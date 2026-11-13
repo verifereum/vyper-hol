@@ -39,9 +39,9 @@ Theorem tuple_store_targets_path_ptr:
         (?name. local_region cenv es.scopes s name b sz))) /\
     fn_has_code st st' func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
     s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
-    stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s ==>
+    stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s ==>
     (gs <> [] \/ ~block_is_terminated st ==> ~block_is_terminated st') /\
-    ?t G' tn'. stmt_state_rel ctx func cenv cx es' t /\ ghost_inv d cenv cx es' G' tn' t /\
+    ?t G' tn'. stmt_state_rel H ctx func cenv cx es' t /\ ghost_inv H d cenv cx es' G' tn' t /\
       ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\
       (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\

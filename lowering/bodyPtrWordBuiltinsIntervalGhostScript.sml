@@ -17,11 +17,11 @@ Proof
 QED
 
 Theorem word_interval_ghost_inv_temp:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) ==>
-  ghost_inv d cenv cx es (DRESTRICT G (COMPL {x}))
+  ghost_inv H d cenv cx es (DRESTRICT G (COMPL {x}))
     (tn with t_var := set_var_taint tn.t_var [x] m) (update_var x w s)
 Proof
   strip_tac >> fs[ghost_inv_def] >>
@@ -60,8 +60,8 @@ Proof
 QED
 
 Theorem word_interval_ghost_inv_index:
-  ghost_inv d cenv cx es G tn (s with vs_inst_idx := i) <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx es G tn (s with vs_inst_idx := i) <=>
+  ghost_inv H d cenv cx es G tn s
 Proof
   simp[ghost_inv_def, ptr_covers_def, stor_taint_ok_def, lookup_var_def] >>
   Cases_on `d` >- simp[return_buf_ptr_def] >>
@@ -69,8 +69,8 @@ Proof
 QED
 
 Theorem word_interval_ghost_inv_jump:
-  ghost_inv d cenv cx es G tn (jump_to l s) <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx es G tn (jump_to l s) <=>
+  ghost_inv H d cenv cx es G tn s
 Proof
   simp[jump_to_def, ghost_inv_jump_to]
 QED

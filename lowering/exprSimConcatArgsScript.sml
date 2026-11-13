@@ -11,7 +11,8 @@ Ancestors
   exprSimConcatPath exprSimConcatStore exprSimConcatStep exprSimAlloc
   exprSimWordArgs exprSimSource exprSimHypsDefs exprSimProps exprSimDefs
   exprBopSimProps exprOperandVar loweringPosts gasOutcome gasSummary gasSummaryCompose
-  gasExemptCert fragGasMode fragGasPath freshWrites fragExec exprLowering
+  gasExemptCert gasStorage vyperStorageTrace vyperStorageFootprint
+  fragGasMode fragGasPath freshWrites fragExec exprLowering
   exprLoweringProps compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs venomState
   vyperValue vyperTyping vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult
   vyperInterpreter vyperState venomMemProps venomExecSemantics words arithmetic list rich_list
@@ -97,7 +98,7 @@ Theorem concat_fixed_arm:
     fn_has_code sx s2 func /\ ~t.vs_halted /\
     t.vs_current_bb = sx.cs_current_bb /\
     t.vs_inst_idx = LENGTH sx.cs_current_insts /\
-    local_ptrs_reserved cenv sx /\ stmt_state_rel H ctx func cenv cx es t /\
+    local_ptrs_reserved cenv sx /\
     eval_operand data_ptr t = SOME (n2w (B + 32)) /\
     eval_operand off_ptr t = SOME ow /\
     eval_operand x t = SOME (word_of_bytes_be (PAD_RIGHT 0w 32 bs)) /\
@@ -115,7 +116,8 @@ Theorem concat_fixed_arm:
     mload (w2n ow) t = n2w k /\ LENGTH bs = m /\ m <= 32 /\
     32 + k + 32 <= bsz ==>
     ?t2. gas_path ctx func t 0 (OK t2) /\
-      stmt_state_rel H ctx func cenv cx es t2 /\ ~t2.vs_halted /\
+      (!(H : (bool # bytes32 # type_value) list # num list). stmt_state_rel H ctx func cenv cx es t ==>
+           stmt_state_rel H ctx func cenv cx es t2) /\ ~t2.vs_halted /\
       t2.vs_current_bb = s2.cs_current_bb /\
       t2.vs_inst_idx = LENGTH s2.cs_current_insts /\
       t2.vs_allocas = t.vs_allocas /\
@@ -149,12 +151,14 @@ Proof
      >- (irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
      irule mstore_mem_bytes_at_disjoint >> qunabbrev_tac `a` >> decide_tac) >>
   qexists_tac `t2` >> asm_rewrite_tac[] >>
-  `stmt_state_rel H ctx func cenv cx es (mstore a wd t)` by
-    (irule literal_mstore_state_rel >> conj_tac
-     >- (qexistsl_tac [`B`, `binst`, `bsz`] >> simp[Abbr `a`] >> metis_tac[]) >>
-     first_assum ACCEPT_TAC) >>
   rpt conj_tac
-  >- (qunabbrev_tac `t2` >> irule concat_offset_store_state_rel >>
+  >- (gen_tac >> strip_tac >>
+      `stmt_state_rel (H : (bool # bytes32 # type_value) list # num list)
+         ctx func cenv cx es (mstore a wd t)` by
+        (irule literal_mstore_state_rel >> conj_tac
+         >- (qexistsl_tac [`B`, `binst`, `bsz`] >> simp[Abbr `a`] >> metis_tac[]) >>
+         first_assum ACCEPT_TAC) >>
+      qunabbrev_tac `t2` >> irule concat_offset_store_state_rel >>
       rpt conj_tac
       >~ [`local_region`] >- (simp[concat_mstore_local_region] >> metis_tac[])
       >~ [`ALLOCA`] >- (qexists_tac `oinst` >> simp[mstore_def])
@@ -190,7 +194,7 @@ Theorem concat_bytes_arm:
     fn_has_code sx s2 func /\ ~t.vs_halted /\
     t.vs_current_bb = sx.cs_current_bb /\
     t.vs_inst_idx = LENGTH sx.cs_current_insts /\
-    local_ptrs_reserved cenv sx /\ stmt_state_rel H ctx func cenv cx es t /\
+    local_ptrs_reserved cenv sx /\
     eval_operand mem_ptr t = SOME sw /\
     eval_operand data_ptr t = SOME (n2w (B + 32)) /\
     eval_operand off_ptr t = SOME ow /\
@@ -210,7 +214,8 @@ Theorem concat_bytes_arm:
     (B + bsz <= w2n ow \/ w2n ow + 64 <= B) /\ B + bsz < dimword (:256) /\
     mload (w2n ow) t = n2w k /\ 32 + k + LENGTH bs <= bsz ==>
     ?t2. gas_path ctx func t 0 (OK t2) /\
-      stmt_state_rel H ctx func cenv cx es t2 /\ ~t2.vs_halted /\
+      (!(H : (bool # bytes32 # type_value) list # num list). stmt_state_rel H ctx func cenv cx es t ==>
+           stmt_state_rel H ctx func cenv cx es t2) /\ ~t2.vs_halted /\
       t2.vs_current_bb = s2.cs_current_bb /\
       t2.vs_inst_idx = LENGTH s2.cs_current_insts /\
       t2.vs_allocas = t.vs_allocas /\
@@ -242,13 +247,6 @@ Proof
     (qunabbrev_tac `t2` >> qunabbrev_tac `t1` >>
      qpat_x_assum `gas_path _ _ _ _ _` mp_tac >> asm_rewrite_tac[]) >>
   `B <= a /\ a + LENGTH bs <= B + bsz` by (qunabbrev_tac `a` >> decide_tac) >>
-  `stmt_state_rel H ctx func cenv cx es t1` by
-    (qunabbrev_tac `t1` >>
-     qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `t`, `binst`, `B`, `bsz`,
-                  `a`, `w2n sw + 32`, `LENGTH bs`]
-       mp_tac alloca_mcopy_state_rel >>
-     impl_tac >- metis_tac[] >>
-     disch_then ACCEPT_TAC) >>
   `!p n. (p + n <= B \/ B + bsz <= p) /\ (p + n <= w2n ow \/ w2n ow + 64 <= p) ==>
      mem_bytes_at p n (mstore (w2n ow) (n2w (k + LENGTH bs)) t1).vs_memory =
      mem_bytes_at p n t.vs_memory` by
@@ -260,7 +258,16 @@ Proof
   qexists_tac `t2` >>
   rpt conj_tac
   >- first_assum ACCEPT_TAC
-  >- (qunabbrev_tac `t2` >> irule concat_offset_store_state_rel >>
+  >- (gen_tac >> strip_tac >>
+      `stmt_state_rel (H : (bool # bytes32 # type_value) list # num list)
+         ctx func cenv cx es t1` by
+        (qunabbrev_tac `t1` >>
+         qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `t`, `binst`, `B`, `bsz`,
+                      `a`, `w2n sw + 32`, `LENGTH bs`]
+           mp_tac (Q.GEN `H` alloca_mcopy_state_rel) >>
+         impl_tac >- metis_tac[] >>
+         disch_then ACCEPT_TAC) >>
+      qunabbrev_tac `t2` >> irule concat_offset_store_state_rel >>
       rpt conj_tac
       >~ [`local_region`]
       >- (simp[Abbr `t1`, concat_mcopy_local_region] >> metis_tac[])
@@ -636,7 +643,8 @@ Theorem concat_head_arm:
         (Var ov) s2 = ((), sb) /\
       ci_mono sa s1 /\ ci_mono s1 s2 /\ fn_has_code s2 sb func /\
       gas_path ctx func t 0 (OK t2) /\
-      stmt_state_rel H ctx func cenv cx es1 t2 /\ ~t2.vs_halted /\
+      (!(H : (bool # bytes32 # type_value) list # num list). stmt_state_rel H ctx func cenv cx es1 t ==>
+           stmt_state_rel H ctx func cenv cx es1 t2) /\ ~t2.vs_halted /\
       t2.vs_current_bb = s2.cs_current_bb /\
       t2.vs_inst_idx = LENGTH s2.cs_current_insts /\
       lookup_var dv t2 = SOME (n2w (B + 32)) /\ lookup_var ov t2 = SOME ow /\
@@ -857,8 +865,15 @@ Proof
   fs[ci_mono_def] >> metis_tac[cs_extends_trans]
 QED
 
+Theorem storage_well_formed_on_gas_obs[local,simp]:
+  storage_well_formed_on cx (st with gas_obs := gs) regions <=>
+  storage_well_formed_on cx st regions
+Proof
+  irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]
+QED
+
 Theorem concat_args_sim:
-  !args P k ctx func cenv cx env nocalls es sa sb s0 dv ov ow
+  !args P k ctx func cenv cx env nocalls st0 es sa sb s0 dv ov ow
    binst B bsz oinst.
     compile_concat compile_expr cenv args (Var dv) (MAP (\e. let ety = expr_type e in
                 if is_bytestring_type ety then (T, 0:num)
@@ -874,7 +889,9 @@ Theorem concat_args_sim:
     exprs_case nocalls ctx func cenv cx args /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0 /\
+       storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
     lookup_var dv s0 = SOME (n2w (B + 32)) /\ lookup_var ov s0 = SOME ow /\
@@ -893,11 +910,12 @@ Theorem concat_args_sim:
     mload (w2n ow) s0 = n2w k /\ k <= P /\
     32 + P + SUM (MAP concat_payload_capacity (MAP expr_type args)) <= bsz /\
     32 + concat_data_bound P (MAP expr_type args) <= bsz ==>
-    gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-      (\rr ee t. ?vs. rr = INL vs /\
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+      (\H rr ee t. ?vs. rr = INL vs /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
          expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee t /\
+         storage_well_formed_on cx ee (FST H) /\
          LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                               value_has_type tv v) args vs /\
          mem_bytes_at (B + 32) (k + LENGTH (FLAT (MAP (\v. case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) vs))) t.vs_memory =
@@ -923,17 +941,19 @@ Theorem concat_args_sim:
                  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
                  regions_disjoint p n b sz) ==>
               mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory))
-      (\rr ee r. ?exc. rr = INR exc /\
+      (\H rr ee r. ?exc. rr = INR exc /\
          expr_exit (INR exc : eval_result + exception) r)
 Proof
   Induct
   >- (rpt strip_tac >>
       gvs[compile_concat_def, comp_return_def] >>
-      rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >>
+      disj2_tac >> disj1_tac >>
       simp[gas_summary_at_def, gas_marked_exec_def, gas_explicit_def,
            eval_exprs_nil, gas_marked_path_def] >>
       qexistsl_tac [`INL []`, `es`, `OK s0`] >>
-      simp[cj 1 gas_path_rules, locals_kept_refl] >> gvs[]) >>
+      simp[cj 1 gas_path_rules, locals_kept_refl] >> rpt strip_tac >>
+      gvs[]) >>
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   rename1 `exprs_case nocalls ctx func cenv cx (e::args)` >>
   qpat_x_assum `exprs_case _ _ _ _ _ (_::_)`
@@ -962,18 +982,59 @@ Proof
     (fs[ci_mono_def] >> metis_tac[fn_has_code_mid, cs_extends_refl]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[expr_body_pre_gas_admissible] >>
+  `storage_trace_frame (eval_exprs cx args)` by
+    simp[evaluate_storage_trace_frame] >>
+  `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+    (irule storage_trace_frame_bind_all >>
+     simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  `!v. storage_trace_frame (bind (eval_exprs cx args) (\vs. return (v::vs)))` by
+    (gen_tac >> irule storage_trace_frame_bind_all >>
+     simp[storage_trace_frame_return]) >>
   drule_all expr_sim_apply >>
   rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      rewrite_tac[eval_exprs_cons_action] >>
+      irule gas_bad_storage_at_bind_left >> simp[])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
-        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def])
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (qexists_tac `marks` >> disj1_tac >>
+           rewrite_tac[eval_exprs_cons_action] >>
+           irule gas_bad_storage_at_bind_left >> simp[] >>
+           irule gas_bad_storage_at_counted_prefix >> metis_tac[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def]
       >- suspend "head_normal"
       >> suspend "head_exit") >>
   suspend "head_exempt"
 QED
 
 Resume concat_args_sim[head_normal]:
-  qpat_x_assum `(\res ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
-  gnvs[] >>
+  qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o BETA_RULE) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> ?v. _`
+    (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `v` strip_assume_tac) >>
+  qpat_x_assum `res = INL v` SUBST_ALL_TAC >>
+  qpat_x_assum `r = OK t` SUBST_ALL_TAC >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?v. _`
+    (assume_tac o SIMP_RULE bool_ss [sumTheory.INL_11, UNWIND_THM1]) >>
+  `?obs. es_end.storage_trace = es.storage_trace ++ obs` by
+    (qpat_assum `gas_marked_exec _ _ _ (es, s0) _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` assume_tac) >>
+     qpat_assum `storage_trace_frame (bind (eval_expr cx e) _)`
+       (fn th => drule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                                   storage_trace_frame_prefix) th)) >>
+     simp[]) >>
+  `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
+    simp[valid_horizon_def] >>
+  qpat_x_assum `es_end.storage_trace = _` kall_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+     es.storage_trace` by metis_tac[] >>
+  `stmt_state_rel (storage_trace_horizon es_end.storage_trace)
+     ctx func cenv cx es s0` by metis_tac[] >>
   `~t.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
   `bind (eval_expr cx e) (read_result cx)
@@ -989,10 +1050,11 @@ Resume concat_args_sim[head_normal]:
   `MAP FDOM es.scopes = MAP FDOM (es_end with gas_obs := []).scopes` by fs[] >>
   `EVERY (\e. is_bytestring_type (expr_type e) \/
               ?m. expr_type e = BaseT (BytesT (Fixed m))) args` by fs[] >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `e`, `args`, `es`, `sa`, `s1`, `sb`,
+  qspecl_then [`storage_trace_horizon es_end.storage_trace`,
+               `ctx`, `func`, `cenv`, `cx`, `e`, `args`, `es`, `sa`, `s1`, `sb`,
                `s0`, `es_end with gas_obs := []`, `v`, `op`, `t`, `B`, `bsz`,
                `ow`, `k`, `P`, `binst`, `oinst`, `dv`, `ov`, `tv`]
-    mp_tac concat_head_arm >>
+    mp_tac (Q.GEN `H` concat_head_arm) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   strip_tac >>
   `gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
@@ -1007,10 +1069,10 @@ Resume concat_args_sim[head_normal]:
   `!e' st. MEM e' args /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e' st /\ (nocalls ==> int_calls_expr e' = [])` by
     (rpt gen_tac >> strip_tac >>
-     qpat_assum `!e' st. (e' = e \/ MEM e' args) /\ _ ==> _`
+     qpat_assum `!e' st. MEM e' (e::args) /\ _ ==> _`
        (qspecl_then [`e'`, `st`] mp_tac) >>
      impl_tac
-     >- (conj_tac >- (disj2_tac >> first_assum ACCEPT_TAC) >>
+     >- (conj_tac >- simp[] >>
          first_assum ACCEPT_TAC) >>
      disch_then ACCEPT_TAC) >>
   `sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
@@ -1027,51 +1089,102 @@ Resume concat_args_sim[head_normal]:
   `binst.inst_id < s2.cs_next_id /\ oinst.inst_id < s2.cs_next_id` by decide_tac >>
   `32 + (P + concat_payload_capacity (expr_type e)) +
      SUM (MAP concat_payload_capacity (MAP expr_type args)) <= bsz` by
-    decide_tac >>
+    (qpat_assum `32 + P + SUM _ <= bsz` mp_tac >>
+     rewrite_tac[listTheory.MAP, listTheory.SUM] >> decide_tac) >>
   `32 + concat_data_bound (P + concat_payload_capacity (expr_type e))
      (MAP expr_type args) <= bsz` by
-    (qpat_x_assum `concat_data_bound P (_::_) + 32 <= bsz` mp_tac >>
+    (qpat_assum `32 + concat_data_bound P _ <= bsz` mp_tac >>
+     rewrite_tac[listTheory.MAP] >>
      simp[concat_data_bound_def, LET_THM] >> rw[MAX_DEF]) >>
+  `!H. valid_horizon cx st0 H (es_end with gas_obs := []).storage_trace ==>
+     stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t2 /\
+     storage_well_formed_on cx (es_end with gas_obs := []) (FST H)` by
+    (gen_tac >> strip_tac >>
+     `valid_horizon cx st0 H es_end.storage_trace` by fs[] >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- simp[]) >>
+     rewrite_tac[expr_post_def] >> strip_tac >> simp[]) >>
   first_x_assum (qspecl_then
     [`P + concat_payload_capacity (expr_type e)`, `k + LENGTH (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => [])`,
-     `ctx`, `func`, `cenv`, `cx`, `env`, `nocalls`, `es_end with gas_obs := []`,
+     `ctx`, `func`, `cenv`, `cx`, `env`, `nocalls`, `st0`, `es_end with gas_obs := []`,
      `s2`, `sb`, `t2`, `dv`, `ov`, `ow`, `binst`, `B`, `bsz`, `oinst`] mp_tac) >>
   qpat_x_assum `compile_concat _ _ args _ _ _ s2 = _`
     (assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   rewrite_tac[gas_outcome_def] >> strip_tac
-  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
-        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def])
+  >- (qexists_tac `marks ++ marks'` >> disj1_tac >>
+      rewrite_tac[eval_exprs_cons_action] >>
+      irule gas_bad_storage_at_bind_right >>
+      qpat_assum `gas_marked_exec _ _ _ (es, s0) _ _ _ _` (irule_at Any) >>
+      simp[] >> irule gas_bad_storage_at_bind_left >>
+      simp[storage_trace_frame_return])
+  >- (qpat_x_assum `gas_summary_at _ _ _ (eval_exprs _ _) _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end'.storage_trace`)
+       >- (qexists_tac `marks ++ marks'` >> disj1_tac >>
+           rewrite_tac[eval_exprs_cons_action] >>
+           irule gas_bad_storage_at_bind_right >>
+           qpat_assum `gas_marked_exec _ _ _ (es, s0) _ _ _ _` (irule_at Any) >>
+           simp[] >> irule gas_bad_storage_at_bind_left >>
+           simp[storage_trace_frame_return] >>
+           irule gas_bad_storage_at_counted_prefix >> metis_tac[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end'.storage_trace)
+         es_end'.storage_trace` by fs[storage_trace_domain_def]
       >- suspend "tail_normal"
       >> suspend "tail_exit") >>
   suspend "tail_exempt"
 QED
 
 Resume concat_args_sim[head_exit]:
+  qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o BETA_RULE) >>
+  `expr_exit res r` by
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+       (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+     simp[]) >>
   Cases_on `res` >- gvs[expr_exit_def] >>
-  qexists_tac `marks` >> disj1_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >>
-  qpat_x_assum `(\res ee r. expr_exit res r) _ _ _` (mp_tac o BETA_RULE) >>
-  qpat_x_assum `exit_result r` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >>
-  Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def, exit_result_def] >>
-  TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
+  (* Rewrite only the goal: gvs[] over this context was too slow for one
+     step. *)
+  disj2_tac >> simp[] >>
+  qpat_x_assum `expr_exit _ r` mp_tac >>
+  Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
 QED
 
 Resume concat_args_sim[head_exempt]:
-  qexists_tac `marks` >> disj2_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   irule_at Any wb_args_head_exempt_cert >> goal_assum (drule_at Any)
 QED
 
 Resume concat_args_sim[tail_normal]:
-  qpat_x_assum `(\rr ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  rename1 `gas_marked_exec _ _ (eval_exprs cx args) _ _ (INL vs) es_end' (OK tu)` >>
-  qexists_tac `marks ++ marks'` >> disj1_tac >>
+  qpat_x_assum `(\rr ee t. _) _ _ _` (assume_tac o BETA_RULE) >>
+  qpat_x_assum `r = OK _` SUBST_ALL_TAC >>
+  rename1 `gas_marked_exec _ _ (eval_exprs cx args) _ _ _ es_end' (OK tu)` >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> ?vs. _`
+    (qspec_then `storage_trace_horizon es_end'.storage_trace` mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `vs` strip_assume_tac) >>
+  qpat_x_assum `res = INL vs` SUBST_ALL_TAC >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?vs. _`
+    (assume_tac o SIMP_RULE bool_ss [sumTheory.INL_11, UNWIND_THM1]) >>
+  `?obs'. es_end'.storage_trace = es_end.storage_trace ++ obs'` by
+    (qpat_assum `gas_marked_exec _ _ (eval_exprs _ _) _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` assume_tac) >>
+     qpat_assum `storage_trace_frame (eval_exprs _ _)`
+       (fn th => drule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                                   storage_trace_frame_prefix) th)) >>
+     simp[]) >>
+  `!H. valid_horizon cx st0 H es_end'.storage_trace ==>
+       valid_horizon cx st0 H es_end.storage_trace` by
+    simp[valid_horizon_def] >>
+  qpat_x_assum `es_end'.storage_trace = _` kall_tac >>
+  qexists_tac `marks ++ marks'` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INL (v::vs)`, `es_end'`, `OK tu`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
@@ -1080,7 +1193,21 @@ Resume concat_args_sim[tail_normal]:
       BETA_TAC >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL vs) _ _`
         (mp_tac o MATCH_MP gas_marked_exec_cons_values) >> simp[]) >>
-  disj1_tac >>
+  disj1_tac >> qexists_tac `tu` >> conj_tac >- REFL_TAC >> BETA_TAC >>
+  gen_tac >> strip_tac >>
+  `valid_horizon cx st0 H es_end'.storage_trace` by fs[] >>
+  `valid_horizon cx st0 H es_end.storage_trace` by metis_tac[] >>
+  `valid_horizon cx st0 H es.storage_trace` by metis_tac[] >>
+  `valid_horizon cx st0 H (es_end with gas_obs := []).storage_trace` by simp[] >>
+  qpat_assum `!H. valid_horizon _ _ H (es_end' with gas_obs := []).storage_trace ==> _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _ /\ _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   `!aid p n. FLOOKUP t2.vs_allocas aid = SOME (p,n) /\ aid < s2.cs_next_id /\
      (p + n <= B \/ B + bsz <= p) /\ (p + n <= w2n ow \/ w2n ow + 64 <= p) /\
      (!name lo sz. local_region cenv (es_end with gas_obs := []).scopes t2 name lo sz ==>
@@ -1094,23 +1221,28 @@ Resume concat_args_sim[tail_normal]:
      >- (qexists_tac `aid` >> conj_tac >> first_assum ACCEPT_TAC)
      >- decide_tac >>
      decide_tac) >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `s1`, `s2`, `s0`,
+  qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `s1`, `s2`, `s0`,
                `es_end with gas_obs := []`, `es_end' with gas_obs := []`,
                `v`, `op`, `t`, `t2`, `tu`, `B`,
                `bsz`, `ow`, `k`, `(case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => [])`, `FLAT (MAP (\v. case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) vs)`]
-    mp_tac concat_args_glue >>
+    mp_tac (Q.GEN `H` concat_args_glue) >>
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   strip_tac >> suspend "post"
 QED
 
 Resume concat_args_sim[post]:
-  qexists_tac `tu` >> conj_tac >- REFL_TAC >>
   qexists_tac `v::vs` >> conj_tac >- REFL_TAC >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >- (qpat_x_assum `expr_sim_inv _ _ _ (es_end' with gas_obs := [])` mp_tac >>
       simp[])
-  >- (qpat_x_assum `stmt_state_rel H _ _ _ _ (es_end' with gas_obs := []) tu` mp_tac >>
-      simp[])
+  >- (qpat_x_assum `!H. valid_horizon _ _ H (es_end' with gas_obs := []).storage_trace ==> _`
+        (qspec_then `H` mp_tac) >>
+      impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >>
+      rewrite_tac[exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
+      strip_tac >> first_assum ACCEPT_TAC)
+  >- (`(es_end' with gas_obs := []).accounts = es_end'.accounts /\
+       (es_end' with gas_obs := []).tStorage = es_end'.tStorage` by simp[] >>
+      metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends])
   >- (qexistsl_tac [`v`, `vs`] >> simp[])
   >- (rewrite_tac[listTheory.MAP, listTheory.FLAT] >> BETA_TAC >>
       first_assum ACCEPT_TAC)
@@ -1191,22 +1323,24 @@ Resume concat_args_sim[post]:
 QED
 
 Resume concat_args_sim[tail_exit]:
-  Cases_on `res` >- gvs[] >>
-  rename1 `gas_marked_exec _ _ _ _ _ (INR exc) _ _` >>
-  qexists_tac `marks ++ marks'` >> disj1_tac >>
+  qpat_x_assum `(\rr ee r. _) _ _ _` (assume_tac o BETA_RULE) >>
+  `?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r` by
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?exc. _`
+       (qspec_then `storage_trace_horizon es_end'.storage_trace` mp_tac) >>
+     simp[]) >>
+  qpat_x_assum `res = INR exc` SUBST_ALL_TAC >>
+  qexists_tac `marks ++ marks'` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INR exc`, `es_end'`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_normal >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >>
-  qpat_x_assum `(\rr ee r. _) _ _ _` mp_tac >>
-  qpat_x_assum `exit_result r` mp_tac >> simp[]
+  disj2_tac >> simp[]
 QED
 
 Resume concat_args_sim[tail_exempt]:
-  qexists_tac `marks ++ marks'` >> disj2_tac >>
+  qexists_tac `marks ++ marks'` >> disj2_tac >> disj2_tac >>
   irule_at Any wb_args_tail_exempt_cert >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any)
 QED

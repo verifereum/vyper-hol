@@ -150,7 +150,7 @@ Proof
 QED
 
 Theorem for_local_element_address_path_covered_ptr:
-  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   entry.type = ArrayTV tv (Fixed n) /\ lookup_var p s = SOME w /\ k < n /\

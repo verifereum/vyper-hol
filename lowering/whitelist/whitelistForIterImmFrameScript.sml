@@ -58,7 +58,7 @@ Proof
        vyperMiscTheory.prod_CASE_rator, var_decl_info_CASE_rator,
        bind_def, lift_option_type_def, return_def, raise_def,
        get_immutables_def, get_address_immutables_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), bind_def, return_def, raise_def]
+  rpt strip_tac >> gvs[AllCaseEqs(), bind_def, ignore_bind_def, record_storage_event_def, return_def, raise_def]
 QED
 
 Theorem extend_place_immutable_root:

@@ -74,13 +74,13 @@ Theorem convert_unwrap_value_path_mem_window:
     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es' (Value v) vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_path_mem ctx func s 0 (OK u) /\
-        expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+        expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
         expr_store_bound cx (expr_type e) v op u /\
         (!sw. eval_operand op u = SOME sw ==>
           w2n sw + type_memory_bytes cenv (lowered_value_type cenv e) <= u.vs_alloca_next) /\
@@ -89,7 +89,9 @@ Theorem convert_unwrap_value_path_mem_window:
          !sw. eval_operand op u = SOME sw ==> w2n sw + 64 <= u.vs_alloca_next) /\
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+        u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+        u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   `~is_word_type (expr_type e)` by metis_tac[is_bytestring_word_type] >>
@@ -106,13 +108,15 @@ Proof
   `t = expr_type e` by
     (Cases_on `p.ptr_location` >> gvs[vv_post_def, vv_holds_def]) >>
   `?u w tv. gas_path_mem ctx func s 0 (OK u) /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
       evaluate_type (get_tenv cx) t = SOME tv /\
       eval_operand op u = SOME w /\
       w2n w + type_memory_size tv <= u.vs_alloca_next /\
       alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
       u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts` by
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
     (Cases_on `p.ptr_location = LocCode`
      >- (irule aggregate_code_materialise_post_capacity >> simp[] >> metis_tac[]) >>
      irule aggregate_storage_materialise_post_capacity >> simp[] >>
@@ -156,7 +160,7 @@ QED
 Resume convert_unwrap_value_path_mem_window[memory]:
   `~is_word_type t` by
     (strip_tac >>
-     qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      qpat_assum `post_value_type cenv e = _`
        (fn th => rewrite_tac[vv_post_def, vv_holds_def, th]) >>
      strip_tac >> gvs[is_bytestring_word_type]) >>
@@ -188,14 +192,14 @@ Theorem convert_unwrap_value_marked_read_mem_window:
     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
-    vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?v u. gas_marked_exec T (ctx,func) (read_result cx tv) (ee,s)
             [] (INL v) ee (OK u) /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
       expr_store_bound cx (expr_type e) v op u /\
       (!sw. eval_operand op u = SOME sw ==>
         w2n sw + type_memory_bytes cenv (lowered_value_type cenv e) <= u.vs_alloca_next) /\
@@ -204,7 +208,9 @@ Theorem convert_unwrap_value_marked_read_mem_window:
        !sw. eval_operand op u = SOME sw ==> w2n sw + 64 <= u.vs_alloca_next) /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `read_result cx tv ee` >> rename1 `_ = (res, ee')` >>
@@ -218,10 +224,63 @@ Proof
      rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
   drule_all vv_post_read_result >> strip_tac >>
   drule_at (Pat `unwrap_value _ _ _ = _`) convert_unwrap_value_path_mem_window >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspec_then `env` mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   qexistsl_tac [`v`, `u`] >> simp[] >>
   simp[gas_marked_exec_def, gas_marked_path_def] >>
   metis_tac[read_result_gas_obs, listTheory.APPEND]
+QED
+
+(* The window at one valid horizon gives the run; its expr_post then holds
+   at every valid horizon, since the run leaves the horizon-read fields be. *)
+Theorem convert_unwrap_value_marked_read_mem_horizons:
+  !ctx func cenv cx env e es sa sm sb s0 ee tv vv op s st0 H0.
+    unwrap_value cenv vv sm = (op, sb) /\
+    expr_body_pre cenv cx env e es /\ is_bytestring_type (expr_type e) /\
+    (!a f args d. e = Call a (IntCall f) args d ==>
+       lowered_value_type cenv e = expr_type e) /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+           type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s) /\
+    valid_horizon cx st0 H0 ee.storage_trace /\
+    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
+    alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+    ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?v u. gas_marked_exec T (ctx,func) (read_result cx tv) (ee,s)
+            [] (INL v) ee (OK u) /\
+      (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         expr_post H ctx func cenv cx e es sa sb s0 ee v op u) /\
+      expr_store_bound cx (expr_type e) v op u /\
+      (!sw. eval_operand op u = SOME sw ==>
+        w2n sw + type_memory_bytes cenv (lowered_value_type cenv e) <= u.vs_alloca_next) /\
+      (lowered_value_type cenv e <> BaseT (BytesT (Dynamic 0)) /\
+       lowered_value_type cenv e <> BaseT (StringT 0) ==>
+       !sw. eval_operand op u = SOME sw ==> w2n sw + 64 <= u.vs_alloca_next) /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+Proof
+  rpt gen_tac >> strip_tac >>
+  `vv_post H0 ctx func cenv cx e es sa sm s0 ee tv vv s` by metis_tac[] >>
+  mp_tac (Q.INST [`H` |-> `H0`]
+            (SPEC_ALL convert_unwrap_value_marked_read_mem_window)) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  qexistsl_tac [`v`, `u`] >> rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (drule_then (strip_assume_tac o REWRITE_RULE [vv_post_def])) >>
+  qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (fn th => irule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                       exprSimUnwrapTheory.expr_post_fields_transport) th)) >>
+  asm_rewrite_tac[] >> qexists_tac `s` >> asm_rewrite_tac[]
 QED

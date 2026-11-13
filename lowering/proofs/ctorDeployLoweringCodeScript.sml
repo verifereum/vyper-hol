@@ -3,6 +3,7 @@ Theory ctorDeployLoweringCode
 Ancestors
   ctorDeployLoweringDefs ctorDeployDefs immSectionDead e2eDeployDefs vyperTypeContract
   compileVyper vyperCompiler
+  immSectionDead
   moduleLowering compileEnv context emitHelper loweringShapeProps
   loweringShapeDefs supportedProgram loweringShapeSource
   ctorDeployLoweringCodeShape loweringShapeRules list ctorUnitShape

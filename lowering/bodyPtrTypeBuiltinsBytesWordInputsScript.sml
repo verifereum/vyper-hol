@@ -4,7 +4,7 @@ Ancestors bodyPtrTypeBuiltinsBytesWordActual bodyPtrSignedConvertSourceTyping
   vyperValue valueEncoding venomState
 
 Theorem bytes_word_child_memory_inputs:
-  expr_post ctx fn cenv cx e es ca sa s0 ee v op s /\
+  expr_post H ctx fn cenv cx e es ca sa s0 ee v op s /\
   is_bytestring_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
   ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok cenv e op G s /\

@@ -5,49 +5,20 @@ Ancestors
   exprSimSource exprSimDefs exprSimHypsDefs gasSummaryCompose gasSummary gasExemptCert
   gasOutcome gasNormalPrefix vyperState vyperTypeExprResult vyperTypeExprSoundness
   vyperTypeInvariants vyperTyping vyperValue compileEnv loweringPosts
+  exprSimMemDefs vyperStorageFootprint gasStorage fragGasMode fragGasPath
 
-Theorem abi_decode_child_exit_summary:
-  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
-    (es,s0) marks (INR exc) ee r /\ exit_result r /\ expr_exit (INR exc) r ==>
-  gas_summary_at F (ctx,func) marks
-    (eval_expr cx (TypeBuiltin ty (AbiDecode unwrap) ty [e])) (es,s0) Q
-    (\res es1 r. expr_exit res r)
+(* The decode step reads the forced bytes and leaves the state alone. *)
+Theorem abi_decode_value_state[local]:
+  bind (lift_sum x) (\w. return (Value w)) st = (res, st') ==> st' = st
 Proof
-  strip_tac >> rewrite_tac[abi_decode_singleton_source, gas_summary_at_def] >>
-  qexistsl_tac [`INR exc`, `ee`, `r`] >> simp[] >>
-  conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> Cases_on `exc` >> Cases_on `r` >>
-  gvs[expr_exit_def] >> Cases_on `e'` >> gvs[expr_exit_def]
+  Cases_on `x` >> simp[bind_def, lift_sum_def, return_def, raise_def]
 QED
 
-Theorem abi_decode_child_exempt_cert:
-  gas_exempt_cert memory tops p
-    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
-    start marks out endpoint ==>
-  gas_exempt_cert memory tops p
-    (ignore_bind (eval_expr cx (TypeBuiltin ty (AbiDecode unwrap) ty [e])) (return ()))
-    start marks out endpoint
-Proof
-  strip_tac >> rewrite_tac[abi_decode_singleton_source] >>
-  `ignore_bind
-    (bind (bind (eval_expr cx e) (read_result cx))
-      (\v. bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [v]))
-        (\w. return (Value w)))) (return ()) =
-    bind (bind (eval_expr cx e) (read_result cx))
-      (\v. ignore_bind
-        (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [v]))
-          (\w. return (Value w))) (return ()))` by
-    (qmatch_goalsub_abbrev_tac `bind a _` >>
-     simp[FUN_EQ_THM, ignore_bind_def, bind_def] >> gen_tac >>
-     Cases_on `a x` >> Cases_on `q` >> simp[]) >>
-  pop_assum SUBST1_TAC >>
-  PairCases_on `p` >> PairCases_on `start` >>
-  PairCases_on `out` >> PairCases_on `endpoint` >>
-  irule gas_exempt_cert_error_value >> simp[]
-QED
-
-Theorem abi_decode_normal_prefix_summary:
-  expr_body_pre ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
+(* The decode continuation after the forced operand, in the guarded
+   horizon form: the operand's post holds at every valid horizon, and the
+   decoder's post is moved from one horizon to all of them. *)
+Theorem abi_decode_suffix_outcome:
+  expr_body_pre ce cx env (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\ local_ptrs_reserved ce sa /\
   lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
   lower_abi_decode data
@@ -62,18 +33,26 @@ Theorem abi_decode_normal_prefix_summary:
   fn_has_code start final func /\ fn_inst_ids_distinct func /\
   gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
     (es,s0) marks (INL v) ee (OK s) /\
-  expr_post ctx func ce cx e es sa start s0 (ee with gas_obs := []) v data s /\
-  ~s.vs_halted /\ s.vs_current_bb = start.cs_current_bb /\
-  s.vs_inst_idx = LENGTH start.cs_current_insts ==>
-  gas_summary_at F (ctx,func) marks
-    (eval_expr cx (TypeBuiltin ann (AbiDecode unwrap) ty [e])) (es,s0)
-    (\res es1 t. ?tv. res = INL tv /\
-      vv_post ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
-        es1 tv (LocatedValue ann (mk_ptr out LocMemory)) t /\
-      t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts)
-    (\res es1 r. expr_exit res r)
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     expr_post H ctx func ce cx e es sa start s0 (ee with gas_obs := []) v data s /\
+     s.vs_current_bb = start.cs_current_bb /\
+     s.vs_inst_idx = LENGTH start.cs_current_insts) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
+    (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [v]))
+      (\w. return (Value w))) (ee with gas_obs := [],s)
+    (\H res es1 t. ?tv. res = INL tv /\
+      vv_post H ctx func ce cx (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es sa final s0
+        es1 tv (LocatedValue ty (mk_ptr out LocMemory)) t /\
+      t.vs_current_bb = final.cs_current_bb /\
+      t.vs_inst_idx = LENGTH final.cs_current_insts)
+    (\H res es1 r. expr_exit res r)
 Proof
   strip_tac >>
+  `~s.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  `?H0. valid_horizon cx st0 H0 ee.storage_trace` by
+    metis_tac[storage_trace_domain_def] >>
   `expr_body_pre ce cx env e es` by
     metis_tac[expr_body_pre_type_builtin_head] >>
   `evaluate_type (get_tenv cx) (expr_type e) =
@@ -98,16 +77,42 @@ Proof
      Cases_on `v` >> gvs[value_has_type_def]) >> gvs[] >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (drule abi_decode_observed_scopes_dom >> simp[]) >>
-  `lower_value compile_expr ce (expr_type e) e sa = (data,start)` by metis_tac[] >>
+  `expr_post H0 ctx func ce cx e es sa start s0 (ee with gas_obs := []) (BytesV bs) data s /\
+   s.vs_current_bb = start.cs_current_bb /\
+   s.vs_inst_idx = LENGTH start.cs_current_insts` by metis_tac[] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func ce cx (ee with gas_obs := []) s /\
+     storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by
+    (rpt strip_tac >> res_tac >> fs[expr_post_def]) >>
+  `lower_value compile_expr ce (expr_type e) e sa = (data,start)` by
+    metis_tac[] >>
   drule_all abi_decode_caller_suffix_summary >>
-  rewrite_tac[gas_summary_at_def] >> strip_tac >>
-  `ann = ty` by
-    metis_tac[abi_decode_parent_type, expr_body_pre_def] >>
-  pop_assum SUBST_ALL_TAC >>
-  rewrite_tac[abi_decode_singleton_source] >>
-  qexistsl_tac [`res`, `es_end`, `r`] >>
-  (conj_tac
-   >- (irule (SRULE [] (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal)) >>
-       goal_assum (drule_at Any) >> metis_tac[]) >>
-   gvs[] >> metis_tac[])
+  rewrite_tac[gas_summary_at_def,
+              ASSUME ``expr_type e = BaseT (BytesT (Dynamic n))``] >>
+  strip_tac >>
+  `es_end with gas_obs := [] = ee with gas_obs := []` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >>
+     simp[gas_explicit_def] >> strip_tac >>
+     drule abi_decode_value_state >> simp[]) >>
+  `es_end.storage_trace = ee.storage_trace` by
+    (pop_assum (mp_tac o Q.AP_TERM `\x. x.storage_trace`) >> simp[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >>
+  disj2_tac >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >> qexistsl_tac [`res`, `es_end`, `r`] >>
+  (conj_tac >| [first_assum ACCEPT_TAC, ALL_TAC])
+  >- (disj1_tac >> qexists_tac `t` >> simp[] >>
+      qpat_x_assum `(\res es1 t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
+      gvs[] >> gen_tac >> strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+        (drule_then strip_assume_tac) >>
+      mp_tac (Q.SPECL [`H0`, `H`, `ctx`, `func`, `ce`, `cx`,
+        `TypeBuiltin ty (AbiDecode unwrap) ty [e]`, `es`, `sa`, `final`, `s0`,
+        `ee with gas_obs := []`, `Value v`,
+        `LocatedValue ty (mk_ptr out LocMemory)`, `t`, `s`]
+        vv_post_fields_transport) >>
+      impl_tac >- (gvs[] >> simp[vv_storage_live_def, contextTheory.mk_ptr_def]) >>
+      simp[])
+  >- (disj2_tac >> gvs[])
 QED

@@ -31,10 +31,10 @@ Proof
 QED
 
 Theorem for_body_landing_transport:
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   ptr_covers G tn p s sz /\
   t = (if res = INL () then jump_to incr_lbl s else s) ==>
-  stmt_state_rel ctx func cenv cx es t /\ ghost_inv d cenv cx es G tn t /\
+  stmt_state_rel H ctx func cenv cx es t /\ ghost_inv H d cenv cx es G tn t /\
   ptr_covers G tn p t sz /\ ~t.vs_halted = ~s.vs_halted /\
   t.vs_allocas = s.vs_allocas /\ (!x. lookup_var x t = lookup_var x s)
 Proof
@@ -50,8 +50,8 @@ Theorem for_range_callback_landing_ptr:
   not_local_ptr bc (FEMPTY :: esk.scopes) p /\
   eval_stmts cx stmts (esk with scopes :=
     (FEMPTY |+ (id,entry)) :: esk.scopes) = (res,ee) /\
-  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel ctx func c3 cx ee s /\
-  ghost_inv d c3 cx ee G tn s /\
+  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel H ctx func c3 cx ee s /\
+  ghost_inv H d c3 cx ee G tn s /\
   FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n a,sz) /\
   ptr_covers G tn p s sz /\
   stmt_lands (InLoop exit_lbl incr_lbl) sb1 res s /\ ~s.vs_halted /\
@@ -63,8 +63,8 @@ Theorem for_range_callback_landing_ptr:
     t.vs_inst_idx = 0 /\ ~t.vs_halted /\
     (res = INR BreakException ==> t.vs_current_bb = exit_lbl) /\
     (res <> INR BreakException ==> t.vs_current_bb = incr_lbl) /\
-    stmt_state_rel ctx func cenv cx (ee with scopes := rest) t /\
-    ghost_inv d cenv cx (ee with scopes := rest) G tn t /\
+    stmt_state_rel H ctx func cenv cx (ee with scopes := rest) t /\
+    ghost_inv H d cenv cx (ee with scopes := rest) G tn t /\
     ptr_covers G tn p t sz /\ t.vs_allocas = s.vs_allocas /\
     (!x. lookup_var x t = lookup_var x s) /\
     (!name lo z. local_region cenv rest t name lo z ==>

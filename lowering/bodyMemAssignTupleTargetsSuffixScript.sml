@@ -14,7 +14,7 @@ Libs
   monadsyntax
 
 Theorem tuple_assignment_prefix_path_mem:
-  !ctx func cenv cx es1 tys tvs vs sa su sl ss op staged elems sv flag d.
+  !st0 ctx func cenv cx es1 tys tvs vs sa su sl ss op staged elems sv flag d.
     value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) tys tvs /\
@@ -33,14 +33,18 @@ Theorem tuple_assignment_prefix_path_mem:
     cs_extends su sl /\ cs_extends sl ss /\
     fn_has_code su sl func /\ fn_has_code sl ss func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv su /\
-    stmt_state_rel H ctx func cenv cx es1 sv /\ alloca_history func sv /\
+    (?H. valid_horizon cx st0 H es1.storage_trace) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es1 sv) /\ alloca_history func sv /\
     return_buf_frame d cenv su sv /\ ~sv.vs_halted /\
     sv.vs_current_bb = su.cs_current_bb /\
     sv.vs_inst_idx = LENGTH su.cs_current_insts ==>
     LENGTH elems = LENGTH tys /\ EVERY (\op. ?x. op = Var x) elems /\
     EVERY (\op. !x. op = Var x ==> not_fresh_at ss x) elems /\
     local_ptrs_reserved cenv ss /\ values_have_types tvs vs /\ tuple_val_wf vs tvs /\
-    ?t (w:256 word) b sz. stmt_state_rel H ctx func cenv cx es1 t /\ ~t.vs_halted /\
+    ?t (w:256 word) b sz.
+      (!H. valid_horizon cx st0 H es1.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx es1 t) /\ ~t.vs_halted /\
       t.vs_current_bb = ss.cs_current_bb /\
       t.vs_inst_idx = LENGTH ss.cs_current_insts /\
       tuple_in_memory vs tvs (w2n w) t.vs_memory /\ b <= w2n w /\
@@ -58,7 +62,9 @@ Theorem tuple_assignment_prefix_path_mem:
          FLOOKUP t.vs_allocas aid = SOME entry) /\
       alloca_history func t /\ return_buf_frame d cenv ss t /\
       sv.vs_alloca_next <= t.vs_alloca_next /\
-      gas_path_mem ctx func sv 0 (OK t)
+      gas_path_mem ctx func sv 0 (OK t) /\
+      t.vs_accounts = sv.vs_accounts /\ t.vs_transient = sv.vs_transient /\
+      t.vs_requests = sv.vs_requests /\ t.vs_call_ctx = sv.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `LIST_REL (\t tv. evaluate_type (get_tenv cx) t = SOME tv) tys tvs` by
@@ -69,6 +75,10 @@ Proof
   `type_memory_bytes cenv (TupleT tys) = type_memory_size_list tvs` by
     (irule type_memory_bytes_tuple_list >> first_assum ACCEPT_TAC) >>
   `?sw. eval_operand op sv = SOME sw` by metis_tac[expr_val_rel_def] >>
+  qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx es1 sv` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ sv`
+       drule >> disch_then ACCEPT_TAC) >>
   drule_all optional_tuple_stage_path_mem >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `?t w. _`
@@ -86,6 +96,20 @@ Proof
   drule_all compile_tuple_load_all_typed_path_mem >> strip_tac >>
   `EVERY (\op. !x. op = Var x ==> not_fresh_at ss x) elems` by
     (simp[EVERY_MEM] >> metis_tac[]) >>
+  `t.vs_accounts = sv.vs_accounts` by asm_rewrite_tac[] >>
+  `t.vs_transient = sv.vs_transient` by asm_rewrite_tac[] >>
+  `t.vs_requests = sv.vs_requests` by asm_rewrite_tac[] >>
+  `t.vs_call_ctx = sv.vs_call_ctx` by asm_rewrite_tac[] >>
+  `!H. valid_horizon cx st0 H es1.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es1 t` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es1 sv` by
+       (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ sv`
+          drule >> disch_then ACCEPT_TAC) >>
+     mp_tac (Q.INST [`H0` |-> `H0`, `u` |-> `t`, `s` |-> `sv`, `es` |-> `es1`]
+               exprLoweringPropsTheory.stmt_state_rel_fields_transport) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   asm_rewrite_tac[] >> qexistsl_tac [`t`, `w`, `b`, `sz`] >>
   asm_rewrite_tac[] >>
   conj_tac
@@ -98,9 +122,11 @@ Proof
 QED
 
 Theorem assign_tuple_targets_suffix_mem:
-  !ctx func cx lctx cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag d.
+  !ctx func cx st0 lctx cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag d.
     post_value_type cenv e = expr_type e /\
-    expr_post H ctx func cenv cx e es sa su s0 ee v op sv /\
+    (?H. valid_horizon cx st0 H ee.storage_trace) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         expr_post H ctx func cenv cx e es sa su s0 ee v op sv) /\
     sv.vs_current_bb = su.cs_current_bb /\
     sv.vs_inst_idx = LENGTH su.cs_current_insts /\ ~sv.vs_halted /\
     alloca_history func sv /\ return_buf_frame d cenv su sv /\
@@ -136,13 +162,18 @@ Theorem assign_tuple_targets_suffix_mem:
       sv.vs_alloca_next <= t'.vs_alloca_next /\
       stmt_lands lctx sf (INL ()) t' /\ ~t'.vs_halted /\ ~block_is_terminated sf /\
       cenv_top_ext cenv cenv ee'.scopes /\
-      stmt_state_rel H ctx func cenv cx (ee' with gas_obs := []) t' /\
+      (!H. valid_horizon cx st0 H ee'.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx (ee' with gas_obs := []) t' /\
+           storage_well_formed_on cx (ee' with gas_obs := []) (FST H)) /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x t' = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                FLOOKUP t'.vs_allocas aid = SOME b)
 Proof
   rpt gen_tac >> strip_tac >>
+  `expr_post H ctx func cenv cx e es sa su s0 ee v op sv` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
+     simp[]) >>
   drule_all tuple_type_value >> strip_tac >> gvs[] >>
   `LENGTH tys = LENGTH tvs /\ LENGTH tvs = LENGTH vs` by
     (gvs[evaluate_type_def, AllCaseEqs()] >>
@@ -188,7 +219,12 @@ Resume assign_tuple_targets_suffix_mem[prefix]:
   strip_tac >>
   `expr_val_rel cx (TupleT tys) (ArrayV (TupleV vs)) op sv` by metis_tac[] >>
   `expr_val_at cenv cx (TupleT tys) sa su ee (ArrayV (TupleV vs)) op sv` by metis_tac[] >>
-  drule_all tuple_assignment_prefix_path_mem >>
+  `!H'. valid_horizon cx st0 H' ee.storage_trace ==>
+        stmt_state_rel H' ctx func cenv cx ee sv` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+       drule >> simp[expr_post_def]) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] tuple_assignment_prefix_path_mem) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `?t w b sz. _`
     (qx_choosel_then [`t`, `w`, `b`, `sz`] (map_every assume_tac o CONJUNCTS)) >>
@@ -222,16 +258,53 @@ Resume assign_tuple_targets_suffix_mem[stores]:
   qpat_x_assum `compile_tuple_load_all _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `expr_val_rel _ (TupleT tys) _ _ _` kall_tac >>
   qpat_x_assum `expr_val_at _ _ (TupleT tys) _ _ _ _ _ _` kall_tac >>
+  `stmt_state_rel H ctx func cenv cx ee t` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ ee t` drule >>
+     disch_then ACCEPT_TAC) >>
+  `local_ptrs_rel func cenv ee.scopes t /\ alloca_inv t /\
+   ~t.vs_call_ctx.cc_static` by
+    (qpat_assum `stmt_state_rel H _ _ _ _ ee t`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def, state_rel_def]) >>
+     asm_rewrite_tac[]) >>
   drule_all tuple_store_targets_path_mem_T >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `?t. stmt_state_rel H ctx _ _ _ ee' _ /\ _`
+  qpat_x_assum `?t. (!st0 H. _) /\ _`
     (qx_choose_then `sfv` (map_every assume_tac o CONJUNCTS)) >>
   qexistsl_tac [`ee'`, `sfv`] >> conj_tac
   >- (drule_all assign_tuple_target_list_gas_obs >>
       simp[Once evaluate_def]) >>
   conj_tac
   >- (drule_all gas_path_mem_then >> simp[]) >>
-  simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
+  suspend "post"
+QED
+
+Resume assign_tuple_targets_suffix_mem[post]:
+  `sv.vs_alloca_next <= sfv.vs_alloca_next` by decide_tac >>
+  `!H'. valid_horizon cx st0 H' ee'.storage_trace ==>
+        stmt_state_rel H' ctx func cenv cx (ee' with gas_obs := []) sfv /\
+        storage_well_formed_on cx (ee' with gas_obs := []) (FST H')` by
+    (gen_tac >> strip_tac >>
+     `valid_horizon cx st0 H' ee.storage_trace` by
+       (irule vyperStorageFootprintTheory.valid_horizon_frame >>
+        qpat_assum `assign_tuple_target_list _ _ _ ee = _` (irule_at Any) >>
+        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H'` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     `stmt_state_rel H' ctx func cenv cx ee t` by
+       (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ ee t`
+          irule >> first_assum ACCEPT_TAC) >>
+     `stmt_state_rel H' ctx func cenv cx ee' sfv /\
+      storage_well_formed_on cx ee' (FST H')` by
+       (qpat_assum `!st0 H. valid_horizon _ st0 H ee'.storage_trace /\ _ ==> _`
+          irule >> qexists_tac `st0` >> asm_rewrite_tac[]) >>
+     `storage_well_formed_on cx (ee' with gas_obs := []) (FST H')` by
+       (`!b. get_storage cx (ee' with gas_obs := []) b = get_storage cx ee' b` by
+          (Cases >> simp_tac (srw_ss()) [vyperStorageBackendTheory.get_storage_def]) >>
+        fs[vyperStorageFootprintTheory.storage_well_formed_on_def]) >>
+     simp[]) >>
+  simp[stmt_lands_def, cenv_top_ext_refl] >>
   suspend "frame"
 QED
 

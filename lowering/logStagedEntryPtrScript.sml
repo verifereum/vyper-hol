@@ -13,7 +13,7 @@ Theorem log_staged_entry_state_ptr:
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   log_write_frame sa (b+off)
     (SUM (MAP (type_memory_bytes ce) (MAP SND xs))) s t /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
   fresh_vars_wrt limit_st s /\ sb.cs_next_var <= limit_st.cs_next_var /\
   (!name lo sz. local_region ce es.scopes s name lo sz ==>
     lo+sz <= b+off \/ b+off+SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= lo) /\
@@ -23,7 +23,7 @@ Theorem log_staged_entry_state_ptr:
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
     p+type_memory_size tv <= b+off \/
     b+off+SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= p) ==>
-  stmt_state_rel ctx func ce cx es t /\ fresh_vars_wrt limit_st t
+  stmt_state_rel H ctx func ce cx es t /\ fresh_vars_wrt limit_st t
 Proof
   strip_tac >>
   drule_all log_store_data_memory_mono >> disch_tac >>
@@ -37,7 +37,7 @@ QED
 
 Theorem log_registered_buffer_immutable_region:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   FLOOKUP s.vs_allocas sa.cs_next_id = SOME (b,cap) ==>
   ce.ce_is_ctor ==> !name tv v off.
     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
@@ -67,7 +67,7 @@ Theorem compile_log_store_data_ready_path_ptr:
   b+cap < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  stmt_state_rel H ctx func ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   local_ptrs_reserved ce sa /\ fresh_vars_wrt limit_st s /\
   sb.cs_next_var <= limit_st.cs_next_var /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
@@ -83,18 +83,18 @@ Theorem compile_log_store_data_ready_path_ptr:
     (!name a k. local_region ce es.scopes s0 name a k ==> p+sz <= a \/ a+k <= p) ==>
     p+sz <= b \/ b+cap <= p) /\
   (!name p sz. local_region ce es.scopes s0 name p sz ==> p+sz <= b \/ b+cap <= p) ==>
-  ?H tm t.
+  ?HG tm t.
     gas_path_ptr D 0 ctx func PG G tn s
-      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) H tm
+      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) HG tm
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
       log_data_layout cx (MAP SND xs) vs b m) /\
-    stmt_state_rel ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
-    ghost_inv d ce cx es H tm t /\ ghost_kept ce es se G0 tn0 s0 H tm /\
+    stmt_state_rel H ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
+    ghost_inv H d ce cx es HG tm t /\ ghost_kept ce es se G0 tn0 s0 HG tm /\
     log_write_frame sa b (SUM (MAP (type_memory_bytes ce) (MAP SND xs))) s t /\
     (!p. not_fresh_at sa p ==>
-      lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+      lookup_var p t = lookup_var p s /\ FLOOKUP HG p = FLOOKUP G p /\
       op_taint tm (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >>
@@ -113,7 +113,7 @@ Proof
     (rpt strip_tac >> res_tac >> decide_tac) >>
   drule_all (SRULE [] (Q.INST [`off` |-> `0`] log_staged_entry_state_ptr)) >> strip_tac >>
   drule_all (SRULE [] log_data_write_ghost_inv) >> disch_tac >>
-  `ghost_kept ce es se G0 tn0 s0 H tm` by
+  `ghost_kept ce es se G0 tn0 s0 HG tm` by
     (irule log_data_write_ghost_kept >>
      qexistsl_tac [`G`,`b`,`cap`,`sa`,`tn`] >>
      conj_tac >- (rpt strip_tac >>
@@ -124,5 +124,5 @@ Proof
        qpat_x_assum `!i. _ ==> mem_bytes_at _ _ _ = _ /\ _` (qspec_then `i` mp_tac) >>
        impl_tac >- decide_tac >> simp[]) >>
      simp[]) >>
-  qexistsl_tac [`H`,`tm`,`t`] >> fs[]
+  qexistsl_tac [`HG`,`tm`,`t`] >> fs[]
 QED

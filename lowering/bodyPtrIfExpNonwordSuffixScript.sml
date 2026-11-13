@@ -10,9 +10,9 @@ Theorem ifexp_expr_post_same_type:
   post_value_type ce e = expr_type e /\
   post_value_type ce f = expr_type f /\
   expr_type e = expr_type f /\
-  expr_post ctx fn ce cx e es sa sb s0 ee v op s /\
+  expr_post H ctx fn ce cx e es sa sb s0 ee v op s /\
   (~expr_has_effect f ==> pure_frame ce fn es sa s0 s) ==>
-  expr_post ctx fn ce cx f es sa sb s0 ee v op s
+  expr_post H ctx fn ce cx f es sa sb s0 ee v op s
 Proof
   rw[expr_post_def] >> gvs[] >> metis_tac[]
 QED
@@ -38,24 +38,24 @@ Theorem ifexp_nonword_arm_suffix:
   compile_expr ce rty arm sa = (vv,sm) /\
   compile_ifexp_arm ce ty (lowered_value_type ce arm) vv sm = (op,sd) /\
   eval_expr cx arm es = (INL raw,ee) /\ read_result cx raw ee = (INL v,ee) /\
-  stmt_state_rel ctx fn ce cx es s0 /\
-  vv_post ctx fn ce cx arm es sa sm s0 ee raw vv s /\
+  stmt_state_rel H ctx fn ce cx es s0 /\
+  vv_post H ctx fn ce cx arm es sa sm s0 ee raw vv s /\
   ptr_vv_ok cx (expr_type arm) raw vv ee G tn s /\
   (!tag src. vv = StackValue tag src /\ ~is_word_type (expr_type arm) ==>
     ptr_buf_ok ce arm src G s) /\
   (!tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce arm p.ptr_operand G s) /\
-  ghost_inv d ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
+  ghost_inv H d ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   fn_has_code sm sd fn /\ fn_inst_ids_distinct fn /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?u H tt. gas_path_ptr D 0 ctx fn PG G tn s 0 H tt (OK u) /\
-    expr_post ctx fn ce cx arm es sa sd s0 ee v op u /\
-    ptr_val_ok cx ty v op H tt u /\ ptr_buf_ok ce (IfExp ty c a b) op H u /\
-    ghost_inv d ce cx ee H tt u /\ ghost_kept ce es sa G0 tn0 s0 H tt /\
+  ?u HG tt. gas_path_ptr D 0 ctx fn PG G tn s 0 HG tt (OK u) /\
+    expr_post H ctx fn ce cx arm es sa sd s0 ee v op u /\
+    ptr_val_ok cx ty v op HG tt u /\ ptr_buf_ok ce (IfExp ty c a b) op HG u /\
+    ghost_inv H d ce cx ee HG tt u /\ ghost_kept ce es sa G0 tn0 s0 HG tt /\
     u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     (!tv. tv = raw \/ tv = Value v ==>
       vv_at ce cx ty sa sd ee tv (LocatedValue ty (mk_ptr op LocMemory)) u)
@@ -67,7 +67,7 @@ Proof
   >- suspend "same" >>
   drule_all ifexp_residual_allocating_arm_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  `expr_post ctx fn ce cx arm es sa sd s0 ee v op q` by
+  `expr_post H ctx fn ce cx arm es sa sd s0 ee v op q` by
     (irule ifexp_expr_post_same_type >>
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >- first_assum ACCEPT_TAC >>
@@ -77,7 +77,7 @@ Proof
      vv_at ce cx ty sa sd ee tv (LocatedValue ty (mk_ptr op LocMemory)) q` by
     (rpt strip_tac >> irule ifexp_vv_at_of_val_own >>
      simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
-     qpat_x_assum `expr_post _ _ _ _ (IfExp _ _ _ _) _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `expr_post _ _ _ _ _ (IfExp _ _ _ _) _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, post_value_type_def, expr_type_def]) >>
   qexistsl_tac [`q`, `Gf`, `tnf`] >> simp[] >>
   metis_tac[expr_type_def, post_value_type_def]
@@ -97,7 +97,7 @@ Resume ifexp_nonword_arm_suffix[same]:
   `!tag src. vv = StackValue tag src ==> ptr_buf_ok ce arm src G s` by metis_tac[] >>
   drule_all ifexp_old_unwrap_nonword_path_capacity >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qexistsl_tac [`t`, `H`, `tt`] >> simp[] >>
+  qexistsl_tac [`t`, `HG`, `tt`] >> simp[] >>
   gvs[ptr_buf_ok_def, lowered_value_type_def, expr_type_def] >>
   first_assum ACCEPT_TAC
 QED

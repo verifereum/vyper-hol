@@ -49,8 +49,8 @@ Theorem emit_add_displacement_counted:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-      stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel H ctx func cenv cx es sf)
 Proof
   strip_tac >>
   `op_taint tn (Var p) = {}` by gvs[ptr_covers_def] >>
@@ -68,8 +68,8 @@ Proof
   `ptr_covers Gf tnf out sf child_sz` by
     (unabbrev_all_tac >> irule add_displacement_coverage >> simp[] >>
      qexists_tac `parent_sz` >> simp[]) >>
-  `!cenv cx es. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-     stmt_state_rel ctx func cenv cx es sf` by
+  `!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+     stmt_state_rel H ctx func cenv cx es sf` by
     (rpt strip_tac >> simp[Abbr `sf`] >> irule fresh_add_stmt_state_rel >>
      simp[] >> qexists_tac `sa` >> simp[] >> fs[not_fresh_at_def]) >>
   qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[] >>

@@ -57,7 +57,7 @@ QED
 
 Theorem uint2str_operand_endpoint:
   expr_body_pre cenv cx env e es /\ expr_type e = BaseT (UintT k) /\
-  expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
+  expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\
   (?marks ee0. ee = ee0 with gas_obs := [] /\
     !tail. vyperState$bind (eval_expr cx e) (read_result cx)
       (es with gas_obs := gas_explicit marks readings ++ tail) =
@@ -92,10 +92,10 @@ Theorem uint2str_operand_suffix:
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
+  expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
-  ghost_inv d cenv cx ee G tn t /\
+  ghost_inv H d cenv cx ee G tn t /\
   ptr_val_ok cx (expr_type e) v op G tn t /\
   (?marks ee0. ee = ee0 with gas_obs := [] /\
     !tail. vyperState$bind (eval_expr cx e) (read_result cx)
@@ -103,8 +103,8 @@ Theorem uint2str_operand_suffix:
       (INL v,ee0 with gas_obs := tail)) ==>
   ?a Gf tnf u. v = IntV (&a) /\
     gas_path_ptr D 0 ctx func PG G tn t 0 Gf tnf (OK u) /\
-    ghost_inv d cenv cx ee Gf tnf u /\ ghost_kept cenv ee sm G tn t Gf tnf /\
-    vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+    ghost_inv H d cenv cx ee Gf tnf u /\ ghost_kept cenv ee sm G tn t Gf tnf /\
+    vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
       ee sm sb t ee (Value (StringV (num_to_dec_string a)))
       (LocatedValue (BaseT (StringT n))
         <|ptr_operand := out; ptr_location := LocMemory|>) u /\
@@ -154,11 +154,11 @@ Theorem uint2str_eval_continuation:
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
-  ghost_inv d cenv cx ee G tn t /\
+  ghost_inv H d cenv cx ee G tn t /\
   ptr_val_ok cx (expr_type e) v op G tn t /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
@@ -166,16 +166,16 @@ Theorem uint2str_eval_continuation:
     !tail. vyperState$bind (eval_expr cx e) (read_result cx)
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
       (INL v,ee0 with gas_obs := tail)) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (\vst. ((case builtin_result cx vst.accounts (BaseT (StringT n)) (Uint2Str n)
       [expr_type e] [v] of INL w => INL (Value w) | INR exc => INR exc), vst))
     (ee,t,G,tn)
     (\res ef Gf tnf u. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+      vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
         es sa sb s0 ef tv vv u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ef Gf tnf u /\
+      ghost_inv H d cenv cx ef Gf tnf u /\
       ptr_vv_ok cx (expr_type (Builtin (BaseT (StringT n)) (Uint2Str n) [e]))
         tv vv ef Gf tnf u /\
       (!t' x. vv = StackValue t' x /\
@@ -193,11 +193,11 @@ Proof
   simp[as_ptr_val_def] >>
   disch_then (CONJUNCTS_THEN (SUBST_ALL_TAC o SYM)) >>
   drule_all uint2str_operand_suffix >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   drule_all operand_prefix_frame_inputs >> strip_tac >>
   `ghost_kept cenv es sa G0 tn0 s0 Gf tnf` by
     (irule ghost_kept_wb_trans >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  `vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+  `vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
       es sa fin s0 ee (Value (StringV (num_to_dec_string a)))
       (LocatedValue (BaseT (StringT n))
         <|ptr_operand := out; ptr_location := LocMemory|>) u` by
@@ -209,7 +209,7 @@ Proof
       expr_type_def] >>
   qexists_tac `[]` >> disj1_tac >>
   qexistsl_tac [`INL (Value (StringV (num_to_dec_string a)))`, `ee`, `Gf`, `tnf`, `OK u`] >>
-  qpat_x_assum `vv_post _ _ _ _ _ es sa fin s0 _ _ _ _` mp_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ es sa fin s0 _ _ _ _` mp_tac >>
   once_rewrite_tac[vv_post_located_mk_ptr] >>
   simp[ptr_vv_ok_def, mk_ptr_def] >>
   fs[ptr_vv_ok_def]

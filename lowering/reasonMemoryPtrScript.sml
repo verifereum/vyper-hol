@@ -67,7 +67,7 @@ Theorem reason_memory_suffix_path_ptr:
   m = type_memory_bytes cenv (BaseT (StringT cap)) /\
   type_alloc_ok cenv (BaseT (StringT cap)) /\
   b+64+m < dimword (:256) /\ b2+m < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es t /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es t /\ fn_inst_ids_distinct func /\
   MEM (mk_inst p3.cs_next_id ALLOCA [Lit (n2w m)] [tuple]) (fn_insts func) /\
   not_local_ptr cenv es.scopes tuple /\
   FLOOKUP t.vs_allocas p3.cs_next_id = SOME (b2,m) /\
@@ -100,7 +100,7 @@ Proof
   fs[eval_operand_def] >>
   drule_at (Pat `reason_encode_finish _ _ _ _ _ = _`)
     (REWRITE_RULE [GSYM AND_IMP_INTRO] reason_normalized_suffix_path_ptr) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   rpt (disch_then drule) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[venomInstTheory.mk_inst_def, exprSimPropsTheory.val_store_size_def] >>

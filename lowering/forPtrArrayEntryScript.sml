@@ -36,7 +36,7 @@ Proof
 QED
 
 Theorem for_array_alloca_prefix_ptr:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
   sz < dimword (:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME
@@ -77,7 +77,7 @@ Proof
 QED
 
 Theorem for_array_counter_zero_inv_ptr:
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   ~s.vs_halted /\ lookup_scopes name es.scopes = SOME snapshot /\
   lookup_scopes id es.scopes = NONE /\
   lookup_var bp s = SOME arr_base /\ lookup_var p s = SOME dst /\
@@ -96,9 +96,9 @@ Theorem for_array_counter_zero_inv_ptr:
     (jump_to cond (update_var idx 0w s))
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (update_var idx 0w s)` by
+  `stmt_state_rel H ctx func cenv cx es (update_var idx 0w s)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
-  `ghost_inv d cenv cx es (DRESTRICT G (COMPL {idx}))
+  `ghost_inv H d cenv cx es (DRESTRICT G (COMPL {idx}))
     (tn with t_var := tn.t_var |+ (idx,{})) (update_var idx 0w s)` by
     (irule for_scalar_overwrite_ghost >> simp[]) >>
   `ret_pc_ok cenv st (update_var idx 0w s)` by
@@ -132,7 +132,7 @@ QED
 
 (* Actual allocation resources, including the reused-allocation-site case. *)
 Theorem for_array_alloca_resources_ptr:
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_inst_ids_distinct func /\
   MEM (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
   not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\ ~s.vs_halted /\
@@ -141,8 +141,8 @@ Theorem for_array_alloca_resources_ptr:
   ret_pc_ok cenv st s /\ (!x. not_fresh_at st x ==> x <> p) ==>
   ?u dst.
     step_inst_base (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s = OK u /\
-    stmt_state_rel ctx func cenv cx es u /\
-    ghost_inv d cenv cx es
+    stmt_state_rel H ctx func cenv cx es u /\
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) u)
       (step_taint (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) s u tn) u /\
     lookup_var p u = SOME dst /\
@@ -180,7 +180,7 @@ Proof
 QED
 
 Theorem for_array_entry_initialize_ptr:
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_inst_ids_distinct func /\
   MEM (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
   not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\ ~s.vs_halted /\
@@ -285,7 +285,7 @@ Theorem for_array_code_initialize_ptr:
   lookup_block entry func.fn_blocks = SOME
     <|bb_label := entry; bb_instructions :=
       [mk_inst ei ASSIGN [Lit 0w] [idx]; mk_inst ej JMP [Label cond] []]|> /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
   lookup_scopes name es.scopes = SOME snapshot /\ lookup_scopes id es.scopes = NONE /\
   name <> id /\ FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var bp) arrsz) /\
@@ -321,7 +321,7 @@ Theorem for_array_done_stmt_post_ptr:
     stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\
     ~block_is_terminated sb /\ cenv' = cenv /\
     cenv_top_ext cenv cenv' es.scopes /\
-    stmt_state_rel ctx func cenv' cx es t /\ ghost_inv d cenv' cx es G tn t /\
+    stmt_state_rel H ctx func cenv' cx es t /\ ghost_inv H d cenv' cx es G tn t /\
     (!x w. not_fresh_at st x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
     (!x. not_fresh_at st x ==> FLOOKUP G x = FLOOKUP G0 x /\
       op_taint tn (Var x) = op_taint tn0 (Var x))

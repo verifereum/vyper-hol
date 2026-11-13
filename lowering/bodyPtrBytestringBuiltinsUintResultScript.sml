@@ -42,7 +42,7 @@ QED
 
 Theorem u2s_alloc_loop_ghost_kept:
   compile_alloc_buffer sz sa = (ba,a) /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   wb_frame cenv es es sa s ready /\
   ghost_kept cenv es sa G tn s G1 tn1 /\
   ghost_kept cenv es a G1 tn1 ready G2 tn2 ==>
@@ -71,7 +71,7 @@ Theorem u2s_result_vv_post:
   compile_alloc_buffer (sz+n) sa = (ba,a) /\
   u2s_layout a op ba.buf_operand n sb /\ out = Var (u2s_var a 2) /\
   inst.inst_id = sa.cs_next_id /\
-  u2s_safe ctx fn cenv cx es a ba.buf_operand b (sz+n) inst sr t /\
+  u2s_safe H ctx fn cenv cx es a ba.buf_operand b (sz+n) inst sr t /\
   wb_frame cenv es es sa s t /\ pure_frame cenv fn es sa s t /\
   post_value_type cenv e = expr_type e /\
   ~is_word_type (expr_type e) /\
@@ -80,7 +80,7 @@ Theorem u2s_result_vv_post:
   lookup_var (u2s_var a 2) t = SOME (n2w addr) /\
   addr < dimword(:256) /\ b <= addr /\
   addr + val_footprint tv v <= b+(sz+n) ==>
-  vv_post ctx fn cenv cx e es sa sb s es (Value v)
+  vv_post H ctx fn cenv cx e es sa sb s es (Value v)
     (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) t
 Proof
   strip_tac >> drule u2s_alloc_compiler_control >> strip_tac >>
