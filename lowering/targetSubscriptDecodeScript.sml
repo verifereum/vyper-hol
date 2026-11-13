@@ -84,7 +84,8 @@ Proof
   Cases_on `pv` >> simp[target_result_decodable_def] >>
   Cases_on `p` >> simp[target_result_decodable_def] >>
   simp[read_storage_slot_def, vyperStorageBackendTheory.get_storage_backend_eq,
-       bind_def, lift_option_def, return_def, raise_def, AllCaseEqs()]
+       bind_def, lift_option_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> CASE_TAC >> simp[raise_def, return_def]
 QED
 
 Theorem target_lookup_global_decodable:

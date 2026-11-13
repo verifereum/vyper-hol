@@ -903,7 +903,7 @@ Proof
     (rpt strip_tac >>
      qspecl_then [`emitted_insts sa sb`, `sa`, `s`, `tt`] mp_tac
        run_inst_seq_writes_fresh >>
-     impl_tac >- simp[] >> strip_tac >>
+     impl_tac >- (simp[] >> gvs[]) >> strip_tac >>
      pop_assum kall_tac >>
      pop_assum (fn th => once_rewrite_tac[th]) >> simp[]) >>
   goal_assum (drule_at Any) >> simp[]
