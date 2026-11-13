@@ -63,11 +63,11 @@ Proof
   rpt strip_tac >> gvs[emitted_insts_def]
 QED
 
-Theorem window_copy_observed:
+Theorem window_copy_strong_endpoint:
   compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') /\
   abi_encoder_window_pre ctx func st st' dst src (AbiCopy sz) at av sb cap d s ==>
-  ?t. window_strong_result ctx func st st' out at av d s t /\
-      (!x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s)
+  window_strong_result ctx func st st' out at av d s
+    ((mcopy d sb sz s) with vs_inst_idx := LENGTH st'.cs_current_insts)
 Proof
   strip_tac >>
   `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
@@ -99,9 +99,6 @@ Proof
     (irule abi_encoder_registered_effect_enlarge >>
      qexistsl_tac [`window_alloca_sites func (frag_ids st st')`, `[(d,sz)]`] >>
      simp[window_alloca_sites_subset]) >>
-  qexists_tac `(mcopy d sb sz s) with vs_inst_idx := LENGTH st'.cs_current_insts` >>
-  reverse conj_tac
-  >- simp[lookup_var_def, mcopy_def, write_memory_with_expansion_def] >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
   simp[eval_operand_def, mcopy_mem_bytes_at_same, abi_encoder_extend_sim_sim] >>
   mp_tac (Q.INST [`d` |-> `d`, `sb` |-> `sb`, `n` |-> `sz`,
@@ -109,6 +106,17 @@ Proof
   simp[] >> strip_tac >> conj_tac >- asm "sizes" ACCEPT_TAC >>
   simp[venomExecSemanticsTheory.mcopy_def,
     venomStateTheory.write_memory_with_expansion_def]
+QED
+
+Theorem window_copy_observed:
+  compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src (AbiCopy sz) at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\
+      (!x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all window_copy_strong_endpoint >> strip_tac >>
+  qexists_tac `(mcopy d sb sz s) with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  simp[lookup_var_def, mcopy_def, write_memory_with_expansion_def]
 QED
 
 Theorem window_copy_contract:
