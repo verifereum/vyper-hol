@@ -154,7 +154,8 @@ Theorem abi_malformed_resource_input_unprune:
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
   strip_tac >>
-  `!H. stmt_state_rel H ctx func cenv cx es s ==>
+  `!H:(bool # bytes32 # type_value) list # num list.
+       stmt_state_rel H ctx func cenv cx es s ==>
        stmt_state_rel H ctx func cenv cx es
          (abi_decoder_prune_vars st.cs_next_var s)` by
     metis_tac[abi_malformed_prune_state] >>
@@ -210,7 +211,8 @@ Proof
     (drule abi_decoder_vars_extend_restore >>
      disch_then (mp_tac o AP_TERM ``\v:venom_state. v with vs_vars := u.vs_vars``) >>
      simp[]) >>
-  `!H. stmt_state_rel H ctx func cenv cx es t ==>
+  `!H:(bool # bytes32 # type_value) list # num list.
+       stmt_state_rel H ctx func cenv cx es t ==>
        stmt_state_rel H ctx func cenv cx es u` by
     (rpt strip_tac >> qpat_x_assum `u = _` SUBST1_TAC >>
      irule abi_malformed_reserved_vars_state >>
