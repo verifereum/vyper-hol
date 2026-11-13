@@ -180,6 +180,10 @@ Resume tuple_local_store_head_path[word_frame]:
   conj_tac
   >- (gen_tac >> strip_tac >> drule_all stmt_state_rel_write_local_store >>
       simp[mstore_def, LET_THM]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _`
+        (qspecl_then [`a`, `len`] mp_tac) >> simp[]) >>
   rpt gen_tac >> strip_tac >>
   drule_all tuple_store_destination_region >> strip_tac >>
   `32 <= dsz` by
