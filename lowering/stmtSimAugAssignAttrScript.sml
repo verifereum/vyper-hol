@@ -1242,7 +1242,9 @@ Resume augassign_attr_normal_summary[store]:
     (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
        augassign_attr_pre_store_frame >>
      disch_then irule >> simp[]) >>
-  drule_at (Pat `emit_void _ _ _ = _`) augassign_attr_store_post_path >>
+  drule_at (Pat `emit_void _ _ _ = _`)
+    (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+       augassign_attr_store_post_path) >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
   disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (PtrVar _ _)`)) >>
@@ -1250,7 +1252,7 @@ Resume augassign_attr_normal_summary[store]:
   disch_then (drule_at (Pat `lookup_var _ u = _`)) >>
   disch_then (drule_at (Pat `eval_operand out u = SOME (typed_val_to_w256 _ _)`)) >>
   disch_then (drule_at (Pat `ALOOKUP fs' fld = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ ee u`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ ee u`)) >>
   disch_then (drule_at (Pat `entry'.value = _`)) >>
   disch_then (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
   disch_then (qspec_then `lctx` mp_tac) >>
@@ -1406,7 +1408,7 @@ Proof
     metis_tac[local_word_pointer_live] >>
   `fn_has_code sa s1 func` by metis_tac[fn_has_code_split, cs_extends_trans] >>
   `eval_operand (Var p) s0 = SOME w0` by simp[eval_operand_def] >>
-  drule_all attr_load_marked_path >>
+  drule_all (INST_TYPE [alpha |-> ``:256``] attr_load_marked_path) >>
   disch_then (qspecl_then [`es`, `cx`, `ctx`] strip_assume_tac) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
        stmt_state_rel H ctx func cenv cx es t /\
@@ -1493,7 +1495,7 @@ Resume compile_augassign_attr_local_case[rhs_normal]:
          (ee with gas_obs := []) v rhs u` by
     (rpt strip_tac >>
      qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
-                     expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _` drule >>
+                     expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` drule >>
      simp[]) >>
   `stmt_state_rel H1 ctx func cenv cx es s0 /\
    stmt_state_rel H1 ctx func cenv cx es t` by metis_tac[] >>
@@ -1501,10 +1503,11 @@ Resume compile_augassign_attr_local_case[rhs_normal]:
     (`mload (w2n (w0 + n2w (struct_field_offset
          (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))) s0 =
          typed_val_to_w256 ftv fv` by
-       (irule stmt_state_rel_field_word >>
+       (irule (INST_TYPE [alpha |-> ``:256``] stmt_state_rel_field_word) >>
         rpt (goal_assum (drule_at Any)) >> simp[]) >>
      `word_value fv` by metis_tac[word_value_type_typed] >>
      gvs[typed_val_to_w256_word_value]) >>
+  qpat_x_assum `valid_horizon cx st0 H1 es.storage_trace` kall_tac >>
   irule augassign_attr_normal_summary >>
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
