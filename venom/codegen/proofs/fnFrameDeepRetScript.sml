@@ -17,6 +17,7 @@ Ancestors
   codegenRel blockSimHelpers unitShapeDefs genBlockSim mixedPrefixSim
   stackPlanGen stackPlanTypes planExec asmSem venomExecSemantics venomState
   venomInst fcgDefs livenessDefs dfgDefs cfgDefs
+  asmRunBounded planEmissionProps
 
 (* fnFrameBoundaryGenRet's ret_frame_prefix over generated_plan_state_wf_marked,
    with any-depth ownership and an address bound on the plan's offsets.
@@ -55,11 +56,22 @@ Theorem ret_frame_prefix_marked_exact:
     context_memory_rel cp vs.vs_memory mid.as_memory /\
     (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
       read_byte b mid.as_memory = read_byte b mem0) /\
-    shared_state_rel vs mid
+    shared_state_rel vs mid /\
+    create_safe_prefix lo o2pc prog
+      (LENGTH (execute_plan cp.cp_initial_fmp ops) - 1) st
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all ret_plan_no_spill >> strip_tac >>
   drule_all ret_plan_decompose >> strip_tac >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st` >>
+  `EVERY plan_admin_op (iops ++ rops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp ops) - 1) st` by
+    (irule plan_admin_create_safe_prefix >>
+     qexistsl [`cplan.cp_initial_fmp`, `iops ++ rops`] >>
+     fs[execute_plan_append, asm_block_at_append, execute_plan_def,
+        exec_stack_op_def]) >>
   drule fn_frame_inv_local_state >> strip_tac >>
   suspend "local_run"
 QED
@@ -286,7 +298,9 @@ Theorem gen_ret_frame_sim_deep_exact:
         (!b. context_spill_byte cp b /\
              ~closure_spill_byte ctx cp fn.fn_name b ==>
              read_byte b as'.as_memory = read_byte b mem0) /\
-        shared_state_rel vs' as'
+        shared_state_rel vs' as' /\
+        create_safe_prefix lo o2pc prog
+          (LENGTH (execute_plan cp.cp_initial_fmp ops)) as
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt gen_tac >> disch_tac >>
@@ -308,6 +322,18 @@ Proof
   `0 < LENGTH (execute_plan cplan.cp_initial_fmp ops)` by
     (drule_all ret_plan_decompose >> strip_tac >>
      gvs[execute_plan_append, execute_plan_def, exec_stack_op_def]) >>
+  `create_safe_prefix lo o2pc prog (SUC 0) mid` by
+    (simp[create_safe_prefix_suc] >>
+     fs[asm_block_at_def, create_safe_def]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp ops)) as` by
+    (`LENGTH (execute_plan cplan.cp_initial_fmp ops) =
+       (LENGTH (execute_plan cplan.cp_initial_fmp ops) - 1) + SUC 0` by decide_tac >>
+     pop_assum SUBST1_TAC >>
+     match_mp_tac (Q.SPECL
+       [`LENGTH (execute_plan cplan.cp_initial_fmp ops) - 1`,
+        `SUC 0`, `as`, `mid`] create_safe_prefix_compose) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac
     `mid with <| as_pc := pc_ret; as_stack := REVERSE ret.iret_values ++ rest |>` >>
   conj_tac
