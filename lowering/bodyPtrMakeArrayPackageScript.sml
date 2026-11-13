@@ -255,6 +255,24 @@ Proof
 QED
 
 
+(* PORT_ADMISSION: SEQ-3208. 0f7fb5e29/5e4c70ab0 compile a tuple literal at its
+   declared member types (tuple_literal_types), which may be wider than its
+   elements' own types; the memory side takes that through
+   bodyMemAggregateLoops' aggregate_make_tuple_fits_sim_mem. Pointer twin for a
+   tuple literal whose annotation is not TupleT (MAP expr_type args);
+   literal_tuple_vv_sim_ptr proves the exact case. *)
+Theorem literal_tuple_widened_vv_sim_ptr:
+  expr_body_pre ce cx env (Builtin ann (MakeArray NONE bnd) args) es /\
+  body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
+  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
+    expr_body_pre ce cx env e st) /\
+  (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+  ann <> TupleT (MAP expr_type args) ==>
+  expr_vv_sim_ptr d ctx PG func ce cx ty (Builtin ann (MakeArray NONE bnd) args) es
+Proof
+  cheat
+QED
+
 Theorem literal_tuple_vv_sim_ptr:
   expr_body_pre ce cx env (Builtin ann (MakeArray NONE bnd) args) es /\
   body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
@@ -263,18 +281,27 @@ Theorem literal_tuple_vv_sim_ptr:
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
   expr_vv_sim_ptr d ctx PG func ce cx ty (Builtin ann (MakeArray NONE bnd) args) es
 Proof
-  strip_tac >> rw[expr_vv_sim_ptr_def] >>
+  strip_tac >>
+  reverse (Cases_on `ann = TupleT (MAP expr_type args)`)
+  >- (drule_all literal_tuple_widened_vv_sim_ptr >> simp[]) >>
+  gvs[] >> rw[expr_vv_sim_ptr_def] >>
   drule compile_tuple_literal_inv >> strip_tac >> gvs[] >>
   drule make_tuple_evaluated_layout >> strip_tac >> gvs[] >>
   `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
   `compatible_bound bnd (LENGTH args)` by
     fs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
   `type_memory_size_list tvs < dimword(:256)` by
-    (fs[expr_body_pre_def, alloc_limits_expr_def] >>
-     simp[wordsTheory.dimword_def] >> decide_tac) >>
+    (`type_memory_bytes ce (TupleT (MAP expr_type args)) < 2 ** 64` by
+       fs[expr_body_pre_def, alloc_limits_expr_def, type_alloc_ok_def,
+          is_word_type_def] >>
+     pop_assum mp_tac >>
+     simp[Once type_memory_bytes_def, wordsTheory.dimword_def] >>
+     CONV_TAC (DEPTH_CONV ETA_CONV) >>
+     qpat_x_assum `SUM _ = type_memory_size_list _` (fn th => rewrite_tac[th]) >>
+     decide_tac) >>
   `?root. ba.buf_operand = Var root` by
     metis_tac[bodyPtrMakeArrayAllocBufferTheory.alloc_buffer_emitted] >>
-  fs[] >>
+  fs[exprLoweringTheory.tuple_literal_types_def] >>
   drule_all (REWRITE_RULE []
     (Q.INST [`pure` |-> `~EXISTS expr_has_effect args`]
       (SPEC_ALL literal_allocated_tuple_outcome))) >>
@@ -292,7 +319,7 @@ Proof
          (Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args)) <=
          type_memory_size_list tvs` by
         (simp[lowered_value_type_def, vyperASTTheory.expr_type_def, type_memory_bytes_def,
-          listTheory.MAP_MAP_o, combinTheory.o_DEF] >> fs[combinTheory.o_DEF]) >>
+          listTheory.MAP_MAP_o, combinTheory.o_DEF] >> fs[listTheory.MAP_MAP_o, combinTheory.o_DEF]) >>
       drule_at (Pat `type_memory_bytes _ _ <= _`) literal_tuple_endpoint_posts >>
       simp[vyperASTTheory.expr_type_def] >>
       disch_then drule >> simp[] >>
@@ -405,8 +432,11 @@ Proof
   Cases_on `emit_void MSTORE [Var root; Lit (n2w (LENGTH args))] sm` >>
   gvs[compile_make_array_def, comp_ignore_bind_def, comp_bind_def] >>
   rename1 `emit_void _ _ sm = ((),sn)` >>
-  drule exprSimAggregateLoopsTheory.compile_make_array_elems_as_tuple >>
-  disch_then (qspecl_then [`T`, `compile_expr`, `ce`, `Var root`, `0`] assume_tac) >>
+  `compile_make_array_elems compile_expr ce args et (type_memory_bytes ce et) T
+     (Var root) 0 =
+   compile_make_tuple compile_expr ce args (REPLICATE (LENGTH args) et)
+     (Var root) 32` by
+    simp[exprSimAggregateLoopsTheory.compile_make_array_elems_as_tuple] >>
   `ci_mono sn sb` by
     metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND] >>
   `ci_mono sm sn` by metis_tac[ci_mono_emit_void, pairTheory.SND] >>
@@ -559,6 +589,23 @@ Proof
   Cases_on `q` >> simp[bind_def, return_def]
 QED
 
+(* PORT_ADMISSION: SEQ-3208. 0f7fb5e29/5e4c70ab0 let an array literal's
+   elements be narrower than its element type (arg_type_fits); the memory side
+   takes that through bodyMemAggregateLoops' aggregate_make_tuple_fits_sim_mem.
+   Pointer twin for an array literal with an element whose type isn't et;
+   literal_array_vv_sim_ptr proves the exact case. *)
+Theorem literal_array_widened_vv_sim_ptr:
+  expr_body_pre ce cx env (Builtin ann (MakeArray (SOME et) bnd) args) es /\
+  body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
+  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
+    expr_body_pre ce cx env e st) /\
+  (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+  ~EVERY (\e. expr_type e = et) args ==>
+  expr_vv_sim_ptr d ctx PG func ce cx ty (Builtin ann (MakeArray (SOME et) bnd) args) es
+Proof
+  cheat
+QED
+
 Theorem literal_array_vv_sim_ptr:
   expr_body_pre ce cx env (Builtin ann (MakeArray (SOME et) bnd) args) es /\
   body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
@@ -567,7 +614,10 @@ Theorem literal_array_vv_sim_ptr:
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
   expr_vv_sim_ptr d ctx PG func ce cx ty (Builtin ann (MakeArray (SOME et) bnd) args) es
 Proof
-  strip_tac >> rw[expr_vv_sim_ptr_def] >>
+  strip_tac >>
+  reverse (Cases_on `EVERY (\e. expr_type e = et) args`)
+  >- (drule_all literal_array_widened_vv_sim_ptr >> simp[]) >>
+  rw[expr_vv_sim_ptr_def] >>
   drule compile_array_literal_inv >> strip_tac >> gvs[] >>
   drule make_array_evaluated_layout >> strip_tac >> gvs[] >>
   `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
