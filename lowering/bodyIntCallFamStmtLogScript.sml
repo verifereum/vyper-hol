@@ -92,6 +92,8 @@ Resume intcall_log_stmt_step[compose]:
   qpat_assum `MAP SND xs = _` (fn th => fs[GSYM th]) >>
   `LENGTH (MAP SND fields) = LENGTH xs` by simp[] >>
   drule_all intcall_log_counted_compose >> strip_tac >>
+  `EVERY (supported_scalar_type o SND) xs` by
+    fs[EVERY_MAP, combinTheory.o_DEF] >>
   `~block_is_terminated cs'` by metis_tac[log_stmt_open] >>
   `env' = env` by fs[type_stmt_def, AllCaseEqs()] >>
   irule gas_outcome_conseq >>
