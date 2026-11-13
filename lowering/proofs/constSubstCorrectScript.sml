@@ -1077,7 +1077,10 @@ Proof
     vyperStateTheory.raise_def, vyperMiscTheory.option_CASE_rator,
     vyperMiscTheory.prod_CASE_rator, vyperStateTheory.var_decl_info_CASE_rator,
     AllCaseEqs()] >>
-  rpt strip_tac >> gvs[AllCaseEqs()]
+  rpt strip_tac >>
+  gvs[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+    vyperStateTheory.record_storage_event_def, vyperStateTheory.return_def,
+    AllCaseEqs()]
 QED
 
 Theorem eval_base_place_immutable_root:
