@@ -128,13 +128,12 @@ Proof
        vs_current_bb := lbl; vs_inst_idx := 0|>) _ (OK actual)`
        (mp_tac o MATCH_MP ctor_path_mem_code) >> simp[]) >>
   `vs.vs_code = (deploy_evaluation_context tops am tx).txn.code` by
-    (qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
-     qpat_x_assum `gas_variant _ _` mp_tac >>
-     simp[deploy_state_rel_def, gas_variant_def, deploy_entry_state_def,
-          entry_venom_state_def, init_venom_state_def,
-          deploy_evaluation_context_def,
-          vyperInterpreterTheory.initial_evaluation_context_def] >>
-     rpt strip_tac >> gvs[]) >>
+    (qpat_x_assum `gas_variant _ _` mp_tac >>
+     rewrite_tac[gas_variant_def] >>
+     disch_then (mp_tac o Q.AP_TERM `\s. s.vs_code`) >>
+     simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def] >>
+     gvs[deploy_state_rel_def, deploy_evaluation_context_def,
+         vyperInterpreterTheory.initial_evaluation_context_def]) >>
   `actual.vs_call_ctx = vs.vs_call_ctx /\ actual.vs_tx_ctx = vs.vs_tx_ctx /\
    actual.vs_block_ctx = vs.vs_block_ctx /\ actual.vs_outcomes = vs.vs_outcomes` by metis_tac[] >>
   drule_all ctor_source_candidate_context >>
