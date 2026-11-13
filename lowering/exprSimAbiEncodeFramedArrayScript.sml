@@ -903,7 +903,27 @@ Theorem abi_encode_framed_array_root_tail_init_sequence:
       (LENGTH avs * abi_member_head_size ty) sb cap d
       (LENGTH (enc (Array NONE ty) (ListV avs))) t /\ abi_encode_exec_frame func s t
 Proof
-  cheat
+  strip_tac >> drule window_array_tail_init_trace >> strip_tac >>
+  `cs_extends st c1 /\ cs_extends c1 c2 /\ cs_extends c2 en` by
+    metis_tac[ci_mono_emit_op, ci_mono_emit_void, ci_mono_def, pairTheory.SND] >>
+  `fn_has_code st c1 func /\ fn_has_code c1 c2 func /\ fn_has_code c2 en func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `alloca_room ctx func s /\ alloca_inv s /\
+   (!b sz. FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,sz) ==> sz = 32)` by
+    (fs[window_array_root_def, window_sizes32_def] >> metis_tac[]) >>
+  `asz = abi_member_head_size ty` by
+    (qpat_assum `window_array_root _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ s` mp_tac >>
+     simp_tac bool_ss [window_array_root_def] >> strip_tac >>
+     qpat_x_assum `abi_encoder_window_input _ _ _ _ _ _` mp_tac >>
+     simp_tac (srw_ss()) [abi_encoder_window_array_iff] >> metis_tac[]) >>
+  drule_all abi_encode_framed_array_dynamic_cursor_sequence >> strip_tac >>
+  `{st.cs_next_id} SUBSET ids` by simp[SUBSET_DEF] >>
+  `EVERY (\r. venomMemDefs$regions_disjoint (sb,cap) r) []` by simp[] >>
+  drule_all window_array_root_transition >> strip_tac >>
+  qexistsl_tac [`t`, `b`] >> asm_rewrite_tac[] >>
+  simp_tac bool_ss [window_array_cursor_def] >> asm_rewrite_tac[] >>
+  qpat_x_assum `window_array_root _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
+  simp_tac bool_ss [window_array_root_def] >> metis_tac[]
 QED
 
 Theorem abi_encode_framed_array_root_tail_init_run:
@@ -924,12 +944,8 @@ Theorem abi_encode_framed_array_root_tail_init_run:
       (LENGTH avs * abi_member_head_size ty) sb cap d
       (LENGTH (enc (Array NONE ty) (ListV avs))) t /\ abi_encode_exec_frame func s t
 Proof
-  strip_tac >> drule window_array_tail_init_trace >> strip_tac >>
-  `cs_extends st c1 /\ cs_extends c1 c2 /\ cs_extends c2 en` by
-    metis_tac[ci_mono_emit_op, ci_mono_emit_void, ci_mono_def, pairTheory.SND] >>
-  `fn_has_code st c1 func /\ fn_has_code c1 c2 func /\ fn_has_code c2 en func` by
-    metis_tac[fn_has_code_split, cs_extends_trans] >>
-  drule_all abi_encode_framed_array_root_dynamic_cursor_phase >> simp_tac bool_ss []
+  strip_tac >> drule_all abi_encode_framed_array_root_tail_init_sequence >>
+  strip_tac >> qexistsl_tac [`t`, `b`] >> asm_rewrite_tac[]
 QED
 
 Theorem abi_encode_framed_array_root_dynamic_init_steps:
