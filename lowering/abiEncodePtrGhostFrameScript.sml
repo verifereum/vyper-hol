@@ -260,3 +260,187 @@ Proof
      Cases_on `fresh` >> Cases_on `method_id` >> gvs[] >> decide_tac) >>
   qpat_x_assum `tn'.t_mem = _` SUBST1_TAC >> simp[] >> decide_tac
 QED
+
+Theorem abi_encode_phases_effects_transport:
+  stmt_state_rel ctx func cenv cx es initial /\ ghost_inv rb cenv cx es G tn initial /\
+  local_ptrs_reserved cenv st /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
+  abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
+  compile_abi_encode_to_buf (SND ops) src ei ready = (len,body_end) /\
+  fn_has_code st ready func /\ fn_has_code ready body_end func /\ fn_inst_ids_distinct func /\
+  st.cs_next_var <= ready.cs_next_var /\ st.cs_next_var <= body_end.cs_next_var /\
+  st.cs_next_id <= ready.cs_next_id /\
+  m = (case method_id of NONE => 0 | SOME mid => 4) /\
+  w = (case method_id of NONE => 0 | SOME mid => 32) /\ d = p+32+m /\
+  outsz = 32+32*word_size (maxlen+m) /\ 32+w <= outsz /\
+  d+LENGTH(enc at av) <= p+outsz /\
+  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME(p,outsz)) /\
+  abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id outsz p w initial prepared /\
+  window_strong_result ctx func ready body_end len at av d prepared body /\
+  abi_encoder_registered_effect {} [(p,32)] body actual /\ abi_decode_frame p 32 body actual /\
+  actual.vs_allocas = body.vs_allocas /\ actual.vs_alloca_next = body.vs_alloca_next /\
+  prepared.vs_accounts = initial.vs_accounts /\ prepared.vs_transient = initial.vs_transient /\
+  body.vs_call_ctx = prepared.vs_call_ctx /\
+  (!op v. abi_decoder_operand_live body_end.cs_next_var op /\ eval_operand op body = SOME v ==>
+    eval_operand op actual = SOME v) /\
+  (!id b sz. id IN window_alloca_sites func (frag_ids ready body_end) /\
+    FLOOKUP prepared.vs_allocas id = SOME(b,sz) ==>
+    venomMemDefs$regions_disjoint (p+32,m) (b,sz)) /\
+  (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+  (!x. not_fresh_at ready x ==> FLOOKUP Hbody x = FLOOKUP H x /\
+    op_taint tbody (Var x) = op_taint tf (Var x)) /\
+  (!x. not_fresh_at body_end x ==> FLOOKUP G' x = FLOOKUP Hbody x /\
+    op_taint tn' (Var x) = op_taint tbody (Var x)) /\
+  tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+  tbody.t_stor = tf.t_stor /\ tbody.t_trans = tf.t_trans /\ tbody.t_imm = tf.t_imm /\
+  tn'.t_stor = tbody.t_stor /\ tn'.t_trans = tbody.t_trans /\ tn'.t_imm = tbody.t_imm /\
+  tf.t_mem = (if FLOOKUP initial.vs_allocas st.cs_next_id = NONE then
+      tn.t_mem UNION {i | p <= i /\ i < p+outsz} else tn.t_mem) DIFF
+    (case method_id of NONE => {} | SOME mid => {i | p+32 <= i /\ i < p+64}) /\
+  (!i. d <= i /\ i < d+LENGTH(enc at av) ==> i NOTIN tbody.t_mem) /\
+  (!i. (i < d \/ d+LENGTH(enc at av) <= i) /\
+    (!id b sz. id IN window_alloca_sites func (frag_ids ready body_end) /\
+      FLOOKUP body.vs_allocas id = SOME(b,sz) ==> i < b \/ b+sz <= i) ==>
+    (i IN tbody.t_mem <=> i IN tf.t_mem)) /\
+  tn'.t_mem = tbody.t_mem DIFF {i | p <= i /\ i < p+32} ==>
+  ghost_inv rb cenv cx es G' tn' actual /\
+  ghost_kept cenv es st G tn initial G' tn' /\
+  (!i. p <= i /\ i < p+32+m+LENGTH(enc at av) ==> i NOTIN tn'.t_mem)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qabbrev_tac `B = window_alloca_sites func (frag_ids ready body_end)` >>
+  qabbrev_tac `ids = st.cs_next_id INSERT B` >>
+  drule_all abi_encode_caller_phase_allocations >> strip_tac >>
+  `FLOOKUP prepared.vs_allocas st.cs_next_id = SOME(p,outsz)` by
+    (irule abiBuiltinEncodeCorrectTheory.abi_builtin_encode_setup_frame_row >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `FLOOKUP actual.vs_allocas st.cs_next_id = SOME(p,outsz)` by
+    (drule abiEncoderWindowContractTheory.window_strong_result_effect >>
+     simp_tac bool_ss [abi_encoder_registered_effect_def] >> strip_tac >> metis_tac[]) >>
+  `abi_encoder_registered_effect ids [] prepared actual` by
+    (irule exprSimAbiEncodeSuffixOwnershipTheory.abi_encode_body_finish_registered >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> qexists `B` >>
+     simp[Abbr `ids`,Abbr `B`,SUBSET_DEF] >> decide_tac) >>
+  `alloca_inv actual` by
+    (drule abiEncoderWindowContractTheory.window_strong_result_public >>
+     simp_tac bool_ss [abiEncoderWindowContractTheory.abi_encoder_window_result_def] >> strip_tac >>
+     fs[alloca_inv_def,allocas_non_overlapping_def,alloca_next_valid_def] >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `!x v. not_fresh_at st x /\ lookup_var x initial = SOME v ==> lookup_var x actual = SOME v` by
+    (suspend "registers") >>
+  `!x. not_fresh_at st x ==> FLOOKUP G' x = FLOOKUP G x /\
+    op_taint tn' (Var x) = op_taint tn (Var x)` by (suspend "ghosts") >>
+  `!name entry ptr sz inst. lookup_scopes name es.scopes = SOME entry /\
+    FLOOKUP cenv.ce_vars name = SOME(PtrVar (Var ptr) sz) /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [ptr] ==>
+    inst.inst_id NOTIN ids` by (suspend "locals") >>
+  `!i. (!id b sz. id IN ids /\ FLOOKUP actual.vs_allocas id = SOME(b,sz) ==>
+    i < b \/ b+sz <= i) ==> (i IN tn'.t_mem <=> i IN tn.t_mem)` by
+    (suspend "taints") >>
+  `ghost_inv rb cenv cx es G' tn' actual /\ ghost_kept cenv es st G tn initial G' tn'` by
+    (suspend "transport") >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >> suspend "clean"
+QED
+
+Resume abi_encode_phases_effects_transport[registers]:
+  rpt gen_tac >> strip_tac >> irule abi_encode_caller_phase_registers >>
+  qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `window_strong_result _ _ _ _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
+  fs[not_fresh_at_def,abiDecoderReentryTheory.abi_decoder_operand_live_def,
+    abiDecoderReentryTheory.abi_decoder_older_vars_def]
+QED
+Resume abi_encode_phases_effects_transport[ghosts]:
+  rpt gen_tac >> strip_tac >>
+  `not_fresh_at ready x /\ not_fresh_at body_end x` by
+    (fs[not_fresh_at_def] >> decide_tac) >> metis_tac[]
+QED
+Resume abi_encode_phases_effects_transport[locals]:
+  drule_all exprSimAbiEncodePrefixWindowTheory.abi_encode_setup_alloca_code >>
+  qmatch_goalsub_abbrev_tac `MEM allocation (fn_insts func)` >> strip_tac >>
+  `allocation.inst_id = st.cs_next_id /\ allocation.inst_opcode = ALLOCA /\
+   allocation.inst_outputs = [STRING #"%" (toString st.cs_next_var)]` by
+    simp[Abbr `allocation`,venomInstTheory.mk_inst_def] >>
+  `!i. i IN ids ==> ?inst q. MEM inst (fn_insts func) /\ inst.inst_id = i /\
+    inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q` by
+    (simp_tac bool_ss [Abbr `ids`,IN_INSERT] >> rpt gen_tac >> strip_tac
+     >- (qexistsl [`allocation`,`STRING #"%" (toString st.cs_next_var)`] >> simp[] >>
+         irule exprLoweringPropsTheory.local_ptrs_reserved_fresh >> goal_assum (drule_at Any) >> simp[]) >>
+     qpat_x_assum `i IN B` mp_tac >>
+     simp_tac std_ss [Abbr `B`,abiEncoderWindowContractTheory.window_alloca_sites_def,GSPECIFICATION] >>
+     strip_tac >>
+     `?q. inst.inst_operands = [Lit 32w] /\ inst.inst_outputs = [q] /\
+       not_local_ptr cenv es.scopes q` by
+       (irule (cj 2 exprSimAbiEncodeSiteResourcesTheory.abi_encode_compiled_scratch_site) >>
+        qpat_assum `compile_abi_encode_to_buf _ _ _ _ = _` (irule_at Any) >>
+        qpat_assum `fn_has_code ready body_end func` (irule_at Any) >> simp[] >>
+        qexistsl [`func`,`st`] >> simp[]) >>
+     qexistsl [`inst`,`q`] >> simp[]) >>
+  rpt gen_tac >> strip_tac >> irule abi_encode_local_site_id_exclusion >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl [`cenv`,`entry`,`name`,`es.scopes`,`sz`] >> simp[]
+QED
+Resume abi_encode_phases_effects_transport[taints]:
+  rpt gen_tac >> strip_tac >>
+  irule (INST_TYPE [alpha |-> ``:256 word``] abi_encode_phases_taint_exterior) >>
+  qpat_assum `tn'.t_mem = _` (irule_at Any) >>
+  qpat_assum `tf.t_mem = _` (irule_at Any) >>
+  qpat_assum `FLOOKUP actual.vs_allocas st.cs_next_id = _` (irule_at Any) >>
+  qexistsl [`w`,`LENGTH(enc at av)`,`ids`,`d`,`B`,`body`] >>
+  gvs[Abbr `ids`] >>
+  Cases_on `method_id` >> gvs[] >> conj_tac >> first_assum ACCEPT_TAC
+QED
+Resume abi_encode_phases_effects_transport[transport]:
+  irule abi_encode_phases_ghost_transport_defined >>
+  qpat_assum `stmt_state_rel _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `abi_encoder_registered_effect ids [] _ _` (irule_at Any) >>
+  drule abiEncoderWindowContractTheory.window_strong_result_effect >> strip_tac >>
+  `!i b sz. FLOOKUP actual.vs_allocas i = SOME(b,sz) /\
+    FLOOKUP initial.vs_allocas i = NONE ==> initial.vs_alloca_next <= b` by
+    (qpat_x_assum `window_alloca_growth initial actual` mp_tac >>
+     simp_tac bool_ss [abiEncoderWindowContractTheory.window_alloca_growth_def] >>
+     metis_tac[]) >>
+  asm_rewrite_tac [] >>
+  fs[abi_encoder_registered_effect_def,abiDecoderContractTheory.abi_decode_frame_def,
+     abiBuiltinEncodeSetupTheory.abi_builtin_encode_setup_frame_def,
+     abiEncoderWindowContractTheory.window_alloca_growth_def] >>
+  asm_rewrite_tac [] >>
+  qpat_x_assum `st.cs_next_id <= ready.cs_next_id` mp_tac >>
+  qpat_x_assum `Abbrev (ids = _)` mp_tac >>
+  qpat_x_assum `Abbrev (B = _)` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  simp_tac std_ss [Abbr `ids`,Abbr `B`,IN_INSERT,
+    abiEncoderWindowContractTheory.window_alloca_sites_def,GSPECIFICATION,
+    abiEncoderPropsTheory.frag_ids_def] >> rpt strip_tac >>
+  gvs[abiEncoderWindowContractTheory.window_alloca_sites_def,
+      abiEncoderPropsTheory.frag_ids_def] >> decide_tac
+QED
+Resume abi_encode_phases_effects_transport[clean]:
+  drule abiEncoderWindowContractTheory.window_strong_result_growth >> strip_tac >>
+  drule abiEncoderWindowContractTheory.window_strong_result_effect >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  irule (INST_TYPE [alpha |-> ``:256 word``] abi_encode_phases_prefix_clean) >>
+  qpat_assum `tn'.t_mem = _` (irule_at Any) >>
+  qpat_assum `tf.t_mem = _` (irule_at Any) >>
+  qpat_assum `abi_encoder_registered_effect _ _ prepared body` (irule_at Any) >>
+  qexists `m` >> simp_tac bool_ss [Abbr `B`] >> asm_rewrite_tac [] >>
+  `alloca_next_valid initial` by
+    metis_tac[exprLoweringPropsTheory.stmt_state_rel_def,venomMemDefsTheory.alloca_inv_def] >>
+  `p+outsz <= prepared.vs_alloca_next` by
+    (qpat_x_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abiBuiltinEncodeSetupTheory.abi_builtin_encode_setup_frame_def] >>
+     strip_tac >>
+     qpat_x_assum `_ \/ _` strip_assume_tac >>
+     gvs[abiBuiltinAllocationTheory.abi_builtin_allocate_state_def] >>
+     metis_tac[venomMemDefsTheory.alloca_next_valid_def]) >>
+  qpat_x_assum `m = _` mp_tac >>
+  qpat_x_assum `w = _` mp_tac >>
+  qpat_x_assum `32+w <= outsz` mp_tac >>
+  qpat_x_assum `p+outsz <= prepared.vs_alloca_next` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> Cases_on `method_id` >> simp[] >> decide_tac
+QED
+Finalise abi_encode_phases_effects_transport
