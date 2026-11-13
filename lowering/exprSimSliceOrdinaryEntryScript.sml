@@ -19,7 +19,9 @@ Theorem slice_bytes_continue_entry:
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sd /\ local_ptrs_reserved cenv se /\
   sc.cs_next_var <= sd.cs_next_var /\ sd.cs_next_var <= se.cs_next_var /\
   sc.cs_next_id <= sd.cs_next_id /\ sd.cs_next_id <= se.cs_next_id /\
-  stmt_state_rel H ctx func cenv cx ec u /\ ~u.vs_halted /\
+  (!H. valid_horizon cx st0 H ec.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ec u /\
+     storage_well_formed_on cx ec (FST H)) /\ ~u.vs_halted /\
   u.vs_current_bb = sc.cs_current_bb /\ u.vs_inst_idx = LENGTH sc.cs_current_insts /\
   eval_operand sl u = SOME (n2w (LENGTH bs)) /\
   eval_operand data u = SOME (n2w src_base) /\
@@ -29,7 +31,8 @@ Theorem slice_bytes_continue_entry:
   (!op z. MEM op [sl;data;sop;lop] /\ op = Var z ==> not_fresh_at se z) /\
   mem_bytes_at src_base (LENGTH bs) u.vs_memory = bs /\
   src_base + LENGTH bs < dimword (:256) /\
-  (!sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
+  (!H sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
+    valid_horizon cx st0 H ec.storage_trace /\
     local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd'.cs_next_id /\
     MAP FDOM ec.scopes = MAP FDOM es1.scopes /\
     expr_post H ctx func cenv cx e1 ec sc sd' u es1 v1 op1 r1 /\
@@ -77,7 +80,9 @@ Theorem slice_string_continue_entry:
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sd /\ local_ptrs_reserved cenv se /\
   sc.cs_next_var <= sd.cs_next_var /\ sd.cs_next_var <= se.cs_next_var /\
   sc.cs_next_id <= sd.cs_next_id /\ sd.cs_next_id <= se.cs_next_id /\
-  stmt_state_rel H ctx func cenv cx ec u /\ ~u.vs_halted /\
+  (!H. valid_horizon cx st0 H ec.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ec u /\
+     storage_well_formed_on cx ec (FST H)) /\ ~u.vs_halted /\
   u.vs_current_bb = sc.cs_current_bb /\ u.vs_inst_idx = LENGTH sc.cs_current_insts /\
   eval_operand sl u = SOME (n2w (LENGTH text)) /\
   eval_operand data u = SOME (n2w src_base) /\
@@ -87,7 +92,8 @@ Theorem slice_string_continue_entry:
   (!op z. MEM op [sl;data;sop;lop] /\ op = Var z ==> not_fresh_at se z) /\
   mem_bytes_at src_base (LENGTH text) u.vs_memory = MAP (n2w o ORD) text /\
   src_base + LENGTH text < dimword (:256) /\
-  (!sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
+  (!H sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
+    valid_horizon cx st0 H ec.storage_trace /\
     local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd'.cs_next_id /\
     MAP FDOM ec.scopes = MAP FDOM es1.scopes /\
     expr_post H ctx func cenv cx e1 ec sc sd' u es1 v1 op1 r1 /\
@@ -291,7 +297,9 @@ Theorem slice_bytes_continue_entry_seq:
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sd /\ local_ptrs_reserved cenv se /\
   sc.cs_next_var <= sd.cs_next_var /\ sd.cs_next_var <= se.cs_next_var /\
   sc.cs_next_id <= sd.cs_next_id /\ sd.cs_next_id <= se.cs_next_id /\
-  stmt_state_rel H ctx func cenv cx ec u /\ ~u.vs_halted /\
+  (!H. valid_horizon cx st0 H ec.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ec u /\
+     storage_well_formed_on cx ec (FST H)) /\ ~u.vs_halted /\
   u.vs_current_bb = sc.cs_current_bb /\ u.vs_inst_idx = LENGTH sc.cs_current_insts /\
   eval_operand sl u = SOME (n2w (LENGTH bs)) /\
   eval_operand data u = SOME (n2w src_base) /\
@@ -301,7 +309,8 @@ Theorem slice_bytes_continue_entry_seq:
   (!op z. MEM op [sl;data;sop;lop] /\ op = Var z ==> not_fresh_at se z) /\
   mem_bytes_at src_base (LENGTH bs) u.vs_memory = bs /\
   src_base + LENGTH bs < dimword (:256) /\
-  (!sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
+  (!H sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
+    valid_horizon cx st0 H ec.storage_trace /\
     local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd'.cs_next_id /\
     expr_sim_inv cenv cx env es1 /\
     MAP FDOM ec.scopes = MAP FDOM es1.scopes /\
@@ -353,7 +362,9 @@ Theorem slice_string_continue_entry_seq:
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sd /\ local_ptrs_reserved cenv se /\
   sc.cs_next_var <= sd.cs_next_var /\ sd.cs_next_var <= se.cs_next_var /\
   sc.cs_next_id <= sd.cs_next_id /\ sd.cs_next_id <= se.cs_next_id /\
-  stmt_state_rel H ctx func cenv cx ec u /\ ~u.vs_halted /\
+  (!H. valid_horizon cx st0 H ec.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ec u /\
+     storage_well_formed_on cx ec (FST H)) /\ ~u.vs_halted /\
   u.vs_current_bb = sc.cs_current_bb /\ u.vs_inst_idx = LENGTH sc.cs_current_insts /\
   eval_operand sl u = SOME (n2w (LENGTH text)) /\
   eval_operand data u = SOME (n2w src_base) /\
@@ -363,7 +374,8 @@ Theorem slice_string_continue_entry_seq:
   (!op z. MEM op [sl;data;sop;lop] /\ op = Var z ==> not_fresh_at se z) /\
   mem_bytes_at src_base (LENGTH text) u.vs_memory = MAP (n2w o ORD) text /\
   src_base + LENGTH text < dimword (:256) /\
-  (!sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
+  (!H sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
+    valid_horizon cx st0 H ec.storage_trace /\
     local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd'.cs_next_id /\
     expr_sim_inv cenv cx env es1 /\
     MAP FDOM ec.scopes = MAP FDOM es1.scopes /\

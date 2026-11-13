@@ -49,6 +49,28 @@ Proof
   simp[] >> qexistsl_tac [`e2`, `se`, `r`] >> simp[]
 QED
 
+Theorem slice_read_frame:
+  storage_trace_frame (bind (eval_expr cx e) (read_result cx))
+Proof
+  irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+  simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       vyperStorageTraceTheory.storage_trace_frame_read_result]
+QED
+
+Theorem slice_two_read_terminal_frame:
+  storage_trace_frame
+    (do sv <- bind (eval_expr cx start) (read_result cx);
+        lv <- bind (eval_expr cx len) (read_result cx);
+        acc <- get_accounts;
+        v <- lift_sum (f sv lv acc);
+        return (Value v) od)
+Proof
+  irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+  simp[slice_read_frame] >> gen_tac >>
+  irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+  simp[slice_read_frame, slice_terminal_source_frame]
+QED
+
 (* A forced operand read, with the marked source prefix retained for its tail. *)
 Theorem slice_read_outcome_bind:
   expr_sim ctx func cenv cx ty e es /\
@@ -185,8 +207,7 @@ Theorem slice_two_read_outcome:
 Proof
   strip_tac >>
   `storage_trace_frame (bind (eval_expr cx len) (read_result cx))` by
-    (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame, vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+    simp[slice_read_frame] >>
   `expr_sim ctx func cenv cx ty start ec` by
     (irule expr_sim_case_apply >> simp[] >> conj_tac >- (qexists_tac `env` >> fs[]) >>
      qexists_tac `nocalls` >> simp[]) >>
@@ -279,6 +300,7 @@ Theorem slice_bytes_continue:
   mem_bytes_at src_base (LENGTH bs) u.vs_memory = bs /\
   src_base + LENGTH bs < dimword (:256) /\
   (!H sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
+    valid_horizon cx st0 H ec.storage_trace /\
     local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd'.cs_next_id /\
     MAP FDOM ec.scopes = MAP FDOM es1.scopes /\
     expr_post H ctx func cenv cx e1 ec sc sd' u es1 v1 op1 r1 /\
@@ -314,8 +336,7 @@ Proof
      valid_horizon cx st0 H ec.storage_trace` by
     (`storage_trace_frame (bind (eval_expr cx start) (read_result cx)) /\
       storage_trace_frame (bind (eval_expr cx len) (read_result cx))` by
-       (conj_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame, vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+       simp[slice_read_frame] >>
      rpt strip_tac >>
      `valid_horizon cx st0 H (e1 with gas_obs := gs2).storage_trace` by
        (irule vyperStorageFootprintTheory.valid_horizon_frame >>
@@ -403,6 +424,7 @@ Theorem slice_string_continue:
   mem_bytes_at src_base (LENGTH text) u.vs_memory = MAP (n2w o ORD) text /\
   src_base + LENGTH text < dimword (:256) /\
   (!H sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
+    valid_horizon cx st0 H ec.storage_trace /\
     local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd'.cs_next_id /\
     MAP FDOM ec.scopes = MAP FDOM es1.scopes /\
     expr_post H ctx func cenv cx e1 ec sc sd' u es1 v1 op1 r1 /\
@@ -438,8 +460,7 @@ Proof
      valid_horizon cx st0 H ec.storage_trace` by
     (`storage_trace_frame (bind (eval_expr cx start) (read_result cx)) /\
       storage_trace_frame (bind (eval_expr cx len) (read_result cx))` by
-       (conj_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame, vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+       simp[slice_read_frame] >>
      rpt strip_tac >>
      `valid_horizon cx st0 H (e1 with gas_obs := gs2).storage_trace` by
        (irule vyperStorageFootprintTheory.valid_horizon_frame >>
@@ -544,8 +565,7 @@ Theorem slice_two_read_outcome_seq:
 Proof
   strip_tac >>
   `storage_trace_frame (bind (eval_expr cx len) (read_result cx))` by
-    (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame, vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+    simp[slice_read_frame] >>
   `expr_sim ctx func cenv cx ty start ec` by
     (irule expr_sim_case_apply >> simp[] >> conj_tac >- (qexists_tac `env` >> fs[]) >>
      qexists_tac `nocalls` >> simp[]) >>
@@ -644,6 +664,7 @@ Theorem slice_bytes_continue_seq:
   mem_bytes_at src_base (LENGTH bs) u.vs_memory = bs /\
   src_base + LENGTH bs < dimword (:256) /\
   (!H sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
+    valid_horizon cx st0 H ec.storage_trace /\
     local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd'.cs_next_id /\
     expr_sim_inv cenv cx env es1 /\
     MAP FDOM ec.scopes = MAP FDOM es1.scopes /\
@@ -680,8 +701,7 @@ Proof
      valid_horizon cx st0 H ec.storage_trace` by
     (`storage_trace_frame (bind (eval_expr cx start) (read_result cx)) /\
       storage_trace_frame (bind (eval_expr cx len) (read_result cx))` by
-       (conj_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame, vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+       simp[slice_read_frame] >>
      rpt strip_tac >>
      `valid_horizon cx st0 H (e1 with gas_obs := gs2).storage_trace` by
        (irule vyperStorageFootprintTheory.valid_horizon_frame >>
@@ -771,6 +791,7 @@ Theorem slice_string_continue_seq:
   mem_bytes_at src_base (LENGTH text) u.vs_memory = MAP (n2w o ORD) text /\
   src_base + LENGTH text < dimword (:256) /\
   (!H sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
+    valid_horizon cx st0 H ec.storage_trace /\
     local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd'.cs_next_id /\
     expr_sim_inv cenv cx env es1 /\
     MAP FDOM ec.scopes = MAP FDOM es1.scopes /\
@@ -807,8 +828,7 @@ Proof
      valid_horizon cx st0 H ec.storage_trace` by
     (`storage_trace_frame (bind (eval_expr cx start) (read_result cx)) /\
       storage_trace_frame (bind (eval_expr cx len) (read_result cx))` by
-       (conj_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-        simp[vyperStorageTraceTheory.evaluate_storage_trace_frame, vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+       simp[slice_read_frame] >>
      rpt strip_tac >>
      `valid_horizon cx st0 H (e1 with gas_obs := gs2).storage_trace` by
        (irule vyperStorageFootprintTheory.valid_horizon_frame >>
