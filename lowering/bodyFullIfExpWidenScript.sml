@@ -262,6 +262,33 @@ QED
 
 Finalise ifexp_widen_copy_endpoint_posts
 
+Theorem ifexp_widen_copy_endpoint_windows:
+  compile_ifexp_arm ce t lt vv sm = (op,sb) /\
+  s'.vs_memory = (mcopy dst src n s).vs_memory /\
+  tf.t_mem = (tn.t_mem DIFF {i | dst <= i /\ i < dst+n}) UNION
+             {dst+i | i < n /\ src+i IN tn.t_mem} /\
+  lo <= dst ==>
+  mem_bytes_at dst n s'.vs_memory = mem_bytes_at src n s.vs_memory /\
+  (!i. i < n ==> (dst+i IN tf.t_mem <=> src+i IN tn.t_mem)) /\
+  (!i. i NOTIN {j | dst <= j /\ j < dst+n} ==>
+    mem_bytes_at i 1 s'.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+    (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+  (!i. i < lo ==> i NOTIN {j | dst <= j /\ j < dst+n}) /\
+  mem_bytes_at 0 lo s'.vs_memory = mem_bytes_at 0 lo s.vs_memory
+Proof
+  strip_tac >>
+  conj_tac >- simp[valueEncodingPropsTheory.mcopy_mem_bytes_at_same] >>
+  conj_tac >- (simp[] >> rpt strip_tac >> simp[pred_setTheory.IN_UNION,
+    pred_setTheory.IN_DIFF, pred_setTheory.GSPECIFICATION] >> metis_tac[]) >>
+  conj_tac >- (gen_tac >> disch_tac >> conj_tac
+    >- (simp[] >> irule mem_bytes_at_mcopy_disjoint >> fs[])
+    >> simp[pred_setTheory.IN_UNION, pred_setTheory.IN_DIFF,
+            pred_setTheory.GSPECIFICATION] >>
+       fs[] >> eq_tac >- (strip_tac >> gvs[] >> decide_tac) >> simp[]) >>
+  conj_tac >- simp[] >>
+  simp[] >> irule mem_bytes_at_mcopy_disjoint >> simp[]
+QED
+
 Theorem ifexp_widen_empty_dead_path:
   compile_ifexp_arm cenv t sty vv sm = (op,sb) /\
   gas_origin_ptr_path
