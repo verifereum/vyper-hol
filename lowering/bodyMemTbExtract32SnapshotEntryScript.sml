@@ -182,7 +182,9 @@ Proof
   drule_all extract32_source_post_view >> strip_tac >>
   `post_value_type cenv e = expr_type e` by
     (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
-  drule_all extract32_snapshot_entry >> strip_tac >>
+  mp_tac (Q.INST [`es` |-> `es'`, `len` |-> `LENGTH bs`]
+            (SPEC_ALL extract32_snapshot_entry)) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   `u.vs_memory = s.vs_memory` by
     (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s`
        (mp_tac o Q.AP_TERM `\v. v.vs_memory`) >> simp[]) >>
