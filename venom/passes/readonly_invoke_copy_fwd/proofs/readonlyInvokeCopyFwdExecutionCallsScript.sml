@@ -2,6 +2,7 @@ Theory readonlyInvokeCopyFwdExecutionCalls
 Ancestors
   readonlyInvokeCopyFwdExecutionCallInstall readonlyInvokeCopyFwdExecutionShape
   readonlyInvokeCopyFwdExecutionEntry readonlyInvokeCopyFwdExecutionRunner
+  readonlyInvokeCopyFwdExecutionInvokeTerminal
   readonlyInvokeCopyFwdExecutionSteps readonlyInvokeCopyFwdExecutionCoverage
   readonlyInvokeCopyFwdExecutionBoundary readonlyInvokeCopyFwdExecution
   readonlyInvokeCopyFwdExecutionHistory readonlyInvokeCopyFwdAnalyzedOrigins
@@ -226,3 +227,73 @@ Proof
   gvs[Abbr `saved`, Abbr `owner`]
 QED
 
+Theorem ricf_execution_point_invoke_terminal:
+  ricf_execution_point vs C log_of D a U B0 E0 outer_history outer_certificates sites maps targets
+    stk PG G tn fn inst s t /\
+  ricf_logged_function_trace
+    (icf_build_ctx (icf_fn_meta_of C) C.ctx_functions (readonly_mem_analyze C) fn)
+    fn (log_of fn) (mid_of fn) /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  ricf_full_alloca_copies fn /\ ricf_src_alloca fn /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  active_inst fn inst s /\ inst.inst_opcode = INVOKE /\
+  cb < LENGTH fn.fn_blocks /\
+  s.vs_inst_idx < LENGTH (EL cb fn.fn_blocks).bb_instructions /\
+  inst = EL s.vs_inst_idx (EL cb fn.fn_blocks).bb_instructions /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME (EL cb fn.fn_blocks) /\
+  j = EL s.vs_inst_idx (EL cb (mid_of fn).fn_blocks).bb_instructions /\
+  decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  lookup_function nm Ct.ctx_functions = SOME callee' /\
+  fn_entry_label callee' = fn_entry_label callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  o1_fn_shape C callee /\ ricf_function_edit callee (mid_of callee) /\
+  (!a1 U1 B1 E1 history1 certificates1 sites1 maps1 targets1.
+    fn_sim_below D vs C Ct
+      (ricf_execution_boundary vs C mid_of log_of D a1 U1 B1 E1 history1 certificates1
+        sites1 maps1 targets1)
+      (ricf_execution_return vs C Ct mid_of log_of D a1 U1 B1 E1 history1 certificates1
+        sites1 maps1 targets1) (SUC k)) /\
+  ((?se. run_blocks k C callee cs = Halt se) \/
+   (?reason se. run_blocks k C callee cs = Abort reason se)) ==>
+  ?m. block_step_rel D vs C
+    (ricf_execution_boundary vs C mid_of log_of D a U B0 E0 outer_history outer_certificates sites maps targets)
+    (ricf_execution_return vs C Ct mid_of log_of D a U B0 E0 outer_history outer_certificates sites maps targets)
+    stk PG fn (step_inst k C inst s) (step_inst m Ct j t)
+Proof
+  strip_tac >>
+  qpat_x_assum `ricf_execution_point _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [ricf_execution_point_def]) >>
+  drule_all ricf_execution_actual_call_entry >> strip_tac >>
+  qabbrev_tac `saved = <|cf_fn := fn; cf_inst := inst; cf_state := s;
+    cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>` >>
+  qabbrev_tac `owner = <|of_owner := a; of_prov := H; of_params := HP|>` >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    (fs[ricf_execution_invariant_def, ricf_heterogeneous_source_ledger_def] >>
+     metis_tac[occ_frame_reachable_projection]) >>
+  `block_reach vs C (saved::stk) (MAP (op_prov G) ops) FEMPTY
+    (tn with t_var := FEMPTY) callee cs` by
+    (simp[Abbr `saved`] >> irule frame_reachable_call_block_reach >> metis_tac[]) >>
+  `setup_callee callee' args' t = SOME ct` by
+    (qpat_x_assum `fn_entry_label callee' = _` mp_tac >>
+     Cases_on `callee.fn_blocks` >> Cases_on `callee'.fn_blocks` >>
+     gvs[fn_entry_label_def, entry_block_def, setup_callee_def]) >>
+  `MEM callee C.ctx_functions /\ callee.fn_name = nm` by
+    metis_tac[lookup_function_MEM, lookup_function_selected_name] >>
+  mp_tac (SPEC_ALL ricf_execution_invoke_terminal |>
+    Q.INST [
+      `R` |-> `ricf_execution_boundary vs C mid_of log_of D n (owner::U) B E
+        (ricf_phase_push saved history) (ricf_phase_push saved certificates)
+        callsites (sites::maps) (t::targets)`,
+      `Rret` |-> `ricf_execution_return vs C Ct mid_of log_of D n (owner::U) B E
+        (ricf_phase_push saved history) (ricf_phase_push saved certificates)
+        callsites (sites::maps) (t::targets)`,
+      `P` |-> `ricf_execution_boundary vs C mid_of log_of D a U B0 E0
+        outer_history outer_certificates sites maps targets`,
+      `Pret` |-> `ricf_execution_return vs C Ct mid_of log_of D a U B0 E0
+        outer_history outer_certificates sites maps targets`,
+      `cstk` |-> `saved::stk`, `cPG` |-> `MAP (op_prov G) ops`,
+      `cG` |-> `FEMPTY`, `ctn` |-> `tn with t_var := FEMPTY`,
+      `i` |-> `inst`]) >>
+  (impl_tac >- (simp[Abbr `saved`, Abbr `owner`] >> metis_tac[])) >> simp[]
+QED
