@@ -60,7 +60,7 @@ Resume array_index_summary_compose_ptr[live]:
   mp_tac (Q.INST [`fin` |-> `es_end`, `es` |-> `mid with gas_obs := []`,
                   `s0` |-> `t`, `G0` |-> `G1`, `tn0` |-> `tn1`,
                   `source` |-> `b`, `next` |-> `k captured`]
-            gas_summary_ptr_at_bind_exception) >>
+            (INST_TYPE [alpha |-> beta, beta |-> gamma] gas_summary_ptr_at_bind_exception)) >>
   impl_tac
   >- (fs[] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
       gvs[fragExecTheory.exit_result_def]) >>
@@ -79,7 +79,7 @@ Resume array_index_summary_compose_ptr[normal]:
                   `G1` |-> `G`, `tn1` |-> `tn`,
                   `es` |-> `mid with gas_obs := []`, `s0` |-> `t`,
                   `G0` |-> `G1`, `tn0` |-> `tn1`]
-            gas_summary_ptr_at_bind_normal |> REWRITE_RULE [APPEND_NIL]) >>
+            (INST_TYPE [alpha |-> beta, beta |-> gamma] gas_summary_ptr_at_bind_normal) |> REWRITE_RULE [APPEND_NIL]) >>
   impl_tac
   >- (fs[] >> first_x_assum irule >> fs[]) >>
   simp[]
