@@ -3,7 +3,7 @@
 Theory readonlyInvokeCopyFwdHistoryAnalysis
 Ancestors
   readonlyInvokeCopyFwdHistory readonlyInvokeCopyFwdProtectionLifetime
-  memAliasProps memAliasDefs venomEffects basePtrDefs memLocDefs venomInst
+  memAliasProofs memAliasDefs venomEffects basePtrDefs memLocDefs venomInst
   readonlyInvokeCopyFwdPlan invokeCopyFwdCommonDefs list
 
 Theorem ricf_event_no_intervening_invoke:
