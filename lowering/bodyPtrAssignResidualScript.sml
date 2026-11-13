@@ -15,7 +15,9 @@ Theory bodyPtrAssignResidual
 Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps supportedStmts supportedDecls
   stmtLowering exprLowering compileEnv vyperAST vyperInterpreter vyperState
-  vyperTypeSystem list finite_map
+  vyperTypeSystem list finite_map widenedAssignPtrFragment
+  assignBasePtrLocalBodyFacts widenedAssignPtrPreparation stmtSimAugAssign
+  exprSimHypsDefs
 
 val _ = Parse.hide "body";
 
@@ -93,7 +95,13 @@ Theorem body_assign_widened_aggregate_call_ptr:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all assign_base_local_rhs_pre >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
+  `type_memory_bytes cenv ty < 2 ** 64` by metis_tac[locals_alloc_ok_def] >>
+  drule_all widened_assignment_internal_call >> strip_tac >>
+  fs[] >> irule widened_assignment_fragment_ptr >> simp[] >> metis_tac[]
 QED
 
 (* RESIDUAL: the pointer twin of S1's bodySimStmtCases$body_assign_tuple_other, stated as S1

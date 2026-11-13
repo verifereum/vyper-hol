@@ -107,8 +107,9 @@ Proof
   `~is_word_type ann` by
     (strip_tac >>
      `~is_abi_dynamic ce.ce_struct_fields ann` by metis_tac[abi_word_metadata] >>
-     drule (cj 1 static_arg_type_fits) >>
-     disch_then (mp_tac o Q.ISPEC `ce.ce_struct_fields`) >> metis_tac[]) >>
+     drule (INST_TYPE [alpha |-> ``:string``, beta |-> ``:num``]
+       (cj 1 static_arg_type_fits)) >>
+     disch_then (qspec_then `ce.ce_struct_fields` mp_tac) >> fs[]) >>
   `~is_bytestring_type ann` by metis_tac[arg_type_fits_bytestring_source] >>
   `~is_word_type (lowered_value_type ce (Call ann (IntCall fid) args drv))` by
     metis_tac[compatible_word_type] >>

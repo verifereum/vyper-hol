@@ -123,7 +123,8 @@ Proof
      EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
        sz = type_memory_size tv) fields)` by
     (qpat_assum `expr_sim_inv ce cx env es` mp_tac >>
-     pure_rewrite_tac[expr_sim_inv_def] >> metis_tac[]) >>
+     pure_rewrite_tac[expr_sim_inv_def] >> strip_tac >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `?dw. lookup_var p s = SOME dw` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
   `type_memory_size entry.type + 64 < dimword (:256) /\
@@ -148,7 +149,8 @@ Proof
      `es` |-> `ee`, `es'` |-> `ee'`, `sw` |-> `w`,
      `D` |-> `cx_dead cx`, `PG` |-> `PG`]
     (SPEC_ALL widened_assign_staged_local_ptr)) >>
-  (impl_tac >- (asm_rewrite_tac[] >> simp[] >> metis_tac[])) >> strip_tac >>
+  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     asm_rewrite_tac[] >> simp[] >> metis_tac[])) >> strip_tac >>
   rename1 `gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0 Gf tf (OK u)` >>
   `gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG
     (bind (bind (eval_expr cx e) (read_result cx))
