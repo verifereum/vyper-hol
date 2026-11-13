@@ -15,7 +15,7 @@ Theory internalReturnWidenPtr
 Ancestors internalReturnStorePtr internalReturnCountedPtr
   internalReturnMemorySuffixPtr internalReturnUnlockSuffixPtr
   internalReturnUnlockPtr aggregateStorePtr stmtLowering typedMemoryCopy
-  compileEnv fragGasPathPtr stmtSimReturn venomState
+  compileEnv fragGasPathPtr stmtSimReturn venomState bodyPtrDefs loweringStateRelDefs
 
 Theorem internal_return_memory_widen_suffix_path_ptr:
   compile_internal_return_from_env ce ty sty (Var src) (Var rpc) sa0 = ((),sb) /\
@@ -81,9 +81,9 @@ Proof
   disch_then (qspecl_then [`sa`,`sm`,`dst`,`Var src`,`d`,`a`,`func`,`G`,`tn`,`s`]
     mp_tac) >>
   impl_tac
-  >- (fs[bodyPtrDefsTheory.ptr_covers_def,
-         loweringStateRelDefsTheory.regions_disjoint_def,
-         venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+  >- (gvs[bodyPtrDefsTheory.ptr_covers_def,
+          loweringStateRelDefsTheory.regions_disjoint_def,
+          venomStateTheory.eval_operand_def] >> metis_tac[]) >>
   disch_then (qx_choosel_then [`H`,`tm`,`t`] strip_assume_tac) >>
   `lookup_var rpc t = SOME pc /\ op_taint tm (Var rpc) = {}` by metis_tac[] >>
   `gas_path_ptr D 0 ctx func PG H tm t 0 H tm
@@ -177,7 +177,8 @@ Proof
          (f with <| vs_transient := s.vs_transient; vs_inst_idx := i |>)` by
     (mp_tac (Q.SPECL [`ce`, `f with vs_inst_idx := i0`, `s`]
        (Q.GENL [`ce`, `t`, `t0`] return_unlock_state_from_final)) >>
-     impl_tac >- asm_simp_tac (srw_ss()) [] >>
+     impl_tac
+     >- (conj_tac >- first_assum ACCEPT_TAC >> simp[Abbr `u`]) >>
      simp[]) >>
   qexistsl_tac [`H`, `tm`,
     `f with <| vs_transient := s.vs_transient; vs_inst_idx := i |>`,
