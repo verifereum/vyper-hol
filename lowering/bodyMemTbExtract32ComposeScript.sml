@@ -365,8 +365,9 @@ Resume compile_extract32_sim_mem[stage2]:
           env_context_consistent_def] >>
      fs[expr_body_pre_def, well_typed_expr_def]) >>
   `alloca_room ctx func t2` by
-    (qpat_x_assum `stmt_state_rel H1 ctx func cenv cx ee2 t2` mp_tac >>
-     simp[stmt_state_rel_def]) >>
+    (qpat_assum `stmt_state_rel H1 ctx func cenv cx ee2 t2`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+     first_assum ACCEPT_TAC) >>
   `t2.vs_alloca_next < dimword (:256)` by
     metis_tac[alloca_room_next_lt] >>
   `Num i + 32 <= LENGTH bs ==> b + 32 + Num i < dimword (:256)` by decide_tac >>
