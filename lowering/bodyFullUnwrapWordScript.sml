@@ -957,15 +957,23 @@ Proof
   >- (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
       simp[vv_post_calldata]) >>
   `is_word_type t` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [vv_post_def, vv_holds_def]) >>
-     gvs[] >> qpat_x_assum `is_word_type _` mp_tac >>
-     qpat_x_assum `is_bytestring_type (post_value_type cenv e)` mp_tac >>
-     rpt (pop_assum kall_tac) >> Cases_on `post_value_type cenv e` >>
-     simp[is_bytestring_type_def] >>
-     rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_bytestring_type_def] >>
-     TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
-     simp[is_bytestring_type_def, is_word_type_def]) >>
+    (`!t. is_bytestring_type t ==> ~is_word_type t` by
+       (Cases >> simp[is_bytestring_type_def] >>
+        rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_bytestring_type_def] >>
+        TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+        simp[is_bytestring_type_def, is_word_type_def]) >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+     qpat_x_assum `vv_holds _ _ _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [vv_holds_def]) >>
+     strip_tac
+     >- (qpat_x_assum `t = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+     qpat_x_assum `!t. is_bytestring_type t ==> _`
+       (qspec_then `post_value_type cenv e` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (fn th => qpat_x_assum `is_word_type (post_value_type cenv e)`
+                            (mp_tac o REWRITE_RULE [th])) >>
+     simp[]) >>
   Cases_on `p.ptr_location` >>
   TRY (qpat_x_assum `LocCalldata <> LocCalldata` mp_tac >> simp[] >> NO_TAC) >>
   FIRST (map (fn th => WORD_PIECE_TAC (Q.INST [`vv` |-> `LocatedValue t p`] th))
