@@ -9,6 +9,7 @@ Ancestors
   stmtSimDefs loweringPosts exprSimAlloc placeMemoryCopyEffect
   placeMemoryAssignForward valueEncodingTyping exprSimHypsDefs exprSimHyps
   typedCopyAggregateCounted fragGasMode loweringStateRelDefs valueEncodingDefs
+  storeMemoryCounted assignPlaceNormalizationMem bodyMemAggregatePath
 
 Theorem assign_alloc_buffer_record[local]:
   compile_alloc_buffer n sa = (buf,sm) /\
@@ -320,9 +321,12 @@ Resume assign_staged_memory_path_mem[store]:
      disch_then (mp_tac o Q.AP_TERM `\z. z.vs_alloca_next`) >> simp[]) >>
   `w2n tw + type_memory_size stv <= u.vs_alloca_next /\
    w2n w + type_memory_size dtv <= u.vs_alloca_next` by decide_tac >>
-  `?t. gas_path_mem ctx func u 0 (OK t) /\
-       val_in_memory dtv v (w2n w) t.vs_memory /\
-       typed_copy_effect ctx func sn sb u t (w2n w) (type_memory_size dtv)` by
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `alloca_inv u` by metis_tac[aggregate_mem_path_alloca_inv] >>
+  `alloca_history func u` by metis_tac[normalization_path_history] >>
+  `?t. val_in_memory dtv v (w2n w) t.vs_memory /\
+       typed_copy_effect ctx func sn sb u t (w2n w) (type_memory_size dtv) /\
+       gas_path_mem ctx func u 0 (OK t) /\ alloca_history func t` by
     (irule compile_store_memory_nonword_effect_mem >>
      drule typed_copy_effect_endpoint >> strip_tac >> simp[] >>
      goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
@@ -677,9 +681,10 @@ Proof
      `regions_disjoint (w2n sw) (type_memory_size stv) b len` by metis_tac[] >>
      gvs[regions_disjoint_def] >> decide_tac) >>
   `val_wf stv v /\ val_wf dtv v` by metis_tac[cj 1 value_has_type_val_wf] >>
-  `?t. gas_path_mem ctx func s 0 (OK t) /\
-       val_in_memory dtv v (w2n w) t.vs_memory /\
-       typed_copy_effect ctx func sa sb s t (w2n w) (type_memory_size dtv)` by
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `?t. val_in_memory dtv v (w2n w) t.vs_memory /\
+       typed_copy_effect ctx func sa sb s t (w2n w) (type_memory_size dtv) /\
+       gas_path_mem ctx func s 0 (OK t) /\ alloca_history func t` by
     (irule compile_store_memory_nonword_effect_mem >> simp[] >>
      goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
      simp[] >> qexistsl_tac [`stv`, `get_tenv cx`] >> simp[] >>
