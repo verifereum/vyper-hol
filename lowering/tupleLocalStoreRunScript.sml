@@ -177,7 +177,8 @@ Proof
 QED
 
 Resume tuple_local_store_head_path[word_frame]:
-  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (gen_tac >> strip_tac >> first_x_assum irule >> first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >>
   drule_all tuple_store_destination_region >> strip_tac >>
   `32 <= dsz` by
