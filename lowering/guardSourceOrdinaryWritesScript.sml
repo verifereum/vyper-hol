@@ -5,7 +5,7 @@ Ancestors
   vyperTypeEvalSoundness vyperTypeCallGraph vyperTypeSystem
   vyperEvalOutcomeSuffix vyperTypeExprSoundness list vyperStorageTrace
   vyperTypeCallStackSoundness vyperTypeEvalStoragePreservation
-  vyperFiniteStoragePreservation
+  vyperFiniteStoragePreservation guardMutationTrace
 Libs
   guardSourceSchemaLib
 
@@ -94,29 +94,6 @@ Proof
   disch_then irule >> metis_tac[]
 QED
 
-Theorem write_place_trace_unchanged[local]:
-  write_place cx p v st = (res,st') ==> st'.storage_trace = st.storage_trace
-Proof
-  Cases_on `p` >>
-  TRY (rename1 `StoragePlace b slot tv` >> Cases_on `b`) >>
-  simp[write_place_def, write_storage_slot_def, bind_def, ignore_bind_def,
-       get_storage_backend_def, set_storage_backend_def,
-       get_accounts_def, get_transient_storage_def, update_accounts_def,
-       update_transient_def, check_not_static_def, check_def, assert_def,
-       lift_option_type_def, lift_option_def, lift_sum_def, return_def, raise_def,
-       get_scopes_def, set_scopes_def, type_check_def,
-       get_immutables_def, get_address_immutables_def, set_immutable_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  gvs[get_storage_backend_def, set_storage_backend_def, bind_def,
-      get_accounts_def, get_transient_storage_def, update_accounts_def,
-      update_transient_def, lift_option_type_def, lift_option_def,
-      lift_sum_def, return_def, raise_def, vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
-      set_address_immutables_def, assert_def,
-      set_scopes_def, AllCaseEqs()] >>
-  PairCases_on `x` >>
-  gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
-      set_scopes_def, vyperMiscTheory.sum_CASE_rator, AllCaseEqs()]
-QED
 
 Theorem finite_prefix_TupleStore_BaseTarget:
   ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "TupleStore_BaseTarget")
