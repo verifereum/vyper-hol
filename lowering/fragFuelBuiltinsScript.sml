@@ -288,10 +288,11 @@ Proof
 QED
 
 Theorem fuel_ok_compile_slice_extcode:
-  !a s l ob odt Wv E. fuel_ok Wv {} E (compile_slice_extcode a s l ob odt)
+  !a s l os Wv E. fuel_ok Wv {} E (compile_slice_extcode a s l os)
 Proof
   rpt gen_tac >> simp_tac std_ss [compile_slice_extcode_def] >>
   fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any,
+             fuel_ok_compile_slice_out_buf, fuel_ok_uncurry_arg,
              fuel_ok_compile_assert_slice_bounds] >>
   simp[is_terminator_def]
 QED
