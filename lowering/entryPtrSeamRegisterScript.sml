@@ -7,7 +7,7 @@
  *   - the S1 relation there (stmt_state_rel, as loweringRuntimeCorrect's
  *     admitted external_entry_reaches_body states it, here at the state the
  *     run actually reaches), and
- *   - a ghost (G0, tn0) in ghost_inv NONE: each parameter's pointer covered
+ *   - a ghost (G0, tn0) in ghost_inv H NONE: each parameter's pointer covered
  *     by its ALLOCA and its value robust to the tainted bytes,
  * with safety of the run from s0 giving safety from the registration's
  * start, for any dead-byte bound D.
@@ -156,8 +156,8 @@ QED
 (* The logical entry relations do not constrain the code-generator's
    initial free-memory-pointer field. *)
 Theorem registration_stmt_initial_fmp:
-  stmt_state_rel ctx func cenv cx es (s with vs_initial_fmp := w) <=>
-  stmt_state_rel ctx func cenv cx es s
+  stmt_state_rel H ctx func cenv cx es (s with vs_initial_fmp := w) <=>
+  stmt_state_rel H ctx func cenv cx es s
 Proof
   simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
        immutable_alloca_sep_def, immutable_decl_sep_def,
@@ -172,8 +172,8 @@ Proof
 QED
 
 Theorem registration_ghost_initial_fmp:
-  ghost_inv d cenv cx es G tn (s with vs_initial_fmp := w) <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx es G tn (s with vs_initial_fmp := w) <=>
+  ghost_inv H d cenv cx es G tn s
 Proof
   Cases_on `d` >- simp[ghost_inv_def, return_buf_ptr_def,
     ptr_covers_def, lookup_var_def, stor_taint_ok_def] >>
@@ -3595,7 +3595,7 @@ Theorem registration_indexed_locals_ghost:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
     op_taint tn (Var x) = {}) /\
   tn.t_stor = {} /\ tn.t_trans = {} /\ tn.t_imm = {} ==>
-  ghost_inv NONE cenv cx es G tn s
+  ghost_inv H NONE cenv cx es G tn s
 Proof
   strip_tac >>
   simp[bodyPtrDefsTheory.ghost_inv_def, bodyPtrDefsTheory.return_buf_ptr_def,
@@ -3669,9 +3669,9 @@ Theorem registration_actual_endpoint_relations:
   (!inst w b n. MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit w] /\
     FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) ==>
-  stmt_state_rel unit.cu_context efn cenv
+  stmt_state_rel H unit.cu_context efn cenv
     (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-  ghost_inv NONE cenv (initial_evaluation_context am.sources am.layouts tx NONE)
+  ghost_inv H NONE cenv (initial_evaluation_context am.sources am.layouts tx NONE)
     es0 G0 tn0 s0
 Proof
   strip_tac >>
@@ -3879,10 +3879,11 @@ Theorem registration_positional_args_joint[local]:
     ?s0 G0 tn0.
     (!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,efn,[])
       (s1,G1,tn1) [] (OK s0,G0,tn0)) /\
-      stmt_state_rel unit.cu_context efn cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-      ghost_inv NONE cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es0 G0 tn0 s0 /\
+      (!H. stmt_state_rel H unit.cu_context efn cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+           ghost_inv H NONE cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0
+             G0 tn0 s0) /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
       s0.vs_gas_readings = s1.vs_gas_readings /\
@@ -3893,9 +3894,9 @@ Proof
   drule_all registration_owned_locals_joint >>
   disch_then (qspecl_then [`tn1`, `ARB:instruction`, `G1`] strip_assume_tac) >>
   qexistsl_tac [`s0`, `G0`, `tn0`] >>
-  `stmt_state_rel unit.cu_context efn cenv
+  `!H. stmt_state_rel H unit.cu_context efn cenv
      (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-   ghost_inv NONE cenv
+   ghost_inv H NONE cenv
      (initial_evaluation_context am.sources am.layouts tx NONE) es0 G0 tn0 s0` by
     (`!j. j < LENGTH args ==> ?aid q p n.
        FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
@@ -3916,7 +3917,7 @@ Proof
         simp[fragGasModeTheory.gas_marked_path_def] >> strip_tac >>
         drule fragGasPathMemTheory.gas_path_mem_exec >>
         metis_tac[registration_path_code]) >>
-     drule_all registration_actual_endpoint_relations >> simp[]) >> simp[]
+     gen_tac >> drule_all registration_actual_endpoint_relations >> simp[]) >> simp[]
 QED
 
 (* Registration seam, proved at the shared owned endpoint:
@@ -3972,10 +3973,11 @@ Theorem registration_positional_args_ptr_no_dalloca:
     tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\ tn1.t_imm = {} /\
     ~ctx_has_dalloca unit.cu_context ==>
     ?s0 G0 tn0.
-      stmt_state_rel unit.cu_context efn cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-      ghost_inv NONE cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es0 G0 tn0 s0 /\
+      (!H. stmt_state_rel H unit.cu_context efn cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+           ghost_inv H NONE cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0
+             G0 tn0 s0) /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
       s0.vs_gas_readings = s1.vs_gas_readings /\
@@ -4026,11 +4028,11 @@ Theorem register_positional_args_ptr:
     tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\
     tn1.t_imm = {} ==>
     ?s0 G0 tn0.
-      stmt_state_rel unit.cu_context efn cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-      ghost_inv NONE cenv
-        (initial_evaluation_context am.sources am.layouts tx NONE) es0
-        G0 tn0 s0 /\
+      (!H. stmt_state_rel H unit.cu_context efn cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+           ghost_inv H NONE cenv
+             (initial_evaluation_context am.sources am.layouts tx NONE) es0
+             G0 tn0 s0) /\
       gas_path_mem unit.cu_context efn s1 0 (OK s0) /\
       (!D explicit.
          gas_origin_ptr_path (D, 0, explicit, unit.cu_context, efn, [])
