@@ -59,7 +59,7 @@ val intro =
 fun execute (execution, exterior) =
   qpat_x_assum `_ /\ _` strip_assume_tac >>
   drule_all execution >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `Gf` (qx_choose_then `tnf` (qx_choose_then `sf` strip_assume_tac)))) >>
   drule exterior >> disch_then drule >>
   disch_then (assume_tac o SIMP_RULE bool_ss [AND_IMP_INTRO]);

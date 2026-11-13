@@ -121,6 +121,7 @@ Theorem pop_positive_memory_suffix:
   expr_sim_inv cenv cx env es /\
   stmt_state_rel H ctx func cenv cx es s0 /\
   stmt_state_rel H ctx func cenv cx mid s /\ wb_frame cenv es mid sa s0 s /\
+  storage_well_formed_on cx mid (FST H) /\
   ghost_inv H d cenv cx mid G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
   local_ptrs_rel func cenv mid.scopes s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
@@ -344,6 +345,8 @@ Resume pop_normal_target_continuation[positive]:
      rpt BasicProvers.VAR_EQ_TAC >> conj_tac >- REFL_TAC >> metis_tac[]) >>
   qpat_assum `local_place_at _ _ _ _ _ _`
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `storage_well_formed_on cx (tend with gas_obs := []) (FST H)` by
+    fs[target_post_def] >>
   `?result fin out' t HG tf.
      q = Var out' /\ fin.gas_obs = [] /\ t.vs_current_bb = r.cs_current_bb /\
      t.vs_inst_idx = LENGTH r.cs_current_insts /\

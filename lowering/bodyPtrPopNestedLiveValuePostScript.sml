@@ -10,6 +10,7 @@ Theorem pop_framed_memory_live_vv_post:
   expr_sim_inv cenv cx env es /\
   stmt_state_rel H ctx func cenv cx es s0 /\
   stmt_state_rel H ctx func cenv cx mid s /\
+  storage_well_formed_on cx mid (FST H) /\
   wb_frame cenv es mid sa s0 s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM mid.scopes /\

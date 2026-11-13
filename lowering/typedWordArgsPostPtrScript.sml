@@ -14,7 +14,8 @@ Definition typed_args_post_ptr_def:
 End
 
 Theorem typed_args_post_ptr_nil:
-  stmt_state_rel H ctx func cenv cx ee s /\ ghost_inv H d cenv cx ee G tn s ==>
+  stmt_state_rel H ctx func cenv cx ee s /\
+  storage_well_formed_on cx ee (FST H) /\ ghost_inv H d cenv cx ee G tn s ==>
   typed_args_post_ptr H d ctx func cenv cx ee sa s G tn ee [] [] [] G tn s
 Proof
   simp[typed_args_post_ptr_def, typed_args_post_def,

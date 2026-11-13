@@ -311,9 +311,9 @@ Proof
   pure_rewrite_tac [storage_dead_def] >>
   conj_tac >- asm_rewrite_tac [] >>
   qexistsl_tac [`other`, `otv`] >>
-  conj_tac >- asm_rewrite_tac [] >>
-  conj_tac >- asm_rewrite_tac [] >>
-  conj_tac >- asm_rewrite_tac [] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   Cases_on `(other,otv) = (slot,ArrayTV tv (Dynamic cap))`
   >- (qpat_x_assum `(other,otv) = _`
         (fn th => map_every SUBST_ALL_TAC (CONJUNCTS (REWRITE_RULE [pairTheory.PAIR_EQ] th))) >>
@@ -323,10 +323,7 @@ Proof
       rpt strip_tac >> simp[] >> gvs[]) >>
   `ranges_disjoint (w2n other) (type_slot_size otv)
       (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))` by
-    (qpat_x_assum `!slot' tv'. _`
-       (qspecl_then [`slot`, `ArrayTV tv (Dynamic cap)`] mp_tac) >>
-     impl_tac >- (asm_rewrite_tac [] >> strip_tac >> gvs[]) >>
-     simp[]) >>
+    (qpat_x_assum `!slot' tv'. _` irule >> metis_tac[]) >>
   `len*type_slot_size tv + type_slot_size tv <= cap*type_slot_size tv` by
     (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
   `dead_bytes st' (w2n other) otv j b <=> dead_bytes st (w2n other) otv j b`
@@ -433,20 +430,20 @@ Proof
   >- suspend "child" >> suspend "outside"
 QED
 Resume append_storage_agree_copy[child]:
-  `len*type_slot_size tv + type_slot_size tv <= cap*type_slot_size tv` by
-    (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
-  `~tr \/ ~MEM (w2n q) (SND H)` by
-    (Cases_on `tr` >> asm_rewrite_tac [] >> strip_tac >>
-     qpat_x_assum `storage_locks_separated _ _` mp_tac >>
-     simp[storage_locks_separated_def] >>
-     qexistsl_tac [`slot`, `ArrayTV tv (Dynamic cap)`, `w2n q`] >>
-     fs[ranges_disjoint_def, type_slot_size_def]) >>
   `~dead_bytes st' (w2n slot) (ArrayTV tv (Dynamic cap)) (w2n q) b` by
-    (strip_tac >> qpat_x_assum `~storage_dead _ _ _ _ _` mp_tac >>
+    (strip_tac >>
+     drule (cj 1 dead_bytes_range) >> strip_tac >>
+     `tr ==> ~MEM (w2n q) (SND H)` by
+       (Cases_on `tr` >> simp[] >> strip_tac >>
+        qpat_x_assum `storage_locks_separated _ _`
+          (mp_tac o REWRITE_RULE [vyperStorageFootprintTheory.storage_locks_separated_def]) >>
+        disch_then (drule_then drule) >>
+        simp[ranges_disjoint_def]) >>
+     qpat_x_assum `~storage_dead _ _ _ _ _` mp_tac >>
      simp_tac bool_ss [storage_dead_def] >>
      conj_tac >- metis_tac[] >>
      qexistsl_tac [`slot`, `ArrayTV tv (Dynamic cap)`] >>
-     asm_rewrite_tac[]) >>
+     asm_rewrite_tac[] >> metis_tac[]) >>
   `~dead_bytes st' (w2n k) tv (w2n q) b` by
     (strip_tac >>
      qpat_x_assum `~dead_bytes st' _ (ArrayTV _ _) _ _` mp_tac >>
@@ -490,4 +487,3 @@ Resume append_storage_agree_copy[outside]:
   qpat_x_assum `storage_agree _ _ _` mp_tac >> simp[storage_agree_def]
 QED
 Finalise append_storage_agree_copy
-

@@ -1,6 +1,6 @@
 Theory typedOperandsPtr
 Ancestors
-  wordOperandsPtr bodyPtrPreds exprSimPrecompiles gasSummaryComposePtr operandOutcomePtr vyperState list
+  wordOperandsPtr bodyPtrPreds exprSimPrecompiles gasSummaryComposePtr gasOutcomeMarkedPtr gasOutcomeMapPtr vyperState list
 
 (* A recursive readiness interface is needed because facts about later
    operands are available only when the preceding operand can evaluate.
@@ -275,7 +275,7 @@ QED
 Resume lower_typed_args_sim_ptr[tail_cert]:
   POP_ASSUM_LIST (K all_tac) >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  rewrite_tac[ignore_map_return, GSYM forced_eval_bind_action,
+  rewrite_tac[ignore_bind_map_return, GSYM forced_eval_bind_action,
     GSYM exprSimWordArgsTheory.eval_exprs_cons_ignore_action] >>
   rpt strip_tac >> irule exprSimWordArgsTheory.wb_args_tail_exempt_cert >>
   goal_assum (drule_at Any) >>
@@ -285,7 +285,7 @@ QED
 Resume lower_typed_args_sim_ptr[head_cert]:
   POP_ASSUM_LIST (K all_tac) >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  rewrite_tac[ignore_map_return, GSYM forced_eval_bind_action,
+  rewrite_tac[ignore_bind_map_return, GSYM forced_eval_bind_action,
     GSYM exprSimWordArgsTheory.eval_exprs_cons_ignore_action] >>
   metis_tac[exprSimWordArgsTheory.wb_args_head_exempt_cert]
 QED
