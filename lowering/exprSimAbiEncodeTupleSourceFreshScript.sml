@@ -12,7 +12,7 @@ Theorem abi_encode_args_staged_source_fresh_free:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
   eval_exprs cx args es = (INL vs,es') /\
   evaluate_type_builtin cx (AbiEncode ensure mid) target (MAP expr_type args) vs = INL out /\
-  abi_args_post ctx func ce cx es sa st s0 es' args ops vs initial /\
+  abi_args_post H ctx func ce cx es sa st s0 es' args ops vs initial /\
   EVERY (abi_decoder_operand_live st.cs_next_var) ops /\
   (!k tv w. k < LENGTH args /\
     evaluate_type (get_tenv cx) (lowered_value_type ce (EL k args)) = SOME tv /\
@@ -45,7 +45,7 @@ Theorem abi_encode_args_staged_source_fresh_free:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_tuple_encode_stage_shape >> strip_tac >>
-  `abi_args_post ctx func ce cx es sa st s0 es' args ops vs (drop_fresh st initial)` by
+  `abi_args_post H ctx func ce cx es sa st s0 es' args ops vs (drop_fresh st initial)` by
     (irule abi_encode_args_post_drop_fresh >> asm_rewrite_tac []) >>
   `fresh_vars_wrt staged (drop_fresh st initial)` by
     (irule abi_encode_drop_final_fresh >> decide_tac) >>
@@ -71,7 +71,7 @@ Proof
     clean.vs_halted = initial.vs_halted /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op initial = SOME w ==>
       eval_operand op clean = SOME w)` by
-    (drule_at (Pat `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    (drule_at (Pat `abi_args_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)
        abi_encode_args_staged_source >>
      disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
      disch_then (drule_at (Pat `compile_store_abi_tuple _ _ _ _ _ = _`)) >>

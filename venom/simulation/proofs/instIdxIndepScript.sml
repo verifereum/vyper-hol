@@ -57,7 +57,7 @@ Theorem eval_ops_inst_idx:
 Proof Induct >> simp[eval_operands_def, eval_op_inst_idx]
 QED
 
-Theorem update_var_idx[local]:
+Theorem update_var_idx:
   !x v s n.
     update_var x v (s with vs_inst_idx := n) =
     (update_var x v s) with vs_inst_idx := n
@@ -100,7 +100,7 @@ Theorem set_returndata_idx[local]:
 Proof simp[set_returndata_def]
 QED
 
-Theorem mstore_idx[local]:
+Theorem mstore_idx:
   !off v s n. mstore off v (s with vs_inst_idx := n) =
               (mstore off v s) with vs_inst_idx := n
 Proof simp[mstore_def, LET_THM]

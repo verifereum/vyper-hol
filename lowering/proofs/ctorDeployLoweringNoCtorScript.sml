@@ -2,6 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringNoCtor
 Ancestors
+  immSectionDead
   structFieldsProps ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
   compileVyper vyperInterpreter e2eDeployDefs moduleLowering
   immutableDeployExecution ctorDeployDefs immSectionDead e2eEntry venomState vyperCompiler
@@ -2386,7 +2387,7 @@ Theorem no_ctor_initialized_zero_section:
 Proof
   strip_tac >>
   `?art. check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
-    gvs[deploy_typing_ok_def] >>
+    gvs[deploy_typing_ok_constants_ready] >>
   pop_assum strip_assume_tac >>
   irule no_ctor_zero_section >> rpt gen_tac >> strip_tac >>
   `MEM (VariableDecl vis Immutable name ty slot) tops` by simp[] >>
@@ -2425,7 +2426,7 @@ Theorem no_ctor_constants_ready:
                   exports updated_by CONS (tx.target,[]) |>)
       tx.target [(NONE,tops)] = SOME am_c
 Proof
-  strip_tac >> gvs[deploy_typing_ok_def] >>
+  strip_tac >> gvs[deploy_typing_ok_constants_ready] >>
   drule vyperTypeEntryReadinessTheory.checked_deployment_constants_ready_setup >>
   metis_tac[]
 QED
@@ -2568,14 +2569,14 @@ Proof
 QED
 
 Theorem no_ctor_source_halt:
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   gas_variant vs (deploy_entry_state prog cplan tops es) /\
   classify_functions tops = (exts,ints,fb,NONE) /\
   ss.vs_returndata = runtime_bc ++ REPLICATE (imm_len tops) 0w /\
   ss.vs_accounts = vs.vs_accounts /\
   ss.vs_transient = vs.vs_transient /\ ss.vs_logs = vs.vs_logs ==>
-  ?marks. deploy_venom_result_rel tops runtime_bc tx
+  ?marks. deploy_venom_result_rel HS tops runtime_bc tx
     (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx [(NONE,tops)] [])
     (Halt ss)
 Proof
@@ -2609,7 +2610,7 @@ Theorem deploy_no_ctor_correct:
       deploy_source_exempt tops
         (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
            [(NONE, tops)] []) \/
-      ?fuel. deploy_venom_result_rel tops runtime_bc tx
+      ?fuel. deploy_venom_result_rel HS tops runtime_bc tx
                (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
                   [(NONE, tops)] [])
                (run_context fuel dunit.cu_context vs)
