@@ -188,7 +188,8 @@ Resume target_mapping_sim_ptr[mapping_frame]:
        (mp_then Any mp_tac wordOperandsPtrTheory.ghost_kept_trans) >>
      disch_then irule >> simp[] >> conj_tac
      >- (qexists_tac `func` >> fs[stmt_state_rel_def, state_rel_def]) >>
-     qexistsl_tac [`es_end with gas_obs := []`, `t`, `sm`] >>
+     qexistsl_tac [`es_end with gas_obs := []`, `es_end with gas_obs := []`,
+                   `t`, `sm`] >>
      fs[target_post_wb_frame, ci_mono_def, stmt_state_rel_def, state_rel_def]) >>
   suspend "mapping_source"
 QED
