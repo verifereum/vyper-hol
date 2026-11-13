@@ -1,6 +1,7 @@
 (* Executed test of the concrete typed-array loop. *)
 Theory typedCopyLoopHeaderPtr
-Ancestors typedCopyLoopLayoutPtr typedCopyOffsetPtr venomExecSemantics
+Ancestors
+  wordLoadStorePtr typedCopyLoopLayoutPtr typedCopyOffsetPtr venomExecSemantics
   venomInst venomState words finite_map arithmetic
 
 Theorem typed_copy_loop_test_steps:
@@ -366,7 +367,7 @@ Theorem typed_copy_loop_mul_frag_ptr:
     frag_exec_ptr cx ctx PG sa sb P Q R
 Proof
   rpt gen_tac >> strip_tac >>
-  irule typedCopyPtrTheory.ptr_fragment_step >>
+  irule wordLoadStorePtrTheory.ptr_fragment_step >>
   simp[mk_inst_def, is_terminator_def] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
   qexists_tac `update_var out (a*b) s` >>

@@ -1,6 +1,7 @@
 (* Opcode boundaries for literal buffer construction. *)
 Theory exprSimPtrLiteralOps
 Ancestors
+  wordLoadStorePtr
   allocationPtr typedCopyPtr exprSimLiteralBuffer exprSimHypsDefs
   exprLowering ptrDiscipline venomExecSemantics venomMemDefs finite_map
   vyperTypeSystem vyperValue vyperAST exprSimProps compileEnv venomState venomInst

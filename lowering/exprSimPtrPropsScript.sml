@@ -15,6 +15,7 @@
  *)
 Theory exprSimPtrProps
 Ancestors
+  wordLoadStorePtr
   bodyPtrDefs fragGasPathPtr exprSimStack exprSimDefs loweringPosts
   gasExemptCert exprLowering emitHelper compileEnv loweringStateRelDefs vyperInterpreter
   vyperState ptrDiscipline fragGasSeqPtr typedCopyPtr decoderGhostFramePtr

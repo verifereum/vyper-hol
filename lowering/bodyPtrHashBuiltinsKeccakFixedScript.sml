@@ -1,6 +1,7 @@
 (* Allocation/store interface probe, shared by fixed-input hash suffixes. *)
 Theory bodyPtrHashBuiltinsKeccakFixed
 Ancestors
+  wordLoadStorePtr
   bodyPtrHashBuiltinsKeccak allocationPtr typedCopyPtr bodyPtrDefs ptrDiscipline venomState
   venomExecSemantics venomInst words finite_map
 
