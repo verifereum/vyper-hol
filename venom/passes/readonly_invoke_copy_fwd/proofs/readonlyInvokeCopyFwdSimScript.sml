@@ -16,7 +16,7 @@ Theory readonlyInvokeCopyFwdSim
 Ancestors
   readonlyInvokeCopyFwdDefs invokeCopyFwdCommonDefs readonlyMemoryArgsDefs
   internalReturnCopyFwdSim reachableFnSim taintAgree o1PassContract
-  ptrDiscipline venomExecSemantics venomInst venomWf venomState
+  ptrDiscipline unitMemInv venomExecSemantics venomInst venomWf venomState
   finite_map pred_set list
 
 Theorem ricf_pass_correct:
@@ -26,7 +26,8 @@ Theorem ricf_pass_correct:
     EVERY ricf_no_derived_mutable_sibling C.ctx_functions /\
     EVERY ricf_src_alloca C.ctx_functions /\
     EVERY ricf_param_order_ok C.ctx_functions /\
-    ptr_discipline lo C vs /\ vs.vs_allocas = FEMPTY /\ ~vs.vs_halted /\
+    ptr_discipline lo C vs /\ mem_inv raw_mem_ok C vs /\
+    vs.vs_allocas = FEMPTY /\ ~vs.vs_halted /\
     ~ctx_has_dalloca C /\ taint_within D C vs /\ dead_wf D /\
     fn_meta = icf_fn_meta_of C /\ rma = readonly_mem_analyze C ==>
     ctx_sim D C (ricf_transform_ctx fn_meta rma C) vs vs

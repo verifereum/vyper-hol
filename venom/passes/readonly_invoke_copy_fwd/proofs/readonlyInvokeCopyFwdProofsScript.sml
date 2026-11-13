@@ -285,7 +285,8 @@ Theorem ricf_pass_correct_nonvacuity:
     EVERY ricf_no_derived_mutable_sibling ricf_witness_ctx.ctx_functions /\
     EVERY ricf_src_alloca ricf_witness_ctx.ctx_functions /\
     EVERY ricf_param_order_ok ricf_witness_ctx.ctx_functions /\
-    ptr_discipline lo ricf_witness_ctx vs /\ vs.vs_allocas = FEMPTY /\
+    ptr_discipline lo ricf_witness_ctx vs /\ mem_inv raw_mem_ok ricf_witness_ctx vs /\
+    vs.vs_allocas = FEMPTY /\
     ~vs.vs_halted /\ ~ctx_has_dalloca ricf_witness_ctx /\
     taint_within D ricf_witness_ctx vs /\ dead_wf D /\
     ricf_transform_ctx (icf_fn_meta_of ricf_witness_ctx)
