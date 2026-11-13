@@ -1,6 +1,8 @@
 (* Shared-witness safe allocation and initialization of array cursors. *)
 Theory abiEncoderWindowArrayCursorMem
 Ancestors
+  exprSimAbiEncodeExecFrame exprSimAbiEncodeFramedArray exprSimAbiEncodeSemantic
+  venomInstProofs1
   abiEncoderWindowArrayEntry windowPhaseMem windowTransitionMem
   abiEncoderWindowLoopMem abiEncoderRegisteredEffect abiEncoderPrimitiveEffect
   abiEncoderWindowPhase abiEncoderWindowArrayInvariant abiEncoderWindowArrayBody freshWrites
@@ -28,7 +30,7 @@ Theorem window_array_cursor_init_phase_counted_mem:
     (!x. cursor = Var x ==> not_fresh_at en x) /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
     b+32 <= t.vs_alloca_next /\ b < dimword (:256) /\
-    mem_word_at b t.vs_memory = w /\ mem_cont_sim ctx func s t /\
+    mem_word_at b t.vs_memory = w /\ mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >> drule_all window_emit_alloca32_phase_counted_mem >> strip_tac >>
@@ -41,7 +43,7 @@ Proof
   `?store_count. window_phase ctx func mid en {st.cs_next_id} [] t
      ((mstore b w t) with vs_inst_idx := LENGTH en.cs_current_insts) /\
    mem_cont_sim ctx func t
-     ((mstore b w t) with vs_inst_idx := LENGTH en.cs_current_insts) /\
+     ((mstore b w t) with vs_inst_idx := LENGTH en.cs_current_insts) /\ abi_encode_exec_frame func t ((mstore b w t) with vs_inst_idx := LENGTH en.cs_current_insts) /\
    gas_path_mem ctx func t store_count
      (OK ((mstore b w t) with vs_inst_idx := LENGTH en.cs_current_insts))` by
     (irule window_cursor_store_phase_counted_mem >> asm_rewrite_tac[] >> metis_tac[]) >>
@@ -64,7 +66,8 @@ Proof
      POP_ASSUM_LIST (K all_tac) >> pure_rewrite_tac [window_sizes32_def] >>
      rpt strip_tac >> drule_all window_registered_sizes_transport >> metis_tac[]) >>
   `?total_count. gas_path_mem ctx func s total_count (OK u)` by
-    (fs[Abbr `u`] >> metis_tac[gas_path_mem_then]) >>
+    (fs[Abbr `u`] >> metis_tac[abi_encode_exec_frame_trans, gas_path_mem_then]) >>
+  `abi_encode_exec_frame func s u` by metis_tac[abi_encode_exec_frame_trans] >>
   qexistsl_tac [`u`, `b`, `total_count`] >> asm_rewrite_tac[] >> conj_tac
   >- metis_tac[window_array_phase_transition] >>
   conj_tac >- metis_tac[window_phase_operand] >>
@@ -110,7 +113,7 @@ Theorem window_array_index_init_run_counted_mem:
     (!x. ip = Var x ==> not_fresh_at en x) /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
     b+32 <= t.vs_alloca_next /\ b < dimword (:256) /\
-    mem_word_at b t.vs_memory = 0w /\ mem_cont_sim ctx func s t /\
+    mem_word_at b t.vs_memory = 0w /\ mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >>
@@ -214,7 +217,7 @@ Theorem window_array_parent_finish_counted_mem:
   ?t path_count. window_phase ctx func st en {site} [] s t /\
     window_array_transition ctx func st {site} [] s t /\
     eval_operand out t = SOME (n2w n) /\
-    (!x. out = Var x ==> not_fresh_at en x) /\ mem_cont_sim ctx func s t /\
+    (!x. out = Var x ==> not_fresh_at en x) /\ mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >>
@@ -227,6 +230,19 @@ Proof
   `raw.vs_allocas = s.vs_allocas /\ raw.vs_alloca_next = s.vs_alloca_next /\
    raw.vs_halted = s.vs_halted /\ raw.vs_current_bb = s.vs_current_bb` by
     fs[window_pure_seq_def, mstore_def, write_memory_with_expansion_def] >>
+  `abi_encode_exec_frame func s raw` by
+    (`run_inst_seq (emitted_insts st en) s = OK raw` by fs[window_seq_def] >>
+     drule abi_encode_framed_array_finish_opcodes >> strip_tac >>
+     `raw.vs_fmp = s.vs_fmp` by
+       (irule (BETA_RULE (Q.ISPEC `\s:venom_state. s.vs_fmp`
+         run_inst_seq_preserves_field)) >>
+        qexists_tac `emitted_insts st en` >> asm_rewrite_tac[] >>
+        rpt strip_tac >> irule step_inst_base_preserves_fmp_ordinary >>
+        qexists_tac `i` >> simp[] >> fs[EVERY_MEM]) >>
+     drule_all abi_encode_semantic_ordinary_sequence >> strip_tac >>
+     fs[window_pure_seq_def, abi_encode_exec_frame_def, pending_alloca_size_def,
+        mstore_def, write_memory_with_expansion_def, LET_THM, LENGTH_TAKE, LENGTH_DROP] >>
+     IF_CASES_TAC >> simp[] >> decide_tac) >>
   `abi_encoder_registered_effect {site} [] s raw` by
     (`abi_encoder_registered_effect {site} [] s t2` by
        metis_tac[window_pure_seq_registered_effect] >>

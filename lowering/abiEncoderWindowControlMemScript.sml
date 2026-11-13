@@ -1,6 +1,7 @@
 (* Exact array control endpoints, with instruction-by-instruction memory checks. *)
 Theory abiEncoderWindowControlMem
 Ancestors
+  exprSimAbiEncodeFramedArrayControl exprSimAbiEncodeExecFrame
   abiEncoderWindowArrayLoop abiEncoderArrayHeader abiDecoderExecution
   memControlFlow memSafeRun instMemFrontier emitHelperProps venomExecProofs venomExecSemantics
   venomState venomInst words arithmetic list rich_list
@@ -22,8 +23,11 @@ Theorem array_header_counted_mem:
   i <= n /\ n < dimword (:256) /\ w2n p + 32 <= s.vs_alloca_next ==>
   gas_path_mem ctx func s 0
     (OK (jump_to (if i<n then body_lbl else exit_lbl)
-      (abi_encode_array_header_state iv cmp done i n s)))
+      (abi_encode_array_header_state iv cmp done i n s))) /\
+  abi_encode_exec_frame func s (jump_to (if i<n then body_lbl else exit_lbl)
+      (abi_encode_array_header_state iv cmp done i n s))
 Proof
+  simp_tac bool_ss [abi_encode_framed_array_header, AND_CLAUSES] >>
   strip_tac >> drule_all abi_encode_array_header_prefix >> strip_tac >>
   qabbrev_tac `code = TAKE 3
     (abi_encode_array_header_insts id ip count_op iv cmp done body_lbl exit_lbl)` >>
@@ -65,7 +69,7 @@ Proof
        eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
        get_instruction_def, abi_encode_array_header_insts_def] >>
      Cases_on `i<n` >> simp[bool_to_word_def, jump_to_def]) >>
-  metis_tac[gas_path_mem_then, ADD_CLAUSES]
+  metis_tac[abi_encode_exec_frame_trans, gas_path_mem_then, ADD_CLAUSES]
 QED
 
 Theorem array_header_mem_safe[local]:

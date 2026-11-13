@@ -1,6 +1,7 @@
 (* Memory-safe indexed complex-member phases. *)
 Theory abiEncoderWindowMembersMem
 Ancestors
+  exprSimAbiEncodeExecFrame
   abiEncoderWindowStructuralMembers abiEncoderWindowMembers abiEncoderWindowChildMem abiEncoderWindowChild
   abiEncoderWindowContract abiEncoderWindowPhase windowPhaseMem memContinuation
   compileEnv fragExec venomState words list rich_list pred_set arithmetic fragGasPathMem
@@ -18,7 +19,7 @@ Theorem window_member_source_prepare_counted_mem:
     (!x. child_src = Var x ==> not_fresh_at ready x) /\
     (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
          !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-    mem_cont_sim ctx func s t /\
+    mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >>
@@ -109,7 +110,7 @@ Theorem window_structural_member_static_run_counted_mem:
     compile_abi_encode_to_buf dst src ei st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
     ?t child_count. window_strong_result ctx func st st' out at av d s t /\
-      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
   compile_abi_encode_child dst child_src ei F
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) /\
   eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
@@ -120,7 +121,7 @@ Theorem window_structural_member_static_run_counted_mem:
       window_member_prefix infos ats avs (SUC k) d t.vs_memory /\
       eval_operand out t = SOME (n2w (LENGTH (enc (EL k ats) (EL k avs)))) /\
       (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
-        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\ mem_cont_sim ctx func s t /\
+        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\ mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >>
@@ -217,7 +218,7 @@ Theorem window_structural_member_static_step_run_counted_mem:
     compile_abi_encode_to_buf dst src ei st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
     ?t child_count. window_strong_result ctx func st st' out at av d s t /\
-      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
   compile_abi_encode_child dst child_src ei F
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,mid) /\
   eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
@@ -237,7 +238,7 @@ Theorem window_structural_member_static_step_run_counted_mem:
         sb cap d mid en t /\
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-      mem_cont_sim ctx func s t /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >>
@@ -335,7 +336,7 @@ Theorem window_structural_member_dynamic_run_counted_mem:
     compile_abi_encode_to_buf dst src ei st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
     ?t child_count. window_strong_result ctx func st st' out at av d s t /\
-      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
   compile_abi_encode_child dst child_src ei T
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) /\
   eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
@@ -349,7 +350,7 @@ Theorem window_structural_member_dynamic_run_counted_mem:
       FLOOKUP t.vs_allocas site = SOME (slot,32) /\
       eval_operand out t = SOME (n2w (LENGTH (enc (EL k ats) (EL k avs)))) /\
       (!i b sz. i IN (window_alloca_sites func (frag_ids st en) UNION {site}) /\
-        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\ mem_cont_sim ctx func s t /\
+        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\ mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >>
@@ -447,7 +448,7 @@ Theorem window_structural_member_dynamic_step_run_counted_mem:
     compile_abi_encode_to_buf dst src ei st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
     ?t child_count. window_strong_result ctx func st st' out at av d s t /\
-      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
   compile_abi_encode_child dst child_src ei T
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,mid) /\
   eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
@@ -466,7 +467,7 @@ Theorem window_structural_member_dynamic_step_run_counted_mem:
         sb cap d mid en t /\
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-      mem_cont_sim ctx func s t /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >>
@@ -577,7 +578,7 @@ Theorem window_member_step_envelope_counted_mem:
     compile_abi_encode_to_buf dst src ei st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
     ?t child_count. window_strong_result ctx func st st' out at av d s t /\
-      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
   compile_abi_encode_child dst child_src ei dyn
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,mid) /\
   eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
@@ -599,7 +600,7 @@ Theorem window_member_step_envelope_counted_mem:
     EVERY (\(b,n). d <= b /\ b+n <= d+LENGTH (enc at (ListV avs))) outs /\
     (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
          !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-    mem_cont_sim ctx func s t /\
+    mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >> reverse (Cases_on `dyn`)
@@ -765,7 +766,7 @@ Theorem window_structural_members_cons_run_counted_mem:
     compile_abi_encode_to_buf dst src h0 st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src h0 at av sb cap d s ==>
     ?t child_count. window_strong_result ctx func st st' out at av d s t /\
-      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
   compile_abi_encode_complex_elems dst src ((h0,h1,h2,h3)::rest)
     (abi_encoder_member_span (TAKE k infos))
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) ==>
@@ -782,7 +783,7 @@ Theorem window_structural_members_cons_run_counted_mem:
     window_alloca_sites func (frag_ids mid en) SUBSET window_alloca_sites func (frag_ids st en) /\
     (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
          !i b sz. i IN R /\ FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-    mem_cont_sim ctx func s u /\
+    mem_cont_sim ctx func s u /\ abi_encode_exec_frame func s u /\
     gas_path_mem ctx func s path_count (OK u)
 Proof
   strip_tac >>
@@ -852,7 +853,7 @@ Resume window_structural_members_cons_run_counted_mem[package]:
    window_alloca_sites func (frag_ids mid en) SUBSET window_alloca_sites func (frag_ids st en)` by
     (simp_tac (srw_ss()) [window_alloca_sites_def, abiEncoderPropsTheory.frag_ids_def,
        SUBSET_DEF] >> rpt strip_tac >> decide_tac) >>
-  `mem_cont_sim ctx func s t'` by metis_tac[mem_cont_sim_trans] >>
+  `mem_cont_sim ctx func s t'` by metis_tac[abi_encode_exec_frame_trans, mem_cont_sim_trans] >>
   `!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
        !i b sz. i IN R /\ FLOOKUP t'.vs_allocas i = SOME (b,sz) ==> sz = 32` by
     (gen_tac >> disch_tac >>
@@ -861,6 +862,7 @@ Resume window_structural_members_cons_run_counted_mem[package]:
      rewrite_tac[]) >>
   `?total_count. gas_path_mem ctx func s total_count (OK t')` by
     metis_tac[gas_path_mem_then] >>
+  `abi_encode_exec_frame func s t'` by metis_tac[abi_encode_exec_frame_trans] >>
   qexistsl_tac [`mid`, `t'`, `total_count`] >> asm_rewrite_tac[] >>
   (conj_tac >- metis_tac[]) >>
   reverse conj_tac >- decide_tac >>
@@ -966,7 +968,7 @@ Theorem window_structural_members_remaining_run_counted_mem:
     compile_abi_encode_to_buf dst src ei st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
     ?t child_count. window_strong_result ctx func st st' out at av d s t /\
-      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
   compile_abi_encode_complex_elems dst src rest
     (abi_encoder_member_span (TAKE k infos))
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) ==>
@@ -978,7 +980,7 @@ Theorem window_structural_members_remaining_run_counted_mem:
         sb cap d en en t /\
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-      mem_cont_sim ctx func s t /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   Induct_on `rest`
@@ -1002,7 +1004,7 @@ Proof
     compile_abi_encode_to_buf dst src h0 st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src h0 at av sb cap d s ==>
     ?t child_count. window_strong_result ctx func st st' out at av d s t /\
-      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s child_count (OK t)` by
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s child_count (OK t)` by
     metis_tac[MEM] >>
   drule_all window_structural_members_cons_run_counted_mem >> strip_tac >>
   suspend "tail"
@@ -1014,10 +1016,10 @@ Resume window_structural_members_remaining_run_counted_mem[tail]:
     compile_abi_encode_to_buf dst src ei st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
     ?t child_count. window_strong_result ctx func st st' out at av d s t /\
-      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s child_count (OK t)` by
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s child_count (OK t)` by
     metis_tac[MEM] >>
   first_x_assum drule_all >> strip_tac >>
-  `mem_cont_sim ctx func s t` by metis_tac[mem_cont_sim_trans] >>
+  `mem_cont_sim ctx func s t` by metis_tac[abi_encode_exec_frame_trans, mem_cont_sim_trans] >>
   `!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
        !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32` by
     (gen_tac >> disch_tac >>
@@ -1026,6 +1028,7 @@ Resume window_structural_members_remaining_run_counted_mem[tail]:
      rewrite_tac[]) >>
   `?total_count. gas_path_mem ctx func s total_count (OK t)` by
     metis_tac[gas_path_mem_then] >>
+  `abi_encode_exec_frame func s t` by metis_tac[abi_encode_exec_frame_trans] >>
   qexistsl_tac [`t`,`total_count`] >> asm_rewrite_tac[] >>
   irule window_phase_chain >>
   qexistsl_tac [`window_alloca_sites func (frag_ids st en) UNION
@@ -1095,7 +1098,7 @@ Theorem window_structural_members_initialized_run_counted_mem:
     compile_abi_encode_to_buf dst src ei st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
     ?t child_count. window_strong_result ctx func st st' out at av d s t /\
-      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
   compile_abi_encode_complex_elems dst src infos 0 0 dp st = (out,en) ==>
   ?t path_count. window_phase ctx func st en
         (window_alloca_sites func (frag_ids st en) UNION
@@ -1106,7 +1109,7 @@ Theorem window_structural_members_initialized_run_counted_mem:
       mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs) /\
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-      mem_cont_sim ctx func s t /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >>
@@ -1180,7 +1183,7 @@ Theorem window_complex_initialized_run_counted_mem:
     compile_abi_encode_to_buf dst src ei st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
     ?t child_count. window_strong_result ctx func st st' out at av d s t /\
-      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
   compile_abi_encode_complex_elems dst src infos 0 0 dp st = (out,en) ==>
   ?t path_count. window_phase ctx func st en
         (window_alloca_sites func (frag_ids st en) UNION
@@ -1191,7 +1194,7 @@ Theorem window_complex_initialized_run_counted_mem:
         mem_word_at slot t.vs_memory = n2w (LENGTH (enc at (ListV avs)))) /\
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-      mem_cont_sim ctx func s t /\
+      mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >>

@@ -1,6 +1,7 @@
 (* Same-witness safe primitive window encoder contracts. *)
 Theory abiEncoderWindowLeavesMem
 Ancestors
+  exprSimAbiEncodeExecFrame exprSimAbiEncodeFramedLeaves exprSimAbiEncodeMemoryLength
   abiEncoderWindowLeaves abiEncoderWindowContract abiEncoderWindowComplex
   abiEncoderWindowPhase abiEncoderWindowBytes abiEncoderRounding abiEncoderBytes
   abiEncoderWindowBytesMem abiEncoderWindowSequence windowSequenceMem fragExecMem instMemFrontier allocaFootprint
@@ -15,7 +16,7 @@ Theorem window_copy_contract_counted_mem:
   compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') /\
   abi_encoder_window_pre ctx func st st' dst src (AbiCopy sz) at av sb cap d s ==>
   ?t count. window_strong_result ctx func st st' out at av d s t /\
-    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s count (OK t)
+    mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s count (OK t)
 Proof
   rpt gen_tac >> strip_tac >>
   `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
@@ -112,7 +113,7 @@ Theorem window_word_contract_counted_mem:
   compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') /\
   abi_encoder_window_pre ctx func st st' dst src AbiPrimWord at av sb cap d s ==>
   ?t count. window_strong_result ctx func st st' out at av d s t /\
-    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s count (OK t)
+    mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s count (OK t)
 Proof
   rpt gen_tac >> strip_tac >>
   `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
@@ -140,6 +141,14 @@ Proof
 QED
 
 Resume window_word_contract_counted_mem[package]:
+  `abi_encode_exec_frame func s (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (`LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+       (qpat_assum `t = _` SUBST1_TAC >>
+        mp_tac (Q.INST [`off` |-> `d`, `w` |-> `mload sb s`,
+          `s` |-> `update_var (STRING #"%" (toString st.cs_next_var)) (mload sb s) s`]
+          abi_encode_mstore_memory_length) >> simp[update_var_def]) >>
+     simp[abi_encode_exec_frame_def, pending_alloca_size_def, update_var_def,
+      mstore_def, exprSimAbiEncodeSemanticTheory.abi_encode_semantic_obs_def]) >>
   `abi_encoder_extend_sim ctx func s
     (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
     metis_tac[window_seq_extend_sim] >>
@@ -219,7 +228,7 @@ Theorem window_bytes_contract_counted_mem:
   compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') /\
   abi_encoder_window_pre ctx func st st' dst src (AbiBytestring maxlen) at av sb cap d s ==>
   ?t count. window_strong_result ctx func st st' out at av d s t /\
-    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s count (OK t)
+    mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s count (OK t)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -244,6 +253,18 @@ Proof
   drule_all window_bytes_mem_checks >> strip_tac >>
   drule_all window_bytes_sequence >> strip_tac >>
   rename1 `window_seq st st' s actual` >>
+  `EVERY (\i. MEM i.inst_opcode [ADD;AND;NOT;MLOAD;MSTORE;MCOPY])
+    (emitted_insts st st')` by metis_tac[abi_encode_bytes_opcodes] >>
+  `run_inst_seq (emitted_insts st st') s = OK actual` by fs[window_seq_def] >>
+  `actual.vs_fmp = s.vs_fmp` by metis_tac[abi_encode_leaf_sequence_fmp] >>
+  `exprSimAbiEncodeSemantic$abi_encode_semantic_obs actual =
+    exprSimAbiEncodeSemantic$abi_encode_semantic_obs s` by
+    metis_tac[abi_encode_leaf_sequence_semantic] >>
+  `LENGTH s.vs_memory <= LENGTH actual.vs_memory` by
+    (irule abi_encode_leaf_sequence_memory_length >>
+     qexists_tac `emitted_insts st st'` >> simp[] >> fs[EVERY_MEM] >> metis_tac[]) >>
+  `abi_encode_exec_frame func s (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    simp[abi_encode_exec_frame_def, pending_alloca_size_def] >>
   `mem_cont_sim ctx func s
      (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
     (drule_all window_seq_mem_cont >> simp[]) >>
