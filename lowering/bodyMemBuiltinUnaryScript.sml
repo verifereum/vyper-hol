@@ -11,7 +11,11 @@ Theorem body_builtin_unary_mem_case:
     (bt = Neg \/ bt = Abs \/ bt = Not) /\ body_expr_mem_ok cx e ==>
     body_expr_mem_ok cx (Builtin ty bt [e])
 Proof
-  rpt gen_tac >> simp[body_expr_mem_ok_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  (match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >>
+  qpat_x_assum `body_expr_mem_ok _ _`
+    (assume_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
   rpt gen_tac >> strip_tac >>
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >> disch_then irule >>

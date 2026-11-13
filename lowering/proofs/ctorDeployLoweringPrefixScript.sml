@@ -269,7 +269,7 @@ Proof
   strip_tac >> PairCases_on `cf` >>
   gvs[compileVyperTheory.ctor_named_init_def] >>
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac
-    ctorDeployInitcodeTheory.classify_functions_ctor_lookup >>
+    ctorDeployDefsTheory.classify_functions_ctor_lookup >>
   simp[] >> strip_tac >>
   gvs[compileVyperTheory.package_constructor_def,
       compileVyperTheory.set_constructor_package_target_def]
@@ -378,7 +378,8 @@ QED
 Theorem deploy_prefix_member_entry_label:
   !tops rp runtime unit fn.
   lower_vyper_deploy_unit tops rp runtime = SOME unit /\
-  supported_program tops /\ MEM fn unit.cu_context.ctx_functions ==>
+  supported_program tops /\ supported_program_deploy tops /\
+  MEM fn unit.cu_context.ctx_functions ==>
   fn_entry_label fn = SOME fn.fn_name
 Proof
   rpt gen_tac >> strip_tac >>
@@ -391,7 +392,7 @@ QED
 
 Theorem deploy_prefix_ctor_entry_label:
   !tops rp runtime unit src ce nr key ut imm lbl sa sb sj se sp sf fn.
-  supported_program tops /\
+  supported_program tops /\ supported_program_deploy tops /\
   deploy_ctor_code tops rp runtime unit
     (src,ce,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,fn) ==>
   fn_entry_label fn = SOME "__deploy"
@@ -492,7 +493,8 @@ Proof
   drule_all deploy_prefix_entry_callvalue >> strip_tac >>
   drule_all ctorDeployLoweringCodeTheory.deploy_ctor_code_exists >> strip_tac >>
   drule_all deploy_prefix_selected_guard >> strip_tac >>
-  `supported_program tops` by fs[ctorDeployDefsTheory.deploy_source_ok_def] >>
+  `supported_program tops /\ supported_program_deploy tops` by
+    fs[ctorDeployDefsTheory.deploy_source_ok_def] >>
   drule_all deploy_prefix_ctor_entry_label >> strip_tac >>
   irule deploy_prefix_context_guard_abort >>
   rpt (goal_assum (drule_at Any)) >> simp[]

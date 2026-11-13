@@ -14,6 +14,7 @@ Ancestors
   stmtLowering vyperTypeSystem vyperState emitHelper vyperTypeSelectedEntrySoundness
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
   unitShapeDefs o1PassContract
+  entryPtrSeamDead entryPtrSeamPrefix entryPtrSeamRegister
 
 val _ = Parse.hide "body";
 
@@ -78,5 +79,14 @@ Theorem external_entry_reaches_body_ptr:
                 (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
                             vs_inst_idx := 0 |>))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all external_entry_reaches_registration_ptr >> strip_tac >>
+  drule_all register_positional_args_ptr >>
+  disch_then (qspec_then `G1` strip_assume_tac) >>
+  qexistsl_tac [`lbl`, `cenv0`, `pos_args`, `min_cds`, `is_payable`, `nkey`,
+    `ut'`, `iv`, `rt`, `st`, `cenv`, `sa`, `st'`, `efn`, `s0`, `G0`,
+    `tn0`] >>
+  simp[] >> strip_tac >>
+  first_x_assum irule >> first_x_assum irule >>
+  simp[external_call_dead_initial_cx]
 QED

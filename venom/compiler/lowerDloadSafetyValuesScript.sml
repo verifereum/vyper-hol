@@ -91,7 +91,7 @@ QED
 
 Theorem ld_numeric_operand_untainted:
   taint_ok fn tn inst s /\ MEM op inst.inst_operands /\
-  ~MEM inst.inst_opcode [ASSIGN; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] ==>
+  ~MEM inst.inst_opcode [ASSIGN; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] ==>
   op_taint tn op = {}
 Proof
   simp[taint_ok_def] >> metis_tac[]
@@ -239,7 +239,7 @@ Theorem ld_vars_numeric_operands_equal:
   fn_shape_ok f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
   taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
   ~MEM inst.inst_opcode
-    [ASSIGN; PHI; RET; RETFMP; DRET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
+    [ASSIGN; PHI; RET; RETFMP; DRET; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
   (!v. MEM (Var v) inst.inst_operands ==>
     MEM v (fn_ir_vars f.lf_fn) /\ v NOTIN fn_pv P f.lf_fn) ==>
   eval_operands inst.inst_operands f.lf_src =

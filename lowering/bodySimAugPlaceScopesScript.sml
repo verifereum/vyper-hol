@@ -63,6 +63,7 @@ QED
 Resume aug_place_pure_scopes_mutual[subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   trace_scopes_tac >> metis_tac[]
 QED
@@ -73,6 +74,10 @@ Resume aug_place_pure_scopes_mutual[attribute]:
 QED
 Resume aug_place_pure_scopes_mutual[builtin]:
   rpt strip_tac >>
+  `code_slice_source blt es = NONE` by
+    (Cases_on `code_slice_source blt es` >> simp[] >>
+     rename1 `SOME p` >> PairCases_on `p` >>
+     gvs[code_slice_source_SOME, supportedExprFormsTheory.supported_builtin_form_def]) >>
   Cases_on `blt = Len` >> Cases_on `blt = Env MsgGas` >>
   Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
@@ -121,6 +126,7 @@ QED
 Resume aug_place_pure_scopes_mutual[place_subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   trace_scopes_tac >> metis_tac[]
 QED
@@ -243,7 +249,7 @@ Proof
 QED
 
 Theorem aug_place_intcall_scopes:
-  (!s0 r0 s1. eval_expr_results cx es s0 = (r0,s1) ==>
+  (!s0 r0 s1. eval_exprs cx es s0 = (r0,s1) ==>
     s1.scopes = s0.scopes) /\
   eval_expr cx (Call ty (IntCall id) es kw) s = (r,s') ==>
   s'.scopes = s.scopes
@@ -298,6 +304,7 @@ QED
 Resume aug_place_effect_scopes_mutual[subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   trace_scopes_tac >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
 QED
@@ -309,6 +316,7 @@ QED
 Resume aug_place_effect_scopes_mutual[place_subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   trace_scopes_tac >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
 QED
@@ -350,7 +358,7 @@ QED
 Resume aug_place_effect_scopes_mutual[intcall]:
   rpt strip_tac >> irule aug_place_intcall_scopes >>
   goal_assum (drule_at Any) >>
-  metis_tac[aug_place_pure_results_scopes]
+  metis_tac[aug_place_pure_exprs_scopes]
 QED
 Finalise aug_place_effect_scopes_mutual
 
