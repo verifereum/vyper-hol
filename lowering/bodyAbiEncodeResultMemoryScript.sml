@@ -1,6 +1,7 @@
 (* Same-endpoint packaging for the ABI encoder's memory execution. *)
 Theory bodyAbiEncodeResultMemory
 Ancestors
+  bodyAbiEncodeRegisteredFrame
   abiEncoderWindowMemFrame abiEncoderWindowPhase exprSimHash exprSimMemDefs
   localPtrsProps loweringSlice exprSimProps abiEncoderWindowContract
   exprLoweringProps compileEnv abiEncoderRegisteredEffect arithmetic venomState exprSimHyps
