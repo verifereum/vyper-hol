@@ -9,7 +9,8 @@ Ancestors
   ptrSafeRun ptrDiscipline exprLowering emitHelper emitHelperProps
   exprLoweringProps compileEnv venomExecSemantics venomInst venomState
   list rich_list finite_map codegenRel contextCodegenRel decoderGhostFramePtr
-  freshWrites
+  freshWrites exprSimHypsDefs vyperTypeSystem vyperTyping vyperValue vyperContext
+  exprSimUnopComposeProps
 
 Theorem word_neg_emission:
   !x ty sa op sb.
@@ -418,4 +419,58 @@ Proof
     metis_tac[word_neg_ghost_register_frame] >>
   qexistsl [`t`, `G'`, `tn'`] >> simp[] >> rpt strip_tac >>
   irule word_neg_ghost_frame >> metis_tac[]
+QED
+
+Theorem word_neg_sim_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+    (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
+       (~is_word_type (expr_type e) ==>
+        !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =
+                SOME tvt ==> type_memory_size tvt = 0) /\
+       expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+         cenv cx ty e es /\
+       (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\
+       (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
+       expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+         cenv cx ty e es) /\
+    bt = Neg /\
+    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
+    body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (Builtin a bt args) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin a bt args) es /\
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin a bt args) es
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `MAP expr_type args = [a] /\ is_numeric_type a /\ ~is_uint_type a /\
+   well_formed_type env.type_defs a` by
+    gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  Cases_on `args` >> gvs[] >>
+  rename1 `expr_body_pre _ _ _ (Builtin _ Neg [e]) _` >>
+  `expr_body_pre cenv cx env e es` by
+    (irule expr_body_pre_builtin_arg >> conj_tac
+     >- gvs[expr_body_pre_def] >>
+     qexistsl [`expr_type e`, `[e]`, `Neg`, `es`] >> simp[]) >>
+  `0 < type_bits (expr_type e) /\ type_bits (expr_type e) <= 256 /\
+   is_word_type (expr_type e)` by
+    (Cases_on `expr_type e` >>
+     gvs[is_numeric_type_def, is_int_type_def, is_uint_type_def] >>
+     rename1 `BaseT b` >> Cases_on `b` >>
+     gvs[is_numeric_type_def, is_int_type_def, is_uint_type_def, type_bits_def,
+         is_word_type_def, well_formed_type_def, evaluate_type_def,
+         expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def]) >>
+  `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin (expr_type e) Neg [e]) es` suffices_by
+    (strip_tac >> gvs[] >> first_x_assum irule >>
+     simp[vyperASTTheory.expr_type_def, compile_neg_stack] >>
+     metis_tac[eval_expr_builtin_value]) >>
+  `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx (expr_type e) e es` by
+    (gvs[builtin_args_length_ok_def, body_exprs_full_ok_def,
+         body_expr_full_ok_def] >> metis_tac[]) >>
+  rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
+  drule lower_value_neg >> strip_tac >>
+  rename1 `compile_neg x (expr_type e) s1 = (op,sb)` >>
+  cheat
 QED
