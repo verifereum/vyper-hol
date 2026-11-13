@@ -1,8 +1,8 @@
 (* Actual-site resources at the nonbulk source-array constructor boundary. *)
 Theory sourceOwnedArrayConstructorPtr
 Ancestors
-  sourceOwnedArrayLoopPtr decoderArrayInitPtr physicalArrayInitSequence abiEncoderSequence
-  fragGasOriginPtr fragGasPathPtr entryDispatchPtr codegenRel contextCodegenRel fragGasSeqPtr fragGasSeqMem fragExecMem stmtForRangeMemoryParts calldataDynInit calldataBytesLeaf
+  ghostPcTransportPtr sourceOwnedArrayLoopPtr decoderArrayInitPtr physicalArrayInitSequence abiEncoderSequence
+  venomInstProofs fragGasSeqAbort venomExecProofs instIdxIndep fragGasOriginPtr fragGasPathPtr entryDispatchPtr codegenRel contextCodegenRel fragGasSeqPtr fragGasSeqMem fragExecMem stmtForRangeMemoryParts calldataDynInit calldataBytesLeaf
   decoderCalldataShell abiDecoderRange abiDecoderBytesBound abiEncoder sourceEncodingWindows sourceEncodingLayout abiDecoderCoherence
   ctorAbiActualArrayRun entrySinkExtraction fragExec
   abiDecoderRecursiveArray abiDecoderLoop abiDecoderArraySetupCode abiDecoderLoopRegisters
@@ -16,6 +16,231 @@ Ancestors
   emitHelperProps emitHelper exprLowering exprLoweringProps abiDecoderContract
   rich_list context compileEnv loweringStateRelDefs venomState venomInst
   venomExecSemantics venomMemDefs venomMemProofs valueEncoding valueEncodingDefs valueEncodingProofs venomWf finite_map words list arithmetic
+
+Theorem constructor_guard_run_joint[local]:
+  !code s t G tn H u ctx fn bb.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+      ~is_terminator i.inst_opcode) code /\
+    run_inst_seq_mem_ok code s /\
+    inst_seq_ptr D lower ctx fn PG G tn code s H u /\
+    run_inst_seq code s = OK t ==>
+    gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG) (s,G,tn) []
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code),H,u)
+Proof
+  Induct
+  >- (simp[run_inst_seq_def, inst_seq_ptr_def] >> rpt strip_tac >>
+      gvs[] >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  gvs[run_inst_seq_def, inst_seq_ptr_def, run_inst_seq_mem_ok_def] >>
+  rename1 `step_inst_base h s = OK v` >>
+  `step_inst 0 ctx h s = OK v` by simp[step_inst_non_invoke] >>
+  `~v.vs_halted /\ v.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+  first_x_assum (qspecl_then [`v with vs_inst_idx := SUC s.vs_inst_idx`,
+    `t with vs_inst_idx := SUC s.vs_inst_idx`, `step_prov PG G h v`,
+    `step_taint h s v tn`, `H`, `u`, `ctx`, `fn`, `bb`] mp_tac) >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def] >> strip_tac >>
+  `gas_path_ptr_edge D lower ctx fn PG G tn s 0
+    (step_prov PG G h v) (step_taint h s v tn)
+    (OK (v with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (drule_all straight_line_ptr_edge >> simp[]) >>
+  `gas_path_mem_edge ctx fn s 0
+    (OK (v with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (drule_all straight_line_mem_edge >> simp[]) >>
+  `gas_origin_ptr_edge (D,lower,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (v with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G h v, step_taint h s v tn)` by
+    (simp[gas_origin_ptr_edge_def] >>
+     metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
+  drule (cj 2 gas_origin_ptr_path_rules) >> disch_then drule >> simp[ADD1]
+QED
+
+Theorem constructor_count_guard_layout[local]:
+  abi_decode_count_guard CALLDATALOAD src maxn st = (cnt,st') ==>
+  cnt = Var ("%" ++ toString st.cs_next_var) /\
+  st'.cs_current_bb = st.cs_current_bb /\
+  st'.cs_blocks = st.cs_blocks /\
+  st'.cs_next_var = st.cs_next_var + 3 /\
+  st'.cs_next_id = st.cs_next_id + 4 /\
+  st'.cs_current_insts = st.cs_current_insts ++
+    [mk_inst st.cs_next_id CALLDATALOAD [src]
+       ["%" ++ toString st.cs_next_var];
+     mk_inst (st.cs_next_id + 1) GT
+       [cnt; Lit (n2w maxn)] ["%" ++ toString (st.cs_next_var + 1)];
+     mk_inst (st.cs_next_id + 2) ISZERO
+       [Var ("%" ++ toString (st.cs_next_var + 1))]
+       ["%" ++ toString (st.cs_next_var + 2)];
+     mk_inst (st.cs_next_id + 3) ASSERT
+       [Var ("%" ++ toString (st.cs_next_var + 2))] []]
+Proof
+  simp[abi_decode_count_guard_def, emit_op_def, emit_void_def,
+    emit_inst_def, fresh_var_def, fresh_id_def, emit_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  strip_tac >> gvs[APPEND_ASSOC]
+QED
+
+Theorem constructor_count_guard_origin_ptr[local]:
+  abi_decode_count_guard CALLDATALOAD src maxn sa = (cnt,sb) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\ allocas_from lower s /\
+  ~ctx_has_dalloca ctx /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?H u. (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
+    (s,G,tn) [] (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u)) /\
+    op_taint u cnt = {} /\ op_prov H cnt = NONE /\
+    (?vars. t = s with vs_vars := vars) /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule constructor_count_guard_layout >> strip_tac >>
+  qabbrev_tac `v0 = "%" ++ toString sa.cs_next_var` >>
+  qabbrev_tac `v1 = "%" ++ toString (sa.cs_next_var + 1)` >>
+  qabbrev_tac `v2 = "%" ++ toString (sa.cs_next_var + 2)` >>
+  qabbrev_tac `i0 = mk_inst sa.cs_next_id CALLDATALOAD [src] [v0]` >>
+  qabbrev_tac `i1 = mk_inst (sa.cs_next_id + 1) GT [Var v0; Lit (n2w maxn)] [v1]` >>
+  qabbrev_tac `i2 = mk_inst (sa.cs_next_id + 2) ISZERO [Var v1] [v2]` >>
+  qabbrev_tac `i3 = mk_inst (sa.cs_next_id + 3) ASSERT [Var v2] []` >>
+  `cnt = Var v0 /\ emitted_insts sa sb = [i0;i1;i2;i3]` by
+    simp[emitted_insts_def, rich_listTheory.DROP_APPEND1, Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`,
+      Abbr `v0`, Abbr `v1`, Abbr `v2`] >>
+  qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >>
+  simp[run_inst_seq_def, AllCaseEqs()] >> strip_tac >>
+  rename1 `step_inst_base i0 s = OK s0` >>
+  rename1 `step_inst_base i1 s0 = OK s1` >>
+  rename1 `step_inst_base i2 s1 = OK s2` >>
+  `s0 = update_var v0 (abi_decode_load CALLDATALOAD a s) s` by
+    gvs[Abbr `i0`, step_inst_base_opcode_eqs, mk_inst_def,
+      exec_read1_def, abi_decode_load_def, abi_decode_source_def] >>
+  `?b. s1 = update_var v1 b s0` by
+    (qpat_x_assum `step_inst_base i1 s0 = OK s1` mp_tac >>
+     simp[Abbr `i1`, mk_inst_def, step_inst_base_opcode_eqs,
+       exec_pure2_def, AllCaseEqs()] >> metis_tac[]) >>
+  `?c. s2 = update_var v2 c s1` by
+    (qpat_x_assum `step_inst_base i2 s1 = OK s2` mp_tac >>
+     simp[Abbr `i2`, mk_inst_def, step_inst_base_opcode_eqs,
+       exec_pure1_def, AllCaseEqs()] >> metis_tac[]) >>
+  `t = s2` by
+    (qpat_x_assum `step_inst_base i3 s2 = OK t` mp_tac >>
+     simp[Abbr `i3`, mk_inst_def, step_inst_base_opcode_eqs,
+       AllCaseEqs()] >> metis_tac[]) >>
+  qabbrev_tac `G0 = step_prov PG G i0 s0` >>
+  qabbrev_tac `u0 = step_taint i0 s s0 tn` >>
+  qabbrev_tac `G1 = step_prov PG G0 i1 s1` >>
+  qabbrev_tac `u1 = step_taint i1 s0 s1 u0` >>
+  qabbrev_tac `G2 = step_prov PG G1 i2 s2` >>
+  qabbrev_tac `u2 = step_taint i2 s1 s2 u1` >>
+  qabbrev_tac `H = step_prov PG G2 i3 t` >>
+  qabbrev_tac `u = step_taint i3 s2 t u2` >>
+  suspend "guard_frames"
+QED
+
+Resume constructor_count_guard_origin_ptr[guard_frames]:
+  `v0 <> v1 /\ v0 <> v2 /\ v1 <> v2` by
+    simp[Abbr `v0`, Abbr `v1`, Abbr `v2`, ASCIInumbersTheory.toString_inj] >>
+  `!x. not_fresh_at sa x ==> x <> v0 /\ x <> v1 /\ x <> v2` by
+    (simp[not_fresh_at_def, Abbr `v0`, Abbr `v1`, Abbr `v2`] >>
+     rpt strip_tac >> gvs[] >> metis_tac[LESS_EQ_REFL, DECIDE ``n <= n+1 /\ n <= n+2``]) >>
+  `op_taint u0 (Var v0) = {}` by
+    (simp[Abbr `u0`, Abbr `i0`] >> irule dispatch_scalar_output_clean >> simp[]) >>
+  `op_taint u1 (Var v1) = {}` by
+    (simp[Abbr `u1`, Abbr `i1`, op_taint_def, step_taint_def,
+      out_taint_def, set_var_taint_def, mk_inst_def, FLOOKUP_UPDATE,
+      FLOOKUP_DRESTRICT, FLOOKUP_DEF, eval_operand_def, lookup_var_def,
+      update_var_def, SF CONJ_ss]) >>
+  `op_taint u2 (Var v2) = {}` by
+    (simp[Abbr `u2`, Abbr `i2`] >> irule dispatch_scalar_output_clean >> simp[]) >>
+  `u0 = tn with t_var := tn.t_var |+ (v0,{})` by
+    (simp[Abbr `u0`, Abbr `i0`, taint_component_equality,
+      step_taint_def, out_taint_def, set_var_taint_def, mk_inst_def,
+      mem_taint_def, new_site_bytes_def, step_writes_def, written_taint_def,
+      store_taint_def, imm_taint_def, adopt_reset_def, update_var_def,
+      source_memory_write_ranges_def, range_bytes_def, FLOOKUP_DEF,
+      pred_setTheory.EXTENSION, SF CONJ_ss]) >>
+  `u1 = u0 with t_var := u0.t_var |+ (v1,{})` by
+    (simp[Abbr `u1`, Abbr `i1`, taint_component_equality,
+      step_taint_def, out_taint_def, set_var_taint_def, mk_inst_def,
+      mem_taint_def, new_site_bytes_def, step_writes_def, written_taint_def,
+      store_taint_def, imm_taint_def, adopt_reset_def, update_var_def,
+      source_memory_write_ranges_def, range_bytes_def, FLOOKUP_DEF,
+      pred_setTheory.EXTENSION, SF CONJ_ss, eval_operand_def,
+      lookup_var_def, FLOOKUP_UPDATE]) >>
+  `u2 = u1 with t_var := u1.t_var |+ (v2,{})` by
+    (simp[Abbr `u2`, Abbr `i2`, taint_component_equality,
+      step_taint_def, out_taint_def, set_var_taint_def, mk_inst_def,
+      mem_taint_def, new_site_bytes_def, step_writes_def, written_taint_def,
+      store_taint_def, imm_taint_def, adopt_reset_def, update_var_def,
+      source_memory_write_ranges_def, range_bytes_def, FLOOKUP_DEF,
+      pred_setTheory.EXTENSION, SF CONJ_ss, eval_operand_def,
+      lookup_var_def, FLOOKUP_UPDATE]) >>
+  `u = u2` by
+    (simp[Abbr `u`, Abbr `i3`, taint_component_equality,
+      step_taint_def, set_var_taint_def, DRESTRICT_UNIV, mk_inst_def,
+      mem_taint_def, new_site_bytes_def, step_writes_def, written_taint_def,
+      store_taint_def, imm_taint_def, adopt_reset_def, update_var_def,
+      source_memory_write_ranges_def, range_bytes_def, FLOOKUP_DEF,
+      pred_setTheory.EXTENSION, SF CONJ_ss]) >>
+  qexistsl [`H`,`u`] >> reverse conj_tac
+  >- (simp[Abbr `H`, Abbr `G2`, Abbr `G1`, Abbr `G0`,
+      Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`,
+      op_prov_def, step_prov_def, out_prov_def, set_prov_def,
+      FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, mk_inst_def,
+      lookup_var_def, update_var_def, op_taint_def] >>
+      qexists `t.vs_vars` >> simp[update_var_def]) >>
+  suspend "guard_path"
+QED
+Resume constructor_count_guard_origin_ptr[guard_path]:
+  `?bb rest. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    bb.bb_instructions = sa.cs_current_insts ++ [i0;i1;i2;i3] ++ rest` by
+    (qpat_assum `fn_has_code sa sb fn` mp_tac >>
+     pure_rewrite_tac[fn_has_code_def] >> strip_tac >>
+     fs[IS_PREFIX_APPEND] >> qexistsl [`bb`,`l`] >>
+     gvs[Abbr `i1`, APPEND_ASSOC]) >>
+  `run_inst_seq [i0;i1;i2;i3] s = OK t` by
+    gvs[run_inst_seq_def] >>
+  `run_inst_seq_mem_ok [i0;i1;i2;i3] s` by
+    (gvs[run_inst_seq_mem_ok_def, run_inst_seq_def] >>
+     simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`,
+       memSafeRunTheory.inst_dload_in_section_def,
+       unitTransformDefsTheory.inst_mem_below_frontier_def,
+       source_memory_read_ranges_def, source_memory_write_ranges_def, mk_inst_def]) >>
+  `allocas_from lower s0 /\ allocas_from lower s1 /\ allocas_from lower s2` by
+    (gvs[allocas_from_def, update_var_def] >> gvs[allocas_from_def]) >>
+  `s0.vs_requests = s.vs_requests /\ s1.vs_requests = s0.vs_requests /\
+   s2.vs_requests = s1.vs_requests /\ t.vs_requests = s2.vs_requests` by
+    simp[update_var_def] >>
+  `!D. inst_seq_ptr D lower ctx fn PG G tn [i0;i1;i2;i3] s H u` by
+    (gen_tac >>
+     `~is_terminator i0.inst_opcode /\ ~is_terminator i1.inst_opcode /\
+      ~is_terminator i2.inst_opcode /\ ~is_terminator i3.inst_opcode` by
+       simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def, is_terminator_def] >>
+     map_every (fn q => qpat_x_assum q kall_tac)
+       [`s0 = _`, `s1 = _`, `s2 = _`, `t = _`,
+        `u0 = _`, `u1 = _`, `u2 = _`, `u = _`] >>
+     simp[inst_seq_ptr_def, step_inst_inst_idx_indep,
+       exec_result_map_def, Abbr `G0`, Abbr `G1`, Abbr `G2`, Abbr `H`,
+       Abbr `u0`, Abbr `u1`, Abbr `u2`, Abbr `u`] >>
+     simp[ptr_inst_ok_def, step_inst_non_invoke, step_inst_inst_idx_indep,
+       exec_result_map_def] >>
+     gvs[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def,
+       access_ok_def, taint_ok_def, source_memory_read_ranges_def,
+       source_memory_write_ranges_def, op_taint_def] >>
+     rpt strip_tac >> Cases_on `op` >> gvs[]) >>
+  rpt gen_tac >>
+  qspecl_then [`[i0;i1;i2;i3]`,`s`,`t`] mp_tac constructor_guard_run_joint >>
+  simp[] >> disch_then irule >>
+  gvs[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`,
+    mk_inst_def, is_terminator_def, rich_listTheory.DROP_APPEND1]
+QED
+Finalise constructor_count_guard_origin_ptr
 
 Theorem constructor_jump_origin_ptr[local]:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
