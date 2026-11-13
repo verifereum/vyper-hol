@@ -7,7 +7,7 @@ Ancestors
   exprSimAggregateChildren memoryLocalRhsProps typedMemoryCopy
   bodyIntCallJointForce exprSimSource exprSimMemDefs stmtSimForLoop
   exprBopSimProps exprSimHyps valueEncodingTyping exprLoweringProps
-  exprSimIfExp bodyIntCallForcingReadOnly
+  exprSimIfExp bodyIntCallForcingReadOnly bodyIntCallStageOwned
 
 Theorem stage_incompatible_geometry[local]:
   type_widens_to tenv sty dty /\
@@ -224,11 +224,80 @@ Resume intcall_stage_memory_arg_outcome[stage]:
   qmatch_asmsub_abbrev_tac `MEM inst (fn_insts fp.jc_func)` >>
   `inst.inst_id = s1.cs_next_id /\ inst.inst_opcode = ALLOCA` by
     simp[Abbr `inst`, venomInstTheory.mk_inst_def] >>
-  drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)
-    intcall_stage_physical_store_cont >>
-  disch_then (drule_at (Pat `intcall_expr_cont _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `expr_val_rel _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `FLOOKUP _ _ = _`)) >>
-  FAIL_TAC "store premises"
+  `!name a k. local_region ce (mid with gas_obs := []).scopes q name a k ==>
+      local_region ce (mid with gas_obs := []).scopes u name a k` by
+    (rpt strip_tac >> match_mp_tac (Q.SPECL
+       [`ce`, `(mid with gas_obs := []).scopes`, `s1`,
+        `(mid with gas_obs := []).scopes`, `q`, `u`, `name`, `a`, `k`]
+       exprSimPropsTheory.local_region_frame_fwd) >>
+     fs[intcall_expr_cont_def, intcall_expr_res_def]) >>
+  `type_memory_size dtv + 64 < dimword (:256)` by
+    (qpat_x_assum `MAX 32 (type_memory_size dtv) + 64 < _` mp_tac >>
+     rw[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  `!name a n. local_region ce mid.scopes u name a n ==>
+      regions_disjoint a n (w2n w) (type_memory_size dtv)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name a k. local_region ce _ u name a k ==>
+       regions_disjoint (w2n w) (MAX 32 (type_memory_bytes ce ty)) a k`
+       (qspecl_then [`name`, `a`, `n`] mp_tac) >>
+     simp[] >>
+     qpat_x_assum `type_memory_bytes ce ty = _` SUBST_ALL_TAC >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def,
+          arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  `!name a n. local_region ce mid.scopes q name a n ==>
+      regions_disjoint a n (w2n w) (MAX 32 (type_memory_bytes ce ty))` by
+    (rpt strip_tac >>
+     `local_region ce mid.scopes u name a n` by
+       (qpat_x_assum `!name a k. local_region ce _ q name a k ==> _`
+          (qspecl_then [`name`, `a`, `n`] mp_tac) >> simp[]) >>
+     qpat_x_assum `!name a k. local_region ce _ u name a k ==>
+       regions_disjoint (w2n w) (MAX 32 (type_memory_bytes ce ty)) a k`
+       (qspecl_then [`name`, `a`, `n`] mp_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
+  mp_tac (Q.INST [`es0` |-> `mid with gas_obs := []`,
+    `sa` |-> `s1`, `s0` |-> `q`, `es` |-> `mid with gas_obs := []`,
+    `su` |-> `s3`, `s` |-> `u`, `src` |-> `op`, `dst` |-> `buf.buf_operand`,
+    `dty` |-> `ty`, `sty` |-> `post_value_type ce e`, `stv` |-> `tv`,
+    `dw` |-> `w`, `b` |-> `w2n (w:256 word)`,
+    `k` |-> `MAX 32 (type_memory_bytes ce ty)`, `inst` |-> `inst`]
+      (SPEC_ALL intcall_stage_physical_store_cont)) >>
+  (impl_tac >- (simp[] >> fs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[])) >>
+  disch_then (qx_choose_then `u_store` strip_assume_tac) >>
+  qpat_x_assum `type_memory_bytes ce ty = _` SUBST_ALL_TAC >>
+  `FLOOKUP u_store.vs_allocas s1.cs_next_id =
+      SOME (w2n w,MAX 32 (type_memory_size dtv))` by metis_tac[] >>
+  `intcall_expr_cont fp ce env es sa t (mid with gas_obs := []) sb u_store` by
+    (match_mp_tac (Q.INST [`mid` |-> `mid with gas_obs := []`,
+       `sm` |-> `s1`, `t` |-> `q`] intcall_expr_cont_trans) >>
+     simp[] >>
+     mp_tac (cj 1 exprLoweringPropsTheory.compile_expr_ci_mono) >>
+     disch_then (qspecl_then [`ce`, `expr_type e`, `e`, `sa`] mp_tac) >>
+     simp[ci_mono_def]) >>
+  `gas_marked_path F fp.jc_ctx fp.jc_func q 0 (OK u_store)` by
+    (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
+        (SPEC_ALL fragGasModeTheory.gas_marked_path_then))) >>
+     qexists `u` >> simp[]) >>
+  `alloca_inv u_store` by
+    fs[intcall_expr_cont_def, intcall_expr_res_def,
+       exprLoweringPropsTheory.stmt_state_rel_def] >>
+  `w2n w + MAX 32 (type_memory_size dtv) <= u_store.vs_alloca_next` by
+    (fs[venomMemDefsTheory.alloca_inv_def,
+        venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
+  `s1.cs_next_id < sb.cs_next_id` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  `!name a k. local_region ce (mid with gas_obs := []).scopes u_store name a k ==>
+      regions_disjoint (w2n w) (MAX 32 (type_memory_size dtv)) a k` by
+    (match_mp_tac (Q.INST [`sa` |-> `s1`, `sb` |-> `s2`, `buf` |-> `buf`,
+       `ctx` |-> `fp.jc_ctx`, `func` |-> `fp.jc_func`, `cx` |-> `fp.jc_cx`,
+       `es` |-> `mid with gas_obs := []`, `s` |-> `u_store`,
+       `n` |-> `MAX 32 (type_memory_size dtv)`]
+       (SPEC_ALL bodyIntCallStageOwnedTheory.staged_buffer_local_disjoint)) >>
+     simp[] >>
+     fs[intcall_expr_cont_def, intcall_expr_res_def]) >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> qexists `[]` >>
+  disj1_tac >> rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
+  qexistsl_tac [`INL v`, `mid with gas_obs := []`, `OK u_store`] >>
+  simp[gasSummaryTheory.gas_marked_exec_def] >>
+  fs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[]
 QED
 Finalise intcall_stage_memory_arg_outcome
