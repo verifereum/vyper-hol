@@ -219,8 +219,8 @@ Proof
   Cases_on `header` >> simp[] >> rpt gen_tac >> strip_tac
   >- suspend "header"
   >> drule empty_word_count >> strip_tac >>
-  drule compile_zero_words_run >>
-  disch_then (qspecl_then [`s`,`w`,`sz`,`func`,`cenv`,`cx`,`es`,`ctx`] mp_tac) >>
+  mp_tac (compile_zero_words_run |> SPEC_ALL
+            |> Q.INST [`n` |-> `(sz+31) DIV 32`]) >>
   simp[] >> (impl_tac >- (rpt strip_tac >> metis_tac[])) >>
   strip_tac >> qexists_tac `t` >> simp[] >>
   rpt strip_tac >> first_x_assum irule >> decide_tac
@@ -332,7 +332,7 @@ Proof
     w2n w+sz <= b \/ b+len <= w2n w` by
     (gvs[regions_disjoint_def] >> metis_tac[]) >>
   drule empty_tail_run >>
-  disch_then (qspecl_then [`t`,`w`,`func`,`cenv`,`cx`,`es`,`ctx`] mp_tac) >>
+  disch_then (qspecl_then [`H`,`t`,`w`,`func`,`cenv`,`cx`,`es`,`ctx`] mp_tac) >>
   simp[] >> (impl_tac >- (conj_tac
     >- (rpt strip_tac >>
         qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _ \/ _` drule >>
