@@ -3,7 +3,7 @@ Theory functionInlinerFrontier
 Ancestors
   functionInlinerLiveInvariant functionInlinerOrigin functionInlinerContract
   venomMemProofs venomExecProofs venomExecSemantics venomState venomInst stateFrame
-  functionInlinerFrame list
+  functionInlinerFrame functionInlinerDefs indexedLists list
 
 Definition inline_frontier_result_def:
   (inline_frontier_result n (OK s) <=> s.vs_alloca_next = n) /\
@@ -210,4 +210,45 @@ Theorem inline_frontier_stack_head_update:
     ((p,a,route,snap with ils_state := s)::rest)
     (frame with ipf_state := t)
 Proof simp[inline_frontier_stack_def] >> metis_tac[]
+QED
+
+Theorem inline_frontier_rewrite_inst:
+  inline_frontier_instruction inst /\
+  rewrite_inline_inst ops outs ret inst q = (xs,q') ==>
+  EVERY inline_frontier_instruction xs
+Proof
+  simp[rewrite_inline_inst_def] >>
+  Cases_on `is_param_opcode inst.inst_opcode` >> simp[]
+  >- (IF_CASES_TAC >> simp[inline_frontier_instruction_def] >>
+      strip_tac >> gvs[inline_frontier_instruction_def]) >>
+  Cases_on `inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP` >>
+  simp[inline_frontier_instruction_def, EVERY_MAP, EVERY_MEM, indexedListsTheory.MEM_MAPi] >>
+  strip_tac >> gvs[] >> rpt strip_tac >>
+  gvs[indexedListsTheory.MEM_MAPi] >> simp[]
+QED
+
+Theorem inline_frontier_rewrite_insts:
+  !insts ops outs ret q xs q'.
+  EVERY inline_frontier_instruction insts /\
+  rewrite_inline_insts ops outs ret insts q = (xs,q') ==>
+  EVERY inline_frontier_instruction xs
+Proof
+  Induct >> simp[rewrite_inline_insts_def] >> rpt gen_tac >>
+  pairarg_tac >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  metis_tac[inline_frontier_rewrite_inst, EVERY_APPEND]
+QED
+
+Theorem inline_frontier_rewrite_blocks:
+  !bbs ops outs ret q bs q'.
+  EVERY (\bb. EVERY inline_frontier_instruction bb.bb_instructions) bbs /\
+  rewrite_inline_blocks ops outs ret bbs q = (bs,q') ==>
+  EVERY (\bb. EVERY inline_frontier_instruction bb.bb_instructions) bs
+Proof
+  Induct >> simp[rewrite_inline_blocks_def] >> rpt gen_tac >>
+  pairarg_tac >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  qpat_x_assum `rewrite_inline_block _ _ _ _ _ = _` mp_tac >>
+  simp[rewrite_inline_block_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  metis_tac[inline_frontier_rewrite_insts]
 QED
