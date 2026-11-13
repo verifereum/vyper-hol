@@ -24,7 +24,7 @@ Proof
     fs[intcall_joint_res_def, intcall_expr_res_def] >>
   `supported_stmt fp.jc_tops bindings (For id fty (Array arr) bound stmts) /\
    type_stmt env fp.jc_ret_ty (For id fty (Array arr) bound stmts) = SOME env'` by
-    (fs[supported_stmts_list, type_stmt_def, AllCaseEqs()]) >>
+    (gvs[supported_stmts_list, type_stmt_def, AllCaseEqs()]) >>
   `?m name. arr = Name (ArrayT fty (Fixed m)) name` by metis_tac[] >>
   drule_all intcall_array_source_inputs >> strip_tac >> gvs[] >>
   rename1 `FLOOKUP ce.ce_vars name = SOME (PtrVar (Var ip) arrsz)` >>
