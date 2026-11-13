@@ -1,6 +1,7 @@
 (* Source-exact initialized array loop with a synchronized owned child callback. *)
 Theory sourceOwnedArrayLoopPtr
 Ancestors
+  sourceArrayHeaderOriginPtr sourceArrayBackedgeOriginPtr sourceArraySetupOriginPtr
   decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr decoderArraySetupPtr fragGasSeqMem fragGasOriginPtr
   calldataDynOwned sourceRecursiveComplexPtr sourceEncodingWindows sourceEncodingLayout
   actualAllocaReplayPtr actualAllocSitesCredit abiDecoderCoherence abiDecoderContract
@@ -226,13 +227,13 @@ Proof
         j < dimword (:256)` by metis_tac[LESS_EQ_LESS_TRANS] >>
       `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by metis_tac[] >>
       `j <= j /\ LENGTH xs < dimword (:256)` by decide_tac >>
-      drule_all decoder_index_header_ptr_core_uniform >>
-      disch_then (qspec_then `PG` strip_assume_tac) >>
       `slot + 32 <= s.vs_alloca_next` by
         (qpat_assum `alloca_inv s` mp_tac >>
          qpat_assum `FLOOKUP s.vs_allocas index_id = _` mp_tac >>
          POP_ASSUM_LIST (K ALL_TAC) >>
          simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+      drule_all source_array_header_origin_ptr >>
+      disch_then (qspec_then `PG` strip_assume_tac) >>
       `gas_path_mem ctx fn s 0 (OK t)` by
         (qpat_assum `t = jump_to _ _` SUBST1_TAC >>
          map_every (fn pat => qpat_assum pat mp_tac)
@@ -368,13 +369,13 @@ Proof
        `lookup_block hdr fn.fn_blocks = SOME _`, `s.vs_current_bb = hdr`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[]) >>
   `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by metis_tac[] >>
-  drule_all decoder_index_header_ptr_core_uniform >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
   `slot + 32 <= s.vs_alloca_next` by
     (qpat_assum `alloca_inv s` mp_tac >>
      qpat_assum `FLOOKUP s.vs_allocas index_id = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  drule_all source_array_header_origin_ptr >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
   `gas_path_mem ctx fn s 0 (OK t)` by
     (qpat_assum `t = jump_to _ _` SUBST1_TAC >>
      map_every (fn pat => qpat_assum pat mp_tac)
@@ -502,7 +503,7 @@ Proof
       [`j < LENGTH xs`,`LENGTH xs < dimword (:256)`,
        `DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem`,`u.t_mem = tn.t_mem`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[DISJOINT_DEF, EXTENSION] >> metis_tac[LESS_TRANS]) >>
-  drule_all calldata_array_element_setup_endpoint_ptr_core >>
+  drule_all source_array_setup_origin_ptr >>
   disch_then (qspecl_then [`ARB`,`ctx`,`PG`,`\g r. F`] strip_assume_tac) >>
   rename1 `SND (SND ops) = Var child` >>
   rename1 `op_taint u' (FST ops) = {}` >>
@@ -543,6 +544,20 @@ Proof
      rpt strip_tac >> fs[frag_exec_ptr_def] >>
      first_x_assum (qspec_then `fn` mp_tac) >>
      simp[] >> strip_tac >> gvs[abi_decode_sim_def] >> metis_tac[]) >>
+  `allocas_from lower t` by
+    (qpat_assum `t.vs_allocas = s.vs_allocas` mp_tac >>
+     qpat_assum `allocas_from lower s` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[allocas_from_def] >> metis_tac[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
+      (t,H,u) [] (OK r,H',u')` by
+    (simp_tac bool_ss [Abbr `r`] >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`!D lower explicit ctx' func. _`, `fn_has_code body_st middle fn`,
+        `allocas_from lower t`, `~ctx_has_dalloca ctx`, `~t.vs_halted`,
+        `slot+32 <= s.vs_alloca_next`, `t.vs_alloca_next = s.vs_alloca_next`,
+        `t.vs_current_bb = body_lbl`, `body_st.cs_current_bb = body_lbl`,
+        `t.vs_inst_idx = 0`, `body_st.cs_current_insts = []`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
   `gas_path_mem ctx fn t 0 (OK r)` by
     (simp_tac bool_ss [Abbr `r`] >>
      map_every (fn pat => qpat_assum pat mp_tac)
@@ -991,7 +1006,12 @@ Proof
      rpt (pop_assum kall_tac) >> simp[]) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp child_end` by simp[] >>
   `DISJOINT ({}:num set) childtn.t_mem` by simp[] >>
-  drule_all decoder_index_backedge_ptr_core_uniform >>
+  `slot + 32 <= child_end.vs_alloca_next` by
+    (qpat_assum `alloca_inv child_end` mp_tac >>
+     qpat_assum `FLOOKUP child_end.vs_allocas index_id = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  drule_all source_array_backedge_origin_ptr >>
   disch_then (qspec_then `PG`
     (qx_choose_then `backG` (qx_choose_then `backtn`
       (qx_choose_then `backstate` strip_assume_tac)))) >>
@@ -1293,6 +1313,16 @@ Proof
         `j < LENGTH xs`, `LENGTH xs < dimword (:256)`] >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      `slot < dimword (:256)` by decide_tac >> simp[wordsTheory.w2n_n2w]) >>
+  `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK final,finalG,finaltn)` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+      [`!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _`,
+       `!D explicit. gas_origin_ptr_path _ (t,H,u) _ _`,
+       `!D explicit. gas_origin_ptr_path _ (r,H',u') _ _`,
+       `!D explicit. gas_origin_ptr_path _ (child_end,childG,childtn) _ _`,
+       `!D explicit. gas_origin_ptr_path _ (backstate,backG,backtn) _ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
   `gas_path_mem ctx fn s 0 (OK final)` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`gas_path_mem ctx fn s 0 (OK t)`, `gas_path_mem ctx fn t 0 (OK r)`,
@@ -1409,7 +1439,7 @@ Proof
   `!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H' u' r) ==>
     !fuel. ptr_safe_run D lower fuel ctx fn PG H u t` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-      [`!D lower ctx' func. _`, `fn_has_code body_st middle fn`,
+      [`!D lower ctx' func. _ ==> !fuel. ptr_safe_run _ _ _ _ _ _ _ _ _`, `fn_has_code body_st middle fn`,
        `allocas_from lower t`, `~ctx_has_dalloca ctx`,
        `t.vs_current_bb = body_lbl`, `body_st.cs_current_bb = body_lbl`,
        `t.vs_inst_idx = 0`, `body_st.cs_current_insts = []`] >>
