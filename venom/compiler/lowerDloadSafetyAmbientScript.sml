@@ -3,6 +3,7 @@ Theory lowerDloadSafetyAmbient
 Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyKernel lowerDloadDefs words lowerDloadFrontier
   o1PassContract venomWf venomInst list contextCodegenRel venomExecProps venomInstProps venomExecSemantics venomExecProofs contextRawReachable ptrDiscipline unitMemInv o1LowerDloadGhost venomInstProofs3
+  lowerDloadSafetyAllocBounds ctxLookupAgree
 
 Theorem ld_sync_labels:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
@@ -481,4 +482,35 @@ Proof
   drule_all ld_frame_raw_reachable >>
   strip_tac >> drule ld_raw_reachable_frontier >> strip_tac >>
   drule ld_sync_frontier >> gvs[ptr_discipline_def]
+QED
+
+(* The frontiers and every selected allocation lie below the dynamic
+   floor: the DLOAD headroom ends at the initial free memory pointer when
+   the context has DALLOCA, and below 2^256 otherwise. *)
+Theorem ld_sync_dyn_floor:
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  mem_inv dload_headroom_ok C vs0 /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N /\
+  ld_global lo A frames /\ FDOM A = ld_slots A frames /\
+  EVERY (ld_maps A) frames ==>
+  lo <= dyn_floor C vs0 /\ t.vs_alloca_next <= dyn_floor C vs0 /\
+  !a b c n. FLOOKUP A a = SOME (b,c,n) ==>
+    b+n <= dyn_floor C vs0 /\ c+n <= dyn_floor C vs0
+Proof
+  strip_tac >>
+  `dload_headroom_ok C fn inst s` by metis_tac[ld_sync_source_mem_inv] >>
+  `s.vs_initial_fmp = vs0.vs_initial_fmp` by
+    (drule ld_sync_source >> strip_tac >> drule_all ld_frame_raw_reachable >>
+     metis_tac[raw_reachable_initial_fmp]) >>
+  `lo <= t.vs_alloca_next` by metis_tac[ld_sync_frontier_lower_bound] >>
+  `ld_charge frames <= ctx_dload_count C /\
+   t.vs_alloca_next = s.vs_alloca_next + 32 * ld_charge frames` by
+    metis_tac[ld_sync_frontier] >>
+  `t.vs_alloca_next <= dyn_floor C vs0` by
+    (simp[dyn_floor_def] >> IF_CASES_TAC >>
+     gvs[dload_headroom_ok_def, ctx_has_dalloca_def] >> decide_tac) >>
+  conj_tac >- decide_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  drule_all ld_alloc_frontiers >> strip_tac >>
+  drule ld_sync_active >> strip_tac >> gvs[] >> decide_tac
 QED
