@@ -291,21 +291,51 @@ QED
 
 Finalise compile_store_bytestring_inst_seq_ptr
 
-Theorem typed_copy_origin_ptr_bytestring_entry:
-  !cenv tenv ctx dty sty dtv stv v.
-    acyclic_struct_metadata cenv.ce_struct_fields /\
-    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
-    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-      ALL_DISTINCT (MAP FST fields) /\
-      EVERY (\(fname, fty, sz). !tv.
-        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+(* A top-level bytestring reads its rounded live size, while separation
+   concerns only the represented value's footprint. *)
+Theorem compile_store_bytestring_value_origin_ptr_path:
+  !tenv ctx dty sty dtv stv v lo explicit func PG xd xs sa sb s G tn dw sw.
     is_bytestring_type dty /\
     type_widens_to tenv sty dty /\
     evaluate_type tenv sty = SOME stv /\
     evaluate_type tenv dty = SOME dtv /\
     value_has_type stv v /\ value_has_type dtv v /\
-    val_wf stv v /\ val_wf dtv v ==>
-    typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv v
+    val_wf stv v /\ val_wf dtv v /\
+    compile_store_bytestring (Var xs) (Var xd) sa = ((),sb) /\
+    not_fresh_at sa xs /\ not_fresh_at sa xd /\
+    lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+           val_in_memory stv v (w2n sw) mem) /\
+    w2n sw + val_store_size stv v < dimword (:256) /\
+    w2n dw + type_memory_size dtv < dimword (:256) /\
+    (val_store_size stv v = 0 \/
+     w2n sw + val_store_size stv v <= s.vs_alloca_next) /\
+    (type_memory_size dtv = 0 \/
+     w2n dw + type_memory_size dtv <= s.vs_alloca_next) /\
+    (w2n sw + val_footprint stv v <= w2n dw \/
+     w2n dw + type_memory_size dtv <= w2n sw) /\
+    ptr_covers G tn xs s (val_store_size stv v) /\
+    ptr_covers G tn xd s (type_memory_size dtv) /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t Gf tnf.
+      gas_origin_ptr_path
+        (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+            d_ret := K {} |>,lo,explicit,ctx,func,PG)
+        (s,G,tn) [] (OK t,Gf,tnf) /\
+      val_in_memory dtv v (w2n dw) t.vs_memory /\
+      typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      (!i. ~(w2n dw <= i /\ i < w2n dw + type_memory_size dtv) ==>
+           (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+      (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+             val_in_memory dtv v (w2n dw) mem) /\
+      (!p. not_fresh_at sa p ==>
+           FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all typed_copy_bytestring_source >> strip_tac >>
@@ -328,9 +358,8 @@ Proof
      rename1 `BytesT bd` >> Cases_on `bd` >>
      gvs[is_bytestring_type_def, is_word_type_def]) >>
   gvs[] >> Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
-  simp[typed_copy_origin_ptr_entry_def, valueEncodingTheory.type_memory_size_def] >> rpt strip_tac >>
-  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
-  simp[Once compile_store_memory_typed_def] >> strip_tac >>
+  fs[valueEncodingTheory.type_memory_size_def, exprSimPropsTheory.val_store_size_def,
+     loweringPostsTheory.val_footprint_def] >>
   qmatch_asmsub_rename_tac `allocas_from lo state` >>
   FIRST [rename1 `BytesV bs` >> qabbrev_tac `len = LENGTH bs`,
          rename1 `StringV str` >> qabbrev_tac `len = STRLEN str`] >>
@@ -441,4 +470,41 @@ Proof
    asm_rewrite_tac[] >>
    pure_rewrite_tac[valueEncodingDefsTheory.mem_bytes_at_def,
                     venomMemPropsTheory.mcopy_padded_read] >> REFL_TAC)
+QED
+
+Theorem typed_copy_origin_ptr_bytestring_entry:
+  !cenv tenv ctx dty sty dtv stv v.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname, fty, sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    is_bytestring_type dty /\
+    type_widens_to tenv sty dty /\
+    evaluate_type tenv sty = SOME stv /\
+    evaluate_type tenv dty = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\
+    val_wf stv v /\ val_wf dtv v ==>
+    typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv v
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[typed_copy_origin_ptr_entry_def] >> rpt gen_tac >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `val_store_size stv v <= type_memory_size stv` by
+    metis_tac[exprSimPropsTheory.val_store_size_le] >>
+  `val_footprint stv v <= type_memory_size stv` by
+    metis_tac[exprSimPropsTheory.val_footprint_le] >>
+  `~is_word_type dty` by
+    metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
+  `compile_store_bytestring (Var xs) (Var xd) sa = ((),sb)` by
+    (drule_all typed_copy_bytestring_source >> strip_tac >>
+     gvs[Once compile_store_memory_typed_def]) >>
+  `ptr_covers G tn xs s (val_store_size stv v)` by
+    (gvs[ptr_covers_def] >> goal_assum (drule_at Any) >> decide_tac) >>
+  mp_tac (Q.INST [`tenv` |-> `tenv`, `dty` |-> `dty`, `sty` |-> `sty`,
+    `dtv` |-> `dtv`, `stv` |-> `stv`, `v` |-> `v`]
+    (SPEC_ALL compile_store_bytestring_value_origin_ptr_path)) >>
+  impl_tac >- (asm_rewrite_tac [] >> decide_tac) >>
+  simp[]
 QED
