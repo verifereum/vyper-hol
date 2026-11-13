@@ -42,24 +42,22 @@ QED
 
 Theorem select_result_nonstorage_gas_obs:
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
-  select_result cx ty r sb s = (res, s) ==>
-  select_result cx ty r sb (s with gas_obs := gs) = (res, s with gas_obs := gs)
+  SND (select_result cx ty r sb s) = s ==>
+  select_result cx ty r sb (s with gas_obs := gs) =
+    (FST (select_result cx ty r sb s), s with gas_obs := gs)
 Proof
-  strip_tac >> qpat_x_assum `select_result _ _ _ _ _ = _` mp_tac >>
-  Cases_on `r`
+  strip_tac >> Cases_on `r`
   >~ [`Value v`] >-
     (simp[select_result_def, lift_option_type_def, lift_sum_def,
           bind_def, ignore_bind_def, return_def, raise_def] >>
      rpt (CASE_TAC >> simp[return_def, raise_def]))
   >~ [`HashMapRef tr slot kt vt`] >-
     (Cases_on `sb` >>
-     simp[select_result_def, extend_place_def, lift_option_type_def,
-          record_storage_event_def,
-          bind_def, ignore_bind_def, return_def, raise_def] >>
+     gvs[select_result_def, extend_place_def, lift_option_type_def,
+         bind_def, ignore_bind_def, return_def, raise_def] >>
      rpt (CASE_TAC >>
-          simp[bind_def, ignore_bind_def, return_def, raise_def,
-               record_storage_event_def]) >>
-     simp[evaluation_state_component_equality, listTheory.APPEND_EQ_SELF]) >>
+          gvs[bind_def, ignore_bind_def, return_def, raise_def,
+              record_storage_event_def, evaluation_state_component_equality])) >>
   Cases_on `p`
   >~ [`StoragePlace tr slot vt`] >- metis_tac[]
   >~ [`MemoryPlace id path`] >-
@@ -88,7 +86,7 @@ Proof
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`res`,`es`,`outcome`] >> simp[] >>
   simp[gas_marked_exec_def] >>
-  drule_all select_result_nonstorage_gas_obs >> simp[]
+  drule select_result_nonstorage_gas_obs >> simp[]
 QED
 
 Theorem idx_in_range_integer:
