@@ -642,7 +642,7 @@ Proof
   impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >>
   irule (Q.INST [`res` |-> `INR (ReturnException v)`, `ee` |-> `mid`]
            gas_outcome_full_exit) >>
-  TRY (conj_tac >- (fs[] >> NO_TAC)) >>
+  rpt conj_tac >> TRY (fs[] >> NO_TAC) >>
   qexistsl_tac [`G'`, `r`, `tn'`] >>
   qpat_assum `~t.vs_halted` (fn th => simp[th, raise_def]) >>
   rpt strip_tac
