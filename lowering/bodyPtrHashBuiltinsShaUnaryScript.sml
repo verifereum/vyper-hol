@@ -7,7 +7,7 @@ Ancestors
 
 Theorem sha256_source_no_halt[local]:
   !st res st'.
-    (\es1. case builtin_result cx es1.accounts ann bt ts vs of
+    (\(es1:evaluation_state). case builtin_result cx es1.accounts ann bt ts vs of
               INL w => ignore_bind (precompile_call_success bt) (return (Value w)) es1
             | INR exc => (INR exc, es1)) st = (res, st') ==>
     res <> INR HaltException

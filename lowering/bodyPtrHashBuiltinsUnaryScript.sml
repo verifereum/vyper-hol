@@ -42,7 +42,7 @@ QED
 
 Theorem builtin_value_source_no_halt[local]:
   !st res st'.
-    (\es'. ((case builtin_result cx es'.accounts ann bt ts vs of
+    (\(es':evaluation_state). ((case builtin_result cx es'.accounts ann bt ts vs of
                INL w => INL (Value w) | INR exc => INR exc), es')) st =
       (res, st') ==>
     res <> INR HaltException
@@ -141,5 +141,8 @@ Proof
   qpat_x_assum `!sa sm sb x vv s0 G0 tn0 v gs ee G tn s. _` drule_all >> simp[] >>
   strip_tac >> qexists_tac `marks` >>
   irule hash_summary_ptr_halt_lift >> conj_tac >>
-  FIRST [first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC builtin_value_source_no_halt]
+  FIRST [first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC builtin_value_source_no_halt,
+         rpt gen_tac >> BETA_TAC >>
+         Cases_on `builtin_result cx st.accounts ann bt [BaseT bty] [v]` >> rw[] >>
+         strip_tac >> gvs[exprSimWordArgsTheory.builtin_result_not_halt]]
 QED
