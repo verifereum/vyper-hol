@@ -27,6 +27,8 @@ Theorem mcopy_alloca_framed_path[local]:
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. stmt_state_rel H ctx func cenv cx es t /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+            stmt_state_rel H' ctx func cenv cx es t) /\
       val_in_memory tv v (w2n dw) t.vs_memory /\
       (!q. lookup_var q t = lookup_var q s) /\ t.vs_allocas = s.vs_allocas /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -37,9 +39,12 @@ Theorem mcopy_alloca_framed_path[local]:
          mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory)
 Proof
   rpt strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es (mcopy (w2n dw) (w2n sw) sz s)` by
-    (irule stmt_state_rel_mcopy_alloca >> simp[] >>
+  `!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+        stmt_state_rel H' ctx func cenv cx es (mcopy (w2n dw) (w2n sw) sz s)` by
+    (rpt strip_tac >> irule stmt_state_rel_mcopy_alloca >> simp[] >>
      qexistsl [`sz`, `inst`, `p`] >> simp[]) >>
+  `stmt_state_rel H ctx func cenv cx es (mcopy (w2n dw) (w2n sw) sz s)` by
+    (first_x_assum irule >> first_assum ACCEPT_TAC) >>
   `val_in_memory tv v (w2n dw) (mcopy (w2n dw) (w2n sw) sz s).vs_memory` by
     (irule mcopy_val_in_memory >> simp[]) >>
   `gas_marked_path F ctx func s 0
@@ -67,7 +72,7 @@ Proof
 QED
 
 Theorem tuple_stage_copy_path[local]:
-  !H ctx func cenv cx es sa sb staged op s sw sz tv v.
+  !st0 ctx func cenv cx es sa sb staged op s sw sz tv v.
     (do buf <- compile_alloc_buffer sz;
         emit_void MCOPY [buf.buf_operand; op; Lit (n2w sz)];
         comp_return buf.buf_operand od) sa = (staged,sb) /\
@@ -76,13 +81,16 @@ Theorem tuple_stage_copy_path[local]:
     eval_operand op s = SOME sw /\
     val_in_memory tv v (w2n sw) s.vs_memory /\ val_wf tv v /\
     val_footprint tv v <= sz /\ sz < dimword (:256) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s) /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t w. eval_operand staged t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       val_in_memory tv v (w2n w) t.vs_memory /\
-      stmt_state_rel H ctx func cenv cx es t /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx es t) /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -101,11 +109,16 @@ Proof
   `op <> Var p` by metis_tac[] >>
   `s.vs_current_bb = sx.cs_current_bb /\
    s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-  drule_all annassign_alloca_operand_framed_path >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] annassign_alloca_operand_framed_path) >>
   disch_then (qx_choosel_then [`s1`, `w`] strip_assume_tac) >>
+  `stmt_state_rel H ctx func cenv cx es s1` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ s1`
+       drule >> disch_then ACCEPT_TAC) >>
   `eval_operand op s1 = SOME sw` by metis_tac[] >>
   `val_in_memory tv v (w2n sw) s1.vs_memory` by simp[] >>
   `?t. stmt_state_rel H ctx func cenv cx es t /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es s1 ==>
+            stmt_state_rel H' ctx func cenv cx es t) /\
       val_in_memory tv v (w2n w) t.vs_memory /\
       (!q. lookup_var q t = lookup_var q s1) /\ t.vs_allocas = s1.vs_allocas /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -118,6 +131,12 @@ Proof
        Q.INST [`inst` |-> `mk_inst sx.cs_next_id ALLOCA [Lit (n2w sz)] [p]`] |>
        SIMP_RULE (srw_ss()) [mk_inst_def]) >> simp[] >>
      goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >> gvs[mk_inst_def]) >>
+  `!H'. valid_horizon cx st0 H' es.storage_trace ==>
+        stmt_state_rel H' ctx func cenv cx es t` by
+    (rpt strip_tac >>
+     qpat_assum `!H'. stmt_state_rel H' _ _ _ _ _ s1 ==> _` irule >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ s1`
+       irule >> first_assum ACCEPT_TAC) >>
   `gas_marked_path F ctx func s (0 + 0) (OK t)` by
     (irule gas_marked_path_then >> qexists `s1` >> simp[]) >>
   `alloca_frame cenv es sa s cenv es t` by
@@ -134,7 +153,7 @@ Proof
 QED
 
 Theorem optional_tuple_stage_path:
-  !H ctx func cenv cx es flag tys tvs vs se sa sb staged op s sw.
+  !st0 ctx func cenv cx es flag tys tvs vs se sa sb staged op s sw.
     (if flag then
        do buf <- compile_alloc_buffer (type_memory_bytes cenv (TupleT tys));
           emit_void MCOPY [buf.buf_operand; op;
@@ -151,13 +170,16 @@ Theorem optional_tuple_stage_path:
     (flag ==> type_memory_size_list tvs < dimword (:256)) /\
     fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
     (!x. op = Var x ==> not_fresh_at sa x) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s) /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     tuple_val_wf vs tvs /\ values_have_types tvs vs /\
     ?t w. eval_operand staged t = SOME w /\
       tuple_in_memory vs tvs (w2n w) t.vs_memory /\
-      stmt_state_rel H ctx func cenv cx es t /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx es t) /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -172,6 +194,7 @@ Theorem optional_tuple_stage_path:
       alloca_frame cenv es sa s cenv es t
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
   drule_all expr_tuple_memory_owned >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `values_have_types tvs vs` by gvs[value_has_type_def] >> simp[] >>
@@ -182,7 +205,7 @@ Proof
        val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) <=
          type_memory_size_list tvs` by
         simp[val_in_memory_def, val_wf_def, val_footprint_def, type_memory_size_def] >>
-      drule_all tuple_stage_copy_path >>
+      drule_all (SIMP_RULE bool_ss [PULL_EXISTS] tuple_stage_copy_path) >>
       disch_then (qx_choosel_then [`t`, `w`] strip_assume_tac) >>
       qexistsl [`t`, `w`] >> simp[] >>
       conj_tac >- gvs[val_in_memory_def] >>
@@ -292,7 +315,7 @@ Proof
 QED
 
 Theorem tuple_assignment_prefix_path:
-  !H ctx func cenv cx es1 tys tvs vs sa su sl ss op staged elems sv flag.
+  !st0 ctx func cenv cx es1 tys tvs vs sa su sl ss op staged elems sv flag.
     value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) tys tvs /\
@@ -311,13 +334,17 @@ Theorem tuple_assignment_prefix_path:
     cs_extends su sl /\ cs_extends sl ss /\
     fn_has_code su sl func /\ fn_has_code sl ss func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv su /\
-    stmt_state_rel H ctx func cenv cx es1 sv /\ ~sv.vs_halted /\
+    (?H. valid_horizon cx st0 H es1.storage_trace) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es1 sv) /\ ~sv.vs_halted /\
     sv.vs_current_bb = su.cs_current_bb /\
     sv.vs_inst_idx = LENGTH su.cs_current_insts ==>
     LENGTH elems = LENGTH tys /\ EVERY (\op. ?x. op = Var x) elems /\
     EVERY (\op. !x. op = Var x ==> not_fresh_at ss x) elems /\
     local_ptrs_reserved cenv ss /\ values_have_types tvs vs /\ tuple_val_wf vs tvs /\
-    ?t (w:256 word) b sz. stmt_state_rel H ctx func cenv cx es1 t /\ ~t.vs_halted /\
+    ?t (w:256 word) b sz.
+      (!H. valid_horizon cx st0 H es1.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx es1 t) /\ ~t.vs_halted /\
       t.vs_current_bb = ss.cs_current_bb /\
       t.vs_inst_idx = LENGTH ss.cs_current_insts /\
       tuple_in_memory vs tvs (w2n w) t.vs_memory /\ b <= w2n w /\
@@ -345,10 +372,14 @@ Proof
   `type_memory_bytes cenv (TupleT tys) = type_memory_size_list tvs` by
     (irule type_memory_bytes_tuple_list >> first_assum ACCEPT_TAC) >>
   `?sw. eval_operand op sv = SOME sw` by metis_tac[expr_val_rel_def] >>
-  drule_all optional_tuple_stage_path >>
+  qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] optional_tuple_stage_path) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `?t w. _`
     (qx_choosel_then [`st`, `w`] (map_every assume_tac o CONJUNCTS)) >>
+  `stmt_state_rel H0 ctx func cenv cx es1 st` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ st`
+       drule >> disch_then ACCEPT_TAC) >>
   qpat_x_assum `?b sz. _`
     (qx_choosel_then [`b`, `sz`] (map_every assume_tac o CONJUNCTS)) >>
   qpat_assum `(if flag then _ else _) su = _`
@@ -361,6 +392,12 @@ Proof
   drule_all compile_tuple_load_all_typed_path >> strip_tac >>
   `EVERY (\op. !x. op = Var x ==> not_fresh_at ss x) elems` by
     (simp[EVERY_MEM] >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H es1.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es1 t` by
+    (rpt strip_tac >>
+     qpat_assum `!H'. stmt_state_rel H' _ _ _ _ _ st ==> _` irule >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ st`
+       irule >> first_assum ACCEPT_TAC) >>
   `alloca_frame cenv es1 su sv cenv es1 t` by
     (pure_rewrite_tac[alloca_frame_def] >>
      asm_rewrite_tac[] >>
