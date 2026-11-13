@@ -248,3 +248,40 @@ Proof
   disch_then (qspecl_then [`FST (eval_exprs cx (MAP SND kes) st)`, `s1`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[APPEND] >> metis_tac[])) >> simp[]
 QED
+
+Theorem finite_prefix_Expr_TypeBuiltin:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "Expr_TypeBuiltin")
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_expr (TypeBuiltin ty tb typ es))` mp_tac >>
+  pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `type_place_expr _ (TypeBuiltin _ _ _ _) = SOME _` mp_tac >>
+      simp[Once well_typed_expr_def]) >>
+  strip_tac >>
+  `well_typed_exprs env es` by
+    (qpat_x_assum `well_typed_expr env (TypeBuiltin _ _ _ _)` mp_tac >>
+     simp_tac(srw_ss())[Once well_typed_expr_def]) >>
+  qpat_x_assum `eval_expr _ (TypeBuiltin _ _ _ _) _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+    type_check_def, assert_def, return_def, raise_def] >>
+  reverse (Cases_on `type_builtin_args_length_ok tb (LENGTH es)`)
+  >- (simp_tac(srw_ss())[] >> strip_tac >>
+      qpat_x_assum `!s'' x t. type_check _ _ s'' = (INL x,t) ==> _` kall_tac >>
+      gvs[valid_horizon_def]) >>
+  simp_tac(srw_ss())[] >>
+  qpat_x_assum `!s'' x t. _` (qspecl_then [`st`, `()`, `st`] mp_tac) >>
+  asm_rewrite_tac[type_check_def, assert_def, return_def] >> strip_tac >>
+  Cases_on `eval_exprs cx es st` >> rename1 `eval_exprs cx es st = (er,s1)` >>
+  Cases_on `er` >> simp_tac(srw_ss())[] >> strip_tac >>
+  `st' = s1` by
+    (qpat_x_assum `!initial_st selected env st res st0. _` kall_tac >>
+     gvs[AllCaseEqs()] >> imp_res_tac lift_sum_state >> gvs[]) >>
+  pop_assum SUBST_ALL_TAC >>
+  qpat_x_assum `!initial_st selected env st res st0. _`
+    (qspecl_then [`initial_st`, `selected`, `env`, `st`] mp_tac) >>
+  disch_then (qspecl_then [`FST (eval_exprs cx es st)`, `s1`] mp_tac) >>
+  rpt (qpat_x_assum `s1 = s1` kall_tac) >>
+  (impl_tac >- (asm_rewrite_tac[APPEND] >> metis_tac[])) >> simp[]
+QED
