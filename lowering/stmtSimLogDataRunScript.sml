@@ -4,6 +4,8 @@ Ancestors
   stmtSimLogData stmtSimLogDataFrame  valueEncoding valueEncodingDefs compileEnv
   context stmtLowering words list arithmetic emitHelper emitHelperProps
   exprSimBufferStore exprLoweringProps
+  annassignRelayoutBounds annassignRelayoutSource wideningZeroLayout
+  venomState placeMemoryCopyEffect exprSimMemoryTransport
 
 Definition log_data_layout_def:
   (log_data_layout cx [] [] p mem = T) /\
@@ -546,4 +548,98 @@ Proof
   goal_assum (drule_at Any) >>
   qpat_x_assum `EVERY (\(op,ty). !x. op = Var x ==> _) xs` mp_tac >>
   simp[EVERY_MEM] >> disch_then drule >> simp[]
+QED
+
+(* A different-layout aggregate cannot use the empty-footprint alternative. *)
+Theorem log_declared_source_separated[local]:
+  type_widens_to (get_tenv cx) lty dty /\
+  evaluate_type (get_tenv cx) lty = SOME ltv /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\ lty <> dty /\
+  ~is_word_type lty /\ ~is_bytestring_type lty /\
+  eval_operand op s = SOME w /\
+  log_source_apart cx b n (op,lty) v s ==>
+  w2n w + type_memory_size ltv <= b \/ b+n <= w2n w
+Proof
+  strip_tac >>
+  `type_memory_size ltv <> 0` by
+    metis_tac[type_widens_to_zero_layout] >>
+  `val_footprint ltv v = type_memory_size ltv` by
+    (irule nonbytes_evaluated_val_footprint >> metis_tac[]) >>
+  gvs[log_source_apart_def] >> metis_tac[]
+QED
+
+Theorem log_declared_relayout_run[local]:
+  ~is_word_type dty /\ ~is_bytestring_type dty /\
+  ~is_word_type lty /\ ~is_bytestring_type lty /\ dty <> lty /\
+  compile_store_memory cenv src dst dty lty sa = ((),sb) /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv.
+      evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  type_widens_to (get_tenv cx) lty dty /\
+  evaluate_type (get_tenv cx) lty = SOME ltv /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  value_has_type ltv v /\ value_has_type dtv v /\
+  val_wf ltv v /\ val_wf dtv v /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  expr_val_rel cx lty v src s /\
+  log_source_apart cx (w2n dw) (type_memory_size dtv) (src,lty) v s /\
+  w2n sw + type_memory_size ltv < dimword (:256) /\
+  w2n dw + type_memory_size dtv < dimword (:256) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
+    typed_copy_effect ctx func sa sb s t (w2n dw) (type_memory_size dtv)
+Proof
+  strip_tac >>
+  `w2n sw + type_memory_size ltv <= w2n dw \/
+   w2n dw + type_memory_size dtv <= w2n sw` by
+    (irule log_declared_source_separated >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  `val_in_memory ltv v (w2n sw) s.vs_memory` by
+    gvs[expr_val_rel_def] >>
+  irule compile_store_memory_relayout_effect >> simp[] >>
+  qpat_assum `compile_store_memory _ _ _ _ _ _ = _` (irule_at Any) >>
+  simp[] >> qexistsl_tac [`get_tenv cx`, `ltv`] >> simp[ADD_COMM] >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem log_declared_effect_operand[local]:
+  typed_copy_effect ctx func sa sb s t b n /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\
+  (!lab. op <> Label lab) ==>
+  eval_operand op t = eval_operand op s
+Proof
+  strip_tac >> Cases_on `op` >> gvs[eval_operand_def] >>
+  metis_tac[typed_copy_effect_lookup]
+QED
+
+Theorem log_declared_effect_source[local]:
+  typed_copy_effect ctx func sa sb s t b n /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\
+  (!lab. op <> Label lab) /\
+  log_source_apart cx b n (op,lty) v s /\
+  evaluate_type (get_tenv cx) lty = SOME tv /\ val_wf tv v /\
+  expr_val_rel cx lty v op s ==>
+  expr_val_rel cx lty v op t /\ log_source_apart cx b n (op,lty) v t
+Proof
+  strip_tac >>
+  `eval_operand op t = eval_operand op s` by
+    metis_tac[log_declared_effect_operand] >>
+  reverse conj_tac >- gvs[log_source_apart_def] >>
+  Cases_on `is_word_type lty`
+  >- gvs[expr_val_rel_def] >>
+  `?w. eval_operand op s = SOME w` by gvs[expr_val_rel_def] >>
+  irule expr_val_rel_footprint_agree >> simp[] >>
+  qexists_tac `s` >> simp[] >>
+  `val_footprint tv v = 0 \/ w2n w + val_footprint tv v <= b \/
+    b + n <= w2n w` by gvs[log_source_apart_def] >>
+  Cases_on `val_footprint tv v = 0` >- simp[mem_bytes_at_def] >>
+  metis_tac[typed_copy_effect_bytes]
 QED
