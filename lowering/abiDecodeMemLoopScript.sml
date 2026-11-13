@@ -183,7 +183,7 @@ QED
 Resume abi_decode_mem_dyn_loop[iteration_success]:
   markerLib.RESUME_TAC >>
   disj1_tac >> qexists_tac `out` >>
-  gvs[Abbr `J`, Abbr `P`, Abbr `R`, Abbr `F'`, Abbr `slot`] >>
+  asm_simp_tac bool_ss [Abbr `J`, Abbr `P`, Abbr `R`, Abbr `F'`, Abbr `slot`] >>
   metis_tac[abi_decoder_operand_live_mono]
 QED
 Resume abi_decode_mem_dyn_loop[iteration_premises]:
