@@ -13,18 +13,18 @@ Theorem tuple_target_nonlocal_head_path_ptr:
   (!id. g <> BaseTarget (NameTarget id)) /\ value_has_type tv v /\
   eval_operand op s = SOME (typed_val_to_w256 tv v) /\
   local_ptrs_reserved cenv st /\ (!x. op = Var x ==> not_fresh_at st x) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_has_code st sf func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_has_code st sf func /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  ghost_inv d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\ op_taint tn op = {} /\
+  ghost_inv H d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\ op_taint tn op = {} /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) ==>
-  ?t G' tn'. stmt_state_rel ctx func cenv cx es' t /\
+  ?t G' tn'. stmt_state_rel H ctx func cenv cx es' t /\
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
     t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts /\
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
-    ghost_inv d cenv cx es' G' tn' t /\ tn'.t_mem = tn.t_mem /\
+    ghost_inv H d cenv cx es' G' tn' t /\ tn'.t_mem = tn.t_mem /\
     (!x. not_fresh_at st x ==> FLOOKUP G' x = FLOOKUP G x /\
       op_taint tn' (Var x) = op_taint tn (Var x)) /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t)

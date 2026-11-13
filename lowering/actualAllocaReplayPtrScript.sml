@@ -87,7 +87,7 @@ Theorem actual_word_alloca_replay_ptr:
     ?p. entry = (p,32) /\ p + 32 <= s.vs_alloca_next) /\
   fresh_vars_wrt limit s /\
   not_fresh_at limit (STRING #"%" (toString sa.cs_next_var)) ==>
-  ?t H u q p.
+  ?t HG u q p.
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     ip = Var q /\ lookup_var q t = SOME (n2w p) /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (p,32) /\
@@ -103,19 +103,19 @@ Theorem actual_word_alloca_replay_ptr:
     (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
       FLOOKUP t.vs_allocas id = SOME entry) /\
     (!id. id <> sa.cs_next_id ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
-    ptr_covers H u q (t with vs_inst_idx := SUC s.vs_inst_idx) 32 /\
-    frag_exec_ptr cx ctx PG sa sb
+    ptr_covers HG u q (t with vs_inst_idx := SUC s.vs_inst_idx) 32 /\
+    frag_exec_ptr H cx ctx PG sa sb
       (\g z v. g = G /\ z = tn /\ v = s)
-      (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+      (\g z v. g = HG /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
     u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     u.t_mem DIFF {a | p <= a /\ a < p + 32} =
       tn.t_mem DIFF {a | p <= a /\ a < p + 32} /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     (!D lower ctx' func.
       fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
@@ -124,7 +124,7 @@ Proof
   simp[] >>
   disch_then (qspecl_then [`tn`,`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
   gvs[AllCaseEqs()] >>
-  qexistsl_tac [`H`,`u`] >>
+  qexistsl_tac [`HG`,`u`] >>
   fs[fresh_vars_wrt_def]
 QED
 
@@ -154,7 +154,7 @@ Theorem actual_word_alloca_twice_ptr:
     ?p. entry = (p,32) /\ p + 32 <= s.vs_alloca_next) /\
   fresh_vars_wrt limit s /\
   not_fresh_at limit (STRING #"%" (toString sa.cs_next_var)) ==>
-  ?t v H u J z q p.
+  ?t v HG u J z q p.
     ip = Var q /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
     lookup_var q t = SOME (n2w p) /\
     run_inst_seq (emitted_insts sa sb)
@@ -165,20 +165,20 @@ Theorem actual_word_alloca_twice_ptr:
     remaining_alloca_budget insts v = remaining_alloca_budget insts t /\
     alloca_inv v /\ alloca_frontier_inv budget_ctx fn site v /\
     fresh_vars_wrt limit v /\
-    ptr_covers H u q (t with vs_inst_idx := SUC s.vs_inst_idx) 32 /\
+    ptr_covers HG u q (t with vs_inst_idx := SUC s.vs_inst_idx) 32 /\
     ptr_covers J z q (v with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)) 32 /\
-    frag_exec_ptr cx ctx PG sa sb
+    frag_exec_ptr H cx ctx PG sa sb
       (\g a w. g = G /\ a = tn /\ w = s)
-      (\g a w. g = H /\ a = u /\ w = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
-    frag_exec_ptr cx ctx PG sa sb
-      (\g a w. g = H /\ a = u /\ w = (t with vs_inst_idx := LENGTH sa.cs_current_insts))
+      (\g a w. g = HG /\ a = u /\ w = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g a w. g = HG /\ a = u /\ w = (t with vs_inst_idx := LENGTH sa.cs_current_insts))
       (\g a w. g = J /\ a = z /\ w = (v with vs_inst_idx := SUC (LENGTH sa.cs_current_insts))) R /\
     (!D lower ctx' func.
       fn_has_code sa sb func /\ allocas_from lower t /\ ~ctx_has_dalloca ctx' /\
       t.vs_current_bb = sa.cs_current_bb /\
       (!fuel. ptr_safe_run D lower fuel ctx' func PG J z
         (v with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
-      !fuel. ptr_safe_run D lower fuel ctx' func PG H u
+      !fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sa.cs_current_insts))
 Proof
   strip_tac >>
@@ -200,11 +200,11 @@ Proof
   disch_then drule >> disch_then drule >>
   disch_then drule >> disch_then drule >>
   disch_then drule >> simp[] >>
-  disch_then (qspecl_then [`u`,`cx`,`ctx`,`R`,`PG`,`H`] strip_assume_tac) >>
+  disch_then (qspecl_then [`u`,`cx`,`ctx`,`R`,`PG`,`HG`] strip_assume_tac) >>
   drule_at (Pos (el 4)) emitted_alloca_occupied_frame >>
   simp[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >> strip_tac >>
   qpat_x_assum `!insts. _` (qspec_then `insts` strip_assume_tac) >>
-  gvs[] >> qexistsl_tac [`H`,`u`,`H'`,`u'`] >>
+  gvs[] >> qexistsl_tac [`HG`,`u`,`HG'`,`u'`] >>
   simp[remaining_alloca_budget_def, allocas_from_def] >>
   rpt strip_tac >> first_x_assum irule >> simp[allocas_from_def] >> gvs[]
 QED

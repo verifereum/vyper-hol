@@ -8,12 +8,12 @@ Ancestors
 Theorem u2s_alloc_concrete_ptr:
   compile_alloc_buffer sz sa = (ba,a) /\
   u2s_layout a op ba.buf_operand n sb /\ fn_has_code sa sb fn /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ sz < dimword(:256) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
   ?p b sr inst G1 tn1.
@@ -24,7 +24,7 @@ Theorem u2s_alloc_concrete_ptr:
     gas_path_ptr_edge D 0 ctx fn PG G tn s 0 G1 tn1
       (OK (sr with vs_inst_idx := SUC s.vs_inst_idx)) /\
     u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr sr /\
-    ghost_inv d cenv cx es G1 tn1 sr /\ ghost_kept cenv es sa G tn s G1 tn1 /\
+    ghost_inv H d cenv cx es G1 tn1 sr /\ ghost_kept cenv es sa G tn s G1 tn1 /\
     FLOOKUP G1 p = SOME (b,sz) /\ lookup_var p sr = SOME (n2w b) /\
     op_taint tn1 (Var p) = {} /\ b+sz < dimword(:256) /\
     wb_frame cenv es es sa s sr /\
@@ -104,11 +104,11 @@ QED
 Theorem u2s_alloc_ready_ptr:
   compile_alloc_buffer sz sa = (ba,a) /\
   u2s_layout a op ba.buf_operand n sb /\ fn_has_code sa sb fn /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ sz < dimword(:256) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
@@ -119,7 +119,7 @@ Theorem u2s_alloc_ready_ptr:
     ready = sr with vs_inst_idx := LENGTH a.cs_current_insts /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK ready) /\
     u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr ready /\
-    ghost_inv d cenv cx es G1 tn1 ready /\ ghost_kept cenv es sa G tn s G1 tn1 /\
+    ghost_inv H d cenv cx es G1 tn1 ready /\ ghost_kept cenv es sa G tn s G1 tn1 /\
     FLOOKUP G1 p = SOME (b,sz) /\ lookup_var p ready = SOME (n2w b) /\
     op_taint tn1 (Var p) = {} /\ b+sz < dimword(:256) /\
     ready.vs_current_bb = a.cs_current_bb /\
@@ -136,7 +136,7 @@ Theorem u2s_alloc_ready_ptr:
       <|bb_label := a.cs_current_bb;
         bb_instructions := a.cs_current_insts ++ u2s_setup a op (Var p)|> /\
     (!out. u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr out ==>
-      stmt_state_rel ctx fn cenv cx es out /\ wb_frame cenv es es sa s out /\
+      stmt_state_rel H ctx fn cenv cx es out /\ wb_frame cenv es es sa s out /\
       FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz) /\
       pure_frame cenv fn es sa s out)
 Proof
@@ -172,7 +172,7 @@ Resume u2s_alloc_ready_ptr[ready]:
      drule_all alloca_step_state_fields >> simp[]) >>
   `not_local_ptr cenv es.scopes p` by
     metis_tac[exprSimOperandsTheory.fresh_not_local_ptr] >>
-  `ghost_inv d cenv cx es G1 tn1 ready` by
+  `ghost_inv H d cenv cx es G1 tn1 ready` by
     (simp[Abbr `ready`, SRULE [] (Q.INST [`gs` |-> `es.gas_obs`]
        literal_ptr_ghost_inv_normalize)]) >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK ready)` by

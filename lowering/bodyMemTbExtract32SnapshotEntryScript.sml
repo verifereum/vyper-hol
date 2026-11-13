@@ -34,15 +34,15 @@ Proof
 QED
 
 Theorem extract32_snapshot_entry_frame:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (t with vs_vars := s.vs_vars) = s /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>
-  stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := n)
+  stmt_state_rel H ctx func cenv cx es (t with vs_inst_idx := n)
 Proof
   strip_tac >>
   `t = s with vs_vars := t.vs_vars` by
     (qpat_x_assum `t with vs_vars := _ = s` (SUBST1_TAC o SYM) >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (s with vs_vars := t.vs_vars)` by
+  `stmt_state_rel H ctx func cenv cx es (s with vs_vars := t.vs_vars)` by
     (irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
      `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
      metis_tac[]) >>
@@ -52,7 +52,11 @@ QED
 Theorem extract32_snapshot_entry[local]:
   compile_bytestring_src src sa = ((len_op,data_op),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s /\
+     storage_well_formed_on cx es (FST H)) /\
+  (?H. valid_horizon cx st0 H es.storage_trace) /\
   alloca_history func s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -62,7 +66,9 @@ Theorem extract32_snapshot_entry[local]:
   b + 32 < dimword (:256) /\ len < dimword (:256) /\
   b + 32 + len <= s.vs_alloca_next ==>
   ?u. gas_path_mem ctx func s 0 (OK u) /\
-    stmt_state_rel ctx func cenv cx es u /\ alloca_history func u /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es u /\
+       storage_well_formed_on cx es (FST H)) /\ alloca_history func u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved cenv sb /\
@@ -73,11 +79,16 @@ Theorem extract32_snapshot_entry[local]:
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     (!x. len_op = Var x \/ data_op = Var x ==> not_fresh_at sb x)
 Proof
-  strip_tac >> drule_all extract32_snapshot_code_prefix >> strip_tac >>
+  strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  drule_all extract32_snapshot_code_prefix >> strip_tac >>
   drule extract32_snapshot_code >> strip_tac >>
   drule extract32_snapshot_shape >> strip_tac >>
   drule_all extract32_source_snapshot >> strip_tac >>
-  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `alloca_inv s` by
+    (qpat_x_assum `stmt_state_rel _ ctx func cenv cx es s`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+     first_assum ACCEPT_TAC) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
     fs[EVERY_MEM] >>
   drule_all alloca_history_run_inst_seq >> strip_tac >>
@@ -85,8 +96,20 @@ Proof
     simp[IS_PREFIX_APPEND] >>
   `gas_path_mem ctx func s 0 (OK (t with vs_inst_idx := s.vs_inst_idx + 2))` by
     (drule_all run_inst_seq_gas_path_mem >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := s.vs_inst_idx + 2)` by
-    (irule extract32_snapshot_entry_frame >> goal_assum (drule_at Any) >> simp[]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es
+         (t with vs_inst_idx := s.vs_inst_idx + 2) /\
+       storage_well_formed_on cx es (FST H)` by
+    (qx_gen_tac `H1` >> strip_tac >>
+     qpat_x_assum `!H. valid_horizon cx st0 H es.storage_trace ==>
+                       stmt_state_rel H ctx func cenv cx es s /\
+                       storage_well_formed_on cx es (FST H)`
+       (qspec_then `H1` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     conj_tac
+     >- (irule extract32_snapshot_entry_frame >> goal_assum (drule_at Any) >>
+         simp[]) >>
+     first_assum ACCEPT_TAC) >>
   `local_ptrs_reserved cenv sb` by
     (irule compiler_ci_mono_reserved >> qexists_tac `sa` >> simp[] >>
      metis_tac[ci_mono_compile_bytestring_src, pairTheory.SND]) >>
@@ -106,7 +129,9 @@ Proof
 QED
 
 Theorem extract32_source_snapshot_entry:
-  expr_post ctx func cenv cx e es s0c sa s0 es' (BytesV bs) src s /\
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+     expr_post H ctx func cenv cx e es s0c sa s0 es' (BytesV bs) src s) /\
+  (?H. valid_horizon cx st0 H es'.storage_trace) /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
   expr_store_bound cx (expr_type e) (BytesV bs) src s /\
@@ -117,7 +142,9 @@ Theorem extract32_source_snapshot_entry:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. src = Var x ==> not_fresh_at sa x) ==>
   ?b u. gas_path_mem ctx func s 0 (OK u) /\
-    stmt_state_rel ctx func cenv cx es' u /\ alloca_history func u /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es' u /\
+       storage_well_formed_on cx es' (FST H)) /\ alloca_history func u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ local_ptrs_reserved cenv sb /\
     eval_operand len_op u = SOME (n2w (LENGTH bs)) /\
@@ -132,10 +159,29 @@ Theorem extract32_source_snapshot_entry:
     val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) b u.vs_memory /\
     expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) s0c sb es' (BytesV bs) src u
 Proof
-  strip_tac >> drule_all extract32_source_post_view >> strip_tac >>
+  strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
+  `!H. valid_horizon cx st0 H es'.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es' s /\
+       storage_well_formed_on cx es' (FST H)` by
+    (qx_gen_tac `H1` >> strip_tac >>
+     qpat_x_assum `!H. valid_horizon cx st0 H es'.storage_trace ==>
+                       expr_post H ctx func cenv cx e es s0c sa s0 es'
+                         (BytesV bs) src s`
+       (qspec_then `H1` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     rewrite_tac[expr_post_def] >> strip_tac >> conj_tac >>
+     first_assum ACCEPT_TAC) >>
+  `local_ptrs_rel func cenv es'.scopes s` by
+    (qpat_x_assum `expr_post _ ctx func cenv cx e es s0c sa s0 es' (BytesV bs) src s`
+       (strip_assume_tac o
+        REWRITE_RULE [expr_post_def, stmt_state_rel_def, state_rel_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `?H. valid_horizon cx st0 H es'.storage_trace` by metis_tac[] >>
+  drule_all extract32_source_post_view >> strip_tac >>
   `post_value_type cenv e = expr_type e` by
     (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
-  `stmt_state_rel ctx func cenv cx es' s` by fs[expr_post_def] >>
   drule_all extract32_snapshot_entry >> strip_tac >>
   `u.vs_memory = s.vs_memory` by
     (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s`
@@ -154,7 +200,6 @@ Proof
        (mp_tac o Q.AP_TERM `\v. v.vs_allocas`) >> simp[]) >>
   `sa.cs_next_id <= sb.cs_next_id` by
     metis_tac[ci_mono_compile_bytestring_src, ci_mono_def, pairTheory.SND] >>
-  `local_ptrs_rel func cenv es'.scopes s` by fs[stmt_state_rel_def, state_rel_def] >>
   `!n b sz. local_region cenv es'.scopes u n b sz <=>
             local_region cenv es'.scopes s n b sz` by
     (rpt gen_tac >> eq_tac

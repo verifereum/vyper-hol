@@ -38,7 +38,7 @@ Theorem calldata_scratch_array_init_reentry_ptr:
   loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ ptr_covers G tn root initial totalbytes /\
   32 <= totalbytes /\ op_taint tn src = {} ==>
-  ?actual slot H u q.
+  ?actual slot HG u q.
     run_inst_seq (emitted_insts st loop_st) initial = OK actual /\
     inst_extends st loop_st /\
     abi_decoder_array_init_post setup st.cs_next_var limit_st (loop_st.cs_next_id - 2)
@@ -48,25 +48,25 @@ Theorem calldata_scratch_array_init_reentry_ptr:
     FST setup = Var q /\ eval_operand (FST setup) actual = SOME (n2w slot) /\
     b <= slot /\ slot + 32 <= b + cap /\ slot + 32 < dimword (:256) /\
     mload slot actual = 0w /\
-    ptr_covers H u q
+    ptr_covers HG u q
       (actual with vs_inst_idx := LENGTH (emitted_insts st loop_st) + initial.vs_inst_idx) 32 /\
-    ptr_covers H u root
+    ptr_covers HG u root
       (actual with vs_inst_idx := LENGTH (emitted_insts st loop_st) + initial.vs_inst_idx) totalbytes /\
-    op_taint u (SND setup) = {} /\ op_prov H (SND setup) = NONE /\
-    frag_exec_ptr cx ctx PG st loop_st
+    op_taint u (SND setup) = {} /\ op_prov HG (SND setup) = NONE /\
+    frag_exec_ptr H cx ctx PG st loop_st
       (\g z v. g = G /\ z = tn /\ v = initial)
-      (\g z v. g = H /\ z = u /\
+      (\g z v. g = HG /\ z = u /\
         v = (actual with vs_inst_idx := LENGTH (emitted_insts st loop_st) + initial.vs_inst_idx)) R /\
     u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     u.t_mem = (tn.t_mem DIFF {x | d <= x /\ x < d + 32})
       DIFF {x | slot <= x /\ x < slot + 32} /\
     (!x. not_fresh_at st x ==> lookup_var x actual = lookup_var x initial /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     (!D lower ctx' func.
       fn_has_code st loop_st func /\ allocas_from lower initial /\ lower <= initial.vs_alloca_next /\
       ~ctx_has_dalloca ctx' /\ initial.vs_current_bb = st.cs_current_bb /\
       initial.vs_inst_idx = LENGTH st.cs_current_insts /\
-      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (actual with vs_inst_idx := LENGTH loop_st.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn initial)
 Proof
@@ -96,7 +96,7 @@ Proof
     (drule abi_decoder_budget_word_bound >> decide_tac) >>
   `slot = p` by
     (gvs[] >> metis_tac[n2w_11, LESS_TRANS, DECIDE ``!x:num. x < x + 32``]) >>
-  qexistsl_tac [`actual`, `slot`, `H`, `u`, `q`] >> gvs[]
+  qexistsl_tac [`actual`, `slot`, `HG`, `u`, `q`] >> gvs[]
 QED
 
 (* Source-valid caller of the joint physical/ghost initializer. *)
@@ -113,7 +113,7 @@ Theorem calldata_scratch_array_initialize_clean_ptr:
   ptr_covers G tn root initial (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   op_taint tn src = {} /\ allocas_from lower initial /\ lower <= initial.vs_alloca_next /\
   ~ctx_has_dalloca ctx ==>
-  ?actual slot H u q.
+  ?actual slot HG u q.
     abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
       bs (ArrayV (DynArrayV vs)) loop_st src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
       0 source_base d first last b cap actual /\
@@ -127,17 +127,17 @@ Theorem calldata_scratch_array_initialize_clean_ptr:
     actual.vs_current_bb = loop_st.cs_current_bb /\
     actual.vs_inst_idx = LENGTH loop_st.cs_current_insts /\ ~actual.vs_halted /\
     abi_decode_sim ctx func initial actual /\
-    FST setup = Var q /\ ptr_covers H u q actual 32 /\
-    ptr_covers H u root actual (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
-    op_taint u (SND setup) = {} /\ op_prov H (SND setup) = NONE /\
+    FST setup = Var q /\ ptr_covers HG u q actual 32 /\
+    ptr_covers HG u root actual (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
+    op_taint u (SND setup) = {} /\ op_prov HG (SND setup) = NONE /\
     b <= slot /\ slot + 32 <= b + cap /\ slot + 32 < dimword (:256) /\
     DISJOINT {a | d <= a /\ a < d + 32} u.t_mem /\
     DISJOINT {a | slot <= a /\ a < slot + 32} u.t_mem /\
     u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\
     u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     (!x. not_fresh_at st x ==> lookup_var x actual = lookup_var x initial /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
-    ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    ((!fuel. ptr_safe_run D lower fuel ctx func PG HG u actual) ==>
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -146,7 +146,7 @@ Proof
     simp[Once type_memory_bytes_def] >>
   drule_all calldata_scratch_array_init_reentry_ptr >>
   disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] strip_assume_tac) >>
-  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac >>
   drule_all (calldata_pos abi_decode_array_loop_init_shape) >> strip_tac >>
   `abi_scratch_effect first last st.cs_next_id loop_st.cs_next_id st.cs_next_var
     limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial actual` by
@@ -173,7 +173,7 @@ Proof
   `LENGTH (emitted_insts st loop_st) + initial.vs_inst_idx = LENGTH loop_st.cs_current_insts` by
     (fs[inst_extends_def] >> simp[ADD_COMM]) >>
   drule (calldata_pos abi_decode_array_loop_index_live) >> strip_tac >>
-  qexistsl_tac [`actual with vs_inst_idx := LENGTH loop_st.cs_current_insts`, `slot`, `H`, `u`] >>
+  qexistsl_tac [`actual with vs_inst_idx := LENGTH loop_st.cs_current_insts`, `slot`, `HG`, `u`] >>
   gvs[abi_decoder_array_init_post_def, abi_scratch_decoder_input_def,
     abi_scratch_decoder_ranges_def, abi_decoder_valid_array_memory_def,
     abi_decoder_child_scratch_def, abi_decode_source_def, mload_def,
@@ -195,7 +195,7 @@ Theorem calldata_scratch_array_initialize_ptr:
   ptr_covers G tn root initial (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   op_taint tn src = {} /\ allocas_from lower initial /\ lower <= initial.vs_alloca_next /\
   ~ctx_has_dalloca ctx ==>
-  ?actual slot H u q.
+  ?actual slot HG u q.
     abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
       bs (ArrayV (DynArrayV vs)) loop_st src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
       0 source_base d first last b cap actual /\
@@ -209,19 +209,19 @@ Theorem calldata_scratch_array_initialize_ptr:
     actual.vs_current_bb = loop_st.cs_current_bb /\
     actual.vs_inst_idx = LENGTH loop_st.cs_current_insts /\ ~actual.vs_halted /\
     abi_decode_sim ctx func initial actual /\
-    FST setup = Var q /\ ptr_covers H u q actual 32 /\
-    ptr_covers H u root actual (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
-    op_taint u (SND setup) = {} /\ op_prov H (SND setup) = NONE /\
+    FST setup = Var q /\ ptr_covers HG u q actual 32 /\
+    ptr_covers HG u root actual (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
+    op_taint u (SND setup) = {} /\ op_prov HG (SND setup) = NONE /\
     b <= slot /\ slot + 32 <= b + cap /\ slot + 32 < dimword (:256) /\
     u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\
     u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     (!x. not_fresh_at st x ==> lookup_var x actual = lookup_var x initial /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
-    ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    ((!fuel. ptr_safe_run D lower fuel ctx func PG HG u actual) ==>
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all calldata_scratch_array_initialize_clean_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qexistsl_tac [`actual`, `slot`, `H`, `u`, `q`] >> asm_rewrite_tac[]
+  qexistsl_tac [`actual`, `slot`, `HG`, `u`, `q`] >> asm_rewrite_tac[]
 QED

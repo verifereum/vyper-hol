@@ -5,8 +5,8 @@ Ancestors
   codegenRel contextCodegenRel pred_set compileEnv loweringStateRelDefs
 
 Theorem alloca_union_ghost_inv:
-  ghost_inv d cenv cx es G tn s /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~not_fresh_at sa q /\
@@ -16,14 +16,14 @@ Theorem alloca_union_ghost_inv:
   dirty SUBSET {i | b <= i /\ i < b+n} /\
   u.vs_memory = s.vs_memory /\ u.vs_call_ctx = s.vs_call_ctx /\
   u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient ==>
-  ghost_inv d cenv cx es (G |+ (q,(b,n)))
+  ghost_inv H d cenv cx es (G |+ (q,(b,n)))
     (tn with <|t_var := tn.t_var |+ (q,{}); t_mem := tn.t_mem UNION dirty|>) u
 Proof
   strip_tac >> irule literal_ghost_inv_frame >>
   qexistsl_tac [`G`, `s`, `sa`, `tn`, `{i | b <= i /\ i < b+n}`] >>
   simp[FLOOKUP_UPDATE, op_taint_def] >>
   conj_tac >- (rpt gen_tac >> strip_tac >>
-    drule_at (Pat `stmt_state_rel _ _ _ _ _ _`) literal_ptr_local_footprint_exterior >>
+    drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`) literal_ptr_local_footprint_exterior >>
     disch_then (qspecl_then [`n`, `b`] mp_tac) >> simp[] >>
     disch_then (drule_at (Pat `lookup_scopes _ _ = _`)) >> simp[] >>
     disch_then irule >> first_assum ACCEPT_TAC) >>
@@ -57,11 +57,11 @@ Proof
 QED
 
 Theorem alloca_step_ghost_frame:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [q]) (fn_insts fn) /\
   n < dimword(:256) /\
   step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [q]) s = OK u /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~not_fresh_at sa q /\
@@ -73,7 +73,7 @@ Theorem alloca_step_ghost_frame:
     off+len <= b \/ b+n <= off) /\
   (!name off len. local_region cenv es.scopes s name off len ==>
     off+len <= b \/ b+n <= off) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [q]) u)
     (step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [q]) s u tn) u /\
   ghost_kept cenv es sa G tn s

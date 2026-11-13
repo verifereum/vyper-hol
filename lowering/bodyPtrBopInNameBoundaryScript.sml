@@ -20,7 +20,7 @@ Theorem local_name_ptr_mem_ok:
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   evaluate_type (get_tenv cx) ann = SOME entry.type /\
   val_wf entry.type entry.value /\ type_memory_size entry.type <= sz /\
-  ghost_inv d cenv cx es G tn s ==>
+  ghost_inv H d cenv cx es G tn s ==>
   ptr_mem_ok cx ann entry.value (Var p) G tn s
 Proof
   strip_tac >>
@@ -39,7 +39,7 @@ Theorem local_name_ptr_buf_ok:
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   evaluate_type (get_tenv cx) ann = SOME entry.type /\
   type_memory_size entry.type <= sz /\
-  ghost_inv d cenv cx es G tn s ==>
+  ghost_inv H d cenv cx es G tn s ==>
   ptr_buf_ok cenv (Name ann id) (Var p) G s
 Proof
   strip_tac >>
@@ -58,8 +58,8 @@ Theorem local_name_ptr_post:
   value_has_type entry.type entry.value /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   cenv.ce_var_type id = SOME ann /\
-  stmt_state_rel ctx func cenv cx es s /\
-  ghost_inv d cenv cx es G tn s ==>
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s ==>
   ptr_vv_ok cx ann (PlaceR (MemoryPlace id []))
     (LocatedValue ann (mk_ptr (Var p) LocMemory))
     (es with gas_obs := []) G tn s
@@ -84,8 +84,8 @@ QED
 Theorem local_name_body_ptr_boundary:
   expr_body_pre cenv cx env (Name ann id) es /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-  stmt_state_rel ctx func cenv cx es s /\
-  ghost_inv d cenv cx es G tn s ==>
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s ==>
   ptr_vv_ok cx ann (PlaceR (MemoryPlace id []))
     (LocatedValue ann (mk_ptr (Var p) LocMemory))
     (es with gas_obs := []) G tn s /\

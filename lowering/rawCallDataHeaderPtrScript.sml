@@ -85,14 +85,14 @@ Theorem raw_call_data_prefix_frame:
   eval_operand ptr_op s = SOME (n2w b) /\
   mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
   mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
-  b < dimword (:256) /\ stmt_state_rel ctx func cenv cx es s /\
+  b < dimword (:256) /\ stmt_state_rel H ctx func cenv cx es s /\
   local_ptrs_reserved cenv sa ==>
   ?t. run_inst_seq (emitted_insts sa sm) s = OK t /\
     eval_operand len_op t = SOME (n2w (LENGTH bs)) /\
     eval_operand data_op t = SOME (n2w (b+32)) /\
     mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
     (!x. len_op = Var x \/ data_op = Var x ==> not_fresh_at sm x)
 Proof
   strip_tac >> drule_all hash_data_prefix_run >> strip_tac >>
@@ -100,7 +100,7 @@ Proof
   `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with vs_vars := _ = _`
        (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
   qexists_tac `t` >> simp[loweringPostsTheory.wb_frame_def,
     exprSimPropsTheory.locals_kept_mem] >> first_assum ACCEPT_TAC
@@ -169,9 +169,9 @@ Proof
 QED
 
 Theorem raw_call_fresh_update_state_frame:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   ~not_fresh_at sa out ==>
-  stmt_state_rel ctx func cenv cx es
+  stmt_state_rel H ctx func cenv cx es
     ((update_var out w s) with vs_inst_idx := k) /\
   wb_frame cenv es es sa s ((update_var out w s) with vs_inst_idx := k)
 Proof
@@ -191,8 +191,8 @@ QED
 
 Theorem raw_call_mload_header_stage:
   emit_op MLOAD [Var x] sa = (Var lx,sl) /\ fn_has_code sa sl func /\
-  stmt_state_rel ctx func cenv cx es s /\
-  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv H dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -201,9 +201,9 @@ Theorem raw_call_mload_header_stage:
   ptr_covers G tn x s 32 /\ lookup_var x s = SOME w /\
   op_taint tn (Var x) = {} /\
   (!i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem) ==>
-  ?H un u. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK u) /\
-    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
+  ?HG un u. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
+    ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sl.cs_current_bb /\
     u.vs_inst_idx = LENGTH sl.cs_current_insts /\ ~u.vs_halted /\
     eval_operand (Var x) u = SOME w /\ op_taint un (Var x) = {} /\
@@ -213,11 +213,11 @@ Theorem raw_call_mload_header_stage:
 Proof
   strip_tac >>
   drule_all raw_call_emit_mload_path_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] assume_tac) >>
-  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ H un (OK u)` >>
-  `ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un` by
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ HG un (OK u)` >>
+  `ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un` by
     (qunabbrev_tac `u` >> irule raw_call_emit_mload_ghost_frame >>
-     goal_assum (drule_at Any) >> simp[Abbr `H`, Abbr `un`] >>
+     goal_assum (drule_at Any) >> simp[Abbr `HG`, Abbr `un`] >>
      qexistsl_tac [`PG`, `x`] >> simp[]) >>
   `~not_fresh_at sa lx /\ sl.cs_current_bb = sa.cs_current_bb` by
     (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
@@ -227,10 +227,10 @@ Proof
        compileEnvTheory.comp_return_def] >> rpt strip_tac >> gvs[] >>
      fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   `x <> lx` by metis_tac[] >>
-  `stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u` by
+  `stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u` by
     (qunabbrev_tac `u` >> irule raw_call_fresh_update_state_frame >>
      goal_assum (drule_at Any) >> simp[]) >>
-  qexistsl_tac [`H`, `un`, `u`] >> simp[] >>
+  qexistsl_tac [`HG`, `un`, `u`] >> simp[] >>
   simp[Abbr `u`, Abbr `un`,
     decoderGhostFramePtrTheory.step_taint_other_output,
     venomInstTheory.mk_inst_def, venomStateTheory.eval_operand_def,
@@ -246,8 +246,8 @@ QED
 
 Theorem raw_call_add_header_stage:
   emit_op ADD [Var x; Lit 32w] sl = (Var dx,sm) /\ fn_has_code sl sm func /\
-  stmt_state_rel ctx func cenv cx es s /\
-  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sl /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv H dep cenv cx es G tn s /\ local_ptrs_reserved cenv sl /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sl z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sl z) /\
   s.vs_current_bb = sl.cs_current_bb /\
@@ -256,26 +256,26 @@ Theorem raw_call_add_header_stage:
   not_fresh_at sl x /\ not_fresh_at sl lx /\
   eval_operand (Var x) s = SOME w /\ op_taint tn (Var x) = {} /\
   eval_operand (Var lx) s = SOME len /\ op_taint tn (Var lx) = {} ==>
-  ?H un u. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK u) /\
-    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sl G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sl s u /\
+  ?HG un u. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
+    ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sl G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sl s u /\
     u.vs_current_bb = sm.cs_current_bb /\
     u.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~u.vs_halted /\
     eval_operand (Var x) u = SOME w /\ op_taint un (Var x) = {} /\
     eval_operand (Var lx) u = SOME len /\ op_taint un (Var lx) = {} /\
     eval_operand (Var dx) u = SOME (w+32w) /\ op_taint un (Var dx) = {} /\
-    op_prov H (Var dx) = op_prov G (Var x) /\
+    op_prov HG (Var dx) = op_prov G (Var x) /\
     u.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem
 Proof
   strip_tac >>
   `op_taint tn (Lit 32w) = {} /\ eval_operand (Lit 32w) s = SOME 32w` by
     simp[ptrDisciplineTheory.op_taint_def, venomStateTheory.eval_operand_def] >>
   drule_all raw_call_emit_add_path_ptr >>
-  disch_then (qspecl_then [`PG`, `G`, `cx_dead cx`] assume_tac) >>
-  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ H un (OK u)` >>
-  `ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sl G tn s H un` by
+  disch_then (qspecl_then [`PG`, `G`, `cx_dead H cx`] assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ HG un (OK u)` >>
+  `ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sl G tn s HG un` by
     (qunabbrev_tac `u` >> irule raw_call_emit_add_ghost_frame >>
-     goal_assum (drule_at Any) >> simp[Abbr `H`, Abbr `un`] >>
+     goal_assum (drule_at Any) >> simp[Abbr `HG`, Abbr `un`] >>
      qexistsl_tac [`PG`, `Var x`, `Lit 32w`] >> simp[]) >>
   `~not_fresh_at sl dx /\ sm.cs_current_bb = sl.cs_current_bb` by
     (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
@@ -284,18 +284,18 @@ Proof
        compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
        compileEnvTheory.comp_return_def] >> rpt strip_tac >> gvs[] >>
      fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
-  `op_prov H (Var dx) = op_prov G (Var x)` by
+  `op_prov HG (Var dx) = op_prov G (Var x)` by
     (Cases_on `FLOOKUP G x` >>
-     simp[Abbr `H`, Abbr `u`, ptrDisciplineTheory.step_prov_def,
+     simp[Abbr `HG`, Abbr `u`, ptrDisciplineTheory.step_prov_def,
       ptrDisciplineTheory.out_prov_def, ptrDisciplineTheory.set_prov_def,
       ptrDisciplineTheory.first_prov_def, ptrDisciplineTheory.op_prov_def,
       venomInstTheory.mk_inst_def, finite_mapTheory.FLOOKUP_UPDATE,
       finite_mapTheory.FLOOKUP_DRESTRICT]) >>
   `x <> dx /\ lx <> dx` by metis_tac[] >>
-  `stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sl s u` by
+  `stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sl s u` by
     (qunabbrev_tac `u` >> irule raw_call_fresh_update_state_frame >>
      goal_assum (drule_at Any) >> simp[]) >>
-  qexistsl_tac [`H`, `un`, `u`] >> simp[] >>
+  qexistsl_tac [`HG`, `un`, `u`] >> simp[] >>
   simp[Abbr `u`, Abbr `un`,
     decoderGhostFramePtrTheory.step_taint_other_output,
     typedCopyPtrTheory.copy_len_binop_ghost_frame,
@@ -308,8 +308,8 @@ QED
 Theorem raw_call_header_two_steps:
   emit_op MLOAD [Var x] sa = (Var lx,sl) /\
   emit_op ADD [Var x; Lit 32w] sl = (Var dx,sm) /\ fn_has_code sa sm func /\
-  stmt_state_rel ctx func cenv cx es s /\
-  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv H dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -318,17 +318,17 @@ Theorem raw_call_header_two_steps:
   ptr_covers G tn x s 32 /\ lookup_var x s = SOME w /\
   op_taint tn (Var x) = {} /\
   (!i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem) ==>
-  ?H un u. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK u) /\
-    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
+  ?HG un u. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
+    ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sm.cs_current_bb /\
     u.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~u.vs_halted /\
     eval_operand (Var x) u = SOME w /\ op_taint un (Var x) = {} /\
     eval_operand (Var lx) u = SOME (mload (w2n w) s) /\ op_taint un (Var lx) = {} /\
     eval_operand (Var dx) u = SOME (w+32w) /\ op_taint un (Var dx) = {} /\
     u.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem /\
-    FLOOKUP H x = FLOOKUP G x /\
-    op_prov H (Var dx) = op_prov G (Var x) /\
+    FLOOKUP HG x = FLOOKUP G x /\
+    op_prov HG (Var dx) = op_prov G (Var x) /\
     not_fresh_at sm x /\ not_fresh_at sm lx /\ not_fresh_at sm dx
 Proof
   strip_tac >>
@@ -358,22 +358,22 @@ Proof
 QED
 
 Resume raw_call_header_two_steps[compose]:
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H' un' (OK u')` by
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG' un' (OK u')` by
     (drule_all fragGasPathPtrTheory.gas_path_ptr_then >> simp[]) >>
   `wb_frame cenv es es sa s u'` by
     (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s`, `sa`, `es`, `es`, `sl`, `u`, `u'`,
        `ctx`] exprSimWordArgsTheory.wb_frame_trans) >> impl_tac >>
      fs[exprLoweringPropsTheory.ci_mono_def]) >>
-  `ghost_kept cenv es sa G tn s H' un'` by
+  `ghost_kept cenv es sa G tn s HG' un'` by
     (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
      >- (qexists_tac `func` >>
          fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
-     qexistsl_tac [`H`, `es`, `es`, `u`, `sl`, `un`] >>
+     qexistsl_tac [`HG`, `es`, `es`, `u`, `sl`, `un`] >>
      fs[exprLoweringPropsTheory.ci_mono_def]) >>
-  `op_prov H' (Var dx) = op_prov G (Var x)` by
+  `op_prov HG' (Var dx) = op_prov G (Var x)` by
     (fs[ptrDisciplineTheory.op_prov_def, bodyPtrDefsTheory.ghost_kept_def] >>
      metis_tac[]) >>
-  qexistsl_tac [`H'`, `un'`, `u'`] >> simp[] >>
+  qexistsl_tac [`HG'`, `un'`, `u'`] >> simp[] >>
   conj_tac
   >- (fs[venomStateTheory.eval_operand_def] >>
       irule exprSimWordArgsTheory.wb_frame_vars >>
@@ -382,7 +382,7 @@ Resume raw_call_header_two_steps[compose]:
   >- (qpat_x_assum `ghost_kept _ _ sl _ _ _ _ _` mp_tac >>
       simp[bodyPtrDefsTheory.ghost_kept_def] >> metis_tac[]) >>
   conj_tac
-  >- (qpat_x_assum `ghost_kept _ _ sa G tn s H' un'` mp_tac >>
+  >- (qpat_x_assum `ghost_kept _ _ sa G tn s HG' un'` mp_tac >>
       simp[bodyPtrDefsTheory.ghost_kept_def] >> metis_tac[]) >>
   conj_tac
   >- metis_tac[stmtFragPtrTheory.not_fresh_at_mono,

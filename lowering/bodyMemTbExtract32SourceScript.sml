@@ -7,7 +7,7 @@ Ancestors
   words arithmetic exprLowering compileEnv
 
 Theorem extract32_source_post_view:
-  expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
   expr_store_bound cx (expr_type e) (BytesV bs) op s ==>
@@ -59,7 +59,7 @@ Proof
 QED
 
 Theorem extract32_saved_interval_post:
-  expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+  expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
   not_fresh_at sa len_name /\ not_fresh_at sa data_name /\
   lookup_var len_name s0 = SOME len /\
   lookup_var data_name s0 = SOME data /\

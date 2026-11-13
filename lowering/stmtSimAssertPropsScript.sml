@@ -119,11 +119,11 @@ Proof
 QED
 
 Theorem assert_success_post:
-  expr_post ctx func cenv cx e es sa s1 s0 ee (BoolV T) op t /\
+  expr_post H ctx func cenv cx e es sa s1 s0 ee (BoolV T) op t /\
   ~t.vs_halted /\ sb.cs_current_insts = [] /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM ee.scopes = MAP FDOM es.scopes ==>
-  stmt_post ctx func cx lctx cenv cenv sa sb es s0 (INL ()) ee
+  stmt_post H ctx func cx lctx cenv cenv sa sb es s0 (INL ()) ee
     (jump_to sb.cs_current_bb t)
 Proof
   strip_tac >>
@@ -137,7 +137,7 @@ Proof
 QED
 
 Theorem assert_success_post_mem:
-  expr_post ctx func cenv cx e es sa s1 s0 ee (BoolV T) op t /\
+  expr_post H ctx func cenv cx e es sa s1 s0 ee (BoolV T) op t /\
   ~t.vs_halted /\ sb.cs_current_insts = [] /\
   sa.cs_next_var <= sb.cs_next_var /\
   return_buf_frame d cenv sa s0 /\ alloca_history func t /\
@@ -147,7 +147,8 @@ Theorem assert_success_post_mem:
     ~(jump_to sb.cs_current_bb t).vs_halted /\
     (~block_is_terminated sb /\ cenv'' = cenv) /\
     cenv_top_ext cenv cenv'' ee.scopes /\
-    stmt_state_rel ctx func cenv'' cx ee (jump_to sb.cs_current_bb t) /\
+    stmt_state_rel H ctx func cenv'' cx ee (jump_to sb.cs_current_bb t) /\
+    storage_well_formed_on cx ee (FST H) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
       lookup_var x (jump_to sb.cs_current_bb t) = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>

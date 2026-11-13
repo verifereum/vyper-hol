@@ -4,7 +4,7 @@ Ancestors
   bodyPtrMakeArrayExternalAggregateProbe loweringPosts exprLowering context compileEnv
 
 Theorem unwrap_external_calldata_excluded:
-  vv_post ctx func ce cx e es sa sb s0 es' raw (LocatedValue t p) s ==>
+  vv_post H ctx func ce cx e es sa sb s0 es' raw (LocatedValue t p) s ==>
   p.ptr_location <> LocCalldata
 Proof
   Cases_on `p.ptr_location` >> simp[vv_post_def, vv_holds_def]

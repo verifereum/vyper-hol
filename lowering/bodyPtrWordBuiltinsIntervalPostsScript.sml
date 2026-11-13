@@ -26,15 +26,15 @@ Proof
 QED
 
 Theorem word_interval_snapshot_ghost_inv:
-  ghost_inv d (FST word_interval_start) cx es G tn s ==>
-  ghost_inv d (FST word_interval_start) cx es
+  ghost_inv H d (FST word_interval_start) cx es G tn s ==>
+  ghost_inv H d (FST word_interval_start) cx es
     (DRESTRICT (DRESTRICT G (COMPL {"%5"})) (COMPL {"%6"}))
     (tn with t_var := set_var_taint (set_var_taint tn.t_var ["%5"] {}) ["%6"] {})
     (jump_to "@exit_2" (update_var "%6" w
       (jump_to l ((update_var "%5" v s) with vs_inst_idx := 8))))
 Proof
   strip_tac >>
-  `ghost_inv d (FST word_interval_start) cx es
+  `ghost_inv H d (FST word_interval_start) cx es
     (DRESTRICT G (COMPL {"%5"}))
     (tn with t_var := set_var_taint tn.t_var ["%5"] {})
     (update_var "%5" v s)` by
@@ -81,7 +81,7 @@ Theorem word_interval_operand_framed_path:
   eval_operand (Var "%0") s = SOME a /\
   mload (w2n a) s = (if b then 1w else 0w) /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-  ghost_inv d (FST word_interval_start) cx es G tn s /\
+  ghost_inv H d (FST word_interval_start) cx es G tn s /\
   ghost_kept (FST word_interval_start) es (SND word_interval_start) G0 tn0 s0 G tn /\
   lookup_scopes "b" es.scopes = SOME entry /\
   read_place cx (MemoryPlace "b" []) es = (INL (BoolV b), es) ==>
@@ -89,7 +89,7 @@ Theorem word_interval_operand_framed_path:
     t.vs_current_bb = "@exit_2" /\ t.vs_inst_idx = 0 /\
     lookup_var "%6" t = SOME (if b then 1w else 2w) /\
     op_prov G' (Var "%6") = NONE /\
-    ghost_inv d (FST word_interval_start) cx es G' tn' t /\
+    ghost_inv H d (FST word_interval_start) cx es G' tn' t /\
     ghost_kept (FST word_interval_start) es (SND word_interval_start) G0 tn0 s0 G' tn' /\
     eval_expr cx
       (IfExp (BaseT (IntT 256)) (Name (BaseT BoolT) "b")

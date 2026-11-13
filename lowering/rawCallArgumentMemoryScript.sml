@@ -4,6 +4,7 @@ Ancestors
   rawCallSuffixMemory bodyMemRawCallBounds exprSimRawCall exprSimMemDefs
   bodyMemoryPreds gasOutcome exprSimDefs exprSimProps loweringPosts exprLoweringProps
   compileEnv venomState vyperInterpreter vyperState bodyArgsMemory exprSimWordArgs
+  vyperStorageFootprint vyperStorageTrace gasStorage
 
 Theorem raw_call_mem_value_bind:
   expr_sim_mem ctx func cenv cx ty e es /\
@@ -11,29 +12,50 @@ Theorem raw_call_mem_value_bind:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H)) /\
+  alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r ==> R H (INR exc) ee r) /\
+  (!v. storage_trace_frame (k v)) /\
   (!gs v ee t.
     bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
-    ee.gas_obs = [] /\ expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
-    expr_store_bound cx (expr_type e) v op t /\
-    t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\ ~t.vs_halted ==>
-    gas_outcome T (cx_tops cx) (ctx,func) (k v) (ee,t) Q R) ==>
-  gas_outcome T (cx_tops cx) (ctx,func)
+    ee.gas_obs = [] /\ (?H. valid_horizon cx st0 H ee.storage_trace) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
+      expr_store_bound cx (expr_type e) v op t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+      ~t.vs_halted) ==>
+    gas_outcome T (cx_tops cx) (ctx,func) cx st0 (k v) (ee,t) Q R) ==>
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx)) k) (es,s0) Q R
 Proof
   strip_tac >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[expr_sim_mem_def] >> disch_then drule_all >> strip_tac >>
+  rewrite_tac[expr_sim_mem_def] >>
+  disch_then (qspecl_then [`st0`,`sa`,`sb`,`op`,`s0`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  strip_tac >>
   drule raw_call_outcome_normal >> strip_tac >>
   irule raw_call_value_outcome_bind >> goal_assum (drule_at Any) >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> Cases_on `rr` >> gvs[expr_exit_def] >> metis_tac[]) >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
+  rpt conj_tac
+  >- (rpt strip_tac >> Cases_on `rr` >> gvs[expr_exit_def] >> metis_tac[])
+  >- (rpt strip_tac >> fs[] >> metis_tac[])
+  >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >>
+  qpat_x_assum `!gs v ee t. _ ==> gas_outcome _ _ _ _ _ _ _ _ _`
+    (qspecl_then [`gs`,`v`,`ee`,`t`] mp_tac) >>
+  (impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     rpt strip_tac >>
+     qpat_x_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> _`
+       (drule_then (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
+     simp[])) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem raw_call_data_prefix_code[local]:
@@ -94,19 +116,22 @@ Theorem raw_call_kwargs_sim_mem[local]:
   wb_args_shape cenv (K (BaseT (UintT 256))) es /\
   compile_ext_call_kwargs compile_expr cenv NoneT ks es sa = ((vo,go,d),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx st s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H st.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx st s0 /\
+    storage_well_formed_on cx st (FST H)) /\
+  alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx es) (st,s0)
-    (\rr ee s. ?xs vs. rr = INL vs /\
-      typed_args_post ctx func cenv cx st sa s0 ee es xs vs s /\
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx es) (st,s0)
+    (\H rr ee s. ?xs vs. rr = INL vs /\
+      typed_args_post H ctx func cenv cx st sa s0 ee es xs vs s /\
       lower_word_args cenv (K (BaseT (UintT 256))) es sa = (xs,sb) /\
       vo = ext_call_kwarg EKValue ks xs /\
       go = ext_call_kwarg EKGas ks xs /\ d = NONE /\
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next)
-    (\rr ee r. wb_args_exit rr r)
+    (\H rr ee r. wb_args_exit rr r)
 Proof
   strip_tac >> drule_all raw_call_kwargs_word_args >> strip_tac >>
   drule_all lower_typed_args_sim_mem >> strip_tac >>
@@ -121,27 +146,46 @@ Theorem raw_call_kwargs_mem_bind:
   wb_args_shape cenv (K (BaseT (UintT 256))) args /\
   compile_ext_call_kwargs compile_expr cenv NoneT ks args sa = ((vo,go,d),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H)) /\
+  alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee r. wb_args_exit (INR exc) r ==> R (INR exc) ee r) /\
+  (!H exc ee r. wb_args_exit (INR exc) r ==> R H (INR exc) ee r) /\
+  (!vs. storage_trace_frame (k vs)) /\
   (!gs vs ee t xs.
     eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee) /\ ee.gas_obs = [] /\
-    typed_args_post ctx func cenv cx es sa s0 ee args xs vs t /\
+    (?H. valid_horizon cx st0 H ee.storage_trace) /\
     lower_word_args cenv (K (BaseT (UintT 256))) args sa = (xs,sb) /\
     vo = ext_call_kwarg EKValue ks xs /\ go = ext_call_kwarg EKGas ks xs /\ d = NONE /\
-    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next ==>
-    gas_outcome T (cx_tops cx) (ctx,func) (k vs) (ee,t) Q R) ==>
-  gas_outcome T (cx_tops cx) (ctx,func) (bind (eval_exprs cx args) k) (es,s0) Q R
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      typed_args_post H ctx func cenv cx es sa s0 ee args xs vs t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next) ==>
+    gas_outcome T (cx_tops cx) (ctx,func) cx st0 (k vs) (ee,t) Q R) ==>
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
+    (bind (eval_exprs cx args) k) (es,s0) Q R
 Proof
-  strip_tac >> drule_all raw_call_kwargs_sim_mem >>
+  strip_tac >>
+  drule_all raw_call_kwargs_word_args >> strip_tac >>
+  drule_all raw_call_kwargs_sim_mem >>
   disch_then (mp_tac o MATCH_MP raw_call_outcome_normal) >> disch_tac >>
   irule raw_call_values_outcome_bind >> goal_assum (drule_at Any) >>
-  conj_tac
+  rpt conj_tac
   >- (rpt gen_tac >> Cases_on `rr` >> simp[wb_args_exit_def] >>
-      metis_tac[wb_args_exit_def]) >>
-  conj_tac >- (simp[] >> metis_tac[]) >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
+      metis_tac[wb_args_exit_def])
+  >- (rpt strip_tac >> fs[] >> metis_tac[])
+  >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >>
+  qpat_x_assum `!gs vs ee t xs. _ ==> gas_outcome _ _ _ _ _ _ _ _ _`
+    (qspecl_then [`gs`,`v`,`ee`,`t`,`xs`] mp_tac) >>
+  (impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (simp[] >> NO_TAC) >>
+     rpt strip_tac >>
+     first_assum (drule_then (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
+     gvs[])) >>
+  disch_then ACCEPT_TAC
 QED

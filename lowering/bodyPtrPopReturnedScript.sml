@@ -6,8 +6,8 @@ Ancestors
 
 (* Extent is demanded only when an actual selected tainted byte exists. *)
 Theorem pop_last_child_taint_header:
-  storage_read_live cx tr st hdr (ArrayTV tv (Dynamic n)) /\
-  X SUBSET {(k,b) | storage_dead cx tr st (w2n k) b} /\
+  storage_read_live H tr st hdr (ArrayTV tv (Dynamic n)) /\
+  X SUBSET {(k,b) | storage_dead H tr st (w2n k) b} /\
   len = w2n (lookup_storage hdr st) /\ 0 < len /\ len <= n /\
   elem = hdr + n2w (1 + (len - 1) * type_slot_size tv) ==>
   pop_region_taint_ok (update_storage hdr u st) (w2n elem) tv
@@ -17,7 +17,7 @@ Proof
   Cases_on `type_slot_size tv = 0`
   >- simp[pop_region_taint_ok_def] >>
   rewrite_tac[pop_region_taint_ok_def] >> rpt gen_tac >> strip_tac >>
-  `storage_dead cx tr st (w2n k) b` by
+  `storage_dead H tr st (w2n k) b` by
     (qpat_x_assum `_ SUBSET _` mp_tac >> simp[SUBSET_DEF] >>
      disch_then (qspec_then `(k,b)` mp_tac) >>
      gvs[ptrDisciplineTheory.key_update_def]) >>
@@ -27,7 +27,7 @@ Proof
   `w2n elem + type_slot_size tv <= dimword (:256) /\
    w2n hdr < w2n elem` by
     (drule_all pop_array_last_bounds >> gvs[]) >>
-  `storage_read_live cx tr st elem tv` by
+  `storage_read_live H tr st elem tv` by
     (drule pop_live_dynamic_element >>
      disch_then (qspec_then `len - 1` mp_tac) >>
      impl_tac >- simp[] >>
@@ -53,9 +53,9 @@ Proof
 QED
 
 Theorem pop_declared_returned_place:
-  expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
+  expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es s /\
   declared_storage_region cx mid id [] = SOME (tr,hdr,ArrayTV tv (Dynamic n)) /\
-  stor_taint_ok cx tn s /\
+  stor_taint_ok H cx tn s /\
   raw = (if tr then s.vs_transient s.vs_call_ctx.cc_address
          else (s.vs_accounts s.vs_call_ctx.cc_address).storage) /\
   len = w2n (lookup_storage hdr raw) /\ 0 < len /\
@@ -77,13 +77,13 @@ Proof
      disch_then assume_tac >> drule pop_array_length_bound >> strip_tac >>
      `0 < type_slot_size (ArrayTV tv (Dynamic n))` by simp[type_slot_size_def] >>
      drule_all pop_declared_header_agree >> strip_tac >> gvs[] >> metis_tac[]) >>
-  `storage_read_live cx tr raw hdr (ArrayTV tv (Dynamic n))` by
+  `storage_read_live H tr raw hdr (ArrayTV tv (Dynamic n))` by
     metis_tac[declared_storage_region_read_live] >>
   `s.vs_call_ctx.cc_address = cx.txn.target` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
        loweringStateRelDefsTheory.call_ctx_rel_def] >>
   `(if tr then tn.t_trans else tn.t_stor) SUBSET
-     {(k,b) | storage_dead cx tr raw (w2n k) b}` by
+     {(k,b) | storage_dead H tr raw (w2n k) b}` by
     (Cases_on `tr` >>
      gvs[stor_taint_ok_def, cx_dead_def]) >>
   irule pop_last_child_taint_header >>
