@@ -867,7 +867,15 @@ QED
 
 Finalise unwrap_code_word_origin_ptr
 
-(* Word forcing needs only the clean identity and word-load cases. *)
+(* unwrap_value at a word result type: a stack operand, or one word load
+   from memory, storage, transient storage or code.  The aggregate copies
+   don't arise, so this needs no copy loop. *)
+val WORD_PIECE_TAC = fn th =>
+  mp_tac th >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >> NO_TAC) >>
+  disch_then ACCEPT_TAC;
+
 Theorem unwrap_word_value_origin_ptr:
   is_word_type (post_value_type cenv e) /\
   compile_expr cenv ty e sa = (vv,sm) /\
@@ -939,33 +947,36 @@ Theorem unwrap_word_value_origin_ptr:
 Proof
   strip_tac >> Cases_on `vv`
   >- (rename1 `StackValue t0 op0` >>
-      mp_tac (Q.INST [`vv` |-> `StackValue t0 op0`] unwrap_stack_origin_ptr) >>
-      impl_tac
-      >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >> NO_TAC) >>
-      disch_then ACCEPT_TAC) >>
+      WORD_PIECE_TAC (Q.INST [`vv` |-> `StackValue t0 op0`] unwrap_stack_origin_ptr)) >>
   rename1 `LocatedValue t p` >>
-  `t = post_value_type cenv e` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-       (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
-     impl_tac >- fs[storage_trace_domain_def] >>
-     simp[vv_post_def, vv_holds_def] >>
-     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
-  `is_word_type t` by metis_tac[] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  impl_tac >- fs[storage_trace_domain_def] >>
+  strip_tac >>
   Cases_on `p.ptr_location = LocCalldata`
-  >- (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-        (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
-      impl_tac >- fs[storage_trace_domain_def] >>
+  >- (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
       simp[vv_post_calldata]) >>
+  `is_word_type t` by
+    (`!t. is_bytestring_type t ==> ~is_word_type t` by
+       (Cases >> simp[is_bytestring_type_def] >>
+        rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_bytestring_type_def] >>
+        TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+        simp[is_bytestring_type_def, is_word_type_def]) >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+     qpat_x_assum `vv_holds _ _ _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [vv_holds_def]) >>
+     strip_tac
+     >- (qpat_x_assum `t = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+     qpat_x_assum `!t. is_bytestring_type t ==> _`
+       (qspec_then `post_value_type cenv e` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (fn th => qpat_x_assum `is_word_type (post_value_type cenv e)`
+                            (mp_tac o REWRITE_RULE [th])) >>
+     simp[]) >>
   Cases_on `p.ptr_location` >>
-  TRY (qpat_x_assum `p.ptr_location = LocCalldata`
-         (fn th => qpat_x_assum `p.ptr_location <> _`
-                     (mp_tac o REWRITE_RULE [th])) >> simp[]) >>
   TRY (qpat_x_assum `LocCalldata <> LocCalldata` mp_tac >> simp[] >> NO_TAC) >>
-  FIRST (map (fn th =>
-    mp_tac (Q.INST [`vv` |-> `LocatedValue t p`] th) >>
-    impl_tac
-    >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >> NO_TAC) >>
-    disch_then ACCEPT_TAC)
+  FIRST (map (fn th => WORD_PIECE_TAC (Q.INST [`vv` |-> `LocatedValue t p`] th))
     [unwrap_memory_word_origin_ptr, unwrap_slot_word_origin_ptr,
      unwrap_code_word_origin_ptr])
 QED
