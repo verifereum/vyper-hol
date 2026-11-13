@@ -10,6 +10,7 @@
  *)
 Theory symFrameInvoke
 Ancestors
+  symPostfixSim
   symFnSimSpec codegenSymRel fnFrameDeepInvoke asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
@@ -71,20 +72,6 @@ Proof
      drule_at (Pat `MEM inst (fn_insts fn)`)
        frameViewFactsTheory.noncopy_output_not_retpc >> simp[]) >>
   simp[op_kind_ok_def]
-QED
-
-Theorem mem_sval_at_range_cong:
-  (!b. in_mem_range off 32 b ==> FLOOKUP m b = FLOOKUP m' b) ==>
-  (mem_sval_at m off sv <=> mem_sval_at m' off sv)
-Proof
-  strip_tac >>
-  `FLOOKUP m off = FLOOKUP m' off /\
-   !i. MEM i (COUNT_LIST 32) ==>
-       FLOOKUP m (off + i) = FLOOKUP m' (off + i)` by
-    gvs[in_mem_range_def, rich_listTheory.MEM_COUNT_LIST] >>
-  Cases_on `sv` >>
-  simp[mem_sval_at_def, mem_label_at_def, EVERY_MEM,
-       GSYM (cj 1 finite_mapTheory.flookup_thm)] >> metis_tac[]
 QED
 
 Theorem sym_invoke_external_labels_preserved:
@@ -165,22 +152,6 @@ Proof
        sym_step_op_def, sym_jump_def, sym_jump_dest_def, asm_next_def]
 QED
 
-Theorem sym_invoke_prefix_frame_transport:
-  !p env ctx cp fn ret srest labs0 ps cs ss ps' cs' ss' r.
-  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
-  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
-  asm_sym_rel p env cs' ss' /\ sym_kinds_ok cp fn ret srest ps' ss' /\
-  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
-       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
-  sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss'
-Proof
-  rw[sym_frame_inv_def] >>
-  `~(r.sr_spill_base <= b /\ b < r.sr_spill_end)` by
-    (strip_tac >> gvs[closure_spill_byte_def, fcgDefsTheory.fcg_path_def] >>
-     metis_tac[relationTheory.RTC_REFL]) >>
-  metis_tac[]
-QED
-
 Theorem sym_invoke_prefix_pair:
   !lo o2pc p env ctx cp fn ret srest labs0 ps cs ss r n cs' ss' ps'.
   lo = SND (compute_label_offsets p) /\ o2pc = build_offset_to_pc p /\
@@ -197,7 +168,7 @@ Proof
   rpt strip_tac >>
   `asm_sym_rel p env cs' ss'` by
     (gvs[sym_frame_inv_def] >> drule_all asm_sym_steps_lockstep >> simp[]) >>
-  drule_all sym_invoke_prefix_frame_transport >> simp[]
+  drule_all sym_frame_inv_region_transfer >> simp[]
 QED
 
 Theorem sym_invoke_selected_frame_prefix:
@@ -412,7 +383,7 @@ Proof
   `!b. in_mem_range off 32 b ==>
        FLOOKUP ssr.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b` by
     metis_tac[sym_invoke_caller_spill_labels_preserved] >>
-  drule mem_sval_at_range_cong >>
+  drule mem_sval_at_cong >>
   gvs[sym_kinds_ok_def] >> metis_tac[]
 QED
 
@@ -452,18 +423,10 @@ Proof
        asm_op_arity_table_def, log_table_def,
        asm_next_def, asm_op_mem_reads_def, asm_op_mem_writes_def,
        mem_labels_hit_def, Excl "GENLIST_NUMERALS", mem_sval_at_store_label,
-       mem_sval_at_clear, mem_labels_clear_lookup, mstore_labels_lookup,
+       mem_sval_at_clear, asmSymBridgeTheory.cleared_labels_lookup, mstore_labels_lookup,
        in_mem_range_def] >>
   pure_once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   simp[mem_sval_at_store_label, mstore_labels_lookup, Excl "GENLIST_NUMERALS"]
-QED
-
-Theorem mem_sval_at_word_no_label:
-  mem_sval_at labs off (Val w) ==> mem_label_at labs off = NONE
-Proof
-  rw[mem_sval_at_def] >>
-  `off NOTIN FDOM labs` by gvs[in_mem_range_def] >>
-  simp[mem_label_at_def, finite_mapTheory.FLOOKUP_DEF]
 QED
 
 Theorem sym_mload_slot_label:
@@ -483,7 +446,7 @@ Theorem sym_mload_slot_word:
     ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
     ss'.sym_mem_labels = ss.sym_mem_labels
 Proof
-  strip_tac >> drule mem_sval_at_word_no_label >> strip_tac >>
+  strip_tac >> drule symPlannerBaseTheory.mem_sval_at_val_no_label >> strip_tac >>
   simp[sym_mload_def, sym_step_concrete_def, asm_op_arity_def,
        asm_op_arity_table_def, sval_val_def, sym_lift_def,
        asmSemTheory.asm_step_op_def, asmSemTheory.asm_step_arith_def,
@@ -495,19 +458,6 @@ Proof
   `~?i. i IN FDOM ss.sym_mem_labels /\ in_mem_range off 32 i` by metis_tac[] >>
   simp[] >> simp[finite_mapTheory.fmap_eq_flookup,
                   finite_mapTheory.FLOOKUP_DRESTRICT]
-QED
-
-Theorem sym_scratch_push:
-  off < dimword (:256) ==>
-  sym_step p env (AsmPush (encode_num_bytes off)) ss =
-  SymOK (ss with <| sym_base := asm_next (ss.sym_base with as_stack := []);
-                   sym_stack := Val (n2w off) :: ss.sym_stack |>)
-Proof
-  strip_tac >>
-  `word_of_bytes F (0w:bytes32) (REVERSE (encode_num_bytes off)) = n2w off` by
-    (mp_tac (Q.SPEC `n2w off` (GEN_ALL strongPrefixSimTheory.push_encode_roundtrip)) >> simp[]) >>
-  simp[sym_step_def, stackOpAsmSimTheory.asm_step_push_ok, sym_lift_def,
-       asm_next_def, sym_state_component_equality]
 QED
 
 Theorem sym_scratch_spill:
@@ -591,7 +541,7 @@ Proof
   strip_tac >>
   `!b. in_mem_range off 32 b ==>
     FLOOKUP last.sym_mem_labels b = FLOOKUP mid.sym_mem_labels b` by metis_tac[] >>
-  `mem_sval_at last.sym_mem_labels off sv` by metis_tac[mem_sval_at_range_cong] >>
+  `mem_sval_at last.sym_mem_labels off sv` by metis_tac[mem_sval_at_cong] >>
   reverse conj_tac >- (simp[] >> metis_tac[]) >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >> simp[sym_steps_add]
 QED
@@ -658,12 +608,6 @@ Proof
   drule sym_scratch_spills_cons >> simp[]
 QED
 
-Theorem op_kind_ok_word_replace:
-  op_kind_ok fn ret op (Val w) ==> op_kind_ok fn ret op (Val v)
-Proof
-  Cases_on `op` >> simp[op_kind_ok_def] >> rpt strip_tac >> gvs[AllCaseEqs()]
-QED
-
 Theorem sym_scratch_restore_kind:
   asm_block_at p ss.sym_base.as_pc
     [AsmPush (encode_num_bytes off); AsmOp "MLOAD"] /\
@@ -677,7 +621,7 @@ Proof
   Cases_on `sv` >> strip_tac
   >- (drule_all sym_scratch_restore_word >>
       disch_then (qspec_then `env` strip_assume_tac) >>
-      metis_tac[op_kind_ok_word_replace]) >>
+      metis_tac[op_kind_ok_val_retype]) >>
   drule_all sym_scratch_restore_label >>
   disch_then (qspec_then `env` strip_assume_tac) >> metis_tac[]
 QED
@@ -837,7 +781,7 @@ Theorem sym_scratch_preserves_spilled_kind:
   op_kind_ok fn ret op sv /\ mem_sval_at labs old sv ==>
   op_kind_ok fn ret op sv /\ mem_sval_at labs' old sv
 Proof
-  strip_tac >> irule_at Any (iffRL mem_sval_at_range_cong) >> metis_tac[]
+  strip_tac >> irule_at Any (iffRL mem_sval_at_cong) >> metis_tac[]
 QED
 
 Theorem sym_scratch_preserves_label_domain:
@@ -1067,28 +1011,6 @@ Proof
   metis_tac[arithmeticTheory.GREATER_DEF, arithmeticTheory.NOT_LESS]
 QED
 
-Theorem sym_pop_numeric:
-  n <= LENGTH ps.ps_stack /\
-  sym_kinds_ok cplan fn ret srest ps ss /\
-  asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SOPop n]) ==>
-  ?ss'. sym_steps p env (LENGTH (execute_plan fmp [SOPop n])) ss = SymOK ss' /\
-    sym_kinds_ok cplan fn ret srest
-      (ps with ps_stack := stack_pop n ps.ps_stack) ss' /\
-    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp [SOPop n]) /\
-    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
-Proof
-  strip_tac >>
-  `?ss'. sym_steps p env (LENGTH (execute_plan fmp [SOPop n])) ss = SymOK ss' /\
-    sym_kinds_ok cplan fn ret srest (apply_prefix_ops fmp FEMPTY [SOPop n] ps) ss' /\
-    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp [SOPop n]) /\
-    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)` by
-    (irule sym_prefix_ops_sim >>
-     simp[prefix_wf_def, stack_op_wf_def, prefix_spill_wf_def, spill_op_wf_def,
-       prefixSimTheory.is_prefix_op_def]) >>
-  gvs[apply_prefix_ops_def, apply_prefix_op_def,
-    strongPrefixSimTheory.apply_simple_op_def, stackModelTheory.stack_pop_def]
-QED
-
 Theorem sym_swap_pop_numeric:
   do_swap dist ps = (swaps, swapped) /\ dist < LENGTH ps.ps_stack /\
   n <= LENGTH ps.ps_stack /\
@@ -1112,9 +1034,9 @@ Proof
   `n <= LENGTH swapped.ps_stack` by metis_tac[planWfTheory.do_swap_length, pairTheory.SND] >>
   `asm_block_at p ss'.sym_base.as_pc (execute_plan fmp [SOPop n])` by
     metis_tac[arithmeticTheory.ADD_COMM] >>
-  drule_all sym_pop_numeric >>
+  drule_all symShuffleSimTheory.sym_pop_numeric >>
   disch_then (qspecl_then [`env`, `R`] strip_assume_tac) >>
-  qexists_tac `ss''` >> conj_tac
+  qexists_tac `out` >> conj_tac
   >- simp[Once sym_steps_add] >>
   simp[] >> metis_tac[]
 QED
@@ -1361,14 +1283,6 @@ Proof
   irule sym_do_swap_numeric >> simp[] >> metis_tac[planAlignTheory.stack_get_depth_bound]
 QED
 
-Theorem sym_kinds_release_dead_spills:
-  sym_kinds_ok cplan fn ret srest ps ss ==>
-  sym_kinds_ok cplan fn ret srest (release_dead_spills nl ps) ss
-Proof
-  rw[sym_kinds_ok_def, fnPlanPrefixTheory.release_dead_spills_stack] >>
-  metis_tac[fnFrameStepsRevertForwardTheory.rf_release_spill_lookup]
-QED
-
 Theorem sym_invoke_cleanup_pops_numeric:
   (if outs = [] then ([],called)
    else if ~halting \/ LENGTH outs > 1 then
@@ -1457,7 +1371,7 @@ Proof
      disch_then (qspec_then `env` strip_assume_tac) >> simp[]) >>
   qexists_tac `fin` >> conj_tac
   >- (once_rewrite_tac[arithmeticTheory.ADD_COMM] >> simp[Once sym_steps_add]) >>
-  metis_tac[sym_kinds_release_dead_spills, arithmeticTheory.ADD_ASSOC,
+  metis_tac[sym_kinds_ok_release_dead_spills, arithmeticTheory.ADD_ASSOC,
     arithmeticTheory.ADD_COMM]
 QED
 
