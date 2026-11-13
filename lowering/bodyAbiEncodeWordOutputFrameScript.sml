@@ -78,7 +78,7 @@ Proof
   fs[window_alloca_sites_def] >> metis_tac[]
 QED
 
-Theorem abi_encode_word_registered_phase[local]:
+Theorem abi_encode_word_registered_phase:
   window_phase ctx func st en {id} [(p,n)] s t /\
   FLOOKUP t.vs_allocas id = SOME (p,n) ==>
   window_phase ctx func st en {id} [] s t

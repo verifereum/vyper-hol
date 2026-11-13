@@ -88,3 +88,28 @@ Proof
   conj_tac >- metis_tac[abi_encode_word_stage_immutable_bytes] >>
   metis_tac[abi_encode_word_stage_immutable_bytes]
 QED
+
+Theorem abi_encode_singleton_wb_frame:
+  stmt_state_rel ctx func ce cx ee s /\ fn_inst_ids_distinct func /\
+  MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
+  not_local_ptr ce ee.scopes q /\ inst.inst_id = st.cs_next_id /\
+  window_phase ctx func st en {inst.inst_id} [] s t ==>
+  wb_frame ce ee st s t
+Proof
+  strip_tac >>
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `!name b sz. local_region ce ee.scopes s name b sz ==>
+    mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
+    metis_tac[abi_encode_word_stage_local_bytes] >>
+  simp[wb_frame_def] >> conj_tac >- metis_tac[window_phase_vars] >>
+  conj_tac >- metis_tac[window_phase_effect, abi_encoder_registered_effect_allocated] >>
+  reverse conj_tac >- metis_tac[locals_kept_regions] >>
+  rpt strip_tac >> irule window_alloca_growth_frame >>
+  drule window_phase_resources >> strip_tac >>
+  conj_tac >- metis_tac[allocaSiteResourceTheory.alloca_site_registered_below] >>
+  simp[] >> qexistsl [`{inst.inst_id}`, `[]`] >> simp[] >>
+  reverse conj_tac >- metis_tac[window_phase_effect] >>
+  rpt strip_tac >> gvs[] >>
+  `aid <> inst.inst_id` by decide_tac >>
+  metis_tac[allocaSiteResourceTheory.alloca_site_registered_disjoint]
+QED
