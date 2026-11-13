@@ -616,7 +616,7 @@ Finalise regular_abort_frame_prefix_deep
 
 (* In a static frame a state write Aborts only at the static check: its
    operands are defined, and a CALL's value is nonzero. *)
-Theorem step_inst_static_abort[local]:
+Theorem step_inst_static_abort:
   vs.vs_call_ctx.cc_static /\
   MEM inst.inst_opcode [SSTORE; TSTORE; SELFDESTRUCT; CALL; CREATE; CREATE2] /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
@@ -633,7 +633,7 @@ Proof
 QED
 
 (* The asm instruction a static frame's state write is emitted as faults. *)
-Theorem static_write_fault_step[local]:
+Theorem static_write_fault_step:
   !lo o2pc prog st name vals rest vs.
     asm_block_at prog st.as_pc [AsmOp name] /\
     st.as_stack = vals ++ rest /\ st.as_call_ctx.cc_static /\
@@ -801,7 +801,7 @@ QED
 Finalise gen_inst_ext_fault_frame_sim_deep
 
 (* A LOG step Aborts only at the static check. *)
-Theorem step_inst_log_abort[local]:
+Theorem step_inst_log_abort:
   inst.inst_opcode = LOG /\ inst_wf inst /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
   a = ExHalt_abort /\ vs' = halt_state (set_returndata [] vs) /\
@@ -816,7 +816,7 @@ Proof
 QED
 
 (* The LOGn a static frame's LOG is emitted as faults. *)
-Theorem static_log_fault_step[local]:
+Theorem static_log_fault_step:
   !lo o2pc prog st n vs.
     asm_block_at prog st.as_pc [AsmOp ("LOG" ++ num_to_dec_string n)] /\
     n <= 4 /\ n + 2 <= LENGTH st.as_stack /\ st.as_call_ctx.cc_static /\
