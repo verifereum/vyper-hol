@@ -1,7 +1,7 @@
 (* One-step inversion at a non-creation root. *)
 Theory frameRootTerminal
 Ancestors
-  frameGas vfmContextLength vfmRunCall vfmDecreasesGas vfmStoragePredicates
+  frameGas vfmContextLength vfmRunCall vfmDecreasesGas vfmStoragePredicates vfmWfState
   vfmExecution vfmExecutionProp vfmContext vfmState vfmTypes vfmHandleStep
   vfmStepLength vfmSameFrame vfmRunWithinFrame vfmStaticCalls
 
