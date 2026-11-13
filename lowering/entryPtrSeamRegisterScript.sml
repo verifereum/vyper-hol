@@ -27,7 +27,7 @@ Ancestors
   vyperCompiler moduleLoweringProps exprLoweringProps vyperInterpreter
   vyperContext venomExecSemantics venomState compileEnv loweringStateRelDefs supportedProgram
   fragExec venomInst ptrDiscipline ptrSafeRun vyperLoweringCorrect
-  loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
+  bodyPtrDefs moduleLowering venomWf
   list rich_list selectorDispatch byte contractABI vyperABIRoundtrip
   valueEncoding valueEncodingDefs entryDispatchProps ctorDeployInitcode abiCallerBuiltinInput compileVyper
   ctorDeployMemoryFrontier registrationSizeAdmissibility argumentRegistrationOpen

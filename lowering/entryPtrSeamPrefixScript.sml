@@ -28,7 +28,7 @@ Ancestors
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
   venomState compileEnv loweringStateRelDefs e2eDefs supportedProgram compileVyper fragExec
   venomInst contextCodegenRel ptrDiscipline ptrSafeRun vyperLoweringCorrect
-  loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
+  bodyPtrDefs moduleLowering venomWf
 
 Theorem vars_pc_only_gas_readings:
   !s t. vars_pc_only s t ==> t.vs_gas_readings = s.vs_gas_readings
