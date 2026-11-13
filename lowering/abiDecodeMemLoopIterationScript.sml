@@ -62,6 +62,8 @@ Theorem abi_decode_mem_loop_iteration:
        u.vs_inst_idx = k /\ eval_operand ip u = SOME p /\
        eval_operand src u = SOME (n2w sb) /\
        eval_operand base_op u = SOME (n2w B) /\
+       eval_operand dst u = SOME (n2w d) /\
+       eval_operand hi_op u = SOME (n2w H) /\
        mload slot u = n2w j /\ mload (B+sb) u = n2w ncount /\
        j <= ncount /\ B+H <= u.vs_alloca_next /\
        d+sz <= u.vs_alloca_next /\ slot+32 <= u.vs_alloca_next) in
@@ -72,12 +74,13 @@ Theorem abi_decode_mem_loop_iteration:
   abi_decode_position_loop_cfg fn hdr body_lbl exit_lbl hid ip src MLOAD base_op first /\
   lookup_block suffix_lbl fn.fn_blocks = SOME bb /\
   bb.bb_instructions = prefix ++ abi_decode_backedge_insts bid iv nv ip hdr /\
-  iv = STRING #"%" (toString first) /\ lo <= hi /\
+  lo <= hi /\
   ncount < dimword(:256) /\ B+H < dimword(:256) /\ sb+32 <= H /\
   d+sz < dimword(:256) /\ (slot+32 <= B \/ B+H <= slot) /\
   (!q. protected q ==> q+32 <= slot \/ slot+32 <= q) /\
   abi_decoder_operand_live first ip /\ abi_decoder_operand_live first src /\
   abi_decoder_operand_live first base_op /\
+  abi_decoder_operand_live first dst /\ abi_decoder_operand_live first hi_op /\
   (!op. abi_decoder_operand_live first op ==> op <> Var nv) /\
   (!j u. j < ncount /\ J j hdr 0 u ==>
     let b = jump_to body_lbl
@@ -238,6 +241,8 @@ Theorem abi_decode_mem_loop_zero:
        u.vs_inst_idx = k /\ eval_operand ip u = SOME p /\
        eval_operand src u = SOME (n2w sb) /\
        eval_operand base_op u = SOME (n2w B) /\
+       eval_operand dst u = SOME (n2w d) /\
+       eval_operand hi_op u = SOME (n2w H) /\
        mload slot u = n2w j /\ mload (B+sb) u = n2w ncount /\
        j <= ncount /\ B+H <= u.vs_alloca_next /\
        d+sz <= u.vs_alloca_next /\ slot+32 <= u.vs_alloca_next) in
@@ -248,12 +253,13 @@ Theorem abi_decode_mem_loop_zero:
   abi_decode_position_loop_cfg fn hdr body_lbl exit_lbl hid ip src MLOAD base_op first /\
   lookup_block suffix_lbl fn.fn_blocks = SOME bb /\
   bb.bb_instructions = prefix ++ abi_decode_backedge_insts bid iv nv ip hdr /\
-  iv = STRING #"%" (toString first) /\ lo <= hi /\
+  lo <= hi /\
   ncount < dimword(:256) /\ B+H < dimword(:256) /\ sb+32 <= H /\
   d+sz < dimword(:256) /\ (slot+32 <= B \/ B+H <= slot) /\
   (!q. protected q ==> q+32 <= slot \/ slot+32 <= q) /\
   abi_decoder_operand_live first ip /\ abi_decoder_operand_live first src /\
   abi_decoder_operand_live first base_op /\
+  abi_decoder_operand_live first dst /\ abi_decoder_operand_live first hi_op /\
   (!op. abi_decoder_operand_live first op ==> op <> Var nv) /\
   (!j u. j < ncount /\ J j hdr 0 u ==>
     let b = jump_to body_lbl
