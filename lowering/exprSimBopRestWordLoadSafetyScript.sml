@@ -19,7 +19,7 @@ Proof
 QED
 
 Theorem rest_word_immutable_region_bound:
-  stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es s /\
   immutable_holds cenv cx ty tv w es s /\
   evaluate_type (get_tenv cx) ty = SOME vt ==>
   w2n w + type_memory_size vt <=
@@ -33,12 +33,12 @@ Proof
   `off + k < dimword (:256)` by decide_tac >>
   `w2n w = off + k` by simp[] >>
   (Cases_on `cenv.ce_is_ctor`
-  >- (qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` mp_tac >>
+  >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
       simp[exprLoweringPropsTheory.stmt_state_rel_def,
            exprLoweringPropsTheory.immutable_alloca_sep_def] >>
       rpt strip_tac >>
       qpat_x_assum `!name tv v off. _` drule_all >> strip_tac >> decide_tac) >>
-  qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
   simp[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
        loweringStateRelDefsTheory.immutables_rel_def] >> rpt strip_tac >>
   qpat_x_assum `!name tv v byte_offset. _` drule_all >> strip_tac >> decide_tac)
@@ -91,7 +91,7 @@ Proof
 QED
 
 Theorem rest_word_array_memory_load_mem_ok:
-  vv_post H ctx func cenv cx e es va vb s0 es' (Value (ArrayV av)) vv s /\
+  vv_post ctx func cenv cx e es va vb s0 es' (Value (ArrayV av)) vv s /\
   (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
   post_value_type cenv e = ArrayT ty bd /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME (ArrayTV et bd) /\
@@ -117,7 +117,7 @@ Proof
 QED
 
 Theorem rest_word_array_memory_header_mem_ok:
-  vv_post H ctx func cenv cx e es va vb s0 es' (Value (ArrayV av)) vv s /\
+  vv_post ctx func cenv cx e es va vb s0 es' (Value (ArrayV av)) vv s /\
   (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
   post_value_type cenv e = ArrayT ty (Dynamic cap) /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) =
@@ -135,7 +135,7 @@ Proof
 QED
 
 Theorem rest_word_array_immutable_load_mem_ok:
-  stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es s /\
   immutable_holds cenv cx (ArrayT ty bd) (Value (ArrayV av)) w es s /\
   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
   value_has_type (ArrayTV et bd) (ArrayV av) /\
@@ -175,7 +175,7 @@ Proof
 QED
 
 Theorem rest_word_array_immutable_header_mem_ok:
-  stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es s /\
   immutable_holds cenv cx (ArrayT ty (Dynamic cap))
     (Value (ArrayV av)) w es s /\
   evaluate_type (get_tenv cx) ty = SOME et /\

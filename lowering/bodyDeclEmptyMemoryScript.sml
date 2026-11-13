@@ -154,7 +154,7 @@ Proof
     metis_tac[annassign_admissible_rhs, forced_expr_admissible_raw] >>
   `gas_outcome T (cx_tops cx) (ctx,func) (eval_expr cx e) (es,salloc)
     (\res ee t. ?tv. res = INL tv /\
-      vv_post H ctx func c cx e es sA sB salloc ee tv vv t /\
+      vv_post ctx func c cx e es sA sB salloc ee tv vv t /\
       vv_store_bound cx (expr_type e) (lowered_value_type c e) ee tv vv t /\
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts /\
@@ -195,7 +195,7 @@ Proof
      simp[gas_marked_exec_def] >> strip_tac >>
      drule gas_marked_path_exec >> strip_tac >> drule gas_path_normal >> simp[]) >>
   drule_all annassign_continuation_all_tails >> strip_tac >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[vv_post_def] >> strip_tac >>
   `lookup_var p t = SOME w` by metis_tac[] >>
   `FLOOKUP t.vs_allocas st.cs_next_id =
@@ -219,7 +219,7 @@ Proof
     (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest` >>
   `not_local_ptr c ee.scopes p` by
     (irule local_ptrs_reserved_not_live >> simp[] >> metis_tac[]) >>
-  `stmt_state_rel H ctx func c cx ee' u` by
+  `stmt_state_rel ctx func c cx ee' u` by
     (simp[Abbr `u`, Abbr `ee'`, stmt_state_rel_inst_idx] >>
      irule stmt_state_rel_declare_store >> simp[] >>
      qexists_tac `mk_inst st.cs_next_id ALLOCA

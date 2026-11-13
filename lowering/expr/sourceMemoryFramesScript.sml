@@ -63,8 +63,8 @@ QED
 
 Theorem state_rel_simple_external_vars_frame:
   !cenv cx es before after.
-    state_rel_simple H cenv cx es before /\ vars_rel cenv es.scopes after /\ abi_state_frame before after ==>
-    state_rel_simple H cenv cx es after
+    state_rel_simple cenv cx es before /\ vars_rel cenv es.scopes after /\ abi_state_frame before after ==>
+    state_rel_simple cenv cx es after
 Proof
   rpt gen_tac >> strip_tac >> drule abi_state_frame_observables >> strip_tac >>
   drule abi_state_frame_source_fields >> strip_tac >>
@@ -146,14 +146,14 @@ QED
 
 Theorem source_relations_copy_frame:
   !func cenv cx es before after ftv copy_count dst bound.
-    state_well_typed es /\ state_rel_simple H cenv cx es before /\ local_ptrs_rel func cenv es.scopes before /\
+    state_well_typed es /\ state_rel_simple cenv cx es before /\ local_ptrs_rel func cenv es.scopes before /\
     abi_state_frame before after /\ allocation_growth before after /\
     source_memory_separated cenv es.scopes before dst (copy_count * type_memory_size ftv) /\
     array_copy_frame ftv copy_count dst before.vs_memory after.vs_memory /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before bound (Var p)) /\
     (!arg_op. abi_operand_before bound arg_op ==> eval_operand arg_op after = eval_operand arg_op before) ==>
-    state_rel_simple H cenv cx es after /\ local_ptrs_rel func cenv es.scopes after
+    state_rel_simple cenv cx es after /\ local_ptrs_rel func cenv es.scopes after
 Proof
   rpt gen_tac >> strip_tac >>
   `EVERY scope_well_typed es.scopes /\ vars_rel cenv es.scopes before` by
@@ -187,12 +187,12 @@ QED
 
 Theorem source_relations_memory_frame:
   !func cenv cx es before after bound.
-    state_rel_simple H cenv cx es before /\ local_ptrs_rel func cenv es.scopes before /\
+    state_rel_simple cenv cx es before /\ local_ptrs_rel func cenv es.scopes before /\
     abi_state_frame before after /\ allocation_growth before after /\ after.vs_memory = before.vs_memory /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before bound (Var p)) /\
     (!arg_op. abi_operand_before bound arg_op ==> eval_operand arg_op after = eval_operand arg_op before) ==>
-    state_rel_simple H cenv cx es after /\ local_ptrs_rel func cenv es.scopes after
+    state_rel_simple cenv cx es after /\ local_ptrs_rel func cenv es.scopes after
 Proof
   rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`cenv`, `es.scopes`, `before`, `after`] vars_rel_memory_eq) >>

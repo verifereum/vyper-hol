@@ -15,10 +15,10 @@ Ancestors
 
 (* Original: exprSimCalldataSlice.slice_calldata_vv_post [local]. *)
 Theorem slice_calldata_vv_capacity:
-  vv_post H ctx func cenv cx e es sa sb s es tv
+  vv_post ctx func cenv cx e es sa sb s es tv
     (LocatedValue (expr_type e) p) t /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\
-  stmt_state_rel H ctx func cenv cx es t /\
+  stmt_state_rel ctx func cenv cx es t /\
   eval_operand p.ptr_operand t = SOME w /\
   FLOOKUP t.vs_allocas aid = SOME (w2n w,32 + 32 * word_size n) ==>
   vv_store_bound cx (expr_type e) (expr_type e) es tv
@@ -60,13 +60,13 @@ Theorem slice_calldata_path_mem:
   (!x. op = Var x ==> not_fresh_at sa x) /\
   bres = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
            INL v => INL v | INR err => INR (Error err)) /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ eval_operand op s0 = SOME (n2w a) /\
+  stmt_state_rel ctx func cenv cx es s0 /\ eval_operand op s0 = SOME (n2w a) /\
   alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?m r. gas_marked_path T ctx func s0 m r /\
     ((?u. r = OK u /\
-          (?rv. bres = INL rv /\ vv_post H ctx func cenv cx e es sa sb s0 es
+          (?rv. bres = INL rv /\ vv_post ctx func cenv cx e es sa sb s0 es
              (Value rv) (LocatedValue (expr_type e) p) u /\
              vv_store_bound cx (expr_type e) (expr_type e) es (Value rv)
                (LocatedValue (expr_type e) p) u) /\
@@ -81,8 +81,8 @@ Proof
      DROP s0.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest` by
     (gvs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
      simp[DROP_APPEND1]) >>
-  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (32 + 32 * word_size n))]
-       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
+  `MEM (mk_inst (sa.cs_next_id + 7) ALLOCA [Lit (n2w (32 + 32 * word_size n))]
+       [STRING #"%" (toString (sa.cs_next_var + 6))]) (fn_insts func)` by
     (gvs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
      irule lookup_block_fn_insts >> goal_assum (drule_at Any) >>
      simp[MEM_APPEND] >> metis_tac[MEM_APPEND]) >>
@@ -137,17 +137,21 @@ Resume slice_calldata_path_mem[success]:
      `step_inst 0 ctx i ss1 = OK ss2` by simp[step_inst_non_invoke] >>
      drule venomInstProofsTheory.step_preserves_control_flow >> simp[]) >>
   `a+n <= LENGTH cx.txn.calldata` by decide_tac >>
-  `!j. vv_post H ctx func cenv cx e es sa sb s0 es
+  `!j. vv_post ctx func cenv cx e es sa sb s0 es
      (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
      (LocatedValue (expr_type e) p) (t with vs_inst_idx := j)` by
-    (irule slice_calldata_vv_post >> simp[] >> metis_tac[]) >>
+    (irule slice_calldata_vv_post >> simp[] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `sa.cs_next_id + 7` >>
+     conj_tac >- simp[] >> conj_tac >- simp[] >>
+     conj_tac >- first_assum ACCEPT_TAC >> simp[]) >>
   qexistsl_tac [`k`, `OK (t with vs_inst_idx := s0.vs_inst_idx +
                                   LENGTH (emitted_insts sa sb))`] >>
   simp[] >> disj1_tac >>
   simp[same_blocks_def, evaluate_calldata_slice_uint] >>
   qpat_x_assum `expr_type e = _` (assume_tac o GSYM) >>
   asm_rewrite_tac[] >>
-  `vv_post H ctx func cenv cx e es sa sb s0 es
+  `vv_post ctx func cenv cx e es sa sb s0 es
      (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
      (LocatedValue (expr_type e) p) t` by
     (first_x_assum (qspec_then `t.vs_inst_idx` mp_tac) >>
@@ -159,7 +163,7 @@ Resume slice_calldata_path_mem[success]:
   irule slice_calldata_vv_capacity >>
   simp[stmt_state_rel_inst_idx] >>
   conj_tac
-  >- (qexistsl_tac [`sa.cs_next_id`, `n`] >> simp[]) >>
+  >- (qexistsl_tac [`sa.cs_next_id + 7`, `n`] >> simp[]) >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 

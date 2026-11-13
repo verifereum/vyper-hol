@@ -5,9 +5,9 @@ Ancestors
   loweringPosts placeMemoryProtectedFrame exprLoweringProps
 
 Theorem normalized_expr_post_frame:
-  expr_post H ctx func ce cx e es sa sm s0 ee v src s /\
+  expr_post ctx func ce cx e es sa sm s0 ee v src s /\
   post_value_type ce out = expr_type out /\
-  stmt_state_rel H ctx func ce cx ee q /\
+  stmt_state_rel ctx func ce cx ee q /\
   expr_val_rel cx (expr_type out) v dst q /\
   expr_val_at ce cx (expr_type out) sa sb ee v dst q /\
   (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
@@ -20,7 +20,7 @@ Theorem normalized_expr_post_frame:
     mem_bytes_at off len q.vs_memory = mem_bytes_at off len s.vs_memory) /\
   (~expr_has_effect out ==> pure_frame ce func es sa s0 q) /\
   locals_kept ce es ee s0 q ==>
-  expr_post H ctx func ce cx out es sa sb s0 ee v dst q
+  expr_post ctx func ce cx out es sa sb s0 ee v dst q
 Proof
   rewrite_tac[expr_post_def] >> strip_tac >> asm_rewrite_tac[] >>
   rpt conj_tac >> rpt gen_tac >> strip_tac
@@ -37,7 +37,7 @@ QED
    No pre-allocation freshness claim is needed for constructor separation. *)
 Theorem allocated_result_immutable_disjoint[local]:
   compile_alloc_buffer N sa = (buf,sm) /\ fn_has_code sa sm func /\
-  stmt_state_rel H ctx func ce cx ee u /\ ce.ce_is_ctor /\
+  stmt_state_rel ctx func ce cx ee u /\ ce.ce_is_ctor /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
   FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
     | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) /\
@@ -53,9 +53,9 @@ Proof
 QED
 
 Theorem allocated_result_expr_post_frame:
-  expr_post H ctx func ce cx e es origin sm s0 ee v src s /\
+  expr_post ctx func ce cx e es origin sm s0 ee v src s /\
   post_value_type ce out = expr_type out /\
-  stmt_state_rel H ctx func ce cx ee q /\
+  stmt_state_rel ctx func ce cx ee q /\
   expr_val_rel cx (expr_type out) v dst q /\
   eval_operand dst q = SOME w /\
   FLOOKUP q.vs_allocas aid = SOME (b,N) /\
@@ -78,7 +78,7 @@ Theorem allocated_result_expr_post_frame:
     FLOOKUP q.vs_allocas old = SOME entry) /\
   (!off len. b + N <= off \/ off + len <= b ==>
     mem_bytes_at off len q.vs_memory = mem_bytes_at off len s.vs_memory) ==>
-  expr_post H ctx func ce cx out es origin sb s0 ee v dst q
+  expr_post ctx func ce cx out es origin sb s0 ee v dst q
 Proof
   strip_tac >>
   `expr_val_at ce cx (expr_type out) origin sb ee v dst q` by
@@ -90,7 +90,7 @@ Proof
      qpat_x_assum `!n lb len. local_region _ _ s _ _ _ ==> _` drule >>
      simp[arithmeticTheory.ADD_COMM]) >>
   drule normalized_expr_post_frame >> disch_then irule >> simp[] >>
-  qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE[expr_post_def]) >>
   conj_tac
   >- (rpt strip_tac >>

@@ -312,8 +312,8 @@ QED
 Resume compile_assert_reason_lit_frag_mem[false]:
   markerLib.RESUME_TAC >>
   gvs[] >>
-  `?EE. stmt_state_rel H ctx func cenv cx EE (jump_to s5.cs_current_bb t)` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  `?EE. stmt_state_rel ctx func cenv cx EE (jump_to s5.cs_current_bb t)` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
      rewrite_tac[stmt_state_rel_jump_to] >> metis_tac[]) >>
   `?u. gas_path_mem ctx func (jump_to s5.cs_current_bb t) 0

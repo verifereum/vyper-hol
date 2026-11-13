@@ -27,7 +27,7 @@ Theorem compile_log_emit_frontier:
   LENGTH topic_ops < dimword (:256) /\
   eval_operand ptr_op s = SOME off /\ eval_operand len_op s = SOME sz /\
   eval_operands topic_ops s = SOME topics /\
-  stmt_state_rel H ctx func ce cx es s /\
+  stmt_state_rel ctx func ce cx es s /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   t.vs_alloca_next = s.vs_alloca_next
 Proof

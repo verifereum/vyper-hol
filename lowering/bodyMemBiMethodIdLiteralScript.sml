@@ -27,7 +27,7 @@ Proof
       unwrap_value_def, comp_return_def] >>
   qexistsl_tac [`[]`, `BytesV (TAKE 4 (Keccak_256_w64 x))`, `es`, `s0`] >>
   simp[gas_value_prefix_def] >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>

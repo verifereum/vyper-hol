@@ -55,14 +55,14 @@ Theorem body_literal_word_mem_prefix:
   lower_value compile_expr cenv ty (Literal ann l) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_value_prefix H T (ctx,func,cenv,cx) (ty,Literal ann l)
+  gas_value_prefix T (ctx,func,cenv,cx) (ty,Literal ann l)
     (sa,sb,op) (es,s0) [] (evaluate_literal l,es,s0)
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>

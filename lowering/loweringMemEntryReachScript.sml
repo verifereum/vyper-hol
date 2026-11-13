@@ -5,7 +5,7 @@
  *)
 Theory loweringMemEntryReach
 Ancestors
-  stmtSimDefs
+  stmtSimDefs entryOwnedBodyState
   loweringPosts
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps valueEncodingProofs vyperInterpreter vyperContext
@@ -18,12 +18,9 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* ADMITTED (#639): external_entry_reaches_body, with the body's frame
-   free of a caller return buffer, and with a memory-safe run from the
-   body's start making the run from __entry memory-safe: the selector
-   dispatch and the entry checks touch no memory, and the argument decode
-   writes only the parameters' buffers (entryHaltMem's
-   entry_decode_arg_mem_ok). *)
+(* The source-selected owned endpoint supplies the body's initial frame
+   and the memory-safe continuation through dispatch, entry checks and
+   positional argument decoding, including dynamic ABI arguments. *)
 Theorem external_entry_reaches_body_mem:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -58,7 +55,7 @@ Theorem external_entry_reaches_body_mem:
       compile_guarded_body cenv F nkey ut' iv fbody rt sa = ((), st') /\
       fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
-      stmt_state_rel H unit.cu_context func cenv
+      stmt_state_rel unit.cu_context func cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
       alloca_history func s0 /\
       ~s0.vs_halted /\ s0.vs_gas_readings = vs.vs_gas_readings /\
@@ -70,5 +67,11 @@ Theorem external_entry_reaches_body_mem:
                 (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
                             vs_inst_idx := 0 |>))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all source_selected_owned_body_state >>
+  disch_then (qspec_then `ARB : instruction` strip_assume_tac) >>
+  qexistsl_tac [`lbl`, `ce`, `pa`, `mc`, `pay`, `key`, `tr`, `view`, `rt`,
+    `sk`, `cer`, `registered`, `completed`, `efn`, `out`] >> simp[] >>
+  qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+  simp[package_external_fn_def]
 QED

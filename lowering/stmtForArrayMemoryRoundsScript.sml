@@ -27,9 +27,9 @@ Definition array_round_inv_def:
 End
 
 Definition array_round_done_def:
-  array_round_done H d ctx func cenv cx caller orig exit es s <=>
+  array_round_done d ctx func cenv cx caller orig exit es s <=>
     s.vs_current_bb = exit /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-    stmt_state_rel H ctx func cenv cx es s /\ ret_pc_ok cenv caller s /\
+    stmt_state_rel ctx func cenv cx es s /\ ret_pc_ok cenv caller s /\
     array_round_frame d func cenv caller orig s
 End
 
@@ -63,7 +63,7 @@ Theorem array_round_last:
   (!x. not_fresh_at caller x ==> x <> dv) /\
   fn_inst_ids_distinct func ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
-      array_round_done H d ctx func cenv cx caller orig exit
+      array_round_done d ctx func cenv cx caller orig exit
         (es with gas_obs := []) t
 Proof
   rw[array_round_inv_def] >>
@@ -114,9 +114,9 @@ QED
 
 Theorem array_round_break:
   stmt_lands (InLoop exit incr) sb (INR BreakException) s /\
-  ~s.vs_halted /\ stmt_state_rel H ctx func cenv cx es s /\
+  ~s.vs_halted /\ stmt_state_rel ctx func cenv cx es s /\
   ret_pc_ok cenv caller s /\ array_round_frame d func cenv caller orig s ==>
-  array_round_done H d ctx func cenv cx caller orig exit es s
+  array_round_done d ctx func cenv cx caller orig exit es s
 Proof
   simp[stmt_lands_def, array_round_done_def]
 QED
@@ -184,7 +184,7 @@ Proof
                            FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
-Theorem array_iter_copy_no_gas[local]:
+Theorem array_iter_copy_no_gas:
   compile_iter_elem_copy ce src dst stride LocMemory F ty ty sa = ((),sb) ==>
   EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
 Proof
@@ -209,7 +209,7 @@ Theorem array_round_copy_entry:
   w2n arr_base + k * stride < dimword (:256) /\ stride + 64 < dimword (:256) /\
   w2n arr_base + k * stride + stride <= s.vs_alloca_next /\
   w2n dst + stride <= s.vs_alloca_next /\
-  stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es s /\
   cenv_top_ext cenv bc (FEMPTY :: es.scopes) /\ local_ptrs_reserved bc sa /\
   lookup_scopes id es.scopes = NONE /\
   FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -229,7 +229,7 @@ Theorem array_round_copy_entry:
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
   alloca_history func s /\ alloca_inv s ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\ alloca_history func t /\
-    stmt_state_rel H ctx func bc cx
+    stmt_state_rel ctx func bc cx
       (es with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
           :: es.scopes) t /\
@@ -278,7 +278,7 @@ Theorem array_code_copy_entry_mem:
   lookup_block stmts_lbl func.fn_blocks = SOME bb /\
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\ alloca_history func s ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\ alloca_history func t /\
-    stmt_state_rel H ctx func bc cx
+    stmt_state_rel ctx func bc cx
       (es with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
           :: es.scopes) t /\
@@ -320,10 +320,10 @@ Proof
 QED
 
 Definition array_body_post_mem_def:
-  array_body_post_mem H d ctx func cx lctx bc bc' sb0 sb1 s_body r ee t <=>
+  array_body_post_mem d ctx func cx lctx bc bc' sb0 sb1 s_body r ee t <=>
     ?ce. stmt_lands lctx sb1 r t /\ ~t.vs_halted /\
       (r = INL () ==> ~block_is_terminated sb1 /\ ce = bc') /\
-      cenv_top_ext bc ce ee.scopes /\ stmt_state_rel H ctx func ce cx ee t /\
+      cenv_top_ext bc ce ee.scopes /\ stmt_state_rel ctx func ce cx ee t /\
       (!x w. not_fresh_at sb0 x /\ lookup_var x s_body = SOME w ==>
         lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s_body.vs_allocas aid = SOME b ==>
@@ -356,7 +356,7 @@ Theorem array_code_body_outcome_mem:
   gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit incr)) ei ==>
   ?s_body. gas_marked_path T ctx func s 0 (OK s_body) /\
     gas_outcome T (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (ei,s_body)
-      (array_body_post_mem H d ctx func cx (InLoop exit incr) bc
+      (array_body_post_mem d ctx func cx (InLoop exit incr) bc
         (FST (stmts_env bc (InLoop exit incr) ty stmts sb0)) sb0 sb1 s_body)
       (\r ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) r rr) /\
     s_body.vs_allocas = s.vs_allocas /\ s_body.vs_alloca_next = s.vs_alloca_next /\
@@ -403,7 +403,7 @@ QED
 Theorem array_body_round_restore_mem:
   array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
     ainst lbl caller orig k es s /\
-  array_body_post_mem H d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body r es2 t /\
+  array_body_post_mem d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body r es2 t /\
   cenv_top_ext cenv bc ei.scopes /\ bc.ce_return_buf = cenv.ce_return_buf /\
   eval_stmts cx stmts ei = (r,es2) /\ es2.scopes = sc :: rest /\
   (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
@@ -425,7 +425,7 @@ Theorem array_body_round_restore_mem:
     array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
       ainst incr caller k (es2 with scopes := rest) (jump_to incr t)) /\
   (r = INR BreakException ==>
-    array_round_done H d ctx func cenv cx caller orig exit (es2 with scopes := rest) t)
+    array_round_done d ctx func cenv cx caller orig exit (es2 with scopes := rest) t)
 Proof
   strip_tac >>
   `cenv.ce_return_buf = bc.ce_return_buf` by simp[] >>
@@ -471,7 +471,7 @@ Theorem array_code_body_finish_mem:
     j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
   array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
     ainst stmts_lbl caller orig k es s /\
-  array_body_post_mem H d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body r es2 t /\
+  array_body_post_mem d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body r es2 t /\
   cenv_top_ext cenv bc ei.scopes /\
   eval_stmts cx stmts ei = (r,es2) /\ es2.scopes = sc :: rest /\
   (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
@@ -488,7 +488,7 @@ Theorem array_code_body_finish_mem:
        | INR e => if e = ContinueException then INL F
                   else if e = BreakException then INL T else INR e) = INL b /\
     gas_marked_path T ctx func t 0 (OK u) /\
-    (b ==> array_round_done H d ctx func cenv cx caller orig exit
+    (b ==> array_round_done d ctx func cenv cx caller orig exit
       (es2 with scopes := rest) u) /\
     (~b ==> array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
       ainst cond caller orig (SUC k) (es2 with scopes := rest) u)
@@ -574,7 +574,7 @@ Theorem array_one_round_mem:
         finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
           pop_scope od) (es,s)
     (\res ee t. ?b. res = INL b /\
-      (b ==> array_round_done H d ctx func cenv cx caller orig exit ee t) /\
+      (b ==> array_round_done d ctx func cenv cx caller orig exit ee t) /\
       (~b ==> array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
         ainst cond caller orig (SUC k) ee t))
     (\res ee rr. ?e. res = INR e /\
@@ -608,7 +608,7 @@ Proof
   irule array_round_outcome_prefix_mem >>
   goal_assum (drule_at (Pat `gas_marked_path _ _ _ live _ _`)) >>
   ho_match_mp_tac (array_body_round_outcome_mem |> Q.INST
-    [`B` |-> `array_body_post_mem H d ctx func cx (InLoop exit incr) bc
+    [`B` |-> `array_body_post_mem d ctx func cx (InLoop exit incr) bc
        (FST (stmts_env bc (InLoop exit incr) ty stmts sb0)) sb0 sb1 s_body`,
      `E` |-> `\r ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) r rr`]) >>
   simp[] >> conj_tac
@@ -696,7 +696,7 @@ Theorem array_code_loop_outcome_mem:
     gas_outcome T (cx_tops cx) (ctx,func)
       (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s)
       (\res ee t. res = INL () /\
-        array_round_done H d ctx func cenv cx caller orig exit ee t)
+        array_round_done d ctx func cenv cx caller orig exit ee t)
       (\res ee rr. ?ex. res = INR ex /\
         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)
 Proof

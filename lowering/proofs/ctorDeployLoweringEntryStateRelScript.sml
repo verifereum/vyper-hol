@@ -167,6 +167,14 @@ Proof
    (es0 with outcomes := SOME vs.vs_outcomes) actual` by
   (qpat_x_assum `immutables_rel _ _ _ _ _ _` mp_tac >> simp[immutables_rel_def]) >>
  `vs.vs_call_ctx.cc_address = tx.target` by fs[call_ctx_rel_def] >>
+ `call_ctx_rel (tx with created_in_tx := T) vs.vs_call_ctx vs.vs_tx_ctx
+    vs.vs_block_ctx` by fs[call_ctx_rel_def, tx_env_ok_def] >>
+ `vs.vs_code = tx.code` by
+  (qpat_x_assum `gas_variant _ _` mp_tac >>
+   rewrite_tac[gas_variant_def] >>
+   disch_then (mp_tac o Q.AP_TERM `\s. s.vs_code`) >>
+   simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def] >>
+   gvs[deploy_state_rel_def]) >>
  simp[state_rel_def, deploy_evaluation_context_def, initial_evaluation_context_def,
       storage_rel_def, transient_rel_def,
       accounts_rel_def, logs_rel_def, contract_storage_def, contract_transient_def]

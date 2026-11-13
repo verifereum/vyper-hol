@@ -23,7 +23,7 @@ Libs
    operands x and y holding w1 and w2 runs memory-safely and keeps the
    allocation history. *)
 Definition binop_frag_mem_def:
-  binop_frag_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
+  binop_frag_mem ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
     !sa sb x y op s0.
       compile_binop bop x y ty bl el sa = (op, sb) /\
       expr_res_ok (bop_result cx ann bop tys v1 v2 es0) /\
@@ -31,7 +31,7 @@ Definition binop_frag_mem_def:
       (!z. y = Var z ==> not_fresh_at sa z) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel H ctx func cenv cx es0 s0 /\ alloca_history func s0 /\
+      stmt_state_rel ctx func cenv cx es0 s0 /\ alloca_history func s0 /\
       eval_operand x s0 = SOME w1 /\ eval_operand y s0 = SOME w2 /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -39,7 +39,7 @@ Definition binop_frag_mem_def:
         ((?s v. r = OK s /\
                  bop_result cx ann bop tys v1 v2 es0 = INL v /\
                  word_value v /\
-                 stmt_state_rel H ctx func cenv cx es0 s /\
+                 stmt_state_rel ctx func cenv cx es0 s /\
                  eval_operand op s = SOME (val_to_w256 v) /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\
@@ -75,7 +75,7 @@ Theorem binop_frag_mem_straight:
             eval_operand x ss = SOME w1 /\ eval_operand y ss = SOME w2 ==>
             ?ss'. run_inst_seq (emitted_insts sa sb) ss =
                     Abort Revert_abort ss')) ==>
-    binop_frag_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0
+    binop_frag_mem ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0
 Proof
   rpt gen_tac >> strip_tac >> simp[binop_frag_mem_def] >> rpt gen_tac >>
   strip_tac >>
@@ -141,9 +141,9 @@ QED
 (* bop_normal_prefix_summary (exprBopSimProps) on the memory-checked path,
    carrying the allocation history. *)
 Theorem bop_normal_prefix_summary_mem:
-  gas_value_prefix H T (ctx, func, cenv, cx) (expr_type e1, e1)
+  gas_value_prefix T (ctx, func, cenv, cx) (expr_type e1, e1)
     (sa, s1, x) (es, s0) left (v1, mid, t) /\
-  gas_value_prefix H T (ctx, func, cenv, cx) (expr_type e1, e2)
+  gas_value_prefix T (ctx, func, cenv, cx) (expr_type e1, e2)
     (s1, s2, y) (mid with gas_obs := [], t) right (v2, fin, u) /\
   gas_admissible
     (do r <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
@@ -157,7 +157,7 @@ Theorem bop_normal_prefix_summary_mem:
   (!z. y = Var z ==> not_fresh_at s2 z) /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\
-  binop_frag_mem H ctx func cenv cx bop (expr_type e1) ann bl el
+  binop_frag_mem ctx func cenv cx bop (expr_type e1) ann bl el
     [expr_type e1; expr_type e2] v1 v2
     (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2)
     (fin with gas_obs := []) ==>
@@ -165,7 +165,7 @@ Theorem bop_normal_prefix_summary_mem:
     (do r <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
         read_result cx r od) (es, s0)
     (\res ee ss. ?v. res = INL v /\
-      expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
+      expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
         es sa sb s0 ee v op ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -173,9 +173,9 @@ Theorem bop_normal_prefix_summary_mem:
     (\res ee r. expr_exit res r)
 Proof
   strip_tac >>
-  qpat_x_assum `gas_value_prefix _ _ _ _ (sa, s1, x) _ _ _`
+  qpat_x_assum `gas_value_prefix _ _ _ (sa, s1, x) _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [gas_value_prefix_def]) >>
-  qpat_x_assum `gas_value_prefix _ _ _ _ (s1, s2, y) _ _ _`
+  qpat_x_assum `gas_value_prefix _ _ _ (s1, s2, y) _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [gas_value_prefix_def]) >>
   `expr_res_ok (bop_result cx ann bop [expr_type e1; expr_type e2]
      v1 v2 (fin with gas_obs := []))` by
@@ -191,11 +191,11 @@ Proof
   `(!z. x = Var z ==> not_fresh_at s2 z) /\
    local_ptrs_reserved cenv s2` by
     metis_tac[not_fresh_at_mono, local_ptrs_reserved_next_var] >>
-  `stmt_state_rel H ctx func cenv cx (fin with gas_obs := []) u` by
+  `stmt_state_rel ctx func cenv cx (fin with gas_obs := []) u` by
     gvs[expr_post_def] >>
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-  qpat_x_assum `binop_frag_mem _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `binop_frag_mem _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [binop_frag_mem_def]) >>
   disch_then (qspecl_then [`s2`, `sb`, `x`, `y`, `op`, `u`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
@@ -212,8 +212,8 @@ Proof
         metis_tac[bop_marked_scopes_dom] >>
       qexists_tac `v` >> gvs[] >>
       irule expr_post_bop >>
-      qpat_assum `expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _` (irule_at Any) >>
-      qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _` (irule_at Any) >>
       simp[]) >>
   metis_tac[bop_result_gas_obs]
 QED
@@ -248,7 +248,7 @@ Theorem compile_bop_typed_sim_mem:
        expr_sim_mem ctx func cenv cx (expr_type e1) e2 es1 /\
        !gs2 v2 es2. (do result <- eval_expr cx e2; read_result cx result od)
          (es1 with gas_obs := gs2) = (INL v2, es2) ==>
-         binop_frag_mem H ctx func cenv cx bop (expr_type e1) ann
+         binop_frag_mem ctx func cenv cx bop (expr_type e1) ann
            (if bop = Exp then expr_int_literal e1 else NONE)
            (if bop = Exp then expr_int_literal e2 else NONE)
            [expr_type e1; expr_type e2] v1 v2
@@ -287,8 +287,8 @@ QED
 
 Resume compile_bop_typed_sim_mem[left_normal]:
   qpat_x_assum `(\res ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
-  gnvs[] >> rename1 `expr_post _ _ _ _ _ e1 _ _ _ _ _ v1 _ t` >>
-  `gas_value_prefix H T (ctx, func, cenv, cx) (expr_type e1, e1)
+  gnvs[] >> rename1 `expr_post _ _ _ _ e1 _ _ _ _ _ v1 _ t` >>
+  `gas_value_prefix T (ctx, func, cenv, cx) (expr_type e1, e1)
      (sa, s1, x) (es, s0) marks (v1, es_end, t)` by
     simp[gas_value_prefix_def] >>
   qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
@@ -302,7 +302,7 @@ Resume compile_bop_typed_sim_mem[left_normal]:
   `gas_admissible (bind (eval_expr cx e2) (read_result cx))
      expr_res_ok (es_end with gas_obs := [])` by
     metis_tac[bop_second_admissible] >>
-  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
+  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
     gvs[expr_post_def] >>
   `~t.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
@@ -334,8 +334,8 @@ Resume compile_bop_typed_sim_mem[left_exempt]:
 QED
 Resume compile_bop_typed_sim_mem[right_normal]:
   qpat_x_assum `(\res ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
-  gnvs[] >> rename1 `expr_post _ _ _ _ _ e2 _ _ _ _ _ v2 _ u` >>
-  `gas_value_prefix H T (ctx, func, cenv, cx) (expr_type e1, e2)
+  gnvs[] >> rename1 `expr_post _ _ _ _ e2 _ _ _ _ _ v2 _ u` >>
+  `gas_value_prefix T (ctx, func, cenv, cx) (expr_type e1, e2)
      (s1, s2, y) (es_end with gas_obs := [], t) marks' (v2, es_end', u)` by
     simp[gas_value_prefix_def] >>
   qpat_assum `gas_marked_exec _ _ _ _ _ (INL v2) _ _`
@@ -346,8 +346,8 @@ Resume compile_bop_typed_sim_mem[right_normal]:
   qexists_tac `marks ++ marks'` >> disj1_tac >>
   pure_rewrite_tac[ETA_AX] >>
   irule (REWRITE_RULE [ETA_AX] bop_normal_prefix_summary_mem) >>
-  qpat_assum `gas_value_prefix _ _ _ _ (sa, s1, x) _ _ _` (irule_at Any) >>
-  qpat_assum `gas_value_prefix _ _ _ _ (s1, s2, y) _ _ _` (irule_at Any) >>
+  qpat_assum `gas_value_prefix _ _ _ (sa, s1, x) _ _ _` (irule_at Any) >>
+  qpat_assum `gas_value_prefix _ _ _ (s1, s2, y) _ _ _` (irule_at Any) >>
   simp[] >> goal_assum (drule_at Any) >> simp[]
 QED
 Resume compile_bop_typed_sim_mem[right_exit]:
@@ -401,7 +401,7 @@ Theorem compile_bop_sim_mem:
        !gs2 v2 es2. (do result <- eval_expr cx e2; read_result cx result od)
          (es1 with gas_obs := gs2) = (INL v2, es2) ==>
          word_value v2 /\
-         binop_frag_mem H ctx func cenv cx bop (expr_type e1) ann
+         binop_frag_mem ctx func cenv cx bop (expr_type e1) ann
            (if bop = Exp then expr_int_literal e1 else NONE)
            (if bop = Exp then expr_int_literal e2 else NONE)
            [expr_type e1; expr_type e2] v1 v2

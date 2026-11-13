@@ -67,6 +67,7 @@ Finalise framed_array_index_outcome_compose
 (* The suffix callback retains the static Code-or-Fixed provenance and
    captured-base post; neither is inferred from the runtime operand. *)
 Theorem framed_array_after_base:
+  ~subscript_reads_base cx obj idx ==>
   gas_marked_exec F (ctx,func) (eval_expr cx obj)
     (es,s0) left (INL captured) mid (OK t) /\
   expr_sim ctx func cenv cx ty idx (mid with gas_obs := []) /\
@@ -75,13 +76,13 @@ Theorem framed_array_after_base:
   local_ptrs_reserved cenv sm /\
   gas_admissible (bind (eval_expr cx idx) (read_result cx)) expr_res_ok
     (mid with gas_obs := []) /\
-  stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t /\
+  stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!imarks raw v u.
      gas_marked_exec F (ctx,func) (bind (eval_expr cx idx) (read_result cx))
        (mid with gas_obs := [],t) imarks (INL v) raw (OK u) /\
-     expr_post H ctx func cenv cx idx (mid with gas_obs := []) sm si t
+     expr_post ctx func cenv cx idx (mid with gas_obs := []) sm si t
        (raw with gas_obs := []) v iop u /\
      u.vs_current_bb = si.cs_current_bb /\
      u.vs_inst_idx = LENGTH si.cs_current_insts ==>
@@ -92,17 +93,17 @@ Theorem framed_array_after_base:
     (eval_expr cx (Subscript ann obj idx)) (es,s0)
     Q (\res ee out. expr_exit res out)
 Proof
-  strip_tac >>
+  disch_tac >> strip_tac >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sm`,`si`,`iop`,`t`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  pure_once_rewrite_tac[eval_expr_subscript_bind] >>
+qpat_assum `~subscript_reads_base _ _ _` (fn th => pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
   irule (BETA_RULE (Q.ISPEC `\r v. select_result cx (expr_type obj) r (ValueSubscript v)`
     (Q.GEN `k` framed_array_index_outcome_compose))) >>
   goal_assum (drule_at Any) >> BETA_TAC >>
   qexists_tac `\v ee u.
-    expr_post H ctx func cenv cx idx (mid with gas_obs := []) sm si t ee v iop u /\
+    expr_post ctx func cenv cx idx (mid with gas_obs := []) sm si t ee v iop u /\
     u.vs_current_bb = si.cs_current_bb /\
     u.vs_inst_idx = LENGTH si.cs_current_insts` >> simp[] >>
   `(!res out. (?exc. res = (INR exc : value + exception) /\
@@ -115,8 +116,8 @@ QED
 
 (* Source observations are consumed by executions, but not by endpoint posts. *)
 Theorem expr_post_initial_gas:
-  expr_post H ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee v op s <=>
-  expr_post H ctx func cenv cx e es sa sb s0 ee v op s
+  expr_post ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee v op s <=>
+  expr_post ctx func cenv cx e es sa sb s0 ee v op s
 Proof
   simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.locals_kept_def,
        loweringPostsTheory.popped_kept_def]
@@ -133,8 +134,8 @@ Proof
 QED
 
 Theorem stmt_state_rel_source_gas[local]:
-  stmt_state_rel H ctx func cenv cx (ee with gas_obs := gs) s <=>
-  stmt_state_rel H ctx func cenv cx ee s
+  stmt_state_rel ctx func cenv cx (ee with gas_obs := gs) s <=>
+  stmt_state_rel ctx func cenv cx ee s
 Proof
   simp[exprLoweringPropsTheory.stmt_state_rel_def,
        loweringStateRelDefsTheory.state_rel_gas_obs,
@@ -182,8 +183,8 @@ Proof
 QED
 
 Theorem vv_post_final_gas:
-  vv_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := gs) r vv s <=>
-  vv_post H ctx func cenv cx e es sa sb s0 ee r vv s
+  vv_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := gs) r vv s <=>
+  vv_post ctx func cenv cx e es sa sb s0 ee r vv s
 Proof
   simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.locals_kept_def,
        loweringPostsTheory.popped_kept_def, stmt_state_rel_source_gas,

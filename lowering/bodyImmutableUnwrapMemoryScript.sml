@@ -90,7 +90,7 @@ QED
 (* At runtime an immutable's bytes lie inside the data section. *)
 Theorem runtime_immutable_data_section:
   immutable_holds cenv cx t (Value v) a es s /\ ~cenv.ce_is_ctor /\
-  stmt_state_rel H ctx func cenv cx es u /\
+  stmt_state_rel ctx func cenv cx es u /\
   evaluate_type (get_tenv cx) t = SOME tv ==>
   w2n a + type_memory_size tv <= LENGTH u.vs_data_section
 Proof
@@ -113,10 +113,10 @@ Theorem unwrap_runtime_code_copy_sim_mem:
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt) ==>
     frag_exec_mem ctx sm sb
-      (\s. vv_post H ctx func cenv cx e es sa sm s0 es' (Value v)
+      (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
              (LocatedValue t p) s /\
            s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
-      (\s. expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
+      (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
            s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s) R
 Proof
   rpt gen_tac >> strip_tac >>
@@ -149,7 +149,7 @@ Proof
   `fn_has_code sm mid func /\ fn_has_code mid cs'' func` by
     metis_tac[fn_has_code_split] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `stmt_state_rel H ctx func cenv cx es' s1` by gvs[vv_post_def] >>
+  `stmt_state_rel ctx func cenv cx es' s1` by gvs[vv_post_def] >>
   drule_all alloc_buffer_source_frag_mem >>
   disch_then (qspec_then `R` strip_assume_tac) >>
   `copy_old_operand mid p.ptr_operand /\ copy_old_operand mid buf.buf_operand` by

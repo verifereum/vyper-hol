@@ -52,34 +52,10 @@ Proof
       simp[] >> strip_tac >>
       drule_all straight_fresh_clean_success_path >>
       disch_then (qspec_then `ctx` strip_assume_tac) >>
+      drule_all straight_fresh_run_post >> strip_tac >>
       qmatch_asmsub_rename_tac `vars_ext ss' target` >>
-      `!H. valid_horizon cx st0 H es0.storage_trace ==>
-           stmt_state_rel H ctx func cenv cx es0
-             (target with vs_inst_idx := LENGTH sb.cs_current_insts)` by
-        (rpt strip_tac >>
-         qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
-         drule_all straight_fresh_run_post >> simp[]) >>
-      `writes_fresh sa (emitted_insts sa sb) /\
-       sb.cs_current_bb = sa.cs_current_bb` by
-        metis_tac[straight_fresh_def] >>
-      qspecl_then [`emitted_insts sa sb`, `sa`, `s0`, `target`] mp_tac
-        run_inst_seq_writes_fresh >>
-      (impl_tac >- simp[]) >> strip_tac >>
-      `eval_operand op target = SOME w` by
-        (fs[vars_ext_def] >>
-         qpat_x_assum `target = ss' with vs_vars := _` SUBST1_TAC >>
-         simp[eval_operand_vars_ext]) >>
-      `eval_operand op
-         (target with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w` by
-        (Cases_on `op` >> gvs[eval_operand_def, lookup_var_def]) >>
-      `target.vs_allocas = s0.vs_allocas /\ target.vs_memory = s0.vs_memory /\
-       target.vs_halted = s0.vs_halted /\
-       target.vs_current_bb = s0.vs_current_bb` by
-        (qpat_x_assum `target = s0 with vs_vars := _`
-           (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
-      qpat_x_assum `target = s0 with vs_vars := _` kall_tac >>
       qexists_tac `OK (target with vs_inst_idx := LENGTH sb.cs_current_insts)` >>
-      simp[] >> simp[expr_val_rel_def, lookup_var_def] >> metis_tac[]) >>
+      simp[] >> simp[expr_val_rel_def] >> metis_tac[]) >>
   qpat_x_assum `!x sa sb op ss. _`
     (qspecl_then [`x`, `sa`, `sb`, `op`, `drop_fresh sa s0`] mp_tac) >>
   simp[] >> strip_tac >>

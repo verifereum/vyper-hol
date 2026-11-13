@@ -45,10 +45,10 @@ QED
 (* The low-level helper emits no unlock.  Keep its result explicitly raw;
    only the environment/epilogue-level theorem below promises intret_q. *)
 Definition intret_mem_q_raw_def:
-  intret_mem_q_raw H func cenv cx ret_tv (buf:bytes32) v
+  intret_mem_q_raw func cenv cx ret_tv (buf:bytes32) v
                    (es : evaluation_state) r <=>
     ?ir s. r = IntRet ir s /\ ir.iret_values = [] /\
-      result_rel H func ret_tv cenv cx (INR (ReturnException v), es) r /\
+      result_rel func ret_tv cenv cx (INR (ReturnException v), es) r /\
       val_in_memory ret_tv v (w2n buf) s.vs_memory
 End
 
@@ -106,16 +106,16 @@ Theorem compile_internal_return_memory_frag_raw:
        regions_disjoint off (type_memory_size itv) (w2n bw)
          (type_memory_size tv)) ==>
     frag_exec ctx sa sb
-      (\s. stmt_state_rel H ctx func cenv cx (es with scopes := []) s /\
+      (\s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
            expr_val_rel cx ty v val_op s /\
            eval_operand buf_op s = SOME bw /\
            ?pc. eval_operand rpc s = SOME pc)
       (\s. F)
-      (intret_mem_q_raw H func cenv cx tv bw v (es with scopes := []))
+      (intret_mem_q_raw func cenv cx tv bw v (es with scopes := []))
 Proof
   rpt gen_tac >> strip_tac >>
   (* the shape needs one state to run the store from *)
-  reverse (Cases_on `?s0. stmt_state_rel H ctx func cenv cx (es with scopes := []) s0 /\
+  reverse (Cases_on `?s0. stmt_state_rel ctx func cenv cx (es with scopes := []) s0 /\
                           expr_val_rel cx ty v val_op s0 /\
                           eval_operand buf_op s0 = SOME bw`)
   >- (simp[frag_exec_def] >> metis_tac[]) >>
@@ -136,7 +136,7 @@ Proof
     (irule cs_extends_same_block >> gvs[same_blocks_def, IS_PREFIX_APPEND]) >>
   `cs_extends sm sb` by (irule cs_extends_emit_inst >> metis_tac[]) >>
   irule frag_exec_seq >>
-  qexistsl_tac [`\s. stmt_state_rel H ctx func cenv cx (es with scopes := []) s /\
+  qexistsl_tac [`\s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
                      val_in_memory tv v (w2n bw) s.vs_memory /\
                      ?pc. eval_operand rpc s = SOME pc`, `sm`] >>
   simp[] >> rpt conj_tac
@@ -228,7 +228,7 @@ Theorem compile_internal_return_memory_frag:
        regions_disjoint off (type_memory_size itv) (w2n bw)
          (type_memory_size tv)) ==>
     frag_exec ctx sa sb
-      (\s. stmt_state_rel H ctx func cenv cx (es with scopes := []) s /\
+      (\s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
            expr_val_rel cx ty v val_op s /\
            eval_operand buf_op s = SOME bw /\
            ?pc. eval_operand rpc s = SOME pc)
@@ -237,7 +237,7 @@ Theorem compile_internal_return_memory_frag:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[frag_exec_def] >> rpt strip_tac >>
-  rename1 `stmt_state_rel H ctx func cenv cx (es with scopes := []) s0` >>
+  rename1 `stmt_state_rel ctx func cenv cx (es with scopes := []) s0` >>
   `~s0.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   drule compile_return_unlock_shape >> strip_tac >>
   `(!x. val_op = Var x ==> not_fresh_at su x) /\
@@ -287,14 +287,14 @@ Resume compile_internal_return_memory_frag[frame]:
      qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> simp[regions_disjoint_def] >> strip_tac >>
      first_x_assum irule >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx (es with scopes := [])
+  `stmt_state_rel ctx func cenv cx (es with scopes := [])
      (s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>)` by
     (irule result_state_memory_frame >> simp[] >> qexists_tac `s0` >>
      simp[local_region_def, lookup_scopes_def] >> rpt strip_tac >>
      `not_fresh_at su x` by metis_tac[] >>
      qpat_x_assum `!x. not_fresh_at su x ==> _` drule >>
      simp[lookup_var_def]) >>
-  `stmt_state_rel H ctx func cenv cx (es with scopes := []) pre` by
+  `stmt_state_rel ctx func cenv cx (es with scopes := []) pre` by
     (qspecl_then [`func`, `cenv`, `cx`, `es with scopes := []`,
        `s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>`,
        `LENGTH sm.cs_current_insts -

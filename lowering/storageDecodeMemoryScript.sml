@@ -229,12 +229,7 @@ Proof
       pure_rewrite_tac[arithmeticTheory.RIGHT_ADD_DISTRIB,
         arithmeticTheory.MULT_RIGHT_1] >> decide_tac) >>
   rpt strip_tac >> gvs[dead_bytes_def] >> rename1 `k < n` >>
-  Cases_on `k < w2n (lookup_storage (n2w bs) st)`
-  >- (gvs[] >> drule (cj 1 dead_bytes_range) >> strip_tac >>
-      `k = i` by
-        (irule slot_block_index >> qexistsl [`i'`, `type_slot_size tv`] >>
-         simp[arithmeticTheory.RIGHT_ADD_DISTRIB] >> decide_tac) >> gvs[]) >>
-  gvs[] >>
+  drule (cj 1 dead_bytes_range) >> strip_tac >>
   `k = i` by
     (irule slot_block_index >> qexistsl [`i'`, `type_slot_size tv`] >>
      simp[arithmeticTheory.RIGHT_ADD_DISTRIB] >> decide_tac) >> gvs[]
@@ -551,6 +546,8 @@ Proof
          qexists_tac `max` >> fs[read_slot_def]) >>
       `MIN (w2n (read_slot st bs)) max = w2n (read_slot st bs)` by
         (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+      `dyn_slots_in_range st (bs + 1) tv (w2n (read_slot st bs))` by
+        (irule dyn_slots_in_range_prefix >> qexists_tac `max` >> simp[]) >>
       gvs[] >> first_x_assum (drule_then strip_assume_tac) >>
       simp[val_in_memory_def] >> irule storage_live_memory_head >>
       goal_assum (drule_at Any) >> simp[type_slot_size_def])
@@ -594,16 +591,16 @@ Proof
 QED
 
 Theorem copied_storage_live_memory:
-  !H tr st rt w tv dst mem.
-    storage_read_live H tr st w tv /\
-    storage_agree (storage_dead H tr st) st rt /\
+  !cx tr st rt w tv dst mem.
+    storage_read_live cx tr st w tv /\
+    storage_agree (storage_dead cx tr st) st rt /\
     (!i. i < type_slot_size tv ==>
       mem_word_at (dst + 32 * i) mem = lookup_storage (w + n2w i) rt) ==>
     storage_live_memory st (w2n w) tv dst mem
 Proof
   rpt gen_tac >> strip_tac >>
   simp[storage_live_memory_def, copy_bytes_def] >> rpt strip_tac >>
-  `~storage_dead H tr st (w2n (w + n2w i)) b` by
+  `~storage_dead cx tr st (w2n (w + n2w i)) b` by
     (strip_tac >>
      qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[storage_read_live_def] >>
@@ -622,11 +619,11 @@ Proof
 QED
 
 Theorem copied_storage_decode_in_memory:
-  !H tr st rt w tv v dst mem.
+  !cx tr st rt w tv v dst mem.
     well_formed_type_value tv /\ slots_in_range st (w2n w) tv /\
     decode_value st (w2n w) tv = SOME v /\
-    storage_read_live H tr st w tv /\
-    storage_agree (storage_dead H tr st) st rt /\
+    storage_read_live cx tr st w tv /\
+    storage_agree (storage_dead cx tr st) st rt /\
     (!i. i < type_slot_size tv ==>
       mem_word_at (dst + 32 * i) mem = lookup_storage (w + n2w i) rt) ==>
     val_in_memory tv v dst mem
@@ -634,5 +631,5 @@ Proof
   rpt strip_tac >> irule decode_value_live_memory >> simp[] >>
   qexistsl_tac [`w2n w`, `st`] >> simp[] >>
   irule copied_storage_live_memory >>
-  qexistsl_tac [`H`, `rt`, `tr`] >> simp[]
+  qexistsl_tac [`cx`, `rt`, `tr`] >> simp[]
 QED

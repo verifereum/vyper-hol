@@ -48,7 +48,8 @@ Proof
       comp_return_def, comp_get_def, emitHelperTheory.emit_inst_def,
       fresh_id_def, emit_def] >>
   qmatch_asmsub_abbrev_tac `sb.cs_current_insts ++ [inst]` >>
-  drule fn_has_code_same_block >> simp[] >>
+  drule fn_has_code_same_block >>
+  disch_then (qspec_then `[inst]` (mp_tac o SIMP_RULE (srw_ss()) [])) >>
   strip_tac >>
   `get_instruction bb s.vs_inst_idx = SOME inst` by simp[] >>
   gen_tac >>
@@ -101,7 +102,7 @@ Theorem stmt_frag_mem_complete:
     ret_pc_ok cenv sa s0 /\ return_buf_frame d cenv sa s0 /\
     ~block_is_terminated sa /\
     gas_admissible source (stmt_res_ok lctx) es /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+    stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
     (!marks err ee leaf finish.

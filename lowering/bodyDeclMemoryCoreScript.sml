@@ -10,14 +10,14 @@ Ancestors
   loweringSlice exprLowering exprSimBufferStore valueEncodingProofs
   words venomExecSemantics stmtLowering context fragExec fragExecMem
   allocaHistoryFragment list rich_list emitHelper emitHelperProps venomInst
-  exprSimLiteralBuffer exprSimAlloc exprSimBuffer finite_map bodySimDeclCases allocLimits
+  exprSimLiteralBuffer exprSimAlloc exprSimBuffer finite_map allocLimits
   bodySim exprSimHyps vyperTypeSystem vyperTypeInvariants memoryLocalRhsProps
   supportedStmtTraverse supportedExprTraverse vyperTypeCallGraph vyperTypeCallStackSoundness
   vyperInterpreter vyperState
 
 Theorem body_stmt_state_rel_declare_store_frame:
   !func cenv cx es s t sa id p sz w inst v tyv sc rest a ctx.
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -32,7 +32,7 @@ Theorem body_stmt_state_rel_declare_store_frame:
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     type_memory_size tyv <= sz /\ val_wf tyv v /\ value_has_type tyv v /\
     val_in_memory tyv v (w2n w) t.vs_memory ==>
-    stmt_state_rel H ctx func cenv cx
+    stmt_state_rel ctx func cenv cx
       (es with scopes :=
         (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t
 Proof
@@ -173,7 +173,7 @@ Theorem annassign_memory_store_body_frag_mem:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
@@ -184,7 +184,7 @@ Theorem annassign_memory_store_body_frag_mem:
     w2n w + type_memory_size tyv <= s.vs_alloca_next /\
     alloca_history func s /\ return_buf_frame d cenv sa s ==>
     frag_exec_mem ctx sa sb (\u. u = s)
-      (\t. stmt_state_rel H ctx func cenv cx
+      (\t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
             (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
         alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
@@ -197,7 +197,7 @@ Proof
   drule compile_store_memory_run_size_bound_with_capacity >>
   disch_then (qspecl_then [`s`, `get_tenv cx`, `tyv`, `v`, `sw`, `w`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx
+  `stmt_state_rel ctx func cenv cx
      (es with scopes :=
        (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t` by
     (irule body_stmt_state_rel_declare_store_frame >> simp[] >>
@@ -230,11 +230,11 @@ QED
 (* Scratch copy preserves all source-level live regions. *)
 Theorem body_stmt_state_rel_mcopy_alloca:
   !func cenv cx es s inst p dst src sz ctx.
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     not_local_ptr cenv es.scopes p /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (dst, sz) ==>
-    stmt_state_rel H ctx func cenv cx es (mcopy dst src sz s)
+    stmt_state_rel ctx func cenv cx es (mcopy dst src sz s)
 Proof
   rpt strip_tac >>
   `(mcopy dst src sz s with <|vs_vars := s.vs_vars;
@@ -251,7 +251,7 @@ Proof
      conj_tac >- simp[mcopy_def, write_memory_with_expansion_def] >>
      reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
      rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
-     qpat_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
+     qpat_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
      strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> strip_tac >>
@@ -278,14 +278,14 @@ QED
 
 Theorem body_scratch_copy_state:
   compile_alloc_buffer n sa = (buf,sm) /\ fn_has_code sa sm func /\
-  stmt_state_rel H ctx func ce cx es a /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es a /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
   FLOOKUP a.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
   run_inst_seq (emitted_insts sm sn) a = OK t /\
   compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
   eval_operand buf.buf_operand a = SOME w /\ eval_operand src a = SOME sw /\
   n < dimword (:256) ==>
-  stmt_state_rel H ctx func ce cx es t
+  stmt_state_rel ctx func ce cx es t
 Proof
   rpt strip_tac >> drule_all buffer_copy_memory_run >>
   asm_rewrite_tac[] >> strip_tac >> gvs[] >>
@@ -301,7 +301,7 @@ QED
 Theorem body_scratch_prefix_run:
   compile_alloc_buffer n sa = (buf,sm) /\
   compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
-  fn_has_code sa sm func /\ stmt_state_rel H ctx func ce cx es s /\
+  fn_has_code sa sm func /\ stmt_state_rel ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   eval_operand src s = SOME sw /\ n < dimword (:256) /\
@@ -312,7 +312,7 @@ Theorem body_scratch_prefix_run:
     run_inst_seq (emitted_insts sm sn) a = OK t /\
     run_inst_seq_mem_ok (emitted_insts sa sm) s /\
     run_inst_seq_mem_ok (emitted_insts sm sn) a /\
-    stmt_state_rel H ctx func ce cx es t /\
+    stmt_state_rel ctx func ce cx es t /\
     eval_operand buf.buf_operand t = SOME w /\
     val_in_memory tv v (w2n w) t.vs_memory /\
     w2n w + n <= t.vs_alloca_next /\
@@ -324,7 +324,7 @@ Proof
   drule_all literal_alloc_buffer_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK a` >>
   `w2n w + n <= a.vs_alloca_next` by
-    (qpat_x_assum `stmt_state_rel H ctx func ce cx es a` mp_tac >>
+    (qpat_x_assum `stmt_state_rel ctx func ce cx es a` mp_tac >>
      simp_tac (srw_ss()) [stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
        venomMemDefsTheory.alloca_next_valid_def] >>
      strip_tac >> qpat_x_assum `!aid base sz. FLOOKUP a.vs_allocas aid = _ ==> _` drule >>
@@ -344,7 +344,7 @@ Proof
   drule_all buffer_copy_memory_encoding >> strip_tac >>
   drule_all buffer_copy_memory_run >> strip_tac >>
   qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts sm sn) a = OK t` >>
-  `stmt_state_rel H ctx func ce cx es t` by
+  `stmt_state_rel ctx func ce cx es t` by
     (irule body_scratch_copy_state >> simp[] >>
      goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >> metis_tac[]) >>
   `t.vs_vars = a.vs_vars /\ t.vs_allocas = a.vs_allocas /\
@@ -407,7 +407,7 @@ Theorem compile_scratch_prefix_body_frag_mem:
     compile_alloc_buffer n sa = (buf,sm) /\
     compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
     fn_has_code sa sn func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s /\
+    local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s /\
     alloca_history func s /\ return_buf_frame d ce sa s /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     eval_operand src s = SOME sw /\ n < dimword (:256) /\
@@ -415,7 +415,7 @@ Theorem compile_scratch_prefix_body_frag_mem:
     val_in_memory tv v (w2n sw) s.vs_memory /\ val_wf tv v /\
     val_footprint tv v <= n ==>
     frag_exec_mem ctx sa sn (\u. u = s)
-      (\t. stmt_state_rel H ctx func ce cx es t /\ alloca_history func t /\
+      (\t. stmt_state_rel ctx func ce cx es t /\ alloca_history func t /\
         return_buf_frame d ce sn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
@@ -453,9 +453,9 @@ Proof
 QED
 
 Theorem annassign_memory_assign_body_frag_mem:
-  !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d R info bytes.
+  !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d R bytes.
     compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
-      ty ty info bytes sa = ((), sb) /\
+      ty ty bytes sa = ((), sb) /\
     (!x. src = Var x ==> not_fresh_at sa x) /\ not_fresh_at sa p /\
     eval_operand src s = SOME sw /\ lookup_var p s = SOME w /\
     ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
@@ -463,7 +463,7 @@ Theorem annassign_memory_assign_body_frag_mem:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
@@ -474,7 +474,7 @@ Theorem annassign_memory_assign_body_frag_mem:
     w2n w + type_memory_size tyv <= s.vs_alloca_next /\
     alloca_history func s /\ return_buf_frame d cenv sa s ==>
     frag_exec_mem ctx sa sb (\u. u = s)
-      (\t. stmt_state_rel H ctx func cenv cx
+      (\t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
             (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
         alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
@@ -552,12 +552,12 @@ Proof
 QED
 
 Theorem body_decl_alloca_run:
-  stmt_state_rel H ctx func c cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func c cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit (n2w sz)] /\ inst.inst_outputs = [p] /\
   not_local_ptr c es.scopes p /\ sz < dimword (:256) ==>
   ?t w. exec_alloca inst s (n2w sz : bytes32) = OK t /\
-    stmt_state_rel H ctx func c cx es t /\ lookup_var p t = SOME w /\
+    stmt_state_rel ctx func c cx es t /\ lookup_var p t = SOME w /\
     FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
     w2n w + sz <= t.vs_alloca_next /\ s.vs_alloca_next <= t.vs_alloca_next /\
     (!x. x <> p ==> lookup_var x t = lookup_var x s) /\
@@ -588,10 +588,10 @@ Theorem annassign_setup_body_frag_mem:
     emit_inst ALLOCA [Lit (n2w (type_memory_bytes ce ty))] [p] st = ((),sA) /\
     type_memory_bytes ce ty < dimword (:256) /\
     fn_has_code sa sA func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s /\
+    local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s /\
     alloca_history func s /\ return_buf_frame d ce sa s ==>
     frag_exec_mem ctx sa sA (\u. u = s)
-      (\t. stmt_state_rel H ctx func c cx es t /\ alloca_history func t /\
+      (\t. stmt_state_rel ctx func c cx es t /\ alloca_history func t /\
         return_buf_frame d c sA t /\ s.vs_alloca_next <= t.vs_alloca_next /\
         local_ptrs_reserved c sA /\ not_fresh_at sA p /\
         FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) (type_memory_bytes ce ty)) /\
@@ -603,7 +603,7 @@ Theorem annassign_setup_body_frag_mem:
           w2n w + type_memory_bytes ce ty <= t.vs_alloca_next) R
 Proof
   rpt gen_tac >> strip_tac >> drule_all annassign_setup_shape >> strip_tac >>
-  `stmt_state_rel H ctx func c cx es s` by metis_tac[stmt_state_rel_declare_local_entry] >>
+  `stmt_state_rel ctx func c cx es s` by metis_tac[stmt_state_rel_declare_local_entry] >>
   qabbrev_tac `A = mk_inst st.cs_next_id ALLOCA
     [Lit (n2w (type_memory_bytes ce ty))] [p]` >>
   `A.inst_opcode = ALLOCA /\ A.inst_operands = [Lit (n2w (type_memory_bytes ce ty))] /\
@@ -636,17 +636,17 @@ Proof
 QED
 
 Theorem annassign_name_rhs_body_frag_mem:
-  !ctx func cenv cx env source_id es s id p sz w inst v tyv sc rest a src ty sa sm sb d R info bytes.
+  !ctx func cenv cx env source_id es s id p sz w inst v tyv sc rest a src ty sa sm sb d R bytes.
     lower_value compile_expr cenv ty (Name ty source_id) sa = (src,sm) /\
     expr_sim_pre cenv cx env (Name ty source_id) es /\
     (do result <- eval_expr cx (Name ty source_id); read_result cx result od) es = (INL v,es) /\
     compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
-      ty ty info bytes sm = ((), sb) /\
+      ty ty bytes sm = ((), sb) /\
     not_fresh_at sa p /\ lookup_var p s = SOME w /\
     ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
@@ -656,7 +656,7 @@ Theorem annassign_name_rhs_body_frag_mem:
     w2n w + type_memory_size tyv <= s.vs_alloca_next /\
     alloca_history func s /\ return_buf_frame d cenv sa s ==>
     frag_exec_mem ctx sa sb (\u. u = s)
-      (\t. stmt_state_rel H ctx func cenv cx
+      (\t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
             (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
         alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
@@ -671,7 +671,7 @@ Proof
       comp_bind_def, comp_return_def, unwrap_value_def,
       contextTheory.mk_ptr_def, vyperASTTheory.expr_type_def] >>
   irule annassign_memory_assign_body_frag_mem >> simp[] >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[eval_operand_def] >>
   qexists_tac `inst` >> simp[] >>
   fs[local_ptrs_reserved_def] >> metis_tac[]
@@ -688,9 +688,7 @@ Theorem body_annassign_name_compiler_parts:
       lower_value compile_expr c typ (Name typ source_id) sA = (op,sB) /\
       compile_assign_value c (Var p) LocMemory op F (vv_location vv)
         typ (lowered_value_type c (Name typ source_id))
-        (case typ of ArrayT elem_ty (Dynamic _) =>
-          SOME ((type_memory_bytes c elem_ty + 31) DIV 32,type_memory_bytes c elem_ty)
-        | _ => NONE) (type_memory_bytes c typ) sB = ((),sb)
+        (type_memory_bytes c typ) sB = ((),sb)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>

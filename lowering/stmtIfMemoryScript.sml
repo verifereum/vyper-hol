@@ -132,7 +132,7 @@ Resume compile_if_stmt_frag_mem[selected_branch]:
        stmt_lands lctx sb res u /\ ~u.vs_halted /\
        (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
        cenv_top_ext cenv cenv'' ee.scopes /\
-       stmt_state_rel H ctx func cenv'' cx ee u /\
+       stmt_state_rel ctx func cenv'' cx ee u /\
        (!x w. not_fresh_at entry x /\
               lookup_var x (jump_to (if b then tl else el) t) = SOME w ==>
               lookup_var x u = SOME w) /\
@@ -188,7 +188,7 @@ Proof
     simp[expr_res_ok_def] >>
   `INL (BoolV b) <> (INR (Error (RuntimeError "convert empty bytes to signed")) : value + exception)` by simp[] >>
   drule_all cond_jump_frag_mem >> strip_tac >> fs[] >>
-  gvs[] >> rename1 `stmt_state_rel H ctx func cenv cx es1 sv` >>
+  gvs[] >> rename1 `stmt_state_rel ctx func cenv cx es1 sv` >>
   `!st l. sa.cs_next_var <= st.cs_next_var ==>
           ret_pc_ok cenv st (jump_to l sv) /\
           return_buf_frame d cenv st (jump_to l sv)` by
@@ -208,7 +208,7 @@ Proof
   qabbrev_tac `se = jump_to si.cs_current_bb sv` >>
   `(?s. stmt_lands lctx sb res s /\ ~s.vs_halted /\
          (res = INL () ==> ~block_is_terminated (if b then s7 else s10)) /\
-         stmt_state_rel H ctx func cenv cx (es2 with scopes := rest) s /\
+         stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s /\
          alloca_history func s /\
          (!x w. not_fresh_at si x /\ lookup_var x se = SOME w ==>
                 lookup_var x s = SOME w) /\

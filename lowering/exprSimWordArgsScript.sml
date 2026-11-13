@@ -27,7 +27,7 @@
  *   forced_eval_expr_preserves_scopes_dom — forced evaluation keeps scope domains
  *   lower_word_args_sim    — the operands' fragments, run in sequence
  *   wb_frame, wb_args_post, wb_args_exit — what holds after them
- *   expr_post_word_builtin — expr_post H of the whole from the last
+ *   expr_post_word_builtin — expr_post of the whole from the last
  *                            operand's and the fragment's facts
  *
  * Its operands and result are word_values and its fragment leaves memory
@@ -59,7 +59,8 @@ End
 
 Theorem eval_expr_builtin_cases:
   !cx ann bt args es res es'.
-    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ bt <> Bop In /\ bt <> Bop NotIn /\
+    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
+    bt <> Bop In /\ bt <> Bop NotIn /\
     builtin_args_length_ok bt (LENGTH args) /\
     (do r <- eval_expr cx (Builtin ann bt args); read_result cx r od) es = (res, es') ==>
     (?exc. eval_exprs cx args es = (INR exc, es') /\ res = INR exc) \/
@@ -112,7 +113,7 @@ Proof
 QED
 
 Theorem eval_expr_builtin_action:
-  bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+  bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
   bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) ==>
   bind (eval_expr cx (Builtin ann bt args)) (read_result cx) =
@@ -128,23 +129,19 @@ QED
 (* ===== A list-indexed word fragment interface ===== *)
 Definition word_builtin_frag_def:
   word_builtin_frag ctx func cenv cx code res vs es0 <=>
-    !st0 sa sb xs op s0.
+    !sa sb xs op s0.
       code xs sa = (op, sb) /\ expr_res_ok res /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      (!H. valid_horizon cx st0 H es0.storage_trace ==>
-        stmt_state_rel H ctx func cenv cx es0 s0 /\
-        storage_well_formed_on cx es0 (FST H)) /\
+      stmt_state_rel ctx func cenv cx es0 s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs vs /\
       ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       ?r. gas_marked_path F ctx func s0 0 r /\
         ((?s v. r = OK s /\ res = INL v /\ word_value v /\
-                (!H. valid_horizon cx st0 H es0.storage_trace ==>
-                  stmt_state_rel H ctx func cenv cx es0 s /\
-                  storage_well_formed_on cx es0 (FST H)) /\
+                stmt_state_rel ctx func cenv cx es0 s /\
                 eval_operand op s = SOME (val_to_w256 v) /\
                 (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                        lookup_var z s = SOME w) /\
@@ -299,7 +296,7 @@ QED
 
 Theorem expr_post_frame:
   !func cenv cx e es sa sb s0 es' v op s ctx.
-    expr_post H ctx func cenv cx e es sa sb s0 es' v op s ==>
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s ==>
     wb_frame cenv es es' sa s0 s
 Proof
   simp[expr_post_def, wb_frame_def] >> metis_tac[]
@@ -307,7 +304,7 @@ QED
 
 Theorem expr_post_pure_frame:
   !func cenv cx e es sa sb s0 es' v op s ctx.
-    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     ~expr_has_effect e ==>
     pure_frame cenv func es sa s0 s
 Proof
@@ -316,15 +313,15 @@ QED
 
 Theorem expr_post_state:
   !func cenv cx e es sa sb s0 es' v op s ctx.
-    expr_post H ctx func cenv cx e es sa sb s0 es' v op s ==>
-    stmt_state_rel H ctx func cenv cx es' s
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s ==>
+    stmt_state_rel ctx func cenv cx es' s
 Proof
   simp[expr_post_def]
 QED
 
 Theorem expr_post_word_operand:
   !func cenv cx e es sa sb s0 es' v op s ctx.
-    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     is_word_type (expr_type e) /\
     IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\ word_value v ==>
     eval_operand op s = SOME (val_to_w256 v)
@@ -335,10 +332,10 @@ QED
 
 Theorem expr_post_word_intro:
   !func cenv cx e es sa sb s0 es' v op s ctx.
-    stmt_state_rel H ctx func cenv cx es' s /\ is_word_type (expr_type e) /\ word_value v /\
+    stmt_state_rel ctx func cenv cx es' s /\ is_word_type (expr_type e) /\ word_value v /\
     eval_operand op s = SOME (val_to_w256 v) /\ wb_frame cenv es es' sa s0 s /\
     (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
-    expr_post H ctx func cenv cx e es sa sb s0 es' v op s
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s
 Proof
   simp[expr_post_def, wb_frame_def, expr_val_rel_def, expr_val_at_def,
        typed_val_to_w256_word_value] >> metis_tac[]
@@ -360,7 +357,7 @@ QED
 
 Theorem wb_frame_trans:
   !func cenv cx es s0 sa es1 es' s1 t u ctx.
-    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
     wb_frame cenv es es1 sa s0 t /\ wb_frame cenv es1 es' s1 t u ==>
@@ -462,9 +459,8 @@ End
 
 (* ===== Argument fragment execution ===== *)
 Definition wb_args_post_def:
-  wb_args_post H ctx func cenv cx es sa s0 es' xs vs s <=>
-    stmt_state_rel H ctx func cenv cx es' s /\
-    storage_well_formed_on cx es' (FST H) /\
+  wb_args_post ctx func cenv cx es sa s0 es' xs vs s <=>
+    stmt_state_rel ctx func cenv cx es' s /\
     LIST_REL (\x v. eval_operand x s = SOME (val_to_w256 v)) xs vs /\
     wb_frame cenv es es' sa s0 s
 End
@@ -504,13 +500,13 @@ Theorem expr_sim_apply:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_outcome F (cx_tops cx) (ctx, func)
       (bind (eval_expr cx e) (read_result cx)) (es, s0)
       (\res ee t. ?v. res = INL v /\
-        expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
+        expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
@@ -530,8 +526,8 @@ Proof
 QED
 
 Theorem stmt_state_rel_gas_obs[simp]:
-  stmt_state_rel H ctx func cenv cx (es with gas_obs := gs) s =
-  stmt_state_rel H ctx func cenv cx es s
+  stmt_state_rel ctx func cenv cx (es with gas_obs := gs) s =
+  stmt_state_rel ctx func cenv cx es s
 Proof
   simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def]
 QED
@@ -573,12 +569,12 @@ QED
 
 Theorem lower_word_args_nil_sim:
   !ctx func cenv cx es sa s0.
-    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_outcome F (cx_tops cx) (ctx, func) (eval_exprs cx []) (es, s0)
       (\rr ee t. ?vs. rr = INL vs /\
-         wb_args_post H ctx func cenv cx es sa s0 ee [] vs t /\
+         wb_args_post ctx func cenv cx es sa s0 ee [] vs t /\
          pure_frame cenv func es sa s0 t /\
          t.vs_current_bb = sa.cs_current_bb /\
          t.vs_inst_idx = LENGTH sa.cs_current_insts)
@@ -594,15 +590,15 @@ QED
 
 Theorem wb_args_post_cons:
   !func cenv cx e es sa s1 s0 es1 v x t es' xs vs u ctx.
-    expr_post H ctx func cenv cx e es sa s1 s0 es1 v x t /\
-    wb_args_post H ctx func cenv cx es1 s1 t es' xs vs u /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    expr_post ctx func cenv cx e es sa s1 s0 es1 v x t /\
+    wb_args_post ctx func cenv cx es1 s1 t es' xs vs u /\
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
     is_word_type (expr_type e) /\
     IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\ word_value v /\
     (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) ==>
-    wb_args_post H ctx func cenv cx es sa s0 es' (x::xs) (v::vs) u
+    wb_args_post ctx func cenv cx es sa s0 es' (x::xs) (v::vs) u
 Proof
   rpt strip_tac >>
   `eval_operand x t = SOME (val_to_w256 v)` by
@@ -618,8 +614,8 @@ QED
 
 Theorem wb_args_pure_cons:
   !func cenv cx e es sa s1 s0 es1 v x t es' args xs vs u ctx.
-    expr_post H ctx func cenv cx e es sa s1 s0 es1 v x t /\
-    wb_args_post H ctx func cenv cx es1 s1 t es' xs vs u /\
+    expr_post ctx func cenv cx e es sa s1 s0 es1 v x t /\
+    wb_args_post ctx func cenv cx es1 s1 t es' xs vs u /\
     (~EXISTS expr_has_effect args ==> pure_frame cenv func es1 s1 t u) /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
@@ -707,12 +703,12 @@ Theorem lower_word_args_sim:
     lower_word_args cenv arg_ty args sa = (xs,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_outcome F (cx_tops cx) (ctx, func) (eval_exprs cx args) (es, s0)
       (\rr ee t. ?vs. rr = INL vs /\
-         wb_args_post H ctx func cenv cx es sa s0 ee xs vs t /\
+         wb_args_post ctx func cenv cx es sa s0 ee xs vs t /\
          (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -754,7 +750,7 @@ Resume lower_word_args_sim[head_normal]:
   qpat_x_assum `(\rr ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
   gnvs[] >>
   drule_all wb_args_head_marked_facts >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
+  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
     metis_tac[expr_post_state] >>
   `~t.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
@@ -794,7 +790,7 @@ Resume lower_word_args_sim[tail_normal]:
         (mp_tac o MATCH_MP gas_marked_exec_cons_values) >> simp[]) >>
   disj1_tac >> simp[] >> conj_tac
   >- (irule wb_args_post_cons >>
-      qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
       goal_assum (drule_at Any) >> simp[]) >>
   strip_tac >> match_mp_tac wb_args_pure_cons >>
   qexistsl_tac [`cx`, `e`, `s1`, `es_end with gas_obs := []`, `v`, `x`, `t`,
@@ -822,14 +818,14 @@ Finalise lower_word_args_sim
 
 Theorem expr_post_word_builtin:
   !func cenv cx es sa sm s0 es' xs vs t ann bt args sb v op u ctx.
-    wb_args_post H ctx func cenv cx es sa s0 es' xs vs t /\
+    wb_args_post ctx func cenv cx es sa s0 es' xs vs t /\
     (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
     sa.cs_next_var <= sm.cs_next_var /\ is_word_type ann /\ word_value v /\
-    stmt_state_rel H ctx func cenv cx es' u /\ eval_operand op u = SOME (val_to_w256 v) /\
+    stmt_state_rel ctx func cenv cx es' u /\ eval_operand op u = SOME (val_to_w256 v) /\
     (!z w. not_fresh_at sm z /\ lookup_var z t = SOME w ==> lookup_var z u = SOME w) /\
     (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
     u.vs_memory = t.vs_memory ==>
-    expr_post H ctx func cenv cx (Builtin ann bt args) es sa sb s0 es' v op u
+    expr_post ctx func cenv cx (Builtin ann bt args) es sa sb s0 es' v op u
 Proof
   rpt strip_tac >> irule expr_post_word_intro >>
   simp[vyperASTTheory.expr_type_def, expr_has_effect_thm] >> conj_tac
@@ -840,7 +836,7 @@ Proof
 QED
 
 Theorem word_builtin_continuation_summary:
-  wb_args_post H ctx func cenv cx es sa s0 (ee with gas_obs := []) xs vs t0 /\
+  wb_args_post ctx func cenv cx es sa s0 (ee with gas_obs := []) xs vs t0 /\
   (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t0) /\
   t0.vs_current_bb = sm.cs_current_bb /\
   t0.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t0.vs_halted /\
@@ -857,13 +853,13 @@ Theorem word_builtin_continuation_summary:
     (\st. (builtin_result cx st.accounts ann bt (MAP expr_type args) vs,st))
     (ee with gas_obs := [],t0)
     (\res fin t. ?v. res = INL v /\
-      expr_post H ctx func cenv cx (Builtin ann bt args) es sa sb s0 fin v op t /\
+      expr_post ctx func cenv cx (Builtin ann bt args) es sa sb s0 fin v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res fin r. expr_exit res r)
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
+  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
    LIST_REL (\x v. eval_operand x t0 = SOME (val_to_w256 v)) xs vs` by
     gvs[wb_args_post_def] >>
   qpat_x_assum `word_builtin_frag _ _ _ _ _ _ _ _`
@@ -882,7 +878,7 @@ Proof
 QED
 
 Theorem word_builtin_marked_admissible:
-  bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+  bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
   bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) /\
   gas_admissible (bind (eval_expr cx (Builtin ann bt args)) (read_result cx))
@@ -902,7 +898,7 @@ Proof
 QED
 
 Theorem word_builtin_exempt_cert:
-  bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+  bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
   bt <> Bop In /\ bt <> Bop NotIn /\
   builtin_args_length_ok bt (LENGTH args) /\
   gas_exempt_cert memory tops (ctx,func)
@@ -931,7 +927,8 @@ QED
 
 Theorem compile_word_builtin_sim:
   !ctx func cenv cx ty ann bt args arg_ty Inv es code.
-    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ bt <> Bop In /\ bt <> Bop NotIn /\
+    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ code_slice_source bt args = NONE /\
+    bt <> Bop In /\ bt <> Bop NotIn /\
     builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
     wb_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
     (!es gs. Inv es ==> Inv (es with gas_obs := gs)) /\

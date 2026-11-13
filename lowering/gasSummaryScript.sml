@@ -146,11 +146,3 @@ Proof
   PairCases_on `p` >> PairCases_on `start` >>
   simp[gas_summary_at_def] >> metis_tac[gas_marked_exec_from_mem]
 QED
-
-Theorem gas_marked_exec_start_gas_obs:
-  gas_marked_exec memory (ctx,func) source (es with gas_obs := gs,s0)
-    marks res ee r =
-  gas_marked_exec memory (ctx,func) source (es,s0) marks res ee r
-Proof
-  simp[gas_marked_exec_def]
-QED

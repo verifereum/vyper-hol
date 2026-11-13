@@ -31,8 +31,8 @@ Proof
 QED
 
 Theorem log_mem_state_rel_gas_obs[local]:
-  stmt_state_rel H ctx func cenv cx es s ==>
-  stmt_state_rel H ctx func cenv cx (es with gas_obs := gs) s
+  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel ctx func cenv cx (es with gas_obs := gs) s
 Proof
   strip_tac >>
   `s with <|vs_gas_readings := s.vs_gas_readings;
@@ -90,7 +90,7 @@ Theorem compile_log_eval_all_gas_mem:
     expr_sim_inv cenv cx env0 es0 /\ well_typed_exprs env args /\
     (!id t. FLOOKUP env.var_types id = SOME t ==>
        ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+    stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
     ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -186,7 +186,7 @@ Resume compile_log_eval_all_gas_mem[head_value]:
      (\r. !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception))
      (es_end with gas_obs := [])` by
     (irule log_mem_tail_admissible >> metis_tac[]) >>
-  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
+  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
     metis_tac[expr_post_state] >>
   `MAP FDOM es.scopes = MAP FDOM es_end.scopes` by
     (`(do r <- eval_expr cx e; read_result cx r od)

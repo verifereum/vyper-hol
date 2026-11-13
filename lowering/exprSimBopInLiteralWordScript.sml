@@ -16,7 +16,7 @@ Ancestors
   gasContext gasSummary gasOutcome gasSummaryCompose gasExemptCert
   fragGasMode fragGasPath fragGasFresh varsExt exprSimUnopCompose exprSimWordArgs loweringPosts valueEncoding
   exprSimBopTyped exprBopSimDefs exprBopSimProps
-  exprSimUnopProps freshWrites emitHelperProps exprLoweringProps
+  exprSimUnopProps freshWrites emitHelperProps exprLoweringProps vyperTypeArgFits
   venomExecSemantics venomState words valueEncodingProofs vyperStorage
   exprSimSource
   exprSimHypsDefs
@@ -43,7 +43,7 @@ Proof
 QED
 
 Theorem literal_word_post_operand:
-  expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
+  expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
   eval_operand op s = SOME (typed_val_to_w256 tv v)
@@ -53,17 +53,17 @@ Proof
 QED
 
 Theorem literal_word_post_cons:
-  expr_post H ctx func cenv cx e es sa s1 s0 es1 v x t /\
-  stmt_state_rel H ctx func cenv cx es' u /\
+  expr_post ctx func cenv cx e es sa s1 s0 es1 v x t /\
+  stmt_state_rel ctx func cenv cx es' u /\
   LIST_REL (\x v. eval_operand x u = SOME (typed_val_to_w256 tv v)) xs vs /\
   wb_frame cenv es1 es' s1 t u /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) ==>
-  stmt_state_rel H ctx func cenv cx es' u /\
+  stmt_state_rel ctx func cenv cx es' u /\
   LIST_REL (\x v. eval_operand x u = SOME (typed_val_to_w256 tv v)) (x::xs) (v::vs) /\
   wb_frame cenv es es' sa s0 u
 Proof
@@ -119,10 +119,10 @@ Proof
 QED
 
 Theorem literal_word_post_singleton:
-  expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
+  expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
-  stmt_state_rel H ctx func cenv cx es' s /\
+  stmt_state_rel ctx func cenv cx es' s /\
   LIST_REL (\x v. eval_operand x s = SOME (typed_val_to_w256 tv v)) [op] [v] /\
   wb_frame cenv es es' sa s0 s
 Proof
@@ -166,7 +166,7 @@ Theorem literal_membership_typing:
 Proof
   strip_tac >> Cases_on `t` >>
   gvs[well_typed_builtin_app_def, well_typed_binop_def, EVERY_MAP] >>
-  gvs[EVERY_MEM] >> metis_tac[]
+  gvs[EVERY_MEM] >> metis_tac[arg_type_fits_prim_word]
 QED
 
 Theorem literal_membership_result:
@@ -216,7 +216,7 @@ Theorem literal_make_array_action:
 Proof
   strip_tac >>
   `MakeArray (SOME et) n <> Len /\ MakeArray (SOME et) n <> Env MsgGas /\
-   ~precompile_builtin (MakeArray (SOME et) n) /\
+   ~precompile_builtin (MakeArray (SOME et) n) /\ code_slice_source (MakeArray (SOME et) n) elems = NONE /\
    MakeArray (SOME et) n <> Bop In /\ MakeArray (SOME et) n <> Bop NotIn /\
    builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH elems)` by
     simp[precompile_builtin_def, builtin_args_length_ok_def] >>
@@ -801,13 +801,13 @@ Theorem literal_typed_fragment_success:
   value_has_type tv v /\ EVERY (value_has_type tv) vs /\
   EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) (needle::xs) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx ee s0 /\
+  stmt_state_rel ctx func cenv cx ee s0 /\
   LIST_REL (\x v. eval_operand x s0 = SOME (typed_val_to_w256 tv v)) xs vs /\
   eval_operand needle s0 = SOME (typed_val_to_w256 tv v) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?s. gas_marked_path F ctx func s0 0 (OK s) /\
-      stmt_state_rel H ctx func cenv cx ee s /\
+      stmt_state_rel ctx func cenv cx ee s /\
       eval_operand op s = SOME (bool_to_word (if bop = In then MEM v vs else ~MEM v vs)) /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
@@ -875,12 +875,12 @@ QED
 
 Theorem literal_word_args_nil_sim:
   !ctx func cenv cx es sa s0 tv.
-    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_outcome F (cx_tops cx) (ctx, func) (eval_exprs cx []) (es, s0)
       (\rr ee t. ?vs. rr = INL vs /\
-         stmt_state_rel H ctx func cenv cx ee t /\
+         stmt_state_rel ctx func cenv cx ee t /\
          LIST_REL (\x v. eval_operand x t = SOME (typed_val_to_w256 tv v)) [] vs /\
          wb_frame cenv es ee sa s0 t /\
          (~EXISTS expr_has_effect [] ==> pure_frame cenv func es sa s0 t) /\
@@ -904,12 +904,12 @@ Theorem literal_word_args_sim:
     lower_word_args cenv arg_ty args sa = (xs,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_outcome F (cx_tops cx) (ctx, func) (eval_exprs cx args) (es, s0)
       (\rr ee t. ?vs. rr = INL vs /\
-         stmt_state_rel H ctx func cenv cx ee t /\
+         stmt_state_rel ctx func cenv cx ee t /\
          LIST_REL (\x v. eval_operand x t = SOME (typed_val_to_w256 tv v)) xs vs /\
          wb_frame cenv es ee sa s0 t /\
          (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
@@ -952,7 +952,7 @@ Resume literal_word_args_sim[head_normal]:
   qpat_x_assum `(\rr ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
   gnvs[] >>
   drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) literal_word_args_head_marked_facts) >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
+  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
     metis_tac[expr_post_state] >>
   `~t.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
@@ -990,16 +990,16 @@ Resume literal_word_args_sim[tail_normal]:
         (mp_tac o MATCH_MP gas_marked_exec_cons_values) >> simp[]) >>
   qpat_x_assum `wb_frame _ _ (_ with gas_obs := _) _ _ _`
     (assume_tac o REWRITE_RULE [wb_frame_gas_obs]) >>
-  `stmt_state_rel H ctx func cenv cx es_end' t' /\
+  `stmt_state_rel ctx func cenv cx es_end' t' /\
    LIST_REL (\x v. eval_operand x t' = SOME (typed_val_to_w256 tv v)) (x::ys) (v::vs) /\
    wb_frame cenv es es_end' sa s0 t'` by
     (irule literal_word_post_cons >>
-     qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
      goal_assum (drule_at Any) >> simp[]) >>
   `~EXISTS expr_has_effect (e::args) ==> pure_frame cenv func es sa s0 t'` by
     (rewrite_tac[listTheory.EXISTS_DEF, DE_MORGAN_THM] >> strip_tac >>
      `pure_frame cenv func es sa s0 t` by
-       (qpat_assum `expr_post H _ _ _ _ e _ _ _ _ _ _ _ _`
+       (qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _`
           (mp_then Any mp_tac exprSimWordArgsTheory.expr_post_pure_frame) >>
         simp[]) >>
      `pure_frame cenv func es_end s1 t t'` by
@@ -1011,7 +1011,7 @@ Resume literal_word_args_sim[tail_normal]:
        (qpat_assum `wb_frame cenv _ _ s1 t t'` mp_tac >>
         pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
         strip_tac >> first_assum ACCEPT_TAC) >>
-     qpat_assum `expr_post H _ _ _ _ e _ _ _ _ _ _ _ _`
+     qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _`
        (strip_assume_tac o MATCH_MP exprSimWordArgsTheory.expr_post_frame) >>
      `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
             lookup_var x t = SOME w` by
@@ -1116,7 +1116,7 @@ Theorem literal_typed_continuation_summary:
   value_has_type tv v /\ EVERY (value_has_type tv) vs /\
   EVERY (\x. !z. x = Var z ==> not_fresh_at sm z) (needle::xs) /\
   fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
-  stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
+  stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
   LIST_REL (\x v. eval_operand x t0 = SOME (typed_val_to_w256 tv v)) xs vs /\
   eval_operand needle t0 = SOME (typed_val_to_w256 tv v) /\
   wb_frame cenv es (ee with gas_obs := []) sa s0 t0 /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -1129,7 +1129,7 @@ Theorem literal_typed_continuation_summary:
     (vyperState$return (BoolV (if bop = In then MEM v vs else ~MEM v vs)))
     (ee with gas_obs := [],t0)
     (\res fin s. ?w. res = INL w /\
-      expr_post H ctx func cenv cx
+      expr_post ctx func cenv cx
         (Builtin (BaseT BoolT) (Bop bop) [e1; Builtin a (MakeArray t n) elems])
         es sa sb s0 fin w op s /\
       s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -1221,7 +1221,7 @@ Resume literal_expr_sim[normal]:
   qpat_x_assum `literal_word_args_ready _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `lower_value _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `wb_args_shape _ _ _` kall_tac >>
-  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t'` by simp[] >>
+  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t'` by simp[] >>
   `EVERY (\x. !z. x = Var z ==> not_fresh_at sm z) (needle::xs)` by
     (simp[] >> metis_tac[]) >>
   `~expr_has_effect (Builtin (BaseT BoolT) (Bop bop)

@@ -209,8 +209,12 @@ them to EVM readings. The old
 - The resource alternative is genuine frame OutOfGas/StackOverflow. A
   value-zero computed precompile that the EVM fails for lack of gas is not an
   alternative: its failure is the call's oracle outcome, which the source and
-  Venom both take. There is no existential sufficient-gas
-  loophole, gas bound or guarantee of success regardless of resources.
+  Venom both take. The call theorem gives no gas bound or guarantee of
+  success regardless of resources; the companion `vyper_call_gas_sufficient`
+  does: with enough gas the run exists, and, provided the call trace's outcomes are
+  storage-valid (`call_outcomes_storage_ok`) and none of its source
+  observations is exempt (`~source_exempt`), the frame runs out of gas only
+  if it reaches a `RETURNDATACOPY` instruction (`frame_inst_at`).
 - Static entry, runtime immutables, msg.gas/gas=, fallback invocation and
   arbitrary unsupported programs are outside this runtime contract. Outgoing
   STATICCALL is not a static-entry guarantee. Environmental satisfiability,

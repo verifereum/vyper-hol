@@ -113,7 +113,7 @@ Proof
      metis_tac[cs_extends_trans]) >>
   irule forced_then_stmt_outcome >>
   qexistsl [
-    `\v ee t. expr_post H ctx func cenv cx e es sa su s0 ee v op t /\
+    `\v ee t. expr_post ctx func cenv cx e es sa su s0 ee v op t /\
               t.vs_current_bb = su.cs_current_bb /\
               t.vs_inst_idx = LENGTH su.cs_current_insts`,
     `e`, `assign_tuple_targets cx (TupleTarget (MAP (BaseTarget o NameTarget) ids))`] >>
@@ -154,7 +154,7 @@ Resume compile_assign_tuple_locals_memory_stmt_frag[success]:
     (drule eval_read_preserves_scopes_dom >> simp[]) >>
   `alloca_frame cenv es sa s0 cenv ee t` by
     (drule_all expr_post_alloca_frame >> simp[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   suspend "suffix"
 QED
@@ -191,8 +191,8 @@ Resume compile_assign_tuple_locals_memory_stmt_frag[post]:
   conj_tac >- (drule assign_tuple_locals_gas >> simp[]) >>
   asm_rewrite_tac [] >> disj1_tac >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
-  `stmt_state_rel H ctx func cenv cx (ee' with gas_obs := []) t'` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ ee' t'` mp_tac >>
+  `stmt_state_rel ctx func cenv cx (ee' with gas_obs := []) t'` by
+    (qpat_assum `stmt_state_rel _ _ _ _ ee' t'` mp_tac >>
      rpt (pop_assum kall_tac) >>
      mp_tac (Q.INST [`es` |-> `ee'`, `s` |-> `t'`,
                      `gs` |-> `[]`, `readings` |-> `t'.vs_gas_readings`,

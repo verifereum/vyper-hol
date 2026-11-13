@@ -76,7 +76,7 @@ val () = List.app (fn th =>
         mem_safe_run_all_fuel, frag_exec_mem_complete];
 
 Theorem body_local_region_frontier:
-  stmt_state_rel H ctx func ce cx es s /\
+  stmt_state_rel ctx func ce cx es s /\
   local_region ce es.scopes s name b sz ==>
   b + sz <= s.vs_alloca_next
 Proof
@@ -90,7 +90,7 @@ Proof
 QED
 
 Theorem body_local_region_subrange:
-  stmt_state_rel H ctx func ce cx es s /\
+  stmt_state_rel ctx func ce cx es s /\
   local_region ce es.scopes s name b sz /\ off + n <= sz ==>
   b + off + n <= s.vs_alloca_next
 Proof
@@ -98,7 +98,7 @@ Proof
 QED
 
 Theorem body_local_ptr_MLOAD_frontier:
-  stmt_state_rel H ctx func ce cx es s /\
+  stmt_state_rel ctx func ce cx es s /\
   local_region ce es.scopes s name b sz /\ 32 <= sz /\
   lookup_var p s = SOME (n2w b) ==>
   inst_mem_below_frontier (mk_inst iid MLOAD [Var p] outs) s

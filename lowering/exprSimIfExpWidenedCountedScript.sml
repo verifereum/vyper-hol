@@ -9,13 +9,13 @@ Ancestors
 
 Theorem typed_copy_semantic_frame:
   typed_copy_state_frame sa b sz s t /\
-  stmt_state_rel H ctx semantic_func ce cx ee s /\
+  stmt_state_rel ctx semantic_func ce cx ee s /\
   local_ptrs_reserved ce sa /\
   MEM inst (fn_insts semantic_func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
   (!name lb len. local_region ce ee.scopes s name lb len ==>
     b + sz <= lb \/ lb + len <= b) ==>
-  stmt_state_rel H ctx semantic_func ce cx ee t
+  stmt_state_rel ctx semantic_func ce cx ee t
 Proof
   strip_tac >> irule copy_buffer_state_rel_frame >>
   qexistsl_tac [`b`, `inst`, `s`, `sa`, `sz`] >>
@@ -46,7 +46,7 @@ Theorem typed_store_counted_semantic_frame:
   fn_has_code sa sb execution_func /\ fn_inst_ids_distinct execution_func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  stmt_state_rel H ctx semantic_func ce cx ee s /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel ctx semantic_func ce cx ee s /\ local_ptrs_reserved ce sa /\
   MEM inst (fn_insts semantic_func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n dw,type_memory_size dtv) /\
   (!name lb len. local_region ce ee.scopes s name lb len ==>
@@ -54,7 +54,7 @@ Theorem typed_store_counted_semantic_frame:
   ?t. gas_marked_path F ctx execution_func s 0 (OK t) /\
     val_in_memory dtv v (w2n dw) t.vs_memory /\
     typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t /\
-    stmt_state_rel H ctx semantic_func ce cx ee t /\
+    stmt_state_rel ctx semantic_func ce cx ee t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -70,7 +70,7 @@ QED
 
 Theorem literal_alloc_buffer_counted:
   compile_alloc_buffer sz sa = (buf,sm) /\
-  stmt_state_rel H ctx semantic_func ce cx ee s /\
+  stmt_state_rel ctx semantic_func ce cx ee s /\
   fn_inst_ids_distinct semantic_func /\ local_ptrs_reserved ce sa /\
   sz < dimword (:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
@@ -79,7 +79,7 @@ Theorem literal_alloc_buffer_counted:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u w. gas_marked_path F ctx execution_func s 0 (OK u) /\
-    stmt_state_rel H ctx semantic_func ce cx ee u /\
+    stmt_state_rel ctx semantic_func ce cx ee u /\
     eval_operand buf.buf_operand u = SOME w /\
     FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\
@@ -176,11 +176,11 @@ Theorem unwrap_value_physical_path:
     type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
     type_memory_size tvt < 2 ** 64) /\
   read_result cx tv ee = (INL v,ee) /\
-  vv_post H ctx func ce cx e es sa sm s0 ee tv vv s /\
+  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u. gas_marked_path F ctx func s 0 (OK u) /\
-    expr_post H ctx func ce cx e es sa sb s0 ee v op u /\
+    expr_post ctx func ce cx e es sa sb s0 ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof

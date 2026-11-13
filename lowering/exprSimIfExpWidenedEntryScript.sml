@@ -5,7 +5,7 @@ Ancestors
 (* Interface probe: the runtime simulation entry supplies the pointer
    existence invariant needed for reverse region transport. *)
 Theorem simulation_entry_local_regions:
-  stmt_state_rel H ctx func ce cx es s0 /\
+  stmt_state_rel ctx func ce cx es s0 /\
   local_ptrs_reserved ce origin /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (!x w. not_fresh_at origin x /\ lookup_var x s0 = SOME w ==>

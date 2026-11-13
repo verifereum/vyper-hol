@@ -46,9 +46,9 @@ QED
 
 Theorem body_not_state_post:
   emit_op NOT [x] sm = (dst,sn) /\ eval_operand x s = SOME w /\
-  local_ptrs_reserved cenv sm /\ stmt_state_rel H ctx func cenv cx es s ==>
+  local_ptrs_reserved cenv sm /\ stmt_state_rel ctx func cenv cx es s ==>
   ?q. run_inst_seq (emitted_insts sm sn) s = OK q /\
-      stmt_state_rel H ctx func cenv cx es q /\
+      stmt_state_rel ctx func cenv cx es q /\
       eval_operand dst q = SOME (word_1comp w) /\
       (!z v. not_fresh_at sm z /\ lookup_var z s = SOME v ==>
              lookup_var z q = SOME v) /\
@@ -76,9 +76,9 @@ Theorem body_not_frag_mem_at:
   emit_op NOT [x] sm = (dst,sn) /\ local_ptrs_reserved cenv sm /\
   fn_has_code sm sn func /\ fn_inst_ids_distinct func ==>
   frag_exec_mem ctx sm sn
-    (\s. s = entry /\ stmt_state_rel H ctx func cenv cx es s /\
+    (\s. s = entry /\ stmt_state_rel ctx func cenv cx es s /\
          eval_operand x s = SOME w /\ alloca_history func s)
-    (\s. stmt_state_rel H ctx func cenv cx es s /\
+    (\s. stmt_state_rel ctx func cenv cx es s /\
          eval_operand dst s = SOME (word_1comp w) /\
          (!z v. not_fresh_at sm z /\ lookup_var z entry = SOME v ==>
                 lookup_var z s = SOME v) /\
@@ -87,12 +87,12 @@ Theorem body_not_frag_mem_at:
 Proof
   rpt strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   drule emit_op_extends >> strip_tac >>
-  qabbrev_tac `P = \s. s = entry /\ stmt_state_rel H ctx func cenv cx es s /\
+  qabbrev_tac `P = \s. s = entry /\ stmt_state_rel ctx func cenv cx es s /\
     eval_operand x s = SOME w /\ alloca_history func s /\ ~s.vs_halted /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   `frag_exec_mem ctx sm sn P
-    (\s. stmt_state_rel H ctx func cenv cx es s /\
+    (\s. stmt_state_rel ctx func cenv cx es s /\
          eval_operand dst s = SOME (word_1comp w) /\
          (!z v. not_fresh_at sm z /\ lookup_var z entry = SOME v ==>
                 lookup_var z s = SOME v) /\

@@ -6,14 +6,13 @@ Ancestors
   venomExecSemantics
 
 Theorem literal_alloca_run[local]:
-  !H.
   !func cenv cx es s inst p (n:bytes32) ctx.
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit n] /\ inst.inst_outputs = [p] /\
     not_local_ptr cenv es.scopes p ==>
     ?t w. exec_alloca inst s n = OK t /\
-      stmt_state_rel H ctx func cenv cx es t /\ lookup_var p t = SOME w /\
+      stmt_state_rel ctx func cenv cx es t /\ lookup_var p t = SOME w /\
       FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w, w2n n) /\
       w2n w + w2n n < dimword (:256) /\ t.vs_memory = s.vs_memory /\
       (!x. x <> p ==> lookup_var x t = lookup_var x s) /\
@@ -68,15 +67,14 @@ Proof
 QED
 
 Theorem literal_alloc_buffer_run:
-  !H.
   !func cenv cx es sa sm buf sz s ctx.
     compile_alloc_buffer sz sa = (buf,sm) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
     ?t w. run_inst_seq (emitted_insts sa sm) s = OK t /\
-      stmt_state_rel H ctx func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\
@@ -141,17 +139,16 @@ QED
 
 (* A bounded store into an allocation separated from local regions. *)
 Theorem literal_mstore_state_rel:
-  !H.
   !func cenv cx es s a (w:bytes32) inst b sz ctx.
-    stmt_state_rel H ctx func cenv cx es s /\ b <= a /\ a + 32 <= b + sz /\
+    stmt_state_rel ctx func cenv cx es s /\ b <= a /\ a + 32 <= b + sz /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
        b + sz <= lb \/ lb + lsz <= b) ==>
-    stmt_state_rel H ctx func cenv cx es (mstore a w s)
+    stmt_state_rel ctx func cenv cx es (mstore a w s)
 Proof
   rpt strip_tac >>
-  qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
   rewrite_tac[Once exprLoweringPropsTheory.stmt_state_rel_def] >> strip_tac >>
   `local_ptrs_rel func cenv es.scopes (mstore a w s)` by
     (irule localPtrsPropsTheory.local_ptrs_rel_mstore >>
@@ -220,16 +217,15 @@ Proof
 QED
 
 Theorem alloc_buffer_source_frag_labels:
-  !H.
   !ctx func cenv cx es sm mid buf sz s src a R.
     compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
     eval_operand src s = SOME a /\
     (!x. src = Var x ==> not_fresh_at sm x) ==>
     ?u w. frag_exec ctx sm mid (\z. z = s) (\z. z = u) R /\
       eval_operand src u = SOME a /\
-      stmt_state_rel H ctx func cenv cx es u /\
+      stmt_state_rel ctx func cenv cx es u /\
       eval_operand buf.buf_operand u = SOME w /\
       FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\
@@ -273,16 +269,15 @@ Proof
 QED
 
 Theorem alloc_buffer_source_frag:
-  !H.
   !ctx func cenv cx es sm mid buf sz s src a R.
     compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
     eval_operand src s = SOME a /\
     (!x. src = Var x ==> not_fresh_at sm x) ==>
     ?u w. frag_exec ctx sm mid (\z. z = s) (\z. z = u) R /\
       eval_operand src u = SOME a /\
-      stmt_state_rel H ctx func cenv cx es u /\
+      stmt_state_rel ctx func cenv cx es u /\
       eval_operand buf.buf_operand u = SOME w /\
       FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\
