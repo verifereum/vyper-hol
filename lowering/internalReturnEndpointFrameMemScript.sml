@@ -1,7 +1,7 @@
 Theory internalReturnEndpointFrameMem
 Ancestors
   internalReturnEndpointMetadataMem internalReturnCompoundEndpointMem
-  intCallReturnDirectBranchesMem ctorReturnFrame exprSimProps stmtSimProps
+  intCallReturnDirectBranchesMem internalReturnBoundaryCommonMem ctorReturnFrame exprSimProps stmtSimProps
   exprOperandVar stmtSimReturn valueEncodingTyping fragExecMem
   loweringPosts exprLoweringProps exprSimDefs loweringStateRelDefs
   venomExecSemantics bodyMemoryDefs intCallReturnMem venomState vyperState
@@ -28,14 +28,15 @@ Proof
   strip_tac >> irule frag_exec_mem_conseq >>
   qexistsl_tac [`P`, `Q`, `intret_mem_q func ce' cx tv bw v (ee with scopes := [])`] >>
   simp[] >> rpt strip_tac >>
-  gvs[intret_mem_q_def, intret_q_def, loweringStateRelDefsTheory.result_rel_def] >>
-  drule_all constructor_exit_state_rel >> simp[]
+  fs[intret_mem_q_def] >> metis_tac[internal_return_post_frame]
 QED
 
 Theorem internal_return_equal_endpoint_mem:
   lower_value compile_expr ce ty e sa = (op,sm) /\
+  compile_return_unlock ce sm = ((),su) /\ ce.ce_returns_count = 0 /\
+  ~is_word_type ty /\
   compile_internal_return ce (SOME op) (Var rpc) 0 ty ty elems
-    (SOME (Var bp)) sm = ((),sb) /\
+    (SOME (Var bp)) su = ((),sb) /\
   ce.ce_imm_alloca = NONE /\
   ret_pc_ok ce sm t /\ ce.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
   ce.ce_return_buf = SOME (PtrVar (Var bp) bsz) /\
@@ -64,10 +65,10 @@ Proof
    w2n bw + type_memory_size tv <= t.vs_alloca_next` by
     gvs[ret_pc_ok_def, return_buf_frame_def, eval_operand_def] >>
   `val_wf tv v` by metis_tac[value_has_type_val_wf] >>
-  drule_at (Pat `compile_internal_return _ _ _ _ _ _ _ _ _ = _`)
-    compile_internal_return_equal_mem >>
-  disch_then (qspecl_then [`ctx`, `func`, `cx`, `ee`, `tv`, `v`, `bw`] mp_tac) >>
-  impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >>
+  mp_tac (Q.SPECL [`ctx`, `func`, `ce`, `cx`, `ee`, `ty`, `ty`,
+    `tv`, `tv`, `v`, `op`, `Var rpc`, `elems`, `Var bp`, `sm`, `su`, `sb`, `bw`]
+    compile_internal_return_compatible_epilogue_mem) >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
   disch_then (irule o MATCH_MP frag_exec_mem_weaken) >> simp[] >>
   fs[expr_post_def, stmt_state_rel_def] >>
   conj_tac >- (irule state_rel_scopes_nil >> first_assum ACCEPT_TAC) >>
