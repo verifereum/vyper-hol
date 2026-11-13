@@ -66,7 +66,7 @@ Proof
   qexists_tac `sm` >> simp[] >> metis_tac[ci_mono_trans]
 QED
 
-Theorem captured_word_encoding[local]:
+Theorem captured_word_encoding:
   vv_holds ce cx ty (Value v) (StackValue tag op) es s /\
   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   value_has_type tv v ==>
