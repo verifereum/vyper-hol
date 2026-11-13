@@ -95,7 +95,7 @@ Proof
 QED
 
 Theorem source_signature_internal_decl:
-  source_typing_ok tops am tx /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   expr_sim_inv c
     (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
   FLOOKUP env.fn_sigs id = SOME sig ==>
@@ -111,14 +111,15 @@ Proof
   qpat_x_assum `fn_sigs_consistent _ _` mp_tac >>
   simp[fn_sigs_consistent_def] >>
   Cases_on `id` >> disch_then drule >> strip_tac >>
-  gvs[source_typing_ok_def, checked_contract_runtime_ready_def,
+  drule_all source_typing_ok_runtime_ready >> strip_tac >>
+  gvs[checked_contract_runtime_ready_def,
       get_module_code_def, initial_evaluation_context_def,
       lookup_callable_function_def, AllCaseEqs()] >>
   drule internal_lookup_supported_decl >> metis_tac[]
 QED
 
 Theorem typed_return_internal_decl:
-  source_typing_ok tops am tx /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   expr_sim_inv c
     (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
   IS_SOME (type_stmt env ret (Return (SOME (Call ann (IntCall id) xs drv)))) ==>
@@ -137,13 +138,14 @@ QED
 
 Theorem source_function_return_evaluates:
   !tops am tx vis mut nr rr name args dflts declared body.
-  source_typing_ok tops am tx /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
   MEM (FunctionDecl vis mut nr rr name args dflts declared body) tops ==>
   ?tv. evaluate_type
     (get_tenv (initial_evaluation_context am.sources am.layouts tx NONE))
     declared = SOME tv
 Proof
-  rpt gen_tac >> simp[source_typing_ok_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  drule_all source_typing_ok_runtime_ready >> strip_tac >>
   drule check_contract_toplevel_decl_MEM >>
   simp[] >> disch_then (drule_at Any) >>
   simp[check_toplevel_decl_def, well_formed_type_def] >>
@@ -157,6 +159,7 @@ QED
 Theorem typed_widened_internal_convention:
   !tops am tx c env es ret ann id xs drv ret_count rbs pvs.
   supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
   expr_sim_inv c
     (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
   IS_SOME (type_stmt env ret (Return (SOME (Call ann (IntCall id) xs drv)))) /\

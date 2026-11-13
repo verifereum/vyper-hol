@@ -119,9 +119,12 @@ QED
 
 Theorem typing_and_storage_contracts:
   (source_typing_ok tops am tx <=>
-    ?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
-          checked_contract_runtime_ready art [(NONE,tops)] am tx /\
-          machine_well_typed am /\ call_tx_well_typed tx) /\
+    ?art cenv.
+      check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
+      global_cells_typed tops art.cta_bare_globals (account_immutables am tx.target) /\
+      constants_fold_module [(NONE, tops)] (account_immutables am tx.target) NONE tops FEMPTY = SOME cenv /\
+      cenv SUBMAP get_source_immutables NONE (account_immutables am tx.target) /\
+      machine_well_typed am /\ call_tx_well_typed tx) /\
   (source_storage_ok tops am tx <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
       contract_storage_well_formed cx (initial_state am []) /\

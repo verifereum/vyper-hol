@@ -100,13 +100,14 @@ QED
 (* The source context is well typed (PR #1081's
    external_source_context_typed). *)
 Theorem external_context_typed_gas_mem[local]:
-  source_typing_ok tops am tx ==>
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx ==>
   context_well_typed
     (initial_evaluation_context am.sources am.layouts tx NONE) /\
   functions_well_typed
     (initial_evaluation_context am.sources am.layouts tx NONE)
 Proof
-  rw[source_typing_ok_def]
+  strip_tac >> drule_all source_typing_ok_runtime_ready >> strip_tac >>
+  conj_tac
   >- gvs[call_tx_well_typed_def, context_well_typed_def,
          initial_evaluation_context_def] >>
   irule check_contract_functions_well_typed_initial >>
@@ -143,7 +144,7 @@ Proof
   `machine_well_typed am` by gvs[source_typing_ok_def] >>
   drule_all external_body_prefix_state_gas_mem >> strip_tac >>
   drule_all external_env_consistent_gas_mem >> strip_tac >>
-  drule external_context_typed_gas_mem >> strip_tac >>
+  drule_all external_context_typed_gas_mem >> strip_tac >>
   rw[gas_admissible_def] >>
   `no_type_error_eval
      (eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)

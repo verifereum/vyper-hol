@@ -1305,7 +1305,7 @@ Proof
   drule_all external_body_prefix_state >> strip_tac >>
   drule_all external_selected_env_consistent >> strip_tac >>
   drule_all external_body_prefix_storage >> strip_tac >>
-  drule external_source_context_typed >> strip_tac >>
+  drule_all external_source_context_typed >> strip_tac >>
   drule_all external_package_dec_metadata >> strip_tac >>
   drule_all external_package_global_maps >> strip_tac >>
   drule external_package_bare_globals >>
