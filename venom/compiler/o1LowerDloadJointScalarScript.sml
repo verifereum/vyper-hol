@@ -334,7 +334,7 @@ Theorem ld_joint_mul_operands[local]:
 Proof
   strip_tac >>
   `!op. MEM op inst.inst_operands ==> op_prov H op = NONE` by
-    (drule ld_joint_scalar_no_provenance >>
+    (drule ld_joint_scalar_no_provenance >> disch_then (qspec_then `ncut` mp_tac) >>
      gvs[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]) >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
