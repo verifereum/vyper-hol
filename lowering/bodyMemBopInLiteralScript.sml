@@ -168,7 +168,7 @@ Theorem literal_typed_continuation_summary_mem[local]:
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
      stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
      storage_well_formed_on cx (ee with gas_obs := []) (FST H)) /\
-  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  valid_horizon cx st0 H0 ee.storage_trace /\
   LIST_REL (\x v. eval_operand x t0 = SOME (typed_val_to_w256 tv v)) xs vs /\
   eval_operand needle t0 = SOME (typed_val_to_w256 tv v) /\
   wb_frame cenv es (ee with gas_obs := []) sa s0 t0 /\
@@ -193,7 +193,6 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `wb_frame _ _ (_ with gas_obs := _) _ _ _`
     (assume_tac o REWRITE_RULE [exprSimWordArgsTheory.wb_frame_gas_obs]) >>
-  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
     (qspec_then `H0` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>

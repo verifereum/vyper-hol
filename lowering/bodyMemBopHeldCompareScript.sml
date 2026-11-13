@@ -104,9 +104,11 @@ Proof
       [qpat_x_assum `expr_exit _ _` mp_tac >> simp[expr_exit_def],
        simp[]] >> NO_TAC),
      (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      gen_tac >> BETA_TAC >>
-      simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def] >> NO_TAC),
+      rpt conj_tac >>
+      FIRST [first_assum ACCEPT_TAC,
+             (gen_tac >> BETA_TAC >>
+              simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def])] >>
+      NO_TAC),
      suspend "second"]
 QED
 
