@@ -105,15 +105,6 @@ Proof
   simp[]
 QED
 
-(* The unit's logs correspond to the EVM's exactly when they are equal. *)
-Theorem logs_correspond_eq[local]:
-  logs_correspond info tenv addr l1 l2 <=> l1 = l2
-Proof
-  `log_entry_corresponds info tenv addr = $=` by
-    simp[FUN_EQ_THM, e2eDefsTheory.log_entry_corresponds_concrete_event] >>
-  simp[e2eDefsTheory.logs_correspond_def, listTheory.LIST_REL_eq]
-QED
-
 (* The shadow run records the real frame's call requests. *)
 Theorem shadow_root_call_requests[local]:
   es.contexts <> [] ==> call_requests (shadow_root es) = call_requests es
@@ -135,6 +126,8 @@ Theorem deploy_venom_frame:
        deploy_result_rel H tops runtime_bc tx es r es' src)
 Proof
   rpt strip_tac >>
+  `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
+    simp[FUN_EQ_THM, e2eDefsTheory.log_entry_corresponds_concrete_event] >>
   `?c0 rb0. es.contexts = [(c0,rb0)] /\
             c0.msgParams.outputTo = Code tx.target`
     by gvs[deploy_state_rel_def] >>
@@ -151,7 +144,8 @@ Proof
       Cases_on `src`
       >- (PairCases_on `x` >>
           Cases_on `ALOOKUP x0.sources tx.target = NONE`
-          >- (gvs[deploy_venom_result_rel_def, logs_correspond_eq] >>
+          >- (gvs[deploy_venom_result_rel_def, e2eDefsTheory.logs_correspond_def,
+                  listTheory.LIST_REL_eq] >>
               qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
                 deploy_frame_complete >>
               impl_tac >- simp[] >>
@@ -170,7 +164,8 @@ Proof
                process_deletions ss.vs_pending_deletions ss.vs_accounts` by
                 (irule process_deletions_update_mem >> simp[]) >>
               fs[update_account_def, lookup_account_def]) >>
-          gvs[deploy_venom_result_rel_def, logs_correspond_eq] >>
+          gvs[deploy_venom_result_rel_def, e2eDefsTheory.logs_correspond_def,
+              listTheory.LIST_REL_eq] >>
           qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
             deploy_frame_complete >>
           impl_tac >- (Cases_on `runtime_bc` >> gvs[]) >>
