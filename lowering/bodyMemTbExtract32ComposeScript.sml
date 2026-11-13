@@ -161,8 +161,15 @@ Resume compile_extract32_sim_mem[stage1]:
     (qpat_assum `bind (eval_expr cx src) (read_result cx) _ = _`
        (mp_tac o MATCH_MP (CONV_RULE (DEPTH_CONV ETA_CONV)
          exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom)) >> simp[]) >>
+  `cap < dimword (:256) /\
+   type_slot_size (BaseTV (BytesT (Dynamic cap))) <= dimword (:256)` by
+    (qpat_assum `expr_body_pre cenv cx env src _`
+       (mp_then Any mp_tac expr_body_pre_type_evaluates) >>
+     qpat_assum `expr_type src = _` (fn th => rewrite_tac[th]) >>
+     simp[evaluate_type_def]) >>
   `evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
-     SOME (BaseTV (BytesT (Dynamic cap)))` by simp[evaluate_type_def] >>
+     SOME (BaseTV (BytesT (Dynamic cap)))` by
+    (asm_simp_tac (srw_ss()) [evaluate_type_def]) >>
   `evaluate_type (get_tenv cx) (expr_type src) =
      SOME (BaseTV (BytesT (Dynamic cap)))` by simp[] >>
   `!x. src_op = Var x ==> not_fresh_at s1 x` by
