@@ -1312,15 +1312,46 @@ Proof
       local_region cenv ee.scopes su name lb k` by
     (rpt strip_tac >> irule local_region_frame_fwd >>
      qexistsl [`u`, `sa`, `es1.scopes`] >> simp[] >>
-     qpat_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ su` mp_tac >>
-     simp[expr_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
+     qpat_x_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ su` mp_tac >>
+     pure_rewrite_tac[expr_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `!old off k. FLOOKUP u.vs_allocas old = SOME (off,k) /\ old < sa.cs_next_id ==>
       w2n w+type_memory_bytes cenv t <= off \/ off+k <= w2n w` by
     (rpt strip_tac >>
      `FLOOKUP z.vs_allocas old = SOME (off,k)` by
        (qpat_x_assum `!H. valid_horizon _ _ _ _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ z /\ _` drule >>
         simp[vv_post_def] >> metis_tac[]) >>
-     qpat_x_assum `!aid b len. aid < sm.cs_next_id /\ _ ==> _` drule >>
-     simp[] >> impl_tac >- decide_tac >> simp[regions_disjoint_def] >> decide_tac) >>
-  FAIL_TAC "apply endpoint"
+     `old < sm.cs_next_id` by decide_tac >>
+     qpat_x_assum `!aid b len. aid < sm.cs_next_id /\ _ ==> _`
+       (qspecl_then [`old`, `off`, `k`] mp_tac) >>
+     simp[regions_disjoint_def] >> decide_tac) >>
+  qabbrev_tac `final = sf with vs_inst_idx := su.vs_inst_idx + LENGTH (emitted_insts sn sb)` >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     expr_post H ctx func cenv cx (IfExp t c a b) es1 sa sb u ee v (Var p) final /\
+     vv_at cenv cx t sa sb ee tva (LocatedValue t (mk_ptr (Var p) LocMemory)) final /\
+     expr_store_bound cx t v (Var p) final /\
+     (!rt w'. evaluate_type (get_tenv cx) t = SOME rt /\ eval_operand (Var p) final = SOME w' ==>
+       type_memory_size rt = 0 \/ w2n w' + type_memory_size rt <= final.vs_alloca_next) /\
+     (sf with <|vs_vars := su.vs_vars; vs_memory := su.vs_memory|>) = su /\
+     (!off k. off+k <= w2n w \/ w2n w+type_memory_bytes cenv t <= off ==>
+        mem_bytes_at off k final.vs_memory = mem_bytes_at off k su.vs_memory)` by
+    (gen_tac >> strip_tac >> irule ifexp_widen_copy_endpoint_posts >>
+     asm_rewrite_tac[eval_operand_def] >>
+     simp[Abbr `final`, GSYM arithmeticTheory.ADD_ASSOC] >>
+     conj_tac >- (qpat_x_assum `alloca_inv su` mp_tac >>
+       qpat_x_assum `FLOOKUP su.vs_allocas sm.cs_next_id = _` mp_tac >>
+       qpat_x_assum `type_memory_bytes cenv t = type_memory_size rty` mp_tac >>
+       POP_ASSUM_LIST (K all_tac) >>
+       simp[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+     conj_tac >- (qexistsl [`lowered_value_type cenv e`, `sm`, `vv`] >> simp[]) >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- (qexists `ai` >>
+       qpat_x_assum `MEM (mk_inst _ _ _ _) (fn_insts func)` mp_tac >>
+       qpat_x_assum `type_memory_bytes cenv t = type_memory_size rty` mp_tac >>
+       qpat_x_assum `buf.buf_operand = Var p` mp_tac >>
+       qpat_x_assum `Abbrev (ai = _)` mp_tac >>
+       simp[markerTheory.Abbrev_def, mk_inst_def] >> rpt strip_tac >>
+       simp[] >> decide_tac) >>
+     qexistsl [`e`, `len`, `sn`, `src`, `sw`] >>
+     simp[] >> FAIL_TAC "endpoint residual") >>
+  FAIL_TAC "finish"
 QED
