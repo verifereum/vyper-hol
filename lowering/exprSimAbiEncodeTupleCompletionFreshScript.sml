@@ -12,14 +12,14 @@ Ancestors
   abiDecoderMembers abiDecoderReentry exprSimAggregateChildren
   vyperTypeInvariants exprSimDefs vyperABIValid vyperContext
   exprSimAbiEncodeRuntimeInputs vyperTypeExprSoundness vyperTypeDefaults
-  words list finite_map arithmetic
+  stmtSimLogExecFields words list finite_map arithmetic
 
 Theorem abi_encode_tuple_counted_success_fresh_free:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid0) target args) es /\
   ~(LENGTH args = 1 /\ ~ensure) /\ mid = OPTION_MAP bytes_method_id_word mid0 /\
   eval_exprs cx args es = (INL vs,es') /\
   evaluate_type_builtin cx (AbiEncode ensure mid0) target (MAP expr_type args) vs = INL result /\
-  abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
+  abi_args_post H ctx func ce cx es origin st s0 es' args values vs initial /\
   (~EXISTS expr_has_effect args ==> pure_frame ce func es origin s0 initial) /\
   EVERY (abi_decoder_operand_live st.cs_next_var) values /\
   compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) st = (buf,allocated) /\
@@ -37,7 +37,11 @@ Theorem abi_encode_tuple_counted_success_fresh_free:
   ?actual. gas_marked_path F ctx func initial 0 (OK actual) /\
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
-    vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode ensure mid0) target args)
+    actual.vs_accounts = initial.vs_accounts /\
+    actual.vs_transient = initial.vs_transient /\
+    actual.vs_requests = initial.vs_requests /\
+    actual.vs_call_ctx = initial.vs_call_ctx /\
+    vv_post H ctx func ce cx (TypeBuiltin ann (AbiEncode ensure mid0) target args)
       es origin final s0 es' (Value result)
       (LocatedValue (expr_type (TypeBuiltin ann (AbiEncode ensure mid0) target args))
         <|ptr_operand := out; ptr_location := LocMemory|>) actual
@@ -53,8 +57,11 @@ Proof
   disch_then (qx_choose_then `raw` (qx_choose_then `avs` (qx_choose_then `ct`
     (qx_choose_then `rv` (MAP_EVERY assume_tac o CONJUNCTS))))) >>
   drule_all abi_encode_tuple_staging_path >> strip_tac >>
-  `stmt_state_rel ctx func ce cx es' initial /\
-   wb_frame ce es es' origin s0 initial` by fs[abi_args_post_def] >>
+  `stmt_state_rel H ctx func ce cx es' initial /\
+   wb_frame ce es es' origin s0 initial /\
+   storage_well_formed_on cx es'
+     (FST (H:(bool # bytes32 # type_value) list # num list))` by
+    fs[abi_args_post_def] >>
   `abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)) < dimword (:256)` by decide_tac >>
   `FLOOKUP raw.vs_allocas st.cs_next_id =
     SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args)))` by metis_tac[] >>
@@ -80,7 +87,7 @@ Proof
     (qpat_assum `abi_decoder_operand_live staged.cs_next_var buf.buf_operand` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> Cases_on `buf.buf_operand` >>
      simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def, IN_DEF]) >>
-  `stmt_state_rel ctx func ce cx es' s /\ wb_frame ce es es' origin s0 s` by
+  `stmt_state_rel H ctx func ce cx es' s /\ wb_frame ce es es' origin s0 s` by
     (simp_tac bool_ss [Abbr `s`] >> asm_rewrite_tac []) >>
   `s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
      (abi_tuple_bytes ce (ZIP (values,MAP (lowered_value_type ce) args))) initial).vs_allocas /\
@@ -153,6 +160,17 @@ Resume abi_encode_tuple_counted_success_fresh_free[result]:
                      exprSimPropsTheory.pure_frame_trans) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all abi_encode_tuple_observation_vv_post >> disch_tac >>
+  `actual.vs_accounts = initial.vs_accounts /\
+   actual.vs_transient = initial.vs_transient /\
+   actual.vs_requests = initial.vs_requests /\
+   actual.vs_call_ctx = initial.vs_call_ctx` by
+    (qpat_assum `abi_encode_staged_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [exprSimAbiEncodeStagedObserverTheory.abi_encode_staged_observation_def]) >>
+     drule_all abi_encode_tuple_staging_external >>
+     disch_then (mp_tac o MATCH_MP log_encode_external_fields) >>
+     qpat_assum `Abbrev (s = _)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[markerTheory.Abbrev_def] >> rpt strip_tac >> fs[]) >>
   qexists `actual` >>
   reverse conj_tac >- metis_tac[] >>
   `gas_marked_path F ctx func initial 0 (OK s)` by
