@@ -2,7 +2,8 @@
 Theory typedNormalizeFixedLoopPathMem
 Ancestors
   typedCopySarrayPathMem typedNormalizeSemanticMem typedNormalizeStraightPathMem
-  immutableLoopStoreMem arithmetic fragGasMode words typedMemoryCopy
+  typedNormalizeDynamicLoopPathMem
+  arithmetic fragGasMode fragGasPathMem memContinuation words typedMemoryCopy
   vyperTyping valueEncoding valueEncodingProofs
 
 Theorem normalize_sarray_indexed_mem_path[local]:
@@ -87,7 +88,8 @@ Proof
   qpat_x_assum `Abbrev (Child = _)` kall_tac >>
   qpat_x_assum `Child` kall_tac >>
   gvs[MULT_COMM, ADD_COMM, gas_marked_path_def] >>
-  metis_tac[immutable_loop_path_mem_cont]
+  imp_res_tac gas_path_mem_exec >>
+  fs[mem_cont_sim_def, fragExecTheory.exit_result_def] >> metis_tac[]
 QED
 Resume normalize_sarray_indexed_mem_path[premises]:
   markerLib.RESUME_TAC >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
