@@ -193,7 +193,7 @@ Proof
      qexists_tac `32` >> simp[]) >>
   irule sym_steps_single_emit >>
   qexists `AsmPush (encode_num_bytes initial_fmp)` >>
-  simp[sym_step_push_word]
+  simp[sym_step_push_bytes]
 QED
 
 Theorem sym_add_word_step:
