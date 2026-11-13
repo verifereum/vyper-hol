@@ -103,6 +103,8 @@ Resume body_for_range_lit_ptr[body]:
       (expr_abi_decode_target_root target) body ==>
       occurs_abi_decode_target target tops` by
     (qpat_x_assum `!target. _` mp_tac >> simp[supported_stmt_expr_exists_def]) >>
+  `body_stmts_safe tops body` by
+    metis_tac[supported_stmts_body_safe] >>
   qpat_x_assum `body_stmts_ptr_ok _ _`
     (irule o REWRITE_RULE [body_stmts_ptr_ok_def]) >>
   simp[] >> rpt conj_tac
@@ -351,6 +353,8 @@ Resume body_for_range_ptr[body]:
       occurs_abi_decode_target target tops` by
     (qpat_x_assum `!target. supported_stmt_expr_exists _ _ ==> _` mp_tac >>
      simp[supported_stmt_expr_exists_def]) >>
+  `body_stmts_safe tops body` by
+    metis_tac[supported_stmts_body_safe] >>
   qpat_x_assum `body_stmts_ptr_ok _ _`
     (irule o REWRITE_RULE [body_stmts_ptr_ok_def]) >>
   simp[] >> rpt conj_tac
