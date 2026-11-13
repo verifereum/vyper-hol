@@ -40,6 +40,9 @@ Theorem held_bytestring_compare_sim_mem:
   body_exprs_mem_ok cx [e1;e2] ==>
   expr_sim_mem ctx func cenv cx ty (Builtin ann (Bop bop) [e1;e2]) es
 Proof
+  `!ann bop ts v1 v2. storage_trace_frame
+      (\es2. (bop_result cx ann bop ts v1 v2 es2, es2))` by
+    simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `well_typed_binop ann bop (expr_type e1) (expr_type e2)` by
     (qpat_assum `expr_body_pre _ _ _ _ _`
@@ -107,7 +110,7 @@ Proof
       rpt conj_tac >>
       FIRST [first_assum ACCEPT_TAC,
              (gen_tac >> BETA_TAC >>
-              simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def])] >>
+              first_assum MATCH_ACCEPT_TAC)] >>
       NO_TAC),
      suspend "second"]
 QED
@@ -206,7 +209,7 @@ Resume held_bytestring_compare_sim_mem[second]:
       [qpat_x_assum `expr_exit _ _` mp_tac >> simp[expr_exit_def],
        simp[]] >> NO_TAC),
      (gen_tac >> BETA_TAC >>
-      simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def] >> NO_TAC),
+      first_assum MATCH_ACCEPT_TAC >> NO_TAC),
      suspend "third"]
 QED
 
