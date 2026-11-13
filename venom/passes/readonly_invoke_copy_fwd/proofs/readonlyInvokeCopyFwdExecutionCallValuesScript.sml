@@ -2,6 +2,8 @@
 Theory readonlyInvokeCopyFwdExecutionCallValues
 Ancestors
   readonlyInvokeCopyFwdExecutionCallArgs readonlyInvokeCopyFwdExecutionCallMap
+  readonlyInvokeCopyFwdExecutionCallSites readonlyInvokeCopyFwdExecutionCallIndex
+  readonlyInvokeCopyFwdHistoryOperandOrigins
   readonlyInvokeCopyFwdExecution readonlyInvokeCopyFwdHeterogeneousLedger
   readonlyInvokeCopyFwdHistoryOrigin readonlyInvokeCopyFwdHistoryPhase
   readonlyInvokeCopyFwdHistoryVisitAccess readonlyInvokeCopyFwdProtectionOrigin
@@ -10,7 +12,7 @@ Ancestors
   readonlyInvokeCopyFwdOpaque readonlyInvokeCopyFwdRel
   invokeCopyFwdCommonDefs internalReturnCopyFwdPlan
   occurrenceGeometry occurrenceOrigin o1LowerDloadOccurrence o1LowerDloadRelocationKernel
-  fnFrameStepsRevertForward allocaRemapSSA ptrDiscipline
+  fnFrameStepsRevertForward allocaRemapSSA mem2varProofs o1PassContract ptrDiscipline
   venomWf venomInst list finite_map pred_set words
 
 Theorem ricf_call_origin_copy_block[local]:
@@ -28,6 +30,50 @@ Proof
    LENGTH current.bb_instructions` by
     metis_tac[ricf_block_edit_EL] >>
   simp[EL_MEM] >> metis_tac[]
+QED
+
+(* An original destination alias selected by an accepted event cannot finish
+   unchanged: every later replacement is an isolated source allocation. *)
+Theorem ricf_call_selected_argument_changed:
+  ricf_logged_function_trace ctx0 fn log last /\
+  ricf_located_event ctx0 fn log round b es prefix e current /\
+  ssa_form fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) /\
+  ricf_full_alloca_copies fn /\ ricf_src_alloca fn /\
+  (ricf_event_copy e (EL b fn.fn_blocks)).inst_operands = [Var dst;src;sz] /\
+  cb < LENGTH fn.fn_blocks /\
+  i < LENGTH (EL cb fn.fn_blocks).bb_instructions /\
+  (EL i (EL cb fn.fn_blocks).bb_instructions).inst_opcode = INVOKE /\
+  j < LENGTH (EL i (EL cb fn.fn_blocks).bb_instructions).inst_operands /\
+  EL j (EL i (EL cb fn.fn_blocks).bb_instructions).inst_operands = Var dv /\
+  ircf_alias fn (icf_assign_root (dfg_build_function fn) {} dst) dv ==>
+  EL j (EL i (EL cb last.fn_blocks).bb_instructions).inst_operands <> Var dv
+Proof
+  strip_tac >>
+  drule_all ricf_call_original_alias_selected_site >> strip_tac >>
+  drule_all ricf_call_original_alias_round_operand >> strip_tac >>
+  drule ricf_located_event_validation >> strip_tac >>
+  `ricf_function_edit fn round` by metis_tac[ricf_function_trace_edit] >>
+  `ricf_inst_edit (EL i (EL cb fn.fn_blocks).bb_instructions)
+    (EL i (EL cb round.fn_blocks).bb_instructions)` by
+    metis_tac[ricf_call_function_position] >>
+  `(EL i (EL cb round.fn_blocks).bb_instructions).inst_id =
+   (EL i (EL cb fn.fn_blocks).bb_instructions).inst_id` by
+    fs[ricf_inst_edit_def] >>
+  `b = cb /\ e.rfe_index < i` by
+    metis_tac[ricf_call_located_same_block_selected] >>
+  qpat_x_assum `b = cb` SUBST_ALL_TAC >>
+  `MEM ((EL i (EL cb fn.fn_blocks).bb_instructions).inst_id,j)
+    (MAP (\(ri,p). (ri.inst_id,p)) e.rfe_sites)` by
+    (simp[MEM_MAP, pairTheory.EXISTS_PROD] >>
+     qexists_tac `EL i (EL cb round.fn_blocks).bb_instructions` >>
+     fs[ricf_inst_edit_def]) >>
+  `i <> e.rfe_index` by decide_tac >>
+  drule_all ricf_logged_function_selected_operand_origin >> strip_tac >>
+  `EL j (EL i (EL cb round.fn_blocks).bb_instructions).inst_operands <>
+    ricf_event_source selected_event selected_current` by
+    (irule ricf_call_recorded_site_not_forwarded_source >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 (* The current numeric argument key identifies the original destination
@@ -171,4 +217,42 @@ Proof
   POP_ASSUM_LIST (K ALL_TAC) >>
   simp[ricf_opaque_value_agree_def, ricf_value_agree_def, ld_value_agree_def,
     FLOOKUP_DEF, WORD_ADD_SUB2] >> metis_tac[]
+QED
+
+(* Match the source coordinate carried by the chronological operand history
+   to the original argument of its selected recorded instruction. *)
+Theorem ricf_call_selected_operand_origin:
+  ricf_located_event ctx0 fn log round b es prefix e current /\
+  ssa_form fn /\ fn_inst_wf fn /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) /\
+  ricf_full_alloca_copies fn /\ ricf_src_alloca fn /\
+  (ricf_event_copy e (EL b fn.fn_blocks)).inst_operands = [Var dst;src;sz] /\
+  cb < LENGTH fn.fn_blocks /\
+  i < LENGTH (EL cb fn.fn_blocks).bb_instructions /\
+  MEM ((EL i (EL cb fn.fn_blocks).bb_instructions).inst_id,p)
+    (MAP (\(ri,p). (ri.inst_id,p)) e.rfe_sites) ==>
+  ?dv.
+    p < LENGTH (EL i (EL cb fn.fn_blocks).bb_instructions).inst_operands /\
+    EL p (EL i (EL cb fn.fn_blocks).bb_instructions).inst_operands = Var dv /\
+    ircf_alias fn (icf_assign_root (dfg_build_function fn) {} dst) dv
+Proof
+  strip_tac >>
+  `?ri. MEM (ri,p) e.rfe_sites /\
+    ri.inst_id = (EL i (EL cb fn.fn_blocks).bb_instructions).inst_id` by
+    (fs[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+  drule_all ricf_call_recorded_site_original_operand >> strip_tac >>
+  rename1 `ri = EL oi (EL ob round.fn_blocks).bb_instructions` >>
+  drule ricf_located_event_validation >> strip_tac >>
+  `ricf_function_edit fn round` by metis_tac[ricf_function_trace_edit] >>
+  `ricf_inst_edit (EL oi (EL ob fn.fn_blocks).bb_instructions) ri` by
+    metis_tac[ricf_call_function_position] >>
+  `MEM (EL oi (EL ob fn.fn_blocks).bb_instructions) (fn_insts fn) /\
+   MEM (EL i (EL cb fn.fn_blocks).bb_instructions) (fn_insts fn)` by
+    (simp[fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
+  `EL oi (EL ob fn.fn_blocks).bb_instructions =
+   EL i (EL cb fn.fn_blocks).bb_instructions` by
+    (irule (Q.ISPEC `\inst:instruction. inst.inst_id` ALL_DISTINCT_MAP_IMP) >>
+     conj_tac >- fs[ricf_inst_edit_def] >>
+     qexists_tac `fn_insts fn` >> simp[]) >>
+  qexists_tac `v` >> metis_tac[]
 QED
