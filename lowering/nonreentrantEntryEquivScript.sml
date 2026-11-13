@@ -7,6 +7,9 @@ Ancestors
   vyperTypeContract vyperInterpreter vyperState
   compileEnv context venomState exprLoweringProps vyperStorageFootprint
   bodyPtrDefs nonreentrantSource sourceUnitExecution pred_set words
+  fragGasSeqPtr transientLockProps ptrSafeRun ptrDiscipline contextCodegenRel
+  codegenRel emitHelperProps venomInst venomExecSemantics finite_map
+  bodyPtrIfExpScalarLoad bodyPtrSignedConvertClamp instSeqComposePtr
 
 (* Horizon lock words cannot carry relocation taint. *)
 Theorem nonreentrant_slot_untainted:
@@ -40,6 +43,143 @@ Proof
     (rpt gen_tac >> irule nonreentrant_storage_dead_frame >> simp[]) >>
   gvs[stor_taint_ok_def, cx_dead_def, tstore_def,
       combinTheory.APPLY_UPDATE_THM]
+QED
+
+(* A literal guard store needs no pointer or tainted operand, including in
+   a static frame where execution aborts before writing. *)
+Theorem literal_tstore_ptr_inst_ok:
+  ~ctx_has_dalloca ctx ==>
+  ptr_inst_ok D 0 fuel ctx func G tn
+    (mk_inst id TSTORE [Lit key; Lit value] []) ss
+Proof
+  strip_tac >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
+       source_memory_write_ranges_def, source_memory_read_ranges_def,
+       op_taint_def, allocas_from_def] >>
+  simp[GSYM mk_inst_def, step_inst_non_invoke] >>
+  Cases_on `ss.vs_call_ctx.cc_static` >>
+  simp[mk_inst_def, step_inst_base_opcode_eqs, exec_write2_def,
+       eval_operand_def, eval_operands_def, tstore_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem literal_tstore_inst_seq_ptr:
+  ~ctx_has_dalloca ctx ==>
+  ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn
+    [mk_inst id TSTORE [Lit key; Lit value] []] ss G' tn'
+Proof
+  strip_tac >> simp[inst_seq_ptr_def, literal_tstore_ptr_inst_ok] >>
+  Cases_on `step_inst_base (mk_inst id TSTORE [Lit key; Lit value] []) ss` >>
+  simp[inst_seq_ptr_def]
+QED
+
+Theorem transient_lock_check_ptr_ghost:
+  ~ctx_has_dalloca ctx /\ key_taint tn.t_trans (n2w nkey) = {} ==>
+  ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn
+    (TAKE 4 (transient_lock_code nkey iv st)) ss G' tn' /\
+    G' = DRESTRICT (DRESTRICT (DRESTRICT G
+        (COMPL {STRING #"%" (toString st.cs_next_var)}))
+        (COMPL {STRING #"%" (toString (st.cs_next_var + 1))}))
+        (COMPL {STRING #"%" (toString (st.cs_next_var + 2))}) /\
+    tn' = (tn with t_var := tn.t_var |+
+        (STRING #"%" (toString st.cs_next_var),{}) |+
+        (STRING #"%" (toString (st.cs_next_var + 1)),{}) |+
+        (STRING #"%" (toString (st.cs_next_var + 2)),{}))
+Proof
+  strip_tac >>
+  qexistsl_tac
+    [`DRESTRICT (DRESTRICT (DRESTRICT G
+       (COMPL {STRING #"%" (toString st.cs_next_var)}))
+       (COMPL {STRING #"%" (toString (st.cs_next_var + 1))}))
+       (COMPL {STRING #"%" (toString (st.cs_next_var + 2))})`,
+     `tn with t_var := tn.t_var |+
+       (STRING #"%" (toString st.cs_next_var),{}) |+
+       (STRING #"%" (toString (st.cs_next_var + 1)),{}) |+
+       (STRING #"%" (toString (st.cs_next_var + 2)),{})`] >>
+  simp[] >>
+  qabbrev_tac `x0 = STRING #"%" (toString st.cs_next_var)` >>
+  qabbrev_tac `i0 = mk_inst st.cs_next_id TLOAD [Lit (n2w nkey)] [x0]` >>
+  qabbrev_tac `s1 = update_var x0 (tload (n2w nkey) ss) ss` >>
+  `step_inst_base i0 ss = OK s1` by
+    (simp[Abbr `i0`, Abbr `s1`] >>
+     irule transientLockPropsTheory.step_TLOAD >> simp[eval_operand_def]) >>
+  `ptr_inst_ok D 0 0 ctx func G tn i0 ss` by
+    (simp[Abbr `i0`] >> irule ifexp_scalar_load_check >>
+     simp[op_taint_def] >> qexists_tac `tload (n2w nkey) ss` >>
+     simp[Abbr `s1`]) >>
+  `step_taint i0 ss s1 tn = tn with t_var := tn.t_var |+ (x0,{})` by
+    (simp[Abbr `i0`, Abbr `s1`] >>
+     irule ifexp_scalar_load_taint >> simp[eval_operand_def]) >>
+  `step_prov PG G i0 s1 = DRESTRICT G (COMPL {x0})` by
+    simp[Abbr `i0`, step_prov_def, set_prov_def, out_prov_def, mk_inst_def] >>
+  fs[Abbr `i0`, Abbr `x0`] >>
+  simp[transient_lock_code_def] >>
+  simp[Once inst_seq_ptr_def] >>
+  irule (SRULE [GSYM arithmeticTheory.ADD_ASSOC]
+    (Q.INST [`id` |-> `st.cs_next_id + 1`,
+             `opc` |-> `EQ`,
+             `x` |-> `Var (STRING #"%" (toString st.cs_next_var))`,
+             `y` |-> `Lit 1w`,
+             `a` |-> `STRING #"%" (toString (st.cs_next_var + 1))`,
+             `b` |-> `STRING #"%" (toString (st.cs_next_var + 2))`,
+             `G` |-> `DRESTRICT G (COMPL {STRING #"%" (toString st.cs_next_var)})`,
+             `tn` |-> `tn with t_var := tn.t_var |+
+               (STRING #"%" (toString st.cs_next_var),{})`]
+      (SPEC_ALL scalar_iszero_assert_certificate))) >>
+  simp[op_prov_def, FLOOKUP_DRESTRICT, op_taint_def, FLOOKUP_UPDATE] >>
+  simp[run_inst_seq_def, Abbr `s1`, mk_inst_def,
+       step_inst_base_opcode_eqs, exec_pure2_def, exec_pure1_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem transient_lock_check_ptr:
+  ~ctx_has_dalloca ctx /\ key_taint tn.t_trans (n2w nkey) = {} ==>
+  ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn
+    (TAKE 4 (transient_lock_code nkey iv st)) ss G' tn'
+Proof
+  strip_tac >> mp_tac (SPEC_ALL transient_lock_check_ptr_ghost) >>
+  simp[] >> metis_tac[]
+QED
+
+(* The pointer check follows the executed prefix, so neither a held lock
+   nor the static-frame abort asks for an unexecuted suffix. *)
+Theorem transient_lock_code_ptr:
+  ~ctx_has_dalloca ctx /\ key_taint tn.t_trans (n2w nkey) = {} ==>
+  ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn
+    (transient_lock_code nkey iv st) ss G' tn'
+Proof
+  strip_tac >>
+  `?G1 tn1. inst_seq_ptr D 0 ctx func PG G tn
+     (transient_lock_code nkey T st) ss G1 tn1` by
+    (mp_tac (SPEC_ALL transient_lock_check_ptr) >>
+     simp[transient_lock_code_def]) >>
+  Cases_on `iv` >- (qexistsl_tac [`G1`, `tn1`] >> simp[]) >>
+  `transient_lock_code nkey F st = transient_lock_code nkey T st ++
+     [mk_inst (st.cs_next_id + 4) TSTORE [Lit (n2w nkey); Lit 1w] []]` by
+    simp[transient_lock_code_def] >>
+  asm_rewrite_tac[] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode)
+     (transient_lock_code nkey T st)` by
+    simp[transient_lock_code_def, mk_inst_def, is_terminator_def] >>
+  `run_inst_seq (transient_lock_code nkey T st) ss =
+     if tload (n2w nkey) ss = 1w then
+       Abort Revert_abort (revert_state (set_returndata []
+         (transient_lock_checked_state st nkey ss)))
+     else OK (transient_lock_checked_state st nkey ss)` by
+    simp[transient_lock_code_execution] >>
+  Cases_on `tload (n2w nkey) ss = 1w`
+  >- (qexistsl_tac [`G1`, `tn1`] >>
+      irule inst_seq_ptr_abort_append >> simp[] >>
+      goal_assum (drule_at Any)) >>
+  `?G2 tn2. inst_seq_ptr D 0 ctx func PG G1 tn1
+     [mk_inst (st.cs_next_id + 4) TSTORE [Lit (n2w nkey); Lit 1w] []]
+     (transient_lock_checked_state st nkey ss with
+       vs_inst_idx := ss.vs_inst_idx + 4) G2 tn2` by
+    (irule literal_tstore_inst_seq_ptr >> simp[]) >>
+  qexistsl_tac [`G2`, `tn2`] >>
+  irule inst_seq_ptr_append_ok >> simp[] >>
+  qexistsl_tac [`G1`, `tn1`] >>
+  simp[transient_lock_code_def, arithmeticTheory.ADD_COMM]
 QED
 
 Theorem source_typing_function_header:
