@@ -189,7 +189,7 @@ Proof
   irule normalize_site_windows >>
   goal_assum (drule_at Any) >> simp[venomInstTheory.mk_inst_def] >>
   goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`cx`,`sa`,`sb`,`src`,`sty`,`v`] >> simp[]
+  qexistsl_tac [`H`,`cx`,`sa`,`sb`,`src`,`sty`,`v`] >> simp[]
 QED
 
 Theorem normalize_return_destination_positive:
