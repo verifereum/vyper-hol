@@ -1,7 +1,8 @@
 (* Pure observations and total selectors for source shadows. *)
 Theory gasShadowCompilePure
 Ancestors
-  gasShadowCompileBase gasShadow exprLowering vyperAST list pair
+  gasShadowCompileBase gasShadow exprLowering vyperSubscriptOverlap
+  vyperTypeCallGraph vyperAST list pair
 
 Theorem gas_shadow_place_type[simp]:
   !e cenv. place_type cenv (gas_shadow_expr e) = place_type cenv e
@@ -59,11 +60,8 @@ QED
 Theorem gas_shadow_lowered_value_type[simp]:
   lowered_value_type cenv (gas_shadow_expr e) = lowered_value_type cenv e
 Proof
-  qid_spec_tac `cenv` >> qid_spec_tac `e` >>
-  ho_match_mp_tac
-    (expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
-      SIMP_RULE (srw_ss()) []) >>
-  rpt strip_tac >>
+  completeInduct_on `expr_size e` >> rpt strip_tac >> gvs[PULL_FORALL] >>
+  Cases_on `e` >>
   simp[gas_shadow_expr_def, lowered_value_type_def, expr_type_def]
   >~ [`lowered_value_type _ (Call _ ct _ _) = _`]
   >- (Cases_on `ct` >> simp[lowered_value_type_def, expr_type_def])
@@ -77,10 +75,13 @@ Proof
   rename1 `TypeBuiltin ann tb ret_ty _` >>
   Cases_on `tb` >> simp[lowered_value_type_def, expr_type_def, MAP_MAP_o, combinTheory.o_DEF] >>
   Cases_on `args` >> simp[gas_shadow_HD, MAP_MAP_o, combinTheory.o_DEF] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[] >>
+  rename1 `h::t` >>
+  `!x. MEM x (h::t) ==>
+       lowered_value_type cenv (gas_shadow_expr x) = lowered_value_type cenv x`
+    by (rpt strip_tac >> first_x_assum irule >>
+        drule exprCallBoundsTheory.expr_list_member_bound >> simp[expr_size_def]) >>
   `MAP (\x. lowered_value_type cenv (gas_shadow_expr x)) t =
-   MAP (lowered_value_type cenv) t` by
-    (irule MAP_CONG >> simp[] >> metis_tac[MEM]) >>
+   MAP (lowered_value_type cenv) t` by simp[MAP_EQ_f] >>
   simp[]
 QED
 
@@ -161,4 +162,48 @@ Proof
       >- (qexists_tac `T` >> simp[gas_shadow_EL]) >>
       qexists_tac `F` >> simp[gas_shadow_EL]) >>
   qexists_tac `F` >> simp[]
+QED
+
+Theorem gas_shadow_accesses_expr[local]:
+  (!e. accesses_expr (gas_shadow_expr e) = accesses_expr e) /\
+  (!t. accesses_target (gas_shadow_target t) = accesses_target t) /\
+  (!es. accesses_exprs (MAP gas_shadow_expr es) = accesses_exprs es) /\
+  (!opt. accesses_opt (OPTION_MAP gas_shadow_expr opt) = accesses_opt opt) /\
+  (!kes. accesses_named_exprs (MAP (I ## gas_shadow_expr) kes) =
+         accesses_named_exprs kes)
+Proof
+  ho_match_mp_tac accesses_expr_ind >>
+  rw[accesses_expr_def, gas_shadow_expr_def, gas_shadow_builtin_def,
+     risky_builtin_def, pairTheory.PAIR_MAP_THM] >>
+  gvs[COND_RAND, risky_builtin_def]
+QED
+
+Theorem gas_shadow_int_calls_expr[local]:
+  (!e. int_calls_expr (gas_shadow_expr e) = int_calls_expr e) /\
+  (!t. int_calls_target (gas_shadow_target t) = int_calls_target t) /\
+  (!es. int_calls_exprs (MAP gas_shadow_expr es) = int_calls_exprs es) /\
+  (!opt. int_calls_opt (OPTION_MAP gas_shadow_expr opt) = int_calls_opt opt) /\
+  (!kes. int_calls_named_exprs (MAP (I ## gas_shadow_expr) kes) =
+         int_calls_named_exprs kes)
+Proof
+  ho_match_mp_tac int_calls_expr_ind >>
+  rw[int_calls_expr_def, gas_shadow_expr_def, pairTheory.PAIR_MAP_THM]
+QED
+
+Theorem gas_shadow_base_through_dynarray[local]:
+  !e. base_through_dynarray (gas_shadow_expr e) = base_through_dynarray e
+Proof
+  ho_match_mp_tac
+    (expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
+      SIMP_RULE (srw_ss()) []) >>
+  simp[gas_shadow_expr_def, base_through_dynarray_def]
+QED
+
+Theorem gas_shadow_subscript_overlap[simp]:
+  subscript_overlap mods (gas_shadow_expr base_e) (gas_shadow_expr idx_e) =
+  subscript_overlap mods base_e idx_e
+Proof
+  simp[subscript_overlap_def, expr_accesses_def, reached_functions_def,
+       gas_shadow_accesses_expr, gas_shadow_int_calls_expr,
+       gas_shadow_base_through_dynarray]
 QED
