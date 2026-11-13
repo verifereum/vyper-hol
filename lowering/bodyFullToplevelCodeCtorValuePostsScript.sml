@@ -4,7 +4,7 @@ Ancestors
   bodyFullToplevelCodeCtorPosts bodyFullToplevelCodePointerPosts
   bodyFullToplevelCodeSource bodyFullToplevelCodeWitnessPosts
   exprPtrUnwrapStoragePost exprPtrUnwrapCode exprPtrUnwrapTypedSize
-  exprSimCopy exprLoweringProps loweringPosts bodyPtrDefs compileEnv context
+  exprSimCopy exprSimProps exprLowering exprLoweringProps loweringPosts bodyPtrDefs compileEnv context
   valueEncodingProps valueTypingMemoryProps venomState venomInst words arithmetic
 
 Theorem toplevel_code_ctor_value_posts:
@@ -61,31 +61,40 @@ Proof
   `vv_post H ctx func cenv cx (TopLevelName ann nsid) es sa sm s0 ee
     (Value v) (LocatedValue t p) s` by
     (drule_all vv_post_code_source >> strip_tac >>
-     gvs[vv_post_def, vv_holds_def, vv_at_def, vv_own_def]) >>
+     gvs[vv_post_def, vv_holds_def, vv_at_def, vv_own_def] >> metis_tac[]) >>
   `expr_post H ctx func cenv cx (TopLevelName ann nsid) es sa sb s0 ee v op z` by
-    (irule toplevel_code_ctor_semantic >> metis_tac[]) >>
+    metis_tac[toplevel_code_ctor_semantic] >>
   `immutable_holds cenv cx t (Value v) q ee a` by
     metis_tac[immutable_holds_memory_cong] >>
+  qpat_x_assum `nb = type_memory_size rt` SUBST_ALL_TAC >>
   drule_all toplevel_code_ctor_contents >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx ee s` by fs[vv_post_def] >>
   `!mem. mem_agree_outside tf.t_mem z.vs_memory mem ==>
     val_in_memory rt v (w2n d) mem` by
-    (irule toplevel_code_ctor_robust >> metis_tac[]) >>
-  `type_memory_bytes cenv (lowered_value_type cenv (TopLevelName ann nsid)) <= nb` by
+    (mp_tac (Q.INST [`p` |-> `q`, `nb` |-> `type_memory_size rt`]
+       (SPEC_ALL (INST_TYPE [``:'b`` |-> ``:256``] toplevel_code_ctor_robust))) >>
+     (impl_tac >- (simp[] >> metis_tac[])) >>
+     simp[]) >>
+  `type_memory_bytes cenv (lowered_value_type cenv (TopLevelName ann nsid)) <= type_memory_size rt` by
     fs[lowered_value_type_def, post_value_type_def] >>
   `ptr_val_ok cx (post_value_type cenv (TopLevelName ann nsid)) v op Gf tf z /\
    ptr_buf_ok cenv (TopLevelName ann nsid) op Gf z` by
-    (irule unwrap_storage_pointer_posts >> metis_tac[]) >>
+    (qpat_assum `op = Var root` (fn th => rewrite_tac[th]) >>
+     irule unwrap_storage_pointer_posts >>
+     (conj_tac >- metis_tac[]) >>
+     qexistsl [`type_memory_size rt`, `rt`, `d`] >> simp[] >> metis_tac[]) >>
   `!id path. raw <> PlaceR (MemoryPlace id path)` by
-    (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ raw _ _` mp_tac >>
-     qpat_assum `p.ptr_location = LocCode` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[vv_post_def, vv_holds_def, vv_at_def, post_value_type_def] >> metis_tac[]) >>
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ raw _ _` mp_tac >>
+     simp[vv_post_def, vv_at_def, post_value_type_def] >>
+     metis_tac[]) >>
   `!rt'. evaluate_type (get_tenv cx) (expr_type (TopLevelName ann nsid)) = SOME rt' ==>
     val_wf rt' v /\ type_memory_bytes cenv (expr_type (TopLevelName ann nsid)) = type_memory_size rt' /\
-    type_memory_bytes cenv (expr_type (TopLevelName ann nsid)) <= nb` by metis_tac[] >>
+    type_memory_bytes cenv (expr_type (TopLevelName ann nsid)) <= type_memory_size rt` by
+    (qpat_assum `t = expr_type _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
   `!rt'. evaluate_type (get_tenv cx) (lowered_value_type cenv (TopLevelName ann nsid)) = SOME rt' ==>
-    type_memory_size rt' <= nb` by
+    type_memory_size rt' <= type_memory_size rt` by
     (fs[lowered_value_type_def, post_value_type_def] >> metis_tac[]) >>
+  `eval_operand op z = SOME d` by metis_tac[] >>
+  `~is_word_type (post_value_type cenv (TopLevelName ann nsid))` by metis_tac[] >>
   drule_all toplevel_code_runtime_size_posts >> strip_tac >> metis_tac[]
 QED
