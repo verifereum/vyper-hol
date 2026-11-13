@@ -183,7 +183,7 @@ Proof
           gvs[] >>
           `!H. valid_horizon cx st0 H es_end.storage_trace ==>
                expr_post H ctx func cenv cx e1 es sa s1 s0
-                 (es_end with gas_obs := []) v x t` by
+                 (es_end with gas_obs := []) v x t'` by
             (rpt strip_tac >> first_x_assum drule >> simp[]) >>
           `?H. valid_horizon cx st0 H es_end.storage_trace` by metis_tac[] >>
           `bind (eval_expr cx e1) (read_result cx)
@@ -194,7 +194,7 @@ Proof
              strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
           qpat_x_assum `!gs1 v1 es1. _`
             (drule o CONV_RULE (DEPTH_CONV ETA_CONV)) >> strip_tac >>
-          `~t.vs_halted` by
+          `~t'.vs_halted` by
             metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
           `expr_res_ok (convert_result cx (expr_type e1) t v)` by
             (qpat_x_assum `gas_admissible (bind (eval_expr cx (TypeBuiltin _ _ _ _)) _) _ es`
@@ -209,7 +209,7 @@ Proof
           (conj_tac
            >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
                       |> REWRITE_RULE [APPEND_NIL]) >>
-               qexistsl_tac [`es_end`,`t`,`v`] >> gvs[]) >>
+               qexistsl_tac [`es_end`,`t'`,`v`] >> gvs[]) >>
            gvs[] >> disj2_tac >> first_assum ACCEPT_TAC)) >>
       Cases_on `res`
       >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
