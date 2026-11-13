@@ -390,7 +390,9 @@ Proof
          POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
          goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
          goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
-         metis_tac[])
+         `?ai. MEM ai (fn_insts func) /\ ai.inst_opcode = ALLOCA /\
+               ai.inst_id = sa.cs_next_id` by metis_tac[] >>
+         rpt conj_tac >> rpt strip_tac >> fs[])
      >- (qpat_assum `rc' = returns_stack_count _ _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
      simp[]) >>
   pop_assum strip_assume_tac >>
