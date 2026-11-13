@@ -177,4 +177,3 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   fs[target_post_def, locals_kept_def, popped_kept_def] >> metis_tac[]
 QED
-

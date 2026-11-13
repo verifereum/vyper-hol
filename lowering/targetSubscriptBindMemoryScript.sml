@@ -1,7 +1,7 @@
 (* Counted subscript composition from compiler and continuation boundaries. *)
 Theory targetSubscriptBindMemory
 Ancestors
-  targetSubscriptMemoryResiduals targetSubscriptSplit targetPlaceSim
+  targetSubscriptSplit targetPlaceSim
   exprSimMemDefs exprSimHypsDefs exprSimSource targetPlaceSimDefs
   stmtLoweringMono exprLoweringProps vyperInterpreter vyperState
   allocaHistory vyperTypeCallGraph vyperTypeEnv targetSubscriptContinuation
@@ -17,9 +17,7 @@ Theorem target_subscript_case_mem_from_boundaries:
       (!env ty es. expr_body_pre cenv cx env e es /\
         (nocalls ==> int_calls_expr e = []) ==>
         expr_vv_sim_mem ctx func cenv cx ty e es)) /\
-    (!nsid. target_root bt = TopLevelNameTarget nsid ==>
-      EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
-    body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    body_inv tops ctx cenv cx /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     type_place_target env bt = SOME bvt /\
     subscript_vtype bvt (expr_type e) = SOME vt /\
@@ -57,7 +55,6 @@ Theorem target_subscript_case_mem_from_boundaries:
       (\res ee r. expr_exit res r)) /\
   (!bt tops ctx cenv cx env es pv ee sa rb sm.
     body_inv tops ctx cenv cx /\
-    EVERY (supported_expr tops) (target_indices bt) /\
     target_pre cenv cx env bt es /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     eval_base_place cx bt es = (INL pv,ee) /\
@@ -94,8 +91,7 @@ Theorem target_subscript_case_mem_from_boundaries:
       (!env ty es. expr_body_pre cenv cx env e es /\
         (nocalls ==> int_calls_expr e = []) ==>
         expr_vv_sim_mem ctx func cenv cx ty e es)) /\
-    body_inv tops ctx cenv cx /\
-    EVERY (supported_expr tops) (target_indices (SubscriptTarget bt e)) ==>
+    body_inv tops ctx cenv cx ==>
     !env es.
       target_pre cenv cx env (SubscriptTarget bt e) es /\
       (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) ==>
@@ -122,13 +118,6 @@ Theorem target_subscript_case_mem_from_boundaries:
           (\res ee r. expr_exit res r)
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
-  Cases_on `?nsid. target_root bt = TopLevelNameTarget nsid /\
-    ~EVERY pure_expr (target_indices (SubscriptTarget bt e))`
-  >- (pop_assum strip_assume_tac >>
-      match_mp_tac target_subscript_storage_effectful_case_mem >>
-      qexists `nsid` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `!nsid. target_root bt = TopLevelNameTarget nsid ==>
-    EVERY pure_expr (target_indices (SubscriptTarget bt e))` by metis_tac[] >>
   rpt strip_tac >>
   `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
   `gas_admissible (eval_base_place cx bt) target_res_ok es` by

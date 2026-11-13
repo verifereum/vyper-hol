@@ -2,7 +2,7 @@
 Theory targetSubscriptContinuationMemory
 Ancestors
   targetSubscriptLocalMemory targetStorageContinuationMemory
-  targetSubscriptMemoryResiduals targetSubscriptSplit exprSimPopNested
+  targetLocalLive popTargetPre targetSubscriptSplit exprSimPopNested
   stmtSimAugAssignPlace exprSimPopNestedBase bodyAttributeMemory
   exprSimMemDefs targetPlaceSimDefs targetPlaceSim exprSimHypsDefs
   vyperInterpreter vyperState allocaHistory vyperTypeCallGraph
@@ -17,9 +17,7 @@ Theorem target_subscript_base_continuation_mem:
     (!env ty es. expr_body_pre cenv cx env e es /\
       (nocalls ==> int_calls_expr e = []) ==>
       expr_vv_sim_mem ctx func cenv cx ty e es)) /\
-  (!nsid. target_root bt = TopLevelNameTarget nsid ==>
-    EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
-  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  body_inv tops ctx cenv cx /\
   storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
   type_place_target env bt = SOME bvt /\
   subscript_vtype bvt (expr_type e) = SOME vt /\
@@ -74,20 +72,23 @@ Proof
 QED
 
 Resume target_subscript_base_continuation_mem[local]:
-  Cases_on `!gs key ee.
+  `!gs key ee.
     bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) =
       (INL key,ee) ==>
     ?path entry v. pv = PlaceR (MemoryPlace id path) /\
       lookup_scopes id ee.scopes = SOME entry /\
-      evaluate_subscripts entry.type entry.value path = INL v`
-  >- suspend "live" >>
-  pop_assum (strip_assume_tac o SIMP_RULE pure_ss [NOT_FORALL_THM, NOT_IMP]) >>
-  drule_all target_subscript_local_popped_case_mem >> simp[]
+      evaluate_subscripts entry.type entry.value path = INL v` by
+    (rpt strip_tac >>
+     qspecl_then [`cenv`, `cx`, `env`,
+       `es with gas_obs := gas_explicit left s0.vs_gas_readings ++ gs`,
+       `bt`, `e`, `bvt`, `id`, `pv`, `mid with gas_obs := gs`, `gs`, `key`,
+       `ee`] mp_tac local_subscript_index_live >>
+     impl_tac >- fs[target_pre_def] >> simp[]) >>
+  suspend "live"
 QED
 
 Resume target_subscript_base_continuation_mem[storage]:
   qpat_assum `!gs. eval_base_place _ _ _ = _` (qspec_then `[]` assume_tac) >>
-  `EVERY pure_expr (target_indices (SubscriptTarget bt e))` by metis_tac[] >>
   `?rvt. type_place_target env (TopLevelNameTarget (src,id)) = SOME rvt` by
     (Cases_on `type_place_target env (TopLevelNameTarget (src,id))` >>
      simp[] >> metis_tac[target_root_untyped, optionTheory.NOT_NONE_SOME]) >>
@@ -102,13 +103,13 @@ Resume target_subscript_base_continuation_mem[storage]:
      goal_assum (drule_at (Pat `target_root _ = _`)) >>
      goal_assum (drule_at (Pat `eval_base_place _ _ _ = _`)) >>
      metis_tac[]) >>
-  irule target_subscript_storage_continuation_mem >> simp[] >> metis_tac[]
+  gvs[] >> irule target_subscript_storage_continuation_mem >> simp[] >> metis_tac[]
 QED
 
 Resume target_subscript_base_continuation_mem[live]:
   `?path. pv = PlaceR (MemoryPlace id path)` by
     metis_tac[aug_place_name_root_base] >> gvs[] >>
-  drule_all target_subscript_local_live_continuation_mem >> strip_tac >>
+  drule_all (SRULE [] target_subscript_local_live_continuation_mem) >> strip_tac >>
   drule gas_outcome_link >> strip_tac >>
   irule exprSimMemDefsTheory.gas_outcome_post_mono >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>

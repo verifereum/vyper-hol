@@ -11,7 +11,6 @@ Libs
 Theorem target_compiler_open:
   !bt tops ctx cenv cx env es pv ee sa rb sm.
     body_inv tops ctx cenv cx /\
-    EVERY (supported_expr tops) (target_indices bt) /\
     target_pre cenv cx env bt es /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     eval_base_place cx bt es = (INL pv,ee) /\

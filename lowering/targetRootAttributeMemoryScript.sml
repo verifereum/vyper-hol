@@ -1,7 +1,7 @@
 (* Counted target roots and field extension. *)
 Theory targetRootAttributeMemory
 Ancestors
-  targetMemoryContracts exprSimPopNestedStorageFrame
+  targetMemoryContracts
   targetPlaceSim targetPlaceSimDefs exprSimDefs loweringPosts
   vyperTypeSystem exprLowering compileEnv stmtSimProps
   vyperInterpreter vyperState vyperEvalMisc loweringStateRelDefs
