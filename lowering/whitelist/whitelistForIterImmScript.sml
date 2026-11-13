@@ -272,7 +272,7 @@ Proof
   imp_res_tac body_stmt_safe_for_body >>
   `~cx_const_name cx (src,name)` by
     (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >>
-     gvs[]) >>
+     gvs[optionTheory.IS_SOME_EXISTS]) >>
   drule_all immutable_for_typing_ready >> strip_tac >> gvs[] >>
   drule_all immutable_for_elements_ready >> strip_tac >>
   qmatch_asmsub_abbrev_tac `LENGTH vs <= bound_length bd` >>
