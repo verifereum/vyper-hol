@@ -201,12 +201,15 @@ Proof
         (qx_gen_tac `HH` >> strip_tac >>
          irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
                   stmt_state_rel_fields_transport) >>
-         conj_tac >- (qexists_tac `H0` >> first_assum ACCEPT_TAC) >>
-         qexists_tac `s` >>
-         qpat_x_assum `r with <|vs_vars := _; vs_allocas := _;
-                                vs_alloca_next := _; vs_inst_idx := _|> = s`
-           (mp_tac o GSYM) >>
-         simp[venom_state_component_equality]) >>
+         conj_tac
+         >- (qexists_tac `s` >>
+             qpat_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ _ s`
+               (qspec_then `HH` assume_tac) >>
+             qpat_x_assum `r with <|vs_vars := _; vs_allocas := _;
+                                    vs_alloca_next := _; vs_inst_idx := _|> = s`
+               (mp_tac o GSYM) >>
+             simp[venom_state_component_equality]) >>
+         qexists_tac `H0` >> first_assum ACCEPT_TAC) >>
       qpat_x_assum `?q. buf.buf_operand = Var q /\ _` strip_assume_tac >>
       `w2n sw + type_memory_size stv <= w2n tw \/
        w2n tw + type_memory_size stv <= w2n sw` by
@@ -215,10 +218,11 @@ Proof
          `not_local_ptr cenv es.scopes (STRING #"%" (toString sa.cs_next_var))` by
            (irule local_ptrs_reserved_fresh >> goal_assum (drule_at Any) >> simp[]) >>
          drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)
-           externalReturnNormalizeMemTheory.normalize_alloca_source_separate >>
+           (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+             externalReturnNormalizeMemTheory.normalize_alloca_source_separate) >>
          disch_then (drule_at (Pat `MEM _ _`)) >>
          simp[venomInstTheory.mk_inst_def] >>
-         metis_tac[]) >>
+         disch_then (qspecl_then [`ctx`, `H0`] mp_tac) >> gvs[]) >>
       `eval_operand src r = SOME sw` by
         (Cases_on `src` >> gvs[eval_operand_def] >> metis_tac[]) >>
       drule_all placeMemoryTypedPrimitiveTheory.compile_copy_memory_forward >>
@@ -280,10 +284,10 @@ Proof
                    loweringShapeDefsTheory.not_fresh_at_mono]) >>
       `lookup_var p u = SOME w /\ eval_operand buf.buf_operand u = SOME tw` by
         (fs[eval_operand_def] >> metis_tac[]) >>
-      drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)
-        store_memory_declare_path >>
-      disch_then (drule_at (Pat `!H. _ ==> stmt_state_rel _ _ _ _ _ _ u`)) >>
+      drule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+          store_memory_declare_path) >>
       disch_then (drule_at (Pat `val_in_memory _ _ (w2n tw) _`)) >>
+      disch_then (drule_at (Pat `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ u`)) >>
       simp[] >>
       disch_then (qspecl_then [`sz`, `inst`, `id`, `a`] mp_tac) >>
       (impl_tac >- metis_tac[]) >>
