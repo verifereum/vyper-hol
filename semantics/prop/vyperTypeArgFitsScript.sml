@@ -9,6 +9,15 @@ Theory vyperTypeArgFits
 Ancestors
   list vyperValue vyperTyping vyperTypeSystem vyperTypeValues
 
+Theorem arg_type_fits_prim_word:
+  !t u. arg_type_fits t u /\ is_prim_word_type u ==> t = u
+Proof
+  `(!t u. arg_type_fits t u ==> is_prim_word_type u ==> t = u) /\
+   (!ts us. arg_types_fit ts us ==> T)` suffices_by metis_tac[] >>
+  ho_match_mp_tac arg_type_fits_ind >>
+  rw[arg_type_fits_def, is_prim_word_type_def]
+QED
+
 Theorem arg_type_fits_default_value:
   (!t u tv tu.
      arg_type_fits t u /\ evaluate_type tenv t = SOME tv /\
@@ -71,6 +80,12 @@ QED
 
 Theorem arg_types_fit_LENGTH:
   !ts us. arg_types_fit ts us ==> LENGTH ts = LENGTH us
+Proof
+  Induct >> Cases_on `us` >> simp[arg_type_fits_def]
+QED
+
+Theorem arg_types_fit_LIST_REL:
+  !ts us. arg_types_fit ts us <=> LIST_REL arg_type_fits ts us
 Proof
   Induct >> Cases_on `us` >> simp[arg_type_fits_def]
 QED

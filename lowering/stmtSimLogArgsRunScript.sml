@@ -32,7 +32,7 @@ Proof
     is_bytestring_type_def]
 QED
 
-Theorem log_scalar_post_value_type[local]:
+Theorem log_scalar_post_value_type:
   supported_scalar_type (expr_type e) ==> post_value_type cenv e = expr_type e
 Proof
   strip_tac >> drule log_scalar_word_or_bytestring >> strip_tac >> simp[]

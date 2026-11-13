@@ -3,6 +3,7 @@
    (S1's body_assign_local_memory). *)
 Theory bodyMemAssignLocalMem
 Ancestors
+  supportedExprTraverse allocLimits allocLimitsProps
   bodyMemoryPreds bodySim bodyExprPreFacts memoryLocalRhsProps
   bodyRhsRoomMemory exprSimAggregateLayout vyperTypeArgFits
   supportedStmtTraverse supportedStmts supportedExprs vyperTypeSystem
@@ -31,6 +32,7 @@ Theorem body_assign_local_rhs_pre[local]:
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget (NameTarget id)) e) /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
     FLOOKUP env.var_types id = SOME ty ==>
@@ -46,7 +48,19 @@ Proof
      Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >> Cases_on `asg` >> gvs[]) >>
   simp[] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
@@ -435,7 +449,7 @@ QED
 
 Theorem local_memory_assign_staged_code[local]:
   compile_assign_value ce dst LocMemory src F (SOME LocMemory)
-    dty sty info bytes sa = ((),sb) /\ fn_has_code sa sb func /\
+    dty sty bytes sa = ((),sb) /\ fn_has_code sa sb func /\
   (dty = sty \/ is_bytestring_type dty) ==>
   ?buf sm sn.
     compile_alloc_buffer (type_memory_bytes ce sty) sa = (buf,sm) /\
@@ -451,7 +465,7 @@ Proof
      compile_copy_memory buf.buf_operand src (type_memory_bytes ce sty) sm =
        ((),sn) /\
      compile_store_memory ce buf.buf_operand dst dty sty sn = ((),sb)` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def,
           comp_return_def] >>
      rpt (pairarg_tac >> gvs[]) >> strip_tac >> metis_tac[pairTheory.PAIR]) >>
@@ -476,9 +490,9 @@ QED
 
 Theorem local_memory_assign_widen_body_path[local]:
   !ctx func cenv cx es s id p sz pre env entry rest v tyv ltv src ty lt sa sb
-   sw d info bytes.
+   sw d bytes.
     compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
-      ty lt info bytes sa = ((), sb) /\
+      ty lt bytes sa = ((), sb) /\
     (ty = lt \/ is_bytestring_type ty /\ is_bytestring_type lt) /\
     ~is_word_type ty /\
     (!x. src = Var x ==> not_fresh_at sa x) /\ not_fresh_at sa p /\
@@ -557,7 +571,7 @@ QED
 
 Theorem assign_local_memory_post_path_mem[local]:
   !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz pre env entry rest
-   v tyv etv ltv vtyp loc info bytes d.
+   v tyv etv ltv vtyp loc bytes d.
     expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
     expr_store_bound cx (expr_type e) v op s /\
     (loc = SOME LocMemory ==> !sw. eval_operand op s = SOME sw ==>
@@ -578,7 +592,7 @@ Theorem assign_local_memory_post_path_mem[local]:
     type_memory_size tyv + 64 < dimword (:256) /\
     type_memory_size ltv < dimword (:256) /\ 0 < type_memory_size etv /\
     compile_assign_value cenv (Var p) LocMemory op F loc vtyp
-      (lowered_value_type cenv e) info bytes sb = ((),sf) /\
+      (lowered_value_type cenv e) bytes sb = ((),sf) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     alloca_history func s /\ return_buf_frame d cenv sb s /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
@@ -633,12 +647,12 @@ Proof
   Cases_on `loc = SOME LocMemory`
   >- (qpat_x_assum `loc = SOME LocMemory` SUBST_ALL_TAC >>
       irule local_memory_assign_widen_body_path >> simp[] >>
-      goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
       simp[] >> conj_tac
       >- (qpat_x_assum `SOME LocMemory = SOME LocMemory ==> _` mp_tac >> simp[]) >>
       qpat_x_assum `(_ /\ _) \/ _` mp_tac >> metis_tac[]) >>
   `compile_store_memory cenv op (Var p) vtyp vtyp sb = ((),sf)` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_assign_value_def] >>
      metis_tac[compile_store_memory_bytestring_src]) >>
   irule local_memory_store_body_path >> simp[] >>
@@ -746,7 +760,7 @@ Resume compile_assign_local_memory_widen_stmt_frag_mem[normal]:
      drule gas_marked_path_exec >> strip_tac >>
      drule fragGasPathTheory.gas_path_normal >> simp[]) >>
   drule assign_local_memory_post_path_mem >>
-  disch_then (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[] >>
   disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
   simp[] >> disch_then (drule_at (Pat `return_buf_frame _ _ _ _`)) >>
@@ -808,6 +822,7 @@ Theorem body_assign_local_memory_mem:
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget (NameTarget id)) e) /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
     frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\

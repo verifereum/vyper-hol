@@ -6,7 +6,7 @@
  *)
 Theory loweringMemBodySourceGas
 Ancestors
-  stmtSimProps stmtSimDefs gasContext supportedDecls
+  stmtSimProps stmtSimDefs gasContext supportedDecls externalBodySupport
   list pair finite_map
   e2eDefs supportedProgram
   vyperTypeSelectedEntrySoundness vyperTypeSystem
@@ -17,61 +17,6 @@ Ancestors
   vyperInterpreter vyperState vyperContext evalNoHalt vyperLoweringCorrect
 
 val _ = Parse.hide "body";
-
-(* The checked typing of the selected external body (PR #1081's
-   external_selected_body_typing). *)
-Theorem external_body_typing_gas_mem[local]:
-  supported_program tops /\ source_typing_ok tops am tx /\
-  source_deployment_rel tops am tx /\
-  lookup_function NONE tx.function_name External tops =
-    SOME (mut, F, args, [], ret, fbody) ==>
-  ?art env_t env'.
-    check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
-    checked_contract_runtime_ready art [(NONE,tops)] am tx /\
-    env_t.current_src = NONE /\
-    env_t.type_defs = get_tenv
-      (initial_evaluation_context am.sources am.layouts tx NONE) /\
-    env_t.fn_sigs = art.cta_fn_sigs /\
-    env_t.bare_globals = art.cta_bare_globals /\
-    env_t.bare_global_assignable = art.cta_bare_global_assignable /\
-    env_t.toplevel_vtypes = art.cta_toplevel_vtypes /\
-    env_t.flag_members = art.cta_flag_members /\
-    type_stmts env_t ret fbody = SOME env' /\
-    (!id ty. MEM (id,ty) args ==>
-      FLOOKUP env_t.var_types id = SOME ty /\
-      IS_SOME (FLOOKUP env_t.var_assignable id)) /\
-    (!n ty. FLOOKUP env_t.var_types n = SOME ty ==> MEM (n,ty) args) /\
-    (!n b. FLOOKUP env_t.var_assignable n = SOME b ==>
-      ?ty. MEM (n,ty) args) /\
-    stmts_no_control_escape fbody /\
-    call_evaluation_safe
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (int_calls_stmts fbody)
-Proof
-  strip_tac >>
-  `?raw. MEM (FunctionDecl External mut F raw tx.function_name args [] ret
-                fbody) tops` by
-    (irule entryStateRelTheory.lookup_function_external_decl >> simp[] >>
-     qexists `tops` >>
-     gvs[supported_program_def, supported_declaration_headers_def]) >>
-  gvs[source_typing_ok_def, source_deployment_rel_def] >>
-  `module_allocated am.layouts tx.target NONE tops` by
-    (drule check_contract_main_module_allocated >> simp[]) >>
-  `External <> Deploy` by simp[] >>
-  `ALOOKUP [(NONE,tops)] NONE = SOME tops` by simp[] >>
-  drule checked_function_body_typing_package >>
-  simp[] >> disch_then drule >> simp[] >>
-  strip_tac >>
-  qexistsl [`env_body`, `env_after`] >> simp[] >>
-  conj_tac >- metis_tac[] >>
-  `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
-     External mut F args [] ret fbody` by
-    (irule check_contract_runtime_function_body_MEM >> simp[] >>
-     qexistsl [`tx.function_name`, `raw`] >> simp[]) >>
-  conj_tac >- gvs[check_function_body_def] >>
-  drule checked_explicit_external_body_call_evaluation_safe >>
-  simp[] >> disch_then drule >> simp[]
-QED
 
 (* Moving the call value changes only the accounts. *)
 Theorem send_call_value_frame_gas_mem[local]:
@@ -194,7 +139,7 @@ Theorem external_body_source_ok_gas_mem:
       (stmt_res_ok NoLoop) es0
 Proof
   rpt strip_tac >>
-  drule_all external_body_typing_gas_mem >> strip_tac >>
+  drule_all external_selected_body_typing >> strip_tac >>
   `machine_well_typed am` by gvs[source_typing_ok_def] >>
   drule_all external_body_prefix_state_gas_mem >> strip_tac >>
   drule_all external_env_consistent_gas_mem >> strip_tac >>

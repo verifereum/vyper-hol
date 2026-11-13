@@ -60,7 +60,7 @@ Proof
   simp[ignore_bind_def, bind_assoc]
 QED
 
-Theorem raw_log_outcome_bind_values[local]:
+Theorem raw_log_outcome_bind_values:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> (value list) evaluation_result) (es,s0) P E /\
   (!marks rr mid t.
@@ -81,7 +81,7 @@ Proof
   qexistsl_tac [`E`, `P`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem raw_log_outcome_bind_value[local]:
+Theorem raw_log_outcome_bind_value:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> value evaluation_result) (es,s0) P E /\
   (!marks rr mid t.
@@ -102,7 +102,7 @@ Proof
   qexistsl_tac [`E`, `P`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem raw_log_outcome_bind_unit[local]:
+Theorem raw_log_outcome_bind_unit:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> unit evaluation_result) (es,s0) P E /\
   (!marks rr mid t.
@@ -126,7 +126,7 @@ Proof
   gvs[]
 QED
 
-Theorem expr_body_pre_make_array_arg[local]:
+Theorem expr_body_pre_make_array_arg:
   expr_body_pre cenv cx env (Builtin ann (MakeArray t b) args) es /\
   MEM e args /\ expr_sim_inv cenv cx env es' ==>
   expr_body_pre cenv cx env e es'
@@ -299,7 +299,7 @@ Proof
   qexists_tac `t''` >> gvs[]
 QED
 
-Theorem raw_log_alloc_args_post[local]:
+Theorem raw_log_alloc_args_post:
   wb_args_post ctx func cenv cx es0 sa s0 es ops vals t /\
   stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es0 es sa s0 u /\
   EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\

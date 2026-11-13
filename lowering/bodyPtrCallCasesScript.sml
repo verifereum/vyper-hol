@@ -19,8 +19,8 @@ Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list bodyPtrCallResidual
   bodyPtrCallCalldata exprSendPtr bodyWordArgsReady typedWordArgsReadyPtr
-  exprSimSend exprSimPrecompiles exprSimHypsDefs exprSimSelfDestruct
-  exprSimSelfDestructPtr
+  exprSimSend exprSimPrecompiles exprSimHypsDefs rawCallExpressionPtr
+  exprSimSelfDestruct exprSimSelfDestructPtr
 
 val _ = Parse.hide "body";
 
@@ -77,7 +77,10 @@ Theorem body_raw_call_case_ptr:
     body_exprs_ptr_ok cx es ==>
     body_expr_ptr_ok cx (Call ty (RawCallTarget flags) es v18)
 Proof
-  cheat
+  rpt gen_tac >> disch_tac >> simp[Once body_expr_ptr_ok_def] >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (irule raw_call_sim_ptr >> metis_tac[]) >>
+  irule raw_call_vv_sim_ptr >> metis_tac[]
 QED
 
 (* ADMITTED: a piece of the body induction. *)

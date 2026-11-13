@@ -1,6 +1,6 @@
 # Conversion witnesses (#548)
 
-`parity-fixtures.txt` names the 6 required bytecode fixtures. Each source in
+`parity-fixtures.txt` names the 13 required bytecode fixtures. Each source in
 `sources/` has independently generated annotated AST/layout JSON and deployment
 and runtime bytecode in `oracle/`. The native runner checks that the HOL checker
 accepts each source in both modes and that each complete bytecode pair equals
