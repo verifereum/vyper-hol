@@ -43,7 +43,8 @@ Proof
        constructor_exit_state_rel)) >> qexists_tac `ce` >>
      fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def]) >>
   simp[intcall_stmt_exit_def] >> disj2_tac >> conj_tac
-  >- (simp[intret_q_def] >> qexists_tac `t` >>
+  >- (irule intret_q_intro >>
+      qexistsl_tac [`<|iret_values := []; iret_adopt_fmp := NONE|>`, `t`] >>
       simp[result_rel_def, intret_vals_match_def, state_rel_gas_obs]) >>
   simp[eval_operand_return_unlock] >> conj_tac
   >- (rpt strip_tac >>
@@ -95,4 +96,20 @@ Theorem return_unlock_active_index_positive:
   0 < (return_unlock_state ce s).vs_inst_idx
 Proof
   strip_tac >> Cases_on `ut` >> simp[return_unlock_state_def]
+QED
+
+Theorem copy_static_unlock_index_witness:
+  copy_static t = copy_static (return_unlock_state ce s) ==>
+  ?u. t = (return_unlock_state ce u with vs_inst_idx := t.vs_inst_idx) /\
+      copy_static u = copy_static s /\
+      u.vs_memory = t.vs_memory /\ u.vs_vars = t.vs_vars
+Proof
+  strip_tac >>
+  qexists_tac `s with <|vs_prev_bb := t.vs_prev_bb;
+    vs_current_bb := t.vs_current_bb; vs_vars := t.vs_vars;
+    vs_memory := t.vs_memory|>` >>
+  qabbrev_tac `info = ce.ce_nonreentrant` >> PairCases_on `info` >>
+  Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
+  gvs[return_unlock_state_def, tstore_def, sstore_def,
+      copy_static_def, venom_state_component_equality]
 QED
