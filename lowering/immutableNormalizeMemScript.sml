@@ -55,6 +55,8 @@ Theorem immutable_normalize_mem_endpoint:
 Proof
   strip_tac >> drule_all immutable_normalize_mem_path_endpoint >>
   disch_then (qx_choose_then `dtv` (qx_choose_then `u`
-    (qx_choose_then `t` (qx_choose_then `b` strip_assume_tac)))) >>
-  qexistsl_tac [`dtv`, `u`, `t`, `b`] >> simp[]
+    (qx_choose_then `t` (qx_choose_then `b`
+      (map_every assume_tac o CONJUNCTS))))) >>
+  qexistsl_tac [`dtv`, `u`, `t`, `b`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
