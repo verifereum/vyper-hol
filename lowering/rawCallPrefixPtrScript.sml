@@ -400,14 +400,14 @@ QED
 
 Resume raw_call_operands_sim_ptr[head_cert]:
   POP_ASSUM_LIST (K all_tac) >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  rewrite_tac[operandOutcomePtrTheory.ignore_map_return] >>
+  rewrite_tac[gasOutcomeMapPtrTheory.ignore_bind_map_return] >>
   rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_values >>
   goal_assum (drule_at Any)
 QED
 
 Resume raw_call_operands_sim_ptr[tail_cert]:
   POP_ASSUM_LIST (K all_tac) >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  rewrite_tac[operandOutcomePtrTheory.ignore_map_return] >>
+  rewrite_tac[gasOutcomeMapPtrTheory.ignore_bind_map_return] >>
   rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_values >>
   goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)
 QED
@@ -457,7 +457,7 @@ Resume raw_call_operands_sim_ptr[keyword_map]:
     rawCallKeywordPrefixPtrTheory.raw_call_kwargs_sim_ptr) >>
   disch_then (qspec_then `PG` assume_tac) >>
   irule (BETA_RULE (Q.ISPEC `\kvs. av::BytesV bs::kvs`
-    (Q.GEN `f` (SPEC_ALL operandOutcomePtrTheory.gas_outcome_ptr_map_return)))) >>
+    (Q.GEN `f` (SPEC_ALL gasOutcomeMapPtrTheory.gas_outcome_ptr_map_return)))) >>
   goal_assum (drule_at Any) >> conj_tac
   >- (rpt gen_tac >> strip_tac >> gvs[] >>
       `wb_frame cenv es ee' sa s0 t'` by

@@ -137,7 +137,7 @@ Theorem typed_args_outcome_inv_ptr:
     (\rr ee G tn t. Q rr ee G tn t /\ Inv ee /\ ~t.vs_halted) R
 Proof
   strip_tac >> drule gas_outcome_ptr_nonhalted >> strip_tac >>
-  irule operandOutcomePtrTheory.gas_outcome_ptr_marked_conseq >>
+  irule gasOutcomeMarkedPtrTheory.gas_outcome_ptr_marked_conseq >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
   `?vs. res = INL vs` by metis_tac[] >> gvs[] >>
   irule typed_args_ready_ptr_inv >>
