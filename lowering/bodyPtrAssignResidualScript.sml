@@ -17,7 +17,7 @@ Ancestors
   stmtLowering exprLowering compileEnv vyperAST vyperInterpreter vyperState
   vyperTypeSystem list finite_map bodyPtrAssignSnapshot bodyPtrAssignPlaceCoverage
   bodyPtrAssignStatic aggregateNormalizePtr supportedTargetLocalLive
-  storeSlotsPtrBase placeMemoryGhostPtr
+  storeSlotsPtrBase placeMemoryGhostPtr bodyPtrAssignMemorySnapshot
 
 val _ = Parse.hide "body";
 
