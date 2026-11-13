@@ -9,6 +9,8 @@ Ancestors
   exprSimMemDefs exprSimStack exprSimIfExp exprSimProps exprLoweringProps
   loweringPosts exprLowering compileEnv emitHelper vyperStorageTrace
   venomExecSemantics venomInst venomState memSafeRun context
+  codegenRel contextCodegenRel unitTransformDefs loweringStateRelDefs
+  vyperTypeSystem vyperAST
   vyperInterpreter vyperState finite_map pred_set list
 
 (* The checked GAS step and its ghosts, fixed before any horizon: the
@@ -82,7 +84,8 @@ Proof
      gvs[not_fresh_at_def]) >>
   drule_all compile_msg_gas_history >>
   disch_then (qspec_then `w` assume_tac) >>
-  qexistsl_tac [`w`, `id`] >> simp[] >>
+  qexistsl_tac [`w`, `id`] >>
+  rpt conj_tac >> TRY (gvs[update_var_def] >> NO_TAC) >>
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `inst = mk_inst id GAS [] [out]` >>
   qabbrev_tac `u = update_var out w (s0 with vs_gas_readings := DROP 1 s0.vs_gas_readings)` >>
@@ -110,10 +113,10 @@ Proof
         simp[Abbr `u`, update_var_def] >>
       qpat_x_assum `gas_origin_ptr_edge _ _ _ _` mp_tac >>
       simp[Abbr `inst`, mk_inst_def] >> strip_tac >>
-      CONV_TAC (RATOR_CONV (RAND_CONV (REWR_CONV (GSYM APPEND_NIL)))) >>
-      irule (cj 2 gas_origin_ptr_path_rules) >>
-      goal_assum (drule_at Any) >>
-      irule (cj 1 gas_origin_ptr_path_rules) >> simp[])
+      irule (SIMP_RULE std_ss [APPEND_NIL]
+        (Q.INST [`right` |-> `[]`] (SPEC_ALL (cj 2 gas_origin_ptr_path_rules)))) >>
+      irule_at Any (cj 1 gas_origin_ptr_path_rules) >>
+      gvs[Abbr `u`, update_var_def])
   >- (drule_all gas_builtin_indexed_ghosts_at >>
       disch_then (qspecl_then [`w`, `SUC s0.vs_inst_idx`, `id`,
         `DROP 1 s0.vs_gas_readings`, `PG`] strip_assume_tac) >>
@@ -121,7 +124,8 @@ Proof
                                    vs_inst_idx := SUC s0.vs_inst_idx|>) =
        u with vs_inst_idx := SUC s0.vs_inst_idx` by
         simp[Abbr `u`, update_var_def] >>
-      gvs[Abbr `inst`] >> fs[ghost_inv_at_def])
+      gvs[Abbr `inst`] >> fs[ghost_inv_at_def] >>
+      rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[]))
   >- (drule_all gas_builtin_indexed_ghosts_at >>
       disch_then (qspecl_then [`w`, `SUC s0.vs_inst_idx`, `id`,
         `DROP 1 s0.vs_gas_readings`, `PG`] strip_assume_tac) >>
@@ -169,9 +173,13 @@ Proof
       rewrite_tac[gas_outcome_full_def] >>
       qexists_tac `[T]` >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`INL (IntV (&w2n w))`, `es`] >>
-      qmatch_goalsub_abbrev_tac `gas_origin_ptr_path _ _ _ (_, G1, tn1)` >>
-      qmatch_goalsub_abbrev_tac `OK t` >>
-      qexistsl_tac [`OK t`, `G1`, `tn1`] >>
+      qexistsl_tac [`OK (update_var out w
+          (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
+                     vs_inst_idx := LENGTH sb.cs_current_insts|>))`,
+        `step_prov PG G0 (mk_inst id GAS [] [out])
+          (update_var out w (s0 with vs_gas_readings := DROP 1 s0.vs_gas_readings))`,
+        `step_taint (mk_inst id GAS [] [out]) s0
+          (update_var out w (s0 with vs_gas_readings := DROP 1 s0.vs_gas_readings)) tn0`] >>
       rpt conj_tac
       >- (gen_tac >> fs[gas_explicit_def, msg_gas_source])
       >- simp[] >>
@@ -182,7 +190,6 @@ Proof
         (drule_then (qspec_then `PG` strip_assume_tac)) >>
       drule_all msg_gas_post_frame >>
       disch_then (qspec_then `w` assume_tac) >>
-      unabbrev_all_tac >>
       gvs[expr_store_bound_word, expr_type_def, env_item_type_def,
           is_word_type_def, update_var_def]) >>
   rw[expr_vv_sim_full_def] >>
@@ -201,15 +208,20 @@ Proof
      simp[compile_env_var_def, emit_op_def, comp_bind_def,
           comp_ignore_bind_def, comp_return_def, fresh_id_def,
           fresh_var_def, emit_def] >> metis_tac[]) >>
-  gvs[] >> drule_all msg_gas_full_witness >> strip_tac >>
+  gvs[] >> rename1 `compile_env_var MsgGas sa = (Var out, sb)` >>
+  drule_all msg_gas_full_witness >> strip_tac >>
   irule gas_outcome_full_initial_domain >>
   simp[msg_gas_source_frame] >> strip_tac >>
   rewrite_tac[gas_outcome_full_def] >>
   qexists_tac `[T]` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`INL (Value (IntV (&w2n w)))`, `es`] >>
-  qmatch_goalsub_abbrev_tac `gas_origin_ptr_path _ _ _ (_, G1, tn1)` >>
-  qmatch_goalsub_abbrev_tac `OK t` >>
-  qexistsl_tac [`OK t`, `G1`, `tn1`] >>
+  qexistsl_tac [`OK (update_var out w
+      (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
+                 vs_inst_idx := LENGTH sb.cs_current_insts|>))`,
+    `step_prov PG G0 (mk_inst id GAS [] [out])
+      (update_var out w (s0 with vs_gas_readings := DROP 1 s0.vs_gas_readings))`,
+    `step_taint (mk_inst id GAS [] [out]) s0
+      (update_var out w (s0 with vs_gas_readings := DROP 1 s0.vs_gas_readings)) tn0`] >>
   rpt conj_tac
   >- (gen_tac >>
       `!s tv s'. eval_expr cx (Builtin (env_item_type MsgGas) (Env MsgGas) []) s =
@@ -229,7 +241,6 @@ Proof
   disch_then (qspec_then `w` assume_tac) >>
   drule_at (Pos last) vv_post_of_expr_post >>
   simp[post_value_type_def, expr_type_def] >> strip_tac >>
-  unabbrev_all_tac >>
   gvs[expr_type_def, vv_store_bound_stack_word, env_item_type_def,
       is_word_type_def, ptr_vv_ok_def, vv_location_def, read_result_def,
       return_def, update_var_def]
