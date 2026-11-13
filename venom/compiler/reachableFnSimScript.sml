@@ -322,6 +322,56 @@ Proof
 QED
 
 (* The block obligation gives fn_sim_below at every bound. *)
+Theorem block_sim_fn_sim_below_family:
+  !D vs C C' R R_ret.
+    (!idx k stk PG G tn fn fn' s t bb.
+       (!idx'. fn_sim_below D vs C C' (R idx') (R_ret idx') (SUC k)) /\
+       MEM fn C.ctx_functions /\
+       lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+       (R idx) stk PG G tn fn s t /\ block_reach vs C stk PG G tn fn s /\
+       lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+       terminates (run_block k C bb s) ==>
+       ?m bb'. lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+               block_step_rel D vs C (R idx) (R_ret idx) stk PG fn
+                 (run_block k C bb s) (run_block m C' bb' t)) ==>
+    !n idx. fn_sim_below D vs C C' (R idx) (R_ret idx) n
+Proof
+  rpt gen_tac >> strip_tac >> completeInduct_on `n` >> gen_tac >>
+  simp[Once fn_sim_below_def] >> rpt strip_tac >>
+  Cases_on `k` >- gvs[Once run_blocks_def, terminates_def] >>
+  rename1 `run_blocks (SUC j) C fn s` >>
+  `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    (Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
+     gvs[run_blocks_unfold, terminates_def]) >>
+  `terminates (run_block j C bb s)` by
+    (gvs[run_blocks_unfold] >>
+     Cases_on `run_block j C bb s` >> gvs[terminates_def]) >>
+  `!idx'. fn_sim_below D vs C C' (R idx') (R_ret idx') (SUC j)` by
+    (qpat_x_assum `!m. m < n ==> _` (qspec_then `SUC j` mp_tac) >> simp[]) >>
+  qpat_x_assum `!idx k stk PG G tn fn fn' s t bb. _`
+    (qspecl_then [`idx`, `j`, `stk`, `PG`, `G`, `tn`, `fn`, `fn'`, `s`, `t`, `bb`]
+       mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  Cases_on `?s1. run_block j C bb s = OK s1 /\ ~s1.vs_halted`
+  >- (gvs[] >>
+      `?t1 G1 tn1. run_block m C' bb' t = OK t1 /\ ~t1.vs_halted /\
+                   block_reach vs C stk PG G1 tn1 fn s1 /\
+                   (R idx) stk PG G1 tn1 fn s1 t1` by
+        (Cases_on `run_block m C' bb' t` >>
+         gvs[block_step_rel_def, fn_run_rel_def] >> metis_tac[]) >>
+      `terminates (run_blocks j C fn s1)` by gvs[run_blocks_unfold] >>
+      qpat_x_assum `!m. m < n ==> _` (qspec_then `SUC j`
+        (mp_tac o SIMP_RULE std_ss [fn_sim_below_def])) >>
+      impl_tac >- simp[] >>
+      disch_then (qspecl_then [`idx`, `j`, `stk`, `PG`, `G1`, `tn1`, `fn`, `fn'`,
+                               `s1`, `t1`] mp_tac) >>
+      impl_tac >- simp[] >> strip_tac >>
+      qexists_tac `SUC (m + m')` >> irule run_blocks_ok_sim >>
+      simp[] >> qexistsl_tac [`m`, `m'`, `t1`] >> simp[]) >>
+  qexists_tac `SUC m` >> irule run_blocks_stop_sim >> simp[] >>
+  metis_tac[]
+QED
+
 Theorem block_sim_fn_sim_below:
   !D vs C C' R R_ret.
     (!k stk PG G tn fn fn' s t bb.
@@ -336,40 +386,10 @@ Theorem block_sim_fn_sim_below:
                  (run_block k C bb s) (run_block m C' bb' t)) ==>
     !n. fn_sim_below D vs C C' R R_ret n
 Proof
-  rpt gen_tac >> strip_tac >> completeInduct_on `n` >>
-  simp[Once fn_sim_below_def] >> rpt strip_tac >>
-  Cases_on `k` >- gvs[Once run_blocks_def, terminates_def] >>
-  rename1 `run_blocks (SUC j) C fn s` >>
-  `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
-    (Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
-     gvs[run_blocks_unfold, terminates_def]) >>
-  `terminates (run_block j C bb s)` by
-    (gvs[run_blocks_unfold] >>
-     Cases_on `run_block j C bb s` >> gvs[terminates_def]) >>
-  `fn_sim_below D vs C C' R R_ret (SUC j)` by
-    (qpat_x_assum `!m. m < n ==> _` irule >> simp[]) >>
-  qpat_x_assum `!k stk PG G tn fn fn' s t bb. _`
-    (qspecl_then [`j`, `stk`, `PG`, `G`, `tn`, `fn`, `fn'`, `s`, `t`, `bb`]
-       mp_tac) >>
-  impl_tac >- simp[] >> strip_tac >>
-  Cases_on `?s1. run_block j C bb s = OK s1 /\ ~s1.vs_halted`
-  >- (gvs[] >>
-      `?t1 G1 tn1. run_block m C' bb' t = OK t1 /\ ~t1.vs_halted /\
-                   block_reach vs C stk PG G1 tn1 fn s1 /\
-                   R stk PG G1 tn1 fn s1 t1` by
-        (Cases_on `run_block m C' bb' t` >>
-         gvs[block_step_rel_def, fn_run_rel_def] >> metis_tac[]) >>
-      `terminates (run_blocks j C fn s1)` by gvs[run_blocks_unfold] >>
-      qpat_x_assum `!m. m < n ==> _` (qspec_then `SUC j`
-        (mp_tac o SIMP_RULE std_ss [fn_sim_below_def])) >>
-      impl_tac >- simp[] >>
-      disch_then (qspecl_then [`j`, `stk`, `PG`, `G1`, `tn1`, `fn`, `fn'`,
-                               `s1`, `t1`] mp_tac) >>
-      impl_tac >- simp[] >> strip_tac >>
-      qexists_tac `SUC (m + m')` >> irule run_blocks_ok_sim >>
-      simp[] >> qexistsl_tac [`m`, `m'`, `t1`] >> simp[]) >>
-  qexists_tac `SUC m` >> irule run_blocks_stop_sim >> simp[] >>
-  metis_tac[]
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`D`,`vs`,`C`,`C'`,`\u:unit. R`,`\u:unit. R_ret`]
+    (INST_TYPE [alpha |-> ``:unit``] block_sim_fn_sim_below_family)) >> simp[] >>
+  disch_then irule >> rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
 (* Why it holds: strong induction on n for fn_sim_below n.  run_blocks
