@@ -1259,60 +1259,6 @@ Proof
   metis_tac[vyperTypingTheory.safe_cast_result_well_typed]
 QED
 
-Theorem abi_encode_lowered_well_typed_coherent:
-  !cenv cx env ann ensure mid target args es.
-    expr_body_pre cenv cx env
-      (TypeBuiltin ann (AbiEncode ensure mid) target args) es ==>
-    well_typed_expr env
-      (TypeBuiltin
-        (lowered_value_type cenv
-          (TypeBuiltin ann (AbiEncode ensure mid) target args))
-        (AbiEncode ensure mid) target args)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `well_typed_expr env (TypeBuiltin ann (AbiEncode ensure mid) target args) /\
-   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-   env.type_defs = get_tenv cx` by
-    gvs[expr_body_pre_def, expr_sim_inv_def,
-        vyperTypeInvariantsTheory.env_consistent_def,
-        vyperTypeInvariantsTheory.env_context_consistent_def] >>
-  drule expr_body_pre_var_types_well_formed >> strip_tac >>
-  qpat_x_assum `expr_body_pre _ _ _ _ _` kall_tac >>
-  gvs[well_typed_expr_def, type_builtin_result_ok_def,
-      well_typed_type_builtin_args_def] >>
-  `EVERY (well_formed_type (get_tenv cx)) (MAP expr_type args)` by
-    (qpat_x_assum `abi_encode_size_ok _ _ _ _ _` kall_tac >>
-     qpat_x_assum `args <> []` kall_tac >>
-     qpat_x_assum `well_typed_exprs env args` mp_tac >>
-     Induct_on `args` >> simp[well_typed_expr_def] >>
-     metis_tac[well_typed_expr_type_well_formed]) >>
-  qmatch_goalsub_abbrev_tac `lowered_value_type cenv be` >>
-  qabbrev_tac `enc_ty0 = if LENGTH args = 1 /\ ~ensure then expr_type (HD args)
-                     else TupleT (MAP expr_type args)` >>
-  `abi_size_bound cenv.ce_struct_fields enc_ty0 =
-   vyper_abi_size_bound (get_tenv cx) enc_ty0` by
-    (simp[Abbr `enc_ty0`] >> IF_CASES_TAC
-     >- (Cases_on `args` >> gvs[well_formed_type_def,
-             optionTheory.IS_SOME_EXISTS] >>
-         drule_all abi_props_vyper_typed >> simp[]) >>
-     irule abi_size_bound_tuple_typed >>
-     fs[well_formed_type_def, EVERY_MEM]) >>
-  `!k. abi_encode_size_ok (get_tenv cx) ensure (TupleT (MAP expr_type args)) mid k =
-   (vyper_abi_size_bound (get_tenv cx) enc_ty0 +
-    (if IS_SOME mid then 4 else 0) <= k)` by
-    (Cases_on `args` >> gvs[] >> Cases_on `t` >>
-     Cases_on `mid` >> Cases_on `ensure` >>
-     gvs[abi_encode_size_ok_def, abi_encode_method_id_size_def,
-         abi_encode_method_id_bytes_def, Abbr `enc_ty0`]) >>
-  simp[Abbr `be`, lowered_value_type_def] >>
-  gvs[well_formed_type_def, evaluate_type_def, type_slot_size_def] >>
-  drule word_size_monotone >> strip_tac >>
-  qpat_x_assum `word_size _ <= word_size n` mp_tac >>
-  qpat_x_assum `word_size n + 1 <= _` mp_tac >>
-  qpat_x_assum `_ <= n` mp_tac >>
-  qpat_x_assum `n < _` mp_tac >> decide_tac
-QED
-
 Theorem memory_rhs_read_annotation_typed:
   !cenv cx env e es v es'.
     expr_body_pre cenv cx env e es /\
