@@ -1,6 +1,7 @@
 (* Exposed run endpoints for the RawLog memory continuations. *)
 Theory bodyMemRawLogExecution
 Ancestors
+  rawLogCoreFrame
   bodyMemRawLogSuffix bodySimRawLog exprSimRawLog exprSimHash
   compileEnv emitHelper exprLoweringProps emitHelperProps fragExec
   venomInst venomState venomExecSemantics words list rich_list

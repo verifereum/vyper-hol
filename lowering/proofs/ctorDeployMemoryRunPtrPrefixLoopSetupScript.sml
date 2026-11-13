@@ -2,6 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixLoopSetup
 Ancestors
   loweringStateRelDefs
+  exprSimUnwrap ghostPcTransportPtr ctorDeployMemoryRunPtrPrefixBoolWord compileEnv
   ctorDeployMemoryRunPtrPrefixLoopSlot ctorDeployMemoryRunPtrPrefixCopyRun
   ctorDeployMemoryRunPtrPrefixSteps ctorDeployMemoryRunPtrPrefixSequence
   abiDecoderContract abiDecoderArrayHeader abiDecoderArrayLoopInit
@@ -9,7 +10,7 @@ Ancestors
   ctorAbiActualArrayPrepare abiDecoderLoop abiEncoderRegisteredEffect
   abiDecoderDynamicLoopSetup abiDecoderReservation venomMemDefs
   allocaFrontierBound allocaBudgetProps ctorAbiActualFrame valueEncodingProps
-  compileEnv emitHelper emitHelperProps exprLowering venomMemProps
+  emitHelper emitHelperProps exprLowering venomMemProps
   ctorAbiActualArrayRun ctorAbiActualArrayEntry ctorAbiActualArrayInvariant
   ctorAbiActualAlloc abiDecoderIndexInit fragExec abiDecoderReentry ctorAbiActualObservations
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst
@@ -97,7 +98,7 @@ Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   `step_inst_base (mk_inst iid DLOAD [src] [x]) s =
     OK (update_var x (abi_decode_load DLOAD a s) s)` by
-    (qpat_assum `eval_operand src s = SOME a` (mp_then Any mp_tac prefix_dload_step) >> disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
+    (qpat_assum `eval_operand src s = SOME a` (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >> disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      simp[abi_decode_load_def,abi_decode_source_def]) >>
   `eval_operand (Var dst) (update_var x (abi_decode_load DLOAD a s) s) = SOME (n2w d)` by
     fs[eval_operand_def,lookup_var_def,update_var_def,FLOOKUP_UPDATE] >>
@@ -196,9 +197,11 @@ Resume prefix_loop_count_header_block_interior[trace]:
   `!v k. mstore d v (update_var x v (s with vs_inst_idx := k)) =
     (mstore d v (update_var x v s)) with vs_inst_idx := k` by
     simp[update_var_def,mstore_def] >>
-  fs[prefix_loop_slot_taint_idx,mk_inst_def] >>
+  fs[ghostPcTransportPtrTheory.step_taint_inst_idx,mk_inst_def] >>
   mp_tac prefix_loop_count_header_steps_interior >>
   simp[prefix_copy_pure_taint] >> strip_tac >>
+  gvs[GSYM mk_inst_def] >>
+  gvs[prefix_copy_pure_taint] >>
   gvs[step_inst_non_invoke,mk_inst_def,update_var_def,mstore_def]
 QED
 
@@ -431,117 +434,11 @@ Proof
 QED
 
 (* Original base-address interfaces remain available as specializations. *)
-Theorem prefix_loop_count_header_steps:
-  eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  eval_operand (Var dst) s = SOME (n2w d) /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (d,sz) /\ 32 <= sz /\ d < dimword (:256) /\ dst <> x /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
-  let i = mk_inst iid DLOAD [src] [x];
-      j = mk_inst (iid+1) MSTORE [Var dst;Var x] [];
-      w = abi_decode_load DLOAD a s;
-      u = update_var x w s;
-      t = mstore d w u;
-      H = DRESTRICT G (COMPL {x});
-      q = step_taint i s u tn;
-      qt = step_taint j u t q
-  in step_inst_base i s = OK u /\ step_inst_base j u = OK t /\
-     ghost_step fuel ctx PG G tn i s = (H,q) /\
-     ghost_step fuel ctx PG H q j u = (H,qt) /\
-     ptr_safe_step D lo fuel ctx fn PG G tn i s /\
-     ptr_safe_step D lo fuel ctx fn PG H q j u /\
-     mload d t = w /\ DISJOINT qt.t_mem {b | d <= b /\ b < d+32} /\
-     qt.t_mem SUBSET tn.t_mem /\
-     op_taint qt (Var dst) = {} /\ op_taint qt (Var x) = {} /\
-     FLOOKUP H dst = SOME (d,sz)
-Proof
-  strip_tac >> irule prefix_loop_count_header_steps_interior >> simp[]
-QED
 
-Theorem prefix_loop_count_header_block:
-  eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  eval_operand (Var dst) s = SOME (n2w d) /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (d,sz) /\ 32 <= sz /\ d < dimword (:256) /\ dst <> x /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
-  let i = mk_inst iid DLOAD [src] [x];
-      j = mk_inst (iid+1) MSTORE [Var dst;Var x] [];
-      w = abi_decode_load DLOAD a s;
-      u = update_var x w s;
-      t = mstore d w u;
-      H = DRESTRICT G (COMPL {x});
-      q = tn with t_var := tn.t_var |+ (x,{});
-      qt = step_taint j u t q
-  in isPREFIX [i;j] (DROP s.vs_inst_idx bb.bb_instructions) ==>
-     run_inst_seq [i;j] s = OK t /\
-     (ptr_safe_block D lo fuel ctx fn PG H qt bb
-        (t with vs_inst_idx := s.vs_inst_idx+2) ==>
-      ptr_safe_block D lo fuel ctx fn PG G tn bb s)
-Proof
-  strip_tac >> irule prefix_loop_count_header_block_interior >> simp[]
-QED
 
-Theorem prefix_loop_count_header_run:
-  eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  eval_operand (Var dst) s = SOME (n2w d) /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (d,sz) /\ 32 <= sz /\ d < dimword (:256) /\ dst <> x /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  isPREFIX [mk_inst iid DLOAD [src] [x];
-    mk_inst (iid+1) MSTORE [Var dst;Var x] []]
-    (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  let u = update_var x (abi_decode_load DLOAD a s) s;
-      t = mstore d (abi_decode_load DLOAD a s) u;
-      H = DRESTRICT G (COMPL {x});
-      q = tn with t_var := tn.t_var |+ (x,{});
-      qt = step_taint (mk_inst (iid+1) MSTORE [Var dst;Var x] []) u t q
-  in run_inst_seq [mk_inst iid DLOAD [src] [x];
-       mk_inst (iid+1) MSTORE [Var dst;Var x] []] s = OK t /\
-     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
-        (t with vs_inst_idx := s.vs_inst_idx+2)) ==>
-      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
-Proof
-  strip_tac >> irule prefix_loop_count_header_run_interior >> fs[]
-QED
 
-Theorem prefix_loop_count_header_pair:
-  abi_decode_array_header (Var dst) src DLOAD st = (cnt,st') /\
-  emitted_insts st st' = [mk_inst iid DLOAD [src] [x];
-    mk_inst (iid+1) MSTORE [Var dst;Var x] []] /\
-  eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  eval_operand (Var dst) s = SOME (n2w d) /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (d,sz) /\ 32 <= sz /\ d < dimword (:256) /\ dst <> x /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
-  abi_decoder_operand_live st.cs_next_var src /\
-  abi_decoder_operand_live st.cs_next_var (Var dst) /\
-  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?t H qt.
-    run_inst_seq (emitted_insts st st') s = OK t /\
-    eval_operand cnt t = SOME (abi_decode_load DLOAD a s) /\
-    mem_word_at d t.vs_memory = abi_decode_load DLOAD a s /\
-    fresh_vars_wrt limit_st t /\ abi_decode_frame d 32 s t /\
-    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
-      eval_operand op t = SOME w) /\
-    t.vs_labels = s.vs_labels /\
-    abi_encoder_registered_effect {} [(d,32)] s t /\
-    allocas_from lo t /\ lo <= t.vs_alloca_next /\
-    FLOOKUP H dst = SOME (d,sz) /\
-    op_taint qt (Var dst) = {} /\ op_taint qt cnt = {} /\
-    DISJOINT qt.t_mem {b | d <= b /\ b < d+32} /\ qt.t_mem SUBSET tn.t_mem /\
-    qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    (!v. v <> x ==> FLOOKUP H v = FLOOKUP G v /\
-      eval_operand (Var v) t = eval_operand (Var v) s /\
-      op_taint qt (Var v) = op_taint tn (Var v)) /\
-    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
-       (t with vs_inst_idx := s.vs_inst_idx+2)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
-Proof
-  strip_tac >> irule prefix_loop_count_header_pair_interior >>
-  simp[] >> conj_tac >- (qexistsl_tac [`iid`,`src`] >> simp[]) >>
-  qpat_x_assum `isPREFIX _ _` mp_tac >> simp[]
-QED
 
-Theorem prefix_loop_guard_outputs[local]:
+Theorem prefix_loop_guard_outputs:
   abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') /\
   emitted_insts st st' =
     [mk_inst st.cs_next_id DLOAD [src] [x];
@@ -560,7 +457,7 @@ Proof
   simp[abi_decoder_older_vars_def] >> metis_tac[LESS_EQ_REFL,DECIDE ``n <= n+1``,DECIDE ``n <= n+2``]
 QED
 
-Theorem prefix_loop_raw_indexed[local]:
+Theorem prefix_loop_raw_indexed:
   inst_extends st st' /\ st'.cs_blocks = st.cs_blocks /\
   st'.cs_current_bb = st.cs_current_bb /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -593,19 +490,6 @@ Proof
   rewrite_tac[venom_state_accfupds]
 QED
 
-Theorem prefix_loop_instruction[local]:
-  isPREFIX xs (DROP k bb.bb_instructions) /\ n < LENGTH xs ==>
-  get_instruction bb (k+n) = SOME (EL n xs)
-Proof
-  rpt strip_tac >> gvs[rich_listTheory.IS_PREFIX_APPEND] >>
-  `LENGTH (DROP k bb.bb_instructions) = LENGTH xs + LENGTH l` by
-    metis_tac[LENGTH_APPEND] >>
-  `n < LENGTH (DROP k bb.bb_instructions)` by decide_tac >>
-  `k+n < LENGTH bb.bb_instructions` by gvs[LENGTH_DROP] >>
-  simp[get_instruction_def] >>
-  qspecl_then [`n`,`k`,`bb.bb_instructions`] mp_tac EL_DROP >>
-  simp[rich_listTheory.EL_APPEND1,ADD_COMM]
-QED
 
 Theorem prefix_loop_setup_pair:
   abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
@@ -849,9 +733,9 @@ Resume prefix_loop_setup_pair[index_lookup]:
      fs[inst_extends_def] >>
      asm_rewrite_tac[GSYM APPEND_ASSOC,rich_listTheory.DROP_LENGTH_APPEND] >>
      simp[rich_listTheory.IS_PREFIX_APPEND,DROP_APPEND,DROP_LENGTH_TOO_LONG]) >>
-  drule prefix_loop_instruction >>
+  drule ctorDeployMemoryRunPtrPrefixBoolWordTheory.prefix_boolword_instruction >>
   disch_then (qspec_then `0` mp_tac) >> simp[] >> disch_tac >>
-  drule prefix_loop_instruction >>
+  drule ctorDeployMemoryRunPtrPrefixBoolWordTheory.prefix_boolword_instruction >>
   disch_then (qspec_then `1` mp_tac) >> simp[ADD1] >> disch_tac >>
   qexists_tac `iblock` >> simp[]
 QED

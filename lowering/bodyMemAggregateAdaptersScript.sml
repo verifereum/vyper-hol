@@ -9,7 +9,7 @@ Ancestors
   exprSimDefs loweringPosts abiStaticAggregateProps exprBopSimProps
 
 Theorem aggregate_struct_fields_sim_mem:
-  !fields tys ce cx env ty off sa out sb es tvs func inst x b asz s0 ctx tops.
+  !st0 fields tys ce cx env ty off sa out sb es tvs func inst x b asz s0 ctx tops.
   LIST_REL (\t (name,e).
     ALOOKUP (get_struct_fields ce.ce_struct_fields
       (case ty of StructT nsid => nsid_to_string nsid | _ => "")) name =
@@ -36,14 +36,17 @@ Theorem aggregate_struct_fields_sim_mem:
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size_list tvs)) /\
-  stmt_state_rel H ctx func ce cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func ce cx es s0 /\
+    storage_well_formed_on cx es (FST H)) /\ alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
-  gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx (MAP SND fields)) (es,s0)
-    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx (MAP SND fields)) (es,s0)
+    (\H res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
       stmt_state_rel H ctx func ce cx es' r /\
+      storage_well_formed_on cx es' (FST H) /\
       fields_in_memory (ZIP (MAP FST fields,vs))
         (ZIP (MAP FST fields,tvs)) (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -69,7 +72,7 @@ Theorem aggregate_struct_fields_sim_mem:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\
+    (\H res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -93,7 +96,7 @@ Proof
 QED
 
 Theorem aggregate_make_array_elems_sim_mem:
-  !args ce cx env elem_ty tv header idx off sa out sb es func inst x b asz s0 ctx tops.
+  !st0 args ce cx env elem_ty tv header idx off sa out sb es func inst x b asz s0 ctx tops.
   EVERY (\e. arg_type_fits (expr_type e) elem_ty) args /\
   evaluate_type (get_tenv cx) elem_ty = SOME tv /\
   type_memory_bytes ce elem_ty = type_memory_size tv /\
@@ -120,14 +123,17 @@ Theorem aggregate_make_array_elems_sim_mem:
        | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (LENGTH args * type_memory_size tv)) /\
-  stmt_state_rel H ctx func ce cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func ce cx es s0 /\
+    storage_well_formed_on cx es (FST H)) /\ alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
-  gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+    (\H res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
       stmt_state_rel H ctx func ce cx es' r /\
+      storage_well_formed_on cx es' (FST H) /\
       elems_in_memory vs (b+off) tv r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -152,7 +158,7 @@ Theorem aggregate_make_array_elems_sim_mem:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\
+    (\H res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -194,7 +200,7 @@ Proof
 QED
 
 Theorem aggregate_make_array_sim_mem:
-  !args ce cx env elem_ty tv stride header sa out sb es func inst x b asz s0 ctx tops.
+  !st0 args ce cx env elem_ty tv stride header sa out sb es func inst x b asz s0 ctx tops.
   EVERY (\e. arg_type_fits (expr_type e) elem_ty) args /\
   evaluate_type (get_tenv cx) elem_ty = SOME tv /\
   stride = type_memory_size tv /\
@@ -221,14 +227,17 @@ Theorem aggregate_make_array_sim_mem:
        | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) b
        ((if header then 32 else 0) + LENGTH args * type_memory_size tv)) /\
-  stmt_state_rel H ctx func ce cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func ce cx es s0 /\
+    storage_well_formed_on cx es (FST H)) /\ alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
-  gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+    (\H res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
       stmt_state_rel H ctx func ce cx es' r /\
+      storage_well_formed_on cx es' (FST H) /\
       elems_in_memory vs (b+(if header then 32 else 0)) tv r.vs_memory /\
       (header ==> mem_word_at b r.vs_memory = n2w (LENGTH args)) /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -254,7 +263,7 @@ Theorem aggregate_make_array_sim_mem:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\
+    (\H res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >> reverse (Cases_on `header`)

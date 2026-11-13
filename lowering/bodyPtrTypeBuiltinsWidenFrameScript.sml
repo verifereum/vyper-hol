@@ -151,7 +151,8 @@ Theorem widen_copy_run_parent_post:
   compile_bytestring_widen_copy capacity x n sa = (op,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   fn_has_code sa sb fn /\ 0 < n /\ n <= capacity /\ capacity < dimword(:256) /\
-  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s /\ storage_well_formed_on cx es (FST H) /\
+  local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ (!z. x = Var z ==> not_fresh_at sa z) /\
   eval_operand x s = SOME a /\ ~is_word_type (expr_type e) /\
   post_value_type cenv e = expr_type e /\

@@ -295,7 +295,7 @@ Resume compile_internal_return_memory_frag[frame]:
      qpat_x_assum `!x. not_fresh_at su x ==> _` drule >>
      simp[lookup_var_def]) >>
   `stmt_state_rel H ctx func cenv cx (es with scopes := []) pre` by
-    (qspecl_then [`func`, `cenv`, `cx`, `es with scopes := []`,
+    (qspecl_then [`H`, `func`, `cenv`, `cx`, `es with scopes := []`,
        `s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>`,
        `LENGTH sm.cs_current_insts -
           LENGTH (return_unlock_insts cenv sa.cs_next_id)`, `ctx`]
