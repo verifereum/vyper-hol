@@ -12,7 +12,7 @@ Theorem reason_encoder_prefix_resources_path_ptr:
   emit_op ADD [buf.buf_operand; Lit 32w] c2 = (payload,c3) /\
   compile_alloc_buffer m c3 = (tuple,c4) /\ fn_has_code c3 c4 func /\
   fn_has_code c1 c2 func /\ fn_has_code c2 c3 func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv cc /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv cc /\
   fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
   s.vs_current_bb = cc.cs_current_bb /\
   s.vs_inst_idx = LENGTH cc.cs_current_insts /\ ~s.vs_halted /\
@@ -22,7 +22,7 @@ Theorem reason_encoder_prefix_resources_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK t) /\
     t.vs_current_bb = c4.cs_current_bb /\
     t.vs_inst_idx = LENGTH c4.cs_current_insts /\ ~t.vs_halted /\
-    stmt_state_rel ctx func cenv cx es t /\ local_ptrs_reserved cenv c4 /\
+    stmt_state_rel H ctx func cenv cx es t /\ local_ptrs_reserved cenv c4 /\
     lookup_var out t = SOME (n2w b) /\ lookup_var x t = SOME (n2w b+32w) /\
     lookup_var out2 t = SOME (n2w b2) /\ b+n < dimword(:256) /\
     b2+m < dimword(:256) /\

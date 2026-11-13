@@ -32,8 +32,8 @@ QED
 
 Theorem raw_log_data_post_transport_ptr:
   wb_args_post ctx func cenv cx es0 sa s0 es1 ops vals t /\
-  expr_post ctx func cenv cx data es1 sm sn t es2 v data_op u /\
-  stmt_state_rel ctx func cenv cx es0 s0 /\ local_ptrs_reserved cenv sa /\
+  expr_post H ctx func cenv cx data es1 sm sn t es2 v data_op u /\
+  stmt_state_rel H ctx func cenv cx es0 s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
@@ -71,8 +71,8 @@ Theorem raw_log_run_suffix_frame:
   eval_operand pop mid = SOME off /\ eval_operand sz mid = SOME len /\
   eval_operands ops mid = SOME (MAP event_value_to_word vals) /\
   TAKE (w2n len) (DROP (w2n off) mid.vs_memory ++ REPLICATE (w2n len) 0w) = bytes /\
-  stmt_state_rel ctx func cenv cx es mid /\ wb_frame cenv es0 es sa s0 mid ==>
-  stmt_state_rel ctx func cenv cx
+  stmt_state_rel H ctx func cenv cx es mid /\ wb_frame cenv es0 es sa s0 mid ==>
+  stmt_state_rel H ctx func cenv cx
     (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bytes]) t /\
   wb_frame cenv es0
     (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bytes]) sa s0 t
@@ -112,22 +112,22 @@ Theorem raw_log_dynamic_counted_post_ptr:
   mload b s = n2w (LENGTH bs) /\
   TAKE (LENGTH bs) (DROP (b+32) s.vs_memory ++ REPLICATE (LENGTH bs) 0w) = bs /\
   b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
   expr_type e = NoneT /\
   run_inst_seq (emitted_insts sm sb) s = OK t /\
   gas_path_ptr D 0 ctx func PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-  ghost_inv d cenv cx (es with logs := es.logs ++
+  ghost_inv H d cenv cx (es with logs := es.logs ++
     [encode_raw_event_values cx.txn.target vals bs]) G' tn'
     (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   ghost_kept cenv es sm G tn s G' tn' ==>
-  expr_post ctx func cenv cx e es0 sa sb s0
+  expr_post H ctx func cenv cx e es0 sa sb s0
     (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs])
     NoneV (Lit 0w) (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   gas_path_ptr D 0 ctx func PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-  ghost_inv d cenv cx (es with logs := es.logs ++
+  ghost_inv H d cenv cx (es with logs := es.logs ++
     [encode_raw_event_values cx.txn.target vals bs]) G' tn'
     (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   ghost_kept cenv es sm G tn s G' tn'
@@ -147,7 +147,7 @@ Proof
      pure_rewrite_tac[emitted_insts_def] >> simp[NoAsms] >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> REFL_TAC) >>
   drule_all emitted_insts_final_emit >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx
+  `stmt_state_rel H ctx func cenv cx
       (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) t /\
    wb_frame cenv es0
      (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t` by
@@ -175,7 +175,7 @@ Theorem raw_log_fixed_counted_post_ptr:
   eval_operand ptr_op s = SOME p /\ eval_operand data_op s = SOME w /\
   eval_operands ops s = SOME (MAP event_value_to_word vals) /\
   LENGTH ops < dimword (:256) /\ LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
+  stmt_state_rel H ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
   local_ptrs_reserved cenv sa /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n p,32) /\
@@ -186,16 +186,16 @@ Theorem raw_log_fixed_counted_post_ptr:
   run_inst_seq (emitted_insts sm sb) s = OK t /\
   gas_path_ptr D 0 ctx func PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-  ghost_inv d cenv cx (es with logs := es.logs ++
+  ghost_inv H d cenv cx (es with logs := es.logs ++
     [encode_raw_event_values cx.txn.target vals bs]) G' tn'
     (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   ghost_kept cenv es sm G tn s G' tn' ==>
-  expr_post ctx func cenv cx e es0 sa sb s0
+  expr_post H ctx func cenv cx e es0 sa sb s0
     (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs])
     NoneV (Lit 0w) (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   gas_path_ptr D 0 ctx func PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-  ghost_inv d cenv cx (es with logs := es.logs ++
+  ghost_inv H d cenv cx (es with logs := es.logs ++
     [encode_raw_event_values cx.txn.target vals bs]) G' tn'
     (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   ghost_kept cenv es sm G tn s G' tn'
@@ -219,7 +219,7 @@ Proof
         simp[eval_operand_def, mstore_def, lookup_var_def]) >>
      simp[] >> Cases_on `ptr_op` >>
      gvs[eval_operand_def, mstore_def, lookup_var_def]) >>
-  `stmt_state_rel ctx func cenv cx
+  `stmt_state_rel H ctx func cenv cx
       (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) t /\
    wb_frame cenv es0
      (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t` by

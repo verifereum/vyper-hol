@@ -19,7 +19,7 @@ Theorem compile_revert_code_string_endpoint_ptr:
   read_result cx tv es = (INL (StringV str),es) /\
   p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\
   copy_old_operand sa p.ptr_operand /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\
   (!k. k < 3 ==> not_local_ptr cenv es.scopes
     (STRING #"%" (toString (sa.cs_next_var+k)))) /\

@@ -76,21 +76,21 @@ Theorem raw_call_scalar_action_outcome:
   ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv dep cenv cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H dep cenv cx es G0 tn0 s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   flags.rcf_max_outsize = 0 /\ ~flags.rcf_revert_on_failure ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) (es,s0,G0,tn0)
-    (\res ee H un t. ?v em tm J jn u K kn.
+    (\res ee HG un t. ?v em tm J jn u K kn.
       MAP FDOM es.scopes = MAP FDOM em.scopes /\
-      res = INL (Value v) /\ ptr_val_ok cx (BaseT BoolT) v result H un t /\
+      res = INL (Value v) /\ ptr_val_ok cx (BaseT BoolT) v result HG un t /\
       expr_val_rel cx (BaseT BoolT) v result t /\
       expr_val_at cenv cx (BaseT BoolT) sa sb ee v result t /\
-      stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
+      stmt_state_rel H ctx func cenv cx ee t /\ ghost_inv H dep cenv cx ee HG un t /\
       ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es em sa s0 tm /\
       ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em em s6 tm u /\
-      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em ee s6 u t /\
+      ghost_kept cenv em s6 K kn u HG un /\ wb_frame cenv em ee s6 u t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -151,7 +151,7 @@ Resume raw_call_scalar_action_outcome[ready]:
   drule_all raw_call_prefix_data_type >> disch_tac >>
   `expr_val_at cenv cx (BaseT (BytesT (Dynamic n))) s1 s6
       (mid with gas_obs := []) (BytesV bs) (Var x) t` by metis_tac[] >>
-  `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t` by simp[] >>
+  `stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t` by simp[] >>
   drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`) raw_call_prefix_data_word_bounds >>
   disch_then drule_all >> strip_tac >>
   `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 sl /\ ci_mono sl sm` by
@@ -231,11 +231,11 @@ Resume raw_call_scalar_action_outcome[finish]:
   disch_then (drule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `gas_admissible _ _ _`)) >>
-  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `op_prov _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand (Var _) _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
   disch_then (qspecl_then [`n2w amount`, `env`, `PG`] mp_tac) >>
   impl_tac
@@ -268,24 +268,24 @@ Theorem raw_call_prepared_prefix_sim_ptr:
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  ghost_inv dep cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  ghost_inv H dep cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx (a::d::kws)) (es,s0,G0,tn0)
     (\rr ee G tn t. ?av bs kvs xs ea ed ta tb th b x base sz t5 gasw aw amount lim.
       rr = INL (av::BytesV bs::kvs) /\ value_has_type (BaseTV AddressT) av /\
-      expr_post ctx func cenv cx a es sa s1 s0 ea av addr ta /\
-      expr_post ctx func cenv cx d ea s1 s2 ta ed (BytesV bs) data tb /\
+      expr_post H ctx func cenv cx a es sa s1 s0 ea av addr ta /\
+      expr_post H ctx func cenv cx d ea s1 s2 ta ed (BytesV bs) data tb /\
       typed_args_post ctx func cenv cx ed sm th ee kws xs kvs t /\
       vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
       EVERY (\op. op_taint tn op = {}) xs /\
       EVERY (\op. !l. op <> Label l) xs /\
       EVERY (\op. !v. op = Var v ==> not_fresh_at s6 v) xs /\
-      stmt_state_rel ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
-      wb_frame cenv es ee sa s0 t /\ ghost_inv dep cenv cx ee G tn t /\
+      stmt_state_rel H ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
+      wb_frame cenv es ee sa s0 t /\ ghost_inv H dep cenv cx ee G tn t /\
       ghost_kept cenv es sa G0 tn0 s0 G tn /\
       MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       sa.cs_next_id <= s6.cs_next_id /\
@@ -356,7 +356,7 @@ Resume raw_call_prepared_prefix_sim_ptr[ready]:
   drule_all raw_call_prefix_data_type >> disch_tac >>
   `expr_val_at cenv cx (BaseT (BytesT (Dynamic n))) s1 s6
       (mid with gas_obs := []) (BytesV bs) (Var x) t` by metis_tac[] >>
-  `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t` by simp[] >>
+  `stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t` by simp[] >>
   drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`) raw_call_prefix_data_word_bounds >>
   disch_then drule_all >> strip_tac >>
   `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 sl /\ ci_mono sl sm` by
@@ -446,21 +446,21 @@ Theorem raw_call_zero_reverting_action_outcome:
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv dep cenv cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H dep cenv cx es G0 tn0 s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   flags.rcf_max_outsize = 0 /\ flags.rcf_revert_on_failure ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) (es,s0,G0,tn0)
-    (\res ee H un t. ?v em tm J jn u K kn.
+    (\res ee HG un t. ?v em tm J jn u K kn.
       MAP FDOM es.scopes = MAP FDOM em.scopes /\
-      res = INL (Value v) /\ ptr_val_ok cx NoneT v result H un t /\
+      res = INL (Value v) /\ ptr_val_ok cx NoneT v result HG un t /\
       expr_val_rel cx NoneT v result t /\
       expr_val_at cenv cx NoneT sa sb ee v result t /\
-      ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
-      stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
+      ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result HG t /\
+      stmt_state_rel H ctx func cenv cx ee t /\ ghost_inv H dep cenv cx ee HG un t /\
       ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es em sa s0 tm /\
       ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em em s6 tm u /\
-      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em ee s6 u t /\
+      ghost_kept cenv em s6 K kn u HG un /\ wb_frame cenv em ee s6 u t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -497,11 +497,11 @@ Resume raw_call_zero_reverting_action_outcome[normal]:
   disch_then (drule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `gas_admissible _ _ _`)) >>
-  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `op_prov _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand (Var _) _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
   disch_then (drule_at (Pat `type_memory_bytes _ _ = _`)) >>
   disch_then (qspecl_then [`n2w amount`, `env`, `PG`] mp_tac) >>
@@ -533,21 +533,21 @@ Theorem raw_call_bytes_action_outcome:
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv dep cenv cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H dep cenv cx es G0 tn0 s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   0 < flags.rcf_max_outsize /\ flags.rcf_revert_on_failure ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) (es,s0,G0,tn0)
-    (\res ee H un t. ?v em tm J jn u K kn.
+    (\res ee HG un t. ?v em tm J jn u K kn.
       MAP FDOM es.scopes = MAP FDOM em.scopes /\
-      res = INL (Value v) /\ ptr_val_ok cx (BaseT (BytesT (Dynamic flags.rcf_max_outsize))) v result H un t /\
+      res = INL (Value v) /\ ptr_val_ok cx (BaseT (BytesT (Dynamic flags.rcf_max_outsize))) v result HG un t /\
       expr_val_rel cx (BaseT (BytesT (Dynamic flags.rcf_max_outsize))) v result t /\
       expr_val_at cenv cx (BaseT (BytesT (Dynamic flags.rcf_max_outsize))) sa sb ee v result t /\
-      ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
-      stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
+      ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result HG t /\
+      stmt_state_rel H ctx func cenv cx ee t /\ ghost_inv H dep cenv cx ee HG un t /\
       ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es em sa s0 tm /\
       ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em em s6 tm u /\
-      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em ee s6 u t /\
+      ghost_kept cenv em s6 K kn u HG un /\ wb_frame cenv em ee s6 u t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -580,11 +580,11 @@ Resume raw_call_bytes_action_outcome[normal]:
   disch_then (drule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `gas_admissible _ _ _`)) >>
-  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `op_prov _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand (Var _) _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
   disch_then (qspecl_then [`n2w amount`, `env`,
     `Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE`, `PG`] mp_tac) >>
@@ -616,22 +616,22 @@ Theorem raw_call_tuple_action_outcome:
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv dep cenv cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H dep cenv cx es G0 tn0 s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   0 < flags.rcf_max_outsize /\ ~flags.rcf_revert_on_failure ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) (es,s0,G0,tn0)
-    (\res ee H un t. ?v em tm J jn u K kn.
+    (\res ee HG un t. ?v em tm J jn u K kn.
       MAP FDOM es.scopes = MAP FDOM em.scopes /\
       res = INL (Value v) /\
-      ptr_val_ok cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic flags.rcf_max_outsize))]) v result H un t /\
+      ptr_val_ok cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic flags.rcf_max_outsize))]) v result HG un t /\
       expr_val_rel cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic flags.rcf_max_outsize))]) v result t /\
       expr_val_at cenv cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic flags.rcf_max_outsize))]) sa sb ee v result t /\
-      ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
-      stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
+      ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result HG t /\
+      stmt_state_rel H ctx func cenv cx ee t /\ ghost_inv H dep cenv cx ee HG un t /\
       ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es em sa s0 tm /\
       ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em em s6 tm u /\
-      ghost_kept cenv em s6 K kn u H un /\ wb_frame cenv em ee s6 u t /\
+      ghost_kept cenv em s6 K kn u HG un /\ wb_frame cenv em ee s6 u t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -666,11 +666,11 @@ Resume raw_call_tuple_action_outcome[normal]:
   disch_then (drule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `gas_admissible _ _ _`)) >>
-  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `op_prov _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand (Var _) _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
   disch_then (qspecl_then [`n2w amount`, `env`,
     `Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE`, `PG`] mp_tac) >>

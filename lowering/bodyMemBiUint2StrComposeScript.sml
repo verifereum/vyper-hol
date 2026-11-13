@@ -1,11 +1,22 @@
 (* Typed uint2str memory paths and operand composition. *)
 Theory bodyMemBiUint2StrCompose
 Ancestors
-  bodyMemBiUint2StrPost bodyMemBiSha256Compose exprSimWordBuiltins
+  bodyMemBiUint2StrPost bodyMemBiSha256Compose exprSimWordBuiltins loweringPosts
+  vyperStorageTrace vyperStorageFootprint exprLoweringProps
   vyperTyping vyperTypeSystem exprSimHypsDefs exprSimSource exprSimWordArgs
   exprSimUint2Str exprSimHash exprSimMemDefs exprLoweringProps
   builtinStrings arithmetic words exprSafeOperand exprLowering compileEnv valueEncoding vyperValue loweringSlice context exprSimDefs gasSummary gasOutcome fragGasMode fragGasPath gasContext builtinSimple vyperAST vyperState fragExec vyperContext
 
+Theorem u2s_as_ptr_loc[local]:
+  as_ptr_val t LocMemory pr = (vv,sb) ==>
+  ?p. vv = LocatedValue t p /\ p.ptr_location = LocMemory
+Proof
+  Cases_on `pr` >> simp[as_ptr_val_def, mk_ptr_def]
+QED
+
+(* A memory pointer's post at one horizon moves to every horizon at which the
+   start state is related: only the storage-side Venom fields enter the
+   horizon-dependent part, and the uint2str code leaves them alone. *)
 Theorem uint2str_typed_mem_path[local]:
   expr_body_pre cenv cx env (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) es /\
   expr_type e = BaseT (UintT k) /\ 78 <= n /\
@@ -14,22 +25,24 @@ Theorem uint2str_typed_mem_path[local]:
     (compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm) = (vv,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,es') /\
   value_has_type (BaseTV (UintT k)) v /\
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\ alloca_history func s ==>
   ?t rv. gas_path_mem ctx func s 0 (OK t) /\
     builtin_result cx es'.accounts (BaseT (StringT n)) (Uint2Str n)
       [expr_type e] [v] = INL rv /\
-    vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+    vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
       es sa sb s0 es' (Value rv) vv t /\
     vv_store_bound cx (BaseT (StringT n)) (BaseT (StringT n)) es'
       (Value rv) vv t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next
+    alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
@@ -95,24 +108,60 @@ Proof
   irule sha256_expr_sim_mem_suffix >>
   first_assum (irule_at (Pat `expr_sim_mem _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-  simp[] >> conj_tac
+  simp[vyperStorageTraceTheory.storage_trace_frame_def] >> conj_tac
   >- (rpt strip_tac >> irule expr_exit_INR_cast >> simp[]) >>
   rpt strip_tac >> suspend "continuation"
 QED
 
+(* The path is chosen at one valid horizon H0 and its endpoint keeps the
+   storage-side Venom fields, so the post moves to every valid horizon. *)
 Resume compile_uint2str_typed_vv_sim_mem[continuation]:
+  qmatch_asmsub_rename_tac `bind (eval_expr cx e) (read_result cx) _ = (INL cv, cee)` >>
+  qmatch_asmsub_rename_tac `expr_store_bound cx (expr_type e) cv cop ct` >>
+  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+    (irule storage_trace_frame_bind_all >>
+     simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  `valid_horizon cx st0 H0 es.storage_trace` by
+    (drule_all valid_horizon_frame >> simp[]) >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
+  `expr_post H0 ctx func cenv cx e es sa sm s0 cee cv cop ct` by metis_tac[] >>
   `expr_body_pre cenv cx env e (es with gas_obs := gs)` by
     metis_tac[expr_body_pre_gas_obs] >>
   drule_at (Pat `bind _ _ _ = _`)
     (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_base_result) >>
   disch_then (qspecl_then [`env`, `cenv`] mp_tac) >> simp[] >> strip_tac >>
   drule_all uint2str_typed_mem_path >> strip_tac >>
-  `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
+  `?p. vv = LocatedValue (BaseT (StringT n)) p /\ p.ptr_location = LocMemory` by
+    (drule u2s_as_ptr_loc >> simp[]) >>
+  `cee with gas_obs := [] = cee` by simp[evaluation_state_component_equality] >>
+  `s0.vs_alloca_next <= t'.vs_alloca_next` by decide_tac >>
   qexists_tac `[]` >>
   rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
-  qexistsl_tac [`INL (Value rv)`, `ee`, `OK t'`] >>
-  simp[gas_marked_path_def, gas_explicit_def, expr_type_def,
-       lowered_value_type_def] >>
-  gvs[]
+  qexistsl_tac [`INL (Value rv)`, `cee`, `OK t'`] >>
+  rpt conj_tac
+  >- simp[]
+  >- simp[gas_marked_path_def]
+  >> disj1_tac >> qexists_tac `t'` >> conj_tac >- REFL_TAC >>
+  BETA_TAC >> qx_gen_tac `H` >> strip_tac >>
+  `valid_horizon cx st0 H cee.storage_trace` by
+    (pop_assum mp_tac >> simp[]) >>
+  `expr_post H ctx func cenv cx e es sa sm s0 cee cv cop ct` by metis_tac[] >>
+  `stmt_state_rel H ctx func cenv cx cee ct /\ storage_well_formed_on cx cee (FST H)` by
+    (qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >> simp[]) >>
+  `vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+     es sa sb s0 cee (Value rv) vv t'` by
+    (mp_tac (Q.SPECL [`H0`, `H`, `ctx`, `func`, `cenv`, `cx`,
+       `Builtin (BaseT (StringT n)) (Uint2Str n) [e]`, `es`, `sa`, `sb`, `s0`,
+       `cee`, `Value rv`, `vv`, `t'`, `ct`]
+       vv_post_fields_transport) >>
+     impl_tac >-
+       (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+        strip_tac >> gvs[vv_storage_live_def]) >>
+     simp[]) >>
+  qexists_tac `Value rv` >>
+  simp[expr_type_def, lowered_value_type_def] >>
+  TRY (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac)
 QED
 Finalise compile_uint2str_typed_vv_sim_mem

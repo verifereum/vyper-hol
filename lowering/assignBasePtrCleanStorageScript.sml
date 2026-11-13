@@ -13,14 +13,14 @@ QED
 
 Theorem assign_base_clean_storage_taint:
   !cx tn tf s tr k w.
-    stor_taint_ok cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+    stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
     tf.t_imm = tn.t_imm /\
     (if tr then tf.t_trans = key_update tn.t_trans k {} /\ tf.t_stor = tn.t_stor
      else tf.t_stor = key_update tn.t_stor k {} /\ tf.t_trans = tn.t_trans) /\
-    storage_dead cx tr
+    storage_dead H tr
       (update_storage k w (if tr then contract_transient s else contract_storage s)) =
-      storage_dead cx tr (if tr then contract_transient s else contract_storage s) ==>
-    stor_taint_ok cx tf (if tr then tstore k w s else sstore k w s)
+      storage_dead H tr (if tr then contract_transient s else contract_storage s) ==>
+    stor_taint_ok H cx tf (if tr then tstore k w s else sstore k w s)
 Proof
   rpt gen_tac >> Cases_on `tr` >>
   simp[stor_taint_ok_def, cx_dead_def, tstore_def, sstore_def,
@@ -31,13 +31,13 @@ QED
 
 Theorem assign_base_clean_storage_word_taint:
   !cx tn tf s tr k w mid name subs tv.
-    stor_taint_ok cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+    stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
     tf.t_imm = tn.t_imm /\
     (if tr then tf.t_trans = key_update tn.t_trans k {} /\ tf.t_stor = tn.t_stor
      else tf.t_stor = key_update tn.t_stor k {} /\ tf.t_trans = tn.t_trans) /\
     declared_storage_region cx mid name subs = SOME (tr,k,tv) /\
     type_slot_size tv = 1 ==>
-    stor_taint_ok cx tf (if tr then tstore k w s else sstore k w s)
+    stor_taint_ok H cx tf (if tr then tstore k w s else sstore k w s)
 Proof
   rpt gen_tac >> strip_tac >> irule assign_base_clean_storage_taint >>
   simp[] >> conj_tac >- (irule storage_dead_update_word_region >> metis_tac[]) >>
@@ -46,14 +46,14 @@ QED
 
 Theorem assign_base_clean_storage_field_taint:
   !cx tn tf s tr k w mid name fs fld off ftv.
-    stor_taint_ok cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+    stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
     tf.t_imm = tn.t_imm /\
     (if tr then
        tf.t_trans = key_update tn.t_trans (k+n2w off) {} /\ tf.t_stor = tn.t_stor
      else tf.t_stor = key_update tn.t_stor (k+n2w off) {} /\ tf.t_trans = tn.t_trans) /\
     declared_storage_region cx mid name [] = SOME (tr,k,StructTV fs) /\
     struct_field_slot fs fld = SOME (off,ftv) /\ type_slot_size ftv = 1 ==>
-    stor_taint_ok cx tf
+    stor_taint_ok H cx tf
       (if tr then tstore (k+n2w off) w s else sstore (k+n2w off) w s)
 Proof
   rpt gen_tac >> strip_tac >> irule assign_base_clean_storage_taint >>
@@ -128,22 +128,22 @@ QED
 
 Theorem assign_base_clean_storage_ghost:
   !d cenv cx es es' G tn s PG id tr addr value k w sa u Gf tf.
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
       not_fresh_at sa x) /\
     es'.scopes = es.scopes /\ s.vs_call_ctx.cc_address = cx.txn.target /\
     eval_operand addr s = SOME k /\ op_taint tn value = {} /\
-    storage_dead cx tr
+    storage_dead H tr
       (update_storage k w (if tr then contract_transient s else contract_storage s)) =
-      storage_dead cx tr (if tr then contract_transient s else contract_storage s) /\
+      storage_dead H tr (if tr then contract_transient s else contract_storage s) /\
     u = ((if tr then tstore k w s else sstore k w s)
       with vs_inst_idx := SUC s.vs_inst_idx) /\
     Gf = step_prov PG G (mk_inst id (if tr then TSTORE else SSTORE)
       [addr; value] []) (if tr then tstore k w s else sstore k w s) /\
     tf = step_taint (mk_inst id (if tr then TSTORE else SSTORE)
       [addr; value] []) s (if tr then tstore k w s else sstore k w s) tn ==>
-    ghost_inv d cenv cx es' Gf tf u /\ ghost_kept cenv es sa G tn s Gf tf
+    ghost_inv H d cenv cx es' Gf tf u /\ ghost_kept cenv es sa G tn s Gf tf
 Proof
   rpt gen_tac >> strip_tac >>
   `(if tr then tstore k w s else sstore k w s).vs_allocas = s.vs_allocas /\
@@ -151,7 +151,7 @@ Proof
     (Cases_on `tr` >> simp[tstore_def, sstore_def]) >>
   drule_all assign_base_clean_storage_step_frame >>
   disch_then (qspecl_then [`PG`, `G`, `id`, `tr`] assume_tac) >>
-  `stor_taint_ok cx tf (if tr then tstore k w s else sstore k w s)` by
+  `stor_taint_ok H cx tf (if tr then tstore k w s else sstore k w s)` by
     (irule assign_base_clean_storage_taint >>
      simp[] >> qexists_tac `tn` >> Cases_on `tr` >> gvs[ghost_inv_def]) >>
   reverse conj_tac

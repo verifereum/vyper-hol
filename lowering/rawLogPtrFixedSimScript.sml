@@ -27,15 +27,15 @@ Theorem raw_log_fixed32_body_frag_ptr:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (bind (eval_expr cx (Call ann RawLog args dflt)) (read_result cx))
     expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv d cenv cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (bind (eval_expr cx (Call ann RawLog args dflt)) (read_result cx)) (es,s0,G0,tn0)
     (\rr ee G tn t. ?v. rr = INL v /\
-      expr_post ctx func cenv cx (Call ann RawLog args dflt) es sa sb s0 ee v (Lit 0w) t /\
+      expr_post H ctx func cenv cx (Call ann RawLog args dflt) es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ee G tn t /\
+      ghost_inv H d cenv cx ee G tn t /\
       ptr_val_ok cx (expr_type (Call ann RawLog args dflt)) v (Lit 0w) G tn t /\
       (~is_word_type (expr_type (Call ann RawLog args dflt)) ==>
         ptr_buf_ok cenv (Call ann RawLog args dflt) (Lit 0w) G t) /\
@@ -149,7 +149,7 @@ QED
 Resume raw_log_fixed32_body_frag_ptr[allocation]:
   drule_all raw_log_topics_marked_post_ptr >> strip_tac >>
   drule_all raw_log_marked_data_ready_ptr >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t /\
+  `stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t /\
    wb_frame cenv es (mid with gas_obs := []) sa s0 t` by fs[wb_args_post_def] >>
   `~t.vs_halted` by
     (drule gas_marked_exec_ptr_exec >> strip_tac >>
@@ -196,8 +196,8 @@ Resume raw_log_fixed32_body_frag_ptr[allocation_path]:
     (mp_then Any mp_tac assignTuplePtrAllocTheory.emit_alloca_zero_path_ptr) >>
   simp[] >>
   disch_then drule_all >>
-  disch_then (qspecl_then [`tn`, `PG`, `G`, `cx_dead cx`] strip_assume_tac) >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 G1 tn1
+  disch_then (qspecl_then [`tn`, `PG`, `G`, `cx_dead H cx`] strip_assume_tac) >>
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 G1 tn1
      (OK (t' with vs_inst_idx := LENGTH sk.cs_current_insts))` by fs[] >>
   suspend "allocated_post"
 QED
@@ -293,7 +293,7 @@ Resume raw_log_fixed32_body_frag_ptr[fixed_frame]:
     (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
   `MAP FDOM (mid with gas_obs := []).scopes = MAP FDOM ee.scopes` by
     (drule (SRULE [SF ETA_ss] forced_eval_expr_preserves_scopes_dom) >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx (mid with gas_obs := [])
+  `stmt_state_rel H ctx func cenv cx (mid with gas_obs := [])
      (t' with vs_inst_idx := SUC (LENGTH sm.cs_current_insts))` by
     fs[exprLoweringPropsTheory.stmt_state_rel_inst_idx, stmt_state_rel_gas_obs] >>
   `lookup_var (STRING #"%" (toString sm.cs_next_var)) t' = SOME w` by
@@ -305,7 +305,7 @@ Resume raw_log_fixed32_body_frag_ptr[fixed_frame]:
     (pure_rewrite_tac[lookup_var_def] >>
      qpat_assum `lookup_var _ t' = SOME w` mp_tac >>
      pure_rewrite_tac[lookup_var_def] >> simp[NoAsms]) >>
-  qpat_assum `expr_post _ _ _ _ data _ _ _ _ _ _ _ t''`
+  qpat_assum `expr_post _ _ _ _ _ data _ _ _ _ _ _ _ t''`
     (mp_then Any mp_tac bodySimRawLogTailsTheory.raw_log_fixed_buffer_after_data) >>
   simp[lookup_var_def, local_region_def] >>
   disch_then (qspecl_then [`sa`, `STRING #"%" (toString sm.cs_next_var)`, `w`, `sm.cs_next_id`] mp_tac) >>
@@ -336,7 +336,7 @@ Resume raw_log_fixed32_body_frag_ptr[coverage]:
   gvs[] >>
   drule hash_fixed_post_view >> simp[] >> strip_tac >>
   `op_taint tn' data_op = {}` by fs[ptr_val_ok_def] >>
-  `stmt_state_rel ctx func cenv cx ee t''` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee t''` by fs[expr_post_def] >>
   suspend "fixed_suffix"
 QED
 
@@ -344,7 +344,7 @@ Resume raw_log_fixed32_body_frag_ptr[fixed_suffix]:
   `fn_has_code sn sb func` by metis_tac[fn_has_code_split] >>
   `LENGTH ops < dimword (:256)` by (simp[dimword_def] >> decide_tac) >>
   `~t''.vs_call_ctx.cc_static` by
-    (qpat_assum `stmt_state_rel _ _ _ _ ee t''` mp_tac >>
+    (qpat_assum `stmt_state_rel _ _ _ _ _ ee t''` mp_tac >>
      rewrite_tac[stmt_state_rel_def, state_rel_def] >> strip_tac >> fs[]) >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sn x` by
     (rpt strip_tac >> irule stmtFragPtrTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[] >> decide_tac) >>
@@ -378,13 +378,13 @@ Resume raw_log_fixed32_body_frag_ptr[fixed_suffix]:
      rpt strip_tac >> first_x_assum drule >>
      simp[regions_disjoint_def] >> decide_tac) >>
   drule_all raw_log_fixed_tail >>
-  disch_then (qspecl_then [`cx_dead cx`, `PG`,
+  disch_then (qspecl_then [`cx_dead H cx`, `PG`,
     `ee.logs ++ [encode_raw_event_values cx.txn.target vs bs]`] strip_assume_tac) >>
   suspend "fixed_post"
 QED
 
 Resume raw_log_fixed32_body_frag_ptr[fixed_post]:
-  qmatch_goalsub_abbrev_tac `expr_post ctx func cenv cx call` >>
+  qmatch_goalsub_abbrev_tac `expr_post H ctx func cenv cx call` >>
   `expr_type call = NoneT` by simp[Abbr `call`, expr_type_def] >>
   `post_value_type cenv call = expr_type call` by simp[Abbr `call`] >>
   `expr_has_effect call` by simp[Abbr `call`, expr_has_effect_thm] >>
@@ -392,15 +392,15 @@ Resume raw_log_fixed32_body_frag_ptr[fixed_post]:
   rename1 `run_inst_seq [_;_] t'' = OK out` >>
   `run_inst_seq (emitted_insts sn sb) t'' = OK out` by
     (qpat_x_assum `run_inst_seq [_;_] t'' = OK out` mp_tac >> simp[]) >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G' tn' t'' 0 G' tn''
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G' tn' t'' 0 G' tn''
      (OK (out with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (qpat_assum `gas_path_ptr _ _ _ _ _ _ _ t'' _ _ _ _` mp_tac >>
      qpat_assum `LENGTH sb.cs_current_insts = t''.vs_inst_idx + 2`
        (fn th => pure_rewrite_tac[GSYM th]) >> simp[]) >>
-  `ghost_inv d cenv cx (ee with logs := ee.logs ++
+  `ghost_inv H d cenv cx (ee with logs := ee.logs ++
       [encode_raw_event_values cx.txn.target vs bs]) G' tn''
       (out with vs_inst_idx := LENGTH sb.cs_current_insts)` by
-    (qpat_assum `ghost_inv _ _ _ (_ with logs := _) _ _ _` mp_tac >>
+    (qpat_assum `ghost_inv _ _ _ _ (_ with logs := _) _ _ _` mp_tac >>
      qpat_assum `LENGTH sb.cs_current_insts = t''.vs_inst_idx + 2`
        (fn th => pure_rewrite_tac[GSYM th]) >> simp[]) >>
   `MEM (mk_inst sm.cs_next_id ALLOCA [Lit 32w] [pv]) (fn_insts func) /\
@@ -418,7 +418,7 @@ Resume raw_log_fixed32_body_frag_ptr[fixed_post]:
     (qpat_assum `TAKE (LENGTH bs) _ = bs` mp_tac >>
      qpat_assum `LENGTH bs = 32` (fn th => pure_rewrite_tac[th]) >>
      disch_then ACCEPT_TAC) >>
-  `expr_post ctx func cenv cx call es sa sb s0
+  `expr_post H ctx func cenv cx call es sa sb s0
      (ee with logs := ee.logs ++ [encode_raw_event_values cx.txn.target vs bs])
      NoneV (Lit 0w) (out with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule (cj 1 raw_log_fixed_counted_post_ptr) >>
@@ -430,7 +430,7 @@ Resume raw_log_fixed32_body_frag_ptr[fixed_post]:
      qpat_assum `eval_operands ops t'' = _` (irule_at Any) >>
      qpat_assum `gas_path_ptr _ _ _ _ _ _ _ t'' _ _ _
        (OK (out with vs_inst_idx := LENGTH sb.cs_current_insts))` (irule_at Any) >>
-     qpat_assum `ghost_inv _ _ _ (_ with logs := _) _ _
+     qpat_assum `ghost_inv _ _ _ _ (_ with logs := _) _ _
        (out with vs_inst_idx := LENGTH sb.cs_current_insts)` (irule_at Any) >>
      qpat_assum `post_value_type cenv call = _` (irule_at Any) >>
      qpat_assum `expr_has_effect call` (irule_at Any) >>
@@ -459,8 +459,8 @@ Resume raw_log_fixed32_body_frag_ptr[summary]:
   `out.vs_current_bb = t''.vs_current_bb` by
     (drule_all bodyPtrHashBuiltinsCursorTheory.hash_run_inst_seq_current_bb >> simp[]) >>
   simp[] >> conj_tac
-  >- (qpat_x_assum `expr_post _ _ _ _ _ es sa sb s0 _ NoneV _ _` mp_tac >> simp[]) >>
-  qpat_x_assum `ghost_inv _ _ _ (_ with logs := _) _ _
+  >- (qpat_x_assum `expr_post _ _ _ _ _ _ es sa sb s0 _ NoneV _ _` mp_tac >> simp[]) >>
+  qpat_x_assum `ghost_inv _ _ _ _ (_ with logs := _) _ _
     (out with vs_inst_idx := LENGTH sb.cs_current_insts)` mp_tac >> simp[]
 QED
 

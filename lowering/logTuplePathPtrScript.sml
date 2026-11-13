@@ -14,12 +14,12 @@ Theorem log_allocated_tuple_raw_path_ptr[local]:
   inputCap <= srcCap /\ sb+srcCap < dimword (:256) /\ outcap < dimword (:256) /\
   not_fresh_at st src /\ lookup_var src s = SOME (n2w sb) /\
   ptr_covers G tn src s srcCap /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d ce cx es G tn s /\
+  ghost_inv H d ce cx es G tn s /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   (!q. mem_agree_outside tn.t_mem s.vs_memory q ==>
     abi_encoder_input ei (Tuple ats) (ListV avs) sb inputCap q) /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ fresh_vars_wrt limit_st s /\
   end_st.cs_next_var <= limit_st.cs_next_var /\
   LENGTH (enc (Tuple ats) (ListV avs)) <= outcap /\
@@ -28,15 +28,15 @@ Theorem log_allocated_tuple_raw_path_ptr[local]:
       EVERY (\(child,asz,mz,dyn). log_scalar_enc_info child) infos)) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts st end_st) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?actual db H tm.
+  ?actual db HG tm.
     gas_path_ptr D 0 ctx func PG G tn s
-      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st end_st))) H tm
+      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st end_st))) HG tm
       (OK (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st))) /\
     run_inst_seq (emitted_insts st end_st) s = OK actual /\
     inst_extends st end_st /\
     fresh_vars_wrt limit_st
       (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) /\
-    stmt_state_rel ctx func ce cx es
+    stmt_state_rel H ctx func ce cx es
       (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) /\
     eval_operand dst.buf_operand
       (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) = SOME (n2w db) /\
@@ -47,12 +47,12 @@ Theorem log_allocated_tuple_raw_path_ptr[local]:
     eval_operand out
       (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) =
       SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
-    op_taint tm out = {} /\ op_prov H out = NONE /\
+    op_taint tm out = {} /\ op_prov HG out = NONE /\
     (!i. db <= i /\ i < db+LENGTH (enc (Tuple ats) (ListV avs)) ==> i NOTIN tm.t_mem) /\
-    ghost_inv d ce cx es H tm
+    ghost_inv H d ce cx es HG tm
       (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) /\
-    ghost_kept ce es st G tn s H tm /\
-    (?dv. dst.buf_operand = Var dv /\ ptr_covers H tm dv
+    ghost_kept ce es st G tn s HG tm /\
+    (?dv. dst.buf_operand = Var dv /\ ptr_covers HG tm dv
       (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) outcap) /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
       eval_operand op (actual with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st end_st)) = SOME w) /\
@@ -62,11 +62,11 @@ Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all log_allocated_tuple_sequence_ptr >>
   disch_then (qspecl_then [`PG`,`D`]
-    (qx_choose_then `actual` (qx_choose_then `db` (qx_choose_then `H`
+    (qx_choose_then `actual` (qx_choose_then `db` (qx_choose_then `HG`
       (qx_choose_then `tm` (REPEAT_TCL CONJUNCTS_THEN assume_tac)))))) >>
   drule_all entrySinkExtractionTheory.run_inst_seq_preserves_entry_control >> strip_tac >>
   drule_all fragGasSeqPtrTheory.run_inst_seq_gas_path_ptr >> disch_tac >>
-  qexistsl_tac [`actual`,`db`,`H`,`tm`] >>
+  qexistsl_tac [`actual`,`db`,`HG`,`tm`] >>
   asm_simp_tac bool_ss [venom_state_accfupds, eval_operand_inst_idx,
     stmt_state_rel_inst_idx, fresh_vars_wrt_def, ptr_covers_inst_idx,
     PURE_REWRITE_RULE [ghost_inv_gas_obs] literal_ptr_ghost_inv_normalize] >>
@@ -83,12 +83,12 @@ Theorem log_allocated_tuple_path_ptr:
   inputCap <= srcCap /\ sb+srcCap < dimword(:256) /\ outcap < dimword(:256) /\
   not_fresh_at st src /\ lookup_var src s = SOME (n2w sb) /\
   ptr_covers G tn src s srcCap /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d ce cx es G tn s /\
+  ghost_inv H d ce cx es G tn s /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   (!q. mem_agree_outside tn.t_mem s.vs_memory q ==>
     abi_encoder_input ei (Tuple ats) (ListV avs) sb inputCap q) /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ fresh_vars_wrt limit_st s /\
   end_st.cs_next_var <= limit_st.cs_next_var /\
   LENGTH (enc (Tuple ats) (ListV avs)) <= outcap /\
@@ -97,19 +97,19 @@ Theorem log_allocated_tuple_path_ptr:
       EVERY (\(child,asz,mz,dyn). log_scalar_enc_info child) infos)) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts st end_st) (DROP j bb.bb_instructions) ==>
-  ?v db H tm.
+  ?v db HG tm.
     gas_path_ptr D 0 ctx func PG G tn (s with vs_inst_idx := j)
-      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st end_st))) H tm (OK v) /\
+      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st end_st))) HG tm (OK v) /\
     inst_extends st end_st /\ fresh_vars_wrt limit_st v /\
-    stmt_state_rel ctx func ce cx es v /\
+    stmt_state_rel H ctx func ce cx es v /\
     eval_operand dst.buf_operand v = SOME (n2w db) /\ db < dimword(:256) /\
     mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) v.vs_memory =
       enc (Tuple ats) (ListV avs) /\
     eval_operand out v = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
-    op_taint tm out = {} /\ op_prov H out = NONE /\
+    op_taint tm out = {} /\ op_prov HG out = NONE /\
     (!i. db <= i /\ i < db+LENGTH (enc (Tuple ats) (ListV avs)) ==> i NOTIN tm.t_mem) /\
-    ghost_inv d ce cx es H tm v /\ ghost_kept ce es st G tn s H tm /\
-    (?dv. dst.buf_operand = Var dv /\ ptr_covers H tm dv v outcap) /\
+    ghost_inv H d ce cx es HG tm v /\ ghost_kept ce es st G tn s HG tm /\
+    (?dv. dst.buf_operand = Var dv /\ ptr_covers HG tm dv v outcap) /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
       eval_operand op v = SOME w) /\
     (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p)) /\
@@ -125,7 +125,7 @@ Proof
       PURE_REWRITE_RULE [ghost_inv_gas_obs] literal_ptr_ghost_inv_normalize])) >>
   strip_tac >>
   qexistsl_tac [`actual with vs_inst_idx := j + LENGTH (emitted_insts st end_st)`,
-    `db`,`H`,`tm`] >>
+    `db`,`HG`,`tm`] >>
   gnvs[venom_state_accfupds, eval_operand_inst_idx,
     stmt_state_rel_inst_idx, fresh_vars_wrt_def, ptr_covers_inst_idx,
     PURE_REWRITE_RULE [ghost_inv_gas_obs] literal_ptr_ghost_inv_normalize,

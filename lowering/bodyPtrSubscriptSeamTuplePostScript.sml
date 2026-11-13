@@ -146,7 +146,7 @@ Proof
 QED
 
 Theorem tuple_child_holds:
-  stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+  stmt_state_rel H ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
   vv_holds cenv cx (TupleT tys) tv bvv es1 q /\
   vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
   read_result cx tv es1 = (INL (ArrayV (TupleV vs)),es1) /\
@@ -192,7 +192,7 @@ Proof
 QED
 
 Theorem tuple_child_post:
-  vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+  vv_post H ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
   post_value_type cenv obj = TupleT tys /\ expr_type obj = TupleT tys /\
   expr_sim_inv cenv cx env es /\
   eval_operand (vv_operand bvv) q = SOME w /\
@@ -206,11 +206,11 @@ Theorem tuple_child_post:
   (~expr_has_effect e ==> ~expr_has_effect obj) /\
   (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
      ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) ==>
-  vv_post ctx func cenv cx e es sa sn s0 es1 tv'
+  vv_post H ctx func cenv cx e es sa sn s0 es1 tv'
     (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q
 Proof
   strip_tac >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE[vv_post_def]) >>
   `LENGTH vs = LENGTH tvs` by metis_tac[values_have_types_length] >>
   `vv_holds cenv cx (EL k tys) tv'

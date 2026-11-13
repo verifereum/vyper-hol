@@ -2,7 +2,7 @@
 Theory stmtAssertMemory
 Ancestors
   exprSimMemDefs bodyMemoryDefs fragGasPathMem stmtSimAssert instMemFrontier
-  stmtSimDefs stmtSimProps stmtSimIfProps stmtSimAssertProps exprSimDefs exprSimProps loweringPosts
+  stmtSimDefs stmtSimForced stmtSimProps stmtSimIfProps stmtSimAssertProps exprSimDefs exprSimProps loweringPosts
   gasOutcome gasSummary gasSummaryCompose gasContext gasCount fragGasPath fragGasMode
   list rich_list finite_map pred_set fragExec localPtrsProps loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
@@ -113,34 +113,40 @@ Proof
     metis_tac[assert_expr_admissible] >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
-  disch_then drule >> simp[] >>
-  disch_then (qspec_then `s0` mp_tac) >> simp[] >>
-  simp[gas_outcome_def, gas_summary_at_def] >>
-  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN assume_tac))
-  >- (qexists_tac `marks` >> disj1_tac >>
-      qpat_x_assum `?res es_end r. _` strip_assume_tac >> gvs[]
-      >- suspend "normal"
-      >> suspend "exception") >>
-  qexists_tac `marks` >> disj2_tac >>
-  pop_assum strip_assume_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  irule assert_expr_exempt >> simp[])
+  disch_then (qspecl_then [`st0`, `sa`, `s1`, `op`, `s0`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `!sa op sb. _` kall_tac >>
+  qmatch_goalsub_abbrev_tac `eval_stmt cx (Assert e ak)` >>
+  mp_tac eval_assert_bind >> (impl_tac >- simp[Abbr `ak`]) >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  irule forced_then_outcome >> BETA_TAC >> rpt conj_tac
+  >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
+  >- (rpt gen_tac >> rw[] >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_return,
+           vyperStorageTraceTheory.storage_trace_frame_raise]) >>
+  qexists_tac `\H v ee t.
+    expr_post H ctx func cenv cx e es sa s1 s0 ee v op t /\
+    expr_store_bound cx (expr_type e) v op t /\
+    t.vs_current_bb = s1.cs_current_bb /\
+    t.vs_inst_idx = LENGTH s1.cs_current_insts /\
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
+  BETA_TAC >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >> suspend "continue")
 QED
 
-Resume compile_assert_frag_mem[normal]:
+Resume compile_assert_frag_mem[continue]:
   markerLib.RESUME_TAC >> (
-  qmatch_goalsub_abbrev_tac `eval_stmt cx (Assert e ak)` >>
-  qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-  simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
-  `~t.vs_halted` by metis_tac[gas_path_mem_exec, gas_path_normal] >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  `(ee with gas_obs := []) = ee` by
+    simp[evaluation_state_component_equality] >>
   `?b. v = BoolV b` by
-    (Cases_on `eval_stmt cx (Assert e ak)
-       (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` >>
-     drule_all gas_admissible_result >> strip_tac >>
+    (Cases_on `eval_stmt cx (Assert e ak) (es with gas_obs := gs)` >>
+     `stmt_res_ok lctx q` by metis_tac[gas_admissible_result] >>
      drule_at (Pat `eval_stmt _ _ _ = _`) eval_assert_forced_ok >>
      disch_then (qspec_then `lctx` mp_tac) >>
-     (impl_tac >- simp[]) >> strip_tac >>
-     qpat_x_assum `!tail. _ = _` (qspec_then `[]` assume_tac) >>
+     (impl_tac >- simp[Abbr `ak`]) >> strip_tac >>
      gvs[bind_def]) >>
   `eval_operand op t = SOME (if b then 1w else 0w)` by
     gvs[expr_post_def, expr_val_rel_def, evaluate_type_def, is_word_type_def,
@@ -150,37 +156,20 @@ Resume compile_assert_frag_mem[normal]:
     (imp_res_tac emit_inst_extends >>
      irule assert_jnz_zero_path_mem >> simp[] >>
      qexistsl_tac [`op`, `s3`, `s4`] >> simp[]) >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `!sa op sb. _` kall_tac >>
   Cases_on `b`
   >- suspend "true"
   >> suspend "false")
 QED
 
-Resume compile_assert_frag_mem[exception]:
-  markerLib.RESUME_TAC >> (
-  Cases_on `res` >- fs[expr_exit_def] >>
-  qexistsl_tac [`INR y`, `es_end`, `r`] >>
-  conj_tac
-  >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-      simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
-      gen_tac >> asm_simp_tac (srw_ss()) [eval_assert_bind] >>
-      simp[Once bind_def]) >>
-  disj2_tac >> simp[stmt_exit_def] >>
-  metis_tac[expr_exit_INR_type])
-QED
-
 Resume compile_assert_frag_mem[true]:
   markerLib.RESUME_TAC >> (
   gvs[] >>
-  qexistsl_tac [`INL ()`, `es_end`, `OK (jump_to sb.cs_current_bb t)`] >>
-  conj_tac
-  >- (conj_tac
-      >- (rpt gen_tac >>
-          asm_simp_tac (srw_ss()) [eval_assert_bind] >>
-          simp[Once bind_def, return_def]) >>
-      metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]) >>
-  disj1_tac >>
+  qexistsl_tac [`INL ()`, `ee`, `OK (jump_to sb.cs_current_bb t)`] >>
+  simp[return_def, gas_marked_path_def] >>
+  disj1_tac >> qx_gen_tac `H1` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (qspec_then `H1` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule_all assert_success_post_mem >> simp[])
 QED
 
@@ -204,13 +193,10 @@ Resume compile_assert_frag_mem[false]:
      simp[below_frontier_REVERT, eval_operand_def] >>
      irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
   qexistsl_tac [`INR (AssertException
-      (if ak = AssertBare then "" else "UNREACHABLE"))`, `es_end`, `Abort a u`] >>
-  conj_tac
-  >- (conj_tac
-      >- (gen_tac >> simp[Abbr `ak`, eval_assert_bind] >>
-          simp[Once bind_def, raise_def]) >>
-      metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]) >>
-  disj2_tac >> simp[exit_result_def, stmt_exit_def])
+      (if ak = AssertBare then "" else "UNREACHABLE"))`, `ee`, `Abort a u`] >>
+  simp[raise_def, gas_marked_path_def] >>
+  conj_tac >- metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
+  simp[exit_result_def, stmt_exit_def] >> fs[Abbr `ak`])
 QED
 
 Finalise compile_assert_frag_mem

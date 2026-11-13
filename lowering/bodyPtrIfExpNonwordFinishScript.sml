@@ -23,7 +23,7 @@ Theorem ifexp_nonword_suffix_ghost:
   eval_operand op u = SOME w /\
   read_result cx tv ee = (INL v,ee) /\ ptr_val_ok cx t v op G tn u /\
   ptr_buf_ok ce e op G u /\
-  ghost_inv d ce cx ee G tn u /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
+  ghost_inv H d ce cx ee G tn u /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
   (!x. not_fresh_at sa x ==> x <> rv) /\
   (!name x sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz) ==> x <> rv) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> rv) /\
@@ -35,7 +35,7 @@ Theorem ifexp_nonword_suffix_ghost:
   ptr_buf_ok ce e (Var rv)
     (step_prov PG G (mk_inst id ASSIGN [op] [rv]) (update_var rv w u))
     (jump_to xl (update_var rv w u with vs_inst_idx := k)) /\
-  ghost_inv d ce cx ee
+  ghost_inv H d ce cx ee
     (step_prov PG G (mk_inst id ASSIGN [op] [rv]) (update_var rv w u))
     (step_taint (mk_inst id ASSIGN [op] [rv]) u (update_var rv w u) tn)
     (jump_to xl (update_var rv w u with vs_inst_idx := k)) /\

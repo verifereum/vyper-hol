@@ -76,14 +76,14 @@ Theorem abi_decode_complex_header_success:
   emit_op ADD [pos;Lit (n2w static_sz)] sa = (e,sm) /\
   compile_abi_decode_range_check pos e hi sm = ((),sb) /\
   fn_has_code sa sb func /\ run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?H tf.
-    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tf
+  ?HG tf.
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG tf /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tf
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi
-      sb H tf (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+      sb HG tf (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     t.vs_memory = s.vs_memory /\
-    abi_decode_member_frame sa G tn s H tf
+    abi_decode_member_frame sa G tn s HG tf
       (t with vs_inst_idx := LENGTH sb.cs_current_insts) (w2n d) 0
 Proof
   strip_tac >>
@@ -101,7 +101,7 @@ Proof
   disch_then (qspecl_then [`LENGTH sb.cs_current_insts`, `func`, `PG`, `D`]
     strip_assume_tac) >>
   fs[IN_GSPEC_IFF] >>
-  qexistsl_tac [`H`, `tm`] >>
+  qexistsl_tac [`HG`, `tm`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- suspend "path" >>
   conj_tac >- suspend "live" >>
@@ -129,25 +129,25 @@ Resume abi_decode_complex_header_success[path]:
 QED
 
 Resume abi_decode_complex_header_success[live]:
-  qmatch_goalsub_abbrev_tac `abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sb H tm u` >>
+  qmatch_goalsub_abbrev_tac `abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sb HG tm u` >>
   `state_frame u = state_frame (s with vs_inst_idx := u.vs_inst_idx) /\
    u.vs_memory = s.vs_memory /\ u.vs_current_bb = sb.cs_current_bb` by
     (unabbrev_all_tac >>
      qpat_x_assum `t = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
      simp[state_frame_def]) >>
   `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
-    FLOOKUP H x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)` by
+    FLOOKUP HG x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)` by
     (rpt strip_tac >> fs[Abbr `u`] >>
      first_x_assum (qspec_then `Var x` mp_tac) >> simp[]) >>
-  `abi_decode_member_frame sa G tn s H tm u (w2n d) 0` by
+  `abi_decode_member_frame sa G tn s HG tm u (w2n d) 0` by
     (irule abi_decode_member_frame_readonly >> simp[] >> gvs[]) >>
-  `ghost_inv ret cenv cx es H tm u` by
+  `ghost_inv H ret cenv cx es HG tm u` by
     (irule ghost_inv_old_vars_frame_ptr >>
-     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
      qexists_tac `sa` >> simp[] >> gvs[]) >>
-  `stmt_state_rel ctx func cenv cx es u` by
+  `stmt_state_rel H ctx func cenv cx es u` by
     (irule stmt_state_rel_old_vars_frame_ptr >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      qexists_tac `sa` >> simp[] >> gvs[Abbr `u`]) >>
   `fresh_vars_wrt sb s` by
     (irule fresh_vars_wrt_mono >> qexists_tac `sa` >> simp[]) >>

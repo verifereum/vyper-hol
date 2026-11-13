@@ -20,7 +20,7 @@ Theorem for_range_round_ptr:
     Inv j ei G tn s <=>
     P ei /\ lookup_scopes id ei.scopes = NONE /\ j <= Num (n2-n1) /\
     s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-    stmt_state_rel ctx func cenv cx ei s /\ ghost_inv d cenv cx ei G tn s /\
+    stmt_state_rel H ctx func cenv cx ei s /\ ghost_inv H d cenv cx ei G tn s /\
     lookup_var cv s = SOME (i2w (n1 + &j)) /\
     lookup_var ev s = SOME (i2w n2) /\ lookup_var p s = SOME a /\
     FLOOKUP G cv = NONE /\ FLOOKUP G ev = NONE /\
@@ -35,7 +35,7 @@ Theorem for_range_round_ptr:
       op_taint tn (Var x) = op_taint tn0 (Var x))) /\
   (!ei G tn t. Done ei G tn t <=>
     t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
-    stmt_state_rel ctx func cenv cx ei t /\ ghost_inv d cenv cx ei G tn t /\
+    stmt_state_rel H ctx func cenv cx ei t /\ ghost_inv H d cenv cx ei G tn t /\
     (!x v. not_fresh_at st x /\ lookup_var x s0 = SOME v ==>
       lookup_var x t = SOME v) /\
     (!x. not_fresh_at st x ==> FLOOKUP G x = FLOOKUP G0 x /\
@@ -57,7 +57,7 @@ Theorem for_range_round_ptr:
   (!j. j < LENGTH vs ==> EL j vs = IntV (n1 + &j) /\ (i2w (n1 + &j) : bytes32) <> i2w n2) /\
   k < LENGTH vs /\ Inv k es G tn s /\
   gas_admissible (eval_for cx tyv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (do push_scope_with_var id tyv (EL k vs);
         finally (try (do eval_stmts cx stmts; return F od)
           handle_loop_exception) pop_scope od) (es,s,G,tn)
@@ -74,17 +74,17 @@ Proof
   `!r q. cenv.ce_return_buf = SOME (PtrVar (Var r) q) ==> r <> dv` by metis_tac[] >>
   `(i2w (n1 + &k) : bytes32) <> i2w n2` by metis_tac[] >>
   mp_tac (SRULE [op_prov_def] (Q.INST
-    [`i` |-> `n1 + &k`, `z` |-> `i2w n2`, `D` |-> `cx_dead cx`]
+    [`i` |-> `n1 + &k`, `z` |-> `i2w n2`, `D` |-> `cx_dead H cx`]
     for_range_body_prepare_ptr)) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   qmatch_asmsub_abbrev_tac
-    `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G2 tf (OK s2)` >>
+    `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 G2 tf (OK s2)` >>
   `s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\ ~s2.vs_halted` by
     gvs[Abbr `s2`] >>
   `!x. not_fresh_at st x ==> x <> dv` by metis_tac[] >>
   drule_all for_range_callback_entry_ptr >> strip_tac >>
   qmatch_asmsub_abbrev_tac `stmt_frag_ptr _ _ _ _ _ _ _ _ _ _ ei` >>
-  `stmt_state_rel ctx func bc cx ei s2 /\ ghost_inv d bc cx ei G2 tf s2` by
+  `stmt_state_rel H ctx func bc cx ei s2 /\ ghost_inv H d bc cx ei G2 tf s2` by
     ( `ei = (es with scopes := (FEMPTY |+ (id,
          <|assignable := F; type := tyv; value := IntV (n1 + &k); popped := []|>))
            :: es.scopes) with gas_obs := []` by simp[Abbr `ei`] >>
@@ -131,7 +131,7 @@ Resume for_range_round_ptr[outcome]:
      ee with <|gas_obs := tail; scopes := TL ee.scopes|>` by
       (Cases_on `ee` >> simp[]) >> asm_rewrite_tac[])) >>
   disch_tac >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
     (push_scope_with_var id tyv (EL k vs)) (es,s,G,tn) [] (INL ())
     (ei with gas_obs := es.gas_obs) G2 tf (OK s2)` by
     (simp[gas_marked_exec_ptr_def, Abbr `ei`,
@@ -164,7 +164,7 @@ Resume for_range_round_ptr[finish]:
    (!x. not_fresh_at st x ==> x <> cv /\ x <> nv) /\
    (res = INL () ==> ~block_is_terminated sb1)` by metis_tac[] >>
   drule_all for_range_callback_finish_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   `res = INL () \/ res = INR ContinueException \/ res = INR BreakException` by
     (qpat_x_assum `stmt_lands _ _ res t` mp_tac >>
      simp[stmt_lands_def] >> metis_tac[]) >> (

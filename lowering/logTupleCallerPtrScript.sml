@@ -11,7 +11,7 @@ Ancestors
   venomState venomInst venomMemDefs finite_map words list arithmetic
 
 Theorem log_alloca_robust_encoder_input:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
@@ -41,13 +41,13 @@ QED
 Theorem log_buffer_encoder_source_seq_ptr:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tm /\
-  stmt_state_rel ctx func ce cx es s /\ n < dimword (:256) /\
+  inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG tm /\
+  stmt_state_rel H ctx func ce cx es s /\ n < dimword (:256) /\
   not_fresh_at sa src /\ ptr_covers G tn src s srcCap /\
   a+cap <= s.vs_alloca_next /\
   (!q. mem_agree_outside tn.t_mem s.vs_memory q ==>
     abi_encoder_input ei at av a cap q) ==>
-  ptr_covers H tm src t srcCap /\
+  ptr_covers HG tm src t srcCap /\
   (!q. mem_agree_outside tm.t_mem t.vs_memory q ==>
     abi_encoder_input ei at av a cap q)
 Proof
@@ -74,7 +74,7 @@ Theorem log_allocated_tuple_semantic_align:
   abi_encoder_input ei (Tuple ats) (ListV avs) sb cap initial.vs_memory /\
   eval_operand src initial = SOME (n2w sb) /\
   abi_decoder_operand_live st.cs_next_var src /\
-  stmt_state_rel ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ fresh_vars_wrt limit_st initial /\
   end_st.cs_next_var <= limit_st.cs_next_var /\
   LENGTH (enc (Tuple ats) (ListV avs)) <= outcap /\
@@ -82,7 +82,7 @@ Theorem log_allocated_tuple_semantic_align:
    (?infos. ei = AbiComplex infos /\ EXISTS (\(_,_,_,dyn). dyn) infos /\
       EVERY (\(child,asz,mz,dyn). log_scalar_enc_info child) infos)) /\
   run_inst_seq (emitted_insts st end_st) initial = OK actual ==>
-  stmt_state_rel ctx func ce cx es actual /\ fresh_vars_wrt limit_st actual /\
+  stmt_state_rel H ctx func ce cx es actual /\ fresh_vars_wrt limit_st actual /\
   (!op w. abi_decoder_operand_live st.cs_next_var op /\
     eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
   ?db. eval_operand dst.buf_operand actual = SOME (n2w db) /\
@@ -101,7 +101,7 @@ QED
 
 Theorem log_buffer_encoder_entry_ptr:
   compile_alloc_buffer outcap st = (dst,prepared) /\ fn_has_code st prepared func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ outcap < dimword (:256) /\
   prepared.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   ~ctx_has_dalloca ctx /\ srcid < st.cs_next_id /\
@@ -110,15 +110,15 @@ Theorem log_buffer_encoder_entry_ptr:
   ptr_covers G tn src s srcCap /\ sb+srcCap < dimword (:256) /\ inputCap <= srcCap /\
   (!q. mem_agree_outside tn.t_mem s.vs_memory q ==>
     abi_encoder_input ei at av sb inputCap q) ==>
-  ?t db H tm dv.
+  ?t db HG tm dv.
     run_inst_seq (emitted_insts st prepared) s = OK t /\
-    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st prepared) s H tm /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st prepared) s HG tm /\
     dst.buf_operand = Var dv /\ dst.buf_size = outcap /\
-    stmt_state_rel ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
+    stmt_state_rel H ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
     local_ptrs_reserved ce prepared /\
     not_fresh_at prepared src /\ not_fresh_at prepared dv /\
     lookup_var src t = SOME (n2w sb) /\ lookup_var dv t = SOME (n2w db) /\
-    ptr_covers H tm src t srcCap /\ ptr_covers H tm dv t outcap /\
+    ptr_covers HG tm src t srcCap /\ ptr_covers HG tm dv t outcap /\
     FLOOKUP t.vs_allocas srcid = SOME (sb,srcCap) /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (db,outcap) /\
     srcid <> prepared.cs_next_id /\ st.cs_next_id <> prepared.cs_next_id /\
@@ -131,7 +131,7 @@ Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all log_buffer_seq_ptr >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`]
-    (qx_choose_then `t` (qx_choose_then `db` (qx_choose_then `H`
+    (qx_choose_then `t` (qx_choose_then `db` (qx_choose_then `HG`
       (qx_choose_then `tm` (qx_choose_then `dv`
         (REPEAT_TCL CONJUNCTS_THEN assume_tac))))))) >>
   `sb+inputCap <= s.vs_alloca_next` by
@@ -162,7 +162,7 @@ Resume log_buffer_encoder_entry_ptr[entry_post]:
        not_fresh_at_def, eval_operand_def] >>
      metis_tac[not_fresh_at_def]) >>
   `lookup_var dv t = SOME (n2w db)` by gns[eval_operand_def] >>
-  qexistsl_tac [`t`,`db`,`H`,`tm`,`dv`] >> asm_simp_tac bool_ss [] >>
+  qexistsl_tac [`t`,`db`,`HG`,`tm`,`dv`] >> asm_simp_tac bool_ss [] >>
   gvs[] >> decide_tac
 QED
 Finalise log_buffer_encoder_entry_ptr
@@ -175,33 +175,33 @@ Theorem log_allocated_tuple_sequence_ptr:
   inputCap <= srcCap /\ sb+srcCap < dimword (:256) /\ outcap < dimword (:256) /\
   not_fresh_at st src /\ lookup_var src s = SOME (n2w sb) /\
   ptr_covers G tn src s srcCap /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d ce cx es G tn s /\
+  ghost_inv H d ce cx es G tn s /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   (!q. mem_agree_outside tn.t_mem s.vs_memory q ==>
     abi_encoder_input ei (Tuple ats) (ListV avs) sb inputCap q) /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ fresh_vars_wrt limit_st s /\
   end_st.cs_next_var <= limit_st.cs_next_var /\
   LENGTH (enc (Tuple ats) (ListV avs)) <= outcap /\
   ((?n. ei = AbiCopy n /\ n < dimword (:256)) \/
    (?infos. ei = AbiComplex infos /\ EXISTS (\(_,_,_,dyn). dyn) infos /\
       EVERY (\(child,asz,mz,dyn). log_scalar_enc_info child) infos)) ==>
-  ?actual db H tm.
+  ?actual db HG tm.
     run_inst_seq (emitted_insts st end_st) s = OK actual /\
-    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st end_st) s H tm /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st end_st) s HG tm /\
     inst_extends st end_st /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
       (emitted_insts st end_st) /\ fresh_vars_wrt limit_st actual /\
-    stmt_state_rel ctx func ce cx es actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
     eval_operand dst.buf_operand actual = SOME (n2w db) /\ db < dimword (:256) /\
     mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
       enc (Tuple ats) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
-    op_taint tm out = {} /\ op_prov H out = NONE /\
+    op_taint tm out = {} /\ op_prov HG out = NONE /\
     (!i. db <= i /\ i < db+LENGTH (enc (Tuple ats) (ListV avs)) ==> i NOTIN tm.t_mem) /\
-    ghost_inv d ce cx es H tm actual /\ ghost_kept ce es st G tn s H tm /\
-    (?dv. dst.buf_operand = Var dv /\ ptr_covers H tm dv actual outcap) /\
+    ghost_inv H d ce cx es HG tm actual /\ ghost_kept ce es st G tn s HG tm /\
+    (?dv. dst.buf_operand = Var dv /\ ptr_covers HG tm dv actual outcap) /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
       eval_operand op actual = SOME w) /\
     (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p))
@@ -211,10 +211,10 @@ Proof
   `prepared.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   drule_all log_buffer_encoder_entry_ptr >>
   disch_then (qspecl_then [`PG`,`D`]
-    (qx_choose_then `t` (qx_choose_then `db` (qx_choose_then `H`
+    (qx_choose_then `t` (qx_choose_then `db` (qx_choose_then `HG`
       (qx_choose_then `tm` (qx_choose_then `dv`
         (REPEAT_TCL CONJUNCTS_THEN assume_tac))))))) >>
-  `!p. not_fresh_at st p ==> FLOOKUP H p = FLOOKUP G p /\
+  `!p. not_fresh_at st p ==> FLOOKUP HG p = FLOOKUP G p /\
      op_taint tm (Var p) = op_taint tn (Var p)` by
     (match_mp_tac (Q.INST [`sb` |-> `prepared`, `cap` |-> `outcap`,
        `buf` |-> `dst`] log_buffer_old_ghost_seq_ptr) >>
@@ -228,7 +228,7 @@ Resume log_allocated_tuple_sequence_ptr[dispatch]:
   markerLib.RESUME_TAC >>
   mp_tac (Q.INST [`st` |-> `prepared`, `dst` |-> `dv`,
     `dstid` |-> `st.cs_next_id`, `d` |-> `db`, `cap` |-> `outcap`,
-    `tys` |-> `ats`, `G` |-> `H`, `tn` |-> `tm`,
+    `tys` |-> `ats`, `G` |-> `HG`, `tn` |-> `tm`,
     `s` |-> `t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st prepared)`]
     (SPEC_ALL compile_log_tuple_seq_ptr)) >>
   impl_tac >- (asm_simp_tac bool_ss [] >>
@@ -291,13 +291,13 @@ Resume log_allocated_tuple_sequence_ptr[ghosts]:
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `ghost_kept ce es st G tn s Gf tk` by
     (irule ghost_kept_footprint_transport >>
-     qexistsl_tac [`H`,`fp`,`prepared`,`tm`] >> asm_simp_tac bool_ss [] >>
+     qexistsl_tac [`HG`,`fp`,`prepared`,`tm`] >> asm_simp_tac bool_ss [] >>
      rpt conj_tac >- metis_tac[] >- metis_tac[] >>
      drule abi_builtin_alloc_buffer_shape >> strip_tac >>
      drule emitted_insts_emit_op >> strip_tac >> decide_tac) >>
-  `ghost_inv d ce cx es Gf tk u` by
+  `ghost_inv H d ce cx es Gf tk u` by
     (irule ghost_inv_footprint_transport >>
-     qexistsl_tac [`H`,`fp`,`func`,
+     qexistsl_tac [`HG`,`fp`,`func`,
        `t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st prepared)`,
        `prepared`,`tm`] >>
      asm_simp_tac bool_ss [venom_state_accfupds] >>
@@ -307,7 +307,7 @@ Resume log_allocated_tuple_sequence_ptr[ghosts]:
         drule emitted_insts_emit_op >> strip_tac >> decide_tac) >>
      conj_tac >- metis_tac[not_fresh_at_mono] >>
      conj_tac >- metis_tac[not_fresh_at_mono] >>
-     qpat_x_assum `stmt_state_rel ctx func ce cx es t` mp_tac >>
+     qpat_x_assum `stmt_state_rel H ctx func ce cx es t` mp_tac >>
      simp_tac bool_ss [local_ptrs_rel_inst_idx, stmt_state_rel_def, state_rel_def] >>
      metis_tac[]) >>
   suspend "compose"
@@ -349,7 +349,7 @@ Resume log_allocated_tuple_sequence_ptr[result]:
     (qpat_x_assum `!v. not_fresh_at prepared v ==> _`
       (qspec_then `dv` mp_tac) >>
      asm_simp_tac bool_ss [] >> strip_tac >>
-     qpat_x_assum `ptr_covers H tm dv t outcap` mp_tac >>
+     qpat_x_assum `ptr_covers HG tm dv t outcap` mp_tac >>
      asm_simp_tac bool_ss [ptr_covers_def, lookup_var_def, venom_state_accfupds]) >>
   `db < dimword (:256)` by decide_tac >>
   `inst_extends st end_st` by metis_tac[inst_extends_trans] >>

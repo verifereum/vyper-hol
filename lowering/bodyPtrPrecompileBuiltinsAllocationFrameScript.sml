@@ -68,7 +68,7 @@ QED
 
 Theorem emitted_allocation_frames:
   compile_alloc_buffer n sa = (buf,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
         [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   n < dimword (:256) /\ ~ctx_has_dalloca ctx /\

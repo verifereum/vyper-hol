@@ -25,7 +25,7 @@ Theorem u2s_loop_invariant_ptr:
   ~ctx_has_dalloca ctx ==>
   ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr t /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es a G0 tn0 s0 G' tn' /\
+    ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es a G0 tn0 s0 G' tn' /\
     ptr_covers G' tn' (u2s_var a 2) t buf_size /\
     lookup_var (u2s_var a 2) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
     val_in_memory (BaseTV (StringT cap)) (StringV (num_to_dec_string X))
@@ -118,7 +118,7 @@ Theorem u2s_check_exit_invariant_ptr:
   ~ctx_has_dalloca ctx ==>
   ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr t /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es a G0 tn0 s0 G' tn' /\
+    ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es a G0 tn0 s0 G' tn' /\
     ptr_covers G' tn' (u2s_var a 2) t buf_size /\
     lookup_var (u2s_var a 2) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
     val_in_memory (BaseTV (StringT cap)) (StringV (num_to_dec_string X))
