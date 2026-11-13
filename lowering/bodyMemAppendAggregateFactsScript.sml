@@ -1,7 +1,7 @@
 (* Body boundaries for aggregate storage Append. *)
 Theory bodyMemAppendAggregateFacts
 Ancestors
-  bodyAppendStorageAdapter bodyAppendStorageFacts bodyMemAssignTopCopyFacts placeDynLayout
+  bodyAppendStorageAdapter bodyAppendStorageFacts bodyMemAssignTopCopyFacts
   supportedStmts supportedExprs loweringPosts exprSimMemDefs
   valueEncodingProps vyperAST bodySim bodyStorageMetadata supportedProgram
   supportedDecls supportedTypes compileEnv exprSimHyps whitelistVisibility
