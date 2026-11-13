@@ -18399,6 +18399,127 @@ Proof
   metis_tac[]
 QED
 
+Theorem mm_local_zero_no_output_recognition[local]:
+  i.inst_outputs = [] /\
+  apply_memzero_inst_supply ns rm s i = (out,s') /\
+  (!v. p = Var v ==> MEM v s.irs_used_vars) /\
+  (!v. q = Var v ==> MEM v s.irs_used_vars) ==>
+  same_after_assigns (REVERSE out ++ xs) p q = same_after_assigns xs p q
+Proof
+  strip_tac >> Cases_on `p = q`
+  >- simp[contextCodegenRelPropsTheory.same_after_assigns_refl] >>
+  gvs[apply_memzero_inst_supply_def, AllCaseEqs()] >>
+  gvs[mk_nop_from_def, mk_zero_store_inst_def,
+      mk_memzero_calldatacopy_def, irSupplyTheory.fresh_inst_id_def] >>
+  TRY (drule irSupplyTheory.fresh_ir_var_contract >> strip_tac) >>
+  Cases_on `p` >> Cases_on `q` >>
+  gvs[contextCodegenRelTheory.same_after_assigns_def,
+      contextCodegenRelTheory.step_back_assign_def] >>
+  rpt IF_CASES_TAC >> gvs[] >> metis_tac[]
+QED
+
+Theorem mm_local_zero_same_after_assigns_list[local]:
+  !xs s out s' P p q.
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  f = apply_memzero_inst_supply
+    (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed)
+    (rep_map_of_groups bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed) /\
+  EVERY (\i. MEM i bb.bb_instructions /\ inst_wf i /\
+    !v. MEM (Var v) i.inst_operands ==> v IN P) xs /\
+  (!v. v IN P ==> MEM v s.irs_used_vars) /\
+  (!v. p = Var v ==> v IN P) /\ (!v. q = Var v ==> v IN P) /\
+  mm_flat_map_supply f s xs = (out,s') /\
+  same_after_assigns (REVERSE xs) p q ==>
+  same_after_assigns (REVERSE out) p q
+Proof
+  Induct using listTheory.SNOC_INDUCT
+  >- simp[mm_flat_map_supply_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `p = q`
+  >- simp[contextCodegenRelPropsTheory.same_after_assigns_refl] >>
+  fs[listTheory.SNOC_APPEND] >>
+  Cases_on `mm_flat_map_supply f s xs` >>
+  rename1 `mm_flat_map_supply f s xs = (pre,sm)` >>
+  Cases_on `f sm x` >> rename1 `f sm x = (chunk,se)` >>
+  `out = pre ++ chunk /\ s' = se` by
+    (`mm_flat_map_supply f sm [x] = (chunk,se)` by
+       simp[mm_flat_map_supply_def] >>
+     drule_all mm_local_flat_map_supply_append >> simp[]) >>
+  `!v. v IN P ==> MEM v sm.irs_used_vars` by
+    (drule_at (Pat `mm_flat_map_supply _ _ _ = _`)
+       (Q.ISPEC `venomInst$inst_uses` mm_local_list_old_vars) >>
+     simp[] >>
+     (impl_tac >- metis_tac[mm_local_memzero_old_use]) >>
+     strip_tac >> metis_tac[]) >>
+  Cases_on `x.inst_outputs = []`
+  >- (`same_after_assigns (REVERSE chunk ++ REVERSE pre) p q =
+       same_after_assigns (REVERSE pre) p q` by
+        (irule mm_local_zero_no_output_recognition >> metis_tac[]) >>
+      `same_after_assigns (REVERSE xs) p q` by
+        (Cases_on `p` >> Cases_on `q` >>
+         gvs[REVERSE_APPEND, contextCodegenRelTheory.same_after_assigns_def,
+             contextCodegenRelTheory.step_back_assign_def]) >>
+      gvs[REVERSE_APPEND] >> first_x_assum irule >> metis_tac[]) >>
+  `chunk = [x] /\ se = sm` by
+    (drule_all mm_local_memzero_producer_unchanged >>
+     disch_then (qspecl_then [`dfg`,`sm`] mp_tac) >> gvs[]) >>
+  gvs[REVERSE_APPEND, contextCodegenRelTheory.same_after_assigns_def] >>
+  Cases_on `step_back_assign x p` >- gvs[] >>
+  Cases_on `step_back_assign x q` >- gvs[] >> gvs[] >>
+  rename1 `step_back_assign x p = SOME p1` >>
+  rename1 `step_back_assign x q = SOME q1` >>
+  `(!v. p1 = Var v ==> v IN P) /\
+   (!v. q1 = Var v ==> v IN P)` by
+    (qpat_x_assum `!s out s' P p q. _` kall_tac >>
+     metis_tac[contextCodegenRelPropsTheory.step_back_assign_preserves_vars]) >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem mm_local_zero_same_after_assigns_prefix[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  f = apply_memzero_inst_supply
+    (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed)
+    (rep_map_of_groups bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed) /\
+  EVERY (\i. inst_wf i /\
+    !v. MEM (Var v) i.inst_operands ==> v IN P) bb.bb_instructions /\
+  (!v. v IN P ==> MEM v supply.irs_used_vars) /\
+  (!v. p = Var v ==> v IN P) /\ (!v. q = Var v ==> v IN P) /\
+  mm_flat_map_supply f supply (TAKE n bb.bb_instructions) = (pre,sn) /\
+  same_after_assigns (REVERSE (TAKE n bb.bb_instructions)) p q ==>
+  same_after_assigns (REVERSE pre) p q
+Proof
+  strip_tac >> irule mm_local_zero_same_after_assigns_list >>
+  goal_assum (drule_at Any) >> qexists `P` >> simp[] >>
+  fs[EVERY_MEM] >> metis_tac[rich_listTheory.MEM_TAKE]
+QED
+
+Theorem mm_local_zero_assign_interval[local]:
+  !xs s out s'.
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  EVERY (\i. MEM i bb.bb_instructions /\ i.inst_opcode = ASSIGN) xs /\
+  mm_flat_map_supply
+    (apply_memzero_inst_supply
+      (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
+        (scan_block_memzero dfg bb).mz_flushed)
+      (rep_map_of_groups bb.bb_instructions
+        (scan_block_memzero dfg bb).mz_flushed)) s xs = (out,s') ==>
+  out = xs /\ s' = s
+Proof
+  Induct_on `xs` >- simp[mm_flat_map_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  `!r. apply_memzero_inst_supply
+    (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed)
+    (rep_map_of_groups bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed) r h = ([h],r)` by
+    (irule mm_local_memzero_nonselected_unchanged >>
+     gvs[is_zero_store_def, is_calldatasize_copy_def]) >>
+  gvs[mm_flat_map_supply_def, AllCaseEqs()] >> metis_tac[]
+QED
+
 Theorem mm_local_zero_noninvoke_stop[local]:
   mm_local_zero_cut dfg is gs H n excluded pc t /\
   (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
