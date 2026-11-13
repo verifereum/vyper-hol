@@ -174,7 +174,7 @@ Theorem ptr_owner_out_projection[local]:
   ptr_owner_erases dyn births (out_prov PT tagged inst s') (out_prov PG numerical inst s') /\
   (!owner. out_prov PT tagged inst s' = SOME owner ==> owner IN FDOM births)
 Proof
-  strip_tac >> Cases_on `inst.inst_opcode = PARAM`
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> Cases_on `inst.inst_opcode = PARAM`
   >- (simp[out_prov_def] >>
       Cases_on `inst.inst_operands` >> simp[ptr_owner_erases_def] >>
       Cases_on `t` >> simp[ptr_owner_erases_def] >>
@@ -203,7 +203,7 @@ Theorem ptr_owner_step_projection:
    (!u. FLOOKUP numerical u <> NONE ==> FLOOKUP tagged u <> NONE)) ==>
   ptr_ledger_erases dyn births (step_prov PT tagged inst s') (step_prov PG numerical inst s')
 Proof
-  strip_tac >> drule_all ptr_owner_out_projection >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> drule_all ptr_owner_out_projection >>
   disch_then (qspec_then `s'` strip_assume_tac) >>
   simp[step_prov_def] >> irule ptr_owner_set_projection >> simp[]
 QED

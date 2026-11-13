@@ -172,7 +172,7 @@ Theorem ptr_tagged_step_projection[local]:
     !out b. inst.inst_outputs = [out] /\ lookup_var out s = SOME b ==> dyn <= w2n b) ==>
   ptr_ledger_erases dyn births (ptr_tagged_step token PT TG inst s) (step_prov PG G inst s)
 Proof
-  strip_tac >> Cases_on `inst.inst_opcode = ALLOCA`
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> Cases_on `inst.inst_opcode = ALLOCA`
   >- (simp[ptr_tagged_step_def, step_prov_def, out_prov_def] >>
       irule ptr_owner_set_projection >> simp[] >>
       Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >>
@@ -247,7 +247,7 @@ Theorem ptr_tagged_chrono_step_erasure[local]:
 Proof
   ho_match_mp_tac ptr_tagged_chrono_step_ind >> rpt conj_tac >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
-  simp[ptr_observe_def] >> strip_tac
+  simp[ptr_observe_def] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS)
   >- (simp[] >> irule ptr_tagged_step_projection >> fs[] >>
       rpt strip_tac >>
       gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(),
@@ -269,6 +269,57 @@ Proof
   Cases_on `h` >> gvs[]
 QED
 
+(* What ptr_tagged_chrono_step_erasure needs of a reachable observation:
+   by affine_pointer_ops, an ADD/SUB has at most one pointer operand, so an
+   operand with a site and a tagged operand are the same; a DALLOCA output
+   lies above the dynamic floor. *)
+Theorem ptr_reachable_step_premises[local]:
+  frame_reachable vs0 C stk PG G tn fn inst s /  ptr_discipline lo C vs0 /\ EVERY (. EVERY inst_wf (fn_insts f)) C.ctx_functions /  ptr_ledger_erases dyn births TG G ==>
+  (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN ==>
+    !u1 u2. MEM (Var u1) inst.inst_operands /\ MEM (Var u2) inst.inst_operands /\
+      FLOOKUP G u1 <> NONE /\ FLOOKUP TG u2 <> NONE ==> u1 = u2) /\
+  (inst.inst_opcode = DALLOCA ==> dyn_floor C vs0 <= w2n s.vs_fmp)
+Proof
+  strip_tac >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
+    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+  drule_all concretizePtrParamSupportTheory.ptr_frame_current_static >> strip_tac >>
+  `active_inst fn inst s` by
+    (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frame_reachable_cases] >> metis_tac[]) >>
+  `?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
+    (fs[contextCodegenRelTheory.active_inst_def] >> metis_tac[MEM_EL]) >>
+  `MEM inst (fn_insts fn)` by
+    (simp[fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `FLOOKUP G u2 <> NONE` by
+        (fs[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >>
+         qpat_x_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `u2` mp_tac) >>
+         qpat_x_assum `!v owner. _` (qspec_then `u2` mp_tac) >>
+         Cases_on `FLOOKUP TG u2` >>
+         gvs[concretizePtrPrefixLedgerTheory.ptr_owner_erases_def] >> gvs[FLOOKUP_DEF]) >>
+      `u1 IN fn_pv P fn /\ u2 IN fn_pv P fn` by
+        metis_tac[concretizePtrParamSupportTheory.ptr_static_support_def,
+          optionTheory.option_CASES] >>
+      `inst_wf inst` by (fs[EVERY_MEM] >> metis_tac[]) >>
+      `affine_pointer_ops fn (ptr_roots P fn)` by fs[EVERY_MEM, fn_ptr_ok_def] >>
+      Cases_on `inst.inst_opcode = ASSIGN`
+      >- (`?x. inst.inst_operands = [x]` by gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+          gvs[]) >>
+      `?x y. inst.inst_operands = [x; y]` by gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+      fs[affine_pointer_ops_def, LET_THM, GSYM fn_pv_def] >>
+      first_x_assum (qspecl_then [`bb`, `inst`, `x`, `y`] mp_tac) >>
+      gvs[] >> rpt strip_tac >> gvs[]) >>
+  strip_tac >>
+  `ctx_has_dalloca C` by (simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
+  `allocas_below_fmp s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `s.vs_initial_fmp = vs0.vs_initial_fmp` by
+    metis_tac[frameResolvedTraceTheory.frame_reachable_initial_fmp] >>
+  fs[dyn_floor_def, allocas_below_fmp_def] >> rfs[]
+QED
+
 Theorem ptr_source_ownership_erasure_invariant[local]:
   !vs0 C h a tokens registry births PT TG saved.
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved ==>
@@ -282,7 +333,75 @@ Theorem ptr_source_ownership_erasure_invariant[local]:
       ptr_ledger_erases dyn births TG a.po_prov /\
       ptr_saved_erases dyn births saved a.po_stack)
 Proof
-  cheat
+  ho_match_mp_tac ptr_source_ownership_ind >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> conj_tac
+      >- metis_tac[ptr_source_ownership_rules] >>
+      drule ptr_chrono_singleton_empty >> strip_tac >>
+      simp[ptr_params_erases_def, ptr_saved_erases_nil,
+        concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def,
+        concretizePtrPrefixLedgerTheory.ptr_owner_erases_def]) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `ptr_tagged_chrono_step C (HD tokens) a b PT TG saved PT' TG' saved'` >>
+  conj_asm1_tac >- metis_tac[ptr_source_ownership_rules] >>
+  `ptr_chrono_step C a b` by metis_tac[ptr_tagged_chrono_step_projection] >>
+  `ptr_source_birth_caches vs0 C h a tokens registry births` by
+    metis_tac[ptr_source_ownership_caches] >>
+  `frame_reachable vs0 C a.po_stack a.po_params a.po_prov a.po_taint a.po_fn
+     a.po_inst a.po_state` by
+    metis_tac[ptr_source_birth_caches_activations, ptr_source_activations_sound,
+      ptr_chrono_history_reachable, ptr_observation_reachable_def] >>
+  qmatch_goalsub_abbrev_tac `ptr_params_erases _ births' _ _` >>
+  `!owner site. FLOOKUP births owner = SOME site ==> FLOOKUP births' owner = SOME site` by
+    (simp[Abbr `births'`] >> rpt strip_tac >>
+     irule ptr_source_birth_caches_snoc_retained >> metis_tac[]) >>
+  `LENGTH b.po_stack = LENGTH a.po_stack ==>
+   !aid. FLOOKUP births' (HD tokens,aid) = FLOOKUP b.po_state.vs_allocas aid` by
+    (strip_tac >>
+     `ptr_source_birth_caches vs0 C (h ++ [b]) b (ptr_activation_tokens h a b tokens)
+        (ptr_activation_registry h a b registry) births'` by
+       metis_tac[ptr_source_ownership_caches] >>
+     drule_all ptr_source_birth_caches_active_lookup >>
+     simp[ptr_activation_tokens_def]) >>
+  conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `ptr_discipline _ _ _ /\ EVERY _ _ ==> _` mp_tac >>
+      impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+      `ptr_params_erases (dyn_floor C vs0) births' PT a.po_params /\
+       ptr_ledger_erases (dyn_floor C vs0) births' TG a.po_prov /\
+       ptr_saved_erases (dyn_floor C vs0) births' saved a.po_stack` by
+        metis_tac[ptr_params_erases_extend, ptr_ledger_erases_extend,
+          ptr_saved_erases_extend] >>
+      drule_all ptr_reachable_step_premises >> strip_tac >>
+      drule ptr_tagged_chrono_step_erasure >>
+      disch_then (qspecl_then [`dyn_floor C vs0`, `births'`] mp_tac) >>
+      impl_tac >- (rpt conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> fs[]) >>
+      simp[]) >>
+  strip_tac >> gen_tac >>
+  qpat_x_assum `~ctx_has_dalloca _ /\ ptr_discipline _ _ _ ==> _` mp_tac >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  `ptr_params_erases dyn births' PT a.po_params /\
+   ptr_ledger_erases dyn births' TG a.po_prov /\
+   ptr_saved_erases dyn births' saved a.po_stack` by
+    metis_tac[ptr_params_erases_extend, ptr_ledger_erases_extend,
+      ptr_saved_erases_extend] >>
+  `!u. FLOOKUP a.po_prov u <> NONE ==> FLOOKUP TG u <> NONE` by
+    (`!dyn. ptr_ledger_erases dyn births TG a.po_prov` by metis_tac[] >>
+     fs[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_every_dyn] >>
+     rpt strip_tac >> Cases_on `FLOOKUP TG u` >> gvs[]) >>
+  `a.po_inst.inst_opcode <> DALLOCA` by
+    (drule_all frameAllocationOwnershipTheory.frame_allocation_ownership >> strip_tac >>
+     `active_inst a.po_fn a.po_inst a.po_state` by
+       (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+        simp[Once frame_reachable_cases] >> metis_tac[]) >>
+     `MEM a.po_inst (fn_insts a.po_fn)` by
+       (gvs[contextCodegenRelTheory.active_inst_def, fn_insts_def,
+          venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+        metis_tac[MEM_EL]) >>
+     fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
+  drule ptr_tagged_chrono_step_erasure >>
+  disch_then (qspecl_then [`dyn`, `births'`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >- (disj2_tac >> first_assum ACCEPT_TAC) >> fs[]) >>
+  simp[]
 QED
 
 Theorem ptr_source_ownership_params_erases:
