@@ -18,6 +18,7 @@ Ancestors
   bodyPtrDefs intCallReturnMem stmtSimReturn bodySim
   internalReturnStackPtr internalReturnStorePtr internalReturnCountedPtr
   internalReturnStackSuffixPtr internalReturnMemorySuffixPtr wordAggregateReturnSemantics
+  internalReturnUnlockPtr internalReturnUnlockSuffixPtr
   compileEnv valueEncoding compileVyper loweringPosts ptrDiscipline
   fragGasPathPtr venomExecSemantics ctorReturnFrame
   bodyPtrBytestringBuiltinsEval returnValueTyped valueEncodingTyping
@@ -97,12 +98,17 @@ Theorem internal_return_direct_ptr:
     stmt_frag_ptr d ctx PG func cx lctx (intret_ptr_q func cenv cx ret_tv d)
       cenv' (stmt_env cenv' lctx ret_ty (Return eo)) (eval_stmt cx (Return eo))
       es
-(* TEMPORARILY CHEATED - the t16 internal return runs compile_return_unlock
-   before RET; this proof predates it and is reworked in the unlock port
-   (unlock step from sa to su, then the stack/memory suffix lemmas from su).
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac[stmt_frag_ptr_def] >> rpt gen_tac >> strip_tac >>
+  `return_unlock_state cenv' = return_unlock_state cenv /\
+   !nr nkey ut iv. cenv'.ce_nonreentrant = (nr,nkey,ut,iv) ==> ut` by
+    (`cenv'.ce_nonreentrant = cenv.ce_nonreentrant` by
+       (fs[same_frame_def] >>
+        qpat_x_assum `_ with <| ce_vars := _; ce_dynarray_capacity := _;
+          ce_var_type := _ |> = _` (mp_tac o Q.AP_TERM `\c. c.ce_nonreentrant`) >>
+        simp[]) >>
+     metis_tac[return_unlock_state_cong]) >>
   Cases_on `eo`
   >- (gvs[vyperTypeSystemTheory.type_stmt_def] >>
       `cenv'.ce_return_pc = SOME (PtrVar (Var rpc) rsz)` by
@@ -114,31 +120,44 @@ Proof
       simp[loweringPostsTheory.stmt_env_def, stmtLoweringTheory.declare_stmt_local_def,
            stmtLoweringTheory.compile_stmt_def,
            comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-      Cases_on `emit_inst RET [Var rpc] [] sa` >>
+      Cases_on `compile_return_unlock cenv' sa` >> rename1 `_ = (uu,su)` >>
+      Cases_on `uu` >> simp[] >>
+      Cases_on `emit_inst RET [Var rpc] [] su` >>
       rename1 `_ = (u,st)` >> Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
       `?pc. lookup_var rpc s0 = SOME pc` by
         fs[ret_pc_ok_def] >>
       `op_taint tn0 (Var rpc) = {}` by metis_tac[ghost_inv_def] >>
-      `gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 G0 tn0
-         (IntRet <| iret_values := []; iret_adopt_fmp := NONE |> s0)` by
-        (irule emit_ret_values_path_ptr >> simp[allocas_from_def] >>
-         qexistsl_tac [`[]`, `pc`, `rpc`, `sa`, `sb`] >>
-         simp[venomStateTheory.eval_operands_def]) >>
+      `stor_taint_ok cx tn0 s0` by metis_tac[ghost_inv_def] >>
+      `~s0.vs_call_ctx.cc_static` by
+        fs[exprLoweringPropsTheory.stmt_state_rel_def,
+           loweringStateRelDefsTheory.state_rel_def] >>
+      `?tm. gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 G0 tm
+         (IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
+           (return_unlock_state cenv' s0)) /\
+         stor_taint_ok cx tm (return_unlock_state cenv' s0)` by
+        (irule internal_return_none_unlock_path_ptr >> simp[] >> metis_tac[]) >>
+      qpat_x_assum `return_unlock_state cenv' = _`
+        (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
       rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
       simp[gas_summary_ptr_at_def, Once vyperInterpreterTheory.evaluate_def,
            vyperStateTheory.raise_def] >>
-      qexistsl_tac [`INR (ReturnException NoneV)`, `es`, `G0`, `tn0`,
-        `IntRet <| iret_values := []; iret_adopt_fmp := NONE |> s0`] >>
-      simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def, intret_ptr_q_def,
-           intret_q_def, loweringStateRelDefsTheory.result_rel_def] >>
+      qexistsl_tac [`INR (ReturnException NoneV)`, `es`, `G0`, `tm`,
+        `IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
+           (return_unlock_state cenv s0)`] >>
+      simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def, intret_ptr_q_def] >>
       gen_tac >> disj2_tac >>
-      simp[loweringStateRelDefsTheory.intret_vals_match_def] >>
-      conj_tac
-      >- (simp[loweringStateRelDefsTheory.state_rel_gas_obs] >>
-          irule constructor_exit_state_rel >>
-          qexists_tac `cenv'` >> fs[exprLoweringPropsTheory.stmt_state_rel_def,
-            loweringStateRelDefsTheory.state_rel_gas_obs]) >>
-      metis_tac[ghost_inv_def]) >>
+      irule intret_q_unlock_intro >>
+      simp[loweringStateRelDefsTheory.result_rel_def,
+           loweringStateRelDefsTheory.intret_vals_match_def] >>
+      conj_tac >- simp[returns_stack_count_def] >>
+      qmatch_goalsub_abbrev_tac `state_rel _ _ _ es1 _` >>
+      `es1 = (es with scopes := []) with gas_obs := tail` by
+        simp[Abbr `es1`] >>
+      pop_assum (fn th => pure_rewrite_tac[th]) >>
+      pure_rewrite_tac[loweringStateRelDefsTheory.state_rel_gas_obs] >>
+      irule constructor_exit_state_rel >>
+      qexists_tac `cenv'` >> fs[exprLoweringPropsTheory.stmt_state_rel_def,
+        loweringStateRelDefsTheory.state_rel_gas_obs]) >>
   gns[] >>
   `cenv'.ce_return_pc = SOME (PtrVar (Var rpc) rsz)` by
     (fs[same_frame_def] >>
@@ -205,6 +224,9 @@ Proof
   `?pc. lookup_var rpc t = SOME pc` by
     metis_tac[ghost_inv_def, ret_pc_ok_def] >>
   `stor_taint_ok cx tn t` by metis_tac[ghost_inv_def] >>
+  `~t.vs_call_ctx.cc_static` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >>
   `not_fresh_at sm rpc` by
     (mp_tac (Q.SPECL [`cenv''`, `ret_ty`, `x`, `sa`]
        (cj 2 stmtLoweringMonoTheory.ci_mono_compile_expr_sa)) >>
@@ -226,16 +248,20 @@ Proof
           Cases_on `ret_ty` >> gvs[is_word_type_def, returns_stack_count_def]) >>
       `?w. eval_operand val_op t = SOME w` by
         metis_tac[expr_val_rel_def] >>
-      drule internal_return_stack_suffix_path_ptr >>
+      drule internal_return_stack_unlock_path_ptr >>
       simp[word_type_elem_types] >>
       disch_then drule_all >> strip_tac >>
       qpat_x_assum `!PG' G' D. _`
         (qspecl_then [`PG`, `G`, `cx_dead cx`] strip_assume_tac) >>
-      rename1 `gas_path_ptr _ _ _ _ _ _ _ _ _ H tm (IntRet _ u)` >>
+      rename1 `gas_path_ptr _ _ _ _ _ _ _ _ _ H tm
+        (IntRet _ (return_unlock_state _ u))` >>
+      qpat_x_assum `return_unlock_state _ = return_unlock_state cenv`
+        (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
       rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
       simp[gas_summary_ptr_at_def, vyperStateTheory.raise_def] >>
       qexistsl_tac [`INR (ReturnException v)`, `ee0 with gas_obs := []`,
-        `H`, `tm`, `IntRet <|iret_values := [w]; iret_adopt_fmp := NONE|> u`] >>
+        `H`, `tm`, `IntRet <|iret_values := [w]; iret_adopt_fmp := NONE|>
+          (return_unlock_state cenv u)`] >>
       simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def] >>
       gen_tac >> disj2_tac >>
       `d = NONE` by
@@ -244,8 +270,12 @@ Proof
       `state_rel func cenv cx (ee0 with scopes := []) t` by
         (irule constructor_exit_state_rel >> qexists_tac `cenv''` >>
          fs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
-      simp[intret_ptr_q_def, intret_q_def, loweringStateRelDefsTheory.result_rel_def] >>
-      reverse conj_tac >- fs[stor_taint_ok_def] >>
+      simp[intret_ptr_q_def] >>
+      TRY (reverse conj_tac >- fs[]) >>
+      irule intret_q_unlock_intro >>
+      simp[loweringStateRelDefsTheory.result_rel_def] >>
+      conj_tac
+      >- (Cases_on `ret_ty` >> gvs[is_word_type_def, returns_stack_count_def]) >>
       conj_tac
       >- (qpat_x_assum `state_rel func cenv _ _ t` mp_tac >>
           simp[loweringStateRelDefsTheory.state_rel_gas_obs, loweringStateRelDefsTheory.state_rel_def,
@@ -360,15 +390,18 @@ Proof
          qexists_tac `k` >> simp[]) >>
       qpat_x_assum `val_op = Var src` SUBST_ALL_TAC >>
       drule (Q.INST [`n` |-> `k`, `len` |-> `len`, `tv` |-> `ret_tv`, `s` |-> `t`]
-        (SPEC_ALL internal_return_memory_suffix_path_ptr)) >>
+        (SPEC_ALL internal_return_memory_unlock_path_ptr)) >>
       disch_then (mp_tac o Q.INST [`d` |-> `bw`, `cap` |-> `slot`,
         `D` |-> `cx_dead cx`] o SPEC_ALL) >>
-      (impl_tac >- gvs[]) >>
+      (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[])) >>
       strip_tac >> rename1 `typed_copy_state_frame sm (w2n bw) k t u` >>
+      qpat_x_assum `return_unlock_state _ = return_unlock_state cenv`
+        (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
       rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
       simp[gas_summary_ptr_at_def, vyperStateTheory.raise_def] >>
       qexistsl_tac [`INR (ReturnException v)`, `ee0 with gas_obs := []`,
-        `H`, `tm`, `IntRet <|iret_values := []; iret_adopt_fmp := NONE|> u`] >>
+        `H`, `tm`, `IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
+          (return_unlock_state cenv u)`] >>
       simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def] >>
       gen_tac >> disj2_tac >>
       `state_rel func cenv cx (ee0 with scopes := []) t` by
@@ -378,7 +411,7 @@ Proof
       qpat_x_assum `state_rel func cenv _ _ t` mp_tac >>
       qpat_x_assum `typed_copy_state_frame _ _ _ t u` mp_tac >>
       qpat_x_assum `!m. _ ==> val_in_memory ret_tv v (w2n bw) m` mp_tac >>
-      qpat_x_assum `stor_taint_ok cx tm u` mp_tac >>
+      qpat_x_assum `stor_taint_ok cx tm _` mp_tac >>
       `~cenv.ce_is_ctor` by metis_tac[same_frame_is_ctor] >>
       qpat_x_assum `~cenv.ce_is_ctor` mp_tac >>
       qpat_x_assum `cenv.ce_module = NONE` mp_tac >>
@@ -386,11 +419,13 @@ Proof
       qpat_x_assum `cenv.ce_returns_count = 0` mp_tac >>
       qpat_x_assum `d = SOME (bw,cap)` mp_tac >>
       rpt (pop_assum kall_tac) >> rpt disch_tac >>
-      simp[intret_ptr_q_def, intret_mem_q_def, intret_q_def,
-        loweringStateRelDefsTheory.result_rel_def] >>
+      asm_simp_tac (srw_ss()) [intret_ptr_q_def, intret_mem_q_def,
+        return_unlock_state_memory] >>
       reverse conj_tac
       >- metis_tac[mem_agree_outside_def] >>
-      simp[loweringStateRelDefsTheory.intret_vals_match_def] >>
+      irule intret_q_unlock_intro >>
+      simp[loweringStateRelDefsTheory.result_rel_def,
+        loweringStateRelDefsTheory.intret_vals_match_def] >>
       qpat_x_assum `state_rel func cenv _ _ t` mp_tac >>
       qpat_x_assum `typed_copy_state_frame _ _ _ t u` mp_tac >>
       simp[typedMemoryCopyTheory.typed_copy_state_frame_def,
@@ -409,22 +444,23 @@ Proof
          drule bytestring_memory_header_bound >>
          disch_then (qspec_then `cenv''` mp_tac) >> simp[]) >>
       `expr_type x = ret_ty` by metis_tac[] >>
-      `compile_store_memory cenv'' val_op (Var dst) ret_ty (expr_type x) sm = ((),sm)` by
+      Cases_on `compile_return_unlock cenv'' sm` >> rename1 `_ = (uu,su)` >>
+      Cases_on `uu` >>
+      `compile_store_memory cenv'' val_op (Var dst) ret_ty ret_ty su = ((),su)` by
         metis_tac[literal_zero_store_identity] >>
-      `emit_inst RET [Var rpc] [] sm = ((),sb)` by
+      `emit_inst RET [Var rpc] [] su = ((),sb)` by
         (qpat_x_assum `compile_internal_return_from_env _ _ _ _ _ _ = _` mp_tac >>
-         simp[stmtLoweringTheory.compile_internal_return_from_env_def,
-           stmtLoweringTheory.compile_internal_return_def,
+         asm_simp_tac (srw_ss()) [stmtLoweringTheory.compile_internal_return_from_env_def,
+           stmtLoweringTheory.compile_internal_return_def, LET_THM,
            compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def,
-           compileEnvTheory.comp_return_def] >>
-         qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
-         simp[]) >>
-      `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 G tn
-        (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> t)` by
-        (irule emit_ret_values_path_ptr >>
-         simp[ptrDisciplineTheory.allocas_from_def] >>
-         qexistsl_tac [`[]`, `pc`, `rpc`, `sm`, `sb`] >>
-         simp[venomStateTheory.eval_operands_def, ptrDisciplineTheory.allocas_from_def]) >>
+           compileEnvTheory.comp_return_def]) >>
+      `?tm. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 G tm
+         (IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
+           (return_unlock_state cenv'' t)) /\
+         stor_taint_ok cx tm (return_unlock_state cenv'' t)` by
+        (irule internal_return_none_unlock_path_ptr >> simp[] >> metis_tac[]) >>
+      qpat_x_assum `return_unlock_state _ = return_unlock_state cenv`
+        (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
       `type_memory_size ret_tv = 0 /\ val_wf ret_tv v` by
         metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
       `!m. mem_agree_outside tn.t_mem t.vs_memory m ==>
@@ -436,14 +472,28 @@ Proof
          irule valueEncodingPropsTheory.val_in_memory_relocate >>
          simp[] >> qexistsl_tac [`m`, `0`, `w2n a`] >>
          simp[valueEncodingDefsTheory.mem_bytes_at_def]) >>
+      `!m. val_in_memory ret_tv v (w2n bw) m` by
+        (gen_tac >> irule valueEncodingPropsTheory.val_in_memory_relocate >>
+         simp[] >> qexistsl_tac [`t.vs_memory`, `0`, `w2n bw`] >>
+         simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
+         first_x_assum irule >> simp[mem_agree_outside_def]) >>
       `state_rel func cenv cx (ee0 with scopes := []) t` by
         (irule constructor_exit_state_rel >> qexists_tac `cenv''` >>
          fs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
       `cenv.ce_returns_count = 0` by metis_tac[] >>
+      `!g. state_rel func cenv cx (ee0 with <|scopes := []; gas_obs := g|>) t` by
+        (gen_tac >>
+         `ee0 with <|scopes := []; gas_obs := g|> =
+            (ee0 with scopes := []) with gas_obs := g` by simp[] >>
+         pop_assum (fn th => pure_rewrite_tac[th]) >>
+         pure_rewrite_tac[loweringStateRelDefsTheory.state_rel_gas_obs] >>
+         first_assum ACCEPT_TAC) >>
+      qpat_x_assum `!g. state_rel func cenv _ _ t` mp_tac >>
+      qpat_x_assum `!m. val_in_memory ret_tv v (w2n bw) m` mp_tac >>
       qpat_x_assum `state_rel func cenv _ _ t` mp_tac >>
       qpat_x_assum `gas_path_ptr _ 0 _ _ _ _ _ _ _ _ _ _` mp_tac >>
       qpat_x_assum `!m. _ ==> val_in_memory ret_tv v (w2n bw) m` mp_tac >>
-      qpat_x_assum `stor_taint_ok cx tn t` mp_tac >>
+      qpat_x_assum `stor_taint_ok cx tm _` mp_tac >>
       qpat_x_assum `cenv.ce_returns_count = 0` mp_tac >>
       qpat_x_assum `d = SOME (bw,cap)` mp_tac >>
       qpat_x_assum `cenv.ce_module = NONE` mp_tac >>
@@ -452,19 +502,19 @@ Proof
       rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
       simp[NoAsms, gas_summary_ptr_at_def, vyperStateTheory.raise_def] >>
       qexistsl_tac [`INR (ReturnException v)`, `ee0 with gas_obs := []`,
-        `G`, `tn`, `IntRet <|iret_values := []; iret_adopt_fmp := NONE|> t`] >>
+        `G`, `tm`, `IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
+          (return_unlock_state cenv t)`] >>
       simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def] >>
       gen_tac >> disj2_tac >>
-      simp[intret_ptr_q_def, intret_mem_q_def, intret_q_def,
-        loweringStateRelDefsTheory.result_rel_def, loweringStateRelDefsTheory.intret_vals_match_def,
+      asm_simp_tac (srw_ss()) [intret_ptr_q_def, intret_mem_q_def,
+        return_unlock_state_memory] >>
+      rpt conj_tac >>
+      TRY (irule intret_q_unlock_intro) >>
+      simp[loweringStateRelDefsTheory.result_rel_def, loweringStateRelDefsTheory.intret_vals_match_def,
         loweringStateRelDefsTheory.state_rel_gas_obs] >>
       `val_in_memory ret_tv v (w2n bw) t.vs_memory` by
         (first_x_assum irule >> simp[mem_agree_outside_def]) >>
-      qpat_x_assum `state_rel func cenv _ _ t` mp_tac >>
-      simp[loweringStateRelDefsTheory.state_rel_def, loweringStateRelDefsTheory.storage_rel_def,
-        loweringStateRelDefsTheory.transient_rel_def, loweringStateRelDefsTheory.accounts_rel_def,
-        loweringStateRelDefsTheory.immutables_rel_def, loweringStateRelDefsTheory.logs_rel_def] >>
-      metis_tac[])) >>
+      asm_simp_tac (srw_ss()) [])) >>
   `?ets. ets = (case ret_ty of TupleT ts => ts | StructT ns =>
        MAP (FST o SND) (get_struct_fields cenv''.ce_struct_fields (nsid_to_string ns))
        | _ => []) /\ ets <> [] /\ EVERY is_word_type ets /\
@@ -552,33 +602,43 @@ Proof
   `?u H tm.
     gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 H tm
       (IntRet <|iret_values := (if ets = [] then [0w] else tuple_words cenv'' a ets 0 t.vs_memory);
-                iret_adopt_fmp := NONE|> u) /\
+                iret_adopt_fmp := NONE|> (return_unlock_state cenv'' u)) /\
+    stor_taint_ok cx tm (return_unlock_state cenv'' u) /\
     u.vs_memory = t.vs_memory /\ u.vs_allocas = t.vs_allocas /\
     u.vs_accounts = t.vs_accounts /\ u.vs_transient = t.vs_transient /\
     u.vs_call_ctx = t.vs_call_ctx /\
     state_frame u = state_frame (t with vs_inst_idx := u.vs_inst_idx) /\
-    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
-    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\ tm.t_imm = tn.t_imm /\
     (!p. not_fresh_at sm p ==>
       lookup_var p u = lookup_var p t /\ FLOOKUP H p = FLOOKUP G p /\
       op_taint tm (Var p) = op_taint tn (Var p))` by
-    (irule internal_return_stack_suffix_path_ptr >>
-     simp[] >> conj_tac >- metis_tac[listTheory.LENGTH_NIL, arithmeticTheory.NOT_ZERO_LT_ZERO] >>
-     qexistsl_tac [`pc`, `rpc`, `sb`, `src`, `expr_type x`, `ret_ty`] >>
-     simp[] >> conj_tac >- gvs[] >>
-     qpat_x_assum `!i. _ ==> ptr_covers _ _ _ _ _` mp_tac >>
-     qpat_x_assum `!i. _ ==> _ /\ !j. _` mp_tac >>
-     qpat_x_assum `ets = _` (fn th => rewrite_tac[GSYM th]) >>
-     rpt (pop_assum kall_tac) >>
-     rpt strip_tac >>
-     qpat_x_assum `!i. _ ==> _ /\ !j. _` (qspec_then `i` mp_tac) >>
-     simp[] >> metis_tac[]) >>
+    (mp_tac (Q.GENL [`ce`, `ty`, `sty`, `op`, `rpc`, `sa`, `sb`, `ets`, `func`,
+        `ctx`, `s`, `pc`, `tn`, `w`, `src`, `bw`, `G`, `D`, `PG`, `cx`]
+        internal_return_stack_unlock_path_ptr) >>
+     disch_then (qspecl_then [`cenv''`, `ret_ty`, `expr_type x`, `Var src`,
+       `rpc`, `sm`, `sb`, `ets`, `func`, `ctx`, `t`, `pc`, `tn`, `0w`, `src`,
+       `a`, `G`, `cx_dead cx`, `PG`, `cx`] mp_tac) >>
+     impl_tac
+     >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+         TRY (gvs[] >> NO_TAC) >>
+         rpt strip_tac >> TRY (first_assum ACCEPT_TAC) >>
+         qpat_x_assum `!i. _ ==> ptr_covers _ _ _ _ _` mp_tac >>
+         qpat_x_assum `!i. _ ==> _ /\ !j. _` mp_tac >>
+         qpat_x_assum `ets = _` (fn th => rewrite_tac[GSYM th]) >>
+         rpt (pop_assum kall_tac) >>
+         rpt strip_tac >>
+         qpat_x_assum `!i. _ ==> _ /\ !j. _` (qspec_then `i` mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     disch_then (qx_choosel_then [`u`, `H`, `tm`] strip_assume_tac) >>
+     qexistsl_tac [`u`, `H`, `tm`] >> asm_rewrite_tac[]) >>
+  qpat_x_assum `return_unlock_state _ = return_unlock_state cenv`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
   qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` (assume_tac o SRULE[]) >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   simp[gas_summary_ptr_at_def, vyperStateTheory.raise_def] >>
   qexistsl_tac [`INR (ReturnException v)`, `ee0 with gas_obs := []`,
     `H`, `tm`, `IntRet <|iret_values := tuple_words cenv'' a ets 0 t.vs_memory;
-                        iret_adopt_fmp := NONE|> u`] >>
+                        iret_adopt_fmp := NONE|> (return_unlock_state cenv u)`] >>
   simp[fragExecTheory.exit_result_def, stmt_exit_ptr_def] >>
   conj_tac >- gvs[] >>
   gen_tac >> disj2_tac >>
@@ -591,8 +651,11 @@ Proof
   `state_rel func cenv cx (ee0 with scopes := []) t` by
     (irule constructor_exit_state_rel >> qexists_tac `cenv''` >>
      fs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
-  simp[intret_ptr_q_def, intret_q_def, loweringStateRelDefsTheory.result_rel_def] >>
-  reverse conj_tac >- fs[stor_taint_ok_def] >>
+  simp[intret_ptr_q_def] >>
+  TRY (reverse conj_tac >- fs[]) >>
+  irule intret_q_unlock_intro >>
+  simp[loweringStateRelDefsTheory.result_rel_def] >>
+  conj_tac >- gvs[] >>
   conj_tac
   >- (qpat_x_assum `state_rel func cenv _ _ t` mp_tac >>
       qpat_x_assum `state_frame u = _` mp_tac >>
@@ -607,10 +670,6 @@ Proof
       metis_tac[]) >>
   gvs[]
 
-QED
-*)
-Proof
-  cheat
 QED
 
 (* RESIDUAL (held): as s3-mem's held internal_return_widened_mem.  A

@@ -3,12 +3,24 @@ Theory internalReturnStackSuffixPtr
 Ancestors internalReturnStackPtr internalReturnCountedPtr stmtLowering
   exprLoweringProps compileEnv fragGasPathPtr stateFrame
 
-(* FALSE on t16 after compile_return_unlock; restated from su in the unlock port.
-   compile_internal_return_from_env now runs compile_return_unlock (a
-   TSTORE/SSTORE of the nonreentrant key) before RET, so the storage,
-   transient and taint frame conclusions below no longer hold.
+Theorem compile_load_tuple_elements_insts_length[local]:
+  !tys cenv base off sa elems sb.
+    compile_load_tuple_elements cenv base tys off sa = (elems,sb) ==>
+    LENGTH sa.cs_current_insts <= LENGTH sb.cs_current_insts
+Proof
+  Induct >>
+  rw[compile_load_tuple_elements_def, comp_return_def, comp_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac emit_op_extends >> res_tac >>
+  qpat_x_assum `LENGTH _ <= LENGTH _` mp_tac >>
+  rpt (qpat_x_assum `_.cs_current_insts = _`
+    (mp_tac o AP_TERM ``LENGTH : instruction list -> num``)) >>
+  simp[]
+QED
+
 Theorem internal_return_stack_suffix_path_ptr:
-  compile_internal_return_from_env ce ty sty op (Var rpc) sa = ((),sb) /\
+  compile_internal_return_from_env ce ty sty op (Var rpc) sa0 = ((),sb) /\
+  compile_return_unlock ce sa0 = ((),sa) /\
   (!off sz. ce.ce_return_buf <> SOME (MemLoc off sz)) /\
   0 < ce.ce_returns_count /\
   ets = (case ty of TupleT ts => ts | StructT ns =>
@@ -35,7 +47,7 @@ Theorem internal_return_stack_suffix_path_ptr:
         else tuple_words ce bw ets 0 s.vs_memory); iret_adopt_fmp := NONE |> t) /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
-    t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_call_ctx = s.vs_call_ctx /\ s.vs_inst_idx <= t.vs_inst_idx /\
     state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
@@ -48,7 +60,8 @@ Proof
     ty sty ets NONE sa = ((),sb)` by
     (qpat_x_assum `compile_internal_return_from_env _ _ _ _ _ _ = _` mp_tac >>
      Cases_on `ce.ce_return_buf` >>
-     simp[compile_internal_return_from_env_def, comp_bind_def, comp_return_def] >>
+     asm_simp_tac (srw_ss()) [compile_internal_return_from_env_def,
+       comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
      TRY (rename1 `ce.ce_return_buf = SOME loc` >> Cases_on `loc`) >>
      fs[compile_internal_return_def, comp_bind_def, comp_return_def] >>
      Cases_on `ty` >> fs[]) >>
@@ -80,8 +93,9 @@ Proof
     (irule emit_ret_values_path_ptr >>
      simp[ptrDisciplineTheory.allocas_from_def] >>
      qexistsl_tac [`elems`, `pc`, `rpc`, `sm`, `sb`] >> simp[]) >>
+  `s.vs_inst_idx <= t.vs_inst_idx` by
+    metis_tac[compile_load_tuple_elements_insts_length] >>
   qexistsl_tac [`t`, `H`, `tm`] >> simp[] >>
   conj_tac >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_0] >>
   gvs[stateFrameTheory.state_frame_def, venomStateTheory.venom_state_component_equality]
 QED
-*)
