@@ -22,7 +22,7 @@ QED
 
 Theorem annassign_memory_rhs_layout_ptr:
  !ctx func c cx e es ea eb s0 es1 v op s G tn etv typ tyv.
- expr_post ctx func c cx e es ea eb s0 es1 v op s /\
+ expr_post H ctx func c cx e es ea eb s0 es1 v op s /\
  lower_value compile_expr c (expr_type e) e ea = (op,eb) /\
  local_ptrs_reserved c ea /\
  evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\

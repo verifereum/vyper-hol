@@ -18,7 +18,7 @@ Theorem log_data_prepare_run_mem:
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand srcbuf.buf_operand ei prepared = (out,end_st) /\
   fn_has_code prepared end_st func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce source_st /\
   fresh_vars_wrt limit_st s /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   LIST_REL (\arg v. log_arg_rel ce cx sa source_st es s arg v /\
@@ -43,7 +43,7 @@ Theorem log_data_prepare_run_mem:
     mem_bytes_at db (LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs))) actual.vs_memory =
       enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)))) /\
-    stmt_state_rel ctx func ce cx es actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
     db < dimword (:256) /\
     LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)) < dimword (:256) /\
     (!op w. abi_decoder_operand_live source_st.cs_next_var op /\

@@ -213,7 +213,7 @@ Proof
 QED
 
 Theorem ifexp_materialize_store_inv:
-  ghost_inv d ce cx es G tn s /\ local_ptrs_reserved ce sa /\
+  ghost_inv H d ce cx es G tn s /\ local_ptrs_reserved ce sa /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   eval_operand addr s = SOME a /\ eval_operand value s = SOME w /\
@@ -222,7 +222,7 @@ Theorem ifexp_materialize_store_inv:
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) /\ lookup_var p s = SOME v ==>
     val_wf entry.type entry.value /\
     (w2n v + type_memory_size entry.type <= w2n a \/ w2n a+32 <= w2n v)) ==>
-  ghost_inv d ce cx es
+  ghost_inv H d ce cx es
     (step_prov PG G (mk_inst id MSTORE [addr;value] []) (mstore (w2n a) w s))
     (step_taint (mk_inst id MSTORE [addr;value] []) s (mstore (w2n a) w s) tn)
     (mstore (w2n a) w s)
@@ -262,10 +262,10 @@ QED
 Theorem ifexp_materialize_load_inv:
   MEM opc [SLOAD;TLOAD;DLOAD] /\ eval_operand arg s = SOME a /\
   (!x. not_fresh_at sa x ==> x <> out) /\
-  ghost_inv d ce cx es G tn s /\ local_ptrs_reserved ce sa /\
+  ghost_inv H d ce cx es G tn s /\ local_ptrs_reserved ce sa /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-  ghost_inv d ce cx es
+  ghost_inv H d ce cx es
     (step_prov PG G (mk_inst id opc [arg] [out]) (update_var out w s))
     (step_taint (mk_inst id opc [arg] [out]) s (update_var out w s) tn)
     (update_var out w s)

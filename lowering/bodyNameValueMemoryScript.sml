@@ -59,19 +59,25 @@ Theorem compile_name_body_vv_sim_mem:
     expr_vv_sim_mem ctx func ce cx ty (Name ann id) es
 Proof
   rpt strip_tac >> simp[expr_vv_sim_mem_def] >> rpt strip_tac >>
-  drule_all body_name_source_region >> strip_tac >>
+  `?entry. lookup_scopes id es.scopes = SOME entry` by
+    (gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+     drule_all well_typed_Name_lookup >> metis_tac[]) >>
+  `?p sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
   `ce.ce_var_type id = SOME ann` by
     gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
   drule compile_name_value_ptr >>
   disch_then (qspecl_then [`ty`, `sa`, `ann`] assume_tac) >> gvs[] >>
-  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INL (PlaceR (MemoryPlace id []))`, `es`, `OK s0`] >>
   conj_tac
   >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_mem_rules,
           Once evaluate_def, bind_def, get_scopes_def, return_def,
           type_check_def, assert_def, check_def, ignore_bind_def] >>
-  disj1_tac >> simp[] >> conj_tac
+  disj1_tac >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  drule_all body_name_source_region >> strip_tac >> gvs[]
   >- (irule name_value_post >> simp[]) >>
   simp[vyperASTTheory.expr_type_def, exprLoweringTheory.lowered_value_type_def] >>
   irule name_vv_store_bound >> simp[] >> qexists_tac `sz` >> simp[]

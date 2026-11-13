@@ -8,6 +8,7 @@ Ancestors
   stmtSimForced gasSummary gasOutcome vyperState exprLowering exprSimUnwrap
   valueCopyBytes fragGasMode fragGasPath gasSummaryCompose vyperInterpreter
   exprSimDefs loweringPosts bodyMemTbConvertDynamicScalar
+  gasStorage vyperStorageTrace vyperStorageFootprint
 
 Theorem dynamic_convert_mem_layout:
   lower_value compile_expr cenv ty (TypeBuiltin ann Convert dst [e]) sa = (op,sb) /\
@@ -59,7 +60,9 @@ Theorem dynamic_read_convert_summary[local]:
      lowered_value_type cenv e = expr_type e) /\
   eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) /\ ee.gas_obs = [] /\
   gas_marked_exec T (ctx,func) (read_result cx tv) (ee,t) [] (INL v) ee (OK u) /\
-  expr_post ctx func cenv cx e es sa s1 s0 ee v x u /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     expr_post H ctx func cenv cx e es sa s1 s0 ee v x u) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
   alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
   u.vs_current_bb = s1.cs_current_bb /\
   u.vs_inst_idx = LENGTH s1.cs_current_insts /\
@@ -76,12 +79,14 @@ Theorem dynamic_read_convert_summary[local]:
   gas_summary_at T (ctx,func) []
     (bind (read_result cx tv) (\v ee. (convert_result cx (expr_type e) ann v,ee)))
     (ee,t)
-    (\res fin ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
+    (\res fin ss. !H. valid_horizon cx st0 H fin.storage_trace ==>
+      ?v. res = INL v /\
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next)
-    (\res fin out. expr_exit res out)
+    (\res fin out. !H. valid_horizon cx st0 H fin.storage_trace ==>
+      expr_exit res out)
 Proof
   strip_tac >>
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
@@ -101,22 +106,24 @@ Proof
                expr_body_pre_gas_obs]) >>
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-  `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
+  `alloca_inv u` by
+    (qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     rewrite_tac[expr_post_def, stmt_state_rel_def] >> strip_tac >>
+     first_assum ACCEPT_TAC) >>
+  irule (Q.INST [`v` |-> `v`, `u` |-> `u`] convert_read_summary_bind) >>
+  simp[] >>
   qpat_assum `ee with gas_obs := [] = ee` (fn th =>
-    drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    drule_at (Pat `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
       (Q.INST [`t` |-> `ann`, `ee` |-> `ee`] dynamic_continuation_summary_mem
        |> REWRITE_RULE [th])) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
   disch_then (drule_at (Pat `well_formed_type _ _`)) >>
   disch_then (qspecl_then [`sb`, `op`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >>
-  rewrite_tac[gas_summary_at_def] >> strip_tac >>
-  qexistsl_tac [`res`,`es_end`,`r`] >>
-  (conj_tac >-
-    (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
-            |> REWRITE_RULE [APPEND_NIL]) >>
-     goal_assum (drule_at Any) >>
-     simp[evaluation_state_component_equality] >> gvs[]) >> gvs[])
+  simp[]
 QED
 
 Theorem dynamic_vv_convert_summary[local]:
@@ -131,7 +138,9 @@ Theorem dynamic_vv_convert_summary[local]:
   unwrap_value cenv vv sm = (x,s1) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sm s1 func /\ fn_inst_ids_distinct func /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv vv t /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func cenv cx e es sa sm s0 ee tv vv t) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
   vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv t /\
   alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
@@ -146,12 +155,14 @@ Theorem dynamic_vv_convert_summary[local]:
   gas_summary_at T (ctx,func) []
     (bind (read_result cx tv) (\v ee. (convert_result cx (expr_type e) ann v,ee)))
     (ee,t)
-    (\res fin ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
+    (\res fin ss. !H. valid_horizon cx st0 H fin.storage_trace ==>
+      ?v. res = INL v /\
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next)
-    (\res fin out. expr_exit res out)
+    (\res fin out. !H. valid_horizon cx st0 H fin.storage_trace ==>
+      expr_exit res out)
 Proof
   strip_tac >>
   `post_value_type cenv e = expr_type e` by
@@ -168,15 +179,13 @@ Proof
     (gen_tac >> strip_tac >>
      drule_at (Pat `evaluate_type _ _ = SOME _`) expr_body_pre_copy_ok >>
      simp[] >> disch_then irule >> metis_tac[is_bytestring_word_type]) >>
+  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
   drule_at (Pat `unwrap_value _ _ _ = _`)
-    bodyMemTbConvertSourceUnwrapTheory.convert_unwrap_value_marked_read_mem_window >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+    bodyMemTbConvertSourceUnwrapTheory.convert_unwrap_value_marked_read_mem_horizons >>
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-  drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`) dynamic_read_convert_summary >>
-  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `well_formed_type _ _`)) >>
-  disch_then (qspecl_then [`sb`, `op`, `gs`] mp_tac) >>
+  `?H. valid_horizon cx st0 H ee.storage_trace` by metis_tac[] >>
+  mp_tac dynamic_read_convert_summary >>
   (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
 QED
 
@@ -209,26 +218,39 @@ Proof
     metis_tac[expr_body_pre_vv_gas_admissible] >>
   qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_vv_sim_mem_def] >>
-  disch_then (qspecl_then [`sa`, `sm`, `vv`, `s0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `vv`, `s0`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE simp[]))) >>
+  strip_tac >>
   rewrite_tac[eval_expr_convert_action, bind_assoc] >>
-  irule forced_vv_then_outcome >>
-  conj_tac >- (rpt strip_tac >> BETA_TAC >>
-    metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
-  qexists_tac `\tv ee u.
-    vv_post ctx func cenv cx e es sa sm s0 ee tv vv u /\
+  irule forced_vv_then_outcome >> rpt conj_tac
+  >~ [`storage_trace_frame _`]
+  >- (rpt gen_tac >> TRY BETA_TAC >>
+      MATCH_ACCEPT_TAC convert_read_continuation_frame)
+  >~ [`expr_exit (INR _) _`]
+  >- (rpt strip_tac >> TRY BETA_TAC >>
+      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+  qexists_tac `\H tv ee u.
+    vv_post H ctx func cenv cx e es sa sm s0 ee tv vv u /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv u /\
     u.vs_current_bb = sm.cs_current_bb /\
     u.vs_inst_idx = LENGTH sm.cs_current_insts /\
     alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next` >>
-  reverse conj_tac >- simp[] >>
+  reverse conj_tac >- (TRY BETA_TAC >> (first_assum ACCEPT_TAC ORELSE simp[])) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
-
-  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) dynamic_vv_convert_summary >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       vv_post H ctx func cenv cx e es sa sm s0 ee tv vv t` by
+    metis_tac[] >>
+  `vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv t /\
+   t.vs_current_bb = sm.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+   alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` by
+    (qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+     metis_tac[]) >>
+  drule_at (Pat `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    dynamic_vv_convert_summary >>
   disch_then (drule_at (Pat `well_formed_type _ _`)) >>
   disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
   disch_then (qspecl_then [`sb`, `op`, `gs`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >>
   simp[gas_summary_at_def, gas_marked_exec_def] >> metis_tac[]
 QED
-

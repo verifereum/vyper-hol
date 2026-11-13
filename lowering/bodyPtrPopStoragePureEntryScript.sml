@@ -7,10 +7,10 @@ Ancestors
   loweringPosts venomState ptrDiscipline exprLoweringProps bodyPtrDefs
 
 Theorem pop_storage_live_agree:
-  storage_agree (storage_dead cx tr st) st rt /\
-  storage_read_live cx tr st slot tv /\
+  storage_agree (storage_dead H tr st) st rt /\
+  storage_read_live H tr st slot tv /\
   w2n slot + type_slot_size tv <= dimword(:256) ==>
-  storage_read_live cx tr rt slot tv
+  storage_read_live H tr rt slot tv
 Proof
   strip_tac >>
   drule storage_agree_storage_dead >> strip_tac >>
@@ -20,10 +20,10 @@ Proof
 QED
 
 Theorem pop_storage_machine_live:
-  stmt_state_rel ctx func cenv cx es s /\
-  storage_read_live cx tr (get_storage cx es tr) slot tv /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_read_live H tr (get_storage cx es tr) slot tv /\
   w2n slot + type_slot_size tv <= dimword(:256) ==>
-  storage_read_live cx tr
+  storage_read_live H tr
     (if tr then contract_transient s else contract_storage s) slot tv
 Proof
   strip_tac >> irule pop_storage_live_agree >>
@@ -35,8 +35,8 @@ Proof
 QED
 
 Theorem pop_storage_live_header_clean:
-  stor_taint_ok cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
-  storage_read_live cx tr
+  stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+  storage_read_live H tr
     (if tr then contract_transient s else contract_storage s) slot tv /\
   0 < type_slot_size tv ==>
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {}

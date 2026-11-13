@@ -9,21 +9,21 @@ Theorem mload_counted_ghost_frame:
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id MLOAD [Var src] [out]) /\
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\ src <> out /\ 
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p. not_fresh_at sa p ==> p <> out) ==>
-  ?H th t.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th (OK t) /\
-    op_prov H (Var out) = NONE /\ op_taint th (Var out) = {} /\
+  ?HG th t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th (OK t) /\
+    op_prov HG (Var out) = NONE /\ op_taint th (Var out) = {} /\
     lookup_var out t = SOME (mload (w2n a) s) /\
     t.vs_inst_idx = SUC s.vs_inst_idx /\
     t = s with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|> /\
-    ghost_inv d cenv cx es H th t /\ ghost_kept cenv es sa G tn s H th /\
-    ptr_covers H th src t 32 /\
-    (!p n. p <> out /\ ptr_covers G tn p s n ==> ptr_covers H th p t n) /\
+    ghost_inv H d cenv cx es HG th t /\ ghost_kept cenv es sa G tn s HG th /\
+    ptr_covers HG th src t 32 /\
+    (!p n. p <> out /\ ptr_covers G tn p s n ==> ptr_covers HG th p t n) /\
     (!p. p <> out ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p)) /\
+      FLOOKUP HG p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p)) /\
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
     t = (update_var out (mload (w2n a) s) s) with

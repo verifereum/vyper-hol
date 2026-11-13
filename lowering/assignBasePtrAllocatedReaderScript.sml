@@ -8,7 +8,7 @@ Ancestors
 Theorem assign_base_ptr_allocated_reader_bound:
   !ctx fn cenv cx es sz sa buf sb s u t a n.
     compile_alloc_buffer sz sa = (buf,sb) /\
-    stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+    stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
     local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\

@@ -7,24 +7,29 @@ Ancestors
   vyperInterpreter vyperState vyperAST vyperValueOperation vyperValue
 
 Theorem aggregate_outcome_map_mem:
-  gas_outcome memory tops (ctx,func) source (es,s) Q R /\
-  (!res ee t. Q res ee t ==> Q' (SUM_MAP f I res) ee t) /\
-  (!res ee r. R res ee r ==> R' (SUM_MAP f I res) ee r) ==>
-  gas_outcome memory tops (ctx,func) (bind source (return o f)) (es,s) Q' R'
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R /\
+  (!H res ee t. Q H res ee t ==> Q' H (SUM_MAP f I res) ee t) /\
+  (!H res ee r. R H res ee r ==> R' H (SUM_MAP f I res) ee r) ==>
+  gas_outcome memory tops (ctx,func) cx st0 (bind source (return o f)) (es,s)
+    Q' R'
 Proof
   strip_tac >>
   `ignore_bind (bind source (return o f)) (return ()) =
    ignore_bind source (return ())` by
     (simp[FUN_EQ_THM, ignore_bind_def, bind_def, return_def] >>
      gen_tac >> Cases_on `source x` >> Cases_on `q` >> simp[]) >>
+  `!st. SND (bind source (return o f) st) = SND (source st)` by
+    (gen_tac >> simp[bind_def, return_def] >>
+     Cases_on `source st` >> Cases_on `q` >> simp[]) >>
   gvs[gas_outcome_def] >> qexists_tac `marks`
-  >- (disj1_tac >>
+  >- (disj1_tac >> fs[gasStorageTheory.gas_bad_storage_at_def])
+  >- (disj2_tac >> disj1_tac >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
       pure_rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >> strip_tac >>
       qexistsl_tac [`SUM_MAP f I res`, `es_end`, `r`] >>
       simp[bind_def, return_def] >>
       Cases_on `res` >> gvs[] >> metis_tac[]) >>
-  disj2_tac >> metis_tac[]
+  disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
 Theorem aggregate_struct_action_mem:
@@ -66,17 +71,18 @@ Proof
 QED
 
 Theorem aggregate_outcome_source_run_mem:
-  gas_outcome memory tops (ctx,func) source (es,s) Q R ==>
-  gas_outcome memory tops (ctx,func) source (es,s)
-    (\res ee t. Q res ee t /\
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R ==>
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s)
+    (\H res ee t. Q H res ee t /\ valid_horizon cx st0 H ee.storage_trace /\
        ?gs. source (es with gas_obs := gs) = (res,ee)) R
 Proof
   simp[gas_outcome_def] >> strip_tac >> qexists_tac `marks`
-  >- (disj1_tac >>
+  >- (disj1_tac >> first_assum ACCEPT_TAC)
+  >- (disj2_tac >> disj1_tac >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
       pure_rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >> strip_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
       first_x_assum (qspec_then `[]` assume_tac) >>
       gvs[] >> metis_tac[]) >>
-  disj2_tac >> metis_tac[]
+  disj2_tac >> disj2_tac >> metis_tac[]
 QED

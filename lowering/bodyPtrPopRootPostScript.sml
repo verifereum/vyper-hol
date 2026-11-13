@@ -13,7 +13,7 @@ Proof
 QED
 
 Theorem pop_root_positive_post:
-  expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
+  expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es s /\
   declared_storage_region cx mid id [] = SOME (tr,hdr,ArrayTV tv (Dynamic n)) /\
   evaluate_type (get_tenv cx) ann = SOME tv /\ local_ptrs_reserved cenv sa /\
   len = w2n (lookup_storage hdr (get_storage cx es tr)) /\ 0 < len /\
@@ -22,7 +22,7 @@ Theorem pop_root_positive_post:
        else sstore hdr (n2w (len - 1)) s) with vs_vars := u.vs_vars /\
   (!q. not_fresh_at sa q ==> lookup_var q u = lookup_var q s) /\
   lookup_var x u = SOME elem ==>
-  vv_post ctx func cenv cx (Pop ann tgt) es sa sb s
+  vv_post H ctx func cenv cx (Pop ann tgt) es sa sb s
     (set_storage cx es tr
       (apply_writes hdr [(0,n2w (len - 1))] (get_storage cx es tr))
       with gas_obs := g)

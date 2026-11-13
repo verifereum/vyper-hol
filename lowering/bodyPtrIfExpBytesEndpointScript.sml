@@ -7,9 +7,9 @@ Ancestors
 
 Theorem ifexp_bytes_destination_expr_post:
   post_value_type ce result = expr_type result /\
-  vv_post ctx fn ce cx arm es sa sc s0 ee raw vv t /\
+  vv_post H ctx fn ce cx arm es sa sc s0 ee raw vv t /\
   (~expr_has_effect result ==> ~expr_has_effect arm) /\
-  stmt_state_rel ctx fn ce cx es s0 /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn ce cx es s0 /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sc /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sc.cs_next_var /\
@@ -29,13 +29,13 @@ Theorem ifexp_bytes_destination_expr_post:
   val_footprint dtv v <= capacity /\
   eval_operand (Var out) sf = SOME w /\
   val_in_memory dtv v (w2n w) sf.vs_memory ==>
-  expr_post ctx fn ce cx result es sa sd s0 ee v (Var out) sf /\
+  expr_post H ctx fn ce cx result es sa sd s0 ee v (Var out) sf /\
   expr_val_own ce cx (expr_type result) sa sd ee v (Var out) sf /\
   (~expr_has_effect arm ==> pure_frame ce fn es sa s0 sf)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx fn ce cx ee t` by gvs[vv_post_def] >>
-  `stmt_state_rel ctx fn ce cx ee sf` by
+  `stmt_state_rel H ctx fn ce cx ee t` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx fn ce cx ee sf` by
     (drule_all ifexp_bytes_mcopy_semantic_state >> simp[]) >>
   `sf.vs_allocas = t.vs_allocas` by
     gvs[venom_state_component_equality] >>
@@ -75,7 +75,7 @@ Proof
   `~expr_has_effect arm ==> pure_frame ce fn es sa s0 sf` by
     (strip_tac >>
      `pure_frame ce fn es sa s0 t` by
-       (qpat_assum `vv_post _ _ _ _ arm _ _ _ _ _ _ _ _`
+       (qpat_assum `vv_post _ _ _ _ _ arm _ _ _ _ _ _ _ _`
           (mp_tac o REWRITE_RULE [vv_post_def]) >>
         strip_tac >> qpat_x_assum `~expr_has_effect arm ==> _` irule >>
         first_assum ACCEPT_TAC) >>
@@ -122,8 +122,8 @@ Proof
 QED
 
 Theorem ifexp_expr_post_inst_idx[simp]:
-  expr_post ctx fn ce cx e es sa sb s0 ee v op (s with vs_inst_idx := k) <=>
-  expr_post ctx fn ce cx e es sa sb s0 ee v op s
+  expr_post H ctx fn ce cx e es sa sb s0 ee v op (s with vs_inst_idx := k) <=>
+  expr_post H ctx fn ce cx e es sa sb s0 ee v op s
 Proof
   simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
        expr_val_at_def, expr_val_own_def, lookup_var_def, local_region_def]
@@ -144,8 +144,8 @@ Proof
 QED
 
 Theorem ifexp_ghost_inv_inst_idx[simp]:
-  ghost_inv d ce cx ee G tn (s with vs_inst_idx := k) <=>
-  ghost_inv d ce cx ee G tn s
+  ghost_inv H d ce cx ee G tn (s with vs_inst_idx := k) <=>
+  ghost_inv H d ce cx ee G tn s
 Proof
   mp_tac (Q.INST [`p` |-> `s.vs_prev_bb`, `l` |-> `s.vs_current_bb`,
                    `i` |-> `k`, `cenv` |-> `ce`, `es` |-> `ee`] ghost_inv_jump_to) >>

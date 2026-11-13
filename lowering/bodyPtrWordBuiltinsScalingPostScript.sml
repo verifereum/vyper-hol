@@ -9,10 +9,10 @@ Theorem word_scale_actual_post:
   0 < m /\ m < dimword (:256) /\ w2n w * m < dimword (:256) /\
   (!z. v = Var z ==> not_fresh_at sa z) /\ eval_operand v s = SOME w /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+  stmt_state_rel H ctx func cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   eval_operand op (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME (w * n2w m) /\
   (!z a. not_fresh_at sa z /\ lookup_var z s = SOME a ==>
     lookup_var z (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME a) /\

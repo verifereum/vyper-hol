@@ -16,22 +16,22 @@ Theorem external_storage_one_unwrap:
   expr_body_pre cenv cx env e esi /\ local_ptrs_reserved cenv si /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
-  vv_post ctx func cenv cx e esi si sn s0 es' raw (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e esi si sn s0 es' raw (LocatedValue t p) s /\
   ptr_vv_ok cx (expr_type e) raw (LocatedValue t p) es' G tn s /\
-  ghost_inv d cenv cx es' G tn s /\ stmt_state_rel ctx func cenv cx es' s /\
+  ghost_inv H d cenv cx es' G tn s /\ stmt_state_rel H ctx func cenv cx es' s /\
   s.vs_current_bb = sn.cs_current_bb /\ s.vs_inst_idx = LENGTH sn.cs_current_insts /\
   ~s.vs_halted /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
   p.ptr_location = (if tr then LocTransient else LocStorage) /\
   ~is_word_type (expr_type e) /\
   (type_memory_bytes cenv t + 31) DIV 32 = 1 ==>
-  ?v z H tm.
+  ?v z HG tm.
     read_result cx raw es' = (INL v,es') /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    expr_post ctx func cenv cx e esi si sb s0 es' v op z /\
-    ptr_val_ok cx (expr_type e) v op H tm z /\ ptr_buf_ok cenv e op H z /\
-    ghost_inv d cenv cx es' H tm z /\ ghost_kept cenv es' sn G tn s H tm /\
-    stmt_state_rel ctx func cenv cx es' z /\
+    expr_post H ctx func cenv cx e esi si sb s0 es' v op z /\
+    ptr_val_ok cx (expr_type e) v op HG tm z /\ ptr_buf_ok cenv e op HG z /\
+    ghost_inv H d cenv cx es' HG tm z /\ ghost_kept cenv es' sn G tn s HG tm /\
+    stmt_state_rel H ctx func cenv cx es' z /\
     (!x. not_fresh_at sn x ==> lookup_var x z = lookup_var x s)
 Proof
   strip_tac >>
@@ -83,7 +83,7 @@ Resume external_storage_one_unwrap[post]:
   `MAP FDOM esi.scopes = MAP FDOM es'.scopes` by
     metis_tac[eval_expr_preserves_scopes_dom] >>
   qpat_x_assum `!esi si e raw vv base. _` (drule_all_then strip_assume_tac) >>
-  qexistsl_tac [`z`, `H`, `tm`] >> simp[]
+  qexistsl_tac [`z`, `HG`, `tm`] >> simp[]
 QED
 
 Finalise external_storage_one_unwrap
@@ -97,22 +97,22 @@ Theorem external_storage_loop_unwrap:
   expr_body_pre cenv cx env e esi /\ local_ptrs_reserved cenv si /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
-  vv_post ctx func cenv cx e esi si sn s0 es' raw (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e esi si sn s0 es' raw (LocatedValue t p) s /\
   ptr_vv_ok cx (expr_type e) raw (LocatedValue t p) es' G tn s /\
-  ghost_inv d cenv cx es' G tn s /\ stmt_state_rel ctx func cenv cx es' s /\
+  ghost_inv H d cenv cx es' G tn s /\ stmt_state_rel H ctx func cenv cx es' s /\
   s.vs_current_bb = sn.cs_current_bb /\ s.vs_inst_idx = LENGTH sn.cs_current_insts /\
   ~s.vs_halted /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
   p.ptr_location = (if tr then LocTransient else LocStorage) /\
   ~is_word_type (expr_type e) /\
   (type_memory_bytes cenv t + 31) DIV 32 <> 1 ==>
-  ?v z H tm.
+  ?v z HG tm.
     read_result cx raw es' = (INL v,es') /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    expr_post ctx func cenv cx e esi si sb s0 es' v op z /\
-    ptr_val_ok cx (expr_type e) v op H tm z /\ ptr_buf_ok cenv e op H z /\
-    ghost_inv d cenv cx es' H tm z /\ ghost_kept cenv es' sn G tn s H tm /\
-    stmt_state_rel ctx func cenv cx es' z /\
+    expr_post H ctx func cenv cx e esi si sb s0 es' v op z /\
+    ptr_val_ok cx (expr_type e) v op HG tm z /\ ptr_buf_ok cenv e op HG z /\
+    ghost_inv H d cenv cx es' HG tm z /\ ghost_kept cenv es' sn G tn s HG tm /\
+    stmt_state_rel H ctx func cenv cx es' z /\
     (!x. not_fresh_at sn x ==> lookup_var x z = lookup_var x s)
 Proof
   strip_tac >>
@@ -163,7 +163,7 @@ Resume external_storage_loop_unwrap[post]:
     metis_tac[eval_expr_preserves_scopes_dom] >>
   `val_footprint tvt v <= 32 * type_slot_size tvt` by simp[] >>
   qpat_x_assum `!esi si e raw vv base. _` (drule_all_then strip_assume_tac) >>
-  qexistsl_tac [`z`, `H`, `tm`] >> simp[]
+  qexistsl_tac [`z`, `HG`, `tm`] >> simp[]
 QED
 
 Finalise external_storage_loop_unwrap
@@ -177,21 +177,21 @@ Theorem external_code_unwrap:
   expr_body_pre cenv cx env e esi /\ local_ptrs_reserved cenv si /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
-  vv_post ctx func cenv cx e esi si sn s0 es' raw (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e esi si sn s0 es' raw (LocatedValue t p) s /\
   ptr_vv_ok cx (expr_type e) raw (LocatedValue t p) es' G tn s /\
-  ghost_inv d cenv cx es' G tn s /\ stmt_state_rel ctx func cenv cx es' s /\
+  ghost_inv H d cenv cx es' G tn s /\ stmt_state_rel H ctx func cenv cx es' s /\
   s.vs_current_bb = sn.cs_current_bb /\ s.vs_inst_idx = LENGTH sn.cs_current_insts /\
   ~s.vs_halted /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
   p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\
   ~is_word_type (expr_type e) ==>
-  ?v z H tm.
+  ?v z HG tm.
     read_result cx raw es' = (INL v,es') /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    expr_post ctx func cenv cx e esi si sb s0 es' v op z /\
-    ptr_val_ok cx (expr_type e) v op H tm z /\ ptr_buf_ok cenv e op H z /\
-    ghost_inv d cenv cx es' H tm z /\ ghost_kept cenv es' sn G tn s H tm /\
-    stmt_state_rel ctx func cenv cx es' z /\
+    expr_post H ctx func cenv cx e esi si sb s0 es' v op z /\
+    ptr_val_ok cx (expr_type e) v op HG tm z /\ ptr_buf_ok cenv e op HG z /\
+    ghost_inv H d cenv cx es' HG tm z /\ ghost_kept cenv es' sn G tn s HG tm /\
+    stmt_state_rel H ctx func cenv cx es' z /\
     (!x. not_fresh_at sn x ==> lookup_var x z = lookup_var x s)
 Proof
   strip_tac >>
@@ -232,7 +232,7 @@ Resume external_code_unwrap[post]:
   `MAP FDOM esi.scopes = MAP FDOM es'.scopes` by
     metis_tac[eval_expr_preserves_scopes_dom] >>
   qpat_x_assum `!esi si e raw vv base. _` (drule_all_then strip_assume_tac) >>
-  qexistsl_tac [`z`, `H`, `tm`] >> simp[]
+  qexistsl_tac [`z`, `HG`, `tm`] >> simp[]
 QED
 
 Finalise external_code_unwrap
@@ -246,21 +246,21 @@ Theorem external_nonword_unwrap:
   expr_body_pre cenv cx env e esi /\ local_ptrs_reserved cenv si /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at si x) /\
-  vv_post ctx func cenv cx e esi si sn s0 es' raw (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e esi si sn s0 es' raw (LocatedValue t p) s /\
   ptr_vv_ok cx (expr_type e) raw (LocatedValue t p) es' G tn s /\
-  ghost_inv d cenv cx es' G tn s /\ stmt_state_rel ctx func cenv cx es' s /\
+  ghost_inv H d cenv cx es' G tn s /\ stmt_state_rel H ctx func cenv cx es' s /\
   s.vs_current_bb = sn.cs_current_bb /\ s.vs_inst_idx = LENGTH sn.cs_current_insts /\
   ~s.vs_halted /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
   p.ptr_location <> LocMemory /\ ~cenv.ce_is_ctor /\
   ~is_word_type (expr_type e) ==>
-  ?v z H tm.
+  ?v z HG tm.
     read_result cx raw es' = (INL v,es') /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    expr_post ctx func cenv cx e esi si sb s0 es' v op z /\
-    ptr_val_ok cx (expr_type e) v op H tm z /\ ptr_buf_ok cenv e op H z /\
-    ghost_inv d cenv cx es' H tm z /\ ghost_kept cenv es' sn G tn s H tm /\
-    stmt_state_rel ctx func cenv cx es' z /\
+    expr_post H ctx func cenv cx e esi si sb s0 es' v op z /\
+    ptr_val_ok cx (expr_type e) v op HG tm z /\ ptr_buf_ok cenv e op HG z /\
+    ghost_inv H d cenv cx es' HG tm z /\ ghost_kept cenv es' sn G tn s HG tm /\
+    stmt_state_rel H ctx func cenv cx es' z /\
     (!x. not_fresh_at sn x ==> lookup_var x z = lookup_var x s)
 Proof
   strip_tac >>

@@ -12,7 +12,7 @@ Theorem augassign_attr_field_inputs_ptr:
   FLOOKUP env.var_types id = SOME (StructT sid) /\
   ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
     fld = SOME (ty,fsz) /\ word_value_type ty /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s ==>
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s ==>
   ?p sz a entry fs vals ftv fv.
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     cenv.ce_var_type id = SOME (StructT sid) /\

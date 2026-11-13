@@ -100,14 +100,14 @@ Proof
       metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible]) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `eval_operand h1 t' = SOME (word_of_bytes_be (Keccak_256_w64 contents)) /\
-   op_prov H' h1 = NONE /\ op_taint un' h1 = {}` by
+   op_prov HG' h1 = NONE /\ op_taint un' h1 = {}` by
     (Cases_on `h1` >>
      fs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
        ptrDisciplineTheory.op_taint_def, ghost_kept_def] >>
      metis_tac[exprSimWordArgsTheory.wb_frame_vars]) >>
   `wb_frame cenv es ee' sa s0 t'` by
     metis_tac[exprSimWordArgsTheory.wb_frame_trans] >>
-  `ghost_kept cenv es sa G0 tn0 s0 H' un'` by
+  `ghost_kept cenv es sa G0 tn0 s0 HG' un'` by
     metis_tac[wordArgsPtrTheory.ghost_kept_wb_trans] >>
   `~expr_has_effect e1 /\ ~expr_has_effect e2 ==>
     pure_frame cenv func es sa s0 t'` by
@@ -165,7 +165,7 @@ Proof
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at st4 x)` by
     metis_tac[freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS] >>
   drule_all bop_compile_compare_endpoint >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   `wb_frame cenv es ee' sa s0 (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (`u.vs_memory = t'.vs_memory /\ u.vs_allocas = t'.vs_allocas` by
        (qpat_x_assum `(u with vs_vars := _) = t'` mp_tac >>
@@ -176,7 +176,7 @@ Proof
      qpat_x_assum `!z. not_fresh_at st4 z ==> lookup_var z u = _`
        (drule_then mp_tac) >>
      simp[venomStateTheory.lookup_var_def]) >>
-  `ghost_kept cenv es sa G0 tn0 s0 H'' un''` by
+  `ghost_kept cenv es sa G0 tn0 s0 HG'' un''` by
     (qpat_assum `ghost_kept cenv ee' st4 _ _ _ _ _` mp_tac >>
      disch_then (mp_then (Pos last) mp_tac wordArgsPtrTheory.ghost_kept_wb_trans) >>
      disch_then irule >> simp[] >> metis_tac[]) >>
@@ -193,14 +193,14 @@ Proof
        word_of_bytes_be (Keccak_256_w64 contents') else
       (word_of_bytes_be (Keccak_256_w64 contents) : bytes32) <>
        word_of_bytes_be (Keccak_256_w64 contents'))) ee'
-    (u with vs_inst_idx := LENGTH sb.cs_current_insts) H'' un''` by
+    (u with vs_inst_idx := LENGTH sb.cs_current_insts) HG'' un''` by
     (irule bop_bool_parent_post >>
      simp[vyperASTTheory.expr_type_def, venomStateTheory.eval_operand_def,
        venomStateTheory.lookup_var_def]) >>
   rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
   qexists_tac `[]` >> disj1_tac >>
   irule bodyPtrHashBuiltinsSummaryTheory.hash_zero_mark_summary >>
-  qexistsl_tac [`H''`, `ee'`, `INL (BoolV (if bop = Eq then
+  qexistsl_tac [`HG''`, `ee'`, `INL (BoolV (if bop = Eq then
     (word_of_bytes_be (Keccak_256_w64 contents) : bytes32) =
      word_of_bytes_be (Keccak_256_w64 contents') else
     (word_of_bytes_be (Keccak_256_w64 contents) : bytes32) <>
