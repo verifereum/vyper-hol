@@ -98,7 +98,7 @@ Proof
   `val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) b r.vs_memory` by
     simp[val_in_memory_def] >>
   drule_all custom_error_tuple_encoder_handoff >> strip_tac >>
-  drule_all custom_error_expr_inv_memory_size >> strip_tac >>
+  drule_all externalReturnSelectedResourcesTheory.return_site_memory_size >> strip_tac >>
   qexistsl_tac [`at`, `rv`] >>
   simp[abi_encoder_translation_admissible, type_memory_size_def,
        eval_operand_def]

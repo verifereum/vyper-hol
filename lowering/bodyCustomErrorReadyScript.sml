@@ -46,7 +46,7 @@ Proof
     (fs[LIST_REL_MAP1] >> irule LIST_REL_mono >>
      goal_assum (drule_at Any) >> rpt strip_tac >>
      gvs[combinTheory.o_DEF] >>
-     drule_all custom_error_expr_inv_memory_size >> simp[]) >>
+     drule_all externalReturnSelectedResourcesTheory.return_site_memory_size >> simp[]) >>
   drule abi_caller_memory_size_list >> strip_tac >>
   `type_slot_size (TupleTV tvs) <= dimword(:256)` by
     (gvs[compileEnvTheory.type_memory_bytes_def, type_memory_size_slots,

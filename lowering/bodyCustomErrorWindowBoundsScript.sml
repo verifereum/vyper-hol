@@ -3,6 +3,7 @@ Ancestors
   abiEncoderSourceAggregate abiEncoderOpenInput abiEncoderWindow vyperABIValid
   abiTypeBoundProps exprSimHypsDefs loweringStateRelDefs typedMemoryCopy
   structFieldsProps bodySim vyperContext finite_map alist list
+  externalReturnSelectedResources
 
 Theorem custom_error_source_rep_window_bound:
   source_rep env ty ei ct /\ evaluate_type env ty = SOME tv /\
@@ -25,14 +26,6 @@ Theorem custom_error_expr_inv_abi_bound:
 Proof
   strip_tac >> irule (cj 2 abi_props_vyper_typed) >>
   gvs[expr_sim_inv_def] >> metis_tac[]
-QED
-
-Theorem custom_error_expr_inv_memory_size:
-  expr_sim_inv ce cx env es /\ evaluate_type (get_tenv cx) ty = SOME tv ==>
-  type_memory_bytes ce ty = type_memory_size tv
-Proof
-  strip_tac >> irule typed_copy_memory_size >>
-  qexists_tac `get_tenv cx` >> gvs[expr_sim_inv_def] >> metis_tac[]
 QED
 
 Theorem custom_error_main_modules_struct_keys:
@@ -76,6 +69,6 @@ Proof
   strip_tac >> rpt conj_tac
   >- gvs[expr_sim_inv_def]
   >- metis_tac[custom_error_body_inv_struct_keys]
-  >- metis_tac[custom_error_expr_inv_memory_size] >>
+  >- metis_tac[return_site_memory_size] >>
   metis_tac[custom_error_expr_inv_abi_bound]
 QED

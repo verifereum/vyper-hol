@@ -104,5 +104,5 @@ Theorem custom_error_tuple_encoder_handoff:
     LENGTH (enc at rv) <= abi_size_bound ce.ce_struct_fields (TupleT (MAP SND params))
 Proof
   strip_tac >> drule_all custom_error_invariant_encoder_handoff >> strip_tac >>
-  drule_all custom_error_expr_inv_memory_size >> strip_tac >> metis_tac[]
+  drule_all externalReturnSelectedResourcesTheory.return_site_memory_size >> strip_tac >> metis_tac[]
 QED

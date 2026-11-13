@@ -5,6 +5,7 @@ Ancestors
   vyperABI vyperValue vyperTyping contractABI list rich_list valueEncoding
   valueEncodingProofs abiEncoderSourceWindow abiEncoderProps abiDecodeRanges
   vyperValueOperation structFieldsProps exprLowering compileEnv finite_map option vyperAST
+  exprSimAbiEncodeSourceClosure
 
 Theorem custom_error_tuple_source_rep:
   source_reps env ts infos cts ==>
@@ -89,52 +90,6 @@ Proof
       simp[type_memory_size_def, type_memory_size_fields_sum, GSYM MAP_MAP_o, MAP_ZIP]) >>
   qexists_tac `cts` >>
   drule source_reps_lengths >> simp[abi_encoder_tuple_type_def]
-QED
-
-Theorem custom_error_dynamic_array_source_rep:
-  evaluate_type env ty = SOME tv /\ source_rep env ty ei ct ==>
-  source_rep env (ArrayT ty (Dynamic n))
-    (AbiDynArray ei (abi_member_head_size ct) (type_memory_size tv)
-      (is_dynamic ct)) (Array NONE ct)
-Proof
-  strip_tac >> drule_all source_rep_metadata >> strip_tac >>
-  simp[source_rep_def, vyper_to_abi_type_def, is_dynamic_def, abi_member_head_size_def] >>
-  rpt strip_tac >>
-  `tv' = ArrayTV tv (Dynamic n)` by
-    gvs[Once evaluate_type_def, AllCaseEqs()] >> gvs[] >>
-  Cases_on `v` >> gvs[value_has_type_def] >>
-  rename1 `ArrayV arr` >> Cases_on `arr` >> gvs[value_has_type_def] >>
-  rename1 `val_in_memory _ (ArrayV (DynArrayV vs)) _ _` >>
-  drule_at (Pat `val_in_memory _ _ _ _`) abi_encoder_dynamic_source >>
-  simp[value_has_type_def, Once vyper_to_abi_def] >> strip_tac >>
-  qpat_x_assum `!t env' av'. _`
-    (qspecl_then [`ty`, `env`, `av`] mp_tac) >> simp[] >> strip_tac >> gvs[] >>
-  `!i. i < LENGTH vs ==> ?rv.
-    enc ct rv = enc (vyper_to_abi_type env ty) (EL i avs) /\
-    abi_encoder_open_input ei ct rv (sb+32+i*type_memory_size tv)
-      (type_memory_size tv) mem` by
-    (rpt strip_tac >> irule source_rep_transport >> simp[] >>
-     qexists_tac `EL i vs` >> simp[arithmeticTheory.ADD_ASSOC]) >>
-  qpat_x_assum `!i. _ ==> ?rv. _` mp_tac >>
-  CONV_TAC (LAND_CONV (BINDER_CONV (HO_REWR_CONV (GSYM RIGHT_EXISTS_IMP_THM)))) >>
-  CONV_TAC (LAND_CONV (HO_REWR_CONV SKOLEM_THM)) >>
-  disch_then (qx_choose_then `f` assume_tac) >>
-  qexists_tac `ListV (GENLIST f (LENGTH vs))` >> conj_tac
-  >- (`enc (Array NONE ct) (ListV (GENLIST f (LENGTH vs))) =
-       enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
-        (irule abi_encoder_dynamic_array_encoding_cong >> simp[]) >>
-      gvs[Once enc_def]) >>
-  irule abiEncoderOpenInputTheory.open_array >>
-  simp[abi_member_head_size_def] >> conj_tac
-  >- (gen_tac >> disch_tac >>
-      qpat_x_assum `!i. _ ==> enc ct (f i) = _ /\ _`
-        (qspec_then `i` mp_tac) >>
-      simp_tac (srw_ss()) [arithmeticTheory.ADD_ASSOC,
-        arithmeticTheory.ADD_COMM] >> simp[]) >>
-  gvs[Once evaluate_type_def, AllCaseEqs()] >>
-  fs[type_slot_size_def] >>
-  `n <= n * type_slot_size tv` by
-    simp[arithmeticTheory.LE_MULT_LCANCEL] >> decide_tac
 QED
 
 Theorem custom_error_fixed_array_source_rep:
@@ -321,7 +276,7 @@ Resume custom_error_evaluated_source_rep_mutual[array]:
       gvs[is_abi_dynamic_def, GSYM REPLICATE_GENLIST] >>
       gvs[evaluate_type_def, AllCaseEqs(), bound_length_def]) >>
   qexists_tac `Array NONE ct` >>
-  drule_all custom_error_dynamic_array_source_rep >>
+  drule_all abi_encode_source_dynarray >>
   disch_then (qspec_then `n` mp_tac) >>
   simp[abi_member_head_size_def]
 QED

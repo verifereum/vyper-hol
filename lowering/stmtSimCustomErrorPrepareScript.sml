@@ -22,7 +22,7 @@ Proof
     (qpat_assum `OPT_MMAP _ _ = SOME _` (mp_tac o MATCH_MP OPT_MMAP_LIST_REL) >>
      disch_tac >> irule LIST_REL_mono >>
      goal_assum (drule_at Any) >> rpt strip_tac >>
-     gvs[] >> drule_all custom_error_expr_inv_memory_size >> simp[]) >>
+     gvs[] >> drule_all externalReturnSelectedResourcesTheory.return_site_memory_size >> simp[]) >>
   drule abi_caller_memory_size_list >> strip_tac >>
   `type_slot_size (TupleTV tvs) <= dimword(:256)` by
     (gvs[compileEnvTheory.type_memory_bytes_def, type_memory_size_slots,
@@ -31,7 +31,7 @@ Proof
   `evaluate_type (get_tenv cx) (TupleT (MAP expr_type args)) = SOME (TupleTV tvs)` by
     simp[vyperValueTheory.evaluate_type_def, vyperValueTheory.evaluate_types_OPT_MMAP] >>
   qexists_tac `tvs` >> simp[] >>
-  drule_all custom_error_expr_inv_memory_size >>
+  drule_all externalReturnSelectedResourcesTheory.return_site_memory_size >>
   simp[valueEncodingTheory.type_memory_size_def]
 QED
 
