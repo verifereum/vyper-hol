@@ -62,7 +62,7 @@ Resume target_pure_source_mutual[structlit]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >> metis_tac[]
 QED
 Resume target_pure_source_mutual[subscript]:
-  rpt strip_tac >>
+  rpt strip_tac >> Cases_on `subscript_reads_base cx e e'` >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
@@ -74,10 +74,16 @@ Resume target_pure_source_mutual[attribute]:
 QED
 Resume target_pure_source_mutual[builtin]:
   rpt strip_tac >>
+  `code_slice_source blt es = NONE` by
+    (Cases_on `code_slice_source blt es` >> simp[] >>
+     rename1 `SOME p` >> PairCases_on `p` >>
+     gvs[code_slice_source_SOME,
+         supportedExprFormsTheory.supported_builtin_form_def]) >>
   Cases_on `blt = Len` >> Cases_on `blt = Env MsgGas` >>
   Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-      assert_def, return_def, raise_def, AllCaseEqs()] >>
+      assert_def, return_def, raise_def, COND_RATOR,
+      vfmTypesTheory.option_CASE_rator, AllCaseEqs()] >>
   imp_res_tac result_array_length_state >>
   imp_res_tac lift_option_type_state >> imp_res_tac lift_sum_state >>
   gvs[next_gas_reading_def, precompile_call_success_def,
@@ -110,7 +116,7 @@ Resume target_pure_source_mutual[fields_cons]:
   imp_res_tac read_result_state >> gvs[] >> metis_tac[]
 QED
 Resume target_pure_source_mutual[place_subscript]:
-  rpt strip_tac >>
+  rpt strip_tac >> Cases_on `subscript_reads_base cx e e'` >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]

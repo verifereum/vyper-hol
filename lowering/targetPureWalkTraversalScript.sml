@@ -67,7 +67,7 @@ Theorem walk_outer_mutual[local]:
       supported_program (cx_tops cx) /\
       IS_SOME (supported_function_decl (cx_tops cx) (NONE,name) Internal) /\
       ~call_can_mutate cenv (IntCall (NONE,name)) /\
-      state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (eval_expr_results cx actuals) ==>
+      state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (eval_exprs cx actuals) ==>
       state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
         (eval_expr cx (Call ty (IntCall (NONE,name)) actuals fallback))) /\
     ~expr_can_mutate cenv e /\
@@ -79,7 +79,7 @@ Theorem walk_outer_mutual[local]:
       supported_program (cx_tops cx) /\
       IS_SOME (supported_function_decl (cx_tops cx) (NONE,name) Internal) /\
       ~call_can_mutate cenv (IntCall (NONE,name)) /\
-      state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (eval_expr_results cx actuals) ==>
+      state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (eval_exprs cx actuals) ==>
       state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
         (eval_expr cx (Call ty (IntCall (NONE,name)) actuals fallback))) /\
     ~exprs_can_mutate cenv es /\
@@ -91,7 +91,7 @@ Theorem walk_outer_mutual[local]:
       supported_program (cx_tops cx) /\
       IS_SOME (supported_function_decl (cx_tops cx) (NONE,name) Internal) /\
       ~call_can_mutate cenv (IntCall (NONE,name)) /\
-      state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (eval_expr_results cx actuals) ==>
+      state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (eval_exprs cx actuals) ==>
       state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
         (eval_expr cx (Call ty (IntCall (NONE,name)) actuals fallback))) /\
     ~expr_can_mutate cenv (target_to_expr bt) /\
@@ -106,7 +106,7 @@ Theorem walk_outer_mutual[local]:
       supported_program (cx_tops cx) /\
       IS_SOME (supported_function_decl (cx_tops cx) (NONE,name) Internal) /\
       ~call_can_mutate cenv (IntCall (NONE,name)) /\
-      state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (eval_expr_results cx actuals) ==>
+      state_rel_frame (\s t. machine_frame (s with logs := t.logs) t) (eval_exprs cx actuals) ==>
       state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
         (eval_expr cx (Call ty (IntCall (NONE,name)) actuals fallback))) /\
     ~exprs_can_mutate cenv es /\
@@ -193,6 +193,12 @@ QED
 Resume walk_outer_mutual[subscript]:
   rpt strip_tac >> gvs[int_calls_expr_def] >> simp[Once evaluate_def] >>
   match_mp_tac walk_bind_guarded >> conj_tac >- metis_tac[] >>
+  rpt strip_tac >> BETA_TAC >> match_mp_tac walk_bind_guarded >>
+  conj_tac
+  >- (Cases_on `subscript_reads_base cx e e'` >> machine_leaf >>
+      simp[machine_frame_primitives] >>
+      match_mp_tac machine_frame_bind >>
+      simp[machine_frame_read_result, machine_frame_primitives]) >>
   rpt strip_tac >> BETA_TAC >> match_mp_tac walk_bind >>
   conj_tac >- metis_tac[] >>
   gen_tac >> BETA_TAC >> machine_leaf >>
@@ -273,10 +279,25 @@ Resume walk_outer_mutual[builtin]:
   IF_CASES_TAC >- suspend "builtin_len" >>
   IF_CASES_TAC >- suspend "builtin_member" >>
   IF_CASES_TAC >- (machine_leaf >> simp[state_rel_frame_def, next_gas_reading_def] >> gen_tac >> Cases_on `st.gas_obs` >> simp[raise_def, return_def, machine_frame_def, bind_def]) >>
-  match_mp_tac walk_bind >> conj_tac >- metis_tac[] >>
-  gen_tac >> BETA_TAC >> machine_leaf >> rpt (match_mp_tac machine_frame_bind >>
-    conj_tac >- simp[machine_frame_primitives, machine_frame_reads, machine_frame_precompile_call_success] >> gen_tac >> BETA_TAC) >>
-  simp[machine_frame_primitives, machine_frame_reads, machine_frame_precompile_call_success]
+  match_mp_tac walk_bind >> reverse conj_tac
+  >- (gen_tac >> BETA_TAC >> machine_leaf >>
+      rpt (match_mp_tac machine_frame_bind >>
+        conj_tac >- simp[machine_frame_primitives, machine_frame_reads,
+                         machine_frame_precompile_call_success] >> gen_tac >> BETA_TAC) >>
+      simp[machine_frame_primitives, machine_frame_reads,
+           machine_frame_precompile_call_success]) >>
+  Cases_on `code_slice_source bt es` >> simp[]
+  >- metis_tac[] >>
+  rename1 `_ = SOME p` >> PairCases_on `p` >> simp[] >>
+  gvs[code_slice_source_SOME, expr_can_mutate_def, int_calls_expr_def] >>
+  match_mp_tac walk_bind_guarded >> conj_tac >- metis_tac[] >>
+  rpt strip_tac >> BETA_TAC >> match_mp_tac walk_bind >>
+  conj_tac >- metis_tac[] >>
+  gen_tac >> BETA_TAC >> machine_leaf >>
+  rpt (match_mp_tac machine_frame_bind >>
+    conj_tac >- simp[machine_frame_primitives, machine_frame_reads] >>
+    gen_tac >> BETA_TAC) >>
+  simp[machine_frame_primitives, machine_frame_reads]
 QED
 
 Resume walk_outer_mutual[builtin_member]:
@@ -355,8 +376,7 @@ Resume walk_outer_mutual[extcall]:
   rpt strip_tac >> BETA_TAC >>
   match_mp_tac walk_bind >> conj_tac >- metis_tac[] >>
   gen_tac >> BETA_TAC >> machine_leaf >>
-  match_mp_tac machine_frame_bind >> conj_tac >- simp[machine_frame_read_results] >>
-  gen_tac >> BETA_TAC >> rw[state_rel_frame_def] >>
+  rw[state_rel_frame_def] >>
   qmatch_goalsub_abbrev_tac `SND call` >> Cases_on `call` >>
   fs[markerTheory.Abbrev_def] >>
   metis_tac[machine_frame_ext_call, pairTheory.SND]
@@ -370,7 +390,7 @@ Theorem target_walk_source_frame_from_internal:
     IS_SOME (supported_function_decl (cx_tops cx) (NONE,name) Internal) /\
     ~call_can_mutate cenv (IntCall (NONE,name)) /\
     state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
-      (eval_expr_results cx actuals) ==>
+      (eval_exprs cx actuals) ==>
     state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
       (eval_expr cx (Call ty (IntCall (NONE,name)) actuals fallback))) /\
   ~expr_can_mutate cenv (target_to_expr bt) /\

@@ -274,9 +274,8 @@ Resume target_call_free_evaluate[extcall_results]:
   simp[machine_frame_def] >> conj_tac
   >- (rpt strip_tac >> simp[] >> irule state_rel_frame_bind_guarded >>
       simp[machine_frame_def] >> conj_tac
-      >- (rpt strip_tac >> match_mp_tac machine_frame_bind >>
-          simp[machine_frame_read_results] >> gen_tac >>
-          simp[state_rel_frame_result] >> metis_tac[machine_frame_ext_call]) >> metis_tac[]) >> metis_tac[]
+      >- (rpt strip_tac >> simp[state_rel_frame_result] >>
+          metis_tac[machine_frame_ext_call]) >> metis_tac[]) >> metis_tac[]
 QED
 Resume target_call_free_evaluate[iterator_array]:
   strip_calls >> gvs[iterator_mutability_ok_def] >> simp[Once evaluate_def] >>
@@ -371,8 +370,14 @@ Resume target_call_free_evaluate[expr_subscript]:
   strip_calls >> gvs[Once expr_mutability_ok_def] >> simp[Once evaluate_def] >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
   >- (rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
-      conj_tac >- (rpt strip_tac >> match_mp_tac machine_frame_bind >>
-        simp[machine_frame_read_result, machine_frame_select_result]) >> metis_tac[]) >> metis_tac[]
+      conj_tac
+      >- (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+          simp[machine_frame_def] >> conj_tac
+          >- (rpt strip_tac >> match_mp_tac machine_frame_bind >>
+              simp[machine_frame_read_result, machine_frame_select_result]) >> metis_tac[]) >>
+      Cases_on `subscript_reads_base cx e e'` >> simp[machine_frame_primitives] >>
+      irule machine_frame_bind >>
+      simp[machine_frame_read_result, machine_frame_primitives]) >> metis_tac[]
 QED
 Resume target_call_free_evaluate[expr_builtin]:
   strip_calls >> gvs[Once expr_mutability_ok_def, call_target_mutability_ok_def] >>
@@ -401,7 +406,24 @@ Resume target_call_free_evaluate[builtin_other]:
   >- rpt (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
           simp[machine_frame_def, machine_frame_reads, machine_frame_primitives,
                machine_frame_precompile_call_success]) >>
-  gvs[SF ETA_ss] >> metis_tac[]
+  gvs[SF ETA_ss] >> Cases_on `code_slice_source bt es` >> simp[]
+  >- metis_tac[] >>
+  rename1 `_ = SOME p` >> PairCases_on `p` >> simp[] >>
+  `EVERY (expr_mutability_ok mods View) (TL es) /\
+   expr_mutability_ok mods View p1 /\
+   EVERY (\e. int_calls_expr e = []) (TL es) /\ int_calls_expr p1 = []` by
+    (qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+     qpat_x_assum `EVERY (expr_mutability_ok _ _) es` mp_tac >>
+     qpat_x_assum `EVERY (\e. int_calls_expr e = []) es` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rw[code_slice_source_SOME] >>
+     gvs[expr_mutability_ok_def, int_calls_expr_def]) >>
+  irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+       simp[machine_frame_def, machine_frame_reads, machine_frame_primitives,
+            machine_frame_precompile_call_success])
 QED
 Resume target_call_free_evaluate[assign_tuple]:
   strip_calls >> gvs[Once stmt_mutability_ok_def] >>

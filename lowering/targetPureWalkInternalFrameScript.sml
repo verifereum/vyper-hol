@@ -34,7 +34,7 @@ Theorem target_walk_internal_frame:
     IS_SOME (supported_function_decl (cx_tops cx) (NONE,name) Internal) /\
     ~call_can_mutate cenv (IntCall (NONE,name)) /\
     state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
-      (eval_expr_results cx actuals) ==>
+      (eval_exprs cx actuals) ==>
     state_rel_frame (\s t. machine_frame (s with logs := t.logs) t)
       (eval_expr cx (Call ty (IntCall (NONE,name)) actuals fallback))
 Proof
@@ -74,8 +74,6 @@ Resume target_walk_internal_frame[after_lookup]:
     match_mp_tac machine_frame_bind >> simp[machine_frame_primitives]) >>
   gen_tac >> BETA_TAC >> machine_leaf >>
   match_mp_tac machine_frame_bind >>
-  conj_tac >- simp[machine_frame_read_results] >>
-  gen_tac >> BETA_TAC >> match_mp_tac machine_frame_bind >>
   conj_tac >- simp[machine_frame_primitives] >>
   gen_tac >> BETA_TAC >> match_mp_tac machine_frame_bind >>
   conj_tac >- simp[machine_frame_primitives] >>
