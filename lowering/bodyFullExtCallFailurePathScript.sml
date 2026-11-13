@@ -2,7 +2,7 @@
 Theory bodyFullExtCallFailurePath
 Ancestors
   ctorDeployMemoryRunPtrPrefixSteps instIdxIndep ghostPcTransportPtr
-  rawCallBufferPtr fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasPathPtr
+  exprSimHash valueEncodingDefs rawCallBufferPtr fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasPathPtr
   fragGasEmitCtrl exprSimAccounts exprLoweringProps emitHelperProps emitHelper
   exprLowering compileEnv fragExec ptrSafeRun ptrDiscipline memSafeRun
   instMemFrontier unitTransformDefs codegenRel contextCodegenRel contextCodegenRelProps
@@ -308,4 +308,111 @@ Proof
   conj_tac >- metis_tac[] >>
   irule extcall_failure_prefix_compose >>
   simp[Abbr `r`, Abbr `i`, allocas_from_def] >> metis_tac[]
+QED
+
+Theorem extcall_failure_forward_exact[local]:
+  !s ctx lo func bb cid p rds rid tn pw G explicit PG.
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst cid RETURNDATACOPY [p;Lit 0w;rds] []) /\
+  get_instruction bb (SUC s.vs_inst_idx) =
+    SOME (mk_inst rid REVERT [p;rds] []) /\
+  op_taint tn p = {} /\ op_taint tn rds = {} /\
+  eval_operand p s = SOME pw /\
+  eval_operand rds s = SOME (n2w (LENGTH s.vs_returndata)) /\
+  LENGTH s.vs_returndata < dimword (:256) ==>
+  ?t G' tn'. t.vs_returndata = s.vs_returndata /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (Abort Revert_abort t,G',tn')
+Proof
+  rpt gen_tac >> strip_tac >>
+  `step_inst_base (mk_inst cid RETURNDATACOPY [p;Lit 0w;rds] []) s =
+      OK (write_memory_with_expansion (w2n pw) s.vs_returndata s) /\
+   step_inst_base (mk_inst rid REVERT [p;rds] [])
+      (write_memory_with_expansion (w2n pw) s.vs_returndata s) =
+      Abort Revert_abort
+        (revert_state (set_returndata s.vs_returndata
+          (write_memory_with_expansion (w2n pw) s.vs_returndata s)))` by
+    (conj_tac
+     >- simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
+          wordsTheory.w2n_n2w] >>
+     `eval_operand p (write_memory_with_expansion (w2n pw) s.vs_returndata s) =
+        SOME pw /\
+      eval_operand rds (write_memory_with_expansion (w2n pw) s.vs_returndata s) =
+        SOME (n2w (LENGTH s.vs_returndata))` by
+       (Cases_on `p` >> Cases_on `rds` >>
+        gvs[write_memory_with_expansion_def, eval_operand_def, lookup_var_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, wordsTheory.w2n_n2w,
+       GSYM mem_bytes_at_def, hash_write_memory_read_self]) >>
+  qmatch_asmsub_abbrev_tac `step_inst_base _ s = OK u` >>
+  qmatch_asmsub_abbrev_tac `step_inst_base _ u = Abort Revert_abort t` >>
+  qexistsl_tac [`t with vs_inst_idx := SUC s.vs_inst_idx`,
+    `step_prov PG G (mk_inst cid RETURNDATACOPY [p;Lit 0w;rds] []) u`,
+    `step_taint (mk_inst cid RETURNDATACOPY [p;Lit 0w;rds] []) s u tn`] >>
+  conj_tac
+  >- simp[Abbr `t`, revert_state_def, set_returndata_def] >>
+  irule extcall_forward_pair_path >> simp[mk_inst_def] >>
+  qpat_x_assum `step_inst_base _ u = Abort _ t` mp_tac >>
+  Cases_on `p` >> Cases_on `rds` >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
+    lookup_var_def, revert_state_def, set_returndata_def] >>
+  strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem extcall_failure_suffix_path:
+  emit_inst JNZ [cond;Label ok;Label fl] [] sa = ((),sx) /\
+  new_block fl sx = (x,sf) /\
+  emit_op RETURNDATASIZE [] sf = (z,sz) /\
+  compile_alloc_buffer 0 sz = (rb,sp) /\
+  emit_void RETURNDATACOPY [rb.buf_operand;Lit 0w;z] sp = (b,sc) /\
+  emit_inst REVERT [rb.buf_operand;z] [] sc = (c,se) /\
+  new_block ok se = (y,sk) /\ fn_has_code sa sk func /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand cond s = SOME 0w /\ op_taint tn cond = {} /\
+  LENGTH s.vs_returndata < dimword (:256) ==>
+  ?u G' tn'. (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) [] (Abort Revert_abort u,G',tn')) /\
+    u.vs_returndata = s.vs_returndata
+Proof
+  strip_tac >>
+  drule_all extcall_failure_layout >> strip_tac >>
+  `fn_has_code sa sx func` by
+    (fs[emit_inst_def, emit_op_def, emit_void_def, compile_alloc_buffer_def,
+      new_block_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_id_def, fresh_var_def, emit_def] >> gvs[] >>
+     fs[fn_has_code_def, emitted_blocks_def, DISJ_IMP_THM, FORALL_AND_THM] >>
+     metis_tac[]) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (jump_to fl s),G,tn)` by
+    (gen_tac >> irule (SRULE [] (INST [``b:bool`` |-> ``F``] emit_jnz_origin_ptr)) >>
+     simp[] >> metis_tac[]) >>
+  `?t G1 tn1 b0.
+    ~t.vs_halted /\ t.vs_current_bb = fl /\ t.vs_inst_idx = 2 /\
+    t.vs_returndata = s.vs_returndata /\
+    eval_operand (Var v) t = SOME (n2w (LENGTH s.vs_returndata)) /\
+    eval_operand (Var p) t = SOME (n2w b0) /\
+    op_taint tn1 (Var v) = {} /\ op_taint tn1 (Var p) = {} /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (jump_to fl s,G,tn) [] (OK t,G1,tn1)` by
+    (pure_rewrite_tac[jump_to_def] >>
+     irule (SRULE [jump_to_def]
+       (Q.INST [`s` |-> `jump_to fl s`] extcall_failure_prefix_path)) >>
+     simp[allocas_from_def] >> fs[allocas_from_def] >> metis_tac[]) >>
+  `?u G2 tn2. u.vs_returndata = t.vs_returndata /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (t,G1,tn1) [] (Abort Revert_abort u,G2,tn2)` by
+    (irule extcall_failure_forward_exact >> simp[] >> metis_tac[]) >>
+  qexistsl_tac [`u`,`G2`,`tn2`] >> simp[] >> gen_tac >>
+  qpat_x_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
+    (qspec_then `D` (mp_then Any mp_tac gas_origin_ptr_path_append)) >>
+  simp[] >> disch_then irule >>
+  qpat_x_assum `!D. gas_origin_ptr_path _ (jump_to fl s,G,tn) _ _`
+    (qspec_then `D` (mp_then Any mp_tac gas_origin_ptr_path_append)) >>
+  simp[] >> disch_then irule >> simp[]
 QED
