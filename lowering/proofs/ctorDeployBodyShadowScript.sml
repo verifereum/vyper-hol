@@ -15,22 +15,12 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem deploy_body_shadow_cond_not[local]:
-  !p a b. (if ~p then a else b) = (if p then b else a)
-Proof
-  Cases >> simp[]
-QED
-
-Theorem deploy_body_shadow_lock_flag[local]:
-  !p f. (\(a:bool,b:num,c:bool,d:bool). f d) p = f (SND (SND (SND p)))
-Proof
-  PairCases >> simp[]
-QED
-
-(* A constructor deploy run, for any body and internal packages, is
-   compile_generate_deploy's constructor branch laid out step by step. *)
+(* A constructor deploy run with a non-view lock flag, for any body and
+   internal packages, is compile_generate_deploy's constructor branch laid
+   out step by step. *)
 Theorem run_deploy_lowering_ctor_trace[local]:
-  !rpolicy bc cap args ifns cenv0 body pay nr nkey ut u.
+  !rpolicy bc cap args ifns cenv0 body pay nr nkey ut u lnr lkey lut.
+    cenv0.ce_nonreentrant = (lnr,lkey,lut,F) /\
     run_deploy_lowering T rpolicy bc cap args 0 ifns cenv0 body pay nr nkey
       ut "__deploy" = SOME u ==>
     ?st_pay imm st1 cenv1 st2 st3 exit_lbl sa sb sj old_bb st_exit
@@ -46,20 +36,16 @@ Theorem run_deploy_lowering_ctor_trace[local]:
       compile_register_constructor_args
         (cenv0 with ce_imm_alloca := (if cap > 0 then SOME imm else NONE))
         args 0 0 st1 = (cenv1,st2) /\
-      (if nr then
-         compile_nonreentrant_lock nkey ut
-           (SND (SND (SND cenv0.ce_nonreentrant)))
-       else comp_return ()) st2 = ((),st3) /\
+      (if nr then compile_nonreentrant_lock nkey ut F else comp_return ())
+        st2 = ((),st3) /\
       fresh_label "ctor_exit" st3 = (exit_lbl,sa) /\
       compile_stmts (cenv1 with ce_ctor_exit_label := SOME exit_lbl)
         NoLoop NoneT body sa = ((),sb) /\
       (if block_is_terminated sb then comp_return ()
        else emit_inst JMP [Label exit_lbl] []) sb = ((),sj) /\
       new_block exit_lbl sj = (old_bb,st_exit) /\
-      (if nr then
-         compile_nonreentrant_unlock nkey ut
-           (SND (SND (SND cenv0.ce_nonreentrant)))
-       else comp_return ()) st_exit = ((),st_epilogue) /\
+      (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
+        st_exit = ((),st_epilogue) /\
       compile_constructor_epilogue (LENGTH bc) cap imm st_epilogue =
         ((),st_final) /\
       compile_internal_fn_bodies ifns st_final = ((),post) /\
@@ -67,11 +53,14 @@ Theorem run_deploy_lowering_ctor_trace[local]:
       lowering_context_ok (install_immutable_reservation cap ctx) /\
       u.cu_context = install_immutable_reservation cap ctx
 Proof
-  rpt gen_tac >> simp[run_deploy_lowering_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `run_deploy_lowering _ _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[run_deploy_lowering_def] >>
   pairarg_tac >> simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
   qpat_x_assum `compile_generate_deploy _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  rewrite_tac [compile_generate_deploy_def, comp_ignore_bind_def,
-    comp_bind_def, comp_get_def, LET_THM, deploy_body_shadow_lock_flag] >>
+  qpat_x_assum `_.ce_nonreentrant = _` (fn th =>
+    rewrite_tac [th, compile_generate_deploy_def, comp_ignore_bind_def,
+      comp_bind_def, comp_get_def, LET_THM]) >>
   rpt (pairarg_tac >> gvs[comp_bind_def, comp_get_def, LET_THM]) >>
   strip_tac >>
   Cases_on `pay` >> gvs[] >>
@@ -165,7 +154,11 @@ Proof
   rename1 `_ = SOME su` >> strip_tac >>
   `gas_shadow_context dunit.cu_context su.cu_context` by
     fs[gas_shadow_unit_def] >>
-  drule run_deploy_lowering_ctor_trace >> strip_tac >>
+  qspecl_then [`rpolicy`, `runtime_bc`, `imm_len tops`, `pos_args`,
+    `MAP gas_shadow_internal_package ifns`, `cenv0`,
+    `MAP gas_shadow_stmt body`, `pay`, `nr`, `nkey`, `ut`, `su`, `nr`,
+    `nkey`, `ut`] mp_tac run_deploy_lowering_ctor_trace >>
+  simp[] >> strip_tac >>
   gvs[] >>
   (* the shadow body run from the shared sa *)
   rename1 `compile_stmts _ NoLoop NoneT (MAP gas_shadow_stmt body) sa =
@@ -202,7 +195,7 @@ Proof
         (if nr then compile_nonreentrant_unlock nkey ut F else return ());
         compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops) imm od)
       (initial_compile_state "__deploy") = ((),t_final)` by
-    (rewrite_tac[deploy_body_shadow_cond_not] >>
+    (rewrite_tac[ctor_code_cond_not] >>
      simp[comp_ignore_bind_def, comp_bind_def, comp_get_def]) >>
   drule_all ctor_code_prefix_certificates >> strip_tac >>
   `EVERY internal_fn_shape_ok (MAP gas_shadow_internal_package ifns)` by

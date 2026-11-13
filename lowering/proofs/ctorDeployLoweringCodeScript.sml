@@ -296,7 +296,7 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
-Theorem ctor_code_cond_not[local]:
+Theorem ctor_code_cond_not:
   !p a b. (if ~p then a else b) = (if p then b else a)
 Proof
   Cases >> simp[]
