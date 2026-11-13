@@ -273,15 +273,24 @@ Theorem abi_malformed_resource_register_update:
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es t` by
-    (qpat_assum `t = v with vs_vars := _` SUBST1_TAC >>
+  `!H:(bool # bytes32 # type_value) list # num list.
+     stmt_state_rel H ctx func cenv cx es v ==>
+     stmt_state_rel H ctx func cenv cx es t` by
+    (rpt strip_tac >>
+     qpat_assum `t = v with vs_vars := _` SUBST1_TAC >>
      irule abi_malformed_reserved_vars_state >>
-     reverse conj_tac >- fs[abi_malformed_resource_post_def] >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
      qexists_tac `st` >> simp[lookup_var_def] >>
      fs[lookup_var_def]) >>
   `t.vs_memory = v.vs_memory /\ t.vs_allocas = v.vs_allocas /\
    t.vs_alloca_next = v.vs_alloca_next /\ t.vs_labels = v.vs_labels` by
     (qpat_assum `t = v with vs_vars := _` SUBST1_TAC >> simp[]) >>
+  `(?H0:(bool # bytes32 # type_value) list # num list.
+      stmt_state_rel H0 ctx func cenv cx es t) /\
+   (!H:(bool # bytes32 # type_value) list # num list.
+      stmt_state_rel H ctx func cenv cx es s ==>
+      stmt_state_rel H ctx func cenv cx es t)` by
+    (fs[abi_malformed_resource_post_def] >> metis_tac[]) >>
   fs[abi_malformed_resource_post_def] >> conj_tac
   >- (rpt strip_tac >> first_x_assum irule >>
       qexistsl_tac [`aid`, `cap`] >> simp[]) >>
