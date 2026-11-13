@@ -133,6 +133,10 @@ Proof
   conj_tac >- metis_tac[EVERY_TAKE] >>
   conj_tac >- metis_tac[EVERY_TAKE] >>
   conj_tac >- metis_tac[] >>
+  reverse conj_tac
+  >- (conj_tac >- (irule EVERY_TAKE >> first_assum MATCH_ACCEPT_TAC) >>
+      conj_tac >- (irule EVERY_TAKE >> fs[]) >>
+      irule EVERY_DROP >> fs[]) >>
   qx_genl_tac [`pos_end`, `pos_state`, `cells`] >> strip_tac >>
   `pos_end with gas_obs := [] = pos_end` by simp[evaluation_state_component_equality] >>
   `gas_admissible (bind (eval_exprs cx (DROP (LENGTH ats) rest))
@@ -157,8 +161,8 @@ Proof
   qpat_assum `exprs_case _ _ _ _ _ (DROP _ rest)` (irule_at Any) >>
   qexistsl [`[]`, `[]`, `[]`, `env`] >>
   simp[extrequest_strong_captures_def] >>
-  conj_tac >- metis_tac[EVERY_DROP] >>
-  conj_tac >- metis_tac[EVERY_DROP] >>
+  conj_tac >- (irule EVERY_DROP >> fs[]) >>
+  conj_tac >- (irule EVERY_DROP >> first_assum MATCH_ACCEPT_TAC) >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   reverse conj_tac
@@ -167,9 +171,9 @@ Proof
   qx_genl_tac [`kwvs`, `ef`, `q`] >> strip_tac >>
   `ci_mono s1 s2` by
     (qpat_assum `compile_ext_call_args _ _ _ _ _ _ = _` mp_tac >>
-     mp_tac (Q.SPECL [`TAKE (LENGTH ats) rest`,
-       `MAP (lowered_value_type cenv) (TAKE (LENGTH ats) rest)`,
-       `compile_expr`, `cenv`, `DROP (LENGTH ats) rest`, `s1`]
+     mp_tac (Q.SPECL [`TAKE (LENGTH (ats:type list)) rest`,
+       `MAP (lowered_value_type cenv) (TAKE (LENGTH (ats:type list)) rest)`,
+       `compile_expr`, `cenv`, `DROP (LENGTH (ats:type list)) rest`, `s1`]
        ci_mono_compile_ext_call_args) >>
      simp[cj 1 compile_expr_ci_mono] >> metis_tac[SND]) >>
   qpat_assum `extrequest_kwargs_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -194,7 +198,7 @@ Proof
        metis_tac[] >>
      irule extrequest_snapshot_cell_history >>
      qpat_assum `extrequest_snapshot_cell _ _ _ _ pos_end _ _ e` (irule_at Any) >>
-     simp[]) >>
+     metis_tac[]) >>
   `safe_operand s2 addr_op` by
     (irule safe_operand_mono >> qexists `s1` >> gvs[ci_mono_def]) >>
   `safe_operand s3 addr_op` by metis_tac[safe_operand_mono] >>
