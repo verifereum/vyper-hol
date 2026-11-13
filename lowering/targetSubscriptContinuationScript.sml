@@ -573,7 +573,8 @@ Proof
       extend_place_def, bind_def, lift_option_type_def, return_def,
       raise_def, AllCaseEqs()] >>
   rename1 `IS_SOME (evaluate_type _ ty)` >>
-  Cases_on `evaluate_type (get_tenv cx) ty` >> gvs[return_def]
+  Cases_on `evaluate_type (get_tenv cx) ty` >>
+  gvs[return_def, bind_def, ignore_bind_def, record_storage_event_def]
 QED
 
 (* ===== One endpoint for every horizon =====

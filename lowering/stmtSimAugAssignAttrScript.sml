@@ -1289,7 +1289,8 @@ Resume augassign_attr_normal_summary[store]:
     metis_tac[gas_marked_path_then, arithmeticTheory.ADD] >>
   `gas_marked_path F ctx func s0 (LENGTH marks + 0) (OK t'')` by
     (irule gas_marked_path_then >> qexists_tac `t'` >> simp[]) >>
-  fs[]
+  qpat_x_assum `gas_marked_path _ _ _ s0 (LENGTH marks + 0) _`
+    (ACCEPT_TAC o REWRITE_RULE [arithmeticTheory.ADD_0])
 QED
 Resume augassign_attr_normal_summary[operator_error]:
   gvs[] >>
