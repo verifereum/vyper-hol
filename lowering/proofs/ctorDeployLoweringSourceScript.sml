@@ -1125,7 +1125,7 @@ QED
 (* The setup-and-body block of call_external_function_trace for a
    constructor without lock, defaults or external calls. *)
 Theorem ctor_call_block_outcomes[local]:
-  ~supported_stmts_expr_exists constructor_call_root body ==>
+  ~supported_stmts_expr_exists constructor_call_root cbody ==>
   !s oc.
     ignore_bind (send_call_value mut cx)
       (bind (eval_external_defaults cx (DROP n []))
@@ -1134,7 +1134,7 @@ Theorem ctor_call_block_outcomes[local]:
               NONE => raise (Error (RuntimeError "call bind_arguments"))
             | SOME env =>
                 ignore_bind (set_scopes [env])
-                  (ignore_bind (lock_if_nr cx F iv) (eval_stmts cx body))))
+                  (ignore_bind (lock_if_nr cx F iv) (eval_stmts cx cbody))))
       (s with outcomes := oc) =
     (FST (ignore_bind (send_call_value mut cx)
       (bind (eval_external_defaults cx (DROP n []))
@@ -1143,7 +1143,7 @@ Theorem ctor_call_block_outcomes[local]:
               NONE => raise (Error (RuntimeError "call bind_arguments"))
             | SOME env =>
                 ignore_bind (set_scopes [env])
-                  (ignore_bind (lock_if_nr cx F iv) (eval_stmts cx body)))) s),
+                  (ignore_bind (lock_if_nr cx F iv) (eval_stmts cx cbody)))) s),
      SND (ignore_bind (send_call_value mut cx)
       (bind (eval_external_defaults cx (DROP n []))
          (\dflt_vs.
@@ -1151,7 +1151,7 @@ Theorem ctor_call_block_outcomes[local]:
               NONE => raise (Error (RuntimeError "call bind_arguments"))
             | SOME env =>
                 ignore_bind (set_scopes [env])
-                  (ignore_bind (lock_if_nr cx F iv) (eval_stmts cx body)))) s)
+                  (ignore_bind (lock_if_nr cx F iv) (eval_stmts cx cbody)))) s)
        with outcomes := oc)
 Proof
   strip_tac >>

@@ -216,7 +216,8 @@ Proof
               simp[])
           >~ [`accounts_agree H _ _ _`]
           >- (`s'.vs_pending_deletions = s.vs_pending_deletions` by gvs[] >>
-              pop_assum SUBST1_TAC >>
+              pop_assum (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >>
+                                  PURE_REWRITE_TAC [th]) >>
               irule accounts_agree_dead_target_trans >>
               qexistsl [`D`, `process_deletions s.vs_pending_deletions
                  (update_account tx.target
