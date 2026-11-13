@@ -21,14 +21,16 @@ Theorem vyper_call_gas_sufficient_asm_opt:
     ~program_reads_self_code tops /\
     supported_program tops /\ immutable_free_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx
       (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
     ==>
     ?g. !g'.
       g <= g' /\
-      call_outcomes_storage_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
+      (!gs. source_storage_ok am tx
+              (MAP SND (call_trace (add_frame_gas g' es))) gs /\
+            call_outcomes_storage_ok am tx
+              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
       (!obs. ~gas_source_exempt tops
          (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
             obs am tx))
@@ -80,7 +82,6 @@ Theorem vyper_call_gas_sufficient:
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ immutable_free_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx
       (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
@@ -89,8 +90,10 @@ Theorem vyper_call_gas_sufficient:
       g <= g' ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        (call_outcomes_storage_ok am tx
-           (MAP SND (call_trace (add_frame_gas g' es))) /\
+        ((!gs. source_storage_ok am tx
+                 (MAP SND (call_trace (add_frame_gas g' es))) gs /\
+               call_outcomes_storage_ok am tx
+                 (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
          (!obs. ~gas_source_exempt tops
             (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
                obs am tx)) /\
@@ -100,8 +103,10 @@ Proof
   rpt gen_tac >> strip_tac >>
   `?g. !g'.
      g <= g' /\
-     call_outcomes_storage_ok am tx
-       (MAP SND (call_trace (add_frame_gas g' es))) /\
+     (!gs. source_storage_ok am tx
+             (MAP SND (call_trace (add_frame_gas g' es))) gs /\
+           call_outcomes_storage_ok am tx
+             (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
      (!obs. ~gas_source_exempt tops
         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
            obs am tx))
