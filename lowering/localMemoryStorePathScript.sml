@@ -96,6 +96,11 @@ Theorem local_memory_store_path:
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
              rest) t /\
+        (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+           stmt_state_rel H' ctx func cenv cx
+             (es with scopes :=
+                pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
+                rest) t) /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -148,8 +153,12 @@ Proof
      decide_tac) >>
   `memory_value_rel entry.type v (w2n w) t.vs_memory` by
     (irule val_in_memory_memory_value_rel >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx es1 t` by
-    (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
+  `!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+        stmt_state_rel H' ctx func cenv cx es1 t` by
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` kall_tac >>
+     drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
+  `stmt_state_rel H ctx func cenv cx es1 t` by (first_assum drule >> simp[]) >>
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
@@ -177,11 +186,25 @@ Proof
   qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
   simp[venom_state_component_equality] >>
   strip_tac >> gvs[same_blocks_def, lookup_var_def] >>
+  conj_tac
+  >- (gen_tac >> strip_tac >>
+      qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` kall_tac >>
+      `t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|> = s` by
+        fs[venom_state_component_equality] >>
+      `lookup_var p s = SOME w` by simp[lookup_var_def] >>
+      `!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s` by
+        simp[lookup_var_def] >>
+      `!b n. b + n <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
+             mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory` by
+        (rpt strip_tac >>
+         qpat_x_assum `!a len. a + len <= w2n w \/ type_memory_size _ + w2n w <= a ==> _`
+           irule >> decide_tac) >>
+      drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem alloc_copy_memory_framed_path:
+Theorem alloc_copy_memory_framed_bounded_path:
   !cx st0 ctx func cenv es sa sm sb s0 p src sz sw tv v.
     emit_inst ALLOCA [Lit (n2w sz)] [p] sa = ((), sm) /\
     emit_void MCOPY [Var p; src; Lit (n2w sz)] sm = ((), sb) /\
@@ -208,13 +231,22 @@ Theorem alloc_copy_memory_framed_path:
                    FLOOKUP s2.vs_allocas aid = SOME entry) /\
       ~s2.vs_halted /\ s2.vs_current_bb = sb.cs_current_bb /\
       s2.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      gas_marked_path F ctx func s0 0 (OK s2)
+      gas_marked_path F ctx func s0 0 (OK s2) /\
+      w2n w + sz < dimword (:256)
 Proof
   rpt strip_tac >>
   qspecl_then [`cx`, `st0`, `ctx`, `func`, `cenv`, `es`, `sa`, `sm`, `p`, `sz`, `s0`]
     mp_tac annassign_alloca_operand_framed_path >>
   impl_tac >- (asm_rewrite_tac[] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`s1`, `w`] strip_assume_tac) >>
+  `w2n w + sz < dimword (:256)` by
+    (`alloca_room ctx func s1 /\ alloca_next_valid s1` by
+       (qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ s1`
+          (drule_then assume_tac) >>
+        gvs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
+     drule alloca_room_next_lt >>
+     fs[venomMemDefsTheory.alloca_next_valid_def] >>
+     first_x_assum (drule_then assume_tac) >> decide_tac) >>
   `eval_operand src s1 = SOME sw` by simp[] >>
   `val_in_memory tv v (w2n sw) s1.vs_memory` by simp[] >>
   qabbrev_tac `inst = mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
@@ -267,4 +299,38 @@ Proof
   `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
   `aid <> bid` by decide_tac >>
   fs[venomMemDefsTheory.allocas_non_overlapping_def] >> metis_tac[]
+QED
+
+Theorem alloc_copy_memory_framed_path:
+  !cx st0 ctx func cenv es sa sm sb s0 p src sz sw tv v.
+    emit_inst ALLOCA [Lit (n2w sz)] [p] sa = ((), sm) /\
+    emit_void MCOPY [Var p; src; Lit (n2w sz)] sm = ((), sb) /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0) /\ fn_inst_ids_distinct func /\
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
+    not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\
+    src <> Var p /\ eval_operand src s0 = SOME sw /\
+    val_in_memory tv v (w2n sw) s0.vs_memory /\ val_wf tv v /\
+    val_footprint tv v <= sz /\
+    fn_has_code sa sm func /\ fn_has_code sm sb func /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?s2 w. lookup_var p s2 = SOME w /\
+      FLOOKUP s2.vs_allocas sa.cs_next_id = SOME (w2n w, sz) /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s2) /\
+      val_in_memory tv v (w2n w) s2.vs_memory /\
+      (!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
+         mem_bytes_at ad len s2.vs_memory = mem_bytes_at ad len s0.vs_memory) /\
+      (!x. x <> p ==> lookup_var x s2 = lookup_var x s0) /\
+      (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+                   FLOOKUP s2.vs_allocas aid = SOME entry) /\
+      ~s2.vs_halted /\ s2.vs_current_bb = sb.cs_current_bb /\
+      s2.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      gas_marked_path F ctx func s0 0 (OK s2)
+Proof
+  rpt gen_tac >>
+  disch_then (strip_assume_tac o MATCH_MP alloc_copy_memory_framed_bounded_path) >>
+  qexistsl_tac [`s2`, `w`] >> asm_rewrite_tac[]
 QED
