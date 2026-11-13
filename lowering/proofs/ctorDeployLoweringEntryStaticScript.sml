@@ -3,6 +3,7 @@ Ancestors
   loweringStateRelDefs
  ctorDeployLoweringDefs ctorDeployLoweringEntryPrefix ctorDeployLoweringFrame
  exprOpenTerminals exprOpenPrimitives moduleLowering emitHelperProps compileEnv venomInst abiEncoder
+ argumentRegistrationOpen
 Libs dep_rewrite
 
 Theorem deploy_ctor_clamp_open:
@@ -41,25 +42,8 @@ Theorem deploy_ctor_decode_args_open:
  compile_decode_args ce args off DLOAD hi adj sa = (u,sb) ==>
  ~block_is_terminated sb
 Proof
- Induct >- simp[compile_decode_args_def, comp_return_def] >>
- PairCases >> rpt gen_tac >>
- Cases_on `h1` >> Cases_on `h2` >>
- simp[compile_decode_args_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
- Cases_on `FLOOKUP ce.ce_vars h0` >>
- simp[] >>
- TRY (rename1 `SOME loc` >> Cases_on `var_location_decode_operand loc`) >>
- simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
- rpt (pairarg_tac >> gvs[]) >> strip_tac >>
- gvs[AllCaseEqs()] >>
- imp_res_tac emit_op_nonterminator_open >> fs[is_terminator_def] >>
- imp_res_tac compile_abi_decode_to_buf_open >>
- imp_res_tac deploy_ctor_clamp_open >>
- imp_res_tac deploy_ctor_optional_store_open >>
- imp_res_tac emit_void_terminated >> fs[is_terminator_def] >>
- qpat_x_assum `!ce off hi adj sa sb. ~block_is_terminated sa /\
-   compile_decode_args ce args off DLOAD hi adj sa = ((),sb) ==> _`
-   (fn ih => first_assum (mp_then (Pos last) mp_tac ih)) >>
- simp[]
+ rpt strip_tac >> drule_at (Pos last) compile_decode_args_open >>
+ simp[is_terminator_def]
 QED
 
 Theorem deploy_ctor_register_args_open:
