@@ -29,7 +29,7 @@ Proof
              gas_shadow_compiles_register_constructor_args,
              gas_shadow_compiles_nonreentrant_lock,
              gas_shadow_compiles_fresh_label, gas_shadow_compile_stmt]) >> gen_tac) >>
-  ho_match_mp_tac gas_shadow_compiles_get_terminated >> gen_tac >>
+  ho_match_mp_tac gas_shadow_compiles_get_terminated >> qx_gen_tac `b` >>
   Cases_on `b` >> Cases_on `nr` >>
   simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
        gas_shadow_compiles_emit_inst, gas_shadow_compiles_new_block,
