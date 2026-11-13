@@ -12,7 +12,7 @@ Theorem raw_call_emit_checked_full:
     (if stat then [gas_op;addr_op;ao_op;az_op;ro_op;rz_op]
      else [gas_op;addr_op;value_op;ao_op;az_op;ro_op;rz_op]) [out] /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   eval_operand gas_op s = SOME gas /\ eval_operand addr_op s = SOME aw /\
   (~stat ==> eval_operand value_op s = SOME vw) /\
   eval_operand ao_op s = SOME ao /\ eval_operand az_op s = SOME az /\
@@ -22,9 +22,9 @@ Theorem raw_call_emit_checked_full:
   take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
     (INL (rq,outcome),es1) /\
   access_ok 0 G func inst s /\ taint_ok func tn inst s /\
-  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok cx tn s /\
+  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok H cx tn s /\
   ~s.vs_halted /\ ~cenv.ce_is_ctor /\ not_local_ptr cenv es.scopes out /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv protected /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv protected /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
   (!x. not_fresh_at protected x ==> x <> out) /\
@@ -32,20 +32,20 @@ Theorem raw_call_emit_checked_full:
     regions_disjoint (w2n ro) (w2n rz) a len) /\
   (!aid a len. aid < protected.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
     regions_disjoint (w2n ro) (w2n rz) a len) ==>
-  ?s' t H un u.
+  ?s' t HG un u.
     exec_ext_call inst s gas aw (if stat then 0w else vw) ao az ro rz stat = OK t /\
     t = update_var out (if outcome.co_success then 1w else 0w) s' /\
     s'.vs_memory = (write_memory_with_expansion (w2n ro)
       (TAKE (w2n rz) outcome.co_returnData) s).vs_memory /\
     s'.vs_returndata = outcome.co_returnData /\
-    H = step_prov PG G inst t /\ un = step_taint inst s t tn /\
+    HG = step_prov PG G inst t /\ un = step_taint inst s t tn /\
     u = t with vs_inst_idx := LENGTH sc.cs_current_insts /\
-    gas_path_ptr_edge (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK u) /\
-    stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
-    ghost_inv d cenv cx (SND (adopt_call_outcome rq outcome es1)) H un u /\
-    ghost_kept cenv es protected G tn s H un /\
+    gas_path_ptr_edge (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
+    stmt_state_rel H ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
+    ghost_inv H d cenv cx (SND (adopt_call_outcome rq outcome es1)) HG un u /\
+    ghost_kept cenv es protected G tn s HG un /\
     wb_frame cenv es (SND (adopt_call_outcome rq outcome es1)) protected s u /\
-    op_taint un (Var out) = {} /\ op_prov H (Var out) = NONE /\
+    op_taint un (Var out) = {} /\ op_prov HG (Var out) = NONE /\
     u.vs_allocas = s.vs_allocas /\
     u.vs_vars = s.vs_vars |+ (out,if outcome.co_success then 1w else 0w) /\
     u.vs_fmp = s.vs_fmp /\
@@ -59,7 +59,7 @@ Proof
      strip_tac >> gvs[] >> goal_assum (drule_at Any) >> simp[]) >>
   mp_tac (oracle_call_checked_full |> Q.INST [`sa` |-> `protected`]) >>
   impl_tac >- (Cases_on `stat` >> gvs[venomInstTheory.mk_inst_def] >> metis_tac[]) >> strip_tac >>
-  qexistsl_tac [`s'`, `t`, `H`, `un`, `t with vs_inst_idx := LENGTH sc.cs_current_insts`] >>
+  qexistsl_tac [`s'`, `t`, `HG`, `un`, `t with vs_inst_idx := LENGTH sc.cs_current_insts`] >>
   gvs[]
 QED
 
@@ -79,9 +79,9 @@ Theorem raw_call_emit_suffix_ready:
   t.vs_returndata = rd /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s capacity /\
   FLOOKUP s.vs_allocas aid = SOME (off,len) /\
-  H = step_prov PG G inst t /\ un = step_taint inst s t tn /\
+  HG = step_prov PG G inst t /\ un = step_taint inst s t tn /\
   u = t with vs_inst_idx := LENGTH sc.cs_current_insts ==>
-  lookup_var src u = SOME a /\ ptr_covers H un src u capacity /\
+  lookup_var src u = SOME a /\ ptr_covers HG un src u capacity /\
   FLOOKUP u.vs_allocas aid = SOME (off,len) /\
   mem_bytes_at (w2n a+32) (LENGTH (TAKE cap rd)) u.vs_memory = TAKE cap rd /\
   (!i. w2n a+32 <= i /\ i < w2n a+32+LENGTH (TAKE cap rd) ==> i NOTIN un.t_mem) /\
@@ -106,7 +106,7 @@ Theorem raw_call_extracted_checked_full:
    | StaticCall => emit_op STATICCALL [gas_op;addr;dp;dl;op;rz_op]) sa = (Var out,sc) /\
   fn_has_code sa sc func /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   eval_operand gas_op s = SOME gas /\ eval_operand addr s = SOME aw /\
   (~stat ==> eval_operand value_op s = SOME vw) /\
   eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\
@@ -121,9 +121,9 @@ Theorem raw_call_extracted_checked_full:
   taint_ok func tn (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
     (if stat then [gas_op;addr;dp;dl;op;rz_op]
      else [gas_op;addr;value_op;dp;dl;op;rz_op]) [out]) s /\
-  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok cx tn s /\
+  allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ stor_taint_ok H cx tn s /\
   ~s.vs_halted /\ ~cenv.ce_is_ctor /\ not_local_ptr cenv es.scopes out /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv protected /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv protected /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
   (!x. not_fresh_at protected x ==> x <> out) /\
@@ -131,7 +131,7 @@ Theorem raw_call_extracted_checked_full:
     regions_disjoint (w2n ro) (w2n rz) a len) /\
   (!aid a len. aid < protected.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
     regions_disjoint (w2n ro) (w2n rz) a len) ==>
-  ?s' t H un u.
+  ?s' t HG un u.
     exec_ext_call (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
       (if stat then [gas_op;addr;dp;dl;op;rz_op]
        else [gas_op;addr;value_op;dp;dl;op;rz_op]) [out])
@@ -140,19 +140,19 @@ Theorem raw_call_extracted_checked_full:
     s'.vs_memory = (write_memory_with_expansion (w2n ro)
       (TAKE (w2n rz) outcome.co_returnData) s).vs_memory /\
     s'.vs_returndata = outcome.co_returnData /\
-    H = step_prov PG G (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
+    HG = step_prov PG G (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
       (if stat then [gas_op;addr;dp;dl;op;rz_op]
        else [gas_op;addr;value_op;dp;dl;op;rz_op]) [out]) t /\
     un = step_taint (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
       (if stat then [gas_op;addr;dp;dl;op;rz_op]
        else [gas_op;addr;value_op;dp;dl;op;rz_op]) [out]) s t tn /\
     u = t with vs_inst_idx := LENGTH sc.cs_current_insts /\
-    gas_path_ptr_edge (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK u) /\
-    stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
-    ghost_inv d cenv cx (SND (adopt_call_outcome rq outcome es1)) H un u /\
-    ghost_kept cenv es protected G tn s H un /\
+    gas_path_ptr_edge (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
+    stmt_state_rel H ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
+    ghost_inv H d cenv cx (SND (adopt_call_outcome rq outcome es1)) HG un u /\
+    ghost_kept cenv es protected G tn s HG un /\
     wb_frame cenv es (SND (adopt_call_outcome rq outcome es1)) protected s u /\
-    op_taint un (Var out) = {} /\ op_prov H (Var out) = NONE /\
+    op_taint un (Var out) = {} /\ op_prov HG (Var out) = NONE /\
     u.vs_allocas = s.vs_allocas /\
     u.vs_vars = s.vs_vars |+ (out,if outcome.co_success then 1w else 0w) /\
     u.vs_fmp = s.vs_fmp /\
@@ -194,15 +194,15 @@ Theorem raw_call_allocated_suffix_ready:
   t.vs_vars = s.vs_vars |+ (out,if flag then 1w else 0w) /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
   t.vs_memory = (write_memory_with_expansion (ob+32) (TAKE cap rd) s).vs_memory /\
-  t.vs_returndata = rd /\ H = step_prov PG G inst t /\
+  t.vs_returndata = rd /\ HG = step_prov PG G inst t /\
   un = step_taint inst s t tn /\ u = t with vs_inst_idx := LENGTH sc.cs_current_insts /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv protected /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv protected /\
   wb_frame cenv es es' protected s u /\ ee.scopes = es.scopes /\
   (!name a len. local_region cenv es.scopes s name a len ==>
     regions_disjoint ob capacity a len) /\
   (!id a len. id < protected.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (a,len) ==>
     regions_disjoint ob capacity a len) ==>
-  lookup_var src u = SOME (n2w ob) /\ ptr_covers H un src u capacity /\
+  lookup_var src u = SOME (n2w ob) /\ ptr_covers HG un src u capacity /\
   local_ptrs_reserved cenv protected /\ ci_mono protected sc /\
   not_fresh_at sc src /\ not_fresh_at sc out /\
   FLOOKUP u.vs_allocas aid = SOME (ob,capacity) /\ aid < sc.cs_next_id /\

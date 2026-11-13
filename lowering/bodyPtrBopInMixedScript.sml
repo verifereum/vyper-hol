@@ -38,7 +38,7 @@ Theorem membership_mixed_outcome_ptr:
     P1 (INL v1) es1 /\ P2 v1 es1 (INL tv) es2 /\
     es1.gas_obs = [] /\ ~s1.vs_halted /\
     es2.gas_obs = [] /\ ~s2.vs_halted ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (next v1 tv) (es2,s2,G2,tn2) Q (\res ee gt r. expr_exit res r)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func) (ignore_bind p1 (return ()))
@@ -72,7 +72,7 @@ Theorem membership_mixed_outcome_ptr:
       gas_exempt_cert F (cx_tops cx) (ctx,func)
         (bind p2 (\tv. ignore_bind (next v1 tv) (return ())))
         (es1,s1) (left ++ right) (err,ee) (leaf,fstate))) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (bind p1 (\v1. bind p2 (next v1))) (es,s0,G0,tn0)
     Q (\res ee gt r. expr_exit res r)
 Proof

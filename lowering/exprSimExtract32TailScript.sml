@@ -8,9 +8,10 @@ Ancestors
   exprLoweringProps compileEnv builtinBytes words list finite_map venomState fragExec
 
 Theorem extract32_tail_ready:
-  expr_post ctx func cenv cx src es sa sm s0 es1 (BytesV bs) src_op s1 /\
-  expr_post ctx func cenv cx off es1 sm st3 s1 es2 (IntV i) off_op s2 /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  (!H. valid_horizon cx st0 H es2.storage_trace ==>
+     expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) src_op s1 /\
+     expr_post H ctx func cenv cx off es1 sm st3 s1 es2 (IntV i) off_op s2 /\
+     stmt_state_rel H ctx func cenv cx es s0) /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv st3 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= st3.cs_next_var /\
@@ -31,16 +32,16 @@ Theorem extract32_tail_ready:
   fn_has_code st3 sb func /\ es2.gas_obs = [] /\
   ~s2.vs_halted /\ s2.vs_current_bb = st3.cs_current_bb /\
   s2.vs_inst_idx = LENGTH st3.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (lift_sum (evaluate_type_builtin cx Extract32 (BaseT bt)
        [expr_type src;expr_type off] [BytesV bs;IntV i])) (\v. return (Value v)))
     (es2,s2)
-    (\res ee t. ?v. res = INL (Value v) /\
-      vv_post ctx func cenv cx (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;off])
+    (\H res ee t. ?v. res = INL (Value v) /\
+      vv_post H ctx func cenv cx (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;off])
         es sa sb s0 ee (Value v) (StackValue ty op) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >> simp[evaluate_type_builtin_def] >>
   Cases_on `evaluate_extract32 bs (Num i) bt`
@@ -51,18 +52,21 @@ QED
 Resume extract32_tail_ready[success]:
   drule_all extract32_tail_success_marked >>
   disch_then (qspec_then `es2` (qspec_then `ctx` strip_assume_tac)) >>
-  `stmt_state_rel ctx func cenv cx es2 u` by
-    (irule hash_readonly_state_rel >> qexistsl_tac [`s2`,`st3`] >>
-     gvs[expr_post_def]) >>
   `u.vs_memory = s2.vs_memory /\ u.vs_allocas = s2.vs_allocas` by
     (qpat_x_assum `_ with vs_vars := _ = _` mp_tac >>
      simp[venom_state_component_equality]) >>
   `!z w. not_fresh_at st3 z /\ lookup_var z s2 = SOME w ==>
      lookup_var z u = SOME w` by metis_tac[] >>
-  `vv_post ctx func cenv cx (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;off])
-     es sa sb s0 es2 (Value x) (StackValue ty op) u` by
-    (drule_all extract32_posts_to_vv_post_frame >> simp[]) >>
-  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  `!H. valid_horizon cx st0 H es2.storage_trace ==>
+     vv_post H ctx func cenv cx (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;off])
+       es sa sb s0 es2 (Value x) (StackValue ty op) u` by
+    (qx_gen_tac `H` >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+     `stmt_state_rel H ctx func cenv cx es2 u` by
+       (irule hash_readonly_state_rel >> qexistsl_tac [`s2`,`st3`] >>
+        gvs[expr_post_def]) >>
+     drule_all extract32_posts_to_vv_post_frame >> simp[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INL (Value x)`, `es2`,
     `OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
@@ -81,7 +85,8 @@ Resume extract32_tail_ready[error]:
   drule_all extract32_tail_error_marked >>
   disch_then (qspec_then `es2` (qspec_then `ctx` strip_assume_tac)) >>
   rename1 `gas_marked_exec _ _ _ _ (REPLICATE ticks F) _ _ _` >>
-  rewrite_tac[gas_outcome_def] >> qexists_tac `REPLICATE ticks F` >> disj1_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `REPLICATE ticks F` >>
+  disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR (Error (RuntimeError msg))`, `es2`,
     `Abort Revert_abort (u with vs_inst_idx := j)`] >>

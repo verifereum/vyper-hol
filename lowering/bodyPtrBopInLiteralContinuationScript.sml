@@ -14,12 +14,12 @@ Theorem literal_readonly_frames:
   (!p. not_fresh_at sm p ==> FLOOKUP G' p = FLOOKUP G p /\
     op_taint tn' (Var p) = op_taint tn (Var p)) /\
   (tn' with t_var := tn.t_var) = tn /\
-  stmt_state_rel ctx fn cenv cx ee s /\ ghost_inv d cenv cx ee G tn s /\
+  stmt_state_rel H ctx fn cenv cx ee s /\ ghost_inv H d cenv cx ee G tn s /\
   local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   wb_frame cenv es ee sa s0 s /\ sa.cs_next_var <= sm.cs_next_var ==>
-  stmt_state_rel ctx fn cenv cx ee t /\ ghost_inv d cenv cx ee G' tn' t /\
+  stmt_state_rel H ctx fn cenv cx ee t /\ ghost_inv H d cenv cx ee G' tn' t /\
   ghost_kept cenv ee sm G tn s G' tn' /\ wb_frame cenv es ee sa s0 t
 Proof
   strip_tac >>
@@ -31,13 +31,13 @@ Proof
    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm` by
     gvs[taint_component_equality] >>
   conj_tac
-  >- (`stmt_state_rel ctx fn cenv cx ee (t with vs_inst_idx := s.vs_inst_idx)`
+  >- (`stmt_state_rel H ctx fn cenv cx ee (t with vs_inst_idx := s.vs_inst_idx)`
         suffices_by simp[stmt_state_rel_inst_idx] >>
       irule stmt_state_rel_reserved_frame >> goal_assum (drule_at Any) >>
       qexists_tac `sm` >> gvs[lookup_var_def]) >>
   conj_tac
   >- (irule ghost_inv_fresh_frame >>
-      goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
       qexists_tac `sm` >> simp[]) >>
   conj_tac
   >- (irule ghost_kept_old_transport >> simp[]) >>
@@ -46,12 +46,12 @@ Proof
 QED
 
 Theorem literal_bool_post:
-  stmt_state_rel ctx fn cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
+  stmt_state_rel H ctx fn cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
   (~expr_has_effect (Builtin (BaseT BoolT) (Bop bop) [e1;e2]) ==>
    pure_frame cenv fn es sa s0 t) /\
   eval_operand op t = SOME (bool_to_word b) /\
   op_prov G op = NONE /\ op_taint tn op = {} ==>
-  expr_post ctx fn cenv cx
+  expr_post H ctx fn cenv cx
     (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
     es sa sb s0 ee (BoolV b) op t /\
   ptr_val_ok cx (BaseT BoolT) (BoolV b) op G tn t
@@ -73,8 +73,8 @@ Theorem literal_typed_continuation_summary_ptr:
   fn_has_code sm sb fn /\ local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-  stmt_state_rel ctx fn cenv cx (ee with gas_obs := []) s /\
-  ghost_inv d cenv cx (ee with gas_obs := []) G tn s /\
+  stmt_state_rel H ctx fn cenv cx (ee with gas_obs := []) s /\
+  ghost_inv H d cenv cx (ee with gas_obs := []) G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   LIST_REL (\x v. eval_operand x s = SOME (typed_val_to_w256 tv v)) xs vs /\
   eval_operand needle s = SOME (typed_val_to_w256 tv v) /\
@@ -92,10 +92,10 @@ Theorem literal_typed_continuation_summary_ptr:
     (return (BoolV (if bop = In then MEM v vs else ~MEM v vs)))
     (ee with gas_obs := [],s,G,tn)
     (\res fin G' tn' t. ?w. res = INL w /\
-      expr_post ctx fn cenv cx
+      expr_post H ctx fn cenv cx
         (Builtin (BaseT BoolT) (Bop bop) [e1; Builtin a (MakeArray aet n) elems])
         es sa sb s0 fin w op t /\
-      ghost_inv d cenv cx fin G' tn' t /\
+      ghost_inv H d cenv cx fin G' tn' t /\
       ptr_val_ok cx (BaseT BoolT) w op G' tn' t /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)

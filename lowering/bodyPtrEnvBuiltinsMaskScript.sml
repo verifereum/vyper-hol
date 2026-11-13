@@ -10,7 +10,7 @@ Theorem method_id_mask_seq_certificate:
   code = [mk_inst ir SHR [Lit 224w; hash] [sel];
           mk_inst il SHL [Lit 224w; Var sel] [out]] /\
   op_taint tn hash = {} /\ eval_operand hash s = SOME w /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -18,7 +18,7 @@ Theorem method_id_mask_seq_certificate:
   run_inst_seq code s = OK t ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code (s with vs_inst_idx := k) G' tn' /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 4))) result (Var out) G' tn' t /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es0 sa G0 tn0 s0 G' tn'
+    ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es0 sa G0 tn0 s0 G' tn'
 Proof
   strip_tac >>
   qabbrev_tac `u = update_var sel (w >>> 224) s` >>
@@ -34,7 +34,7 @@ Proof
   `op_taint tn1 (Var sel) = {}` by
     (simp[Abbr `tn1`] >> irule scalar_builtin_output_clean >> simp[] >>
      rpt strip_tac >> gvs[] >> simp[op_taint_def]) >>
-  `ghost_inv d cenv cx es G1 tn1 u /\ ghost_kept cenv es0 sa G0 tn0 s0 G1 tn1` by
+  `ghost_inv H d cenv cx es G1 tn1 u /\ ghost_kept cenv es0 sa G0 tn0 s0 G1 tn1` by
     (simp[Abbr `G1`, Abbr `tn1`, Abbr `u`] >> irule scalar_builtin_update_ghosts >> simp[]) >>
   qexistsl_tac [`step_prov PG G1 (mk_inst il SHL [Lit 224w; Var sel] [out]) t`,
     `step_taint (mk_inst il SHL [Lit 224w; Var sel] [out]) u t tn1`] >>
@@ -81,7 +81,7 @@ Theorem method_id_mask_compile_counted:
   emit_op SHR [Lit 224w; hash] sa = (sel,sm) /\
   emit_op SHL [Lit 224w; sel] sm = (op,sb) /\
   op_taint tn hash = {} /\ eval_operand hash s = SOME w /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   ghost_kept cenv es0 sf G0 tn0 s0 G tn /\ local_ptrs_reserved cenv sf /\
   (!x. not_fresh_at sf x ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sf x) /\
@@ -92,7 +92,7 @@ Theorem method_id_mask_compile_counted:
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 4))) result op G' tn' t /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es0 sf G0 tn0 s0 G' tn'
+    ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es0 sf G0 tn0 s0 G' tn'
 Proof
   strip_tac >> drule_all method_id_mask_compile_code >> strip_tac >>
   `~not_fresh_at sf x /\ ~not_fresh_at sf y` by metis_tac[] >>
@@ -103,7 +103,7 @@ Proof
      qexists_tac `l` >> simp[]) >>
   `?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 4))) result op G' tn' t /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es0 sf G0 tn0 s0 G' tn'` by
+    ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es0 sf G0 tn0 s0 G' tn'` by
     (drule_at (Pat `_ = [_;_]`) method_id_mask_seq_certificate >>
      disch_then drule_all >>
      disch_then (qspecl_then [`result`, `s.vs_inst_idx`] mp_tac) >>

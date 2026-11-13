@@ -8,10 +8,10 @@ Ancestors
 
 Theorem compile_uint2str_counted_ptr:
   compile_uint2str op n sz sa = (out,sb) /\ fn_has_code sa sb fn /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
@@ -27,8 +27,8 @@ Theorem compile_uint2str_counted_ptr:
   LENGTH (num_to_dec_string X)+32 <= type_memory_size (BaseTV (StringT cap)) /\
   val_footprint (BaseTV (StringT cap)) (StringV (num_to_dec_string X)) <= sz ==>
   ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn' /\
-    vv_post ctx fn cenv cx e es sa sb s es (Value (StringV (num_to_dec_string X)))
+    ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn' /\
+    vv_post H ctx fn cenv cx e es sa sb s es (Value (StringV (num_to_dec_string X)))
       (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) t /\
     ptr_vv_ok cx (expr_type e) (Value (StringV (num_to_dec_string X)))
       (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>)
@@ -77,7 +77,7 @@ Resume compile_uint2str_counted_ptr[post]:
     (qpat_x_assum `!out. u2s_safe _ _ _ _ _ _ _ _ _ _ _ out ==> _`
        (qspec_then `t` mp_tac) >> simp[]) >>
   `inst.inst_id = sa.cs_next_id` by simp[mk_inst_def] >>
-  `u2s_safe ctx fn cenv cx es a ba.buf_operand b (sz+n) inst sr t` by metis_tac[] >>
+  `u2s_safe H ctx fn cenv cx es a ba.buf_operand b (sz+n) inst sr t` by metis_tac[] >>
   drule_all u2s_result_vv_post >> simp[]
 QED
 

@@ -13,7 +13,7 @@
 
    Proposed public contract (NOT a theorem asserted by this audit):
      unwrap_value ce vv sm = (op,sb) /\
-     vv_post ctx fn ce cx e es sa sm s0 es' tv vv s /\
+     vv_post H ctx fn ce cx e es sa sm s0 es' tv vv s /\
      read_result cx tv es' = (INL v,es') /\
      is_word_type (expr_type e) /\
      ptr_vv_ok cx (expr_type e) tv vv es' G tn s /\
@@ -24,7 +24,7 @@
      ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor /\ ~s.vs_halted /\
      s.vs_current_bb = sm.cs_current_bb /\
      s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-     ghost_inv d ce cx es' G tn s /\
+     ghost_inv H d ce cx es' G tn s /\
      ghost_kept ce es sa G0 tn0 s0 G tn /\
      (!name p sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
                   not_fresh_at sm p) /\
@@ -49,7 +49,7 @@ Ancestors
   exprLowering context venomInst
 
 Theorem scalar_unwrap_emits_load:
-  vv_post ctx fn cenv cx e es sa sm s0 es' tv (LocatedValue t p) s /\
+  vv_post H ctx fn cenv cx e es sa sm s0 es' tv (LocatedValue t p) s /\
   is_word_type t /\ ~cenv.ce_is_ctor ==>
   ?opc.
     ((p.ptr_location = LocMemory /\ opc = MLOAD) \/

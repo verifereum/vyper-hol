@@ -5,7 +5,7 @@ Ancestors allocationPtr reasonEncoderTailPtr reasonPrefixPtr exprSimAlloc normal
   finite_map ptrDiscipline exprLoweringProps emitHelperProps exprSimProps loweringHalt bodyPtrDefs ghostPcTransportPtr
 
 Theorem reason_alloca_exterior_effects:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
@@ -30,11 +30,11 @@ QED
 
 Theorem reason_slot_alloc_run:
   compile_alloc_buffer 32 sa = (buf,c1) /\ buf.buf_operand = Var slot /\
-  fn_has_code sa c1 func /\ stmt_state_rel ctx func cenv cx es s /\
+  fn_has_code sa c1 func /\ stmt_state_rel H ctx func cenv cx es s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
   ?t a.
     step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [slot]) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ lookup_var slot t = SOME a /\
+    stmt_state_rel H ctx func cenv cx es t /\ lookup_var slot t = SOME a /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n a,32) /\
     w2n a + 32 < dimword (:256) /\ t.vs_memory = s.vs_memory /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -61,7 +61,7 @@ Proof
 QED
 
 Theorem reason_alloca_robust_preserved:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
@@ -86,7 +86,7 @@ Theorem reason_slot_initialize_resources_ptr:
   compile_alloc_buffer 32 sa = (buf,c1) /\ buf.buf_operand = Var slot /\
   emit_void MSTORE [Var slot;Lit 32w] c1 = ((),sb) /\
   fn_has_code sa c1 func /\ fn_has_code c1 sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted ==>
@@ -189,7 +189,7 @@ Theorem reason_slot_tuple_resources_ptr:
   compile_alloc_buffer 32 sa = (buf,c1) /\ buf.buf_operand = Var slot /\
   emit_void MSTORE [Var slot;Lit 32w] c1 = ((),sb) /\
   fn_has_code sa c1 func /\ fn_has_code c1 sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\

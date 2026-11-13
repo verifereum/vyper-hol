@@ -76,13 +76,13 @@ Theorem framed_array_after_base:
   local_ptrs_reserved cenv sm /\
   gas_admissible (bind (eval_expr cx idx) (read_result cx)) expr_res_ok
     (mid with gas_obs := []) /\
-  stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t /\
+  stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!imarks raw v u.
      gas_marked_exec F (ctx,func) (bind (eval_expr cx idx) (read_result cx))
        (mid with gas_obs := [],t) imarks (INL v) raw (OK u) /\
-     expr_post ctx func cenv cx idx (mid with gas_obs := []) sm si t
+     expr_post H ctx func cenv cx idx (mid with gas_obs := []) sm si t
        (raw with gas_obs := []) v iop u /\
      u.vs_current_bb = si.cs_current_bb /\
      u.vs_inst_idx = LENGTH si.cs_current_insts ==>
@@ -103,7 +103,7 @@ qpat_assum `~subscript_reads_base _ _ _` (fn th => pure_once_rewrite_tac[MATCH_M
     (Q.GEN `k` framed_array_index_outcome_compose))) >>
   goal_assum (drule_at Any) >> BETA_TAC >>
   qexists_tac `\v ee u.
-    expr_post ctx func cenv cx idx (mid with gas_obs := []) sm si t ee v iop u /\
+    expr_post H ctx func cenv cx idx (mid with gas_obs := []) sm si t ee v iop u /\
     u.vs_current_bb = si.cs_current_bb /\
     u.vs_inst_idx = LENGTH si.cs_current_insts` >> simp[] >>
   `(!res out. (?exc. res = (INR exc : value + exception) /\
@@ -116,8 +116,8 @@ QED
 
 (* Source observations are consumed by executions, but not by endpoint posts. *)
 Theorem expr_post_initial_gas:
-  expr_post ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee v op s <=>
-  expr_post ctx func cenv cx e es sa sb s0 ee v op s
+  expr_post H ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee v op s <=>
+  expr_post H ctx func cenv cx e es sa sb s0 ee v op s
 Proof
   simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.locals_kept_def,
        loweringPostsTheory.popped_kept_def]
@@ -134,8 +134,8 @@ Proof
 QED
 
 Theorem stmt_state_rel_source_gas[local]:
-  stmt_state_rel ctx func cenv cx (ee with gas_obs := gs) s <=>
-  stmt_state_rel ctx func cenv cx ee s
+  stmt_state_rel H ctx func cenv cx (ee with gas_obs := gs) s <=>
+  stmt_state_rel H ctx func cenv cx ee s
 Proof
   simp[exprLoweringPropsTheory.stmt_state_rel_def,
        loweringStateRelDefsTheory.state_rel_gas_obs,
@@ -183,8 +183,8 @@ Proof
 QED
 
 Theorem vv_post_final_gas:
-  vv_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := gs) r vv s <=>
-  vv_post ctx func cenv cx e es sa sb s0 ee r vv s
+  vv_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := gs) r vv s <=>
+  vv_post H ctx func cenv cx e es sa sb s0 ee r vv s
 Proof
   simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.locals_kept_def,
        loweringPostsTheory.popped_kept_def, stmt_state_rel_source_gas,

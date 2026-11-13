@@ -34,10 +34,11 @@ Ancestors
   fragGasMode fragGasPath fragGasSeq stmtSimDeclPath stmtSimDeclCompose
   abiStaticAggregateProps venomState exprSimUnwrap
   exprSimBufferStore valueCopyBytes freshWrites
+  gasStorage gasExemptCert vyperStorageTrace vyperStorageFootprint
 
 
 Theorem aggregate_alloca_slice_excludes_local:
-  stmt_state_rel ctx func ce cx es r /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es r /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
   not_local_ptr ce es.scopes x /\
   FLOOKUP r.vs_allocas inst.inst_id = SOME (b,asz) /\
@@ -85,17 +86,19 @@ QED
 (* ===== Counted composition of the tuple loop ===== *)
 
 (* The empty source list is a genuine reflexive counted execution. *)
-Theorem aggregate_tuple_nil_outcome[local]:
-  ~s.vs_halted /\ Q (INL []) (es with gas_obs := []) s ==>
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx []) (es,s) Q R
+Theorem aggregate_tuple_nil_outcome:
+  ~s.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     Q H (INL []) (es with gas_obs := []) s) ==>
+  gas_outcome memory tops (ctx,func) cx st0 (eval_exprs cx []) (es,s) Q R
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
-  qexists_tac `[]` >> disj1_tac >>
+  qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INL []`, `es`, `OK s`] >>
   simp[gas_marked_exec_def, exprSimWordArgsTheory.eval_exprs_nil,
        gas_marked_path_def] >>
-  irule (cj 1 gas_path_rules) >> simp[]
+  Cases_on `memory` >> simp[cj 1 gas_path_rules, cj 1 gas_path_mem_rules]
 QED
 
 Theorem aggregate_tuple_child_outcome[local]:
@@ -103,15 +106,18 @@ Theorem aggregate_tuple_child_outcome[local]:
   expr_body_pre ce cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
   compile_expr ce (expr_type e) e sa = (vv,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  local_ptrs_reserved ce sa /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
-    (\res ee t. ?tv. res = INL tv /\
-      vv_post ctx func ce cx e es sa sb s0 ee tv vv t /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_expr cx e) (es,s0)
+    (\H res ee t. ?tv. res = INL tv /\
+      vv_post H ctx func ce cx e es sa sb s0 ee tv vv t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   `expr_vv_sim ctx func ce cx (expr_type e) e es` by
@@ -203,21 +209,31 @@ Theorem aggregate_tuple_add_marked[local]:
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
   emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
-  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
   eval_operand buf s = SOME w /\ fn_has_code sm sn func /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?q. gas_marked_path F ctx func s 0 (OK q) /\
     ~q.vs_halted /\ q.vs_current_bb = sn.cs_current_bb /\
     q.vs_inst_idx = LENGTH sn.cs_current_insts /\
-    vv_post ctx func cenv cx e es sa sn s0 es' tv vv q /\
+    vv_post H ctx func cenv cx e es sa sn s0 es' tv vv q /\
     eval_operand dst q = SOME (w + n2w off) /\
     q.vs_memory = s.vs_memory /\ q.vs_allocas = s.vs_allocas /\
-    (!x. not_fresh_at sm x ==> lookup_var x q = lookup_var x s)
+    (!x. not_fresh_at sm x ==> lookup_var x q = lookup_var x s) /\
+    (!H'. vv_post H' ctx func cenv cx e es sa sm s0 es' tv vv s ==>
+          vv_post H' ctx func cenv cx e es sa sn s0 es' tv vv q)
 Proof
   strip_tac >>
   drule_all exprSimAggregateChildrenTheory.buffer_emit_add_vv_post >>
   strip_tac >>
+  `!H'. vv_post H' ctx func cenv cx e es sa sm s0 es' tv vv s ==>
+        vv_post H' ctx func cenv cx e es sa sn s0 es' tv vv q` by
+    (rpt strip_tac >>
+     qpat_x_assum `vv_post H' _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then (Pos (el 5)) mp_tac
+          exprSimAggregateChildrenTheory.buffer_emit_add_vv_post) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     strip_tac >> gvs[]) >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
   drule exprLoweringPropsTheory.emit_op_same_blocks >>
   simp[exprLoweringPropsTheory.same_blocks_def] >> strip_tac >>
@@ -287,7 +303,7 @@ Theorem aggregate_store_compatible_rebased_slice_run[local]:
   post_value_type ce e = expr_type e /\
   compile_store_memory ce op (Var x) dty (expr_type e) su = ((),sb) /\
   (dty = expr_type e \/ is_bytestring_type dty /\ is_bytestring_type (expr_type e)) /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
   not_fresh_at sm x /\ lookup_var x r = SOME w /\
   sm.cs_next_var <= su.cs_next_var /\
@@ -298,7 +314,7 @@ Theorem aggregate_store_compatible_rebased_slice_run[local]:
   value_has_type dtv v /\ val_wf dtv v /\
   type_memory_bytes ce dty = type_memory_size dtv /\
   type_memory_size dtv < dimword (:256) /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b + k <= w2n w \/ w2n w + type_memory_size dtv <= b) /\
   (ce.ce_is_ctor ==> !name itv iv off.
@@ -312,7 +328,7 @@ Theorem aggregate_store_compatible_rebased_slice_run[local]:
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
     run_inst_seq (emitted_insts su sb) s = OK q /\
     val_in_memory dtv v (w2n w) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
       lookup_var z q = SOME a) /\
     (!aid b. FLOOKUP r.vs_allocas aid = SOME b ==>
@@ -342,10 +358,10 @@ Proof
     (rpt strip_tac >> gvs[] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   `expr_val_rel cx (expr_type e) v op s /\
-   stmt_state_rel ctx func ce cx es' s` by gvs[expr_post_def] >>
+   stmt_state_rel H ctx func ce cx es' s` by gvs[expr_post_def] >>
   `eval_operand (Var x) s = SOME w` by simp[eval_operand_def] >>
   drule_all buffer_store_memory_compatible_encoding >> strip_tac >>
-  `stmt_state_rel ctx func ce cx es' q` by
+  `stmt_state_rel H ctx func ce cx es' q` by
     (irule exprSimBufferStoreTheory.buffer_store_state_frame >>
      qexistsl_tac [`w2n w`, `type_memory_size dtv`, `s`, `su`] >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
@@ -396,7 +412,7 @@ Theorem aggregate_tuple_store_compatible_marked[local]:
   post_value_type ce e = expr_type e /\
   compile_store_memory ce op (Var x) dty (expr_type e) su = ((),sb) /\
   (dty = expr_type e \/ is_bytestring_type dty /\ is_bytestring_type (expr_type e)) /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
   not_fresh_at sm x /\ lookup_var x r = SOME w /\
   sm.cs_next_var <= su.cs_next_var /\
@@ -407,7 +423,7 @@ Theorem aggregate_tuple_store_compatible_marked[local]:
   value_has_type dtv v /\ val_wf dtv v /\
   type_memory_bytes ce dty = type_memory_size dtv /\
   type_memory_size dtv < dimword (:256) /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b + k <= w2n w \/ w2n w + type_memory_size dtv <= b) /\
   (ce.ce_is_ctor ==> !name itv iv off.
@@ -426,7 +442,7 @@ Theorem aggregate_tuple_store_compatible_marked[local]:
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     val_in_memory dtv v (w2n w) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
       lookup_var z q = SOME a) /\
     (!aid b. FLOOKUP r.vs_allocas aid = SOME b ==>
@@ -438,10 +454,21 @@ Theorem aggregate_tuple_store_compatible_marked[local]:
       off <= a /\ a + k <= off + sz /\
       (a + k <= w2n w \/ w2n w + type_memory_size dtv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' es' r q
+    locals_kept ce es' es' r q /\
+    (!H'. expr_post H' ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+            su r es' v op s /\ stmt_state_rel H' ctx func ce cx es' r ==>
+          stmt_state_rel H' ctx func ce cx es' q)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all aggregate_store_compatible_rebased_slice_run >> strip_tac >>
+  `!H'. expr_post H' ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+          su r es' v op s /\ stmt_state_rel H' ctx func ce cx es' r ==>
+        stmt_state_rel H' ctx func ce cx es' q` by
+    (rpt strip_tac >>
+     qpat_x_assum `expr_post H' _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then (Pos (el 4)) mp_tac aggregate_store_compatible_rebased_slice_run) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     strip_tac >> gvs[]) >>
   `compile_store_memory ce op (Var x) dty dty su = ((),sb)` by
     metis_tac[valueCopyBytesTheory.compile_store_memory_bytestring_src] >>
   qpat_x_assum `!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> _`
@@ -482,73 +509,117 @@ Proof
 QED
 
 Theorem aggregate_tuple_gas_outcome_mono:
-  gas_outcome memory tops (ctx,func) source start Q R ==>
-  (!res ee r. Q res ee r ==> Q' res ee r) ==>
-  (!res ee r. R res ee r ==> R' res ee r) ==>
-  gas_outcome memory tops (ctx,func) source start Q' R'
+  gas_outcome memory tops (ctx,func) cx st0 source start Q R ==>
+  (!H res ee r. Q H res ee r ==> Q' H res ee r) ==>
+  (!H res ee r. R H res ee r ==> R' H res ee r) ==>
+  gas_outcome memory tops (ctx,func) cx st0 source start Q' R'
 Proof
   PairCases_on `start` >>
   rewrite_tac[gas_outcome_def, gas_summary_at_def] >> metis_tac[]
 QED
 
 (* The child's value, then the rest of the source under it. *)
-Theorem aggregate_tuple_bind_outcome[local]:
-  gas_outcome F tops (ctx,func)
+Theorem aggregate_tuple_bind_outcome:
+  gas_outcome memory tops (ctx,func) cx st0
     (a : evaluation_state -> eval_result evaluation_result) (es,s0)
-    (\res ee t. ?v. res = INL v /\ P v ee t)
-    (\res ee r. ?exc. res = INR exc /\ R (INR exc) ee r) /\
+    (\H res ee t. ?v. res = INL v /\ P H v ee t)
+    (\H res ee r. ?exc. res = INR exc /\ R H (INR exc) ee r) /\
+  (!v. storage_trace_frame (k v)) /\
   (!marks v ee t.
-    gas_marked_exec F (ctx,func) a (es,s0) marks (INL v) ee (OK t) /\
-    ee.gas_obs = [] /\ P v ee t ==>
-    gas_outcome F tops (ctx,func)
+    gas_marked_exec memory (ctx,func) a (es,s0) marks (INL v) ee (OK t) /\
+    ee.gas_obs = [] /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==> P H v ee t) ==>
+    gas_outcome memory tops (ctx,func) cx st0
       (k v : evaluation_state -> value list evaluation_result) (ee,t) Q R) ==>
-  gas_outcome F tops (ctx,func) (bind a k) (es,s0) Q R
+  gas_outcome memory tops (ctx,func) cx st0 (bind a k) (es,s0) Q R
 Proof
   strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
-  disch_then (qx_choose_then `left` strip_assume_tac)
-  >- (gvs[] >>
-      first_x_assum (qspecl_then [`left`, `v`, `es_end with gas_obs := []`, `t`] mp_tac) >>
-      (impl_tac >- fs[aggregate_tuple_exec_end_gas_obs]) >>
-      rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
-      disch_then (qx_choose_then `right` strip_assume_tac)
-      >- (qexists_tac `left ++ right` >> disj1_tac >>
-          metis_tac[gas_marked_exec_bind_normal])
-      >- (qexists_tac `left ++ right` >> disj1_tac >>
-          metis_tac[gas_marked_exec_bind_normal]) >>
-      qexists_tac `left ++ right` >> disj2_tac >>
-      rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
-      irule_at Any gasExemptCertTheory.gas_exempt_cert_bind_result >>
-      simp[GSYM ignore_bind_def] >> metis_tac[])
-  >- (gvs[] >> qexists_tac `left` >> disj1_tac >>
-      metis_tac[gas_marked_exec_bind_exception]) >>
-  qexists_tac `left` >> disj2_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ a _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+      irule gas_bad_storage_at_bind_left >> simp[])
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+           irule gas_bad_storage_at_bind_left >> simp[] >>
+           irule gas_bad_storage_at_counted_prefix >>
+           qexistsl_tac [`ctx`, `es_end`, `func`, `memory`, `r`, `res`] >>
+           simp[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def]
+      >- suspend "normal"
+      >> suspend "exit") >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >>
+  disj2_tac >> disj2_tac >>
   rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
-  irule_at Any gasExemptCertTheory.gas_exempt_cert_error_result >>
+  irule_at Any gas_exempt_cert_error_result >>
   simp[GSYM ignore_bind_def] >> metis_tac[]
 QED
 
+Resume aggregate_tuple_bind_outcome[normal]:
+  qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `?v. res = INL v` by
+    (first_assum (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> metis_tac[]) >>
+  gvs[] >>
+  qpat_x_assum `!marks v ee t. _`
+    (qspecl_then [`marks`, `v`, `es_end with gas_obs := []`, `t`] mp_tac) >>
+  (impl_tac >- simp[aggregate_tuple_exec_end_gas_obs]) >> strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ (k v) _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
+      disj1_tac >> irule gas_bad_storage_at_bind_right >> simp[] >>
+      metis_tac[])
+  >- (qpat_x_assum `gas_summary_at _ _ _ (k _) _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
+      disj2_tac >> disj1_tac >> simp[gas_summary_at_def] >>
+      qexistsl_tac [`res`, `es_end'`, `r`] >> simp[] >>
+      (conj_tac
+       >- (irule gas_marked_exec_bind_normal >> goal_assum (drule_at Any) >>
+           gvs[])) >>
+      fs[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
+  disj2_tac >> disj2_tac >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule_at Any gas_exempt_cert_bind_result >>
+  simp[GSYM ignore_bind_def] >> metis_tac[]
+QED
+
+Resume aggregate_tuple_bind_outcome[exit]:
+  qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o BETA_RULE) >>
+  first_assum (drule_then strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  gvs[] >> rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >>
+  disj2_tac >> disj1_tac >> simp[gas_summary_at_def] >>
+  qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
+  irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC
+QED
+
+Finalise aggregate_tuple_bind_outcome
+
 (* A source-only step whose target code reads no gas, then the rest. *)
-Theorem aggregate_tuple_value_bind[local]:
-  gas_marked_exec F (ctx,func)
+Theorem aggregate_tuple_value_bind:
+  gas_marked_exec memory (ctx,func)
     (a : evaluation_state -> value evaluation_result) (es,s0)
     left (INL v) mid (OK t) /\
-  gas_outcome F tops (ctx,func)
+  gas_outcome memory tops (ctx,func) cx st0
     (k v : evaluation_state -> value list evaluation_result)
     (mid with gas_obs := [],t) Q R ==>
-  gas_outcome F tops (ctx,func) (bind a k) (es,s0) Q R
+  gas_outcome memory tops (ctx,func) cx st0 (bind a k) (es,s0) Q R
 Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (qx_choose_then `right` strip_assume_tac))
   >- (qexists_tac `left ++ right` >> disj1_tac >>
+      irule gas_bad_storage_at_bind_right >> metis_tac[])
+  >- (qexists_tac `left ++ right` >> disj2_tac >> disj1_tac >>
       metis_tac[gas_marked_exec_bind_normal])
-  >- (qexists_tac `left ++ right` >> disj1_tac >>
+  >- (qexists_tac `left ++ right` >> disj2_tac >> disj1_tac >>
       metis_tac[gas_marked_exec_bind_normal]) >>
-  qexists_tac `left ++ right` >> disj2_tac >>
+  qexists_tac `left ++ right` >> disj2_tac >> disj2_tac >>
   rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
-  irule_at Any gasExemptCertTheory.gas_exempt_cert_bind_value >>
+  irule_at Any gas_exempt_cert_bind_value >>
   simp[GSYM ignore_bind_def] >> metis_tac[]
 QED
 
@@ -561,29 +632,31 @@ Proof
 QED
 
 (* The rest of the tuple, with the child's value in front. *)
-Theorem aggregate_tuple_values_outcome[local]:
-  gas_outcome F tops (ctx,func) (eval_exprs cx args) (es,s) Q1 R1 /\
-  (!res ee r. Q1 res ee r ==>
-     Q (case res of INL vs => INL (v::vs) | INR exc => INR exc) ee r) /\
-  (!res ee r. R1 res ee r ==>
-     R (case res of INL vs => INL (v::vs) | INR exc => INR exc) ee r) ==>
-  gas_outcome F tops (ctx,func)
+Theorem aggregate_tuple_values_outcome:
+  gas_outcome memory tops (ctx,func) cx st0 (eval_exprs cx args) (es,s) Q1 R1 /\
+  (!H res ee r. Q1 H res ee r ==>
+     Q H (case res of INL vs => INL (v::vs) | INR exc => INR exc) ee r) /\
+  (!H res ee r. R1 H res ee r ==>
+     R H (case res of INL vs => INL (v::vs) | INR exc => INR exc) ee r) ==>
+  gas_outcome memory tops (ctx,func) cx st0
     (bind (eval_exprs cx args) (\vs. return (v::vs))) (es,s) Q R
 Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def,
               aggregate_tuple_ignore_values] >>
   strip_tac >> qexists_tac `marks`
-  >- (disj1_tac >>
+  >- (disj1_tac >> irule gas_bad_storage_at_bind_left >>
+      simp[storage_trace_frame_return])
+  >- (disj2_tac >> disj1_tac >>
       qexistsl_tac [`case res of INL vs => INL (v::vs) | INR exc => INR exc`,
                     `es_end`, `OK t`] >>
-      qpat_x_assum `!res ee r. Q1 _ _ _ ==> _` drule >>
-      Cases_on `res` >> fs[gas_marked_exec_def, bind_def, return_def])
-  >- (disj1_tac >>
+      Cases_on `res` >> fs[gas_marked_exec_def, bind_def, return_def] >>
+      metis_tac[])
+  >- (disj2_tac >> disj1_tac >>
       qexistsl_tac [`case res of INL vs => INL (v::vs) | INR exc => INR exc`,
                     `es_end`, `r`] >>
-      qpat_x_assum `!res ee r. R1 _ _ _ ==> _` drule >>
-      Cases_on `res` >> fs[gas_marked_exec_def, bind_def, return_def]) >>
-  disj2_tac >> metis_tac[]
+      Cases_on `res` >> fs[gas_marked_exec_def, bind_def, return_def] >>
+      metis_tac[]) >>
+  disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
 Theorem aggregate_tuple_eval_cons:
@@ -599,8 +672,8 @@ QED
 Theorem aggregate_tuple_local_region_backward[local]:
   !es es1 s0 s1 sa sb ctx func ce cx e tv vv name b sz.
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
-  vv_post ctx func ce cx e es sa sb s0 es1 tv vv s1 /\
+  stmt_state_rel H ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  vv_post H ctx func ce cx e es sa sb s0 es1 tv vv s1 /\
   local_region ce es1.scopes s1 name b sz ==>
   local_region ce es.scopes s0 name b sz
 Proof
@@ -618,7 +691,7 @@ QED
    element's own type, or a String or Bytes of another bound, which the
    store copies as bytes (compile_store_memory_compatible_run). *)
 Theorem aggregate_make_tuple_flat_sim:
-  !args tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx nocalls.
+  !args tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx nocalls st0.
   compile_make_tuple compile_expr ce args tys (Var x) off sa = (out,sb) /\
   LIST_REL (\t e. arg_type_fits (expr_type e) t) tys args /\
   LIST_REL (\t e. t = expr_type e \/
@@ -646,14 +719,18 @@ Theorem aggregate_make_tuple_flat_sim:
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\
+  ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+    (\H res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
+      storage_well_formed_on cx es' (FST H) /\
       tuple_in_memory vs tvs (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -677,7 +754,7 @@ Theorem aggregate_make_tuple_flat_sim:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\
+    (\H res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   Induct_on `args`
@@ -721,23 +798,45 @@ Proof
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
   drule_all aggregate_tuple_child_outcome >> strip_tac >>
   rewrite_tac[aggregate_tuple_eval_cons] >>
-  match_mp_tac (Q.SPEC `\tv ee t. vv_post ctx func ce cx h es sa sm s0 ee tv vv t /\
+  match_mp_tac (Q.SPEC `\H tv ee t.
+    vv_post H ctx func ce cx h es sa sm s0 ee tv vv t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts`
     (Q.GEN `P` aggregate_tuple_bind_outcome)) >>
-  conj_tac
-  >- (qpat_x_assum `gas_outcome _ _ _ (eval_expr _ _) _ _ _`
+  rpt conj_tac
+  >- (qpat_x_assum `gas_outcome _ _ _ _ _ (eval_expr _ _) _ _ _`
         (irule o MATCH_MP aggregate_tuple_gas_outcome_mono) >>
       simp[] >> rpt strip_tac >>
-      Cases_on `res` >> gvs[expr_exit_def]) >>
+      Cases_on `res` >> gvs[expr_exit_def])
+  >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
+      simp[storage_trace_frame_read_result] >> gen_tac >>
+      irule storage_trace_frame_bind_all >>
+      simp[evaluate_storage_trace_frame, storage_trace_frame_return]) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   rename1 `gas_marked_exec F _ (eval_expr cx h) _ m1 (INL tv) es1 (OK t1)` >>
   suspend "child_success"
 QED
 
+(* Any horizon valid at the child's end works for the per-step facts: the
+   steps after it are runs, so the state each one reaches is the same at
+   every horizon, and only stmt_state_rel and swf for the tail are needed
+   at all of them. *)
 Resume aggregate_make_tuple_flat_sim[child_success]:
   `es1 with gas_obs := [] = es1` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es1.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >> asm_rewrite_tac[] >>
+      irule storage_trace_frame_bind_all >>
+      simp[storage_trace_frame_read_result] >> gen_tac >>
+      irule storage_trace_frame_bind_all >>
+      simp[evaluate_storage_trace_frame, storage_trace_frame_return]) >>
+  `?H. valid_horizon cx st0 H es1.storage_trace` by
+    (qexists_tac `storage_trace_horizon es1.storage_trace` >>
+     fs[storage_trace_domain_def]) >>
+  qpat_assum `!H. valid_horizon _ _ H es1.storage_trace ==> _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   `~t1.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
   `eval_expr cx h (es with gas_obs := gas_explicit m1 s0.vs_gas_readings) =
@@ -745,6 +844,15 @@ Resume aggregate_make_tuple_flat_sim[child_success]:
     (qpat_x_assum `gas_marked_exec F _ (eval_expr cx h) _ _ _ _ _`
        (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
      strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `?obs. es1.storage_trace = es.storage_trace ++ obs` by
+    (qpat_assum `eval_expr cx h _ = _`
+       (mp_then (Pos last) mp_tac storage_trace_frame_prefix) >>
+     simp[evaluate_storage_trace_frame]) >>
+  `!H. valid_horizon cx st0 H es1.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
+    simp[valid_horizon_def] >>
+  qpat_x_assum `es1.storage_trace = _` kall_tac >>
+  `stmt_state_rel H ctx func ce cx es s0` by metis_tac[] >>
   `expr_body_pre ce cx env h
      (es with gas_obs := gas_explicit m1 s0.vs_gas_readings)` by simp[] >>
   drule_all aggregate_tuple_marked_child_source >>
@@ -793,7 +901,7 @@ Resume aggregate_make_tuple_flat_sim[child_steps]:
     simp[venomStateTheory.eval_operand_def] >>
   `sa.cs_next_var <= sm.cs_next_var` by fs[ci_mono_def] >>
   drule_at (Pat `emit_op _ _ _ = _`) aggregate_tuple_add_marked >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> strip_tac >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
   qpat_x_assum `dst = Var _` SUBST_ALL_TAC >>
@@ -808,7 +916,7 @@ Resume aggregate_make_tuple_flat_sim[child_steps]:
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `sm` >> fs[ci_mono_def] >>
      drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
-  `stmt_state_rel ctx func ce cx es1 r` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func ce cx es1 r` by fs[vv_post_def] >>
   `off + type_memory_size dtv <= asz /\ b+off+type_memory_size dtv < dimword (:256)` by
     (fs[type_memory_size_def] >> decide_tac) >>
   `w2n ((n2w (b+off)) : bytes32) = b+off` by
@@ -827,14 +935,20 @@ Resume aggregate_make_tuple_flat_sim[unwrap_store]:
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   `~is_word_type (expr_type h) ==> type_memory_size stv < 2 ** 64` by
     (strip_tac >> drule_all exprSimHypsTheory.expr_body_pre_copy_ok >> simp[]) >>
-  `vv_post ctx func ce cx h es1 (sa with cs_next_var := sn.cs_next_var)
+  `vv_post H ctx func ce cx h es1 (sa with cs_next_var := sn.cs_next_var)
      sn r es1 tv vv r` by
     (irule vv_post_rebase >> goal_assum (drule_at Any)) >>
   `local_ptrs_reserved ce (sa with cs_next_var := sn.cs_next_var)` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      qexists_tac `sn` >> simp[]) >>
-  drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read >>
-  disch_then (qpat_assum `vv_post _ _ _ _ _ es1 _ sn r es1 _ _ r` o mp_then Any mp_tac) >>
+  `!H'. valid_horizon cx st0 H' es1.storage_trace ==>
+        vv_post H' ctx func ce cx h es1 (sa with cs_next_var := sn.cs_next_var)
+          sn r es1 tv vv r` by
+    (rpt strip_tac >> irule vv_post_rebase >> metis_tac[]) >>
+  qspecl_then [`ctx`, `func`, `ce`, `cx`, `h`, `es1`,
+               `sa with cs_next_var := sn.cs_next_var`, `sn`, `su`, `r`,
+               `es1`, `tv`, `vv`, `op`, `r`, `st0`, `es1.storage_trace`, `H`]
+    mp_tac unwrap_value_marked_read_horizons >>
   (impl_tac >- (asm_rewrite_tac[] >> fs[ci_mono_def] >> metis_tac[])) >>
   disch_then (qx_choosel_then [`v'`, `u`] strip_assume_tac) >>
   `v' = v` by
@@ -843,8 +957,10 @@ Resume aggregate_make_tuple_flat_sim[unwrap_store]:
      strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >>
      simp[gas_explicit_def]) >>
   qpat_x_assum `v' = v` SUBST_ALL_TAC >>
+  `expr_post H ctx func ce cx h es1 (sa with cs_next_var := sn.cs_next_var)
+     su r es1 v op u` by metis_tac[] >>
   drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`) aggregate_tuple_store_compatible_marked >>
-  disch_then (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` o mp_then Any mp_tac) >>
+  disch_then (qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` o mp_then Any mp_tac) >>
   disch_then (qpat_assum `lookup_var d r = _` o mp_then Any mp_tac) >>
   disch_then (qpat_assum `evaluate_type _ mty = SOME dtv` o mp_then Any mp_tac) >>
   disch_then (qspec_then `stv` mp_tac) >>
@@ -884,12 +1000,25 @@ Resume aggregate_make_tuple_flat_sim[rest]:
   `exprs_case nocalls ctx func ce cx args` by
     (qpat_x_assum `exprs_case _ _ _ _ _ (h::args)` mp_tac >>
      simp[Once exprs_case_def] >> metis_tac[]) >>
+  `!H'. valid_horizon cx st0 H' es1.storage_trace ==>
+        stmt_state_rel H' ctx func ce cx es1 t2 /\
+        storage_well_formed_on cx es1 (FST H')` by
+    (gen_tac >> strip_tac >>
+     `vv_post H' ctx func ce cx h es sa sm s0 es1 tv vv t1` by metis_tac[] >>
+     `vv_post H' ctx func ce cx h es sa sn s0 es1 tv vv r` by metis_tac[] >>
+     `expr_post H' ctx func ce cx h es1 (sa with cs_next_var := sn.cs_next_var)
+        su r es1 v op u` by metis_tac[] >>
+     `stmt_state_rel H' ctx func ce cx es1 r /\
+      storage_well_formed_on cx es1 (FST H')` by
+       (qpat_x_assum `vv_post H' _ _ _ _ _ _ _ sn _ _ _ _ _` mp_tac >>
+        simp_tac std_ss [vv_post_def] >> strip_tac >> asm_rewrite_tac[]) >>
+     metis_tac[]) >>
   qpat_x_assum `!tys ce':compile_env. _`
     (qspecl_then [`tys'`, `ce`, `cx`, `env`] mp_tac) >>
   disch_then (qpat_assum `compile_make_tuple _ ce args _ _ _ ss = _` o mp_then Any mp_tac) >>
   disch_then (qpat_assum `exprs_case nocalls ctx func ce cx args` o mp_then Any mp_tac) >>
   disch_then (qpat_assum `FLOOKUP t2.vs_allocas inst.inst_id = _` o mp_then Any mp_tac) >>
-  disch_then (qspecl_then [`es1`, `t'`] mp_tac) >>
+  disch_then (qspecl_then [`es1`, `t'`, `st0`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >>
     simp[type_memory_size_def] >>
     gnvs[ci_mono_def, type_memory_size_def] >> conj_tac
@@ -903,7 +1032,7 @@ Resume aggregate_make_tuple_flat_sim[rest]:
   BETA_TAC >> irule aggregate_tuple_values_outcome >>
   goal_assum (drule_at Any) >> conj_tac
   >- (rpt gen_tac >> BETA_TAC >> strip_tac >> gvs[]) >>
-  qx_genl_tac [`rr`, `es'`, `s`] >> BETA_TAC >> strip_tac >>
+  qx_genl_tac [`H'`, `rr`, `es'`, `s`] >> BETA_TAC >> strip_tac >>
   suspend "tuple_join"
 QED
 
@@ -941,13 +1070,13 @@ Resume aggregate_make_tuple_flat_sim[vars_join]:
   `not_fresh_at sn z /\ not_fresh_at ss z` by
     (conj_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `sa` >> fs[ci_mono_def] >> decide_tac) >>
-  qpat_x_assum `vv_post ctx func ce cx h es sa sn s0 es1 tv vv q` mp_tac >>
+  qpat_x_assum `vv_post H ctx func ce cx h es sa sn s0 es1 tv vv q` mp_tac >>
   simp_tac std_ss [vv_post_def] >> strip_tac >> metis_tac[]
 QED
 
 Resume aggregate_make_tuple_flat_sim[allocas_join]:
   rpt strip_tac >>
-  qpat_x_assum `vv_post ctx func ce cx h es sa sn s0 es1 tv vv q` mp_tac >>
+  qpat_x_assum `vv_post H ctx func ce cx h es sa sn s0 es1 tv vv q` mp_tac >>
   simp_tac std_ss [vv_post_def] >> strip_tac >> metis_tac[]
 QED
 
@@ -957,20 +1086,20 @@ Resume aggregate_make_tuple_flat_sim[slice_join]:
       b + asz <= lo \/ lo + sz <= b` by
     (`not_local_ptr ce es.scopes x` by simp[] >>
      `alloca_inv s0 /\ local_ptrs_rel func ce es.scopes s0` by
-       (qpat_assum `stmt_state_rel ctx func ce cx es s0` mp_tac >>
+       (qpat_assum `stmt_state_rel H ctx func ce cx es s0` mp_tac >>
         simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
         strip_tac >> asm_rewrite_tac[]) >>
      rpt strip_tac >> drule_all local_ptrs_rel_alloca_disjoint >>
      simp[regions_disjoint_def]) >>
   `mem_bytes_at b asz q.vs_memory = mem_bytes_at b asz s0.vs_memory` by
-    (qpat_assum `vv_post ctx func ce cx h es sa sn s0 es1 tv vv q`
+    (qpat_assum `vv_post H ctx func ce cx h es sa sn s0 es1 tv vv q`
        (mp_then Any irule vv_post_old_buffer) >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   `!name lo sz. local_region ce es1.scopes q name lo sz ==>
       asz + b <= lo \/ lo + sz <= b` by
     (`not_local_ptr ce es1.scopes x` by simp[] >>
      `alloca_inv q /\ local_ptrs_rel func ce es1.scopes q` by
-       (qpat_assum `stmt_state_rel ctx func ce cx es1 q` mp_tac >>
+       (qpat_assum `stmt_state_rel H ctx func ce cx es1 q` mp_tac >>
         simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
         strip_tac >> asm_rewrite_tac[]) >>
      rpt strip_tac >> drule_all local_ptrs_rel_alloca_disjoint >>
@@ -1010,7 +1139,7 @@ Resume aggregate_make_tuple_flat_sim[exterior_join]:
      qpat_x_assum `!name lo sz. local_region ce es1.scopes q name lo sz ==> p + n <= lo \/ _`
        (qspecl_then [`name`, `lo`, `sz`] mp_tac) >> asm_rewrite_tac[]) >>
   `mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory` by
-    (qpat_assum `vv_post ctx func ce cx h es sa sn s0 es1 tv vv q`
+    (qpat_assum `vv_post H ctx func ce cx h es sa sn s0 es1 tv vv q`
        (mp_then Any irule vv_post_old_buffer) >> reverse conj_tac
      >- (qexists_tac `aid` >> asm_rewrite_tac[]) >>
      rpt strip_tac >>
@@ -1018,7 +1147,7 @@ Resume aggregate_make_tuple_flat_sim[exterior_join]:
        (qspecl_then [`n'`, `b'`, `k`] mp_tac) >>
      asm_rewrite_tac[] >> decide_tac) >>
   `FLOOKUP q.vs_allocas aid = SOME (p,n)` by
-    (qpat_x_assum `vv_post ctx func ce cx h es sa sn s0 es1 tv vv q` mp_tac >>
+    (qpat_x_assum `vv_post H ctx func ce cx h es sa sn s0 es1 tv vv q` mp_tac >>
      simp_tac std_ss [vv_post_def] >> strip_tac >>
      qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` irule >>
      asm_rewrite_tac[]) >>
@@ -1048,7 +1177,7 @@ Resume aggregate_make_tuple_flat_sim[locals_join]:
     (irule locals_kept_trans >> qexistsl_tac [`es1`, `sn`, `t2`] >>
      asm_rewrite_tac[]) >>
   irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `q`] >>
-  qpat_x_assum `vv_post ctx func ce cx h es sa sn s0 es1 tv vv q` mp_tac >>
+  qpat_x_assum `vv_post H ctx func ce cx h es sa sn s0 es1 tv vv q` mp_tac >>
   simp_tac std_ss [vv_post_def] >> strip_tac >> simp[]
 QED
 
@@ -1062,16 +1191,16 @@ Resume aggregate_make_tuple_flat_sim[pure_join]:
   `pure_frame ce func es sa s0 q /\
    (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
       lookup_var z q = SOME w)` by
-    (qpat_x_assum `vv_post ctx func ce cx h es sa sn s0 es1 tv vv q` mp_tac >>
+    (qpat_x_assum `vv_post H ctx func ce cx h es sa sn s0 es1 tv vv q` mp_tac >>
      rewrite_tac[vv_post_def] >> strip_tac >> conj_tac
      >- (qpat_x_assum `~expr_has_effect h ==> _` irule >> first_assum ACCEPT_TAC) >>
      first_assum ACCEPT_TAC) >>
-  qpat_assum `expr_post _ _ _ _ h _ _ _ _ _ _ _ u`
+  qpat_assum `expr_post H _ _ _ _ h _ _ _ _ _ _ _ u`
     (mp_then (Pos hd) mp_tac exprSimWordArgsTheory.expr_post_pure_frame) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   `!aid a. FLOOKUP q.vs_allocas aid = SOME a ==>
      FLOOKUP u.vs_allocas aid = SOME a` by
-    (qpat_x_assum `expr_post _ _ _ _ h _ _ _ _ _ _ _ u` mp_tac >>
+    (qpat_x_assum `expr_post H _ _ _ _ h _ _ _ _ _ _ _ u` mp_tac >>
      rewrite_tac[expr_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `pure_frame ce func es sa s0 u` by
     (match_mp_tac pure_frame_trans >>
@@ -1081,7 +1210,7 @@ Resume aggregate_make_tuple_flat_sim[pure_join]:
       b + asz <= lo \/ lo + sz <= b` by
     (`not_local_ptr ce es.scopes x` by simp[] >>
      `alloca_inv s0 /\ local_ptrs_rel func ce es.scopes s0` by
-       (qpat_assum `stmt_state_rel ctx func ce cx es s0` mp_tac >>
+       (qpat_assum `stmt_state_rel H ctx func ce cx es s0` mp_tac >>
         simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
         strip_tac >> asm_rewrite_tac[]) >>
      rpt strip_tac >> drule_all local_ptrs_rel_alloca_disjoint >>
@@ -1121,7 +1250,7 @@ Finalise aggregate_make_tuple_flat_sim
 
 (* The equal-type case of aggregate_make_tuple_flat_sim. *)
 Theorem aggregate_make_tuple_sim:
-  !args ce cx env off sa out sb es tvs func inst x b asz s0 ctx nocalls.
+  !args ce cx env off sa out sb es tvs func inst x b asz s0 ctx nocalls st0.
   compile_make_tuple compile_expr ce args (MAP expr_type args) (Var x) off sa =
     (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
@@ -1147,14 +1276,18 @@ Theorem aggregate_make_tuple_sim:
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\
+  ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+    (\H res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
+      storage_well_formed_on cx es' (FST H) /\
       tuple_in_memory vs tvs (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -1178,7 +1311,7 @@ Theorem aggregate_make_tuple_sim:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\
+    (\H res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -1197,7 +1330,7 @@ QED
    supported_struct_elements limit every member to supported_copy_types,
    all of which are flat. *)
 Theorem aggregate_make_tuple_nested_sim:
-  !args tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx nocalls.
+  !args tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx nocalls st0.
   compile_make_tuple compile_expr ce args tys (Var x) off sa = (out,sb) /\
   LIST_REL (\t e. arg_type_fits (expr_type e) t) tys args /\
   (?t e. MEM (t,e) (ZIP (tys,args)) /\ t <> expr_type e /\
@@ -1226,14 +1359,18 @@ Theorem aggregate_make_tuple_nested_sim:
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\
+  ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+    (\H res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
+      storage_well_formed_on cx es' (FST H) /\
       tuple_in_memory vs tvs (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -1257,7 +1394,7 @@ Theorem aggregate_make_tuple_nested_sim:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\
+    (\H res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   cheat
@@ -1284,7 +1421,7 @@ Proof
 QED
 
 Theorem aggregate_make_tuple_fits_sim:
-  !args tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx nocalls.
+  !args tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx nocalls st0.
   compile_make_tuple compile_expr ce args tys (Var x) off sa = (out,sb) /\
   LIST_REL (\t e. arg_type_fits (expr_type e) t) tys args /\
   OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
@@ -1311,14 +1448,18 @@ Theorem aggregate_make_tuple_fits_sim:
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\
+  ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+    (\H res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
+      storage_well_formed_on cx es' (FST H) /\
       tuple_in_memory vs tvs (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -1342,7 +1483,7 @@ Theorem aggregate_make_tuple_fits_sim:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\
+    (\H res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1361,9 +1502,9 @@ QED
 
 (* Post transport keeps the counted execution and exemption witnesses intact. *)
 Theorem struct_gas_outcome_post:
-  gas_outcome memory tops (ctx,func) source (es,s0) Q R /\
-  (!res es' r. Q res es' r ==> Q' res es' r) ==>
-  gas_outcome memory tops (ctx,func) source (es,s0) Q' R
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s0) Q R /\
+  (!H res es' r. Q H res es' r ==> Q' H res es' r) ==>
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s0) Q' R
 Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def] >> metis_tac[]
 QED
@@ -1379,7 +1520,7 @@ Proof
 QED
 
 Theorem aggregate_struct_fields_sim:
-  !fields tys ce cx env ty off sa out sb es tvs func inst x b asz s0 ctx nocalls.
+  !fields tys ce cx env ty off sa out sb es tvs func inst x b asz s0 ctx nocalls st0.
   LIST_REL (\t (name,e).
     ALOOKUP (get_struct_fields ce.ce_struct_fields
       (case ty of StructT nsid => nsid_to_string nsid | _ => "")) name =
@@ -1410,14 +1551,18 @@ Theorem aggregate_struct_fields_sim:
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\
+  ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx (MAP SND fields)) (es,s0)
-    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx (MAP SND fields)) (es,s0)
+    (\H res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
+      storage_well_formed_on cx es' (FST H) /\
       fields_in_memory (ZIP (MAP FST fields,vs))
         (ZIP (MAP FST fields,tvs)) (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -1442,7 +1587,7 @@ Theorem aggregate_struct_fields_sim:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\
+    (\H res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1454,7 +1599,7 @@ Proof
   disch_then (drule_at (Pat `exprs_case _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME (_,_)`)) >>
-  disch_then (qspec_then `es` mp_tac) >>
+  disch_then (qspecl_then [`es`, `st0`] mp_tac) >>
   (impl_tac >- (simp[] >> conj_tac >- metis_tac[] >>
     first_assum ACCEPT_TAC)) >>
   strip_tac >> simp[] >>
@@ -1483,7 +1628,7 @@ QED
 
 
 Theorem array_header_store_state_rel:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   (!name lo sz. local_region ce es.scopes s name lo sz ==>
      lo + sz <= b \/ b + 32 <= lo) /\
   (ce.ce_is_ctor ==> !name tv v io.
@@ -1491,7 +1636,7 @@ Theorem array_header_store_state_rel:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
     regions_disjoint io (type_memory_size tv) b 32) ==>
-  stmt_state_rel ctx func ce cx es (mstore b w s)
+  stmt_state_rel H ctx func ce cx es (mstore b w s)
 Proof
   strip_tac >>
   `local_ptrs_rel func ce es.scopes (mstore b w s)` by
@@ -1522,7 +1667,7 @@ Proof
 QED
 
 Theorem array_header_store_boundary:
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
   not_local_ptr ce es.scopes x /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,asz) /\ 32 <= asz /\
@@ -1531,7 +1676,7 @@ Theorem array_header_store_boundary:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
     regions_disjoint io (type_memory_size tv) b 32) ==>
-  stmt_state_rel ctx func ce cx es (mstore b w s) /\
+  stmt_state_rel H ctx func ce cx es (mstore b w s) /\
   locals_kept ce es es s (mstore b w s) /\
   mem_word_at b (mstore b w s).vs_memory = w /\
   (!p n. p+n <= b \/ b+32 <= p ==>
@@ -1555,7 +1700,7 @@ QED
 
 
 Theorem aggregate_make_array_elems_sim:
-  !args ce cx env elem_ty tv header idx off sa out sb es func inst x b asz s0 ctx nocalls.
+  !args ce cx env elem_ty tv header idx off sa out sb es func inst x b asz s0 ctx nocalls st0.
   EVERY (\e. arg_type_fits (expr_type e) elem_ty) args /\
   evaluate_type (get_tenv cx) elem_ty = SOME tv /\
   type_memory_bytes ce elem_ty = type_memory_size tv /\
@@ -1585,14 +1730,18 @@ Theorem aggregate_make_array_elems_sim:
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (LENGTH args * type_memory_size tv)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\
+  ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+    (\H res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
+      storage_well_formed_on cx es' (FST H) /\
       elems_in_memory vs (b+off) tv r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -1616,7 +1765,7 @@ Theorem aggregate_make_array_elems_sim:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\
+    (\H res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1644,11 +1793,12 @@ Proof
   drule_all aggregate_make_tuple_fits_sim >>
   pure_rewrite_tac [type_memory_size_list_replicate] >>
   disch_then strip_assume_tac >> conj_tac >- asm_rewrite_tac[] >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
   rpt (pop_assum kall_tac) >>
   pure_rewrite_tac [gas_outcome_def, gas_summary_at_def] >>
   strip_tac
-  >- (qexists_tac `marks` >> disj1_tac >>
+  >- (qexists_tac `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >>
       gvs[] >>
       qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
@@ -1660,7 +1810,7 @@ Proof
 QED
 
 Theorem aggregate_make_array_start_sim:
-  !args ce cx env elem_ty tv stride header sa out sb es func inst x b asz s0 ctx nocalls.
+  !args ce cx env elem_ty tv stride header sa out sb es func inst x b asz s0 ctx nocalls st0.
   EVERY (\e. arg_type_fits (expr_type e) elem_ty) args /\
   evaluate_type (get_tenv cx) elem_ty = SOME tv /\
   stride = type_memory_size tv /\
@@ -1690,14 +1840,18 @@ Theorem aggregate_make_array_start_sim:
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+(if header then 32 else 0))
        (LENGTH args * type_memory_size tv)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\
+  ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+    (\H res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
+      storage_well_formed_on cx es' (FST H) /\
       elems_in_memory vs (b+(if header then 32 else 0)) tv r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -1722,7 +1876,7 @@ Theorem aggregate_make_array_start_sim:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\
+    (\H res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1751,7 +1905,7 @@ QED
 
 
 Theorem aggregate_make_array_sim:
-  !args ce cx env elem_ty tv stride header sa out sb es func inst x b asz s0 ctx nocalls.
+  !args ce cx env elem_ty tv stride header sa out sb es func inst x b asz s0 ctx nocalls st0.
   EVERY (\e. arg_type_fits (expr_type e) elem_ty) args /\
   evaluate_type (get_tenv cx) elem_ty = SOME tv /\
   stride = type_memory_size tv /\
@@ -1781,14 +1935,18 @@ Theorem aggregate_make_array_sim:
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) b
        ((if header then 32 else 0) + LENGTH args * type_memory_size tv)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\
+  ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+    (\H res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
+      storage_well_formed_on cx es' (FST H) /\
       elems_in_memory vs (b+(if header then 32 else 0)) tv r.vs_memory /\
       (header ==> mem_word_at b r.vs_memory = n2w (LENGTH args)) /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -1813,7 +1971,7 @@ Theorem aggregate_make_array_sim:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\
+    (\H res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >> reverse (Cases_on `header`)
@@ -1836,7 +1994,7 @@ Proof
      metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND]) >>
   `cs_extends sa sm /\ cs_extends sm sb` by gvs[ci_mono_def] >>
   drule_all fn_has_code_split >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `gas_outcome F _ _ _ _ post exitrel` >>
+  qmatch_goalsub_abbrev_tac `gas_outcome F _ _ _ _ _ _ post exitrel` >>
   qabbrev_tac `sh = mstore b (n2w (LENGTH args)) s0 with
     vs_inst_idx := SUC s0.vs_inst_idx` >>
   `gas_marked_path F ctx func s0 0 (OK sh)` by
@@ -1844,13 +2002,14 @@ Proof
      drule emit_mstore_marked_path >>
      disch_then (qspecl_then [`n2w (LENGTH args)`, `n2w b`, `s0`, `func`, `ctx`] mp_tac) >>
      simp[eval_operand_def, Abbr `sh`]) >>
-  `stmt_state_rel ctx func ce cx es (mstore b (n2w (LENGTH args)) s0) /\
+  `!H. stmt_state_rel H ctx func ce cx es s0 ==>
+   stmt_state_rel H ctx func ce cx es (mstore b (n2w (LENGTH args)) s0) /\
    locals_kept ce es es s0 (mstore b (n2w (LENGTH args)) s0) /\
    mem_word_at b (mstore b (n2w (LENGTH args)) s0).vs_memory = n2w (LENGTH args) /\
    (!p n. p+n <= b \/ b+32 <= p ==>
      mem_bytes_at p n (mstore b (n2w (LENGTH args)) s0).vs_memory =
      mem_bytes_at p n s0.vs_memory)` by
-    (irule array_header_store_boundary >>
+    (gen_tac >> strip_tac >> irule array_header_store_boundary >>
      simp[] >> conj_tac
      >- (rpt strip_tac >> first_x_assum drule_all >>
          simp[regions_disjoint_def] >> decide_tac) >>
@@ -1860,10 +2019,18 @@ Proof
    sm.cs_next_id = SUC sa.cs_next_id /\ sm.cs_next_var = sa.cs_next_var` by
     gvs[emitHelperTheory.emit_void_def, comp_bind_def, fresh_id_def,
         comp_ignore_bind_def, comp_return_def, emit_def] >>
-  `stmt_state_rel ctx func ce cx es sh /\ ~sh.vs_halted /\
-   sh.vs_current_bb = sm.cs_current_bb /\
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func ce cx es sh /\
+       storage_well_formed_on cx es (FST H)` by
+    (gen_tac >> strip_tac >>
+     `stmt_state_rel H ctx func ce cx es s0 /\
+      storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+     `stmt_state_rel H ctx func ce cx es (mstore b (n2w (LENGTH args)) s0)` by
+       metis_tac[] >>
+     asm_simp_tac std_ss [Abbr `sh`, stmt_state_rel_inst_idx]) >>
+  `~sh.vs_halted /\ sh.vs_current_bb = sm.cs_current_bb /\
    sh.vs_inst_idx = LENGTH sm.cs_current_insts` by
-    simp[Abbr `sh`, stmt_state_rel_inst_idx, mstore_def] >>
+    simp[Abbr `sh`, mstore_def] >>
   `local_ptrs_reserved ce sm /\ not_fresh_at sm x /\
    inst.inst_id < sm.cs_next_id` by
     (conj_tac
@@ -1890,10 +2057,11 @@ Proof
      metis_tac[])) >>
   strip_tac >> conj_tac >- simp[] >>
   irule gas_outcome_zero_prefix >> qexists_tac `sh` >> simp[] >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
   strip_tac
-  >- (qexists_tac `marks` >> disj1_tac >>
+  >- (qexists_tac `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
       disj1_tac >> suspend "array_post_transport") >>
   metis_tac[]
@@ -1908,7 +2076,27 @@ Resume aggregate_make_array_sim[array_post_transport]:
   qpat_x_assum `exprs_case _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `~nocalls ==> _` kall_tac >>
   qpat_x_assum `ce.ce_is_ctor ==> _` kall_tac >>
-  gvs[Abbr `post`] >>
+  gvs[Abbr `post`] >> rpt strip_tac >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (`?obs. es_end.storage_trace = es.storage_trace ++ obs` by
+       (qpat_assum `gas_marked_exec _ _ (eval_exprs _ _) _ _ _ _ _`
+          (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+        disch_then (qspec_then `[]` assume_tac) >>
+        drule_at (Pos last) storage_trace_frame_prefix >>
+        simp[evaluate_storage_trace_frame]) >>
+     `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+          valid_horizon cx st0 H es.storage_trace` by
+       simp[valid_horizon_def] >>
+     metis_tac[]) >>
+  `stmt_state_rel H ctx func ce cx es s0` by metis_tac[] >>
+  `locals_kept ce es es s0 (mstore b (n2w (LENGTH args)) s0) /\
+   mem_word_at b (mstore b (n2w (LENGTH args)) s0).vs_memory = n2w (LENGTH args) /\
+   (!p n. p+n <= b \/ b+32 <= p ==>
+     mem_bytes_at p n (mstore b (n2w (LENGTH args)) s0).vs_memory =
+     mem_bytes_at p n s0.vs_memory)` by metis_tac[] >>
+  qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  gvs[] >>
   conj_tac >- suspend "header_word" >>
   conj_tac >- suspend "variables" >>
   conj_tac >- suspend "allocas" >>

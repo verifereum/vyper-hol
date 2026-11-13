@@ -21,7 +21,7 @@ Proof
 QED
 
 Theorem membership_immutable_base_value:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   cenv.ce_imm_alloca = SOME region_op ==>
   eval_operand region_op s = SOME 0w
 Proof
@@ -41,7 +41,7 @@ Proof
 QED
 
 Theorem membership_memory_offset_covers:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   vv_at cenv cx ty sa sb es tv (LocatedValue ann p) s /\
   ptr_vv_ok cx ty tv (LocatedValue ann p) es G tn s /\
   p.ptr_location = LocMemory /\

@@ -19,7 +19,7 @@ Theorem compile_revert_string_endpoint_ptr:
     (type_memory_bytes cenv (expr_type r)) sm = ((),sb) /\
   fn_has_code sm sb fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
-  vv_post ctx fn cenv cx r es sa sm s0 ee tv vv t /\
+  vv_post H ctx fn cenv cx r es sa sm s0 ee tv vv t /\
   ptr_vv_ok cx (expr_type r) tv vv ee G tn t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -111,7 +111,7 @@ Proof
   qpat_x_assum `post_value_type cenv r = _`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   irule compile_revert_string_endpoint_ptr >> simp[] >>
-  goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
   simp[] >> metis_tac[]
 QED
@@ -138,7 +138,7 @@ Proof
     (STRING #"%" (toString (sm.cs_next_var+k)))` by
     (rpt strip_tac >> irule local_ptrs_reserved_fresh >>
      goal_assum (drule_at Any) >> decide_tac) >>
-  `?z Gf tnf. gas_path_ptr (cx_dead cx) 0 ctx fn PG G0 tn0 s0 0 Gf tnf
+  `?z Gf tnf. gas_path_ptr (cx_dead H cx) 0 ctx fn PG G0 tn0 s0 0 Gf tnf
     (Abort Revert_abort z)` by
     (irule (INST_TYPE [alpha |-> ``:type``] compile_literal_revert_path_ptr) >>
      simp[] >> goal_assum (drule_at (Pat `compile_bytelike_literal _ _ _ = _`)) >>

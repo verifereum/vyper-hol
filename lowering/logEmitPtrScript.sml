@@ -143,11 +143,11 @@ Proof
 QED
 
 Theorem log_emit_ghost_inv:
-  ghost_inv d ce cx es G tn s ==>
-  ghost_inv d ce cx (es with logs := es.logs ++ [ev]) G tn
+  ghost_inv H d ce cx es G tn s ==>
+  ghost_inv H d ce cx (es with logs := es.logs ++ [ev]) G tn
     (s with vs_logs := s.vs_logs ++ [ev])
 Proof
-  strip_tac >> qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  strip_tac >> qpat_x_assum `ghost_inv _ _ _ _ _ _ _ _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> Cases_on `d`
   >- (simp[ghost_inv_def, ptr_covers_def, lookup_var_def, stor_taint_ok_def,
        return_buf_ptr_def] >> metis_tac[]) >>
@@ -164,17 +164,17 @@ Theorem compile_log_emit_path_ptr:
   EVERY (\op. op_taint tn op = {}) (ptr_op::len_op::topic_ops) /\
   (w2n len <> 0 ==> ?v. ptr_op = Var v /\ ptr_covers G tn v s (w2n len)) /\
   (!i. w2n off <= i /\ i < w2n off + w2n len ==> i NOTIN tn.t_mem) /\
-  stmt_state_rel ctx func ce cx es s /\ fresh_vars_wrt limit_st s /\
-  ghost_inv d ce cx es G tn s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func ce cx es s /\ fresh_vars_wrt limit_st s /\
+  ghost_inv H d ce cx es G tn s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t. gas_path_ptr D 0 ctx func PG G tn s 0 G tn
       (OK (t with vs_inst_idx := SUC s.vs_inst_idx)) /\
-    stmt_state_rel ctx func ce cx (es with logs := es.logs ++
+    stmt_state_rel H ctx func ce cx (es with logs := es.logs ++
       [<|logger := w2w cx.txn.target; topics := topics;
         data := mem_bytes_at (w2n off) (w2n len) s.vs_memory|>])
       (t with vs_inst_idx := SUC s.vs_inst_idx) /\
-    ghost_inv d ce cx (es with logs := es.logs ++
+    ghost_inv H d ce cx (es with logs := es.logs ++
       [<|logger := w2w cx.txn.target; topics := topics;
         data := mem_bytes_at (w2n off) (w2n len) s.vs_memory|>]) G tn
       (t with vs_inst_idx := SUC s.vs_inst_idx) /\
@@ -235,7 +235,7 @@ Resume compile_log_emit_path_ptr[post]:
   asm_simp_tac bool_ss [stmt_state_rel_inst_idx,
     PURE_REWRITE_RULE [ghost_inv_gas_obs] literal_ptr_ghost_inv_normalize] >>
   conj_tac
-  >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with logs := _) t` mp_tac >>
+  >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ (_ with logs := _) t` mp_tac >>
       asm_simp_tac bool_ss [w2w_id]) >>
   conj_tac
   >- (qpat_x_assum `t = _` SUBST_ALL_TAC >>

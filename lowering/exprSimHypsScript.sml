@@ -95,7 +95,7 @@
  *     or without default arguments, and the constructor: entryLocals;
  *     internal functions: package_internal_fn_prologue_ptrs in
  *     intCallCallee) and how the statement lowering declares
- *     locals; state_rel only relates the locals that are held so
+ *     locals; state_rel H only relates the locals that are held so
  *     (local_ptrs_rel), and compile_name_vv emits INVALID for a name it
  *     does not find.
  *   - The local types clause: the compile environment's type of a local
@@ -1257,13 +1257,6 @@ Proof
   drule_all ifexp_intcall_read_cast >> strip_tac >>
   goal_assum (drule_at Any) >>
   metis_tac[vyperTypingTheory.safe_cast_result_well_typed]
-QED
-
-Theorem word_size_monotone:
-  !n m. n <= m ==> word_size n <= word_size m
-Proof
-  rpt strip_tac >> simp[vfmConstantsTheory.word_size_def] >>
-  irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]
 QED
 
 Theorem memory_rhs_read_annotation_typed:

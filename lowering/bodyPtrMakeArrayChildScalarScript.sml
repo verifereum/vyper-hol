@@ -17,7 +17,7 @@ Theorem literal_child_scalar_materialize:
   lookup_var root s = SOME a /\ op_taint tn (Var root) = {} /\
   ptr_covers G tn root s capacity /\ FLOOKUP G root = SOME (base,cap) /\
   base+cap <= dimword(:256) /\ off < capacity /\ off+32 <= capacity /\
-  vv_post ctx func ce cx e esi si sm s0 es' raw vv s /\
+  vv_post H ctx func ce cx e esi si sm s0 es' raw vv s /\
   ptr_vv_ok cx (expr_type e) raw vv es' G tn s /\ is_word_type (expr_type e) /\
   (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce e p.ptr_operand G s) /\
@@ -27,15 +27,15 @@ Theorem literal_child_scalar_materialize:
   (!p. vv_operand vv = Var p ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
-  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn ==>
-  ?tv z H tm.
+  ghost_inv H d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn ==>
+  ?tv z HG tm.
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
-    expr_post ctx func ce cx e esi si su s0 es' v op z /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
+    expr_post H ctx func ce cx e esi si su s0 es' v op z /\
     eval_operand op z = SOME (typed_val_to_w256 tv v) /\ op_taint tm op = {} /\
-    ghost_inv d ce cx es' H tm z /\ ghost_kept ce esi si G0 tn0 s0 H tm /\
+    ghost_inv H d ce cx es' HG tm z /\ ghost_kept ce esi si G0 tn0 s0 HG tm /\
     z.vs_current_bb = su.cs_current_bb /\ z.vs_inst_idx = LENGTH su.cs_current_insts /\
-    ptr_covers H tm dst z 32 /\ lookup_var dst z = SOME (a+n2w off)
+    ptr_covers HG tm dst z 32 /\ lookup_var dst z = SOME (a+n2w off)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `(!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
@@ -61,5 +61,5 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl [`ty`, `sf`, `Gf`, `tnf`] >> simp[] >>
   irule (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then |> SRULE []) >>
-  qexistsl [`H`, `z`, `tm`] >> simp[]
+  qexistsl [`HG`, `z`, `tm`] >> simp[]
 QED

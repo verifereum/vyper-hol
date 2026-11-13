@@ -34,7 +34,7 @@ QED
 Theorem aggregate_buffer_alloc_counted_mem_any_block:
   compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  sz < dimword (:256) /\ stmt_state_rel ctx func ce cx es s0 /\
+  sz < dimword (:256) /\ stmt_state_rel H ctx func ce cx es s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   alloca_history func s0 ==>
@@ -45,7 +45,7 @@ Theorem aggregate_buffer_alloc_counted_mem_any_block:
     gas_marked_path T ctx func s0 0 (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    stmt_state_rel ctx func ce cx es t /\
+    stmt_state_rel H ctx func ce cx es t /\
     lookup_var x t = SOME (n2w b) /\
     FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\
     b + sz < dimword (:256) /\ t.vs_memory = s0.vs_memory /\
@@ -60,7 +60,9 @@ Theorem aggregate_buffer_alloc_counted_mem_any_block:
     (!name p n. local_region ce es.scopes t name p n <=>
       local_region ce es.scopes s0 name p n) /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
-    b + sz <= t.vs_alloca_next
+    b + sz <= t.vs_alloca_next /\
+    t.vs_accounts = s0.vs_accounts /\ t.vs_transient = s0.vs_transient /\
+    t.vs_requests = s0.vs_requests /\ t.vs_call_ctx = s0.vs_call_ctx
 Proof
   strip_tac >>
   drule_all buffer_alloc_provenance >> strip_tac >>
@@ -114,6 +116,14 @@ Proof
           venomStateTheory.eval_operand_def] >>
      Cases_on `FLOOKUP s0.vs_allocas sa.cs_next_id` >>
      simp[venomStateTheory.update_var_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  `u.vs_accounts = s0.vs_accounts /\ u.vs_transient = s0.vs_transient /\
+   u.vs_requests = s0.vs_requests /\ u.vs_call_ctx = s0.vs_call_ctx` by
+    (qpat_x_assum `run_inst_seq _ _ = OK u` mp_tac >>
+     simp[run_inst_seq_def, Once venomExecSemanticsTheory.step_inst_base_def,
+          venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def,
+          venomStateTheory.eval_operand_def] >>
+     Cases_on `FLOOKUP s0.vs_allocas sa.cs_next_id` >>
+     simp[venomStateTheory.update_var_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
   `w2n w + sz <= u.vs_alloca_next` by
     (drule_all aggregate_alloca_capacity_mem >> simp[]) >>
   qexistsl_tac [`inst`, `x`, `u with vs_inst_idx := LENGTH sm.cs_current_insts`,
@@ -134,7 +144,7 @@ QED
 Theorem aggregate_buffer_alloc_counted_mem:
   compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  sz < dimword (:256) /\ stmt_state_rel ctx func ce cx es s0 /\
+  sz < dimword (:256) /\ stmt_state_rel H ctx func ce cx es s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   alloca_history func s0 /\ ~block_is_terminated sa ==>
@@ -145,7 +155,7 @@ Theorem aggregate_buffer_alloc_counted_mem:
     gas_marked_path T ctx func s0 0 (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    stmt_state_rel ctx func ce cx es t /\
+    stmt_state_rel H ctx func ce cx es t /\
     lookup_var x t = SOME (n2w b) /\
     FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\
     b + sz < dimword (:256) /\ t.vs_memory = s0.vs_memory /\

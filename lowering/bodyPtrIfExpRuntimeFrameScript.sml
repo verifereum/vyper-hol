@@ -48,7 +48,7 @@ Proof
 QED
 
 Theorem ifexp_runtime_allocation_frame:
-  stmt_state_rel ctx fn ce cx ee s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn ce cx ee s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sb /\
   compile_alloc_buffer (32*n) sb = (buf,cs) /\ fn_has_code sb cs fn /\
   buf.buf_operand = Var out /\ 32*n < dimword (:256) /\

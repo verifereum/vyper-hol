@@ -4,7 +4,7 @@ Ancestors allocationPtr exprSimPtrLiteralBuffer bodyPtrDefs compileEnv
   ptrDiscipline exprSimProps loweringHalt
 
 Theorem structlit_fresh_alloca_ghost_inv:
-  ghost_inv d ce cx es G tn s /\ local_ptrs_reserved ce sa /\
+  ghost_inv H d ce cx es G tn s /\ local_ptrs_reserved ce sa /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   ~not_fresh_at sa out /\
@@ -15,7 +15,7 @@ Theorem structlit_fresh_alloca_ghost_inv:
     w2n w + val_footprint entry.type entry.value <= s.vs_alloca_next) /\
   FLOOKUP s.vs_allocas id = NONE /\ n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
-  ghost_inv d ce cx es
+  ghost_inv H d ce cx es
     (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) s1)
     (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn)
     (s1 with vs_inst_idx := SUC s.vs_inst_idx)

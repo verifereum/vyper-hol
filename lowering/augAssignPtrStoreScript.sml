@@ -110,7 +110,7 @@ QED
 (* Source updates supply only the local-value clause. The remaining ghost
    components are insensitive to a memory-only store with no variable outputs. *)
 Theorem ghost_inv_mstore_transport:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
   op_taint tn value = {} /\
   (!name entry p sz.
@@ -121,7 +121,7 @@ Theorem ghost_inv_mstore_transport:
       mem_agree_outside (tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32})
         (mstore (w2n a) w s).vs_memory mem ==>
       val_in_memory entry.type entry.value (w2n b) mem) ==>
-  ghost_inv d cenv cx es' G
+  ghost_inv H d cenv cx es' G
     (step_taint (mk_inst id MSTORE [Var dst; value] []) s (mstore (w2n a) w s) tn)
     ((mstore (w2n a) w s) with vs_inst_idx := pc)
 Proof
@@ -179,7 +179,7 @@ Proof
 QED
 
 Theorem ghost_local_word_store:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_rel fn cenv es.scopes s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
@@ -214,13 +214,13 @@ Proof
 QED
 
 Theorem ghost_inv_write_local_word:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_rel fn cenv es.scopes s /\
   find_containing_scope name es.scopes = SOME (pre, env, entry, rest) /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME a /\ 32 <= sz /\ word_value v /\
   eval_operand value s = SOME (val_to_w256 v) /\ op_taint tn value = {} ==>
-  ghost_inv d cenv cx
+  ghost_inv H d cenv cx
     (es with scopes := pre ++ (env |+ (name, entry with <|value := v; popped := []|>)) :: rest)
     G (step_taint (mk_inst id MSTORE [Var p; value] []) s
       (mstore (w2n a) (val_to_w256 v) s) tn)
@@ -234,7 +234,7 @@ Proof
   conj_tac
   >- (rpt gen_tac >> strip_tac >> irule ghost_local_word_store >> simp[] >>
       goal_assum (drule_at Any) >>
-      qpat_assum `ghost_inv _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `ghost_inv _ _ _ _ _ _ _ _` (irule_at Any) >>
       qpat_assum `local_ptrs_rel _ _ _ _` (irule_at Any) >>
       qpat_assum `lookup_var p s = SOME a` (irule_at Any) >>
       qpat_assum `FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz)` (irule_at Any) >>

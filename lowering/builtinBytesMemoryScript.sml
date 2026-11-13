@@ -401,7 +401,7 @@ val () = List.app (fn th =>
    for the bytestring header read, including an unsuccessful read prefix. *)
 Theorem compile_bytestring_src_local_mem_ok:
   !ctx func cenv cx es s name entry p sz sa result sb.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
     32 <= sz /\

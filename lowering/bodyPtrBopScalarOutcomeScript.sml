@@ -54,7 +54,7 @@ QED
 
 Theorem bop_scalar_success_ghost_frame:
   bop_scalar_seq {z | not_fresh_at sa z} A code B /\
-  run_inst_seq code s = OK t /\ ghost_inv d cenv cx es G tn s /\
+  run_inst_seq code s = OK t /\ ghost_inv H d cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -63,7 +63,7 @@ Theorem bop_scalar_success_ghost_frame:
   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
   tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
   es'.scopes = es.scopes ==>
-  ghost_inv d cenv cx es' G' tn' (t with vs_inst_idx := j) /\
+  ghost_inv H d cenv cx es' G' tn' (t with vs_inst_idx := j) /\
   ghost_kept cenv es sa G tn s G' tn'
 Proof
   strip_tac >> drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
@@ -74,7 +74,7 @@ Proof
     (gvs[lookup_var_def, op_taint_def] >> metis_tac[]) >>
   conj_tac
   >- (irule ghost_inv_fresh_frame >>
-      goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
       simp[] >> qexists_tac `sa` >> simp[] >>
       qpat_x_assum `t = s with vs_vars := _` SUBST_ALL_TAC >> simp[]) >>
   irule ghost_kept_old_transport >> simp[] >> metis_tac[]
@@ -88,14 +88,14 @@ Theorem bop_scalar_binop_success_ghost_path:
   ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   es'.scopes = es.scopes ==>
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     op_prov G' op = NONE /\ op_taint tn' op = {} /\
-    ghost_inv d cenv cx es' G' tn'
+    ghost_inv H d cenv cx es' G' tn'
       (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
     ghost_kept cenv es sa G tn s G' tn'
 Proof
@@ -124,7 +124,7 @@ Theorem bop_scalar_suffix_outcome_ptr:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ((?v t. bop_result cx ann bop tys v1 v2 es = INL v /\ word_value v /\
@@ -136,7 +136,7 @@ Theorem bop_scalar_suffix_outcome_ptr:
       run_inst_seq (emitted_insts sa sb) s = OK t /\
       eval_operand op t = SOME (val_to_w256 v) /\
       op_prov G' op = NONE /\ op_taint tn' op = {} /\
-      ghost_inv d cenv cx (es with gas_obs := []) G' tn'
+      ghost_inv H d cenv cx (es with gas_obs := []) G' tn'
         (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
       ghost_kept cenv es sa G tn s G' tn' ==>
       Q (INL v) (es with gas_obs := []) G' tn'
@@ -150,7 +150,7 @@ Proof
   >- (`?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
           (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
         op_prov G' op = NONE /\ op_taint tn' op = {} /\
-        ghost_inv d cenv cx (es with gas_obs := []) G' tn'
+        ghost_inv H d cenv cx (es with gas_obs := []) G' tn'
           (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
         ghost_kept cenv es sa G tn s G' tn'` by
         (irule bop_scalar_binop_success_ghost_path >> simp[] >>

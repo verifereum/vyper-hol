@@ -21,6 +21,8 @@ Theorem compile_blockhash_frag_mem:
          [BaseT (UintT 256)] (IntV i) es0) es0
 Proof
   rpt strip_tac >> simp[unop_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  rename1 `valid_horizon cx st0 H0 es0.storage_trace` >>
+  `stmt_state_rel H0 ctx func cenv cx es0 s0` by metis_tac[] >>
   `call_ctx_rel cx.txn s0.vs_call_ctx s0.vs_tx_ctx s0.vs_block_ctx` by
     fs[stmt_state_rel_def, state_rel_def] >>
   `?n. i = &n` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >>
@@ -58,6 +60,15 @@ Resume compile_blockhash_frag_mem[success]:
   drule_all blockhash_clean_success_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   drule_all blockhash_run_post >> strip_tac >>
+  `!H. valid_horizon cx st0 H es0.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es0
+       (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+     storage_well_formed_on cx es0 (FST H)` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es0 s0 /\
+      storage_well_formed_on cx es0 (FST H)` by metis_tac[] >>
+     qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ s0` kall_tac >>
+     drule_all blockhash_run_post >> simp[]) >>
   `alloca_inv s0` by fs[stmt_state_rel_def] >>
   drule_all blockhash_run_history >> strip_tac >>
   qexists_tac `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)` >>

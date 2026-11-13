@@ -21,11 +21,11 @@ Theorem emit_acc_path_frame_mem:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+    local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
     alloca_history func s0 ==>
     ?t. gas_marked_path T ctx func s0 0 (OK t) /\
       eval_operand op t = SOME w /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       local_ptrs_reserved cenv sb /\ alloca_history func t /\
@@ -65,7 +65,7 @@ Proof
      qexists_tac `sa` >> simp[]) >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (update_var out w s0)` by
+  `stmt_state_rel H ctx func cenv cx es (update_var out w s0)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   qexists_tac `update_var out w s0 with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[gas_marked_path_def, stmt_state_rel_inst_idx, eval_operand_def] >>
@@ -81,8 +81,8 @@ Theorem unop_frag_mem_read_then:
     is_word_type t /\ (!c. straight_fresh (g c)) /\
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           w = typed_val_to_w256 tv v) /\
-    (!x ss n out.
-       eval_operand x ss = SOME w1 /\ stmt_state_rel ctx func cenv cx es0 ss ==>
+    (!(H:(bool # bytes32 # type_value) list # num list) x ss n out.
+       eval_operand x ss = SOME w1 /\ stmt_state_rel H ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) /\
     (!c sa sb op ss.
@@ -98,6 +98,8 @@ Proof
     (irule unop_frag_mem_straight >> simp[] >> strip_tac >>
      qexists_tac `w` >> simp[] >> metis_tac[]) >>
   simp[unop_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  rename1 `valid_horizon cx st0 H0 es0.storage_trace` >>
+  `stmt_state_rel H0 ctx func cenv cx es0 s0` by metis_tac[] >>
   qpat_x_assum `comp_bind _ _ _ = _` mp_tac >> simp[comp_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
   rename1 `emit_op _ [x] sa = (c, s1)` >>
@@ -109,7 +111,9 @@ Proof
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
   `?u. gas_marked_path T ctx func s0 0 (OK u) /\
       eval_operand c u = SOME r /\
-      stmt_state_rel ctx func cenv cx es0 u /\
+      (!H. valid_horizon cx st0 H es0.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es0 u /\
+         storage_well_formed_on cx es0 (FST H)) /\
       ~u.vs_halted /\ u.vs_current_bb = s1.cs_current_bb /\
       u.vs_inst_idx = LENGTH s1.cs_current_insts /\
       local_ptrs_reserved cenv s1 /\ alloca_history func u /\
@@ -118,18 +122,28 @@ Proof
       (?out. c = Var out /\ not_fresh_at s1 out) /\
       u.vs_memory = s0.vs_memory` by
     (drule emit_acc_path_frame_mem >>
-     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      disch_then (qspec_then `r` mp_tac) >> simp[] >>
-     (impl_tac >- (qpat_x_assum `!x ss n out. _ ==> step_inst_base _ _ = _` mp_tac >> simp[] >>
-                  disch_then irule >> simp[])) >>
+     (impl_tac >- (qpat_x_assum `!H x ss n out. _ ==> step_inst_base _ _ = _` irule >>
+                   qexists_tac `H0` >> simp[])) >>
      strip_tac >>
+     `not_local_ptr cenv es0.scopes (STRING #"%" (toString sa.cs_next_var))` by
+       (irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
+     `!H. valid_horizon cx st0 H es0.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es0
+          (update_var (STRING #"%" (toString sa.cs_next_var)) r s0
+             with vs_inst_idx := LENGTH s1.cs_current_insts) /\
+        storage_well_formed_on cx es0 (FST H)` by
+       (rpt strip_tac >> simp[stmt_state_rel_inst_idx] >>
+        metis_tac[stmt_state_rel_update_var]) >>
      qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) r s0
                     with vs_inst_idx := LENGTH s1.cs_current_insts` >>
      gvs[update_var_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
      rw[] >> gvs[]) >>
   qpat_x_assum `unop_frag_mem _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[unop_frag_mem_def] >>
-  disch_then (qspecl_then [`s1`, `sb`, `c`, `op`, `u`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `s1`, `sb`, `c`, `op`, `u`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
   simp[] >> strip_tac >>
   `!z. not_fresh_at sa z ==> not_fresh_at s1 z` by
     metis_tac[not_fresh_at_mono] >>
@@ -147,8 +161,8 @@ Theorem unop_frag_mem_read:
     is_word_type t /\
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           r = typed_val_to_w256 tv v) /\
-    (!x ss n out.
-       eval_operand x ss = SOME w1 /\ stmt_state_rel ctx func cenv cx es0 ss ==>
+    (!(H:(bool # bytes32 # type_value) list # num list) x ss n out.
+       eval_operand x ss = SOME w1 /\ stmt_state_rel H ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) ==>
     unop_frag_mem ctx func cenv cx (\x. emit_op opc [x]) w1 t (INL v) es0

@@ -17,7 +17,7 @@ Theorem log_allocated_tuple_encode_continue_mem:
   abi_encoder_input ei (Tuple ats) (ListV avs) sb cap initial.vs_memory /\
   eval_operand src initial = SOME (n2w sb) /\
   abi_decoder_operand_live st.cs_next_var src /\
-  stmt_state_rel ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ fresh_vars_wrt limit_st initial /\
   end_st.cs_next_var <= limit_st.cs_next_var /\
   LENGTH (enc (Tuple ats) (ListV avs)) <= outcap /\
@@ -33,7 +33,7 @@ Theorem log_allocated_tuple_encode_continue_mem:
     mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
       enc (Tuple ats) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
-    stmt_state_rel ctx func ce cx es actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
     db < dimword (:256) /\

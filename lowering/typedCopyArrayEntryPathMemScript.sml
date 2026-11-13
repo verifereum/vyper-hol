@@ -1,5 +1,6 @@
 Theory typedCopyArrayEntryPathMem
 Ancestors
+  bodyDeclZeroGasPath
   typedArrayLoopLayoutMem typedCopyControlPathMem exprSimBopRestWordLoopPath
   fragGasMode fragGasPathMem venomState venomExecSemantics venomInst
   exprLoweringProps words arithmetic list rich_list typedNormalizeDynarray
