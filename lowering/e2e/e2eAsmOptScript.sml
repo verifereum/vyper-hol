@@ -93,9 +93,18 @@ QED
 Theorem opt_entry_initial_venom_state_rel:
   !tops prog prog' am tx es cplan.
   call_state_rel tops (assemble prog') am tx es ==>
-  initial_venom_state_rel tops am tx (opt_entry_state prog prog' cplan es)
+  initial_venom_state_rel tops am
+    (tx with code := (opt_entry_state prog prog' cplan es).vs_code)
+    (opt_entry_state prog prog' cplan es)
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_then (qspec_then `cplan` mp_tac) entry_venom_state_initial_venom_state_rel >>
+  simp[initial_venom_state_rel_def, venom_env_rel_def, opt_entry_state_def,
+       entry_venom_state_frame_fields] >>
+  simp[entry_venom_state_def] >> strip_tac >>
+  gvs[value_transfer_ok_def, accounts_after_transfer_def,
+      loweringStateRelDefsTheory.tx_env_ok_def,
+      loweringStateRelDefsTheory.call_ctx_rel_def]
 QED
 
 (* code_layout_valid reads no GAS readings. *)
