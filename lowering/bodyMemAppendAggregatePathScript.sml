@@ -2359,42 +2359,6 @@ Proof
       eval_operand_def, lookup_var_def]
 QED
 
-Theorem append_storage_aggregate_code_bounds:
-  emit_op (if tr then TLOAD else SLOAD) [bop] sa = (lop,s1) /\
-  emit_op LT [lop; Lit (n2w cap)] s1 = (valid,s2) /\
-  emit_void ASSERT [valid] s2 = ((),s3) /\
-  emit_op ADD [bop; Lit 1w] s3 = (dop,s4) /\
-  emit_op MUL [lop; Lit (n2w n)] s4 = (off,s5) /\
-  emit_op ADD [dop; off] s5 = (dst,s6) /\
-  compile_word_copy_loop vop dst n LocMemory
-    (if tr then LocTransient else LocStorage) F s6 = (u,s7) /\
-  emit_op ADD [lop; Lit 1w] s7 = (fresh,s8) /\
-  emit_void (if tr then TSTORE else SSTORE) [bop;fresh] s8 = ((),sf) /\
-  fn_has_code sa sf func ==>
-  fn_has_code sa s6 func /\ fn_has_code s6 s7 func /\
-  fn_has_code s7 sf func /\
-  (!x. not_fresh_at sa x ==> not_fresh_at s6 x) /\
-  (!x. dst = Var x \/ lop = Var x ==> not_fresh_at s6 x) /\
-  (!x. not_fresh_at s6 x ==> not_fresh_at s7 x)
-Proof
-  strip_tac >> drule_all append_storage_aggregate_prefix_layout >> strip_tac >>
-  `cs_extends sa s6` by
-    (fs[same_blocks_def, inst_extends_def] >>
-     simp[cs_extends_def] >> qexists_tac `[]` >> simp[IS_PREFIX_APPEND]) >>
-  `ci_mono s6 s7` by metis_tac[ci_mono_compile_word_copy_loop, SND] >>
-  `ci_mono s7 s8` by metis_tac[ci_mono_emit_op, SND] >>
-  `ci_mono s8 sf` by metis_tac[ci_mono_emit_void, SND] >>
-  `cs_extends s6 s7 /\ cs_extends s7 sf` by
-    metis_tac[ci_mono_def, cs_extends_trans] >>
-  `cs_extends sa s7` by metis_tac[cs_extends_trans] >>
-  `fn_has_code sa s7 func /\ fn_has_code s7 sf func` by
-    metis_tac[fn_has_code_split] >>
-  simp[] >> conj_tac >- metis_tac[fn_has_code_split] >>
-  conj_tac >- metis_tac[fn_has_code_split] >>
-  conj_tac >- asm_rewrite_tac [] >>
-  fs[ci_mono_def] >> simp[not_fresh_at_def] >> rpt strip_tac >>
-  qpat_x_assum `!n. s6.cs_next_var <= n ==> _` irule >> decide_tac
-QED
 
 Theorem append_storage_aggregate_header_run:
   emit_op ADD [lop; Lit 1w] sa = (fresh,s1) /\
