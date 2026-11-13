@@ -36,8 +36,9 @@ Theorem internal_return_compound_suffix_mem:
   evaluate_type (get_tenv cx) ty = SOME tv /\
   lower_value compile_expr ce ty e sa = (op,sm) /\
   local_ptrs_reserved ce sa /\
+  compile_return_unlock ce sm = ((),su) /\ ce.ce_returns_count = 0 /\
   compile_internal_return ce (SOME op) (Var rpc) 0 ty
-    (lowered_value_type ce e) elems (SOME (Var bp)) sm = ((),sb) /\
+    (lowered_value_type ce e) elems (SOME (Var bp)) su = ((),sb) /\
   ce.ce_imm_alloca = NONE /\
   ce.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
   ce.ce_return_buf = SOME (PtrVar (Var bp) bsz) /\
@@ -86,9 +87,9 @@ Proof
    w2n bw + type_memory_size tv <= t.vs_alloca_next` by
     gvs[ret_pc_ok_def, return_buf_frame_def, eval_operand_def] >>
   `val_wf stv v /\ val_wf tv v` by metis_tac[value_has_type_val_wf] >>
-  drule_at (Pat `compile_internal_return _ _ _ _ _ _ _ _ _ = _`)
-    compile_internal_return_memory_widen_mem >>
-  disch_then (qspecl_then [`ctx`, `func`, `cx`, `ee`, `tv`, `stv`, `v`, `bw`] mp_tac) >>
+  mp_tac (Q.SPECL [`ctx`, `func`, `ce`, `cx`, `ee`, `ty`, `lowered_value_type ce e`,
+    `tv`, `stv`, `v`, `op`, `Var rpc`, `elems`, `Var bp`, `sm`, `su`, `sb`, `bw`]
+    compile_internal_return_memory_widen_epilogue_mem) >>
   impl_tac >- (simp[] >> metis_tac[]) >>
   disch_then (irule o MATCH_MP frag_exec_mem_weaken) >> simp[] >>
   conj_tac >- (
