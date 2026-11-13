@@ -2,7 +2,8 @@ Theory stmtSimLogSource
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
    supportedTypes e2eDefs vyperTyping vyperValue vyperABI
-  vyperEventArgCompat vyperEvent valueEncoding vyperInterpreter vyperState  vyperExprNoControl
+  vyperEventArgCompat vyperEvent valueEncoding vyperInterpreter vyperState vyperExprNoControl
+  vyperTypeABI
 
 (* Source-only scalar conversion boundary. No compiler execution is unfolded. *)
 Theorem log_scalar_abi_exists:
@@ -137,6 +138,47 @@ Proof
   drule_all non_indexed_event_args_exists >> strip_tac >>
   simp[encode_source_event_def, encode_vyper_event_metadata_def] >>
   metis_tac[]
+QED
+
+(* Aggregate data is typed; only indexed fields require scalar support. *)
+Theorem log_typed_source_event_encoded:
+  lookup_event_metadata tenv sources target id = SOME (h,tys,flags) /\
+  LENGTH flags = LENGTH tys /\
+  EVERY (\(ty,indexed). indexed ==> supported_scalar_type ty) (ZIP (tys,flags)) /\
+  LIST_REL (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\ value_has_type tv v) tys vals ==>
+  ?topics avs.
+    encode_indexed_event_topics flags tys vals = SOME topics /\
+    vyper_to_abi_list tenv (log_non_indexed_types flags tys)
+      (log_non_indexed_values flags vals) = SOME avs /\
+    encode_source_event tenv sources target id vals =
+      SOME <|logger := target; topics := n2w h::topics;
+        data := enc (Tuple (vyper_to_abi_types tenv (log_non_indexed_types flags tys))) (ListV avs)|>
+Proof
+  strip_tac >>
+  `!flags tys vals.
+    LENGTH flags = LENGTH tys /\
+    EVERY (\(ty,indexed). indexed ==> supported_scalar_type ty) (ZIP (tys,flags)) /\
+    LIST_REL (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\ value_has_type tv v) tys vals ==>
+    ?topics avs.
+      encode_indexed_event_topics flags tys vals = SOME topics /\
+      vyper_to_abi_list tenv (log_non_indexed_types flags tys)
+        (log_non_indexed_values flags vals) = SOME avs` by
+    (rpt (pop_assum kall_tac) >> Induct
+     >- (Cases_on `tys` >> Cases_on `vals` >>
+         simp[encode_indexed_event_topics_def, compileEnvTheory.log_non_indexed_types_def,
+           loweringStateRelDefsTheory.log_non_indexed_values_def, Once vyper_to_abi_def]) >>
+     rpt gen_tac >> Cases_on `tys` >> Cases_on `vals` >> simp[] >>
+     rename1 `encode_indexed_event_topics (flag::flags) (ty::tys) (v::vals)` >>
+     Cases_on `flag` >> simp[] >> rpt strip_tac >>
+     first_x_assum drule_all >> strip_tac >>
+     simp[encode_indexed_event_topics_def, compileEnvTheory.log_non_indexed_types_def,
+       loweringStateRelDefsTheory.log_non_indexed_values_def, Once vyper_to_abi_def]
+     >- (drule_all log_scalar_topic_exists >> strip_tac >> simp[]) >>
+     drule_all (cj 1 vyper_to_abi_total) >> strip_tac >> simp[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  `LENGTH flags = LENGTH vals` by metis_tac[listTheory.LIST_REL_LENGTH] >>
+  drule_all non_indexed_event_args_exists >> strip_tac >>
+  simp[encode_source_event_def, encode_vyper_event_metadata_def] >> metis_tac[]
 QED
 
 (* Keep the encoding-error branch explicit: readiness only types successes.
