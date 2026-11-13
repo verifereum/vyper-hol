@@ -12,14 +12,18 @@ Theorem append_storage_aggregate_staging_bounded_path:
   val_wf tv v /\ val_in_memory tv v (w2n sw) s.vs_memory /\
   val_footprint tv v <= n /\ eval_operand raw s = SOME sw /\
   (!x. raw = Var x ==> not_fresh_at sb x) /\
-  stmt_state_rel ctx func cenv cx ee s /\ local_ptrs_reserved cenv sb /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ee s) /\ local_ptrs_reserved cenv sb /\
   fn_inst_ids_distinct func /\ fn_has_code sb sd func /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?u w. gas_marked_path F ctx func s 0 (OK u) /\
-    stmt_state_rel ctx func cenv cx ee u /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx ee u) /\
     eval_operand buf.buf_operand u = SOME w /\
     val_in_memory tv v (w2n w) u.vs_memory /\
+    alloca_frame cenv ee sb s cenv ee u /\
     (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
                  FLOOKUP u.vs_allocas aid = SOME entry) /\
@@ -56,7 +60,25 @@ Proof
    s.vs_current_bb = pre.cs_current_bb /\
    s.vs_inst_idx = LENGTH pre.cs_current_insts` by
     gvs[Abbr `pre`, fn_has_code_def, emitted_blocks_def] >>
-  drule_all alloc_copy_memory_framed_bounded_path >> strip_tac >>
+  qspecl_then [`cx`, `st0`, `ctx`, `func`, `cenv`, `ee`, `pre`, `sc`,
+    `sd`, `s`, `p`, `raw`, `n`, `sw`, `tv`, `v`]
+    mp_tac alloc_copy_memory_framed_bounded_path >>
+  impl_tac >- (asm_rewrite_tac[] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  `stmt_state_rel H ctx func cenv cx ee s` by
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ s`
+       (qspec_then `H` mp_tac) >> asm_rewrite_tac[]) >>
+  `stmt_state_rel H ctx func cenv cx ee s2` by
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ s2`
+       (qspec_then `H` mp_tac) >> asm_rewrite_tac[]) >>
+  `venomMemDefs$allocas_non_overlapping s2` by
+    fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+  `!x sw. not_fresh_at sb x /\ lookup_var x s = SOME sw ==>
+      lookup_var x s2 = SOME sw` by
+    (rpt strip_tac >> metis_tac[]) >>
+  `sb.cs_next_id <= pre.cs_next_id` by simp[Abbr `pre`] >>
+  `alloca_frame cenv ee sb s cenv ee s2` by
+    (drule_all (INST_TYPE [alpha |-> ``:256``] alloca_frame_owned_copy) >> simp[]) >>
   `not_fresh_at sd p` by
     (qpat_x_assum `emit_inst ALLOCA _ _ _ = _` mp_tac >>
      simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def,
@@ -77,14 +99,18 @@ Theorem append_storage_aggregate_staging_path:
   val_wf tv v /\ val_in_memory tv v (w2n sw) s.vs_memory /\
   val_footprint tv v <= n /\ eval_operand raw s = SOME sw /\
   (!x. raw = Var x ==> not_fresh_at sb x) /\
-  stmt_state_rel ctx func cenv cx ee s /\ local_ptrs_reserved cenv sb /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ee s) /\ local_ptrs_reserved cenv sb /\
   fn_inst_ids_distinct func /\ fn_has_code sb sd func /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?u w. gas_marked_path F ctx func s 0 (OK u) /\
-    stmt_state_rel ctx func cenv cx ee u /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx ee u) /\
     eval_operand buf.buf_operand u = SOME w /\
     val_in_memory tv v (w2n w) u.vs_memory /\
+    alloca_frame cenv ee sb s cenv ee u /\
     (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
                  FLOOKUP u.vs_allocas aid = SOME entry) /\
@@ -92,7 +118,8 @@ Theorem append_storage_aggregate_staging_path:
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     (?p. buf.buf_operand = Var p /\ not_fresh_at sd p)
 Proof
-  strip_tac >> drule_all append_storage_aggregate_staging_bounded_path >>
+  strip_tac >>
+  drule_all (SRULE [PULL_EXISTS] append_storage_aggregate_staging_bounded_path) >>
   disch_then (qx_choosel_then [`u`, `w`] strip_assume_tac) >>
   qexistsl_tac [`u`, `w`] >> simp[]
 QED

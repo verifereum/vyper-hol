@@ -8,7 +8,7 @@ Theorem structlit_uniform_cons_outcome_ptr:
   expr_vv_sim_ptr d ctx PG func ce cx (expr_type e) e es /\
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es si G0 tn0 s0 cells off /\
-  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
+  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
@@ -21,11 +21,11 @@ Theorem structlit_uniform_cons_outcome_ptr:
   expr_body_pre ce cx env e es /\ evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   k = type_memory_bytes ce (expr_type e) /\ off+k <= capacity /\
   post_value_type ce e = expr_type e /\ (pure ==> ~expr_has_effect e) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
-    (\res ee H tm z. ?v. res = INL v /\ value_has_type tv v /\
+    (\res ee HG tm z. ?v. res = INL v /\ value_has_type tv v /\
       literal_loop_frame pure ctx func ce cx d root aid addr capacity
-        ees fr sf Gf tnf ee sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
+        ees fr sf Gf tnf ee sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
       literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z)
     (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
 Proof
@@ -36,15 +36,15 @@ Proof
   rewrite_tac[expr_vv_sim_ptr_def] >>
   disch_then drule_all >> strip_tac >>
   irule literal_result_bind_outcome_ptr >>
-  qexists `\raw ee H tm z.
-    vv_post ctx func ce cx e es si sm s0 ee raw vv z /\
+  qexists `\raw ee HG tm z.
+    vv_post H ctx func ce cx e es si sm s0 ee raw vv z /\
     z.vs_current_bb = sm.cs_current_bb /\ z.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    ghost_inv d ce cx ee H tm z /\ ptr_vv_ok cx (expr_type e) raw vv ee H tm z /\
+    ghost_inv H d ce cx ee HG tm z /\ ptr_vv_ok cx (expr_type e) raw vv ee HG tm z /\
     (!tag arg. vv = StackValue tag arg /\ ~is_word_type (expr_type e) ==>
-      ptr_buf_ok ce e arg H z) /\
+      ptr_buf_ok ce e arg HG z) /\
     (!tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
-      ptr_buf_ok ce e p.ptr_operand H z) /\
-    ghost_kept ce es si G0 tn0 s0 H tm` >>
+      ptr_buf_ok ce e p.ptr_operand HG z) /\
+    ghost_kept ce es si G0 tn0 s0 HG tm` >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >> fs[] >>
       `off+k <= capacity` by decide_tac >>

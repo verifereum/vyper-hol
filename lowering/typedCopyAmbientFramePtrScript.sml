@@ -9,7 +9,7 @@ Theorem emit_copy_len_binop_ambient_frag_ptr:
     eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
     op_taint tn left = {} /\ op_taint tn right = {} ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
@@ -32,7 +32,7 @@ Theorem emit_copy_len_not_ambient_frag_ptr:
     emit_op NOT [x] sa = (Var out,sb) /\
     eval_operand x s = SOME a /\ op_taint tn x = {} ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       lookup_var out sf = SOME (~a) /\ op_taint tnf (Var out) = {} /\
@@ -54,7 +54,7 @@ Theorem emit_mload_clean_ambient_frag_ptr:
     ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       lookup_var out sf = SOME (mload (w2n a) s) /\
@@ -78,7 +78,7 @@ Theorem compile_bytestring_copy_len_ambient_frag_ptr:
     ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       eval_operand count_op sf =
@@ -98,7 +98,7 @@ Proof
 QED
 
 Theorem compile_store_bytestring_ambient_frag_ptr:
-  !cx ctx PG R sa sb src dst G tn s a b len n.
+  !H cx ctx PG R sa sb src dst G tn s a b len n.
     compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
     not_fresh_at sa src /\ not_fresh_at sa dst /\
     lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
@@ -108,7 +108,7 @@ Theorem compile_store_bytestring_ambient_frag_ptr:
     ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
@@ -145,7 +145,7 @@ Theorem typed_copy_loop_address_ambient_frag_ptr:
        mk_inst (id+2) ADD [Var sr;Var so] [sp];
        mk_inst (id+3) ADD [Var dr;Var doff] [dp]] ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sb si
+      frag_exec_ptr H cx ctx PG sb si
         (\g t v. g=G /\ t=tn /\ v=s)
         (\g t v. g=Gf /\ t=tnf /\ v=sf) R /\
       lookup_var sp sf = SOME (n2w (w2n a+i*ss)) /\

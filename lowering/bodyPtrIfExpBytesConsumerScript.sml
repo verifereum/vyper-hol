@@ -7,9 +7,9 @@ Ancestors
 
 Theorem ifexp_allocated_bytes_writer:
   post_value_type ce result = expr_type result /\
-  vv_post ctx fn ce cx arm es sa sc s0 ee raw vv t /\
+  vv_post H ctx fn ce cx arm es sa sc s0 ee raw vv t /\
   (~expr_has_effect result ==> ~expr_has_effect arm) /\
-  stmt_state_rel ctx fn ce cx es s0 /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn ce cx es s0 /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sc.cs_next_var /\
   MEM (mk_inst aid ALLOCA [Lit (n2w capacity)] [out]) (fn_insts fn) /\
@@ -20,7 +20,7 @@ Theorem ifexp_allocated_bytes_writer:
     off+sz <= w2n b \/ w2n b+capacity <= off) /\
   (!name p sz. local_region ce es.scopes s0 name p sz ==>
     p+sz <= w2n b \/ w2n b+capacity <= p) /\
-  ghost_inv d ce cx ee G tn t /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
+  ghost_inv H d ce cx ee G tn t /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   compile_store_bytestring (Var src) (Var out) sc = ((),sd) /\
@@ -44,13 +44,13 @@ Theorem ifexp_allocated_bytes_writer:
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn t 0 Gf tnf
       (OK (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd))) /\
-    expr_post ctx fn ce cx result es sa sd s0 ee v (Var out)
+    expr_post H ctx fn ce cx result es sa sd s0 ee v (Var out)
       (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd)) /\
     expr_val_own ce cx (expr_type result) sa sd ee v (Var out)
       (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd)) /\
     (~expr_has_effect arm ==> pure_frame ce fn es sa s0
       (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd))) /\
-    ghost_inv d ce cx ee Gf tnf
+    ghost_inv H d ce cx ee Gf tnf
       (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd)) /\
     ghost_kept ce es sa G0 tn0 s0 Gf tnf /\
     ptr_val_ok cx (expr_type result) v (Var out) Gf tnf
@@ -103,8 +103,8 @@ Resume ifexp_allocated_bytes_writer[armpure]:
 QED
 
 Resume ifexp_allocated_bytes_writer[ghost]:
-  `stor_taint_ok cx tn t` by gvs[ghost_inv_def] >>
-  `stor_taint_ok cx tnf sf` by
+  `stor_taint_ok H cx tn t` by gvs[ghost_inv_def] >>
+  `stor_taint_ok H cx tnf sf` by
     (irule bytes_writer_stor_taint_ok >> qexistsl_tac [`t`, `tn`] >> simp[]) >>
   `!x. not_fresh_at sc x ==>
      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tnf (Var x) = op_taint tn (Var x) /\

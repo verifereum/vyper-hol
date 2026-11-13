@@ -7,7 +7,7 @@ Ancestors
   vyperCallOutcomeProps exprSimSend vyperTypeExtCallCore
 
 Theorem raw_call_prepared_source_domain:
-  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx es s ==>
   ~cx.txn.is_static /\ IS_SOME es.outcomes /\
   frame_call_value cx (if stat then NONE else SOME amount) es =
     (INL (if stat then NONE else SOME amount),es) /\
@@ -21,7 +21,7 @@ Proof
 QED
 
 Theorem raw_call_prepared_take_error:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   take_call_outcome target data value_opt es = (INR exc,ee) ==>
   exc = Error (RuntimeError "call outcome accounts")
 Proof
@@ -65,7 +65,7 @@ Proof
 QED
 
 Theorem raw_call_prepared_take_success:
-  stmt_state_rel ctx func cenv cx es s /\ expr_sim_inv cenv cx env es ==>
+  stmt_state_rel H ctx func cenv cx es s /\ expr_sim_inv cenv cx env es ==>
   ?rq outcome ee. take_call_outcome target data value_opt es = (INL (rq,outcome),ee)
 Proof
   strip_tac >>

@@ -131,7 +131,7 @@ Theorem compile_tuple_load_all_typed_path_mem:
     w2n w + type_memory_size_list tvs < dimword (:256) /\
     w2n w + type_memory_size_list tvs <= s.vs_alloca_next /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     local_ptrs_reserved cenv sa /\ alloca_history func s /\
     return_buf_frame d cenv sa s /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -142,7 +142,7 @@ Theorem compile_tuple_load_all_typed_path_mem:
     ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      stmt_state_rel ctx func cenv cx es t /\ alloca_history func t /\
+      stmt_state_rel H ctx func cenv cx es t /\ alloca_history func t /\
       return_buf_frame d cenv sb t /\
       t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
       t.vs_alloca_next = s.vs_alloca_next /\
@@ -152,7 +152,9 @@ Theorem compile_tuple_load_all_typed_path_mem:
       (!i. i < LENGTH tys ==> ?v. eval_operand (EL i elems) t = SOME v /\
         if is_word_type (EL i tys) then
           v = typed_val_to_w256 (EL i tvs) (EL i vals)
-        else w2n v = w2n w + SUM (MAP type_memory_size (TAKE i tvs)))
+        else w2n v = w2n w + SUM (MAP type_memory_size (TAKE i tvs))) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all compile_tuple_load_all_typed_mem_ok >> strip_tac >>
@@ -193,7 +195,7 @@ Theorem optional_tuple_stage_path_mem:
     (flag ==> type_memory_size_list tvs < dimword (:256)) /\
     fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
     (!x. op = Var x ==> not_fresh_at sa x) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     alloca_history func s /\ return_buf_frame d cenv sa s /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -201,7 +203,7 @@ Theorem optional_tuple_stage_path_mem:
     ?t w. gas_path_mem ctx func s 0 (OK t) /\
       eval_operand staged t = SOME w /\
       tuple_in_memory vs tvs (w2n w) t.vs_memory /\
-      stmt_state_rel ctx func cenv cx es t /\ alloca_history func t /\
+      stmt_state_rel H ctx func cenv cx es t /\ alloca_history func t /\
       return_buf_frame d cenv sb t /\
       s.vs_alloca_next <= t.vs_alloca_next /\
       w2n w + type_memory_size_list tvs <= t.vs_alloca_next /\
@@ -215,7 +217,9 @@ Theorem optional_tuple_stage_path_mem:
         w2n w + type_memory_size_list tvs <= b + sz /\
         b + sz <= t.vs_alloca_next /\
         ((?aid. FLOOKUP t.vs_allocas aid = SOME (b,sz)) \/
-         (?name. local_region cenv es.scopes t name b sz)))
+         (?name. local_region cenv es.scopes t name b sz))) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all expr_tuple_memory_owned >>

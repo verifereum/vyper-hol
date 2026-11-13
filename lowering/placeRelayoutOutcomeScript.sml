@@ -33,11 +33,11 @@ Theorem owned_target_relayout_store_outcome:
   compile_assign_value cenv dst loc op (is_word_type dty) src_loc dty sty
     (type_memory_bytes cenv dty) sb = ((),sf) /\
   compile_get_target_ptr cfn cenv bt sa = ((dst,SOME loc,SOME (ValPT dty)),sb) /\
-  target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
+  target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
     (dst,SOME loc,SOME (ValPT dty)) s /\
   expr_val_own cenv cx sty si sj es v op s0 /\
   sj.cs_next_id <= sa.cs_next_id /\ sa.cs_next_id <= sb.cs_next_id /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (src_loc = NONE \/ src_loc = SOME LocMemory) /\
   ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty /\
@@ -62,7 +62,7 @@ Theorem owned_target_relayout_store_outcome:
   s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?r. gas_marked_path F ctx func s 0 r /\
     ((?t. r = OK t /\ res = INL () /\
-       stmt_state_rel ctx func cenv cx ff t /\
+       stmt_state_rel H ctx func cenv cx ff t /\
        (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
        ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\

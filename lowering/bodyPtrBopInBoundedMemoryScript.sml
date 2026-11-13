@@ -10,7 +10,7 @@ Theorem membership_memory_length_header_entry:
   compile_ptr_load F imm LocMemory (Var basesrc) sa = (len,sb) /\ fn_has_code sa sb fn /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   vv_at cenv cx aty sc sd es tvv (LocatedValue ann p) s /\
   ptr_vv_ok cx aty tvv (LocatedValue ann p) es G tn s /\
   p.ptr_location = LocMemory /\ p.ptr_operand = Var basesrc /\
@@ -89,7 +89,7 @@ Theorem membership_bounded_memory_array_element_source:
   membership_loop_registers sa i r G tn s /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
   s.vs_inst_idx = 0 /\ not_fresh_at early basesrc /\
-  stmt_state_rel ctx fn cenv cx es s0 /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\
   vv_at cenv cx aty sc sd es tvv (LocatedValue ann p) s0 /\
   ptr_vv_ok cx aty tvv (LocatedValue ann p) es G0 tn0 s0 /\
   p.ptr_location = LocMemory /\ p.ptr_operand = Var basesrc /\
@@ -156,7 +156,7 @@ Theorem membership_bounded_memory_load_contract_source:
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ not_fresh_at early basesrc /\
   membership_loop_frame early G0 tn0 s0 Gh tnh sh /\
   (!x. not_fresh_at early x ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s0 /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\
   vv_at cenv cx (ArrayT ety (Dynamic cap)) sc sd es tvv (LocatedValue ann p) s0 /\
   ptr_vv_ok cx (ArrayT ety (Dynamic cap)) tvv (LocatedValue ann p) es G0 tn0 s0 /\
   p.ptr_location = LocMemory /\ p.ptr_operand = Var basesrc /\
@@ -194,7 +194,7 @@ Theorem membership_bounded_memory_prepare:
   fn_has_code early sa fn /\ fn_has_code sa sb fn /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = early.cs_current_bb /\ s.vs_inst_idx = LENGTH early.cs_current_insts /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   vv_at cenv cx (ArrayT ety (Dynamic cap)) sc sd es tvv (LocatedValue ann p) s /\
   ptr_vv_ok cx (ArrayT ety (Dynamic cap)) tvv (LocatedValue ann p) es G tn s /\
   p.ptr_location = LocMemory /\ p.ptr_operand = Var basesrc /\

@@ -5,10 +5,10 @@ Ancestors
   bodyPtrDefs
 
 Theorem updated_scope_ghost_inv_ptr:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p. lookup_var p t = lookup_var p s) /\
   (!p. op_taint tn' (Var p) = op_taint tn (Var p)) /\
-  stor_taint_ok cx tn' t /\
+  stor_taint_ok H cx tn' t /\
   (!name entry p sz.
      lookup_scopes name es'.scopes = SOME entry /\
      FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
@@ -16,7 +16,7 @@ Theorem updated_scope_ghost_inv_ptr:
      !w m. lookup_var p t = SOME w /\
        mem_agree_outside tn'.t_mem t.vs_memory m ==>
        val_in_memory entry.type entry.value (w2n w) m) ==>
-  ghost_inv d cenv cx es' G tn' t
+  ghost_inv H d cenv cx es' G tn' t
 Proof
   rpt strip_tac >>
   gvs[ghost_inv_def] >>

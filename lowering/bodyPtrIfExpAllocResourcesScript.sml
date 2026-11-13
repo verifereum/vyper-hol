@@ -8,8 +8,8 @@ Ancestors
 Theorem compile_alloc_buffer_vv_source_frame:
   !D d ctx fn PG G0 tn0 G tn cenv cx e es sa sb s0 es' tv vv s n buf sc.
     post_value_type cenv e = expr_type e /\
-    vv_post ctx fn cenv cx e es sa sb s0 es' tv vv s /\
-    ghost_inv d cenv cx es' G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+    vv_post H ctx fn cenv cx e es sa sb s0 es' tv vv s /\
+    ghost_inv H d cenv cx es' G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
     local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     sa.cs_next_var <= sb.cs_next_var /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -29,9 +29,9 @@ Theorem compile_alloc_buffer_vv_source_frame:
       buf.buf_operand = Var out /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK t) /\
       ptr_covers G1 tn1 out t n /\
-      ghost_inv d cenv cx es' G1 tn1 t /\
+      ghost_inv H d cenv cx es' G1 tn1 t /\
       ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
-      vv_post ctx fn cenv cx e es sa sc s0 es' tv vv t /\
+      vv_post H ctx fn cenv cx e es sa sc s0 es' tv vv t /\
       ptr_vv_ok cx (expr_type e) tv vv es' G1 tn1 t /\
       (!ty op. vv = StackValue ty op /\ ~is_word_type (expr_type e) ==>
           ptr_buf_ok cenv e op G1 t) /\
@@ -45,7 +45,7 @@ Theorem compile_alloc_buffer_vv_source_frame:
       FLOOKUP t.vs_allocas sb.cs_next_id = SOME (buffer_allocation_base s sb.cs_next_id,n)
 Proof
   rpt strip_tac >>
-  `stmt_state_rel ctx fn cenv cx es' s` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx es' s` by gvs[vv_post_def] >>
   drule_all compile_alloc_buffer_counted >>
   disch_then (qspecl_then [`D`, `PG`, `G`, `tn`] strip_assume_tac) >>
   `!x. vv_operand vv = Var x ==> x <> out` by
@@ -74,7 +74,7 @@ Proof
 QED
 
 Resume compile_alloc_buffer_vv_source_frame[ghost_position]:
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ u` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ u` mp_tac >>
   rpt (pop_assum kall_tac) >> Cases_on `d`
   >- (simp[ghost_inv_def, ptr_covers_def, stor_taint_ok_def, lookup_var_def,
            return_buf_ptr_def] >> strip_tac >> simp[]) >>

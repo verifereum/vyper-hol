@@ -6,7 +6,7 @@ Ancestors
   venomState valueEncodingProps vyperState vyperInterpreter context compileEnv loweringStateRelDefs valueCopyBytes
 
 Theorem scalar_located_load_step:
-  vv_post ctx fn ce cx e es sa sm s0 es' tv (LocatedValue t p) s /\
+  vv_post H ctx fn ce cx e es sa sm s0 es' tv (LocatedValue t p) s /\
   read_result cx tv es' = (INL v,es') /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\ ~ce.ce_is_ctor /\
@@ -19,9 +19,9 @@ Theorem scalar_located_load_step:
       OK (update_var tmp (typed_val_to_w256 ty v) s)
 Proof
   strip_tac >>
-  `vv_post ctx fn ce cx e es sa sm s0 es' (Value v) (LocatedValue t p) s`
+  `vv_post H ctx fn ce cx e es sa sm s0 es' (Value v) (LocatedValue t p) s`
     by metis_tac[vv_post_read_result] >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ tv _ _` kall_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ tv _ _` kall_tac >>
   gvs[vv_post_def, vv_holds_def] >>
   gvs[read_result_def, return_def] >>
   (reverse (Cases_on `p.ptr_location = LocCode`)
@@ -33,7 +33,7 @@ Proof
 QED
 
 Theorem scalar_unwrap_typed_instruction:
-  vv_post ctx fn ce cx e es sa sm s0 es' tv (LocatedValue t p) s /\
+  vv_post H ctx fn ce cx e es sa sm s0 es' tv (LocatedValue t p) s /\
   read_result cx tv es' = (INL v,es') /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\ ~ce.ce_is_ctor /\

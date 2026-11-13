@@ -4,13 +4,13 @@ Ancestors
   rawCallActionBindPtr exprPtrUnwrap exprSimHash wordArgsPtr
 
 Theorem raw_call_action_frames:
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM em.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es em sa s0 tm /\
   ghost_kept cenv em sm J jn tm Gmid kn /\ wb_frame cenv em em sm tm u /\
-  ghost_kept cenv em sm Gmid kn u H un /\ wb_frame cenv em ee sm u t ==>
-  ghost_kept cenv es sa G0 tn0 s0 H un /\ wb_frame cenv es ee sa s0 t
+  ghost_kept cenv em sm Gmid kn u HG un /\ wb_frame cenv em ee sm u t ==>
+  ghost_kept cenv es sa G0 tn0 s0 HG un /\ wb_frame cenv es ee sa s0 t
 Proof
   strip_tac >>
   `ghost_kept cenv es sa G0 tn0 s0 Gmid kn` by
@@ -27,11 +27,11 @@ QED
 Theorem raw_call_stack_value_view_post:
   expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
-  stmt_state_rel ctx func cenv cx ee t /\
+  stmt_state_rel H ctx func cenv cx ee t /\
   expr_val_rel cx (expr_type e) v op t /\
   expr_val_at cenv cx (expr_type e) sa sb ee v op t /\
   wb_frame cenv es ee sa s0 t ==>
-  vv_post ctx func cenv cx e es sa sb s0 ee (Value v) (StackValue ty op) t
+  vv_post H ctx func cenv cx e es sa sb s0 ee (Value v) (StackValue ty op) t
 Proof
   strip_tac >> irule vv_post_frame_intro >> asm_rewrite_tac[] >> simp[] >>
   simp[loweringPostsTheory.vv_holds_def, loweringPostsTheory.vv_at_def,
@@ -41,11 +41,11 @@ QED
 Theorem raw_call_memory_value_view_post:
   expr_has_effect e /\
   post_value_type cenv e = expr_type e /\ expr_type e = lowty /\ ~is_word_type (expr_type e) /\
-  stmt_state_rel ctx func cenv cx ee t /\
+  stmt_state_rel H ctx func cenv cx ee t /\
   expr_val_rel cx (expr_type e) v op t /\
   expr_val_at cenv cx (expr_type e) sa sb ee v op t /\
   wb_frame cenv es ee sa s0 t ==>
-  vv_post ctx func cenv cx e es sa sb s0 ee (Value v)
+  vv_post H ctx func cenv cx e es sa sb s0 ee (Value v)
     (LocatedValue lowty (mk_ptr op LocMemory)) t
 Proof
   strip_tac >> qpat_x_assum `expr_type e = lowty` (SUBST_ALL_TAC o SYM) >>

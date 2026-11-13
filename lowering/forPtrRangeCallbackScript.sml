@@ -73,9 +73,9 @@ Theorem for_range_callback_scope:
   lookup_scopes id esk.scopes = NONE /\
   eval_stmts cx stmts ei = (res,ee) /\
   cenv_top_ext bc c3 ee.scopes /\
-  ghost_inv d c3 cx ee G tn t /\ ee.scopes = sc :: rest /\
+  ghost_inv H d c3 cx ee G tn t /\ ee.scopes = sc :: rest /\
   (!name. name IN FDOM sc ==> lookup_scopes name rest = NONE) ==>
-  ghost_inv d cenv cx (ee with scopes := rest) G tn t
+  ghost_inv H d cenv cx (ee with scopes := rest) G tn t
 Proof
   strip_tac >>
   `cenv_top_ext cenv bc ei.scopes` by
@@ -96,20 +96,20 @@ Theorem for_range_callback_contract:
   ~ctx_has_dalloca ctx /\ ~bc.ce_is_ctor /\ ret_pc_ok bc sb0 s0 /\
   (!x sz. bc.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sb0 x) /\
   gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit_lbl incr_lbl)) es /\
-  stmt_state_rel ctx func bc cx es s0 /\ ghost_inv d bc cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx func bc cx es s0 /\ ghost_inv H d bc cx es G0 tn0 s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sb0.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sb0.cs_current_insts /\
   ptr_covers G0 tn0 p s0 sz /\
   lookup_var cv s0 = SOME c /\ lookup_var ev s0 = SOME e /\
   FLOOKUP G0 cv = NONE /\ FLOOKUP G0 ev = NONE /\
   op_taint tn0 (Var cv) = {} /\ op_taint tn0 (Var ev) = {} ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG (eval_stmts cx stmts)
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG (eval_stmts cx stmts)
     (es,s0,G0,tn0)
     (\res ee G tn t. ((?c3.
       stmt_lands (InLoop exit_lbl incr_lbl) sb1 res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb1 /\ c3 = bc') /\
-      cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel ctx func c3 cx ee t /\
-      ghost_inv d c3 cx ee G tn t /\
+      cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel H ctx func c3 cx ee t /\
+      ghost_inv H d c3 cx ee G tn t /\
       (!x w. not_fresh_at sb0 x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!x. not_fresh_at sb0 x ==> FLOOKUP G x = FLOOKUP G0 x /\
         op_taint tn (Var x) = op_taint tn0 (Var x))) /\
@@ -165,13 +165,13 @@ Theorem for_range_callback_outer_state:
   not_local_ptr bc (FEMPTY :: esk.scopes) p /\
   eval_stmts cx stmts (esk with scopes :=
     (FEMPTY |+ (id,entry)) :: esk.scopes) = (res,ee) /\
-  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel ctx func c3 cx ee t /\
-  ghost_inv d c3 cx ee G tn t /\
+  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel H ctx func c3 cx ee t /\
+  ghost_inv H d c3 cx ee G tn t /\
   FLOOKUP t.vs_allocas ainst.inst_id = SOME (w2n w,sz) ==>
   ?sc rest. ee.scopes = sc :: rest /\
     lookup_scopes id rest = NONE /\
-    stmt_state_rel ctx func cenv cx (ee with scopes := rest) t /\
-    ghost_inv d cenv cx (ee with scopes := rest) G tn t /\
+    stmt_state_rel H ctx func cenv cx (ee with scopes := rest) t /\
+    ghost_inv H d cenv cx (ee with scopes := rest) G tn t /\
     (!name lo z. local_region cenv rest t name lo z ==>
       regions_disjoint (w2n w) sz lo z)
 Proof
@@ -179,12 +179,12 @@ Proof
   qexistsl_tac [`sc`, `rest`] >> simp[] >>
   `cenv_top_ext cenv bc ((FEMPTY |+ (id,entry)) :: esk.scopes)` by
     (metis_tac[for_code_pushed_top_ext]) >>
-  `stmt_state_rel ctx func cenv cx (ee with scopes := rest) t` by
+  `stmt_state_rel H ctx func cenv cx (ee with scopes := rest) t` by
     (irule array_body_scope_projection >> conj_tac
      >- (qexists_tac `sc` >> simp[]) >>
      goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >>
      simp[] >> metis_tac[]) >>
-  `ghost_inv d cenv cx (ee with scopes := rest) G tn t` by
+  `ghost_inv H d cenv cx (ee with scopes := rest) G tn t` by
     (irule ghost_inv_body_scope_projection >> conj_tac
      >- (qexists_tac `sc` >> simp[]) >>
      goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >>

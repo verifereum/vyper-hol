@@ -19,12 +19,12 @@ Theorem tuple_local_word_store_head_path_mem:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   eval_operand op s = SOME (typed_val_to_w256 tv v) /\
-  stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
+  stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
   find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   store_lays_out tv entry.type v ==>
   ?dw t. lookup_var p s = SOME dw /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes := pre ++
         (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
     ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
@@ -34,7 +34,9 @@ Theorem tuple_local_word_store_head_path_mem:
     alloca_history func t /\
     (!a len. a + len <= w2n dw \/ w2n dw + 32 <= a ==>
        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
-    gas_marked_path T ctx func s 0 (OK t)
+    gas_marked_path T ctx func s 0 (OK t) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `lookup_scopes id es.scopes = SOME entry` by
@@ -139,14 +141,14 @@ Theorem tuple_local_nonword_store_head_path_mem:
   type_memory_bytes cenv vt = type_memory_size entry.type /\
   type_memory_size entry.type + 64 < dimword (:256) /\
   w2n w + val_store_size tv v <= s.vs_alloca_next /\
-  stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
+  stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
   find_containing_scope id es.scopes = SOME (pre,env,entry,rest) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) dsz) /\
   fn_has_code st st' func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?dw t. lookup_var p s = SOME dw /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes := pre ++
         (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
     ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
@@ -157,7 +159,9 @@ Theorem tuple_local_nonword_store_head_path_mem:
     (!a len. a + len <= w2n dw \/
        w2n dw + MIN (type_memory_size tv) (type_memory_size entry.type) <= a ==>
        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
-    gas_marked_path T ctx func s 0 (OK t)
+    gas_marked_path T ctx func s 0 (OK t) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `lookup_scopes id es.scopes = SOME entry` by
@@ -177,7 +181,7 @@ Proof
     (rpt gen_tac >> disch_tac >>
      qpat_x_assum `!a len. _ ==> mem_bytes_at a len t.vs_memory = _` irule >>
      simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-  `stmt_state_rel ctx func cenv cx
+  `stmt_state_rel H ctx func cenv cx
       (es with scopes := pre ++
         (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t` by
     (irule local_memory_write_frame >> simp[] >>
@@ -186,7 +190,9 @@ Proof
      >- metis_tac[arithmeticTheory.ADD_COMM] >>
      qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
-  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
+  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
   `EVERY (\i. i.inst_opcode <> GAS) (emitted_insts st st')` by
@@ -220,14 +226,14 @@ Theorem tuple_local_store_head_path_mem:
      type_memory_size entry.type + 64 < dimword (:256) /\
      w2n w + val_store_size tv v <= s.vs_alloca_next) /\
   (!x. op = Var x ==> not_fresh_at st x) /\ local_ptrs_reserved cenv st /\
-  stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
+  stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
   find_containing_scope id es.scopes = SOME (pre,env,entry,rest) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) dsz) /\
   fn_has_code st st' func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?dw t. lookup_var p s = SOME dw /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes := pre ++
         (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
     ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
@@ -239,7 +245,9 @@ Theorem tuple_local_store_head_path_mem:
        w2n dw + (if is_word_type ty then 32
                   else MIN (type_memory_size tv) (type_memory_size entry.type)) <= a ==>
        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
-    gas_marked_path T ctx func s 0 (OK t)
+    gas_marked_path T ctx func s 0 (OK t) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `is_word_type ty`
@@ -294,13 +302,15 @@ Theorem tuple_store_mixed_locals_path_mem:
     alloca_history func s /\ fn_inst_ids_distinct func /\
     fn_has_code st st' func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
-    s.vs_inst_idx = LENGTH st.cs_current_insts /\ stmt_state_rel ctx func cenv cx es s ==>
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\ stmt_state_rel H ctx func cenv cx es s ==>
     (ids <> [] \/ ~block_is_terminated st ==> ~block_is_terminated st') /\
-    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
         t.vs_current_bb = st'.cs_current_bb /\ t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
         t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-        alloca_history func t /\ gas_marked_path T ctx func s 0 (OK t)
+        alloca_history func t /\ gas_marked_path T ctx func s 0 (OK t) /\
+        t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+        t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   Induct
   >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -429,6 +439,10 @@ Resume tuple_store_mixed_locals_path_mem[tail_premises]:
         qpat_x_assum `if is_word_type ty then store_lays_out _ _ _ else _` mp_tac >>
         simp[store_lays_out_def]) >> simp[]) >>
   `!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP s1.vs_allocas aid = SOME bs` by simp[] >>
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ es s`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def, state_rel_def]) >>
+     asm_rewrite_tac[]) >>
   drule_all tuple_store_memory_tail >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt conj_tac
@@ -486,7 +500,7 @@ QED
 
 Resume tuple_store_mixed_locals_path_mem[compose]:
   conj_tac >- (first_x_assum irule >> asm_rewrite_tac []) >>
-  qpat_x_assum `?t. stmt_state_rel ctx _ _ _ _ _ /\ _` strip_assume_tac >>
+  qpat_x_assum `?t. stmt_state_rel H ctx _ _ _ _ _ /\ _` strip_assume_tac >>
   qexists `t` >> simp_tac (srw_ss()) [] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>

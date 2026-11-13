@@ -5,7 +5,7 @@ Ancestors
   exprLoweringProps bodyPtrDefs compileEnv loweringStateRelDefs
 
 Theorem expr_post_local_pointer:
-  expr_post ctx func cenv cx idx es sa sb s0 es' iv iop s /\
+  expr_post H ctx func cenv cx idx es sa sb s0 es' iv iop s /\
   local_ptrs_reserved cenv sa /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s0 = SOME w ==>
@@ -17,7 +17,7 @@ Proof
 QED
 
 Theorem expr_post_local_representation:
-  expr_post ctx func cenv cx idx es sa sb s0 es' iv iop s /\
+  expr_post H ctx func cenv cx idx es sa sb s0 es' iv iop s /\
   local_ptrs_reserved cenv sa /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s0 = SOME w /\
@@ -32,12 +32,12 @@ Proof
 QED
 
 Theorem expr_post_local_robust_representation:
-  expr_post ctx func cenv cx idx es sa sb s0 es' iv iop s /\
+  expr_post H ctx func cenv cx idx es sa sb s0 es' iv iop s /\
   local_ptrs_reserved cenv sa /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s0 = SOME w /\
   lookup_scopes name es'.scopes = SOME entry /\
-  ghost_inv d cenv cx es' G tn s /\
+  ghost_inv H d cenv cx es' G tn s /\
   mem_agree_outside tn.t_mem s.vs_memory mem ==>
   val_in_memory entry.type entry.value (w2n w) mem
 Proof
@@ -50,7 +50,7 @@ QED
 Theorem ghost_inv_local_coverage:
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_scopes name es'.scopes = SOME entry /\
-  ghost_inv d cenv cx es' G tn s ==>
+  ghost_inv H d cenv cx es' G tn s ==>
   ptr_covers G tn p s sz
 Proof
   simp[ghost_inv_def] >> metis_tac[]

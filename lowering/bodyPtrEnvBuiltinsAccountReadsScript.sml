@@ -9,7 +9,7 @@ Ancestors
   valueEncodingProofs
 
 Theorem account_read_frame:
-  stmt_state_rel ctx fn cenv cx es s ==>
+  stmt_state_rel H ctx fn cenv cx es s ==>
   !addr.
     (lookup_account addr s.vs_accounts).balance =
       (lookup_account addr es.accounts).balance /\
@@ -26,7 +26,7 @@ Theorem account_read_typed_step:
   MEM (item,opc) [(Balance,BALANCE); (Codesize,EXTCODESIZE); (Codehash,EXTCODEHASH)] /\
   LENGTH bs = 20 /\
   eval_operand arg s = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   evaluate_type (get_tenv cx) (account_item_type item) = SOME tv ==>
   step_inst_base (mk_inst id opc [arg] [out]) s =
     OK (update_var out (typed_val_to_w256 tv

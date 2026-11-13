@@ -11,14 +11,14 @@ Ancestors
 
 Theorem log_buffer_allocate:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ cap < dimword (:256) /\
   sb.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
   ?t p. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand buf.buf_operand t = SOME (n2w p) /\ buf.buf_size = cap /\
     p + cap < dimword (:256) /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (p,cap) /\
-    stmt_state_rel ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
+    stmt_state_rel H ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
     (!op. abi_decoder_operand_live sa.cs_next_var op ==>
       eval_operand op t = eval_operand op s) /\
     t.vs_memory = s.vs_memory /\
@@ -64,7 +64,7 @@ QED
 (* Ownership follows the actual instruction site, including replayed sites. *)
 Theorem log_buffer_clear_of_locals:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
   FLOOKUP s.vs_allocas sa.cs_next_id = SOME (p,cap) /\
   local_region ce es.scopes s name lo sz ==>
@@ -84,7 +84,7 @@ QED
 
 Theorem log_buffer_clear_of_immutable:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func ce cx es s /\ ce.ce_is_ctor /\
+  stmt_state_rel H ctx func ce cx es s /\ ce.ce_is_ctor /\
   FLOOKUP s.vs_allocas sa.cs_next_id = SOME (p,cap) /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
   FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
@@ -101,7 +101,7 @@ Proof
 QED
 
 Theorem log_pending_alloca_locals[local]:
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
   not_local_ptr ce es.scopes q /\
   ((FLOOKUP s.vs_allocas inst.inst_id = NONE /\ p = s.vs_alloca_next) \/
@@ -119,7 +119,7 @@ Proof
 QED
 
 Theorem log_pending_alloca_immutable[local]:
-  stmt_state_rel ctx func ce cx es s /\ ce.ce_is_ctor /\
+  stmt_state_rel H ctx func ce cx es s /\ ce.ce_is_ctor /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   ((FLOOKUP s.vs_allocas inst.inst_id = NONE /\ p = s.vs_alloca_next) \/
     FLOOKUP s.vs_allocas inst.inst_id = SOME (p,cap)) /\
@@ -140,7 +140,7 @@ QED
 (* This is the prospective cursor resource consumed by the encoder, not an
    assumption that its ALLOCA is fresh.  Its site may already be recorded. *)
 Theorem log_cursor_ownership:
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit (n2w 32)] /\
   inst.inst_outputs = [STRING #"%" (toString st.cs_next_var)] /\

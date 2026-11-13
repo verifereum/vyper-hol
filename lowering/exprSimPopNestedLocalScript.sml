@@ -101,6 +101,8 @@ Resume pop_nested_local_sim[normal]:
      drule_all local_target_live >> strip_tac >> gvs[]) >>
   `place_readable cx (tend with gas_obs := []) (PlaceR p)` by
     fs[target_post_def] >>
+  `storage_well_formed_on cx (tend with gas_obs := []) (FST H)` by
+    fs[target_post_def] >>
   drule_all pop_counted_source_handoff >> strip_tac >> gvs[] >>
   `lookup_scopes id (tend with gas_obs := []).scopes = SOME entry` by simp[] >>
   drule_all memory_target_encoding_handoff >> strip_tac >>
@@ -135,7 +137,7 @@ Resume pop_nested_local_sim[normal]:
   qpat_x_assum `target_root _ = _` kall_tac >>
   qpat_x_assum `type_place_target _ _ = _` kall_tac >>
   qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `target_post H _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `place_readable _ _ _` kall_tac >>
   qpat_x_assum `gas_admissible (eval_target_place _ _) _ _` kall_tac >>
   drule memory_pop_shape >> strip_tac >>
