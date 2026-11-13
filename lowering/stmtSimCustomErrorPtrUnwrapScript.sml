@@ -2,7 +2,7 @@ Theory stmtSimCustomErrorPtrUnwrap
 Ancestors
   stmtSimCustomErrorPtrMaterialise stmtSimCustomErrorPtrWordMaterialise
   stmtSimCustomErrorPtrStorageMaterialise stmtSimCustomErrorPtrCodeMaterialise
-  bodyPtrAttributeCase exprSimUnwrap exprSimUnwrapProps exprLoweringProps
+  bodyPtrAttributeCase bodyPtrAttributeAdd emitHelperProps exprSimUnwrap exprSimUnwrapProps exprLoweringProps
   exprOperandVar exprSimVVFrame fragGasSeqPtr freshWrites
   valueEncodingProps loweringPosts bodyPtrDefs exprLowering compileEnv context
   ptrDiscipline venomState finite_map words pred_set fragGasPathPtr
@@ -130,3 +130,82 @@ Resume custom_error_materialise_path_ptr[code]:
   fs[SUBSET_DEF]
 QED
 Finalise custom_error_materialise_path_ptr
+
+(* Destination construction is sequenced before materialisation. *)
+Theorem custom_error_destination_path_ptr[local]:
+  (if off = 0 then comp_return (Var x)
+   else emit_op ADD [Var x; Lit (n2w off)]) sm = (dst,sn) /\
+  vv_post ctx func ce cx e es sa sm s0 ee raw vv s /\
+  ptr_vv_ok cx (post_value_type ce e) raw vv ee G tn s /\
+  ptr_buf_ok ce e (vv_operand vv) G s /\
+  local_ptrs_reserved ce sm /\ local_ptrs_reserved ce sa /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  (!z sz. ce.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z) /\
+  (!z sz. ce.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z) /\
+  ghost_inv d ce cx ee G tn s /\
+  ptr_covers G tn x s asz /\ lookup_var x s = SOME (n2w b) /\
+  not_fresh_at sm x /\ off + nb <= asz /\ b+asz < dimword (:256) /\
+  fn_has_code sm sn func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  !D PG. ?H tm a y.
+    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK a) /\
+    vv_post ctx func ce cx e es sa sn s0 ee raw vv a /\
+    ptr_vv_ok cx (post_value_type ce e) raw vv ee H tm a /\
+    ptr_buf_ok ce e (vv_operand vv) H a /\
+    ghost_inv d ce cx ee H tm a /\ ghost_kept ce ee sm G tn s H tm /\
+    dst = Var y /\ not_fresh_at sn y /\
+    ptr_covers H tm y a nb /\ lookup_var y a = SOME (n2w (b+off)) /\
+    a.vs_current_bb = sn.cs_current_bb /\
+    a.vs_inst_idx = LENGTH sn.cs_current_insts /\ ~a.vs_halted /\
+    a.vs_memory = s.vs_memory /\ a.vs_allocas = s.vs_allocas /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!z. not_fresh_at sm z ==> lookup_var z a = lookup_var z s /\
+      FLOOKUP H z = FLOOKUP G z /\ op_taint tm (Var z) = op_taint tn (Var z))
+Proof
+  Cases_on `off = 0`
+  >- (strip_tac >> gvs[comp_return_def] >> rpt gen_tac >>
+      qexistsl_tac [`G`,`tn`,`s`] >> simp[ghost_kept_def] >>
+      conj_tac >- metis_tac[cj 1 gas_path_ptr_rules] >>
+      gvs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  strip_tac >> gvs[] >> rpt gen_tac >>
+  `eval_operand (Var x) s = SOME (n2w b) /\
+   eval_operand (Lit (n2w off)) s = SOME (n2w off) /\
+   op_taint tn (Var x) = {} /\ op_taint tn (Lit (n2w off)) = {}` by
+    gvs[ptr_covers_def, eval_operand_def, op_taint_def] >>
+  drule_all (attribute_emit_binop_path_ptr |> SPEC_ALL
+    |> Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`] |> SRULE []) >>
+  disch_then (qspecl_then [`PG`,`G`,`D`] strip_assume_tac) >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  suspend "add"
+QED
+
+Resume custom_error_destination_path_ptr[add]:
+  gvs[] >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK a)` >>
+  `!z. not_fresh_at sm z ==> z <> STRING #"%" (toString sm.cs_next_var)` by
+    (rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def] >>
+     first_x_assum (qspec_then `sm.cs_next_var` mp_tac) >> simp[]) >>
+  `vv_post ctx func ce cx e es sa sn s0 ee raw vv a /\
+   ptr_vv_ok cx (post_value_type ce e) raw vv ee H tm a /\
+   ptr_buf_ok ce e (vv_operand vv) H a` by
+    (qunabbrev_tac `a` >> irule custom_error_fresh_add_transport >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `ghost_inv d ce cx ee H tm a /\ ghost_kept ce ee sm G tn s H tm` by
+    (qunabbrev_tac `a` >> irule attribute_fresh_ghost_update >>
+     simp[] >> qexistsl_tac [`G`,`tn`] >> simp[ghost_kept_def]) >>
+  qexistsl_tac [`H`,`tm`,`a`] >>
+  simp[] >>
+  drule loweringShapeRulesTheory.emit_op_facts >> strip_tac >> gvs[] >>
+  simp[Abbr `a`, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+       wordsTheory.word_add_n2w] >>
+  reverse conj_tac >- metis_tac[] >>
+  simp[ptr_covers_def, Abbr `H`, attribute_add_provenance, op_prov_def,
+       update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  gvs[ptr_covers_def, wordsTheory.word_add_n2w] >>
+  `b + off < dimword (:256)` by decide_tac >>
+  simp[wordsTheory.w2n_n2w] >> decide_tac
+QED
+Finalise custom_error_destination_path_ptr

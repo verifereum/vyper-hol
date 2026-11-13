@@ -62,7 +62,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem custom_error_fresh_add_transport[local]:
+Theorem custom_error_fresh_add_transport:
   emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
   out = STRING #"%" (toString sm.cs_next_var) /\
   local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
