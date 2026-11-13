@@ -40,7 +40,7 @@ Ancestors
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource passSimulationDefs
   codegenCorrectness immutableCodeLayout frameOutcome frameGas
-  venomRunBounded unitMemInv
+  venomRunBounded unitMemInv ptrDiscipline e2eComposition lowerDloadDefs
   asmOptimizer callTrace
   e2eDeployCorrectness e2eDeployDefs ctorDeployDefs ctorDeployLowering
   ctorDeployFrame ctorDeployShape ctorDeployDefsReach ctorDeployInitcode
@@ -56,7 +56,7 @@ Theorem call_state_rel_add_frame_gas:
 Proof
   rw[call_state_rel_def] >>
   drule add_frame_gas_contexts >> disch_then (qspec_then `g` assume_tac) >>
-  simp[add_frame_gas_wf_state, add_frame_gas_fields]
+  fs[add_frame_gas_wf_state, add_frame_gas_fields]
 QED
 
 (* The creation frame's relation, at the new gas, from the old one and its
@@ -76,7 +76,8 @@ Proof
   drule add_frame_gas_contexts >> disch_then (qspec_then `g` assume_tac) >>
   qexistsl_tac [`ctxt with msgParams updated_by (\p. p with gasLimit updated_by $+ g)`,
                 `rb`, `args_bytes`] >>
-  fs[add_frame_gas_wf_state, add_frame_gas_fields]
+  fs[add_frame_gas_wf_state, add_frame_gas_fields] >>
+  simp[add_frame_gas_def]
 QED
 
 (* ===== The companion theorem ===== *)

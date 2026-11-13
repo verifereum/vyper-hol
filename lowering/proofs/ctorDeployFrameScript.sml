@@ -149,7 +149,9 @@ QED
 Theorem add_frame_gas_single_context[local]:
   (add_frame_gas g es).contexts = [x] ==> ?c rb. es.contexts = [(c, rb)]
 Proof
-  rw[add_frame_gas_def] >> every_case_tac >> gvs[]
+  Cases_on `es.contexts` >- simp[add_frame_gas_def] >>
+  rename1 `es.contexts = head :: rest` >> PairCases_on `head` >>
+  simp[add_frame_gas_def] >> strip_tac >> gvs[]
 QED
 
 Theorem shadow_root_add_frame_gas[local]:
@@ -157,15 +159,36 @@ Theorem shadow_root_add_frame_gas[local]:
   shadow_root (add_frame_gas g es) = add_frame_gas g (shadow_root es)
 Proof
   rw[shadow_root_def, add_frame_gas_def, shadow_root_contexts_def,
-     vfmContextTheory.execution_state_component_equality]
+     vfmContextTheory.execution_state_component_equality] >>
+  simp[vfmContextTheory.context_component_equality, combinTheory.o_DEF]
+QED
+
+Theorem surplus_excludes_frame_raises[local]:
+  (!s op r s'. frame_inst_at es s op /\ step_inst op s = (r,s') /\
+     LENGTH s'.contexts = LENGTH s.contexts ==>
+     r <> INR (SOME OutOfGas) /\ k <= frame_gas_left s') ==>
+  !op. ~frame_inst_raises es OutOfGas op
+Proof
+  rpt strip_tac >> fs[frame_inst_raises_def] >>
+  rename1 `frame_inst_at es s op` >>
+  rename1 `step_inst op s = (INR (SOME OutOfGas),s')` >>
+  `LENGTH s.contexts = LENGTH es.contexts` by
+    (qpat_x_assum `frame_inst_at _ _ _` mp_tac >>
+     simp[frame_inst_at_def] >> metis_tac[]) >>
+  first_x_assum (qspecl_then [`s`, `op`, `INR (SOME OutOfGas)`, `s'`] mp_tac) >>
+  simp[]
 QED
 
 (* A halting root-shadowed run that leaves gas for the largest deposit:
    the real frame's deposit fails with OutOfGas only when oversized. *)
 Theorem deploy_frame_halt_deposit[local]:
-  es.contexts = [(c0, rb0)] /\ c0.msgParams.outputTo = Code target /  run (shadow_root es) = SOME (INR NONE, es1) /  code_deposit_cost * max_code_size <= frame_gas_left es1 /  es1.contexts = [(c1, rb1)]
+  es.contexts = [(c0, rb0)] /\ c0.msgParams.outputTo = Code target /\
+  run (shadow_root es) = SOME (INR NONE, es1) /\
+  code_deposit_cost * max_code_size <= frame_gas_left es1 /\
+  es1.contexts = [(c1, rb1)]
   ==>
-  ?r es'. run_call es = SOME (r, es') /          (r = INR (SOME OutOfGas) ==> max_code_size < LENGTH c1.returnData)
+  ?r es'. run_call es = SOME (r, es') /\
+          (r = INR (SOME OutOfGas) ==> max_code_size < LENGTH c1.returnData)
 Proof
   strip_tac >>
   `es.contexts <> []` by simp[] >>
@@ -268,41 +291,53 @@ Proof
      qpat_x_assum `!g' Inv vs es s op r s'. _`
        (qspecl_then [`g'`, `Inv`, `vs`, `shadow_root es`, `s`, `op`, `r`, `s'`]
           mp_tac) >>
-     qpat_x_assum `shadow_root _ = _` (assume_tac o GSYM) >>
+     qpat_x_assum `sh = add_frame_gas _ _` (assume_tac o GSYM) >>
      impl_tac >- fs[Abbr `sh`] >> simp[]) >>
+  `!op. ~frame_inst_raises sh OutOfGas op` by
+    (irule surplus_excludes_frame_raises >>
+     qexists_tac `code_deposit_cost * max_code_size` >> metis_tac[]) >>
+  qpat_x_assum `!g' Inv vs es s op r s'. _` kall_tac >>
+  qpat_x_assum `sh = add_frame_gas _ _` kall_tac >>
   (* the shadowed frame's run, and how it ends *)
   qspecl_then [`vfuel`, `rpolicy`, `dout.po_unit`, `cplan`, `prog`, `Inv`,
                `vs`, `sh`] mp_tac codegen_correct >>
-  impl_tac >- fs[] >> strip_tac >>
+  (impl_tac >- fs[]) >> strip_tac >> (
   `sh.contexts = [(ctxt with msgParams updated_by
                      (\mp. mp with outputTo := Memory <| offset := 0; size := 0 |>),
-                   rb)]` by simp[Abbr `sh`, shadow_root_def, shadow_root_contexts_def] >>
+                   rb)]` by
+    simp[Abbr `sh`, shadow_root_def, shadow_root_contexts_def] >>
   qspecl_then [`sh`, `ctxt with msgParams updated_by
                      (\mp. mp with outputTo := Memory <| offset := 0; size := 0 |>)`,
                `rb`, `r`, `es'`] mp_tac run_call_root_ends_at_inst >>
-  impl_tac >- simp[] >> strip_tac >>
+  (impl_tac >- simp[]) >> disch_then (CONJUNCTS_THEN assume_tac) >>
   `r <> INR (SOME OutOfGas)` by
-    (strip_tac >> gvs[frame_inst_raises_def] >>
-     first_x_assum drule >> disch_then drule >> gvs[frame_inst_at_def]) >>
+    metis_tac[] >>
   `run sh = SOME (r, es')` by
-    metis_tac[run_call_eq_run_single_context, LENGTH, ONE] >>
+    metis_tac[run_call_eq_run_single_context, listTheory.LENGTH, arithmeticTheory.ONE] >>
   `run_call (add_frame_gas g' es) = run (add_frame_gas g' es)` by
     (irule run_call_eq_run_single_context >> simp[]) >>
+  (Cases_on `frame_resource_starved sh r es'`
+   >- (fs[frame_resource_starved_def, Abbr `sh`] >>
+       drule_all deploy_frame_exception >> strip_tac >> metis_tac[])) >>
+  fs[] >>
   drule deploy_venom_result_rel_terminates >> strip_tac >>
-  Cases_on `run_context vfuel dout.po_unit.cu_context vs` >>
-  gvs[terminates_def]
-  >~ [`Halt ss`]
-  >- (Cases_on `frame_resource_starved sh r es'`
-      >- gvs[frame_resource_starved_def, frame_outcome_def] >>
-      gvs[venom_frame_rel_def, frame_outcome_def] >>
+  (Cases_on `run_context vfuel dout.po_unit.cu_context vs` >>
+  gvs[terminates_def, venom_frame_rel_def]
+  >- (rename1 `Halt ss` >> gvs[frame_outcome_def] >>
       Cases_on `src` >> gvs[deploy_source_exempt_def]
       >- (PairCases_on `x` >> gvs[deploy_venom_result_rel_def] >>
           drule immutables_section_rel_length >> strip_tac >>
-          qspecl_then [`add_frame_gas g' es`, `ctxt`, `rb`, `tx.target`,
-                       `es'`, `ctxt'`, `rb'`] mp_tac
-            (Q.GENL [`es`, `c0`, `rb0`, `target`, `es1`, `c1`, `rb1`]
-               deploy_frame_halt_deposit) >>
-          impl_tac >- metis_tac[] >> simp[imm_len_def]) >>
+          rename1 `frame_inst_at sh halt_pre halt_op` >>
+          `LENGTH halt_pre.contexts = 1` by
+            (qpat_x_assum `frame_inst_at _ _ _` mp_tac >>
+             simp[frame_inst_at_def] >> metis_tac[listTheory.LENGTH]) >>
+          `LENGTH es'.contexts = LENGTH halt_pre.contexts` by simp[] >>
+          qpat_x_assum `!s op r s'. _`
+            (drule_all_then strip_assume_tac) >>
+          `run (shadow_root (add_frame_gas g' es)) = SOME (INR NONE,es')`
+            by fs[Abbr `sh`] >>
+          drule_all deploy_frame_halt_deposit >>
+          simp[imm_len_def]) >>
       Cases_on `y` >> gvs[deploy_venom_result_rel_def]) >>
   (* an exceptional end: the real run ends the same way *)
   `?exc. r = INR (SOME exc)` by
@@ -310,5 +345,5 @@ Proof
      gvs[frame_resource_starved_def, frame_outcome_def, venom_frame_rel_def] >>
      rename1 `Abort ab _` >> Cases_on `ab` >>
      gvs[venom_frame_rel_def, frame_outcome_def]) >>
-  gvs[Abbr `sh`] >> drule shadow_root_run_exception >> strip_tac >> simp[]
+  gvs[Abbr `sh`] >> drule shadow_root_run_exception >> strip_tac >> simp[]))
 QED
