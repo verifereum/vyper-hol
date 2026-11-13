@@ -5,7 +5,7 @@ Ancestors
   fragExec exprLoweringProps emitHelper list
 
 Theorem typed_copy_primitive_code[local]:
-  !P. P ADD /\ P MLOAD /\ P AND /\ P MCOPY ==>
+  !P. P ADD /\ P MLOAD /\ P AND /\ P MCOPY /\ P NOT ==>
     (!dst src n. code_action P (compile_copy_memory dst src n)) /\
     (!dst src n. code_action P (compile_copy_memory_dynamic dst src n)) /\
     (!base off. code_action P (compile_with_byte_offset base off)) /\
@@ -21,11 +21,12 @@ Proof
   irule code_action_bind >> simp[code_action_emit_void] >>
   irule code_action_bind >> simp[code_action_emit_op] >> gen_tac >>
   irule code_action_bind >> simp[code_action_emit_op] >> gen_tac >>
-  simp[] >> irule code_action_bind >> simp[code_action_emit_op]
+  simp[] >> irule code_action_bind >> simp[code_action_emit_op] >> gen_tac >>
+  irule code_action_bind >> simp[code_action_emit_op]
 QED
 
 Theorem typed_copy_code_family:
-  !P. EVERY P [ADD; MLOAD; AND; MCOPY; MSTORE; INVALID; ASSIGN; JMP;
+  !P. EVERY P [ADD; MLOAD; AND; MCOPY; NOT; MSTORE; INVALID; ASSIGN; JMP;
               LT; ISZERO; JNZ; MUL; GT; ASSERT] ==>
   (!cenv dst dty src sty. code_action P (compile_store_memory_typed cenv dst dty src sty)) /\
   (!cenv dst src dtys stys doff soff.
