@@ -3,6 +3,7 @@ Ancestors
   abiTupleEncodeSlot abiDecodePtrBytesTail bodyPtrAttributeAdd
   rawCallHeaderFramePtr assignBasePtrMcopyGhost assignBasePtrCopyPath
   exprLowering venomMemProofs abiDecoderContract context valueEncodingProps
+  augAssignPtrStore wordLoadStorePtr
   bodyPtrEnvBuiltinsSelectorBuffer bodyPtrStructLitFieldStore
   ghostPcTransportPtr ptrCoverage bodyPtrDefs compileEnv emitHelper emitHelperProps
   loweringStateRelDefs venomState venomInst venomExecSemantics
@@ -146,5 +147,48 @@ Proof
    mem_bytes_at (w2n a) n s.vs_memory` by simp[mcopy_mem_bytes_at_same] >>
   simp[Abbr `t`, mcopy_def, write_memory_with_expansion_def,
     lookup_var_def, ptr_covers_def, op_taint_def] >>
+  simp[Abbr `tf`, step_taint_def, mk_inst_def, imm_taint_def]
+QED
+
+Theorem abi_tuple_slot_word_resources_ptr:
+  emit_void MSTORE [Var dst;value] sa = ((),sb) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  lookup_var dst s = SOME b /\ eval_operand value s = SOME w /\
+  ptr_covers G tn dst s 32 /\ op_taint tn value = {} /\
+  local_ptrs_rel func cenv es.scopes s /\ ghost_inv rb cenv cx es G tn s /\
+  (!name base sz. local_region cenv es.scopes s name base sz ==>
+    base+sz <= w2n b \/ w2n b+32 <= base) /\
+  ghost_kept cenv es fr G0 tn0 s0 G tn ==>
+  ?tf t.
+    gas_path_ptr D 0 ctx func PG G tn s 0 G tf (OK t) /\
+    t = (mstore (w2n b) w s with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    ghost_inv rb cenv cx es G tf t /\ ghost_kept cenv es fr G0 tn0 s0 G tf /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!x. lookup_var x t = lookup_var x s) /\
+    (!x k. ptr_covers G tf x t k <=> ptr_covers G tn x s k) /\
+    tf.t_var = tn.t_var /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    tf.t_mem = tn.t_mem DIFF {j | w2n b <= j /\ j < w2n b+32} /\
+    abi_decode_frame (w2n b) 32 s t
+Proof
+  strip_tac >> drule_all emit_mstore_path_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >> gvs[] >>
+  drule_all mstore_step_ghost_inv >>
+  disch_then (qspecl_then [`PG`,`sa.cs_next_id`] assume_tac) >>
+  drule_all mstore_ghost_kept >>
+  disch_then (qspecl_then [`PG`,`sa.cs_next_id`] assume_tac) >>
+  drule_all mstore_ghost_frame >>
+  disch_then (qspecl_then [`PG`,`G`,`sa.cs_next_id`] strip_assume_tac) >>
+  gvs[] >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx func PG G tn s 0 G tf (OK t)` >>
+  qexists_tac `tf` >> simp[] >>
+  `abi_decode_frame (w2n b) 32 s t` by
+    (simp[Abbr `t`, abi_decode_frame_def] >>
+     metis_tac[mstore_mem_bytes_at_disjoint, ADD_COMM]) >>
+  simp[ptr_covers_def, op_taint_def, mstore_def, lookup_var_def] >>
   simp[Abbr `tf`, step_taint_def, mk_inst_def, imm_taint_def]
 QED
