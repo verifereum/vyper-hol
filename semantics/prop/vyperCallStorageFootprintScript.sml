@@ -75,7 +75,7 @@ Proof
   drule_all (cj 2 eval_storage_well_formed_on_mutual) >> simp[]
 QED
 
-Theorem explicit_lock_observed[local]:
+Theorem explicit_lock_observed:
   lock_if_nr cx nr is_view st = (r,u) /\
   nr /\ cx.nonreentrant_slot = SOME slot ==>
   MEM (StorageLock slot) u.storage_trace
@@ -281,7 +281,7 @@ Proof
          disch_then (qspec_then `H` mp_tac) >> metis_tac[]
 QED
 
-Theorem explicit_unlock_storage[local]:
+Theorem explicit_unlock_storage:
   (!cx nr view st r u H obs.
     regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
     storage_well_formed_on cx st (FST H) /\ storage_observations_ok cx H obs /\
@@ -321,7 +321,7 @@ val explicit_unlocked_tac =
       simp[initial_state_def, abstract_machine_from_state_def]) >>
   gvs[storage_observations_ok_append];
 
-Theorem send_call_value_storage[local]:
+Theorem send_call_value_storage:
   send_call_value mut cx st = (r,u) /\
   storage_well_formed_on cx st (FST H) ==>
   storage_well_formed_on cx u (FST H)
@@ -337,7 +337,7 @@ Proof
   drule_all transfer_value_preserves_storage_well_formed_on >> simp[]
 QED
 
-Theorem lock_if_nr_storage[local]:
+Theorem lock_if_nr_storage:
   regions_consistent (FST H) /\
   storage_locks_separated (FST H) (SND H) /\
   storage_well_formed_on cx st (FST H) /\
@@ -362,7 +362,7 @@ Proof
     assert_def, check_def, raise_def]
 QED
 
-Theorem unlock_if_nr_storage[local]:
+Theorem unlock_if_nr_storage:
   regions_consistent (FST H) /\
   storage_locks_separated (FST H) (SND H) /\
   storage_well_formed_on cx st (FST H) /\
@@ -550,7 +550,7 @@ Proof
   strip_tac >> drule_all selected_getter_machine_frame >> simp[]
 QED
 
-Theorem storage_well_formed_on_target[local]:
+Theorem storage_well_formed_on_target:
   cx'.txn.target = cx.txn.target ==>
   (storage_well_formed_on cx' st L <=> storage_well_formed_on cx st L)
 Proof
@@ -560,7 +560,7 @@ Proof
   simp[storage_well_formed_on_def]
 QED
 
-Theorem storage_observations_ok_target[local]:
+Theorem storage_observations_ok_target:
   cx'.txn.target = cx.txn.target ==>
   (storage_observations_ok cx' H obs <=> storage_observations_ok cx H obs)
 Proof
