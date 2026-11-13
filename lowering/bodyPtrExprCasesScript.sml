@@ -101,7 +101,12 @@ Proof
      fs[]) >>
   Cases_on `bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i) \/ (?i. bt = Acc i) \/
              bt = BlockHash \/ bt = BlobHash \/ bt = MethodId`
-  >- (irule env_builtin_expr_ptr_ok >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  >- (irule env_builtin_expr_ptr_ok >> rpt conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `builtin_args_length_ok _ _ /\ _ /\ _ ==> _` irule >>
+          fs[type_check_def, assert_def])
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC) >>
   Cases_on `?bop. bt = Bop bop`
   >- (gvs[] >> Cases_on `bop = In \/ bop = NotIn`
       >- (irule bop_in_expr_ptr_ok >> gvs[]) >>
