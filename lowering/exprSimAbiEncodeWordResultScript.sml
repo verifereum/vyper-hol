@@ -18,11 +18,12 @@ Theorem abi_encode_word_observation_vv_post:
   fn_has_code staged final func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce staged /\ local_ptrs_reserved ce origin /\
   origin.cs_next_id <= staged.cs_next_id /\
-  abi_encode_staged_observation ctx func ce cx es' staged out mid
+  abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es' staged out mid
     (32+32*word_size (32+(case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual /\
+  storage_well_formed_on cx es' (FST H) /\
   wb_frame ce es es' origin s0 actual /\
   (~expr_has_effect e ==> pure_frame ce func es origin s0 actual) ==>
-  vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode F mid0) target [e])
+  vv_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx (TypeBuiltin ann (AbiEncode F mid0) target [e])
     es origin final s0 es' (Value (BytesV (abi_encode_method_id_bytes mid0 ++ enc ct rv)))
     (LocatedValue (expr_type (TypeBuiltin ann (AbiEncode F mid0) target [e]))
       <|ptr_operand := out; ptr_location := LocMemory|>) actual
@@ -30,7 +31,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `well_typed_type_builtin_args (AbiEncode F mid0) target [expr_type e]` by
     fs[expr_body_pre_def, well_typed_expr_def] >>
-  qpat_assum `abi_encode_staged_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_assum `abi_encode_staged_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp_tac bool_ss [abi_encode_staged_observation_def] >> strip_tac >>
   drule_all abi_encode_tuple_result_memory >> disch_then (qspec_then `N` assume_tac) >>
   `!name b n. local_region ce es'.scopes actual name b n ==>
@@ -40,7 +41,7 @@ Proof
      rpt gen_tac >> strip_tac >>
      irule abi_encode_setup_row_local_exclusion >>
      qpat_assum `abi_builtin_encode_setup _ _ _ = _` (irule_at Any) >>
-     qpat_assum `stmt_state_rel ctx func ce cx es' actual` (irule_at Any) >>
+     qpat_assum `stmt_state_rel H ctx func ce cx es' actual` (irule_at Any) >>
      metis_tac[]) >>
   drule abi_encode_strict_id_growth >> strip_tac >>
   irule abi_encode_bytes_vv_post >> goal_assum (drule_at Any) >>
@@ -55,7 +56,7 @@ QED
 Theorem abi_encode_word_counted_success:
   expr_body_pre ce cx env e es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) target [e]) es /\
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\ vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
@@ -75,7 +76,9 @@ Theorem abi_encode_word_counted_success:
   ?actual. gas_marked_path F ctx func s 0 (OK actual) /\
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
-    vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode F mid0) target [e])
+    actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+    actual.vs_requests = s.vs_requests /\ actual.vs_call_ctx = s.vs_call_ctx /\
+    vv_post H ctx func ce cx (TypeBuiltin ann (AbiEncode F mid0) target [e])
       es origin final s0 es' (Value result)
       (LocatedValue (expr_type (TypeBuiltin ann (AbiEncode F mid0) target [e]))
         <|ptr_operand := out; ptr_location := LocMemory|>) actual
@@ -115,6 +118,7 @@ Resume abi_encode_word_counted_success[finish]:
      conj_tac >- (irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
      decide_tac) >>
   `LENGTH (abi_encode_method_id_bytes mid0 ++ enc ct rv) <= N` by metis_tac[] >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   drule_all abi_encode_word_observation_vv_post >> disch_tac >>
   qexists `actual` >> reverse conj_tac >- metis_tac[] >>
   `0 = 0 + 0` by simp[] >> pop_assum (fn th => once_rewrite_tac[th]) >>

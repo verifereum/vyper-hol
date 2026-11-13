@@ -40,7 +40,7 @@ Theorem abi_encode_framed_caller_suffix_extend:
     sz = 32 /\ venomMemDefs$regions_disjoint (sb,cap) (b,sz) /\
     venomMemDefs$regions_disjoint (d,LENGTH (enc at av)) (b,sz) /\
     venomMemDefs$regions_disjoint (p+32,m) (b,sz)) /\
-  stmt_state_rel ctx func ce cx vs initial /\ local_ptrs_reserved ce st /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs initial /\ local_ptrs_reserved ce st /\
   fn_inst_ids_distinct func /\
   (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
     MEM j (fn_insts func)) /\
@@ -69,7 +69,7 @@ Theorem abi_encode_framed_caller_suffix_extend:
     prepared.vs_logs = initial.vs_logs /\ prepared.vs_requests = initial.vs_requests /\
     prepared.vs_pending_deletions = initial.vs_pending_deletions /\
     prepared.vs_labels = initial.vs_labels /\ actual.vs_labels = initial.vs_labels /\
-    stmt_state_rel ctx func ce cx vs actual /\
+    stmt_state_rel H ctx func ce cx vs actual /\
     abi_encoder_extend_sim (ctx with ctx_functions := [obs]) obs initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -78,7 +78,7 @@ Proof
   `outsz = 32+32*word_size (maxlen+(case method_id of NONE => 0 | SOME x => 4))` by
     (qpat_assum `outsz = _` (fn th => rewrite_tac [th]) >>
      qpat_assum `m = _` (fn th => rewrite_tac [th])) >>
-  `stmt_state_rel ctx func ce cx vs actual` by
+  `stmt_state_rel H ctx func ce cx vs actual` by
     (drule_all abi_encode_phases_caller_state >> strip_tac >>
      first_assum ACCEPT_TAC) >>
   `abi_decode_sim ctx obs initial actual` by
@@ -123,7 +123,7 @@ Theorem abi_encode_framed_caller_suffix:
     sz = 32 /\ venomMemDefs$regions_disjoint (sb,cap) (b,sz) /\
     venomMemDefs$regions_disjoint (d,LENGTH (enc at av)) (b,sz) /\
     venomMemDefs$regions_disjoint (p+32,m) (b,sz)) /\
-  stmt_state_rel ctx func ce cx vs initial /\ local_ptrs_reserved ce st /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs initial /\ local_ptrs_reserved ce st /\
   fn_inst_ids_distinct func /\
   (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
     MEM j (fn_insts func)) /\
@@ -152,7 +152,7 @@ Theorem abi_encode_framed_caller_suffix:
     prepared.vs_logs = initial.vs_logs /\ prepared.vs_requests = initial.vs_requests /\
     prepared.vs_pending_deletions = initial.vs_pending_deletions /\
     prepared.vs_labels = initial.vs_labels /\ actual.vs_labels = initial.vs_labels /\
-    stmt_state_rel ctx func ce cx vs actual
+    stmt_state_rel H ctx func ce cx vs actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_encode_framed_caller_suffix_extend >> strip_tac >>
