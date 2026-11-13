@@ -505,8 +505,7 @@ Resume compile_slice_ordinary_case[bytes_rebase]:
  irule slice_bytestring_source_post_rebase >>
  goal_assum (drule_at Any) >> simp[] >>
  goal_assum (drule_at Any) >> simp[] >>
- qpat_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` (irule_at Any) >>
- simp[] >>
+ rpt (qpat_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` (irule_at Any) >> simp[]) >>
  `?w. eval_operand src_op t = SOME w` by
    (qpat_x_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` mp_tac >>
     simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
@@ -545,8 +544,7 @@ Resume compile_slice_ordinary_case[string_rebase]:
  irule slice_bytestring_source_post_rebase >>
  goal_assum (drule_at Any) >> simp[] >>
  goal_assum (drule_at Any) >> simp[] >>
- qpat_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` (irule_at Any) >>
- simp[] >>
+ rpt (qpat_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` (irule_at Any) >> simp[]) >>
  `?w. eval_operand src_op t = SOME w` by
    (qpat_x_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` mp_tac >>
     simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
