@@ -144,5 +144,9 @@ Proof
     (qspec_then `H` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule_all for_body_cleanup_exec_ptr >> strip_tac >>
-  Cases_on `es_end` >> gvs[] >> metis_tac[]
+  qpat_x_assum `!H res ee G tn t. Q H res ee G tn t ==> _`
+    (qspecl_then [`H`,`res`,`es_end with gas_obs := []`] assume_tac) >>
+  qpat_x_assum `!H res ee gt r. R H res ee gt r ==> _`
+    (qspecl_then [`H`,`res`,`es_end with gas_obs := []`] assume_tac) >>
+  gvs[] >> metis_tac[]
 QED

@@ -212,8 +212,12 @@ Proof
  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
  drule_all (Q.INST [`H` |-> `HH`] annassign_normal_continuation_ptr) >> strip_tac >>
  gvs[gas_marked_exec_ptr_def, ghost_inv_gas_obs, stmt_state_rel_gas_obs] >>
- Cases_on `ff` >> Cases_on `ff'` >>
- gvs[ghost_inv_gas_obs, stmt_state_rel_gas_obs,
-   vyperStorageFootprintTheory.storage_well_formed_on_def,
-   vyperStorageBackendTheory.get_storage_def]
+ `?g. ff = ff' with gas_obs := g` by
+   (qexists `ff.gas_obs` >>
+    qpat_x_assum `!tail. _ with gas_obs := tail = _ with gas_obs := tail`
+      (qspec_then `ff.gas_obs` mp_tac) >> simp[]) >>
+ `storage_well_formed_on cx (ff' with gas_obs := []) (FST HH) <=>
+  storage_well_formed_on cx ff' (FST HH)` by
+   (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+ gvs[ghost_inv_gas_obs, stmt_state_rel_gas_obs]
 QED

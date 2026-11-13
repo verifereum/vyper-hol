@@ -75,7 +75,8 @@ Proof
   `lookup_var cv s = SOME (i2w n2)` by metis_tac[i2w_counter_end] >>
   `not_local_ptr cenv es.scopes dv` by fs[for_code_def] >>
   `!q. cenv.ce_return_buf <> SOME (PtrVar (Var dv) q)` by metis_tac[] >>
-  `!H. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0
+  `!(H:(bool # bytes32 # type_value) list # num list).
+     gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0
      (DRESTRICT G (COMPL {dv})) (tn with t_var := tn.t_var |+ (dv,{}))
      (OK (jump_to exit_lbl (update_var dv 1w s)))` by
     (gen_tac >> `lookup_block cond_lbl func.fn_blocks =
@@ -94,10 +95,8 @@ Proof
     (drule_then strip_assume_tac) >>
   drule_all for_header_exit_transport_ptr >>
   disch_then (qspec_then `exit_lbl` strip_assume_tac) >>
-  simp[] >> conj_tac
-  >- first_assum (qspec_then `H` ACCEPT_TAC) >>
   `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
    storage_well_formed_on cx es (FST H)` by
     (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
-  simp[]
+  simp[] >> simp[jump_to_def, update_var_def]
 QED

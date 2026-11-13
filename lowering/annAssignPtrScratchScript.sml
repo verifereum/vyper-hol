@@ -288,8 +288,9 @@ Proof
     disch_then (drule_at (Pat `(_ with t_mem := _) = _`)) >>
     disch_then irule >> simp[] >> qexists `k` >> simp[]) >>
  `ghost_kept cenv es sa G0 tn0 s0 G tn'` by
-   (mp_tac (Q.INST [`p` |-> `dst`, `b` |-> `w2n b`]
-      (SPEC_ALL annassign_alloca_copy_kept_ptr)) >>
+   (Q.ISPECL_THEN [`H`,`ctx`,`func`,`cenv`,`cx`,`es`,`sa`,`G0`,`tn0`,`s0`,
+      `G`,`tn`,`s`,`tn'`,`inst`,`dst`,`w2n b`,`sz`,`k`] mp_tac
+      (Q.GEN `H` annassign_alloca_copy_kept_ptr) >>
     (impl_tac >- (simp[] >> rpt strip_tac >> metis_tac[])) >> simp[]) >>
  `stmt_state_rel H ctx func cenv cx es s'` by
    (irule annassign_alloca_copy_state_ptr >> metis_tac[]) >>
