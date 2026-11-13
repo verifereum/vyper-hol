@@ -147,11 +147,12 @@ Proof
      simp[exec_result_map_def]) >>
   `lookup_var root (prepared with vs_inst_idx := LENGTH mid.cs_current_insts) = SOME a /\
    ptr_covers H1 u1 root (prepared with vs_inst_idx := LENGTH mid.cs_current_insts) cap` by
-    (conj_tac
-     >- (qpat_assum `lookup_var root prepared = SOME a` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >> simp[lookup_var_def]) >>
-     irule (Q.INST [`G` |-> `H1`, `tn` |-> `u1`, `s` |-> `prepared`]
-       ptr_covers_frame) >> simp[lookup_var_def]) >>
+    (qpat_assum `lookup_var root prepared = SOME a` mp_tac >>
+     qpat_assum `ptr_covers H1 u1 root prepared cap` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[ptr_covers_def,lookup_var_def] >> rpt strip_tac >> gvs[]) >>
+  `vo + n <= cap /\ w2n a + vo < dimword (:256)` by
+    simp[arithmeticTheory.ADD_COMM] >>
   drule_all (SRULE [eval_op_inst_idx, cj 4 control_moves_keep_vars]
     (Q.INST [`s` |-> `prepared with vs_inst_idx := LENGTH mid.cs_current_insts`,
       `t` |-> `t with vs_inst_idx := LENGTH mid.cs_current_insts`,
@@ -176,7 +177,6 @@ Proof
   qexistsl_tac [`H`,`u`,`q`] >>
   simp[] >>
   conj_tac >- (fs[lookup_var_def] >> metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
   rpt gen_tac >>
   `gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
       (OK (prepared with vs_inst_idx := LENGTH mid.cs_current_insts),H1,u1)` by
@@ -266,8 +266,11 @@ Proof
   `s with vs_inst_idx := LENGTH sa.cs_current_insts = s` by
     simp[venom_state_component_equality] >>
   qpat_x_assum `!D. (!fuel. ptr_safe_run D _ _ _ _ _ _ _ _) ==> _` mp_tac >>
+  qpat_x_assum `gas_path_mem ctx fn s 0 _` mp_tac >>
+  qpat_x_assum `!D explicit. gas_origin_ptr_path _ _ _ _` mp_tac >>
   qpat_x_assum `s with vs_inst_idx := _ = s` mp_tac >>
-  POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[ADD1, ADD_ASSOC, ADD_COMM]
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  simp_tac bool_ss [DECIDE ``a + SUC b = b + (a + 1)``]
 QED
 
 Theorem owned_member_navigation_ptr:
@@ -555,7 +558,7 @@ Proof
          `allocas_from lo s`, `FLOOKUP s.vs_allocas oid = _`,
          `ptr_covers G tn root s cap`, `k = LENGTH tys`, `!i. i < k ==> _`] >>
       POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
-      simp[] >> conj_tac
+      simp[cj 1 gas_path_mem_rules,cj 1 gas_origin_ptr_path_rules] >> conj_tac
       >- (rpt strip_tac >>
           qpat_x_assum `!i. i < k ==> _` (qspec_then `i` mp_tac) >>
           simp[mem_agree_outside_def]) >>
