@@ -182,7 +182,8 @@ Proof
   `stmt_state_rel H ctx func cenv cx ee t` by
     fs[loweringPostsTheory.expr_post_def] >>
   `LENGTH bs <= 32` by decide_tac >>
-  drule_all slice_fixed_scratch_entry >> strip_tac >>
+  drule_all slice_fixed_scratch_entry >>
+  disch_then (qspec_then `st0` strip_assume_tac) >>
   qexistsl_tac [`bs`, `u`, `p`] >> gvs[] >>
   first_assum MATCH_ACCEPT_TAC
 QED
