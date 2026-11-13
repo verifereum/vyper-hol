@@ -54,8 +54,11 @@ checkpoint; acceptance is fail-closed.
 
 ## Capture and escape queries
 
-`passes/fmp_lowering.py:603-628`: propagation opcodes exempt all occurrences;
-otherwise compare variable occurrence counts with safe memory-access counts.
+`escaping_operands` (`analysis/base_ptr_analysis.py` at v0.5.0b1; previously
+`passes/fmp_lowering.py:603-628`): propagation opcodes and comparisons
+(`fmp_comparison_opcode`) exempt all occurrences; otherwise compare variable
+occurrence counts with safe memory-access counts. The escape query and its
+helpers live in `basePtrDefs`, where memory liveness also uses it.
 Production `fmp_safe_operands` reuses `mem_read_ops`/`mem_write_ops`, counting
 ofst, size, and distinct max_size. HOL compares optional operand values to avoid
 counting a default max_size twice; Python uses object identity for the default
@@ -81,8 +84,9 @@ all GETFMP roots or replace current-state scope with a whole-function veto.
 ## Proof integrity and dependency direction
 
 All three new theories audit their own exported theorem tags (DISK_THM only).
-No admissions were added. Shared syntactic helpers (single-output, transparent
-opcode, uses-any) moved unchanged from fmpReclaimDefs into fmpAliasDefs, so future
+No admissions were added. Shared syntactic helpers (single-output, uses-any)
+moved unchanged from fmpReclaimDefs into fmpAliasDefs (the transparent-opcode
+test later moved on to basePtrDefs with the escape query), so future
 reclaim transfer can import these interfaces without a theory dependency cycle.
 The old reclaim transfer/checker semantics are otherwise untouched at this
 checkpoint. These static closure/checker facts are not a memory-reuse safety

@@ -400,7 +400,7 @@ Proof
 QED
 
 (* Adjacent RETURNDATACOPY [p; 0; rds] and REVERT [p; rds] form a pair. *)
-Theorem revert_forward_pair_adjacent[local]:
+Theorem revert_forward_pair_adjacent:
   !bb i id1 id2 p rds.
     get_instruction bb i = SOME (mk_inst id1 RETURNDATACOPY [p; Lit 0w; rds] []) /\
     get_instruction bb (SUC i) = SOME (mk_inst id2 REVERT [p; rds] []) ==>

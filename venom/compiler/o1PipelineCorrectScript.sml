@@ -7,6 +7,8 @@
  * No compiler hook or final-unit check is changed to obtain output shape.
  * S4 supplies the lowered output invariant at its chosen input oracle;
  * S5 consumes that same output invariant for codegen.
+ * run_venom_pipeline_run_bounded (S6b) is the output's resource bound,
+ * which codegen's gas proof consumes.
  *)
 Theory o1PipelineCorrect
 Ancestors
@@ -14,6 +16,8 @@ Ancestors
   venomPassSchedule o1PassContract o1PipelineCompose ctxLookupAgree
   ptrDiscipline contextPlanLayoutProps stepWriteFootprint
   contextCodegenRel stackPlanGen venomCompilerTypes venomState words
+  gasEvents gasCount o1PipelineGasMask
+  venomRunBounded
 
 (* This is the compiler's existing O1 hook, with all three checks K T.
  * Naming it does not change compile_vyper or its literal pipeline hooks. *)
@@ -92,6 +96,198 @@ Proof
   drule_all o1_pipeline_stage_facts_all_dead >> strip_tac >> metis_tac[]
 QED
 
+(* The uniform gas mask through O1: one raw-slot tuple, fixed before every
+ * filling, suffix and dead mask, covers the raw unit's entry events of each
+ * terminating compatible filling, which the output then simulates.  When
+ * DFT's block lemma holds, the sites also start with the first n raw events
+ * of any entry run, terminating or not, that is safe up to the cut n. *)
+Theorem run_venom_pipeline_gas_mask_prefix:
+  !lo rpolicy unit out vs_out fuel nm fn lbl.
+    o1_pipeline rpolicy unit = SOME out /\
+    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
+    reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
+    EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+    fixed_region_reserved lo unit.cu_context /\
+    out.po_unit.cu_context.ctx_entry = SOME nm /\
+    lookup_function nm out.po_unit.cu_context.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    terminates (run_context fuel out.po_unit.cu_context vs_out) /\
+    gas_count_blocks fuel out.po_unit.cu_context fn
+      (vs_out with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>) <=
+      LENGTH vs_out.vs_gas_readings
+    ==>
+    ?raw_slots sites unused.
+      LENGTH raw_slots = LENGTH sites /\
+      PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) vs_out.vs_gas_readings /\
+      (!gobs tail D.
+        LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs /\
+        (?fr. terminates (run_context fr unit.cu_context
+                            (vs_out with vs_gas_readings := gobs ++ tail))) /\
+        dead_wf D /\
+        raw_unit_memory_ok unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) /\
+        ptr_discipline lo unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) /\
+        taint_within D unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) /\
+        mem_inv dload_offset_ok unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) /\
+        mem_inv dload_headroom_ok unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) ==>
+        (?fn0 lbl0. unit.cu_context.ctx_entry = SOME nm /\
+           lookup_function nm unit.cu_context.ctx_functions = SOME fn0 /\
+           fn_entry_label fn0 = SOME lbl0 /\
+           !fr. terminates (run_context fr unit.cu_context
+                              (vs_out with vs_gas_readings := gobs ++ tail)) ==>
+             ?extra. sites =
+               gas_events_blocks fr unit.cu_context fn0
+                 (vs_out with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                                 vs_current_bb := lbl0; vs_inst_idx := 0 |>) ++ extra) /\
+        ctx_sim D unit.cu_context out.po_unit.cu_context
+          (vs_out with vs_gas_readings := gobs ++ tail) vs_out) /\
+      (dft_blocks_gas_prefix ==>
+       !gobs tail D n f fa la.
+         LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs /\
+         dead_wf D /\
+         o1_safe_upto D lo n unit.cu_context
+           (vs_out with vs_gas_readings := gobs ++ tail) /\
+         lookup_function nm unit.cu_context.ctx_functions = SOME fa /\
+         fn_entry_label fa = SOME la /\
+         n <= LENGTH (gas_events_blocks f unit.cu_context fa
+                (vs_out with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                                vs_current_bb := la; vs_inst_idx := 0 |>)) ==>
+         ?extra. sites =
+           TAKE n (gas_events_blocks f unit.cu_context fa
+                (vs_out with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                                vs_current_bb := la; vs_inst_idx := 0 |>)) ++ extra)
+Proof
+  rpt strip_tac >>
+  `fmp_free_ctx unit.cu_context` by (irule source_fmp_free >> fs[]) >>
+  `!D vi. raw_unit_memory_ok unit.cu_context vi /\
+        ptr_discipline lo unit.cu_context vi /\
+        taint_within D unit.cu_context vi /\
+        mem_inv dload_offset_ok unit.cu_context vi /\
+        mem_inv dload_headroom_ok unit.cu_context vi ==>
+        o1_pre_walk_inv D unit.cu_context vi` by
+    (rpt strip_tac >>
+     `o1_src_inv D unit.cu_context vi` by
+       (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv,
+           o1_source_unit_ok_no_dalloca] >> metis_tac[]) >>
+     irule o1_source_pre_walk_inv >> simp[]) >>
+  fs[o1_pipeline_def] >>
+  drule_all o1_pipeline_gas_mask >>
+  disch_then (qx_choosel_then [`raw_slots`, `sites`, `unused`] strip_assume_tac) >>
+  qexistsl [`raw_slots`, `sites`, `unused`] >> simp[] >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      `vs_out with <|vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0;
+                     vs_gas_readings := gobs ++ tail|> =
+       vs_out with <|vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                     vs_current_bb := la; vs_inst_idx := 0|>` by
+        simp[venomStateTheory.venom_state_component_equality] >>
+      pop_assum (fn eq => RULE_ASSUM_TAC (REWRITE_RULE [eq]) >> rewrite_tac [eq]) >>
+      qpat_x_assum `dft_blocks_gas_prefix ==> _`
+        (fn th => mp_tac (Q.SPECL [`gobs`, `tail`, `D`, `lo`, `n`, `f`, `fa`, `la`]
+                            (UNDISCH th))) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `dft_blocks_gas_prefix ==> _` kall_tac >>
+  qpat_x_assum `!gobs tail D. _` (qspecl_then [`gobs`, `tail`, `D`] mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
+  strip_tac >> TRY (reverse conj_tac >- first_assum ACCEPT_TAC) >>
+  qexistsl [`fn0`, `lbl0`] >> simp[] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> qexists_tac `extra` >>
+  `vs_out with <|vs_prev_bb := NONE; vs_current_bb := lbl0; vs_inst_idx := 0;
+                 vs_gas_readings := gobs ++ tail|> =
+   vs_out with <|vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                 vs_current_bb := lbl0; vs_inst_idx := 0|>` by
+    simp[venomStateTheory.venom_state_component_equality] >>
+  asm_rewrite_tac[]
+QED
+
+(* The mask without its prefix half. *)
+Theorem run_venom_pipeline_gas_mask:
+  !lo rpolicy unit out vs_out fuel nm fn lbl.
+    o1_pipeline rpolicy unit = SOME out /\
+    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
+    reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
+    EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+    fixed_region_reserved lo unit.cu_context /\
+    out.po_unit.cu_context.ctx_entry = SOME nm /\
+    lookup_function nm out.po_unit.cu_context.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    terminates (run_context fuel out.po_unit.cu_context vs_out) /\
+    gas_count_blocks fuel out.po_unit.cu_context fn
+      (vs_out with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>) <=
+      LENGTH vs_out.vs_gas_readings
+    ==>
+    ?raw_slots sites unused.
+      LENGTH raw_slots = LENGTH sites /\
+      PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) vs_out.vs_gas_readings /\
+      !gobs tail D.
+        LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs /\
+        (?fr. terminates (run_context fr unit.cu_context
+                            (vs_out with vs_gas_readings := gobs ++ tail))) /\
+        dead_wf D /\
+        raw_unit_memory_ok unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) /\
+        ptr_discipline lo unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) /\
+        taint_within D unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) /\
+        mem_inv dload_offset_ok unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) /\
+        mem_inv dload_headroom_ok unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) ==>
+        (?fn0 lbl0. unit.cu_context.ctx_entry = SOME nm /\
+           lookup_function nm unit.cu_context.ctx_functions = SOME fn0 /\
+           fn_entry_label fn0 = SOME lbl0 /\
+           !fr. terminates (run_context fr unit.cu_context
+                              (vs_out with vs_gas_readings := gobs ++ tail)) ==>
+             ?extra. sites =
+               gas_events_blocks fr unit.cu_context fn0
+                 (vs_out with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                                 vs_current_bb := lbl0; vs_inst_idx := 0 |>) ++ extra) /\
+        ctx_sim D unit.cu_context out.po_unit.cu_context
+          (vs_out with vs_gas_readings := gobs ++ tail) vs_out
+Proof
+  rpt strip_tac >> drule_all run_venom_pipeline_gas_mask_prefix >>
+  disch_then (qx_choosel_then [`raw_slots`, `sites`, `unused`] strip_assume_tac) >>
+  qexistsl [`raw_slots`, `sites`, `unused`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+(* S4 with the output fuel fixed by the input fuel: every pass but
+ * CFGNormalization keeps it, and cfg_norm_fuel bounds CFGNormalization's. *)
+Theorem run_venom_pipeline_fuel:
+  !D lo rpolicy unit out vs_out.
+    o1_pipeline rpolicy unit = SOME out /\
+    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
+    reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
+    EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+    fixed_region_reserved lo unit.cu_context /\ dead_wf D
+    ==>
+    ?vs_in. gas_variant vs_in vs_out /\
+      (raw_unit_memory_ok unit.cu_context vs_in /\
+       ptr_discipline lo unit.cu_context vs_in /\
+       taint_within D unit.cu_context vs_in /\
+       mem_inv dload_offset_ok unit.cu_context vs_in /\
+       mem_inv dload_headroom_ok unit.cu_context vs_in ==>
+       ctx_sim_fuel (cfg_norm_fuel out.po_unit.cu_context) D
+         unit.cu_context out.po_unit.cu_context vs_in vs_out /\
+       o1_lowered_inv out.po_unit.cu_context vs_out)
+Proof
+  rpt strip_tac >>
+  `fmp_free_ctx unit.cu_context` by (irule source_fmp_free >> fs[]) >>
+  `!vi. raw_unit_memory_ok unit.cu_context vi /\
+        ptr_discipline lo unit.cu_context vi /\
+        taint_within D unit.cu_context vi /\
+        mem_inv dload_offset_ok unit.cu_context vi /\
+        mem_inv dload_headroom_ok unit.cu_context vi ==>
+        o1_pre_walk_inv D unit.cu_context vi` by
+    (rpt strip_tac >>
+     `o1_src_inv D unit.cu_context vi` by
+       (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv,
+           o1_source_unit_ok_no_dalloca] >> metis_tac[]) >>
+     irule o1_source_pre_walk_inv >> simp[]) >>
+  fs[o1_pipeline_def] >>
+  drule_all o1_pipeline_stage_facts >> strip_tac >> metis_tac[]
+QED
+
 Theorem run_venom_pipeline_correct:
   !D lo rpolicy unit out vs_out.
     o1_pipeline rpolicy unit = SOME out /\
@@ -110,8 +306,9 @@ Theorem run_venom_pipeline_correct:
        ctx_sim D unit.cu_context out.po_unit.cu_context vs_in vs_out /\
        o1_lowered_inv out.po_unit.cu_context vs_out)
 Proof
-  rpt strip_tac >> drule_all run_venom_pipeline_correct_all_dead >>
-  strip_tac >> metis_tac[]
+  rpt strip_tac >>
+  drule_all run_venom_pipeline_fuel >> strip_tac >>
+  qexists_tac `vs_in` >> metis_tac[ctx_sim_fuel_imp_ctx_sim]
 QED
 
 Theorem o1_lowered_inv_fixed_pointer[local]:
@@ -121,8 +318,7 @@ Theorem o1_lowered_inv_fixed_pointer[local]:
 Proof
   strip_tac >> fs[o1_lowered_inv_def] >>
   fs[mem_inv_raw_reachable] >>
-  rpt strip_tac >> first_x_assum drule >>
-  drule raw_reachable_initial_fmp >> simp[lowered_mem_fact_def]
+  rpt strip_tac >> first_x_assum drule >> simp[static_mem_ok_lowered]
 QED
 
 (* The output's memory invariant: every access is static (below some
@@ -178,6 +374,68 @@ Proof
   gvs[w2n_n2w, arithmeticTheory.LESS_MOD] >>
   qexists_tac `raw_reachable vs` >>
   metis_tac[mem_inv_codegen_obligations, step_write_footprint_holds]
+QED
+
+(* ===== S6b: resource bound of the output (sufficient gas) ===== *)
+
+(* S6b.  A fuel bound on the source unit that holds for every entry state
+ * gives the output a fuel bound and a memory bound that hold for every
+ * entry state, so neither depends on the external-call outcomes or the GAS
+ * readings.  Takes S4's premises, with the input-side facts and the
+ * source's termination at every input state S4 may pick (a gas_variant of
+ * the output state); the plan cp locates the spill slots (below
+ * cp_initial_fmp) and the DRET packing area (above it).  The output fuel
+ * is cfg_norm_fuel of the source fuel (run_venom_pipeline_fuel), and the
+ * memory bound is the output's max_live_eom: every access stays static
+ * (o1_lowered_inv). *)
+Theorem run_venom_pipeline_run_bounded:
+  !lo rpolicy unit out cp fuel.
+    o1_pipeline rpolicy unit = SOME out /\
+    generate_context_plan out.po_unit.cu_context = SOME cp
+    ==>
+    ?fuel' M. !D vs.
+      o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+      unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+      o1_run_state_ok vs /\
+      reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
+      EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+      fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
+      vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
+      (!vs_in. gas_variant vs_in vs ==>
+         raw_unit_memory_ok unit.cu_context vs_in /\
+         ptr_discipline lo unit.cu_context vs_in /\
+         taint_within D unit.cu_context vs_in /\
+         mem_inv dload_offset_ok unit.cu_context vs_in /\
+         mem_inv dload_headroom_ok unit.cu_context vs_in /\
+         terminates (run_context fuel unit.cu_context vs_in))
+      ==>
+      venom_run_bounded fuel' M out.po_unit.cu_context vs
+Proof
+  rpt gen_tac >> strip_tac >>
+  qexistsl_tac [`cfg_norm_fuel out.po_unit.cu_context fuel`,
+                `case max_live_eom out.po_unit.cu_context of
+                   SOME eom => eom | NONE => 0`] >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`D`, `lo`, `rpolicy`, `unit`, `out`, `vs`]
+            run_venom_pipeline_fuel) >>
+  impl_tac >- simp[] >> strip_tac >>
+  qpat_x_assum `!vs_in. gas_variant vs_in vs ==> _`
+    (qspec_then `vs_in` mp_tac) >>
+  simp[] >> strip_tac >>
+  `ctx_sim_fuel (cfg_norm_fuel out.po_unit.cu_context) D unit.cu_context
+     out.po_unit.cu_context vs_in vs /\
+   o1_lowered_inv out.po_unit.cu_context vs` by metis_tac[] >>
+  fs[o1_lowered_inv_def, ctx_sim_fuel_def] >>
+  qpat_x_assum `!fuel. _` (qspec_then `fuel` mp_tac) >>
+  simp[] >> strip_tac >>
+  simp[venom_run_bounded_def] >> conj_tac
+  >- metis_tac[dead_result_rel_terminates] >>
+  `static_mem_ok eom =
+     (\ctx fn inst s. in_revert_forward fn s \/
+        EVERY (\(off,len). len = 0 \/ off + len <= eom)
+          (inst_mem_ranges inst s))` by
+    simp[FUN_EQ_THM, static_mem_ok_def] >>
+  fs[]
 QED
 
 (* ===== S6: output shape without new compiler checks ===== *)
