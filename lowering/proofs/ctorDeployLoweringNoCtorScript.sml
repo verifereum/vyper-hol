@@ -10,7 +10,7 @@ Ancestors
   valueEncoding valueEncodingDefs vyperValue vyperTypeInitialState vyperTypeContractStaticMaps
   vyperTypeConstantCells abiCallerBuiltinInput entryStateRel
   venomPipelineData venomPipelineDriver venomPipelineRunner venomFnScheduleRunner
-  unitLabelMap fcgPruning
+  unitLabelMap fcgPruning vyperStorageTrace
   fcgDefs
 
 Theorem no_ctor_lookup:
@@ -2453,11 +2453,27 @@ Theorem no_ctor_empty_external:
        (st with scopes := [FEMPTY]), st.requests)
 Proof
   strip_tac >>
-  simp[call_external_function_def, bind_arguments_def,
+  Cases_on `evaluate_module_constants_trace cx am cx.txn.target (constants_order mods)` >>
+  gvs[evaluate_all_constants_def, evaluate_module_constants_def] >>
+  rename1 `evaluate_module_constants_trace _ _ _ _ = (SOME am_c, observations)` >>
+  `send_call_value Payable cx
+     (initial_state am_c [FEMPTY] with
+       <|outcomes := orc; requests := []; gas_obs := gobs;
+         storage_trace := observations|>) =
+     (INL (), st with storage_trace := observations ++ st.storage_trace)` by
+    (mp_tac (send_call_value_storage_trace_frame |> Q.INST [`mut` |-> `Payable`]) >>
+     rewrite_tac[storage_trace_frame_action] >>
+     disch_then (qspecl_then
+       [`initial_state am_c [FEMPTY] with
+           <|outcomes := orc; requests := []; gas_obs := gobs|>`,
+        `observations`] mp_tac) >>
+     fs[initial_state_def]) >>
+  simp[call_external_function_def, call_external_function_trace_def,
+       bind_arguments_def, eval_external_defaults_nil,
        lock_if_nr_def, unlock_if_nr_def, is_view_mut_def,
        vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.return_def, vyperStateTheory.set_scopes_def,
-       evaluate_def]
+       evaluate_def, abstract_machine_from_state_def]
 QED
 
 Theorem no_ctor_send_value:
@@ -2488,7 +2504,9 @@ Theorem no_ctor_load_reduce:
       (am_out with sources updated_by CONS (tx.target,[(NONE,tops)])), rqs)
 Proof
   strip_tac >> drule no_ctor_lookup >> strip_tac >>
-  gvs[deploy_evaluation_context_def] >> simp[load_contract_def]
+  gvs[deploy_evaluation_context_def, call_external_function_def,
+      load_contract_def, load_contract_trace_def] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()]
 QED
 
 Theorem no_ctor_constants_frame:
@@ -2499,8 +2517,11 @@ Theorem no_ctor_constants_frame:
   am_c.layouts = am.layouts
 Proof
   simp[evaluate_all_constants_def, constants_order_def,
-       evaluate_module_constants_def] >>
-  strip_tac >> gvs[AllCaseEqs(), merge_constants_def]
+       evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
+  strip_tac >>
+  Cases_on `constants_env_trace (set_current_module cx NONE) am addr NONE tops FEMPTY` >>
+  rename1 `constants_env_trace _ _ _ _ _ _ = (cresult, observations)` >>
+  Cases_on `cresult` >> gvs[merge_constants_def]
 QED
 
 Theorem no_ctor_source_success:
@@ -2581,7 +2602,7 @@ Proof
 QED
 
 Theorem no_ctor_source_halt:
-  deploy_state_rel tops deploy_bc am tx es /\
+  deploy_source_ok tops am tx /\
   deploy_state_rel tops deploy_bc am tx es /\
   gas_variant vs (deploy_entry_state prog cplan tops es) /\
   classify_functions tops = (exts,ints,fb,NONE) /\
@@ -2637,7 +2658,8 @@ Theorem deploy_no_ctor_correct:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all no_ctor_target_execution >> strip_tac >>
-  drule_all no_ctor_source_halt >> strip_tac >>
+  drule_all no_ctor_source_halt >>
+  disch_then (qspec_then `HS` strip_assume_tac) >>
   qexists_tac `marks` >> disj2_tac >> qexists_tac `fuel` >>
   asm_rewrite_tac[]
 QED
