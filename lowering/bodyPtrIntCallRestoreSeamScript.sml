@@ -4,7 +4,10 @@ Ancestors
   bodyIntCallSeams bodyPtrDefs bodyPtrIntCallConfinement
   bodyPtrBytestringBuiltinsWindowGhost exprSimDefs exprSimProps
   loweringPosts compileEnv venomState venomExecSemantics
-  finite_map pred_set list
+  vyperState vyperInterpreter gasSummaryComposePtr fragGasSeqPtr fragGasPathPtr
+  finite_map pred_set list vyperTypeEvalSoundness vyperTypeBindArguments
+  vyperTypeInvariants vyperTypeSystem exprSimHypsDefs vyperContext
+  vyperTyping vyperValue vyperTypeEnv
 
 (* Concrete and ghost confinement have different jobs: the exit seam
    preserves the bytes; the protected-set frame prevents new taint there. *)
@@ -57,4 +60,147 @@ Proof
   disch_then (qspecl_then [`P`, `tn`, `tm`, `es`] assume_tac) >>
   rpt gen_tac >> strip_tac >> first_x_assum irule >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >> goal_assum (drule_at Any)
+QED
+
+(* Only scope cleanup remains on the supported nonreentrant-free path. *)
+Theorem intcall_rest_without_lock[local]:
+  !cx name mut ss prev rtv.
+    intcall_rest cx name mut F ss prev rtv =
+    bind (finally (intcall_callee_src cx name ss) (pop_function prev))
+      (\rv. bind (lift_option_type (safe_cast rtv rv) "IntCall cast ret")
+        (\crv. return (Value crv)))
+Proof
+  simp[intcall_rest_def, intcall_callee_src_def,
+       vyperInterpreterTheory.unlock_if_nr_def, finally_unless_halt_return]
+QED
+
+Theorem intcall_rest_marked_success:
+  !D ctx func PG cx name mut ss prev rtv es s0 G0 tn0 marks v mid G tn r crv.
+    gas_marked_exec_ptr D (ctx,func) PG (intcall_callee_src cx name ss)
+      (es,s0,G0,tn0) marks (INL v) mid G tn r /\
+    safe_cast rtv v = SOME crv ==>
+    gas_marked_exec_ptr D (ctx,func) PG
+      (intcall_rest cx name mut F ss prev rtv)
+      (es,s0,G0,tn0) marks (INL (Value crv))
+      (mid with scopes := prev) G tn r
+Proof
+  rewrite_tac[gas_marked_exec_ptr_def, intcall_rest_without_lock] >>
+  rpt gen_tac >> strip_tac >> simp[] >> gen_tac >>
+  simp[bind_def, finally_def, pop_function_def, set_scopes_def,
+       ignore_bind_def, return_def, lift_option_type_def, lift_option_def]
+QED
+
+Theorem intcall_rest_marked_exception:
+  !D ctx func PG cx name mut ss prev rtv es s0 G0 tn0 marks ex mid G tn r.
+    gas_marked_exec_ptr D (ctx,func) PG (intcall_callee_src cx name ss)
+      (es,s0,G0,tn0) marks (INR ex) mid G tn r ==>
+    gas_marked_exec_ptr D (ctx,func) PG
+      (intcall_rest cx name mut F ss prev rtv)
+      (es,s0,G0,tn0) marks (INR ex)
+      (mid with scopes := prev) G tn r
+Proof
+  rewrite_tac[gas_marked_exec_ptr_def, intcall_rest_without_lock] >>
+  rpt gen_tac >> strip_tac >> simp[] >> gen_tac >>
+  simp[bind_def, finally_def, pop_function_def, set_scopes_def,
+       ignore_bind_def, return_def, raise_def]
+QED
+
+(* The caller's typed call selects a live signature.  Successful binding,
+   rather than a raw-argument typing assumption, types the pushed scope. *)
+Theorem intcall_entry_typed_callee:
+  intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
+    (mut,nr,args,ret,ss,rr) prev penv rtv es1 t /\
+  well_typed_expr tenv (Call ty (IntCall (NONE,name)) es drv) /\
+  get_module_code cx NONE = SOME ts /\
+  lookup_callable_function cx.in_deploy name ts =
+    SOME (mut,nr,args,[],ret,ss) ==>
+  ?env_body env_after.
+    type_stmts env_body ret ss = SOME env_after /\
+    env_consistent env_body (cx with stk updated_by CONS (NONE,name)) es1 /\
+    state_well_typed es1 /\ accounts_well_typed es1.accounts /\
+    context_well_typed cx /\ functions_well_typed cx /\
+    evaluate_type env_body.type_defs ret = SOME rtv /\
+    (ret = NoneT \/ stmts_no_fallthrough ss) /\
+    call_evaluation_safe (cx with stk updated_by CONS (NONE,name))
+      (int_calls_stmts ss)
+Proof
+  strip_tac >>
+  qpat_x_assum `intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [intcall_entry_def]) >>
+  map_every (fn pat => qpat_x_assum pat mp_tac)
+    [`well_typed_expr _ _`, `get_module_code _ _ = _`,
+     `lookup_callable_function _ _ _ = _`, `bind_arguments _ _ _ = _`,
+     `evaluate_type _ _ = _`, `call_evaluation_safe _ _`,
+     `es1.scopes = _`, `expr_sim_inv _ _ _ _`] >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  `env_consistent tenv cx (es1 with scopes := prev) /\
+   state_well_typed (es1 with scopes := prev) /\
+   accounts_well_typed es1.accounts /\ context_well_typed cx /\
+   functions_well_typed cx` by
+    (qpat_assum `expr_sim_inv _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[expr_sim_inv_def]) >>
+  `IS_SOME (FLOOKUP tenv.fn_sigs (NONE,name))` by
+    fs[Once well_typed_expr_def, AllCaseEqs()] >>
+  drule_all callable_body_typing_from_env_consistent >> strip_tac >>
+  `accounts_well_typed (es1 with scopes := prev).accounts` by simp[] >>
+  drule_all intcall_default_env_side_conditions >> strip_tac >>
+  `scope_well_typed penv` by
+    metis_tac[bind_arguments_scope_well_typed_from_success] >>
+  `env_scopes_consistent env_body
+     (cx with stk updated_by CONS (NONE,name)) es1` by
+    (`env_scopes_consistent env_body
+       (cx with stk updated_by CONS (NONE,name)) (es1 with scopes := [penv])`
+       suffices_by (qpat_assum `es1.scopes = _`
+         (fn th => simp[NoAsms, GSYM th])) >>
+     irule bind_arguments_env_scopes_consistent >>
+     qexistsl [`args`, `get_tenv cx`, `vs`] >> simp[get_tenv_def] >>
+     metis_tac[]) >>
+  qpat_x_assum `!fn. env_context_consistent _ _ /\ _`
+    (qspec_then `name` strip_assume_tac) >>
+  qexistsl [`env_body`, `env_after`] >>
+  simp[env_consistent_def] >>
+  gvs[env_immutables_consistent_def, state_well_typed_def] >>
+  metis_tac[]
+QED
+
+Theorem intcall_callee_src_typed_cast:
+  !cx name body env env_after ret rtv es1 v mid.
+    type_stmts env ret body = SOME env_after /\
+    env_consistent env (cx with stk updated_by CONS (NONE,name)) es1 /\
+    state_well_typed es1 /\ accounts_well_typed es1.accounts /\
+    context_well_typed cx /\ functions_well_typed cx /\
+    call_evaluation_safe (cx with stk updated_by CONS (NONE,name))
+      (int_calls_stmts body) /\
+    evaluate_type env.type_defs ret = SOME rtv /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    intcall_callee_src cx name body es1 = (INL v,mid) ==>
+    safe_cast rtv v = SOME v
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `type_stmts env ret ss = SOME env_after` >>
+  Cases_on `eval_stmts (cx with stk updated_by CONS (NONE,name)) ss es1` >>
+  rename1 `eval_stmts _ _ _ = (res,st)` >>
+  `context_well_typed (cx with stk updated_by CONS (NONE,name)) /\
+   functions_well_typed (cx with stk updated_by CONS (NONE,name))` by
+    (conj_tac >- fs[context_well_typed_def] >>
+     qpat_x_assum `functions_well_typed cx` mp_tac >>
+     simp[functions_well_typed_def, get_module_code_def,
+         get_tenv_def, fn_sigs_consistent_def, fn_sigs_declared_complete_def,
+         toplevel_vtypes_complete_def, bare_globals_complete_def,
+         bare_global_assignable_complete_def, flag_members_complete_def,
+         well_formed_type_def, fn_sigs_live_def, context_function_live_context,
+         lookup_var_slot_from_layout_def]) >>
+  drule_all (cj 2 eval_scc_type_sound_results_mutual) >> strip_tac >>
+  Cases_on `res` >>
+  gvs[intcall_callee_src_def, try_def, ignore_bind_def, bind_def,
+      return_def, raise_def]
+  >~ [`safe_cast NoneTV NoneV`] >-
+    simp[vyperValueOperationTheory.safe_cast_def]
+  >~ [`eval_stmts _ _ _ = (INL (),_)`] >-
+    metis_tac[cj 2 no_fallthrough_eval_no_success] >>
+  rename1 `handle_function ex st = (INL v,mid)` >>
+  Cases_on `ex` >> gvs[handle_function_def, return_def, raise_def] >>
+  drule_all env_extends_return_exception_typed >>
+  simp[vyperTypeStmtResultTheory.return_exception_typed_def,
+       vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
+  strip_tac >> gvs[] >> irule safe_cast_well_typed >> simp[]
 QED
