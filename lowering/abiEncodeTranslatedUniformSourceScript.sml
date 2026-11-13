@@ -124,7 +124,42 @@ Resume abi_encode_translated_uniform_source_upto[flag]:
   first_assum (irule_at Any) >> simp[]
 QED
 Resume abi_encode_translated_uniform_source_upto[array]:
-  cheat
+  drule evaluate_type_array_child_size >> strip_tac >>
+  `abi_sfields_consistent_upto (type_value_size u) sf E` by
+    (irule abi_sfields_consistent_upto_mono >>
+     qexists `type_value_size tv` >> simp[]) >>
+  `?ect.
+    (!u. evaluate_type E elem = SOME u ==>
+      is_dynamic ect = is_dynamic (vyper_to_abi_type E elem) /\
+      abi_member_head_size ect = abi_member_head_size (vyper_to_abi_type E elem)) /\
+    (!u v av sb mem0.
+      evaluate_type E elem = SOME u /\ value_has_type u v /\
+      vyper_to_abi E elem v = SOME av /\ val_in_memory u v sb mem0 ==>
+      ?rv. enc ect rv = enc (vyper_to_abi_type E elem) av /\
+        !mem. val_in_memory u v sb mem ==>
+          abi_encoder_open_input (type_to_abi_enc_info sf ce elem) ect rv sb (type_memory_size u) mem)` by
+    (first_x_assum drule >> disch_then irule >> simp[] >>
+     qexists `E0` >> simp[]) >>
+  drule_all abi_encode_element_metadata >> strip_tac >>
+  Cases_on `bd`
+  >- (pure_once_rewrite_tac[type_to_abi_enc_info_def] >> IF_CASES_TAC
+      >- (irule abi_encode_translated_uniform_static >> simp[is_abi_dynamic_def] >>
+          first_assum (irule_at Any) >> simp[]) >>
+      irule abi_encoder_uniform_sarray >>
+      conj_tac >- gvs[is_abi_dynamic_def] >>
+      conj_tac >- (qexists `REPLICATE n ect` >>
+      gvs[GSYM REPLICATE_GENLIST, EL_REPLICATE, abi_member_head_size_def] >>
+      rpt gen_tac >> strip_tac >> gvs[EL_REPLICATE] >>
+      first_assum MATCH_ACCEPT_TAC) >>
+      simp[GSYM REPLICATE_GENLIST] >>
+      rpt gen_tac >> strip_tac >> gvs[] >>
+      simp[abi_member_head_size_def]) >>
+  pure_once_rewrite_tac[type_to_abi_enc_info_def] >>
+  qexists `Array NONE ect` >>
+  drule_all abi_encoder_uniform_dynarray >>
+  simp[abi_member_head_size_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> first_x_assum irule >> simp[] >>
+  metis_tac[]
 QED
 Resume abi_encode_translated_uniform_source_upto[tuple]:
   pure_once_rewrite_tac[type_to_abi_enc_info_def] >>
@@ -158,7 +193,58 @@ Resume abi_encode_translated_uniform_source_upto[tuple]:
   strip_tac >> first_assum (irule o cj 2 o cj 1)
 QED
 Resume abi_encode_translated_uniform_source_upto[struct]:
-  cheat
+  `?args. FLOOKUP E k = SOME (StructArgs args)` by
+    (qpat_x_assum `evaluate_type E (StructT k) = _` mp_tac >>
+     simp[Once evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
+  `?fields. FLOOKUP sf (nsid_to_string k) = SOME fields /\
+    MAP FST fields = MAP FST args /\ MAP (FST o SND) fields = MAP SND args` by
+    (irule abi_sfields_consistent_upto_lookup >>
+     qexistsl [`E`, `type_value_size tv`, `tv`] >> simp[]) >>
+  pure_once_rewrite_tac[type_to_abi_enc_info_def] >>
+  IF_CASES_TAC
+  >- (irule abi_encode_translated_uniform_static >> simp[] >>
+      first_assum (irule_at Any) >> simp[]) >>
+  `!t. MEM t (MAP SND args) ==> IS_SOME (evaluate_type (E \\ k) t) /\ ?ct.
+    (!u. evaluate_type (E \\ k) t = SOME u ==>
+      is_dynamic ct = is_dynamic (vyper_to_abi_type (E \\ k) t) /\
+      abi_member_head_size ct = abi_member_head_size (vyper_to_abi_type (E \\ k) t)) /\
+    (!u v av sb mem0.
+      evaluate_type (E \\ k) t = SOME u /\ value_has_type u v /\
+      vyper_to_abi (E \\ k) t v = SOME av /\ val_in_memory u v sb mem0 ==>
+      ?rv. enc ct rv = enc (vyper_to_abi_type (E \\ k) t) av /\
+        !mem. val_in_memory u v sb mem ==>
+          abi_encoder_open_input (type_to_abi_enc_info (sf \\ nsid_to_string k) ce t) ct rv sb (type_memory_size u) mem)` by
+    (gen_tac >> strip_tac >>
+     `?u. evaluate_type (E \\ k) t = SOME u /\ type_value_size u < type_value_size tv` by
+       metis_tac[evaluate_type_struct_child_size] >>
+     `abi_sfields_consistent_upto (type_value_size u) (sf \\ nsid_to_string k) (E \\ k)` by
+       (irule abi_sfields_consistent_upto_domsub >> simp[] >>
+        qexists `type_value_size tv` >> simp[]) >>
+     conj_tac >- simp[] >>
+     first_x_assum drule >> disch_then irule >> simp[] >>
+     qexists `E0` >> simp[] >> irule SUBMAP_TRANS >> qexists `E` >> simp[]) >>
+  `E \\ k SUBMAP E0` by (irule SUBMAP_TRANS >> qexists `E` >> simp[]) >>
+  drule_all abi_encode_translated_uniform_members >> strip_tac >>
+  drule_all abi_encode_element_metadata >> strip_tac >>
+  pure_rewrite_tac[LET_DEF] >> BETA_TAC >>
+  qpat_assum `FLOOKUP sf _ = SOME fields` (rewrite_tac o single) >>
+  rewrite_tac[option_case_def] >> BETA_TAC >>
+  `MAP (\(fn,fty,sz).
+      (type_to_abi_enc_info (sf \\ nsid_to_string k) ce fty,
+       abi_embedded_static_size ce.ce_struct_fields fty, type_memory_bytes ce fty,
+       is_abi_dynamic ce.ce_struct_fields fty)) fields =
+   MAP (\t. (type_to_abi_enc_info (sf \\ nsid_to_string k) ce t,
+       abi_embedded_static_size ce.ce_struct_fields t, type_memory_bytes ce t,
+       is_abi_dynamic ce.ce_struct_fields t)) (MAP SND args)` by
+    (qpat_x_assum `MAP (FST o SND) fields = MAP SND args`
+       (once_rewrite_tac o single o GSYM) >>
+     simp[MAP_MAP_o, o_DEF, pairTheory.LAMBDA_PROD]) >>
+  qexists `Tuple cts` >> irule abi_encoder_uniform_struct >> gvs[] >>
+  reverse conj_tac
+  >- metis_tac[LENGTH_MAP] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!i ei abi_sz mem_sz dyn. _` drule >>
+  disch_then drule >> strip_tac >> first_assum irule
 QED
 Finalise abi_encode_translated_uniform_source_upto
 
