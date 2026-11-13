@@ -155,6 +155,7 @@ Theorem array_index_outcome_post_compose_ptr:
 Proof
   rpt strip_tac >>
   irule array_index_outcome_compose_ptr >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`G1`, `\H v ee Gi tni u. Qidx H (INL v) ee Gi tni u`,
     `captured`, `left`, `mid`, `t`, `tn1`] >>
   simp[] >> conj_tac >- metis_tac[] >>
