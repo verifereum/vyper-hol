@@ -749,26 +749,6 @@ QED
 
 *)
 
-Theorem gas_variant_outcomes:
-  gas_variant si so ==> si.vs_outcomes = so.vs_outcomes
-Proof
-  rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
-QED
-
-Theorem gas_variant_call_ctx:
-  gas_variant si so ==> si.vs_call_ctx = so.vs_call_ctx
-Proof
-  rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
-QED
-
-Theorem gas_variant_initial_venom_state_rel:
-  gas_variant si so /\ initial_venom_state_rel tops am tx so ==>
-  initial_venom_state_rel tops am tx si
-Proof
-  rw[gas_variant_def] >>
-  qpat_x_assum `so = _` SUBST_ALL_TAC >>
-  gvs[initial_venom_state_rel_def, venom_env_rel_def]
-QED
 
 (* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
 (* The widened gate supplies the real stages' remaining source restrictions. *)
@@ -1002,18 +982,10 @@ Resume vyper_call_correct_asm_opt[pipeline]:
      qpat_x_assum `vs.vs_code = _` SUBST1_TAC >> simp[]) >>
   drule_all lower_vyper_runtime_unit_sym_src_ok >> strip_tac >>
   drule_all o1_pipeline_code_end_offset_ok >> strip_tac >>
-  `initial_venom_state_rel tops am txp vs_in` by
-    (irule gas_variant_initial_venom_state_rel >> qexists_tac `vs` >>
-     simp[Abbr `txp`]) >>
+  `initial_venom_state_rel tops am txp vs` by simp[Abbr `txp`] >>
+  drule_all runtime_source_gas_variant >> strip_tac >>
   `vs_in.vs_outcomes = vs.vs_outcomes` by
     (irule gas_variant_outcomes >> simp[]) >>
-  `vs_in.vs_call_ctx = vs.vs_call_ctx` by
-    (irule gas_variant_call_ctx >> simp[]) >>
-  `valid_vyper_call tops txp vs_in.vs_call_ctx.cc_calldata ret /\
-   call_outcomes_ok am txp vs_in.vs_outcomes` by gvs[] >>
-  `source_unit_execution_correct tops ret am txp unit vs_in` by
-    (irule lower_vyper_runtime_unit_correct >> simp[] >>
-     qexists_tac `rpolicy` >> simp[]) >>
   `?marks. source_unit_execution_correct_at
              (gas_explicit marks vs_in.vs_gas_readings) tops ret am txp unit vs_in` by
     metis_tac[source_unit_execution_correct_def] >>
@@ -1052,23 +1024,15 @@ Resume vyper_call_correct_asm_opt[source]:
      unit.cu_context vs_in` by
     (drule lower_vyper_runtime_unit_memory_ok >>
      disch_then (qspecl_then [`am`, `txp`, `ret`, `vs_in`] mp_tac) >>
-     impl_tac >- fs[] >> strip_tac >> simp[] >>
+     impl_tac >- gvs[] >> strip_tac >> simp[] >>
      metis_tac[external_call_dead_observations]) >>
   suspend "memory"
 QED
 
 Resume vyper_call_correct_asm_opt[memory]:
-  `mem_inv dload_offset_ok unit.cu_context vs_in` by
-    (irule lower_vyper_runtime_unit_dload_offset_ok >> simp[] >>
-     qexistsl_tac [`am`, `ret`, `rpolicy`, `tops`, `txp`] >> gvs[]) >>
-  `mem_inv dload_headroom_ok unit.cu_context vs_in` by
-    (irule lower_vyper_runtime_unit_dload_headroom_ok >> metis_tac[]) >>
-  `mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
-                            s.vs_code = vs_in.vs_code /\
-                            s.vs_data_section = vs_in.vs_data_section)
-     unit.cu_context vs_in` by
-    (irule lower_vyper_runtime_unit_dload_in_section >> simp[] >>
-     qexistsl_tac [`am`, `ret`, `rpolicy`, `tops`, `txp`] >> gvs[]) >>
+  drule runtime_source_dload_invariants >>
+  disch_then (qspecl_then [`am`, `txp`, `ret`, `vs_in`] mp_tac) >>
+  impl_tac >- gvs[] >> strip_tac >>
   `ctx_sim (external_call_dead txp
        (call_external (SOME vs.vs_outcomes) [] am txp))
        unit.cu_context out.po_unit.cu_context vs_in vs /\
