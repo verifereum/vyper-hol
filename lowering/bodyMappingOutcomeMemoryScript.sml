@@ -96,18 +96,18 @@ Proof
       (CONJUNCTS_THEN2 assume_tac
         (CONJUNCTS_THEN2 assume_tac
           (CONJUNCTS_THEN2 assume_tac strip_assume_tac))))) >>
-  drule_all mapping_subscript_code_parts >> strip_tac >>
   `expr_map_pre cenv cx env obj es` by
     metis_tac[expr_body_pre_map_subscript_base, expr_map_pre_subscript_base] >>
-  drule exprOperandVarTheory.compile_lower_value_var >> simp[] >> disch_tac >>
-  qpat_assum `compile_expr _ _ obj _ = _`
-    (mp_then Any mp_tac (cj 1 exprOperandVarTheory.compiler_compile_var)) >>
-  simp[] >> disch_tac >>
   `type_place_expr env obj = SOME (HashMapT kt vt)` by
     (drule_all expr_map_pre_checked_type >> simp[]) >>
   qpat_assum `type_place_expr _ obj = _`
     (strip_assume_tac o Q.SPECL [`cenv`, `idx`, `cx`] o
      MATCH_MP map_base_no_overlap) >>
+  drule_all mapping_subscript_code_parts >> strip_tac >>
+  drule exprOperandVarTheory.compile_lower_value_var >> simp[] >> disch_tac >>
+  qpat_assum `compile_expr _ _ obj _ = _`
+    (mp_then Any mp_tac (cj 1 exprOperandVarTheory.compiler_compile_var)) >>
+  simp[] >> disch_tac >>
   drule_all compile_mapping_operand_not_label >> disch_tac >>
   `gas_admissible (eval_expr cx obj) expr_map_res_ok es` by
     (irule subscript_result_base_admissible >>

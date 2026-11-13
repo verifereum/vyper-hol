@@ -6,8 +6,8 @@ Ancestors
 
 Theorem mapping_subscript_code_parts:
   compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
-  place_type cenv obj = MapPT kt vt /\ fn_has_code sa sb func /\
-  local_ptrs_reserved cenv sa ==>
+  place_type cenv obj = MapPT kt vt /\ ~copies_subscript_base cenv obj idx /\
+  fn_has_code sa sb func /\ local_ptrs_reserved cenv sa ==>
   ?bvv sm key sn hashed sp slot.
     compile_expr cenv ty obj sa = (bvv,sm) /\
     lower_value compile_expr cenv (expr_type idx) idx sm = (key,sn) /\

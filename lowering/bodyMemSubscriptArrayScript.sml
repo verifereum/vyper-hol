@@ -43,7 +43,7 @@ Proof
         (rpt strip_tac >>
          qpat_x_assum `!s tv t s' tv' t'. _`
            (qspecl_then [`s`, `tv`, `t`, `t`, `tv`, `t`] mp_tac) >>
-         fs[vyperStateTheory.return_def]) >>
+         fs[vyperStateTheory.return_def] >> disch_then irule >> metis_tac[]) >>
       irule compile_subscript_array_framed_base_mem_case >>
       simp[] >> metis_tac[]) >>
   irule compile_subscript_array_place_base_mem_case >>

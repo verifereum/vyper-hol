@@ -107,6 +107,9 @@ Proof
     (drule_all expr_body_pre_map_subscript_base >> simp[]) >>
   `type_place_expr env obj = SOME (HashMapT kt vt)` by
     (drule_all expr_map_pre_checked_type >> simp[]) >>
+  qpat_assum `type_place_expr _ obj = _`
+    (strip_assume_tac o Q.SPECL [`cenv`, `idx`, `cx`] o
+     MATCH_MP map_base_no_overlap) >>
   `~well_typed_expr env obj` by
     metis_tac[well_typed_expr_not_hashmap_place] >>
   `vt = Type ann` by
