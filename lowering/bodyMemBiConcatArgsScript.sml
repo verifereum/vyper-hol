@@ -199,7 +199,7 @@ Resume concat_args_sim_mem[head_normal]:
   `!H. valid_horizon cx st0 H (es_end with gas_obs := []).storage_trace ==>
        stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t2 /\
        storage_well_formed_on cx (es_end with gas_obs := []) (FST H)` by
-    (rpt strip_tac >>
+    (gen_tac >> strip_tac >>
      `valid_horizon cx st0 H es_end.storage_trace` by fs[] >>
      qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==>
                    expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
