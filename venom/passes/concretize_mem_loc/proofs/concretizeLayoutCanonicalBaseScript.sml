@@ -470,7 +470,7 @@ Theorem layout_canonical_ordinary_nonterm_success:
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   (MEM i.inst_opcode [NOP; ALLOCA; ASSIGN; ADD; SUB; SHL; SHR; SAR; OFFSET;
-      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE; TSTORE; EQ; LT; GT; RETURNDATASIZE; ASSERT; ASSERT_UNREACHABLE; MSTORE; MSTORE8; BUMP; PARAM; RETPC_PARAM; CODESIZE; DLOAD; INITIAL_FMP; BALANCE; SELFBALANCE; EXTCODESIZE; EXTCODEHASH] \/ context_read0_opcode i.inst_opcode \/
+      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE; TSTORE; EQ; LT; GT; RETURNDATASIZE; ASSERT; ASSERT_UNREACHABLE; MSTORE; MSTORE8; BUMP; DALLOCA; PARAM; RETPC_PARAM; CODESIZE; DLOAD; INITIAL_FMP; BALANCE; SELFBALANCE; EXTCODESIZE; EXTCODEHASH] \/ context_read0_opcode i.inst_opcode \/
     (clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT])) /\
   step_inst_base i s = OK post ==>
   ?tpost. step_inst_base j t = OK tpost /\
@@ -568,6 +568,18 @@ Proof
            (qpat_x_assum `inst_wf i` mp_tac >>
             simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
          drule_all layout_bump_trace_step >> metis_tac[]) >>
+     Cases_on `i.inst_opcode = DALLOCA`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         `?v. i.inst_outputs = [v]` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+         (* waits on P5f: the room premise comes from ~ctx_has_dalloca *)
+         `ctx_has_dalloca C ==>
+            ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp` by
+           simp[] >>
+         drule_all layout_dalloca_trace_step >> metis_tac[]) >>
      `?v. i.inst_outputs = [v]` by
        (qpat_x_assum `inst_wf i` mp_tac >>
         fs[MEM, context_read0_opcode_def, clean_value_shape_def, scalar_binary_opcode_def] >>
