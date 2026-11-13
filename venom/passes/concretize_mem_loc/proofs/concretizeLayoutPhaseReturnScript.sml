@@ -43,6 +43,8 @@ Proof
   `s.vs_labels = t.vs_labels` by fs[relocation_env_def] >>
   gvs[] >>
   `g.lop_cursor <= LENGTH es` by simp[] >>
+  `~ctx_has_dalloca C ==>
+   resolved_complete (EL g.lop_cursor (q0::qs)) ((rp,rv)::anns)` by fs[] >>
   drule_all concretize_return_read_agreement >> strip_tac >>
   `concretize_local_obs s t` by metis_tac[local_rel_def] >>
   drule_all concretize_return_observation >> strip_tac >>

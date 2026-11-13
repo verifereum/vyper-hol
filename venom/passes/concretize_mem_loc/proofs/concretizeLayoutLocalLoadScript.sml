@@ -34,6 +34,7 @@ Theorem concretize_word_load_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -142,6 +143,7 @@ Theorem concretize_mload_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -183,6 +185,7 @@ Theorem concretize_iload_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -208,7 +211,6 @@ Theorem concretize_iload_local_complete:
       (\s t. dead_result_rel D (Halt s) (Halt t)) post tpost /\
     relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
-    step_prov PG G inst post = SND o_f (origin_set rv [v] NONE) /\
     relocation_env post tpost /\ relocation_reader_context post tpost
 Proof
   strip_tac >>
@@ -216,14 +218,5 @@ Proof
   `MEM inst.inst_opcode [MLOAD;ILOAD]` by simp[] >>
   drule_all concretize_word_load_local_complete >> strip_tac >>
   drule_all concretize_word_load_execution_clean_lanes >> strip_tac >> gvs[] >>
-  (conj_tac >- suspend "ghost") >>
   fs[relocation_env_def, relocation_reader_context_def, update_var_def]
 QED
-Resume concretize_iload_local_complete[ghost]:
-  `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >> metis_tac[resolved_frame_erasure]) >>
-  gvs[] >> simp[step_prov_def, out_prov_def, set_prov_def,
-    origin_set_def, fmap_eq_flookup, FLOOKUP_o_f, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
-  gen_tac >> IF_CASES_TAC >> simp[]
-QED
-Finalise concretize_iload_local_complete

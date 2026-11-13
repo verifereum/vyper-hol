@@ -52,14 +52,18 @@ Theorem ptr_paired_owned_read_recovery:
   max_live_eom C' = SOME eom /\
   FLOOKUP positions (Allocation aid) = SOME (pa,sz) ==>
   read_byte (b+k) endpoint.po_state.vs_memory =
-    read_byte (pa+k) at.po_state.vs_memory
+    read_byte (pa+k) at.po_state.vs_memory \/
+  dyn_floor C vs <= b+k
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `dyn_floor C vs <= b+k` >- simp[] >> disj1_tac >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_source >> strip_tac >>
   `b <= b+k /\ b+k < b+sz` by decide_tac >>
-  drule_all ptr_endpoint_actual_protected_livesets >> strip_tac >>
+  qpat_assum `~(dyn_floor C vs <= b+k)` (fn th =>
+    drule_all ptr_endpoint_actual_protected_livesets >>
+    disch_then (strip_assume_tac o REWRITE_RULE [th])) >>
   `SUC w < LENGTH h` by decide_tac >>
   drule ptr_structural_trace_actual_writer_retained >>
   disch_then (qspecl_then [`w`,`b+k`] mp_tac) >>
@@ -111,6 +115,8 @@ Proof
    FLOOKUP (ptr_owner_view d (EL (SUC w) h)).cf_state.vs_allocas aid = SOME (b,sz)` by
     (qpat_x_assum `!n. w <= n /\ n < LENGTH h ==> _` (qspec_then `SUC w` mp_tac) >>
      simp[]) >>
+  `b+k < dyn_floor C (EL w h).po_state` by
+    (qpat_x_assum `~(dyn_floor C vs <= b+k)` mp_tac >> fs[dyn_floor_def]) >>
   `rho' (b+k) = pa+k` by
     (drule_all ptr_paired_write_owner_relocation >> simp[]) >>
   `read_byte (b+k) (EL (SUC w) h).po_state.vs_memory =

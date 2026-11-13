@@ -11,11 +11,10 @@ Theorem ptr_reachable_protected_byte_no_kill:
   EVERY (fn_ptr_ok P) ctx.ctx_functions /\ EVERY ssa_form ctx.ctx_functions /\
   EVERY fn_inst_wf ctx.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions /\
   wf_function fn /\ all_reachable fn /\
   ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) /\
   MEM inst (fn_insts fn) /\ ptr_discipline lo ctx vs /\
-  o1_ctx_shape ctx /\ ~ctx_has_dalloca ctx /\
+  o1_ctx_shape ctx /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ b <= byte /\ byte < b + sz /\
   step_inst fuel ctx inst s = OK s' /\ ~in_revert_forward fn s /\
   ~MEM (Allocation aid) (MAP FST imports) /\
