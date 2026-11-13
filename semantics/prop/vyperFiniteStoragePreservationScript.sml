@@ -726,7 +726,7 @@ Proof
   last_x_assum (qspec_then `StorageLock lock` mp_tac) >> simp[]
 QED
 
-Theorem lock_frame_preserves_storage_well_formed_on[local]:
+Theorem lock_frame_preserves_storage_well_formed_on:
   regions_consistent regions /\ storage_locks_separated regions locks /\
   storage_well_formed_on cx st regions /\ MEM lock locks /\
   lock + 1 <= dimword(:256) /\ st'.accounts = st.accounts /\
@@ -945,6 +945,91 @@ Proof
   qexists_tac `nr /\ error <> HaltException` >> Cases_on `error` >>
   gvs[finally_unless_halt_def, finally_def, ignore_bind_def, bind_def,
       pop_function_def, set_scopes_def, return_def, raise_def]
+QED
+
+Theorem intcall_defaults_body_runtime:
+  env_consistent env cx args_st /\ state_well_typed args_st /\
+  expr_results_typed (env,cx,args_st) es results /\
+  get_module_code cx src_id_opt = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,params,dflts,ret,body_stmts) /\
+  FLOOKUP env.fn_sigs (src_id_opt,fn) = SOME sig /\
+  LENGTH es <= LENGTH sig.param_types /\
+  LENGTH sig.param_types - sig.num_defaults <= LENGTH es /\
+  MAP expr_type es = TAKE (LENGTH es) sig.param_types /\
+  env_body.current_src = src_id_opt /\ env_body.type_defs = get_tenv cx /\
+  env_body.fn_sigs = env.fn_sigs /\ env_body.bare_globals = env.bare_globals /\
+  env_body.bare_global_assignable = env.bare_global_assignable /\
+  env_body.toplevel_vtypes = env.toplevel_vtypes /\ env_body.flag_members = env.flag_members /\
+  context_well_typed (cx with stk updated_by CONS (src_id_opt,fn)) /\
+  functions_well_typed (cx with stk updated_by CONS (src_id_opt,fn)) /\
+  call_evaluation_safe (cx with stk updated_by CONS (src_id_opt,fn))
+    (int_calls_exprs (DROP (LENGTH dflts - (LENGTH params - LENGTH es)) dflts)) /\
+  well_typed_exprs (defaults_env env_body) (DROP (LENGTH dflts - (LENGTH params - LENGTH es)) dflts) /\
+  runtime_consistent (defaults_env env_body) (cx with stk updated_by CONS (src_id_opt,fn))
+    (args_st with scopes := [FEMPTY]) /\
+  MAP expr_type dflts = MAP SND (DROP (LENGTH params - LENGTH dflts) params) /\
+  (!id typ. MEM (id,typ) params ==> FLOOKUP env_body.var_types id = SOME typ /\
+       IS_SOME (FLOOKUP env_body.var_assignable id)) /\
+  (!n ty. FLOOKUP env_body.var_types n = SOME ty ==> ?id. MEM (id,ty) params /\ n = id) /\
+  (!n b. FLOOKUP env_body.var_assignable n = SOME b ==> ?id typ. MEM (id,typ) params /\ n = id) /\
+  finally (do set_scopes [FEMPTY];
+    eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+      (DROP (LENGTH dflts - (LENGTH params - LENGTH es)) dflts) od)
+    (set_scopes args_st.scopes) args_st = (INL dflt_vs,defaults_st) /\
+  read_results cx results defaults_st = (INL vs,defaults_st) /\
+  lift_option_type (bind_arguments (get_tenv cx) params (vs ++ dflt_vs))
+    "IntCall bind_arguments" defaults_st = (INL call_env,defaults_st) /\
+  lock_if_nr cx nr (is_view_mut mut) defaults_st = (INL (),lock_st) ==>
+  runtime_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn))
+    (lock_st with scopes := [call_env])
+Proof
+  rpt strip_tac >>
+  drule default_finally_result >> strip_tac >>
+  qpat_assum `runtime_consistent (defaults_env env_body) _ _`
+    (strip_assume_tac o SRULE [runtime_consistent_def]) >>
+  drule_at (Pat `eval_exprs _ _ _ = _`) (cj 1 (cj 6 eval_scc_type_sound_results_mutual)) >>
+  disch_then (qspec_then `defaults_env env_body` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule_all default_restore_runtime_projections >> strip_tac >>
+  qpat_assum `case INL _ of INL vs => exprs_runtime_typed _ _ _ | INR _ => _`
+    (assume_tac o SRULE []) >>
+  drule_all read_results_restored_runtime_typed >> strip_tac >>
+  `env.type_defs = get_tenv cx /\ fn_sigs_consistent env.fn_sigs cx` by
+    (qpat_assum `env_consistent env cx args_st` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[vyperTypeInvariantsTheory.env_consistent_def,
+          vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+  `sig.param_types = MAP SND params /\ sig.num_defaults = LENGTH dflts` by
+    (qpat_assum `fn_sigs_consistent env.fn_sigs cx` mp_tac >>
+     qpat_assum `FLOOKUP env.fn_sigs _ = SOME sig` mp_tac >>
+     qpat_assum `get_module_code cx _ = SOME _` mp_tac >>
+     qpat_assum `lookup_callable_function _ _ _ = SOME _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[vyperTypeInvariantsTheory.fn_sigs_consistent_def] >>
+     rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[]) >>
+  `MAP expr_type es = TAKE (LENGTH es) (MAP SND params)` by metis_tac[] >>
+  `LENGTH params - LENGTH es <= LENGTH dflts` by (gvs[]) >>
+  drule_at (Pos hd) vyperTypeBindArgumentsTheory.intcall_bind_arguments_from_runtime_typed >>
+  disch_then (drule_at (Pat `exprs_runtime_typed (defaults_env _) _ _`)) >>
+  disch_then (drule_at (Pat `MAP expr_type _ = MAP SND _`)) >>
+  disch_then (qspecl_then [`cx with stk updated_by CONS (src_id_opt,fn)`, `defaults_st`] mp_tac) >>
+  (impl_tac >- (simp[vyperContextTheory.get_tenv_def] >> conj_tac >- gvs[] >> metis_tac[])) >> strip_tac >>
+  `call_env' = call_env` by
+    (qpat_assum `bind_arguments _ _ _ = SOME call_env'` mp_tac >>
+     qpat_assum `lift_option_type _ "IntCall bind_arguments" _ = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[vyperContextTheory.get_tenv_def, lift_option_type_def, return_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[return_def]) >>
+  qpat_x_assum `call_env' = call_env` SUBST_ALL_TAC >>
+  qpat_x_assum `lock_if_nr _ _ _ _ = _` (mp_tac o REWRITE_RULE [lock_if_nr_def]) >>
+  disch_then assume_tac >>
+  drule_at (Pat `(if _ then _ else _) _ = _`) intcall_live_pushed_body_preconditions >>
+  disch_then (qspecl_then [`env`, `env_body`] mp_tac) >>
+  disch_then (qspecl_then [`args_st`, `call_env`, `fn`] mp_tac) >>
+  (impl_tac >- (qpat_x_assum `defaults_st = _ with scopes := _` kall_tac >> simp[])) >>
+  strip_tac >>
+  qpat_x_assum `defaults_st = _ with scopes := _` kall_tac >>
+  simp[runtime_consistent_def] >> metis_tac[]
 QED
 
 Theorem eval_storage_well_formed_on_mutual:
@@ -3548,54 +3633,12 @@ Resume eval_storage_well_formed_on_mutual[IntCall_body_integration]:
   disch_then SUBST_ALL_TAC >>
   qmatch_asmsub_rename_tac `(if _ then _ else return ()) defaults_st = (INL (),lock_st)` >>
   qmatch_goalsub_rename_tac `lock_st with scopes := [call_env]` >>
-  drule default_finally_result >> strip_tac >>
-  qpat_assum `runtime_consistent (defaults_env env_body) _ _`
-    (strip_assume_tac o SRULE [runtime_consistent_def]) >>
-  drule_at (Pat `eval_exprs _ _ _ = _`) (cj 1 (cj 6 eval_scc_type_sound_results_mutual)) >>
-  disch_then (qspec_then `defaults_env env_body` mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  drule_all default_restore_runtime_projections >> strip_tac >>
   qpat_assum `case INL _ of INL results => expr_results_typed _ _ _ | INR _ => _`
     (assume_tac o SRULE []) >>
-  qpat_assum `case INL _ of INL vs => exprs_runtime_typed _ _ _ | INR _ => _`
-    (assume_tac o SRULE []) >>
-  drule_all read_results_restored_runtime_typed >> strip_tac >>
-  `env.type_defs = get_tenv cx /\ fn_sigs_consistent env.fn_sigs cx` by
-    (qpat_assum `env_consistent env cx args_st` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[vyperTypeInvariantsTheory.env_consistent_def,
-          vyperTypeInvariantsTheory.env_context_consistent_def]) >>
-  `sig.param_types = MAP SND callable2 /\ sig.num_defaults = LENGTH callable3` by
-    (qpat_assum `fn_sigs_consistent env.fn_sigs cx` mp_tac >>
-     qpat_assum `FLOOKUP env.fn_sigs _ = SOME sig` mp_tac >>
-     qpat_assum `get_module_code cx _ = SOME _` mp_tac >>
-     qpat_assum `lookup_callable_function _ _ _ = SOME _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[vyperTypeInvariantsTheory.fn_sigs_consistent_def] >>
-     rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[]) >>
-  `MAP expr_type es = TAKE (LENGTH es) (MAP SND callable2)` by metis_tac[] >>
-  `LENGTH callable2 - LENGTH es <= LENGTH callable3` by decide_tac >>
-  drule_at (Pos hd) vyperTypeBindArgumentsTheory.intcall_bind_arguments_from_runtime_typed >>
-  disch_then (drule_at (Pat `exprs_runtime_typed (defaults_env _) _ _`)) >>
-  disch_then (drule_at (Pat `MAP expr_type _ = MAP SND _`)) >>
-  disch_then (qspecl_then [`cx with stk updated_by CONS (src_id_opt,fn)`, `defaults_st`] mp_tac) >>
-  (impl_tac >- (simp[vyperContextTheory.get_tenv_def] >> metis_tac[])) >> strip_tac >>
-  `call_env' = call_env` by
-    (qpat_assum `bind_arguments _ _ _ = SOME call_env'` mp_tac >>
-     qpat_assum `lift_option_type _ "IntCall bind_arguments" _ = _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[vyperContextTheory.get_tenv_def, lift_option_type_def, vyperStateTheory.return_def, AllCaseEqs()] >>
-     rpt strip_tac >> gvs[vyperStateTheory.return_def]) >>
-  qpat_x_assum `call_env' = call_env` SUBST_ALL_TAC >>
-  drule_at (Pat `(if _ then _ else _) _ = _`) intcall_live_pushed_body_preconditions >>
-  disch_then (qspecl_then [`env`, `env_body`] mp_tac) >>
-  disch_then (qspecl_then [`args_st`, `call_env`, `fn`] mp_tac) >>
-  (impl_tac >- (qpat_x_assum `defaults_st = _ with scopes := _` kall_tac >> simp[])) >>
-  strip_tac >>
   `runtime_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn))
      (lock_st with scopes := [call_env])` by
-    (qpat_x_assum `defaults_st = _ with scopes := _` kall_tac >>
-     simp[runtime_consistent_def] >> metis_tac[]) >>
+    (irule intcall_defaults_body_runtime >>
+     simp[lock_if_nr_def] >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   suspend "IntCall_finite_body_cleanup"
 QED
 
