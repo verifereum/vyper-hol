@@ -174,7 +174,8 @@ Theorem gas_shadow_accesses_expr[local]:
 Proof
   ho_match_mp_tac accesses_expr_ind >>
   rw[accesses_expr_def, gas_shadow_expr_def, gas_shadow_builtin_def,
-     risky_builtin_def, pairTheory.PAIR_MAP_THM]
+     risky_builtin_def, pairTheory.PAIR_MAP_THM] >>
+  gvs[COND_RAND, risky_builtin_def]
 QED
 
 Theorem gas_shadow_int_calls_expr[local]:
