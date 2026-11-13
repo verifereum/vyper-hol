@@ -188,6 +188,7 @@ QED
 Theorem ptr_allocating_affine_owned_prefix:
   !n a h births TG j t u.
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  ptr_discipline lo C vs0 /\
   o1_run_state_ok vs0 /\ o1_ctx_shape C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
@@ -270,7 +271,7 @@ Proof
      disch_then (drule_at (Pat `ptr_ledger_block_alignment _ _ _ _`)) >>
      disch_then (drule_at (Pat `ptr_vars_transport _ _ _ _ _ _`)) >>
      disch_then (drule_at (Pat `step_inst _ _ _ _ = _`)) >>
-     disch_then drule >>
+     disch_then drule >> disch_then drule >>
      simp[] >> (impl_tac >- metis_tac[]) >> strip_tac >>
      qexistsl_tac [`delta`,`b`,`births`,`TG'`] >> simp[]) >>
   first_x_assum (qspec_then `b` mp_tac) >>

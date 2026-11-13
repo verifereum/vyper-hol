@@ -24,11 +24,12 @@ Theorem ptr_paired_fixed_actual_write_reflection:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\ x < lo /\ q < LENGTH done /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  (x < lo \/ dyn_floor C vs <= x) /\ q < LENGTH done /\
   x IN range_bytes (step_writes (EL q ht).po_inst
     (EL q ht).po_state (EL (SUC q) ht).po_state) ==>
   x IN range_bytes (step_writes (EL (EL q done) h).po_inst
@@ -37,6 +38,7 @@ Theorem ptr_paired_fixed_actual_write_reflection:
     (EL (EL q done) h).po_state
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `x < lo \/ _` (assume_tac o REWRITE_RULE [DISJ_EQ_IMP]) >>
   Cases_on `in_revert_forward (EL (EL q done) h).po_fn
     (EL (EL q done) h).po_state` >- simp[] >>
   simp[] >>
@@ -83,9 +85,6 @@ Proof
      BETA_TAC >> irule ptr_fn_inst_wf_flat >>
      fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
      first_x_assum drule >> simp[]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (qpat_x_assum `~ctx_has_dalloca C` mp_tac >>
-     simp[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `EL q done < LENGTH h` by decide_tac >>
   `fn_ptr_ok P aa.po_fn` by (fs[EVERY_MEM] >> metis_tac[]) >>
   `!u. u IN FDOM TGj ==> u IN fn_pv P aa.po_fn` by
@@ -97,8 +96,8 @@ Proof
     (qx_choose_then `dest` (qx_choose_then `z` (qx_choose_then `destt`
       (map_every assume_tac o CONJUNCTS)))))) >>
   unabbrev_all_tac >>
-  drule_all ptr_historical_write_classification_static >>
-  strip_tac
+  drule_all ptr_historical_write_classification >>
+  disch_then (DISJ_CASES_THEN2 (MAP_EVERY assume_tac o CONJUNCTS) strip_assume_tac)
   >- (`MEM (EL (EL q done) h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
         LENGTH (EL (SUC (EL q done)) h).po_state.vs_returndata =
         LENGTH (EL (SUC q) ht).po_state.vs_returndata` by simp[] >>
@@ -106,12 +105,11 @@ Proof
   drule ptr_structural_transcript_ownership >>
   disch_then (qspec_then `EL q done` mp_tac) >>
   simp[ptr_snapshot_ownership_def] >> strip_tac >>
-  drule_all ptr_source_ownership_static_prov_erases >>
-  simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_every_dyn] >> strip_tac >>
+  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
   `FLOOKUP bj (token,bid) = SOME (db,sb)` by
-    (qpat_x_assum `!v. FLOOKUP (EL (EL q done) h).po_prov v = _`
-       (qspec_then `dv` mp_tac) >>
-     simp[ptr_owner_project_def]) >>
+    (fs[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >>
+     qpat_x_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `dv` mp_tac) >>
+     simp[concretizePtrPrefixLedgerTheory.ptr_owner_erases_def]) >>
   `op_prov TGj ops.iao_ofst = SOME (token,bid)` by simp[op_prov_def] >>
   `destt = dest - n2w db + n2w pb` by
     (gvs[ptr_lookup_transport_some, ptr_value_transport_def]) >>
@@ -121,8 +119,14 @@ Proof
   `w2n destt <= x /\ x < w2n destt + w2n z` by
     (drule_all ptr_step_write_max_containment >> simp[]) >>
   `pb <= x /\ x - pb < sb` by decide_tac >>
-  `lo <= pb + (x-pb)` by
-    (irule ptr_stage_placements_reserved_prefix >>
+  Cases_on `x < lo`
+  >- (`lo <= pb + (x-pb)` by
+        (irule ptr_stage_placements_reserved_prefix >>
+         rpt (goal_assum (drule_at Any)) >> simp[]) >>
+      decide_tac) >>
+  `dyn_floor C vs <= x` by metis_tac[] >>
+  `pb + sb <= eom` by
+    (irule concretizePtrStageBoundsTheory.ptr_stage_placements_endpoint_bound >>
      rpt (goal_assum (drule_at Any)) >> simp[]) >>
-  decide_tac
+  Cases_on `ctx_has_dalloca C` >> fs[dyn_floor_def] >> decide_tac
 QED

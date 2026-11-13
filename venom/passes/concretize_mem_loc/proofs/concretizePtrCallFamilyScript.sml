@@ -515,7 +515,12 @@ Proof
      >- (simp[concretizePtrPairedFieldsTheory.ptr_paired_write_owner_def] >>
          rpt strip_tac >> disj1_tac >>
          Cases_on `w2n n < LENGTH post.vs_returndata` >>
-         gns[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+         gns[arithmeticTheory.MIN_DEF] >> decide_tac)
+     >- (`w2n x < dimword(:256)` by simp[wordsTheory.w2n_lt] >>
+         `dimword(:256) <= w2n x` by
+           (qpat_x_assum `_ <= w2n x` mp_tac >>
+            qpat_assum `~ctx_has_dalloca C` (fn th => rewrite_tac[th, dyn_floor_def])) >>
+         `F` suffices_by rewrite_tac[] >> decide_tac) >>
      `MEM token tokens` by (drule_all ptr_source_ownership_live_prov >> simp[]) >>
      simp[concretizePtrPairedFieldsTheory.ptr_paired_write_owner_def] >>
      rpt strip_tac >> disj2_tac >> disj1_tac >>

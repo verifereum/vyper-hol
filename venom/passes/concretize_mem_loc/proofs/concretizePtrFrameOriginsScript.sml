@@ -33,7 +33,16 @@ Theorem ptr_frame_site_step:
     (pointer_derived_vars fn (ptr_frame_site_roots dyn fn A PG site))
     (step_prov PG G inst s') site
 Proof
-  cheat
+  strip_tac >> irule ptr_site_step >> simp[] >>
+  reverse conj_tac
+  >- (qexists `fn` >> simp[] >>
+      metis_tac[pointer_derived_vars_closed, ptr_frame_site_roots_finite])
+  >> rpt strip_tac >>
+  irule (pointer_derived_vars_roots |> REWRITE_RULE [SUBSET_DEF]) >>
+  simp[ptr_frame_site_roots_finite] >>
+  simp[ptr_frame_site_roots_def] >> qexists `inst` >> simp[] >>
+  Cases_on `inst.inst_opcode = DALLOCA` >- (gvs[] >> metis_tac[]) >>
+  gvs[out_prov_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem ptr_frame_site_phis:

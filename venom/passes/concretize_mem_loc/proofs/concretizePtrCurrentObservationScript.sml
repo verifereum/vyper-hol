@@ -9,10 +9,41 @@ Ancestors
   concretizePtrPairedFields concretizePtrSharedFields
   concretizeStepStructure concretizeMemLocDefs
   venomExecProofs passSimulationDefs passSharedDefs unitLabelMapIdentity concretizePtrOpaqueRetpc
-  lowerDloadDefs
+  lowerDloadDefs lowerDloadDynHeadroom frameRawEndpoints frameRawProjection
+  unitTransformDefs concretizePtrRequestHistory concretizePtrTaintContent
   ptrDiscipline unitMemInv unitShapeDefs venomWf o1PassContract
   contextCodegenRel codegenRel memLocDefs pointerConfinedDefs
   venomInst list finite_map pred_set words arithmetic
+
+(* A source range at or above the dynamic floor lies in the dynamic region
+   [initial_fmp, fmp): the alloca frontier, with the DLOAD headroom still to
+   come, stays at or below the floor, so of the raw frontier check's cases
+   only the dynamic-region one is left. *)
+Theorem ptr_frame_dyn_range_in_fmp_region:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY wf_function C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ mem_inv dload_headroom_ok C vs /\
+  ~in_revert_forward fn s /\
+  MEM (off,len)
+    (source_memory_read_ranges inst s ++ source_memory_write_ranges inst s) /\
+  dyn_floor C vs <= off ==>
+  len = 0 \/ (w2n s.vs_initial_fmp <= off /\ off + len <= w2n s.vs_fmp)
+Proof
+  strip_tac >>
+  `raw_mem_ok C fn inst s` by (drule_all (Q.INST [`M` |-> `raw_mem_ok`] frame_reachable_mem_inv) >> simp[]) >>
+  `raw_reachable vs C fn inst s` by
+    metis_tac[frameRawProjectionTheory.frame_reachable_raw] >>
+  `s.vs_alloca_next + 32 * ctx_dload_count C <= dyn_floor C vs` by
+    metis_tac[ld_raw_dyn_headroom] >>
+  `inst_mem_below_frontier inst s` by
+    (fs[raw_mem_ok_def, inst_mem_ok_in_fn_def, in_revert_forward_def] >>
+     metis_tac[]) >>
+  qpat_x_assum `inst_mem_below_frontier _ _` mp_tac >>
+  rewrite_tac[inst_mem_below_frontier_def, EVERY_MEM] >>
+  disch_then (qspec_then `(off,len)` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  simp[] >> decide_tac
+QED
 
 Theorem ptr_paired_current_static_bound:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -38,5 +69,127 @@ Theorem ptr_paired_current_static_bound:
     len = 0 \/ off + len <= eom \/
     (w2n at.po_state.vs_initial_fmp <= off /\ off + len <= w2n at.po_state.vs_fmp))
 Proof
-  cheat
+  strip_tac >> Cases_on `in_revert_forward a.po_fn a.po_state`
+  >- (disj1_tac >> drule_all ptr_paired_prefix_forwarding >> simp[]) >>
+  disj2_tac >>
+  Cases_on `a.po_inst.inst_opcode = ALLOCA`
+  >- (gvs[concretize_inst_with_positions_def, AllCaseEqs()] >>
+      qpat_x_assum `_ = at.po_inst`
+        (mp_tac o AP_TERM ``\i:instruction. i.inst_opcode``) >>
+      simp[mk_nop_inst_def, mk_assign_inst_def] >> strip_tac >>
+      simp[source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
+  `at.po_inst = a.po_inst` by metis_tac[concretize_positions_unchanged] >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+     a.po_fn a.po_inst a.po_state` by
+    (drule ptr_gap_ownership_history >> strip_tac >>
+     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `active_inst a.po_fn a.po_inst a.po_state` by
+    (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frame_reachable_cases] >> metis_tac[]) >>
+  `MEM a.po_inst (fn_insts a.po_fn)` by
+    (fs[active_inst_def, fn_insts_MEM] >> metis_tac[lookup_block_MEM, MEM_EL]) >>
+  `inst_wf a.po_inst /\ fn_shape_ok a.po_fn` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
+     metis_tac[]) >>
+  `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
+     a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
+    (fs[ptr_paired_sample_def] >>
+     metis_tac[concretizePtrRequestHistoryTheory.ptr_history_content_labels]) >>
+  `a.po_state.vs_initial_fmp = at.po_state.vs_initial_fmp /\
+   a.po_state.vs_fmp = at.po_state.vs_fmp` by
+    (fs[ptr_paired_sample_def] >> drule ptr_history_content_control >>
+     simp[ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
+     metis_tac[]) >>
+  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
+  suspend "range_supply"
 QED
+
+Resume ptr_paired_current_static_bound[range_supply]:
+  markerLib.RESUME_TAC >> rpt disch_tac >>
+  `taint_ok a.po_fn a.po_taint a.po_inst a.po_state /\
+   access_ok lo a.po_prov a.po_fn a.po_inst a.po_state` by
+    (fs[ptr_discipline_def] >> metis_tac[]) >>
+  qpat_assum `ptr_discipline _ _ _` mp_tac >>
+  pure_rewrite_tac[ptr_discipline_def] >> strip_tac >>
+  `EVERY (fn_ptr_ok P) C.ctx_functions` by fs[EVERY_MEM] >>
+  `fn_ptr_ok P a.po_fn` by fs[EVERY_MEM] >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
+     metis_tac[]) >>
+  drule_all ptr_frame_current_static >> strip_tac >>
+  `FDOM a.po_prov SUBSET fn_pv P a.po_fn` by
+    (fs[ptr_static_support_def, SUBSET_DEF, FLOOKUP_DEF] >>
+     metis_tac[optionTheory.NOT_NONE_SOME]) >>
+  `opaque_use_ok a.po_fn /\ label_positions_ok a.po_inst` by
+    (fs[fn_shape_ok_def, EVERY_MEM, inst_shape_ok_def] >> metis_tac[]) >>
+  qpat_x_assum `at.po_inst = a.po_inst` (fn th => rewrite_tac[th]) >>
+  rpt gen_tac >> strip_tac >>
+  Q.SUBGOAL_THEN `?mops ranges_s ranges_t.
+     ((mops = mem_read_ops a.po_inst /\
+       ranges_s = source_memory_read_ranges a.po_inst a.po_state /\
+       ranges_t = source_memory_read_ranges a.po_inst at.po_state) \/
+      (mops = mem_write_ops a.po_inst /\
+       ranges_s = source_memory_write_ranges a.po_inst a.po_state /\
+       ranges_t = source_memory_write_ranges a.po_inst at.po_state)) /\
+     MEM (off,len) ranges_t`
+    (qx_choose_then `mops` (qx_choose_then `ranges_s`
+      (qx_choose_then `ranges_t` (map_every assume_tac o CONJUNCTS))))
+  >- metis_tac[MEM_APPEND] >>
+  suspend "range_bound"
+QED
+
+Resume ptr_paired_current_static_bound[range_bound]:
+  markerLib.RESUME_TAC >> rpt disch_tac >>
+  drule_all ptr_current_range_transport >>
+  disch_then (qx_choose_then `off_s` strip_assume_tac)
+  >- suspend "scalar_bound" >>
+  suspend "descriptor_bound"
+QED
+
+Resume ptr_paired_current_static_bound[scalar_bound]:
+  markerLib.RESUME_TAC >> rpt disch_tac >>
+  Cases_on `len = 0` >- simp[] >>
+  `off_s + len <= lo` by
+    (Q.SUBGOAL_THEN
+       `((ranges_s = source_memory_read_ranges a.po_inst a.po_state /\
+          mops = mem_read_ops a.po_inst) \/
+         (ranges_s = source_memory_write_ranges a.po_inst a.po_state /\
+          mops = mem_write_ops a.po_inst))` assume_tac
+     >- metis_tac[] >>
+     drule_all ptr_access_range_classification >>
+     strip_tac >> gvs[op_prov_def] >>
+     qpat_x_assum `!ops'. _` (qspec_then `ops` mp_tac) >> simp[]) >>
+  drule_all ptr_stage_fixed_region_bound >> simp[] >> decide_tac
+QED
+
+Resume ptr_paired_current_static_bound[descriptor_bound]:
+  markerLib.RESUME_TAC >> rpt disch_tac >>
+  Q.SUBGOAL_THEN
+    `((mem_read_ops a.po_inst = SOME ops /\
+       MEM (w2n x,len) (source_memory_read_ranges a.po_inst a.po_state)) \/
+      (mem_write_ops a.po_inst = SOME ops /\
+       MEM (w2n x,len) (source_memory_write_ranges a.po_inst a.po_state)))`
+    assume_tac >- metis_tac[] >>
+  drule_all ptr_paired_current_range_static_bound >>
+  disch_then (DISJ_CASES_THEN2 (fn th => simp[th])
+    (DISJ_CASES_THEN2 (fn th => simp[th]) strip_assume_tac)) >>
+  gvs[] >>
+  `EVERY wf_function C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
+  `MEM (w2n x,len) (source_memory_read_ranges a.po_inst a.po_state ++
+     source_memory_write_ranges a.po_inst a.po_state)` by
+    (simp[MEM_APPEND] >> metis_tac[]) >>
+  drule_all ptr_frame_dyn_range_in_fmp_region >>
+  qpat_x_assum `a.po_state.vs_initial_fmp = _` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `a.po_state.vs_fmp = _` (SUBST_ALL_TAC o SYM) >>
+  decide_tac
+QED
+
+Finalise ptr_paired_current_static_bound

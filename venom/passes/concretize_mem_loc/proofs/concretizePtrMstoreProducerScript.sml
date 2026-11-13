@@ -16,6 +16,7 @@ Ancestors
   contextCodegenRel codegenRel memLocDefs venomExecSemantics venomState venomInst
   concretizePtrValueTransport concretizePtrPrefixLedger concretizePtrBytes
   concretizePtrComparisonTransport concretizePtrRequestHistory finite_map list arithmetic
+  frameResolvedTrace
 
 Theorem ptr_mstore_transcript_successor:
   ptr_paired_prefix R lp positions lo vs C C'
@@ -26,7 +27,7 @@ Theorem ptr_mstore_transcript_successor:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
@@ -150,7 +151,7 @@ Theorem ptr_mstore_write_producer:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
@@ -254,8 +255,9 @@ Resume ptr_mstore_write_producer[classified]:
   `EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def, EVERY_MEM,
         fn_insts_MEM] >> metis_tac[]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `dyn_floor C a.po_state = dyn_floor C vs` by
+    (drule frameResolvedTraceTheory.frame_reachable_initial_fmp >>
+     simp[dyn_floor_def]) >>
   `!x. x IN FDOM TG ==> x IN fn_pv P a.po_fn` by
     (rpt strip_tac >>
      `?tag. FLOOKUP TG x = SOME tag` by metis_tac[FLOOKUP_DEF] >>
@@ -276,18 +278,23 @@ Resume ptr_mstore_write_producer[classified]:
     simp[source_memory_write_ranges_def, fixed_source_write_range_def, mem_write_ops_def] >>
   qabbrev_tac `ops = <|iao_ofst := op1; iao_size := SOME (Lit 32w);
     iao_max_size := SOME (Lit 32w)|>` >>
-  `(op_prov TG ops.iao_ofst = NONE /\
-    op_taint (EL (LENGTH h - 1) h).po_taint ops.iao_ofst = {} /\ w2n addr + 32 <= lo) \/
+  Q.SUBGOAL_THEN `(op_prov TG ops.iao_ofst = NONE /\
+    op_taint (EL (LENGTH h - 1) h).po_taint ops.iao_ofst = {} /\
+    (w2n addr + 32 <= lo \/ dyn_floor C vs <= w2n addr)) \/
    (?dv token bid db sb pb. ops.iao_ofst = Var dv /\ FLOOKUP TG dv = SOME (token,bid) /\
     FLOOKUP (EL (LENGTH h - 1) h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\ db <= w2n addr /\
-    w2n addr + 32 <= db+sb /\ pb+sb < dimword(:256))` by
-    (irule ptr_historical_write_classification_static >>
+    w2n addr + 32 <= db+sb /\ pb+sb < dimword(:256))`
+    (DISJ_CASES_THEN2 (MAP_EVERY assume_tac o CONJUNCTS) strip_assume_tac)
+  >- (irule ptr_historical_write_classification >>
      simp[Abbr `ops`] >>
+     conj_tac >- (qexists_tac `names` >> first_assum ACCEPT_TAC) >>
      conj_tac
      >- (qexists_tac `a.po_fn` >> simp[]) >>
-     rpt (goal_assum (drule_at Any)) >> simp[]) 
-  >- (fs[Abbr `ops`] >> suspend "fixed") >>
+     conj_tac >- (qexistsl [`C'`, `rpolicy`] >> fs[]) >>
+     rpt (goal_assum (drule_at Any)) >> simp[])
+  >- (qpat_x_assum `w2n addr + 32 <= lo \/ _` (assume_tac o REWRITE_RULE [DISJ_EQ_IMP]) >>
+      fs[Abbr `ops`] >> suspend "fixed") >>
   fs[Abbr `ops`] >> suspend "owned"
 QED
 
@@ -308,7 +315,8 @@ Resume ptr_mstore_write_producer[fixed]:
   reverse conj_tac
   >- (simp[ptr_paired_write_owner_def, step_writes_def,
         source_memory_write_ranges_def, fixed_source_write_range_def, range_bytes_def] >>
-      rpt strip_tac >> disj1_tac >> decide_tac) >>
+      rpt strip_tac >>
+      `x < lo \/ dyn_floor C vs <= x` by (fs[] >> decide_tac) >> fs[]) >>
   qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
   once_rewrite_tac[ptr_chrono_step_cases] >>
   simp[ptr_observe_def, ptr_observation_component_equality, is_terminator_def] >>
@@ -353,9 +361,9 @@ Resume ptr_mstore_write_producer[owned]:
   `MEM token tokens` by
     (drule_all ptr_source_ownership_live_prov >> simp[]) >>
   `FLOOKUP births (token,bid) = SOME (db,sb)` by
-    (drule_all ptr_source_ownership_static_prov_erases >>
-     simp[ptr_ledger_erases_every_dyn] >> strip_tac >>
-     first_x_assum (qspec_then `dv` mp_tac) >> gvs[]) >>
+    (drule_all ptr_source_ownership_prov_erases >>
+     simp[ptr_ledger_erases_def, ptr_owner_erases_def] >>
+     disch_then (qspec_then `dv` mp_tac o CONJUNCT1) >> gvs[]) >>
   drule ptr_structural_trace_embedding >> strip_tac >>
   drule ptr_structural_trace_target >> strip_tac >>
   drule ptr_chrono_history_end >> strip_tac >>
@@ -435,7 +443,7 @@ Theorem ptr_paired_prefix_mstore:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
