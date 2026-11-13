@@ -53,10 +53,10 @@ Theorem compile_for_immutable_frag_mem_from_outcome:
   stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   P es /\ lookup_scopes id es.scopes = NONE /\
-  gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx) es /\
+  gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx) es /\
   alloca_history func s /\ return_buf_frame d cenv st s ==>
   gas_outcome T (cx_tops cx) (ctx,func)
-    (eval_for cx tv id stmts vs) (es,s)
+    (eval_for cx tv id stmts (MAP Value vs)) (es,s)
     (\res ee t. res = INL () /\
        t.vs_current_bb = st'.cs_current_bb /\
        t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
@@ -104,7 +104,7 @@ Theorem compile_for_immutable_frag_mem_from_outcome:
   bound_length bd <= n /\ lookup_scopes id es.scopes = NONE /\
   P (es with gas_obs := []) /\
   (!gs. eval_iterator cx (Array (TopLevelName (ArrayT et bd) (src,name)))
-    (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) ==>
+    (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) ==>
   stmt_frag_mem d ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ty
       (For id et (Array (TopLevelName (ArrayT et bd) (src,name))) n stmts))
@@ -124,7 +124,7 @@ Proof
      strip_tac >> asm_rewrite_tac[]) >>
   `lookup_scopes id (es with gas_obs := []).scopes = NONE` by simp[] >>
   `LENGTH vs <= n` by decide_tac >>
-  `gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx)
+  `gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx)
      (es with gas_obs := [])` by
     (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
      simp[gas_admissible_def, Once evaluate_def, lift_option_type_def,
@@ -156,10 +156,10 @@ Resume compile_for_immutable_frag_mem_from_outcome[source_prefix]:
        ignore_bind_def, bind_assoc] >>
      `gas_marked_exec T (ctx,func)
        (eval_iterator cx (Array (TopLevelName (ArrayT et bd) (src,name)))) (es,s0)
-       [] (INL vs) es (OK s0)` by
+       [] (INL (MAP Value vs)) es (OK s0)` by
        (simp[gas_marked_exec_def, gas_marked_path_def] >>
         irule (cj 1 gas_path_mem_rules) >> simp[]) >>
-     drule gas_exempt_cert_bind_values >>
+     drule gas_exempt_cert_bind_results >>
      simp[] >> disch_then irule >>
      simp[check_def, compatible_bound_def, vyperStateTheory.assert_def, bind_return,
        GSYM ignore_bind_def] >>
@@ -221,7 +221,7 @@ Theorem compile_for_immutable_frag_mem:
   bound_length bd <= n /\ lookup_scopes id es.scopes = NONE /\
   P (es with gas_obs := []) /\
   (!gs. eval_iterator cx (Array (TopLevelName (ArrayT et bd) (src,name)))
-    (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) ==>
+    (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) ==>
   stmt_frag_mem d ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ty
       (For id et (Array (TopLevelName (ArrayT et bd) (src,name))) n stmts))

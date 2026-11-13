@@ -56,10 +56,10 @@ Theorem immutable_compiled_loop_outcome_mem:
   stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   P es /\ lookup_scopes id es.scopes = NONE /\
-  gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx) es /\
+  gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx) es /\
   alloca_history func s /\ return_buf_frame d cenv st s ==>
   gas_outcome T (cx_tops cx) (ctx,func)
-    (eval_for cx tv id stmts vs) (es,s)
+    (eval_for cx tv id stmts (MAP Value vs)) (es,s)
     (\res ee t. res = INL () /\
        t.vs_current_bb = st'.cs_current_bb /\
        t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
