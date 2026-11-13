@@ -19930,7 +19930,7 @@ Proof
          qpat_x_assum `bb = EL index fn0.fn_blocks` SUBST_ALL_TAC >>
          qpat_x_assum `dfg = dfg_build_function fn0` SUBST_ALL_TAC >>
          simp[stateEquivProofsTheory.state_equiv_refl] >>
-         rpt conj_tac >> TRY (first_assum MATCH_ACCEPT_TAC) >>
+         rpt conj_tac >>
          asm_simp_tac (srw_ss()) [] >>
          qpat_assum `s.vs_current_bb = _` (fn th => rewrite_tac[GSYM th]) >>
          first_assum MATCH_ACCEPT_TAC) >>
@@ -20124,14 +20124,15 @@ Theorem mm_local_payload_word_steps[local]:
     OK (update_var v w (write_memory_with_expansion dst bs t))
 Proof
   strip_tac >> conj_tac
-  >- (Cases_on `mode` >>
+  >- (Cases_on `mode` >> fs[] >>
       gvs[mk_load_inst_def, mode_load_opcode_def,
-        venomExecSemanticsTheory.step_inst_non_invoke,
-        venomExecSemanticsTheory.step_inst_base_def,
-        venomExecSemanticsTheory.exec_read1_def,
+        venomExecSemanticsTheory.step_inst_non_invoke] >>
+      simp[stepInstBaseLib.opcode_clause ``CALLDATALOAD``,
+        stepInstBaseLib.opcode_clause ``DLOAD``] >>
+      simp[venomExecSemanticsTheory.exec_read1_def,
         venomStateTheory.eval_operand_def, wordsTheory.w2n_n2w]) >>
   simp[mk_mstore_from_load_def, venomExecSemanticsTheory.step_inst_non_invoke,
-    venomExecSemanticsTheory.step_inst_base_def,
+    stepInstBaseLib.opcode_clause ``MSTORE``,
     venomExecSemanticsTheory.exec_write2_def,
     venomStateTheory.eval_operand_def, wordsTheory.w2n_n2w,
     venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
@@ -21734,6 +21735,262 @@ Proof
   (impl_tac >- (asm_rewrite_tac[] >>
     simp[Abbr `R`, state_equiv_def, execution_equiv_def])) >>
   simp[Abbr `P`] >> metis_tac[mm_local_function_forget_vars]
+QED
+
+Theorem mm_local_payload_nonterminator_stop[local]:
+  mm_local_payload_cut cap is gs H n excluded pc t /\
+  (i.inst_opcode = INVOKE ==> mm_local_pending_indices is gs n = []) /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  ~is_terminator i.inst_opcode /\
+  ~(?err. step_inst fuel ctx i (H n) = Error err) /\
+  ~(?u. step_inst fuel ctx i (H n) = OK u) ==>
+  lift_result (\_ _. F) (execution_equiv excluded) revert_equiv
+    (step_inst fuel ctx i (H n)) (step_inst fuel ctx i t)
+Proof
+  strip_tac >> Cases_on `i.inst_opcode = INVOKE`
+  >- (irule mm_local_state_non_ok >> metis_tac[mm_local_payload_cut_empty]) >>
+  `state_equiv excluded
+    ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) t` by
+    gvs[mm_local_payload_cut_def, state_equiv_frame, mm_local_nonmemory_frame_def,
+      stateFrameTheory.state_frame_def, venomStateTheory.lookup_var_def,
+      venomStateTheory.venom_state_component_equality] >>
+  Cases_on `step_inst fuel ctx i (H n)` >> gvs[lift_result_def]
+  >- (drule opcodeClassTheory.step_inst_halt_opcodes >> strip_tac >>
+      gvs[venomInstTheory.is_terminator_def])
+  >- (drule_all mm_local_state_noninvoke_abort >>
+      strip_tac >> simp[lift_result_def])
+  >- (gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+      drule opcodeClassTheory.step_inst_base_intret_opcodes >> strip_tac >>
+      gvs[venomInstTheory.is_terminator_def])
+QED
+
+Theorem mm_local_payload_terminator_result[local]:
+  mm_local_payload_cut cap is gs H n excluded pc t /\
+  mm_local_pending_indices is gs n = [] /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  is_terminator i.inst_opcode ==>
+  lift_result
+    (\u v. state_equiv excluded (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+    (execution_equiv excluded) revert_equiv
+    (dft_exec_suffix fuel ctx [i] (H n)) (dft_exec_suffix fuel ctx [i] t)
+Proof
+  strip_tac >> irule mm_local_state_terminator_result >>
+  metis_tac[mm_local_payload_cut_empty]
+QED
+
+
+Theorem mm_local_payload_live_load_step[local]:
+  mode IN {CalldataMerge; DloadMerge} /\
+  bytes = (if mode = CalldataMerge then (\u. u.vs_call_ctx.cc_calldata)
+           else (\u. u.vs_data_section)) /\
+  step_inst fuel ctx inst s = OK t /\ ~is_terminator inst.inst_opcode /\
+  (!v src. FLOOKUP ss.ss_loads v = SOME src ==>
+    lookup_var v s = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src (bytes s) ++ REPLICATE 32 0w)))) /\
+  (!v src. FLOOKUP ss.ss_loads v = SOME src ==> ~MEM v inst.inst_outputs) ==>
+  !v src. FLOOKUP (scan_inst dfg mode ss inst).ss_loads v = SOME src ==>
+    lookup_var v t = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src (bytes t) ++ REPLICATE 32 0w)))
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule mm_local_scan_lookup_step >> strip_tac
+  >- (`lookup_var v t = lookup_var v s` by
+        (irule basePtrProofsTheory.step_inst_preserves_lookup >> metis_tac[]) >>
+      `t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section` by
+        metis_tac[venomInstProofsTheory.step_preserves_call_ctx,
+          venomInstProofsTheory.step_preserves_data_section] >>
+      gvs[] >> metis_tac[]) >>
+  `mode = CalldataMerge \/ mode = DloadMerge` by gvs[] >>
+  gvs[mode_load_opcode_def, venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_def, venomExecSemanticsTheory.exec_read1_def,
+    venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+    venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem mm_local_payload_live_load_cut[local]:
+  !n h states fn0 supply index k bb sk fuel ctx mode bytes.
+  mode IN {CalldataMerge; DloadMerge} /\
+  bytes = (if mode = CalldataMerge then (\u. u.vs_call_ctx.cc_calldata)
+           else (\u. u.vs_data_section)) /\
+  wf_ssa fn0 /\ wf_function fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME mode) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  h+n <= LENGTH bb.bb_instructions /\ n < LENGTH states /\
+  (FOLDL (scan_inst (dfg_build_function fn0) mode) empty_scan_state
+    (TAKE h bb.bb_instructions)).ss_loads = FEMPTY /\
+  (!r. r < n ==>
+    ~is_terminator (EL (h+r) bb.bb_instructions).inst_opcode /\
+    ?t. step_inst fuel ctx (EL (h+r) bb.bb_instructions) (EL r states) = OK t /\
+        EL (SUC r) states = t with vs_inst_idx := SUC (EL r states).vs_inst_idx) ==>
+  !v src. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode)
+      empty_scan_state (TAKE (h+n) bb.bb_instructions)).ss_loads v = SOME src ==>
+    lookup_var v (EL n states) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src (bytes (EL n states)) ++ REPLICATE 32 0w)))
+Proof
+  Induct_on `n`
+  >- (rpt strip_tac >> gvs[]) >>
+  rpt strip_tac >>
+  `!v src. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode)
+      empty_scan_state (TAKE (h+n) bb.bb_instructions)).ss_loads v = SOME src ==>
+    lookup_var v (EL n states) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src (bytes (EL n states)) ++ REPLICATE 32 0w)))` by
+    (first_x_assum match_mp_tac >>
+     qexistsl [`supply`,`index`,`k`,`sk`,`fuel`,`ctx`] >>
+     simp[] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `h+n < LENGTH bb.bb_instructions` by decide_tac >>
+  `~is_terminator (EL (h+n) bb.bb_instructions).inst_opcode /\
+    ?t. step_inst fuel ctx (EL (h+n) bb.bb_instructions) (EL n states) = OK t /\
+        EL (SUC n) states = t with vs_inst_idx := SUC (EL n states).vs_inst_idx` by
+    (first_x_assum irule >> simp[]) >>
+  `!u a. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode)
+      empty_scan_state (TAKE (h+n) bb.bb_instructions)).ss_loads u = SOME a ==>
+    ~MEM u (EL (h+n) bb.bb_instructions).inst_outputs` by
+    (metis_tac[mm_local_live_cut_fresh]) >>
+  `~is_terminator (EL (h+n) bb.bb_instructions).inst_opcode` by
+    (qpat_x_assum `!r. r < SUC n ==> _` (qspec_then `n` mp_tac) >> simp[]) >>
+  mp_tac (Q.INST [`ss` |-> `FOLDL (scan_inst (dfg_build_function fn0) mode)
+      empty_scan_state (TAKE (h+n) bb.bb_instructions)`,
+    `inst` |-> `EL (h+n) bb.bb_instructions`, `s` |-> `EL n states`,
+    `dfg` |-> `dfg_build_function fn0`] (SPEC_ALL mm_local_payload_live_load_step)) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  disch_then (qspecl_then [`v`,`src`] mp_tac) >>
+  gvs[arithmeticTheory.ADD_CLAUSES, rich_listTheory.TAKE_SUC_BY_TAKE,
+      rich_listTheory.FOLDL_SNOC, venomStateTheory.lookup_var_def]
+QED
+
+Theorem mm_local_payload_live_load_history[local]:
+  mode IN {CalldataMerge; DloadMerge} /\
+  bytes = (if mode = CalldataMerge then (\u. u.vs_call_ctx.cc_calldata)
+           else (\u. u.vs_data_section)) /\
+  wf_ssa fn0 /\ wf_function fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME mode) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  h = phi_prefix_length bb.bb_instructions /\
+  h <= j /\ j <= LENGTH bb.bb_instructions /\
+  (!q. h <= q /\ q < j ==>
+    ~is_terminator (EL q bb.bb_instructions).inst_opcode /\
+    ?u. step_inst fuel ctx (EL q bb.bb_instructions) (H q) = OK u /\
+        H (SUC q) = u with vs_inst_idx := SUC (H q).vs_inst_idx) ==>
+  !v src. FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode)
+      empty_scan_state (TAKE j bb.bb_instructions)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src (bytes (H j)) ++ REPLICATE 32 0w)))
+Proof
+  strip_tac >>
+  mp_tac (Q.SPECL [`j-h`,`h`,`GENLIST (\r. H (h+r)) (SUC (j-h))`,
+    `fn0`,`supply`,`index`,`k`,`bb`,`sk`,`fuel`,`ctx`,`mode`,`bytes`]
+    mm_local_payload_live_load_cut) >>
+  `h + (j-h) = j` by decide_tac >>
+  simp[mm_local_scan_phi_prefix, empty_scan_state_def, EL_GENLIST] >>
+  impl_tac >- (rpt strip_tac >>
+    qpat_x_assum `!q. _ ==> ~is_terminator _ /\ _`
+      (qspec_then `r + phi_prefix_length bb.bb_instructions` mp_tac) >>
+    (impl_tac >- (gvs[] >> decide_tac)) >> simp[arithmeticTheory.ADD_CLAUSES]) >> simp[]
+QED
+
+Theorem mm_local_payload_stopping_history[local]:
+  mode IN {CalldataMerge; DloadMerge} /\
+  wf_ssa fn0 /\ wf_function fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME mode) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\ h = phi_prefix_length is /\
+  s.vs_inst_idx = h /\ s.vs_current_bb = bb.bb_label /\
+  cd = (if mode = CalldataMerge then s.vs_call_ctx.cc_calldata else s.vs_data_section) /\
+  EVERY (\((p,d',id),f,i,t). p = [] ==> static_mem_ok eom ctx f i t)
+    (trace_block [] d fuel ctx fn bb s) /\
+  ~(?err. exec_block fuel ctx bb s = Error err) ==>
+  ?n H. h <= n /\ n < LENGTH is /\ H h = s /\
+    (!q. h <= q /\ q <= n ==>
+      (H q).vs_inst_idx = q /\ (H q).vs_current_bb = bb.bb_label /\
+      static_mem_ok eom ctx fn (EL q is) (H q)) /\
+    (!q. h <= q /\ q < n ==>
+      ~is_terminator (EL q is).inst_opcode /\
+      ?u. step_inst fuel ctx (EL q is) (H q) = OK u /\
+        H (SUC q) = u with vs_inst_idx := SUC q) /\
+    (is_terminator (EL n is).inst_opcode \/
+      ~(?u. step_inst fuel ctx (EL n is) (H n) = OK u)) /\
+    exec_block fuel ctx bb s = dft_exec_suffix fuel ctx [EL n is] (H n) /\
+    (!j. (if mode = CalldataMerge then (H j).vs_call_ctx.cc_calldata
+          else (H j).vs_data_section) = cd) /\
+    (!j dst v src. j < LENGTH is /\ (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dst; Var v] /\
+      FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode) empty_scan_state
+        (TAKE j is)).ss_loads v = SOME src ==>
+      lookup_var v (H j) = SOME (word_of_bytes T (0w:bytes32)
+        (TAKE 32 (DROP src cd ++ REPLICATE 32 0w))))
+
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `h <= LENGTH bb.bb_instructions` by
+    simp[venomExecProofsTheory.phi_prefix_length_le] >>
+  `?n H. h <= n /\ n < LENGTH bb.bb_instructions /\ H h = s /\
+    (!q. h <= q /\ q <= n ==> (H q).vs_inst_idx = q) /\
+    (!q. h <= q /\ q < n ==>
+      ~is_terminator (EL q bb.bb_instructions).inst_opcode /\
+      ?u. step_inst fuel ctx (EL q bb.bb_instructions) (H q) = OK u /\
+        H (SUC q) = u with vs_inst_idx := SUC q) /\
+    (!q. h <= q /\ q <= n ==>
+      static_mem_ok eom ctx fn (EL q bb.bb_instructions) (H q)) /\
+    (is_terminator (EL n bb.bb_instructions).inst_opcode \/
+      ~(?u. step_inst fuel ctx (EL n bb.bb_instructions) (H n) = OK u)) /\
+    exec_block fuel ctx bb s = dft_exec_suffix fuel ctx [EL n bb.bb_instructions] (H n)` by
+    (irule mm_local_source_stopping_history >> simp[] >> metis_tac[]) >>
+  `!q. h <= q /\ q <= n ==> (H q).vs_current_bb = bb.bb_label` by
+    metis_tac[mm_local_source_history_label] >>
+  `!q. h <= q /\ q <= n ==>
+    (H q).vs_call_ctx = s.vs_call_ctx /\
+    (H q).vs_data_section = s.vs_data_section` by
+    (rpt strip_tac >>
+     `h + (q-h) = q` by decide_tac >>
+     mp_tac (Q.SPECL [`q-h`,`h`,`H`,`is`,`fuel`,`ctx`]
+       mm_local_payload_history_fields) >>
+     (impl_tac >- (gvs[] >> rpt strip_tac >> metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS])) >>
+     simp[]) >>
+  qabbrev_tac `H0 = \j. if j < h then s else H j` >>
+  `!j. j <= n ==>
+    (if mode = CalldataMerge then (H0 j).vs_call_ctx.cc_calldata
+     else (H0 j).vs_data_section) = cd` by
+    (rpt strip_tac >> Cases_on `j < h` >> simp[Abbr `H0`] >>
+     `h <= j` by decide_tac >> metis_tac[]) >>
+  `!j dst v src. j <= n /\ j < LENGTH is /\
+    (EL j is).inst_opcode = MSTORE /\
+    (EL j is).inst_operands = [Lit dst; Var v] /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H0 j) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src cd ++ REPLICATE 32 0w)))` by
+    (rpt strip_tac >> Cases_on `j < h`
+     >- (`EVERY (\i. i.inst_opcode = PHI) (TAKE h is)` by
+           simp[analysisSimProofsBaseTheory.phi_prefix_all_phi] >>
+         `(EL j is).inst_opcode = PHI` by
+           (qpat_x_assum `EVERY _ (TAKE h is)`
+             (fn th => mp_tac (Q.SPEC `j` (REWRITE_RULE[EVERY_EL] th))) >>
+           simp[LENGTH_TAKE,EL_TAKE] >> gvs[LENGTH_TAKE,EL_TAKE] >> decide_tac) >> gvs[]) >>
+     `h <= j /\ j <= LENGTH bb.bb_instructions` by gvs[] >>
+     mp_tac (Q.INST [`bytes` |-> `(if mode = CalldataMerge then (\u. u.vs_call_ctx.cc_calldata)
+       else (\u. u.vs_data_section))`]
+       (SPEC_ALL mm_local_payload_live_load_history)) >>
+     (impl_tac >- (gvs[] >> rpt strip_tac >>
+       metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS,arithmeticTheory.LESS_IMP_LESS_OR_EQ])) >>
+     strip_tac >> simp[Abbr `H0`] >> gvs[] >> metis_tac[]) >>
+  `?H'. (!j. j <= n ==> H' j = H0 j) /\
+    (!j. (if mode = CalldataMerge then (H' j).vs_call_ctx.cc_calldata
+          else (H' j).vs_data_section) = cd) /\
+    (!j dst v src. j < LENGTH is /\ (EL j is).inst_opcode = MSTORE /\
+      (EL j is).inst_operands = [Lit dst; Var v] /\
+      FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode) empty_scan_state
+        (TAKE j is)).ss_loads v = SOME src ==>
+      lookup_var v (H' j) = SOME (word_of_bytes T (0w:bytes32)
+        (TAKE 32 (DROP src cd ++ REPLICATE 32 0w))))` by
+    (irule mm_local_payload_prefix_extend >> metis_tac[]) >>
+  `!j. h <= j /\ j <= n ==> H' j = H j` by
+    (rpt strip_tac >> simp[Abbr `H0`] >> metis_tac[arithmeticTheory.NOT_LESS]) >>
+  qexistsl [`n`,`H'`] >>
+  gvs[] >> rpt strip_tac >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ,
+    arithmeticTheory.LESS_OR]
 QED
 
 Theorem mm_local_stage_correct:
