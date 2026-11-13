@@ -29,7 +29,8 @@ Proof
     (fs[intcall_frame_ok_def] >> Cases_on `fp.jc_rb` >> gvs[]) >>
   simp[intcall_stmt_exit_def] >> disj2_tac >>
   conj_tac
-  >- (simp[intret_q_def] >> qexists_tac `t` >>
+  >- (irule intret_q_intro >>
+      qexistsl_tac [`<|iret_values := ws; iret_adopt_fmp := NONE|>`, `t`] >>
       simp[result_rel_def, state_rel_gas_obs]) >>
   simp[eval_operand_return_unlock] >> conj_tac
   >- (qpat_x_assum `t = _` SUBST1_TAC >> fs[intcall_joint_res_def, intcall_expr_res_def]) >>
