@@ -191,6 +191,87 @@ Proof
   imp_res_tac val_store_size_le >> decide_tac
 QED
 
+Theorem toplevel_slot_single_allocation_owned:
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    vv_post H ctx func cenv cx (TopLevelName ann nsid) es sa sb s0 ee tv vv s) /\
+  compile_alloc_buffer nb sb = (buf,mid) /\ fn_has_code sb mid func /\
+  buf.buf_operand = Var root /\ nb < dimword (:256) /\
+  u = update_var root d (buffer_allocation_fields s sb.cs_next_id nb) /\
+  step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
+  a = u with vs_inst_idx := LENGTH mid.cs_current_insts /\
+  slot_copy_runtime_frame mid d 1 a z ==>
+  FLOOKUP z.vs_allocas sb.cs_next_id = SOME (w2n d,nb)
+Proof
+  strip_tac >>
+  `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx ee s` by
+    (fs[storage_trace_domain_def] >>
+     `vv_post (storage_trace_horizon ee.storage_trace) ctx func cenv cx
+       (TopLevelName ann nsid) es sa sb s0 ee tv vv s` by metis_tac[] >>
+     fs[vv_post_def]) >>
+  `MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]) (fn_insts func)` by
+    (drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[]) >>
+  `?b. FLOOKUP u.vs_allocas sb.cs_next_id = SOME (b,nb) /\
+       b+nb < dimword (:256) /\ eval_operand (Var root) u = SOME (n2w b)` by
+    (drule_all alloca_step_site >> simp[]) >>
+  `b = w2n d` by
+    (qpat_x_assum `eval_operand (Var root) u = _` mp_tac >>
+     simp[venomStateTheory.update_var_def, eval_operand_def, lookup_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >>
+     disch_then (mp_tac o AP_TERM ``w2n:bytes32 -> num``) >>
+     `b < dimword (:256)` by decide_tac >> simp[]) >>
+  fs[exprPtrUnwrapRuntimeFrameTheory.slot_copy_runtime_frame_def] >>
+  qpat_x_assum `a = _` (fn th => fs[th]) >> gvs[]
+QED
+
+Theorem toplevel_slot_single_frame_facts:
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    vv_post H ctx func cenv cx (TopLevelName ann nsid) es sa sb s0 ee tv vv s /\
+    ghost_inv_at (DF H) lo ret cenv cx ee G tn s) /\
+  local_ptrs_reserved cenv sb /\
+  (!x. not_fresh_at sb x ==> lookup_var x z = lookup_var x s) /\
+  (!name b len. local_region cenv ee.scopes s name b len ==>
+    w2n (d:bytes32)+nb <= b \/ b+len <= w2n d) /\
+  u = update_var root d (buffer_allocation_fields s sb.cs_next_id nb) /\
+  a = u with vs_inst_idx := LENGTH mid.cs_current_insts /\
+  slot_copy_runtime_frame mid d 1 a z /\
+  tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+  z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+  z.vs_call_ctx = s.vs_call_ctx /\ z.vs_requests = s.vs_requests ==>
+  (!name b len. local_region cenv ee.scopes z name b len ==>
+    w2n d+nb <= b \/ b+len <= w2n d) /\
+  z.vs_immutables = s.vs_immutables /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==> stor_taint_ok_at (DF H) tnf z) /\
+  local_ptrs_rel func cenv ee.scopes s
+Proof
+  strip_tac >>
+  `!name b len. local_region cenv ee.scopes z name b len ==>
+     w2n d+nb <= b \/ b+len <= w2n d` by
+    (rpt strip_tac >>
+     `local_region cenv ee.scopes s name b len` by
+       metis_tac[exprSimCopyTheory.copy_buffer_local_region_frame] >> metis_tac[]) >>
+  `z.vs_immutables = s.vs_immutables` by
+    (qpat_x_assum `slot_copy_runtime_frame _ _ _ _ _` mp_tac >>
+     simp[exprPtrUnwrapRuntimeFrameTheory.slot_copy_runtime_frame_def] >> strip_tac >>
+     qpat_x_assum `copy_static _ = copy_static _`
+       (mp_tac o AP_TERM ``\r:venom_state. r.vs_immutables``) >>
+     simp[exprSimStorageCopyTheory.copy_static_def] >>
+     Cases_on `FLOOKUP s.vs_allocas sb.cs_next_id` >>
+     simp[bufferAllocationExecutionTheory.buffer_allocation_fields_def,
+          venomStateTheory.update_var_def]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stor_taint_ok_at (DF H) tnf z` by
+    (rpt strip_tac >>
+     `ghost_inv_at (DF H) lo ret cenv cx ee G tn s` by metis_tac[] >>
+     fs[ghost_inv_at_def, stor_taint_ok_at_def]) >>
+  simp[] >> fs[storage_trace_domain_def] >>
+  `vv_post (storage_trace_horizon ee.storage_trace) ctx func cenv cx
+    (TopLevelName ann nsid) es sa sb s0 ee tv vv s` by metis_tac[] >>
+  fs[vv_post_def, stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
+  metis_tac[]
+QED
+
 Theorem toplevel_slot_single_posts:
   compile_expr cenv ty (TopLevelName ann nsid) sa = (LocatedValue t p,sm) /\
   storage_trace_domain cx st0 ee.storage_trace /\
@@ -289,31 +370,11 @@ Proof
      goal_assum (drule_at (Pat `ptr_vv_ok _ _ _ _ _ _ _ _`)) >>
      qexistsl [`buf`, `LENGTH mid.cs_current_insts`, `mid`, `nb`, `root`, `sb`] >>
      gvs[]) >>
-  `!name b len. local_region cenv ee.scopes z name b len ==>
-     w2n d+nb <= b \/ b+len <= w2n d` by
-    (rpt strip_tac >>
-     `local_region cenv ee.scopes s name b len` by
-       metis_tac[exprSimCopyTheory.copy_buffer_local_region_frame] >> metis_tac[]) >>
-  `z.vs_immutables = s.vs_immutables` by
-    (qpat_x_assum `slot_copy_runtime_frame _ _ _ _ _` mp_tac >>
-     simp[exprPtrUnwrapRuntimeFrameTheory.slot_copy_runtime_frame_def] >>
-     strip_tac >>
-     qpat_x_assum `copy_static _ = copy_static _`
-       (mp_tac o AP_TERM ``\r:venom_state. r.vs_immutables``) >>
-     simp[exprSimStorageCopyTheory.copy_static_def] >>
-     Cases_on `FLOOKUP s.vs_allocas sb.cs_next_id` >>
-     simp[bufferAllocationExecutionTheory.buffer_allocation_fields_def,
-          venomStateTheory.update_var_def]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
-     stor_taint_ok_at (DF H) tnf z` by
-    (rpt strip_tac >>
-     `ghost_inv_at (DF H) lo ret cenv cx ee G tn s` by metis_tac[] >>
-     fs[ghost_inv_at_def, stor_taint_ok_at_def]) >>
-  `local_ptrs_rel func cenv ee.scopes s` by
-    (fs[storage_trace_domain_def] >>
-     `vv_post (storage_trace_horizon ee.storage_trace) ctx func cenv cx
-       (TopLevelName ann nsid) es sa sb s0 ee tv (LocatedValue t p) s` by metis_tac[] >>
-     fs[vv_post_def, stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
+     vv_post H ctx func cenv cx (TopLevelName ann nsid) es sa sb s0 ee tv (LocatedValue t p) s /\
+     ghost_inv_at (DF H) lo ret cenv cx ee G tn s` by metis_tac[] >>
+  `!x. not_fresh_at sb x ==> lookup_var x z = lookup_var x s` by metis_tac[] >>
+  drule_all toplevel_slot_single_frame_facts >> strip_tac >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      ghost_inv_at (DF H) lo ret cenv cx ee Gf tnf z` by
     (rpt strip_tac >> irule (INST_TYPE [alpha |-> ``:256``] toplevel_slot_single_ghost_family) >> simp[] >>
@@ -329,25 +390,7 @@ Proof
      conj_tac >- simp[] >>
      reverse conj_tac >- (simp[] >> goal_assum drule) >>
      qexistsl [`d`, `nb`] >> gvs[] >> rpt conj_tac >> metis_tac[]) >>
-  `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx ee s` by
-    (fs[storage_trace_domain_def] >>
-     `vv_post (storage_trace_horizon ee.storage_trace) ctx func cenv cx
-       (TopLevelName ann nsid) es sa sb s0 ee tv (LocatedValue t p) s` by metis_tac[] >>
-     fs[vv_post_def]) >>
-  `MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]) (fn_insts func)` by
-    (drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[]) >>
-  `?b. FLOOKUP u.vs_allocas sb.cs_next_id = SOME (b,nb) /\
-       b+nb < dimword (:256) /\ eval_operand (Var root) u = SOME (n2w b)` by
-    (drule_all alloca_step_site >> simp[]) >>
-  `b = w2n d` by
-    (qpat_x_assum `eval_operand (Var root) u = _` mp_tac >>
-     simp[venomStateTheory.update_var_def, eval_operand_def, lookup_var_def,
-          finite_mapTheory.FLOOKUP_UPDATE] >>
-     disch_then (mp_tac o AP_TERM ``w2n:bytes32 -> num``) >>
-     `b < dimword (:256)` by decide_tac >> simp[]) >>
-  `FLOOKUP z.vs_allocas sb.cs_next_id = SOME (w2n d,nb)` by
-    (fs[exprPtrUnwrapRuntimeFrameTheory.slot_copy_runtime_frame_def] >>
-     qpat_x_assum `a = _` (fn th => fs[th]) >> gvs[]) >>
+  drule_all toplevel_slot_single_allocation_owned >> strip_tac >>
   `eval_operand (Var root) z = SOME d` by metis_tac[] >>
   drule_all toplevel_slot_single_value_posts >> strip_tac >>
   qexists `v` >> gvs[]
