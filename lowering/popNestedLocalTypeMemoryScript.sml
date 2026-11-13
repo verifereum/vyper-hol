@@ -4,7 +4,7 @@ Ancestors
   allocLimits targetPlaceSim stmtSimAssignAttr vyperTypeEnv exprSimHypsDefs
   vyperTypeSystem vyperTypeInvariants
 
-Theorem local_target_place_vtype[local]:
+Theorem local_target_place_vtype:
   !bt id vt.
     target_root bt = NameTarget id /\
     expr_sim_inv cenv cx env es /\

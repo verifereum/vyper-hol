@@ -15,8 +15,8 @@ Theorem pop_nested_subscript_continuation_mem:
     bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) = (INL key,ee) ==>
     place_readable cx ee pv /\
     (!id path. pv = PlaceR (MemoryPlace id path) ==>
-      ?entry av. lookup_scopes id ee.scopes = SOME entry /\
-        evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) /\
+      ?entry v. lookup_scopes id ee.scopes = SOME entry /\
+        evaluate_subscripts entry.type entry.value path = INL v) /\
     (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
       storage_read_live cx tr (get_storage cx ee tr) slot tv /\
       w2n slot + type_slot_size tv <= dimword(:256) /\
@@ -118,6 +118,14 @@ Resume pop_nested_subscript_continuation_mem[suffix]:
   drule_all target_subscript_index_source_diagnostic >> strip_tac >>
   drule_all target_subscript_index_runtime_diagnostic >> strip_tac >>
   qpat_x_assum `!gs key ee. _` (drule_then strip_assume_tac) >>
+  `!id path. pv = PlaceR (MemoryPlace id path) ==>
+     ?entry av. lookup_scopes id (mid' with gas_obs := []).scopes = SOME entry /\
+       evaluate_subscripts entry.type entry.value path = INL (ArrayV av)` by
+    (rpt strip_tac >> gvs[] >>
+     `?av. v = ArrayV av` by
+       (irule target_subscript_memory_array_ready >>
+        goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+        simp[] >> metis_tac[]) >> metis_tac[]) >>
   `local_ptrs_reserved cenv sn` by
     metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
   `sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id` by

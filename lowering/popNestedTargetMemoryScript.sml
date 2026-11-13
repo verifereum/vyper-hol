@@ -6,9 +6,11 @@ Ancestors
   exprSimMemDefs popNestedTargetRootsMemory popNestedTargetAttributeMemory
   popNestedTargetIndexMemory popNestedTargetSuffixMemory
   popNestedStorageIndexReadiness popNestedLocalReadinessMemory
+  popNestedLocalTypeMemory
   popNestedSubscriptConstructorMemory popNestedSubscriptContinuationMemory
   exprSimPopNestedBase exprSimPopNestedStorageFrame loweringPosts
   targetPlaceSimDefs vyperInterpreter vyperState exprSimHypsDefs targetPlaceLive
+  vyperTypeSystem vyperTypeEnv vyperTypeCallGraph vyperTypeCallStackSoundness
 
 Theorem pop_nested_subscript_index_mem:
   body_inv tops ctx cenv cx /\
@@ -88,3 +90,74 @@ Resume pop_nested_storage_target_mem[ready]:
 QED
 
 Finalise pop_nested_storage_target_mem
+
+Theorem pop_nested_local_target_mem:
+  !bt. !ctx func cenv cx env es id ty.
+    body_inv (cx_tops cx) ctx cenv cx /\
+    target_pre cenv cx env bt es /\ body_base_target_mem_ok cx bt /\
+    target_root bt = NameTarget id /\
+    type_place_target env bt = SOME (Type ty) /\
+    call_evaluation_safe cx (int_calls_target bt) ==>
+    target_sim_mem ctx func cenv cx env bt es
+Proof
+  recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac
+  >- (rpt strip_tac >> irule pop_nested_target_name_mem >> simp[])
+  >- simp[target_root_def]
+  >- suspend "subscript"
+  >> strip_tac >> rpt gen_tac >> strip_tac >>
+  irule pop_nested_target_attr_mem >> simp[] >> first_x_assum irule >>
+  gvs[target_root_def, body_base_target_mem_ok_def,
+      type_place_target_AttributeTarget, int_calls_expr_def, AllCaseEqs()] >>
+  metis_tac[target_pre_sub]
+QED
+
+Resume pop_nested_local_target_mem[subscript]:
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  irule pop_nested_subscript_constructor_mem >> simp[] >> reverse conj_tac
+  >- (first_x_assum irule >>
+      gvs[target_root_def, body_base_target_mem_ok_def,
+          type_place_target_SubscriptTarget, int_calls_expr_def, AllCaseEqs()] >>
+      `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
+      drule_all local_target_place_vtype >> strip_tac >>
+      metis_tac[target_pre_sub, call_evaluation_safe_append_left]) >>
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_mem ctx func cenv cx (expr_type e) e (mid with gas_obs := [])` by
+    (drule_all pop_nested_subscript_index_mem >> simp[]) >>
+  irule pop_nested_subscript_continuation_mem >> simp[] >>
+  suspend "ready"
+QED
+
+Resume pop_nested_local_target_mem[ready]:
+  reverse conj_tac
+  >- (goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >> simp[] >>
+      qexists `env` >> simp[]) >>
+  rpt gen_tac >> disch_tac >>
+  drule target_subscript_marked_base_source >>
+  disch_then (qspec_then `gs` assume_tac) >>
+  `target_root bt = NameTarget id /\ target_pre cenv cx env bt es /\
+   call_evaluation_safe cx (int_calls_target bt)` by
+    (fs[target_root_def, int_calls_expr_def] >>
+     metis_tac[target_pre_sub, call_evaluation_safe_append_left]) >>
+  `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
+  drule_all local_target_place_vtype >> strip_tac >> gvs[] >>
+  `target_pre cenv cx env bt
+    (es with gas_obs := gas_explicit left s0.vs_gas_readings ++ gs)` by simp[] >>
+  drule_all pop_nested_local_base_ready >> strip_tac >> gvs[] >>
+  `expr_sim_inv cenv cx env (mid with gas_obs := [])` by
+    metis_tac[target_subscript_marked_base_inv] >>
+  `expr_sim_inv cenv cx env (mid with gas_obs := gs)` by fs[] >>
+  `expr_body_pre cenv cx env e (mid with gas_obs := gs) /\
+   ~target_subscript_overlap cenv bt e` by
+    (fs[target_pre_def, target_indices_pre_def] >> metis_tac[]) >>
+  drule_at (Pat `eval_base_place _ _ _ = _`) pop_nested_local_index_ready >>
+  simp[] >> disch_then (drule_at (Pat `monad_bind _ _ _ = _`)) >>
+  simp[] >> strip_tac >>
+  `expr_body_pre cenv cx env e mid` by fs[] >>
+  `?other w. lookup_scopes id ee.scopes = SOME other /\
+    evaluate_subscripts other.type other.value path = INL w` by metis_tac[] >>
+  simp[place_readable_def, read_place_def, bind_def, get_scopes_def,
+       return_def, read_memory_path_def, lift_sum_def]
+QED
+
+Finalise pop_nested_local_target_mem

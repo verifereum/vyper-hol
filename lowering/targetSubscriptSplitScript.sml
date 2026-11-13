@@ -902,7 +902,7 @@ Proof
   drule read_result_state >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem target_subscript_memory_array_ready[local]:
+Theorem target_subscript_memory_array_ready:
   expr_sim_inv cenv cx env es /\
   target_post ctx func cenv cx es0 sa sn s0 es
     (PlaceR (MemoryPlace id path)) bvt rb s /\
