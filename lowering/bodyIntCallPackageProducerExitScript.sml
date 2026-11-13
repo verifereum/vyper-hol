@@ -7,19 +7,19 @@ Ancestors
   compileEnv loweringStateRelDefs exprSimDefs
 
 Theorem intcall_stmt_return_callee_exit:
-  !fp v ee r cx owner rtv cenv rc t n m rb func.
+  !fp v ee r cx owner rtv cenv retc t n m rb func.
   ~FST fp.jc_root_ce.ce_nonreentrant /\ intcall_stmt_exit fp (INR (ReturnException v)) ee r /\
   fp.jc_cx = (cx with stk updated_by CONS owner) /\
   fp.jc_ret_tv = rtv /\
   fp.jc_root_ce.ce_module_vars = cenv.ce_module_vars /\
   fp.jc_root_ce.ce_module = cenv.ce_module /\
   fp.jc_root_ce.ce_is_ctor = cenv.ce_is_ctor /\
-  fp.jc_root_ce.ce_returns_count = rc /\ fp.jc_morig = t /\
+  fp.jc_root_ce.ce_returns_count = retc /\ fp.jc_morig = t /\
   (!a k. fp.jc_prot a k <=> a + k <= t.vs_alloca_next /\
     !aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
       n <= aid /\ aid < m ==> regions_disjoint a k off asz) /\
   OPTION_MAP FST fp.jc_rb = rb ==>
-  intcall_callee_exit func cenv cx mut F rtv rc rb n m t (INL v) ee r
+  intcall_callee_exit func cenv cx mut F rtv retc rb n m t (INL v) ee r
 Proof
   rpt gen_tac >> disch_then (fn th =>
     mp_tac (CONJUNCT2 th) >>

@@ -319,13 +319,13 @@ End
 
 (* Without the lock, the IntRet's state is the callee's own. *)
 Theorem intcall_callee_exit_F:
-  intcall_callee_exit func cenv cx mut F rtv rc rb n m t res ee r <=>
+  intcall_callee_exit func cenv cx mut F rtv retc rb n m t res ee r <=>
     expr_exit res r \/
     ?v ir s'.
       res = INL v /\ r = IntRet ir s' /\
       state_rel func cenv cx (ee with scopes := []) s' /\
       intret_vals_match rtv v ir.iret_values /\
-      LENGTH ir.iret_values = rc /\ ir.iret_adopt_fmp = NONE /\
+      LENGTH ir.iret_values = retc /\ ir.iret_adopt_fmp = NONE /\
       (!b sz. b + sz <= t.vs_alloca_next /\
               (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
                              n <= aid /\ aid < m ==>

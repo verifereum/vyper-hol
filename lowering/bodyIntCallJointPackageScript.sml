@@ -31,7 +31,7 @@ QED
 
 Theorem intcall_callee_packaging:
   !E tops ctx func cenv cx tenv name es sa sb vv s0 es0 mut args ret ss rr
-   prev penv rtv es1 t callee entered rc rbs pvs.
+   prev penv rtv es1 t callee entered retc rbs pvs.
     body_inv tops ctx cenv cx /\
     cenv_module_pins tops cenv /\
     lookup_callable_function cx.in_deploy name tops =
@@ -45,7 +45,7 @@ Theorem intcall_callee_packaging:
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
       (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
     gas_invoke_entry (ctx,func) t callee entered /\
-    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (retc,rbs,pvs) ==>
     !bb inst lbl arg_ops argv.
       lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
       get_instruction bb t.vs_inst_idx = SOME inst /\
@@ -53,8 +53,8 @@ Theorem intcall_callee_packaging:
       eval_operands arg_ops t = SOME argv ==>
       gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut F ss)
         (es1,entered) (\res ee r. F)
-        (intcall_callee_exit func cenv cx mut F rtv rc
-           (if rc = 0 /\
+        (intcall_callee_exit func cenv cx mut F rtv retc
+           (if retc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)
            sa.cs_next_id sb.cs_next_id t)
