@@ -119,12 +119,12 @@ fun copy_len (load, notop, binop, extends_trans) =
          fresh_id_def, emit_def, comp_return_def, not_fresh_at_def,
          ASCIInumbersTheory.toString_11]) >>
   drule_all load >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `eval_operand (Lit 31w) s1 = SOME 31w /\ op_taint tn1 (Lit 31w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
   drule_all notop >>
-  disch_then (qspecl_then [`G1`, `cx`, `ctx`, `PG`, `R`]
+  disch_then (qspecl_then [`H`, `G1`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `Gm` (qx_choose_then `tnm` (qx_choose_then `sm` strip_assume_tac)))) >>
   `eval_operand (Var v1) sm = SOME (mload (w2n a) s) /\
    op_taint tnm (Var v1) = {} /\
@@ -132,20 +132,20 @@ fun copy_len (load, notop, binop, extends_trans) =
     (qpat_assum `!p. not_fresh_at sc1 p ==> _` (qspec_then `v1` mp_tac) >>
      simp[eval_operand_def, op_taint_def]) >>
   drule_all (SRULE [] (Q.SPECL [`ADD`, `word_add`] binop)) >>
-  disch_then (qspecl_then [`Gm`, `cx`, `ctx`, `PG`, `R`]
+  disch_then (qspecl_then [`H`, `Gm`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G2` (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
   `eval_operand (Var v2) s2 = SOME (mload (w2n a) s + 31w) /\
    eval_operand (Var vm) s2 = SOME (~31w) /\ op_taint tn2 (Var vm) = {}` by
     (qpat_assum `!p. not_fresh_at scm p ==> _` (qspec_then `vm` mp_tac) >>
      simp[eval_operand_def, op_taint_def]) >>
   drule_all (SRULE [] (Q.SPECL [`AND`, `word_and`] binop)) >>
-  disch_then (qspecl_then [`G2`, `cx`, `ctx`, `PG`, `R`]
+  disch_then (qspecl_then [`H`, `G2`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G3` (qx_choose_then `tn3` (qx_choose_then `s3` strip_assume_tac)))) >>
   `eval_operand (Var v3) s3 = SOME (mload (w2n a) s + 31w && ~31w) /\
    eval_operand (Lit 32w) s3 = SOME 32w /\ op_taint tn3 (Lit 32w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
   drule_all (SRULE [] (Q.SPECL [`ADD`, `word_add`] binop)) >>
-  disch_then (qspecl_then [`G3`, `cx`, `ctx`, `PG`, `R`]
+  disch_then (qspecl_then [`H`, `G3`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G4` (qx_choose_then `tn4` (qx_choose_then `s4` strip_assume_tac)))) >>
   qexistsl_tac [`G4`, `tn4`, `s4`] >>
   `cs_extends sa sc1 /\ cs_extends sc1 scm /\ cs_extends scm sc2 /\
@@ -155,16 +155,16 @@ fun copy_len (load, notop, binop, extends_trans) =
      rpt conj_tac >> qexists_tac `[]` >> simp[]) >>
   conj_tac >-
     (irule fragExecPtrTheory.frag_exec_ptr_seq >>
-     qpat_assum `frag_exec_ptr _ _ _ sa sc1 _ _ _` (irule_at Any) >>
+     qpat_assum `frag_exec_ptr _ _ _ _ sa sc1 _ _ _` (irule_at Any) >>
      simp[] >> conj_tac >- metis_tac[extends_trans] >>
      irule fragExecPtrTheory.frag_exec_ptr_seq >>
-     qpat_assum `frag_exec_ptr _ _ _ sc1 scm _ _ _` (irule_at Any) >>
+     qpat_assum `frag_exec_ptr _ _ _ _ sc1 scm _ _ _` (irule_at Any) >>
      simp[] >> conj_tac >- metis_tac[extends_trans] >>
      irule fragExecPtrTheory.frag_exec_ptr_seq >>
-     qpat_assum `frag_exec_ptr _ _ _ scm sc2 _ _ _` (irule_at Any) >>
+     qpat_assum `frag_exec_ptr _ _ _ _ scm sc2 _ _ _` (irule_at Any) >>
      simp[] >> conj_tac >- metis_tac[extends_trans] >>
      irule fragExecPtrTheory.frag_exec_ptr_seq >>
-     qpat_assum `frag_exec_ptr _ _ _ sc2 sc3 _ _ _` (irule_at Any) >> simp[]) >>
+     qpat_assum `frag_exec_ptr _ _ _ _ sc2 sc3 _ _ _` (irule_at Any) >> simp[]) >>
   `!p. not_fresh_at sa p ==> not_fresh_at sc1 p /\ not_fresh_at scm p /\
        not_fresh_at sc2 p /\ not_fresh_at sc3 p` by
     (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
@@ -193,7 +193,7 @@ val store_compose =
      pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
      simp[rich_listTheory.IS_PREFIX_APPEND]) >>
   irule fragExecPtrTheory.frag_exec_ptr_seq >>
-  qpat_assum `frag_exec_ptr _ _ _ sa sc _ _ _` (irule_at Any) >>
+  qpat_assum `frag_exec_ptr _ _ _ _ sa sc _ _ _` (irule_at Any) >>
   simp[] >> first_assum ACCEPT_TAC;
 
 fun store_bytestring_with_effects effects (length_fragment, copy_fragment, copy_ghost,
@@ -207,7 +207,7 @@ fun store_bytestring_with_effects effects (length_fragment, copy_fragment, copy_
     (fs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
                                   arithmeticTheory.LESS_EQ_ADD]) >>
   drule_all length_fragment >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `eval_operand count_op s1 = SOME (n2w n)` by
     (fs[] >> qspec_then `len` mp_tac round_size >>
@@ -227,7 +227,7 @@ fun store_bytestring_with_effects effects (length_fragment, copy_fragment, copy_
     (mk_inst sc.cs_next_id MCOPY [Var dst; Var src; count_op] []) t` >>
   qabbrev_tac `tnf = step_taint
     (mk_inst sc.cs_next_id MCOPY [Var dst; Var src; count_op] []) s1 t tn1` >>
-  `frag_exec_ptr cx ctx PG sc sb
+  `frag_exec_ptr H cx ctx PG sc sb
     (\g tt v. g = G1 /\ tt = tn1 /\ v = s1)
     (\g tt v. g = Gf /\ tt = tnf /\ v = t with vs_inst_idx := SUC s1.vs_inst_idx) R` by
     (irule (Q.SPECL [`cx`, `ctx`, `PG`, `sc`, `sb`, `sc.cs_next_id`,

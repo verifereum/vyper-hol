@@ -5,7 +5,7 @@ Ancestors assignBasePtrLiteralGhost robustCopyTransportPtr loweringPosts
 
 Theorem assign_base_ptr_alloca_placed_footprint:
   !ctx func cenv cx es s id n out t ty sa sb v op tv w i.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
@@ -26,7 +26,7 @@ QED
 
 Theorem assign_base_ptr_alloca_robust_source:
   !ctx func cenv cx es s id n out t ty sa sb v op tv w tn.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\

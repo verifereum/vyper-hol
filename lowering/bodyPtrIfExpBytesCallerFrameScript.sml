@@ -6,7 +6,7 @@ Ancestors
   stmtFragPtr
 
 Theorem ifexp_alloca_live_local_write_bounds:
-  stmt_state_rel ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w capacity)] [out]) (fn_insts fn) /\
   not_local_ptr ce es.scopes out /\ capacity < dimword(:256) /\ n <= capacity /\
   lookup_scopes name es.scopes = SOME entry /\
@@ -36,8 +36,8 @@ Proof
 QED
 
 Theorem ifexp_bytes_live_local_frame_bounds:
-  stmt_state_rel ctx fn ce cx es s0 /\
-  vv_post ctx fn ce cx e es sa sc s0 ee raw vv t /\
+  stmt_state_rel H ctx fn ce cx es s0 /\
+  vv_post H ctx fn ce cx e es sa sc s0 ee raw vv t /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   n <= capacity /\
   (!name p sz. local_region ce es.scopes s0 name p sz ==>
@@ -68,13 +68,13 @@ Proof
 QED
 
 Theorem ifexp_bytes_caller_ghost_inv:
-  stmt_state_rel ctx fn ce cx es s0 /\
-  vv_post ctx fn ce cx e es sa sc s0 ee raw vv t /\
+  stmt_state_rel H ctx fn ce cx es s0 /\
+  vv_post H ctx fn ce cx e es sa sc s0 ee raw vv t /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sc.cs_next_var /\ n <= capacity /\
   (!name p sz. local_region ce es.scopes s0 name p sz ==>
     p+sz <= b \/ b+capacity <= p) /\
-  ghost_inv d ce cx ee G tn t /\
+  ghost_inv H d ce cx ee G tn t /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sc x ==>
@@ -83,8 +83,8 @@ Theorem ifexp_bytes_caller_ghost_inv:
   (!ft fv p. val_wf ft fv /\ (p+type_memory_size ft <= b \/ b+n <= p) /\
     (!m. mem_agree_outside tn.t_mem t.vs_memory m ==> val_in_memory ft fv p m) ==>
     !m. mem_agree_outside tnf.t_mem sf.vs_memory m ==> val_in_memory ft fv p m) /\
-  stor_taint_ok cx tnf sf ==>
-  ghost_inv d ce cx ee Gf tnf sf
+  stor_taint_ok H cx tnf sf ==>
+  ghost_inv H d ce cx ee Gf tnf sf
 Proof
   strip_tac >>
   drule ifexp_bytes_live_local_frame_bounds >>
@@ -99,7 +99,7 @@ Proof
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x)` by
     metis_tac[not_fresh_at_mono] >>
   irule bytes_writer_ghost_inv >> conj_tac >- simp[] >>
-  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`b`, `n`, `sc`] >> simp[] >> metis_tac[]
 QED
 

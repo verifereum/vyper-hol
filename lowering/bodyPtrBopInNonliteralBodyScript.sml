@@ -44,7 +44,7 @@ Theorem membership_mixed_post_frames:
     v es1 s1 G1 tn1 /\
   membership_vv_post d ctx fn cenv cx e2 es1 sc sm vv s1 G1 tn1
     tv es2 s2 G2 tn2 /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id ==>
   wb_frame cenv es es2 sa s0 s2 /\
@@ -61,10 +61,10 @@ Proof
   `~expr_has_effect e1 /\ ~expr_has_effect e2 ==> pure_frame cenv fn es sa s0 s2` by
     (strip_tac >>
      `pure_frame cenv fn es sa s0 s1` by
-       (qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _`
+       (qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _`
           (mp_then Any mp_tac expr_post_pure_frame) >> simp[]) >>
      `pure_frame cenv fn es1 sc s1 s2` by
-       (qpat_x_assum `vv_post _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
+       (qpat_x_assum `vv_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
         rewrite_tac[loweringPostsTheory.vv_post_def] >> strip_tac >>
         qpat_x_assum `~expr_has_effect e2 ==> _` irule >> first_assum ACCEPT_TAC) >>
      `!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
@@ -88,7 +88,7 @@ Proof
     (mp_then (Pos last) mp_tac wordArgsPtrTheory.ghost_kept_wb_trans) >>
   disch_then irule >>
   first_assum (irule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
-  first_assum (irule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   fs[]
 QED
 
@@ -198,7 +198,7 @@ Resume nonliteral_expr_sim_ptr[success]:
      strip_tac >> qpat_x_assum `_ /\ _ ==> pure_frame _ _ _ _ _ s2` irule >>
      conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all membership_array_continuation_summary_ptr >>
-  disch_then (qspecl_then [`Unsigned 0`,`PG`,`cx_dead cx`] assume_tac) >>
+  disch_then (qspecl_then [`Unsigned 0`,`PG`,`cx_dead H cx`] assume_tac) >>
   drule membership_typed_read_continuation >> disch_then (fn th => rewrite_tac[th]) >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   irule gas_summary_ptr_at_conseq >> first_assum (irule_at (Pos last)) >>

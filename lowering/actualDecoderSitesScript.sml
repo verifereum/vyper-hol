@@ -132,7 +132,7 @@ QED
 (* Actual-site credit is supplied by the expression state relation, also
    when this scratch instruction has executed on an earlier loop entry. *)
 Theorem actual_decoder_caller_site_execute:
-  stmt_state_rel ctx fn ce cx es s /\
+  stmt_state_rel H ctx fn ce cx es s /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit 32w] /\ inst.inst_outputs = [out] ==>
   ?t b. exec_alloca inst s (32w:bytes32) = OK t /\
@@ -167,7 +167,7 @@ QED
 Theorem actual_index_init_caller_allocation:
   abi_decode_index_init first = (ip,last) /\
   (!i. MEM i (emitted_insts first last) ==> MEM i (fn_insts fn)) /\
-  stmt_state_rel ctx fn ce cx es s ==>
+  stmt_state_rel H ctx fn ce cx es s ==>
   ?t b.
     exec_alloca (mk_inst first.cs_next_id ALLOCA [Lit 32w]
       [STRING #"%" (toString first.cs_next_var)]) s (32w:bytes32) = OK t /\
@@ -193,7 +193,7 @@ Definition decode_site_resources_def:
 End
 
 Theorem stmt_state_rel_decode_site_resources:
-  stmt_state_rel ctx fn ce cx es s ==> decode_site_resources ctx fn s
+  stmt_state_rel H ctx fn ce cx es s ==> decode_site_resources ctx fn s
 Proof
   rw[stmt_state_rel_def, decode_site_resources_def] >> metis_tac[]
 QED

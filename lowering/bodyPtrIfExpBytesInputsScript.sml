@@ -51,7 +51,7 @@ Theorem ifexp_residual_noncall_bytes:
   expr_body_pre ce cx env (IfExp ty cond a b) es /\
   (arm = a \/ arm = b) /\
   compile_expr ce ret_ty arm sa = (vv,sb) /\
-  vv_post ctx fn ce cx arm es_arm sa sb s0 ee tv vv t /\
+  vv_post H ctx fn ce cx arm es_arm sa sb s0 ee tv vv t /\
   ~same_memory_layout ce (lowered_value_type ce arm) ty /\
   ~(?ann fid args dret. arm = Call ann (IntCall fid) args dret) ==>
   is_bytestring_type ty
@@ -93,7 +93,7 @@ Theorem ifexp_selected_bytes_inputs:
   (arm = a \/ arm = b) /\
   expr_body_pre ce cx env_arm arm es_arm /\
   compile_expr ce ret_ty arm sa = (vv,sb) /\
-  vv_post ctx fn ce cx arm es_arm sa sb s0 ee raw vv t /\
+  vv_post H ctx fn ce cx arm es_arm sa sb s0 ee raw vv t /\
   ~same_memory_layout ce (lowered_value_type ce arm) ty /\
   ~(?ann fid args dret. arm = Call ann (IntCall fid) args dret) /\
   eval_expr cx arm es_arm = (INL raw,ee) /\ read_result cx raw ee = (INL v,er) ==>

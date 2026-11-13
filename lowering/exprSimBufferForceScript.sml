@@ -47,18 +47,26 @@ Proof
       disch_then (DISJ_CASES_THEN (strip_assume_tac o BETA_RULE)) >>
       qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       rewrite_tac[gas_summary_at_def] >> BETA_TAC
-      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?tv. _`
+            (assume_tac o SIMP_RULE (srw_ss()) []) >>
+          qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
+            (drule_then (qx_choose_then `tv` strip_assume_tac)) >>
+          qpat_x_assum `res = INL tv` SUBST_ALL_TAC >>
+          qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
             (assume_tac o SIMP_RULE (srw_ss()) []) >>
           `?v. read_result cx tv (es_end with gas_obs := []) =
                (INL v, es_end with gas_obs := [])` by
-            (qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
-               (drule_then mp_tac) >>
-             simp[vv_post_def, vv_holds_def] >> metis_tac[]) >>
+            (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+               (strip_assume_tac o REWRITE_RULE [vv_post_def, vv_holds_def]) >>
+             rpt (qpat_x_assum `!H. _` kall_tac) >>
+             qpat_assum `p.ptr_location = LocMemory`
+               (fn th => RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [th])) >>
+             metis_tac[]) >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK t'`] >>
           simp[] >> conj_tac
           >- (drule read_result_gas_obs >> strip_tac >>
               gvs[gas_marked_exec_def, bind_def]) >>
-          rpt strip_tac >> irule expr_post_of_vv_post_memory >> simp[] >>
+          disj1_tac >> rpt strip_tac >> irule expr_post_of_vv_post_memory >> simp[] >>
           qexists_tac `t` >> simp[] >>
           irule vv_post_read_result >> simp[] >> metis_tac[]) >>
       qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`

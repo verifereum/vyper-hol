@@ -13,11 +13,11 @@ Theorem word_modular_actual_post:
   eval_operand a s = SOME va /\ eval_operand b s = SOME vb /\
   eval_operand c s = SOME vc /\ vc <> 0w /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+  stmt_state_rel H ctx func cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   eval_operand op (t with vs_inst_idx := LENGTH sb.cs_current_insts) =
     SOME ((if is_mul then mulmod else addmod) va vb vc) /\
   (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==>
@@ -46,11 +46,11 @@ Theorem word_pow_actual_post:
   (!z. b = Var z ==> not_fresh_at sa z) /\
   eval_operand a s = SOME va /\ eval_operand b s = SOME vb /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+  stmt_state_rel H ctx func cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   eval_operand op (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME (word_exp va vb) /\
   (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==>
     lookup_var z (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME v) /\

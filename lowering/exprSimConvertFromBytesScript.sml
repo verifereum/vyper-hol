@@ -620,7 +620,7 @@ Proof
 QED
 
 Theorem dynamic_operand_header_bound:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
   expr_val_at cenv cx t sarg sa es v op s /\
   32 <= val_footprint tv v /\ eval_operand op s = SOME a ==>
@@ -670,7 +670,7 @@ QED
 Theorem dynamic_bytes_operand_view:
   evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic n))) = SOME stv /\
   value_has_type stv v /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_rel cx (BaseT (BytesT (Dynamic n))) v op s /\
   expr_val_at cenv cx (BaseT (BytesT (Dynamic n))) sarg sa es v op s ==>
   ?bs a. v = BytesV bs /\ LENGTH bs <= n /\
@@ -694,7 +694,7 @@ QED
 Theorem dynamic_string_operand_view:
   evaluate_type (get_tenv cx) (BaseT (StringT n)) = SOME stv /\
   value_has_type stv v /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_rel cx (BaseT (StringT n)) v op s /\
   expr_val_at cenv cx (BaseT (StringT n)) sarg sa es v op s ==>
   ?str a. v = StringV str /\ LENGTH str <= n /\
@@ -1733,7 +1733,7 @@ Finalise dynamic_scalar_run_exact
 Theorem dynamic_operand_packet:
   is_bytestring_type src /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
-  stmt_state_rel ctx func cenv cx es s /\ expr_val_rel cx src v op s /\
+  stmt_state_rel H ctx func cenv cx es s /\ expr_val_rel cx src v op s /\
   expr_val_at cenv cx src sarg sa es v op s ==>
   ?a. eval_operand op s = SOME a /\ w2n a + 32 < dimword (:256) /\
       val_in_memory stv v (w2n a) s.vs_memory
@@ -1769,8 +1769,8 @@ Theorem dynamic_frag_writes_fresh_exact:
      (?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a)) /\
   (!a ss. A a ==> R (Abort a ss)) ==>
   frag_exec ctx sa sb
-    (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss)
-    (\ss. stmt_state_rel ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
+    (\ss. ss = s0 /\ stmt_state_rel H ctx func cenv cx es ss /\ P ss)
+    (\ss. stmt_state_rel H ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
       (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
                lookup_var x ss = SOME w') /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -1856,8 +1856,8 @@ Theorem dynamic_frag_straight_fresh_exact:
     (?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a)) /\
   (!a ss. A a ==> R (Abort a ss)) ==>
   frag_exec ctx sa sb
-    (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss)
-    (\ss. stmt_state_rel ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
+    (\ss. ss = s0 /\ stmt_state_rel H ctx func cenv cx es ss /\ P ss)
+    (\ss. stmt_state_rel H ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
       (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
                lookup_var x ss = SOME w') /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -2032,8 +2032,8 @@ Theorem dynamic_frag_read_fresh_exact:
      (?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a)) /\
   (!a ss. A a ==> R (Abort a ss)) ==>
   frag_exec ctx sa sb
-    (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss)
-    (\ss. stmt_state_rel ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
+    (\ss. ss = s0 /\ stmt_state_rel H ctx func cenv cx es ss /\ P ss)
+    (\ss. stmt_state_rel H ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
       (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
                lookup_var x ss = SOME w') /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -2119,8 +2119,8 @@ Theorem dynamic_frag_straight_read_fresh_exact:
     (?a ss'. run_inst_seq (emitted_insts sa sb) ss = Abort a ss' /\ A a)) /\
   (!a ss. A a ==> R (Abort a ss)) ==>
   frag_exec ctx sa sb
-    (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\ P ss)
-    (\ss. stmt_state_rel ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
+    (\ss. ss = s0 /\ stmt_state_rel H ctx func cenv cx es ss /\ P ss)
+    (\ss. stmt_state_rel H ctx func cenv cx es ss /\ eval_operand op ss = SOME w /\
       (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
                lookup_var x ss = SOME w') /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -2222,12 +2222,12 @@ QED
 
 Theorem dynamic_run_post:
   dynamic_straight_fresh m /\ m sa = (op,sb) /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   run_inst_seq (emitted_insts sa sb) (drop_fresh sa s0) = OK t0 /\
   eval_operand op t0 = SOME w /\
   run_inst_seq (emitted_insts sa sb) s0 = OK t /\ vars_ext t0 t ==>
-  stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+  stmt_state_rel H ctx func cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   eval_operand op (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w /\
   (!z v. not_fresh_at sa z /\ lookup_var z s0 = SOME v ==>
     lookup_var z (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME v) /\
@@ -2245,7 +2245,7 @@ Proof
     (fs[vars_ext_def] >>
      qpat_x_assum `t = t0 with vs_vars := _` SUBST1_TAC >>
      simp[eval_operand_vars_ext]) >>
-  `stmt_state_rel ctx func cenv cx es (s0 with vs_vars := t.vs_vars)` by
+  `stmt_state_rel H ctx func cenv cx es (s0 with vs_vars := t.vs_vars)` by
     (irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
      `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
      simp[lookup_var_def]) >>
@@ -2264,10 +2264,10 @@ Theorem dynamic_scalar_frag_success:
   local_ptrs_reserved cenv sa /\
   (!z. op = Var z ==> not_fresh_at sa z) ==>
   frag_exec ctx sa sb
-    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+    (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s /\
       (?a. eval_operand op s = SOME a /\ w2n a + 32 < dimword (:256) /\
            val_in_memory stv v (w2n a) s.vs_memory))
-    (\s. stmt_state_rel ctx func cenv cx es s /\
+    (\s. stmt_state_rel H ctx func cenv cx es s /\
       eval_operand r s = SOME (typed_val_to_w256 dtv vout) /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x s = SOME w) /\
@@ -2300,7 +2300,7 @@ Theorem dynamic_scalar_frag_abort:
   compile_type_convert op (mk_convert_op src dst) sa = (r,sb) /\
   (!z. op = Var z ==> not_fresh_at sa z) ==>
   frag_exec ctx sa sb
-    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+    (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s /\
       (?a. eval_operand op s = SOME a /\ w2n a + 32 < dimword (:256) /\
            val_in_memory stv v (w2n a) s.vs_memory)) Q (expr_exit (INR ex))
 Proof
@@ -2338,11 +2338,11 @@ Theorem dynamic_scalar_fragment:
   local_ptrs_reserved cenv sa /\
   (!z. op = Var z ==> not_fresh_at sa z) ==>
   frag_exec ctx sa sb
-    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+    (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s /\
          expr_val_rel cx src v op s /\ expr_val_at cenv cx src sarg sa0 es v op s)
     (\s. ?vout dtv. res = INL vout /\
          evaluate_type (get_tenv cx) dst = SOME dtv /\
-         stmt_state_rel ctx func cenv cx es s /\
+         stmt_state_rel H ctx func cenv cx es s /\
          eval_operand r s = SOME (typed_val_to_w256 dtv vout) /\
          s.vs_memory = s0.vs_memory /\ s.vs_allocas = s0.vs_allocas /\
          (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
@@ -2394,14 +2394,14 @@ Theorem dynamic_scalar_counted_fragment:
   compile_type_convert op (mk_convert_op src dst) sa = (r,sb) /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
   (!z. op = Var z ==> not_fresh_at sa z) /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   expr_val_rel cx src v op s0 /\ expr_val_at cenv cx src sarg sa0 es v op s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?out. gas_marked_path F ctx func s0 0 out /\
     ((?s vout dtv. out = OK s /\ res = INL vout /\
        evaluate_type (get_tenv cx) dst = SOME dtv /\
-       stmt_state_rel ctx func cenv cx es s /\
+       stmt_state_rel H ctx func cenv cx es s /\
        eval_operand r s = SOME (typed_val_to_w256 dtv vout) /\
        s.vs_memory = s0.vs_memory /\ s.vs_allocas = s0.vs_allocas /\
        (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
@@ -2442,15 +2442,15 @@ QED
 Finalise dynamic_scalar_counted_fragment
 
 Theorem dynamic_expr_post_convert:
-  expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
-  stmt_state_rel ctx func cenv cx es' ss /\
+  expr_post H ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
+  stmt_state_rel H ctx func cenv cx es' ss /\
   evaluate_type (get_tenv cx) ann = SOME dtv /\
   eval_operand op ss = SOME (typed_val_to_w256 dtv v) /\
   (!z w. not_fresh_at s1 z /\ lookup_var z t0 = SOME w ==>
          lookup_var z ss = SOME w) /\
   ss.vs_allocas = t0.vs_allocas /\ ss.vs_memory = t0.vs_memory /\
   is_word_type ann /\ sa.cs_next_var <= s1.cs_next_var ==>
-  expr_post ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0 es'
+  expr_post H ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0 es'
     v op ss
 Proof
   simp[expr_post_def] >> strip_tac >>
@@ -2563,7 +2563,7 @@ Proof
 QED
 
 Theorem dynamic_continuation_summary:
-  expr_post ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  expr_post H ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
   is_bytestring_type (expr_type e1) /\ ~is_bytestring_type t /\
@@ -2583,7 +2583,7 @@ Theorem dynamic_continuation_summary:
     (\vs. (convert_result cx (expr_type e1) t v1,vs))
     (ee with gas_obs := [],t0)
     (\res fin ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res fin out. expr_exit res out)
@@ -2593,7 +2593,7 @@ Proof
             lowered_value_type cenv e1 = BaseT (StringT 0)`
   >- suspend "empty" >>
   gvs[] >>
-  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
+  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
    expr_val_rel cx (expr_type e1) v1 x t0 /\
    expr_val_at cenv cx (expr_type e1) sa s1 (ee with gas_obs := []) v1 x t0` by
     fs[expr_post_def] >>

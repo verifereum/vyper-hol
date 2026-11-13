@@ -11,20 +11,20 @@ Theorem emit_count_load_endpoint_ptr_core:
   emit_op CALLDATALOAD [src] sa = (out,sb) /\
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?H u. frag_exec_ptr cx ctx PG sa sb
+  ?HG u. frag_exec_ptr H cx ctx PG sa sb
     (\g z v. g = G /\ z = tn /\ v = s)
-    (\g z v. g = H /\ z = u /\
+    (\g z v. g = HG /\ z = u /\
       v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
-    op_taint u out = {} /\ op_prov H out = NONE /\
+    op_taint u out = {} /\ op_prov HG out = NONE /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
     u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     (?vars. t = s with vs_vars := vars) /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     (!D lower ctx' func.
       fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
@@ -37,14 +37,14 @@ Proof
   `t = update_var out (abi_decode_load CALLDATALOAD a s) s` by
     gvs[run_inst_seq_def, Abbr `out`, step_inst_base_opcode_eqs, mk_inst_def,
       exec_read1_def, abi_decode_load_def, abi_decode_source_def] >>
-  qabbrev_tac `H = step_prov PG G inst t` >>
+  qabbrev_tac `HG = step_prov PG G inst t` >>
   qabbrev_tac `u = step_taint inst s t tn` >>
-  `frag_exec_ptr cx ctx PG sa sb
+  `frag_exec_ptr H cx ctx PG sa sb
     (\g z v. g = G /\ z = tn /\ v = s)
-    (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R` by
+    (\g z v. g = HG /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R` by
     (irule ptr_fragment_step >> simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
      rpt strip_tac >> qexists_tac `update_var out (abi_decode_load CALLDATALOAD a s) s` >>
-     simp[Abbr `H`, Abbr `u`, Abbr `out`, mk_inst_def,
+     simp[Abbr `HG`, Abbr `u`, Abbr `out`, mk_inst_def,
        step_inst_base_opcode_eqs, exec_read1_def, abi_decode_load_def,
        abi_decode_source_def, update_var_def] >>
      rpt strip_tac >>
@@ -57,7 +57,7 @@ Proof
   `!D lower ctx' func.
       fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s` by
     (rpt gen_tac >> strip_tac >>
@@ -74,15 +74,15 @@ Proof
       goal_assum (drule_at Any) >>
       goal_assum (drule_at Any) >>
       qexists_tac `sa` >>
-      simp[Abbr `H`, Abbr `u`, Abbr `inst`, Abbr `out`, mk_inst_def,
+      simp[Abbr `HG`, Abbr `u`, Abbr `inst`, Abbr `out`, mk_inst_def,
         is_terminator_def, update_var_def]) >>
-  qexistsl_tac [`H`, `u`] >> simp[] >>
+  qexistsl_tac [`HG`, `u`] >> simp[] >>
   conj_tac >-
     (simp[Abbr `u`, Abbr `inst`, Abbr `out`] >>
      irule dispatch_scalar_output_clean >> simp[]) >>
   `!x. not_fresh_at sa x ==> x <> out` by
     (simp[not_fresh_at_def, Abbr `out`] >> metis_tac[LESS_EQ_REFL]) >>
-  simp[Abbr `H`, Abbr `u`, Abbr `inst`, Abbr `out`,
+  simp[Abbr `HG`, Abbr `u`, Abbr `inst`, Abbr `out`,
     op_prov_def, step_prov_def, out_prov_def, set_prov_def,
     op_taint_def, step_taint_def, out_taint_def, set_var_taint_def,
     FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, mk_inst_def,

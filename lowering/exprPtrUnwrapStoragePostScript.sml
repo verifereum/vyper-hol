@@ -71,12 +71,12 @@ QED
 
 (* Semantic and robust posts use the very same copy endpoint z. *)
 Theorem unwrap_storage_copy_post:
-  vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   storage_holds cx tr (post_value_type cenv e) tv w ee s /\
   ptr_vv_ok cx (post_value_type cenv e) tv (LocatedValue t p) ee G tn s /\
   p.ptr_location = slot_loc tr /\ eval_operand p.ptr_operand s = SOME w /\
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
-  stmt_state_rel ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= mid.cs_next_var /\
@@ -94,7 +94,7 @@ Theorem unwrap_storage_copy_post:
   (!j b. j < n /\ b < 32 /\ w2n d+32*j+b IN tm.t_mem ==>
     b IN key_taint (if tr then tn.t_trans else tn.t_stor) (w+n2w j)) ==>
   ?v. read_result cx tv ee = (INL v,ee) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op z /\
+    expr_post H ctx func cenv cx e es sa sb s0 ee v op z /\
     (!mem. mem_agree_outside tm.t_mem z.vs_memory mem ==>
       val_in_memory ty v (w2n d) mem)
 Proof
@@ -108,15 +108,15 @@ Proof
   pop_assum strip_assume_tac >>
   drule_all storage_holds_value_bounds >> strip_tac >>
   drule vv_post_read_result >> strip_tac >>
-  `vv_post ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  `vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      asm_rewrite_tac[]) >>
   qexists `v` >> simp[] >>
   `val_in_memory ty v (w2n d) z.vs_memory` by
     (first_x_assum irule >> simp[mem_agree_outside_def]) >>
   `val_footprint ty v <= nb` by decide_tac >>
   irule unwrap_copy_semantic_post >> simp[] >>
-  goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> qexistsl [`buf`, `k`, `mid`, `type_slot_size ty`, `nb`, `root`] >>
   gvs[]
 QED

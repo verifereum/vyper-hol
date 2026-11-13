@@ -8,13 +8,13 @@ Ancestors exprSimCopy loweringPosts exprLoweringProps freshWrites
 Theorem ifexp_copy_buffer_post_transport:
   !ctx func cenv cx e es sa sm mid sb s0 es' raw v vv s u z tv op w sz inst.
     post_value_type cenv e = expr_type e /\
-    vv_post ctx func cenv cx e es sa sm s0 es' raw vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' raw vv s /\
     read_result cx raw es' = (INL v,es') /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= mid.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\ sm.cs_next_id < sb.cs_next_id /\
-    stmt_state_rel ctx func cenv cx es' u /\
+    stmt_state_rel H ctx func cenv cx es' u /\
     u.vs_memory = s.vs_memory /\
     (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
@@ -36,7 +36,7 @@ Theorem ifexp_copy_buffer_post_transport:
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     val_wf tv v /\ val_in_memory tv v (w2n w) z.vs_memory /\
     val_footprint tv v <= sz /\ eval_operand op z = SOME w ==>
-    expr_post ctx func cenv cx e es sa sb s0 es' v op z
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op z
 Proof
   rpt gen_tac >> strip_tac >>
   `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by
@@ -53,12 +53,12 @@ Proof
      fs[regions_disjoint_def] >> metis_tac[]) >>
   `!name b len. local_region cenv es.scopes s0 name b len ==>
      w2n w + sz <= b \/ b + len <= w2n w` by
-    (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) copy_buffer_original_local_separation >>
+    (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) copy_buffer_original_local_separation >>
      disch_then (qspecl_then [`w2n w`, `sz`] mp_tac) >>
      simp[] >> metis_tac[ADD_COMM]) >>
   `local_ptrs_reserved cenv mid` by
     metis_tac[local_ptrs_reserved_next_var, LESS_EQ_TRANS] >>
-  `stmt_state_rel ctx func cenv cx es' z` by
+  `stmt_state_rel H ctx func cenv cx es' z` by
     (irule copy_buffer_state_rel_frame >>
      qexistsl_tac [`w2n w`, `inst`, `u`, `mid`, `sz`] >>
      simp[] >> gvs[regions_disjoint_def] >> metis_tac[]) >>

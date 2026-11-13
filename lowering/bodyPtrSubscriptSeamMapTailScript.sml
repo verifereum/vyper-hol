@@ -9,8 +9,8 @@ Theorem mapping_slot_hash_endpoint_ptr:
   (!z. slot = Var z \/ key = Var z ==> not_fresh_at sa z) /\
   eval_operand slot s = SOME w0 /\ eval_operand key s = SOME w1 /\
   op_taint tn slot = {} /\ op_taint tn key = {} /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
   (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -18,7 +18,7 @@ Theorem mapping_slot_hash_endpoint_ptr:
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK u) /\
     eval_operand op u = SOME (hashmap_slot w0 w1) /\
-    stmt_state_rel ctx fn cenv cx es u /\ ghost_inv d cenv cx es G' tn' u /\
+    stmt_state_rel H ctx fn cenv cx es u /\ ghost_inv H d cenv cx es G' tn' u /\
     ghost_kept cenv es sa G tn s G' tn' /\ op_taint tn' op = {} /\
     wb_frame cenv es es sa s u /\ pure_frame cenv fn es sa s u /\
     u.vs_current_bb = sb.cs_current_bb /\
@@ -69,7 +69,7 @@ Proof
 QED
 
 Theorem mapping_key_encode_endpoint_ptr:
-  expr_post ctx fn cenv cx e es sa sn s0 ee kv key s /\
+  expr_post H ctx fn cenv cx e es sa sn s0 ee kv key s /\
   hashmap_key_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv kv /\
   ptr_val_ok cx (post_value_type cenv e) kv key G tn s /\
@@ -77,7 +77,7 @@ Theorem mapping_key_encode_endpoint_ptr:
   (if is_bytestring_type (expr_type e) then compile_keccak256_key key F sn
    else (key,sn)) = (op,sp) /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sn /\
-  ghost_inv d cenv cx ee G tn s /\
+  ghost_inv H d cenv cx ee G tn s /\
   (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sn p) /\
   (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sn p) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -85,7 +85,7 @@ Theorem mapping_key_encode_endpoint_ptr:
   fn_has_code sn sp fn ==>
   ?u G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK u) /\
     eval_operand op u = SOME (encode_hashmap_key (expr_type e) kv) /\
-    stmt_state_rel ctx fn cenv cx ee u /\ ghost_inv d cenv cx ee G' tn' u /\
+    stmt_state_rel H ctx fn cenv cx ee u /\ ghost_inv H d cenv cx ee G' tn' u /\
     ghost_kept cenv ee sn G tn s G' tn' /\ op_taint tn' op = {} /\
     (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
     (!z. not_fresh_at sn z ==> lookup_var z u = lookup_var z s) /\
@@ -128,7 +128,7 @@ Proof
 QED
 
 Theorem mapping_index_tail_ptr:
-  expr_post ctx fn cenv cx e es sa sn s0 ee kv key s /\
+  expr_post H ctx fn cenv cx e es sa sn s0 ee kv key s /\
   hashmap_key_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv kv /\
   ptr_val_ok cx (post_value_type cenv e) kv key G tn s /\
@@ -138,7 +138,7 @@ Theorem mapping_index_tail_ptr:
   compile_mapping_subscript slot hashed sp = (out,sb) /\
   fn_has_code sn sb fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sn /\
-  ghost_inv d cenv cx ee G tn s /\
+  ghost_inv H d cenv cx ee G tn s /\
   (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sn p) /\
   (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sn p) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -147,7 +147,7 @@ Theorem mapping_index_tail_ptr:
   eval_operand slot s = SOME base_slot /\ op_taint tn slot = {} ==>
   ?u Gu tnu. gas_path_ptr D 0 ctx fn PG G tn s 0 Gu tnu (OK u) /\
     eval_operand out u = SOME (hashmap_slot base_slot (encode_hashmap_key (expr_type e) kv)) /\
-    stmt_state_rel ctx fn cenv cx ee u /\ ghost_inv d cenv cx ee Gu tnu u /\
+    stmt_state_rel H ctx fn cenv cx ee u /\ ghost_inv H d cenv cx ee Gu tnu u /\
     op_taint tnu out = {} /\ wb_frame cenv ee ee sn s u /\
     pure_frame cenv fn ee sn s u /\
     ghost_kept cenv ee sn G tn s Gu tnu /\
@@ -182,7 +182,7 @@ Proof
   `wb_frame cenv ee ee sn s a` by
     (simp[loweringPostsTheory.wb_frame_def] >>
      irule exprSimPropsTheory.locals_kept_regions >> simp[]) >>
-  `stmt_state_rel ctx fn cenv cx ee s` by
+  `stmt_state_rel H ctx fn cenv cx ee s` by
     gvs[loweringPostsTheory.expr_post_def] >>
   `wb_frame cenv ee ee sn s u` by
     (qspecl_then [`fn`, `cenv`, `cx`, `ee`, `s`, `sn`, `ee`, `ee`, `sp`, `a`, `u`, `ctx`]

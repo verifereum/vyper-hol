@@ -65,8 +65,8 @@ Theorem emit_mload_counted:
       lookup_var p sf = lookup_var p s /\
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-      stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel H ctx func cenv cx es sf)
 Proof
   strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb /\
@@ -85,8 +85,8 @@ Proof
     (mk_inst sa.cs_next_id MLOAD [Var src] [out]) t` >>
   qabbrev_tac `tnf = step_taint
     (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s t tn` >>
-  `!cenv cx es. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-     stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := SUC s.vs_inst_idx)` by
+  `!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+     stmt_state_rel H ctx func cenv cx es (t with vs_inst_idx := SUC s.vs_inst_idx)` by
     (rpt strip_tac >> simp[Abbr `t`] >> irule fresh_add_stmt_state_rel >>
      simp[] >> qexists_tac `sa` >> simp[] >> metis_tac[]) >>
   qexistsl_tac [`Gf`, `tnf`, `t with vs_inst_idx := SUC s.vs_inst_idx`] >>
@@ -131,8 +131,8 @@ Theorem emit_dynarray_length_counted:
       lookup_var p sf = lookup_var p s /\
       FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-      stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel H ctx func cenv cx es sf)
 Proof
   strip_tac >>
   drule dynarray_in_memory_robust_length >> strip_tac >>
@@ -158,17 +158,17 @@ Theorem expr_sim_ptr_local_length_continuation:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   gas_admissible (bind (eval_expr cx idx) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
     (bind (eval_expr cx idx) (read_result cx)) (es, s0, G0, tn0)
     (\res ee G tn t. ?v. res = INL v /\
-      expr_post ctx func cenv cx idx es sa sb s0 ee v op t /\
+      expr_post H ctx func cenv cx idx es sa sb s0 ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ee G tn t /\
+      ghost_inv H d cenv cx ee G tn t /\
       ptr_val_ok cx (post_value_type cenv idx) v op G tn t /\
       (~is_word_type (post_value_type cenv idx) ==> ptr_buf_ok cenv idx op G t) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn /\
@@ -181,7 +181,7 @@ Theorem expr_sim_ptr_local_length_continuation:
         32 <= sz /\ ~t.vs_halted /\
         emit_op MLOAD [Var p] sb = (Var out,sc) /\ fn_has_code sb sc func ==>
         ?Gf tnf sf.
-          gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 Gf tnf (OK sf) /\
+          gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 Gf tnf (OK sf) /\
           sf.vs_current_bb = sc.cs_current_bb /\
           sf.vs_inst_idx = LENGTH sc.cs_current_insts /\
           lookup_var out sf = SOME (n2w (LENGTH vs)) /\
@@ -205,6 +205,6 @@ Proof
   qpat_x_assum `!name p sz w. _` drule_all >> strip_tac >>
   first_x_assum drule >> strip_tac >>
   gvs[] >> drule_all emit_dynarray_length_counted >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
 QED

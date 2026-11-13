@@ -41,7 +41,7 @@ Theorem raw_call_tuple_tail_mem_ok[local]:
   emit_void MSTORE [buf.buf_operand;ok] sm = ((),sb) /\
   emit_op ADD [buf.buf_operand;Lit 32w] sb = (dst,sc) /\
   emit_void MCOPY [dst;src;Lit (n2w sz)] sc = ((),sd) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel (H : (bool # 256 word # type_value) list # num list) ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ 32 + sz < dimword (:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (32 + sz))]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
@@ -51,7 +51,7 @@ Theorem raw_call_tuple_tail_mem_ok[local]:
   run_inst_seq_mem_ok (emitted_insts sa sd) s
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
+  `stmt_state_rel H ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
   drule_all raw_call_alloc_buffer_run >> strip_tac >>
   `!p. safe_operand sa p ==> eval_operand p t = eval_operand p s` by
     (Cases >> simp[safe_operand_def, eval_operand_def]) >>
@@ -60,7 +60,7 @@ Proof
   `s.vs_alloca_next <= t.vs_alloca_next` by
     (drule_all ec_alloc_buffer_frontier >> simp[]) >>
   `w2n w + (32 + sz) <= t.vs_alloca_next` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ (t with vs_fmp := _)` mp_tac >>
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ (t with vs_fmp := _)` mp_tac >>
      simp[NoAsms, stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
      strip_tac >>
      qpat_x_assum `!aid base len. FLOOKUP t.vs_allocas aid = SOME (base,len) ==> _`
@@ -120,7 +120,7 @@ Theorem raw_call_nonrevert_positive_mem_ok:
           emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
           return buf.buf_operand od
      else return ok) sa = (result,sb) /\ 0 < n /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sf s0 s /\
+  stmt_state_rel (H : (bool # 256 word # type_value) list # num list) ctx func cenv cx es s /\ wb_frame cenv es0 es sf s0 s /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
   alloc.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
@@ -138,13 +138,13 @@ Theorem raw_call_nonrevert_positive_mem_ok:
 Proof
   strip_tac >> drule_all raw_call_nonrevert_suffix_code >> strip_tac >>
   qpat_x_assum `(if _ then _ else _) _ = _` kall_tac >>
-  `stmt_state_rel ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
+  `stmt_state_rel H ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
   drule_at (Pat `MEM _ (fn_insts _)`) raw_call_output_prefix_ready >>
   simp[] >> disch_then drule >> simp[] >>
   disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >> simp[] >>
   fs[wordsTheory.dimword_def] >>
-  `stmt_state_rel ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
+  `stmt_state_rel H ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
   disch_then drule_all >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa s4) s = OK u` >>
   `u with vs_fmp := s.vs_fmp = u` by
@@ -154,14 +154,14 @@ QED
 
 Resume raw_call_nonrevert_positive_mem_ok[compose]:
   `w2n w + (32 * ((n + 31) DIV 32) + 32) <= s.vs_alloca_next` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ s` mp_tac >>
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ s` mp_tac >>
      simp[NoAsms, stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
      strip_tac >>
      qpat_x_assum `!aid base len. FLOOKUP s.vs_allocas aid = SOME (base,len) ==> _`
        (drule_then mp_tac) >> simp[]) >>
   `FLOOKUP u.vs_allocas alloc.inst_id = SOME (w2n w,32 * ((n + 31) DIV 32) + 32)` by simp[] >>
   `w2n w + (32 * ((n + 31) DIV 32) + 32) <= u.vs_alloca_next` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ u` mp_tac >>
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ u` mp_tac >>
      simp[NoAsms, stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
      strip_tac >>
      qpat_x_assum `!aid base len. FLOOKUP u.vs_allocas aid = SOME (base,len) ==> _`
@@ -186,7 +186,7 @@ Resume raw_call_nonrevert_positive_mem_ok[compose]:
   goal_assum (drule_at (Pat `emit_void MCOPY _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_op ADD _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_void MSTORE [buf.buf_operand;ok] _ = _`)) >>
-  qexistsl_tac [`w`,`cenv`,`ctx`,`cx`,`es`,`if success then 1w else 0w`,`func`] >>
+  qexistsl_tac [`H`,`w`,`cenv`,`ctx`,`cx`,`es`,`if success then 1w else 0w`,`func`] >>
   simp[wordsTheory.dimword_def]
 QED
 
