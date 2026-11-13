@@ -6,6 +6,10 @@ Ancestors
   bodyIntCallFamStmtMutationBinopCont stmtSimAugAssignPlaceMemory
   bodyIntCallJointContract compileEnv exprLoweringProps emitHelperProps
   loweringShapeDefs venomState
+  bodyIntCallFamStmtMutationAugPlaceMemorySuffix
+  bodyIntCallFamStmtMutationAugPlaceStorageSuffix
+  bodyIntCallFamStmtMutationAugPlaceSourceLanding
+  exprSimHypsDefs vyperInterpreter vyperState
 
 Theorem intcall_aug_memory_store_cont:
   intcall_frame_ok fp /\
@@ -89,4 +93,31 @@ Proof
      fs[intcall_expr_cont_def] >> metis_tac[]) >>
   drule intcall_storage_place_word_store_path >>
   fs[intcall_expr_cont_def] >> disch_then drule_all >> simp[]
+QED
+
+(* Replay only the successful source prefix; this is backend-independent. *)
+Theorem intcall_aug_place_source_replay_landing:
+  supported_program tops /\ get_module_code cx NONE = SOME tops /\
+  supported_stmt tops bindings (AugAssign ty bt bop e) /\
+  expr_sim_inv ce cx env es /\ ce.ce_alloca_locals /\
+  type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env /\
+  call_evaluation_safe cx (int_calls_stmt (AugAssign ty bt bop e)) /\
+  eval_target_place cx bt (es with gas_obs := gs) = (INL p,mid) /\
+  read_place cx p mid = (INL cur,mid) /\
+  place_type_value cx p mid = (INL ptv,mid) /\
+  bind (eval_expr cx e) (read_result cx) mid = (INL rhs,ee) /\
+  evaluate_binop
+    (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+    ptv bop cur rhs = INL v /\
+  write_place cx p v ee = (INL (),ff) ==>
+  expr_sim_inv ce cx env ff
+Proof
+  strip_tac >>
+  `eval_stmt cx (AugAssign ty bt bop e) (es with gas_obs := gs) = (INL (),ff)` by
+    (simp[Once evaluate_def,bind_def,lift_sum_def,return_def] >>
+     qpat_x_assum `bind _ _ mid = _` mp_tac >>
+     simp[bind_def] >> strip_tac >>
+     gvs[AllCaseEqs(),lift_sum_def,return_def]) >>
+  `expr_sim_inv ce cx env (es with gas_obs := gs)` by simp[] >>
+  drule_all intcall_aug_place_source_landing >> simp[]
 QED
