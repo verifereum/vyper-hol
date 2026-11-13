@@ -4,7 +4,21 @@
 Theory bodyPtrIntCallArrayTraversal
 Ancestors
   bodyPtrIntCallArrayLoop bodyPtrIntCallArrayInvariant
-  typedArrayLoopStructure context logValueFramePtr
+  typedArrayLoopStructure typedArrayLoopCode abiStaticLoopCode
+  context logValueFramePtr loweringStateRelDefs
+
+(* All seven parent temporaries predate the recursive child.  In particular
+   its counter and derived pointers can be protected by the usual fresh
+   write frame; arbitrary names cannot be protected without this premise. *)
+Theorem intcall_array_child_parent_not_fresh:
+  !cs cl bl el len dst src ds ss i.
+    i < 7 ==>
+    not_fresh_at (typed_array_loop_start cs cl bl el len dst src ds ss)
+      (compiler_var_name cs.cs_next_var i)
+Proof
+  simp[not_fresh_at_def, typed_array_loop_start_def, compiler_var_name_def] >>
+  rpt strip_tac >> gvs[]
+QED
 
 (* sc is typed_array_loop_start; ec is the actual recursively compiled
    child's endpoint, which need not be in sc's initial block.  The loop
@@ -12,11 +26,18 @@ Ancestors
    choosing R to include them.  No prefix or next-index invariant is
    demanded of this callback. *)
 val typed_array_child_callback = ``
-  !D ctx fn PG ce dt st sc ec vb vs stv dtv a b ss ds sp dp R.
+  !D ctx fn PG ce tenv dt st sc ec vb vs stv dtv a b ss ds sp dp R.
   compile_store_memory_typed ce (Var (compiler_var_name vb 6)) dt
     (Var (compiler_var_name vb 5)) st sc = ((),ec) ==>
   !j s G tn.
-    j < LENGTH vs /\ ~s.vs_halted /\
+    j < LENGTH vs /\ fn_has_code sc ec fn /\
+    ~ctx_has_dalloca ctx /\ (!x. x IN R ==> not_fresh_at sc x) /\
+    evaluate_type tenv st = SOME stv /\
+    evaluate_type tenv dt = SOME dtv /\
+    type_memory_bytes ce st = ss /\ type_memory_bytes ce dt = ds /\
+    (!i. a+j*ss <= i /\ i < a+(j+1)*ss ==>
+      ~(b+j*ds <= i /\ i < b+(j+1)*ds)) /\
+    ~s.vs_halted /\
     s.vs_current_bb = sc.cs_current_bb /\
     s.vs_inst_idx = LENGTH sc.cs_current_insts /\
     eval_operand (Var (compiler_var_name vb 5)) s = SOME (n2w (a+j*ss)) /\
