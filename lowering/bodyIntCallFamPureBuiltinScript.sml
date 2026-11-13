@@ -46,7 +46,8 @@ Proof
   `~expr_has_effect e` by metis_tac[supported_pure_expr_effect_free] >>
   `expr_sim_pre ce fp.jc_cx env e es` by
     (simp[expr_sim_pre_body] >> metis_tac[supported_pure_int_calls]) >>
-  drule compile_expr_vv_sim >>
+  `acyclic_struct_metadata ce.ce_struct_fields` by fs[bodySimTheory.body_inv_def] >>
+  drule_all compile_expr_vv_sim >>
   disch_then (qspecl_then [`fp.jc_ctx`, `fp.jc_func`, `ty`] mp_tac) >>
   simp[expr_vv_sim_def] >>
   disch_then (qspecl_then [`sa`, `sb`, `vv`, `s`] mp_tac) >>
