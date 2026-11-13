@@ -1,7 +1,7 @@
 (* Allocation identity for available ircf aliases. *)
 Theory internalReturnCopyFwdAlias
 Ancestors
-  internalReturnCopyFwdPlan ptrDiscipline venomWfProps venomInst list finite_map words
+  internalReturnCopyFwdPlan ptrDiscipline venomWfProps venomInstIdsProps venomInst list finite_map words
   venomExecSemantics venomState o1LowerDloadPairedAllocation
   venomMemProps basePtrProofs o1FrameLockstep ssaAvailablePred venomExecProofs venomWf rangeAnalysisProofs contextCodegenRel
   tailMergeStep venomInstProofs1 ptrDisciplineControl venomInstProps relation

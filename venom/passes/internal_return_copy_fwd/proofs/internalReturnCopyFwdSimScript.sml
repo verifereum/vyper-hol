@@ -1303,7 +1303,7 @@ Proof
   rw[EXTENSION, ircf_gam_def, NOT_IN_EMPTY] >>
   spose_not_then strip_assume_tac >>
   fs[ircf_fwds_def] >>
-  drule phi_prefix_length_el_phi >> simp[]
+  drule venomExecProofsTheory.phi_prefix_length_el_phi >> simp[]
 QED
 
 Theorem ircf_gam_stk_cons[simp]:
