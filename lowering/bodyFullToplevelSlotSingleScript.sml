@@ -6,6 +6,7 @@ Ancestors
   exprPtrUnwrapEnsureSingle bodyFullUnwrapSlotPost exprPtrUnwrapStoragePost
   exprLoweringProps bodyPtrDefs venomState venomInst words list rich_list
   bodyMemEcArithPrefix exprPtrUnwrapAllocation bufferAllocationExecution fragGasSeqPtr
+  fragGasOriginPtrDead fragGasOriginPtr exprPtrUnwrapLoopEntry
 
 Theorem toplevel_slot_single_suffix_origin_ptr:
   compile_expr cenv ty (TopLevelName ann nsid) si = (LocatedValue vt p,sm) /\
@@ -103,4 +104,61 @@ Proof
       step_prov PG G inst u, step_taint inst s u tn)` by
     (irule emitted_origin_ptr_path >> metis_tac[]) >>
   qexistsl [`out`, `u`] >> gvs[Abbr `u`, Abbr `inst`]
+QED
+
+(* The raw endpoints and ghost updates are selected once, not once per H. *)
+Theorem toplevel_slot_single_common_run:
+  compile_expr cenv ty (TopLevelName ann nsid) si = (LocatedValue vt p,sm) /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+  compile_alloc_buffer nb sa = (buf,mid) /\ buf.buf_operand = Var root /\
+  fn_has_code sa mid func /\ nb < dimword (:256) /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  u = update_var root (n2w (buffer_allocation_base s sa.cs_next_id))
+        (buffer_allocation_fields s sa.cs_next_id nb) /\
+  a = u with vs_inst_idx := LENGTH mid.cs_current_insts /\
+  G0 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) u /\
+  tn0 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
+  same_blocks mid sb /\ isPREFIX mid.cs_current_insts sb.cs_current_insts /\
+  fn_has_code mid sb func /\
+  emitted_insts mid sb =
+    [mk_inst id (if p.ptr_location=LocStorage then SLOAD else TLOAD) [p.ptr_operand] [out];
+     mk_inst (id+1) MSTORE [Var root;Var out] []] /\
+  eval_operand p.ptr_operand a = SOME key /\ op_taint tn0 p.ptr_operand = {} /\
+  root <> out /\ ptr_covers G0 tn0 root a 32 /\ lookup_var root a = SOME addr /\
+  w2n addr + 32 < dimword (:256) /\ w2n addr + 32 <= a.vs_alloca_next /\
+  allocas_from lo a /\ ~a.vs_halted /\ a.vs_current_bb = mid.cs_current_bb /\
+  a.vs_inst_idx = LENGTH mid.cs_current_insts ==>
+  ?Gf tnf t.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tnf)) /\
+    t = mstore (w2n addr)
+      (slot_copy_word (if p.ptr_location=LocStorage then SLOAD else TLOAD) a key)
+      (update_var out
+        (slot_copy_word (if p.ptr_location=LocStorage then SLOAD else TLOAD) a key) a) /\
+    tnf.t_mem = (tn0.t_mem DIFF {j | w2n addr <= j /\ j < w2n addr+32}) UNION
+      {w2n addr+k | k IN key_taint
+        (if p.ptr_location=LocStorage then tn0.t_stor else tn0.t_trans) key} /\
+    tnf.t_stor = tn0.t_stor /\ tnf.t_trans = tn0.t_trans /\ tnf.t_imm = tn0.t_imm /\
+    (!x. x <> out ==> FLOOKUP Gf x = FLOOKUP G0 x /\
+       op_taint tnf (Var x) = op_taint tn0 (Var x)) /\
+    (!x k. x <> out /\ ptr_covers G0 tn0 x a k ==> ptr_covers Gf tnf x t k)
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac strip_assume_tac)) >>
+  qabbrev_tac `D0 = <|d_stor := K (K {}); d_trans := K (K {});
+    d_imm := K {}; d_ret := K {}|>` >>
+  mp_tac (Q.INST [`D` |-> `D0`, `sb` |-> `mid`] toplevel_slot_alloc_origin_ptr) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  `gas_origin_ptr_path (D0,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK a,G0,tn0)` by
+    (gvs[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp a` by simp[] >>
+  drule_all toplevel_slot_single_suffix_origin_ptr >>
+  disch_then (qspecl_then [`explicit`, `PG`, `D0`] strip_assume_tac) >>
+  `gas_origin_ptr_path (D0,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),Gf,tnf)` by
+    metis_tac[gas_origin_ptr_path_append, APPEND_NIL] >>
+  qexistsl [`Gf`, `tnf`, `t`] >> asm_rewrite_tac[] >>
+  gen_tac >> irule gas_origin_ptr_path_from_no_dead >>
+  gvs[Abbr `D0`]
 QED
