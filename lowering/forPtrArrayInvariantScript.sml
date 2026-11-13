@@ -7,12 +7,13 @@ Ancestors forPtrArraySnapshot stmtSimForArrayLoop bodyPtrDefs forPtrElement
   venomState ptrDiscipline finite_map list valueEncoding arithmetic
 
 Definition for_array_inv_ptr_def:
-  for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+  for_array_inv_ptr ctx func cenv cx st0 vs tv id idx bp arr_base p dst sz ainst
     cond_lbl st s0 G0 tn0 d name snapshot k es G tn s <=>
-  array_loop_inv ctx func cenv cx
+  array_loop_inv ctx func cenv cx st0
     (\ei. lookup_scopes name ei.scopes = SOME snapshot)
     vs id idx (Var bp) arr_base p dst sz ainst cond_lbl st k es s /\
-  ghost_inv H d cenv cx es G tn s /\ FLOOKUP G idx = NONE /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G tn s) /\ FLOOKUP G idx = NONE /\
   op_taint tn (Var idx) = {} /\ ptr_covers G tn p s sz /\
   ptr_covers G tn bp s (LENGTH vs * type_memory_size tv) /\
   (!nm lo z. local_region cenv es.scopes s nm lo z ==>
@@ -24,9 +25,11 @@ Definition for_array_inv_ptr_def:
 End
 
 Definition for_array_done_ptr_def:
-  for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d es G tn s <=>
+  for_array_done_ptr ctx func cenv cx st0 exit_lbl st s0 G0 tn0 d es G tn s <=>
   s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv H d cenv cx es G tn s) /\
   (!x v. not_fresh_at st x /\ lookup_var x s0 = SOME v ==>
     lookup_var x s = SOME v) /\
   (!x. not_fresh_at st x ==> FLOOKUP G x = FLOOKUP G0 x /\
@@ -34,7 +37,7 @@ Definition for_array_done_ptr_def:
 End
 
 Theorem for_array_inv_element_ptr:
-  for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+  for_array_inv_ptr ctx func cenv cx st0 vs tv id idx bp arr_base p dst sz ainst
     cond_lbl st s0 G0 tn0 d name snapshot k es G tn s /\
   k < LENGTH vs /\ snapshot.type = ArrayTV tv (Fixed n) /\
   snapshot.value = ArrayV (SArrayV kvs) /\
@@ -51,14 +54,19 @@ Proof
       `((k+1)*type_memory_size tv) <= LENGTH vs * type_memory_size tv` by
         simp[LESS_MONO_MULT] >> decide_tac) >>
   qpat_assum `vs = _` (fn th => once_rewrite_tac[th]) >>
-  rpt strip_tac >> irule for_local_array_element_robust >> metis_tac[]
+  rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> ghost_inv H _ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
+  drule_all for_local_array_element_robust >> simp[]
 QED
 
 Theorem for_array_inv_header_ptr:
-  for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+  for_array_inv_ptr ctx func cenv cx st0 vs tv id idx bp arr_base p dst sz ainst
     cond_lbl st s0 G0 tn0 d name snapshot k es G tn s ==>
   s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv H d cenv cx es G tn s) /\
   lookup_var idx s = SOME (n2w k) /\ FLOOKUP G idx = NONE /\
   op_taint tn (Var idx) = {} /\
   (!x v. not_fresh_at st x /\ lookup_var x s0 = SOME v ==>
@@ -66,5 +74,5 @@ Theorem for_array_inv_header_ptr:
   (!x. not_fresh_at st x ==> FLOOKUP G x = FLOOKUP G0 x /\
     op_taint tn (Var x) = op_taint tn0 (Var x))
 Proof
-  simp[for_array_inv_ptr_def, array_loop_inv_def]
+  simp[for_array_inv_ptr_def, array_loop_inv_def] >> metis_tac[]
 QED
