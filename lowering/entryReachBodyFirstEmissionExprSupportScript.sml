@@ -487,8 +487,9 @@ Proof
       ho_match_mp_tac first_emission_pair_let >> conj_tac
       >- metis_tac[first_emission_alloc_buffer] >> simp[cs_extends_refl]) >>
   gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
-  >- (qspecl_then [`cfn`, `ce`, `args`, `p1`, `MAP expr_type args`] mp_tac
-        first_emission_stage_intcall_args >>
+  >- (qspecl_then [`cfn`, `ce`, `args`, `p1`,
+                  `TAKE (LENGTH args) (ce.ce_func_param_types (nsid_to_string fid))`]
+        mp_tac first_emission_stage_intcall_args >>
       impl_tac >- first_assum ACCEPT_TAC >> disch_then ACCEPT_TAC) >>
   gen_tac >> Cases_on `n > 0` >> simp[]
   >- (Cases_on `return_buf` >> simp_tac (srw_ss()) [LET_THM]
