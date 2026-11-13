@@ -36,7 +36,7 @@ Proof
 QED
 
 Theorem tuple_place_head_pointer_operands:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   i <= j /\ j < LENGTH ltys ==>
   ?v. eval_operand (EL j elems) s = SOME v /\
@@ -62,7 +62,7 @@ QED
 
 
 Theorem tuple_place_pointer_local_regions:
-  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sp /\
+  stmt_state_rel H0 ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sp /\
   EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
   target_post H ctx func cenv cx es sp sa s0 ee pv vt r s ==>
   (!n b sz. local_region cenv ee.scopes s n b sz <=>
@@ -76,7 +76,7 @@ Proof
 QED
 
 Theorem tuple_place_pointer_snapshot:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
   target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) ==>
@@ -100,7 +100,7 @@ Proof
 QED
 
 Theorem tuple_place_pointer_pending_memory:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
   target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   i <= j /\ j < LENGTH ltys /\ ~is_word_type (EL j ltys) ==>
@@ -270,7 +270,7 @@ QED
 
 (* Reassemble the value relation after pointer evaluation, at its actual endpoint. *)
 Theorem tuple_place_pointer_value_rel:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
   target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   evaluate_type (get_tenv cx) (EL i ltys) = SOME (EL i ltvs) /\
@@ -283,13 +283,13 @@ Proof
       v = typed_val_to_w256 (EL i ltvs) (EL i vs)
     else w2n v = w2n w + SUM (MAP type_memory_size (TAKE i ltvs))` by
     (irule tuple_place_head_pointer_operands >>
-     qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
      simp[] >> goal_assum (drule_at Any)) >>
   simp[loweringPostsTheory.expr_val_rel_def] >>
   Cases_on `is_word_type (EL i ltys)` >- gvs[] >>
   gvs[] >> once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule tuple_place_pointer_pending_memory >>
-  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
@@ -314,8 +314,25 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
+(* A valid horizon at the place's endpoint observed its storage root. *)
+Theorem tuple_place_pointer_storage_facts:
+  eval_base_place cx bt es = (INL (PlaceR p),ee) /\
+  valid_horizon cx st0 H ee.storage_trace ==>
+  storage_place_observed H p /\ regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H)
+Proof
+  strip_tac >>
+  fs[vyperStorageFootprintTheory.valid_horizon_def] >>
+  Cases_on `p` >>
+  simp[vyperStoragePlaceObservedTheory.storage_place_observed_def] >>
+  drule vyperFiniteStoragePreservationTheory.eval_base_place_observed_region >>
+  strip_tac >>
+  drule_all vyperFiniteStoragePreservationTheory.storage_observations_ok_root >>
+  strip_tac >> qexistsl [`n2w offset`, `tv`, `path`, `delta`] >> simp[]
+QED
+
 Theorem tuple_place_pointer_element_facts:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   i < LENGTH ltys ==>
   value_has_type (EL i ltvs) (EL i vs) /\
@@ -333,7 +350,7 @@ Proof
 QED
 
 Theorem tuple_place_pointer_owned_region:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   EVERY (supported_expr tops) (target_indices bt) /\ eval_base_place cx bt es = (res,ee) /\
   target_post H ctx func cenv cx es sp sa s0 ee pv vt r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\

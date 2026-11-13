@@ -518,6 +518,10 @@ Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all tuple_target_store_head_path_mem >>
   disch_then (qx_choose_then `t` (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ es s`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def, state_rel_def]) >>
+     asm_rewrite_tac[]) >>
   drule_all tuple_target_store_memory_tail >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   qexists_tac `t` >> simp[]
@@ -691,6 +695,10 @@ Resume tuple_store_targets_path_mem[tail_memory]:
     (qpat_assum `!i. _ ==> evaluate_type _ _ = _ /\ _`
       (qspec_then `0` mp_tac) >> simp_tac (srw_ss()) [] >>
      strip_tac >> asm_rewrite_tac []) >>
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ es s`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def, state_rel_def]) >>
+     asm_rewrite_tac[]) >>
   drule_all tuple_target_store_memory_tail >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   asm_rewrite_tac [] >>
