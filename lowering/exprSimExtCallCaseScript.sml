@@ -340,7 +340,36 @@ Proof
   drule exprExtRequestShapeTheory.extrequest_compile_call_split >> strip_tac >>
   qpat_x_assum `let call_types = _ in _` mp_tac >>
   simp[NoAsms, LET_THM] >> pairarg_tac >> simp[] >> strip_tac >>
-  drule_all exprExtRequestCodeTheory.extrequest_operand_code >> strip_tac >>
+  `ci_mono sa s1` by
+    metis_tac[cj 2 stmtLoweringMonoTheory.ci_mono_compile_expr_sa, pairTheory.SND] >>
+  `ci_mono s1 s2` by
+    (qpat_assum `compile_ext_call_args _ _ _ _ _ _ = _` mp_tac >>
+     mp_tac (Q.SPECL [`TAKE (LENGTH (arg_types:type list)) rest`,
+       `MAP (lowered_value_type cenv) (TAKE (LENGTH (arg_types:type list)) rest)`,
+       `compile_expr`, `cenv`, `DROP (LENGTH (arg_types:type list)) rest`, `s1`]
+       ci_mono_compile_ext_call_args) >>
+     simp[cj 1 compile_expr_ci_mono] >> metis_tac[pairTheory.SND]) >>
+  `ci_mono s2 s3` by
+    metis_tac[exprExtRequestKwargsTheory.extrequest_kwargs_mono, pairTheory.SND] >>
+  `ci_mono s3 s4` by
+    (Cases_on `gas_opt`
+     >- (gvs[] >> metis_tac[ci_mono_emit_op, pairTheory.SND]) >>
+     gvs[ci_mono_refl]) >>
+  `ci_mono s4 sb` by
+    metis_tac[exprExtRequestCodeTheory.extrequest_external_mono, pairTheory.SND] >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 s2 func /\
+   fn_has_code s2 s3 func /\ fn_has_code s3 s4 func /\ fn_has_code s4 sb func` by
+    (fs[ci_mono_def] >>
+     `cs_extends s3 sb` by metis_tac[cs_extends_trans] >>
+     `cs_extends s2 sb` by metis_tac[cs_extends_trans] >>
+     `cs_extends s1 sb` by metis_tac[cs_extends_trans] >>
+     `fn_has_code sa s1 func /\ fn_has_code s1 sb func` by
+       metis_tac[fragExecTheory.fn_has_code_split] >>
+     `fn_has_code s1 s2 func /\ fn_has_code s2 sb func` by
+       metis_tac[fragExecTheory.fn_has_code_split] >>
+     `fn_has_code s2 s3 func /\ fn_has_code s3 sb func` by
+       metis_tac[fragExecTheory.fn_has_code_split] >>
+     metis_tac[fragExecTheory.fn_has_code_split]) >>
   fs[exprExtRequestStagesSourceTheory.extrequest_source_stages] >>
   irule (BETA_RULE (Q.INST [`kont` |->
     `\target posvs kwargs.
@@ -368,10 +397,9 @@ Proof
   drule_all exprExtRequestShapeTheory.extrequest_compile_kwargs_code >> strip_tac >>
   `EVERY (extrequest_snapshot_cell ctx func cenv cx ee s4 t') cells` by
     (fs[EVERY_MEM] >> rpt strip_tac >>
+     `extrequest_snapshot_cell ctx func cenv cx ee s3 t e` by metis_tac[] >>
      irule exprExtRequestSnapshotStoreInterfaceTheory.extrequest_snapshot_cell_history >>
-     qpat_assum `EVERY _ cells` (mp_tac o SRULE [EVERY_MEM]) >>
-     disch_then (qspec_then `e` mp_tac) >> simp[] >> strip_tac >>
-     goal_assum (drule_at Any) >> simp[] >>
+     qpat_assum `extrequest_snapshot_cell _ _ _ _ ee s3 t e` (irule_at Any) >>
      fs[exprExtRequestKwargsTheory.extrequest_kwargs_post_def]) >>
   `expr_body_pre cenv cx env h es` by
     (irule exprExtRequestShapeTheory.extrequest_body_pre_arg >>
@@ -389,14 +417,17 @@ Proof
   `expr_sim_inv cenv cx env esB` by
     (qpat_x_assum `!tail. eval_exprs _ (TAKE _ rest) _ = _`
        (qspec_then `[]` mp_tac) >> simp[] >> strip_tac >>
+     `expr_sim_inv cenv cx env (esB with gas_obs := [])` suffices_by simp[] >>
      irule exprExtRequestStagesSourceTheory.extrequest_exprs_preserves_inv >>
-     goal_assum (drule_at Any) >>
-     simp[] >> metis_tac[EVERY_TAKE, EVERY_DEF]) >>
+     qpat_assum `eval_exprs cx (TAKE _ rest) _ = (INL _,esB with gas_obs := [])`
+       (irule_at Any) >>
+     simp[] >> irule EVERY_TAKE >> fs[]) >>
   `expr_sim_inv cenv cx env ee` by
     (qpat_assum `extrequest_kwargs_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o SRULE [exprExtRequestKwargsTheory.extrequest_kwargs_post_def]) >>
      irule exprExtRequestStagesSourceTheory.extrequest_exprs_preserves_inv >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[EVERY_DROP, EVERY_DEF]) >>
+     qpat_assum `eval_exprs cx (DROP _ rest) _ = (INL _,ee)` (irule_at Any) >>
+     simp[] >> irule EVERY_DROP >> fs[]) >>
   `SUM (MAP (type_memory_bytes cenv)
       (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest))) < 2 ** 64 /\
    MAX (abi_size_bound cenv.ce_struct_fields
@@ -413,8 +444,8 @@ Proof
     fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >>
   `SUM (MAP (\(vv,ty,tv,v). type_memory_size tv) cells) =
      type_memory_size_list tvs` by
-    (qpat_assum `type_memory_size (TupleTV tvs) = SUM _` mp_tac >>
-     simp[valueEncodingTheory.type_memory_size_def]) >>
+    (qpat_assum `type_memory_size (TupleTV tvs) = SUM _`
+       (ACCEPT_TAC o SYM o REWRITE_RULE [valueEncodingTheory.type_memory_size_def])) >>
   `ee.gas_obs = []` by
     fs[exprExtRequestKwargsTheory.extrequest_kwargs_post_def] >>
   `SUM (MAP (type_memory_bytes cenv)
@@ -457,7 +488,6 @@ Proof
       disch_then (qspec_then `env` mp_tac) >>
       (impl_tac >- (simp[] >> fs[wordsTheory.dimword_def] >> decide_tac)) >>
       strip_tac >>
-      qpat_x_assum `posvs = []` SUBST_ALL_TAC >>
       gvs[vyperABITheory.vyper_to_abi_def] >>
       qexistsl_tac [`t''`, `w`] >> simp[contractABITheory.enc_def, listTheory.REV_DEF, wordsTheory.dimword_def]) >>
   `TAKE (LENGTH arg_types) rest <> []` by metis_tac[LENGTH_NIL] >>
@@ -995,10 +1025,6 @@ Resume extcall_call_step[call_success]:
      >- metis_tac[exprSafeOperandTheory.safe_operand_mono]
      >- metis_tac[exprSafeOperandTheory.safe_operand_mono]
      >- metis_tac[exprSafeOperandTheory.safe_operand_mono]
-     >- (qpat_x_assum `LENGTH oc.co_returnData < _` mp_tac >>
-         simp[wordsTheory.dimword_def])
-     >- (qpat_x_assum `cap + w2n ro < _` mp_tac >>
-         simp[wordsTheory.dimword_def])
      >- (qexistsl [`live`, `buf_size`] >> simp[] >> decide_tac) >>
      metis_tac[]) >>
   `gas_path ctx func t (n + (n' + n'')) (OK (jump_to sr.cs_current_bb u'))` by
