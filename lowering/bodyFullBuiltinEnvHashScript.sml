@@ -2,6 +2,7 @@ Theory bodyFullBuiltinEnvHash
 Ancestors
   bodyFullExprGeneric bodyFullPreds bodySimFull exprSimSource exprSimHypsDefs
   exprLowering exprLoweringProps exprBopLowering valueEncoding builtinProps builtinSimple vyperTypeSystem
+  gasShadowCompileStmtHelpers gasShadowState
   compileEnv vyperAST list pair
 
 Theorem hash_builtin_full_vv:
