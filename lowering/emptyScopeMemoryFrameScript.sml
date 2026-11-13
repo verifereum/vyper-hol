@@ -4,7 +4,7 @@ Ancestors
   loweringSlice localPtrsProps exprSimCopy intCallResult
   exprSimProps exprLoweringProps loweringStateRelDefs
   finite_map context compileEnv venomState valueEncodingProps
-  exprSimStorageCopy vyperState
+  exprSimStorageCopy vyperState stmtSimReturn
 
 Theorem immutables_rel_byte_agree[local]:
   !cenv addr src ctor es s t.
@@ -76,4 +76,36 @@ Proof
                gvs[stmt_state_rel_def]) >>
   gvs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
       local_region_def, lookup_scopes_def] >> first_assum ACCEPT_TAC
+QED
+
+Theorem empty_scope_unlock_memory_frame:
+  stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
+  copy_static t = copy_static (return_unlock_state cenv s) /\
+  (!off len. off + len <= b \/ b + sz <= off ==>
+    mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) /\
+  (cenv.ce_is_ctor ==> !name itv iv off.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+      SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables cenv.ce_module imms) name =
+      SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) b sz) /\
+  (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
+    lookup_var x t = lookup_var x s) ==>
+  ?pre. t = (return_unlock_state cenv pre with vs_inst_idx := t.vs_inst_idx) /\
+    stmt_state_rel ctx func cenv cx (es with scopes := []) pre
+Proof
+  strip_tac >>
+  qabbrev_tac `pre = t with
+    <|vs_accounts := s.vs_accounts; vs_transient := s.vs_transient|>` >>
+  `copy_static pre = copy_static s /\
+   t = (return_unlock_state cenv pre with vs_inst_idx := t.vs_inst_idx)` by
+    (qabbrev_tac `info = cenv.ce_nonreentrant` >> PairCases_on `info` >>
+     Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
+     fs[copy_static_def, return_unlock_state_def, Abbr `pre`,
+        tstore_def, sstore_def, venom_state_component_equality]) >>
+  qexists_tac `pre` >> simp[] >>
+  irule empty_scope_memory_frame >> qexistsl_tac [`b`, `s`, `sz`] >>
+  fs[Abbr `pre`, lookup_var_def, arithmeticTheory.ADD_COMM] >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
