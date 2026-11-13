@@ -3,6 +3,7 @@ Theory abiEncTuplePtrCapturedPrefix
 Ancestors
   abiEncodeArgsSim bodyPtrBytestringBuiltinsEval bodyPtrDefs
   gasSummaryComposePtr fragGasPathPtr gasExemptCert
+  bodyPtrTypeBuiltinsPure bodyPtrBytestringBuiltinsUnary exprSimMemorySource
 
 Theorem abi_args_result_bind_ptr:
   gas_outcome_ptr D tops (ctx,func) PG
@@ -72,4 +73,20 @@ Proof
   gvs[exprSimDefsTheory.expr_exit_INL] >>
   first_x_assum irule >> simp[] >>
   fs[stmtSimPropsTheory.expr_exit_INR_type]
+QED
+
+(* read_result is gas-observation transparent at an actual successful read. *)
+Theorem abi_args_read_result_suffix_ptr:
+  read_result cx tv ee = (INL v,ee) /\ ee.gas_obs = [] /\ ~t.vs_halted /\
+  gas_outcome_ptr D tops (ctx,func) PG (k v) (ee,t,G,tn) Q R ==>
+  gas_outcome_ptr D tops (ctx,func) PG (bind (read_result cx tv) k)
+    (ee,t,G,tn) Q R
+Proof
+  strip_tac >> irule gas_outcome_ptr_value_bind >>
+  qexistsl [`\res em gt r. F`,
+            `\res em H tm u. res = INL v /\ em = ee /\ H = G /\ tm = tn /\ u = t`] >> simp[] >>
+  irule gas_outcome_ptr_pure >> simp[] >>
+  conj_tac
+  >- (gen_tac >> irule read_result_gas_obs >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `ee.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]
 QED
