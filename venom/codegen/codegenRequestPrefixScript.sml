@@ -219,6 +219,7 @@ Theorem codegen_request_prefix:
     call_requests es <<= vs'.vs_requests
 Proof
   rpt gen_tac >> strip_tac >>
+  rename1 `generate_context_plan unit.cu_context = SOME cplan` >>
   drule_all codegen_assembly_frame_prog_ok >> strip_tac >>
   `assemble prog <> []` by metis_tac[codegen_assembly_nonempty] >>
   (Q.SUBGOAL_THEN `vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
@@ -226,7 +227,7 @@ Proof
        es.rollback.accounts)` assume_tac
    >- (gvs[initial_ctx_rel_def, codegenEntryRelTheory.initial_ctx_rel_tail_def] >>
        metis_tac[])) >>
-  `initial_ctx_rel_tail [] cp prog unit.cu_context vs es` by
+  `initial_ctx_rel_tail [] cplan prog unit.cu_context vs es` by
     fs[initial_ctx_rel_def] >>
   drule_all asm_frame_rel_entry >> strip_tac >>
   drule_all codegen_entry_asm_sim >>
