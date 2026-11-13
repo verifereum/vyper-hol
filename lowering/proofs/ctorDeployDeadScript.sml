@@ -172,9 +172,9 @@ Proof
 QED
 
 Theorem deploy_venom_result_rel_dead:
-  !H tops runtime_bc am tx gobs src res res'.
+  !H tops runtime_bc am tx orc gobs src res res'.
     deploy_source_ok tops am tx /\
-    src = load_contract NONE gobs am tx [(NONE, tops)] [] /\
+    src = load_contract orc gobs am tx [(NONE, tops)] [] /\
     deploy_venom_result_rel H tops runtime_bc tx src res /\
     ~deploy_source_exempt tops src /\
     dead_result_rel (deploy_dead H tops runtime_bc am tx) res res'
