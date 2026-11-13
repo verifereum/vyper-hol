@@ -96,6 +96,11 @@ Theorem local_memory_store_path:
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
              rest) t /\
+        (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+           stmt_state_rel H' ctx func cenv cx
+             (es with scopes :=
+                pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
+                rest) t) /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -148,8 +153,12 @@ Proof
      decide_tac) >>
   `memory_value_rel entry.type v (w2n w) t.vs_memory` by
     (irule val_in_memory_memory_value_rel >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx es1 t` by
-    (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
+  `!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+        stmt_state_rel H' ctx func cenv cx es1 t` by
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` kall_tac >>
+     drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
+  `stmt_state_rel H ctx func cenv cx es1 t` by (first_assum drule >> simp[]) >>
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>

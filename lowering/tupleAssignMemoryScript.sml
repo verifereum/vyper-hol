@@ -103,7 +103,7 @@ Proof
 QED
 
 Theorem assign_tuple_locals_memory_suffix_path:
-  !ctx func cx cenv ids es1 es' tys tvs vs sa su sl ss sf op staged elems sv flag.
+  !st0 ctx func cx cenv ids es1 es' tys tvs vs sa su sl ss sf op staged elems sv flag.
     ids <> [] /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     (!i. i < LENGTH ids ==> ?p sz vt.
@@ -138,11 +138,14 @@ Theorem assign_tuple_locals_memory_suffix_path:
     cs_extends su sl /\ cs_extends sl ss /\ cs_extends ss sf /\
     fn_has_code su sl func /\ fn_has_code sl ss func /\ fn_has_code ss sf func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv su /\
-    stmt_state_rel H ctx func cenv cx es1 sv /\ ~sv.vs_halted /\
+    (?H. valid_horizon cx st0 H es1.storage_trace) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es1 sv) /\ ~sv.vs_halted /\
     sv.vs_current_bb = su.cs_current_bb /\
     sv.vs_inst_idx = LENGTH su.cs_current_insts ==>
     ~block_is_terminated sf /\
-    ?t. stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. (!H. valid_horizon cx st0 H es1.storage_trace ==>
+             stmt_state_rel H ctx func cenv cx es' t) /\ ~t.vs_halted /\
       t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x w. not_fresh_at su x /\ lookup_var x sv = SOME w ==>
@@ -193,6 +196,9 @@ Resume assign_tuple_locals_memory_suffix_path[code]:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `?t w b sz. _`
     (qx_choosel_then [`t`, `w`, `b`, `sz`] (map_every assume_tac o CONJUNCTS)) >>
+  qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx es1 t` by
+    (qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ es1 t` irule >> simp[]) >>
   suspend "store"
 QED
 
@@ -241,16 +247,22 @@ Resume assign_tuple_locals_memory_suffix_path[store_ready]:
      drule_all word_type_sizes >>
      disch_then (qspec_then `cenv` strip_assume_tac) >> simp[]) >>
   drule_all (SIMP_RULE (srw_ss()) []
-    (Q.SPECL [`ids`, `T`] tupleLocalStoreRunTheory.tuple_store_mixed_locals_path)) >>
+    (Q.SPECL [`H0`, `ids`, `T`] tupleLocalStoreRunTheory.tuple_store_mixed_locals_path)) >>
   disch_then ((MAP_EVERY assume_tac o CONJUNCTS)) >>
-  qpat_x_assum `?t. stmt_state_rel H ctx _ _ _ es' _ /\ _`
+  qpat_x_assum `?t. stmt_state_rel H0 ctx _ _ _ es' _ /\ _`
     (qx_choose_then `sfv` (MAP_EVERY assume_tac o CONJUNCTS)) >>
   suspend "compose"
 QED
 
 Resume assign_tuple_locals_memory_suffix_path[compose]:
   conj_tac >- (first_x_assum irule >> simp[]) >>
-  qexists `sfv` >> asm_rewrite_tac [] >>
+  qexists `sfv` >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!H'. stmt_state_rel H' _ _ _ _ es1 t ==> _` irule >>
+      qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ es1 t` irule >>
+      first_assum ACCEPT_TAC) >>
+  asm_rewrite_tac [] >>
   conj_tac >- suspend "vars" >>
   conj_tac >- metis_tac[] >>
   conj_tac
