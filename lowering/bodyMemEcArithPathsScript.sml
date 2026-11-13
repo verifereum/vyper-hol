@@ -84,7 +84,8 @@ QED
 
 Theorem ecmul_points_path_mem:
   compile_ecmul_point p scalar sa = (op,sb) /\
-  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   (!i. MEM i (emitted_insts sa sb) ==> MEM i (fn_insts func)) /\
   eval_operand p s = SOME point /\ eval_operand scalar s = SOME sw /\
@@ -142,7 +143,8 @@ QED
 
 Theorem ecadd_points_path_mem:
   compile_ecadd_points p q sa = (op,sb) /\
-  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   (!i. MEM i (emitted_insts sa sb) ==> MEM i (fn_insts func)) /\
   eval_operand p s = SOME point /\ eval_operand q s = SOME point2 /\
