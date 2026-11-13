@@ -2,6 +2,7 @@
 Theory abiDecodeMemActualFrame
 Ancestors
   abiDecodeMemMembers abiDecoderFrame abiDecoderFrameCompose
+  calldataDynOwned allocationGrowth
   venomState venomInst finite_map pred_set list arithmetic
 
 val actual_footprint = ``\func lo hi (m:num |-> (num # num)) fp.
@@ -60,4 +61,39 @@ Proof
      >- metis_tac[] >- metis_tac[] >> rw[])) >>
   strip_tac >> qexists_tac `fp` >>
   fs[abi_decode_footprint_frame_def] >> metis_tac[]
+QED
+
+Theorem abi_decode_actual_frame_accumulate:
+  abi_decode_footprint_frame ((d,sz)::old) s t /\
+  abi_decode_footprint_frame ((e,esz)::child) t u /\
+  ^actual_footprint func lo hi t.vs_allocas old /\
+  ^actual_footprint func child_lo child_hi u.vs_allocas child /\
+  allocation_growth t u /\ lo <= child_lo /\ child_hi <= hi /\
+  d <= e /\ e+esz <= d+sz ==>
+  ?fp. ^actual_footprint func lo hi u.vs_allocas fp /\
+    abi_decode_footprint_frame ((d,sz)::fp) s u
+Proof
+  strip_tac >>
+  qspecl_then [`func`,`lo`,`hi`,`u.vs_allocas`] strip_assume_tac
+    abi_decode_actual_footprint_exists >>
+  `abi_decode_footprint_frame ((d,sz)::(old++child)) s u` by
+    metis_tac[calldata_footprint_accumulate] >>
+  `!p n. MEM (p,n) old ==> MEM (p,n) fp` by
+    (rpt strip_tac >>
+     `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+       lo <= inst.inst_id /\ inst.inst_id < hi /\
+       FLOOKUP t.vs_allocas inst.inst_id = SOME (p,n)` by metis_tac[] >>
+     `FLOOKUP u.vs_allocas inst.inst_id = SOME (p,n)` by
+       metis_tac[allocation_growth_old] >> metis_tac[]) >>
+  `!p n. MEM (p,n) child ==> MEM (p,n) fp` by
+    (rpt strip_tac >>
+     `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+       child_lo <= inst.inst_id /\ inst.inst_id < child_hi /\
+       FLOOKUP u.vs_allocas inst.inst_id = SOME (p,n)` by metis_tac[] >>
+     `lo <= inst.inst_id /\ inst.inst_id < hi` by decide_tac >> metis_tac[]) >>
+  qexists_tac `fp` >> asm_rewrite_tac[] >>
+  irule abi_decode_footprint_frame_weaken >>
+  qexists_tac `(d,sz)::(old++child)` >> asm_rewrite_tac[] >>
+  simp[MEM_APPEND] >> rpt strip_tac >>
+  qexistsl_tac [`d'`,`sz'`] >> simp[]
 QED
