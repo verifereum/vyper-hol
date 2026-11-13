@@ -1210,8 +1210,8 @@ Proof
     metis_tac[deploy_source_ctor_not_nr] >>
   gvs[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_constants_ready,
       constructor_call_free_def] >>
-  `ALOOKUP [(NONE,tops)] NONE = SOME tops /\
-   MEM (NONE,tops) [(NONE,tops)]` by simp[] >>
+  `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops /\
+   MEM (NONE:num option,tops) [(NONE,tops)]` by simp[] >>
   simp[load_contract_trace_def] >>
   qpat_assum `initial_immutables _ _ = SOME _` (fn th => simp[th]) >>
   Cases_on `lookup_function NONE "__init__" Deploy tops` >> simp[] >>
