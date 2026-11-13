@@ -461,7 +461,8 @@ Resume gen_inst_assert_frame_sim[prepared]:
      gvs[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def,
        eval_operand_with_memory] >> metis_tac[]) >>
   `?out. asm_steps lo o2pc prog 7 (mid with as_stack := mid.as_stack ++ rest) = AsmRevert out /\
-    venom_asm_terminal_rel (halt_state (set_returndata [] vs)) out` by
+    venom_asm_terminal_rel (halt_state (set_returndata [] vs)) out /\
+    create_safe_prefix lo o2pc prog 7 (mid with as_stack := mid.as_stack ++ rest)` by
     (irule asm_assert_zero_revert >>
      simp[] >> rpt conj_tac
      >- (qexists `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest` >>

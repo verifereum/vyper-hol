@@ -259,7 +259,8 @@ Theorem gen_inst_assert_frame_sim_deep:
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
   ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\ a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert out /\
-    venom_asm_terminal_rel vs' out
+    venom_asm_terminal_rel vs' out /\
+    create_safe_prefix lo o2pc prog n st
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all step_inst_assert_abort >> strip_tac >>
@@ -299,6 +300,17 @@ Resume gen_inst_assert_frame_sim_deep[decomposed]:
 QED
 
 Resume gen_inst_assert_frame_sim_deep[prepared]:
+  `EVERY plan_admin_op (iops ++ rops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `asm_block_at prog st.as_pc
+     (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
+    (qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
+     simp[execute_plan_append, asm_block_at_append]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) st` by
+    (irule plan_admin_create_safe_prefix >> metis_tac[LESS_EQ_REFL]) >>
+  qpat_x_assum `asm_block_at prog st.as_pc
+    (execute_plan cplan.cp_initial_fmp (iops ++ rops))` kall_tac >>
   `!op. operand_val (frame_view fn ra vs with vs_memory := st.as_memory) lo op =
         operand_val (frame_view fn ra vs) lo op` by
     (Cases >> simp[operand_val_def]) >>
@@ -314,7 +326,8 @@ Resume gen_inst_assert_frame_sim_deep[prepared]:
      gvs[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def,
        eval_operand_with_memory] >> metis_tac[]) >>
   `?out. asm_steps lo o2pc prog 7 (mid with as_stack := mid.as_stack ++ rest) = AsmRevert out /\
-    venom_asm_terminal_rel (halt_state (set_returndata [] vs)) out` by
+    venom_asm_terminal_rel (halt_state (set_returndata [] vs)) out /\
+    create_safe_prefix lo o2pc prog 7 (mid with as_stack := mid.as_stack ++ rest)` by
     (irule asm_assert_zero_revert >>
      simp[] >> rpt conj_tac
      >- (qexists `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest` >>
@@ -323,7 +336,9 @@ Resume gen_inst_assert_frame_sim_deep[prepared]:
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 7`, `out`] >>
   conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
-  simp[] >> irule asm_steps_compose_revert >> goal_assum (drule_at Any) >> simp[]
+  simp[] >> conj_tac
+  >- (irule asm_steps_compose_revert >> goal_assum (drule_at Any) >> simp[]) >>
+  irule create_safe_prefix_compose >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Finalise gen_inst_assert_frame_sim_deep

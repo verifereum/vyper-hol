@@ -12,6 +12,7 @@
 Theory genBlockSim
 Ancestors
   venomFnInstsProofs operandInventory codegenReadyCompute regularEmitSim regularPlanSim preparedPrefixSim generatedPrefixSim generatedReorderSim regularMemorySim regularPostfixSim reorderSpillFresh prefixSpillReplay deepDupCallerSim blockSimHelpers stackOpSim stackOpAsmSim planWf prefixExec prefixSim mixedPrefixSim planSim asmSem planExec codegenRel asmIR stackPlanGen stackPlanTypes stackModel stackPlanOps venomExecSemantics venomInstProofs1 venomState venomInst venomWf venomEffects list rich_list arithmetic indexedLists instSimHelpers opcodeClass strongPrefixSim reorderSim emitInputSim planAlign doSwapSim emitSim asmOpSim spillSim allocMono cleanOpsSim planSpillBounds contextCodegenRelProps
+  asmRunBounded
   doDupModel doDupCorrect emitOperandSim singleInputSim inputPlanSim inputMaterialised reduceDepthSim reorderCheckedSim operandPreparationSim spillPlanSim spillWordBounds memoryReadRel logEmitSim logPlanSim logInstructionSim
 Libs
   BasicProvers
@@ -1751,7 +1752,8 @@ Theorem asm_revert_postamble[local]:
     asm_block_at prog st.as_pc (execute_plan initial_fmp revert_postamble) /\
     venom_asm_terminal_rel vs st ==>
     ?out. asm_steps lo o2pc prog 4 st = AsmRevert out /\
-      venom_asm_terminal_rel (halt_state (set_returndata [] vs)) out
+      venom_asm_terminal_rel (halt_state (set_returndata [] vs)) out /\
+      create_safe_prefix lo o2pc prog 4 st
 Proof
   rpt strip_tac >>
   fs[revert_postamble_def, execute_plan_def, exec_stack_op_def,
@@ -1782,7 +1784,16 @@ Proof
       `1 = SUC 0` by decide_tac >> pop_assum SUBST1_TAC >>
       rewrite_tac[asm_steps_def] >> simp[stackOpAsmSimTheory.asm_step_revert, asm_revert_op_def,
            asm_state_component_equality]) >>
-  fs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def]
+  conj_tac
+  >- fs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def] >>
+  rewrite_tac[numLib.num_CONV ``4:num``, create_safe_prefix_suc] >>
+  simp[create_safe_def, asm_step_def, asm_next_def] >>
+  rewrite_tac[numLib.num_CONV ``3:num``, create_safe_prefix_suc] >>
+  simp[create_safe_def, asm_step_def, asm_next_def] >>
+  rewrite_tac[numLib.num_CONV ``2:num``, create_safe_prefix_suc] >>
+  simp[create_safe_def, asm_dup_def, asm_next_def] >>
+  rewrite_tac[ONE, create_safe_prefix_suc] >>
+  simp[create_safe_def]
 QED
 
 Theorem asm_assert_zero_jump[local]:
@@ -1793,22 +1804,29 @@ Theorem asm_assert_zero_jump[local]:
     FLOOKUP lo "revert" = SOME off /\ off < dimword (:256) /\
     FLOOKUP o2pc off = SOME pc ==>
     asm_steps lo o2pc prog 3 st =
-      AsmOK (st with <|as_stack := rest; as_pc := pc|>)
+      AsmOK (st with <|as_stack := rest; as_pc := pc|>) /\
+    create_safe_prefix lo o2pc prog 3 st
 Proof
-  rpt strip_tac >> fs[asm_block_at_def] >>
+  rpt gen_tac >> strip_tac >> fs[asm_block_at_def] >>
   `EL st.as_pc prog = AsmOp "ISZERO"` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   `EL (st.as_pc + 1) prog = AsmPushLabel "revert"` by
     (first_x_assum (qspec_then `1` mp_tac) >> simp[]) >>
   `EL (st.as_pc + 2) prog = AsmOp "JUMPI"` by
     (first_x_assum (qspec_then `2` mp_tac) >> simp[]) >>
-  `3 = SUC 2` by decide_tac >> pop_assum SUBST1_TAC >>
-  rewrite_tac[Once asm_steps_def] >>
-  simp[asm_step_iszero, asm_unop_def, asm_next_def] >>
-  `2 = SUC 1` by decide_tac >> pop_assum SUBST1_TAC >>
-  rewrite_tac[Once asm_steps_def] >> simp[asm_step_def, asm_next_def] >>
-  `1 = SUC 0` by decide_tac >> pop_assum SUBST1_TAC >>
-  rewrite_tac[asm_steps_def] >> simp[asm_step_jumpi, asm_jumpi_def]
+  conj_tac
+  >- (`3 = SUC 2` by decide_tac >> pop_assum SUBST1_TAC >>
+      rewrite_tac[Once asm_steps_def] >>
+      simp[asm_step_iszero, asm_unop_def, asm_next_def] >>
+      `2 = SUC 1` by decide_tac >> pop_assum SUBST1_TAC >>
+      rewrite_tac[Once asm_steps_def] >> simp[asm_step_def, asm_next_def] >>
+      `1 = SUC 0` by decide_tac >> pop_assum SUBST1_TAC >>
+      rewrite_tac[asm_steps_def] >> simp[asm_step_jumpi, asm_jumpi_def]) >>
+  rewrite_tac[numLib.num_CONV ``3:num``, create_safe_prefix_suc] >>
+  simp[create_safe_def, asm_step_iszero, asm_unop_def, asm_next_def] >>
+  rewrite_tac[numLib.num_CONV ``2:num``, create_safe_prefix_suc] >>
+  simp[create_safe_def, asm_step_def, asm_next_def] >>
+  rewrite_tac[ONE, create_safe_prefix_suc] >> simp[create_safe_def]
 QED
 
 Theorem asm_assert_zero_revert:
@@ -1821,7 +1839,8 @@ Theorem asm_assert_zero_revert:
     asm_block_at prog pc (execute_plan initial_fmp revert_postamble) /\
     venom_asm_terminal_rel vs st ==>
     ?out. asm_steps lo o2pc prog 7 st = AsmRevert out /\
-      venom_asm_terminal_rel (halt_state (set_returndata [] vs)) out
+      venom_asm_terminal_rel (halt_state (set_returndata [] vs)) out /\
+      create_safe_prefix lo o2pc prog 7 st
 Proof
   rpt strip_tac >>
   drule_all asm_assert_zero_jump >> strip_tac >>
@@ -1836,7 +1855,9 @@ Proof
   rename1 `asm_steps lo o2pc prog 4 _ = AsmRevert out` >>
   qexists `out` >> simp[] >>
   `7 = (3:num) + 4` by simp[] >> pop_assum SUBST1_TAC >>
-  irule asm_steps_compose_revert >> goal_assum drule >> simp[]
+  conj_tac
+  >- (irule asm_steps_compose_revert >> goal_assum drule >> simp[]) >>
+  irule create_safe_prefix_compose >> goal_assum drule >> simp[]
 QED
 
 (* Kept under this theory's name for the compiler-proof integration branch. *)
