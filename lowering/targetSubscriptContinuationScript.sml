@@ -656,6 +656,8 @@ Proof
      (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s` by simp[] >>
   drule_all target_subscript_storage_compile >> strip_tac >>
   qpat_x_assum `op = _` SUBST_ALL_TAC >> fs[] >>
+  `w2n slot + type_slot_size (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) <=
+     dimword(:256)` by simp[] >>
   drule_all target_storage_array_suffix_horizons >> strip_tac >>
   qexists_tac `u` >> simp[]
 QED
