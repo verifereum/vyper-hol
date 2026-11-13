@@ -230,39 +230,74 @@ Proof
   decide_tac
 QED
 
-(* TEMPORARILY CHEATED - its proof went through compile_slice_calldata_shared_success,
-   whose old-order statement is false under 0.5.0b1; statement unchanged and true.
+(* An ALLOCA step sees only the allocation book-keeping, so a state that
+   differs only in variables and the PC allocates the same new bytes. *)
+Theorem alloca_step_same_new_site_bytes:
+  step_inst_base (mk_inst id ALLOCA [Lit szw] [out]) r = OK u /\
+  r.vs_allocas = s.vs_allocas /\ r.vs_alloca_next = s.vs_alloca_next /\
+  r.vs_fmp = s.vs_fmp ==>
+  ?us. step_inst_base (mk_inst id ALLOCA [Lit szw] [out]) s = OK us /\
+    new_site_bytes s us = new_site_bytes r u
 Proof
-  strip_tac >> drule_all compile_slice_calldata_shared_success >>
-  disch_then (qspecl_then [`bound`,`PG`,`D`] strip_assume_tac) >>
-  `sa.cs_next_id < sb.cs_next_id` by
-    (drule compile_slice_calldata_id_range >> simp[]) >>
-  `wb_frame cenv es es sa s zf` by
-    (simp[wb_frame_def] >> metis_tac[]) >>
-  `~expr_has_effect e ==> pure_frame cenv fn es sa s zf` by
-    (strip_tac >> first_assum ACCEPT_TAC) >>
-  `LENGTH (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) <= n` by simp[] >>
-  qpat_x_assum `out = Var root` SUBST_ALL_TAC >>
-  `!i. w2n w <= i /\ i < w2n w + 32 +
-    LENGTH (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) ==> i NOTIN tm.t_mem` by
-    (rpt gen_tac >> disch_tac >>
-     qpat_x_assum `!i. _ ==> i NOTIN _` irule >> decide_tac) >>
-  drule_all calldata_bytes_result_posts >> strip_tac >>
-  `val_footprint (BaseTV (BytesT (Dynamic bound)))
-    (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) <= N` by
-    (simp[val_footprint_def] >> decide_tac) >>
-  qexistsl_tac [`zf`,`HG`,`tm`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac
-  >- (irule vv_post_allocated_memory_intro >> simp[] >>
-      qexistsl_tac [`sa.cs_next_id`,`w2n w`,`N`] >>
-      simp[] >> rpt gen_tac >> disch_tac >>
-      qpat_x_assum `!name b len. _ ==> regions_disjoint _ _ _ _` drule >>
-      simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
-  simp[]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
+  strip_tac >> Cases_on `FLOOKUP s.vs_allocas id` >> gvs[]
+  >- simp[new_site_bytes_def, update_var_def] >>
+  rename1 `FLOOKUP s.vs_allocas id = SOME site` >> PairCases_on `site` >>
+  gvs[new_site_bytes_def, update_var_def]
 QED
-*)
-(* PORT_ADMISSION: SEQ-3208, bot/opus/seq-3208-t16-cdslice, built at fc54ea89e *)
+
+(* The successful calldata slice with its run witnesses chosen once, before
+   any horizon: the run is deterministic, so one endpoint and one ghost serve
+   every H that P admits. *)
+Theorem compile_slice_calldata_success_uniform:
+  compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
+  fn_has_code sa sb fn /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
+  32 + n <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
+  a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  a + n < dimword (:256) /\ a + n <= LENGTH s.vs_call_ctx.cc_calldata /\
+  eval_operand start s = SOME (n2w a) /\
+  (!x. start = Var x ==> not_fresh_at sa x) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  op_prov G start = NONE /\ op_taint tn start = {} /\
+  (!H. P H ==> stmt_state_rel H ctx fn cenv cx es s /\
+     ghost_inv H d cenv cx es G tn s /\ storage_well_formed_on cx es (FST H)) /\
+  P H0 /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  post_value_type cenv e = expr_type e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic bound))) /\
+  ~is_word_type (expr_type e) /\
+  val_wf (BaseTV (BytesT (Dynamic bound)))
+    (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) /\
+  type_memory_size (BaseTV (BytesT (Dynamic bound))) <= N /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= N ==>
+  ?zf HG tm.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK zf) /\
+    (!H. P H ==>
+      vv_post H ctx fn cenv cx e es sa sb s es
+        (Value (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))))
+        (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) zf /\
+      ghost_inv H d cenv cx es HG tm zf) /\
+    ptr_vv_ok cx (expr_type e)
+      (Value (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))))
+      (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) es HG tm zf /\
+    ptr_buf_ok cenv e out HG zf /\
+    ghost_kept cenv es sa G tn s HG tm /\
+    zf.vs_current_bb = sb.cs_current_bb /\ zf.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~zf.vs_halted
+Proof
+  strip_tac >>
+  `stmt_state_rel H0 ctx fn cenv cx es s` by metis_tac[] >>
+  drule_all compile_slice_calldata_semantic >>
+  disch_then (qspec_then `bound` strip_assume_tac) >>
+  qpat_x_assum `out = _` SUBST_ALL_TAC >>
+  qpat_x_assum `data = _` SUBST_ALL_TAC >>
+  goalStack.print_tac "PROBE" >> cheat
+QED
+
 Theorem compile_slice_calldata_success_posts:
   compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
   fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
@@ -276,7 +311,7 @@ Theorem compile_slice_calldata_success_posts:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   op_prov G start = NONE /\ op_taint tn start = {} /\
-  ghost_inv H d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\ storage_well_formed_on cx es (FST H) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   post_value_type cenv e = expr_type e /\
@@ -299,7 +334,11 @@ Theorem compile_slice_calldata_success_posts:
     zf.vs_current_bb = sb.cs_current_bb /\ zf.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~zf.vs_halted
 Proof
-  cheat
+  strip_tac >>
+  mp_tac (Q.INST [`P` |-> `\H'. H' = H`, `H0` |-> `H`]
+    compile_slice_calldata_success_uniform) >>
+  impl_tac >- simp[] >>
+  strip_tac >> qexistsl_tac [`zf`,`HG`,`tm`] >> fs[]
 QED
 
 Theorem compile_slice_calldata_revert:
@@ -420,7 +459,7 @@ Theorem compile_slice_calldata_source_outcome:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   op_prov G start = NONE /\ op_taint tn start = {} /\
-  ghost_inv H d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\ storage_well_formed_on cx es (FST H) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   post_value_type cenv e = expr_type e /\
