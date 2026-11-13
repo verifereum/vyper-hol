@@ -19832,6 +19832,24 @@ Proof
     venomStateTheory.eval_operand_def]
 QED
 
+Theorem mm_local_calldata_store_step[local]:
+  i.inst_opcode = MSTORE /\ i.inst_operands = [Lit dst; Var v] /\
+  lookup_var v t = SOME (word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP (w2n src) t.vs_call_ctx.cc_calldata ++ REPLICATE 32 0w))) ==>
+  step_inst fuel ctx i t =
+    OK (write_memory_with_expansion (w2n dst)
+      (TAKE 32 (DROP (w2n src) t.vs_call_ctx.cc_calldata ++ REPLICATE 32 0w)) t)
+Proof
+  strip_tac >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.exec_write2_def,
+    venomStateTheory.eval_operand_def] >>
+  qspecl_then [`w2n src`, `w2n dst`, `t`] mp_tac
+    calldataload_mstore_eq_calldatacopy >>
+  simp[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
