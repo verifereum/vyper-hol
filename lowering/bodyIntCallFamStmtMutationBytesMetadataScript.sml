@@ -13,50 +13,50 @@ Theorem intcall_bytes_lowered_class:
   type_memory_bytes ce (lowered_value_type ce e) <=
     type_memory_bytes ce (expr_type e)
 Proof
-  (* Temporary stand-in: the proof below broke on the 0.5.0b1 lowering port;
-     named repair for the alan run. Original proof:
-    strip_tac >>
-    drule expr_body_pre_var_types_well_formed >> strip_tac >>
-    `well_typed_expr env e /\
-     sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
-      gvs[expr_body_pre_def, expr_sim_inv_def,
-          vyperTypeInvariantsTheory.env_consistent_def,
-          vyperTypeInvariantsTheory.env_context_consistent_def] >>
-    drule_all ifexp_lowered_type_classify >> strip_tac
-    >- gvs[]
-    >- metis_tac[lowered_value_type_memory_bound] >>
-    `supported_program tops /\
-     ce.ce_func_return_type = build_func_return_type tops /\
-     get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
-    qpat_x_assum `supported_expr _ _` mp_tac >>
-    simp[supportedExprsTheory.supported_expr_def, supported_pure_expr_def,
-         supported_effect_expr_def] >> strip_tac >>
-    Cases_on `drv` >> gvs[supported_effect_expr_def, optionTheory.IS_SOME_EXISTS] >>
-    PairCases_on `x` >>
-    `?sig. FLOOKUP env.fn_sigs fid = SOME sig` by
-      (Cases_on `fid` >>
-       gvs[well_typed_expr_def, optionTheory.IS_SOME_EXISTS]) >>
-    `expr_sim_inv ce cx env es` by gvs[expr_body_pre_def] >>
-    drule_all supported_internal_signature_return >> strip_tac >>
-    qpat_x_assum `well_typed_expr _ _` mp_tac >>
-    Cases_on `fid` >>
-    simp[well_typed_expr_def, expr_type_def] >> strip_tac >>
-    gvs[lowered_value_type_def, expr_type_def, type_widens_to_def] >>
-    Cases_on `ty` >> gvs[is_bytestring_type_def] >>
-    Cases_on `b` >> gvs[is_bytestring_type_def] >>
-    Cases_on `sig.ret_ty` >> gvs[arg_type_fits_def] >>
-    rename1 `arg_type_fits (BaseT bt) _` >>
-    Cases_on `bt` >>
-    gvs[arg_type_fits_def, is_bytestring_type_def,
-        compileEnvTheory.type_memory_bytes_def] >>
-    simp[arithmeticTheory.DIV_LE_MONOTONE] >>
-    rename1 `arg_type_fits (BaseT (BytesT src)) (BaseT (BytesT dst))` >>
-    Cases_on `dst` >> gvs[is_bytestring_type_def] >>
-    Cases_on `src` >>
-    gvs[is_bytestring_type_def, arg_type_fits_def, type_memory_bytes_def,
-        arithmeticTheory.DIV_LE_MONOTONE]
-  *)
-  cheat
+  strip_tac >>
+  drule expr_body_pre_var_types_well_formed >> strip_tac >>
+  `well_typed_expr env e /\
+   sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
+   (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+      ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
+    gvs[expr_body_pre_def, expr_sim_inv_def,
+        vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  drule_all ifexp_lowered_type_classify >> strip_tac
+  >- gvs[]
+  >- metis_tac[lowered_value_type_memory_bound] >>
+  `supported_program tops /\
+   ce.ce_func_return_type = build_func_return_type tops /\
+   get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+  qpat_x_assum `supported_expr _ _` mp_tac >>
+  simp[supportedExprsTheory.supported_expr_def, supported_pure_expr_def,
+       supported_effect_expr_def] >> strip_tac >>
+  Cases_on `drv` >> gvs[supported_effect_expr_def, optionTheory.IS_SOME_EXISTS] >>
+  PairCases_on `x` >>
+  `?sig. FLOOKUP env.fn_sigs fid = SOME sig` by
+    (Cases_on `fid` >>
+     gvs[well_typed_expr_def, optionTheory.IS_SOME_EXISTS]) >>
+  `expr_sim_inv ce cx env es` by gvs[expr_body_pre_def] >>
+  drule_all supported_internal_signature_return >> strip_tac >>
+  qpat_x_assum `well_typed_expr _ _` mp_tac >>
+  Cases_on `fid` >>
+  simp[well_typed_expr_def, expr_type_def] >> strip_tac >>
+  gvs[lowered_value_type_def, expr_type_def, type_widens_to_def] >>
+  qpat_x_assum `!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> _` drule >>
+  simp[] >> strip_tac >>
+  Cases_on `ty` >> gvs[is_bytestring_type_def] >>
+  Cases_on `b` >> gvs[is_bytestring_type_def] >>
+  Cases_on `sig.ret_ty` >> gvs[arg_type_fits_def] >>
+  rename1 `arg_type_fits (BaseT bt) _` >>
+  Cases_on `bt` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def,
+      compileEnvTheory.type_memory_bytes_def] >>
+  simp[arithmeticTheory.DIV_LE_MONOTONE] >>
+  rename1 `arg_type_fits (BaseT (BytesT src)) (BaseT (BytesT dst))` >>
+  Cases_on `dst` >> gvs[is_bytestring_type_def] >>
+  Cases_on `src` >>
+  gvs[is_bytestring_type_def, arg_type_fits_def, type_memory_bytes_def,
+      arithmeticTheory.DIV_LE_MONOTONE]
 QED
 
 Theorem intcall_bytes_lowered_metadata:
