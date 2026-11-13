@@ -350,3 +350,54 @@ Proof
     (qspecl_then [`initial_st`, `selected`] mp_tac) >>
   disch_then irule >> metis_tac[]
 QED
+
+Theorem lookup_global_backend_observations[local]:
+  lookup_global cx src n st = (res,st') ==>
+  (storage_trace_backends_well_formed cx R st'.storage_trace <=>
+   storage_trace_backends_well_formed cx R st.storage_trace)
+Proof
+  Cases_on `get_module_code cx src` >>
+  simp[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  Cases_on `find_var_decl_by_name n x` >>
+  simp[get_immutables_def, get_address_immutables_def, bind_def, return_def, raise_def] >>
+  TRY (PairCases_on `x'` >> Cases_on `x'0`) >>
+  gvs[bind_def, ignore_bind_def, lift_option_type_def, return_def, raise_def,
+      record_storage_event_def, vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[storage_trace_backends_well_formed_def]
+QED
+
+Theorem finite_prefix_Expr_TopLevelName:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "Expr_TopLevelName")
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def] >> strip_tac >>
+  `st'.accounts = st.accounts /\ st'.tStorage = st.tStorage` by
+    (drule lookup_global_state >> disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `storage_trace_backends_well_formed cx (FST H) st'.storage_trace` by
+    metis_tac[valid_horizon_def, storage_observations_ok_def, lookup_global_backend_observations] >>
+  gvs[storage_observations_ok_def, storage_trace_regions_append,
+      storage_trace_locks_append, EVERY_APPEND,
+      storage_well_formed_on_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!b slot tv. _` drule >>
+  Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]
+QED
+
+Theorem finite_prefix_BasePlaceRoot_TopLevelNameTarget:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "BasePlaceRoot_TopLevelNameTarget")
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def] >> strip_tac >>
+  `st'.accounts = st.accounts /\ st'.tStorage = st.tStorage` by
+    (drule lookup_global_state >> disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `storage_trace_backends_well_formed cx (FST H) st'.storage_trace` by
+    metis_tac[valid_horizon_def, storage_observations_ok_def, lookup_global_backend_observations] >>
+  gvs[storage_observations_ok_def, storage_trace_regions_append,
+      storage_trace_locks_append, EVERY_APPEND,
+      storage_well_formed_on_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!b slot tv. _` drule >>
+  Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]
+QED
