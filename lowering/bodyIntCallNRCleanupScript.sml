@@ -2,7 +2,7 @@
 Theory bodyIntCallNRCleanup
 Ancestors
   bodyIntCallNRCleanupProbe bodyIntCallNRSource bodyIntCallSeamDefs
-  gasContext exprSimDefs exprLoweringProps loweringHalt vyperTyping vyperInterpreter vyperState
+  gasSummary fragGasFocus fragGasMode gasContext exprSimDefs exprLoweringProps loweringHalt vyperTyping vyperInterpreter vyperState
 Libs
   monadsyntax
 
@@ -98,4 +98,44 @@ Proof
   `?ue. unlock_if_nr cx nr (is_view_mut mut) (ee with gas_obs := []) =
           (INL (),ue)` by metis_tac[intcall_unlock_total] >>
   drule_all intcall_rest_normal_typed >> simp[]
+QED
+
+Theorem intcall_cleanup_return_summary:
+  gas_invoke_entry (ctx,func) t callee entered /\
+  gas_admissible (intcall_rest cx name mut nr ss prev rtv) expr_vv_res_ok es /\
+  gas_marked_exec F (ctx,callee) (intcall_callee_src cx name mut nr ss)
+    (es,entered) marks (INL v) ee (IntRet ir cs) /\
+  unlock_if_nr cx nr (is_view_mut mut) (ee with gas_obs := []) = (INL (),ue) /\
+  gas_path ctx func t (LENGTH marks + k) (OK out) /\
+  Q (INL (Value v)) (ue with scopes := prev) out ==>
+  gas_summary_at F (ctx,func) (marks ++ REPLICATE k F)
+    (intcall_rest cx name mut nr ss prev rtv) (es,t) Q R
+Proof
+  strip_tac >>
+  `entered.vs_gas_readings = t.vs_gas_readings` by
+    (drule gas_invoke_entry_readings >> simp[]) >>
+  fs[gas_marked_exec_def, gas_marked_path_def,
+     Excl "unlock_if_nr_def", Excl "is_view_mut_def"] >>
+  `!tail. unlock_if_nr cx nr (is_view_mut mut) (ee with gas_obs := tail) =
+      (INL (),ue with gas_obs := tail)` by
+    (gen_tac >>
+     mp_tac (Q.INST [`es` |-> `ee with gas_obs := []`, `gs` |-> `tail`,
+                      `view` |-> `is_view_mut mut`] intcall_unlock_gas_obs) >>
+     simp[Excl "unlock_if_nr_def", Excl "is_view_mut_def"]) >>
+  `!tail. intcall_rest cx name mut nr ss prev rtv
+      (es with gas_obs := gas_explicit marks t.vs_gas_readings ++ tail) =
+      (INL (Value v),(ue with scopes := prev) with gas_obs := tail)` by
+    (gen_tac >>
+     qpat_assum `!tail. intcall_callee_src _ _ _ _ _ _ = _`
+       (qspec_then `tail` assume_tac) >>
+     qpat_assum `!tail. unlock_if_nr _ _ _ _ = _`
+       (qspec_then `tail` assume_tac) >>
+     drule_all intcall_rest_normal_typed >> simp[]) >>
+  `ue with gas_obs := [] = ue` by
+    (qpat_x_assum `!tail. unlock_if_nr _ _ _ _ = _`
+       (qspec_then `[]` mp_tac) >>
+     simp[Excl "unlock_if_nr_def", Excl "is_view_mut_def"]) >>
+  simp[gas_summary_at_def, gas_marked_exec_def, gas_marked_path_def] >>
+  qexistsl_tac [`INL (Value v)`,`ue with scopes := prev`,`OK out`] >>
+  simp[gas_explicit_append]
 QED
