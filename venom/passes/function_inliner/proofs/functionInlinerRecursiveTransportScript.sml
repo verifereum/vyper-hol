@@ -1,11 +1,17 @@
 (* Finite evaluator segments, indexed by actual entry and interior body cuts. *)
 Theory functionInlinerRecursiveTransport
 Ancestors
-  functionInlinerSelectedSource functionInlinerSelectedContinuation
+  functionInlinerSelectedSource functionInlinerSelectedContinuation functionInlinerFrontier
+  functionInlinerResidualReturn functionInlinerEvaluatorResidual functionInlinerFmp
+  functionInlinerReturnRouting functionInlinerEnvelopes functionInlinerSimulation functionInlinerCuts
+  functionInlinerLiveInvariant functionInlinerParameterSequential functionInlinerParameterAncestry
   functionInlinerLiveSteps functionInlinerLiveEdges functionInlinerFuel
   functionInlinerLocation functionInlinerParameterLocations
   functionInlinerActivation functionInlinerSiteLayout cfgTransform
-  venomExecSemantics venomExecProofs arithmetic
+  venomExecSemantics venomExecProofs o1PassLift arithmetic
+  functionInlinerOccurrences functionInlinerRoutedProvenance functionInlinerOrigin
+  functionInlinerRouteKeys functionInlinerParameterLineage
+  functionInlinerFrame venomState venomInst list
 
 Datatype:
   inline_eval_cut = InlineEntry venom_state | InlineBody basic_block venom_state
@@ -1112,16 +1118,6 @@ Proof
   gvs[functionInlinerSimulationTheory.inline_caller_bookkeeping_def]
 QED
 
-Theorem inline_root_parameter_fields[local]:
-  is_param_opcode src.inst_opcode /\ inline_inst_fields dst = inline_inst_fields src ==>
-  step_inst tfuel Tctx dst s = step_inst fuel C src s /\
-  ~is_terminator dst.inst_opcode
-Proof
-  simp[inline_inst_fields_def] >> strip_tac >>
-  gvs[venomInstTheory.is_param_opcode_iff] >>
-  simp[step_inst_def, step_inst_base_opcode_eqs, venomInstTheory.is_terminator_def]
-QED
-
 Theorem inline_root_parameter_fetched_trace[local]:
   inline_annotated_origin C n root cert /\
   (inline_entry_function cert).fn_blocks = entry::rest /\
@@ -1161,3 +1157,818 @@ Proof
   gvs[venomInstTheory.is_param_opcode_iff, inline_inst_fields_def] >>
   gvs[step_inst_def, step_inst_base_opcode_eqs, venomInstTheory.is_terminator_def]
 QED
+
+Theorem inline_keep_current_boundary[local]:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  e.ise_index < LENGTH bb.bb_instructions /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  lookup_block l e.ise_caller.fn_blocks = SOME cb /\
+  get_instruction cb j = SOME inst /\
+  inline_choice_location (InlineKeep e)
+    <|il_block := l; il_phase := InlineAtInstruction j; il_counter := k|> =
+    SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := next|> ==>
+  inline_parameter_boundary (InlineKeep e) e.ise_caller l j e.ise_final ml mj
+Proof
+  strip_tac >>
+  `j <= LENGTH cb.bb_instructions` by gvs[venomInstTheory.get_instruction_def] >>
+  drule_all inline_keep_boundary_produce >>
+  gvs[inline_choice_location_def, inline_keep_boundary_def] >>
+  Cases_on `l = e.ise_block` >> gvs[] >>
+  Cases_on `e.ise_index < j` >> gvs[]
+QED
+
+Theorem inline_enter_current_boundary[local]:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  ~MEM (STRCAT e.ise_prefix l) (fn_labels e.ise_caller) /\
+  STRCAT e.ise_prefix l <> e.ise_return /\
+  lookup_block l e.ise_callee.fn_blocks = SOME cb /\
+  get_instruction cb j = SOME inst /\
+  inline_choice_location (InlineEnter e)
+    <|il_block := l; il_phase := InlineAtInstruction j; il_counter := k|> =
+    SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := next|> ==>
+  inline_parameter_boundary (InlineEnter e) e.ise_callee l j e.ise_final ml mj
+Proof
+  strip_tac >>
+  `j <= LENGTH cb.bb_instructions` by gvs[venomInstTheory.get_instruction_def] >>
+  drule_all inline_enter_boundary_produce >>
+  gvs[inline_choice_location_def, functionInlinerReachableCutsTheory.inline_cell_prefix_def]
+QED
+
+Theorem inline_residual_current_path[local]:
+  !cert root p fn l j orig outcome.
+    inline_call_incidence cert root p fn l j orig outcome ==>
+    !C n loc inst k.
+      inline_annotated_origin C n root cert /\
+      outcome = InlineResidual loc inst /\ loc.il_phase = InlineAtInstruction k ==>
+      ?path. inline_routed_leaf cert root p fn path /\
+        inline_parameter_boundary_path path fn l j root loc.il_block k
+Proof
+  ho_match_mp_tac inline_call_incidence_strongind >> rpt conj_tac >> simp[]
+  >- (rpt strip_tac >> qexists `[]` >>
+      simp[inline_parameter_boundary_path_def, inline_routed_leaf_rules]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
+  drule inline_annotated_origin_edit_elim >> simp[] >> strip_tac >>
+  `?i. loc.il_phase = InlineAtInstruction i` by
+    metis_tac[inline_call_incidence_residual_phase] >>
+  qpat_x_assum `!C n k. _`
+    (qspecl_then [`C`, `e.ise_state.is_inline_count`, `i`] mp_tac) >>
+  simp[] >> strip_tac >>
+  drule_all inline_annotated_edit_fetch_facts >> strip_tac
+  >- (qexists `path ++ [InlineKeep e]` >>
+      conj_tac >- metis_tac[inline_routed_leaf_rules] >>
+      irule inline_parameter_boundary_path_append >> goal_assum (drule_at Any) >>
+      simp[inline_parameter_boundary_path_def] >>
+      `?cb current. lookup_block loc.il_block e.ise_caller.fn_blocks = SOME cb /\
+        get_instruction cb i = SOME current` by
+        (drule inline_call_incidence_residual_fetch >>
+         disch_then (qspecl_then [`C`, `e.ise_state.is_inline_count`, `loc`, `inst`] mp_tac) >>
+         simp[inline_fetched_fields_def] >> metis_tac[]) >>
+      `loc = <|il_block := loc.il_block; il_phase := InlineAtInstruction i;
+        il_counter := loc.il_counter|>` by simp[inline_location_component_equality] >>
+      `loc' = <|il_block := loc'.il_block; il_phase := InlineAtInstruction k;
+        il_counter := loc'.il_counter|>` by simp[inline_location_component_equality] >>
+      irule inline_keep_current_boundary >> metis_tac[]) >>
+  qexists `path ++ [InlineEnter e]` >>
+  conj_tac >- metis_tac[inline_routed_leaf_rules] >>
+  irule inline_parameter_boundary_path_append >> goal_assum (drule_at Any) >>
+  simp[inline_parameter_boundary_path_def] >>
+  `?cb current. lookup_block loc.il_block e.ise_callee.fn_blocks = SOME cb /\
+    get_instruction cb i = SOME current` by
+    (drule inline_call_incidence_residual_fetch >>
+     disch_then (qspecl_then [`C`, `e.ise_state.is_inline_count`, `loc`, `inst`] mp_tac) >>
+     simp[inline_fetched_fields_def] >> metis_tac[]) >>
+  `MEM loc.il_block (fn_labels e.ise_callee)` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+      venomExecPropsTheory.lookup_block_label, fn_labels_def, MEM_MAP] >>
+  `loc = <|il_block := loc.il_block; il_phase := InlineAtInstruction i;
+    il_counter := loc.il_counter|>` by simp[inline_location_component_equality] >>
+  `loc' = <|il_block := loc'.il_block; il_phase := InlineAtInstruction k;
+    il_counter := loc'.il_counter|>` by simp[inline_location_component_equality] >>
+  irule inline_enter_current_boundary >> metis_tac[]
+QED
+
+(* The three clauses share a fuel, but not a phase.  INITIAL and ENTRY
+   consume a run_blocks layer before BODY; residual INVOKE uses INITIAL
+   at BODY's fuel, not a fictitious smaller child fuel. *)
+Theorem inline_residual_arguments[local]:
+  inline_call_incidence cert root p fn l j orig (InlineResidual loc dst) /\
+  inline_annotated_origin C n root cert /\
+  inline_routed_leaf cert root p fn path /\
+  decode_invoke orig = SOME (nm,ops) /\
+  s.vs_labels = FEMPTY /\ eval_operands ops s = SOME args ==>
+  decode_invoke dst = SOME (nm,MAP (inline_rename_operand (inline_path_rename path) I) ops) /\
+  dst.inst_outputs = MAP (inline_path_rename path) orig.inst_outputs
+Proof
+  strip_tac >>
+  `EVERY (\op. !name. op <> Label name) ops` by
+    (`EVERY (\op. IS_SOME (eval_operand op s)) ops` by
+       simp[GSYM eval_operands_IS_SOME_EVERY] >>
+     fs[EVERY_MEM] >> rpt strip_tac >> gvs[] >>
+     qpat_x_assum `!op. MEM op ops ==> IS_SOME _`
+       (qspec_then `Label name` mp_tac) >> simp[eval_operand_def]) >>
+  `?actual. orig.inst_operands = Label nm::ops /\
+     dst.inst_operands = Label nm::actual` by
+    (drule inline_call_incidence_residual_target >>
+     disch_then (qspecl_then [`C`,`n`,`loc`,`dst`] mp_tac) >>
+     simp[] >> strip_tac >> gvs[decode_invoke_def]) >>
+  drule inline_call_incidence_residual_routing >>
+  disch_then (qspecl_then [`loc`,`dst`] mp_tac) >> simp[] >> strip_tac >>
+  `inline_path_rename path' = inline_path_rename path` by
+    metis_tac[inline_routed_leaf_key_unique, inline_path_key_rename] >>
+  `actual = MAP (inline_rename_operand (inline_path_rename path') I) ops` by
+    (irule LIST_EQ >>
+     `LENGTH actual = LENGTH ops` by
+       (qspec_then `path'` (qspec_then `orig.inst_operands` mp_tac)
+          inline_call_operand_fold_length >> metis_tac[LENGTH, prim_recTheory.INV_SUC_EQ]) >>
+     simp[] >> rpt strip_tac >>
+     qspec_then `path'` (qspecl_then [`Label nm::ops`,`SUC x`,`I`] mp_tac)
+       inline_call_operand_fold_value >>
+     fs[EVERY_EL] >> simp[] >>
+     qpat_x_assum `Label nm::actual = _` (fn th => rewrite_tac[GSYM th]) >>
+     simp[EL_MAP, EL]) >>
+  gvs[decode_invoke_def] >>
+  qpat_x_assum `Label nm::_ = _` (fn th => rewrite_tac[GSYM th]) >> simp[]
+QED
+
+Definition inline_transport_family_def:
+  inline_transport_family C Tctx R <=>
+    (!root cert. R root cert ==> ?n. inline_annotated_origin C n root cert) /\
+    (!root cert p fn l j orig loc inst name args child.
+      R root cert /\
+      inline_call_incidence cert root p fn l j orig (InlineResidual loc inst) /\
+      decode_invoke orig = SOME (name,args) /\
+      lookup_function name C.ctx_functions = SOME child ==>
+      ?target cert'. lookup_function name Tctx.ctx_functions = SOME target /\
+        inline_entry_function cert' = child /\ R target cert')
+End
+
+Definition inline_physical_outcome_def:
+  inline_physical_outcome Tctx root cut result <=>
+    case result of
+      IntRet ir u => ?b v. inline_terminal Tctx root b cut (IntRet ir v) /\
+        inline_shared_frame u = inline_shared_frame v
+    | Halt u => ?b v. inline_terminal Tctx root b cut (Halt v) /\
+        inline_shared_frame u = inline_shared_frame v
+    | Abort reason u => ?b v. inline_terminal Tctx root b cut (Abort reason v) /\
+        inline_shared_frame u = inline_shared_frame v
+    | other => F
+End
+
+Definition inline_transport_initial_def:
+  inline_transport_initial C Tctx R fuel <=>
+    !root cert fn s result.
+      R root cert /\ fn = inline_entry_function cert /\
+      fn.fn_blocks <> [] /\ s.vs_labels = FEMPTY /\ ~s.vs_halted /\
+      s.vs_current_bb = (HD fn.fn_blocks).bb_label /\ s.vs_inst_idx = 0 /\
+      run_blocks fuel C fn s = result /\
+      (!err. result <> Error err) /\ (!u. result <> OK u) ==>
+      inline_physical_outcome Tctx root (InlineEntry s) result
+End
+
+Definition inline_transport_entry_def:
+  inline_transport_entry C Tctx R fuel <=>
+    !root cert p a route snap rest frame path sb tb completed_fuel result.
+      R root cert /\
+      inline_live_stack C cert root ((p,a,route,snap)::rest) frame /\
+      inline_frontier_stack ((p,a,route,snap)::rest) frame /\
+      inline_namespace_leaf_at cert p route.ir_rename a.ia_function /\
+      inline_routed_leaf cert root p a.ia_function path /\
+      route.ir_rename = inline_path_rename path /\
+      ~snap.ils_state.vs_halted /\ ~frame.ipf_state.vs_halted /\
+      lookup_block snap.ils_state.vs_current_bb a.ia_function.fn_blocks = SOME sb /\
+      lookup_block frame.ipf_state.vs_current_bb root.fn_blocks = SOME tb /\
+      a.ia_function.fn_blocks <> [] /\
+      snap.ils_state.vs_current_bb <> (HD a.ia_function.fn_blocks).bb_label /\
+      (!q. snap.ils_state.vs_prev_bb = SOME q ==> MEM q (fn_labels a.ia_function)) /\
+      inline_phi_entry_path path
+        (snap.ils_state.vs_current_bb,snap.ils_state.vs_prev_bb) =
+        (frame.ipf_state.vs_current_bb,frame.ipf_state.vs_prev_bb) /\
+      run_blocks completed_fuel C a.ia_function a.ia_entry = result /\
+      inline_resume C a.ia_function fuel (InlineEntry snap.ils_state) = result /\
+      (!err. result <> Error err) /\ (!u. result <> OK u) ==>
+      inline_activation_outcome C Tctx cert root p a route rest frame
+        (InlineEntry frame.ipf_state) result
+End
+
+Definition inline_transport_body_def:
+  inline_transport_body C Tctx R fuel <=>
+    !root cert p a route snap rest frame path sb tb completed_fuel result.
+      R root cert /\
+      inline_live_stack C cert root ((p,a,route,snap)::rest) frame /\
+      inline_frontier_stack ((p,a,route,snap)::rest) frame /\
+      inline_namespace_leaf_at cert p route.ir_rename a.ia_function /\
+      inline_routed_leaf cert root p a.ia_function path /\
+      route.ir_rename = inline_path_rename path /\
+      ~snap.ils_state.vs_halted /\ ~frame.ipf_state.vs_halted /\
+      lookup_block snap.ils_state.vs_current_bb a.ia_function.fn_blocks = SOME sb /\
+      lookup_block frame.ipf_state.vs_current_bb root.fn_blocks = SOME tb /\
+      inline_parameter_boundary_path path a.ia_function
+        snap.ils_state.vs_current_bb snap.ils_state.vs_inst_idx root
+        frame.ipf_state.vs_current_bb frame.ipf_state.vs_inst_idx /\
+      phi_prefix_length sb.bb_instructions <= snap.ils_state.vs_inst_idx /\
+      no_param_insts (DROP snap.ils_state.vs_inst_idx sb.bb_instructions) /\
+      run_blocks completed_fuel C a.ia_function a.ia_entry = result /\
+      inline_resume C a.ia_function fuel (InlineBody sb snap.ils_state) = result /\
+      (!err. result <> Error err) /\ (!u. result <> OK u) ==>
+      inline_activation_outcome C Tctx cert root p a route rest frame
+        (InlineBody tb frame.ipf_state) result
+End
+
+Theorem inline_zero_frame_boundary[local]:
+  inline_cell_frame tag c d /\
+  (!e k. tag = EnterCell e k ==> k = 0) ==>
+  inline_parameter_boundary (inline_cell_choice tag)
+    c.ic_function c.ic_block c.ic_index d.ic_function d.ic_block d.ic_index
+Proof
+  strip_tac >>
+  `inline_cell_at d` by metis_tac[functionInlinerReachableCutsTheory.inline_cell_frame_sound] >>
+  Cases_on `tag` >>
+  gvs[functionInlinerReachableCutsTheory.inline_cell_frame_def,
+      functionInlinerReachableCutsTheory.inline_cell_choice_def,
+      inline_parameter_boundary_def,
+      functionInlinerReachableCutsTheory.inline_cell_at_def,
+      inline_fetched_fields_def,
+      functionInlinerReachableCutsTheory.inline_make_cell_def,
+      inline_keep_boundary_def, venomInstTheory.get_instruction_def] >>
+  metis_tac[LESS_IMP_LESS_OR_EQ]
+QED
+
+Theorem inline_jump_keep_produce[local]:
+  inline_annotated_origin ctx e.ise_state.is_inline_count e.ise_caller a /\
+  inline_annotated_origin ctx e.ise_state.is_inline_count e.ise_callee b /\
+  inline_site_edit_valid e /\ c.ic_function = e.ise_caller /\
+  inline_cell_at c /\ FST c.ic_fields = JMP ==>
+  ?d. inline_cell_frame (KeepCell e) c d /\
+    d.ic_function = e.ise_final /\ inline_cell_at d /\ FST d.ic_fields = JMP
+Proof
+  strip_tac >> drule_all functionInlinerOccurrencesTheory.inline_annotated_edit_fetch_facts >> strip_tac >>
+  `ALL_DISTINCT (fn_labels e.ise_caller)` by
+    metis_tac[functionInlinerOccurrencesTheory.inline_annotated_origin_labels] >>
+  `?source. lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source /\
+    e.ise_index < LENGTH source.bb_instructions /\
+    (EL e.ise_index source.bb_instructions).inst_opcode = INVOKE` by
+    metis_tac[inline_site_edit_valid_def,
+      functionInlinerWfTheory.find_invoke_site_lookup] >>
+  `c.ic_block <> e.ise_block \/ c.ic_index <> e.ise_index` by
+    (gvs[functionInlinerReachableCutsTheory.inline_cell_at_def,
+      inline_fetched_fields_def,
+      venomInstTheory.get_instruction_def, inline_inst_fields_def] >>
+     rpt strip_tac >> gvs[] >>
+     qpat_x_assum `(_,_,_) = c.ic_fields` (assume_tac o SYM) >> fs[]) >>
+  `?d. inline_cell_frame (KeepCell e) c d` by
+    metis_tac[functionInlinerReachableCutsTheory.inline_keep_cell_produce] >>
+  qexists `d` >> simp[] >>
+  `inline_cell_at d` by metis_tac[functionInlinerReachableCutsTheory.inline_cell_frame_sound] >> simp[] >>
+  qpat_x_assum `inline_cell_frame _ _ _` mp_tac >>
+  simp[functionInlinerReachableCutsTheory.inline_cell_frame_def] >> rpt strip_tac >>
+  gvs[functionInlinerReachableCutsTheory.inline_make_cell_def,
+    inline_inst_fields_def,
+    inline_edit_repair_def]
+QED
+
+Theorem inline_jump_enter_produce[local]:
+  inline_annotated_origin ctx e.ise_state.is_inline_count e.ise_caller a /\
+  inline_annotated_origin ctx e.ise_state.is_inline_count e.ise_callee b /\
+  inline_site_edit_valid e /\ c.ic_function = e.ise_callee /\
+  inline_cell_at c /\ FST c.ic_fields = JMP ==>
+  ?d. inline_cell_frame (EnterCell e 0) c d /\
+    d.ic_function = e.ise_final /\ inline_cell_at d /\ FST d.ic_fields = JMP
+Proof
+  strip_tac >> drule_all functionInlinerOccurrencesTheory.inline_annotated_edit_fetch_facts >> strip_tac >>
+  `?cb inst. lookup_block c.ic_block e.ise_callee.fn_blocks = SOME cb /\
+    get_instruction cb c.ic_index = SOME inst /\
+    c.ic_fields = inline_inst_fields inst` by
+    metis_tac[functionInlinerReachableCutsTheory.inline_cell_at_def, inline_fetched_fields_def] >>
+  `inst.inst_opcode = JMP` by gvs[inline_inst_fields_def] >>
+  `MEM c.ic_block (fn_labels e.ise_callee)` by
+    (simp[venomInstTheory.fn_labels_def, MEM_MAP] >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM,
+               venomExecPropsTheory.lookup_block_label]) >>
+  `inline_cell_focus e bb cb c.ic_index =
+    ([clone_instruction e.ise_prefix (fn_labels e.ise_callee) inst],
+     SND (inline_cell_prefix e bb cb c.ic_index))` by
+    gvs[functionInlinerReachableCutsTheory.inline_cell_focus_def,
+        venomInstTheory.get_instruction_def, functionInlinerDefsTheory.clone_instruction_def,
+        functionInlinerDefsTheory.rewrite_inline_inst_def, is_param_opcode_def] >>
+  `?d. inline_cell_frame (EnterCell e 0) c d` by
+    (irule functionInlinerReachableCutsTheory.inline_enter_cell_produce >> simp[] >> metis_tac[]) >>
+  qexists `d` >> simp[] >>
+  `inline_cell_at d` by metis_tac[functionInlinerReachableCutsTheory.inline_cell_frame_sound] >> simp[] >>
+  qpat_x_assum `inline_cell_frame _ _ _` mp_tac >>
+  simp[functionInlinerReachableCutsTheory.inline_cell_frame_def] >> rpt strip_tac >>
+  gvs[functionInlinerReachableCutsTheory.inline_make_cell_def,
+      inline_inst_fields_def, inline_edit_repair_def, functionInlinerDefsTheory.clone_instruction_def] >> metis_tac[]
+QED
+
+Theorem inline_jump_path_produce[local]:
+  !path c root.
+  inline_annotated_choice_path ctx path c.ic_function root /\
+  inline_cell_at c /\ FST c.ic_fields = JMP ==>
+  ?frames d. inline_cell_zipper c frames d /\
+    MAP (\(tag,next). inline_cell_choice tag) frames = path /\
+    EVERY (\(tag,next). !edit. tag <> SelectedJump edit) frames /\
+    d.ic_function = root /\ inline_cell_at d /\ FST d.ic_fields = JMP /\
+    inline_parameter_boundary_path path c.ic_function c.ic_block c.ic_index
+      root d.ic_block d.ic_index
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (qexistsl_tac [`[]`,`c`] >>
+      gvs[functionInlinerParameterPropagationTheory.inline_annotated_choice_path_def,
+          functionInlinerReachableCutsTheory.inline_cell_zipper_def,
+          inline_parameter_boundary_path_def]) >>
+  qpat_x_assum `inline_annotated_choice_path _ _ _ _` mp_tac >>
+  simp[functionInlinerParameterPropagationTheory.inline_annotated_choice_path_def] >> strip_tac >> gvs[]
+  >- (drule_all inline_jump_keep_produce >> strip_tac >>
+      `inline_parameter_boundary (InlineKeep e) c.ic_function c.ic_block c.ic_index
+         d.ic_function d.ic_block d.ic_index` by
+        (drule inline_zero_frame_boundary >>
+         simp[functionInlinerReachableCutsTheory.inline_cell_choice_def]) >>
+      first_x_assum (qspec_then `d` mp_tac) >> simp[] >>
+      disch_then (qspec_then `root` mp_tac) >> simp[] >> strip_tac >>
+      qexistsl_tac [`(KeepCell e,d)::frames`,`d'`] >>
+      simp[functionInlinerReachableCutsTheory.inline_cell_zipper_def,
+           functionInlinerReachableCutsTheory.inline_cell_choice_def,
+           inline_parameter_boundary_path_def] >>
+      metis_tac[inline_zero_frame_boundary,
+        functionInlinerReachableCutsTheory.inline_cell_choice_def]) >>
+  drule_all inline_jump_enter_produce >> strip_tac >>
+  `inline_parameter_boundary (InlineEnter e) c.ic_function c.ic_block c.ic_index
+     d.ic_function d.ic_block d.ic_index` by
+    (drule inline_zero_frame_boundary >>
+     simp[functionInlinerReachableCutsTheory.inline_cell_choice_def]) >>
+  first_x_assum (qspec_then `d` mp_tac) >> simp[] >>
+  disch_then (qspec_then `root` mp_tac) >> simp[] >> strip_tac >>
+  qexistsl_tac [`(EnterCell e 0,d)::frames`,`d'`] >>
+  simp[functionInlinerReachableCutsTheory.inline_cell_zipper_def,
+       functionInlinerReachableCutsTheory.inline_cell_choice_def,
+       inline_parameter_boundary_path_def] >>
+  metis_tac[inline_zero_frame_boundary,
+    functionInlinerReachableCutsTheory.inline_cell_choice_def]
+QED
+
+Theorem inline_selected_jump_boundary:
+  inline_annotated_origin C n root cert /\
+  inline_call_incidence cert root p fn l j orig (InlineSelected u q e zipper) /\
+  inline_routed_leaf cert root p fn path /\
+  inline_parameter_boundary_path path fn l j root tl tj ==>
+  ?c mid frames d. inline_cell_frame (SelectedJump e) c mid /\
+    inline_cell_zipper mid frames d /\
+    MAP (\(tag,next). inline_cell_choice tag) frames = zipper /\
+    EVERY (\(tag,next). !edit. tag <> SelectedJump edit) frames /\
+    d.ic_function = root /\ d.ic_block = tl /\ d.ic_index = tj
+Proof
+  strip_tac >>
+  drule functionInlinerPairedSelectionTheory.inline_selected_paired_separation >> simp[] >>
+  disch_then drule >> strip_tac >>
+  `inline_fetched_fields e.ise_caller e.ise_block e.ise_index
+     (inline_inst_fields current)` by
+    (drule inline_call_incidence_residual_fetch >>
+     disch_then (qspecl_then [`C`,`e.ise_state.is_inline_count`,`src`,`current`] mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  qmatch_asmsub_abbrev_tac `inline_fetched_fields _ _ _ fields` >>
+  qabbrev_tac `c = inline_make_cell e.ise_caller e.ise_block e.ise_index fields` >>
+  `inline_cell_at c /\ c.ic_function = e.ise_caller /\
+   c.ic_block = e.ise_block /\ c.ic_index = e.ise_index` by
+    simp[Abbr `c`, functionInlinerReachableCutsTheory.inline_cell_at_def,
+      functionInlinerReachableCutsTheory.inline_make_cell_def] >>
+  `~MEM e.ise_return (fn_labels e.ise_caller)` by
+    metis_tac[functionInlinerOccurrencesTheory.inline_annotated_edit_fetch_facts] >>
+  `?mid. inline_cell_frame (SelectedJump e) c mid` by
+    metis_tac[functionInlinerReachableCutsTheory.inline_selected_cell_produce] >>
+  `mid.ic_function = e.ise_final /\ inline_cell_at mid /\ FST mid.ic_fields = JMP` by
+    (conj_tac
+     >- gvs[functionInlinerReachableCutsTheory.inline_cell_frame_def,
+            functionInlinerReachableCutsTheory.inline_make_cell_def] >>
+     conj_tac >- metis_tac[functionInlinerReachableCutsTheory.inline_cell_frame_sound] >>
+     gvs[functionInlinerReachableCutsTheory.inline_cell_frame_def,
+         functionInlinerReachableCutsTheory.inline_make_cell_def]) >>
+  `inline_annotated_choice_path C zipper e.ise_final root` by
+    metis_tac[functionInlinerSelectedParameterDescriptorsTheory.inline_selected_annotated_choice_path] >>
+  mp_tac (Q.SPECL [`zipper`,`mid`,`root`] (Q.INST [`ctx` |-> `C`] inline_jump_path_produce)) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`c`,`mid`,`frames`,`d`] >> simp[] >>
+  drule inline_residual_current_path >>
+  disch_then (qspecl_then [`C`,`e.ise_state.is_inline_count`,`src`,`current`,
+    `e.ise_index`] mp_tac) >> simp[] >> strip_tac >>
+  `MAP inline_choice_key path' = MAP inline_choice_key path''` by
+    metis_tac[functionInlinerRouteKeysTheory.inline_routed_leaf_key_unique] >>
+  `inline_parameter_boundary_path path' fn l j e.ise_caller e.ise_block e.ise_index` by
+    metis_tac[functionInlinerSelectedContinuationTheory.inline_parameter_boundary_path_keys] >>
+  `inline_parameter_boundary (InlineKeep e) e.ise_caller e.ise_block e.ise_index
+     e.ise_final mid.ic_block mid.ic_index` by
+    (drule inline_zero_frame_boundary >>
+     simp[functionInlinerReachableCutsTheory.inline_cell_choice_def]) >>
+  `inline_parameter_boundary_path (path' ++ [InlineKeep e] ++ zipper)
+     fn l j root d.ic_block d.ic_index` by
+    (irule inline_parameter_boundary_path_append >> goal_assum (drule_at Any) >>
+     irule inline_parameter_boundary_path_append >> goal_assum (drule_at Any) >>
+     simp[inline_parameter_boundary_path_def] >> metis_tac[]) >>
+  `MAP inline_choice_key path =
+     MAP inline_choice_key (path' ++ [InlineKeep e] ++ zipper)` by
+    metis_tac[functionInlinerRouteKeysTheory.inline_routed_leaf_key_unique] >>
+  `inline_parameter_boundary_path path fn l j root d.ic_block d.ic_index` by
+    metis_tac[functionInlinerSelectedContinuationTheory.inline_parameter_boundary_path_keys] >>
+  metis_tac[inline_parameter_boundary_path_functional]
+QED
+
+Theorem inline_live_stack_index:
+  inline_live_stack C cert root ((p,a,route,snap)::rest) frame ==>
+  inline_live_stack C cert root
+    ((p,a,route,snap with ils_state := snap.ils_state with vs_inst_idx := si)::rest)
+    (frame with ipf_state := frame.ipf_state with vs_inst_idx := ti)
+Proof
+  strip_tac >>
+  `inline_owner_storage cert ((p,a,route,snap)::rest) frame /\
+   inline_parameter_saved_reads ((p,a,route,snap)::rest)` by
+    metis_tac[inline_live_stack_def] >>
+  drule_all inline_parameter_sequential_control >>
+  disch_then (qspecl_then [`ti`,`si`] strip_assume_tac) >>
+  fs[inline_live_stack_def, inline_parameter_owners_cons,
+     inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+     inline_caller_residual_updates]
+QED
+
+Theorem inline_recursive_transport:
+  inliner_input_ok C /\ inline_transport_family C Tctx R ==>
+  !fuel. inline_transport_initial C Tctx R fuel /\
+         inline_transport_entry C Tctx R fuel /\
+         inline_transport_body C Tctx R fuel
+Proof
+  strip_tac >> completeInduct_on `fuel` >>
+  conj_asm1_tac >- suspend "initial" >>
+  conj_asm1_tac >- suspend "entry" >>
+  suspend "body"
+QED
+
+Resume inline_recursive_transport[entry]:
+  rewrite_tac[inline_transport_entry_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `fuel`
+  >- (qpat_x_assum `inline_resume _ _ _ _ = _` mp_tac >>
+      simp[inline_resume_def, Once run_blocks_def] >> metis_tac[]) >>
+  `inline_transport_body C Tctx R n` by simp[] >>
+  `?k. inline_annotated_origin C k root cert` by
+    metis_tac[inline_transport_family_def] >>
+  mp_tac (Q.SPECL [`snap.ils_state`,`sb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  strip_tac
+  >- (rename1 `eval_phis snap.ils_state sb.bb_instructions = OK post` >>
+      drule_all inline_live_phi_body_boundary >> strip_tac >>
+      `MEM a.ia_function C.ctx_functions` by
+        metis_tac[functionInlinerReachableCutsTheory.inline_routed_leaf_source_member] >>
+      `canonical_param_prefix a.ia_function` by
+        (gvs[functionInlinerContractTheory.inliner_input_ok_def, listTheory.EVERY_MEM] >>
+         metis_tac[]) >>
+      `no_param_insts sb.bb_instructions` by
+        (qpat_x_assum `canonical_param_prefix _` mp_tac >>
+         Cases_on `a.ia_function.fn_blocks` >>
+         simp[callLayoutDefsTheory.canonical_param_prefix_def] >> strip_tac >>
+         `MEM sb t` by
+           (qpat_assum `lookup_block snap.ils_state.vs_current_bb _ = _`
+              (mp_tac o MATCH_MP venomExecPropsTheory.lookup_block_MEM) >>
+            strip_tac >> gvs[] >>
+            metis_tac[venomExecPropsTheory.lookup_block_label]) >>
+         gvs[listTheory.EVERY_MEM]) >>
+      `inline_resume C a.ia_function n
+         (InlineBody sb (post with vs_inst_idx := phi_prefix_length sb.bb_instructions)) = result` by
+        (qpat_x_assum `inline_resume C a.ia_function (SUC n) _ = _` mp_tac >>
+         simp[inline_resume_def, Once run_blocks_def]) >>
+      fs[LET_THM] >>
+      `post.vs_current_bb = snap.ils_state.vs_current_bb /\
+       v.vs_current_bb = frame.ipf_state.vs_current_bb` by
+        metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
+      `post.vs_alloca_next = snap.ils_state.vs_alloca_next /\
+       v.vs_alloca_next = frame.ipf_state.vs_alloca_next` by
+        metis_tac[inline_frontier_phis] >>
+      `inline_frontier_stack
+         ((p,a,route,snap with
+           <|ils_state := post with vs_inst_idx := phi_prefix_length sb.bb_instructions;
+             ils_defined := inline_phi_outputs sb.bb_instructions UNION snap.ils_defined|>)::rest)
+         (frame with ipf_state := v with vs_inst_idx := phi_prefix_length tb.bb_instructions)` by
+        gvs[inline_frontier_stack_def] >>
+      `inline_activation_outcome C Tctx cert root p a route rest
+         (frame with ipf_state := v with vs_inst_idx := phi_prefix_length tb.bb_instructions)
+         (InlineBody tb (v with vs_inst_idx := phi_prefix_length tb.bb_instructions)) result` by
+        (qpat_assum `inline_transport_body C Tctx R n`
+           (assume_tac o REWRITE_RULE[inline_transport_body_def]) >>
+         qpat_assum `inline_live_stack _ _ _ _ (frame with ipf_state := _)`
+           (fn live => first_x_assum (fn ih => mp_then (Pat `inline_live_stack _ _ _ _ _`) mp_tac ih live)) >>
+         simp[] >> disch_then (qspecl_then [`path`,`completed_fuel`] mp_tac) >>
+         fs[callLayoutDefsTheory.no_param_insts_def] >>
+         metis_tac[rich_listTheory.EVERY_DROP]) >>
+      irule inline_activation_entry_body >> goal_assum (drule_at Any) >>
+      simp[] >>
+      Cases_on `result` >>
+      gvs[inline_activation_outcome_def, inline_return_frontier_def] >> metis_tac[]) >>
+  qpat_x_assum `inline_resume _ _ _ _ = _` mp_tac >>
+  simp[inline_resume_def, Once run_blocks_def] >> metis_tac[]
+QED
+
+Resume inline_recursive_transport[body]:
+  rewrite_tac[inline_transport_body_def] >> rpt gen_tac >>
+  map_every qid_spec_tac [`frame`,`tb`] >>
+  completeInduct_on `LENGTH sb.bb_instructions - snap.ils_state.vs_inst_idx` >>
+  rpt gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `get_instruction sb snap.ils_state.vs_inst_idx`
+  >- (qpat_x_assum `inline_resume _ _ _ _ = _` mp_tac >>
+      simp[inline_resume_def, Once exec_block_def] >> metis_tac[]) >>
+  rename1 `get_instruction sb snap.ils_state.vs_inst_idx = SOME inst` >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (`terminates (step_inst fuel C inst snap.ils_state)` by
+        (Cases_on `step_inst fuel C inst snap.ils_state` >> simp[passSimulationDefsTheory.terminates_def] >>
+         qpat_x_assum `inline_resume _ _ _ _ = _` mp_tac >>
+         simp[inline_resume_def, Once exec_block_def] >> metis_tac[]) >>
+      `?child cr. inline_original_child C fuel a.ia_id 0 inst snap.ils_state
+         (step_inst fuel C inst snap.ils_state) child cr` by
+        (irule functionInlinerActivationTheory.inline_original_child_exists >> simp[]) >>
+      `?n. inline_annotated_origin C n root cert` by
+        metis_tac[inline_transport_family_def] >>
+      `?outcome. inline_call_incidence cert root p a.ia_function
+        snap.ils_state.vs_current_bb snap.ils_state.vs_inst_idx inst outcome` by
+        (drule functionInlinerOccurrencesTheory.inline_call_incidence_total >>
+         metis_tac[]) >>
+      Cases_on `outcome`
+      >- (rename1 `inline_call_incidence _ _ _ _ _ _ _ (InlineResidual loc dst)` >>
+          qpat_assum `inline_original_child _ _ _ _ _ _ _ _ _` mp_tac >>
+          rewrite_tac[functionInlinerActivationTheory.inline_original_child_def] >>
+          strip_tac >>
+          `?target cert'. lookup_function nm Tctx.ctx_functions = SOME target /\
+             inline_entry_function cert' = child.ia_function /\ R target cert'` by
+            (qpat_assum `inline_transport_family _ _ _`
+               (strip_assume_tac o REWRITE_RULE[inline_transport_family_def]) >>
+             first_x_assum drule_all >> simp[]) >>
+          `snap.ils_state.vs_labels = FEMPTY` by
+            (drule functionInlinerLiveInvariantTheory.inline_live_stack_storage >>
+             strip_tac >>
+             drule functionInlinerOperationalCutsTheory.inline_owner_storage_head >>
+             simp[functionInlinerCutsTheory.inline_tracked_snapshot_def]) >>
+          `child.ia_function.fn_blocks <> [] /\ child.ia_entry.vs_labels = FEMPTY /\
+             ~child.ia_entry.vs_halted /\ child.ia_entry.vs_inst_idx = 0 /\
+             child.ia_entry.vs_current_bb = (HD child.ia_function.fn_blocks).bb_label` by
+            (qpat_x_assum `setup_callee _ _ _ = _` mp_tac >>
+             Cases_on `child.ia_function.fn_blocks` >>
+             simp[setup_callee_def] >>
+             disch_then (fn th => simp[GSYM th])) >>
+          `inline_physical_outcome Tctx target (InlineEntry child.ia_entry) cr` by
+            (qpat_assum `inline_transport_initial _ _ _ fuel`
+               (mp_tac o REWRITE_RULE[inline_transport_initial_def]) >>
+             disch_then irule >>
+             simp[] >> conj_tac
+             >- (Cases_on `cr` >> gvs[passSimulationDefsTheory.terminates_def]) >>
+             conj_tac >- metis_tac[o1PassLiftTheory.run_blocks_not_OK] >>
+             qexists `cert'` >> simp[]) >>
+          `?k. loc.il_phase = InlineAtInstruction k /\
+             inline_fetched_fields root loc.il_block k (inline_inst_fields dst)` by
+            (drule inline_call_incidence_residual_fetch >>
+             disch_then (qspecl_then [`C`,`n`,`loc`,`dst`] mp_tac) >> simp[]) >>
+          `?rpath. inline_routed_leaf cert root p a.ia_function rpath /\
+             inline_parameter_boundary_path rpath a.ia_function
+               snap.ils_state.vs_current_bb snap.ils_state.vs_inst_idx root loc.il_block k` by
+            (drule inline_residual_current_path >>
+             disch_then (qspecl_then [`C`,`n`,`loc`,`dst`,`k`] mp_tac) >> simp[]) >>
+          `MAP inline_choice_key path = MAP inline_choice_key rpath` by
+            metis_tac[inline_routed_leaf_key_unique] >>
+          `inline_parameter_boundary_path path a.ia_function
+             snap.ils_state.vs_current_bb snap.ils_state.vs_inst_idx root loc.il_block k` by
+            metis_tac[inline_parameter_boundary_path_keys] >>
+          `loc.il_block = frame.ipf_state.vs_current_bb /\
+             k = frame.ipf_state.vs_inst_idx` by
+            metis_tac[inline_parameter_boundary_path_functional] >>
+          `?tinst. get_instruction tb frame.ipf_state.vs_inst_idx = SOME tinst /\
+             inline_inst_fields tinst = inline_inst_fields dst` by
+            (gvs[inline_fetched_fields_def] >> metis_tac[]) >>
+          `decode_invoke dst = SOME
+             (nm,MAP (inline_rename_operand route.ir_rename I) ops) /\
+             dst.inst_outputs = MAP route.ir_rename inst.inst_outputs` by
+            (metis_tac[inline_residual_arguments]) >>
+          `decode_invoke tinst = SOME
+             (nm,MAP (inline_rename_operand route.ir_rename I) ops) /\
+             tinst.inst_outputs = MAP route.ir_rename inst.inst_outputs /\
+             tinst.inst_opcode = INVOKE` by
+            (drule inline_call_incidence_residual_phase >> simp[] >>
+             gvs[inline_inst_fields_def, decode_invoke_def]) >>
+          `MEM a.ia_function C.ctx_functions` by
+            metis_tac[functionInlinerReachableCutsTheory.inline_routed_leaf_source_member] >>
+          `MEM inst (fn_insts a.ia_function)` by
+            (imp_res_tac venomExecPropsTheory.lookup_block_MEM >>
+             gvs[venomInstTheory.get_instruction_def] >>
+             metis_tac[venomInstTheory.fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff, listTheory.EL_MEM]) >>
+          `inline_opacity_ok a.ia_function {v | retpc_var a.ia_function v}` by
+            metis_tac[functionInlinerOpacityTheory.inliner_input_opacity] >>
+          `EVERY (\op. !v. op = Var v ==>
+             MEM v (cfgTransform$fn_all_vars a.ia_function) /\
+             ~retpc_var a.ia_function v) ops` by
+            (rewrite_tac[listTheory.EVERY_MEM] >> qx_gen_tac `op` >> disch_tac >>
+             BETA_TAC >> qx_gen_tac `x` >> disch_then SUBST_ALL_TAC >>
+             `MEM (Var x) inst.inst_operands` by
+               (gvs[decode_invoke_def, AllCaseEqs()]) >>
+             conj_tac
+             >- (mp_tac (Q.INST [`fn` |-> `a.ia_function`,
+                   `P` |-> `\v. MEM v (cfgTransform$fn_all_vars a.ia_function)`]
+                   functionInlinerNamespaceTheory.inline_fn_vars_in) >>
+                 simp[functionInlinerNamespaceTheory.inline_inst_vars_in_def, listTheory.EVERY_MEM] >>
+                 disch_then (qspec_then `inst` mp_tac) >> simp[] >>
+                 strip_tac >> first_x_assum (qspec_then `Var x` mp_tac) >> simp[]) >>
+             drule_all functionInlinerOpacityTheory.inline_opacity_invoke_operand >> simp[]) >>
+          `inline_tracked_snapshot a.ia_function a route snap frame` by
+            (drule functionInlinerLiveInvariantTheory.inline_live_stack_storage >>
+             strip_tac >> drule functionInlinerOperationalCutsTheory.inline_owner_storage_head >> simp[]) >>
+          `eval_operands (MAP (inline_rename_operand route.ir_rename I) ops)
+             frame.ipf_state = SOME edge.ipe_args` by
+            (irule functionInlinerOperationalCutsTheory.inline_tracked_operands_success >>
+             goal_assum (drule_at Any) >> simp[]) >>
+          `target.fn_blocks <> [] /\
+             (HD target.fn_blocks).bb_label = (HD child.ia_function.fn_blocks).bb_label` by
+            (`?m. inline_annotated_origin C m target cert'` by
+               metis_tac[inline_transport_family_def] >>
+             drule inline_annotated_entry_first_label >> simp[]) >>
+          `inline_shared_frame snap.ils_state = inline_shared_frame frame.ipf_state` by
+            metis_tac[functionInlinerLiveInvariantTheory.inline_live_stack_head_shared] >>
+          `snap.ils_state.vs_alloca_next = frame.ipf_state.vs_alloca_next` by
+            metis_tac[inline_frontier_stack_head] >>
+          `setup_callee child.ia_function edge.ipe_args snap.ils_state =
+             setup_callee target edge.ipe_args frame.ipf_state` by
+            (irule inline_frontier_setup_compare >> simp[]) >>
+          `setup_callee target edge.ipe_args frame.ipf_state = SOME child.ia_entry` by
+            metis_tac[] >>
+          Cases_on `cr` >> gvs[passSimulationDefsTheory.terminates_def, inline_physical_outcome_def]
+          >- (rename1 `inline_terminal Tctx target b (InlineEntry child.ia_entry) (Halt tv)` >>
+              rename1 `inline_original_call_result _ _ (Halt sv) _` >>
+              gvs[inline_terminal_def, inline_resume_def] >>
+              `step_inst b Tctx tinst frame.ipf_state = Halt tv` by
+                simp[Once step_inst_def] >>
+              `exec_block b Tctx tb frame.ipf_state = Halt tv` by
+                simp[Once exec_block_def] >>
+              `run_blocks completed_fuel C a.ia_function a.ia_entry = Halt sv` by
+                (gvs[functionInlinerActivationTheory.inline_original_call_result_def] >>
+                 qpat_x_assum `_ = run_blocks completed_fuel C a.ia_function a.ia_entry` mp_tac >>
+                 simp[Once exec_block_def]) >>
+              gvs[] >> irule inline_activation_halt_here >> metis_tac[])
+          >- (rename1 `inline_terminal Tctx target b (InlineEntry child.ia_entry) (Abort reason tv)` >>
+              rename1 `inline_original_call_result _ _ (Abort reason sv) _` >>
+              gvs[inline_terminal_def, inline_resume_def] >>
+              `step_inst b Tctx tinst frame.ipf_state = Abort reason tv` by
+                simp[Once step_inst_def] >>
+              `exec_block b Tctx tb frame.ipf_state = Abort reason tv` by
+                simp[Once exec_block_def] >>
+              `run_blocks completed_fuel C a.ia_function a.ia_entry = Abort reason sv` by
+                (gvs[functionInlinerActivationTheory.inline_original_call_result_def] >>
+                 qpat_x_assum `_ = run_blocks completed_fuel C a.ia_function a.ia_entry` mp_tac >>
+                 simp[Once exec_block_def]) >>
+              gvs[] >> irule inline_activation_abort_here >> metis_tac[]) >>
+          rename1 `inline_terminal Tctx target b (InlineEntry child.ia_entry) (IntRet ir tv)` >>
+          rename1 `inline_original_call_result _ _ (IntRet ir sv) _` >>
+          gvs[functionInlinerActivationTheory.inline_original_call_result_def] >>
+          rename1 `bind_outputs edge.ipe_call.inst_outputs ir.iret_values
+            (adopt_return_fmp ir (merge_callee_state snap.ils_state sv)) = SOME su` >>
+          gvs[inline_terminal_def, inline_resume_def] >>
+          `inline_fmp_ctx_ok C` by metis_tac[inline_input_fmp_ctx] >>
+          `inline_fmp_result snap.ils_state.vs_fmp (IntRet ir sv)` by
+            (drule_all inline_callee_fmp_result >>
+             disch_then (qspec_then `fuel` mp_tac) >> simp[]) >>
+          `inline_caller_residual sv = inline_caller_residual child.ia_entry` by
+            metis_tac[inline_caller_residual_run_blocks_return] >>
+          `inline_caller_residual child.ia_entry = inline_caller_residual snap.ils_state` by
+            (qpat_x_assum `setup_callee child.ia_function _ _ = _` mp_tac >>
+             simp[setup_callee_def, AllCaseEqs()] >> strip_tac >>
+             gvs[inline_caller_residual_def, inline_shared_frame_def,
+               stateFrameTheory.execution_frame_def, merge_callee_state_def,
+               venom_state_component_equality]) >>
+          `EVERY (\x. MEM x (cfgTransform$fn_all_vars a.ia_function) /\
+             ~retpc_var a.ia_function x) edge.ipe_call.inst_outputs` by
+            metis_tac[inline_call_output_namespace] >>
+          `INJ route.ir_rename (set edge.ipe_call.inst_outputs UNION snap.ils_defined) UNIV` by
+            (irule pred_setTheory.INJ_SUBSET >> qexists `UNIV` >> simp[] >>
+             metis_tac[inline_namespace_leaf_at_def, inline_namespace_node_injective]) >>
+          `inline_caller_residual sv = inline_caller_residual snap.ils_state` by metis_tac[] >>
+          drule_all inline_live_residual_return >> strip_tac >>
+          `!h. b <= h ==> step_inst h Tctx tinst frame.ipf_state = OK tu` by
+            (rpt strip_tac >> simp[Once step_inst_def] >> gvs[]) >>
+          `inline_segment Tctx root b 0 (InlineBody tb frame.ipf_state)
+             (InlineBody tb (tu with vs_inst_idx := SUC frame.ipf_state.vs_inst_idx))` by
+            (irule inline_segment_body_step >> simp[venomInstTheory.is_terminator_def]) >>
+          `?spath. inline_routed_leaf cert root p a.ia_function spath /\
+             inline_parameter_boundary_path spath a.ia_function
+               snap.ils_state.vs_current_bb (SUC snap.ils_state.vs_inst_idx)
+               root frame.ipf_state.vs_current_bb (SUC frame.ipf_state.vs_inst_idx)` by
+            (drule inline_residual_invoke_successor_path >>
+             disch_then (qspecl_then [`C`,`n`,`loc`,`dst`,`frame.ipf_state.vs_inst_idx`] mp_tac) >>
+             simp[]) >>
+          `inline_parameter_boundary_path path a.ia_function
+             snap.ils_state.vs_current_bb (SUC snap.ils_state.vs_inst_idx)
+             root frame.ipf_state.vs_current_bb (SUC frame.ipf_state.vs_inst_idx)` by
+            metis_tac[inline_routed_leaf_key_unique, inline_parameter_boundary_path_keys] >>
+          qabbrev_tac `nextsnap = snap with <|ils_state := su with vs_inst_idx := SUC snap.ils_state.vs_inst_idx;
+             ils_defined := set edge.ipe_call.inst_outputs UNION snap.ils_defined|>` >>
+          qabbrev_tac `nextframe = frame with ipf_state := tu with vs_inst_idx := SUC frame.ipf_state.vs_inst_idx` >>
+          `inline_live_stack C cert root ((p,a,route,nextsnap)::rest) nextframe` by
+            (simp[Abbr `nextsnap`, Abbr `nextframe`] >>
+             qpat_assum `inline_live_stack _ _ _ _ (frame with ipf_state := tu)`
+               (mp_tac o MATCH_MP (Q.INST
+                 [`si` |-> `SUC snap.ils_state.vs_inst_idx`,
+                  `ti` |-> `SUC frame.ipf_state.vs_inst_idx`] inline_live_stack_index)) >> simp[]) >>
+          `inline_frontier_stack ((p,a,route,nextsnap)::rest) nextframe` by
+            (fs[inline_frontier_stack_def, Abbr `nextsnap`, Abbr `nextframe`]) >>
+          `snap.ils_state.vs_inst_idx < LENGTH sb.bb_instructions` by
+            (gvs[get_instruction_def, AllCaseEqs()] >> decide_tac) >>
+          qpat_x_assum `!m. m < LENGTH sb.bb_instructions - snap.ils_state.vs_inst_idx ==> _`
+            (qspec_then `LENGTH sb.bb_instructions - SUC snap.ils_state.vs_inst_idx` mp_tac) >>
+          simp[] >> disch_then (qspecl_then [`sb`,`nextsnap`] mp_tac) >>
+          simp[Abbr `nextsnap`] >>
+          disch_then (qspecl_then [`tb`,`nextframe`] mp_tac) >>
+          impl_tac
+          >- (fs[Abbr `nextframe`] >>
+              conj_tac
+              >- (fs[callLayoutDefsTheory.no_param_insts_def] >>
+                  qpat_assum `EVERY _ (DROP snap.ils_state.vs_inst_idx _)`
+                    (mp_tac o MATCH_MP rich_listTheory.EVERY_DROP) >>
+                  disch_then (qspec_then `1` mp_tac) >>
+                  simp[rich_listTheory.DROP_DROP_T, arithmeticTheory.ADD1]) >>
+              qpat_x_assum `_ = run_blocks completed_fuel C a.ia_function a.ia_entry` mp_tac >>
+              simp[Once exec_block_def, venomInstTheory.is_terminator_def]) >>
+          disch_tac >>
+          `inline_activation_outcome C Tctx cert root p a route rest frame
+             (InlineBody tb (tu with vs_inst_idx := SUC frame.ipf_state.vs_inst_idx))
+             (run_blocks completed_fuel C a.ia_function a.ia_entry)` by
+            (qpat_x_assum `inline_activation_outcome _ _ _ _ _ _ _ _ nextframe _ _` mp_tac >>
+             simp[Abbr `nextframe`, inline_activation_outcome_def, inline_return_frontier_def]) >>
+          drule_all inline_activation_outcome_segment >> simp[]) >>
+      rename1 `inline_call_incidence _ _ _ _ _ _ _ (InlineSelected u q e zipper)` >>
+      drule functionInlinerParameterNestingTheory.inline_selected_entry_route_pair >>
+      disch_then (qspecl_then [`C`,`n`,`u`,`q`,`e`,`zipper`] mp_tac) >>
+      simp[] >> strip_tac >>
+      `child' = child.ia_function` by
+        (drule_all functionInlinerReturnRoutingTheory.inline_selected_return_call_target >>
+         strip_tac >>
+         qpat_assum `inline_original_child _ _ _ _ _ _ _ _ _` mp_tac >>
+         pure_rewrite_tac[functionInlinerActivationTheory.inline_original_child_def] >>
+         strip_tac >>
+         gvs[venomExecSemanticsTheory.decode_invoke_def] >>
+         `MEM child' C.ctx_functions` by
+           metis_tac[functionInlinerReachableCutsTheory.inline_routed_leaf_source_member] >>
+         `ALL_DISTINCT (MAP (\f. f.fn_name) C.ctx_functions)` by
+           fs[functionInlinerContractTheory.inliner_input_ok_def,
+             venomWfTheory.ctx_wf_def, venomWfTheory.ctx_distinct_fn_names_def,
+             venomInstTheory.ctx_fn_names_def] >>
+         `lookup_function child'.fn_name C.ctx_functions = SOME child'` by
+           (irule intCallLookupTheory.lookup_function_distinct_mem >> simp[]) >>
+         gvs[]) >>
+      drule_all inline_selected_jump_boundary >> strip_tac >>
+      `canonical_param_prefix child.ia_function` by
+        (`MEM child.ia_function C.ctx_functions` by
+           metis_tac[functionInlinerReachableCutsTheory.inline_routed_leaf_source_member] >>
+         gvs[functionInlinerContractTheory.inliner_input_ok_def, EVERY_MEM] >> metis_tac[]) >>
+      `?eb blocks. (clone_function e.ise_prefix e.ise_callee).fn_blocks = eb::blocks` by
+        (drule functionInlinerPairedSelectionTheory.inline_selected_paired_separation >> simp[] >>
+         disch_then drule >> strip_tac >>
+         drule functionInlinerOccurrencesTheory.inline_annotated_entry_route >> strip_tac >>
+         qpat_x_assum `!prefix. inline_routed_leaf _ _ _ _ _ ==> _` drule >> strip_tac >>
+         `child.ia_function = inline_entry_function b` by
+           (drule functionInlinerRoutedProvenanceTheory.inline_routed_leaf_namespace >>
+            strip_tac >>
+            gvs[functionInlinerEnvelopesTheory.inline_namespace_leaf_at_def] >>
+            imp_res_tac functionInlinerSelectedParameterDescriptorsTheory.inline_namespace_node_same_address >>
+            qpat_x_assum `InlineNamespaceLeaf child.ia_function = InlineNamespaceLeaf (inline_entry_function b)` mp_tac >>
+            simp[NoAsms]) >>
+         `(inline_entry_function b).fn_blocks <> []` by
+           (Cases_on `child.ia_function.fn_blocks` >>
+            gvs[callLayoutDefsTheory.canonical_param_prefix_def]) >>
+         `e.ise_callee.fn_blocks <> []` by
+           metis_tac[functionInlinerOccurrencesTheory.inline_annotated_entry_first_label] >>
+         Cases_on `e.ise_callee.fn_blocks` >>
+         gvs[functionInlinerDefsTheory.clone_function_def]) >>
+      qabbrev_tac `croute = route with ir_rename :=
+        inline_path_rename (prefix ++ [InlineEnter e] ++ zipper)` >>
+      `inline_namespace_leaf_at cert q croute.ir_rename child.ia_function` by
+        (simp[Abbr `croute`] >> metis_tac[]) >>
+      `frame.ipf_state.vs_current_bb = d.ic_block /\
+       frame.ipf_state.vs_inst_idx = d.ic_index` by simp[] >>
+      drule_all (Q.INST [`Tctx` |-> `Tctx`, `route` |-> `croute`]
+        (SPEC_ALL inline_selected_source_body_cut)) >>
+      disch_then (qspec_then `Tctx` strip_assume_tac) >>
+      drule_all inline_selected_body_routed_boundary >> strip_tac >>
+      FAIL_TAC "BODY selected: child fuel induction") >>
+  FAIL_TAC "BODY non-INVOKE: direct return, terminal, ordinary successor or branch ENTRY"
+QED
+
+Resume inline_recursive_transport[initial]:
+  rewrite_tac[inline_transport_initial_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `fuel` >- gvs[Once run_blocks_def] >>
+  `inline_transport_body C Tctx R n` by simp[] >>
+  Cases_on `fn.fn_blocks` >- gvs[] >> rename1 `fn.fn_blocks = entry::blocks` >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME entry` by
+    simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm] >>
+  mp_tac (Q.SPECL [`s`,`entry.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  strip_tac
+  >- (rename1 `eval_phis s entry.bb_instructions = OK post` >>
+      `inline_resume C fn n
+         (InlineBody entry (post with vs_inst_idx := phi_prefix_length entry.bb_instructions)) = result` by
+        (drule_all inline_resume_entry_unfold >>
+         disch_then (qspecl_then [`n`,`C`] mp_tac) >> simp[inline_resume_def]) >>
+      FAIL_TAC "INITIAL: source entry unfolding and same-state parameter endpoint") >>
+  qpat_x_assum `run_blocks (SUC n) C fn s = result` mp_tac >>
+  simp[Once run_blocks_def] >> metis_tac[]
+QED
+
+Finalise inline_recursive_transport
