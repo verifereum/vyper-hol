@@ -138,16 +138,17 @@ Resume ptr_paired_fixed_read_recovery[writer]:
   `vs.vs_allocas = FEMPTY` by fs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
   `EVERY wf_function C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
-  `x < lo \/ (dyn_floor C (EL w h).po_state <= x /\
-     !d aid b0 sz. d <= LENGTH (EL (SUC w) h).po_stack /\
-       FLOOKUP (ptr_owner_view d (EL (SUC w) h)).cf_state.vs_allocas aid = SOME (b0,sz) ==>
-       b0 + sz <= dyn_floor C (EL w h).po_state)` by
-    (qpat_x_assum `dyn_floor C (EL w h).po_state = _` (fn th => rewrite_tac[th]) >>
-     Cases_on `x < lo` >> simp[] >>
-     `dyn_floor C vs <= x` by (qpat_x_assum `x < lo \/ _` mp_tac >> simp[]) >>
-     simp[] >>
-     rpt strip_tac >> metis_tac[ptr_reachable_owner_below_dyn_floor]) >>
-  `rho' x = x` by metis_tac[ptr_paired_write_owner_fixed] >>
+  `rho' x = x` by
+    (`x < lo \/ (dyn_floor C (EL w h).po_state <= x /\
+       !d aid b0 sz. d <= LENGTH (EL (SUC w) h).po_stack /\
+         FLOOKUP (ptr_owner_view d (EL (SUC w) h)).cf_state.vs_allocas aid = SOME (b0,sz) ==>
+         b0 + sz <= dyn_floor C (EL w h).po_state)` by
+      (qpat_x_assum `dyn_floor C (EL w h).po_state = _` (fn th => rewrite_tac[th]) >>
+       Cases_on `x < lo` >> simp[] >>
+       `dyn_floor C vs <= x` by (qpat_x_assum `x < lo \/ _` mp_tac >> simp[]) >>
+       simp[] >>
+       rpt strip_tac >> metis_tac[ptr_reachable_owner_below_dyn_floor]) >>
+     metis_tac[ptr_paired_write_owner_fixed]) >>
   `read_byte x (EL (SUC w) h).po_state.vs_memory =
    read_byte x (EL (SUC q) ht).po_state.vs_memory` by
     (qpat_x_assum `ptr_ledger_write_pair _ _ _ _ _ _ _` mp_tac >>
