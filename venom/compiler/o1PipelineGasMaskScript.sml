@@ -1169,7 +1169,8 @@ Proof
      >- (irule o1_src_inv_prune >> metis_tac[])
      >> conj_tac >> irule o1_prune_every >> first_assum ACCEPT_TAC) >>
   `ctx_sim D unit.cu_context (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context w w` by
-    (irule ctx_sim_run_context_eq >> qexists_tac `pre.cu_context` >> simp[]) >>
+    (qpat_x_assum `ctx_sim D unit.cu_context pre.cu_context w w` mp_tac >>
+     simp[ctx_sim_def] >> metis_tac[]) >>
   (* the raw unit's events reach the walk's input *)
   `!f. terminates (run_context f unit.cu_context w) ==>
        ?f' nm fa fb la lb.
