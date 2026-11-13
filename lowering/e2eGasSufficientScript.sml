@@ -280,13 +280,14 @@ Proof
     (irule deploy_unit_execution_correct >> metis_tac[]) >>
   pop_assum (qx_choose_then `marks` assume_tac o
              REWRITE_RULE [deploy_unit_execution_correct_def]) >>
+  qspecl_then [`marks`, `tops`, `runtime_bc`, `am`, `tx`, `dunit`, `vi`, `[]`]
+    mp_tac deploy_unit_exit_safe_runs >>
+  REWRITE_TAC [APPEND_NIL] >>
   qabbrev_tac `gobs = gas_explicit marks vi.vs_gas_readings` >>
   `load_contract (SOME vi.vs_outcomes) gobs am tx [(NONE, tops)] [] =
    load_contract NONE gobs am tx [(NONE, tops)] []` by
     metis_tac[load_contract_call_free] >>
-  qspecl_then [`marks`, `tops`, `runtime_bc`, `am`, `tx`, `dunit`, `vi`]
-    mp_tac deploy_unit_exit_safe_runs >>
-  impl_tac >- (simp[Abbr`gobs`] >> metis_tac[]) >>
+  impl_tac >- (rpt conj_tac >> fs[]) >>
   disch_then (qx_choosel_then [`func`, `efuel`] strip_assume_tac) >>
   qabbrev_tac `H = storage_trace_horizon
                      (deploy_storage_trace (SOME vi.vs_outcomes) gobs am tx tops)` >>
