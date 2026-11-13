@@ -211,7 +211,7 @@ them to EVM readings. The old
   alternative: its failure is the call's oracle outcome, which the source and
   Venom both take. The call theorem gives no gas bound or guarantee of
   success regardless of resources; the companion `vyper_call_gas_sufficient`
-  does: with enough gas, provided the call trace's outcomes are
+  does: with enough gas the run exists, and, provided the call trace's outcomes are
   storage-valid (`call_outcomes_storage_ok`) and none of its source
   observations is exempt (`~source_exempt`), the frame runs out of gas only
   if it reaches a `RETURNDATACOPY` instruction (`frame_inst_at`).
