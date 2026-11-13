@@ -1,6 +1,7 @@
 (* Source and counted target outcomes for the raw-call suffix. *)
 Theory rawCallTailOutcomeMemory
 Ancestors
+  vyperStorageFootprint vyperStorageTrace gasStorage vyperFiniteStoragePreservation
   rawCallTailMemory exprSimRawCall exprSimRawCallCalldata rawCallPrefixMemory valueEncodingDefs
   exprSimMemDefs gasOutcome gasSummary fragGasMode
   vyperInterpreter vyperState exprLowering compileEnv exprSimDefs exprSimProps
@@ -18,30 +19,39 @@ Theorem raw_call_tail_outcome_mem:
     (INL (BytesV bs),esD) /\
   eval_exprs cx kws (esD with gas_obs := gsK) = (INL kvs,esK) /\
   esK.gas_obs = [] /\ expr_sim_inv cenv cx env esK /\
-  typed_args_post ctx func cenv cx esD s4 tm esK kws xs kvs tk /\
-  expr_val_rel cx (BaseT AddressT) av addr t /\
-  (!x w. MEM x xs /\ eval_operand x tk = SOME w ==> eval_operand x t = SOME w) /\
-  eval_operand len t = SOME (n2w (LENGTH bs)) /\
-  eval_operand dp t = SOME (n2w (b+32)) /\ eval_operand gas t = SOME gw /\
-  mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
-  b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
-  alloca_history func t /\ b+32+LENGTH bs <= t.vs_alloca_next /\
+  (?H. valid_horizon cx st0 H esK.storage_trace) /\
+  (!H. valid_horizon cx st0 H esK.storage_trace ==>
+    expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA /\
+    expr_post H ctx func cenv cx d esA s1 s2 tA esD (BytesV bs) data tD /\
+    typed_args_post H ctx func cenv cx esD s4 tm esK kws xs kvs tk /\
+    expr_val_rel cx (BaseT AddressT) av addr t /\
+    (!x w. MEM x xs /\ eval_operand x tk = SOME w ==> eval_operand x t = SOME w) /\
+    eval_operand len t = SOME (n2w (LENGTH bs)) /\
+    eval_operand dp t = SOME (n2w (b+32)) /\ eval_operand gas t = SOME gw /\
+    mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
+    b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+    stmt_state_rel H ctx func cenv cx esK t /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx esK (FST H) /\ wb_frame cenv es esK sa s0 t /\
+    ~t.vs_halted /\ t.vs_current_bb = s6.cs_current_bb /\
+    t.vs_inst_idx = LENGTH s6.cs_current_insts /\
+    (!x. addr = Var x \/ len = Var x \/ dp = Var x \/ gas = Var x \/
+         MEM (Var x) xs ==> not_fresh_at s6 x) /\
+    safe_operand s6 addr /\ safe_operand s6 len /\ safe_operand s6 dp /\
+    safe_operand s6 gas /\ safe_operand s6
+      (case ext_call_kwarg EKValue flags.rcf_kws xs of NONE => Lit 0w | SOME v => v) /\
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+    b+32+LENGTH bs <= t.vs_alloca_next) /\
   lowered_value_type cenv (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE) =
     raw_call_return_type flags /\
-  stmt_state_rel ctx func cenv cx esK t /\ wb_frame cenv es esK sa s0 t /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\
   ci_mono sa s6 /\ fn_has_code s6 sb func /\ fn_inst_ids_distinct func /\
-  ~t.vs_halted /\ t.vs_current_bb = s6.cs_current_bb /\
-  t.vs_inst_idx = LENGTH s6.cs_current_insts /\
-  safe_operand s6 addr /\ safe_operand s6 len /\ safe_operand s6 dp /\
-  safe_operand s6 gas /\ safe_operand s6
-    (case ext_call_kwarg EKValue flags.rcf_kws xs of NONE => Lit 0w | SOME v => v) /\
   compile_raw_call_outbuf flags.rcf_max_outsize s6 = ((ov,op),s7) /\
   compile_raw_call_finish addr dp len gas
     (case ext_call_kwarg EKValue flags.rcf_kws xs of NONE => Lit 0w | SOME v => v)
     (if flags.rcf_is_static then StaticCall else RegularCall)
     flags.rcf_max_outsize flags.rcf_revert_on_failure ov op s7 = (result,sb) ==>
-  gas_outcome T (cx_tops cx) (ctx,func)
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (do
       type_check (LENGTH (av::BytesV bs::kvs) = 2 + LENGTH flags.rcf_kws) "raw_call args";
       target <- lift_option_type (dest_AddressV av) "raw_call target";
@@ -50,8 +60,8 @@ Theorem raw_call_tail_outcome_mem:
       eval_raw_call cx flags target data amount
         (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))
     od) (esK,t)
-    (\res ee u. (?tv. res = INL tv /\
-      vv_post ctx func cenv cx
+    (\H res ee u. (?tv. res = INL tv /\
+      vv_post H ctx func cenv cx
         (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE)
         es sa sb s0 ee tv
         (if flags.rcf_max_outsize = 0 then StackValue ann result
@@ -61,9 +71,13 @@ Theorem raw_call_tail_outcome_mem:
          else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)) u) /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
-  strip_tac >> drule_all raw_call_prefix_source_ready >> strip_tac >>
+  strip_tac >>
+  qpat_assum `?H. valid_horizon _ _ _ _` (qx_choose_then `H0` assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  drule_all raw_call_prefix_source_ready >> strip_tac >>
   drule raw_call_pre_flags >> strip_tac >>
   `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   `IS_SOME esK.outcomes /\ outcomes_accounts_typed esK.outcomes /\
@@ -101,7 +115,7 @@ Resume raw_call_tail_outcome_mem[ready]:
   disch_then (qspecl_then [`cx`,`bs`] SUBST1_TAC) >>
   map_every (fn q => qpat_x_assum q kall_tac)
     [`bind (eval_expr cx a) _ _ = _`, `bind (eval_expr cx d) _ _ = _`,
-     `eval_exprs cx kws _ = _`, `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _`,
+     `eval_exprs cx kws _ = _`, `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _ _`,
      `expr_val_rel _ _ _ _ _`, `!x w. MEM x xs /\ _ ==> _`,
      `MAP FDOM es.scopes = MAP FDOM esA.scopes`,
      `MAP FDOM esA.scopes = MAP FDOM esD.scopes`,
@@ -149,6 +163,23 @@ Resume raw_call_tail_outcome_mem[path]:
      fs[expr_type_def, raw_call_return_type_def, evaluate_type_def]) >>
   `expr_type (Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE) =
     raw_call_return_type flags` by simp[expr_type_def] >>
+  (* A horizon valid after the call was valid before it, and the call keeps
+     storage well formed on it. *)
+  `!H. valid_horizon cx st0 H es2.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx esK t /\
+       storage_well_formed_on cx es2 (FST H)` by
+    (gen_tac >> strip_tac >>
+     `valid_horizon cx st0 H esK.storage_trace` by
+       (qpat_assum `eval_raw_call _ _ _ _ _ _ esK = _`
+          (mp_then (Pat `_ _ = (_,_)`) mp_tac
+             vyperStorageFootprintTheory.valid_horizon_frame) >>
+        simp[storage_trace_frame_raw_call]) >>
+     qpat_assum `!H. valid_horizon _ _ H esK.storage_trace ==> _` drule >>
+     strip_tac >> simp[] >>
+     qpat_assum `eval_raw_call _ _ _ _ _ _ esK = _`
+       (mp_then (Pat `eval_raw_call _ _ _ _ _ _ _ = _`) mp_tac
+          vyperFiniteStoragePreservationTheory.eval_raw_call_preserves_storage_well_formed_on) >>
+     disch_then irule >> fs[valid_horizon_def]) >>
   suspend "execute"
 QED
 
@@ -159,7 +190,7 @@ Resume raw_call_tail_outcome_mem[execute]:
   simp[expr_type_def] >>
   disch_then (drule_at (Pat `lowered_value_type _ _ = _`)) >>
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ esK t`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ esK t`)) >>
   disch_then (drule_at (Pat `eval_operand addr t = _`)) >>
   disch_then (drule_at (Pat `eval_operand dp t = _`)) >>
   disch_then (drule_at (Pat `eval_operand len t = _`)) >>
@@ -173,7 +204,8 @@ Resume raw_call_tail_outcome_mem[execute]:
 QED
 
 Resume raw_call_tail_outcome_mem[outcome]:
-  markerLib.RESUME_TAC >> simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  markerLib.RESUME_TAC >> simp[gas_outcome_def] >> qexists_tac `[]` >>
+  disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexists_tac `FST (eval_raw_call cx flags target bs amount
     (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs)) esK)` >>
@@ -187,7 +219,7 @@ Resume raw_call_tail_outcome_mem[outcome]:
     (drule fragGasPathMemTheory.gas_path_mem_exec >>
      disch_then (mp_tac o CONJUNCT1) >>
      disch_then (mp_then Any mp_tac rest_word_path_frontier) >> simp[]) >>
-  simp[] >> metis_tac[]
+  simp[] >> rpt strip_tac >> metis_tac[]
 QED
 
 Finalise raw_call_tail_outcome_mem

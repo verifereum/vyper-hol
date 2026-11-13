@@ -36,7 +36,7 @@ Proof
   conj_tac >- simp[gas_path_ptr_rules] >>
   disj1_tac >> simp[] >>
   drule_all local_name_body_ptr_boundary >> strip_tac >>
-  `vv_post ctx func cenv cx (Name ann id) es sa sa s0
+  `vv_post H ctx func cenv cx (Name ann id) es sa sa s0
      (es with gas_obs := []) (PlaceR (MemoryPlace id []))
      (LocatedValue ann (mk_ptr (Var p) LocMemory)) s0` by
     (irule name_value_post >> simp[]) >>

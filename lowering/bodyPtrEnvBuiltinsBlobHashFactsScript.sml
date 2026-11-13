@@ -18,7 +18,7 @@ Proof
 QED
 
 Theorem blobhash_read_typed_step:
-  0 <= i /\ i < 2 ** 256 /\ stmt_state_rel ctx fn cenv cx es s /\
+  0 <= i /\ i < 2 ** 256 /\ stmt_state_rel H ctx fn cenv cx es s /\
   eval_operand arg s = SOME (typed_val_to_w256 (BaseTV (UintT 256)) (IntV i)) ==>
   step_inst_base (mk_inst id BLOBHASH [arg] [out]) s =
     OK (update_var out

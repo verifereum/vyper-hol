@@ -98,11 +98,11 @@ Proof
 QED
 
 Theorem assign_ghost_inv:
-  eval_operand src s = SOME w /\ ghost_inv d cenv cx es G tn s /\
+  eval_operand src s = SOME w /\ ghost_inv H d cenv cx es G tn s /\
   (!name x sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var x) sz) ==> x <> out) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> out) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> out) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id ASSIGN [src] [out]) (update_var out w s))
     (step_taint (mk_inst id ASSIGN [src] [out]) s (update_var out w s) tn)
     (update_var out w s)

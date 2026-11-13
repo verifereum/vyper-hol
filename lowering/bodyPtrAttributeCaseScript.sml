@@ -10,9 +10,9 @@ Theorem attribute_add_vv_post:
   compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\
   emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) /\
-  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
   eval_operand (vv_operand vv) s = SOME w ==>
-  vv_post ctx func cenv cx e es sa sn s0 es' tv vv
+  vv_post H ctx func cenv cx e es sa sn s0 es' tv vv
     (update_var (STRING #"%" (toString sm.cs_next_var)) (w + n2w off) s
       with vs_inst_idx := n) /\
   eval_operand (vv_operand vv)
@@ -40,12 +40,12 @@ Theorem attribute_add_path_post_ptr:
   fn_has_code sm sn func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
   eval_operand (vv_operand vv) s = SOME w /\ op_taint tn (vv_operand vv) = {} ==>
   ?out G' tn' t.
     dst = Var out /\ gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
     t = (update_var out (w + n2w off) s with vs_inst_idx := SUC s.vs_inst_idx) /\
-    vv_post ctx func cenv cx e es sa sn s0 es' tv vv t /\
+    vv_post H ctx func cenv cx e es sa sn s0 es' tv vv t /\
     eval_operand (vv_operand vv) t = SOME w /\
     eval_operand dst t = SOME (w + n2w off) /\
     FLOOKUP G' out = op_prov G (vv_operand vv) /\
@@ -71,13 +71,13 @@ Theorem attribute_fresh_ghost_update:
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
-  ghost_inv d cenv cx ee G tn s /\
+  ghost_inv H d cenv cx ee G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
   tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
   (!p. p <> STRING #"%" (toString sm.cs_next_var) ==>
      FLOOKUP G' p = FLOOKUP G p /\ op_taint tn' (Var p) = op_taint tn (Var p)) ==>
-  ghost_inv d cenv cx ee G' tn'
+  ghost_inv H d cenv cx ee G' tn'
     (update_var (STRING #"%" (toString sm.cs_next_var)) w s with vs_inst_idx := n) /\
   ghost_kept cenv es sa G0 tn0 s0 G' tn'
 Proof
@@ -116,8 +116,8 @@ Theorem attribute_nonmemory_field_ptr:
   t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
   t.vs_transient = s.vs_transient /\
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
-  op_taint tn' dst = {} /\ (vv_loc vv = LocCode ==> op_prov H dst = NONE) ==>
-  ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc vv))) ee' H tn' t
+  op_taint tn' dst = {} /\ (vv_loc vv = LocCode ==> op_prov HG dst = NONE) ==>
+  ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc vv))) ee' HG tn' t
 Proof
   strip_tac >> irule ptr_vv_ok_nonmemory >>
   simp[mk_ptr_def] >> rpt strip_tac >> gvs[] >>
@@ -145,9 +145,9 @@ Theorem attribute_memory_field_ptr:
   w2n (w + n2w (struct_field_offset fields fld)) = w2n w + struct_field_offset fields fld /\
   t.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem /\ op_taint tn' dst = {} /\
   (!x b sz. vv_operand vv = Var x /\ FLOOKUP G x = SOME (b,sz) ==>
-     ?y. dst = Var y /\ FLOOKUP H y = SOME (b,sz)) ==>
-  ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst LocMemory)) ee H tn' t /\
-  ptr_buf_ok cenv fldexpr dst H t
+     ?y. dst = Var y /\ FLOOKUP HG y = SOME (b,sz)) ==>
+  ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst LocMemory)) ee HG tn' t /\
+  ptr_buf_ok cenv fldexpr dst HG t
 Proof
   strip_tac >>
   `ptr_mem_ok cx (StructT sid) (StructV vals) (vv_operand vv) G tn s` by

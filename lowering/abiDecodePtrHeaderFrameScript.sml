@@ -18,7 +18,7 @@ Theorem abi_builtin_decode_header_frame_ptr:
   mload (w2n w) s = n2w cnt /\ mn <= cnt /\ cnt <= mx /\
   mx < dimword (:256) /\ abi_decoder_operand_live sa.cs_next_var (Var p) /\
   sh.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
@@ -27,8 +27,8 @@ Theorem abi_builtin_decode_header_frame_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK u) /\
     run_inst_seq (emitted_insts sa sh) s = OK (u with vs_inst_idx := s.vs_inst_idx) /\
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sh) s G' tn' /\
-    fresh_vars_wrt limit_st u /\ stmt_state_rel ctx func cenv cx es u /\
-    ghost_inv d cenv cx es G' tn' u /\
+    fresh_vars_wrt limit_st u /\ stmt_state_rel H ctx func cenv cx es u /\
+    ghost_inv H d cenv cx es G' tn' u /\
     ~u.vs_halted /\ u.vs_current_bb = sh.cs_current_bb /\
     u.vs_inst_idx = LENGTH sh.cs_current_insts /\
     eval_operand (Var r) u = SOME (n2w cnt) /\
@@ -52,12 +52,12 @@ Proof
   drule_all (abi_builtin_decode_header_success_path_ptr |>
     SRULE [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule stmt_state_rel_old_vars_frame_ptr >>
      qexistsl_tac [`s`, `sa`] >> simp[]) >>
-  `ghost_inv d cenv cx es G' tn' (t with vs_inst_idx := LENGTH sh.cs_current_insts)` by
+  `ghost_inv H d cenv cx es G' tn' (t with vs_inst_idx := LENGTH sh.cs_current_insts)` by
     (irule ghost_inv_fresh_frame >>
-     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
      qexists_tac `sa` >> fs[lookup_var_def]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH sh.cs_current_insts`, `G'`, `tn'`, `q`, `r`] >>
   gvs[fresh_vars_wrt_def, ptr_covers_def, eval_operand_def, lookup_var_def,

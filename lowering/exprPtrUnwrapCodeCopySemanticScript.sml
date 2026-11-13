@@ -36,11 +36,11 @@ Theorem unwrap_code_copy_endpoint_post:
   (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
   (!ty. evaluate_type (get_tenv cx) t = SOME ty ==>
     type_memory_bytes cenv t = type_memory_size ty) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
   compile_alloc_buffer nb sm = (buf,mid) /\ buf.buf_operand = Var root /\
   step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
   a = u with vs_inst_idx := k /\ copy_runtime_frame mid a sb z ==>
-  expr_post ctx func cenv cx e es sa sb s0 ee v op z
+  expr_post H ctx func cenv cx e es sa sb s0 ee v op z
 Proof
   strip_tac >> drule_all unwrap_code_copy_shifted_run >> disch_tac >>
   irule unwrap_code_same_endpoint_post >> ntac 4 (conj_tac >- simp[]) >>

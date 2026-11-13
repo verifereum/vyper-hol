@@ -115,7 +115,7 @@ Proof
 QED
 
 Theorem ghost_inv_exterior_frame:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. ((?name. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz)) \/
             cenv.ce_return_buf = SOME (PtrVar (Var p) sz) \/
             cenv.ce_return_pc = SOME (PtrVar (Var p) sz)) ==>
@@ -135,7 +135,7 @@ Theorem ghost_inv_exterior_frame:
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient ==>
-  ghost_inv d cenv cx es G' tn' t
+  ghost_inv H d cenv cx es G' tn' t
 Proof
   strip_tac >>
   gvs[ghost_inv_def, stor_taint_ok_def] >>

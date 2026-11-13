@@ -44,11 +44,11 @@ QED
 (* Word-region and struct-field source lemmas supply this dead-map equality.
    It is essential: taint shrinking alone does not preserve a changing bank. *)
 Theorem clean_storage_store_taint_ok:
-  stor_taint_ok cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
-  (!k b. storage_dead cx tr
+  stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+  (!k b. storage_dead H tr
     (update_storage slot w (if tr then contract_transient s else contract_storage s)) k b =
-    storage_dead cx tr (if tr then contract_transient s else contract_storage s) k b) ==>
-  stor_taint_ok cx
+    storage_dead H tr (if tr then contract_transient s else contract_storage s) k b) ==>
+  stor_taint_ok H cx
     (if tr then tn with t_trans := key_update tn.t_trans slot {}
      else tn with t_stor := key_update tn.t_stor slot {})
     (if tr then tstore slot w s else sstore slot w s)
@@ -62,18 +62,18 @@ Proof
 QED
 
 Theorem ghost_inv_storage_word_store:
-  ghost_inv d cenv cx es G tn s /\ es'.scopes = es.scopes /\
+  ghost_inv H d cenv cx es G tn s /\ es'.scopes = es.scopes /\
   s.vs_call_ctx.cc_address = cx.txn.target /\
-  (!k b. storage_dead cx tr
+  (!k b. storage_dead H tr
     (update_storage slot w (if tr then contract_transient s else contract_storage s)) k b =
-    storage_dead cx tr (if tr then contract_transient s else contract_storage s) k b) ==>
-  ghost_inv d cenv cx es' G
+    storage_dead H tr (if tr then contract_transient s else contract_storage s) k b) ==>
+  ghost_inv H d cenv cx es' G
     (if tr then tn with t_trans := key_update tn.t_trans slot {}
      else tn with t_stor := key_update tn.t_stor slot {})
     ((if tr then tstore slot w s else sstore slot w s) with vs_inst_idx := pc)
 Proof
   strip_tac >>
-  `stor_taint_ok cx tn s` by fs[ghost_inv_def] >>
+  `stor_taint_ok H cx tn s` by fs[ghost_inv_def] >>
   drule_all clean_storage_store_taint_ok >> strip_tac >>
   Cases_on `tr` >>
   gvs[ghost_inv_def, ptr_covers_def, op_taint_def, sstore_def, tstore_def,

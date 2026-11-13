@@ -23,7 +23,7 @@ QED
 Theorem assign_base_ptr_alloc_buffer_endpoint_separation:
   !ctx func cenv cx es sa sm buf sz s t a.
     compile_alloc_buffer sz sa = (buf,sm) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
@@ -94,12 +94,12 @@ Theorem assign_base_ptr_alloc_buffer_counted_separated:
   !ctx func d cenv cx es sa sm buf sz s PG G tn D frame_sa
     ty va vb v op tv w.
     compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
     ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     not_local_ptr cenv es.scopes (STRING #"%" (toString sa.cs_next_var)) /\
     (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==>
       x <> STRING #"%" (toString sa.cs_next_var)) /\
@@ -115,7 +115,7 @@ Theorem assign_base_ptr_alloc_buffer_counted_separated:
       val_in_memory tv v (w2n w) m) ==>
     ?u a G' tn'.
       gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK u) /\
-      stmt_state_rel ctx func cenv cx es u /\ ~u.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es u /\ ~u.vs_halted /\
       eval_operand buf.buf_operand u = SOME a /\
       FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n a,sz) /\
       w2n a + sz < dimword (:256) /\
@@ -125,7 +125,7 @@ Theorem assign_base_ptr_alloc_buffer_counted_separated:
       (!p k. buf.buf_operand <> Var p /\ ptr_covers G tn p s k ==>
         ptr_covers G' tn' p u k) /\
       (!q. q <> buf.buf_operand ==> eval_operand q u = eval_operand q s) /\
-      ghost_inv d cenv cx es G' tn' u /\
+      ghost_inv H d cenv cx es G' tn' u /\
       ghost_kept cenv es frame_sa G tn s G' tn' /\
       eval_operand op u = SOME w /\
       (!m. mem_agree_outside tn'.t_mem u.vs_memory m ==>
