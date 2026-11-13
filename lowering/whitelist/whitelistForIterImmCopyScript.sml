@@ -399,7 +399,7 @@ Proof
   reverse conj_tac >- metis_tac[] >>
   irule array_iter_copy_immutables >>
   goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`w2n w`, `type_memory_size tv`] >>
+  qexistsl_tac [`H`, `w2n w`, `type_memory_size tv`] >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl_tac [`ctx`, `func`, `inst`] >> simp[] >>
   metis_tac[arithmeticTheory.ADD_COMM]
