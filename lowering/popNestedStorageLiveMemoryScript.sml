@@ -2,7 +2,7 @@
 Theory popNestedStorageLiveMemory
 Ancestors
   popNestedStorageSuffixMemory exprSimPopNestedBase exprSimMemDefs
-  exprSimPopNestedStorageFrame targetPlaceSimMem allocaHistoryFragment
+  targetPlaceSimMem allocaHistoryFragment
   loweringPosts loweringStateRelDefs exprSimDefs exprSimProps exprSimHypsDefs
   exprSimPopStorage exprLoweringProps compileEnv fragExec list words
   vyperInterpreter vyperState vyperContext vyperStoragePlaceRegion

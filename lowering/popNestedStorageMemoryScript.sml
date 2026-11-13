@@ -1,8 +1,7 @@
-(* Counted Pop for storage-frame indices, conditional on target simulation. *)
+(* Counted Pop for storage and transient targets, conditional on target simulation. *)
 Theory popNestedStorageMemory
 Ancestors
-  popNestedStorageLiveMemory popNestedStorageEffectfulMemory
-  exprSimPopNestedStorageFrame targetPlaceSimMem
+  popNestedStorageLiveMemory targetPlaceSimMem
   exprSimMemDefs exprSimPopNestedBase loweringPosts bodySim
   list fragExec exprSimDefs exprSimProps exprSimHypsDefs exprSimHyps exprSimPop exprSimPopStorage
   targetPlaceSim targetPlaceSimCases targetPlaceLive vyperTypeEnv vyperTypeInvariants
@@ -11,17 +10,17 @@ Ancestors
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
   exprLoweringProps compileEnv finite_map vyperPureExpr
   vyperStoragePlaceRegion vyperStoragePlaceProvenance vyperStorageLayoutSafety
+  vyperPlaceStoragePreservation accountsRelProps vyperStorage
   vyperPlaceFrames vyperStatePreservation
   exprSimHash fragGasSeqAbort gasSummary exprSimVVFrame
   gasOutcome gasExemptCert gasSummaryCompose fragGasMode fragGasPath
 
-Theorem pop_nested_storage_frame_sim_mem:
+Theorem pop_nested_storage_sim_mem:
   !ctx func cenv cx env ann bt ty es src id ts d.
     target_sim_mem ctx func cenv cx env bt es /\
     expr_body_pre cenv cx env (Pop ann bt) es /\
     target_root bt = TopLevelNameTarget (src,id) /\
-    get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = SOME d /\
-    EVERY (storage_frame_expr cx) (target_indices bt) ==>
+    get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = SOME d ==>
     expr_vv_sim_mem ctx func cenv cx ty (Pop ann bt) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -61,7 +60,7 @@ Proof
   suspend "compose"
 QED
 
-Resume pop_nested_storage_frame_sim_mem[compose]:
+Resume pop_nested_storage_sim_mem[compose]:
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
   `eval_expr cx (Pop ann bt) = vyperState$bind (eval_target_place cx bt) (pop_place cx)` by
     simp[FUN_EQ_THM, Once evaluate_def, vyperStateTheory.bind_def] >>
@@ -74,7 +73,7 @@ Resume pop_nested_storage_frame_sim_mem[compose]:
   first_assum (irule_at Any o MATCH_MP gas_exempt_cert_error_place)
 QED
 
-Resume pop_nested_storage_frame_sim_mem[summary]:
+Resume pop_nested_storage_sim_mem[summary]:
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
   simp[gas_summary_at_def] >>
   disch_then (qx_choosel_then [`tres`, `tend`, `tr0`] strip_assume_tac) >>
@@ -90,7 +89,7 @@ Resume pop_nested_storage_frame_sim_mem[summary]:
   rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
 QED
 
-Resume pop_nested_storage_frame_sim_mem[normal]:
+Resume pop_nested_storage_sim_mem[normal]:
   rename1 `target_post _ _ _ _ _ _ _ _ _ (PlaceR p) _ _ t` >>
   `eval_target_place cx bt
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
@@ -98,21 +97,20 @@ Resume pop_nested_storage_frame_sim_mem[normal]:
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def] >> strip_tac >>
      first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-  `storage_layout_safe cx /\ contract_storage_well_formed cx es` by
-    fs[expr_sim_inv_def] >>
-  `contract_storage_well_formed cx
-     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
-    (irule contract_storage_well_formed_storage_frame >>
-     qexists `es` >> simp[] >> Cases >>
-     simp[vyperStorageBackendTheory.get_storage_def]) >>
+  `storage_layout_safe cx` by fs[expr_sim_inv_def] >>
+  drule_all nested_pop_target_storage_preserved >> strip_tac >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def] >>
      metis_tac[gas_marked_path_exec, gas_path_normal]) >>
   drule_all nested_pop_eval_target_storage_class >> strip_tac >> gvs[] >>
   drule nested_pop_storage_target_metadata >> strip_tac >> gvs[] >>
-  drule_all nested_pop_eval_target_storage_frame >> strip_tac >>
   drule eval_target_place_region >> strip_tac >>
+  rename1 `evaluate_type (get_tenv cx) ann = SOME tv` >>
+  `0 < type_slot_size (ArrayTV tv (Dynamic n))` by
+    simp[vyperValueTheory.type_slot_size_def] >>
+  drule_all storage_place_region_slots_in_range >> strip_tac >>
+  drule_all storage_place_region_read_live >> strip_tac >>
   drule_all pop_storage_element_size >>
   disch_then (qspec_then `tr` assume_tac) >>
   fs[GSYM slot_loc_def] >>
@@ -135,7 +133,7 @@ Resume pop_nested_storage_frame_sim_mem[normal]:
   suspend "finish"
 QED
 
-Resume pop_nested_storage_frame_sim_mem[finish]:
+Resume pop_nested_storage_sim_mem[finish]:
   qexistsl_tac [`pres'`, `pend'`, `pr`] >>
   conj_tac
   >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
@@ -144,23 +142,4 @@ Resume pop_nested_storage_frame_sim_mem[finish]:
         (irule_at Any) >> asm_rewrite_tac[]) >>
   gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
-Finalise pop_nested_storage_frame_sim_mem
-
-Theorem pop_nested_storage_sim_mem:
-  !ctx func cenv cx env ann bt ty es src id ts d.
-    (EVERY (storage_frame_expr cx) (target_indices bt) ==>
-       target_sim_mem ctx func cenv cx env bt es) /\
-    body_base_target_mem_ok cx bt /\ body_inv (cx_tops cx) ctx cenv cx /\
-    expr_body_pre cenv cx env (Pop ann bt) es /\
-    target_root bt = TopLevelNameTarget (src,id) /\
-    get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = SOME d ==>
-    expr_vv_sim_mem ctx func cenv cx ty (Pop ann bt) es
-Proof
-  rpt strip_tac >>
-  Cases_on `EVERY (storage_frame_expr cx) (target_indices bt)`
-  >- (irule pop_nested_storage_frame_sim_mem >> metis_tac[]) >>
-  `~EVERY pure_expr (target_indices bt)` by
-    metis_tac[listTheory.EVERY_MONOTONIC, storage_frame_expr_pure] >>
-  irule pop_nested_storage_effectful_dead_case_mem >>
-  asm_rewrite_tac[] >> metis_tac[]
-QED
+Finalise pop_nested_storage_sim_mem
