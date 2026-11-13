@@ -923,7 +923,7 @@ Proof
   imp_res_tac (cj 2 subscript_pop_not_label) >> gvs[]
 QED
 
-Theorem target_subscript_index_source_diagnostic[local]:
+Theorem target_subscript_index_source_diagnostic:
   expr_body_pre cenv cx env e s /\
   bind (eval_expr cx e) (read_result cx) s = (INL key,ee) ==>
   expr_sim_inv cenv cx env ee /\ expr_result_typed env e (Value key)
@@ -933,7 +933,7 @@ Proof
   simp[]
 QED
 
-Theorem target_subscript_index_runtime_diagnostic[local]:
+Theorem target_subscript_index_runtime_diagnostic:
   expr_body_pre cenv cx env e s /\
   bind (eval_expr cx e) (read_result cx) s = (INL key,ee) ==>
   ?itv. evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\
@@ -944,7 +944,7 @@ Proof
   drule read_result_state >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem target_subscript_memory_array_ready[local]:
+Theorem target_subscript_memory_array_ready:
   expr_sim_inv cenv cx env es /\
   target_post ctx func cenv cx es0 sa sn s0 es
     (PlaceR (MemoryPlace id path)) bvt rb s /\
@@ -1057,7 +1057,7 @@ Proof
   fs[expr_sim_inv_def]
 QED
 
-Theorem target_subscript_suffix_var[local]:
+Theorem target_subscript_suffix_var:
   target_subscript_suffix cenv e rb ix sn = (op,sb) ==>
   !x. FST op = Var x ==> not_fresh_at sb x
 Proof
@@ -1071,7 +1071,7 @@ Proof
   metis_tac[exprOperandVarTheory.compiler_subscript_ops_var]
 QED
 
-Theorem target_subscript_vtype_well_formed[local]:
+Theorem target_subscript_vtype_well_formed:
   !tenv base_vt idx_ty result_vt.
     well_formed_vtype tenv base_vt /\
     subscript_vtype base_vt idx_ty = SOME result_vt ==>
@@ -1112,7 +1112,7 @@ Proof
   drule_all attribute_type_runtime_step >> strip_tac >> metis_tac[]
 QED
 
-Theorem target_subscript_pre_result_well_formed[local]:
+Theorem target_subscript_pre_result_well_formed:
   target_pre cenv cx env bt es /\ type_place_target env bt = SOME vt ==>
   well_formed_vtype (get_tenv cx) vt
 Proof
@@ -1122,7 +1122,7 @@ Proof
   fs[env_consistent_def, env_context_consistent_def]
 QED
 
-Theorem target_subscript_marked_nonhalted[local]:
+Theorem target_subscript_marked_nonhalted:
   gas_marked_exec memory (ctx,func) source (es,s0) marks res mid (OK t) ==>
   ~t.vs_halted
 Proof
