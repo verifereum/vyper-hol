@@ -3,7 +3,7 @@ Theory abiEncoderWindowLeavesMem
 Ancestors
   abiEncoderWindowLeaves abiEncoderWindowContract abiEncoderWindowComplex
   abiEncoderWindowSequenceFrameMem abiEncoderWindowMemFrame abiEncoderLeafGlobals
-  abiDecoderVarSequence pred_set
+  abiDecoderVarSequence pred_set immutableMemoryFrame
   abiEncoderWindowPhase abiEncoderWindowBytes abiEncoderRounding abiEncoderBytes
   abiEncoderWindowBytesMem abiEncoderWindowSequence windowSequenceMem fragExecMem instMemFrontier allocaFootprint
   abiEncoderLeaves abiEncoderWrites abiEncoderReentryLeaves moduleLoweringProps
@@ -126,12 +126,12 @@ Proof
   gvs[update_var_def]
 QED
 
-Theorem window_word_contract_mem:
+Theorem window_word_contract_mem_growth:
   !dst src st out st' ctx func s at av sb cap d.
   compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') /\
   abi_encoder_window_pre ctx func st st' dst src AbiPrimWord at av sb cap d s ==>
   ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t /\
-      window_mem_frame ctx func s t
+      window_mem_frame ctx func s t /\ LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   rpt gen_tac >> strip_tac >>
   `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
@@ -177,7 +177,10 @@ Proof
   suspend "package"
 QED
 
-Resume window_word_contract_mem[package]:
+Resume window_word_contract_mem_growth[package]:
+  `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    (qpat_assum `t = _` SUBST1_TAC >>
+     simp[immutable_mstore_capacity, update_var_def]) >>
   qexists_tac `t with vs_inst_idx := LENGTH st'.cs_current_insts` >> asm_rewrite_tac[] >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
   simp[eval_operand_def, abi_encoder_extend_sim_sim] >>
@@ -190,7 +193,17 @@ Resume window_word_contract_mem[package]:
   asm "sizes" ACCEPT_TAC
 QED
 
-Finalise window_word_contract_mem
+Finalise window_word_contract_mem_growth
+
+Theorem window_word_contract_mem:
+  !dst src st out st' ctx func s at av sb cap d.
+  compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src AbiPrimWord at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t /\
+      window_mem_frame ctx func s t
+Proof
+  metis_tac[window_word_contract_mem_growth]
+QED
 
 Theorem window_leaf_sequence_result[local]:
   abi_encoder_window_pre ctx func st en dst src ei at av sb cap d s /\
@@ -223,12 +236,12 @@ Proof
   Cases_on `out` >> gvs[eval_operand_def, lookup_var_def]
 QED
 
-Theorem window_bytes_contract_mem:
+Theorem window_bytes_contract_mem_growth:
   !dst src st out st' ctx func s at av sb cap d.
   compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') /\
   abi_encoder_window_pre ctx func st st' dst src (AbiBytestring maxlen) at av sb cap d s ==>
   ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t /\
-      window_mem_frame ctx func s t
+      window_mem_frame ctx func s t /\ LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -271,6 +284,22 @@ Proof
      [(d,LENGTH (enc at (BytesV bs)))] s actual` by
     (asm_rewrite_tac[] >> irule window_bytes_effect >> simp[] >>
      qexistsl_tac [`LENGTH bs`, `sb`] >> simp[]) >>
-  qexists_tac `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
-  asm_rewrite_tac[] >> metis_tac[window_leaf_sequence_result]
+  `LENGTH s.vs_memory <= LENGTH actual.vs_memory` by
+    (asm_rewrite_tac[] >> simp[mcopy_def,
+       venomMemPropsTheory.LENGTH_write_memory_with_expansion,
+       immutable_mstore_capacity]) >>
+  drule window_leaf_sequence_result >> disch_then (qspec_then `actual` mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  simp_tac (srw_ss()) [] >> asm_rewrite_tac[] >>
+  first_x_assum irule >> simp[ADD_COMM]
+QED
+
+Theorem window_bytes_contract_mem:
+  !dst src st out st' ctx func s at av sb cap d.
+  compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src (AbiBytestring maxlen) at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t /\
+      window_mem_frame ctx func s t
+Proof
+  metis_tac[window_bytes_contract_mem_growth]
 QED
