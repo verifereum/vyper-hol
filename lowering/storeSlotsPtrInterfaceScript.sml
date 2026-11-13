@@ -3,6 +3,9 @@
 Theory storeSlotsPtrInterface
 Ancestors
   placeStoreSlots stmtSimStoreCopy assignBasePtrStoragePath assignBasePtrStorageSemantic
+  assignBasePtrStorageExtent assignBasePtrStorageSingle assignBasePtrStorageDirect
+  exprSimHyps exprSimTypedAlloc exprLoweringProps assignBasePtrStorageTypes
+  assignBasePtrStorageLoop bodyPtrAttributeAdd emitHelper
   typedCopyLayoutPtr representationCleanPtr reasonCodeOffsetPtr valueEncodingDefs
   bodyPtrDefs fragGasPathPtr ptrDiscipline stateFrame
   compileEnv context loweringStateRelDefs venomState words list pred_set
@@ -178,4 +181,172 @@ Proof
   >- (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
         (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
   gvs[lookup_var_def, update_var_def, ADD1, FLOOKUP_UPDATE]
+QED
+
+(* The actual assignment RHS supplies full footprint coverage and robust
+   representation; no cleanliness assumption about payload is needed. *)
+Theorem store_slots_assignment_rhs_resources:
+  body_inv tops bctx cenv cx /\ expr_sim_inv cenv cx env pre /\
+  expr_body_pre cenv cx env e pre /\ supported_expr tops e /\
+  supported_storage_type tops (expr_type e) /\ ~is_word_type (expr_type e) /\
+  (!elem n. expr_type e <> ArrayT elem (Dynamic n)) /\
+  type_stmt env ret (Assign target e) = SOME env' /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  stmt_state_rel ctx func cenv cx es s /\
+  expr_val_at cenv cx (expr_type e) sa sb es v op s /\
+  ptr_val_ok cx (expr_type e) v op G tn s /\ eval_operand op s = SOME w ==>
+  ?root. op = Var root /\ lookup_var root s = SOME w /\
+    ptr_covers G tn root s (val_footprint tv v) /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory tv v (w2n w) m) /\
+    w2n w + type_memory_size tv < dimword (:256)
+Proof
+  strip_tac >>
+  drule_all assign_base_storage_rhs_footprint >> strip_tac >>
+  drule_all assign_base_storage_rhs_lowered_type >> strip_tac >>
+  drule_all assign_base_typed_assignment_capacity_positive >> strip_tac >>
+  `val_footprint tv v <> 0` by metis_tac[arithmeticTheory.NOT_ZERO_LT_ZERO] >>
+  `?root. op = Var root /\ ptr_covers G tn root s (val_footprint tv v)` by
+    (irule ptr_val_ok_read_covers >> simp[] >>
+     qexistsl_tac [`cx`, `tv`, `expr_type e`, `v`] >> simp[]) >>
+  `w2n w + val_footprint tv v < dimword (:256)` by
+    (irule expr_val_at_bound >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  drule assign_base_storage_not_bytestring >> strip_tac >>
+  drule_all assign_base_nonbytes_footprint >> strip_tac >>
+  gvs[eval_operand_def] >>
+  fs[ptr_val_ok_def, ptr_mem_ok_def, eval_operand_def] >> metis_tac[]
+QED
+
+Theorem store_slots_normalize_execution_frame:
+  execution_frame u = execution_frame v ==>
+  store_copy_normalize s u = store_copy_normalize s v
+Proof
+  simp[execution_frame_def, store_copy_normalize_def,
+    venom_state_component_equality]
+QED
+
+(* A richer offset boundary uses the explicit binop witnesses, including
+   immutable taint, already provided by attribute_emit_binop_path_ptr. *)
+Theorem store_slots_emit_offset_resources:
+  emit_op ADD [Var root; Lit (n2w off)] sa = (Var out,sb) /\
+  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  lookup_var root s = SOME a /\ ptr_covers G tn root s capacity /\
+  off < dimword (:256) /\ off + needed <= capacity /\
+  w2n a + off < dimword (:256) ==>
+  ?Gf tf u. gas_path_ptr D 0 ctx func PG G tn s 0 Gf tf (OK u) /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
+    lookup_var out u = SOME (a + n2w off) /\ ptr_covers Gf tf out u needed /\
+    execution_frame u = execution_frame s /\
+    tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==> lookup_var p u = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `op_taint tn (Var root) = {}` by fs[ptr_covers_def] >>
+  `eval_operand (Var root) s = SOME a /\
+   eval_operand (Lit (n2w off)) s = SOME (n2w off) /\
+   op_taint tn (Lit (n2w off)) = {}` by simp[eval_operand_def, op_taint_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`]
+    attribute_emit_binop_path_ptr)) >>
+  disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx func PG G tn s 0 g1 t1 (OK s1)` >>
+  qexistsl_tac [`g1`, `t1`, `s1`] >> simp[] >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   LENGTH sb.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by
+    gvs[emit_op_def, fresh_var_def, fresh_id_def, emit_def, comp_bind_def,
+      comp_ignore_bind_def, comp_return_def] >>
+  simp[Abbr `s1`, execution_frame_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> conj_tac
+  >- (gvs[ptr_covers_def] >>
+      simp[Abbr `g1`, attribute_add_provenance, op_prov_def, lookup_var_def,
+        update_var_def, FLOOKUP_UPDATE, w2n_add_2] >> decide_tac) >>
+  drule code_offset_emit_shape >> strip_tac >> rpt strip_tac >>
+  `p <> out` by metis_tac[] >> simp[FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem store_slots_offset_resources:
+  compile_lit_byte_offset (Var root) off sa = (r,sb) /\
+  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  lookup_var root s = SOME a /\ ptr_covers G tn root s capacity /\
+  off < dimword (:256) /\ off + needed <= capacity /\
+  w2n a + off < dimword (:256) ==>
+  ?out Gf tf u. r = Var out /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tf (OK u) /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
+    lookup_var out u = SOME (a + n2w off) /\ ptr_covers Gf tf out u needed /\
+    execution_frame u = execution_frame s /\
+    tf.t_mem = tn.t_mem /\ tf.t_imm = tn.t_imm /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==> lookup_var p u = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> Cases_on `off = 0`
+  >- (gvs[compile_lit_byte_offset_def, comp_return_def] >>
+      qexistsl_tac [`G`, `tn`, `s`] >> simp[WORD_ADD_0] >> conj_tac
+      >- (irule (cj 1 gas_path_ptr_rules) >> simp[]) >>
+      gvs[ptr_covers_def] >> decide_tac) >>
+  gvs[compile_lit_byte_offset_def] >>
+  drule code_offset_emit_var >> strip_tac >> gvs[] >>
+  `off < dimword (:256) /\ off + needed <= capacity /\
+   w2n a + off < dimword (:256)` by decide_tac >>
+  drule_all store_slots_emit_offset_resources >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tf`, `u`] >> gvs[execution_frame_def]
+QED
+
+(* Probe a real shifted read and sparse write, preserving dead-slot taint. *)
+Theorem store_slots_offset_singleton_counted:
+  compile_lit_byte_offset (Var root) off sa = (r,sm) /\
+  (do loaded <- emit_op MLOAD [r];
+      emit_void (if tr then TSTORE else SSTORE) [Lit k;loaded]
+   od) sm = (z,sb) /\
+  fn_has_code sa sm func /\ fn_has_code sm sb func /\
+  not_fresh_at sa root /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  ~s.vs_call_ctx.cc_static /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  lookup_var root s = SOME a /\ ptr_covers G tn root s capacity /\
+  off < dimword (:256) /\ off + 32 <= capacity /\
+  w2n a + off < dimword (:256) ==>
+  ?Gf tf u.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tf (OK u) /\
+    store_slots_ptr_frame tr (a+n2w off) k s tn [0] u tf /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted
+Proof
+  strip_tac >> drule_all store_slots_offset_resources >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rename1 `gas_path_ptr D 0 ctx func PG G tn s 0 g1 t1 (OK s1)` >>
+  `not_fresh_at sm out` by
+    (drule reasonCodeTransferPtrTheory.code_offset_compiler_frame >> simp[] >>
+     disch_then irule >> simp[]) >>
+  `~s1.vs_call_ctx.cc_static` by fs[execution_frame_def] >>
+  qpat_x_assum `r = Var out` SUBST_ALL_TAC >>
+  drule_all assign_base_storage_single_compiled_counted >>
+  disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tf`, `u`] >> conj_tac
+  >- (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
+        (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
+  simp[] >>
+  `store_copy_normalize s u = store_copy_normalize s
+    (store_copy_prefix (if tr then LocTransient else LocStorage)
+      (a+n2w off) k s1 1)` by
+    (irule store_slots_normalize_execution_frame >> first_assum ACCEPT_TAC) >>
+  `store_copy_normalize s s1 = s` by
+    (qpat_assum `execution_frame s1 = execution_frame s`
+       (mp_then Any mp_tac store_slots_normalize_execution_frame) >>
+     disch_then (qspec_then `s` mp_tac) >>
+     simp[store_copy_normalize_def, venom_state_component_equality]) >>
+  pure_rewrite_tac[store_slots_ptr_frame_def, store_slots_taint_def, FOLDL] >>
+  fs[assign_base_store_frame_def] >>
+  Cases_on `tr` >> pure_rewrite_tac[ONE] >>
+  fs[assign_base_store_prefix_suc, assign_base_store_prefix_zero,
+    assign_base_store_taint_prefix_def, WORD_ADD_0, WORD_MULT_CLAUSES] >>
+  gvs[store_copy_normalize_def, sstore_def, tstore_def, mload_def,
+    venom_state_component_equality]
 QED
