@@ -423,7 +423,8 @@ Theorem assign_base_ptr_one_byte_run_post:
   !func cenv cx es sa buf sb s t ctx.
     compile_bytelike_literal [1w] 1 sa = (buf,sb) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ ~cenv.ce_is_ctor /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
