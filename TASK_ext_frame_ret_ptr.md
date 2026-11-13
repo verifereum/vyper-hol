@@ -138,6 +138,27 @@ AbiComplex, the return wrapped in a one-element tuple), and the
 a wider declared type). No counterexample was found: in each branch the
 bytes in the RETURN range are written with untainted data first.
 
+## Repairs first (2026-11-13, merged train-16 head 8af3fb5d5)
+
+These ported leaves fail on this base and are part of this run's work
+(proof-only; helper statements in extRet* leaves you own may change, frozen
+statements may not). Build the target's cone to see them:
+
+- `extRetBytesCopyCountedPtr` (`compile_bytestring_copy_len_counted_ptr`):
+  `compile_bytestring_copy_len` now rounds with a `NOT 31` mask and a
+  different operand order (lowering/defs). About 80 leaves wait on it.
+- `extRetRawStmtPtr` (`external_return_raw_stmt_parts`) and the raw-return
+  leaves after it: the raw return now allocates a buffer, stores the value
+  with `compile_store_memory_typed`, then calls `compile_external_return`.
+- `extRetFrameFactsPtr` (`supported_lookup_external_raw_decl`): public
+  variables are now supported, and `lookup_function ... External` returns
+  their getters (`VariableDecl (Public nr)` clauses of `lookup_function_def`),
+  so the lemma is false as stated. The target's frozen premise
+  `lookup_function NONE tx.function_name External tops = SOME (...)` now
+  covers getter functions too; their bodies are a single `Return (SOME ne)`
+  of a top-level read.
+- Any leaf behind these that then fails.
+
 ## State at the 2026-11-12 port
 
 This branch ports the earlier frame-ret work onto the merge-train-16 head.
