@@ -3,7 +3,7 @@ Theory readonlyInvokeCopyFwdExecutionCallIndex
 Ancestors
   readonlyInvokeCopyFwdHistory readonlyInvokeCopyFwdProtectionLifetime
   readonlyInvokeCopyFwdPlan readonlyInvokeCopyFwdDefs
-  invokeCopyFwdCommonDefs allocaRemapSSA venomWf venomWfProps
+  invokeCopyFwdCommonDefs allocaRemapSSA venomFnInstsProofs venomWf venomWfProps
   venomInst list rich_list arithmetic
 
 Theorem ricf_call_event_selected_not_before:
