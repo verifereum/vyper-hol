@@ -1,7 +1,7 @@
 (* Root-frame metadata is retained even for a singleton initial stack. *)
 Theory callTraceRootMetadata
 Ancestors
-  asmFrameCallStep vfmAccountFrame vfmExecutionProp vfmRunCall
+  asmFrameCallStep vfmAccountFrame vfmExecutionProp vfmRunCall vfmWfState
 
 Theorem run_call_reaches_root_msgParams:
   wf_state es /\ run_call_reaches es s /\
