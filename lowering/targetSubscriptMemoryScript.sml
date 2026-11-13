@@ -904,7 +904,8 @@ Proof
      qspecl_then [`emitted_insts sa sb`, `sa`, `s`, `tt`] mp_tac
        run_inst_seq_writes_fresh >>
      impl_tac >- simp[] >> strip_tac >>
-     qpat_x_assum `tt = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+     pop_assum kall_tac >>
+     pop_assum (fn th => once_rewrite_tac[th]) >> simp[]) >>
   goal_assum (drule_at Any) >> simp[]
 QED
 
