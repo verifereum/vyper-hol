@@ -399,7 +399,7 @@ Resume concat_args_sim_mem[post]:
             rpt conj_tac >> first_assum ACCEPT_TAC) >>
          `local_region cenv es_end.scopes t2 nm lb lsz` by
            (qpat_assum `local_region cenv (es_end with gas_obs := []).scopes t2 nm lb lsz`
-              mp_tac >> simp[]) >>
+              (assume_tac o SIMP_RULE (srw_ss()) []) >> first_assum ACCEPT_TAC) >>
          `mem_bytes_at lb lsz t.vs_memory = mem_bytes_at lb lsz s0.vs_memory` by
            (qpat_x_assum `!n b sz. local_region cenv es.scopes s0 n b sz ==>
                             mem_bytes_at b sz t.vs_memory = _`
