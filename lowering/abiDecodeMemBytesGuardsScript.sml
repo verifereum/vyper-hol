@@ -1,6 +1,6 @@
 Theory abiDecodeMemBytesGuards
 Ancestors
-  abiDecodeMemRange abiDecoderBytesBound bodyFieldMemoryProps freshWrites
+  abiDecoderReentry abiDecodeMemRange abiDecoderBytesBound bodyFieldMemoryProps freshWrites
   fragGasMode fragGasPathMem fragExec emitHelperProps emitHelper compileEnv
   venomState venomExecSemantics venomInst words list rich_list exprLoweringProps
   loweringStateRelDefs abiDecoderRange localPtrsProps
@@ -15,6 +15,8 @@ Theorem abi_decode_add_path_mem:
   ?t. gas_path_mem ctx func s 0 (OK t) /\
     eval_operand v t = SOME (p+q) /\ fresh_vars_wrt st' t /\
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
     t.vs_current_bb = st'.cs_current_bb /\
     t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
     t.vs_memory = s.vs_memory /\
@@ -26,6 +28,12 @@ Proof
     (irule straight_fresh_emit_op >> simp[fresh_write_op_def]) >>
   `writes_fresh st (emitted_insts st st')` by fs[straight_fresh_def] >>
   drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  `t.vs_labels = s.vs_labels` by
+    (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+    eval_operand op t = eval_operand op s` by
+    (Cases >> fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+      eval_operand_def, lookup_var_def, not_fresh_at_def]) >>
   drule_all attr_add_gas_path >> strip_tac >>
   drule_all attr_add_history >> strip_tac >>
   qexists_tac `t with vs_inst_idx := LENGTH st'.cs_current_insts` >>
@@ -52,6 +60,8 @@ Theorem abi_decode_add_range_path_mem[local]:
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
       fresh_vars_wrt st' t /\
       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op s) /\
       t.vs_memory = s.vs_memory /\
       t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_allocas = s.vs_allocas /\ alloca_history func t) /\
@@ -73,9 +83,11 @@ Proof
 QED
 Resume abi_decode_add_range_path_mem[accept]:
   strip_tac >> gvs[] >>
+  `st.cs_next_var <= mid.cs_next_var` by
+    (drule emitted_insts_emit_op >> simp[]) >>
   `gas_path_mem ctx func s 0 (OK t')` by
     metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
-  qexists_tac `t'` >> simp[] >> metis_tac[]
+  qexists_tac `t'` >> simp[] >> metis_tac[abi_decoder_operand_live_mono]
 QED
 Resume abi_decode_add_range_path_mem[reject]:
   strip_tac >> gvs[] >>
@@ -98,6 +110,8 @@ Theorem abi_decode_bytes_head_path_mem:
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
       fresh_vars_wrt st' t /\
       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op s) /\
       t.vs_memory = s.vs_memory /\
       t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_allocas = s.vs_allocas /\ alloca_history func t) /\
@@ -128,6 +142,8 @@ Theorem abi_decode_bytes_payload_guard_path_mem:
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
       fresh_vars_wrt st' t /\
       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op s) /\
       t.vs_memory = s.vs_memory /\
       t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_allocas = s.vs_allocas /\ alloca_history func t) /\
@@ -140,5 +156,5 @@ Proof
   pairarg_tac >> strip_tac >> gvs[] >>
   drule_all abi_decode_add_range_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  conj_tac >- (strip_tac >> gvs[] >> metis_tac[]) >> simp[]
+  conj_tac >- (strip_tac >> gvs[] >> qexists_tac `t` >> simp[]) >> simp[]
 QED

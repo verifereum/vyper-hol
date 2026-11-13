@@ -1,7 +1,7 @@
 (* Memory-safe execution of the bulk dynamic-array decoder. *)
 Theory abiDecodeMemBulk
 Ancestors
-  abiDecodeMemBytesGuards abiDecodeMemCountGuard abiDecoderBulk
+  abiDecoderReentry abiDecodeMemBytesGuards abiDecodeMemCountGuard abiDecoderBulk
   abiDecoderDynarrayBound abiDecoderDynarrayPrefix abiDecoderBytesPrefix
   abiDecoderRange abiDecoderBytesBound abiDecoderContract
   entryDecoderHistoryFrame entrySinkExtraction allocaHistoryFragment
@@ -24,6 +24,8 @@ Theorem abi_decode_dynarray_payload_guard_path_mem:
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
       fresh_vars_wrt st' t /\
       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op s) /\
       t.vs_memory = s.vs_memory /\
       t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_allocas = s.vs_allocas /\ alloca_history func t) /\
@@ -53,6 +55,13 @@ Resume abi_decode_dynarray_payload_guard_path_mem[multiply_path]:
   `straight_fresh (emit_op MUL [cnt;Lit (n2w stride)])` by
     (irule straight_fresh_emit_op >> simp[fresh_write_op_def]) >>
   `writes_fresh st (emitted_insts st mid)` by fs[straight_fresh_def] >>
+  drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  `u.vs_labels = s.vs_labels` by
+    (qpat_x_assum `u = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+    eval_operand op u = eval_operand op s` by
+    (Cases >> fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+      eval_operand_def, lookup_var_def, not_fresh_at_def]) >>
   `run_inst_seq_mem_ok (emitted_insts st mid) s` by metis_tac[writes_fresh_mem_ok] >>
   drule emit_op_extends >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
@@ -74,6 +83,9 @@ Resume abi_decode_dynarray_payload_guard_path_mem[multiply_path]:
   drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
   `s.vs_inst_idx + LENGTH (emitted_insts st mid) = LENGTH mid.cs_current_insts` by
     (gvs[IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND]) >>
+  suspend "multiply_cursor"
+QED
+Resume abi_decode_dynarray_payload_guard_path_mem[multiply_cursor]:
   qabbrev_tac `v = u with vs_inst_idx := LENGTH mid.cs_current_insts` >>
   `gas_path_mem ctx func s 0 (OK v) /\ alloca_history func v /\
    eval_operand sz v = SOME (q*n2w stride) /\ fresh_vars_wrt mid v /\
@@ -84,6 +96,9 @@ Resume abi_decode_dynarray_payload_guard_path_mem[multiply_path]:
    v.vs_allocas = s.vs_allocas /\ ~v.vs_halted /\
    v.vs_current_bb = mid.cs_current_bb /\ v.vs_inst_idx = LENGTH mid.cs_current_insts` by
     gvs[Abbr `v`, mk_inst_def, eval_operand_def, lookup_var_def, fresh_vars_wrt_def] >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+    eval_operand op v = eval_operand op s` by
+    (simp[Abbr `v`, eval_operand_def, lookup_var_def]) >>
   `eval_operand head v = SOME p /\ eval_operand hi v = SOME h` by metis_tac[] >>
   `alloca_inv v` by (irule alloca_inv_fields >> metis_tac[]) >>
   drule_all abi_decode_bytes_payload_guard_path_mem >>
@@ -94,7 +109,8 @@ Resume abi_decode_dynarray_payload_guard_path_mem[accept]:
   strip_tac >> gvs[] >>
   `gas_path_mem ctx func s 0 (OK t)` by
     metis_tac[gas_path_mem_then, ADD_CLAUSES] >>
-  qexists_tac `t` >> simp[] >> metis_tac[]
+  `st.cs_next_var <= mid.cs_next_var` by decide_tac >>
+  qexists_tac `t` >> simp[] >> metis_tac[abi_decoder_operand_live_mono]
 QED
 Resume abi_decode_dynarray_payload_guard_path_mem[reject]:
   strip_tac >> gvs[] >> fs[gas_marked_path_def] >>

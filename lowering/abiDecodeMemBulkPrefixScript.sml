@@ -1,7 +1,7 @@
 (* Bounded, rejection-aware memory execution before bulk-array writes. *)
 Theory abiDecodeMemBulkPrefix
 Ancestors
-  abiDecodeMemBulk abiDecodeMemBytesGuards abiDecodeMemCountGuard
+  abiDecoderReentry abiDecodeMemBulk abiDecodeMemBytesGuards abiDecodeMemCountGuard
   abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderBytesBound
   abiDecoderBytesPrefix abiDecoderGuards abiDecoderContract abiDecoderRange abiEncoder
   localPtrsProps fragGasMode fragGasPathMem fragExec
@@ -39,6 +39,8 @@ Theorem abi_decode_dynarray_position_prefix_path_mem:
     t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
     fresh_vars_wrt st' t /\
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
     t.vs_memory = s.vs_memory /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\
     t.vs_alloca_next = s.vs_alloca_next /\
@@ -61,6 +63,19 @@ Proof
   drule inst_extends_emit_op >> strip_tac >>
   drule_all abi_decode_count_guard_fragment_shape >> strip_tac >>
   drule abi_decode_dynarray_payload_fragment >> strip_tac >>
+  `st.cs_next_var <= c1.cs_next_var` by
+    (qpat_x_assum `abi_decode_bytes_head _ _ _ = _` mp_tac >>
+     simp[abi_decode_bytes_head_def, compile_abi_decode_range_check_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
+       emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+     strip_tac >> gvs[]) >>
+  `c1.cs_next_var <= c2.cs_next_var` by
+    (drule emitted_insts_emit_op >> simp[]) >>
+  `c2.cs_next_var <= c3.cs_next_var` by
+    (qpat_x_assum `abi_decode_count_guard _ _ _ _ = _` mp_tac >>
+     simp[abi_decode_count_guard_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+       fresh_id_def, emit_def] >> strip_tac >> gvs[]) >>
   `fn_has_code st c1 func /\ fn_has_code c1 c2 func /\
    fn_has_code c2 c3 func /\ fn_has_code c3 st' func` by
     (gvs[fn_has_code_def, emitted_blocks_def, inst_extends_def, same_blocks_def] >>
@@ -145,6 +160,14 @@ Resume abi_decode_dynarray_position_prefix_path_mem[payload_accept]:
      qpat_x_assum `!op w. eval_operand op s3 = _ ==> _` irule >>
      qpat_x_assum `!op w. eval_operand op s2 = _ ==> _` irule >>
      qpat_x_assum `!op w. eval_operand op s1 = _ ==> _` irule >>
+     metis_tac[]) >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+    eval_operand op t = eval_operand op s` by
+    (rpt strip_tac >>
+     `abi_decoder_operand_live c1.cs_next_var op /\
+      abi_decoder_operand_live c2.cs_next_var op /\
+      abi_decoder_operand_live c3.cs_next_var op` by
+       metis_tac[abi_decoder_operand_live_mono] >>
      metis_tac[]) >>
   disj2_tac >> qexistsl_tac [`w2n cw`, `t`] >> simp[word_add_n2w]
 QED

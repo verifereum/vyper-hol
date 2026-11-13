@@ -1,6 +1,6 @@
 Theory abiDecodeMemRange
 Ancestors
-  abiDecoderRange abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
+  abiDecoderReentry abiDecoderRange abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
   venomExecSemantics venomInst venomState words arithmetic list rich_list
   fragGasSeqMem fragGasSeqAbort fragGasMode
   allocaHistoryFragment freshWrites fragGasFresh
@@ -91,6 +91,8 @@ Theorem abi_decode_range_path_mem:
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
       fresh_vars_wrt st' t /\
       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op s) /\
       t.vs_memory = s.vs_memory /\
       t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\
       t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
@@ -123,13 +125,19 @@ Resume abi_decode_range_path_mem[success_path]:
      (emitted_insts st st')` by fs[EVERY_MEM] >>
   drule_all run_inst_seq_gas_path_mem >> strip_tac >>
   drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  `t.vs_labels = s.vs_labels` by
+    (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+    eval_operand op t = eval_operand op s` by
+    (Cases >> fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+      eval_operand_def, lookup_var_def, not_fresh_at_def]) >>
   `?rest. DROP s.vs_inst_idx bb.bb_instructions = emitted_insts st st' ++ rest`
     by fs[IS_PREFIX_APPEND] >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st st')`
     by fs[EVERY_MEM] >>
   drule_all alloca_history_run_inst_seq >> strip_tac >>
   qexists_tac `t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st st')` >>
-  simp[] >>
+  simp[eval_operand_def, lookup_var_def] >>
   `t.vs_current_bb = s.vs_current_bb /\ ~t.vs_halted /\
    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
