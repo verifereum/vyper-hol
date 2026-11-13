@@ -1,0 +1,290 @@
+Theory supportedTargetArraySuffixPtr
+Ancestors
+  bodyPtrPopTargetSimFixedMemory bodyPtrPopTargetSimFixedSlot
+  bodyPtrPopTargetSimDynamicMemory bodyPtrPopTargetSimDynamicSlot
+  bodyPtrPopTargetSimArrayGas bodyPtrPopTargetSimIndexSource
+  bodyPtrPopTargetSimIndexFrame bodyPtrPopTargetSimCoverage
+  bodyPtrPopTargetSimPost exprSimHypsDefs exprSimSource exprSimProps
+  exprLoweringProps exprLowering emitHelperProps stmtLoweringMono
+  targetPlaceSim targetPlaceSimDefs loweringPosts bodyPtrDefs
+  bodyPtrPopTargetDefs vyperInterpreter vyperState vyperTypeSystem
+  compileEnv loweringStateRelDefs ptrDiscipline freshWrites fragExec pair list
+  vyperEvalExprPreservesScopesDom wordOperandsPtr stmtFragPtr
+  bodySimStmtCases vyperTypeExprSoundness vyperTypeInvariants vyperValue
+  exprSimHyps vyperTyping assignTuplePtrBodyReady valueEncoding
+  exprWordOperand exprSafeOperand exprSimCopy exprSimArrayIndex
+  bodyPtrPopTargetSimArrayCase stmtReasonLitFragMemory emitHelper rich_list context venomState
+  targetPlaceLive vyperStorageLayoutSafety exprPtrUnwrapTypedSize
+  bodyPtrPopTargetSimStorageHeader accountsRelProps vyperStoragePlaceProvenance
+  targetEffectfulStorageHeader
+
+Theorem target_toplevel_array_normal_suffix_ptr:
+  bt = TopLevelNameTarget (mid,name) /\
+  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  type_place_target env bt = SOME (Type (ArrayT et bd)) /\
+  well_typed_expr env e /\ is_int_type (expr_type e) /\
+  compile_get_target_ptr compile_expr cenv bt sa = ((bop,loc,SOME (ValPT (ArrayT et bd))),sm) /\
+  lower_value compile_expr cenv (expr_type e) e sm = (idx,sn) /\
+  compile_array_subscript bop idx (case bd of Fixed _ => F | Dynamic _ => T)
+    (case bd of Fixed n => n | Dynamic _ => 0)
+    (word_scale (case loc of SOME l => l | NONE => LocMemory))
+    (elem_size_in_location cenv (case loc of SOME l => l | NONE => LocMemory) et)
+    (is_signed_type (expr_type e))
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
+      (case loc of SOME l => l | NONE => LocMemory)) sn = (dst,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  target_post ctx func cenv cx es sa sm s0 ee pv (Type (ArrayT et bd))
+    (bop,loc,SOME (ValPT (ArrayT et bd))) t /\
+  target_ptr_ok cenv pv (bop,loc,SOME (ValPT (ArrayT et bd))) G tn t /\
+  ghost_inv d cenv cx ee G tn t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+  ee = em with gas_obs := [] /\
+  source_start = es with gas_obs := gs /\
+  eval_base_place cx bt source_start = (INL pv,em) /\
+  bind (eval_expr cx e) (read_result cx) em = (INL v,ef) /\
+  expr_body_pre cenv cx env e em /\ expr_sim_inv cenv cx env em /\
+  expr_sim_inv cenv cx env ef /\ ef.gas_obs = [] /\
+  expr_post ctx func cenv cx e ee sm sn t ef v idx u /\
+  ghost_inv d cenv cx ef H un u /\
+  ptr_val_ok cx (post_value_type cenv e) v idx H un u /\
+  ghost_kept cenv ee sm G tn t H un /\
+  u.vs_current_bb = sn.cs_current_bb /\
+  u.vs_inst_idx = LENGTH sn.cs_current_insts /\ ~u.vs_halted ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (extend_place cx pv (ValueSubscript v)) (ef,u,H,un)
+    (\res ef' H' un' q. ?pv'. res = INL pv' /\
+      target_post ctx func cenv cx es sa sb s0 ef' pv' (Type et)
+        (dst,loc,SOME (ValPT et)) q /\
+      q.vs_current_bb = sb.cs_current_bb /\
+      q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      ghost_inv d cenv cx ef' H' un' q /\
+      target_ptr_ok cenv pv' (dst,loc,SOME (ValPT et)) H' un' q /\
+      ghost_kept cenv es sa G0 tn0 s0 H' un')
+    (\res ef' gt r. expr_exit res r)
+Proof
+  strip_tac >> suspend "common"
+QED
+
+Resume target_toplevel_array_normal_suffix_ptr[common]:
+  `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
+    (drule eval_base_place_preserves_scopes_dom >>
+     simp[] >> gvs[]) >>
+  gvs[] >>
+  `wb_frame cenv es ef sa s0 u` by
+    (drule target_post_index_frame >> simp[] >>
+     disch_then irule >> fs[ci_mono_def] >> metis_tac[]) >>
+  `ghost_kept cenv es sa G0 tn0 s0 H un` by
+    (`wb_frame cenv es (em with gas_obs := []) sa s0 t` by
+       fs[target_post_wb_frame] >>
+     `local_ptrs_rel func cenv es.scopes s0` by
+       fs[stmt_state_rel_def, state_rel_def] >>
+     `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by
+       fs[ci_mono_def] >>
+     `MAP FDOM es.scopes = MAP FDOM (em with gas_obs := []).scopes` by fs[] >>
+     qpat_assum `ghost_kept cenv (em with gas_obs := []) sm G tn t H un`
+       (mp_then (Pos (el 2)) mp_tac wordOperandsPtrTheory.ghost_kept_trans) >>
+     disch_then irule >>
+     first_assum (irule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
+     fs[]) >>
+  suspend "typed"
+QED
+
+Resume target_toplevel_array_normal_suffix_ptr[typed]:
+  `?itv. evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\
+         value_has_type itv v` by
+    (fs[vyperStateTheory.bind_def] >>
+     drule_all (SRULE [vyperStateTheory.bind_def] bodySimStmtCasesTheory.expr_body_pre_eval) >>
+     disch_then (CONJUNCTS_THEN2 kall_tac (qspec_then `v` mp_tac)) >>
+     simp[value_runtime_typed_def] >> rpt strip_tac >>
+     `env.type_defs = get_tenv cx` by
+       (qpat_x_assum `expr_sim_inv cenv cx env em` mp_tac >>
+        simp[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]) >>
+     metis_tac[]) >>
+  `?i. v = IntV i` by
+    (Cases_on `expr_type e` >> fs[is_int_type_def] >>
+     Cases_on `b` >> gvs[is_int_type_def, evaluate_type_def, AllCaseEqs(), value_has_type_def] >>
+     Cases_on `v` >> fs[value_has_type_def]) >> gvs[] >>
+  suspend "scalar"
+QED
+
+Resume target_toplevel_array_normal_suffix_ptr[scalar]:
+  `is_word_type (expr_type e)` by
+    (Cases_on `expr_type e` >> fs[is_int_type_def] >>
+     Cases_on `b` >> fs[is_int_type_def, is_word_type_def]) >>
+  `op_prov H idx = NONE /\ op_taint un idx = {}` by
+    fs[ptr_val_ok_def] >>
+  `stmt_state_rel ctx func cenv cx ef u /\
+   eval_operand idx u = SOME (val_to_w256 (IntV i))` by
+    (fs[expr_post_def, expr_val_rel_def] >>
+     Cases_on `itv` >> simp[typed_val_to_w256_def] >>
+     Cases_on `b` >> simp[typed_val_to_w256_def]) >>
+  `!id ty. FLOOKUP env.var_types id = SOME ty ==>
+    well_formed_type env.type_defs ty` by
+    (drule expr_body_pre_var_types_well_formed >> simp[]) >>
+  `safe_operand sn idx` by (irule lower_value_word_safe_operand >> metis_tac[]) >>
+  `copy_old_operand sn idx` by fs[safe_operand_def, copy_old_operand_def] >>
+  `copy_old_operand sn bop` by
+    (fs[target_post_def, copy_old_operand_def, ci_mono_def, not_fresh_at_def] >>
+     metis_tac[]) >>
+  `local_ptrs_reserved cenv sn` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[ci_mono_def]) >>
+  `sa.cs_next_var <= sn.cs_next_var /\
+   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sn x) /\
+   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sn x)` by
+    (fs[ci_mono_def, not_fresh_at_def] >> metis_tac[]) >>
+  `fn_has_code sn sb func` by
+    (irule (cj 2 fn_has_code_split) >> conj_tac
+     >- fs[ci_mono_def] >>
+     qexists_tac `sa` >> fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  suspend "classify"
+QED
+
+Resume target_toplevel_array_normal_suffix_ptr[classify]:
+  `?b. eval_operand bop t = SOME b /\
+    place_ptr_rel cenv cx t pv b loc (Type (ArrayT et bd))` by
+    (fs[target_post_def] >> metis_tac[]) >>
+  `(?id path. pv = PlaceR (MemoryPlace id path)) \/
+   (?tr slot tv. pv = PlaceR (StoragePlace tr slot tv))` by
+    (Cases_on `pv` >> fs[place_ptr_rel_def] >>
+     Cases_on `p` >> fs[place_ptr_rel_def]) >>
+  gvs[]
+  >- (drule target_base_memory_root_ptr >> simp[target_root_def]) >>
+  suspend "storage"
+QED
+
+Resume target_toplevel_array_normal_suffix_ptr[storage]:
+  `target_root (TopLevelNameTarget (mid,name)) =
+     TopLevelNameTarget (mid,name)` by simp[target_root_def] >>
+  `!lbl. bop <> Label lbl` by
+    (drule_all target_toplevel_compiled_not_label_ptr >> simp[]) >>
+  drule target_storage_index_frame_ptr >> simp[] >>
+  disch_then drule >> disch_then drule >> simp[] >> strip_tac >>
+  suspend "storage_frame"
+QED
+
+Resume target_toplevel_array_normal_suffix_ptr[storage_frame]:
+  first_x_assum drule >> strip_tac >>
+  `?etv. evaluate_type (get_tenv cx) et = SOME etv /\
+     tv = ArrayTV etv bd /\ loc = SOME (slot_loc tr)` by
+    (fs[place_ptr_rel_def, Once evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
+  gvs[] >> suspend "storage_source"
+QED
+
+Resume target_toplevel_array_normal_suffix_ptr[storage_source]:
+  `declared_storage_region cx mid name [] = SOME (tr,slot,ArrayTV etv bd)` by
+    (irule lookup_global_storage_region >>
+     qexistsl_tac [`es with gas_obs := gs`, `em`] >>
+     fs[Once evaluate_def]) >>
+  `slots_in_range (get_storage cx ef tr) (w2n slot) (ArrayTV etv bd)` by
+    (irule declared_region_post_index_slots >>
+     conj_tac >- (qexistsl_tac [`mid`, `name`, `[]`] >> simp[]) >>
+     fs[expr_sim_inv_def]) >>
+  `storage_read_live cx tr (get_storage cx ef tr) slot (ArrayTV etv bd)` by
+    metis_tac[declared_storage_region_read_live] >>
+  `op_taint un bop = {}` by (Cases_on `bop` >> fs[target_ptr_ok_def, op_taint_def]) >>
+  `evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd)` by
+    fs[place_ptr_rel_def] >>
+  `elem_size_in_location cenv (slot_loc tr) et = type_slot_size etv /\
+   word_scale (slot_loc tr) = 1` by
+    (Cases_on `tr` >> simp[elem_size_in_location_def, slot_loc_def,
+       word_scale_def, is_slot_addressed_def] >>
+     irule unwrap_typed_buffer_count >>
+     irule expr_sim_inv_memory_size >> metis_tac[]) >>
+  Cases_on `bd` >> fs[] >- suspend "storage_fixed" >> suspend "storage_dynamic"
+QED
+
+Resume target_toplevel_array_normal_suffix_ptr[storage_fixed]:
+  gvs[] >>
+  `cs_extends sn sb` by fs[ci_mono_def] >>
+  qpat_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[NoAsms, compile_array_subscript_split, comp_bind_def,
+       comp_return_def, comp_ignore_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> rename1 `array_bounds_check _ _ _ sn = (uu,sg)` >>
+  Cases_on `uu` >>
+  drule target_array_guard_layout >> strip_tac >>
+  drule target_array_elem_layout >> strip_tac >>
+  `sb.cs_current_bb = sn.cs_current_bb /\
+   sb.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sb` by
+    (fs[same_blocks_def] >>
+     `sb.cs_current_insts = sn.cs_current_insts ++
+       (emitted_insts sn sg ++ emitted_insts sg sb)` by fs[APPEND_ASSOC] >>
+     metis_tac[emitted_insts_def, DROP_LENGTH_APPEND]) >>
+  drule_all stmtReasonLitFragMemoryTheory.fn_has_code_code >> strip_tac >>
+  `lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+   isPREFIX (emitted_insts sn sb) (DROP u.vs_inst_idx bb.bb_instructions)` by
+    metis_tac[] >>
+  suspend "storage_fixed_code"
+QED
+
+Resume target_toplevel_array_normal_suffix_ptr[storage_fixed_code]:
+  `stmt_state_rel ctx func cenv cx ef u` by simp[] >>
+  drule_all target_fixed_slot_array_continue_ptr >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  (irule target_array_suffix_outcome_ptr >> simp[] >>
+   qexists_tac `sn` >>
+   `LENGTH sn.cs_current_insts + LENGTH (emitted_insts sn sb) =
+    LENGTH sb.cs_current_insts` by metis_tac[LENGTH_APPEND] >> metis_tac[])
+QED
+
+Resume target_toplevel_array_normal_suffix_ptr[storage_dynamic]:
+  gvs[] >>
+  `stmt_state_rel ctx func cenv cx ef u` by simp[] >>
+  `stor_taint_ok cx un u` by fs[ghost_inv_def] >>
+  `0 < type_slot_size (ArrayTV etv (Dynamic n))` by simp[type_slot_size_def] >>
+  `key_taint (if tr then un.t_trans else un.t_stor) slot = {}` by
+    (drule_all target_storage_header_clean_ptr >> simp[]) >>
+  `op_prov H bop = NONE` by fs[target_ptr_ok_def] >>
+  qpat_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  `compile_ptr_load F cenv.ce_imm_alloca (slot_loc tr) =
+     emit_op (if tr then TLOAD else SLOAD) o (\x. [x])` by
+    (Cases_on `tr` >> simp[FUN_EQ_THM, compile_ptr_load_def, slot_loc_def]) >>
+  simp[NoAsms, compile_array_subscript_split, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  suspend "storage_dynamic_layout"
+QED
+
+Resume target_toplevel_array_normal_suffix_ptr[storage_dynamic_layout]:
+  qpat_x_assum `compile_ptr_load _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_ptr_load _ _ _ = _` (fn th => rewrite_tac[th]) >>
+  simp[] >> strip_tac >>
+  rename1 `emit_op _ [bop] sn = (ln,sl)` >>
+  rename1 `array_bounds_check _ _ _ sl = (uu,sg)` >> Cases_on `uu` >>
+  `?out. ln = Var out` by (drule emitted_insts_emit_op >> simp[] >> metis_tac[]) >> gvs[] >>
+  drule emit_op_extends >> strip_tac >>
+  drule target_array_guard_layout >> strip_tac >>
+  drule target_array_elem_layout >> strip_tac >>
+  `cs_extends sn sl /\ cs_extends sl sg /\ cs_extends sg sb` by
+    (simp[cs_extends_def, same_blocks_def] >>
+     fs[same_blocks_def] >> metis_tac[IS_PREFIX_APPEND]) >>
+  `cs_extends sl sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sn sl func /\ fn_has_code sl sb func /\ fn_has_code sl sg func` by
+    metis_tac[fn_has_code_split] >>
+  suspend "storage_dynamic_code"
+QED
+
+Resume target_toplevel_array_normal_suffix_ptr[storage_dynamic_code]:
+  `stmt_state_rel ctx func cenv cx ef u` by simp[] >>
+  drule_all target_live_dynamic_slot_array_continue_ptr >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  `sb.cs_current_bb = sn.cs_current_bb` by fs[same_blocks_def] >>
+  `sb.cs_current_insts = sn.cs_current_insts ++
+    (emitted_insts sn sl ++ emitted_insts sl sg ++ emitted_insts sg sb)` by fs[APPEND_ASSOC] >>
+  `sb.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sb` by
+    metis_tac[emitted_insts_def, DROP_LENGTH_APPEND] >>
+  `LENGTH sn.cs_current_insts + LENGTH (emitted_insts sn sb) =
+   LENGTH sb.cs_current_insts` by metis_tac[LENGTH_APPEND] >>
+  (irule target_array_suffix_outcome_ptr >>
+   conj_tac >- simp[] >>
+   conj_tac >- metis_tac[] >>
+   reverse conj_tac
+   >- (disj2_tac >> qexistsl_tac [`tr`, `slot`, `etv`, `Dynamic n`, `i`] >> simp[NoAsms]) >>
+   qexists_tac `sn` >> metis_tac[])
+QED
+
+Finalise target_toplevel_array_normal_suffix_ptr
