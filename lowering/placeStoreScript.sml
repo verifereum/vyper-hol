@@ -38,7 +38,7 @@ Theorem place_store_default_typed[local]:
 Proof
   ho_match_mp_tac
     (legacyInduction.mutual_ind_from_ops
-      (TypeBase.induction_of ``:type_value``)) >>
+      (TypeBase.set_induction_of ``:type_value``)) >>
   simp[default_value_def, default_value_tuple_MAP, default_value_struct_MAP,
        value_has_type_def] >>
   conj_tac
