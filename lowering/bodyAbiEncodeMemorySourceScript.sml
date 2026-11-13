@@ -28,6 +28,7 @@ QED
    every later recorded allocation.  Empty footprints need no pointer bound. *)
 Theorem abi_encode_source_live_resources:
   expr_post ctx func ce cx e es sa sb s0 ee v src s /\
+  post_value_type ce e = expr_type e /\
   expr_store_bound cx (expr_type e) v src s /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -66,6 +67,7 @@ QED
    judgment.  ABI typing/plan facts are supplied at the actual source endpoint. *)
 Theorem abi_encode_forced_source_outcome:
   expr_sim_mem ctx func ce cx (expr_type e) e es /\
+  post_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\
   lower_value compile_expr ce (expr_type e) e sa = (src,ready) /\
   compile_type_builtin_dispatch_body compile_expr ce vv_ty ty
