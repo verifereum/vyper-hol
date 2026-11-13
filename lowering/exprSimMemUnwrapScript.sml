@@ -150,7 +150,7 @@ Proof
      [p.ptr_operand] sm = (op, sb)` by
     gvs[unwrap_value_def, contextTheory.compile_ptr_load_def] >>
   drule emit_op_path_mem >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s`, `ld`]
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es'`, `s`, `ld`]
     mp_tac) >>
   impl_tac
   >- (rw[is_terminator_def, Abbr `ld`] >>
@@ -198,7 +198,7 @@ Proof
     gvs[unwrap_value_def, contextTheory.compile_ptr_load_def,
         contextTheory.compile_imm_load_word_def] >>
   drule emit_op_path_mem >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s`,
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es'`, `s`,
     `typed_val_to_w256 tvt v`] mp_tac) >>
   impl_tac
   >- (simp[is_terminator_def] >> rpt strip_tac
@@ -252,7 +252,7 @@ Proof
   rpt strip_tac >> Cases_on `cenv.ce_imm_alloca` >>
   gvs[contextTheory.compile_imm_load_word_def]
   >- (drule emit_op_path_mem >>
-      disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`,
+      disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s0`,
         `mload (w2n w) s0`] mp_tac) >>
       impl_tac
       >- (simp[is_terminator_def, below_frontier_ILOAD] >>
@@ -276,7 +276,7 @@ Proof
     gvs[exprLoweringPropsTheory.stmt_state_rel_def, immutable_base_zero_def] >>
   qpat_x_assum `emit_op ADD _ _ = _` assume_tac >>
   drule emit_op_path_mem >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `w`]
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `w`]
     mp_tac) >>
   impl_tac
   >- (simp[is_terminator_def] >> rpt strip_tac >>
@@ -287,7 +287,7 @@ Proof
   `~s1.vs_halted` by metis_tac[gas_path_mem_exec, gas_path_normal] >>
   qpat_x_assum `emit_op ILOAD _ _ = _` assume_tac >>
   drule emit_op_path_mem >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s1`,
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s1`,
     `mload (w2n w) s1`] mp_tac) >>
   impl_tac
   >- (simp[is_terminator_def, below_frontier_ILOAD] >>
@@ -336,7 +336,7 @@ Proof
   `compile_imm_load_word T cenv.ce_imm_alloca p.ptr_operand sm = (op, sb)` by
     gvs[unwrap_value_def, contextTheory.compile_ptr_load_def] >>
   drule compile_imm_load_word_ctor_path_mem >>
-  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es'`, `s`, `w`] mp_tac) >>
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cx`, `es'`, `s`, `w`] mp_tac) >>
   impl_tac >- simp[] >>
   strip_tac >> rename1 `gas_path_mem _ _ s 0 (OK u)` >>
   qexists_tac `u` >> simp[] >>
@@ -1429,7 +1429,7 @@ Resume unwrap_code_copy_capacity_path_mem[constructor_post]:
          `regions_disjoint (w2n a) (type_memory_size tv)
              (w2n w) (type_memory_size tv)` by
            (irule immutable_holds_alloca_disjoint >>
-            qexistsl_tac [`cenv`, `ctx`, `cx`, `es'`, `func`] >>
+            qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `es'`, `func`] >>
             goal_assum (drule_at Any) >> simp[mk_inst_def] >>
             qexists_tac `mk_inst sm.cs_next_id ALLOCA
               [Lit (n2w (type_memory_size tv))]
@@ -1587,7 +1587,9 @@ Theorem unwrap_copy_path_mem:
         u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
         u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
-  metis_tac[unwrap_copy_capacity_path_mem]
+  rpt gen_tac >>
+  disch_then (strip_assume_tac o MATCH_MP unwrap_copy_capacity_path_mem) >>
+  qexists_tac `u` >> simp[]
 QED
 
 (* unwrap_value_path's memory-checked form: every value_vv's code, one
@@ -1812,7 +1814,8 @@ Proof
              strip_tac >> first_x_assum (qspec_then `[]` assume_tac) >>
              drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
              simp[]) >>
-          drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read_mem >>
+          drule_at (Pat `unwrap_value _ _ _ = _`)
+            (INST_TYPE [alpha |-> ``:256``] unwrap_value_marked_read_mem) >>
           disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
           impl_tac >- simp[] >> strip_tac >>
           rename1 `gas_marked_exec T _ (read_result _ _) _ [] _ _ (OK u2)` >>
@@ -1830,6 +1833,7 @@ Proof
              qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ u2`
                (fn th => irule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                   exprSimUnwrapTheory.expr_post_fields_transport) th)) >>
+             conj_tac >- first_assum ACCEPT_TAC >>
              qexists_tac `t1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u2`] >>
           simp[] >>
