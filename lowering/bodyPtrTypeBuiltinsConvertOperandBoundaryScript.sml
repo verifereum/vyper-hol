@@ -28,24 +28,30 @@ Proof
 QED
 
 Theorem convert_operand_marked_bind:
-  gas_outcome_ptr D tops (ctx,func) PG
+  gas_outcome_ptr D tops (ctx,func) PG cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
-    (\res ee G tn t. ?v. res = INL v /\ Q v ee G tn t)
-    (\res ee gt r. ?exc. res = INR exc /\ R (INR exc) ee gt r) /\
+    (\H res ee G tn t. ?v. res = INL v /\ Q H v ee G tn t)
+    (\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r) /\
   (!marks v mid G tn t.
-    gas_marked_exec_ptr D (ctx,func) PG
-      (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
-      marks (INL v) mid G tn (OK t) /\
-    Q v (mid with gas_obs := []) G tn t ==>
-    gas_outcome_ptr D tops (ctx,func) PG
+    (?H. valid_horizon cx st0 H mid.storage_trace) /\
+    gas_marked_exec F (ctx,func)
+      (bind (eval_expr cx e) (read_result cx)) (es,s0)
+      marks (INL v) mid (OK t) /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+      gas_marked_exec_ptr (D H) (ctx,func) PG
+        (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+        marks (INL v) mid G tn (OK t) /\
+      Q H v (mid with gas_obs := []) G tn t) ==>
+    gas_outcome_ptr D tops (ctx,func) PG cx st0
       (\ee. (convert_result cx (expr_type e) typ v,ee))
       (mid with gas_obs := [],t,G,tn) Q' R) ==>
-  gas_outcome_ptr D tops (ctx,func) PG
+  gas_outcome_ptr D tops (ctx,func) PG cx st0
     (bind (eval_expr cx (TypeBuiltin ann Convert typ [e])) (read_result cx))
     (es,s0,G0,tn0) Q' R
 Proof
   strip_tac >> rewrite_tac[eval_expr_convert_action] >>
-  irule gas_outcome_ptr_marked_bind >> simp[] >> conj_tac
+  irule gas_outcome_ptr_marked_bind >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_def] >> conj_tac
   >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >>
       goal_assum (drule_at Any) >> BETA_TAC >>
       qpat_x_assum `gas_exempt_cert _ _ _ _ _ _ _ _` (ACCEPT_TAC o BETA_RULE)) >>
