@@ -15,7 +15,8 @@ Ancestors
   exprSimAbiEncodeFramedPhases abiEncoderWindowCursor abiEncoderWindowArrayEntry
   valueEncodingProps abiEncoderWindowStructuralMembers abiDecoderIndexInit context instIdxIndep
   abiEncoderWindow abiEncoderArrayPrefix abiEncoderArrayTailInit abiEncoderProps
-  abiEncoderExtendSim
+  abiEncoderExtendSim exprSimAbiEncodeFramedBuiltin exprSimAbiEncodeMemoryLength
+  intCallCallee venomInstProofs3 stmtSimLogExecFields
 
 Theorem abi_encode_framed_array_exit_opcodes:
   (if active then abi_encode_array_dynamic_exit src dp st
@@ -477,8 +478,97 @@ Theorem abi_encode_framed_array_dynamic_cursor_sequence:
     b+32 <= t.vs_alloca_next /\ b < dimword (:256) /\
     mem_word_at b t.vs_memory = n2w (n*asz) /\ abi_encode_exec_frame func s t
 Proof
-  cheat
+  strip_tac >> drule_all window_array_dynamic_cursor_sequence >> strip_tac >>
+  qexistsl_tac [`t`, `b`] >> asm_rewrite_tac[] >>
+  `emitted_insts st c1 = [mk_inst st.cs_next_id ALLOCA [Lit 32w]
+      [STRING #"%" (toString st.cs_next_var)]] /\
+   emitted_insts c1 c2 = [mk_inst c1.cs_next_id MUL [count_op;Lit (n2w asz)]
+      [STRING #"%" (toString c1.cs_next_var)]] /\
+   emitted_insts c2 en = [mk_inst c2.cs_next_id MSTORE [dp;offset] []] /\
+   emitted_insts st en = emitted_insts st c1 ++
+      (emitted_insts c1 c2 ++ emitted_insts c2 en)` by
+    (qpat_assum `emit_op ALLOCA _ _ = _` (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+     qpat_assum `emit_op MUL _ _ = _` (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+     drule emitted_insts_emit_void >> strip_tac >>
+     asm_rewrite_tac[] >>
+     pure_rewrite_tac [emitted_insts_def] >>
+     asm_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND]) >>
+  `EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE)
+      (emitted_insts st en)` by
+    (`!i. MEM i (emitted_insts st c1) \/ MEM i (emitted_insts c1 c2) \/
+          MEM i (emitted_insts c2 en) ==> MEM i (fn_insts func)` by
+       metis_tac[abi_encode_emitted_instruction_member] >>
+     rewrite_tac[EVERY_MEM] >> BETA_TAC >> gen_tac >> strip_tac >> conj_tac
+     >- (first_x_assum irule >>
+         qpat_x_assum `MEM _ (emitted_insts st en)` mp_tac >>
+         asm_rewrite_tac[MEM_APPEND] >> simp[]) >>
+     qpat_x_assum `MEM _ (emitted_insts st en)` mp_tac >>
+     asm_rewrite_tac[] >> POP_ASSUM_LIST (K all_tac) >>
+     simp[mk_inst_def] >> rpt strip_tac >> gvs[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st en)` by
+    (asm_rewrite_tac[] >> simp[mk_inst_def, is_terminator_def]) >>
+  drule_all run_inst_seq_static_charge >> strip_tac >>
+  drule_all abi_encode_leaf_sequence_context >>
+  simp_tac (srw_ss()) [pairTheory.PAIR_EQ] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts st en) s = OK raw` >>
+  suspend "frame"
 QED
+
+Resume abi_encode_framed_array_dynamic_cursor_sequence[frame]:
+  qpat_x_assum `run_inst_seq _ _ = OK raw` mp_tac >>
+  asm_rewrite_tac[] >>
+  simp_tac (srw_ss()) [run_inst_seq_def, AllCaseEqs()] >> strip_tac >>
+  rename1 `step_inst_base (mk_inst st.cs_next_id ALLOCA _ _) s = OK a` >>
+  rename1 `step_inst_base (mk_inst c1.cs_next_id MUL _ _) a = OK u` >>
+  `abi_encode_exec_frame func s raw` suffices_by
+    simp[Abbr `raw`, abi_encode_exec_frame_inst_idx] >>
+  `raw.vs_call_ctx = s.vs_call_ctx /\ raw.vs_data_section = s.vs_data_section` by
+    simp[Abbr `raw`] >>
+  simp_tac (srw_ss()) [abi_encode_exec_frame_def] >> asm_rewrite_tac[] >>
+  conj_tac >- suspend "fmp" >>
+  conj_tac >- suspend "semantic" >>
+  suspend "memory"
+QED
+
+Resume abi_encode_framed_array_dynamic_cursor_sequence[fmp]:
+  `a.vs_fmp = s.vs_fmp` by
+    (irule abi_encode_setup_step_fmp >> goal_assum (drule_at Any) >> simp[mk_inst_def]) >>
+  `u.vs_fmp = a.vs_fmp` by
+    (irule step_inst_base_preserves_fmp_ordinary >> goal_assum (drule_at Any) >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def, is_ext_call_op_def]) >>
+  `raw.vs_fmp = u.vs_fmp` by
+    (irule abi_encode_setup_step_fmp >> goal_assum (drule_at Any) >> simp[mk_inst_def]) >>
+  asm_rewrite_tac[]
+QED
+
+Resume abi_encode_framed_array_dynamic_cursor_sequence[semantic]:
+  `abi_encode_semantic_obs a = abi_encode_semantic_obs s` by
+    (irule abi_encode_semantic_step >> goal_assum (drule_at Any) >>
+     simp[mk_inst_def, log_encode_safe_opcode_def]) >>
+  `abi_encode_semantic_obs u = abi_encode_semantic_obs a` by
+    (irule abi_encode_semantic_ordinary_step >> goal_assum (drule_at Any) >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def, is_ext_call_op_def]) >>
+  `abi_encode_semantic_obs raw = abi_encode_semantic_obs u` by
+    (irule abi_encode_semantic_step >> goal_assum (drule_at Any) >>
+     simp[mk_inst_def, log_encode_safe_opcode_def]) >>
+  asm_rewrite_tac[]
+QED
+
+Resume abi_encode_framed_array_dynamic_cursor_sequence[memory]:
+  `LENGTH s.vs_memory <= LENGTH a.vs_memory` by
+    (irule abi_encode_leaf_step_memory_length >> goal_assum (drule_at Any) >> simp[mk_inst_def]) >>
+  `u.vs_memory = a.vs_memory` by
+    (irule exec_pure2_memory_preserves >>
+     qpat_x_assum `step_inst_base (mk_inst _ MUL _ _) _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp_tac (srw_ss()) [mk_inst_def, step_inst_base_opcode_eqs] >>
+     metis_tac[]) >>
+  `LENGTH u.vs_memory <= LENGTH raw.vs_memory` by
+    (irule abi_encode_leaf_step_memory_length >> goal_assum (drule_at Any) >> simp[mk_inst_def]) >>
+  metis_tac[LESS_EQ_TRANS]
+QED
+
+Finalise abi_encode_framed_array_dynamic_cursor_sequence
 
 Theorem abi_encode_framed_array_dynamic_cursor_phase:
   emit_op ALLOCA [Lit 32w] st = (dp,c1) /\
@@ -501,71 +591,9 @@ Theorem abi_encode_framed_array_dynamic_cursor_phase:
     b+32 <= t.vs_alloca_next /\ b < dimword (:256) /\
     mem_word_at b t.vs_memory = n2w (n*asz) /\ abi_encode_exec_frame func s t
 Proof
-  strip_tac >> drule_all abi_encode_framed_alloca32_phase_observed >> strip_tac >>
-  `alloca_inv t /\ alloca_room ctx func t /\ ~t.vs_halted /\
-   t.vs_current_bb = c1.cs_current_bb /\
-   t.vs_inst_idx = LENGTH c1.cs_current_insts` by
-    metis_tac[window_phase_resources, window_phase_control] >>
-  `b < dimword (:256)` by (drule alloca_room_next_lt >> decide_tac) >>
-  `eval_operand count_op t = SOME (n2w n)` by metis_tac[window_phase_operand] >>
-  `eval_operand (Lit (n2w asz)) t = SOME (n2w asz)` by simp[eval_operand_def] >>
-  drule_all abi_encode_framed_array_mul_phase >> strip_tac >>
-  rename1 `window_phase ctx func c1 c2 {} [] t u` >>
-  `abi_encode_exec_frame func s u` by
-    (irule abi_encode_exec_frame_trans >> qexists_tac `t` >> asm_rewrite_tac[]) >>
-  `alloca_inv u /\ alloca_room ctx func u /\ ~u.vs_halted /\
-   u.vs_current_bb = c2.cs_current_bb /\
-   u.vs_inst_idx = LENGTH c2.cs_current_insts` by
-    metis_tac[window_phase_resources, window_phase_control] >>
-  `eval_operand dp u = SOME (n2w b)` by metis_tac[window_phase_operand] >>
-  `FLOOKUP u.vs_allocas st.cs_next_id = SOME (b,32)` by
-    metis_tac[window_phase_effect, abi_encoder_registered_effect_allocated] >>
-  `b+32 <= u.vs_alloca_next` by
-    metis_tac[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
-  `window_phase ctx func c2 en {st.cs_next_id} [] u
-    ((mstore b (n2w (n*asz)) u) with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    (irule window_cursor_store_phase >> asm_rewrite_tac[] >>
-     qexistsl_tac [`dp`, `offset`] >> fs[word_mul_n2w, MULT_COMM]) >>
-  `st.cs_next_var <= c1.cs_next_var /\ c1.cs_next_var <= c2.cs_next_var /\
-   c2.cs_next_var <= en.cs_next_var` by
-    metis_tac[ci_mono_emit_op, ci_mono_emit_void, ci_mono_def, pairTheory.SND] >>
-  `window_phase ctx func st c2 {st.cs_next_id} [] s u` by
-    (irule window_phase_chain >>
-     qexistsl_tac [`{st.cs_next_id}`, `[]`, `c1`, `{}`, `[]`, `t`] >> simp[]) >>
-  `window_phase ctx func st en {st.cs_next_id} [] s
-    ((mstore b (n2w (n*asz)) u) with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    (irule window_phase_chain >>
-     qexistsl_tac [`{st.cs_next_id}`, `[]`, `c2`, `{st.cs_next_id}`, `[]`, `u`] >> simp[]) >>
-  qmatch_asmsub_abbrev_tac `window_phase ctx func st en {st.cs_next_id} [] s v` >>
-  `abi_encode_exec_frame func u v` by
-    simp[Abbr `v`, abi_encode_exec_frame_def, pending_alloca_size_def,
-      mstore_def, write_memory_with_expansion_def] >>
-  `abi_encode_exec_frame func s v` by
-    (irule abi_encode_exec_frame_trans >> qexists_tac `u` >> asm_rewrite_tac[]) >>
-  suspend "finish"
+  strip_tac >> drule_all abi_encode_framed_array_dynamic_cursor_sequence >>
+  strip_tac >> qexistsl_tac [`t`, `b`] >> asm_rewrite_tac[]
 QED
-
-Resume abi_encode_framed_array_dynamic_cursor_phase[finish]:
-  `v.vs_allocas = u.vs_allocas /\ v.vs_alloca_next = u.vs_alloca_next` by
-    simp[Abbr `v`, mstore_def, write_memory_with_expansion_def] >>
-  `window_sizes32 {st.cs_next_id} v` by simp[window_sizes32_def] >>
-  `abi_encoder_registered_effect {st.cs_next_id} [] s v` by metis_tac[window_phase_effect] >>
-  `!R. window_sizes32 R s ==> window_sizes32 R v` by
-    (qpat_assum `abi_encoder_registered_effect {st.cs_next_id} [] s v` mp_tac >>
-     qpat_assum `window_sizes32 {st.cs_next_id} v` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> pure_rewrite_tac [window_sizes32_def] >>
-     rpt strip_tac >> drule_all window_registered_sizes_transport >> metis_tac[]) >>
-  qexistsl_tac [`v`, `b`] >> asm_rewrite_tac[] >> conj_tac
-  >- (irule window_array_phase_transition >> asm_rewrite_tac[] >> qexists_tac `en` >> asm_rewrite_tac[]) >>
-  conj_tac
-  >- (qpat_x_assum `eval_operand dp u = _` mp_tac >>
-      simp_tac (srw_ss()) [Abbr `v`, mstore_def, write_memory_with_expansion_def] >>
-      POP_ASSUM_LIST (K all_tac) >> Cases_on `dp` >> simp[eval_operand_def, lookup_var_def]) >>
-  conj_tac >- metis_tac[not_fresh_at_mono] >>
-  simp[Abbr `v`, mstore_mem_word_at_same]
-QED
-
-Finalise abi_encode_framed_array_dynamic_cursor_phase
 
 Theorem abi_encode_framed_array_prefix_phase:
   abi_decode_index_init st = (pp,c1) /\
