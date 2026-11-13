@@ -212,7 +212,10 @@ Resume subscript_array_framed_code_ptr[suffix_frame]:
          vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom) >> simp[]) >>
   `!l. p.ptr_operand <> Label l` by
     (drule compile_array_pointer_not_label >> disch_then irule >> simp[] >>
-     qexists `env` >> fs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+     qexists `env` >>
+     qpat_assum `expr_body_pre cenv cx env e1 es`
+       (strip_assume_tac o PURE_REWRITE_RULE [expr_body_pre_def, expr_sim_inv_def]) >>
+     metis_tac[]) >>
   `!tr slot vt. tv <> PlaceR (StoragePlace tr slot vt)` by metis_tac[] >>
   suspend "suffix_typed"
 QED

@@ -64,8 +64,10 @@ Resume raw_revert_vv_sim_mem[success]:
     (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_eval) >>
   disch_then drule >> strip_tac >>
   `env.type_defs = get_tenv cx` by
-    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
-       env_context_consistent_def] >>
+    (qpat_assum `expr_sim_inv cenv cx env _`
+       (strip_assume_tac o PURE_REWRITE_RULE
+         [expr_sim_inv_def, env_consistent_def, env_context_consistent_def]) >>
+     first_assum ACCEPT_TAC) >>
   `?bs. v = BytesV bs` by
     (gvs[expr_result_typed_def, expr_runtime_typed_def,
          value_result_typed_def, evaluate_type_def] >>

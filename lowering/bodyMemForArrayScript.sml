@@ -441,13 +441,16 @@ Resume body_for_immutable_array_mem[scope]:
     (irule expr_sim_inv_for_pop >> metis_tac[]) >>
   `lookup_scopes id rest = NONE` by
     (Cases_on `lookup_scopes id rest` >> simp[] >>
-     gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     qpat_assum `expr_sim_inv cenv cx env (es2 with scopes := rest)`
+       (strip_assume_tac o PURE_REWRITE_RULE [expr_sim_inv_def, env_consistent_def]) >>
+     fs[env_scopes_consistent_def] >>
      qpat_x_assum `!id entry. lookup_scopes _ _ = _ ==> _` drule >>
      simp[FLOOKUP_DEF]) >>
   simp[] >>
   `env_context_consistent (extend_local env id typ F) cx` by
-    (fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def,
-        extend_local_def] >> metis_tac[]) >>
+    (qpat_assum `expr_sim_inv cenv cx env es`
+       (strip_assume_tac o PURE_REWRITE_RULE [expr_sim_inv_def, env_consistent_def]) >>
+     fs[env_context_consistent_def, extend_local_def] >> metis_tac[]) >>
   `FLOOKUP (extend_local env id typ F).bare_globals (cenv.ce_module,name) =
      SOME (ArrayT typ bd)` by simp[extend_local_def] >>
   drule_all immutable_array_body_observation >>
