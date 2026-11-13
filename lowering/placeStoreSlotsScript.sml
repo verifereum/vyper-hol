@@ -399,7 +399,7 @@ Proof
   simp[store_copy_normalize_def, tstore_def, sstore_def]
 QED
 
-Theorem store_slots_shift_fold[local]:
+Theorem store_slots_shift_fold:
   a.vs_memory = s.vs_memory /\
   w2n sw + i * type_memory_size tv < dimword (:256) ==>
   FOLDL (\q j. (if tr then tstore else sstore)
@@ -1065,7 +1065,7 @@ Proof
   Cases_on `i` >> gvs[] >> first_x_assum irule >> metis_tac[]
 QED
 
-Theorem store_slots_dyn_encoding_support[local]:
+Theorem store_slots_dyn_encoding_support:
   !vs tv off ws.
     encode_dyn_array tv off vs = SOME ws ==>
     !k. MEM k (MAP FST ws) <=>
@@ -1201,13 +1201,13 @@ QED
 
 Finalise store_slots_dyn_prefix_path
 
-Theorem store_slots_normalize_compose[local]:
+Theorem store_slots_normalize_compose:
   store_copy_normalize a (store_copy_normalize b t) = store_copy_normalize a t
 Proof
   simp[store_copy_normalize_def]
 QED
 
-Theorem store_slots_normalize_store[local]:
+Theorem store_slots_normalize_store:
   store_copy_normalize a ((if tr then tstore else sstore) k v t) =
     (if tr then tstore else sstore) k v (store_copy_normalize a t)
 Proof
@@ -1303,7 +1303,7 @@ QED
 
 (* Successful type evaluation guards the literal element count, even for
    nested array types whose raw layout could otherwise have zero size. *)
-Theorem store_slots_fixed_count_bound[local]:
+Theorem store_slots_fixed_count_bound:
   evaluate_type tenv (ArrayT elem (Fixed n)) = SOME tv ==>
   n < dimword (:256)
 Proof
@@ -1315,7 +1315,7 @@ Proof
   decide_tac
 QED
 
-Theorem store_slots_sparse_support[local]:
+Theorem store_slots_sparse_support:
   !sparse tv offset writes.
     encode_static_array tv offset sparse = SOME writes ==>
     !k. MEM k (MAP FST writes) <=>
