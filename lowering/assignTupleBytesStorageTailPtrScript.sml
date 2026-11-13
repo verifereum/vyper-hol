@@ -44,7 +44,9 @@ Theorem bytes_storage_place_tail_ptr:
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
-      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+      FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    execution_frame u = execution_frame
+      (store_copy_prefix (if tr then LocTransient else LocStorage) a k s n)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   mp_tac (Q.INST [`root` |-> `src`,`z` |-> `()`]
