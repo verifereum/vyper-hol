@@ -96,17 +96,19 @@ Proof
     metis_tac[normalize_nonbytes_footprint] >>
   `0 < type_memory_size stv` by metis_tac[normalize_return_source_positive] >>
   `w2n sw + type_memory_size stv < dimword (:256)` by
-    (drule_all normalize_source_window >> simp[]) >>
+    (drule normalize_source_window >>
+     disch_then (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
+     simp[] >> disch_then (qspec_then `stv` mp_tac) >>
+     simp[] >> strip_tac >> gvs[]) >>
   `w2n sw + type_memory_size stv <= w2n w \/
    w2n w + type_memory_size dtv <= w2n sw` by
     (drule expr_val_at_alloca_outside_interval_separate >>
      disch_then (drule_at (Pos (el 2))) >> simp[] >>
      disch_then (qspecl_then [`p`, `sz`, `inst`, `w2n w`] mp_tac) >> gvs[]) >>
   (drule compile_assign_value_typed_path >>
-  disch_then (drule_at (Pat `!H. _ ==> stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `valid_horizon _ _ _ _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >> simp[] >>
-  disch_then (qspecl_then [`sz`, `sa`, `inst`, `id`, `a`] mp_tac) >>
+  disch_then (qspecl_then [`sz`, `sa`, `inst`, `id`, `a`, `H0`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >> gvs[])) >> strip_tac >>
   qexists `t` >> simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt strip_tac >>
