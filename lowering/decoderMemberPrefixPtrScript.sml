@@ -455,7 +455,8 @@ Proof
   qpat_x_assum `eval_operand left s = SOME a` kall_tac >>
   qpat_x_assum `eval_operand right s = SOME b` kall_tac >>
   drule_all (SRULE [] (Q.SPEC `ADD` emit_scalar_binop_endpoint_ptr_origin_core)) >>
-  disch_then (qspecl_then [`ARB`,`ARB`,`PG`,`ARB`] strip_assume_tac) >>
+  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`,`ARB`]
+    (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac))) >>
   `!D. (!fuel. ptr_safe_run D lower fuel ctx func PG H u
     (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
     !fuel. ptr_safe_run D lower fuel ctx func PG G tn
@@ -521,7 +522,8 @@ Proof
   qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = OK t` kall_tac >>
   qpat_x_assum `eval_operand src s = SOME a` kall_tac >>
   drule_all emit_calldata_load_endpoint_ptr_origin_core >>
-  disch_then (qspecl_then [`G`,`ARB`,`ARB`,`PG`,`ARB`] strip_assume_tac) >>
+  disch_then (qspecl_then [`ARB`,`G`,`ARB`,`ARB`,`PG`,`ARB`]
+    (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac))) >>
   `!D. (!fuel. ptr_safe_run D lower fuel ctx func PG H u
     (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
     !fuel. ptr_safe_run D lower fuel ctx func PG G tn

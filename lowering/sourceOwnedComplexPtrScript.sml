@@ -156,10 +156,10 @@ Proof
     (Q.INST [`s` |-> `prepared with vs_inst_idx := LENGTH mid.cs_current_insts`,
       `t` |-> `t with vs_inst_idx := LENGTH mid.cs_current_insts`,
       `off` |-> `vo`] (SPEC_ALL emit_ptr_offset_endpoint_ptr_origin_core))) >>
-  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`,`ARB`] strip_assume_tac) >>
   rename1 `dst = Var q` >>
   rename1 `ptr_covers H u q _ n` >>
-  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac >>
   `ptr_covers H u q t n` by
     (irule ptr_covers_frame >> goal_assum (drule_at Any) >>
      simp[lookup_var_def]) >>
