@@ -465,9 +465,10 @@ Proof
       imp_res_tac vyperLookupStorageTheory.storage_field_slots_in_range >>
       gvs[storage_holds_def])
   >~ [`vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _`]
-  >- (simp[expr_type_def] >> irule attr_vv_at_field >> simp[] >>
+  >- (simp[expr_type_def] >>
+      irule attr_vv_at_field >> simp[] >>
       (conj_tac
-      >- (qexistsl_tac [`ctx`, `func`] >> first_assum ACCEPT_TAC) >>
+      >- (qexistsl_tac [`H`, `ctx`, `func`] >> first_assum ACCEPT_TAC) >>
       qexistsl_tac [`fld`, `fs`, `sid`, `tv`, `vals`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]))
   >~ [`storage_read_live`]
@@ -754,10 +755,14 @@ Proof
     metis_tac[attr_operand_admissible] >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
-  disch_then (qspecl_then [`sa`,`sm`,`bvv`,`s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`,`sa`,`sm`,`bvv`,`s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
   rewrite_tac[gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
+      rewrite_tac[attr_source] >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_select])
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >> gvs[]
       >- (drule_all attr_summary_ok >> simp[]) >>
@@ -767,7 +772,7 @@ Proof
       qexistsl_tac [`INR exn`,`fe`,`fr`] >> simp[] >>
       rewrite_tac[attr_source] >> irule gas_marked_exec_bind_exception >>
       simp[]) >>
-  qexists_tac `marks` >> disj2_tac >> metis_tac[attr_exempt_cert]
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >> metis_tac[attr_exempt_cert]
 QED
 
 Theorem compile_attribute_vv_case:

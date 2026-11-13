@@ -1640,7 +1640,7 @@ Proof
       (Abort Revert_abort ss)` by
     (rpt strip_tac >> first_x_assum drule >> strip_tac >> simp[expr_exit_def]) >>
   drule_all convert_cast_frag_success >>
-  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es1`] mp_tac) >>
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cx`, `es1`] mp_tac) >>
   disch_then (qspecl_then [`p`, `s`] mp_tac) >>
   disch_then (mp_then Any irule frag_exec_weaken) >>
   simp[] >> conj_tac
@@ -1879,17 +1879,21 @@ Proof
     (irule convert_operand_admissible >> metis_tac[]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `s1`, `x`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `s1`, `x`, `s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
   rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      rewrite_tac[eval_expr_convert_action] >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_def])
   >- suspend "counted" >>
-  qexists_tac `marks` >> disj2_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   irule convert_exempt_cert >> simp[]
 QED
 
 Resume compile_convert_bytestring_frag_sim[counted]:
-  qexists_tac `marks` >> disj1_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   rewrite_tac[eval_expr_convert_action] >>
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>

@@ -444,7 +444,7 @@ Proof
       SRULE [mk_inst_def] send_assert_fail, expr_exit_def, mk_inst_def] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
   rpt conj_tac
-  >~ [`stmt_state_rel _ _ _ _ _ _ _`]
+  >~ [`stmt_state_rel _ _ _ _ _ _ (update_var _ _ _)`]
   >- (irule stmt_state_rel_update_var >> conj_tac
       >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
       `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
@@ -548,7 +548,8 @@ Proof
       simp[raise_def, return_def] >>
       rename1 `_ = SOME res` >> PairCases_on `res` >>
       simp[check_def, assert_def, update_accounts_def, update_pending_deletions_def, update_transient_def,
-           append_logs_def, return_def, raise_def] >>
+           append_logs_def, return_def, raise_def, record_storage_backend_def,
+           record_storage_event_def] >>
       Cases_on `res0` >> simp[] >>
       strip_tac >> gvs[evaluation_state_component_equality]) >>
   simp[bind_def, ignore_bind_def, take_call_outcome_gas_obs] >>
@@ -640,7 +641,8 @@ Theorem send_tail_path[local]:
   ?n r. gas_marked_path F ctx func t n r /\
     ((?w. r = OK w /\
           (?v. res = INL v /\
-               !H'. stmt_state_rel H' ctx func cenv cx es1 t /\
+               !(H':(bool # bytes32 # type_value) list # num list).
+                 stmt_state_rel H' ctx func cenv cx es1 t /\
                     storage_well_formed_on cx es' (FST H') ==>
                     expr_post H' ctx func cenv cx e es sa sb s0 es' v (Lit 0w) w) /\
           w.vs_current_bb = sb.cs_current_bb /\
@@ -665,7 +667,8 @@ Proof
     (qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
   qspecl_then [`ctx`, `func`, `sm`, `sb`, `t`,
     `\w. ?v. res = INL v /\
-            !H'. stmt_state_rel H' ctx func cenv cx es1 t /\
+            !(H':(bool # bytes32 # type_value) list # num list).
+                 stmt_state_rel H' ctx func cenv cx es1 t /\
                  storage_well_formed_on cx es' (FST H') ==>
                  expr_post H' ctx func cenv cx e es sa sb s0 es' v (Lit 0w) w`,
     `expr_exit res`] mp_tac run_inst_seq_gas_path >>
@@ -675,13 +678,13 @@ Proof
       SRULE [mk_inst_def] send_assert_fail, expr_exit_def, mk_inst_def] >>
   qx_gen_tac `H2` >> strip_tac >>
   `state_rel H2 func cenv cx es' s'` by
-    (irule send_call_state_rel_any >>
+    (irule (SRULE [mk_inst_def] send_call_state_rel_any) >>
      qpat_assum `step_inst_base _ t = OK (update_var out 1w s')`
        (irule_at Any) >>
      simp[] >> metis_tac[]) >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
   rpt conj_tac
-  >~ [`stmt_state_rel _ _ _ _ _ _ _`]
+  >~ [`stmt_state_rel _ _ _ _ _ _ (update_var _ _ _)`]
   >- (irule stmt_state_rel_update_var >> conj_tac
       >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
       `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
@@ -815,7 +818,7 @@ Proof
   drule_then (fn th => rewrite_tac[th]) eval_expr_send_read_action >>
   irule eval_exprs_suffix >> rpt conj_tac
   >~ [`storage_trace_frame _`]
-  >- (gen_tac >> irule storage_trace_frame_bind_all >>
+  >- (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
       simp[storage_trace_frame_send, storage_trace_frame_read_result])
   >~ [`wb_args_exit (INR _) _`] >- simp[wb_args_exit_def] >>
   qexists_tac `\H vs ee t. typed_args_post H ctx func cenv cx es sa s0 ee args
@@ -824,8 +827,6 @@ Proof
                  t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   BETA_TAC >> reverse conj_tac >- first_assum ACCEPT_TAC >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `?H. valid_horizon _ _ H ee.storage_trace`
-    (qx_choose_then `H` assume_tac) >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
     (qspec_then `H` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
@@ -870,13 +871,23 @@ Proof
        (strip_assume_tac o
         MATCH_MP (CONV_RULE (DEPTH_CONV ETA_CONV) eval_send_read)) >>
      irule vyperFiniteStoragePreservationTheory.eval_send_preserves_storage_well_formed_on >>
-     goal_assum (drule_at Any) >> fs[valid_horizon_def]) >>
-  irule send_tail_summary >> simp[expr_type_def, loweringPostsTheory.expr_has_effect_thm] >>
+     conj_tac
+     >- (qpat_x_assum `valid_horizon cx st0 H2 es'.storage_trace`
+           (strip_assume_tac o REWRITE_RULE [valid_horizon_def]) >>
+         first_assum ACCEPT_TAC) >>
+     goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+  `stmt_state_rel H ctx func cenv cx ee t` by
+    (qpat_assum `!H'. valid_horizon _ _ H' ee.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+  irule (INST_TYPE [alpha |-> ``:256``] send_tail_summary) >>
+  simp[expr_type_def, loweringPostsTheory.expr_has_effect_thm] >>
   qpat_assum `emit_op _ _ _ = _` (irule_at Any) >>
   qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
   qpat_assum `eval_operand addr_op _ = _` (irule_at Any) >>
   qpat_assum `eval_operand val_op _ = _` (irule_at Any) >>
-  rpt conj_tac >>
+  qexists_tac `H` >> rpt conj_tac >>
   FIRST [first_assum ACCEPT_TAC,
          irule address_typed_dest >> first_assum ACCEPT_TAC,
          irule uint256_typed_dest >> first_assum ACCEPT_TAC,

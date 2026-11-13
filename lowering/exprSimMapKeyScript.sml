@@ -884,7 +884,8 @@ Proof
   irule exprSimWordArgsTheory.wb_frame_trans >>
   goal_assum (drule_at Any) >> simp[] >>
   reverse conj_tac >- (qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]) >>
-  goal_assum (drule_at Any)
+  goal_assum (drule_at Any) >>
+  qexists_tac `sp` >> simp[]
 QED
 
 Theorem compile_hashmap_tail_shape:
@@ -939,8 +940,8 @@ Proof
     (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
   `wb_frame cenv es en sa s0 u` by
     (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     reverse conj_tac >- (qexistsl_tac [`en`, `sn`, `s`] >> simp[]) >>
-     goal_assum (drule_at Any)) >>
+     reverse conj_tac >- (qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]) >>
+     qexistsl_tac [`en`, `sn`, `s`] >> simp[]) >>
   qpat_x_assum `wb_frame cenv es en sa s0 u` mp_tac >>
   simp[loweringPostsTheory.wb_frame_def, lookup_var_def] >>
   strip_tac >> first_assum ACCEPT_TAC
@@ -1014,8 +1015,8 @@ Proof
     (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
   `wb_frame cenv em en sm s1 u` by
     (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     reverse conj_tac >- (qexistsl_tac [`en`, `sn`, `t`] >> simp[]) >>
-     goal_assum (drule_at Any)) >>
+     reverse conj_tac >- (qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]) >>
+     qexistsl_tac [`en`, `sn`, `t`] >> simp[]) >>
   `~expr_has_effect idx ==> pure_frame cenv func em sm s1 u` by
     (strip_tac >>
      `pure_frame cenv func em sm s1 t` by

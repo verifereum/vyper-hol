@@ -968,6 +968,7 @@ Theorem slice_calldata_frag[local]:
   0 < n /\ n < 2 ** 256 /\ a < 2 ** 256 /\
   32 + 32 * word_size n < 2 ** 64 /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
+  storage_well_formed_on cx es (FST H) /\
   res = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
            INL v => INL (Value v) | INR err => INR (Error err)) ==>
   frag_exec ctx sa sb
@@ -1020,6 +1021,7 @@ Theorem slice_calldata_path[local]:
   bres = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
            INL v => INL v | INR err => INR (Error err)) /\
   (!H. valid_horizon cx st0 H tr ==> stmt_state_rel H ctx func cenv cx es s0) /\
+  (!H. valid_horizon cx st0 H tr ==> storage_well_formed_on cx es (FST H)) /\
   (?H. valid_horizon cx st0 H tr) /\ eval_operand op s0 = SOME (n2w a) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -1060,13 +1062,18 @@ Proof
   qx_gen_tac `H1` >> strip_tac >>
   `stmt_state_rel H1 ctx func cenv cx es t` by
     (`stmt_state_rel H1 ctx func cenv cx es s0` by metis_tac[] >>
-     qpat_x_assum `stmt_state_rel H _ _ _ _ _ s0` kall_tac >>
-     drule_all (SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
-       [wordsTheory.dimword_def] slice_calldata_run) >>
+     qspecl_then [`H1`, `op`, `n`, `sa`, `p.ptr_operand`, `sb`, `func`, `cenv`,
+                  `cx`, `es`, `s0`, `a`, `ctx`] mp_tac
+       (Q.GEN `H` (SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
+          [wordsTheory.dimword_def] slice_calldata_run)) >>
+     (impl_tac >- (simp[] >> decide_tac)) >>
      gns[wordsTheory.dimword_def] >> rpt strip_tac >> gvs[]) >>
   `t = t with vs_inst_idx := t.vs_inst_idx` by
     simp[venom_state_component_equality] >>
   pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
+  `storage_well_formed_on cx es (FST H1)` by
+    (qpat_assum `!H. _ ==> storage_well_formed_on _ _ _` (qspec_then `H1` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> disch_then ACCEPT_TAC) >>
   irule slice_calldata_vv_post >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `sa.cs_next_id + 7` >> rpt conj_tac
@@ -1313,6 +1320,14 @@ Proof
   `!H. valid_horizon cx st0 H es'.storage_trace ==>
      stmt_state_rel H ctx func cenv cx es' s` by
     metis_tac[expr_post_state] >>
+  `!H. valid_horizon cx st0 H es'.storage_trace ==>
+     storage_well_formed_on cx es' (FST H)` by
+    (qx_gen_tac `H1` >> strip_tac >>
+     qpat_x_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H1` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o
+                 REWRITE_RULE [expr_post_def])) >>
   `eval_operand x s = SOME (n2w a)` by
     (drule expr_post_word_operand >>
      simp[evaluate_type_def, is_word_type_def, word_value_def, val_to_w256_def,
