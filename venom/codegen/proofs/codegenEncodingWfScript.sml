@@ -77,106 +77,11 @@ QED
 
 (* ===== No SOPushOfst without OFFSET ===== *)
 
-Theorem spill_fold_no_push_ofst[local]:
-  !items acc_ops offsets al ops offsets' al'.
-  FOLDL (\(ops, offs, al) item.
-    (\(off, al'). (ops ++ [SOSpill off], SNOC off offs, al'))
-      (alloc_spill_slot al))
-    (acc_ops, offsets, al) items = (ops, offsets', al') /\
-  ~MEM (SOPushOfst lbl d) acc_ops ==>
-  ~MEM (SOPushOfst lbl d) ops
-Proof
-  rpt gen_tac >> strip_tac >> drule spill_fold_preserves >>
-  disch_then (qspec_then `\op. op <> SOPushOfst lbl d` mp_tac) >>
-  simp[EVERY_MEM]
-QED
-
 Theorem do_swap_no_push_ofst:
   do_swap dist ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
   strip_tac >> drule do_swap_admin >> metis_tac[plan_admin_no_push_ofst]
-QED
-
-Theorem popmany_fold_no_push_ofst[local]:
-  !xs acc_ops ps ops ps'.
-  FOLDL (\(ops, ps) v.
-    case stack_get_depth v ps.ps_stack of
-      NONE => (ops, ps)
-    | SOME dist =>
-        (\(swap_ops, ps').
-          (ops ++ swap_ops ++ [SOPop 1],
-           ps' with ps_stack := stack_pop 1 ps'.ps_stack))
-        (if dist = 0 then ([], ps) else do_swap dist ps))
-    (acc_ops, ps) xs = (ops, ps') /\
-  ~MEM (SOPushOfst lbl d) acc_ops ==> ~MEM (SOPushOfst lbl d) ops
-Proof
-  rpt gen_tac >> strip_tac >> drule popmany_fold_preserves >>
-  disch_then (qspec_then `\op. op <> SOPushOfst lbl d` mp_tac) >>
-  simp[EVERY_MEM] >> metis_tac[do_swap_no_push_ofst]
-QED
-
-Theorem popmany_individual_no_push_ofst[local]:
-  popmany_individual to_pop ps = (ops, ps') ==>
-  !lbl d. ~MEM (SOPushOfst lbl d) ops
-Proof
-  strip_tac >> drule popmany_individual_admin >>
-  metis_tac[plan_admin_no_push_ofst]
-QED
-
-Theorem popmany_plan_no_push_ofst[local]:
-  popmany_plan to_pop ps = (ops, ps') ==> !lbl d. ~MEM (SOPushOfst lbl d) ops
-Proof
-  strip_tac >> drule popmany_plan_admin >> metis_tac[plan_admin_no_push_ofst]
-QED
-
-Theorem optimistic_swap_plan_no_push_ofst[local]:
-  optimistic_swap_plan dfg inst live term ps = (ops, ps') ==>
-  !lbl d. ~MEM (SOPushOfst lbl d) ops
-Proof
-  strip_tac >> drule optimistic_swap_plan_admin >>
-  metis_tac[plan_admin_no_push_ofst]
-QED
-
-Theorem do_spill_tos_no_push_ofst[local]:
-  do_spill_tos ps = (ops, ps') ==> !lbl d. ~MEM (SOPushOfst lbl d) ops
-Proof
-  strip_tac >> drule do_spill_tos_admin >> metis_tac[plan_admin_no_push_ofst]
-QED
-
-Theorem do_spill_at_no_push_ofst[local]:
-  do_spill_at dist ps = (ops, ps') ==> !lbl d. ~MEM (SOPushOfst lbl d) ops
-Proof
-  strip_tac >> drule do_spill_at_admin >> metis_tac[plan_admin_no_push_ofst]
-QED
-
-Theorem do_restore_no_push_ofst[local]:
-  do_restore op ps = (ops, ps') ==> !lbl d. ~MEM (SOPushOfst lbl d) ops
-Proof
-  strip_tac >> drule do_restore_admin >> metis_tac[plan_admin_no_push_ofst]
-QED
-
-Theorem restore_spilled_plan_no_push_ofst[local]:
-  !ops0 ps ops ps'. restore_spilled_plan ops0 ps = (ops, ps') ==>
-  !lbl d. ~MEM (SOPushOfst lbl d) ops
-Proof
-  rpt gen_tac >> strip_tac >> drule restore_spilled_plan_admin >>
-  metis_tac[plan_admin_no_push_ofst]
-QED
-
-Theorem do_dup_no_push_ofst[local]:
-  do_dup dist ps = (ops, ps') ==> !lbl d. ~MEM (SOPushOfst lbl d) ops
-Proof
-  strip_tac >> drule do_dup_admin >> metis_tac[plan_admin_no_push_ofst]
-QED
-
-Theorem reduce_depth_plan_no_push_ofst[local]:
-  !fuel target_ops target_op f n ps ops ps'.
-  reduce_depth_plan fuel target_ops target_op f n ps = (ops, ps') ==>
-  !lbl d. ~MEM (SOPushOfst lbl d) ops
-Proof
-  rpt gen_tac >> strip_tac >> drule reduce_depth_plan_admin >>
-  metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem reorder_one_no_push_ofst[local]:
@@ -186,31 +91,11 @@ Proof
   strip_tac >> drule reorder_one_admin >> metis_tac[plan_admin_no_push_ofst]
 QED
 
-Theorem reorder_fold_no_push_ofst[local]:
-  !xs acc_ops ps ops ps'.
-  FOLDL (\(ops, ps) (idx, op).
-    (\(step_ops, ps'). (ops ++ step_ops, ps'))
-      (reorder_one dfg target_ops idx op ps)) (acc_ops, ps) xs =
-    (ops, ps') /\ ~MEM (SOPushOfst lbl d) acc_ops ==>
-  ~MEM (SOPushOfst lbl d) ops
-Proof
-  rpt gen_tac >> strip_tac >> drule reorder_fold_preserves >>
-  disch_then (qspec_then `\op. op <> SOPushOfst lbl d` mp_tac) >>
-  simp[EVERY_MEM] >> metis_tac[reorder_one_no_push_ofst]
-QED
-
 Theorem reorder_plan_no_push_ofst:
   reorder_plan dfg target_ops ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
   strip_tac >> drule reorder_plan_admin >> metis_tac[plan_admin_no_push_ofst]
-QED
-
-Theorem emit_one_input_no_push_ofst[local]:
-  emit_one_input opc live op ps = (ops, ps') ==>
-  !lbl d. ~MEM (SOPushOfst lbl d) ops
-Proof
-  strip_tac >> drule emit_one_input_admin >> metis_tac[plan_admin_no_push_ofst]
 QED
 
 Theorem emit_input_plan_no_push_ofst:
@@ -272,21 +157,6 @@ Theorem clean_stack_plan_no_push_ofst[local]:
   !lbl d. ~MEM (SOPushOfst lbl d) ops
 Proof
   metis_tac[clean_stack_plan_admin, plan_admin_no_push_ofst]
-QED
-
-Theorem generate_block_insts_plan_no_push_ofst[local]:
-  !insts i ps ops ps'.
-  generate_block_insts_plan liveness dfg cfg fn bb_label halting
-    n_params block_len i insts ps = SOME (ops, ps') /\
-  EVERY (\inst. inst.inst_opcode <> OFFSET) insts ==>
-  !lbl d. ~MEM (SOPushOfst lbl d) ops
-Proof
-  rpt gen_tac >> strip_tac >> rpt gen_tac >>
-  drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
-    generate_block_insts_plan_preserves >>
-  disch_then (qspecl_then [`\inst. inst.inst_opcode <> OFFSET`,
-                           `\op. op <> SOPushOfst lbl d`] mp_tac) >>
-  simp[EVERY_MEM] >> metis_tac[generate_inst_plan_no_push_ofst]
 QED
 
 Theorem generate_block_plan_no_push_ofst[local]:

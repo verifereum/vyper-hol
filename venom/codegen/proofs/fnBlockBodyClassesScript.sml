@@ -300,7 +300,6 @@ Theorem body_callee_sim:
        MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
        (!l. FLOOKUP cvs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
        fn_entry_inv Inv ctx callee cvs /\
-       ~cvs.vs_call_ctx.cc_static /\
        asm_block_at prog cas.as_pc (execute_plan cpl.cp_initial_fmp rj.sr_plan) /\
        LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256) /\
        fn_entry_state_rel cpl callee cvs cas cra crest /\

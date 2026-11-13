@@ -19,51 +19,6 @@ Ancestors
 
 val _ = Parse.hide "cp";
 
-(* The assembly state as starts codegen's program prog for the Venom
-   state vs at the context's entry: at PC 0 with an empty stack, memory
-   and shared state related, and vs a fresh, non-static entry state whose
-   labels are prog's offsets. *)
-Definition codegen_asm_entry_rel_def:
-  codegen_asm_entry_rel cp prog vs as <=>
-    as.as_pc = 0 /\ as.as_stack = [] /\
-    ~vs.vs_halted /\ ~vs.vs_call_ctx.cc_static /\
-    vs.vs_vars = FEMPTY /\ vs.vs_params = [] /\
-    n2w cp.cp_initial_fmp = vs.vs_initial_fmp /\
-    (!l. FLOOKUP vs.vs_labels l =
-         OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
-    context_memory_rel cp vs.vs_memory as.as_memory /\
-    shared_state_rel vs as
-End
-
-Theorem codegen_asm_entry_fn_state_rel:
-  !cp prog vs as fe lbl ra.
-    codegen_asm_entry_rel cp prog vs as /\
-    get_params (HD fe.fn_blocks).bb_instructions = [] /\
-    fn_entry_label fe = SOME lbl ==>
-    fn_entry_state_rel cp fe
-      (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
-      as ra []
-Proof
-  rw[codegen_asm_entry_rel_def] >>
-  gvs[fn_entry_label_def, entry_block_def] >>
-  gvs[fn_entry_state_rel_def, fn_has_retpc_def,
-      shared_state_rel_def, venom_asm_terminal_rel_def]
-QED
-
-Theorem initial_ctx_codegen_asm_entry_rel:
-  !cp prog ctx vs es.
-    initial_ctx_rel cp prog ctx vs es ==>
-    codegen_asm_entry_rel cp prog vs (entry_asm_state vs es)
-Proof
-  rw[initial_ctx_rel_def] >>
-  gvs[initial_state_rel_def, initial_codegen_state_rel_def,
-      stack_params_rel_def, msg_ctx_rel_def] >>
-  simp[codegen_asm_entry_rel_def, entry_asm_state_def,
-       shared_state_rel_def, venom_asm_terminal_rel_def] >>
-  Cases_on `ctxt.stack` >> gvs[] >>
-  first_x_assum (qspec_then `0` mp_tac) >> simp[]
-QED
-
 (* The resource simulation carries its static step bound and creation
    safety on the same execution witness. Administrative fragments cannot
    create; marked CREATE/CREATE2 simulations obtain their size bound from
