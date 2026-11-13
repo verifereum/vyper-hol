@@ -3,6 +3,8 @@ Theory abiDecodeMemTypedRecursive
 Ancestors
   abiDecodeMemTyped abiDecoderCoherence abiDecoderReentry abiDecoderSiteEffect
   actualDecoderSites allocationGrowth abiCallerAllocation
+  exprSimAbiDecodeMemberExecute extcallDecoderStaticSuffix
+  vyperABI contractABI vyperTypeABI vyperTyping
   exprLoweringProps loweringStateRelDefs compileEnv venomState venomInst
   valueEncodingDefs valueEncoding words list arithmetic finite_map
 
@@ -10,6 +12,12 @@ fun decoder_entry inst = fst (dest_conj (fst (dest_imp (concl
   (Q.INST inst abi_decode_typed_scalar_memory)))));
 
 val parent_entry = decoder_entry [];
+val parent_result = snd (dest_imp (concl abi_decode_typed_scalar_memory));
+val decoder_good =
+  let
+    val normal = fst (dest_disj (concl (BETA_RULE (ASSUME parent_result))));
+    val body = snd (strip_exists normal)
+  in fst (dest_conj (snd (dest_conj body))) end;
 val child_entry = decoder_entry
   [`env` |-> `child_env`, `sf` |-> `child_sf`,
    `ty` |-> `child_ty`, `tv` |-> `child_tv`,
@@ -79,3 +87,32 @@ Resume abi_decode_typed_child_entry[scratch]:
 QED
 
 Finalise abi_decode_typed_child_entry[local]
+
+Theorem abi_decode_typed_good_view[local]:
+  evaluate_type env ty = SOME tv ==>
+  (^decoder_good <=>
+   sb <= H /\
+   (is_dynamic (vyper_to_abi_type env ty) \/
+     static_length (vyper_to_abi_type env ty) <= LENGTH (DROP sb (TAKE H snap))) /\
+   abi_decode_source_accepts env ty
+     (abi_decode_source_view (vyper_to_abi_type env ty) (TAKE H snap) sb) v)
+Proof
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  Cases_on `is_dynamic (vyper_to_abi_type env ty)`
+  >- (simp[abi_decode_source_view_def, abi_decode_source_accepts_def] >>
+      eq_tac >> strip_tac >> simp[] >>
+      irule (cj 1 abi_to_vyper_well_typed) >> metis_tac[]) >>
+  Cases_on `sb <= H` >> fs[LENGTH_DROP] >>
+  Cases_on `static_length (vyper_to_abi_type env ty) <= LENGTH (DROP sb (TAKE H snap))` >>
+  fs[LENGTH_DROP] >>
+  mp_tac (Q.SPECL [`vyper_to_abi_type env ty`, `DROP sb (TAKE H snap)`]
+    static_decode_valid_suffix) >>
+  (impl_tac >- simp[LENGTH_DROP]) >> strip_tac >>
+  Cases_on `vyper_decode_valid_enc (vyper_to_abi_type env ty) (DROP sb (TAKE H snap))` >>
+  simp[abi_decode_source_view_def, abi_decode_source_accepts_def] >>
+  mp_tac (Q.SPECL [`vyper_to_abi_type env ty`, `DROP sb (TAKE H snap)`]
+    static_dec_suffix) >>
+  (impl_tac >- simp[LENGTH_DROP]) >> strip_tac >> simp[] >>
+  eq_tac >> strip_tac >> simp[] >>
+  irule (cj 1 abi_to_vyper_well_typed) >> metis_tac[]
+QED
