@@ -1041,28 +1041,39 @@ Theorem taint_agree_exec_delegatecall:
        with t_var := set_var_taint tn.t_var [out] {}) s' (update_var out w u)
 Proof
   strip_tac >>
-  `ld_joint_local_fields s t` by metis_tac[taint_agree_local_fields] >>
-  `s.vs_logs = t.vs_logs /\ s.vs_pending_deletions = t.vs_pending_deletions` by
-    fs[taint_agree_def, ld_shared_agree_def] >>
-  drule_all (INST_TYPE
-    (map (fn ty => ty |-> ``:256``)
-      (type_vars_in_term (concl ld_exec_delegatecall_transport)))
-    ld_exec_delegatecall_transport) >>
-  disch_then (qspec_then `ro` strip_assume_tac) >>
-  drule_all taint_agree_extract_concrete >> strip_tac >>
-  drule ld_extract_concrete_shape >> strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
+  qmatch_goalsub_abbrev_tac `consume_call_outcome rq1 _ _ s` >>
+  Cases_on `consume_call_outcome rq1 (w2n ro) (w2n rs) s` >>
+  rename1 `consume_call_outcome rq1 _ _ s = (w,r)` >>
+  simp[AllCaseEqs(), Excl "consume_call_outcome_eq"] >> strip_tac >>
+  gvs[Excl "consume_call_outcome_eq"] >>
+  qabbrev_tac `rq2 = venom_call_request t addr 0w off sz F with
+                       cr_kind := DelegateMessageCall` >>
+  Cases_on `consume_call_outcome rq2 (w2n ro) (w2n rs) t` >>
+  rename1 `consume_call_outcome rq2 _ _ t = (w2,u)` >>
+  `request_agree_except D rq1 rq2` by
+    simp[Abbr `rq1`, Abbr `rq2`, request_agree_except_def, venom_call_request_def,
+      accounts_agree_except_def, transient_agree_except_def,
+      storage_agree_except_def, word_agree_except_def] >>
+  qpat_assum `consume_call_outcome rq1 _ _ s = _`
+    (mp_then (Pat `consume_call_outcome _ _ _ _ = _`) mp_tac
+      taint_agree_consume_call) >>
+  disch_then (drule_at (Pat `consume_call_outcome _ _ _ _ = _`)) >>
+  disch_then drule >>
+  (impl_tac >- simp[Abbr `rq1`, Abbr `rq2`, venom_call_request_def]) >>
+  strip_tac >> gvs[Excl "consume_call_outcome_eq"] >>
   `r.vs_allocas = s.vs_allocas /\ r.vs_fmp = s.vs_fmp` by
-    (qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  gvs[] >> qexistsl_tac [`w`, `r`] >>
-  qmatch_asmsub_abbrev_tac `exec_delegatecall inst t gas addr off sz ro rs = OK (update_var out w u)` >>
-  qexists_tac `u` >> simp[] >>
-  qmatch_goalsub_abbrev_tac `taint_agree D X mask` >>
-  `mask = (tn with t_mem := mask.t_mem) with
-     t_var := set_var_taint (tn with t_mem := mask.t_mem).t_var [out] {}` by
-    simp[Abbr `mask`, taint_component_equality] >>
-  pop_assum SUBST1_TAC >>
-  irule taint_agree_update_var >>
-  simp[Abbr `mask`, word_agree_except_def]
+    (qpat_x_assum `consume_call_outcome rq1 _ _ _ = _` mp_tac >> simp[] >>
+     strip_tac >> gvs[]) >>
+  qexistsl_tac [`w`, `r`, `u`] >> simp[Excl "consume_call_outcome_eq"] >>
+  qmatch_asmsub_abbrev_tac `taint_agree D X mask r u` >>
+  qmatch_goalsub_abbrev_tac `taint_agree D X final` >>
+  `final = mask with t_var := set_var_taint mask.t_var [out] {}` by
+    (simp[Abbr `final`, Abbr `mask`, taint_component_equality] >> fs[]) >>
+  pop_assum SUBST1_TAC >> irule taint_agree_update_var >>
+  simp[word_agree_except_def, Excl "consume_call_outcome_eq"]
 QED
 
 Theorem taint_agree_delegatecall_mask:
@@ -2466,6 +2477,48 @@ Proof
   pop_assum SUBST1_TAC >> simp[Abbr `mask`]
 QED
 
+(* MUL may take one tainted operand when the other is an untainted 0/1
+   selector: by 0 both products are 0, by 1 each is its data operand. *)
+Theorem taint_agree_mul[local]:
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\
+  inst.inst_opcode = MUL /\ step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base inst t = OK t' /\
+       taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands /\ op_taint tn op <> {} ==>
+        ?b. (inst.inst_operands = [op; b] \/ inst.inst_operands = [b; op]) /\
+            op_taint tn b = {} /\
+            (eval_operand b s = SOME 0w \/ eval_operand b s = SOME 1w)` by
+    (rpt strip_tac >> qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
+     simp[taint_ok_def] >> strip_tac >> first_x_assum drule_all >>
+     gvs[] >> metis_tac[]) >>
+  gvs[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()] >>
+  `?y1. eval_operand op1 t = SOME y1 /\ word_agree_except (op_taint tn op1) v1 y1` by
+    metis_tac[taint_agree_operand_value] >>
+  `?y2. eval_operand op2 t = SOME y2 /\ word_agree_except (op_taint tn op2) v2 y2` by
+    metis_tac[taint_agree_operand_value] >>
+  qexists_tac `update_var out (word_mul y1 y2) t` >> simp[] >>
+  `step_taint inst s (update_var out (word_mul v1 v2) s) tn =
+     tn with t_var := set_var_taint tn.t_var [out] (out_taint tn inst s)` by
+    (Cases_on `tn` >>
+     fs[step_taint_def, mem_taint_def, store_taint_def,
+        imm_taint_def, adopt_reset_def, new_site_bytes_def, update_var_def,
+        step_writes_def, source_memory_write_ranges_def, written_taint_def,
+        range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, taint_component_equality]) >>
+  simp[] >> irule taint_agree_update_var >> simp[out_taint_def] >>
+  Cases_on `op_taint tn op1 = {}` >> Cases_on `op_taint tn op2 = {}`
+  >- (`v1 = y1 /\ v2 = y2` by metis_tac[taint_agree_operand_clean, optionTheory.SOME_11] >>
+      simp[word_agree_except_def])
+  >- (first_x_assum (qspec_then `op2` mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+      drule_all taint_agree_operand_clean >> strip_tac >>
+      gvs[word_agree_except_def, wordsTheory.WORD_MULT_CLAUSES])
+  >- (first_x_assum (qspec_then `op1` mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+      drule_all taint_agree_operand_clean >> strip_tac >>
+      gvs[word_agree_except_def, wordsTheory.WORD_MULT_CLAUSES]) >>
+  first_x_assum (qspec_then `op1` mp_tac) >> simp[] >> strip_tac >> gvs[]
+QED
+
 Theorem taint_agree_pure2:
   taint_agree D X tn s t /\ taint_ok fn tn inst s /\
   MEM inst.inst_opcode
@@ -2476,6 +2529,7 @@ Theorem taint_agree_pure2:
        taint_agree D X (step_taint inst s s' tn) s' t'
 Proof
   strip_tac >>
+  Cases_on `inst.inst_opcode = MUL` >- metis_tac[taint_agree_mul] >>
   `!op. MEM op inst.inst_operands ==> op_taint tn op = {}` by
     (gvs[taint_ok_def] >> metis_tac[]) >>
   fs[MEM] >> gvs[step_inst_base_opcode_eqs] >>

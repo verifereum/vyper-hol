@@ -403,7 +403,7 @@ Theorem ircf_alias_site_phi_prefix:
 Proof
   rw[prefix_pred_def] >>
   `(EL j bb.bb_instructions).inst_opcode = PHI` by
-    metis_tac[rangeAnalysisProofsTheory.phi_prefix_length_el_phi] >>
+    metis_tac[venomExecProofsTheory.phi_prefix_length_el_phi] >>
   irule ircf_alias_site_other_output >> simp[] >>
   qexists_tac `EL j bb.bb_instructions` >> simp[] >>
   gvs[fn_insts_def] >> metis_tac[o1PassContractTheory.fn_insts_blocks_MEM, EL_MEM]
