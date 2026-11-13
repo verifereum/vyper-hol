@@ -450,9 +450,8 @@ Proof
           first_x_assum (qspecl_then [`StructArgs args`, `args`, `x`, `SND x`]
                            mp_tac) >>
           simp[] >> disch_then irule >> simp[] >>
-          qexists_tac `tenv1` >> simp[])
-      >- fs[EVERY_MEM] >>
-      qexists_tac `tenv0` >> simp[])
+          qexists_tac `tenv1` >> simp[]) >>
+      TRY (qexists_tac `tenv0`) >> fs[EVERY_MEM])
   >~ [`TupleT tys`]
   >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
       drule_all type_to_abi_dec_info_plan_tuple >> simp[])
