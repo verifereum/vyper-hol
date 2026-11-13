@@ -157,10 +157,14 @@ Proof
   TRY (irule (iffRL placeTypingPropsTheory.place_map_tables_agree_on_defined_cong) >>
        qexistsl [`caller`, `env`] >> simp[] >> NO_TAC) >>
   (* the body's bare-global layout is the caller's at the same deploy flag *)
-  qpat_x_assum `bare_globals_layout _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `bare_globals_layout _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[exprSimHypsDefsTheory.bare_globals_layout_def] >> strip_tac >>
-  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >> fs[get_tenv_def] >>
-  res_tac >> fs[]
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  fs[get_tenv_def, get_module_code_def] >> res_tac >> fs[] >>
+  Cases_on `src = NONE` >> gvs[] >>
+  Cases_on `ALOOKUP cx.sources cx.txn.target` >> gvs[] >>
+  rename1 `ALOOKUP mods src` >> Cases_on `ALOOKUP mods src` >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem packaged_internal_entry_locals_alloc_ok:

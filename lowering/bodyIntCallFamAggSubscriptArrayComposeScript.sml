@@ -74,6 +74,7 @@ Theorem intcall_framed_array_child_suffix:
            a + k < dimword (:256) /\
            (fp.jc_lo <= a \/
             ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
+      (~expr_has_effect (Subscript et obj idx) ==> pure_frame ce fp.jc_func es sa s0 q) /\
       intcall_expr_cont fp ce env es sa s0 ee' sd q)
     (\res ee' outcome. expr_exit res outcome)
 Proof

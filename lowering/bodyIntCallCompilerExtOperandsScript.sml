@@ -55,3 +55,18 @@ Proof
   rpt strip_tac >> irule intcall_interval_bind_floor >>
   simp[pairTheory.FORALL_PROD, intcall_interval_return]
 QED
+
+(* The positional arguments of an external call: each produced, then
+   snapshotted when a later argument or keyword could change it. *)
+Theorem intcall_interval_ext_call_args:
+  (!ce ty e a. k <= a.cs_next_var ==>
+    intcall_compiler_interval k a (SND (cfn ce ty e a))) ==>
+  !tys es a. k <= a.cs_next_var ==>
+    intcall_compiler_interval k a
+      (SND (compile_ext_call_args cfn cenv kw_es tys es a))
+Proof
+  strip_tac >> Induct >> Cases_on `es` >>
+  simp[compile_ext_call_args_def, intcall_interval_return] >>
+  rpt (rpt strip_tac >> irule intcall_interval_bind_floor >>
+       simp[intcall_interval_snapshot_vv, intcall_interval_return])
+QED
