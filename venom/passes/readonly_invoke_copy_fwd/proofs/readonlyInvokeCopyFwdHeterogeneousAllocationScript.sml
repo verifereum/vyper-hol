@@ -1,12 +1,21 @@
 Theory readonlyInvokeCopyFwdHeterogeneousAllocation
 Ancestors
-  readonlyInvokeCopyFwdHeterogeneousMapOrigins
+  readonlyInvokeCopyFwdHeterogeneousMapOrigins readonlyInvokeCopyFwdHeterogeneousSupport
   readonlyInvokeCopyFwdAlignedOrigins readonlyInvokeCopyFwdOperationalAllocation
   readonlyInvokeCopyFwdOperationalMapOrigins readonlyInvokeCopyFwdHeterogeneousLedger
   readonlyInvokeCopyFwdOperationalSupport readonlyInvokeCopyFwdHistorySelected
   readonlyInvokeCopyFwdHistoryPhase readonlyInvokeCopyFwdRel
   occurrenceGeometry o1LowerDloadOccurrence ptrDiscipline
   finite_map list pred_set arithmetic
+
+Theorem ricf_heterogeneous_alloca_support_fresh:
+  ricf_heterogeneous_support_origins vs C a fn U stk B E /\
+  occurrence_allocas_ok B a s /\ FLOOKUP s.vs_allocas inst.inst_id = NONE ==>
+  (a,inst.inst_id) NOTIN E
+Proof
+  rw[ricf_heterogeneous_support_origins_def, occurrence_allocas_ok_def] >>
+  strip_tac >> first_x_assum drule >> strip_tac >> gvs[] >> metis_tac[]
+QED
 
 Theorem ricf_heterogeneous_map_translation[local]:
   ricf_heterogeneous_map_origins vs C stk PG G tn fn inst s U B sites /\

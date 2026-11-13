@@ -2,6 +2,8 @@ Theory readonlyInvokeCopyFwdExecutionAllocation
 Ancestors
   readonlyInvokeCopyFwdExecutionLocal readonlyInvokeCopyFwdExecution
   readonlyInvokeCopyFwdOperationalAllocation readonlyInvokeCopyFwdOperationalGuards
+  readonlyInvokeCopyFwdHeterogeneousAllocation readonlyInvokeCopyFwdHeterogeneousSupport
+  readonlyInvokeCopyFwdHeterogeneousMapOrigins
   readonlyInvokeCopyFwdStepsAllocation readonlyInvokeCopyFwdStepsCore
   readonlyInvokeCopyFwdGlobalSupport readonlyInvokeCopyFwdHeterogeneousLedger
   readonlyInvokeCopyFwdOperationalMapOrigins readonlyInvokeCopyFwdOperationalSupport
@@ -40,38 +42,8 @@ Proof
     FLOOKUP_UPDATE, eval_operand_def, taint_component_equality]
 QED
 
-Theorem ricf_cached_alloca_map_exclusion[local]:
-  ricf_map_origins vs C ctx0 log stk PG G tn fn inst s U B sites /\
-  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
-  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
-  occurrence_natural_geometry lo a U B stk s /\
-  FLOOKUP s.vs_allocas aid = SOME (b,z) ==>
-  (b,z) NOTIN FDOM sites
-Proof
-  strip_tac >> simp[GSYM FLOOKUP_DEF] >> strip_tac >>
-  `?tr. FLOOKUP sites (b,z) = SOME tr` by
-    metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >>
-  `ricf_translation_origin vs C ctx0 log stk PG G tn fn inst s U B (b,z) tr` by
-    fs[ricf_map_origins_def] >>
-  `0 < z` by
-    (qpat_assum `ricf_translation_origin _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [ricf_translation_origin_def]) >>
-     gvs[] >> metis_tac[ricf_translation_positive]) >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
-    metis_tac[occ_frame_reachable_annotation] >>
-  fs[occurrence_annotation_ok_def] >>
-  `FLOOKUP B (a,aid) = SOME (b,z)` by
-    fs[occurrence_allocas_ok_def] >>
-  fs[ricf_translation_origin_def] >> gvs[] >>
-  `MEM p.rpe_owner (MAP (\u. u.of_owner) U)` by
-    (simp[MEM_MAP] >> qexists_tac `EL (LENGTH pre) U` >> simp[EL_MEM]) >>
-  `p.rpe_dst <> (a,aid)` by (strip_tac >> gvs[]) >>
-  `p.rpe_db+p.rpe_size <= p.rpe_db` by
-    metis_tac[occurrence_geometry_sites_disjoint] >> decide_tac
-QED
-
 Theorem ricf_execution_fresh_alloca_next:
-  ricf_execution_invariant vs C ctx0 log D stk PG G tn fn inst s t
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets rt /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   occurrence_natural_geometry lo a U B stk s /\
@@ -81,7 +53,7 @@ Theorem ricf_execution_fresh_alloca_next:
   step_inst fuel C inst s = OK u /\
   active_inst fn next (u with vs_inst_idx := SUC s.vs_inst_idx) ==>
   ?v. step_inst fuel Ct inst t = OK v /\
-    ricf_execution_invariant vs C ctx0 log D stk PG (step_prov PG G inst u)
+    ricf_execution_invariant vs C D stk PG (step_prov PG G inst u)
       (step_taint inst s u tn) fn next
       (u with vs_inst_idx := SUC s.vs_inst_idx)
       (v with vs_inst_idx := SUC s.vs_inst_idx)
@@ -108,14 +80,14 @@ Proof
     (ricf_phase_stack_ranges stk ledger) s t` by
     (irule ricf_cert_reconstruct >> simp[]) >>
   `(s.vs_alloca_next,w2n amount) NOTIN FDOM sites` by
-    metis_tac[ricf_alloca_map_fresh] >>
+    metis_tac[ricf_heterogeneous_alloca_map_fresh] >>
   `!gam. gam = ricf_phase_ranges 0 ledger \/
       MEM gam (ricf_phase_stack_ranges stk ledger) \/
       gam = ricf_site_triples sites \/
       (?j. j < LENGTH stk /\ gam = ricf_site_triples (EL j maps)) ==>
     !db sb sz k. (db,sb,sz) IN gam /\ k < sz ==>
       db+k < s.vs_alloca_next /\ sb+k < s.vs_alloca_next` by
-    (match_mp_tac ricf_allocation_certificate_bounds >> metis_tac[]) >>
+    (match_mp_tac ricf_heterogeneous_allocation_certificate_bounds >> metis_tac[]) >>
   `?w. step_inst_base inst t = OK w /\
     ricf_cert_core D (ricf_original_copy_ids C) stk PG
       (ricf_effective_prov fn u (set_prov G [out]
@@ -165,22 +137,26 @@ Proof
     n a U (occurrence_sites_step a B inst u) HP
     (occurrence_step a HP H inst u) ledger` by
     (irule ricf_heterogeneous_source_ledger_actual_next >> metis_tac[]) >>
-  `ricf_map_origins vs C ctx0 log stk PG (step_prov PG G inst u)
+  `ricf_heterogeneous_map_origins vs C stk PG (step_prov PG G inst u)
     (step_taint inst s u tn) fn next (u with vs_inst_idx := SUC s.vs_inst_idx)
-    U B sites` by (irule ricf_map_origins_next >> metis_tac[]) >>
-  `ricf_map_origins vs C ctx0 log stk PG (step_prov PG G inst u)
+    U B sites` by (irule ricf_heterogeneous_map_origins_next >> metis_tac[]) >>
+  `ricf_heterogeneous_map_origins vs C stk PG (step_prov PG G inst u)
     (step_taint inst s u tn) fn next (u with vs_inst_idx := SUC s.vs_inst_idx)
     U (occurrence_sites_step a B inst u) sites` by
-    metis_tac[ricf_map_origins_sites_step] >>
-  `ricf_saved_map_origins vs C ctx0 log stk U
-    (occurrence_sites_step a B inst u) maps` by
-    metis_tac[ricf_saved_map_origins_sites_step] >>
-  `ricf_global_support_origins vs C ctx0 a fn U stk
+    metis_tac[ricf_heterogeneous_map_origins_sites_step] >>
+  `ricf_heterogeneous_saved_map_origins vs C stk PG (step_prov PG G inst u)
+    (step_taint inst s u tn) fn next (u with vs_inst_idx := SUC s.vs_inst_idx)
+    U B maps` by (irule ricf_heterogeneous_saved_map_origins_next >> metis_tac[]) >>
+  `ricf_heterogeneous_saved_map_origins vs C stk PG (step_prov PG G inst u)
+    (step_taint inst s u tn) fn next (u with vs_inst_idx := SUC s.vs_inst_idx)
+    U (occurrence_sites_step a B inst u) maps` by
+    metis_tac[ricf_heterogeneous_saved_map_origins_sites_step] >>
+  `ricf_heterogeneous_support_origins vs C a fn U stk
     (occurrence_sites_step a B inst u) E` by
-    (irule (cj 2 ricf_global_support_actual_next) >> metis_tac[]) >>
+    (irule ricf_heterogeneous_support_actual_next >> metis_tac[]) >>
   `s.vs_allocas = t.vs_allocas /\ s.vs_alloca_next = t.vs_alloca_next` by
     (fs[ricf_frame_agree_def] >> drule taint_agree_allocation_fields >> simp[]) >>
-  `(a,inst.inst_id) NOTIN E` by metis_tac[ricf_alloca_support_fresh] >>
+  `(a,inst.inst_id) NOTIN E` by metis_tac[ricf_heterogeneous_alloca_support_fresh] >>
   `ricf_support_agree (occurrence_sites_step a B inst u) E
     (step_taint inst s u rt) u w` by
     (drule_all ricf_support_actual_fresh_alloca >> strip_tac >>
@@ -200,7 +176,7 @@ Proof
 QED
 
 Theorem ricf_execution_cached_alloca_next:
-  ricf_execution_invariant vs C ctx0 log D stk PG G tn fn inst s t
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets rt /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   occurrence_natural_geometry lo a U B stk s /\
@@ -210,7 +186,7 @@ Theorem ricf_execution_cached_alloca_next:
   step_inst fuel C inst s = OK u /\
   active_inst fn next (u with vs_inst_idx := SUC s.vs_inst_idx) ==>
   ?v. step_inst fuel Ct inst t = OK v /\
-    ricf_execution_invariant vs C ctx0 log D stk PG (step_prov PG G inst u)
+    ricf_execution_invariant vs C D stk PG (step_prov PG G inst u)
       (step_taint inst s u tn) fn next
       (u with vs_inst_idx := SUC s.vs_inst_idx)
       (v with vs_inst_idx := SUC s.vs_inst_idx)
@@ -220,11 +196,11 @@ Theorem ricf_execution_cached_alloca_next:
 Proof
   strip_tac >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
-   ricf_map_origins vs C ctx0 log stk PG G tn fn inst s U B sites /\
+   ricf_heterogeneous_map_origins vs C stk PG G tn fn inst s U B sites /\
    ricf_frame_agree D (ircf_dead (ricf_original_copy_ids C) s stk) sites
      (ricf_complete_params PG s.vs_params) G rt s t` by
     fs[ricf_execution_invariant_def, ricf_heterogeneous_source_ledger_def] >>
-  `(b,z) NOTIN FDOM sites` by metis_tac[ricf_cached_alloca_map_exclusion] >>
+  `(b,z) NOTIN FDOM sites` by metis_tac[ricf_heterogeneous_cached_alloca_map_exclusion] >>
   `s.vs_allocas = t.vs_allocas` by
     (fs[ricf_frame_agree_def] >> drule taint_agree_allocation_fields >> simp[]) >>
   `occurrence_allocas_ok B a s` by
