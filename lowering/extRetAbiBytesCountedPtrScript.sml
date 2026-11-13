@@ -9,7 +9,9 @@ Ancestors
   arithmetic abiEncoderInput valueEncoding abiEncoderBytes
   immutableCopyExecution extRetAbiReadCleanPtr abiEncoderInputFrame
   valueEncodingProps pred_set representationCleanPtr valueEncodingProofs
-  robustCopyTransportPtr
+  robustCopyTransportPtr extRetAbiCeil32Ptr
+
+Overload ceil32[local] = ``contractABI$ceil32``
 
 Theorem abi_encode_round_ambient_counted_ptr:
   abi_encode_round len sa = (Var out,sb) /\ fn_has_code sa sb fn /\
@@ -64,7 +66,7 @@ Proof
     (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
          fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
      rpt strip_tac >> decide_tac) >>
-  simp[abi_bytes_round_mask_first] >> metis_tac[]
+  simp[abi_bytes_round_mask_first, abi_bytes_ceil32_eq] >> metis_tac[]
 QED
 
 Theorem abi_encode_round_counted_ptr:
@@ -115,14 +117,15 @@ Proof
   qpat_x_assum `abi_encode_bytes_suffix _ _ = _` mp_tac >>
   simp[abi_encode_bytes_suffix_def, comp_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
-  `?v. rounded = Var v` by metis_tac[abi_encode_round_shape] >> gvs[] >>
+  `?v. rounded = Var v` by metis_tac[abi_encode_ceil32_shape] >> gvs[] >>
   `cs_extends sa cs' /\ cs_extends cs' sb` by
-    (imp_res_tac abi_encode_round_shape >> imp_res_tac emit_op_extends >>
+    (imp_res_tac abi_encode_ceil32_shape >> imp_res_tac emit_op_extends >>
      gvs[cs_extends_def, inst_extends_def, same_blocks_def]) >>
   `fn_has_code sa cs' fn /\ fn_has_code cs' sb fn` by
     metis_tac[fn_has_code_split] >>
   `eval_operand (Var len) s = SOME (n2w n)` by simp[eval_operand_def] >>
-  drule_all abi_encode_round_ambient_counted_ptr >>
+  `!v. Var len = Var v ==> not_fresh_at sa v` by simp[] >>
+  drule_all abi_encode_ceil32_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
   `eval_operand (Var v) sf = SOME (n2w (ceil32 n)) /\
    eval_operand (Lit 32w) sf = SOME 32w /\ op_taint tnf (Lit 32w) = {}` by
@@ -135,7 +138,7 @@ Proof
     (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
      qexistsl_tac [`Gf`, `sf`, `tnf`] >> simp[]) >>
   `!p. not_fresh_at sa p ==> not_fresh_at cs' p` by
-    (imp_res_tac abi_encode_round_shape >> gvs[not_fresh_at_def]) >>
+    (imp_res_tac abi_encode_ceil32_shape >> gvs[not_fresh_at_def]) >>
   simp[GSYM word_add_n2w, WORD_ADD_COMM] >> metis_tac[]
 QED
 
@@ -446,7 +449,7 @@ Proof
        fresh_id_def, emit_def] >> rpt (pairarg_tac >> gvs[]) >> metis_tac[]) >> gvs[] >>
   `?v. out = Var v` by
     (qpat_x_assum `abi_encode_bytes_suffix _ _ = _` mp_tac >>
-     simp[abi_encode_bytes_suffix_def, abi_encode_round_def, emit_op_def,
+     simp[abi_encode_bytes_suffix_def, abi_encode_ceil32_def, emit_op_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
        fresh_id_def, emit_def] >> rpt (pairarg_tac >> gvs[]) >> metis_tac[]) >> gvs[] >>
   `cs_extends sa ready /\ cs_extends ready copied /\ cs_extends copied sb /\
@@ -458,7 +461,8 @@ Proof
      qpat_x_assum `abi_encode_bytes_copy _ _ _ _ _ = _` mp_tac >>
      qpat_x_assum `abi_encode_bytes_suffix _ _ = _` mp_tac >>
      simp[abi_encode_bytes_prefix_def, abi_encode_bytes_copy_def,
-          abi_encode_bytes_suffix_def, abi_encode_round_def, emit_op_def, emit_void_def,
+          abi_encode_bytes_suffix_def, abi_encode_round_def, abi_encode_ceil32_def,
+          emit_op_def, emit_void_def,
           comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
           fresh_id_def, emit_def] >>
      rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
@@ -475,8 +479,9 @@ Proof
    ptr_covers Gf tnf src sf (32+LENGTH bs) /\
    ptr_covers Gf tnf dst sf (32+LENGTH bs) /\
    32+LENGTH bs < dimword(:256)` by
-    (qspec_then `LENGTH (bs:word8 list)` strip_assume_tac abi_bytes_ceil32_gap >>
-     gvs[ptr_covers_def] >> decide_tac) >>
+    (gvs[ptr_covers_def] >>
+     qspec_then `LENGTH (bs:word8 list)` mp_tac
+       (PURE_REWRITE_RULE [abi_bytes_ceil32_eq] abi_bytes_ceil32_gap) >> decide_tac) >>
   `not_fresh_at ready src /\ not_fresh_at ready dst` by metis_tac[] >>
   drule_all abi_encode_bytes_copy_ambient_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -611,7 +616,8 @@ Proof
   `w2n b+ceil32 (LENGTH bs) < dimword(:256)` by decide_tac >>
   drule_all compile_abi_encode_bytes_ambient_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qspec_then `LENGTH (bs:word8 list)` strip_assume_tac abi_bytes_ceil32_gap >>
+  qspec_then `LENGTH (bs:word8 list)` strip_assume_tac
+    (PURE_REWRITE_RULE [abi_bytes_ceil32_eq] abi_bytes_ceil32_gap) >>
   `!i. w2n a <= i /\ i < w2n a+32+LENGTH bs ==> i NOTIN tn.t_mem` by
     (drule abi_encode_bytes_live_clean >> simp[]) >>
   `tnf.t_mem = tn.t_mem DIFF
