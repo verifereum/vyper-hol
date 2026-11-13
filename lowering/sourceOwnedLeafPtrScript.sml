@@ -563,7 +563,15 @@ Resume owned_word_run_origin_certificate[word_frame]:
 QED
 
 Resume owned_word_run_origin_certificate[word_backward]:
-  FAIL_TAC "backward"
+  gvs[venom_state_accfupds] >>
+  `!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H1 u' s1) ==>
+        !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s` by
+    (gen_tac >> first_x_assum irule >> simp[]) >>
+  qpat_x_assum `!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H1 u' s1) ==> _` mp_tac >>
+  qpat_x_assum `!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H2 u2 _) ==> _` mp_tac >>
+  qpat_x_assum `!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H' u'' _) ==> _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  metis_tac[]
 QED
 
 Finalise owned_word_run_origin_certificate
