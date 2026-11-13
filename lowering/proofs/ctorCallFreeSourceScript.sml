@@ -184,11 +184,11 @@ Proof
   >- (irule (cj 2 subst_consts_stmt_call_free) >> simp[] >>
       rpt strip_tac >>
       `constant_expr [(NONE,tops)] r` by
-        (irule checked_module_consts_env_replacement_constant >> simp[] >>
-         conj_tac >> first_assum (irule_at Any)) >>
+        (drule checked_module_consts_env_replacement_constant >> simp[] >>
+         disch_then drule >> simp[]) >>
       metis_tac[constant_expr_call_free]) >>
   irule (cj 2 subst_consts_stmt_shape) >> simp[] >>
   rpt strip_tac >>
-  irule checked_module_consts_env_replacement_shape >> simp[] >>
-  conj_tac >> first_assum (irule_at Any)
+  drule checked_module_consts_env_replacement_shape >> simp[] >>
+  disch_then drule >> simp[]
 QED
