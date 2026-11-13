@@ -10,7 +10,7 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem eval_assert_custom_error_bind[local]:
+Theorem eval_assert_custom_error_bind:
   eval_stmt cx (Assert e (AssertCustomError err)) =
     bind (bind (eval_expr cx e) (read_result cx))
       (\v. if v = BoolV T then return ()
@@ -27,7 +27,7 @@ Proof
   simp[Once evaluate_def, bind_def]
 QED
 
-Theorem compile_assert_custom_error_parts[local]:
+Theorem compile_assert_custom_error_parts:
   stmt_env cenv lctx ty (Assert e (AssertCustomError err)) sa = (cenv',sb) ==>
   ?op s1 ok s2 fl s3 s4 entry last.
     cenv' = cenv /\
@@ -55,7 +55,7 @@ Proof
   imp_res_tac new_block_props >> gvs[]
 QED
 
-Theorem assert_custom_error_condition_admissible[local]:
+Theorem assert_custom_error_condition_admissible:
   gas_admissible (eval_stmt cx (Assert e (AssertCustomError err)))
     (stmt_res_ok lctx) es ==>
   gas_admissible (bind (eval_expr cx e) (read_result cx))
@@ -83,7 +83,7 @@ Proof
   gvs[stmt_res_ok_def, expr_res_ok_def, no_control_exc_def]
 QED
 
-Theorem assert_custom_error_raise_admissible[local]:
+Theorem assert_custom_error_raise_admissible:
   gas_admissible (eval_stmt cx (Assert e (AssertCustomError err)))
     (stmt_res_ok lctx) es /\
   (!tail. bind (eval_expr cx e) (read_result cx)
@@ -98,7 +98,7 @@ Proof
   simp[eval_assert_custom_error_bind, bind_def] >> metis_tac[]
 QED
 
-Theorem compile_raise_custom_error_extends[local]:
+Theorem compile_raise_custom_error_extends:
   stmt_env cenv lctx ty (Raise (RaiseCustomError err)) sa = (cenv',sb) ==>
   cs_extends sa sb
 Proof
@@ -110,7 +110,20 @@ Proof
   disch_then (qspecl_then [`cenv`,`err`,`sa`] mp_tac) >> simp[]
 QED
 
-Theorem assert_custom_error_compiler_code[local]:
+Theorem compile_raise_custom_error_ci_mono:
+  stmt_env cenv lctx ty (Raise (RaiseCustomError err)) sa = (cenv',sb) ==>
+  ci_mono sa sb
+Proof
+  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `compile_revert_with_custom_error cenv err sa` >>
+  rename1 `_ = (unit,last_state)` >> Cases_on `unit` >>
+  simp[] >> strip_tac >> gvs[] >>
+  mp_tac (cj 2 ci_mono_custom_error) >>
+  disch_then (qspecl_then [`cenv`,`err`,`sa`] mp_tac) >> simp[]
+QED
+
+Theorem assert_custom_error_compiler_code:
   lower_value compile_expr cenv (BaseT BoolT) e sa = (op,s1) /\
   fresh_label "assert_ok" s1 = (ok,s2) /\
   fresh_label "assert_fail" s2 = (fl,s3) /\

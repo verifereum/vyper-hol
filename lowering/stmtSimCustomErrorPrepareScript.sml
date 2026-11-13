@@ -9,7 +9,7 @@ Ancestors
   supportedExprs vyperValue bodyExprPreFacts abiCallerTupleLayout valueEncodingProps
   list vyperTypeABI gasOutcome fragGasMode
 
-Theorem custom_error_tuple_layout[local]:
+Theorem custom_error_tuple_layout:
   expr_sim_inv ce cx env es /\ well_typed_exprs env args /\
   type_memory_bytes ce (TupleT (MAP expr_type args)) < 2 ** 64 ==>
   ?tvs. OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
