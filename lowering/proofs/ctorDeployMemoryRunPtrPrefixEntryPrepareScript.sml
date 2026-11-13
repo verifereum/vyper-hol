@@ -8,7 +8,7 @@ Ancestors
   ctorDeployMemoryRunPtrPrefixSequence context emitHelper emitHelperProps exprLoweringProps
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst
   finite_map words arithmetic pred_set list rich_list codegenRel contextCodegenRel memLocDefs
-  fragExec abiDecoderContract abiDecoderLoop
+  fragExec fragExecMem abiDecoderContract abiDecoderLoop
   fragGasSeqMem allocaFootprint ctorDeployMemoryRunMemEntryWord
   unitTransformDefs memSafeRun fragGasPathMem
   fragGasOriginPtr fragGasOriginPtrLoop
