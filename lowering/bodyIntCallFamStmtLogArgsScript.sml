@@ -26,10 +26,12 @@ Theorem intcall_compile_log_eval_all:
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
     (eval_exprs fp.jc_cx args) (es,s)
     (\res ee u. ?vs. res = INL vs /\
-      log_args_post fp.jc_ctx fp.jc_func ce fp.jc_cx es sa sb s ee xs vs u /\
+      log_args_post fp.jc_ctx fp.jc_func ce fp.jc_cx es sa sb s ee
+        (ZIP (MAP FST xs, MAP expr_type args)) vs u /\
       intcall_expr_cont fp ce env es sa s ee sb u /\
       LIST_REL (\ty v. ?tv. evaluate_type (get_tenv fp.jc_cx) ty = SOME tv /\ value_has_type tv v) (MAP expr_type args) vs /\
-      EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sb z) /\ (!lab. FST p <> Label lab)) xs)
+      EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sb z) /\ (!lab. FST p <> Label lab))
+        (ZIP (MAP FST xs, MAP expr_type args)))
     (\res ee r. expr_exit res r)
 Proof
   map_every qid_spec_tac [`s`, `xs`, `sb`, `sa`, `es`] >>

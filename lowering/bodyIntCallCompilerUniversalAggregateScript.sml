@@ -108,7 +108,6 @@ Proof
        simp[intcall_interval_emit_op, intcall_interval_return])
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem intcall_interval_subscript_all:
   (!ce ty e a. k <= a.cs_next_var ==>
     intcall_compiler_interval k a (SND (cfn ce ty e a))) /\
@@ -116,25 +115,28 @@ Theorem intcall_interval_subscript_all:
   intcall_compiler_interval k a
     (SND (compile_subscript cfn cenv rt ty be ie a))
 Proof
-  (* original proof, kept while held:
   strip_tac >> simp[compile_subscript_def] >>
   irule intcall_interval_bind_floor >> simp[] >>
+  rpt strip_tac >> irule intcall_interval_bind_floor >>
+  simp[intcall_interval_snapshot_vv, intcall_interval_return, COND_RATOR,
+       COND_RAND] >>
   rpt strip_tac >> Cases_on `place_type cenv be`
   >- (simp[] >>
       rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
            simp[intcall_interval_lower_value, intcall_interval_mapping_subscript,
+                intcall_interval_snapshot_vv, intcall_interval_keccak_key,
                 intcall_interval_return]) >>
-      IF_CASES_TAC >> simp[intcall_interval_keccak_key, intcall_interval_return] >>
+      rpt strip_tac >> IF_CASES_TAC >>
+      simp[intcall_interval_keccak_key, intcall_interval_return] >>
       rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
-           simp[intcall_interval_mapping_subscript, intcall_interval_return])) >>
+           simp[intcall_interval_mapping_subscript,
+                intcall_interval_keccak_key, intcall_interval_return])) >>
   rename1 `ValPT bt` >> Cases_on `bt` >>
   simp[compile_tuple_subscript_def] >>
   rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
        simp[intcall_interval_emit_op, intcall_interval_return,
             intcall_interval_lower_value, intcall_interval_array_subscript,
             intcall_interval_ptr_load])
-  *)
-  cheat
 QED
 
 Theorem intcall_interval_acc_all:
