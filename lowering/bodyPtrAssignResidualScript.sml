@@ -14,6 +14,7 @@
 Theory bodyPtrAssignResidual
 Ancestors
   assignDynStorageAddressPtr assignStorageBlockFramePtr assignDynStorageDataPtr
+  assignStorageHeaderFramePtr assignStoragePrefixLivePtr
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps supportedStmts supportedDecls
   stmtLowering exprLowering compileEnv vyperAST vyperInterpreter vyperState
   vyperTypeSystem list finite_map
