@@ -5,6 +5,17 @@ Ancestors
   exprSimSource exprSimHypsDefs exprSimDefs gasOutcome fragGasPathPtr
   gasContext vyperState vyperInterpreter list
 
+Theorem sha256_source_no_halt[local]:
+  !st res st'.
+    (\es1. case builtin_result cx es1.accounts ann bt ts vs of
+              INL w => ignore_bind (precompile_call_success bt) (return (Value w)) es1
+            | INR exc => (INR exc, es1)) st = (res, st') ==>
+    res <> INR HaltException
+Proof
+  rpt gen_tac >> BETA_TAC >>
+  MATCH_ACCEPT_TAC exprSimHashTheory.sha256_result_not_halt
+QED
+
 Theorem hash_compile_typed_sha256_unary_vv_sim_ptr:
   expr_body_pre cenv cx env (Builtin ann Sha256 [e]) es /\
   expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es /\
@@ -78,7 +89,6 @@ Proof
   gvs[] >>
   qpat_x_assum `!sa sm sb x vv s0 G0 tn0 v gs ee G tn s. _` drule_all >> simp[] >>
   strip_tac >> qexists_tac `marks` >>
-  irule hash_summary_ptr_halt_lift >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-  rpt gen_tac >> BETA_TAC >> DISCH_TAC >>
-  drule exprSimHashTheory.sha256_result_not_halt >> simp[]
+  irule hash_summary_ptr_halt_lift >> conj_tac >>
+  FIRST [first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC sha256_source_no_halt]
 QED

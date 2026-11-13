@@ -40,6 +40,17 @@ Proof
   fs[halt_exit_def]
 QED
 
+Theorem builtin_value_source_no_halt[local]:
+  !st res st'.
+    (\es'. ((case builtin_result cx es'.accounts ann bt ts vs of
+               INL w => INL (Value w) | INR exc => INR exc), es')) st =
+      (res, st') ==>
+    res <> INR HaltException
+Proof
+  rpt gen_tac >> BETA_TAC >>
+  Cases_on `builtin_result cx st.accounts ann bt ts vs` >> simp[]
+QED
+
 Theorem hash_compile_typed_unary_builtin_vv_sim_ptr:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
   expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es /\
@@ -128,7 +139,6 @@ Proof
   gvs[] >>
   qpat_x_assum `!sa sm sb x vv s0 G0 tn0 v gs ee G tn s. _` drule_all >> simp[] >>
   strip_tac >> qexists_tac `marks` >>
-  irule hash_summary_ptr_halt_lift >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-  rpt gen_tac >> BETA_TAC >> DISCH_TAC >>
-  gvs[AllCaseEqs(), exprSimWordArgsTheory.builtin_result_not_halt]
+  irule hash_summary_ptr_halt_lift >> conj_tac >>
+  FIRST [first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC builtin_value_source_no_halt]
 QED
