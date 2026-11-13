@@ -1,6 +1,7 @@
 (* Raw positional execution, NOP removal, and the indexed recursive family. *)
 Theory readonlyInvokeCopyFwdExecutionAssembly
 Ancestors
+  readonlyInvokeCopyFwdExecutionForward
   readonlyInvokeCopyFwdExecutionSteps readonlyInvokeCopyFwdExecutionReturnBridge
   readonlyInvokeCopyFwdExecutionBoundary readonlyInvokeCopyFwdExecutionCoverage
   readonlyInvokeCopyFwdPlan readonlyInvokeCopyFwdExecution
@@ -181,6 +182,75 @@ Proof
      impl_tac >- simp[] >> metis_tac[]) >>
   qexistsl_tac [`m`,`tb`] >> metis_tac[]
 QED
+
+Theorem ricf_execution_run_block_forward:
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  ptr_discipline lo C vs /\ opaque_use_ok fn /\ vs.vs_allocas = FEMPTY /\
+  ((!bb tb G tn inst ti s t.
+      ricf_block_edit bb tb /\
+      ricf_execution_point vs C log_of D a U B0 E0 outer_history outer_certificates sites maps targets
+        stk PG G tn fn inst s t /\
+      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb s.vs_inst_idx = SOME inst /\
+      get_instruction tb t.vs_inst_idx = SOME ti /\
+      terminates (step_inst k C inst s) /\
+      (!u. step_inst k C inst s = OK u ==> is_terminator inst.inst_opcode) ==>
+      ?m. block_step_rel D vs C
+        (ricf_execution_boundary vs C mid_of log_of D a U B0 E0 outer_history outer_certificates sites maps targets)
+        (ricf_execution_return vs C Ct mid_of log_of D a U B0 E0 outer_history outer_certificates sites maps targets)
+        stk PG fn (step_inst k C inst s) (step_inst m Ct ti t)) /\
+   (!bb tb G tn inst ti s t u next.
+      ricf_block_edit bb tb /\
+      ricf_execution_point vs C log_of D a U B0 E0 outer_history outer_certificates sites maps targets
+        stk PG G tn fn inst s t /\
+      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb s.vs_inst_idx = SOME inst /\
+      get_instruction tb t.vs_inst_idx = SOME ti /\
+      ~in_revert_forward fn s /\
+      ~is_terminator inst.inst_opcode /\ step_inst k C inst s = OK u /\
+      active_inst fn next (u with vs_inst_idx := SUC s.vs_inst_idx) ==>
+      ?h v G1 tn1.
+        step_inst h Ct ti t = OK v /\
+        ricf_execution_point vs C log_of D a U B0 E0 outer_history outer_certificates sites maps targets
+          stk PG G1 tn1 fn next
+          (u with vs_inst_idx := SUC s.vs_inst_idx)
+          (v with vs_inst_idx := SUC s.vs_inst_idx))) ==>
+  !G tn s t bb.
+    ricf_execution_boundary vs C mid_of log_of D a U B0 E0 outer_history outer_certificates sites maps targets
+      stk PG G tn fn s t /\
+    ricf_function_edit fn (mid_of fn) /\ wf_function fn /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    terminates (run_block k C bb s) ==>
+    ?m tb. lookup_block t.vs_current_bb (mid_of fn).fn_blocks = SOME tb /\
+      bb_well_formed tb /\ block_step_rel D vs C
+        (ricf_execution_boundary vs C mid_of log_of D a U B0 E0 outer_history outer_certificates sites maps targets)
+        (ricf_execution_return vs C Ct mid_of log_of D a U B0 E0 outer_history outer_certificates sites maps targets)
+        stk PG fn (run_block k C bb s) (run_block m Ct tb t)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all ricf_execution_run_entry >>
+  disch_then (qspec_then `Ct` strip_assume_tac) >>
+  `terminates (exec_block k C bb s1)` by fs[] >>
+  `lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb` by
+    metis_tac[enters_block_current_bb] >>
+  `?m. block_step_rel D vs C
+    (ricf_execution_boundary vs C mid_of log_of D a U B0 E0 outer_history outer_certificates sites maps targets)
+    (ricf_execution_return vs C Ct mid_of log_of D a U B0 E0 outer_history outer_certificates sites maps targets)
+    stk PG fn (exec_block k C bb s1) (exec_block m Ct tb t1)` by
+    (mp_tac ricf_execution_exec_block_forward >>
+     impl_tac
+     >- (conj_tac
+         >- (rpt strip_tac >>
+             drule_all ricf_execution_point_revert_forward >>
+             disch_then (qspec_then `Ct` strip_assume_tac) >>
+             qexistsl_tac [`reason`,`se`,`0`,`te`] >> simp[]) >>
+         conj_tac >> rpt strip_tac >> metis_tac[]) >>
+     disch_then (qspecl_then [`G`,`tn`,`inst`,`s1`,`t1`] mp_tac) >>
+     impl_tac >- simp[] >> metis_tac[]) >>
+  qexistsl_tac [`m`,`tb`] >> metis_tac[]
+QED
+
+
 
 Theorem ricf_execution_block_target_transport:
   target = (if (mid_of fn).fn_blocks <> fn.fn_blocks
