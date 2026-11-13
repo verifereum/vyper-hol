@@ -1,6 +1,7 @@
 (* Finite memory-checked decoder sequences tolerate stale temporaries. *)
 Theory abiDecodeMemElementReentry
 Ancestors
+  abiDecodeMemStaticFrame abiDecoderSiteEffect
   abiDecodeMemElementFrame abiDecodeMemElementPointer abiDecodeMemSequenceReentry
   abiDecodeMemReentry abiDecoderReentryPointer
   abiDecoderReentry abiDecoderContract abiEncoder abiDecoderBytesPrefix words
@@ -8,6 +9,7 @@ Ancestors
   venomState venomInst fragExecMem fragExec emitHelperProps exprLoweringProps
   compileEnv emitHelper rich_list list fragGasSeqMem fragGasSeqAbort
   entrySinkExtraction entryDecoderHistoryFrame loweringStateRelDefs bodyUnopFragMemory
+  abiEncoderWindowLookup
 
 Theorem abi_decode_element_reentry_sequence[local]:
   compile_abi_decode_dyn_elem_ptr MLOAD bop src data hi sz st = (ptr_op,st') /\
@@ -21,7 +23,7 @@ Theorem abi_decode_element_reentry_sequence[local]:
   run_inst_seq_mem_ok (emitted_insts st st') s /\
   (w2n d + w2n (abi_decode_load MLOAD (b+p) s) + sz <= w2n h ==>
     ?t. run_inst_seq (emitted_insts st st') s = OK t /\
-      eval_operand ptr_op t = SOME (d+abi_decode_load MLOAD (b+p) s) /\
+      decode_static_frame s t /\ eval_operand ptr_op t = SOME (d+abi_decode_load MLOAD (b+p) s) /\
       (!op. abi_decoder_operand_live st.cs_next_var op ==>
         eval_operand op t = eval_operand op s) /\
       t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
@@ -79,11 +81,31 @@ Resume abi_decode_element_reentry_sequence[accept]:
   drule_all abi_decoder_sequence_vars_extend >> strip_tac >>
   drule_all abi_decoder_vars_extend_observations >> strip_tac >>
   goal_assum (drule_at Any) >>
+  conj_tac >- (irule abi_decode_reentry_sequence_static_frame >>
+    goal_assum (drule_at Any) >> simp[]) >>
   conj_tac >- metis_tac[abi_decoder_vars_extend_eval] >>
   reverse conj_tac >- simp[Abbr `clean`, abi_decoder_prune_vars_def] >>
   metis_tac[abi_decode_element_total_frame]
 QED
 Finalise abi_decode_element_reentry_sequence
+
+Theorem abi_decode_element_output_bounds[local]:
+  compile_abi_decode_dyn_elem_ptr MLOAD bop src data hi sz st = (ptr_op,st') /\
+  hi <> Lit 0w ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\
+    EVERY (not_fresh_at st') i.inst_outputs) (emitted_insts st st')
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_abi_decode_dyn_elem_ptr _ _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `bop = Lit 0w` >>
+  asm_simp_tac (srw_ss()) [compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
+    compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def, LET_THM] >>
+  rpt strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def, not_fresh_at_def,
+    ASCIInumbersTheory.toString_11]
+QED
 
 Theorem abi_decode_mload_element_reentry_path_mem:
   compile_abi_decode_dyn_elem_ptr MLOAD bop src data hi sz st = (ptr_op,st') /\
@@ -112,11 +134,14 @@ Theorem abi_decode_mload_element_reentry_path_mem:
       t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
       t.vs_data_section = s.vs_data_section /\
       t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
+      (!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+        fresh_vars_wrt limit_st t) /\ decode_static_frame s t /\
       alloca_history func t) /\
   (~(w2n d + w2n (abi_decode_load MLOAD (b+p) s) + sz <= w2n h) ==>
     ?t. gas_marked_path T ctx func s 0 (Abort Revert_abort t))
 Proof
-  strip_tac >> drule abi_decode_element_shape >> strip_tac >>
+  strip_tac >> drule_all abi_decode_element_output_bounds >> strip_tac >>
+  drule abi_decode_element_shape >> strip_tac >>
   drule_all abi_decode_element_reentry_sequence >> strip_tac >>
   `isPREFIX st.cs_current_insts st'.cs_current_insts` by fs[inst_extends_def] >>
   drule_all entry_straight_line_code_slice >> strip_tac >>
@@ -140,9 +165,21 @@ Resume abi_decode_mload_element_reentry_path_mem[accept]:
   drule_all entry_straight_line_alloca_history >> strip_tac >>
   drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
   `s.vs_inst_idx + LENGTH (emitted_insts st st') = LENGTH st'.cs_current_insts`
-    by gvs[IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND] >>
+    by (
+      `LENGTH st.cs_current_insts <= LENGTH st'.cs_current_insts`
+        by metis_tac[IS_PREFIX_LENGTH] >>
+      pure_rewrite_tac [emitted_insts_def, LENGTH_DROP] >> decide_tac) >>
   `w2n h < dimword (:256)` by irule w2n_lt >>
   `w2n d + w2n (abi_decode_load MLOAD (b+p) s) < dimword (:256)` by decide_tac >>
+  `!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+    fresh_vars_wrt limit_st (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (rpt strip_tac >>
+     mp_tac (Q.INST [`en` |-> `st'`, `insts` |-> `emitted_insts st st'`,
+       `s` |-> `s`, `t` |-> `t`, `idx` |-> `LENGTH st'.cs_current_insts`]
+       abi_window_seq_fresh_idx) >> (impl_tac >- asm_rewrite_tac []) >> simp[]) >>
+  `decode_static_frame s (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (qpat_x_assum `decode_static_frame s t` mp_tac >>
+     simp[decode_static_frame_def, venom_state_component_equality]) >>
   qexists_tac `t with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   simp[eval_operand_def, lookup_var_def, w2n_add_2] >> gvs[]
 QED
