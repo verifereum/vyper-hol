@@ -2,7 +2,7 @@
 Theory bodyFullBuiltinWordWeiPrefix
 Ancestors
   exprSimWordBuiltins exprSimWordArgs exprSimHypsDefs
-  gasShadow bodyFullPreds gasOutcomeFullCompose
+  gasShadow bodyFullPreds gasOutcomeFullCompose gasShadowCompileStmtHelpers gasShadowState
   vyperTypeSystem vyperAST vyperInterpreter vyperContext vyperState list
 
 Theorem as_wei_value_argument_shape:
@@ -28,4 +28,31 @@ Proof
        eval_exprs_cons_action, Once evaluate_def, bind_assoc] >>
   AP_TERM_TAC >> ABS_TAC >> AP_TERM_TAC >> ABS_TAC >>
   simp[FUN_EQ_THM, bind_def, return_def]
+QED
+
+Theorem as_wei_value_lower_pair:
+  expr_type e = BaseT (UintT k) /\
+  gas_shadow_state sa sha /\
+  lower_value compile_expr cenv ty (Builtin ann (AsWeiValue dn) [e]) sa = (op,sb) /\
+  lower_value compile_expr cenv ty
+    (gas_shadow_expr (Builtin ann (AsWeiValue dn) [e])) sha = (op,shb) ==>
+  ?x s1 sh1.
+    lower_value compile_expr cenv (expr_type e) e sa = (x,s1) /\
+    lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e) sha = (x,sh1) /\
+    gas_shadow_state s1 sh1 /\
+    compile_as_wei_value_int x (denomination_multiplier dn) F s1 = (op,sb) /\
+    compile_as_wei_value_int x (denomination_multiplier dn) F sh1 = (op,shb)
+Proof
+  rpt strip_tac >>
+  drule_all lower_value_as_wei_value >> strip_tac >>
+  `expr_type (gas_shadow_expr e) = BaseT (UintT k)` by simp[gas_shadow_expr_type] >>
+  qpat_x_assum `lower_value _ _ _ (Builtin _ _ _) _ = _` kall_tac >>
+  qpat_x_assum `lower_value _ _ _ (gas_shadow_expr _) _ = _` mp_tac >>
+  simp[gas_shadow_expr_def, gas_shadow_builtin_def] >> strip_tac >>
+  drule_all lower_value_as_wei_value >> strip_tac >>
+  mp_tac (Q.INST [`ty` |-> `expr_type e`] gas_shadow_stmt_lower_value) >>
+  simp[gas_shadow_compiles_def] >>
+  disch_then (qspecl_then [`sa`, `sha`] mp_tac) >>
+  simp[] >> strip_tac >>
+  gvs[] >> metis_tac[]
 QED
