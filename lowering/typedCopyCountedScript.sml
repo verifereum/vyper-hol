@@ -5,7 +5,7 @@ Ancestors
   exprLoweringProps context typedCopyAgreement venomState valueEncodingProps
   valueEncodingProofs valueCopy valueCopyBytes exprSimProps emitHelper venomInst compileEnv
   exprSimBufferStore list fragGasPathMem valueEncoding vyperTyping
-  vyperTypeSystem vyperValue vyperTypeInvariants venomMemProps
+  vyperTypeSystem vyperValue vyperTypeInvariants venomMemProps valueEncodingDefs
 
 Theorem normalize_word_window_path_length:
   is_word_type dst_ty /\ evaluate_type tenv dst_ty = SOME tv /\

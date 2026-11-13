@@ -90,5 +90,5 @@ Proof
   `expr_body_pre ce cx env e
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ [])` by simp[] >>
   drule_all exprSimSourceTheory.expr_body_pre_eval_result >> strip_tac >>
-  simp[targetPlaceSimTheory.target_pre_def] >> metis_tac[]
+  gvs[targetPlaceSimTheory.target_pre_def] >> metis_tac[]
 QED

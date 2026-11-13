@@ -5,7 +5,7 @@ Ancestors
   stagingMemoryLength
   bodyMemAssignTupleLocalsPrefix bodyMemAggregateBounds exprSimAlloc
   localPtrsProps stmtSimReturn loweringPosts venomState venomInst
-  exprLoweringProps compileEnv bodyDeclMemoryCore loweringSlice fragExec
+  exprLoweringProps compileEnv bodyDeclMemoryCore loweringSlice fragExec loweringStateRelDefs
 
 Theorem compile_staging_prefix_mem_length:
   compile_alloc_buffer n sa = (buf,sm) /\

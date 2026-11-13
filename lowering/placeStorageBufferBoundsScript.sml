@@ -2,7 +2,7 @@
 Theory placeStorageBufferBounds
 Ancestors
   placeMemoryTypedBase exprSimHyps valueEncodingProps vyperTyping abiDecodeStaticProps
-  vyperTypeValues vyperValue valueEncoding venomState words arithmetic
+  vyperTypeValues vyperValue valueEncoding valueEncodingDefs venomState words arithmetic
 
 Theorem dynamic_storage_buffer_bounds:
   evaluate_type tenv (ArrayT et (Dynamic cap)) = SOME (ArrayTV tv (Dynamic cap)) /\

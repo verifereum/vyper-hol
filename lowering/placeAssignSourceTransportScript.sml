@@ -4,58 +4,9 @@ Ancestors
   bodyMemoryDefs exprSimProps exprSimMemoryPath stmtSimAssign
   exprLoweringProps stmtLowering loweringPosts targetPlaceSimDefs
   valueEncodingProofs freshWrites compileEnv emitHelper context venomState arithmetic fragExec stmtLoweringMono
-  exprSimUnwrapProps vyperEvalExprPreservesScopesDom
+  exprSimUnwrapProps vyperEvalExprPreservesScopesDom loweringStateRelDefs
 Libs
   monadsyntax
-
-Theorem assign_place_relayout_code_parts:
-  compile_stmt ce lctx ty (Assign (BaseTarget bt) e) a = ((),sb) /\
-  ~(has_length_word (expr_type e) /\ is_empty_value_expr e) ==>
-  ?vv sv r sa src su.
-    compile_expr ce (expr_type e) e a = (vv,sv) /\
-    compile_get_target_ptr compile_expr ce bt sv = (r,sa) /\
-    unwrap_value ce vv sa = (src,su) /\
-    (case FST (SND r) of
-       SOME loc => compile_assign_value ce (FST r) loc src
-         (is_word_type (case SND (SND r) of SOME (ValPT dt) => dt
-                       | _ => lowered_value_type ce e))
-         (vv_location vv)
-         (case SND (SND r) of SOME (ValPT dt) => dt
-          | _ => lowered_value_type ce e) (lowered_value_type ce e)
-         (case (case SND (SND r) of SOME (ValPT dt) => dt
-                | _ => lowered_value_type ce e) of
-            ArrayT et (Dynamic _) =>
-              SOME ((type_memory_bytes ce et + 31) DIV 32,
-                    type_memory_bytes ce et) | _ => NONE)
-         (type_memory_bytes ce (case SND (SND r) of SOME (ValPT dt) => dt
-                               | _ => lowered_value_type ce e)) su
-     | NONE => emit_void INVALID [] su) = ((),sb)
-Proof
-  strip_tac >> qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
-  simp[Once compile_stmt_def, comp_bind_def, comp_return_def, LET_THM] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  pairarg_tac >> simp[] >> strip_tac >>
-  Cases_on `FST (SND tgt_result)` >> gvs[]
-QED
-
-Theorem assign_place_memory_relayout_suffix:
-  compile_stmt ce lctx ty (Assign (BaseTarget bt) e) a = ((),sb) /\
-  ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
-  compile_expr ce (expr_type e) e a = (LocatedValue sty sp,sv) /\
-  compile_get_target_ptr compile_expr ce bt sv =
-    ((dst,SOME loc,SOME (ValPT dty)),sa) /\
-  sp.ptr_location = LocMemory /\ ~is_word_type sty ==>
-  compile_assign_value ce dst loc sp.ptr_operand (is_word_type dty)
-    (SOME LocMemory) dty (lowered_value_type ce e)
-    (case dty of ArrayT et (Dynamic _) =>
-      SOME ((type_memory_bytes ce et + 31) DIV 32,
-            type_memory_bytes ce et) | _ => NONE)
-    (type_memory_bytes ce dty) sa = ((),sb)
-Proof
-  strip_tac >> drule_all assign_place_relayout_code_parts >>
-  simp[unwrap_memory_compile, comp_return_def, vv_location_def] >>
-  strip_tac >> gvs[]
-QED
 
 Theorem assign_source_own_target[local]:
   expr_val_own ce cx sty a sv es v src s /\
@@ -91,7 +42,7 @@ Theorem assign_source_owned_bytes_target[local]:
   mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
 Proof
   strip_tac >> Cases_on `val_footprint tv v = 0`
-  >- simp[valueEncodingTheory.mem_bytes_at_def] >>
+  >- simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
   fs[expr_val_own_def] >> gvs[] >>
   `mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
     (fs[target_post_def] >> metis_tac[]) >>
@@ -169,7 +120,7 @@ Theorem assign_vv_source_target:
   (!x. sp.ptr_operand = Var x ==> not_fresh_at sa x)
 Proof
   strip_tac >>
-  drule_all vv_post_read_result >> disch_then (fn th => fs[th]) >>
+  drule_all vv_post_read_result >> strip_tac >>
   drule_all expr_post_of_vv_post_memory >> strip_tac >>
   `MAP FDOM es1.scopes = MAP FDOM ee.scopes` by
     metis_tac[eval_base_place_preserves_scopes_dom] >>

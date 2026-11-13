@@ -1,6 +1,6 @@
 Theory declaredStorageAgreement
 Ancestors
-  accountsRelProps compileEnv vyperStorageFrame words arithmetic
+  accountsRelProps compileEnv loweringStateRelDefs vyperStorageFrame words arithmetic
 
 Theorem dead_bytes_outside_leaf_frame[local]:
   !old post root tv base leaf j b.

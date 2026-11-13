@@ -7,7 +7,7 @@ Ancestors
   pair sum list vyperStatePreservation vyperPlaceFrames vyperCallFrame
   vyperImmutablesPreservation vyperStorageBackend vyperScopePreservation
   loweringPosts targetPlaceSimMem exprSimProps valueEncodingProofs
-  valueEncoding compileEnv venomState words arithmetic finite_map
+  valueEncoding valueEncodingDefs compileEnv venomState words arithmetic finite_map
   exprSimIfExp bodyMemAssignAttrStorage
 
 Theorem assign_target_region_window[local]:
@@ -296,40 +296,3 @@ Proof
   Cases_on `vv` >> gvs[exprSimMemDefsTheory.vv_store_bound_def] >> metis_tac[]
 QED
 
-Theorem assign_target_vv_post:
-  ee.scopes = es.scopes /\ ee.immutables = es.immutables /\
-  (!tr. get_storage cx ee tr = get_storage cx es tr) /\
-  FST (read_result cx r ee) = FST (read_result cx r es) /\
-  vv_post ctx func cenv cx e old sa sm s0 es r vv s /\
-  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
-  local_ptrs_reserved cenv sm /\ local_ptrs_rel func cenv es.scopes s /\
-  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  sm.cs_next_id <= sc.cs_next_id /\
-  target_post ctx func cenv cx es sm sc s ee pv vt op t /\
-  target_pure_frame cenv cx es s t ==>
-  vv_post ctx func cenv cx e es sa sc s ee r vv t
-Proof
-  strip_tac >>
-  `vv_holds cenv cx (post_value_type cenv e) r vv ee t` by
-    (irule assign_target_vv_holds >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-     gvs[vv_post_def] >> metis_tac[]) >>
-  `vv_at cenv cx (post_value_type cenv e) sa sc ee r vv t` by
-    (irule assign_target_vv_at >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-     gvs[vv_post_def] >> metis_tac[]) >>
-  `(post_value_type cenv e <> expr_type e ==>
-    vv_own cenv cx (post_value_type cenv e) sa sc ee r vv t)` by
-    (strip_tac >> irule assign_target_vv_own >>
-     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-     gvs[vv_post_def] >> metis_tac[]) >>
-  `~expr_has_effect e ==> vv_storage_live cx vv ee t` by
-    (strip_tac >>
-     Cases_on `vv` >> gvs[vv_post_def, contextTheory.vv_operand_def] >> metis_tac[]) >>
-  gvs[vv_post_def, target_post_def] >> rpt conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >>
-      gvs[not_fresh_at_def]) >>
-  rpt strip_tac >> first_x_assum irule >> simp[] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexists_tac `aid` >> simp[]
-QED

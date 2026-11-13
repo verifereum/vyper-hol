@@ -8,7 +8,7 @@ Ancestors
   compileEnv context venomState venomExecSemantics venomInst freshWrites
   valueEncoding valueEncodingProps valueTypingMemoryProps finite_map list rich_list
   localPtrsProps stmtSimDefs stmtSimProps fragExec fragExecMem bodyMemoryDefs
-  loweringPosts vyperTyping instMemFrontier stmtSimReturn
+  loweringPosts vyperTyping instMemFrontier stmtSimReturn loweringStateRelDefs
 
 Theorem staging_run_allocation[local]:
   compile_alloc_buffer n sa = (buf,sm) /\

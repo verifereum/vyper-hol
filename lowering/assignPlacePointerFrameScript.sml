@@ -1,6 +1,6 @@
 (* Existing local pointers need only forward preservation of defined variables. *)
 Theory assignPlacePointerFrame
-Ancestors loweringPosts exprLoweringProps context compileEnv
+Ancestors loweringPosts exprLoweringProps context compileEnv loweringStateRelDefs
 
 Theorem assign_place_ptr_rel_forward_frame:
   !cenv cx s u sa pv w loc vt.
