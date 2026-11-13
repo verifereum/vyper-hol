@@ -65,6 +65,10 @@ Theorem bytestring_source_prefix_ghost_frame:
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==>
       p <> len /\ p <> data) ==>
     ?G' tn' t.
+      run_inst_seq [mk_inst id1 MLOAD [Var src] [len];
+         mk_inst id2 ADD [Var src;Lit 32w] [data]] s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+      inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id1 MLOAD [Var src] [len];
+         mk_inst id2 ADD [Var src;Lit 32w] [data]] s G' tn' /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
       lookup_var len t = SOME (mload (w2n a) s) /\
       op_taint tn' (Var len) = {} /\ op_prov G' (Var len) = NONE /\

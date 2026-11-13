@@ -49,6 +49,8 @@ Theorem compile_bytestring_src_counted_frame:
     ?len data G' tn' t.
       len_op = Var len /\ data_op = Var data /\ ALL_DISTINCT [src;len;data] /\
       not_fresh_at sc src /\ not_fresh_at sc len /\ not_fresh_at sc data /\
+      run_inst_seq (emitted_insts sb sc) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+      inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sb sc) s G' tn' /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
       lookup_var len t = SOME (mload (w2n a) s) /\
       op_taint tn' (Var len) = {} /\ op_prov G' (Var len) = NONE /\

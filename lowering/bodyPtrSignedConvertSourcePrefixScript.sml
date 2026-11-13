@@ -84,6 +84,12 @@ Theorem bytestring_source_prefix_counted:
     ptr_covers G tn src s capacity /\ 32 <= capacity /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?G' tn' t.
+      run_inst_seq [mk_inst id1 MLOAD [Var src] [len];
+        mk_inst id2 ADD [Var src;Lit 32w] [data]] s =
+        OK (t with vs_inst_idx := s.vs_inst_idx) /\
+      inst_seq_ptr D 0 ctx fn PG G tn
+        [mk_inst id1 MLOAD [Var src] [len];
+         mk_inst id2 ADD [Var src;Lit 32w] [data]] s G' tn' /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
       lookup_var len t = SOME (mload (w2n a) s) /\
       op_taint tn' (Var len) = {} /\ op_prov G' (Var len) = NONE /\
@@ -102,17 +108,18 @@ Theorem bytestring_source_prefix_counted:
         ptr_covers G' tn' data t n)
 Proof
   rpt gen_tac >> strip_tac >>
+  `src <> len /\ src <> data /\ len <> data` by fs[listTheory.ALL_DISTINCT] >>
   `ptr_covers G tn src s 32` by
     (gvs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   drule_all mload_counted_clean_ambient >>
   disch_then (qspecl_then [`D`,`PG`]
     (qx_choose_then `G1` (qx_choose_then `tn1`
       (qx_choose_then `s1` strip_assume_tac)))) >>
-  qpat_x_assum `s1 = update_var _ _ _ with vs_inst_idx := _` kall_tac >>
+
   `~s1.vs_halted` by metis_tac[gas_path_ptr_ok_not_halted] >>
   `lookup_var src s1 = SOME a /\ op_taint tn1 (Var src) = {} /\
    ptr_covers G1 tn1 src s1 capacity` by
-    (gvs[listTheory.ALL_DISTINCT, ptr_covers_def] >> metis_tac[]) >>
+    (gvs[listTheory.ALL_DISTINCT, ptr_covers_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `get_instruction bb s1.vs_inst_idx =
     SOME (mk_inst id2 ADD [Var src; Lit 32w] [data]) /\
    lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -123,6 +130,42 @@ Proof
   disch_then (qspecl_then [`D`,`PG`,`G1`]
     (qx_choose_then `G2` (qx_choose_then `tn2`
       (qx_choose_then `s2` strip_assume_tac)))) >>
+  `step_inst_base (mk_inst id1 MLOAD [Var src] [len]) s =
+     OK (update_var len (mload (w2n a) s) s)` by
+    (irule step_MLOAD >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst id2 ADD [Var src;Lit 32w] [data])
+      (update_var len (mload (w2n a) s) s) =
+     OK (update_var data (a+32w) (update_var len (mload (w2n a) s) s))` by
+    (irule step_ADD >> simp[eval_operand_def, lookup_var_def,
+       update_var_def, FLOOKUP_UPDATE] >> fs[lookup_var_def]) >>
+  `run_inst_seq [mk_inst id1 MLOAD [Var src] [len];
+      mk_inst id2 ADD [Var src;Lit 32w] [data]] s =
+      OK (s2 with vs_inst_idx := s.vs_inst_idx)` by
+    (qpat_assum `s2 = _ with vs_inst_idx := _` (fn eq => rewrite_tac[eq]) >>
+     qpat_assum `s1 = update_var _ _ _ with vs_inst_idx := _`
+       (fn eq => rewrite_tac[eq]) >>
+     simp[exprLoweringPropsTheory.run_inst_seq_def] >>
+     simp[update_var_def]) >>
+  `inst_seq_ptr D 0 ctx fn PG G1 tn1 [mk_inst id2 ADD [Var src;Lit 32w] [data]]
+      s1 G2 tn2` by
+    (`step_inst_base (mk_inst id2 ADD [Var src;Lit 32w] [data]) s1 =
+       OK (update_var data (a+32w) s1)` by
+       (irule step_ADD >> simp[]) >>
+     qpat_x_assum `s1 = update_var _ _ _ with vs_inst_idx := _` kall_tac >>
+     qpat_assum `G2 = _` (fn eq => rewrite_tac[eq]) >>
+     qpat_assum `tn2 = _` (fn eq => rewrite_tac[eq]) >>
+     simp[inst_seq_ptr_def, ptr_inst_ok_copy_len_binop]) >>
+  `inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id1 MLOAD [Var src] [len];
+       mk_inst id2 ADD [Var src;Lit 32w] [data]] s G2 tn2` by
+    (qpat_assum `inst_seq_ptr _ _ _ _ _ G tn [_] s G1 tn1`
+       (mp_tac o REWRITE_RULE [inst_seq_ptr_def]) >>
+     simp[] >> strip_tac >>
+     `step_inst_base (mk_inst id1 MLOAD [Var src] [len]) s =
+       OK (update_var len (mload (w2n a) s) s)` by
+       (irule step_MLOAD >> simp[eval_operand_def]) >>
+     simp[Once inst_seq_ptr_def] >> gvs[]) >>
+  qpat_x_assum `s1 = update_var _ _ _ with vs_inst_idx := _` kall_tac >>
   `!n. 32 < capacity /\ 32+n <= capacity /\ w2n a+32 < dimword(:256) ==>
     ptr_covers G2 tn2 data s2 n` by
     (rpt strip_tac >>
@@ -132,10 +175,11 @@ Proof
        (fn th => rewrite_tac[th]) >>
      pure_rewrite_tac [ptr_covers_inst_idx] >>
      irule typed_copy_loop_dynamic_offset_covers >>
-     simp[eval_operand_def] >> conj_tac
-     >- (qpat_x_assum `ALL_DISTINCT _` mp_tac >> simp[]) >>
+     simp[eval_operand_def] >>
      qexists_tac `capacity` >> simp[arithmeticTheory.ADD_COMM]) >>
   qexistsl_tac [`G2`,`tn2`,`s2`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >-
     (qpat_assum `gas_path_ptr _ _ _ _ _ _ _ s _ _ _ (OK s1)`
        (mp_then Any mp_tac gas_path_ptr_then) >>

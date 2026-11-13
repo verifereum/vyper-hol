@@ -14,6 +14,7 @@ Theorem mload_counted_ghost_frame:
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p. not_fresh_at sa p ==> p <> out) ==>
   ?HG th t.
+    inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id MLOAD [Var src] [out]] s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th (OK t) /\
     op_prov HG (Var out) = NONE /\ op_taint th (Var out) = {} /\
     lookup_var out t = SOME (mload (w2n a) s) /\
