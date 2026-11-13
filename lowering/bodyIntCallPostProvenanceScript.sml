@@ -13,6 +13,7 @@ Ancestors
   bodyIntCallPostProvenanceTypedCases
   bodyIntCallPostProvenanceOrdinary
   bodyIntCallPostProvenanceArmIdentity
+  bodyIntCallPostProvenanceStruct
 
 Theorem vv_post_intcall_provenance:
   vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
