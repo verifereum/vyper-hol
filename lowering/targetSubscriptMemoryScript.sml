@@ -904,7 +904,8 @@ Proof
      impl_tac >- simp[] >> strip_tac >>
      pop_assum kall_tac >>
      pop_assum (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  goal_assum (drule_at Any) >> simp[]
+  qexists_tac `t' with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  gvs[]
 QED
 
 Theorem target_memory_dynamic_array_path_fields[local]:
