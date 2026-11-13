@@ -301,8 +301,8 @@ Proof
      simp[ptr_observe_def]) >>
   qpat_x_assum `!ht at. _` drule >> strip_tac
   >- (`dalloca_no_wrap inst s` by
-        (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-           ptr_paired_target_static_fields >> simp[ptr_observe_def]) >>
+        (fs[ptr_observe_def] >> drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+           ptr_paired_target_static_fields >> simp[]) >>
       drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
         ptr_paired_current_static_bound >>
       simp[] >>
