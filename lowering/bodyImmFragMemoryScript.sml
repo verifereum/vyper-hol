@@ -54,7 +54,8 @@ Theorem compile_for_immutable_frag_mem_from_outcome:
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   P es /\ lookup_scopes id es.scopes = NONE /\
   gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx) es /\
-  alloca_history func s /\ return_buf_frame d cenv st s ==>
+  alloca_history func s /\ return_buf_frame d cenv st s /\
+  ret_buf_frontier d cenv s ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (eval_for cx tv id stmts (MAP Value vs)) (es,s)
     (\res ee t. res = INL () /\
