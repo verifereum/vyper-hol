@@ -174,3 +174,54 @@ Resume live_storage_array_represented_suffix_summary[dynamic_ok]:
   simp_tac (srw_ss()) [arithmeticTheory.ADD_COMM]
 QED
 Finalise live_storage_array_represented_suffix_summary
+
+Theorem live_storage_array_suffix_summary:
+  vv_post ctx func cenv cx obj es sa sb s0 t
+    (PlaceR (StoragePlace tr slot (ArrayTV etv bd))) (LocatedValue (ArrayT et bd) p) u /\
+  expr_post ctx func cenv cx idx t sb sc u ee (IntV i) iop s /\
+  expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
+  is_word_type (expr_type idx) /\
+  evaluate_type (get_tenv cx) et = SOME etv /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+  well_formed_type_value (ArrayTV etv bd) /\ well_formed_type_value etv /\
+  evaluate_type (get_tenv cx) (expr_type idx) = SOME itv /\ value_has_type itv (IntV i) /\
+  eval_operand iop s = SOME (i2w i) /\ ee.gas_obs = [] /\
+  storage_read_live cx tr (get_storage cx ee tr) slot (ArrayTV etv bd) /\
+  slots_in_range (get_storage cx ee tr) (w2n slot) (ArrayTV etv bd) /\
+  (!n. bd = Dynamic n ==> w2n (lookup_storage slot (get_storage cx ee tr)) <= n) /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\ (!l. p.ptr_operand <> Label l) /\
+  (!x. iop = Var x ==> not_fresh_at sc x) /\ (!l. iop <> Label l) /\
+  expr_sim_inv cenv cx env t /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sb /\ local_ptrs_reserved cenv sc /\
+  MAP FDOM es.scopes = MAP FDOM t.scopes /\
+  sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
+  sb.cs_next_var <= sc.cs_next_var /\ sb.cs_next_id <= sc.cs_next_id /\
+  sb.cs_next_id <= sd.cs_next_id /\
+  compile_array_subscript p.ptr_operand iop
+    (case bd of Fixed _ => F | Dynamic _ => T)
+    (case bd of Fixed n => n | Dynamic _ => 0) 1 (type_slot_size etv)
+    (is_signed_type (expr_type idx))
+    (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca (slot_loc tr)) sc = (dst,sd) /\
+  fn_has_code sc sd func /\ ~s.vs_halted /\
+  s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  gas_summary_at F (ctx,func) []
+    (select_result cx (ArrayT et bd) (PlaceR (StoragePlace tr slot (ArrayTV etv bd)))
+      (ValueSubscript (IntV i))) (ee,s)
+    (\res ee' q. ?child. res = INL child /\
+      vv_post ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee' child
+        (LocatedValue et (mk_ptr dst (slot_loc tr))) q /\
+      q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts)
+    (\res ee' outcome. expr_exit res outcome)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `stmt_state_rel ctx func cenv cx ee s` by fs[expr_post_def] >>
+  irule live_storage_array_represented_suffix_summary >> simp[] >>
+  qexistsl_tac [`iop`,`p`,`sc`] >> simp[] >>
+  conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  conj_tac
+  >- (rpt strip_tac >> drule live_storage_array_base_endpoint >>
+      disch_then drule >> simp[] >> disch_then irule >> simp[] >>
+      qexists_tac `env` >> simp[]) >>
+  drule live_storage_array_base_endpoint >> disch_then drule >> simp[] >>
+  disch_then irule >> simp[] >> qexists_tac `env` >> simp[]
+QED
