@@ -8,6 +8,7 @@ Ancestors
   o1LabelFlowLowerDload o1LabelFlowMiddleConcretize o1LabelFlowMiddleFmp venomInst
   concretizeMemLocDefs venomPassDispatcher o1PassContract lowerDloadMakeSsaInput
   o1ContractMakeSsaReplay o1LabelFlowMiddleSsaAssembly unitShapeDefs
+  o1LabelFlowSourcePreWalk
   venomFnScheduleRunnerProps
 
 (* A named runner invariant avoids repeating the three phase boundaries in
@@ -167,4 +168,73 @@ Proof
   >- (irule (SRULE [] (Q.INST [`k` |-> `6`] compose_late)) >> metis_tac[])
   >- (irule (SRULE [] (Q.INST [`k` |-> `7`] compose_late)) >> metis_tac[]) >>
   irule (SRULE [] (Q.INST [`k` |-> `8`] compose_late)) >> metis_tac[]
+QED
+
+Theorem o1_label_flow_walk:
+  run_named_fn_schedules execute_configured_fn_pass rp o1_fn_passes names u s =
+    SOME (u',s') /\ o1_ctx_shape u.cu_context /\
+  ALL_DISTINCT (unit_label_namespace u) /\ ALL_DISTINCT names /\
+  (!n. MEM n names <=> MEM n (ctx_fn_names u.cu_context)) /\
+  ir_supply_inst_ok s /\ EVERY (o1_fn_row 0) u.cu_context.ctx_functions /\
+  (!f i. MEM f u.cu_context.ctx_functions /\ MEM i (fn_insts f) ==>
+    ~MEM (Label "code_end") i.inst_operands /\ i.inst_opcode <> CODESIZE /\
+    (i.inst_opcode = CODECOPY ==>
+     ?dst sz. i.inst_operands = [dst; Label "runtime_begin"; sz])) ==>
+  label_flow_ok u'.cu_context
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`ctx` |-> `u.cu_context`] o1_label_flow_enriched_contracts) >>
+  disch_tac >>
+  drule_at (Pos (el 1)) run_named_fn_schedules_decomp >>
+  disch_then (drule_at (Pat `run_named_fn_schedules _ _ _ _ _ _ = _`)) >>
+  impl_tac
+  >- (simp[label_flow_row_extra_def, EVERY_MEM] >> rpt strip_tac
+      >- fs[EVERY_MEM]
+      >- (irule (iffRL label_flow_ok_seed_free_function) >> metis_tac[])
+      >> metis_tac[]) >>
+  disch_then (qx_choose_then `chains` strip_assume_tac) >>
+  `!i. i < LENGTH chains ==>
+    label_flow_ok (u.cu_context with ctx_functions :=
+      [EL (LENGTH o1_fn_passes) (FST (EL i chains))])` by
+    (rpt strip_tac >>
+     qpat_x_assum `!i. i < LENGTH chains ==> chain_facts _ _ _ _ _ _ _`
+       (qspec_then `i` mp_tac) >> impl_tac >- simp[] >> strip_tac >>
+     drule_at (Pos (el 1)) chain_facts_row >>
+     disch_then (qspec_then `LENGTH o1_fn_passes` mp_tac) >>
+     simp[label_flow_row_extra_def]) >>
+  gvs[stage_ctx_def, stage_fns_def, label_flow_ok_def, MEM_MAP] >>
+  metis_tac[MEM_EL]
+QED
+
+Theorem o1_pipeline_label_flow_preserved:
+  !rpolicy unit out.
+  o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  label_flow_ok unit.cu_context /\
+  (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+             ~MEM (Label "code_end") inst.inst_operands) ==>
+  label_flow_ok out.po_unit.cu_context
+Proof
+  rpt strip_tac >> fs[o1_pipeline_def] >>
+  drule o1_driver_runs >> strip_tac >>
+  `o1_ctx_shape unit.cu_context` by metis_tac[o1_source_unit_ok_ctx_shape] >>
+  `ir_supply_inst_ok (init_ir_supply unit)` by simp[init_ir_supply_inst_ok] >>
+  drule_all o1_pre_walk_rows >> strip_tac >>
+  drule o1_pre_walk_seed_free_flow >> simp[] >> disch_tac >>
+  drule_all o1_pre_walk_sim >> strip_tac >>
+  `unit.cu_context.ctx_entry = SOME entry` by metis_tac[] >>
+  mp_tac (Q.INST [`unit` |-> `pre`, `fcg` |-> `fcg_analyze pre.cu_context`]
+    o1_walk_callee_first) >> simp[] >> strip_tac >>
+  drule unit_labels_wf_namespace >> strip_tac >>
+  `o1_ctx_shape (prune_unit_fcg_unreachable pre
+     (fcg_analyze pre.cu_context)).cu_context /\
+   ALL_DISTINCT (unit_label_namespace
+     (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)))` by
+    metis_tac[o1_ctx_shape_prune] >>
+  fs[run_callee_first_def] >>
+  drule o1_label_flow_walk >> impl_tac
+  >- (simp[o1_prune_every] >>
+      metis_tac[MEM_prune_unit_fcg_unreachable_functions]) >>
+  simp[]
 QED

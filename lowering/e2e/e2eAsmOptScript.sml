@@ -24,7 +24,7 @@ Ancestors
   contextPlanLayoutProps unitMemInv stepWriteFootprint o1PassContract
   contextRawReachable codegenEncodingWf spillWordBounds symbolResolve asmWf
   memSafeRun lowerDloadDefs
-  frameRel codegenRel
+  frameRel codegenRel o1LabelFlowCompose
 
 (* L1 for the optimizer: the runtime is the optimized assembly of the O1
    output's generated assembly. *)
@@ -242,7 +242,7 @@ Theorem o1_pipeline_label_flow_ok:
              ~MEM (Label "code_end") inst.inst_operands) ==>
   label_flow_ok out.po_unit.cu_context
 Proof
-  cheat
+  ACCEPT_TAC o1_pipeline_label_flow_preserved
 QED
 
 (* O1 keeps the data segment and makes INVOKE targets well formed. *)
