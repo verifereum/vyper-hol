@@ -11084,7 +11084,7 @@ Proof
 QED
 
 Theorem mm_local_merge_adjacent_ordered_every[local]:
-  (!a b. a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) ==>
+  (!a b. copy_can_merge a b /\ a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) ==>
   !cs. SORTED (\a b. a.cg_dst <= b.cg_dst) cs /\ EVERY P cs ==>
     EVERY P (merge_adjacent cs)
 Proof
@@ -11098,7 +11098,7 @@ Proof
 QED
 
 Theorem mm_local_hazards_add_ordered_every[local]:
-  (!a b. a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) /\
+  (!a b. copy_can_merge a b /\ a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) /\
   mm_local_scan_every P ss /\ SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\ P c ==>
   mm_local_scan_every P ((flush_hazards mode ss c) with ss_copies :=
     add_copy (flush_hazards mode ss c).ss_copies c)
@@ -11111,47 +11111,49 @@ Proof
 QED
 
 Theorem mm_local_store_ordered_every[local]:
-  (!a b. a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) /\
+  (!a b. copy_can_merge a b /\ a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) /\
   mm_local_scan_every P ss /\ SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
   (!dst v src. inst.inst_operands = [Lit dst; Var v] /\ FLOOKUP ss.ss_loads v = SOME src ==>
     P <|cg_dst := w2n dst; cg_src := src; cg_length := 32; cg_inst_ids := inst.inst_id ::
       (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id])|>) ==>
-  mm_local_scan_every P (scan_store dfg Mem2Mem ss inst)
+  mm_local_scan_every P (scan_store dfg mode ss inst)
 Proof
   strip_tac >> simp[scan_store_def] >> rpt BasicProvers.TOP_CASE_TAC >>
-  simp[mm_local_barrier_every] >> irule mm_local_hazards_add_ordered_every >>
+  simp[mm_local_barrier_every] >> Cases_on `mode_allows_overlap mode` >> simp[] >>
+  irule mm_local_hazards_add_ordered_every >>
   simp[invalidate_loads_def, mm_local_invalidate_every] >>
   gvs[oneline operand_lit_val_def, oneline operand_var_name_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem mm_local_bulk_ordered_every[local]:
-  (!a b. a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) /\
+  (!a b. copy_can_merge a b /\ a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) /\
   mm_local_scan_every P ss /\ SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
   (!dst src len. inst.inst_operands = [Lit dst; Lit src; Lit len] ==>
     P <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
       cg_inst_ids := [inst.inst_id]|>) ==>
-  mm_local_scan_every P (scan_bulk_copy Mem2Mem ss inst)
+  mm_local_scan_every P (scan_bulk_copy mode ss inst)
 Proof
   strip_tac >> simp[scan_bulk_copy_def] >> rpt BasicProvers.TOP_CASE_TAC >>
-  simp[mm_local_barrier_every] >> irule mm_local_hazards_add_ordered_every >>
+  simp[mm_local_barrier_every] >> Cases_on `mode_allows_overlap mode` >> simp[] >>
+  irule mm_local_hazards_add_ordered_every >>
   simp[invalidate_loads_def, mm_local_invalidate_every] >>
   gvs[oneline operand_lit_val_def, oneline operand_var_name_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem mm_local_inst_ordered_every[local]:
-  (!a b. a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) /\
+  (!a b. copy_can_merge a b /\ a.cg_dst <= b.cg_dst /\ P a /\ P b ==> P (copy_merge a b)) /\
   mm_local_scan_every P ss /\ SORTED (\a b. a.cg_dst <= b.cg_dst) ss.ss_copies /\
   (inst.inst_opcode = MSTORE ==>
     !dst v src. inst.inst_operands = [Lit dst; Var v] /\ FLOOKUP ss.ss_loads v = SOME src ==>
       P <|cg_dst := w2n dst; cg_src := src; cg_length := 32; cg_inst_ids := inst.inst_id ::
         (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id])|>) /\
-  (inst.inst_opcode = MCOPY ==>
+  (inst.inst_opcode = mode_copy_opcode mode ==>
     !dst src len. inst.inst_operands = [Lit dst; Lit src; Lit len] ==>
       P <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
         cg_inst_ids := [inst.inst_id]|>) ==>
-  mm_local_scan_every P (scan_inst dfg Mem2Mem ss inst)
+  mm_local_scan_every P (scan_inst dfg mode ss inst)
 Proof
-  strip_tac >> simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  strip_tac >> simp[scan_inst_def] >>
   IF_CASES_TAC >- (irule mm_local_load_every >> simp[]) >>
   IF_CASES_TAC >- (irule mm_local_store_ordered_every >> metis_tac[]) >>
   IF_CASES_TAC >- (irule mm_local_bulk_ordered_every >> metis_tac[]) >>
@@ -11179,14 +11181,13 @@ Proof
   irule mm_local_inst_ordered_every >>
   conj_tac
   >- (simp[copy_merge_def, MEM_APPEND] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  simp[] >> reverse conj_tac
+  gvs[mode_copy_opcode_def] >> conj_tac
   >- (rpt strip_tac >> gvs[] >>
       irule (Q.INST [`j` |-> `t`, `is` |-> `bb.bb_instructions`]
         mm_local_footprint_store_lower) >> simp[] >> metis_tac[]) >>
   rpt strip_tac >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
-    (qpat_assum `is = _` SUBST1_TAC >>
-     drule_all mm_local_prefix_wf_id_distinct >> simp[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    (drule_all mm_local_prefix_wf_id_distinct >> simp[]) >>
   `j = t` by
     (gvs[] >> metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx]) >>
   gvs[mm_local_write_footprint_def]
