@@ -8,11 +8,12 @@ Ancestors
   augAssignPtrStorageFieldLoad augAssignPtrLoad bodyPtrPopTargetSimStorageHeader
   bodyPtrDefs emitHelper compileEnv exprLoweringProps venomState freshWrites
   stmtSimProps stmtFragPtr finite_map loweringStateRelDefs
+  targetSubscriptStorage vyperStoragePlaceProvenance
+  vyperPlaceStoragePreservation vyperStorageWritePreservation
 
 Theorem aug_place_storage_target_ready_ptr:
   body_inv tops ctx cenv cx /\
   supported_target_info tops bindings bt = SOME pt /\
-  supported_target_pure tops bt /\
   (!id. target_root bt <> NameTarget id) /\
   target_pre cenv cx env bt es /\ expr_body_pre cenv cx env e es /\
   eval_base_place cx bt es = (INL pv,mid) /\
@@ -62,18 +63,18 @@ Proof
          drule aug_place_extend_memory_inversion >> strip_tac >> gvs[] >>
          simp[target_root_def] >> metis_tac[]) >> metis_tac[]) >>
   gvs[target_post_def, place_ptr_rel_def, target_ptr_ok_def] >>
-  `EVERY (supported_pure_expr tops) (target_indices bt)` by
-    (qpat_x_assum `supported_target_pure tops bt` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
-     fs[supported_target_pure_def, target_indices_def] >>
-     first_x_assum irule >> simp[]) >>
-  `contract_storage_well_formed cx es` by
-    gvs[target_pre_def, expr_sim_inv_def] >>
-  drule_all aug_place_pure_target_storage_range >> strip_tac >>
-  drule_all aug_place_pure_target_storage_live >> strip_tac >>
   `expr_body_pre cenv cx env e mid` by
     (drule_all eval_base_place_sim_inv >> gvs[expr_body_pre_def]) >>
+  `storage_layout_safe cx /\ contract_storage_well_formed cx mid` by
+    fs[expr_body_pre_def, expr_sim_inv_def] >>
+  `storage_place_region cx (StoragePlace tr slot tv)` by
+    (drule eval_base_place_region >> simp[storage_result_region_def]) >>
+  `slots_in_range (get_storage cx mid tr) (w2n slot) tv` by
+    (Cases_on `type_slot_size tv = 0`
+     >- (irule (cj 1 zero_slot_size_slots_in_range) >> simp[]) >>
+     irule storage_place_region_slots_in_range >> simp[]) >>
+  `storage_read_live cx tr (get_storage cx mid tr) slot tv` by
+    (drule_all eval_base_place_storage_ready >> simp[]) >>
   `well_formed_type_value tv` by
     metis_tac[cj 1 evaluate_type_well_formed] >>
   drule_all decode_value_from_slots_in_range >> strip_tac >>
