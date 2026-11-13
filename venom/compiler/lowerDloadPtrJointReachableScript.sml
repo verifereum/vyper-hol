@@ -143,18 +143,20 @@ Theorem dload_joint_reachable:
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >>
   drule dload_joint_reachable_if_next >>
-  disch_then (fn th => irule (SPEC_ALL th)) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> strip_tac >>
-  `ALL_DISTINCT (fn_labels g')` by
-    (irule dload_target_reachable_labels >> metis_tac[]) >>
-  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
-  irule (SRULE [] dload_joint_next) >>
-  simp[] >>
-  conj_tac >- (qexists_tac `fuel` >> simp[]) >>
-  qpat_x_assum `(\ds PH H un g j t. _) _ _ _ _ _ _ _` mp_tac >>
-  CONV_TAC (REDEPTH_CONV BETA_CONV) >> simp[] >>
-  disch_then kall_tac >> metis_tac[]
+  disch_then (fn th => mp_tac (SPEC_ALL th)) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      rpt gen_tac >> strip_tac >>
+      `ALL_DISTINCT (fn_labels g')` by
+        (irule dload_target_reachable_labels >> metis_tac[]) >>
+      CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+      irule (SRULE [] dload_joint_next) >>
+      simp[] >>
+      conj_tac >- (qexists_tac `fuel` >> simp[]) >>
+      qpat_x_assum `(\ds PH H un g j t. _) _ _ _ _ _ _ _` mp_tac >>
+      CONV_TAC (REDEPTH_CONV BETA_CONV) >> simp[] >>
+      disch_then kall_tac >> metis_tac[]) >>
+  simp[]
 QED
 
 val _ = List.app (fn th => if null (hyp th) then ()
