@@ -7,7 +7,7 @@ Ancestors
   vyperTypeArgFits vyperTypeInvariants exprSimHypsDefs
   exprSimIfExpCompat vyperTypeSystem vyperAST compileEnv
 
-Theorem arg_type_fits_source_assignable[local]:
+Theorem arg_type_fits_source_assignable:
   (!t u. arg_type_fits t u ==>
     !tenv. assignable_type tenv u /\ well_formed_type tenv t ==>
       assignable_type tenv t) /\
