@@ -2653,7 +2653,7 @@ Proof
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
-Theorem ifexp_root_suffix_path[local]:
+Theorem ifexp_root_suffix_path:
   emit_inst ASSIGN [op] [rv] sx = ((),sy) /\
   emit_inst JMP [Label xl] [] sy = ((),sz) /\
   fn_has_code sx sy func /\ fn_has_code sy sz func /\

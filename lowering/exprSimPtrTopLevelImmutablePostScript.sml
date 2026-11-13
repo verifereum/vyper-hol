@@ -122,7 +122,8 @@ Proof
      rewrite_tac[IS_PREFIX_APPEND] >> strip_tac >> qexists_tac `l` >>
      asm_rewrite_tac[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]) >>
   drule_all toplevel_immutable_copy_counted_frontier >>
-  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`,`D`]
+    (qx_choosel_then [`t'`,`HG'`,`tm'`] strip_assume_tac)) >>
   drule_all gas_path_ptr_then >> simp[] >> strip_tac >>
   `(!i. w2n w <= i /\ i < w2n w+32*n ==> i NOTIN tm'.t_mem) /\
    tm'.t_mem SUBSET tn.t_mem` by
@@ -136,7 +137,7 @@ Proof
   qexistsl_tac [`w`,`Gf`,`tnf`,`t'`,`HG'`,`tm'`] >>
   fs[Abbr `s1`, eval_operand_def, lookup_var_def] >>
   gvs[immutable_copy_ghost_frame_def, copy_runtime_frame_def, lookup_var_def] >>
-  metis_tac[]
+  first_assum ACCEPT_TAC
 QED
 
 Theorem toplevel_immutable_alloc_copy_ghost_inv:

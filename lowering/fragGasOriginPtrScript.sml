@@ -2,6 +2,7 @@
 Theory fragGasOriginPtr
 Ancestors
   fragGasOrigin fragGasPathPtr fragGasFocus ptrSafeRun ptrDiscipline
+  gasCount gasEvents gasOracleReplay venomExecProofs fragExec
   venomExecSemantics venomInst venomState finite_map list arithmetic
 
 Definition gas_origin_ptr_edge_def:
@@ -182,4 +183,75 @@ Proof
   rpt gen_tac >> simp[] >> rpt strip_tac
   >- metis_tac[gas_origin_ptr_path_rules, APPEND_ASSOC]
   >> gvs[fragExecTheory.exit_result_def]
+QED
+
+Theorem gas_origin_ptr_edge_ok_readings:
+  gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG)
+    (s, G, tn) marks (OK mid, G', tn') ==>
+  mid.vs_gas_readings = DROP (LENGTH marks) s.vs_gas_readings
+Proof
+  strip_tac >> drule gas_origin_ptr_edge_common_fuel >> strip_tac >>
+  qspecl_then [`fuel`, `ctx`, `inst`, `s`] mp_tac (cj 1 gas_count_suffix) >>
+  Cases_on `step_inst fuel ctx inst s` >>
+  gvs[cj 1 gas_events_length, gas_count_suffix_def, exit_result_def] >>
+  imp_res_tac gas_count_phis_ok >> simp[]
+QED
+
+(* An edge runs a real instruction: a PHI outside the block's PHI prefix
+   errors, and an edge never errors. *)
+Theorem gas_origin_ptr_edge_not_phi:
+  gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG)
+    (s, G, tn) marks (r, G', tn') ==>
+  ?bb inst.
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    inst.inst_opcode <> PHI
+Proof
+  strip_tac >> drule gas_origin_ptr_edge_common_fuel >> strip_tac >>
+  qexistsl_tac [`bb`, `inst`] >> simp[] >> strip_tac >>
+  qspecl_then [`fuel`, `ctx`, `inst`, `s`] mp_tac step_inst_phi_error >>
+  simp[] >> strip_tac >> gvs[] >> imp_res_tac exit_result_not_error >> gvs[]
+QED
+
+(* A focus with marks left starts with an edge of its function, or enters
+   the callee of the INVOKE it stands at. *)
+Theorem gas_origin_ptr_focus_first:
+  !cx st m out.
+    gas_origin_ptr_focus cx st m out ==>
+    !D lo explicit ctx func PG s G tn.
+      cx = (D, lo, explicit, ctx, func, PG) /\ st = (s, G, tn) /\
+      m <> [] ==>
+      (?left mid G1 tn1 right.
+         gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG)
+           (s, G, tn) left (OK mid, G1, tn1) /\
+         gas_origin_ptr_focus (D, lo, explicit, ctx, func, PG)
+           (mid, G1, tn1) right out /\
+         m = left ++ right) \/
+      (?bb inst name ops callee entered.
+         lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+         get_instruction bb s.vs_inst_idx = SOME inst /\
+         inst.inst_opcode = INVOKE /\
+         decode_invoke inst = SOME (name, ops) /\
+         gas_invoke_entry (ctx, func) s callee entered /\
+         ptr_inst_ok D lo 0 ctx func G tn inst s /\
+         gas_origin_ptr_focus
+           (D, lo, explicit, ctx, callee, MAP (op_prov G) ops)
+           (entered, FEMPTY, tn with t_var := FEMPTY) m out)
+Proof
+  ho_match_mp_tac gas_origin_ptr_focus_strongind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[]
+  >- (qpat_x_assum `gas_origin_ptr_path _ _ _ _` mp_tac >>
+      simp[Once gas_origin_ptr_path_cases] >> rw[] >>
+      gvs[exit_result_def] >>
+      disj1_tac >> metis_tac[gas_origin_ptr_focus_rules])
+  >- (qpat_x_assum `gas_origin_ptr_path _ _ _ _` mp_tac >>
+      simp[Once gas_origin_ptr_path_cases] >> strip_tac >>
+      gvs[exit_result_def]
+      >~ [`gas_origin_ptr_path _ _ r1 (OK _, _, _)`]
+      >- (disj1_tac >>
+          rename1 `gas_origin_ptr_edge _ _ l1 (OK m1, G2, tn2)` >>
+          qexistsl_tac [`l1`, `m1`, `G2`, `tn2`, `r1 ++ m`] >> simp[] >>
+          irule (cj 2 gas_origin_ptr_focus_rules) >> metis_tac[]) >>
+      metis_tac[]) >>
+  disj2_tac >> metis_tac[]
 QED

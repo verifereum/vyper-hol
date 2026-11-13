@@ -277,7 +277,7 @@ Proof
 QED
 
 (* Immutable declarations cannot overwrite a populated storage/transient key. *)
-Theorem entry_module_lookup_immutable_frame[local]:
+Theorem entry_module_lookup_immutable_frame:
   !tops sft off key loc.
     ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
     FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME loc ==>

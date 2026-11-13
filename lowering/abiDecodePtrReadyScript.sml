@@ -132,7 +132,7 @@ Resume abi_builtin_decode_phased_ready_ptr[compose]:
 QED
 
 Resume abi_builtin_decode_phased_ready_ptr[path]:
-  qpat_x_assum `!D PG G tn. gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `!D PG G tn. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _ /\ gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`
     (qspecl_then [`D`, `PG`, `HG`, `tm`] mp_tac) >>
   simp[arithmeticTheory.ADD1] >> strip_tac >>
   conj_tac

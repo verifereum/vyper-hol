@@ -1,6 +1,6 @@
 Theory exprSimAbiEncodeWordSuccess
 Ancestors
-  exprSimHashBoundary
+  exprSimHashBoundary exprSimUnwrap
     loweringStateRelDefs
   exprSimAbiEncodeStagedObserver exprSimAbiEncodePrefixWindow exprSimAbiEncodeStagedFrame
   abiBuiltinEncodeWord abiBuiltinAllocation exprSimHash abiDecoderGuards context emitHelper emitHelperProps
@@ -462,6 +462,8 @@ Theorem abi_encode_word_staged_counted:
     LENGTH (enc ct rv) = 32 /\
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+    actual.vs_requests = s.vs_requests /\ actual.vs_call_ctx = s.vs_call_ctx /\
     abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es' sh out mid
       (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4)))
       p ct rv initial actual /\ wb_frame ce es es' origin s0 actual /\
@@ -562,6 +564,18 @@ Proof
      match_mp_tac (Q.SPECL [`ce`, `func`, `es`, `es'`, `origin`, `sa`, `s0`, `s`, `actual`]
                      exprSimPropsTheory.pure_frame_trans) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+   actual.vs_requests = s.vs_requests /\ actual.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `compile_alloc_buffer _ _ = _` (fn c =>
+       qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK _` (fn r =>
+         mp_tac (MATCH_MP exprSimUnwrapTheory.alloc_buffer_fields (CONJ c r)))) >>
+     qpat_assum `abi_encode_staged_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [abi_encode_staged_observation_def]) >>
+     qpat_assum `Abbrev (initial = _)` mp_tac >>
+     qpat_assum `Abbrev (staged = _)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rewrite_tac[markerTheory.Abbrev_def] >> rpt strip_tac >>
+     asm_simp_tac (srw_ss()) [mstore_def, LET_THM]) >>
   qexistsl_tac [`p`, `ct`, `rv`, `initial`, `actual`] >>
   asm_rewrite_tac[] >> simp[Abbr `initial`]
 QED

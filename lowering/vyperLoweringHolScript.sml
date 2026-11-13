@@ -10,11 +10,11 @@ Ancestors
   entryStateRel entryLocals ctorEntryLocals ctorSourceInputs
   loweringSlice
   memSafeRun instMemFrontier fragExecMem allocaFootprint
-  fragGasOrigin
+  fragGasOrigin fragGasOriginPtrSafeUpto
   varsExt exprSimNameWord exprSimLiteralWord exprSimEnv
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
-  exprSimMain bodySimMain ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimSeq stmtSimExpr
+  exprSimMain bodySimMain bodySimFullMain ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimSeq stmtSimExpr
   stmtSimBreak stmtSimContinue stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
@@ -30,7 +30,7 @@ Ancestors
   selectorCompilerProps checkedSelectorTableProps
   immutableStagingBridge
   immutableCodeLayout
-  e2eDeployFrame
+  e2eDeployFrame ctorDeployLoweringEntry
   deployFrameReplay asmDataSuffixProps deployEntryLayout deployUnitProducers
   immutableLocationProps
   loweringShapeDefs

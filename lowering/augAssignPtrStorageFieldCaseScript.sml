@@ -3,7 +3,7 @@ Theory augAssignPtrStorageFieldCase
 Ancestors
   augAssignPtrStoragePipeline augAssignPtrStorageFieldInputs
   augAssignPtrStorageFieldLoad augAssignPtrStorageFieldLive
-  stmtSimAugAssignAttrStorage stmtSimAssignStorage stmtSimAssignAttrStorage
+  augAssignStorageFieldSource stmtSimAssignStorage stmtSimAssignAttrStorage
   exprSimFieldLayout exprSimAttributeFields exprSimTopLevelProps
   exprSimProps exprSimSource exprSimHypsDefs bodyPtrDefs
   vyperPlaceTyping vyperStorageLayoutSafety vyperTypeValues
