@@ -280,3 +280,16 @@ Proof
   gvs[MEM_MAP] >>
   gvs[COND_RAND, COND_RATOR] >> metis_tac[]
 QED
+
+Theorem inline_frontier_renumber:
+  inline_frontier_function fn ==>
+  inline_frontier_function (renumber_fn_inst_ids fn)
+Proof
+  `MAP inline_frontier_instruction (fn_insts (renumber_fn_inst_ids fn)) =
+   MAP inline_frontier_instruction (fn_insts fn)` by
+    (irule renumber_fn_projection >> simp[inline_frontier_instruction_def]) >>
+  `!f. inline_frontier_function f <=> EVERY I (MAP inline_frontier_instruction (fn_insts f))` by
+    (simp[inline_frontier_function_def, EVERY_MAP, EVERY_MEM, fn_insts_def,
+          unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+  metis_tac[]
+QED
