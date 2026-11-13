@@ -3,7 +3,7 @@ Ancestors concretizePtrRootCover concretizePtrFrameOrigins concretizePtrClosure
   concretizePtrRuntimeOrigins pointerClosure pointerConfinedDefs
   ptrDiscipline venomInst finite_map pred_set list
   concretizePtrAllocationOrigins venomMemProps venomExecSemantics
-  ptrDisciplineEmptyTaint venomState ctxLookupAgreeHelpers
+  ptrDisciplineEmptyTaint venomState frameResolvedTrace
 
 Theorem ptr_frame_roots_extend:
   (!aid p. FLOOKUP A aid = SOME p ==> FLOOKUP B aid = SOME p) ==>
@@ -59,7 +59,7 @@ Proof
        metis_tac[ptr_step_allocas_extend] >> NO_TAC) >>
   rpt strip_tac >>
   gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(), out_prov_def,
-      update_var_def, lookup_var_def]
+      update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem ptr_frame_current_table_entry:
@@ -80,19 +80,6 @@ Theorem ptr_return_allocas:
 Proof
   strip_tac >> drule bind_outputs_allocation_frame >>
   simp[merge_callee_state_allocas]
-QED
-
-Theorem ptr_frame_reachable_initial_fmp[local]:
-  !vs0 ctx stk PG G tn fn inst s.
-    frame_reachable vs0 ctx stk PG G tn fn inst s ==>
-    s.vs_initial_fmp = vs0.vs_initial_fmp /\
-    EVERY (\f. f.cf_state.vs_initial_fmp = vs0.vs_initial_fmp) stk
-Proof
-  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac >> rpt gen_tac >>
-  strip_tac >>
-  imp_res_tac enters_block_initial_fmp >> imp_res_tac step_inst_initial_fmp >>
-  imp_res_tac setup_callee_initial_fmp >> imp_res_tac bind_outputs_initial_fmp >>
-  gvs[]
 QED
 
 Theorem ptr_frame_table_support_invariant:
@@ -121,7 +108,7 @@ Proof
            (simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
          `allocas_below_fmp s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
          `s.vs_initial_fmp = vs0.vs_initial_fmp` by
-           metis_tac[ptr_frame_reachable_initial_fmp] >>
+           metis_tac[frame_reachable_initial_fmp] >>
          fs[dyn_floor_def, allocas_below_fmp_def] >> rfs[]) >>
       simp[] >> gen_tac >> irule ptr_frame_current_table_step >>
       fs[EVERY_MEM] >> metis_tac[])

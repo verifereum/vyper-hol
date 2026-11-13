@@ -26,7 +26,6 @@ Theorem ptr_demand_protected_token_interval:
   ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
     births PT TG saved entries H /\ vs.vs_allocas = FEMPTY /\
   o1_ctx_shape C /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY ssa_form C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -51,7 +50,7 @@ Theorem ptr_demand_protected_token_interval:
   fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
   ctx_fn_names observed.cu_context = ctx_fn_names C /\
   o1_walk_view rpolicy 2 C' fn observed /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   EVERY fn_inst_wf C.ctx_functions ==>
   (?w. w+1 < LENGTH h /\
     b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
@@ -110,7 +109,6 @@ Definition ptr_demand_interval_def:
   (ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
     births PT TG saved entries H /\ vs.vs_allocas = FEMPTY /\
   o1_ctx_shape C /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY ssa_form C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -135,7 +133,7 @@ Definition ptr_demand_interval_def:
   fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
   ctx_fn_names observed.cu_context = ctx_fn_names C /\
   o1_walk_view rpolicy 2 C' fn observed /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   EVERY fn_inst_wf C.ctx_functions) /\
   (w+1 < LENGTH h /\
     b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
@@ -162,7 +160,6 @@ Theorem ptr_demand_interval_exists:
   ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
     births PT TG saved entries H /\ vs.vs_allocas = FEMPTY /\
   o1_ctx_shape C /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY ssa_form C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -187,7 +184,7 @@ Theorem ptr_demand_interval_exists:
   fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
   ctx_fn_names observed.cu_context = ctx_fn_names C /\
   o1_walk_view rpolicy 2 C' fn observed /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   EVERY fn_inst_wf C.ctx_functions ==>
   (?w. ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
@@ -454,7 +451,7 @@ Proof
      (o1_walk_view rpolicy 2) C C' /\
    EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
    ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-   o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+   o1_run_state_ok vs /\ ptr_discipline lo C vs /\
    ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
      births PT TG saved entries H` by fs[ptr_demand_interval_def] >>
   `?e owner output p.
@@ -547,8 +544,6 @@ Proof
        fn = (EL (LENGTH A.po_stack-(d+1)) A.po_stack).cf_fn` by
         (simp[] >> qpat_x_assum `(ptr_owner_view d A).cf_fn = fn` mp_tac >>
          simp[ptr_owner_view_def]) >>
-      `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-        fs[ptr_demand_interval_def] >>
       drule_all ptr_source_tagged_owner_call_liveset >>
       disch_then (qspec_then `observed.cu_context` strip_assume_tac) >>
       `MEM ((ptr_owner_view d A).cf_state.vs_current_bb,
@@ -572,8 +567,6 @@ QED
 Resume ptr_demand_other_owner_separation[active_same_depth]:
   `fn = A.po_fn /\ tokB = HD tsj` by
     (fs[ptr_owner_view_def, GSYM HD] >> metis_tac[]) >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-    fs[ptr_demand_interval_def] >>
   `dv IN pointer_derived_vars fn (ptr_bp_alloc_roots fn bid)` by
     (irule (INST_TYPE [alpha |-> ``:num``] ptr_tag_roots_local_wf) >> simp[] >>
      goal_assum (drule_at (Pat `FLOOKUP TGj dv = SOME (_,_)`)) >>
@@ -681,8 +674,6 @@ Resume ptr_demand_other_owner_separation[distinct_depths]:
      simp[ptr_owner_view_def]) >>
   `SUC (LENGTH A.po_stack-(e+1)) = LENGTH A.po_stack-e` by
     (qpat_x_assum `e < LENGTH A.po_stack` mp_tac >> simp[]) >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-    fs[ptr_demand_interval_def] >>
   `owner = (EL (LENGTH A.po_stack-(e+1)) A.po_stack).cf_fn` by metis_tac[] >>
   pop_assum (mk_asm "owner_function") >>
   qpat_x_assum `owner = (ptr_owner_view e A).cf_fn` kall_tac >>
@@ -757,15 +748,14 @@ Proof
   qpat_x_assum `_ \/ _` strip_assume_tac
   >- (drule_all ptr_demand_fixed_write_exclusion >> simp[]) >>
   drule_all ptr_demand_interval_snapshot >> strip_tac >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
-   ~ctx_has_dalloca C /\ ptr_discipline lo C vs`
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+   ptr_discipline lo C vs`
     by fs[ptr_demand_interval_def] >>
   `FLOOKUP bj (tokB,bid) = SOME (db,sb)` by
-    (drule_all ptr_source_ownership_static_prov_erases >>
-     simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_every_dyn] >>
-     strip_tac >>
-     qpat_x_assum `!v. FLOOKUP (EL j h).po_prov v = _`
-       (qspec_then `dv` mp_tac) >> simp[]) >>
+    (drule_all ptr_source_ownership_prov_erases >>
+     simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def,
+          concretizePtrPrefixLedgerTheory.ptr_owner_erases_def] >>
+     disch_then (qspec_then `dv` mp_tac) >> simp[]) >>
   `op_prov TGj ops.iao_ofst = SOME (tokB,bid)` by simp[op_prov_def] >>
   Cases_on `tokB = token /\ bid = aid`
   >- (qpat_x_assum `tokB = token /\ bid = aid` strip_assume_tac >>

@@ -11,7 +11,7 @@ Ancestors concretizePtrHistoricalWriteExclusion concretizePtrOperationalBytes
   concretizePtrSourceOwnership concretizePtrActivationBirths
   concretizePtrActivationChronology concretizePtrAllocationOwnership
   venomCallOracleDefs extCallOracle venomState venomInst venomExecSemantics
-  ptrDiscipline codegenRel copyFwdEquiv allocaRemapDefs finite_map
+  ptrDiscipline codegenRel copyFwdEquiv allocaRemapDefs finite_map frameResolvedTrace
 Libs wordsLib
 
 val () = augment_srw_ss [wordsLib.SIZES_ss, wordsLib.WORD_GROUND_ss];
@@ -20,7 +20,6 @@ Theorem ptr_paired_owned_read_recovery:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   vs.vs_allocas = FEMPTY /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   EVERY wf_function C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   (!obs. MEM obs h ==> access_ok lo obs.po_prov obs.po_fn obs.po_inst obs.po_state) /\
@@ -45,7 +44,7 @@ Theorem ptr_paired_owned_read_recovery:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
@@ -116,7 +115,10 @@ Proof
     (qpat_x_assum `!n. w <= n /\ n < LENGTH h ==> _` (qspec_then `SUC w` mp_tac) >>
      simp[]) >>
   `b+k < dyn_floor C (EL w h).po_state` by
-    (qpat_x_assum `~(dyn_floor C vs <= b+k)` mp_tac >> fs[dyn_floor_def]) >>
+    (`(EL w h).po_state.vs_initial_fmp = vs.vs_initial_fmp` by
+       (fs[ptr_observation_reachable_def] >>
+        metis_tac[frameResolvedTraceTheory.frame_reachable_initial_fmp]) >>
+     qpat_x_assum `~(dyn_floor C vs <= b+k)` mp_tac >> fs[dyn_floor_def]) >>
   `rho' (b+k) = pa+k` by
     (drule_all ptr_paired_write_owner_relocation >> simp[]) >>
   `read_byte (b+k) (EL (SUC w) h).po_state.vs_memory =
@@ -267,7 +269,6 @@ Theorem ptr_paired_actual_protected_write_exclusion:
   ptr_paired_prefix R lp positions lo vs C C'
     h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
   vs.vs_allocas = FEMPTY /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   EVERY wf_function C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   EVERY fn_inst_wf C.ctx_functions /\
@@ -291,7 +292,7 @@ Theorem ptr_paired_actual_protected_write_exclusion:
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
   max_live_eom C' = SOME eom /\ FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
