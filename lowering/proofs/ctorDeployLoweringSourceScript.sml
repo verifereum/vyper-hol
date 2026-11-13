@@ -1191,7 +1191,7 @@ Proof
   pop_assum (fn th => once_rewrite_tac[th]) >>
   pop_assum (fn th => rewrite_tac[th]) >>
   rpt (pairarg_tac >> gvs[]) >>
-  every_case_tac >>
+  BasicProvers.every_case_tac >>
   gvs[unlock_if_nr_def, return_def, abstract_machine_from_state_def]
 QED
 
