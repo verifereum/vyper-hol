@@ -199,6 +199,7 @@ Theorem annassign_declare_store_ptr:
  ghost_inv H d cenv cx
    (es with scopes := (sc |+ (id,<|assignable := assign; type := ty; value := v; popped := []|>))::rest) G tn' s' /\
  ghost_kept cenv es sa G0 tn0 s0 G tn' /\
+ s' = (mstore (w2n a) wd s) with vs_inst_idx := SUC s.vs_inst_idx /\
  tn' = (tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32}) /\
  s'.vs_memory = (mstore (w2n a) wd s).vs_memory /\
  (!x. lookup_var x s' = lookup_var x s) /\

@@ -38,10 +38,13 @@ Theorem annassign_empty_store_continuation_ptr:
  (?cenv''. stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\
    (~block_is_terminated sf /\ cenv'' = cenv) /\
    cenv_top_ext old cenv'' ee.scopes /\
-   stmt_state_rel H ctx func cenv'' cx ee t /\ ghost_inv H d cenv'' cx ee G tnf t /\
+   stmt_state_rel H ctx func cenv'' cx ee t /\
+   storage_well_formed_on cx ee (FST H) /\ ghost_inv H d cenv'' cx ee G tnf t /\
    (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==> lookup_var x t = SOME u) /\
    (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
-      op_taint tnf (Var x) = op_taint tn0 (Var x)))
+      op_taint tnf (Var x) = op_taint tn0 (Var x))) /\
+ t = (mstore (w2n w) 0w s) with vs_inst_idx := SUC s.vs_inst_idx /\
+ tnf = tn with t_mem := tn.t_mem DIFF {i | w2n w <= i /\ i < w2n w+32}
 Proof
  rpt gen_tac >> strip_tac >>
  `stmt_state_rel H ctx func cenv cx es1 s /\ lookup_var p s = SOME w /\
@@ -68,10 +71,14 @@ Proof
  `ghost_kept cenv es1 sa G tn s G tn` by simp[ghost_kept_def] >>
  drule_all annassign_declare_store_ptr >>
  disch_then (qspecl_then [`PG`,`T`] strip_assume_tac) >>
+ `!scs. storage_well_formed_on cx (es1 with scopes := scs) (FST H)` by
+   fs[vv_post_def, vyperStorageFootprintTheory.storage_well_formed_on_def,
+      vyperStorageBackendTheory.get_storage_scopes] >>
  qexistsl [`es1 with scopes :=
    (sc |+ (id,<|assignable := T; type := tyv; value := default_value tyv; popped := []|>))::rest`,
    `s'`,`tn'`] >> conj_tac
  >- gvs[gas_marked_exec_ptr_def] >>
+ reverse conj_tac >- simp[] >>
  qexists `cenv` >> simp[stmt_lands_def] >>
  fs[vv_post_def, ghost_kept_def] >> metis_tac[]
 QED
@@ -105,10 +112,13 @@ Theorem annassign_empty_normal_continuation_ptr:
  (?cenv''. stmt_lands lctx sf (INL ()) u /\ ~u.vs_halted /\
    (~block_is_terminated sf /\ cenv'' = c) /\
    cenv_top_ext old cenv'' ff.scopes /\
-   stmt_state_rel H ctx func cenv'' cx ff u /\ ghost_inv H d cenv'' cx ff G tnf u /\
+   stmt_state_rel H ctx func cenv'' cx ff u /\
+   storage_well_formed_on cx ff (FST H) /\ ghost_inv H d cenv'' cx ff G tnf u /\
    (!x z. not_fresh_at sa x /\ lookup_var x salloc = SOME z ==> lookup_var x u = SOME z) /\
    (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP Ga x /\
-      op_taint tnf (Var x) = op_taint tna (Var x)))
+      op_taint tnf (Var x) = op_taint tna (Var x))) /\
+ u = (mstore (w2n w) 0w s) with vs_inst_idx := SUC s.vs_inst_idx /\
+ tnf = tn with t_mem := tn.t_mem DIFF {i | w2n w <= i /\ i < w2n w+32}
 Proof
  rpt gen_tac >> strip_tac >>
  `!tail. eval_expr cx e

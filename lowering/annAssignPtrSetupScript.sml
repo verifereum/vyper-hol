@@ -1,7 +1,7 @@
 (* Counted declaration setup and the explicit not-yet-live pointer frame. *)
 Theory annAssignPtrSetup
 Ancestors
-  annAssignPtrFacts bodyPtrDefs allocationPtr fragGasSeqPtr
+  bodyPtrDefs allocationPtr fragGasSeqPtr
   exprSimProps loweringPosts finite_map fragExecPtr venomInst venomExecSemantics
   fragGasPathPtr venomInstProofs venomState stmtSimProps compileEnv
   annAssignPtrAllocGhost fragExec emitHelper emitHelperProps
