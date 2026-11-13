@@ -480,11 +480,10 @@ Proof
   `!v. storage_trace_frame (cont v)` by
     (simp[Abbr `cont`] >> gen_tac >>
      irule storage_trace_frame_bind_all >>
-     simp[cj 11 evaluate_storage_trace_frame] >> gen_tac >>
-     irule storage_trace_frame_bind_all >>
      simp[cj 6 evaluate_storage_trace_frame] >> gen_tac >>
      irule storage_trace_frame_bind_all >>
-     simp[storage_trace_frame_read_results, storage_trace_frame_ext_call]) >>
+     simp[cj 6 evaluate_storage_trace_frame] >> gen_tac >>
+     simp[storage_trace_frame_ext_call]) >>
   Cases_on `eval_exprs cx (TAKE 1 es) st` >>
   rename1 `eval_exprs cx (TAKE 1 es) st = (target_res,target_st)` >>
   qpat_assum `eval_exprs cx (TAKE 1 es) st = _`
@@ -526,19 +525,18 @@ Proof
       qpat_x_assum `!v. storage_trace_frame (cont v)` kall_tac >>
       qpat_x_assum `cont target target_st = _` mp_tac >>
       simp_tac(srw_ss())[Abbr `cont`] >>
-      qmatch_goalsub_abbrev_tac `bind (eval_expr_results cx (TAKE (LENGTH sig1) (DROP 1 es))) capture_cont` >>
+      qmatch_goalsub_abbrev_tac `bind (eval_exprs cx (TAKE (LENGTH sig1) (DROP 1 es))) capture_cont` >>
       `!v. storage_trace_frame (capture_cont v)` by
         (simp[Abbr `capture_cont`] >> gen_tac >>
          irule storage_trace_frame_bind_all >>
          simp[cj 6 evaluate_storage_trace_frame] >> gen_tac >>
-         irule storage_trace_frame_bind_all >>
-         simp[storage_trace_frame_read_results, storage_trace_frame_ext_call]) >>
-      Cases_on `eval_expr_results cx (TAKE (LENGTH sig1) (DROP 1 es)) target_st` >>
-      rename1 `eval_expr_results _ _ target_st = (capture_res,capture_st)` >>
+         simp[storage_trace_frame_ext_call]) >>
+      Cases_on `eval_exprs cx (TAKE (LENGTH sig1) (DROP 1 es)) target_st` >>
+      rename1 `eval_exprs _ _ target_st = (capture_res,capture_st)` >>
       disch_tac >>
       `?delta. st'.storage_trace = capture_st.storage_trace ++ delta` by
         (qpat_x_assum `bind _ capture_cont target_st = _` mp_tac >>
-         qpat_assum `eval_expr_results _ _ target_st = _`
+         qpat_assum `eval_exprs _ _ target_st = _`
            (fn th => pure_rewrite_tac[bind_def, th]) >>
          Cases_on `capture_res` >> simp_tac(srw_ss())[raise_def] >> strip_tac
          >- (irule (INST_TYPE [alpha |-> ``:eval_result``] storage_trace_frame_prefix) >>
@@ -549,9 +547,9 @@ Proof
        storage_observations_ok cx H capture_st.storage_trace` by
         (qpat_x_assum `!s'' target t nargs s1 rs t1. eval_exprs _ _ _ = _ /\ _ ==> _` kall_tac >>
          qpat_x_assum `!initial_st selected env st res st'. well_typed_exprs env (TAKE 1 es) /\ _ ==> _` kall_tac >>
-         irule (INST_TYPE [alpha |-> ``:eval_result list + vyperState$exception``]
+         irule (INST_TYPE [alpha |-> ``:value list + vyperState$exception``]
            recursive_prefix_handoff) >>
-         qexistsl [`eval_expr_results cx (TAKE (LENGTH sig1) (DROP 1 es))`,
+         qexistsl [`eval_exprs cx (TAKE (LENGTH sig1) (DROP 1 es))`,
                    `st'`,`capture_res`,`selected`,`target_st`] >>
          conj_tac
          >- (rpt gen_tac >> strip_tac >>
@@ -563,22 +561,24 @@ Proof
              prefix_assumption_tac) >>
          conj_tac
          >- (rpt gen_tac >> strip_tac >>
-             drule eval_expr_results_outcome_suffix >> disch_then ACCEPT_TAC) >>
+             mp_tac (cj 6 eval_outcomes_suffix_mutual) >>
+             simp_tac(srw_ss())[outcomes_suffix_def] >>
+             metis_tac[pairTheory.SND]) >>
          simp[]) >>
       `valid_horizon cx initial_st H capture_st.storage_trace` by
         (qpat_x_assum `valid_horizon cx initial_st H st.storage_trace` mp_tac >>
          pure_rewrite_tac[valid_horizon_def] >> strip_tac >>
          rpt conj_tac >> first_assum ACCEPT_TAC) >>
       `runtime_consistent env cx capture_st` by
-        (drule_all eval_expr_results_preserves_runtime_consistent_from_eval >>
+        (drule_all eval_exprs_preserves_runtime_consistent >>
          disch_then ACCEPT_TAC) >>
       qpat_x_assum `bind _ capture_cont target_st = _` mp_tac >>
-      qpat_assum `eval_expr_results _ _ target_st = _`
+      qpat_assum `eval_exprs _ _ target_st = _`
         (fn th => pure_rewrite_tac[bind_def, th]) >>
       reverse (Cases_on `capture_res`) >> simp_tac(srw_ss())[raise_def]
       >- (strip_tac >> qpat_x_assum `capture_st = st'` SUBST_ALL_TAC >>
           conj_tac >> first_assum ACCEPT_TAC) >>
-      rename1 `eval_expr_results _ _ target_st = (INL results,capture_st)` >>
+      rename1 `eval_exprs _ _ target_st = (INL results,capture_st)` >>
       qpat_x_assum `!s'' target t nargs s1 rs t1. eval_exprs _ _ _ = _ /\ _ ==> _`
         (drule o SIMP_RULE (srw_ss()) []) >>
       disch_then drule >> strip_tac >>
@@ -586,9 +586,7 @@ Proof
       simp_tac(srw_ss())[Abbr `capture_cont`] >>
       qmatch_goalsub_abbrev_tac `bind (eval_exprs cx (DROP (1 + LENGTH sig1) es)) kwargs_cont` >>
       `!v. storage_trace_frame (kwargs_cont v)` by
-        (simp[Abbr `kwargs_cont`] >> gen_tac >>
-         irule storage_trace_frame_bind_all >>
-         simp[storage_trace_frame_read_results, storage_trace_frame_ext_call]) >>
+        simp[Abbr `kwargs_cont`, storage_trace_frame_ext_call] >>
       Cases_on `eval_exprs cx (DROP (1 + LENGTH sig1) es) capture_st` >>
       rename1 `eval_exprs _ _ capture_st = (kwargs_res,kwargs_st)` >>
       disch_tac >>
@@ -633,14 +631,7 @@ Proof
       >- (strip_tac >> qpat_x_assum `kwargs_st = st'` SUBST_ALL_TAC >>
           conj_tac >> first_assum ACCEPT_TAC) >>
       qpat_x_assum `!v. storage_trace_frame (kwargs_cont v)` kall_tac >>
-      simp_tac(srw_ss())[Abbr `kwargs_cont`, bind_apply] >>
-      Cases_on `read_results cx results kwargs_st` >>
-      rename1 `read_results cx results kwargs_st = (read_res,read_st)` >>
-      drule read_results_state >> disch_then SUBST_ALL_TAC >>
-      reverse (Cases_on `read_res`) >> simp_tac(srw_ss())[]
-      >- (strip_tac >> qpat_x_assum `kwargs_st = st'` SUBST_ALL_TAC >>
-          conj_tac >> first_assum ACCEPT_TAC) >>
-      strip_tac >>
+      simp_tac(srw_ss())[Abbr `kwargs_cont`] >> strip_tac >>
       qpat_x_assum `!initial_st selected env st res st'. well_typed_exprs env (TAKE 1 es) /\ _ ==> _` kall_tac >>
       qpat_x_assum `!initial_st selected env st res st'. well_typed_exprs env (TAKE (LENGTH sig1) (DROP 1 es)) /\ _ ==> _` kall_tac >>
       qpat_x_assum `!initial_st selected env st res st'. well_typed_exprs env (DROP (1 + LENGTH sig1) es) /\ _ ==> _` kall_tac >>
