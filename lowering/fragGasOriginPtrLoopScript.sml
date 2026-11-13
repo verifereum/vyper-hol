@@ -104,7 +104,10 @@ Proof
     (qspecl_then [`SUC k`, `bb`, `u o SUC`, `g o SUC`, `q o SUC`] mp_tac) >>
   impl_tac
   >- (simp[] >> rpt strip_tac
-      >~ [`run_inst_seq_mem_ok`] >- fs[] >>
+      >~ [`run_inst_seq_mem_ok`]
+      >- (drule run_inst_seq_mem_ok_inst_idx >>
+          disch_then (qspecl_then [`u 1`, `SUC k`] (SUBST1_TAC o SYM)) >>
+          first_assum ACCEPT_TAC) >>
       qpat_x_assum `!j. j < _ ==> _` (qspec_then `SUC j` mp_tac) >>
       simp[ADD_CLAUSES]) >>
   simp[ADD_CLAUSES] >> strip_tac >>
