@@ -2,6 +2,7 @@
    creator nonce update on failure and the created address on success. *)
 Theory asmFrameCreateStep
 Ancestors
+  vfmWfState
   asmFrameRel asmFrameCallStep frameObsStep asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp frameCreationGuard
@@ -647,7 +648,7 @@ Proof
   `step s = (INL (),t)` by (irule asm_create_step_success >> metis_tac[]) >>
   `wf_state t /\ (?dt. t.msdomain = Collect dt) /\ t.txParams = s.txParams` by
     (rpt conj_tac
-     >- (drule_all vfmRunCallTheory.step_preserves_wf_state >> simp[])
+     >- (drule_all vfmWfStateTheory.step_preserves_wf_state >> simp[])
      >- (drule_at (Pat `step _ = _`) vfmDomainCollectionTheory.step_preserves_collect >> simp[]) >>
      qspec_then `s` mp_tac vfmTxParamsTheory.step_preserves_txParams >> simp[]) >>
   `observable_call c` by (Cases_on `salt_opt` >> gvs[observable_call_def]) >>
@@ -704,7 +705,7 @@ Proof
   `step s = (INL (),v)` by (irule asm_create_step_success >> metis_tac[]) >>
   `wf_state v /\ (?dv. v.msdomain = Collect dv) /\ v.txParams = s.txParams` by
     (rpt conj_tac
-     >- (drule_all vfmRunCallTheory.step_preserves_wf_state >> simp[])
+     >- (drule_all vfmWfStateTheory.step_preserves_wf_state >> simp[])
      >- (drule_at (Pat `step _ = _`) vfmDomainCollectionTheory.step_preserves_collect >> simp[]) >>
      qspec_then `s` mp_tac vfmTxParamsTheory.step_preserves_txParams >> simp[]) >>
   `observable_call c` by (Cases_on `salt_opt` >> gvs[observable_call_def]) >>
