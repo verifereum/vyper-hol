@@ -3,7 +3,8 @@ Theory tupleTargetStoreProps
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
   list rich_list finite_map
-  stmtSimAssignStorage stmtSimAssignStorageFacts stmtSimAssignAttrStorage tupleLocalStoreRun
+  stmtSimAssignStorage stmtSimAssignStorageFacts stmtSimAssignAttrStorage
+  tupleLocalStoreRun
   stmtSimAssignTuple   vyperExprNoControl
   vyperTypeSystem vyperInterpreter vyperState vyperValue vyperTyping vyperLookup
   stmtLowering exprLowering emitHelper compileEnv
@@ -181,7 +182,8 @@ Proof
       simp[Once evaluate_def, bind_def] >>
       metis_tac[tuple_target_local_preserves_layout]) >>
   drule_all tuple_target_storage_write_safe >>
-  disch_then (qspec_then `es with storage_trace := obs` strip_assume_tac) >>
+  disch_then (qspecl_then [`tr`, `slot`, `es with storage_trace := obs`]
+    strip_assume_tac) >>
   simp[Once evaluate_def, bind_def] >> gvs[]
 QED
 

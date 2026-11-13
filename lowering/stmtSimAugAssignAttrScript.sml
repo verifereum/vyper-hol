@@ -1254,7 +1254,8 @@ Resume augassign_attr_normal_summary[store]:
   disch_then (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`lctx`, `func`, `cx`, `ctx`] mp_tac) >>
   qpat_assum `valid_horizon _ _ H1 _` (fn h =>
-    disch_then (mp_tac o ISPEC (el 3 (snd (strip_comb (concl h)))))) >>
+    disch_then (mp_tac o ISPEC (el 3 (snd (strip_comb (concl h)))) o
+                INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``])) >>
   impl_tac >- simp[] >>
   strip_tac >>
   `bop_result cx ty bop [ty;expr_type e] fv v ee =

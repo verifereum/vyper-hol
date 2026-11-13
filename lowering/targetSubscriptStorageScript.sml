@@ -105,7 +105,7 @@ Proof
      slot (ArrayTV tv (Dynamic n))` by
     (irule storage_range_agree_of_live >>
      conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl_tac [`cx`, `tr`] >> simp[] >> Cases_on `tr` >>
+     qexistsl_tac [`H`, `tr`] >> simp[] >> Cases_on `tr` >>
      gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
          transient_rel_def, vyperStorageBackendTheory.get_storage_def,
          vfmStateTheory.lookup_account_def]) >>
