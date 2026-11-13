@@ -1,6 +1,7 @@
 (* Literal allocation sizes survive the actual counted decoder path. *)
 Theory abiDecodeMemAllocationSizes
 Ancestors
+  allocationPathGrowth allocationGrowth bodyMemAggregatePath
   abiStepAllocRecords abiAllocationHistory fragGasPathMem exprLoweringProps localPtrsProps
   venomExecSemantics venomExecProofs venomMemProofs venomInstProofs1
   venomState venomInst finite_map list words
@@ -101,4 +102,28 @@ Proof
       (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
       disch_then ACCEPT_TAC) >>
   rpt strip_tac >> gvs[fragExecTheory.exit_result_def]
+QED
+
+Theorem abi_decode_allocation_growth_edge[local]:
+  gas_path_mem_edge ctx func s n (OK t) /\ alloca_inv s ==>
+  allocation_growth s t
+Proof
+  rw[gas_path_mem_edge_def] >> gvs[fragExecTheory.exit_result_def] >>
+  imp_res_tac step_inst_allocation_growth >>
+  imp_res_tac eval_phis_preserves_alloca_fields >>
+  gvs[allocation_growth_def, jump_to_def] >> metis_tac[]
+QED
+
+Theorem abi_decode_allocation_growth_path:
+  gas_path_mem ctx func s n (OK t) /\ alloca_inv s ==>
+  allocation_growth s t
+Proof
+  `!ctx func s n result. gas_path_mem ctx func s n result ==>
+   !t. result = OK t ==> alloca_inv s ==> allocation_growth s t`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac gas_path_mem_ind >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[abi_decode_allocation_growth_edge,
+    aggregate_mem_edge_alloca_inv, allocation_growth_trans,
+    fragExecTheory.exit_result_def]
 QED
