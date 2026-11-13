@@ -84,7 +84,6 @@ Resume raw_call_expr_vv_sim_mem[tail]:
   irule gas_outcome_post_mono >>
   irule_at Any (SRULE [CONJ_ASSOC, arithmeticTheory.ADD_COMM]
     (BETA_RULE raw_call_tail_outcome_mem)) >>
-  first_assum (irule_at (Pat `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   first_assum (irule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
   simp[] >> rpt (goal_assum (drule_at Any)) >> simp[] >>
