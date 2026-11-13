@@ -1128,8 +1128,7 @@ Theorem convert_buffer_expr_post:
     post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     val_wf tv v /\ val_in_memory tv v (w2n p) tt.vs_memory /\
-    stmt_state_rel H ctx func cenv cx es' tt /\
-    storage_well_formed_on cx es' (FST H) /\ eval_operand op tt = SOME p /\
+    stmt_state_rel H ctx func cenv cx es' tt /\ eval_operand op tt = SOME p /\
     FLOOKUP tt.vs_allocas sa.cs_next_id = SOME (w2n p,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tv v <= sz /\
     (!name lb lsz. local_region cenv es'.scopes tt name lb lsz ==>
@@ -1151,8 +1150,7 @@ Theorem convert_widen_copy_run:
     compile_bytestring_widen_copy d x k sm = (op,sb) /\
     0 < k /\ k <= d /\ d < dimword (:256) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    stmt_state_rel H ctx func cenv cx es s /\
-    storage_well_formed_on cx es (FST H) /\ local_ptrs_reserved cenv sm /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
     (!z. x = Var z ==> not_fresh_at sm z) /\ eval_operand x s = SOME p /\
     ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -1264,8 +1262,7 @@ Theorem convert_widen_copy_owned:
     compile_bytestring_widen_copy d x k sm = (op,sb) /\
     0 < k /\ k <= d /\ d < dimword (:256) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    stmt_state_rel H ctx func cenv cx es s /\
-    storage_well_formed_on cx es (FST H) /\ local_ptrs_reserved cenv sm /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
     (!z. x = Var z ==> not_fresh_at sm z) /\
     eval_operand x s = SOME p /\ ~is_word_type (expr_type e) /\
     post_value_type cenv e = expr_type e /\
@@ -1603,7 +1600,6 @@ Proof
   `val_in_memory tv2 v' (w2n p) s.vs_memory` by metis_tac[] >>
   `val_footprint tv2 v' <= type_memory_bytes cenv (lowered_value_type cenv e1)` by simp[] >>
   `post_value_type cenv e = expr_type e` by simp[] >>
-  `storage_well_formed_on cx es1 (FST H)` by fs[expr_post_def] >>
   drule_all convert_widen_copy_owned >> strip_tac >>
   qexistsl_tac [`t`, `v'`] >> simp[] >>
   qpat_assum `expr_post H _ _ _ _ e1 _ _ _ _ _ _ _ _`
@@ -1640,7 +1636,7 @@ Proof
       (Abort Revert_abort ss)` by
     (rpt strip_tac >> first_x_assum drule >> strip_tac >> simp[expr_exit_def]) >>
   drule_all convert_cast_frag_success >>
-  disch_then (qspecl_then [`H`, `ctx`, `func`, `cx`, `es1`] mp_tac) >>
+  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es1`] mp_tac) >>
   disch_then (qspecl_then [`p`, `s`] mp_tac) >>
   disch_then (mp_then Any irule frag_exec_weaken) >>
   simp[] >> conj_tac
