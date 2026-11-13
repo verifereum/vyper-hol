@@ -1155,7 +1155,8 @@ Proof
   qabbrev_tac `w = vs_out with vs_gas_readings := gobs ++ tail` >>
   `o1_run_state_ok w` by simp[Abbr `w`, run_state_ok_gas_readings] >>
   `ctx_sim D unit.cu_context pre.cu_context w w /\
-   o1_walk_src_inv D pre.cu_context w` by metis_tac[] >>
+   o1_walk_src_inv D pre.cu_context w` by
+    metis_tac[ctx_sim_fuel_imp_ctx_sim] >>
   (* pruning *)
   `(!fuel vs. run_context fuel pre.cu_context vs =
               run_context fuel (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context vs) /\
