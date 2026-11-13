@@ -128,7 +128,7 @@ Proof
   qexistsl_tac [`u`, `w`] >> simp[] >> metis_tac[]
 QED
 
-Theorem extcall_materialize_store_result[local]:
+Theorem extcall_materialize_store_result:
   compile_store_memory ce src dst lt lt sa = ((),sb) /\
   ~is_word_type lt /\ evaluate_type (get_tenv cx) lt = SOME tv /\
   value_has_type tv v /\ val_wf tv v /\
