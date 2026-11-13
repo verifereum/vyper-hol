@@ -338,6 +338,7 @@ Theorem o1_deploy_unit_create_size_ok:
     ==>
     mem_inv (\ctx fn inst s. inst_create_size_ok inst s) dout.po_unit.cu_context vs
 Proof
+  (* PLANNED ADMISSION: SEQ-4910 *)
   cheat
 QED
 
