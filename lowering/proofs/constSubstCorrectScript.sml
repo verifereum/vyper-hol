@@ -3,10 +3,10 @@ Theory constSubstCorrect
 Ancestors
   constSubst vyperTypeConstantFold vyperAST vyperTypeContractContext
   vyperState vyperValue vyperContext vyperTypeInvariants vyperInterpreter
-  vyperMisc vyperTyping vyperTypeValues
+  vyperMisc vyperTyping vyperTypeValues targetOverlapAccess
   vyperPlaceFrames vyperStatePreservation
   vyperImmutablesPreservation vyperScopePreservation vyperCallOutcomeFrame
-  vyperCreateFrame vyperCallFrame vyperMachineFrame
+  vyperCreateFrame vyperCallFrame vyperMachineFrame vyperEvalOutcomeSuffix
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeSystem finite_map alist list
 
 Definition const_local_refs_def:
@@ -5079,6 +5079,877 @@ Proof
     (PURE_REWRITE_RULE [vyperStateTheory.bind_assoc] const_computations_related_ifexp))
 QED
 
+(* A replay range quantifies over exhausted outcome streams as well as the
+   non-oracle evaluator.  In particular, a reached sha256 cannot replay. *)
+Theorem const_sha256_exhausted[local]:
+  st.outcomes = SOME [] ==>
+  eval_expr cx (Builtin ty Sha256 es) st <> (INL pv,st')
+Proof
+  strip_tac >>
+  `outcome_suffix st.outcomes (SND (eval_exprs cx es st)).outcomes` by
+    metis_tac[cj 6 eval_outcomes_suffix_with_results, outcomes_suffix_def] >>
+  Cases_on `eval_exprs cx es st` >>
+  gvs[outcome_suffix_def] >>
+  simp[Once evaluate_def, ignore_bind_def, bind_def, type_check_def,
+       assert_def, return_def, raise_def] >>
+  Cases_on `builtin_args_length_ok Sha256 (LENGTH es)` >> simp[] >>
+  Cases_on `q` >> simp[bind_def] >>
+  Cases_on `evaluate_builtin cx r.accounts ty Sha256 (MAP expr_type es) x` >>
+  simp[lift_sum_def, bind_def, precompile_call_success_def, check_def,
+       get_accounts_def, assert_def, return_def, raise_def]
+QED
+
+Theorem exhausted_outcomes_result[local]:
+  outcomes_suffix f /\ st.outcomes = SOME [] /\ f st = (res,t) ==>
+  t.outcomes = SOME []
+Proof
+  strip_tac >> drule_all outcomes_suffix_result >>
+  simp[outcome_suffix_def]
+QED
+
+Theorem eval_exprs_exhausted_every[local]:
+  !es st vs t. EVERY (\e. !s pv t. s.outcomes = SOME [] /\
+          eval_expr cx e s = (INL pv,t) ==> P e) es /\
+    st.outcomes = SOME [] /\ eval_exprs cx es st = (INL vs,t) ==>
+    EVERY P es
+Proof
+  Induct >> simp[EVERY_DEF] >> rpt strip_tac >>
+  qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> imp_res_tac read_result_state >> gvs[] >>
+  metis_tac[exhausted_outcomes_result, cj 5 eval_outcomes_suffix_with_results]
+QED
+
+Theorem constant_expr_exhausted_no_sha256[local]:
+  (!e. constant_expr mods e ==>
+    !cx st pv st'. st.outcomes = SOME [] /\
+      eval_expr cx e st = (INL pv,st') ==> no_sha256_expr e) /\
+  (!es. EVERY (constant_expr mods) es ==>
+    EVERY (\e. !cx st pv st'. st.outcomes = SOME [] /\
+      eval_expr cx e st = (INL pv,st') ==> no_sha256_expr e) es) /\
+  (!fs:(identifier # expr) list. EVERY (constant_expr mods) (MAP SND fs) ==>
+    EVERY (\e. !cx st pv st'. st.outcomes = SOME [] /\
+      eval_expr cx e st = (INL pv,st') ==> no_sha256_expr e) (MAP SND fs))
+Proof
+  ho_match_mp_tac const_local_refs_ind >>
+  simp[constant_expr_def, no_sha256_expr_def, EVERY_DEF, MAP] >>
+  rpt strip_tac
+  >~ [`eval_expr cx (StructLit ty ns fs) st = _`]
+  >- (PairCases_on `ns` >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      `EVERY no_sha256_expr (MAP SND fs)` suffices_by
+        simp[no_sha256_collections, EVERY_MAP, combinTheory.o_DEF] >>
+      irule eval_exprs_exhausted_every >> goal_assum (drule_at Any) >>
+      gvs[EVERY_MEM] >> metis_tac[])
+  >~ [`eval_expr cx (Attribute ty e id) st = _`]
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+      metis_tac[])
+  >>~- ([`eval_expr cx (Subscript ty e e') st = _`],
+      Cases_on `subscript_reads_base cx e e'` >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >> imp_res_tac read_result_state >> gvs[] >>
+      metis_tac[exhausted_outcomes_result, cj 5 eval_outcomes_suffix_with_results])
+  >~ [`bi = Sha256`]
+  >- metis_tac[const_sha256_exhausted]
+  >~ [`eval_expr cx (Builtin ty bi es) st = _`]
+  >- (Cases_on `bi = Len`
+      >- (gvs[] >> Cases_on `es` >>
+          qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+          simp[Once evaluate_def, builtin_args_length_ok_def, type_check_def,
+               ignore_bind_def, bind_def, assert_def, raise_def, return_def,
+               AllCaseEqs()] >>
+          Cases_on `t` >> simp[no_sha256_expr_def] >>
+          rpt strip_tac >> gvs[EVERY_DEF] >> metis_tac[]) >>
+      `code_slice_source bi es = NONE /\ bi <> Env MsgGas` by
+        (Cases_on `bi` >> gvs[constant_builtin_def, code_slice_source_SOME]) >>
+      Cases_on `bi = Bop In \/ bi = Bop NotIn` >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, ignore_bind_def, bind_def, type_check_def,
+           assert_def, raise_def, return_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >> simp[no_sha256_collections] >>
+      irule eval_exprs_exhausted_every >> goal_assum (drule_at Any) >>
+      gvs[EVERY_MEM] >> metis_tac[])
+  >~ [`eval_expr cx (TypeBuiltin ty bi t es) st = _`]
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, ignore_bind_def, bind_def, type_check_def,
+           assert_def, raise_def, return_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >> simp[no_sha256_collections] >>
+      irule eval_exprs_exhausted_every >> goal_assum (drule_at Any) >>
+      gvs[EVERY_MEM] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem const_results_related_capture[local]:
+  const_results_related roots cx ty p q /\ const_cells_agree roots st /\
+  (c = d \/ ?v. const_result_at roots cx ty p v /\
+                 const_result_at roots cx ty q v) ==>
+  const_computations_related (const_results_related roots cx ty)
+    (if c then bind (read_result cx p) (\v. return (Value v)) else return p)
+    (if d then bind (read_result cx q) (\v. return (Value v)) else return q) st
+Proof
+  strip_tac
+  >- (Cases_on `d` >> simp[]
+      >- (irule const_computations_related_prefix >>
+          simp[const_computations_related_eq] >>
+          metis_tac[const_results_related_read, const_computations_related_refl,
+                    const_results_related_def]) >>
+      simp[const_computations_related_def, return_def]) >>
+  `read_result cx p st = (INL v,st) /\
+   read_result cx q st = (INL v,st)` by
+    metis_tac[const_result_at_observe] >>
+  `const_result_at roots cx ty (Value v) v` by
+    gvs[const_result_at_def] >>
+  Cases_on `c` >> Cases_on `d` >>
+  gvs[const_computations_related_def, bind_def, return_def,
+      const_results_related_def] >> metis_tac[]
+QED
+
+Theorem const_subst_range_no_sha256[local]:
+  const_subst_context roots cx env E mods art /\
+  ALOOKUP E id = SOME r /\ const_cells_agree roots st ==>
+  no_sha256_expr r
+Proof
+  strip_tac >>
+  `const_cells_agree roots (st with outcomes := SOME [])` by
+    gvs[const_cells_agree_def] >>
+  gvs[const_subst_context_def] >>
+  first_x_assum drule >> strip_tac >>
+  drule (cj 1 constant_expr_exhausted_no_sha256) >>
+  disch_then irule >>
+  qexistsl [`cx`, `pv`, `st with outcomes := SOME []`,
+            `st with outcomes := SOME []`] >> simp[]
+QED
+
+Theorem subst_consts_index_effects_aux[local]:
+  const_subst_context roots cx env E mods art /\ const_cells_agree roots st ==>
+  ((!e. int_calls_expr (subst_consts_expr E e) = int_calls_expr e /\
+    FILTER (\a. !r. a <> vyperSubscriptOverlap$ReadAcc r)
+      (vyperSubscriptOverlap$accesses_expr (subst_consts_expr E e)) =
+    FILTER (\a. !r. a <> vyperSubscriptOverlap$ReadAcc r)
+      (vyperSubscriptOverlap$accesses_expr e)) /\
+   (!t. int_calls_target (subst_consts_btarget E t) = int_calls_target t /\
+    FILTER (\a. !r. a <> vyperSubscriptOverlap$ReadAcc r)
+      (vyperSubscriptOverlap$accesses_target (subst_consts_btarget E t)) =
+    FILTER (\a. !r. a <> vyperSubscriptOverlap$ReadAcc r)
+      (vyperSubscriptOverlap$accesses_target t)) /\
+   (!es. int_calls_exprs (subst_consts_exprs E es) = int_calls_exprs es /\
+    FILTER (\a. !r. a <> vyperSubscriptOverlap$ReadAcc r)
+      (vyperSubscriptOverlap$accesses_exprs (subst_consts_exprs E es)) =
+    FILTER (\a. !r. a <> vyperSubscriptOverlap$ReadAcc r)
+      (vyperSubscriptOverlap$accesses_exprs es)) /\
+   (!opt. int_calls_opt (subst_consts_opt E opt) = int_calls_opt opt /\
+    FILTER (\a. !r. a <> vyperSubscriptOverlap$ReadAcc r)
+      (vyperSubscriptOverlap$accesses_opt (subst_consts_opt E opt)) =
+    FILTER (\a. !r. a <> vyperSubscriptOverlap$ReadAcc r)
+      (vyperSubscriptOverlap$accesses_opt opt)) /\
+   (!fs. int_calls_named_exprs (subst_consts_fields E fs) = int_calls_named_exprs fs /\
+    FILTER (\a. !r. a <> vyperSubscriptOverlap$ReadAcc r)
+      (vyperSubscriptOverlap$accesses_named_exprs (subst_consts_fields E fs)) =
+    FILTER (\a. !r. a <> vyperSubscriptOverlap$ReadAcc r)
+      (vyperSubscriptOverlap$accesses_named_exprs fs)))
+Proof
+  strip_tac >> ho_match_mp_tac vyperSubscriptOverlapTheory.accesses_expr_ind >>
+  simp[subst_consts_expr_def, vyperTypeCallGraphTheory.int_calls_expr_def,
+       vyperSubscriptOverlapTheory.accesses_expr_def, FILTER_APPEND_DISTRIB] >>
+  rpt strip_tac >> gvs[]
+  >>~- ([`subst_consts_expr E (TopLevelName ty ns)`],
+    PairCases_on `ns` >> Cases_on `ns0` >>
+    simp[subst_consts_expr_def, vyperTypeCallGraphTheory.int_calls_expr_def,
+         vyperSubscriptOverlapTheory.accesses_expr_def] >>
+    Cases_on `ALOOKUP E ns1` >>
+    simp[vyperTypeCallGraphTheory.int_calls_expr_def,
+         vyperSubscriptOverlapTheory.accesses_expr_def] >>
+    rename1 `ALOOKUP E ns1 = SOME r` >>
+    `no_sha256_expr r` by metis_tac[const_subst_range_no_sha256] >>
+    `constant_expr mods r` by
+      (gvs[const_subst_context_def] >> metis_tac[]) >>
+    drule_all (cj 1 constant_expr_read_accesses_aux) >>
+    simp[FILTER_EQ_NIL]) >>
+  Cases_on `t` >> gvs[vyperTypeCallGraphTheory.int_calls_expr_def]
+QED
+
+Theorem subst_consts_index_hazards[local]:
+  const_subst_context roots cx env E mods art /\ const_cells_agree roots st ==>
+  (MEM (vyperSubscriptOverlap$WriteAcc x)
+     (vyperSubscriptOverlap$expr_accesses M (subst_consts_expr E e)) <=>
+   MEM (vyperSubscriptOverlap$WriteAcc x)
+     (vyperSubscriptOverlap$expr_accesses M e)) /\
+  (MEM vyperSubscriptOverlap$RiskyAcc
+     (vyperSubscriptOverlap$expr_accesses M (subst_consts_expr E e)) <=>
+   MEM vyperSubscriptOverlap$RiskyAcc
+     (vyperSubscriptOverlap$expr_accesses M e))
+Proof
+  strip_tac >> drule_all (cj 1 subst_consts_index_effects_aux) >>
+  disch_then (qspec_then `e` strip_assume_tac) >>
+  `MEM (vyperSubscriptOverlap$WriteAcc x)
+      (vyperSubscriptOverlap$accesses_expr (subst_consts_expr E e)) =
+   MEM (vyperSubscriptOverlap$WriteAcc x)
+      (vyperSubscriptOverlap$accesses_expr e) /\
+   MEM vyperSubscriptOverlap$RiskyAcc
+      (vyperSubscriptOverlap$accesses_expr (subst_consts_expr E e)) =
+   MEM vyperSubscriptOverlap$RiskyAcc
+      (vyperSubscriptOverlap$accesses_expr e)` by
+    (qpat_x_assum `FILTER _ _ = _` (fn th =>
+       mp_tac (AP_TERM ``MEM (vyperSubscriptOverlap$WriteAcc x)`` th) >>
+       mp_tac (AP_TERM ``MEM vyperSubscriptOverlap$RiskyAcc`` th)) >>
+     simp[MEM_FILTER]) >>
+  simp[vyperSubscriptOverlapTheory.expr_accesses_def,
+       vyperSubscriptOverlapTheory.reached_functions_def, MEM_APPEND]
+QED
+
+Theorem const_subst_nonempty_roots_modules[local]:
+  const_subst_context roots cx env E mods art /\ roots <> [] ==>
+  ALOOKUP cx.sources cx.txn.target = SOME mods
+Proof
+  Cases_on `roots` >> simp[const_subst_context_def] >>
+  PairCases_on `h` >> rpt strip_tac >>
+  qpat_x_assum `!addr src id tv root. _` (qspecl_then
+    [`h0`, `h1`, `h2`, `h3`, `h4`] mp_tac) >>
+  simp[checked_frame_context_def]
+QED
+
+Theorem lookup_global_no_immutables[local]:
+  st.immutables = [] ==>
+  lookup_global cx NONE id st <>
+    (INL (PlaceR (ImmutablePlace NONE id [])),st)
+Proof
+  strip_tac >> Cases_on `get_module_code cx NONE` >>
+  simp[lookup_global_def, bind_def, ignore_bind_def, lift_option_type_def,
+       return_def, raise_def] >>
+  Cases_on `find_var_decl_by_name id x` >>
+  simp[get_immutables_def, get_address_immutables_def, bind_def,
+       lift_option_type_def, return_def, raise_def] >>
+  PairCases_on `x'` >> Cases_on `x'0` >>
+  simp[bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()]
+QED
+
+Theorem const_subst_empty_roots_range[local]:
+  const_subst_context [] cx env E mods art ==> ALOOKUP E id = NONE
+Proof
+  strip_tac >> Cases_on `ALOOKUP E id` >> simp[] >>
+  gvs[const_subst_context_def] >> first_x_assum drule >> strip_tac >>
+  qpat_x_assum `!st. const_cells_agree [] st ==> lookup_global _ _ _ st = _`
+    (qspec_then `ARB with immutables := []` mp_tac) >>
+  simp[const_cells_agree_def] >>
+  irule lookup_global_no_immutables >> simp[]
+QED
+
+Theorem const_subst_empty_roots_env[local]:
+  const_subst_context [] cx env E mods art ==> E = []
+Proof
+  strip_tac >> Cases_on `E` >> simp[] >> PairCases_on `h` >>
+  drule const_subst_empty_roots_range >>
+  disch_then (qspec_then `h0` mp_tac) >> simp[]
+QED
+
+Theorem const_subst_tracked_declared[local]:
+  const_subst_context roots cx env E mods art /\
+  const_result_at roots cx ty (PlaceR (ImmutablePlace NONE id [])) v ==>
+  declared_constant mods NONE id
+Proof
+  simp[const_result_at_def] >> rpt strip_tac >>
+  gvs[const_subst_context_def, checked_frame_context_def] >> metis_tac[]
+QED
+
+Theorem overlap_constant_decl_MEM[local]:
+  !ts id. vyperSubscriptOverlap$constant_decl id ts <=>
+    ?vis e ty init. MEM (VariableDecl vis (Constant e) id ty init) ts
+Proof
+  Induct >> simp[vyperSubscriptOverlapTheory.constant_decl_def] >>
+  Cases_on `h` >> simp[vyperSubscriptOverlapTheory.constant_decl_def] >>
+  rename1 `VariableDecl vis mut nm ty init` >>
+  Cases_on `mut` >> simp[vyperSubscriptOverlapTheory.constant_decl_def] >>
+  metis_tac[]
+QED
+
+Theorem declared_constant_overlap_test[local]:
+  ALL_DISTINCT (MAP FST mods) /\ declared_constant mods src id ==>
+  ?ts. ALOOKUP mods src = SOME ts /\ vyperSubscriptOverlap$constant_decl id ts
+Proof
+  rw[declared_constant_def] >> qexists `tls` >>
+  conj_tac >- metis_tac[ALOOKUP_ALL_DISTINCT_MEM] >>
+  simp[overlap_constant_decl_MEM] >> metis_tac[]
+QED
+
+Theorem constant_expr_nonconstant_reads[local]:
+  ALL_DISTINCT (MAP FST mods) ==>
+  ((!e. constant_expr mods e ==>
+    vyperSubscriptOverlap$nonconstant_reads mods
+      (vyperSubscriptOverlap$accesses_expr e) = []) /\
+   (!es. EVERY (constant_expr mods) es ==>
+    vyperSubscriptOverlap$nonconstant_reads mods
+      (vyperSubscriptOverlap$accesses_exprs es) = []) /\
+   (!fs. EVERY (constant_expr mods) (MAP SND fs) ==>
+    vyperSubscriptOverlap$nonconstant_reads mods
+      (vyperSubscriptOverlap$accesses_named_exprs fs) = []))
+Proof
+  strip_tac >> ho_match_mp_tac const_local_refs_ind >>
+  simp[constant_expr_def, vyperSubscriptOverlapTheory.accesses_expr_def,
+       targetOverlapAccessTheory.nonconstant_reads_append,
+       vyperSubscriptOverlapTheory.nonconstant_reads_def, SF ETA_ss] >>
+  rpt strip_tac >> gvs[SF ETA_ss]
+  >~ [`constant_expr mods (TopLevelName ty ns)`]
+  >- (PairCases_on `ns` >> gvs[constant_expr_def] >>
+      drule_all declared_constant_overlap_test >>
+      strip_tac >> simp[vyperSubscriptOverlapTheory.nonconstant_reads_def]) >>
+  Cases_on `vyperSubscriptOverlap$risky_builtin bi` >>
+  simp[vyperSubscriptOverlapTheory.nonconstant_reads_def]
+QED
+
+Theorem subst_consts_nonconstant_reads_aux[local]:
+  ALL_DISTINCT (MAP FST mods) /\
+  (!id r. ALOOKUP E id = SOME r ==>
+    constant_expr mods r /\ declared_constant mods NONE id) ==>
+  ((!e. vyperSubscriptOverlap$nonconstant_reads mods
+      (vyperSubscriptOverlap$accesses_expr (subst_consts_expr E e)) =
+    vyperSubscriptOverlap$nonconstant_reads mods
+      (vyperSubscriptOverlap$accesses_expr e)) /\
+   (!t. vyperSubscriptOverlap$nonconstant_reads mods
+      (vyperSubscriptOverlap$accesses_target (subst_consts_btarget E t)) =
+    vyperSubscriptOverlap$nonconstant_reads mods
+      (vyperSubscriptOverlap$accesses_target t)) /\
+   (!es. vyperSubscriptOverlap$nonconstant_reads mods
+      (vyperSubscriptOverlap$accesses_exprs (subst_consts_exprs E es)) =
+    vyperSubscriptOverlap$nonconstant_reads mods
+      (vyperSubscriptOverlap$accesses_exprs es)) /\
+   (!opt. vyperSubscriptOverlap$nonconstant_reads mods
+      (vyperSubscriptOverlap$accesses_opt (subst_consts_opt E opt)) =
+    vyperSubscriptOverlap$nonconstant_reads mods
+      (vyperSubscriptOverlap$accesses_opt opt)) /\
+   (!fs. vyperSubscriptOverlap$nonconstant_reads mods
+      (vyperSubscriptOverlap$accesses_named_exprs (subst_consts_fields E fs)) =
+    vyperSubscriptOverlap$nonconstant_reads mods
+      (vyperSubscriptOverlap$accesses_named_exprs fs)))
+Proof
+  strip_tac >> ho_match_mp_tac vyperSubscriptOverlapTheory.accesses_expr_ind >>
+  simp[subst_consts_expr_def, vyperSubscriptOverlapTheory.accesses_expr_def,
+       targetOverlapAccessTheory.nonconstant_reads_append] >> rpt strip_tac >> gvs[]
+  >~ [`subst_consts_expr E (TopLevelName ty ns)`]
+  >- (PairCases_on `ns` >> Cases_on `ns0` >>
+      simp[subst_consts_expr_def, vyperSubscriptOverlapTheory.accesses_expr_def] >>
+      Cases_on `ALOOKUP E ns1` >>
+      simp[vyperSubscriptOverlapTheory.accesses_expr_def] >>
+      first_x_assum drule >> strip_tac >>
+      drule_all declared_constant_overlap_test >> strip_tac >>
+      drule (cj 1 constant_expr_nonconstant_reads) >>
+      disch_then drule >>
+      simp[vyperSubscriptOverlapTheory.nonconstant_reads_def]) >>
+  Cases_on `t` >> gvs[vyperSubscriptOverlapTheory.accesses_expr_def]
+QED
+
+Theorem const_subst_nonconstant_reads[local]:
+  const_subst_context roots cx env E mods art /\ const_cells_agree roots st /\
+  (!id r. ALOOKUP E id = SOME r ==>
+    ?v. const_result_at roots cx (expr_type r)
+      (PlaceR (ImmutablePlace NONE id [])) v) ==>
+  vyperSubscriptOverlap$nonconstant_reads mods
+    (vyperSubscriptOverlap$expr_accesses mods (subst_consts_expr E e)) =
+  vyperSubscriptOverlap$nonconstant_reads mods
+    (vyperSubscriptOverlap$expr_accesses mods e)
+Proof
+  strip_tac >> Cases_on `roots = []`
+  >- (gvs[] >> drule const_subst_empty_roots_env >>
+      simp[subst_consts_expr_empty]) >>
+  `?src id. checked_frame_context cx mods art src id env` by
+    (Cases_on `roots` >> gvs[] >> PairCases_on `h` >>
+     gvs[const_subst_context_def] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP FST mods)` by
+    (gvs[checked_frame_context_def] >>
+     drule check_contract_runtime_namespaces >>
+     simp[contract_namespaces_ok_def]) >>
+  `!id r. ALOOKUP E id = SOME r ==>
+     constant_expr mods r /\ declared_constant mods NONE id` by
+    (rpt gen_tac >> strip_tac >> conj_tac
+     >- (gvs[const_subst_context_def] >> metis_tac[]) >>
+     metis_tac[const_subst_tracked_declared]) >>
+  drule_all (cj 1 subst_consts_nonconstant_reads_aux) >>
+  disch_then (qspec_then `e` assume_tac) >>
+  drule_all (cj 1 subst_consts_index_effects_aux) >>
+  disch_then (qspec_then `e` strip_assume_tac) >>
+  simp[vyperSubscriptOverlapTheory.expr_accesses_def,
+       vyperSubscriptOverlapTheory.reached_functions_def,
+       targetOverlapAccessTheory.nonconstant_reads_append]
+QED
+
+Theorem select_result_immutable_source[local]:
+  select_result cx ty pv sb st =
+    (INL (PlaceR (ImmutablePlace src id path)),st') ==>
+  ?pre. pv = PlaceR (ImmutablePlace src id pre)
+Proof
+  Cases_on `pv` >>
+  simp[select_result_def, extend_place_def, bind_def, ignore_bind_def,
+       lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+  >- (Cases_on `p` >>
+      gvs[extend_place_def, extend_memory_place_def, bind_def,
+          ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+      rename1 `extend_storage_place cx tr slot tv sb` >>
+      Cases_on `tv` >> Cases_on `sb` >>
+      gvs[extend_storage_place_def, bind_def, ignore_bind_def,
+          lift_option_type_def, return_def, raise_def,
+          prod_CASE_rator, AllCaseEqs()] >>
+      TRY (pairarg_tac >> gvs[return_def] >> NO_TAC) >>
+      rename1 `ValueSubscript v` >> Cases_on `v` >>
+      gvs[extend_storage_place_def, bind_def, ignore_bind_def,
+          lift_option_type_def, return_def, raise_def,
+          prod_CASE_rator, AllCaseEqs()] >>
+      pairarg_tac >> gvs[return_def]) >>
+  Cases_on `sb` >> Cases_on `v` >>
+  gvs[extend_place_def, bind_def, lift_option_type_def, return_def,
+      raise_def, AllCaseEqs()]
+QED
+
+Theorem closed_constant_no_local_place[local]:
+  !mods r. constant_expr mods r /\ const_local_refs r = [] ==>
+    !cx st st' id path.
+      eval_expr cx r st <>
+        (INL (PlaceR (ImmutablePlace NONE id path)),st')
+Proof
+  recInduct constant_expr_ind >>
+  simp[constant_expr_def, const_local_refs_def] >>
+  rpt strip_tac
+  >- (Cases_on `src` >> gvs[] >>
+      gvs[Once evaluate_def] >>
+      drule lookup_global_immutable_root >> simp[])
+  >~ [`eval_expr cx (Attribute ty e fld) st = _`]
+  >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+          raise_def, AllCaseEqs()] >>
+      drule select_result_immutable_source >> strip_tac >>
+      gvs[] >> metis_tac[]) >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+      raise_def, AllCaseEqs()]
+  >- (rename1 `StructLit ty ns kes` >> Cases_on `ns` >>
+      gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()]) >>
+  drule select_result_immutable_source >> strip_tac >> gvs[] >>
+  Cases_on `subscript_reads_base cx e1 e2` >>
+  gvs[bind_def, return_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem const_subst_range_tracked[local]:
+  const_subst_context roots cx env E mods art /\
+  const_cells_agree roots st /\ ALOOKUP E id = SOME r ==>
+  ?v. const_result_at roots cx (expr_type r)
+        (PlaceR (ImmutablePlace NONE id [])) v
+Proof
+  strip_tac >>
+  `constant_expr mods r /\ const_local_refs r = [] /\
+   ?pv. const_results_related roots cx (expr_type r)
+          (PlaceR (ImmutablePlace NONE id [])) pv /\
+        eval_expr cx r st = (INL pv,st)` by
+    (gvs[const_subst_context_def] >> metis_tac[]) >>
+  gvs[const_results_related_def] >>
+  metis_tac[closed_constant_no_local_place]
+QED
+
+Theorem changed_subscript_capture_spine[local]:
+  expr_type a' = expr_type a /\
+  vyperSubscriptOverlap$nonconstant_reads mods
+    (vyperSubscriptOverlap$expr_accesses mods a') =
+  vyperSubscriptOverlap$nonconstant_reads mods
+    (vyperSubscriptOverlap$expr_accesses mods a) /\
+  (!reads. vyperSubscriptOverlap$any_written reads
+       (vyperSubscriptOverlap$expr_accesses mods b') =
+     vyperSubscriptOverlap$any_written reads
+       (vyperSubscriptOverlap$expr_accesses mods b)) /\
+  (MEM vyperSubscriptOverlap$RiskyAcc
+     (vyperSubscriptOverlap$expr_accesses mods b') <=>
+   MEM vyperSubscriptOverlap$RiskyAcc
+     (vyperSubscriptOverlap$expr_accesses mods b)) /\
+  vyperSubscriptOverlap$subscript_overlap mods a b <>
+    vyperSubscriptOverlap$subscript_overlap mods a' b' ==>
+  base_through_dynarray a <> base_through_dynarray a'
+Proof
+  simp[vyperSubscriptOverlapTheory.subscript_overlap_def] >>
+  metis_tac[]
+QED
+
+Theorem value_or_const_capture_success[local]:
+  ((?v. p = Value v) \/ (?v. const_result_at roots cx ty p v)) /\
+  (if c then bind (read_result cx p) (\v. return (Value v))
+   else return p) st = (INL q,s) ==>
+  ((?v. q = Value v) \/ (?v. const_result_at roots cx ty q v))
+Proof
+  Cases_on `c` >>
+  gvs[bind_def, return_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem value_or_const_select_success[local]:
+  ((?v. p = Value v) \/ (?v. const_result_at roots cx ty p v)) /\
+  const_cells_agree roots st /\
+  (!v tv w. evaluate_type (get_tenv cx) ty = SOME tv /\
+    value_has_type tv v /\ evaluate_subscripts tv v [sb] = INL w ==>
+    ?etv. subscript_type tv sb = SOME etv /\
+      evaluate_type (get_tenv cx) result_ty = SOME etv) /\
+  select_result cx ty p sb st = (INL q,s) ==>
+  ((?w. q = Value w) \/ (?w. const_result_at roots cx result_ty q w))
+Proof
+  rpt strip_tac
+  >- (gvs[select_result_def, bind_def, lift_option_type_def,
+          lift_sum_def, return_def, raise_def, AllCaseEqs()] >> metis_tac[]) >>
+  drule_all const_result_at_observe >> strip_tac >>
+  `?tv. evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v` by
+    gvs[const_result_at_def] >>
+  `select_result cx ty p sb st =
+    case evaluate_subscripts tv v [sb] of
+    | INL w => (INL (const_select_output p sb w),st)
+    | INR err => (INR (Error err),st)` by
+    (irule constant_result_selection_outcome >> simp[] >>
+     qexists `ARB with type_defs := get_tenv cx` >> simp[]) >>
+  Cases_on `evaluate_subscripts tv v [sb]` >> gvs[] >>
+  metis_tac[const_result_at_select]
+QED
+
+Theorem value_or_const_subscript_success[local]:
+  ((?v. p = Value v) \/ (?v. const_result_at roots cx ct p v)) /\
+  const_cells_agree roots st /\ subscript_type_ok ct ie ty /\
+  vyperTypeExprResult$subscript_index_matches ct ie idx /\
+  select_result cx ct p (ValueSubscript idx) st = (INL q,s) ==>
+  ((?w. q = Value w) \/ (?w. const_result_at roots cx ty q w))
+Proof
+  strip_tac >>
+  `!v tv w. evaluate_type (get_tenv cx) ct = SOME tv /\
+    value_has_type tv v /\ evaluate_subscripts tv v [ValueSubscript idx] = INL w ==>
+    ?etv. subscript_type tv (ValueSubscript idx) = SOME etv /\
+      evaluate_type (get_tenv cx) ty = SOME etv` by
+    (rpt strip_tac >>
+     drule_all (constant_subscript_selected_typed
+       |> Q.INST [`env` |-> `ARB with type_defs := get_tenv cx`] |> SRULE []) >>
+     metis_tac[]) >>
+  metis_tac[value_or_const_select_success]
+QED
+
+Theorem value_or_const_attribute_success[local]:
+  ((?v. p = Value v) \/ (?v. const_result_at roots cx ct p v)) /\
+  const_cells_agree roots st /\
+  attribute_type (get_tenv cx) ct id = SOME ty /\
+  select_result cx ct p (AttrSubscript id) st = (INL q,s) ==>
+  ((?w. q = Value w) \/ (?w. const_result_at roots cx ty q w))
+Proof
+  strip_tac >>
+  `!v tv w. evaluate_type (get_tenv cx) ct = SOME tv /\
+    value_has_type tv v /\ evaluate_subscripts tv v [AttrSubscript id] = INL w ==>
+    ?etv. subscript_type tv (AttrSubscript id) = SOME etv /\
+      evaluate_type (get_tenv cx) ty = SOME etv` by
+    (rpt strip_tac >>
+     drule_all (constant_attribute_selected_typed
+       |> Q.INST [`env` |-> `ARB with type_defs := get_tenv cx`] |> SRULE []) >>
+     metis_tac[]) >>
+  metis_tac[value_or_const_select_success]
+QED
+
+Theorem hashmap_spine_subst[local]:
+  !a kt vt. const_subst_context roots cx env E mods art /\
+    type_place_expr env a = SOME (HashMapT kt vt) ==>
+    base_through_dynarray a = base_through_dynarray (subst_consts_expr E a)
+Proof
+  measureInduct_on `expr_size a` >> Cases_on `a` >>
+  simp[subst_consts_expr_def, base_through_dynarray_def] >> rpt strip_tac >>
+  all_tac >~ [`type_place_expr env (TopLevelName ty ns) = _`] >-
+    (PairCases_on `ns` >> Cases_on `ns0` >>
+     gvs[subst_consts_expr_def, base_through_dynarray_def] >>
+     Cases_on `ALOOKUP E ns1` >> gvs[base_through_dynarray_def] >>
+     gvs[Once well_typed_expr_def, const_subst_context_def] >>
+     first_x_assum drule >> strip_tac >> gvs[]) >>
+  all_tac >~ [`type_place_expr env (Subscript ty a b) = _`] >-
+    (drule const_subscript_hashmap_base >> strip_tac >>
+     `expr_type (subst_consts_expr E a) = expr_type a` by
+       metis_tac[const_subst_typed_annotation, optionTheory.IS_SOME_EXISTS] >>
+     `base_through_dynarray a = base_through_dynarray (subst_consts_expr E a)` by
+       (first_x_assum (qspec_then `a` mp_tac) >> simp[expr_size_def] >> metis_tac[]) >>
+     simp[]) >>
+  gvs[Once well_typed_expr_def]
+QED
+
+Theorem changed_base_spine_result[local]:
+  !a st s p.
+    const_subst_context roots cx env E mods art /\
+    (well_typed_expr env a \/ IS_SOME (type_place_expr env a)) /\
+    const_cells_agree roots st /\
+    base_through_dynarray a <>
+      base_through_dynarray (subst_consts_expr E a) /\
+    eval_expr cx a st = (INL p,s) ==>
+    (?v. p = Value v) \/
+    (?v. const_result_at roots cx (expr_type a) p v)
+Proof
+  measureInduct_on `expr_size a` >> Cases_on `a` >>
+  simp[subst_consts_expr_def, base_through_dynarray_def] >>
+  rpt strip_tac
+  >>~- ([`eval_expr cx (TopLevelName ty ns) st = _`], (
+    `expr_type (subst_consts_expr E (TopLevelName ty ns)) = ty` by
+      metis_tac[const_subst_typed_annotation, expr_type_def] >>
+    PairCases_on `ns` >> Cases_on `ns0` >>
+    gvs[subst_consts_expr_def, base_through_dynarray_def, AllCaseEqs()] >>
+    Cases_on `ALOOKUP E ns1` >> gvs[base_through_dynarray_def] >>
+    rename1 `ALOOKUP E nm = SOME r` >>
+    `lookup_global cx NONE nm st =
+       (INL (PlaceR (ImmutablePlace NONE nm [])),st)` by
+      (gvs[const_subst_context_def] >> metis_tac[]) >>
+    gvs[Once evaluate_def, expr_type_def] >>
+    metis_tac[const_subst_range_tracked])) >>
+  all_tac >>~- ([`eval_expr cx (Subscript ty a b) st = _`], (
+    `(well_typed_expr env a \/ IS_SOME (type_place_expr env a)) /\
+      well_typed_expr env b` by
+      metis_tac[frame_subscript_typing, optionTheory.IS_SOME_EXISTS] >>
+    `expr_type (subst_consts_expr E a) = expr_type a` by
+      metis_tac[const_subst_typed_annotation] >>
+    `base_through_dynarray a <> base_through_dynarray (subst_consts_expr E a)` by
+      (gvs[] >> metis_tac[]) >>
+    qpat_x_assum `eval_expr cx (Subscript ty a b) st = _` mp_tac >>
+    simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+    gvs[] >>
+    rename1 `select_result cx (expr_type a) res' (ValueSubscript iv) readst = (INL p,s)` >>
+    rename1 `read_result cx idx idxst = (INL iv,readst)` >>
+    rename1 `eval_expr cx b cap = (INL idx,idxst)` >>
+    rename1 `eval_expr cx a st = (INL res,mid)` >>
+    `(?v. res = Value v) \/ (?v. const_result_at roots cx (expr_type a) res v)` by
+      (first_x_assum (qspec_then `a` mp_tac) >> simp[expr_size_def] >>
+       metis_tac[]) >>
+    `(?v. res' = Value v) \/ (?v. const_result_at roots cx (expr_type a) res' v)` by
+      metis_tac[value_or_const_capture_success] >>
+    `cap = mid` by
+      (Cases_on `subscript_reads_base cx a b` >>
+       gvs[bind_def, return_def, AllCaseEqs()] >> metis_tac[read_result_state]) >>
+    `const_cells_agree roots readst` by
+      metis_tac[const_subst_context_expr_frame, read_result_state] >>
+    `~?kt vt. type_place_expr env a = SOME (HashMapT kt vt)` by
+      metis_tac[hashmap_spine_subst] >>
+    `subscript_type_ok (expr_type a) b ty` by
+      metis_tac[const_subscript_domain_type_ok] >>
+    `vyperTypeExprResult$subscript_index_matches (expr_type a) b iv` by
+      (Cases_on `expr_type a` >>
+       gvs[vyperTypeExprResultTheory.subscript_index_matches_def,
+           vyperTypeExprResultTheory.subscript_type_ok_tuple] >>
+       gvs[Once evaluate_def, vyperValueOperationTheory.evaluate_literal_def,
+           return_def, read_result_def]) >>
+    simp[expr_type_def] >> metis_tac[value_or_const_subscript_success])) >>
+  gvs[frame_place_expr_other] >>
+  rename1 `eval_expr cx (Attribute ty a fld) st = _` >>
+  `well_typed_expr env a /\ attribute_type (get_tenv cx) (expr_type a) fld = SOME ty` by
+    (gvs[Once well_typed_expr_def, const_subst_context_def, attribute_type_ok_def]) >>
+  qpat_x_assum `eval_expr cx (Attribute ty a fld) st = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  `(?v. res = Value v) \/ (?v. const_result_at roots cx (expr_type a) res v)` by
+    (first_x_assum (qspec_then `a` mp_tac) >> simp[expr_size_def] >> metis_tac[]) >>
+  rename1 `select_result cx (expr_type a) res (AttrSubscript fld) mid = _` >>
+  `const_cells_agree roots mid` by metis_tac[const_subst_context_expr_frame] >>
+  simp[expr_type_def] >> metis_tac[value_or_const_attribute_success]
+QED
+
+Theorem const_subst_changed_capture_classify_conditional[local]:
+  const_subst_context roots cx env E mods art /\
+  (well_typed_expr env a \/ IS_SOME (type_place_expr env a)) /\
+  const_cells_agree roots st /\
+  vyperSubscriptOverlap$nonconstant_reads mods
+    (vyperSubscriptOverlap$expr_accesses mods (subst_consts_expr E a)) =
+  vyperSubscriptOverlap$nonconstant_reads mods
+    (vyperSubscriptOverlap$expr_accesses mods a) /\
+  (!reads. vyperSubscriptOverlap$any_written reads
+       (vyperSubscriptOverlap$expr_accesses mods (subst_consts_expr E b)) =
+     vyperSubscriptOverlap$any_written reads
+       (vyperSubscriptOverlap$expr_accesses mods b)) /\
+  (MEM vyperSubscriptOverlap$RiskyAcc
+     (vyperSubscriptOverlap$expr_accesses mods (subst_consts_expr E b)) <=>
+   MEM vyperSubscriptOverlap$RiskyAcc
+     (vyperSubscriptOverlap$expr_accesses mods b)) /\
+  subscript_reads_base cx a b <>
+    subscript_reads_base cx (subst_consts_expr E a) (subst_consts_expr E b) /\
+  eval_expr cx a st = (INL p,s) /\
+  eval_expr cx (subst_consts_expr E a) st = (INL p,s) ==>
+  (?v. p = Value v) \/ (?v. const_result_at roots cx (expr_type a) p v)
+Proof
+  disch_tac >> Cases_on `roots = []`
+  >- (gvs[] >> drule const_subst_empty_roots_env >> strip_tac >>
+      gvs[subst_consts_expr_empty]) >>
+  gvs[] >>
+  `ALOOKUP cx.sources cx.txn.target = SOME mods` by
+    metis_tac[const_subst_nonempty_roots_modules] >>
+  `base_through_dynarray a <> base_through_dynarray (subst_consts_expr E a)` by
+    (irule changed_subscript_capture_spine >>
+     reverse conj_tac >- metis_tac[const_subst_typed_annotation] >>
+     qexistsl [`b`, `subst_consts_expr E b`, `mods`] >>
+     gvs[subscript_reads_base_def]) >>
+  metis_tac[changed_base_spine_result]
+QED
+
+Theorem const_subst_equal_result_classify[local]:
+  const_subst_context roots cx env E mods art /\
+  (well_typed_expr env a \/ IS_SOME (type_place_expr env a)) /\
+  const_cells_agree roots st /\
+  eval_expr cx a st = (INL p,s) /\
+  eval_expr cx (subst_consts_expr E a) st = (INL p,s) ==>
+  subscript_reads_base cx a b =
+    subscript_reads_base cx (subst_consts_expr E a) (subst_consts_expr E b) \/
+  (?v. p = Value v) \/ (?v. const_result_at roots cx (expr_type a) p v)
+Proof
+  disch_tac >> Cases_on `subscript_reads_base cx a b =
+    subscript_reads_base cx (subst_consts_expr E a) (subst_consts_expr E b)`
+  >- simp[] >> simp[] >>
+  irule const_subst_changed_capture_classify_conditional >>
+  qexistsl [`E`, `art`, `b`, `env`, `mods`, `s`, `st`] >> simp[] >>
+  `!id r. ALOOKUP E id = SOME r ==> ?v.
+    const_result_at roots cx (expr_type r)
+      (PlaceR (ImmutablePlace NONE id [])) v` by
+    metis_tac[const_subst_range_tracked] >>
+  conj_tac
+  >- (Induct >> simp[vyperSubscriptOverlapTheory.any_written_def] >>
+      metis_tac[subst_consts_index_hazards]) >>
+  conj_tac >- metis_tac[subst_consts_index_hazards] >>
+  metis_tac[const_subst_nonconstant_reads]
+QED
+
+Theorem const_subst_equal_result_capture[local]:
+  const_subst_context roots cx env E mods art /\
+  (well_typed_expr env a \/ IS_SOME (type_place_expr env a)) /\
+  const_cells_agree roots st /\
+  eval_expr cx a st = (INL p,s) /\
+  eval_expr cx (subst_consts_expr E a) st = (INL p,s) /\
+  const_cells_agree roots t ==>
+  const_computations_related (const_results_related roots cx (expr_type a))
+    (if subscript_reads_base cx a b
+     then bind (read_result cx p) (\v. return (Value v)) else return p)
+    (if subscript_reads_base cx (subst_consts_expr E a) (subst_consts_expr E b)
+     then bind (read_result cx p) (\v. return (Value v)) else return p) t
+Proof
+  disch_tac >>
+  `subscript_reads_base cx a b =
+     subscript_reads_base cx (subst_consts_expr E a) (subst_consts_expr E b) \/
+   (?v. p = Value v) \/ (?v. const_result_at roots cx (expr_type a) p v)` by
+    metis_tac[const_subst_equal_result_classify]
+  >- (irule const_results_related_capture >>
+      simp[const_results_related_def])
+  >- (gvs[read_result_def] >>
+      Cases_on `subscript_reads_base cx a b` >>
+      Cases_on `subscript_reads_base cx (subst_consts_expr E a) (subst_consts_expr E b)` >>
+      simp[const_computations_related_def, bind_def, return_def,
+           const_results_related_def]) >>
+  irule const_results_related_capture >> simp[const_results_related_def] >>
+  metis_tac[]
+QED
+
+Theorem const_subst_captured_base[local]:
+  const_subst_context roots cx env E mods art /\
+  (well_typed_expr env a \/ IS_SOME (type_place_expr env a)) /\
+  const_cells_agree roots st /\
+  const_computations_related (const_results_related roots cx (expr_type a))
+    (eval_expr cx a) (eval_expr cx (subst_consts_expr E a)) st ==>
+  const_computations_related (const_results_related roots cx (expr_type a))
+    (bind (eval_expr cx a) (\p.
+      if subscript_reads_base cx a b
+      then bind (read_result cx p) (\v. return (Value v)) else return p))
+    (bind (eval_expr cx (subst_consts_expr E a)) (\p.
+      if subscript_reads_base cx (subst_consts_expr E a) (subst_consts_expr E b)
+      then bind (read_result cx p) (\v. return (Value v)) else return p)) st
+Proof
+  disch_tac >> irule const_computations_related_bind >>
+  qexists `const_results_related roots cx (expr_type a)` >> simp[] >>
+  rpt strip_tac >>
+  `const_cells_agree roots s` by metis_tac[const_subst_context_expr_frame] >>
+  Cases_on `x = y`
+  >- (gvs[] >> metis_tac[const_subst_equal_result_capture]) >>
+  irule const_results_related_capture >> simp[] >>
+  metis_tac[const_results_related_def]
+QED
+
+Theorem const_subst_code_head[local]:
+  const_subst_context roots cx env E mods art ==>
+  (subst_consts_expr E e = Builtin ct (Acc Code) [addr'] <=>
+   ?addr. e = Builtin ct (Acc Code) [addr] /\ addr' = subst_consts_expr E addr)
+Proof
+  disch_tac >> Cases_on `e` >>
+  simp[subst_consts_expr_def, subst_consts_exprs_map, MAP_EQ_CONS] >>
+  all_tac >~ [`subst_consts_expr E (TopLevelName ty ns)`] >-
+    (PairCases_on `ns` >> Cases_on `ns0` >>
+     simp[subst_consts_expr_def] >> Cases_on `ALOOKUP E ns1` >> simp[] >>
+     strip_tac >> gvs[const_subst_context_def] >> first_x_assum drule >>
+     simp[constant_expr_def, constant_builtin_def]) >>
+  metis_tac[]
+QED
+
+Theorem const_subst_self_addr[local]:
+  const_subst_context roots cx env E mods art ==>
+  is_self_addr (subst_consts_expr E e) = is_self_addr e
+Proof
+  disch_tac >> Cases_on `e` >>
+  simp[subst_consts_expr_def, is_self_addr_def, subst_consts_exprs_map] >>
+  all_tac >~ [`subst_consts_expr E (TopLevelName ty ns)`] >-
+    (PairCases_on `ns` >> Cases_on `ns0` >>
+     simp[subst_consts_expr_def, is_self_addr_def] >>
+     Cases_on `ALOOKUP E ns1` >> simp[is_self_addr_def] >>
+     rename1 `ALOOKUP E nm = SOME r` >>
+     `constant_expr mods r` by (gvs[const_subst_context_def] >> metis_tac[]) >>
+     Cases_on `r` >> gvs[constant_expr_def, is_self_addr_def] >>
+     rename1 `Builtin ty bt es` >> Cases_on `bt` >>
+     gvs[constant_builtin_def, is_self_addr_def]) >>
+  rename1 `is_self_addr (Builtin ty bt (MAP (subst_consts_expr E) args))` >>
+  Cases_on `bt` >> simp[is_self_addr_def] >>
+  rename1 `Env op` >> Cases_on `op` >> simp[is_self_addr_def] >>
+  Cases_on `args` >> simp[is_self_addr_def]
+QED
+
+Theorem const_subst_code_slice_source[local]:
+  const_subst_context roots cx env E mods art ==>
+  code_slice_source bi (MAP (subst_consts_expr E) es) =
+  OPTION_MAP (\(ct,addr). (ct,subst_consts_expr E addr)) (code_slice_source bi es)
+Proof
+  strip_tac >> Cases_on `code_slice_source bi es`
+  >- (Cases_on `code_slice_source bi (MAP (subst_consts_expr E) es)` >> simp[] >>
+      PairCases_on `x` >>
+      gvs[code_slice_source_SOME, MAP_EQ_CONS] >>
+      rename1 `Builtin ct (Acc Code) [addr'] = subst_consts_expr E hd` >>
+      `?addr. hd = Builtin ct (Acc Code) [addr]` by
+        metis_tac[const_subst_code_head] >> gvs[]) >>
+  PairCases_on `x` >> gvs[code_slice_source_SOME] >>
+  simp[subst_consts_expr_def]
+QED
+
+Theorem code_source_observe_head[local]:
+  ~is_self_addr a ==>
+  bind (eval_exprs cx [a]) (\avs. bind get_accounts (\acc.
+    lift_sum (evaluate_code_source cx acc (is_self_addr a) ct (expr_type a) avs))) =
+  bind (eval_expr cx (Builtin ct (Acc Code) [a])) (read_result cx)
+Proof
+  strip_tac >>
+  CONV_TAC (RHS_CONV (LAND_CONV (SIMP_CONV bool_ss [Once evaluate_def]))) >>
+  simp[evaluate_code_source_def, builtin_args_length_ok_def, type_check_def,
+       assert_def, ignore_bind_def, precompile_call_success_def,
+       vyperStateTheory.bind_return] >>
+  simp[vyperStateTheory.bind_assoc, vyperStateTheory.bind_return,
+       vyperStateTheory.assert_def, read_result_def] >>
+  `assert T (Error (TypeError "Builtin args")) = return ()` by
+    simp[FUN_EQ_THM, vyperStateTheory.assert_def, return_def] >>
+  simp[vyperStateTheory.bind_return] >>
+  AP_TERM_TAC >> ABS_TAC >>
+  AP_TERM_TAC >> ABS_TAC >>
+  Cases_on `evaluate_builtin cx acc ct (Acc Code) [expr_type a] avs` >>
+  simp[FUN_EQ_THM, bind_def, lift_sum_def, return_def, raise_def]
+QED
+
+Theorem const_subst_code_source[local]:
+  const_subst_context roots cx env E mods art /\
+  const_subst_expr_ok roots cx env E (Builtin ct (Acc Code) [a]) /\
+  well_typed_expr env (Builtin ct (Acc Code) [a]) /\
+  const_cells_agree roots st ==>
+  bind (eval_exprs cx [a]) (\avs. bind get_accounts (\acc.
+    lift_sum (evaluate_code_source cx acc (is_self_addr a) ct (expr_type a) avs))) st =
+  bind (eval_exprs cx [subst_consts_expr E a]) (\avs. bind get_accounts (\acc.
+    lift_sum (evaluate_code_source cx acc (is_self_addr (subst_consts_expr E a)) ct
+      (expr_type (subst_consts_expr E a)) avs))) st
+Proof
+  strip_tac >> Cases_on `is_self_addr a`
+  >- (Cases_on `a` >> gvs[is_self_addr_def] >>
+      rename1 `Builtin ann b args` >> Cases_on `b` >>
+      gvs[is_self_addr_def] >> rename1 `Env ev` >> Cases_on `ev` >>
+      gvs[is_self_addr_def] >> Cases_on `args` >>
+      gvs[is_self_addr_def, subst_consts_expr_def]) >>
+  `~is_self_addr (subst_consts_expr E a)` by metis_tac[const_subst_self_addr] >>
+  simp[code_source_observe_head] >>
+  drule_all const_subst_expr_observe >>
+  simp[subst_consts_expr_def]
+QED
+
 (* Instantiate the five mutual predicates from the typed goal. *)
 fun const_subst_structural_ind_tac (g as (_,w)) =
   let
@@ -5257,23 +6128,26 @@ Proof
                   optionTheory.IS_SOME_EXISTS] >>
       Cases_on `?kt vt. type_place_expr env a = SOME (HashMapT kt vt)`
       >- (pop_assum strip_assume_tac >>
+          `~is_ArrayT (expr_type a)` by
+            (drule type_place_expr_vtype_annotation >>
+             simp[vtype_annotation_ok_def]) >>
+          `~subscript_reads_base cx a b /\
+           ~subscript_reads_base cx (subst_consts_expr env' a)
+              (subst_consts_expr env' b)` by
+            metis_tac[subscript_reads_base_through_dynarray] >>
           `eval_expr cx a st = eval_expr cx (subst_consts_expr env' a) st` by
             gvs[const_subst_expr_ok_def] >>
           `const_computations_related $=
             (eval_expr cx (Subscript ty a b))
             (eval_expr cx (Subscript ty (subst_consts_expr env' a) (subst_consts_expr env' b))) st` by
-            ((* PORT_ADMISSION SEQ-3071: const_subst_structural Subscript HashMap.
-                Argon 2026-11-12 18:17: TRUE under cd0661984's
-                constant_expr and closed-replacement context. Original proof:
-            (simp_tac bool_ss [Ntimes evaluate_def 2] >> simp[] >>
+            (simp_tac bool_ss [Ntimes evaluate_def 2] >> simp[vyperStateTheory.bind_return] >>
              irule const_computations_related_subscript_exact_base >>
              reverse conj_tac >- simp[] >>
              qexistsl [`expr_type b`, `roots`] >> rpt conj_tac
              >- metis_tac[const_subst_context_expr_frame, frame_subscript_typing,
                           optionTheory.IS_SOME_EXISTS]
              >- metis_tac[const_subst_context_expr_frame]
-             >> gvs[const_subst_expr_ok_def])
-             *) cheat) >>
+             >> gvs[const_subst_expr_ok_def]) >>
           gvs[const_computations_related_eq, subst_consts_expr_def] >>
           irule const_computations_related_equal >>
           simp[const_results_related_def]) >>
@@ -5281,12 +6155,14 @@ Proof
         metis_tac[const_subscript_domain_type_ok] >>
       simp_tac bool_ss [subst_consts_expr_def, Ntimes evaluate_def 2, expr_type_def] >>
       simp[] >> conj_tac
-      >- ((* PORT_ADMISSION SEQ-3071: const_subst_structural Subscript non-HashMap.
-              Argon 2026-11-12 18:17: TRUE under cd0661984's
-              constant_expr and closed-replacement context. Original proof:
-      >- (irule const_computations_related_subscript >>
+      >- (CONV_TAC (ONCE_DEPTH_CONV (HO_REWR_CONV (GSYM vyperStateTheory.bind_assoc))) >>
+          irule const_computations_related_subscript >>
           rpt conj_tac
-          >- metis_tac[const_subst_context_expr_frame]
+          >- (rpt strip_tac >>
+              gvs[bind_def, AllCaseEqs()] >>
+              Cases_on `subscript_reads_base cx a b` >>
+              gvs[bind_def, return_def, AllCaseEqs()] >>
+              metis_tac[const_subst_context_expr_frame, read_result_state])
           >- metis_tac[const_subst_context_expr_frame]
           >- (qexists `expr_type b` >> gvs[const_subst_expr_ok_def])
           >- (qexists `b` >> simp[] >> rpt strip_tac >>
@@ -5295,22 +6171,16 @@ Proof
                   vyperTypeExprResultTheory.subscript_type_ok_tuple] >>
               gvs[Once evaluate_def, vyperValueOperationTheory.evaluate_literal_def,
                   return_def, read_result_def]) >>
-          metis_tac[const_subst_expr_ok_def, frame_subscript_typing,
-                    optionTheory.IS_SOME_EXISTS])
-          *) cheat) >>
+          irule const_subst_captured_base >>
+          gvs[const_subst_expr_ok_def] >> metis_tac[]) >>
       metis_tac[const_subscript_hashmap_base])
-  >~ [`const_subst_expr_ok _ _ _ _ (Builtin ty bi es)`]
-  >- ((* PORT_ADMISSION SEQ-3071: const_subst_structural Builtin code_slice_source.
-          Argon 2026-11-12 18:17: this structural case is TRUE under
-          cd0661984's constant_expr and closed-replacement context.
-          This admits the semantic Builtin case, not syntactic equality
-          of code_slice_source operands. Original case proof retained:
   >~ [`const_subst_expr_ok _ _ _ _ (Builtin ty bi es)`]
   >- (simp[const_subst_expr_ok_def, well_typed_expr_def] >>
       rpt strip_tac >>
       simp_tac bool_ss [subst_consts_expr_def, Ntimes evaluate_def 2, expr_type_def] >>
       `MAP expr_type (subst_consts_exprs env' es) = MAP expr_type es` by
         metis_tac[const_subst_typed_annotations] >>
+      CONV_TAC (RATOR_CONV (RAND_CONV (SIMP_CONV bool_ss [Once evaluate_def]))) >>
       simp[subst_consts_exprs_map] >>
       rewrite_tac[ignore_bind_def] >>
       irule const_computations_related_prefix >> reverse conj_tac
@@ -5350,18 +6220,53 @@ Proof
           simp[const_results_related_def]) >>
       Cases_on `bi = Env MsgGas` >> simp[]
       >- (irule const_computations_related_refl >> simp[const_results_related_def]) >>
+      drule const_subst_code_slice_source >>
+      disch_then (qspecl_then [`es`, `bi`] assume_tac) >>
+      Cases_on `code_slice_source bi es`
+      >- (gvs[] >> simp_tac bool_ss [GSYM vyperStateTheory.bind_assoc] >>
+          irule const_computations_related_prefix >> reverse conj_tac
+          >- (irule const_computations_related_prefix >> reverse conj_tac
+              >- (drule_all const_subst_exprs_from_elements >>
+                  simp[const_subst_exprs_ok_def, const_computations_related_eq,
+                       subst_consts_exprs_map] >>
+                  disch_then (qspec_then `s` mp_tac) >>
+                  simp[bind_def]) >>
+              rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
+          rpt strip_tac >> irule const_computations_related_refl >>
+          simp[const_results_related_def]) >>
+      PairCases_on `x` >>
+      drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_typing >>
+      strip_tac >> gvs[] >>
+      `?rest. es = Builtin x0 (Acc Code) [x1]::rest` by
+        gvs[code_slice_source_SOME] >>
+      gvs[EVERY_DEF] >>
+      `bind (eval_expr cx x1) (\tv. bind (read_result cx tv)
+         (\v. bind (eval_exprs cx []) (\vs. return (v::vs)))) =
+       eval_exprs cx [x1]` by
+        (CONV_TAC (RHS_CONV (SIMP_CONV bool_ss [Once evaluate_def])) >> REFL_TAC) >>
+      pop_assum SUBST_ALL_TAC >>
+      simp_tac bool_ss [vyperStateTheory.bind_assoc] >>
+      irule const_computations_related_prefix >> reverse conj_tac
+      >- (drule_all const_subst_exprs_from_elements >>
+          simp[const_subst_exprs_ok_def, const_computations_related_eq,
+               subst_consts_exprs_map] >>
+          disch_then (qspec_then `s` mp_tac) >> simp[bind_def]) >>
+      rpt strip_tac >>
+      rename1 `eval_exprs cx rest s = (INL tail_vs,t)` >>
+      `const_cells_agree roots t` by
+        (drule_all const_subst_context_exprs_frame >> simp[]) >>
       simp_tac bool_ss [GSYM vyperStateTheory.bind_assoc] >>
       irule const_computations_related_prefix >> reverse conj_tac
       >- (irule const_computations_related_prefix >> reverse conj_tac
-          >- (drule_all const_subst_exprs_from_elements >>
-              simp[const_subst_exprs_ok_def, const_computations_related_eq,
-                   subst_consts_exprs_map] >>
-              disch_then (qspec_then `s` mp_tac) >>
-              simp[bind_def]) >>
+          >- (irule const_computations_related_prefix >> reverse conj_tac
+              >- (irule const_computations_related_prefix >> reverse conj_tac
+                  >- (simp[const_computations_related_eq] >>
+                      irule const_subst_code_source >> metis_tac[]) >>
+                  rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
+              rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
           rpt strip_tac >> irule const_computations_related_refl >> simp[]) >>
       rpt strip_tac >> irule const_computations_related_refl >>
       simp[const_results_related_def])
-       *) cheat)
   >~ [`const_subst_expr_ok _ _ _ _ (Call ty ct es d)`]
   >- (simp[const_subst_expr_ok_def] >> disch_tac >>
       `well_typed_expr env (Call ty ct es d)` by
