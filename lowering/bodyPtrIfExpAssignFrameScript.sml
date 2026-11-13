@@ -68,6 +68,23 @@ Proof
   qexistsl_tac [`b`, `sz`] >> simp[SRULE[op_prov_def] assign_result_prov]
 QED
 
+Theorem assign_ghost_kept_at:
+  eval_operand src s = SOME w /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+  (!x. not_fresh_at sa x ==> x <> out) ==>
+  ghost_kept_at lo cenv es sa G0 tn0 s0
+    (step_prov PG G (mk_inst id ASSIGN [src] [out]) (update_var out w s))
+    (step_taint (mk_inst id ASSIGN [src] [out]) s (update_var out w s) tn)
+Proof
+  strip_tac >> drule assign_taint >> simp[] >> strip_tac >>
+  simp[ghost_kept_at_def] >> conj_tac
+  >- (gen_tac >> strip_tac >>
+      `x <> out` by metis_tac[] >>
+      simp[assign_other_prov, op_taint_def, FLOOKUP_UPDATE] >>
+      gvs[ghost_kept_at_def, op_taint_def]) >>
+  fs[ghost_kept_at_def] >> metis_tac[]
+QED
+
 Theorem assign_ghost_kept:
   eval_operand src s = SOME w /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
@@ -76,13 +93,7 @@ Theorem assign_ghost_kept:
     (step_prov PG G (mk_inst id ASSIGN [src] [out]) (update_var out w s))
     (step_taint (mk_inst id ASSIGN [src] [out]) s (update_var out w s) tn)
 Proof
-  strip_tac >> drule assign_taint >> simp[] >> strip_tac >>
-  simp[ghost_kept_def] >> conj_tac
-  >- (gen_tac >> strip_tac >>
-      `x <> out` by metis_tac[] >>
-      simp[assign_other_prov, op_taint_def, FLOOKUP_UPDATE] >>
-      gvs[ghost_kept_def, op_taint_def]) >>
-  fs[ghost_kept_def] >> conj_tac >> first_assum ACCEPT_TAC
+  pure_rewrite_tac[ghost_kept_zero] >> metis_tac[assign_ghost_kept_at]
 QED
 
 Theorem assign_other_covers:
@@ -95,6 +106,53 @@ Proof
   strip_tac >> drule assign_taint >> simp[] >> strip_tac >>
   gvs[ptr_covers_def, assign_other_prov, op_taint_def, lookup_var_def,
       update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem assign_ghost_inv_at:
+  eval_operand src s = SOME w /\ ghost_inv_at D lo d cenv cx es G tn s /\
+  (!name x sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var x) sz) ==> x <> out) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> out) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> out) /\
+  (!x. lo <> 0 /\ cenv.ce_imm_alloca = SOME (Var x) ==> x <> out) ==>
+  ghost_inv_at D lo d cenv cx es
+    (step_prov PG G (mk_inst id ASSIGN [src] [out]) (update_var out w s))
+    (step_taint (mk_inst id ASSIGN [src] [out]) s (update_var out w s) tn)
+    (update_var out w s)
+Proof
+  strip_tac >> drule assign_taint >> simp[] >> strip_tac >>
+  fs[ghost_inv_at_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `p <> out` by metis_tac[] >>
+      qpat_x_assum `!name entry p sz. _` drule_all >> strip_tac >>
+      conj_tac
+      >- (drule_all assign_other_covers >> simp[assign_taint]) >>
+      simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+      first_x_assum drule_all >> simp[lookup_var_def]) >>
+  conj_tac
+  >- (Cases_on `d` >> simp[return_buf_ptr_def] >>
+      PairCases_on `x` >> fs[return_buf_ptr_def] >>
+      `x <> out` by metis_tac[] >> conj_tac
+      >- gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+      drule_all assign_other_covers >> simp[assign_taint]) >>
+  conj_tac
+  >- (rpt strip_tac >> `x <> out` by metis_tac[] >>
+      simp[op_taint_def, FLOOKUP_UPDATE] >> gvs[op_taint_def]) >>
+  gvs[stor_taint_ok_at_def, update_var_def, allocas_from_def] >>
+  rpt strip_tac >> gvs[assign_other_prov, op_taint_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem ifexp_assign_ptr_buf_ok:
+  eval_operand src s = SOME w /\ ptr_buf_ok ce e src G s ==>
+  ptr_buf_ok ce e (Var out)
+    (step_prov PG G (mk_inst id ASSIGN [src] [out]) (update_var out w s))
+    (update_var out w s)
+Proof
+  strip_tac >>
+  qpat_x_assum `ptr_buf_ok _ _ _ _ _` mp_tac >>
+  simp[ptr_buf_ok_def, assign_result_value] >> strip_tac >>
+  rpt strip_tac >> first_x_assum drule >> simp[] >>
+  strip_tac >> qexistsl_tac [`b`, `sz`] >>
+  simp[SRULE [op_prov_def] assign_result_prov]
 QED
 
 Theorem assign_ghost_inv:

@@ -44,7 +44,8 @@ Ancestors
   asmOptimizer callTrace
   e2eDeployCorrectness e2eDeployDefs ctorDeployDefs ctorDeployLowering
   ctorDeployFrame ctorDeployShape ctorDeployDefsReach ctorDeployInitcode
-  ctorDeployEntry ctorDeployMemory ctorDeployDload ctorDeployDead
+  ctorDeployEntry ctorDeployDead ctorDeployRunBounded ctorDeployImmBudget
+  ctorDeployMemoryFrontier deployUnitExecution deployUnitExitSafe
   vfmExecution vfmExecutionProp vfmContext list rich_list pair
 
 (* ===== add_frame_gas keeps the call's state relation ===== *)
@@ -77,17 +78,10 @@ Proof
   fs[]
 QED
 
-(* The creation frame's relation, at the new gas, from the old one and its
-   two call-trace clauses, which range over what the run does with the gas. *)
+(* The creation frame's relation at the new gas: only gas fields change. *)
 Theorem deploy_state_rel_add_frame_gas:
   !tops bc am tx g es.
-    deploy_state_rel tops bc am tx es /\
-    call_outcomes_storage_ok am tx (MAP SND (call_trace (add_frame_gas g es))) /\
-    EVERY (\co. contract_storage_well_formed (deploy_evaluation_context tops am tx)
-                  (initial_state (am with <|accounts := co.co_accounts;
-                                            tStorage := co.co_tStorage|>) []))
-      (MAP SND (call_trace (add_frame_gas g es)))
-    ==>
+    deploy_state_rel tops bc am tx es ==>
     deploy_state_rel tops bc am tx (add_frame_gas g es)
 Proof
   rw[deploy_state_rel_def] >>
@@ -245,27 +239,95 @@ QED
 
 (* ===== The deployment cases ===== *)
 
-(* e2e_deploy_correctness's hypotheses.  The two clauses of the creation
-   frame's relation that range over the call trace, and so over what the run
-   does with the gas, are stated at the new gas (under constructor_call_free
-   the trace is empty).  The exemption premise is the deploy counterpart of the call's,
-   for every list of GAS observations. *)
+(* One gas variant of the creation frame's entry state, under the top's
+   finite storage guard and non-exemption: the unit's certificate at its
+   own marks is on its exit arm, which gives the S3 facts S4 and S6b ask
+   for (through ctorDeployMemoryFrontier's bridges), the pointer taint
+   within the dead set of the run's observed horizon H, and the unit's
+   result there. *)
+Theorem deploy_variant_exit_facts[local]:
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vi.
+    deploy_phases policy tops (deploy_bc, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    deploy_source_ok tops am tx /\
+    deploy_state_rel tops deploy_bc am tx es /\
+    gas_variant vi (deploy_entry_state prog cplan tops es) /\
+    code_layout_valid vi /\
+    (!gs. deploy_storage_ok tops am tx (MAP SND (call_trace es)) gs) /\
+    (!obs. ~deploy_source_exempt tops
+       (load_contract NONE obs am tx [(NONE, tops)] []))
+    ==>
+    ?H gobs efuel.
+      raw_unit_memory_ok dunit.cu_context vi /\
+      ptr_discipline (imm_len tops) dunit.cu_context vi /\
+      taint_within (deploy_dead H tops runtime_bc am tx) dunit.cu_context vi /\
+      mem_inv dload_offset_ok dunit.cu_context vi /\
+      mem_inv dload_headroom_ok dunit.cu_context vi /\
+      deploy_venom_result_rel H tops runtime_bc tx
+        (load_contract NONE gobs am tx [(NONE, tops)] [])
+        (run_context efuel dunit.cu_context vi)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all deploy_unit_run_entry >> strip_tac >>
+  drule deploy_imm_alloca_budget_ok >> strip_tac >>
+  `~ctx_has_dalloca dunit.cu_context` by
+    metis_tac[deploy_unit_shape_ok, o1_source_unit_ok_no_dalloca] >>
+  `tx.function_name = "__init__"` by fs[deploy_state_rel_def] >>
+  `vi.vs_outcomes = MAP SND (call_trace es)` by
+    (drule gas_variant_outcomes >>
+     simp[deploy_entry_state_def, entry_venom_state_def]) >>
+  `deploy_unit_execution_correct tops runtime_bc am tx dunit vi` by
+    (irule deploy_unit_execution_correct >> metis_tac[]) >>
+  pop_assum (qx_choose_then `marks` assume_tac o
+             REWRITE_RULE [deploy_unit_execution_correct_def]) >>
+  qspecl_then [`marks`, `tops`, `runtime_bc`, `am`, `tx`, `dunit`, `vi`, `[]`]
+    mp_tac deploy_unit_exit_safe_runs >>
+  REWRITE_TAC [APPEND_NIL] >>
+  qabbrev_tac `gobs = gas_explicit marks vi.vs_gas_readings` >>
+  `load_contract (SOME vi.vs_outcomes) gobs am tx [(NONE, tops)] [] =
+   load_contract NONE gobs am tx [(NONE, tops)] []` by
+    metis_tac[load_contract_call_free] >>
+  impl_tac >- (rpt conj_tac >> fs[]) >>
+  disch_then (qx_choosel_then [`func`, `efuel`] strip_assume_tac) >>
+  qabbrev_tac `H = storage_trace_horizon
+                     (deploy_storage_trace (SOME vi.vs_outcomes) gobs am tx tops)` >>
+  `func = fn /\ lbl = "__deploy"` by gvs[] >> gvs[] >>
+  qexistsl_tac [`H`, `gobs`, `efuel`] >> gvs[] >>
+  rpt conj_tac
+  >- (qspecl_then [`imm_len tops`, `dunit.cu_context`, `"__deploy"`, `fn`,
+                   `"__deploy"`, `vi`] mp_tac lowered_unit_raw_memory_ok_from >>
+      simp[] >> disch_then irule >> decide_tac)
+  >- (qspecl_then [`deploy_dead H tops runtime_bc am tx`, `imm_len tops`,
+                   `dunit.cu_context`, `"__deploy"`, `fn`, `"__deploy"`, `vi`]
+        mp_tac lowered_unit_ptr_taint >> simp[])
+  >- (qspecl_then [`deploy_dead H tops runtime_bc am tx`, `imm_len tops`,
+                   `dunit.cu_context`, `"__deploy"`, `fn`, `"__deploy"`, `vi`]
+        mp_tac lowered_unit_ptr_taint >> simp[])
+  >- (irule lowered_unit_dload_offset_ok >> metis_tac[])
+  >> irule lowered_unit_dload_headroom_ok_from >> metis_tac[]
+QED
+
+(* e2e_deploy_correctness's hypotheses.  The constructor run's finite
+   storage guard depends on the run's GAS observations, so it is stated at
+   the new gas for every list of them, as is the exemption premise, the
+   deploy counterpart of the call's.  S6b takes the all-dead set: each gas
+   variant of the entry state has its own observed horizon, and no common
+   finite one exists.  S4 takes its input state before the dead set, which
+   is then the dead set at that state's own horizon, so the source's
+   result relation carries over to the compiled unit. *)
 Theorem e2e_deploy_gas_sufficient_identity:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ supported_program_deploy tops /\
     constructor_call_free tops /\
-    deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
+    deploy_typing_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t)
     ==>
     ?g. !g'.
       g <= g' /\
-      call_outcomes_storage_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
-      EVERY (\co. contract_storage_well_formed (deploy_evaluation_context tops am tx)
-                    (initial_state (am with <|accounts := co.co_accounts;
-                                              tStorage := co.co_tStorage|>) []))
-        (MAP SND (call_trace (add_frame_gas g' es))) /\
+      (!gs. deploy_storage_ok tops am tx
+              (MAP SND (call_trace (add_frame_gas g' es))) gs) /\
       (!obs. ~deploy_source_exempt tops
          (load_contract NONE obs am tx [(NONE, tops)] []))
       ==>
@@ -285,7 +347,13 @@ Proof
     fs[deploy_phases_def] >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   (* S1b-d, S6b and S7g-d, at bounds that hold for every creation frame *)
-  drule_all deploy_unit_run_bounded >>
+  (* S1b-d: one fuel for every run that ends; each variant's run ends on its
+     exit arm (below) *)
+  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+    fs[deploy_phases_def] >>
+  `lowering_context_ok dunit.cu_context` by metis_tac[deploy_unit_context_ok] >>
+  drule_all deploy_unit_fns_fuel_stable >> strip_tac >>
+  drule_all run_context_uniform_fuel >>
   disch_then (qx_choose_then `fuel` assume_tac) >>
   qspecl_then [`imm_len tops`, `rpolicy`, `dunit`, `dout`, `cplan`, `fuel`]
     mp_tac run_venom_pipeline_run_bounded >>
@@ -298,80 +366,86 @@ Proof
   qexists_tac `g` >> rpt strip_tac >>
   (* the creation frame at the new gas *)
   `deploy_state_rel tops deploy_bc am tx (add_frame_gas g' es)` by
-    (irule deploy_state_rel_add_frame_gas >> fs[]) >>
+    simp[deploy_state_rel_add_frame_gas] >>
   qpat_x_assum `deploy_state_rel _ _ _ _ es` kall_tac >>
   drule_all deploy_initcode_half_bounded >> strip_tac >>
   drule_all deploy_entry_state_ok >> strip_tac >>
   qabbrev_tac `vs = deploy_entry_state prog cplan tops (add_frame_gas g' es)` >>
-  `vs.vs_initial_fmp = n2w cplan.cp_initial_fmp` by
+  `vs.vs_initial_fmp = n2w cplan.cp_initial_fmp /\
+   vs.vs_outcomes = MAP SND (call_trace (add_frame_gas g' es))` by
     simp[Abbr`vs`, deploy_entry_state_def, entry_venom_state_def] >>
-  qabbrev_tac `D = deploy_dead tops runtime_bc am tx` >>
-  `dead_wf D` by simp[Abbr`D`, deploy_dead_wf] >>
-  (* every input state S4 may pick: a gas variant of vs *)
+  qabbrev_tac `Du = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
+                       d_imm := K UNIV; d_ret := K UNIV |>` >>
+  `dead_wf Du` by simp[Abbr`Du`, dead_wf_def] >>
+  (* every gas variant of vs: its own exit arm *)
   `!vi. gas_variant vi vs ==>
-        raw_unit_memory_ok dunit.cu_context vi /\
-        ptr_discipline (imm_len tops) dunit.cu_context vi /\
-        taint_within D dunit.cu_context vi /\
-        mem_inv dload_offset_ok dunit.cu_context vi /\
-        mem_inv dload_headroom_ok dunit.cu_context vi /\
-        terminates (run_context fuel dunit.cu_context vi)` by
-    (gen_tac >> strip_tac >>
-     `!marks. ~deploy_source_exempt tops
-        (load_contract NONE (gas_explicit marks vi.vs_gas_readings) am tx
-           [(NONE, tops)] [])` by fs[] >>
+        ?H gobs efuel.
+          raw_unit_memory_ok dunit.cu_context vi /\
+          ptr_discipline (imm_len tops) dunit.cu_context vi /\
+          taint_within (deploy_dead H tops runtime_bc am tx)
+            dunit.cu_context vi /\
+          mem_inv dload_offset_ok dunit.cu_context vi /\
+          mem_inv dload_headroom_ok dunit.cu_context vi /\
+          deploy_venom_result_rel H tops runtime_bc tx
+            (load_contract NONE gobs am tx [(NONE, tops)] [])
+            (run_context efuel dunit.cu_context vi)` by
+    (rpt strip_tac >>
      `code_layout_valid vi` by
        (irule gas_variant_code_layout_valid >> qexists_tac `vs` >>
         fs[o1_run_state_ok_def]) >>
-     `gas_variant vi (deploy_entry_state prog cplan tops (add_frame_gas g' es))`
-       by fs[Abbr`vs`] >>
-     drule_all deploy_unit_memory_ok >> strip_tac >>
-     drule_all deploy_unit_dload_ok >> strip_tac >>
-     qpat_x_assum `!es vs. _ ==> terminates (run_context fuel _ _)`
-       (qspecl_then [`add_frame_gas g' es`, `vi`] mp_tac) >>
-     impl_tac >- fs[] >>
-     fs[Abbr`D`]) >>
+     irule deploy_variant_exit_facts >> fs[Abbr`vs`] >>
+     metis_tac[]) >>
+  `!vi. gas_variant vi vs ==>
+        terminates (run_context fuel dunit.cu_context vi)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!vi. gas_variant vi vs ==> ?H gobs efuel. _` drule >>
+     strip_tac >>
+     qpat_x_assum `!s f. terminates _ ==> _` irule >> qexists_tac `efuel` >>
+     metis_tac[deploy_venom_result_rel_terminates]) >>
   `venom_run_bounded fuel' M dout.po_unit.cu_context vs` by
     (qpat_x_assum `!D vs. _ ==> venom_run_bounded _ _ _ _` irule >>
-     simp[] >> metis_tac[]) >>
-  (* S4's input state, for the codegen obligations and the return value *)
-  qspecl_then [`D`, `imm_len tops`, `rpolicy`, `dunit`, `dout`, `vs`] mp_tac
-    run_venom_pipeline_correct >>
+     qexists_tac `Du` >> simp[] >> rpt strip_tac >>
+     TRY (simp[Abbr`Du`, taint_within_def] >> NO_TAC) >>
+     metis_tac[]) >>
+  (* S4's input state, picked before its dead set *)
+  qspecl_then [`imm_len tops`, `rpolicy`, `dunit`, `dout`, `vs`] mp_tac
+    run_venom_pipeline_correct_all_dead >>
   impl_tac >- simp[] >> strip_tac >>
-  `raw_unit_memory_ok dunit.cu_context vs_in /\
-   ptr_discipline (imm_len tops) dunit.cu_context vs_in /\
-   taint_within D dunit.cu_context vs_in /\
-   mem_inv dload_offset_ok dunit.cu_context vs_in /\
-   mem_inv dload_headroom_ok dunit.cu_context vs_in /\
-   terminates (run_context fuel dunit.cu_context vs_in)` by metis_tac[] >>
+  `?H gobs efuel.
+     raw_unit_memory_ok dunit.cu_context vs_in /\
+     ptr_discipline (imm_len tops) dunit.cu_context vs_in /\
+     taint_within (deploy_dead H tops runtime_bc am tx) dunit.cu_context vs_in /\
+     mem_inv dload_offset_ok dunit.cu_context vs_in /\
+     mem_inv dload_headroom_ok dunit.cu_context vs_in /\
+     deploy_venom_result_rel H tops runtime_bc tx
+       (load_contract NONE gobs am tx [(NONE, tops)] [])
+       (run_context efuel dunit.cu_context vs_in)` by metis_tac[] >>
+  qabbrev_tac `D = deploy_dead H tops runtime_bc am tx` >>
+  `dead_wf D` by simp[Abbr`D`, deploy_dead_wf] >>
   `ctx_sim D dunit.cu_context dout.po_unit.cu_context vs_in vs /\
    o1_lowered_inv dout.po_unit.cu_context vs` by metis_tac[] >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
-  (* what the compiled constructor returns, as for e2e_deploy_correctness *)
-  qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rpolicy`, `dunit`,
-               `dout`, `prog`, `cplan`, `am`, `tx`, `add_frame_gas g' es`, `vs_in`]
-    mp_tac deploy_unit_execution_correct >>
-  impl_tac >- fs[Abbr`vs`] >>
-  strip_tac >- metis_tac[] >>
-  rename1 `run_context efuel dunit.cu_context vs_in` >>
+  (* what the compiled constructor returns *)
   `terminates (run_context efuel dunit.cu_context vs_in)` by
     metis_tac[deploy_venom_result_rel_terminates] >>
   `?vfuel. dead_result_rel D (run_context efuel dunit.cu_context vs_in)
              (run_context vfuel dout.po_unit.cu_context vs)` by
     metis_tac[ctx_sim_def] >>
   `~deploy_source_exempt tops
-      (load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
-         [(NONE, tops)] [])` by fs[] >>
-  qspecl_then [`tops`, `runtime_bc`, `am`, `tx`,
-               `gas_explicit marks vs_in.vs_gas_readings`] mp_tac
+      (load_contract NONE gobs am tx [(NONE, tops)] [])` by fs[] >>
+  qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `tx`, `gobs`,
+               `load_contract NONE gobs am tx [(NONE, tops)] []`,
+               `run_context efuel dunit.cu_context vs_in`,
+               `run_context vfuel dout.po_unit.cu_context vs`] mp_tac
     deploy_venom_result_rel_dead >>
-  simp[] >> disch_then drule_all >> strip_tac >>
+  impl_tac >- fs[Abbr`D`] >> strip_tac >>
   qpat_x_assum `!g' am tx es Inv. _`
     (qspecl_then [`g'`, `am`, `tx`, `es`, `Inv`] mp_tac) >>
   impl_tac
   >- (fs[Abbr`vs`] >>
-      qexistsl_tac [`load_contract NONE (gas_explicit marks vs_in.vs_gas_readings)
-                       am tx [(NONE, tops)] []`, `vfuel`] >>
+      qexistsl_tac [`H`, `load_contract NONE gobs am tx [(NONE, tops)] []`,
+                    `vfuel`] >>
       fs[]) >>
   simp[]
 QED

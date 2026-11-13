@@ -45,7 +45,7 @@ Proof
 QED
 
 Theorem deploy_ctor_start_nr[local]:
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==> ~nr
 Proof
@@ -55,7 +55,7 @@ Proof
 QED
 
 Theorem deploy_ctor_body_pending[local]:
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   eval_stmts (deploy_evaluation_context tops am tx) stmts
@@ -110,7 +110,7 @@ Proof
 QED
 
 Theorem deploy_ctor_start_immutables[local]:
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==>
   es0.immutables = am_c.immutables
@@ -147,7 +147,7 @@ QED
 
 Theorem deploy_ctor_initial_immutables_present[local]:
   !tops am tx deploy_bc es mut nr body am_c es0.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) ==>
   ?imms. ALOOKUP es0.immutables tx.target = SOME imms
@@ -161,7 +161,7 @@ QED
 
 Theorem deploy_ctor_final_immutables_present[local]:
   !tops am tx deploy_bc es mut nr body am_c es0 gs outcomes res st.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
   eval_stmts (deploy_evaluation_context tops am tx) body
@@ -178,7 +178,7 @@ QED
 
 Theorem deploy_ctor_initial_immutable_lookup[local]:
   !tops am tx deploy_bc es mut nr stmts am_c es0 vis name ty slot.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   MEM (VariableDecl vis Immutable name ty slot) tops ==>
@@ -189,7 +189,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `es0.immutables = am_c.immutables` by
     (drule_all deploy_ctor_start_immutables >> simp[]) >>
-  gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def,
+  gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready,
       deploy_ctor_start_def] >>
   `contract_namespaces_ok F [(NONE,tops)] /\
    runtime_art.cta_bare_globals =
@@ -231,7 +231,7 @@ QED
 
 Theorem deploy_ctor_final_immutable_lookup[local]:
   !tops am tx deploy_bc es mut nr stmts am_c es0 gs outcomes res st vis name ty slot.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   eval_stmts (deploy_evaluation_context tops am tx) stmts
@@ -276,7 +276,7 @@ QED
 
 Theorem deploy_constructor_prefix_typing[local]:
   !tops am tx deploy_bc es mut nr body am_c es0 gs outcomes.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
   context_well_typed (deploy_evaluation_context tops am tx) ==>
@@ -301,7 +301,7 @@ Proof
   drule deploy_send_call_value_observations >>
   disch_then (qspecl_then [`[FEMPTY]`,`SOME outcomes`,`gs`] mp_tac) >>
   simp[deploy_initial_state_scopes] >> strip_tac >>
-  gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def] >>
+  gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready] >>
   `((es0 with <|scopes := [FEMPTY]; outcomes := SOME outcomes; gas_obs := gs|>)
       with scopes := [env]) =
     (es0 with <|gas_obs := gs; outcomes := SOME outcomes|>)` by
@@ -315,11 +315,11 @@ Proof
 QED
 
 Theorem deploy_context_well_typed[local]:
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es ==>
   context_well_typed (deploy_evaluation_context tops am tx)
 Proof
-  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def,
+  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready,
     call_tx_well_typed_def, vyperTypeInvariantsTheory.context_well_typed_def,
     e2eDeployDefsTheory.deploy_evaluation_context_def,
     initial_evaluation_context_def] >> metis_tac[]
@@ -327,7 +327,7 @@ QED
 
 Theorem deploy_ctor_final_state_well_typed[local]:
   !tops am tx deploy_bc es mut nr stmts am_c es0 gs outcomes res st.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   eval_stmts (deploy_evaluation_context tops am tx) stmts
@@ -423,7 +423,7 @@ Theorem deploy_source_variable_names_distinct[local]:
   deploy_source_ok tops am tx ==>
   ALL_DISTINCT (FLAT (MAP (vyperTypeContract$toplevel_vtype_keys_toplevel (NONE:num option)) tops))
 Proof
-  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def] >>
+  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready] >>
   rpt strip_tac >>
   qpat_x_assum `check_contract T _ _ _ = _` mp_tac >>
   simp[vyperTypeContractTheory.check_contract_def,
@@ -435,7 +435,7 @@ QED
 Theorem deploy_ctor_immutable_offsets[local]:
   !tops am tx rpolicy runtime_bc dunit body cenv nr nkey ut imm exit_lbl
    sa sb sj st_exit st_epilogue st_final func.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_code tops rpolicy runtime_bc dunit
     (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,st_epilogue,st_final,func) ==>
   cenv.ce_module = NONE /\ cenv.ce_is_ctor /\
@@ -531,7 +531,7 @@ Theorem deploy_source_type_names_distinct[local]:
   deploy_source_ok tops am tx ==>
   ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))
 Proof
-  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def] >>
+  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready] >>
   rpt strip_tac >>
   qpat_x_assum `check_contract T _ _ _ = _` mp_tac >>
   simp[check_contract_def, contract_namespaces_ok_def, contract_keys_def,
@@ -542,7 +542,7 @@ Theorem deploy_ctor_immutable_section[local]:
   !tops am tx deploy_bc es mut nr body am_c es0 gs outcomes res st
    rpolicy runtime_bc dunit cenv nkey ut imm exit_lbl sa sb sj st_exit
    st_epilogue st_final func before.
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
   deploy_ctor_code tops rpolicy runtime_bc dunit
@@ -575,7 +575,7 @@ Proof
 QED
 
 Theorem deploy_snapshot_observations[local]:
-  state_rel func cenv (deploy_evaluation_context tops am tx)
+  state_rel H func cenv (deploy_evaluation_context tops am tx)
     (st with scopes := []) before ==>
   (!a. a <> tx.target ==>
     lookup_account a before.vs_accounts = lookup_account a st.accounts) /\
@@ -598,7 +598,7 @@ Proof
   `log_entry_equiv cenv (deploy_evaluation_context tops am tx).txn.target = $=` by
     simp[FUN_EQ_THM, log_entry_equiv_def] >>
   `st.logs = before.vs_logs` by
-    (qpat_x_assum `state_rel _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `state_rel _ _ _ _ _ _` mp_tac >>
      simp[state_rel_def, logs_rel_def, LIST_REL_eq] >> metis_tac[]) >>
   `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
     simp[FUN_EQ_THM, e2eDefsTheory.log_entry_corresponds_concrete_event] >>
@@ -610,7 +610,7 @@ Proof
 QED
 
 Theorem deploy_snapshot_immutables[local]:
-  state_rel func cenv (deploy_evaluation_context tops am tx)
+  state_rel H func cenv (deploy_evaluation_context tops am tx)
     (st with scopes := []) before /\
   cenv.ce_module = NONE /\ cenv.ce_is_ctor ==>
   immutables_rel cenv tx.target NONE T (st with scopes := []) before
@@ -935,7 +935,7 @@ Proof
 QED
 
 Theorem deploy_ctor_start_static[local]:
-  !tops am tx mut nr body am_c es0.
+  !tops am tx mut nr body am_c es0 deploy_bc es.
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) ==>
   am_c.sources = am.sources /\ am_c.layouts = am.layouts
 Proof
@@ -982,7 +982,7 @@ Theorem deploy_ctor_return:
     constructor_return_q func cenv (deploy_evaluation_context tops am tx) (LENGTH runtime_bc)
       (imm_len tops) nr nkey NoneV (st with scopes := []) (Halt final) /\
     final.vs_code = vs.vs_code /\ final.vs_labels = vs.vs_labels ==>
-    deploy_venom_result_rel tops runtime_bc tx
+    deploy_venom_result_rel HS tops runtime_bc tx
       (deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx) nr mut am_c res st) (Halt final)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -1016,7 +1016,7 @@ Proof
   qpat_x_assum `deploy_ctor_start _ _ _ _` kall_tac >>
   qpat_x_assum `eval_stmts _ _ _ = _` kall_tac >>
   qpat_x_assum `_ \/ _` kall_tac >>
-  qpat_x_assum `state_rel _ _ _ _ _` kall_tac >>
+  qpat_x_assum `state_rel _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `immutables_rel _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `!pre vis name ty slot post. _` kall_tac >>
   simp[deploy_venom_result_rel_def, abstract_machine_from_state_def,

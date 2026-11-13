@@ -3,27 +3,15 @@ Ancestors
   o1LowerDloadSuppliedSegmentTransport o1LowerDloadSuppliedSegmentControl
   o1LowerDloadOccurrenceHeadroom o1LowerDloadJointRelation
   o1LowerDloadOccurrence o1LowerDloadRawBridge
-  o1PassLift memSafeRun unitMemInv
+  o1PassLift o1SafeUpto memSafeRun unitMemInv
   o1PassContract lowerDloadDefs contextRawReachable contextCodegenRel
   venomExecProps venomExecSemantics list
-
-Theorem ld_raw_code_data:
-  !vs C fn inst s. raw_reachable vs C fn inst s ==>
-    s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section
-Proof
-  ho_match_mp_tac raw_reachable_ind >>
-  rw[enters_block_def, setup_callee_def] >>
-  imp_res_tac venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
-  imp_res_tac step_inst_ok_code_data >>
-  gvs[setup_callee_def, AllCaseEqs()] >>
-  qpat_x_assum `s_phi = _` (fn th => once_rewrite_tac [th]) >> simp[]
-QED
 
 Theorem ld_raw_code_layout:
   raw_reachable vs C fn inst s /\ code_layout_valid vs ==>
   code_layout_valid s
 Proof
-  strip_tac >> drule ld_raw_code_data >> strip_tac >>
+  strip_tac >> drule raw_reachable_code_data >> strip_tac >>
   drule raw_reachable_labels >> strip_tac >>
   gvs[code_layout_valid_def]
 QED

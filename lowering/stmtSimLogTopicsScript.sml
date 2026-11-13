@@ -375,7 +375,7 @@ Proof
 QED
 
 Theorem log_readonly_source_args[local]:
-  !xs vs. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  !xs vs. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   sm.cs_next_id <= sb.cs_next_id /\
   (t with vs_vars := s.vs_vars) = s /\
   (!z. not_fresh_at sm z ==> lookup_var z t = lookup_var z s) /\

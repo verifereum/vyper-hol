@@ -146,7 +146,7 @@ Theorem ctor_prefix_entry_value:
 Proof
   rpt strip_tac >>
   `tx.value < 2 ** 256` by
-    fs[deploy_source_ok_def, deploy_typing_ok_def, call_tx_well_typed_def] >>
+    fs[deploy_source_ok_def, deploy_typing_ok_constants_ready, call_tx_well_typed_def] >>
   `vs.vs_call_ctx.cc_callvalue = n2w tx.value` by
     (qpat_x_assum `gas_variant _ _` mp_tac >> simp[gas_variant_def] >>
      disch_then (mp_tac o Q.AP_TERM `\s. s.vs_call_ctx.cc_callvalue`) >>

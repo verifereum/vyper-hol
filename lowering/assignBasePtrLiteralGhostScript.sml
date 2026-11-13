@@ -593,7 +593,7 @@ Resume assign_base_ptr_alloca_init_ghost[invariant]:
     (irule assign_base_ptr_alloca_inv >>
      simp[] >> metis_tac[]) >>
   drule_at (Pat `inst_seq_ptr`) assign_base_ptr_one_byte_init_inv >>
-  simp[] >> disch_then (qspecl_then [`d`, `cenv`, `cx`, `es`] mp_tac) >>
+  simp[] >> disch_then (qspecl_then [`H`, `d`, `cenv`, `cx`, `es`] mp_tac) >>
   (impl_tac >- (simp[] >> fs[dimword_def] >> metis_tac[])) >> strip_tac >>
   drule_all assign_base_ptr_one_byte_init_endpoint >>
   disch_then SUBST1_TAC >> simp[]

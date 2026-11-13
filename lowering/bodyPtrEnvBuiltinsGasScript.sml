@@ -8,7 +8,7 @@ Ancestors
   compileEnv loweringStateRelDefs exprLowering exprPtrUnwrap exprSimProps stmtFragPtr
   venomInst venomState venomExecSemantics finite_map pred_set list rich_list
   vyperAST vyperTypeSystem vyperValue valueEncoding codegenRel exprSimHypsDefs
-  gasStorage vyperStorageTrace vyperStorageFootprint vyperStorageBackend
+  gasStorage vyperStorageTrace vyperStorageFootprint bodyFullGhostFrame
 
 Theorem gas_builtin_base_step:
   ?w. gas_prefix 1 s.vs_gas_readings = [w] /\
@@ -88,8 +88,8 @@ Proof
      simp[Abbr `inst`, Abbr `u`, source_memory_write_ranges_def,
           written_taint_def, mk_inst_def, update_var_def]) >>
   conj_tac
-  >- (irule ghost_inv_at_register_transport >>
-      qexistsl_tac [`G`, `s`, `sa`, `tn`] >>
+  >- (irule ghost_inv_at_exterior_frame >>
+      qexistsl_tac [`G`, `es`, `s`, `sa`, `tn`] >>
       simp[update_var_def] >>
       `((step_taint inst s u tn).t_stor = tn.t_stor) /\
        ((step_taint inst s u tn).t_trans = tn.t_trans) /\

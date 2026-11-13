@@ -2,11 +2,12 @@
 Theory ctorDeployMemoryRunPtrPrefixMembersFloor
 Ancestors
   valueEncodingDefs
+  valueEncoding
   ctorDeployMemoryRunPtrPrefixMembers ctorDeployMemoryRunPtrPrefixAllocationFloor
   abiDecoderMembers abiDecoderMemberInfos abiDecoderEmpty abiDecoderEmptyMember
   ctorAbiActualMembers ctorAbiActualEmpty abiEncoderRegisteredEffect
   abiDecoderCoherence abiDecoderContract abiDecoderTypedContract
-  abiDecoderLoop fragExec compileEnv valueEncoding abiEncoder contractABI
+  abiDecoderLoop fragExec compileEnv abiEncoder contractABI
   allocaFrontierBound allocaBudgetProps abiDecoderReentryPointer
   ctorDeployMemoryRunPtrPrefixCanonical ptrDiscipline ptrSafeRun
   finite_map pred_set words list rich_list arithmetic

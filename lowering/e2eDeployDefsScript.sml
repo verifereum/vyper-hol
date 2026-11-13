@@ -10,7 +10,9 @@
 Theory e2eDeployDefs
 Ancestors
   e2eDefs supportedStmtTraverse vyperTypeEntryReadiness
-  vyperTypeContractSoundness vyperTypeInitialState vyperStorageLayoutSafety
+  vyperTypeContractSoundness vyperTypeDeploymentSoundness
+  vyperTypeDeploymentMachine vyperTypeInvariants vyperTypeInitialState
+  vyperStorageLayoutSafety
   vyperInterpreter vyperABI vfmExecution vfmExecutionProp frameOutcome
   list immutableSectionRel compileEnv callTrace vyperStorageFootprint
 
@@ -72,12 +74,22 @@ Proof
 QED
 
 (* Runtime readiness must NOT be required of the uninstalled source target.
- * Use the source's pre-constant deployment readiness on precisely the machine
- * load_contract builds. The two artifacts are the checked deployment/runtime
- * pair used by load_contract_establishes_machine_well_typed. This is an input
- * typing/setup boundary, not a hypothesis that deployment already succeeded.
+ * The checked deployment/runtime artifact pair used by
+ * load_contract_establishes_machine_well_typed, plus well-typed inputs. This
+ * is an input typing/setup boundary, not a hypothesis that deployment already
+ * succeeded. The initial immutables and the pre-constant deployment readiness
+ * on the machine load_contract builds follow from it
+ * (deploy_typing_ok_constants_ready).
  *)
 Definition deploy_typing_ok_def:
+  deploy_typing_ok tops am tx <=>
+    ?deploy_art runtime_art.
+      check_contract T am.layouts tx.target [(NONE, tops)] = SOME deploy_art /\
+      check_contract F am.layouts tx.target [(NONE, tops)] = SOME runtime_art /\
+      machine_well_typed am /\ call_tx_well_typed tx
+End
+
+Theorem deploy_typing_ok_constants_ready:
   deploy_typing_ok tops am tx <=>
     ?deploy_art runtime_art imms.
       check_contract T am.layouts tx.target [(NONE, tops)] = SOME deploy_art /\
@@ -89,7 +101,20 @@ Definition deploy_typing_ok_def:
         (am with <| immutables updated_by CONS (tx.target, imms);
                     exports updated_by CONS (tx.target, []) |>)
         tx.target [(NONE, tops)]
-End
+Proof
+  simp[deploy_typing_ok_def] >> eq_tac >> strip_tac >- (
+    drule check_contract_initial_immutables >> strip_tac >>
+    qexistsl [`deploy_art`, `runtime_art`, `imms`] >> simp[] >>
+    `context_well_typed (deploy_evaluation_context tops am tx)` by
+      gvs[deploy_evaluation_context_def, call_tx_well_typed_def,
+          context_well_typed_def, initial_evaluation_context_def] >>
+    mp_tac (Q.INST [`exps` |-> `[]`, `mods` |-> `[(NONE,tops)]`,
+                    `cx` |-> `deploy_evaluation_context tops am tx`]
+              checked_constructor_constants_ready) >>
+    impl_tac >- gvs[deploy_evaluation_context_def] >>
+    simp[]) >>
+  metis_tac[]
+QED
 
 (* The storage observations of the constructor run at outcome oracle orc and
    gas observations gobs: the deployment twin of source_storage_trace, over
@@ -99,14 +124,15 @@ Definition deploy_storage_trace_def:
     SND (load_contract_trace orc gobs am tx [(NONE, tops)] [])
 End
 
-(* The finite storage guard for the constructor run at gas observations gs:
+(* The finite storage guard for the constructor run at callee outcomes os and
+   gas observations gs:
    the roots it touches fit the slot space, are pairwise equal or disjoint,
    miss the lock slots, and decode in the starting state and in every
    backend the run adopts. *)
 Definition deploy_storage_ok_def:
-  deploy_storage_ok tops am tx gs <=>
+  deploy_storage_ok tops am tx os gs <=>
     let cx = deploy_evaluation_context tops am tx in
-    let obs = deploy_storage_trace NONE gs am tx tops in
+    let obs = deploy_storage_trace (SOME os) gs am tx tops in
     let (regions, locks) = storage_trace_horizon obs in
       storage_roots_fit obs /\ regions_consistent regions /\
       storage_locks_separated regions locks /\
@@ -169,49 +195,43 @@ QED
 
 (* ===== Creation result cases (no nested creation frame_outcome) ===== *)
 
-(* This named case expression is for clean focused boundary clients. The stage
- * theorem keeps the literal PLAN 5.11 expression in its conclusion. Source
- * installation is not EVM bytecode installation: compare the target modulo
- * code, with its storage modulo storage_dead, all other accounts exactly,
- * transient storage modulo storage_dead, and ordered logs (as the runtime's
- * accounts_agree/transient_agree). Dead bytes are taken within the horizon H
- * of the constructor run's storage observations.
+(* Source installation is not EVM bytecode installation. On success the
+ * deposited code is read before the pending deletions (a constructor's
+ * delegate callee may self-destruct the new account); accounts are compared
+ * after the deletions with the target's code masked to the source's, modulo
+ * the storage bytes dead within the horizon H of the constructor run's
+ * storage observations (accounts_agree), as are transient storage and the
+ * outgoing call requests. Logs are compared concretely, as on the call side.
  *)
 Definition deploy_result_rel_def:
   deploy_result_rel H tops runtime_bc tx es r es' src <=>
     case src of
       INL (am', rqs) =>
-        if ALOOKUP am'.sources tx.target = NONE then
-          (* The constructor halted (selfdestruct): load_contract installed
-           * no source, and the EVM deposited no code. *)
-          let cx = initial_evaluation_context
-                     ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE in
-          ?lgs.
-            frame_outcome es r es' NONE [] lgs /\
-            (lookup_account tx.target es'.rollback.accounts).code = [] /\
-            accounts_agree cx am'.accounts
-              (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-            transient_agree cx am'.tStorage es'.rollback.tStorage /\
-            logs_correspond (compiled_event_info tops) (type_env tops)
-              tx.target am'.logs lgs
-        else
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-        ?section.
-          immutables_section_rel tops (account_immutables am' tx.target) section /\
-          frame_outcome es r es' NONE (runtime_bc ++ section) am'.logs /\
-          (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
-          (!a. a <> tx.target ==>
-               lookup_account a es'.rollback.accounts =
-               lookup_account a am'.accounts) /\
-          (lookup_account tx.target es'.rollback.accounts) with code := [] =
-          (lookup_account tx.target am'.accounts) with
-            <| code := [];
-               storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
-          storage_agree
-            (storage_dead H F (lookup_account tx.target am'.accounts).storage)
-            (lookup_account tx.target am'.accounts).storage
-            (lookup_account tx.target es'.rollback.accounts).storage /\
-          transient_agree H cx am'.tStorage es'.rollback.tStorage
+        if ALOOKUP am'.sources tx.target = NONE then
+          (* the constructor self-destructed: no source installed, no code
+             deposited *)
+          frame_outcome es r es' NONE [] am'.logs /\
+          (lookup_account tx.target es'.rollback.accounts).code = [] /\
+          accounts_agree H cx am'.accounts
+            (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+          transient_agree H cx am'.tStorage es'.rollback.tStorage /\
+          LIST_REL (request_agree H cx) rqs (call_requests es)
+        else
+          ?section.
+            immutables_section_rel tops (account_immutables am' tx.target)
+              section /\
+            frame_outcome es r es' NONE (runtime_bc ++ section) am'.logs /\
+            (lookup_account tx.target es'.rollback.accounts).code =
+              runtime_bc ++ section /\
+            accounts_agree H cx am'.accounts
+              (process_deletions es'.rollback.toDelete
+                 (update_account tx.target
+                    (lookup_account tx.target es'.rollback.accounts with
+                       code := (lookup_account tx.target am'.accounts).code)
+                    es'.rollback.accounts)) /\
+            transient_agree H cx am'.tStorage es'.rollback.tStorage /\
+            LIST_REL (request_agree H cx) rqs (call_requests es)
     | INR (AssertException s) =>
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")
@@ -223,15 +243,17 @@ Definition deploy_result_rel_def:
     | INR (ReturnException _) => F
 End
 
-(* The deployment relation at every gas filling: where the constructor run's
-   finite storage guard holds, its result relates at the run's own horizon. *)
+(* The deployment relation at every gas filling, with the source run on the
+   frame's own callee outcomes: where the constructor run's finite storage
+   guard holds, its result relates at the run's own horizon. *)
 Definition deploy_call_result_rel_def:
   deploy_call_result_rel tops runtime_bc am tx es r es' <=>
+    let os = MAP SND (call_trace es) in
     gas_readings_rel (gas_readings es)
-      (\gs. deploy_storage_ok tops am tx gs ==>
+      (\gs. deploy_storage_ok tops am tx os gs ==>
             deploy_result_rel
-              (storage_trace_horizon (deploy_storage_trace NONE gs am tx tops))
+              (storage_trace_horizon (deploy_storage_trace (SOME os) gs am tx tops))
               tops runtime_bc tx es r es'
-              (load_contract NONE gs am tx [(NONE, tops)] [])) T
+              (load_contract (SOME os) gs am tx [(NONE, tops)] [])) T
 End
 

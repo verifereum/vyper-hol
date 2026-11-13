@@ -6,6 +6,7 @@ Ancestors
   ptrSafeRun venomExecSemantics venomInstProofs contextCodegenRel
   assignTuplePtrPrefix stmtLowering emitHelper assignTuplePtrCopyEndpoint
   stmtSimAssignStorage tupleTargetStoreProps stmtSimProps stmtSimDefs exprLoweringProps
+  sourceUnitExecution
 
 Theorem clean_storage_step_taint_ptr:
   eval_operand dst s = SOME slot /\ op_taint tn value = {} /\

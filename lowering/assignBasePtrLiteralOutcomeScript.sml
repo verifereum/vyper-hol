@@ -66,7 +66,8 @@ Finalise assign_base_ptr_one_byte_sequence
 Theorem assign_base_ptr_one_byte_endpoint:
   !ctx func cenv cx es sa buf sb s PG G tn d.
     compile_bytelike_literal [1w] 1 sa = (buf,sb) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
     ghost_inv H d cenv cx es G tn s /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -115,7 +116,7 @@ Resume assign_base_ptr_one_byte_endpoint[ghost]:
     x <> STRING #"%" (toString (sa.cs_next_var + 1))` by metis_tac[] >>
   gvs[] >>
   drule_at (Pat `inst_seq_ptr`) (SRULE [] assign_base_ptr_alloca_init_ghost) >>
-  simp[] >> disch_then (qspecl_then [`d`, `cenv`, `cx`, `es`] mp_tac) >>
+  simp[] >> disch_then (qspecl_then [`H`, `d`, `cenv`, `cx`, `es`] mp_tac) >>
   disch_then (qspec_then `sa` mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   simp[] >>
@@ -173,10 +174,15 @@ Theorem assign_base_ptr_expr_post_gas_obs:
   expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := gs) v op s <=>
   expr_post H ctx func cenv cx e es sa sb s0 ee v op s
 Proof
+  `!b. vyperStorageBackend$get_storage cx (ee with gas_obs := gs) b =
+       vyperStorageBackend$get_storage cx ee b` by
+    (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
   simp[loweringPostsTheory.expr_post_def, stmt_state_rel_def, state_rel_gas_obs,
     loweringPostsTheory.expr_val_at_def,
     loweringPostsTheory.expr_val_own_def, loweringPostsTheory.locals_kept_def,
-    loweringPostsTheory.popped_kept_def]
+    loweringPostsTheory.popped_kept_def,
+    vyperStorageFootprintTheory.storage_well_formed_on_def,
+    vyperStorageBackendTheory.get_storage_def]
 QED
 
 Theorem assign_base_ptr_one_byte_outcome:
@@ -187,13 +193,15 @@ Theorem assign_base_ptr_one_byte_outcome:
     local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-    stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx es s /\
+      storage_well_formed_on cx es (FST H) /\ ghost_inv H d cenv cx es G tn s) /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
       (bind (eval_expr cx (Literal (BaseT (BytesT (Dynamic 64))) (BytesL [1w])))
         (read_result cx)) (es,s,G,tn)
-      (\res ee G' tn' t. ?v. res = INL v /\
+      (\H res ee G' tn' t. ?v. res = INL v /\
         expr_post H ctx func cenv cx
           (Literal (BaseT (BytesT (Dynamic 64))) (BytesL [1w]))
           es sa sb s ee v op t /\
@@ -205,13 +213,28 @@ Theorem assign_base_ptr_one_byte_outcome:
         ghost_kept cenv es sa G tn s G' tn' /\
         ?a p. op = Var p /\ lookup_var p t = SOME a /\
           ptr_covers G' tn' p t 64 /\ w2n a + 64 < dimword (:256))
-      (\res ee gt r. expr_exit res r)
+      (\H res ee gt r. expr_exit res r)
 Proof
   rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `?H. valid_horizon cx st0 H es.storage_trace`)
+  >- (rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
+      qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+           vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+  pop_assum (qx_choose_then `H0` assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
   simp[assign_base_ptr_one_byte_lowering, comp_bind_def, comp_return_def] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   drule_all assign_base_ptr_one_byte_alloca_member >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule_all assign_base_ptr_one_byte_endpoint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   drule_all assign_base_ptr_bytelike_counted_path >> strip_tac >>
@@ -219,11 +242,22 @@ Proof
 QED
 
 Resume assign_base_ptr_one_byte_outcome[package]:
-  simp[fragGasPathPtrTheory.gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
-  simp[fragGasPathPtrTheory.gas_summary_ptr_at_def] >>
+  rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
+  qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  rewrite_tac[fragGasPathPtrTheory.gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL (BytesV [1w])`, `es`, `G'`, `tn'`,
     `OK (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`] >>
   conj_tac >- suspend "source" >>
+  qx_gen_tac `HH` >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `HH` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  drule_all (Q.INST [`H` |-> `HH`] assign_base_ptr_one_byte_endpoint) >>
+  disch_then (qspec_then `PG`
+    (qx_choosel_then [`tH`,`GH`,`tnH`] strip_assume_tac)) >>
+  `GH = G' /\ tnH = tn'` by
+    (irule inst_seq_ptr_ghost_unique >> metis_tac[]) >> gvs[] >>
+  drule_all assign_base_ptr_bytelike_counted_path >> strip_tac >>
   simp[assign_base_ptr_expr_post_index, assign_base_ptr_expr_post_gas_obs,
     assign_base_ptr_ghost_index, stmtFragPtrTheory.ghost_inv_gas_obs,
     assign_base_ptr_value_index, assign_base_ptr_buffer_index, lookup_var_def] >>

@@ -109,7 +109,7 @@ Theorem deploy_venom_frame:
   !tops runtime_bc deploy_bc am tx es src res.
     deploy_state_rel tops deploy_bc am tx es /\
     runtime_bc <> [] /\ ~(?t. runtime_bc = 0xEFw :: t) /\
-    deploy_venom_result_rel tops runtime_bc tx src res /\
+    deploy_venom_result_rel HS tops runtime_bc tx src res /\
     (?r g. run_call (shadow_root es) = SOME (r, g) /\
            (frame_resource_starved (shadow_root es) r g \/
             venom_frame_rel (shadow_root es) r g res))
@@ -210,9 +210,9 @@ Theorem deploy_frame_gas_sufficient:
         (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
       venom_run_bounded fuel M dout.po_unit.cu_context
         (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
-      (?src vfuel.
+      (?H src vfuel.
          ~deploy_source_exempt tops src /\
-         deploy_venom_result_rel tops runtime_bc tx src
+         deploy_venom_result_rel H tops runtime_bc tx src
            (run_context vfuel dout.po_unit.cu_context
               (deploy_entry_state prog cplan tops (add_frame_gas g' es))))
       ==>

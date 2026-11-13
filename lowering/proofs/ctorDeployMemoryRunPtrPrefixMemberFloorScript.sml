@@ -2,11 +2,12 @@
 Theory ctorDeployMemoryRunPtrPrefixMemberFloor
 Ancestors
   loweringStateRelDefs
+  compileEnv
   ctorDeployMemoryRunPtrPrefixMemberSetup
   ctorDeployMemoryRunPtrPrefixAllocationFloor
   abiDecoderDynamicLoopSetup instIdxIndep venomState ptrDiscipline ptrSafeRun
   abiDecoderReentryPointer abiDecoderReentry abiDecoderContract
-  compileEnv fragExec words venomMemDefs allocaFrontierBound allocaBudgetProps ctorAbiActualFrame
+  fragExec words venomMemDefs allocaFrontierBound allocaBudgetProps ctorAbiActualFrame
 
 Theorem prefix_member_setup_pair_floor:
   abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) /\

@@ -3,7 +3,7 @@ Theory assignBasePtrCleanStorage
 Ancestors assignBasePtrWordStore accountsRelProps bodyPtrDefs ptrDiscipline
   venomState venomExecSemantics venomInst vyperStorage vyperValue
   finite_map pred_set words vfmState codegenRel fragGasPathPtr
-  appendStorageGhostPtr
+  appendStorageGhostPtr sourceUnitExecution
 
 Theorem assign_base_clean_key_update_subset:
   !X k Y. X SUBSET Y ==> key_update X k {} SUBSET Y
@@ -30,13 +30,12 @@ Proof
 QED
 
 Theorem assign_base_clean_storage_word_taint:
-  !cx tn tf s tr k w mid name subs tv.
+  !cx tn tf s tr k w tv.
     stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
     tf.t_imm = tn.t_imm /\
     (if tr then tf.t_trans = key_update tn.t_trans k {} /\ tf.t_stor = tn.t_stor
      else tf.t_stor = key_update tn.t_stor k {} /\ tf.t_trans = tn.t_trans) /\
-    declared_storage_region cx mid name subs = SOME (tr,k,tv) /\
-    type_slot_size tv = 1 ==>
+    MEM (tr,k,tv) (FST H) /\ type_slot_size tv = 1 ==>
     stor_taint_ok H cx tf (if tr then tstore k w s else sstore k w s)
 Proof
   rpt gen_tac >> strip_tac >> irule assign_base_clean_storage_taint >>
@@ -45,13 +44,13 @@ Proof
 QED
 
 Theorem assign_base_clean_storage_field_taint:
-  !cx tn tf s tr k w mid name fs fld off ftv.
+  !cx tn tf s tr k w fs fld off ftv.
     stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
     tf.t_imm = tn.t_imm /\
     (if tr then
        tf.t_trans = key_update tn.t_trans (k+n2w off) {} /\ tf.t_stor = tn.t_stor
      else tf.t_stor = key_update tn.t_stor (k+n2w off) {} /\ tf.t_trans = tn.t_trans) /\
-    declared_storage_region cx mid name [] = SOME (tr,k,StructTV fs) /\
+    MEM (tr,k,StructTV fs) (FST H) /\
     struct_field_slot fs fld = SOME (off,ftv) /\ type_slot_size ftv = 1 ==>
     stor_taint_ok H cx tf
       (if tr then tstore (k+n2w off) w s else sstore (k+n2w off) w s)

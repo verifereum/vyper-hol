@@ -87,7 +87,7 @@ Proof
   simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def]
 QED
 
-Theorem abi_encode_vv_post_fields_transport[local]:
+Theorem abi_encode_vv_post_fields_transport:
   vv_post (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es sa sb s0 es' tv
     (LocatedValue ty p) u /\
   p.ptr_location = LocMemory /\

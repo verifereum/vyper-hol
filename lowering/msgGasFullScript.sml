@@ -4,14 +4,14 @@ Theory msgGasFull
 Ancestors
   bodySimFull gasOutcomeFull gasOutcomeFullCompose msgGasOrigin msgGasPost
   msgGasSim bodyMemBiEnvMsgGas bodyPtrEnvBuiltinsGas bodyPtrEnvBuiltinsEdges
-  decoderGhostFramePtr fragGasSeqPtr fragGasOriginPtr bodyPtrDefs ptrSafeRun
+  fragGasSeqPtr fragGasOriginPtr bodyPtrDefs ptrSafeRun
   ptrDiscipline gasShadow gasSummary gasOracleReplay allocaHistory
   exprSimMemDefs exprSimStack exprSimIfExp exprSimProps exprLoweringProps
   loweringPosts exprLowering compileEnv emitHelper vyperStorageTrace
   venomExecSemantics venomInst venomState memSafeRun context
   codegenRel contextCodegenRel unitTransformDefs loweringStateRelDefs
   vyperTypeSystem vyperAST
-  vyperInterpreter vyperState finite_map pred_set list
+  vyperInterpreter vyperState pred_set list
 
 (* The checked GAS step and its ghosts, fixed before any horizon: the
    endpoint, provenance and taint do not depend on the dead mask. *)
@@ -125,7 +125,7 @@ Proof
        u with vs_inst_idx := SUC s0.vs_inst_idx` by
         simp[Abbr `u`, update_var_def] >>
       gvs[Abbr `inst`] >> fs[ghost_inv_at_def] >>
-      rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[]))
+      rpt conj_tac >> first_assum ACCEPT_TAC)
   >- (drule_all gas_builtin_indexed_ghosts_at >>
       disch_then (qspecl_then [`w`, `SUC s0.vs_inst_idx`, `id`,
         `DROP 1 s0.vs_gas_readings`, `PG`] strip_assume_tac) >>
@@ -194,6 +194,7 @@ Proof
           is_word_type_def, update_var_def]) >>
   rw[expr_vv_sim_full_def] >>
   Cases_on `compile_env_var MsgGas sa` >>
+  rename1 `compile_env_var MsgGas sa = (mop, _)` >>
   Cases_on `compile_env_var GasPrice shadow_sa` >>
   gvs[gas_shadow_expr_def, gas_shadow_builtin_def] >>
   qpat_x_assum `compile_expr _ _ _ sa = _` mp_tac >>
@@ -203,7 +204,7 @@ Proof
   simp[Once compile_expr_def, compile_expr_def,
        compile_builtin_dispatch_body_def, as_stack_val_def] >> strip_tac >>
   gvs[expr_type_def] >>
-  `?out. q = Var out` by
+  `?out. mop = Var out` by
     (qpat_x_assum `compile_env_var MsgGas _ = _` mp_tac >>
      simp[compile_env_var_def, emit_op_def, comp_bind_def,
           comp_ignore_bind_def, comp_return_def, fresh_id_def,

@@ -23,7 +23,7 @@ Theorem prefix_entry_runtime_label:
 Proof
   rpt gen_tac >> strip_tac >>
   `vs.vs_labels = (entry_venom_state prog plan0 es).vs_labels` by
-    (qpat_x_assum `gas_variant _ _` mp_tac >>
+    (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
      simp[gas_variant_def, deploy_entry_state_def] >>
      disch_then (mp_tac o Q.AP_TERM `\s. s.vs_labels`) >> simp[]) >>
   fs[deploy_phases_def] >>
