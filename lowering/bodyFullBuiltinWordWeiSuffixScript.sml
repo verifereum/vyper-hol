@@ -5,7 +5,7 @@ Ancestors
   bodyPtrWordBuiltinsScalarSequence ptrDiscipline venomInst
   instSeqPtrLo bodyFullGhostFrame
   exprSimWordBuiltins fragGasSeqPtr fragGasEmitCtrl bodySimFull
-  finite_map pred_set list
+  finite_map pred_set list fragExecMem unitTransformDefs memSafeRun contextCodegenRel codegenRel
 
 Theorem as_wei_value_canonical_ghosts:
   compile_as_wei_value_int v (denomination_multiplier dn) F sa = (op,sb) /\
@@ -54,4 +54,49 @@ Proof
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
   drule_all word_scale_emitted_insts >> strip_tac >>
   gvs[op_prov_def] >> first_x_assum irule >> simp[mk_inst_def]
+QED
+
+Theorem as_wei_value_suffix_mem_ok:
+  compile_as_wei_value_int v (denomination_multiplier dn) F sa = (op,sb) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >> Cases_on `denomination_multiplier dn = 1`
+  >- (gvs[] >> drule word_scale_identity >> strip_tac >>
+      gvs[run_inst_seq_mem_ok_def]) >>
+  drule_all word_scale_emitted_insts >> strip_tac >>
+  simp[run_inst_seq_mem_ok_def, inst_mem_below_frontier_def,
+       inst_dload_in_section_def, source_memory_read_ranges_def,
+       source_memory_write_ranges_def, mk_inst_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[])
+QED
+
+Theorem as_wei_value_success_origin:
+  compile_as_wei_value_int v (denomination_multiplier dn) F sa = (op,sb) /\
+  fn_has_code sa sb fn /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  op_prov G v = NONE /\ op_taint tn v = {} /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?G' tn'.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),G',tn')) /\
+    op_prov G' op = NONE /\ op_taint tn' op = {}
+Proof
+  strip_tac >> drule_all as_wei_value_canonical_ghosts >>
+  disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
+  qexistsl_tac [`G'`, `tn'`] >>
+  reverse conj_tac >- metis_tac[] >> gen_tac >>
+  drule_all word_scale_current_block >> strip_tac >>
+  drule_all word_scale_code_prefix >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb) /\
+   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (Cases_on `denomination_multiplier dn = 1`
+     >- (gvs[] >> drule word_scale_identity >> strip_tac >> gvs[]) >>
+     drule_all word_scale_emitted_shape >> simp[]) >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+    metis_tac[as_wei_value_suffix_mem_ok] >>
+  first_x_assum (qspec_then `D` assume_tac) >>
+  drule_all run_inst_seq_gas_origin_ptr_path >>
+  simp[]
 QED
