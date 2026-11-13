@@ -626,3 +626,42 @@ Proof
   gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS, optionTheory.IS_SOME_EXISTS] >>
   metis_tac[supported_place_evaluated_assignable]
 QED
+
+(* Compatibility is the checker's widening relation with field/argument
+   order reversed. Evaluation is supplied by the two producer interfaces. *)
+Theorem log_compatible_evaluated_widening:
+  !dty lty tenv ltv dtv.
+    event_arg_compatible dty lty /\
+    evaluate_type tenv lty = SOME ltv /\
+    evaluate_type tenv dty = SOME dtv ==>
+    type_widens_to tenv lty dty
+Proof
+  simp[event_arg_compatible_alias_def, type_widens_to_def,
+       well_formed_type_def]
+QED
+
+Theorem log_compatible_aggregate_source:
+  !dty lty.
+    event_arg_compatible dty lty /\
+    ~is_word_type dty /\ ~is_bytestring_type dty ==>
+    ~is_word_type lty /\ ~is_bytestring_type lty
+Proof
+  simp[event_arg_compatible_alias_def] >>
+  metis_tac[aggregateEvaluatedLayoutTheory.arg_type_fits_word_type,
+            memoryLocalRhsPropsTheory.arg_type_fits_bytestring_target]
+QED
+
+Theorem log_compatible_declared_value:
+  !dty lty tenv ltv dtv v.
+    event_arg_compatible dty lty /\
+    evaluate_type tenv lty = SOME ltv /\
+    evaluate_type tenv dty = SOME dtv /\ value_has_type ltv v ==>
+    value_has_type dtv v /\ val_wf dtv v
+Proof
+  rpt strip_tac >>
+  `type_widens_to tenv lty dty` by
+    metis_tac[log_compatible_evaluated_widening] >>
+  drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >>
+  strip_tac >> gvs[] >>
+  metis_tac[valueEncodingTypingTheory.value_has_type_val_wf]
+QED
