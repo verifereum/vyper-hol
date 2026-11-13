@@ -54,7 +54,7 @@ Proof
   fs[intcall_frame_ok_def, intcall_expr_res_def, bodySimTheory.same_frame_def] >>
   qpat_x_assum `cenv_module_pins _ _` mp_tac >>
   qpat_x_assum `_ = fp.jc_root_ce` (fn th => once_rewrite_tac[GSYM th]) >>
-  simp[cenv_module_pins_def]
+  simp[bodySimTheory.cenv_module_pins_def]
 QED
 
 (* Held: the call step for a nonreentrant callee, whose lock the
