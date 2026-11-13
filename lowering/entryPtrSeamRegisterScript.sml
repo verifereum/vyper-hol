@@ -128,14 +128,9 @@ Theorem registration_external_allocs_ok:
   ?rr:bool. fn_allocs_ok tops (mut,nr,rr,name,args,defaults,ret,fbody)
 Proof
   strip_tac >>
-  `(!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops) /\
-   (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops)` by
-    (fs[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def,
-        EVERY_MEM] >> rpt strip_tac >>
-     qpat_x_assum `!e. MEM e tops ==> supported_declaration_header tops e` drule >>
-     simp[supportedDeclsTheory.supported_declaration_header_def]) >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  drule_all lookup_function_external_mem >> strip_tac >> gvs[] >>
+  `supported_declaration_headers tops` by fs[supported_program_def] >>
+  drule_all supported_headers_external_member >> strip_tac >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
   qexists_tac `rr` >> irule lower_vyper_runtime_unit_allocs_ok >>
   metis_tac[]
 QED
