@@ -260,16 +260,15 @@ Definition sym_jumpi_def:
     | _ => SymError "jumpi: stack underflow"
 End
 
-(* Deltas stay below 2^255, so a label's address plus its delta never wraps
-   in the concrete semantics. *)
+(* CODECOPY needs a non-wrapping data address; arithmetic and spills keep
+   deltas symbolically even before the read is reached. *)
 Definition sym_delta_ok_def:
   sym_delta_ok (d : num) ⇔ d < dimword (:256) DIV 2
 End
 
 Definition sym_push_lab_def:
   sym_push_lab l d stk ss =
-    if sym_delta_ok d then sym_set_stack (Lab l d :: stk) ss
-    else SymBad "label delta too large"
+    sym_set_stack (Lab l d :: stk) ss
 End
 
 Definition sym_add_def:
@@ -315,7 +314,7 @@ Definition sym_codecopy_def:
   sym_codecopy p env ss =
     case ss.sym_stack of
       Val dst :: Lab l d :: Val sz :: stk =>
-        if sym_data_label p env l then
+        if sym_data_label p env l ∧ sym_delta_ok d then
           sym_lift 3
             (mem_labels_clear ss.sym_mem_labels
                (in_mem_range (w2n dst) (w2n sz))) ss

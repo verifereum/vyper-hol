@@ -15,7 +15,7 @@
  *   label_flow_ok          - no CODESIZE; code_end variables only copied or
  *                            CODECOPY's source, and CODECOPY reads only
  *                            runtime_begin or a code_end variable
- *   code_end_offset_ok     - a code_end ADD's offset is below 2^255
+ *   code_end_offset_ok     - a code_end CODECOPY's offset is below 2^255
  *   sym_unit_static_ok     - the data segment holds bytes only, has
  *                            runtime_begin when the code uses it, and every
  *                            INVOKE names a function of the context
@@ -72,16 +72,16 @@ Definition label_flow_ok_def:
           ?x. src = Var x /\ code_end_var fn x))
 End
 
-(* P3: at every invariant point of a code_end ADD, its offset is below
-   2^255, so the pointer's delta is one the symbolic semantics keeps
-   (sym_delta_ok). *)
+(* P3: bound a code_end-derived offset when CODECOPY reads it. Pure ADDs
+   can be scheduled before a failing call or bounds check. *)
 Definition code_end_offset_ok_def:
   code_end_offset_ok Inv ctx <=>
-    !fn inst vs op w.
-      Inv ctx fn inst vs /\ inst.inst_opcode = ADD /\
-      inst.inst_operands = [op; Label "code_end"] /\
-      eval_operand op vs = SOME w ==>
-      w2n w < dimword (:256) DIV 2
+    !fn inst vs dst x sz w base.
+      Inv ctx fn inst vs /\ inst.inst_opcode = CODECOPY /\
+      inst.inst_operands = [dst; Var x; sz] /\ code_end_var fn x /\
+      eval_operand (Var x) vs = SOME w /\
+      FLOOKUP vs.vs_labels "code_end" = SOME base ==>
+      w2n (w - base) < dimword (:256) DIV 2
 End
 
 (* The static clauses: the data segment holds bytes only (a DataLabel would
@@ -148,7 +148,8 @@ Definition op_kind_ok_def:
     | Label l => sv = Lab l 0
     | Var x =>
         if retpc_var fn x then sv = Lab ret 0
-        else if code_end_var fn x then (?d. sv = Lab "code_end" d)
+        else if code_end_var fn x then
+          (?d. d < dimword (:256) /\ sv = Lab "code_end" d)
         else (?w. sv = Val w)
 End
 
