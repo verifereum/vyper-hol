@@ -134,6 +134,7 @@ Theorem concretize_clean_write_geometry:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -167,23 +168,31 @@ Proof
          metis_tac[operand_domain_agreement, optionTheory.NOT_SOME_NONE]) >>
       qexists_tac `dstT` >> simp[] >> rpt strip_tac >>
       irule joint_relocation_demand_retained >> simp[range_bytes_def] >> metis_tac[]) >>
-  `?dstT. eval_operand opd t = SOME dstT /\
-    ((w2n dst+cap <= lo /\ w2n dstT = w2n dst) \/
-     (?d owner aid b sz.
-       activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
-         d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\ w2n dst+cap <= b+sz /\
-       w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by
-    (irule concretize_memory_access_geometry >> simp[] >>
+  `~(dyn_floor C s <= w2n dst)` by
+    fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
+  (qpat_assum `~(dyn_floor C s <= w2n dst)` (fn nd =>
+    Q.SUBGOAL_THEN `?dstT. eval_operand opd t = SOME dstT /\
+      (((w2n dst+cap <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
+       (?d owner aid b sz.
+         activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+           d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\ w2n dst+cap <= b+sz /\
+         w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))`
+      (strip_assume_tac o REWRITE_RULE [nd]))
+   >- (irule concretize_memory_access_geometry >> simp[] >>
      conj_tac >- (qexists_tac `access` >> simp[]) >>
      conj_tac >- metis_tac[] >>
+     conj_tac >- metis_tac[] >>
      goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[] >> metis_tac[]) >>
-  pop_assum strip_assume_tac >> qexists_tac `dstT` >> asm_rewrite_tac[] >>
+     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[] >> metis_tac[])) >>
+  qexists_tac `dstT` >> asm_rewrite_tac[] >>
   `!i. i < len ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
     (rpt strip_tac >> `i < cap` by decide_tac >>
-     irule relocation_pair_range >>
-     qexists_tac `cap` >> asm_rewrite_tac[] >> metis_tac[]) >>
+     `c <= LENGTH es` by decide_tac >>
+     mp_tac (Q.INST [`off:bytes32` |-> `dst`, `offT:num` |-> `w2n (dstT:bytes32)`,
+        `len:num` |-> `cap`, `positions` |-> `concretize_positions C'`]
+        access_geometry_relocation_pairs) >>
+     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >> disch_then (qspec_then `i` mp_tac) >> simp[]) >>
   (conj_tac >- suspend "written") >> suspend "retained"
 QED
 Resume concretize_clean_write_geometry[written]:
@@ -235,6 +244,7 @@ Theorem concretize_calldatacopy_execution_geometry:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -412,6 +422,7 @@ Theorem concretize_calldatacopy_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\

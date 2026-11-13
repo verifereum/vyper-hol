@@ -66,6 +66,7 @@ Definition layout_ordinary_trace_def:
     EL g.lop_cursor (q0::qs) = g.lop_config /\
     resolved_config_ok g.lop_config g.lop_ids g.lop_anns /\
     lifetime_ok g.lop_bound g.lop_ids g.lop_config /\
+    (~ctx_has_dalloca C ==> resolved_complete g.lop_config g.lop_anns) /\
     (g.lop_pending ==>
       ?c fuel. g.lop_cursor = SUC c /\ c < LENGTH es /\
         EL c es = SOME (OriginOrdinary fuel s) /\
@@ -367,6 +368,8 @@ Proof
   qpat_x_assum `layout_ordinary_trace _ _ _ _ _ _ g s` mp_tac >>
   qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ g s t` mp_tac >>
   simp[layout_ordinary_trace_def, layout_ordinary_state_def] >> rpt strip_tac >>
+  `~ctx_has_dalloca C ==>
+   resolved_complete (EL g.lop_cursor (q0::qs)) ((rp,rv)::anns)` by fs[] >>
   drule_all concretize_returncopy_local_complete >> strip_tac >>
   `post.vs_initial_fmp = tpost.vs_initial_fmp` by
     metis_tac[step_inst_initial_fmp, step_inst_base_initial_fmp] >>
