@@ -278,20 +278,21 @@ Resume ptr_mstore_write_producer[classified]:
     simp[source_memory_write_ranges_def, fixed_source_write_range_def, mem_write_ops_def] >>
   qabbrev_tac `ops = <|iao_ofst := op1; iao_size := SOME (Lit 32w);
     iao_max_size := SOME (Lit 32w)|>` >>
-  `(op_prov TG ops.iao_ofst = NONE /\
+  sg `(op_prov TG ops.iao_ofst = NONE /\
     op_taint (EL (LENGTH h - 1) h).po_taint ops.iao_ofst = {} /\
     (w2n addr + 32 <= lo \/ dyn_floor C vs <= w2n addr)) \/
    (?dv token bid db sb pb. ops.iao_ofst = Var dv /\ FLOOKUP TG dv = SOME (token,bid) /\
     FLOOKUP (EL (LENGTH h - 1) h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\ db <= w2n addr /\
-    w2n addr + 32 <= db+sb /\ pb+sb < dimword(:256))` by
-    (irule ptr_historical_write_classification >>
+    w2n addr + 32 <= db+sb /\ pb+sb < dimword(:256))`
+  >- (irule ptr_historical_write_classification >>
      simp[Abbr `ops`] >>
      conj_tac >- (qexists_tac `names` >> first_assum ACCEPT_TAC) >>
      conj_tac
      >- (qexists_tac `a.po_fn` >> simp[]) >>
      conj_tac >- (qexistsl [`C'`, `rpolicy`] >> fs[]) >>
-     rpt (goal_assum (drule_at Any)) >> simp[]) 
+     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  pop_assum (DISJ_CASES_THEN2 (MAP_EVERY assume_tac o CONJUNCTS) strip_assume_tac)
   >- (fs[Abbr `ops`] >> suspend "fixed") >>
   fs[Abbr `ops`] >> suspend "owned"
 QED
@@ -313,9 +314,7 @@ Resume ptr_mstore_write_producer[fixed]:
   reverse conj_tac
   >- (simp[ptr_paired_write_owner_def, step_writes_def,
         source_memory_write_ranges_def, fixed_source_write_range_def, range_bytes_def] >>
-      rpt strip_tac >> Cases_on `w2n addr + 32 <= lo`
-      >- (disj1_tac >> decide_tac) >>
-      disj2_tac >> disj2_tac >> fs[] >> decide_tac) >>
+      rpt strip_tac >> fs[] >> decide_tac) >>
   qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
   once_rewrite_tac[ptr_chrono_step_cases] >>
   simp[ptr_observe_def, ptr_observation_component_equality, is_terminator_def] >>
@@ -362,7 +361,7 @@ Resume ptr_mstore_write_producer[owned]:
   `FLOOKUP births (token,bid) = SOME (db,sb)` by
     (drule_all ptr_source_ownership_prov_erases >>
      simp[ptr_ledger_erases_def, ptr_owner_erases_def] >>
-     disch_then (qspec_then `dv` mp_tac) >> gvs[]) >>
+     disch_then (qspec_then `dv` mp_tac o CONJUNCT1) >> gvs[]) >>
   drule ptr_structural_trace_embedding >> strip_tac >>
   drule ptr_structural_trace_target >> strip_tac >>
   drule ptr_chrono_history_end >> strip_tac >>

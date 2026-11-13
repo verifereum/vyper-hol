@@ -772,7 +772,7 @@ Proof
     (drule_all ptr_source_ownership_prov_erases >>
      simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def,
           concretizePtrPrefixLedgerTheory.ptr_owner_erases_def] >>
-     disch_then (qspec_then `dv` mp_tac) >> simp[]) >>
+     disch_then (qspec_then `dv` mp_tac o CONJUNCT1) >> simp[]) >>
   `op_prov TGj ops.iao_ofst = SOME (tokB,bid)` by simp[op_prov_def] >>
   Cases_on `tokB = token /\ bid = aid`
   >- (qpat_x_assum `tokB = token /\ bid = aid` strip_assume_tac >>
