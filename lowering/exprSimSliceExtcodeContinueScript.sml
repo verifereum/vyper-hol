@@ -2,7 +2,7 @@
 Theory exprSimSliceExtcodeContinue
 Ancestors
   loweringStateRelDefs
-  exprSimSliceExtcodeEntry exprSimSliceCompose exprSimSliceExtcode
+  exprSimSliceExtcodeEntry exprSimSliceCompose exprSimSliceExtcode exprSimSliceTerminal
   exprSimSliceBounds exprSimSliceOrdinaryContinue exprSimSource exprSimHyps
   exprSimPrecompiles exprSimWordArgs emitHelperProps fragGasSeqAbort builtinBytes emitHelper
   exprSimSliceExtcodeContext exprSimSliceMemory exprSimHash loweringHalt loweringPosts venomState
@@ -241,10 +241,11 @@ QED
 Theorem slice_extcode_success_outcome:
   gas_marked_path F ctx func s 0 (OK t) /\
   i+k <= LENGTH (lookup_account (word_of_bytes_be bs) es.accounts).code /\ k <= n /\
-  vv_post H ctx func cenv cx e es sbase sb s (es with gas_obs := [])
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+   vv_post H ctx func cenv cx e es sbase sb s (es with gas_obs := [])
     (Value (BytesV (TAKE k (DROP i
       (lookup_account (word_of_bytes_be bs) es.accounts).code))))
-    (LocatedValue (expr_type e) (mk_ptr out LocMemory)) t /\
+    (LocatedValue (expr_type e) (mk_ptr out LocMemory)) t) /\
   t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   gas_outcome F tops (ctx,func) cx st0
     (do acc <- get_accounts;
@@ -274,7 +275,8 @@ QED
 Theorem slice_extcode_run_vv_post:
   compile_slice_extcode addr start len sz sa = (r,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H) /\
+  local_ptrs_reserved cenv sa /\
   eval_operand addr s = SOME a /\ eval_operand start s = SOME b /\
   eval_operand len s = SOME n /\
   (!x. MEM (Var x) [addr;start;len] ==> not_fresh_at sa x) /\
@@ -406,6 +408,43 @@ QED
 
 Finalise slice_extcode_run_vv_post
 
+(* The run is the same at every horizon, so one state carries the post
+   at all of them. *)
+Theorem slice_extcode_run_vv_post_horizons[local]:
+  compile_slice_extcode addr start len sz sa = (r,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  storage_trace_domain cx st0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s /\
+     storage_well_formed_on cx es (FST H)) /\
+  local_ptrs_reserved cenv sa /\
+  eval_operand addr s = SOME a /\ eval_operand start s = SOME b /\
+  eval_operand len s = SOME n /\
+  (!x. MEM (Var x) [addr;start;len] ==> not_fresh_at sa x) /\
+  LENGTH (lookup_account (w2w a) s.vs_accounts).code < dimword (:256) /\
+  ~(LENGTH (lookup_account (w2w a) s.vs_accounts).code < w2n b + w2n n) /\
+  32 + w2n n <= sz /\ sz < dimword (:256) /\
+  expr_type e = BaseT (BytesT (Dynamic max_len)) /\ w2n n <= max_len ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    !H. valid_horizon cx st0 H es.storage_trace ==>
+      !k. vv_post H ctx func cenv cx e es sa sb s es
+        (Value (BytesV (TAKE (w2n n) (DROP (w2n b)
+          (lookup_account (w2w a) s.vs_accounts).code))))
+        (LocatedValue (expr_type e) (mk_ptr r LocMemory)) (t with vs_inst_idx := k)
+Proof
+  strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+  impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  strip_tac >>
+  drule_all slice_extcode_run_vv_post >> asm_rewrite_tac[] >> strip_tac >>
+  qexists_tac `t` >> asm_rewrite_tac[] >> rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  drule_all slice_extcode_run_vv_post >> asm_rewrite_tac[] >> strip_tac >>
+  gvs[]
+QED
+
 Theorem slice_extcode_tail_outcome:
   compile_slice_extcode addr sop lop sz sa = (r,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
@@ -415,9 +454,12 @@ Theorem slice_extcode_tail_outcome:
   eval_operand addr s = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) /\
   eval_operand sop s = SOME (n2w i) /\ eval_operand lop s = SOME (n2w k) /\
   (!x. MEM (Var x) [addr;sop;lop] ==> not_fresh_at sa x) /\
-  accounts_agree H cx es.accounts s.vs_accounts /\ accounts_well_typed es.accounts /\
+  accounts_well_typed es.accounts /\
   LENGTH bs = 20 /\ i < dimword (:256) /\ k < dimword (:256) /\ k <= n /\
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s /\
+     storage_well_formed_on cx es (FST H)) /\
+  local_ptrs_reserved cenv sa /\
   32+n <= sz /\ sz < dimword (:256) /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\ es.gas_obs = [] ==>
   gas_outcome F tops (ctx,func) cx st0
@@ -433,6 +475,13 @@ Theorem slice_extcode_tail_outcome:
     (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
+  ho_match_mp_tac exprSimSliceTerminalTheory.slice_terminal_domain_intro >>
+  strip_tac >>
+  `accounts_agree (storage_trace_horizon es.storage_trace) cx es.accounts s.vs_accounts` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+     impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     simp[stmt_state_rel_def, state_rel_def, accounts_rel_def]) >>
   drule_all slice_extcode_account >> strip_tac >>
   `LENGTH (lookup_account (w2w (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)))
       s.vs_accounts).code < dimword (:256)` by
@@ -458,11 +507,10 @@ Resume slice_extcode_tail_outcome[success]:
     LENGTH (lookup_account (w2w (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)))
       s.vs_accounts).code` by simp[] >>
   `32 + w2n (n2w k : bytes32) <= sz /\ w2n (n2w k : bytes32) <= n` by simp[] >>
-  drule_all slice_extcode_run_vv_post >>
   `~(LENGTH (lookup_account (w2w (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)))
       s.vs_accounts).code < w2n (n2w i : bytes32) + w2n (n2w k : bytes32))` by
     decide_tac >>
-  pop_assum (fn th => rewrite_tac[th]) >> strip_tac >>
+  drule_all slice_extcode_run_vv_post_horizons >> strip_tac >>
   `EVERY (\inst. inst.inst_opcode <> INVOKE /\
       ~is_terminator inst.inst_opcode) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
   `FILTER (\inst. inst.inst_opcode = GAS) (emitted_insts sa sb) = []` by
@@ -485,8 +533,9 @@ Resume slice_extcode_tail_outcome[success]:
   >- (qpat_x_assum `gas_path _ _ _ _ _` mp_tac >> simp[]) >>
   `es with gas_obs := [] = es` by
     (qpat_x_assum `es.gas_obs = []` (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
-  qpat_x_assum `!idx. vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (qspec_then `t.vs_inst_idx` mp_tac) >> simp[]
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> !k. _`
+    (drule_then (qspec_then `t.vs_inst_idx` mp_tac)) >> simp[]
 QED
 
 Finalise slice_extcode_tail_outcome
@@ -556,7 +605,9 @@ Theorem slice_extcode_continue_entry_seq:
   expr_type a = BaseT AddressT /\ expr_body_pre cenv cx env a es /\
   expr_sim_case nocalls ctx func cenv cx a /\
   (nocalls ==> int_calls_expr a = []) /\
-  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s /\
+     storage_well_formed_on cx es (FST H)) /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand sop s = SOME (n2w i) /\ eval_operand lop s = SOME (n2w k) /\
   (!op. MEM op [sop;lop] ==>
@@ -584,8 +635,30 @@ Proof
   irule slice_address_read_outcome >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   simp[] >> qexistsl_tac [`cenv`, `env`, `nocalls`, `aop`, `sa`, `sb`, `ty`] >>
-  simp[] >> rpt gen_tac >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx ee t` by fs[loweringPostsTheory.expr_post_def] >>
+  simp[] >> rpt conj_tac
+  >~ [`storage_trace_frame _`]
+  >- (gen_tac >>
+      rpt (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+           simp[vyperStorageTraceTheory.storage_trace_frame_state_reads,
+                vyperStorageTraceTheory.storage_trace_frame_lifts,
+                vyperStorageTraceTheory.storage_trace_frame_return] >>
+           rpt gen_tac)) >>
+  rpt gen_tac >> strip_tac >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     valid_horizon cx st0 H es.storage_trace` by
+    (rpt strip_tac >>
+     drule_at (Pos (el 2)) vyperStorageFootprintTheory.valid_horizon_frame >>
+     simp[slice_read_frame]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ee t /\ storage_well_formed_on cx ee (FST H)` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
+     simp[]) >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  strip_tac >>
   `!op. MEM op [sop;lop] ==> eval_operand op t = eval_operand op s` by
     (rpt strip_tac >>
      `(?w. op = Lit w) \/ (?z. op = Var z /\ not_fresh_at sa z)` by metis_tac[] >>
@@ -595,18 +668,21 @@ Proof
 QED
 
 Resume slice_extcode_continue_entry_seq[tail]:
-  irule slice_gas_outcome_conseq >>
+  irule exprSimSliceTerminalTheory.slice_gas_outcome_conseq_frame >>
   qexists_tac `(\H res ef z. ?tv. res = INL tv /\
     vv_post H ctx func cenv cx result ee sb sc t ef tv
       (LocatedValue (expr_type result) (mk_ptr r LocMemory)) z /\
     z.vs_current_bb = sc.cs_current_bb /\ z.vs_inst_idx = LENGTH sc.cs_current_insts)` >>
   qexists_tac `(\H res ef r. expr_exit res r)` >>
-  conj_tac >- simp[] >>
-  conj_tac >- suspend "rebase" >>
+  simp[exprSimSliceTerminalTheory.slice_terminal_source_frame] >>
+  rpt conj_tac
+  >~ [`gas_outcome _ _ _ _ _ _ _ _ _`] >- suspend "outcome" >>
+  suspend "rebase"
+QED
+
+Resume slice_extcode_continue_entry_seq[outcome]:
   `accounts_well_typed ee.accounts` by
     fs[exprSimHypsDefsTheory.expr_sim_inv_def, vyperTypeInvariantsTheory.state_well_typed_def] >>
-  `accounts_agree H cx ee.accounts t.vs_accounts` by
-    fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >>
   `?bb. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb /\
     isPREFIX (emitted_insts sb sc) (DROP (LENGTH sb.cs_current_insts) bb.bb_instructions)` by
     (drule slice_extcode_tail_control >> strip_tac >>
@@ -624,6 +700,10 @@ QED
 
 Resume slice_extcode_continue_entry_seq[rebase]:
   BETA_TAC >> rpt strip_tac >> gvs[] >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+    valid_horizon _ _ H es.storage_trace` (drule_then assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
   `wb_frame cenv es ee sa s t` by
     (irule expr_post_frame >> goal_assum (drule_at Any)) >>
   match_mp_tac (Q.INST [`es1` |-> `ee`, `sm` |-> `sb`, `sb` |-> `sc`]
