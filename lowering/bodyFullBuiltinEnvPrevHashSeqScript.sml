@@ -13,6 +13,7 @@ Theorem env_prevhash_seq_ghosts:
  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x)
  ==> ?G' tn'.
+ tn'.t_mem = tn.t_mem /\
  run_inst_seq_mem_ok (emitted_insts sa sb) s /\
  op_prov G' op = NONE /\ op_taint tn' op = {} /\
  (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
