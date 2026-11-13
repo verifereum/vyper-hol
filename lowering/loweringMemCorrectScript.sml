@@ -17,17 +17,9 @@
  *)
 Theory loweringMemCorrect
 Ancestors
-  stmtSimDefs
-  loweringPosts
-  vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
-  exprLoweringProps valueEncodingProofs vyperInterpreter vyperContext
-  venomExecSemantics venomState compileEnv e2eDefs supportedProgram
-  compileVyper unitTransformDefs fragExec loweringHalt venomInst venomWf
-  contextCodegenRel memSafeRun allocaFrontierBound o1PassContract ptrDiscipline
-  vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
-  entryHaltMem loweringPtrCorrect bodySim bodySimMain moduleLowering
-  stmtLowering vyperTypeSystem vyperState lowerDloadDefs
-  gasSummary
+  vyperLoweringCorrect vyperCompiler loweringPtrCorrect memSafeRun
+  allocaFrontierBound ptrDiscipline lowerDloadDefs contextCodegenRel venomWf
+  venomInst unitMemInv
 
 val _ = Parse.hide "body";
 
@@ -144,7 +136,7 @@ Proof
           `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                       vs_inst_idx := 0 |>`] mp_tac code_data_entry >>
         simp[]) >>
-      simp[]) >>
+      gvs[]) >>
   rw[dload_offset_ok_def] >>
   `inst_dload_in_section inst s` by metis_tac[mem_safe_point_dload] >>
   `w2n off <= LENGTH s.vs_data_section` by
