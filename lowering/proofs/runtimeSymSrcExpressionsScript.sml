@@ -43,8 +43,11 @@ Resume runtime_sym_expression_pointwise[expr]:
            runtime_sym_type_builtin_contract_def] >> rpt gen_tac >> strip_tac >>
       qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
       IF_CASES_TAC >> pure_rewrite_tac[] >> strip_tac >> metis_tac[]) >>
-  simp[runtime_sym_expr_contract_def] >> disch_then irule >>
-  simp[Once compile_expr_raw_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+  pure_rewrite_tac[runtime_sym_expr_contract_def] >> disch_then assume_tac >>
+  rpt gen_tac >> strip_tac >> first_x_assum irule >>
+  pure_rewrite_tac[GSYM (SIMP_RULE pure_ss [COND_CLAUSES]
+    (CONV_RULE (DEPTH_CONV ETA_CONV) compile_expr_raw_def))] >>
+  metis_tac[]
 QED
 
 Resume runtime_sym_expression_pointwise[builtin]:
@@ -54,8 +57,11 @@ Resume runtime_sym_expression_pointwise[builtin]:
   impl_tac
   >- (simp[] >> rpt gen_tac >> strip_tac >>
       simp[runtime_sym_expr_contract_def] >> metis_tac[]) >>
-  simp[runtime_sym_builtin_contract_def] >> disch_then irule >>
-  simp[Once compile_expr_raw_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+  pure_rewrite_tac[runtime_sym_builtin_contract_def] >> disch_then assume_tac >>
+  rpt gen_tac >> strip_tac >> first_x_assum irule >>
+  pure_rewrite_tac[GSYM (SIMP_RULE pure_ss [COND_CLAUSES]
+    (CONV_RULE (DEPTH_CONV ETA_CONV) compile_expr_raw_def))] >>
+  metis_tac[]
 QED
 
 Resume runtime_sym_expression_pointwise[typebuiltin]:
@@ -65,8 +71,25 @@ Resume runtime_sym_expression_pointwise[typebuiltin]:
   impl_tac
   >- (simp[] >> rpt gen_tac >> strip_tac >>
       simp[runtime_sym_expr_contract_def] >> metis_tac[]) >>
-  simp[runtime_sym_type_builtin_contract_def] >> disch_then irule >>
-  simp[Once compile_expr_raw_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+  pure_rewrite_tac[runtime_sym_type_builtin_contract_def] >> disch_then assume_tac >>
+  rpt gen_tac >> strip_tac >> first_x_assum irule >>
+  pure_rewrite_tac[GSYM (SIMP_RULE pure_ss [COND_CLAUSES]
+    (CONV_RULE (DEPTH_CONV ETA_CONV) compile_expr_raw_def))] >>
+  metis_tac[]
 QED
 
 Finalise runtime_sym_expression_pointwise
+
+Theorem runtime_sym_expression_contracts:
+  runtime_sym_generator_contracts tops ==>
+  ((!ce ty e. runtime_sym_expr_contract tops compile_expr ce ty e) /\
+   (!ce rt ty bi args.
+      runtime_sym_builtin_contract tops compile_builtin_dispatch ce rt ty bi args) /\
+   (!ce vt ty tb rt args.
+      runtime_sym_type_builtin_contract tops compile_type_builtin_dispatch
+        ce vt ty tb rt args))
+Proof
+  pure_rewrite_tac[runtime_sym_expr_contract_def,
+    runtime_sym_builtin_contract_def, runtime_sym_type_builtin_contract_def] >>
+  metis_tac[runtime_sym_expression_pointwise]
+QED
