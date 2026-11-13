@@ -81,6 +81,46 @@ Proof
   simp[abi_malformed_resource_post_def] >> metis_tac[]
 QED
 
+Theorem abi_malformed_resource_post_frame_intro:
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
+    ctx func cenv cx es t /\
+  (!H. stmt_state_rel H ctx func cenv cx es s ==>
+       stmt_state_rel H ctx func cenv cx es t) /\
+  s.vs_alloca_next <= t.vs_alloca_next /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+     FLOOKUP t.vs_allocas aid = SOME entry) /\
+  (!aid B cap L. aid NOTIN sites /\ aid <> dstid /\
+     FLOOKUP s.vs_allocas aid = SOME (B,cap) /\ L <= cap ==>
+     mem_bytes_at B L t.vs_memory = mem_bytes_at B L s.vs_memory) /\
+  (!op w. abi_decoder_operand_live next op /\ eval_operand op s = SOME w ==>
+     eval_operand op t = SOME w) ==>
+  abi_malformed_resource_post ctx func cenv cx es next sites dstid s t
+Proof
+  rw[abi_malformed_resource_post_def] >> metis_tac[]
+QED
+
+(* A decoder step keeps the four fields that carry the storage horizon, so
+   the relation at the one horizon it was shown for moves to every horizon. *)
+Theorem abi_malformed_resource_post_intro:
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
+    ctx func cenv cx es t /\
+  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+  t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx /\
+  s.vs_alloca_next <= t.vs_alloca_next /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+     FLOOKUP t.vs_allocas aid = SOME entry) /\
+  (!aid B cap L. aid NOTIN sites /\ aid <> dstid /\
+     FLOOKUP s.vs_allocas aid = SOME (B,cap) /\ L <= cap ==>
+     mem_bytes_at B L t.vs_memory = mem_bytes_at B L s.vs_memory) /\
+  (!op w. abi_decoder_operand_live next op /\ eval_operand op s = SOME w ==>
+     eval_operand op t = SOME w) ==>
+  abi_malformed_resource_post ctx func cenv cx es next sites dstid s t
+Proof
+  strip_tac >> irule abi_malformed_resource_post_frame_intro >>
+  qexists_tac `H` >> simp[] >>
+  metis_tac[stmt_state_rel_fields_transport]
+QED
+
 Theorem abi_malformed_resource_weaken:
   abi_malformed_resource_post ctx func cenv cx es child_next child_sites dstid s t /\
   next <= child_next /\ child_sites SUBSET sites ==>

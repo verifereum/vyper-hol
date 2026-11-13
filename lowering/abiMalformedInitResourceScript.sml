@@ -48,8 +48,13 @@ Proof
   drule_all abi_malformed_alloc_registers >> strip_tac >>
   `st.cs_next_var < ceiling.cs_next_var` by decide_tac >>
   drule_all abi_decoder_register_update >> strip_tac >>
+  `!H':(bool # bytes32 # type_value) list # num list.
+     stmt_state_rel H' ctx func cenv cx es s ==>
+     stmt_state_rel H' ctx func cenv cx es allocated` by
+    (rpt strip_tac >> drule_all literal_alloc_buffer_run >> strip_tac >> gvs[]) >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s allocated` by
-    (simp[abi_malformed_resource_post_def] >> metis_tac[]) >>
+    (irule abi_malformed_resource_post_frame_intro >> qexists_tac `H` >> simp[] >>
+     metis_tac[]) >>
   `not_local_ptr cenv es.scopes (STRING #"%" (toString st.cs_next_var))` by
     (irule local_ptrs_reserved_fresh >> qexists_tac `st` >> simp[]) >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid

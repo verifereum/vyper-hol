@@ -50,8 +50,11 @@ Proof
   `local_ptrs_rel func cenv es.scopes t` by suspend "locals" >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
     suspend "immutables" >>
-  `stmt_state_rel H ctx func cenv cx es t` by suspend "state" >>
-  simp[abi_malformed_resource_post_def] >> rpt strip_tac >>
+  `!H':(bool # bytes32 # type_value) list # num list.
+     stmt_state_rel H' ctx func cenv cx es s ==>
+     stmt_state_rel H' ctx func cenv cx es t` by suspend "state" >>
+  irule abi_malformed_resource_post_frame_intro >> qexists_tac `H` >> simp[] >>
+  rpt strip_tac >>
   qhdtm_assum `abi_decode_frame`
     (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
   first_x_assum match_mp_tac >>
@@ -95,7 +98,7 @@ Resume abi_valid_allocated_scratch_free_resource[immutables]:
 QED
 
 Resume abi_valid_allocated_scratch_free_resource[state]:
-  irule stmt_state_rel_allocas_frame >> conj_tac
+  rpt strip_tac >> irule stmt_state_rel_allocas_frame >> conj_tac
   >- (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
       reverse conj_tac >- fs[stmt_state_rel_def] >> rpt strip_tac >>
       `not_fresh_at st x` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>

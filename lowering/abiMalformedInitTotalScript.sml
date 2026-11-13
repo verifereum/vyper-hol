@@ -59,7 +59,7 @@ Proof
     (irule local_ptrs_reserved_next_var >> qexists_tac `guard_st` >>
      fs[abi_malformed_entry_def]) >>
   `stmt_state_rel H ctx func cenv cx es prepared` by
-    fs[abi_malformed_resource_post_def] >>
+    fs[abi_malformed_resource_post_def, abi_malformed_entry_def] >>
   `fresh_vars_wrt en prepared` by
     (irule fresh_vars_wrt_mono >> qexists_tac `header_st` >> simp[GREATER_EQ]) >>
   `MEM (mk_inst header_st.cs_next_id ALLOCA [Lit 32w]

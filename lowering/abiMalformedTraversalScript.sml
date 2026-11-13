@@ -39,7 +39,7 @@ Proof
        (fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def] >>
         metis_tac[LESS_EQ_TRANS]) >>
      qpat_x_assum `!op. _ ==> _` drule >> simp[eval_operand_def, lookup_var_def]) >>
-  simp[abi_malformed_resource_post_def, stmt_state_rel_jump_to] >>
+  irule abi_malformed_resource_post_intro >> qexists_tac `H` >> simp[stmt_state_rel_jump_to] >>
   Cases_on `base_op = Lit 0w` >>
   fs[Abbr `h`, abi_decode_position_header_state_def, update_var_def, jump_to_def,
      eval_operand_def, lookup_var_def]
@@ -98,7 +98,7 @@ Proof
        (fs[stmt_state_rel_def, state_rel_def] >>
         drule_all local_ptrs_rel_alloca_disjoint >> simp[]) >>
      gvs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
-  simp[abi_malformed_resource_post_def, mstore_def, write_memory_with_expansion_def] >>
+  irule abi_malformed_resource_post_intro >> qexists_tac `H` >> simp[mstore_def, write_memory_with_expansion_def] >>
   rpt strip_tac >>
   `aid <> inst.inst_id` by metis_tac[] >>
   `allocas_non_overlapping s` by gvs[stmt_state_rel_def, alloca_inv_def] >>
@@ -135,7 +135,7 @@ Proof
      simp[lookup_var_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
      fs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
   `abi_malformed_resource_post ctx func cenv cx es first sites dstid s u` by
-    (simp[abi_malformed_resource_post_def, Abbr `u`, update_var_def] >>
+    (irule abi_malformed_resource_post_intro >> qexists_tac `H` >> simp[Abbr `u`, update_var_def] >>
      rpt strip_tac >>
      `abi_decoder_operand_live next op` by
        (irule abi_decoder_operand_live_mono >> qexists_tac `first` >> simp[]) >>
@@ -278,7 +278,7 @@ Proof
      irule abi_malformed_reserved_vars_state >> simp[lookup_var_def] >>
      qexists_tac `st` >> simp[]) >>
   qpat_x_assum `t = s with vs_vars := _` SUBST_ALL_TAC >>
-  simp[abi_malformed_resource_post_def] >> rpt strip_tac >>
+  irule abi_malformed_resource_post_intro >> qexists_tac `H` >> simp[] >> rpt strip_tac >>
   Cases_on `op` >>
   fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
     not_fresh_at_def, eval_operand_def, lookup_var_def] >>

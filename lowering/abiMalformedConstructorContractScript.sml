@@ -68,9 +68,13 @@ Proof
      simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   ` (mstore d w (s with vs_vars := vars)).vs_allocas = s.vs_allocas /\
     (mstore d w (s with vs_vars := vars)).vs_alloca_next = s.vs_alloca_next /\
-    (mstore d w (s with vs_vars := vars)).vs_vars = vars` by
+    (mstore d w (s with vs_vars := vars)).vs_vars = vars /\
+    (mstore d w (s with vs_vars := vars)).vs_accounts = s.vs_accounts /\
+    (mstore d w (s with vs_vars := vars)).vs_transient = s.vs_transient /\
+    (mstore d w (s with vs_vars := vars)).vs_requests = s.vs_requests /\
+    (mstore d w (s with vs_vars := vars)).vs_call_ctx = s.vs_call_ctx` by
     simp[mstore_def, write_memory_with_expansion_def] >>
-  simp[abi_malformed_resource_post_def] >> conj_tac
+  irule abi_malformed_resource_post_intro >> qexists_tac `H` >> simp[] >> conj_tac
   >- (rpt strip_tac >>
       `mem_bytes_at B' L' (mstore d w (s with vs_vars := vars)).vs_memory =
        mem_bytes_at B' L' (s with vs_vars := vars).vs_memory` suffices_by simp[] >>
@@ -376,9 +380,11 @@ Proof
      irule abi_malformed_reserved_vars_state >> simp[] >> qexists_tac `st` >>
      simp[lookup_var_def]) >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-   t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels` by
+   t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `t = s with vs_vars := _` SUBST1_TAC >> simp[]) >>
-  simp[abi_malformed_resource_post_def] >> rpt strip_tac >> Cases_on `op` >>
+  irule abi_malformed_resource_post_intro >> qexists_tac `H` >> simp[] >> rpt strip_tac >> Cases_on `op` >>
   fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
      not_fresh_at_def, eval_operand_def, lookup_var_def]
 QED

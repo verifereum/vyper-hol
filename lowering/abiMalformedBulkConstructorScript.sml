@@ -41,9 +41,13 @@ Proof
      simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   ` (mcopy at source_addr n s).vs_vars = s.vs_vars /\
     (mcopy at source_addr n s).vs_allocas = s.vs_allocas /\
-    (mcopy at source_addr n s).vs_alloca_next = s.vs_alloca_next` by
+    (mcopy at source_addr n s).vs_alloca_next = s.vs_alloca_next /\
+    (mcopy at source_addr n s).vs_accounts = s.vs_accounts /\
+    (mcopy at source_addr n s).vs_transient = s.vs_transient /\
+    (mcopy at source_addr n s).vs_requests = s.vs_requests /\
+    (mcopy at source_addr n s).vs_call_ctx = s.vs_call_ctx` by
     simp[mcopy_def, write_memory_with_expansion_def] >>
-  simp[abi_malformed_resource_post_def] >>
+  irule abi_malformed_resource_post_intro >> qexists_tac `H` >> simp[] >>
   conj_tac
   >- (rpt strip_tac >>
   `allocas_non_overlapping s` by fs[stmt_state_rel_def, alloca_inv_def] >>
