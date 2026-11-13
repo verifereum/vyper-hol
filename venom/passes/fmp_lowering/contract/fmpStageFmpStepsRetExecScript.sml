@@ -8,7 +8,7 @@
  *)
 Theory fmpStageFmpStepsRetExec
 Ancestors
-  fmpStageRetStep fmpStageRunnerFacts fmpStageOpBase fmpStageControl fmpStageRel ptrDiscipline
+  fmpStageOpSteps fmpStageRetStep fmpStageRunnerFacts fmpStageOpBase fmpStageControl fmpStageRel ptrDiscipline
   ptrStaticDiscipline
   o1PassContract contextCodegenRel venomExecSemantics venomState venomInst
   venomExecProofs opcodeClass list fmpStepLayout fmpLowerDefs fmpLowerProps
@@ -35,27 +35,6 @@ Proof
   rename1 `SOME vals` >> Cases_on `vals` >> simp[] >> strip_tac >> gvs[]
 QED
 
-Theorem fmp_stage_ret_kept[local]:
-  wf_function fn /\ active_inst fn inst s /\ inst.inst_opcode = RET /\
-  fmp_frame_rel sm fmp0 raw0 eb elo lo T fn fn' PG G tv s t /\
-  active_inst fn' inst' t ==> inst' = inst
-Proof
-  strip_tac >>
-  `ALL_DISTINCT (fn_labels fn)` by fs[wf_function_def] >>
-  fs[active_inst_def] >>
-  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
-    metis_tac[wf_lookup_block] >>
-  qpat_x_assum `fmp_frame_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[fmp_frame_rel_def] >> strip_tac >>
-  `fn_labels fn' = fn_labels fn` by metis_tac[fmp_stage_lowered_shape] >>
-  `lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb'` by
-    (irule MEM_lookup_block >> fs[fn_labels_def]) >>
-  `~MEM inst.inst_opcode [DALLOCA; INVOKE; RETPC_PARAM] /\
-   pre_fmp_opcode inst.inst_opcode` by simp[pre_fmp_opcode_def] >>
-  `inst = EL s.vs_inst_idx bb.bb_instructions` by simp[] >>
-  drule_all fmp_stage_kept_inst >> strip_tac >> gvs[]
-QED
-
 Theorem fmp_stage_ret_exec:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
@@ -70,9 +49,15 @@ Proof
   strip_tac >> drule_all fmp_stage_ret_source >> strip_tac >>
   `wf_function fn` by
     (drule_all fmp_stage_frame_facts >> simp[o1_fn_shape_def]) >>
+  `active_inst fn' inst t` by
+    (irule fmp_stage_target_inst >> simp[] >> metis_tac[]) >>
+  `ALL_DISTINCT (fn_labels fn')` by
+    (qpat_x_assum `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[fmp_stage_rel_def, fmp_frame_rel_def] >> strip_tac >> gvs[] >>
+     metis_tac[fmp_stage_lowered_shape, wf_function_def]) >>
   `inst' = inst` by
-    (irule fmp_stage_ret_kept >>
-     fs[fmp_stage_rel_def] >> metis_tac[]) >>
+    metis_tac[dftGasToListReachBoundaryTheory.active_inst_lookup_distinct,
+              optionTheory.SOME_11] >>
   gvs[] >> drule_all fmp_stage_ret_step >> strip_tac >>
   qexists `jr` >> simp[]
 QED
