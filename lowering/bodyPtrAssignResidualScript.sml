@@ -15,7 +15,8 @@ Theory bodyPtrAssignResidual
 Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps supportedStmts supportedDecls
   stmtLowering exprLowering compileEnv vyperAST vyperInterpreter vyperState
-  vyperTypeSystem list finite_map
+  vyperTypeSystem list finite_map bodyPtrAssignSnapshot bodyPtrAssignPlaceCoverage
+  bodyPtrAssignStatic
 
 val _ = Parse.hide "body";
 
