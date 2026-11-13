@@ -23,7 +23,7 @@ Ancestors
   codegenCorrectness immutableCodeLayout asmOptimizer codegenAsmOpt e2eAsmOpt
   stateEquiv stateEquivProps
   venomExecSemantics
-  vyperABI
+  vyperABI runtimeSymSrcUnit
   vyperInterpreter
   compileEnv loweringStateRelDefs compileVyper
   venomInst

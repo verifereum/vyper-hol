@@ -26,7 +26,7 @@ Ancestors
   asmOptimizer contextRawReachable asmDataSuffixProps contextPlanLayoutProps
   loweringStateRelDefs vyperArith frameRel codegenRel callTrace
   ctorDeployLowering ctorDeployMemory ctorDeployDload memSafeRun frameObsStep
-  deployOutcomesFreeUnit
+  deployOutcomesFreeUnit asmOptNonemptyFinalizer
 
 (* L1 of the deployment for the optimizer: the deploy code is the optimized
    assembly of the deployment unit's generated assembly. *)
