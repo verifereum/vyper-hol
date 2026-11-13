@@ -206,3 +206,139 @@ Proof
        (drule_at (Pos last)) >> asm_rewrite_tac[]) >>
    rpt gen_tac >> strip_tac >> asm "key_safe" irule >> qexists_tac `ty` >> asm_rewrite_tac[]))
 QED
+
+Theorem runtime_sym_target_ptr:
+  runtime_sym_lower_value_clause tops /\
+  (!op b s out s'. EVERY runtime_sym_inst (state_insts s) /\
+     ~is_label_operand op /\ compile_keccak256_key op b s = (out,s') ==>
+     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand out) /\
+  (!bop key s out s'. EVERY runtime_sym_inst (state_insts s) /\
+     ~is_label_operand bop /\ ~is_label_operand key /\
+     compile_mapping_subscript bop key s = (out,s') ==>
+     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand out) /\
+  (!ce loc bop idx dyn count ws sz signed s out s'.
+     runtime_sym_env ce /\ EVERY runtime_sym_inst (state_insts s) /\
+     ~is_label_operand bop /\ ~is_label_operand idx /\
+     compile_array_subscript bop idx dyn count ws sz signed
+       (compile_ptr_load ce.ce_is_ctor ce.ce_imm_alloca loc) s = (out,s') ==>
+     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand out) ==>
+  runtime_sym_target_ptr_clause tops
+Proof
+  strip_tac >> rewrite_tac[runtime_sym_target_ptr_clause_def] >>
+  map_every qx_gen_tac [`cfn`,`ce`,`target`] >>
+  measureInduct_on `vyperAST$base_assignment_target_size target` >>
+  Cases_on `target` >> rpt gen_tac >> strip_tac
+  >- suspend "name"
+  >- suspend "top_name"
+  >- suspend "subscript"
+  >> suspend "attribute"
+QED
+
+Resume runtime_sym_target_ptr[name]:
+  rpt (qpat_x_assum `!x. _` kall_tac) >>
+  qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` mp_tac >>
+  simp[NoAsms, compile_get_target_ptr_def] >>
+  Cases_on `FLOOKUP ce.ce_vars s` >> simp[NoAsms, comp_return_def] >>
+  rpt strip_tac >> gvs[is_label_operand_def] >> Cases_on `x` >> gvs[comp_return_def, is_label_operand_def] >>
+  drule_all runtime_sym_env_local >> simp[runtime_sym_loc_def]
+QED
+
+Resume runtime_sym_target_ptr[top_name]:
+  rpt (qpat_x_assum `!x. _` kall_tac) >>
+  qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` mp_tac >>
+  simp[NoAsms, compile_get_target_ptr_def] >>
+  Cases_on `FLOOKUP ce.ce_module_vars p` >> simp[NoAsms, comp_return_def] >>
+  rpt strip_tac >> gvs[is_label_operand_def] >> Cases_on `x` >> gvs[comp_return_def, is_label_operand_def]
+QED
+
+Resume runtime_sym_target_ptr[attribute]:
+  rename1 `compile_get_target_ptr cfn ce (AttributeTarget b fld) st = _` >>
+  qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
+  simp[NoAsms, vyperASTTheory.expr_size_def] >> strip_tac >>
+  Cases_on `compile_get_target_ptr cfn ce b st` >> PairCases_on `q` >>
+  `EVERY runtime_sym_inst (state_insts r) /\ ~is_label_operand q0` by
+    (first_x_assum irule >>
+     qpat_x_assum `!ce loc bop idx dyn count ws sz signed s out s'. _` kall_tac >>
+     qpat_x_assum `!op b s out s'. _` kall_tac >>
+     qpat_x_assum `!bop key s out s'. _` kall_tac >>
+     fs[supported_expr_exists_def] >> metis_tac[]) >>
+  rpt (qpat_x_assum `!x. _` kall_tac) >>
+  qpat_x_assum `compile_get_target_ptr _ _ (AttributeTarget _ _) _ = _` mp_tac >>
+  qpat_x_assum `compile_get_target_ptr cfn ce b st = _`
+    (fn th => simp[NoAsms, compile_get_target_ptr_def, comp_bind_def, th]) >>
+  pairarg_tac >> simp[NoAsms, comp_return_def] >> strip_tac >>
+  drule_at (Pos last) runtime_sym_emit_op >> simp[is_label_operand_def] >>
+  rpt strip_tac >> gvs[NoAsms]
+QED
+
+Resume runtime_sym_target_ptr[subscript]:
+  qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
+  simp[NoAsms, vyperASTTheory.expr_size_def] >> strip_tac >>
+  Cases_on `compile_get_target_ptr cfn ce b s` >> PairCases_on `q` >>
+  `EVERY runtime_sym_inst (state_insts r) /\ ~is_label_operand q0` by
+    (first_x_assum irule >>
+     qpat_x_assum `!ce loc bop idx dyn count ws sz signed s out s'. _` kall_tac >>
+     qpat_x_assum `!op b s out s'. _` kall_tac >>
+     qpat_x_assum `!bop key s out s'. _` kall_tac >>
+     fs[supported_expr_exists_def] >> metis_tac[]) >>
+  `!op t. lower_value cfn ce (expr_type e) e r = (op,t) ==>
+     EVERY runtime_sym_inst (state_insts t) /\ ~is_label_operand op` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `runtime_sym_lower_value_clause tops` mp_tac >>
+     rewrite_tac[runtime_sym_lower_value_clause_def] >>
+     disch_then irule >> qexistsl [`ce`,`cfn`,`e`,`r`,`expr_type e`] >>
+     simp[NoAsms] >>
+     qpat_x_assum `!ce loc bop idx dyn count ws sz signed s out s'. _` kall_tac >>
+     qpat_x_assum `!op b s out s'. _` kall_tac >>
+     qpat_x_assum `!bop key s out s'. _` kall_tac >>
+     qpat_x_assum `!op b s out s'. _` kall_tac >>
+     fs[supported_expr_exists_def] >>
+     `supported_expr_exists (\x. x = e) e` by
+       (irule supported_expr_exists_root >> simp[]) >> metis_tac[]) >>
+  pop_assum (mk_asm "key_safe") >>
+  qpat_x_assum `compile_get_target_ptr _ _ (SubscriptTarget _ _) _ = _` mp_tac >>
+  qpat_x_assum `compile_get_target_ptr cfn ce b s = _`
+    (fn th => simp[NoAsms, compile_get_target_ptr_def, comp_bind_def, th]) >>
+  Cases_on `q2` >> simp[NoAsms]
+  >- suspend "array"
+  >> Cases_on `x` >> simp[NoAsms]
+  >- suspend "map"
+  >> suspend "array"
+QED
+
+Resume runtime_sym_target_ptr[map]:
+  Cases_on `lower_value cfn ce (expr_type e) e r` >>
+  rename1 `lower_value cfn ce (expr_type e) e r = (kp,ks)` >>
+  `EVERY runtime_sym_inst (state_insts ks) /\ ~is_label_operand kp` by
+    (asm "key_safe" irule >> asm_rewrite_tac[]) >>
+  Cases_on `(if is_bytestring_type t then compile_keccak256_key kp F else comp_return kp) ks` >>
+  rename1 `(if is_bytestring_type t then compile_keccak256_key kp F else comp_return kp) ks = (hp,hs)` >>
+  `EVERY runtime_sym_inst (state_insts hs) /\ ~is_label_operand hp` by
+    (irule runtime_sym_optional_hash >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`is_bytestring_type t`,`kp`,`ks`] >> asm_rewrite_tac[]) >>
+  Cases_on `compile_mapping_subscript q0 hp hs` >>
+  rename1 `compile_mapping_subscript q0 hp hs = (sp,ss)` >>
+  `EVERY runtime_sym_inst (state_insts ss) /\ ~is_label_operand sp` by
+    (qpat_x_assum `!bop key s out s'. _ /\ _ /\ _ /\ compile_mapping_subscript _ _ _ = _ ==> _`
+      (drule_at (Pos last)) >> asm_rewrite_tac[]) >>
+  rpt (qpat_x_assum `!x. _` kall_tac) >>
+  gvs[comp_bind_def, comp_return_def] >> strip_tac >> gvs[]
+QED
+
+Resume runtime_sym_target_ptr[array]:
+  markerLib.RESUME_TAC >>
+  Cases_on `lower_value cfn ce (expr_type e) e r` >>
+  rename1 `lower_value cfn ce (expr_type e) e r = (kp,ks)` >>
+  `EVERY runtime_sym_inst (state_insts ks) /\ ~is_label_operand kp` by
+    (asm "key_safe" irule >> asm_rewrite_tac[]) >>
+  qpat_x_assum `lower_value cfn ce (expr_type e) e r = _`
+    (fn th => simp[NoAsms, comp_bind_def, th]) >>
+  pairarg_tac >> simp[NoAsms, comp_return_def] >> strip_tac >>
+  `EVERY runtime_sym_inst (state_insts cs') /\ ~is_label_operand elem_ptr` by
+    (qpat_x_assum `!ce loc bop idx dyn count ws sz signed s out s'. _`
+      (drule_at (Pos last)) >> asm_rewrite_tac[]) >>
+  rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]
+QED
+
+Finalise runtime_sym_target_ptr
