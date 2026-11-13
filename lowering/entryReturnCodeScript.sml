@@ -22,6 +22,17 @@ Proof
   simp[compile_mcopy_guard_def, entry_code_emit_inst]
 QED
 
+Theorem entry_code_nonreentrant_lock:
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_nonreentrant_lock nkey ut iv)
+Proof
+  Cases_on `iv` >> Cases_on `ut` >>
+  simp[compile_nonreentrant_lock_def, comp_ignore_bind_def] >>
+  rpt (irule entry_code_bind >>
+    simp[entry_code_emit_op, entry_code_emit_void, entry_code_return] >>
+    rpt gen_tac)
+QED
+
 Theorem entry_code_nonreentrant_unlock:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_nonreentrant_unlock nkey ut iv)
@@ -41,11 +52,23 @@ Proof
   simp[entry_code_emit_inst, entry_code_load_tuple_elements, entry_code_store_memory]
 QED
 
+Theorem entry_code_return_unlock:
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_return_unlock cenv)
+Proof
+  Cases_on `cenv.ce_nonreentrant` >> PairCases_on `r` >>
+  gvs[compile_return_unlock_def] >>
+  rw[entry_code_return, entry_code_nonreentrant_unlock]
+QED
+
 Theorem entry_code_internal_return_from_env:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_internal_return_from_env cenv ty src_ty val_op rpc)
 Proof
-  simp[compile_internal_return_from_env_def] >> irule entry_code_bind >>
+  simp[compile_internal_return_from_env_def, comp_ignore_bind_def] >>
+  irule entry_code_bind >> reverse conj_tac
+  >- simp[entry_code_return_unlock] >>
+  rpt gen_tac >> BETA_TAC >> irule entry_code_bind >>
   conj_tac
   >- (rpt gen_tac >> BETA_TAC >> irule entry_code_bind >>
       simp[entry_code_return, entry_code_internal_return]) >>

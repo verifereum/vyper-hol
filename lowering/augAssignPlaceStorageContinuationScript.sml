@@ -38,6 +38,7 @@ Theorem aug_place_loaded_storage_suffix:
   place_ptr_rel cenv cx u (PlaceR (StoragePlace tr slot tv)) slot
     (SOME (slot_loc tr)) (Type ty) /\
   stmt_state_rel ctx func cenv cx mid u /\ alloca_history func u /\
+  alloca_frame cenv es0 sa s0 cenv mid u /\ sa.cs_next_id <= sl.cs_next_id /\
   s0.vs_alloca_next <= u.vs_alloca_next /\
   ~u.vs_halted /\ u.vs_current_bb = sl.cs_current_bb /\
   u.vs_inst_idx = LENGTH sl.cs_current_insts /\ ~block_is_terminated sf /\
@@ -49,7 +50,7 @@ Theorem aug_place_loaded_storage_suffix:
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop old rhs)) (write_place cx (StoragePlace tr slot tv)))) (mid,u)
     (\res ff v. res = INL () /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s0 res ff v /\
+      stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 res ff v /\
       alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
 Proof

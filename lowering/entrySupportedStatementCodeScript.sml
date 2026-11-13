@@ -41,9 +41,14 @@ Proof
   >- (irule entry_code_bind >> simp[entry_code_store_at_loc] >>
       irule entry_code_get_target_ptr >> simp[]) >>
   rpt (irule entry_code_bind >> reverse conj_tac
-    >- (simp[entry_code_return, entry_code_unwrap_value] >>
+    >- (simp[entry_code_return, entry_code_unwrap_value, entry_code_snapshot_vv] >>
         irule entry_code_get_target_ptr >> simp[]) >>
     rpt gen_tac >> BETA_TAC) >>
+  rpt (IF_CASES_TAC ORELSE
+       (irule entry_code_bind >> reverse conj_tac
+        >- (simp[entry_code_return, entry_code_unwrap_value, entry_code_snapshot_vv] >>
+            irule entry_code_get_target_ptr >> simp[]) >>
+        rpt gen_tac >> BETA_TAC)) >>
   BasicProvers.TOP_CASE_TAC >> simp[entry_code_emit_void, entry_code_assign_value]
 QED
 
@@ -96,11 +101,17 @@ QED
 
 Theorem entry_code_append_stmt[local]:
   (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-     (compile_expr ce' et e)) ==>
+     (compile_expr ce' et e)) /\
+  (!ix ce' et. MEM ix (target_indices target) ==>
+    entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+      (compile_expr ce' et ix)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (Append target e))
 Proof
   strip_tac >> simp[Once compile_stmt_def, comp_ignore_bind_def] >>
+  irule entry_code_bind >> reverse conj_tac
+  >- (irule entry_code_get_target_ptr >> metis_tac[]) >>
+  rpt gen_tac >> BETA_TAC >>
   irule entry_code_bind >> reverse conj_tac
   >- simp[entry_code_lower_value] >>
   rpt gen_tac >> BETA_TAC >>
@@ -112,18 +123,20 @@ Proof
   rpt gen_tac >> BETA_TAC >>
   irule entry_code_bind >> reverse conj_tac >- simp[entry_code_return] >>
   rpt gen_tac >> BETA_TAC >> irule entry_code_dynarray_append >>
-  Cases_on `infer_array_location ce (target_to_expr target)` >>
-  simp[load_opc_for_def, store_opc_for_def]
+  `!l. load_opc_for l <> DALLOCA /\ store_opc_for l <> DALLOCA` by
+    (Cases >> simp[load_opc_for_def, store_opc_for_def]) >>
+  simp[]
 QED
 
 Theorem entry_code_assert_stmt[local]:
   (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
      (compile_expr ce' et e)) /\
-  (!reason. why = AssertReason reason ==> supported_string_reason tops reason) ==>
+  (!reason. why = AssertReason reason ==> supported_string_reason tops reason) /\
+  ~(?err. why = AssertCustomError err) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (Assert e why))
 Proof
-  strip_tac >> Cases_on `why` >>
+  strip_tac >> Cases_on `why` >> fs[] >>
   simp[Once compile_stmt_def, comp_ignore_bind_def] >>
   rpt (irule entry_code_bind >> reverse conj_tac
     >- (simp[entry_code_lower_value, entry_code_fresh_label,
@@ -134,11 +147,12 @@ Proof
 QED
 
 Theorem entry_code_raise_stmt[local]:
-  (!reason. why = RaiseReason reason ==> supported_string_reason tops reason) ==>
+  (!reason. why = RaiseReason reason ==> supported_string_reason tops reason) /\
+  ~(?err. why = RaiseCustomError err) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_stmt ce lc rt (Raise why))
 Proof
-  strip_tac >> Cases_on `why` >>
+  strip_tac >> Cases_on `why` >> fs[] >>
   simp[Once compile_stmt_def, entry_code_emit_inst, comp_ignore_bind_def] >>
   rpt (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_emit_inst] >> rpt gen_tac >> BETA_TAC) >>
@@ -165,6 +179,15 @@ Proof
   simp[entry_code_return]
 QED
 
+(* Main's external Return SOME tail: plain, or copied to a raw buffer first. *)
+val external_return_value_tac =
+  rpt gen_tac >> Cases_on `ce.ce_raw_return` >> simp[entry_code_external_return] >>
+  rpt (irule entry_code_bind >> reverse conj_tac
+    >- rw[entry_code_return, entry_code_nonreentrant_unlock, entry_code_alloc_buffer,
+          entry_code_store_memory_typed] >>
+    rpt gen_tac >> BETA_TAC) >>
+  simp[entry_code_external_return];
+
 Theorem entry_code_return_some_stmt[local]:
   (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
      (compile_expr ce' et e)) ==>
@@ -177,13 +200,34 @@ Proof
   Cases_on `ce.ce_return_pc`
   >- (simp[] >> irule entry_code_bind >>
       simp[SRULE [comp_ignore_bind_def] entry_code_normalize_return, entry_code_external_return,
-           comp_ignore_bind_def]) >>
+           comp_ignore_bind_def] >>
+      external_return_value_tac) >>
   rename1 `SOME binding` >> Cases_on `binding` >>
   simp[entry_code_internal_return_from_env] >>
   irule entry_code_bind >>
   simp[entry_code_emit_op, entry_code_internal_return_from_env,
        SRULE [comp_ignore_bind_def] entry_code_normalize_return, entry_code_external_return,
-       comp_ignore_bind_def]
+       comp_ignore_bind_def] >>
+  external_return_value_tac
+QED
+
+Theorem entry_code_return_some_stmts:
+  (!ce' et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_expr ce' et e)) ==>
+  !ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_stmts ce lc rt [Return (SOME e)])
+Proof
+  rpt strip_tac >>
+  `!ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_stmt ce lc rt (Return (SOME e)))` by
+    metis_tac[entry_code_return_some_stmt] >>
+  `!ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+     (compile_stmts ce lc rt [])` by simp[compile_stmt_def, entry_code_return] >>
+  simp[Once compile_stmt_def, comp_ignore_bind_def] >>
+  irule entry_code_bind >> simp[entry_code_get] >> gen_tac >>
+  IF_CASES_TAC >> simp[entry_code_return] >>
+  rpt (irule entry_code_bind >> reverse conj_tac
+    >- simp[entry_code_declare_stmt_local] >> rpt gen_tac >> BETA_TAC) >> simp[]
 QED
 
 Theorem entry_code_log_stmt[local]:
@@ -221,7 +265,8 @@ Proof
   rename1 `SOME binding` >> Cases_on `binding` >>
   simp[entry_code_emit_inst] >>
   rpt (irule entry_code_bind >> reverse conj_tac
-    >- simp[entry_code_emit_op] >> rpt gen_tac >> BETA_TAC) >>
+    >- simp[entry_code_emit_op, entry_code_return_unlock] >>
+    rpt gen_tac >> BETA_TAC) >>
   simp[entry_code_emit_inst] >>
   Cases_on `ce.ce_ctor_exit_label` >> simp[entry_code_emit_inst] >>
   CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
@@ -266,7 +311,11 @@ Proof
   >~ [`compile_stmt _ _ _ (Assign _ _)`] >- suspend "assign"
   >~ [`compile_stmt _ _ _ (AugAssign _ _ _ _)`] >- suspend "augassign"
   >~ [`compile_stmt _ _ _ (Append _ _)`] >- (
-    simp[supported_stmt_def] >> metis_tac[entry_code_append_stmt, entry_code_supported_pure_expr])
+    simp[supported_stmt_def] >> rpt strip_tac >>
+    rename1 `compile_stmt _ _ _ (Append tgt _)` >> Cases_on `tgt` >> gvs[] >>
+    irule entry_code_append_stmt >>
+    simp[targetPlaceLiveTheory.target_indices_def] >>
+    metis_tac[entry_code_supported_pure_expr])
   >~ [`compile_stmt _ _ _ (If _ _ _)`] >- (
     simp[supported_stmt_def] >> metis_tac[entry_code_if_stmt, entry_code_supported_pure_expr])
   >~ [`compile_stmt _ _ _ (Assert _ _)`] >- suspend "assert"

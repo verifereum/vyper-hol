@@ -62,12 +62,26 @@ Proof
      simp[] >> decide_tac) >>
   qpat_assum `!s1 wi. _` (qspecl_then [`s1`,`w`] mp_tac) >>
   (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  drule_all (Q.INST [`s` |-> `u`, `sa` |-> `sb`, `sz` |-> `outsz`]
-    (SPEC_ALL literal_alloc_buffer_run)) >> strip_tac >>
+  `sf.cs_next_id <= sb.cs_next_id` by decide_tac >>
+  `sf.cs_next_var <= sb.cs_next_var` by decide_tac >>
+  `!x. not_fresh_at sf x ==> lookup_var x u = lookup_var x s` by
+    (rpt strip_tac >>
+     `not_fresh_at sa x` by (gvs[not_fresh_at_def] >> decide_tac) >>
+     simp[]) >>
+  `wb_frame cenv es es sf s u` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
+     reverse conj_tac >- (qexistsl_tac [`es`,`sf`,`s1`] >> simp[]) >>
+     qexistsl_tac [`ctx`,`cx`,`func`] >> simp[]) >>
+  `!x. ib.buf_operand = Var x ==> not_fresh_at sb x` by
+    (rpt strip_tac >> gvs[not_fresh_at_def] >> decide_tac) >>
+  qpat_x_assum `wb_frame cenv es es sf s s1` kall_tac >>
+  qpat_x_assum `stmt_state_rel ctx func cenv cx es s1` kall_tac >>
+  qpat_x_assum `wb_frame cenv es es sf s1 u` kall_tac >>
+  drule_all alloc_buffer_finish >> strip_tac >>
   `FLOOKUP t.vs_allocas sf.cs_next_id = SOME (w2n w,insz)` by
     (first_x_assum irule >> first_assum ACCEPT_TAC) >>
   `w2n w + insz <= t.vs_alloca_next /\
-   w2n w' + outsz <= t.vs_alloca_next` by
+   w2n po + outsz <= t.vs_alloca_next` by
     (conj_tac
      >- (irule alloca_region_below_frontier >> conj_tac
          >- (qpat_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
@@ -76,16 +90,12 @@ Proof
      irule alloca_region_below_frontier >> conj_tac
      >- (qpat_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
          simp_tac (srw_ss()) [stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
-     qexistsl [`sb.cs_next_id`,`w2n w'`,`outsz`] >> simp[]) >>
+     qexistsl [`sb.cs_next_id`,`w2n po`,`outsz`] >> simp[]) >>
   `run_inst_seq (emitted_insts sf sm) s = OK t` by
     (asm_rewrite_tac[] >>
      qpat_x_assum `run_inst_seq (emitted_insts sf sa) s = _` mp_tac >>
      qpat_x_assum `run_inst_seq code s1 = _` mp_tac >>
      qpat_x_assum `run_inst_seq (emitted_insts sb sm) u = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[run_inst_seq_append]) >>
-  `eval_operand ib.buf_operand t = SOME w` by
-    (gvs[eval_operand_def, not_fresh_at_def] >>
-     first_x_assum irule >> decide_tac) >>
-  drule_all allocated_payload_run >> strip_tac >>
-  gvs[] >> qexistsl [`t`,`w`,`w'`] >> simp[]
+  qexistsl [`t`,`w`,`po`] >> gvs[]
 QED

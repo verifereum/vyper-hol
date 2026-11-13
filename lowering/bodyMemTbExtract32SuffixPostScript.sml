@@ -30,8 +30,37 @@ Proof
   fs[ci_mono_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
+Theorem extract32_operands_pure_frame:
+  expr_post ctx func cenv cx src es sa s1 s0 es1 v1 src_op s /\
+  expr_post ctx func cenv cx off es1 s2 s3 u es2 v2 off_op t /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  ci_mono sa s1 /\ ci_mono s1 s2 /\
+  (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+  (!x. not_fresh_at s1 x ==> lookup_var x u = lookup_var x s) /\
+  ~expr_has_effect src /\ ~expr_has_effect off ==>
+  pure_frame cenv func es sa s0 t
+Proof
+  strip_tac >>
+  `wb_frame cenv es es1 sa s0 s` by metis_tac[expr_post_frame] >>
+  `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `wb_frame cenv es es1 sa s0 u` by
+    (irule wb_frame_readonly_tail >> goal_assum (drule_at Any) >>
+     qexists_tac `s1` >> fs[ci_mono_def] >> metis_tac[]) >>
+  `wb_frame cenv es1 es2 s2 u t` by metis_tac[expr_post_frame] >>
+  `pure_frame cenv func es sa s0 s` by metis_tac[expr_post_pure_frame] >>
+  `pure_frame cenv func es1 s2 u t` by metis_tac[expr_post_pure_frame] >>
+  `pure_frame cenv func es sa s0 u` by
+    (irule pure_frame_mem_tail >> qexists_tac `s` >> simp[]) >>
+  match_mp_tac pure_frame_trans >>
+  qexistsl_tac [`es1`, `s2`, `u`] >> fs[wb_frame_def, ci_mono_def]
+QED
+
 Theorem extract32_suffix_word_post:
   stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es es' sa s0 s /\
+  (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   t = s with vs_vars := t.vs_vars /\
   (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
@@ -53,6 +82,11 @@ Proof
      qexists_tac `s` >> simp[lookup_var_def] >>
      qpat_x_assum `t = s with vs_vars := _` SUBST1_TAC >>
      fs[lookup_var_def]) >>
+  `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
+    (qpat_x_assum `t with vs_vars := s.vs_vars = s`
+       (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >> simp[]) >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by
+    metis_tac[pure_frame_state_cong] >>
   conj_tac
   >- (irule vv_post_word_intro >> simp[] >>
       metis_tac[evaluate_type_BaseT_SOME]) >>
@@ -124,6 +158,7 @@ Theorem extract32_suffix_success_entry:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s /\
   stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es es' s0c s0 s /\
+  (~expr_has_effect e ==> pure_frame cenv func es s0c s0 s) /\
   local_ptrs_reserved cenv sa /\ s0c.cs_next_var <= sa.cs_next_var /\
   expr_type e = BaseT bt /\ is_word_type (BaseT bt) /\
   eval_operand l s = SOME (n2w (LENGTH bs)) /\

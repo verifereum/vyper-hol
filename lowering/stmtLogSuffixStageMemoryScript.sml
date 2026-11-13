@@ -97,7 +97,7 @@ QED
 Theorem log_mem_data_stage_code:
   cs_extends sm st /\
   compile_alloc_buffer cap st = (src,s1) /\
-  compile_log_store_data ce xs src.buf_operand 0 s1 = ((),s2) /\
+  compile_log_store_data ce xs (MAP SND xs) src.buf_operand 0 s1 = ((),s2) /\
   EVERY (supported_scalar_type o SND) xs /\
   compile_alloc_buffer outcap s2 = (dst,s3) /\
   compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\

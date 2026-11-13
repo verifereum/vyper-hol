@@ -88,15 +88,14 @@ Proof
   simp[compile_copy_memory_def, entry_code_return, entry_code_emit_void]
 QED
 
-Theorem entry_code_word_copy_loop:
+Theorem entry_code_word_copy_loop_op:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_word_copy_loop src dst word_count load_loc store_loc is_ctor)
+    (compile_word_copy_loop_op src dst count_op load_loc store_loc is_ctor)
 Proof
   `!ops base. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (comp_bind (emit_op MUL ops) (\scaled. emit_op ADD [base; scaled]))`
     by (rpt gen_tac >> irule entry_code_bind >> simp[entry_code_emit_op]) >>
-  rewrite_tac[compile_word_copy_loop_def, compile_word_copy_loop_op_def,
-              compile_word_copy_loop_base_def] >>
+  rewrite_tac[compile_word_copy_loop_op_def, compile_word_copy_loop_base_def] >>
   Cases_on `word_scale load_loc = 1` >>
   Cases_on `word_scale store_loc = 1` >>
   simp[compileEnvTheory.comp_ignore_bind_def] >>
@@ -106,6 +105,13 @@ Proof
             entry_code_ptr_load, entry_code_ptr_store, entry_code_new_block] >>
        rpt gen_tac) >>
   simp[entry_code_new_block]
+QED
+
+Theorem entry_code_word_copy_loop:
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_word_copy_loop src dst word_count load_loc store_loc is_ctor)
+Proof
+  simp[compile_word_copy_loop_def, entry_code_word_copy_loop_op]
 QED
 
 Theorem entry_code_storage_to_memory:

@@ -87,13 +87,14 @@ Resume raw_revert_vv_sim_mem[success]:
      qexistsl_tac [`data`, `LENGTH bs`, `n2w b`, `sb`, `sm`] >>
      simp[w2n_n2w]) >>
   simp[gas_summary_at_def] >>
-  qexistsl_tac [`INR (Error (RuntimeError "raw_revert"))`, `es_end`,
+  qexistsl_tac [`INR (Error (RevertData bs))`, `es_end`,
                 `Abort Revert_abort w`] >>
   simp[exit_result_def, expr_exit_def] >>
   irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
          |> REWRITE_RULE [APPEND_NIL]) >>
   qexistsl_tac [`es_end`, `t`, `BytesV bs`] >> simp[] >>
-  simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def, raise_def]
+  simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def, raise_def,
+       bind_def, lift_option_type_def, return_def, dest_BytesV_def]
 QED
 
 Resume raw_revert_vv_sim_mem[exception]:

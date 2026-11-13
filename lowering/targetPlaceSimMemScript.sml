@@ -27,6 +27,9 @@ Definition target_sim_mem_def:
       gas_outcome T (cx_tops cx) (ctx, func) (eval_base_place cx bt) (es, s0)
         (\res ee t. ?pv. res = INL pv /\
           target_post ctx func cenv cx es sa sb s0 ee pv vt op t /\
+          (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
+             slots_in_range (get_storage cx ee tr) (w2n slot) tv /\
+             storage_read_live cx tr (get_storage cx ee tr) slot tv) /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
@@ -111,10 +114,10 @@ Proof
   first_assum (irule_at Any o MATCH_MP gas_exempt_cert_error_result)
 QED
 
-(* What a pure target (supported_target_pure) keeps: every live local's
-   region whole, dynamic-array length words included (locals_kept exempts
-   them), storage, transient storage, and the constructor's staged
-   immutables.  Its scratch ALLOCAs can be reused in a loop, so the bytes
+(* What a target the lowering does not snapshot the RHS for
+   (~expr_can_mutate) keeps: every live local's region whole, dynamic-array
+   length words included (locals_kept exempts them), storage, transient
+   storage, and the constructor's staged immutables.  Its scratch ALLOCAs can be reused in a loop, so the bytes
    below the frontier are not all kept, only these. *)
 Definition target_pure_frame_def:
   target_pure_frame cenv cx (es : evaluation_state) (s0 : venom_state)
@@ -158,10 +161,16 @@ Definition target_sim_mem_pure_def:
 End
 
 (* Held with body_target_sim_mem: the subscript case waits on the same
-   S1 target_subscript_main_case. *)
+   S1 target_subscript_main_case.  Stated for every target the lowering
+   does not snapshot the RHS for (compile_stmt's Assign tests
+   expr_can_mutate); a supported_target_pure target is one of them
+   (bodySimLog.supported_pure_expr_no_mutate).  The ce_func_mutability pin
+   it needs comes from body_inv (cenv_module_pins).  Proving it needs raw
+   storage kept across compile_get_target_ptr, which the index's expr_post
+   gives only on live slots (a dead popped storage slot is the gap). *)
 Theorem body_target_sim_mem_pure:
   !t cx tops ctx func cenv env es.
-    supported_target_pure tops t /\
+    ~expr_can_mutate cenv (target_to_expr t) /\
     body_base_target_mem_ok cx t /\ body_inv tops ctx cenv cx /\
     target_pre cenv cx env t es ==>
     target_sim_mem_pure ctx func cenv cx env t es
