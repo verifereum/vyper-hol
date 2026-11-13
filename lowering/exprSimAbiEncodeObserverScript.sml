@@ -82,9 +82,15 @@ Proof
   `MEM (mk_inst 0 ALLOCA [Lit n] ["out"])
     (fn_insts (abi_encode_alloc_observer fn n))` by
     simp[abi_encode_alloc_observer_def, fn_insts_def, fn_insts_blocks_def] >>
-  drule alloca_site_execute >>
-  disch_then drule >> disch_then drule >>
-  simp[mk_inst_def] >> strip_tac >>
+  `(mk_inst 0 ALLOCA [Lit n] ["out"]).inst_opcode = ALLOCA /\
+   (mk_inst 0 ALLOCA [Lit n] ["out"]).inst_operands = [Lit n] /\
+   (mk_inst 0 ALLOCA [Lit n] ["out"]).inst_outputs = ["out"] /\
+   (mk_inst 0 ALLOCA [Lit n] ["out"]).inst_id = 0` by
+    simp_tac (srw_ss()) [mk_inst_def] >>
+  pop_assum (fn th =>
+    drule alloca_site_execute >> disch_then drule >> disch_then drule >>
+    disch_then (qspecl_then [`"out"`, `n`] mp_tac) >> rewrite_tac[th]) >>
+  impl_tac >- simp[] >> strip_tac >>
   `t.vs_halted = s.vs_halted /\ t.vs_current_bb = s.vs_current_bb` by
     (irule abi_encode_alloca_control >>
      qexistsl_tac [`0`, `n`, `"out"`] >> simp[mk_inst_def]) >>
