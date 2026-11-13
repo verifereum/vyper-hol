@@ -725,3 +725,136 @@ Resume finite_prefix_Expr_Builtin[args]:
 QED
 
 Finalise finite_prefix_Expr_Builtin
+
+Theorem finite_prefix_AssertCustomError:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "AssertCustomError")
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def, well_typed_custom_error_def] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Assert e (AssertCustomError err)))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_assert_reason_def] >> strip_tac >>
+  drule call_evaluation_safe_append_left >> strip_tac >>
+  drule call_evaluation_safe_append_right >> strip_tac >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
+  Cases_on `eval_expr cx e st` >> rename1 `eval_expr cx e st = (er,st1)` >>
+  reverse (Cases_on `er`)
+  >- (qpat_x_assum `!s'' tv t id positional kwargs tops params es. _` kall_tac >>
+      simp_tac(srw_ss())[] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!initial_st selected env st res st0. _`
+        (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+      disch_then (irule o cj 1) >> metis_tac[]) >>
+  simp_tac(srw_ss())[switch_BoolV_def, bind_def, return_def, raise_def] >>
+  Cases_on `read_result cx x st1` >> rename1 `read_result cx x st1 = (rr,st2)` >>
+  `st2 = st1` by metis_tac[read_result_state] >> BasicProvers.VAR_EQ_TAC >>
+  reverse (Cases_on `rr`) >> simp_tac(srw_ss())[]
+  >- (strip_tac >> BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!s'' tv t id positional kwargs tops params es. _` kall_tac >>
+      qpat_x_assum `!initial_st selected env st res st0. _`
+        (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+      disch_then (irule o cj 1) >> metis_tac[]) >>
+  Cases_on `x' = BoolV T` >>
+  pop_assum (fn th => rewrite_tac[th, return_def, raise_def]) >>
+  simp_tac(srw_ss())[]
+  >- (strip_tac >> BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!s'' tv t id positional kwargs tops params es. _` kall_tac >>
+      qpat_x_assum `!initial_st selected env st res st0. _`
+        (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+      disch_then (irule o cj 1) >> metis_tac[]) >>
+  reverse (Cases_on `x' = BoolV F`) >>
+  pop_assum (fn th => rewrite_tac[th, return_def, raise_def]) >>
+  simp_tac(srw_ss())[]
+  >- (strip_tac >> BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!s'' tv t id positional kwargs tops params es. _` kall_tac >>
+      qpat_x_assum `!initial_st selected env st res st0. _`
+        (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+      disch_then (irule o cj 1) >> metis_tac[]) >>
+  suspend "custom_error"
+QED
+
+Resume finite_prefix_AssertCustomError[custom_error]:
+  Cases_on `err` >>
+  Cases_on `get_module_code cx (FST p)` >>
+  simp_tac(srw_ss())[] >>
+  pure_asm_rewrite_tac[bind_def, lift_option_def, return_def, raise_def] >>
+  simp_tac(srw_ss())[bind_def, return_def, raise_def]
+  >- (strip_tac >> BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!s'' tv t id positional kwargs tops params es. _` kall_tac >>
+      qpat_x_assum `!initial_st selected env st res st0. _`
+        (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+      disch_then (irule o cj 1) >> metis_tac[]) >>
+  rename1 `get_module_code cx (FST p) = SOME tops` >>
+  Cases_on `lookup_custom_error_args_in (SND p) tops` >>
+  simp_tac(srw_ss())[] >>
+  pure_asm_rewrite_tac[bind_def, lift_option_def, return_def, raise_def] >>
+  simp_tac(srw_ss())[bind_def, return_def, raise_def]
+  >- (strip_tac >> BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!s'' tv t id positional kwargs tops params es. _` kall_tac >>
+      qpat_x_assum `!initial_st selected env st res st0. _`
+        (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+      disch_then (irule o cj 1) >> metis_tac[]) >>
+  rename1 `lookup_custom_error_args_in (SND p) tops = SOME params` >>
+  Cases_on `order_custom_error_args params (CustomError p l l0)` >>
+  simp_tac(srw_ss())[] >>
+  pure_asm_rewrite_tac[bind_def, lift_option_def, return_def, raise_def] >>
+  simp_tac(srw_ss())[bind_def, return_def, raise_def]
+  >- (strip_tac >> BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!s'' tv t id positional kwargs tops params es. _` kall_tac >>
+      qpat_x_assum `!initial_st selected env st res st0. _`
+        (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+      disch_then (irule o cj 1) >> metis_tac[]) >>
+  rename1 `order_custom_error_args params (CustomError p positional kwargs) = SOME es` >>
+  qpat_x_assum `!s'' tv t id positional kwargs tops params es. _`
+    (qspecl_then [`st`, `x`, `st1`] mp_tac) >>
+  simp_tac(srw_ss())[] >>
+  pure_asm_rewrite_tac[] >> simp_tac(srw_ss())[] >> strip_tac >>
+  qpat_x_assum `!params es. _` (qspecl_then [`params`, `es`] mp_tac) >>
+  pure_asm_rewrite_tac[] >> simp_tac(srw_ss())[] >> strip_tac >>
+  `PERM (custom_error_exprs (CustomError p positional kwargs)) es` by
+    (drule vyperASTTheory.order_custom_error_args_perm >> simp[]) >>
+  `well_typed_exprs env es` by
+    (drule well_typed_exprs_perm >> disch_then (qspec_then `env` mp_tac) >>
+     simp[vyperASTTheory.custom_error_exprs_def]) >>
+  `call_evaluation_safe cx (int_calls_exprs es)` by
+    (drule call_evaluation_safe_exprs_perm >>
+     disch_then (qspec_then `cx` mp_tac) >> simp[]) >>
+  suspend "arguments"
+QED
+
+Resume finite_prefix_AssertCustomError[arguments]:
+  Cases_on `eval_exprs cx es st1` >> rename1 `eval_exprs cx es st1 = (er2,st3)` >>
+  simp_tac(srw_ss())[bind_def, return_def, raise_def] >> strip_tac >>
+  `st' = st3` by
+    (ntac 2 (qpat_x_assum `!initial_st selected env st res st0. _` kall_tac) >>
+     Cases_on `er2` >> gvs[AllCaseEqs(), bind_def, return_def, raise_def] >>
+     Cases_on `build_custom_error_data (get_tenv cx) (SND p) (MAP SND params) x''` >>
+     gvs[return_def, raise_def]) >>
+  pop_assum SUBST_ALL_TAC >>
+  `?suffix. st3.storage_trace = st1.storage_trace ++ suffix` by
+    (ntac 2 (qpat_x_assum `!initial_st selected env st res st0. _` kall_tac) >>
+     metis_tac[storage_trace_frame_prefix, cj 6 evaluate_storage_trace_frame]) >>
+  `storage_well_formed_on cx st1 (FST H) /\
+   storage_observations_ok cx H st1.storage_trace` by
+    (qpat_x_assum `!initial_st selected env st res st0. _ ==> (well_typed_expr env e ==> _) /\ _`
+      (qspecl_then [`initial_st`, `selected`, `env`, `st`, `INL x`, `st1`] mp_tac) >>
+     (impl_tac >- (asm_rewrite_tac[APPEND] >> metis_tac[APPEND_ASSOC])) >>
+     disch_then (mp_tac o CONJUNCT1) >> asm_rewrite_tac[]) >>
+  `runtime_consistent env cx st1` by
+    metis_tac[eval_expr_preserves_runtime_consistent] >>
+  `IS_SOME st1.outcomes` by
+    (qpat_assum `eval_expr cx e st = _`
+       (mp_then Any mp_tac (cj 5 eval_outcome_suffix_mutual)) >>
+     disch_then (mp_tac o MATCH_MP outcome_suffix_modes) >>
+     Cases_on `st.outcomes` >> Cases_on `st1.outcomes` >> simp[] >> metis_tac[]) >>
+  `valid_horizon cx initial_st H st1.storage_trace` by
+    (qpat_x_assum `valid_horizon cx initial_st H st.storage_trace` mp_tac >>
+     simp_tac(srw_ss())[valid_horizon_def] >> metis_tac[]) >>
+  qpat_x_assum `!initial_st selected env st res st0. _ ==> (well_typed_expr env e ==> _) /\ _` kall_tac >>
+  qpat_x_assum `!initial_st selected env st res st0. _`
+    (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+  disch_then irule >> pure_rewrite_tac[GSYM APPEND_ASSOC, listTheory.APPEND] >> metis_tac[]
+QED
+
+Finalise finite_prefix_AssertCustomError
