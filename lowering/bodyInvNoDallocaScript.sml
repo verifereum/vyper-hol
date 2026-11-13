@@ -11,8 +11,7 @@ Proof
   rw[body_inv_def] >>
   irule o1_source_unit_ok_no_dalloca >>
   Cases_on `cx.in_deploy` >> gvs[]
-  >- (irule lower_vyper_deploy_unit_source_unit_ok >>
-      goal_assum (drule_at Any) >> simp[]) >>
+  >- metis_tac[lower_vyper_deploy_unit_source_unit_ok] >>
   irule loweringShapePropsTheory.lower_vyper_runtime_unit_source_unit_ok_shape >>
   goal_assum (drule_at Any) >> conj_tac
   >- (irule supported_names_internal_names_distinct >>
