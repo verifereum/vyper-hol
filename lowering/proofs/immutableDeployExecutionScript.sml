@@ -532,7 +532,7 @@ QED
 Theorem compile_constructor_epilogue_related_alloca:
   compile_constructor_epilogue rt cap imm st = ((),st') /\
   fn_has_code st st' func /\ ~block_is_terminated st /\
-  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   rt + cap < dimword(:256) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st x)) ==>
@@ -563,7 +563,7 @@ Proof
   `!b sz. FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
      sz = w2n (n2w (rt + cap):bytes32)` by
     (rpt strip_tac >>
-     qpat_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[stmt_state_rel_def] >> strip_tac >>
      qpat_x_assum `!inst n base sz. _` drule >>
      disch_then (qspecl_then [`n2w (rt + cap)`, `b`, `sz`] mp_tac) >>
@@ -765,7 +765,7 @@ Theorem compile_constructor_epilogue_padded_execution:
   compile_constructor_epilogue rt cap imm st = ((),st') /\
   fn_has_code st st' func /\ fn_inst_ids_distinct func /\
   ~block_is_terminated st /\
-  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   rt + cap < dimword(:256) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st x)) ==>
@@ -838,7 +838,7 @@ Theorem compile_constructor_epilogue_padded_run_from:
       ((), st') /\
     fn_has_code st st' func /\ fn_inst_ids_distinct func /\
     ~block_is_terminated st /\
-    stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+    stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
     runtime_size + immutables_len < dimword(:256) /\
     (immutables_len <> 0 ==>
       cenv.ce_imm_alloca = SOME imm /\
