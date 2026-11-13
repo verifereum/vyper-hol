@@ -143,7 +143,7 @@ Theorem dload_joint_reachable:
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >>
   drule dload_joint_reachable_if_next >>
-  disch_then (fn th => mp_tac (SPEC_ALL th)) >>
+  disch_then (fn th => mp_tac (SPECL (fst (strip_forall (concl th))) th)) >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
       rpt gen_tac >> strip_tac >>
