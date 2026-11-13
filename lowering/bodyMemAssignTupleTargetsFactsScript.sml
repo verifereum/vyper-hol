@@ -99,7 +99,9 @@ Theorem tuple_scratch_prefix_path_mem:
       eval_operand buf.buf_operand t = SOME w /\
       val_in_memory tv v (w2n w) t.vs_memory /\
       w2n w + n <= t.vs_alloca_next /\
-      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n)
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all body_scratch_prefix_shape >> strip_tac >>
@@ -166,7 +168,9 @@ Theorem tuple_stage_copy_path_mem:
       eval_operand staged t = SOME w /\
       val_in_memory tv v (w2n w) t.vs_memory /\
       w2n w + n <= t.vs_alloca_next /\
-      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n)
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `_ sa = (staged,sb)` mp_tac >>

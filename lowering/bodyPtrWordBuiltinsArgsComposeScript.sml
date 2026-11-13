@@ -20,7 +20,7 @@ Theorem word_args_compose_sim_ptr:
   (!xs. straight_fresh (code xs)) /\
   (!sa sm sb xs op s0 G0 tn0 ee t G tn vs.
     code xs sm = (op,sb) /\
-    wb_args_post ctx func cenv cx es sa s0 ee xs vs t /\
+    wb_args_post H ctx func cenv cx es sa s0 ee xs vs t /\
     (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
     LIST_REL (\e v. value_has_type (BaseTV (UintT 256)) v) args vs /\
     EVERY (\x. !z. x = Var z ==> not_fresh_at sm z) xs /\
@@ -111,7 +111,7 @@ Resume word_args_compose_sim_ptr[bind]:
       Cases_on `res` >> gvs[wb_args_exit_def, expr_exit_def]) >>
   rpt gen_tac >> strip_tac >>
   fs[Abbr `Qfacts`, typed_args_post_ptr_def] >>
-  `wb_args_post ctx func cenv cx es sa s0 em xs v t` by
+  `wb_args_post H ctx func cenv cx es sa s0 em xs v t` by
     (irule word_uint_args_post >> metis_tac[]) >>
   `~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t` by
     fs[exprSimPrecompilesTheory.typed_args_post_def] >>

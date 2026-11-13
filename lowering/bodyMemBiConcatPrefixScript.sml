@@ -37,12 +37,12 @@ Theorem concat_prefix_path_mem:
   emit_void MSTORE [ob.buf_operand; Lit 0w] s3 = (u,s4) /\
   fn_has_code sa s4 func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ bsz < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s0 ==>
   ?t B ow binst oinst.
     gas_path_mem ctx func s0 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx es t /\ ~t.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = s4.cs_current_bb /\
     t.vs_inst_idx = LENGTH s4.cs_current_insts /\
     lookup_var (STRING #"%" (toString sa.cs_next_var)) t = SOME (n2w B) /\
@@ -69,7 +69,9 @@ Theorem concat_prefix_path_mem:
     (!p n. p + n <= w2n ow \/ w2n ow + 64 <= p ==>
        mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory) /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
-    B + bsz <= t.vs_alloca_next /\ w2n ow + 64 <= t.vs_alloca_next
+    B + bsz <= t.vs_alloca_next /\ w2n ow + 64 <= t.vs_alloca_next /\
+    t.vs_accounts = s0.vs_accounts /\ t.vs_transient = s0.vs_transient /\
+    t.vs_requests = s0.vs_requests /\ t.vs_call_ctx = s0.vs_call_ctx
 Proof
   strip_tac >>
   drule_all concat_prefix_code_cuts >> strip_tac >>
@@ -125,7 +127,7 @@ Resume concat_prefix_path_mem[frames]:
   `MEM binst (fn_insts func) /\ MEM oinst (fn_insts func)` by
     (conj_tac >> irule concat_code_mem >> qexistsl_tac [`sa`, `s4`] >>
      simp[Abbr `binst`, Abbr `oinst`]) >>
-  `stmt_state_rel ctx func cenv cx es t4` by
+  `stmt_state_rel H ctx func cenv cx es t4` by
     (simp[Abbr `t4`, stmt_state_rel_inst_idx] >>
      irule literal_mstore_state_rel >>
      reverse conj_tac >- simp[] >>
@@ -152,6 +154,9 @@ Resume concat_prefix_path_mem[result]:
      `not_fresh_at s1 x` by
        (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
      simp[]) >>
+  `t3.vs_accounts = s0.vs_accounts /\ t3.vs_transient = s0.vs_transient /\
+   t3.vs_requests = s0.vs_requests /\ t3.vs_call_ctx = s0.vs_call_ctx` by
+    gvs[Abbr `t2`, venomStateTheory.update_var_def] >>
   `!name p n. local_region cenv es.scopes t3 name p n <=>
               local_region cenv es.scopes s0 name p n` by
     (rpt gen_tac >> irule concat_local_region_vars >> qexists_tac `sa` >> simp[]) >>

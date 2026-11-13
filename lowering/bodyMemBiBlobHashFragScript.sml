@@ -19,14 +19,16 @@ Theorem blobhash_read_frag_mem:
     is_word_type t /\
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           r = typed_val_to_w256 tv v) /\
-    (!x ss n out.
+    (!(H:(bool # bytes32 # type_value) list # num list) x ss n out.
        eval_operand x ss = SOME w1 /\ stmt_state_rel H ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n BLOBHASH [x] [out]) ss =
          OK (update_var out r ss)) ==>
-    unop_frag_mem H ctx func cenv cx (\x. emit_op BLOBHASH [x]) w1 t (INL v) es0
+    unop_frag_mem ctx func cenv cx (\x. emit_op BLOBHASH [x]) w1 t (INL v) es0
 Proof
   rpt gen_tac >> strip_tac >> simp[unop_frag_mem_def] >> rpt gen_tac >>
   strip_tac >>
+  rename1 `valid_horizon cx st0 H0 es0.storage_trace` >>
+  `stmt_state_rel H0 ctx func cenv cx es0 s0` by metis_tac[] >>
   drule emitted_insts_emit_op >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb /\
    LENGTH sb.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by
@@ -61,18 +63,20 @@ Proof
   `op = Var out` by
     gvs[Abbr `out`, emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
         comp_ignore_bind_def, comp_return_def, emit_def] >>
-  `stmt_state_rel H ctx func cenv cx es0 (update_var out r s0)` by
-    (irule stmt_state_rel_update_var >> simp[]) >>
+  `!H. valid_horizon cx st0 H es0.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es0 u /\
+     storage_well_formed_on cx es0 (FST H)` by
+    (rpt strip_tac >> simp[Abbr `u`, stmt_state_rel_inst_idx] >>
+     metis_tac[stmt_state_rel_update_var]) >>
   qexists_tac `OK u` >> simp[] >>
-  simp[Abbr `u`, stmt_state_rel_inst_idx, expr_val_rel_def, expr_val_at_def,
-       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  metis_tac[stmt_state_rel_update_var]
+  simp[Abbr `u`, expr_val_rel_def, expr_val_at_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem compile_blobhash_frag_mem:
   !ctx func cenv cx i es0.
     0 <= i /\ i < 2 ** 256 ==>
-    unop_frag_mem H ctx func cenv cx (\x. emit_op BLOBHASH [x])
+    unop_frag_mem ctx func cenv cx (\x. emit_op BLOBHASH [x])
       (typed_val_to_w256 (BaseTV (UintT 256)) (IntV i))
       (BaseT (BytesT (Fixed 32)))
       (unop_result cx (BaseT (BytesT (Fixed 32))) BlobHash

@@ -61,9 +61,9 @@ Proof
 QED
 
 Theorem u2s_body_front_safe:
-  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr s /\
+  u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
   local_ptrs_reserved cenv a /\ not_fresh_at a p ==>
-  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr
+  u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr
     (update_var (u2s_var a 8) w8 (update_var (u2s_var a 7) w7
       (update_var (u2s_var a 6) w6 (update_var (u2s_var a 5) w5 s)))
       with vs_inst_idx := idx)
@@ -95,7 +95,7 @@ Proof
 QED
 
 Theorem u2s_safe_store_frame:
-  u2s_safe ctx fn cenv cx es a buf b sz inst sr s ==>
+  u2s_safe H ctx fn cenv cx es a buf b sz inst sr s ==>
   local_ptrs_rel fn cenv es.scopes s /\ alloca_inv s /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz)
 Proof
@@ -103,7 +103,7 @@ Proof
 QED
 
 Theorem u2s_body_invariant_ptr:
-  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr s /\
+  u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
   u2s_digits a b n X x str s /\ 0 < x /\ LENGTH str < n /\
   u2s_ptr_state d cenv cx es a G0 tn0 s0 p b sz n (LENGTH str) G tn s /\
   not_fresh_at a p /\ local_ptrs_reserved cenv a /\
@@ -118,7 +118,7 @@ Theorem u2s_body_invariant_ptr:
     SOME <|bb_label := u2s_label a 2; bb_instructions := u2s_body a (Var p) n|> /\
   s.vs_current_bb = u2s_label a 2 /\ s.vs_inst_idx = 0 ==>
   ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr t /\
+    u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr t /\
     u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) t /\
     u2s_ptr_state d cenv cx es a G0 tn0 s0 p b sz n (LENGTH str+1) G' tn' t /\
     t.vs_current_bb = u2s_label a 1 /\ t.vs_inst_idx = 0
@@ -130,7 +130,7 @@ Proof
   drule_all u2s_body_front_invariant_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ gf tf (OK front)` >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr front` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr front` by
     (simp[Abbr `front`] >> irule u2s_body_front_safe >> simp[]) >>
   drule u2s_safe_store_frame >> strip_tac >>
   `lookup_var (u2s_var a 8) front = SOME (n2w (b+n-LENGTH str)) /\
@@ -157,7 +157,7 @@ Proof
     gvs[Abbr `front`, u2s_word_arithmetic, word_add_n2w,
         arithmeticTheory.ADD1, update_var_def, jump_to_def,
         mstore_def, write_memory_with_expansion_def] >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr out /\
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr out /\
    u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) out` by
     metis_tac[u2s_safe_jump, u2s_digits_jump] >>
   qexistsl_tac [`gout`, `tout`, `out`] >> simp[] >>
