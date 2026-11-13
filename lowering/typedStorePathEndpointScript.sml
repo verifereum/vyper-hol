@@ -1,7 +1,8 @@
 (* Same-endpoint counted boundary for the actual typed normalization store. *)
 Theory typedStorePathEndpoint
 Ancestors
-  typedNormalizeRankPathMem typedStoreAllocationFrame venomState
+  typedCopyRankPathMem typedStoreAllocationFrame venomState
+  fragGasPathMem fragGasMode memContinuation fragExec
 
 Theorem typed_store_mem_path:
   acyclic_struct_metadata ce.ce_struct_fields /\
@@ -40,12 +41,11 @@ Theorem typed_store_mem_path:
     gas_marked_path T ctx fn s 0 (OK t)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  irule typed_store_rank_mem_path >>
-  goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexists_tac `tenv` >> simp[] >> first_assum ACCEPT_TAC
+  drule_all compile_store_memory_typed_path_mem >>
+  disch_then (qspec_then `ctx` (qx_choose_then `t` strip_assume_tac)) >>
+  `mem_cont_sim ctx fn s t` by
+    (drule gas_path_mem_exec >>
+     simp[mem_cont_sim_def, exit_result_def]) >>
+  qexists_tac `t` >> simp_tac bool_ss [gas_marked_path_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-

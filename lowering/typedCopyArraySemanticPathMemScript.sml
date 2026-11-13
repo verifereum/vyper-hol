@@ -1,6 +1,5 @@
 Theory typedCopyArraySemanticPathMem
 Ancestors
-  typedNormalizeDynamicLoopPathMem
   typedNormalizeSemanticMem typedCopySarrayPathMem typedCopyDynarrayPathMem
   typedNormalizeLoop typedMemoryCopy valueEncodingProps valueEncodingTyping
   exprLowering compileEnv venomState venomExecSemantics fragGasPathMem

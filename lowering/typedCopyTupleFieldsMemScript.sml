@@ -1,6 +1,5 @@
 Theory typedCopyTupleFieldsMem
 Ancestors
-  typedNormalizeFieldPathMem
   typedCopyFieldStepMem typedCopyFieldsPathMem typedNormalizeFields
   typedNormalizeFrame typedBytesArrayMem externalReturnNormalizeMem
   abiDecoderFrame context compileEnv emitHelper venomInst exprLoweringProps

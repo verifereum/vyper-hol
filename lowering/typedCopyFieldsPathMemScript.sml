@@ -1,6 +1,5 @@
 Theory typedCopyFieldsPathMem
 Ancestors
-  typedNormalizeFieldPathMem
   typedNormalizeFields externalReturnNormalizeMem bodyDeclMemoryCounted
   typedNormalizeFrame typedBytesArrayMem context compileEnv emitHelper
   venomInst exprLoweringProps venomState venomExecSemantics fragGasPathMem
