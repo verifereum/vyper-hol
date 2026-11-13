@@ -409,25 +409,24 @@ Proof
   simp[]
 QED
 
-(* HELD: members stored at declared types that differ from their elements'
-   types (a String[5] element in a String[40] slot, say).  Reached only from
-   body_make_array_widened_call_elem and body_struct_lit_widened_call_elem,
-   when a literal has both a widened internal-call element and a narrower
-   member.  The flat half (bytestring members) follows exprSimAggregateLoops'
-   aggregate_make_tuple_flat_sim. *)
-Theorem aggregate_body_make_tuple_narrow_sim:
+(* HELD: a member stored at a declared type that differs from its element's
+   and isn't a String or Bytes (a DynArray[String[5],2] element in a
+   DynArray[String[40],2] slot, say).  compile_store_memory_typed stores it
+   and emits INVALID unless acyclic_struct_metadata holds, hence that
+   premise; exprSimAggregateLoops' aggregate_make_tuple_nested_sim is the
+   S1 twin. *)
+Theorem aggregate_body_make_tuple_nested_sim:
   !args tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx.
   compile_make_tuple compile_expr ce args tys (Var x) off sa = (out,sb) /\
   LIST_REL (\t e. arg_type_fits (expr_type e) t) tys args /\
-  tys <> MAP expr_type args /\
+  (?t e. MEM (t,e) (ZIP (tys,args)) /\ t <> expr_type e /\
+     ~is_bytestring_type t) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   expr_sim_inv ce cx env es /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (F ==> int_calls_expr e = [])) /\
   exprs_case F ctx func ce cx args /\
-  (!e. MEM e args ==> (int_calls_expr e <> [] /\
-    lowered_value_type ce e <> expr_type e ==>
-    acyclic_struct_metadata ce.ce_struct_fields)) /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -491,9 +490,7 @@ Theorem aggregate_body_make_tuple_fits_sim:
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (F ==> int_calls_expr e = [])) /\
   exprs_case F ctx func ce cx args /\
-  (!e. MEM e args ==> (int_calls_expr e <> [] /\
-    lowered_value_type ce e <> expr_type e ==>
-    acyclic_struct_metadata ce.ce_struct_fields)) /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -545,12 +542,16 @@ Theorem aggregate_body_make_tuple_fits_sim:
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `tys = MAP expr_type args`
-  >- (qpat_x_assum `tys = _` SUBST_ALL_TAC >>
-      mp_tac (SPEC_ALL aggregate_body_make_tuple_sim) >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
-  mp_tac (SPEC_ALL aggregate_body_make_tuple_narrow_sim) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]
+  Cases_on `LIST_REL (\t e. t = expr_type e \/
+    is_bytestring_type t /\ is_bytestring_type (expr_type e)) tys args`
+  >- (mp_tac (SPEC_ALL aggregate_body_make_tuple_flat_sim) >>
+      impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+      simp[]) >>
+  mp_tac (SPEC_ALL aggregate_body_make_tuple_nested_sim) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      irule aggregate_member_not_flat >> simp[]) >>
+  simp[]
 QED
 
 Theorem aggregate_body_make_array_elems_sim:
@@ -565,9 +566,7 @@ Theorem aggregate_body_make_array_elems_sim:
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (F ==> int_calls_expr e = [])) /\
   exprs_case F ctx func ce cx args /\
-  (!e. MEM e args ==> (int_calls_expr e <> [] /\
-    lowered_value_type ce e <> expr_type e ==>
-    acyclic_struct_metadata ce.ce_struct_fields)) /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -636,8 +635,7 @@ Proof
   disch_then (qspecl_then [`env`, `inst`, `b`, `asz`] mp_tac) >>
   simp[type_memory_size_list_replicate] >>
   (impl_tac >-
-    (conj_tac >- (qpat_x_assum `!e. MEM e args ==> _` mp_tac >> simp[]) >>
-     conj_tac >- (gvs[] >> decide_tac) >>
+    (conj_tac >- (gvs[] >> decide_tac) >>
      qpat_x_assum `ce.ce_is_ctor ==> _` mp_tac >>
      simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM])) >>
   strip_tac >> simp[] >>
@@ -664,8 +662,7 @@ Theorem aggregate_body_make_array_sim:
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
   exprs_case F ctx func ce cx args /\
-  (!e. MEM e args ==> (int_calls_expr e <> [] /\
-    lowered_value_type ce e <> expr_type e ==> acyclic_struct_metadata ce.ce_struct_fields)) /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -779,7 +776,7 @@ Resume aggregate_body_make_array_sim[dynamic]:
   disch_then (qspecl_then [`env`, `inst`, `b`, `asz`] mp_tac) >>
   simp[] >>
   (impl_tac >-
-    (conj_tac >- metis_tac[] >> rpt strip_tac >>
+    (rpt strip_tac >>
      first_x_assum drule_all >> simp[regions_disjoint_def] >> decide_tac)) >>
   strip_tac >> simp[] >>
   irule gas_outcome_zero_prefix >> qexists_tac `s1` >> simp[] >>
