@@ -25,24 +25,24 @@ Theorem hash_compile_typed_sha256_unary_vv_sim_ptr:
     bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
       (INL v,ee) /\ ee.gas_obs = [] /\
     value_has_type (BaseTV bty) v /\ expr_sim_inv cenv cx env ee /\
-    expr_post H ctx func cenv cx e es sa sm s0 ee v x s /\ ~s.vs_halted /\
+    expr_post ctx func cenv cx e es sa sm s0 ee v x s /\ ~s.vs_halted /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    ghost_inv H d cenv cx ee G tn s /\
-    ptr_val_ok cx (expr_type e) v x G tn s /\
-    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G s) /\
+    ghost_inv d cenv cx ee G tn s /\
+    ptr_val_ok cx (post_value_type cenv e) v x G tn s /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e x G s) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
     local_ptrs_rel func cenv es.scopes s0 ==>
-    ?marks. gas_summary_ptr_at (cx_dead H cx) (ctx,func) PG marks
+    ?marks. gas_summary_ptr_at (cx_dead cx) (ctx,func) PG marks
       (\es'. case builtin_result cx es'.accounts ann Sha256 [expr_type e] [v] of
          INR exc => (INR exc,es')
        | INL w => (do precompile_call_success Sha256; return (Value w) od) es')
       (ee,s,G,tn)
       (\res ef G' tn' t. ?tv. res = INL tv /\
-        vv_post H ctx func cenv cx (Builtin ann Sha256 [e]) es sa sb s0 ef tv vv t /\
+        vv_post ctx func cenv cx (Builtin ann Sha256 [e]) es sa sb s0 ef tv vv t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        ghost_inv H d cenv cx ef G' tn' t /\
+        ghost_inv d cenv cx ef G' tn' t /\
         ptr_vv_ok cx (expr_type (Builtin ann Sha256 [e])) tv vv ef G' tn' t /\
         (!t' op. vv = StackValue t' op /\
            ~is_word_type (expr_type (Builtin ann Sha256 [e])) ==>

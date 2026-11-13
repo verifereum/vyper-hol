@@ -21,7 +21,7 @@ QED
 Theorem attribute_typed_selection:
   expr_body_pre cenv cx env (Attribute ann obj fld) es0 /\
   eval_expr cx obj es0 = (INL btv,ee) /\
-  vv_post H ctx func cenv cx obj es sa sm s0 ee btv bvv t ==>
+  vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv t ==>
   ?sid fs ftv vals fv tv' w.
     expr_type obj = StructT sid /\
     evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
@@ -35,12 +35,12 @@ Theorem attribute_typed_selection:
     eval_operand (vv_operand bvv) t = SOME w
 Proof
   strip_tac >> drule attr_pre_base >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (drule_all attr_post_value_type >> simp[]) >>
   drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
   `expr_sim_inv cenv cx env es0` by fs[expr_body_pre_def] >>
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
   drule_all attribute_type_evaluates >> strip_tac >>
-  `post_value_type cenv obj = expr_type obj` by
-    metis_tac[exprSimAttributeTheory.attr_post_value_type] >>
   `vv_holds cenv cx (StructT sid) btv bvv ee t` by fs[vv_post_def] >>
   drule attribute_vv_holds_read_operand >> strip_tac >>
   `value_has_type (StructTV fs) v` by metis_tac[] >>
@@ -77,9 +77,8 @@ Proof
 QED
 
 Theorem attribute_memory_field_address:
-  vv_post H ctx func cenv cx obj es sa sm s0 ee btv bvv t /\
-  post_value_type cenv obj = expr_type obj /\
-  expr_type obj = StructT sid /\ vv_loc bvv = LocMemory /\
+  vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv t /\
+  post_value_type cenv obj = StructT sid /\ vv_loc bvv = LocMemory /\
   read_result cx btv ee = (INL (StructV vals),ee) /\
   evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
   eval_operand (vv_operand bvv) t = SOME w /\
@@ -88,9 +87,9 @@ Theorem attribute_memory_field_address:
     w2n w + struct_field_offset fields fld
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx ee t` by fs[vv_post_def] >>
+  `stmt_state_rel ctx func cenv cx ee t` by fs[vv_post_def] >>
   `vv_at cenv cx (StructT sid) sa sm ee btv bvv t` by fs[vv_post_def] >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   drule stmt_state_rel_region_lt >> strip_tac >>
   drule_all struct_field_offset_le >> strip_tac >>
   Cases_on `bvv` >>
