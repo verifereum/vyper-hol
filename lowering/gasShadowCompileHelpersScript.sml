@@ -69,16 +69,16 @@ Proof
   strip_tac >> Cases_on `sh` >> simp[] >> Induct >>
   rpt gen_tac >> Cases_on `tys` >>
   simp[compile_ext_call_args_def, gas_shadow_compiles_return] >>
-  match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- metis_tac[COND_CLAUSES] >>
-  gen_tac >> BETA_TAC >>
-  match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- (ONCE_REWRITE_TAC[GSYM MAP_APPEND] >>
-      REWRITE_TAC[gas_shadow_expr_can_mutate] >>
-      simp[gas_shadow_compiles_snapshot_vv]) >>
-  gen_tac >> BETA_TAC >>
-  match_mp_tac gas_shadow_compiles_bind >> conj_tac >- simp[] >>
-  simp[gas_shadow_compiles_return]
+  (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+   >- metis_tac[COND_CLAUSES] >>
+   gen_tac >> BETA_TAC >>
+   match_mp_tac gas_shadow_compiles_bind >> conj_tac
+   >- (ONCE_REWRITE_TAC[GSYM MAP_APPEND] >>
+       REWRITE_TAC[gas_shadow_expr_can_mutate] >>
+       simp[gas_shadow_compiles_snapshot_vv]) >>
+   gen_tac >> BETA_TAC >>
+   match_mp_tac gas_shadow_compiles_bind >> conj_tac >- simp[] >>
+   simp[gas_shadow_compiles_return])
 QED
 
 Theorem gas_shadow_compiles_abi_encode_args:
