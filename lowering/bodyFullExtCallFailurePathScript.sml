@@ -1,10 +1,11 @@
 (* Checked failure forwarding after an unsuccessful external call. *)
 Theory bodyFullExtCallFailurePath
 Ancestors
+  ctorDeployMemoryRunPtrPrefixSteps instIdxIndep ghostPcTransportPtr
   rawCallBufferPtr fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasPathPtr
   fragGasEmitCtrl exprSimAccounts exprLoweringProps emitHelperProps emitHelper
   exprLowering compileEnv fragExec ptrSafeRun ptrDiscipline memSafeRun
-  instMemFrontier contextCodegenRel contextCodegenRelProps
+  instMemFrontier unitTransformDefs codegenRel contextCodegenRel contextCodegenRelProps
   venomExecProps venomInstProps venomExecSemantics venomInst venomState
   gasEvents gasCount finite_map pred_set list context
 
@@ -153,4 +154,158 @@ Proof
   fs[fn_has_code_def, emitted_blocks_def] >>
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
   simp[get_instruction_def, EL_APPEND_EQN]
+QED
+
+Theorem extcall_failure_prefix_edge[local]:
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  (inst = mk_inst id RETURNDATASIZE [] [out] \/
+   inst = mk_inst id ALLOCA [Lit 0w] [out]) /\
+  step_inst_base inst s = OK u ==>
+  !D. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G inst u,step_taint inst s u tn)
+Proof
+  strip_tac >> gen_tac >>
+  `ptr_inst_ok D lo 0 ctx func G tn inst s` by
+    (Cases_on `inst.inst_opcode = ALLOCA`
+     >- (gvs[mk_inst_def] >> simp[GSYM mk_inst_def, prefix_alloca_inst_ok]) >>
+     gvs[mk_inst_def] >>
+     gvs[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       source_memory_write_ranges_def, source_memory_read_ranges_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs,
+       exec_read0_def, bind_outputs_def, update_var_def]) >>
+  `inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+   inst_mem_below_frontier inst s /\ inst_dload_in_section inst s /\
+   inst.inst_opcode <> GAS` by
+    (gvs[] >> simp[mk_inst_def, is_terminator_def,
+       inst_mem_below_frontier_def, inst_dload_in_section_def,
+       source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
+  drule_all straight_line_origin_ptr_edge >> simp[]
+QED
+
+Theorem extcall_zero_alloca_result[local]:
+  !s id p. ?u b.
+    step_inst_base (mk_inst id ALLOCA [Lit 0w] [p]) s = OK u /\
+    eval_operand (Var p) u = SOME (n2w b) /\
+    u.vs_returndata = s.vs_returndata /\
+    u.vs_current_bb = s.vs_current_bb /\ u.vs_halted = s.vs_halted /\
+    u.vs_inst_idx = s.vs_inst_idx /\
+    (!z. z <> p ==> eval_operand (Var z) u = eval_operand (Var z) s) /\
+    (!lo. allocas_from lo s /\ lo <= s.vs_alloca_next ==>
+          allocas_from lo u /\ lo <= u.vs_alloca_next)
+Proof
+  rpt gen_tac >> Cases_on `FLOOKUP s.vs_allocas id`
+  >- (qexistsl_tac
+       [`update_var p (n2w s.vs_alloca_next)
+          (s with vs_allocas := s.vs_allocas |+ (id,(s.vs_alloca_next,0)))`,
+        `s.vs_alloca_next`] >>
+      simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def,
+        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+        allocas_from_def] >> rpt strip_tac >>
+      Cases_on `id = aid` >> gvs[] >> metis_tac[]) >>
+  PairCases_on `x` >>
+  qexistsl_tac [`update_var p (n2w x0) s`, `x0`] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def,
+    eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+    allocas_from_def] >> metis_tac[]
+QED
+
+Theorem extcall_failure_prefix_compose[local]:
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME r /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME i /\
+  r = mk_inst rid RETURNDATASIZE [] [z] /\
+  i = mk_inst aid ALLOCA [Lit 0w] [p] /\
+  step_inst_base r s = OK a /\ step_inst_base i a = OK u ==>
+  !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (u with vs_inst_idx := s.vs_inst_idx + 2),
+     step_prov PG (step_prov PG G r a) i u,
+     step_taint i a u (step_taint r s a tn))
+Proof
+  strip_tac >> gen_tac >>
+  `~a.vs_halted /\ a.vs_current_bb = s.vs_current_bb /\ allocas_from lo a` by
+    (gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read0_def,
+      bind_outputs_def, update_var_def, allocas_from_def] >> metis_tac[]) >>
+  `step_inst_base i (a with vs_inst_idx := SUC s.vs_inst_idx) =
+    OK (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[step_inst_inst_idx_indep, is_terminator_def, mk_inst_def,
+      exec_result_map_def] >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (a with vs_inst_idx := SUC s.vs_inst_idx),
+      step_prov PG G r a,step_taint r s a tn)` by
+    (irule extcall_failure_prefix_edge >> simp[] >> metis_tac[]) >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG)
+    (a with vs_inst_idx := SUC s.vs_inst_idx,
+      step_prov PG G r a,step_taint r s a tn) []
+    (OK (u with vs_inst_idx := s.vs_inst_idx + 2),
+      step_prov PG (step_prov PG G r a) i u,
+      step_taint i a u (step_taint r s a tn))` by
+    (drule_at (Pat `step_inst_base _ _ = _`)
+       extcall_failure_prefix_edge >>
+     simp[allocas_from_def, arithmeticTheory.ADD1] >> disch_then irule >>
+     fs[allocas_from_def, GSYM arithmeticTheory.ADD1] >> metis_tac[]) >>
+  qpat_x_assum `gas_origin_ptr_edge _ (s,G,tn) _ _`
+    (mp_then Any mp_tac (cj 2 gas_origin_ptr_path_rules)) >>
+  disch_then (qspec_then `[]` mp_tac) >> simp[] >> disch_then irule >>
+  drule (cj 2 gas_origin_ptr_path_rules) >>
+  disch_then (qspec_then `[]` mp_tac) >> simp[] >> disch_then irule >>
+  irule (cj 1 gas_origin_ptr_path_rules) >>
+  gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def,
+      update_var_def, AllCaseEqs()]
+QED
+
+Theorem extcall_failure_prefix_path:
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ z <> p /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst rid RETURNDATASIZE [] [z]) /\
+  get_instruction bb (SUC s.vs_inst_idx) =
+    SOME (mk_inst aid ALLOCA [Lit 0w] [p]) ==>
+  ?t G' tn' b.
+    ~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = s.vs_inst_idx + 2 /\
+    t.vs_returndata = s.vs_returndata /\
+    eval_operand (Var z) t = SOME (n2w (LENGTH s.vs_returndata)) /\
+    eval_operand (Var p) t = SOME (n2w b) /\
+    op_taint tn' (Var z) = {} /\ op_taint tn' (Var p) = {} /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')
+Proof
+  strip_tac >>
+  qabbrev_tac `r = mk_inst rid RETURNDATASIZE [] [z]` >>
+  qabbrev_tac `i = mk_inst aid ALLOCA [Lit 0w] [p]` >>
+  qabbrev_tac `a = update_var z (n2w (LENGTH s.vs_returndata)) s` >>
+  `step_inst_base r s = OK a` by
+    simp[Abbr `r`, Abbr `a`, step_inst_base_opcode_eqs, mk_inst_def,
+      exec_read0_def, bind_outputs_def] >>
+  `?u b. step_inst_base i a = OK u /\
+    eval_operand (Var p) u = SOME (n2w b) /\
+    u.vs_returndata = a.vs_returndata /\
+    u.vs_current_bb = a.vs_current_bb /\ u.vs_halted = a.vs_halted /\
+    u.vs_inst_idx = a.vs_inst_idx /\
+    eval_operand (Var z) u = eval_operand (Var z) a /\
+    allocas_from lo u /\ lo <= u.vs_alloca_next` by
+    (qspecl_then [`a`,`aid`,`p`]
+       (qx_choose_then `u` (qx_choose_then `b` strip_assume_tac))
+       extcall_zero_alloca_result >>
+     qexistsl_tac [`u`,`b`] >>
+     fs[Abbr `i`, Abbr `a`, update_var_def, allocas_from_def] >>
+     metis_tac[]) >>
+  qexistsl_tac [`u with vs_inst_idx := s.vs_inst_idx + 2`,
+    `step_prov PG (step_prov PG G r a) i u`,
+    `step_taint i a u (step_taint r s a tn)`, `b`] >>
+  fs[Abbr `a`, update_var_def, eval_operand_def, lookup_var_def,
+    FLOOKUP_UPDATE, allocas_from_def] >>
+  conj_tac
+  >- simp[Abbr `i`, Abbr `r`, op_taint_def, step_taint_def,
+       set_var_taint_def, out_taint_def, mk_inst_def, FLOOKUP_UPDATE] >>
+  conj_tac >- simp[Abbr `i`, prefix_alloca_output_taint] >>
+  conj_tac >- metis_tac[] >>
+  irule extcall_failure_prefix_compose >>
+  simp[Abbr `r`, Abbr `i`, allocas_from_def] >> metis_tac[]
 QED
