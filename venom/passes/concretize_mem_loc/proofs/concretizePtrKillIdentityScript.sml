@@ -115,7 +115,8 @@ Proof
     r IN (ptr_roots P fn DIFF alloca_roots fn)` by
     metis_tac[ptr_frame_current_root_cover] >>
   irule ptr_covered_base_write_site >>
-  qexists `dyn_floor ctx vs` >>
+  qexistsl [`P`, `PG`, `bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn`,
+            `dyn_floor ctx vs`] >>
   fs[ptr_site_supported_def] >> metis_tac[]
 QED
 

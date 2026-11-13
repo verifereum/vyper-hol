@@ -52,6 +52,7 @@ Proof
     (first_x_assum (qspec_then `k` mp_tac) >> simp[]) >>
   `?site. FLOOKUP births tag = SOME site` by metis_tac[FLOOKUP_DEF] >>
   `EL k a.po_params = SOME site` by
-    (first_x_assum (qspec_then `k` mp_tac) >> gvs[ptr_owner_erases_def]) >>
+    (qpat_x_assum `!n. n < LENGTH a.po_params ==> _` (qspec_then `k` mp_tac) >>
+     gvs[ptr_owner_erases_def]) >>
   gvs[ptr_params_ok_def] >> metis_tac[]
 QED
