@@ -747,7 +747,7 @@ Proof
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_call_def, GSYM comp_bind_def, GSYM comp_return_def,
        gasShadowCompileBaseTheory.comp_bind_uncurry, GSYM MAP_TAKE, GSYM MAP_DROP,
-       MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss] >>
+       MAP_MAP_o, combinTheory.o_DEF] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_emit_inst] >> gen_tac >> BETA_TAC) >>
