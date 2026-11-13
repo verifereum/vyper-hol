@@ -34,14 +34,12 @@ Proof
   strip_tac >>
   `post_value_type cenv off = expr_type off` by
     (irule post_value_type_word >> simp[is_word_type_def]) >>
-  `expr_val_rel cx (expr_type off) (IntV i) off_op t` by gvs[expr_post_def] >>
-  `is_word_type (expr_type off)` by simp[is_word_type_def] >>
   `~(i < 0)` by intLib.ARITH_TAC >>
-  `evaluate_type (get_tenv cx) (expr_type off) = SOME (BaseTV (UintT k))` by
-    simp[vyperValueTheory.evaluate_type_def] >>
-  drule_all expr_val_rel_typed >>
-  simp[is_word_type_def, typed_val_to_w256_def, val_to_w256_def,
-       integer_wordTheory.i2w_def, integerTheory.INT_NOT_LT]
+  qpat_x_assum `expr_post _ _ _ _ _ off _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def,
+      value_has_type_def, expr_val_rel_def, is_word_type_def, evaluate_type_def,
+      typed_val_to_w256_def, val_to_w256_def, integer_wordTheory.i2w_def]
 QED
 
 
