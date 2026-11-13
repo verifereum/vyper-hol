@@ -1,11 +1,12 @@
 Theory extRetAbiChildComposePtr
-Ancestors abiEncoderChildContext extRetAbiChildBoundaryPtr extRetAbiBytesCountedPtr loweringStateRelDefs
+Ancestors
+  abiEncoderChildContext extRetAbiChildBoundaryPtr extRetAbiBytesCountedPtr
   extRetBulkCopyCountedPtr extRetBytesCopyCountedPtr abiEncoderChildCode
-  fragGasPathPtr fragExec emitHelperProps exprLoweringProps
-  context compileEnv emitHelper ptrDiscipline bodyPtrDefs venomState venomExecSemantics
-  valueEncoding venomMemProps words finite_map pred_set arithmetic
-  venomInst venomInstProofs ptrSafeRun fragExecPtr typedCopyPtr contextCodegenRel
-  extRetScratchResourcePtr wordLoadStorePtr
+  fragGasPathPtr fragExec emitHelperProps exprLoweringProps context
+  compileEnv loweringStateRelDefs emitHelper ptrDiscipline bodyPtrDefs
+  venomState venomExecSemantics valueEncoding venomMemProps words finite_map
+  pred_set arithmetic venomInst venomInstProofs ptrSafeRun fragExecPtr
+  typedCopyPtr contextCodegenRel extRetScratchResourcePtr wordLoadStorePtr
 
 Theorem child_mstore_exact_counted_ptr[local]:
   emit_void MSTORE [Var dst;value] sa = ((),sb) /\ fn_has_code sa sb fn /\

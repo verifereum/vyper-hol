@@ -4,10 +4,11 @@ Ancestors
   extRetEvaluatedStaticLoopResourcePtr extRetRecursiveResourcePtr
   extRetAbiArrayInitPtr extRetLoopScalarAmbientPtr extRetBulkCopyCountedPtr
   extRetScratchInitPtr extRetScratchResourcePtr extRetLoopInitAmbientPtr
-  fragGasPathPtr fragExec emitHelperProps exprLoweringProps emitHelper compileEnv
-  ptrDiscipline bodyPtrDefs venomState venomExecSemantics venomInst
-  venomMemDefs venomMemProps valueEncodingProps codegenRel
-  abiDecoderReentry words finite_map pred_set arithmetic list rich_list loweringStateRelDefs
+  fragGasPathPtr fragExec emitHelperProps exprLoweringProps emitHelper
+  compileEnv loweringStateRelDefs ptrDiscipline bodyPtrDefs venomState
+  venomExecSemantics venomInst venomMemDefs venomMemProps valueEncodingProps
+  codegenRel abiDecoderReentry words finite_map pred_set arithmetic list
+  rich_list
 
 (* Unlike a contiguous scratch initializer, MUL really occurs between allocation
    and store.  This boundary does not assume that the allocation site is fresh. *)

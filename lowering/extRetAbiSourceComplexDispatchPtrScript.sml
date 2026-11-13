@@ -1,11 +1,13 @@
 Theory extRetAbiSourceComplexDispatchPtr
-Ancestors extRetAbiSourceComplexBytesPtr extRetAbiArrayInitPtr loweringStateRelDefs
+Ancestors
+  extRetAbiSourceComplexBytesPtr extRetAbiArrayInitPtr
   extRetBulkCopyCountedPtr extRetBytesCopyCountedPtr abiBuiltinAllocation
   bodyPtrDefs venomMemProps valueEncodingProofs pred_set finite_map
   abiEncoderComplexCode abiEncoderComplexPrefix abiEncoderMembersBoundary
   abiEncoderAddressReach abiEncoder abiEncoderMemberCode exprLoweringProps
-  emitHelperProps exprLowering fragExec fragGasPathPtr compileEnv emitHelper
-  ptrDiscipline venomState context words list arithmetic wordLoadStorePtr
+  emitHelperProps exprLowering fragExec fragGasPathPtr compileEnv
+  loweringStateRelDefs emitHelper ptrDiscipline venomState context words list
+  arithmetic wordLoadStorePtr
 
 Theorem abi_complex_empty_dispatch_counted_ptr:
   compile_abi_encode_to_buf dst src (AbiComplex []) sa = (out,sb) /\ ~s.vs_halted ==>

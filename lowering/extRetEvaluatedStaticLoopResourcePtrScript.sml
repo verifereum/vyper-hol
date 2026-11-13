@@ -1,17 +1,18 @@
 Theory extRetEvaluatedStaticLoopResourcePtr
 Ancestors
   extRetEvaluatedStaticLoopPtr extRetLoopInitAmbientPtr
-  extRetRecursiveResourcePtr extRetScratchResourcePtr
-  abiEncoderWindowArray abiDecoderIndexInit abiBuiltinAllocation
-  allocaSiteResource allocationPtr fragExec fragGasPathPtr compileEnv
-  emitHelper ptrDiscipline bodyPtrDefs venomState venomExecSemantics
-  venomMemDefs venomInst exprLoweringProps words finite_map pred_set arithmetic list
+  extRetRecursiveResourcePtr extRetScratchResourcePtr abiEncoderWindowArray
+  abiDecoderIndexInit abiBuiltinAllocation allocaSiteResource allocationPtr
+  fragExec fragGasPathPtr compileEnv loweringStateRelDefs emitHelper
+  ptrDiscipline bodyPtrDefs venomState venomExecSemantics venomMemDefs
+  venomInst exprLoweringProps words finite_map pred_set arithmetic list
   robustCopyTransportPtr valueTypingMemoryProps loweringPosts valueEncoding
-  valueEncodingProofs vyperTyping extRetLoopHeaderAmbientPtr extRetLoopTailAmbientPtr
-  abiEncoderArrayCode abiEncoderArrayContext abiEncoderArrayPhaseAppend
-  abiEncoderArrayPhases abiEncoderArrayHeader abiDecoderLoopEmit
-  extRetAbiArrayStaticLoopPtr emitHelperProps fragGasSeqPtr
-  bodyPtrPopMemoryHeader valueEncodingProps abiEncoderArrayLoopLayout loweringStateRelDefs valueEncodingDefs
+  valueEncodingDefs valueEncodingProofs vyperTyping
+  extRetLoopHeaderAmbientPtr extRetLoopTailAmbientPtr abiEncoderArrayCode
+  abiEncoderArrayContext abiEncoderArrayPhaseAppend abiEncoderArrayPhases
+  abiEncoderArrayHeader abiDecoderLoopEmit extRetAbiArrayStaticLoopPtr
+  emitHelperProps fragGasSeqPtr bodyPtrPopMemoryHeader valueEncodingProps
+  abiEncoderArrayLoopLayout
 
 (* Project the allocator's checked resource transition to the allocation-only
    state used by the compiler-phase interfaces. No runtime address is assumed. *)

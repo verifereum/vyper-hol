@@ -34,7 +34,8 @@ Proof
       first_x_assum irule >> simp[] >> metis_tac[])
   >~ [`lookup_function _ _ _ (HashMapDecl vis _ _ _ _ _ :: _)`]
   >- (Cases_on `vis` >> gvs[lookup_function_def] >>
-      first_x_assum irule >> simp[] >> metis_tac[]) >>
+      first_x_assum irule >> simp[] >> metis_tac[])
+  >~ [`well_formed_type _ NoneT`] >- simp[well_formed_type_def, vyperValueTheory.evaluate_type_def] >>
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 

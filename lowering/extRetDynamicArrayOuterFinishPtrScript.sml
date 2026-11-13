@@ -3,12 +3,13 @@ Ancestors
   extRetSemanticDynamicArrayPtr extRetSemanticDynamicLoopPtr
   extRetDynamicExitPtr extRetDynamicBodyPtr extRetRecursiveFramePtr
   extRetRecursiveResourcePtr extRetFramedChildPtr extRetSemanticResultPtr
-  extRetScratchResourcePtr extRetRobustSourceChildrenPtr abiEncoderArrayHeader abiEncoderArrayBodyCode
-  abiEncoderArrayTail abiEncoderChildCode abiDecoderLoopEmit abiEncoderArrayCode
-  abiEncoder compileEnv emitHelper fragExec fragGasPathPtr
-  bodyPtrDefs ptrDiscipline venomState venomMemDefs valueEncoding
-  vyperABI vyperTypeABI vyperTyping vyperValue
-  words finite_map pred_set arithmetic list rich_list loweringStateRelDefs
+  extRetScratchResourcePtr extRetRobustSourceChildrenPtr
+  abiEncoderArrayHeader abiEncoderArrayBodyCode abiEncoderArrayTail
+  abiEncoderChildCode abiDecoderLoopEmit abiEncoderArrayCode abiEncoder
+  compileEnv loweringStateRelDefs emitHelper fragExec fragGasPathPtr
+  bodyPtrDefs ptrDiscipline venomState venomMemDefs valueEncoding vyperABI
+  vyperTypeABI vyperTyping vyperValue words finite_map pred_set arithmetic
+  list rich_list
 
 (* A protected parent survives the loop even when child sites are reused. *)
 Theorem encoder_dynamic_effect_parent_word:

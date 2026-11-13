@@ -1,11 +1,12 @@
 (* Finite static-element array loop; concrete compiler phase interfaces. *)
 Theory extRetAbiArrayStaticLoopPtr
 Ancestors
-  extRetAbiArrayHeaderPtr extRetAbiArrayStaticBodyPtr extRetAbiArrayBackedgePtr
-  abiEncoderArrayPhaseAppend abiEncoderArrayHeader abiEncoderArrayBodyCode
-  abiEncoderCounters abiDecoderLoopEmit fragExec fragGasPathPtr compileEnv emitHelperProps
+  extRetAbiArrayHeaderPtr extRetAbiArrayStaticBodyPtr
+  extRetAbiArrayBackedgePtr abiEncoderArrayPhaseAppend abiEncoderArrayHeader
+  abiEncoderArrayBodyCode abiEncoderCounters abiDecoderLoopEmit fragExec
+  fragGasPathPtr compileEnv loweringStateRelDefs emitHelperProps
   ptrDiscipline bodyPtrDefs venomState venomExecSemantics words finite_map
-  list rich_list arithmetic pred_set loweringStateRelDefs
+  list rich_list arithmetic pred_set
 
 Theorem abi_array_static_loop_phase_code:
   abi_encode_array_header ip count_op sh = ((hdr,body_lbl,exit_lbl),sb) /\

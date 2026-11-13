@@ -4,14 +4,15 @@ Ancestors
   extRetScratchResourcePtr extRetScratchResourceInitPtr extRetScratchInitPtr
   extRetAbiArrayInitPtr extRetFramedChildPtr
   extRetEvaluatedStaticLoopResourcePtr extRetLoopScalarAmbientPtr
-  extRetLoopInitAmbientPtr abiDecoderReentry abiEncoderArrayCode abiDecoderIndexInit
-  allocaSiteResource allocaFootprint abiBuiltinAllocation allocationPtr
-  localPtrsProps loweringHalt fragExecPtr fragGasPathPtr fragGasSeqPtr
-  exprLoweringProps compileEnv emitHelper context codegenRel loweringPosts
-  ptrDiscipline bodyPtrDefs venomState venomInst venomExecSemantics
-  venomMemProps venomMemDefs valueEncodingProps words finite_map pred_set
-  arithmetic list rich_list emitHelperProps fragExec extRetBulkCopyCountedPtr
-  extRetBytesCopyCountedPtr typedCopyPtr wordLoadStorePtr loweringStateRelDefs
+  extRetLoopInitAmbientPtr abiDecoderReentry abiEncoderArrayCode
+  abiDecoderIndexInit allocaSiteResource allocaFootprint abiBuiltinAllocation
+  allocationPtr localPtrsProps loweringHalt fragExecPtr fragGasPathPtr
+  fragGasSeqPtr exprLoweringProps compileEnv loweringStateRelDefs emitHelper
+  context codegenRel loweringPosts ptrDiscipline bodyPtrDefs venomState
+  venomInst venomExecSemantics venomMemProps venomMemDefs valueEncodingProps
+  words finite_map pred_set arithmetic list rich_list emitHelperProps
+  fragExec extRetBulkCopyCountedPtr extRetBytesCopyCountedPtr typedCopyPtr
+  wordLoadStorePtr
 
 (* The earlier allocate-state resource lemma is local to its theory.
    This boundary additionally retains exact allocation equality off-site. *)

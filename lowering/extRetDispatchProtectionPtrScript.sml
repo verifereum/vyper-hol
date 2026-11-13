@@ -1,6 +1,7 @@
 Theory extRetDispatchProtectionPtr
 Ancestors
-  builtinCreate builtinSystem emitHelper compileEnv context venomInst pair loweringStateRelDefs
+  builtinCreate builtinSystem emitHelper compileEnv loweringStateRelDefs
+  context venomInst pair
 
 Theorem compile_create_dispatch_unchecked_result_protected:
   compile_create_dispatch code_ptr len value salt F st = (op,sb) /\

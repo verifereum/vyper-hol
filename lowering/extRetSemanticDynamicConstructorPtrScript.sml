@@ -3,12 +3,13 @@ Ancestors
   extRetDynamicArrayOuterEntryPtr extRetDynamicArrayOuterFinishPtr
   extRetDynamicArrayPhasePtr extRetDynamicBodyPtr extRetRecursiveFramePtr
   extRetFramedChildPtr extRetSemanticResultPtr extRetRecursiveResourcePtr
-  extRetScratchResourcePtr fragGasPathPtr fragExec compileEnv emitHelper
-  abiEncoderArrayContext abiEncoderArrayHeader abiEncoderArrayLoopLayout
-  abiEncoderArrayBodyCode abiEncoderArrayTail abiEncoderChildCode
-  abiDecoderLoopEmit abiEncoderArrayCode abiEncoderChildContext abiEncoder
-  bodyPtrDefs ptrDiscipline venomState venomMemDefs valueEncoding
-  vyperABI vyperTypeABI vyperTyping vyperValue words finite_map pred_set arithmetic list rich_list loweringStateRelDefs
+  extRetScratchResourcePtr fragGasPathPtr fragExec compileEnv
+  loweringStateRelDefs emitHelper abiEncoderArrayContext
+  abiEncoderArrayHeader abiEncoderArrayLoopLayout abiEncoderArrayBodyCode
+  abiEncoderArrayTail abiEncoderChildCode abiDecoderLoopEmit
+  abiEncoderArrayCode abiEncoderChildContext abiEncoder bodyPtrDefs
+  ptrDiscipline venomState venomMemDefs valueEncoding vyperABI vyperTypeABI
+  vyperTyping vyperValue words finite_map pred_set arithmetic list rich_list
 
 (* A zero-cost outer entry may stop at a header, not at the compiler
    endpoint.  Its effect is precisely what is needed to rebase the result. *)

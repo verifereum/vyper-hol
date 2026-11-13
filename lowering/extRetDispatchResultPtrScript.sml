@@ -1,7 +1,8 @@
 Theory extRetDispatchResultPtr
 Ancestors
   extRetDispatchProtectionPtr exprLoweringProps freshWrites builtinCreate
-  builtinSystem emitHelper compileEnv context venomInst pair loweringStateRelDefs
+  builtinSystem emitHelper compileEnv loweringStateRelDefs context venomInst
+  pair
 
 Theorem compile_check_create_result_protected:
   compile_check_create_result result rof st = (op,sb) /\

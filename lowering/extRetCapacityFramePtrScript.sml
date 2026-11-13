@@ -18,7 +18,8 @@ Theorem same_frame_valued_return_capacity_bound:
   cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
   cenv.ce_max_return_size < 2 ** 64
 Proof
-  rw[same_frame_def] >> gvs[] >>
+  rw[same_frame_def] >>
+  qpat_x_assum `_ = cenv` (SUBST_ALL_TAC o SYM) >> fs[] >>
   drule_all frame_valued_return_capacity_bound >> simp[]
 QED
 

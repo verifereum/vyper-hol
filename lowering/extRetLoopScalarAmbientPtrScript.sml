@@ -1,8 +1,9 @@
 Theory extRetLoopScalarAmbientPtr
 Ancestors
   extRetBytesCopyCountedPtr fragGasPathPtr fragExec emitHelper compileEnv
-  ptrDiscipline ptrSafeRun bodyPtrDefs venomExecSemantics venomInst venomState
-  words finite_map pred_set arithmetic codegenRel contextCodegenRel loweringStateRelDefs
+  loweringStateRelDefs ptrDiscipline ptrSafeRun bodyPtrDefs
+  venomExecSemantics venomInst venomState words finite_map pred_set
+  arithmetic codegenRel contextCodegenRel
 
 (* The older bulk producer's check and ghost equations are local.  This
    boundary retains the immediate-taint frame of the concrete instruction. *)

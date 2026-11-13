@@ -3,13 +3,15 @@ Ancestors
   extRetDynamicExitPtr extRetBytesCopyCountedPtr extRetBulkCopyCountedPtr
   extRetDynamicArrayPhasePtr extRetDynamicArrayInitFramePtr
   extRetDynamicArrayEntryPtr extRetDynamicArrayCountPtr
-  extRetSemanticDynamicLoopPtr abiEncoderArrayLoopLayout abiEncoderArrayHeader
-  fragGasSeqPtr extRetRecursiveResourcePtr extRetScratchResourcePtr
-  extRetFramedChildPtr extRetDynamicBodyPtr extRetRecursiveFramePtr
-  robustCopyTransportPtr valueEncodingProps allocaSiteResource
-  extRetScratchInitPtr fragGasPathPtr fragExec emitHelperProps exprLoweringProps
-  emitHelper compileEnv bodyPtrDefs ptrDiscipline venomState venomExecSemantics
-  venomMemDefs venomMemProps valueEncoding words finite_map pred_set arithmetic loweringStateRelDefs
+  extRetSemanticDynamicLoopPtr abiEncoderArrayLoopLayout
+  abiEncoderArrayHeader fragGasSeqPtr extRetRecursiveResourcePtr
+  extRetScratchResourcePtr extRetFramedChildPtr extRetDynamicBodyPtr
+  extRetRecursiveFramePtr robustCopyTransportPtr valueEncodingProps
+  allocaSiteResource extRetScratchInitPtr fragGasPathPtr fragExec
+  emitHelperProps exprLoweringProps emitHelper compileEnv
+  loweringStateRelDefs bodyPtrDefs ptrDiscipline venomState
+  venomExecSemantics venomMemDefs venomMemProps valueEncoding words
+  finite_map pred_set arithmetic
 
 (* The final four instructions of the outer array encoder.  The parent
    cursor is local scratch, initialized to zero before the array loop. *)

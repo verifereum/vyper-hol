@@ -1,14 +1,15 @@
 (* Allocation fields retained on the constructed bytes-encoder witnesses. *)
 Theory extRetAbiBytesAllocationPtr
 Ancestors
-  extRetAbiBytesCountedPtr extRetAbiBytesHeaderPtr extRetBulkCopyCountedPtr abiEncoderBytesCode
-  extRetAbiBytesArithPtr venomLayout exprLoweringProps emitHelperProps
-  context compileEnv emitHelper venomState ptrDiscipline fragGasSeqPtr
-  extRetBytesCopyCountedPtr bodyPtrDefs fragExec fragGasPathPtr words
-  venomInst venomExecSemantics ptrSafeRun typedCopyPtr finite_map arithmetic
-  abiEncoderInput valueEncoding abiEncoderBytes immutableCopyExecution
+  extRetAbiBytesCountedPtr extRetAbiBytesHeaderPtr extRetBulkCopyCountedPtr
+  abiEncoderBytesCode extRetAbiBytesArithPtr venomLayout exprLoweringProps
+  emitHelperProps context compileEnv loweringStateRelDefs emitHelper
+  venomState ptrDiscipline fragGasSeqPtr extRetBytesCopyCountedPtr
+  bodyPtrDefs fragExec fragGasPathPtr words venomInst venomExecSemantics
+  ptrSafeRun typedCopyPtr finite_map arithmetic abiEncoderInput valueEncoding
+  valueEncodingDefs abiEncoderBytes immutableCopyExecution
   extRetAbiReadCleanPtr abiEncoderInputFrame valueEncodingProps pred_set
-  representationCleanPtr valueEncodingProofs robustCopyTransportPtr loweringStateRelDefs valueEncodingDefs
+  representationCleanPtr valueEncodingProofs robustCopyTransportPtr
 
 Theorem abi_encode_round_allocation_counted_ptr:
   abi_encode_round len sa = (Var out,sb) /\ fn_has_code sa sb fn /\

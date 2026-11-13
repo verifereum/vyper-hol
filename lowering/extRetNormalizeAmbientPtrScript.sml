@@ -1,10 +1,12 @@
 Theory extRetNormalizeAmbientPtr
 Ancestors
-  extRetNormalizeWordPtr extRetScalarCopyCountedPtr typedCopyPtr fragGasSeqPtr
-  fragExec fragExecPtr bodyPtrDefs fragGasPathPtr venomExecSemantics venomInstProofs
-  venomInst venomState ptrSafeRun ptrDiscipline finite_map compileEnv emitHelper
-  arithmetic wordLoadStorePtr representationCleanPtr robustCopyTransportPtr
-  valueEncoding valueEncodingProofs valueEncodingProps list venomMemProofs valueEncodingDefs
+  extRetNormalizeWordPtr extRetScalarCopyCountedPtr typedCopyPtr
+  fragGasSeqPtr fragExec fragExecPtr bodyPtrDefs fragGasPathPtr
+  venomExecSemantics venomInstProofs venomInst venomState ptrSafeRun
+  ptrDiscipline finite_map compileEnv emitHelper arithmetic wordLoadStorePtr
+  representationCleanPtr robustCopyTransportPtr valueEncoding
+  valueEncodingDefs valueEncodingProofs valueEncodingProps list
+  venomMemProofs
 
 (* A concrete execution boundary: unlike the old scalar endpoint, this
    retains the immutable taint and the whole ambient runtime record. *)

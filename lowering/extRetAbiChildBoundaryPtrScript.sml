@@ -1,9 +1,11 @@
 Theory extRetAbiChildBoundaryPtr
-Ancestors extRetAbiSingletonCountedPtr extRetAbiBytesCountedPtr loweringStateRelDefs
+Ancestors
+  extRetAbiSingletonCountedPtr extRetAbiBytesCountedPtr
   extRetBulkCopyCountedPtr extRetBytesCopyCountedPtr abiEncoderChildCode
-  fragGasPathPtr fragExec emitHelperProps exprLoweringProps
-  context compileEnv emitHelper ptrDiscipline bodyPtrDefs venomState venomExecSemantics
-  valueEncoding venomMemProps words finite_map pred_set arithmetic
+  fragGasPathPtr fragExec emitHelperProps exprLoweringProps context
+  compileEnv loweringStateRelDefs emitHelper ptrDiscipline bodyPtrDefs
+  venomState venomExecSemantics valueEncoding venomMemProps words finite_map
+  pred_set arithmetic
 
 Theorem abi_child_prefix_ambient_counted_ptr:
   abi_encode_child_prefix (Var dst) h (Var ip) sa =

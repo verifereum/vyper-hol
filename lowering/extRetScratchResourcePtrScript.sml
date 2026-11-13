@@ -1,9 +1,9 @@
 Theory extRetScratchResourcePtr
 Ancestors
-  allocaSiteResource allocationPtr extRetSourceAllocationPtr exprLoweringProps
-  abiBuiltinAllocation
-  localPtrsProps loweringPosts exprSimOperands compileEnv venomState venomInst
-  venomExecSemantics venomMemDefs words finite_map pred_set arithmetic loweringStateRelDefs
+  allocaSiteResource allocationPtr extRetSourceAllocationPtr
+  exprLoweringProps abiBuiltinAllocation localPtrsProps loweringPosts
+  exprSimOperands compileEnv loweringStateRelDefs venomState venomInst
+  venomExecSemantics venomMemDefs words finite_map pred_set arithmetic
 
 Definition scratch_resource_def:
   scratch_resource ctx fn sites q len s <=>

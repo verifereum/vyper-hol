@@ -1,9 +1,9 @@
 (* Prospective cursor sites may be fresh or registered already. *)
 Theory extRetCursorResourcePtr
 Ancestors
-  allocationPtr allocaSiteResource abiBuiltinAllocation codegenRel exprLoweringProps
-  stmtSimDefs venomMemDefs venomState venomInst compileEnv
-  words finite_map arithmetic loweringStateRelDefs
+  allocationPtr allocaSiteResource abiBuiltinAllocation codegenRel
+  exprLoweringProps stmtSimDefs venomMemDefs venomState venomInst compileEnv
+  loweringStateRelDefs words finite_map arithmetic
 
 Theorem return_cursor_allocation_resources:
   stmt_state_rel ctx fn cenv cx es s /\

@@ -2,12 +2,13 @@
 Theory extRetBufferStatePtr
 Ancestors
   extRetBufferAllocCountedPtr extRetBulkCopyCountedPtr extRetCountedPtr
-  extRetBytesCopyCountedPtr allocaFootprint list rich_list loweringSlice allocationPtr loweringHalt
-  abiBuiltinAllocation exprLoweringProps fragGasSeqPtr fragGasPathPtr
-  fragExecPtr fragExec emitHelperProps compileEnv emitHelper context
-  ptrDiscipline ptrSafeRun bodyPtrDefs venomState venomInst venomExecSemantics
-  codegenRel venomMemProps valueEncodingProps valueEncodingProofs
-  loweringPosts words finite_map pred_set arithmetic loweringStateRelDefs
+  extRetBytesCopyCountedPtr allocaFootprint list rich_list loweringSlice
+  allocationPtr loweringHalt abiBuiltinAllocation exprLoweringProps
+  fragGasSeqPtr fragGasPathPtr fragExecPtr fragExec emitHelperProps
+  compileEnv loweringStateRelDefs emitHelper context ptrDiscipline ptrSafeRun
+  bodyPtrDefs venomState venomInst venomExecSemantics codegenRel
+  venomMemProps valueEncodingProps valueEncodingProofs loweringPosts words
+  finite_map pred_set arithmetic
 
 Theorem expr_val_at_allocation_frame[local]:
   (!aid site. FLOOKUP s.vs_allocas aid = SOME site ==>

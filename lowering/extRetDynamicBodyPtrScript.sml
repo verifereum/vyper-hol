@@ -5,10 +5,10 @@ Ancestors
   extRetAbiChildComposePtr extRetAbiChildBoundaryPtr extRetLoopTailAmbientPtr
   extRetNumericLedgerPtr abiEncoderArrayDynamicMemory abiEncoderArrayBodyCode
   abiEncoderArrayTail abiEncoderChildCode abiDecoderLoopEmit fragGasPathPtr
-  fragExec compileEnv bodyPtrDefs ptrDiscipline venomState venomExecSemantics
-  venomMemDefs venomMemProps valueEncoding valueEncodingProps valueEncodingProofs
-  robustCopyTransportPtr valueTypingMemoryProps words finite_map pred_set
-  arithmetic list rich_list loweringStateRelDefs
+  fragExec compileEnv loweringStateRelDefs bodyPtrDefs ptrDiscipline
+  venomState venomExecSemantics venomMemDefs venomMemProps valueEncoding
+  valueEncodingProps valueEncodingProofs robustCopyTransportPtr
+  valueTypingMemoryProps words finite_map pred_set arithmetic list rich_list
 
 (* The initialized invariant does not include a compiler program counter.
    Thus header branching and the body transition share the same invariant. *)

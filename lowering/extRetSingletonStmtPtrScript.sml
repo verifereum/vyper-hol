@@ -3,15 +3,18 @@ Theory extRetSingletonStmtPtr
 Ancestors
   extRetRawStmtPtr extRetSingletonWordCapacityPtr extRetAbiSingletonReturnPtr
   extRetBufferCursorStatePtr exprOperandVar loweringHalt exprLoweringProps
-  emitHelperProps fragExec stmtLowering compileEnv stmtSimReturn loweringPosts rich_list
-  vyperTypeArgFits vyperTyping vyperTypeSystem allocationPtr allocaFootprint
-  extRetAbiBytesLivePtr abiEncoderInput robustCopyTransportPtr valueEncodingProofs
-  words finite_map arithmetic pred_set abiEncoderInputFrame
-  extRetBufferStatePtr exprSimOperands venomState venomInst bodyPtrDefs exprLowering emitHelper context
-  abiBuiltinAllocation extRetAbiSingletonWrapperPtr abiEncoderComplexPrefix
-  abiEncoder fragGasPathPtr abiEncoderComplexCode extRetNormalEvidencePtr
-  extRetSomeComposePtr typedCopyPtr extRetStaticStmtPtr vyperValue vyperArith vyperTypeABI venomLayout
-  extRetAbiSourceInputPtr vfmConstants extRetAbiBytesArithPtr representationCleanPtr valueEncoding valueEncodingTyping exprSimTypedAlloc loweringStateRelDefs
+  emitHelperProps fragExec stmtLowering compileEnv loweringStateRelDefs
+  stmtSimReturn loweringPosts rich_list vyperTypeArgFits vyperTyping
+  vyperTypeSystem allocationPtr allocaFootprint extRetAbiBytesLivePtr
+  abiEncoderInput robustCopyTransportPtr valueEncodingProofs words finite_map
+  arithmetic pred_set abiEncoderInputFrame extRetBufferStatePtr
+  exprSimOperands venomState venomInst bodyPtrDefs exprLowering emitHelper
+  context abiBuiltinAllocation extRetAbiSingletonWrapperPtr
+  abiEncoderComplexPrefix abiEncoder fragGasPathPtr abiEncoderComplexCode
+  extRetNormalEvidencePtr extRetSomeComposePtr typedCopyPtr
+  extRetStaticStmtPtr vyperValue vyperArith vyperTypeABI venomLayout
+  extRetAbiSourceInputPtr vfmConstants extRetAbiBytesArithPtr
+  representationCleanPtr valueEncoding valueEncodingTyping exprSimTypedAlloc
 
 Theorem external_return_singleton_stmt_parts[local]:
   stmt_env cenv lctx ty (Return (SOME e)) sa = (cenv',sb) /\

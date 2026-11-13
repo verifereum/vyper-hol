@@ -2,9 +2,10 @@ Theory extRetComplexMemberStatePtr
 Ancestors
   extRetRecursiveResourcePtr extRetRecursiveFramePtr extRetScratchResourcePtr
   extRetFramedChildPtr extRetChildNarrowFramePtr extRetBulkCopyCountedPtr
-  extRetDynamicBodyPtr bodyPtrDefs compileEnv emitHelper fragExec fragGasPathPtr
-  ptrDiscipline venomState venomMemDefs valueEncoding valueEncodingProps
-  robustCopyTransportPtr words finite_map pred_set list rich_list arithmetic loweringStateRelDefs
+  extRetDynamicBodyPtr bodyPtrDefs compileEnv loweringStateRelDefs emitHelper
+  fragExec fragGasPathPtr ptrDiscipline venomState venomMemDefs valueEncoding
+  valueEncodingProps robustCopyTransportPtr words finite_map pred_set list
+  rich_list arithmetic
 
 (* All offsets are relative to the original source/destination, even when
    the compiler is processing a suffix of the member list. *)

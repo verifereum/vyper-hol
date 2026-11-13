@@ -1,10 +1,11 @@
 Theory extRetLoopAddressesAmbientPtr
 Ancestors
-  extRetLoopScalarAmbientPtr extRetAbiBytesCountedPtr extRetBulkCopyCountedPtr
-  extRetBytesCopyCountedPtr abiEncoderArrayCode abiEncoderArrayBodyCode
-  abiDecoderDynamicLoopSetup context compileEnv emitHelper emitHelperProps exprLoweringProps
+  extRetLoopScalarAmbientPtr extRetAbiBytesCountedPtr
+  extRetBulkCopyCountedPtr extRetBytesCopyCountedPtr abiEncoderArrayCode
+  abiEncoderArrayBodyCode abiDecoderDynamicLoopSetup context compileEnv
+  loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   bodyPtrDefs fragExec fragGasPathPtr fragGasSeqPtr venomState venomLayout
-  ptrDiscipline ptrSafeRun words finite_map pred_set arithmetic loweringStateRelDefs
+  ptrDiscipline ptrSafeRun words finite_map pred_set arithmetic
 
 Theorem loop_coordinates_compiler[local]:
   abi_decode_indexed_coordinates root_op idx stride sa = (ops,sb) ==>

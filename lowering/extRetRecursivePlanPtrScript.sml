@@ -1,5 +1,7 @@
 Theory extRetRecursivePlanPtr
-Ancestors vyperValue valueEncoding retAbiPlanProps abiEncoderProps compileEnv exprLowering vyperTyping finite_map list rich_list loweringStateRelDefs
+Ancestors
+  vyperValue valueEncoding retAbiPlanProps abiEncoderProps compileEnv
+  loweringStateRelDefs exprLowering vyperTyping finite_map list rich_list
 
 Inductive encodable_ret_shape:
 [base:]

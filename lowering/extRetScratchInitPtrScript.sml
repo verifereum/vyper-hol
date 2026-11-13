@@ -1,11 +1,12 @@
 Theory extRetScratchInitPtr
 Ancestors
   extRetBufferStatePtr extRetBulkCopyCountedPtr extRetBytesCopyCountedPtr
-  allocaSiteResource localPtrsProps loweringHalt venomMemDefs fragExecPtr fragGasPathPtr fragGasSeqPtr fragExec emitHelperProps
-  exprLoweringProps compileEnv emitHelper context codegenRel loweringPosts
+  allocaSiteResource localPtrsProps loweringHalt venomMemDefs fragExecPtr
+  fragGasPathPtr fragGasSeqPtr fragExec emitHelperProps exprLoweringProps
+  compileEnv loweringStateRelDefs emitHelper context codegenRel loweringPosts
   ptrDiscipline ptrSafeRun bodyPtrDefs typedCopyPtr venomState venomInst
-  venomExecSemantics venomMemProps valueEncoding valueEncodingProps words
-  finite_map pred_set arithmetic wordLoadStorePtr loweringStateRelDefs valueEncodingDefs
+  venomExecSemantics venomMemProps valueEncoding valueEncodingDefs
+  valueEncodingProps words finite_map pred_set arithmetic wordLoadStorePtr
 
 (* The existing store interface omits concrete allocation metadata. Retain
    its exact state here, so no recursive consumer must unfold MSTORE. *)

@@ -1,9 +1,10 @@
 (* Compiler-region resources for recursive external-return encoding. *)
 Theory extRetEncoderScratchSitesPtr
 Ancestors
-  extRetScratchResourcePtr extRetEncoderRegionPtr abiEncoderWindowContract abiEncoderProps
-  exprSimOperands venomMemDefs pred_set arithmetic abiDecoderCode abiEncoder context venomInst
-  loweringHalt exprLoweringProps loweringStateRelDefs
+  loweringStateRelDefs extRetScratchResourcePtr extRetEncoderRegionPtr
+  abiEncoderWindowContract abiEncoderProps exprSimOperands venomMemDefs
+  pred_set arithmetic abiDecoderCode abiEncoder context venomInst
+  loweringHalt exprLoweringProps
 
 Theorem scratch_resource_restrict:
   scratch_resource ctx fn sites q len s /\ children SUBSET sites /\

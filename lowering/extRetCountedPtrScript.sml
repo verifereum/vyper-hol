@@ -1,12 +1,12 @@
 Theory extRetCountedPtr
 Ancestors
-  entryHaltPtr fragGasPathPtr fragExec
-  stmtLowering compileEnv emitHelper contextCodegenRelProps
-  loweringHalt ptrSafeRun ptrDiscipline gasCount venomExecSemantics
-  fragExecPtr venomInst venomState fragGasSeqPtr bodyPtrDefs venomInstProofs
-  emitHelperProps abiBuiltinAllocation finite_map allocaFootprint arithmetic
-  allocationPtr memLocDefs contextCodegenRel codegenRel
-  typedCopyPtr typedCopyLoopHeaderPtr wordLoadStorePtr loweringStateRelDefs
+  entryHaltPtr fragGasPathPtr fragExec stmtLowering compileEnv
+  loweringStateRelDefs emitHelper contextCodegenRelProps loweringHalt
+  ptrSafeRun ptrDiscipline gasCount venomExecSemantics fragExecPtr venomInst
+  venomState fragGasSeqPtr bodyPtrDefs venomInstProofs emitHelperProps
+  abiBuiltinAllocation finite_map allocaFootprint arithmetic allocationPtr
+  memLocDefs contextCodegenRel codegenRel typedCopyPtr typedCopyLoopHeaderPtr
+  wordLoadStorePtr
 Theorem stop_gas_path_ptr:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\

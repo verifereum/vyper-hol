@@ -1,11 +1,11 @@
 Theory extRetRecursiveChildPtr
 Ancestors
   extRetRecursiveResourcePtr extRetRecursiveFramePtr extRetScratchResourcePtr
-  extRetAbiChildBoundaryPtr extRetAbiChildComposePtr
-  abiEncoderChildCode fragGasPathPtr fragExec compileEnv emitHelper
+  extRetAbiChildBoundaryPtr extRetAbiChildComposePtr abiEncoderChildCode
+  fragGasPathPtr fragExec compileEnv loweringStateRelDefs emitHelper
   bodyPtrDefs ptrDiscipline venomState venomMemDefs words finite_map pred_set
-  arithmetic list wordLoadStorePtr abiEncoderChildContext extRetBulkCopyCountedPtr
-  fragGasSeqPtr loweringStateRelDefs
+  arithmetic list wordLoadStorePtr abiEncoderChildContext
+  extRetBulkCopyCountedPtr fragGasSeqPtr
 
 (* The envelope is taken at the child endpoint, where new scratch spans
    have been registered.  No fixed entry-state scratch footprint is used. *)

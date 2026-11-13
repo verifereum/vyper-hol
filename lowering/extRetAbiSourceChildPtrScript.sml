@@ -1,8 +1,10 @@
 Theory extRetAbiSourceChildPtr
-Ancestors extRetAbiChildComposePtr extRetAbiSourceBytesCountedPtr loweringStateRelDefs valueEncodingDefs
+Ancestors
+  extRetAbiChildComposePtr extRetAbiSourceBytesCountedPtr
   abiEncoderChildContext abiEncoderChildCode robustCopyTransportPtr
-  exprLoweringProps emitHelperProps bodyPtrDefs loweringPosts valueEncoding vyperTyping
-  emitHelper compileEnv ptrDiscipline venomState words list finite_map pred_set arithmetic
+  exprLoweringProps emitHelperProps bodyPtrDefs loweringPosts valueEncoding
+  valueEncodingDefs vyperTyping emitHelper compileEnv loweringStateRelDefs
+  ptrDiscipline venomState words list finite_map pred_set arithmetic
 
 Theorem abi_dynamic_bytes_source_child_counted_ptr:
   compile_abi_encode_child (Var dst) (Var src)

@@ -2,11 +2,13 @@
 Theory extRetAbiArrayInitPtr
 Ancestors
   extRetBulkCopyCountedPtr extRetCountedPtr abiDecoderIndexInit
-  extRetBytesCopyCountedPtr allocaFootprint fragExecPtr
-  abiBuiltinAllocation allocationPtr robustCopyTransportPtr abiEncoderInputFrame
-  fragGasSeqPtr fragGasPathPtr fragExec emitHelperProps exprLoweringProps compileEnv emitHelper context
-  ptrDiscipline ptrSafeRun bodyPtrDefs venomState venomInst venomExecSemantics
-  codegenRel venomMemProps valueEncodingProps valueEncodingProofs words finite_map pred_set arithmetic loweringStateRelDefs
+  extRetBytesCopyCountedPtr allocaFootprint fragExecPtr abiBuiltinAllocation
+  allocationPtr robustCopyTransportPtr abiEncoderInputFrame fragGasSeqPtr
+  fragGasPathPtr fragExec emitHelperProps exprLoweringProps compileEnv
+  loweringStateRelDefs emitHelper context ptrDiscipline ptrSafeRun
+  bodyPtrDefs venomState venomInst venomExecSemantics codegenRel
+  venomMemProps valueEncodingProps valueEncodingProofs words finite_map
+  pred_set arithmetic
 
 Theorem emit_alloca_index_ambient_counted_ptr:
   emit_op ALLOCA [Lit 32w] sa = (Var ip,sb) /\ fn_has_code sa sb fn /\

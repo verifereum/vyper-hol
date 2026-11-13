@@ -5,10 +5,11 @@ Ancestors
   extRetDynamicArrayEntryPtr extRetRecursiveFramePtr
   extRetRecursiveResourcePtr extRetFramedChildPtr extRetScratchResourcePtr
   abiEncoderArrayPhases abiEncoderArrayContext abiDecoderIndexInit
-  abiEncoderArrayCode abiEncoderArrayHeader abiEncoder
-  emitHelperProps exprLoweringProps compileEnv emitHelper fragExec context ASCIInumbers
-  bodyPtrDefs ptrDiscipline venomState venomMemDefs venomMemProps
-  robustCopyTransportPtr augAssignPtrStore wordLoadStorePtr valueEncoding words finite_map pred_set arithmetic list loweringStateRelDefs
+  abiEncoderArrayCode abiEncoderArrayHeader abiEncoder emitHelperProps
+  exprLoweringProps compileEnv loweringStateRelDefs emitHelper fragExec
+  context ASCIInumbers bodyPtrDefs ptrDiscipline venomState venomMemDefs
+  venomMemProps robustCopyTransportPtr augAssignPtrStore wordLoadStorePtr
+  valueEncoding words finite_map pred_set arithmetic list
 
 Theorem encoder_dynamic_outer_prefix_trace[local]:
   abi_encode_array_prefix src dst si = (ops,sl) ==>

@@ -2,11 +2,13 @@
 Theory extRetAbiArrayStaticBodyPtr
 Ancestors
   extRetAbiStaticCountedPtr extRetAbiBytesCountedPtr extRetBulkCopyCountedPtr
-  extRetBytesCopyCountedPtr abiEncoderArrayCode abiEncoderArrayBodyCode abiEncoderAppend
-  abiDecoderDynamicLoopSetup abiEncoderInput abiEncoderInputFrame
-  robustCopyTransportPtr context compileEnv emitHelper emitHelperProps exprLoweringProps
+  extRetBytesCopyCountedPtr abiEncoderArrayCode abiEncoderArrayBodyCode
+  abiEncoderAppend abiDecoderDynamicLoopSetup abiEncoderInput
+  abiEncoderInputFrame robustCopyTransportPtr context compileEnv
+  loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   bodyPtrDefs fragExec fragGasPathPtr fragGasSeqPtr venomState venomLayout
-  ptrDiscipline ptrSafeRun words finite_map pred_set arithmetic valueEncoding valueEncodingProofs loweringStateRelDefs valueEncodingDefs
+  ptrDiscipline ptrSafeRun words finite_map pred_set arithmetic valueEncoding
+  valueEncodingDefs valueEncodingProofs
 
 Theorem abi_array_coordinates_compiler[local]:
   abi_decode_indexed_coordinates root_op idx stride sa = (ops,sb) ==>

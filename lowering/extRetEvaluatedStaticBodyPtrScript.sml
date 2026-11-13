@@ -2,11 +2,12 @@ Theory extRetEvaluatedStaticBodyPtr
 Ancestors
   extRetLoopAddressesAmbientPtr extRetLoopStaticInfoAmbientPtr
   extRetRecursiveResourcePtr extRetRecursiveLayoutPtr representationCleanPtr
-  robustCopyTransportPtr abiEncoderArrayCode abiEncoderArrayBodyCode abiEncoderAppend
-  abiDecoderDynamicLoopSetup abiEncoder emitHelper emitHelperProps exprLoweringProps
-  bodyPtrDefs fragExec fragGasPathPtr fragGasSeqPtr venomState compileEnv
-  ptrDiscipline words finite_map pred_set arithmetic valueEncoding valueEncodingProofs
-  extRetRecursiveFramePtr valueTypingMemoryProps vyperTyping vyperTypeABI loweringStateRelDefs
+  robustCopyTransportPtr abiEncoderArrayCode abiEncoderArrayBodyCode
+  abiEncoderAppend abiDecoderDynamicLoopSetup abiEncoder emitHelper
+  emitHelperProps exprLoweringProps bodyPtrDefs fragExec fragGasPathPtr
+  fragGasSeqPtr venomState compileEnv loweringStateRelDefs ptrDiscipline
+  words finite_map pred_set arithmetic valueEncoding valueEncodingProofs
+  extRetRecursiveFramePtr valueTypingMemoryProps vyperTyping vyperTypeABI
 
 Theorem loop_addresses_vars[local]:
   abi_encode_array_addresses ip src dst asz msz sa = (coords,sb) ==>

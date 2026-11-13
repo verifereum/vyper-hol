@@ -1,8 +1,10 @@
 Theory extRetAbiSourceComplexBytesPtr
-Ancestors extRetAbiSourceChildPtr extRetBulkCopyCountedPtr abiEncoderMemberCode loweringStateRelDefs
+Ancestors
+  extRetAbiSourceChildPtr extRetBulkCopyCountedPtr abiEncoderMemberCode
   abiEncoder exprLowering emitHelperProps exprLoweringProps bodyPtrDefs
-  fragGasPathPtr fragExec compileEnv emitHelper ptrDiscipline venomState
-  valueEncoding vyperTyping words list finite_map pred_set arithmetic
+  fragGasPathPtr fragExec compileEnv loweringStateRelDefs emitHelper
+  ptrDiscipline venomState valueEncoding vyperTyping words list finite_map
+  pred_set arithmetic
 
 Theorem exterior_frames_compose[local]:
   mem_agree_outside w1 m1 m0 /\ mem_agree_outside w2 m2 m1 /\

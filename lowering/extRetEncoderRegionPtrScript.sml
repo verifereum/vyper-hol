@@ -1,7 +1,8 @@
 (* Function-owned coverage of the encoder's fresh instruction interval. *)
 Theory extRetEncoderRegionPtr
 Ancestors
-  fragExec abiEncoder compileEnv emitHelper context arithmetic abiEncoderWindowArray venomInst localPtrsProps loweringStateRelDefs
+  fragExec abiEncoder compileEnv loweringStateRelDefs emitHelper context
+  arithmetic abiEncoderWindowArray venomInst localPtrsProps
 
 Definition encoder_region_def:
   encoder_region st en <=>

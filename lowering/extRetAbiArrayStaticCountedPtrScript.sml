@@ -4,11 +4,13 @@ Ancestors
   extRetAbiArrayStaticLoopPtr extRetAbiArrayInitPtr extRetCopyCountedPtr
   extRetBytesCopyCountedPtr extRetBulkCopyCountedPtr abiEncoderArrayCode
   abiEncoderArrayContext abiEncoderArrayPhaseAppend abiEncoderArrayPhases
-  abiEncoderArrayHeader abiDecoderIndexInit abiEncoderCounters abiDecoderLoopEmit
-  robustCopyTransportPtr abiEncoderInputFrame valueEncodingProofs bodyPtrDefs fragGasPathPtr fragExec
-  emitHelperProps exprLoweringProps compileEnv emitHelper context
-  bodyPtrCtrlCases venomInst abiEncoderInput representationCleanPtr valueEncodingProps
-  venomState venomExecSemantics ptrDiscipline words finite_map list pred_set arithmetic loweringStateRelDefs
+  abiEncoderArrayHeader abiDecoderIndexInit abiEncoderCounters
+  abiDecoderLoopEmit robustCopyTransportPtr abiEncoderInputFrame
+  valueEncodingProofs bodyPtrDefs fragGasPathPtr fragExec emitHelperProps
+  exprLoweringProps compileEnv loweringStateRelDefs emitHelper context
+  bodyPtrCtrlCases venomInst abiEncoderInput representationCleanPtr
+  valueEncodingProps venomState venomExecSemantics ptrDiscipline words
+  finite_map list pred_set arithmetic
 
 (* Retain all producer frames while transporting the robust source and the
    already encoded destination header through scratch allocation/reset. *)

@@ -3,11 +3,11 @@ Ancestors
   extRetComplexMemberStatePtr extRetComplexStaticMemberPtr
   extRetComplexDynamicMemberPtr extRetComplexMembersInvariantPtr
   extRetDynamicBodyPtr extRetRecursiveFramePtr extRetFramedChildPtr
-  extRetBulkCopyCountedPtr bodyPtrDefs compileEnv emitHelper fragExec
-  abiEncoder abiEncoderMemberCode fragGasPathPtr ptrDiscipline
-  venomState venomMemDefs list rich_list arithmetic finite_map
-  loweringShapeRules loweringShapeDefs reasonCopySourcePtr
-  contractABI vyperValue loweringStateRelDefs
+  extRetBulkCopyCountedPtr bodyPtrDefs compileEnv loweringStateRelDefs
+  emitHelper fragExec abiEncoder abiEncoderMemberCode fragGasPathPtr
+  ptrDiscipline venomState venomMemDefs list rich_list arithmetic finite_map
+  loweringShapeRules loweringShapeDefs reasonCopySourcePtr contractABI
+  vyperValue
 
 Definition encoder_complex_infos_def:
   encoder_complex_infos eis hs ms dyn =

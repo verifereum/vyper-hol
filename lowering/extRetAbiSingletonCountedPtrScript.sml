@@ -2,13 +2,13 @@
 Theory extRetAbiSingletonCountedPtr
 Ancestors
   extRetAbiArrayInitPtr extRetAbiBytesCountedPtr extRetAbiWrappedSourcePtr
-  abiEncoderComplexCode abiEncoderMemberCode abiEncoderChildCode abiEncoderChildContext
-  abiEncoderBytesCode abiBuiltinAllocation
+  abiEncoderComplexCode abiEncoderMemberCode abiEncoderChildCode
+  abiEncoderChildContext abiEncoderBytesCode abiBuiltinAllocation
   extRetBulkCopyCountedPtr extRetCountedPtr extRetBytesCopyCountedPtr
   fragGasPathPtr fragGasSeqPtr fragExec emitHelperProps exprLoweringProps
-  context compileEnv emitHelper exprLowering ptrDiscipline bodyPtrDefs venomState venomExecSemantics
-  venomMemProps
-  valueEncodingProps valueEncodingProofs words finite_map pred_set arithmetic loweringStateRelDefs
+  context compileEnv loweringStateRelDefs emitHelper exprLowering
+  ptrDiscipline bodyPtrDefs venomState venomExecSemantics venomMemProps
+  valueEncodingProps valueEncodingProofs words finite_map pred_set arithmetic
 
 Theorem abi_encode_singleton_prefix_ambient_counted_ptr:
   abi_encode_complex_prefix [(ei,32,cap,T)] sa = (Var ip,sb) /\

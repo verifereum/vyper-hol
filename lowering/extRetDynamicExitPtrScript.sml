@@ -1,9 +1,9 @@
 Theory extRetDynamicExitPtr
 Ancestors
   abiEncoderArrayCode extRetBulkCopyCountedPtr extRetBytesCopyCountedPtr
-  fragGasPathPtr fragExec emitHelperProps exprLoweringProps emitHelper compileEnv
-  ptrDiscipline bodyPtrDefs venomState venomExecSemantics venomInst
-  words finite_map pred_set arithmetic loweringStateRelDefs
+  fragGasPathPtr fragExec emitHelperProps exprLoweringProps emitHelper
+  compileEnv loweringStateRelDefs ptrDiscipline bodyPtrDefs venomState
+  venomExecSemantics venomInst words finite_map pred_set arithmetic
 
 Theorem abi_array_dynamic_exit_ambient_counted_ptr:
   abi_encode_array_dynamic_exit (Var src) (Var cursor) sa = (Var out,sd) /\

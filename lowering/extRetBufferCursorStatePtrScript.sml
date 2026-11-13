@@ -3,8 +3,8 @@ Theory extRetBufferCursorStatePtr
 Ancestors
   extRetBufferStatePtr extRetCursorResourcePtr exprSimOperands loweringHalt
   exprLoweringProps abiBuiltinAllocation fragGasPathPtr ptrDiscipline
-  bodyPtrDefs compileEnv venomState venomInst codegenRel
-  extRetSourceAllocationPtr loweringPosts words finite_map arithmetic loweringStateRelDefs
+  bodyPtrDefs compileEnv loweringStateRelDefs venomState venomInst codegenRel
+  extRetSourceAllocationPtr loweringPosts words finite_map arithmetic
 
 Theorem compile_alloc_buffer_cursor_state_counted_ptr:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb fn /\

@@ -1,6 +1,8 @@
 Theory extRetRobustSourceChildrenPtr
-Ancestors abiEncoderSourceTransport representationCleanPtr valueEncoding valueEncodingProofs valueEncodingDefs
-  vyperValueOperation ptrDiscipline list rich_list arithmetic
+Ancestors
+  abiEncoderSourceTransport representationCleanPtr valueEncoding
+  valueEncodingDefs valueEncodingProofs vyperValueOperation ptrDiscipline
+  list rich_list arithmetic
 
 (* These boundaries keep the Vyper child fixed.  They neither choose an ABI
    representative nor assert ownership of a fresh child allocation. *)

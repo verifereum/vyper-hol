@@ -2,12 +2,13 @@ Theory extRetLoopInitAmbientPtr
 Ancestors
   extRetRecursiveResourceInitPtr extRetRecursiveResourcePtr
   extRetScratchResourceInitPtr extRetScratchResourcePtr extRetScratchInitPtr
-  extRetAbiArrayInitPtr extRetAbiSourceArrayDispatchPtr extRetBulkCopyCountedPtr
-  extRetBytesCopyCountedPtr allocaSiteResource compileEnv emitHelper fragExec
-  fragGasPathPtr fragGasSeqPtr ptrDiscipline bodyPtrDefs venomState venomMemDefs
+  extRetAbiArrayInitPtr extRetAbiSourceArrayDispatchPtr
+  extRetBulkCopyCountedPtr extRetBytesCopyCountedPtr allocaSiteResource
+  compileEnv loweringStateRelDefs emitHelper fragExec fragGasPathPtr
+  fragGasSeqPtr ptrDiscipline bodyPtrDefs venomState venomMemDefs
   venomMemProps venomExecSemantics valueEncodingProps abiStaticAggregateProps
   abiDecoderIndexInit abiDecoderReentry context words finite_map pred_set
-  arithmetic list loweringStateRelDefs
+  arithmetic list
 
 Theorem encoder_scratch_init_ambient_counted_ptr:
   compile_alloc_buffer 32 sa = (buf,sm) /\

@@ -1,8 +1,9 @@
 Theory extRetRecursiveFramePtr
 Ancestors
-  extRetRecursiveResourcePtr extRetScratchResourcePtr bodyPtrDefs
-  bodyPtrBopInMachineMemory valueEncodingProps abiStaticAggregateProps
-  venomState venomMemDefs ptrDiscipline finite_map pred_set arithmetic loweringStateRelDefs
+  loweringStateRelDefs extRetRecursiveResourcePtr extRetScratchResourcePtr
+  bodyPtrDefs bodyPtrBopInMachineMemory valueEncodingProps
+  abiStaticAggregateProps venomState venomMemDefs ptrDiscipline finite_map
+  pred_set arithmetic
 
 Definition encoder_scratch_span_def:
   encoder_scratch_span sites s =
