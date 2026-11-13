@@ -379,3 +379,60 @@ Proof
     venomExecSemanticsTheory.mcopy_def, venomStateTheory.write_memory_with_expansion_def,
     lookup_var_def] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
+
+Theorem normalize_dynarray_equal_window_mem_path:
+  compile_copy_dynarray_typed ce dst ty cap src ty sa = ((),sb) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  mload (w2n p) s = n2w l /\ l <= cap /\ cap < dimword(:256) /\
+  l * type_memory_bytes ce ty < dimword(:256) /\
+  w2n p + 32 < dimword(:256) /\ w2n d + 32 < dimword(:256) /\
+  32 + l * type_memory_bytes ce ty <= src_size /\
+  w2n p + src_size <= s.vs_alloca_next /\
+  w2n d + 32 + l * type_memory_bytes ce ty <= s.vs_alloca_next /\
+  (w2n p + src_size <= w2n d \/
+   w2n d + 32 + l * type_memory_bytes ce ty <= w2n p) /\
+  val_in_memory tv v (w2n p) s.vs_memory /\ val_wf tv v /\
+  val_footprint tv v <= 32 + l * type_memory_bytes ce ty /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. mem_cont_sim ctx fn s t /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    val_in_memory tv v (w2n d) t.vs_memory /\
+    mem_bytes_at (w2n p) src_size t.vs_memory =
+      mem_bytes_at (w2n p) src_size s.vs_memory /\
+    (!a k. a+k <= w2n d \/ w2n d+32+l*type_memory_bytes ce ty <= a ==>
+      mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory) /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
+      vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    gas_marked_path T ctx fn s 0 (OK t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `w2n (p+32w) = w2n p+32 /\ w2n (d+32w) = w2n d+32` by
+    simp[wordsTheory.w2n_add_2] >>
+  `w2n p + 32 <= s.vs_alloca_next /\
+   w2n d + 32 <= s.vs_alloca_next /\
+   w2n (p+32w) + l * type_memory_bytes ce ty <= s.vs_alloca_next /\
+   w2n (d+32w) + l * type_memory_bytes ce ty <= s.vs_alloca_next` by decide_tac >>
+  drule_all typed_dynarray_equal_mem_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `val_in_memory tv v (w2n d) u.vs_memory` by
+    (irule valueCopyTheory.val_in_memory_relocate >> conj_tac >- simp[] >>
+     qexistsl_tac [`w2n p`, `32+l*type_memory_bytes ce ty`, `s.vs_memory`] >>
+     simp[] >>
+     pure_rewrite_tac [Q.SPECL [`l*type_memory_bytes ce ty`, `32`] arithmeticTheory.ADD_COMM] >>
+     irule typed_dynarray_equal_window >> metis_tac[]) >>
+  `mem_bytes_at (w2n p) src_size u.vs_memory =
+      mem_bytes_at (w2n p) src_size s.vs_memory` by
+    (simp[] >> irule typed_dynarray_equal_exterior >> decide_tac) >>
+  `!a k. a+k <= w2n d \/ w2n d+32+l*type_memory_bytes ce ty <= a ==>
+      mem_bytes_at a k u.vs_memory = mem_bytes_at a k s.vs_memory` by
+    (rpt strip_tac >> simp[] >> irule typed_dynarray_equal_exterior >> simp[]) >>
+  drule typed_dynarray_equal_shape >> strip_tac >>
+  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  gvs[venom_state_component_equality, lookup_var_def] >> gvs[]
+QED
