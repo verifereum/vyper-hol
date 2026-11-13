@@ -5940,6 +5940,34 @@ Proof
   simp[update_var_def, finite_mapTheory.FUPDATE_COMMUTES]
 QED
 
+(* The selected GAS discharges a pending assignment at the actual paired cut.
+   No packet bookkeeping is moved to the unassigned source state. *)
+Theorem pending_assignment_selected_gas[local]:
+  !fuel C owner y out w r A U.
+  let R = (\xs st. FOLDR (dft_exec_cons fuel C) OK xs st);
+      E = (\xs st. gas_events_block fuel C owner
+        <|bb_label := st.vs_current_bb; bb_instructions :=
+          REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> st)
+  in
+    y.inst_opcode = GAS /\ y.inst_outputs = [out] /\
+    A.vs_gas_readings = w::r /\
+    (U with vs_gas_readings := w::r) =
+      (update_var out w A with vs_inst_idx := SUC A.vs_inst_idx) ==>
+    R [y] A = OK (U with vs_gas_readings := r) /\
+    E [y] A = [(owner,y.inst_id)]
+Proof
+  ntac 9 gen_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  `step_inst fuel C y A = OK (update_var out w (A with vs_gas_readings := r))` by
+    (drule dftBlockSimTheory.step_inst_gas_single >> simp[]) >>
+  conj_tac
+  >- (simp[dftIndexedExecTheory.dft_exec_cons_def, venomInstTheory.is_terminator_def] >>
+      qpat_x_assum `U with vs_gas_readings := _ = _` mp_tac >>
+      simp[update_var_def, venom_state_component_equality]) >>
+  simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+       EL_APPEND_EQN, gas_events_step_def] >>
+  simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]
+QED
+
 (* Operational pending-GAS cut: replay the invocation's actual consumed core.
    The caller update survives only an OK return, not a stopped call. *)
 Theorem source_cut_invoke_gas[local]:
