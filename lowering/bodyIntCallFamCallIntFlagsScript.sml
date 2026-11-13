@@ -35,8 +35,10 @@ Proof
   simp[listTheory.EL_MAP]
 QED
 
-(* Source selection already exports exact actual/declaration type equality.
-   Combine it with the metadata flags at the same selected declaration. *)
+(* The calling-convention flags at the selected declaration.  The supplied
+   arguments may be fewer than the declared parameters (omitted defaults are
+   appended) and only widen to them, so the flags speak about the declared
+   parameter types. *)
 Theorem intcall_argument_flags:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (Call ann (IntCall (src,name)) es dflt) st /\
@@ -44,14 +46,11 @@ Theorem intcall_argument_flags:
   lookup_callable_function cx.in_deploy name ts =
     SOME (mut,nr,args,dflts,ret,ss) /\
   ce.ce_func_info (nsid_to_string (src,name)) = (nret,rb,pvs) ==>
-  MAP expr_type es = MAP SND args /\
-  LENGTH pvs = LENGTH es /\
-  (!i. i < LENGTH es /\ EL i pvs ==> is_word_type (expr_type (EL i es)))
+  LENGTH es <= LENGTH args /\
+  LENGTH pvs = LENGTH args /\
+  (!i. i < LENGTH args /\ EL i pvs ==> is_word_type (SND (EL i args)))
 Proof
   strip_tac >> drule_all body_intcall_source_selection >>
   strip_tac >> gvs[] >>
-  drule_all intcall_func_info_flags >> strip_tac >> simp[] >>
-  rpt strip_tac >>
-  `EL i (MAP expr_type es) = EL i (MAP SND args)` by simp[] >>
-  gvs[listTheory.EL_MAP]
+  drule_all intcall_func_info_flags >> simp[]
 QED
