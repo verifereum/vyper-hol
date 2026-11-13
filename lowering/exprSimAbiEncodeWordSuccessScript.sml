@@ -78,7 +78,7 @@ QED
 
 Theorem abi_encode_word_allocation_geometry:
   abi_builtin_encode_setup mid 32 st = (ops,ready) /\
-  fn_has_code st ready func /\ stmt_state_rel ctx func ce cx es s /\
+  fn_has_code st ready func /\ stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
   FLOOKUP s.vs_allocas source_id = SOME (sb,32) /\
   source_id <> st.cs_next_id ==>
   let m = case mid of NONE => 0 | SOME _ => 4 in
@@ -133,7 +133,7 @@ Theorem abi_encode_word_staged_observer:
   fn_has_code st ready obs /\ fn_has_code ready body_end obs /\
   fn_has_code body_end final obs /\ fn_inst_ids_distinct obs /\
   obs.fn_name = func.fn_name /\
-  stmt_state_rel ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\
   FLOOKUP initial.vs_allocas source_id = SOME(sb,32) /\ source_id <> st.cs_next_id /\
   abi_encoder_window_input (type_to_abi_enc_info sf ce ty) at av sb 32 initial.vs_memory /\
@@ -150,7 +150,7 @@ Theorem abi_encode_word_staged_observer:
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_exec_frame obs initial actual /\
-    abi_encode_staged_observation ctx func ce cx es st (FST ops) mid
+    abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es st (FST ops) mid
       (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) p at av initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -197,7 +197,7 @@ Theorem abi_encode_word_no_block_phases:
   fn_has_code st ready func /\ fn_has_code ready body_end func /\
   fn_has_code body_end final func /\ fn_inst_ids_distinct func /\
   st.cs_blocks = final.cs_blocks /\
-  stmt_state_rel ctx func ce cx es initial /\ local_ptrs_reserved ce st /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es initial /\ local_ptrs_reserved ce st /\
   FLOOKUP initial.vs_allocas source_id = SOME(sb,32) /\ source_id <> st.cs_next_id /\
   abi_encoder_window_input (type_to_abi_enc_info sf ce ty) at av sb 32 initial.vs_memory /\
   LENGTH (enc at av) = 32 /\ eval_operand src initial = SOME(n2w sb) /\
@@ -208,7 +208,7 @@ Theorem abi_encode_word_no_block_phases:
     let actual = raw with vs_inst_idx := LENGTH final.cs_current_insts in
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     abi_encode_exec_frame func initial actual /\
-    abi_encode_staged_observation ctx func ce cx es st (FST ops) mid
+    abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es st (FST ops) mid
       (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) p at av initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -261,7 +261,7 @@ Proof
   `st.cs_next_var <= ready.cs_next_var /\ st.cs_next_var <= body_end.cs_next_var` by
     (qpat_assum `ready.cs_next_var = _` mp_tac >> Cases_on `mid` >> simp[] >> decide_tac) >>
   drule_all abi_encode_caller_phase_allocations >> strip_tac >>
-  `stmt_state_rel ctx func ce cx es actual /\
+  `stmt_state_rel H ctx func ce cx es actual /\
    (!name b n. local_region ce es.scopes initial name b n ==>
      mem_bytes_at b n actual.vs_memory = mem_bytes_at b n initial.vs_memory) /\
    FLOOKUP actual.vs_allocas st.cs_next_id =
@@ -286,7 +286,7 @@ Proof
      asm_rewrite_tac [arithmeticTheory.ADD_ASSOC] >> rpt strip_tac >>
      metis_tac[arithmeticTheory.ADD_ASSOC]) >>
   `alloca_inv actual` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ actual` mp_tac >>
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ actual` mp_tac >>
      simp_tac bool_ss [stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `st.cs_next_id <= ready.cs_next_id` by
     (qpat_assum `ready.cs_next_id = _` (fn th => rewrite_tac[th]) >>
@@ -323,7 +323,7 @@ Theorem abi_encode_word_no_block_run:
   is_word_type ty /\
   lower_abi_encode F mid src (type_to_abi_enc_info sf ce ty) 32 st = (out,final) /\
   fn_has_code st final func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es initial /\ local_ptrs_reserved ce st /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es initial /\ local_ptrs_reserved ce st /\
   FLOOKUP initial.vs_allocas source_id = SOME(sb,32) /\ source_id <> st.cs_next_id /\
   abi_encoder_window_input (type_to_abi_enc_info sf ce ty) at av sb 32 initial.vs_memory /\
   LENGTH (enc at av) = 32 /\ eval_operand src initial = SOME(n2w sb) /\
@@ -334,7 +334,7 @@ Theorem abi_encode_word_no_block_run:
     let actual = raw with vs_inst_idx := LENGTH final.cs_current_insts in
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     abi_encode_exec_frame func initial actual /\
-    abi_encode_staged_observation ctx func ce cx es st out mid
+    abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es st out mid
       (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) p at av initial actual
 Proof
   strip_tac >>
@@ -361,7 +361,7 @@ Theorem abi_encode_word_no_block_observer:
   is_word_type ty /\
   lower_abi_encode F mid src (type_to_abi_enc_info sf ce ty) 32 st = (out,final) /\
   fn_has_code st final func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es initial /\ local_ptrs_reserved ce st /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es initial /\ local_ptrs_reserved ce st /\
   FLOOKUP initial.vs_allocas source_id = SOME(sb,32) /\ source_id <> st.cs_next_id /\
   abi_encoder_window_input (type_to_abi_enc_info sf ce ty) at av sb 32 initial.vs_memory /\
   LENGTH (enc at av) = 32 /\ eval_operand src initial = SOME(n2w sb) /\
@@ -372,7 +372,7 @@ Theorem abi_encode_word_no_block_observer:
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_exec_frame func initial actual /\
-    abi_encode_staged_observation ctx func ce cx es st out mid
+    abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es st out mid
       (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) p at av initial actual
 Proof
   strip_tac >> drule_all abi_encode_word_no_block_run >>
@@ -390,7 +390,7 @@ Theorem abi_encode_word_counted_encoder:
   is_word_type ty /\
   lower_abi_encode F mid src (type_to_abi_enc_info sf ce ty) 32 st = (out,final) /\
   fn_has_code st final func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es initial /\ local_ptrs_reserved ce st /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es initial /\ local_ptrs_reserved ce st /\
   FLOOKUP initial.vs_allocas source_id = SOME(sb,32) /\ source_id <> st.cs_next_id /\
   abi_encoder_window_input (type_to_abi_enc_info sf ce ty) at av sb 32 initial.vs_memory /\
   LENGTH (enc at av) = 32 /\ eval_operand src initial = SOME(n2w sb) /\
@@ -400,14 +400,14 @@ Theorem abi_encode_word_counted_encoder:
   ?p actual. gas_marked_path F ctx func initial 0 (OK actual) /\
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
-    abi_encode_staged_observation ctx func ce cx es st out mid
+    abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es st out mid
       (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) p at av initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all lower_abi_encode_frag_facts >> strip_tac >>
   drule_all abi_encode_word_encoder_no_blocks >> strip_tac >>
   qabbrev_tac `Q = \actual. ?p.
-    abi_encode_staged_observation ctx func ce cx es st out mid
+    abi_encode_staged_observation H ctx func ce cx es st out mid
       (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) p at av initial actual` >>
   `!t rd. Q t ==> Q (t with vs_returndata := rd)` by
     simp[Abbr `Q`] >>
@@ -429,7 +429,7 @@ Proof
 QED
 
 Theorem abi_encode_word_staged_counted:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\ vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
@@ -451,7 +451,7 @@ Theorem abi_encode_word_staged_counted:
     LENGTH (enc ct rv) = 32 /\
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
-    abi_encode_staged_observation ctx func ce cx es' sh out mid
+    abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es' sh out mid
       (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4)))
       p ct rv initial actual /\ wb_frame ce es es' origin s0 actual /\
     (~expr_has_effect e ==> pure_frame ce func es origin s0 actual)
@@ -473,7 +473,7 @@ Proof
   drule_all abi_builtin_encode_word_stage_shape >> strip_tac >>
   drule_all abi_encode_word_source_window >>
   disch_then (qspecl_then [`sf`, `ce`] strip_assume_tac) >>
-  qmatch_asmsub_abbrev_tac `stmt_state_rel ctx func ce cx es' staged` >>
+  qmatch_asmsub_abbrev_tac `stmt_state_rel H ctx func ce cx es' staged` >>
   drule_all abi_encode_word_staging_path >> strip_tac >>
   qabbrev_tac `initial = staged with vs_inst_idx := LENGTH sh.cs_current_insts` >>
   `local_ptrs_reserved ce sh` by
@@ -481,7 +481,7 @@ Proof
   `FLOOKUP initial.vs_allocas sa.cs_next_id = SOME(w2n addr,32)` by
     simp[Abbr `initial`, Abbr `staged`, mstore_def] >>
   `sa.cs_next_id <> sh.cs_next_id` by decide_tac >>
-  `stmt_state_rel ctx func ce cx es' initial /\
+  `stmt_state_rel H ctx func ce cx es' initial /\
    abi_encoder_window_input (type_to_abi_enc_info sf ce (expr_type e))
      ct rv (w2n addr) 32 initial.vs_memory /\
    LENGTH (enc ct rv) = 32 /\
@@ -498,7 +498,7 @@ Proof
        fresh_var_def, fresh_id_def, emit_def, comp_return_def] >>
      strip_tac >> Cases_on `buf.buf_operand` >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
-  `stmt_state_rel ctx func ce cx es' s /\
+  `stmt_state_rel H ctx func ce cx es' s /\
    eval_operand op s = SOME(typed_val_to_w256 tv v)` by
     (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   drule_all hash_alloc_mstore_frame >> strip_tac >>
@@ -508,7 +508,7 @@ Proof
   `t = staged` by gvs[] >>
   qpat_x_assum `t = staged` SUBST_ALL_TAC >>
   `wb_frame ce es es' origin s0 staged` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_then Any irule abi_encode_nonword_origin_frame) >>
      simp[] >> metis_tac[]) >>
   `wb_frame ce es es' origin s0 initial` by
@@ -523,7 +523,7 @@ Proof
   drule_all abi_encode_staged_origin_frame >> strip_tac >>
   `~expr_has_effect e ==> pure_frame ce func es origin s0 actual` by
     (strip_tac >>
-     qpat_assum `abi_encode_staged_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+     qpat_assum `abi_encode_staged_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [abi_encode_staged_observation_def]) >>
      `pure_frame ce func es' sa s initial` by
        (qpat_assum `pure_frame _ _ _ sa s staged` mp_tac >> simp[Abbr `initial`]) >>
@@ -544,7 +544,7 @@ Proof
         >- decide_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
         >- simp[] >>
         first_assum ACCEPT_TAC) >>
-     qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _`
+     qpat_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
      `pure_frame ce func es origin s0 s` by
        (qpat_x_assum `~expr_has_effect e ==> _` irule >> first_assum ACCEPT_TAC) >>

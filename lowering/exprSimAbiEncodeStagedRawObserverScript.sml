@@ -42,7 +42,7 @@ Theorem abi_encode_staged_raw_observer:
     sz = 32 /\ venomMemDefs$regions_disjoint (sb,cap) (b,sz) /\
     venomMemDefs$regions_disjoint (d,LENGTH (enc at av)) (b,sz) /\
     venomMemDefs$regions_disjoint (p+32,m) (b,sz)) /\
-  stmt_state_rel ctx func ce cx vs initial /\ local_ptrs_reserved ce st /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs initial /\ local_ptrs_reserved ce st /\
   st.cs_next_var <= ready.cs_next_var /\ st.cs_next_var <= body_end.cs_next_var /\
   32+w <= outsz /\ p <= d /\ d+LENGTH(enc at av) <= p+outsz ==>
   ?raw. run_inst_seq (emitted_insts st final) initial = OK raw /\
@@ -50,7 +50,7 @@ Theorem abi_encode_staged_raw_observer:
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_exec_frame func initial actual /\
-    abi_encode_staged_observation ctx func ce cx vs st (FST ops) method_id outsz p at av initial actual
+    abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs st (FST ops) method_id outsz p at av initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_encode_translated_concrete_phases >>
@@ -65,7 +65,7 @@ Proof
   drule_all abi_encode_phases_caller_state >> strip_tac >>
   drule_all abi_encode_phases_caller_pure_frame >> strip_tac >>
   `alloca_inv actual` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ actual` mp_tac >>
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ actual` mp_tac >>
      simp_tac bool_ss [stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `st.cs_next_id <= ready.cs_next_id` by
     (drule abi_builtin_encode_setup_shape >> strip_tac >>

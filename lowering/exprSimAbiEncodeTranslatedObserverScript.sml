@@ -13,7 +13,7 @@ Ancestors
   exprSimAbiEncodeStateTransport exprSimAbiEncodeExecFrame
 
 Theorem abi_encode_translated_relabel_observer:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
@@ -46,7 +46,7 @@ Theorem abi_encode_translated_relabel_observer:
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
     abi_decode_sim ctx obs (s with vs_current_bb := L) actual /\
-    stmt_state_rel ctx func ce cx es' actual /\
+    stmt_state_rel H ctx func ce cx es' actual /\
     abi_encode_exec_frame obs (s with vs_current_bb := L) actual /\
     LENGTH s.vs_memory <= LENGTH actual.vs_memory /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
@@ -201,7 +201,7 @@ Resume abi_encode_translated_relabel_observer[transport]:
   drule abi_builtin_encode_setup_shape >> strip_tac >>
   drule abi_encoder_counters >> strip_tac >>
   `rst.cs_next_var <= rr.cs_next_var /\ rst.cs_next_var <= re.cs_next_var` by decide_tac >>
-  `stmt_state_rel ctx func ce cx es' actual /\
+  `stmt_state_rel H ctx func ce cx es' actual /\
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
@@ -236,7 +236,7 @@ Resume abi_encode_translated_relabel_observer[transport]:
     (drule_all abi_encode_caller_phase_allocations >>
      disch_then (mp_tac o CONJUNCT1) >> simp_tac (srw_ss()) [Abbr `rs`]) >>
   `alloca_inv actual` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ actual` mp_tac >>
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ actual` mp_tac >>
      simp_tac bool_ss [stmt_state_rel_def] >> metis_tac[]) >>
   `rst.cs_next_id <= rr.cs_next_id` by
     (qpat_assum `rr.cs_next_id = _` mp_tac >>
