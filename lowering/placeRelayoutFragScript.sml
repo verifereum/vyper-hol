@@ -94,7 +94,10 @@ Proof
       irule relayout_store_stmt_post >> simp[] >>
       goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
-  disj2_tac >> simp[] >> gen_tac >>
+  disj2_tac >> simp[] >>
+  `res <> INR HaltException` by
+    (strip_tac >> metis_tac[evalNoHaltTheory.places_nh]) >>
+  simp[exprSimDefsTheory.halt_exit_def] >> gen_tac >>
   `expr_exit res r` suffices_by simp[stmt_exit_def] >>
   Cases_on `res` >- fs[stmt_exit_def] >>
   drule vyperExprNoControlTheory.write_place_no_control >>

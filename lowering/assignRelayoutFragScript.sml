@@ -160,8 +160,10 @@ Proof
       >- (irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      disj2_tac >> gen_tac >> simp[stmt_exit_def] >>
-      metis_tac[expr_exit_INR_type]) >>
+      disj2_tac >> conj_tac
+      >- (gen_tac >> simp[stmt_exit_def] >>
+          metis_tac[expr_exit_INR_type]) >>
+      fs[halt_exit_def]) >>
   qexists `marks` >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>
   irule assign_local_exempt >> simp[gas_exempt_cert_unforce_result]

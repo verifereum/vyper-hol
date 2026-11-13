@@ -207,10 +207,15 @@ Resume ecadd_expr_vv_sim_ptr[tail_outcome]:
        (mp_then Any (qspec_then `[]` mp_tac) ec_source_tail_gas_obs) >>
      qpat_assum `ee' with gas_obs := [] = ee'` (fn eq => rewrite_tac [eq]) >>
      strip_tac >> gvs[]) >>
+  `rr <> INR HaltException` by
+    (strip_tac >> pop_assum SUBST_ALL_TAC >>
+     qpat_x_assum `ec_source_tail _ _ _ _ _ ee' = _` mp_tac >>
+     simp[exprSimECArithTheory.ec_source_tail_not_halt]) >>
   irule ec_source_tail_pointer_outcome >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   simp[] >>
-  simp[vyperASTTheory.expr_type_def, as_ptr_val_def] >>
+  simp[vyperASTTheory.expr_type_def, as_ptr_val_def,
+       exprSimDefsTheory.halt_exit_def] >>
   suspend "entry_rebase"
 QED
 

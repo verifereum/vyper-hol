@@ -554,6 +554,6 @@ Resume for_range_checked_tail_outcome_ptr[finish]:
       rpt (pop_assum kall_tac) >>
       rpt strip_tac >> gvs[stmt_lands_def, block_is_terminated_def]) >>
   rpt gen_tac >> strip_tac >> pop_assum mp_tac >>
-  rpt (pop_assum kall_tac) >> simp[] >> metis_tac[]
+  rpt (pop_assum kall_tac) >> simp[] >> strip_tac >> gvs[halt_exit_def]
 QED
 Finalise for_range_checked_tail_outcome_ptr

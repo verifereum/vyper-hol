@@ -28,7 +28,8 @@ Theorem aug_place_rhs_mem_continuation[local]:
        gas_marked_path T ctx func t 0 r /\
        ((?u. r = OK u /\ Q res (ff with gas_obs := []) u) \/
         (exit_result r /\ R res (ff with gas_obs := []) r))) /\
-  (!ex ee r. expr_exit (INR ex : value + exception) r ==>
+  (!ex ee r. expr_exit (INR ex : value + exception) r /\
+             halt_exit cx ee (INR ex : value + exception) r ==>
              R (INR ex) ee r) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (bind (eval_expr cx e) (read_result cx)) k) (es,s0) Q R
@@ -96,7 +97,8 @@ Theorem aug_place_operator_write_path_mem[local]:
       stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry
         res (ff with gas_obs := []) u /\ alloca_history func u /\
       s_entry.vs_alloca_next <= u.vs_alloca_next) \/
-     (exit_result r /\ !tail. stmt_exit RetQ (ff with gas_obs := tail) res r))
+     (exit_result r /\ (!tail. stmt_exit RetQ (ff with gas_obs := tail) res r) /\
+      halt_exit cx ff res r))
 Proof
   strip_tac >>
   `bop_result cx ty bop [ty;expr_type e] cur rhs ee =
@@ -203,7 +205,8 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> conj_tac
   >- (rpt strip_tac >> simp[stmtSimDefsTheory.stmt_exit_def] >>
       ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
-        stmtSimPropsTheory.expr_exit_INR_type] >> simp[]) >>
+        stmtSimPropsTheory.expr_exit_INR_type] >>
+      fs[exprSimDefsTheory.halt_exit_def]) >>
   qexistsl_tac [`cenv`, `y`, `s1`, `s2`, `ty`] >> simp[] >>
   rpt strip_tac >>
   qpat_x_assum `!rhs ee. _ ==> _`

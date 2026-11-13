@@ -224,7 +224,7 @@ Proof
   simp[Once resolve_array_element_def, return_def, raise_def]
 QED
 
-Theorem places_nh[local]:
+Theorem places_nh:
   (read_place cx p s = (INR HaltException, s') ==> F) /\
   (place_type_value cx p s = (INR HaltException, s') ==> F) /\
   (write_place cx p v s = (INR HaltException, s') ==> F)
