@@ -65,7 +65,7 @@ Libs
   monadsyntax
 
 (* x.f's place for a storage or transient struct x: x's slot plus f's slot
-   offset, at f's type. *)
+   offset, at f's type; looking x up records the root it observes. *)
 Theorem eval_target_place_attr_toplevel_field:
   !cx src id fld es ts tr typ id_str slot fs off ftv.
     get_module_code cx src = SOME ts /\
@@ -74,7 +74,9 @@ Theorem eval_target_place_attr_toplevel_field:
     evaluate_type (get_tenv cx) typ = SOME (StructTV fs) /\
     struct_field_slot fs fld = SOME (off, ftv) ==>
     eval_target_place cx (AttributeTarget (TopLevelNameTarget (src, id)) fld)
-      es = (INL (StoragePlace tr (n2w slot + n2w off) ftv), es) /\
+      es = (INL (StoragePlace tr (n2w slot + n2w off) ftv),
+            es with storage_trace :=
+              es.storage_trace ++ [StorageRoot tr slot (StructTV fs)]) /\
     place_type_value cx (StoragePlace tr (n2w slot + n2w off) ftv) es =
       (INL ftv, es)
 Proof
@@ -83,7 +85,8 @@ Proof
   simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
        return_def, LET_THM, extend_place_def, extend_storage_place_def,
-       get_place_def, place_type_value_def]
+       get_place_def, place_type_value_def, ignore_bind_def,
+       record_storage_event_def]
 QED
 
 (* A non-type-error AugAssign has successfully resolved its target. *)
@@ -166,9 +169,10 @@ QED
 (* The target's place, its value and its type are read before e; e's
    evaluation and the operator follow, and the slot is written. *)
 Theorem eval_augassign_storage_place:
-  !cx tgt tr k ftv es v0.
+  !cx tgt tr k ftv evs es v0.
     (!es'. eval_target_place cx tgt es' =
-             (INL (StoragePlace tr k ftv), es')) /\
+             (INL (StoragePlace tr k ftv),
+              es' with storage_trace := es'.storage_trace ++ evs)) /\
     read_storage_slot cx tr k ftv es = (INL v0, es) ==>
     !gs ty bop e.
       eval_stmt cx (AugAssign ty tgt bop e) (es with gas_obs := gs) =
@@ -176,25 +180,34 @@ Theorem eval_augassign_storage_place:
           r <- lift_sum (evaluate_binop
             (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
             ftv bop v0 v);
-          write_storage_slot cx tr k ftv r od) (es with gas_obs := gs)
+          write_storage_slot cx tr k ftv r od)
+        (es with <|gas_obs := gs; storage_trace := es.storage_trace ++ evs|>)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
-  `read_storage_slot cx tr k ftv (es with gas_obs := gs) =
-     (INL v0, es with gas_obs := gs)` by
-    metis_tac[read_storage_slot_gas_obs] >>
+  `read_storage_slot cx tr k ftv
+     (es with <|gas_obs := gs; storage_trace := es.storage_trace ++ evs|>) =
+   (INL v0,
+    es with <|gas_obs := gs; storage_trace := es.storage_trace ++ evs|>)` by
+    (drule read_storage_slot_gas_obs >>
+     disch_then (qspec_then `gs` assume_tac) >>
+     drule read_storage_slot_storage_trace >>
+     disch_then (qspec_then `es.storage_trace ++ evs` mp_tac) >> simp[]) >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, read_place_def,
        write_place_def, place_type_value_def, return_def] >>
-  Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
+  qmatch_goalsub_abbrev_tac `eval_expr cx e es1` >>
+  Cases_on `eval_expr cx e es1` >>
   rename1 `_ = (raw, st)` >>
   Cases_on `raw` >> simp[bind_def]
 QED
 
 Theorem augassign_storage_place_rhs_exception:
-  !cx tgt tr k ftv es v0 e gs ex ee.
+  !cx tgt tr k ftv evs es v0 e gs ex ee.
     (!es'. eval_target_place cx tgt es' =
-             (INL (StoragePlace tr k ftv), es')) /\
+             (INL (StoragePlace tr k ftv),
+              es' with storage_trace := es'.storage_trace ++ evs)) /\
     read_storage_slot cx tr k ftv es = (INL v0, es) /\
-    bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+    bind (eval_expr cx e) (read_result cx)
+      (es with <|gas_obs := gs; storage_trace := es.storage_trace ++ evs|>) =
       (INR ex, ee) ==>
     !ty bop.
       eval_stmt cx (AugAssign ty tgt bop e) (es with gas_obs := gs) =
@@ -207,11 +220,13 @@ Proof
 QED
 
 Theorem augassign_storage_place_rhs_normal:
-  !cx tgt tr k ftv es v0 e gs v ee.
+  !cx tgt tr k ftv evs es v0 e gs v ee.
     (!es'. eval_target_place cx tgt es' =
-             (INL (StoragePlace tr k ftv), es')) /\
+             (INL (StoragePlace tr k ftv),
+              es' with storage_trace := es'.storage_trace ++ evs)) /\
     read_storage_slot cx tr k ftv es = (INL v0, es) /\
-    bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+    bind (eval_expr cx e) (read_result cx)
+      (es with <|gas_obs := gs; storage_trace := es.storage_trace ++ evs|>) =
       (INL v, ee) ==>
     !ty bop.
       eval_stmt cx (AugAssign ty tgt bop e) (es with gas_obs := gs) =
@@ -227,20 +242,26 @@ QED
 
 Theorem augassign_storage_place_rhs_admissible:
   (!es'. eval_target_place cx tgt es' =
-           (INL (StoragePlace tr k ftv), es')) /\
+           (INL (StoragePlace tr k ftv),
+            es' with storage_trace := es'.storage_trace ++ evs)) /\
   read_storage_slot cx tr k ftv es = (INL v0, es) /\
   gas_admissible (eval_stmt cx (AugAssign ty tgt bop e))
     (stmt_res_ok lctx) es ==>
-  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
+    (es with storage_trace := es.storage_trace ++ evs)
 Proof
   strip_tac >> rw[gas_admissible_def] >>
   Cases_on `res` >- simp[expr_res_ok_def] >>
   rename1 `INR ex` >>
+  `bind (eval_expr cx e) (read_result cx)
+     (es with <|gas_obs := gs; storage_trace := es.storage_trace ++ evs|>) =
+   (INR ex, ee)` by fs[] >>
   drule_all augassign_storage_place_rhs_exception >>
   disch_then (qspecl_then [`ty`, `bop`] assume_tac) >>
   `stmt_res_ok lctx (INR ex)` by metis_tac[gas_admissible_result] >>
   qpat_x_assum `bind _ _ _ = _` mp_tac >> simp[bind_def] >>
-  Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
+  qmatch_goalsub_abbrev_tac `eval_expr cx e es1` >>
+  Cases_on `eval_expr cx e es1` >>
   rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
   imp_res_tac read_result_no_control >>
   imp_res_tac (cj 1 eval_expr_no_control) >>
@@ -249,12 +270,14 @@ QED
 
 Theorem augassign_storage_place_binop_admissible:
   (!es'. eval_target_place cx tgt es' =
-           (INL (StoragePlace tr k ftv), es')) /\
+           (INL (StoragePlace tr k ftv),
+            es' with storage_trace := es'.storage_trace ++ evs)) /\
   read_storage_slot cx tr k ftv es = (INL v0, es) /\
   bop <> In /\ bop <> NotIn /\
   gas_admissible (eval_stmt cx (AugAssign ty tgt bop e))
     (stmt_res_ok lctx) es /\
-  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+  bind (eval_expr cx e) (read_result cx)
+    (es with <|gas_obs := gs; storage_trace := es.storage_trace ++ evs|>) =
     (INL v, ee) ==>
   expr_res_ok (bop_result cx ty bop [ty; expr_type e] v0 v ee)
 Proof
@@ -282,19 +305,22 @@ QED
    value and its type are read with no GAS before e. *)
 Theorem augassign_storage_place_rhs_exempt:
   (!es'. eval_target_place cx tgt es' =
-           (INL (StoragePlace tr k ftv), es')) /\
+           (INL (StoragePlace tr k ftv),
+            es' with storage_trace := es'.storage_trace ++ evs)) /\
   read_storage_slot cx tr k ftv es = (INL v0, es) /\
   gas_marked_path memory ctx func s0 0 (OK t) /\ ~t.vs_halted /\
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
-    (es with gas_obs := [],t) marks (err,ee) (leaf,fin) ==>
+    (es with <|gas_obs := []; storage_trace := es.storage_trace ++ evs|>,t)
+    marks (err,ee) (leaf,fin) ==>
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind (eval_stmt cx (AugAssign ty tgt bop e)) (return ()))
     (es,s0) marks (err,ee) (leaf,fin)
 Proof
   strip_tac >>
   `gas_marked_exec memory (ctx,func) (eval_target_place cx tgt)
-     (es,s0) [] (INL (StoragePlace tr k ftv)) es (OK t)` by
+     (es,s0) [] (INL (StoragePlace tr k ftv))
+     (es with storage_trace := es.storage_trace ++ evs) (OK t)` by
     simp[gas_marked_exec_def, gas_explicit_def] >>
   `ignore_bind (eval_stmt cx (AugAssign ty tgt bop e)) (return ()) =
    do p <- eval_target_place cx tgt;
@@ -309,11 +335,16 @@ Proof
   pop_assum SUBST1_TAC >>
   drule gas_exempt_cert_bind_place >> simp[] >> disch_then irule >>
   `gas_marked_exec memory (ctx,func) (read_place cx (StoragePlace tr k ftv))
-     (es with gas_obs := [],t) [] (INL v0)
-     (es with gas_obs := []) (OK t)` by
+     (es with <|gas_obs := []; storage_trace := es.storage_trace ++ evs|>,t)
+     [] (INL v0)
+     (es with <|gas_obs := []; storage_trace := es.storage_trace ++ evs|>)
+     (OK t)` by
     (simp[gas_marked_exec_def, gas_explicit_def] >> conj_tac
      >- (gen_tac >> simp[read_place_def] >>
-         metis_tac[read_storage_slot_gas_obs]) >>
+         drule read_storage_slot_gas_obs >>
+         disch_then (qspec_then `tail` assume_tac) >>
+         drule read_storage_slot_storage_trace >>
+         disch_then (qspec_then `es.storage_trace ++ evs` mp_tac) >> simp[]) >>
      irule gas_marked_path_from_mem >> simp[gas_path_mem_rules]) >>
   drule gas_exempt_cert_bind_value >> simp[] >> disch_then irule >>
   simp[place_type_value_def, bind_return] >>
@@ -501,7 +532,9 @@ QED
 (* ===== The statement ===== *)
 
 (* x.f's place, value and type are read for a storage or transient struct
-   x where expr_sim_inv holds: the read decodes x's whole value. *)
+   x where expr_sim_inv holds: the read decodes x's whole value.  Looking x
+   up records the root it observes, so the reads are at the state after
+   the place. *)
 Theorem augassign_attr_storage_place:
   !cx cenv env es src id fld ts tr sid id_str slot fty fsz.
     expr_sim_inv cenv cx env es /\
@@ -512,11 +545,11 @@ Theorem augassign_attr_storage_place:
     IS_SOME (evaluate_type (get_tenv cx) (StructT sid)) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (fty, fsz) ==>
-    ?p cur ptv.
+    ?p es1 cur ptv.
       eval_target_place cx (AttributeTarget (TopLevelNameTarget (src, id)) fld)
-        es = (INL p, es) /\
-      read_place cx p es = (INL cur, es) /\
-      place_type_value cx p es = (INL ptv, es)
+        es = (INL p, es1) /\
+      read_place cx p es1 = (INL cur, es1) /\
+      place_type_value cx p es1 = (INL ptv, es1)
 Proof
   rpt strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >>
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
@@ -528,7 +561,10 @@ Proof
      metis_tac[]) >>
   drule_all read_storage_slot_field >> strip_tac >>
   drule_all eval_target_place_attr_toplevel_field >> strip_tac >>
-  simp[read_place_def]
+  drule read_storage_slot_storage_trace >>
+  disch_then (qspec_then `es.storage_trace ++ [StorageRoot tr slot (StructTV fs)]`
+    assume_tac) >>
+  simp[read_place_def, place_type_value_def, return_def]
 QED
 
 (* self.x.f op= e for a storage or transient struct x the lowering holds by

@@ -91,7 +91,7 @@ QED
 Theorem log_ready_arguments_buffer_safe:
   !env cx cenv func ids reserved requests final_cut cs allocation_cs es ss credit args tvs values
     capacity buf cut byte_count.
-    log_prefix_ready env cx cenv func ids reserved requests final_cut [] cs es ss credit args tvs values /\
+    log_prefix_ready H env cx cenv func ids reserved requests final_cut [] cs es ss credit args tvs values /\
     compile_alloc_buffer capacity allocation_cs = (buf,cut) /\ fn_has_code allocation_cs cut func /\
     fn_inst_ids_distinct func /\ cs.cs_next_var <= allocation_cs.cs_next_var /\
     MEM allocation_cs.cs_next_id (compiler_alloca_ids cs final_cut) /\
@@ -99,7 +99,7 @@ Theorem log_ready_arguments_buffer_safe:
     log_args_safe args tvs ss (w2n (memory_snapshot_addr allocation_cs.cs_next_id ss)) byte_count
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
-  qpat_x_assum `log_prefix_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `log_prefix_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [log_prefix_ready_def]) >>
   `log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) T args tvs` by fs[expr_can_mutate_def] >>
   `abi_request_reservation reserved requests ss` by (drule_all abi_request_credit_reservation >> simp[]) >>
@@ -178,7 +178,7 @@ QED
 
 Theorem log_ready_arguments_empty_safe:
   !env cx cenv func ids reserved requests final_cut cs es ss credit args tvs values.
-    log_prefix_ready env cx cenv func ids reserved requests final_cut [] cs es ss credit args tvs values ==>
+    log_prefix_ready H env cx cenv func ids reserved requests final_cut [] cs es ss credit args tvs values ==>
     log_args_safe args tvs ss 0 0
 Proof
   rpt gen_tac >>

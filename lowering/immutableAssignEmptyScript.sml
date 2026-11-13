@@ -79,7 +79,7 @@ Proof
 QED
 
 Theorem immutable_assign_empty_store_restore:
-  stmt_state_rel ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
+  stmt_state_rel H ctx func ce cx es s /\ expr_sim_inv ce cx env es /\
   local_ptrs_reserved ce sa /\ ce.ce_is_ctor /\
   FLOOKUP env.bare_globals (ce.ce_module,id) = SOME ty /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
@@ -90,7 +90,7 @@ Theorem immutable_assign_empty_store_restore:
     vs_immutables := s.vs_immutables; vs_prev_bb := s.vs_prev_bb;
     vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx|>) = s /\
   (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) ==>
-  stmt_state_rel ctx func ce cx ee q
+  stmt_state_rel H ctx func ce cx ee q
 Proof
   strip_tac >>
   `mem_word_at off q.vs_memory = 0w` by simp[mstore_mem_word_at_same] >>
@@ -151,7 +151,7 @@ Proof
 QED
 
 Theorem immutable_assign_header_alloca_frame:
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
   ce.ce_is_ctor /\
   FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
   ce.ce_module_var_type (ce.ce_module,id) = SOME ty /\
@@ -187,6 +187,13 @@ Proof
   drule_all immutable_assign_empty_source >> strip_tac >>
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   drule_all immutable_assign_empty_code >> strip_tac >> gvs[] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func ce cx es s0` by metis_tac[] >>
   `!region. ce.ce_imm_alloca = SOME region ==> eval_operand region s0 = SOME 0w` by
     (fs[stmt_state_rel_def, state_rel_def, immutable_base_zero_def]) >>
   `off < dimword (:256)` by metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS,
@@ -198,13 +205,6 @@ Proof
    q.vs_allocas = s0.vs_allocas` by
     (qpat_x_assum `q with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = _`
        mp_tac >> simp[venom_state_component_equality]) >>
-  `stmt_state_rel ctx func ce cx ee q` by
-    (irule immutable_assign_empty_store_restore >>
-     goal_assum (drule_at Any) >>
-     qexistsl_tac [`env`, `es`, `id`, `off`, `s0`, `sa`, `tv`, `ity`] >>
-     simp[venom_state_component_equality] >>
-     qpat_x_assum `q with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = _`
-       mp_tac >> simp[venom_state_component_equality]) >>
   `ee.scopes = es.scopes` by
     metis_tac[vyperPlaceFramesTheory.write_immutable_place_scopes] >>
   `32 <= type_memory_size tv` by
@@ -214,11 +214,26 @@ Proof
   `alloca_frame ce es sa s0 ce ee q` by
     (irule immutable_assign_header_alloca_frame >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-  rewrite_tac[gas_summary_at_def] >>
+  `ee.storage_trace = es.storage_trace /\
+   (!rs. storage_well_formed_on cx (ee with gas_obs := []) rs <=>
+         storage_well_formed_on cx es rs)` by
+    (drule vyperPlaceFramesTheory.write_immutable_place_frame >> strip_tac >>
+     gvs[] >> gen_tac >>
+     irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >> BETA_TAC >>
   qexistsl_tac [`INL ()`, `ee`, `OK (q with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   conj_tac >- simp[gas_marked_exec_def] >>
-  disj1_tac >>
+  disj1_tac >> simp[] >> rpt strip_tac >>
+  `stmt_state_rel H ctx func ce cx es s0 /\ storage_well_formed_on cx es (FST H)` by
+    gs[] >>
+  `stmt_state_rel H ctx func ce cx ee q` by
+    (irule immutable_assign_empty_store_restore >>
+     goal_assum (drule_at Any) >>
+     qexistsl_tac [`env`, `es`, `id`, `off`, `s0`, `sa`, `tv`, `ity`] >>
+     simp[venom_state_component_equality] >>
+     qpat_x_assum `q with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = _`
+       mp_tac >> simp[venom_state_component_equality]) >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl,
        stmt_state_rel_inst_idx, same_blocks_def] >>
   gvs[same_blocks_def, lookup_var_def] >>

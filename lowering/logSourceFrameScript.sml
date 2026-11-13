@@ -134,11 +134,11 @@ QED
 
 Theorem log_buffer_source_relations:
   !func cenv cx es before st capacity.
-  state_rel_simple cenv cx es before /\ local_ptrs_rel func cenv es.scopes before /\
+  state_rel_simple H cenv cx es before /\ local_ptrs_rel func cenv es.scopes before /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
     abi_operand_before st.cs_next_var (Var p)) ==>
-  state_rel_simple cenv cx es (memory_snapshot_allocated st.cs_next_id st.cs_next_var capacity before) /\
+  state_rel_simple H cenv cx es (memory_snapshot_allocated st.cs_next_id st.cs_next_var capacity before) /\
   local_ptrs_rel func cenv es.scopes (memory_snapshot_allocated st.cs_next_id st.cs_next_var capacity before)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -155,7 +155,7 @@ QED
 (* Only fields actually read by state_rel_simple are needed. *)
 Theorem log_public_source_relations:
   !func cenv cx es before after st lo outs events.
-  state_well_typed es /\ state_rel_simple cenv cx es before /\
+  state_well_typed es /\ state_rel_simple H cenv cx es before /\
   local_ptrs_rel func cenv es.scopes before /\
   log_source_regions st lo outs cenv es.scopes before /\
   log_packing_public_frame st lo outs before after /\
@@ -164,7 +164,7 @@ Theorem log_public_source_relations:
   after.vs_immutables = before.vs_immutables /\
   after.vs_outcomes = before.vs_outcomes /\
   after.vs_logs = before.vs_logs ++ events ==>
-  state_rel_simple cenv cx (es with logs := es.logs ++ events) after /\
+  state_rel_simple H cenv cx (es with logs := es.logs ++ events) after /\
   local_ptrs_rel func cenv es.scopes after
 Proof
   rpt gen_tac >> strip_tac >>
