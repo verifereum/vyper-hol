@@ -458,3 +458,22 @@ Theorem compile_stmt_cs_mono:
 Proof
   rw[] >> irule ci_mono_cs_mono >> simp[compile_stmt_ci_mono]
 QED
+
+(* The iterable expression is the first fragment of an array loop. *)
+Theorem compile_for_array_expr_prefix_mono:
+ !cenv lctx ty id et e n stmts sa sb vv se.
+  compile_stmt cenv lctx ty (For id et (Array e) n stmts) sa = ((),sb) /\
+  compile_expr cenv (expr_type e) e sa = (vv,se) ==>
+  ci_mono se sb
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
+  pure_once_rewrite_tac[compile_stmt_def] >>
+  simp_tac pure_ss [LET_THM] >>
+  pure_once_rewrite_tac[comp_bind_def] >> simp[] >>
+  qmatch_goalsub_abbrev_tac `rest se = ((),sb)` >> strip_tac >>
+  qsuff_tac `ci_mono se (SND (rest se))` >- gvs[] >>
+  simp_tac pure_ss [Abbr `rest`] >>
+  ci_mono_chain_tac
+    (compile_stmt_ci_mono :: ci_mono_stmt_helpers :: ci_mono_stmt_rws)
+QED
