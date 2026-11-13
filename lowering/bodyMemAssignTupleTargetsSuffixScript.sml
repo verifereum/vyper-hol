@@ -58,7 +58,9 @@ Theorem tuple_assignment_prefix_path_mem:
          FLOOKUP t.vs_allocas aid = SOME entry) /\
       alloca_history func t /\ return_buf_frame d cenv ss t /\
       sv.vs_alloca_next <= t.vs_alloca_next /\
-      gas_path_mem ctx func sv 0 (OK t)
+      gas_path_mem ctx func sv 0 (OK t) /\
+      t.vs_accounts = sv.vs_accounts /\ t.vs_transient = sv.vs_transient /\
+      t.vs_requests = sv.vs_requests /\ t.vs_call_ctx = sv.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `LIST_REL (\t tv. evaluate_type (get_tenv cx) t = SOME tv) tys tvs` by

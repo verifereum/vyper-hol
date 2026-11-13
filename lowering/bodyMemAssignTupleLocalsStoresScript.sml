@@ -34,7 +34,9 @@ Theorem tuple_local_word_store_head_path_mem:
     alloca_history func t /\
     (!a len. a + len <= w2n dw \/ w2n dw + 32 <= a ==>
        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
-    gas_marked_path T ctx func s 0 (OK t)
+    gas_marked_path T ctx func s 0 (OK t) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `lookup_scopes id es.scopes = SOME entry` by
@@ -157,7 +159,9 @@ Theorem tuple_local_nonword_store_head_path_mem:
     (!a len. a + len <= w2n dw \/
        w2n dw + MIN (type_memory_size tv) (type_memory_size entry.type) <= a ==>
        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
-    gas_marked_path T ctx func s 0 (OK t)
+    gas_marked_path T ctx func s 0 (OK t) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `lookup_scopes id es.scopes = SOME entry` by
@@ -186,7 +190,9 @@ Proof
      >- metis_tac[arithmeticTheory.ADD_COMM] >>
      qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
-  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
+  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
   `EVERY (\i. i.inst_opcode <> GAS) (emitted_insts st st')` by
@@ -239,7 +245,9 @@ Theorem tuple_local_store_head_path_mem:
        w2n dw + (if is_word_type ty then 32
                   else MIN (type_memory_size tv) (type_memory_size entry.type)) <= a ==>
        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
-    gas_marked_path T ctx func s 0 (OK t)
+    gas_marked_path T ctx func s 0 (OK t) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `is_word_type ty`
@@ -300,7 +308,9 @@ Theorem tuple_store_mixed_locals_path_mem:
         t.vs_current_bb = st'.cs_current_bb /\ t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
         t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-        alloca_history func t /\ gas_marked_path T ctx func s 0 (OK t)
+        alloca_history func t /\ gas_marked_path T ctx func s 0 (OK t) /\
+        t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+        t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   Induct
   >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
