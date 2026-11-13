@@ -6,6 +6,24 @@ Ancestors
   supportedTypes vyperTyping vyperABI contractABI vyperValue words integer arithmetic typedCopyMetadata
   abiEncoderInput valueEncoding valueEncodingDefs compileEnv exprLowering stmtSimLogData
   valueEncodingProps list abiDecodeRanges exprSimAttributeFields vyperTypeDefaults abiDecoderMembers
+  abiEncoderSourceProducer abiEncoderSourceInvoke abiEncoderWindow
+
+Theorem log_plan_window_input:
+  abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\
+  value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+  val_in_memory tv v b mem /\ type_memory_size tv <= cap ==>
+  abi_encoder_admissible ei /\
+  ?ct rv. enc ct rv = enc (vyper_to_abi_type env ty) av /\
+    abi_encoder_window_input ei ct rv b cap mem
+Proof
+  rpt strip_tac
+  >- (drule (cj 1 abiEncoderSourceInvokeTheory.abi_enc_plan_admissible) >> simp[]) >>
+  drule_all abiEncoderSourceProducerTheory.abi_encoder_source_window >> strip_tac >>
+  drule abiEncoderWindowTheory.abi_encoder_open_input_window >> strip_tac >>
+  qexistsl_tac [`ct`, `rv`] >> simp[] >>
+  irule abiEncoderWindowTheory.abi_encoder_window_input_capacity >>
+  metis_tac[]
+QED
 
 Theorem log_word_abi_type:
   supported_word_type ty /\ evaluate_type env ty = SOME tv /\
@@ -187,6 +205,45 @@ Theorem log_data_layout_typed_tuple:
 Proof
   rpt strip_tac >> drule log_data_layout_tuple >> strip_tac >>
   drule_all log_tuple_types >> disch_then (qspec_then `ce` strip_assume_tac) >>
+  `type_slot_size (TupleTV tvs) <= dimword (:256)` by
+    (gvs[type_memory_size_def, type_slot_size_def] >>
+     mp_tac (cj 2 valueEncodingPropsTheory.type_memory_size_slots) >>
+     disch_then (qspec_then `tvs` assume_tac) >> decide_tac) >>
+  qexists_tac `TupleTV tvs` >>
+  simp[Once evaluate_type_def, value_has_type_def, val_in_memory_def,
+       type_memory_size_def, values_have_types_LIST_REL] >>
+  gvs[dimword_def]
+QED
+
+Theorem log_aggregate_tuple_types[local]:
+  !tys tvs vs.
+    LIST_REL (\ty tv. evaluate_type env ty = SOME tv) tys tvs /\
+    LIST_REL (\ty v. ?tv. evaluate_type env ty = SOME tv /\
+      value_has_type tv v /\ type_memory_bytes ce ty = type_memory_size tv) tys vs ==>
+    LIST_REL value_has_type tvs vs /\
+    type_memory_size_list tvs = SUM (MAP (type_memory_bytes ce) tys) /\
+    !acc. evaluate_types env tys acc = SOME (REVERSE acc ++ tvs)
+Proof
+  Induct_on `tys` >> Cases_on `tvs` >> Cases_on `vs` >>
+  simp[Once evaluate_type_def, type_memory_size_def] >>
+  rpt strip_tac >> gvs[] >>
+  first_x_assum drule_all >> strip_tac >>
+  simp[Once evaluate_type_def, type_memory_size_def] >>
+  metis_tac[]
+QED
+
+Theorem log_data_layout_aggregate_typed_tuple:
+  LIST_REL (\ty v. ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
+    value_has_type tv v /\ type_memory_bytes ce ty = type_memory_size tv) tys vs /\
+  log_data_layout cx tys vs p mem /\
+  SUM (MAP (type_memory_bytes ce) tys) < dimword (:256) ==>
+  ?tv. evaluate_type (get_tenv cx) (TupleT tys) = SOME tv /\
+    value_has_type tv (ArrayV (TupleV vs)) /\
+    val_in_memory tv (ArrayV (TupleV vs)) p mem /\
+    type_memory_size tv = SUM (MAP (type_memory_bytes ce) tys)
+Proof
+  rpt strip_tac >> drule log_data_layout_tuple >> strip_tac >>
+  drule_all log_aggregate_tuple_types >> strip_tac >>
   `type_slot_size (TupleTV tvs) <= dimword (:256)` by
     (gvs[type_memory_size_def, type_slot_size_def] >>
      mp_tac (cj 2 valueEncodingPropsTheory.type_memory_size_slots) >>
