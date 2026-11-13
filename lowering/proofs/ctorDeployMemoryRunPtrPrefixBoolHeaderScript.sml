@@ -9,21 +9,6 @@ Ancestors
   venomExecSemantics venomExecProofs venomState venomInst words arithmetic
   list rich_list finite_map pred_set codegenRel contextCodegenRel memLocDefs
 
-Theorem prefix_bool_header_state_frames:
-  ALL_DISTINCT [ip;src;dst;iv;cv;cmp;done] ==>
-  let h = abi_decode_header_state iv cv cmp done i ncount s;
-      t = jump_to target h
-  in
-    t.vs_memory = s.vs_memory /\
-    t.vs_data_section = s.vs_data_section /\
-    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    (!v. MEM v [ip;src;dst] ==>
-      eval_operand (Var v) t = eval_operand (Var v) s)
-Proof
-  simp[abi_decode_header_state_def, jump_to_def, update_var_def,
-       eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  metis_tac[]
-QED
 
 Theorem prefix_bool_header_execution:
   ~s.vs_halted /\ s.vs_inst_idx = 0 /\
