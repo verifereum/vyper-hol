@@ -263,7 +263,7 @@ Theorem encode_default_value:
 Proof
   ho_match_mp_tac
     (legacyInduction.mutual_ind_from_ops
-       (TypeBase.induction_of ``:type_value``)) >>
+       (TypeBase.set_induction_of ``:type_value``)) >>
   simp[default_value_def, default_value_tuple_MAP,
        default_value_struct_MAP, encode_value_def, encode_base_to_slot_def,
        IS_SOME_option_CASE] >>
