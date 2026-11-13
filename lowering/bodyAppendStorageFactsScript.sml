@@ -323,7 +323,7 @@ Proof
      SOME (ArrayTV tv' (Dynamic (cenv.ce_module_dynarray_capacity (NONE,id))))` by
     simp[evaluate_type_def] >>
   drule_all append_storage_target_eval >> strip_tac >>
-  simp[] >> (conj_tac >- metis_tac[]) >>
+  simp[] >>
   strip_tac >> irule append_storage_compiler_location >>
   goal_assum (drule_at Any) >> simp[]
 QED
@@ -348,7 +348,7 @@ Proof
     (irule post_value_type_not_int_call >>
      rpt strip_tac >> gvs[int_calls_expr_def]) >>
   `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
-  drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> strip_tac >>
+  drule_all exprSimSourceTheory.expr_body_pre_eval >> strip_tac >>
   `env.type_defs = get_tenv cx` by
     fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   `value_has_type tv v` by
