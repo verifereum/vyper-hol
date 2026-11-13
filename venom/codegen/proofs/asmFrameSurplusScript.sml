@@ -10,7 +10,7 @@
 
 Theory asmFrameSurplus
 Ancestors
-  asmFrameNext asmFrameGas asmFrameLocalStep asmFrameCallStep frameStep
+  asmFrameRun asmFrameGas asmFrameLocalStep asmFrameCallStep frameStep
   asmRunBounded asmFrameRel frameGas asmSem asmWf asmEncodeParse codegenRel
   symbolResolve vfmExecution vfmExecutionProp vfmOperation vfmContext
   callTrace list finite_map relation arithmetic
@@ -60,7 +60,7 @@ Proof
 QED
 
 (* Why it should hold.  Induction on N along the frame's own states:
-   asm_frame_step_next steps the assembly and the frame together
+   asm_frame_step steps the assembly and the frame together
    (frame_reaches_next / frame_reaches_last place every frame state of
    frame_inst_at on that chain), asm_run_bounded supplies each step's
    side conditions until a RETURNDATACOPY or a terminal step, and
@@ -98,7 +98,7 @@ Proof
   >- (gvs[] >>
       `frame_op_gas H + 64 * D <= frame_gas_left e` by decide_tac >>
       drule_all asm_frame_current_gas >> simp[]) >>
-  drule_all asm_frame_step_next >> strip_tac
+  drule_all (cj 2 asm_frame_step) >> strip_tac
   >- (fs[frame_inst_at_def] >> metis_tac[frame_reaches_last]) >>
   drule_all frame_next_inst_at >> simp[] >> strip_tac >>
   `frame_op_gas H <= frame_gas_left e` by decide_tac >>
@@ -160,7 +160,7 @@ Proof
     (Cases_on `EL a.as_pc prog` >>
      gvs[is_data_inst_def, asm_step_def]) >>
   drule_all asm_frame_current_no_returndatacopy >> strip_tac >>
-  drule_all asm_frame_step_next >> strip_tac
+  drule_all (cj 2 asm_frame_step) >> strip_tac
   >- (strip_tac >>
       `t = e` by
         (irule frame_reaches_last >> gvs[frame_inst_at_def]) >> gvs[]) >>

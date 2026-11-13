@@ -11,7 +11,8 @@
 
 Theory fnFrameDeepAbort
 Ancestors
-  deepResidualSim fnPlanPrefix fnFrameTerminal fnFrameTerminalAbort
+  planEmissionProps arithmetic
+  deepResidualSim fnPlanPrefix fnFrameTerminal fnFrameTerminalAbort deepInstSim asmRunBounded venomRunBounded
   fnFrameTerminalPrep generatedPrefixSim planSpillBounds stackOpSim
   stackModel stackPlanOps asmFrame asmIR emitSim frameViewFacts
   frameViewMemory regularMemorySim venomWf venomEffects allocMono
@@ -139,8 +140,8 @@ Theorem gen_inst_revert_frame_sim_deep:
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
-  ?n out. a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert out /\
-    venom_asm_terminal_rel vs' out
+  ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\ a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert out /\
+    venom_asm_terminal_rel vs' out /\ create_safe_prefix lo o2pc prog n st
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all step_inst_revert_abort >> strip_tac >>
@@ -160,6 +161,13 @@ Proof
 QED
 
 Resume gen_inst_revert_frame_sim_deep[decomposed]:
+  `EVERY plan_admin_op (iops ++ rops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) st` by
+    (irule plan_admin_create_safe_prefix >>
+     qexistsl_tac [`cplan.cp_initial_fmp`, `iops ++ rops`] >>
+     simp[] >> gvs[execute_plan_append, asm_block_at_append]) >>
   rename1 `generated_plan_state_wf_marked spillbase ps` >>
   `asm_block_at prog (st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)))
      [AsmOp "REVERT"]` by
@@ -189,6 +197,10 @@ Resume gen_inst_revert_frame_sim_deep[decomposed]:
 QED
 
 Resume gen_inst_revert_frame_sim_deep[prepared]:
+  `create_safe_prefix lo o2pc prog 1
+     (mid with as_stack := mid.as_stack ++ rest)` by
+    (irule asm_block_create_safe_prefix >> qexists `[AsmOp "REVERT"]` >>
+     simp[create_safe_def] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   `!op. operand_val (frame_view fn ra vs with vs_memory := st.as_memory) lo op =
         operand_val (frame_view fn ra vs) lo op` by
     (Cases >> simp[operand_val_def]) >>
@@ -218,7 +230,10 @@ Resume gen_inst_revert_frame_sim_deep[prepared]:
          metis_tac[APPEND_ASSOC, APPEND]) >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 1`, `out`] >>
-  simp[] >> irule asm_steps_compose_revert >> goal_assum (drule_at Any) >> simp[]
+  conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
+  simp[] >> conj_tac
+  >- (irule asm_steps_compose_revert >> goal_assum (drule_at Any) >> simp[]) >>
+  irule create_safe_prefix_compose >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Finalise gen_inst_revert_frame_sim_deep
@@ -256,8 +271,9 @@ Theorem gen_inst_assert_frame_sim_deep:
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
-  ?n out. a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert out /\
-    venom_asm_terminal_rel vs' out
+  ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\ a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert out /\
+    venom_asm_terminal_rel vs' out /\
+    create_safe_prefix lo o2pc prog n st
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all step_inst_assert_abort >> strip_tac >>
@@ -297,6 +313,17 @@ Resume gen_inst_assert_frame_sim_deep[decomposed]:
 QED
 
 Resume gen_inst_assert_frame_sim_deep[prepared]:
+  `EVERY plan_admin_op (iops ++ rops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `asm_block_at prog st.as_pc
+     (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
+    (qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
+     simp[execute_plan_append, asm_block_at_append]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) st` by
+    (irule plan_admin_create_safe_prefix >> metis_tac[LESS_EQ_REFL]) >>
+  qpat_x_assum `asm_block_at prog st.as_pc
+    (execute_plan cplan.cp_initial_fmp (iops ++ rops))` kall_tac >>
   `!op. operand_val (frame_view fn ra vs with vs_memory := st.as_memory) lo op =
         operand_val (frame_view fn ra vs) lo op` by
     (Cases >> simp[operand_val_def]) >>
@@ -312,7 +339,8 @@ Resume gen_inst_assert_frame_sim_deep[prepared]:
      gvs[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def,
        eval_operand_with_memory] >> metis_tac[]) >>
   `?out. asm_steps lo o2pc prog 7 (mid with as_stack := mid.as_stack ++ rest) = AsmRevert out /\
-    venom_asm_terminal_rel (halt_state (set_returndata [] vs)) out` by
+    venom_asm_terminal_rel (halt_state (set_returndata [] vs)) out /\
+    create_safe_prefix lo o2pc prog 7 (mid with as_stack := mid.as_stack ++ rest)` by
     (irule asm_assert_zero_revert >>
      simp[] >> rpt conj_tac
      >- (qexists `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest` >>
@@ -320,7 +348,10 @@ Resume gen_inst_assert_frame_sim_deep[prepared]:
      >- (qexists `cplan.cp_initial_fmp` >> simp[]) >>
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 7`, `out`] >>
-  simp[] >> irule asm_steps_compose_revert >> goal_assum (drule_at Any) >> simp[]
+  conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
+  simp[] >> conj_tac
+  >- (irule asm_steps_compose_revert >> goal_assum (drule_at Any) >> simp[]) >>
+  irule create_safe_prefix_compose >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Finalise gen_inst_assert_frame_sim_deep
@@ -359,8 +390,8 @@ Theorem gen_inst_assert_unreachable_frame_sim_deep:
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
-  ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
-    venom_asm_terminal_rel vs' out
+  ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\ a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
+    venom_asm_terminal_rel vs' out /\ create_safe_prefix lo o2pc prog n st
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all step_inst_assert_unreachable_abort >> strip_tac >>
@@ -408,6 +439,17 @@ Resume gen_inst_assert_unreachable_frame_sim_deep[decomposed]:
 QED
 
 Resume gen_inst_assert_unreachable_frame_sim_deep[prepared]:
+  `EVERY plan_admin_op (iops ++ rops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `asm_block_at prog st.as_pc
+     (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
+    (qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
+     simp[execute_plan_append, asm_block_at_append]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) st` by
+    (irule plan_admin_create_safe_prefix >> metis_tac[LESS_EQ_REFL]) >>
+  qpat_x_assum `asm_block_at prog st.as_pc
+    (execute_plan cplan.cp_initial_fmp (iops ++ rops))` kall_tac >>
   `!op. operand_val (frame_view fn ra vs with vs_memory := st.as_memory) lo op =
         operand_val (frame_view fn ra vs) lo op` by
     (Cases >> simp[operand_val_def]) >>
@@ -423,7 +465,8 @@ Resume gen_inst_assert_unreachable_frame_sim_deep[prepared]:
      gvs[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def,
        eval_operand_with_memory] >> metis_tac[]) >>
   `?out. asm_steps lo o2pc prog 3 (mid with as_stack := mid.as_stack ++ rest) = AsmFault out /\
-    venom_asm_terminal_rel (vs with <|vs_returndata := []; vs_halted := T|>) out` by
+    venom_asm_terminal_rel (vs with <|vs_returndata := []; vs_halted := T|>) out /\
+    create_safe_prefix lo o2pc prog 3 (mid with as_stack := mid.as_stack ++ rest)` by
     (irule terminal_pushlabel_jumpi_invalid >>
      simp[] >> conj_tac
      >- (qexists `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest` >>
@@ -431,8 +474,10 @@ Resume gen_inst_assert_unreachable_frame_sim_deep[prepared]:
      qexistsl_tac [`endlabel`, `off`] >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3`, `out`] >>
-  simp[halt_state_def, set_returndata_def] >>
-  irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
+  conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
+  simp[halt_state_def, set_returndata_def] >> conj_tac
+  >- (irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]) >>
+  irule create_safe_prefix_compose >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Finalise gen_inst_assert_unreachable_frame_sim_deep
@@ -464,8 +509,8 @@ Theorem gen_inst_invalid_frame_sim_deep:
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
-  ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
-    venom_asm_terminal_rel vs' out
+  ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\ a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
+    venom_asm_terminal_rel vs' out /\ create_safe_prefix lo o2pc prog n st
 Proof
   rpt gen_tac >> strip_tac >>
   `generate_regular_inst_plan lv dfg cfg fn inst nl halting term label ps = (ops,final)` by
@@ -491,6 +536,18 @@ Proof
 QED
 
 Resume gen_inst_invalid_frame_sim_deep[decomposed]:
+  `EVERY plan_admin_op (iops ++ rops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `asm_block_at prog st.as_pc
+     (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
+    (qpat_assum `asm_block_at prog st.as_pc _` mp_tac >>
+     simp[execute_plan_append, asm_block_at_append] >>
+     gvs[execute_plan_append, asm_block_at_append]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) st` by
+    (irule plan_admin_create_safe_prefix >> metis_tac[LESS_EQ_REFL]) >>
+  qpat_x_assum `asm_block_at prog st.as_pc
+    (execute_plan cplan.cp_initial_fmp (iops ++ rops))` kall_tac >>
   rename1 `generated_plan_state_wf_marked spillbase ps` >>
   `asm_block_at prog (st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)))
      [AsmOp "INVALID"]` by
@@ -519,11 +576,14 @@ Resume gen_inst_invalid_frame_sim_deep[decomposed]:
      goal_assum (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
      gvs[sortingTheory.PERM_REFL] >> metis_tac[]) >>
   `?out. asm_steps lo o2pc prog 1 (mid with as_stack := mid.as_stack ++ rest) = AsmFault out /\
-    venom_asm_terminal_rel (vs with <|vs_returndata := []; vs_halted := T|>) out` by
+    venom_asm_terminal_rel (vs with <|vs_returndata := []; vs_halted := T|>) out /\
+    create_safe_prefix lo o2pc prog 1 (mid with as_stack := mid.as_stack ++ rest)` by
     (irule terminal_invalid_step >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 1`, `out`] >>
-  simp[halt_state_def, set_returndata_def] >>
-  irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
+  conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
+  simp[halt_state_def, set_returndata_def] >> conj_tac
+  >- (irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]) >>
+  irule create_safe_prefix_compose >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Finalise gen_inst_invalid_frame_sim_deep
@@ -558,13 +618,17 @@ Theorem regular_abort_frame_prefix_deep:
   fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) ==>
   ?pre arranged mid.
+    LENGTH (execute_plan cplan.cp_initial_fmp pre) <=
+      LENGTH (execute_plan cplan.cp_initial_fmp ops) /\
     arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
       compute_operands inst /\
     asm_steps lo o2pc prog (LENGTH (execute_plan cplan.cp_initial_fmp pre)) st =
       AsmOK (mid with as_stack := mid.as_stack ++ rest) /\
     venom_asm_rel lo arranged (frame_view fn ra vs with vs_memory := st.as_memory) mid /\
     venom_asm_terminal_rel vs (mid with as_stack := mid.as_stack ++ rest) /\
-    asm_block_at prog mid.as_pc [AsmOp name]
+    asm_block_at prog mid.as_pc [AsmOp name] /\
+    create_safe_prefix lo o2pc prog
+      (LENGTH (execute_plan cplan.cp_initial_fmp pre)) st
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all regular_plan_selected_prefix >> strip_tac >>
@@ -605,7 +669,19 @@ Resume regular_abort_frame_prefix_deep[decomposed]:
      goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
      gvs[sortingTheory.PERM_REFL, APPEND_ASSOC] >> metis_tac[]) >>
-  qexistsl_tac [`iops ++ rops`, `arranged`, `mid`] >> simp[] >>
+  `EVERY plan_admin_op (iops ++ rops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `asm_block_at prog st.as_pc
+     (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
+    (qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
+     simp[execute_plan_append, asm_block_at_append]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) st` by
+    (irule plan_admin_create_safe_prefix >> metis_tac[LESS_EQ_REFL]) >>
+  qpat_x_assum `asm_block_at prog st.as_pc
+    (execute_plan cplan.cp_initial_fmp (iops ++ rops))` kall_tac >>
+  qexistsl_tac [`iops ++ rops`, `arranged`, `mid`] >>
+  conj_tac >- simp[execute_plan_append] >> simp[] >>
   qpat_x_assum `ops = _` SUBST_ALL_TAC >>
   qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, execute_plan_append, asm_block_at_append] >>
@@ -662,6 +738,32 @@ Proof
   gvs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def]
 QED
 
+(* Creation safety at the marked abort operand boundary. *)
+Theorem abort_frame_creation_safe:
+  inst_wf inst /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  inst_create_size_ok inst vs /\
+  ((inst.inst_opcode = CREATE /\ name = "CREATE") \/
+   (inst.inst_opcode = CREATE2 /\ name = "CREATE2")) /\
+  (!op. MEM op (compute_operands inst) ==>
+    eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
+    compute_operands inst /\
+  venom_asm_rel lo arranged (frame_view fn ra vs with vs_memory := m) mid /\
+  eval_operands inst.inst_operands vs = SOME vals ==>
+  create_safe (AsmOp name) (mid.as_stack ++ rest)
+Proof
+  strip_tac >>
+  `mid.as_stack = vals ++ DROP (LENGTH inst.inst_operands) mid.as_stack` by
+    (irule abort_frame_arranged_stack >> simp[] >>
+     conj_tac >- (qexists `dfg` >> gvs[EVERY_MEM] >> metis_tac[]) >>
+     goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >> simp[]) >>
+  qpat_x_assum `mid.as_stack = _` (fn th => once_rewrite_tac[th]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  irule evaluated_creation_safe >> metis_tac[]
+QED
+
 Theorem gen_inst_ext_fault_frame_sim_deep:
   !inst cplan vs fn r final base ps nl lo ra dfg ops ctx rest mem0 st
     lv cfg halting term label prog fuel a vs' o2pc.
@@ -693,8 +795,9 @@ Theorem gen_inst_ext_fault_frame_sim_deep:
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
-  ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
-    venom_asm_terminal_rel vs' out
+  ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\ a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
+    venom_asm_terminal_rel vs' out /\
+    (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n st)
 Proof
   rpt gen_tac >> strip_tac >>
   `?name. venom_to_evm_name inst.inst_opcode = SOME name` by
@@ -723,7 +826,37 @@ Proof
           (strip_assume_tac o MATCH_MP step_inst_abort_opcodes) >> gvs[]) >>
      suspend "returndatacopy") >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp pre) + 1`, `out`] >>
-  simp[] >> irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
+  conj_tac >- simp[] >>
+  simp[] >> conj_tac
+  >- (irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]) >>
+  strip_tac >> irule create_safe_prefix_compose >> conj_tac >- asm_rewrite_tac[] >>
+  qexists `mid with as_stack := mid.as_stack ++ rest` >> asm_rewrite_tac[] >>
+  rewrite_tac[ONE, ADD_CLAUSES, create_safe_prefix_suc] >>
+  conj_tac >- suspend "safe_opcode" >>
+  simp[asm_result_distinct]
+QED
+
+Resume gen_inst_ext_fault_frame_sim_deep[safe_opcode]:
+  `EL mid.as_pc prog = AsmOp name` by gvs[asm_block_at_def] >>
+  simp[] >> Cases_on `name = "CREATE" \/ name = "CREATE2"`
+  >- ( `((inst.inst_opcode = CREATE /\ name = "CREATE") \/
+         (inst.inst_opcode = CREATE2 /\ name = "CREATE2"))` by
+         (qpat_x_assum `venom_to_evm_name _ = _` mp_tac >>
+          qpat_x_assum `name = "CREATE" \/ _` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >>
+          Cases_on `inst.inst_opcode` >> simp[venom_to_evm_name_def] >>
+          rpt strip_tac >> gvs[]) >>
+       `?vals. eval_operands inst.inst_operands vs = SOME vals` by
+         (qpat_x_assum `step_inst _ _ _ _ = Abort _ _` mp_tac >>
+          qpat_x_assum `inst.inst_opcode = _` mp_tac >>
+          qpat_x_assum `inst_wf inst` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+          gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+          gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_create_def,
+              eval_operands_def, AllCaseEqs(), venomStateTheory.eval_operands_def] >>
+          gvs[optionTheory.IS_SOME_EXISTS, AllCaseEqs()]) >>
+       irule abort_frame_creation_safe >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  simp[create_safe_def]
 QED
 
 Resume gen_inst_ext_fault_frame_sim_deep[static]:
@@ -822,9 +955,13 @@ Theorem static_log_fault_step[local]:
     n <= 4 /\ n + 2 <= LENGTH st.as_stack /\ st.as_call_ctx.cc_static /\
     venom_asm_terminal_rel vs st ==>
     ?st'. asm_steps lo o2pc prog 1 st = AsmFault st' /\
-      venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st'
+      venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st' /\
+      create_safe_prefix lo o2pc prog 1 st
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `create_safe_prefix lo o2pc prog 1 st` by
+    (irule asm_block_create_safe_prefix >> goal_assum (drule_at Any) >>
+     simp[create_safe_def]) >>
   qexists_tac `st with as_returndata := []` >>
   conj_tac
   >- (rewrite_tac [DECIDE ``1 = SUC 0``] >> simp[asm_steps_def] >>
@@ -875,8 +1012,9 @@ Theorem gen_inst_log_static_frame_sim_deep[local]:
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
-  ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
-    venom_asm_terminal_rel vs' out
+  ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\
+    a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
+    venom_asm_terminal_rel vs' out /\ create_safe_prefix lo o2pc prog n st
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all step_inst_log_abort >> strip_tac >>
@@ -895,6 +1033,13 @@ Proof
 QED
 
 Resume gen_inst_log_static_frame_sim_deep[decomposed]:
+  `EVERY plan_admin_op (input_ops ++ reorder_ops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (input_ops ++ reorder_ops))) st` by
+    (irule plan_admin_create_safe_prefix >>
+     qexistsl_tac [`cplan.cp_initial_fmp`, `input_ops ++ reorder_ops`] >>
+     simp[] >> gvs[execute_plan_append, asm_block_at_append]) >>
   rename1 `generated_plan_state_wf_marked spillbase ps` >>
   `plan_state_residual_wf_marked spillbase lops (LENGTH lops) ps4 /\
    ps4.ps_stack = stack_pop (LENGTH lops) ps4.ps_stack ++ lops /\
@@ -947,7 +1092,11 @@ Resume gen_inst_log_static_frame_sim_deep[prepared]:
   strip_tac >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (input_ops ++ reorder_ops)) + 1`,
     `st'`] >>
-  simp[] >> irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
+  conj_tac
+  >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
+  simp[] >> conj_tac
+  >- (irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]) >>
+  irule create_safe_prefix_compose >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Finalise gen_inst_log_static_frame_sim_deep
@@ -1016,9 +1165,11 @@ Theorem gen_inst_abort_frame_sim_deep:
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
     !a vs'. step_inst fuel ctx inst vs = Abort a vs' ==>
       ?n as'.
+        n <= LENGTH (execute_plan cp.cp_initial_fmp ops) + 7 /\
         ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
          (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
-        venom_asm_terminal_rel vs' as'
+        venom_asm_terminal_rel vs' as' /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_opcode = REVERT`
@@ -1047,4 +1198,31 @@ Proof
   drule_all gen_inst_ext_fault_frame_sim_deep >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   qexistsl_tac [`n`, `out`] >> simp[]
+QED
+
+
+(* Executable abort probe: a static creation still inspects the prepared
+   operands.  Safety and the fault step hold at that same assembly state. *)
+Theorem static_creation_abort_safe:
+  inst_wf inst /\ inst_create_size_ok inst vs /\
+  ((inst.inst_opcode = CREATE /\ name = "CREATE") \/
+   (inst.inst_opcode = CREATE2 /\ name = "CREATE2")) /\
+  eval_operands inst.inst_operands vs = SOME vals /\
+  st.as_stack = vals ++ rest /\ st.as_call_ctx.cc_static /\
+  asm_block_at prog st.as_pc [AsmOp name] /\
+  venom_asm_terminal_rel vs st ==>
+  create_safe (EL st.as_pc prog) st.as_stack /\
+  ?out. asm_steps lo o2pc prog 1 st = AsmFault out /\
+    venom_asm_terminal_rel (halt_state (set_returndata [] vs)) out
+Proof
+  strip_tac >> (conj_tac
+  >- ( `EL st.as_pc prog = AsmOp name` by gvs[asm_block_at_def] >>
+       asm_rewrite_tac[] >> irule evaluated_creation_safe >> metis_tac[]) >>
+  `LENGTH vals = LENGTH inst.inst_operands` by
+    metis_tac[logEmitSimTheory.eval_operands_length] >>
+  `MEM (name, LENGTH vals)
+    [("SSTORE",2); ("TSTORE",2); ("SELFDESTRUCT",1); ("CREATE",3);
+     ("CREATE2",4); ("CALL",7)]` by gvs[inst_wf_def] >>
+  `(name = "CALL" ==> EL 2 vals <> 0w)` by gvs[] >>
+  drule_all static_write_fault_step >> simp[])
 QED

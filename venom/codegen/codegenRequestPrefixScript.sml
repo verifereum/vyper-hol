@@ -189,7 +189,7 @@ Proof
       gvs[is_data_inst_def, asm_step_def, asm_steps_def]) >>
   `a.as_requests ++ call_requests es = call_requests es0` by
     gvs[asm_frame_rel_def] >>
-  `asm_frame_step_ok prog data es0 a es` by (irule asm_frame_step >> simp[]) >>
+  `asm_frame_step_ok prog data es0 a es` by (irule (cj 1 asm_frame_step) >> simp[]) >>
   pop_assum mp_tac >> simp[asm_frame_step_ok_def] >> strip_tac
   >- (gvs[] >> metis_tac[asm_steps_requests]) >>
   Cases_on `asm_step (SND (compute_label_offsets prog))

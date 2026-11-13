@@ -185,7 +185,7 @@ Theorem opt_deploy_codegen_asm_entry_rel:
 Proof
   rpt strip_tac >> fs[deploy_state_rel_def] >>
   drule shadow_root_single >> strip_tac >>
-  simp[codegenLabelDisciplinedTheory.codegen_asm_entry_rel_def, entry_asm_state_def, shared_state_rel_def,
+  simp[codegenEntrySimTheory.codegen_asm_entry_rel_def, entry_asm_state_def, shared_state_rel_def,
        venom_asm_terminal_rel_def, opt_deploy_entry_state_def,
        opt_entry_state_def, entry_venom_state_frame_fields,
        entry_venom_state_fresh] >>

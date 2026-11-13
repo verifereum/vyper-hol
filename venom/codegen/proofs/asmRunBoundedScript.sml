@@ -12,7 +12,7 @@
 
 Theory asmRunBounded
 Ancestors
-  asmSem asmWf vfmConstants words list
+  asmSem asmWf vfmConstants words list stackOpSim
 
 (* The memory ranges (offset, size) an assembly instruction reads or
    writes, from its operands on the stack (top first, as the EVM pops
@@ -74,10 +74,51 @@ Definition asm_run_bounded_def:
       | _ => T))
 End
 
+Theorem word_memory_range_bounds[local]:
+  !(x:bytes32) (y:bytes32).
+    w2n x + w2n y <= 2 * dimword (:256) /\
+    w2n x + 32 <= 2 * dimword (:256) /\
+    w2n x + 1 <= 2 * dimword (:256)
+Proof
+  rpt gen_tac >>
+  mp_tac (Q.ISPEC `x:bytes32` w2n_lt) >>
+  mp_tac (Q.ISPEC `y:bytes32` w2n_lt) >>
+  CONV_TAC (DEPTH_CONV wordsLib.SIZES_CONV) >>
+  simp[dimword_def] >> decide_tac
+QED
+
+Theorem asm_mem_ranges_bounded:
+  EVERY (\(off,len). len = 0 \/ off + len <= 2 * dimword (:256))
+    (asm_mem_ranges inst stk)
+Proof
+  Cases_on `inst` >> simp[asm_mem_ranges_def] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  (* Split the first stack cell separately to keep each case tactic small.
+     Normalize the bound in the rewrite to match simp's numeric form. *)
+  CASE_TAC >> simp[SRULE [] (CONV_RULE (DEPTH_CONV wordsLib.SIZES_CONV)
+    word_memory_range_bounds), arithmeticTheory.ADD_SYM] >>
+  rpt (CASE_TAC >> simp[SRULE [] (CONV_RULE (DEPTH_CONV wordsLib.SIZES_CONV)
+    word_memory_range_bounds), arithmeticTheory.ADD_SYM])
+QED
+
+Theorem asm_run_bounded_mono:
+  !k l s.
+    asm_run_bounded lo o2pc prog H k s /\ k <= l ==>
+    asm_run_bounded lo o2pc prog H l s
+Proof
+  Induct_on `k` >- simp[asm_run_bounded_def] >>
+  Cases_on `l` >- simp[] >>
+  rpt gen_tac >> simp[Once asm_run_bounded_def] >>
+  strip_tac >> simp[Once asm_run_bounded_def] >>
+  Cases_on `EL s.as_pc prog = AsmOp "RETURNDATACOPY"` >> simp[] >>
+  Cases_on `asm_step lo o2pc (EL s.as_pc prog) s` >> gvs[] >>
+  first_x_assum irule >> simp[]
+QED
+
 (* The CALL families expose the same two ranges, after their value slot. *)
 Theorem asm_inst_gas_ok_call_ranges:
   asm_inst_gas_ok H (AsmOp name) stk /\
-  (name = "CALL" \/ name = "STATICCALL") /\
+  (name = "CALL" \/ name = "STATICCALL" \/ name = "DELEGATECALL") /\
   6 + (if name = "CALL" then 1 else 0) <= LENGTH stk ==>
   (w2n (EL (3 + (if name = "CALL" then 1 else 0)) stk) = 0 \/
    w2n (EL (2 + (if name = "CALL" then 1 else 0)) stk) +
@@ -114,4 +155,114 @@ Proof
       gvs[is_data_inst_def, asm_step_def]) >>
   strip_tac >> gvs[] >>
   Cases_on `asm_step lo o2pc (EL s.as_pc prog) s` >> gvs[]
+QED
+
+(* Creation operands are the only dynamic part of the universal word-memory
+   bound.  A prefix records them only at states actually visited. *)
+Definition create_safe_def:
+  create_safe inst (stk:bytes32 list) <=>
+    ((inst = AsmOp "CREATE" \/ inst = AsmOp "CREATE2") ==>
+     case stk of _ :: _ :: sz :: _ => w2n sz <= 2 * max_code_size | _ => F)
+End
+
+Definition create_safe_prefix_def:
+  create_safe_prefix lo o2pc prog n s <=>
+    !j t. j < n /\ asm_steps lo o2pc prog j s = AsmOK t ==>
+      create_safe (EL t.as_pc prog) t.as_stack
+End
+
+Theorem create_safe_prefix_zero[simp]:
+  create_safe_prefix lo o2pc prog 0 s
+Proof
+  simp[create_safe_prefix_def]
+QED
+
+Theorem create_safe_prefix_mono:
+  create_safe_prefix lo o2pc prog n s /\ m <= n ==>
+  create_safe_prefix lo o2pc prog m s
+Proof
+  rw[create_safe_prefix_def] >> first_x_assum irule >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem create_safe_prefix_suc:
+  create_safe_prefix lo o2pc prog (SUC n) s <=>
+  create_safe (EL s.as_pc prog) s.as_stack /\
+  (s.as_pc < LENGTH prog ==>
+   !t. asm_step lo o2pc (EL s.as_pc prog) s = AsmOK t ==>
+       create_safe_prefix lo o2pc prog n t)
+Proof
+  simp[create_safe_prefix_def] >> eq_tac
+  >- (strip_tac >> conj_tac
+      >- (first_x_assum (qspec_then `0` mp_tac) >> simp[asm_steps_def]) >>
+      rpt strip_tac >> first_x_assum (qspec_then `SUC j` mp_tac) >>
+      simp[asm_steps_def]) >>
+  strip_tac >> Cases_on `j` >> simp[asm_steps_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem create_safe_prefix_compose:
+  !m n s t.
+    asm_steps lo o2pc prog m s = AsmOK t /\
+    create_safe_prefix lo o2pc prog m s /\
+    create_safe_prefix lo o2pc prog n t ==>
+    create_safe_prefix lo o2pc prog (m + n) s
+Proof
+  Induct_on `m` >- simp[asm_steps_def] >>
+  rpt gen_tac >> simp[Once asm_steps_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[create_safe_prefix_suc, arithmeticTheory.ADD_CLAUSES] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem create_safe_imp_gas_ok:
+  create_safe inst stk ==>
+  asm_inst_gas_ok (2 * dimword (:256)) inst stk
+Proof
+  simp[create_safe_def, asm_inst_gas_ok_def, asm_mem_ranges_bounded]
+QED
+
+Theorem create_safe_prefix_run_bounded:
+  !n s R.
+    create_safe_prefix lo o2pc prog n s /\
+    asm_steps lo o2pc prog n s = R /\
+    (?t. R = AsmHalt t \/ R = AsmRevert t \/ R = AsmFault t) ==>
+    asm_run_bounded lo o2pc prog (2 * dimword (:256)) (SUC n) s
+Proof
+  Induct_on `n` >- simp[asm_steps_def] >>
+  rpt gen_tac >> simp[Once asm_steps_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[create_safe_prefix_suc] >>
+  drule create_safe_imp_gas_ok >> strip_tac >> gvs[] >>
+  simp[Once asm_run_bounded_def] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem asm_inst_gas_ok_create_ranges:
+  asm_inst_gas_ok H (AsmOp (if two then "CREATE2" else "CREATE")) stk ==>
+  3 <= LENGTH stk /\ w2n (EL 2 stk) <= 2 * max_code_size /\
+  (w2n (EL 2 stk) = 0 \/ w2n (EL 1 stk) + w2n (EL 2 stk) <= H)
+Proof
+  Cases_on `two` >>
+  namedCases_on `stk` ["", "value tail"] >> simp[asm_inst_gas_ok_def] >>
+  namedCases_on `tail` ["", "off tail2"] >> simp[asm_inst_gas_ok_def] >>
+  namedCases_on `tail2` ["", "sz tail3"] >>
+  simp[asm_inst_gas_ok_def, asm_mem_ranges_def]
+QED
+
+(* A straight-line footprint certifies every inspected instruction, including
+   a faulting or reverting last step. *)
+Theorem asm_block_create_safe_prefix:
+  EVERY (\i. i <> AsmOp "JUMP" /\ i <> AsmOp "JUMPI" /\
+             !stk. create_safe i stk) code /\
+  asm_block_at prog s.as_pc code /\ n <= LENGTH code ==>
+  create_safe_prefix lo o2pc prog n s
+Proof
+  strip_tac >> rw[create_safe_prefix_def] >>
+  `t.as_pc = s.as_pc + j` by
+    (irule asm_steps_pc_advance >> goal_assum (drule_at Any) >>
+     qexists `code` >> simp[EVERY_MEM] >>
+     gvs[EVERY_MEM] >> metis_tac[]) >>
+  `EL t.as_pc prog = EL j code` by gvs[asm_block_at_def] >>
+  gvs[EVERY_EL] >> metis_tac[]
 QED
