@@ -392,8 +392,13 @@ Resume compile_extract32_sim_mem[suffix_success]:
   drule_all extract32_word_suffix_success >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_path_mem ctx func t2 ng (OK u')` >>
   `u.vs_alloca_next = t1.vs_alloca_next` by
-    (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = t1`
-       (mp_tac o Q.AP_TERM `vs_alloca_next`) >> simp[]) >>
+    (first_assum (fn th =>
+       let val c = concl th
+       in if is_eq c andalso is_comb (lhs c) andalso is_var (rhs c) andalso
+             fst (dest_var (rhs c)) = "t1"
+          then SUBST1_TAC (SYM th) else NO_TAC
+       end) >>
+     simp[]) >>
   `s0.vs_alloca_next <= u'.vs_alloca_next` by decide_tac >>
   rewrite_tac[gas_outcome_def] >>
   qexists_tac `REPLICATE ng F` >> disj2_tac >> disj1_tac >>
