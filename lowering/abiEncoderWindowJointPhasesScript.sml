@@ -1529,5 +1529,297 @@ Theorem window_child_suffix_joint:
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,G',tn')
 Proof
-  cheat
+  strip_tac >>
+  `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+  `h < dimword (:256) /\ slot < dimword (:256)` by decide_tac >>
+  `!x. Var dp = Var x \/ len = Var x ==> not_fresh_at st x` by metis_tac[] >>
+  drule_all abi_encode_framed_child_suffix_steps_strong >> strip_tac >>
+  `window_phase ctx func a en {site} [] t1 t3` by
+    (irule window_phase_chain >>
+     qexistsl_tac [`{}`, `[]`, `b`, `{site}`, `[]`, `t2`] >> simp[]) >>
+  `window_phase ctx func st en {site} [(h,32)] s t3` by
+    (irule window_phase_chain >>
+     qexistsl_tac [`{}`, `[(h,32)]`, `a`, `{site}`, `[]`, `t1`] >> simp[]) >>
+  drule_all window_child_suffix_context >> strip_tac >>
+  rename1 `emit_void MSTORE [Var head;offset] st = ((),ca)` >>
+  rename1 `emit_op ADD [offset;len] ca = (next,cb)` >>
+  qpat_assum `emit_void MSTORE [Var head;offset] st = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_void) >>
+  qpat_assum `emit_op ADD [offset;len] ca = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  qpat_assum `emit_void MSTORE [Var dp;next] cb = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_void) >>
+  qabbrev_tac `p = STRING #"%" (toString ca.cs_next_var)` >>
+  `next = Var p` by simp[Abbr `p`] >>
+  qabbrev_tac `i1 = mk_inst st.cs_next_id MSTORE [Var head;offset] []` >>
+  qabbrev_tac `i2 = mk_inst ca.cs_next_id ADD [offset;len] [p]` >>
+  qabbrev_tac `i3 = mk_inst cb.cs_next_id MSTORE [Var dp;next] []` >>
+  `emitted_insts st en = [i1;i2;i3]` by
+    simp[emitted_insts_def, APPEND_ASSOC, DROP_LENGTH_APPEND,
+      Abbr `i1`, Abbr `i2`, Abbr `i3`, Abbr `p`] >>
+  `?u v raw. step_inst_base i1 s = OK u /\
+    step_inst_base i2 u = OK v /\ step_inst_base i3 v = OK raw /\
+    raw = (t3 with vs_inst_idx := s.vs_inst_idx)` by
+    (qpat_assum `run_inst_seq (emitted_insts st en) s = _` mp_tac >>
+     qpat_assum `emitted_insts st en = _` (fn th => pure_rewrite_tac[th]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[run_inst_seq_def, AllCaseEqs()] >> metis_tac[]) >>
+  `!x. not_fresh_at st x ==> p <> x` by
+    (simp[Abbr `p`, loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[]) >>
+  `u = mstore h (n2w off) s` by
+    (qpat_x_assum `step_inst_base i1 s = OK u` mp_tac >>
+     simp[Abbr `i1`, step_inst_base_opcode_eqs, exec_write2_def,
+       w2n_n2w, LESS_MOD]) >>
+  `eval_operand offset u = SOME (n2w off) /\
+   eval_operand len u = SOME (n2w n)` by
+    (simp[eval_operand_def, lookup_var_def, mstore_def,
+      write_memory_with_expansion_def] >>
+     Cases_on `offset` >> Cases_on `len` >>
+     gvs[eval_operand_def, lookup_var_def]) >>
+  `v = update_var p (n2w (off+n)) u` by
+    (qpat_x_assum `step_inst_base i2 u = OK v` mp_tac >>
+     simp[Abbr `i2`, step_inst_base_opcode_eqs, exec_pure2_def, word_add_n2w]) >>
+  `p <> dp /\ p <> head` by metis_tac[] >>
+  `eval_operand (Var dp) v = SOME (n2w slot)` by
+    (simp[eval_operand_def, lookup_var_def, update_var_def, mstore_def,
+      write_memory_with_expansion_def, FLOOKUP_UPDATE] >>
+     fs[eval_operand_def, lookup_var_def]) >>
+  `eval_operand next v = SOME (n2w (off+n))` by
+    simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `raw = mstore slot (n2w (off+n)) v` by
+    (qpat_assum `step_inst_base i3 v = OK raw` mp_tac >>
+     simp[NoAsms, Abbr `i3`, step_inst_base_opcode_eqs, exec_write2_def] >>
+     qpat_assum `eval_operand (Var dp) v = _` (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `eval_operand next v = _` (fn th => pure_rewrite_tac[th]) >>
+     simp[w2n_n2w, LESS_MOD]) >>
+  qabbrev_tac `G1 = step_prov PG G i1 u` >>
+  qabbrev_tac `tn1 = step_taint i1 s u tn` >>
+  qabbrev_tac `G2 = step_prov PG G1 i2 v` >>
+  qabbrev_tac `tn2 = step_taint i2 u v tn1` >>
+  qabbrev_tac `G3 = step_prov PG G2 i3 raw` >>
+  qabbrev_tac `tn3 = step_taint i3 v raw tn2` >>
+  `G1 = G /\ tn1.t_var = tn.t_var /\
+   tn1.t_mem = tn.t_mem DIFF {i | h <= i /\ i < h+32} /\
+   tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans` by
+    (simp[Abbr `G1`, Abbr `tn1`, Abbr `i1`, step_prov_def,
+       set_prov_def, out_prov_def, step_taint_def, mk_inst_def,
+       set_var_taint_def, DRESTRICT_UNIV, store_taint_def, adopt_reset_def,
+       mem_taint_def, step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+       codegenRelTheory.fixed_source_write_range_def, written_taint_def,
+       range_bytes_def, new_site_bytes_def, w2n_n2w, LESS_MOD,
+       mstore_def, write_memory_with_expansion_def, FLOOKUP_DEF] >>
+     fs[eval_operand_def] >> SET_TAC[]) >>
+  `tn1.t_imm = tn.t_imm` by
+    simp[Abbr `tn1`, Abbr `i1`, step_taint_def, imm_taint_def, mk_inst_def] >>
+  `op_taint tn1 offset = {} /\ op_taint tn1 len = {}` by
+    (Cases_on `offset` >> Cases_on `len` >> gvs[op_taint_def]) >>
+  `tn2.t_var = tn1.t_var |+ (p,{}) /\
+   tn2.t_mem = tn1.t_mem /\ tn2.t_stor = tn1.t_stor /\
+   tn2.t_trans = tn1.t_trans /\ tn2.t_imm = tn1.t_imm` by
+    (simp[Abbr `tn2`, Abbr `i2`, step_taint_def, mk_inst_def,
+      set_var_taint_def, out_taint_def, mem_taint_def, new_site_bytes_def,
+      step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+      codegenRelTheory.fixed_source_write_range_def, range_bytes_def,
+      written_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
+      FLOOKUP_DEF, update_var_def] >> SET_TAC[]) >>
+  `op_taint tn2 next = {}` by simp[op_taint_def, FLOOKUP_UPDATE] >>
+  `G3 = G2 /\ tn3.t_var = tn2.t_var /\
+   tn3.t_mem = tn2.t_mem DIFF {i | slot <= i /\ i < slot+32} /\
+   tn3.t_stor = tn2.t_stor /\ tn3.t_trans = tn2.t_trans` by
+    (qspecl_then [`PG`, `G2`, `tn2`, `v`] mp_tac mstore_ghost_frame >>
+     disch_then (qspecl_then [`cb.cs_next_id`, `dp`, `next`] mp_tac) >>
+     simp[GSYM eval_operand_def] >>
+     simp[Abbr `G3`, Abbr `tn3`, Abbr `i3`, w2n_n2w, LESS_MOD,
+       range_bytes_def]) >>
+  `tn3.t_imm = tn2.t_imm` by
+    simp[Abbr `tn3`, Abbr `i3`, step_taint_def, imm_taint_def, mk_inst_def] >>
+  `!x. not_fresh_at st x ==>
+    FLOOKUP G3 x = FLOOKUP G x /\
+    op_taint tn3 (Var x) = op_taint tn (Var x)` by
+    (rpt strip_tac >>
+     `p <> x` by metis_tac[] >>
+     Cases_on `first_prov G [offset;len]` >>
+     simp[Abbr `G2`, Abbr `i2`, step_prov_def, set_prov_def,
+       out_prov_def, mk_inst_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT,
+       op_taint_def] >> metis_tac[]) >>
+  `allocas_from lo u /\ allocas_from lo v` by
+    (simp[allocas_from_def, mstore_def, write_memory_with_expansion_def,
+      update_var_def] >> metis_tac[allocas_from_def]) >>
+  `ptr_covers G2 tn2 dp v 32` by
+    (`not_fresh_at st dp` by metis_tac[] >>
+     `FLOOKUP G2 dp = FLOOKUP G dp` by metis_tac[] >>
+     qpat_x_assum `ptr_covers G tn dp s 32` mp_tac >>
+     simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def,
+       FLOOKUP_UPDATE, mstore_def, write_memory_with_expansion_def,
+       update_var_def, lookup_var_def]) >>
+  `!D k. ptr_inst_ok D lo 0 ctx func G tn i1
+    (s with vs_inst_idx := k)` by
+    (rpt gen_tac >>
+     `ptr_inst_ok D 0 0 ctx func G tn i1 (s with vs_inst_idx := k)` by
+       (simp[NoAsms, Abbr `i1`] >> irule ptr_inst_ok_mstore >>
+        simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def] >>
+        metis_tac[bodyPtrDefsTheory.ptr_covers_def]) >>
+     `allocas_from lo (s with vs_inst_idx := k)` by
+       (simp[NoAsms, allocas_from_def] >> metis_tac[allocas_from_def]) >>
+     metis_tac[ptr_inst_ok_lower_bound_transport, ZERO_LESS_EQ]) >>
+  `!D k. ptr_inst_ok D lo 0 ctx func G2 tn2 i3
+    (v with vs_inst_idx := k)` by
+    (rpt gen_tac >>
+     `ptr_inst_ok D 0 0 ctx func G2 tn2 i3 (v with vs_inst_idx := k)` by
+       (simp[NoAsms, Abbr `i3`] >> irule ptr_inst_ok_mstore >>
+        simp[bodyPtrDefsTheory.ptr_covers_def, op_taint_def] >>
+        metis_tac[bodyPtrDefsTheory.ptr_covers_def]) >>
+     `allocas_from lo (v with vs_inst_idx := k)` by
+       (simp[NoAsms, allocas_from_def] >> metis_tac[allocas_from_def]) >>
+     metis_tac[ptr_inst_ok_lower_bound_transport, ZERO_LESS_EQ]) >>
+  `!D k. ptr_inst_ok D lo 0 ctx func G1 tn1 i2
+      (u with vs_inst_idx := k)` by
+    (rpt gen_tac >>
+     simp[ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       Abbr `i2`, mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
+       codegenRelTheory.fixed_source_write_range_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       allocas_from_def, step_inst_non_invoke] >>
+     simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def,
+       lookup_var_def, update_var_def, AllCaseEqs()] >>
+     conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+     metis_tac[allocas_from_def]) >>
+  `!k. step_inst_base i2 (u with vs_inst_idx := k) =
+       OK (v with vs_inst_idx := k) /\
+       step_inst_base i3 (v with vs_inst_idx := k) =
+       OK (raw with vs_inst_idx := k)` by
+    (gen_tac >>
+     `~is_terminator i2.inst_opcode /\ ~is_terminator i3.inst_opcode` by
+       simp[Abbr `i2`, Abbr `i3`, mk_inst_def, is_terminator_def] >>
+     asm_simp_tac bool_ss [instIdxIndepTheory.step_inst_inst_idx_indep,
+       instIdxIndepTheory.exec_result_map_def]) >>
+  `!D. inst_seq_ptr D lo ctx func PG G tn [i1;i2;i3] s G3 tn3` by
+    (gen_tac >>
+     pure_rewrite_tac[inst_seq_ptr_def] >>
+     qpat_assum `step_inst_base i1 s = OK u` (fn th => pure_rewrite_tac[th]) >>
+     simp[NoAsms] >>
+     simp[NoAsms, step_prov_inst_idx, step_taint_inst_idx_left,
+       step_taint_inst_idx_right] >>
+     qpat_assum `!k. step_inst_base i2 _ = _ /\ _` (fn th => pure_rewrite_tac[th]) >>
+     simp[NoAsms, step_prov_inst_idx, step_taint_inst_idx_left,
+       step_taint_inst_idx_right] >>
+     qpat_assum `!k. step_inst_base i2 _ = _ /\ _` (fn th => pure_rewrite_tac[th]) >>
+     simp[NoAsms, step_prov_inst_idx, step_taint_inst_idx_left,
+       step_taint_inst_idx_right] >>
+     map_every (fn q => qpat_assum q (fn th =>
+       pure_rewrite_tac[GSYM (REWRITE_RULE[markerTheory.Abbrev_def] th)]))
+       [`Abbrev (G1 = _)`, `Abbrev (tn1 = _)`,
+        `Abbrev (G2 = _)`, `Abbrev (tn2 = _)`,
+        `Abbrev (G3 = _)`, `Abbrev (tn3 = _)`] >>
+     conj_tac
+     >- (qpat_assum `!D k. ptr_inst_ok D lo 0 ctx func G tn i1 _`
+           (qspecl_then [`D`, `s.vs_inst_idx`] mp_tac) >> simp[NoAsms]) >>
+     metis_tac[]) >>
+  `en.cs_current_insts = st.cs_current_insts ++ [i1;i2;i3] /\
+   en.cs_current_bb = st.cs_current_bb` by
+    (conj_tac >- simp[APPEND_ASSOC] >>
+     (map_every (fn pat => qpat_assum pat mp_tac)
+        [`emit_void MSTORE _ st = _`, `emit_op ADD _ ca = _`,
+         `emit_void MSTORE _ cb = _`] >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      simp[emit_op_def, emit_void_def, emit_inst_def, fresh_var_def, fresh_id_def,
+        comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_def, LET_THM] >>
+      rpt strip_tac >> gvs[])) >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX [i1;i2;i3] (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`fn_has_code st en func`, `en.cs_current_insts = _`,
+        `en.cs_current_bb = _`, `s.vs_current_bb = _`, `s.vs_inst_idx = _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rw[fn_has_code_def, IS_PREFIX_APPEND] >>
+     qexists_tac `bb` >> qpat_x_assum `bb.bb_instructions = _` SUBST1_TAC >>
+     asm_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp_tac (srw_ss()) []) >>
+  `run_inst_seq_mem_ok [i1;i2;i3] s` by
+    (pure_rewrite_tac[fragExecMemTheory.run_inst_seq_mem_ok_def] >>
+     qpat_assum `step_inst_base i1 s = OK u` (fn th => pure_rewrite_tac[th]) >> simp[NoAsms] >>
+     qpat_assum `step_inst_base i2 u = OK v` (fn th => pure_rewrite_tac[th]) >> simp[NoAsms] >>
+     qpat_assum `step_inst_base i3 v = OK raw` (fn th => pure_rewrite_tac[th]) >> simp[NoAsms] >>
+     simp[Abbr `i1`, Abbr `i2`, Abbr `i3`,
+       unitTransformDefsTheory.inst_mem_below_frontier_def,
+       memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       codegenRelTheory.fixed_source_write_range_def,
+       w2n_n2w, LESS_MOD, eval_operand_def] >>
+     `lookup_var head s = SOME (n2w h) /\
+      lookup_var dp v = SOME (n2w slot)` by metis_tac[eval_operand_def] >>
+     simp[w2n_n2w, LESS_MOD, mstore_def, write_memory_with_expansion_def,
+       update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+     `FLOOKUP s.vs_vars head = SOME (n2w h)` by
+       (qpat_assum `eval_operand (Var head) s = _`
+          (mp_tac o REWRITE_RULE [eval_operand_def, lookup_var_def]) >> simp[]) >>
+     `FLOOKUP s.vs_vars dp = SOME (n2w slot)` by
+       (qpat_assum `eval_operand (Var dp) s = _`
+          (mp_tac o REWRITE_RULE [eval_operand_def, lookup_var_def]) >> simp[]) >>
+     simp[w2n_n2w, LESS_MOD]) >>
+  `run_inst_seq [i1;i2;i3] s = OK raw` by metis_tac[] >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) []
+    (OK (raw with vs_inst_idx := LENGTH en.cs_current_insts),G3,tn3)` by
+    (gen_tac >>
+     `s.vs_inst_idx + 3 = LENGTH en.cs_current_insts` by simp[] >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) [i1;i2;i3]` by
+       simp[Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def, is_terminator_def] >>
+     `inst_seq_ptr D lo ctx func PG G tn [i1;i2;i3] s G3 tn3` by metis_tac[] >>
+     drule_all run_inst_seq_gas_origin_ptr_path >>
+     simp_tac (srw_ss()) [Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def] >>
+     asm_rewrite_tac[] >> metis_tac[]) >>
+  `t3.vs_inst_idx = LENGTH en.cs_current_insts` by simp[] >>
+  `raw with vs_inst_idx := LENGTH en.cs_current_insts = t3` by
+    (qpat_assum `raw = t3 with vs_inst_idx := _` SUBST1_TAC >>
+     simp[venom_state_component_equality]) >>
+  `t3.vs_memory =
+    (mstore slot (n2w (off+n)) (mstore h (n2w off) s)).vs_memory /\
+   t3.vs_allocas = s.vs_allocas /\
+   t3.vs_alloca_next = s.vs_alloca_next` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`raw = t3 with vs_inst_idx := _`, `raw = mstore slot _ v`,
+        `v = update_var _ _ u`, `u = mstore h _ s`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt disch_tac >>
+     qpat_x_assum `u = mstore h _ s`
+       (fn th => pure_rewrite_tac[GSYM th] >> mp_tac th) >>
+     disch_tac >>
+     conj_tac
+     >- (qpat_x_assum `raw = t3 with vs_inst_idx := _`
+           (mp_tac o AP_TERM ``\z. z.vs_memory``) >>
+         qpat_x_assum `u = mstore h _ s` kall_tac >>
+         simp[mstore_def, update_var_def]) >>
+     conj_tac
+     >- (qpat_x_assum `raw = t3 with vs_inst_idx := _`
+           (mp_tac o AP_TERM ``\z. z.vs_allocas``) >>
+         simp[mstore_def, write_memory_with_expansion_def, update_var_def]) >>
+     qpat_x_assum `raw = t3 with vs_inst_idx := _`
+       (mp_tac o AP_TERM ``\z. z.vs_alloca_next``) >>
+     simp[mstore_def, write_memory_with_expansion_def, update_var_def]) >>
+  `mem_word_at h t3.vs_memory = n2w off /\
+   mem_word_at slot t3.vs_memory = n2w (off+n)` by
+    (simp[mstore_mem_word_at_same] >>
+     irule EQ_TRANS >>
+     qexists_tac `mem_word_at h (mstore h (n2w off) s).vs_memory` >>
+     conj_tac >- (irule mstore_mem_word_at_disjoint >>
+       fs[venomMemDefsTheory.regions_disjoint_def]) >>
+     simp[mstore_mem_word_at_same]) >>
+  `!x. out = Var x ==> not_fresh_at en x` by
+    (rpt strip_tac >>
+     `not_fresh_at st x` by metis_tac[] >>
+     fs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
+  `op_taint tn3 out = {}` by
+    (Cases_on `out` >> gvs[op_taint_def] >> metis_tac[]) >>
+  `tn3.t_mem = tn.t_mem DIFF
+      ({i | h <= i /\ i < h+32} UNION {i | slot <= i /\ i < slot+32})` by
+    (simp[] >> SET_TAC[]) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) [] (OK t3,G3,tn3)` by metis_tac[] >>
+  qpat_x_assum `t3 = mstore _ _ _ with vs_inst_idx := _` kall_tac >>
+  qpat_x_assum `raw = t3 with vs_inst_idx := _` kall_tac >>
+  qpat_x_assum `raw = mstore _ _ _` kall_tac >>
+  qpat_x_assum `G3 = G2` kall_tac >>
+  qexistsl_tac [`t3`, `G3`, `tn3`] >>
+  simp[allocas_from_def] >>
+  qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]
 QED
