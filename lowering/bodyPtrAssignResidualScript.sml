@@ -13,6 +13,7 @@
  *)
 Theory bodyPtrAssignResidual
 Ancestors
+  assignTupleStoreOpenPtr
   supportedTargetSimPtr allocaPtrValueFrame assignTuplePtrOutcome tupleWidenedReadTyped
   tupleWidenedPrefixPtr countedPtrLoop
   assignDynStorageRoundPtr assignTupleDynamicStoragePtr

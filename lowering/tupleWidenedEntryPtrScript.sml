@@ -4,7 +4,8 @@ Ancestors
   tupleWidenedSourceReady externalNormalizePremises assignTuplePtrBodyTargets
   tupleTargetStoreProps exprSimHyps exprSimHypsDefs vyperTypeValues
   vyperTypeInvariants vyperTypeSystem vyperValue valueEncoding
-  supportedStmts loweringPosts list
+  supportedStmts supportedExprs supportedTypes memoryLocalRhsProps bodySim
+  exprLowering loweringPosts list
 
 Theorem tuple_widened_entry_ready_ptr:
   body_inv tops ctx cenv cx /\
@@ -56,4 +57,26 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`atys`, `stys`, `stvs`] >> simp[] >>
   metis_tac[LIST_REL_LENGTH]
+QED
+
+(* Supported internal return tuples contain words and bytelike values. *)
+Theorem tuple_widened_physical_scalars_ptr:
+  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  expr_body_pre cenv cx env e es /\ expr_type e = TupleT atys /\
+  lowered_value_type cenv e = TupleT stys /\
+  lowered_value_type cenv e <> expr_type e ==>
+  EVERY supported_scalar_type stys
+Proof
+  strip_tac >> drule_all tuple_widened_source_ready >> strip_tac >> gvs[] >>
+  `supported_program tops /\
+   cenv.ce_func_return_type = build_func_return_type tops` by
+    fs[body_inv_def] >>
+  qpat_x_assum `supported_expr _ _` mp_tac >>
+  simp[supported_expr_def,supported_pure_expr_def,supported_effect_expr_def] >>
+  strip_tac >> Cases_on `drv` >>
+  gvs[supported_effect_expr_def,optionTheory.IS_SOME_EXISTS] >>
+  PairCases_on `x` >>
+  drule_all supported_internal_return_type >> strip_tac >>
+  drule_all supported_internal_return_admissible >> strip_tac >>
+  gvs[lowered_value_type_def,supported_return_type_def,supported_value_tuple_depth]
 QED
