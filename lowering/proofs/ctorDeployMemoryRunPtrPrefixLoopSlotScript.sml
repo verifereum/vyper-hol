@@ -237,7 +237,8 @@ Resume prefix_loop_index_slot_pair[forward]:
     `H` |-> `G |+ (ip,(p,32))`,
     `q` |-> `step_taint (mk_inst aid ALLOCA [Lit 32w] [ip]) s a tn`,
     `fuel` |-> `0`, `D` |-> `D'`] prefix_loop_slot_zero_pair) >>
-  (impl_tac >- fs[eval_op_inst_idx, allocas_from_def, FLOOKUP_UPDATE]) >>
+  (impl_tac >- (fs[eval_op_inst_idx, allocas_from_def, FLOOKUP_UPDATE] >>
+     metis_tac[])) >>
   simp_tac std_ss [LET_THM] >> strip_tac >>
   mp_tac (Q.INST [`inst` |-> `mk_inst (aid+1) MSTORE [Var ip;Lit 0w] []`,
     `s` |-> `a with vs_inst_idx := s.vs_inst_idx + 1`,
