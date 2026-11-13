@@ -11,6 +11,7 @@
  *)
 Theory bodyFullLiteralBuffer
 Ancestors
+  exprSimPtrLiteralPayload exprLoweringProps list
   exprSimPtrLiteralBuffer fragGasSeqPtr instSeqPtrLo bodyPtrDefs vyperStorageFootprint
   exprLowering compileEnv loweringStateRelDefs venomState finite_map words
 
@@ -22,6 +23,39 @@ Ancestors
    state is horizon-free (allocation, stores, provenance and taint are
    deterministic), so those are fixed before H; storage_trace_domain gives
    one valid horizon to read the run's facts at. *)
+(* Recover the payload frame for the actual, pinned ALLOCA endpoint. *)
+Theorem literal_full_payload_frame[local]:
+  compile_store_byte_chunks (Var p) bs 32 sh = ((),sb) /\
+  not_fresh_at sh p /\
+  emitted_insts sa sb =
+    [mk_inst sa.cs_next_id ALLOCA
+       [Lit (n2w (32+32*word_size (LENGTH bs)))] [p];
+     mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] []] ++
+    emitted_insts sh sb /\
+  step_inst_base (mk_inst sa.cs_next_id ALLOCA
+    [Lit (n2w (32+32*word_size (LENGTH bs)))] [p]) s = OK u /\
+  lookup_var p u = SOME (n2w b) /\
+  b+32+32*word_size (LENGTH bs) < dimword (:256) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
+  LENGTH u.vs_memory <= LENGTH t.vs_memory /\
+  (!x. not_fresh_at sh x ==> lookup_var x t = lookup_var x u) /\
+  (!a len. a+len <= b \/ b+32+32*word_size (LENGTH bs) <= a ==>
+    mem_bytes_at a len t.vs_memory = mem_bytes_at a len u.vs_memory) /\
+  mem_word_at b t.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
+  lookup_var p t = SOME (n2w b)
+Proof
+  strip_tac >>
+  `run_inst_seq
+     (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
+      emitted_insts sh sb) u = OK t` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = _` mp_tac >>
+     asm_simp_tac bool_ss [APPEND, run_inst_seq_def] >> simp[]) >>
+  drule_all literal_header_chunks_functional >> strip_tac >>
+  metis_tac[]
+QED
+
 Theorem literal_bytelike_full_run:
   !bs sa buf sb DF lo d PG ctx func cenv cx st0 es s G tn.
     compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
