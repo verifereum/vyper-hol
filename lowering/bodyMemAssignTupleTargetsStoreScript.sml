@@ -9,6 +9,7 @@ Ancestors
   valueEncoding valueEncodingDefs venomMemDefs tupleMemoryFrame tupleMemoryLayout
   vyperLookup list loweringPosts bodyMemAssignTupleTargetsFacts
   bodyMemAssignLocalWord tupleTargetStoreRun tupleTargetStoreProps
+  stmtSimAssignStorageFacts
   instMemFrontier emitHelperProps memSafeRun venomInst freshWrites
   valueEncodingProps stmtSimDeclStore stmtSimAssignStore allocaFootprint
   storageStoreFrame stmtSimAssignStorage emitHelper context stmtLowering
