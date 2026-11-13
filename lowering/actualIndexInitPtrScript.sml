@@ -39,7 +39,7 @@ Proof
   `sa.cs_next_id IN abi_decoder_ids sa.cs_next_id (sa.cs_next_id+1)` by
     simp[abi_decoder_ids_def] >>
   drule_all abi_decode_index_init_endpoint_exact_ptr_core >>
-  disch_then (qspecl_then [`tn`,`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   `p + 32 < dimword (:256)` by
     (drule abi_decoder_budget_word_bound >> decide_tac) >>
   `case FLOOKUP s.vs_allocas sa.cs_next_id of
