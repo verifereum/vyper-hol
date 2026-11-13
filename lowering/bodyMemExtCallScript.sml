@@ -4,7 +4,7 @@ Theory bodyMemExtCall
 Ancestors
   bodyMemoryPreds extcallRelabelMemory extcallDecoderHeadBounds
   extcallDecoderStaticSuffix extcallDecoderArraySemantics extcallDecoderMemberSemantics
-  extcallDecoderCompositeMemory extcallEncoderWindowMemory
+  extcallDecoderCompositeMemory extcallEncoderWindowMemory extcallCalldataOpsMemory
 
 Theorem body_extcall_mem_case:
   !cx v14 is_static skip_check sig opts es v15.
