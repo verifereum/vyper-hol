@@ -132,7 +132,8 @@ Proof
      qpat_assum `gas_variant _ _` mp_tac >>
      simp[deploy_state_rel_def, gas_variant_def, deploy_entry_state_def,
           entry_venom_state_def, init_venom_state_def,
-          deploy_evaluation_context_def, initial_evaluation_context_def] >>
+          deploy_evaluation_context_def,
+          vyperInterpreterTheory.initial_evaluation_context_def] >>
      rpt strip_tac >> gvs[]) >>
   `actual.vs_call_ctx = vs.vs_call_ctx /\ actual.vs_tx_ctx = vs.vs_tx_ctx /\
    actual.vs_block_ctx = vs.vs_block_ctx /\ actual.vs_outcomes = vs.vs_outcomes` by metis_tac[] >>
