@@ -87,8 +87,10 @@ Proof
         (irule venomInstProofs1Theory.step_inst_base_preserves_fmp_ordinary >>
          qexists `inst` >> fs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def]) >>
       metis_tac[ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp])
-  >- (drule_all enters_block_before_revert_window >> decide_tac)
-  >- (drule_all enters_block_before_revert_window >> decide_tac) >>
+  >- (drule_all enters_block_before_revert_window >> strip_tac >>
+      `F` suffices_by rewrite_tac[] >> decide_tac)
+  >- (drule_all enters_block_before_revert_window >> strip_tac >>
+      `F` suffices_by rewrite_tac[] >> decide_tac) >>
   `s'.vs_current_bb = f.cf_state.vs_current_bb` by
     (`s'.vs_current_bb =
         (adopt_return_fmp ret (merge_callee_state f.cf_state s_end)).vs_current_bb` by
