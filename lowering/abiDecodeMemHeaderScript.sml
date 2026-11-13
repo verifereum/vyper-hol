@@ -70,7 +70,7 @@ Proof
        below_frontier_no_ranges, inst_dload_in_section_other]
 QED
 
-Theorem abi_decode_setup_no_gas[local]:
+Theorem abi_decode_setup_no_gas:
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) ==>
   FILTER (\i. i.inst_opcode = GAS) (emitted_insts st ready) = []
 Proof
