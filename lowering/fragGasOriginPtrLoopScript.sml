@@ -114,10 +114,9 @@ Proof
   `gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
      ((u 0) with vs_inst_idx := k, g 0, q 0) []
      (OK ((u 1) with vs_inst_idx := SUC k), g 1, q 1)` by
-    (mp_tac (Q.INST [`s` |-> `(u 0) with vs_inst_idx := k`, `i` |-> `h`,
-                     `G` |-> `g 0`, `tn` |-> `q 0`,
-                     `u` |-> `(u 1) with vs_inst_idx := k`,
-                     `G'` |-> `g 1`, `tn'` |-> `q 1`] step_origin_ptr_path) >>
+    (qspecl_then [`(u 0) with vs_inst_idx := k`, `h`, `g 0`, `q 0`,
+                  `(u 1) with vs_inst_idx := k`, `g 1`, `q 1`] mp_tac
+       (Q.GENL [`s`, `i`, `G`, `tn`, `u`, `G'`, `tn'`] step_origin_ptr_path) >>
      simp[]) >>
   qpat_x_assum `gas_origin_ptr_path _ ((u 0) with vs_inst_idx := k, g 0, q 0) [] _`
     (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
@@ -259,11 +258,11 @@ Proof
   strip_tac >>
   `?bb. lookup_block st.cs_current_bb func.fn_blocks = SOME bb /\
         isPREFIX st'.cs_current_insts bb.bb_instructions` by
-    (gvs[fn_has_code_def, inst_extends_def] >> metis_tac[]) >>
+    (gvs[fragExecTheory.fn_has_code_def, emitHelperPropsTheory.inst_extends_def] >> metis_tac[]) >>
   `?code. st'.cs_current_insts = st.cs_current_insts ++ code /\
           emitted_insts st st' = code` by
-    (fs[inst_extends_def, IS_PREFIX_APPEND] >>
-     simp[emitted_insts_def, DROP_LENGTH_APPEND]) >>
+    (fs[emitHelperPropsTheory.inst_extends_def, IS_PREFIX_APPEND] >>
+     simp[exprLoweringPropsTheory.emitted_insts_def, DROP_LENGTH_APPEND]) >>
   `isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
     (qpat_x_assum `isPREFIX st'.cs_current_insts _` mp_tac >>
      simp[IS_PREFIX_APPEND] >> strip_tac >> simp[IS_PREFIX_APPEND] >>
@@ -321,16 +320,16 @@ Proof
     simp[mk_inst_def, step_jmp_behavior] >>
   `ptr_safe_step D lo 0 ctx func PG G tn (mk_inst iid JMP [Label lbl] []) s` by
     (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-          mk_inst_def, source_memory_write_ranges_def,
-          source_memory_read_ranges_def, op_taint_def] >>
+          mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
+          contextCodegenRelTheory.source_memory_read_ranges_def, op_taint_def] >>
      simp[GSYM mk_inst_def, step_inst_non_invoke] >>
      simp[mk_inst_def, step_jmp_behavior, jump_to_def]) >>
   mp_tac (Q.INST [`i` |-> `mk_inst iid JMP [Label lbl] []`]
     jump_origin_ptr_path) >>
   simp[] >>
   simp[mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
-       inst_dload_in_section_def, source_memory_read_ranges_def,
-       source_memory_write_ranges_def]
+       inst_dload_in_section_def, contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def]
 QED
 
 (* A JNZ on an untainted condition keeps the ghost and lands on the taken
@@ -351,17 +350,18 @@ Proof
   `ptr_safe_step D lo 0 ctx func PG G tn
      (mk_inst iid JNZ [cond; Label l1; Label l2] []) s` by
     (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-          mk_inst_def, source_memory_write_ranges_def,
-          source_memory_read_ranges_def, op_taint_def] >>
+          mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
+          contextCodegenRelTheory.source_memory_read_ranges_def, op_taint_def] >>
      simp[GSYM mk_inst_def, step_inst_non_invoke] >>
-     rw[jump_to_def]) >>
+     rw[jump_to_def] >> Cases_on `op = cond` >> gvs[op_taint_def] >>
+     Cases_on `op` >> gvs[]) >>
   mp_tac (Q.INST [`i` |-> `mk_inst iid JNZ [cond; Label l1; Label l2] []`,
-                  `lbl` |-> `if w <> 0w then l1 else l2`]
+                  `lbl` |-> `if (w:256 word) <> 0w then l1 else l2`]
     jump_origin_ptr_path) >>
   simp[] >>
   simp[mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
-       inst_dload_in_section_def, source_memory_read_ranges_def,
-       source_memory_write_ranges_def]
+       inst_dload_in_section_def, contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def]
 QED
 
 (* A loop whose every non-exit state P reaches a smaller P state by a
@@ -385,7 +385,7 @@ Proof
        gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) x []
          (OK s', G', tn')` suffices_by
     (rpt strip_tac >> first_x_assum drule >> simp[]) >>
-  drule relationTheory.WF_INDUCTION_THM >> disch_then ho_match_mp_tac >>
+  first_assum (ho_match_mp_tac o MATCH_MP relationTheory.WF_INDUCTION_THM) >>
   gen_tac >> PairCases_on `x` >> rpt strip_tac >>
   Cases_on `Q (x0, x1, x2)`
   >- (qexistsl_tac [`x0`, `x1`, `x2`] >> simp[] >>
