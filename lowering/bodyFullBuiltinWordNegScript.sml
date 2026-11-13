@@ -284,3 +284,31 @@ Proof
     mk_inst_def, finite_mapTheory.FLOOKUP_DEF] >>
   SET_TAC[]
 QED
+
+Theorem word_neg_taint_exterior:
+  compile_neg x ty sa = (op,sb) /\
+  inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G' tn' ==>
+  tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+  tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm
+Proof
+  strip_tac >>
+  `!i u v tn0. MEM i (emitted_insts sa sb) /\
+      step_inst_base i u = OK v ==>
+      (step_taint i u v tn0).t_mem = tn0.t_mem /\
+      (step_taint i u v tn0).t_stor = tn0.t_stor /\
+      (step_taint i u v tn0).t_trans = tn0.t_trans /\
+      (step_taint i u v tn0).t_imm = tn0.t_imm` by
+    metis_tac[word_neg_step_exterior] >>
+  drule word_neg_emission >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `emitted_insts sa sb = [i;j;k]` >>
+  `MEM i (emitted_insts sa sb) /\ MEM j (emitted_insts sa sb) /\
+   MEM k (emitted_insts sa sb)` by simp[] >>
+  gvs[Once inst_seq_ptr_def] >>
+  Cases_on `step_inst_base i s` >> gvs[] >>
+  gvs[Once inst_seq_ptr_def] >>
+  Cases_on `step_inst_base j (v with vs_inst_idx := SUC s.vs_inst_idx)` >>
+  gvs[] >>
+  gvs[Once inst_seq_ptr_def] >>
+  Cases_on `step_inst_base k (v' with vs_inst_idx := SUC (SUC s.vs_inst_idx))` >>
+  gvs[inst_seq_ptr_def] >> metis_tac[]
+QED
