@@ -2,6 +2,7 @@
 Theory abiEncoderWindowArrayFrameMem
 Ancestors
   abiEncoderWindowArrayMem abiEncoderWindowPrimitiveFrameMem
+  abiEncoderWindowArrayGrowthMem
   abiEncoderWindowMemFrame memContinuation abiEncoderWindowContract
 
 Theorem window_array_strong_contract_mem_frame_from_primitives:

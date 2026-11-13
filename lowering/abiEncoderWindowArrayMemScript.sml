@@ -6,6 +6,7 @@ Ancestors
   freshWrites abiEncoderWindowArrayRound abiEncoderArrayContext abiEncoderRegisteredEffect
   abiEncoderArrayLoopCode
   abiEncoderWindowArrayEntryMem abiEncoderWindowArrayCursorMem abiEncoderWindowLoopMem
+  abiEncoderWindowHeaderMem abiEncoderWindowArrayResultMem
   abiEncoderWindowLoopFrameMem abiEncoderWindowSequenceFrameMem abiEncoderWindowMemFrame
   abiEncoderSharedArrayEntry abiDecoderVarSequence
   windowPhaseMem windowSequenceMem windowTransitionMem abiEncoderArrayCode allocaFootprint
@@ -529,57 +530,17 @@ Resume window_array_strong_contract_mem[package]:
   `!x. not_fresh_at st x ==> not_fresh_at owner x` by
     (rpt strip_tac >> irule not_fresh_at_mono >>
      qexists_tac `st` >> asm_rewrite_tac[] >> decide_tac) >>
-  `window_array_transition ctx func st ids
-    [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] entry completed` by
-    (irule window_array_transition_owner_weaken >> qexists_tac `owner` >>
-     asm_rewrite_tac[] >> irule window_array_transition_region >>
-     qexistsl_tac [`loop_ids`, `[(d,LENGTH (enc (Array NONE ty) (ListV avs))) ]`] >>
-     asm_rewrite_tac[] >> simp[]) >>
-  `window_array_transition ctx func st ids
-    [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] completed t` by
-    (irule window_array_transition_owner_weaken >> qexists_tac `owner` >>
-     asm_rewrite_tac[] >> irule window_array_transition_region >>
-     qexistsl_tac [`{st.cs_next_id}`, `[]`] >>
-     asm_rewrite_tac[] >> simp[]) >>
   `32 <= LENGTH (enc (Array NONE ty) (ListV avs))` by
     (`abi_encoder_window_input (AbiDynArray ei asz msz active)
        (Array NONE ty) (ListV avs) sb cap s.vs_memory` by
        fs[window_array_root_def] >>
      drule window_array_layout >> decide_tac) >>
   `window_array_transition ctx func st ids
-    [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s entry` by
-    (irule window_array_transition_region >> qexistsl_tac [`ids`, `[(d,32)]`] >>
-     asm_rewrite_tac[] >> simp[]) >>
-  `window_array_transition ctx func st ids
     [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t` by
-    (irule window_array_transition_trans >>
-     qexists_tac `entry` >> asm_rewrite_tac[] >>
-     irule window_array_transition_trans >>
-     qexists_tac `completed` >> asm_rewrite_tac[]) >>
-  suspend "result"
-QED
-
-Resume window_array_strong_contract_mem[result]:
-  `window_sizes32 ids s` by fs[window_array_root_def] >>
-  `window_sizes32 ids t` by
-    (qpat_x_assum `window_array_transition ctx func st ids _ s t` mp_tac >>
-     simp_tac bool_ss [window_array_transition_def] >>
-     strip_tac >> first_x_assum irule >> asm_rewrite_tac[]) >>
-  qpat_x_assum `window_array_transition ctx func st ids _ s t` mp_tac >>
-  simp_tac bool_ss [window_array_transition_def] >> strip_tac >>
-  `abi_encoder_registered_effect (frag_ids st st')
-    [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t` by
-    (irule abi_encoder_registered_effect_enlarge >>
-     qexistsl_tac [`ids`, `[(d,LENGTH (enc (Array NONE ty) (ListV avs))) ]`] >>
-     asm_rewrite_tac[] >>
-     simp_tac bool_ss [Abbr `ids`] >> irule window_alloca_sites_subset) >>
+    (irule window_array_transition_assembly >> metis_tac[]) >>
   qexists_tac `t` >> reverse conj_tac >- asm_rewrite_tac[] >>
-  simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
-  asm_rewrite_tac[] >>
-  conj_tac >- metis_tac[abiEncoderExtendSimTheory.abi_encoder_extend_sim_sim] >>
-  qpat_x_assum `window_sizes32 ids t` mp_tac >>
-  simp_tac bool_ss [window_sizes32_def, Abbr `ids`] >>
-  strip_tac >> asm_rewrite_tac[]
+  irule window_array_transition_strong_result >>
+  fs[window_array_root_def, Abbr `ids`]
 QED
 
 Finalise window_array_strong_contract_mem

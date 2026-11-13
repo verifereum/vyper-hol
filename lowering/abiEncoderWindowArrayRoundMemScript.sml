@@ -1,6 +1,7 @@
 (* Same-endpoint memory companions for array rounds. *)
 Theory abiEncoderWindowArrayRoundMem
 Ancestors
+  abiEncoderWindowHeaderMem
   abiEncoderWindowArrayRecursiveMem abiEncoderWindowLoopMem abiEncoderWindowLoopFrameMem abiEncoderWindowMemFrame memContinuation
   abiEncoderWindowArrayRound abiEncoderWindowControlMem windowTransitionMem
   abiEncoderWindowArrayLoop abiEncoderWindowArrayInvariant abiEncoderArrayLoopCode
