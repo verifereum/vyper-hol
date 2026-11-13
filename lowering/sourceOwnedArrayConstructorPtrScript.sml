@@ -131,7 +131,7 @@ Proof
   strip_tac >> gvs[APPEND_ASSOC]
 QED
 
-Theorem constructor_count_guard_origin_ptr[local]:
+Theorem constructor_count_guard_origin_ptr:
   (!D lo PG code s t G tn G' tn' ctx fn bb.
     ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -307,7 +307,7 @@ Resume constructor_count_guard_origin_ptr[guard_path]:
   gvs[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`,
     mk_inst_def, is_terminator_def, rich_listTheory.DROP_APPEND1]
 QED
-Finalise constructor_count_guard_origin_ptr
+Finalise constructor_count_guard_origin_ptr[local]
 
 Theorem constructor_jump_origin_ptr[local]:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -630,7 +630,7 @@ Proof
   metis_tac[gas_origin_ptr_path_rules, APPEND]
 QED
 
-Theorem constructor_array_header_origin_ptr[local]:
+Theorem constructor_array_header_origin_ptr:
   (!code s t G tn G' tn' ctx fn bb D lo PG.
     ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -847,7 +847,7 @@ Resume constructor_array_header_origin_ptr[continuation]:
   gvs[]
 QED
 
-Finalise constructor_array_header_origin_ptr
+Finalise constructor_array_header_origin_ptr[local]
 
 (* Initialization writes only its own registers, so freshness at the eventual
    decoder limit is preserved, not merely freshness at the initializer limit. *)
