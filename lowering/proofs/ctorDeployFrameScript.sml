@@ -316,7 +316,7 @@ Proof
           Cases_on `ALOOKUP x0.sources tx.target = NONE` >> gvs[]
           >~ [`immutables_section_rel _ _ _`]
           >- (drule immutables_section_rel_length >> strip_tac >>
-              simp[imm_len_def]) >>
+              simp[immSectionDeadTheory.imm_len_def]) >>
           metis_tac[]) >>
       Cases_on `y` >> gvs[deploy_venom_result_rel_def])
   (* an aborted run ends in an exception *)
