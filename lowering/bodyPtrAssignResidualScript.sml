@@ -18,6 +18,7 @@ Ancestors
   vyperTypeSystem list finite_map
   widenedDeclarationPtrFragment widenedAssignPtrPreparation widenedAssignPtrRhsInput
   assignRelayoutCaller
+  widenedAssignPtrFragment assignBasePtrLocalBodyFacts
   annAssignPtrFacts annAssignPtrWord bodySimDeclCases bodyExprPreFacts
   memoryLocalRhsProps exprSimSource exprSimHypsDefs
   vyperTypeExprSoundness vyperTyping vyperTypeInvariants exprLoweringProps
@@ -78,6 +79,9 @@ Theorem body_assign_widened_aggregate_call_ptr:
    ty.
     body_expr_ptr_ok cx e /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (Assign (BaseTarget (NameTarget id)) e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
@@ -93,7 +97,13 @@ Theorem body_assign_widened_aggregate_call_ptr:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all assign_base_local_rhs_pre >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
+  `type_memory_bytes cenv ty < 2 ** 64` by metis_tac[locals_alloc_ok_def] >>
+  drule_all widened_assignment_internal_call >> strip_tac >>
+  fs[] >> irule widened_assignment_fragment_ptr >> simp[] >> metis_tac[]
 QED
 
 (* RESIDUAL: the pointer twin of S1's bodySimStmtCases$body_assign_tuple_other, stated as S1
