@@ -1,8 +1,9 @@
 (* The raw deployment unit's run is pointer-safe, with its taint confined to
  * deploy_dead's bytes and its accesses below imm_len exempt (the immutables
- * fixed region, addressed by literal offsets).  The deploy twin of
- * lower_vyper_runtime_unit_run_ptr_safe_composed, at PG = [] (__deploy has
- * no parameters).  Composed like deploy_unit_run_mem_safe: without a
+ * fixed region, addressed by literal offsets).  The deploy twin of the
+ * runtime unit's pointer-safe run (the exit arm of loweringRuntimeCorrect's
+ * lower_vyper_runtime_unit_body_joint), at PG = [] (__deploy has no
+ * parameters).  Composed like deploy_unit_run_mem_safe: without a
  * constructor (RunPtrNoCtor); a source that fails before the body
  * (RunPtrPrefix); otherwise the prefix reaches the body start with
  * deploy_ptr_inv (RunPtrEntry), and the body (RunPtrBody) either exits, a
