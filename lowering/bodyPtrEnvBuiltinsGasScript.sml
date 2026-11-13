@@ -8,6 +8,7 @@ Ancestors
   compileEnv loweringStateRelDefs exprLowering exprPtrUnwrap exprSimProps stmtFragPtr
   venomInst venomState venomExecSemantics finite_map pred_set list rich_list
   vyperAST vyperTypeSystem vyperValue valueEncoding codegenRel exprSimHypsDefs
+  gasStorage vyperStorageTrace vyperStorageFootprint vyperStorageBackend
 
 Theorem gas_builtin_base_step:
   ?w. gas_prefix 1 s.vs_gas_readings = [w] /\
@@ -125,15 +126,19 @@ QED
 Theorem gas_builtin_counted_post:
   compile_env_var MsgGas sa = (op,sb) /\ fn_has_code sa sb fn /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel H ctx fn cenv cx es s /\ ~s.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
+    storage_well_formed_on cx es (FST H)) /\
+  ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?w G' tn' t.
     gas_prefix 1 s.vs_gas_readings = [w] /\
-    gas_path_ptr D 0 ctx fn PG G tn s 1 G' tn' (OK t) /\
+    !H. valid_horizon cx st0 H es.storage_trace ==>
+    gas_path_ptr (D H) 0 ctx fn PG G tn s 1 G' tn' (OK t) /\
     expr_post H ctx fn cenv cx (Builtin (env_item_type MsgGas) (Env MsgGas) [])
       es sa sb s (es with gas_obs := []) (IntV (&w2n w)) op t /\
     t.vs_current_bb = sb.cs_current_bb /\
@@ -158,29 +163,43 @@ Proof
     metis_tac[gas_builtin_base_step] >>
   drule emit_scalar_builtin_counted_suffix >> simp[MEM] >>
   disch_then drule_all >>
-  disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] assume_tac) >>
+  disch_then (qspecl_then [`tn`, `PG`, `G`] assume_tac) >>
   drule emitted_insts_emit_op >> strip_tac >>
   `SUC s.vs_inst_idx = LENGTH sb.cs_current_insts` by simp[] >>
-  `expr_post H ctx fn cenv cx (Builtin (env_item_type MsgGas) (Env MsgGas) [])
-    es sa sb s (es with gas_obs := []) (IntV (&w2n w)) op
-    (update_var (STRING #"%" (toString sa.cs_next_var)) w
-      (s with <|vs_gas_readings := DROP 1 s.vs_gas_readings;
-                 vs_inst_idx := LENGTH sb.cs_current_insts|>))` by
-    metis_tac[msg_gas_post_frame] >>
+  `update_var (STRING #"%" (toString sa.cs_next_var)) w
+     (s with vs_gas_readings := DROP 1 s.vs_gas_readings) with
+     vs_inst_idx := SUC s.vs_inst_idx =
+   update_var (STRING #"%" (toString sa.cs_next_var)) w
+     (s with <|vs_gas_readings := DROP 1 s.vs_gas_readings;
+               vs_inst_idx := LENGTH sb.cs_current_insts|>)` by
+    simp[update_var_def] >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  qexistsl_tac [
+    `step_prov PG G (mk_inst sa.cs_next_id GAS []
+       [STRING #"%" (toString sa.cs_next_var)])
+       (update_var (STRING #"%" (toString sa.cs_next_var)) w
+          (s with vs_gas_readings := DROP 1 s.vs_gas_readings))`,
+    `step_taint (mk_inst sa.cs_next_id GAS []
+       [STRING #"%" (toString sa.cs_next_var)]) s
+       (update_var (STRING #"%" (toString sa.cs_next_var)) w
+          (s with vs_gas_readings := DROP 1 s.vs_gas_readings)) tn`,
+    `update_var (STRING #"%" (toString sa.cs_next_var)) w
+       (s with <|vs_gas_readings := DROP 1 s.vs_gas_readings;
+                 vs_inst_idx := LENGTH sb.cs_current_insts|>)`] >>
+  qx_gen_tac `H` >> strip_tac >>
+  `ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx fn cenv cx es s /\
+   storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+  conj_tac
+  >- (qpat_x_assum `!D. gas_path_ptr D _ _ _ _ _ _ _ _ _ _ _`
+        (qspec_then `D H` mp_tac) >>
+      simp[update_var_def, arithmeticTheory.ADD1]) >>
+  conj_tac >- metis_tac[msg_gas_post_frame] >>
+  conj_tac >- simp[update_var_def] >>
+  conj_tac >- simp[update_var_def] >>
   drule gas_builtin_indexed_ghosts >> disch_then drule_all >>
   disch_then (qspecl_then [`w`, `LENGTH sb.cs_current_insts`, `sa.cs_next_id`,
     `DROP 1 s.vs_gas_readings`, `PG`] strip_assume_tac) >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ (update_var _ _ _)` mp_tac >>
-  `update_var (STRING #"%" (toString sa.cs_next_var)) w
-     (s with <|vs_gas_readings := DROP 1 s.vs_gas_readings;
-               vs_inst_idx := LENGTH sb.cs_current_insts|>) =
-   update_var (STRING #"%" (toString sa.cs_next_var)) w
-     (s with vs_gas_readings := DROP 1 s.vs_gas_readings) with
-     vs_inst_idx := LENGTH sb.cs_current_insts` by simp[update_var_def] >>
-  pop_assum (fn th => rewrite_tac[th, ghost_inv_inst_idx]) >> strip_tac >>
-  qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  gvs[update_var_def, ptr_val_ok_def, env_item_type_def, is_word_type_def,
-      arithmeticTheory.ADD1, ghost_inv_gas_obs] >>
+  gvs[ptr_val_ok_def, env_item_type_def, is_word_type_def, ghost_inv_gas_obs] >>
   conj_tac
   >- (irule scalar_builtin_output_clean >> simp[MEM]) >>
   irule scalar_builtin_output_no_prov >> simp[MEM]
@@ -192,13 +211,25 @@ Theorem compile_msg_gas_sim_ptr:
 Proof
   rw[expr_sim_ptr_def] >>
   drule lower_value_env >> strip_tac >>
-  drule_all gas_builtin_counted_post >>
-  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
-  simp[gas_outcome_ptr_def] >> qexists_tac `[T]` >> disj1_tac >>
-  simp[gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INL (IntV (&w2n w))`, `es`, `G'`, `tn'`, `OK t`] >>
-  simp[gas_explicit_def, msg_gas_source] >>
-  gvs[expr_type_def, env_item_type_def, is_word_type_def]
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G0 tn0 s0 /\
+    stmt_state_rel H ctx fn cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+  Cases_on `?H. valid_horizon cx st0 H es.storage_trace`
+  >- (drule_all gas_builtin_counted_post >>
+      disch_then (qspecl_then [`PG`, `\H. cx_dead H cx`] strip_assume_tac) >>
+      simp[gas_outcome_ptr_def] >> qexists_tac `[T]` >>
+      disj2_tac >> disj1_tac >>
+      simp[gas_summary_ptr_at_def] >>
+      qexistsl_tac [`INL (IntV (&w2n w))`, `es`, `G'`, `tn'`, `OK t`] >>
+      simp[gas_explicit_def, msg_gas_source] >> rpt strip_tac >>
+      first_x_assum drule >> strip_tac >>
+      gvs[expr_type_def, env_item_type_def, is_word_type_def]) >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  irule gas_bad_storage_at_initial >> conj_tac
+  >- (irule storage_trace_frame_bind_all >>
+      simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  simp[storage_trace_domain_def] >> metis_tac[]
 QED
 
 Theorem compile_msg_gas_vv_sim_ptr:
