@@ -121,7 +121,7 @@ Proof
       simp[] >> gen_tac >> irule ptr_frame_current_table_entry >> simp[])
   >- (rpt gen_tac >> strip_tac >> strip_tac >>
       qpat_x_assum `ptr_discipline _ _ _ ==> _` (drule_then strip_assume_tac) >>
-      simp[ptr_site_supported_def] >> metis_tac[lookup_function_MEM])
+      fs[ptr_site_supported_def] >> metis_tac[lookup_function_MEM])
   >> rpt gen_tac >> strip_tac >> strip_tac >>
   qpat_x_assum `ptr_discipline _ _ _ ==> _` (drule_then strip_assume_tac) >>
   `s'.vs_allocas = f.cf_state.vs_allocas` by metis_tac[ptr_return_allocas] >>
