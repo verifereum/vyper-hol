@@ -481,7 +481,9 @@ QED
 Resume compile_slice_ordinary_case[bytes_nonhalt]:
  markerLib.RESUME_TAC >> (
  `?w. eval_operand src_op t = SOME w` by
-   (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+   (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+      (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+    impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
     simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def, is_word_type_def,
       vyperValueTheory.evaluate_type_def] >> metis_tac[]) >>
  drule_all slice_bytestring_src_run >> strip_tac >> gvs[] >>
@@ -519,7 +521,9 @@ QED
 Resume compile_slice_ordinary_case[string_nonhalt]:
  markerLib.RESUME_TAC >> (
  `?w. eval_operand src_op t = SOME w` by
-   (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+   (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+      (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+    impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
     simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def, is_word_type_def,
       vyperValueTheory.evaluate_type_def] >> metis_tac[]) >>
  drule_all slice_bytestring_src_run >> strip_tac >> gvs[] >>
