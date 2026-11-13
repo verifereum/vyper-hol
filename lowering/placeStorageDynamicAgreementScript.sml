@@ -1,7 +1,7 @@
 (* Lookup and agreement boundaries for live dynamic storage copies. *)
 Theory placeStorageDynamicAgreement
 Ancestors
-  placeStorageSubregionLive storageCopyLive placeStorageElementPaths
+  storageSubregionFrame storageCopyLive placeStorageElementPaths
   compileEnv accountsRelProps vyperStoragePlaceRegion vyperValue vyperStorage vyperTyping
   bodyMemAssignTopCopySem stmtSimStoreCopy venomState words list rich_list arithmetic
 
@@ -142,13 +142,15 @@ Theorem storage_subregion_dead_outside:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `storage_dead _ _ _ _ _` mp_tac >>
-  simp_tac bool_ss [storage_dead_def] >> strip_tac >>
+  simp_tac bool_ss [loweringStateRelDefsTheory.storage_dead_def] >> strip_tac >>
   rename1 `dead_bytes st (w2n slot) tv x b` >>
   `dead_bytes st' (w2n slot) tv x b` by
     (Cases_on `(slot,tv) = (k,root)`
-     >- (gvs[] >> drule storage_subregion_dead_frame >>
-         disch_then (qspecl_then [`st`, `st'`, `w2n k`, `x`, `b`] mp_tac) >>
-         simp[] >> metis_tac[]) >>
+     >- (gvs[] >>
+         `dead_bytes st' (w2n k) root x b <=> dead_bytes st (w2n k) root x b` by
+           (irule storage_subregion_dead_bytes_frame_outside >>
+            goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
+            first_x_assum irule >> decide_tac) >> simp[]) >>
      drule storage_subregion_bounds >> strip_tac >>
      `ranges_disjoint (w2n slot) (type_slot_size tv)
        (w2n k) (type_slot_size root)` by
@@ -157,7 +159,7 @@ Proof
        (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
         first_x_assum irule >> fs[vyperStorageFrameTheory.ranges_disjoint_def] >> decide_tac) >>
      simp[]) >>
-  simp_tac bool_ss [storage_dead_def] >>
+  simp_tac bool_ss [loweringStateRelDefsTheory.storage_dead_def] >>
   qexistsl_tac [`mid'`, `n`, `subs'`, `slot`, `tv`] >> asm_rewrite_tac[]
 QED
 
@@ -224,7 +226,7 @@ Proof
   `w2n d+type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword(:256)` by decide_tac >>
   `LENGTH vs <= cap` by fs[Once value_has_type_def] >>
   `LENGTH vs*type_slot_size tv <= cap*type_slot_size tv` by simp[] >>
-  pure_rewrite_tac[storage_agree_def] >> rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac[loweringStateRelDefsTheory.storage_agree_def] >> rpt gen_tac >> strip_tac >>
   rename1 `~storage_dead cx tr (apply_writes d writes st1) (w2n q) b` >>
   Cases_on `w2n d <= w2n q /\ w2n q < w2n d+type_slot_size (ArrayTV tv (Dynamic cap))`
   >- suspend "inside"
@@ -234,12 +236,11 @@ Resume storage_dynamic_subregion_lookup_agree[inside]:
   `~dead_bytes (apply_writes d writes st1) (w2n d)
     (ArrayTV tv (Dynamic cap)) (w2n q) b` by
     (strip_tac >> qpat_x_assum `~storage_dead _ _ _ _ _` mp_tac >> simp[] >>
-     pure_rewrite_tac[storage_dead_def] >>
+     pure_rewrite_tac[loweringStateRelDefsTheory.storage_dead_def] >>
      qexistsl_tac [`mid`, `name`, `subs`, `k`, `root`] >> simp[] >>
      conj_tac >- gvs[] >>
-     drule storage_subregion_dead_leaf >>
-     disch_then (qspecl_then [`apply_writes d writes st1`, `w2n k`, `w2n q`, `b`] mp_tac) >>
-     simp[] >> metis_tac[ADD_COMM]) >>
+     irule storageSubregionFrameTheory.storage_subregion_dead_bytes >>
+     goal_assum (drule_at Any) >> gvs[]) >>
   `lookup_storage d (apply_writes d writes st1) = n2w (LENGTH vs)` by
     (irule storage_dynamic_encoded_header >> metis_tac[]) >>
   Cases_on `q = d` >- (gvs[]) >>
@@ -277,7 +278,7 @@ Resume storage_dynamic_subregion_lookup_agree[outside]:
      simp_tac std_ss [type_slot_size_def] >> decide_tac) >>
   qpat_x_assum `!q. lookup_storage q st2' = _` (qspec_then `q` mp_tac) >>
   simp[] >> disch_then SUBST1_TAC >>
-  qpat_x_assum `storage_agree _ _ _` mp_tac >> simp[storage_agree_def]
+  qpat_x_assum `storage_agree _ _ _` mp_tac >> simp[loweringStateRelDefsTheory.storage_agree_def]
 QED
 Finalise storage_dynamic_subregion_lookup_agree
 

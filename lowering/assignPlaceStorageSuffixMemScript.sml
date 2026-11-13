@@ -2,7 +2,7 @@
 Theory assignPlaceStorageSuffixMem
 Ancestors
   dynStorageCopyAgreement dynStorageState dynStorageDeclaredAgreement
-  declaredStorageAgreement storageSubregionAgreement
+  declaredStorageAgreement storageSubregionFrame
   bodyMemAssignTopCopyPaths bodyMemAssignTopCopySem bodyMemAssignTopCopySuffix
   stmtSimAssignStorageCopy storageCopyLive valueCopyBytes
   stmtSimStoreCopy stmtLowering venomState valueEncodingProps words arithmetic
@@ -73,8 +73,8 @@ Proof
     `w2n k`, `keys`, `tv`, `mid`, `name`, `old`, `root`, `rtv`] >>
   rpt conj_tac
   >- suspend "outside_mask"
-  >- (rpt strip_tac >> drule storage_subregion_dead_bytes >>
-      disch_then irule >> metis_tac[])
+  >- (rpt strip_tac >> irule storageSubregionFrameTheory.storage_subregion_dead_bytes >>
+      goal_assum (drule_at Any) >> metis_tac[])
   >- (rpt strip_tac >>
       `w2n k+n <= dimword (:256)` by decide_tac >>
       `~(w2n k <= j /\ j < w2n k+n)` by decide_tac >>
@@ -106,13 +106,10 @@ Resume suffix_declared_agreement[outside_mask]:
        ~(w2n k <= a /\ a < w2n k+type_slot_size tv) ==>
        lookup_storage (n2w a) (apply_writes k writes old) = lookup_storage (n2w a) old` by
     (rpt strip_tac >> irule copy_encoded_outside >> metis_tac[]) >>
-  drule storage_subregion_dead_bytes_outside >>
-  disch_then (qspecl_then [`old`, `apply_writes k writes old`, `w2n root`, `j`, `b`] mp_tac) >>
-  impl_tac
-  >- (conj_tac >- asm_rewrite_tac[] >>
-      reverse conj_tac >- decide_tac >>
-      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
-  metis_tac[]
+  irule storage_subregion_dead_bytes_frame_outside >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  decide_tac
 QED
 Finalise suffix_declared_agreement
 

@@ -40,7 +40,7 @@ Proof
   Cases_on `w2n (mload (w2n sw) s) > cap MOD dimword (:256)` >> simp[] >>
   simp[lookup_var_update_var, toString_inj] >>
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  Cases_on `dst` >> gvs[eval_operand_def, lookup_var_def, not_fresh_at_def] >>
+  Cases_on `dst` >> gvs[eval_operand_def, lookup_var_def, loweringStateRelDefsTheory.not_fresh_at_def] >>
   rpt strip_tac >>
   `!k. sa.cs_next_var <= k ==> s' <> STRING #"%" (toString k)` by metis_tac[] >>
   simp[]
@@ -112,7 +112,7 @@ Proof
   `mem_bytes_at d 32 t.vs_memory = mem_bytes_at d 32 u.vs_memory` by
     (irule typed_copy_effect_bytes >> goal_assum (drule_at Any) >> simp[]) >>
   simp[val_in_memory_dynarray] >> conj_tac
-  >- gvs[valueEncodingTheory.mem_word_at_def, valueEncodingTheory.mem_bytes_at_def] >>
+  >- gvs[valueEncodingDefsTheory.mem_word_at_def, valueEncodingDefsTheory.mem_bytes_at_def] >>
   irule exprSimAggregateEncodingTheory.elems_in_memory_intro >> simp[]
 QED
 
@@ -391,7 +391,7 @@ QED
 
 Resume typed_memory_dynarray_slow_forward_counted[iteration]:
   conj_tac
-  >- (fs[valueEncodingTheory.val_wf_def] >>
+  >- (fs[valueEncodingDefsTheory.val_wf_def] >>
       metis_tac[exprSimPopTheory.elems_val_wf_EL]) >>
   conj_tac
   >- (gvs[valueEncodingTheory.type_memory_size_def] >>
@@ -507,7 +507,7 @@ Resume typed_memory_dynarray_slow_forward_counted[element_finish]:
   `alloca_inv a'` by metis_tac[localPtrsPropsTheory.alloca_inv_fields] >>
   imp_res_tac typed_copy_effect_endpoint >>
   `val_wf dtv (EL j vs) /\ val_wf stv (EL j vs)` by
-    (fs[valueEncodingTheory.val_wf_def] >>
+    (fs[valueEncodingDefsTheory.val_wf_def] >>
      metis_tac[exprSimPopTheory.elems_val_wf_EL]) >>
   `value_has_type dtv (EL j vs) /\ value_has_type stv (EL j vs)` by
     (fs[vyperTypingTheory.value_has_type_def, vyperTypingTheory.all_have_type_EVERY] >>

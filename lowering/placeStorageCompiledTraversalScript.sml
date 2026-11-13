@@ -2,7 +2,7 @@
 Theory placeStorageCompiledTraversal
 Ancestors
   placeStorageTraversalCounted placeStorageLayoutCounted placeStorageControlCounted
-  compileEnv emitHelperProps words list rich_list
+  compileEnv loweringStateRelDefs emitHelperProps words list rich_list
 
 Theorem dyn_storage_word_header[local]:
   compile_dynarray_to_storage src dst 1 em tr sa = ((),sb) /\

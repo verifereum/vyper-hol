@@ -1,13 +1,14 @@
 (* Memory assignment endpoints retain the local frame of fresh staging. *)
 Theory assignPlaceMemoryContinuationMem
 Ancestors
-  placeAssignStagingMem placeMemoryStateRebuild placeMemoryStagingFrame
+  placeMemoryStagingMem placeMemoryStateRebuild placeMemoryStagingFrame
   exprSimMemUnwrap abiBuiltinAllocation fragExec venomExecSemantics
   venomInst venomState rich_list exprLoweringProps freshWrites emitHelperProps
-  loweringHalt abiTupleProps compileEnv exprSimProps placeTypedCopyPrimitiveMem
+  loweringHalt abiTupleProps compileEnv exprSimProps typedCopyPrimitivePathMem
   fragGasPathMem valueEncodingProps placeMemoryLiveRegion abiCallerLocalScratch
   stmtSimDefs loweringPosts exprSimAlloc placeMemoryCopyEffect
   placeMemoryAssignForward valueEncodingTyping exprSimHypsDefs exprSimHyps
+  typedCopyAggregateCounted fragGasMode loweringStateRelDefs valueEncodingDefs
 
 Theorem assign_alloc_buffer_record[local]:
   compile_alloc_buffer n sa = (buf,sm) /\
@@ -74,14 +75,18 @@ Proof
     (rpt strip_tac >> irule local_region_frame_fwd >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `w2n sw + n <= r.vs_alloca_next` by decide_tac >>
-  drule_all compile_copy_memory_effect_mem >>
+  `alloca_inv r` by fs[stmt_state_rel_def] >>
+  `val_footprint stv v <= n` by metis_tac[val_footprint_le] >>
+  `val_in_memory stv v (w2n sw) r.vs_memory` by simp[] >>
+  drule_all copy_memory_window_path_length >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  rename1 `typed_copy_effect ctx func sm sn r u _ _` >>
+  rename1 `gas_path_mem ctx func r 0 (OK u)` >>
+  `typed_copy_effect ctx func sm sn r u (w2n w) n` by
+    (simp[typed_copy_effect_def] >> conj_tac
+     >- (simp[gas_marked_path_def] >> metis_tac[gas_path_mem_exec]) >>
+     gvs[venom_state_component_equality] >> metis_tac[]) >>
   `gas_path_mem ctx func s 0 (OK u)` by
     metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
-  `val_in_memory stv v (w2n w) u.vs_memory` by
-    (irule valueEncodingPropsTheory.val_in_memory_relocate >> conj_tac >- simp[] >>
-     qexistsl_tac [`s.vs_memory`, `n`, `w2n sw`] >> simp[]) >>
   qexistsl_tac [`r`, `u`, `w`] >> simp[] >> metis_tac[]
 QED
 
@@ -127,8 +132,8 @@ Proof
   `immutable_alloca_sep func cenv cx ee s` by
     metis_tac[stmt_state_rel_def] >>
   qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
-  simp[immutable_alloca_sep_def] >>
-  disch_then (qspecl_then [`nm`, `tv`, `iv`, `off`] mp_tac) >>
+  simp[immutable_alloca_sep_def] >> strip_tac >>
+  qpat_x_assum `!name tv v off. _` (qspecl_then [`nm`, `tv`, `iv`, `off`] mp_tac) >>
   simp[] >> strip_tac >>
   qpat_x_assum `!id b sz. local_region _ _ _ _ _ _ ==> _` drule >>
   simp[regions_disjoint_def] >> strip_tac >>
@@ -154,8 +159,8 @@ Proof
   drule_all buffer_alloc_code >> strip_tac >>
   `immutable_alloca_sep func cenv cx ee r` by metis_tac[stmt_state_rel_def] >>
   qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
-  simp[immutable_alloca_sep_def] >>
-  disch_then (qspecl_then [`nm`, `tv`, `iv`, `off`] mp_tac) >>
+  simp[immutable_alloca_sep_def] >> strip_tac >>
+  qpat_x_assum `!name tv v off. _` (qspecl_then [`nm`, `tv`, `iv`, `off`] mp_tac) >>
   simp[] >> strip_tac >>
   `regions_disjoint off (type_memory_size tv) tmp n` by
     (qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` irule >>

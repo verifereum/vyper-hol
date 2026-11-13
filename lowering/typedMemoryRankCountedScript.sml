@@ -3,7 +3,7 @@ Ancestors
   placeMemoryTypedForward typedCopyCounted typedCopyAggregateCounted
   typedSarrayForwardCounted typedDynarrayForwardCounted typedCopyFieldsSemanticCounted
   typedNormalizeStaticRigidity typedNormalizeDynarray typedNormalizeStructMetadata
-  typedCopyDomain compileEnv vyperTypeSystem vyperValue vyperTyping valueEncoding
+  typedCopyDomain compileEnv vyperTypeSystem vyperValue vyperTyping valueEncoding valueEncodingDefs
   placeMemoryChildForward placeMemoryCopyEffect placeMemoryTypedBase context
   vyperTypeValues exprLoweringProps venomState fragGasMode fragGasPathMem
 

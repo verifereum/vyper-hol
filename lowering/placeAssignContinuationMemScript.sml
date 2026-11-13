@@ -1,4 +1,8 @@
-(* Counted continuation boundaries for widened aggregate place assignment. *)
+(* Counted continuation boundaries for widened aggregate place assignment.
+   Unlike assignPlaceNormalizationMem's vv_at/vv_store_bound arbitrary-region
+   boundary (which permits zero size), these facts use expr_val_at and strict
+   widening at one allocation site. The allocation result also retains physical
+   values, old allocations, local separation, storage/transient and labels. *)
 Theory placeAssignContinuationMem
 Ancestors
   placeStorageNormalizationBoundary placeMemoryStagingBoundary

@@ -7,7 +7,7 @@ Ancestors
   stmtLowering exprLoweringProps loweringPosts venomState words arithmetic
   vyperTypeSystem vyperValue vyperTyping valueEncodingProps context compileEnv
   vfmConstants bodySim allocLimits exprSimMemDefs
-  assignPlaceNormalizationMem exprSimAlloc placeAssignStagingMem
+  assignPlaceNormalizationMem exprSimAlloc placeMemoryStagingMem typedMemoryRankCounted
   placeMemoryCopyEffect fragGasPathMem loweringHalt
   assignPlaceDynStorageRuntime assignPlaceDynStorageControl
   assignPlaceDynStorageLayout emitHelper emitHelperProps fragExec fragGasMode
@@ -262,18 +262,16 @@ Proof
   `local_ptrs_reserved ce sm` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[] >>
      drule compile_alloc_buffer_parts >> simp[]) >>
-  `compile_store_memory ce (vv_operand vv) buf.buf_operand dty sty sm = ((),sb)` by
-    (asm_rewrite_tac[contextTheory.compile_store_memory_def] >> gvs[]) >>
+  `alloca_inv r` by fs[stmt_state_rel_def] >>
   `!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
     type_memory_bytes ce ty = type_memory_size tv` by
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
-  `?t. gas_path_mem ctx func r 0 (OK t) /\
-       val_in_memory dtv v (w2n dw) t.vs_memory /\
-       typed_copy_effect ctx func sm sb r t (w2n dw) (type_memory_size dtv)` by
-    (irule compile_store_memory_nonword_effect_mem >> simp[] >>
-     goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
-     qexistsl_tac [`stv`,`sw`,`get_tenv cx`] >>
-     simp[arithmeticTheory.ADD_COMM] >>
+  `?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
+       typed_copy_effect ctx func sm sb r t (w2n dw) (type_memory_size dtv) /\
+       gas_path_mem ctx func r 0 (OK t) /\ alloca_history func t` by
+    (irule typed_memory_rank_forward_counted >> simp[] >>
+     goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+     qexistsl_tac [`stv`,`sw`,`get_tenv cx`] >> simp[] >>
      fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
   `stmt_state_rel ctx func ce cx ee t` by
     (irule normalization_copy_state >> metis_tac[]) >>

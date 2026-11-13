@@ -1,7 +1,7 @@
 (* Single-store continuations for scalar and empty place assignments. *)
 Theory assignPlaceScalarContinuationMem
 Ancestors
-  placeStore placeMemoryLiveRegion bodyMemoryDefs placeTypedCopyPrimitiveMem
+  placeStore placeMemoryLiveRegion bodyMemoryDefs typedCopyPrimitivePathMem
   fragGasMode fragGasPathMem fragGasSeqMem instMemFrontier memSafeRun
   bodyDeclMemoryCore bodyDeclMemoryCounted compileEnv context
   emitHelperProps emitHelper exprLoweringProps

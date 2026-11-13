@@ -1,7 +1,7 @@
 (* Overlap-safe bytestring stores at a memory assignment destination. *)
 Theory assignPlaceBytestringContinuationMem
 Ancestors
-  assignPlaceMemoryContinuationMem placeTypedCopyPrimitiveMem
+  assignPlaceMemoryContinuationMem typedCopyPrimitivePathMem
   placeMemoryCopyEffect exprSimHyps stmtLowering valueCopy compileEnv
   fragGasPathMem venomState context valueCopyBytes
 

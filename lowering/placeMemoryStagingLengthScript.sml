@@ -58,5 +58,5 @@ Proof
     metis_tac[alloca_room_next_lt, stmt_state_rel_def] >>
   `regions_disjoint (w2n tw) (type_memory_size stv) b len` by metis_tac[] >>
   qexistsl_tac [`t`, `tw`] >> simp[] >>
-  fs[compileEnvTheory.regions_disjoint_def] >> gvs[]
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> gvs[]
 QED

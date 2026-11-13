@@ -178,7 +178,7 @@ Proof
   `typed_copy_effect ctx func mid sb z t d
      (type_memory_size dtv + type_memory_size_list dtvs)` by
     (irule typed_copy_effect_enlarge >> goal_assum (drule_at Any) >> simp[]) >>
-  simp[valueEncodingTheory.val_in_memory_def] >> conj_tac
+  simp[valueEncodingDefsTheory.val_in_memory_def] >> conj_tac
   >- (irule typed_copy_effect_then >> qexistsl [`mid`, `mid`, `z`] >>
       simp[] >> metis_tac[not_fresh_at_mono]) >>
   `gas_path_mem ctx func s (0 + 0) (OK t)` by
@@ -240,14 +240,14 @@ Theorem typed_memory_fields_forward_counted:
 Proof
   Induct
   >- (Cases_on `sts` >> Cases_on `dtvs` >> Cases_on `stvs` >> Cases_on `vs` >>
-      simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def,
-           valueEncodingTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def,
+      simp[vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_wf_def,
+           valueEncodingDefsTheory.val_in_memory_def, valueEncodingTheory.type_memory_size_def,
            cj 2 compile_store_memory_typed_def, comp_return_def] >>
       rpt strip_tac >> gvs[] >> qexists `s` >> simp[gas_path_mem_rules] >>
       irule typed_copy_effect_identity >> simp[]) >>
   pop_assum (mk_asm "ih") >> Cases_on `sts` >> Cases_on `dtvs` >>
   Cases_on `stvs` >> Cases_on `vs` >>
-  simp[vyperTypingTheory.value_has_type_def, valueEncodingTheory.val_wf_def,
+  simp[vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_wf_def,
        valueEncodingTheory.type_memory_size_def] >>
   rpt strip_tac >> gvs[] >> rename1 `compile_typed_copy_fields cenv dst src (dt::dts) (st::sts) doff soff sa = ((),sb)` >>
   rename1 `tuple_in_memory (v::vs) (stv::stvs) _ s.vs_memory` >> rename1 `evaluate_type tenv dt = SOME dtv` >>
@@ -265,12 +265,12 @@ Proof
        typed_copy_effect ctx func sa c s z (w2n dw + doff) (type_memory_size dtv) /\
        gas_path_mem ctx func s 0 (OK z) /\ alloca_history func z` by
     (irule typed_fields_head_path_mem >> simp[comp_bind_def, comp_ignore_bind_def] >>
-     rpt (goal_assum (drule_at Any)) >> gvs[valueEncodingTheory.val_in_memory_def] >>
+     rpt (goal_assum (drule_at Any)) >> gvs[valueEncodingDefsTheory.val_in_memory_def] >>
      qexists `soff` >> simp[] >> qpat_x_assum `ih :- _` kall_tac >>
      qpat_x_assum `!dt'. _` (qspec_then `dt` mp_tac) >> simp[]) >>
   `tuple_in_memory vs stvs (w2n sw + soff + type_memory_size stv) z.vs_memory` by
     (irule typed_fields_source_tail_frame >> rpt (goal_assum (drule_at Any)) >>
-     fs[valueEncodingTheory.val_in_memory_def] >> decide_tac) >>
+     fs[valueEncodingDefsTheory.val_in_memory_def] >> decide_tac) >>
   `alloca_inv z /\ z.vs_alloca_next = s.vs_alloca_next /\
    eval_operand dst z = SOME dw /\ eval_operand src z = SOME sw` by
     (irule typed_fields_effect_state >> rpt (goal_assum (drule_at Any))) >>

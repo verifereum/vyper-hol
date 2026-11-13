@@ -4,9 +4,13 @@ Ancestors
   valueCopy exprLoweringProps exprSimAlloc compileEnv venomState fragGasPathMem
   loweringPosts exprSimMemDefs exprSimProps allocaHistoryFragment
   vyperTypeSystem valueEncodingProps bodyMemAggregatePath allocaHistory
+  loweringStateRelDefs
 
-(* Allocation-site separation uses full nonbytes footprints, not just the
-   bytes occupied by a particular value. *)
+(* This raw-value boundary uses vv_at and vv_store_bound, permits zero-size
+   sources, and proves separation from arbitrary disjoint regions. In contrast,
+   placeAssignContinuationMem uses expr_val_at and strict widening at a specific
+   allocation site, and also returns physical value, local and storage frames.
+   Both contracts are needed by their distinct continuation cuts. *)
 Theorem normalization_source_separation[local]:
   vv_at ce cx sty origin sa ee raw vv s /\
   read_result cx raw ee = (INL v,ee) /\
@@ -169,11 +173,10 @@ Theorem assign_place_normalization_mem:
         evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
     (!ty tv. evaluate_type tenv ty = SOME tv ==>
       type_memory_bytes cenv ty = type_memory_size tv) /\
-    fn_inst_ids_distinct func /\
-    (dty <> sty /\ ~is_bytestring_type dty ==>
-      w2n sw + type_memory_size stv <= w2n dw \/
-      w2n dw + type_memory_size dtv <= w2n sw) /\
-    compile_store_memory cenv sp dp dty sty a = ((),b) ==>
+    fn_inst_ids_distinct func /\ alloca_history func u /\ alloca_inv u /\
+    (w2n sw + type_memory_size stv <= w2n dw \/
+     w2n dw + type_memory_size dtv <= w2n sw) /\
+    compile_store_memory_typed cenv dp dty sp sty a = ((),b) ==>
     ?t. gas_path_mem ctx func u 0 (OK t) /\
       val_in_memory dtv v (w2n dw) t.vs_memory /\
       typed_copy_effect ctx func a b u t (w2n dw) (type_memory_size dtv)) ==>
@@ -228,13 +231,12 @@ Proof
   drule_all normalization_allocate >> strip_tac >>
   `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
     metis_tac[loweringHaltTheory.compile_alloc_buffer_parts] >>
-  `compile_store_memory ce (vv_operand vv) buf.buf_operand ty sty sm = ((),sb)` by
-    (asm_rewrite_tac[contextTheory.compile_store_memory_def] >> gvs[]) >>
+  `alloca_inv r` by fs[stmt_state_rel_def] >>
   `?t. gas_path_mem ctx func r 0 (OK t) /\
        val_in_memory dtv v (w2n dw) t.vs_memory /\
        typed_copy_effect ctx func sm sb r t (w2n dw) (type_memory_size dtv)` by
     (asm "copy" irule >> simp[] >>
-     goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
      qexistsl_tac [`stv`,`sw`,`get_tenv cx`] >>
      simp[arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
   asm_x "copy" kall_tac >>

@@ -263,7 +263,7 @@ Theorem storage_element_multi_fresh:
   not_fresh_at sc ("%" ++ toString sa.cs_next_var) /\
   (!x. not_fresh_at sa x ==> not_fresh_at sc x)
 Proof
-  simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  simp[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
   strip_tac >> rpt conj_tac >> rpt strip_tac >>
   first_x_assum irule >> decide_tac
 QED

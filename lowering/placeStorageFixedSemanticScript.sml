@@ -2,7 +2,7 @@
 Theory placeStorageFixedSemantic
 Ancestors
   placeStorageDynamicAgreement stmtSimAssignStorageCopy bodyMemAssignTopCopyPaths
-  bodyMemAssignTopCopySem storageCopyLive placeStorageSubregionLive
+  bodyMemAssignTopCopySem storageCopyLive storageSubregionFrame
   accountsRelProps vyperStoragePlaceRegion valueEncodingProps words arithmetic
   compileEnv vyperStorage vyperTyping venomState list rich_list stmtSimStoreCopy
 
@@ -24,7 +24,7 @@ Theorem storage_fixed_subregion_agree[local]:
 Proof
   strip_tac >> drule storage_subregion_bounds >> strip_tac >>
   `w2n d+type_slot_size tv <= dimword(:256)` by decide_tac >>
-  pure_rewrite_tac[storage_agree_def] >> rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac[loweringStateRelDefsTheory.storage_agree_def] >> rpt gen_tac >> strip_tac >>
   rename1 `~storage_dead cx tr (apply_writes d writes st1) (w2n q) b` >>
   `lookup_storage q (FOLDL (\a i. update_storage (d+n2w i)
     (mem_word_at (off+32*i) mem) a) st2 (COUNT_LIST (type_slot_size tv))) =
@@ -38,11 +38,10 @@ QED
 Resume storage_fixed_subregion_agree[inside]:
   `~dead_bytes (apply_writes d writes st1) (w2n d) tv (w2n q) b` by
     (strip_tac >> qpat_x_assum `~storage_dead _ _ _ _ _` mp_tac >> simp[] >>
-     pure_rewrite_tac[storage_dead_def] >>
+     pure_rewrite_tac[loweringStateRelDefsTheory.storage_dead_def] >>
      qexistsl_tac [`mid`, `name`, `subs`, `k`, `root`] >> simp[] >>
-     conj_tac >- gvs[] >> drule storage_subregion_dead_leaf >>
-     disch_then (qspecl_then [`apply_writes d writes st1`, `w2n k`, `w2n q`, `b`] mp_tac) >>
-     simp[] >> metis_tac[ADD_COMM]) >>
+     conj_tac >- gvs[] >> irule storageSubregionFrameTheory.storage_subregion_dead_bytes >>
+     goal_assum (drule_at Any) >> gvs[]) >>
   `w2n d+(w2n q-w2n d) = w2n q /\ w2n q-w2n d < type_slot_size tv` by decide_tac >>
   simp[] >> drule encode_value_memory_live >>
   disch_then drule >> disch_then drule >> disch_then drule >>
@@ -61,7 +60,7 @@ Resume storage_fixed_subregion_agree[outside]:
        `path`, `root`, `st1`, `subs`] >> simp[] >> gvs[]) >>
   `lookup_storage q (apply_writes d writes st1) = lookup_storage q st1` by
     (first_x_assum (qspec_then `w2n q` mp_tac) >> simp[w2n_lt] >> decide_tac) >>
-  simp[] >> qpat_x_assum `storage_agree _ _ _` mp_tac >> simp[storage_agree_def]
+  simp[] >> qpat_x_assum `storage_agree _ _ _` mp_tac >> simp[loweringStateRelDefsTheory.storage_agree_def]
 QED
 Finalise storage_fixed_subregion_agree
 

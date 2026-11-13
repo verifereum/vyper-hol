@@ -1,9 +1,9 @@
 Theory assignPlaceNormalizationStateMem
 Ancestors
-  assignPlaceNormalizationMem placeAssignStagingMem exprSimCopy
+  assignPlaceNormalizationMem placeMemoryStagingMem exprSimCopy
   exprSimStorageCopy localPtrsProps exprSimAlloc exprLoweringProps
   loweringHalt venomInst placeMemoryCopyEffect venomState compileEnv
-  stmtSimDefs fragGasPathMem
+  stmtSimDefs fragGasPathMem loweringStateRelDefs typedMemoryRankCounted
 
 Theorem normalization_copy_state:
   compile_alloc_buffer n sa = (buf,sm) /\ fn_has_code sa sm func /\
@@ -96,23 +96,18 @@ Proof
   `local_ptrs_reserved ce sm` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[] >>
      drule compile_alloc_buffer_parts >> simp[]) >>
-  `compile_store_memory ce (vv_operand vv) buf.buf_operand ty sty sm = ((),sb)` by
-    (asm_rewrite_tac[contextTheory.compile_store_memory_def] >> gvs[]) >>
-  `?t. gas_path_mem ctx func r 0 (OK t) /\
-       val_in_memory dtv v (w2n dw) t.vs_memory /\
-       typed_copy_effect ctx func sm sb r t (w2n dw) (type_memory_size dtv)` by
-    (irule compile_store_memory_nonword_effect_mem >> simp[] >>
-     goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
-     qexistsl_tac [`stv`,`sw`,`get_tenv cx`] >>
-     simp[arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
+  `alloca_inv r` by fs[stmt_state_rel_def] >>
+  `?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
+       typed_copy_effect ctx func sm sb r t (w2n dw) (type_memory_size dtv) /\
+       gas_path_mem ctx func r 0 (OK t) /\ alloca_history func t` by
+    (irule typed_memory_rank_forward_counted >> simp[] >>
+     goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+     qexistsl_tac [`stv`,`sw`,`get_tenv cx`] >> simp[] >> metis_tac[]) >>
   `stmt_state_rel ctx func ce cx ee t` by
     (irule normalization_copy_state >> metis_tac[]) >>
   `t.vs_alloca_next = r.vs_alloca_next` by
     (drule_all typed_copy_effect_record >>
      simp[venom_state_component_equality]) >>
-  `alloca_history func t` by
-    (irule normalization_path_history >> simp[] >>
-     qexistsl_tac [`ctx`,`0`,`r`] >> gvs[stmt_state_rel_def]) >>
   drule_all typed_copy_effect_endpoint >> strip_tac >>
   drule_all typed_copy_effect_allocas >> disch_tac >>
   `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s` by
