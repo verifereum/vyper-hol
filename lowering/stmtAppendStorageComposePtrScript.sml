@@ -93,16 +93,16 @@ Resume compile_append_storage_word_stmt_frag_ptr[summary]:
   simp[gas_summary_ptr_at_marked] >> strip_tac >>
   Cases_on `?H. valid_horizon cx st0 H es_end.storage_trace`
   >- (pop_assum (qx_choose_then `H0` assume_tac) >>
-      qpat_assum `!H. valid_horizon _ _ _ _ ==> _`
-        (qspec_then `H0` mp_tac) >> simp[] >> strip_tac
+      qpat_assum `!H. valid_horizon cx st0 H es_end.storage_trace ==> _`
+        (qspec_then `H0` (drule_then strip_assume_tac))
       >- suspend "operand" >>
       `?ex. res = INR ex` by (Cases_on `res` >> gvs[]) >> gvs[] >>
       qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       irule gas_summary_ptr_at_bind_exception >>
       qexistsl_tac [`G`, `tn`, `ex`, `es_end`, `r`] >>
       simp[] >> rpt strip_tac >>
-      qpat_assum `!H. valid_horizon _ _ _ _ ==> _`
-        (qspec_then `H` mp_tac) >> simp[] >>
+      qpat_assum `!H. valid_horizon cx st0 H es_end.storage_trace ==> _`
+        (qspec_then `H` (drule_then strip_assume_tac)) >> gvs[] >>
       simp[gas_marked_exec_ptr_def, stmt_exit_ptr_def] >>
       metis_tac[expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj1_tac >>
@@ -220,8 +220,8 @@ Resume compile_append_storage_word_stmt_frag_ptr[full]:
   `valid_horizon cx st0 H es_end.storage_trace` by
     (`valid_horizon cx st0 H (es_end with gas_obs := []).storage_trace` by
        metis_tac[valid_horizon_frame, storage_trace_frame_append_place] >> fs[]) >>
-  qpat_assum `!H. valid_horizon _ _ _ _ ==> _`
-    (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H es_end.storage_trace ==> _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >> gvs[] >>
   conj_tac
   >- (irule (SIMP_RULE std_ss [APPEND_NIL]
         (Q.INST [`right` |-> `[]`] gas_marked_exec_ptr_bind_normal)) >>
@@ -273,8 +273,8 @@ Resume compile_append_storage_word_stmt_frag_ptr[stored_finish]:
   `valid_horizon cx st0 H es_end.storage_trace` by
     (`valid_horizon cx st0 H (es_end with gas_obs := []).storage_trace` by
        metis_tac[valid_horizon_frame, storage_trace_frame_append_place] >> fs[]) >>
-  qpat_assum `!H. valid_horizon _ _ _ _ ==> _`
-    (qspec_then `H` mp_tac) >> simp[] >> strip_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H es_end.storage_trace ==> _`
+    (qspec_then `H` (drule_then strip_assume_tac)) >> gvs[] >>
   conj_tac
   >- (irule (SIMP_RULE std_ss [APPEND_NIL]
         (Q.INST [`right` |-> `[]`] gas_marked_exec_ptr_bind_normal)) >>
