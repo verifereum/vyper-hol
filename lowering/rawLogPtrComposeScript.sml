@@ -31,7 +31,7 @@ Proof
 QED
 
 Theorem raw_log_data_post_transport_ptr:
-  wb_args_post ctx func cenv cx es0 sa s0 es1 ops vals t /\
+  wb_args_post H ctx func cenv cx es0 sa s0 es1 ops vals t /\
   expr_post H ctx func cenv cx data es1 sm sn t es2 v data_op u /\
   stmt_state_rel H ctx func cenv cx es0 s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es1.scopes /\

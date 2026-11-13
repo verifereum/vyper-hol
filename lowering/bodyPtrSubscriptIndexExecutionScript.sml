@@ -14,13 +14,15 @@ Theorem expr_sim_ptr_local_refresh:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   gas_admissible (bind (eval_expr cx idx) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel H ctx func cenv cx es s0 /\
-  ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv H d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx, func) PG cx st0
     (bind (eval_expr cx idx) (read_result cx)) (es, s0, G0, tn0)
-    (\res ee G tn t. ?v. res = INL v /\
+    (\H res ee G tn t. ?v. res = INL v /\
       expr_post H ctx func cenv cx idx es sa sb s0 ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -37,12 +39,12 @@ Theorem expr_sim_ptr_local_refresh:
           val_in_memory entry.type entry.value (w2n w) t.vs_memory /\
           (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
             val_in_memory entry.type entry.value (w2n w) mem))))
-    (\res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r)
 Proof
   rpt strip_tac >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_sim_ptr_def] >>
-  disch_then drule_all >> strip_tac >>
+  disch_then (qspec_then `st0` drule_all) >> strip_tac >>
   irule gas_outcome_ptr_conseq >>
   goal_assum (drule_at Any) >>
   simp[] >>
@@ -52,9 +54,9 @@ Proof
   gen_tac >> strip_tac >>
   conj_tac >- (drule_all ghost_inv_local_coverage >> simp[]) >>
   conj_tac >-
-   (mp_tac (GEN_ALL (Q.INST [`mem` |-> `s.vs_memory`]
-              expr_post_local_robust_representation)) >>
-    simp[mem_agree_outside_def] >> disch_then drule_all >> simp[]) >>
+   (`mem_agree_outside tn.t_mem t.vs_memory t.vs_memory` by
+      simp[mem_agree_outside_def] >>
+    drule_all expr_post_local_robust_representation >> simp[]) >>
   gen_tac >> strip_tac >>
   drule_all expr_post_local_robust_representation >> simp[]
 QED

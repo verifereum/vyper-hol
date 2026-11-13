@@ -7,7 +7,7 @@ Theorem ec_allocated_payload_capacity_run:
   context$compile_alloc_buffer insz sf = (ib,sa) /\
   context$compile_alloc_buffer outsz sb = (ob,sm) /\
   emitted_insts sf sm = emitted_insts sf sa ++ code ++ emitted_insts sb sm /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sb /\
   insz < dimword (:256) /\ outsz < dimword (:256) /\
   MEM (mk_inst sf.cs_next_id ALLOCA [Lit (n2w insz)]
@@ -18,7 +18,7 @@ Theorem ec_allocated_payload_capacity_run:
   sf.cs_next_var <= sa.cs_next_var /\ sa.cs_next_var <= sb.cs_next_var /\
   (!s1 wi.
     run_inst_seq (emitted_insts sf sa) s = OK s1 /\
-    stmt_state_rel ctx func cenv cx es s1 /\
+    stmt_state_rel H ctx func cenv cx es s1 /\
     eval_operand ib.buf_operand s1 = SOME wi /\
     FLOOKUP s1.vs_allocas sf.cs_next_id = SOME (w2n wi,insz) /\
     w2n wi + insz < dimword (:256) /\ s1.vs_memory = s.vs_memory /\
@@ -32,14 +32,14 @@ Theorem ec_allocated_payload_capacity_run:
       FLOOKUP s1.vs_allocas aid = SOME (b,len) ==>
       regions_disjoint (w2n wi) insz b len) /\
     (!x. not_fresh_at sf x ==> lookup_var x s1 = lookup_var x s) ==>
-    ?u. run_inst_seq code s1 = OK u /\ stmt_state_rel ctx func cenv cx es u /\
+    ?u. run_inst_seq code s1 = OK u /\ stmt_state_rel H ctx func cenv cx es u /\
       wb_frame cenv es es sf s1 u /\
       (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s1) /\
       FLOOKUP u.vs_allocas sf.cs_next_id = SOME (w2n wi,insz) /\
       eval_operand ib.buf_operand u = SOME wi /\
       mem_bytes_at (w2n wi) insz u.vs_memory = bytes) ==>
   ?t pi po. run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + insz < dimword (:256) /\ w2n po + outsz < dimword (:256) /\
@@ -58,7 +58,7 @@ Proof
     FLOOKUP s1.vs_allocas aid = SOME (b,len) ==>
     regions_disjoint (w2n w) insz b len` by
     (rpt strip_tac >> irule state_allocations_disjoint >>
-     qexistsl [`sf.cs_next_id`,`aid`,`cenv`,`ctx`,`cx`,`es`,`func`,`s1`] >>
+     qexistsl [`H`,`sf.cs_next_id`,`aid`,`cenv`,`ctx`,`cx`,`es`,`func`,`s1`] >>
      simp[] >> decide_tac) >>
   qpat_assum `!s1 wi. _` (qspecl_then [`s1`,`w`] mp_tac) >>
   (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
@@ -71,11 +71,11 @@ Proof
   `wb_frame cenv es es sf s u` by
     (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
      reverse conj_tac >- (qexistsl_tac [`es`,`sf`,`s1`] >> simp[]) >>
-     qexistsl_tac [`ctx`,`cx`,`func`] >> simp[]) >>
+     qexistsl_tac [`H`,`ctx`,`cx`,`func`] >> simp[]) >>
   `!x. ib.buf_operand = Var x ==> not_fresh_at sb x` by
     (rpt strip_tac >> gvs[not_fresh_at_def] >> decide_tac) >>
   qpat_x_assum `wb_frame cenv es es sf s s1` kall_tac >>
-  qpat_x_assum `stmt_state_rel ctx func cenv cx es s1` kall_tac >>
+  qpat_x_assum `stmt_state_rel H ctx func cenv cx es s1` kall_tac >>
   qpat_x_assum `wb_frame cenv es es sf s1 u` kall_tac >>
   drule_all alloc_buffer_finish >> strip_tac >>
   `FLOOKUP t.vs_allocas sf.cs_next_id = SOME (w2n w,insz)` by
@@ -84,11 +84,11 @@ Proof
    w2n po + outsz <= t.vs_alloca_next` by
     (conj_tac
      >- (irule alloca_region_below_frontier >> conj_tac
-         >- (qpat_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
+         >- (qpat_assum `stmt_state_rel _ _ _ _ _ _ t` mp_tac >>
              simp_tac (srw_ss()) [stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
          qexistsl [`sf.cs_next_id`,`w2n w`,`insz`] >> simp[]) >>
      irule alloca_region_below_frontier >> conj_tac
-     >- (qpat_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
+     >- (qpat_assum `stmt_state_rel _ _ _ _ _ _ t` mp_tac >>
          simp_tac (srw_ss()) [stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
      qexistsl [`sb.cs_next_id`,`w2n po`,`outsz`] >> simp[]) >>
   `run_inst_seq (emitted_insts sf sm) s = OK t` by

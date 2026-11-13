@@ -56,6 +56,7 @@ Theorem named_root_execution:
   compile_expr cenv ty (Name ann id) sa = (vv,sb) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
     ghost_inv H d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -85,6 +86,8 @@ Proof
   `?entry. lookup_scopes id es.scopes = SOME entry` by
     (gvs[expr_body_pre_def, expr_sim_inv_def] >>
      drule_all well_typed_Name_lookup >> strip_tac >> simp[]) >>
+  `?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    gvs[expr_body_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
   drule compile_name_value_ptr >>
   disch_then (qspecl_then [`ty`, `sa`, `ann`] assume_tac) >> gvs[] >>
   simp[gas_outcome_ptr_def] >> qexists_tac `[]` >>
@@ -94,7 +97,7 @@ Proof
                 `G0`, `tn0`, `OK s0`] >>
   simp[named_root_source, gas_path_ptr_rules] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
-  drule_all named_root_preparation >> strip_tac >>
+  drule_all named_root_preparation >> strip_tac >> gvs[] >>
   `vv_post H ctx func cenv cx (Name ann id) es sa sa s0
      (es with gas_obs := []) (PlaceR (MemoryPlace id []))
      (LocatedValue ann (mk_ptr (Var p) LocMemory)) s0` by

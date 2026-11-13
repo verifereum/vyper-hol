@@ -6,8 +6,8 @@ Ancestors
 (* Package the typed S1 list post and its ghost frame once, so list
    composition and callers need not unfold either implementation. *)
 Definition typed_args_post_ptr_def:
-  typed_args_post_ptr d ctx func cenv cx es sa s0 G0 tn0 ee args xs vs G tn s <=>
-    typed_args_post ctx func cenv cx es sa s0 ee args xs vs s /\
+  typed_args_post_ptr H d ctx func cenv cx es sa s0 G0 tn0 ee args xs vs G tn s <=>
+    typed_args_post H ctx func cenv cx es sa s0 ee args xs vs s /\
     ghost_inv H d cenv cx ee G tn s /\
     EVERY (\op. op_taint tn op = {}) xs /\
     ghost_kept cenv es sa G0 tn0 s0 G tn
@@ -15,7 +15,7 @@ End
 
 Theorem typed_args_post_ptr_nil:
   stmt_state_rel H ctx func cenv cx ee s /\ ghost_inv H d cenv cx ee G tn s ==>
-  typed_args_post_ptr d ctx func cenv cx ee sa s G tn ee [] [] [] G tn s
+  typed_args_post_ptr H d ctx func cenv cx ee sa s G tn ee [] [] [] G tn s
 Proof
   simp[typed_args_post_ptr_def, typed_args_post_def,
        wb_frame_refl, ghost_kept_refl]
@@ -23,7 +23,7 @@ QED
 
 Theorem typed_args_post_ptr_cons:
   expr_post H ctx func cenv cx e es sa s1 s0 es1 v x t /\
-  typed_args_post_ptr d ctx func cenv cx es1 s1 t G1 tn1 ee args xs vs G tn u /\
+  typed_args_post_ptr H d ctx func cenv cx es1 s1 t G1 tn1 ee args xs vs G tn u /\
   stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv s1 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
@@ -33,7 +33,7 @@ Theorem typed_args_post_ptr_cons:
   (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) /\
   ptr_val_ok cx (expr_type e) v x G1 tn1 t /\
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 ==>
-  typed_args_post_ptr d ctx func cenv cx es sa s0 G0 tn0 ee
+  typed_args_post_ptr H d ctx func cenv cx es sa s0 G0 tn0 ee
     (e::args) (x::xs) (v::vs) G tn u
 Proof
   rewrite_tac[typed_args_post_ptr_def] >> strip_tac >>
@@ -56,7 +56,7 @@ Theorem lower_typed_args_nil_sim_ptr:
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG (eval_exprs cx [])
     (es,s0,G0,tn0)
     (\rr ee G tn t. ?vs. rr = INL vs /\
-       typed_args_post_ptr d ctx func cenv cx es sa s0 G0 tn0 ee [] [] vs G tn t /\
+       typed_args_post_ptr H d ctx func cenv cx es sa s0 G0 tn0 ee [] [] vs G tn t /\
        t.vs_current_bb = sa.cs_current_bb /\
        t.vs_inst_idx = LENGTH sa.cs_current_insts)
     (\rr ee ghosts r. wb_args_exit rr r)

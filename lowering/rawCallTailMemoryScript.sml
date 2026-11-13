@@ -14,10 +14,10 @@ Theorem raw_call_outbuf_tail_mem:
   compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
     (if stat then StaticCall else RegularCall) cap flags.rcf_revert_on_failure ov op sm = (result,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel (H : (bool # 256 word # type_value) list # num list) ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ci_mono initial sa /\ wb_frame cenv initial_es es initial s0 s /\
-  stmt_state_rel ctx func cenv cx initial_es s0 /\ local_ptrs_reserved cenv initial /\
+  stmt_state_rel H ctx func cenv cx initial_es s0 /\ local_ptrs_reserved cenv initial /\
   MAP FDOM initial_es.scopes = MAP FDOM es.scopes /\
   eval_operand gas_op s = SOME gas /\ eval_operand to_op s = SOME aw /\
   eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\ eval_operand val_op s = SOME val_word /\
@@ -42,22 +42,25 @@ Theorem raw_call_outbuf_tail_mem:
     ((?u. r = OK u /\ alloca_history func u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (flags.rcf_revert_on_failure ==> outcome.co_success) /\
-      vv_post ctx func cenv cx e initial_es initial sb s0
-        (SND (adopt_call_outcome rq outcome es1))
-        (Value (if flags.rcf_revert_on_failure then
-          if cap = 0 then NoneV else BytesV (TAKE cap outcome.co_returnData)
-         else if cap = 0 then BoolV outcome.co_success
-         else ArrayV (TupleV [BoolV outcome.co_success;BytesV (TAKE cap outcome.co_returnData)])))
-        (if cap = 0 then StackValue ann result
-         else LocatedValue (expr_type e) (mk_ptr result LocMemory)) u /\
-      vv_store_bound cx (expr_type e) (lowered_value_type cenv e)
-        (SND (adopt_call_outcome rq outcome es1))
-        (Value (if flags.rcf_revert_on_failure then
-          if cap = 0 then NoneV else BytesV (TAKE cap outcome.co_returnData)
-         else if cap = 0 then BoolV outcome.co_success
-         else ArrayV (TupleV [BoolV outcome.co_success;BytesV (TAKE cap outcome.co_returnData)])))
-        (if cap = 0 then StackValue ann result
-         else LocatedValue (expr_type e) (mk_ptr result LocMemory)) u) \/
+      (!(H2 : (bool # 256 word # type_value) list # num list).
+        stmt_state_rel H2 ctx func cenv cx es s /\
+        storage_well_formed_on cx (SND (adopt_call_outcome rq outcome es1)) (FST H2) ==>
+        vv_post H2 ctx func cenv cx e initial_es initial sb s0
+          (SND (adopt_call_outcome rq outcome es1))
+          (Value (if flags.rcf_revert_on_failure then
+            if cap = 0 then NoneV else BytesV (TAKE cap outcome.co_returnData)
+           else if cap = 0 then BoolV outcome.co_success
+           else ArrayV (TupleV [BoolV outcome.co_success;BytesV (TAKE cap outcome.co_returnData)])))
+          (if cap = 0 then StackValue ann result
+           else LocatedValue (expr_type e) (mk_ptr result LocMemory)) u /\
+        vv_store_bound cx (expr_type e) (lowered_value_type cenv e)
+          (SND (adopt_call_outcome rq outcome es1))
+          (Value (if flags.rcf_revert_on_failure then
+            if cap = 0 then NoneV else BytesV (TAKE cap outcome.co_returnData)
+           else if cap = 0 then BoolV outcome.co_success
+           else ArrayV (TupleV [BoolV outcome.co_success;BytesV (TAKE cap outcome.co_returnData)])))
+          (if cap = 0 then StackValue ann result
+           else LocatedValue (expr_type e) (mk_ptr result LocMemory)) u)) \/
      (?u. flags.rcf_revert_on_failure /\ ~outcome.co_success /\
        r = Abort Revert_abort u /\ u.vs_returndata = outcome.co_returnData))
 Proof
@@ -150,7 +153,20 @@ Resume raw_call_outbuf_tail_mem[nonrevert]:
     (simp[expr_val_rel_def, vyperValueTheory.evaluate_type_def,
        is_word_type_def, typed_val_to_w256_def, val_to_w256_def] >>
      Cases_on `outcome.co_success` >> simp[bool_to_word_def]) >>
-  metis_tac[raw_call_zero_finish_post_mem]
+  `!(H2 : (bool # 256 word # type_value) list # num list).
+     stmt_state_rel H2 ctx func cenv cx es s /\
+     storage_well_formed_on cx (SND (adopt_call_outcome rq outcome es1)) (FST H2) ==>
+     vv_post H2 ctx func cenv cx e initial_es initial sb s0
+       (SND (adopt_call_outcome rq outcome es1)) (Value (BoolV outcome.co_success))
+       (StackValue ann result) t /\
+     vv_store_bound cx (expr_type e) (lowered_value_type cenv e)
+       (SND (adopt_call_outcome rq outcome es1)) (Value (BoolV outcome.co_success))
+       (StackValue ann result) t` by
+    (rpt strip_tac >>
+     `stmt_state_rel H2 ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t` by
+       metis_tac[] >>
+     metis_tac[raw_call_zero_finish_post_mem]) >>
+  metis_tac[]
 QED
 
 Resume raw_call_outbuf_tail_mem[tuple]:
@@ -159,7 +175,7 @@ Resume raw_call_outbuf_tail_mem[tuple]:
   qpat_assum `expr_type e = _`
     (mp_then (Pat `expr_type _ = _`) mp_tac raw_call_nonrevert_positive_path_mem) >>
   simp[arithmeticTheory.GREATER_DEF, arithmeticTheory.MULT_COMM] >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ t`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ t`)) >>
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _ t`)) >>
   disch_then (drule_at (Pat `do _ od _ = (_,_)`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
@@ -172,7 +188,7 @@ Resume raw_call_outbuf_tail_mem[tuple]:
   rename1 `run_inst_seq _ t = OK u` >>
   qexists_tac `OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)` >>
   conj_tac >- (drule_all gas_path_mem_then >> simp[]) >>
-  gvs[]
+  gvs[] >> rpt strip_tac >> metis_tac[]
 QED
 
 Resume raw_call_outbuf_tail_mem[revert_entry]:
@@ -197,8 +213,10 @@ Resume raw_call_outbuf_tail_mem[revert_normal]:
   Cases_on `0 < flags.rcf_max_outsize`
   >- suspend "revert_bytes" >>
   gvs[] >>
-  `stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u` by
-    (irule raw_call_finish_state_rel_aged >>
+  `!(H2 : (bool # 256 word # type_value) list # num list).
+     stmt_state_rel H2 ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t ==>
+     stmt_state_rel H2 ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u` by
+    (rpt strip_tac >> irule raw_call_finish_state_rel_aged >>
      qexistsl_tac [`0w`,`0`,`0w`,`sc`,`t`] >> simp[]) >>
   `wb_frame cenv initial_es (SND (adopt_call_outcome rq outcome es1)) initial s0 u` by
     (irule raw_call_finish_frame_aged >>
@@ -208,6 +226,9 @@ Resume raw_call_outbuf_tail_mem[revert_normal]:
   conj_tac >- (drule_all gas_path_mem_then >> simp[]) >>
   simp[] >>
   `expr_type e = NoneT` by fs[raw_call_return_type_def] >>
+  rpt strip_tac >>
+  `stmt_state_rel H2 ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u` by
+    metis_tac[] >>
   metis_tac[raw_call_zero_finish_post_mem]
 QED
 
@@ -222,8 +243,11 @@ Resume raw_call_outbuf_tail_mem[revert_bytes]:
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
      fs[stmt_state_rel_def, state_rel_def]) >>
-  `stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u` by
-    (irule (INST_TYPE [alpha |-> ``:256``] raw_call_finish_state_rel_aged) >>
+  `!(H2 : (bool # 256 word # type_value) list # num list).
+     stmt_state_rel H2 ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t ==>
+     stmt_state_rel H2 ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u` by
+    (rpt strip_tac >>
+     irule (INST_TYPE [alpha |-> ``:256``] raw_call_finish_state_rel_aged) >>
      qexistsl_tac [`w`,`flags.rcf_max_outsize`,
        `n2w (MIN (LENGTH outcome.co_returnData) flags.rcf_max_outsize)`,`sc`,`t`] >>
      simp[] >> qexistsl_tac [`alloc`,`w2n w`,
@@ -245,6 +269,8 @@ QED
 Resume raw_call_outbuf_tail_mem[revert_bytes_post]:
   `expr_type e = BaseT (BytesT (Dynamic flags.rcf_max_outsize))` by
     fs[raw_call_return_type_def] >>
+  `stmt_state_rel H ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u` by
+    metis_tac[] >>
   `u.vs_allocas = t.vs_allocas` by
     (qpat_assum `raw_call_finish_view u = _` mp_tac >>
      rpt (pop_assum kall_tac) >>
@@ -262,7 +288,12 @@ Resume raw_call_outbuf_tail_mem[revert_bytes_post]:
   qexists_tac `OK u` >>
   conj_tac >- (drule_all gas_path_mem_then >> simp[]) >>
   simp[] >>
-  `vv_post ctx func cenv cx e initial_es initial sb s0
+  rpt strip_tac >>
+  `stmt_state_rel H2 ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) t` by
+    metis_tac[] >>
+  `stmt_state_rel H2 ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u` by
+    metis_tac[] >>
+  `vv_post H2 ctx func cenv cx e initial_es initial sb s0
      (SND (adopt_call_outcome rq outcome es1))
      (Value (BytesV (TAKE flags.rcf_max_outsize outcome.co_returnData)))
      (LocatedValue (expr_type e) (mk_ptr ov LocMemory)) u /\

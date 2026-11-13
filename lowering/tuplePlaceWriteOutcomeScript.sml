@@ -30,7 +30,7 @@ Theorem tuple_place_source_write_success:
   call_evaluation_safe cx (int_calls_target bt) /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
   ~immutable_root cx bt /\ eval_target_place cx bt es = (INL p,ee) /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p v ee = (res,ff) ==> res = INL ()
 Proof
   strip_tac >> drule_all tuple_place_source_target_endpoint >> strip_tac >>
