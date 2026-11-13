@@ -346,7 +346,8 @@ Proof
       qpat_assum `!H. valid_horizon _ _ H _ ==> intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
         (drule_then assume_tac) >>
       drule intcall_entry_source >> strip_tac >>
-      `dflts = []` by gvs[] >> gvs[] >>
+      `dflts = []` by gvs[] >>
+      gvs[exprSimWordArgsTheory.eval_exprs_nil] >>
       `~cx.txn.is_static` by
         fs[intcall_entry_def, exprLoweringPropsTheory.stmt_state_rel_def,
            loweringStateRelDefsTheory.state_rel_def] >>
