@@ -778,7 +778,7 @@ Proof
   `get_storage cx ((es with storage_trace := o') with gas_obs := g) tr =
    get_storage cx es tr` by
     (Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
-  gvs[pop_storage_rss_end]
+  gvs[pop_storage_rss_end, vyperStorageBackendTheory.get_storage_def]
 QED
 
 Theorem compile_pop_storage_normalized_sim:
