@@ -43,20 +43,6 @@ Proof
   gvs[EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem prefix_copy_low_frame:
-  abi_decode_frame d cap initial final /\ lo <= d ==>
-  !a. a < lo ==> read_byte a final.vs_memory = read_byte a initial.vs_memory
-Proof
-  simp[abi_decode_frame_def] >> strip_tac >> rpt strip_tac >>
-  `mem_bytes_at a 1 final.vs_memory = mem_bytes_at a 1 initial.vs_memory` by
-    (first_x_assum irule >> decide_tac) >>
-  pop_assum (mp_tac o AP_TERM ``HD : byte list -> byte``) >>
-  simp[NoAsms, mem_bytes_at_def, codegenRelTheory.read_byte_def, HD_TAKE] >>
-  once_rewrite_tac[GSYM (CONJUNCT1 EL)] >>
-  simp[NoAsms, EL_APPEND_EQN, EL_DROP] >>
-  simp[NoAsms, DECIDE ``0 < n-a <=> a<n``] >>
-  rewrite_tac[ONE, REPLICATE, HD]
-QED
 
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di

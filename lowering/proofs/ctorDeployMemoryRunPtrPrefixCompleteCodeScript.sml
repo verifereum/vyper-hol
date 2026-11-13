@@ -47,39 +47,6 @@ Proof
   drule_all deploy_ctor_decoder_sequence_observations >> simp[]
 QED
 
-Theorem prefix_scalar_complete_execution_code:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
-  abi_decoder_coherent ce env sf ty tv /\
-  type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
-  abi_decoder_metadata ce env ty tv root_di av v /\
-  eval_operand src initial = SOME (n2w sb) /\
-  eval_operand (Var dst) initial = SOME (n2w d) /\
-  abi_decoder_operand_live st.cs_next_var src /\
-  abi_decoder_operand_live st.cs_next_var (Var dst) /\
-  sb < dimword (:256) /\ d < dimword (:256) /\
-  mem_bytes_at sb 32 initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
-  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
-  ?actual.
-    run_inst_seq (emitted_insts st st') initial = OK actual /\
-    let final = actual with vs_inst_idx := LENGTH st'.cs_current_insts in
-    val_in_memory tv v d final.vs_memory /\ fresh_vars_wrt limit_st final /\
-    abi_decode_frame d 32 initial final /\
-    (!op w. abi_decoder_operand_live st.cs_next_var op /\
-      eval_operand op initial = SOME w ==> eval_operand op final = SOME w) /\
-    final.vs_allocas = initial.vs_allocas /\
-    final.vs_alloca_next = initial.vs_alloca_next /\
-    final.vs_outcomes = initial.vs_outcomes /\
-    final.vs_tx_ctx = initial.vs_tx_ctx /\ final.vs_block_ctx = initial.vs_block_ctx /\
-    final.vs_gas_readings = initial.vs_gas_readings /\
-    final.vs_code = initial.vs_code /\
-    abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st'))
-      [(d,32)] initial final
-Proof
-  strip_tac >> drule_all prefix_scalar_complete_execution >>
-  disch_then (qspec_then `func` mp_tac) >> simp[LET_THM] >> strip_tac >>
-  drule_all prefix_scalar_sequence_code >> disch_tac >>
-  qexists `actual` >> simp[LET_THM]
-QED
 
 Theorem prefix_scalar_complete_shift_code:
   compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
@@ -143,57 +110,6 @@ Proof
   qexistsl [`actual`,`H`,`qt`] >> simp[LET_THM] >> metis_tac[]
 QED
 
-Theorem prefix_member_setup_complete_shift_code:
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) /\
-  eval_operand src s = SOME (n2w sb) /\ eval_operand (Var dst) s = SOME (n2w d) /\
-  (dyn ==> abi_decode_load DLOAD (n2w (sb+ao) : bytes32) s = n2w payload_off /\
-           sb+payload_off < dimword (:256)) /\
-  abi_decoder_operand_live st.cs_next_var src /\
-  abi_decoder_operand_live st.cs_next_var (Var dst) /\
-  middle.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (b,sz) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
-  lo <= s.vs_alloca_next /\ ~s.vs_halted /\
-  fn_has_code st middle fn /\ s.vs_current_bb = st.cs_current_bb /\
-  s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  alloca_inv s /\ alloca_frontier_inv_from k ctx fn site s /\
-  ctor_actual_scratch fn ids scratch_base N s /\ scratch_base+N <= s.vs_alloca_next ==>
-  ?t H qt child_dst.
-    run_inst_seq (emitted_insts st middle) s = OK t /\
-    let prepared = t with vs_inst_idx := LENGTH middle.cs_current_insts in
-    SND ops = Var child_dst /\ FLOOKUP H child_dst = SOME (b,sz) /\
-    op_taint qt (FST ops) = {} /\ op_taint qt (SND ops) = {} /\
-    eval_operand (FST ops) prepared = SOME (n2w (sb + if dyn then payload_off else ao)) /\
-    eval_operand (SND ops) prepared = SOME (n2w (d+vo)) /\
-    abi_decoder_operand_live middle.cs_next_var (FST ops) /\
-    abi_decoder_operand_live middle.cs_next_var (SND ops) /\
-    fresh_vars_wrt limit_st prepared /\
-    abi_decoder_address_frame st.cs_next_var s prepared /\ inst_extends st middle /\
-    prepared.vs_allocas = s.vs_allocas /\ prepared.vs_alloca_next = s.vs_alloca_next /\
-    allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\
-    prepared.vs_current_bb = middle.cs_current_bb /\
-    prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\ ~prepared.vs_halted /\
-    prepared.vs_memory = s.vs_memory /\ prepared.vs_data_section = s.vs_data_section /\
-    prepared.vs_call_ctx = s.vs_call_ctx /\ prepared.vs_labels = s.vs_labels /\
-    (!v. not_fresh_at st v ==> lookup_var v prepared = lookup_var v s) /\
-    qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
-    qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    (!v. not_fresh_at st v ==>
-       FLOOKUP H v = FLOOKUP G v /\ op_taint qt (Var v) = op_taint tn (Var v)) /\
-    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt prepared) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
-    alloca_inv prepared /\ alloca_frontier_inv_from k ctx fn site prepared /\
-    ctor_actual_scratch fn ids scratch_base N prepared /\
-    scratch_base+N <= prepared.vs_alloca_next /\
-    prepared.vs_outcomes = s.vs_outcomes /\ prepared.vs_tx_ctx = s.vs_tx_ctx /\
-    prepared.vs_block_ctx = s.vs_block_ctx /\ prepared.vs_gas_readings = s.vs_gas_readings /\
-    prepared.vs_code = s.vs_code
-Proof
-  strip_tac >> drule_all prefix_member_setup_complete_shift >>
-  disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[LET_THM] >> strip_tac >>
-  drule_all prefix_member_setup_sequence_code >> disch_tac >>
-  qexistsl [`t`,`H`,`qt`,`child_dst`] >> simp[LET_THM]
-QED
 
 Theorem prefix_canonical_member_setup_complete_shift_code:
   abi_decoder_members ce env sf pretys pretvs preavs prevs /\

@@ -128,59 +128,8 @@ val Mshift = ``\tys tvs.
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)``;
 
-Theorem prefix_members_complete_shift_nil:
-  (^Mshift) [] []
-Proof
-  BETA_TAC >> rpt gen_tac >>
-  simp[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def,
-    comp_return_def, Excl "enc_def"] >> strip_tac >>
-  drule abi_decoder_members_lengths >> strip_tac >> gvs[Excl "enc_def"] >>
-  qexistsl [`initial`,`G`,`tn`,`{}`] >>
-  simp[val_in_memory_def, abi_encoder_registered_effect_refl, abi_decode_sim_refl]
-QED
 
-Theorem prefix_scalar_complete_shift_contract:
-  type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^Cshift) ty tv
-Proof
-  disch_tac >> BETA_TAC >> rpt gen_tac >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule abi_decoder_primitive_cases >> disch_then (qspec_then `clamp` mp_tac) >>
-  asm_simp_tac bool_ss [] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `LENGTH (enc (vyper_to_abi_type env ty) av) = 32` by
-    (qpat_assum `abi_decoder_metadata _ _ _ _ _ _ _`
-      (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_metadata_def]) >>
-     drule_all abi_decoder_descended_encoding_length >> simp[]) >>
-  `sb < dimword (:256) /\ d < dimword (:256)` by
-    (qpat_x_assum `alloca_frontier_inv_from _ _ _ _ _` mp_tac >>
-     simp[alloca_frontier_inv_from_def] >> strip_tac >> decide_tac) >>
-  `abi_decoder_operand_live st.cs_next_var src /\
-   abi_decoder_operand_live st.cs_next_var (Var dst)` by
-    (Cases_on `src` >>
-     simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
-     metis_tac[not_fresh_at_def]) >>
-  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
-     (DecPrimWord clamp) st = ((),st')` by metis_tac[] >>
-  `mem_bytes_at sb 32 initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
-   d+32 <= b+sz` by metis_tac[] >>
-  drule_all prefix_scalar_complete_shift >>
-  disch_then (qspecl_then [`site`,`PG`,`Ddead`] mp_tac) >>
-  simp[LET_THM, Excl "enc_def"] >> strip_tac >>
-  qexistsl [`actual with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,`B`] >>
-  simp[Excl "enc_def"]
-QED
 
-Theorem prefix_empty_complete_shift_contract:
-  type_to_abi_dec_info sf ce ty = DecComplex T [] ==> (^Cshift) ty tv
-Proof
-  disch_tac >> BETA_TAC >> rpt gen_tac >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
-    (DecComplex T []) st = ((),st')` by metis_tac[] >>
-  drule prefix_empty_inline_code >> strip_tac >>
-  drule_all abi_decoder_empty_metadata_value >> strip_tac >>
-  qexistsl [`initial`,`G`,`tn`,`{}`] >>
-  simp[abi_encoder_registered_effect_refl, abi_decode_sim_refl]
-QED
 
 Theorem prefix_member_setup_shift_execution_frame:
   abi_decode_member_setup dst src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) /\
@@ -506,16 +455,3 @@ Resume prefix_members_complete_shift_cons[support]:
 QED
 
 Finalise prefix_members_complete_shift_cons
-
-Theorem prefix_members_complete_shift:
-  !tys tvs. LIST_REL (^Cshift) tys tvs ==> (^Mshift) tys tvs
-Proof
-  Induct_on `tys` >> rpt gen_tac >> Cases_on `tvs` >>
-  simp_tac bool_ss [LIST_REL_def, prefix_members_complete_shift_nil] >> strip_tac >>
-  rename1 `LIST_REL _ tys rest` >>
-  mp_tac (Q.INST [`ty` |-> `h`, `tv` |-> `h'`, `tvs` |-> `rest`]
-    prefix_members_complete_shift_cons) >>
-  (impl_tac >- (conj_tac >- (BETA_TAC >> first_assum ACCEPT_TAC) >>
-    first_x_assum irule >> first_assum ACCEPT_TAC)) >>
-  simp_tac bool_ss []
-QED

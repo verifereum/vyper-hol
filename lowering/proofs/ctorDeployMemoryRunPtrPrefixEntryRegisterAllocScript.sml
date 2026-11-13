@@ -9,7 +9,7 @@ Ancestors
   vyperCompiler localPtrsProps ctorAbiActualArrayRun abiDecoderLoop
   ptrSafeRun ptrDiscipline pred_set ctorDeployMemoryRunPtrPrefixAllocationFloor
   ctorDeployMemoryRunMemEntryRegistration
-  fragGasOriginPtr
+  fragGasOriginPtr fragGasOriginPtrLoop memSafeRun unitTransformDefs contextCodegenRel
 
 
 Theorem prefix_entry_register_alloc_actual:
@@ -53,15 +53,6 @@ QED
 
 (* Allocation has a literal machine endpoint, so checked execution attaches
    directly to that endpoint rather than to a second existential run. *)
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
-Proof
- strip_tac >> drule_all prefix_entry_register_alloc_actual >>
- disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
- qexistsl [`a`,`H`,`q`] >> asm_rewrite_tac[] >> strip_tac >>
- metis_tac[ctor_checked_alloc_buffer_edge]
-QED
-*)
 Theorem prefix_entry_register_alloc_actual_mode:
  compile_alloc_buffer n st = (buf,sa) /\ fn_has_code st sa func /\
  n < dimword (:256) /\ alloca_inv initial /\
@@ -95,7 +86,27 @@ Theorem prefix_entry_register_alloc_actual_mode:
  (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK a, H, q)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK a) /\ alloca_history func a)
 Proof
-  cheat
+ strip_tac >> drule_all prefix_entry_register_alloc_actual >>
+ disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+ qexistsl [`a`,`H`,`q`] >> asm_rewrite_tac[] >>
+ conj_tac >-
+   (strip_tac >> qx_gen_tac `D'` >> gen_tac >>
+    mp_tac (Q.INST [`s` |-> `initial`, `aid` |-> `st.cs_next_id`,
+      `x` |-> `STRING #"%" (toString st.cs_next_var)`, `fuel` |-> `0`, `fn` |-> `func`, `D` |-> `D'`]
+      prefix_register_alloc_pair) >>
+    impl_tac >- simp[] >>
+    pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+    drule_all prefix_register_alloc_layout >> strip_tac >>
+    qpat_x_assum `LENGTH sa.cs_current_insts = _` SUBST1_TAC >>
+    `(mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [STRING #"%" (toString st.cs_next_var)]).inst_opcode = ALLOCA` by simp[mk_inst_def] >>
+    `inst_mem_below_frontier (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [STRING #"%" (toString st.cs_next_var)]) initial /\
+     inst_dload_in_section (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [STRING #"%" (toString st.cs_next_var)]) initial` by
+      simp[mk_inst_def, inst_mem_below_frontier_def, inst_dload_in_section_def,
+           source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+    irule (Q.INST [`s` |-> `initial`, `i` |-> `mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [STRING #"%" (toString st.cs_next_var)]`] step_origin_ptr_path) >>
+    qexists_tac `bb` >>
+    asm_simp_tac (srw_ss()) [step_inst_non_invoke, is_terminator_def]) >>
+ strip_tac >> metis_tac[ctor_checked_alloc_buffer_edge]
 QED
 
 val _ = export_theory();

@@ -241,7 +241,7 @@ Resume prefix_bulk_complete_mode_contract[finish]:
     (rpt strip_tac >> irule prefix_bulk_var_frame >>
      goal_assum (drule_at Any) >> metis_tac[]) >>
   `!a. a < lo ==> read_byte a t.vs_memory = read_byte a initial.vs_memory` by
-    (drule prefix_copy_low_frame >> disch_then (qspec_then `lo` mp_tac) >> simp[]) >>
+    (drule ctorDeployMemoryRunPtrPrefixCompleteScalarTheory.prefix_copy_low_frame >> disch_then (qspec_then `lo` mp_tac) >> simp[]) >>
   `checked ==> gas_path_mem ctx func initial 0
      (OK (t with vs_inst_idx := LENGTH st'.cs_current_insts)) /\
      alloca_history func (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
