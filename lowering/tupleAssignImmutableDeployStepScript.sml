@@ -24,16 +24,13 @@ Theorem tuple_immutable_loaded_head_step:
   type_alloc_ok ce (TupleT tys) /\ i < LENGTH tys /\
   (let dst = FST place; loc_opt = FST (SND place); dst_ty_opt = SND (SND place);
        loc = case loc_opt of SOME l => l | NONE => LocMemory;
-       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys;
-       arr = case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes ce et+31) DIV 32,type_memory_bytes ce et)
-         | _ => NONE
+       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys
    in (if is_word_type (EL i ltys) then
          if is_word_type dty then
            compile_store_at_loc ce.ce_imm_alloca dst (EL i elems) loc_opt
          else emit_void INVALID []
        else compile_assign_value ce dst loc (EL i elems) (is_word_type dty)
-         NONE dty (EL i ltys) arr (type_memory_bytes ce dty)) sa) = ((),sb) /\
+         NONE dty (EL i ltys) (type_memory_bytes ce dty)) sa) = ((),sb) /\
   acyclic_struct_metadata ce.ce_struct_fields /\ local_ptrs_reserved ce sa /\
   fn_has_code sp sa func /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sp.cs_next_var <= sa.cs_next_var /\
@@ -206,9 +203,7 @@ Proof
   strip_tac >>
   `compile_assign_value ce (Lit (n2w off)) LocCode (EL i elems)
      (is_word_type ity) NONE ity (EL i ltys)
-     (case ity of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes ce et+31) DIV 32,type_memory_bytes ce et)
-       | _ => NONE) (type_memory_bytes ce ity) sa = ((),sb)` by gvs[] >>
+     (type_memory_bytes ce ity) sa = ((),sb)` by gvs[] >>
   `~block_is_terminated sb` by
     metis_tac[immutable_assign_loccode_open] >>
   `ci_mono sa sb` by

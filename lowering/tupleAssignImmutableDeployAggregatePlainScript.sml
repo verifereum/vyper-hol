@@ -5,7 +5,7 @@ Ancestors
   immutableAssignStore immutableAssignStoreLength
 
 Theorem tuple_immutable_direct_aggregate_store:
-  compile_assign_value cenv dst LocCode src F NONE dty sty da L sa = ((),sb) /\
+  compile_assign_value cenv dst LocCode src F NONE dty sty L sa = ((),sb) /\
   dty = sty /\ ~is_bytestring_type dty /\
   n = (if L <= 32 then 1 else (L+31) DIV 32) /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
@@ -63,7 +63,7 @@ Proof
 QED
 
 Theorem tuple_immutable_bytestring_aggregate_store:
-  compile_assign_value cenv dst LocCode src F NONE dty sty da L sa = ((),sb) /\
+  compile_assign_value cenv dst LocCode src F NONE dty sty L sa = ((),sb) /\
   is_bytestring_type sty /\ is_bytestring_type dty /\
   evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
   value_has_type stv v /\ value_has_type dtv v /\

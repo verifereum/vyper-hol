@@ -13,16 +13,13 @@ Theorem tuple_immutable_aggregate_store:
     | _ => NONE) /\
   (let dst = FST place; loc_opt = FST (SND place); dst_ty_opt = SND (SND place);
        loc = case loc_opt of SOME l => l | NONE => LocMemory;
-       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys;
-       arr = case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-         | _ => NONE
+       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys
    in (if is_word_type (EL i ltys) then
          if is_word_type dty then
            compile_store_at_loc cenv.ce_imm_alloca dst (EL i elems) loc_opt
          else emit_void INVALID []
        else compile_assign_value cenv dst loc (EL i elems) (is_word_type dty)
-         NONE dty (EL i ltys) arr (type_memory_bytes cenv dty)) sa) = ((),sb) /\
+         NONE dty (EL i ltys) (type_memory_bytes cenv dty)) sa) = ((),sb) /\
   ~is_word_type sty /\ type_widens_to (get_tenv cx) sty dty /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
@@ -84,7 +81,7 @@ Theorem tuple_immutable_aggregate_store:
 Proof
   strip_tac >>
   `compile_assign_value cenv dst LocCode src (is_word_type dty) NONE
-     dty sty da L sa = ((),sb)` by gvs[LET_THM] >>
+     dty sty L sa = ((),sb)` by gvs[LET_THM] >>
   qpat_x_assum `place = _` kall_tac >>
   qpat_x_assum `src = EL i elems` kall_tac >>
   qpat_x_assum `sty = EL i ltys` kall_tac >>

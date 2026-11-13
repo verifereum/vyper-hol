@@ -26,7 +26,7 @@ Theorem tuple_immutable_loaded_word_store:
     u.vs_immutables = s.vs_immutables |+ (off,typed_val_to_w256 tv v)
 Proof
   strip_tac >>
-  `compile_assign_value cenv dst LocCode src T NONE dty dty NONE 0 sa = ((),sb)` by
+  `compile_assign_value cenv dst LocCode src T NONE dty dty 0 sa = ((),sb)` by
     gvs[stmtLoweringTheory.compile_assign_value_def,
         stmtLoweringTheory.compile_store_at_loc_def,
         compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def] >>

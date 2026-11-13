@@ -7,7 +7,7 @@ Ancestors
   tuplePlaceSnapshot
 
 Theorem tuple_immutable_normalized_aggregate_store:
-  compile_assign_value cenv dst LocCode src F NONE dty sty da L sa = ((),sb) /\
+  compile_assign_value cenv dst LocCode src F NONE dty sty L sa = ((),sb) /\
   dty <> sty /\ ~is_bytestring_type dty /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
@@ -163,7 +163,7 @@ Resume tuple_immutable_normalized_aggregate_store[post]:
       loweringStateRelDefsTheory.regions_disjoint_def,
       exprLoweringPropsTheory.same_blocks_def,
       venomStateTheory.lookup_var_def] >> (
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `stmt_state_rel _ _ _ _ _ s` kall_tac >>
   qpat_x_assum `stmt_state_rel _ _ _ _ _ r` kall_tac >>
   conj_tac

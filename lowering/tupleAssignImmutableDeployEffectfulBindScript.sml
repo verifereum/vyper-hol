@@ -19,10 +19,7 @@ Theorem tuple_effectful_head_bind_conditional:
     (if is_word_type (EL i ltys) then
        compile_store_at_loc cenv.ce_imm_alloca dst (EL i elems) (SOME loc)
      else compile_assign_value cenv dst loc (EL i elems) (is_word_type (EL i tys)) NONE
-       (EL i tys) (EL i ltys)
-       (case EL i tys of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-        | _ => NONE) (type_memory_bytes cenv (EL i tys))) sa = ((),sb) /\
+       (EL i tys) (EL i ltys) (type_memory_bytes cenv (EL i tys))) sa = ((),sb) /\
     eval_operand dst s = SOME dw /\
     place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
     (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -57,16 +54,13 @@ Theorem tuple_effectful_head_bind_conditional:
   type_alloc_ok cenv (TupleT tys) /\ i < LENGTH tys /\
   (let dst = FST r; loc_opt = FST (SND r); dst_ty_opt = SND (SND r);
        loc = case loc_opt of SOME l => l | NONE => LocMemory;
-       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys;
-       arr = case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-         | _ => NONE
+       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys
    in (if is_word_type (EL i ltys) then
          if is_word_type dty then
            compile_store_at_loc cenv.ce_imm_alloca dst (EL i elems) loc_opt
          else emit_void INVALID []
        else compile_assign_value cenv dst loc (EL i elems) (is_word_type dty)
-         NONE dty (EL i ltys) arr (type_memory_bytes cenv dty)) sa) = ((),sb) /\
+         NONE dty (EL i ltys) (type_memory_bytes cenv dty)) sa) = ((),sb) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\ local_ptrs_reserved cenv sa /\
   fn_has_code sp sa func /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sp.cs_next_var <= sa.cs_next_var /\
@@ -100,8 +94,9 @@ Theorem tuple_effectful_head_bind_conditional:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_sim_inv cenv cx env es` by fs[targetPlaceSimTheory.target_pre_def] >>
+  `target_indices_pre cenv cx env bt` by fs[targetPlaceSimTheory.target_pre_def] >>
   `gas_admissible (eval_target_place cx bt) target_place_res_ok es` by
-    (irule tuple_place_target_gas_admissible >> metis_tac[]) >>
+    (drule_all tuple_place_target_gas_admissible >> simp[]) >>
   `type_place_target env bt = SOME (Type (EL i tys))` by
     fs[vyperTypeSystemTheory.well_typed_target_def] >>
   `gas_outcome F (cx_tops cx) (ctx,func) (eval_target_place cx bt) (es,s0)

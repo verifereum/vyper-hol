@@ -174,9 +174,7 @@ Theorem tuple_loaded_owned_run[local]:
   i < LENGTH tys /\ ~is_word_type (EL i ltys) /\
   compile_assign_value cenv dst loc (EL i elems) (is_word_type (EL i tys)) NONE
     (EL i tys) (EL i ltys)
-    (case EL i tys of ArrayT et (Dynamic _) =>
-      SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-     | _ => NONE) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
+    (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -239,7 +237,7 @@ Proof
      metis_tac[listTheory.EL_MEM]) >>
   irule tuplePlaceOwnedValueFrameTheory.tuple_place_owned_value_run_frame >>
   qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
   simp[] >> qexists `EL i vs` >> simp[] >>
   fs[tuplePlaceHeadTheory.tuple_place_head_def] >>
@@ -254,7 +252,7 @@ Theorem tuple_loaded_equal_memory_run[local]:
   0 < type_memory_size (EL i tvs) /\
   type_memory_size (EL i tvs)+64 < dimword (:256) /\
   compile_assign_value cenv dst LocMemory (EL i elems) F NONE
-    (EL i tys) (EL i tys) arr (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
+    (EL i tys) (EL i tys) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -299,7 +297,7 @@ Proof
      strip_tac >> rpt strip_tac >> gvs[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   irule tuplePlaceEqualMemoryTheory.tuple_place_equal_memory_run_frame >>
   qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
   simp[] >> qexists `EL i vs` >> simp[] >>
   fs[tuplePlaceHeadTheory.tuple_place_head_def,
@@ -315,9 +313,7 @@ Theorem tuple_loaded_equal_storage_run[local]:
   (loc = LocStorage \/ loc = LocTransient) /\
   compile_assign_value cenv dst loc (EL i elems) (is_word_type (EL i tys)) NONE
     (EL i tys) (EL i tys)
-    (case EL i tys of ArrayT et (Dynamic _) =>
-      SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-     | _ => NONE) (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
+    (type_memory_bytes cenv (EL i tys)) sa = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -359,15 +355,9 @@ Proof
     (fs[tuplePlaceHeadTheory.tuple_place_head_def,
         vyperTypeDefaultsTheory.values_have_types_LIST_REL, listTheory.LIST_REL_EL_EQN] >>
      metis_tac[listTheory.EL_MEM]) >>
-  Cases_on `?et n. EL i tys = ArrayT et (Dynamic n)`
-  >- (irule tuplePlaceBorrowStoreTheory.tuple_place_equal_dyn_run_memory >>
-      qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
-      qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
-      qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
-      simp[] >> qexists `EL i vs` >> gvs[]) >>
   irule tuplePlaceBorrowStoreTheory.tuple_place_equal_storage_run_memory >>
   qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
   simp[] >> qexists `EL i vs` >> gvs[]
 QED
@@ -386,9 +376,7 @@ Theorem tuple_loaded_mutable_store_step:
      compile_store_at_loc cenv.ce_imm_alloca dst (EL i elems) (SOME loc)
    else compile_assign_value cenv dst loc (EL i elems) (is_word_type (EL i tys)) NONE
      (EL i tys) (EL i ltys)
-     (case EL i tys of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-      | _ => NONE) (type_memory_bytes cenv (EL i tys))) sa = ((),sb) /\
+     (type_memory_bytes cenv (EL i tys))) sa = ((),sb) /\
   eval_operand dst s = SOME dw /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME loc) (Type (EL i tys)) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
