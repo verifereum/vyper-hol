@@ -2,6 +2,9 @@
 Theory abiEncoderWindowJointPhases
 Ancestors
   abiEncoderWindowJointLeaves abiEncoderWindowArrayEntry
+  abiEncoderArrayPhases abiDecoderIndexInit abiEncoderWindowStructuralMembers
+  abiEncoderWindowArrayBody abiEncoderWindow abiEncoderWindowArrayLayout freshWrites
+  abiEncoder abiEncoderRegisteredEffect abiEncoderPrimitiveEffect
   abiEncoderWindowArrayInvariant exprSimAbiEncodeFramedArray
   exprSimAbiEncodeFramedBuiltin exprSimAbiEncodeExecFrame
   abiEncoderWindowCursor abiEncoderWindowPhase abiEncoderWindowSequence
@@ -391,5 +394,273 @@ Theorem window_array_root_prefix_joint:
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,G',tn')
 Proof
-  cheat
+  strip_tac >>
+  `?c1 c2. abi_decode_index_init st = (pp,c1) /\
+    emit_op MLOAD [src] c1 = (count_op,c2) /\
+    emit_void MSTORE [dst;count_op] c2 = ((),en)` by
+    (qpat_assum `abi_encode_array_prefix _ _ _ = _` mp_tac >>
+     simp_tac bool_ss [abi_encode_array_prefix_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >> metis_tac[]) >>
+  `?a1. emit_op ALLOCA [Lit 32w] st = (pp,a1) /\
+    emit_void MSTORE [pp;Lit 0w] a1 = ((),c1)` by
+    (qpat_assum `abi_decode_index_init _ = _` mp_tac >>
+     simp_tac bool_ss [abi_decode_index_init_def, contextTheory.compile_alloc_buffer_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+     Cases_on `emit_op ALLOCA [Lit 32w] st` >> gvs[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `cs_extends st a1 /\ cs_extends a1 c1 /\ cs_extends c1 c2 /\
+   cs_extends c2 en` by
+    metis_tac[ci_mono_emit_op, ci_mono_emit_void, ci_mono_def, pairTheory.SND] >>
+  `fn_has_code st c1 func /\ fn_has_code c1 en func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `alloca_inv s /\ alloca_room ctx func s /\
+   (!b sz. FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,sz) ==> sz = 32)` by
+    (fs[window_array_root_def, window_sizes32_def] >> metis_tac[]) >>
+  `eval_operand (Lit 0w) s = SOME (0w:bytes32) /\
+   op_taint tn (Lit 0w) = {} /\
+   (!x. Lit 0w = Var x ==> not_fresh_at st x)` by
+    simp[eval_operand_def, op_taint_def] >>
+  drule_all window_cursor_init_joint >>
+  disch_then (qspecl_then [`explicit`, `PG`, `G`] strip_assume_tac) >>
+  rename1 `window_phase ctx func st c1 _ [] s u` >>
+  suspend "after_cursor"
 QED
+
+Resume window_array_root_prefix_joint[after_cursor]:
+  rename1 `src = Var sp` >> rename1 `dst = Var dp` >>
+  rename1 `pp = Var cursor_var` >>
+  rename1 `ptr_covers Gi ti cursor_var u 32` >>
+  `!R. window_sizes32 R s ==> window_sizes32 R u` by
+    (`window_sizes32 {st.cs_next_id} u` by simp[window_sizes32_def] >>
+     `abi_encoder_registered_effect {st.cs_next_id} [] s u` by
+       metis_tac[window_phase_effect] >>
+     qpat_assum `window_sizes32 _ u` mp_tac >>
+     qpat_assum `abi_encoder_registered_effect _ _ s u` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     pure_rewrite_tac[window_sizes32_def] >> rpt strip_tac >>
+     drule_all window_registered_sizes_transport >> metis_tac[]) >>
+  `window_array_transition ctx func st {st.cs_next_id} [] s u` by
+    metis_tac[window_array_phase_transition] >>
+  `{st.cs_next_id} SUBSET ids /\
+   EVERY (\r. venomMemDefs$regions_disjoint (sb,cap) r) []` by simp[] >>
+  `window_array_root ctx func st ids ei asz msz active ty avs
+    src dst sb cap d u` by metis_tac[window_array_root_transition] >>
+  `not_fresh_at st sp /\ not_fresh_at st dp` by
+    fs[window_array_root_def] >>
+  `cursor_var = STRING #"%" (toString st.cs_next_var)` by
+    (drule emitted_insts_emit_op >> simp[]) >>
+  `!x. not_fresh_at st x ==> cursor_var <> x` by
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
+     metis_tac[LESS_EQ_REFL]) >>
+  `ptr_covers Gi ti sp u 32 /\ ptr_covers Gi ti dp u 32` by
+    (fs[bodyPtrDefsTheory.ptr_covers_def, op_taint_def] >>
+     simp[FLOOKUP_UPDATE] >> metis_tac[window_phase_vars]) >>
+  suspend "word_pre"
+QED
+
+Resume window_array_root_prefix_joint[word_pre]:
+  `32 <= cap /\ mem_word_at sb u.vs_memory = n2w (LENGTH avs)` by
+    (qpat_assum `window_array_root _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ u` mp_tac >>
+     simp_tac bool_ss [window_array_root_def] >> strip_tac >>
+     fs[abi_encoder_window_array_iff]) >>
+  `32 <= LENGTH (enc (Array NONE ty) (ListV avs))` by
+    (qpat_assum `window_array_root _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ u` mp_tac >>
+     simp_tac bool_ss [window_array_root_def] >> strip_tac >>
+     drule window_array_layout >> decide_tac) >>
+  `alloca_inv u /\ alloca_room ctx func u /\
+   fn_inst_ids_distinct func /\
+   eval_operand src u = SOME (n2w sb) /\
+   eval_operand dst u = SOME (n2w d) /\
+   sb+32 <= u.vs_alloca_next /\ d+32 <= u.vs_alloca_next` by
+    (fs[window_array_root_def] >> decide_tac) >>
+  `u.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+  `~u.vs_halted /\ u.vs_current_bb = c1.cs_current_bb /\
+   u.vs_inst_idx = LENGTH c1.cs_current_insts` by
+    metis_tac[window_phase_control] >>
+  `st.cs_next_var <= c1.cs_next_var /\ c1.cs_next_var <= en.cs_next_var` by
+    (drule abi_decode_index_init_shape >> strip_tac >>
+     `c1.cs_next_var <= c2.cs_next_var /\ c2.cs_next_var <= en.cs_next_var` by
+       metis_tac[ci_mono_emit_op, ci_mono_emit_void, ci_mono_def, pairTheory.SND] >>
+     decide_tac) >>
+  `not_fresh_at c1 sp /\ not_fresh_at c1 dp` by
+    metis_tac[not_fresh_at_mono] >>
+  `!i. sb <= i /\ i < sb+32 ==> i NOTIN ti.t_mem` by simp[] >>
+  `compile_abi_encode_to_buf dst src AbiPrimWord c1 = (Lit 32w,en)` by
+    (simp_tac bool_ss [Once compile_abi_encode_child_def,
+       compile_abi_encode_static_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >> simp[]) >>
+  `compile_abi_encode_to_buf (Var dp) (Var sp) AbiPrimWord c1 = (Lit 32w,en)` by
+    metis_tac[] >>
+  `eval_operand (Var sp) u = SOME (n2w sb) /\
+   eval_operand (Var dp) u = SOME (n2w d)` by metis_tac[] >>
+  drule_all window_word_joint_path >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  suspend "word_endpoint"
+QED
+
+Resume window_array_root_prefix_joint[word_endpoint]:
+  qmatch_asmsub_abbrev_tac `gas_origin_ptr_path _ (u,Gi,ti) [] (OK t,Gf,tf)` >>
+  `sb < dimword (:256) /\ d < dimword (:256)` by decide_tac >>
+  `!x. dst = Var x ==> not_fresh_at c1 x` by simp[] >>
+  drule_all abiEncoderWindowLeavesTheory.window_word_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts c1 en) u = OK raw` >>
+  `t = raw with vs_inst_idx := LENGTH en.cs_current_insts` by
+    simp[Abbr `t`] >>
+  `alloca_inv raw /\ alloca_room ctx func raw /\
+   (!x. not_fresh_at c1 x ==> lookup_var x raw = lookup_var x u) /\
+   window_alloca_growth u raw` by
+    (qpat_assum `alloca_inv u` mp_tac >>
+     qpat_assum `alloca_room ctx func u` mp_tac >>
+     qpat_assum `raw = _` SUBST1_TAC >>
+     POP_ASSUM_LIST (K all_tac) >> ntac 2 strip_tac >>
+     mp_tac (Q.INST [`s` |-> `u`, `st` |-> `c1`, `w` |-> `mload sb u`,
+       `ix` |-> `u.vs_inst_idx`] abiEncoderWindowLeavesTheory.window_word_state_resources) >>
+     simp[mstore_def, update_var_def, write_memory_with_expansion_def] >>
+     strip_tac >> fs[lookup_var_def]) >>
+  `window_seq c1 en u raw` by
+    simp[window_seq_def] >>
+  `abi_encoder_registered_effect {} [(d,32)] u raw` by
+    (qpat_assum `raw = _` SUBST1_TAC >>
+     irule abi_encoder_registered_effect_trans >>
+     qexists_tac `update_var (STRING #"%" (toString c1.cs_next_var)) (mload sb u) u` >>
+     simp[abi_encoder_registered_update_var, abi_encoder_output_store]) >>
+  `raw.vs_halted = u.vs_halted /\ raw.vs_current_bb = u.vs_current_bb` by
+    (qpat_assum `raw = _` SUBST1_TAC >>
+     simp[NoAsms, update_var_def, mstore_def, write_memory_with_expansion_def]) >>
+  `window_phase ctx func c1 en {} [(d,32)] u t` by
+    (qpat_assum `t = _` (fn th => pure_rewrite_tac[th]) >>
+     irule window_seq_phase >> simp[]) >>
+  suspend "observations"
+QED
+
+Resume window_array_root_prefix_joint[observations]:
+  `window_phase ctx func st en {st.cs_next_id} [(d,32)] s t` by
+    (irule window_phase_chain >>
+     qexistsl_tac [`{st.cs_next_id}`, `[]`, `c1`, `{}`, `[(d,32)]`, `u`] >>
+     simp[]) >>
+  `!R. window_sizes32 R s ==> window_sizes32 R t` by
+    (rpt strip_tac >>
+     `window_sizes32 R u` by metis_tac[] >>
+     qpat_x_assum `window_sizes32 R u` mp_tac >>
+     simp[NoAsms, window_sizes32_def, Abbr `t`, mstore_def, update_var_def,
+        write_memory_with_expansion_def]) >>
+  `window_array_transition ctx func st {st.cs_next_id} [(d,32)] s t` by
+    metis_tac[window_array_phase_transition] >>
+  `EVERY (\r. venomMemDefs$regions_disjoint (sb,cap) r) [(d,32)]` by
+    (simp[] >>
+     `venomMemDefs$regions_disjoint (sb,cap)
+       (d,LENGTH (enc (Array NONE ty) (ListV avs)))` by metis_tac[window_array_root_def] >>
+     qpat_assum `venomMemDefs$regions_disjoint (sb,cap) _` mp_tac >>
+     qpat_assum `32 <= LENGTH _` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+     simp_tac bool_ss [venomMemDefsTheory.regions_disjoint_def,
+       GSYM LENGTH_NIL] >> decide_tac) >>
+  `window_array_root ctx func st ids ei asz msz active ty avs
+    src dst sb cap d t` by metis_tac[window_array_root_transition] >>
+  `abi_encode_exec_frame func u t` by
+    (simp[Abbr `t`] >> irule abi_encode_exec_frame_trans >>
+     qexists_tac `update_var (STRING #"%" (toString c1.cs_next_var)) (mload sb u) u` >>
+     conj_tac >-
+       simp_tac (srw_ss()) [abi_encode_exec_frame_def, pending_alloca_size_def,
+         update_var_def, exprSimAbiEncodeSemanticTheory.abi_encode_semantic_obs_def] >> simp[]) >>
+  `abi_encode_exec_frame func s t` by metis_tac[abi_encode_exec_frame_trans] >>
+  suspend "finish"
+QED
+
+Resume window_array_root_prefix_joint[finish]:
+  `count_op = Var (STRING #"%" (toString c1.cs_next_var))` by
+    (qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >> simp[]) >>
+  `eval_operand count_op t = SOME (n2w (LENGTH avs))` by
+    (simp[Abbr `t`, eval_operand_def, lookup_var_def, update_var_def,
+       mstore_def, write_memory_with_expansion_def, FLOOKUP_UPDATE,
+       GSYM mem_word_at_eq_mload]) >>
+  `!x. count_op = Var x ==> not_fresh_at en x` by
+    (qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any mp_tac emitted_insts_emit_op) >> strip_tac >>
+     qpat_assum `emit_void MSTORE [dst;count_op] _ = _`
+       (mp_then Any mp_tac emitted_insts_emit_void) >> strip_tac >>
+     simp[loweringStateRelDefsTheory.not_fresh_at_def]) >>
+  `mem_word_at d t.vs_memory = n2w (LENGTH avs)` by
+    simp[Abbr `t`, mstore_mem_word_at_same, GSYM mem_word_at_eq_mload] >>
+  `abi_encoder_array_prefix ty avs 0 d t.vs_memory` by
+    metis_tac[abiEncoderArrayPrefixTheory.abi_encoder_array_prefix_empty] >>
+  `allocas_from lo t /\ lo <= t.vs_alloca_next` by
+    (qpat_assum `allocas_from lo u` mp_tac >>
+     simp[NoAsms, Abbr `t`, allocas_from_def, mstore_def, update_var_def,
+       write_memory_with_expansion_def] >> simp[]) >>
+  `venomMemDefs$regions_disjoint (sb,cap) (b,32) /\
+   venomMemDefs$regions_disjoint
+     (d,LENGTH (enc (Array NONE ty) (ListV avs))) (b,32)` by
+    (qpat_assum `window_array_root _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ u` mp_tac >>
+     simp_tac bool_ss [window_array_root_def] >> strip_tac >> metis_tac[]) >>
+  `b+32 <= d \/ d+32 <= b` by
+    (qpat_assum `venomMemDefs$regions_disjoint (d,_) (b,32)` mp_tac >>
+     qpat_assum `32 <= LENGTH _` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+     simp_tac bool_ss [venomMemDefsTheory.regions_disjoint_def, GSYM LENGTH_NIL] >>
+     decide_tac) >>
+  `mem_word_at b t.vs_memory = 0w` by
+    simp[Abbr `t`, mstore_mem_word_at_disjoint, update_var_def] >>
+  `window_array_cursor T en pp st.cs_next_id b 0 sb cap d
+     (LENGTH (enc (Array NONE ty) (ListV avs))) t` by
+    (simp_tac bool_ss [window_array_cursor_def] >> asm_rewrite_tac[] >>
+     conj_tac >-
+       (qpat_x_assum `not_fresh_at c1 cursor_var` mp_tac >>
+        simp[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
+     conj_tac >-
+       (qpat_assum `window_phase ctx func c1 en {} [(d,32)] u t`
+          (mp_then Any mp_tac abiEncoderWindowChildTheory.window_phase_eval_var) >>
+        disch_then (qspecl_then [`n2w b`, `pp`] mp_tac) >>
+        qpat_assum `eval_operand pp u = _` mp_tac >>
+        qpat_assum `not_fresh_at c1 cursor_var` mp_tac >>
+        qpat_assum `pp = Var cursor_var` mp_tac >>
+        qpat_assum `cursor_var = _` mp_tac >>
+        qpat_assum `Abbrev (t = _)` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> simp[markerTheory.Abbrev_def]) >>
+     simp[Abbr `t`, mstore_def, update_var_def, write_memory_with_expansion_def]) >>
+  `lookup_var cursor_var t = lookup_var cursor_var u` by
+    (qpat_assum `!x. not_fresh_at c1 x ==> lookup_var x raw = _` mp_tac >>
+     qpat_assum `not_fresh_at c1 cursor_var` mp_tac >>
+     qpat_assum `t = raw with vs_inst_idx := _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[lookup_var_def]) >>
+  `FLOOKUP Gf cursor_var = FLOOKUP Gi cursor_var /\
+   op_taint tf (Var cursor_var) = op_taint ti (Var cursor_var)` by metis_tac[] >>
+  `ptr_covers Gf tf cursor_var t 32` by
+    (qpat_assum `ptr_covers Gi ti cursor_var u 32` mp_tac >>
+     qpat_assum `lookup_var cursor_var t = _` mp_tac >>
+     qpat_assum `FLOOKUP Gf cursor_var = _` mp_tac >>
+     qpat_assum `op_taint tf (Var cursor_var) = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[bodyPtrDefsTheory.ptr_covers_def]) >>
+  `!x. not_fresh_at st x ==>
+     FLOOKUP Gf x = FLOOKUP G x /\
+     op_taint tf (Var x) = op_taint tn (Var x)` by
+    (gen_tac >> disch_tac >>
+     `not_fresh_at c1 x` by metis_tac[not_fresh_at_mono] >>
+     `cursor_var <> x` by metis_tac[] >>
+     `FLOOKUP Gf x = FLOOKUP Gi x /\
+      op_taint tf (Var x) = op_taint ti (Var x)` by metis_tac[] >>
+     qpat_assum `Gi = _` mp_tac >>
+     qpat_assum `ti.t_var = _` mp_tac >>
+     qpat_assum `FLOOKUP Gf x = _` mp_tac >>
+     qpat_assum `op_taint tf (Var x) = _` mp_tac >>
+     qpat_assum `cursor_var <> x` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[ptrDisciplineTheory.op_taint_def, FLOOKUP_UPDATE]) >>
+  `tf.t_mem = tn.t_mem DIFF
+    ({i | b <= i /\ i < b+32} UNION {i | d <= i /\ i < d+32})` by
+    (qpat_assum `tf.t_mem = _` mp_tac >>
+     qpat_assum `ti.t_mem = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> SET_TAC[]) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tf)` by
+    (gen_tac >>
+     qpat_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
+       (qspec_then `D` mp_tac) >>
+     disch_then (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
+     disch_then (qspecl_then [`u`, `Gi`, `ti`, `[]`, `OK t`, `Gf`, `tf`] mp_tac) >>
+     qpat_assum `!D. gas_origin_ptr_path _ (u,Gi,ti) _ _`
+       (qspec_then `D` mp_tac) >>
+     POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  qexistsl_tac [`t`, `b`, `cursor_var`, `Gf`, `tf`] >> asm_rewrite_tac[]
+QED
+
+Finalise window_array_root_prefix_joint
