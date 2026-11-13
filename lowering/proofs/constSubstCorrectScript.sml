@@ -822,6 +822,35 @@ Proof
   metis_tac[]
 QED
 
+(* constants_env's recursion, now that it reads the first component of
+   constants_env_trace. *)
+Theorem constants_env_eqns[local]:
+  constants_env cx am addr src [] acc = SOME acc /\
+  constants_env cx am addr src ((VariableDecl vis (Constant e) id typ x)::ts) acc =
+    (case evaluate_type (get_tenv cx) typ of
+     | NONE => NONE
+     | SOME tv =>
+       case FST ((do res <- eval_expr cx e; read_result cx res od)
+         (initial_state (merge_constants addr src acc am) [FEMPTY])) of
+       | INL v => constants_env cx am addr src ts (acc |+ (id, (tv, v)))
+       | _ => NONE) /\
+  (!t. (!vis e id typ x. t <> VariableDecl vis (Constant e) id typ x) ==>
+     constants_env cx am addr src (t::ts) acc =
+     constants_env cx am addr src ts acc)
+Proof
+  rpt conj_tac
+  >- simp[vyperInterpreterTheory.constants_env_def,
+          vyperInterpreterTheory.constants_env_trace_def]
+  >- (simp[vyperInterpreterTheory.constants_env_def,
+           Once vyperInterpreterTheory.constants_env_trace_def] >>
+      CASE_TAC >> simp[] >> pairarg_tac >> simp[] >>
+      CASE_TAC >> simp[] >> pairarg_tac >> simp[]) >>
+  Cases >> simp[vyperInterpreterTheory.constants_env_def,
+                vyperInterpreterTheory.constants_env_trace_def] >>
+  rename1 `VariableDecl _ mut` >> Cases_on `mut` >>
+  simp[vyperInterpreterTheory.constants_env_trace_def]
+QED
+
 Theorem constants_env_fold_agreement_acc:
   !ts acc A.
     check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
@@ -833,13 +862,13 @@ Theorem constants_env_fold_agreement_acc:
     constants_fold_module mods (constant_machine_immutables am cx.txn.target) src ts acc = SOME A /\
     constant_fmap_declared_typed (type_env_all_modules mods) full A
 Proof
-  Induct >- simp[vyperInterpreterTheory.constants_env_def, constants_fold_module_def] >>
+  Induct >- simp[constants_env_eqns, constants_fold_module_def] >>
   rpt gen_tac >> Cases_on `h` >>
-  simp[vyperInterpreterTheory.constants_env_def, constants_fold_module_def] >>
+  simp[constants_env_eqns, constants_fold_module_def] >>
   strip_tac
   >~ [`constants_fold_module _ _ _ (VariableDecl vis mut id ty slot :: ts) acc`]
   >- (Cases_on `mut` >>
-      gvs[vyperInterpreterTheory.constants_env_def, constants_fold_module_def, AllCaseEqs()]
+      gvs[constants_env_eqns, constants_fold_module_def, AllCaseEqs()]
       >~ [`FST _ = INL v`]
       >- (`?st'. (do pv <- eval_expr cx e; read_result cx pv od)
              (initial_state (merge_constants cx.txn.target src acc am) [FEMPTY]) = (INL v,st')` by
