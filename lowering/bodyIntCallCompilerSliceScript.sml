@@ -42,50 +42,40 @@ Proof
             intcall_interval_return])
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem intcall_interval_slice_calldata:
   k <= a.cs_next_var ==>
   intcall_compiler_interval k a (SND (compile_slice_calldata x n sz a))
 Proof
-  (* original proof, kept while held:
   strip_tac >> simp[compile_slice_calldata_def, comp_ignore_bind_def] >>
-  irule intcall_interval_bind_floor >>
-  simp[intcall_interval_slice_out_buf, pairTheory.FORALL_PROD] >>
-  rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
-       simp[intcall_interval_assert_slice_bounds, intcall_interval_emit_op,
-            intcall_interval_emit_void, intcall_interval_return])
-  *)
-  cheat
+  rpt (rpt strip_tac >> irule intcall_interval_bind_floor >>
+       simp[intcall_interval_slice_out_buf, intcall_interval_assert_slice_bounds,
+            intcall_interval_emit_op, intcall_interval_emit_void,
+            intcall_interval_return, pairTheory.FORALL_PROD])
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem intcall_interval_slice_code:
   k <= a.cs_next_var ==>
   intcall_compiler_interval k a (SND (compile_slice_code x n sz a))
 Proof
-  (* original proof, kept while held:
   strip_tac >> simp[compile_slice_code_def, comp_ignore_bind_def] >>
-  irule intcall_interval_bind_floor >>
-  simp[intcall_interval_slice_out_buf, pairTheory.FORALL_PROD] >>
-  rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
-       simp[intcall_interval_assert_slice_bounds, intcall_interval_emit_op,
-            intcall_interval_emit_void, intcall_interval_return])
-  *)
-  cheat
+  rpt (rpt strip_tac >> irule intcall_interval_bind_floor >>
+       simp[intcall_interval_slice_out_buf, intcall_interval_assert_slice_bounds,
+            intcall_interval_emit_op, intcall_interval_emit_void,
+            intcall_interval_return, pairTheory.FORALL_PROD])
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): compile_slice_extcode takes the output size and
+   allocates its own buffer, as compile_slice_calldata/code do. *)
 Theorem intcall_interval_slice_extcode:
   k <= a.cs_next_var ==>
-  intcall_compiler_interval k a (SND (compile_slice_extcode addr x n buf data a))
+  intcall_compiler_interval k a (SND (compile_slice_extcode addr x n sz a))
 Proof
   strip_tac >> simp[compile_slice_extcode_def, comp_ignore_bind_def] >>
-  rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
-       simp[intcall_interval_assert_slice_bounds, intcall_interval_emit_op,
-            intcall_interval_emit_void, intcall_interval_return])
+  rpt (rpt strip_tac >> irule intcall_interval_bind_floor >>
+       simp[intcall_interval_slice_out_buf, intcall_interval_assert_slice_bounds,
+            intcall_interval_emit_op, intcall_interval_emit_void,
+            intcall_interval_return, pairTheory.FORALL_PROD])
 QED
-*)
 
 Theorem intcall_interval_extract32_load:
   k <= a.cs_next_var ==>
