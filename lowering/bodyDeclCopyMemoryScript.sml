@@ -189,13 +189,13 @@ Proof
      Cases_on `loc = SOME LocMemory`
      >- (gvs[] >>
          drule annassign_memory_assign_body_path >>
-         disch_then (qspecl_then [`ctx`, `func`, `cx`, `ee`, `s`, `id`, `sz`,
+         disch_then (qspecl_then [`H`, `ctx`, `func`, `cx`, `ee`, `s`, `id`, `sz`,
            `w`, `inst`, `v`, `tyv`, `sc`, `rest`, `a`, `sw`, `d`] mp_tac) >>
          simp[]) >>
      `compile_store_memory cenv op (Var p) vtyp vtyp sb = ((),sf)` by
        gvs[compile_assign_value_def] >>
      drule annassign_memory_store_body_path >>
-     disch_then (qspecl_then [`ctx`, `func`, `cx`, `ee`, `s`, `id`, `sz`,
+     disch_then (qspecl_then [`H`, `ctx`, `func`, `cx`, `ee`, `s`, `id`, `sz`,
        `w`, `inst`, `v`, `tyv`, `sc`, `rest`, `a`, `sw`, `d`] mp_tac) >>
      simp[]) >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -213,7 +213,9 @@ Proof
                   FLOOKUP t.vs_allocas aid = SOME b) /\
          t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
          t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
-    metis_tac[] >>
+    (rpt strip_tac >>
+     qpat_x_assum `!H. stmt_state_rel _ _ _ _ _ _ _ ==> _` irule >>
+     simp[]) >>
   qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> ?t. _`
     (qspec_then `H0` mp_tac) >>
   impl_tac >- first_assum ACCEPT_TAC >>
