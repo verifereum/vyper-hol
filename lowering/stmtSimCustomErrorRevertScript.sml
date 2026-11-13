@@ -291,7 +291,10 @@ Resume custom_error_revert_tail_safe_exit[encoded]:
      drule window_strong_result_public >>
      simp_tac bool_ss [abi_encoder_window_result_def] >> strip_tac >>
      drule window_phase_control >> strip_tac >>
-     rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, decide_tac]) >>
+     rpt conj_tac
+     >- decide_tac
+     >- first_assum ACCEPT_TAC
+     >- decide_tac >> first_assum ACCEPT_TAC) >>
   `?fuel'. run_from fuel' ctx func u = Abort Revert_abort w /\
     mem_safe_run fuel' ctx func u` by
     (irule mem_cont_sim_exit_run >> simp_tac bool_ss [exit_result_def] >>

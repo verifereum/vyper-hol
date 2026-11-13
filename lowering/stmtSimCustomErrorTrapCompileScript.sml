@@ -77,13 +77,24 @@ val ce_compile_simps =
    ce_compile_alloc_buffer, LET_THM];
 
 fun ce_compile_tac extra g =
-  (FIRST [
-    FIRST_PROVE [asm_simp_tac (srw_ss()) (extra @ ce_compile_simps)],
-    first_x_assum (fn th => irule (SRULE[] th) >> simp[]),
-    ho_match_mp_tac ce_compile_bind >> conj_tac
-      >- ce_compile_tac extra >> rpt gen_tac >> ce_compile_tac extra,
-    ho_match_mp_tac ce_compile_ignore_bind >> conj_tac >> ce_compile_tac extra,
-    IF_CASES_TAC >> gvs[] >> ce_compile_tac extra]) g;
+  (asm_simp_tac (srw_ss()) (extra @ ce_compile_simps) >>
+   (fn goal =>
+     let
+       val code = rand (snd goal)
+       val head = fst (strip_comb code)
+       val name = if is_const head then fst (dest_const head) else ""
+     in
+       if name = "comp_bind" then
+         (ho_match_mp_tac ce_compile_bind >> conj_tac
+           >- ce_compile_tac extra >> rpt gen_tac >> ce_compile_tac extra) goal
+       else if name = "comp_ignore_bind" then
+         (ho_match_mp_tac ce_compile_ignore_bind >> conj_tac >>
+          ce_compile_tac extra) goal
+       else if boolSyntax.is_cond code then
+         (IF_CASES_TAC >> gvs[] >> ce_compile_tac extra) goal
+       else
+         first_x_assum (fn th => irule (SRULE[] th) >> simp[]) goal
+     end)) g;
 
 Theorem ce_compile_static[local]:
   ce_compile_commutes (compile_abi_encode_static dst src)
