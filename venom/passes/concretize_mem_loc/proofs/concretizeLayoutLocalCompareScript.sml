@@ -166,7 +166,7 @@ Proof
       b + sz <= w2n s.vs_initial_fmp) \/
    SND o_f rv = G` assume_tac
   >- (Cases_on `ctx_has_dalloca C`
-      >- (disj1_tac >> rpt strip_tac >> irule frame_reachable_caches_below >> metis_tac[]) >>
+      >- (disj1_tac >> rpt strip_tac >> irule frameAllocationOwnershipTheory.frame_reachable_caches_below >> metis_tac[]) >>
       fs[]) >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (drule resolved_config_current >> simp[] >> strip_tac >>

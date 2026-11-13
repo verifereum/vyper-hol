@@ -110,7 +110,7 @@ Proof
            (simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
          `allocas_below_fmp s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
          `s.vs_initial_fmp = vs0.vs_initial_fmp` by
-           metis_tac[frame_reachable_initial_fmp] >>
+           metis_tac[frameAllocationOwnershipTheory.frame_reachable_initial_fmp] >>
          fs[dyn_floor_def, allocas_below_fmp_def] >> rfs[]) >>
       simp[] >> gen_tac >> irule ptr_frame_current_table_step >>
       fs[EVERY_MEM] >> metis_tac[])
