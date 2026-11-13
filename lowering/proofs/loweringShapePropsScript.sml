@@ -10541,32 +10541,6 @@ Proof
   Cases_on `vv` >> simp[vv_with_type_def, value_shape_ok_def]
 QED
 
-(* The RHS snapshot taken before an effectful target yields a value whose
-   operands are plain: the unwrapped word, or the fresh buffer's pointer. *)
-Theorem compile_snapshot_vv_shape[local]:
-  shape_step internal compiler_label
-    (\st. value_shape_ok st vv /\ cenv_shape_ok st cenv)
-    (compile_snapshot_vv cenv copy vv)
-    (\v st. value_shape_ok st v /\ cenv_shape_ok st cenv)
-Proof
-  simp[compile_snapshot_vv_def] >> IF_CASES_TAC
-  >- (match_mp_tac shape_step_bind >>
-      qexists_tac `\op st. plain_operand st op /\ cenv_shape_ok st cenv` >> conj_tac
-      >- (irule shape_step_conseq >>
-          irule_at Any shape_step_frame >> irule_at Any unwrap_value_shape >>
-          qexists_tac `\st. cenv_shape_ok st cenv` >> simp[cenv_shape_ok_stable]) >>
-      gen_tac >> simp[] >> irule shape_step_return >> simp[value_shape_ok_def]) >>
-  IF_CASES_TAC
-  >- (match_mp_tac shape_step_bind >>
-      qexists_tac `\op st. plain_operand st op /\ cenv_shape_ok st cenv` >> conj_tac
-      >- (irule shape_step_conseq >>
-          irule_at Any (Q.INST [`R` |-> `\st. T`] compile_materialize_vv_shape_under) >>
-          simp[shape_stable_def]) >>
-      gen_tac >> simp[] >> irule shape_step_return >>
-      simp[value_shape_ok_def, mk_ptr_def]) >>
-  irule shape_step_return >> simp[]
-QED
-
 Theorem compile_assign_base_shape[local]:
   !bt e cenv lctx ty internal.
     ~supported_target_exists expr_shape_root bt /\
@@ -10587,8 +10561,10 @@ Proof
   (* Snapshot the RHS before an effectful target's indices. *)
   stmt_bind `\v st. value_shape_ok st v /\ cenv_shape_ok st cenv` `v`
     (IF_CASES_TAC
-     >- (irule shape_step_conseq >> irule_at Any compile_snapshot_vv_shape >>
-         simp[vv_with_type_shape_ok]) >>
+     >- (irule shape_step_conseq >>
+         irule_at Any (Q.INST [`R` |-> `\st. cenv_shape_ok st cenv`]
+           compile_snapshot_vv_shape_framed) >>
+         simp[cenv_shape_ok_stable, vv_with_type_shape_ok]) >>
      irule shape_step_return >> simp[]) >>
   stmt_bind `\r st. plain_operand st (FST r) /\
     (value_shape_ok st v /\ cenv_shape_ok st cenv)` `r`
@@ -14035,7 +14011,7 @@ Resume compile_group_dispatch_linear_shape[jobs]:
 QED
 Finalise compile_group_dispatch_linear_shape
 
-Theorem grouped_runtime_entry_prefix_shape[local]:
+Theorem grouped_runtime_entry_prefix_shape:
   !groups fallback_fn.
     EVERY external_group_shape_ok groups /\ fallback_shape_ok fallback_fn ==>
     shape_step F jump_label_ok (\st. T)
@@ -14078,7 +14054,7 @@ Resume grouped_runtime_entry_prefix_shape[dispatch]:
   >- (ho_match_mp_tac shape_step_new_block >> simp[shape_stable_def, jump_label_ok_def]) >>
   gen_tac >> BETA_TAC >> irule runtime_fallback_shape >> simp[]
 QED
-Finalise grouped_runtime_entry_prefix_shape[local]
+Finalise grouped_runtime_entry_prefix_shape
 
 Theorem compile_generate_grouped_runtime_shape:
   !groups internal_fns fallback_fn st1.
