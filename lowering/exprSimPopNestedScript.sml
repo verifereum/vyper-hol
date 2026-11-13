@@ -80,7 +80,7 @@ Proof
   res_tac >> gvs[]
 QED
 
-Theorem target_root_untyped[local]:
+Theorem target_root_untyped:
   !env bt. type_place_target env (target_root bt) = NONE ==>
     type_place_target env bt = NONE
 Proof
@@ -182,7 +182,7 @@ Proof
   fs[bare_globals_layout_def] >> metis_tac[]
 QED
 
-Theorem target_root_cases[local]:
+Theorem target_root_cases:
   !bt. (?id. target_root bt = NameTarget id) \/
        (?src id. target_root bt = TopLevelNameTarget (src,id))
 Proof
