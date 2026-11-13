@@ -22,20 +22,24 @@ Theorem intcall_declared_local_activate_resources:
   ce_locals_declared ce env' ==>
   intcall_joint_res fp ce env' es' sa s
 Proof
-  (* Temporary stand-in: the proof below broke on the 0.5.0b1 lowering port;
-     named repair for the alan run. Original proof:
-    pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
-    `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx
-      (es with scopes :=
-        (sc |+ (id,<|assignable := a; type := tv; value := v; popped := []|>)) :: rest) s` by
-      (irule declared_local_activate >>
-       fs[intcall_expr_res_def] >> metis_tac[]) >>
-    fs[intcall_joint_res_def, intcall_expr_res_def] >>
-    reverse conj_tac >- metis_tac[] >>
-    ho_match_mp_tac (local_region_declared_allocation |> SPEC_ALL |>
-      Q.INST [`lo` |-> `fp.jc_lo`, `aid` |-> `inst.inst_id`,
-              `size_bytes` |-> `sz`]) >>
-    goal_assum (drule_at Any) >> simp[] >> metis_tac[]
-  *)
-  cheat
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
+  `value_has_type tv v` by
+    (qpat_x_assum `expr_sim_inv _ _ env' _` mp_tac >>
+     simp[exprSimHypsDefsTheory.expr_sim_inv_def,
+          vyperTypeInvariantsTheory.state_well_typed_def,
+          vyperTypeInvariantsTheory.scope_well_typed_def] >>
+     strip_tac >>
+     qpat_x_assum `!n entry. FLOOKUP (sc |+ _) n = SOME entry ==> _`
+       (qspec_then `id` mp_tac) >> simp[finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx
+    (es with scopes :=
+      (sc |+ (id,<|assignable := a; type := tv; value := v; popped := []|>)) :: rest) s` by
+    (irule declared_local_activate >>
+     fs[intcall_expr_res_def] >> metis_tac[]) >>
+  fs[intcall_joint_res_def, intcall_expr_res_def] >>
+  reverse conj_tac >- metis_tac[] >>
+  ho_match_mp_tac (local_region_declared_allocation |> SPEC_ALL |>
+    Q.INST [`lo` |-> `fp.jc_lo`, `aid` |-> `inst.inst_id`,
+            `size_bytes` |-> `sz`]) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
