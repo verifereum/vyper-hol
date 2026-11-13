@@ -4,9 +4,10 @@
    ASSIGN and the JMP.  The value judgment follows from the vv judgment by
    the shared joint unwrap_value lemma (bodyFullUnwrap).
 
-   The generic ALLOCA/bytestring lemmas and the joint typed copy are
-   premises in their exact statements until they land (bodyFullAllocGeneric,
-   typedCopyOriginPtr); body_ifexp_case_full follows once they do.
+   The generic ALLOCA/bytestring lemmas the arm steps take come from
+   bodyFullAllocGeneric.  The joint typed copy is a premise in its exact
+   statement until it lands (typedCopyOriginPtr); body_ifexp_case_full
+   follows once it does.
 
    DRAFT: statements only; the proofs are not written yet.
  *
@@ -14,12 +15,13 @@
  *   expr_sim_full_of_vv -- the value judgment from the vv judgment
  *   ifexp_vv_full_root -- the ternary's vv judgment from its parts
  *   body_ifexp_case_full_of_helpers -- bodyFullCases' IfExp case, from the
- *     helper lemmas
+ *     joint typed copy
  *)
 Theory bodyFullIfExp
 Ancestors
   bodyFullIfExpArm bodyFullIfExpWiden bodyFullIfExpWidenCall
-  bodyFullIfExpFinish bodyFullIfExpShadow bodyFullUnwrap bodyFullPreds
+  bodyFullIfExpFinish bodyFullIfExpShadow bodyFullAllocGeneric bodyFullUnwrap
+  bodyFullPreds
   bodySimFull gasOutcomeFullCompose gasOutcomeFull gasShadowCompile
   gasShadowCompileHelpers exprSimMemorySource exprSimIfExp exprSimDefs
   exprSimMemDefs bodyPtrDefs loweringPosts exprLowering exprLoweringProps
@@ -48,73 +50,6 @@ QED
 (* The ternary's root from the condition's value judgment and the arms'
    vv judgments.  Each arm is one of the three arm steps' kinds. *)
 Theorem ifexp_vv_full_root:
-  (* ifexp_alloca_origin_ptr_edge *)
-  (!s ctx lo fn bb id n p u D explicit PG G tn.
-    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
-    lo <= s.vs_alloca_next /\
-    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    get_instruction bb s.vs_inst_idx = SOME (mk_inst id ALLOCA [Lit n] [p]) /\
-    step_inst_base (mk_inst id ALLOCA [Lit n] [p]) s = OK u ==>
-    gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-      (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
-       step_prov PG G (mk_inst id ALLOCA [Lit n] [p]) u,
-       step_taint (mk_inst id ALLOCA [Lit n] [p]) s u tn))  /\
-  (* compile_alloc_buffer_ghost_frame_at *)
-  (!H D lo ctx fn cenv cx es sa sb n buf sc s out u d PG G tn.
-      stmt_state_rel (H:(bool # 256 word # type_value) list # num list)
-        ctx fn cenv cx es s /\
-      ghost_inv_at D lo d cenv cx es G tn s /\
-      local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sb.cs_next_var /\
-      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-      (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-      compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc fn /\
-      buf.buf_operand = Var out /\ n < dimword (:256) /\
-      step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
-      ghost_inv_at D lo d cenv cx es
-        (step_prov PG G (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) u)
-        (step_taint (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s u tn) u)  /\
-  (* compile_alloc_buffer_kept_frame_at *)
-  (!H lo ctx fn cenv cx e es sa sb s0 es' tv vv s n buf sc out u PG G0 tn0 G tn.
-      vv_post (H:(bool # 256 word # type_value) list # num list)
-        ctx fn cenv cx e es sa sb s0 es' tv vv s /\
-      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
-      lo <= s.vs_alloca_next /\
-      local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-      sa.cs_next_var <= sb.cs_next_var /\
-      compile_alloc_buffer n sb = (buf,sc) /\ buf.buf_operand = Var out /\
-      n < dimword (:256) /\
-      step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
-      ghost_kept_at lo cenv es sa G0 tn0 s0
-        (step_prov PG G (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) u)
-        (step_taint (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s u tn))  /\
-  (* compile_store_bytestring_origin_ptr_path *)
-  (!lo explicit ctx fn PG sa sb src dst G tn s a b len n bb.
-      compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
-      not_fresh_at sa src /\ not_fresh_at sa dst /\
-      lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
-      n = 32 + 32 * ((len+31) DIV 32) /\
-      len+31 < dimword(:256) /\ n < dimword(:256) /\
-      mload (w2n a) s = n2w len /\
-      ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
-      (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
-      allocas_from lo s /\ lo <= s.vs_alloca_next /\
-      run_inst_seq_mem_ok (emitted_insts sa sb) s /\
-      ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-      isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-      ?Gf tnf sf.
-        (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-          (OK (sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)),Gf,tnf)) /\
-        run_inst_seq (emitted_insts sa sb) s = OK sf /\
-        tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
-        sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
-        sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
-        tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
-        tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+n}) UNION
-          {w2n b+i | i < n /\ w2n a+i IN tn.t_mem} /\
-        (!p. not_fresh_at sa p ==>
-          lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
-          op_taint tnf (Var p) = op_taint tn (Var p)))  /\
   (* compile_store_memory_typed_origin_ptr_path (r3) *)
   (!cenv xd dty xs sty sa sb tenv stv dtv v s sw dw G tn lo ctx func explicit PG.
     compile_store_memory_typed cenv (Var xd) dty (Var xs) sty sa = ((),sb) /\
@@ -201,77 +136,10 @@ Proof
   cheat
 QED
 
-(* bodyFullCases' IfExp case, from the helper lemmas: the side facts the
+(* bodyFullCases' IfExp case, from the joint typed copy: the side facts the
    root takes come from body_inv and expr_body_pre, the word agreement by
    the contrapositive of post_value_type_nonword. *)
 Theorem body_ifexp_case_full_of_helpers:
-  (* ifexp_alloca_origin_ptr_edge *)
-  (!s ctx lo fn bb id n p u D explicit PG G tn.
-    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
-    lo <= s.vs_alloca_next /\
-    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    get_instruction bb s.vs_inst_idx = SOME (mk_inst id ALLOCA [Lit n] [p]) /\
-    step_inst_base (mk_inst id ALLOCA [Lit n] [p]) s = OK u ==>
-    gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-      (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
-       step_prov PG G (mk_inst id ALLOCA [Lit n] [p]) u,
-       step_taint (mk_inst id ALLOCA [Lit n] [p]) s u tn))  /\
-  (* compile_alloc_buffer_ghost_frame_at *)
-  (!H D lo ctx fn cenv cx es sa sb n buf sc s out u d PG G tn.
-      stmt_state_rel (H:(bool # 256 word # type_value) list # num list)
-        ctx fn cenv cx es s /\
-      ghost_inv_at D lo d cenv cx es G tn s /\
-      local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sb.cs_next_var /\
-      (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-      (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-      compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc fn /\
-      buf.buf_operand = Var out /\ n < dimword (:256) /\
-      step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
-      ghost_inv_at D lo d cenv cx es
-        (step_prov PG G (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) u)
-        (step_taint (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s u tn) u)  /\
-  (* compile_alloc_buffer_kept_frame_at *)
-  (!H lo ctx fn cenv cx e es sa sb s0 es' tv vv s n buf sc out u PG G0 tn0 G tn.
-      vv_post (H:(bool # 256 word # type_value) list # num list)
-        ctx fn cenv cx e es sa sb s0 es' tv vv s /\
-      ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
-      lo <= s.vs_alloca_next /\
-      local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-      sa.cs_next_var <= sb.cs_next_var /\
-      compile_alloc_buffer n sb = (buf,sc) /\ buf.buf_operand = Var out /\
-      n < dimword (:256) /\
-      step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
-      ghost_kept_at lo cenv es sa G0 tn0 s0
-        (step_prov PG G (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) u)
-        (step_taint (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s u tn))  /\
-  (* compile_store_bytestring_origin_ptr_path *)
-  (!lo explicit ctx fn PG sa sb src dst G tn s a b len n bb.
-      compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
-      not_fresh_at sa src /\ not_fresh_at sa dst /\
-      lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
-      n = 32 + 32 * ((len+31) DIV 32) /\
-      len+31 < dimword(:256) /\ n < dimword(:256) /\
-      mload (w2n a) s = n2w len /\
-      ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
-      (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
-      allocas_from lo s /\ lo <= s.vs_alloca_next /\
-      run_inst_seq_mem_ok (emitted_insts sa sb) s /\
-      ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-      isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-      ?Gf tnf sf.
-        (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-          (OK (sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)),Gf,tnf)) /\
-        run_inst_seq (emitted_insts sa sb) s = OK sf /\
-        tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
-        sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
-        sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
-        tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
-        tnf.t_mem = (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+n}) UNION
-          {w2n b+i | i < n /\ w2n a+i IN tn.t_mem} /\
-        (!p. not_fresh_at sa p ==>
-          lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
-          op_taint tnf (Var p) = op_taint tn (Var p)))  /\
   (* compile_store_memory_typed_origin_ptr_path (r3) *)
   (!cenv xd dty xs sty sa sb tenv stv dtv v s sw dw G tn lo ctx func explicit PG.
     compile_store_memory_typed cenv (Var xd) dty (Var xs) sty sa = ((),sb) /\
