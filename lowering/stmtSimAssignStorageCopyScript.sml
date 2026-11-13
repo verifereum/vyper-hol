@@ -5,7 +5,7 @@
 
 Theory stmtSimAssignStorageCopy
 Ancestors
-  stmtSimAssignStorageFacts
+  fullAssignCopyFacts stmtSimAssignStorageFacts
   abiTypeBoundProps vyperABI vyperStorageCoverage
   exprSimHashBoundary
   valueEncodingProps exprSimTopLevelProps gasOutcome gasSummary gasContext
@@ -279,44 +279,7 @@ Proof
        comp_return_def, compile_store_at_loc_def]
 QED
 
-(* Expose the RHS prefix independently of the later assignment dispatch.
-   In particular this interface remains valid when RHS evaluation fails. *)
-Theorem assign_storage_copy_code_parts:
-  !cenv lctx ty nsid e sa sf c tr slot vtyp.
-    stmt_env cenv lctx ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e)
-      sa = (c, sf) /\
-    FLOOKUP cenv.ce_module_vars nsid =
-      SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    cenv.ce_hashmap_info nsid = NONE /\
-    cenv.ce_module_var_type nsid = SOME vtyp /\
-    ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
-    lowered_value_type cenv e = expr_type e ==>
-    c = cenv /\
-    ?vv sV sB op.
-      compile_expr cenv (expr_type e) e sa = (vv, sV) /\
-      unwrap_value cenv vv sV = (op, sB) /\
-      lower_value compile_expr cenv (expr_type e) e sa = (op, sB) /\
-      compile_assign_value cenv (Lit slot)
-        (if tr then LocTransient else LocStorage) op (is_word_type vtyp)
-        (vv_location vv) vtyp (lowered_value_type cenv e)
-        (type_memory_bytes cenv vtyp) sB = ((), sf)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all compile_get_target_ptr_toplevel >> strip_tac >>
-  drule stmt_env_assign >> strip_tac >>
-  qpat_x_assum `c = cenv` SUBST_ALL_TAC >>
-  qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss())
-    [Once compile_stmt_def, exprLoweringTheory.expr_can_mutate_def,
-     stmtLoweringTheory.target_to_expr_def, comp_bind_def, comp_ignore_bind_def,
-     comp_return_def, LET_THM] >>
-  Cases_on `compile_expr cenv (expr_type e) e sa` >>
-  rename1 `compile_expr _ _ _ _ = (vv, sV)` >>
-  Cases_on `unwrap_value cenv vv sV` >>
-  rename1 `unwrap_value _ _ _ = (op, sB)` >>
-  simp[] >> strip_tac >>
-  simp[lower_value_def, comp_bind_def]
-QED
+(* assign_storage_copy_code_parts is exported by fullAssignCopyFacts. *)
 
 (* Once source layout compatibility is known, only the size dispatch
    remains. No dynamic-array path or normalization can be selected. *)
@@ -358,18 +321,7 @@ Proof
   gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def]
 QED
 
-(* The word copy loop ends in its exit block, which is open. *)
-Theorem word_copy_loop_op_open:
-  !src dst n loc ctor sa u sb.
-    compile_word_copy_loop_op src dst n LocMemory loc ctor sa = (u,sb) ==>
-    ~block_is_terminated sb
-Proof
-  rpt gen_tac >>
-  simp[compile_word_copy_loop_op_def, compile_word_copy_loop_base_def,
-    comp_ignore_bind_def, comp_bind_def] >>
-  rpt (pairarg_tac >> simp[]) >>
-  strip_tac >> gvs[new_block_def, block_is_terminated_def]
-QED
+(* word_copy_loop_op_open is exported by fullAssignCopyFacts. *)
 
 Theorem assign_storage_copy_suffix_open:
   !cenv dst src tr loc typ src_ty mem_size sa sb.

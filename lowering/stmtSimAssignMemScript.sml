@@ -24,6 +24,7 @@
 
 Theory stmtSimAssignMem
 Ancestors
+  fullAssignCopyFacts
   stmtSimProps
   exprSimProps
   stmtSimDefs
@@ -44,17 +45,7 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem stmt_env_assign:
-  !cenv lctx ty g e sa c sf.
-    stmt_env cenv lctx ty (Assign g e) sa = (c, sf) ==>
-    c = cenv /\ compile_stmt cenv lctx ty (Assign g e) sa = ((), sf)
-Proof
-  rpt gen_tac >>
-  simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >>
-  Cases_on `compile_stmt cenv lctx ty (Assign g e) sa` >>
-  rename1 `(u, _)` >> Cases_on `u` >> simp[]
-QED
+(* stmt_env_assign is exported by fullAssignCopyFacts. *)
 
 (* The code of x = e for a memory-backed local x: e's value, then
    compile_assign_value into x's pointer at x's type. *)

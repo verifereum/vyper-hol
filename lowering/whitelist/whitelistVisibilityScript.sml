@@ -6,7 +6,7 @@
 
 Theory whitelistVisibility
 Ancestors
-  bodyAppendStorageFacts entryStateRel bodyStorageMetadata exprOpenCases
+  fullAssignCopyFacts bodyAppendStorageFacts entryStateRel bodyStorageMetadata exprOpenCases
   supportedDecls compileVyper constSubst compileEnv vyperTypeEnv vyperTypeContract
   vyperContext vyperInterpreter vyperState vyperTypeInvariants exprSimHyps
   exprSimHypsDefs vyperTypeSystem
@@ -284,43 +284,7 @@ Proof
   metis_tac[]
 QED
 
-(* bodySimStmtCases' body_assign_copy_target, with the Private lookup
-   replaced by a lookup of any visibility. *)
-Theorem body_assign_copy_target_vis:
-  !tops ctx cenv cx src id vis mut ty ast_slot env es ret_ty e env'.
-    body_inv tops ctx cenv cx /\
-    supported_variable_decl tops (src,id) = SOME (vis,mut,ty,SOME ast_slot) /\
-    (mut = Storage \/ mut = Transient) /\ expr_sim_inv cenv cx env es /\
-    type_stmt env ret_ty (Assign (BaseTarget (TopLevelNameTarget (src,id))) e) =
-      SOME env' ==>
-    src = NONE /\ get_module_code cx NONE = SOME tops /\
-    cenv.ce_hashmap_info (NONE,id) = NONE /\
-    cenv.ce_module_var_type (NONE,id) = SOME ty /\
-    ?tr id_str off tvt.
-      find_var_decl_by_name id tops = SOME (StorageVarDecl tr ty,id_str) /\
-      lookup_var_slot_from_layout cx tr NONE id_str = SOME off /\
-      evaluate_type (get_tenv cx) ty = SOME tvt
-Proof
-  rpt gen_tac >> strip_tac >> (
-  `ALL_DISTINCT
-     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
-   get_module_code cx NONE = SOME tops /\
-   cenv.ce_hashmap_info = build_hashmap_info tops /\
-   cenv.ce_module_var_type (NONE,id) = build_var_type_map tops (NONE,id)` by
-    fs[body_inv_def] >>
-  drule supported_variable_decl_storage_binding >> disch_then drule >>
-  (impl_tac >- fs[]) >> strip_tac >> gvs[] >>
-  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
-  Cases_on `type_place_target env (TopLevelNameTarget (NONE,id))` >>
-  gvs[type_stmt_def, atarget_accepts_def] >>
-  rename1 `type_place_target _ _ = SOME vt` >> Cases_on `vt` >> gvs[] >>
-  gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
-  >- (gvs[env_consistent_def, env_context_consistent_def] >>
-      first_x_assum drule >> strip_tac >> gvs[]) >>
-  drule_all vyperTypeEnvTheory.env_consistent_toplevel_storage_static >>
-  strip_tac >> gvs[] >>
-  gvs[optionTheory.IS_SOME_EXISTS])
-QED
+(* body_assign_copy_target_vis is exported by fullAssignCopyFacts. *)
 
 (* ===== FlagDecl and ErrorDecl entries ===== *)
 

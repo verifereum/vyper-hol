@@ -1369,7 +1369,7 @@ Proof
   Cases_on `lookup_function NONE fid1 Internal tops` >> gvs[]
   >- (irule lookup_deploy_return_type >> simp[] >> metis_tac[]) >>
   drule lookup_function_Internal_SOME_MEM >> strip_tac >>
-  irule memoryLocalRhsPropsTheory.build_func_return_type_distinct >> simp[] >>
+  irule fullAssignCopyFactsTheory.build_func_return_type_distinct >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
 QED
 

@@ -6,7 +6,7 @@
 
 Theory stmtSimAssignStorageSparse
 Ancestors
-  gasStorage vyperStorageFootprint vyperStorageTrace
+  fullAssignCopyFacts gasStorage vyperStorageFootprint vyperStorageTrace
   stmtSimAssignStorageCopy vyperStorageBackend placeStoreSlots exprSimHash exprSimHashBoundary exprOpenPrimitives
   exprSimTopLevelProps stmtSimAssignStorage
   stmtSimDeclMem
@@ -20,118 +20,7 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem mem_to_slots_open[local]:
-  !b src slot w s u t.
-    (if b then compile_memory_to_transient else compile_memory_to_storage)
-      src slot w s = (u,t) ==>
-    ~block_is_terminated t
-Proof
-  Cases >>
-  simp[compile_memory_to_storage_def, compile_memory_to_transient_def,
-       compile_word_copy_loop_def] >>
-  metis_tac[word_copy_loop_op_open]
-QED
-
-Theorem emit_void_store_open[local]:
-  !b args s u t.
-    emit_void (if b then TSTORE else SSTORE) args s = (u,t) ==>
-    ~block_is_terminated t
-Proof
-  rpt strip_tac >> drule emit_void_terminated >> Cases_on `b` >>
-  simp[is_terminator_def]
-QED
-
-Theorem copy_elements_open[local]:
-  !cenv src slot elem cnt tr s u t.
-    compile_copy_elements_to_slots cenv src slot elem cnt tr s = (u,t) ==>
-    ~block_is_terminated t
-Proof
-  rpt gen_tac >>
-  simp[Once compile_store_slots_def, LET_THM, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> simp[]) >>
-  strip_tac >> gvs[new_block_def, block_is_terminated_def]
-QED
-
-(* An ABI-dynamic type that is not a bytestring is an array, or a tuple or
-   struct with members. *)
-Theorem abi_dynamic_shape[local]:
-  !sf ty.
-    is_abi_dynamic sf ty /\ ~is_bytestring_type ty ==>
-    (?elem bd. ty = ArrayT elem bd) \/
-    (?tys. ty = TupleT tys /\ tys <> []) \/
-    (?nsid fields. ty = StructT nsid /\
-       FLOOKUP sf (nsid_to_string nsid) = SOME fields /\ fields <> [])
-Proof
-  rpt gen_tac >> Cases_on `ty` >>
-  simp[is_abi_dynamic_def, is_bytestring_type_def]
-  >~ [`BaseT bt`]
-  >- (Cases_on `bt` >> simp[is_abi_dynamic_def, is_bytestring_type_def] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >>
-      simp[is_abi_dynamic_def, is_bytestring_type_def])
-  >- (rename1 `EXISTS _ tys` >> Cases_on `tys` >> simp[]) >>
-  CASE_TAC >> simp[] >> rename1 `MAP _ fields` >> Cases_on `fields` >> simp[]
-QED
-
-(* The live-slot store leaves its block open.  The members of an
-   ABI-dynamic tuple or struct are not empty. *)
-Theorem store_slots_open:
-  (!cenv src slot ty tr s u t.
-     compile_store_slots cenv src slot ty tr s = (u,t) /\
-     acyclic_struct_metadata cenv.ce_struct_fields ==>
-     ~block_is_terminated t) /\
-  (!cenv src slot members mem_off slot_off tr s u t.
-     compile_store_slots_members cenv src slot members mem_off slot_off tr s =
-       (u,t) /\
-     acyclic_struct_metadata cenv.ce_struct_fields /\
-     (members = [] ==> ~block_is_terminated s) ==>
-     ~block_is_terminated t) /\
-  (!cenv src slot elem cnt tr s u t.
-     compile_copy_elements_to_slots cenv src slot elem cnt tr s = (u,t) ==>
-     ~block_is_terminated t)
-Proof
-  ho_match_mp_tac compile_store_slots_ind >> rpt conj_tac >> rpt strip_tac
-  >- (qpat_x_assum `compile_store_slots _ _ _ _ _ _ = _` mp_tac >>
-      simp_tac std_ss [Once compile_store_slots_def, LET_THM] >>
-      IF_CASES_TAC
-      >- (IF_CASES_TAC >>
-          simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-          rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-          metis_tac[emit_void_store_open, mem_to_slots_open]) >>
-      IF_CASES_TAC
-      >- (simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-          rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-          metis_tac[word_copy_loop_op_open]) >>
-      IF_CASES_TAC >- gvs[] >>
-      `is_abi_dynamic cenv.ce_struct_fields ty` by gvs[] >>
-      drule_all abi_dynamic_shape >> strip_tac >> gvs[]
-      >- (Cases_on `bd` >>
-          simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-          rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-          metis_tac[emit_void_store_open, copy_elements_open])
-      >- (strip_tac >> first_x_assum drule >> simp[])
-      >- (strip_tac >> first_x_assum drule >> gvs[get_struct_fields_def]))
-  >- gvs[Once compile_store_slots_def, comp_return_def]
-  >- (qpat_x_assum `compile_store_slots_members _ _ _ (_::_) _ _ _ _ = _`
-        mp_tac >>
-      simp[Once compile_store_slots_def, comp_bind_def,
-           comp_ignore_bind_def] >>
-      rpt (pairarg_tac >> simp[]) >> strip_tac >> metis_tac[])
-  >- metis_tac[copy_elements_open]
-QED
-
-Theorem compile_assign_storage_endpoint_open:
-  !cenv dst src tr sloc dty sty bytes sa sf.
-    compile_assign_value cenv dst (if tr then LocTransient else LocStorage)
-      src F sloc dty sty bytes sa = ((),sf) /\
-    acyclic_struct_metadata cenv.ce_struct_fields ==>
-    ~block_is_terminated sf
-Proof
-  rpt gen_tac >> Cases_on `tr` >>
-  simp[compile_assign_value_def, comp_bind_def] >>
-  pairarg_tac >> simp[] >> strip_tac >>
-  metis_tac[cj 1 store_slots_open]
-QED
+(* Storage endpoint openness is exported by fullAssignCopyFacts. *)
 
 (* Assignment to a non-word storage or transient variable with no length
    word, by the live-slot store.  The region fits the slot space. *)

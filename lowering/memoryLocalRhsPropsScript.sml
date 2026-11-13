@@ -21,7 +21,7 @@
 
 Theory memoryLocalRhsProps
 Ancestors
-  loweringPosts
+  fullAssignCopyFacts loweringPosts
   exprSimProps
   exprSimHypsDefs
   compileEnv exprLowering stmtLowering vyperTypeSystem exprSimAggregates
@@ -33,90 +33,7 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem build_func_return_type_distinct:
-  !tops vis mut nr rr name args dflts ret stmts.
-    ALL_DISTINCT (supported_function_names tops) /\ vis <> External /\
-    MEM (FunctionDecl vis mut nr rr name args dflts ret stmts) tops ==>
-    build_func_return_type tops name = ret
-Proof
-  Induct >> simp[] >> Cases >>
-  simp[build_func_return_type_def, supported_function_names_def] >>
-  rpt strip_tac >> gvs[] >>
-  first_x_assum drule_all >> strip_tac >>
-  `MEM name (supported_function_names tops)` by
-    (simp[MEM_supported_function_names] >> metis_tac[]) >>
-  `name <> s` by (strip_tac >> gvs[]) >> rw[]
-QED
-
-Theorem supported_internal_function_lookup:
-  !tops id mut nr rr args dflts ret body.
-    supported_function_decl tops id Internal =
-      SOME (mut, nr, rr, args, dflts, ret, body) ==>
-    FST id = NONE /\
-    lookup_function NONE (SND id) Internal tops =
-      SOME (mut, nr, args, dflts, ret, body) /\
-    MEM (FunctionDecl Internal mut nr rr (SND id) args dflts ret body) tops
-Proof
-  Induct >> Cases_on `id` >> simp[supported_function_decl_def] >>
-  Cases_on `h` >> simp[supported_function_decl_def, lookup_function_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  first_x_assum drule >> simp[lookup_function_def] >>
-  Cases_on `v` >> simp[lookup_function_def]
-QED
-
-Theorem supported_internal_return_type:
-  !tops id mut nr rr args dflts ret body cenv.
-    supported_program tops /\
-    supported_function_decl tops id Internal =
-      SOME (mut, nr, rr, args, dflts, ret, body) /\
-    cenv.ce_func_return_type = build_func_return_type tops ==>
-    cenv.ce_func_return_type (nsid_to_string id) = ret
-Proof
-  rpt strip_tac >> drule supported_internal_function_lookup >> strip_tac >>
-  `ALL_DISTINCT (supported_function_names tops)` by
-    metis_tac[supported_program_names, supported_declaration_names_unique] >>
-  Cases_on `id` >> gvs[nsid_to_string_def] >>
-  irule build_func_return_type_distinct >> simp[] >>
-  qexistsl_tac [`args`, `dflts`, `mut`, `nr`, `rr`, `body'`, `Internal`] >> simp[]
-QED
-
-Theorem supported_internal_signature_return:
-  !tops id mut nr rr args dflts ret body cenv cx env es sig.
-    supported_program tops /\
-    supported_function_decl tops id Internal =
-      SOME (mut, nr, rr, args, dflts, ret, body) /\
-    cenv.ce_func_return_type = build_func_return_type tops /\
-    get_module_code cx NONE = SOME tops /\
-    expr_sim_inv cenv cx env es /\
-    FLOOKUP env.fn_sigs id = SOME sig ==>
-    cenv.ce_func_return_type (nsid_to_string id) = sig.ret_ty
-Proof
-  rpt strip_tac >>
-  `cenv.ce_func_return_type (nsid_to_string id) = ret` by
-    (drule_all supported_internal_return_type >> simp[]) >>
-  drule supported_internal_function_lookup >> strip_tac >>
-  `vyperTypeInvariants$fn_sigs_consistent env.fn_sigs cx` by
-    gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
-        vyperTypeInvariantsTheory.env_context_consistent_def] >>
-  gvs[vyperTypeInvariantsTheory.fn_sigs_consistent_def] >>
-  Cases_on `id` >> gvs[] >>
-  first_x_assum drule >> strip_tac >>
-  gvs[lookup_callable_function_def] >>
-  metis_tac[]
-QED
-
-Theorem supported_internal_return_admissible:
-  !tops id mut nr rr args dflts ret body.
-    supported_program tops /\
-    supported_function_decl tops id Internal =
-      SOME (mut,nr,rr,args,dflts,ret,body) ==>
-    supported_return_type tops ret
-Proof
-  rpt strip_tac >> drule supported_internal_function_lookup >> strip_tac >>
-  drule_all supported_program_declaration >>
-  simp[supported_function_header_contract, supported_function_return_def]
-QED
-
+(* Pure return-typing boundaries are exported by fullAssignCopyFacts. *)
 Theorem eval_empty_bytes_read:
   !cx ann es.
     (do r <- eval_expr cx (Literal ann (BytesL []));

@@ -47,6 +47,7 @@
 
 Theory bodySimStmtCases
 Ancestors
+  fullAssignCopyFacts
   bodyAssignTupleWidenedPrep stmtSimAssignTuplePlaces
   loweringStateRelDefs valueEncodingProps bodyAssignTupleOther assignRelayoutFrag assignRelayoutCaller annassignRelayoutSource
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
@@ -1369,15 +1370,7 @@ Proof
        supportedTypesTheory.supported_full_word_type_def]
 QED
 
-Theorem topcopy_no_length_word:
-  !tops t. supported_storage_type tops t /\
-    (!elem n. t <> ArrayT elem (Dynamic n)) ==> ~has_length_word t
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule topcopy_not_bytestring >>
-  Cases_on `t` >> simp[has_length_word_def, is_bytestring_type_def] >>
-  Cases_on `b` >> gvs[has_length_word_def, is_bytestring_type_def]
-QED
+(* topcopy_no_length_word is exported by fullAssignCopyFacts. *)
 
 (* An assignment to a private storage or transient aggregate: the dense
    copy for an ABI-static type, the live-slot store otherwise.  Region

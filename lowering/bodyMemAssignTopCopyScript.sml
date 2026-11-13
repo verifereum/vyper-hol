@@ -56,7 +56,7 @@ Proof
     metis_tac[topcopy_rhs_lowered_type] >>
   `~is_bytestring_type (expr_type e) /\ ~has_length_word (expr_type e)` by
     metis_tac[bodySimStmtCasesTheory.topcopy_not_bytestring,
-              bodySimStmtCasesTheory.topcopy_no_length_word] >>
+              fullAssignCopyFactsTheory.topcopy_no_length_word] >>
   `expr_sim_mem ctx func cenv cx (expr_type e) e es` by
     metis_tac[topcopy_rhs_memory] >>
   `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
