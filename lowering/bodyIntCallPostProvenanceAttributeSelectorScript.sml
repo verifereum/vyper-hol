@@ -98,3 +98,22 @@ Proof
   qexists_tac `s` >> simp[] >>
   Cases_on `vv_operand vv` >> gvs[eval_operand_def, lookup_var_def, update_var_def]
 QED
+
+Theorem intcall_struct_field_layout[local]:
+  fields_layout fields fs /\ struct_has_type fs vals /\
+  ALOOKUP vals fld = SOME fv /\ ALOOKUP fs fld = SOME ftv /\
+  val_wf ftv fv ==>
+  sub_layout (StructTV fs) (StructV vals)
+    (struct_field_offset fields fld) ftv fv /\
+  struct_field_offset fields fld + val_footprint ftv fv <=
+    val_footprint (StructTV fs) (StructV vals)
+Proof
+  strip_tac >>
+  `struct_field_offset fields fld + type_memory_size ftv <=
+   type_memory_size_fields fs` by
+    (irule struct_field_offset_le >> metis_tac[]) >>
+  conj_tac
+  >- (simp[sub_layout_def, type_memory_size_def] >> rpt strip_tac >>
+      irule fields_in_memory_field >> gvs[val_in_memory_def] >> metis_tac[]) >>
+  drule val_footprint_le >> simp[val_footprint_def] >> decide_tac
+QED
