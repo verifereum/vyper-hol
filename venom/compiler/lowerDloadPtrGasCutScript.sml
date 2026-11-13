@@ -113,34 +113,45 @@ QED
 (* Each rule of frame_reachable carries a cut at its target back to its
    source. *)
 Theorem frame_next_gas_cut:
-  step_inst fuel ctx inst s = OK s' /  gas_cut cut vs (s' with vs_inst_idx := k) ==> gas_cut cut vs s
+  step_inst fuel ctx inst s = OK s' /\
+  gas_cut cut vs (s' with vs_inst_idx := k) ==> gas_cut cut vs s
 Proof
   rw[] >> drule step_inst_gas_le >> strip_tac >>
-  irule gas_cut_le >> qexists_tac `s' with vs_inst_idx := k` >> simp[]
+  `LENGTH (s' with vs_inst_idx := k).vs_gas_readings <=
+   LENGTH s.vs_gas_readings` by simp[] >>
+  metis_tac[gas_cut_le]
 QED
 
 Theorem frame_block_gas_cut:
-  step_inst fuel ctx inst s = OK s' /\ enters_block fn s' s1 /  gas_cut cut vs s1 ==> gas_cut cut vs s
+  step_inst fuel ctx inst s = OK s' /\ enters_block fn s' s1 /\
+  gas_cut cut vs s1 ==> gas_cut cut vs s
 Proof
   rw[] >> imp_res_tac step_inst_gas_le >> imp_res_tac enters_block_gas_le >>
-  irule gas_cut_le >> qexists_tac `s1` >> simp[]
+  `LENGTH s1.vs_gas_readings <= LENGTH s.vs_gas_readings` by decide_tac >>
+  metis_tac[gas_cut_le]
 QED
 
 Theorem frame_call_gas_cut:
-  setup_callee callee args s = SOME cs /\ enters_block callee cs s1 /  gas_cut cut vs s1 ==> gas_cut cut vs s
+  setup_callee callee args s = SOME cs /\ enters_block callee cs s1 /\
+  gas_cut cut vs s1 ==> gas_cut cut vs s
 Proof
   rw[] >> imp_res_tac setup_callee_gas_readings >>
   imp_res_tac enters_block_gas_le >>
-  irule gas_cut_le >> qexists_tac `s1` >> simp[]
+  `LENGTH s1.vs_gas_readings <= LENGTH s.vs_gas_readings` by gvs[] >>
+  metis_tac[gas_cut_le]
 QED
 
 Theorem frame_ret_gas_cut:
-  step_inst fuel ctx rinst s = IntRet ret s_end /  bind_outputs outs ret.iret_values
-    (adopt_return_fmp ret (merge_callee_state c s_end)) = SOME s' /  gas_cut cut vs (s' with vs_inst_idx := k) ==> gas_cut cut vs s
+  step_inst fuel ctx rinst s = IntRet ret s_end /\
+  bind_outputs outs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state c s_end)) = SOME s' /\
+  gas_cut cut vs (s' with vs_inst_idx := k) ==> gas_cut cut vs s
 Proof
   rw[] >> imp_res_tac step_inst_int_ret_gas_le >>
   imp_res_tac bind_outputs_gas_readings >>
-  irule gas_cut_le >> qexists_tac `s_end` >>
-  Cases_on `ret.iret_adopt_fmp` >>
-  gvs[gas_cut_def, adopt_return_fmp_def, merge_callee_state_def]
+  `(s' with vs_inst_idx := k).vs_gas_readings = s_end.vs_gas_readings` by
+    (Cases_on `ret.iret_adopt_fmp` >>
+     gvs[adopt_return_fmp_def, merge_callee_state_def]) >>
+  `gas_cut cut vs s_end` by gvs[gas_cut_def] >>
+  metis_tac[gas_cut_le]
 QED
