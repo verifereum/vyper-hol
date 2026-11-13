@@ -15,7 +15,7 @@
  * parameters.  The induction hypotheses are those evaluate_ind gives for
  * the two rows.
  *
- * TOP-LEVEL (all ADMITTED, one per tower):
+ * TOP-LEVEL (one per tower):
  *   body_custom_error_cases       S1 (stmt_frag)
  *   body_custom_error_mem_cases   S3 memory (stmt_frag_mem)
  *   body_custom_error_ptr_cases   S3 pointer (stmt_frag_ptr)
@@ -25,10 +25,12 @@ Ancestors
   bodySim bodyMemoryPreds bodyPtrPreds supportedExprs supportedStmtTraverse
   loweringPosts vyperInterpreter vyperAST vyperTypeCallGraph vyperTypeSystem
   vyperTypeContract bodyCustomErrorRaise bodyCustomErrorAssert stmtSimCustomErrorPath
+  bodyCustomErrorMemRaise bodyCustomErrorMemAssert stmtSimCustomErrorMemPath
+  bodyCustomErrorPtrRows stmtSimCustomErrorPtrTailEmpty
 
 val _ = Parse.hide "body";
 
-(* ADMITTED: S1 rows 8 and 12; siblings body_raise_reason_case and
+(* S1 rows 8 and 12; siblings body_raise_reason_case and
    body_assert_reason_case (bodySimStmtCases). *)
 Theorem body_custom_error_cases:
   (!cx err.
@@ -89,7 +91,7 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
-(* ADMITTED: S3 memory rows 8 and 12; siblings body_raise_reason_mem_case
+(* S3 memory rows 8 and 12; siblings body_raise_reason_mem_case
    (bodyMemRaiseReason) and body_assert_reason_mem_case. *)
 Theorem body_custom_error_mem_cases:
   (!cx err.
@@ -141,7 +143,13 @@ Theorem body_custom_error_mem_cases:
          (stmt_env cenv lctx ret_ty (Assert e (AssertCustomError err)))
          (eval_stmt cx (Assert e (AssertCustomError err))) es)
 Proof
-  cheat
+  conj_tac
+  >- (mp_tac body_raise_custom_error_mem_using_path >>
+      (impl_tac >- ACCEPT_TAC compile_raise_custom_error_ready_frag_mem) >>
+      disch_then ACCEPT_TAC) >>
+  mp_tac body_assert_custom_error_mem_using_path >>
+  (impl_tac >- ACCEPT_TAC compile_raise_custom_error_ready_frag_mem) >>
+  disch_then ACCEPT_TAC
 QED
 
 (* ADMITTED: S3 pointer rows 8 and 12; siblings body_raise_reason_case_ptr
