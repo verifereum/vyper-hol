@@ -342,7 +342,8 @@ Theorem slice_extcode_tail_vv_post:
   eval_operand dst s = SOME (p + 32w) /\
   (!x. MEM (Var x) [addr;start;len;out;dst] ==> not_fresh_at sa x) /\
   w2n b + w2n n <= LENGTH (lookup_account (w2w a) s.vs_accounts).code /\
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H) /\
+  local_ptrs_reserved cenv sa /\
   sbase.cs_next_var <= sa.cs_next_var /\ sbase.cs_next_id <= aid /\ aid < sa.cs_next_id /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = aid /\
   FLOOKUP s.vs_allocas aid = SOME (w2n p,cap) /\
@@ -389,6 +390,7 @@ Proof
        stmt_state_rel_inst_idx,
        evaluate_type_def, is_word_type_def, vyperStateTheory.read_result_def,
        vyperStateTheory.return_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   reverse conj_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   conj_tac
   >- (simp[val_wf_def, type_memory_size_def] >>

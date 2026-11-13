@@ -9,6 +9,7 @@ Theorem slice_data_bytes_success_post:
  compile_slice_data src_len src_data start len sz sa = (out,sb) /\
  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
+ storage_well_formed_on cx es (FST H) /\
  eval_operand src_len s = SOME (n2w (LENGTH bs)) /\
  eval_operand src_data s = SOME (n2w src_base) /\
  eval_operand start s = SOME (n2w a) /\ eval_operand len s = SOME (n2w n) /\
@@ -52,7 +53,7 @@ Proof
  Cases_on `evaluate_type (get_tenv cx) (expr_type e)`
  >- (irule vv_post_frame_intro >>
      simp[vv_holds_def, vv_at_def, mk_ptr_def, vyperStateTheory.read_result_def] >>
-     simp[vyperStateTheory.return_def]) >>
+     simp[vyperStateTheory.return_def] >> first_assum ACCEPT_TAC) >>
  `x = BaseTV (BytesT (Dynamic bound))` by
    (qpat_x_assum `evaluate_type _ _ = SOME x` mp_tac >>
     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
@@ -79,6 +80,7 @@ Theorem slice_data_string_success_post:
  compile_slice_data src_len src_data start len sz sa = (out,sb) /\
  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
+ storage_well_formed_on cx es (FST H) /\
  eval_operand src_len s = SOME (n2w (LENGTH text)) /\
  eval_operand src_data s = SOME (n2w src_base) /\
  eval_operand start s = SOME (n2w a) /\ eval_operand len s = SOME (n2w n) /\
@@ -126,7 +128,7 @@ Proof
  Cases_on `evaluate_type (get_tenv cx) (expr_type e)`
  >- (irule vv_post_frame_intro >>
      simp[vv_holds_def, vv_at_def, mk_ptr_def, vyperStateTheory.read_result_def] >>
-     simp[vyperStateTheory.return_def]) >>
+     simp[vyperStateTheory.return_def] >> first_assum ACCEPT_TAC) >>
  `x = BaseTV (StringT bound)` by
    (qpat_x_assum `evaluate_type _ _ = SOME x` mp_tac >>
     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>

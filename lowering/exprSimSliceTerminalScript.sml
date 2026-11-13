@@ -36,8 +36,10 @@ QED
 Theorem slice_terminal_outcome[local]:
   (!tail. source (es with gas_obs := tail) = (res, es with gas_obs := tail)) /\
   gas_marked_path F ctx func s 0 r /\
-  ((?t. r = OK t /\ Q res (es with gas_obs := []) t) \/
-   (exit_result r /\ R res (es with gas_obs := []) r)) ==>
+  ((?t. r = OK t /\ !H. valid_horizon cx st0 H es.storage_trace ==>
+          Q H res (es with gas_obs := []) t) \/
+   (exit_result r /\ !H. valid_horizon cx st0 H es.storage_trace ==>
+          R H res (es with gas_obs := []) r)) ==>
   gas_outcome F tops (ctx,func) cx st0 source (es,s) Q R
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
@@ -45,6 +47,57 @@ Proof
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`res`, `es`, `r`] >>
   gvs[gas_marked_exec_def]
+QED
+
+(* Weaken the posts of a trace-framed source using the horizons that were
+   already valid at its start. *)
+Theorem slice_gas_outcome_conseq_frame:
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R /\
+  storage_trace_frame source /\
+  (!H res ee t. valid_horizon cx st0 H es.storage_trace /\ Q H res ee t ==>
+     Q' H res ee t) /\
+  (!H res ee r. R H res ee r ==> R' H res ee r) ==>
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q' R'
+Proof
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac >>
+  qexists_tac `marks`
+  >- simp[]
+  >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`, `es_end`, `r`] >>
+      `?obs. es_end.storage_trace = es.storage_trace ++ obs` by
+        (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+           (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+         disch_then (qspec_then `[]` assume_tac) >>
+         qpat_assum `storage_trace_frame source`
+           (fn th => drule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+              vyperStorageTraceTheory.storage_trace_frame_prefix) th)) >>
+         simp[]) >>
+      `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+           valid_horizon cx st0 H es.storage_trace` by
+        fs[vyperStorageFootprintTheory.valid_horizon_def] >>
+      fs[] >> metis_tac[]) >>
+  disj2_tac >> disj2_tac >> metis_tac[]
+QED
+
+(* The terminal action reads accounts only, so a start outside the storage
+   domain is already a bad-storage outcome. *)
+Theorem slice_terminal_domain_intro[local]:
+  (storage_trace_domain cx st0 es.storage_trace ==>
+   gas_outcome F tops (ctx,func) cx st0
+     (do acc <- get_accounts; v <- lift_sum (f acc); return (Value v) od)
+     (es,s) Q R) ==>
+  gas_outcome F tops (ctx,func) cx st0
+    (do acc <- get_accounts; v <- lift_sum (f acc); return (Value v) od)
+    (es,s) Q R
+Proof
+  strip_tac >> Cases_on `storage_trace_domain cx st0 es.storage_trace`
+  >- fs[] >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  irule gasStorageTheory.gas_bad_storage_at_initial >> simp[] >>
+  irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_state_reads] >>
+  gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_lifts,
+       vyperStorageTraceTheory.storage_trace_frame_return]
 QED
 
 Theorem slice_data_range_path:
@@ -78,7 +131,10 @@ QED
 Theorem slice_data_bytes_outcome:
   compile_slice_data sl data sop lop sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s /\
+     storage_well_formed_on cx es (FST H)) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -108,6 +164,7 @@ Proof
   `EVERY (\inst. inst.inst_opcode <> INVOKE /\
      ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> GAS)
      (emitted_insts sa sb)` by metis_tac[slice_data_zero_code] >>
+  ho_match_mp_tac slice_terminal_domain_intro >> strip_tac >>
   Cases_on `i+k <= LENGTH bs`
   >- suspend "success"
   >> suspend "range"
@@ -116,7 +173,24 @@ QED
 Resume slice_data_bytes_outcome[success]:
   `k <= n` by (drule_all slice_read_capacity >> simp[]) >>
   `32+k <= sz` by decide_tac >>
+  qabbrev_tac `H0 = storage_trace_horizon es.storage_trace` >>
+  `valid_horizon cx st0 H0 es.storage_trace` by
+    fs[Abbr `H0`, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func cenv cx es s /\
+   storage_well_formed_on cx es (FST H0)` by metis_tac[] >>
   drule_all slice_data_bytes_success_post >> strip_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     !idx. vv_post H ctx func cenv cx e es sa sb s es
+       (Value (BytesV (TAKE k (DROP i bs))))
+       (LocatedValue (expr_type e) (mk_ptr out LocMemory))
+       (t with vs_inst_idx := idx)` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es s /\
+      storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+     qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
+     qpat_x_assum `storage_well_formed_on _ _ (FST H0)` kall_tac >>
+     drule_all slice_data_bytes_success_post >> strip_tac >> gvs[]) >>
+  qpat_x_assum `!idx. vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   `EVERY (\inst. inst.inst_opcode <> INVOKE /\
       ~is_terminator inst.inst_opcode) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
   `FILTER (\inst. inst.inst_opcode = GAS) (emitted_insts sa sb) = []` by
@@ -136,8 +210,9 @@ Resume slice_data_bytes_outcome[success]:
   simp[fragGasModeTheory.gas_marked_path_def, get_accounts_def,
        bind_def, lift_sum_def, return_def, evaluate_builtin_def,
        exprSimSliceSourceTheory.slice_bytes_nat] >>
-  qpat_x_assum `!idx. vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (qspec_then `t.vs_inst_idx` mp_tac) >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> !idx. vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (drule_then (qspec_then `t.vs_inst_idx` mp_tac)) >>
   `post_value_type cenv e = expr_type e` by
     (irule loweringPostsTheory.post_value_type_bytestring >>
      simp[compileEnvTheory.is_bytestring_type_def]) >>
@@ -172,7 +247,10 @@ Finalise slice_data_bytes_outcome
 Theorem slice_data_string_outcome:
   compile_slice_data sl data sop lop sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s /\
+     storage_well_formed_on cx es (FST H)) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -202,6 +280,7 @@ Proof
   `EVERY (\inst. inst.inst_opcode <> INVOKE /\
      ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> GAS)
      (emitted_insts sa sb)` by metis_tac[slice_data_zero_code] >>
+  ho_match_mp_tac slice_terminal_domain_intro >> strip_tac >>
   Cases_on `i+k <= LENGTH text`
   >- suspend "success"
   >> suspend "range"
@@ -210,7 +289,24 @@ QED
 Resume slice_data_string_outcome[success]:
   `k <= n` by (drule_all slice_read_capacity >> simp[]) >>
   `32+k <= sz` by decide_tac >>
+  qabbrev_tac `H0 = storage_trace_horizon es.storage_trace` >>
+  `valid_horizon cx st0 H0 es.storage_trace` by
+    fs[Abbr `H0`, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func cenv cx es s /\
+   storage_well_formed_on cx es (FST H0)` by metis_tac[] >>
   drule_all slice_data_string_success_post >> strip_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     !idx. vv_post H ctx func cenv cx e es sa sb s es
+       (Value (StringV (TAKE k (DROP i text))))
+       (LocatedValue (expr_type e) (mk_ptr out LocMemory))
+       (t with vs_inst_idx := idx)` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es s /\
+      storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+     qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
+     qpat_x_assum `storage_well_formed_on _ _ (FST H0)` kall_tac >>
+     drule_all slice_data_string_success_post >> strip_tac >> gvs[]) >>
+  qpat_x_assum `!idx. vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   `EVERY (\inst. inst.inst_opcode <> INVOKE /\
       ~is_terminator inst.inst_opcode) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
   `FILTER (\inst. inst.inst_opcode = GAS) (emitted_insts sa sb) = []` by
@@ -230,8 +326,9 @@ Resume slice_data_string_outcome[success]:
   simp[fragGasModeTheory.gas_marked_path_def, get_accounts_def,
        bind_def, lift_sum_def, return_def, evaluate_builtin_def,
        exprSimSliceSourceTheory.slice_string_nat] >>
-  qpat_x_assum `!idx. vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (qspec_then `t.vs_inst_idx` mp_tac) >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> !idx. vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (drule_then (qspec_then `t.vs_inst_idx` mp_tac)) >>
   `post_value_type cenv e = expr_type e` by
     (irule loweringPostsTheory.post_value_type_bytestring >>
      simp[compileEnvTheory.is_bytestring_type_def]) >>
