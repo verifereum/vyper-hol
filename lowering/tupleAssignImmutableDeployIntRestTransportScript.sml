@@ -19,12 +19,14 @@ Proof
        safe_cast_well_typed]
 QED
 
-Theorem tuple_immutable_intcall_rest_transport:
+Theorem tuple_immutable_intcall_rest_transport_reachable:
   gas_invoke_entry (ctx,func) t callee entered /\
   gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
     (es1,entered) (\res ee r. F)
     (intcall_callee_exit func ce cx rtv ret_count ret_word n t) /\
-  (!v ee ir cs'.
+  (!gs v ee ir cs'.
+    intcall_callee_src cx name ss (es1 with gas_obs := gs) =
+      (INL v,ee with gas_obs := []) /\
     intcall_callee_exit func ce cx rtv ret_count ret_word n t (INL v)
       (ee with gas_obs := []) (IntRet ir cs') ==>
     value_has_type rtv v /\
@@ -52,14 +54,14 @@ Proof
   >- suspend "completed"
   >> suspend "exempt"
 QED
-Resume tuple_immutable_intcall_rest_transport[completed]:
+Resume tuple_immutable_intcall_rest_transport_reachable[completed]:
   gvs[exit_result_def] >>
   qpat_x_assum `intcall_callee_exit _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[intcall_callee_exit_def, expr_exit_def] >> strip_tac
   >- suspend "abort"
   >> suspend "success"
 QED
-Resume tuple_immutable_intcall_rest_transport[exempt]:
+Resume tuple_immutable_intcall_rest_transport_reachable[exempt]:
   rename1 `gas_exempt_cert _ _ _ _ _ _ (_,ee) (leaf,endpoint)` >>
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`, `ee with scopes := prev`, `leaf`, `endpoint`] >>
@@ -81,7 +83,7 @@ Resume tuple_immutable_intcall_rest_transport[exempt]:
           set_scopes_def, return_def, evaluation_state_component_equality] >>
   simp[Abbr `src`] >> irule (cj 19 gas_exempt_cert_rules) >> metis_tac[]
 QED
-Resume tuple_immutable_intcall_rest_transport[abort]:
+Resume tuple_immutable_intcall_rest_transport_reachable[abort]:
   Cases_on `r` >> gvs[expr_exit_def] >> rename1 `Abort a cs'` >>
   `gas_marked_path F ctx callee entered (LENGTH marks) (Abort a cs')` by
     gvs[gas_marked_exec_def] >>
@@ -107,12 +109,18 @@ Resume tuple_immutable_intcall_rest_transport[abort]:
   simp[gas_marked_exec_def] >> strip_tac >>
   first_x_assum (qspec_then `tail` assume_tac) >> drule rest_replay >> simp[]
 QED
-Resume tuple_immutable_intcall_rest_transport[success]:
+Resume tuple_immutable_intcall_rest_transport_reachable[success]:
   gvs[] >>
   `intcall_callee_exit func ce cx rtv (LENGTH ir.iret_values) ret_word n t (INL v)
      (es_end with gas_obs := []) (IntRet ir s')` by
     (simp[intcall_callee_exit_def] >> metis_tac[]) >>
-  first_assum (drule_then strip_assume_tac) >>
+  `intcall_callee_src cx name ss
+     (es1 with gas_obs := gas_explicit marks entered.vs_gas_readings) =
+     (INL v,es_end with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  first_assum (drule_all_then strip_assume_tac) >>
   drule_all tuple_immutable_callee_marked_invoke >> strip_tac >>
   `gas_marked_path F ctx callee entered (LENGTH marks) (IntRet ir s')` by
     gvs[gas_marked_exec_def] >>
@@ -141,4 +149,37 @@ Resume tuple_immutable_intcall_rest_transport[success]:
     simp[gas_marked_exec_def] >> strip_tac >>
     first_x_assum (qspec_then `tail` assume_tac) >> drule rest_replay >> simp[]
 QED
-Finalise tuple_immutable_intcall_rest_transport
+Finalise tuple_immutable_intcall_rest_transport_reachable
+
+(* Compatibility interface: arbitrary exits imply the reachable-exit premise. *)
+Theorem tuple_immutable_intcall_rest_transport:
+  gas_invoke_entry (ctx,func) t callee entered /\
+  gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name ss)
+    (es1,entered) (\res ee r. F)
+    (intcall_callee_exit func ce cx rtv ret_count ret_word n t) /\
+  (!v ee ir cs'.
+    intcall_callee_exit func ce cx rtv ret_count ret_word n t (INL v)
+      (ee with gas_obs := []) (IntRet ir cs') ==>
+    value_has_type rtv v /\
+    (!bb inst. lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb t.vs_inst_idx = SOME inst ==>
+      LENGTH inst.inst_outputs = LENGTH ir.iret_values) /\
+    (!bb inst returned argv setup fuel.
+      lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb t.vs_inst_idx = SOME inst /\
+      bind_outputs inst.inst_outputs ir.iret_values
+        (adopt_return_fmp ir (merge_callee_state t cs')) = SOME returned /\
+      ~returned.vs_halted /\ returned.vs_current_bb = t.vs_current_bb /\
+      setup_callee callee argv t = SOME setup /\
+      run_blocks fuel ctx callee setup = IntRet ir cs' ==>
+      ?u. gas_marked_path F ctx func
+          (returned with vs_inst_idx := SUC t.vs_inst_idx) 0 (OK u) /\
+        Q (INL (Value v)) (ee with <|scopes := prev; gas_obs := []|>) u)) ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (intcall_rest cx name mut ss prev rtv) (es1,t) Q
+    (\res ee r. expr_exit res r)
+Proof
+  strip_tac >> irule tuple_immutable_intcall_rest_transport_reachable >>
+  qexistsl [`callee`, `ce`, `entered`, `n`, `ret_count`, `ret_word`] >>
+  simp[] >> metis_tac[]
+QED
