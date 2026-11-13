@@ -33,7 +33,7 @@ Libs
   emitTacticsLib
 
 (* Adjacent safe/unsafe endpoints of the finite power search. *)
-Theorem pow_search_midpoint[local]:
+Theorem pow_search_midpoint:
   !lo hi fuel. lo + 1 < hi /\ hi - lo <= 2 ** SUC fuel ==>
     lo <= (lo + hi) DIV 2 /\ (lo + hi) DIV 2 <= hi /\
     (lo + hi) DIV 2 - lo <= 2 ** fuel /\

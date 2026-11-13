@@ -433,7 +433,7 @@ QED
 
 (* ===== The code ===== *)
 
-Theorem augassign_attr_storage_code_parts[local]:
+Theorem augassign_attr_storage_code_parts:
   !cenv lctx ty0 ty src id fld sid fty fsz bop e sa c sf tr slot.
     stmt_env cenv lctx ty0
       (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)

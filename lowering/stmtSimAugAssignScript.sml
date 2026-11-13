@@ -692,10 +692,10 @@ QED
 
 Theorem augassign_rhs_exception_exec:
   lookup_scopes id es.scopes = SOME entry /\
-  gas_marked_path F ctx func s0 0 (OK t) /\
-  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+  gas_marked_path memory ctx func s0 0 (OK t) /\
+  gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
     (es with gas_obs := [],t) marks (INR ex) ee r ==>
-  gas_marked_exec F (ctx,func)
+  gas_marked_exec memory (ctx,func)
     (eval_stmt cx (AugAssign ty (NameTarget id) bop e))
     (es,s0) marks (INR ex) ee r
 Proof
@@ -707,15 +707,15 @@ QED
 
 Theorem augassign_rhs_normal_exec:
   lookup_scopes id es.scopes = SOME entry /\
-  gas_marked_path F ctx func s0 0 (OK t) /\
-  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+  gas_marked_path memory ctx func s0 0 (OK t) /\
+  gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
     (es with gas_obs := [],t) marks (INL v) ee (OK u) /\
-  gas_marked_exec F (ctx,func)
+  gas_marked_exec memory (ctx,func)
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       entry.type bop entry.value v)) (write_place cx (MemoryPlace id [])))
     (ee with gas_obs := [],u) [] res fin r ==>
-  gas_marked_exec F (ctx,func)
+  gas_marked_exec memory (ctx,func)
     (eval_stmt cx (AugAssign ty (NameTarget id) bop e))
     (es,s0) marks res fin r
 Proof
@@ -762,8 +762,8 @@ Theorem augassign_store_continuation_exec:
   br = INL w /\
   write_place cx (MemoryPlace id []) w ee = (res, fin) /\
   (!m. res <> INR (Error (TypeError m))) /\
-  gas_marked_path F ctx func u 0 r ==>
-  gas_marked_exec F (ctx,func)
+  gas_marked_path memory ctx func u 0 r ==>
+  gas_marked_exec memory (ctx,func)
     (bind (lift_sum br) (write_place cx (MemoryPlace id [])))
     (ee,u) [] res fin r
 Proof
@@ -772,8 +772,8 @@ Proof
 QED
 
 Theorem augassign_error_continuation_exec:
-  br = INR err /\ gas_marked_path F ctx func u 0 r ==>
-  gas_marked_exec F (ctx,func)
+  br = INR err /\ gas_marked_path memory ctx func u 0 r ==>
+  gas_marked_exec memory (ctx,func)
     (bind (lift_sum br) (write_place cx (MemoryPlace id [])))
     (ee,u) [] (INR (Error err)) ee r
 Proof
