@@ -24233,6 +24233,102 @@ Proof
   qexists `t'` >> simp[] >> metis_tac[mm_local_safe_exec_prefix_universal]
 QED
 
+Theorem mm_local_payload_actual_safe_interval_if_forward[local]:
+  !m n es t out es' pre.
+  mode IN {CalldataMerge; DloadMerge} /\
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  dfg = dfg_build_function fn0 /\ is = bb.bb_instructions /\
+  gs = (scan_block dfg mode bb).ss_flushed /\
+  ns = nop_ids_of_groups dfg mode is gs /\ rs = rep_map_of_groups is gs /\
+  f = apply_groups_inst_supply mode ns rs /\
+  deleted = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  cap = mm_local_payload_capture mode is H (LENGTH is) /\
+  h = phi_prefix_length is /\ h <= n /\ n + m <= LENGTH is /\
+  (!j. (if mode = CalldataMerge then (H j).vs_call_ctx.cc_calldata
+         else (H j).vs_data_section) = cd) /\
+  (!j dst v src. j < LENGTH is /\ (EL j is).inst_opcode = MSTORE /\
+    (EL j is).inst_operands = [Lit dst; Var v] /\
+    FLOOKUP (FOLDL (scan_inst dfg mode) empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src cd ++ REPLICATE 32 0w)))) /\
+  (!j a bs. cap j = SOME (a,bs) ==> h <= j) /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\ eom < dimword (:256) /\
+  (!j. h <= j /\ j < n + m ==>
+    (H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn (EL j is) (H j) /\
+    ~is_terminator (EL j is).inst_opcode /\
+    ?u. step_inst fuel ctx (EL j is) (H j) = OK u /\
+      H (SUC j) = u with vs_inst_idx := SUC j) /\
+  (!j pref sj tj. h <= j /\ j < n + m /\
+    mm_flat_map_supply f sk (TAKE j is) = (pref,sj) /\
+    mm_local_payload_cut cap is gs H j excluded (LENGTH pref) tj ==>
+    in_revert_forward fn (H j) ==> in_revert_forward fn' tj) /\
+  mm_flat_map_supply f sk (TAKE n is) = (pre,es) /\
+  mm_local_payload_cut cap is gs H n excluded (LENGTH pre) t /\
+  mm_flat_map_supply f es (TAKE m (DROP n is)) = (out,es') ==>
+  ?t'. mm_local_safe_exec_prefix (static_mem_ok eom ctx fn') fuel ctx out t t' /\
+    mm_local_payload_cut cap is gs H (n + m) excluded (LENGTH pre + LENGTH out) t'
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!j pref sj tj chunk sj'. n <= j /\ j < n + m /\
+    mm_flat_map_supply f sk (TAKE j is) = (pref,sj) /\
+    mm_local_payload_cut cap is gs H j excluded (LENGTH pref) tj /\
+    f sj (EL j is) = (chunk,sj') ==>
+    ?tj'. mm_local_safe_exec_prefix (static_mem_ok eom ctx fn') fuel ctx chunk tj tj' /\
+      mm_local_payload_cut cap is gs H (SUC j) excluded
+        (LENGTH pref + LENGTH chunk) tj'` by
+    (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     `h <= j /\ j < LENGTH is` by decide_tac >>
+     `MEM (EL j is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+     `ir_supply_extends sk sj` by
+       (drule_at (Pat `mm_flat_map_supply _ _ _ = (pref,sj)`) mm_local_list_resources >>
+        (impl_tac >- metis_tac[mm_local_mode_resources]) >> simp[]) >>
+     `?u. step_inst fuel ctx (EL j is) (H j) = OK u /\
+          H (SUC j) = u with vs_inst_idx := SUC j` by metis_tac[] >>
+     `!v. chunk = [EL j is] /\ MEM (Var v) (EL j is).inst_operands ==>
+       v NOTIN excluded` by
+       (gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+        `MEM v (venomInst$inst_uses (EL j is))` by
+          metis_tac[venomWfPropsTheory.operand_var_in_inst_uses] >>
+        mp_tac (Q.INST [`inst` |-> `EL (j:num) (is:instruction list)`,
+          `es` |-> `sj:ir_supply`, `es'` |-> `sj':ir_supply`]
+          (SPEC_ALL mm_local_retained_operand_protected)) >>
+        (impl_tac >- (gvs[] >> metis_tac[EL_MEM])) >> simp[]) >>
+     `!v. MEM (EL j is).inst_id ns /\
+       (EL j is).inst_opcode = mode_load_opcode mode /\
+       MEM v (EL j is).inst_outputs ==> v IN excluded` by
+       (rpt strip_tac >> simp[] >> metis_tac[EL_MEM]) >>
+     `!v. v NOTIN excluded ==> MEM v sj.irs_used_vars` by
+       (gvs[ir_supply_extends_def,list_subset_def,EVERY_MEM] >> metis_tac[]) >>
+     `!q a bs. q <= j /\ cap q = SOME (a,bs) ==> h <= q /\ q < n + m` by
+       (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+        conj_tac >- metis_tac[] >> decide_tac) >>
+     `!q a bs. q <= j /\ cap q = SOME (a,bs) ==>
+       (H q).vs_current_bb = bb.bb_label /\ (H q).vs_inst_idx = q /\
+       static_mem_ok eom ctx fn (EL q is) (H q) /\
+       ?u. step_inst fuel ctx (EL q is) (H q) = OK u` by
+       (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+        `h <= q /\ q < n + m` by metis_tac[] >>
+        qpat_x_assum `!j. h <= j /\ j < n + m ==> _`
+          (qspec_then `q` mp_tac) >> simp[] >> metis_tac[]) >>
+     `(in_revert_forward fn (H j) ==> in_revert_forward fn' tj)` by
+       (qpat_assum `!j pref sj tj. _`
+         (qspecl_then [`j`,`pref`,`sj`,`tj`] mp_tac) >> simp[]) >>
+     mp_tac (Q.INST [`n` |-> `j`, `es` |-> `sj`, `es'` |-> `sj'`,
+       `t` |-> `tj`, `pc` |-> `LENGTH (pref:instruction list)`]
+         (SPEC_ALL mm_local_payload_actual_safe_transition_if_forward)) >>
+     (impl_tac >- (gvs[] >> rpt strip_tac >> metis_tac[])) >> simp[]) >>
+  mp_tac (Q.INST [`supply` |-> `sk`,
+    `P` |-> `static_mem_ok eom ctx fn'`,
+    `Inv` |-> `\j pc (sj:ir_supply) tj. mm_local_payload_cut cap is gs H j excluded pc tj`]
+      (SPEC_ALL (INST_TYPE [alpha |-> ``:ir_supply``, beta |-> ``:instruction``]
+        mm_local_safe_flatmap_interval))) >>
+  (impl_tac >- gvs[]) >> simp[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
