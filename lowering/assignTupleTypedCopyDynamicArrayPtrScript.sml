@@ -2,10 +2,11 @@
 Theory assignTupleTypedCopyDynamicArrayPtr
 Ancestors
   assignBasePtrBytesPrefix assignTupleTypedCopyArrayPtr typedCopyLayoutPtr
+  normalizationPrefixPtr typedCopyRobustTransportPtr
   bodyPtrPopMemoryHeader bodyPtrMakeArrayWordStore bodyPtrMakeArrayCopyStep
   wordLoadStorePtr valueEncodingProps representationCleanPtr
   liveArrayTransportPtr robustCopyTransportPtr abiStaticAggregateProps assignBasePtrMcopyTransport
-  augAssignPtrScalarCertificate typedCopyLoopHeaderPtr
+  augAssignPtrScalarCertificate typedCopyLoopHeaderPtr typedCopyLoopBackedgePtr
   augAssignPtrScalarSafety augAssignPtrScalarRun
   typedNormalizeDynarray typedNormalizeDynarrayLoop typedCopyAmbientFramePtr typedCopyPtr compileEnv
   bodyPtrDefs ptrDiscipline ptrSafeRun fragGasSeqPtr fragExecPtr
@@ -412,6 +413,447 @@ Finalise typed_dynarray_data_address_frag_ptr
 
 (* The child premise ranges over actual compiler slices and arbitrary runtime
    states. Capacity windows are geometric, not taint-cleanliness assumptions. *)
+(* Zero-sized elements still execute the child; only coverage is conditional. *)
+Triviality typed_dynarray_loop_address_ptr:
+  !cx ctx PG R sb si ctr so doff sp dp sr dr id i ss ds a b S T G tn s.
+    lookup_var ctr s = SOME (n2w i) /\ op_taint tn (Var ctr) = {} /\
+    lookup_var sr s = SOME a /\ lookup_var dr s = SOME b /\
+    op_taint tn (Var sr) = {} /\ op_taint tn (Var dr) = {} /\
+    (ss <> 0 ==> ptr_covers G tn sr s S /\ i*ss < S /\
+      i*ss+ss <= S /\ w2n a+i*ss < dimword(:256)) /\
+    (ds <> 0 ==> ptr_covers G tn dr s T /\ i*ds < T /\
+      i*ds+ds <= T /\ w2n b+i*ds < dimword(:256)) /\
+    ALL_DISTINCT [so;doff;sp;dp] /\
+    (!v. MEM v [so;doff;sp;dp] ==> ctr <> v /\ sr <> v /\ dr <> v) /\
+    si.cs_blocks = sb.cs_blocks /\ si.cs_current_bb = sb.cs_current_bb /\
+    si.cs_current_insts = sb.cs_current_insts ++
+      [mk_inst id MUL [Var ctr;Lit (n2w ss)] [so];
+       mk_inst (id+1) MUL [Var ctr;Lit (n2w ds)] [doff];
+       mk_inst (id+2) ADD [Var sr;Var so] [sp];
+       mk_inst (id+3) ADD [Var dr;Var doff] [dp]] ==>
+    ?Gf tnf sf.
+      frag_exec_ptr cx ctx PG sb si
+        (\g t v. g=G /\ t=tn /\ v=s)
+        (\g t v. g=Gf /\ t=tnf /\ v=sf) R /\
+      lookup_var sp sf = SOME (n2w (w2n a+i*ss)) /\
+      lookup_var dp sf = SOME (n2w (w2n b+i*ds)) /\
+      (ss = 0 \/ ptr_covers Gf tnf sp sf ss) /\
+      (ds = 0 \/ ptr_covers Gf tnf dp sf ds) /\
+      sf with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|> = s /\
+      tnf.t_mem=tn.t_mem /\ tnf.t_stor=tn.t_stor /\
+      tnf.t_trans=tn.t_trans /\ tnf.t_imm=tn.t_imm /\
+      (!p. ~MEM p [so;doff;sp;dp] ==>
+        lookup_var p sf=lookup_var p s /\ FLOOKUP Gf p=FLOOKUP G p /\
+        op_taint tnf (Var p)=op_taint tn (Var p))
+Proof
+  typedCopyLoopAmbientLib.address_witnesses >>
+  conj_tac >- (typedCopyLoopAmbientLib.address_fragment typed_copy_loop_mul_frag_ptr) >>
+  `lookup_var sp s4 = SOME (n2w (w2n a+i*ss)) /\
+   lookup_var dp s4 = SOME (n2w (w2n b+i*ds))` by
+    simp[Abbr `s4`, Abbr `t4`, Abbr `s3`, Abbr `t3`, Abbr `s2`, Abbr `s1`,
+         lookup_var_def, update_var_def, FLOOKUP_UPDATE, GSYM word_add_n2w] >>
+  simp[] >>
+  conj_tac >- suspend "source_cover" >>
+  conj_tac >- suspend "destination_cover" >>
+  suspend "address_frame"
+QED
+
+Resume typed_dynarray_loop_address_ptr[source_cover]:
+  Cases_on `ss = 0` >- simp[] >>
+  simp[] >>
+  `ptr_covers g3 tn3 sp t3 ss` by
+    (simp[Abbr `g3`, Abbr `tn3`, Abbr `t3`] >>
+     irule typed_copy_loop_dynamic_offset_covers >>
+     simp[Abbr `s2`, Abbr `s1`, Abbr `g2`, Abbr `g1`,
+          Abbr `tn2`, Abbr `tn1`, eval_operand_def,
+          ptr_covers_def, lookup_var_def, update_var_def,
+          FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def] >>
+     conj_tac >- gvs[lookup_var_def] >>
+     qexists_tac `S'` >> gvs[ptr_covers_def, lookup_var_def, op_taint_def]) >>
+  gvs[Abbr `s4`, Abbr `s3`, Abbr `g4`, Abbr `tn4`, Abbr `t4`,
+      ptr_covers_def, lookup_var_def, update_var_def,
+      FLOOKUP_UPDATE, copy_len_binop_ghost_frame]
+QED
+
+Resume typed_dynarray_loop_address_ptr[destination_cover]:
+  Cases_on `ds = 0` >- simp[] >>
+  simp[] >>
+  `ptr_covers g3 tn3 dr s3 T'` by
+    gvs[Abbr `g3`, Abbr `tn3`, Abbr `s3`, Abbr `t3`,
+        ptr_covers_def, lookup_var_def, update_var_def,
+        copy_len_binop_ghost_frame, Abbr `g2`, Abbr `g1`,
+        Abbr `tn2`, Abbr `tn1`, Abbr `s2`, Abbr `s1`,
+        FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, op_taint_def] >>
+  `ptr_covers g4 tn4 dp t4 ds` by
+    (simp[Abbr `g4`, Abbr `tn4`, Abbr `t4`] >>
+     irule typed_copy_loop_dynamic_offset_covers >> simp[] >>
+     conj_tac >- simp[Abbr `s3`, Abbr `t3`, Abbr `s2`, Abbr `s1`,
+         eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+     conj_tac >- gvs[Abbr `s3`, Abbr `t3`, Abbr `s2`, Abbr `s1`,
+         lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+     qexists_tac `T'` >> simp[]) >>
+  gvs[Abbr `s4`, ptr_covers_def, lookup_var_def]
+QED
+
+Resume typed_dynarray_loop_address_ptr[address_frame]:
+  conj_tac >-
+    simp[Abbr `s4`, Abbr `t4`, Abbr `s3`, Abbr `t3`, Abbr `s2`, Abbr `s1`,
+         update_var_def] >>
+  simp[Abbr `g4`, Abbr `tn4`, Abbr `t4`, copy_len_binop_ghost_frame] >>
+  simp[Abbr `g3`, Abbr `tn3`, Abbr `t3`, copy_len_binop_ghost_frame] >>
+  simp[Abbr `tn2`, Abbr `tn1`] >> rpt strip_tac >>
+  simp[copy_len_binop_ghost_frame,
+       Abbr `s3`, Abbr `s2`, Abbr `s1`, update_var_def, FLOOKUP_UPDATE,
+       Abbr `g2`, Abbr `g1`, FLOOKUP_DRESTRICT, op_taint_def] >>
+  simp[Abbr `s4`, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       step_taint_def, imm_taint_def, mk_inst_def]
+QED
+
+Finalise typed_dynarray_loop_address_ptr
+
+Triviality typed_dynarray_loop_entry_run:
+  !ctx fn s bb pre id ctr cond sf.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    bb.bb_instructions = pre ++
+      [mk_inst id ASSIGN [Lit 0w] [ctr];
+       mk_inst (id+1) JMP [Label cond] []] /\
+    s.vs_inst_idx = LENGTH pre /\ ~s.vs_halted /\
+    sf = jump_to cond (update_var ctr 0w s) ==>
+    !fuel. run_from (SUC fuel) ctx fn s = run_blocks (SUC fuel) ctx fn sf
+Proof
+  rpt strip_tac >>
+  simp[run_from_def, Once exec_block_def, get_instruction_def,
+       step_inst_non_invoke, EL_APPEND_EQN, ADD1] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def,
+       instruction_accessors, instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  simp[eval_operand_def, Once exec_block_def, get_instruction_def,
+       update_var_def, step_inst_non_invoke, is_terminator_def, EL_APPEND_EQN, ADD1] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def,
+       instruction_accessors, instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  simp[eval_operand_def, jump_to_def]
+QED
+
+Triviality typed_dynarray_loop_entry_assign_ghost:
+  !PG G tn s id ctr.
+    step_prov PG G (mk_inst id ASSIGN [Lit 0w] [ctr]) (update_var ctr 0w s) =
+      DRESTRICT G (COMPL {ctr}) /\
+    step_taint (mk_inst id ASSIGN [Lit 0w] [ctr]) s (update_var ctr 0w s) tn =
+      (tn with t_var := tn.t_var |+ (ctr,{}))
+Proof
+  rpt gen_tac >>
+  `new_site_bytes s (update_var ctr 0w s) = {}` by
+    simp[new_site_bytes_def, update_var_def, FLOOKUP_DEF, EXTENSION, SF CONJ_ss] >>
+  simp[step_prov_def, set_prov_def, out_prov_def, first_prov_def, op_prov_def,
+       step_taint_def, set_var_taint_def, mk_inst_def, mem_taint_def, step_writes_def,
+       source_memory_write_ranges_def, written_taint_def, store_taint_def,
+       adopt_reset_def, out_taint_def, op_taint_def, imm_taint_def, range_bytes_def,
+       taint_component_equality, eval_operand_def]
+QED
+
+Triviality typed_dynarray_loop_entry_ghost_run:
+  !ctx fn PG G tn s bb pre id ctr cond sf target.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    bb.bb_instructions = pre ++
+      [mk_inst id ASSIGN [Lit 0w] [ctr];
+       mk_inst (id+1) JMP [Label cond] []] /\
+    s.vs_inst_idx = LENGTH pre /\ ~s.vs_halted /\
+    sf = jump_to cond (update_var ctr 0w s) /\
+    lookup_block cond fn.fn_blocks = SOME target /\
+    phi_prefix_length target.bb_instructions = 0 ==>
+    !fuel. ghost_run (SUC fuel) ctx fn PG G tn s =
+      ghost_run fuel ctx fn PG (DRESTRICT G (COMPL {ctr}))
+        (tn with t_var := tn.t_var |+ (ctr,{})) sf
+Proof
+  rpt strip_tac >>
+  simp[ghost_run_def, Once ghost_block_def, get_instruction_def,
+       step_inst_non_invoke, EL_APPEND_EQN, ADD1] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def,
+       instruction_accessors, instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  simp[eval_operand_def, is_terminator_def, ghost_step_def, step_inst_non_invoke,
+       mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, GSYM mk_inst_def, eval_operand_def] >>
+  simp[typed_dynarray_loop_entry_assign_ghost] >>
+  simp[Once ghost_block_def, get_instruction_def, step_inst_non_invoke,
+       update_var_def, EL_APPEND_EQN, ADD1] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def,
+       instruction_accessors, instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  simp[eval_operand_def, is_terminator_def, jump_to_def] >>
+  qmatch_goalsub_abbrev_tac `entry_prov fn sj gg` >>
+  qmatch_goalsub_abbrev_tac `entry_taint_vars fn sj tt` >>
+  `entry_prov fn sj gg = gg /\ entry_taint_vars fn sj tt = tt` by
+    (irule typedCopyArrayPtrTheory.entry_ghost_no_phi >>
+     simp[Abbr `sj`] >> metis_tac[]) >>
+  simp[Once ghost_blocks_def, Abbr `sj`, GSYM ADD1] >>
+  Cases_on `target.bb_instructions` >- simp[eval_phis_def] >>
+  Cases_on `h.inst_opcode = PHI` >>
+  gvs[phi_prefix_length_def, eval_phis_def]
+QED
+
+Triviality typed_dynarray_loop_entry_ptr_safe:
+  !D ctx fn PG G tn s bb pre id ctr cond sf target.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    bb.bb_instructions = pre ++
+      [mk_inst id ASSIGN [Lit 0w] [ctr];
+       mk_inst (id+1) JMP [Label cond] []] /\
+    s.vs_inst_idx = LENGTH pre /\ ~s.vs_halted /\
+    sf = jump_to cond (update_var ctr 0w s) /\
+    lookup_block cond fn.fn_blocks = SOME target /\
+    phi_prefix_length target.bb_instructions = 0 /\ ~ctx_has_dalloca ctx ==>
+    !fuel. ptr_safe_run D 0 fuel ctx fn PG (DRESTRICT G (COMPL {ctr}))
+      (tn with t_var := tn.t_var |+ (ctr,{})) sf ==>
+      ptr_safe_run D 0 (SUC fuel) ctx fn PG G tn s
+Proof
+  rpt strip_tac >>
+  simp[ptr_safe_run_def, Once ptr_safe_block_def, get_instruction_def,
+       ptr_safe_step_def, step_inst_non_invoke, EL_APPEND_EQN, ADD1] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def,
+       instruction_accessors, instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  simp[eval_operand_def, is_terminator_def] >>
+  conj_tac >- suspend "assign_safe" >>
+  simp[ghost_step_def, step_inst_non_invoke, step_inst_base_opcode_eqs,
+       GSYM mk_inst_def, eval_operand_def, typed_dynarray_loop_entry_assign_ghost] >>
+  simp[Once ptr_safe_block_def, get_instruction_def, ptr_safe_step_def,
+       step_inst_non_invoke, update_var_def, EL_APPEND_EQN, ADD1] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def,
+       instruction_accessors, instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  simp[eval_operand_def, is_terminator_def, jump_to_def] >>
+  conj_tac >- suspend "jump_safe" >>
+  qmatch_goalsub_abbrev_tac `entry_prov fn sj gg` >>
+  qmatch_goalsub_abbrev_tac `entry_taint_vars fn sj tt` >>
+  `entry_prov fn sj gg = gg /\ entry_taint_vars fn sj tt = tt` by
+    (irule typedCopyArrayPtrTheory.entry_ghost_no_phi >>
+     simp[Abbr `sj`] >> metis_tac[]) >>
+  simp[Once ptr_safe_blocks_def, Abbr `sj`, GSYM ADD1] >>
+  qpat_x_assum `ptr_safe_run _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[ptr_safe_run_def, GSYM ADD1, update_var_def, jump_to_def] >>
+  Cases_on `target.bb_instructions` >- simp[eval_phis_def] >>
+  Cases_on `h.inst_opcode = PHI` >>
+  gvs[phi_prefix_length_def, eval_phis_def]
+QED
+
+Resume typed_dynarray_loop_entry_ptr_safe[assign_safe]:
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+       mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs, update_var_def,
+       eval_operand_def, op_taint_def]
+QED
+
+Resume typed_dynarray_loop_entry_ptr_safe[jump_safe]:
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
+       mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs, update_var_def,
+       jump_to_def, eval_operand_def, op_taint_def]
+QED
+
+Finalise typed_dynarray_loop_entry_ptr_safe
+
+(* A normal child preserves the live source and length, and extends exactly
+   one destination element.  This is independent of all prefix runtime states. *)
+Triviality typed_dynarray_child_memory_frame:
+  !stv dtv vs source_cap cap a b i dirty dirty' mem mem'.
+    i < LENGTH vs /\ LENGTH vs <= source_cap /\ LENGTH vs <= cap /\
+    EVERY (\v. val_wf stv v /\ val_wf dtv v) vs /\
+    (a + source_cap * type_memory_size stv <= b \/
+     b + (cap * type_memory_size dtv + 32) <= a) /\
+    (!m. mem_agree_outside dirty mem m ==>
+      elems_in_memory vs a stv m) /\
+    (!m. mem_agree_outside dirty mem m ==>
+      mem_word_at b m = n2w (LENGTH vs)) /\
+    (!j. j < i ==> !m. mem_agree_outside dirty mem m ==>
+      val_in_memory dtv (EL j vs) (b+32+j*type_memory_size dtv) m) /\
+    (!m. mem_agree_outside dirty' mem' m ==>
+      val_in_memory dtv (EL i vs) (b+32+i*type_memory_size dtv) m) /\
+    (!p n. p+n <= b+32+i*type_memory_size dtv \/
+      b+32+i*type_memory_size dtv+type_memory_size dtv <= p ==>
+      mem_bytes_at p n mem' = mem_bytes_at p n mem) /\
+    (!p. p < b+32+i*type_memory_size dtv \/
+      b+32+i*type_memory_size dtv+type_memory_size dtv <= p ==>
+      (p IN dirty' <=> p IN dirty)) ==>
+    (!m. mem_agree_outside dirty' mem' m ==>
+      elems_in_memory vs a stv m) /\
+    (!m. mem_agree_outside dirty' mem' m ==>
+      mem_word_at b m = n2w (LENGTH vs)) /\
+    (!j. j < SUC i ==> !m. mem_agree_outside dirty' mem' m ==>
+      val_in_memory dtv (EL j vs) (b+32+j*type_memory_size dtv) m)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  conj_tac >- suspend "source" >>
+  conj_tac >- suspend "header" >>
+  match_mp_tac robust_array_prefix_extend >>
+  qexistsl_tac [`dirty`, `mem`] >> simp[] >>
+  conj_tac >-
+    (rpt strip_tac >>
+     `j < LENGTH vs` by decide_tac >>
+     gvs[EVERY_EL] >> metis_tac[exprSimPropsTheory.val_footprint_le, LESS_TRANS]) >>
+  qx_gen_tac `x` >> disch_tac >>
+  `x < b+32+i*type_memory_size dtv \/
+   b+32+i*type_memory_size dtv+type_memory_size dtv <= x` by
+    (gvs[LEFT_ADD_DISTRIB] >> decide_tac) >>
+  conj_tac >- (first_x_assum irule >> decide_tac) >> metis_tac[]
+QED
+
+Resume typed_dynarray_child_memory_frame[source]:
+  match_mp_tac robust_elems_in_memory_copy_transport >>
+  qexistsl_tac [`a`, `LENGTH vs * type_memory_size stv`, `dirty`, `mem`] >>
+  simp[] >>
+  `LENGTH vs * type_memory_size stv <= source_cap * type_memory_size stv /\
+   (i+1) * type_memory_size dtv <= cap * type_memory_size dtv` by
+    (conj_tac >> irule LESS_MONO_MULT >> decide_tac) >>
+  rpt conj_tac
+  >- (gvs[EVERY_EL] >> metis_tac[exprSimPropsTheory.val_footprint_le, LESS_TRANS])
+  >- (first_x_assum irule >>
+      rule_assum_tac (REWRITE_RULE [LEFT_ADD_DISTRIB, MULT_CLAUSES]) >>
+      pure_rewrite_tac[LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
+  rpt strip_tac >> first_x_assum irule >>
+  rule_assum_tac (REWRITE_RULE [LEFT_ADD_DISTRIB, MULT_CLAUSES]) >>
+  pure_rewrite_tac[LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac
+QED
+
+Resume typed_dynarray_child_memory_frame[header]:
+  rpt strip_tac >>
+  `?mix. mem_agree_outside dirty mem mix /\
+    mem_bytes_at b 32 mix = mem_bytes_at b 32 m` by
+    (irule copied_window_agree_witness >>
+     qexistsl_tac [`mem'`, `dirty'`] >> simp[]) >>
+  `mem_word_at b mix = n2w (LENGTH vs)` by metis_tac[] >>
+  gvs[mem_word_at_def, GSYM mem_bytes_at_def]
+QED
+Finalise typed_dynarray_child_memory_frame
+
+(* Size-zero child endpoints may wrap, but their empty windows still fit. *)
+Triviality typed_dynarray_child_word_window:
+  !a k n i frontier.
+    i < n /\ a+n*k <= frontier /\ a+n*k <= dimword(:256) ==>
+    w2n (n2w (a+i*k):bytes32)+k <= frontier /\
+    w2n (n2w (a+i*k):bytes32)+k <= dimword(:256) /\
+    (k <> 0 ==> w2n (n2w (a+i*k):bytes32) = a+i*k)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `(i+1)*k <= n*k` by (irule LESS_MONO_MULT >> decide_tac) >>
+  Cases_on `k=0`
+  >- (gvs[] >>
+      `a MOD dimword(:256) <= a` by simp[MOD_LESS_EQ] >>
+      simp[w2n_n2w] >> decide_tac) >>
+  `a+i*k < dimword(:256)` by
+    (qpat_x_assum `(i+1)*k <= n*k` mp_tac >>
+     pure_rewrite_tac[LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
+  simp[w2n_n2w, LESS_MOD] >>
+  qpat_x_assum `(i+1)*k <= n*k` mp_tac >>
+  pure_rewrite_tac[LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac
+QED
+
+(* One real loop iteration: operand-count header, the address/child slice,
+   and the backedge at the child's actual final block.  Q carries the memory
+   invariant; neither child termination nor a single-block child is assumed. *)
+Triviality typed_dynarray_iteration_continuation:
+  !cx ctx fn PG G tn s ctr bound lt done hid i n body exit hb bb
+    sc ec eb bid tmp Gh th sh Q R.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME hb /\
+    hb.bb_instructions =
+      [mk_inst hid LT [Var ctr;bound] [lt];
+       mk_inst (hid+1) ISZERO [Var lt] [done];
+       mk_inst (hid+2) JNZ [Var done;Label exit;Label body] []] /\
+    lookup_block body fn.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0 /\
+    phi_prefix_length hb.bb_instructions = 0 /\
+    s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+    lookup_var ctr s = SOME (n2w i) /\
+    eval_operand bound s = SOME (n2w n) /\
+    op_taint tn (Var ctr) = {} /\ op_taint tn bound = {} /\
+    op_prov G (Var ctr) = NONE /\ op_prov G bound = NONE /\
+    ~ctx_has_dalloca ctx /\ i < n /\ n < dimword(:256) /\
+    ctr <> lt /\ ctr <> done /\ ctr <> tmp /\
+    Gh = DRESTRICT (DRESTRICT G (COMPL {lt})) (COMPL {done}) /\
+    th = (tn with t_var := (tn.t_var |+ (lt,{})) |+ (done,{})) /\
+    sh = jump_to body (update_var done 0w (update_var lt 1w s)) /\
+    sc.cs_current_bb = body /\ sc.cs_current_insts = [] /\
+    fn_has_code sc ec fn /\
+    lookup_block ec.cs_current_bb fn.fn_blocks = SOME eb /\
+    eb.bb_instructions = ec.cs_current_insts ++
+      [mk_inst bid ADD [Var ctr;Lit 1w] [tmp];
+       mk_inst (bid+1) ASSIGN [Var tmp] [ctr];
+       mk_inst (bid+2) JMP [Label s.vs_current_bb] []] /\
+    frag_exec_ptr cx ctx PG sc ec (\g t u. g=Gh /\ t=th /\ u=sh)
+      (\g t u. Q g t u /\ lookup_var ctr u = SOME (n2w i) /\
+        FLOOKUP g ctr = NONE /\ op_taint t (Var ctr) = {}) R ==>
+    ((?Gc tc uc Gf tf uf.
+       Q Gc tc uc /\
+       uf = jump_to s.vs_current_bb
+         (update_var ctr (n2w (i+1)) (update_var tmp (n2w (i+1)) uc)) /\
+       Gf = DRESTRICT (DRESTRICT Gc (COMPL {tmp})) (COMPL {ctr}) /\
+       tf = (tc with t_var := (tc.t_var |+ (tmp,{})) |+ (ctr,{})) /\
+       (!fuel r. run_from fuel ctx fn uf = r /\ (!e. r <> Error e) ==>
+         ?fuel'. run_from fuel' ctx fn s = r /\
+           ghost_run fuel' ctx fn PG G tn s =
+             ghost_run fuel ctx fn PG Gf tf uf /\
+           (ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG Gf tf uf ==>
+            ptr_safe_run (cx_dead cx) 0 fuel' ctx fn PG G tn s))) \/
+     (?fuel r. run_from fuel ctx fn s = r /\ exit_result r /\
+       (!e. r <> Error e) /\ R (ghost_run fuel ctx fn PG G tn s) r /\
+       ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!fuel r. run_from fuel ctx fn sh = r /\ (!e. r <> Error e) ==>
+    run_from (SUC fuel) ctx fn s = r /\
+    ghost_run (SUC fuel) ctx fn PG G tn s = ghost_run fuel ctx fn PG Gh th sh /\
+    (ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG Gh th sh ==>
+     ptr_safe_run (cx_dead cx) 0 (SUC fuel) ctx fn PG G tn s)` by
+    (match_mp_tac typed_copy_operand_loop_test_continuation >>
+     simp[mk_inst_def, instruction_component_equality, bool_to_word_def] >>
+     qexistsl_tac [`i`,`n`,`bb`] >> simp[bool_to_word_def] >> decide_tac) >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[frag_exec_ptr_def] >>
+  disch_then (qspecl_then [`fn`,`Gh`,`th`,`sh`] mp_tac) >>
+  (impl_tac >- simp[jump_to_def, update_var_def]) >>
+  disch_then strip_assume_tac
+  >- (qpat_x_assum `(\g t u. _) _ _ _` mp_tac >> BETA_TAC >> strip_tac >>
+      rename1 `Q Gc tc uc` >>
+      qabbrev_tac `uf = jump_to s.vs_current_bb
+        (update_var ctr (n2w (i+1)) (update_var tmp (n2w (i+1)) uc))` >>
+      qabbrev_tac `Gf = DRESTRICT (DRESTRICT Gc (COMPL {tmp})) (COMPL {ctr})` >>
+      qabbrev_tac `tf = tc with t_var := (tc.t_var |+ (tmp,{})) |+ (ctr,{})` >>
+      `!fuel r. run_from fuel ctx fn uf = r /\ (!e. r <> Error e) ==>
+        run_from (SUC fuel) ctx fn uc = r /\
+        ghost_run (SUC fuel) ctx fn PG Gc tc uc = ghost_run fuel ctx fn PG Gf tf uf /\
+        (ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG Gf tf uf ==>
+         ptr_safe_run (cx_dead cx) 0 (SUC fuel) ctx fn PG Gc tc uc)` by
+        suspend "backedge" >>
+      disj1_tac >> qexistsl_tac [`Gc`,`tc`,`uc`,`Gf`,`tf`,`uf`] >>
+      simp[] >> rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!fuel r. run_from fuel ctx fn uf = r /\ _ ==> _`
+        (qspec_then `fuel` mp_tac) >> simp[] >> strip_tac >>
+      qpat_x_assum `!fuel r. run_from fuel ctx fn uc = r /\ _ ==> _` drule_all >>
+      strip_tac >>
+      qpat_x_assum `!fuel r. run_from fuel ctx fn sh = r /\ _ ==> _` drule_all >>
+      strip_tac >> qexists_tac `SUC fuel'` >> simp[]) >>
+  disj2_tac >>
+  `!e. r <> Error e` by (Cases_on `r` >> gvs[exit_result_def]) >>
+  qpat_x_assum `!fuel r. run_from fuel ctx fn sh = r /\ _ ==> _` drule_all >>
+  strip_tac >> qexistsl_tac [`SUC fuel`,`r`] >> gvs[]
+QED
+
+Resume typed_dynarray_iteration_continuation[backedge]:
+  `!fuel. run_from (SUC fuel) ctx fn uc = run_blocks (SUC fuel) ctx fn uf` by
+    (match_mp_tac typed_copy_loop_backedge_run >>
+     simp[Abbr `uf`] >> metis_tac[]) >>
+  `!fuel. run_blocks (SUC fuel) ctx fn uf = run_from fuel ctx fn uf` by
+    (gen_tac >>
+     `lookup_block uf.vs_current_bb fn.fn_blocks = SOME hb` by
+       simp[Abbr `uf`, jump_to_def] >>
+     drule run_blocks_run_from_no_phi >>
+     disch_then (qspec_then `fuel` mp_tac) >>
+     simp[Abbr `uf`, jump_to_def, phi_prefix_length_def, mk_inst_def]) >>
+  `!fuel. ghost_run (SUC fuel) ctx fn PG Gc tc uc =
+    ghost_run fuel ctx fn PG Gf tf uf` by
+    (match_mp_tac typed_copy_loop_backedge_ghost_run >>
+     simp[Abbr `uf`, Abbr `Gf`, Abbr `tf`] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> conj_tac >- metis_tac[] >>
+  conj_tac >- simp[] >>
+  match_mp_tac typed_copy_loop_backedge_ptr_safe >>
+  simp[Abbr `uf`, Abbr `Gf`, Abbr `tf`] >> metis_tac[]
+QED
+Finalise typed_dynarray_iteration_continuation
+
 Theorem compile_copy_dynarray_typed_child_frag_ptr:
   !ce st dt stv dtv vs source_cap cap dst src sa sb cx ctx PG R.
   type_memory_size stv = type_memory_bytes ce st /\
@@ -569,7 +1011,7 @@ Proof
     (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
      `value_has_type stv v` by metis_tac[] >>
      drule valueTypingMemoryPropsTheory.value_has_type_memory_wf >>
-     metis_tac[exprSimPropsTheory.val_footprint_le]) >>
+     metis_tac[exprSimPropsTheory.val_footprint_le, LESS_TRANS]) >>
   `LENGTH vs * type_memory_size stv <= source_cap * type_memory_bytes ce st` by
     simp[arithmeticTheory.LE_MULT_RCANCEL] >>
   `!m. mem_agree_outside t5.t_mem s5.vs_memory m ==>
@@ -973,3 +1415,222 @@ Resume compile_copy_dynarray_typed_child_frag_ptr[equal_frames]:
   pure_rewrite_tac[op_taint_def] >> simp[]
 QED
 
+Resume compile_copy_dynarray_typed_child_frag_ptr[element_loop]:
+  rewrite_tac[frag_exec_ptr_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `(\g t u. _) _ _ _` mp_tac >>
+  BETA_TAC >> strip_tac >>
+  qpat_x_assum `G'' = H7` SUBST_ALL_TAC >>
+  qpat_x_assum `tn'' = t7` SUBST_ALL_TAC >>
+  `fn_has_code sa sb fn'` by
+    (qpat_assum `fn_has_code sm sb fn'` mp_tac >>
+     qpat_assum `sm.cs_blocks = sa.cs_blocks` (fn th =>
+       simp[NoAsms, fn_has_code_def, emitted_blocks_def, th])) >>
+  `~(type_memory_bytes ce dt = type_memory_bytes ce st /\ dt = st)` by simp[] >>
+  drule_at (Pat `fn_has_code _ _ fn'`) typed_dynarray_child_states >>
+  disch_then drule_all >>
+  disch_then (qx_choose_then `sc` (qx_choose_then `ec`
+    (map_every assume_tac o CONJUNCTS))) >>
+  qabbrev_tac `sr = STRING #"%" (toString (sa.cs_next_var+3))` >>
+  qabbrev_tac `dr = STRING #"%" (toString (sa.cs_next_var+4))` >>
+  qabbrev_tac `len = STRING #"%" (toString sa.cs_next_var)` >>
+  qabbrev_tac `ctr = STRING #"%" (toString (sa.cs_next_var+5))` >>
+  qabbrev_tac `so = STRING #"%" (toString (sa.cs_next_var+8))` >>
+  qabbrev_tac `dof = STRING #"%" (toString (sa.cs_next_var+9))` >>
+  qabbrev_tac `sp = STRING #"%" (toString (sa.cs_next_var+10))` >>
+  qabbrev_tac `dp = STRING #"%" (toString (sa.cs_next_var+11))` >>
+  qabbrev_tac `n = LENGTH vs` >>
+  qabbrev_tac `ss = type_memory_bytes ce st` >>
+  qabbrev_tac `ds = type_memory_bytes ce dt` >>
+  qabbrev_tac `a = w2n p+32` >>
+  qabbrev_tac `b = w2n q` >>
+  qabbrev_tac `srcspan = source_cap*ss` >>
+  qabbrev_tac `dstspan = cap*ds` >>
+  qabbrev_tac `V = {z | not_fresh_at sa z \/ z=sr \/ z=dr \/ z=len}` >>
+  qabbrev_tac `Frame = (\g t u.
+    (u with <|vs_vars:=s7.vs_vars; vs_memory:=s7.vs_memory;
+      vs_current_bb:=s7.vs_current_bb; vs_inst_idx:=s7.vs_inst_idx;
+      vs_prev_bb:=s7.vs_prev_bb|>)=s7 /\
+    t.t_stor=t7.t_stor /\ t.t_trans=t7.t_trans /\ t.t_imm=t7.t_imm /\
+    (!z k. z+k<=b \/ b+32+dstspan<=z ==>
+      mem_bytes_at z k u.vs_memory=mem_bytes_at z k s7.vs_memory) /\
+    (!z. z<b \/ b+32+dstspan<=z ==> (z IN t.t_mem <=> z IN t7.t_mem)) /\
+    (!z. z IN V ==> lookup_var z u=lookup_var z s7 /\
+      FLOOKUP g z=FLOOKUP H7 z /\ op_taint t (Var z)=op_taint t7 (Var z)))` >>
+  qabbrev_tac `Mem = (\i t u.
+    (!m. mem_agree_outside t.t_mem u.vs_memory m ==> elems_in_memory vs a stv m) /\
+    (!m. mem_agree_outside t.t_mem u.vs_memory m ==> mem_word_at b m=n2w n) /\
+    (!j. j<i ==> !m. mem_agree_outside t.t_mem u.vs_memory m ==>
+      val_in_memory dtv (EL j vs) (b+32+j*ds) m))` >>
+  qabbrev_tac `Regs = (\g t u.
+    lookup_var sr u=SOME(n2w a) /\ lookup_var dr u=SOME(n2w(b+32)) /\
+    lookup_var len u=SOME(n2w n) /\ op_taint t (Var sr)={} /\
+    op_taint t (Var dr)={} /\ op_taint t (Var len)={} /\ FLOOKUP g len=NONE /\
+    (ss<>0 ==> ptr_covers g t sr u srcspan) /\
+    (ds<>0 ==> ptr_covers g t dr u dstspan))` >>
+  qabbrev_tac `sbod = sc with cs_current_insts := []` >>
+  `ALL_DISTINCT [so;dof;sp;dp] /\
+   (!z. MEM z [so;dof;sp;dp] ==> ctr<>z /\ sr<>z /\ dr<>z)` by
+    (simp[Abbr `so`, Abbr `dof`, Abbr `sp`, Abbr `dp`, Abbr `ctr`,
+      Abbr `sr`, Abbr `dr`, ASCIInumbersTheory.toString_inj] >>
+    rpt (pop_assum kall_tac) >> rpt strip_tac >>
+    gvs[ASCIInumbersTheory.toString_inj]) >>
+  `sc.cs_blocks=sbod.cs_blocks /\ sc.cs_current_bb=sbod.cs_current_bb /\
+   sc.cs_current_insts=sbod.cs_current_insts ++
+     [mk_inst (sa.cs_next_id+12) MUL [Var ctr;Lit (n2w ss)] [so];
+      mk_inst (sa.cs_next_id+13) MUL [Var ctr;Lit (n2w ds)] [dof];
+      mk_inst (sa.cs_next_id+14) ADD [Var sr;Var so] [sp];
+      mk_inst (sa.cs_next_id+15) ADD [Var dr;Var dof] [dp]]` by
+    simp[Abbr `sbod`, Abbr `ctr`, Abbr `so`, Abbr `dof`, Abbr `sp`,
+      Abbr `dp`, Abbr `sr`, Abbr `dr`] >>
+  `s7.vs_alloca_next=s.vs_alloca_next` by
+    (qpat_assum `_ = s6` (mp_tac o Q.AP_TERM `(\u:venom_state. u.vs_alloca_next)`) >>
+     qpat_assum `_ = s5` (mp_tac o Q.AP_TERM `(\u:venom_state. u.vs_alloca_next)`) >>
+     qpat_assum `_ = s4` (mp_tac o Q.AP_TERM `(\u:venom_state. u.vs_alloca_next)`) >>
+     simp[Abbr `s4`, update_var_def]) >>
+  `a+srcspan<=s7.vs_alloca_next /\ b+32+dstspan<=s7.vs_alloca_next /\
+   a+srcspan<=dimword(:256) /\ b+32+dstspan<=dimword(:256)` by
+    (simp[Abbr `a`] >> decide_tac) >>
+  `!i g t u. i<n /\ Regs g t u /\ Mem i t u /\ Frame g t u /\
+    lookup_var ctr u=SOME(n2w i) /\ FLOOKUP g ctr=NONE /\ op_taint t (Var ctr)={} ==>
+    frag_exec_ptr cx ctx PG sbod ec (\h v w. h=g /\ v=t /\ w=u)
+      (\h v w. Regs h v w /\ Mem (SUC i) v w /\ Frame h v w /\
+        lookup_var ctr w=SOME(n2w i) /\ FLOOKUP h ctr=NONE /\
+        op_taint v (Var ctr)={}) R` by suspend "body_step" >>
+  suspend "element_loop_chain"
+QED
+
+Resume compile_copy_dynarray_typed_child_frag_ptr[body_step]:
+  markerLib.RESUME_TAC >>
+  map_every (fn pat => qpat_x_assum pat kall_tac)
+    [`Abbrev (Post = _)`, `Abbrev (s4 = _)`, `Abbrev (c4 = _)`,
+     `Abbrev (c5 = _)`, `Abbrev (c6 = _)`] >>
+  rpt (qhdtm_x_assum `Abbrev` mp_tac) >>
+  map_every (fn pat => qpat_x_assum pat mp_tac)
+    [`type_memory_size stv = ss`, `type_memory_size dtv = ds`,
+     `n <= source_cap`, `n <= cap`, `cap < dimword(:256)`,
+     `EVERY (\v. value_has_type stv v /\ value_has_type dtv v) vs`,
+     `!sc ec sop dop v. _`,
+     `compile_store_memory_typed _ _ _ _ _ sc = _`,
+     `sc.cs_next_var = _`, `ci_mono sa sc`,
+     `ALL_DISTINCT [so;dof;sp;dp]`,
+     `!z. MEM z [so;dof;sp;dp] ==> _`,
+     `sc.cs_blocks = sbod.cs_blocks`,
+     `sc.cs_current_bb = sbod.cs_current_bb`,
+     `sc.cs_current_insts = sbod.cs_current_insts ++ _`,
+     `a+srcspan <= s7.vs_alloca_next`,
+     `b+32+dstspan <= s7.vs_alloca_next`,
+     `a+srcspan <= dimword(:256)`, `b+32+dstspan <= dimword(:256)`,
+     `w2n p + (srcspan+32) <= b \/ _`] >>
+  rpt (pop_assum kall_tac) >> rpt disch_tac >>
+  rpt gen_tac >> strip_tac >>
+  `ss<>0 ==> i*ss<srcspan /\ i*ss+ss<=srcspan /\
+      w2n (n2w a:bytes32)+i*ss<dimword(:256)` by
+    (strip_tac >>
+     `i<source_cap /\ SUC i<=source_cap` by decide_tac >>
+     `SUC i*ss<=source_cap*ss` by
+       (pure_rewrite_tac[arithmeticTheory.LE_MULT_RCANCEL] >> simp[]) >>
+     `i*ss<srcspan /\ i*ss+ss<=srcspan` by
+       (qpat_x_assum `SUC i*ss<=_` mp_tac >>
+        pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >>
+        disch_tac >> simp[Abbr `srcspan`] >> decide_tac) >>
+     `a<dimword(:256)` by decide_tac >> simp[] >> decide_tac) >>
+  `ds<>0 ==> i*ds<dstspan /\ i*ds+ds<=dstspan /\
+      w2n (n2w (b+32):bytes32)+i*ds<dimword(:256)` by
+    (strip_tac >>
+     `i<cap /\ SUC i<=cap` by decide_tac >>
+     `SUC i*ds<=cap*ds` by
+       (pure_rewrite_tac[arithmeticTheory.LE_MULT_RCANCEL] >> simp[]) >>
+     `i*ds<dstspan /\ i*ds+ds<=dstspan` by
+       (qpat_x_assum `SUC i*ds<=_` mp_tac >>
+        pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >>
+        disch_tac >> simp[Abbr `dstspan`] >> decide_tac) >>
+     `b+32<dimword(:256)` by decide_tac >> simp[] >> decide_tac) >>
+  qpat_assum `Regs g t u` mp_tac >> simp[NoAsms, Abbr `Regs`] >> strip_tac >>
+  Q.UNDISCH_THEN `lookup_var ctr u = SOME (n2w i)`
+    (mp_then (Pat `lookup_var ctr s = SOME (n2w i)`) mp_tac
+      typed_dynarray_loop_address_ptr) >>
+  disch_then (fn th => Q.UNDISCH_THEN `op_taint t (Var ctr) = {}`
+    (mp_then (Pat `op_taint tn (Var ctr) = {}`) mp_tac th)) >>
+  disch_then (fn th => Q.UNDISCH_THEN `lookup_var sr u = SOME (n2w a)`
+    (mp_then (Pos hd) mp_tac th)) >>
+  disch_then (fn th => Q.UNDISCH_THEN `lookup_var dr u = SOME (n2w (b+32))`
+    (mp_then (Pos hd) mp_tac th)) >>
+  disch_then (fn th => Q.UNDISCH_THEN `op_taint t (Var sr) = {}`
+    (mp_then (Pat `op_taint tn (Var sr) = {}`) mp_tac th)) >>
+  disch_then (fn th => Q.UNDISCH_THEN `op_taint t (Var dr) = {}`
+    (mp_then (Pat `op_taint tn (Var dr) = {}`) mp_tac th)) >>
+  disch_then (fn th =>
+    `ss<>0 ==> ptr_covers g t sr u srcspan /\ i*ss<srcspan /\
+      i*ss+ss<=srcspan /\ w2n (n2w a:bytes32)+i*ss<dimword(:256)` by simp[] >>
+    qpat_x_assum `ss<>0 ==> ptr_covers _ _ _ _ _ /\ _`
+      (mp_then (Pos hd) mp_tac th)) >>
+  disch_then (fn th =>
+    `ds<>0 ==> ptr_covers g t dr u dstspan /\ i*ds<dstspan /\
+      i*ds+ds<=dstspan /\ w2n (n2w (b+32):bytes32)+i*ds<dimword(:256)` by simp[] >>
+    qpat_x_assum `ds<>0 ==> ptr_covers _ _ _ _ _ /\ _`
+      (mp_then (Pos hd) mp_tac th)) >>
+  disch_then (fn th => qpat_assum `ALL_DISTINCT [so;dof;sp;dp]`
+    (mp_then (Pos hd) mp_tac th)) >>
+  disch_then (fn th => qpat_assum `!z. MEM z [so;dof;sp;dp] ==> _`
+    (mp_then (Pos hd) mp_tac th)) >>
+  disch_then (fn th => qpat_assum `sc.cs_blocks=sbod.cs_blocks`
+    (mp_then (Pos hd) mp_tac th)) >>
+  disch_then (fn th => qpat_assum `sc.cs_current_bb=sbod.cs_current_bb`
+    (mp_then (Pos hd) mp_tac th)) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`,`sa.cs_next_id+12`] mp_tac) >>
+  (impl_tac >- simp[arithmeticTheory.ADD_ASSOC]) >>
+  disch_then (qx_choose_then `ga` (qx_choose_then `ta`
+    (qx_choose_then `ua` (map_every assume_tac o CONJUNCTS)))) >>
+  `compile_store_memory_typed ce (Var dp) dt (Var sp) st sc = ((),ec)` by
+    (qpat_assum `compile_store_memory_typed ce _ dt _ st sc = _` mp_tac >>
+     simp[NoAsms, Abbr `dp`, Abbr `sp`, stringTheory.STRCAT_EQNS]) >>
+  qpat_assum `compile_store_memory_typed ce (Var dp) dt (Var sp) st sc = _`
+    (fn cth => qpat_assum `!sc ec sop dop v. _`
+      (fn ith => mp_then (Pos hd) mp_tac ith cth)) >>
+  disch_then (qspec_then `EL i vs` mp_tac) >>
+  disch_then (qspecl_then [`ga`,`ta`,`ua`] mp_tac) >>
+  disch_then (qspecl_then
+    [`n2w (w2n (n2w a:bytes32)+i*ss):bytes32`,
+     `n2w (w2n (n2w (b+32):bytes32)+i*ds):bytes32`] mp_tac) >>
+  (impl_tac >- suspend "child_runtime") >>
+  suspend "child_composition"
+QED
+
+Resume compile_copy_dynarray_typed_child_frag_ptr[child_runtime]:
+  markerLib.RESUME_TAC >>
+  `n2w (w2n (n2w a:bytes32)+i*ss):bytes32 = n2w (a+i*ss)` by
+    simp[GSYM word_add_n2w] >>
+  `n2w (w2n (n2w (b+32):bytes32)+i*ds):bytes32 = n2w (b+32+i*ds)` by
+    simp[GSYM word_add_n2w] >>
+  asm_rewrite_tac[] >>
+  conj_tac
+  >- (conj_tac
+      >- (qpat_assum `sc.cs_next_var = _` mp_tac >>
+          simp[NoAsms, Abbr `sp`, Abbr `dp`,
+            loweringStateRelDefsTheory.not_fresh_at_def,
+            ASCIInumbersTheory.toString_inj] >>
+          rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[] >> decide_tac) >>
+      qpat_assum `EVERY _ vs` mp_tac >> pure_rewrite_tac[EVERY_EL] >>
+      disch_then (qspec_then `i` mp_tac) >>
+      qpat_assum `i<n` mp_tac >> simp[NoAsms, Abbr `n`]) >>
+  `ua.vs_alloca_next = s7.vs_alloca_next` by
+    (qpat_assum `ua with <|vs_vars := _; vs_inst_idx := _|> = u`
+       (mp_tac o Q.AP_TERM `(\v:venom_state. v.vs_alloca_next)`) >>
+     qpat_assum `Frame g t u` mp_tac >>
+     simp[NoAsms, Abbr `Frame`] >>
+     disch_then (mp_tac o CONJUNCT1) >>
+     disch_then (mp_tac o Q.AP_TERM `(\v:venom_state. v.vs_alloca_next)`) >>
+     simp[]) >>
+  `w2n (n2w (a+i*ss):bytes32)+ss<=ua.vs_alloca_next /\
+   w2n (n2w (a+i*ss):bytes32)+ss<=dimword(:256) /\
+   (ss<>0 ==> w2n (n2w (a+i*ss):bytes32)=a+i*ss)` by
+    (irule typed_dynarray_child_word_window >> qexists_tac `source_cap` >>
+     simp[Abbr `srcspan`] >> decide_tac) >>
+  `w2n (n2w (b+32+i*ds):bytes32)+ds<=ua.vs_alloca_next /\
+   w2n (n2w (b+32+i*ds):bytes32)+ds<=dimword(:256) /\
+   (ds<>0 ==> w2n (n2w (b+32+i*ds):bytes32)=b+32+i*ds)` by
+    (irule typed_dynarray_child_word_window >> qexists_tac `cap` >>
+     simp[Abbr `dstspan`] >> decide_tac) >>
+  simp[eval_operand_def] >>
+  FAIL_TAC "runtime_separation"
+QED
