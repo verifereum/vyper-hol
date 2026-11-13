@@ -6,6 +6,7 @@ Ancestors
   exprSimBufferStore exprLoweringProps
   annassignRelayoutBounds annassignRelayoutSource wideningZeroLayout
   venomState placeMemoryCopyEffect exprSimMemoryTransport
+  placeMemoryPrimitiveForward venomInst
 
 Definition log_data_layout_def:
   (log_data_layout cx [] [] p mem = T) /\
@@ -642,4 +643,83 @@ Proof
     b + n <= w2n w` by gvs[log_source_apart_def] >>
   Cases_on `val_footprint tv v = 0` >- simp[mem_bytes_at_def] >>
   metis_tac[typed_copy_effect_bytes]
+QED
+
+Theorem log_declared_address_effect[local]:
+  emit_op ADD [buf; Lit (n2w off)] sa = (dst,sb) /\
+  eval_operand buf s = SOME (n2w b) /\ fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. eval_operand dst t = SOME (n2w (b+off)) /\
+    typed_copy_effect ctx func sa sb s t d n
+Proof
+  strip_tac >> drule_all log_data_address_run >> strip_tac >>
+  rename1 `run_inst_seq _ s = OK u` >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb) /\
+   EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)` by
+    (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+          fresh_id_def, fresh_var_def, emit_def] >> strip_tac >>
+     gvs[emitted_insts_def, DROP_APPEND, mk_inst_def, is_terminator_def]) >>
+  `gas_marked_path F ctx func s 0
+    (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (irule straight_line_zero_gas_path >> simp[] >>
+     qexistsl_tac [`emitted_insts sa sb`, `sa`] >> simp[]) >>
+  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  gvs[typed_copy_effect_def, eval_operand_def, lookup_var_def] >>
+  gvs[venom_state_component_equality]
+QED
+
+Theorem log_declared_same_type_opcodes[local]:
+  compile_store_memory cenv src dst ty ty sa = ((),sb) ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)
+Proof
+  simp[compile_store_memory_def] >>
+  Cases_on `is_word_type ty`
+  >- (simp[emit_void_def, comp_bind_def, comp_return_def, fresh_id_def,
+           emit_def] >> strip_tac >> gvs[emitted_insts_def, DROP_APPEND,
+                                      mk_inst_def, is_terminator_def]) >>
+  Cases_on `is_bytestring_type ty`
+  >- (simp[compile_store_bytestring_def, compile_bytestring_copy_len_def,
+           emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+           comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+      strip_tac >> gvs[emitted_insts_def] >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+      simp[DROP_APPEND, mk_inst_def, is_terminator_def]) >>
+  Cases_on `type_memory_bytes cenv ty` >>
+  simp[compile_copy_memory_def, emit_void_def, comp_bind_def, comp_return_def,
+       fresh_id_def, emit_def] >>
+  strip_tac >> gvs[emitted_insts_def, DROP_APPEND, mk_inst_def, is_terminator_def]
+QED
+
+Theorem log_declared_same_type_effect[local]:
+  compile_store_memory cenv src dst ty ty sa = ((),sb) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\ expr_val_rel cx ty v src s /\
+  type_memory_bytes cenv ty = type_memory_size tv /\
+  type_memory_size tv < dimword (:256) /\ eval_operand dst s = SOME dw /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. val_in_memory tv v (w2n dw) t.vs_memory /\
+    typed_copy_effect ctx func sa sb s t (w2n dw) (type_memory_size tv)
+Proof
+  strip_tac >> drule_all buffer_store_memory_encoding >> strip_tac >>
+  drule_all buffer_store_memory_capacity >> strip_tac >>
+  drule buffer_store_memory_shape >> strip_tac >>
+  drule log_declared_same_type_opcodes >> strip_tac >>
+  drule compile_store_memory_same_type_no_gas >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by gvs[same_blocks_def] >>
+  `gas_marked_path F ctx func s 0
+    (OK (q with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (irule straight_line_zero_gas_path >> simp[] >>
+     qexistsl_tac [`emitted_insts sa sb`, `sa`] >> simp[]) >>
+  qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  gvs[typed_copy_effect_def, venom_state_component_equality, lookup_var_def] >>
+  metis_tac[lookup_var_def]
 QED
