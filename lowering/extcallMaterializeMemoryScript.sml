@@ -234,6 +234,191 @@ Proof
   fs[ci_mono_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
 
+Theorem extcall_materialize_vv_alloc_mem:
+  compile_materialize_vv ce lt vv sa = (op,sb) /\
+  ~is_word_type lt /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  vv_holds ce cx lt (Value v) vv es s /\
+  vv_store_bound cx lt lt es (Value v) vv s /\
+  vv_storage_live cx vv es s /\
+  evaluate_type (get_tenv cx) lt = SOME tv /\ val_wf tv v /\
+  value_has_type tv v /\
+  type_memory_bytes ce lt = type_memory_size tv /\
+  type_memory_size tv < dimword (:256) /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sa x) /\
+  (!tag p. vv = LocatedValue tag p ==>
+    (p.ptr_location <> LocMemory \/ is_word_type tag ==> tag = lt) /\
+    (p.ptr_location = LocCode /\ ce.ce_is_ctor ==>
+      !region. ce.ce_imm_alloca = SOME region ==>
+        eval_operand region s = SOME 0w /\
+        (!x. region = Var x ==> not_fresh_at sa x))) ==>
+  ?z w. FLOOKUP z.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size tv) /\
+    sa.cs_next_id < sb.cs_next_id /\
+    gas_path_mem ctx func s 0 (OK z) /\
+    ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand op z = SOME w /\
+    w2n w + type_memory_size tv <= z.vs_alloca_next /\
+    expr_val_rel cx lt v op z /\ expr_store_bound cx lt v op z /\
+    stmt_state_rel ctx func ce cx es z /\ alloca_history func z /\
+    s.vs_alloca_next <= z.vs_alloca_next /\
+    (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP z.vs_allocas aid = SOME entry) /\
+    (!aid b sz off len. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
+      aid < sa.cs_next_id /\ b <= off /\ off + len <= b + sz ==>
+      mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) /\
+    (!name b sz off len. local_region ce es.scopes s name b sz /\
+      b <= off /\ off + len <= b + sz ==>
+      mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) /\
+    (!name io itv iv off len. ce.ce_is_ctor /\
+      FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) /\
+      io <= off /\ off + len <= io + type_memory_size itv ==>
+      mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory)
+Proof
+  strip_tac >> drule_all extcall_materialize_stages >> strip_tac >>
+  `type_memory_bytes ce lt < dimword (:256)` by simp[] >>
+  drule_all extcall_materialize_alloc_value >> strip_tac >>
+  suspend "unwrap"
+QED
+
+Resume extcall_materialize_vv_alloc_mem[unwrap]:
+  qpat_x_assum `u = _ with vs_inst_idx := _` kall_tac >>
+  `read_result cx (Value v) es = (INL v,es)` by EVAL_TAC >>
+  `!tag src. vv = StackValue tag src ==>
+    !x. src = Var x ==> not_fresh_at sm x` by
+    (rpt strip_tac >> gvs[vv_operand_def]) >>
+  `!tag ptr. vv = LocatedValue tag ptr ==>
+    (ptr.ptr_location <> LocMemory \/ is_word_type tag \/ is_word_type lt ==> tag = lt) /\
+    (!x. ptr.ptr_operand = Var x ==> not_fresh_at sm x) /\
+    (ptr.ptr_location <> LocMemory ==> lt = lt) /\
+    (is_word_type lt /\ ptr.ptr_location = LocMemory ==>
+      !a. eval_operand ptr.ptr_operand u = SOME a ==>
+        w2n a + 32 <= u.vs_alloca_next) /\
+    (ptr.ptr_location = LocCode /\ ce.ce_is_ctor ==>
+      !region. ce.ce_imm_alloca = SOME region ==>
+        eval_operand region u = SOME 0w /\
+        (!x. region = Var x ==> not_fresh_at sm x))` by
+    (map_every qx_gen_tac [`tag`, `ap`] >> strip_tac >>
+     `!x. ap.ptr_operand = Var x ==> not_fresh_at sm x` by
+       gvs[vv_operand_def] >>
+     simp[] >> rpt strip_tac
+     >- metis_tac[]
+     >- (`eval_operand region u = eval_operand region s` by
+           (Cases_on `region` >> simp[eval_operand_def] >> metis_tac[]) >> metis_tac[]) >>
+     fs[ci_mono_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  drule_all extcall_captured_unwrap_mem >> strip_tac >>
+  suspend "store"
+QED
+Resume extcall_materialize_vv_alloc_mem[store]:
+  `eval_operand buf.buf_operand z = SOME w` by
+    (simp[eval_operand_def] >>
+     qpat_x_assum `eval_operand buf.buf_operand u = SOME w` mp_tac >>
+     simp[eval_operand_def] >> metis_tac[]) >>
+  `w2n w + type_memory_size tv <= z.vs_alloca_next` by decide_tac >>
+  `!name b sz. local_region ce es.scopes z name b sz ==>
+    b + sz <= w2n w \/ w2n w + type_memory_size tv <= b` by
+    (rpt strip_tac >>
+     `local_region ce es.scopes u name b sz` by
+       metis_tac[exprSimCopyTheory.copy_buffer_local_region_frame] >>
+     qpat_x_assum `!name b len. local_region ce es.scopes u name b len ==> _`
+       (qspecl_then [`name`, `b`, `sz`] mp_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
+  `ce.ce_is_ctor ==> !name itv iv off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)` by
+    (rpt strip_tac >>
+     drule_all extcall_alloc_immutable_separation >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
+  `!x. src = Var x \/ buf.buf_operand = Var x ==> not_fresh_at su x` by
+    metis_tac[] >>
+  drule_all extcall_materialize_store_result >> strip_tac >>
+  suspend "join"
+QED
+Resume extcall_materialize_vv_alloc_mem[join]:
+  `gas_path_mem ctx func s 0 (OK z')` by
+    (qpat_assum `gas_path_mem ctx func s 0 (OK u)`
+       (mp_then Any mp_tac gas_path_mem_then) >>
+     disch_then drule >> simp[] >> strip_tac >>
+     qpat_assum `gas_path_mem ctx func s 0 (OK z)`
+       (mp_then Any mp_tac gas_path_mem_then) >>
+     disch_then drule >> simp[]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x /\ not_fresh_at su x` by
+    (fs[ci_mono_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `sa.cs_next_id < sm.cs_next_id` by
+    (drule loweringHaltTheory.compile_alloc_buffer_parts >> simp[]) >>
+  `!name b sz. local_region ce es.scopes s name b sz ==>
+    local_region ce es.scopes u name b sz` by
+    metis_tac[exprSimCopyTheory.copy_buffer_local_region_frame] >>
+  `FLOOKUP z.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size tv)` by
+    metis_tac[] >>
+  `FLOOKUP z'.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size tv)` by
+    metis_tac[] >>
+  `sa.cs_next_id < sb.cs_next_id` by (fs[ci_mono_def] >> decide_tac) >>
+  qexistsl_tac [`z'`, `w`] >> simp[] >>
+  suspend "frames"
+QED
+Resume extcall_materialize_vv_alloc_mem[frames]:
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- suspend "registered" >>
+  conj_tac >- suspend "locals" >>
+  suspend "immutables"
+QED
+Resume extcall_materialize_vv_alloc_mem[registered]:
+  map_every qx_gen_tac [`aid`, `b`, `sz`, `off`, `len`] >> strip_tac >>
+  `regions_disjoint (w2n w) (type_memory_size tv) b sz` by metis_tac[] >>
+  `off + len <= w2n w \/ w2n w + type_memory_size tv <= off` by
+    (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `mem_bytes_at off len z'.vs_memory = mem_bytes_at off len z.vs_memory` by
+    (qpat_x_assum `!a k. _ ==> mem_bytes_at a k z'.vs_memory = _`
+       (qspecl_then [`off`, `len`] irule) >> simp[]) >>
+  `mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory` by
+    (`aid < sm.cs_next_id` by decide_tac >>
+     `FLOOKUP u.vs_allocas aid = SOME (b,sz)` by metis_tac[] >>
+     qpat_x_assum `!aid b sz off len. _ ==> mem_bytes_at off len z.vs_memory = _`
+       (qspecl_then [`aid`, `b`, `sz`, `off`, `len`] irule) >>
+     qexistsl_tac [`aid`, `b`, `sz`] >> simp[]) >>
+  simp[]
+QED
+Resume extcall_materialize_vv_alloc_mem[locals]:
+  map_every qx_gen_tac [`name`, `b`, `sz`, `off`, `len`] >> strip_tac >>
+  `local_region ce es.scopes u name b sz` by metis_tac[] >>
+  `regions_disjoint (w2n w) (type_memory_size tv) b sz` by metis_tac[] >>
+  `off + len <= w2n w \/ w2n w + type_memory_size tv <= off` by
+    (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `mem_bytes_at off len z'.vs_memory = mem_bytes_at off len z.vs_memory` by
+    (qpat_x_assum `!a k. _ ==> mem_bytes_at a k z'.vs_memory = _`
+       (qspecl_then [`off`, `len`] irule) >> simp[]) >>
+  `mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory` by
+    (qpat_x_assum `!name b sz off len. _ ==> mem_bytes_at off len z.vs_memory = _`
+       (qspecl_then [`name`, `b`, `sz`, `off`, `len`] mp_tac) >> simp[]) >>
+  simp[]
+QED
+Resume extcall_materialize_vv_alloc_mem[immutables]:
+  map_every qx_gen_tac [`name`, `io`, `itv`, `iv`, `off`, `len`] >> strip_tac >>
+  `regions_disjoint io (type_memory_size itv) (w2n w) (type_memory_size tv)` by
+    metis_tac[] >>
+  `off + len <= w2n w \/ w2n w + type_memory_size tv <= off` by
+    (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `mem_bytes_at off len z'.vs_memory = mem_bytes_at off len z.vs_memory` by
+    (qpat_x_assum `!a k. _ ==> mem_bytes_at a k z'.vs_memory = _`
+       (qspecl_then [`off`, `len`] irule) >> simp[]) >>
+  `mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory` by
+    (qpat_x_assum `!name io itv iv off len. _ ==> mem_bytes_at off len z.vs_memory = _`
+       (qspecl_then [`name`, `io`, `itv`, `iv`, `off`, `len`] mp_tac) >> simp[]) >>
+  simp[]
+QED
+Finalise extcall_materialize_vv_alloc_mem
+
 Theorem extcall_materialize_vv_mem:
   compile_materialize_vv ce lt vv sa = (op,sb) /\
   ~is_word_type lt /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -279,135 +464,7 @@ Theorem extcall_materialize_vv_mem:
       io <= off /\ off + len <= io + type_memory_size itv ==>
       mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory)
 Proof
-  strip_tac >> drule_all extcall_materialize_stages >> strip_tac >>
-  `type_memory_bytes ce lt < dimword (:256)` by simp[] >>
-  drule_all extcall_materialize_alloc_value >> strip_tac >>
-  suspend "unwrap"
+  strip_tac >> drule_all extcall_materialize_vv_alloc_mem >>
+  strip_tac >> qexistsl_tac [`z`,`w`] >>
+  pure_asm_rewrite_tac [] >> simp_tac bool_ss []
 QED
-
-Resume extcall_materialize_vv_mem[unwrap]:
-  qpat_x_assum `u = _ with vs_inst_idx := _` kall_tac >>
-  `read_result cx (Value v) es = (INL v,es)` by EVAL_TAC >>
-  `!tag src. vv = StackValue tag src ==>
-    !x. src = Var x ==> not_fresh_at sm x` by
-    (rpt strip_tac >> gvs[vv_operand_def]) >>
-  `!tag ptr. vv = LocatedValue tag ptr ==>
-    (ptr.ptr_location <> LocMemory \/ is_word_type tag \/ is_word_type lt ==> tag = lt) /\
-    (!x. ptr.ptr_operand = Var x ==> not_fresh_at sm x) /\
-    (ptr.ptr_location <> LocMemory ==> lt = lt) /\
-    (is_word_type lt /\ ptr.ptr_location = LocMemory ==>
-      !a. eval_operand ptr.ptr_operand u = SOME a ==>
-        w2n a + 32 <= u.vs_alloca_next) /\
-    (ptr.ptr_location = LocCode /\ ce.ce_is_ctor ==>
-      !region. ce.ce_imm_alloca = SOME region ==>
-        eval_operand region u = SOME 0w /\
-        (!x. region = Var x ==> not_fresh_at sm x))` by
-    (map_every qx_gen_tac [`tag`, `ap`] >> strip_tac >>
-     `!x. ap.ptr_operand = Var x ==> not_fresh_at sm x` by
-       gvs[vv_operand_def] >>
-     simp[] >> rpt strip_tac
-     >- metis_tac[]
-     >- (`eval_operand region u = eval_operand region s` by
-           (Cases_on `region` >> simp[eval_operand_def] >> metis_tac[]) >> metis_tac[]) >>
-     fs[ci_mono_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  drule_all extcall_captured_unwrap_mem >> strip_tac >>
-  suspend "store"
-QED
-Resume extcall_materialize_vv_mem[store]:
-  `eval_operand buf.buf_operand z = SOME w` by
-    (simp[eval_operand_def] >>
-     qpat_x_assum `eval_operand buf.buf_operand u = SOME w` mp_tac >>
-     simp[eval_operand_def] >> metis_tac[]) >>
-  `w2n w + type_memory_size tv <= z.vs_alloca_next` by decide_tac >>
-  `!name b sz. local_region ce es.scopes z name b sz ==>
-    b + sz <= w2n w \/ w2n w + type_memory_size tv <= b` by
-    (rpt strip_tac >>
-     `local_region ce es.scopes u name b sz` by
-       metis_tac[exprSimCopyTheory.copy_buffer_local_region_frame] >>
-     qpat_x_assum `!name b len. local_region ce es.scopes u name b len ==> _`
-       (qspecl_then [`name`, `b`, `sz`] mp_tac) >>
-     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
-  `ce.ce_is_ctor ==> !name itv iv off.
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
-    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
-      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
-    regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)` by
-    (rpt strip_tac >>
-     drule_all extcall_alloc_immutable_separation >>
-     fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
-  `!x. src = Var x \/ buf.buf_operand = Var x ==> not_fresh_at su x` by
-    metis_tac[] >>
-  drule_all extcall_materialize_store_result >> strip_tac >>
-  suspend "join"
-QED
-Resume extcall_materialize_vv_mem[join]:
-  `gas_path_mem ctx func s 0 (OK z')` by
-    (qpat_assum `gas_path_mem ctx func s 0 (OK u)`
-       (mp_then Any mp_tac gas_path_mem_then) >>
-     disch_then drule >> simp[] >> strip_tac >>
-     qpat_assum `gas_path_mem ctx func s 0 (OK z)`
-       (mp_then Any mp_tac gas_path_mem_then) >>
-     disch_then drule >> simp[]) >>
-  `!x. not_fresh_at sa x ==> not_fresh_at sm x /\ not_fresh_at su x` by
-    (fs[ci_mono_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  `sa.cs_next_id < sm.cs_next_id` by
-    (drule loweringHaltTheory.compile_alloc_buffer_parts >> simp[]) >>
-  `!name b sz. local_region ce es.scopes s name b sz ==>
-    local_region ce es.scopes u name b sz` by
-    metis_tac[exprSimCopyTheory.copy_buffer_local_region_frame] >>
-  qexistsl_tac [`z'`, `w`] >> simp[] >>
-  suspend "frames"
-QED
-Resume extcall_materialize_vv_mem[frames]:
-  conj_tac >- metis_tac[] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- suspend "registered" >>
-  conj_tac >- suspend "locals" >>
-  suspend "immutables"
-QED
-Resume extcall_materialize_vv_mem[registered]:
-  map_every qx_gen_tac [`aid`, `b`, `sz`, `off`, `len`] >> strip_tac >>
-  `regions_disjoint (w2n w) (type_memory_size tv) b sz` by metis_tac[] >>
-  `off + len <= w2n w \/ w2n w + type_memory_size tv <= off` by
-    (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  `mem_bytes_at off len z'.vs_memory = mem_bytes_at off len z.vs_memory` by
-    (qpat_x_assum `!a k. _ ==> mem_bytes_at a k z'.vs_memory = _`
-       (qspecl_then [`off`, `len`] irule) >> simp[]) >>
-  `mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory` by
-    (`aid < sm.cs_next_id` by decide_tac >>
-     `FLOOKUP u.vs_allocas aid = SOME (b,sz)` by metis_tac[] >>
-     qpat_x_assum `!aid b sz off len. _ ==> mem_bytes_at off len z.vs_memory = _`
-       (qspecl_then [`aid`, `b`, `sz`, `off`, `len`] irule) >>
-     qexistsl_tac [`aid`, `b`, `sz`] >> simp[]) >>
-  simp[]
-QED
-Resume extcall_materialize_vv_mem[locals]:
-  map_every qx_gen_tac [`name`, `b`, `sz`, `off`, `len`] >> strip_tac >>
-  `local_region ce es.scopes u name b sz` by metis_tac[] >>
-  `regions_disjoint (w2n w) (type_memory_size tv) b sz` by metis_tac[] >>
-  `off + len <= w2n w \/ w2n w + type_memory_size tv <= off` by
-    (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  `mem_bytes_at off len z'.vs_memory = mem_bytes_at off len z.vs_memory` by
-    (qpat_x_assum `!a k. _ ==> mem_bytes_at a k z'.vs_memory = _`
-       (qspecl_then [`off`, `len`] irule) >> simp[]) >>
-  `mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory` by
-    (qpat_x_assum `!name b sz off len. _ ==> mem_bytes_at off len z.vs_memory = _`
-       (qspecl_then [`name`, `b`, `sz`, `off`, `len`] mp_tac) >> simp[]) >>
-  simp[]
-QED
-Resume extcall_materialize_vv_mem[immutables]:
-  map_every qx_gen_tac [`name`, `io`, `itv`, `iv`, `off`, `len`] >> strip_tac >>
-  `regions_disjoint io (type_memory_size itv) (w2n w) (type_memory_size tv)` by
-    metis_tac[] >>
-  `off + len <= w2n w \/ w2n w + type_memory_size tv <= off` by
-    (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  `mem_bytes_at off len z'.vs_memory = mem_bytes_at off len z.vs_memory` by
-    (qpat_x_assum `!a k. _ ==> mem_bytes_at a k z'.vs_memory = _`
-       (qspecl_then [`off`, `len`] irule) >> simp[]) >>
-  `mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory` by
-    (qpat_x_assum `!name io itv iv off len. _ ==> mem_bytes_at off len z.vs_memory = _`
-       (qspecl_then [`name`, `io`, `itv`, `iv`, `off`, `len`] mp_tac) >> simp[]) >>
-  simp[]
-QED
-Finalise extcall_materialize_vv_mem
