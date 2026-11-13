@@ -28,18 +28,19 @@ QED
 
 Theorem extract32_off_operand[local]:
   expr_post H ctx func cenv cx off es sa sb s0 es' (IntV i) off_op t /\
-  expr_type off = BaseT (UintT k) /\ 0 <= i ==>
+  expr_type off = BaseT (UintT k) /\ 0 <= i /\
+  0 < k /\ k <= 256 /\ k MOD 8 = 0 ==>
   eval_operand off_op t = SOME (n2w (Num i))
 Proof
   strip_tac >>
   `post_value_type cenv off = expr_type off` by
     (irule post_value_type_word >> simp[is_word_type_def]) >>
-  `expr_val_rel cx (expr_type off) (IntV i) off_op t` by gvs[expr_post_def] >>
-  `is_word_type (expr_type off)` by simp[is_word_type_def] >>
   `~(i < 0)` by intLib.ARITH_TAC >>
-  drule_all expr_val_rel_typed >>
-  simp[is_word_type_def, typed_val_to_w256_def, val_to_w256_def,
-       integer_wordTheory.i2w_def, integerTheory.INT_NOT_LT]
+  qpat_x_assum `expr_post _ _ _ _ _ off _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def,
+      value_has_type_def, expr_val_rel_def, is_word_type_def, evaluate_type_def,
+      typed_val_to_w256_def, val_to_w256_def, integer_wordTheory.i2w_def]
 QED
 
 
@@ -81,20 +82,20 @@ Proof
      rpt strip_tac >> imp_res_tac emitted_insts_emit_op >> gvs[]) >>
   `(!l. len <> Label l) /\ (!l. data <> Label l)` by
     (qpat_assum `len = Var _` mp_tac >> qpat_assum `data = Var _` mp_tac >>
-     rpt strip_tac >> simp[]) >>
+     rpt strip_tac >> gvs[]) >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ src _`
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `src_op`, `s0`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
   strip_tac >>
   rewrite_tac[extract32_read_action] >>
-  match_mp_tac extract32_outcome_bind_marked >>
-  qexists_tac `\H v ee t.
+  match_mp_tac (Q.INST [`P` |-> `\H v ee t.
     expr_post H ctx func cenv cx src es sa s1 s0 ee v src_op t /\
     expr_store_bound cx (expr_type src) v src_op t /\
     t.vs_current_bb = s1.cs_current_bb /\
     t.vs_inst_idx = LENGTH s1.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next`]
+    (SPEC_ALL extract32_outcome_bind_marked)) >>
   conj_tac
   >- (`!(res:value + exception) r.
          (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r) <=>
@@ -160,8 +161,15 @@ Resume compile_extract32_sim_mem[stage1]:
     (qpat_assum `bind (eval_expr cx src) (read_result cx) _ = _`
        (mp_tac o MATCH_MP (CONV_RULE (DEPTH_CONV ETA_CONV)
          exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom)) >> simp[]) >>
+  `cap < dimword (:256) /\
+   type_slot_size (BaseTV (BytesT (Dynamic cap))) <= dimword (:256)` by
+    (qpat_assum `expr_body_pre cenv cx env src _`
+       (mp_then Any mp_tac exprSimHypsTheory.expr_body_pre_type_evaluates) >>
+     qpat_assum `expr_type src = _` (fn th => rewrite_tac[th]) >>
+     simp[evaluate_type_def]) >>
   `evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
-     SOME (BaseTV (BytesT (Dynamic cap)))` by simp[evaluate_type_def] >>
+     SOME (BaseTV (BytesT (Dynamic cap)))` by
+    (simp[evaluate_type_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `evaluate_type (get_tenv cx) (expr_type src) =
      SOME (BaseTV (BytesT (Dynamic cap)))` by simp[] >>
   `!x. src_op = Var x ==> not_fresh_at s1 x` by
@@ -199,13 +207,13 @@ Resume compile_extract32_sim_mem[stage1]:
   strip_tac >>
   irule gas_outcome_zero_prefix_mem >> qexists_tac `u` >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  match_mp_tac extract32_outcome_bind_marked >>
-  qexists_tac `\H n ee t.
+  match_mp_tac (Q.INST [`P` |-> `\H n ee t.
     expr_post H ctx func cenv cx off ee1 s2 s3 u ee n off_op t /\
     expr_store_bound cx (expr_type off) n off_op t /\
     t.vs_current_bb = s3.cs_current_bb /\
     t.vs_inst_idx = LENGTH s3.cs_current_insts /\
-    alloca_history func t /\ u.vs_alloca_next <= t.vs_alloca_next` >>
+    alloca_history func t /\ u.vs_alloca_next <= t.vs_alloca_next`]
+    (SPEC_ALL extract32_outcome_bind_marked)) >>
   conj_tac
   >- (`!(res:value + exception) r.
          (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r) <=>
@@ -296,6 +304,11 @@ Resume compile_extract32_sim_mem[stage2]:
     (qpat_assum `!H. valid_horizon cx st0 H ee2.storage_trace ==>
                      stmt_state_rel H ctx func cenv cx ee2 t2 /\ _`
        (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+  `0 < k /\ k <= 256 /\ k MOD 8 = 0` by
+    (qpat_assum `expr_body_pre cenv cx env off _`
+       (mp_then Any mp_tac exprSimHypsTheory.expr_body_pre_type_evaluates) >>
+     qpat_assum `expr_type off = _` (fn th => rewrite_tac[th]) >>
+     simp[evaluate_type_def]) >>
   `eval_operand off_op t2 = SOME (n2w (Num i))` by
     (drule_all extract32_off_operand >> simp[]) >>
   `b < dimword (:256)` by decide_tac >>
@@ -309,25 +322,27 @@ Resume compile_extract32_sim_mem[stage2]:
        (mp_then (Pos hd) mp_tac
           exprSimExtract32PostTheory.extract32_post_operand_kept) >>
      disch_then (qspec_then `len` mp_tac) >>
+     disch_then (qspec_then `n2w (LENGTH bs)` mp_tac) >>
      (impl_tac >-
-        (conj_tac
-         >- (rpt strip_tac >>
-             qpat_x_assum `!x. len = Var x \/ data = Var x ==> not_fresh_at s2 x`
-               irule >> simp[])
-         >> first_assum ACCEPT_TAC)) >>
-     disch_then (qspec_then `n2w (LENGTH bs)` mp_tac) >> simp[]) >>
+        (rpt conj_tac >>
+         FIRST [first_assum ACCEPT_TAC,
+                (rpt strip_tac >>
+                 qpat_x_assum `!x. len = Var x \/ data = Var x ==> not_fresh_at s2 x`
+                   irule >> simp[] >> NO_TAC)])) >>
+     simp[]) >>
   `eval_operand data t2 = SOME (n2w (b + 32))` by
     (qpat_assum `expr_post _ _ _ _ _ off _ _ _ _ _ _ _ t2`
        (mp_then (Pos hd) mp_tac
           exprSimExtract32PostTheory.extract32_post_operand_kept) >>
      disch_then (qspec_then `data` mp_tac) >>
+     disch_then (qspec_then `n2w (b + 32)` mp_tac) >>
      (impl_tac >-
-        (conj_tac
-         >- (rpt strip_tac >>
-             qpat_x_assum `!x. len = Var x \/ data = Var x ==> not_fresh_at s2 x`
-               irule >> simp[])
-         >> first_assum ACCEPT_TAC)) >>
-     disch_then (qspec_then `n2w (b + 32)` mp_tac) >> simp[]) >>
+        (rpt conj_tac >>
+         FIRST [first_assum ACCEPT_TAC,
+                (rpt strip_tac >>
+                 qpat_x_assum `!x. len = Var x \/ data = Var x ==> not_fresh_at s2 x`
+                   irule >> simp[] >> NO_TAC)])) >>
+     simp[]) >>
   `b + 32 + LENGTH bs <= t2.vs_alloca_next` by
     (qpat_x_assum `w2n _ + w2n _ <= u.vs_alloca_next` mp_tac >>
      simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> decide_tac) >>
@@ -345,11 +360,14 @@ Resume compile_extract32_sim_mem[stage2]:
     (simp[expr_has_effect_thm] >> rpt strip_tac >>
      drule_all extract32_operands_pure_frame >> simp[]) >>
   `well_formed_type (get_tenv cx) (BaseT bt)` by
-    (qpat_assum `expr_body_pre cenv cx env (TypeBuiltin _ _ _ _) es` mp_tac >>
-     simp[expr_body_pre_def, well_typed_expr_def]) >>
+    (`env.type_defs = get_tenv cx` by
+       fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+          env_context_consistent_def] >>
+     fs[expr_body_pre_def, well_typed_expr_def]) >>
   `alloca_room ctx func t2` by
-    (qpat_x_assum `stmt_state_rel H1 ctx func cenv cx ee2 t2` mp_tac >>
-     simp[stmt_state_rel_def]) >>
+    (qpat_assum `stmt_state_rel H1 ctx func cenv cx ee2 t2`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+     first_assum ACCEPT_TAC) >>
   `t2.vs_alloca_next < dimword (:256)` by
     metis_tac[alloca_room_next_lt] >>
   `Num i + 32 <= LENGTH bs ==> b + 32 + Num i < dimword (:256)` by decide_tac >>
@@ -374,8 +392,13 @@ Resume compile_extract32_sim_mem[suffix_success]:
   drule_all extract32_word_suffix_success >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_path_mem ctx func t2 ng (OK u')` >>
   `u.vs_alloca_next = t1.vs_alloca_next` by
-    (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = t1`
-       (mp_tac o Q.AP_TERM `vs_alloca_next`) >> simp[]) >>
+    (first_assum (fn th =>
+       let val c = concl th
+       in if is_eq c andalso is_comb (lhs c) andalso is_var (rhs c) andalso
+             fst (dest_var (rhs c)) = "t1"
+          then SUBST1_TAC (SYM th) else NO_TAC
+       end) >>
+     simp[]) >>
   `s0.vs_alloca_next <= u'.vs_alloca_next` by decide_tac >>
   rewrite_tac[gas_outcome_def] >>
   qexists_tac `REPLICATE ng F` >> disj2_tac >> disj1_tac >>
@@ -412,7 +435,7 @@ Resume compile_extract32_sim_mem[suffix_revert]:
   qexists_tac `REPLICATE k' F` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR (Error (RuntimeError msg))`, `ee2`,
-    `Abort Revert_abort (t'' with vs_inst_idx := j)`] >>
+    `Abort Revert_abort (t with vs_inst_idx := j)`] >>
   conj_tac
   >- simp[gas_marked_exec_def, gas_marked_path_def,
           vyperContextTheory.evaluate_type_builtin_def,

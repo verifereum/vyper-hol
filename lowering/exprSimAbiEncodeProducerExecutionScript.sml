@@ -43,7 +43,7 @@ QED
 
 (* Resource supplement for the actual word producer. *)
 Theorem abi_encode_word_prefix_phase_resources:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   (do result <- eval_expr cx e; read_result cx result od) es = (INL v,es') /\
   evaluate_type_builtin cx (AbiEncode F mid0) (TupleT [expr_type e])
@@ -65,7 +65,7 @@ Theorem abi_encode_word_prefix_phase_resources:
     let a = abi_builtin_allocate_state sh.cs_next_id outsz staged in
     run_inst_seq (emitted_insts sa sm) s = OK allocated /\
     run_inst_seq (emitted_insts sm sh) allocated = OK staged /\
-    stmt_state_rel ctx func ce cx es' staged /\
+    stmt_state_rel H ctx func ce cx es' staged /\
     eval_operand buf.buf_operand allocated = SOME addr /\
     enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (expr_type e))
       (THE (vyper_to_abi (get_tenv cx) (expr_type e) v)) /\
@@ -89,8 +89,8 @@ Proof
   strip_tac >> drule_all abi_encode_word_prefix_resources >>
   simp_tac bool_ss [LET_THM] >>
   disch_then (qspec_then `sf` strip_assume_tac) >>
-  qmatch_asmsub_abbrev_tac `stmt_state_rel ctx func ce cx es' staged` >>
-  `stmt_state_rel ctx func ce cx es' s` by fs[expr_post_def] >>
+  qmatch_asmsub_abbrev_tac `stmt_state_rel H ctx func ce cx es' staged` >>
+  `stmt_state_rel H ctx func ce cx es' s` by fs[expr_post_def] >>
   `32 < dimword (:256)` by simp[dimword_def] >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >> gvs[] >>
@@ -132,7 +132,7 @@ Proof
 QED
 
 Theorem abi_encode_word_producer_phases:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   (do result <- eval_expr cx e; read_result cx result od) es = (INL v,es') /\
   evaluate_type_builtin cx (AbiEncode F mid0) (TupleT [expr_type e])
@@ -193,7 +193,7 @@ Proof
   qexistsl [`allocated`, `addr`, `ct`, `rv`, `p`] >>
   simp_tac bool_ss [LET_THM] >> asm_rewrite_tac [] >>
   rpt strip_tac >>
-  qmatch_asmsub_abbrev_tac `stmt_state_rel ctx func ce cx es' staged` >>
+  qmatch_asmsub_abbrev_tac `stmt_state_rel H ctx func ce cx es' staged` >>
   `abi_size_bound ce.ce_struct_fields (expr_type e) = 32` by
     metis_tac[abi_encode_word_size_bound] >>
   `abi_encoder_admissible (type_to_abi_enc_info sf ce (expr_type e))` by
@@ -242,7 +242,7 @@ QED
 (* The counted unwrap ends in expr_post at sa, retaining origin.  In the
    empty case its actual pointer remains unconstrained by the frontier. *)
 Theorem abi_encode_nonword_producer_source_split:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   ~is_word_type (post_value_type ce e) /\
   abi_enc_plan (get_tenv cx) (post_value_type ce e) ei /\
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
@@ -267,7 +267,7 @@ QED
 (* Resources at the actual nonword expression boundary. Empty footprints
    retain the real pointer and impose no endpoint constraint. *)
 Theorem abi_encode_nonword_phase_resources:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
@@ -386,7 +386,7 @@ Proof
   unabbrev_all_tac >> asm_rewrite_tac [] >>
   conj_tac >- simp[venomMemDefsTheory.regions_disjoint_def] >>
   rpt gen_tac >> strip_tac >>
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) abi_encode_nonword_scratch_row >>
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) abi_encode_nonword_scratch_row >>
   disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (b,sz)`)) >>
@@ -415,7 +415,7 @@ local
     |> PURE_REWRITE_RULE [REFL_CLAUSE, IMP_CLAUSES, AND_CLAUSES];
 in
 Theorem abi_encode_nonword_producer_phases:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
