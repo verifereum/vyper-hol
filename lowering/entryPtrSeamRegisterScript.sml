@@ -1737,15 +1737,15 @@ Proof
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
   rename1 `lookup_var q ready = SOME (n2w p)` >>
   drule_all registration_preparation_forward_slots >> strip_tac >>
+  `mid.cs_next_id <= first.cs_next_id` by
+    (Cases_on `dyn` >> fs[] >>
+     drule calldataRegistrationExecTheory.registration_ptr_guard_code >>
+     simp[]) >>
   `st.cs_next_id < first.cs_next_id` by
     (`st.cs_next_id < mid.cs_next_id` by
        (qpat_x_assum `!id entry. FLOOKUP ready.vs_allocas id = SOME entry ==>
                         id < mid.cs_next_id` irule >>
         qexists_tac `(p,type_memory_size tv)` >> first_assum ACCEPT_TAC) >>
-     `mid.cs_next_id <= first.cs_next_id` by
-       (Cases_on `dyn` >> fs[] >>
-        drule calldataRegistrationExecTheory.registration_ptr_guard_code >>
-        simp[]) >>
      decide_tac) >>
   `first.cs_next_var <= last.cs_next_var` by
     metis_tac[abiDecoderCountersTheory.abi_decoder_vars_mono_mutual,
@@ -1772,7 +1772,7 @@ Proof
   (impl_tac >-
     (gvs[Excl "enc_def"] >> rpt strip_tac >>
      qpat_x_assum `!id entry. FLOOKUP ready.vs_allocas id = SOME entry ==> _`
-       drule >> simp[])) >>
+       drule >> simp[] >> rpt strip_tac >> decide_tac)) >>
   strip_tac >>
   qexistsl_tac [`t`, `H'`, `u'`, `q`, `p`] >>
   `CALLDATALOAD <> ALLOCA` by simp[] >>
