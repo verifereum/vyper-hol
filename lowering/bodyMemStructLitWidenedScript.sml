@@ -102,7 +102,8 @@ Resume body_struct_lit_widened_flat_mem[value_post]:
      (StructV (ZIP (MAP FST kes,vs))) <= type_memory_size_list tvs` by
     (drule val_footprint_le >> simp[type_memory_size_def] >>
      `LENGTH (MAP FST kes) = LENGTH tvs` by
-       (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+       (drule vyperTypeABITheory.OPT_MMAP_LENGTH >>
+        imp_res_tac listTheory.LIST_REL_LENGTH >> fs[]) >>
      simp[struct_layout_size_zip]) >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
@@ -163,7 +164,8 @@ Resume body_struct_lit_widened_flat_mem[buffer_post]:
   qexistsl [`sa.cs_next_id`, `b`, `type_memory_size_list tvs`] >>
   simp[] >>
   `LENGTH (MAP FST kes) = LENGTH tvs` by
-    (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+    (drule vyperTypeABITheory.OPT_MMAP_LENGTH >>
+     imp_res_tac listTheory.LIST_REL_LENGTH >> fs[]) >>
   simp[type_memory_size_def, struct_layout_size_zip,
        venomStateTheory.eval_operand_def] >>
   metis_tac[]
