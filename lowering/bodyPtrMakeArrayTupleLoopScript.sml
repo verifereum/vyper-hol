@@ -190,7 +190,8 @@ Resume literal_tuple_flat_loop_outcome_ptr[cons]:
   `type_memory_bytes ce dty = type_memory_size dtv` by
     metis_tac[expr_sim_inv_memory_size] >>
   `off + type_memory_bytes ce dty <= capacity` by
-    (fs[type_memory_size_def] >> decide_tac) >>
+    (qpat_x_assum `_ = tvs` (assume_tac o SYM) >>
+     fs[type_memory_size_def] >> decide_tac) >>
   qpat_assum `!e. e = hd \/ MEM e args ==> _`
     (qspec_then `hd` (assume_tac o SRULE [])) >>
   `off + type_memory_size dtv <= capacity` by metis_tac[] >>
@@ -211,10 +212,10 @@ Resume literal_tuple_flat_loop_outcome_ptr[cons]:
       ees fr sf Gf tnf ee ss H tm z
       (cells ++ [(dtv,v,addr+off,type_memory_size dtv)]) (off+type_memory_size dtv) /\
     literal_prefix_ok (cells ++ [(dtv,v,addr+off,type_memory_size dtv)]) tm z` >>
-  conj_tac >- (simp[] >> metis_tac[]) >>
+  (conj_tac >- (simp[] >> metis_tac[])) >>
   rpt gen_tac >> strip_tac >>
-  `expr_sim_inv ce cx env ee` by metis_tac[literal_marked_value_inv] >>
-  `body_exprs_ptr_ok cx args` by metis_tac[literal_marked_children_tail] >>
+  `expr_sim_inv ce cx env ee` by (drule_all literal_marked_value_inv >> simp[]) >>
+  `body_exprs_ptr_ok cx args` by (drule_all literal_marked_children_tail >> simp[]) >>
   suspend "tail"
 QED
 Resume literal_tuple_flat_loop_outcome_ptr[tail]:
@@ -225,7 +226,8 @@ Resume literal_tuple_flat_loop_outcome_ptr[tail]:
    (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at ss p)` by
     metis_tac[not_fresh_at_mono, ci_mono_def] >>
   `off + type_memory_size dtv + type_memory_size_list dtvs <= capacity` by
-    (fs[type_memory_size_def] >> decide_tac) >>
+    (qpat_x_assum `_ = tvs` (assume_tac o SYM) >>
+     fs[type_memory_size_def] >> decide_tac) >>
   qpat_x_assum `!tys' ce' cx' env' off' si' out' sb' es' tvs' cells' G0' tn0' s0'. _`
     (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)) >>
   simp[] >>
@@ -288,7 +290,12 @@ Proof
      (MAP expr_type args) args` by
     (simp[LIST_REL_MAP1] >> irule EVERY2_refl >> simp[]) >>
   mp_tac (Q.INST [`tys` |-> `MAP expr_type args`]
-    (SPEC_ALL literal_tuple_flat_loop_outcome_ptr)) >> simp[]
+    (SPEC_ALL literal_tuple_flat_loop_outcome_ptr)) >> simp[] >>
+  impl_tac
+  >- (strip_tac >> fs[listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >> metis_tac[]) >>
+  strip_tac >> simp[] >>
+  irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
+  simp[literal_prefix_ok_def, listTheory.EVERY_APPEND] >> metis_tac[]
 QED
 
 Theorem literal_array_flat_loop_outcome_ptr:
@@ -385,5 +392,8 @@ Proof
   `EVERY (\e. elem_ty = expr_type e \/
      is_bytestring_type elem_ty /\ is_bytestring_type (expr_type e)) args` by
     (fs[EVERY_MEM] >> metis_tac[]) >>
-  mp_tac (SPEC_ALL literal_array_flat_loop_outcome_ptr) >> simp[]
+  mp_tac (SPEC_ALL literal_array_flat_loop_outcome_ptr) >> simp[] >>
+  impl_tac
+  >- (strip_tac >> fs[listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >> metis_tac[]) >>
+  simp[]
 QED
