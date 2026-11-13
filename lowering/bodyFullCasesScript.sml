@@ -9,7 +9,7 @@
 Theory bodyFullCases
 Ancestors
   bodyFullAssign bodyFullAssignTuple bodyFullAugAssign bodyFullAnnAssign
-  bodyFullAppend annAssignPtrFacts
+  bodyFullAppend annAssignPtrFacts bodyFullIfExp
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullCtrlCases
   gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
@@ -458,7 +458,7 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.if_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_ifexp_case_ptr_at (bodyPtrExprCases). *)
+(* The joint twin of body_ifexp_case_ptr_at (bodyPtrExprCases): bodyFullIfExp. *)
 Theorem body_ifexp_case_full:
   !cx v5 e1 e2 e3.
     (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok cx e2) /\
@@ -466,7 +466,7 @@ Theorem body_ifexp_case_full:
     body_expr_full_ok cx e1 ==>
     body_expr_full_ok cx (IfExp v5 e1 e2 e3)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullIfExpTheory.ifexp_expr_full_ok
 QED
 
 (* Admitted: the joint twin of body_intcall_case_ptr_at (bodyPtrIntCallCase). *)
