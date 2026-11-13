@@ -2,6 +2,7 @@
 Theory assignDynStorageDataPtr
 Ancestors
   assignDynStorageAddressPtr assignStorageBlockFramePtr assignTupleStorageAddressPtr
+  assignStorageExecFramePtr
   assignBasePtrStorageFrame assignBasePtrStorageLoop assignTuplePtrCopyLen placeStoreCopyPath
   typedMemoryCopy context compileEnv exprLoweringProps freshWrites
   bodyPtrDefs fragGasPathPtr fragExec ptrDiscipline venomState venomExecSemantics stateFrame
@@ -36,6 +37,9 @@ Theorem dyn_storage_multi_data_counted:
       gas_path_ptr D 0 ctx fn PG G tn s 0 H tt (OK u) /\
       assign_base_store_frame (if tr then LocTransient else LocStorage)
         (a+n2w (32+idx*ems)) (k+n2w (1+idx*ew)) s tn ew u tt /\
+      execution_frame u = execution_frame (store_copy_prefix
+        (if tr then LocTransient else LocStorage)
+        (a+n2w (32+idx*ems)) (k+n2w (1+idx*ew)) s ew) /\
       u.vs_current_bb = sh.cs_current_bb /\
       u.vs_inst_idx = LENGTH sh.cs_current_insts /\ ~u.vs_halted /\
       u.vs_labels = s.vs_labels /\
@@ -135,10 +139,35 @@ Resume dyn_storage_multi_data_counted[join]:
   `gas_path_ptr D 0 ctx fn PG G tn s 0 H tt (OK u)` by
     (qpat_assum `gas_path_ptr D 0 ctx fn PG G tn s 0 G2 tn2 (OK s2)`
       (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
+  `execution_frame s2 = execution_frame s` by
+    (simp[execution_frame_def] >> metis_tac[]) >>
+  `execution_frame u = execution_frame (store_copy_prefix
+     (if tr then LocTransient else LocStorage)
+     (a+n2w (32+idx*ems)) (k+n2w (1+idx*ew)) s ew)` by
+    (qpat_assum `execution_frame u = execution_frame (store_copy_prefix _ _ _ s2 _)` mp_tac >>
+     qpat_assum `execution_frame s2 = execution_frame s` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     rpt strip_tac >>
+     mp_tac (Q.SPECL [`ew`,`if tr then LocTransient else LocStorage`,
+       `(a:bytes32)+n2w (32+idx*ems)`,`(k:bytes32)+n2w (1+idx*ew)`,`s2`,`s`]
+       store_copy_prefix_execution_frame) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (fn th => once_rewrite_tac[GSYM th]) >>
+     first_assum ACCEPT_TAC) >>
   `u.vs_labels = s.vs_labels` by
-    (qpat_x_assum `execution_frame u = _` (mp_tac o Q.AP_TERM `\v. v.vs_labels`) >>
+    (qpat_assum `execution_frame u = execution_frame (store_copy_prefix _ _ _ s _)`
+       (mp_tac o Q.AP_TERM `\v. v.vs_labels`) >>
+     POP_ASSUM_LIST (K all_tac) >>
      simp[execution_frame_def, place_store_prefix_fields]) >>
-  qexistsl_tac [`H`,`tt`,`u`] >> simp[] >> metis_tac[]
+  `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)` by
+    (qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at sd x /\ not_fresh_at sg x` mp_tac >>
+     qpat_assum `!x. not_fresh_at sa x ==> lookup_var x s1 = lookup_var x s /\ _` mp_tac >>
+     qpat_assum `!x. not_fresh_at sd x ==> lookup_var x s2 = lookup_var x s1 /\ _` mp_tac >>
+     qpat_assum `!x. not_fresh_at sg x ==> lookup_var x u = lookup_var x s2 /\ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  qexistsl_tac [`H`,`tt`,`u`] >> gvs[execution_frame_def]
+
 QED
 
 Finalise dyn_storage_multi_data_counted
