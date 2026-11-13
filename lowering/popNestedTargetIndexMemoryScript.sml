@@ -25,6 +25,7 @@ Theorem pop_nested_target_index_outcome_mem:
     (\res ee u. ?v. res = INL v /\
        target_post ctx func cenv cx es sa sn s0 ee pv vt rb u /\
        expr_post ctx func cenv cx e es1 sm sn t ee v ix u /\
+       expr_store_bound cx (expr_type e) v ix u /\
        u.vs_current_bb = sn.cs_current_bb /\
        u.vs_inst_idx = LENGTH sn.cs_current_insts /\
        alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next)
