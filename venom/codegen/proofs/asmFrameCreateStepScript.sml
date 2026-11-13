@@ -877,7 +877,7 @@ Proof
     (irule asm_step_fault_outcome >> simp[] >>
      qexistsl [`p`, `t`] >> gvs[vfm_abort_def]) >>
   irule asm_frame_fault_step_ok >> goal_assum (drule_at Any) >>
-  (reverse conj_tac >- (qexistsl [`ex`, `r`, `u`] >> gvs[]) >>
+  (reverse conj_tac >- (conj_tac >- simp[] >> qexistsl [`ex`, `r`, `u`] >> gvs[]) >>
    qexists `a with as_returndata := []` >>
    Cases_on `salt_opt` >>
    gvs[asm_step_def, asm_step_op_def, asm_step_arith_def, asm_step_compare_def,

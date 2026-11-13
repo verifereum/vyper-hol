@@ -231,7 +231,7 @@ QED
 
 Theorem initial_ctx_codegen_asm_entry_rel:
   !cp prog ctx vs es.
-    initial_ctx_rel cp prog ctx vs es ==>
+    initial_ctx_rel cp prog ctx vs es /\ ~vs.vs_call_ctx.cc_static ==>
     codegen_asm_entry_rel cp prog vs (entry_asm_state vs es)
 Proof
   rw[initial_ctx_rel_def] >>
