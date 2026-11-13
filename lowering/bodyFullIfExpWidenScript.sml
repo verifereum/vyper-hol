@@ -1324,6 +1324,16 @@ Proof
      qpat_x_assum `!aid b len. aid < sm.cs_next_id /\ _ ==> _`
        (qspecl_then [`old`, `off`, `k`] mp_tac) >>
      simp[regions_disjoint_def] >> decide_tac) >>
+  `sn.cs_next_id <= sb.cs_next_id` by
+    (qspecl_then [`src`, `buf.buf_operand`, `sn`] mp_tac
+      ci_mono_compile_store_bytestring >> simp[ci_mono_def]) >>
+  `p = STRING #"%" (toString sm.cs_next_var)` by
+    (qpat_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     qpat_assum `buf.buf_operand = Var p` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_return_def,
+       comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def] >>
+     rpt strip_tac >> gvs[]) >>
   qabbrev_tac `final = sf with vs_inst_idx := su.vs_inst_idx + LENGTH (emitted_insts sn sb)` >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      expr_post H ctx func cenv cx (IfExp t c a b) es1 sa sb u ee v (Var p) final /\
@@ -1349,9 +1359,66 @@ Proof
        qpat_x_assum `type_memory_bytes cenv t = type_memory_size rty` mp_tac >>
        qpat_x_assum `buf.buf_operand = Var p` mp_tac >>
        qpat_x_assum `Abbrev (ai = _)` mp_tac >>
-       simp[markerTheory.Abbrev_def, mk_inst_def] >> rpt strip_tac >>
-       simp[] >> decide_tac) >>
+       qpat_x_assum `p = STRING _ _` mp_tac >>
+       simp[markerTheory.Abbrev_def, mk_inst_def]) >>
      qexistsl [`e`, `len`, `sn`, `src`, `sw`] >>
-     simp[] >> FAIL_TAC "endpoint residual") >>
+     simp[] >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+     conj_tac >- (fs[wordsTheory.dimword_def] >> decide_tac) >>
+     qpat_x_assum `mload (w2n sw) su = _` mp_tac >>
+     qpat_x_assum `n = val_store_size rty v` mp_tac >>
+     qpat_x_assum `n = 32 + 32 * _` mp_tac >>
+     qpat_x_assum `compile_store_bytestring src buf.buf_operand sn = _` mp_tac >>
+     simp[mload_def, mem_word_at_def, word_size_def]) >>
+  `lo <= w2n w` by
+    (qpat_x_assum `allocas_from lo su` mp_tac >>
+     qpat_x_assum `FLOOKUP su.vs_allocas sm.cs_next_id = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[allocas_from_def] >> metis_tac[]) >>
+  `mem_bytes_at (w2n w) n final.vs_memory = mem_bytes_at (w2n sw) n su.vs_memory /\
+   (!i. i < n ==> (w2n w+i IN tnf.t_mem <=> w2n sw+i IN tu.t_mem)) /\
+   (!i. i NOTIN {j | w2n w <= j /\ j < w2n w+n} ==>
+     mem_bytes_at i 1 final.vs_memory = mem_bytes_at i 1 su.vs_memory /\
+     (i IN tnf.t_mem <=> i IN tu.t_mem)) /\
+   (!i. i < lo ==> i NOTIN {j | w2n w <= j /\ j < w2n w+n}) /\
+   mem_bytes_at 0 lo final.vs_memory = mem_bytes_at 0 lo su.vs_memory` by
+    (irule ifexp_widen_copy_endpoint_windows >>
+     simp[Abbr `final`] >>
+     qexistsl [`cenv`, `lowered_value_type cenv e`, `op`, `sb`, `sm`, `t`, `vv`] >>
+     simp[]) >>
+  `sf with <|vs_vars := su.vs_vars; vs_memory := su.vs_memory|> = su` by
+    (qpat_x_assum `!H. valid_horizon _ _ _ _ ==> expr_post _ _ _ _ _ (IfExp _ _ _ _) _ _ _ _ _ _ _ _ /\ _` drule >> simp[]) >>
+  `final.vs_allocas = su.vs_allocas /\ final.vs_alloca_next = su.vs_alloca_next /\
+   final.vs_immutables = su.vs_immutables /\ final.vs_call_ctx = su.vs_call_ctx /\
+   final.vs_accounts = su.vs_accounts /\ final.vs_transient = su.vs_transient` by
+    (simp[Abbr `final`] >>
+     qpat_x_assum `sf with <|vs_vars := _; vs_memory := _|> = su` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     disch_then (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
+  `FLOOKUP Gu p = SOME (w2n w,type_memory_bytes cenv t) /\ op_taint tu (Var p) = {}` by
+    (qpat_x_assum `!x. not_fresh_at salloc x ==> _` (qspec_then `p` mp_tac) >>
+     simp[Abbr `Ga`, Abbr `ta`, Abbr `ai`, step_prov_def, out_prov_def,
+       set_prov_def, mk_inst_def, step_taint_def, set_var_taint_def, out_taint_def,
+       op_taint_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, Abbr `q`]) >>
+  `lookup_var p final = SOME w /\ FLOOKUP Gf p = SOME (w2n w,type_memory_bytes cenv t) /\
+   op_taint tnf (Var p) = {}` by
+    (qpat_x_assum `!p. not_fresh_at sn p ==> _` (qspec_then `p` mp_tac) >>
+     simp[Abbr `final`, lookup_var_def]) >>
+  `!mem. mem_agree_outside tu.t_mem su.vs_memory mem ==>
+      val_in_memory rty v (w2n sw) mem` by
+    (qpat_x_assum `ptr_val_ok cx t v src Gu tu su` mp_tac >>
+     simp[ptr_val_ok_def, ptr_mem_ok_def] >>
+     disch_then (qspecl_then [`rty`, `sw`] mp_tac) >> simp[]) >>
+  `val_wf rty v` by
+    (qpat_x_assum `!mem. mem_agree_outside tu.t_mem _ _ ==> _` (qspec_then `su.vs_memory` mp_tac) >>
+     simp[mem_agree_outside_def] >> metis_tac[val_in_memory_wf]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv_at (DF H) lo d cenv cx ee Gf tnf final /\
+    ptr_val_ok cx t v (Var p) Gf tnf final /\
+    (!e'. lowered_value_type cenv e' = t ==> ptr_buf_ok cenv e' (Var p) Gf final) /\
+    ghost_kept_at lo cenv es1 sa G1 tn1 u Gf tnf` by
+    (gen_tac >> strip_tac >> irule ifexp_widen_copy_ghost_finish >>
+     asm_rewrite_tac[] >> FAIL_TAC "ghost interface") >>
   FAIL_TAC "finish"
 QED
