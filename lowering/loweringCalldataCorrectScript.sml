@@ -33,6 +33,7 @@ Theorem lower_vyper_runtime_unit_correct_dispatched:
     ==>
     source_unit_execution_correct tops ret am tx unit vs
 Proof
+  (* HELD ADMISSION SEQ-4939: S1 for noncanonical/__default__ dispatch; needs the entry chain over calldata_exact_owned_run *)
   cheat
 QED
 
@@ -51,6 +52,7 @@ Theorem lower_vyper_runtime_unit_reverts:
     ?fuel s. run_context fuel unit.cu_context vs = Abort Revert_abort s /\
              s.vs_returndata = []
 Proof
+  (* HELD ADMISSION SEQ-4940: S1 revert on a NONE dispatch; needs the selector-miss and decode-failure entry runs *)
   cheat
 QED
 
@@ -77,6 +79,7 @@ Theorem lower_vyper_runtime_unit_memory_ok_dispatched:
           (external_call_dead tx (call_external (SOME vs.vs_outcomes) [] am tx))
           unit.cu_context vs
 Proof
+  (* HELD ADMISSION SEQ-4941: S3 twin of SEQ-4939 *)
   cheat
 QED
 
@@ -96,6 +99,7 @@ Theorem lower_vyper_runtime_unit_reverts_memory_ok:
         ptr_discipline 0 unit.cu_context vs /\
         ?D. dead_wf D /\ taint_within D unit.cu_context vs
 Proof
+  (* HELD ADMISSION SEQ-4942: S3 twin of SEQ-4940 *)
   cheat
 QED
 
@@ -116,5 +120,6 @@ Theorem lower_vyper_runtime_unit_dload_offset_ok_dispatched:
           (gas_explicit marks vs.vs_gas_readings) am tx))
     ==> mem_inv dload_offset_ok unit.cu_context vs
 Proof
+  (* HELD ADMISSION SEQ-4943: dispatched form of the proved canonical dload_offset_ok *)
   cheat
 QED

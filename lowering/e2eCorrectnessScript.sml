@@ -1045,6 +1045,7 @@ Theorem vyper_call_reverts:
       (frame_resource_starved es r es' \/
        ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
 Proof
+  (* HELD ADMISSION SEQ-4945: e2e composition of SEQ-4940/SEQ-4942 through both finalizers *)
   cheat
 QED
 
