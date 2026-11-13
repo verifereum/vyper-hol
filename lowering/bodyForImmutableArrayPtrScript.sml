@@ -335,7 +335,39 @@ Resume body_for_immutable_array_ptr[initialize]:
 QED
 
 Resume body_for_immutable_array_ptr[counted]:
-  FAIL_TAC "immutable pointer counted loop bridge"
+  map_every qunabbrev_tac [`ainst`, `g`, `vld`, `tot`] >>
+  mp_tac (Q.INST [`et` |-> `typ`, `ty` |-> `ret_ty`, `stmts` |-> `body`,
+    `orig` |-> `s0`] (SPEC_ALL immutable_code_loop_outcome_ptr)) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then (qspecl_then [`0`, `es with gas_obs := []`, `cc`, `dst`, `H`, `tm`]
+    (mp_tac o SIMP_RULE list_ss [])) >>
+  impl_tac
+  >- (asm_rewrite_tac[] >>
+      qpat_assum `array_caller_frame st s0 cc` mp_tac >>
+      rpt (pop_assum kall_tac) >>
+      simp[array_caller_frame_def]) >>
+  strip_tac >>
+  drule_all gas_outcome_ptr_prefix >> disch_tac >>
+  qmatch_asmsub_abbrev_tac
+    `gas_outcome_ptr _ _ _ _ _ (es with gas_obs := [],s0,G0,tn0) Q R` >>
+  `gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (eval_stmt cx (For id typ (Array (TopLevelName (ArrayT typ bd) (NONE,name))) n body))
+    (es,s0,G0,tn0) Q R` by
+    (simp[Once evaluate_def, lift_option_type_def, lift_option_def, bind_return] >>
+     irule (Q.INST [`vs` |-> `MAP Value vs`]
+       (SPEC_ALL for_values_prefix_outcome_ptr)) >> simp[] >>
+     simp[compatible_bound_def, check_def, vyperStateTheory.assert_def,
+       ignore_bind_def, bind_return]) >>
+  irule gas_outcome_ptr_conseq >>
+  qpat_assum `gas_outcome_ptr _ _ _ _ (eval_stmt _ _) _ Q R` (irule_at Any) >>
+  simp[NoAsms] >> conj_tac
+  >- (rpt gen_tac >> simp[Abbr `Q`, NoAsms] >> strip_tac >>
+      qpat_x_assum `res = INL ()` SUBST_ALL_TAC >>
+      drule_all for_array_done_stmt_post_ptr >>
+      disch_then (qspec_then `lctx` mp_tac) >>
+      rpt (pop_assum kall_tac) >> simp[] >> metis_tac[]) >>
+  rpt gen_tac >> simp[Abbr `R`, NoAsms] >>
+  rpt (pop_assum kall_tac) >> metis_tac[]
 QED
 
 Finalise body_for_immutable_array_ptr
