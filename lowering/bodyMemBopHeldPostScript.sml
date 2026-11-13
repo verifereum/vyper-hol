@@ -41,7 +41,7 @@ Theorem held_digest_compare_post:
   expr_post H ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
     es sa sb s0 ee (BoolV b) op ss
 Proof
-  strip_tac >>
+  rpt gen_tac >> strip_tac >>
   `wb_frame cenv es es1 sa s0 t` by
     (rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es1 ee s1 t u` by
@@ -49,19 +49,28 @@ Proof
   `wb_frame cenv es ee sa s0 u` by
     (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`,
        `es1`, `ee`, `s1`, `t`, `u`, `ctx`]
-       (INST_TYPE [alpha |-> ``:256``] wb_frame_trans)) >>
+       wb_frame_trans) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   `wb_frame cenv es ee sa s0 ss` by
     (mp_tac (Q.SPECL [`cenv`, `es`, `ee`, `sa`, `s0`, `u`, `s2`, `ss`]
        wb_frame_readonly_tail) >>
      impl_tac >- (simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >> simp[]) >>
-  `~expr_has_effect e1 /\ ~expr_has_effect e2 ==>
+  `~expr_has_effect (Builtin (BaseT BoolT) (Bop bop) [e1;e2]) ==>
    pure_frame cenv func es sa s0 ss` by
-    (strip_tac >>
+    (simp[] >> strip_tac >>
+     `pure_frame cenv func es sa s0 t` by
+       (qpat_x_assum `~expr_has_effect e1 ==> _` irule >>
+        first_assum ACCEPT_TAC) >>
+     `pure_frame cenv func es1 s1 t u` by
+       (qpat_x_assum `~expr_has_effect e2 ==> _` irule >>
+        first_assum ACCEPT_TAC) >>
      `pure_frame cenv func es sa s0 u` by
-       (irule pure_frame_trans >> conj_tac >- first_assum ACCEPT_TAC >>
-        qexistsl_tac [`es1`, `s1`, `t`] >> fs[]) >>
-     irule pure_frame_mem_tail >> qexists_tac `u` >> fs[]) >>
+       (mp_tac (Q.SPECL [`cenv`, `func`, `es`, `es1`, `sa`, `s1`, `s0`, `t`,
+                         `u`] pure_frame_trans) >>
+        impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+     mp_tac (Q.SPECL [`cenv`, `func`, `es`, `sa`, `s0`, `u`, `ss`]
+                     pure_frame_mem_tail) >>
+     impl_tac >- simp[] >> simp[]) >>
   irule expr_post_word_intro >>
   fs[expr_type_def, is_word_type_def, word_value_def, val_to_w256_def,
      bool_to_word_def] >> Cases_on `b` >> fs[bool_to_word_def]
