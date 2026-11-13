@@ -37,18 +37,12 @@ QED
 
 Theorem ricf_delegatecall_error_iff:
   exec_delegatecall inst s gas addr ao az ro rz = Error e <=>
-  (ricf_delegate_extract s gas addr ao az ro rz = NONE /\
-   e = "delegatecall: non-terminating or invalid state") \/
-  (IS_SOME (ricf_delegate_extract s gas addr ao az ro rz) /\
-   ~(?out. inst.inst_outputs = [out]) /\
-   e = "delegatecall requires single output")
+  ~(?out. inst.inst_outputs = [out]) /\
+  e = "delegatecall requires single output"
 Proof
-  pure_rewrite_tac[exec_delegatecall_def, LET_THM] >> BETA_TAC >>
-  rewrite_tac[GSYM ricf_delegate_extract_def] >>
-  Cases_on `ricf_delegate_extract s gas addr ao az ro rz` >> simp[] >>
-  PairCases_on `x` >> simp[] >>
-  Cases_on `inst.inst_outputs` >> simp[] >>
-  rename1 `h::tl` >> Cases_on `tl` >> simp[]
+  Cases_on `inst.inst_outputs` >> simp[exec_delegatecall_def] >>
+  rename1 `h::tl` >> Cases_on `tl` >> simp[exec_delegatecall_def] >>
+  pairarg_tac >> simp[]
 QED
 
 Theorem ricf_delegatecall_error:
@@ -136,8 +130,8 @@ Proof
   metis_tac[optionTheory.NOT_SOME_NONE]
 QED
 
-(* The extraction premise is intentionally explicit: operand availability does
-   not equate calldata or the concrete EVM runs. *)
+(* The historical extraction premise remains in this interface; oracle-call
+   helper errors now depend only on the output envelope. *)
 Theorem ricf_delegatecall_dispatch_error:
   inst.inst_opcode = DELEGATECALL /\
   (!op. MEM op inst.inst_operands ==>
