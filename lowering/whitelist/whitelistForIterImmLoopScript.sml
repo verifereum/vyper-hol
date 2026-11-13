@@ -2,7 +2,7 @@
    uses LocCode; the memory-only array loop contracts cannot certify it. *)
 Theory whitelistForIterImmLoop
 Ancestors
-  whitelistForIterImmCopy whitelistForIterImmFrame whitelistForIterDynLoop
+  whitelistForIterImmCopy whitelistForIterImmFrame whitelistForIterDynLoop loweringSlice
   exprSimTopLevelImmutable stmtLowering exprLoweringProps compileEnv loweringStateRelDefs context
   vyperAST list finite_map stmtSimForArrayParts stmtSimProps emitHelper venomInst fragExec
   stmtSimForArrayLoop stmtSimForArrayFrag stmtSimDefs venomState venomExecSemantics
@@ -739,15 +739,25 @@ Proof
        (es with <|scopes := (FEMPTY |+ (id,
           <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes;
           gas_obs := []|>) (FST H)` by
-    (gen_tac >> strip_tac >>
+    (Q.X_GEN_TAC `H1` >> strip_tac >>
      qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ bc _ _ s2 /\ _`
-       (qspec_then `H` mp_tac) >>
+       (qspec_then `H1` mp_tac) >>
      impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
      conj_tac
-     >- (drule msg_gas_state_frame >>
+     >- (`s2 with <|vs_gas_readings := s2.vs_gas_readings; vs_inst_idx := s2.vs_inst_idx|> = s2`
+           by simp[venomStateTheory.venom_state_component_equality] >>
+         drule msg_gas_state_frame >>
          disch_then (qspecl_then [`s2.vs_gas_readings`, `s2.vs_inst_idx`, `[]`] mp_tac) >>
-         simp[stmt_state_rel_inst_idx]) >>
-     qpat_x_assum `storage_well_formed_on cx es (FST H)` mp_tac >>
+         pop_assum SUBST1_TAC >> strip_tac >>
+         `es with <|gas_obs := [];
+            scopes := (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+              :: es.scopes|> =
+          es with <|scopes := (FEMPTY |+ (id,
+            <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes;
+            gas_obs := []|>` by simp[vyperStateTheory.evaluation_state_component_equality] >>
+         pop_assum (fn eq => RULE_ASSUM_TAC (REWRITE_RULE [eq])) >>
+         first_assum ACCEPT_TAC) >>
+     qpat_x_assum `storage_well_formed_on cx es (FST H1)` mp_tac >>
      match_mp_tac (METIS_PROVE [] ``(A <=> B) ==> B ==> A``) >>
      irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
   simp[] >> metis_tac[]
@@ -1467,7 +1477,7 @@ Proof
     (Cases_on `dyn` >> simp[Abbr `cc`, Abbr `e4s`, Abbr `e0`,
        jump_to_def, update_var_def]) >>
   `local_ptrs_reserved cenv st ==> alloca_frame cenv es st s0 cenv es cc` by
-    (strip_tac >> irule alloca_frame_of_mem_frame >>
+    (strip_tac >> irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_of_mem_frame) >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   qexistsl_tac [`dst`, `cc`] >> simp[] >> rpt conj_tac
   >- (simp[array_loop_inv_def, eval_operand_def] >> metis_tac[])
@@ -1564,9 +1574,19 @@ Proof
     metis_tac[stmt_state_rel_inst_idx] >>
   `!H'. valid_horizon cx st0 H' es.storage_trace ==>
      stmt_state_rel H' ctx func cenv cx es u` by
-    (rpt strip_tac >> qpat_x_assum `u = _` SUBST1_TAC >> simp[] >> metis_tac[]) >>
+    (rpt strip_tac >>
+     qpat_x_assum `!H'. valid_horizon _ _ H' _ ==>
+         stmt_state_rel H' _ _ _ _ _ (s with vs_vars := u.vs_vars)`
+       (qspec_then `H'` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     strip_tac >>
+     `u = (s with vs_vars := u.vs_vars) with vs_inst_idx := LENGTH sb.cs_current_insts` by
+       (qpat_x_assum `u = _` SUBST1_TAC >>
+        simp[venomStateTheory.venom_state_component_equality]) >>
+     pop_assum (fn eq => ONCE_REWRITE_TAC [eq]) >>
+     simp[stmt_state_rel_inst_idx] >> first_assum ACCEPT_TAC) >>
   `alloca_frame cenv es sa s cenv es u` by
-    (irule alloca_frame_of_mem_frame >> goal_assum (drule_at Any) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_of_mem_frame) >> goal_assum (drule_at Any) >>
      simp[] >> conj_tac
      >- (qpat_x_assum `u = _` SUBST1_TAC >> simp[]) >>
      metis_tac[]) >>
@@ -1809,7 +1829,12 @@ Proof
   qexistsl_tac [`bc`, `bc'`, `entry`, `incr_lbl`, `s2`, `sb0`, `sb1`] >>
   simp[] >> rpt strip_tac
   >- (irule (SRULE [] counted_array_body_finish) >>
-      simp[eval_operand_def] >> goal_assum (drule_at Any) >>
+      simp[eval_operand_def] >>
+      conj_tac
+      >- (first_assum (fn th =>
+            ACCEPT_TAC (EXISTS (``?H. valid_horizon cx st0 H ee.storage_trace``,
+                                rand (rator (concl th))) th))) >>
+      goal_assum (drule_at Any) >>
       simp[] >>
       qexistsl_tac [`i1`, `i2`, `i3`, `marks`, `nv`, `sj`, `stmts`] >>
       simp[] >>
@@ -1956,19 +1981,19 @@ Resume immutable_for_loop_counted[last]:
   `!H. valid_horizon cx st0 H ei.storage_trace ==>
      stmt_state_rel H ctx func cenv cx (ei with gas_obs := []) next /\
      storage_well_formed_on cx (ei with gas_obs := []) (FST H)` by
-    (gen_tac >> strip_tac >>
+    (Q.X_GEN_TAC `H1` >> strip_tac >>
      qpat_x_assum `!H. valid_horizon _ _ H ei.storage_trace ==>
-       stmt_state_rel H _ _ _ _ ei next /\ _` (qspec_then `H` mp_tac) >>
+       stmt_state_rel H _ _ _ _ ei next /\ _` (qspec_then `H1` mp_tac) >>
      impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     `storage_well_formed_on cx (ei with gas_obs := []) (FST H1) <=>
+      storage_well_formed_on cx ei (FST H1)` by
+       (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
      conj_tac
      >- (drule msg_gas_state_frame >>
          disch_then (qspecl_then [`next.vs_gas_readings`, `next.vs_inst_idx`, `[]`]
            mp_tac) >>
          simp[stmt_state_rel_inst_idx]) >>
-     `storage_well_formed_on cx (ei with gas_obs := []) (FST H) <=>
-      storage_well_formed_on cx ei (FST H)` by
-       (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
-     metis_tac[]) >>
+     pop_assum (fn iff => REWRITE_TAC [iff]) >> first_assum ACCEPT_TAC) >>
   `alloca_frame cenv origin_es caller old cenv ei next` by
     (irule alloca_frame_trans >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> fs[array_caller_frame_def]) >>
@@ -1987,7 +2012,8 @@ Resume immutable_for_loop_counted[round]:
       fs[vyperStorageFootprintTheory.storage_trace_domain_def,
          array_round_storage_frame]) >>
   `array_loop_inv ctx func cenv cx st0 P vs id idx (Lit (n2w off)) (n2w off)
-     p dst sz ainst cond_lbl st j ei s /\ array_caller_frame caller old s` by
+     p dst sz ainst cond_lbl st j ei s /\ array_caller_frame caller old s /\
+   alloca_frame cenv origin_es caller old cenv ei s` by
     (fs[Abbr `Inv`] >> metis_tac[]) >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> Inv _ _ _ _` kall_tac >>
   `!H. valid_horizon cx st0 H ei.storage_trace ==>
@@ -2042,6 +2068,18 @@ Resume immutable_for_loop_counted[round]:
         P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)` by
     (simp[Abbr `entry`] >> metis_tac[]) >>
   qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  qpat_x_assum `!j ei s. _ /\ j < LENGTH vs ==> _` kall_tac >>
+  qpat_x_assum `!ei j. P ei /\ _ /\ _ ==> _` kall_tac >>
+  rpt (FIRST_X_ASSUM (fn th =>
+    if free_in ``(next:venom_state)`` (concl th) then ALL_TAC else NO_TAC)) >>
+  `!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
+     ?sc rest. stmt_res_ok (InLoop exit_lbl incr_lbl) r /\ es2.scopes = sc :: rest /\
+       (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
+       ((r = INL () \/ r = INR ContinueException) ==>
+         P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = _ ==> _` drule >>
+     strip_tac >> qexistsl_tac [`sc`, `rest`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all (SIMP_RULE pure_ss [PULL_EXISTS] immutable_for_round_counted) >>
   disch_then (qspec_then `off` assume_tac) >>
   simp[Abbr `R`] >> irule exprSimMemDefsTheory.gas_outcome_post_mono >>
