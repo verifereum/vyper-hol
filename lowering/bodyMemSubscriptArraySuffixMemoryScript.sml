@@ -188,7 +188,7 @@ Resume framed_array_represented_suffix_summary_mem[valid]:
      simp[exprSimHypsDefsTheory.expr_body_pre_def,
           Once vyperTypeSystemTheory.well_typed_expr_def] >>
      strip_tac >> gvs[vyperTypeSystemTheory.subscript_type_ok_def] >>
-     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
      strip_tac >> Cases_on `vt` >>
      gvs[vyperTypeSystemTheory.vtype_annotation_ok_def] >>
      gvs[vyperTypeSystemTheory.subscript_vtype_def, AllCaseEqs()]) >>

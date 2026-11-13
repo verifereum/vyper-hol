@@ -11,7 +11,8 @@ Theorem compile_subscript_array_framed_base_mem_case:
                           expr_sim_mem ctx func cenv cx ty idx es) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     post_value_type cenv obj = expr_type obj /\
-    ((!t r t'. eval_expr cx idx t = (INL r, t') ==>
+    (~subscript_reads_base cx obj idx /\ ~copies_subscript_base cenv obj idx /\
+      (!t r t'. eval_expr cx idx t = (INL r, t') ==>
                 t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
       (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
       ((~cenv.ce_is_ctor /\

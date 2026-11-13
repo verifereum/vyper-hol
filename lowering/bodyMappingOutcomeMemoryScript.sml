@@ -105,6 +105,9 @@ Proof
   simp[] >> disch_tac >>
   `type_place_expr env obj = SOME (HashMapT kt vt)` by
     (drule_all expr_map_pre_checked_type >> simp[]) >>
+  qpat_assum `type_place_expr _ obj = _`
+    (strip_assume_tac o Q.SPECL [`cenv`, `idx`, `cx`] o
+     MATCH_MP map_base_no_overlap) >>
   drule_all compile_mapping_operand_not_label >> disch_tac >>
   `gas_admissible (eval_expr cx obj) expr_map_res_ok es` by
     (irule subscript_result_base_admissible >>
@@ -114,7 +117,9 @@ Proof
   qpat_x_assum `expr_map_sim_mem _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_map_sim_mem_def] >>
   disch_then (qspecl_then [`sa`, `sm`, `bvv`, `s0`] mp_tac) >>
-  (impl_tac >- simp[]) >> rewrite_tac[eval_expr_subscript_bind] >>
+  (impl_tac >- simp[]) >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
   disch_then (mp_then Any irule gas_outcome_bind_result_exec) >>
   reverse conj_tac
   >- (conj_tac
