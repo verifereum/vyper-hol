@@ -24,9 +24,10 @@ Theorem ptr_history_content_fmp[local]:
   ptr_history_content tn s t ==>
   ptr_history_content tn (s with vs_fmp := v) (t with vs_fmp := v)
 Proof
-  simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
-       ptr_core_shared_def, ptr_shared_fields_def,
-       contract_storage_def, contract_transient_def]
+  strip_tac >>
+  fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+     ptr_core_shared_def, ptr_shared_fields_def,
+     contract_storage_def, contract_transient_def]
 QED
 
 Theorem ptr_dalloca_execution[local]:
