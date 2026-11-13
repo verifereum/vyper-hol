@@ -11,6 +11,7 @@
  *)
 Theory bodyPtrMakeArrayWidened
 Ancestors
+  aggregateStorePtr
   exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
   bodyPtrPhysicalLiteralPackage exprSimSource vyperTypeSystem vyperTypeBuiltins
   exprSimHypsDefs
