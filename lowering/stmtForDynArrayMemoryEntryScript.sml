@@ -69,7 +69,10 @@ Theorem dynarray_loop_initialize_mem:
        mk_inst e4 ASSERT [Var vld] [];
        mk_inst e5 JMP [Label cond] []]|> /\
   s0.vs_inst_idx = LENGTH pre /\ ~s0.vs_halted /\
-  stmt_state_rel ctx func cenv cx es s0 /\ P es /\
+  (?H. valid_horizon cx st0 H es.storage_trace) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ P es /\
   lookup_scopes id es.scopes = NONE /\
   eval_operand saved_base s0 = SOME array_base /\
   mload (w2n array_base) s0 = n2w (LENGTH vs) /\
@@ -86,7 +89,7 @@ Theorem dynarray_loop_initialize_mem:
     exec_alloca ainst (update_var lv (n2w (LENGTH vs)) s0) (n2w sz : bytes32) = OK s1 /\
     cc = jump_to cond (update_var vld 1w (update_var g 0w
       (update_var idx 0w (jump_to entry s1)))) /\
-    array_loop_inv ctx func cenv cx P vs id idx saved_base array_base p dst sz
+    array_loop_inv ctx func cenv cx st0 P vs id idx saved_base array_base p dst sz
       ainst cond st 0 es cc /\
     lookup_var lv cc = SOME (n2w (LENGTH vs)) /\
     array_caller_frame st s0 cc /\
@@ -95,7 +98,9 @@ Theorem dynarray_loop_initialize_mem:
     alloca_history func cc /\ cc.vs_memory = s0.vs_memory /\
     s0.vs_alloca_next <= cc.vs_alloca_next
 Proof
-  strip_tac >> drule_all dynarray_loop_initialize_explicit >> strip_tac >>
+  strip_tac >>
+  drule_all (SIMP_RULE pure_ss [PULL_EXISTS] dynarray_loop_initialize_explicit) >>
+  strip_tac >>
   `gas_path_mem ctx func s0 0 (OK cc) /\ alloca_history func cc` by
     suspend "certificate" >>
   qexistsl_tac [`dst`, `cc`, `s1`] >> simp[] >>
@@ -111,6 +116,7 @@ Resume dynarray_loop_initialize_mem[certificate]:
      irule step_MLOAD >> simp[]) >>
   `step_inst_base ainst sl = OK s1` by
     simp[step_inst_base_opcode_eqs, eval_operand_def] >>
+  `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
   `alloca_inv s0` by fs[stmt_state_rel_def] >>
   `run_inst_seq_mem_ok [mk_inst mi MLOAD [saved_base] [lv]; ainst] s0` by
     (simp[run_inst_seq_mem_ok_def, below_frontier_MLOAD, inst_dload_in_section_def] >>
@@ -124,12 +130,12 @@ Resume dynarray_loop_initialize_mem[certificate]:
      qexistsl_tac [`[mk_inst mi MLOAD [saved_base] [lv]; ainst]`, `j`] >>
      simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]) >>
   qabbrev_tac `en = jump_to entry s1` >>
-  `stmt_state_rel ctx func cenv cx es sl` by
+  `stmt_state_rel H ctx func cenv cx es sl` by
     (simp[Abbr `sl`] >> irule stmt_state_rel_update_var >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es s1` by
+  `stmt_state_rel H ctx func cenv cx es s1` by
     (drule_all stmt_state_rel_exec_alloca >> simp[] >>
      disch_then irule >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es en` by simp[Abbr `en`, stmt_state_rel_jump_to] >>
+  `stmt_state_rel H ctx func cenv cx es en` by simp[Abbr `en`, stmt_state_rel_jump_to] >>
   `alloca_inv en` by fs[stmt_state_rel_def] >>
   `~en.vs_halted` by
     (qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>

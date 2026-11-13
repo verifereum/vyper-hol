@@ -3,7 +3,6 @@ Theory bodyNameValueMemory
 Ancestors
   bodyNameMemoryFacts exprSimMemDefs gasOutcome
   exprSimSource exprSimHypsDefs exprSimDefs exprSimProps bodyMemoryDefs
-  gasStorage vyperStorageTrace vyperStorageFootprint
   exprSimMemoryValues exprSimMemoryStack fragGasSeqMem fragGasPathMem
   gasNormalPrefix gasSummary gasContext gasCount fragGasMode loweringPosts
   exprSimNameWord exprSimNameValue loweringSlice exprLowering exprLoweringProps
@@ -60,17 +59,11 @@ Theorem compile_name_body_vv_sim_mem:
     expr_vv_sim_mem ctx func ce cx ty (Name ann id) es
 Proof
   rpt strip_tac >> simp[expr_vv_sim_mem_def] >> rpt strip_tac >>
-  reverse (Cases_on `?H. valid_horizon cx st0 H es.storage_trace`)
-  >- (PURE_REWRITE_TAC[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-      rw[gas_bad_storage_at_def] >>
-      `storage_trace_frame (eval_expr cx (Name ann id))` by
-        simp[evaluate_storage_trace_frame] >>
-      `~storage_trace_domain cx st0 (es with gas_obs := tail).storage_trace` by
-        (simp[storage_trace_domain_def] >> metis_tac[]) >>
-      Cases_on `eval_expr cx (Name ann id) (es with gas_obs := tail)` >>
-      simp[] >> metis_tac[storage_trace_frame_preserves_bad_domain]) >>
-  fs[] >> first_assum drule >> strip_tac >>
-  drule_all body_name_source_region >> strip_tac >>
+  `?entry. lookup_scopes id es.scopes = SOME entry` by
+    (gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+     drule_all well_typed_Name_lookup >> metis_tac[]) >>
+  `?p sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
   `ce.ce_var_type id = SOME ann` by
     gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
   drule compile_name_value_ptr >>
@@ -82,10 +75,9 @@ Proof
   >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_mem_rules,
           Once evaluate_def, bind_def, get_scopes_def, return_def,
           type_check_def, assert_def, check_def, ignore_bind_def] >>
-  disj1_tac >> simp[] >>
-  X_GEN_TAC ``(Hn:(bool # bytes32 # type_value) list # num list)`` >> strip_tac >>
-  first_x_assum (qspec_then `Hn` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >>
-  strip_tac >> conj_tac
+  disj1_tac >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  drule_all body_name_source_region >> strip_tac >> gvs[]
   >- (irule name_value_post >> simp[]) >>
   simp[vyperASTTheory.expr_type_def, exprLoweringTheory.lowered_value_type_def] >>
   irule name_vv_store_bound >> simp[] >> qexists_tac `sz` >> simp[]

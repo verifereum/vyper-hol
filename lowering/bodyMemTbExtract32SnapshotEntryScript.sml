@@ -108,7 +108,7 @@ Proof
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      conj_tac
      >- (irule extract32_snapshot_entry_frame >> goal_assum (drule_at Any) >>
-         simp[]) >>
+         qexists_tac `sa` >> simp[]) >>
      first_assum ACCEPT_TAC) >>
   `local_ptrs_reserved cenv sb` by
     (irule compiler_ci_mono_reserved >> qexists_tac `sa` >> simp[] >>
@@ -182,7 +182,12 @@ Proof
   drule_all extract32_source_post_view >> strip_tac >>
   `post_value_type cenv e = expr_type e` by
     (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
-  drule_all extract32_snapshot_entry >> strip_tac >>
+  mp_tac (Q.INST [`es` |-> `es'`, `len` |-> `LENGTH (bs:word8 list)`]
+            (SPEC_ALL extract32_snapshot_entry)) >>
+  impl_tac >- (rpt conj_tac >>
+               FIRST [first_assum ACCEPT_TAC,
+                      (qexists_tac `H` >> first_assum ACCEPT_TAC)]) >>
+  strip_tac >>
   `u.vs_memory = s.vs_memory` by
     (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s`
        (mp_tac o Q.AP_TERM `\v. v.vs_memory`) >> simp[]) >>
@@ -210,6 +215,13 @@ Proof
      qexistsl_tac [`s`,`sa`,`es'.scopes`] >> simp[]) >>
   `expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) s0c sb es' (BytesV bs) src u` by
     (gvs[expr_post_def, expr_val_at_def, is_word_type_def, w2n_n2w] >>
-     metis_tac[LESS_LESS_EQ_TRANS]) >>
+     FIRST
+       [(disj1_tac >> qexistsl_tac [`aid`,`b'`,`sz`] >> rpt conj_tac >>
+         FIRST [first_assum ACCEPT_TAC,
+                (irule LESS_LESS_EQ_TRANS >> qexists_tac `sa.cs_next_id` >>
+                 conj_tac >> first_assum ACCEPT_TAC)] >> NO_TAC),
+        (disj2_tac >> disj1_tac >> qexistsl_tac [`n`,`b'`,`sz`] >>
+         rpt conj_tac >> first_assum ACCEPT_TAC >> NO_TAC),
+        (disj2_tac >> disj2_tac >> first_assum ACCEPT_TAC)]) >>
   qexistsl_tac [`b`,`u`] >> simp[] >> metis_tac[]
 QED
