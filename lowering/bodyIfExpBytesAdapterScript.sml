@@ -153,6 +153,39 @@ QED
 
 Resume ifexp_bytestring_adapter_path_mem[canonical]:
   `evaluate_type (get_tenv cx) (expr_type e) = SOME tvt` by simp[] >>
+  `~expr_has_effect e ==>
+   pure_frame ce func es origin s0
+     (mcopy (w2n d) (w2n w) (32 + 32 * word_size len) u)` by
+    (strip_tac >>
+     `pure_frame ce func es origin s0 u` by metis_tac[expr_post_pure_frame] >>
+     `(mcopy (w2n d) (w2n w) (32 + 32 * word_size len) u).vs_allocas =
+      u.vs_allocas` by
+       simp[venomExecSemanticsTheory.mcopy_def,
+            venomStateTheory.write_memory_with_expansion_def] >>
+     `!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        regions_disjoint (w2n d) (type_memory_bytes ce t) lb lsz` by
+       (rpt strip_tac >>
+        qpat_x_assum `!name b len. local_region ce ee.scopes u name b len ==> _`
+          irule >>
+        qexists_tac `n` >> irule local_region_frame_fwd >>
+        qexistsl_tac [`s0`, `origin`, `es.scopes`] >>
+        fs[wb_frame_def]) >>
+     qpat_assum `MEM (mk_inst _ _ _ _) _`
+       (assume_tac o SRULE [venomInstTheory.mk_inst_def]) >>
+     match_mp_tac pure_frame_buffer_tail >>
+     qexistsl_tac [`u`, `mk_inst sa.cs_next_id ALLOCA
+       [Lit (n2w (type_memory_bytes ce t))] [STRING #"%" (toString sa.cs_next_var)]`,
+       `w2n d`, `type_memory_bytes ce t`] >>
+     rpt conj_tac
+     >- first_assum ACCEPT_TAC
+     >- simp[]
+     >- first_assum ACCEPT_TAC
+     >- simp[venomInstTheory.mk_inst_def]
+     >- simp[venomInstTheory.mk_inst_def]
+     >- simp[venomInstTheory.mk_inst_def]
+     >- first_assum ACCEPT_TAC >>
+     rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
+     fs[regions_disjoint_def] >> decide_tac) >>
   drule_at (Pat `wb_frame _ _ _ _ _ _`) ifexp_copy_endpoint >>
   disch_then (drule_at (Pat `post_value_type _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
