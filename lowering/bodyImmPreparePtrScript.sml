@@ -18,18 +18,16 @@ Theorem immutable_address_prefix_ptr:
      (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
      [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]])
     (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  let code =
-    [mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
-    (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
-    [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]];
-      u = update_var ep (n2w off + n2w ((if dyn then 32 else 0) + k * stride))
-       (if dyn then update_var tot (n2w (32 + k * stride))
-          (update_var ov (n2w (k * stride)) s)
-        else update_var ov (n2w (k * stride)) s)
-  in
   ?H tm.
     gas_path_ptr D 0 ctx func PG G tn s 0 H tm
-      (OK (u with vs_inst_idx := s.vs_inst_idx + LENGTH code)) /\
+      (OK (((update_var ep (n2w off + n2w ((if dyn then 32 else 0) + k * stride))
+        (if dyn then update_var tot (n2w (32 + k * stride))
+           (update_var ov (n2w (k * stride)) s)
+         else update_var ov (n2w (k * stride)) s)) with
+        vs_inst_idx := s.vs_inst_idx + LENGTH
+          ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
+           (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
+           [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]])))) /\
     op_prov H (Var ep) = NONE /\ op_taint tm (Var ep) = {} /\
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
@@ -61,7 +59,9 @@ Proof
   qexistsl [`G'`,`tn'`] >> simp[] >>
   `Var ep IN B` by simp[Abbr `B`] >>
   conj_tac >- (qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-    SIMP_TAC bool_ss [LENGTH_APPEND, LENGTH, ONE, ADD_CLAUSES, ADD_COMM]) >> metis_tac[]
+    SIMP_TAC bool_ss [LENGTH_APPEND, LENGTH, ONE, ADD_CLAUSES, ADD_COMM] >>
+    `!a b. SUC (SUC (a + b)) = a + 2 + b` by decide_tac >>
+    asm_rewrite_tac[]) >> metis_tac[]
 QED
 
 (* Scope adapter for the checked immutable copy contract.  The source relation
@@ -176,26 +176,58 @@ Theorem immutable_address_entry_ptr:
      cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at cut x) /\
   immutable_holds cenv cx et (Value v)
     (n2w off + n2w ((if dyn then 32 else 0) + k * stride)) es s ==>
-  let code =
-    [mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
-    (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
-    [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]];
-      u = update_var ep (n2w off + n2w ((if dyn then 32 else 0) + k * stride))
-       (if dyn then update_var tot (n2w (32 + k * stride))
-          (update_var ov (n2w (k * stride)) s)
-        else update_var ov (n2w (k * stride)) s);
-      t = u with vs_inst_idx := s.vs_inst_idx + LENGTH code
-  in
   ?H tm.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK t) /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 H tm
+      (OK (((update_var ep (n2w off + n2w ((if dyn then 32 else 0) + k * stride))
+        (if dyn then update_var tot (n2w (32 + k * stride))
+           (update_var ov (n2w (k * stride)) s)
+         else update_var ov (n2w (k * stride)) s)) with
+        vs_inst_idx := s.vs_inst_idx + LENGTH
+          ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
+           (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
+           [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]])))) /\
     op_prov H (Var ep) = NONE /\ op_taint tm (Var ep) = {} /\
-    stmt_state_rel ctx func cenv cx es t /\ ghost_inv d cenv cx es H tm t /\
+    stmt_state_rel ctx func cenv cx es
+      ((update_var ep (n2w off + n2w ((if dyn then 32 else 0) + k * stride))
+        (if dyn then update_var tot (n2w (32 + k * stride))
+           (update_var ov (n2w (k * stride)) s)
+         else update_var ov (n2w (k * stride)) s)) with
+        vs_inst_idx := s.vs_inst_idx + LENGTH
+          ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
+           (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
+           [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]])) /\
+    ghost_inv d cenv cx es H tm
+      ((update_var ep (n2w off + n2w ((if dyn then 32 else 0) + k * stride))
+        (if dyn then update_var tot (n2w (32 + k * stride))
+           (update_var ov (n2w (k * stride)) s)
+         else update_var ov (n2w (k * stride)) s)) with
+        vs_inst_idx := s.vs_inst_idx + LENGTH
+          ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
+           (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
+           [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]])) /\
     immutable_holds cenv cx et (Value v)
-      (n2w off + n2w ((if dyn then 32 else 0) + k * stride)) es t /\
+      (n2w off + n2w ((if dyn then 32 else 0) + k * stride)) es
+      ((update_var ep (n2w off + n2w ((if dyn then 32 else 0) + k * stride))
+        (if dyn then update_var tot (n2w (32 + k * stride))
+           (update_var ov (n2w (k * stride)) s)
+         else update_var ov (n2w (k * stride)) s)) with
+        vs_inst_idx := s.vs_inst_idx + LENGTH
+          ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
+           (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
+           [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]])) /\
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     (!x. not_fresh_at cut x ==>
-      lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+      lookup_var x
+        ((update_var ep (n2w off + n2w ((if dyn then 32 else 0) + k * stride))
+          (if dyn then update_var tot (n2w (32 + k * stride))
+             (update_var ov (n2w (k * stride)) s)
+           else update_var ov (n2w (k * stride)) s)) with
+          vs_inst_idx := s.vs_inst_idx + LENGTH
+            ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
+             (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
+             [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]])) =
+        lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
