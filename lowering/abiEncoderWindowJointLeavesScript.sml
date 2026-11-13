@@ -301,5 +301,158 @@ Theorem compile_abi_encode_to_buf_copy_window_joint:
     !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,G',tn')
 Proof
-  cheat
+  strip_tac >>
+  `abi_encoder_window_input (AbiCopy sz) at av sb cap s.vs_memory` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  `sz <= cap /\ mem_bytes_at sb sz s.vs_memory = enc at av` by
+    fs[abi_encoder_window_copy_iff] >>
+  `LENGTH (enc at av) = sz` by metis_tac[LENGTH_mem_bytes_at_proof] >>
+  `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+  `d < dimword (:256) /\ sz < dimword (:256)` by decide_tac >>
+  `0 < sz ==> sb < dimword (:256)` by
+    (strip_tac >> `0 < cap` by decide_tac >>
+     `sb + cap <= s.vs_alloca_next` by metis_tac[] >> decide_tac) >>
+  qabbrev_tac `a = w2n (n2w sb : 256 word)` >>
+  `a < dimword (:256)` by simp[Abbr `a`] >>
+  `0 < sz ==> a = sb` by simp[Abbr `a`] >>
+  drule abiEncoderLeavesTheory.abi_encode_copy_code >> strip_tac >>
+  `eval_operand src s = SOME (n2w a)` by simp[Abbr `a`] >>
+  `eval_operand (Lit (n2w sz)) s = SOME (n2w sz)` by simp[eval_operand_def] >>
+  drule_all window_emit_copy_run >> strip_tac >>
+  `window_strong_result ctx func st en out at av d s
+     ((mcopy d a sz s) with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (Cases_on `0 < cap`
+     >- (`abi_encoder_window_pre ctx func st en dst src (AbiCopy sz) at av sb cap d s` by
+           (pure_rewrite_tac[abi_encoder_window_pre_def] >> metis_tac[]) >>
+         `a = sb` by
+           (`sb + cap <= s.vs_alloca_next` by metis_tac[] >> simp[Abbr `a`]) >>
+         metis_tac[window_copy_strong_endpoint]) >>
+     suspend "zero_endpoint") >>
+  suspend "joint_assembly"
 QED
+
+Resume compile_abi_encode_to_buf_copy_window_joint[zero_endpoint]:
+  `cap = 0 /\ sz = 0 /\ enc at av = []` by
+    (conj_asm1_tac >- decide_tac >>
+     conj_asm1_tac >- decide_tac >>
+     metis_tac[listTheory.LENGTH_NIL]) >>
+  `abi_encoder_extend_sim ctx func s
+    ((mcopy d a sz s) with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (irule abi_encoder_run_sequence_extend_sim >>
+     (conj_tac >- first_assum ACCEPT_TAC) >> qexists_tac `st` >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `abi_encoder_registered_effect (window_alloca_sites func (frag_ids st en))
+    [(d,sz)] s ((mcopy d a sz s) with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (irule abi_encoder_registered_effect_trans >> qexists_tac `mcopy d a sz s` >>
+     simp[abi_encoder_registered_output_copy, abi_encoder_registered_inst_idx]) >>
+  `abi_encoder_registered_effect (frag_ids st en) [(d,sz)] s
+    ((mcopy d a sz s) with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    (irule abi_encoder_registered_effect_enlarge >>
+     qexistsl_tac [`window_alloca_sites func (frag_ids st en)`, `[(d,sz)]`] >>
+     simp[window_alloca_sites_subset]) >>
+  qpat_x_assum `sz = 0` SUBST_ALL_TAC >>
+  simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
+  simp[eval_operand_def, abi_encoder_extend_sim_sim] >>
+  mp_tac (Q.INST [`d` |-> `d`, `sb` |-> `a`, `n` |-> `0`,
+    `ix` |-> `LENGTH en.cs_current_insts`] window_copy_state_resources) >>
+  (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+  simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `_ IN window_alloca_sites _ _` mp_tac >>
+    simp[window_alloca_sites_def] >> strip_tac >> metis_tac[]) >>
+  simp[venomExecSemanticsTheory.mcopy_def,
+    venomStateTheory.write_memory_with_expansion_def]
+QED
+Resume compile_abi_encode_to_buf_copy_window_joint[joint_assembly]:
+  `!i. a <= i /\ i < a + sz ==> i NOTIN tn.t_mem` by
+    (Cases_on `sz = 0` >- simp[] >>
+     `a = sb` by simp[] >>
+     qspecl_then [`tn.t_mem`, `s.vs_memory`, `sb`, `sz`, `enc at av`]
+       mp_tac robust_mem_bytes_at_clean >>
+     impl_tac >- metis_tac[abi_encoder_window_copy_iff] >> simp[]) >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  qabbrev_tac `copy_inst = mk_inst st.cs_next_id MCOPY [dst;src;Lit (n2w sz)] []` >>
+  qabbrev_tac `u = mcopy d a sz s` >>
+  qabbrev_tac `tn2 = step_taint copy_inst s u tn` >>
+  `step_prov PG G copy_inst u = G /\ tn2.t_var = tn.t_var /\
+   tn2.t_stor = tn.t_stor /\ tn2.t_trans = tn.t_trans /\
+   tn2.t_mem = tn.t_mem DIFF {i | d <= i /\ i < d + sz}` by
+    (qpat_assum `eval_operand dst s = _`
+       (mp_then Any mp_tac mcopy_operand_ghost_frame) >>
+     disch_then (fn th => qpat_assum `eval_operand src s = SOME (n2w a)`
+       (mp_then Any mp_tac th)) >>
+     disch_then (fn th => qpat_assum `eval_operand (Lit (n2w sz)) s = _`
+       (mp_then Any mp_tac th)) >>
+     disch_then (qspecl_then [`PG`, `G`, `tn`, `st.cs_next_id`] mp_tac) >>
+     asm_simp_tac std_ss [w2n_n2w, Abbr `copy_inst`, Abbr `u`, Abbr `tn2`] >>
+     suspend "ghost_clean") >>
+  qexistsl_tac [`u with vs_inst_idx := LENGTH en.cs_current_insts`, `G`, `tn2`] >>
+  conj_tac >- simp[Abbr `u`] >>
+  conj_tac >- simp[Abbr `u`] >>
+  conj_tac >- simp[op_taint_def] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[pred_setTheory.IN_DIFF] >>
+  conj_tac >- simp[op_taint_def] >>
+  conj_tac >- (rpt strip_tac >> simp[] >> decide_tac) >>
+  simp[] >>
+  conj_tac >- simp[Abbr `tn2`, Abbr `copy_inst`, step_taint_def,
+    imm_taint_def, mk_inst_def, step_writes_def] >>
+  suspend "copy_path"
+QED
+Resume compile_abi_encode_to_buf_copy_window_joint[ghost_clean]:
+  strip_tac >>
+  `!i. i < sz ==> a + i NOTIN tn.t_mem` by
+    (gen_tac >> disch_tac >>
+     qpat_x_assum `!i. a <= i /\ i < a + sz ==> _` irule >> decide_tac) >>
+  simp_tac (srw_ss()) [pred_setTheory.EXTENSION, pred_setTheory.IN_DIFF,
+    pred_setTheory.IN_UNION] >> metis_tac[]
+QED
+Resume compile_abi_encode_to_buf_copy_window_joint[copy_path]:
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+     isPREFIX [copy_inst] (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (qpat_assum `fn_has_code st en func` mp_tac >>
+     pure_rewrite_tac[fragExecTheory.fn_has_code_def] >> strip_tac >>
+     qexists_tac `bb` >> conj_tac >- metis_tac[] >>
+     qpat_x_assum `isPREFIX _ _` mp_tac >>
+     simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+     simp[DROP_APPEND] >> metis_tac[]) >>
+  `s.vs_inst_idx + 1 = LENGTH en.cs_current_insts` by simp[] >>
+  `run_inst_seq_mem_ok [copy_inst] s` by
+    (`run_inst_seq_mem_ok (emitted_insts st en) s` suffices_by metis_tac[] >>
+     irule allocaFootprintTheory.emit_mcopy_mem_ok >>
+     qexistsl_tac [`n2w a`, `n2w d`, `dst`, `Lit (n2w sz)`, `n2w sz`, `src`] >>
+     simp[eval_operand_def] >>
+     Cases_on `sz = 0` >- simp[] >>
+     `0 < cap /\ a = sb` by simp[] >>
+     `sb + cap <= s.vs_alloca_next` by metis_tac[] >>
+     decide_tac) >>
+  gen_tac >>
+  `ptr_inst_ok D lo 0 ctx func G tn copy_inst s` by
+    (irule ptr_inst_ok_lower_bound_transport >>
+     conj_tac >- simp[] >> qexists_tac `0` >> simp[] >>
+     Cases_on `sz = 0`
+     >- (simp[Abbr `copy_inst`] >> irule ptr_inst_ok_mcopy_zero >> metis_tac[]) >>
+     `0 < cap` by decide_tac >>
+     `?sp. src = Var sp /\ ptr_covers G tn sp s cap` by metis_tac[] >>
+     `?dp. dst = Var dp /\ ptr_covers G tn dp s sz` by
+       (qpat_x_assum `0 < LENGTH _ ==> _` mp_tac >> simp[]) >>
+     `ptr_covers G tn sp s sz` by
+       (qpat_assum `ptr_covers G tn sp s cap` mp_tac >>
+        pure_rewrite_tac[ptr_covers_def] >> strip_tac >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        qexistsl_tac [`w`, `b`, `sz'`] >> simp[] >> decide_tac) >>
+     simp[Abbr `copy_inst`] >> irule ptr_inst_ok_mcopy >> simp[]) >>
+  `step_inst_base copy_inst s = OK u` by
+    (`run_inst_seq [copy_inst] s = OK u` by metis_tac[] >>
+     qpat_x_assum `run_inst_seq [copy_inst] s = _` mp_tac >>
+     pure_rewrite_tac[run_inst_seq_def] >>
+     Cases_on `step_inst_base copy_inst s` >> simp[]) >>
+  `inst_seq_ptr D lo ctx func PG G tn [copy_inst] s G tn2` by
+    simp[inst_seq_ptr_def, Abbr `tn2`] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) [copy_inst] /\
+   FILTER (\i. i.inst_opcode = GAS) [copy_inst] = []` by
+    simp[Abbr `copy_inst`, mk_inst_def, is_terminator_def] >>
+  `run_inst_seq [copy_inst] s = OK u` by metis_tac[] >>
+  drule_all run_inst_seq_gas_origin_ptr_path >> simp[]
+QED
+Finalise compile_abi_encode_to_buf_copy_window_joint
