@@ -1,6 +1,7 @@
 (* Dynamic pointer control uses the saved length register, not a fixed bound. *)
 Theory forPtrDynArrayLoop
 Ancestors forPtrArrayAssemble forPtrRounds whitelistForIterDynLoop
+  forPtrDynArrayPrepare
   forPtrControl forPtrRangeTerminal forPtrArrayInvariant bodyPtrDefs
   venomState venomInst ptrDiscipline finite_map fragExec
   forPtrRangePrepare stmtSimForArrayLoop ghostPcTransportPtr stmtSimProps
