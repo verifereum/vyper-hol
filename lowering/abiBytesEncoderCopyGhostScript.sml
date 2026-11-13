@@ -24,8 +24,9 @@ Theorem bytes_encoder_copy_ghosts:
   ~ctx_has_dalloca ctx /\ allocas_from lo a /\
   run_inst_seq (TAKE 3 (DROP 4 (bytestring_encoder_insts id N (Var dst) (Var src)))) a = OK b ==>
   ?H tm.
-    (!D. inst_seq_ptr D lo ctx func PG G tn
-      (TAKE 3 (DROP 4 (bytestring_encoder_insts id N (Var dst) (Var src)))) a H tm) /\
+    (!D k. inst_seq_ptr D lo ctx func PG G tn
+      (TAKE 3 (DROP 4 (bytestring_encoder_insts id N (Var dst) (Var src))))
+      (a with vs_inst_idx := k) H tm) /\
     ptr_covers H tm dst b (32+contractABI$ceil32 n) /\
     (!i. w2n q <= i /\ i < w2n q + 32 + contractABI$ceil32 n ==> i NOTIN tm.t_mem) /\
     (!i. i < w2n q \/ w2n q + 32 + contractABI$ceil32 n <= i ==>
@@ -130,8 +131,9 @@ Proof
   `~is_terminator i0.inst_opcode /\ ~is_terminator i1.inst_opcode /\
    ~is_terminator i2.inst_opcode` by
     simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, mk_inst_def, is_terminator_def] >>
-  `!D. ptr_inst_ok D lo 0 ctx func G tn i0 a` by
-    (simp[Abbr `i0`, ptr_inst_ok_def, step_inst_non_invoke] >>
+  `!D k. ptr_inst_ok D lo 0 ctx func G tn i0 (a with vs_inst_idx := k)` by
+    (simp[Abbr `i0`, ptr_inst_ok_def, step_inst_non_invoke,
+       step_inst_inst_idx_indep, exec_result_map_def] >>
      simp[access_ok_def, taint_ok_def,
        codegenRelTheory.source_memory_write_ranges_def,
        codegenRelTheory.fixed_source_write_range_def,
@@ -140,7 +142,7 @@ Proof
        mk_inst_def, op_taint_def, eval_operand_def, w2n_n2w] >>
      gvs[ptr_covers_def, eval_operand_def, op_taint_def, Abbr `a1`, mstore_def,
        write_memory_with_expansion_def] >>
-     rpt strip_tac >> gvs[]) >>
+     rpt strip_tac >> gvs[allocas_from_def] >> metis_tac[]) >>
   `a2.vs_requests = a1.vs_requests /\ a3.vs_requests = a2.vs_requests /\
    a1.vs_allocas = a.vs_allocas /\ a2.vs_allocas = a.vs_allocas` by
     (simp[Abbr `a3`, mcopy_def, write_memory_with_expansion_def] >>
