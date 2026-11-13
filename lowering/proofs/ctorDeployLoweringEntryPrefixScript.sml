@@ -44,7 +44,7 @@ QED
 
 Theorem deploy_ctor_original_entry_shape[local]:
  !tops rp runtime unit body ce nr key ut imm lbl sa sb sj se sp sf func.
- supported_program tops /\
+ supported_program tops /\ supported_program_deploy tops /\
  deploy_ctor_code tops rp runtime unit
    (body,ce,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) ==>
  unit.cu_context.ctx_entry = SOME "__deploy" /\
@@ -149,7 +149,8 @@ Theorem deploy_ctor_prefix_entry:
         ?fuel'. run_context fuel' dunit.cu_context vs = r)
 Proof
  rpt gen_tac >> strip_tac >>
- `supported_program tops` by fs[deploy_source_ok_def] >>
+ `supported_program tops /\ supported_program_deploy tops` by
+   fs[deploy_source_ok_def] >>
  drule_all deploy_ctor_original_entry_shape >> strip_tac >>
  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
   func.fn_name = "__deploy"` by fs[deploy_ctor_code_def] >>
