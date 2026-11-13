@@ -2,7 +2,7 @@
 Theory frameRootReach
 Ancestors
   arithmetic combin pair list rich_list relation
-  frameGas vfmAccountFrame vfmContextLength vfmRunCall
+  frameGas vfmAccountFrame vfmContextLength vfmRunCall vfmWfState
 
 Theorem root_run_last_step[local]:
   run_call es = SOME (INR e,t) ==>

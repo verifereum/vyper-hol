@@ -23,5 +23,6 @@ Theorem lower_vyper_deploy_unit_call_free_entry:
       !inst. MEM inst (fn_insts efn) ==>
              inst.inst_opcode <> RETURNDATACOPY /\ inst.inst_opcode <> INVOKE
 Proof
+  (* PORT_ADMISSION: SEQ-4883, bot/opus/seq-3902-s7gd-v4, built at 914754370 *)
   cheat
 QED
