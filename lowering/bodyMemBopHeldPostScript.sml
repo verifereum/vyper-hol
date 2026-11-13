@@ -41,7 +41,7 @@ Theorem held_digest_compare_post:
   expr_post H ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
     es sa sb s0 ee (BoolV b) op ss
 Proof
-  strip_tac >>
+  rpt gen_tac >> strip_tac >>
   `wb_frame cenv es es1 sa s0 t` by
     (rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es1 ee s1 t u` by
