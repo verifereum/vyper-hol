@@ -8,6 +8,7 @@ Ancestors
 Theorem intcall_framed_array_after_base:
   gas_marked_exec F (fp.jc_ctx,fp.jc_func) (eval_expr fp.jc_cx obj)
     (es,s0) left (INL captured) mid (OK t) /\
+  ~subscript_reads_base fp.jc_cx obj idx /\
   intcall_forced_producer fp idx /\
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   expr_body_pre ce fp.jc_cx env idx (mid with gas_obs := []) /\
@@ -37,7 +38,8 @@ Theorem intcall_framed_array_after_base:
 Proof
   strip_tac >>
   drule_all intcall_forced_post_outcome >> strip_tac >>
-  pure_once_rewrite_tac[eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
   irule (BETA_RULE (Q.ISPEC `\r v. select_result fp.jc_cx (expr_type obj) r (ValueSubscript v)`
     (Q.GEN `k` framed_array_index_outcome_compose))) >>
   goal_assum (drule_at Any) >> BETA_TAC >>

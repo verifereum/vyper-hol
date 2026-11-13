@@ -1,7 +1,7 @@
 (* Caller-counted decoder success after the concrete relabeled prefix. *)
 Theory extcallReturnRelabelCounted
 Ancestors
-  extcallReturnRelabelSuccess extcallReturnRelabelPrefix
+  extcallReturnRelabelSuccess extcallReturnEdgePrefix exprSimAbiGasBridgeEdge extcallReturnRelabelPrefix
   extcallReturnCountedCheck abiValidAllocatedContract
   abiMalformedRecursiveInterface abiMalformedSiteFrame exprSimAbiGasBridge
   abiEncoderObserver fragGasMode compileEnv loweringStateRelDefs venomState venomExecSemantics
@@ -27,9 +27,6 @@ QED
 Theorem return_capped_relabel_counted_success:
   cs_extends st en /\ st.cs_blocks <> en.cs_blocks /\ frag_ops_free st en /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
-  (en.cs_current_insts <> [] \/
-   !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   ~MEM en.cs_current_bb (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks st en))) /\
   ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code st en)) /\
   rt = (if needs_external_call_wrap ty then TupleT [ty] else ty) /\
@@ -59,7 +56,7 @@ Theorem return_capped_relabel_counted_success:
     u.vs_inst_idx = LENGTH en.cs_current_insts
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  drule_all return_capped_relabel_prefix >> strip_tac >>
+  drule_all return_capped_relabel_edge_prefix >> strip_tac >>
   `frag_relabel_state L st.cs_current_bb (s with vs_current_bb := L) s` by
     (irule frag_relabel_state_initial >> simp[]) >>
   `(L,s.vs_inst_idx) IN frag_observer_region
@@ -67,13 +64,13 @@ Proof
     (qspec_then `start_swap st L ids en` mp_tac
        (Q.SPEC `start_relabel L ids st`
          (Q.GENL [`sa`, `sb`] frag_observer_start_region)) >>
-     fs[frag_relabel_context_def, start_relabel_extends, start_relabel_def]) >>
+     fs[frag_relabel_edge_context_def, start_relabel_extends, start_relabel_def]) >>
   `?u'. gas_path ctx func s 0 (OK u') /\
      frag_relabel_state L st.cs_current_bb u u'` by
-    (drule return_relabel_prefix_path >> disch_then irule >>
+    (drule frag_relabel_edge_prefix_path >> disch_then irule >>
      conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl_tac [`id`, `ids`, `en`] >> simp[] >> gvs[]) >>
-  `u.vs_current_bb <> L` by fs[frag_relabel_context_def] >>
+  `u.vs_current_bb <> L` by fs[frag_relabel_edge_context_def] >>
   drule_all frag_relabel_state_cut >> strip_tac >>
   qexistsl_tac [`ceiling`, `u'`] >>
   conj_tac >- simp[gas_marked_path_def] >>

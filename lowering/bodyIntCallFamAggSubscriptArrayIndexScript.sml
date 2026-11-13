@@ -6,7 +6,6 @@ Ancestors
   exprSimSubscriptArrayFrame loweringPosts exprBopSimProps context
   exprLoweringProps compileEnv
 
-(* HELD (train 15): suspected false: pure_frame of obj across an effectful index; restate in train 16 *)
 Theorem intcall_framed_array_index_endpoint:
   intcall_expr_res fp ce env es sa s0 /\
   intcall_expr_cont fp ce env es sa s0 t sb u /\
@@ -29,12 +28,11 @@ Theorem intcall_framed_array_index_endpoint:
   MAP FDOM es.scopes = MAP FDOM t.scopes /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   sb.cs_next_var <= sc.cs_next_var /\ sb.cs_next_id <= sc.cs_next_id ==>
-  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sc s0 ee r
-    (LocatedValue (ArrayT et bd) p) s /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript (ArrayT et bd) obj idx)
+    es sa sc s0 ee r (LocatedValue (ArrayT et bd) p) s /\
   intcall_expr_cont fp ce env es sa s0 ee sc s /\
   (!w. eval_operand p.ptr_operand u = SOME w ==> eval_operand p.ptr_operand s = SOME w)
 Proof
-  (* original proof, kept while held:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s0 /\
    expr_sim_inv ce fp.jc_cx env t /\
@@ -51,6 +49,4 @@ Proof
   rpt strip_tac >> irule eval_operand_frame >> simp[] >>
   qexistsl_tac [`sb`,`u`] >>
   fs[intcall_expr_cont_def] >> metis_tac[]
-  *)
-  cheat
 QED

@@ -50,7 +50,7 @@ Theorem intcall_entry_root_expr_inv:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
     (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   body_inv tops ctx cenv cx /\ cenv_module_pins tops cenv /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
   env_body.current_src = NONE /\ env_body.type_defs = get_tenv cx /\
   env_body.fn_sigs = tenv.fn_sigs /\ env_body.bare_globals = tenv.bare_globals /\
   env_body.bare_global_assignable = tenv.bare_global_assignable /\

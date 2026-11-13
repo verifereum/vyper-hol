@@ -7,8 +7,8 @@ Ancestors
 
 Theorem intcall_entry_root_ready:
   body_inv tops ctx cenv cx /\ cenv_module_pins tops cenv /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
-  lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,[],ret,ss) /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,dflts,ret,ss) /\
   call_stack_follows (call_edge_rel E) ((NONE,name)::cx.stk) /\
   irreflexive (TC (call_edge_rel E)) /\
   functions_follow_call_graph E (cx with stk updated_by CONS (NONE,name)) /\

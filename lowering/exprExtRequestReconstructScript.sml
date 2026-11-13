@@ -135,13 +135,11 @@ Proof
   gvs[mem_word_at_def, GSYM mem_bytes_at_def]
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem extrequest_history_immutable_holds:
   immutable_holds cenv cx ty r w ec tc /\
   extrequest_history_frame cenv cx ec sc tc ee sn t ==>
   immutable_holds cenv cx ty r w ee t
 Proof
-  (* original proof, kept while held:
   strip_tac >>
   `extrequest_read_frame cx ec ee` by gvs[extrequest_history_frame_def] >>
   qpat_x_assum `immutable_holds _ _ _ _ _ _ _` mp_tac >>
@@ -150,21 +148,8 @@ Proof
     (drule extrequest_read_result_frame >> simp[]) >>
   `ALOOKUP ec.immutables cx.txn.target = ALOOKUP ee.immutables cx.txn.target`
     by gvs[extrequest_read_frame_def] >>
-  fs[] >>
-  qexistsl_tac [`name`, `off`, `itv`, `iv`, `k`] >> simp[] >>
-  disj2_tac >> simp[] >>
-  irule val_in_memory_footprint_agree >>
-  conj_tac >- metis_tac[value_has_type_memory_wf] >>
-  qexists_tac `tc.vs_memory` >> simp[] >>
-  `val_footprint tvt v <= type_memory_size tvt` by
-    metis_tac[value_has_type_memory_wf, val_footprint_le] >>
-  `mem_bytes_at off (type_memory_size itv) t.vs_memory =
-   mem_bytes_at off (type_memory_size itv) tc.vs_memory` by
-    (gvs[extrequest_history_frame_def] >> metis_tac[]) >>
-  drule mem_bytes_at_agree_window >> strip_tac >>
-  first_x_assum irule >> simp[]
-  *)
-  cheat
+  qexistsl_tac [`name`, `off`, `itv`, `iv`, `k`, `tvt`, `v`] >>
+  gvs[]
 QED
 
 Theorem extrequest_history_holds:

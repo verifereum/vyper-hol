@@ -238,11 +238,18 @@ Theorem body_inv_internal_charge_witness:
       unit_alloca_frame ctx
 Proof
   strip_tac >>
+  `module_consts_env tops [] = []` by
+    (fs[body_inv_def] >>
+     metis_tac[supportedProgramTheory.supported_program_def,
+       supportedDeclsTheory.supported_declaration_headers_def,
+       supportedDeclsTheory.supported_headers_module_consts_env]) >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts,ints,fb,ctor_fn)` >>
   `MEM (mut,nr,rr,name,args,dflts,ret,bd) ints` by
-    metis_tac[loweringShapePropsTheory.MEM_classify_internal,
-      pairTheory.FST, pairTheory.SND] >>
+    (`ints = FST (SND (classify_functions tops))` by simp[] >>
+     pop_assum SUBST1_TAC >>
+     simp[loweringShapePropsTheory.MEM_classify_internal,
+       constSubstTheory.subst_consts_fn_empty]) >>
   gvs[body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[]
   >- (`fn_allocs_ok tops (mut,nr,rr,name,args,dflts,ret,bd)` by
         metis_tac[lower_vyper_deploy_unit_allocs_ok] >>

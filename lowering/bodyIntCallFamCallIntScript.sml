@@ -14,6 +14,12 @@ Theorem intcall_nested_graph_producers:
      CARD {z | TC (call_edge_rel fp.jc_edges) fp'.jc_owner z} <
      CARD {z | TC (call_edge_rel fp.jc_edges) fp.jc_owner z} ==>
      intcall_stmts_producer fp' ss) /\
+  (!fp' e'.
+     fp'.jc_edges = fp.jc_edges /\
+     CARD {z | TC (call_edge_rel fp.jc_edges) fp'.jc_owner z} <
+     CARD {z | TC (call_edge_rel fp.jc_edges) fp.jc_owner z} ==>
+     intcall_expr_producer fp' e' /\ intcall_forced_producer fp' e' /\
+     intcall_map_producer fp' e') /\
   calls_follow_call_graph fp.jc_edges fp.jc_owner calls /\
   MEM (src,name) calls /\
   get_module_code fp.jc_cx src = SOME tops /\
@@ -62,10 +68,16 @@ Theorem intcall_intcall_step_nonreentrant:
      CARD {z | TC (call_edge_rel fp.jc_edges) fp'.jc_owner z} <
      CARD {z | TC (call_edge_rel fp.jc_edges) fp.jc_owner z} ==>
      intcall_stmts_producer fp' ss) /\
+  (!fp' e'.
+     fp'.jc_edges = fp.jc_edges /\
+     CARD {z | TC (call_edge_rel fp.jc_edges) fp'.jc_owner z} <
+     CARD {z | TC (call_edge_rel fp.jc_edges) fp.jc_owner z} ==>
+     intcall_expr_producer fp' e' /\ intcall_forced_producer fp' e' /\
+     intcall_map_producer fp' e') /\
   e = Call ann (IntCall (NONE,name)) cargs dflt /\
   get_module_code fp.jc_cx NONE = SOME tops /\
   lookup_callable_function fp.jc_cx.in_deploy name tops =
-    SOME (mut,T,args,[],ret,ss) /\
+    SOME (mut,T,args,dflts,ret,ss) /\
       intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
       expr_body_pre ce fp.jc_cx env e es /\
       supportedExprs$supported_expr fp.jc_tops e /\
@@ -112,6 +124,12 @@ Theorem intcall_intcall_step:
      CARD {z | TC (call_edge_rel fp.jc_edges) fp'.jc_owner z} <
      CARD {z | TC (call_edge_rel fp.jc_edges) fp.jc_owner z} ==>
      intcall_stmts_producer fp' ss) /\
+  (!fp' e'.
+     fp'.jc_edges = fp.jc_edges /\
+     CARD {z | TC (call_edge_rel fp.jc_edges) fp'.jc_owner z} <
+     CARD {z | TC (call_edge_rel fp.jc_edges) fp.jc_owner z} ==>
+     intcall_expr_producer fp' e' /\ intcall_forced_producer fp' e' /\
+     intcall_map_producer fp' e') /\
   (?a nsid args dflt. e = Call a (IntCall nsid) args dflt) ==>
   intcall_expr_producer fp e /\ intcall_map_producer fp e
 Proof

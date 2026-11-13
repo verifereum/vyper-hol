@@ -166,7 +166,7 @@ Theorem intcall_zero_return_prepare:
   t.vs_inst_idx = LENGTH si.cs_current_insts /\
   gas_invoke_entry (ctx,func) t callee entered /\
   gas_path ctx callee entered nsteps (IntRet ir cs) /\ ir.iret_values = [] /\
-  intcall_callee_exit other ce cx rtv rcn rb sa.cs_next_id sb.cs_next_id t
+  intcall_callee_exit other ce cx mut F rtv rcn rb sa.cs_next_id sb.cs_next_id t
     res ee (IntRet ir cs) /\
   stmt_state_rel ctx func ce cx (es1 with scopes := prev) t /\
   immutable_alloca_sep func ce cx (ee with scopes := prev) t /\
@@ -190,7 +190,7 @@ Theorem intcall_zero_return_prepare:
 Proof
   strip_tac >> drule_all intcall_void_compiler_boundary >> strip_tac >>
   `ir.iret_adopt_fmp = NONE` by
-    fs[intcall_callee_exit_def, expr_exit_def] >>
+    fs[intcall_callee_exit_F, expr_exit_def] >>
   `bind_outputs [] ir.iret_values (adopt_return_fmp ir (merge_callee_state t cs)) =
     SOME (merge_callee_state t cs)` by simp[bind_outputs_def, adopt_return_fmp_def] >>
   drule_all (intcall_return_restored_frame |> Q.INST [`outs` |-> `[]`] |> SRULE []) >>
@@ -279,9 +279,9 @@ Theorem intcall_physical_return_resources:
          off + buf.buf_size <= lb \/ lb + lsz <= off)))
 Proof
   gen_tac >> strip_tac >>
-  `intcall_callee_exit other ce cx tv nret NONE sa.cs_next_id sb.cs_next_id t
+  `intcall_callee_exit other ce cx mut F tv nret NONE sa.cs_next_id sb.cs_next_id t
     (INL v) (ee with gas_obs := []) (IntRet ir cs)` by
-    (simp[intcall_callee_exit_def] >> metis_tac[]) >>
+    (simp[intcall_callee_exit_F] >> metis_tac[]) >>
   `immutable_alloca_sep func ce cx (ee with <|scopes := prev; gas_obs := []|>) t` by
     (irule immutable_alloca_sep_fields >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>

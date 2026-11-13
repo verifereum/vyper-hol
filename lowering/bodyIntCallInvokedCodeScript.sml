@@ -5,7 +5,7 @@ Ancestors
 
 Theorem body_inv_invoked_internal_code:
   body_inv tops ctx cenv cx /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
     (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   gas_invoke_entry (ctx,func) t callee entered /\
@@ -40,6 +40,19 @@ Proof
   drule_all gas_invoke_entry_decode >> strip_tac >>
   drule_all (cj 1 intcall_entry_package_inputs) >> strip_tac >>
   `cenv.ce_is_ctor = cx.in_deploy` by gvs[body_inv_def] >>
-  gvs[] >> drule_all body_inv_selected_internal_code >> strip_tac >>
+  gvs[] >>
+  `package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy
+      (if cx.in_deploy then
+         compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) tops
+       else 0)
+      (mut,F,rr,name,args,dflts,ret,ss) =
+   package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy
+      (if cx.in_deploy then
+         compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) tops
+       else 0)
+      (mut,F,rr,name,args,([] : expr list),ret,ss)` by
+    simp[compileVyperTheory.package_internal_fn_def] >>
+  pop_assum (fn th => RULE_ASSUM_TAC (ONCE_REWRITE_RULE [GSYM th])) >>
+  drule_all body_inv_selected_internal_code >> strip_tac >>
   gvs[] >> metis_tac[]
 QED
