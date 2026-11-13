@@ -324,6 +324,8 @@ Proof
     simp[Abbr `u`, Abbr `g`, Abbr `q`] >>
   `EVERY (\i. i.inst_opcode <> INVOKE) xs` by
     simp[Abbr `xs`, mk_inst_def] >>
+  qpat_x_assum `inst_seq_ptr D lo ctx fn PG _ _ ys _ G' tn'`
+    (assume_tac o SIMP_RULE std_ss [DRESTRICT_DRESTRICT, INTER_ASSOC]) >>
   qspecl_then [`xs`, `s`, `u`, `g`, `q`] mp_tac
     (Q.INST [`func` |-> `fn`] prefix_trace_inst_seq_ptr) >>
   simp[Abbr `u`, Abbr `g`, Abbr `q`, Abbr `xs`, DRESTRICT_DRESTRICT,
@@ -726,8 +728,7 @@ Proof
   qpat_x_assum `!fuel. ptr_safe_step _ _ _ _ _ _ _ _ _ _` (qspec_then `fuel` assume_tac) >>
   simp[SRULE [LET_THM] prefix_mstore_taint_frame, prefix_mstore_mem_taint] >>
   conj_tac >- (simp[range_bytes_def, DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
-  conj_tac >- (drule_all ptr_safe_block_step >> simp[]) >>
-  first_assum ACCEPT_TAC
+  strip_tac >> drule_all ptr_safe_block_step >> simp[]
 QED
 
 Theorem prefix_bulk_reload_success_block:
@@ -1044,8 +1045,9 @@ Proof
         disch_then ACCEPT_TAC) >>
      `get_instruction bb s.vs_inst_idx = SOME (mk_inst iid DLOAD [src] [x])` by
        (qpat_x_assum `!j. j < 6 ==> _` (qspec_then `0` mp_tac) >> simp[Abbr `ys`]) >>
-     drule_all prefix_bulk_reload_success_block >>
-     disch_then (qspecl_then [`0`,`fn`,`PG`,`G`,`D'`] mp_tac) >>
+     mp_tac (Q.INST [`w` |-> `(n2w cnt):bytes32`, `fuel` |-> `0`, `D` |-> `D'`]
+       prefix_bulk_reload_success_block) >>
+     impl_tac >- simp[] >>
      pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
      `ys = [mk_inst iid DLOAD [src] [x]; h; i2; i3; i4; i5]` by
        simp[Abbr `ys`, Abbr `h`, Abbr `i2`, Abbr `i3`, Abbr `i4`, Abbr `i5`] >>
@@ -1269,13 +1271,14 @@ Resume prefix_bulk_success_ghost[body]:
      qpat_x_assum `!D'. inst_seq_ptr D' _ _ _ _ G3 q3 _ u3 H qt`
        (qspec_then `D'` mp_tac) >>
      qpat_assum `emitted_insts st st' = xs ++ ys` SUBST1_TAC >>
-     mp_tac (Q.INST [`iid` |-> `st.cs_next_id`, `limit` |-> `maxn`,
-                     `x` |-> `x 0`, `y` |-> `x 1`, `z` |-> `x 2`, `D` |-> `D'`,
-                     `G'` |-> `H`, `tn'` |-> `qt`]
-       prefix_copy_count_success_ptr) >>
+     qspecl_then [`st.cs_next_id`, `maxn`, `x 0`, `x 1`, `x 2`, `D'`, `H`, `qt`]
+       mp_tac
+       (Q.GENL [`iid`, `limit`, `x`, `y`, `z`, `D`, `G'`, `tn'`, `ys`]
+          prefix_copy_count_success_ptr) >>
      asm_simp_tac (srw_ss()) [LET_THM, Abbr `xs`] >>
-     simp[Abbr `s3`, Abbr `G3`, Abbr `q3`, Abbr `u3`, Abbr `ys`,
-          DRESTRICT_DRESTRICT, INTER_ASSOC]) >>
+     rpt strip_tac >> first_x_assum irule >>
+     qpat_x_assum `inst_seq_ptr _ _ _ _ _ G3 _ _ _ _ _` mp_tac >>
+     simp[Abbr `G3`, Abbr `u3`, INTER_ASSOC]) >>
   `LENGTH st'.cs_current_insts = s.vs_inst_idx+10` by simp[] >>
   `!fuel. ptr_safe_block D lo fuel ctx fn PG H qt bb
       (t with vs_inst_idx := LENGTH st'.cs_current_insts) ==>
