@@ -39,7 +39,9 @@ Proof
 QED
 
 Theorem abi_decode_position_header_path_mem:
-  abi_decode_position_loop_cfg fn hdr body_lbl exit_lbl id ip src MLOAD base_op first /\
+  lookup_block hdr fn.fn_blocks = SOME
+    <|bb_label := hdr; bb_instructions :=
+      abi_decode_position_header_insts id ip src MLOAD base_op first body_lbl exit_lbl|> /\
   abi_decode_position_loop_ready hdr ip src MLOAD base_op B sb p ncount i s /\
   src <> Var (STRING #"%" (toString first)) /\
   base_op <> Var (STRING #"%" (toString first)) /\
@@ -50,7 +52,7 @@ Theorem abi_decode_position_header_path_mem:
       (abi_decode_position_header_state base_op first B sb i ncount s)))
 Proof
   strip_tac >>
-  fs[abi_decode_position_loop_cfg_def, abi_decode_position_loop_ready_def] >>
+  fs[abi_decode_position_loop_ready_def] >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_position_header_prefix >> strip_tac >>
   `run_inst_seq_mem_ok (TAKE (4+abi_decode_position_header_delta base_op)
