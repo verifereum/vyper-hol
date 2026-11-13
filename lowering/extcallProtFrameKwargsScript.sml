@@ -263,7 +263,17 @@ Resume extcall_protframe_kwarg_retained_cps[unwrap_post]:
      Cases_on `p.ptr_location = LocMemory`
      >- (simp[] >> disj2_tac >> irule safe_operand_mono >> qexists `sc` >>
          fs[extrequest_history_frame_def]) >>
-     `tag = expr_type e` by fs[vv_post_def, vv_holds_def] >>
+     `post_value_type cenv e = expr_type e` by
+       (qpat_assum `is_word_type (expr_type e)` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        Cases_on `e` >> simp[expr_type_def] >>
+        rename1 `Call _ ct _ _` >> Cases_on `ct` >> simp[expr_type_def]) >>
+     `tag = expr_type e` by
+       (qpat_assum `vv_post _ _ _ _ e _ _ _ _ _ _ (LocatedValue tag p) _` mp_tac >>
+        qpat_assum `p.ptr_location <> LocMemory` mp_tac >>
+        qpat_assum `post_value_type cenv e = expr_type e` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[vv_post_def, vv_holds_def] >> rpt strip_tac >> gvs[]) >>
      gvs[safe_operand_mono]) >>
   `~u.vs_halted` by
     (qpat_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
