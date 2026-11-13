@@ -1,6 +1,7 @@
 (* Compiler and execution composition for retained widened local assignments. *)
 Theory widenedAssignPtrContinuation
 Ancestors widenedAssignPtrTypedLocal widenedAssignPtrRhsInput
+  widenedAssignPtrCopyRecursive widenedAssignPtrLocalLanding
   assignBasePtrAllocSeparate valueEncodingProps bodyDeclMemoryCore
   tupleLocalStoreRun localPtrsProps venomInst fragGasPathPtr stmtFragPtr exprSimAlloc
   assignBasePtrLocalAssign externalEntryShape stmtLowering context
@@ -310,3 +311,75 @@ Resume widened_assign_staged_local_ptr[store]:
 QED
 
 Finalise widened_assign_staged_local_ptr
+
+(* Bufferless calls supply Lit 0w, not a pointer variable.  A zero physical
+   source needs no readable region; the counted typed-store interface already
+   expresses that distinction. *)
+Theorem widened_assign_zero_local_store_ptr:
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  type_widens_to (get_tenv cx) sty dty /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  evaluate_type (get_tenv cx) dty = SOME entry.type /\
+  value_has_type stv v /\ value_has_type entry.type v /\
+  val_wf stv v /\ val_wf entry.type v /\ type_memory_size stv = 0 /\
+  compile_store_memory_typed cenv (Var p) dty (Lit 0w) sty a = ((),b) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory stv v 0 m) /\
+  fn_has_code a b fn /\ fn_inst_ids_distinct fn /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\
+  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
+  write_place cx (MemoryPlace id []) v es = (INL (),es') /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  lookup_var p s = SOME dw /\ local_ptrs_reserved cenv a /\
+  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at a x) /\
+  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at a x) ==>
+  ?G' tn' t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    t.vs_current_bb = b.cs_current_bb /\
+    t.vs_inst_idx = LENGTH b.cs_current_insts /\ ~t.vs_halted /\
+    stmt_state_rel ctx fn cenv cx es' t /\ ghost_inv d cenv cx es' G' tn' t /\
+    (!x. not_fresh_at a x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  drule_all tuple_store_destination_region >> strip_tac >>
+  `not_fresh_at a p` by metis_tac[local_ptrs_reserved_def] >>
+  `ptr_covers G tn p s sz` by (fs[ghost_inv_def] >> metis_tac[]) >>
+  `ptr_covers G tn p s (type_memory_size entry.type)` by
+    (fs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `local_ptrs_rel fn cenv es.scopes s /\ alloca_room ctx fn s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `w2n dw + sz <= s.vs_alloca_next` by
+    (qpat_assum `local_ptrs_rel _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
+     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+  `w2n dw + type_memory_size entry.type < dimword (:256)` by decide_tac >>
+  `eval_operand (Var p) s = SOME dw /\ op_taint tn (Var p) = {}` by
+    gvs[eval_operand_def, ptr_covers_def] >>
+  mp_tac (Q.SPECL [`cenv`,`get_tenv cx`,`ctx`,`D`,`PG`,`dty`,`sty`,
+    `entry.type`,`stv`,`v`] widened_assign_typed_store_counted_ptr) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then drule >> simp[] >>
+  disch_then (qspecl_then [`dw`,`0w`,`fn`,`G`,`tn`,`s`] mp_tac) >>
+  (impl_tac >- (simp[eval_operand_def, op_taint_def] >> metis_tac[])) >> strip_tac >>
+  rename1 `gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK t)` >>
+  `stmt_state_rel ctx fn cenv cx es' t /\ ghost_inv d cenv cx es' Gf tf t` by
+    (irule widened_local_write_landing_ptr >>
+     goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `typed_copy_state_frame _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+     simp[] >> metis_tac[]) >>
+  qexistsl_tac [`Gf`,`tf`,`t`] >> simp[]
+QED
