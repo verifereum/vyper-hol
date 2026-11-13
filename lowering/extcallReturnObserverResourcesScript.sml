@@ -132,22 +132,22 @@ Theorem return_observer_output_resources:
   abi_malformed_resource_post ctx func ce cx es next sites dstid s t
 Proof
   strip_tac >>
-  drule return_observer_alloca_structure >> strip_tac >>
   `!H':(bool # bytes32 # type_value) list # num list.
      stmt_state_rel H' ctx func ce cx es s ==>
      stmt_state_rel H' ctx func ce cx es t` by
     (rpt strip_tac >>
      `stmt_state_rel H' (return_observer_context ctx obs) obs ce cx es s` by
-       fs[stmt_state_rel_def] >>
+       (fs[stmt_state_rel_def] >>
+        metis_tac[return_observer_alloca_structure]) >>
      `stmt_state_rel H' (return_observer_context ctx obs) obs ce cx es t` by
-       (qpat_x_assum `abi_malformed_resource_post _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+       (qpat_x_assum `abi_malformed_resource_post _ _ _ _ _ _ _ _ _ _` mp_tac >>
         simp[abi_malformed_resource_post_def] >> rpt strip_tac >>
         first_x_assum irule >> simp[]) >>
      qpat_x_assum `stmt_state_rel H' (return_observer_context _ _) _ _ _ _ t`
        (mp_then (Pos hd) irule return_observer_output_state) >>
      metis_tac[]) >>
   first_assum (qspec_then `H` mp_tac) >> impl_tac >- simp[] >> strip_tac >>
-  qpat_x_assum `abi_malformed_resource_post _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `abi_malformed_resource_post _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [abi_malformed_resource_post_def]) >>
   rewrite_tac[abi_malformed_resource_post_def] >> rpt conj_tac
   >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
