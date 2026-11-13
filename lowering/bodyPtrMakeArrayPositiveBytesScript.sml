@@ -5,7 +5,7 @@ Ancestors
   bodyPtrMakeArrayConsInvariant bodyPtrDefs list pair
 
 Theorem literal_bytes_loop_store:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sa G tn s cells off /\
   literal_prefix_ok cells tn s /\
   compile_store_memory ce (Var src) (Var dst) ty sty sa = ((),sb) /\
@@ -25,10 +25,10 @@ Theorem literal_bytes_loop_store:
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id ==>
-  ?z H tm.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
-    literal_loop_frame pure ctx func ce cx d root aid addr capacity
-      ees fr sf Gf tnf es sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
+  ?z HG tm.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
+    literal_loop_frame H pure ctx func ce cx d root aid addr capacity
+      ees fr sf Gf tnf es sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -38,11 +38,11 @@ Proof
   drule literal_loop_frame_runtime >> strip_tac >>
   drule_all literal_bytes_store_counted >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  rename1 `gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z)` >>
-  `FLOOKUP H root = SOME (addr,capacity) /\ ptr_covers H tm root z capacity` by
+  rename1 `gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z)` >>
+  `FLOOKUP HG root = SOME (addr,capacity) /\ ptr_covers HG tm root z capacity` by
     metis_tac[literal_loop_frame_allocation] >>
-  `literal_loop_frame pure ctx func ce cx d root aid addr capacity
-    ees fr sf Gf tnf es sb H tm z cells off` by
+  `literal_loop_frame H pure ctx func ce cx d root aid addr capacity
+    ees fr sf Gf tnf es sb HG tm z cells off` by
     (irule literal_loop_store_endpoint >> simp[] >>
      qexistsl [`G`, `n`, `s`, `sa`, `tn`] >> simp[] >> metis_tac[]) >>
   `EVERY (\(tv,v,p,k). p+k <= addr+off) cells` by
@@ -50,10 +50,10 @@ Proof
   `literal_prefix_ok cells tm z` by
     (irule literal_prefix_store_frame >> qexistsl [`addr+off`, `n`, `s`, `tn`] >>
      simp[] >> metis_tac[]) >>
-  `literal_loop_frame pure ctx func ce cx d root aid addr capacity
-    ees fr sf Gf tnf es sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k)` by
+  `literal_loop_frame H pure ctx func ce cx d root aid addr capacity
+    ees fr sf Gf tnf es sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k)` by
     (irule literal_loop_frame_advance >> simp[]) >>
-  qexistsl [`z`, `H`, `tm`] >> simp[] >>
+  qexistsl [`z`, `HG`, `tm`] >> simp[] >>
   `val_footprint tv v <= k` by decide_tac >>
   simp[literal_prefix_cell] >> metis_tac[]
 QED
