@@ -63,10 +63,10 @@ Theorem ifexp_copy_post_transport:
   (!x. not_fresh_at cut x ==> lookup_var x q = lookup_var x m) /\
   local_ptrs_reserved cenv cut /\ origin.cs_next_var <= cut.cs_next_var /\
   (!x. op = Var x ==> not_fresh_at cut x) /\
-  expr_post ctx func cenv cx e es origin sb s0 ee v op m /\
+  expr_post H ctx func cenv cx e es origin sb s0 ee v op m /\
   vv_store_bound cx (expr_type e) lt ee raw
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) m ==>
-  expr_post ctx func cenv cx e es origin sb s0 ee v op q /\
+  expr_post H ctx func cenv cx e es origin sb s0 ee v op q /\
   vv_store_bound cx (expr_type e) lt ee raw
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q
 Proof
@@ -79,7 +79,7 @@ Proof
        (mp_tac o AP_TERM ``\s. s.vs_labels``) >> simp[]) >>
   `eval_operand op q = eval_operand op m` by
     (Cases_on `op` >> fs[venomStateTheory.eval_operand_def]) >>
-  `stmt_state_rel ctx func cenv cx ee (m with vs_vars := q.vs_vars)` by
+  `stmt_state_rel H ctx func cenv cx ee (m with vs_vars := q.vs_vars)` by
     (irule exprSimPropsTheory.stmt_state_rel_vars_frame >>
      fs[loweringPostsTheory.expr_post_def] >> rpt strip_tac >>
      fs[loweringStateRelDefsTheory.local_ptrs_reserved_def,
@@ -102,13 +102,13 @@ Resume ifexp_copy_post_transport[post]:
     (qpat_x_assum `q with <|vs_vars := _; vs_inst_idx := _|> = m`
        (SUBST1_TAC o SYM) >>
      simp_tac (srw_ss()) [venomStateTheory.venom_state_component_equality]) >>
-  `stmt_state_rel ctx func cenv cx ee q` by
+  `stmt_state_rel H ctx func cenv cx ee q` by
     metis_tac[exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
   `post_value_type cenv e <> expr_type e ==>
    expr_val_own cenv cx (post_value_type cenv e) origin sb ee v op q` by
     (strip_tac >>
      `expr_val_own cenv cx (post_value_type cenv e) origin sb ee v op m` by
-       (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ m` mp_tac >>
+       (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ m` mp_tac >>
         qpat_assum `post_value_type cenv e <> expr_type e` (fn th =>
           rewrite_tac[loweringPostsTheory.expr_post_def, th]) >>
         rpt strip_tac >> first_assum ACCEPT_TAC) >>
