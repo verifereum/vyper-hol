@@ -2,10 +2,10 @@
 Theory immutableAssignFixedMem
 Ancestors
   immutableFixedCopyTransportMem immutableConstructorRelation immutableDeployAssignBytes
-  exprLoweringProps stmtLowering context compileEnv loweringSlice valueEncodingProps venomState loweringStateRelDefs
+  exprLoweringProps stmtLowering context compileEnv loweringSlice valueEncodingProps venomState loweringStateRelDefs vyperTypeValues
 
 Theorem immutable_assign_fixed_mem_endpoint:
-  compile_assign_value ce dst LocCode src F sl dty dty di
+  compile_assign_value ce dst LocCode src F sl dty dty
     (type_memory_bytes ce dty) sm = ((),sb) /\
   ~is_word_type dty /\ ~is_bytestring_type dty /\
   ce.ce_imm_alloca = SOME region /\ fn_has_code sm sb func /\
@@ -42,7 +42,7 @@ Proof
      simp[] >> disch_then (qspec_then `type_memory_size dtv` mp_tac) >>
      simp[] >> decide_tac) >>
   `compile_imm_store_words (SOME region) src dst n 0 sm = ((),sb)` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_assign_value_def, comp_bind_def, comp_return_def] >>
      Cases_on `n = 1` >-
        (gvs[] >> CONV_TAC (DEPTH_CONV numLib.num_CONV) >>
@@ -63,6 +63,8 @@ Proof
   disch_then (qspecl_then [`s`, `func`, `ctx`, `off`, `a`] mp_tac) >>
   simp[] >> strip_tac >>
   `val_wf dtv v` by metis_tac[immutable_admissible_val_wf] >>
+  `well_formed_type_value dtv` by
+    metis_tac[evaluate_type_well_formed_type_value] >>
   `val_in_memory dtv v off (mcopy off a (32*n) s).vs_memory` by
     (irule mcopy_establishes_val_in_memory >> simp[]) >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>

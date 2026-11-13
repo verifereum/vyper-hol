@@ -4,7 +4,7 @@ Ancestors
   immutableAssignStoreMem immutableConstructorRelation stmtLowering compileEnv context emitHelper venomExecSemantics loweringStateRelDefs venomState finite_map
 
 Theorem immutable_assign_word_mem_endpoint:
-  compile_assign_value ce dst LocCode src T sl dty sty di memsz sm = ((),sb) /\
+  compile_assign_value ce dst LocCode src T sl dty sty memsz sm = ((),sb) /\
   ce.ce_imm_alloca = SOME region /\ fn_has_code sm sb func /\
   eval_operand region s = SOME 0w /\ eval_operand dst s = SOME (n2w off) /\
   eval_operand src s = SOME w /\
