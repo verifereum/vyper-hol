@@ -63,6 +63,8 @@ Theorem hash_alloc_store_counted:
     mk_inst sid MSTORE [Var p;value] []] (DROP s.vs_inst_idx bb.bb_instructions) ==>
   run_inst_seq [mk_inst aid ALLOCA [Lit 32w] [p];
     mk_inst sid MSTORE [Var p;value] []] s = OK (mstore (w2n a) w t) /\
+  inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst aid ALLOCA [Lit 32w] [p]; mk_inst sid MSTORE [Var p;value] []] s G2 tn2 /\
   gas_path_ptr D 0 ctx fn PG G tn s 0 G2 tn2
     (OK ((mstore (w2n a) w t) with vs_inst_idx := s.vs_inst_idx+2))
 Proof
@@ -89,7 +91,7 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     [mk_inst aid ALLOCA [Lit 32w] [p]; mk_inst sid MSTORE [Var p;value] []]` by
     simp[mk_inst_def, is_terminator_def] >>
-  drule_all run_inst_seq_gas_path_ptr >> simp[]
+  drule_all run_inst_seq_gas_path_ptr >> gvs[]
 QED
 
 Theorem hash_alloca_control_fields:
@@ -125,6 +127,7 @@ Theorem hash_fixed_prepare_endpoint:
   ?t a p w G2 tn2.
   a = t with vs_inst_idx := s.vs_inst_idx+2 /\
   run_inst_seq (emitted_insts sa sm) s = OK t /\
+  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm) s G2 tn2 /\
   gas_path_ptr D 0 ctx fn PG G tn s 0 G2 tn2 (OK a) /\
   stmt_state_rel H ctx fn cenv cx es a /\ ghost_inv H d cenv cx es G2 tn2 a /\
   ghost_kept cenv es sa G tn s G2 tn2 /\ ib.buf_operand = Var p /\

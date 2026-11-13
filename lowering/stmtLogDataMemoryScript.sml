@@ -1,7 +1,7 @@
 Theory stmtLogDataMemory
 Ancestors
   stmtSimLogDataRun stmtSimLogDataFrame stmtSimLogData stmtSimLogTopics
-  stmtLogTopicsMemory bodyCopyMemory bodyAllocMemory abiBuiltinAllocation stmtReasonMemory exprSimHash exprSimProps
+  stmtLogTopicsMemory bodyCopyMemoryBase bodyCopyMemory bodyAllocMemory abiBuiltinAllocation stmtReasonMemory exprSimHash exprSimProps
   exprSimBufferStore exprSimDefs supportedTypes context emitHelperProps
   fragExecMem instMemFrontier valueEncoding words list arithmetic compileEnv exprLoweringProps moduleLoweringProps venomInst venomState freshWrites
 
