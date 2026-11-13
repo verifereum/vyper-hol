@@ -93,7 +93,7 @@ Theorem constructor_epilogue_zero_path_mem:
   compile_constructor_epilogue rt cap imm st = ((),st') /\
   fn_has_code st st' func /\ fn_inst_ids_distinct func /\
   ~block_is_terminated st /\
-  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   rt + cap < dimword(:256) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st x)) /\
@@ -137,7 +137,7 @@ Theorem constructor_exit_zero_path_mem:
   (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) /\
-  stmt_state_rel ctx func body_cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func body_cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = st_exit.cs_current_bb /\ s.vs_inst_idx = 0 ==>
   ?final. gas_path_mem ctx func s 0 (Halt final)
 Proof
@@ -153,7 +153,7 @@ Proof
   >- (gvs[] >>
       qmatch_asmsub_abbrev_tac `fn_has_code st_exit ep func` >>
       qabbrev_tac `u = tstore (n2w nkey) 0w s` >>
-      `stmt_state_rel ctx func body_cenv cx
+      `stmt_state_rel H ctx func body_cenv cx
          (es with tStorage := (cx.txn.target =+
            update_storage (n2w nkey) 0w (es.tStorage cx.txn.target)) es.tStorage)
          (u with vs_inst_idx := 1)` by
@@ -221,7 +221,7 @@ Proof
   `gas_path_mem ctx func s0 0 (OK (jump_to exit_lbl s0))` by
     (irule emit_jump_zero_path_mem >> simp[] >>
      qexistsl_tac [`sa`, `sb`] >> simp[]) >>
-  `stmt_state_rel ctx func body_cenv cx es (jump_to exit_lbl s0)` by
+  `stmt_state_rel H ctx func body_cenv cx es (jump_to exit_lbl s0)` by
     simp[stmt_state_rel_jump_to] >>
   `~(jump_to exit_lbl s0).vs_halted /\
    (jump_to exit_lbl s0).vs_current_bb = st_exit.cs_current_bb /\

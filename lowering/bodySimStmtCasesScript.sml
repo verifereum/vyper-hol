@@ -47,7 +47,7 @@
 
 Theory bodySimStmtCases
 Ancestors
-  bodyAssignTupleWidenedPrep stmtSimAssignTuplePlaces
+  bodyStorageMetadata bodyAssignTupleWidenedPrep stmtSimAssignTuplePlaces
   loweringStateRelDefs valueEncodingProps bodyAssignTupleOther assignRelayoutFrag assignRelayoutCaller annassignRelayoutSource
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
@@ -663,19 +663,6 @@ Proof
   metis_tac[store_lays_out_typed]
 QED
 
-(* A storage declaration found by name is a variable declaration of tops
-   under that name. *)
-
-Theorem find_var_decl_storage_some:
-  !ts vis mut id ty init.
-    MEM (VariableDecl vis mut id ty init) ts /\
-    (mut = Storage \/ mut = Transient) ==>
-    find_var_decl_by_name id ts <> NONE
-Proof
-  Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >> metis_tac[]
-QED
-
-
 (* expr_sim_inv's storage-variable clause from the program's frame: in a
    single-module program, a storage or transient variable has its declared
    type in ce_module_var_type and is not a mapping. *)
@@ -1019,24 +1006,6 @@ Proof
                     (nsid_to_string sid)) fld = SOME (fty, fsz)` by
     metis_tac[attribute_type_struct_field] >>
   irule compile_assign_attr_local_case >> simp[] >> metis_tac[]
-QED
-
-(* A struct field write the supported subset admits is to a storage or
-   transient struct of the main module, tops. *)
-Theorem supported_storage_field_write_decl:
-  !tops src id fld.
-    supported_storage_field_write tops (src, id) fld ==>
-    src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-    ?vis mut sid slot. MEM (VariableDecl vis mut id (StructT sid) slot) tops
-Proof
-  rpt gen_tac >>
-  simp[supported_storage_field_write_def,
-       supportedExprFormsTheory.supported_storage_fields_def] >>
-  Cases_on `supported_variable_decl tops (src, id)` >> simp[] >>
-  rename1 `SOME x` >> PairCases_on `x` >>
-  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
-  Cases_on `x0` >> Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >> simp[] >>
-  metis_tac[find_var_decl_storage_some]
 QED
 
 (* An assignment to a word field of a storage or transient struct:

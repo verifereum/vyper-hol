@@ -54,12 +54,5 @@ Proof
                         evaluate_type (get_tenv cx) typ = SOME tv /\
                         read_storage_slot cx tr (n2w slot) tv es = (INL v,es)`
   >- (gvs[] >> irule compile_toplevel_storage_aggregate_sim_ptr >> metis_tac[]) >>
-  rw[expr_sim_ptr_def] >>
-  `gas_admissible (eval_expr cx (TopLevelName ann (src,id))) expr_vv_res_ok es` by
-    metis_tac[forced_expr_admissible_raw] >>
-  `F` suffices_by simp[] >>
-  drule_all admissible_toplevel_storage_lookup >> strip_tac >>
-  `contract_storage_well_formed cx es` by
-    gvs[expr_sim_pre_def, expr_sim_inv_def] >>
-  drule_all toplevel_storage_read_decodes >> metis_tac[]
+  irule toplevel_storage_undecodable_sim_ptr >> metis_tac[]
 QED

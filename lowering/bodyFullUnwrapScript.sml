@@ -89,7 +89,10 @@ Theorem unwrap_value_origin_ptr:
     wb_frame cenv ee ee sb s z /\
     ghost_kept_at lo cenv ee sb G tn s G' tn'
 Proof
-  strip_tac >> Cases_on `vv`
+  strip_tac >>
+  Cases_on `is_word_type (post_value_type cenv e)`
+  >- PIECE_TAC unwrap_word_value_origin_ptr >>
+  Cases_on `vv`
   >- (rename1 `StackValue t0 op0` >>
       PIECE_TAC (Q.INST [`vv` |-> `StackValue t0 op0`] unwrap_stack_origin_ptr)) >>
   rename1 `LocatedValue t p` >>

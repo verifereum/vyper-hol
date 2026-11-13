@@ -309,15 +309,39 @@ Proof
      simp[lift_option_type_def, raise_def, bind_def, expr_vv_res_ok_def]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ e _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sm`, `data`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `data`, `s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  rewrite_tac[gas_outcome_def] >> strip_tac
-  >- (qexists_tac `marks` >> disj1_tac >>
+  rewrite_tac[gas_outcome_def] >> BETA_TAC >>
+  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN mp_tac))
+  >- (strip_tac >> qexists_tac `marks` >> disj1_tac >>
       rewrite_tac[eval_raw_revert_action] >>
-      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
-        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
-      gvs[]
-      >- (`?w. eval_operand data t = SOME w` by
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+           vyperStorageTraceTheory.storage_trace_frame_lifts,
+           vyperStorageTraceTheory.storage_trace_frame_raise]) >>
+  disch_then (DISJ_CASES_THEN mp_tac)
+  >- (rewrite_tac[gas_summary_at_def] >>
+      disch_then (qx_choose_then `res` (qx_choose_then `es_end`
+        (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
+      reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+      >- (disch_then kall_tac >> qexists_tac `marks` >> disj1_tac >>
+          rewrite_tac[eval_raw_revert_action] >>
+          irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+          simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+               vyperStorageTraceTheory.storage_trace_frame_lifts,
+               vyperStorageTraceTheory.storage_trace_frame_raise] >>
+          irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
+          metis_tac[]) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by
+        fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+      disch_then (DISJ_CASES_THEN (strip_assume_tac o BETA_RULE)) >>
+      qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      rewrite_tac[eval_raw_revert_action]
+      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+            (assume_tac o SIMP_RULE (srw_ss()) []) >>
+          first_x_assum drule >> strip_tac >> gvs[] >>
+          `?w. eval_operand data t = SOME w` by
             gvs[expr_post_def, expr_val_rel_def] >>
           `~t.vs_halted` by
             metis_tac[gas_marked_exec_def, gas_marked_path_exec,
@@ -339,6 +363,9 @@ Proof
           qexistsl_tac [`es_end`, `t`, `v`] >> simp[] >>
           gvs[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def,
               raise_def, bind_def, lift_option_type_def, return_def]) >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+        (assume_tac o SIMP_RULE (srw_ss()) []) >>
+      `expr_exit res r` by metis_tac[] >>
       Cases_on `res` >> gvs[expr_exit_def] >>
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >>
@@ -346,7 +373,7 @@ Proof
       qpat_x_assum `expr_exit _ _` mp_tac >>
       Cases_on `r` >> Cases_on `y` >> simp[expr_exit_def] >>
       rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
-  qexists_tac `marks` >> disj2_tac >>
+  strip_tac >> qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   rewrite_tac[eval_raw_revert_action, ignore_bind_bind_unit] >>
   irule gas_exempt_cert_error_value >> simp[]
