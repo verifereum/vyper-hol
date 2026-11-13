@@ -32,10 +32,10 @@ Theorem immutable_augassign_scalar_suffix_mem:
   eval_operand x s0 = SOME (val_to_w256 cur) /\
   w2n (n2w off : bytes32) + 32 <= s0.vs_alloca_next /\
   is_word_type (expr_type e) /\ IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
-  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+  gas_admissible (vyperState$bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
   gas_admissible
-    (bind (bind (eval_expr cx e) (read_result cx))
-      (\rhs. bind (lift_sum (evaluate_binop
+    (vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
+      (\rhs. vyperState$bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur rhs)) (write_place cx (ImmutablePlace cenv.ce_module id []))))
     (stmt_res_ok lctx) es /\
@@ -48,8 +48,8 @@ Theorem immutable_augassign_scalar_suffix_mem:
   (!aid b. FLOOKUP s_entry.vs_allocas aid = SOME b ==>
            FLOOKUP s0.vs_allocas aid = SOME b) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
-    (bind (bind (eval_expr cx e) (read_result cx))
-      (\rhs. bind (lift_sum (evaluate_binop
+    (vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
+      (\rhs. vyperState$bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
         tv bop cur rhs)) (write_place cx (ImmutablePlace cenv.ce_module id [])))) (es,s0)
     (\res ff u. res = INL () /\
@@ -71,6 +71,9 @@ Proof
   drule_all immutable_augassign_rhs_source >>
   disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
   drule_all immutable_augassign_current_root >> strip_tac >>
+  `FLOOKUP env.bare_globals (cenv.ce_module,id) = SOME ty` by
+    (fs[exprSimHypsDefsTheory.expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >> metis_tac[]) >>
   `value_has_type tv v` by metis_tac[] >>
   `store_lays_out tv tv v` by metis_tac[store_lays_out_typed] >>
   `eval_operand op t = SOME (typed_val_to_w256 tv v)` by

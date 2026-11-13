@@ -10,8 +10,8 @@ Theorem immutable_augassign_root_source_outcome:
     NONE => FEMPTY | SOME imms => get_source_immutables src imms) id = SOME (tv,iv) /\
   ~s0.vs_halted /\
   gas_outcome T tops (ctx,func)
-    (bind (bind (eval_expr cx e) (read_result cx))
-      (\rhs. bind (lift_sum (evaluate_binop
+    (vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
+      (\rhs. vyperState$bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop iv rhs)) (write_place cx (ImmutablePlace src id []))))
     (es,s0) Q R ==>
