@@ -77,6 +77,17 @@ Definition target_result_decodable_def:
   target_result_decodable cx st (Value _) = T
 End
 
+Theorem target_result_decodable_trace[simp]:
+  target_result_decodable cx (st with storage_trace := obs) pv =
+  target_result_decodable cx st pv
+Proof
+  Cases_on `pv` >> simp[target_result_decodable_def] >>
+  Cases_on `p` >> simp[target_result_decodable_def] >>
+  simp[read_storage_slot_def, vyperStorageBackendTheory.get_storage_backend_eq,
+       bind_def, lift_option_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> CASE_TAC >> simp[raise_def, return_def]
+QED
+
 Theorem target_lookup_global_decodable:
   contract_storage_well_formed cx st /\
   lookup_global cx mid name st = (INL pv,st') ==>
@@ -218,9 +229,11 @@ Proof
           drule_all target_storage_extend_decodable >> simp[]) >>
       simp[extend_memory_place_def, target_result_decodable_def]) >>
   Cases_on `sb` >> simp[extend_place_def, raise_def] >> Cases_on `v` >>
-  simp[extend_place_def, bind_def, lift_option_type_def, return_def, raise_def,
-       AllCaseEqs()] >> rpt strip_tac >>
+  simp[extend_place_def, bind_def, ignore_bind_def, record_storage_event_def,
+       lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >>
   gvs[target_result_decodable_def, vyperMiscTheory.option_CASE_rator,
+      bind_def, ignore_bind_def, record_storage_event_def,
       return_def, raise_def, AllCaseEqs()] >>
   drule storage_mapping_region_step >>
   disch_then (qspec_then `v'` assume_tac) >>
@@ -251,13 +264,17 @@ Proof
   simp[target_result_decodable_def] >>
   qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
   simp[expr_size_def] >> strip_tac >>
-  first_x_assum drule >> simp[] >> strip_tac >>
-  drule_all nested_pop_eval_base_pure_state >> strip_tac >> gvs[]
-  >~ [`pure_expr e`]
-  >- (drule_all eval_expr_preserves_state >> strip_tac >> gvs[] >>
-      drule read_result_state >> strip_tac >> gvs[] >>
-      drule_all target_extend_result_decodable >> simp[]) >>
-  drule_all target_extend_result_decodable >> simp[]
+  rename1 `eval_base_place cx b st = (INL bpv,s1)` >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all nested_pop_eval_base_pure_state >> strip_tac >>
+  qmatch_assum_rename_tac `extend_place _ _ _ s3 = (INL pv,st')` >>
+  `s3 = st with storage_trace := s3.storage_trace` by
+    (imp_res_tac eval_expr_preserves_state >> imp_res_tac read_result_state >>
+     gvs[] >> fs[evaluation_state_component_equality]) >>
+  `target_result_decodable cx s3 bpv /\ contract_storage_well_formed cx s3` by
+    (pop_assum SUBST1_TAC >> simp[]) >>
+  drule_all target_extend_result_decodable >>
+  qpat_x_assum `s3 = _` (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
 Theorem target_eval_base_header_capacity:
@@ -283,8 +300,9 @@ Theorem target_subscript_pure_capacity:
   (dyn ==> w2n (lookup_storage slot (get_storage cx es tr)) <= cnt)
 Proof
   rpt strip_tac >> gvs[] >>
-  drule_all nested_pop_eval_base_pure_state >> strip_tac >> gvs[] >>
-  drule_all eval_expr_preserves_state >> strip_tac >> gvs[] >>
-  drule read_result_state >> strip_tac >> gvs[] >>
-  drule_all target_eval_base_header_capacity >> simp[]
+  drule_all target_eval_base_header_capacity >>
+  imp_res_tac nested_pop_eval_base_pure_state >>
+  imp_res_tac eval_expr_preserves_state >> imp_res_tac read_result_state >>
+  gvs[] >>
+  metis_tac[vyperStorageBackendTheory.get_storage_storage_trace]
 QED
