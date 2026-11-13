@@ -78,7 +78,7 @@ Proof
       `~is_bytestring_type ty` by metis_tac[assign_base_storage_not_bytestring, expr_type_def] >>
       gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
          expr_type_def, is_bytestring_type_def])
-  >- (rpt gen_tac >> strip_tac >>
+  >- (rpt strip_tac >>
       qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
       simp[expr_body_pre_def, well_typed_expr_def,
            type_builtin_result_ok_def, expr_type_def] >> strip_tac >>
