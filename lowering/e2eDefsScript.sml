@@ -128,8 +128,14 @@ Theorem source_typing_ok_runtime_ready:
         checked_contract_runtime_ready art [(NONE, tops)] am tx /\
         machine_well_typed am /\ call_tx_well_typed tx
 Proof
-  rw[source_typing_ok_def, global_cells_typed_def, source_deployment_rel_def] >>
-  qexists_tac `art` >>
+  strip_tac >>
+  fs[source_typing_ok_def, global_cells_typed_def] >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
+   (case ALOOKUP am.exports tx.target of NONE => [] | SOME exps => exps) = []` by
+    (fs[source_deployment_rel_def] >>
+     Cases_on `ALOOKUP am.exports tx.target` >> gvs[]) >>
+  qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
+  TRY (qexists_tac `art`) >>
   simp[checked_contract_runtime_ready_def] >>
   conj_tac >- metis_tac[check_contract_single_module_exports_ok] >>
   mp_tac (Q.INST
@@ -212,10 +218,11 @@ Proof
   conj_tac
   >- gvs[vyperContextTheory.type_env_all_modules_def,
          vyperContextTheory.type_env_def, finite_mapTheory.FUNION_FEMPTY_2] >>
-  `MEM (tx.target, x) am.immutables` by metis_tac[alistTheory.ALOOKUP_MEM] >>
+  qabbrev_tac `imms0 = constant_machine_immutables am tx.target` >>
+  `MEM (tx.target, imms0) am.immutables` by metis_tac[alistTheory.ALOOKUP_MEM] >>
   gvs[listTheory.EVERY_MEM] >>
-  first_x_assum (qspec_then `(tx.target, x)` mp_tac) >> simp[] >>
-  Cases_on `ALOOKUP x NONE` >> gvs[vyperTypeInvariantsTheory.imms_well_typed_def] >>
+  first_x_assum (qspec_then `(tx.target, imms0)` mp_tac) >> simp[] >>
+  Cases_on `ALOOKUP imms0 NONE` >> gvs[vyperTypeInvariantsTheory.imms_well_typed_def] >>
   metis_tac[]
 QED
 
