@@ -270,22 +270,24 @@ Resume widened_declaration_retained_read_store_ptr[unstaged]:
     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
     strip_tac >> gvs[]) >>
  `w2n sw + type_memory_size ltv <= w2n w \/ w2n w + sz <= w2n sw` by
-   (mp_tac (Q.INST [`ce` |-> `c`,`es` |-> `ee with gas_obs := []`,
-       `ty` |-> `lowered_value_type c e`,`tv` |-> `ltv`,
-       `(src:operand)` |-> `Var src`,`(p:256 word)` |-> `sw`,
-       `(x:string)` |-> `p`,`b` |-> `w2n (w:256 word)`]
-      (SPEC_ALL expr_val_at_alloca_outside_interval_separate)) >>
+   (mp_tac (SPEC_ALL expr_val_at_alloca_outside_interval_separate
+      |> INST [``src:operand`` |-> ``Var (src:string) : operand``,``p:256 word`` |-> ``sw:256 word``,
+               ``x:string`` |-> ``p:string``]
+      |> Q.INST [`ce` |-> `c`,`es` |-> `ee with gas_obs := []`,
+           `ty` |-> `lowered_value_type c e`,`tv` |-> `ltv`,
+           `b` |-> `w2n (w:256 word)`]) >>
     (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[])) >>
     simp[]) >>
  `w2n w + type_memory_size tyv <= w2n sw \/
   w2n sw + type_memory_size ltv <= w2n w` by decide_tac >>
- mp_tac (Q.INST [`ce` |-> `c`,`sa` |-> `sb`,`sb` |-> `sf`,`(src:operand)` |-> `Var src`,
+ mp_tac (INST [``src:operand`` |-> ``Var (src:string) : operand``]
+   (SPEC_ALL widened_declaration_store_ptr) |>
+   Q.INST [`ce` |-> `c`,`sa` |-> `sb`,`sb` |-> `sf`,
    `sty` |-> `lowered_value_type c e`,`dty` |-> `typ`,
    `stv` |-> `ltv`,`dtv` |-> `tyv`,
    `es` |-> `ee with gas_obs := []`,`s0` |-> `salloc`,
    `G0` |-> `Ga`,`tn0` |-> `tna`,`dw` |-> `(w:256 word)`,
-   `sw` |-> `(sw:256 word)`,`cap` |-> `sz`]
-   (SPEC_ALL widened_declaration_store_ptr)) >>
+   `sw` |-> `(sw:256 word)`,`cap` |-> `sz`]) >>
  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
    TRY (fs[ptr_covers_def] >> NO_TAC) >> metis_tac[])) >>
  disch_then (qx_choosel_then [`H`,`tm`,`t`] strip_assume_tac) >>
