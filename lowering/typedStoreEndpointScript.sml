@@ -1,7 +1,7 @@
 (* Rank-free boundary for the actual typed normalization store. *)
 Theory typedStoreEndpoint
 Ancestors
-  typedNormalizeRankMem typedStoreAllocationFrame venomState
+  typedStorePathEndpoint typedNormalizeRankMem typedStoreAllocationFrame venomState
 
 Theorem typed_store_mem_cont:
   acyclic_struct_metadata ce.ce_struct_fields /\
@@ -38,13 +38,9 @@ Theorem typed_store_mem_cont:
       vs_prev_bb := s.vs_prev_bb|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  irule typed_store_rank_mem_cont >>
-  goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexists_tac `tenv` >> simp[] >> first_assum ACCEPT_TAC
+  strip_tac >> drule_all typed_store_mem_path >>
+  disch_then (qspec_then `ctx` (qx_choose_then `t` strip_assume_tac)) >>
+  qexists_tac `t` >> simp[]
 QED
 
 Theorem typed_store_mem_cont_resources:

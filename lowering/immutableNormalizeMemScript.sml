@@ -1,10 +1,7 @@
 (* Framed allocation and typed normalization before an immutable write. *)
 Theory immutableNormalizeMem
 Ancestors
-  externalReturnNormalizeRun externalNormalizePremises typedStoreEndpoint
-  typedStoreAllocationFrame memContinuation loweringHalt exprLoweringProps localPtrsProps
-  exprSimDefs loweringPosts fragExecMem venomState venomExecSemantics
-  compileEnv context words arithmetic finite_map
+  immutableNormalizePathMem
 
 Theorem immutable_normalize_mem_endpoint:
   compile_alloc_buffer (type_memory_bytes ce dty) sm = (buf,mid) /\
@@ -56,81 +53,8 @@ Theorem immutable_normalize_mem_endpoint:
       OK (u with vs_inst_idx := s.vs_inst_idx) /\
     FLOOKUP u.vs_allocas sm.cs_next_id = SOME (b,type_memory_size dtv)
 Proof
-  strip_tac >> drule_all normalize_return_typed_windows >>
-  disch_then (qx_choose_then `dtv` (qx_choose_then `t`
-    (qx_choose_then `b` (map_every assume_tac o CONJUNCTS)))) >>
-  `b < dimword (:256)` by decide_tac >>
-  `FLOOKUP t.vs_allocas sm.cs_next_id = SOME (b,type_memory_size dtv)` by
-    (drule_all normalize_alloc_registered >> simp[]) >>
-  drule_all normalize_alloc_mem_cont >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
-  qmatch_asmsub_abbrev_tac `mem_cont_sim ctx func s u` >>
-  `t.vs_inst_idx = s.vs_inst_idx` by
-    (qpat_x_assum `exec_alloca _ _ _ = OK t` mp_tac >>
-     simp[exec_alloca_def, venomInstTheory.mk_inst_def, AllCaseEqs(), update_var_def] >>
-     strip_tac >> gvs[]) >>
-  `u.vs_inst_idx = LENGTH mid.cs_current_insts /\
-   eval_operand src u = SOME p /\ eval_operand buf.buf_operand u = SOME (n2w b) /\
-   u.vs_memory = t.vs_memory /\ u.vs_alloca_next = t.vs_alloca_next` by
-    simp[Abbr `u`, eval_operand_def, lookup_var_def] >>
-  drule compile_alloc_buffer_parts >> strip_tac >>
-  `!x. buf.buf_operand = Var x \/ src = Var x ==> not_fresh_at mid x` by
-    (gen_tac >> strip_tac >> gvs[] >> metis_tac[]) >>
-  `w2n (n2w b : bytes32) = b` by
-    (simp[w2n_n2w] >> irule LESS_MOD >> decide_tac) >>
-  `alloca_inv u /\ alloca_room ctx func u` by
-    (conj_tac
-     >- (irule alloca_inv_fields >> qexists_tac `t` >> simp[Abbr `u`]) >>
-     irule alloca_room_fields >> qexists_tac `t` >> simp[Abbr `u`]) >>
-  suspend "store"
+  strip_tac >> drule_all immutable_normalize_mem_path_endpoint >>
+  disch_then (qx_choose_then `dtv` (qx_choose_then `u`
+    (qx_choose_then `t` (qx_choose_then `b` strip_assume_tac)))) >>
+  qexistsl_tac [`dtv`, `u`, `t`, `b`] >> simp[]
 QED
-
-Resume immutable_normalize_mem_endpoint[store]:
-  `val_in_memory stv v (w2n p) u.vs_memory /\
-   w2n p + type_memory_size stv <= u.vs_alloca_next /\
-   w2n (n2w b : bytes32) + type_memory_size dtv <= u.vs_alloca_next /\
-   w2n p + type_memory_size stv < dimword (:256) /\
-   w2n (n2w b : bytes32) + type_memory_size dtv < dimword (:256)` by metis_tac[] >>
-  Q.SUBGOAL_THEN
-    `w2n p + type_memory_size stv <= w2n (n2w b : bytes32) \/
-      w2n (n2w b : bytes32) + type_memory_size dtv <= w2n p` assume_tac
-  >- metis_tac[] >>
-  drule_all typed_store_mem_cont >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
-  rename1 `mem_cont_sim ctx func u z` >>
-  `z.vs_allocas = u.vs_allocas /\ z.vs_alloca_next = u.vs_alloca_next` by
-    (irule typed_store_frame_allocations >> goal_assum (drule_at Any)) >>
-  `alloca_inv z /\ alloca_room ctx func z` by
-    (irule typed_store_frame_resources >> goal_assum (drule_at Any) >> simp[]) >>
-  qexistsl_tac [`dtv`,`u`,`z`,`b`] >> simp[] >>
-  suspend "frame"
-QED
-
-Resume immutable_normalize_mem_endpoint[frame]:
-  conj_tac
-  >- (simp[eval_operand_def] >>
-      qpat_x_assum `!x. not_fresh_at mid x ==> _` (qspec_then `STRING #"%" (toString sm.cs_next_var)` mp_tac) >>
-      gvs[eval_operand_def]) >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- (rpt strip_tac >> metis_tac[ADD_COMM]) >>
-  drule_at (Pos (el 2)) stmtSimDeclPathTheory.exec_alloca_frames >>
-  simp[emitHelperPropsTheory.mk_inst_outputs] >> strip_tac >>
-  reverse conj_tac
-  >- (conj_tac >- suspend "allocation_execution" >> simp[Abbr `u`]) >>
-  simp[Abbr `u`, lookup_var_def] >> metis_tac[lookup_var_def]
-QED
-
-Resume immutable_normalize_mem_endpoint[allocation_execution]:
-  `(u with vs_inst_idx := s.vs_inst_idx) = t` by
-        (qunabbrev_tac `u` >>
-         qpat_x_assum `t.vs_inst_idx = s.vs_inst_idx` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         simp[venom_state_component_equality]) >>
-      qpat_assum `exec_alloca _ _ _ = OK t` mp_tac >>
-      qpat_assum `type_memory_bytes ce dty = type_memory_size dtv` mp_tac >>
-      qpat_assum `(u with vs_inst_idx := s.vs_inst_idx) = t` mp_tac >>
-      qpat_assum `s.vs_inst_idx = LENGTH sm.cs_current_insts` mp_tac >>
-      POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[]
-QED
-
-Finalise immutable_normalize_mem_endpoint
