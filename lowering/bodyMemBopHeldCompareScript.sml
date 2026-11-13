@@ -8,7 +8,7 @@ Ancestors
   list rich_list bodyMemBopHeldFacts vyperAST exprSimOperators stmtReasonVvMemory
   exprBopDigestProps bodyMemBopHeldPost vyperTypeExprSoundness byte
   vyperTypeExprResult vyperTypeInvariants fragGasMode
-  gasStorage vyperStorageTrace vyperStorageFootprint exprSimWordArgs exprBopSimDefs exprSimDefs
+  gasStorage vyperStorageTrace vyperStorageFootprint exprSimWordArgs exprBopSimDefs exprSimDefs exprLoweringProps
 Libs
   pairLib
 

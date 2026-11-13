@@ -377,9 +377,9 @@ Resume literal_expr_sim_mem[normal]:
   qpat_x_assum `(?t. r2 = OK t /\ _) \/ _`
     (DISJ_CASES_THEN2 (qx_choose_then `uu` strip_assume_tac) strip_assume_tac)
   >- (disj1_tac >> qexists_tac `uu` >> conj_tac >- first_assum ACCEPT_TAC >>
-      BETA_TAC >> gen_tac >> BETA_TAC >> strip_tac >>
+      BETA_TAC >> qx_gen_tac `H1` >> BETA_TAC >> strip_tac >>
       qpat_x_assum `(\res fin s. _) _ _ _` (mp_tac o BETA_RULE) >>
-      disch_then (qspec_then `H` mp_tac) >>
+      disch_then (qspec_then `H1` mp_tac) >>
       (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
       qexists_tac `w` >> rpt conj_tac >>
       FIRST [first_assum ACCEPT_TAC,
