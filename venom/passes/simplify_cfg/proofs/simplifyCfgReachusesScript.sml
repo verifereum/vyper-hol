@@ -3,7 +3,7 @@ Ancestors
   simplifyCfgDefs simplifyCfgStruct simplifyCfgPhiRepair simplifyCfgLabelProps
   simplifyCfgDataflow simplifyCfgRepairDataflow simplifyCfgPhiPreds
   simplifyCfgChainDataflow simplifyCfgBypassDataflow
-  unitShapeDefs stackPlanTypes venomInst venomWf venomExecSemantics venomExecProofs cfgTransform cfgTransformProps cfgTransformInstWf list rich_list
+  unitShapeDefs stackPlanTypes venomWfProps venomInst venomWf venomExecSemantics venomExecProofs cfgTransform cfgTransformProps cfgTransformInstWf list rich_list
 
 Theorem fix_phi_inst_inst_wf:
   inst_wf inst ==> inst_wf (fix_phi_inst actual_preds inst)
@@ -27,13 +27,6 @@ Proof
   simp[fn_inst_wf_def, fix_all_phis_def, fix_phis_in_block_def,
        MEM_MAP, MEM_APPEND, MEM_FILTER, PULL_EXISTS] >>
   metis_tac[fix_phi_inst_inst_wf]
-QED
-
-Theorem remove_unreachable_blocks_fn_inst_wf:
-  fn_inst_wf fn ==> fn_inst_wf (remove_unreachable_blocks fn)
-Proof
-  simp[fn_inst_wf_def, remove_unreachable_blocks_def] >>
-  Cases_on `fn_entry_label fn` >> simp[MEM_FILTER] >> metis_tac[]
 QED
 
 Theorem repair_reachable_invariants:
@@ -333,7 +326,7 @@ Proof
   Cases_on `target = a.bb_label` >>
   Cases_on `bb'.bb_label = target` >>
   Cases_on `is_terminator orig.inst_opcode` >>
-  gvs[inst_wf_update_phi_bypass, inst_wf_canon_jnz_inst, inst_wf_subst_label_inst]
+  gvs[inst_wf_update_phi_bypass, canon_jnz_inst_wf, inst_wf_subst_label_inst]
 QED
 
 Theorem chain_merge_reachable_input:

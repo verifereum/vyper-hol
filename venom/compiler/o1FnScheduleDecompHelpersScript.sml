@@ -45,8 +45,49 @@ Proof
        ctx_fn_names_MAP_replace]
 QED
 
+Theorem fn_inst_ids_distinct_ir_ids:
+  fn_inst_ids_distinct f <=> ALL_DISTINCT (fn_ir_inst_ids f)
+Proof
+  simp[fn_inst_ids_distinct_def, fn_ir_inst_ids_def,
+       GSYM block_ir_inst_ids_def, ETA_THM]
+QED
+
+Theorem ctx_inst_ids_distinct_ir_ids:
+  ctx_inst_ids_distinct ctx <=>
+  ALL_DISTINCT (FLAT (MAP fn_ir_inst_ids ctx.ctx_functions))
+Proof
+  simp[ctx_inst_ids_distinct_def, GSYM block_ir_inst_ids_def,
+       GSYM fn_ir_inst_ids_def, ETA_THM]
+QED
+
+Theorem o1_fn_shape_inst_ids:
+  o1_fn_shape ctx f ==> ALL_DISTINCT (fn_ir_inst_ids f)
+Proof
+  simp[o1_fn_shape_def, wf_function_def, fn_inst_ids_distinct_ir_ids]
+QED
+
+Theorem distinct_ids_MAP_replace:
+  !fns. ALL_DISTINCT (MAP (\f. f.fn_name) fns) /\
+    ALL_DISTINCT (FLAT (MAP fn_ir_inst_ids fns)) /\
+    ALL_DISTINCT (fn_ir_inst_ids g) /\
+    (!h id. MEM h fns /\ h.fn_name <> name /\
+       MEM id (fn_ir_inst_ids g) ==> ~MEM id (fn_ir_inst_ids h)) ==>
+    ALL_DISTINCT (FLAT (MAP fn_ir_inst_ids
+      (MAP (\f. if f.fn_name = name then g else f) fns)))
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  Cases_on `h.fn_name = name` >> gvs[] >>
+  simp[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[] >>
+  IF_CASES_TAC >> gvs[] >>
+  metis_tac[MEM_MAP, MEM_FLAT]
+QED
+
 Theorem o1_ctx_shape_MAP_replace:
-  o1_ctx_shape ctx /\ o1_fn_shape ctx g /\ g.fn_name = name ==>
+  o1_ctx_shape ctx /\ o1_fn_shape ctx g /\ g.fn_name = name /\
+  (!h id. MEM h ctx.ctx_functions /\ h.fn_name <> name /\
+     MEM id (fn_ir_inst_ids g) ==> ~MEM id (fn_ir_inst_ids h)) ==>
   o1_ctx_shape (ctx with ctx_functions :=
     MAP (\f. if f.fn_name = name then g else f) ctx.ctx_functions)
 Proof
@@ -54,11 +95,17 @@ Proof
   `ctx_fn_names (ctx with ctx_functions :=
      MAP (\f. if f.fn_name = name then g else f) ctx.ctx_functions) =
    ctx_fn_names ctx` by simp[ctx_fn_names_MAP_replace] >>
-  fs[o1_ctx_shape_def] >> conj_tac
-  >- simp[ctx_wf_MAP_replace] >>
+  simp[o1_ctx_shape_def] >> conj_tac
+  >- (irule ctx_wf_MAP_replace >> fs[o1_ctx_shape_def]) >>
+  conj_tac
+  >- (simp[ctx_inst_ids_distinct_ir_ids] >>
+      irule distinct_ids_MAP_replace >>
+      fs[o1_ctx_shape_def, ctx_inst_ids_distinct_ir_ids, ctx_wf_def,
+         ctx_distinct_fn_names_def, ctx_fn_names_def] >>
+      metis_tac[o1_fn_shape_inst_ids]) >>
   simp[EVERY_MEM] >> rpt strip_tac >>
   drule MEM_MAP_replace_fn >> strip_tac >> gvs[] >>
-  fs[EVERY_MEM, o1_fn_shape_def] >> metis_tac[]
+  fs[o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >> metis_tac[]
 QED
 
 Theorem replace_unique_function_MAP:
@@ -274,6 +321,47 @@ Theorem fresh_labels_exclude_used_dead:
 Proof
   metis_tac[]
 QED
+Theorem fresh_inst_ids_trans:
+  list_subset s0.irs_used_inst_ids s1.irs_used_inst_ids /\
+  (!id. MEM id (fn_ir_inst_ids mid) ==>
+    MEM id (fn_ir_inst_ids before) \/ ~MEM id s0.irs_used_inst_ids) /\
+  (!id. MEM id (fn_ir_inst_ids after) ==>
+    MEM id (fn_ir_inst_ids mid) \/ ~MEM id s1.irs_used_inst_ids) ==>
+  (!id. MEM id (fn_ir_inst_ids after) ==>
+    MEM id (fn_ir_inst_ids before) \/ ~MEM id s0.irs_used_inst_ids)
+Proof
+  simp[list_subset_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem fresh_inst_ids_separate:
+  fresh_names_ok s before after /\ after.fn_name = before.fn_name /\
+  ir_supply_covers_unit s
+    (unit with cu_context := unit.cu_context with ctx_functions :=
+      MAP (\f. if f.fn_name = before.fn_name then before else f)
+        unit.cu_context.ctx_functions) /\
+  (!h id. MEM h unit.cu_context.ctx_functions /\ h.fn_name <> before.fn_name /\
+     MEM id (fn_ir_inst_ids before) ==> ~MEM id (fn_ir_inst_ids h)) ==>
+  (!h id. MEM h unit.cu_context.ctx_functions /\ h.fn_name <> after.fn_name /\
+     MEM id (fn_ir_inst_ids after) ==> ~MEM id (fn_ir_inst_ids h))
+Proof
+  simp[fresh_names_ok_def, ir_supply_covers_unit_def, list_subset_def,
+       EVERY_MEM, unit_ir_inst_ids_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem covers_unit_replacement_inst_ids:
+  ir_supply_covers_unit s
+    (unit with cu_context := unit.cu_context with ctx_functions :=
+      MAP (\f. if f.fn_name = fn.fn_name then fn else f)
+        unit.cu_context.ctx_functions) /\
+  MEM fn.fn_name (ctx_fn_names unit.cu_context) ==>
+  (!id. MEM id (fn_ir_inst_ids fn) ==> MEM id s.irs_used_inst_ids)
+Proof
+  simp[ir_supply_covers_unit_def, list_subset_def, EVERY_MEM,
+       unit_ir_inst_ids_def, ctx_fn_names_def, MEM_MAP, MEM_FLAT,
+       PULL_EXISTS] >> rpt strip_tac >> metis_tac[]
+QED
+
 
 Theorem observed_step_contract:
   o1_step_contract rpolicy pass /\
@@ -282,6 +370,8 @@ Theorem observed_step_contract:
     MAP (\f. if f.fn_name = fn.fn_name then fn else f)
       unit.cu_context.ctx_functions) /\
   o1_ctx_shape unit.cu_context /\ o1_fn_shape unit.cu_context fn /\
+  (!h id. MEM h unit.cu_context.ctx_functions /\ h.fn_name <> fn.fn_name /\
+     MEM id (fn_ir_inst_ids fn) ==> ~MEM id (fn_ir_inst_ids h)) /\
   ir_supply_inst_ok s ==>
   o1_fn_shape unit.cu_context out.fpo_function /\
   fresh_names_ok s fn out.fpo_function /\
@@ -301,65 +391,137 @@ Proof
   gvs[o1_fn_shape_def] >> metis_tac[]
 QED
 
+(* The step contract of the k-th run for a family R of function rows:
+   row k of the input to row k+1 of the output, in an observed unit whose
+   functions are each at some row.  o1_step_contract_at is the instance
+   R = o1_fn_row (o1_step_contracts_from_rows), and the plain step
+   contract the instance with no rows (o1_step_contract_rows_plain), as
+   for a pass mapped over every function outside the walk. *)
+Definition rows_step_contract_def:
+  rows_step_contract R k rpolicy pass <=>
+    !observed s fn out.
+      fn_pass_step rpolicy pass observed s fn out /\
+      o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
+      EVERY (\g. ?j. R j g) observed.cu_context.ctx_functions /\
+      R k fn ==>
+      o1_fn_shape observed.cu_context out.fpo_function /\
+      fresh_names_ok s fn out.fpo_function /\
+      label_map_sources_ok fn out.fpo_function out.fpo_label_map /\
+      ir_supply_inst_ok out.fpo_supply /\
+      R (SUC k) out.fpo_function
+End
+
+Definition rows_step_contracts_from_def:
+  (rows_step_contracts_from R rpolicy k [] <=> T) /\
+  (rows_step_contracts_from R rpolicy k (pass::passes) <=>
+     rows_step_contract R k rpolicy pass /\
+     rows_step_contracts_from R rpolicy (SUC k) passes)
+End
+
+Theorem o1_step_contracts_from_rows:
+  !passes k.
+    o1_step_contracts_from rpolicy k passes ==>
+    rows_step_contracts_from o1_fn_row rpolicy k passes
+Proof
+  Induct >> simp[o1_step_contracts_from_def, rows_step_contracts_from_def] >>
+  rpt strip_tac >> simp[rows_step_contract_def] >> rpt gen_tac >> strip_tac >>
+  `EVERY fmp_sig_no_param observed.cu_context.ctx_functions` by
+    (fs[EVERY_MEM, o1_fn_row_def] >> metis_tac[]) >>
+  qpat_x_assum `o1_step_contract_at _ _ _`
+    (mp_tac o REWRITE_RULE [o1_step_contract_at_def]) >>
+  disch_then drule_all >> simp[]
+QED
+
+Theorem o1_step_contract_rows_plain:
+  o1_step_contract rpolicy pass ==>
+  rows_step_contracts_from (\k fn. T) rpolicy k [pass]
+Proof
+  simp[rows_step_contracts_from_def, rows_step_contract_def] >>
+  rpt strip_tac >> fs[o1_step_contract_def] >>
+  first_x_assum drule_all >> simp[]
+QED
+
 Theorem observed_step_contract_at:
-  o1_step_contract_at k rpolicy pass /\
+  rows_step_contract R k rpolicy pass /\
   fn_pass_step rpolicy pass observed s fn out /\
   observed = (unit with cu_context := unit.cu_context with ctx_functions :=
     MAP (\f. if f.fn_name = fn.fn_name then fn else f)
       unit.cu_context.ctx_functions) /\
   o1_ctx_shape unit.cu_context /\ o1_fn_shape unit.cu_context fn /\
-  ir_supply_inst_ok s /\ o1_fn_row k fn ==>
+  (!h id. MEM h unit.cu_context.ctx_functions /\ h.fn_name <> fn.fn_name /\
+     MEM id (fn_ir_inst_ids fn) ==> ~MEM id (fn_ir_inst_ids h)) /\
+  EVERY (\g. ?j. R j g) unit.cu_context.ctx_functions /\
+  ir_supply_inst_ok s /\ R k fn ==>
   o1_fn_shape unit.cu_context out.fpo_function /\
   fresh_names_ok s fn out.fpo_function /\
   label_map_sources_ok fn out.fpo_function out.fpo_label_map /\
   ir_supply_inst_ok out.fpo_supply /\
-  o1_fn_row (SUC k) out.fpo_function
+  R (SUC k) out.fpo_function
 Proof
   strip_tac >>
   `o1_ctx_shape observed.cu_context`
     by (gvs[] >> irule o1_ctx_shape_MAP_replace >> simp[]) >>
   `ctx_fn_names observed.cu_context = ctx_fn_names unit.cu_context`
     by gvs[ctx_fn_names_MAP_replace] >>
+  `EVERY (\g. ?j. R j g) observed.cu_context.ctx_functions` by
+    (qpat_x_assum `observed = _` SUBST_ALL_TAC >>
+     fs[EVERY_MEM] >> rpt strip_tac >>
+     drule MEM_MAP_replace_fn >> strip_tac >> metis_tac[]) >>
   `o1_fn_shape observed.cu_context out.fpo_function /\
    fresh_names_ok s fn out.fpo_function /\
    label_map_sources_ok fn out.fpo_function out.fpo_label_map /\
-   ir_supply_inst_ok out.fpo_supply /\ o1_fn_row (SUC k) out.fpo_function`
-    by metis_tac[o1_step_contract_at_def] >>
+   ir_supply_inst_ok out.fpo_supply /\ R (SUC k) out.fpo_function`
+    by metis_tac[rows_step_contract_def] >>
   gvs[o1_fn_shape_def] >> metis_tac[]
 QED
 
 Theorem contracted_fold_invariant:
   !passes k s fn labels fn' labels' s' name.
-    o1_step_contracts_from rpolicy k passes /\ o1_fn_row k fn /\
+    rows_step_contracts_from R rpolicy k passes /\ R k fn /\
+    EVERY (\g. ?j. R j g) unit.cu_context.ctx_functions /\
     run_configured_fn_pass_fold execute_configured_fn_pass rpolicy passes
       unit s fn labels = SOME (fn',labels',s') /\
     o1_ctx_shape unit.cu_context /\ o1_fn_shape unit.cu_context fn /\
     fn.fn_name = name /\
+    (!h id. MEM h unit.cu_context.ctx_functions /\ h.fn_name <> name /\
+       MEM id (fn_ir_inst_ids fn) ==> ~MEM id (fn_ir_inst_ids h)) /\
     ir_supply_covers_unit s
       (unit with cu_context := unit.cu_context with ctx_functions :=
          MAP (\f. if f.fn_name = name then fn else f)
            unit.cu_context.ctx_functions) /\
     ir_supply_inst_ok s ==>
     fn'.fn_name = fn.fn_name /\ o1_fn_shape unit.cu_context fn' /\
-    ir_supply_inst_ok s' /\ o1_fn_row (k + LENGTH passes) fn' /\
+    ir_supply_inst_ok s' /\ R (k + LENGTH passes) fn' /\
     list_subset s.irs_used_labels s'.irs_used_labels /\
     (!l. MEM l (fn_labels fn') ==>
          MEM l (fn_labels fn) \/ ~MEM l s.irs_used_labels)
 Proof
   Induct
   >- simp[run_configured_fn_pass_fold_def, list_subset_def, EVERY_MEM] >>
-  rpt gen_tac >> pure_rewrite_tac[o1_step_contracts_from_def] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  rpt gen_tac >> pure_rewrite_tac[rows_step_contracts_from_def] >>
+  strip_tac >>
+  qpat_x_assum `fn.fn_name = name` (SUBST_ALL_TAC o SYM) >>
   drule_all run_configured_fn_pass_fold_cons_step >> strip_tac >>
   drule_all observed_step_contract_at >> strip_tac >>
   `out.fpo_function.fn_name = fn.fn_name` by fs[fn_pass_step_def] >>
   `ir_supply_covers_unit out.fpo_supply
      (unit with cu_context := unit.cu_context with ctx_functions :=
         MAP (\f. if f.fn_name = out.fpo_function.fn_name then out.fpo_function
-                 else f) unit.cu_context.ctx_functions)` by
-    (qpat_x_assum `out.fpo_function.fn_name = fn.fn_name`
-       (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
-  first_x_assum drule_all >> strip_tac >>
+                 else f) unit.cu_context.ctx_functions)`
+    by (qpat_assum `out.fpo_function.fn_name = _`
+          (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
+  `!h id. MEM h unit.cu_context.ctx_functions /\
+     h.fn_name <> out.fpo_function.fn_name /\
+     MEM id (fn_ir_inst_ids out.fpo_function) ==>
+     ~MEM id (fn_ir_inst_ids h)`
+    by (qpat_x_assum `!k s fn labels fn' labels' s' name. _` kall_tac >>
+        drule fresh_inst_ids_separate >>
+        disch_then (qspec_then `unit` mp_tac) >> metis_tac[]) >>
+  qpat_x_assum `!k s fn labels fn' labels' s' name. _`
+    (qspecl_then [`SUC k`, `out.fpo_supply`, `out.fpo_function`,
+                  `labels ++ out.fpo_label_map`, `fn'`, `labels'`, `s'`,
+                  `out.fpo_function.fn_name`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [REFL_TAC, first_assum ACCEPT_TAC])) >> strip_tac >>
   fs[fn_pass_step_def, ir_supply_extends_def, fresh_names_ok_def] >>
   conj_tac >- (`k + SUC (LENGTH passes) = LENGTH passes + SUC k` by simp[] >>
                asm_rewrite_tac[]) >>

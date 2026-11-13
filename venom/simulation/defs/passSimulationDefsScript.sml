@@ -13,8 +13,6 @@
  *   uniform R         = lift_result R R R
  *
  * TOP-LEVEL:
- *   block_map_transform      — MAP f over block instructions
- *   function_map_transform   — MAP bt over function blocks
  *   inst_simulates           — per-instruction simulation predicate
  *   block_simulates          — whole-block simulation predicate
  *   terminates               — execution terminates (not Error)
@@ -24,45 +22,7 @@
 
 Theory passSimulationDefs
 Ancestors
-  stateEquiv venomExecSemantics venomInst
-
-(* ===== Transform definitions ===== *)
-
-(* Level 1: 1:1 instruction mapping *)
-Definition block_map_transform_def:
-  block_map_transform f bb =
-    bb with bb_instructions := MAP f bb.bb_instructions
-End
-
-(* Function transform: apply block transform to all blocks *)
-Definition function_map_transform_def:
-  function_map_transform bt fn =
-    fn with fn_blocks := MAP bt fn.fn_blocks
-End
-
-Theorem function_map_transform_identity_metadata_eq:
-  !bt fn. fn_identity_metadata_eq (function_map_transform bt fn) fn
-Proof
-  simp[function_map_transform_def, fn_identity_metadata_eq_def]
-QED
-
-Theorem function_map_transform_static_input_eq:
-  !bt fn. fn_static_input_eq (function_map_transform bt fn) fn
-Proof
-  simp[function_map_transform_def, fn_static_input_eq_def]
-QED
-
-Theorem function_map_transform_static_layout_eq:
-  !bt fn. fn_static_layout_eq (function_map_transform bt fn) fn
-Proof
-  simp[function_map_transform_def, fn_static_layout_eq_def]
-QED
-
-Theorem function_map_transform_fmp_convention_eq:
-  !bt fn. fn_fmp_convention_eq (function_map_transform bt fn) fn
-Proof
-  simp[function_map_transform_def, fn_fmp_convention_eq_def]
-QED
+  stateEquiv venomExecSemantics venomInst passTransform
 
 (* ===== Simulation predicates ===== *)
 

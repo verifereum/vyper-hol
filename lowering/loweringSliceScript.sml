@@ -40,7 +40,7 @@ Ancestors
   fragExec localPtrsProps venomMemDefs immutableMemoryFrame immutableRelation
   immutableEncoding
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding valueEncodingProps
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps memoryValueDefs
   vyperInterpreter vyperState vyperValue vyperValueOperation
   vyperEvalExprPreservesScopesDom
   vyperEvalPreservesScopes vyperStatePreservation arithmeticProps
@@ -74,6 +74,24 @@ End
 
 (* ===== Reading a word local ===== *)
 
+(* Scalar layouts are selected by the type constructor, not its size:
+   an aggregate can also occupy exactly 32 bytes. *)
+Definition word_memory_type_def:
+  word_memory_type tv <=>
+    (?bt. tv = BaseTV bt) \/ (?n. tv = FlagTV n)
+End
+
+Theorem evaluate_word_memory_type:
+  !tenv ty tv.
+    is_word_type ty /\ evaluate_type tenv ty = SOME tv ==>
+    word_memory_type tv
+Proof
+  rpt gen_tac >> Cases_on `ty` >>
+  simp[is_word_type_def, evaluate_type_def, word_memory_type_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[word_memory_type_def]) >>
+  rw[] >> simp[]
+QED
+
 (* A value held in one memory word under its plain encoding val_to_w256:
    the values mstore_establishes_val_in_memory_prim covers.  BytesV, the
    value of address and bytesN locals, is left out, as it is there: how it
@@ -91,6 +109,24 @@ Theorem word_value_in_memory:
     val_in_memory ty v off (mstore off (val_to_w256 v) s).vs_memory
 Proof
   rw[word_value_def] >> simp[mstore_establishes_val_in_memory_prim]
+QED
+
+Theorem word_value_memory_rel:
+  !ty v off s.
+    word_memory_type ty /\ word_value v ==>
+    memory_value_rel ty v off (mstore off (val_to_w256 v) s).vs_memory
+Proof
+  rw[word_memory_type_def] >>
+  simp[memory_value_rel_def, word_value_in_memory]
+QED
+
+(* At a word type the complete layout is the canonical one. *)
+Theorem word_memory_type_memory_value_rel:
+  !ty v off mem.
+    word_memory_type ty ==>
+    (memory_value_rel ty v off mem <=> val_in_memory ty v off mem)
+Proof
+  rw[word_memory_type_def] >> simp[memory_value_rel_def]
 QED
 
 Theorem word_value_wf:
@@ -182,11 +218,12 @@ Theorem step_name_word:
 Proof
   rpt strip_tac >>
   `?w. lookup_var p s = SOME w /\
-       val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
+       memory_value_rel entry.type entry.value (w2n w) s.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
   `mload (w2n w) s = val_to_w256 entry.value` by
-    (fs[word_value_def] >> gvs[val_in_memory_prim, mem_word_at_eq_mload]) >>
+    (fs[word_value_def] >> Cases_on `entry.type` >>
+     gvs[memory_value_rel_def, val_in_memory_prim, mem_word_at_eq_mload]) >>
   pop_assum (SUBST1_TAC o SYM) >>
   irule step_MLOAD >> simp[eval_operand_def]
 QED
@@ -233,6 +270,31 @@ End
 
 (* Admissibility supplies the footprint well-formedness needed by memory
    transport; no canonical-padding assumption is imposed on immutables. *)
+Theorem immutable_base_admissible_val_wf[local]:
+  !bt v. immutable_value_admissible (BaseTV bt) v ==> val_wf (BaseTV bt) v
+Proof
+  Cases_on `bt`
+  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
+                           type_memory_size_def])
+  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
+                           type_memory_size_def])
+  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
+                           type_memory_size_def])
+  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
+                           type_memory_size_def])
+  >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
+                           type_memory_size_def] >>
+      metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
+                arithmeticTheory.LESS_EQ_TRANS])
+  >- (rename1 `BytesT bound` >> Cases_on `bound`
+      >- (Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def])
+      >> Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def,
+                              type_memory_size_def] >>
+      metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
+                arithmeticTheory.LESS_EQ_TRANS])
+  >> Cases_on `v` >> simp[immutable_value_admissible_def, val_wf_def]
+QED
+
 Theorem immutable_admissible_val_wf:
   (!tv v. immutable_value_admissible tv v ==> val_wf tv v) /\
   (!vs tvs. immutable_fields_admissible tvs vs ==> fields_val_wf vs tvs) /\
@@ -344,7 +406,7 @@ Proof
   first_x_assum drule_all >> strip_tac >>
   `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
   irule mstore_mem_bytes_at_disjoint >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem immutables_rel_mstore_outside_prefix:
@@ -356,7 +418,6 @@ Proof
   >- (fs[immutables_rel_def, immutable_prefix_bound_def] >>
       simp[immutables_rel_def] >> rpt gen_tac >> strip_tac >>
       `immutable_value_admissible tv v /\
-       byte_offset + type_memory_size tv <= LENGTH s.vs_memory /\
        val_in_memory tv v byte_offset s.vs_memory /\
        immutable_value_bytes_rel tv v
          (mem_bytes_at byte_offset (type_memory_size tv) s.vs_memory)` by
@@ -368,10 +429,7 @@ Proof
        mem_bytes_at byte_offset (type_memory_size tv) s.vs_memory` by
         (irule mstore_mem_bytes_at_disjoint >> simp[]) >>
       `val_wf tv v` by metis_tac[immutable_admissible_val_wf] >>
-      simp[] >> conj_tac
-      >- (simp[immutable_mstore_capacity, arithmeticTheory.MAX_DEF] >>
-          IF_CASES_TAC >> DECIDE_TAC) >>
-      irule val_in_memory_mem_agree >> conj_tac >- simp[] >>
+      simp[] >> irule val_in_memory_mem_agree >> conj_tac >- simp[] >>
       qexistsl_tac [`type_memory_size tv`, `s.vs_memory`] >> simp[]) >>
   fs[immutables_rel_def, mstore_def, LET_THM] >> metis_tac[]
 QED
@@ -545,20 +603,17 @@ Theorem immutable_alloca_sep_declare_local[local]:
     immutable_alloca_sep func cenv cx es' t
 Proof
   rpt gen_tac >> strip_tac >>
-  fs[immutable_alloca_sep_def] >>
-  disch_tac >> rpt gen_tac >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >> simp[] >>
-  conj_tac >- metis_tac[] >>
+  drule immutable_alloca_sep_frame >> disch_then irule >>
+  rpt conj_tac >> TRY (fs[] >> NO_TAC) >>
   rpt strip_tac >>
   rename1 `local_region cenv es'.scopes t n b z` >>
   Cases_on `n = id`
   >- (gvs[local_region_def] >> metis_tac[]) >>
-  `local_region cenv es.scopes s n b z` by
-    (fs[local_region_def] >>
-     rename1 `FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) z)` >>
-     `~not_local_ptr cenv es.scopes q` by
-       (simp[not_local_ptr_def] >> metis_tac[]) >>
-     metis_tac[]) >>
+  disj1_tac >> qexists_tac `n` >>
+  fs[local_region_def] >>
+  rename1 `FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) z)` >>
+  `~not_local_ptr cenv es.scopes q` by
+    (simp[not_local_ptr_def] >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -575,7 +630,7 @@ Theorem stmt_state_rel_declare_word:
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz /\ word_value v /\ type_memory_size tyv = 32 /\
-    cap <= w2n w /\
+    word_memory_type tyv /\ cap <= w2n w /\
     (cenv.ce_is_ctor ==>
        immutable_prefix_bound cenv cx.txn.target cenv.ce_module es cap) ==>
     stmt_state_rel ctx func cenv cx
@@ -595,7 +650,8 @@ Proof
    s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
    s'.vs_pending_deletions = s.vs_pending_deletions /\
    s'.vs_immutables = s.vs_immutables /\
-   s'.vs_data_section = s.vs_data_section /\ s'.vs_labels = s.vs_labels` by
+   s'.vs_data_section = s.vs_data_section /\ s'.vs_labels = s.vs_labels /\
+   s'.vs_code = s.vs_code` by
     simp[Abbr `s'`, mstore_def, LET_THM] >>
   `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
     fs[stmt_state_rel_def, state_rel_def] >>
@@ -620,8 +676,8 @@ Proof
     simp[Abbr `scs'`, lookup_scopes_def, FLOOKUP_UPDATE] >>
   `local_backed func p s (w2n w) sz` by
     (simp[local_backed_def] >> disj1_tac >> qexists_tac `inst` >> simp[]) >>
-  `val_in_memory tyv v (w2n w) s'.vs_memory` by
-    simp[Abbr `s'`, word_value_in_memory] >>
+  `memory_value_rel tyv v (w2n w) s'.vs_memory` by
+    simp[Abbr `s'`, word_value_memory_rel] >>
   `val_wf tyv v` by (irule word_value_wf >> simp[]) >>
   `local_ptrs_rel func cenv scs' s'` by
     (`entry.type = tyv /\ entry.value = v` by simp[Abbr `entry`] >>
@@ -833,6 +889,8 @@ Proof
      (INL v, es1)` by simp[bind_def] >>
   `word_value v` by metis_tac[] >>
   `type_memory_size tyv = 32` by fs[] >>
+  `word_memory_type tyv` by
+    (irule evaluate_word_memory_type >> metis_tac[]) >>
   `(cenv.ce_is_ctor ==>
       immutable_prefix_bound cenv cx.txn.target cenv.ce_module es1 cap)` by
     (fs[immutable_prefix_bound_def] >> metis_tac[]) >>
@@ -878,7 +936,7 @@ Proof
   `lookup_var p s = SOME w` by metis_tac[] >> simp[] >>
   qspecl_then [`func`, `cenv`, `cx`, `es1`, `s`, `id`, `p`, `sz`, `w`,
                `mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]`,
-               `v`, `tyv`, `sc`, `rest`, `cap`, `T`]
+               `v`, `tyv`, `sc`, `rest`, `cap`, `T`, `ctx`]
     MATCH_MP_TAC stmt_state_rel_declare_word >>
   fs[venomInstTheory.mk_inst_def]
 QED

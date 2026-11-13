@@ -23,17 +23,19 @@
  * TOP-LEVEL:
  *   ac_get_iszero_operand    — trace through assigns to find iszero input
  *   ac_is_safe_between       — check if instruction is safe between asserts
- *   ac_find_merge_pairs      — analysis: find mergeable assert pairs
- *   ac_apply_merge           — transform: merge a pair
+ *   ac_scan_block            — analysis: find mergeable assert pairs
+ *   ac_merge_inst/insts      — transform: apply the merges, taking the
+ *                              OR/ISZERO ids and names from the supply
  *   ac_transform_block       — block-level transform
- *   ac_transform_function    — function-level transform
+ *   ac_transform_function    — function-level transform, threading the
+ *                              ir_supply the fresh ids/names come from
  *
  * Source: vyper/venom/passes/assert_combiner.py
  *)
 
 Theory assertCombinerDefs
 Ancestors
-  passSimulationDefs dfgDefs dfgAnalysisProps venomExecSemantics venomInst venomEffects
+  passTransform dfgDefs venomExecSemantics venomInst venomEffects irSupply
 Libs
   pred_setTheory
 
@@ -155,31 +157,24 @@ End
 
 (* ===== Transform: Apply Merges ===== *)
 
-(* Fresh variable names for OR and ISZERO outputs *)
-Definition ac_or_var_def:
-  ac_or_var (id:num) = STRCAT "ac_or_" (toString id)
-End
-
-Definition ac_iz_var_def:
-  ac_iz_var (id:num) = STRCAT "ac_iz_" (toString id)
-End
-
 (*
- * Apply merge: given merge candidates, transform the instruction list.
+ * Apply merge to one instruction, given the block's merge candidates.
  *
- * Uses FOLDL with a merged_preds map (id → actual merged predicate).
+ * merged_preds maps an assert id to the predicate it ended up checking.
  * When instruction B is "second" of MC1 (merge with A):
  *   - The merged pred for B = Var or_v (the OR output)
  *   - If B is later "first" of MC2, we use merged_preds[B] instead of mc_first_pred
+ * The OR/ISZERO ids and outputs come from the supply, as Python's
+ * InstUpdater.add_before takes them from fn.get_next_variable().
  *
  * IMPORTANT: Process "second" logic BEFORE "first" NOP, so that a
  * 3-assert chain A→B→C correctly records merged_preds[B] before B is NOP'd.
  * Otherwise pred_a would be lost when processing C.
  *)
-Definition ac_apply_merge_step_def:
-  ac_apply_merge_step candidates (merged_preds, acc) inst =
+Definition ac_merge_inst_def:
+  ac_merge_inst candidates merged_preds sup inst =
     (* Phase 1: "second" merge — compute OR/ISZERO, update merged_preds *)
-    let (merged_preds1, pre_insts, merged_op) =
+    let (merged_preds1, pre_insts, merged_op, sup1) =
       case FIND (\mc. mc.mc_second_id = inst.inst_id) candidates of
         SOME mc =>
           let actual_first_pred =
@@ -189,71 +184,70 @@ Definition ac_apply_merge_step_def:
           if actual_first_pred = mc.mc_second_pred then
             (* Identical preds — no merge needed, but record for chaining *)
             ((mc.mc_second_id, actual_first_pred) :: merged_preds,
-             [], NONE)
+             [], NONE, sup)
           else
-            let id = inst.inst_id in
-            let or_v = ac_or_var id in
-            let iz_v = ac_iz_var id in
-            let or_inst = <| inst_id := id; inst_opcode := OR;
-                inst_operands := [actual_first_pred; mc.mc_second_pred];
-                inst_outputs := [or_v] |> in
-            let iz_inst = <| inst_id := id + 1; inst_opcode := ISZERO;
-                inst_operands := [Var or_v];
-                inst_outputs := [iz_v] |> in
-            ((mc.mc_second_id, Var or_v) :: merged_preds,
-             [or_inst; iz_inst], SOME iz_v)
-      | NONE => (merged_preds, [], NONE) in
+            (case fresh_inst_id sup of (or_id, s1) =>
+             case fresh_ir_var s1 of (or_v, s2) =>
+             case fresh_inst_id s2 of (iz_id, s3) =>
+             case fresh_ir_var s3 of (iz_v, s4) =>
+               ((mc.mc_second_id, Var or_v) :: merged_preds,
+                [<| inst_id := or_id; inst_opcode := OR;
+                    inst_operands := [actual_first_pred; mc.mc_second_pred];
+                    inst_outputs := [or_v] |>;
+                 <| inst_id := iz_id; inst_opcode := ISZERO;
+                    inst_operands := [Var or_v]; inst_outputs := [iz_v] |>],
+                SOME iz_v, s4))
+      | NONE => (merged_preds, [], NONE, sup) in
     (* Phase 2: if this is also a "first" assert — NOP it *)
     if EXISTS (\mc. mc.mc_first_id = inst.inst_id) candidates then
-      let nop = inst with <| inst_opcode := NOP;
-                              inst_operands := [];
-                              inst_outputs := [] |> in
-      (merged_preds1, acc ++ pre_insts ++ [nop])
+      (merged_preds1,
+       pre_insts ++ [inst with <| inst_opcode := NOP; inst_operands := [];
+                                  inst_outputs := [] |>],
+       sup1)
     (* Phase 3: if it was only a "second" — emit merged assert *)
-    else (case merged_op of
+    else case merged_op of
       SOME iz_v =>
-        (merged_preds1, acc ++ pre_insts ++
-          [inst with inst_operands := [Var iz_v]])
-    | NONE =>
-        (merged_preds1, acc ++ pre_insts ++ [inst]))
+        (merged_preds1, pre_insts ++ [inst with inst_operands := [Var iz_v]],
+         sup1)
+    | NONE => (merged_preds1, pre_insts ++ [inst], sup1)
+End
+
+Definition ac_merge_insts_def:
+  ac_merge_insts candidates merged_preds sup [] = ([], sup) /\
+  ac_merge_insts candidates merged_preds sup (inst :: insts) =
+    case ac_merge_inst candidates merged_preds sup inst of
+      (mp1, out, s1) =>
+        case ac_merge_insts candidates mp1 s1 insts of
+          (outs, s2) => (out ++ outs, s2)
 End
 
 (* ===== Block and Function Transform ===== *)
 
 Definition ac_transform_block_def:
-  ac_transform_block dfg bb =
-    let candidates = ac_scan_block dfg bb.bb_instructions NONE in
-    bb with bb_instructions :=
-      SND (FOLDL (ac_apply_merge_step candidates) ([], [])
-                  bb.bb_instructions)
+  ac_transform_block dfg sup bb =
+    case ac_merge_insts (ac_scan_block dfg bb.bb_instructions NONE) [] sup
+                        bb.bb_instructions of
+      (insts, sup') => (bb with bb_instructions := insts, sup')
+End
+
+Definition ac_transform_blocks_def:
+  ac_transform_blocks dfg sup [] = ([], sup) /\
+  ac_transform_blocks dfg sup (bb :: bbs) =
+    case ac_transform_block dfg sup bb of (bb', s1) =>
+    case ac_transform_blocks dfg s1 bbs of (bbs', s2) =>
+      (bb' :: bbs', s2)
 End
 
 Definition ac_transform_function_def:
-  ac_transform_function fn =
-    let dfg = dfg_build_function fn in
-    fn with fn_blocks :=
-      MAP (ac_transform_block dfg) fn.fn_blocks
+  ac_transform_function sup fn =
+    case ac_transform_blocks (dfg_build_function fn) sup fn.fn_blocks of
+      (bbs, sup') => (fn with fn_blocks := bbs, sup')
 End
 
-Definition ac_transform_context_def:
-  ac_transform_context ctx =
-    ctx with ctx_functions := MAP ac_transform_function ctx.ctx_functions
-End
-
-(* ===== Fresh Variable Tracking ===== *)
-
-(* Fresh variables introduced by merging within a single block. *)
-Definition ac_fresh_vars_block_def:
-  ac_fresh_vars_block dfg bb =
-    let candidates = ac_scan_block dfg bb.bb_instructions NONE in
-    set (FLAT (MAP (\mc.
-      [ac_or_var mc.mc_second_id; ac_iz_var mc.mc_second_id])
-      candidates))
-End
-
-(* Fresh variables in a function. *)
-Definition ac_fresh_vars_fn_def:
-  ac_fresh_vars_fn fn =
-    let dfg = dfg_build_function fn in
-    BIGUNION (set (MAP (ac_fresh_vars_block dfg) fn.fn_blocks))
+(* The variables the transform may introduce: those it took from the
+   supply. *)
+Definition ac_fresh_vars_def:
+  ac_fresh_vars sup fn =
+    set (SND (ac_transform_function sup fn)).irs_used_vars DIFF
+    set sup.irs_used_vars
 End

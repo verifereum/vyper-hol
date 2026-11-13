@@ -27,9 +27,6 @@
  *   icf_get_invoke_callee    — resolve invoke callee name
  *   icf_has_src_clobber      — check for source clobber between copy and uses
  *
- * Proof:
- *   icf_equiv                — state equiv allowing vs_memory to differ
- *
  * Helper:
  *   icf_iter_use_positions   — iterate use positions for a variable
  *)
@@ -37,7 +34,7 @@
 Theory invokeCopyFwdCommonDefs
 Ancestors
   readonlyMemoryArgsDefs dfgDefs basePtrDefs memAliasDefs dominatorDefs
-  passSharedDefs venomEffects cfgDefs passResidualFrame
+  passSharedDefs venomEffects cfgDefs
 
 (* ===== Analysis Context ===== *)
 
@@ -323,21 +320,4 @@ Definition is_mem_addr_position_def:
     (opc = REVERT  /\ pos = 0) \/       (* revert [off; sz] *)
     (* Log — operand 0 is Lit topic_count, operand 1 is memory offset *)
     (opc = LOG     /\ pos = 1)          (* log [tc; off; sz; topics...] *)
-End
-
-(* ===== Proof Equivalence Relation ===== *)
-
-(* State equivalence allowing vs_memory to differ.
-   Both copy forwarding passes NOP mcopy instructions, removing a memory
-   write to the dst allocation. The forwarding preconditions ensure no
-   instruction reads from that memory after the rewrite, so the memory
-   difference is at a dead location.
-   Includes control flow fields so it can serve as both R_ok and R_term
-   in lift_result. *)
-Definition icf_equiv_def:
-  icf_equiv s1 s2 <=>
-    (!v. lookup_var v s1 = lookup_var v s2) /\
-    (* Memory, four FMP components and the bump pointer were unconstrained;
-       all control components and the allocation map remain compared. *)
-    icf_frame s1 = icf_frame s2
 End

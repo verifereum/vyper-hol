@@ -8,14 +8,14 @@
  * TOP-LEVEL:
  *   branch_opt_function_correct       — main correctness theorem
  *
- * Required preservation obligations:
+ * Required preservation obligations, over branch_opt_function_supply:
  *   branch_opt_preserves_ssa_form       — SSA form preservation
  *   branch_opt_preserves_wf_function     — well-formed function preservation
  *)
 
 Theory branchOptCorrectness
 Ancestors
-  branchOptProofs venomExecSemantics venomWf
+  branchOptProofs branchOptSupplyProofs venomExecSemantics venomWf
 
 Theorem branch_opt_function_correct:
   !fuel ctx live_at fn s.
@@ -66,18 +66,25 @@ QED
 
 (* ===== Obligations ===== *)
 
-(* Cheated: requires proving MAP over branch_opt_block preserves
-   SSA uniqueness/dominance — needs wf_ssa infrastructure not yet built *)
+(* Over the supply-aware form: the inserted ISZERO's variable and
+   instruction id come from the supply, so they are fresh. *)
 Theorem branch_opt_preserves_ssa_form:
-  ∀fn live_at. ssa_form fn ⇒ ssa_form (branch_opt_function live_at fn)
+  ∀fn live_at s fn' s'.
+    ssa_form fn ∧ ir_supply_covers_fn s fn ∧
+    branch_opt_function_supply live_at s fn = (fn',s') ⇒
+    ssa_form fn'
 Proof
-  cheat
+  ACCEPT_TAC branch_opt_function_supply_ssa_form
 QED
 
-(* Cheated: requires proving branch_opt_block preserves block well-formedness
-   (non-empty blocks, terminator position) — structural obligation *)
+(* Case 1 makes the ISZERO's operand the JNZ condition, so it must be
+   its only operand and not a label for the successors to stay put. *)
 Theorem branch_opt_preserves_wf_function:
-  ∀fn live_at. wf_function fn ⇒ wf_function (branch_opt_function live_at fn)
+  ∀fn live_at s fn' s'.
+    wf_function fn ∧ fn_inst_wf fn ∧ EVERY label_positions_ok (fn_insts fn) ∧
+    ir_supply_inst_ok s ∧ ir_supply_covers_fn s fn ∧
+    branch_opt_function_supply live_at s fn = (fn',s') ⇒
+    wf_function fn'
 Proof
-  cheat
+  ACCEPT_TAC branch_opt_function_supply_wf
 QED

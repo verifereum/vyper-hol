@@ -30,7 +30,6 @@ Ancestors
   tailMerge
   simplifyCfg
   cfgNorm
-  makeSsa
   (* memory passes *)
   loadElim
   deadStoreElim
@@ -44,7 +43,7 @@ Ancestors
   (* configured pipeline runner structural guarantees *)
   venomPipelineRunnerProps venomPipelineData
   (* dead function traversal *)
-  venomDft
+  dftCorrectnessFinal
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs

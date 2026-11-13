@@ -15,7 +15,7 @@
  *)
 Theory loweringShapeRules
 Ancestors
-  list rich_list compileEnv emitHelper emitHelperProps fragExec venomInst
+  list rich_list compileEnv loweringStateRelDefs emitHelper emitHelperProps fragExec venomInst
   unitShapeDefs loweringShapeDefs context
 Libs
   monadsyntax dep_rewrite
@@ -184,8 +184,6 @@ Proof
   `state_insts st' = state_insts st`
     by gs[state_insts_def, all_blocks_def] >>
   `all_blocks st' = all_blocks st` by simp[all_blocks_def] >>
-  `raw_checked_state st'` by
-    gvs[raw_checked_state_def, all_blocks_def, shape_state_def] >>
   gs[shape_state_def, shape_base_state_def] >> metis_tac[not_fresh_at_mono]
 QED
 
@@ -336,9 +334,6 @@ Proof
     by gs[added_labels_def, DROP_LENGTH_MAP_APPEND] >>
   `added_insts st st1 = []` by gs[added_insts_def, DROP_LENGTH_NIL] >>
   `shape_extends internal LP st st1` by gs[shape_extends_def] >>
-  `raw_checked_state st1` by
-    (irule raw_checked_state_cs_extends >> qexists_tac `st` >>
-     gvs[shape_state_def]) >>
   `shape_state st1`
     by (gs[shape_state_def, shape_base_state_def] >>
         conj_tac >- (irule rets_scoped_append_empty >> simp[]) >>
@@ -361,9 +356,6 @@ Theorem opaque_insts_ok_snoc:
     (MEM inst.inst_opcode [GAS; RETPC_PARAM] ==>
        !x. MEM x inst.inst_outputs ==> ~not_fresh_at st x /\ not_fresh_at st' x) /\
     (!x. MEM (Var x) inst.inst_operands ==>
-       (opaque_out GAS (insts ++ [inst]) x ==>
-          (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
-          ?rest. inst.inst_operands = Var x :: rest /\ ~MEM (Var x) rest) /\
        (opaque_out RETPC_PARAM (insts ++ [inst]) x ==>
           inst.inst_opcode = RET /\
           ?front. inst.inst_operands = front ++ [Var x] /\
@@ -380,7 +372,7 @@ Proof
         (qspecl_then [`i`, `y`] mp_tac o REWRITE_RULE [opaque_insts_ok_def]) >>
       Cases_on `MEM y inst.inst_outputs` >> gvs[opaque_out_snoc])
   >> gvs[] >>
-  qpat_x_assum `!x. MEM (Var x) inst.inst_operands ==> _ /\ _`
+  qpat_x_assum `!x. MEM (Var x) inst.inst_operands ==> _`
     (qspec_then `y` mp_tac) >>
   simp[]
 QED
@@ -484,9 +476,6 @@ Theorem shape_base_append_inst:
        not_fresh_at st' x /\
        (not_fresh_at st x ==> ~opaque_out RETPC_PARAM (state_insts st) x)) /\
     (!x. MEM (Var x) inst.inst_operands ==>
-       (opaque_out GAS (state_insts st ++ [inst]) x ==>
-          (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
-          ?rest. inst.inst_operands = Var x :: rest /\ ~MEM (Var x) rest) /\
        (opaque_out RETPC_PARAM (state_insts st ++ [inst]) x ==>
           inst.inst_opcode = RET /\
           ?front. inst.inst_operands = front ++ [Var x] /\
@@ -557,9 +546,6 @@ Theorem shape_append_inst:
        not_fresh_at st' x /\
        (not_fresh_at st x ==> ~opaque_out RETPC_PARAM (state_insts st) x)) /\
     (!x. MEM (Var x) inst.inst_operands ==>
-       (opaque_out GAS (state_insts st ++ [inst]) x ==>
-          (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
-          ?rest. inst.inst_operands = Var x :: rest /\ ~MEM (Var x) rest) /\
        (opaque_out RETPC_PARAM (state_insts st ++ [inst]) x ==>
           inst.inst_opcode = RET /\
           ?front. inst.inst_operands = front ++ [Var x] /\
@@ -577,9 +563,7 @@ Proof
     gvs[state_insts_def, all_blocks_def] >>
   `added_insts st st' = [inst]` by
     gvs[added_insts_def, DROP_LENGTH_APPEND] >>
-  simp[shape_state_def] >>
-  irule raw_checked_state_cs_extends >> qexists_tac `st` >>
-  gvs[shape_extends_def, shape_state_def]
+  simp[shape_state_def]
 QED
 
 (* Outputs that are plain variables already. *)
@@ -597,7 +581,7 @@ QED
 
 Theorem plain_operand_not_opaque:
   !st op x. plain_operand st op /\ op = Var x ==>
-    not_fresh_at st x /\ ~opaque_out GAS (state_insts st) x /\
+    not_fresh_at st x /\
     ~opaque_out RETPC_PARAM (state_insts st) x
 Proof
   rw[plain_operand_def]
@@ -610,7 +594,6 @@ Theorem plain_append_ok:
     inst.inst_opcode <> GAS /\ inst.inst_opcode <> RETPC_PARAM ==>
     (!x. MEM (Var x) inst.inst_operands ==> not_fresh_at st x) /\
     (!x. MEM (Var x) inst.inst_operands ==>
-         ~opaque_out GAS (state_insts st ++ [inst]) x /\
          ~opaque_out RETPC_PARAM (state_insts st ++ [inst]) x)
 Proof
   rpt gen_tac >> strip_tac >> simp[opaque_out_snoc] >>
@@ -622,21 +605,18 @@ QED
 (* A call whose head operand may be a GAS value. *)
 Theorem call_append_ok:
   !st g rest inst.
-    MEM inst.inst_opcode [CALL; STATICCALL] /\
+    MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL] /\
     inst.inst_operands = g :: rest /\
     (gas_operand st g \/ plain_operand st g) /\
     EVERY (plain_operand st) rest ==>
     (!x. MEM (Var x) inst.inst_operands ==> not_fresh_at st x) /\
     (!x. MEM (Var x) inst.inst_operands ==>
-       (opaque_out GAS (state_insts st ++ [inst]) x ==>
-          (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
-          ?rest'. inst.inst_operands = Var x :: rest' /\ ~MEM (Var x) rest') /\
        ~opaque_out RETPC_PARAM (state_insts st ++ [inst]) x)
 Proof
   rpt gen_tac >> strip_tac >>
   `inst.inst_opcode <> GAS /\ inst.inst_opcode <> RETPC_PARAM` by gvs[] >>
   `!x. MEM (Var x) rest ==>
-       not_fresh_at st x /\ ~opaque_out GAS (state_insts st) x /\
+       not_fresh_at st x /\
        ~opaque_out RETPC_PARAM (state_insts st) x`
     by (gvs[EVERY_MEM] >> metis_tac[plain_operand_not_opaque]) >>
   `!x. g = Var x ==>
@@ -653,7 +633,6 @@ Theorem ret_append_ok:
     EVERY (plain_operand st) front ==>
     (!x. MEM (Var x) inst.inst_operands ==> not_fresh_at st x) /\
     (!x. MEM (Var x) inst.inst_operands ==>
-       ~opaque_out GAS (state_insts st ++ [inst]) x /\
        (opaque_out RETPC_PARAM (state_insts st ++ [inst]) x ==>
           inst.inst_opcode = RET /\
           ?front'. inst.inst_operands = front' ++ [Var x] /\
@@ -661,11 +640,10 @@ Theorem ret_append_ok:
 Proof
   rpt gen_tac >> strip_tac >>
   `!x. MEM (Var x) front ==>
-       not_fresh_at st x /\ ~opaque_out GAS (state_insts st) x /\
+       not_fresh_at st x /\
        ~opaque_out RETPC_PARAM (state_insts st) x`
     by (gvs[EVERY_MEM] >> metis_tac[plain_operand_not_opaque]) >>
-  `!x. r = Var x ==>
-       not_fresh_at st x /\ ~opaque_out GAS (state_insts st) x`
+  `!x. r = Var x ==> not_fresh_at st x`
     by (rw[] >> gvs[retpc_operand_def, plain_operand_def] >> metis_tac[]) >>
   simp[opaque_out_snoc] >> rpt strip_tac >> gvs[] >> metis_tac[]
 QED
@@ -914,9 +892,24 @@ Proof
   gs[gas_operand_def]
 QED
 
+Theorem shape_step_emit_op_gas_plain:
+  !internal LP R.
+    shape_stable R ==>
+    shape_step internal LP R (emit_op GAS [])
+      (\x st'. R st' /\ plain_operand st' x)
+Proof
+  rpt strip_tac >> irule shape_step_conseq >>
+  drule shape_step_emit_op_gas >>
+  disch_then (qspecl_then [`internal`, `LP`] (irule_at Any)) >>
+  qexists_tac `LP` >>
+  rw[gas_operand_def, plain_operand_def,
+     stackPlanTypesTheory.is_label_operand_def] >>
+  gvs[stackPlanTypesTheory.is_label_operand_def]
+QED
+
 Theorem shape_base_emit_op_call:
   !internal LP opc g rest st x st'.
-    MEM opc [CALL; STATICCALL] /\
+    MEM opc [CALL; STATICCALL; DELEGATECALL] /\
     (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) /\
     (gas_operand st g \/ plain_operand st g) /\
     EVERY (plain_operand st) rest /\ shape_base_state st /\
@@ -937,9 +930,6 @@ Proof
     by (Cases_on `opc = CALL` >> gvs[]) >>
   `(!x. MEM (Var x) inst.inst_operands ==> not_fresh_at st x) /\
    (!x. MEM (Var x) inst.inst_operands ==>
-      (opaque_out GAS (state_insts st ++ [inst]) x ==>
-         (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
-         ?rest'. inst.inst_operands = Var x :: rest' /\ ~MEM (Var x) rest') /\
       ~opaque_out RETPC_PARAM (state_insts st ++ [inst]) x)`
     by (match_mp_tac (Q.SPECL [`st`, `g`, `rest`, `inst`] call_append_ok) >>
         ASM_REWRITE_TAC[]) >>
@@ -1021,7 +1011,7 @@ QED
 
 Theorem shape_base_step_emit_op_call:
   !internal LP R opc g rest.
-    shape_stable R /\ MEM opc [CALL; STATICCALL] /\
+    shape_stable R /\ MEM opc [CALL; STATICCALL; DELEGATECALL] /\
     (!id outs. lowered_inst_ok internal (mk_inst id opc (g :: rest) outs)) ==>
     shape_base_step internal LP
       (\st. R st /\ (gas_operand st g \/ plain_operand st g) /\
@@ -1166,7 +1156,7 @@ Proof
        stackPlanTypesTheory.is_label_operand_def]
 QED
 
-Theorem shape_base_step_emit_op_guarded[local]:
+Theorem shape_base_step_emit_op_guarded:
   !internal LP P opc ops.
     shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
     (!st. P st ==> EVERY (label_or_plain st) ops /\
@@ -1181,7 +1171,7 @@ Proof
   metis_tac[shape_stable_def]
 QED
 
-Theorem shape_base_step_emit_inst_guarded[local]:
+Theorem shape_base_step_emit_inst_guarded:
   !internal LP P opc ops outs.
     shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM; RET] /\
     (!st. P st ==> EVERY (label_or_plain st) ops /\
@@ -1196,7 +1186,7 @@ Proof
   metis_tac[shape_stable_def]
 QED
 
-Theorem shape_base_step_extcall_revert[local]:
+Theorem shape_base_step_extcall_revert:
   !internal LP R.
     shape_stable R ==>
     shape_base_step internal LP R
@@ -1333,7 +1323,7 @@ Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[checked_extcall_grouped] >>
   irule shape_base_step_bind >>
   qexists_tac `\success st. R st /\ plain_operand st success` >>
-  reverse conj_tac >- (irule shape_base_step_emit_op_call >> simp[]) >>
+  reverse conj_tac >- (irule shape_base_step_emit_op_call >> simp[] >> fs[MEM]) >>
   qx_gen_tac `success` >> BETA_TAC >>
   `shape_stable (\st. R st /\ plain_operand st success)` by
     (rw[shape_stable_def] >> metis_tac[shape_stable_def, plain_operand_mono]) >>
@@ -1414,17 +1404,6 @@ Proof
   simp[compiler_label_def, fresh_label_output_in_future]
 QED
 
-Theorem checked_extcall_raw_checked_state:
-  raw_checked_state st /\ checked_extcall opc g rest st = (success, st') ==>
-  raw_checked_state st'
-Proof
-  strip_tac >> drule checked_extcall_layout >> strip_tac >>
-  `raw_checked_blocks (REVERSE st.cs_blocks ++
-    [<| bb_label := st.cs_current_bb; bb_instructions := st.cs_current_insts |>])`
-    by gvs[raw_checked_state_def, all_blocks_def] >>
-  drule raw_checked_blocks_splice_branch >>
-  simp[raw_checked_state_def] >> disch_then irule >> gvs[] >> metis_tac[]
-QED
 
 Theorem shape_step_emit_op_call_branch:
   !internal LP R opc g rest.
@@ -1438,7 +1417,7 @@ Theorem shape_step_emit_op_call_branch:
 Proof
   rpt gen_tac >> strip_tac >> drule_all shape_base_step_checked_extcall >>
   simp[shape_base_step_def, shape_step_def, shape_state_def] >>
-  metis_tac[checked_extcall_raw_checked_state]
+  metis_tac[]
 QED
 
 Theorem checked_extcall_then:
@@ -1517,7 +1496,7 @@ Proof
   `shape_extends internal LP st mid /\ shape_base_state mid /\
    plain_operand mid success` by
     (irule shape_base_emit_op_call >> simp[] >>
-     qexistsl [`g`, `opc`, `rest`] >> fs[]) >>
+     qexistsl [`g`, `opc`, `rest`] >> fs[MEM]) >>
   drule emit_op_facts >> strip_tac >>
   Cases_on `emit_inst ASSERT [success] [] mid` >> gvs[] >>
   qmatch_goalsub_rename_tac `shape_extends internal LP st last` >>
@@ -1534,19 +1513,7 @@ Proof
   `shape_extends internal LP st last` by metis_tac[shape_extends_trans] >>
   `R last` by metis_tac[shape_stable_def] >>
   `plain_operand last (Var out)` by metis_tac[plain_operand_mono, shape_extends_def] >>
-  simp[shape_state_def] >>
-  `raw_checked_blocks (REVERSE st.cs_blocks ++
-    [<| bb_label := st.cs_current_bb; bb_instructions := st.cs_current_insts |>])`
-    by gvs[shape_state_def, raw_checked_state_def, all_blocks_def] >>
-  qmatch_asmsub_abbrev_tac `mid.cs_current_insts = _ ++ [call]` >>
-  `call.inst_outputs = [out]` by gvs[Abbr `call`, mk_inst_def] >>
-  drule raw_checked_blocks_splice_assert >>
-  disch_then (qspecl_then [`out`,
-    `mk_inst mid.cs_next_id ASSERT [Var out] []`, `call`] mp_tac) >>
-  simp[mk_inst_def] >> strip_tac >>
-  gvs[raw_checked_state_def, all_blocks_def, emit_inst_eq, APPEND_ASSOC, mk_inst_def] >>
-  qpat_x_assum `raw_checked_blocks _` mp_tac >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]
+  simp[shape_state_def]
 QED
 
 (* The return PC exists only in internal-function code. *)
@@ -1595,7 +1562,6 @@ Proof
     by (simp[Abbr `inst`] >> qpat_x_assum `!id. lowered_inst_ok _ _` MATCH_ACCEPT_TAC) >>
   `(!x. MEM (Var x) inst.inst_operands ==> not_fresh_at st x) /\
    (!x. MEM (Var x) inst.inst_operands ==>
-      ~opaque_out GAS (state_insts st ++ [inst]) x /\
       (opaque_out RETPC_PARAM (state_insts st ++ [inst]) x ==>
          inst.inst_opcode = RET /\
          ?front'. inst.inst_operands = front' ++ [Var x] /\
@@ -1610,20 +1576,24 @@ QED
 
 (* ===== From the invariant to opaque_use_ok ===== *)
 
-Theorem copy_phi_var_opaque_out:
-  !origin fn x.
-    copy_phi_var origin fn x ==>
-    !insts. opaque_insts_ok insts /\ MEM origin [GAS; RETPC_PARAM] /\
+Theorem copy_phi_var_retpc_opaque_out:
+  !fn x.
+    copy_phi_var RETPC_PARAM fn x ==>
+    !insts. opaque_insts_ok insts /\
             (!inst. MEM inst (fn_insts fn) ==> MEM inst insts) ==>
-            opaque_out origin insts x
+            opaque_out RETPC_PARAM insts x
 Proof
+  `!origin fn x. copy_phi_var origin fn x ==>
+    origin = RETPC_PARAM ==>
+    !insts. opaque_insts_ok insts /\
+      (!inst. MEM inst (fn_insts fn) ==> MEM inst insts) ==>
+      opaque_out origin insts x` suffices_by metis_tac[] >>
   Induct_on `copy_phi_var` >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac
+  disch_then SUBST_ALL_TAC >> rpt gen_tac >> strip_tac
   >- (simp[opaque_out_def] >> metis_tac[])
-  >> rename1 `copy_phi_var origin fn y` >>
-  `opaque_out origin insts y` by (first_x_assum irule >> gs[]) >>
+  >> rename1 `copy_phi_var RETPC_PARAM fn y` >>
+  `opaque_out RETPC_PARAM insts y` by (first_x_assum irule >> gs[]) >>
   `MEM inst insts` by res_tac >>
-  qpat_x_assum `MEM origin _` (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
   qpat_x_assum `opaque_insts_ok _`
     (qspecl_then [`inst`, `y`] mp_tac o REWRITE_RULE [opaque_insts_ok_def]) >>
   gvs[]
@@ -1635,16 +1605,15 @@ Theorem opaque_insts_ok_opaque_use_ok:
     (!inst. MEM inst (fn_insts fn) ==> MEM inst insts) ==>
     opaque_use_ok fn
 Proof
-  rpt strip_tac >> simp[opaque_use_ok_def, gas_var_def, retpc_var_def] >>
-  rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> simp[opaque_use_ok_def, retpc_var_def] >>
+  rpt strip_tac >>
   `MEM inst insts` by res_tac >>
-  rpt conj_tac >> strip_tac >>
-  drule copy_phi_var_opaque_out >>
+  drule copy_phi_var_retpc_opaque_out >>
   disch_then (qspec_then `insts` mp_tac) >>
   (impl_tac >- fs[]) >> strip_tac >>
   qpat_x_assum `opaque_insts_ok _`
     (qspecl_then [`inst`, `x`] mp_tac o REWRITE_RULE [opaque_insts_ok_def]) >>
-  simp[gas_use_ok_def, retpc_use_ok_def] >> metis_tac[]
+  simp[retpc_use_ok_def] >> metis_tac[]
 QED
 
 (* Runtime data labels are legal only in CODECOPY's source position. *)
@@ -1707,7 +1676,7 @@ Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[retpc_shape_ok_def] >>
   `!x. retpc_var fn x ==> opaque_out RETPC_PARAM insts x`
     by (rpt strip_tac >> fs[retpc_var_def] >>
-        drule copy_phi_var_opaque_out >>
+        drule copy_phi_var_retpc_opaque_out >>
         disch_then (qspec_then `insts` mp_tac) >> simp[]) >>
   `!x. retpc_var (reachable_fn fn) x ==> opaque_out RETPC_PARAM insts x`
     by metis_tac[reachable_retpc_var] >>

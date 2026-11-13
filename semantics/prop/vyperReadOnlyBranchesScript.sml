@@ -39,10 +39,11 @@ Proof
   match_mp_tac state_rel_frame_bind_guarded >>
   conj_tac >- metis_tac[machine_frame_trans] >>
   conj_tac >- simp[] >> rpt strip_tac >> simp[] >>
-  ho_match_mp_tac machine_frame_local_place_effect >> simp[] >>
-  conj_tac >- metis_tac[] >> rpt gen_tac >>
   match_mp_tac machine_frame_bind >>
-  simp[machine_frame_read_result, machine_frame_write_memory_place]
+  simp[machine_frame_read_result] >> gen_tac >>
+  ho_match_mp_tac machine_frame_local_place_effect >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  simp[machine_frame_write_memory_place]
 QED
 
 Theorem machine_frame_expr_pop:
@@ -139,16 +140,21 @@ Proof
 QED
 
 Theorem machine_frame_for_cons:
-  (!s x t. push_scope_with_var nm tyv v s = (INL x,t) ==>
+  (!s0 v s1 s x t. read_result cx r s0 = (INL v,s1) /\
+     push_scope_with_var nm tyv v s = (INL x,t) ==>
      state_rel_frame machine_frame (eval_stmts cx body)) /\
-  (!s x t u broke w.
+  (!s0 v s1 s x t u broke w.
+     read_result cx r s0 = (INL v,s1) /\
      push_scope_with_var nm tyv v s = (INL x,t) /\
      finally (try (do eval_stmts cx body; return F od)
                    handle_loop_exception) pop_scope u = (INL broke,w) /\
      ~broke ==> state_rel_frame machine_frame (eval_for cx tyv nm body vs)) ==>
-  state_rel_frame machine_frame (eval_for cx tyv nm body (v::vs))
+  state_rel_frame machine_frame (eval_for cx tyv nm body (r::vs))
 Proof
   strip_tac >> simp[Once evaluate_def, ignore_bind_def] >>
+  irule state_rel_frame_bind_guarded >>
+  simp[machine_frame_def, machine_frame_read_result] >>
+  rpt strip_tac >> BETA_TAC >>
   irule state_rel_frame_bind_guarded >>
   simp[machine_frame_def, machine_frame_primitives] >>
   suspend "loop_continuation"
@@ -158,7 +164,7 @@ Resume machine_frame_for_cons[loop_continuation]:
   rpt strip_tac >> irule state_rel_frame_bind_guarded >>
   conj_tac >- suspend "loop_tail" >>
   simp[machine_frame_def] >> irule (SRULE [ignore_bind_def] machine_frame_loop_cleanup) >>
-  qpat_x_assum `!s x t. _ ==> state_rel_frame _ (eval_stmts _ _)` drule >> simp[]
+  metis_tac[]
 QED
 
 Resume machine_frame_for_cons[loop_tail]:
@@ -227,28 +233,18 @@ Proof
   irule machine_frame_custom_error_tail >> metis_tac[]
 QED
 
-Theorem machine_frame_push_function:
-  state_rel_frame machine_frame (push_function src_fn sc cx)
-Proof
-  simp[state_rel_frame_def, push_function_def, return_def]
-QED
-
-Theorem machine_frame_pop_function:
-  state_rel_frame machine_frame (pop_function prev)
-Proof
-  simp[pop_function_def, machine_frame_primitives]
-QED
-
 Theorem machine_frame_internal_lock:
   state_rel_frame machine_frame
     (if nr then
        case cx.nonreentrant_slot of
        | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot T
+       | SOME slot => do acquire_nonreentrant_lock cx.txn.target slot T; return () od
      else return ())
 Proof
   Cases_on `nr` >> simp[] >> Cases_on `cx.nonreentrant_slot` >>
-  simp[machine_frame_view_lock, machine_frame_primitives]
+  simp[machine_frame_primitives, ignore_bind_def] >>
+  irule state_rel_frame_bind_guarded >>
+  simp[machine_frame_def, machine_frame_view_lock, machine_frame_primitives]
 QED
 
 Theorem machine_frame_switch_BoolV:
@@ -260,17 +256,6 @@ Proof
   >- simp[machine_frame_read_result] >>
   gen_tac >> simp[] >> IF_CASES_TAC >> simp[] >>
   IF_CASES_TAC >> simp[machine_frame_primitives]
-QED
-
-Theorem machine_frame_reads:
-  state_rel_frame machine_frame (lookup_global cx src id) /\
-  state_rel_frame machine_frame (lookup_flag_mem cx nsid mid) /\
-  state_rel_frame machine_frame (read_storage_slot cx tr slot ty) /\
-  state_rel_frame machine_frame (result_array_length cx r)
-Proof
-  simp[state_rel_frame_result] >> metis_tac[lookup_global_state,
-    lookup_flag_mem_state, read_storage_slot_state,
-    result_array_length_state, machine_frame_refl]
 QED
 
 Theorem machine_frame_assign_tuple:

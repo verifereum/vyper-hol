@@ -1,0 +1,102 @@
+{
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.1.9",
+    "packaging": "26.3",
+    "pycryptodome": "3.23.0",
+    "wheel": "0.48.0"
+  },
+  "fixtures": {
+    "assign_delayed_popped_read": {
+      "deploy_sha256": "2f160bc5fc333308b4961df3a2eeabc294eebc90e8fb160c2b768d6c966e0bf4",
+      "frontend_sha256": "a23222f765ff3fe17eb8fc30f95964a3afe9a615d7a6845a576d2d36c83366b5",
+      "runtime_sha256": "6a853c779cda7bb5c395034d3a13175a9c5df514ed00159d3b6be42e9253d6c4",
+      "source": "sources/assign_delayed_popped_read.vy",
+      "source_sha256": "4e6d700a985b762bc24593666864bc7723b2ca71bf311dd57a910e75349e2d36"
+    },
+    "assign_delayed_storage_read": {
+      "deploy_sha256": "78f5c96a5fb0caeb8e1514b4e06ce1b4435518c7897518cebc287a0bd83298f5",
+      "frontend_sha256": "cec32f8280135e2df0da392747bdbb61005569c1bb588edd52bdee96bf45eb3e",
+      "runtime_sha256": "7cd62c64b641da7cc03159a217d6105ef7ef63c7b4bf006fe7ae78c163543d39",
+      "source": "sources/assign_delayed_storage_read.vy",
+      "source_sha256": "764a5546f63460716d163d08caa9966c6a20208e522cef09709ae3b57f4eddbf"
+    },
+    "assign_nested_popped_read": {
+      "deploy_sha256": "7b7db8062b1ed0b0ae6f40c029c045a5f11eacb49a2c2c42ba2582d58ae44330",
+      "frontend_sha256": "5910aed6e3ef72fe92237ee50683d40bc88f7f6b3639479010c6149ba9713d7d",
+      "runtime_sha256": "8e61a8e6bcea71a065f4445a73f601e48454c044f44000f48caf800acbeaeca6",
+      "source": "sources/assign_nested_popped_read.vy",
+      "source_sha256": "4717674c0c5295120a231faebc45ba3183a0a8ce4ff0c180b9a0e51d306935ae"
+    },
+    "c08_storage_arr_assign_computed_rhs": {
+      "deploy_sha256": "0a8c191636ac1b709c5943dfe672217465df617389023195d61c570d663040f6",
+      "frontend_sha256": "569aec5c694b31b132bd3f8172668896801cb97f7e39f5b7f26cdd6eed121a10",
+      "runtime_sha256": "50d5784e65ceb644d601ecf0661ce496a4d6c2f0cfc0d6f83987d3551969ae0a",
+      "source": "sources/c08_storage_arr_assign_computed_rhs.vy",
+      "source_sha256": "580b1367f11831a3c1c8daadf158e504e4af9e916e78de7b4923d67a77554730"
+    },
+    "c09_storage_map_assign_computed_rhs": {
+      "deploy_sha256": "6fb844e078f4c1a74367ab37bb7cc507cffa55b4f33f1ddd68f401ef8f8322aa",
+      "frontend_sha256": "0ffa7e12ce632354641177bbca60816c24162c3e4c9a794528a25b40f401f2b0",
+      "runtime_sha256": "0125bf999c1dba853a46276f735cd630e116131265630afb79a0949dd015209c",
+      "source": "sources/c09_storage_map_assign_computed_rhs.vy",
+      "source_sha256": "bc1558a1eeba9256865104c16c9598b4c5e46611e1700e57d82565525aafa333"
+    },
+    "g19_aug_rhs_modifies_target": {
+      "deploy_sha256": "0ab2a3867a9094b754c78315ebbaa9e84b06da79e44a5a0c2f59d21f87da0509",
+      "frontend_sha256": "723a21a2fbaaac6caf1fdb185f0dbe0eb3b75cd686514b005a9e1d75d01cd5bb",
+      "runtime_sha256": "ded823f81a650f9621015585ae64b4d598069aa2085918350e84bb6ab484c139",
+      "source": "sources/g19_aug_rhs_modifies_target.vy",
+      "source_sha256": "28fc550b7ded2bf3a8f0ff08e292272c3778d86308f04ca05e2f2e78c2e9f740"
+    },
+    "g6_write_order_side": {
+      "deploy_sha256": "8d2fa14095b438b4ec1d2f220e3c42cdc95f9272be83fe568ab55e4a4cd2236a",
+      "frontend_sha256": "645ed17c14d9a6813fb641ef32519e01657bf19340d2fb73d37b9b6ccc6160ca",
+      "runtime_sha256": "07a89e9f97f64b104a4980897695942d5050900498f90b3e365e5ec3ffa407a1",
+      "source": "sources/g6_write_order_side.vy",
+      "source_sha256": "517a39ff3402a0975b414d42246014d5e85c93994d06602f2fa5fe4e6faf9877"
+    },
+    "s11_storage_map_assign_extcall_rhs": {
+      "deploy_sha256": "920c13488d3c8307366670bea15e7c60f88fb5078e64224547bd2dbc79f303ac",
+      "frontend_sha256": "17a62fcbd7b2cfe6dfce17dad894f22416e3f0ade1c8d0094e88700e3795e30c",
+      "runtime_sha256": "f7ae5b947ee0df976aebb629bfae27d344789d1144c77a5a8d17b55e01d40054",
+      "source": "sources/s11_storage_map_assign_extcall_rhs.vy",
+      "source_sha256": "769688a25a335a48832ea29400c930a89abf99f8a5e6f084847958445994f49b"
+    },
+    "x03_assign_elem_from_pop": {
+      "deploy_sha256": "31e25e0159de456862ca3fa4a066e08711a0d9fbbcdf3431c51024d883b2472f",
+      "frontend_sha256": "ab19f3bfcb9701bd7b7efde602c1b4d8ee89ae0077f333b79f8283c7473d3139",
+      "runtime_sha256": "fd339e226c97ac70e83abc8f446eca4aa7e9479648adb9225db63494a643105d",
+      "source": "sources/x03_assign_elem_from_pop.vy",
+      "source_sha256": "6387e28110db501eb1791ce6af0e9f85622435e1cfec25c11ffe966a7c0f381d"
+    },
+    "x04_assign_sideeffect_order": {
+      "deploy_sha256": "8eb2b2216bda5c9a37536f9d0163892328050c8b2f73022ebb466d6da838345e",
+      "frontend_sha256": "489096371d5cf3222d17787597a27828f2b66493e3ba7b66c3afda6b7b12dbaf",
+      "runtime_sha256": "d10574e60aef4a4dabaeb1c91ca10528252f4d32b97290343d86776d2ad69804",
+      "source": "sources/x04_assign_sideeffect_order.vy",
+      "source_sha256": "3fe1679549eb2fbede3b0dbd0e855a84e485acf8c1b4ef4ed6d24400fef949b4"
+    }
+  },
+  "producer": "pinned Python Vyper",
+  "python_version": "3.11.11",
+  "schema_version": 2,
+  "settings": {
+    "bytecode_metadata": false,
+    "evm_version": "prague",
+    "experimental_codegen": true,
+    "final_assembly_optimization": false,
+    "optimization_level": "NONE",
+    "outputs": [
+      "bytecode",
+      "bytecode_runtime",
+      "annotated_ast_dict",
+      "layout"
+    ],
+    "venom_ir_pipeline": "O1"
+  },
+  "uv_version": "0.10.11",
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.5.0b1"
+}

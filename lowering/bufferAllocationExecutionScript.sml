@@ -78,7 +78,7 @@ Proof
   simp[compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_alloca_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def,
        buffer_allocation_base_def, buffer_allocation_fields_def] >>
   Cases_on `FLOOKUP s.vs_allocas cs.cs_next_id` >>
   gvs[AllCaseEqs()] >>

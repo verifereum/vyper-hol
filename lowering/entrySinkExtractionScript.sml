@@ -35,7 +35,7 @@ Proof
   rpt strip_tac >>
   simp[run_from_def, lookup_block_def, Once exec_block_def,
        get_instruction_def, EL_APPEND_EQN, step_inst_non_invoke,
-       step_inst_base_def, mk_inst_def, FIND_def, INDEX_FIND_def]
+       step_inst_base_opcode_eqs, mk_inst_def, FIND_def, INDEX_FIND_def]
 QED
 
 Theorem step_inst_base_nonterminator_no_exit:
@@ -50,6 +50,7 @@ Proof
   simp[exec_pure2_def, AllCaseEqs()] >>
   simp[exec_pure3_def, AllCaseEqs()] >>
   simp[exec_read0_def, AllCaseEqs()] >>
+  simp[exec_gas_def, AllCaseEqs()] >>
   simp[exec_read1_def, AllCaseEqs()] >>
   simp[exec_write2_def, AllCaseEqs()] >>
   simp[exec_ext_call_def, AllCaseEqs()] >>
@@ -78,7 +79,7 @@ Proof
   >- (fs[] >> drule drop_cons_instruction >> strip_tac >>
       qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
       simp[Once exec_block_def, get_instruction_def, step_inst_non_invoke,
-           step_inst_base_def, mk_inst_def] >> strip_tac >>
+           step_inst_base_opcode_eqs, mk_inst_def] >> strip_tac >>
       simp[run_inst_seq_def]) >>
   gvs[] >> drule drop_cons_instruction >> strip_tac >>
   qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
@@ -126,7 +127,7 @@ Proof
   Induct >> rpt gen_tac >> strip_tac >> fs[] >>
   drule drop_cons_instruction >> strip_tac
   >- simp[Once exec_block_def, get_instruction_def, step_inst_non_invoke,
-          step_inst_base_def, mk_inst_def] >>
+          step_inst_base_opcode_eqs, mk_inst_def] >>
   simp[Once exec_block_def, get_instruction_def, step_inst_non_invoke] >>
   rename1 `step_inst_base inst s` >>
   Cases_on `step_inst_base inst s` >> simp[] >>

@@ -6,7 +6,7 @@
 
 Theory simplifyCfgCorrectness
 Ancestors
-  simplifyCfgProof simplifyCfgPhi2 simplifyCfgSsaform simplifyCfgWffn simplifyCfgJnzdist
+  simplifyCfgProof simplifyCfgPhi2 simplifyCfgPhiLabels simplifyCfgSsaform simplifyCfgWffn simplifyCfgJnzdist
   simplifyCfgReach simplifyCfgReachuses simplifyCfgWfssa simplifyCfgDefs cfgWf unitShapeDefs
   venomInst
 
@@ -89,6 +89,29 @@ Theorem simplify_cfg_phi_two_pairs:
          2 <= LENGTH (phi_pairs inst.inst_operands)
 Proof
   strip_tac >> match_mp_tac simplify_cfg_fn_phi_arity >> simp[]
+QED
+
+(* No step gives a PHI two inputs from one predecessor: bypassing drops
+   the bypassed block's input when another predecessor's already carries
+   the same value, merging and label substitution rename a predecessor
+   that no PHI already lists, and fixup only drops inputs.  Labels kept
+   out of JNZ conditions (label_positions_ok) keep a bypassed JNZ's
+   dropped edge out of the PHIs.  Admitted for now. *)
+Theorem simplify_cfg_phi_labels_distinct:
+  wf_function fn /\ fn_inst_wf fn /\ EVERY label_positions_ok (fn_insts fn) /\
+  (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI ==>
+          ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands))) ==>
+  !inst. MEM inst (fn_insts (simplify_cfg_fn fn)) /\ inst.inst_opcode = PHI ==>
+         ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands))
+Proof
+  strip_tac >>
+  simp[simplifyCfgDefsTheory.simplify_cfg_fn_def,
+       simplifyCfgDefsTheory.simplify_cfg_fn_with_labels_def] >>
+  mp_tac (Q.SPECL [`LENGTH fn.fn_blocks`, `fn`] simplify_cfg_iter_phi_distinct) >>
+  gvs[venomWfTheory.wf_function_def, venomWfTheory.fn_has_entry_def,
+      venomWfTheory.fn_inst_wf_def, listTheory.EVERY_MEM,
+      venomInstTheory.fn_insts_def, simplifyCfgLabelPropsTheory.fn_insts_blocks_mem] >>
+  metis_tac[]
 QED
 
 (* A bypass that makes a JNZ's targets meet turns it into a JMP

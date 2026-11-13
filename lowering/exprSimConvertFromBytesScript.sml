@@ -1,21 +1,23 @@
-(* Dynamic-source conversion simulation before the exact source-exemption lift. *)
+(* Dynamic-source conversion simulation. *)
 Theory exprSimConvertFromBytes
 Ancestors
-  loweringPosts
-  exprSimConvert exprSimHyps exprSim exprLowering compileEnv
-  exprSimBuffer valueEncoding valueEncodingProofs
+  exprSimHypsDefs exprSimSource
+  exprSimDefs exprSimProps exprSimStack loweringPosts
+  exprSimConvert exprSimHyps  exprLowering compileEnv loweringStateRelDefs
+  exprSimBuffer valueEncoding valueEncodingDefs valueEncodingProofs
   vyperTypeSystem vyperValueOperation vyperValue vyperInterpreter
   fragExec freshWrites loweringSlice venomExecSemantics venomState
   words list integer_word emitHelperProps builtinConvertPrefix exprLoweringProps
   venomMemDefs vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
   builtinIntClamp varsExt exprOperandVar vyperState
+  fragGasSeq fragGasSeqAbort fragGasMode fragGasPath gasSummary
 
 val () = augment_srw_ss [rewrites
   [fcpLib.INDEX_CONV ``dimindex(:8)``,
    fcpLib.INDEX_CONV ``dimindex(:160)``,
    fcpLib.INDEX_CONV ``dimindex(:256)``]];
 
-Theorem dynamic_emit_update_exact[local]:
+Theorem dynamic_emit_update_exact:
   emit_op opc ops st = (v,st') /\ fresh_vars_wrt st ss /\
   step_inst_base (mk_inst st.cs_next_id opc ops
     [STRING #"%" (toString st.cs_next_var)]) ss =
@@ -38,7 +40,7 @@ Proof
   goal_assum $ drule_at Any >> gvs[]
 QED
 
-Theorem dynamic_emit_load_exact[local]:
+Theorem dynamic_emit_load_exact:
   emit_op MLOAD [a] st = (v,st') /\
   eval_operand a ss = SOME x /\ fresh_vars_wrt st ss ==>
   ?ss'. run_inst_seq (emitted_insts st st') ss = OK ss' /\
@@ -52,7 +54,7 @@ Proof
   irule step_MLOAD >> simp[]
 QED
 
-Theorem dynamic_emit_binary_exact[local]:
+Theorem dynamic_emit_binary_exact:
   emit_op opc [a;b] st = (v,st') /\
   eval_operand a ss = SOME x /\ eval_operand b ss = SOME y /\
   fresh_vars_wrt st ss /\
@@ -71,7 +73,57 @@ Proof
          irule step_SHR, irule step_SAR] >> simp[]
 QED
 
-Theorem dynamic_load_payload_exact[local]:
+Theorem dynamic_emit_iszero_exact:
+  emit_op ISZERO [a] sa = (v,sb) /\
+  eval_operand a ss = SOME x /\ fresh_vars_wrt sa ss ==>
+  ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+    eval_operand v sf = SOME (if x = 0w then 1w else 0w) /\
+    fresh_vars_wrt sb sf /\ sf.vs_memory = ss.vs_memory /\
+    sf.vs_allocas = ss.vs_allocas /\
+    (!p w. eval_operand p ss = SOME w ==> eval_operand p sf = SOME w)
+Proof
+  rpt strip_tac >> irule dynamic_emit_update_exact >> simp[] >>
+  goal_assum $ drule_at (Pat `emit_op`) >> simp[] >>
+  drule step_ISZERO >> Cases_on `x = 0w` >> simp[bool_to_word_def]
+QED
+
+Theorem dynamic_mask_payload_exact:
+  emit_op ISZERO [len] sa = (empty,s1) /\
+  emit_op ISZERO [empty] s1 = (nonempty,s2) /\
+  emit_op MUL [data;nonempty] s2 = (masked,sb) /\
+  eval_operand len ss = SOME n /\ eval_operand data ss = SOME d /\
+  fresh_vars_wrt sa ss ==>
+  ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+    eval_operand masked sf = SOME (if n = 0w then 0w else d) /\
+    fresh_vars_wrt sb sf /\ sf.vs_memory = ss.vs_memory /\
+    sf.vs_allocas = ss.vs_allocas /\
+    (!p w. eval_operand p ss = SOME w ==> eval_operand p sf = SOME w)
+Proof
+  rpt strip_tac >>
+  drule_all dynamic_emit_iszero_exact >>
+  disch_then (qx_choose_then `t1` strip_assume_tac) >>
+  drule_all dynamic_emit_iszero_exact >>
+  disch_then (qx_choose_then `t2` strip_assume_tac) >>
+  `eval_operand data t2 = SOME d` by metis_tac[] >>
+  `?t3. run_inst_seq (emitted_insts s2 sb) t2 = OK t3 /\
+    eval_operand masked t3 = SOME (if n = 0w then 0w else d) /\
+    fresh_vars_wrt sb t3 /\ t3.vs_memory = t2.vs_memory /\
+    t3.vs_allocas = t2.vs_allocas /\
+    (!p w. eval_operand p t2 = SOME w ==> eval_operand p t3 = SOME w)` by
+    (irule dynamic_emit_binary_exact >> simp[] >>
+     goal_assum $ drule_at (Pat `emit_op`) >>
+     Cases_on `n = 0w` >> gvs[] >> metis_tac[]) >>
+  `inst_extends sa s1 /\ inst_extends s1 s2 /\ inst_extends s2 sb` by
+    metis_tac[inst_extends_emit_op] >>
+  `run_inst_seq (emitted_insts sa s2) ss = OK t2` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`t1`,`s1`] >> simp[]) >>
+  `inst_extends sa s2` by metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts sa sb) ss = OK t3` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`t2`,`s2`] >> simp[]) >>
+  qexists_tac `t3` >> simp[] >> metis_tac[]
+QED
+
+Theorem dynamic_load_payload_exact:
   emit_op MLOAD [v] sa = (len,s1) /\
   emit_op ADD [v; Lit 32w] s1 = (dp,s2) /\
   emit_op MLOAD [dp] s2 = (data,sb) /\
@@ -110,7 +162,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem dynamic_shift_payload_exact[local]:
+Theorem dynamic_shift_payload_exact:
   emit_op SUB [Lit 32w; len] sa = (sub,s1) /\
   emit_op MUL [sub; Lit 8w] s1 = (k,s2) /\
   emit_op opc [k; data] s2 = (r,sb) /\ (opc = SHR \/ opc = SAR) /\
@@ -157,7 +209,7 @@ Proof
   qexists_tac `t3` >> simp[] >> metis_tac[]
 QED
 
-Theorem dynamic_load_word_raw_exact[local]:
+Theorem dynamic_load_word_raw_exact:
   load_bytestring_as_word v opc sa = ((r,k),sb) /\
   (opc = SHR \/ opc = SAR) /\ eval_operand v ss = SOME a /\
   mload (w2n a) ss = n /\ mload (w2n (a + 32w)) ss = d /\
@@ -166,16 +218,24 @@ Theorem dynamic_load_word_raw_exact[local]:
     eval_operand k sf = SOME ((32w - n) * 8w) /\
     eval_operand r sf = SOME
       (if opc = SHR then word_lsr d (w2n ((32w - n) * 8w))
-       else word_asr d (w2n ((32w - n) * 8w))) /\
+       else word_asr (if n = 0w then 0w else d)
+              (w2n ((32w - n) * 8w))) /\
     fresh_vars_wrt sb sf /\ sf.vs_memory = ss.vs_memory /\
     sf.vs_allocas = ss.vs_allocas /\
     (!p w. eval_operand p ss = SOME w ==> eval_operand p sf = SOME w)
 Proof
   rpt gen_tac >> strip_tac >>
+  Cases_on `opc = SHR` >> gvs[] >>
   qpat_x_assum `load_bytestring_as_word _ _ _ = _` mp_tac >>
-  simp_tac pure_ss [load_bytestring_as_word_def, comp_bind_def,
-                   comp_return_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  simp_tac (srw_ss()) [load_bytestring_as_word_def, comp_bind_def,
+                      comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[comp_return_def]) >> strip_tac >> gvs[]
+  >- suspend "unsigned"
+  >> suspend "signed"
+QED
+
+Resume dynamic_load_word_raw_exact[unsigned]:
+
   rename1 `emit_op MLOAD [v] sa = (len,s1)` >>
   rename1 `emit_op ADD [v; Lit 32w] s1 = (dp,s2)` >>
   rename1 `emit_op MLOAD [dp] s2 = (data,s3)` >>
@@ -197,7 +257,38 @@ Proof
   qexists_tac `sf` >> simp[] >> metis_tac[]
 QED
 
-Theorem dynamic_convert_typing_boundary[local]:
+Resume dynamic_load_word_raw_exact[signed]:
+  rename1 `emit_op MLOAD [v] sa = (len,s1)` >>
+  rename1 `emit_op ADD [v; Lit 32w] s1 = (dp,s2)` >>
+  rename1 `emit_op MLOAD [dp] s2 = (data,s3)` >>
+  rename1 `emit_op ISZERO [len] s3 = (empty,s4)` >>
+  rename1 `emit_op ISZERO [empty] s4 = (nonempty,s5)` >>
+  rename1 `emit_op MUL [data;nonempty] s5 = (masked,s6)` >>
+  rename1 `emit_op SUB [Lit 32w;len] s6 = (sub,s7)` >>
+  rename1 `emit_op MUL [sub;Lit 8w] s7 = (k,s8)` >>
+  rename1 `emit_op SAR [k;masked] s8 = (r,sb)` >>
+  drule_all dynamic_load_payload_exact >>
+  disch_then (qx_choose_then `t1` strip_assume_tac) >>
+  drule_all dynamic_mask_payload_exact >>
+  disch_then (qx_choose_then `t2` strip_assume_tac) >>
+  `eval_operand len t2 = SOME (mload (w2n a) ss)` by metis_tac[] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `SAR`] dynamic_shift_payload_exact)) >>
+  disch_then (qx_choose_then `sf` strip_assume_tac) >>
+  imp_res_tac inst_extends_emit_op >>
+  `inst_extends sa s3` by metis_tac[inst_extends_trans] >>
+  `inst_extends s3 s6` by metis_tac[inst_extends_trans] >>
+  `inst_extends s6 sb` by metis_tac[inst_extends_trans] >>
+  `inst_extends sa s6` by metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts sa s6) ss = OK t2` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`t1`,`s3`] >> simp[]) >>
+  `run_inst_seq (emitted_insts sa sb) ss = OK sf` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`t2`,`s6`] >> simp[]) >>
+  qexists_tac `sf` >> simp[] >> metis_tac[]
+QED
+
+Finalise dynamic_load_word_raw_exact
+
+Theorem dynamic_convert_typing_boundary:
   expr_body_pre cenv cx env (TypeBuiltin ann Convert dst [e]) es ==>
   valid_conversion (expr_type e) dst /\ ann = dst /\
   well_formed_type env.type_defs dst
@@ -207,7 +298,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem dynamic_decimal_convert_op[local]:
+Theorem dynamic_decimal_convert_op:
   mk_convert_op (BaseT (BytesT (Dynamic n))) (BaseT DecimalT) =
     ConvBytestringToDecimal 10000000000
       (w2i (FST (type_bounds (BaseT DecimalT))))
@@ -216,7 +307,7 @@ Proof
   simp[mk_convert_op_def, is_bytestring_type_def] >> pairarg_tac >> simp[]
 QED
 
-Theorem dynamic_bytes_scalar_partition[local]:
+Theorem dynamic_bytes_scalar_partition:
   valid_conversion (BaseT (BytesT (Dynamic n))) dst /\
   ~is_bytestring_type dst ==>
   (dst = BaseT BoolT /\ n <= 32) \/
@@ -233,7 +324,7 @@ Proof
   simp[valid_conversion_def, is_bytestring_type_def]
 QED
 
-Theorem dynamic_string_scalar_partition[local]:
+Theorem dynamic_string_scalar_partition:
   valid_conversion (BaseT (StringT n)) dst /\
   ~is_bytestring_type dst ==>
   ?m. dst = BaseT (BytesT (Fixed m)) /\ n <= m
@@ -245,7 +336,7 @@ Proof
   simp[valid_conversion_def, is_bytestring_type_def]
 QED
 
-Theorem dynamic_scalar_convert_ops[local]:
+Theorem dynamic_scalar_convert_ops:
   mk_convert_op (BaseT (BytesT (Dynamic n))) (BaseT BoolT) =
     ConvBytestringToBool /\
   mk_convert_op (BaseT (BytesT (Dynamic n))) (BaseT AddressT) =
@@ -264,7 +355,7 @@ QED
 
 (* The dynamic representation constrains exactly the payload bytes, not a
    capacity-sized or word-rounded suffix. *)
-Theorem dynamic_bytes_memory_boundary[local]:
+Theorem dynamic_bytes_memory_boundary:
   val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bs) off mem <=>
   mem_word_at off mem = n2w (LENGTH bs) /\
   mem_bytes_at (off + 32) (LENGTH bs) mem = bs
@@ -272,14 +363,14 @@ Proof
   simp[val_in_memory_def]
 QED
 
-Theorem dynamic_empty_memory_boundary[local]:
+Theorem dynamic_empty_memory_boundary:
   val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV []) off mem <=>
   mem_word_at off mem = 0w
 Proof
   simp[dynamic_bytes_memory_boundary, mem_bytes_at_def]
 QED
 
-Theorem dynamic_string_memory_boundary[local]:
+Theorem dynamic_string_memory_boundary:
   val_in_memory (BaseTV (StringT n)) (StringV str) off mem <=>
   mem_word_at off mem = n2w (LENGTH str) /\
   mem_bytes_at (off + 32) (LENGTH str) mem = MAP (n2w o ORD) str
@@ -287,7 +378,7 @@ Proof
   simp[val_in_memory_def]
 QED
 
-Theorem dynamic_bytes_operand_memory[local]:
+Theorem dynamic_bytes_operand_memory:
   evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic n))) =
     SOME (BaseTV (BytesT (Dynamic n))) /\
   expr_val_rel cx (BaseT (BytesT (Dynamic n))) (BytesV bs) op s ==>
@@ -298,7 +389,7 @@ Proof
   strip_tac >> gvs[expr_val_rel_def, is_word_type_def, val_in_memory_def]
 QED
 
-Theorem dynamic_get_byte_encoding[local]:
+Theorem dynamic_get_byte_encoding:
   j < 32 ==>
   byte$get_byte (n2w j:bytes32) (word_of_bytes_be bs:bytes32) T =
     if j < LENGTH bs then EL j bs else 0w
@@ -309,7 +400,7 @@ Proof
        wordsTheory.dimword_def]
 QED
 
-Theorem dynamic_get_byte_bit[local]:
+Theorem dynamic_get_byte_bit:
   j < 32 /\ r < 8 ==>
   ((byte$get_byte (n2w j:bytes32) (w:bytes32) T : byte) ' r =
    w ' (8 * (31 - j) + r))
@@ -321,7 +412,7 @@ Proof
   AP_TERM_TAC >> decide_tac
 QED
 
-Theorem dynamic_word_bit_byte[local]:
+Theorem dynamic_word_bit_byte:
   i < 256 ==>
   ((w:bytes32) ' i =
    (byte$get_byte (n2w (31 - i DIV 8):bytes32) w T : byte) ' (i MOD 8))
@@ -336,7 +427,7 @@ Proof
   simp[]
 QED
 
-Theorem dynamic_payload_prefix_bits[local]:
+Theorem dynamic_payload_prefix_bits:
   n <= 32 /\ LENGTH xs = 32 /\ LENGTH bs = n /\ TAKE n xs = bs ==>
   !i. 8 * (32 - n) <= i /\ i < 256 ==>
     ((word_of_bytes_be xs:bytes32) ' i =
@@ -351,7 +442,7 @@ Proof
     metis_tac[EL_TAKE] >> simp[]
 QED
 
-Theorem dynamic_payload_low_bits[local]:
+Theorem dynamic_payload_low_bits:
   LENGTH bs <= 32 ==>
   !i. i < 8 * (32 - LENGTH bs) ==>
     ~((word_of_bytes_be bs:bytes32) ' i)
@@ -364,7 +455,7 @@ Proof
        wordsTheory.word_0, fcpTheory.FCP_BETA]
 QED
 
-Theorem dynamic_lsr_high_cong[local]:
+Theorem dynamic_lsr_high_cong:
   (!i. k <= i /\ i < 256 ==> (u:bytes32) ' i = (v:bytes32) ' i) ==>
   word_lsr u k = word_lsr v k
 Proof
@@ -374,7 +465,7 @@ Proof
   first_x_assum irule >> decide_tac
 QED
 
-Theorem dynamic_asr_high_cong[local]:
+Theorem dynamic_asr_high_cong:
   k < 256 /\
   (!i. k <= i /\ i < 256 ==> (u:bytes32) ' i = (v:bytes32) ' i) ==>
   word_asr u k = word_asr v k
@@ -387,7 +478,7 @@ Proof
   first_x_assum irule >> decide_tac
 QED
 
-Theorem dynamic_lsr_lsl_mask[local]:
+Theorem dynamic_lsr_lsl_mask:
   (!i. i < k /\ i < 256 ==> ~((w:bytes32) ' i)) ==>
   word_lsl (word_lsr w k) k = w
 Proof
@@ -398,7 +489,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem dynamic_payload_lsr[local]:
+Theorem dynamic_payload_lsr:
   LENGTH xs = 32 /\ LENGTH bs <= 32 /\ TAKE (LENGTH bs) xs = bs ==>
   word_lsr (word_of_bytes_be xs:bytes32) (8 * (32 - LENGTH bs)) =
   word_lsr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs))
@@ -407,7 +498,7 @@ Proof
   metis_tac[dynamic_payload_prefix_bits]
 QED
 
-Theorem dynamic_payload_asr[local]:
+Theorem dynamic_payload_asr:
   LENGTH xs = 32 /\ LENGTH bs <= 32 /\ TAKE (LENGTH bs) xs = bs /\ bs <> [] ==>
   word_asr (word_of_bytes_be xs:bytes32) (8 * (32 - LENGTH bs)) =
   word_asr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs))
@@ -417,7 +508,7 @@ Proof
   `LENGTH bs <> 0` by simp[] >> decide_tac
 QED
 
-Theorem dynamic_payload_mask[local]:
+Theorem dynamic_payload_mask:
   LENGTH xs = 32 /\ LENGTH bs <= 32 /\ TAKE (LENGTH bs) xs = bs ==>
   word_lsl
     (word_lsr (word_of_bytes_be xs:bytes32) (8 * (32 - LENGTH bs)))
@@ -428,7 +519,7 @@ Proof
   metis_tac[dynamic_payload_low_bits]
 QED
 
-Theorem dynamic_memory_payload_prefix[local]:
+Theorem dynamic_memory_payload_prefix:
   LENGTH bs <= 32 /\ mem_bytes_at off (LENGTH bs) mem = bs ==>
   LENGTH (TAKE 32 (DROP off mem ++ REPLICATE 32 0w)) = 32 /\
   TAKE (LENGTH bs) (TAKE 32 (DROP off mem ++ REPLICATE 32 0w)) = bs
@@ -442,7 +533,7 @@ Proof
   `LENGTH bs = 32` by decide_tac >> gvs[mem_bytes_at_def]
 QED
 
-Theorem dynamic_memory_payload_lsr[local]:
+Theorem dynamic_memory_payload_lsr:
   LENGTH bs <= 32 /\ mem_bytes_at off (LENGTH bs) mem = bs ==>
   word_lsr (mem_word_at off mem) (8 * (32 - LENGTH bs)) =
   word_lsr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs))
@@ -452,7 +543,7 @@ Proof
   irule dynamic_payload_lsr >> simp[]
 QED
 
-Theorem dynamic_memory_payload_asr[local]:
+Theorem dynamic_memory_payload_asr:
   LENGTH bs <= 32 /\ mem_bytes_at off (LENGTH bs) mem = bs /\ bs <> [] ==>
   word_asr (mem_word_at off mem) (8 * (32 - LENGTH bs)) =
   word_asr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs))
@@ -462,7 +553,7 @@ Proof
   irule dynamic_payload_asr >> simp[]
 QED
 
-Theorem dynamic_memory_payload_mask[local]:
+Theorem dynamic_memory_payload_mask:
   LENGTH bs <= 32 /\ mem_bytes_at off (LENGTH bs) mem = bs ==>
   word_lsl
     (word_lsr (mem_word_at off mem) (8 * (32 - LENGTH bs)))
@@ -473,7 +564,7 @@ Proof
   irule dynamic_payload_mask >> simp[]
 QED
 
-Theorem dynamic_string_operand_memory[local]:
+Theorem dynamic_string_operand_memory:
   evaluate_type (get_tenv cx) (BaseT (StringT n)) = SOME (BaseTV (StringT n)) /\
   expr_val_rel cx (BaseT (StringT n)) (StringV str) op s ==>
   ?w. eval_operand op s = SOME w /\
@@ -483,7 +574,7 @@ Proof
   strip_tac >> gvs[expr_val_rel_def, is_word_type_def, val_in_memory_def]
 QED
 
-Theorem dynamic_load_word_decoded_exact[local]:
+Theorem dynamic_load_word_decoded_exact:
   load_bytestring_as_word v opc sa = ((r,k),sb) /\
   (opc = SHR \/ opc = SAR) /\ (opc = SAR ==> bs <> []) /\
   eval_operand v ss = SOME a /\ fresh_vars_wrt sa ss /\
@@ -520,7 +611,7 @@ Proof
          irule dynamic_memory_payload_asr] >> simp[]
 QED
 
-Theorem dynamic_local_region_bound[local]:
+Theorem dynamic_local_region_bound:
   local_ptrs_rel func cenv scopes s /\ local_region cenv scopes s name b sz ==>
   b + sz <= s.vs_alloca_next
 Proof
@@ -528,7 +619,7 @@ Proof
   first_x_assum drule_all >> strip_tac >> gvs[]
 QED
 
-Theorem dynamic_operand_header_bound[local]:
+Theorem dynamic_operand_header_bound:
   stmt_state_rel ctx func cenv cx es s /\
   evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
   expr_val_at cenv cx t sarg sa es v op s /\
@@ -549,7 +640,7 @@ Proof
   drule_all dynamic_local_region_bound >> decide_tac
 QED
 
-Theorem dynamic_convert_operand_typed[local]:
+Theorem dynamic_convert_operand_typed:
   expr_body_pre cenv cx env (TypeBuiltin ann Convert t [e1]) es /\
   (do r <- eval_expr cx e1; read_result cx r od) es = (INL v, es1) ==>
   ?stv. evaluate_type (get_tenv cx) (expr_type e1) = SOME stv /\
@@ -562,21 +653,21 @@ Proof
   gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def]
 QED
 
-Theorem dynamic_bytes_value_typed[local]:
+Theorem dynamic_bytes_value_typed:
   value_has_type (BaseTV (BytesT (Dynamic n))) v ==>
   ?bs. v = BytesV bs /\ LENGTH bs <= n
 Proof
   Cases_on `v` >> simp[vyperTypingTheory.value_has_type_def]
 QED
 
-Theorem dynamic_string_value_typed[local]:
+Theorem dynamic_string_value_typed:
   value_has_type (BaseTV (StringT n)) v ==>
   ?str. v = StringV str /\ LENGTH str <= n
 Proof
   Cases_on `v` >> simp[vyperTypingTheory.value_has_type_def]
 QED
 
-Theorem dynamic_bytes_operand_view[local]:
+Theorem dynamic_bytes_operand_view:
   evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic n))) = SOME stv /\
   value_has_type stv v /\
   stmt_state_rel ctx func cenv cx es s /\
@@ -600,7 +691,7 @@ Proof
   qexists_tac `w` >> gvs[wordsTheory.dimword_def]
 QED
 
-Theorem dynamic_string_operand_view[local]:
+Theorem dynamic_string_operand_view:
   evaluate_type (get_tenv cx) (BaseT (StringT n)) = SOME stv /\
   value_has_type stv v /\
   stmt_state_rel ctx func cenv cx es s /\
@@ -624,7 +715,7 @@ Proof
   qexists_tac `w` >> gvs[wordsTheory.dimword_def]
 QED
 
-Theorem dynamic_unsigned_padding[local]:
+Theorem dynamic_unsigned_padding:
   LENGTH bs <= 32 ==>
   word_lsr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs)) =
     word_of_bytes_be (PAD_LEFT 0w 32 bs)
@@ -644,7 +735,7 @@ Proof
   simp[wordsTheory.word_0, fcpTheory.FCP_BETA]
 QED
 
-Theorem dynamic_payload_zero[local]:
+Theorem dynamic_payload_zero:
   LENGTH bs <= 32 ==>
   (((word_of_bytes_be bs:bytes32) = 0w) <=> EVERY (\b. b = 0w) bs)
 Proof
@@ -663,7 +754,7 @@ Proof
   gvs[wordsTheory.word_0, fcpTheory.FCP_BETA]
 QED
 
-Theorem dynamic_unsigned_zero[local]:
+Theorem dynamic_unsigned_zero:
   LENGTH bs <= 32 ==>
   ((word_lsr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs)) = 0w) <=>
     EVERY (\b. b = 0w) bs)
@@ -678,7 +769,7 @@ Proof
   strip_tac >> gvs[wordsTheory.ZERO_SHIFT]
 QED
 
-Theorem dynamic_unsigned_bound[local]:
+Theorem dynamic_unsigned_bound:
   LENGTH bs <= 32 ==>
   w2n (word_lsr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs))) <
     2 ** (8 * LENGTH bs)
@@ -690,7 +781,7 @@ Proof
        arithmeticTheory.DIV_LT_X]
 QED
 
-Theorem dynamic_fixed_bytes_encoding[local]:
+Theorem dynamic_fixed_bytes_encoding:
   LENGTH bs <= m /\ m <= 32 ==>
   typed_val_to_w256 (BaseTV (BytesT (Fixed m)))
     (BytesV (PAD_RIGHT 0w m bs)) = (word_of_bytes_be bs:bytes32)
@@ -700,7 +791,7 @@ Proof
        byteTheory.word_of_bytes_be_def, word_of_bytes_append_zero]
 QED
 
-Theorem dynamic_signed_padding[local]:
+Theorem dynamic_signed_padding:
   word_asr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs)) =
   word_asr (word_of_bytes_be (PAD_RIGHT 0w 32 bs):bytes32)
     (8 * (32 - LENGTH bs))
@@ -708,7 +799,7 @@ Proof
   simp[word_of_bytes_be_pad_right]
 QED
 
-Theorem dynamic_signed_roundtrip[local]:
+Theorem dynamic_signed_roundtrip:
   i2w (w2i (word_asr (word_of_bytes_be bs:bytes32)
     (8 * (32 - LENGTH bs)))) =
   word_asr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs))
@@ -716,7 +807,7 @@ Proof
   simp[integer_wordTheory.i2w_w2i]
 QED
 
-Theorem dynamic_asr_sign[local]:
+Theorem dynamic_asr_sign:
   word_msb (word_asr (w:bytes32) k) = word_msb w
 Proof
   simp[wordsTheory.word_msb_def, wordsTheory.word_asr_def,
@@ -724,7 +815,7 @@ Proof
   Cases_on `k = 0` >> simp[]
 QED
 
-Theorem dynamic_asr_complement[local]:
+Theorem dynamic_asr_complement:
   word_1comp (word_asr (w:bytes32) k) = word_asr (word_1comp w) k
 Proof
   simp[wordsTheory.word_1comp_def, wordsTheory.word_asr_def,
@@ -732,7 +823,7 @@ Proof
   rpt strip_tac >> Cases_on `i + k < 256` >> simp[]
 QED
 
-Theorem dynamic_asr_clear_sign[local]:
+Theorem dynamic_asr_clear_sign:
   ~word_msb (w:bytes32) ==> word_asr w k = word_lsr w k
 Proof
   simp[wordsTheory.word_asr_def, wordsTheory.word_lsr_def,
@@ -740,14 +831,14 @@ Proof
   rpt strip_tac >> Cases_on `i + k < 256` >> simp[]
 QED
 
-Theorem dynamic_complement_sign[local]:
+Theorem dynamic_complement_sign:
   word_msb (word_1comp (w:bytes32)) = ~word_msb w
 Proof
   simp[wordsTheory.word_msb_def, wordsTheory.word_1comp_def,
        fcpTheory.FCP_BETA]
 QED
 
-Theorem dynamic_clear_sign_bound[local]:
+Theorem dynamic_clear_sign_bound:
   ~word_msb (w:bytes32) ==> w2n w < 2 ** 255
 Proof
   Cases_on `w` >>
@@ -755,14 +846,14 @@ Proof
        wordsTheory.dimword_def]
 QED
 
-Theorem dynamic_clear_sign_value[local]:
+Theorem dynamic_clear_sign_value:
   ~word_msb (w:bytes32) ==> w2i w = &(w2n w)
 Proof
   strip_tac >> drule dynamic_clear_sign_bound >>
   simp[integer_wordTheory.w2i_eq_w2n, wordsTheory.INT_MIN_def]
 QED
 
-Theorem dynamic_clear_sign_lsr_bound[local]:
+Theorem dynamic_clear_sign_lsr_bound:
   ~word_msb (w:bytes32) /\ k < 256 ==>
   w2n (word_lsr w k) < 2 ** (255 - k)
 Proof
@@ -773,7 +864,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem dynamic_negative_complement_value[local]:
+Theorem dynamic_negative_complement_value:
   word_msb (w:bytes32) ==> w2i w = -(&(w2n (word_1comp w))) - 1
 Proof
   Cases_on `w` >>
@@ -784,7 +875,7 @@ Proof
   gvs[wordsTheory.dimword_def] >> intLib.ARITH_TAC
 QED
 
-Theorem dynamic_asr_signed_range[local]:
+Theorem dynamic_asr_signed_range:
   !(w:bytes32) k. k < 256 ==>
   -(&(2 ** (255-k))) <= w2i (word_asr w k) /\
   w2i (word_asr w k) < &(2 ** (255-k))
@@ -802,7 +893,7 @@ Proof
   simp[dynamic_asr_clear_sign] >> intLib.ARITH_TAC
 QED
 
-Theorem dynamic_payload_signed_range[local]:
+Theorem dynamic_payload_signed_range:
   0 < LENGTH bs /\ LENGTH bs <= 32 ==>
   -(&(2 ** (8 * LENGTH bs - 1))) <=
     w2i (word_asr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs))) /\
@@ -815,7 +906,7 @@ Proof
   drule dynamic_asr_signed_range >> simp[]
 QED
 
-Theorem dynamic_signed_range_widen[local]:
+Theorem dynamic_signed_range_widen:
   0 < a /\ a <= b /\ -(&(2 ** (a-1))) <= i /\ i < &(2 ** (a-1)) ==>
   within_int_bound (Signed b) i
 Proof
@@ -826,7 +917,7 @@ Proof
   Cases_on `i < 0` >> simp[] >> intLib.ARITH_TAC
 QED
 
-Theorem dynamic_payload_signed_bound[local]:
+Theorem dynamic_payload_signed_bound:
   0 < LENGTH bs /\ LENGTH bs <= 32 /\ 8 * LENGTH bs <= b ==>
   within_int_bound (Signed b)
     (w2i (word_asr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs))))
@@ -835,7 +926,7 @@ Proof
   irule dynamic_signed_range_widen >> qexists_tac `8 * LENGTH bs` >> simp[]
 QED
 
-Theorem dynamic_payload_decimal_bound[local]:
+Theorem dynamic_payload_decimal_bound:
   0 < LENGTH bs /\ LENGTH bs <= 32 /\ 8 * LENGTH bs <= 168 ==>
   within_int_bound decimal_bound
     (w2i (word_asr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs))))
@@ -843,21 +934,7 @@ Proof
   simp[decimal_bound_def, decimal_bits_def, dynamic_payload_signed_bound]
 QED
 
-Theorem dynamic_emit_iszero_exact[local]:
-  emit_op ISZERO [a] sa = (v,sb) /\
-  eval_operand a ss = SOME x /\ fresh_vars_wrt sa ss ==>
-  ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
-    eval_operand v sf = SOME (if x = 0w then 1w else 0w) /\
-    fresh_vars_wrt sb sf /\ sf.vs_memory = ss.vs_memory /\
-    sf.vs_allocas = ss.vs_allocas /\
-    (!p w. eval_operand p ss = SOME w ==> eval_operand p sf = SOME w)
-Proof
-  rpt strip_tac >> irule dynamic_emit_update_exact >> simp[] >>
-  goal_assum $ drule_at (Pat `emit_op`) >> simp[] >>
-  drule step_ISZERO >> Cases_on `x = 0w` >> simp[bool_to_word_def]
-QED
-
-Theorem dynamic_emit_shl_exact[local]:
+Theorem dynamic_emit_shl_exact:
   emit_op SHL [a;b] sa = (v,sb) /\
   eval_operand a ss = SOME x /\ eval_operand b ss = SOME y /\
   fresh_vars_wrt sa ss ==>
@@ -872,7 +949,7 @@ Proof
   irule step_SHL >> simp[]
 QED
 
-Theorem dynamic_convert_bool_raw_exact[local]:
+Theorem dynamic_convert_bool_raw_exact:
   compile_type_convert v ConvBytestringToBool sa = (r,sb) /\
   eval_operand v ss = SOME a /\ fresh_vars_wrt sa ss /\
   LENGTH bs <= 32 /\ w2n (a + 32w) = w2n a + 32 /\
@@ -915,7 +992,7 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
-Theorem dynamic_convert_fixed_raw_exact[local]:
+Theorem dynamic_convert_fixed_raw_exact:
   compile_type_convert v (ConvBytestringToBytesM m) sa = (r,sb) /\
   eval_operand v ss = SOME a /\ fresh_vars_wrt sa ss /\
   LENGTH bs <= 32 /\ w2n (a + 32w) = w2n a + 32 /\
@@ -948,7 +1025,7 @@ Proof
   metis_tac[dynamic_payload_low_bits]
 QED
 
-Theorem dynamic_bool_encoding[local]:
+Theorem dynamic_bool_encoding:
   LENGTH bs <= 32 ==>
   typed_val_to_w256 (BaseTV BoolT) (BoolV (EXISTS (\b. b <> 0w) bs)) =
     (if word_lsr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs)) = 0w
@@ -962,7 +1039,7 @@ Proof
   asm_rewrite_tac[typed_val_to_w256_def, val_to_w256_def, bool_to_word_def]
 QED
 
-Theorem dynamic_convert_bool_exact[local]:
+Theorem dynamic_convert_bool_exact:
   compile_type_convert v (mk_convert_op (BaseT (BytesT (Dynamic n)))
     (BaseT BoolT)) sa = (r,sb) /\
   eval_operand v ss = SOME a /\ fresh_vars_wrt sa ss /\
@@ -985,7 +1062,7 @@ Proof
        dynamic_bool_encoding]
 QED
 
-Theorem dynamic_fixed_conversion_result[local]:
+Theorem dynamic_fixed_conversion_result:
   ((src = BaseT (BytesT (Dynamic n)) /\ vin = BytesV bs) \/
    (?s. src = BaseT (StringT n) /\ vin = StringV s /\
         bs = MAP (n2w o ORD) s)) /\ LENGTH bs <= m ==>
@@ -996,7 +1073,7 @@ Proof
                    evaluate_convert_def]
 QED
 
-Theorem dynamic_convert_fixed_exact[local]:
+Theorem dynamic_convert_fixed_exact:
   ((src = BaseT (BytesT (Dynamic n)) /\ vin = BytesV bs) \/
    (?s. src = BaseT (StringT n) /\ vin = StringV s /\
         bs = MAP (n2w o ORD) s)) /\
@@ -1025,7 +1102,7 @@ Proof
   goal_assum $ drule_at (Pat `eval_operand`) >> simp[]
 QED
 
-Theorem dynamic_emit_gt_exact[local]:
+Theorem dynamic_emit_gt_exact:
   emit_op GT [a;b] sa = (v,sb) /\
   eval_operand a ss = SOME x /\ eval_operand b ss = SOME y /\
   fresh_vars_wrt sa ss ==>
@@ -1040,7 +1117,7 @@ Proof
   simp[clamp_step_equations, exec_pure2_def, venomInstTheory.mk_inst_def]
 QED
 
-Theorem dynamic_emit_assert_exact[local]:
+Theorem dynamic_emit_assert_exact:
   emit_void ASSERT [a] sa = (u,sb) /\
   eval_operand a ss = SOME x /\ fresh_vars_wrt sa ss ==>
   run_inst_seq (emitted_insts sa sb) ss =
@@ -1053,7 +1130,7 @@ Proof
   metis_tac[fresh_vars_wrt_emit_void]
 QED
 
-Theorem dynamic_uint_clamp_raw_exact[local]:
+Theorem dynamic_uint_clamp_raw_exact:
   compile_int_clamp F b v sa = (r,sb) /\
   eval_operand v ss = SOME x /\ fresh_vars_wrt sa ss ==>
   if w2n x <= w2n (n2w (2 ** b - 1):bytes32) then
@@ -1089,7 +1166,7 @@ Proof
   drule_all run_inst_seq_emit_extend >> simp[]
 QED
 
-Theorem dynamic_emit_signed_cmp_exact[local]:
+Theorem dynamic_emit_signed_cmp_exact:
   (opc = SLT \/ opc = SGT) /\
   emit_op opc [a;b] sa = (v,sb) /\
   eval_operand a ss = SOME x /\ eval_operand b ss = SOME y /\
@@ -1105,7 +1182,7 @@ Proof
   simp[clamp_step_equations, exec_pure2_def, venomInstTheory.mk_inst_def]
 QED
 
-Theorem dynamic_emit_and_exact[local]:
+Theorem dynamic_emit_and_exact:
   emit_op AND [a;b] sa = (v,sb) /\
   eval_operand a ss = SOME x /\ eval_operand b ss = SOME y /\
   fresh_vars_wrt sa ss ==>
@@ -1120,7 +1197,7 @@ Proof
   simp[clamp_step_equations, exec_pure2_def, venomInstTheory.mk_inst_def]
 QED
 
-Theorem dynamic_sint_clamp_raw_exact[local]:
+Theorem dynamic_sint_clamp_raw_exact:
   compile_int_clamp T b v sa = (r,sb) /\
   eval_operand v ss = SOME x /\ fresh_vars_wrt sa ss ==>
   if ~(x < (i2w (- &(2 ** (b-1))):bytes32)) /\
@@ -1180,7 +1257,7 @@ Proof
   simp[wordsTheory.WORD_AND_CLAUSES] >> metis_tac[]
 QED
 
-Theorem dynamic_uint_clamp_test[local]:
+Theorem dynamic_uint_clamp_test:
   b <= 256 ==>
   (w2n (x:bytes32) <= w2n (n2w (2 ** b - 1):bytes32) <=>
    within_int_bound (Unsigned b) (&(w2n x)))
@@ -1193,7 +1270,7 @@ Proof
   decide_tac
 QED
 
-Theorem dynamic_sint_clamp_test[local]:
+Theorem dynamic_sint_clamp_test:
   0 < b /\ b <= 256 ==>
   (~((x:bytes32) < (i2w (- &(2 ** (b-1))):bytes32)) /\
    ~(x > (i2w (&(2 ** (b-1) - 1)):bytes32)) <=>
@@ -1210,7 +1287,7 @@ Proof
   Cases_on `w2i x < 0` >> simp[] >> intLib.ARITH_TAC
 QED
 
-Theorem dynamic_int_clamp_exact[local]:
+Theorem dynamic_int_clamp_exact:
   compile_int_clamp sg b v sa = (r,sb) /\
   eval_operand v ss = SOME x /\ fresh_vars_wrt sa ss /\
   0 < b /\ b <= 256 ==>
@@ -1228,7 +1305,60 @@ Proof
   drule_all dynamic_uint_clamp_raw_exact >> simp[dynamic_uint_clamp_test]
 QED
 
-Theorem dynamic_payload_int_bound[local]:
+Theorem dynamic_convert_empty_signed_exact:
+  compile_type_convert v (ConvBytestringToInt T b n) sa = (r,sb) /\
+  eval_operand v ss = SOME a /\ fresh_vars_wrt sa ss /\
+  n <= 32 /\ 0 < b /\ b <= 256 /\
+  mem_word_at (w2n a) ss.vs_memory = 0w ==>
+  ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+    eval_operand r sf = SOME 0w /\ fresh_vars_wrt sb sf /\
+    sf.vs_memory = ss.vs_memory /\ sf.vs_allocas = ss.vs_allocas /\
+    (!p w. eval_operand p ss = SOME w ==> eval_operand p sf = SOME w)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_type_convert _ _ _ = _` mp_tac >>
+  simp_tac pure_ss [compile_type_convert_def, comp_bind_def,
+                   comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  rename1 `load_bytestring_as_word v SAR sa = ((shifted,k),s1)` >>
+  drule dynamic_load_word_raw_exact >>
+  disch_then (qspecl_then [`ss`,`0w`,`mload (w2n (a + 32w)) ss`,`a`] mp_tac) >>
+  simp[mload_def, GSYM mem_word_at_def] >> strip_tac >>
+  `within_int_bound (Signed b) 0` by simp[within_int_bound_def] >>
+  `inst_extends sa s1` by metis_tac[inst_extends_load_bytestring_as_word] >>
+  Cases_on `8 * n > b` >> gvs[]
+  >- (`b <= 256` by decide_tac >>
+      drule_all dynamic_int_clamp_exact >> simp[integer_wordTheory.w2i_def] >> strip_tac >>
+      qexists_tac `sf'` >> simp[] >>
+      irule run_inst_seq_compose_ok >> qexistsl [`sf`,`s1`] >>
+      metis_tac[inst_extends_compile_int_clamp]) >>
+  gvs[comp_return_def] >> metis_tac[]
+QED
+
+Theorem dynamic_empty_signed_result:
+  0 < b ==>
+  convert_result cx (BaseT (BytesT (Dynamic n))) (BaseT (IntT b)) (BytesV []) =
+    INL (IntV 0)
+Proof
+  strip_tac >>
+  simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def,
+       PAD_RIGHT, byteTheory.word_of_bytes_be_def,
+       integer_wordTheory.w2i_def, within_int_bound_def] >> EVAL_TAC >>
+  simp[arithmeticTheory.EXP_POS]
+QED
+
+Theorem dynamic_empty_decimal_result:
+  convert_result cx (BaseT (BytesT (Dynamic n))) (BaseT DecimalT) (BytesV []) =
+    INL (DecimalV 0)
+Proof
+  simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def,
+       bounded_decimal_op_def, decimal_bound_def, decimal_bits_def,
+       PAD_RIGHT, byteTheory.word_of_bytes_be_def,
+       integer_wordTheory.w2i_def, within_int_bound_def] >> EVAL_TAC >>
+  simp[arithmeticTheory.EXP_POS]
+QED
+
+Theorem dynamic_payload_int_bound:
   LENGTH bs <= 32 /\ 8 * LENGTH bs <= b /\ (sg ==> 0 < LENGTH bs) ==>
   within_int_bound (if sg then Signed b else Unsigned b)
     (if sg then w2i (word_asr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs)))
@@ -1241,7 +1371,7 @@ Proof
   simp[within_int_bound_def]
 QED
 
-Theorem dynamic_convert_int_raw_exact[local]:
+Theorem dynamic_convert_int_raw_exact:
   compile_type_convert v (ConvBytestringToInt sg b n) sa = (r,sb) /\
   eval_operand v ss = SOME a /\ fresh_vars_wrt sa ss /\
   LENGTH bs <= n /\ n <= 32 /\ 0 < b /\ b <= 256 /\ (sg ==> bs <> []) /\
@@ -1293,7 +1423,7 @@ Proof
   gvs[comp_return_def] >> qexists_tac `t1` >> simp[]
 QED
 
-Theorem dynamic_address_encoding[local]:
+Theorem dynamic_address_encoding:
   w2n (x:bytes32) < 2 ** 160 ==>
   typed_val_to_w256 (BaseTV AddressT) (AddressV (n2w (w2n x))) = x
 Proof
@@ -1306,7 +1436,7 @@ Proof
        bitTheory.BITS_ZERO3]
 QED
 
-Theorem dynamic_integer_conversion_result[local]:
+Theorem dynamic_integer_conversion_result:
   LENGTH bs <= 32 /\ (sg ==> bs <> []) ==>
   convert_result cx (BaseT (BytesT (Dynamic n)))
     (BaseT (if sg then IntT b else UintT b)) (BytesV bs) =
@@ -1324,7 +1454,7 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
-Theorem dynamic_convert_integer_exact[local]:
+Theorem dynamic_convert_integer_exact:
   compile_type_convert v (mk_convert_op (BaseT (BytesT (Dynamic n)))
     (BaseT (if sg then IntT b else UintT b))) sa = (r,sb) /\
   convert_result cx (BaseT (BytesT (Dynamic n)))
@@ -1360,7 +1490,7 @@ Proof
     integer_wordTheory.i2w_w2i]
 QED
 
-Theorem dynamic_address_conversion_result[local]:
+Theorem dynamic_address_conversion_result:
   LENGTH bs <= 32 ==>
   convert_result cx (BaseT (BytesT (Dynamic n))) (BaseT AddressT) (BytesV bs) =
   let x = word_lsr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs)) in
@@ -1374,7 +1504,7 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
-Theorem dynamic_convert_address_exact[local]:
+Theorem dynamic_convert_address_exact:
   compile_type_convert v (mk_convert_op (BaseT (BytesT (Dynamic n)))
     (BaseT AddressT)) sa = (r,sb) /\
   convert_result cx (BaseT (BytesT (Dynamic n))) (BaseT AddressT) (BytesV bs) = res /\
@@ -1406,7 +1536,7 @@ Proof
   simp[dynamic_address_encoding]
 QED
 
-Theorem dynamic_decimal_integer_compile[local]:
+Theorem dynamic_decimal_integer_compile:
   compile_type_convert v (mk_convert_op (BaseT (BytesT (Dynamic n))) (BaseT DecimalT)) =
   compile_type_convert v (ConvBytestringToInt T 168 n)
 Proof
@@ -1416,7 +1546,7 @@ Proof
   Cases_on `8 * n <= 168` >> simp[]
 QED
 
-Theorem dynamic_decimal_conversion_result[local]:
+Theorem dynamic_decimal_conversion_result:
   bs <> [] ==>
   convert_result cx (BaseT (BytesT (Dynamic n))) (BaseT DecimalT) (BytesV bs) =
   let i = w2i (word_asr (word_of_bytes_be bs:bytes32) (8 * (32 - LENGTH bs))) in
@@ -1430,7 +1560,7 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
-Theorem dynamic_convert_decimal_exact[local]:
+Theorem dynamic_convert_decimal_exact:
   compile_type_convert v (mk_convert_op (BaseT (BytesT (Dynamic n)))
     (BaseT DecimalT)) sa = (r,sb) /\
   convert_result cx (BaseT (BytesT (Dynamic n))) (BaseT DecimalT) (BytesV bs) = res /\
@@ -1464,7 +1594,6 @@ Theorem dynamic_scalar_run_exact:
   valid_conversion src dst /\ well_formed_type tenv dst /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
   convert_result cx src dst v = res /\
-  res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
   compile_type_convert op (mk_convert_op src dst) sa = (r,sb) /\
   fresh_vars_wrt sa ss /\ eval_operand op ss = SOME a /\
   w2n a + 32 < dimword (:256) /\
@@ -1527,9 +1656,14 @@ Resume dynamic_scalar_run_exact[int]:
   drule dynamic_bytes_value_typed >> strip_tac >> gvs[] >>
   gvs[dynamic_bytes_memory_boundary, well_formed_type_def,
       vyperValueTheory.evaluate_type_def] >>
-  `bs <> []` by
-    (strip_tac >> gvs[convert_result_def, evaluate_convert_from_def,
-                     evaluate_convert_def]) >>
+  Cases_on `bs = []`
+  >- (gvs[] >>
+      `0 < b` by decide_tac >>
+      gvs[dynamic_empty_signed_result, dynamic_scalar_convert_ops] >>
+      `0 < b` by decide_tac >>
+      drule_all dynamic_convert_empty_signed_exact >>
+      simp[vyperValueTheory.evaluate_type_def, typed_val_to_w256_def,
+           val_to_w256_def, integer_wordTheory.i2w_def]) >>
   drule (SRULE [] (Q.INST [`sg` |-> `T`] dynamic_convert_integer_exact)) >>
   disch_then (qspecl_then [`ss`,`convert_result cx (BaseT (BytesT (Dynamic n))) (BaseT (IntT b)) (BytesV bs)`,`cx`,`bs`,`a`] mp_tac) >>
   (impl_tac >- simp[]) >>
@@ -1553,9 +1687,13 @@ Resume dynamic_scalar_run_exact[decimal]:
   gvs[vyperValueTheory.evaluate_type_def] >>
   drule dynamic_bytes_value_typed >> strip_tac >> gvs[] >>
   gvs[dynamic_bytes_memory_boundary] >>
-  `bs <> []` by
-    (strip_tac >> gvs[convert_result_def, evaluate_convert_from_def,
-                     evaluate_convert_def]) >>
+  Cases_on `bs = []`
+  >- (gvs[dynamic_empty_decimal_result] >>
+      gvs[dynamic_decimal_integer_compile] >>
+      drule dynamic_convert_empty_signed_exact >>
+      disch_then (qspecl_then [`ss`,`a`] mp_tac) >>
+      simp[vyperValueTheory.evaluate_type_def, typed_val_to_w256_def,
+           val_to_w256_def, integer_wordTheory.i2w_def]) >>
   drule dynamic_convert_decimal_exact >>
   disch_then (qspecl_then [`ss`,`convert_result cx (BaseT (BytesT (Dynamic n))) (BaseT DecimalT) (BytesV bs)`,`cx`,`bs`,`a`] mp_tac) >>
   (impl_tac >- simp[]) >>
@@ -1590,9 +1728,9 @@ Resume dynamic_scalar_run_exact[string]:
   gvs[vyperValueTheory.evaluate_type_def]
 QED
 
-Finalise dynamic_scalar_run_exact[local]
+Finalise dynamic_scalar_run_exact
 
-Theorem dynamic_operand_packet[local]:
+Theorem dynamic_operand_packet:
   is_bytestring_type src /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
   stmt_state_rel ctx func cenv cx es s /\ expr_val_rel cx src v op s /\
@@ -1709,7 +1847,7 @@ QED
 
 Finalise dynamic_frag_writes_fresh_exact[local]
 
-Theorem dynamic_frag_straight_fresh_exact[local]:
+Theorem dynamic_frag_straight_fresh_exact:
   straight_fresh m /\ m sa = (op,sb) /\ local_ptrs_reserved cenv sa /\
   (!ss. P ss ==> P (drop_fresh sa ss)) /\
   (!ss. fresh_vars_wrt sa ss /\ P ss ==>
@@ -1748,7 +1886,7 @@ Definition dynamic_straight_fresh_def:
       dynamic_writes_fresh st (emitted_insts st st')
 End
 
-Theorem dynamic_step_read_fresh[local]:
+Theorem dynamic_step_read_fresh:
   (fresh_write_op inst.inst_opcode \/ inst.inst_opcode = MLOAD) /\
   step_inst_base inst ss = OK tt ==>
   tt = ss with vs_vars := tt.vs_vars /\
@@ -1761,7 +1899,7 @@ Proof
       venom_state_component_equality]
 QED
 
-Theorem dynamic_run_read_fresh[local]:
+Theorem dynamic_run_read_fresh:
   !is st ss tt.
     dynamic_writes_fresh st is /\ run_inst_seq is ss = OK tt ==>
     tt = ss with vs_vars := tt.vs_vars /\
@@ -1787,7 +1925,7 @@ Proof
   metis_tac[])
 QED
 
-Theorem dynamic_read_fresh_safe[local]:
+Theorem dynamic_read_fresh_safe:
   fresh_write_op opc \/ opc = MLOAD ==>
   opc <> INVOKE /\ ~is_terminator opc /\ ~is_ext_call_op opc
 Proof
@@ -1795,7 +1933,18 @@ Proof
   gvs[venomInstTheory.is_terminator_def, venomInstTheory.is_ext_call_op_def]
 QED
 
-Theorem dynamic_writes_fresh_mono[local]:
+Theorem dynamic_writes_fresh_path_opcodes:
+  dynamic_writes_fresh sa code ==>
+  EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+             ~is_terminator i.inst_opcode /\ ~is_ext_call_op i.inst_opcode) code
+Proof
+  rw[dynamic_writes_fresh_def, EVERY_MEM] >>
+  first_x_assum drule >>
+  simp[fresh_write_op_def] >> rpt strip_tac >>
+  gvs[venomInstTheory.is_terminator_def, venomInstTheory.is_ext_call_op_def]
+QED
+
+Theorem dynamic_writes_fresh_mono:
   dynamic_writes_fresh st' is /\ st.cs_next_var <= st'.cs_next_var ==>
   dynamic_writes_fresh st is
 Proof
@@ -1803,14 +1952,14 @@ Proof
   fs[EVERY_MEM] >> metis_tac[not_fresh_at_mono]
 QED
 
-Theorem dynamic_straight_fresh_return[local]:
+Theorem dynamic_straight_fresh_return:
   dynamic_straight_fresh (comp_return x)
 Proof
   rw[dynamic_straight_fresh_def, comp_return_def, emitted_insts_refl,
      dynamic_writes_fresh_def]
 QED
 
-Theorem dynamic_straight_fresh_emit_op[local]:
+Theorem dynamic_straight_fresh_emit_op:
   fresh_write_op opc \/ opc = MLOAD ==>
   dynamic_straight_fresh (emit_op opc ops)
 Proof
@@ -1820,7 +1969,7 @@ Proof
      not_fresh_at_def]
 QED
 
-Theorem dynamic_straight_fresh_emit_void[local]:
+Theorem dynamic_straight_fresh_emit_void:
   fresh_write_op opc \/ opc = MLOAD ==>
   dynamic_straight_fresh (emit_void opc ops)
 Proof
@@ -1829,7 +1978,7 @@ Proof
   fs[same_blocks_def, dynamic_writes_fresh_def, venomInstTheory.mk_inst_def]
 QED
 
-Theorem dynamic_straight_fresh_bind[local]:
+Theorem dynamic_straight_fresh_bind:
   !mm ff. dynamic_straight_fresh mm /\ (!a. dynamic_straight_fresh (ff a)) ==>
           dynamic_straight_fresh (comp_bind mm ff)
 Proof
@@ -1846,7 +1995,7 @@ Proof
   gvs[dynamic_writes_fresh_def, EVERY_APPEND]
 QED
 
-Theorem dynamic_straight_fresh_ignore_bind[local]:
+Theorem dynamic_straight_fresh_ignore_bind:
   dynamic_straight_fresh mm /\ dynamic_straight_fresh ff ==>
   dynamic_straight_fresh (comp_ignore_bind mm ff)
 Proof
@@ -1862,7 +2011,7 @@ val dynamic_sf_step = FIRST [
   MATCH_ACCEPT_TAC dynamic_straight_fresh_return,
   IF_CASES_TAC];
 
-Theorem dynamic_straight_fresh_convert[local]:
+Theorem dynamic_straight_fresh_convert:
   dynamic_straight_fresh (compile_type_convert op ConvBytestringToBool) /\
   dynamic_straight_fresh (compile_type_convert op (ConvBytestringToInt sg b n)) /\
   dynamic_straight_fresh (compile_type_convert op (ConvBytestringToDecimal d lo hi n)) /\
@@ -1961,7 +2110,7 @@ QED
 
 Finalise dynamic_frag_read_fresh_exact[local]
 
-Theorem dynamic_frag_straight_read_fresh_exact[local]:
+Theorem dynamic_frag_straight_read_fresh_exact:
   dynamic_straight_fresh m /\ m sa = (op,sb) /\ local_ptrs_reserved cenv sa /\
   (!ss. P ss ==> P (drop_fresh sa ss)) /\
   (!ss. fresh_vars_wrt sa ss /\ P ss ==>
@@ -1986,7 +2135,7 @@ Proof
   simp[rich_listTheory.IS_PREFIX_APPEND3]
 QED
 
-Theorem dynamic_scalar_straight_read_fresh[local]:
+Theorem dynamic_scalar_straight_read_fresh:
   is_bytestring_type src /\ ~is_bytestring_type dst /\
   valid_conversion src dst ==>
   dynamic_straight_fresh (compile_type_convert op (mk_convert_op src dst))
@@ -2005,7 +2154,107 @@ Proof
       dynamic_straight_fresh_convert]
 QED
 
-Theorem dynamic_scalar_frag_success[local]:
+Theorem dynamic_code_prefix:
+  dynamic_straight_fresh m /\ m sa = (op,sb) /\ fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+       isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)
+Proof
+  simp[dynamic_straight_fresh_def] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
+  simp[DROP_APPEND]
+QED
+
+Theorem dynamic_clean_success_path:
+  dynamic_straight_fresh m /\ m sa = (op,sb) /\ fn_has_code sa sb func /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) (drop_fresh sa s0) = OK t0 ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s0 = OK t /\ vars_ext t0 t /\
+      gas_marked_path F ctx func s0 0
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  rpt strip_tac >>
+  `dynamic_writes_fresh sa (emitted_insts sa sb) /\
+   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by
+    metis_tac[dynamic_straight_fresh_def] >>
+  drule dynamic_writes_fresh_path_opcodes >> strip_tac >>
+  `vars_ext_result
+     (run_inst_seq (emitted_insts sa sb) (drop_fresh sa s0))
+     (run_inst_seq (emitted_insts sa sb) s0)` by
+    (irule run_inst_seq_vars_ext >>
+     simp[vars_ext_drop_fresh] >> fs[EVERY_MEM]) >>
+  gvs[vars_ext_result_def] >>
+  drule_all dynamic_code_prefix >> strip_tac >>
+  drule_at (Pat `run_inst_seq _ _ = OK _`) tuple_run_inst_seq_gas_path >>
+  simp[] >>
+  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0` by
+    (simp[FILTER_EQ_NIL] >> fs[EVERY_MEM] >> metis_tac[]) >>
+  simp[gas_marked_path_def] >> disch_then irule >>
+  conj_tac >- (fs[EVERY_MEM]) >>
+  qexists_tac `bb` >> gvs[]
+QED
+
+Theorem dynamic_clean_abort_path:
+  dynamic_straight_fresh m /\ m sa = (op,sb) /\ fn_has_code sa sb func /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) (drop_fresh sa s0) = Abort a t0 ==>
+  ?t j. gas_marked_path F ctx func s0 0 (Abort a (t with vs_inst_idx := j))
+Proof
+  rpt strip_tac >>
+  `dynamic_writes_fresh sa (emitted_insts sa sb)` by
+    metis_tac[dynamic_straight_fresh_def] >>
+  drule dynamic_writes_fresh_path_opcodes >> strip_tac >>
+  `vars_ext_result
+     (run_inst_seq (emitted_insts sa sb) (drop_fresh sa s0))
+     (run_inst_seq (emitted_insts sa sb) s0)` by
+    (irule run_inst_seq_vars_ext >>
+     simp[vars_ext_drop_fresh] >> fs[EVERY_MEM]) >>
+  gvs[vars_ext_result_def] >>
+  drule_all dynamic_code_prefix >> strip_tac >>
+  drule_at (Pat `run_inst_seq _ _ = Abort _ _`) run_inst_seq_abort_zero_path >>
+  disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+  (impl_tac >- (simp[] >> fs[EVERY_MEM])) >> metis_tac[]
+QED
+
+Theorem dynamic_run_post:
+  dynamic_straight_fresh m /\ m sa = (op,sb) /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  run_inst_seq (emitted_insts sa sb) (drop_fresh sa s0) = OK t0 /\
+  eval_operand op t0 = SOME w /\
+  run_inst_seq (emitted_insts sa sb) s0 = OK t /\ vars_ext t0 t ==>
+  stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+  eval_operand op (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w /\
+  (!z v. not_fresh_at sa z /\ lookup_var z s0 = SOME v ==>
+    lookup_var z (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME v) /\
+  (t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_allocas = s0.vs_allocas /\
+  (t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_memory = s0.vs_memory /\
+  ~(t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_halted /\
+  (t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_current_bb = sb.cs_current_bb /\
+  (t with vs_inst_idx := LENGTH sb.cs_current_insts).vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt strip_tac >>
+  `dynamic_writes_fresh sa (emitted_insts sa sb) /\ sb.cs_current_bb = sa.cs_current_bb` by
+    metis_tac[dynamic_straight_fresh_def] >>
+  drule_all dynamic_run_read_fresh >> strip_tac >>
+  `eval_operand op t = SOME w` by
+    (fs[vars_ext_def] >>
+     qpat_x_assum `t = t0 with vs_vars := _` SUBST1_TAC >>
+     simp[eval_operand_vars_ext]) >>
+  `stmt_state_rel ctx func cenv cx es (s0 with vs_vars := t.vs_vars)` by
+    (irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+     `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     simp[lookup_var_def]) >>
+  qpat_x_assum `t = _` SUBST_ALL_TAC >>
+  simp[stmt_state_rel_inst_idx, lookup_var_def] >>
+  Cases_on `op` >> gvs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem dynamic_scalar_frag_success:
   is_bytestring_type src /\ ~is_bytestring_type dst /\
   valid_conversion src dst /\ well_formed_type tenv dst /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
@@ -2043,12 +2292,11 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem dynamic_scalar_frag_abort[local]:
+Theorem dynamic_scalar_frag_abort:
   is_bytestring_type src /\ ~is_bytestring_type dst /\
   valid_conversion src dst /\ well_formed_type tenv dst /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
   convert_result cx src dst v = INR ex /\
-  INR ex <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
   compile_type_convert op (mk_convert_op src dst) sa = (r,sb) /\
   (!z. op = Var z ==> not_fresh_at sa z) ==>
   frag_exec ctx sa sb
@@ -2086,7 +2334,6 @@ Theorem dynamic_scalar_fragment:
   valid_conversion src dst /\ well_formed_type tenv dst /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
   convert_result cx src dst v = res /\
-  res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
   compile_type_convert op (mk_convert_op src dst) sa = (r,sb) /\
   local_ptrs_reserved cenv sa /\
   (!z. op = Var z ==> not_fresh_at sa z) ==>
@@ -2139,7 +2386,62 @@ QED
 
 Finalise dynamic_scalar_fragment[local]
 
-Theorem dynamic_expr_post_convert[local]:
+Theorem dynamic_scalar_counted_fragment:
+  is_bytestring_type src /\ ~is_bytestring_type dst /\
+  valid_conversion src dst /\ well_formed_type tenv dst /\
+  evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
+  convert_result cx src dst v = res /\
+  compile_type_convert op (mk_convert_op src dst) sa = (r,sb) /\
+  local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
+  (!z. op = Var z ==> not_fresh_at sa z) /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  expr_val_rel cx src v op s0 /\ expr_val_at cenv cx src sarg sa0 es v op s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?out. gas_marked_path F ctx func s0 0 out /\
+    ((?s vout dtv. out = OK s /\ res = INL vout /\
+       evaluate_type (get_tenv cx) dst = SOME dtv /\
+       stmt_state_rel ctx func cenv cx es s /\
+       eval_operand r s = SOME (typed_val_to_w256 dtv vout) /\
+       s.vs_memory = s0.vs_memory /\ s.vs_allocas = s0.vs_allocas /\
+       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+              lookup_var x s = SOME w) /\
+       ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
+       s.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+     (exit_result out /\ expr_exit res out))
+Proof
+  rpt strip_tac >>
+  drule_all dynamic_operand_packet >> strip_tac >>
+  `dynamic_straight_fresh (compile_type_convert op (mk_convert_op src dst))` by
+    (irule dynamic_scalar_straight_read_fresh >> simp[]) >>
+  `eval_operand op (drop_fresh sa s0) = SOME a` by
+    simp[eval_operand_drop_fresh] >>
+  qspecl_then [`sa`,`s0`] assume_tac fresh_vars_wrt_drop_fresh >>
+  `val_in_memory stv v (w2n a) (drop_fresh sa s0).vs_memory` by
+    simp[drop_fresh_def] >>
+  drule_all dynamic_scalar_run_exact >>
+  Cases_on `res` >> simp[] >> strip_tac
+  >- suspend "success" >>
+  suspend "abort"
+QED
+
+Resume dynamic_scalar_counted_fragment[success]:
+  drule_all dynamic_clean_success_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all dynamic_run_post >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Resume dynamic_scalar_counted_fragment[abort]:
+  drule_all dynamic_clean_abort_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  goal_assum (drule_at Any) >>
+  simp[exit_result_def, expr_exit_def]
+QED
+
+Finalise dynamic_scalar_counted_fragment
+
+Theorem dynamic_expr_post_convert:
   expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
   stmt_state_rel ctx func cenv cx es' ss /\
   evaluate_type (get_tenv cx) ann = SOME dtv /\
@@ -2152,7 +2454,12 @@ Theorem dynamic_expr_post_convert[local]:
     v op ss
 Proof
   simp[expr_post_def] >> strip_tac >>
-  `locals_kept cenv es s0 ss` by
+  `~expr_has_effect (TypeBuiltin ann Convert t [e1]) ==>
+   pure_frame cenv func es sa s0 ss` by
+    (simp[loweringPostsTheory.expr_has_effect_thm] >> strip_tac >>
+     match_mp_tac exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `t0` >>
+     simp[]) >>
+  `locals_kept cenv es es' s0 ss` by
     (irule locals_kept_mem_tail >> qexists_tac `t0` >> asm_rewrite_tac[]) >>
   simp[expr_val_rel_def, expr_val_at_def, vyperASTTheory.expr_type_def] >>
   conj_tac
@@ -2166,7 +2473,7 @@ Proof
   rpt strip_tac >> fs[] >> metis_tac[]
 QED
 
-Theorem dynamic_scalar_type[local]:
+Theorem dynamic_scalar_type:
   is_bytestring_type src /\ ~is_bytestring_type dst /\ valid_conversion src dst /\
   well_formed_type tenv dst ==>
   is_word_type dst /\ (!n. dst <> FlagT n)
@@ -2188,8 +2495,7 @@ Theorem dynamic_empty_scalar_convert:
   valid_conversion src dst /\ well_formed_type tenv dst /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
   (v = BytesV [] \/ v = StringV "") /\
-  convert_result cx src dst v = res /\
-  res <> INR (Error (RuntimeError "convert empty bytes to signed")) ==>
+  convert_result cx src dst v = res ==>
   ?vout dtv. res = INL vout /\
     evaluate_type (get_tenv cx) dst = SOME dtv /\
     typed_val_to_w256 dtv vout = 0w
@@ -2212,7 +2518,9 @@ Proof
       listTheory.PAD_LEFT, listTheory.PAD_RIGHT,
       GSYM rich_listTheory.REPLICATE_GENLIST,
       word_of_bytes_replicate_zero, typed_val_to_w256_def, val_to_w256_def] >>
-  CONV_TAC (DEPTH_CONV wordsLib.SIZES_CONV) >> EVAL_TAC
+  CONV_TAC (DEPTH_CONV wordsLib.SIZES_CONV) >> EVAL_TAC >>
+  simp[arithmeticTheory.EXP_POS, typed_val_to_w256_def, val_to_w256_def,
+       integer_wordTheory.i2w_def]
 QED
 Resume dynamic_empty_scalar_convert[string]:
   drule_all dynamic_string_scalar_partition >> strip_tac >> gvs[] >>
@@ -2254,25 +2562,90 @@ Proof
   rw[] >> gvs[exprBopLoweringTheory.as_stack_val_pair, unwrap_value_def, comp_return_def]
 QED
 
+Theorem dynamic_continuation_summary:
+  expr_post ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  t0.vs_current_bb = s1.cs_current_bb /\
+  t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
+  is_bytestring_type (expr_type e1) /\ ~is_bytestring_type t /\
+  valid_conversion (expr_type e1) t /\ well_formed_type tenv t /\ ann = t /\
+  is_word_type t /\
+  evaluate_type (get_tenv cx) (expr_type e1) = SOME stv /\ value_has_type stv v1 /\
+  ((lowered_value_type cenv e1 = BaseT (BytesT (Dynamic 0)) \/
+    lowered_value_type cenv e1 = BaseT (StringT 0)) ==> v1 = BytesV [] \/ v1 = StringV "") /\
+  (if lowered_value_type cenv e1 = BaseT (BytesT (Dynamic 0)) \/
+      lowered_value_type cenv e1 = BaseT (StringT 0)
+   then op = Lit 0w /\ sb = s1
+   else compile_type_convert x (mk_convert_op (expr_type e1) t) s1 = (op,sb)) /\
+  (!z. x = Var z ==> not_fresh_at s1 z) /\
+  fn_has_code s1 sb func /\ local_ptrs_reserved cenv s1 /\
+  sa.cs_next_var <= s1.cs_next_var ==>
+  gas_summary_at F (ctx,func) []
+    (\vs. (convert_result cx (expr_type e1) t v1,vs))
+    (ee with gas_obs := [],t0)
+    (\res fin ss. ?v. res = INL v /\
+      expr_post ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0
+        fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
+      ss.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res fin out. expr_exit res out)
+Proof
+  strip_tac >>
+  Cases_on `lowered_value_type cenv e1 = BaseT (BytesT (Dynamic 0)) \/
+            lowered_value_type cenv e1 = BaseT (StringT 0)`
+  >- suspend "empty" >>
+  gvs[] >>
+  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
+   expr_val_rel cx (expr_type e1) v1 x t0 /\
+   expr_val_at cenv cx (expr_type e1) sa s1 (ee with gas_obs := []) v1 x t0` by
+    fs[expr_post_def] >>
+  drule_all (Q.INST
+    [`src` |-> `expr_type e1`, `dst` |-> `ann`, `v` |-> `v1`,
+     `res` |-> `convert_result cx (expr_type e1) ann v1`]
+    dynamic_scalar_counted_fragment |> SIMP_RULE (srw_ss()) []) >>
+  strip_tac
+  >- suspend "success" >>
+  suspend "abort"
+QED
+
+Resume dynamic_continuation_summary[empty]:
+  `?vout dtv. convert_result cx (expr_type e1) t v1 = INL vout /\
+    evaluate_type (get_tenv cx) t = SOME dtv /\ typed_val_to_w256 dtv vout = 0w` by
+    metis_tac[dynamic_empty_scalar_convert] >>
+  gvs[] >> simp[gas_summary_at_def] >>
+  qexistsl_tac [`INL vout`,`ee`,`OK t0`] >>
+  simp[gas_marked_exec_def, gas_marked_path_def, gas_path_rules] >>
+  (irule dynamic_expr_post_convert >> simp[eval_operand_def] >>
+   conj_tac >- fs[expr_post_def] >>
+   qexistsl_tac [`s1`,`t0`] >> simp[] >> metis_tac[])
+QED
+
+Resume dynamic_continuation_summary[success]:
+  simp[gas_summary_at_def] >>
+  qexistsl_tac [`INL vout`,`ee`,`OK s`] >>
+  simp[gas_marked_exec_def] >>
+  conj_tac >- metis_tac[] >>
+  irule dynamic_expr_post_convert >> simp[] >>
+  qexistsl_tac [`s1`,`t0`] >> simp[] >> metis_tac[]
+QED
+
+Resume dynamic_continuation_summary[abort]:
+  simp[gas_summary_at_def] >>
+  qexistsl_tac [`convert_result cx (expr_type e1) ann v1`,`ee`,`out`] >>
+  simp[gas_marked_exec_def]
+QED
+
+Finalise dynamic_continuation_summary
+
 Theorem dynamic_convert_lower_case:
   expr_body_pre cenv cx env (TypeBuiltin ann Convert t [e1]) es /\
   is_bytestring_type (expr_type e1) /\ ~is_bytestring_type t /\
   (!a f args d. e1 = Call a (IntCall f) args d ==>
      lowered_value_type cenv e1 = expr_type e1) /\
-  expr_sim ctx func cenv cx (expr_type e1) e1 es /\
-  lower_value compile_expr cenv ty (TypeBuiltin ann Convert t [e1]) sa = (op,sb) /\
-  (do raw <- eval_expr cx (TypeBuiltin ann Convert t [e1]);
-      read_result cx raw od) es = (res,es') /\ expr_res_ok res /\
-  res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa ==>
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-    (\s. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0 es' v op s)
-    (expr_exit res)
+  expr_sim ctx func cenv cx (expr_type e1) e1 es ==>
+  expr_sim ctx func cenv cx ty (TypeBuiltin ann Convert t [e1]) es
 Proof
   strip_tac >> drule dynamic_convert_typing_boundary >> strip_tac >>
   drule_all dynamic_scalar_type >> strip_tac >>
+  simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
   drule_all lower_value_dynamic_convert >> strip_tac >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   `!z. x = Var z ==> not_fresh_at s1 z` by
@@ -2290,60 +2663,63 @@ Proof
     (irule fn_has_code_split >> asm_rewrite_tac[]) >>
   `local_ptrs_reserved cenv s1` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  drule_all eval_expr_convert_cases >> strip_tac
-  >- suspend "operand_exit" >>
-  suspend "operand_value"
+  `gas_admissible (bind (eval_expr cx e1) (read_result cx)) expr_res_ok es` by
+    (irule convert_operand_admissible >> metis_tac[]) >>
+  qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
+    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  disch_then (qspecl_then [`sa`,`s1`,`x`,`s0`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> strip_tac
+  >- suspend "counted" >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
+  irule convert_exempt_cert >> simp[]
 QED
 
-Resume dynamic_convert_lower_case[operand_exit]:
-  qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
-    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `s1`, `x`, `INR exc`, `es'`, `s0`] mp_tac) >>
-  (impl_tac >- gvs[]) >>
-  disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
-  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
-                           `\s. F`, `expr_exit res`] mp_tac) >>
-  (impl_tac >- gvs[]) >> strip_tac >>
-  irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[]
-QED
-Resume dynamic_convert_lower_case[operand_value]:
-  drule_all dynamic_convert_operand_typed >> strip_tac >>
-  qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
-    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `s1`, `x`, `INL v1`, `es'`, `s0`] mp_tac) >>
-  (impl_tac >- simp[expr_res_ok_def]) >>
-  disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
-                           `expr_exit res`] mp_tac) >>
-  (impl_tac >- simp[]) >>
-  disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
-  asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
-  rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0` >>
-  Cases_on `lowered_value_type cenv e1 = BaseT (BytesT (Dynamic 0)) \/
-            lowered_value_type cenv e1 = BaseT (StringT 0)`
-  >- (gvs[] >>
-      drule expr_body_pre_convert >> strip_tac >> gvs[] >>
-      `(v1 = BytesV [] \/ v1 = StringV "")` by
-        metis_tac[lowered_zero_bytestring_read_empty] >>
-      `?vout dtv. convert_result cx (expr_type e1) ann v1 = INL vout /\
-          evaluate_type (get_tenv cx) ann = SOME dtv /\
-          typed_val_to_w256 dtv vout = 0w` by
-        metis_tac[dynamic_empty_scalar_convert] >>
-      irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
-      irule dynamic_expr_post_convert >> simp[eval_operand_def] >>
-      metis_tac[expr_post_def]) >>
-  gvs[] >>
-  drule_all (SRULE [] (Q.INST
-    [`src` |-> `expr_type e1`, `dst` |-> `t`, `v` |-> `v1`,
-     `res` |-> `convert_result cx (expr_type e1) t v1`]
-    dynamic_scalar_fragment)) >>
-  disch_then (qspecl_then [`sa`, `s1`, `t0`]
-    (qspecl_then [`func`, `es'`, `ctx`] mp_tac)) >>
-  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
+Resume dynamic_convert_lower_case[counted]:
+  qexists_tac `marks` >> disj1_tac >>
+  rewrite_tac[eval_expr_convert_action] >>
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
+  strip_tac
+  >- suspend "value" >>
+  Cases_on `res` >- gvs[] >>
+  simp[gas_summary_at_def] >> qexistsl_tac [`INR y`,`es_end`,`r`] >>
   simp[] >> conj_tac
-  >- fs[expr_post_def] >>
-  rpt strip_tac >> gvs[] >>
-  drule_all dynamic_expr_post_convert >> simp[]
+  >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >> simp[]) >>
+  gvs[]
+QED
+
+Resume dynamic_convert_lower_case[value]:
+  gvs[] >>
+  `bind (eval_expr cx e1) (read_result cx)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL v, es_end with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `expr_body_pre cenv cx env (TypeBuiltin ann Convert ann [e1])
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
+    metis_tac[expr_body_pre_gas_obs] >>
+  drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) dynamic_convert_operand_typed) >> strip_tac >>
+  `~t'.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  `((lowered_value_type cenv e1 = BaseT (BytesT (Dynamic 0)) \/
+     lowered_value_type cenv e1 = BaseT (StringT 0)) ==> v = BytesV [] \/ v = StringV "")` by
+    (strip_tac >> drule expr_body_pre_convert >> strip_tac >>
+     gvs[] >>
+     metis_tac[CONV_RULE (DEPTH_CONV ETA_CONV) lowered_zero_bytestring_read_empty,
+               expr_body_pre_gas_obs]) >>
+  drule_all (Q.INST [`t` |-> `ann`] dynamic_continuation_summary
+             |> SIMP_RULE (srw_ss()) []) >>
+  rewrite_tac[gas_summary_at_def] >> strip_tac >>
+  qexistsl_tac [`res`,`es_end'`,`r`] >>
+  (conj_tac
+   >- (irule (Q.INST [`right` |-> `[]`]
+              gasSummaryComposeTheory.gas_marked_exec_bind_normal
+              |> REWRITE_RULE [APPEND_NIL]) >>
+       qexistsl_tac [`es_end`,`t'`,`v`] >> gvs[]) >>
+   gvs[])
 QED
 Finalise dynamic_convert_lower_case
 
@@ -2353,62 +2729,18 @@ Theorem compile_convert_from_bytestring_case:
     is_bytestring_type (expr_type e1) /\ ~is_bytestring_type t /\
     (!a f args d. e1 = Call a (IntCall f) args d ==>
        lowered_value_type cenv e1 = expr_type e1) ==>
-    !env ty es sa sb vv res es' s0.
-      expr_body_pre cenv cx env (TypeBuiltin ann Convert t [e1]) es /\
-      (nocalls ==> int_calls_expr (TypeBuiltin ann Convert t [e1]) = []) /\
-      compile_expr cenv ty (TypeBuiltin ann Convert t [e1]) sa = (vv, sb) /\
-      eval_expr cx (TypeBuiltin ann Convert t [e1]) es = (res, es') /\
-      expr_vv_res_ok res /\
-      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-        (\s. ?tv. res = INL tv /\
-                  vv_post ctx func cenv cx (TypeBuiltin ann Convert t [e1])
-                    es sa sb s0 es' tv vv s)
-        (expr_exit res)
+    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t [e1])
 Proof
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rw[expr_vv_case_def] >>
   drule expr_body_pre_convert >> strip_tac >>
-  gvs[exprs_case_def] >>
   `expr_sim ctx func cenv cx (expr_type e1) e1 es` by
-    (irule expr_sim_case_apply >> conj_tac >- (qexists_tac `env` >> simp[]) >>
+    (gvs[exprs_case_def] >>
+     irule expr_sim_case_apply >> conj_tac >- (qexists_tac `env` >> simp[]) >>
      qexists_tac `nocalls` >> simp[] >>
      metis_tac[int_calls_type_builtin_arg, listTheory.MEM]) >>
-  qspecl_then [`cenv`, `ty`, `ann`, `ann`, `[e1]`, `sa`]
-    strip_assume_tac compile_convert_stack >> gvs[] >>
-  `lower_value compile_expr cenv ty (TypeBuiltin ann Convert ann [e1]) sa = (op,sb)` by
-    simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def] >>
-  Cases_on `res`
-  >- suspend "value" >>
-  suspend "exit"
+  `expr_sim ctx func cenv cx ty (TypeBuiltin ann Convert t [e1]) es` by
+    (irule dynamic_convert_lower_case >> metis_tac[]) >>
+  irule expr_vv_sim_stack >> simp[] >> conj_tac
+  >- (gen_tac >> irule compile_convert_stack) >>
+  metis_tac[eval_expr_type_builtin_value]
 QED
-
-Resume compile_convert_from_bytestring_case[value]:
-  `?v. x = Value v` by metis_tac[eval_expr_type_builtin_value] >> gvs[] >>
-  `(do raw <- eval_expr cx (TypeBuiltin ann Convert ann [e1]);
-       read_result cx raw od) es = (INL v, es')` by
-    simp[bind_def, read_result_def, return_def] >>
-  drule_all (SRULE [expr_res_ok_def] (Q.INST [`res` |-> `INL v`]
-    dynamic_convert_lower_case)) >>
-  disch_then (qspec_then `s0` mp_tac) >>
-  disch_then (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
-  simp[] >> rpt gen_tac >> strip_tac >>
-  gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-      read_result_def, return_def] >> first_assum ACCEPT_TAC
-QED
-Resume compile_convert_from_bytestring_case[exit]:
-  `(do raw <- eval_expr cx (TypeBuiltin ann Convert ann [e1]);
-       read_result cx raw od) es = (INR y, es')` by simp[bind_def] >>
-  `expr_res_ok (INR y : value + exception)` by
-    gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
-  gvs[] >>
-  drule_all (SRULE [] (Q.INST [`res` |-> `(INR y : value + exception)`]
-    dynamic_convert_lower_case)) >>
-  disch_then (qspec_then `s0` mp_tac) >>
-  disch_then (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
-  simp[] >> qx_gen_tac `exit` >> Cases_on `exit` >> Cases_on `y` >>
-  simp[expr_exit_def] >> rename1 `Error err` >> Cases_on `err` >>
-  simp[expr_exit_def]
-QED
-Finalise compile_convert_from_bytestring_case

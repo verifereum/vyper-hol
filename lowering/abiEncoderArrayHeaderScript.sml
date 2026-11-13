@@ -57,13 +57,13 @@ Proof
   `eval_operand count_op (update_var iv (n2w i) s) = SOME (n2w n)` by
     (Cases_on `count_op` >> gvs[eval_operand_def, lookup_var_update_var]) >>
   `step_inst_base (mk_inst id MLOAD [ip] [iv]) s = OK (update_var iv (n2w i) s)` by
-    (pure_rewrite_tac [Once step_inst_base_def, mk_inst_def] >>
+    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds, combinTheory.K_THM] >>
      simp[exec_read1_def]) >>
   `i < dimword (:256)` by decide_tac >>
   simp[abi_encode_array_header_insts_def, run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
     eval_operand_def, lookup_var_update_var, w2n_n2w] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure1_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def,
     eval_operand_def, lookup_var_update_var, abi_encode_array_header_state_def] >>
   Cases_on `i<n` >> simp[bool_to_word_def]
 QED
@@ -84,7 +84,7 @@ Proof
     mp_tac exec_block_run_inst_seq >>
   simp[abi_encode_array_header_insts_def, mk_inst_def, is_terminator_def] >> strip_tac >> simp[] >>
   simp[Once exec_block_def, get_instruction_def, abi_encode_array_header_insts_def] >>
-  simp[step_inst_def, Once step_inst_base_def, mk_inst_def,
+  simp[step_inst_def, step_inst_base_opcode_eqs, mk_inst_def,
     abi_encode_array_header_state_def, eval_operand_def, lookup_var_update_var] >>
   Cases_on `i<n` >> simp[bool_to_word_def, lookup_var_def, update_var_def,
     finite_mapTheory.FLOOKUP_UPDATE, jump_to_def, is_terminator_def]

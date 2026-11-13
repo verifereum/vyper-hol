@@ -11,6 +11,7 @@
  * TOP-LEVEL:
  *   store_lays_out               — the stored word lays out the value
  *   store_lays_out_word_value, store_lays_out_typed — its two sources
+ *   store_lays_out_memory_value_rel — the store's complete layout
  *   stmt_state_rel_declare_store — a store into a new local's region binds
  *                                  it, for a word laying out a value that
  *                                  fits the region
@@ -22,10 +23,11 @@
 
 Theory stmtSimDeclStore
 Ancestors
+  exprSimProps
   list rich_list finite_map pred_set
-  fragExec localPtrsProps venomMemDefs loweringSlice exprSim
+  fragExec localPtrsProps venomMemDefs loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding valueEncodingProps
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperTyping
   venomExecSemantics venomInst venomState
 
@@ -47,13 +49,14 @@ Theorem stmt_state_rel_declare_memory:
     t.vs_immutables = s.vs_immutables /\
     t.vs_pending_deletions = s.vs_pending_deletions /\
     t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels /\
+    t.vs_code = s.vs_code /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
     (!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
          lookup_var q t = lookup_var q s) /\
     (!n b sz'. n <> id /\ local_region cenv es.scopes s n b sz' ==>
          mem_bytes_at b sz' s.vs_memory = mem_bytes_at b sz' t.vs_memory) /\
     type_memory_size tyv <= sz /\ val_wf tyv v /\
-    val_in_memory tyv v (w2n w) t.vs_memory ==>
+    memory_value_rel tyv v (w2n w) t.vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
          (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest) t
@@ -101,18 +104,13 @@ Proof
   `fmp_room ctx func t` by
     (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
-    (qpat_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
-     pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
-     strip_tac >> simp[immutable_alloca_sep_def] >>
-     rpt strip_tac >>
-     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-     disch_then drule_all >> strip_tac >> simp[]
-     >- metis_tac[] >>
-     rpt strip_tac >>
+    (`immutable_alloca_sep func cenv cx es s` by fs[stmt_state_rel_def] >>
+     drule immutable_alloca_sep_frame >> disch_then irule >>
+     rpt conj_tac >> TRY (fs[] >> NO_TAC) >>
+     fs[] >> rpt strip_tac >>
      rename1 `local_region cenv scs' t j b len` >>
      Cases_on `j = id`
-     >- (gvs[local_region_def] >>
-         qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >> simp[]) >>
+     >- (gvs[local_region_def] >> metis_tac[]) >>
      `local_region cenv (sc :: rest) s j b len` by
        (gvs[local_region_def] >> metis_tac[]) >>
      metis_tac[]) >>
@@ -140,7 +138,7 @@ Theorem stmt_state_rel_declare_store:
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz /\ type_memory_size tyv <= sz /\
-    val_in_memory tyv v (w2n w) (mstore (w2n w) x s).vs_memory /\
+    memory_value_rel tyv v (w2n w) (mstore (w2n w) x s).vs_memory /\
     val_wf tyv v ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
@@ -198,14 +196,14 @@ QED
    lays v out, in one word. *)
 Definition store_lays_out_def:
   store_lays_out etv tyv v <=>
-    val_wf tyv v /\ type_memory_size tyv = 32 /\
+    val_wf tyv v /\ type_memory_size tyv = 32 /\ word_memory_type tyv /\
     !off s. val_in_memory tyv v off
               (mstore off (typed_val_to_w256 etv v) s).vs_memory
 End
 
 Theorem store_lays_out_word_value:
   !tenv t etv tyv v.
-    word_value v /\ type_memory_size tyv = 32 /\
+    word_value v /\ type_memory_size tyv = 32 /\ word_memory_type tyv /\
     is_word_type t /\ evaluate_type tenv t = SOME etv ==>
     store_lays_out etv tyv v
 Proof
@@ -222,5 +220,16 @@ Theorem store_lays_out_typed:
     store_lays_out tyv tyv v
 Proof
   rpt strip_tac >> simp[store_lays_out_def] >>
-  metis_tac[typed_word_store]
+  metis_tac[typed_word_store, evaluate_word_memory_type]
+QED
+
+(* The stored word also gives the local's complete layout, which
+   local_ptrs_rel keeps for every live local. *)
+Theorem store_lays_out_memory_value_rel:
+  !etv tyv v off s.
+    store_lays_out etv tyv v ==>
+    memory_value_rel tyv v off
+      (mstore off (typed_val_to_w256 etv v) s).vs_memory
+Proof
+  rw[store_lays_out_def, word_memory_type_memory_value_rel]
 QED

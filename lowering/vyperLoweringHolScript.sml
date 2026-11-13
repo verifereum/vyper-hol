@@ -7,13 +7,14 @@ Ancestors
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   entryChecksProps
-  entryStateRel entryLocals
+  entryStateRel entryLocals ctorEntryLocals ctorSourceInputs
   loweringSlice
   memSafeRun instMemFrontier fragExecMem allocaFootprint
-  varsExt exprSim
+  varsExt exprSimNameWord exprSimLiteralWord exprSimEnv
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
-  exprSimMain bodySimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
+  exprSimMain bodySimMain ctorReturnFrame stmtSimZero stmtSimPass stmtSimProps stmtSimSeq stmtSimExpr
+  stmtSimBreak stmtSimContinue stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
   stmtSimAssign stmtSimAssignMem stmtSimAssignTuple stmtSimAssignTupleMem
@@ -22,6 +23,10 @@ Ancestors
   stmtSimAssignAttrStorage stmtSimAugAssignAttr
   valueEncodingProofs
   localPtrsProps
+  externalEntryProps constructorGuardProps
+  nonreentrantEntryEquiv internalReturnLockProps
+  transientLockFrameProps
+  selectorCompilerProps checkedSelectorTableProps
   immutableStagingBridge
   immutableCodeLayout
   e2eDeployFrame
@@ -29,7 +34,7 @@ Ancestors
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps
-  ctorShapeProps
+  ctorShapeProps ctorUnitShape
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   structFieldsProps
   (* compiler + correctness *)
@@ -38,11 +43,6 @@ Ancestors
   vyperLoweringCorrect
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
   loweringMemCorrect
-  configuredE2ECorrectness
-  evalCompilerInternalImmutables
-  evalAssignmentOrder
-  (* focused internal-frame allocation, cleanup and whitelist regressions *)
-  calleeMemoryWitness
-  cleanupPromiseWitness
-  joinSpillWitness
-  internalFrameWhitelistDiagnostic
+  asmSymBridge
+  asmDataEnv
+  asmOptFinalizerCorrect

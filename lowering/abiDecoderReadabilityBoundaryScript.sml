@@ -34,7 +34,7 @@ QED
 Theorem zero_fixed_array_member_executes:
   !payload:bytes32.
   let start = initial_compile_state "entry" in
-  let end_st = SND (compile_abi_decode_to_buf (Lit 256w) (Lit 32w) MLOAD (Lit 64w)
+  let end_st = SND (compile_abi_decode_to_buf (Lit 256w) (Lit 32w) MLOAD (Lit 0w) (Lit 64w)
     (DecComplex T [(DecComplex T [],32,0)]) start) in
   ?actual. run_inst_seq (emitted_insts start end_st)
     (mstore 32 payload (init_venom_state "entry")) = OK actual /\

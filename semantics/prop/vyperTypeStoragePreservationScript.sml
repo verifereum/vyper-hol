@@ -134,6 +134,7 @@ Proof
      simp[] >> strip_tac >>
      drule (CONJUNCT1 vyperEncodeDecodeTheory.encode_writes_bounded) >>
      simp[] >> metis_tac[]) >>
+  Cases_on `cx.txn.is_static` >>
   gvs[vyperStorageBackendTheory.write_storage_slot_eq,
       vyperStorageTheory.apply_writes_def] >>
   Cases_on `b = b'` >> gvs[]
@@ -249,16 +250,16 @@ QED
 
 Definition protected_storage_calls_preserve_def:
   protected_storage_calls_preserve cx <=>
-    (!callee calldata value_opt gas st txp success returndata accounts' tStorage' emitted_logs.
+    (!callee calldata value_opt gas st txp success returndata accounts' tStorage' emitted_logs deletions.
        run_ext_call cx.txn.target callee calldata value_opt gas
          st.accounts st.tStorage txp =
-         SOME (success,returndata,accounts',tStorage',emitted_logs) /\
+         SOME (success,returndata,accounts',tStorage',emitted_logs, deletions) /\
        contract_storage_well_formed cx st ==>
        contract_storage_well_formed cx
          (st with <| accounts := accounts'; tStorage := tStorage' |>)) /\
-    (!callee calldata gas st success returndata accounts' tStorage' emitted_logs.
+    (!callee calldata gas st success returndata accounts' tStorage' emitted_logs deletions.
        run_delegate_call cx callee calldata gas st.accounts st.tStorage =
-         SOME (success,returndata,accounts',tStorage',emitted_logs) /\
+         SOME (success,returndata,accounts',tStorage',emitted_logs, deletions) /\
        contract_storage_well_formed cx st ==>
        contract_storage_well_formed cx
          (st with <| accounts := accounts'; tStorage := tStorage' |>))
@@ -268,7 +269,7 @@ Theorem protected_storage_calls_preserve_run_ext_call:
   protected_storage_calls_preserve cx /\
   run_ext_call cx.txn.target callee calldata value_opt gas
     st.accounts st.tStorage txp =
-    SOME (success,returndata,accounts',tStorage',emitted_logs) /\
+    SOME (success,returndata,accounts',tStorage',emitted_logs, deletions) /\
   contract_storage_well_formed cx st ==>
   contract_storage_well_formed cx
     (st with <| accounts := accounts'; tStorage := tStorage' |>)
@@ -279,7 +280,7 @@ QED
 Theorem protected_storage_calls_preserve_run_delegate_call:
   protected_storage_calls_preserve cx /\
   run_delegate_call cx callee calldata gas st.accounts st.tStorage =
-    SOME (success,returndata,accounts',tStorage',emitted_logs) /\
+    SOME (success,returndata,accounts',tStorage',emitted_logs, deletions) /\
   contract_storage_well_formed cx st ==>
   contract_storage_well_formed cx
     (st with <| accounts := accounts'; tStorage := tStorage' |>)
@@ -290,7 +291,7 @@ QED
 Theorem protected_storage_calls_preserve_run_raw_call:
   protected_storage_calls_preserve cx /\
   run_raw_call cx flags callee calldata amount gas st.accounts st.tStorage =
-    SOME (success,returndata,accounts',tStorage',emitted_logs) /\
+    SOME (success,returndata,accounts',tStorage',emitted_logs, deletions) /\
   contract_storage_well_formed cx st ==>
   contract_storage_well_formed cx
     (st with <| accounts := accounts'; tStorage := tStorage' |>)
@@ -356,7 +357,7 @@ Theorem protected_storage_call_output_persistent_region:
   protected_storage_calls_preserve cx /\
   run_ext_call cx.txn.target callee calldata value_opt gas
     st.accounts st.tStorage txp =
-    SOME (success,returndata,accounts',tStorage',emitted_logs) /\
+    SOME (success,returndata,accounts',tStorage',emitted_logs, deletions) /\
   contract_storage_well_formed cx st /\
   declared_storage_region cx mid n subs = SOME (F,slot,tv) /\
   get_storage_backend cx F
@@ -372,7 +373,7 @@ Theorem protected_storage_call_output_transient_region:
   protected_storage_calls_preserve cx /\
   run_ext_call cx.txn.target callee calldata value_opt gas
     st.accounts st.tStorage txp =
-    SOME (success,returndata,accounts',tStorage',emitted_logs) /\
+    SOME (success,returndata,accounts',tStorage',emitted_logs, deletions) /\
   contract_storage_well_formed cx st /\
   declared_storage_region cx mid n subs = SOME (T,slot,tv) /\
   get_storage_backend cx T

@@ -1,9 +1,10 @@
 (* Static interfaces for sequential tuple-target stores. *)
 Theory tupleTargetStoreProps
 Ancestors
+  exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
   list rich_list finite_map
   stmtSimAssignStorage stmtSimAssignAttrStorage tupleLocalStoreRun
-  stmtSimAssignTuple stmtSim exprSim vyperExprNoControl
+  stmtSimAssignTuple   vyperExprNoControl
   vyperTypeSystem vyperInterpreter vyperState vyperValue vyperTyping vyperLookup
   stmtLowering exprLowering emitHelper compileEnv
 
@@ -79,6 +80,7 @@ QED
 
 Theorem tuple_target_storage_write_safe:
   !cx tr slot ty tv v es.
+    ~cx.txn.is_static /\
     is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
     value_has_type tv v ==>
     ?es'. write_place cx (StoragePlace tr slot tv) v es = (INL (), es') /\
@@ -88,7 +90,7 @@ Proof
   Cases_on `tr` >>
   simp[write_place_def, write_storage_slot_def, get_storage_backend_def,
        set_storage_backend_def, get_transient_storage_def, get_accounts_def,
-       update_transient_def, update_accounts_def, bind_def,
+       update_transient_def, update_accounts_def, bind_def, ignore_bind_def,
        lift_option_type_def, return_def]
 QED
 
@@ -156,6 +158,7 @@ QED
 
 Theorem tuple_target_write_safe:
   !cx bt v es.
+    ~cx.txn.is_static /\
     ((?id pre sc entry rest.
        eval_target_place cx bt es = (INL (MemoryPlace id []), es) /\
        find_containing_scope id es.scopes = SOME (pre, sc, entry, rest) /\
@@ -214,6 +217,7 @@ QED
 
 Theorem tuple_source_target_safe:
   !cx es g tv v.
+    ~cx.txn.is_static /\
     tuple_source_target cx es.scopes g tv /\ value_has_type tv v ==>
     ?es'. assign_tuple_targets cx g v es = (INL (),es') /\
       !n. OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es'.scopes) =
@@ -221,19 +225,20 @@ Theorem tuple_source_target_safe:
 Proof
   rpt gen_tac >> simp[tuple_source_target_def] >> strip_tac >> gvs[]
   >- (drule lookup_scopes_find_containing_scope >> strip_tac >>
-      irule tuple_target_write_safe >> disj1_tac >>
+      irule tuple_target_write_safe >> conj_tac >- simp[] >> disj1_tac >>
       first_assum (irule_at Any) >> simp[] >>
       simp[Once evaluate_def, bind_def] >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
            return_def, get_place_def, get_scopes_def])
   >- (drule_all tuple_target_toplevel_place >> strip_tac >>
-      irule tuple_target_write_safe >> disj2_tac >> metis_tac[]) >>
+      irule tuple_target_write_safe >> conj_tac >- simp[] >> disj2_tac >> metis_tac[]) >>
   drule_all tuple_target_field_place >> strip_tac >>
-  irule tuple_target_write_safe >> disj2_tac >> metis_tac[]
+  irule tuple_target_write_safe >> conj_tac >- simp[] >> disj2_tac >> metis_tac[]
 QED
 
 Theorem assign_tuple_target_list_safe:
   !gs cx es tvs vs.
+    ~cx.txn.is_static /\
     LIST_REL (tuple_source_target cx es.scopes) gs tvs /\
     LIST_REL value_has_type tvs vs ==>
     ?es'. assign_tuple_target_list cx gs vs es = (INL (),es') /\
@@ -255,6 +260,7 @@ QED
 
 Theorem assign_tuple_targets_safe:
   !cx es gs tvs vs.
+    ~cx.txn.is_static /\
     LIST_REL (tuple_source_target cx es.scopes) gs tvs /\
     LIST_REL value_has_type tvs vs ==>
     ?es'. assign_tuple_targets cx (TupleTarget gs) (ArrayV (TupleV vs)) es =
@@ -266,6 +272,7 @@ QED
 
 Theorem eval_assign_tuple_targets_error:
   !cx gs e es ex es' lctx.
+    ~cx.txn.is_static ==>
     eval_stmt cx (Assign (TupleTarget gs) e) es = (INR ex,es') /\
     stmt_res_ok lctx (INR ex) /\
     (!v es1. (do result <- eval_expr cx e; read_result cx result od) es =
@@ -276,7 +283,7 @@ Theorem eval_assign_tuple_targets_error:
     (do result <- eval_expr cx e; read_result cx result od) es = (INR ex,es') /\
     expr_res_ok (INR ex : value + exception)
 Proof
-  rpt gen_tac >> strip_tac >> drule eval_assign_tuple >> strip_tac >>
+  rpt gen_tac >> strip_tac >> strip_tac >> drule eval_assign_tuple >> strip_tac >>
   Cases_on `r` >> gvs[]
   >- (drule_all assign_tuple_targets_safe >> gvs[]) >>
   gvs[stmt_res_ok_def, expr_res_ok_def, no_control_exc_def]
@@ -544,7 +551,7 @@ Proof
   Cases_on `tr` >>
   simp[raise_def, write_storage_slot_def, get_storage_backend_def, set_storage_backend_def,
        get_transient_storage_def, get_accounts_def, update_transient_def,
-       update_accounts_def, bind_def, lift_option_type_def, return_def,
+       update_accounts_def, bind_def, ignore_bind_def, lift_option_type_def, return_def,
        AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 
@@ -575,7 +582,7 @@ QED
 
 Theorem tuple_target_list_cons_success:
   !cenv cx g gs ty tv v vs es es'.
-    tuple_target_aligned cenv cx g ty tv /\
+    ~cx.txn.is_static /\ tuple_target_aligned cenv cx g ty tv /\
     tuple_target_layout es.scopes g ty tv v /\ value_has_type tv v /\
     assign_tuple_target_list cx (g::gs) (v::vs) es = (INL (),es') ==>
     ?es1. assign_tuple_targets cx g v es = (INL (),es1) /\
@@ -585,4 +592,67 @@ Proof
   drule_all tuple_source_target_safe >> strip_tac >>
   qpat_x_assum `assign_tuple_target_list _ (_::_) _ _ = _` mp_tac >>
   simp[assign_tuple_target_list_cons] >> metis_tac[]
+QED
+
+Theorem tuple_source_target_gas_obs:
+  !cx es g tv v tail.
+    tuple_source_target cx es.scopes g tv /\ value_has_type tv v ==>
+    assign_tuple_targets cx g v (es with gas_obs := tail) =
+      (FST (assign_tuple_targets cx g v es),
+       SND (assign_tuple_targets cx g v es) with gas_obs := tail)
+Proof
+  rpt gen_tac >> simp[tuple_source_target_def] >> strip_tac >> gvs[]
+  >- (drule lookup_scopes_find_containing_scope >> strip_tac >>
+      simp[evaluate_def, bind_def, ignore_bind_def, type_check_def,
+           assert_def, return_def, get_place_def, get_scopes_def] >>
+      simp[write_place_def, bind_def, ignore_bind_def, get_scopes_def,
+           lift_option_type_def, type_check_def, assert_def, lift_sum_def,
+           replace_memory_entry_def, evaluate_subscripts_def,
+           assign_subscripts_def, set_scopes_def, return_def])
+  >- (drule_all tuple_target_toplevel_place >> strip_tac >>
+      ntac 3 (simp[Once evaluate_def, bind_def] >> asm_rewrite_tac[]) >>
+      simp[write_place_def, write_storage_slot_gas_obs]) >>
+  drule_all tuple_target_field_place >> strip_tac >>
+  ntac 3 (simp[Once evaluate_def, bind_def] >> asm_rewrite_tac[]) >>
+  simp[write_place_def, write_storage_slot_gas_obs]
+QED
+
+Theorem assign_tuple_target_list_gas_obs:
+  !gs cx es tvs vs tail.
+    ~cx.txn.is_static /\
+    LIST_REL (tuple_source_target cx es.scopes) gs tvs /\
+    LIST_REL value_has_type tvs vs ==>
+    assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
+      (FST (assign_tuple_target_list cx gs vs es),
+       SND (assign_tuple_target_list cx gs vs es) with gas_obs := tail)
+Proof
+  Induct
+  >- (simp[evaluate_def, return_def]) >>
+  rpt gen_tac >> Cases_on `tvs` >> simp[] >> Cases_on `vs` >> simp[] >>
+  strip_tac >> rename1 `LIST_REL value_has_type tail_tvs tail_vs` >>
+  drule_all tuple_source_target_safe >> strip_tac >>
+  `LIST_REL (tuple_source_target cx es'.scopes) gs tail_tvs` by
+    (irule LIST_REL_mono >> first_assum (irule_at Any) >>
+     metis_tac[tuple_source_target_layout]) >>
+  drule_all tuple_source_target_gas_obs >>
+  disch_then (qspec_then `tail` assume_tac) >>
+  first_x_assum drule_all >>
+  disch_then (qspec_then `tail` assume_tac) >>
+  ntac 3 (simp[Once evaluate_def, ignore_bind_def, bind_def])
+QED
+
+Theorem assign_tuple_targets_gas_tail:
+  !cx es gs tvs vs.
+    ~cx.txn.is_static /\
+    LIST_REL (tuple_source_target cx es.scopes) gs tvs /\
+    LIST_REL value_has_type tvs vs ==>
+    ?ee. !tail.
+      assign_tuple_targets cx (TupleTarget gs) (ArrayV (TupleV vs))
+        (es with gas_obs := tail) = (INL (), ee with gas_obs := tail)
+Proof
+  rpt strip_tac >> drule_all assign_tuple_target_list_safe >> strip_tac >>
+  qexists `es'` >> gen_tac >>
+  drule_all assign_tuple_target_list_gas_obs >>
+  disch_then (qspec_then `tail` mp_tac) >>
+  simp[Once evaluate_def]
 QED

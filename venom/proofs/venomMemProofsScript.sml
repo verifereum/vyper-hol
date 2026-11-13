@@ -21,7 +21,7 @@
 
 Theory venomMemProofs
 Ancestors
-  venomMemDefs venomExecSemantics venomState venomInst venomInstProofs
+  venomLayout venomMemDefs venomExecSemantics venomState venomInst venomInstProofs
   venomExecProofs stateEquiv opcodeClass finite_map list rich_list words byte arithmetic divides
 Libs
   wordsLib dep_rewrite
@@ -30,14 +30,7 @@ Libs
    Infrastructure: dimindex, word_to_bytes length
    =================================================================== *)
 
-Theorem dimindex_256[local]:
-  dimindex (:256) = 256
-Proof
-  rw[fcpTheory.index_bit0, fcpTheory.index_bit1, fcpTheory.index_one,
-     fcpTheory.finite_bit0, fcpTheory.finite_bit1, fcpTheory.finite_one]
-QED
-
-Theorem len_word_to_bytes_256[local]:
+Theorem len_word_to_bytes_256:
   LENGTH (word_to_bytes (w:bytes32) be) = 32
 Proof
   rw[byteTheory.LENGTH_word_to_bytes, dimindex_256]
@@ -119,7 +112,7 @@ Proof
 QED
 
 (* Padding-length-insensitive TAKE: only the payload matters, not how much padding *)
-Theorem take_append_pad[local]:
+Theorem take_append_pad:
   !n (l:'a list) a b x.
     n <= LENGTH l + a /\ n <= LENGTH l + b ==>
     TAKE n (l ++ REPLICATE a x) = TAKE n (l ++ REPLICATE b x)
@@ -400,6 +393,24 @@ Proof
   rw[exec_read0_def, update_var_def] >> gvs[AllCaseEqs()]
 QED
 
+Triviality exec_gas_result_alloca_fields[local]:
+  !inst (s:venom_state) r.
+    exec_gas inst s = r ==>
+    case r of
+      OK s' => s'.vs_allocas = s.vs_allocas /\
+               s'.vs_alloca_next = s.vs_alloca_next
+    | Halt s' => s'.vs_allocas = s.vs_allocas /\
+                 s'.vs_alloca_next = s.vs_alloca_next
+    | Abort a s' => s'.vs_allocas = s.vs_allocas /\
+                    s'.vs_alloca_next = s.vs_alloca_next
+    | IntRet v s' => s'.vs_allocas = s.vs_allocas /\
+                     s'.vs_alloca_next = s.vs_alloca_next
+    | Error e => T
+Proof
+  rpt gen_tac >> Cases_on `r` >>
+  rw[exec_gas_def, update_var_def] >> gvs[AllCaseEqs()]
+QED
+
 Triviality exec_read1_result_alloca_fields[local]:
   !f inst (s:venom_state) r.
     exec_read1 f inst s = r ==>
@@ -529,6 +540,7 @@ val effect_free_alloca_tac =
     drule exec_pure2_result_alloca_fields >> simp[],
     drule exec_pure3_result_alloca_fields >> simp[],
     drule exec_read0_result_alloca_fields >> simp[],
+    drule exec_gas_result_alloca_fields >> simp[],
     drule exec_read1_result_alloca_fields >> simp[],
     alloca_field_solve_tac
   ];
@@ -544,7 +556,7 @@ val alloca_field_finish_tac =
     rw[exec_pure1_def] >> alloca_field_solve_tac >> NO_TAC,
     rw[exec_pure2_def] >> alloca_field_solve_tac >> NO_TAC,
     rw[exec_pure3_def] >> alloca_field_solve_tac >> NO_TAC,
-    rw[exec_read0_def] >> alloca_field_solve_tac >> NO_TAC,
+    rw[exec_read0_def, exec_gas_def] >> alloca_field_solve_tac >> NO_TAC,
     rw[exec_read1_def] >> alloca_field_solve_tac >> NO_TAC,
     rw[exec_write2_def] >> alloca_field_solve_tac >> NO_TAC,
     rw[] >>
@@ -741,7 +753,7 @@ Triviality opcode_alloca_field_class[local]:
     is_ext_call_op op \/
     op = SSTORE \/ op = TSTORE \/ op = ISTORE \/ op = LOG \/
     op = ASSERT \/ op = ASSERT_UNREACHABLE \/
-    op = DALLOCA \/ op = SETFMP \/ is_terminator op
+    op = DALLOCA \/ op = SETFMP \/ is_terminator op \/ op = GAS
 Proof
   Cases >> EVAL_TAC
 QED
@@ -877,6 +889,17 @@ Proof
   rpt strip_tac >> alloca_field_finish_tac
 QED
 
+Triviality step_inst_base_gas_alloca_fields[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/ step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    inst.inst_opcode = GAS ==>
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >> alloca_field_finish_tac
+QED
+
 Triviality step_inst_base_assert_alloca_fields[local]:
   !inst (s:venom_state) s'.
     (step_inst_base inst s = OK s' \/ step_inst_base inst s = Halt s' \/
@@ -949,6 +972,7 @@ Proof
   >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_fmp_write_alloca_fields >> impl_tac >- gvs[] >> gvs[])
   >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_fmp_write_alloca_fields >> impl_tac >- gvs[] >> gvs[])
   >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_terminator_alloca_fields >> impl_tac >- gvs[] >> gvs[])
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_gas_alloca_fields >> impl_tac >- gvs[] >> gvs[])
 QED
 
 Theorem step_inst_base_preserves_allocas:
@@ -1083,14 +1107,14 @@ Proof
 QED
 
 (* Setting vs_inst_idx preserves alloca_inv *)
-Theorem alloca_inv_set_inst_idx[local]:
+Theorem alloca_inv_set_inst_idx:
   !s n. alloca_inv s ==> alloca_inv (s with vs_inst_idx := n)
 Proof
   rw[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]
 QED
 
 (* Joint induction: step_inst/exec_block/run_blocks preserve alloca_inv *)
-Theorem alloca_inv_joint[local]:
+Theorem alloca_inv_joint:
   (!fuel ctx inst s.
      alloca_inv s ==>
      result_alloca_inv s.vs_alloca_next (step_inst fuel ctx inst s)) /\

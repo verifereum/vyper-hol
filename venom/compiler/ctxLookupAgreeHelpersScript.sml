@@ -31,13 +31,6 @@ Proof
   simp[EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem selected_block_mem[local]:
-  !bbs lbl bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
-Proof
-  Induct_on `bbs` >> rw[lookup_block_def, FIND_thm] >>
-  gvs[lookup_block_def] >> metis_tac[]
-QED
-
 Theorem EVERY_fn_lookup_block:
   EVERY P (fn_insts fn) /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
   EVERY P bb.bb_instructions

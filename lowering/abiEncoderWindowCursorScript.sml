@@ -4,7 +4,7 @@ Ancestors
   abiEncoderWindowSequence abiEncoderWindowLeaves valueEncodingProps
   abiEncoderWindowContract abiEncoderPrimitiveEffect
   abiEncoderRegisteredEffect emitHelperProps exprLoweringProps
-  emitHelper compileEnv fragExec freshWrites venomState venomExecSemantics
+  emitHelper compileEnv loweringStateRelDefs fragExec freshWrites venomState venomExecSemantics
   venomMemDefs venomInst words finite_map list arithmetic
 
 Theorem window_emit_alloca32_sequence:
@@ -52,7 +52,7 @@ Proof
      disch_then (SUBST1_TAC o GSYM o CONJUNCT2) >> simp[]) >>
   `run_inst_seq (emitted_insts st st') s = OK t` by
     (asm_rewrite_tac[run_inst_seq_def] >>
-     simp_tac (srw_ss()) [Once step_inst_base_def, mk_inst_def,
+     simp_tac (srw_ss()) [step_inst_base_opcode_eqs, mk_inst_def,
        exec_read1_def, eval_operands_def, eval_operand_def] >>
      qpat_x_assum `exec_alloca _ _ _ = OK t` mp_tac >>
      simp_tac (srw_ss()) [mk_inst_def] >> strip_tac >> asm_rewrite_tac[]) >>

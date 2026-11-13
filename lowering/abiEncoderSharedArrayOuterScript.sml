@@ -4,7 +4,7 @@ Ancestors
   abiEncoderSharedArrayInitFrame abiEncoderSharedContract abiEncoderRegisteredEffect
   abiEncoderExtendSim abiEncoderArrayHeaderMemory abiEncoderMembersDefs abiEncoderArrayPrefix
   abiScratchCursor abiScratchEffect abiScratchEncoderContract abiDecoderAllocation
-  abiDecoderReentry abiDecoderContract compileEnv valueEncoding contractABI venomState words
+  abiDecoderReentry abiDecoderContract compileEnv loweringStateRelDefs valueEncoding contractABI venomState words
   list arithmetic pred_set abiEncoderSharedArrayRun abiEncoderArrayLoopCode
   abiEncoderArrayParent abiEncoderArrayContext abiEncoderArrayPhases abiEncoderMemberPhaseRaw
   abiEncoderMemberPhaseEffect abiDecoderFootprint abiDecoderFrameCompose abiDecoderFrame
@@ -279,6 +279,8 @@ Proof
   strip_tac >> drule_all abi_encoder_array_finish_raw_transport >> strip_tac >>
   `ready.vs_accounts = initial.vs_accounts /\ ready.vs_transient = initial.vs_transient /\
    ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests /\
+   ready.vs_tx_ctx = initial.vs_tx_ctx /\ ready.vs_block_ctx = initial.vs_block_ctx /\
+   ready.vs_immutables = initial.vs_immutables /\ ready.vs_outcomes = initial.vs_outcomes /\
    ready.vs_pending_deletions = initial.vs_pending_deletions` by
     (irule abi_encoder_member_phase_globals >> goal_assum (drule_at Any) >>
      drule abi_encoder_array_finish_opcodes >> simp[]) >>

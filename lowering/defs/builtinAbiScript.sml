@@ -99,11 +99,10 @@ Definition lower_abi_decode_def:
        (* Allocate output buffer *)
        out_buf_alloc <- compile_alloc_buffer output_size;
        out_buf <- return out_buf_alloc.buf_operand;
-       (* Compute hi = data_ptr + data_len for bounds checking *)
-       hi <- emit_op ADD [data_ptr; data_len];
-       (* Decode ABI data into output buffer.
-          load_opc=MLOAD since source is memory. *)
-       compile_abi_decode_to_buf out_buf data_ptr MLOAD hi dec_info;
+       (* Decode ABI data into output buffer.  The source is memory, read
+          at positions from data_ptr and bounded by data_len. *)
+       compile_abi_decode_to_buf out_buf (Lit 0w) MLOAD data_ptr data_len
+         dec_info;
        return out_buf
     od
 End

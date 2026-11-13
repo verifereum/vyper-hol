@@ -5,6 +5,9 @@ Ancestors
 
 Theorem write_storage_place_eq:
   write_place cx (StoragePlace tr slot tv) v st =
+    if cx.txn.is_static then
+      (INR (Error (RuntimeError "write in static context")), st)
+    else
     (case encode_value tv v of
      | SOME writes =>
          (INL (), set_storage cx st tr
@@ -59,7 +62,8 @@ Theorem write_place_logs:
 Proof
   Cases_on `p`
   >- (simp[write_storage_place_eq] >>
-      Cases_on `encode_value t v` >> simp[] >> rpt strip_tac >> gvs[]) 
+      Cases_on `cx.txn.is_static` >> Cases_on `encode_value t v` >> simp[] >>
+      rpt strip_tac >> gvs[])
   >- (strip_tac >> drule write_memory_place_frame >> strip_tac >> gvs[]) >>
   strip_tac >> drule write_immutable_place_frame >> strip_tac >> gvs[]
 QED

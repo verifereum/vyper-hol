@@ -540,3 +540,32 @@ Proof
     (drule (cj 2 fn_plan_aux_visited_mem) >> simp[]) >>
   metis_tac[cj 1 fn_plan_aux_visited_mem]
 QED
+
+
+(* Successful successor traversal exposes the branch result and the saved-parent
+   continuation.  Only the high-water allocator and label counter are threaded;
+   the next branch restores the original stack/spills and parent's free slots. *)
+Theorem generate_succs_plan_cons_success:
+  !liveness dfg cfg fn ss sp succ rest visited ps ops visited' ps'.
+    generate_succs_plan liveness dfg cfg fn ss sp (succ::rest) visited ps =
+      SOME (ops, visited', ps') ==>
+    ?branch_ops branch_visited branch_after rest_ops.
+      generate_fn_plan_aux liveness dfg cfg fn [succ] visited
+        (ps with <|ps_stack := ss; ps_spilled := sp|>) =
+        SOME (branch_ops, branch_visited, branch_after) /\
+      generate_succs_plan liveness dfg cfg fn ss sp rest branch_visited
+        (ps with <|ps_alloc := branch_after.ps_alloc with
+                    sa_free_slots := ps.ps_alloc.sa_free_slots;
+                   ps_label_counter := branch_after.ps_label_counter|>) =
+        SOME (rest_ops, visited', ps') /\
+      ops = branch_ops ++ rest_ops /\
+      set visited SUBSET set branch_visited /\
+      set branch_visited SUBSET set visited'
+Proof
+  rpt gen_tac >>
+  simp[Once generate_fn_plan_aux_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  conj_tac
+  >- (drule generate_fn_plan_aux_visited_mono >> simp[]) >>
+  drule generate_succs_plan_visited_mono >> simp[]
+QED

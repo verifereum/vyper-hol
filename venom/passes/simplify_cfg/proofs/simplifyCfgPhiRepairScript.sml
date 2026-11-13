@@ -1,7 +1,7 @@
 Theory simplifyCfgPhiRepair
 Ancestors
   simplifyCfgDataflow simplifyCfgLabelProps simplifyCfgStruct simplifyCfgDefs
-  venomWf venomInst venomExecSemantics venomExecProofs cfgTransform list rich_list relation
+  venomWfProps venomWf venomInst venomExecSemantics venomExecProofs cfgTransform list rich_list relation
 
 Theorem is_fn_path_first_predecessor:
   (!q. fn_cfg_edge fn q b ==> q = p) ==>
@@ -106,36 +106,6 @@ Proof
   simp[scfg_phi_safe_def] >> metis_tac[]
 QED
 
-Theorem distinct_projection_member_eq:
-  !xs. ALL_DISTINCT (FLAT (MAP f xs)) ==>
-  !x y v. MEM x xs /\ MEM y xs /\ MEM v (f x) /\ MEM v (f y) ==> x = y
-Proof
-  Induct >> simp[ALL_DISTINCT_APPEND] >> rpt strip_tac >>
-  fs[MEM_FLAT, MEM_MAP] >> metis_tac[]
-QED
-
-Theorem wf_function_instruction_block:
-  wf_function fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
-  MEM inst a.bb_instructions /\ MEM inst b.bb_instructions ==> a = b
-Proof
-  strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
-     fn.fn_blocks))` by fs[wf_function_def, fn_inst_ids_distinct_def] >>
-  drule distinct_projection_member_eq >>
-  disch_then (qspecl_then [`a`, `b`, `inst.inst_id`] mp_tac) >>
-  simp[MEM_MAP] >> metis_tac[]
-QED
-
-Theorem ssa_form_output_unique:
-  ssa_form fn /\ MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-  MEM bb' fn.fn_blocks /\ MEM inst' bb'.bb_instructions /\
-  MEM v inst.inst_outputs /\ MEM v inst'.inst_outputs ==> inst' = inst
-Proof
-  strip_tac >> fs[ssa_form_def] >>
-  drule distinct_projection_member_eq >>
-  disch_then (qspecl_then [`inst'`, `inst`, `v`] mp_tac) >>
-  simp[] >> fs[fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]
-QED
 
 Theorem pred_labels_edge:
   MEM p (pred_labels fn b) <=> fn_cfg_edge fn p b

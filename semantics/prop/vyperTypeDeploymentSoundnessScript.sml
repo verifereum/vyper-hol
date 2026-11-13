@@ -35,7 +35,7 @@ Ancestors
   vyperTypeContractContext vyperTypeContractSoundness
   vyperTypeSelectedEntrySoundness vyperTypeDeploymentMachine
   vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
-  vyperTypeExternalCallMachine vyperTypeInvariants vyperTypeBindArguments
+  vyperTypeExternalCallMachine vyperTypeExternalDefaults vyperTypeInvariants vyperTypeBindArguments
   vyperTypeStmtSoundness vyperTypeStmtResult vyperTypeEvalSoundness
   vyperExprNoControl
 
@@ -58,12 +58,14 @@ Theorem constructor_call_observed[local]:
   bind_arguments (type_env_all_modules mods) args vals = SOME scope ==>
   (case call_external_function orc gobs am0 cx nr mut (ts:toplevel list)
           mods args [] vals body ret of
-     (INR e,_,_) => INR e
-   | (INL v,am',rqs) => INL (v,am',rqs)) =
+     (INR HaltException,am',rqs) => INL (NONE,am',rqs)
+   | (INR e,_,_) => INR e
+   | (INL v,am',rqs) => INL (SOME v,am',rqs)) =
   (case call_constructor_body orc gobs am_c cx nr mut (type_env_all_modules mods)
           scope body ret of
-     (INR e,_,_) => INR e
-   | (INL v,am',rqs) => INL (v,am',rqs))
+     (INR HaltException,am',rqs) => INL (NONE,am',rqs)
+   | (INR e,_,_) => INR e
+   | (INL v,am',rqs) => INL (SOME v,am',rqs))
 Proof
   strip_tac >>
   simp[call_external_function_def, call_constructor_body_def] >>
@@ -72,13 +74,14 @@ Proof
   Cases_on `q` >>
   simp[call_external_body_def, bind_def, ignore_bind_def, set_scopes_def, return_def] >>
   TRY (rename1 `send_call_value _ _ _ = (INR exc,_)` >>
-       drule send_call_value_no_control_c53 >>
-       Cases_on `exc` >> simp[no_control_exc_def] >> NO_TAC) >>
+       drule send_call_value_error >> strip_tac >> gvs[] >> NO_TAC) >>
   qabbrev_tac `lock_action = if nr then
     case cx.nonreentrant_slot of
       NONE => raise (Error (TypeError "nonreentrant slot missing"))
-    | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                     (mut = View \/ mut = Pure)
+    | SOME slot =>
+        bind (acquire_nonreentrant_lock cx.txn.target slot
+                ((mut = View \/ mut = Pure) \/ cx.txn.is_static))
+             (\x. if mut = View \/ mut = Pure then return () else check_not_static cx)
     else return ()` >>
   Cases_on `lock_action (r with scopes := [scope])` >>
   Cases_on `q` >> simp[] >>
@@ -88,6 +91,11 @@ Proof
     case cx.nonreentrant_slot of NONE => return ()
     | SOME slot => release_nonreentrant_lock cx.txn.target slot
     else return ()` >>
+  `!s res s'. unlock_action s = (res,s') ==> res = INL ()` by
+    (simp[Abbr `unlock_action`] >> rpt gen_tac >> strip_tac >>
+     drule (release_action_result |> SPEC_ALL |>
+       Q.INST [`is_view` |-> `mut = View \/ mut = Pure`] |> SRULE []) >>
+     simp[]) >>
   TRY (rename1 `eval_stmts _ _ _ = (INR exc,_)` >>
        Cases_on `exc` >> simp[]) >>
   TRY (rename1 `lock_action _ = (INR exc,_)` >>
@@ -95,7 +103,8 @@ Proof
   TRY (rename1 `send_call_value _ _ _ = (INR exc,_)` >>
        Cases_on `exc` >> simp[]) >>
   TRY (qmatch_goalsub_rename_tac `unlock_action final_st` >>
-       Cases_on `unlock_action final_st` >> Cases_on `q` >> simp[]) >>
+       Cases_on `unlock_action final_st` >> Cases_on `q` >> simp[] >>
+       res_tac >> gvs[]) >>
   rpt (CASE_TAC >> simp[])
 QED
 
@@ -151,7 +160,7 @@ Theorem load_contract_constructor_body:
   ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,[],ret,body) /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\
   LENGTH tx.args = LENGTH args /\
   bind_arguments (type_env_all_modules mods) args tx.args = SOME scope /\
@@ -162,7 +171,9 @@ Theorem load_contract_constructor_body:
   load_contract orc gobs am tx mods exps =
     case call_constructor_body orc gobs am_c cx nr mut (type_env_all_modules mods)
            scope body ret of
-      (INR e, _, _) => INR e
+      (INR HaltException, am', rqs) =>
+        INL (finalize_pending_deletions am', rqs)
+    | (INR e, _, _) => INR e
     | (INL _, am', rqs) =>
         INL (finalize_pending_deletions
                (am' with sources updated_by CONS (tx.target,mods)), rqs)
@@ -179,7 +190,15 @@ Proof
   disch_then (qspecl_then [`ts`,`ret`,`orc`,`nr`,`mut`,`gobs`,`body`] mp_tac) >>
   simp[load_contract_def] >>
   qpat_x_assum `cx = _` (fn th => rewrite_tac[GSYM th]) >>
-  rpt (CASE_TAC >> gvs[])
+  qmatch_goalsub_abbrev_tac `call_external_function _ _ am_i _ _ _ _ _ _ _ _ _ _` >>
+  Cases_on `call_external_function orc gobs am_i cx nr mut ts mods args [] tx.args body ret` >>
+  rename1 `_ = (res1,p1)` >> PairCases_on `p1` >>
+  Cases_on `call_constructor_body orc gobs am_c cx nr mut (type_env_all_modules mods)
+              scope body ret` >>
+  rename1 `call_constructor_body _ _ _ _ _ _ _ _ _ _ = (res2,p2)` >> PairCases_on `p2` >>
+  simp[] >>
+  namedCases_on `res1` ["v1","e1"] >> namedCases_on `res2` ["v2","e2"] >>
+  simp[] >> TRY (Cases_on `e1`) >> TRY (Cases_on `e2`) >> simp[]
 QED
 
 (* ===== Constructor static boundary ===== *)
@@ -256,7 +275,7 @@ Theorem checked_constructor_constants_exist:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
   machine_well_typed am /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\
   context_well_typed cx /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms ==>
@@ -281,7 +300,7 @@ QED
 Theorem checked_constructor_initial_immutables_consistent:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
   check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants cx
@@ -294,7 +313,8 @@ Proof
   strip_tac >>
   irule checked_deployment_constants_establish_initial_env_immutables_consistent >>
   qexistsl [`am with exports updated_by CONS (tx.target,exps)`,`imms`,
-    `am.layouts`,`runtime_art`,`(tx.target,mods)::am.sources`,`tx.target`,`tx`] >>
+    `am.layouts`,`runtime_art`,`(tx.target,mods)::am.sources`,`tx.target`,
+    `tx with created_in_tx := T`] >>
   simp[]
 QED
 
@@ -304,7 +324,7 @@ Theorem checked_constructor_prefix_typing:
   machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\ context_well_typed cx /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants cx
@@ -318,8 +338,11 @@ Theorem checked_constructor_prefix_typing:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                      (mut = View \/ mut = Pure)
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
    else return ())
     (send_st with scopes := [scope]) = (INL (),body_st) ==>
   ?env_body env_after.
@@ -359,14 +382,16 @@ Proof
      context_well_typed cx /\ functions_well_typed cx /\ state_well_typed body_st` by
     (irule checked_constructor_body_setup >> simp[] >>
      qexistsl [`args`,`deploy_art`,`dflts`,`am.layouts`,`mods`,`mut`,`nr`,
-       `runtime_art`,`(tx.target,mods)::am.sources`,`ts`,`tx`,`vals`] >>
+       `runtime_art`,`(tx.target,mods)::am.sources`,`ts`,
+       `tx with created_in_tx := T`,`vals`] >>
      gvs[]) >>
   qexistsl [`env_body`,`env_after`] >> simp[] >> conj_tac
   >- gvs[env_consistent_def, env_context_consistent_def,
          get_tenv_def, initial_evaluation_context_def] >>
   irule checked_constructor_call_evaluation_safe >>
   qexistsl [`args`,`deploy_art`,`dflts`,`am.layouts`,`mods`,`mut`,`nr`,
-    `ret`,`(tx.target,mods)::am.sources`,`ts`,`tx`] >> simp[]
+    `ret`,`(tx.target,mods)::am.sources`,`ts`,
+    `tx with created_in_tx := T`] >> simp[]
 QED
 
 Theorem checked_constructor_prefix_no_type_error:
@@ -375,7 +400,7 @@ Theorem checked_constructor_prefix_no_type_error:
   machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\ context_well_typed cx /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants cx
@@ -390,15 +415,20 @@ Theorem checked_constructor_prefix_no_type_error:
        (if nr then
           case cx.nonreentrant_slot of
             NONE => raise (Error (TypeError "nonreentrant slot missing"))
-          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                           (mut = View \/ mut = Pure)
+          | SOME slot => do
+                acquire_nonreentrant_lock cx.txn.target slot
+                  ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+                if (mut = View \/ mut = Pure) then return () else check_not_static cx
+              od
         else return ());
        eval_stmts cx body
      od (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>))
 Proof
   strip_tac >>
   `nr ==> cx.nonreentrant_slot <> NONE` by
-    (strip_tac >> drule_all checked_constructor_nonreentrant_slot >> simp[]) >>
+    (strip_tac >>
+     drule_all (checked_constructor_nonreentrant_slot |> SPEC_ALL |>
+       Q.INST [`tx` |-> `tx with created_in_tx := T`] |> SRULE []) >> simp[]) >>
   qmatch_goalsub_abbrev_tac `ignore_bind (send_call_value mut cx)
     (ignore_bind (set_scopes [scope]) (ignore_bind lock_action (eval_stmts cx body)))` >>
   qpat_x_assum `cx = _` (assume_tac o GSYM) >>
@@ -428,7 +458,7 @@ Theorem checked_constructor_prefix_return_typed:
   machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\ context_well_typed cx /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants cx
@@ -442,8 +472,11 @@ Theorem checked_constructor_prefix_return_typed:
      (if nr then
         case cx.nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                         (mut = View \/ mut = Pure)
+        | SOME slot => do
+              acquire_nonreentrant_lock cx.txn.target slot
+                ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+              if (mut = View \/ mut = Pure) then return () else check_not_static cx
+            od
       else return ());
      eval_stmts cx body
    od (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)) =
@@ -457,10 +490,12 @@ Proof
   gs[bind_def, ignore_bind_def, set_scopes_def, return_def, AllCaseEqs()] >>
   TRY (drule send_call_value_no_control_c53 >> simp[no_control_exc_def] >> NO_TAC) >>
   TRY (qunabbrev_tac `lock_action` >>
-       drule call_lock_action_no_control_c53 >> simp[no_control_exc_def] >> NO_TAC) >>
+       fs[ignore_bind_def] >>
+       drule (SRULE [ignore_bind_def] call_lock_action_no_control_c53) >>
+       simp[no_control_exc_def] >> NO_TAC) >>
   qunabbrev_tac `lock_action` >>
   qpat_x_assum `_ = cx` (assume_tac o GSYM) >>
-  drule_all (SRULE [] checked_constructor_prefix_typing) >> strip_tac >> gvs[] >>
+  drule_all (SRULE [ignore_bind_def] checked_constructor_prefix_typing) >> strip_tac >> gvs[] >>
   drule_all eval_stmts_type_preservation_exception >>
   simp[stmt_error_ok_def, return_exception_typed_def, value_runtime_typed_def]
 QED
@@ -476,8 +511,11 @@ Theorem checked_constructor_prefix_no_loop_control:
      (if nr then
         case cx.nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                         (mut = View \/ mut = Pure)
+        | SOME slot => do
+              acquire_nonreentrant_lock cx.txn.target slot
+                ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+              if (mut = View \/ mut = Pure) then return () else check_not_static cx
+            od
       else return ());
      eval_stmts cx body
    od st) = (INR exc,st') ==>
@@ -492,14 +530,9 @@ Proof
   FIRST_PROVE
     [metis_tac[vyperTypeEvalSoundnessTheory.stmts_no_control_escape_eval_stmts_no_loop_control],
      drule send_call_value_no_control_c53 >> rw[no_control_exc_def] >> gvs[],
-     qunabbrev_tac `lock_action` >> drule call_lock_action_no_control_c53 >>
+     qunabbrev_tac `lock_action` >> fs[ignore_bind_def] >>
+       drule (SRULE [ignore_bind_def] call_lock_action_no_control_c53) >>
        rw[no_control_exc_def] >> gvs[]]
-QED
-
-Theorem triple_identity[local]:
-  !p. (\(res,am_out,rqs). (res,am_out,rqs)) p = p
-Proof
-  Cases >> Cases_on `r` >> simp[]
 QED
 
 Theorem call_constructor_body_no_type_error_from_prefix:
@@ -508,8 +541,11 @@ Theorem call_constructor_body_no_type_error_from_prefix:
     set_scopes [scope];
     (if nr then case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                      (mut = View \/ mut = Pure)
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
      else return ());
     eval_stmts cx body
   od (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)) /\
@@ -554,8 +590,11 @@ Theorem call_constructor_body_no_loop_control_from_prefix:
     set_scopes [scope];
     (if nr then case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                      (mut = View \/ mut = Pure)
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
      else return ());
     eval_stmts cx body
   od (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)) /\
@@ -598,7 +637,7 @@ Theorem checked_constructor_body_no_static_error:
   machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\ context_well_typed cx /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants cx
@@ -649,7 +688,7 @@ Theorem checked_load_contract_no_static_error:
   ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts (tx with created_in_tx := T)
           NONE with in_deploy := T) /\
   call_tx_well_typed tx /\
   LENGTH tx.args = LENGTH args /\
@@ -665,7 +704,9 @@ Theorem checked_load_contract_no_static_error:
     load_contract orc gobs am tx mods exps =
       (case call_constructor_body orc gobs am_c cx nr mut (type_env_all_modules mods)
               scope body ret of
-         (INR e, _, _) => INR e
+         (INR HaltException, am', rqs) =>
+           INL (finalize_pending_deletions am', rqs)
+       | (INR e, _, _) => INR e
        | (INL _, am', rqs) =>
            INL (finalize_pending_deletions
                   (am' with sources updated_by CONS (tx.target,mods)), rqs)) /\

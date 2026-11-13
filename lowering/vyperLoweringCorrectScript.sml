@@ -30,8 +30,10 @@
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_o1_shape_extras -- S2b: the entry function
  *     has no PARAM, no function has its FMP convention set
- *   lower_vyper_runtime_unit_defs_reach_uses -- S2b (planned admission):
- *     every use is written on every path to it
+ *   lower_vyper_runtime_unit_fn_ptr_ok -- the lowered functions and their
+ *     reachable parts are pointer-confined (fn_ptr_ok)
+ *   lower_vyper_runtime_unit_defs_reach_uses -- S2b: every use is written
+ *     on every path to it
  *   (S3, lower_vyper_runtime_unit_memory_ok, is in loweringMemCorrect)
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
@@ -42,7 +44,8 @@
 
 Theory vyperLoweringCorrect
 Ancestors
-  vyperCompiler
+  vyperCompiler gasSummary
+  ptrOkCheck
   selectorDispatch
   moduleLoweringProps
   stmtLoweringProps
@@ -56,11 +59,11 @@ Ancestors
   vyperContext
   venomExecSemantics
   venomState
-  compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
+  compileEnv loweringStateRelDefs e2eDefs supportedProgram compileVyper immutableSectionRel
   unitTransformDefs unitShapeDefs o1PassContract ptrDiscipline
   fragExec loweringHalt loweringShapeProps loweringShapeSource retAbiPlanProps
   venomInst venomWf contextCodegenRel memSafeRun allocaFrontierBound
-  supportedNames
+  supportedNames ptrSafeRun
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
    exact oracle-mode boundary below. Original text retained without bridges.
@@ -68,7 +71,7 @@ Ancestors
 
 (* Observable state produced by an external source call. Function-local scope
    state is gone at this boundary, so this is intentionally smaller than
-   compileEnv$state_rel but still includes all externally visible effects. *)
+   loweringStateRelDefs$state_rel but still includes all externally visible effects. *)
 Definition external_logs_rel_def:
   external_logs_rel cenv (addr : address) (am : abstract_machine) ss ⇔
     LIST_REL (log_entry_equiv cenv addr) am.logs ss.vs_logs
@@ -122,12 +125,14 @@ End
 (* ===== PLAN 5.7 oracle-mode boundary ===== *)
 
 (* No gas-reading/oracle equality is invented here: cc_gas, outcomes,
-   code/labels and frame-pointer fields are deliberately free at entry. *)
+   labels and frame-pointer fields are deliberately free at entry. *)
 Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
-    compileEnv$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
+    loweringStateRelDefs$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
-    vs.vs_prev_hashes = tx.block_hashes
+    ~tx.is_static /\
+    vs.vs_prev_hashes = tx.block_hashes /\
+    vs.vs_code = tx.code
 End
 
 (* tx_env_ok is also a conjunct of venom_env_rel, through call_ctx_rel; it
@@ -189,6 +194,14 @@ Definition external_call_result_rel_def:
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\
         LIST_REL (request_agree cx) rqs ss.vs_requests
+    | (INR HaltException, Halt ss) =>
+        ss.vs_returndata = [] /\
+        accounts_agree cx am'.accounts
+          (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
+        transient_agree cx am'.tStorage ss.vs_transient /\
+        logs_correspond (compiled_event_info tops) (type_env tops)
+          tx.target am'.logs ss.vs_logs /\
+        LIST_REL (request_agree cx) rqs ss.vs_requests
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
     | (INR (Error (RevertData _)), Abort Revert_abort _) => T
@@ -197,11 +210,26 @@ Definition external_call_result_rel_def:
     | _ => F
 End
 
+(* The source call at gas observations gobs either fails with an
+   exempt error or relates to a run of the lowered unit.  The lowered
+   run reads GAS from vs.vs_gas_readings, so the source call that
+   matches it reads the observations the run's GAS reads produce. *)
+Definition source_unit_execution_correct_at_def:
+  source_unit_execution_correct_at gobs tops ret am tx unit vs <=>
+    source_exempt tops (call_external (SOME vs.vs_outcomes) gobs am tx) \/
+    ?fuel. external_call_result_rel tops ret tx
+             (call_external (SOME vs.vs_outcomes) gobs am tx)
+             (run_context fuel unit.cu_context vs)
+End
+
+(* The observations are those some of the run's GAS reads produce
+   (gas_explicit), so a lowered unit cannot pass with readings of its own
+   choosing. *)
 Definition source_unit_execution_correct_def:
   source_unit_execution_correct tops ret am tx unit vs <=>
-    ?fuel. external_call_result_rel tops ret tx
-             (call_external (SOME vs.vs_outcomes) [] am tx)
-             (run_context fuel unit.cu_context vs)
+    ?marks. source_unit_execution_correct_at
+              (gas_explicit marks vs.vs_gas_readings)
+              tops ret am tx unit vs
 End
 
 (* ===== S1 halt bridge (#640) ===== *)
@@ -215,7 +243,8 @@ QED
 
 (* An external function's return sequences, run from state_rel at the
    return (whose accounts_rel gives every address's accounts and transient
-   storage as in the source, with no pending deletions), halt in the
+   storage as in the source, and which equates the two sides' pending
+   deletions), halt in the
    success case of external_call_result_rel.  The source result is the one
    call_external_function builds: the returned value cast to the return
    type (NoneV when the body returns without a value or falls off its
@@ -259,6 +288,8 @@ Theorem external_return_prim_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`tops`, `tenv`, `ret`, `tv`, `v0`, `v`] mp_tac
     return_bytes_prim_value >>
   impl_tac >- asm_rewrite_tac[] >> strip_tac >>
@@ -326,6 +357,8 @@ Theorem external_return_none_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`ctx`, `cenv`, `lctx`, `ty`, `st`, `x`, `st'`, `nr`, `nkey`,
                `ut`, `iv`] mp_tac compile_return_none_external_unlock_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
@@ -360,6 +393,8 @@ Theorem external_fallthrough_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`ctx`, `cenv`, `nr`, `nkey`, `ut`, `iv`, `stmts`, `st`, `x`,
                `st'`, `sa`, `sb`] mp_tac
     compile_guarded_body_stop_unlock_frag >>
@@ -516,6 +551,8 @@ Theorem external_return_static_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   qspecl_then [`ctx`, `op`, `m`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
                `x`, `st'`] mp_tac compile_external_return_copy_unlock_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
@@ -644,7 +681,7 @@ Theorem singleton_tuple_memory:
     val_in_memory (TupleTV [tv]) (ArrayV (TupleV [v])) p mem =
     val_in_memory tv v p mem
 Proof
-  simp[valueEncodingTheory.val_in_memory_def]
+  simp[valueEncodingDefsTheory.val_in_memory_def]
 QED
 
 Theorem singleton_tuple_memory_size:
@@ -767,13 +804,15 @@ Theorem external_return_abi_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[state_rel_def] >>
   drule_all return_abi_value_package >>
   disch_then (qspec_then
     `needs_external_call_wrap ret /\
      is_dynamic (vyper_to_abi_type (type_env tops) ret)` strip_assume_tac) >>
   drule compile_external_return_abi_unlock_frag >>
   disch_then irule >>
-  asm_rewrite_tac[] >>
+  asm_rewrite_tac[] >> conj_tac >- (simp[] >> metis_tac[]) >>
   qexistsl_tac [`av`, `type_env tops`, `tv'`,
     `if needs_external_call_wrap ret /\
         is_dynamic (vyper_to_abi_type (type_env tops) ret)
@@ -837,7 +876,9 @@ QED
 
 (* The same, for the plan and buffer size update_cenv_ret_abi builds from a
    compile env with the program's struct map (as build_compile_env's is), for
-   a return type with no NoneT in it (retAbiPlanProps). *)
+   a return type with no NoneT in it (retAbiPlanProps).  Accounts remain raw
+   at the return; external_call_result_rel processes pending deletions only
+   at the success boundary, as in external_return_abi_result_rel. *)
 Theorem external_return_abi_cenv_result_rel:
   !ctx op nr nkey ut iv st x st' func cenv cenv0 cx es ret tv v0 v
      tops tx srcs exps layouts Q.
@@ -895,7 +936,7 @@ QED
 (* S2, Milestone 5: proved in loweringShapeSource as
    lower_vyper_runtime_unit_source_unit_ok_checked. The type checker supplies
    builtin arities and distinct internal names; raw_shape_free_program
-   excludes msg.gas values and raw_call (wider than the unit shape needs:
+   excludes raw_call and create calls (wider than the unit shape needs:
    a plain raw_call passes it, but the body-shape proof lacks that case). *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
   !tops rpolicy unit layouts addr art.
@@ -907,19 +948,17 @@ Proof
   ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_checked
 QED
 
-(* S2b, planned admission: every variable a use in the lowering's code
-   reads is written on every path to the use.  SimplifyCFG's pre-walk
-   needs it. *)
-Theorem lower_vyper_runtime_unit_defs_reach_uses:
-  !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
-    immutable_free_program tops
-    ==> unit_defs_reach_uses unit
+(* The runtime unit reserves no global memory. *)
+Theorem run_grouped_lowering_global_reserved[local]:
+  run_grouped_lowering groups internal_fns fallback_fn rpolicy entry_label =
+    SOME u ==>
+  u.cu_context.ctx_global_reserved = []
 Proof
-  cheat
+  simp[run_grouped_lowering_def, extract_context_with_internals_def,
+       mk_venom_context_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 
-(* The runtime unit reserves no global memory. *)
 Theorem lower_vyper_runtime_unit_global_reserved:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit
@@ -927,7 +966,8 @@ Theorem lower_vyper_runtime_unit_global_reserved:
 Proof
   rpt gen_tac >> simp[lower_vyper_runtime_unit_def] >>
   pairarg_tac >> gvs[AllCaseEqs()] >> strip_tac >>
-  irule vyperCompilerTheory.run_lowering_global_reserved >> metis_tac[]
+  metis_tac[vyperCompilerTheory.run_lowering_global_reserved,
+            run_grouped_lowering_global_reserved]
 QED
 
 (* ===== S3: memory safety ===== *)
@@ -948,18 +988,63 @@ Proof
   simp[listTheory.EVERY_MEM, function_raw_metadata_defaults_def]
 QED
 
-(* A unit that lowers comes from run_lowering with the entry label
-   "__entry". *)
-Theorem lower_vyper_runtime_unit_run_lowering:
+(* The grouped-defaults lowering builds its functions the same way. *)
+Theorem run_grouped_lowering_eom_none[local]:
+  run_grouped_lowering groups internal_fns fallback_fn rpolicy entry_label =
+    SOME u ==>
+  EVERY (\fn. fn.fn_eom = NONE) u.cu_context.ctx_functions
+Proof
+  simp[run_grouped_lowering_def, extract_context_with_internals_def,
+       mk_venom_context_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[mk_raw_function_def] >>
+  drule package_internal_blocks_raw_defaults >>
+  simp[listTheory.EVERY_MEM, function_raw_metadata_defaults_def]
+QED
+
+(* The grouped-defaults lowering puts its entry first, as run_lowering does. *)
+Theorem run_grouped_lowering_entry[local]:
+  run_grouped_lowering groups internal_fns fallback_fn rpolicy entry_label =
+    SOME unit ==>
+  unit.cu_context.ctx_entry = SOME entry_label /\
+  ?fn. lookup_function entry_label unit.cu_context.ctx_functions = SOME fn
+Proof
+  simp[run_grouped_lowering_def] >> rpt strip_tac >>
+  pairarg_tac >>
+  gvs[AllCaseEqs(), extract_context_with_internals_def, mk_venom_context_def,
+      lookup_function_def, mk_raw_function_def, listTheory.FIND_thm]
+QED
+
+(* A unit that lowers, by run_lowering or by the grouped-defaults lowering,
+   passed lowering_context_ok and has its entry "__entry". *)
+Theorem lower_vyper_runtime_unit_context_entry:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
-    ?selectors external_fns internal_fns fallback_fn entry_info.
-      run_lowering selectors external_fns internal_fns fallback_fn rpolicy
-        0 0 [] entry_info "__entry" = SOME unit
+    lowering_context_ok unit.cu_context /\
+    unit.cu_context.ctx_entry = SOME "__entry" /\
+    ?fn. lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn
 Proof
   rpt gen_tac >> simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
-  strip_tac >> metis_tac[]
+  strip_tac >> Cases_on `EXISTS external_has_defaults q` >> gvs[] >>
+  imp_res_tac run_grouped_lowering_context >>
+  imp_res_tac run_grouped_lowering_entry >>
+  imp_res_tac run_lowering_context_ok >>
+  imp_res_tac run_lowering_entry >> simp[]
+QED
+
+(* S2b: every variable a use in the lowering's code reads is written on
+   every path to the use.  SimplifyCFG's pre-walk needs it.  run_lowering
+   decides it on the unit (lowering_context_ok). *)
+Theorem lower_vyper_runtime_unit_defs_reach_uses:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit
+    ==> unit_defs_reach_uses unit
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  drule lowering_context_ok_defs_reach_uses >>
+  simp[unit_defs_reach_uses_def]
 QED
 
 (* run_lowering builds every function with mk_raw_function, which leaves
@@ -978,10 +1063,37 @@ Proof
   simp[listTheory.EVERY_MEM, function_raw_metadata_defaults_def]
 QED
 
+Theorem run_grouped_lowering_fmp_unsealed[local]:
+  run_grouped_lowering groups internal_fns fallback_fn rpolicy entry_label =
+    SOME u ==>
+  unit_fmp_unsealed u
+Proof
+  simp[run_grouped_lowering_def, extract_context_with_internals_def,
+       mk_venom_context_def, unit_fmp_unsealed_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[mk_raw_function_def] >>
+  drule package_internal_blocks_raw_defaults >>
+  simp[listTheory.EVERY_MEM, function_raw_metadata_defaults_def]
+QED
+
+(* Either lowering path leaves fn_eom and the FMP convention unset. *)
+Theorem lower_vyper_runtime_unit_raw_defaults:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
+    EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+    unit_fmp_unsealed unit
+Proof
+  rpt gen_tac >> simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
+  strip_tac >> Cases_on `EXISTS external_has_defaults q` >> gvs[] >>
+  metis_tac[run_lowering_eom_none, run_lowering_fmp_unsealed,
+            run_grouped_lowering_eom_none, run_grouped_lowering_fmp_unsealed]
+QED
+
 (* S2b. The entry function reads calldata, never a PARAM: the S2 shape
    proof gives that of the unit's first function, which run_lowering's
    distinct function names make the only one named by the entry.  No
-   function has its FMP convention set (run_lowering_fmp_unsealed).  The
+   function has its FMP convention set (lower_vyper_runtime_unit_raw_defaults).  The
    label and PHI facts S4 also needs follow from unit_wf and
    o1_source_unit_ok (o1_source_unit_label_refs_no_phi). *)
 Theorem lower_vyper_runtime_unit_o1_shape_extras:
@@ -990,19 +1102,18 @@ Theorem lower_vyper_runtime_unit_o1_shape_extras:
     ==> unit_entry_no_params unit /\ unit_fmp_unsealed unit
 Proof
   rpt gen_tac >> strip_tac >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  reverse conj_tac >- metis_tac[run_lowering_fmp_unsealed] >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  reverse conj_tac >- metis_tac[lower_vyper_runtime_unit_raw_defaults] >>
   drule lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params >>
   impl_tac
   >- metis_tac[supported_program_runtime_bodies_shape_ok,
-               supported_names_internal_names_distinct,
-               supported_program_names, supported_declaration_names_unique] >>
+               classified_internal_names_distinct,
+               supported_program_internal_names] >>
   strip_tac >>
   `entry_fn_first unit.cu_context` by
     fs[o1_source_unit_ok_def, unit_shape_ok_def] >>
   `ALL_DISTINCT (MAP (\f. f.fn_name) unit.cu_context.ctx_functions)` by
-    (drule run_lowering_context_ok >>
-     simp[lowering_context_ok_def, ctx_fn_names_def]) >>
+    fs[lowering_context_ok_def, ctx_fn_names_def] >>
   qpat_x_assum `entry_fn_first _`
     (strip_assume_tac o REWRITE_RULE [entry_fn_first_def]) >>
   rename1 `_ = efn :: rest` >>
@@ -1034,6 +1145,26 @@ Definition external_call_dead_def:
                           else {});
        d_imm := K {}; d_ret := K {} |>
 End
+
+(* The lowered unit's functions and their reachable parts are
+   pointer-confined (fn_ptr_ok), with P each function's pointer parameters:
+   the return buffer, if any, and the arguments passed in memory:
+   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound for a
+   unit without DALLOCA. *)
+Theorem lower_vyper_runtime_unit_fn_ptr_ok:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    ~ctx_has_dalloca unit.cu_context ==>
+    ?P. EVERY (fn_ptr_ok P) unit.cu_context.ctx_functions /\
+        EVERY (\f. fn_ptr_ok P (reachable_fn f)) unit.cu_context.ctx_functions
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  qpat_x_assum `lowering_context_ok _` mp_tac >> simp[lowering_context_ok_def] >>
+  strip_tac >> drule_all ptr_ok_check_sound >> strip_tac >>
+  qexists_tac `\nm. set (ctx_ptr_param_list unit.cu_context nm)` >>
+  fs[listTheory.EVERY_MEM]
+QED
 
 (* ===== Superseded admission provenance ===== *)
 (* TASK051 full-token consumer audit found no source consumer of

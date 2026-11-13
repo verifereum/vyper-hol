@@ -2,7 +2,7 @@
    These are layout facts, not execution correctness of the recursive decoder. *)
 Theory abiBoundaryChecks
 Ancestors
-  valueEncoding compileEnv abiEncoder vyperABI
+  valueEncoding valueEncodingDefs compileEnv abiEncoder vyperABI
 
 Theorem val_in_memory_singleton_tuple:
   val_in_memory (TupleTV [tv]) (ArrayV (TupleV [v])) off mem <=>

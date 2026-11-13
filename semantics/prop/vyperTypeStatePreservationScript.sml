@@ -167,7 +167,6 @@ Proof
   rpt strip_tac >> gvs[]
   >- (metis_tac[decode_dyn_bytes_length])
   >- (metis_tac[decode_dyn_bytes_length])
-  >- (first_x_assum irule >> gvs[EVERY_MEM])
   >- simp[enumerate_static_array_sorted]
   >- (qpat_x_assum `decode_static_array _ _ _ _ = _`
         (ASSUME_TAC o MATCH_MP decode_static_array_length) >>
@@ -341,7 +340,8 @@ Theorem write_storage_preserves_state_well_typed:
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof
   rpt strip_tac >>
-  Cases_on `encode_value tv v` >> gvs[write_storage_slot_eq]
+  Cases_on `encode_value tv v` >> Cases_on `cx.txn.is_static` >>
+  gvs[write_storage_slot_eq]
   >- (irule set_storage_preserves_state_well_typed >> simp[]) >>
   irule set_storage_preserves_accounts_well_typed >> simp[]
 QED
@@ -352,7 +352,8 @@ Theorem write_storage_slot_preserves_state_well_typed_any:
   state_well_typed st ==> state_well_typed st'
 Proof
   rpt strip_tac >>
-  Cases_on `encode_value tv v` >> gvs[write_storage_slot_eq] >>
+  Cases_on `encode_value tv v` >> Cases_on `cx.txn.is_static` >>
+  gvs[write_storage_slot_eq] >>
   irule set_storage_preserves_state_well_typed >> simp[]
 QED
 
@@ -363,7 +364,8 @@ Theorem write_storage_slot_preserves_accounts_well_typed:
   accounts_well_typed st'.accounts
 Proof
   rpt strip_tac >>
-  Cases_on `encode_value tv v` >> gvs[write_storage_slot_eq] >>
+  Cases_on `encode_value tv v` >> Cases_on `cx.txn.is_static` >>
+  gvs[write_storage_slot_eq] >>
   irule set_storage_preserves_accounts_well_typed >> simp[]
 QED
 
@@ -489,8 +491,8 @@ Proof
   `?writes. encode_value tv v = SOME writes` by
     metis_tac[optionTheory.IS_SOME_EXISTS] >>
   CCONTR_TAC >> gvs[] >>
-  Cases_on `is_transient` >>
-  gvs[write_storage_slot_def, bind_def, lift_option_def,
+  Cases_on `is_transient` >> Cases_on `cx.txn.is_static` >>
+  gvs[write_storage_slot_def, bind_def, ignore_bind_def, lift_option_def,
       get_storage_backend_def, get_transient_storage_def, get_accounts_def,
       return_def, raise_def, set_storage_backend_def, update_transient_def,
       update_accounts_def]

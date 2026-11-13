@@ -3,7 +3,7 @@
    runtime allocation order. Site/output ownership is supplied by generated code. *)
 Theory abiCallerLocalScratch
 Ancestors
-  abiDecoderFootprint abiDecoderFrame localPtrsProps compileEnv venomMemDefs
+  abiDecoderFootprint abiDecoderFrame localPtrsProps compileEnv loweringStateRelDefs venomMemDefs
   venomState venomInst venomWf finite_map pred_set list arithmetic
 
 Theorem abi_caller_local_end:
@@ -28,7 +28,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!id off len. _` drule >> disch_then drule >> strip_tac >> gvs[] >>
   drule_all local_ptrs_rel_alloca_disjoint >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem abi_caller_local_scratch_frame:

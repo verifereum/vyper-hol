@@ -19,10 +19,12 @@
 Theory entryStateRel
 Ancestors
   list rich_list finite_map alist
-  e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec
-  compileEnv compileVyper moduleLowering supportedProgram supportedNames
+  e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec entryDispatchProps
+  compileEnv loweringStateRelDefs compileVyper moduleLowering supportedProgram supportedNames
   supportedDecls immutableLocationProps immutableSectionRel immutableRelation
+  structFieldsProps
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractContext
+  vyperTypeContractGetter
   vyperInterpreter vyperState vyperContext vyperAST vyperValue vyperTypeDefaults
   venomState
 Libs
@@ -51,6 +53,20 @@ Proof
   first_x_assum drule >> reverse strip_tac >- metis_tac[] >- metis_tac[] >>
   pop_assum mp_tac >> BasicProvers.every_case_tac >> simp[FLOOKUP_UPDATE] >>
   rw[] >> metis_tac[]
+QED
+
+(* Where an entry of add_immutable_locations comes from. *)
+Theorem add_immutable_locations_cases:
+  !sft tops off vars k loc.
+    FLOOKUP (add_immutable_locations sft tops off vars) k = SOME loc ==>
+    FLOOKUP vars k = SOME loc \/
+    ?vis name ty slot.
+      MEM (VariableDecl vis Immutable name ty slot) tops /\ k = (NONE, name)
+Proof
+  gen_tac >> Induct >- simp[add_immutable_locations_def] >>
+  rpt gen_tac >> Cases_on `h` >> simp[add_immutable_locations_def] >>
+  rpt (CASE_TAC >> simp[]) >> strip_tac >> first_x_assum drule >>
+  rw[FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
 (* A declaration's own name is untouched by the other declarations. *)
@@ -145,6 +161,32 @@ Proof
   drule contract_namespaces_ok_module_toplevel_vtype_keys >> simp[]
 QED
 
+Theorem source_typing_ok_external_names_distinct:
+  source_typing_ok tops am tx ==>
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))
+Proof
+  rw[source_typing_ok_def] >>
+  drule check_contract_namespaces_ok >>
+  simp[contract_namespaces_ok_def, contract_keys_def]
+QED
+
+Theorem source_typing_ok_raw_external_decl:
+  source_typing_ok tops am tx /\
+  lookup_function NONE name External tops =
+    SOME (mut,nr,args,dflts,ret,stmts) /\
+  lookup_raw_return_or_F (NONE:num option) name External tops ==>
+  MEM (FunctionDecl External mut nr T name args dflts ret stmts) tops
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
+  drule lookup_function_external_raw_cases >> strip_tac
+  >- gvs[lookup_raw_return_or_F_def] >>
+  `lookup_raw_return (NONE:num option) name External tops = NONE` by
+    metis_tac[public_getter_raw_return_none] >>
+  gvs[lookup_raw_return_or_F_def]
+QED
+
 (* The layout's slots as lookup_var_slot_from_layout reads them. *)
 Theorem layouts_agree_lookup:
   !tops am tx cx.
@@ -159,7 +201,8 @@ Theorem layouts_agree_lookup:
 Proof
   rpt gen_tac >> strip_tac >>
   fs[layouts_agree_def, lookup_var_slot_from_layout_def] >>
-  Cases_on `ALOOKUP am.layouts tx.target` >> gvs[] >>
+  Cases_on `ALOOKUP am.layouts tx.target` >> gvs[]
+  >- (rpt conj_tac >> rpt gen_tac >> strip_tac >> res_tac >> fs[]) >>
   rename1 `SOME p` >> PairCases_on `p` >> gvs[] >>
   rpt conj_tac >> rpt gen_tac >> TRY (Cases_on `tr`) >> simp[] >> metis_tac[]
 QED
@@ -183,7 +226,10 @@ Theorem entry_storage_vars_rel:
               ((NONE, name))) ==>
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx
 Proof
-  rpt gen_tac >> strip_tac >> fs[source_deployment_rel_def] >>
+  rpt gen_tac >> strip_tac >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
+   layouts_agree tops am tx` by fs[source_deployment_rel_def] >>
+  qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
   drule_all layouts_agree_lookup >> strip_tac >>
   `!src ts. get_module_code cx src = SOME ts ==> src = NONE /\ ts = tops` by
     (simp[get_module_code_def] >> Cases >> simp[]) >>
@@ -326,6 +372,7 @@ Theorem body_entry_state_rel:
     ss.vs_tx_ctx = vs.vs_tx_ctx /\ ss.vs_block_ctx = vs.vs_block_ctx /\
     ss.vs_outcomes = vs.vs_outcomes /\ ss.vs_requests = vs.vs_requests /\
     ss.vs_pending_deletions = vs.vs_pending_deletions /\
+    ss.vs_code = vs.vs_code /\
     local_ptrs_rel func cenv [env] ss /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     (!n off. FLOOKUP cenv.ce_module_vars n <> SOME (ImmutableLoc off)) ==>
@@ -352,6 +399,7 @@ Theorem body_entry_state_rel_runtime[local]:
     ss.vs_tx_ctx = vs.vs_tx_ctx /\ ss.vs_block_ctx = vs.vs_block_ctx /\
     ss.vs_outcomes = vs.vs_outcomes /\ ss.vs_requests = vs.vs_requests /\
     ss.vs_pending_deletions = vs.vs_pending_deletions /\
+    ss.vs_code = vs.vs_code /\
     local_ptrs_rel func cenv [env] ss /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     cenv.ce_module = NONE /\ ~cenv.ce_is_ctor /\
@@ -372,16 +420,6 @@ Proof
 QED
 
 (* ===== The compiler's env for an external function ===== *)
-
-Theorem type_mem_bytes_type_memory_bytes:
-  !cenv ty.
-    type_mem_bytes (get_struct_fields cenv.ce_struct_fields) ty =
-    type_memory_bytes cenv ty
-Proof
-  ho_match_mp_tac type_memory_bytes_ind >>
-  rw[type_mem_bytes_def, type_memory_bytes_def] >>
-  AP_TERM_TAC >> irule MAP_CONG >> simp[]
-QED
 
 Theorem allocate_args_lookup:
   !args sft off vars.
@@ -502,7 +540,7 @@ QED
 
 (* ===== The selected function's parameters ===== *)
 
-Theorem source_typing_ok_type_def_keys_distinct[local]:
+Theorem source_typing_ok_type_def_keys_distinct:
   !tops am tx.
     source_typing_ok tops am tx ==>
     ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))
@@ -517,44 +555,30 @@ Proof
   simp[type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2]
 QED
 
-(* With no public variables, an external function lookup_function selects
-   is a declared function, not a getter. *)
-Theorem lookup_function_external_decl[local]:
-  !tops tops0 name mut nr args dflts ret fbody.
-    EVERY (supported_declaration_header tops0) tops /\
-    lookup_function NONE name External tops =
-      SOME (mut, nr, args, dflts, ret, fbody) ==>
-    ?raw. MEM (FunctionDecl External mut nr raw name args dflts ret fbody) tops
-Proof
-  Induct >- simp[lookup_function_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  Cases_on `h` >> gvs[supported_declaration_header_def, lookup_function_def] >>
-  BasicProvers.every_case_tac >> gvs[lookup_function_def, AllCaseEqs()] >>
-  metis_tac[]
-QED
-
 (* The source typing check gives the parameters distinct names and
    assignable types. *)
-Theorem source_typing_ok_params_ok[local]:
+Theorem source_typing_ok_params_ok:
   !tops am tx mut nr fargs ret fbody.
     supported_declaration_headers tops /\ source_typing_ok tops am tx /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, nr, fargs, [], ret, fbody) ==>
     params_ok (type_env tops) fargs
 Proof
-  rpt strip_tac >>
-  drule_at (Pos last) lookup_function_external_decl >>
-  disch_then (qspec_then `tops` mp_tac) >>
-  impl_tac >- fs[supported_declaration_headers_def] >> strip_tac >>
+  rpt strip_tac >> drule lookup_function_External_cases >> strip_tac
+  >- (fs[source_typing_ok_def] >>
+      drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
+      drule check_contract_runtime_function_body_MEM >>
+      disch_then (qspecl_then [`External`, `tops`, `NONE`, `ret`, `raw`, `nr`,
+        `mut`, `tx.function_name`, `[]`, `fbody`, `fargs`] mp_tac) >>
+      simp[check_function_body_def, type_env_all_modules_one]) >>
   fs[source_typing_ok_def] >>
-  drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
-  drule check_contract_runtime_function_body_MEM >>
-  disch_then (qspecl_then [`External`, `tops`, `NONE`, `ret`, `raw`, `nr`,
-    `mut`, `tx.function_name`, `[]`, `fbody`, `fargs`] mp_tac) >>
-  simp[check_function_body_def, type_env_all_modules_one]
+  `module_allocated am.layouts tx.target NONE tops` by
+    (drule check_contract_main_module_allocated >> simp[]) >>
+  `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>
+  drule_all checked_public_getter_params_ok >> simp[type_env_all_modules_one]
 QED
 
-Theorem build_positional_args_names[local]:
+Theorem build_positional_args_names:
   !cenv fargs. MAP FST (build_positional_args cenv fargs) = MAP FST fargs
 Proof
   Induct_on `fargs` >> fs[build_positional_args_def] >>
@@ -652,7 +676,7 @@ Theorem external_body_entry_state_rel:
     s0.vs_outcomes = vs.vs_outcomes /\ s0.vs_requests = vs.vs_requests /\
     s0.vs_pending_deletions = vs.vs_pending_deletions /\
     s0.vs_allocas = vs.vs_allocas /\ s0.vs_alloca_next = vs.vs_alloca_next /\
-    s0.vs_data_section = vs.vs_data_section /\
+    s0.vs_data_section = vs.vs_data_section /\ s0.vs_code = vs.vs_code /\
     fresh_vars_wrt st s0 /\ fn_has_code st st' func /\ ~s0.vs_halted /\
     s0.vs_current_bb = st.cs_current_bb /\
     s0.vs_inst_idx = LENGTH st.cs_current_insts ==>

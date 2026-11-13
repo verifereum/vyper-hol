@@ -1,7 +1,7 @@
 Theory abiEncoderTuple
 Ancestors
   abiCanonicalWindows abiDecodeRanges abiEncoderMemory abiDecoderFrame abiDecoderContract
-  valueEncoding contractABI venomState words list arithmetic
+  valueEncoding valueEncodingDefs contractABI venomState words list arithmetic
 
 (* ===== Prefix ===== *)
 

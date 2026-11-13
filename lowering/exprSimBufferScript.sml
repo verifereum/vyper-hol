@@ -16,47 +16,22 @@
  *)
 Theory exprSimBuffer
 Ancestors
+  exprSimProps
   loweringPosts
   exprSimAlloc
   exprSimLiteralBuffer emitHelperProps exprLoweringProps compileEnv
   context venomInst venomState words fragExec rich_list list
-  exprSimWordArgs exprSimOps exprSim
+  exprSimWordArgs exprSimOps
 
-Theorem buffer_offset_no_wrap:
-  !w:bytes32. !off sz.
-    w2n w + sz < dimword (:256) /\ off <= sz ==>
-    w2n (w + n2w off) = w2n w + off
-Proof
-  rpt strip_tac >>
-  `off < dimword (:256)` by decide_tac >>
-  `w2n (w + n2w off) = w2n w + w2n ((n2w off):bytes32)`
-    suffices_by simp[] >>
-  irule wordsTheory.w2n_add_2 >> simp[] >> decide_tac
-QED
+
 
 (* Unlike emit_op_ADD_correct, this exact execution boundary does not
    require all existing variables to satisfy fresh_vars_wrt. *)
-Theorem buffer_emit_add_run:
-  !sa sb ptr dst s w off.
-    emit_op ADD [ptr; Lit (n2w off)] sa = (dst, sb) /\
-    eval_operand ptr s = SOME w ==>
-    run_inst_seq (emitted_insts sa sb) s =
-      OK (update_var (STRING #"%" (toString sa.cs_next_var))
-                     (w + n2w off) s)
-Proof
-  rpt strip_tac >> rename1 `eval_operand pop s = SOME w` >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  `step_inst_base
-     (mk_inst sa.cs_next_id ADD [pop; Lit (n2w off)]
-       [STRING #"%" (toString sa.cs_next_var)]) s =
-   OK (update_var (STRING #"%" (toString sa.cs_next_var))
-                  (w + n2w off) s)` by
-    (irule step_ADD >> simp[eval_operand_def]) >>
-  simp[run_inst_seq_def]
-QED
+
 
 Theorem buffer_memory_vv_post_general:
   !func cenv cx e es sa sb s0 es' t v tvt p w sz ctx.
+    post_value_type cenv e = expr_type e /\
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
@@ -75,7 +50,8 @@ Theorem buffer_memory_vv_post_general:
       (!n b k. local_region cenv es.scopes s0 n b k ==>
         off+len <= b \/ b+k <= off) ==>
       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory) /\
-    locals_kept cenv es s0 t ==>
+    locals_kept cenv es es' s0 t /\
+    (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) ==>
     vv_post ctx func cenv cx e es sa sb s0 es' (Value v)
       (LocatedValue (expr_type e) p) t
 Proof
@@ -87,11 +63,12 @@ Proof
       rpt strip_tac >>
       qpat_x_assum `!n lb lsz. local_region _ es'.scopes _ _ _ _ ==> _`
         drule >> decide_tac) >>
-  metis_tac[]
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem buffer_memory_vv_post:
   !func cenv cx e es sa sb s0 t v tvt p w sz ctx.
+    post_value_type cenv e = expr_type e /\
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
@@ -108,12 +85,13 @@ Theorem buffer_memory_vv_post:
        FLOOKUP s0.vs_allocas aid = SOME (b,len) ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
     (!name b len. local_region cenv es.scopes s0 name b len ==>
-       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) ==>
+       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
+    pure_frame cenv func es sa s0 t ==>
     vv_post ctx func cenv cx e es sa sb s0 es (Value v)
       (LocatedValue (expr_type e) p) t
 Proof
   rpt gen_tac >> strip_tac >>
-  `locals_kept cenv es s0 t` by
+  `locals_kept cenv es es s0 t` by
     (irule locals_kept_regions >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!name b len. local_region _ _ s0 _ _ _ ==> _` kall_tac >>
   irule buffer_memory_vv_post_general >>

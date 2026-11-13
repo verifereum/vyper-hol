@@ -2,7 +2,7 @@ Theory copyExecution
 Ancestors
   createMemoryInterface createFrameInterface createSourceCallback fragExec context contextProps
   emitHelperProps exprLoweringProps venomMemProps venomExecSemantics
-  compileEnv emitHelper venomInst venomState list rich_list
+  compileEnv loweringStateRelDefs emitHelper venomInst venomState list rich_list
 
 (* Dynamic copying is one MCOPY, not a compiler-generated loop.  Lift its
    checked execution to the compositional CFG interface. *)
@@ -126,7 +126,7 @@ Theorem compile_slot_to_memory_shape:
      slot_copy_final cs src dst n (if loc = LocStorage then SLOAD else TLOAD))
 Proof
   strip_tac >> gvs[] >>
-  simp[compile_slot_to_memory_def, compile_word_copy_loop_def,
+  simp[compile_slot_to_memory_def, compile_word_copy_loop_def, compile_word_copy_loop_op_def, compile_word_copy_loop_base_def,
        word_scale_def, compile_ptr_load_def, compile_ptr_store_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_label_def, fresh_var_def, fresh_id_def,

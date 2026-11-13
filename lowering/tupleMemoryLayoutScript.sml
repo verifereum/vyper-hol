@@ -7,7 +7,8 @@
  *)
 Theory tupleMemoryLayout
 Ancestors
-  list rich_list arithmetic valueEncoding exprSim vyperTyping valueTypingMemoryProps
+  exprSimProps
+  list rich_list arithmetic valueEncoding valueEncodingDefs  vyperTyping valueTypingMemoryProps
 
 Theorem tuple_in_memory_element:
   !vs tvs base mem i.

@@ -2,7 +2,7 @@ Theory ctorAbiActualEmpty
 Ancestors
   ctorAbiActualWorld ctorAbiActualNarrow abiDecoderEmpty abiDecoderComplexGuard
   abiDecoderComplexHead abiDecoderGuard abiDecoderReentry abiDecoderDynamicLoopSetup
-  abiDecoderContract abiDecoderLoop fragExec instIdxIndep compileEnv
+  abiDecoderContract abiDecoderLoop fragExec instIdxIndep compileEnv loweringStateRelDefs
   abiEncoderRegisteredEffect venomState venomExecSemantics venomInst words list arithmetic
 
 Theorem ctor_actual_complex_guard_narrow_fragment[local]:
@@ -34,7 +34,7 @@ Proof
 QED
 
 Theorem ctor_actual_empty_complex_narrow_reach:
-  compile_abi_decode_to_buf dst src opc hi (DecComplex dynamic []) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex dynamic []) st = ((),st') /\
   fn_has_code st st' func /\ eval_operand src initial = SOME (n2w sb) /\
   (hi = Lit 0w \/ ?hb. eval_operand hi initial = SOME (n2w hb) /\
     sb <= hb /\ hb < dimword (:256)) /\

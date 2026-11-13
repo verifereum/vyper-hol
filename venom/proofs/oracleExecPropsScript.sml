@@ -1,4 +1,5 @@
-(* Non-call primitives preserve the oracle lists and pending deletions.
+(* Non-call primitives preserve oracle lists and deletion queues;
+ * non-GAS primitives preserve the gas readings.
  * Activated-call counterexamples live in venomCallActivationRegression.
  * INVOKE transport remains the calleeTransport boundary. *)
 Theory oracleExecProps
@@ -37,6 +38,28 @@ Proof
   step_inst_base_opcode_tac >>
   gvs[AllCaseEqs()] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
+     exec_ext_call_def, exec_delegatecall_def,
+     exec_create_def, exec_alloca_def, extract_venom_result_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
+     istore_def, write_memory_with_expansion_def, mcopy_def,
+     revert_state_def, eval_operands_def, jump_to_def]
+QED
+
+(* Only GAS pops the gas readings; INVOKE's callee is step_inst's. *)
+Theorem step_inst_base_gas_readings:
+  inst.inst_opcode <> GAS /\ step_inst_base inst s = OK s' ==>
+  s'.vs_gas_readings = s.vs_gas_readings
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  step_inst_base_opcode_tac >>
+  gvs[AllCaseEqs()] >>
+  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,
      exec_ext_call_def, exec_delegatecall_def,
      exec_create_def, exec_alloca_def, extract_venom_result_def] >>
@@ -46,6 +69,21 @@ Proof
   fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
      istore_def, write_memory_with_expansion_def, mcopy_def,
      revert_state_def, jump_to_def, eval_operands_def]
+QED
+
+(* Two GAS steps from equal readings pop the same reading. *)
+Theorem step_inst_base_gas_agree:
+  inst.inst_opcode = GAS /\ step_inst_base inst s1 = OK v1 /\
+  step_inst_base inst s2 = OK v2 /\
+  s1.vs_gas_readings = s2.vs_gas_readings ==>
+  v1.vs_gas_readings = v2.vs_gas_readings /\
+  !x. MEM x inst.inst_outputs ==> lookup_var x v1 = lookup_var x v2
+Proof
+  strip_tac >>
+  rpt (qpat_x_assum `step_inst_base inst _ = _` mp_tac) >>
+  step_inst_base_opcode_tac >>
+  simp[exec_gas_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem step_inst_noninvoke_oracle:
@@ -58,4 +96,13 @@ Theorem step_inst_noninvoke_oracle:
 Proof
   simp[Once step_inst_def] >> strip_tac >> gvs[] >>
   drule step_inst_base_oracle >> simp[]
+QED
+
+Theorem step_inst_noninvoke_gas_readings:
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS /\
+  step_inst fuel ctx inst s = OK s' ==>
+  s'.vs_gas_readings = s.vs_gas_readings
+Proof
+  simp[Once step_inst_def] >> strip_tac >> gvs[] >>
+  drule_all step_inst_base_gas_readings >> simp[]
 QED

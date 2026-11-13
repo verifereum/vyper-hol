@@ -1,6 +1,6 @@
 Theory vyperABIEntries
 Ancestors
-  vyperABI vyperAST list rich_list arithmetic words
+  vyperABI vyperAST list rich_list arithmetic words alist
 Libs
   cv_transLib
 
@@ -99,6 +99,19 @@ Definition abi_external_method_ids_def:
       (abi_external_signatures tops)
 End
 
+(* Only named exports join the main module's deployed interface. *)
+Definition abi_deployed_signatures_def:
+  abi_deployed_signatures (mods : (num option # toplevel list) list) exps =
+    (case ALOOKUP mods NONE of
+     | NONE => []
+     | SOME tops => abi_external_signatures tops) ++
+    FLAT (MAP (\(name,src).
+      case ALOOKUP mods (SOME src) of
+      | NONE => []
+      | SOME tops => FILTER (\(fn,tys). fn = name)
+                      (abi_external_signatures tops)) exps)
+End
+
 Theorem abi_function_signatures_no_defaults[simp]:
   abi_function_signatures name args [] = [(name, MAP SND args)]
 Proof
@@ -119,6 +132,7 @@ val () = cv_auto_trans abi_getter_args_def;
 val () = cv_auto_trans abi_decl_signatures_def;
 val () = cv_auto_trans abi_external_signatures_def;
 val () = cv_auto_trans abi_external_method_ids_def;
+val () = cv_auto_trans abi_deployed_signatures_def;
 
 (* Checked prefix order and the three selectors of the dflt_multi witness. *)
 Theorem dflt_multi_abi_method_ids:

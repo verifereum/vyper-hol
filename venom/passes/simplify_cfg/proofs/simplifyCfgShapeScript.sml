@@ -217,22 +217,6 @@ Proof
   rw[] >> gvs[]
 QED
 
-Theorem canon_jnz_inst_wf:
-  inst_wf inst ==> inst_wf (canon_jnz_inst inst)
-Proof
-  Cases_on `canon_jnz_inst inst = inst` >- simp[] >>
-  drule canon_jnz_inst_changed >> strip_tac >>
-  gvs[inst_wf_def] >> metis_tac[]
-QED
-
-Theorem canon_jnz_inst_var_subset:
-  MEM (Var v) (canon_jnz_inst inst).inst_operands ==>
-  MEM (Var v) inst.inst_operands
-Proof
-  Cases_on `canon_jnz_inst inst = inst` >- simp[] >>
-  drule canon_jnz_inst_changed >> strip_tac >> simp[]
-QED
-
 Theorem opaque_use_ok_transport:
   opaque_use_ok fn_old /\
   (!x. gas_var fn_new x ==> gas_var fn_old x) /\

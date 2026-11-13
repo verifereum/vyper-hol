@@ -71,7 +71,14 @@ Theorem block_environment_bounds:
   LENGTH tx.block_hashes <= 256 /\
   tp.prevRandao = n2w tx.prev_randao /\ tp.prevHashes = tx.block_hashes
 Proof
-  simp[tx_block_fields_rel_def, compileEnvTheory.tx_env_ok_def]
+  simp[tx_block_fields_rel_def, loweringStateRelDefsTheory.tx_env_ok_def]
+QED
+
+Theorem boundary_pending_deletions:
+  call_state_rel tops code am tx es ==>
+  es.rollback.toDelete = am.pending_deletions
+Proof
+  simp[call_state_rel_def] >> metis_tac[]
 QED
 
 Theorem no_genesis_or_unbounded_hash_environment:
@@ -81,14 +88,15 @@ Theorem no_genesis_or_unbounded_hash_environment:
   (MIN 256 tx.block_number > LENGTH hashes ==>
     ~tx_env_ok (tx with block_hashes := hashes))
 Proof
-  simp[compileEnvTheory.tx_env_ok_def, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
+  simp[loweringStateRelDefsTheory.tx_env_ok_def, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
 QED
 
 (* ===== Exact source module/layout and independent hypotheses ===== *)
 Theorem deployed_main_module_exact:
   source_deployment_rel tops am tx <=>
   ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
-  ALOOKUP am.exports tx.target = NONE /\ layouts_agree tops am tx
+  (ALOOKUP am.exports tx.target = NONE \/
+   ALOOKUP am.exports tx.target = SOME []) /\ layouts_agree tops am tx
 Proof
   simp[source_deployment_rel_def]
 QED
@@ -185,19 +193,27 @@ Proof
        vyperValueOperationTheory.safe_cast_def]
 QED
 
-(* Closed ambiguity check: PLAN's source lookup includes getters, but the
-   independent supported whitelist rejects public variables. Do not silently
-   strengthen the exact PLAN predicate with an extra MEM FunctionDecl guard. *)
-Theorem source_lookup_getter_outside_supported:
+(* The compiler packages the same getter that source lookup selects. *)
+Theorem source_lookup_getter_supported:
   let tops = [VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0)] in
     vyperInterpreter$lookup_function NONE "g" External tops =
       SOME (View,F,[],[],BaseT (UintT 256),
         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"g")))]) /\
-    ~supported_program tops
+    supported_program tops
 Proof
-  simp[vyperInterpreterTheory.lookup_function_def,
-       supported_program_def, supported_declaration_headers_def,
-       supported_public_variables_rejected]
+  simp_tac bool_ss [LET_THM] >> conj_tac >- EVAL_TAC >>
+  simp[supported_program_def, supported_declaration_headers_def,
+    supported_declaration_header_def, supported_declaration_body_def,
+    supportedNamesTheory.supported_declaration_names_def,
+    supportedNamesTheory.supported_function_names_def,
+    supportedNamesTheory.supported_event_names_def,
+    supportedNamesTheory.supported_function_header_names_def,
+    supportedNamesTheory.supported_selectors_distinct_def,
+    compileVyperTheory.classify_functions_def,
+    compileVyperTheory.classify_function_def,
+    compileVyperTheory.public_getters_def, compileVyperTheory.public_getter_def,
+    constSubstTheory.module_consts_env_def, constSubstTheory.subst_consts_fn_empty,
+    compileVyperTheory.build_selectors_def] >> EVAL_TAC
 QED
 
 (* ===== Canonical external ABI wrapping ===== *)
@@ -268,8 +284,7 @@ End
 
 Theorem decoding_exemption_exact:
   (unspecified_behaviour_exempt dynamic_decode_program e <=>
-    e = RuntimeError "abi_decode invalid" \/
-    e = RuntimeError "convert empty bytes to signed") /\
+    e = RuntimeError "abi_decode invalid") /\
   ~unspecified_behaviour_exempt [] (RuntimeError "abi_decode invalid") /\
   ~unspecified_behaviour_exempt dynamic_decode_program (RuntimeError "abi_decode conversion") /\
   ~unspecified_behaviour_exempt dynamic_decode_program (TypeError "abi_decode invalid")
@@ -302,16 +317,18 @@ Theorem source_exemption_triple:
   ~source_exempt tops (INR (AssertException s),am,rqs) /\
   ~source_exempt tops (INR BreakException,am,rqs) /\
   ~source_exempt tops (INR ContinueException,am,rqs) /\
+  ~source_exempt tops (INR HaltException,am,rqs) /\
   ~source_exempt tops (INR (ReturnException v),am,rqs)
 Proof
   simp[source_exempt_def]
 QED
 
 (* ===== Result cases: success REQUESTS, not remaining OUTCOMES ===== *)
+(* At fixed (empty) gas observations: call_result_rel is ?gobs. call_result_rel_at gobs. *)
 Theorem success_requires_requests_and_effects:
   call_external (SOME (MAP SND (call_trace es))) [] am tx = (INL v,am',rqs) /\
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE ==>
-  (call_result_rel tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
       tx_return_bytes tops ret tx v out /\
       accounts_agree cx am'.accounts
@@ -320,57 +337,55 @@ Theorem success_requires_requests_and_effects:
       logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
       LIST_REL (request_agree cx) rqs (call_requests es))
 Proof
-  simp[call_result_rel_def]
+  simp[call_result_rel_at_def]
+QED
+
+Theorem halt_requires_empty_success_and_effects:
+  call_external (SOME (MAP SND (call_trace es))) [] am tx =
+    (INR HaltException,am',rqs) /\
+  cx = initial_evaluation_context am'.sources am'.layouts tx NONE ==>
+  (call_result_rel_at [] tops ret am tx es r es' <=>
+    ?lgs. frame_outcome es r es' NONE [] lgs /\
+      accounts_agree cx am'.accounts
+        (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+      transient_agree cx am'.tStorage es'.rollback.tStorage /\
+      logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
+      LIST_REL (request_agree cx) rqs (call_requests es))
+Proof
+  simp[call_result_rel_at_def]
 QED
 
 Theorem assert_result_does_not_compare_requests:
   call_external (SOME (MAP SND (call_trace es))) [] am tx =
     (INR (AssertException s),am',rqs) ==>
-  (call_result_rel tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops ret am tx es r es' <=>
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
       (exc = Reverted \/ s = "UNREACHABLE"))
 Proof
-  simp[call_result_rel_def]
+  simp[call_result_rel_at_def]
 QED
 
 Theorem error_result_only_exact_exemption_or_failure:
   call_external (SOME (MAP SND (call_trace es))) [] am tx = (INR (Error e),am',rqs) ==>
-  (call_result_rel tops ret am tx es r es' <=>
+  (call_result_rel_at [] tops ret am tx es r es' <=>
     unspecified_behaviour_exempt tops e \/
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)
 Proof
-  simp[call_result_rel_def]
-QED
-
-Theorem empty_signed_conversion_accepts_any_outcome:
-  call_external (SOME (MAP SND (call_trace es))) [] am tx =
-    (INR (Error (RuntimeError "convert empty bytes to signed")),am',rqs) ==>
-  call_result_rel tops ret am tx es r es'
-Proof
-  simp[call_result_rel_def, unspecified_behaviour_exempt_def]
-QED
-
-Theorem empty_signed_conversion_exemption_exact:
-  unspecified_behaviour_exempt [] (RuntimeError "convert empty bytes to signed") /\
-  ~unspecified_behaviour_exempt [] (RuntimeError "convert BytesV int bound") /\
-  ~unspecified_behaviour_exempt [] (RuntimeError "convert BytesV decimal bound") /\
-  ~unspecified_behaviour_exempt [] (TypeError "convert empty bytes to signed")
-Proof
-  simp[unspecified_behaviour_exempt_def, occurs_abi_decode_target_def]
+  simp[call_result_rel_at_def]
 QED
 
 Theorem escaped_control_is_not_related:
   (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR BreakException,am',rqs) ==>
-     ~call_result_rel tops ret am tx es r es') /\
+     ~call_result_rel_at [] tops ret am tx es r es') /\
   (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR ContinueException,am',rqs) ==>
-     ~call_result_rel tops ret am tx es r es') /\
+     ~call_result_rel_at [] tops ret am tx es r es') /\
   (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR (ReturnException v),am',rqs) ==>
-     ~call_result_rel tops ret am tx es r es')
+     ~call_result_rel_at [] tops ret am tx es r es')
 Proof
-  simp[call_result_rel_def]
+  simp[call_result_rel_at_def]
 QED
 
 (* Boundary regressions must be kernel-closed, not inherited admissions. *)

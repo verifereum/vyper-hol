@@ -53,7 +53,8 @@
 Theory varsExt
 Ancestors
   list rich_list finite_map pred_set
-  venomExecSemantics venomState venomInst exprLoweringProps compileEnv
+  venomExecSemantics venomExecProofs venomState venomInst exprLoweringProps
+  compileEnv loweringStateRelDefs
   fragExec
 
 (* ===== More variables bound ===== *)
@@ -178,7 +179,17 @@ Theorem exec_read0_vars_ext:
       (exec_read0 f inst (s with vs_vars := V))
 Proof
   rpt strip_tac >> Cases_on `exec_read0 f inst s` >>
-  gvs[vars_ext_result_def, exec_read0_def, AllCaseEqs()] >>
+  gvs[vars_ext_result_def, exec_read0_def, exec_gas_def, AllCaseEqs()] >>
+  simp exec_simps
+QED
+
+Theorem exec_gas_vars_ext:
+  !inst s V.
+    s.vs_vars SUBMAP V ==>
+    vars_ext_result (exec_gas inst s) (exec_gas inst (s with vs_vars := V))
+Proof
+  rpt strip_tac >> Cases_on `exec_gas inst s` >>
+  gvs[vars_ext_result_def, exec_gas_def, AllCaseEqs()] >>
   simp exec_simps
 QED
 
@@ -207,6 +218,19 @@ Proof
 QED
 
 local
+(* SSTORE and TSTORE abort in a static frame once their operands evaluate;
+   the operands then evaluate in the extended state too. *)
+val static_write2_tac =
+  Cases_on `s.vs_call_ctx.cc_static` >> simp[] >-
+   (Cases_on `eval_operands inst.inst_operands s` >>
+    gvs[eval_operands_vars_ext] >-
+     (qmatch_goalsub_rename_tac `vars_ext_result (exec_write2 f _ _) _` >>
+      Cases_on `exec_write2 f inst s` >>
+      gvs[vars_ext_result_def, exec_write2_def, AllCaseEqs(),
+          eval_operands_def]) >>
+    asm_simp_tac (srw_ss()) ext_simps) >>
+  irule exec_write2_vars_ext >> asm_simp_tac (srw_ss()) ext_simps;
+
 (* Select one already-proved dispatch equation, keeping simplification local. *)
 fun vars_ext_opcode_eq opc =
   valOf (List.find
@@ -301,7 +325,7 @@ QED
 
 Theorem step_inst_base_context_vars_ext[local]:
   !inst s V.
-    MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; GAS; ORIGIN; GASPRICE;
+    MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE;
                          CHAINID] /\ s.vs_vars SUBMAP V ==>
     vars_ext_result (step_inst_base inst s)
       (step_inst_base inst (s with vs_vars := V))
@@ -354,14 +378,23 @@ Proof
   irule exec_read1_vars_ext >> asm_simp_tac (srw_ss()) ext_simps
 QED
 
-Theorem step_inst_base_store_vars_ext[local]:
+Theorem step_inst_base_MSTORE8_vars_ext[local]:
   !inst s V.
-    MEM inst.inst_opcode [MSTORE8; SSTORE; TSTORE] /\ s.vs_vars SUBMAP V ==>
+    inst.inst_opcode = MSTORE8 /\ s.vs_vars SUBMAP V ==>
     vars_ext_result (step_inst_base inst s)
       (step_inst_base inst (s with vs_vars := V))
 Proof
-  rw[MEM] >> vars_ext_dispatch_tac >>
+  rpt strip_tac >> vars_ext_dispatch_tac >>
   irule exec_write2_vars_ext >> asm_simp_tac (srw_ss()) ext_simps
+QED
+
+Theorem step_inst_base_store_vars_ext[local]:
+  !inst s V.
+    MEM inst.inst_opcode [SSTORE; TSTORE] /\ s.vs_vars SUBMAP V ==>
+    vars_ext_result (step_inst_base inst s)
+      (step_inst_base inst (s with vs_vars := V))
+Proof
+  rw[MEM] >> vars_ext_dispatch_tac >> static_write2_tac
 QED
 
 Theorem step_inst_base_MCOPY_vars_ext[local]:
@@ -433,7 +466,10 @@ Theorem step_inst_base_LOG_vars_ext[local]:
     vars_ext_result (step_inst_base inst s)
       (step_inst_base inst (s with vs_vars := V))
 Proof
-  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac
+  rpt strip_tac >> vars_ext_dispatch_tac >> ext_tac >>
+  imp_res_tac log_operands_defined >>
+  gvs[optionTheory.IS_SOME_EQ_NOT_NONE, eval_operands_vars_ext,
+      eval_operands_def, eval_operand_def]
 QED
 
 Theorem step_inst_base_ALLOCA_vars_ext[local]:
@@ -532,13 +568,13 @@ val vars_ext_opcode_facts =
    ([``MSTORE``], step_inst_base_MSTORE_vars_ext),
    ([``RETURNDATACOPY``], step_inst_base_RETURNDATACOPY_vars_ext),
    ([``ISZERO``, ``NOT``], step_inst_base_pure1_vars_ext),
-   ([``SUB``, ``MUL``, ``Div``, ``Mod``, ``SDIV``, ``SMOD``, ``Exp``, ``OFFSET``],
+   ([``SUB``, ``MUL``, ``venomInst$Div``, ``venomInst$Mod``, ``SDIV``, ``SMOD``, ``venomInst$Exp``, ``OFFSET``],
     step_inst_base_arith_vars_ext),
    ([``EQ``, ``LT``, ``GT``, ``SLT``, ``SGT``], step_inst_base_compare_vars_ext),
    ([``AND``, ``OR``, ``XOR``, ``SHL``, ``SHR``, ``SAR``, ``SIGNEXTEND``, ``BYTE``],
     step_inst_base_bitwise_vars_ext),
    ([``ADDMOD``, ``MULMOD``], step_inst_base_pure3_vars_ext),
-   ([``CALLER``, ``ADDRESS``, ``CALLVALUE``, ``GAS``, ``ORIGIN``, ``GASPRICE``,
+   ([``CALLER``, ``ADDRESS``, ``CALLVALUE``, ``ORIGIN``, ``GASPRICE``,
      ``CHAINID``], step_inst_base_context_vars_ext),
    ([``COINBASE``, ``TIMESTAMP``, ``NUMBER``, ``PREVRANDAO``, ``GASLIMIT``,
      ``BASEFEE``, ``BLOBBASEFEE``], step_inst_base_block_vars_ext),
@@ -548,7 +584,8 @@ val vars_ext_opcode_facts =
     step_inst_base_load_vars_ext),
    ([``BLOCKHASH``, ``BLOBHASH``, ``BALANCE``, ``EXTCODESIZE``, ``EXTCODEHASH``],
     step_inst_base_query_vars_ext),
-   ([``MSTORE8``, ``SSTORE``, ``TSTORE``], step_inst_base_store_vars_ext),
+   ([``MSTORE8``], step_inst_base_MSTORE8_vars_ext),
+   ([``SSTORE``, ``TSTORE``], step_inst_base_store_vars_ext),
    ([``MCOPY``], step_inst_base_MCOPY_vars_ext),
    ([``CALLDATACOPY``], step_inst_base_CALLDATACOPY_vars_ext),
    ([``CODECOPY``], step_inst_base_CODECOPY_vars_ext),
@@ -586,7 +623,10 @@ Theorem step_inst_base_vars_ext:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  fs[is_terminator_def, is_ext_call_op_def] >>
+  fs[is_terminator_def, is_ext_call_op_def]
+  >~ [`inst.inst_opcode = GAS`]
+  >- (asm_simp_tac bool_ss [vars_ext_opcode_eq ``GAS``] >>
+     irule exec_gas_vars_ext >> simp[]) >>
   vars_ext_apply_opcode_fact
 QED
 end

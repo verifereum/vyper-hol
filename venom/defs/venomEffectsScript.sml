@@ -114,8 +114,10 @@ Definition write_effects_def:
   write_effects CALL = all_effects DIFF {Eff_IMMUTABLES} /\
   write_effects DELEGATECALL = all_effects DIFF {Eff_IMMUTABLES} /\
   write_effects STATICCALL = {Eff_MEMORY; Eff_RETURNDATA} /\
-  write_effects CREATE = all_effects DIFF {Eff_MEMORY; Eff_IMMUTABLES} /\
-  write_effects CREATE2 = all_effects DIFF {Eff_MEMORY; Eff_IMMUTABLES} /\
+  (* CREATE/CREATE2: Eff_MEMORY is conservative (memory expansion), as for
+     CALL; not upstream, carried in lowering/defs/bytecode/vyper-pin.patch *)
+  write_effects CREATE = all_effects DIFF {Eff_IMMUTABLES} /\
+  write_effects CREATE2 = all_effects DIFF {Eff_IMMUTABLES} /\
   write_effects INVOKE = all_effects /\
   (* Logging *)
   write_effects LOG = {Eff_LOG} /\
@@ -192,9 +194,11 @@ End
 
 (* Failure class of a non-terminator opcode: what non-OK result types
    step_inst can produce (besides Error, which is structural).
-   - NoFail: only OK or Error (pure ops, reads, writes)
+   - NoFail: only OK or Error (pure ops, reads, memory writes)
    - CanRevert: can Abort with Revert_abort (ASSERT)
-   - CanExHalt: can Abort with ExHalt_abort (ASSERT_UNREACHABLE, RETURNDATACOPY, INVALID)
+   - CanExHalt: can Abort with ExHalt_abort (ASSERT_UNREACHABLE, RETURNDATACOPY,
+     INVALID; and the state writes SSTORE, TSTORE, LOG, SELFDESTRUCT, CREATE,
+     CREATE2 and value-carrying CALL, which abort in a static frame)
    - AnyFail: can Halt or Abort with any type (INVOKE — from callee)
    Note: effects_independent INVOKE INVOKE = F, so AnyFail never pairs with itself. *)
 Datatype:
@@ -208,6 +212,13 @@ Definition opcode_fail_class_def:
   opcode_fail_class CREATE = CanExHalt /\
   opcode_fail_class CREATE2 = CanExHalt /\
   opcode_fail_class INVALID = CanExHalt /\
+  opcode_fail_class SSTORE = CanExHalt /\
+  opcode_fail_class TSTORE = CanExHalt /\
+  opcode_fail_class LOG = CanExHalt /\
+  opcode_fail_class SELFDESTRUCT = CanExHalt /\
+  opcode_fail_class CREATE = CanExHalt /\
+  opcode_fail_class CREATE2 = CanExHalt /\
+  opcode_fail_class CALL = CanExHalt /\
   opcode_fail_class INVOKE = AnyFail /\
   opcode_fail_class _ = NoFail
 End

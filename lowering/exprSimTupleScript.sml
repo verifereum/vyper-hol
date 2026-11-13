@@ -31,7 +31,7 @@
  *   eval_expr_tuple_subscript, base_vv_holds_loc, base_vv_at_mem,
  *   tuple_elem_ptr, tuple_vv_at_elem, sub_layout_tuple_elem,
  *   immutable_holds_tuple_elem, tuple_slots_in_range_el,
- *   tuple_elem_slots_in_range, tuple_prefix_el_bound, dead_bytes_list_el,
+ *   tuple_elem_slots_in_range, tuple_prefix_el_bound,
  *   storage_range_agree_tuple_elem, tuple_vv_holds_elem, tuple_base_read,
  *   tuple_vv_post, lookup_scopes_popped_keys_indexed,
  *   tuple_memory_no_snapshot
@@ -50,18 +50,26 @@
 
 Theory exprSimTuple
 Ancestors
+  exprSimAttributeProps exprSimFieldLayout
+  exprSimSource
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
   loweringPosts
   list rich_list finite_map pair
-  fragExec exprSim exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
+  fragExec  exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
   exprSimAggregateLayout exprSimAttributeFields exprSimAttribute
   placeTypingProps
-  exprLowering exprLoweringProps compileEnv context
-  valueEncoding vyperAST vyperInterpreter vyperState vyperStorage vyperValue
+  exprLowering exprLoweringProps compileEnv loweringStateRelDefs context
+  valueEncoding valueEncodingDefs vyperAST vyperInterpreter vyperState vyperStorage vyperValue
   vyperValueOperation vyperTyping vyperTypeSystem vyperTypeExprSoundness
   vyperPlaceResultTyping valueEncodingProofs
   venomState venomInst
 Libs
   pairLib
+
+open gasContextTheory gasOutcomeTheory gasSummaryTheory gasSummaryComposeTheory
+     gasExemptCertTheory fragGasModeTheory fragGasPathTheory;
 
 (* ===== Lists ===== *)
 
@@ -104,6 +112,7 @@ End
 Theorem compile_expr_tuple_subscript[local]:
   !cenv ty ann obj idx tys st vv st'.
     compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
+    expr_type obj = TupleT tys /\
     place_type cenv obj = ValPT (TupleT tys) ==>
     ?bvv st1 p.
       compile_expr cenv ty obj st = (bvv, st1) /\
@@ -113,6 +122,9 @@ Theorem compile_expr_tuple_subscript[local]:
       vv = LocatedValue ann (mk_ptr p (vv_loc bvv))
 Proof
   rpt gen_tac >> strip_tac >>
+  `~copies_subscript_base cenv obj idx` by
+    simp[exprLoweringTheory.copies_subscript_base_def,
+         vyperSubscriptOverlapTheory.subscript_overlap_def] >>
   qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
        compile_subscript_def, compile_tuple_subscript_def, comp_bind_def,
@@ -318,7 +330,7 @@ Proof
       rename1 `evaluate_subscripts ptv h1 (DROP _ path)` >>
       Cases_on `evaluate_subscripts ptv h1 (DROP (LENGTH h0) path)` >> gvs[]
       >- (drule_all evaluate_subscripts_snoc_tuple >> simp[]) >>
-      drule evaluate_subscripts_append_err >> simp[]) >>
+      drule exprSimPopNestedLocalPathTheory.evaluate_subscripts_append_err >> simp[]) >>
   `~IS_PREFIX (path ++ [ValueSubscript (IntV (&k))]) h0` by
     (strip_tac >> gvs[GSYM SNOC_APPEND, isPREFIX_SNOC_EQ] >> metis_tac[]) >>
   simp[]
@@ -338,7 +350,7 @@ Proof
   strip_tac >> gvs[]
   >- (drule_all evaluate_subscripts_snoc_tuple >> simp[]) >>
   gvs[AllCaseEqs()] >>
-  drule evaluate_subscripts_append_err >> simp[] >> strip_tac >>
+  drule exprSimPopNestedLocalPathTheory.evaluate_subscripts_append_err >> simp[] >> strip_tac >>
   drule_all read_popped_snoc_tuple >> simp[]
 QED
 
@@ -469,7 +481,7 @@ Proof
     (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
      simp[expr_body_pre_def, Once well_typed_expr_def] >>
      rpt strip_tac >> gvs[] >>
-     drule type_place_expr_vtype_annotation >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
      Cases_on `vt` >> TRY (rename1 `Type t` >> Cases_on `t`) >>
      gvs[subscript_vtype_def, vtype_annotation_ok_def]) >>
   `?ity k. idx = Literal ity (IntL (&k)) /\ k < LENGTH tys /\ EL k tys = ann` by
@@ -480,7 +492,13 @@ Proof
   gvs[expr_body_pre_def, well_typed_expr_def,
       vyperTypeCallGraphTheory.int_calls_expr_def, byte_widths_expr_def,
       allocLimitsTheory.alloc_limits_expr_def,
-      supportedExprTraverseTheory.expr_has_evm_run_thm]
+      supportedExprTraverseTheory.expr_has_evm_run_thm] >>
+  rpt strip_tac >>
+  TRY (qpat_x_assum `~supported_expr_exists _ (Subscript _ _ _)` mp_tac >>
+       simp[supportedExprTraverseTheory.supported_expr_exists_def] >> NO_TAC) >>
+  qpat_x_assum `!target. supported_expr_exists _ (Subscript _ _ _) ==> _`
+    (qspec_then `target` irule) >>
+  simp[supportedExprTraverseTheory.supported_expr_exists_def]
 QED
 
 Theorem eval_expr_tuple_subscript[local]:
@@ -490,7 +508,18 @@ Theorem eval_expr_tuple_subscript[local]:
         select_result cx (expr_type obj) r (ValueSubscript (IntV (&k))) od)
       es
 Proof
-  rpt gen_tac >> simp[Once evaluate_def, bind_def] >>
+  rpt gen_tac >>
+  `~subscript_reads_base cx obj (Literal ity (IntL (&k)))` by
+    (`!vs. ~any_written vs []` by
+       (Induct >> simp[vyperSubscriptOverlapTheory.any_written_def]) >>
+     simp[vyperInterpreterTheory.subscript_reads_base_def,
+          vyperSubscriptOverlapTheory.subscript_overlap_def,
+          vyperSubscriptOverlapTheory.expr_accesses_def,
+          vyperSubscriptOverlapTheory.accesses_expr_def,
+          vyperSubscriptOverlapTheory.reached_functions_def,
+          vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    simp[th, Once evaluate_def, bind_def, return_def]) >>
   Cases_on `eval_expr cx obj es` >> rename1 `_ = (rr, es1)` >>
   Cases_on `rr` >> simp[] >>
   simp[Once evaluate_def, evaluate_literal_def, return_def, read_result_def]
@@ -515,7 +544,7 @@ Theorem base_vv_holds_loc[local]:
            read_storage_slot cx T w tvt es = (INL v, es) /\
            slots_in_range (get_storage cx es T) (w2n w) tvt /\
            storage_range_agree (get_storage cx es T) (contract_transient s) w tvt) /\
-        (vv_loc vv = LocCode ==> immutable_holds cenv cx t tv w es) /\
+        (vv_loc vv = LocCode ==> immutable_holds cenv cx t tv w es s) /\
         vv_loc vv <> LocCalldata
 Proof
   rpt gen_tac >> Cases_on `vv` >>
@@ -541,14 +570,16 @@ Theorem base_vv_at_mem[local]:
                               b + sz <= lb \/ lb + lsz <= b)) \/
      (?n b sz. local_region cenv es.scopes s n b sz /\
                b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
-               local_path_at cenv cx n (w2n w - b) tvt) \/
+               local_path_at cenv cx n (w2n w - b) tvt /\
+               local_place_at cenv cx n (w2n w - b) tvt tv) \/
      val_footprint tvt v = 0)
 Proof
   rpt gen_tac >> Cases_on `vv` >>
   simp[vv_at_def, vv_loc_def, vv_location_def, vv_operand_def,
        expr_val_at_def, local_val_at_def] >>
   rpt strip_tac >> gvs[] >>
-  TRY (first_x_assum drule_all >> strip_tac >> gvs[]) >> metis_tac[]
+  TRY (first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  gvs[local_place_at_def] >> metis_tac[]
 QED
 
 (* The element's pointer in memory: the element lies inside the base's
@@ -575,7 +606,8 @@ Theorem tuple_elem_ptr[local]:
                               b + sz <= lb \/ lb + lsz <= b)) \/
      (?n b sz. local_region cenv es1.scopes q n b sz /\
                b <= w2n w /\ w2n w + type_memory_size_list tvs <= b + sz /\
-               local_path_at cenv cx n (w2n w - b) (TupleTV tvs)) \/
+               local_path_at cenv cx n (w2n w - b) (TupleTV tvs) /\
+               local_place_at cenv cx n (w2n w - b) (TupleTV tvs) tv) \/
      type_memory_size_list tvs = 0)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -610,12 +642,20 @@ Theorem tuple_vv_at_elem[local]:
       SOME (w + n2w (tuple_offset cenv tys (vv_loc bvv) k)) /\
     OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
-    LENGTH vs = LENGTH tvs /\ k < LENGTH tvs ==>
+    LENGTH vs = LENGTH tvs /\ k < LENGTH tvs /\
+    (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+       ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) ==>
     vv_at cenv cx (EL k tys) sa sn es1 tv'
       (LocatedValue t (mk_ptr dst (vv_loc bvv))) q
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[vv_at_def, mk_ptr_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  simp[vv_at_def, mk_ptr_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `?p0. tv = PlaceR (MemoryPlace id p0)` by metis_tac[] >>
+      qpat_x_assum `vv_at _ _ (TupleT _) _ _ _ _ _ _` mp_tac >>
+      Cases_on `bvv` >>
+      gvs[vv_at_def, vv_loc_def, vv_location_def, is_word_type_def]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
   `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by
     (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>
      impl_tac >- (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
@@ -635,10 +675,13 @@ Proof
       `mem_step_offset (TupleTV tvs) (ValueSubscript (IntV &k)) =
        SOME (SUM (TAKE k (MAP type_memory_size tvs)), EL k tvs)` by
         simp[mem_step_offset_def, type_memory_size_list_sum, MAP_TAKE] >>
+      `local_place_at cenv cx n
+         (w2n w - b + SUM (TAKE k (MAP type_memory_size tvs))) (EL k tvs) tv'` by
+        (irule local_place_at_step >> metis_tac[]) >>
       drule_all local_path_at_step >>
       `w2n w - b + SUM (TAKE k (MAP type_memory_size tvs)) =
        w2n w + SUM (TAKE k (MAP type_memory_size tvs)) - b` by decide_tac >>
-      simp[local_path_at_val_at] >> decide_tac) >>
+      gvs[local_path_at_val_at] >> decide_tac) >>
   disj2_tac >> disj2_tac >> decide_tac
 QED
 
@@ -660,22 +703,30 @@ QED
 (* The element of a tuple an immutable's code pointer holds: the pointer
    plus the element's offset. *)
 Theorem immutable_holds_tuple_elem[local]:
-  !cenv cx tys tvs tv w es vs j tv'.
-    immutable_holds cenv cx (TupleT tys) tv w es /\
+  !cenv cx tys tvs tv w es s vs j tv'.
+    immutable_holds cenv cx (TupleT tys) tv w es s /\
     read_result cx tv es = (INL (ArrayV (TupleV vs)), es) /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     evaluate_type (get_tenv cx) (EL j tys) = SOME (EL j tvs) /\
     j < LENGTH tvs /\ read_result cx tv' es = (INL (EL j vs), es) ==>
     immutable_holds cenv cx (EL j tys) tv'
-      (w + n2w (SUM (TAKE j (MAP type_memory_size tvs)))) es
+      (w + n2w (SUM (TAKE j (MAP type_memory_size tvs)))) es s
 Proof
-  rw[immutable_holds_def] >> gvs[value_has_type_def] >>
+  rpt strip_tac >>
+  `value_has_type (TupleTV tvs) (ArrayV (TupleV vs))` by
+    (fs[immutable_holds_def] >> gvs[]) >>
+  gvs[value_has_type_def] >>
   `LENGTH vs = LENGTH tvs /\ value_has_type (EL j tvs) (EL j vs)` by
     metis_tac[values_have_types_el] >>
-  qexistsl [`name`, `off`, `itv`, `iv`,
-            `k + SUM (TAKE j (MAP type_memory_size tvs))`] >>
-  simp[wordsTheory.word_add_n2w] >>
-  irule sub_layout_tuple_elem >> simp[]
+  `sub_layout (TupleTV tvs) (ArrayV (TupleV vs))
+     (SUM (TAKE j (MAP type_memory_size tvs))) (EL j tvs) (EL j vs)` by
+    (qspecl_then [`TupleTV tvs`, `ArrayV (TupleV vs)`, `0`, `tvs`, `vs`, `j`]
+       mp_tac sub_layout_tuple_elem >>
+     simp[sub_layout_def]) >>
+  irule immutable_holds_sub >>
+  qexistsl [`EL j tvs`, `EL j vs`, `TupleTV tvs`, `ArrayV (TupleV vs)`,
+            `TupleT tys`, `tv`] >>
+  simp[]
 QED
 
 (* ===== A tuple element's slots in storage ===== *)
@@ -726,22 +777,6 @@ Proof
   simp[vyperValueTheory.type_slot_size_def]
 QED
 
-Theorem dead_bytes_list_el[local]:
-  !tvs k st base j b.
-    dead_bytes_list st base tvs j b /\ k < LENGTH tvs /\
-    base + tuple_prefix_slot_size k tvs <= j /\
-    j < base + tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) ==>
-    dead_bytes st (base + tuple_prefix_slot_size k tvs) (EL k tvs) j b
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `dead_bytes_list _ _ _ _ _` mp_tac >>
-  simp[Once dead_bytes_def] >> strip_tac >>
-  Cases_on `k` >> gvs[tuple_prefix_slot_size_def] >>
-  imp_res_tac (cj 1 accountsRelPropsTheory.dead_bytes_range) >>
-  imp_res_tac (cj 2 accountsRelPropsTheory.dead_bytes_range) >> gvs[] >>
-  first_x_assum drule >> disch_then (qspec_then `n` mp_tac) >>
-  impl_tac >- decide_tac >> rewrite_tac[arithmeticTheory.ADD_ASSOC]
-QED
 
 (* A tuple element of a value whose slots agree has its slots agree. *)
 Theorem storage_range_agree_tuple_elem[local]:
@@ -771,7 +806,37 @@ Proof
   `dead_bytes_list st (w2n w) tvs (w2n k) b` by
     (qpat_x_assum `dead_bytes _ _ (TupleTV _) _ _` mp_tac >>
      simp[Once dead_bytes_def]) >>
-  drule dead_bytes_list_el >>
+  drule accountsRelPropsTheory.dead_bytes_list_el >>
+  disch_then (qspec_then `i` mp_tac) >> simp[]
+QED
+
+(* A tuple element of a value read live is read live. *)
+Theorem storage_read_live_tuple_elem[local]:
+  !cx tr st w tvs i.
+    storage_read_live cx tr st w (TupleTV tvs) /\ i < LENGTH tvs ==>
+    storage_read_live cx tr st (w + n2w (tuple_prefix_slot_size i tvs))
+      (EL i tvs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule tuple_prefix_el_bound >> strip_tac >>
+  Cases_on `type_slot_size (EL i tvs) = 0`
+  >- (simp[storage_read_live_def] >>
+      rpt strip_tac >>
+      qspec_then `w + n2w (tuple_prefix_slot_size i tvs)` mp_tac
+        wordsTheory.w2n_lt >>
+      decide_tac) >>
+  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_read_live_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  `w2n w + tuple_prefix_slot_size i tvs < dimword (:256)` by decide_tac >>
+  `w2n (w + n2w (tuple_prefix_slot_size i tvs)) =
+   w2n w + tuple_prefix_slot_size i tvs` by
+    (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
+  simp[] >> strip_tac >>
+  `dead_bytes_list st (w2n w) tvs j b` by
+    (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >>
+     simp[Once dead_bytes_def]) >>
+  drule accountsRelPropsTheory.dead_bytes_list_el >>
   disch_then (qspec_then `i` mp_tac) >> simp[]
 QED
 
@@ -832,6 +897,7 @@ QED
 Theorem tuple_base_read[local]:
   !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs ctx.
     vv_post ctx func cenv cx obj es sa sb s0 es1 btv bvv s /\
+    post_value_type cenv obj = TupleT tys /\
     expr_type obj = TupleT tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     eval_operand (vv_operand bvv) s = SOME w /\
@@ -843,9 +909,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   `?v. read_result cx btv es1 = (INL v, es1)` by
     (gvs[vv_post_def] >>
-     qspecl_then [`cenv`, `cx`, `TupleT tys`, `btv`, `bvv`, `es1`, `s`,
-                  `TupleTV tvs`, `w`] mp_tac base_vv_holds_loc >>
-     simp[is_word_type_def] >> metis_tac[]) >>
+     `~is_word_type (TupleT tys)` by simp[is_word_type_def] >>
+     drule_all base_vv_holds_loc >> simp[is_word_type_def] >>
+     metis_tac[]) >>
   `value_has_type (TupleTV tvs) v` by metis_tac[] >>
   Cases_on `v` >> gvs[value_has_type_def] >>
   rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def] >>
@@ -856,6 +922,7 @@ QED
 Theorem tuple_vv_post[local]:
   !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv' ctx.
     vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    post_value_type cenv obj = TupleT tys /\
     expr_sim_inv cenv cx env es /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
@@ -866,7 +933,9 @@ Theorem tuple_vv_post[local]:
     k < LENGTH tvs /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     values_have_types tvs vs /\
-    read_result cx tv' es1 = (INL (EL k vs), es1) ==>
+    read_result cx tv' es1 = (INL (EL k vs), es1) /\
+    (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+       ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) ==>
     vv_post ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q
 Proof
@@ -874,12 +943,36 @@ Proof
   qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   rewrite_tac[vv_post_def] >> gvs[vyperASTTheory.expr_type_def] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (strip_tac >>
+       qpat_x_assum `~expr_has_effect obj ==> pure_frame _ _ _ _ _ _` irule >>
+       first_assum ACCEPT_TAC >> NO_TAC)
   >- (irule tuple_vv_holds_elem >> simp[] >> metis_tac[]) >>
-  qspecl_then [`func`, `cenv`, `cx`, `env`, `es`, `sa`, `sn`, `es1`, `tv`,
-               `bvv`, `q`, `w`, `dst`, `tys`, `tvs`, `vs`, `k`, `tv'`,
-               `EL k tys`, `ctx`] mp_tac tuple_vv_at_elem >>
-  imp_res_tac values_have_types_length >> simp[]
+  `vv_at cenv cx (EL k tys) sa sn es1 tv'
+     (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q` by
+    (qspecl_then [`func`, `cenv`, `cx`, `env`, `es`, `sa`, `sn`, `es1`, `tv`,
+                  `bvv`, `q`, `w`, `dst`, `tys`, `tvs`, `vs`, `k`, `tv'`,
+                  `EL k tys`, `ctx`] mp_tac tuple_vv_at_elem >>
+     imp_res_tac values_have_types_length >> simp[]) >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `~expr_has_effect obj ==> vv_storage_live _ _ _ _` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
+  `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by
+    (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>
+     impl_tac >- (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+     simp[]) >>
+  Cases_on `bvv` >>
+  gvs[mk_ptr_def, vv_loc_def, contextTheory.vv_location_def,
+      contextTheory.vv_operand_def] >>
+  rename1 `LocatedValue t p` >>
+  `t = TupleT tys` by
+    (qpat_x_assum `vv_holds _ _ _ _ (LocatedValue _ _) _ _` mp_tac >>
+     simp[vv_holds_def, is_bytestring_type_def] >> rpt strip_tac >>
+     simp[]) >>
+  `tuple_offset cenv tys p.ptr_location k = tuple_prefix_slot_size k tvs` by
+    (irule tuple_offset_slots >> simp[] >> metis_tac[]) >>
+  gvs[] >> irule storage_read_live_tuple_elem >> simp[] >>
+  first_x_assum irule >> simp[]
 QED
 
 (* ===== The simulation ===== *)
@@ -943,63 +1036,250 @@ Proof
   drule_all tuple_memory_no_snapshot >> metis_tac[]
 QED
 
+(* The element's selection reads no gas observation. *)
+Theorem tuple_select_gas_obs[local]:
+  !cx ty tv i ee r.
+    select_result cx ty tv (ValueSubscript (IntV i)) ee = (r, ee) ==>
+    !tail. select_result cx ty tv (ValueSubscript (IntV i))
+             (ee with gas_obs := tail) = (r, ee with gas_obs := tail)
+Proof
+  rpt gen_tac >> Cases_on `tv`
+  >~ [`Value v`]
+  >- (simp[select_result_def, bind_def, lift_option_type_def, lift_sum_def,
+           return_def, raise_def] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]))
+  >~ [`HashMapRef tr slot kt vt`]
+  >- (Cases_on `vt` >>
+      simp[select_result_def, extend_place_def, bind_def,
+           lift_option_type_def, return_def, raise_def, LET_THM] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
+  rename1 `PlaceR pl` >> Cases_on `pl`
+  >~ [`StoragePlace tr slot ptv`]
+  >- (Cases_on `ptv` >> TRY (Cases_on `b`) >> Cases_on `tr` >>
+      simp[select_result_def, extend_place_def, extend_storage_place_def,
+           resolve_array_element_def, vyperStoragePlaceProvenanceTheory.resolve_array_element_empty, check_def,
+           assert_def, ignore_bind_def, get_storage_backend_def,
+           get_accounts_def, get_transient_storage_def, bind_def,
+           lift_option_type_def, return_def, raise_def, pairTheory.UNCURRY,
+           LET_THM, vfmTypesTheory.option_CASE_rator, COND_RATOR, COND_RAND]
+      >>~- ([`oEL (Num i) l`],
+            Cases_on `0 <= i /\ Num i < LENGTH l` >> simp[] >>
+            Cases_on `oEL (Num i) l` >> simp[]) >>
+      rpt (BasicProvers.TOP_CASE_TAC >> simp[COND_RAND]) >> gvs[])
+  >~ [`MemoryPlace id path`]
+  >- (simp[select_result_def, extend_place_def, place_type_value_def,
+           read_place_def, get_scopes_def, bind_def, ignore_bind_def,
+           lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
+      rpt strip_tac >> gvs[]) >>
+  simp[select_result_def, extend_place_def, place_type_value_def,
+       read_place_def, get_immutables_def, get_address_immutables_def,
+       bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem tuple_source[local]:
+  !cx ann obj ity k.
+    eval_expr cx (Subscript ann obj (Literal ity (IntL (&k)))) =
+    bind (eval_expr cx obj)
+      (\r. select_result cx (expr_type obj) r (ValueSubscript (IntV (&k))))
+Proof
+  simp[FUN_EQ_THM, eval_expr_tuple_subscript]
+QED
+
+Theorem tuple_operand_admissible[local]:
+  !cenv cx env e es.
+    expr_body_pre cenv cx env e es ==>
+    gas_admissible (eval_expr cx e) expr_vv_res_ok es
+Proof
+  rpt strip_tac >> simp[gas_admissible_def] >> rpt strip_tac >>
+  `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+  metis_tac[expr_body_pre_vv_res_ok]
+QED
+
+Theorem tuple_exempt_cert[local]:
+  !memory tops p cx ann obj ity k start marks out endpoint.
+    gas_exempt_cert memory tops p (ignore_bind (eval_expr cx obj) (return ()))
+      start marks out endpoint ==>
+    gas_exempt_cert memory tops p
+      (ignore_bind (eval_expr cx (Subscript ann obj (Literal ity (IntL (&k)))))
+        (return ()))
+      start marks out endpoint
+Proof
+  rpt strip_tac >> simp[tuple_source] >>
+  PairCases_on `p` >> PairCases_on `start` >>
+  PairCases_on `out` >> PairCases_on `endpoint` >>
+  qmatch_goalsub_abbrev_tac `bind (eval_expr cx obj) sel` >>
+  `ignore_bind (bind (eval_expr cx obj) sel) (return ()) =
+   bind (eval_expr cx obj) (\r. ignore_bind (sel r) (return ()))` by
+    (simp[FUN_EQ_THM, ignore_bind_def, bind_def] >> gen_tac >>
+     Cases_on `eval_expr cx obj x` >> Cases_on `q` >> simp[]) >>
+  pop_assum SUBST1_TAC >> irule gas_exempt_cert_error_result >> simp[]
+QED
+
+(* The source facts at the base's actual end state. *)
+Theorem tuple_base_facts[local]:
+  !cenv cx env obj ity k es0 tys btv es1.
+    expr_body_pre cenv cx env
+      (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es0 /\
+    expr_body_pre cenv cx env obj es0 /\ expr_type obj = TupleT tys /\
+    eval_expr cx obj es0 = (INL btv, es1) ==>
+    ?tvs.
+      evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+      OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
+      LENGTH tvs = LENGTH tys /\
+      (!v. read_result cx btv es1 = (INL v, es1) ==>
+           value_has_type (TupleTV tvs) v) /\
+      ~popped_at_elem btv k es1 /\
+      !res es2.
+        select_result cx (TupleT tys) btv (ValueSubscript (IntV (&k))) es1 =
+          (res, es2) ==> !m. res <> INR (Error (TypeError m))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
+  drule evaluate_tuple_type >> strip_tac >> gvs[] >>
+  conj_tac >- (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+  conj_tac
+  >- (drule_all tuple_popped_clash_unreachable >>
+      simp[tuple_popped_clash_def, literal_int_index_def] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `eval_expr cx (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es0 =
+     (res, es2)` by simp[eval_expr_tuple_subscript, bind_def] >>
+  qspecl_then [`cenv`, `cx`, `env`,
+               `Subscript (EL k tys) obj (Literal ity (IntL (&k)))`, `es0`,
+               `res`, `es2`] mp_tac expr_body_pre_vv_res_ok >>
+  simp[expr_vv_res_ok_def]
+QED
+
+(* A completed base execution: the ADD's path and the element's post. *)
+Theorem tuple_summary_ok[local]:
+  !ctx func cenv cx env ty obj ity k es tys sa sm p sb bvv s0 marks btv fe
+   t R.
+    expr_body_pre cenv cx env
+      (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es /\
+    expr_body_pre cenv cx env obj es /\ expr_type obj = TupleT tys /\
+    post_value_type cenv obj = TupleT tys /\
+    k < LENGTH tys /\
+    compile_expr cenv ty obj sa = (bvv, sm) /\ local_ptrs_reserved cenv sa /\
+    sa.cs_next_var <= sm.cs_next_var /\
+    emit_op ADD [vv_operand bvv;
+                 Lit (n2w (tuple_offset cenv tys (vv_loc bvv) k))]
+      sm = (p, sb) /\
+    fn_has_code sm sb func /\
+    gas_marked_exec F (ctx,func) (eval_expr cx obj) (es,s0) marks
+      (INL btv) fe (OK t) /\
+    vv_post ctx func cenv cx obj es sa sm s0 (fe with gas_obs := []) btv bvv t /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    gas_summary_at F (ctx,func) marks
+      (eval_expr cx (Subscript (EL k tys) obj (Literal ity (IntL (&k)))))
+      (es,s0)
+      (\res ee t. ?tv. res = INL tv /\
+         vv_post ctx func cenv cx
+           (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es sa sb s0
+           ee tv (LocatedValue (EL k tys) (mk_ptr p (vv_loc bvv))) t /\
+         t.vs_current_bb = sb.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sb.cs_current_insts) R
+Proof
+  rpt strip_tac >>
+  `eval_expr cx obj (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL btv, fe with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `~t.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  mp_tac (Q.SPECL [`cenv`,`cx`,`env`,`obj`,`ity`,`k`,
+            `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+            `tys`,`btv`,`fe with gas_obs := []`] tuple_base_facts) >>
+  simp[] >> strip_tac >>
+  drule_all attr_add_path >> strip_tac >>
+  rename1 `gas_path ctx func t 0 (OK t1)` >>
+  qspecl_then [`func`,`cenv`,`cx`,`obj`,`es`,`sa`,`sb`,`s0`,
+               `fe with gas_obs := []`,`btv`,`bvv`,`t1`,`w`,`tys`,`tvs`,
+               `ctx`] mp_tac tuple_base_read >>
+  simp[] >> strip_tac >>
+  Cases_on `select_result cx (TupleT tys) btv (ValueSubscript (IntV (&k)))
+              (fe with gas_obs := [])` >>
+  rename1 `_ = (sres, es2)` >>
+  `!m. sres <> INR (Error (TypeError m))` by metis_tac[] >>
+  qspecl_then [`cx`,`TupleT tys`,`btv`,`k`,`fe with gas_obs := []`,`vs`,
+               `sres`,`es2`] mp_tac select_tuple_read >>
+  simp[] >> strip_tac >> gvs[] >>
+  rename1 `select_result _ _ _ _ _ = (INL tv2, _)` >>
+  drule tuple_select_gas_obs >> simp[] >> strip_tac >>
+  simp[gas_summary_at_def] >>
+  qexistsl_tac [`INL tv2`, `fe`, `OK t1`] >> simp[] >> conj_tac
+  >- (rewrite_tac[tuple_source] >>
+      irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
+               |> REWRITE_RULE [APPEND_NIL]) >>
+      qexistsl_tac [`fe`,`t`,`btv`] >> simp[] >>
+      simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def]) >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  qpat_assum `select_result _ _ _ _ _ = (INL tv2, _)`
+    (assume_tac o MATCH_MP select_result_memory_place) >>
+  disj1_tac >> irule tuple_vv_post >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`btv`, `vs`] >> simp[]
+QED
+
+Theorem tuple_vv_sim[local]:
+  !ctx func cenv cx env ty obj ity k es tys.
+    expr_body_pre cenv cx env
+      (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es /\
+    expr_body_pre cenv cx env obj es /\ expr_type obj = TupleT tys /\
+    post_value_type cenv obj = expr_type obj /\
+    place_type cenv obj = ValPT (TupleT tys) /\ k < LENGTH tys /\
+    expr_vv_sim ctx func cenv cx ty obj es ==>
+    expr_vv_sim ctx func cenv cx ty
+      (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
+  drule_all compile_expr_tuple_subscript >> strip_tac >>
+  gvs[literal_int_index_def] >>
+  rename1 `compile_expr cenv ty obj sa = (bvv, sm)` >>
+  drule attr_extends >> strip_tac >>
+  drule compile_expr_extends >> strip_tac >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `gas_admissible (eval_expr cx obj) expr_vv_res_ok es` by
+    metis_tac[tuple_operand_admissible] >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _`
+    (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
+  disch_then (qspecl_then [`sa`,`sm`,`bvv`,`s0`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >> gvs[]
+      >- (drule_all tuple_summary_ok >> simp[]) >>
+      Cases_on `res` >> gvs[] >>
+      rename1 `gas_marked_exec _ _ _ _ marks (INR exn) fe fr` >>
+      simp[gas_summary_at_def] >>
+      qexistsl_tac [`INR exn`,`fe`,`fr`] >> simp[] >>
+      rewrite_tac[tuple_source] >> irule gas_marked_exec_bind_exception >>
+      simp[]) >>
+  qexists_tac `marks` >> disj2_tac >> metis_tac[tuple_exempt_cert]
+QED
+
 Theorem compile_subscript_tuple_sim:
   !nocalls ctx func cenv cx ann obj idx tys.
     expr_vv_case nocalls ctx func cenv cx obj /\ expr_type obj = TupleT tys /\
-    place_type cenv obj = ValPT (TupleT tys) ==>
+    place_type cenv obj = ValPT (TupleT tys) /\
+    (~nocalls ==> post_value_type cenv obj = expr_type obj) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rpt gen_tac >> strip_tac >> simp[expr_vv_case_def] >>
   rpt gen_tac >> strip_tac >>
-  `~tuple_popped_clash cx obj idx es` by
-    (drule_all tuple_popped_clash_unreachable >> simp[]) >>
+  `post_value_type cenv obj = expr_type obj` by
+    (Cases_on `nocalls` >> fs[vyperTypeCallGraphTheory.int_calls_expr_def] >>
+     metis_tac[exprSimHypsTheory.post_value_type_no_calls]) >>
   drule_all tuple_pre_base >> strip_tac >> gvs[] >>
   `expr_vv_sim ctx func cenv cx ty obj es` by
     (qpat_x_assum `expr_vv_case _ _ _ _ _ obj` mp_tac >>
      simp[expr_vv_case_def] >> disch_then irule >> simp[] >>
      qexists_tac `env` >> simp[]) >>
-  `literal_int_index (Literal ity (IntL (&k))) = k` by
-    simp[literal_int_index_def] >>
-  simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
-  drule_all compile_expr_tuple_subscript >> strip_tac >> gvs[] >>
-  rename1 `compile_expr cenv ty obj sa = (bvv, sm)` >>
-  drule attr_extends >> strip_tac >>
-  drule compile_expr_extends >> strip_tac >>
-  drule_all fn_has_code_split >> strip_tac >>
-  gvs[eval_expr_tuple_subscript, bind_def] >>
-  Cases_on `eval_expr cx obj es` >> rename1 `_ = (er, es1)` >>
-  `expr_vv_res_ok er` by (drule_all expr_body_pre_vv_res_ok >> simp[]) >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _` mp_tac >>
-  simp[expr_vv_sim_def] >>
-  disch_then drule_all >> disch_then (qspec_then `s0` assume_tac) >>
-  Cases_on `er` >> gvs[]
-  >- (rename1 `eval_expr cx obj es = (INL btv, es1)` >>
-      drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
-      drule evaluate_tuple_type >> strip_tac >> gvs[] >>
-      `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-      `~popped_at_elem btv k es1` by
-        (fs[tuple_popped_clash_def] >> metis_tac[]) >>
-      `!m. res <> INR (Error (TypeError m))` by
-        (rpt strip_tac >> gvs[expr_vv_res_ok_def]) >>
-      `LENGTH tvs = LENGTH tys` by
-        (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
-      irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post ctx func cenv cx obj es sa sm s0 es1 btv bvv s`,
-                    `sm`] >>
-      simp[] >> conj_tac
-      >- (irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]) >>
-      qmatch_asmsub_abbrev_tac `emit_op ADD [_; Lit (n2w off)] sm = _` >>
-      drule_all attr_add_frag >>
-      disch_then (qspecl_then [`ctx`, `func`, `cx`, `es`, `s0`, `es1`, `btv`,
-                               `expr_exit res`] assume_tac) >>
-      irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
-      rpt strip_tac >>
-      drule_all tuple_base_read >> strip_tac >>
-      drule select_tuple_read >>
-      disch_then (drule_at (Pat `select_result _ _ _ _ _ = _`)) >>
-      simp[] >> strip_tac >> gvs[] >>
-      irule tuple_vv_post >> simp[Abbr `off`] >>
-      conj_tac >- metis_tac[] >>
-      qexistsl [`btv`, `vs`] >> simp[]) >>
-  irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]
+  irule tuple_vv_sim >> simp[] >> metis_tac[]
 QED

@@ -2,7 +2,7 @@
    the sequence theorem proves execution, freshness and operand preservation. *)
 Theory abiDecoderClamp
 Ancestors
-  abiDecoderUnsignedClamp abiDecoderGuards abiDecoderContract abiEncoder
+  abiDecoderRange abiDecoderUnsignedClamp abiDecoderGuards abiDecoderContract abiEncoder
   emitHelperProps exprLoweringProps compileEnv emitHelper valueEncoding
   venomExecSemantics venomState venomInst words arithmetic rich_list list
 
@@ -17,7 +17,7 @@ Definition abi_decoder_clamp_valid_def:
   abi_decoder_clamp_valid BoolClamp w = (w2n w < 2)
 End
 
-Theorem abi_clamp_emit_SIGNEXTEND[local]:
+Theorem abi_clamp_emit_SIGNEXTEND:
   emit_op SIGNEXTEND [op1;op2] st = (v,st') /\
   eval_operand op1 s = SOME w1 /\ eval_operand op2 s = SOME w2 /\
   fresh_vars_wrt st s ==>
@@ -69,7 +69,7 @@ Proof
   qexists_tac `s2` >> simp[] >> metis_tac[]
 QED
 
-Theorem abi_clamp_emit_SHL[local]:
+Theorem abi_clamp_emit_SHL:
   emit_op SHL [op1;op2] st = (v,st') /\
   eval_operand op1 s = SOME w1 /\ eval_operand op2 s = SOME w2 /\
   fresh_vars_wrt st s ==>

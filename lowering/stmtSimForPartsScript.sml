@@ -16,9 +16,9 @@
 
 Theory stmtSimForParts
 Ancestors
-  stmtSim
+  stmtSimProps
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice
+  fragExec localPtrsProps  loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperEvalPreservesScopes
@@ -36,7 +36,7 @@ Theorem eval_iterator_range:
     eval_expr cx e1 es = (INL (Value (IntV n1)), es) /\
     eval_expr cx e2 es = (INL (Value (IntV n2)), es) /\ n1 <= n2 ==>
     eval_iterator cx (Range e1 e2) es =
-    (INL (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))), es)
+    (INL (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))), es)
 Proof
   rpt strip_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, LET_THM, return_def] >>
@@ -53,7 +53,7 @@ Theorem eval_iterator_range_lit:
   !cx a1 n1 a2 n2 es.
     n1 <= n2 ==>
     eval_iterator cx (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) es =
-    (INL (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))), es)
+    (INL (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))), es)
 Proof
   rpt strip_tac >> irule eval_iterator_range >> simp[eval_expr_int_lit]
 QED
@@ -67,7 +67,7 @@ Theorem eval_stmt_for_range:
     eval_expr cx e2 es = (INL (Value (IntV n2)), es) /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\ n1 <= n2 /\
     Num (n2 - n1) <= bound ==>
-    eval_for cx tyv id body (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))
+    eval_for cx tyv id body (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)))
       es = (res, es')
 Proof
   rpt gen_tac >> strip_tac >>
@@ -85,7 +85,7 @@ Theorem eval_stmt_for_range_lit:
          bound stmts) es = (res, es') /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\ n1 <= n2 /\
     Num (n2 - n1) <= bound ==>
-    eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))
+    eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)))
       es = (res, es')
 Proof
   rpt strip_tac >>
@@ -100,7 +100,7 @@ QED
    values, a break ends the loop, any other exception leaves it. *)
 Theorem eval_for_cons_cases:
   !cx tyv nm stmts v vs es res es'.
-    eval_for cx tyv nm stmts (v::vs) es = (res, es') /\
+    eval_for cx tyv nm stmts (Value v::vs) es = (res, es') /\
     lookup_scopes nm es.scopes = NONE ==>
     ?r2 es2 sc rest.
       eval_stmts cx stmts
@@ -119,7 +119,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, push_scope_with_var_def,
-       finally_def, try_def, return_def] >>
+       finally_def, try_def, return_def, read_result_def] >>
   `!x. x with scopes updated_by
          CONS (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v; popped := [] |>)) =
        x with scopes :=
@@ -428,6 +428,7 @@ Theorem compile_for_range_parts:
       sb0.cs_current_insts =
         [mk_inst (st.cs_next_id + 7) MSTORE [Var p; Var cv] []] /\
       sb0.cs_next_var = st.cs_next_var + 4 /\ cs_extends st sb0 /\
+      st.cs_next_id <= sb0.cs_next_id /\
       compile_stmts bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = ((), sb1) /\
       fn_has_code sb0 sb1 func /\
       lookup_block st.cs_current_bb func.fn_blocks =
@@ -530,6 +531,7 @@ Proof
   >- simp[Abbr `sb0`]
   >- simp[Abbr `sb0`]
   >- first_assum ACCEPT_TAC
+  >- simp[Abbr `sb0`]
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
   >- (qpat_assum `!l b. MEM b _ /\ _ ==> _` irule >>
@@ -594,6 +596,7 @@ Theorem compile_for_range_lit_parts:
       sb0.cs_current_insts =
         [mk_inst (st.cs_next_id + 7) MSTORE [Var p; Var cv] []] /\
       sb0.cs_next_var = st.cs_next_var + 4 /\ cs_extends st sb0 /\
+      st.cs_next_id <= sb0.cs_next_id /\
       compile_stmts bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = ((), sb1) /\
       fn_has_code sb0 sb1 func /\
       lookup_block st.cs_current_bb func.fn_blocks =

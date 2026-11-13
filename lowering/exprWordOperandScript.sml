@@ -304,6 +304,8 @@ Proof
         compile_var_array_membership_safe_operand]) >>
   IF_CASES_TAC
   >- (strip_tac >>
+      Cases_on `bytestring_literal_hash (HD args)` >>
+      Cases_on `bytestring_literal_hash (HD (TL args))` >> gvs[] >>
       rpt (pairarg_tac >> gvs[]) >>
       Cases_on `bop = Eq` >> gvs[] >>
       rpt (pairarg_tac >> gvs[]) >>
@@ -701,3 +703,22 @@ Proof
   disch_then (qspec_then `env` mp_tac) >>
   simp[] >> metis_tac[unwrap_value_safe_operand]
 QED
+
+Theorem lower_value_word_shape:
+  !cenv env ty e sa op sb.
+    lower_value compile_expr cenv ty e sa = (op, sb) /\
+    well_typed_expr env e /\
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+            well_formed_type env.type_defs t) /\
+    is_word_type (expr_type e) ==>
+    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id /\
+    (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule (cj 2 exprLoweringPropsTheory.compile_expr_grows) >> strip_tac >>
+  drule lower_value_word_safe_operand >>
+  disch_then (qspec_then `env` mp_tac) >>
+  disch_then drule_all >> simp[exprSafeOperandTheory.safe_operand_def]
+QED
+

@@ -1,5 +1,6 @@
 Theory convertScalarDecimalFrag
 Ancestors
+  exprUnopStraight
   convertScalarDecimalRun convertScalarProps exprSimUnop exprSimConvert
   exprLowering compileEnv valueEncoding vyperValue vyperValueOperation
   vyperDecimalBounds integer integer_word words arithmeticProps intExtension
@@ -28,7 +29,7 @@ Proof
   rpt strip_tac >> drule_all (SRULE[decimal_scale_def] scalar_int_to_decimal_abort) >> simp[]
 QED
 
-Theorem scalar_decimal_word_bounds[local]:
+Theorem scalar_decimal_word_bounds:
   w2i (i2w (-&(2 ** 167)):bytes32) = -&(2 ** 167) /\
   w2i (i2w (&(2 ** 167 - 1)):bytes32) = &(2 ** 167 - 1)
 Proof
@@ -37,7 +38,7 @@ Proof
   irule w2i_i2w_pow2_sub1 >> simp[]
 QED
 
-Theorem scalar_int_decimal_mk_op[local]:
+Theorem scalar_int_decimal_mk_op:
   mk_convert_op (BaseT (if sg then IntT bits else UintT bits)) (BaseT DecimalT) =
   ConvIntToDecimal sg bits 10000000000 (-&(2 ** 167)) (&(2 ** 167)-1)
 Proof
@@ -130,7 +131,7 @@ Proof
   qexistsl_tac [`&(2 ** bits)-1`, `i`, `0`, `op`, `x`] >> simp[]
 QED
 
-Theorem scalar_decimal_signed_mk_op[local]:
+Theorem scalar_decimal_signed_mk_op:
   0 < bits /\ bits <= 256 ==>
   mk_convert_op (BaseT DecimalT) (BaseT (IntT bits)) =
   ConvDecimalToInt 10000000000 (-&(2 ** 167)) (&(2 ** 167)-1)
@@ -161,7 +162,7 @@ Proof
   irule (SRULE[] scalar_decimal_signed_frag) >> gvs[]
 QED
 
-Theorem scalar_decimal_unsigned_mk_op[local]:
+Theorem scalar_decimal_unsigned_mk_op:
   0 < bits /\ bits < 256 ==>
   mk_convert_op (BaseT DecimalT) (BaseT (UintT bits)) =
   ConvDecimalToInt 10000000000 (-&(2 ** 167)) (&(2 ** 167)-1)
@@ -188,7 +189,7 @@ Proof
   irule (SRULE[] scalar_decimal_unsigned_frag) >> gvs[]
 QED
 
-Theorem scalar_decimal_uint256_upper[local]:
+Theorem scalar_decimal_uint256_upper:
   within_int_bound decimal_bound i ==>
   i <= (&(2 ** 167)-1) * decimal_scale /\
   i <= (&(2 ** 256)-1) * decimal_scale

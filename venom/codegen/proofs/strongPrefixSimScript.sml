@@ -120,6 +120,7 @@ Theorem pop_k_concrete[local]:
           st'.as_outcomes = st.as_outcomes /\
           st'.as_requests = st.as_requests /\
           st'.as_pending_deletions = st.as_pending_deletions /\
+          st'.as_gas_readings = st.as_gas_readings /\
           st'.as_call_ctx = st.as_call_ctx /\
           st'.as_tx_ctx = st.as_tx_ctx /\
           st'.as_block_ctx = st.as_block_ctx /\
@@ -173,7 +174,7 @@ QED
 
 val dim256 = fcpLib.INDEX_CONV ``dimindex(:256)``;
 
-Theorem push_encode_roundtrip[local]:
+Theorem push_encode_roundtrip:
   word_of_bytes F (0w:bytes32)
     (REVERSE (encode_num_bytes (w2n (v:bytes32)))) = v
 Proof
@@ -201,7 +202,7 @@ QED
    Single-step asm_steps helper
    ========================================================================= *)
 
-Theorem LUPDATE_commutes[local]:
+Theorem LUPDATE_commutes:
   !a b i j (l:'a list). i <> j ==>
     LUPDATE a i (LUPDATE b j l) = LUPDATE b j (LUPDATE a i l)
 Proof
@@ -228,6 +229,7 @@ Theorem asm_single_step_rel[local]:
           st'.as_outcomes = st.as_outcomes /\
           st'.as_requests = st.as_requests /\
           st'.as_pending_deletions = st.as_pending_deletions /\
+          st'.as_gas_readings = st.as_gas_readings /\
           st'.as_call_ctx = st.as_call_ctx /\
           st'.as_tx_ctx = st.as_tx_ctx /\
           st'.as_block_ctx = st.as_block_ctx /\
@@ -498,7 +500,7 @@ Proof
 QED
 
 (* The length of ps_stack after apply_simple_op matches stack_op_wf's SND *)
-Theorem apply_simple_op_length[local]:
+Theorem apply_simple_op_length:
   !lo op ps.
     is_simple_stack_op op ==>
     LENGTH (apply_simple_op lo op ps).ps_stack =

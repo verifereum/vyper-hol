@@ -2,9 +2,55 @@
 
 Theory contextCodegenRelProps
 Ancestors
-  contextCodegenRel planSpillBounds codegenRel
+  contextCodegenRel planSpillBounds codegenRel memLocDefs venomWf venomState words
+  venomInst
+
+Theorem lookup_instruction_active:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst ==>
+  active_inst fn inst s
+Proof
+  simp[active_inst_def, get_instruction_def] >>
+  qspec_tac (`fn.fn_blocks`, `bbs`) >>
+  Induct >> simp[lookup_block_def, listTheory.FIND_thm] >>
+  rw[] >> gvs[]
+  >- (qexists_tac `bb` >> simp[]) >>
+  fs[lookup_block_def] >> metis_tac[]
+QED
 
 (* ===== Visited-instruction invariant interface ===== *)
+
+(* The analysis access descriptor denotes an actual byte range once the
+   well-formed instruction's operands have all been evaluated. *)
+Theorem source_memory_access_ranges:
+  !inst s vals ops off len size_op.
+    inst_wf inst /\ eval_operands inst.inst_operands s = SOME vals /\
+    ops.iao_max_size = SOME size_op /\
+    eval_operand ops.iao_ofst s = SOME off /\
+    eval_operand size_op s = SOME len ==>
+    (mem_read_ops inst = SOME ops ==>
+       MEM (w2n off,w2n len) (source_memory_read_ranges inst s)) /\
+    (mem_write_ops inst = SOME ops ==>
+       MEM (w2n off,w2n len) (source_memory_write_ranges inst s))
+Proof
+  rpt strip_tac >>
+  gvs[mem_read_ops_def, mem_write_ops_def, AllCaseEqs()] >>
+  gvs[source_memory_read_ranges_def, source_memory_write_ranges_def,
+      memory_range_of_operands_def, fixed_source_write_range_def,
+      sized_source_write_range_def, eval_operands_def, eval_operand_def,
+      wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``,
+      AllCaseEqs()] >>
+  gvs[inst_wf_def, eval_operands_def, eval_operand_def, AllCaseEqs()] >>
+  `IS_SOME (eval_operands (DROP 2 (REVERSE rest)) s)` by
+    (irule (iffRL eval_operands_IS_SOME_EVERY) >>
+     irule rich_listTheory.EVERY_DROP >>
+     simp[rich_listTheory.EVERY_REVERSE] >>
+     simp[GSYM eval_operands_IS_SOME_EVERY]) >>
+  Cases_on `REVERSE rest` >> gvs[] >>
+  rename1 `REVERSE rest = h::t` >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `eval_operands (DROP 2 (REVERSE rest)) s` >> gvs[]
+QED
 
 Theorem fn_entry_inv_active:
   fn_entry_inv Inv ctx fn s /\ enters_block fn s s1 /\
@@ -136,6 +182,45 @@ Proof
   qexists `r` >> simp[]
 QED
 
+(* The local allocator may grow within its context-owned region.  Every
+   source read still avoids the whole local spill interval. *)
+Theorem context_source_memory_reads_disjoint_local:
+  !cp inst vs r alloc.
+    source_memory_reads_disjoint cp inst vs /\
+    MEM r cp.cp_regions /\
+    r.sr_spill_base <= alloc.sa_spill_base /\
+    alloc.sa_next_offset <= r.sr_spill_end ==>
+    !i. source_memory_read_byte inst vs i ==>
+        ~(alloc.sa_spill_base <= i /\ i < alloc.sa_next_offset)
+Proof
+  rpt strip_tac >>
+  fs[source_memory_reads_disjoint_def, source_memory_read_byte_def,
+     listTheory.EVERY_MEM] >>
+  rename1 `byte_in_memory_range rng i` >> PairCases_on `rng` >>
+  fs[byte_in_memory_range_def] >>
+  first_x_assum drule >> simp[] >>
+  qexists_tac `r` >> simp[]
+QED
+
+Theorem codegen_memory_obligations_local_reads:
+  codegen_memory_obligations Inv ctx cp /\
+  Inv ctx fn inst vs /\ MEM fn ctx.ctx_functions /\
+  MEM inst (fn_insts fn) /\ ~in_revert_forward fn vs /\
+  MEM r cp.cp_regions /\
+  r.sr_spill_base <= alloc.sa_spill_base /\
+  alloc.sa_next_offset <= r.sr_spill_end ==>
+  !i. source_memory_read_byte inst vs i ==>
+      ~(alloc.sa_spill_base <= i /\ i < alloc.sa_next_offset)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `source_memory_reads_disjoint cp inst vs` by
+    (fs[codegen_memory_obligations_def] >> metis_tac[]) >>
+  mp_tac (Q.ISPECL [`cp:context_plan`,`inst:instruction`,`vs:venom_state`,
+    `r:spill_region`,`alloc:spill_alloc`]
+    context_source_memory_reads_disjoint_local) >>
+  (impl_tac >- asm_rewrite_tac []) >> simp[]
+QED
+
 Theorem local_memory_rel_context:
   MEM r cp.cp_regions /\
   memory_rel
@@ -258,4 +343,109 @@ Proof
      source_memory_writes_disjoint_def, listTheory.EVERY_MEM] >>
   first_x_assum drule >>
   PairCases_on `e` >> simp[] >> metis_tac[]
+QED
+
+(* Backwards traversal of ASSIGN copies; instruction lists are latest first. *)
+Theorem resolve_block_assigns_nonvar[simp]:
+  (!xs w. resolve_block_assigns xs (Lit w) = Lit w) /\
+  (!xs l. resolve_block_assigns xs (Label l) = Label l)
+Proof
+  conj_tac >> Cases >> simp[resolve_block_assigns_def]
+QED
+
+Theorem step_back_assign_no_write:
+  (case op of Var v => ~MEM v inst.inst_outputs | _ => T) ==>
+  step_back_assign inst op = SOME op
+Proof
+  Cases_on `op` >> simp[step_back_assign_def]
+QED
+
+Theorem resolve_block_assigns_no_write:
+  EVERY (\a. case op of Var v => ~MEM v a.inst_outputs | _ => T) xs ==>
+  resolve_block_assigns xs op = op
+Proof
+  Cases_on `op` >> Induct_on `xs` >> simp[resolve_block_assigns_def]
+QED
+
+Theorem step_back_assign_copy:
+  inst.inst_opcode = ASSIGN /\ inst.inst_outputs = [v] /\
+  inst.inst_operands = [src] ==>
+  step_back_assign inst op = SOME (if op = Var v then src else op)
+Proof
+  Cases_on `op` >> simp[step_back_assign_def] >> metis_tac[]
+QED
+
+Theorem resolve_block_assigns_copy_cons:
+  inst.inst_opcode = ASSIGN /\ inst.inst_outputs = [v] /\
+  inst.inst_operands = [src] ==>
+  resolve_block_assigns (inst::xs) op =
+    resolve_block_assigns xs (if op = Var v then src else op)
+Proof
+  Cases_on `op` >> simp[resolve_block_assigns_def] >> metis_tac[]
+QED
+
+Theorem resolve_block_assigns_copy_append:
+  EVERY (\a. a.inst_opcode = ASSIGN /\ LENGTH a.inst_outputs = 1 /\
+              LENGTH a.inst_operands = 1) xs ==>
+  resolve_block_assigns (xs ++ ys) op =
+    resolve_block_assigns ys (resolve_block_assigns xs op)
+Proof
+  qid_spec_tac `op` >> Induct_on `xs`
+  >- simp[resolve_block_assigns_def]
+  >> simp[] >> rpt strip_tac
+  >> gvs[listTheory.LENGTH_EQ_NUM_compute]
+  >> drule_all resolve_block_assigns_copy_cons
+  >> disch_then (fn th => rewrite_tac[th])
+  >> simp[]
+QED
+
+Theorem same_after_assigns_refl[simp]:
+  same_after_assigns xs op op
+Proof
+  Cases_on `xs` >> simp[same_after_assigns_def]
+QED
+
+Theorem same_after_assigns_copy_prefix:
+  EVERY (\a. a.inst_opcode = ASSIGN /\ LENGTH a.inst_outputs = 1 /\
+              LENGTH a.inst_operands = 1) xs /\
+  same_after_assigns ys (resolve_block_assigns xs p)
+                        (resolve_block_assigns xs q) ==>
+  same_after_assigns (xs ++ ys) p q
+Proof
+  map_every qid_spec_tac [`q`,`p`] >> Induct_on `xs`
+  >- simp[resolve_block_assigns_def]
+  >> rpt gen_tac >> strip_tac
+  >> gvs[listTheory.LENGTH_EQ_NUM_compute]
+  >> Cases_on `p = q` >- simp[]
+  >> drule_all step_back_assign_copy
+  >> disch_then (fn th => simp[same_after_assigns_def, th])
+  >> first_x_assum irule
+  >> drule_all resolve_block_assigns_copy_cons
+  >> disch_then (fn th => gvs[th])
+QED
+
+Theorem step_back_assign_preserves_vars:
+  (!v. op = Var v ==> v IN P) /\
+  (!v. MEM (Var v) inst.inst_operands ==> v IN P) /\
+  step_back_assign inst op = SOME op' ==>
+  (!v. op' = Var v ==> v IN P)
+Proof
+  Cases_on `op` >> simp[step_back_assign_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute] >> metis_tac[listTheory.MEM]
+QED
+
+Theorem resolve_block_assigns_preserves_vars:
+  !xs op P.
+  (!v. op = Var v ==> v IN P) /\
+  EVERY (\inst. !v. MEM (Var v) inst.inst_operands ==> v IN P) xs ==>
+  (!v. resolve_block_assigns xs op = Var v ==> v IN P)
+Proof
+  Induct >> simp[resolve_block_assigns_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `op` >> simp[Once resolve_block_assigns_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute]
+  >- (rename1 `h.inst_operands = [operand]` >>
+      first_x_assum (qspecl_then [`operand`, `P`] mp_tac) >> simp[]) >>
+  first_x_assum (qspecl_then [`Var s`, `P`] mp_tac) >> simp[]
 QED

@@ -35,6 +35,7 @@
  *                          case form (as expr_vv_case: nocalls = T for
  *                          compile_expr_sim, F for the body simulation)
  *   target_name_case       — a local: its pointer, no code
+ *   toplevel_target_env    — a module variable's compile env entries
  *   target_toplevel_case   — a storage or transient variable or a mapping:
  *                          its slot, no code
  * The steps (fields, subscripts) and the induction over targets are in
@@ -46,10 +47,13 @@
 
 Theory targetPlaceSim
 Ancestors
+  exprSimFieldLayout
+  targetPlaceSimDefs
+  exprSimHypsDefs placeTypingProps
   loweringPosts
   list rich_list finite_map pair
-  fragExec exprSim exprSimHyps exprSimAttributeFields
-  exprLowering exprLoweringProps compileEnv
+  fragExec  exprSimHyps exprSimAttributeFields
+  exprLowering exprLoweringProps compileEnv loweringStateRelDefs
   valueEncoding vyperAST vyperInterpreter vyperState vyperValue
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants vyperPlaceResultTyping
   venomState venomInst
@@ -60,29 +64,10 @@ Libs
 
 (* The source results the judgment speaks of: a place or a mapping, an
    error other than a type error, or an assertion. *)
-Definition target_res_ok_def:
-  target_res_ok (res : eval_result + exception) <=>
-    (?pv. res = INL pv) \/ (?m. res = INR (Error (RuntimeError m))) \/
-    (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
-End
 
 (* The judgment: the target's fragment of bt, typed vt, run from a state
    related at es, reaches its end in target_post on a place, and exits as
    expr_exit allows on an error. *)
-Definition target_sim_def:
-  target_sim ctx func cenv cx env bt es <=>
-    !vt sa sb r res es' s0.
-      type_place_target env bt = SOME vt /\
-      compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
-      eval_base_place cx bt es = (res, es') /\ target_res_ok res /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-        (\s. ?pv. res = INL pv /\
-                  target_post ctx func cenv cx es sa sb s0 es' pv vt r s)
-        (expr_exit res)
-End
 
 (* ===== Premises ===== *)
 
@@ -110,6 +95,17 @@ Definition target_root_def:
   target_root (SubscriptTarget t e) = target_root t
 End
 
+(* The type checker's access root of a place (vyperTypeSystem) is its root. *)
+Theorem place_access_root:
+  !tgt attrs. FST (place_access tgt attrs) = target_root tgt
+Proof
+  `(!e:expr. T) /\
+   !tgt attrs. FST (place_access tgt attrs) = target_root tgt`
+    suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[vyperTypeSystemTheory.place_access_def, target_root_def]
+QED
+
 (* The target is inside an immutable or a constant: a module name with no
    storage declaration. *)
 Definition immutable_root_def:
@@ -120,21 +116,22 @@ Definition immutable_root_def:
 End
 
 (* Every index of the target meets expr_body_pre wherever expr_sim_inv
-   holds: the static part of expr_body_pre. *)
+   holds, the static part of expr_body_pre, and no subscript of it is a
+   rejected overlap (target_subscript_overlap). *)
 Definition target_indices_pre_def:
   target_indices_pre cenv cx env (NameTarget id) = T /\
   target_indices_pre cenv cx env (TopLevelNameTarget nsid) = T /\
   target_indices_pre cenv cx env (AttributeTarget t fld) =
     target_indices_pre cenv cx env t /\
   target_indices_pre cenv cx env (SubscriptTarget t e) =
-    (target_indices_pre cenv cx env t /\
+    (target_indices_pre cenv cx env t /\ ~target_subscript_overlap cenv t e /\
      !es. expr_sim_inv cenv cx env es ==> expr_body_pre cenv cx env e es)
 End
 
 Definition target_pre_def:
   target_pre cenv cx env bt es <=>
-    expr_sim_inv cenv cx env es /\ target_env_ok cenv cx /\
-    ~immutable_root cx bt /\ target_indices_pre cenv cx env bt
+    expr_sim_inv cenv cx env es /\ ~immutable_root cx bt /\
+    target_indices_pre cenv cx env bt
 End
 
 (* The shared case form, as expr_vv_case: target_sim at every state meeting
@@ -220,18 +217,24 @@ Proof
   simp[Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   drule_all expr_sim_inv_local >> strip_tac >>
   `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
-  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
-       type_check_def, assert_def, return_def] >>
-  strip_tac >> gvs[] >>
   qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` mp_tac >>
   simp[compile_get_target_ptr_def, comp_return_def] >> strip_tac >> gvs[] >>
-  irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
-  irule target_post_refl >> simp[value_type_place_def] >>
-  `?b. lookup_var p s = SOME b` by
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+    (drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
+     simp[NoAsms]) >>
+  simp[gasOutcomeTheory.gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >> qexists_tac `[]` >> disj1_tac >>
+  qexistsl_tac [`INL (PlaceR (MemoryPlace id []))`, `es`, `OK s0`] >>
+  conj_tac
+  >- simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def, fragGasPathTheory.gas_path_rules,
+          Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+          type_check_def, assert_def, return_def] >>
+  simp[exit_result_def] >>
+  `?b. lookup_var p s0 = SOME b` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      metis_tac[]) >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+  simp[target_post_def, value_type_place_def] >>
   simp[eval_operand_def, place_ptr_rel_def, mem_path_offset_def,
        place_readable_def, read_place_def, bind_def, get_scopes_def,
        lift_option_type_def, return_def, lift_sum_def, read_memory_path_def,
@@ -287,6 +290,39 @@ Proof
   gvs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]
 QED
 
+(* A typed module variable target has its compile environment entries: a
+   storage or transient variable is not a mapping and has its declared
+   type, a mapping its declared key and value types (expr_sim_inv's
+   storage clause and place_map_tables_agree_on_defined). *)
+Theorem toplevel_target_env:
+  !cenv cx env es src id vt ts d id_str.
+    expr_sim_inv cenv cx env es /\
+    type_place_target env (TopLevelNameTarget (src,id)) = SOME vt /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (d, id_str) ==>
+    (!tr typ. d = StorageVarDecl tr typ ==>
+              cenv.ce_hashmap_info (src,id) = NONE /\
+              cenv.ce_module_var_type (src,id) = SOME typ) /\
+    (!tr kt vt'. d = HashMapVarDecl tr kt vt' ==>
+                 ?tr'. cenv.ce_hashmap_info (src,id) = SOME (tr',kt,vt'))
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> gvs[expr_sim_inv_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  `!ts'. get_module_code cx src = SOME ts' ==>
+         find_var_decl_by_name id ts' <> NONE` by gvs[] >>
+  drule_all toplevel_target_decl >> strip_tac >> gvs[] >>
+  `FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt')` by
+    metis_tac[type_place_target_global_lookup] >>
+  `place_map_tables_agree_on_defined cenv env` by fs[expr_sim_inv_def] >>
+  qpat_x_assum `place_map_tables_agree_on_defined _ _` mp_tac >>
+  simp[place_map_tables_agree_on_defined_def] >>
+  disch_then drule >>
+  Cases_on `cenv.ce_hashmap_info (src,id)` >> simp[] >>
+  PairCases_on `x` >> simp[]
+QED
+
 (* A storage, transient or mapping variable: its slot, no code. *)
 Theorem target_toplevel_case:
   !nocalls ctx func cenv cx nsid.
@@ -304,48 +340,64 @@ Proof
 QED
 
 Resume target_toplevel_case[storage]:
-  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
-       return_def, LET_THM] >>
-  strip_tac >> gvs[] >>
   `cenv.ce_hashmap_info (src,id) = NONE /\
    cenv.ce_module_var_type (src,id) = SOME ty` by
-    (fs[target_env_ok_def] >> metis_tac[]) >>
+    metis_tac[toplevel_target_env] >>
   reverse (Cases_on `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx`)
-  >- (simp[frag_exec_def] >> rpt strip_tac >>
-      gvs[stmt_state_rel_def, state_rel_def]) >>
+  >- gvs[stmt_state_rel_def, state_rel_def] >>
   qspecl_then [`cenv`, `cx`, `src`, `id`, `ts`, `StorageVarDecl tr ty`,
                `id_str`, `tr`, `slot`] mp_tac toplevel_decl_ce_vars >>
   simp[var_decl_transient_def] >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+    (drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
+     simp[NoAsms]) >>
+  simp[gasOutcomeTheory.gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  qexistsl_tac [`INL (PlaceR (StoragePlace tr (n2w slot) tv))`, `es`, `OK s0`] >>
+  conj_tac
+  >- (`!gs. eval_base_place cx (TopLevelNameTarget (src,id)) (es with gas_obs := gs) =
+            (INL (PlaceR (StoragePlace tr (n2w slot) tv)), es with gas_obs := gs)` by
+        (gen_tac >> asm_simp_tac (srw_ss()) [Once evaluate_def, lookup_global_def,
+           bind_def, lift_option_type_def, return_def, LET_THM]) >>
+      simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
+           fragGasPathTheory.gas_path_rules]) >>
   qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` mp_tac >>
   Cases_on `tr` >>
   simp[compile_get_target_ptr_def, comp_return_def, LET_THM] >>
   strip_tac >> gvs[] >>
-  irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
-  irule target_post_refl >>
+  simp[exit_result_def, target_post_def] >>
   simp[eval_operand_def, place_ptr_rel_def, slot_loc_def,
        value_type_place_def, place_readable_def]
 QED
 
 Resume target_toplevel_case[mapping]:
-  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
-       return_def, LET_THM] >>
-  strip_tac >> gvs[] >>
   `?tr'. cenv.ce_hashmap_info (src,id) = SOME (tr',kt,vt')` by
-    (fs[target_env_ok_def] >> metis_tac[]) >>
+    metis_tac[toplevel_target_env] >>
   reverse (Cases_on `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx`)
-  >- (simp[frag_exec_def] >> rpt strip_tac >>
-      gvs[stmt_state_rel_def, state_rel_def]) >>
+  >- gvs[stmt_state_rel_def, state_rel_def] >>
   qspecl_then [`cenv`, `cx`, `src`, `id`, `ts`, `HashMapVarDecl tr kt vt'`,
                `id_str`, `tr`, `slot`] mp_tac toplevel_decl_ce_vars >>
   simp[var_decl_transient_def] >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+    (drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
+     simp[NoAsms]) >>
+  simp[gasOutcomeTheory.gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  qexistsl_tac [`INL (HashMapRef tr (n2w slot) kt vt')`, `es`, `OK s0`] >>
+  conj_tac
+  >- (`!gs. eval_base_place cx (TopLevelNameTarget (src,id)) (es with gas_obs := gs) =
+            (INL (HashMapRef tr (n2w slot) kt vt'), es with gas_obs := gs)` by
+        (gen_tac >> asm_simp_tac (srw_ss()) [Once evaluate_def, lookup_global_def,
+           bind_def, lift_option_type_def, return_def, LET_THM]) >>
+      simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
+           fragGasPathTheory.gas_path_rules]) >>
   qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` mp_tac >>
   Cases_on `tr` >>
   simp[compile_get_target_ptr_def, comp_return_def, LET_THM] >>
   strip_tac >> gvs[] >>
-  irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
-  irule target_post_refl >>
+  simp[exit_result_def, target_post_def] >>
   simp[eval_operand_def, place_ptr_rel_def, slot_loc_def,
        value_type_place_def, place_readable_def]
 QED

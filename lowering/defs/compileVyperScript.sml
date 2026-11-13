@@ -21,7 +21,7 @@ Theory compileVyper
 Ancestors
   allocLimits exprLowering
   vyperCompiler
-  venomPipeline
+  venomPipelineDriver
   codegen
   selectorDispatch
   jumptableUtils
@@ -30,6 +30,8 @@ Ancestors
   valueEncoding
   compileEnv
   vyperAST
+  vyperABIEntries
+  vyperGetter constSubst
   byte
 
 
@@ -89,6 +91,17 @@ Definition build_struct_fields_map_def:
     | _ => build_struct_fields_map tenv rest sft
 End
 
+(* Compatibility helper for metadata proofs over pre-existing field lists.
+   The builder above now resolves sizes directly against the complete tenv. *)
+Definition resolve_struct_field_sizes_def:
+  resolve_struct_field_sizes tenv fields =
+    MAP (\(name,ty,old_size).
+      (name,ty,case evaluate_type tenv ty of
+        SOME tv => type_memory_size tv | NONE => old_size)) fields
+End
+
+(* Resolve field sizes against the complete environment while building the
+   map, including references to structs declared later in the module. *)
 Definition make_struct_fields_map_def:
   make_struct_fields_map tops =
     build_struct_fields_map (type_env tops) tops FEMPTY
@@ -264,18 +277,6 @@ Proof
        build_event_info_empty_lookup_event_metadata_in]
 QED
 
-(* ===== Nonreentrant Keys ===== *)
-
-Definition assign_nkeys_def:
-  assign_nkeys ([] : toplevel list) (next : num) = (K 0n : string -> num) ∧
-  assign_nkeys (top :: rest) next =
-    case top of
-      FunctionDecl _ _ T _ fname _ _ _ _ =>
-        let nkey_map = assign_nkeys rest (next + 1) in
-        (λn. if n = fname then next else nkey_map n)
-    | _ => assign_nkeys rest next
-End
-
 (* ===== Function Classification ===== *)
 
 (* Classify functions into external, internal, fallback, and constructor.
@@ -305,8 +306,47 @@ Definition classify_function_def:
   classify_function _ acc = acc
 End
 
+Definition public_getter_def:
+  public_getter (VariableDecl (Public nr) mut id typ slot) =
+    (let ne = TopLevelName typ (NONE, id) in
+     if ~is_ArrayT typ then
+       SOME (View, nr, F, id, [], [], typ, [Return (SOME ne)])
+     else
+       let (gm, gn, args, dflts, ret, body) =
+         getter nr ne (BaseT (UintT 256)) (Type (ArrayT_type typ)) in
+       SOME (gm, gn, F, id, args, dflts, ret, body)) /\
+  public_getter (HashMapDecl (Public nr) tr id kt vt slot) =
+    (let (gm, gn, args, dflts, ret, body) =
+       getter nr (TopLevelName NoneT (NONE, id)) kt vt in
+     SOME (gm, gn, F, id, args, dflts, ret, body)) /\
+  public_getter _ = NONE
+End
+
+Definition public_getters_def:
+  public_getters [] = [] /\
+  public_getters (t :: ts) =
+    (case public_getter t of NONE => [] | SOME g => [g]) ++
+    public_getters ts
+End
+
+Theorem MEM_public_getters:
+  !tops g. MEM g (public_getters tops) <=>
+    ?top. MEM top tops /\ public_getter top = SOME g
+Proof
+  Induct >> simp[public_getters_def] >>
+  gen_tac >> Cases_on `public_getter h` >>
+  simp[RIGHT_AND_OVER_OR, EXISTS_OR_THM] >> metis_tac[]
+QED
+
 Definition classify_functions_def:
-  classify_functions tops = FOLDR classify_function ([], [], NONE, NONE) tops
+  classify_functions tops =
+    let env = module_consts_env tops [] in
+    let (exts, ints, fb, ctor) =
+      FOLDR classify_function ([], [], NONE, NONE) tops in
+    (MAP (subst_consts_fn env) (exts ++ public_getters tops),
+     MAP (subst_consts_fn env) ints,
+     OPTION_MAP (subst_consts_fn env) fb,
+     OPTION_MAP (subst_consts_fn env) ctor)
 End
 
 (* ===== Memory Allocation ===== *)
@@ -506,6 +546,18 @@ Definition build_func_return_type_def:
     | _ => rest_map
 End
 
+(* Internal-call mutability used by delayed operand snapshots. *)
+Definition build_func_mutability_def:
+  build_func_mutability ([] : toplevel list) = (K Nonpayable) ∧
+  build_func_mutability (top :: rest) =
+    let rest_map = build_func_mutability rest in
+    case top of
+      FunctionDecl vis mut _ _ fname _ _ _ _ =>
+        if vis = External then rest_map
+        else (λs. if s = fname then mut else rest_map s)
+    | _ => rest_map
+End
+
 (* Function ids for internal labels (internal_fn_label): a function's
    position among the source's function declarations, counting from n, and
    the first non-external declaration of a name wins, as in
@@ -638,6 +690,7 @@ Definition build_compile_env_def:
        ce_module_var_type := var_type_map;
        ce_hashmap_info := hashmap_info;
        ce_event_info := event_info;
+       ce_error_info := (λname. lookup_custom_error_args_in name tops);
        ce_type_env := tenv;
        ce_returns_count := rc;
        ce_return_buf := ret_buf;
@@ -653,7 +706,9 @@ Definition build_compile_env_def:
        ce_func_info := func_info;
        ce_func_param_types := build_func_param_types tops;
        ce_func_return_type := build_func_return_type tops;
+       ce_func_mutability := build_func_mutability tops;
        ce_func_ids := build_func_ids 0 tops;
+       ce_modules := [(NONE, tops)];
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
        (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
        ce_raw_return := F;
@@ -675,6 +730,16 @@ Theorem build_compile_env_ce_struct_fields:
   !tops vis mut func_name args ret_type (body : stmt list) use_trans.
     (build_compile_env tops vis mut func_name args ret_type body use_trans).
       ce_struct_fields = make_struct_fields_map tops
+Proof
+  rpt strip_tac
+  >> simp[build_compile_env_def]
+  >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_compile_env_ce_modules:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops vis mut func_name args ret_type body use_trans).
+      ce_modules = [(NONE, tops)]
 Proof
   rpt strip_tac
   >> simp[build_compile_env_def]
@@ -1089,11 +1154,15 @@ End
    internal call in new_temporary_value's, those of its defaults and its
    body (alloc_limits_stmts), and its return type's, which a caller stages
    for an internal call's result in new_temporary_value.  The compile env
-   only supplies struct sizes, which every function's has the same. *)
+   only supplies struct sizes, which every function's has the same.
+   The parameters' ABI encoding is also bounded below 2 ** 128 bytes, so a
+   constructor's appended arguments keep the deployment code within half a
+   word. *)
 Definition fn_allocs_ok_def:
   fn_allocs_ok tops (mut, nr, rr, fname, fargs, dflts, ret, body) ⇔
     let cenv = build_compile_env tops Internal mut fname fargs ret body F in
     EVERY (λ(_,ty). type_memory_bytes cenv ty < 2 ** 64) fargs ∧
+    abi_size_bound cenv.ce_struct_fields (TupleT (MAP SND fargs)) < 2 ** 128 ∧
     alloc_limits_exprs cenv dflts ∧ alloc_limits_stmts cenv body ∧
     type_memory_bytes cenv ret < 2 ** 64
 End
@@ -1206,9 +1275,20 @@ Definition package_fallback_fn_def:
     let nkey = nkey_map fname in
     let is_payable = (mut = Payable) in
     let is_view = (mut = View) in
-    SOME (cenv, is_payable, nr, nkey, use_trans, is_view,
+    let cenv_final = update_cenv_nonreentrant cenv nr nkey use_trans is_view in
+    SOME (cenv_final, is_payable, nr, nkey, use_trans, is_view,
           body, if ret = NoneT then NONE else SOME ret)
 End
+
+Theorem package_fallback_guard_info:
+  package_fallback_fn tops use_trans nkey_map
+    (SOME (mut,nr,rr,fname,fargs,dflts,ret,stmts)) =
+    SOME (cenv,payable,guarded,key,trans,view,compiled_stmts,ret_type) ==>
+  cenv.ce_nonreentrant = (guarded,key,trans,view)
+Proof
+  simp[package_fallback_fn_def, update_cenv_nonreentrant_def] >>
+  rpt strip_tac >> gvs[]
+QED
 
 (* ===== Constructor Packaging ===== *)
 
@@ -1394,6 +1474,63 @@ Proof
 QED
 
 
+(* Group labels use a separator that cannot occur in a Vyper identifier.
+   In particular f's common body must not alias an ordinary f_common. *)
+Definition external_prefix_label_def:
+  external_prefix_label fname (k:num) = "fn_" ++ fname ++ "$entry$" ++ toString k
+End
+
+Definition external_common_label_def:
+  external_common_label fname = "fn_" ++ fname ++ "$common"
+End
+
+Definition package_external_group_def:
+  package_external_group tops target use_trans nkey_map
+    (mut, nr, rr, fname, fargs, dflts, ret, body) =
+    let package = set_external_package_target target
+          (package_external_fn tops use_trans nkey_map
+            (mut, nr, rr, fname, fargs, dflts, ret, body)) in
+    if NULL dflts then
+      ExternalSingle (compute_selector (type_env tops) fname (MAP SND fargs))
+                     package
+    else
+      let (lbl, cenv, pos_args, min_cds, payable, nonreentrant,
+           nkey, trans, view, stmts, ret_type) = package in
+      let npos = LENGTH fargs - LENGTH dflts in
+      let positional = TAKE npos fargs in
+      let specs = MAP (\((name,ty),default_e). (name,ty,default_e))
+                      (ZIP (DROP npos fargs,dflts)) in
+      let entries = MAP (\(prefix,k).
+          let (sel,unused,tz) =
+            compute_selector (type_env tops) fname (MAP SND prefix) in
+          (sel,external_prefix_label fname k,
+           min_calldata_size cenv prefix 0,k)) (abi_entries fargs dflts) in
+      ExternalDefaults
+        <| ec_env := cenv;
+           ec_pos_args := build_positional_args cenv positional;
+           ec_common_label := external_common_label fname;
+           ec_nonreentrant := nonreentrant; ec_nkey := nkey;
+           ec_transient := trans; ec_view := view; ec_payable := payable;
+           ec_body := stmts; ec_return := ret_type |>
+        entries specs (min_calldata_size cenv positional 0)
+End
+
+Definition external_has_defaults_def:
+  external_has_defaults (mut,nr,rr,fname,fargs,dflts,ret,body) = ~NULL dflts
+End
+
+Theorem package_external_group_no_defaults:
+  !tops target use_trans nkeys mut nr rr fname fargs ret body.
+  package_external_group tops target use_trans nkeys
+    (mut,nr,rr,fname,fargs,[],ret,body) =
+  ExternalSingle (compute_selector (type_env tops) fname (MAP SND fargs))
+    (set_external_package_target target
+      (package_external_fn tops use_trans nkeys
+        (mut,nr,rr,fname,fargs,([]:expr list),ret,body)))
+Proof
+  rpt gen_tac >> simp[package_external_group_def] >> REFL_TAC
+QED
+
 (* ===== Policy-driven complete-unit lowering ===== *)
 
 (* Package runtime metadata from source, but keep the raw lowering result atomic.
@@ -1403,8 +1540,8 @@ Definition lower_vyper_runtime_unit_def:
   lower_vyper_runtime_unit (tops : toplevel list)
                            (rpolicy : resolved_compiler_policy) =
     let tenv = type_env tops in
-    let nkey_map = assign_nkeys tops 0 in
-    let use_trans = F in
+    let nkey_map = (K global_nonreentrant_slot : string -> num) in
+    let use_trans = T in
     let (ext_fns, int_fns, fb_fn, ctor_fn) = classify_functions tops in
     let selectors = build_selectors tenv ext_fns in
     let external_fns =
@@ -1417,14 +1554,65 @@ Definition lower_vyper_runtime_unit_def:
           set_fallback_package_target rpolicy.rpol_target
             (package_fallback_fn tops use_trans nkey_map fb_fn) in
     let entry_info = build_dense_entry_info selectors external_fns in
-    if EVERY external_return_buffer_ok external_fns ∧
+    if compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
+         tops < 0x6000 ∧
+       EVERY external_return_buffer_ok external_fns ∧
        EVERY (fn_allocs_ok tops)
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
     then
-      run_lowering selectors external_fns runtime_int_fns fallback_fn
-        rpolicy 0 0 ([] : dense_bucket list) entry_info "__entry"
+      if EXISTS external_has_defaults ext_fns then
+        run_grouped_lowering
+          (MAP (package_external_group tops rpolicy.rpol_target
+                                      use_trans nkey_map) ext_fns)
+          runtime_int_fns fallback_fn rpolicy "__entry"
+      else
+        run_lowering selectors external_fns runtime_int_fns fallback_fn
+          rpolicy 0 0 ([] : dense_bucket list) entry_info "__entry"
     else NONE
 End
+
+(* A unit that lowers has its immutable section below the CODE allocator's
+   0x6000 limit (Vyper rejects larger sections). *)
+Theorem lower_vyper_runtime_unit_immutables_bound:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit ⇒
+  compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
+    tops < 0x6000
+Proof
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  rw[lower_vyper_runtime_unit_def, AllCaseEqs()]
+QED
+
+(* Without external defaults, delegate to the ordinary lowering path while
+   retaining the shared return-buffer allocation check. *)
+Theorem lower_vyper_runtime_unit_no_external_defaults:
+  classify_functions tops = (ext_fns,int_fns,fb_fn,ctor_fn) /\
+  ~EXISTS external_has_defaults ext_fns ==>
+  lower_vyper_runtime_unit tops rpolicy =
+    let tenv = type_env tops in
+    let nkey_map = (K global_nonreentrant_slot : string -> num) in
+    let use_trans = T in
+    let selectors = build_selectors tenv ext_fns in
+    let external_fns = MAP
+      (set_external_package_target rpolicy.rpol_target o
+       package_external_fn tops use_trans nkey_map) ext_fns in
+    let runtime_int_fns = MAP
+      (set_internal_package_target rpolicy.rpol_target o
+       package_internal_fn tops use_trans nkey_map F 0) int_fns in
+    let fallback_fn = set_fallback_package_target rpolicy.rpol_target
+      (package_fallback_fn tops use_trans nkey_map fb_fn) in
+    if compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
+         tops < 0x6000 ∧
+       EVERY external_return_buffer_ok external_fns ∧
+       EVERY (fn_allocs_ok tops)
+         (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
+    then
+      run_lowering selectors external_fns runtime_int_fns fallback_fn rpolicy
+        0 0 ([]:dense_bucket list) (build_dense_entry_info selectors external_fns)
+        "__entry"
+    else NONE
+Proof
+  strip_tac >> simp[lower_vyper_runtime_unit_def]
+QED
 
 (* A unit that lowers has every external return buffer below the limit. *)
 Theorem lower_vyper_runtime_unit_return_buffer_ok:
@@ -1433,7 +1621,7 @@ Theorem lower_vyper_runtime_unit_return_buffer_ok:
     classify_functions tops = (exts, ints, fb, ctor) ∧ MEM x exts ⇒
     external_return_buffer_ok
       (set_external_package_target rpolicy.rpol_target
-         (package_external_fn tops F (assign_nkeys tops 0) x))
+         (package_external_fn tops T (K global_nonreentrant_slot) x))
 Proof
   rw[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
   gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP, PULL_EXISTS]
@@ -1452,6 +1640,15 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
+(* Only __init__ may be a Deploy function, as the constructor.
+   Mirrors Python: vyper/semantics/types/function.py
+   (ContractFunctionT.from_FunctionDef: "Only constructors can be marked as
+   `@deploy`!"). *)
+Definition ctor_named_init_def:
+  (ctor_named_init NONE ⇔ T) ∧
+  (ctor_named_init (SOME (_, _, _, fname, _, _, _, _)) ⇔ fname = "__init__")
+End
+
 (* Deploy lowering receives the actual runtime bytes.  Their size and data
    section are both owned by run_deploy_lowering. *)
 Definition lower_vyper_deploy_unit_def:
@@ -1461,8 +1658,8 @@ Definition lower_vyper_deploy_unit_def:
     let sft = make_struct_fields_map tops in
     let sft_fn = get_struct_fields sft in
     let immutables_len = compute_immutables_len sft_fn tops in
-    let nkey_map = assign_nkeys tops 0 in
-    let use_trans = F in
+    let nkey_map = (K global_nonreentrant_slot : string -> num) in
+    let use_trans = T in
     let (ext_fns, int_fns, fb_fn, ctor_fn) = classify_functions tops in
     let has_constructor = IS_SOME ctor_fn in
     let deploy_int_fns =
@@ -1471,8 +1668,10 @@ Definition lower_vyper_deploy_unit_def:
                  package_internal_fn tops use_trans nkey_map T immutables_len)
                 int_fns
           else [] in
-    if ¬EVERY (fn_allocs_ok tops)
-          (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f]))
+    if ¬(immutables_len < 0x6000) ∨
+       ¬EVERY (fn_allocs_ok tops)
+          (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f])) ∨
+       ¬ctor_named_init ctor_fn
     then NONE else
     let (ctor_cenv, ctor_args, ctor_payable, ctor_nr, ctor_nkey,
          ctor_trans, ctor_body, ctor_ret) =
@@ -1485,6 +1684,27 @@ Definition lower_vyper_deploy_unit_def:
       immutables_len ctor_args 0 deploy_int_fns ctor_cenv ctor_body
       ctor_payable ctor_nr ctor_nkey ctor_trans "__deploy"
 End
+
+Theorem lower_vyper_deploy_unit_immutables_bound:
+  lower_vyper_deploy_unit tops rpolicy bytes = SOME unit ==>
+  compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
+    tops < 0x6000
+Proof
+  Cases_on `classify_functions tops` >>
+  PairCases_on `r` >>
+  rw[lower_vyper_deploy_unit_def, AllCaseEqs()]
+QED
+
+(* A deploy unit that lowers has its constructor named __init__. *)
+Theorem lower_vyper_deploy_unit_ctor_named_init:
+  ∀tops rpolicy bytes unit exts ints fb ctor.
+    lower_vyper_deploy_unit tops rpolicy bytes = SOME unit ∧
+    classify_functions tops = (exts, ints, fb, ctor) ⇒
+    ctor_named_init ctor
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lower_vyper_deploy_unit_def, AllCaseEqs()]
+QED
 
 (* A deploy unit that lowers has the constructor's and every internal
    function's static buffers below the limit. *)
@@ -1621,3 +1841,65 @@ Definition compile_vyper_o1_def:
                    (tops : toplevel list) =
     compile_vyper finalizer (o1_policy all_capabilities) tops
 End
+
+Theorem build_positional_args_layout_cong:
+  ce'.ce_struct_fields = ce.ce_struct_fields /\
+  ce'.ce_flag_n_members = ce.ce_flag_n_members ==>
+  build_positional_args ce' args = build_positional_args ce args
+Proof
+  strip_tac >> simp[build_positional_args_def] >> irule listTheory.MAP_CONG >>
+  simp[pairTheory.FORALL_PROD, build_positional_arg_def] >>
+  metis_tac[type_to_abi_dec_info_layout_cong]
+QED
+
+Theorem build_positional_args_imm_alloca:
+  build_positional_args (ce with ce_imm_alloca := imm) args =
+  build_positional_args ce args
+Proof
+  irule build_positional_args_layout_cong >> simp[]
+QED
+
+(* Closed builder regressions: the production specialization uses transient
+   slot zero, with view guards checking only and view release a no-op. *)
+Theorem global_nonreentrant_lock_opcodes:
+  MAP (\i. i.inst_opcode)
+    (SND (compile_nonreentrant_lock global_nonreentrant_slot T F
+       (initial_compile_state "entry"))).cs_current_insts =
+    [TLOAD; EQ; ISZERO; ASSERT; TSTORE]
+Proof
+  EVAL_TAC
+QED
+
+Theorem global_nonreentrant_lock_view_opcodes:
+  MAP (\i. i.inst_opcode)
+    (SND (compile_nonreentrant_lock global_nonreentrant_slot T T
+       (initial_compile_state "entry"))).cs_current_insts =
+    [TLOAD; EQ; ISZERO; ASSERT]
+Proof
+  EVAL_TAC
+QED
+
+Theorem global_nonreentrant_unlock_code:
+  MAP (\i. (i.inst_opcode, i.inst_operands))
+    (SND (compile_nonreentrant_unlock global_nonreentrant_slot T F
+       (initial_compile_state "entry"))).cs_current_insts =
+    [(TSTORE, [Lit 0w; Lit 0w])]
+Proof
+  EVAL_TAC
+QED
+
+Theorem global_nonreentrant_unlock_view_noop:
+  compile_nonreentrant_unlock global_nonreentrant_slot T T
+    (initial_compile_state "entry") = ((), initial_compile_state "entry")
+Proof
+  EVAL_TAC
+QED
+
+Theorem global_nonreentrant_lock_literals:
+  MAP (\i. FILTER (\op. case op of Lit _ => T | _ => F) i.inst_operands)
+    (SND (compile_nonreentrant_lock global_nonreentrant_slot T F
+       (initial_compile_state "entry"))).cs_current_insts =
+    [[Lit 0w]; [Lit 1w]; []; []; [Lit 0w; Lit 1w]]
+Proof
+  EVAL_TAC
+QED

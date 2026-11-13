@@ -1,14 +1,13 @@
 (*
  * Syntactic unit hypotheses for PLAN §5.8 (not compiler checks).
- * TOP-LEVEL: gas_var, retpc_var, opaque_use_ok, retpc_shape_ok,
- *   label_positions_ok, reserved_label, entry_fn_first, unit_shape_ok,
- *   o1_source_unit_ok;
+ * TOP-LEVEL: retpc_var, opaque_use_ok, retpc_shape_ok,
+ *   label_positions_ok,
+ *   reserved_label, entry_fn_first, unit_shape_ok, o1_source_unit_ok;
  *   entry_fn_first_lookup (L4).
  * Helpers: copy_phi_var is the least seeded ASSIGN/PHI closure;
- *   gas_use_ok / retpc_use_ok specify opaque operand positions;
+ *   retpc_use_ok specifies the opaque return-PC operand positions;
  *   inst_shape_ok / fn_shape_ok collect output-shape restrictions;
- *   call_checks_ok: a failed CALL/STATICCALL always ends the frame with an
- *   exception (revert_path, flag_fails, flag_path, calls_flagged).
+ *   revert_path, flag_fails and flag_path describe revert witnesses.
  * Raw-only restrictions are deliberately absent from unit_shape_ok.
  *)
 Theory unitShapeDefs
@@ -82,16 +81,8 @@ End
 Definition opaque_use_ok_def:
   opaque_use_ok fn <=>
     !inst x. MEM inst (fn_insts fn) /\ MEM (Var x) inst.inst_operands ==>
-      (gas_var fn x ==> gas_use_ok inst x) /\
       (retpc_var fn x ==> retpc_use_ok inst x)
 End
-
-Theorem opaque_use_ok_gas_use:
-  opaque_use_ok fn /\ gas_var fn x /\ MEM inst (fn_insts fn) /\
-  MEM (Var x) inst.inst_operands ==> gas_use_ok inst x
-Proof
-  metis_tac[opaque_use_ok_def]
-QED
 
 Theorem opaque_use_ok_retpc_use:
   opaque_use_ok fn /\ retpc_var fn x /\ MEM inst (fn_insts fn) /\
@@ -311,10 +302,11 @@ End
 
 Definition inst_shape_ok_def:
   inst_shape_ok inst <=>
-    ~MEM inst.inst_opcode
-      [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT; DJMP; OFFSET] /\
+    ~MEM inst.inst_opcode [DJMP; OFFSET] /\
     (is_read0_opcode inst.inst_opcode ==> inst.inst_operands = []) /\
-    (inst.inst_opcode = PHI ==> 2 <= LENGTH (phi_pairs inst.inst_operands)) /\
+    (inst.inst_opcode = PHI ==>
+       2 <= LENGTH (phi_pairs inst.inst_operands) /\
+       ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands))) /\
     label_positions_ok inst
 End
 
@@ -374,15 +366,6 @@ Definition flag_path_def:
         rest))
 End
 
-Definition calls_flagged_def:
-  (calls_flagged bbs [] <=> T) /\
-  (calls_flagged bbs (inst :: rest) <=>
-     ((inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) ==>
-        case inst.inst_outputs of
-          [v] => flag_path bbs [v] rest
-        | _ => F) /\
-     calls_flagged bbs rest)
-End
 
 (* A failed CALL/STATICCALL (success flag 0) never lets the frame finish
    normally: later in the same block, with no INVOKE in between, the flag
@@ -392,10 +375,6 @@ End
    effect-free work before a JNZ, SingleUseExpansion copies a flag with
    several uses, CFGNormalization and SimplifyCFG split or merge the edges
    into the revert block). *)
-Definition call_checks_ok_def:
-  call_checks_ok fn <=>
-    EVERY (\bb. calls_flagged fn.fn_blocks bb.bb_instructions) fn.fn_blocks
-End
 
 Theorem MEM_fn_insts_blocks:
   !bbs bb inst. MEM bb bbs /\ MEM inst bb.bb_instructions ==>
@@ -404,29 +383,12 @@ Proof
   Induct >> rw[fn_insts_blocks_def] >> metis_tac[]
 QED
 
-Theorem calls_flagged_no_calls:
-  !insts. EVERY (\inst. ~MEM inst.inst_opcode [CALL; STATICCALL]) insts ==>
-          calls_flagged bbs insts
-Proof
-  Induct >> rw[calls_flagged_def]
-QED
-
-Theorem call_checks_ok_no_calls:
-  EVERY (\inst. ~MEM inst.inst_opcode [CALL; STATICCALL]) (fn_insts fn) ==>
-  call_checks_ok fn
-Proof
-  rw[call_checks_ok_def, EVERY_MEM] >> irule calls_flagged_no_calls >>
-  rw[EVERY_MEM] >>
-  `MEM inst (fn_insts fn)`
-    by (simp[fn_insts_def] >> metis_tac[MEM_fn_insts_blocks]) >>
-  res_tac
-QED
 
 Definition fn_shape_ok_def:
   fn_shape_ok fn <=>
     fn_entry_label fn = SOME fn.fn_name /\ opaque_use_ok fn /\
     retpc_shape_ok fn /\ EVERY (\bb. ~reserved_label bb.bb_label) fn.fn_blocks /\
-    EVERY inst_shape_ok (fn_insts fn) /\ call_checks_ok fn
+    EVERY inst_shape_ok (fn_insts fn)
 End
 
 Definition unit_shape_ok_def:

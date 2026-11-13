@@ -11,7 +11,7 @@ Ancestors
   e2eDefs supportedStmtTraverse vyperTypeEntryReadiness
   vyperTypeContractSoundness vyperTypeInitialState vyperStorageLayoutSafety
   vyperInterpreter vyperABI vfmExecution vfmExecutionProp frameOutcome
-  list immutableSectionRel
+  list immutableSectionRel compileEnv callTrace
 
 (* ===== Canonical constructor ABI and syntactic Call exclusion ===== *)
 
@@ -21,6 +21,7 @@ Definition constructor_args_encode_def:
       vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
         SOME (mut, F, args, [], NoneT, body) /\
       LENGTH tx.args = LENGTH args /\
+      IS_SOME (bind_arguments (type_env tops) args tx.args) /\
       vyper_to_abi_list (type_env tops) (MAP SND args) tx.args = SOME abi_vals /\
       bs = enc (Tuple (vyper_to_abi_types (type_env tops) (MAP SND args)))
                (ListV abi_vals)
@@ -55,8 +56,19 @@ End
 Definition deploy_evaluation_context_def:
   deploy_evaluation_context tops am tx =
     initial_evaluation_context ((tx.target, [(NONE, tops)]) :: am.sources)
-      am.layouts tx NONE with in_deploy := T
+      am.layouts (tx with created_in_tx := T) NONE with in_deploy := T
 End
+
+(* The constructor runs with created_in_tx set; the value transfer reads none
+   of it. *)
+Theorem value_transfer_created_in_tx:
+  (value_transfer_ok (tx with created_in_tx := c) accs <=>
+   value_transfer_ok tx accs) /\
+  accounts_after_transfer (tx with created_in_tx := c) accs =
+  accounts_after_transfer tx accs
+Proof
+  simp[value_transfer_ok_def, accounts_after_transfer_def]
+QED
 
 (* Runtime readiness must NOT be required of the uninstalled source target.
  * Use the source's pre-constant deployment readiness on precisely the machine
@@ -92,9 +104,11 @@ Definition deploy_state_rel_def:
     ?ctxt rb args_bytes.
       es.contexts = [(ctxt, rb)] /\
       wf_state es /\ (?d. es.msdomain = Collect d) /\
+      account_empty (lookup_account tx.target es.originalAccounts) /\
       ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
       ctxt.msgParams.outputTo = Code tx.target /\
       ctxt.msgParams.code = deploy_bc ++ args_bytes /\
+      tx.code = ctxt.msgParams.code /\
       ctxt.msgParams.parsed = parse_code 0 FEMPTY (deploy_bc ++ args_bytes) /\
       buffer_to_list ctxt.msgParams.data = [] /\
       tx.calldata = [] /\
@@ -104,25 +118,71 @@ Definition deploy_state_rel_def:
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
+      es.rollback.toDelete = am.pending_deletions /\
       am.pending_deletions = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
       tx_block_fields_rel tx es.txParams /\
-      tx.function_name = "__init__" /\
+      tx.function_name = "__init__" /\ ~tx.is_static /\
+      call_outcomes_storage_ok am tx (MAP SND (call_trace es)) /\
+      balance_bounded (2 ** 256 - 1) es /\
+      (* Under constructor_call_free the real call trace is empty, so this
+       * clause is vacuous. It could be discharged by proving that a
+       * call-free constructor compiles (through O1 and codegen) to code with
+       * no CALL-family instruction, leaving call_trace es empty; it is kept
+       * as a premise only to avoid that detour. *)
+      EVERY (\co. contract_storage_well_formed (deploy_evaluation_context tops am tx)
+                    (initial_state (am with <|accounts := co.co_accounts;
+                                              tStorage := co.co_tStorage|>) []))
+        (MAP SND (call_trace es)) /\
       ALOOKUP am.sources tx.target = NONE /\ layouts_agree tops am tx
 End
+
+(* The constructor frame starts with empty return data, so returndata_bounded
+   holds of es without a premise; with the balance bound, the callee outcome
+   bounds follow as for the call relation. *)
+Theorem deploy_state_rel_call_outcomes_ok:
+  deploy_state_rel tops deploy_bc am tx es ==>
+  call_outcomes_ok am tx (MAP SND (call_trace es))
+Proof
+  strip_tac >>
+  `wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es /\
+   call_outcomes_storage_ok am tx (MAP SND (call_trace es))` by
+    gvs[deploy_state_rel_def, vfmReturndataBoundTheory.returndata_bounded_def] >>
+  drule_all call_trace_outcomes_bounded >>
+  qpat_x_assum `call_outcomes_storage_ok _ _ _` mp_tac >>
+  simp[call_outcomes_ok_def, call_outcomes_storage_ok_def, listTheory.EVERY_MEM] >>
+  rpt strip_tac >> res_tac
+QED
 
 (* ===== Creation result cases (no nested creation frame_outcome) ===== *)
 
 (* This named case expression is for clean focused boundary clients. The stage
  * theorem keeps the literal PLAN 5.11 expression in its conclusion. Source
  * installation is not EVM bytecode installation: compare the target modulo
- * code, all other accounts exactly, plus transient storage and ordered logs.
+ * code, with its storage modulo storage_dead, all other accounts exactly,
+ * transient storage modulo storage_dead, and ordered logs (as the runtime's
+ * accounts_agree/transient_agree).
  *)
 Definition deploy_result_rel_def:
   deploy_result_rel tops runtime_bc tx es r es' src <=>
     case src of
       INL (am', rqs) =>
+        if ALOOKUP am'.sources tx.target = NONE then
+          (* The constructor halted (selfdestruct): load_contract installed
+           * no source, and the EVM deposited no code. *)
+          let cx = initial_evaluation_context
+                     ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE in
+          ?lgs.
+            frame_outcome es r es' NONE [] lgs /\
+            (lookup_account tx.target es'.rollback.accounts).code = [] /\
+            accounts_agree cx am'.accounts
+              (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+            transient_agree cx am'.tStorage es'.rollback.tStorage /\
+            logs_correspond (compiled_event_info tops) (type_env tops)
+              tx.target am'.logs lgs
+        else
+        let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?section lgs.
           immutables_section_rel tops (account_immutables am' tx.target) section /\
           frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
@@ -131,8 +191,14 @@ Definition deploy_result_rel_def:
                lookup_account a es'.rollback.accounts =
                lookup_account a am'.accounts) /\
           (lookup_account tx.target es'.rollback.accounts) with code := [] =
-          (lookup_account tx.target am'.accounts) with code := [] /\
-          es'.rollback.tStorage = am'.tStorage /\
+          (lookup_account tx.target am'.accounts) with
+            <| code := [];
+               storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
+          storage_agree
+            (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
+            (lookup_account tx.target am'.accounts).storage
+            (lookup_account tx.target es'.rollback.accounts).storage /\
+          transient_agree cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs
     | INR (AssertException s) =>

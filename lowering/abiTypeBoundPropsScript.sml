@@ -1,7 +1,7 @@
 (* Compiler and source ABI sizes agree for types that evaluate. *)
 Theory abiTypeBoundProps
 Ancestors
-  compileEnv vyperValue vyperABI vyperTypeABI vyperTyping
+  compileEnv loweringStateRelDefs vyperValue vyperABI vyperTypeABI vyperTyping
   finite_map list rich_list option pair
 
 (* Evaluation and the ABI type are stable under a larger type env: a type

@@ -7,7 +7,6 @@
  *   compile_ptr_store_memory_correct  — MSTORE writes value to memory
  *   compile_ptr_store_storage_correct — SSTORE writes value to storage
  *   compile_load_storage_prim_correct — compile_load_storage primitive case
- *   compile_store_storage_prim_correct— compile_store_storage primitive case
  *   compile_nonreentrant_lock_correct — lock sets storage slot (persistent)
  *   compile_nonreentrant_lock_revert  — locked slot causes revert
  *   compile_nonreentrant_lock_view    — view lock checks but doesn't write
@@ -30,7 +29,7 @@
 
 Theory contextProps
 Ancestors
-  exprLoweringProps emitHelperProps
+  exprLoweringProps emitHelperProps transientLockProps
   context compileEnv
   venomExecSemantics venomState
   valueEncoding vfmState
@@ -124,7 +123,8 @@ Theorem compile_ptr_store_storage_correct:
     compile_ptr_store is_ctor imm LocStorage op_addr op_val st = ((), st') ∧
     eval_operand op_addr ss = SOME addr ∧
     eval_operand op_val ss = SOME val ∧
-    fresh_vars_wrt st ss
+    fresh_vars_wrt st ss ∧
+    ¬ss.vs_call_ctx.cc_static
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
@@ -163,29 +163,6 @@ Proof
   goal_assum drule >> simp[]
 QED
 
-(* compile_store_storage with is_prim_word=T emits SSTORE [slot; val].
-   Result state = sstore slot_w w ss.
-   compile_store_storage val slot T word_count = emit_void SSTORE [slot; val]. *)
-Theorem compile_store_storage_prim_correct:
-  ∀ val_op slot_op st st' ss w slot_w word_count.
-    compile_store_storage val_op slot_op T word_count st = ((), st') ∧
-    eval_operand val_op ss = SOME w ∧
-    eval_operand slot_op ss = SOME slot_w ∧
-    fresh_vars_wrt st ss
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      ss' = sstore slot_w w ss ∧
-      same_blocks st st' ∧
-      fresh_vars_wrt st' ss' ∧
-      (∀ op v. eval_operand op ss = SOME v ⇒
-               eval_operand op ss' = SOME v) ∧
-      ss'.vs_memory = ss.vs_memory
-Proof
-  rpt strip_tac >> gvs[compile_store_storage_def] >>
-  drule_all emit_void_SSTORE_correct >> simp[]
-QED
-
 (* ===== Nonreentrant Lock ===== *)
 
 (* Lock protocol (persistent, non-view, non-transient):
@@ -208,7 +185,8 @@ Theorem compile_nonreentrant_lock_correct:
   ∀ nkey ss st st'.
     compile_nonreentrant_lock nkey F F st = ((), st') ∧
     sload (n2w nkey) ss ≠ 2w ∧
-    fresh_vars_wrt st ss
+    fresh_vars_wrt st ss ∧
+    ¬ss.vs_call_ctx.cc_static
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
@@ -274,6 +252,8 @@ Resume compile_nonreentrant_lock_correct[after_assert]:
   (* Step 5: SSTORE *)
   `step_inst_base (mk_inst (st.cs_next_id + 4) SSTORE [Lit (n2w nkey); Lit 2w] []) ss3 =
      OK (sstore (n2w nkey) 2w ss3)` by (
+    `ss3.vs_call_ctx = ss.vs_call_ctx` by
+      simp[Abbr`ss3`, Abbr`ss2`, Abbr`ss1`, update_var_def] >>
     qspecl_then [`Lit (n2w nkey)`, `Lit 2w`, `n2w nkey`, `2w`,
                   `st.cs_next_id + 4`, `ss3`] mp_tac step_SSTORE >>
     simp[eval_operand_lit]) >>
@@ -415,7 +395,8 @@ QED
 Theorem compile_nonreentrant_unlock_correct:
   ∀ nkey ss st st'.
     compile_nonreentrant_unlock nkey F F st = ((), st') ∧
-    fresh_vars_wrt st ss
+    fresh_vars_wrt st ss ∧
+    ¬ss.vs_call_ctx.cc_static
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
@@ -631,10 +612,10 @@ Theorem compile_ptr_store_storage_preserves_memory:
 Proof
   rpt strip_tac >> gvs[compile_ptr_store_def] >>
   drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
-  gvs[run_inst_seq_def] >>
-  `step_inst_base (mk_inst st.cs_next_id SSTORE [op_addr; op_val] []) ss =
-     OK (sstore addr val ss)` by simp[step_SSTORE] >>
-  gvs[]
+  qspecl_then [`op_addr`, `op_val`, `addr`, `val`, `st.cs_next_id`, `ss`]
+    mp_tac step_SSTORE >>
+  Cases_on `ss.vs_call_ctx.cc_static` >> gvs[run_inst_seq_def] >>
+  strip_tac >> gvs[]
 QED
 
 (* The fixed region is exactly an ASSIGN of zero, with a size annotation only
@@ -661,6 +642,6 @@ Theorem compile_fixed_region_zero_correct:
 Proof
   rpt strip_tac >> drule compile_fixed_region_as_assign >> strip_tac >>
   drule (Q.SPECL [`ASSIGN`, `\x:bytes32. x`] emit_op_pure1_correct) >>
-  simp[eval_operand_def, step_inst_base_def, venomInstTheory.mk_inst_def] >>
+  simp[eval_operand_def, step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def] >>
   disch_then drule >> strip_tac >> goal_assum drule >> simp[]
 QED

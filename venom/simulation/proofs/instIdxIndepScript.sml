@@ -171,7 +171,7 @@ fun idx_cases_tac ss =
 
 val exec_idx_ss = idx_case_ss ++ rewrites
   [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-   exec_read0_def, exec_read1_def, exec_write2_def];
+   exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def];
 
 val exec_idx_tac = idx_cases_tac exec_idx_ss;
 
@@ -206,6 +206,14 @@ Theorem exec_read0_idx[local]:
     exec_result_map (\s'. s' with vs_inst_idx := n) (exec_read0 g inst s)
 Proof
   rpt strip_tac >> exec_idx_tac
+QED
+
+Theorem exec_gas_idx[local]:
+  !inst s n.
+    exec_gas inst (s with vs_inst_idx := n) =
+    exec_result_map (\s'. s' with vs_inst_idx := n) (exec_gas inst s)
+Proof
+  rpt gen_tac >> exec_idx_tac
 QED
 
 Theorem exec_read1_idx[local]:
@@ -369,8 +377,8 @@ val step_inst_base_opcode_tac =
   qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode;
 
 val opcode_idx_ss = idx_case_ss ++ rewrites
-  (idx_rw @ [exec_pure1_idx, exec_pure2_idx, exec_pure3_idx, exec_alloca_idx,
-             exec_ext_call_idx, exec_delegatecall_idx, exec_create_idx]);
+  (idx_rw @ [exec_pure1_idx, exec_pure2_idx, exec_pure3_idx, exec_gas_idx,
+             exec_alloca_idx, exec_ext_call_idx, exec_delegatecall_idx, exec_create_idx]);
 
 (* Direct envelopes do not need the exec_read/exec_write rule probes. *)
 val envelope_idx_tac =
@@ -381,6 +389,16 @@ val opcode_idx_tac =
   simp_tac opcode_idx_ss [] >>
   TRY (irule exec_read0_idx >> simp_tac opcode_idx_ss [] >> NO_TAC) >>
   TRY (irule exec_read1_idx >> simp_tac opcode_idx_ss [] >> NO_TAC) >>
+  TRY (irule exec_write2_idx >> simp_tac opcode_idx_ss [] >> NO_TAC) >>
+  idx_cases_tac opcode_idx_ss;
+
+(* State writes first test the static-frame flag and whether the operands
+   are defined, which vs_inst_idx leaves alone: split on that test, then
+   treat the write as usual. *)
+val static_idx_tac =
+  step_inst_base_opcode_tac >>
+  Cases_on `s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)` >>
+  asm_simp_tac (opcode_idx_ss ++ rewrites [eval_ops_inst_idx]) [] >>
   TRY (irule exec_write2_idx >> simp_tac opcode_idx_ss [] >> NO_TAC) >>
   idx_cases_tac opcode_idx_ss;
 
@@ -449,9 +467,9 @@ Proof
   >- opcode_idx_tac  (* MCOPY *)
   >- opcode_idx_tac  (* MEMTOP *)
   >- opcode_idx_tac  (* SLOAD *)
-  >- opcode_idx_tac  (* SSTORE *)
+  >- static_idx_tac  (* SSTORE *)
   >- opcode_idx_tac  (* TLOAD *)
-  >- opcode_idx_tac  (* TSTORE *)
+  >- static_idx_tac  (* TSTORE *)
   >- opcode_idx_tac  (* ILOAD *)
   >- opcode_idx_tac  (* ISTORE *)
   >- opcode_idx_tac  (* PHI *)
@@ -501,7 +519,7 @@ Proof
   >- envelope_idx_tac  (* DELEGATECALL *)
   >- envelope_idx_tac  (* CREATE *)
   >- envelope_idx_tac  (* CREATE2 *)
-  >- opcode_idx_tac  (* LOG *)
+  >- static_idx_tac  (* LOG *)
   >- opcode_idx_tac  (* ASSERT *)
   >- opcode_idx_tac  (* ASSERT_UNREACHABLE *)
   >- opcode_idx_tac  (* DLOAD *)
@@ -585,6 +603,33 @@ Proof
   gvs[AllCaseEqs(), jump_to_def] >>
   Cases_on `pack_dret_dynamic s.vs_call_entry_fmp pairs s` >>
   Cases_on `r` >> gvs[]
+QED
+
+(* Helper: terminator step_inst_base is idx-independent for OK results *)
+Theorem term_step_base_idx_0:
+  !inst s v.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK v ==>
+    step_inst_base inst (s with vs_inst_idx := 0) = OK v
+Proof
+  rpt strip_tac >>
+  `v.vs_inst_idx = 0` by
+    metis_tac[terminator_OK_inst_idx_0] >>
+  qabbrev_tac `f = \st:venom_state. st with vs_inst_idx := 0` >>
+  `exec_result_map f (step_inst_base inst (s with vs_inst_idx := 0)) =
+   exec_result_map f (step_inst_base inst s)` by
+    (unabbrev_all_tac >>
+     metis_tac[terminator_step_inst_base_idx_norm0]) >>
+  `exec_result_map f (step_inst_base inst s) = OK v` by
+    (simp[Abbr `f`, exec_result_map_def] >>
+     `v with vs_inst_idx := 0 = v` by
+       simp[venom_state_component_equality] >> fs[]) >>
+  fs[] >>
+  Cases_on `step_inst_base inst (s with vs_inst_idx := 0)` >>
+  fs[Abbr `f`, exec_result_map_def] >>
+  `v'.vs_inst_idx = 0` by
+    metis_tac[terminator_OK_inst_idx_0] >>
+  fs[venom_state_component_equality]
 QED
 
 

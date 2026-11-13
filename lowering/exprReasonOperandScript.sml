@@ -22,6 +22,7 @@
 
 Theory exprReasonOperand
 Ancestors
+  exprSimSource
   exprWordOperand exprOperandVar exprSafeOperand stmtSimReason stmtSimReasonExpr
   stmtSimReasonStorage exprLowering exprCallBounds compileEnv context vyperTypeSystem vyperAST
 
@@ -101,7 +102,7 @@ Proof
 QED
 
 Theorem reason_pop_operand[local]:
-  compile_dynarray_pop bop ws es load_opc store_opc sa = (op,sb) ==>
+  compile_dynarray_pop bop ws es is_ctor imm loc sa = (op,sb) ==>
   !l. op <> Label l
 Proof
   simp[compile_dynarray_pop_def, comp_bind_def, comp_ignore_bind_def, LET_THM] >>
@@ -136,15 +137,46 @@ Proof
   gvs[reason_result_shape_def, vv_location_def, mk_ptr_def, safe_operand_def]
 QED
 
+(* An array base the lowering copies before its index (compile_subscript's
+   snapshot) is in memory afterwards. *)
+Theorem reason_snapshot_shape[local]:
+  reason_result_shape t loc vv /\ compile_snapshot_vv cenv T vv sa = (vv',sb) ==>
+  reason_result_shape t LocMemory vv'
+Proof
+  strip_tac >>
+  `vv_type vv = t /\ !l. vv_operand vv <> Label l` by
+    (Cases_on `vv` >> gvs[reason_result_shape_def, vv_type_def, vv_operand_def]) >>
+  qpat_x_assum `compile_snapshot_vv _ _ _ _ = _` mp_tac >>
+  simp[compile_snapshot_vv_def] >> IF_CASES_TAC >>
+  simp[compile_materialize_vv_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  gvs[reason_result_shape_def, mk_ptr_def] >>
+  metis_tac[unwrap_value_not_label, alloc_buffer_not_label]
+QED
+
+Theorem reason_subscript_base_shape[local]:
+  reason_result_shape t loc vv0 /\
+  (if c then compile_snapshot_vv cenv T vv0 else return vv0) sa = (vv,sb) ==>
+  reason_result_shape t (if c then LocMemory else loc) vv
+Proof
+  Cases_on `c` >> simp[comp_return_def] >> metis_tac[reason_snapshot_shape]
+QED
+
+(* The subscript's location is its base's, or memory when the lowering
+   copies the base first. *)
 Theorem reason_compile_subscript[local]:
   (!sa vv sb. f cenv ty base_e sa = (vv,sb) ==>
      reason_result_shape bt loc vv) /\
   compile_subscript f cenv ret_ty ty base_e idx_e sa = (vv,sb) ==>
-  reason_result_shape ret_ty loc vv
+  reason_result_shape ret_ty
+    (if copies_subscript_base cenv base_e idx_e then LocMemory else loc) vv
 Proof
-  simp[compile_subscript_def, comp_bind_def, comp_return_def, LET_THM] >>
+  simp[compile_subscript_def, comp_bind_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   first_x_assum drule >> strip_tac >>
+  drule_all reason_subscript_base_shape >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `reason_result_shape _ L _` >>
   Cases_on `base_vv` >>
   gvs[reason_result_shape_def, vv_location_def, vv_operand_def] >>
   (Cases_on `place_type cenv base_e`
@@ -313,9 +345,22 @@ Theorem reason_builtin_bop:
 Proof
   strip_tac >>
   `word_result_ok sb vv` by metis_tac[word_builtin_bop] >>
-  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  pop_assum mp_tac >> pop_assum mp_tac >>
+  simp_tac (srw_ss()) [compile_builtin_dispatch_body_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (rpt strip_tac >> Cases_on `HD (TL args)` >> gvs[] >>
+      TRY (rename1 `Builtin _ bi _` >> Cases_on `bi` >> simp[]) >>
+      rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+      metis_tac[reason_stack_result]) >>
+  IF_CASES_TAC
+  >- (rpt strip_tac >>
+      Cases_on `bytestring_literal_hash (HD args)` >>
+      Cases_on `bytestring_literal_hash (HD (TL args))` >> gvs[] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      Cases_on `bop = Eq` >> gvs[] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      metis_tac[reason_stack_result]) >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   metis_tac[reason_stack_result]
 QED
 
@@ -461,9 +506,8 @@ Theorem reason_slice_adhoc[local]:
     compile_slice_calldata start lenop sz sa = (op,sb) ==> !l. op <> Label l) /\
   (!start lenop sz sa op sb.
     compile_slice_code start lenop sz sa = (op,sb) ==> !l. op <> Label l) /\
-  (!addr start lenop buf data sa op sb.
-    (!l. buf <> Label l) /\
-    compile_slice_extcode addr start lenop buf data sa = (op,sb) ==>
+  (!addr start lenop sz sa op sb.
+    compile_slice_extcode addr start lenop sz sa = (op,sb) ==>
     !l. op <> Label l)
 Proof
   rpt conj_tac >> rpt gen_tac >>
@@ -701,7 +745,7 @@ Proof
   simp[compile_external_call_kwargs_def, LET_THM, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `retsz = 0`
+  Cases_on `rt = NoneT`
   >- simp[comp_return_def] >>
   simp[] >> Cases_on `hasdef` >>
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
@@ -760,9 +804,25 @@ Proof
   >~ [`cenv.ce_func_info name = info`] >- suspend "internal"
   >~ [`compile_call f cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
     >- suspend "external"
+  >~ [`raw_log_topic_exprs _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
+  >~ [`compile_raw_revert _ _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
+  >~ [`compile_selfdestruct _ _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
   >~ [`as_stack_val rt (compile_create_call f cenv ck salted rof args sa)`]
-    >- suspend "create"
-  >> suspend "send"
+    >- suspend "create" >>
+  (* send, raw_log and raw_revert: each returns the zero word on the stack. *)
+  Cases_on `args` >> gvs[reason_result_shape_def] >>
+  rpt (rename1 `list_CASE tail _ _` >> Cases_on `tail` >>
+       gvs[reason_result_shape_def]) >>
+  gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[reason_result_shape_def]) >>
+  rpt (qpat_x_assum `(if _ then _ else _) = _` mp_tac >> IF_CASES_TAC >>
+       strip_tac) >>
+  gvs[reason_result_shape_def]
 QED
 
 Resume reason_compile_call[internal]:
@@ -787,14 +847,6 @@ Resume reason_compile_call[create]:
   strip_tac >> gvs[reason_result_shape_def] >>
   metis_tac[exprSafeOperandBuiltinsTheory.compile_create_call_safe_operand,
             safe_operand_def]
-QED
-
-Resume reason_compile_call[send]:
-  Cases_on `args` >> gvs[reason_result_shape_def] >>
-  rename1 `list_CASE tail _ _` >> Cases_on `tail` >>
-  gvs[reason_result_shape_def] >>
-  gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[reason_result_shape_def]) >>
-  simp[reason_result_shape_def]
 QED
 
 Finalise reason_compile_call
@@ -960,9 +1012,14 @@ Resume reason_compile_expr_body[subscript]:
     (mp_tac o REWRITE_RULE [reason_uniform_shape_def]) >>
   disch_then (qx_choosel_then [`loc`, `bt`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
   irule reason_uniform_shape_intro >>
-  qexists_tac `loc` >> simp[] >> rpt strip_tac >>
+  qexists_tac `if copies_subscript_base cenv base_e idx_e
+               then LocMemory else loc` >>
+  conj_tac >- (IF_CASES_TAC >> fs[]) >>
+  qpat_x_assum `loc = _ \/ _` kall_tac >> rpt strip_tac >>
   gvs[compile_expr_body_def, expr_type_def] >>
-  metis_tac[reason_compile_subscript]
+  qpat_x_assum `compile_subscript _ _ _ _ _ _ _ = _` (fn h6 =>
+    qpat_x_assum `!sa vv sb. f _ _ _ _ = _ ==> _` (fn h5 =>
+      ACCEPT_TAC (MATCH_MP reason_compile_subscript (CONJ h5 h6))))
 QED
 
 Resume reason_compile_expr_body[attribute]:
@@ -1131,7 +1188,7 @@ Resume reason_compile_uniform[builtin_operand_valid]:
   `well_typed_expr env e` by
     (qpat_x_assum `well_typed_expr env _` mp_tac >>
      simp[well_typed_expr_def] >> strip_tac >>
-     irule exprSimHypsTheory.well_typed_exprs_member >> metis_tac[]) >>
+     irule exprSimSourceTheory.well_typed_exprs_member >> metis_tac[]) >>
   `reason_uniform_shape compile_expr cenv t e` by
     (first_x_assum irule >> simp[] >> qexists_tac `env` >>
      simp[reason_typable_def]) >>
@@ -1152,7 +1209,7 @@ Resume reason_compile_uniform[type_operand_valid]:
   `well_typed_expr env e` by
     (qpat_x_assum `well_typed_expr env _` mp_tac >>
      simp[well_typed_expr_def] >> strip_tac >>
-     irule exprSimHypsTheory.well_typed_exprs_member >> metis_tac[]) >>
+     irule exprSimSourceTheory.well_typed_exprs_member >> metis_tac[]) >>
   `reason_uniform_shape compile_expr cenv t e` by
     (first_x_assum irule >> simp[] >> qexists_tac `env` >>
      simp[reason_typable_def]) >>

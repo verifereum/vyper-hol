@@ -3,7 +3,7 @@ Ancestors
   jsonToVyper jsonToVyperExpr jsonAST vyperAST vyperTypeContract
   jsonNominalSources
 Libs
-  vyperCheckContractFrontendLib
+  vyperCheckContractFrontendLib vyperConstEvalLib
 
 (* Declare fixtures relative to this source file so holbuild stages them at
    the same relative path and includes their contents in the cache key. *)
@@ -13,10 +13,12 @@ val () = holbuild_extra_deps ["../tests/fixtures/check_contract"]
 (* Branch checks for guarded call dispatch; fixture checks below also exercise
    these paths through the contract checker. Deliberately conflicting metadata
    checks that syntax shortcuts and self/pop keep their original priority. *)
-val call_ctx = ``(0, SOME 9, [("lib", 7)], [], [], [], []) :
+val call_ctx = ``(0, SOME 9, [("lib", 7)], [], [], [], [], [], []) :
   int # num option # (string # num) list # string list #
   (string # type) list # ((num option # string) # type) list #
-  (((num option # string) # (num option # string)) list)``;
+  (((num option # string) # (num option # string)) list) #
+  ((num option # string) # literal) list #
+  (num # (string # num) list) list``;
 val call_arg = ``Literal (BaseT BoolT) (BoolL T)``;
 (* An interface constructor yields its address as a stack value. *)
 val iface_result = ``Builtin (BaseT AddressT) (Acc Address) [^call_arg]``;
@@ -42,10 +44,12 @@ fun internal_call nsid name =
   ``Call (BaseT BoolT) (IntCall (^nsid, ^name)) [^call_arg] NONE``;
 val override_call_ctx =
   ``(0, SOME 0, [], [], [], [],
-      [((SOME 0, "compute"), (NONE, "compute"))]) :
+      [((SOME 0, "compute"), (NONE, "compute"))], [], []) :
     int # num option # (string # num) list # string list #
     (string # type) list # ((num option # string) # type) list #
-    (((num option # string) # (num option # string)) list)``;
+    (((num option # string) # (num option # string)) list) #
+    ((num option # string) # literal) list #
+    (num # (string # num) list) list``;
 val _ = check_call_with override_call_ctx ``JExplicitSource 0``
   "abstract call links to concrete override"
   (call_attr self_name ``"compute"`` ``NONE : string option``)
@@ -65,6 +69,24 @@ val _ = app (fn shortcut => check_bool_call "interface shortcut before self"
 val _ = check_bool_call "near shortcut name"
   (call_attr self_name ``"__at"`` ``SOME "interface"``)
   (internal_call ``SOME 9`` ``"__at"``);
+(* A tuple literal takes its type from the node's annotation (Vyper types it
+   by its context, so a member may be wider than its element), and falls back
+   to the element types when the annotation is missing or doesn't fit. *)
+fun check_tuple_type label ty expected = let
+  val translated = bossLib.EVAL
+    ``expr_type (translate_expr ^call_ctx
+        (JE_Tuple [JE_Str 1 "x"; JE_Int 1 (JT_Integer 256 F)] ^ty))``
+in
+  if aconv (rhs (concl translated)) expected then ()
+  else raise Fail ("tuple literal type: " ^ label)
+end;
+val _ = check_tuple_type "annotated"
+  ``JT_Tuple [JT_String 10; JT_Integer 256 F]``
+  ``TupleT [BaseT (StringT 10); BaseT (UintT 256)]``;
+val _ = check_tuple_type "missing annotation" ``JT_None``
+  ``TupleT [BaseT (StringT 1); BaseT (UintT 256)]``;
+val _ = check_tuple_type "wrong arity" ``JT_Tuple [JT_String 10]``
+  ``TupleT [BaseT (StringT 1); BaseT (UintT 256)]``;
 fun pop_call base = call_attr base ``"pop"`` ``SOME "interface"``;
 fun check_pop label base expected = let
   val func = pop_call base
@@ -209,9 +231,10 @@ QED
 fun tuple_return_fn decs aliases bound =
   ``JTL_FunctionDef "compute" ^decs ^aliases [] []
       (JFuncType [] (JT_Tuple [JT_String ^bound; JT_Integer 256 F]))
-      (JTA_Tuple [JTA_String ^bound; JTA_Integer 256 F])
+      (JTA_Tuple [JTA_String (JE_Int (&^bound) (JT_Integer 256 F));
+        JTA_Integer 256 F])
       [JS_Return (SOME (JE_Tuple [JE_Str 1 "x";
-        JE_Int 1 (JT_Integer 256 F)]))]``;
+        JE_Int 1 (JT_Integer 256 F)] JT_None))]``;
 val tuple_abstract = tuple_return_fn ``["abstract"]`` ``[] : string list`` ``10``;
 val tuple_override = tuple_return_fn ``["override"]`` ``["base"]`` ``5``;
 val _ = assert_translation "covariant tuple return" true
@@ -260,20 +283,20 @@ val _ = assert_translation "different declarations with identical default spelli
 val expression_default =
   ``JE_BinOp (JE_Int 1 (JT_Integer 256 F)) JBop_Add
       (JE_Int 1 (JT_Integer 256 F)) (JT_Integer 256 F)``;
-val folded_default_abstract = default_u256_fn ``["abstract"]`` ``[] : string list``
-  ``JE_Folded ^expression_default (JE_Int 2 (JT_Integer 256 F))``;
+val expression_default_abstract = default_u256_fn ``["abstract"]`` ``[] : string list``
+  expression_default;
 val expression_default_override = default_u256_fn ``["override"]`` ``["base"]``
   expression_default;
 val literal_default_override = default_u256_fn ``["override"]`` ``["base"]``
   ``JE_Int 2 (JT_Integer 256 F)``;
-val _ = assert_translation "folding metadata preserves original default structure"
+val _ = assert_translation "same default expression"
   true (abstract_link_ast
     ``[^import_base; ^initialize_base; ^expression_default_override]``
-    ``[^folded_default_abstract]``);
+    ``[^expression_default_abstract]``);
 val _ = assert_translation "equal default values with different syntax"
   false (abstract_link_ast
     ``[^import_base; ^initialize_base; ^literal_default_override]``
-    ``[^folded_default_abstract]``);
+    ``[^expression_default_abstract]``);
 
 Theorem abstract_override_resolution_is_transitive:
   resolve_override_aux 3
@@ -359,6 +382,25 @@ val _ = assert_modules "stub-only interfaces are removed"
   ``[(NONE, [])] : (num option # toplevel list) list``
   (prepare_ast (repeated_interface_ast ``[^interface_stub]``
     ``[^interface_stub]``));
+(* Called directly, as by callers that skip prepare_translated_input,
+   remove_interface_sources returns one listing per source ID. Listings of
+   one module that differ only in their nonreentrancy default both survive
+   translation, with equal translated sources. *)
+val twice_listed_ast =
+  ``JAnnotatedAST (JModule 0 F [])
+      [JImportedModule 1 "IPing.vyi" "utils/IPing.vyi" F ^interface_event;
+       JImportedModule 1 "IPing.vyi" "utils/IPing.vyi" T ^interface_event]``;
+val twice_listed_translation = optionSyntax.dest_some
+  (rhs (concl (bossLib.EVAL ``translate_annotated_ast ^twice_listed_ast``)));
+fun source_ids translated =
+  map (fst o pairSyntax.dest_pair)
+    (fst (listSyntax.dest_list (fst (pairSyntax.dest_pair translated))));
+val _ = if length (source_ids twice_listed_translation) = 3 then ()
+  else raise Fail "twice-listed interface: translation no longer repeats it";
+val _ = if length (source_ids
+    (vyperCheckContractFrontendLib.remove_interface_sources twice_listed_ast
+       twice_listed_translation)) = 2 then ()
+  else raise Fail "remove_interface_sources kept a repeated source ID";
 val builtin_interfaces =
   ``JAnnotatedAST (JModule 0 F [])
       [JImportedModule (-2) "IERC20.vyi" "builtin/IERC20.vyi" F
@@ -423,6 +465,11 @@ end;
 
 val _ = check_fixture false "scoped_locals/main.json";
 val _ = check_fixture false "simple.json";
+(* Named constants fold to literals; slice start bounds remain runtime checks. *)
+val _ = check_fixture false "slice_named_start.json";
+(* Constant slice lengths fold to literals: a code slice and a narrowing byte
+   slice are accepted, as is a runtime length within the source's bound. *)
+val _ = check_fixture false "slice_folded_length.json";
 val _ = check_fixture false "address_bytes20.json";
 val _ = check_fixture true "address_bytes20.json";
 val _ = check_fixture false "address_bytes32.json";
@@ -437,6 +484,8 @@ val _ = check_fixture false "imported_flag/main.json";
 val _ = check_fixture false "imported_constants/main.json";
 val _ = check_fixture true "imported_constants/main.json";
 val _ = check_fixture false "imported_interface/main.json";
+(* A .vyi stub's defaults (`= []`, `= ""`) are never analysed, so untyped. *)
+val _ = check_fixture false "interface_defaults/main.json";
 val _ = check_fixture false "duplicate_interface/main/c.json";
 val _ = check_fixture false "multimodule_storage/main.json";
 val _ = check_fixture false "defaults_control/main.json";
@@ -467,6 +516,27 @@ val _ = check_fixture true "attribute_initializes/main.json";
    its pure helper directly and through mid, which main initializes. *)
 val _ = check_fixture false "uninitialized_import/main.json";
 val _ = check_fixture true "uninitialized_import/main.json";
+
+(* A code slice needs a compile-time length. *)
+val _ =
+  ((check_fixture false "slice_code_runtime.json";
+    raise Fail "frontend contract checker accepted a runtime-length code slice")
+   handle Fail message =>
+     if String.isSubstring "check_contract returned NONE" message then ()
+     else raise Fail message);
+
+(* A runtime length bounds the result by the source: Bytes[64] fits a
+   Bytes[64] result but not a Bytes[63] one. *)
+Theorem slice_runtime_length_source_bound:
+  slice_operands_ok (Slice 64)
+    [Name (BaseT (BytesT (Dynamic 64))) "b"; Literal (BaseT (UintT 256)) (IntL 0);
+     Name (BaseT (UintT 256)) "n"] /\
+  ~slice_operands_ok (Slice 63)
+    [Name (BaseT (BytesT (Dynamic 64))) "b"; Literal (BaseT (UintT 256)) (IntL 0);
+     Name (BaseT (UintT 256)) "n"]
+Proof
+  EVAL_TAC
+QED
 
 (* An inferred struct name declared in two modules keeps no source. *)
 Theorem nominal_source_needs_one_declaration:
@@ -553,6 +623,40 @@ val _ =
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
 
+(* Ordinary slices, like calldata slices, fold a constant length to a literal
+   for their result capacity. A constant start remains a runtime expression. *)
+val slice_uint_json =
+  "{\"typeclass\":\"integer\",\"bits\":256,\"is_signed\":false}";
+val slice_sum_json =
+  "{\"ast_type\":\"BinOp\",\"left\":{\"ast_type\":\"Int\",\"value\":1,\"type\":" ^
+  slice_uint_json ^ "},\"op\":{\"ast_type\":\"Add\"},\"right\":{\"ast_type\":\"Int\"," ^
+  "\"value\":1,\"type\":" ^ slice_uint_json ^ "},\"type\":" ^ slice_uint_json ^ "}";
+val ordinary_slice_ast = JSONDecode.decodeString jsonASTLib.annotated_ast
+  ("{\"ast\":{\"body\":[{\"ast_type\":\"FunctionDef\",\"name\":\"test\",\"decorator_list\":[]," ^
+   "\"args\":{\"ast_type\":\"arguments\",\"args\":[]},\"func_type\":{\"argument_types\":[],\"return_type\":null}," ^
+   "\"body\":[{\"ast_type\":\"Expr\",\"value\":{\"ast_type\":\"Call\",\"func\":{\"ast_type\":\"Name\",\"id\":\"slice\"}," ^
+   "\"args\":[{\"ast_type\":\"Name\",\"id\":\"b\",\"type\":{\"name\":\"Bytes\",\"length\":10}}," ^
+   slice_sum_json ^ "," ^ slice_sum_json ^ "],\"keywords\":[]," ^
+   "\"type\":{\"name\":\"Bytes\",\"length\":2}}}]}]}}");
+val expected_ordinary_slice =
+  ``JE_Call (JE_Name "slice" NONE JMissingSource JT_None)
+      [JE_Name "b" NONE JMissingSource (JT_Bytes 10);
+       JE_BinOp (JE_Int 1 (JT_Integer 256 F)) JBop_Add (JE_Int 1 (JT_Integer 256 F))
+         (JT_Integer 256 F);
+       JE_BinOp (JE_Int 1 (JT_Integer 256 F)) JBop_Add (JE_Int 1 (JT_Integer 256 F))
+         (JT_Integer 256 F)] [] (JT_Bytes 2) JMissingSource``;
+val () = if not (null (find_terms (aconv expected_ordinary_slice) ordinary_slice_ast))
+  then () else raise Fail "ordinary slice decoded unexpectedly";
+val () = if aconv (rhs (concl (bossLib.EVAL
+    ``translate_expr (0,NONE,[],[],[],[],[],[],[]) ^expected_ordinary_slice``)))
+  ``Builtin (BaseT (BytesT (Dynamic 2))) (Slice 2)
+      [Name (BaseT (BytesT (Dynamic 10))) "b";
+       Builtin (BaseT (UintT 256)) (Bop Add)
+         [Literal (BaseT (UintT 256)) (IntL 1);
+          Literal (BaseT (UintT 256)) (IntL 1)];
+       Literal (BaseT (UintT 256)) (IntL 2)]``
+  then () else raise Fail "ordinary slice did not fold its length";
+
 (* Issue 565: the public getter flag follows the pragma, except for explicit
    reentrant, constant and immutable declarations (g37/g38/g39 controls). *)
 Theorem translated_public_variable_getter_flag:
@@ -572,4 +676,29 @@ Theorem translated_public_hashmap_getter_flag:
    | _ => Private) = Public (nr_default /\ ~reentrant)
 Proof
   simp[jsonToVyperTopLevelTheory.translate_toplevel_def]
+QED
+
+(* Without bound=, range endpoints are folded to literals; with it, they stay
+   the translated expressions. *)
+Theorem range_static_folded_endpoints:
+  !ctx.
+    translate_iter ctx (BaseT (IntT 8))
+      (JIter_Range
+         [JE_BinOp (JE_Int (-5) (JT_Integer 8 T)) JBop_Add
+            (JE_Int 2 (JT_Integer 8 T)) (JT_Integer 8 T);
+          JE_Int 127 (JT_Integer 8 T)] NONE) =
+    Range (Literal (BaseT (IntT 8)) (IntL (-3)))
+          (Literal (BaseT (IntT 8)) (IntL 127)) /\
+    translate_iter ctx (BaseT (IntT 8))
+      (JIter_Range
+         [JE_BinOp (JE_Int (-5) (JT_Integer 8 T)) JBop_Add
+            (JE_Int 2 (JT_Integer 8 T)) (JT_Integer 8 T);
+          JE_Int 127 (JT_Integer 8 T)]
+         (SOME (JE_Int 1 (JT_Integer 256 F)))) =
+    Range (Builtin (BaseT (IntT 8)) (Bop Add)
+             [Literal (BaseT (IntT 8)) (IntL (-5));
+              Literal (BaseT (IntT 8)) (IntL 2)])
+          (Literal (BaseT (IntT 8)) (IntL 127))
+Proof
+  gen_tac >> CONV_TAC EVAL
 QED

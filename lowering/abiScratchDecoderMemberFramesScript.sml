@@ -8,32 +8,35 @@ Ancestors
   list arithmetic
 
 Theorem abi_scratch_decoder_member_after_head:
-  abi_scratch_decoder_ranges opc hi_op src dst sb (LENGTH bs)
+  abi_scratch_decoder_ranges opc base_op hi_op src dst B sb (LENGTH bs)
     d (SUM (MAP (type_memory_bytes ce) (pretys ++ ty::tys))) first last b cap initial /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs /\
-  abi_scratch_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc initial) = bs /\
+  abi_scratch_effect first last (abi_decoder_entry_floor st) end_st.cs_next_id st.cs_next_var limit_st
     (d + SUM (MAP (type_memory_bytes ce) pretys)) (type_memory_bytes ce ty) b cap initial after_head /\
-  first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
+  first <= (abi_decoder_entry_floor st) /\ end_st.cs_next_id <= last /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-  abi_decoder_operand_live st.cs_next_var hi_op /\ st.cs_next_var <= end_st.cs_next_var ==>
-  abi_scratch_decoder_ranges opc hi_op src dst sb (LENGTH bs)
+  abi_decoder_operand_live st.cs_next_var hi_op /\
+  abi_decoder_operand_live st.cs_next_var base_op /\ st.cs_next_var <= end_st.cs_next_var ==>
+  abi_scratch_decoder_ranges opc base_op hi_op src dst B sb (LENGTH bs)
     d (SUM (MAP (type_memory_bytes ce) (pretys ++ ty::tys))) first last b cap after_head /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc after_head) = bs /\
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc after_head) = bs /\
   fresh_vars_wrt limit_st after_head /\ abi_decoder_budget first last b cap after_head /\
   abi_decoder_operand_live end_st.cs_next_var src /\ abi_decoder_operand_live end_st.cs_next_var dst /\
-  abi_decoder_operand_live end_st.cs_next_var hi_op
+  abi_decoder_operand_live end_st.cs_next_var hi_op /\
+    abi_decoder_operand_live end_st.cs_next_var base_op
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `abi_scratch_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
+  `abi_scratch_effect first last (abi_decoder_entry_floor st) end_st.cs_next_id st.cs_next_var limit_st
     d (SUM (MAP (type_memory_bytes ce) (pretys ++ ty::tys))) b cap initial after_head` by
     (irule abi_scratch_effect_widen >>
      qexistsl_tac [`d + SUM (MAP (type_memory_bytes ce) pretys)`, `end_st.cs_next_id`,
-       `st.cs_next_id`, `st.cs_next_var`, `type_memory_bytes ce ty`] >>
+       `(abi_decoder_entry_floor st)`, `st.cs_next_var`, `type_memory_bytes ce ty`] >>
      asm_simp_tac arith_ss [MAP_APPEND, MAP, SUM_APPEND, SUM]) >>
   drule_all abi_scratch_decoder_ranges_effect >> strip_tac >>
   drule_all abi_scratch_decoder_source_effect >> strip_tac >>
   `abi_decoder_operand_live end_st.cs_next_var src /\ abi_decoder_operand_live end_st.cs_next_var dst /\
-   abi_decoder_operand_live end_st.cs_next_var hi_op` by
+   abi_decoder_operand_live end_st.cs_next_var hi_op /\
+    abi_decoder_operand_live end_st.cs_next_var base_op` by
     (rpt conj_tac >> irule abi_decoder_operand_live_mono >>
      qexists_tac `st.cs_next_var` >> asm_simp_tac bool_ss []) >>
   fs[abi_scratch_effect_def]
@@ -62,9 +65,9 @@ QED
 
 Theorem abi_scratch_decoder_member_effects_compose:
   abi_scratch_effect first last lo mid_id next limit_st cell headsz b cap s middle /\
-  abi_scratch_effect first last mid_id hi tail_next limit_st
+  abi_scratch_effect first last tail_lo hi tail_next limit_st
     (cell + headsz) tailsz b cap middle t /\
-  first <= lo /\ hi <= last /\ lo <= mid_id /\ mid_id <= hi /\ next <= tail_next ==>
+  first <= lo /\ hi <= last /\ lo <= tail_lo /\ mid_id <= hi /\ next <= tail_next ==>
   abi_scratch_effect first last lo hi next limit_st cell (headsz + tailsz) b cap s t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -74,7 +77,7 @@ Proof
      asm_simp_tac arith_ss []) >>
   `abi_scratch_effect first last lo hi next limit_st cell (headsz + tailsz) b cap middle t` by
     (irule abi_scratch_effect_widen >>
-     qexistsl_tac [`cell + headsz`, `hi`, `mid_id`, `tail_next`, `tailsz`] >>
+     qexistsl_tac [`cell + headsz`, `hi`, `tail_lo`, `tail_next`, `tailsz`] >>
      asm_simp_tac arith_ss []) >>
   irule abi_scratch_effect_trans >> asm_simp_tac bool_ss [] >> qexists_tac `middle` >> simp[]
 QED

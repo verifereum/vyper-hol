@@ -1,6 +1,6 @@
 Theory immutableRelation
 Ancestors
-  immutableSection immutableEncodingProofs immutableEncoding immutableValue compileEnv
+  immutableSection immutableEncodingProofs immutableEncoding immutableValue compileEnv loweringStateRelDefs
 
 (* A lookup-to-declaration interface, discharged by location allocation and
    source-name uniqueness. It deliberately does not presume unshadowed keys. *)
@@ -127,7 +127,7 @@ Theorem immutable_relation_from_slices:
   immutables_rel cenv addr src ctor vs ss
 Proof
   simp[immutables_rel_def] >> rpt strip_tac >>
-  first_x_assum drule_all >> strip_tac >> simp[] >>
+  first_x_assum drule_all >> strip_tac >> gvs[] >>
   FIRST [irule immutable_encoding_slice_decodes >> simp[],
          irule immutable_value_bytes_slice >> simp[]]
 QED
@@ -194,6 +194,10 @@ Proof
        listTheory.TAKE_APPEND1]
 QED
 
+(* DISABLED: false in constructor mode now that immutables_rel_def bounds
+   only the runtime data section; its only user (immutable_constructor_section)
+   reads immutables_rel_def directly.  Kept pending a decision on whether to
+   weaken the length conjunct to (~ctor ==> ...) or drop the theorem.
 Theorem immutable_relation_lookup:
   immutables_rel cenv addr src ctor vs ss /\
   FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
@@ -208,6 +212,7 @@ Theorem immutable_relation_lookup:
 Proof
   strip_tac >> fs[immutables_rel_def] >> metis_tac[]
 QED
+*)
 
 Theorem immutable_base_zero_assigned:
   cenv.ce_imm_alloca = SOME (Var out) /\

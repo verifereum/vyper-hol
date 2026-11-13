@@ -22,9 +22,9 @@ Theorem ctx_sim_refl:
   (!name fn. C.ctx_entry = SOME name /\
              lookup_function name C.ctx_functions = SOME fn ==>
              entry_fn_no_return fn) ==>
-  ctx_sim D C C vs vs
+  ctx_sim_fuel I D C C vs vs
 Proof
-  rw[ctx_sim_def] >> qexists_tac `fuel` >>
+  rw[ctx_sim_fuel_def] >>
   irule unit_result_rel_dead_result_rel >>
   Cases_on `run_context fuel C vs` >>
   gvs[terminates_def, unit_result_rel_def, observable_equiv_def] >>
@@ -57,7 +57,7 @@ Proof
   Induct >> Cases_on `l'` >> rw[] >> metis_tac[]
 QED
 
-Theorem dret_desugar_stage_identity[local]:
+Theorem dret_desugar_stage_identity:
   ctx_pass_stage rpolicy (CFP_Simple VP_DretDesugar) view C C' /\
   o1_ctx_shape C ==> C' = C
 Proof
@@ -83,6 +83,7 @@ Proof
       `no_dret fn` by gvs[o1_fn_shape_def] >>
       drule_all dret_desugar_step_identity >> rw[] >>
       simp[fresh_names_ok_def, label_map_sources_ok_def]) >>
-  rw[o1_stage_contract_def] >> drule_all dret_desugar_stage_identity >>
+  rw[o1_stage_contract_def, pass_fuel_def] >>
+  drule_all dret_desugar_stage_identity >>
   rw[] >> irule ctx_sim_refl >> metis_tac[o1_ctx_shape_entry_no_return]
 QED

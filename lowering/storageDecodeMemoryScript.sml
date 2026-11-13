@@ -1,7 +1,7 @@
 (* Byte observations for storage values copied to memory. *)
 Theory storageDecodeMemory
 Ancestors
-  list rich_list words valueEncoding valueEncodingProps compileEnv
+  list rich_list words valueEncoding valueEncodingDefs valueEncodingProps compileEnv loweringStateRelDefs
   vyperLookupStorage vyperStorage vyperValue accountsRelProps venomMemProps
   exprSimAggregateEncoding vyperTyping valueTypingMemoryProps
 
@@ -17,15 +17,6 @@ Definition storage_live_memory_def:
     copy_bytes st bs (type_slot_size tv) (dead_bytes st bs tv) dst mem
 End
 
-Theorem type_memory_size_slots:
-  (!tv. type_memory_size tv = 32 * type_slot_size tv) /\
-  (!tvs. type_memory_size_list tvs = 32 * type_slot_size_list tvs) /\
-  (!fields. type_memory_size_fields fields = 32 * type_slot_size_fields fields)
-Proof
-  ho_match_mp_tac type_memory_size_ind >>
-  simp[type_memory_size_def, type_slot_size_def,
-       arithmeticTheory.LEFT_ADD_DISTRIB]
-QED
 
 Theorem copy_bytes_word:
   !dst mem (w:bytes32).
@@ -238,12 +229,7 @@ Proof
       pure_rewrite_tac[arithmeticTheory.RIGHT_ADD_DISTRIB,
         arithmeticTheory.MULT_RIGHT_1] >> decide_tac) >>
   rpt strip_tac >> gvs[dead_bytes_def] >> rename1 `k < n` >>
-  Cases_on `k < w2n (lookup_storage (n2w bs) st)`
-  >- (gvs[] >> drule (cj 1 dead_bytes_range) >> strip_tac >>
-      `k = i` by
-        (irule slot_block_index >> qexistsl [`i'`, `type_slot_size tv`] >>
-         simp[arithmeticTheory.RIGHT_ADD_DISTRIB] >> decide_tac) >> gvs[]) >>
-  gvs[] >>
+  drule (cj 1 dead_bytes_range) >> strip_tac >>
   `k = i` by
     (irule slot_block_index >> qexistsl [`i'`, `type_slot_size tv`] >>
      simp[arithmeticTheory.RIGHT_ADD_DISTRIB] >> decide_tac) >> gvs[]
@@ -560,6 +546,8 @@ Proof
          qexists_tac `max` >> fs[read_slot_def]) >>
       `MIN (w2n (read_slot st bs)) max = w2n (read_slot st bs)` by
         (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+      `dyn_slots_in_range st (bs + 1) tv (w2n (read_slot st bs))` by
+        (irule dyn_slots_in_range_prefix >> qexists_tac `max` >> simp[]) >>
       gvs[] >> first_x_assum (drule_then strip_assume_tac) >>
       simp[val_in_memory_def] >> irule storage_live_memory_head >>
       goal_assum (drule_at Any) >> simp[type_slot_size_def])

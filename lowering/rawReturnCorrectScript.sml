@@ -68,6 +68,8 @@ Theorem external_return_raw_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
+  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+    simp[loweringStateRelDefsTheory.state_rel_def] >>
   `v = v0` by metis_tac[safe_cast_some_eq] >>
   `value_has_type tv v0` by metis_tac[safe_cast_result_well_typed] >>
   irule frag_exec_pointwise >>

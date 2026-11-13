@@ -4,13 +4,13 @@
  * Depends on removeUnusedStructProofs for rusp_preserves_all and
  * removeUnusedSsaProofs for nop_output_not_used_as_operand.
  *
- * Key theorem:
- *   remove_unused_function_correct_ssa — full OWHILE iteration correctness
+ * Key theorems reconstruct source GAS oracles through finite OWHILE
+ * iteration, preserving nonzero budgets and low-fuel Error reflection.
  *)
 
 Theory removeUnusedFnProofs
 Ancestors
-  removeUnusedStructProofs
+  removeUnusedStructProofs removeUnusedGasProofs
   removeUnusedSsaProofs
   removeUnusedProofs removeUnusedDefs
   passSimulationDefs passSimulationProps analysisSimProps
@@ -106,170 +106,267 @@ Proof
   ]
 QED
 
-(* One OWHILE step: running x errors or yields state/execution-equivalent result to remove_unused_single_pass(x) w.r.t. eliminated vars *)
-Theorem rusp_step_condition[local]:
-  !fuel ctx fn s result x.
-    venom_wf ctx /\ s.vs_inst_idx = 0 /\
-    remove_unused_iterate fn = SOME result /\
-    remove_unused_single_pass x <> x /\
-    OWHILE ^G_def ^f_def x = SOME result /\
-    wf_function x /\ fn_inst_wf x /\ wf_ssa x /\
-    ssa_form x /\ nop_outputs_empty x /\ alloca_pointer_confined x /\
-    fn_entry_label x = SOME s.vs_current_bb /\
-    fn_all_outputs x SUBSET fn_all_outputs fn ==>
-    let elim = remove_unused_eliminated_vars fn in
-    (?e. run_blocks fuel ctx x s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_blocks fuel ctx x s)
-      (run_blocks fuel ctx (remove_unused_single_pass x) s)
+
+Theorem remove_unused_owhile_reachable_ind[local]:
+  !G f P.
+    (!x. ~G x ==> P x x) /\
+    (!x y. G x /\ OWHILE G f (f x) = SOME y /\ P (f x) y ==> P x y) ==>
+    !x y. OWHILE G f x = SOME y ==> P x y
 Proof
-  rpt strip_tac >> simp_tac std_ss [LET_THM] >>
-  (* Apply single-pass correctness *)
-  mp_tac (SIMP_RULE std_ss [LET_THM]
-            removeUnusedProofsTheory.remove_unused_single_pass_correct_proof) >>
-  disch_then (qspecl_then [`fuel`, `ctx`, `x`, `s`] mp_tac) >>
-  (impl_tac >- (
-    rpt conj_tac >> fs[] >>
-    rpt strip_tac >>
-    metis_tac[nop_output_not_used_as_operand])) >>
-  simp_tac std_ss [LET_THM] >>
-  strip_tac
-  >- metis_tac[] >>
-  (* Weaken nop_outputs to elim *)
-  DISJ2_TAC >>
+  rpt gen_tac >> strip_tac >>
+  `!x y. OWHILE G f x = SOME y ==>
+    OWHILE G f x = SOME y /\ P x y` by
+    (ho_match_mp_tac WhileTheory.OWHILE_IND >> conj_tac >>
+     rpt strip_tac >> simp[Once WhileTheory.OWHILE_THM] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem remove_unused_owhile_permanent_error_reconstruction:
+  !x y. OWHILE ^G_def ^f_def x = SOME y ==>
+    !ctx s.
+      wf_function x /\ fn_inst_wf x /\ wf_ssa x /\ ssa_form x /\
+      nop_outputs_empty x /\ alloca_pointer_confined x /\
+      s.vs_inst_idx = 0 /\
+      (!fuel. ?e. run_blocks fuel ctx y s = Error e) ==>
+      ?gs:(256 word) list.
+        LENGTH (FILTER (\w. w <> 0w) gs) <=
+          LENGTH (FILTER (\w. w <> 0w) s.vs_gas_readings) /\
+        !fuel. ?e. run_blocks fuel ctx x (s with vs_gas_readings := gs) = Error e
+Proof
+  ho_match_mp_tac WhileTheory.OWHILE_IND >>
+  simp_tac std_ss [BETA_THM] >> conj_tac
+  >- (rpt strip_tac >> qexists_tac `s.vs_gas_readings` >> simp[]) >>
+  rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `wf_function (remove_unused_single_pass x) /\
+   fn_inst_wf (remove_unused_single_pass x) /\
+   wf_ssa (remove_unused_single_pass x) /\
+   ssa_form (remove_unused_single_pass x) /\
+   nop_outputs_empty (remove_unused_single_pass x) /\
+   alloca_pointer_confined (remove_unused_single_pass x)` by
+    metis_tac[rusp_preserves_all] >>
+  `?hs:(256 word) list.
+     LENGTH (FILTER (\w. w <> 0w) hs) <=
+       LENGTH (FILTER (\w. w <> 0w) s.vs_gas_readings) /\
+     !fuel. ?e. run_blocks fuel ctx (remove_unused_single_pass x)
+       (s with vs_gas_readings := hs) = Error e` by metis_tac[] >>
+  `?gs:(256 word) list.
+     LENGTH (FILTER (\w. w <> 0w) gs) <= LENGTH (FILTER (\w. w <> 0w) hs) /\
+     !fuel. ?e. run_blocks fuel ctx x (s with vs_gas_readings := gs) = Error e` by
+    (qspecl_then [`ctx`, `x`, `s`, `s with vs_gas_readings := hs`] mp_tac
+       remove_unused_single_pass_permanent_error_reconstruction >>
+     simp[stateEquivPropsTheory.state_equiv_refl]) >>
+  qexists_tac `gs` >> simp[] >> decide_tac
+QED
+
+Theorem remove_unused_owhile_finite_reconstruction:
+  !x y. OWHILE ^G_def ^f_def x = SOME y ==>
+    !N ctx s.
+      wf_function x /\ fn_inst_wf x /\ wf_ssa x /\ ssa_form x /\
+      nop_outputs_empty x /\ alloca_pointer_confined x /\
+      s.vs_inst_idx = 0 /\ ~(?e. run_blocks N ctx y s = Error e) ==>
+      ?gs:(256 word) list.
+        LENGTH (FILTER (\w. w <> 0w) gs) <=
+          LENGTH (FILTER (\w. w <> 0w) s.vs_gas_readings) /\
+        ((!fuel. ?e. run_blocks fuel ctx x (s with vs_gas_readings := gs) = Error e) \/
+         lift_result (state_equiv (fn_all_outputs x DIFF fn_all_outputs y))
+           (execution_equiv (fn_all_outputs x DIFF fn_all_outputs y))
+           (execution_equiv (fn_all_outputs x DIFF fn_all_outputs y))
+           (run_blocks N ctx x (s with vs_gas_readings := gs))
+           (run_blocks N ctx y s)) /\
+        (!k. k <= N /\ (?e. run_blocks k ctx y s = Error e) ==>
+          ?e. run_blocks k ctx x (s with vs_gas_readings := gs) = Error e)
+Proof
+  ho_match_mp_tac remove_unused_owhile_reachable_ind >>
+  simp_tac std_ss [BETA_THM] >> conj_tac
+  >- (rpt strip_tac >> qexists_tac `s.vs_gas_readings` >>
+      simp[removeUnusedProofsTheory.lift_result_refl_state_equiv]) >>
+  rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `wf_function (remove_unused_single_pass x) /\
+   fn_inst_wf (remove_unused_single_pass x) /\
+   wf_ssa (remove_unused_single_pass x) /\
+   ssa_form (remove_unused_single_pass x) /\
+   nop_outputs_empty (remove_unused_single_pass x) /\
+   alloca_pointer_confined (remove_unused_single_pass x)` by
+    metis_tac[rusp_preserves_all] >>
+  suspend "step"
+QED
+
+Resume remove_unused_owhile_finite_reconstruction[step]:
+  `OWHILE ^G_def ^f_def x = SOME y` by
+    (simp[Once WhileTheory.OWHILE_THM] >> first_assum ACCEPT_TAC) >>
+  `single_pass_nop_outputs x SUBSET (fn_all_outputs x DIFF fn_all_outputs y)` by
+    (irule nop_outputs_subset_elim >> simp[]) >>
+  `fn_all_outputs (remove_unused_single_pass x) DIFF fn_all_outputs y SUBSET
+      (fn_all_outputs x DIFF fn_all_outputs y)` by
+    (mp_tac (Q.SPEC `x` removeUnusedProofsTheory.rusp_all_outputs_subset) >>
+     pred_setLib.SET_TAC[]) >>
+  qpat_x_assum `!N ctx s. _` (qspecl_then [`N`, `ctx`, `s`] mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `hs` strip_assume_tac)
+  >- (qspecl_then [`ctx`, `x`, `s`, `s with vs_gas_readings := hs`] mp_tac
+        remove_unused_single_pass_permanent_error_reconstruction >>
+      simp[stateEquivPropsTheory.state_equiv_refl] >>
+      disch_then (qx_choose_then `gs` strip_assume_tac) >>
+      qexists_tac `gs` >> simp[] >> decide_tac) >>
+  qpat_x_assum `remove_unused_single_pass x <> x` kall_tac >>
+  qpat_x_assum `OWHILE _ _ x = SOME y` kall_tac >>
+  qpat_x_assum `OWHILE _ _ (remove_unused_single_pass x) = SOME y` kall_tac >>
+  qpat_x_assum `wf_function (remove_unused_single_pass x)` kall_tac >>
+  qpat_x_assum `fn_inst_wf (remove_unused_single_pass x)` kall_tac >>
+  qpat_x_assum `wf_ssa (remove_unused_single_pass x)` kall_tac >>
+  qpat_x_assum `ssa_form (remove_unused_single_pass x)` kall_tac >>
+  qpat_x_assum `nop_outputs_empty (remove_unused_single_pass x)` kall_tac >>
+  qpat_x_assum `alloca_pointer_confined (remove_unused_single_pass x)` kall_tac >>
+  suspend "tail"
+QED
+
+Resume remove_unused_owhile_finite_reconstruction[tail]:
+  `~(?e. run_blocks N ctx (remove_unused_single_pass x)
+       (s with vs_gas_readings := hs) = Error e)` by
+    (Cases_on `run_blocks N ctx (remove_unused_single_pass x)
+       (s with vs_gas_readings := hs)` >>
+     Cases_on `run_blocks N ctx y s` >> gvs[lift_result_def]) >>
+  gvs[] >>
+  qspecl_then [`N`, `ctx`, `x`, `s`, `s with vs_gas_readings := hs`] mp_tac
+    remove_unused_single_pass_finite_reconstruction >>
+  simp[stateEquivPropsTheory.state_equiv_refl] >>
+  disch_then (qx_choose_then `gs` strip_assume_tac)
+  >- (qexists_tac `gs` >> simp[] >> decide_tac) >>
+  qexists_tac `gs` >> conj_tac >- decide_tac >>
+  reverse conj_tac >- metis_tac[] >>
+  disj2_tac >>
+  irule passSimulationProofsTheory.lift_result_trans_proof >>
+  conj_tac >- metis_tac[stateEquivPropsTheory.execution_equiv_trans] >>
+  conj_tac >- metis_tac[stateEquivPropsTheory.state_equiv_trans] >>
+  conj_tac >- metis_tac[stateEquivPropsTheory.execution_equiv_trans] >>
+  qexists_tac `run_blocks N ctx (remove_unused_single_pass x)
+    (s with vs_gas_readings := hs)` >> conj_tac >>
   irule removeUnusedProofsTheory.lift_result_weaken_vars >>
-  qexists_tac `single_pass_nop_outputs x` >> conj_tac
-  >- (
-    (* single_pass_nop_outputs x <= elim *)
-    simp[remove_unused_eliminated_vars_def, LET_THM,
-         GSYM fn_all_outputs_def, remove_unused_function_def] >>
-    irule nop_outputs_subset_elim >>
-    simp[remove_unused_iterate_def] >> fs[]
-  )
-  >- first_assum ACCEPT_TAC
+  goal_assum (drule_at Any) >> simp[]
 QED
 
-(* After one OWHILE step, wf/SSA/pointer-confinement bundle, entry label, and output subset are preserved *)
-Theorem rusp_preservation_condition[local]:
-  !fn result s x.
-    OWHILE ^G_def ^f_def x = SOME result /\
-    remove_unused_single_pass x <> x /\
-    wf_function x /\ fn_inst_wf x /\ wf_ssa x /\
-    ssa_form x /\ nop_outputs_empty x /\ alloca_pointer_confined x /\
-    fn_entry_label x = SOME s.vs_current_bb /\
-    fn_all_outputs x SUBSET fn_all_outputs fn ==>
-    OWHILE ^G_def ^f_def (remove_unused_single_pass x) = SOME result /\
-    wf_function (remove_unused_single_pass x) /\
-    fn_inst_wf (remove_unused_single_pass x) /\
-    wf_ssa (remove_unused_single_pass x) /\
-    ssa_form (remove_unused_single_pass x) /\
-    nop_outputs_empty (remove_unused_single_pass x) /\
-    alloca_pointer_confined (remove_unused_single_pass x) /\
-    fn_entry_label (remove_unused_single_pass x) = SOME s.vs_current_bb /\
-    fn_all_outputs (remove_unused_single_pass x) SUBSET fn_all_outputs fn
-Proof
-  rpt strip_tac >>
-  `OWHILE (\g. remove_unused_single_pass g <> g)
-          remove_unused_single_pass (remove_unused_single_pass x) = SOME result` by (
-    qpat_x_assum `OWHILE _ _ x = SOME result` mp_tac >>
-    CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [WhileTheory.OWHILE_THM])) >>
-    simp[]) >>
-  fs[rusp_preserves_all, rusp_preserves_entry_label] >>
-  metis_tac[removeUnusedProofsTheory.rusp_all_outputs_subset,
-            pred_setTheory.SUBSET_TRANS]
-QED
+Finalise remove_unused_owhile_finite_reconstruction
 
-(* Self-contained correctness under wf_ssa: remove_unused_function either errors
-   or yields state/execution-equivalent result w.r.t. the eliminated variable set *)
-Theorem remove_unused_function_correct_ssa:
-  !fuel ctx fn s.
-    venom_wf ctx /\ wf_function fn /\ fn_inst_wf fn /\
-    wf_ssa fn /\ ssa_form fn /\
+
+Theorem remove_unused_function_permanent_error_reconstruction:
+  !ctx fn s.
+    wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\ ssa_form fn /\
     nop_outputs_empty fn /\ alloca_pointer_confined fn /\
     s.vs_inst_idx = 0 /\
-    fn_entry_label fn = SOME s.vs_current_bb ==>
-    let elim = remove_unused_eliminated_vars fn in
-    (?e. run_blocks fuel ctx fn s = Error e) \/
-    lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (remove_unused_function fn) s)
+    (!fuel. ?e. run_blocks fuel ctx (remove_unused_function fn) s = Error e) ==>
+    ?gs:(256 word) list.
+      LENGTH (FILTER (\w. w <> 0w) gs) <=
+        LENGTH (FILTER (\w. w <> 0w) s.vs_gas_readings) /\
+      !fuel. ?e. run_blocks fuel ctx fn (s with vs_gas_readings := gs) = Error e
 Proof
-  rpt strip_tac >> simp_tac std_ss [LET_THM] >>
+  rpt gen_tac >>
   simp[remove_unused_function_def] >>
   Cases_on `remove_unused_iterate fn`
-  >- simp[removeUnusedProofsTheory.lift_result_refl_state_equiv] >>
-  rename1 `remove_unused_iterate fn = SOME result` >>
-  simp[] >>
-  qabbrev_tac `elim = remove_unused_eliminated_vars fn` >>
-  (* Apply owhile_lift_result_compose *)
-  mp_tac (BETA_RULE (Q.ISPECL [
-    `\g:ir_function. remove_unused_single_pass g <> g`,
-    `remove_unused_single_pass`,
-    `state_equiv elim`,
-    `execution_equiv elim`,
-    `\x. run_blocks fuel ctx x s`
-  ] removeUnusedProofsTheory.owhile_lift_result_compose)) >>
-  disch_then (qspec_then
-    `\x. OWHILE ^G_def ^f_def x = SOME result /\
-         wf_function x /\ fn_inst_wf x /\ wf_ssa x /\
-         ssa_form x /\ nop_outputs_empty x /\ alloca_pointer_confined x /\
-         fn_entry_label x = SOME s.vs_current_bb /\
-         fn_all_outputs x SUBSET fn_all_outputs fn` mp_tac) >>
-  simp_tac std_ss [BETA_THM] >>
-  simp[stateEquivPropsTheory.state_equiv_refl,
-       stateEquivPropsTheory.execution_equiv_refl] >>
-  (* Discharge transitivity *)
-  (SUBGOAL_THEN
-    ``(!s1 s2 s3. state_equiv elim s1 s2 /\ state_equiv elim s2 s3 ==>
-                  state_equiv elim s1 s3) /\
-     (!s1 s2 s3. execution_equiv elim s1 s2 /\ execution_equiv elim s2 s3 ==>
-                  execution_equiv elim s1 s3)``
-    (fn th => REWRITE_TAC [th])
-  >- metis_tac[stateEquivPropsTheory.state_equiv_trans,
-               stateEquivPropsTheory.execution_equiv_trans]) >>
-  (* Discharge step condition *)
-  `!x. remove_unused_single_pass x <> x /\
-       OWHILE (\g. remove_unused_single_pass g <> g)
-              remove_unused_single_pass x = SOME result /\
-       wf_function x /\ fn_inst_wf x /\ wf_ssa x /\
-       ssa_form x /\ nop_outputs_empty x /\ alloca_pointer_confined x /\
-       fn_entry_label x = SOME s.vs_current_bb /\
-       fn_all_outputs x SUBSET fn_all_outputs fn ==>
-       (?e. run_blocks fuel ctx x s = Error e) \/
-       lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
-         (run_blocks fuel ctx x s)
-         (run_blocks fuel ctx (remove_unused_single_pass x) s)` by (
-    rpt strip_tac >>
-    mp_tac (SIMP_RULE std_ss [LET_THM] rusp_step_condition) >>
-    disch_then (qspecl_then [`fuel`, `ctx`, `fn`, `s`, `result`, `x`] mp_tac) >>
-    (impl_tac >- (simp[remove_unused_iterate_def] >> fs[])) >>
-    fs[Abbr `elim`]) >>
-  (* Discharge preservation condition *)
-  `!x. remove_unused_single_pass x <> x /\
-       OWHILE (\g. remove_unused_single_pass g <> g)
-              remove_unused_single_pass x = SOME result /\
-       wf_function x /\ fn_inst_wf x /\ wf_ssa x /\
-       ssa_form x /\ nop_outputs_empty x /\ alloca_pointer_confined x /\
-       fn_entry_label x = SOME s.vs_current_bb /\
-       fn_all_outputs x SUBSET fn_all_outputs fn ==>
-       OWHILE (\g. remove_unused_single_pass g <> g)
-              remove_unused_single_pass (remove_unused_single_pass x) = SOME result /\
-       wf_function (remove_unused_single_pass x) /\
-       fn_inst_wf (remove_unused_single_pass x) /\
-       wf_ssa (remove_unused_single_pass x) /\
-       ssa_form (remove_unused_single_pass x) /\
-       nop_outputs_empty (remove_unused_single_pass x) /\
-       alloca_pointer_confined (remove_unused_single_pass x) /\
-       fn_entry_label (remove_unused_single_pass x) = SOME s.vs_current_bb /\
-       fn_all_outputs (remove_unused_single_pass x) SUBSET fn_all_outputs fn` by (
-    rpt strip_tac >>
-    mp_tac rusp_preservation_condition >>
-    disch_then (qspecl_then [`fn`, `result`, `s`, `x`] mp_tac) >>
-    (impl_tac >- fs[]) >> simp[]) >>
-  (* Feed to owhile_lift_result_compose *)
-  (impl_tac >- (rpt strip_tac >> metis_tac[])) >>
-  disch_then (qspec_then `fn` mp_tac) >>
-  simp[remove_unused_iterate_def, pred_setTheory.SUBSET_REFL] >>
-  fs[remove_unused_iterate_def]
+  >- (simp[] >> strip_tac >> qexists_tac `s.vs_gas_readings` >> simp[]) >>
+  simp[] >> strip_tac >>
+  irule remove_unused_owhile_permanent_error_reconstruction >>
+  goal_assum (drule_at Any) >> simp[GSYM remove_unused_iterate_def]
 QED
 
+Theorem remove_unused_function_finite_reconstruction:
+  !N ctx fn s.
+    wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\ ssa_form fn /\
+    nop_outputs_empty fn /\ alloca_pointer_confined fn /\
+    s.vs_inst_idx = 0 /\
+    ~(?e. run_blocks N ctx (remove_unused_function fn) s = Error e) ==>
+    ?gs:(256 word) list.
+      LENGTH (FILTER (\w. w <> 0w) gs) <=
+        LENGTH (FILTER (\w. w <> 0w) s.vs_gas_readings) /\
+      ((!fuel. ?e. run_blocks fuel ctx fn (s with vs_gas_readings := gs) = Error e) \/
+       lift_result (state_equiv (remove_unused_eliminated_vars fn))
+         (execution_equiv (remove_unused_eliminated_vars fn))
+         (execution_equiv (remove_unused_eliminated_vars fn))
+         (run_blocks N ctx fn (s with vs_gas_readings := gs))
+         (run_blocks N ctx (remove_unused_function fn) s)) /\
+      (!k. k <= N /\ (?e. run_blocks k ctx (remove_unused_function fn) s = Error e) ==>
+        ?e. run_blocks k ctx fn (s with vs_gas_readings := gs) = Error e)
+Proof
+  rpt gen_tac >>
+  simp[remove_unused_eliminated_vars_def, remove_unused_function_def] >>
+  Cases_on `remove_unused_iterate fn`
+  >- (simp[] >> strip_tac >> qexists_tac `s.vs_gas_readings` >>
+      simp[removeUnusedProofsTheory.lift_result_refl_state_equiv]) >>
+  simp[] >> strip_tac >>
+  irule remove_unused_owhile_finite_reconstruction >>
+  goal_assum (drule_at Any) >> simp[GSYM remove_unused_iterate_def]
+QED
+
+Theorem remove_unused_owhile_error_reconstruction:
+  !x y. OWHILE ^G_def ^f_def x = SOME y ==>
+    !N ctx s.
+      wf_function x /\ fn_inst_wf x /\ wf_ssa x /\ ssa_form x /\
+      nop_outputs_empty x /\ alloca_pointer_confined x /\
+      s.vs_inst_idx = 0 /\
+      (?e. run_blocks N ctx y s = Error e) ==>
+      ?gs:(256 word) list.
+        LENGTH (FILTER (\w. w <> 0w) gs) <=
+          LENGTH (FILTER (\w. w <> 0w) s.vs_gas_readings) /\
+        ?e. run_blocks N ctx x (s with vs_gas_readings := gs) = Error e
+Proof
+  ho_match_mp_tac WhileTheory.OWHILE_IND >>
+  simp_tac std_ss [BETA_THM] >> conj_tac
+  >- (rpt strip_tac >> qexists_tac `s.vs_gas_readings` >> simp[]) >>
+  rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `wf_function (remove_unused_single_pass x) /\
+   fn_inst_wf (remove_unused_single_pass x) /\
+   wf_ssa (remove_unused_single_pass x) /\
+   ssa_form (remove_unused_single_pass x) /\
+   nop_outputs_empty (remove_unused_single_pass x) /\
+   alloca_pointer_confined (remove_unused_single_pass x)` by
+    metis_tac[rusp_preserves_all] >>
+  `?hs:(256 word) list.
+     LENGTH (FILTER (\w. w <> 0w) hs) <=
+       LENGTH (FILTER (\w. w <> 0w) s.vs_gas_readings) /\
+     ?e. run_blocks N ctx (remove_unused_single_pass x)
+       (s with vs_gas_readings := hs) = Error e` by metis_tac[] >>
+  `?gs:(256 word) list.
+     LENGTH (FILTER (\w. w <> 0w) gs) <= LENGTH (FILTER (\w. w <> 0w) hs) /\
+     ?e. run_blocks N ctx x (s with vs_gas_readings := gs) = Error e` by
+    (qspecl_then [`N`, `ctx`, `x`, `s`, `s with vs_gas_readings := hs`]
+       mp_tac remove_unused_single_pass_error_reconstruction >>
+     simp[stateEquivPropsTheory.state_equiv_refl]) >>
+  qexists_tac `gs` >> conj_tac >- decide_tac >> metis_tac[]
+QED
+
+Theorem remove_unused_function_error_reconstruction:
+  !N ctx fn s.
+    wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\ ssa_form fn /\
+    nop_outputs_empty fn /\ alloca_pointer_confined fn /\
+    s.vs_inst_idx = 0 /\
+    (?e. run_blocks N ctx (remove_unused_function fn) s = Error e) ==>
+    ?gs:(256 word) list.
+      LENGTH (FILTER (\w. w <> 0w) gs) <=
+        LENGTH (FILTER (\w. w <> 0w) s.vs_gas_readings) /\
+      ?e. run_blocks N ctx fn (s with vs_gas_readings := gs) = Error e
+Proof
+  rpt gen_tac >> simp[remove_unused_function_def] >>
+  Cases_on `remove_unused_iterate fn`
+  >- (simp[] >> strip_tac >> qexists_tac `s.vs_gas_readings` >> simp[]) >>
+  simp[] >> strip_tac >>
+  irule remove_unused_owhile_error_reconstruction >>
+  goal_assum (drule_at Any) >> simp[GSYM remove_unused_iterate_def]
+QED
+
+Theorem remove_unused_function_bounded_error_reconstruction:
+  !N ctx fn s.
+    wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\ ssa_form fn /\
+    nop_outputs_empty fn /\ alloca_pointer_confined fn /\
+    s.vs_inst_idx = 0 /\
+    (?e. run_blocks N ctx (remove_unused_function fn) s = Error e) ==>
+    ?gs:(256 word) list.
+      LENGTH (FILTER (\w. w <> 0w) gs) <=
+        LENGTH (FILTER (\w. w <> 0w) s.vs_gas_readings) /\
+      !k. k <= N ==> ?e. run_blocks k ctx fn (s with vs_gas_readings := gs) = Error e
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`N`, `ctx`, `fn`, `s`] mp_tac
+    remove_unused_function_error_reconstruction >> simp[] >>
+  disch_then (qx_choose_then `gs` strip_assume_tac) >>
+  qexists_tac `gs` >> simp[] >> rpt strip_tac >>
+  irule remove_unused_run_blocks_error_downward >>
+  qexists_tac `N` >> simp[]
+QED

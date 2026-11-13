@@ -41,7 +41,7 @@
 Theory extCallOracleStep
 Ancestors
   list words
-  compileEnv localPtrsProps exprLoweringProps accountsRelProps
+  compileEnv loweringStateRelDefs localPtrsProps exprLoweringProps accountsRelProps
   vyperInterpreter vyperState vyperValue vyperCallOutcome extCallOracle
   venomCallOracleDefs venomExecSemantics venomInst venomState venomMemProps
 
@@ -142,6 +142,7 @@ Proof
       adopt_outcome_deletions_def, logs_rel_eq, record_request_def] >>
   Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
   Cases_on `rq.cr_kind = MessageCall` >>
+  Cases_on `rq.cr_kind = DelegateMessageCall` >>
   gvs[storage_rel_def, transient_rel_def, accounts_rel_def,
       call_ctx_rel_def, contract_storage_def, contract_transient_def] >>
   gvs[immutables_rel_def] >>
@@ -192,7 +193,7 @@ Proof
           es1 = es with <| outcomes := SOME rest;
                            requests := record_request rq es.requests |>` by
     (qpat_x_assum `take_call_outcome _ _ _ _ = _` mp_tac >>
-     simp[take_call_outcome_def] >> pairarg_tac >> simp[] >> rw[] >>
+     simp[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> simp[] >> rw[] >>
      qexists_tac `rest` >> simp[]) >>
   `request_agree cx rq (venom_call_request s aw vw ao az stat)` by
     (qpat_x_assum `rq = _` SUBST1_TAC >>
@@ -251,16 +252,19 @@ Theorem send_call_oracle_step:
 Proof
   rpt gen_tac >> strip_tac >>
   `es.outcomes = SOME s.vs_outcomes /\
-   local_ptrs_rel func cenv es.scopes s /\ ~s.vs_call_ctx.cc_static` by
+   local_ptrs_rel func cenv es.scopes s /\ ~s.vs_call_ctx.cc_static /\
+   ~cx.txn.is_static` by
     fs[state_rel_def] >>
   `step_inst_base inst s =
      exec_ext_call inst s (THE (eval_operand gas_op s)) aw vw 0w 0w
        (0w:bytes32) (0w:bytes32) F` by
     (Cases_on `eval_operand gas_op s` >> fs[] >>
-     simp[step_inst_base_def, eval_operand_def]) >>
+     simp[step_inst_base_opcode_eqs, eval_operand_def]) >>
   qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
-       check_def, lift_option_type_def, vyperStateTheory.return_def] >>
+  qpat_x_assum `~cx.txn.is_static` (fn th =>
+    simp[eval_send_def, frame_call_value_def, update_pending_deletions_def, th, bind_def, ignore_bind_def,
+         type_check_def, assert_def, check_def, lift_option_type_def,
+         vyperStateTheory.return_def]) >>
   Cases_on `take_call_outcome (w2w aw) [] (SOME (w2n vw)) es` >>
   qmatch_asmsub_rename_tac `take_call_outcome _ _ _ _ = (tr, es1)` >>
   Cases_on `tr` >> simp[]
@@ -300,5 +304,5 @@ Proof
           vyperStateTheory.return_def]) >>
   strip_tac >> disj1_tac >>
   qpat_x_assum `take_call_outcome _ _ _ _ = _` mp_tac >>
-  simp[take_call_outcome_def] >> pairarg_tac >> rw[] >> gvs[]
+  simp[take_call_outcome_def, take_request_outcome_def] >> pairarg_tac >> rw[] >> gvs[]
 QED

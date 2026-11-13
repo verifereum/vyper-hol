@@ -198,17 +198,16 @@ Theorem exec_delegatecall_frame_view:
 Proof
   strip_tac >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = OK t` mp_tac >>
-  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  rename1 `extract_venom_result s 1w _ _ _ = SOME (w,u)` >>
+  simp[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+  pairarg_tac >> simp[AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+  strip_tac >> gvs[Excl "consume_call_outcome_eq"] >>
+  qmatch_asmsub_abbrev_tac `consume_call_outcome rq (w2n retOff) (w2n retSize) s` >>
+  rename1 `consume_call_outcome rq _ _ s = (w,u)` >>
   qexists_tac `TAKE (w2n retSize) u.vs_returndata` >>
-  drule extract_venom_result_memory >> strip_tac >>
-  simp[LENGTH_TAKE_EQ, update_var_def] >>
-  drule extract_venom_result_frame_view >>
-  disch_then (qspecl_then [`ra`, `m`, `fn`] assume_tac) >>
-  fs[read_memory_def] >>
-  simp[exec_delegatecall_def, read_memory_def,
-       make_venom_delegatecall_state_frame_view] >>
-  fs[frame_view_def] >> simp[update_var_def, finite_mapTheory.FMAP_MAP2_FUPDATE]
+  drule venom_call_request_frame_view >> strip_tac >>
+  simp[exec_delegatecall_def, consume_call_outcome_frame_view,
+       frame_view_update_var, LENGTH_TAKE_EQ, Excl "consume_call_outcome_eq"] >>
+  gvs[Abbr `rq`, consume_call_outcome_eq, update_var_def]
 QED
 
 Theorem exec_create_frame_view:
@@ -249,7 +248,7 @@ Proof
   qpat_x_assum `MEM inst.inst_opcode _` mp_tac >> simp[] >> strip_tac >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
   simp[Once (opcode_equation ``CREATE``), Once (opcode_equation ``CREATE2``),
-       AllCaseEqs()] >> strip_tac >> gvs[] >>
+       AllCaseEqs()] >> strip_tac >> gvs[eval_operands_def] >>
   rename1 `exec_create inst s _ argOff argSize _ = OK s'` >>
   `?out. inst.inst_outputs = [out]` by
     (qpat_x_assum `exec_create _ _ _ _ _ _ = OK s'` mp_tac >>
@@ -265,6 +264,7 @@ Proof
   drule_all exec_create_frame_view >>
   disch_then (qspec_then `ra` strip_assume_tac) >>
   qexists_tac `m` >>
+  `(frame_view fn ra s).vs_call_ctx = s.vs_call_ctx` by simp[frame_view_def] >>
   simp[opcode_equation ``CREATE``, opcode_equation ``CREATE2``]
 QED
 

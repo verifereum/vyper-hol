@@ -6,4 +6,4 @@
 
 Theory phiElim
 Ancestors
-  phiDefs phiTransform phiElimCorrectness
+  phiDefs phiTransform phiElimCorrectness phiSsa

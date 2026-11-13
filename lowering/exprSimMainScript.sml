@@ -21,10 +21,13 @@
 
 Theory exprSimMain
 Ancestors
-  list exprSim exprSimHyps exprSimLeaves exprSimOperators exprSimPlaces
+  exprSimTopLevel
+  exprSimName
+  exprSimHypsDefs
+  list  exprSimHyps exprSimLeaves exprSimOperators exprSimPlaces
   exprSimAggregates exprSimBuiltins exprSimCalls exprLowering
   vyperAST vyperTypeCallGraph vyperTypeSystem exprSimWordBuiltins
-  exprSimCalldataSlice exprSimPrecompiles exprSimLen
+  exprSimCalldataSlice exprSimPrecompiles exprSimLen exprSimSlice
 
 val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
                   basicSizeTheory.option_size_def];
@@ -38,13 +41,15 @@ Theorem compile_builtin_case:
   !nocalls ctx func cenv cx ann bi args.
     (!bop. bi <> Bop bop) /\ (!t n. bi <> MakeArray t n) /\
     bi <> ECAdd /\ bi <> ECMul /\
-    exprs_case nocalls ctx func cenv cx args ==>
+    (code_slice_source bi args = NONE ==>
+     exprs_case nocalls ctx func cenv cx args) /\
+    (!m. bi = Slice m ==> slice_extcode_case nocalls ctx func cenv cx args) ==>
     expr_sim_case nocalls ctx func cenv cx (Builtin ann bi args) /\
     expr_vv_case nocalls ctx func cenv cx (Builtin ann bi args)
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_case nocalls ctx func cenv cx (Builtin ann bi args)`
-    suffices_by metis_tac[expr_sim_case_of_vv] >>
+    suffices_by simp[expr_sim_case_of_vv] >>
   Cases_on `bi`
   >~ [`Builtin _ (Bop _) _`] >- metis_tac[]
   >~ [`Builtin _ (MakeArray _ _) _`] >- metis_tac[]
@@ -66,6 +71,7 @@ QED
 
 Theorem compile_builtin_case_sim:
   !cenv ann bi args.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_below cenv (list_size expr_size args) ==>
     builtin_sim_ok cenv ann bi args
 Proof
@@ -79,18 +85,23 @@ Proof
   >- (gvs[] >> irule expr_ok_of_vv >> irule compile_ecmul_sim >> gvs[]) >>
   rw[expr_ok_case] >> drule exprs_case_below >>
   disch_then (qspecl_then [`ctx`, `func`, `cx`] assume_tac) >>
+  drule slice_extcode_case_below >>
+  disch_then (qspecl_then [`ctx`, `func`, `cx`] assume_tac) >>
   drule_at Any compile_builtin_case >> gvs[]
 QED
 
 Theorem compile_type_builtin_case:
   !nocalls ctx func cenv cx ann tb t args.
-    exprs_case nocalls ctx func cenv cx args ==>
+    exprs_case nocalls ctx func cenv cx args /\
+    (tb = Convert ==> ~nocalls ==>
+     !e1 a f cargs d. args = [e1] /\ e1 = Call a (IntCall f) cargs d ==>
+       lowered_value_type cenv e1 = expr_type e1) ==>
     expr_sim_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args) /\
     expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args)
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args)`
-    suffices_by metis_tac[expr_sim_case_of_vv] >>
+    suffices_by simp[expr_sim_case_of_vv] >>
   Cases_on `tb`
   >~ [`TypeBuiltin _ MaxValue _ _`] >- simp[compile_bound_builtin_case]
   >~ [`TypeBuiltin _ MinValue _ _`] >- simp[compile_bound_builtin_case]
@@ -138,6 +149,7 @@ QED
 
 Theorem compile_expr_case_sim:
   !cenv e.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_below cenv (expr_size e) /\
     (!ann bi args. list_size expr_size args < expr_size e ==>
                    builtin_sim_ok cenv ann bi args) /\
@@ -158,7 +170,7 @@ Proof
   >~ [`Call _ _ _ _`] >- (irule compile_call_case_sim >> gvs[])
   >~ [`Name _ _`] >- simp[compile_name_case_sim]
   >~ [`Literal _ _`] >- simp[compile_literal_case_sim]
-  >~ [`FlagMember _ _ _`] >- simp[compile_flag_member_case_sim] >>
+  >~ [`FlagMember _ _ _`] >- simp[exprSimFlagWordTheory.compile_flag_member_case_sim] >>
   FIRST (map (fn th => irule expr_ok_of_vv >> irule th >> gvs[])
     [compile_toplevel_name_sim, compile_ifexp_sim,
      compile_struct_lit_sim, compile_subscript_sim, compile_attribute_sim,
@@ -168,17 +180,22 @@ QED
 (* ===== The theorem ===== *)
 
 Theorem compile_expr_sim_mutual:
-  (!cenv e. expr_ok cenv e) /\
-  (!cenv ann bi args. builtin_sim_ok cenv ann bi args) /\
-  (!cenv ann tb t args. type_builtin_sim_ok cenv ann tb t args)
+  (!cenv e. acyclic_struct_metadata cenv.ce_struct_fields ==> expr_ok cenv e) /\
+  (!cenv ann bi args. acyclic_struct_metadata cenv.ce_struct_fields ==>
+     builtin_sim_ok cenv ann bi args) /\
+  (!cenv ann tb t args. acyclic_struct_metadata cenv.ce_struct_fields ==>
+     type_builtin_sim_ok cenv ann tb t args)
 Proof
   mp_tac (BETA_RULE (Q.SPECL
-    [`\cenv ty e st. expr_ok cenv e`,
-     `\cenv ret_ty ty bi args st. builtin_sim_ok cenv ret_ty bi args`,
+    [`\cenv ty e st. acyclic_struct_metadata cenv.ce_struct_fields ==>
+        expr_ok cenv e`,
+     `\cenv ret_ty ty bi args st. acyclic_struct_metadata cenv.ce_struct_fields ==>
+        builtin_sim_ok cenv ret_ty bi args`,
      `\cenv vv_ty ty tb ret_ty args st.
+        acyclic_struct_metadata cenv.ce_struct_fields ==>
         type_builtin_sim_ok cenv vv_ty tb ret_ty args`] compile_expr_ind)) >>
   impl_tac
-  >- (rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- (rpt conj_tac >> rpt gen_tac >> strip_tac >> strip_tac
       >- (irule compile_expr_case_sim >> rw[expr_sim_below_def] >>
           metis_tac[])
       >- (irule compile_builtin_case_sim >> rw[expr_sim_below_def] >>
@@ -190,6 +207,7 @@ QED
 
 Theorem compile_expr_sim:
   !ctx func cenv cx env ty e es.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_pre cenv cx env e es ==> expr_sim ctx func cenv cx ty e es
 Proof
   metis_tac[compile_expr_sim_mutual, expr_ok_def, expr_sim_ok_def]
@@ -197,6 +215,7 @@ QED
 
 Theorem compile_expr_vv_sim:
   !ctx func cenv cx env ty e es.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_pre cenv cx env e es ==> expr_vv_sim ctx func cenv cx ty e es
 Proof
   metis_tac[compile_expr_sim_mutual, expr_ok_def, expr_vv_ok_def]

@@ -18,7 +18,7 @@
 
 Theory emitSim
 Ancestors
-  codegenRel asmSem planExec stackPlanGen stackPlanTypes stackModel
+  venomLayout codegenRel asmSem planExec stackPlanGen stackPlanTypes stackModel
   venomExecSemantics venomState venomInst
   instSimHelpers stackOpSim blockSimHelpers asmToBytecodeProofs
   strongPrefixSim list rich_list finite_map
@@ -73,24 +73,8 @@ QED
    Plain-add BUMP boundary
    ========================================================================= *)
 
-Theorem dimindex_256[local,simp]:
-  dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
+val _ = augment_srw_ss [rewrites [dimindex_256]];
 
-
-Theorem word_of_bytes_encode_num_bytes_256[local]:
-  !n. n < dimword (:256) ==>
-      word_of_bytes F (0w:bytes32) (REVERSE (encode_num_bytes n)) = n2w n
-Proof
-  rpt strip_tac >>
-  mp_tac (INST_TYPE [alpha |-> ``:256``]
-            asmToBytecodeProofsTheory.word_of_bytes_encode_roundtrip) >>
-  simp[dimindex_256, dividesTheory.divides_def] >>
-  disch_then (qspec_then `(n2w n):bytes32` mp_tac) >>
-  simp[wordsTheory.w2n_n2w]
-QED
 
 Theorem bump_emit_ops_asm_trace:
   !initial_fmp lo o2pc prog as sz base_val rest.

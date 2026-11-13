@@ -418,17 +418,17 @@ QED
 
 (* ===== Pre-proved byte-to-opname theorems ===== *)
 (* Each proves: wf_opname op /\ opcode op = [byte] ==> op = ConcreteOp
-   Proved once at file-load time via Cases_on op (84 constructors). *)
+   Derived at file-load time from opcode injectivity and concrete encodings. *)
 local
   val byte_opname_proof = fn (byte_tm, opn_tm) =>
     prove(mk_imp(mk_conj(``wf_opname (op:opname)``,
             mk_eq(``opcode (op:opname)``,
                   listSyntax.mk_list([byte_tm], ``:word8``))),
           mk_eq(``op:opname``, opn_tm)),
-      Cases_on `op` >> simp[opcode_def, wf_opname_def] >>
-      rpt strip_tac >>
-      gvs[wordsTheory.n2w_11, wordsTheory.dimword_8,
-          wordsTheory.word_add_n2w])
+      strip_tac >>
+      `wf_opname ^opn_tm /\ opcode ^opn_tm = [^byte_tm]` by
+        simp[opcode_def, wf_opname_def, wordsTheory.word_add_n2w] >>
+      metis_tac[opcode_wf_inj])
 in
   val byte_opname_thms = map byte_opname_proof [
     (* Arith *)
@@ -808,6 +808,16 @@ Proof
   rpt strip_tac >> gvs[asm_evm_rel_def]
 QED
 
+(* Rewrites the assembly's static check into the EVM's, so one case split
+   decides both. *)
+Theorem asm_evm_rel_static:
+  !prog as es ctxt rb rest.
+    asm_evm_rel prog as es /\ es.contexts = (ctxt, rb) :: rest ==>
+    (as.as_call_ctx.cc_static <=> ctxt.msgParams.static)
+Proof
+  rpt strip_tac >> gvs[asm_evm_rel_def]
+QED
+
 Triviality asm_evm_rel_code:
   !prog as es.
     asm_evm_rel prog as es ==> as.as_code = assemble prog
@@ -1100,7 +1110,7 @@ val word_of_bytes_be_le_256 =
 
 (* asm_expand_memory agrees with EVM expand_memory.
    After expanding, both sides produce the same memory. *)
-Theorem asm_expand_eq_evm[local]:
+Theorem asm_expand_eq_evm:
   !n (mem:byte list).
     asm_expand_memory n mem =
     mem ++ REPLICATE (MAX (LENGTH mem) (((n + 31) DIV 32) * 32) -
@@ -1122,7 +1132,7 @@ Proof
 QED
 
 (* Simp-normalized form: simp commutes 32 * X vs X * 32, folds offset+size+31 *)
-Theorem asm_expand_eq_evm_simp[local]:
+Theorem asm_expand_eq_evm_simp:
   !n (mem:byte list).
     mem ++ REPLICATE (MAX (LENGTH mem) (32 * ((n + 31) DIV 32)) -
                      LENGTH mem) (0w:byte) =
@@ -1494,6 +1504,7 @@ Proof
   (* === TSTORE === *)
   >- (
     identify_evm_op_tac >> gvs[] >>
+    drule_all asm_evm_rel_static >> strip_tac >>
     simp[asm_tstore_def, LET_THM] >>
     Cases_on `as.as_stack` >> gvs[] >>
     Cases_on `t` >> gvs[] >>
@@ -1659,6 +1670,7 @@ QED
 
 Resume asm_evm_step_memory_dispatch[sstore]:
   identify_evm_op_tac >> gvs[] >>
+  drule_all asm_evm_rel_static >> strip_tac >>
   simp[asm_sstore_def, LET_THM] >>
   Cases_on `as.as_stack` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
@@ -2404,14 +2416,14 @@ Proof
 QED
 
 (* TAKE n (REPLICATE m x) = REPLICATE n x when n <= m *)
-Theorem take_replicate_le[local]:
+Theorem take_replicate_le:
   !n m (x:'a). n <= m ==> TAKE n (REPLICATE m x) = REPLICATE n x
 Proof
   Induct_on `n` >> simp[] >> Cases_on `m` >> simp[]
 QED
 
 (* TAKE from zero-padded list = take_pad_0 *)
-Theorem take_pad_replicate[local]:
+Theorem take_pad_replicate:
   !n (l:byte list) k.
     n <= LENGTH l + k ==>
     TAKE n (l ++ REPLICATE k (0w:byte)) = take_pad_0 n l
@@ -2425,7 +2437,7 @@ Proof
 QED
 
 (* Key lemma: TAKE/DROP from expanded source = take_pad_0 from original *)
-Theorem take_drop_expand_eq_pad[local]:
+Theorem take_drop_expand_eq_pad:
   !sz soff (src:byte list).
     TAKE sz (DROP soff (asm_expand_memory (soff + sz) src)) =
     take_pad_0 sz (DROP soff src)
@@ -3325,7 +3337,7 @@ Proof
 QED
 
 (* Helper: LUPDATE as TAKE/DROP *)
-Theorem lupdate_take_drop[local]:
+Theorem lupdate_take_drop:
   !n v l. n < LENGTH l ==> (LUPDATE v n l = TAKE n l ++ [v] ++ DROP (SUC n) l)
 Proof
   Induct_on `n` >> Cases_on `l` >> simp[LUPDATE_def]
@@ -3431,6 +3443,7 @@ Proof
   simp[log_table_def] >>
   rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[] >>
   identify_evm_op_tac >> gvs[] >>
+  drule_all asm_evm_rel_static >> strip_tac >>
   simp[asm_log_def, LET_THM] >>
   IF_CASES_TAC >> gvs[] >>
   ALL_TAC >| [suspend "log_0", suspend "log_1", suspend "log_2",

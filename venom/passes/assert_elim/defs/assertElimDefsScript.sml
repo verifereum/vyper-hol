@@ -18,7 +18,7 @@
 
 Theory assertElimDefs
 Ancestors
-  analysisSimDefs rangeAnalysisDefs valueRangeDefs rangeEvalDefs
+  passTransform rangeAnalysisDefs valueRangeDefs rangeEvalDefs
   passSharedDefs
 
 (* ===== Range predicate ===== *)

@@ -11,6 +11,8 @@
  *   producing_inst         — find instruction producing a variable
  *   inst_data_deps         — data dependencies for one instruction
  *   build_eda              — effect dependency analysis (incremental, with clearing)
+ *   add_abort_run_deps     — abort-run edges (vyperlang/vyper#5336)
+ *   dft_eda                — EDA dft_block schedules over
  *   build_full_eda         — combined EDA with barrier/abort/alloca chains
  *   inst_all_deps          — combined DDA + EDA dependencies
  *   entry_instructions     — dependency DAG roots
@@ -169,12 +171,69 @@ Definition is_fallible_def:
   is_fallible inst <=> opcode_fail_class inst.inst_opcode <> NoFail
 End
 
+(* DFT's own abort classes, for which instructions it may reorder: an
+   ASSERT reverts, ASSERT_UNREACHABLE and RETURNDATACOPY halt
+   exceptionally, an INVOKE may end any way, and nothing else aborts in the
+   non-static frames DFT's output runs in.  Unlike opcode_fail_class, the
+   state writes a static frame aborts (SSTORE, LOG, CALL, ...) are none. *)
+Definition dft_abort_kind_def:
+  dft_abort_kind ASSERT = CanRevert /\
+  dft_abort_kind ASSERT_UNREACHABLE = CanExHalt /\
+  dft_abort_kind RETURNDATACOPY = CanExHalt /\
+  dft_abort_kind CREATE = CanExHalt /\
+  dft_abort_kind CREATE2 = CanExHalt /\
+  dft_abort_kind INVOKE = AnyFail /\
+  dft_abort_kind _ = NoFail
+End
+
+(* Two instructions DFT may swap without changing how a run aborts: one
+   of them never aborts, or both abort the same way, other than any. *)
+Definition dft_abort_compatible_def:
+  dft_abort_compatible op1 op2 <=>
+    dft_abort_kind op1 = NoFail \/ dft_abort_kind op2 = NoFail \/
+    (dft_abort_kind op1 = dft_abort_kind op2 /\ dft_abort_kind op1 <> AnyFail)
+End
+
 (* Chain all fallible instructions so abort-incompatible pairs can never
    be reordered. Ensures abort_compatible for every reorderable pair.
    (Diverges from Python DFT which lacks this — upstream bug.) *)
 Definition add_abort_deps_def:
   add_abort_deps block_insts eda =
     add_chain_deps is_fallible block_insts eda
+End
+
+(* Python (vyperlang/vyper#5336): consecutive aborting instructions of the
+   same kind, other than any, form a run, and each aborting instruction gets
+   EDA edges to every member of the previous run.  The edges come before the
+   instruction's effect edges, so they are prepended (first occurrence wins,
+   as in Python's OrderedSet). *)
+Definition abort_run_step_def:
+  abort_run_step (prev_run, run) inst =
+    if run = [] \/ dft_abort_kind inst.inst_opcode = AnyFail \/
+       dft_abort_kind inst.inst_opcode <> dft_abort_kind (HD run).inst_opcode
+    then (run, [inst])
+    else (prev_run, run ++ [inst])
+End
+
+Definition abort_run_dep_step_def:
+  abort_run_dep_step (acc, runs) inst =
+    if dft_abort_kind inst.inst_opcode = NoFail then (acc, runs)
+    else
+      let runs' = abort_run_step runs inst in
+      let old_deps = case FLOOKUP acc inst.inst_id of
+                       NONE => [] | SOME ds => ds in
+      (acc |+ (inst.inst_id, nub_first (FST runs' ++ old_deps)), runs')
+End
+
+Definition add_abort_run_deps_def:
+  add_abort_run_deps block_insts eda =
+    let non_phis = FILTER (\i. ~is_pseudo i.inst_opcode) block_insts in
+    FST (FOLDL abort_run_dep_step (eda, ([], [])) non_phis)
+End
+
+(* The EDA dft_block schedules over: effect edges and abort-run edges. *)
+Definition dft_eda_def:
+  dft_eda block_insts = add_abort_run_deps block_insts (build_eda block_insts)
 End
 
 (* Instruction whose opcode is ALLOCA. *)
@@ -286,6 +345,11 @@ End
 
 (* ===== Entry Instructions ===== *)
 
+(* Python's entries are the instructions nothing depends on.  HOL also keeps
+   an instruction with no outputs and no effects (an ASSERT, say) as an entry
+   when a later abort-run edge targets it, so the DFS still reaches it in
+   block order and nothing is scheduled above it; vyperlang/vyper#5336 lets
+   such an instruction lose its entry and be scheduled late. *)
 Definition entry_instructions_def:
   entry_instructions block_insts order eda =
     let non_phis = FILTER (λi. ¬is_pseudo i.inst_opcode) block_insts in
@@ -293,7 +357,10 @@ Definition entry_instructions_def:
       (MAP (λi. MAP (λd. d.inst_id)
                      (inst_all_deps block_insts order eda i))
            non_phis)) in
-    FILTER (λi. ¬MEM i.inst_id all_dep_ids) non_phis
+    FILTER (λi. ¬MEM i.inst_id all_dep_ids ∨
+                (i.inst_outputs = [] ∧
+                 read_effects i.inst_opcode = empty_effects ∧
+                 write_effects i.inst_opcode = empty_effects)) non_phis
 End
 
 (* ===== Operand Flipping ===== *)
@@ -324,27 +391,30 @@ End
 (* Python: cost() in _process_instruction_r.
    Determines child traversal order in DFS.
    Python costs (can be negative):
+     effect-only edge between two aborting instructions: -2
      effect-only with data offspring: -1
      effect-only without data offspring: 0
      order position match: position (0..len(order)-1)
      direct operand match: operand_idx + len(order)
      fallback: len(order)
-   We shift all costs by +1 for num (natural numbers):
-     -1→0, 0→1, position→position+1, idx+len→idx+len+1, len→len+1 *)
+   We shift all costs by +2 for num (natural numbers):
+     -2→0, -1→1, 0→2, position→position+2, idx+len→idx+len+2, len→len+2 *)
 Definition dft_cost_def:
   dft_cost block_insts order eda offspring_map parent child =
     let dda = inst_data_deps block_insts order parent in
     let is_effect_only = ~MEM child dda in
+    if is_effect_only /\ dft_abort_kind parent.inst_opcode <> NoFail /\
+       dft_abort_kind child.inst_opcode <> NoFail then 0:num
     (* Python: if is_effect_only or inst.flippable — for flippable
        instructions, ALL children get the simple offspring-based cost,
        not just effect-only deps. *)
-    if is_effect_only \/ is_flippable parent.inst_opcode then
+    else if is_effect_only \/ is_flippable parent.inst_opcode then
       let has_offspring =
         case FLOOKUP offspring_map child.inst_id of
           SOME offs => offs <> []
         | NONE => F in
-      if has_offspring then 0:num  (* maps to -1 in Python, but we use num *)
-      else 1
+      if has_offspring then 1
+      else 2
     else
       (* Data dep: find operand index *)
       (* Cross HOL semantic order to Python's stack order, so index 0 is
@@ -356,9 +426,9 @@ Definition dft_cost_def:
                          else NONE
           | NONE => NONE)
           (python_stack_operands parent.inst_opcode parent.inst_operands))) in
-      (* Python cost = idx + len(order); shifted +1 for num: idx + len(order) + 1 *)
+      (* Python cost = idx + len(order); shifted +2 for num *)
       case op_idxs of
-        idx :: _ => idx + LENGTH order + 1
+        idx :: _ => idx + LENGTH order + 2
       | [] =>
         (* Fallback: check if child's outputs appear directly in parent's
            operands. Python path 2: x.get_outputs() in inst.operands.
@@ -371,16 +441,16 @@ Definition dft_cost_def:
             | Label _ => NONE)
             (python_stack_operands parent.inst_opcode parent.inst_operands))) in
         case output_idxs of
-          idx :: _ => idx + LENGTH order + 1
+          idx :: _ => idx + LENGTH order + 2
         | [] =>
-        (* Python cost = order_position; shifted +1: position + 1 *)
+        (* Python cost = order_position; shifted +2: position + 2 *)
         let order_idxs = MAP THE (FILTER IS_SOME
           (MAPi (\i v.
             if MEM v child.inst_outputs then SOME i else NONE)
             order)) in
         case order_idxs of
-          idx :: _ => idx + 1
-        | [] => LENGTH order + 1
+          idx :: _ => idx + 2
+        | [] => LENGTH order + 2
 End
 
 (* Sort children by cost. Lower cost = processed first in DFS
@@ -504,7 +574,7 @@ QED
 Definition dft_block_def:
   dft_block order bb =
     let phis = FILTER (λi. is_pseudo i.inst_opcode) bb.bb_instructions in
-    let eda = build_eda bb.bb_instructions in
+    let eda = dft_eda bb.bb_instructions in
     let offspring_map = build_offspring_map bb.bb_instructions order in
     let entries = entry_instructions bb.bb_instructions order eda in
     let scheduled = schedule_from_entries bb.bb_instructions order

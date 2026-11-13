@@ -2,15 +2,14 @@
 Theory abiDecoderCopy
 Ancestors
   abiDecoderComposition abiDecoderContract emitHelperProps exprLoweringProps
-  venomExecSemantics venomInst venomState compileEnv valueEncoding emitHelper
+  venomExecSemantics venomInst venomState compileEnv loweringStateRelDefs valueEncoding emitHelper
 
 Theorem run_mcopy_vars[local]:
   run_inst_seq [mk_inst id MCOPY [dst;src;sz] []] s = OK t ==>
   t.vs_vars = s.vs_vars
 Proof
   rewrite_tac[run_inst_seq_def, mk_inst_def] >>
-  once_rewrite_tac[step_inst_base_def] >>
-  simp[] >>
+  simp[step_inst_base_opcode_eqs] >>
   gvs[mcopy_def, write_memory_with_expansion_def, AllCaseEqs()] >>
   strip_tac >> gvs[]
 QED
@@ -20,8 +19,7 @@ Theorem run_calldatacopy_vars[local]:
   t.vs_vars = s.vs_vars
 Proof
   rewrite_tac[run_inst_seq_def, mk_inst_def] >>
-  once_rewrite_tac[step_inst_base_def] >>
-  simp[] >>
+  simp[step_inst_base_opcode_eqs] >>
   gvs[write_memory_with_expansion_def, AllCaseEqs()] >>
   strip_tac >> gvs[]
 QED
@@ -31,8 +29,7 @@ Theorem run_dloadbytes_vars[local]:
   t.vs_vars = s.vs_vars
 Proof
   rewrite_tac[run_inst_seq_def, mk_inst_def] >>
-  once_rewrite_tac[step_inst_base_def] >>
-  simp[] >>
+  simp[step_inst_base_opcode_eqs] >>
   gvs[write_memory_with_expansion_def, AllCaseEqs()] >>
   strip_tac >> gvs[]
 QED

@@ -1,12 +1,13 @@
 (* Liveness-only execution boundaries for positional calldata registration. *)
 Theory calldataRegistrationExec
 Ancestors
-  calldataRegistration abiDecoderReentryAddress fragExecMem actualAllocExec
+  valueEncodingDefs loweringStateRelDefs calldataRegistration abiDecoderReentryAddress fragExecMem actualAllocExec
   venomExecProofs emitHelperProps exprLoweringProps finite_map words
   abiDecoderReentry venomState venomExecSemantics abiDecoderContract
   compileEnv emitHelper venomInst arithmetic moduleLowering abiEncoder
   abiCallerAllocation abiDecoderFrame valueEncodingProps valueEncoding venomMemDefs
   fragExec abiDecoderAppend calldataDynOwned allocLimitsProps
+  calldataWordLive safeSequence instMemFrontier
 
 Theorem registration_emit_step_mem:
   emit_op opc args st = (out,last) /\
@@ -155,7 +156,7 @@ Theorem registration_primitive_decoder_prelude:
   var_location_decode_operand loc = SOME dst ==>
   ?src first.
     emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] st = (src,first) /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (DecPrimWord c) first = ((),last)
 Proof
   strip_tac >>
@@ -163,7 +164,7 @@ Proof
   simp[compile_decode_args_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-  simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (goal_assum $ drule_at Any) >> simp[]
 QED
@@ -177,11 +178,13 @@ Theorem registration_decoder_prelude:
   ?head after_head src first.
     emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] st = (head,after_head) /\
     (if dyn /\ ~prim then
-       ?offset after_load.
+       ?offset after_load after_src.
          emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
-         emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
+         emit_op ADD [Lit (n2w 4); offset] after_load = (src,after_src) /\
+         compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) after_src =
+           ((),first)
      else src = head /\ first = after_head) /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),last)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last)
 Proof
   Cases_on `prim` >> simp[] >> strip_tac
   >- (gvs[] >> drule_all registration_primitive_decoder_prelude >>
@@ -220,7 +223,7 @@ QED
 
 (* The address prelude is pure, but its consumer also needs alignment and
    safe continuation lifting, not merely a fragment judgment. *)
-Theorem registration_address_owned_run:
+Theorem registration_address_prelude_run[local]:
   emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] st = (head,after_head) /\
   (if dyn then
     ?offset after_load.
@@ -259,7 +262,7 @@ Proof
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
-Theorem registration_address_prelude_bounds:
+Theorem registration_address_prelude_mid_bounds:
   emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] st = (head,after_head) /\
   (if dyn then
     ?offset after_load.
@@ -282,6 +285,239 @@ Proof
      conj_tac >- metis_tac[cs_extends_trans] >> decide_tac)]
 QED
 
+(* The calldata pointer guard: LT; ISZERO; ASSERT, touching no memory. *)
+Theorem registration_ptr_guard_code:
+  compile_abi_arg_ptr_guard CALLDATALOAD src p st = ((),last) ==>
+  last.cs_blocks = st.cs_blocks /\ last.cs_current_bb = st.cs_current_bb /\
+  isPREFIX st.cs_current_insts last.cs_current_insts /\
+  last.cs_next_id = st.cs_next_id + 3 /\ last.cs_next_var = st.cs_next_var + 2 /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+    i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES /\
+    ~MEM i.inst_opcode
+      [MLOAD; ILOAD; MCOPY; DRET; RETURN; REVERT; SHA3; LOG; CALL; STATICCALL;
+       DELEGATECALL; CREATE; CREATE2; MSTORE; MSTORE8; ISTORE; CALLDATACOPY;
+       RETURNDATACOPY; DLOADBYTES; CODECOPY; EXTCODECOPY])
+    (emitted_insts st last)
+Proof
+  simp[compile_abi_arg_ptr_guard_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+       fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]
+QED
+
+Theorem registration_ptr_guard_extends:
+  compile_abi_arg_ptr_guard CALLDATALOAD src p st = ((),last) ==>
+  cs_extends st last
+Proof
+  strip_tac >> drule registration_ptr_guard_code >> strip_tac >>
+  irule cs_extends_same_block >> simp[]
+QED
+
+(* The guard reverts when the pointer lies below the argument tuple, and
+   otherwise only defines its two fresh test variables. *)
+Theorem registration_ptr_guard_frag_mem:
+  compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) st = ((),last) /\
+  eval_operand src s = SOME w ==>
+  frag_exec_mem ctx st last (\u. u = s)
+    (\u. u = (update_var (STRING #"%" (toString (st.cs_next_var + 1))) 1w
+          (update_var (STRING #"%" (toString st.cs_next_var)) 0w s))
+         with vs_inst_idx := LENGTH last.cs_current_insts)
+    (\r. w <+ 4w /\ ?z. r = Abort Revert_abort z)
+Proof
+  strip_tac >> drule registration_ptr_guard_code >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+     i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+     (emitted_insts st last)` by
+    (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> irule instMemFrontierTheory.below_frontier_no_ranges >>
+      qpat_x_assum `emitted_insts _ _ = _ ++ _` SUBST_ALL_TAC >> fs[]) >>
+  qpat_x_assum `compile_abi_arg_ptr_guard _ _ _ _ = _` mp_tac >>
+  simp[compile_abi_arg_ptr_guard_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  rename1 `emit_op LT [src; Lit 4w] st = (below,c1)` >>
+  rename1 `emit_op ISZERO [below] c1 = (ok,c2)` >>
+  qpat_assum `emit_op LT _ _ = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+  `step_inst_base (mk_inst st.cs_next_id LT [src; Lit 4w]
+     [STRING #"%" (toString st.cs_next_var)]) s =
+   OK (update_var (STRING #"%" (toString st.cs_next_var))
+     (bool_to_word (w2n w < w2n (4w:bytes32))) s)` by
+    (irule step_LT >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst c1.cs_next_id ISZERO [below]
+     [STRING #"%" (toString c1.cs_next_var)])
+     (update_var (STRING #"%" (toString st.cs_next_var))
+       (bool_to_word (w2n w < w2n (4w:bytes32))) s) =
+   OK (update_var (STRING #"%" (toString c1.cs_next_var))
+     (bool_to_word (bool_to_word (w2n w < w2n (4w:bytes32)) = 0w))
+     (update_var (STRING #"%" (toString st.cs_next_var))
+       (bool_to_word (w2n w < w2n (4w:bytes32))) s))` by
+    (irule step_ISZERO >> simp[eval_operand_def, lookup_var_update_var]) >>
+  drule_all calldataWordLiveTheory.calldata_two_tests_repeat >> strip_tac >>
+  Cases_on `w <+ 4w` >> gvs[WORD_LO, bool_to_word_def]
+QED
+
+(* An operand older than the guard keeps its value across the guard. *)
+Theorem registration_guard_state_live:
+  abi_decoder_operand_live n op ==>
+  eval_operand op (update_var (STRING #"%" (toString (n + 1))) x
+     (update_var (STRING #"%" (toString n)) y s)) =
+  eval_operand op s
+Proof
+  strip_tac >>
+  `abi_decoder_operand_live (n + 1) op` by
+    (irule abi_decoder_operand_live_mono >> qexists_tac `n` >> simp[]) >>
+  simp[calldataDynOwnedTheory.calldata_update_protected]
+QED
+
+(* Alloca invariants read only the allocas and their frontier. *)
+Theorem registration_alloca_fields_inv[local]:
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next ==>
+  alloca_inv t /\ alloca_frontier_inv ctx fn site t
+Proof
+  strip_tac >>
+  qpat_x_assum `alloca_inv s` mp_tac >>
+  qpat_x_assum `alloca_frontier_inv _ _ _ s` mp_tac >>
+  simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
+    allocaFrontierBoundTheory.alloca_frontier_inv_def,
+    allocaBudgetPropsTheory.remaining_alloca_budget_def]
+QED
+
+(* Split the guarded prelude at the guard's entry state. *)
+Theorem registration_address_mid:
+  (if dyn then
+    ?offset after_load after_src.
+      emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
+      emit_op ADD [Lit (n2w 4); offset] after_load = (src,after_src) /\
+      compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) after_src = ((),first)
+   else src = head /\ first = after_head) ==>
+  ?mid.
+    (if dyn then
+      ?offset after_load.
+        emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
+        emit_op ADD [Lit (n2w 4); offset] after_load = (src,mid)
+     else src = head /\ mid = after_head) /\
+    (if dyn then compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) mid = ((),first)
+     else mid = first)
+Proof
+  Cases_on `dyn` >> simp[] >> metis_tac[]
+QED
+
+Theorem registration_address_prelude_bounds:
+  emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] st = (head,after_head) /\
+  (if dyn then
+    ?offset after_load after_src.
+      emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
+      emit_op ADD [Lit (n2w 4); offset] after_load = (src,after_src) /\
+      compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) after_src = ((),first)
+   else src = head /\ first = after_head) ==>
+  cs_extends st first /\ st.cs_next_id < first.cs_next_id /\
+  st.cs_next_var <= first.cs_next_var
+Proof
+  strip_tac >>
+  qpat_x_assum `if dyn then _ else _`
+    (strip_assume_tac o MATCH_MP registration_address_mid) >>
+  drule_all registration_address_prelude_mid_bounds >> strip_tac >>
+  Cases_on `dyn` >> gvs[] >>
+  drule registration_ptr_guard_code >> strip_tac >>
+  drule registration_ptr_guard_extends >> strip_tac >>
+  conj_tac >- metis_tac[cs_extends_trans] >> decide_tac
+QED
+
+(* The address prelude with its pointer guard: a pointer below the argument
+   tuple reverts; otherwise the run reaches the decoder boundary. *)
+Theorem registration_address_owned_run:
+  emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] st = (head,after_head) /\
+  (if dyn then
+    ?offset after_load after_src.
+      emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
+      emit_op ADD [Lit (n2w 4); offset] after_load = (src,after_src) /\
+      compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) after_src = ((),first)
+   else src = head /\ first = after_head) /\
+  fn_has_code st first fn /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s ==>
+  (?fuel z. run_from fuel ctx fn s = Abort Revert_abort z /\
+    mem_safe_run fuel ctx fn s) \/
+  ?t. ~t.vs_halted /\ t.vs_current_bb = first.cs_current_bb /\
+    t.vs_inst_idx = LENGTH first.cs_current_insts /\
+    eval_operand src t = SOME
+      (if dyn then n2w 4 + abi_decode_load CALLDATALOAD
+         (n2w 4 + n2w (off-4):bytes32) s else n2w 4 + n2w (off-4)) /\
+    abi_decoder_operand_live first.cs_next_var src /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\
+    (!fuel r. run_from fuel ctx fn t = r /\ (!err. r <> Error err) ==>
+      ?fuel'. run_from fuel' ctx fn s = r /\
+        (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `if dyn then _ else _`
+    (strip_assume_tac o MATCH_MP registration_address_mid) >>
+  drule_all registration_address_prelude_mid_bounds >> strip_tac >>
+  `cs_extends mid first` by
+    (Cases_on `dyn` >> fs[cs_extends_refl] >>
+     drule registration_ptr_guard_extends >> simp[]) >>
+  `fn_has_code st mid fn /\ fn_has_code mid first fn` by
+    metis_tac[fn_has_code_split] >>
+  drule_all registration_address_prelude_run >> strip_tac >>
+  reverse (Cases_on `dyn`) >> gvs[]
+  >- (disj2_tac >> qexists_tac `t` >> simp[]) >>
+  suspend "guard"
+QED
+
+Resume registration_address_owned_run[guard]:
+  drule registration_ptr_guard_code >> strip_tac >>
+  drule_all registration_ptr_guard_frag_mem >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  qmatch_goalsub_abbrev_tac `frag_exec_mem ctx mid first _ (\u. u = gs) _` >>
+  simp[frag_exec_mem_def] >> disch_then (qspec_then `fn` mp_tac) >>
+  simp[] >> strip_tac
+  >- (disj2_tac >> qexists_tac `gs` >>
+      `gs.vs_memory = t.vs_memory /\ gs.vs_allocas = t.vs_allocas /\
+       gs.vs_alloca_next = t.vs_alloca_next /\ gs.vs_call_ctx = t.vs_call_ctx /\
+       gs.vs_data_section = t.vs_data_section` by
+        simp[Abbr `gs`, update_var_def] >>
+      `!op. abi_decoder_operand_live mid.cs_next_var op ==>
+         eval_operand op gs = eval_operand op t` by
+        (rpt strip_tac >>
+         simp[Abbr `gs`, instIdxIndepTheory.eval_op_inst_idx,
+           registration_guard_state_live]) >>
+      `alloca_inv gs /\ alloca_frontier_inv ctx fn site gs` by
+        (irule registration_alloca_fields_inv >> qexists_tac `s` >> simp[]) >>
+      `abi_decoder_operand_live (mid.cs_next_var + 2) src` by
+        (irule abi_decoder_operand_live_mono >>
+         qexists_tac `mid.cs_next_var` >> simp[]) >>
+      `eval_operand src gs = eval_operand src t` by metis_tac[] >>
+      `!op. abi_decoder_operand_live st.cs_next_var op ==>
+         eval_operand op gs = eval_operand op s` by
+        metis_tac[abi_decoder_operand_live_mono] >>
+      `!fuel. (!err. run_from fuel ctx fn gs <> Error err) ==>
+         ?fuel'. run_from fuel' ctx fn s = run_from fuel ctx fn gs /\
+           (mem_safe_run fuel ctx fn gs ==> mem_safe_run fuel' ctx fn s)` by
+        (qpat_x_assum `!fuel. (!e. run_from fuel ctx fn gs <> Error e) ==> _`
+           mp_tac >>
+         qpat_x_assum `!fuel. (!err. run_from fuel ctx fn t <> Error err) ==> _`
+           mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+      simp[]) >>
+  disj1_tac >>
+  qpat_x_assum `!fuel. (!err. run_from fuel ctx fn t <> Error err) ==> _`
+    (qspec_then `fuel` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Finalise registration_address_owned_run
+
 (* Allocation and literal address calculation, stopping exactly at the
    universal decoder boundary. No source values are assumed. *)
 Theorem registration_singleton_owned_prefix:
@@ -298,9 +534,11 @@ Theorem registration_singleton_owned_prefix:
     ?p. entry = (p,n) /\ p+n < dimword (:256)) /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  (?fuel z. run_from fuel ctx fn initial = Abort Revert_abort z /\
+    mem_safe_run fuel ctx fn initial) \/
   ?dst src first ready p.
     FLOOKUP cef.ce_vars name = SOME (PtrVar dst n) /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first =
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first =
       ((),final) /\ fn_has_code first final fn /\
     st.cs_next_id < first.cs_next_id /\
     st.cs_next_var <= first.cs_next_var /\
@@ -354,11 +592,20 @@ Proof
   qpat_x_assum `!entry. FLOOKUP initial.vs_allocas _ = SOME entry ==> _` kall_tac >>
   qpat_x_assum `alloca_inv initial` kall_tac >>
   qpat_x_assum `alloca_frontier_inv _ _ _ initial` kall_tac >>
-  drule_all registration_address_owned_run >> strip_tac >>
+  drule_all registration_address_owned_run >> strip_tac
+  >- suspend "revert" >>
+  disj2_tac >>
   qexistsl_tac [`buf.buf_operand`,`src`,`first`,`t`,`p`] >> simp[] >>
   conj_tac >- suspend "pointer_live" >>
   conj_tac >- suspend "old_live" >>
   suspend "continuation"
+QED
+
+Resume registration_singleton_owned_prefix[revert]:
+  disj1_tac >>
+  qpat_x_assum `!fuel r. run_from fuel ctx fn v = r /\ _ ==> _`
+    (qspecl_then [`fuel`, `Abort Revert_abort z`] mp_tac) >>
+  simp[] >> metis_tac[]
 QED
 
 Resume registration_singleton_owned_prefix[pointer_live]:
@@ -439,10 +686,11 @@ Theorem registration_singleton_owned_run:
         (mem_safe_run fuel ctx fn v ==> mem_safe_run fuel' ctx fn initial))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all registration_singleton_owned_prefix >> strip_tac >>
+  drule_all registration_singleton_owned_prefix >> strip_tac
+  >- (disj1_tac >> qexistsl_tac [`fuel`,`z`] >> simp[]) >>
   `first.cs_next_id <= final.cs_next_id /\
    first.cs_next_var <= final.cs_next_var` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      metis_tac[cj 1 ci_mono_compile_abi_decode, ci_mono_def, pairTheory.SND]) >>
   `!id q k. first.cs_next_id <= id /\ id < final.cs_next_id /\
@@ -451,7 +699,7 @@ Proof
     ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
       ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]` by
     suspend "scratch_input" >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)
     calldataRecursiveExecutionTheory.calldata_coherent_owned_run >>
   disch_then (drule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
@@ -478,7 +726,7 @@ QED
 Resume registration_singleton_owned_run[success]:
   disj2_tac >> qexistsl_tac [`v`,`x`,`dst`,`p`,`first.cs_next_id`,`sc`] >>
   qpat_x_assum `compile_register_positional_args _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` kall_tac >>
   qpat_x_assum `!entry. FLOOKUP initial.vs_allocas _ = SOME entry ==> _` kall_tac >>
   qpat_x_assum `!id q k. st.cs_next_id < id /\ _ ==> _` kall_tac >>
   qpat_x_assum `!id q k. first.cs_next_id <= id /\ _ /\ FLOOKUP ready.vs_allocas _ = _ ==> _` kall_tac >>
@@ -637,6 +885,15 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
+Theorem registration_ptr_guard_ci_mono[local]:
+  !opc a p s. ci_mono s (SND (compile_abi_arg_ptr_guard opc a p s))
+Proof
+  rpt gen_tac >> simp[compile_abi_arg_ptr_guard_def] >>
+  IF_CASES_TAC >> simp[ci_mono_comp_return] >>
+  irule ci_mono_bind >> simp[ci_mono_emit_op] >> rpt strip_tac >>
+  irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]
+QED
+
 (* Compile-only counter interfaces; execution uses these without unfolding decoders. *)
 Theorem registration_decode_ci_mono:
   !args ce off opc hi adj s.
@@ -655,7 +912,7 @@ Proof
   rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind] >>
     rpt conj_tac >> rpt gen_tac >> BETA_TAC) >>
   simp[ci_mono_comp_return, ci_mono_emit_void, ci_mono_emit_op,
-    ci_mono_compile_abi_decode]
+    ci_mono_compile_abi_decode, registration_ptr_guard_ci_mono]
 QED
 
 Theorem registration_compile_ci_mono:

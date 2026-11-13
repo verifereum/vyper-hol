@@ -2,7 +2,7 @@
 Theory abiEncoderOpenInputFrame
 Ancestors
   abiEncoderOpenInput abiEncoderInputFrame abiEncoderInput
-  valueEncoding valueEncodingProps contractABI words list arithmetic
+  valueEncoding valueEncodingDefs valueEncodingProps contractABI words list arithmetic
 
 Theorem abi_encoder_open_input_mem_agree:
   !ei at av sb cap mem. abi_encoder_open_input ei at av sb cap mem ==>

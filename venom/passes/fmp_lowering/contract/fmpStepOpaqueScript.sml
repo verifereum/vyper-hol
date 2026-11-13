@@ -26,10 +26,10 @@ QED
 Theorem input_setfmp_not_opaque:
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = SETFMP /\
   MEM (Var x) inst.inst_operands ==>
-  ~gas_var fn x /\ ~retpc_var fn x
+  ~retpc_var fn x
 Proof
   simp[opaque_use_ok_def] >> rpt strip_tac >>
-  first_x_assum drule >> simp[gas_use_ok_def, retpc_use_ok_def] >> metis_tac[]
+  first_x_assum drule >> simp[retpc_use_ok_def] >> metis_tac[]
 QED
 
 Theorem fmp_lower_inst_retained_origin:
@@ -148,7 +148,7 @@ Theorem fmp_install_checked_root_upper_bound:
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
   fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks leftover s2) /\
   fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) /\
   MEM origin [GAS; RETPC_PARAM] /\
@@ -201,7 +201,7 @@ QED
 Theorem fmp_lower_function_opaque_upper_bound:
   fmp_lower_function ctx s fn = SOME (fn',s') /\
   o1_fn_shape ctx fn /\ ir_supply_covers_fn s fn /\
-  MEM origin [GAS; RETPC_PARAM] ==>
+  origin = RETPC_PARAM ==>
   copy_phi_upper_bound origin fn' (copy_phi_var origin fn)
 Proof
   simp[fmpLowerDefsTheory.fmp_lower_function_def,
@@ -217,19 +217,62 @@ Proof
    `opaque_use_ok fn` by fs[o1_fn_shape_def, fn_shape_ok_def] >>
    `!i y. MEM i (fn_insts fn) /\ i.inst_opcode = SETFMP /\
       MEM (Var y) i.inst_operands ==>
-      ~gas_var fn y /\ ~retpc_var fn y` by metis_tac[input_setfmp_not_opaque] >>
-   `!point base. MEM (point,base) (fmap_to_alist plan) ==>
-      ~gas_var fn base /\ ~retpc_var fn base` by
-     (rpt strip_tac >> rename1 `MEM (point,target) (fmap_to_alist plan)` >>
-      `FLOOKUP plan point = SOME target` by fs[alistTheory.MEM_fmap_to_alist_FLOOKUP] >>
+      ~retpc_var fn y` by metis_tac[input_setfmp_not_opaque] >>
+   `!point base. MEM (point,base) (fmp_plan_to_alist fn plan) ==>
+      ~retpc_var fn base` by
+     (rpt strip_tac >> rename1 `MEM (point,target) (fmp_plan_to_alist fn plan)` >>
+      `FLOOKUP plan point = SOME target` by fs[fmpLowerPropsTheory.MEM_fmp_plan_to_alist] >>
       drule_all analyze_fmp_reclaims_output >> strip_tac >>
       fs[o1_fn_shape_def] >> metis_tac[]) >>
-   `!origin. MEM origin [GAS; RETPC_PARAM] ==>
+   `!origin. origin = RETPC_PARAM ==>
       copy_phi_upper_bound origin (fn with fn_blocks := blocks) (copy_phi_var origin fn)` by
      (gen_tac >> disch_tac >> irule fmp_lower_blocks_upper_bound >>
-      conj_tac >- (fs[gas_var_def, retpc_var_def] >> metis_tac[]) >>
+      conj_tac >- (fs[retpc_var_def] >> metis_tac[]) >>
       conj_tac >- (goal_assum (drule_at Any) >>
-        fs[gas_var_def, retpc_var_def] >> metis_tac[]) >>
+        fs[retpc_var_def] >> metis_tac[]) >>
+      simp[copy_phi_upper_bound_identity]) >>
+   irule fmp_install_checked_root_upper_bound >>
+   conj_tac >- metis_tac[] >> simp[] >>
+   goal_assum (drule_at Any) >> simp[] >> metis_tac[])
+QED
+
+Theorem fmp_lower_function_gas_upper_bound:
+  fmp_lower_function ctx s fn = SOME (fn',s') /\
+  o1_fn_shape ctx fn /\ ir_supply_covers_fn s fn /\
+  (!i x. MEM i (fn_insts fn) /\ gas_var fn x /\
+    MEM (Var x) i.inst_operands ==> gas_use_ok i x) /\
+  origin = GAS ==>
+  copy_phi_upper_bound origin fn' (copy_phi_var origin fn)
+Proof
+  simp[fmpLowerDefsTheory.fmp_lower_function_def,
+       fmpLowerDefsTheory.fmp_lower_function_with_info_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[copy_phi_upper_bound_identity] >>
+  drule fmpLowerDefsTheory.fmp_checked_seal_some >> strip_tac >>
+  gvs[fmpLowerDefsTheory.fmp_seal_def, copy_phi_upper_bound_identity] >>
+  Cases_on `root_layout` >> gvs[] >>
+  (`?users oldpc suffix. split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix)` by
+     (gvs[fmpLowerDefsTheory.fmp_make_root_layout_def, AllCaseEqs()] >> metis_tac[]) >>
+   `!origin. ~copy_phi_var origin fn runner` by
+     metis_tac[fresh_runner_not_input_opaque] >>
+   `!i y. MEM i (fn_insts fn) /\ i.inst_opcode = SETFMP /\
+      MEM (Var y) i.inst_operands ==>
+      ~gas_var fn y` by
+     (rpt strip_tac >> rename1 `inst.inst_opcode = SETFMP` >>
+      qpat_x_assum `!i x. MEM i (fn_insts fn) /\ gas_var fn x /\ _ ==> _`
+        (qspecl_then [`inst`, `y`] mp_tac) >>
+      simp[gas_use_ok_def]) >>
+   `!point base. MEM (point,base) (fmp_plan_to_alist fn plan) ==>
+      ~gas_var fn base` by
+     (rpt strip_tac >> rename1 `MEM (point,target) (fmp_plan_to_alist fn plan)` >>
+      `FLOOKUP plan point = SOME target` by fs[fmpLowerPropsTheory.MEM_fmp_plan_to_alist] >>
+      drule_all analyze_fmp_reclaims_output >> strip_tac >>
+      fs[o1_fn_shape_def] >> metis_tac[]) >>
+   `!origin. origin = GAS ==>
+      copy_phi_upper_bound origin (fn with fn_blocks := blocks) (copy_phi_var origin fn)` by
+     (gen_tac >> disch_tac >> irule fmp_lower_blocks_upper_bound >>
+      conj_tac >- (fs[gas_var_def] >> metis_tac[]) >>
+      conj_tac >- (goal_assum (drule_at Any) >>
+        fs[gas_var_def] >> metis_tac[]) >>
       simp[copy_phi_upper_bound_identity]) >>
    irule fmp_install_checked_root_upper_bound >>
    conj_tac >- metis_tac[] >> simp[] >>
@@ -238,10 +281,12 @@ QED
 
 Theorem fmp_lower_function_gas_var_reflect:
   fmp_lower_function ctx s fn = SOME (fn',s') /\
-  o1_fn_shape ctx fn /\ ir_supply_covers_fn s fn /\ gas_var fn' x ==>
+  o1_fn_shape ctx fn /\ ir_supply_covers_fn s fn /\
+  (!i x. MEM i (fn_insts fn) /\ gas_var fn x /\
+    MEM (Var x) i.inst_operands ==> gas_use_ok i x) /\ gas_var fn' x ==>
   gas_var fn x
 Proof
-  strip_tac >> drule fmp_lower_function_opaque_upper_bound >>
+  strip_tac >> drule fmp_lower_function_gas_upper_bound >>
   disch_then (qspec_then `GAS` mp_tac) >> simp[] >> strip_tac >>
   fs[gas_var_def] >> metis_tac[copy_phi_upper_bound_sound]
 QED
@@ -390,7 +435,7 @@ Theorem fmp_install_checked_root_opaque_use:
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
   analyze_fmp_reclaims infos ctx fn = SOME plan /\
   fmp_make_root_layout ctx fn info runner s0 = SOME (FmpRootLayout n root newpc s1) /\
-  fmp_lower_blocks infos ctx runner s1 (fmap_to_alist plan) fn.fn_blocks =
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult blocks leftover s2) /\
   fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) ==>
   !x use_ok.
@@ -438,7 +483,7 @@ Proof
   drule fmpLowerDefsTheory.fmp_checked_seal_some >> strip_tac >>
   gvs[fmpLowerDefsTheory.fmp_seal_def, fn_insts_def] >>
   Cases_on `root_layout` >> gvs[] >>
-  drule_all fmpStepSupplyTheory.fresh_ir_var_inst_ok >> strip_tac >>
+  drule_all irSupplyTheory.fresh_ir_var_inst_ok >> strip_tac >>
   drule fresh_ir_var_contract >> strip_tac >>
   drule_all fmp_make_root_layout_inst_ok >> strip_tac >>
   drule fmp_make_root_layout_used_vars >> strip_tac >>
@@ -476,16 +521,7 @@ Theorem fmp_lower_function_opaque_use_ok:
 Proof
   strip_tac >>
   `opaque_use_ok fn` by fs[o1_fn_shape_def, fn_shape_ok_def] >>
-  rewrite_tac[opaque_use_ok_def] >> rpt gen_tac >> strip_tac >> conj_tac >> strip_tac
-  >- (`gas_var fn x` by metis_tac[fmp_lower_function_gas_var_reflect] >>
-      `MEM x s.irs_used_vars` by
-        (fs[venomFnScheduleRunnerTheory.ir_supply_covers_fn_def,
-            venomFnScheduleRunnerTheory.list_subset_def, EVERY_MEM, gas_var_def] >>
-         metis_tac[copy_phi_var_in_ir_vars]) >>
-      `!i. MEM i (fn_insts fn) /\ MEM (Var x) i.inst_operands ==> gas_use_ok i x` by
-        metis_tac[opaque_use_ok_gas_use] >>
-      drule_all (SRULE[] (Q.INST [`use_ok` |-> `gas_use_ok`] fmp_lower_function_allowed_use)) >>
-      metis_tac[]) >>
+  rewrite_tac[opaque_use_ok_def] >> rpt strip_tac >>
   `retpc_var fn x` by metis_tac[fmp_lower_function_retpc_var_reflect] >>
   `MEM x s.irs_used_vars` by
     (fs[venomFnScheduleRunnerTheory.ir_supply_covers_fn_def,

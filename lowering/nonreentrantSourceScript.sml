@@ -1,7 +1,7 @@
 Theory nonreentrantSource
 Ancestors
   words finite_map
-  compileEnv accountsRelProps
+  compileEnv loweringStateRelDefs accountsRelProps
   vyperInterpreter vyperState vyperContext vyperStorageLayoutSafety
   venomState vfmState vfmExecution
 

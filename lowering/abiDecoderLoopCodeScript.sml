@@ -29,17 +29,14 @@ Proof
 QED
 
 Theorem abi_decoder_loop_prefix_extends:
-  abi_decode_loop_prefix ip src opc start = (labels,st) ==> cs_extends start st
+  abi_decode_loop_prefix ip src opc base_op start = (labels,st) ==> cs_extends start st
 Proof
   simp_tac bool_ss [abi_decode_loop_prefix_shape] >> strip_tac >> gvs[] >>
   simp_tac bool_ss [cs_extends_def, abi_decode_loop_prefix_state_def] >>
   qexists_tac
     `[<|bb_label := fresh_label_output "dec_dyn_hdr" start.cs_next_label;
-       bb_instructions := abi_decode_header_insts (start.cs_next_id+1) ip src opc
-         (STRING #"%" (toString start.cs_next_var))
-         (STRING #"%" (toString (start.cs_next_var+1)))
-         (STRING #"%" (toString (start.cs_next_var+2)))
-         (STRING #"%" (toString (start.cs_next_var+3)))
+       bb_instructions := abi_decode_position_header_insts (start.cs_next_id+1) ip src opc base_op
+         start.cs_next_var
          (fresh_label_output "dec_dyn_body" (start.cs_next_label+1))
          (fresh_label_output "dec_dyn_exit" (start.cs_next_label+2))|>;
       <|bb_label := start.cs_current_bb; bb_instructions := start.cs_current_insts ++
@@ -58,9 +55,9 @@ Proof
 QED
 
 Theorem abi_decoder_loop_phase_containment:
-  abi_decode_loop_prefix ip src opc start = (labels,st) /\
-  abi_decode_array_element_setup ip src dst opc hi di asz msz st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi di middle = ((),end_st) /\
+  abi_decode_loop_prefix ip src opc base_op start = (labels,st) /\
+  abi_decode_array_element_setup ip src dst opc base_op hi di asz msz st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi di middle = ((),end_st) /\
   abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),final) /\
   abi_decode_source_opcode opc /\ fn_has_code start final func ==>
   fn_has_code st end_st func /\ fn_has_code middle end_st func /\
@@ -83,8 +80,8 @@ Proof
 QED
 
 Theorem abi_decoder_array_body_entry_phi:
-  abi_decode_array_element_setup ip src dst opc hi di asz msz st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi di middle = ((),end_st) /\
+  abi_decode_array_element_setup ip src dst opc base_op hi di asz msz st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi di middle = ((),end_st) /\
   fn_has_code middle end_st func /\ st.cs_current_insts = [] ==>
   ?bb. lookup_block st.cs_current_bb func.fn_blocks = SOME bb /\
     phi_prefix_length bb.bb_instructions = 0

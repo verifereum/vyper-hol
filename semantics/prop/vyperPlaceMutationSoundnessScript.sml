@@ -1,7 +1,7 @@
 Theory vyperPlaceMutationSoundness
 Ancestors
   list option pair finite_map vyperState vyperMisc vyperTyping
-  vyperTypeInvariants vyperPlaceResultTyping vyperPlaceWriteSoundness
+  vyperTypeInvariants vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperPlaceWriteSoundness
   vyperTypeStatePreservation vyperAssignPreservesType vyperTypeExprSoundness
   vyperPlaceTyping vyperStorageBackend vyperLookup vyperValueOperation
   vyperPlaceStatePreservation vyperPlaceInvariants

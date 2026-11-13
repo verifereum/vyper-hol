@@ -32,7 +32,7 @@ Proof
   strip_tac >> simp_tac bool_ss [abi_decoder_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> gvs[Excl "enc_def"] >>
   (drule abi_decoder_primitive_source >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qhdtm_assum `abi_decoder_recursive_pre`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_pre_def]) >>
   drule abi_decoder_pre_output_separated >> disch_then assume_tac >>
   drule_all abi_decoder_primitive_reentry_from_state >> disch_then (qspec_then `ctx` assume_tac) >>
@@ -52,10 +52,13 @@ Theorem abi_decoder_correct_bytestring:
 Proof
   strip_tac >> simp_tac bool_ss [abi_decoder_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> gvs[Excl "enc_def"] >>
-  (qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  (qhdtm_assum `abi_decoder_recursive_pre`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_pre_def]) >>
   drule abi_decoder_pre_output_separated >> disch_then assume_tac >>
-  drule_all abi_decoder_bytestring_reentry_from_state >> disch_then (qspec_then `ctx` assume_tac) >>
+  drule abi_decoder_bytestring_reentry_from_state >> simp_tac bool_ss [] >>
+  disch_then drule >> simp_tac bool_ss [] >>
+  disch_then (qspecl_then [`limit_st`, `ctx`] mp_tac) >>
+  asm_simp_tac bool_ss [] >> strip_tac >>
   drule abi_decode_sim_from_fragment >> disch_then drule >> simp[] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
   `actual.vs_halted = initial.vs_halted` by simp[] >>
