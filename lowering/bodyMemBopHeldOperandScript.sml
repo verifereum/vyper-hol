@@ -290,8 +290,16 @@ Resume held_digest_operand_outcome[runtime_normal]:
   disj1_tac >> simp[] >> gen_tac >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==>
      stmt_state_rel H _ _ _ _ _ t /\ _` (drule_then strip_assume_tac) >>
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
+    simp[stmt_state_rel_gas_obs] >>
   `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t'` by
-    metis_tac[INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``] stmt_state_rel_fields_transport] >>
+    (mp_tac (Q.INST [`H0` |-> `storage_trace_horizon es_end.storage_trace`,
+                     `es` |-> `es_end with gas_obs := []`,
+                     `u` |-> `t'`, `s` |-> `t`]
+               (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+                  stmt_state_rel_fields_transport)) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then ACCEPT_TAC) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]
 QED
 

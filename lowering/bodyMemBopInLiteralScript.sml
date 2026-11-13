@@ -275,8 +275,8 @@ Proof
   rewrite_tac[gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
       drule_all literal_body_action_flat >> disch_then (fn th => rewrite_tac[th]) >>
-      irule gas_bad_storage_at_bind_left >> conj_tac >- first_assum ACCEPT_TAC >>
-      simp[storage_trace_frame_return])
+      irule gas_bad_storage_at_bind_left >> conj_tac >>
+      FIRST [first_assum ACCEPT_TAC, simp[storage_trace_frame_return]])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
       disch_then (qx_choosel_then [`res`, `es_end`, `r`]
