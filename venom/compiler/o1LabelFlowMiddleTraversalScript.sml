@@ -1,11 +1,32 @@
 Theory o1LabelFlowMiddleTraversal
 Ancestors
-  o1LabelFlowMiddleRenameLocal o1MakeSsaEventFrames o1MakeSsaActualNames
+  o1LabelFlowMiddleRenameLocal o1MakeSsaEventFrames makeSsaCurrentInduct
   o1MakeSsaOwnership o1MakeSsaTraversalFrames o1MakeSsaVisitTrace
   o1LabelFlowMiddleOperandOwners o1LabelFlowMiddlePhiOwners
   o1LabelFlowMiddleLive
   makeSsaDefs makeSsaCurrentLockstepShape codegenSymRel o1PassContract
   venomInst list rich_list pair
+
+
+Triviality visit_local_rename:
+  (!tree path s rs bbs sm.
+    EVERY (\e. rename_current_block_insts e.sve_supply_in e.sve_in e.sve_before =
+      (e.sve_out,e.sve_supply_out,e.sve_after))
+      (SND (visit_blocks path s rs bbs sm tree))) /\
+  (!trees path s ctrs stacks bbs sm.
+    EVERY (\e. rename_current_block_insts e.sve_supply_in e.sve_in e.sve_before =
+      (e.sve_out,e.sve_supply_out,e.sve_after))
+      (SND (visit_children path s ctrs stacks bbs sm trees)))
+Proof
+  ho_match_mp_tac makeSsaCurrentInductTheory.current_dom_tree_induction >>
+  rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+      simp[Once visit_blocks_def] >> Cases_on `lookup_block lbl bbs` >> simp[] >>
+      rpt (pairarg_tac >> gvs[]) >> simp[] >> metis_tac[SND])
+  >- simp[visit_blocks_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> simp[Once visit_blocks_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[] >> metis_tac[SND]
+QED
 
 Theorem indexed_patch_frame_adjacent:
   indexed_patch_frame bb out /\
