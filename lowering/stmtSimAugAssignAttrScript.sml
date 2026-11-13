@@ -64,7 +64,7 @@ Proof
        storage_well_formed_on cx es (FST H)` by
         (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
          simp[]) >>
-      simp[]) >>
+      fs[]) >>
   rewrite_tac[gas_outcome_def] >> strip_tac >> qexists_tac `marks`
   >- (disj1_tac >> fs[gasStorageTheory.gas_bad_storage_at_def])
   >- (disj2_tac >> disj1_tac >>
@@ -585,7 +585,8 @@ Proof
     metis_tac[local_ptrs_reserved_next_var] >>
   `fn_has_code sa sm func /\ fn_has_code sm sn func` by
     metis_tac[fn_has_code_split] >>
-  drule_all attr_add_marked_path >> strip_tac >>
+  drule_all attr_add_marked_path >>
+  disch_then (qspecl_then [`es`, `cx`, `ctx`] strip_assume_tac) >>
   qabbrev_tac `t = (update_var (STRING #"%" (toString sm.cs_next_var))
      (mload (w2n (w + n2w off)) q) q) with
        vs_inst_idx := SUC q.vs_inst_idx` >>
@@ -660,13 +661,15 @@ Proof
       `gas_explicit marks s0.vs_gas_readings =
        gas_explicit marks sm.vs_gas_readings` by
         (drule gas_marked_path_exec >> strip_tac >>
-         drule gas_path_suffix >> simp[gasCountTheory.gas_count_suffix_def]) >>
+         drule fragGasPathTheory.gas_path_suffix >> simp[gasCountTheory.gas_count_suffix_def]) >>
       fs[gasStorageTheory.gas_bad_storage_at_def])
   >- (disj2_tac >> disj1_tac >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
       rewrite_tac[gas_summary_at_def] >> strip_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >> gvs[] >>
-      irule gas_marked_exec_zero_prefix >> qexists_tac `sm` >> simp[]) >>
+      drule_all stmtSimAugAssignTheory.gas_marked_exec_zero_prefix >> strip_tac
+      >~ [`exit_result r`] >- (conj_tac >- first_assum ACCEPT_TAC >> disj2_tac >> first_assum ACCEPT_TAC) >>
+      fs[]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
@@ -876,8 +879,7 @@ Proof
   `expr_post H1 ctx func cenv cx e (es with gas_obs := []) sa sb sm
      (ee with gas_obs := []) v rhs t` by metis_tac[] >>
   `eval_operand rhs t = SOME (val_to_w256 v)` by
-    (irule augassign_attr_rhs_word_operand >>
-     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+    (drule_all augassign_attr_rhs_word_operand >> simp[]) >>
   `sa.cs_next_var <= sb.cs_next_var` by
     metis_tac[ci_mono_lower_value_cfn, compile_expr_ci_mono, ci_mono_def, pairTheory.SND] >>
   `local_ptrs_reserved cenv sb` by
@@ -1042,11 +1044,11 @@ Proof
      goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
      simp[pred_setTheory.ABSORPTION_RWT] >>
-     metis_tac[arithmeticTheory.ADD_COMM]) >>
+     rpt strip_tac >> gvs[] >> first_x_assum irule >> simp[]) >>
   qexistsl_tac [`ee with scopes := pre ++
     (env1 |+ (id,entry with <|value := StructV (AFUPDKEY fld (K v) vals);
       popped := []|>)) :: rest`, `t'`] >>
-  conj_tac >- simp[gas_marked_exec_def] >>
+  conj_tac >- gvs[gas_marked_exec_def] >>
   simp[] >> rpt strip_tac >>
   `storage_well_formed_on cx (ee with scopes := pre ++
      (env1 |+ (id,entry with <|value := StructV (AFUPDKEY fld (K v) vals);
@@ -1057,6 +1059,12 @@ Proof
        (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
         simp[Abbr `ee1`]) >>
      simp[]) >>
+  qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`,
+    `STRING #"%" (toString sm.cs_next_var)`, `op`, `su`, `sf`, `p`, `sz`, `w0`,
+    `struct_field_offset flds fld`, `id`, `pre`, `env1`, `entry`, `rest`, `fs`,
+    `vals`, `flds`, `fld`, `ftv`, `v`] mp_tac assign_attr_local_store_marked_path >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  strip_tac >> gvs[] >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   metis_tac[]
 QED
@@ -1398,7 +1406,8 @@ Proof
     metis_tac[local_word_pointer_live] >>
   `fn_has_code sa s1 func` by metis_tac[fn_has_code_split, cs_extends_trans] >>
   `eval_operand (Var p) s0 = SOME w0` by simp[eval_operand_def] >>
-  drule_all attr_load_marked_path >> strip_tac >>
+  drule_all attr_load_marked_path >>
+  disch_then (qspecl_then [`es`, `cx`, `ctx`] strip_assume_tac) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
        stmt_state_rel H ctx func cenv cx es t /\
        storage_well_formed_on cx es (FST H)` by metis_tac[] >>

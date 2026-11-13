@@ -15,7 +15,9 @@ Theorem compile_msg_gas_origin_prefix:
   MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
   fn_has_code sa sb func /\ fn_has_code ta tb shadow_func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?v ee t.
@@ -24,8 +26,9 @@ Theorem compile_msg_gas_origin_prefix:
       (es, s0) [T] (INL v) ee (OK t) /\
     gas_origin_path memory (gas_explicit_sites ctx shadow_ctx)
       ctx func s0 [T] (OK t) /\
-    expr_post ctx func cenv cx (Builtin ann (Env MsgGas) args)
-      es sa sb s0 (ee with gas_obs := []) v op t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       expr_post H ctx func cenv cx (Builtin ann (Env MsgGas) args)
+         es sa sb s0 (ee with gas_obs := []) v op t) /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -41,6 +44,9 @@ Proof
   conj_tac
   >- fs[gas_marked_exec_def, gas_explicit_def, msg_gas_source] >>
   conj_tac >- simp[] >>
-  conj_tac >- (irule msg_gas_post_frame >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _` drule >> strip_tac >>
+      irule msg_gas_post_frame >> simp[]) >>
   simp[update_var_def]
 QED

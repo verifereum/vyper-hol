@@ -15,7 +15,7 @@ Ancestors
   exprLowering compileEnv context emitHelperProps venomState finite_map
   exprPtrUnwrapLoad exprPtrUnwrapStorage emitHelper venomExecSemantics
   venomInst freshWrites exprLoweringProps ptrDiscipline vyperStorageFootprint
-  arithmetic list rich_list pred_set
+  loweringStateRelDefs arithmetic list rich_list pred_set
 
 (* vv_post at the compile_expr state, held at the later unwrap state. *)
 val VV_MONO_TAC =
@@ -267,7 +267,10 @@ Proof
          mk_inst_def, exec_read1_def, eval_operand_def] >>
   `!q. not_fresh_at sb q ==> q <> out` by
     (simp[not_fresh_at_def, Abbr `out`] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
-  `allocas_from lo s` by fs[ghost_inv_at_def] >>
+  `allocas_from lo s` by
+    (qpat_assum `ghost_inv_at _ lo _ _ _ _ _ _ s`
+       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+     first_assum ACCEPT_TAC) >>
   qspecl_then [`not_fresh_at sb`, `u`, `out`, `sb.cs_next_id`, `func`, `src`, D0_Q]
     mp_tac (Q.GENL [`P`, `t`, `out`, `id`, `fn`, `p`, `D`] ctor_mload_segment) >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
@@ -292,8 +295,9 @@ Proof
   >- simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
   strip_tac >>
   `alloca_inv s` by
-    (qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[vv_post_def, stmt_state_rel_def]) >>
+    (qpat_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [vv_post_def, stmt_state_rel_def]) >>
+     first_assum ACCEPT_TAC) >>
   `alloca_history func (u with vs_inst_idx := LENGTH sc.cs_current_insts)` by
     metis_tac[body_word_load_history] >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -332,10 +336,14 @@ Proof
   >- simp[]
   >- (irule ghost_kept_at_clean_suffix >> simp[] >>
       metis_tac[SUBSET_REFL])
-  >- (rpt strip_tac >> res_tac >>
+  >- (rpt strip_tac >>
+      qpat_assum `!q. not_fresh_at sb q ==> q <> out` drule >>
+      qpat_assum `!q. not_fresh_at sb q ==> FLOOKUP Gf q = _ /\ _` drule >>
+      rpt strip_tac >>
       simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE])
   >- (simp[wb_frame_def, update_var_def, locals_kept_mem] >>
-      rpt strip_tac >> res_tac >>
+      rpt strip_tac >>
+      qpat_assum `!q. not_fresh_at sb q ==> q <> out` drule >>
       fs[lookup_var_def, FLOOKUP_UPDATE])
   >> (irule ghost_kept_at_clean_suffix >>
   qexistsl [`G`, `tn`] >> simp[ghost_kept_at_def] >>
@@ -431,7 +439,10 @@ Proof
                         [p.ptr_operand] [out]` >>
   `!q. not_fresh_at sb q ==> q <> out` by
     (simp[not_fresh_at_def, Abbr `out`] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
-  `allocas_from lo s` by fs[ghost_inv_at_def] >>
+  `allocas_from lo s` by
+    (qpat_assum `ghost_inv_at _ lo _ _ _ _ _ _ s`
+       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+     first_assum ACCEPT_TAC) >>
   qspecl_then [`if tr then TLOAD else SLOAD`, `p.ptr_operand`, `a`,
                `sb.cs_next_id`, `out`, `func`, D0_Q]
     mp_tac (Q.GENL [`load`, `arg`, `key`, `id`, `out`, `fn`, `D`]
@@ -447,7 +458,7 @@ Proof
      simp[inst_seq_ptr_def, Abbr `inst`]) >>
   `slot_copy_word (if tr then TLOAD else SLOAD) s a =
      if tr then tload a s else sload a s` by
-    (Cases_on `tr` >> simp[slot_copy_word_def]) >>
+    (rpt (pop_assum kall_tac) >> Cases_on `tr` >> simp[slot_copy_word_def]) >>
   `run_inst_seq_mem_ok [inst] s` by
     (simp[run_inst_seq_mem_ok_last, Abbr `inst`] >> conj_tac
      >- (irule below_frontier_no_ranges >> Cases_on `tr` >> simp[mk_inst_def])
@@ -459,8 +470,9 @@ Proof
       simp[is_terminator_def]) >>
   strip_tac >>
   `alloca_inv s` by
-    (qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[vv_post_def, stmt_state_rel_def]) >>
+    (qpat_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [vv_post_def, stmt_state_rel_def]) >>
+     first_assum ACCEPT_TAC) >>
   `alloca_history func (u with vs_inst_idx := LENGTH sc.cs_current_insts)` by
     (qspecl_then [`[inst]`, `sb`, `sc`, `s`, `u`] mp_tac
        emitted_alloca_history >>
@@ -491,7 +503,7 @@ Proof
   >- fs[update_var_def]
   >- fs[update_var_def]
   >- (irule ptr_val_ok_word >> simp[] >> conj_tac
-      >- (Cases_on `tr` >> fs[])
+      >- (Cases_on `tr` >> gvs[])
       >> irule step_prov_out_none >>
       simp[Abbr `inst`, mk_inst_def] >>
       irule out_prov_other_none >> Cases_on `tr` >> simp[mk_inst_def])
@@ -499,10 +511,14 @@ Proof
   >- simp[]
   >- (irule ghost_kept_at_clean_suffix >> simp[] >>
       metis_tac[SUBSET_REFL])
-  >- (rpt strip_tac >> res_tac >>
+  >- (rpt strip_tac >>
+      qpat_assum `!q. not_fresh_at sb q ==> q <> out` drule >>
+      strip_tac >> qpat_assum `!p. p <> out ==> FLOOKUP Gf p = _ /\ _` drule >>
+      rpt strip_tac >>
       simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE])
   >- (simp[wb_frame_def, update_var_def, locals_kept_mem] >>
-      rpt strip_tac >> res_tac >>
+      rpt strip_tac >>
+      qpat_assum `!q. not_fresh_at sb q ==> q <> out` drule >>
       fs[lookup_var_def, FLOOKUP_UPDATE])
   >> (irule ghost_kept_at_clean_suffix >>
   qexistsl [`G`, `tn`] >> simp[ghost_kept_at_def] >>
@@ -583,8 +599,9 @@ Proof
   drule_all vv_post_code_source >> strip_tac >>
   WORD_TYPES_TAC >>
   `stmt_state_rel H0 ctx func cenv cx ee s` by
-    (qpat_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[vv_post_def]) >>
+    (qpat_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+     first_assum ACCEPT_TAC) >>
   REG_Q by REG_TAC >>
   reverse (Cases_on `cenv.ce_is_ctor`) >- suspend "runtime" >>
   `compile_imm_load_word T cenv.ce_imm_alloca p.ptr_operand sb = (op,sc)` by
@@ -607,20 +624,31 @@ Proof
      CCONTR_TAC >> fs[] >>
      qpat_x_assum `!i. w2n a <= i /\ _ ==> _` (qspec_then `w2n a + x` mp_tac) >>
      simp[]) >>
-  `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_def] >>
+  `allocas_from lo s /\ lo <= s.vs_alloca_next` by
+    (qpat_assum `ghost_inv_at _ lo _ _ _ _ _ _ s`
+       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `!region. cenv.ce_imm_alloca = SOME region ==>
      eval_operand region s = SOME 0w /\ copy_old_operand sb region /\
      op_taint tn region = {} /\ op_prov G region = NONE` by
     (gen_tac >> strip_tac >>
-     `immutable_base_zero cenv s` by fs[stmt_state_rel_def] >>
-     fs[immutable_base_zero_alt] >> first_x_assum drule >>
+     `immutable_base_zero cenv s` by
+       (qpat_assum `stmt_state_rel H0 _ _ _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+        first_assum ACCEPT_TAC) >>
+     qpat_x_assum `immutable_base_zero _ _`
+       (mp_tac o REWRITE_RULE [immutable_base_zero_alt]) >>
+     disch_then (drule o CONJUNCT1) >>
      Cases_on `region` >>
      simp[eval_operand_def, lookup_var_def, copy_old_operand_def,
           op_taint_def, op_prov_def] >>
      strip_tac >> conj_tac
      >- metis_tac[local_ptrs_reserved_imm_base] >>
      `lo <> 0` by decide_tac >>
-     fs[ghost_inv_at_def, op_taint_def, op_prov_def]) >>
+     qpat_assum `ghost_inv_at _ lo _ _ _ _ G tn s`
+       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+     qpat_x_assum `!x. lo <> 0 /\ _ ==> FLOOKUP G x = NONE /\ _` drule_all >>
+     simp[op_taint_def, op_prov_def]) >>
   qspecl_then [`cenv.ce_imm_alloca`, `p.ptr_operand`, `sb`, `op`, `sc`,
                D0_Q, `lo`, `ctx`, `func`, `PG`, `G`, `tn`, `s`, `a`]
     mp_tac (Q.GENL [`imm`, `arg`, `sa`, `op`, `sb`, `D`, `lo`, `ctx`, `fn`,
@@ -677,14 +705,18 @@ Proof
   qspecl_then [`emitted_insts sb sc`, `sb`, `sc`, `s`, `u`, `G`, `tn`,
                `Gf`, `tnf`] mp_tac (Q.INST [`D` |-> D0_Q] emitted_origin_ptr_path) >>
   impl_tac >- fs[] >> strip_tac >>
-  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `alloca_inv s` by
+    (qpat_assum `stmt_state_rel H0 _ _ _ _ _ s`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+     first_assum ACCEPT_TAC) >>
   `alloca_history func (u with vs_inst_idx := LENGTH sc.cs_current_insts)` by
     (qspecl_then [`emitted_insts sb sc`, `sb`, `sc`, `s`, `u`] mp_tac
        emitted_alloca_history >>
      fs[EVERY_MEM]) >>
-  `!x n. eval_operand x (u with vs_inst_idx := n) = eval_operand x u /\
-         lookup_var x (u with vs_inst_idx := n) = lookup_var x u` by
-    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  `(!x n. eval_operand x (u with vs_inst_idx := n) = eval_operand x u) /\
+   (!y n. lookup_var y (u with vs_inst_idx := n) = lookup_var y u)` by
+    (conj_tac >- (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+     simp[lookup_var_def]) >>
   `?tvt. evaluate_type (get_tenv cx) t = SOME tvt /\
          mload (w2n a) s = typed_val_to_w256 tvt v` by
     metis_tac[immutable_holds_iload] >>
@@ -696,8 +728,9 @@ Proof
        (qspec_then `H` mp_tac) >>
      impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
      `stmt_state_rel H ctx func cenv cx ee s` by
-       (qpat_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-        simp[vv_post_def]) >>
+       (qpat_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+        first_assum ACCEPT_TAC) >>
      `stmt_state_rel H ctx func cenv cx ee
         (u with vs_inst_idx := LENGTH sc.cs_current_insts)` by
        (irule stmt_state_rel_old_vars_frame_ptr >>
@@ -706,11 +739,11 @@ Proof
      qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_then (Pos last) mp_tac vv_post_read_result) >>
      disch_then (drule_then assume_tac) >>
-     qspecl_then [`func`, `cenv`, `cx`, `e`, `es`, `sa`, `sb`, `sc`, `s0`,
+     qspecl_then [`H`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `sb`, `sc`, `s0`,
                   `ee`, `v`, `t`, `p`, `op`, `s`,
                   `u with vs_inst_idx := LENGTH sc.cs_current_insts`,
                   `mload (w2n a) s`, `ctx`]
-       mp_tac expr_post_of_vv_post_load_physical >>
+       mp_tac (Q.GEN `H` expr_post_of_vv_post_load_physical) >>
      impl_tac >- gvs[immutable_copy_read_def] >>
      simp[]) >>
   qexistsl [`v`, `u with vs_inst_idx := LENGTH sc.cs_current_insts`,
@@ -754,7 +787,10 @@ Resume unwrap_code_word_origin_ptr[runtime]:
   `!q. not_fresh_at sb q ==> q <> out` by
     (simp[not_fresh_at_def, Abbr `out`] >>
      metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
-  `allocas_from lo s` by fs[ghost_inv_at_def] >>
+  `allocas_from lo s` by
+    (qpat_assum `ghost_inv_at _ lo _ _ _ _ _ _ s`
+       (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+     first_assum ACCEPT_TAC) >>
   qspecl_then [`not_fresh_at sb`, `u`, `out`, `sb.cs_next_id`, `func`,
                `p.ptr_operand`, D0_Q]
     mp_tac (Q.GENL [`P`, `t`, `out`, `id`, `fn`, `arg`, `D`]
@@ -766,7 +802,8 @@ Resume unwrap_code_word_origin_ptr[runtime]:
        simp[venom_state_component_equality] >>
      simp[]) >>
   `w2n a + type_memory_size rty <= LENGTH s.vs_data_section` by
-    (irule runtime_immutable_data_section >> simp[] >> metis_tac[]) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] runtime_immutable_data_section) >>
+     simp[] >> metis_tac[]) >>
   `run_inst_seq_mem_ok [inst] s` by
     (simp[run_inst_seq_mem_ok_last, Abbr `inst`] >> conj_tac
      >- (irule below_frontier_no_ranges >> simp[mk_inst_def])
@@ -776,7 +813,10 @@ Resume unwrap_code_word_origin_ptr[runtime]:
   impl_tac
   >- simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
   strip_tac >>
-  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `alloca_inv s` by
+    (qpat_assum `stmt_state_rel H0 _ _ _ _ _ s`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+     first_assum ACCEPT_TAC) >>
   `alloca_history func (u with vs_inst_idx := LENGTH sc.cs_current_insts)` by
     (qspecl_then [`[inst]`, `sb`, `sc`, `s`, `u`] mp_tac
        emitted_alloca_history >>
@@ -811,10 +851,14 @@ Resume unwrap_code_word_origin_ptr[runtime]:
   >- simp[]
   >- (irule ghost_kept_at_clean_suffix >> simp[] >>
       metis_tac[SUBSET_REFL])
-  >- (rpt strip_tac >> res_tac >>
+  >- (rpt strip_tac >>
+      qpat_assum `!q. not_fresh_at sb q ==> q <> out` drule >>
+      qpat_assum `!q. not_fresh_at sb q ==> FLOOKUP Gf q = _ /\ _` drule >>
+      rpt strip_tac >>
       simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE])
   >- (simp[wb_frame_def, update_var_def, locals_kept_mem] >>
-      rpt strip_tac >> res_tac >>
+      rpt strip_tac >>
+      qpat_assum `!q. not_fresh_at sb q ==> q <> out` drule >>
       fs[lookup_var_def, FLOOKUP_UPDATE])
   >> (irule ghost_kept_at_clean_suffix >>
   qexistsl [`G`, `tn`] >> simp[ghost_kept_at_def] >>

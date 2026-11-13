@@ -33,7 +33,7 @@ Proof
 QED
 
 Theorem bop_operand_post_typed_word:
-  bop_operand_post d ctx func cenv cx e es sa sb op s G tn v ee t H un /\
+  bop_operand_post H d ctx func cenv cx e es sa sb op s G tn v ee t HG un /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
   eval_operand op t = SOME (typed_val_to_w256 tv v)
