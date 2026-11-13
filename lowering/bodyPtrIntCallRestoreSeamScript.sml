@@ -5,7 +5,8 @@ Ancestors
   bodyPtrBytestringBuiltinsWindowGhost exprSimDefs exprSimProps
   loweringPosts compileEnv venomState venomExecSemantics
   vyperState vyperInterpreter gasSummaryComposePtr fragGasSeqPtr fragGasPathPtr
-  finite_map pred_set list
+  finite_map pred_set list vyperTypeEvalSoundness vyperTypeInvariants
+  vyperTypeSystem vyperTyping vyperValue vyperTypeEnv vyperContext
 
 (* Concrete and ghost confinement have different jobs: the exit seam
    preserves the bytes; the protected-set frame prevents new taint there. *)
@@ -101,4 +102,46 @@ Proof
   rpt gen_tac >> strip_tac >> simp[] >> gen_tac >>
   simp[bind_def, finally_def, pop_function_def, set_scopes_def,
        ignore_bind_def, return_def, raise_def]
+QED
+
+Theorem intcall_callee_src_typed_cast:
+  !cx name body env env_after ret rtv es1 v mid.
+    type_stmts env ret body = SOME env_after /\
+    env_consistent env (cx with stk updated_by CONS (NONE,name)) es1 /\
+    state_well_typed es1 /\ accounts_well_typed es1.accounts /\
+    context_well_typed cx /\ functions_well_typed cx /\
+    call_evaluation_safe (cx with stk updated_by CONS (NONE,name))
+      (int_calls_stmts body) /\
+    evaluate_type env.type_defs ret = SOME rtv /\
+    (ret = NoneT \/ stmts_no_fallthrough body) /\
+    intcall_callee_src cx name body es1 = (INL v,mid) ==>
+    safe_cast rtv v = SOME v
+Proof
+  rpt gen_tac >> strip_tac >> rename1 `type_stmts env ret ss = SOME env_after` >>
+  Cases_on `eval_stmts (cx with stk updated_by CONS (NONE,name)) ss es1` >>
+  rename1 `eval_stmts _ _ _ = (res,st)` >>
+  `context_well_typed (cx with stk updated_by CONS (NONE,name)) /\
+   functions_well_typed (cx with stk updated_by CONS (NONE,name))` by
+    (conj_tac >- fs[context_well_typed_def] >>
+     qpat_x_assum `functions_well_typed cx` mp_tac >>
+     simp[functions_well_typed_def, get_module_code_def,
+         get_tenv_def, fn_sigs_consistent_def, fn_sigs_declared_complete_def,
+         toplevel_vtypes_complete_def, bare_globals_complete_def,
+         bare_global_assignable_complete_def, flag_members_complete_def,
+         well_formed_type_def, fn_sigs_live_def, context_function_live_context,
+         lookup_var_slot_from_layout_def]) >>
+  drule_all (cj 2 eval_scc_type_sound_results_mutual) >> strip_tac >>
+  Cases_on `res` >>
+  gvs[intcall_callee_src_def, try_def, ignore_bind_def, bind_def,
+      return_def, raise_def]
+  >~ [`safe_cast NoneTV NoneV`] >-
+    simp[vyperValueOperationTheory.safe_cast_def]
+  >~ [`eval_stmts _ _ _ = (INL (),_)`] >-
+    metis_tac[cj 2 no_fallthrough_eval_no_success] >>
+  rename1 `handle_function ex st = (INL v,mid)` >>
+  Cases_on `ex` >> gvs[handle_function_def, return_def, raise_def] >>
+  drule_all env_extends_return_exception_typed >>
+  simp[vyperTypeStmtResultTheory.return_exception_typed_def,
+       vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
+  strip_tac >> gvs[] >> irule safe_cast_well_typed >> simp[]
 QED
