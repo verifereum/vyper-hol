@@ -1168,7 +1168,8 @@ Theorem gen_inst_abort_frame_sim_deep:
         n <= LENGTH (execute_plan cp.cp_initial_fmp ops) + 7 /\
         ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
          (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
-        venom_asm_terminal_rel vs' as'
+        venom_asm_terminal_rel vs' as' /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_opcode = REVERT`
