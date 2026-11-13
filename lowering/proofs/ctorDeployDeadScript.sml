@@ -226,7 +226,7 @@ Proof
               rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
               TRY (simp[Abbr `D`, deploy_dead_def, initial_evaluation_context_def] >>
                    NO_TAC) >>
-              irule accounts_agree_except_process_deletions >>
+              irule e2eCompositionTheory.accounts_agree_except_process_deletions >>
               irule accounts_agree_except_code_update >> first_assum ACCEPT_TAC)
           >~ [`transient_agree H _ _ _`]
           >- (irule transient_agree_dead_target_trans >>
