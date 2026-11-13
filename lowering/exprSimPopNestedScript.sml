@@ -117,7 +117,7 @@ Proof
   simp[Once well_typed_expr_def]
 QED
 
-Theorem target_root_cases[local]:
+Theorem target_root_cases:
   !bt. (?id. target_root bt = NameTarget id) \/
        (?src id. target_root bt = TopLevelNameTarget (src,id))
 Proof
