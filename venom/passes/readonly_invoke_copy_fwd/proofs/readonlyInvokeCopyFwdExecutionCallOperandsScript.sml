@@ -13,7 +13,7 @@ Ancestors
   o1LowerDloadShared taintAgree frameRel venomCallOracleDefs extCallOracle
   o1PassContract finite_map list pred_set words
 
-Theorem ricf_execution_call_operands:
+Theorem ricf_execution_call_family_operands:
   ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets tn /\
   ricf_mapped_support a B E PG G sites /\
@@ -26,7 +26,7 @@ Theorem ricf_execution_call_operands:
   ptr_discipline lo C vs /\ opaque_use_ok fn /\
   active_inst fn inst s /\ ~in_revert_forward fn s /\
   ((inst.inst_opcode = CALL /\ prefix = [gop;adop;vop]) \/
-   (inst.inst_opcode = STATICCALL /\ prefix = [gop;adop])) /\
+   (MEM inst.inst_opcode [STATICCALL;DELEGATECALL] /\ prefix = [gop;adop])) /\
   inst.inst_operands = prefix ++ [aop;azop;rop;rsop] /\
   IS_SOME (eval_operands prefix s) /\
   eval_operand aop s = SOME ao /\ eval_operand azop s = SOME az /\
@@ -37,7 +37,7 @@ Theorem ricf_execution_call_operands:
     read_memory (w2n ao) (w2n az) s = read_memory (w2n ao') (w2n az) t /\
     (w2n rs = 0 \/ ro = ro')
 Proof
-  strip_tac >>
+  strip_tac >> fs[MEM] >>
   `?prefix_values. eval_operands prefix s = SOME prefix_values` by
     metis_tac[optionTheory.IS_SOME_EXISTS] >>
   `frame_reachable vs C stk PG G tn fn inst s` by
@@ -77,6 +77,34 @@ Proof
      (impl_tac >- (gvs[MEM, eval_operands_def, AllCaseEqs()] >> simp[mem_write_ops_def,
        source_memory_write_ranges_def, sized_source_write_range_def])) >> simp[]) >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem ricf_execution_call_operands:
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
+    n a U B HP H ledger E sites maps targets tn /\
+  ricf_mapped_support a B E PG G sites /\
+  ricf_analyzed_map_origins vs C stk PG G tn fn inst s U B sites /\
+  o1_ctx_shape C /\ ALL_DISTINCT (MAP (\f. f.fn_name) C.ctx_functions) /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY ricf_param_order_ok C.ctx_functions /\
+  EVERY wf_function C.ctx_functions /\ EVERY fn_inst_wf C.ctx_functions /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ mem_inv raw_mem_ok C vs /\
+  ricf_full_alloca_copies fn /\ ricf_src_alloca fn /\
+  ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  active_inst fn inst s /\ ~in_revert_forward fn s /\
+  ((inst.inst_opcode = CALL /\ prefix = [gop;adop;vop]) \/
+   (inst.inst_opcode = STATICCALL /\ prefix = [gop;adop])) /\
+  inst.inst_operands = prefix ++ [aop;azop;rop;rsop] /\
+  IS_SOME (eval_operands prefix s) /\
+  eval_operand aop s = SOME ao /\ eval_operand azop s = SOME az /\
+  eval_operand rop s = SOME ro /\ eval_operand rsop s = SOME rs ==>
+  (!op x. MEM op (prefix ++ [azop;rsop]) /\ eval_operand op s = SOME x ==>
+    eval_operand op t = SOME x) /\
+  ?ao' ro'. eval_operand aop t = SOME ao' /\ eval_operand rop t = SOME ro' /\
+    read_memory (w2n ao) (w2n az) s = read_memory (w2n ao') (w2n az) t /\
+    (w2n rs = 0 \/ ro = ro')
+Proof
+  strip_tac >> mp_tac ricf_execution_call_family_operands >>
+  (impl_tac >- simp[]) >> simp[]
 QED
 
 Theorem ricf_execution_call_request_compatible:

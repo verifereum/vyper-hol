@@ -200,6 +200,164 @@ Proof
     ricf_call_taint_def, Excl "consume_call_outcome_eq"] >> metis_tac[]
 QED
 
+Theorem ricf_execution_consume_call_next:
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
+    n a U B HP H ledger E sites maps targets tn /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  active_inst fn inst s /\ ~is_terminator inst.inst_opcode /\
+  inst.inst_opcode <> INVOKE /\
+  inst.inst_outputs = [out] /\
+  step_inst fuel C inst s = OK (update_var out w r) /\
+  (!z v. consume_call_outcome rq2 (ro') (rs) t = (z,v) ==>
+    step_inst fuel Ct inst t = OK (update_var out z v)) /\
+  rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
+  rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
+  ((computed_precompile rq1 /\ computed_precompile rq2 /\
+    rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data) \/
+    request_agree_except D rq1 rq2) /\
+  consume_call_outcome rq1 (ro) (rs) s = (w,r) /\
+  (rs = 0 \/ ro = ro') /\
+  step_prov PG G inst (update_var out w r) = set_prov G [out] NONE /\
+  step_taint inst s (update_var out w r) tn =
+    (ricf_call_taint tn rq1 s r (ro) (rs)
+      with t_var := set_var_taint tn.t_var [out] {}) /\
+  occurrence_sites_step a B inst (update_var out w r) = B /\
+  active_inst fn next ((update_var out w r) with vs_inst_idx := SUC s.vs_inst_idx) /\
+  (!gam. gam = ricf_phase_ranges 0 ledger \/
+      MEM gam (ricf_phase_stack_ranges stk ledger) \/
+      gam = ricf_site_triples sites \/
+      (?j. j < LENGTH stk /\ gam = ricf_site_triples (EL j maps)) ==>
+    !db sb sz k. (db,sb,sz) IN gam /\ k < sz ==>
+      ~(ro <= db+k /\ db+k < ro + LENGTH (TAKE (rs) r.vs_returndata)) /\
+      ~(ro <= sb+k /\ sb+k < ro + LENGTH (TAKE (rs) r.vs_returndata))) ==>
+  ?v. step_inst fuel C inst s = OK (update_var out w r) /\
+    step_inst fuel Ct inst t = OK v /\
+    ricf_execution_invariant vs C D stk PG
+      (step_prov PG G inst (update_var out w r))
+      (step_taint inst s (update_var out w r) tn) fn next
+      ((update_var out w r) with vs_inst_idx := SUC s.vs_inst_idx)
+      (v with vs_inst_idx := SUC s.vs_inst_idx)
+      n a U B HP (occurrence_step a HP H inst (update_var out w r))
+      ledger E sites maps targets (step_taint inst s (update_var out w r) tn)
+Proof
+  strip_tac >>
+  `ricf_opaque_frame_agree fn D (ircf_dead (ricf_original_copy_ids C) s stk)
+    sites (ricf_complete_params PG s.vs_params) G tn s t /\
+   ricf_opaque_live_stack_agree D (ricf_original_copy_ids C) tn maps stk targets s t /\
+   ircf_cross tn (ricf_phase_ranges 0 ledger) s t /\
+   ricf_cert_crosses tn (ricf_phase_stack_ranges stk ledger) stk s t /\
+   ricf_support_agree B E tn s t` by fs[ricf_execution_invariant_def, Excl "consume_call_outcome_eq"] >>
+  Cases_on `consume_call_outcome rq2 (ro') (rs) t` >>
+  rename1 `consume_call_outcome rq2 (ro') (rs) t =
+    (target_result,target_state)` >>
+  `w = target_result /\ ricf_opaque_frame_agree fn D
+    (ircf_dead (ricf_original_copy_ids C) s stk) sites
+    (ricf_complete_params PG s.vs_params) G
+    (ricf_call_taint tn rq1 s r (ro) (rs)) r target_state` by
+    (Cases_on `rs = 0` >| [
+       mp_tac (Q.INST [`X` |-> `ircf_dead (ricf_original_copy_ids C) s stk`,
+         `PG` |-> `ricf_complete_params PG s.vs_params`,
+        `rq1` |-> `rq1`, `rq2` |-> `rq2`,
+        `ro1` |-> `ro`, `ro2` |-> `ro'`, `u` |-> `target_state`, `z` |-> `target_result`]
+         ricf_opaque_frame_consume_call_zero) >>
+       impl_tac >- (gvs[venom_call_request_def, Excl "consume_call_outcome_eq"] >>
+          metis_tac[]) >> simp[Excl "consume_call_outcome_eq"],
+       gvs[Excl "consume_call_outcome_eq"] >>
+       qpat_x_assum `!gam. _` (qspec_then `ricf_site_triples sites` mp_tac) >>
+       simp[Excl "consume_call_outcome_eq"] >> strip_tac >>
+       mp_tac (Q.INST [`X` |-> `ircf_dead (ricf_original_copy_ids C) s stk`,
+         `PG` |-> `ricf_complete_params PG s.vs_params`, `ro` |-> `ro`,
+         `rs` |-> `rs`, `u` |-> `target_state`, `z` |-> `target_result`,
+         `rq1` |-> `rq1`,
+         `rq2` |-> `rq2`]
+         ricf_opaque_frame_consume_call) >>
+       (impl_tac >- (simp[venom_call_request_def, Excl "consume_call_outcome_eq"] >>
+         metis_tac[arithmeticTheory.ADD_COMM])) >>
+       simp[Excl "consume_call_outcome_eq"]]) >>
+  `r.vs_returndata = target_state.vs_returndata` by
+    (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def, Excl "consume_call_outcome_eq"] >>
+     drule taint_agree_read_fields >> simp[ricf_opaque_view_def]) >>
+  `ricf_opaque_live_stack_agree D (ricf_original_copy_ids C)
+    (ricf_call_taint tn rq1 s r (ro) (rs)) maps stk targets r target_state` by
+    (Cases_on `rs = 0`
+     >- (mp_tac (Q.INST [`ids` |-> `ricf_original_copy_ids C`,
+           `ro1` |-> `ro`, `ro2` |-> `ro'`,
+           `u` |-> `target_state`, `z` |-> `target_result`] ricf_opaque_live_stack_consume_call_zero) >>
+         impl_tac >- (gvs[venom_call_request_def, Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
+         simp[Excl "consume_call_outcome_eq"]) >>
+     mp_tac (Q.INST [`ids` |-> `ricf_original_copy_ids C`, `ro` |-> `ro`,
+       `rs` |-> `rs`, `u` |-> `target_state`, `z` |-> `target_result`]
+       ricf_opaque_live_stack_consume_call) >>
+     impl_tac >- (gvs[venom_call_request_def, Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
+     simp[Excl "consume_call_outcome_eq"]) >>
+  `r.vs_vars = s.vs_vars /\ r.vs_params = s.vs_params /\
+   r.vs_allocas = s.vs_allocas` by metis_tac[ricf_consume_call_footprint] >>
+  `step_inst fuel C inst s = OK (update_var out w r) /\
+   step_inst fuel Ct inst t = OK (update_var out w target_state)` by
+    (gvs[Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
+  `ircf_cross (ricf_call_taint tn rq1 s r (ro) (rs))
+    (ricf_phase_ranges 0 ledger) r target_state` by
+    (mp_tac (Q.INST [`gam` |-> `ricf_phase_ranges 0
+         (ledger:(ricf_protection_event # call_frame list) list)`,
+       `ro1` |-> `ro`, `ro2` |-> `ro'`, `rs` |-> `rs`,
+       `u` |-> `target_state`, `z` |-> `target_result`]
+       ricf_cross_consume_call_offsets) >>
+     (impl_tac >- (gvs[Excl "consume_call_outcome_eq"] >> metis_tac[])) >>
+     simp[Excl "consume_call_outcome_eq"]) >>
+  `ricf_cert_crosses (ricf_call_taint tn rq1 s r (ro) (rs))
+    (ricf_phase_stack_ranges stk ledger) stk r target_state` by
+    (fs[ricf_cert_crosses_def, EVERY_MEM, Excl "consume_call_outcome_eq"] >>
+     rpt strip_tac >>
+     rename1 `MEM gam (ricf_phase_stack_ranges stk ledger)` >>
+     mp_tac (Q.INST [`gam` |-> `gam`,
+       `ro1` |-> `ro`, `ro2` |-> `ro'`, `rs` |-> `rs`,
+       `u` |-> `target_state`, `z` |-> `target_result`]
+       ricf_cross_consume_call_offsets) >>
+     (impl_tac >- (gvs[Excl "consume_call_outcome_eq"] >> metis_tac[])) >>
+     simp[Excl "consume_call_outcome_eq"]) >>
+  `ricf_support_agree B E (ricf_call_taint tn rq1 s r (ro) (rs)) r target_state` by
+    (mp_tac (Q.INST [`ro1` |-> `ro`, `ro2` |-> `ro'`,
+       `rs` |-> `rs`, `u` |-> `target_state`, `z` |-> `target_result`]
+       (INST_TYPE [alpha |-> ``:num # num``] ricf_support_consume_call)) >>
+     (impl_tac >- (gvs[Excl "consume_call_outcome_eq"] >> metis_tac[])) >>
+     simp[Excl "consume_call_outcome_eq"]) >>
+  `ricf_opaque_frame_agree fn D (ircf_dead (ricf_original_copy_ids C) s stk)
+    sites (ricf_complete_params PG s.vs_params) (set_prov G [out] NONE)
+    (ricf_call_taint tn rq1 s r (ro) (rs)
+      with t_var := set_var_taint tn.t_var [out] {})
+    (update_var out w r) (update_var out w target_state)` by
+    (mp_tac (Q.INST [`tn` |-> `ricf_call_taint tn rq1 s r ro rs`,
+       `s` |-> `r`, `t` |-> `target_state`,
+       `X` |-> `ircf_dead (ricf_original_copy_ids C) s stk`,
+       `PG` |-> `ricf_complete_params PG s.vs_params`,
+       `p` |-> `NONE`, `m` |-> `{}:num set`, `x` |-> `w:256 word`,
+       `y` |-> `w:256 word`] ricf_opaque_frame_bind) >>
+     (impl_tac >- simp[ricf_opaque_value_agree_def, ricf_is_zero_prov_def,
+       ricf_value_agree_def, ld_value_agree_def, word_agree_except_def,
+       ricf_call_taint_def]) >>
+     simp[ricf_call_taint_def]) >>
+  qexists_tac `update_var out w target_state` >> simp[] >>
+  (mp_tac (Q.INST [`u` |-> `update_var out w r`,
+    `v` |-> `update_var out w target_state`, `rt` |-> `tn`]
+    ricf_execution_next) >>
+  (impl_tac >- (fs[MEM, Excl "consume_call_outcome_eq"] >> simp[is_terminator_def, Excl "consume_call_outcome_eq"] >>
+  (rpt conj_tac
+  >- gvs[ircf_dead_def, update_var_def, Excl "consume_call_outcome_eq"]
+  >- (mp_tac (Q.INST [`ids` |-> `ricf_original_copy_ids C`,
+        `tn` |-> `ricf_call_taint tn rq1 s r ro rs`,
+        `s` |-> `r`, `t` |-> `target_state`,
+        `tv` |-> `set_var_taint tn.t_var [out] {}`,
+        `x` |-> `w:256 word`, `y` |-> `w:256 word`]
+        ricf_opaque_live_stack_update_var) >>
+      simp[ricf_call_taint_def,
+        Excl "consume_call_outcome_eq"])
+  >- (fs[ircf_cross_def, update_var_def, Excl "consume_call_outcome_eq"] >> metis_tac[])
+  >- (fs[ricf_cert_crosses_def, EVERY_MEM, ircf_cross_def,
+        update_var_def, Excl "consume_call_outcome_eq"] >> metis_tac[])
+  >> fs[ricf_support_agree_def, update_var_def, Excl "consume_call_outcome_eq"] >>
+     metis_tac[]))) >> simp[])
+QED
+
 Theorem ricf_execution_ext_call_next:
   ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets tn /\
@@ -239,129 +397,32 @@ Theorem ricf_execution_ext_call_next:
       ledger E sites maps targets (step_taint inst s (update_var out w r) tn)
 Proof
   strip_tac >>
-  qabbrev_tac `call_off = w2n ro` >>
-  qabbrev_tac `target_call_off = w2n ro'` >>
-  qabbrev_tac `call_size = w2n rs` >>
-  `ricf_opaque_frame_agree fn D (ircf_dead (ricf_original_copy_ids C) s stk)
-    sites (ricf_complete_params PG s.vs_params) G tn s t /\
-   ricf_opaque_live_stack_agree D (ricf_original_copy_ids C) tn maps stk targets s t /\
-   ircf_cross tn (ricf_phase_ranges 0 ledger) s t /\
-   ricf_cert_crosses tn (ricf_phase_stack_ranges stk ledger) stk s t /\
-   ricf_support_agree B E tn s t` by fs[ricf_execution_invariant_def, Excl "consume_call_outcome_eq"] >>
-  Cases_on `consume_call_outcome rq2 (w2n ro') (w2n rs) t` >>
-  rename1 `consume_call_outcome rq2 (w2n ro') (w2n rs) t =
-    (target_result,target_state)` >>
-  `w = target_result /\ ricf_opaque_frame_agree fn D
-    (ircf_dead (ricf_original_copy_ids C) s stk) sites
-    (ricf_complete_params PG s.vs_params) G
-    (ricf_call_taint tn rq1 s r (w2n ro) (w2n rs)) r target_state` by
-    (Cases_on `call_size = 0` >| [
-       mp_tac (Q.INST [`X` |-> `ircf_dead (ricf_original_copy_ids C) s stk`,
-         `PG` |-> `ricf_complete_params PG s.vs_params`,
-        `rq1` |-> `rq1`, `rq2` |-> `rq2`,
-        `ro1` |-> `call_off`, `ro2` |-> `target_call_off`, `u` |-> `target_state`, `z` |-> `target_result`]
-         ricf_opaque_frame_consume_call_zero) >>
-       impl_tac >- (gvs[Abbr `call_off`, Abbr `target_call_off`, Abbr `call_size`,
-         venom_call_request_def, Excl "consume_call_outcome_eq"] >>
-          metis_tac[]) >> simp[Abbr `call_off`, Abbr `call_size`, Excl "consume_call_outcome_eq"],
-       gvs[Excl "consume_call_outcome_eq"] >>
-       qpat_x_assum `!gam. _` (qspec_then `ricf_site_triples sites` mp_tac) >>
-       simp[Excl "consume_call_outcome_eq"] >> strip_tac >>
-       mp_tac (Q.INST [`X` |-> `ircf_dead (ricf_original_copy_ids C) s stk`,
-         `PG` |-> `ricf_complete_params PG s.vs_params`, `ro` |-> `call_off`,
-         `rs` |-> `call_size`, `u` |-> `target_state`, `z` |-> `target_result`,
-         `rq1` |-> `venom_call_request s addr value ao az static`,
-         `rq2` |-> `venom_call_request t addr value ao' az static`]
-         ricf_opaque_frame_consume_call) >>
-       (impl_tac >- (simp[venom_call_request_def, Excl "consume_call_outcome_eq"] >>
-         metis_tac[arithmeticTheory.ADD_COMM])) >>
-       simp[Abbr `call_off`, Abbr `call_size`, Excl "consume_call_outcome_eq"]]) >>
-  `r.vs_returndata = target_state.vs_returndata` by
-    (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def, Excl "consume_call_outcome_eq"] >>
-     drule taint_agree_read_fields >> simp[ricf_opaque_view_def]) >>
-  `ricf_opaque_live_stack_agree D (ricf_original_copy_ids C)
-    (ricf_call_taint tn rq1 s r (w2n ro) (w2n rs)) maps stk targets r target_state` by
-    (Cases_on `call_size = 0`
-     >- (mp_tac (Q.INST [`ids` |-> `ricf_original_copy_ids C`,
-           `ro1` |-> `call_off`, `ro2` |-> `target_call_off`,
-           `u` |-> `target_state`, `z` |-> `target_result`] ricf_opaque_live_stack_consume_call_zero) >>
-         impl_tac >- (gvs[Abbr `call_off`, Abbr `target_call_off`, Abbr `call_size`,
-           venom_call_request_def, Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
-         simp[Abbr `call_off`, Abbr `call_size`, Excl "consume_call_outcome_eq"]) >>
-     mp_tac (Q.INST [`ids` |-> `ricf_original_copy_ids C`, `ro` |-> `call_off`,
-       `rs` |-> `call_size`, `u` |-> `target_state`, `z` |-> `target_result`]
-       ricf_opaque_live_stack_consume_call) >>
-     impl_tac >- (gvs[Abbr `call_off`, Abbr `target_call_off`, Abbr `call_size`,
-       venom_call_request_def, Excl "consume_call_outcome_eq"] >> metis_tac[]) >>
-     simp[Abbr `call_off`, Abbr `call_size`, Excl "consume_call_outcome_eq"]) >>
-  `r.vs_vars = s.vs_vars /\ r.vs_params = s.vs_params /\
-   r.vs_allocas = s.vs_allocas` by metis_tac[ricf_consume_call_footprint] >>
-  `step_inst fuel C inst s = OK (update_var out w r) /\
-   step_inst fuel Ct inst t = OK (update_var out w target_state)` by
-    gvs[exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
-  `ircf_cross (ricf_call_taint tn rq1 s r (w2n ro) (w2n rs))
-    (ricf_phase_ranges 0 ledger) r target_state` by
-    (mp_tac (Q.INST [`gam` |-> `ricf_phase_ranges 0
-         (ledger:(ricf_protection_event # call_frame list) list)`,
-       `ro1` |-> `call_off`, `ro2` |-> `target_call_off`, `rs` |-> `call_size`,
-       `u` |-> `target_state`, `z` |-> `target_result`]
-       ricf_cross_consume_call_offsets) >>
-     (impl_tac >- (gvs[Abbr `call_off`, Abbr `target_call_off`, Abbr `call_size`,
-       Excl "consume_call_outcome_eq"] >> metis_tac[])) >>
-     simp[Abbr `call_off`, Abbr `call_size`, Excl "consume_call_outcome_eq"]) >>
-  `ricf_cert_crosses (ricf_call_taint tn rq1 s r (w2n ro) (w2n rs))
-    (ricf_phase_stack_ranges stk ledger) stk r target_state` by
-    (fs[ricf_cert_crosses_def, EVERY_MEM, Excl "consume_call_outcome_eq"] >>
-     rpt strip_tac >>
-     rename1 `MEM gam (ricf_phase_stack_ranges stk ledger)` >>
-     mp_tac (Q.INST [`gam` |-> `gam`,
-       `ro1` |-> `call_off`, `ro2` |-> `target_call_off`, `rs` |-> `call_size`,
-       `u` |-> `target_state`, `z` |-> `target_result`]
-       ricf_cross_consume_call_offsets) >>
-     (impl_tac >- (gvs[Abbr `call_off`, Abbr `target_call_off`, Abbr `call_size`,
-       Excl "consume_call_outcome_eq"] >> metis_tac[])) >>
-     simp[Abbr `call_off`, Abbr `call_size`, Excl "consume_call_outcome_eq"]) >>
-  `ricf_support_agree B E (ricf_call_taint tn rq1 s r (w2n ro) (w2n rs)) r target_state` by
-    (mp_tac (Q.INST [`ro1` |-> `call_off`, `ro2` |-> `target_call_off`,
-       `rs` |-> `call_size`, `u` |-> `target_state`, `z` |-> `target_result`]
-       (INST_TYPE [alpha |-> ``:num # num``] ricf_support_consume_call)) >>
-     (impl_tac >- (gvs[Abbr `call_off`, Abbr `target_call_off`, Abbr `call_size`,
-       Excl "consume_call_outcome_eq"] >> metis_tac[])) >>
-     simp[Abbr `call_off`, Abbr `call_size`, Excl "consume_call_outcome_eq"]) >>
-  `ricf_opaque_frame_agree fn D (ircf_dead (ricf_original_copy_ids C) s stk)
-    sites (ricf_complete_params PG s.vs_params) (set_prov G [out] NONE)
-    (ricf_call_taint tn rq1 s r (w2n ro) (w2n rs)
-      with t_var := set_var_taint tn.t_var [out] {})
-    (update_var out w r) (update_var out w target_state)` by
-    (mp_tac (Q.INST [`tn` |-> `ricf_call_taint tn rq1 s r call_off call_size`,
-       `s` |-> `r`, `t` |-> `target_state`,
-       `X` |-> `ircf_dead (ricf_original_copy_ids C) s stk`,
-       `PG` |-> `ricf_complete_params PG s.vs_params`,
-       `p` |-> `NONE`, `m` |-> `{}:num set`, `x` |-> `w:256 word`,
-       `y` |-> `w:256 word`] ricf_opaque_frame_bind) >>
-     (impl_tac >- simp[Abbr `call_off`, Abbr `call_size`,
-       ricf_opaque_value_agree_def, ricf_is_zero_prov_def,
-       ricf_value_agree_def, ld_value_agree_def, word_agree_except_def,
-       ricf_call_taint_def]) >>
-     simp[Abbr `call_off`, Abbr `call_size`, ricf_call_taint_def]) >>
-  qexists_tac `update_var out w target_state` >> simp[] >>
-  (mp_tac (Q.INST [`u` |-> `update_var out w r`,
-    `v` |-> `update_var out w target_state`, `rt` |-> `tn`]
-    ricf_execution_next) >>
-  (impl_tac >- (fs[MEM, Excl "consume_call_outcome_eq"] >> simp[is_terminator_def, Excl "consume_call_outcome_eq"] >>
-  (rpt conj_tac
-  >- gvs[ircf_dead_def, update_var_def, Excl "consume_call_outcome_eq"]
-  >- (mp_tac (Q.INST [`ids` |-> `ricf_original_copy_ids C`,
-        `tn` |-> `ricf_call_taint tn rq1 s r call_off call_size`,
-        `s` |-> `r`, `t` |-> `target_state`,
-        `tv` |-> `set_var_taint tn.t_var [out] {}`,
-        `x` |-> `w:256 word`, `y` |-> `w:256 word`]
-        ricf_opaque_live_stack_update_var) >>
-      simp[Abbr `call_off`, Abbr `call_size`, ricf_call_taint_def,
-        Excl "consume_call_outcome_eq"])
-  >- (fs[ircf_cross_def, update_var_def, Excl "consume_call_outcome_eq"] >> metis_tac[])
-  >- (fs[ricf_cert_crosses_def, EVERY_MEM, ircf_cross_def,
-        update_var_def, Excl "consume_call_outcome_eq"] >> metis_tac[])
-  >> fs[ricf_support_agree_def, update_var_def, Excl "consume_call_outcome_eq"] >>
-     metis_tac[]))) >> simp[])
+  `step_inst fuel C inst s = OK (update_var out w r)` by
+    (qpat_assum `step_inst fuel C inst s = _` (fn th => pure_rewrite_tac[th]) >>
+     pure_rewrite_tac[exec_ext_call_def, LET_THM] >>
+     qpat_assum `rq1 = venom_call_request _ _ _ _ _ _`
+       (fn th => pure_rewrite_tac[GSYM th]) >>
+     qpat_assum `consume_call_outcome rq1 _ _ s = _` (fn th => pure_rewrite_tac[th]) >>
+     simp[Excl "consume_call_outcome_eq"]) >>
+  `!z v. consume_call_outcome rq2 (w2n ro') (w2n rs) t = (z,v) ==>
+     step_inst fuel Ct inst t = OK (update_var out z v)` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `step_inst fuel Ct inst t = _` (fn th => pure_rewrite_tac[th]) >>
+     pure_rewrite_tac[exec_ext_call_def, LET_THM] >>
+     qpat_assum `rq2 = venom_call_request _ _ _ _ _ _`
+       (fn th => pure_rewrite_tac[GSYM th]) >>
+     qpat_assum `consume_call_outcome rq2 _ _ t = _` (fn th => pure_rewrite_tac[th]) >>
+     simp[Excl "consume_call_outcome_eq"]) >>
+  `rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
+   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient` by
+    (qpat_assum `rq1 = venom_call_request _ _ _ _ _ _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `rq2 = venom_call_request _ _ _ _ _ _` (fn th => rewrite_tac[th]) >>
+     simp[venom_call_request_def]) >>
+  qabbrev_tac `source_off = w2n ro` >>
+  qabbrev_tac `target_off = w2n ro'` >>
+  qabbrev_tac `output_size = w2n rs` >>
+  mp_tac (Q.INST [`ro` |-> `source_off`, `ro'` |-> `target_off`,
+    `rs` |-> `output_size`] ricf_execution_consume_call_next) >>
+  (impl_tac >- (gvs[Abbr `source_off`, Abbr `target_off`, Abbr `output_size`,
+    MEM, is_terminator_def, Excl "consume_call_outcome_eq"] >> metis_tac[])) >> simp[]
 QED
