@@ -27,7 +27,7 @@ Proof
   `ptr_discipline_upto lo cut C vs` by
     fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
   pop_assum mp_tac >> rewrite_tac[ptr_discipline_upto_def] >> strip_tac >>
-  simp[ptr_discipline_upto_def] >> conj_tac >- first_assum ACCEPT_TAC >>
+  simp[ptr_discipline_upto_def] >>
   conj_tac >-
     (qexists_tac `P` >> drule_all lower_dload_stage_static_ptr_ok >> simp[]) >>
   rpt gen_tac >> strip_tac >>
