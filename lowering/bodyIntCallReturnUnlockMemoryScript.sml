@@ -88,3 +88,11 @@ Proof
     (SUBST1_TAC o SYM) >>
   fs[copy_static_def, venom_state_component_equality]
 QED
+
+(* Exact unlock images cannot be the zero-index exit of a typed-copy loop. *)
+Theorem return_unlock_active_index_positive:
+  ce.ce_nonreentrant = (T,key,ut,F) ==>
+  0 < (return_unlock_state ce s).vs_inst_idx
+Proof
+  strip_tac >> Cases_on `ut` >> simp[return_unlock_state_def]
+QED
