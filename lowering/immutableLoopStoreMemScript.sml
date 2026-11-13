@@ -187,7 +187,7 @@ Proof
                 istore_def, mstore_def]
 QED
 
-Theorem immutable_loop_allocation_frame[local]:
+Theorem immutable_loop_allocation_frame:
   immutable_loop_frame sa sb s a b i q ==>
   q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next
 Proof
@@ -198,7 +198,7 @@ Proof
        immutable_transfers_allocation_frame]
 QED
 
-Theorem immutable_loop_jump_mem_path[local]:
+Theorem immutable_loop_jump_mem_path:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label target] []) ==>
