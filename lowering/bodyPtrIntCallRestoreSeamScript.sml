@@ -4,6 +4,7 @@ Ancestors
   bodyIntCallSeams bodyPtrDefs bodyPtrIntCallConfinement
   bodyPtrBytestringBuiltinsWindowGhost exprSimDefs exprSimProps
   loweringPosts compileEnv venomState venomExecSemantics
+  vyperState vyperInterpreter gasSummaryComposePtr fragGasSeqPtr fragGasPathPtr
   finite_map pred_set list
 
 (* Concrete and ghost confinement have different jobs: the exit seam
@@ -57,4 +58,47 @@ Proof
   disch_then (qspecl_then [`P`, `tn`, `tm`, `es`] assume_tac) >>
   rpt gen_tac >> strip_tac >> first_x_assum irule >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >> goal_assum (drule_at Any)
+QED
+
+(* Only scope cleanup remains on the supported nonreentrant-free path. *)
+Theorem intcall_rest_without_lock[local]:
+  !cx name mut ss prev rtv.
+    intcall_rest cx name mut F ss prev rtv =
+    bind (finally (intcall_callee_src cx name ss) (pop_function prev))
+      (\rv. bind (lift_option_type (safe_cast rtv rv) "IntCall cast ret")
+        (\crv. return (Value crv)))
+Proof
+  simp[intcall_rest_def, intcall_callee_src_def,
+       vyperInterpreterTheory.unlock_if_nr_def, finally_unless_halt_return]
+QED
+
+Theorem intcall_rest_marked_success:
+  !D ctx func PG cx name mut ss prev rtv es s0 G0 tn0 marks v mid G tn r crv.
+    gas_marked_exec_ptr D (ctx,func) PG (intcall_callee_src cx name ss)
+      (es,s0,G0,tn0) marks (INL v) mid G tn r /\
+    safe_cast rtv v = SOME crv ==>
+    gas_marked_exec_ptr D (ctx,func) PG
+      (intcall_rest cx name mut F ss prev rtv)
+      (es,s0,G0,tn0) marks (INL (Value crv))
+      (mid with scopes := prev) G tn r
+Proof
+  rewrite_tac[gas_marked_exec_ptr_def, intcall_rest_without_lock] >>
+  rpt gen_tac >> strip_tac >> simp[] >> gen_tac >>
+  simp[bind_def, finally_def, pop_function_def, set_scopes_def,
+       ignore_bind_def, return_def, lift_option_type_def, lift_option_def]
+QED
+
+Theorem intcall_rest_marked_exception:
+  !D ctx func PG cx name mut ss prev rtv es s0 G0 tn0 marks ex mid G tn r.
+    gas_marked_exec_ptr D (ctx,func) PG (intcall_callee_src cx name ss)
+      (es,s0,G0,tn0) marks (INR ex) mid G tn r ==>
+    gas_marked_exec_ptr D (ctx,func) PG
+      (intcall_rest cx name mut F ss prev rtv)
+      (es,s0,G0,tn0) marks (INR ex)
+      (mid with scopes := prev) G tn r
+Proof
+  rewrite_tac[gas_marked_exec_ptr_def, intcall_rest_without_lock] >>
+  rpt gen_tac >> strip_tac >> simp[] >> gen_tac >>
+  simp[bind_def, finally_def, pop_function_def, set_scopes_def,
+       ignore_bind_def, return_def, raise_def]
 QED
