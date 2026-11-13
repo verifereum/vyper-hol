@@ -121,8 +121,8 @@ Theorem abi_malformed_resource_post_intro:
 Proof
   strip_tac >> match_mp_tac (GEN_ALL abi_malformed_resource_post_frame_intro) >>
   qexists_tac `H` >> simp[] >> rpt strip_tac
-  >- (irule stmt_state_rel_fields_transport >>
-      conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+  >- (qpat_assum `stmt_state_rel H _ _ _ _ _ t`
+        (mp_then (Pos hd) irule stmt_state_rel_fields_transport) >>
       qexists_tac `s` >> simp[]) >>
   first_x_assum irule >> qexistsl_tac [`aid`, `cap`] >> simp[]
 QED
