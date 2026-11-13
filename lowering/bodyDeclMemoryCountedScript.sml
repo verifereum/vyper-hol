@@ -60,6 +60,7 @@ Theorem annassign_setup_body_gas_path_mem:
     t.vs_inst_idx = LENGTH sA.cs_current_insts /\
     stmt_state_rel ctx func c cx es t /\ alloca_history func t /\
     return_buf_frame d c sA t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+    t.vs_memory = s.vs_memory /\
     local_ptrs_reserved c sA /\ not_fresh_at sA p /\
     FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) (type_memory_bytes ce ty)) /\
     not_local_ptr c es.scopes p /\
@@ -93,7 +94,8 @@ Proof
   `alloca_history func (t with vs_inst_idx := LENGTH sA.cs_current_insts)` by
     (irule body_store_memory_history >> simp[same_blocks_def, is_terminator_def] >>
      qexistsl_tac [`s`, `sa`] >> simp[is_terminator_def] >> fs[stmt_state_rel_def, same_blocks_def]) >>
-  `t.vs_halted = s.vs_halted /\ t.vs_current_bb = s.vs_current_bb` by
+  `t.vs_halted = s.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
+   t.vs_memory = s.vs_memory` by
     (qpat_x_assum `exec_alloca A s _ = OK t` mp_tac >>
      simp[exec_alloca_def, AllCaseEqs()] >> rpt strip_tac >>
      gvs[update_var_def]) >>
@@ -171,6 +173,25 @@ Proof
   metis_tac[compile_copy_memory_no_gas]
 QED
 
+(* A write inside one alloca's first n0 bytes keeps the bytes of every other
+   alloca. *)
+Theorem alloca_region_write_others[local]:
+  allocas_non_overlapping s /\ FLOOKUP s.vs_allocas aid0 = SOME (b0, z0) /\
+  n0 <= z0 /\
+  (!ad len. ad + len <= b0 \/ b0 + n0 <= ad ==>
+     mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory) ==>
+  !aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\ aid <> aid0 ==>
+    mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory
+Proof
+  rewrite_tac[venomMemDefsTheory.allocas_non_overlapping_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `!ad len. _ ==> _` irule >>
+  qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _`
+    (qspecl_then [`aid`, `aid0`, `off`, `z`, `b0`, `z0`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  decide_tac
+QED
+
 Theorem annassign_memory_store_body_path:
   !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d.
     compile_store_memory cenv src (Var p) ty ty sa = ((), sb) /\
@@ -202,7 +223,9 @@ Theorem annassign_memory_store_body_path:
       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       return_buf_frame d cenv sb t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\ aid <> inst.inst_id ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
@@ -237,13 +260,55 @@ Proof
   `alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule body_store_memory_history >> simp[] >>
      qexistsl_tac [`s`, `sa`] >> simp[]) >>
+  `allocas_non_overlapping s` by fs[venomMemDefsTheory.alloca_inv_def] >>
+  `!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\ aid <> inst.inst_id ==>
+     mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory` by
+    (mp_tac (Q.INST [`aid0` |-> `inst.inst_id`, `b0` |-> `w2n (w:bytes32)`, `z0` |-> `sz`,
+       `n0` |-> `type_memory_size tyv`] alloca_region_write_others) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[stmt_state_rel_inst_idx] >>
   conj_tac
   >- (Cases_on `d` >- fs[return_buf_frame_def] >>
       rename1 `return_buf_frame (SOME pair)` >> PairCases_on `pair` >>
       fs[return_buf_frame_def, lookup_var_def]) >>
-  fs[lookup_var_def]
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[lookup_var_def]
+QED
+
+(* The scratch buffer's allocation and copy keep the bytes of every alloca
+   older than the buffer: the buffer is clear of them. *)
+Theorem body_scratch_prefix_frame:
+  compile_alloc_buffer n sa = (buf,sm) /\
+  compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
+  fn_has_code sa sm func /\ stmt_state_rel ctx func ce cx es s /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ n < dimword (:256) /\
+  run_inst_seq (emitted_insts sa sm) s = OK a /\
+  run_inst_seq (emitted_insts sm sn) a = OK u ==>
+  !aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\ aid < sa.cs_next_id ==>
+    mem_bytes_at off z u.vs_memory = mem_bytes_at off z s.vs_memory
+Proof
+  strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
+  drule_all literal_alloc_buffer_run >> strip_tac >>
+  `t = a` by gvs[] >> pop_assum SUBST_ALL_TAC >>
+  qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK a` kall_tac >>
+  `a.vs_labels = s.vs_labels` by
+    (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >>
+     qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK a` mp_tac >>
+     asm_simp_tac (srw_ss()) [run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       eval_operand_def, exec_alloca_def] >>
+     Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
+     >- (simp[LET_THM, update_var_def] >> rpt strip_tac >> gvs[]) >>
+     PairCases_on `x` >> simp[LET_THM, update_var_def] >> rpt strip_tac >> gvs[]) >>
+  `eval_operand src a = SOME sw` by
+    (Cases_on `src` >> fs[eval_operand_def] >> metis_tac[]) >>
+  drule_all buffer_copy_memory_run >> strip_tac >>
+  rpt strip_tac >>
+  qpat_x_assum `!aid b len. aid < sa.cs_next_id /\ _ ==> _` drule_all >>
+  strip_tac >> gvs[] >>
+  IF_CASES_TAC >> fs[regions_disjoint_def, mem_bytes_at_mcopy_disjoint]
 QED
 
 Theorem compile_scratch_prefix_body_path:
@@ -268,6 +333,8 @@ Theorem compile_scratch_prefix_body_path:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\ aid < sa.cs_next_id ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory) /\
       val_wf tv v /\ ?w. eval_operand buf.buf_operand t = SOME w /\
         val_in_memory tv v (w2n w) t.vs_memory /\
         w2n w + n <= t.vs_alloca_next
@@ -276,6 +343,10 @@ Proof
   drule_all body_scratch_prefix_shape >> strip_tac >>
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
   drule_all body_scratch_prefix_run >> strip_tac >>
+  `!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\ aid < sa.cs_next_id ==>
+     mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory` by
+    (mp_tac (Q.INST [`u` |-> `t`] body_scratch_prefix_frame) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   `run_inst_seq (emitted_insts sa sn) s = OK t` by
     (asm_rewrite_tac[] >>
      qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK a`
@@ -339,7 +410,10 @@ Theorem annassign_memory_assign_body_path:
       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       return_buf_frame d cenv sb t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\ aid <> inst.inst_id /\
+                   aid < sa.cs_next_id ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >> drule_all assign_memory_body_code >> strip_tac >>
   `cs_extends sa sn` by metis_tac[cs_extends_trans] >>
@@ -373,6 +447,16 @@ Proof
   `not_fresh_at sn p` by simp[] >>
   drule_all annassign_memory_store_body_path >>
   disch_then (qspec_then `a` (qx_choose_then `t2` strip_assume_tac)) >>
+  `!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\ aid <> inst.inst_id /\
+               aid < sa.cs_next_id ==>
+     mem_bytes_at off z t2.vs_memory = mem_bytes_at off z s.vs_memory` by
+    (rpt strip_tac >>
+     `FLOOKUP t.vs_allocas aid = SOME (off,z)` by metis_tac[] >>
+     `mem_bytes_at off z t2.vs_memory = mem_bytes_at off z t.vs_memory` by
+       metis_tac[] >>
+     `mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory` by
+       metis_tac[] >>
+     simp[]) >>
   qexists_tac `t2` >>
   `gas_path_mem ctx func s (0 + 0) (OK t2)` by
     (irule gas_path_mem_then >> qexists_tac `t` >> simp[]) >>
@@ -411,7 +495,10 @@ Theorem annassign_name_rhs_body_path:
       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       return_buf_frame d cenv sb t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\ aid <> inst.inst_id /\
+                   aid < sa.cs_next_id ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all bodyNameMemoryFactsTheory.body_name_source_region >> strip_tac >>
@@ -422,6 +509,5 @@ Proof
   irule annassign_memory_assign_body_path >> simp[] >>
   goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[eval_operand_def] >>
-  qexists_tac `inst` >> simp[] >>
   fs[local_ptrs_reserved_def] >> metis_tac[]
 QED

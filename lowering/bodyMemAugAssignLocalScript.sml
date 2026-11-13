@@ -14,6 +14,7 @@
    flag where S1's fix it to F. *)
 Theory bodyMemAugAssignLocal
 Ancestors
+  stmtSimAugAssignAttr
   supportedExprTraverse allocLimitsProps
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyMemAssignLocalWord bodyNameWordMemory
@@ -378,6 +379,7 @@ Theorem augassign_local_load_mem[local]:
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       local_ptrs_reserved cenv sb /\ alloca_history func t /\
       t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+      t.vs_memory = s0.vs_memory /\
       (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
       (?out. op = Var out /\ not_fresh_at sb out)
 Proof
@@ -649,9 +651,41 @@ Resume compile_augassign_local_mem[post]:
        (qpat_x_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
         simp[expr_post_def] >> metis_tac[]) >>
      metis_tac[]) >>
+  `alloca_frame cenv es sa s0 cenv ee s` by
+    (`sa.cs_next_id <= s1.cs_next_id` by
+       (qpat_x_assum `emit_op _ _ sa = _`
+          (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+        simp[]) >>
+     `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+       (qpat_assum `bind (eval_expr cx e) (read_result cx) _ = (INL _, _)`
+          (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
+     `stmt_state_rel ctx func cenv cx es t` by
+       (qpat_x_assum `expr_post _ _ _ _ (Name _ _) _ _ _ _ _ _ _ _` mp_tac >>
+        simp[expr_post_def]) >>
+     drule_at (Pat `expr_post _ _ _ _ e _ _ _ _ _ _ _ _`)
+       stmtSimAugAssignAttrTheory.augassign_attr_pre_store_frame >>
+     disch_then irule >> simp[] >> metis_tac[]) >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>
-  irule return_buf_frame_frame >>
-  qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]
+  conj_tac
+  >- (irule return_buf_frame_frame >>
+      qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
+  `ee.scopes = pre ++ env1 :: rest /\ id IN FDOM env1` by
+    (qpat_assum `find_containing_scope _ _ = _`
+       (mp_tac o MATCH_MP vyperLookupTheory.find_containing_scope_structure) >>
+     simp[finite_mapTheory.FLOOKUP_DEF]) >>
+  rename1 `lookup_var p s = SOME wp` >>
+  `local_region cenv ee.scopes s id (w2n wp) sz` by
+    (rewrite_tac[local_region_def] >> metis_tac[]) >>
+  irule alloca_frame_region_write >>
+  goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (qpat_x_assum `ee.scopes = _` SUBST1_TAC >>
+       qpat_assum `id IN FDOM env1`
+         (fn th => simp_tac (srw_ss()) [pred_setTheory.ABSORPTION_RWT, th]) >>
+       NO_TAC) >>
+  rpt gen_tac >> disch_tac >>
+  qpat_x_assum `!wp ad len. _ ==> _` irule >> simp[]
 QED
 
 Resume compile_augassign_local_mem[operator_exit]:

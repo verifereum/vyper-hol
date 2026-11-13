@@ -30,64 +30,6 @@ Proof
   metis_tac[]
 QED
 
-(* stmt_post without its allocation frame: the post the counted
-   memory-safe sequencing (stmtSimSeqMem) composes, whose fragments make
-   no claim about older allocations' bytes. *)
-Definition stmt_post_core_def:
-  stmt_post_core ctx func cx lctx cenv cenv' sa sb s0 res ee t <=>
-    ?cenv''.
-      stmt_lands lctx sb res t /\ ~t.vs_halted /\
-      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
-      cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel ctx func cenv'' cx ee t /\
-      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
-      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
-End
-
-Theorem stmt_post_core_normal_entry:
-  stmt_post_core ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
-  ret_pc_ok cenv sa s0 /\ sa.cs_next_var <= sm.cs_next_var ==>
-  cenv_top_ext cenv c mid.scopes /\
-  stmt_state_rel ctx func c cx mid t /\ ~block_is_terminated sm /\
-  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
-  t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ret_pc_ok c sm t
-Proof
-  rw[stmt_post_core_def, stmt_lands_def] >>
-  irule ret_pc_ok_frame >>
-  metis_tac[cenv_top_ext_return_pc]
-QED
-
-Theorem stmt_post_core_exception_endpoint:
-  res <> INL () /\
-  stmt_post_core ctx func cx lctx cenv c sa sm s0 res ee t ==>
-  stmt_post_core ctx func cx lctx cenv c' sa sb s0 res ee t
-Proof
-  rw[stmt_post_core_def] >> qexists_tac `cenv''` >>
-  gvs[stmt_lands_def] >> metis_tac[]
-QED
-
-Theorem stmt_post_core_sequence:
-  stmt_post_core ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
-  stmt_post_core ctx func cx lctx c c' sm sb t res ee u /\
-  sa.cs_next_var <= sm.cs_next_var /\
-  (mid.scopes = [] <=> ee.scopes = []) /\
-  MAP FDOM (TL mid.scopes) = MAP FDOM (TL ee.scopes) ==>
-  stmt_post_core ctx func cx lctx cenv c' sa sb s0 res ee u
-Proof
-  rw[stmt_post_core_def] >> qexists_tac `cenv''` >> simp[] >>
-  conj_tac >- (irule cenv_top_ext_trans >> metis_tac[]) >>
-  rpt strip_tac >> first_x_assum irule >>
-  metis_tac[not_fresh_at_def, arithmeticTheory.LESS_EQ_TRANS]
-QED
-
-Theorem stmt_post_core:
-  stmt_post ctx func cx lctx cenv c sa sb es s0 res ee t ==>
-  stmt_post_core ctx func cx lctx cenv c sa sb s0 res ee t
-Proof
-  rw[stmt_post_def, stmt_post_core_def] >> qexists_tac `cenv''` >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
 Theorem stmt_post_normal_entry:
   stmt_post ctx func cx lctx cenv c sa sm es0 s0 (INL ()) mid t /\
   ret_pc_ok cenv sa s0 /\ sa.cs_next_var <= sm.cs_next_var ==>
@@ -96,8 +38,9 @@ Theorem stmt_post_normal_entry:
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ret_pc_ok c sm t
 Proof
-  strip_tac >> irule stmt_post_core_normal_entry >>
-  metis_tac[stmt_post_core]
+  rw[stmt_post_def, stmt_lands_def] >>
+  irule ret_pc_ok_frame >>
+  metis_tac[cenv_top_ext_return_pc]
 QED
 
 Theorem stmt_post_exception_endpoint:

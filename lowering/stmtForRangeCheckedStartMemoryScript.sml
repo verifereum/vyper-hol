@@ -45,7 +45,8 @@ Theorem for_range_checked_start_mem:
         return_buf_frame d cenv sa cc /\ ret_pc_ok cenv sa cc /\
         alloca_history func cc /\ s0.vs_alloca_next <= cc.vs_alloca_next /\
         (!id ent. FLOOKUP s0.vs_allocas id = SOME ent ==> FLOOKUP cc.vs_allocas id = SOME ent) /\
-        (!x. not_fresh_at sa x ==> lookup_var x cc = lookup_var x s0))
+        (!x. not_fresh_at sa x ==> lookup_var x cc = lookup_var x s0) /\
+        cc.vs_memory = s0.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   `?ee w. gas_path_mem ctx func s0 0 (OK ee) /\
@@ -56,7 +57,7 @@ Proof
       alloca_history func ee /\ s0.vs_alloca_next <= ee.vs_alloca_next /\
       (!id ent. FLOOKUP s0.vs_allocas id = SOME ent ==> FLOOKUP ee.vs_allocas id = SOME ent) /\
       (!x. x <> p ==> lookup_var x ee = lookup_var x s0) /\
-      ee.vs_labels = s0.vs_labels` by
+      ee.vs_labels = s0.vs_labels /\ ee.vs_memory = s0.vs_memory` by
     (irule for_range_alloca_start_mem >>
      qpat_assum `aa = _` (fn th => rewrite_tac[GSYM th]) >> simp[] >>
      conj_tac >-

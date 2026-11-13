@@ -101,8 +101,9 @@ Finalise immutable_condition_boundary_mem
 (* The cutoff state selects only live registers, not the address temporaries. *)
 Theorem immutable_body_finish_mem:
   array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
-    p dst sz ainst bod caller orig k es s /\
-  array_body_post_mem d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body r ee t /\
+    p dst sz ainst bod caller eo orig k es s /\
+  array_body_post_mem d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body ef r ee t /\
+  alloca_frame cenv es caller s bc ef s_body /\ caller.cs_next_id <= sb0.cs_next_id /\
   cenv_top_ext cenv bc ei.scopes /\ bc.ce_return_buf = cenv.ce_return_buf /\
   eval_stmts cx stmts ei = (r,ee) /\ ee.scopes = sc :: rest /\
   (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
@@ -131,10 +132,10 @@ Theorem immutable_body_finish_mem:
        | INR e => if e = ContinueException then INL F
                   else if e = BreakException then INL T else INR e) = INL b /\
     gas_marked_path T ctx func t 0 (OK u) /\
-    (b ==> array_round_done d ctx func cenv cx caller orig exit
+    (b ==> array_round_done d ctx func cenv cx caller eo orig exit
       (ee with scopes := rest) u) /\
     (~b ==> array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
-      p dst sz ainst cond caller orig (SUC k) (ee with scopes := rest) u)
+      p dst sz ainst cond caller eo orig (SUC k) (ee with scopes := rest) u)
 Proof
   strip_tac >>
   `!x. not_fresh_at caller x ==> not_fresh_at cut x` by
@@ -152,7 +153,7 @@ Proof
   `r = INL () \/ r = INR ContinueException` by fs[stmt_lands_def] >>
   `?u. gas_marked_path T ctx func t 0 (OK u) /\
     array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
-      p dst sz ainst incr caller orig k (ee with scopes := rest) u` by
+      p dst sz ainst incr caller eo orig k (ee with scopes := rest) u` by
     (irule array_round_postbody_entry >> simp[] >>
      qexistsl_tac [`exit`, `r`, `sb1`, `sj`] >> simp[]) >>
   qpat_x_assum `!scopes. _` (qspec_then `rest` strip_assume_tac) >>
@@ -185,14 +186,15 @@ Theorem immutable_prepared_one_round_mem:
   dv <> idx /\ dv <> p /\ p <> idx /\ p <> nv /\
   (!x. not_fresh_at caller x ==> x <> dv /\ x <> idx /\ x <> nv) /\
   caller.cs_next_var <= cut.cs_next_var /\ cut.cs_next_var <= sb0.cs_next_var /\
+  caller.cs_next_id <= sb0.cs_next_id /\
   not_fresh_at cut idx /\ not_fresh_at cut p /\
   (!x. not_fresh_at cut x ==> not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep) /\
   array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
-    p dst sz ainst cond caller orig k es s /\
+    p dst sz ainst cond caller eo orig k es s /\
   eval_operand lvo s = SOME (n2w (LENGTH vs)) /\
   k < LENGTH vs /\ LENGTH vs < dimword (:256) /\
   (!live. array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
-      p dst sz ainst bod caller orig k es live ==>
+      p dst sz ainst bod caller eo orig k es live ==>
     ?s_body. s_body.vs_current_bb = sb0.cs_current_bb /\
       s_body.vs_inst_idx = LENGTH sb0.cs_current_insts /\ ~s_body.vs_halted /\
       stmt_state_rel ctx func bc cx
@@ -202,7 +204,9 @@ Theorem immutable_prepared_one_round_mem:
       s_body.vs_allocas = live.vs_allocas /\ s_body.vs_alloca_next = live.vs_alloca_next /\
       alloca_history func s_body /\ return_buf_frame d bc sb0 s_body /\
       (!x. not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep ==>
-        lookup_var x s_body = lookup_var x live)) /\
+        lookup_var x s_body = lookup_var x live) /\
+      alloca_frame cenv es caller live bc (es with scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes) s_body) /\
   cenv_top_ext cenv bc ((FEMPTY |+ (id,
     <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes) /\
   stmt_frag_mem d ctx func cx (InLoop exit incr) RetQ bc
@@ -223,9 +227,9 @@ Theorem immutable_prepared_one_round_mem:
         finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
           pop_scope od) (es,s)
     (\res ee t. ?b. res = INL b /\
-      (b ==> array_round_done d ctx func cenv cx caller orig exit ee t) /\
+      (b ==> array_round_done d ctx func cenv cx caller eo orig exit ee t) /\
       (~b ==> array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
-        p dst sz ainst cond caller orig (SUC k) ee t))
+        p dst sz ainst cond caller eo orig (SUC k) ee t))
     (\res ee rr. ?e. res = INR e /\
       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR e) rr)
 Proof
@@ -239,7 +243,7 @@ Proof
   simp[] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_marked_path T ctx func s 0 (OK live)` >>
   `array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
-    p dst sz ainst bod caller orig k es live` by suspend "live" >>
+    p dst sz ainst bod caller eo orig k es live` by suspend "live" >>
   qpat_x_assum `!live. _` drule >> strip_tac >>
   `gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit incr))
     (es with scopes := (FEMPTY |+ (id,
@@ -248,14 +252,18 @@ Proof
   `gas_outcome T (cx_tops cx) (ctx,func) (eval_stmts cx stmts)
     (es with scopes := (FEMPTY |+ (id,
       <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes, s_body)
-    (array_body_post_mem d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body)
+    (array_body_post_mem d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body
+      (es with scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes))
     (\r ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) r rr)` by suspend "body_outcome" >>
   irule array_round_outcome_prefix_mem >>
   goal_assum (drule_at (Pat `gas_marked_path _ _ _ s _ _`)) >>
   irule array_round_outcome_prefix_mem >>
   goal_assum (drule_at (Pat `gas_marked_path _ _ _ live _ _`)) >>
   ho_match_mp_tac (array_body_round_outcome_mem |> Q.INST
-    [`B` |-> `array_body_post_mem d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body`,
+    [`B` |-> `array_body_post_mem d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body
+       (es with scopes := (FEMPTY |+ (id,
+         <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes)`,
      `E` |-> `\r ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) r rr`]) >>
   simp[] >> conj_tac >- suspend "scopes" >>
   conj_tac >- suspend "finish" >> suspend "exit"
@@ -263,6 +271,10 @@ QED
 
 Resume immutable_prepared_one_round_mem[live]:
   simp[array_round_inv_def] >>
+  `alloca_frame cenv eo caller orig cenv es live` by
+    (simp[Abbr `live`, alloca_frame_jump_to] >>
+     irule alloca_frame_update_var >> fs[array_round_inv_def]) >>
+  simp[] >>
   irule array_round_frame_transport >> simp[] >> qexists_tac `s` >>
   fs[array_round_inv_def, Abbr `live`, lookup_var_def, jump_to_def, update_var_def,
      FLOOKUP_UPDATE] >> metis_tac[]
@@ -317,16 +329,17 @@ Theorem immutable_prepared_loop_outcome_mem:
   dv <> idx /\ dv <> p /\ p <> idx /\ p <> nv /\
   (!x. not_fresh_at caller x ==> x <> dv /\ x <> idx /\ x <> nv) /\
   caller.cs_next_var <= cut.cs_next_var /\ cut.cs_next_var <= sb0.cs_next_var /\
+  caller.cs_next_id <= sb0.cs_next_id /\
   not_fresh_at cut idx /\ not_fresh_at cut p /\
   (!x. not_fresh_at cut x ==> not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep) /\
   LENGTH vs < dimword (:256) /\
   (!k ei t. k <= LENGTH vs /\
     array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
-      p dst sz ainst cond caller orig k ei t ==>
+      p dst sz ainst cond caller eo orig k ei t ==>
     eval_operand lvo t = SOME (n2w (LENGTH vs))) /\
   (!k ei live. k < LENGTH vs /\
     array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
-      p dst sz ainst bod caller orig k ei live ==>
+      p dst sz ainst bod caller eo orig k ei live ==>
     ?s_body. s_body.vs_current_bb = sb0.cs_current_bb /\
       s_body.vs_inst_idx = LENGTH sb0.cs_current_insts /\ ~s_body.vs_halted /\
       stmt_state_rel ctx func bc cx
@@ -336,7 +349,9 @@ Theorem immutable_prepared_loop_outcome_mem:
       s_body.vs_allocas = live.vs_allocas /\ s_body.vs_alloca_next = live.vs_alloca_next /\
       alloca_history func s_body /\ return_buf_frame d bc sb0 s_body /\
       (!x. not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep ==>
-        lookup_var x s_body = lookup_var x live)) /\
+        lookup_var x s_body = lookup_var x live) /\
+      alloca_frame cenv ei caller live bc (ei with scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes) s_body) /\
   (!k ei. k < LENGTH vs /\ P ei /\ lookup_scopes id ei.scopes = NONE ==>
     cenv_top_ext cenv bc ((FEMPTY |+ (id,
       <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes) /\
@@ -355,12 +370,12 @@ Theorem immutable_prepared_loop_outcome_mem:
           P (ee with scopes := rest) /\ lookup_scopes id rest = NONE))) ==>
   !k es s. k <= LENGTH vs /\
     array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
-      p dst sz ainst cond caller orig k es s /\
+      p dst sz ainst cond caller eo orig k es s /\
     gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) ok es ==>
     gas_outcome T (cx_tops cx) (ctx,func)
       (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s)
       (\res ee t. res = INL () /\
-        array_round_done d ctx func cenv cx caller orig exit ee t)
+        array_round_done d ctx func cenv cx caller eo orig exit ee t)
       (\res ee rr. ?ex. res = INR ex /\
         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)
 Proof
@@ -400,6 +415,9 @@ Resume immutable_prepared_loop_outcome_mem[last]:
     (irule array_round_frame_transport >> simp[] >> qexists_tac `s` >>
      fs[array_round_inv_def, Abbr `t`, lookup_var_def, jump_to_def, update_var_def,
        FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `alloca_frame cenv eo caller orig cenv es t` by
+    (simp[Abbr `t`, alloca_frame_jump_to] >>
+     irule alloca_frame_update_var >> fs[array_round_inv_def]) >>
   fs[array_round_done_def, array_loop_inv_def, state_rel_gas_obs]
 QED
 Finalise immutable_prepared_loop_outcome_mem

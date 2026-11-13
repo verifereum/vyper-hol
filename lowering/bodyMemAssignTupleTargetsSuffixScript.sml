@@ -13,6 +13,85 @@ Ancestors
 Libs
   monadsyntax
 
+(* optional_tuple_stage_path_mem, plus the staging copy's frame: it writes
+   only its own buffer, so every older allocation keeps its bytes. *)
+Theorem optional_tuple_stage_frame_mem[local]:
+  !ctx func cenv cx es flag tys tvs vs se sa sb staged op s sw d.
+    (if flag then
+       do buf <- compile_alloc_buffer (type_memory_bytes cenv (TupleT tys));
+          emit_void MCOPY [buf.buf_operand; op;
+            Lit (n2w (type_memory_bytes cenv (TupleT tys)))];
+          comp_return buf.buf_operand od
+     else comp_return op) sa = (staged,sb) /\
+    evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+    value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) /\
+    expr_val_rel cx (TupleT tys) (ArrayV (TupleV vs)) op s /\
+    expr_val_at cenv cx (TupleT tys) se sa es (ArrayV (TupleV vs)) op s /\
+    eval_operand op s = SOME sw /\
+    0 < type_memory_size_list tvs /\
+    type_memory_bytes cenv (TupleT tys) = type_memory_size_list tvs /\
+    (flag ==> type_memory_size_list tvs < dimword (:256)) /\
+    fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
+    (!x. op = Var x ==> not_fresh_at sa x) /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    alloca_history func s /\ return_buf_frame d cenv sa s /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    tuple_val_wf vs tvs /\ values_have_types tvs vs /\
+    ?t w. gas_path_mem ctx func s 0 (OK t) /\
+      eval_operand staged t = SOME w /\
+      tuple_in_memory vs tvs (w2n w) t.vs_memory /\
+      stmt_state_rel ctx func cenv cx es t /\ alloca_history func t /\
+      return_buf_frame d cenv sb t /\
+      s.vs_alloca_next <= t.vs_alloca_next /\
+      w2n w + type_memory_size_list tvs <= t.vs_alloca_next /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+        FLOOKUP t.vs_allocas aid = SOME entry) /\
+      (!x. staged = Var x ==> not_fresh_at sb x) /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (?b sz. b <= w2n w /\
+        w2n w + type_memory_size_list tvs <= b + sz /\
+        b + sz <= t.vs_alloca_next /\
+        ((?aid. FLOOKUP t.vs_allocas aid = SOME (b,sz)) \/
+         (?name. local_region cenv es.scopes t name b sz))) /\
+      (!aid off z. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (off,z) ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_tuple_memory_owned >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac
+      (qx_choosel_then [`b`, `sz`] (MAP_EVERY assume_tac o CONJUNCTS)))) >>
+  `values_have_types tvs vs` by gvs[value_has_type_def] >>
+  `b + sz <= s.vs_alloca_next` by
+    (irule bodyMemAssignTupleTargetsFactsTheory.tuple_container_frontier >>
+     metis_tac[]) >>
+  `w2n sw + type_memory_size_list tvs <= s.vs_alloca_next` by decide_tac >>
+  simp[] >> Cases_on `flag`
+  >- (qpat_x_assum `(?aid. _) \/ (?name. _)` kall_tac >> gvs[] >>
+      `val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n sw) s.vs_memory /\
+       val_wf (TupleTV tvs) (ArrayV (TupleV vs)) /\
+       val_footprint (TupleTV tvs) (ArrayV (TupleV vs)) <= type_memory_size_list tvs` by
+        simp[valueEncodingDefsTheory.val_in_memory_def, valueEncodingDefsTheory.val_wf_def,
+             val_footprint_def, type_memory_size_def] >>
+      `w2n sw + type_memory_size_list tvs <= s.vs_alloca_next` by decide_tac >>
+      drule_all bodyMemAssignTupleTargetsFactsTheory.tuple_stage_copy_path_mem >>
+      strip_tac >>
+      qexistsl_tac [`t`, `w`] >> simp[] >>
+      conj_tac >- fs[valueEncodingDefsTheory.val_in_memory_def] >>
+      conj_tac
+      >- (drule_all tuple_stage_copy_parts >> strip_tac >> gvs[]) >>
+      conj_tac
+      >- (qexistsl_tac [`w2n w`, `type_memory_size_list tvs`] >> simp[] >>
+          metis_tac[]) >>
+      first_assum ACCEPT_TAC) >>
+  gvs[comp_return_def] >> qexistsl_tac [`s`, `sw`] >> simp[] >>
+  simp[cj 1 gas_path_mem_rules] >>
+  qexistsl_tac [`b`, `sz`] >> simp[] >> metis_tac[]
+QED
+
 Theorem tuple_assignment_prefix_path_mem:
   !ctx func cenv cx es1 tys tvs vs sa su sl ss op staged elems sv flag d.
     value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) /\
@@ -58,7 +137,8 @@ Theorem tuple_assignment_prefix_path_mem:
          FLOOKUP t.vs_allocas aid = SOME entry) /\
       alloca_history func t /\ return_buf_frame d cenv ss t /\
       sv.vs_alloca_next <= t.vs_alloca_next /\
-      gas_path_mem ctx func sv 0 (OK t)
+      gas_path_mem ctx func sv 0 (OK t) /\
+      alloca_frame cenv es1 su sv cenv es1 t
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `LIST_REL (\t tv. evaluate_type (get_tenv cx) t = SOME tv) tys tvs` by
@@ -69,7 +149,7 @@ Proof
   `type_memory_bytes cenv (TupleT tys) = type_memory_size_list tvs` by
     (irule type_memory_bytes_tuple_list >> first_assum ACCEPT_TAC) >>
   `?sw. eval_operand op sv = SOME sw` by metis_tac[expr_val_rel_def] >>
-  drule_all optional_tuple_stage_path_mem >>
+  drule_all optional_tuple_stage_frame_mem >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `?t w. _`
     (qx_choosel_then [`st`, `w`] (map_every assume_tac o CONJUNCTS)) >>
@@ -88,11 +168,16 @@ Proof
     (simp[EVERY_MEM] >> metis_tac[]) >>
   asm_rewrite_tac[] >> qexistsl_tac [`t`, `w`, `b`, `sz`] >>
   asm_rewrite_tac[] >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `not_fresh_at sl x` by
-        (irule not_fresh_at_mono >> qexists_tac `su` >> fs[cs_extends_def]) >>
-      simp[]) >>
+  `!x. not_fresh_at su x ==> lookup_var x t = lookup_var x sv` by
+    (rpt strip_tac >>
+     `not_fresh_at sl x` by
+       (irule not_fresh_at_mono >> qexists_tac `su` >> fs[cs_extends_def]) >>
+     simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  `alloca_frame cenv es1 su sv cenv es1 t` by
+    (irule alloca_frame_of_mem_frame >> simp[] >>
+     conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+     metis_tac[]) >>
   `gas_path_mem ctx func sv (0 + 0) (OK t)` by
     (irule gas_path_mem_then >> qexists_tac `st` >> simp[]) >> gvs[]
 QED
@@ -140,7 +225,8 @@ Theorem assign_tuple_targets_suffix_mem:
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x t' = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-               FLOOKUP t'.vs_allocas aid = SOME b)
+               FLOOKUP t'.vs_allocas aid = SOME b) /\
+      alloca_frame cenv ee su sv cenv ee' t'
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all tuple_type_value >> strip_tac >> gvs[] >>
@@ -226,6 +312,8 @@ Resume assign_tuple_targets_suffix_mem[stores]:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `?t. stmt_state_rel ctx _ _ _ ee' _ /\ _`
     (qx_choose_then `sfv` (map_every assume_tac o CONJUNCTS)) >>
+  `alloca_frame cenv ee su sv cenv ee' sfv` by
+    (first_x_assum irule >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`ee'`, `sfv`] >> conj_tac
   >- (drule_all assign_tuple_target_list_gas_obs >>
       simp[Once evaluate_def]) >>

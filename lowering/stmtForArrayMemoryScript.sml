@@ -64,6 +64,7 @@ Proof
   `?base. eval_operand (Var arr_ptr) s0 = SOME base` by metis_tac[] >>
   `ainst.inst_operands = [Lit (n2w (type_memory_bytes cenv et))] /\
    type_memory_bytes cenv et < dimword (:256)` by simp[venomInstTheory.mk_inst_def] >>
+  `sa.cs_next_id <= ainst.inst_id` by simp[venomInstTheory.mk_inst_def] >>
   `lookup_block s0.vs_current_bb func.fn_blocks =
     SOME <|bb_label := sa.cs_current_bb; bb_instructions := sa.cs_current_insts ++
       [ainst; mk_inst (sa.cs_next_id + 1) JMP [Label entry] []]|>` by simp[] >>
@@ -84,13 +85,15 @@ Proof
      conj_tac >- (qexistsl_tac [`arr_sz`, `name`] >> simp[]) >>
      gvs[] >> goal_assum (drule_at Any)) >>
   `array_round_inv d ctx func cenv cx P vs id idx (Var arr_ptr) base' p dst
-     (type_memory_bytes cenv et) ainst cond sa s0 0 es s` by
-    (simp[array_round_inv_def, array_round_frame_def] >>
+     (type_memory_bytes cenv et) ainst cond sa es s0 0 es s` by
+    (`alloca_frame cenv es sa s0 cenv es s` by
+       (irule alloca_frame_of_mem_frame >> simp[] >> metis_tac[]) >>
+     simp[array_round_inv_def, array_round_frame_def] >>
      irule return_buf_frame_frame >> goal_assum (drule_at Any) >> gvs[]) >>
   `gas_outcome T (cx_tops cx) (ctx,func)
      (eval_for cx tv id stmts (MAP Value (DROP 0 vs))) (es,s)
      (\res ee t. res = INL () /\
-       array_round_done d ctx func cenv cx sa s0 exit ee t)
+       array_round_done d ctx func cenv cx sa es s0 exit ee t)
      (\res ee rr. ?ex. res = INR ex /\
        !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)` by
     (drule array_code_loop_outcome_mem >> disch_then irule >>
@@ -148,7 +151,7 @@ Resume compile_for_array_frag_mem[public_outcome]:
   `gas_outcome T (cx_tops cx) (ctx,func)
      (eval_for cx tv id stmts (MAP Value vs)) (es,s0)
      (\res ee t. res = INL () /\
-       array_round_done d ctx func cenv cx sa s0 exit ee t)
+       array_round_done d ctx func cenv cx sa es s0 exit ee t)
      (\res ee rr. ?ex. res = INR ex /\
        !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)` by
     (irule stmtForArrayMemoryRoundSupportTheory.array_round_outcome_prefix_mem >> goal_assum (drule_at Any) >> gvs[]) >>

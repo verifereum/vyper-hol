@@ -127,7 +127,7 @@ Theorem append_storage_word_success_path_mem:
     ~t.vs_halted /\
     (!x a. not_fresh_at sa x /\ lookup_var x sbase = SOME a ==> lookup_var x t = SOME a) /\
     t.vs_allocas = sbase.vs_allocas /\ t.vs_alloca_next = sbase.vs_alloca_next /\
-    alloca_history func t
+    alloca_history func t /\ t.vs_memory = sbase.vs_memory
 Proof
   strip_tac >>
   `~sbase.vs_call_ctx.cc_static` by
@@ -135,6 +135,11 @@ Proof
   drule_all append_storage_word_run_mem >> strip_tac >>
   drule_all append_storage_word_success_post_mem >> strip_tac >>
   drule append_storage_word_frame_fields_mem >> strip_tac >>
+  `u.vs_memory = sbase.vs_memory` by
+    (qpat_x_assum `state_frame u = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `tr` >> simp[state_frame_def, sstore_def, tstore_def,
+       LET_THM, venom_state_component_equality]) >>
   drule append_storage_word_suffix_footprint_mem >> strip_tac >>
   `sf.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sf` by
     fs[inst_extends_def, emitted_insts_def, IS_PREFIX_APPEND] >>
@@ -153,8 +158,9 @@ Proof
      qexistsl_tac [`sbase`, `sa`] >> simp[] >> fs[EVERY_MEM]) >>
   asm_rewrite_tac [] >>
   qexists_tac `u with vs_inst_idx := LENGTH sf.cs_current_insts` >>
-  simp[gas_marked_path_def, stmt_state_rel_inst_idx, stmt_lands_def,
-       same_blocks_def, lookup_var_def] >>
+  qpat_assum `u.vs_memory = _` (fn th =>
+    simp[th, gas_marked_path_def, stmt_state_rel_inst_idx, stmt_lands_def,
+         same_blocks_def, lookup_var_def]) >>
   conj_tac >- fs[same_blocks_def] >>
   rpt strip_tac >>
   qpat_x_assum `!x a. _ ==> lookup_var x u = SOME a`
@@ -223,7 +229,7 @@ Theorem append_storage_word_value_path_mem:
       stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\
       (!x a. not_fresh_at sb x /\ lookup_var x s = SOME a ==> lookup_var x t = SOME a) /\
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-      alloca_history func t) \/
+      alloca_history func t /\ t.vs_memory = s.vs_memory) \/
      (exit_result r /\ stmt_exit RetQ es' res r))
 Proof
   strip_tac >>

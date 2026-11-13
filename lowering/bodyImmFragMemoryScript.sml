@@ -60,7 +60,8 @@ Theorem compile_for_immutable_frag_mem_from_outcome:
     (\res ee t. res = INL () /\
        t.vs_current_bb = st'.cs_current_bb /\
        t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
-       stmt_state_rel ctx func cenv cx ee t /\ array_caller_frame st s t /\
+       stmt_state_rel ctx func cenv cx ee t /\
+       alloca_frame cenv es st s cenv ee t /\ array_caller_frame st s t /\
        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
        return_buf_frame d cenv st' t /\ alloca_history func t /\
        s.vs_alloca_next <= t.vs_alloca_next)
@@ -175,6 +176,7 @@ Resume compile_for_immutable_frag_mem_from_outcome[post]:
   conj_tac
   >- (rpt gen_tac >> simp[Abbr `R`] >> metis_tac[]) >>
   rpt gen_tac >> BETA_TAC >> simp[Abbr `Q`] >> strip_tac >>
+  qpat_x_assum `alloca_frame _ _ _ _ _ _ _` mp_tac >> simp[] >> strip_tac >>
   simp[stmt_lands_def, block_is_terminated_def, cenv_top_ext_refl] >>
   qpat_x_assum `array_caller_frame _ _ _` mp_tac >>
   simp[array_caller_frame_def]

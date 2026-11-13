@@ -81,7 +81,11 @@ Theorem dynarray_round_copy_entry_mem:
     t.vs_inst_idx = LENGTH sb0.cs_current_insts /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     (!x. not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep ==>
-      lookup_var x t = lookup_var x s)
+      lookup_var x t = lookup_var x s) /\
+    (!c0. c0.cs_next_id <= sa.cs_next_id /\ c0.cs_next_id <= ainst.inst_id ==>
+      alloca_frame cenv es c0 s bc (es with scopes :=
+        (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+          :: es.scopes) t)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all dynarray_for_body_entry_run >>
@@ -102,6 +106,6 @@ Proof
         first_assum ACCEPT_TAC) >>
   drule_all array_prefix_counted_history >> simp[] >> strip_tac >>
   qexists_tac `t with vs_inst_idx := LENGTH sb0.cs_current_insts` >>
-  simp[gas_marked_path_def, stmt_state_rel_inst_idx] >>
+  simp[gas_marked_path_def, stmt_state_rel_inst_idx, alloca_frame_inst_idx] >>
   fs[venom_state_component_equality, lookup_var_def]
 QED

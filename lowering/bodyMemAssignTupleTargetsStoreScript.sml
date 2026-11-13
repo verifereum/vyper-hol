@@ -460,7 +460,9 @@ Theorem tuple_target_store_head_path_mem:
         FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\ lookup_var p s = SOME dw /\
         (!a len. a + len <= w2n dw \/
           w2n dw + (if is_word_type ty then 32 else type_memory_size tv) <= a ==>
-          mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory))
+          mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)) /\
+      (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+         alloca_frame c0 e0 sa0 s0 cenv es' t)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all tuple_target_assignment_scope_frame >> strip_tac >>
@@ -468,11 +470,49 @@ Proof
   >- (pop_assum strip_assume_tac >> gvs[] >>
       drule tuple_target_local_head_path_mem >> simp[] >>
       disch_then drule_all >> strip_tac >>
-      qexists_tac `t` >> simp[] >> disj2_tac >> metis_tac[]) >>
+      qexists_tac `t` >> simp[] >> conj_tac
+      >- (disj2_tac >> metis_tac[]) >>
+      suspend "local_frame") >>
   `is_word_type ty` by metis_tac[tuple_target_aligned_nonlocal_word] >>
   gvs[] >> drule_all tuple_target_nonlocal_head_path_mem >> strip_tac >>
-  qexists_tac `t` >> simp[]
+  qexists_tac `t` >> simp[] >> suspend "nonlocal_frame"
 QED
+
+Resume tuple_target_store_head_path_mem[local_frame]:
+  rpt strip_tac >>
+  drule_all tuple_store_destination_region >> strip_tac >>
+  `entry.type = tv` by gvs[tuple_target_layout_local] >>
+  `(if is_word_type ty then 32 else type_memory_size tv) <= sz` by
+    (Cases_on `is_word_type ty` >> gvs[tuple_target_layout_local,
+       stmtSimDeclStoreTheory.store_lays_out_def] >> decide_tac) >>
+  irule tuple_local_region_write_frame >> goal_assum (drule_at Any) >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      Cases_on `is_word_type ty` >> gvs[] >> decide_tac) >>
+  simp[]
+QED
+
+Resume tuple_target_store_head_path_mem[nonlocal_frame]:
+  rpt strip_tac >>
+  `!id b z. local_region cenv es'.scopes t id b z ==>
+             local_region cenv es.scopes s id b z` by
+    (rpt gen_tac >> simp[local_region_def] >> strip_tac >>
+     `lookup_var p t = lookup_var p s` by
+       (first_x_assum irule >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     `IS_SOME (lookup_scopes id es.scopes)` by
+       metis_tac[vyperTypeEnvPreservationTheory.lookup_scopes_same_fdoms_some] >>
+     fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+  fs[stmtSimDefsTheory.alloca_frame_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!aid off sz. _` drule_all >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >> first_x_assum irule >>
+  metis_tac[]
+QED
+
+Finalise tuple_target_store_head_path_mem
 
 (* Single store transports only the unread suffix, not the consumed bytes. *)
 Theorem tuple_target_store_tail_path_mem:
@@ -563,7 +603,9 @@ Theorem tuple_store_targets_path_mem:
         (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
         (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP t.vs_allocas aid = SOME bs) /\
         alloca_history func t /\ return_buf_frame d cenv st' t /\
-        s.vs_alloca_next <= t.vs_alloca_next /\ gas_path_mem ctx func s 0 (OK t)
+        s.vs_alloca_next <= t.vs_alloca_next /\ gas_path_mem ctx func s 0 (OK t) /\
+        (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+           alloca_frame c0 e0 sa0 s0 cenv es' t)
 Proof
   Induct
   >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -714,6 +756,9 @@ Resume tuple_store_targets_path_mem[compose]:
       metis_tac[]) >>
   conj_tac >- metis_tac[] >>
   conj_tac >- simp[] >>
+  reverse conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      first_x_assum irule >> first_assum ACCEPT_TAC) >>
   irule (gas_path_mem_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
   first_assum (irule_at Any) >> simp[]
 QED

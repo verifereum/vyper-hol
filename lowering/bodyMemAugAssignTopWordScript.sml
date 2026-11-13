@@ -10,6 +10,7 @@
    memory flag where S1's fix it to F. *)
 Theory bodyMemAugAssignTopWord
 Ancestors
+  stmtSimAugAssignAttr
   supportedExprTraverse allocLimitsProps
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyMemAssignTopWord bodyDeclMemoryCounted
@@ -424,6 +425,7 @@ Theorem augassign_storage_load_frame_mem[local]:
     local_ptrs_reserved cenv sb /\ alloca_history func t /\
     (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
     t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+    t.vs_memory = s0.vs_memory /\
     (?out. op = Var out /\ not_fresh_at sb out)
 Proof
   strip_tac >>
@@ -720,9 +722,24 @@ Resume compile_augassign_toplevel_mem[post]:
        (qpat_x_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
         simp[expr_post_def] >> metis_tac[]) >>
      metis_tac[]) >>
+  `alloca_frame cenv es sa s0 cenv ee s` by
+    (`sa.cs_next_id <= s1.cs_next_id` by
+       (qpat_x_assum `emit_op _ _ sa = _`
+          (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+        simp[]) >>
+     `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+       (qpat_assum `bind (eval_expr cx e) (read_result cx) _ = (INL _, _)`
+          (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
+     drule_at (Pat `expr_post _ _ _ _ e _ _ _ _ _ _ _ _`)
+       stmtSimAugAssignAttrTheory.augassign_attr_pre_store_frame >>
+     disch_then irule >> simp[] >> metis_tac[]) >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>
-  irule return_buf_frame_frame >>
-  qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]
+  conj_tac
+  >- (irule return_buf_frame_frame >>
+      qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
+  qpat_x_assum `alloca_frame cenv es sa s0 cenv ee s`
+    (irule o MATCH_MP alloca_frame_keep_regs) >>
+  simp[]
 QED
 
 Resume compile_augassign_toplevel_mem[operator_exit]:

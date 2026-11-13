@@ -99,12 +99,17 @@ Theorem tuple_scratch_prefix_path_mem:
       eval_operand buf.buf_operand t = SOME w /\
       val_in_memory tv v (w2n w) t.vs_memory /\
       w2n w + n <= t.vs_alloca_next /\
-      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n)
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
+      (!aid off z. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (off,z) ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all body_scratch_prefix_shape >> strip_tac >>
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
   drule_all body_scratch_prefix_run >> strip_tac >>
+  `!aid off z. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (off,z) ==>
+     mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory` by
+    (rpt strip_tac >> drule_all body_scratch_prefix_frame >> simp[]) >>
   drule_all tuple_scratch_prefix_provenance >> strip_tac >> gvs[] >>
   `run_inst_seq (emitted_insts sa sn) s = OK t` by
     (asm_rewrite_tac[] >>
@@ -166,7 +171,9 @@ Theorem tuple_stage_copy_path_mem:
       eval_operand staged t = SOME w /\
       val_in_memory tv v (w2n w) t.vs_memory /\
       w2n w + n <= t.vs_alloca_next /\
-      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n)
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
+      (!aid off z. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (off,z) ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `_ sa = (staged,sb)` mp_tac >>
@@ -179,6 +186,6 @@ Proof
     (Cases_on `n` >> gvs[compile_copy_memory_def]) >>
   `w2n sw + n <= s.vs_alloca_next` by decide_tac >>
   drule_all tuple_scratch_prefix_path_mem >>
-  strip_tac >> qexistsl_tac [`t`, `w`] >> simp[]
+  strip_tac >> qexistsl_tac [`t`, `w`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 

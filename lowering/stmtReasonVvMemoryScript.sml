@@ -557,6 +557,9 @@ Resume compile_assert_reason_vv_frag_mem[true]:
   irule assert_ok_return_outcome >>
   qexists_tac `jump_to sb.cs_current_bb t` >>
   simp[gas_marked_path_def] >>
+  `MAP FDOM (mid with gas_obs := []).scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
   drule_all assert_success_post_mem >> simp[]
 QED
 

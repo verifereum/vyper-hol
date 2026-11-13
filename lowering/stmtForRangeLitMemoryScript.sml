@@ -86,7 +86,8 @@ Proof
      return_buf_frame d cenv sa cc /\ ret_pc_ok cenv sa cc /\
      alloca_history func cc /\ s0.vs_alloca_next <= cc.vs_alloca_next /\
      (!id ent. FLOOKUP s0.vs_allocas id = SOME ent ==> FLOOKUP cc.vs_allocas id = SOME ent) /\
-     (!x. not_fresh_at sa x ==> lookup_var x cc = lookup_var x s0)` by
+     (!x. not_fresh_at sa x ==> lookup_var x cc = lookup_var x s0) /\
+     cc.vs_memory = s0.vs_memory` by
     (irule for_range_lit_start_mem >>
      simp[] >> conj_tac
      >- (map_every (fn q => qpat_assum q SUBST1_TAC) [`p = _`, `cv = _`, `ev = _`] >>
@@ -94,6 +95,8 @@ Proof
          rpt strip_tac >> gvs[] >> decide_tac) >>
      qexistsl_tac [`entry_lbl`, `sa.cs_next_id + 2`, `sa.cs_next_id + 3`,
        `sa.cs_next_id + 4`, `sa.cs_next_id + 1`] >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv es cc` by
+    (irule alloca_frame_of_mem_frame >> simp[] >> metis_tac[]) >>
   drule_all declare_local_ptr >> strip_tac >>
   `local_ptrs_reserved bc sb0` by
     (drule_all declare_local_reserved >> strip_tac >>
@@ -137,14 +140,16 @@ Resume compile_for_range_lit_frag_mem[loop]:
        return_buf_frame d cenv sa s /\ alloca_history func s /\
        cc.vs_alloca_next <= s.vs_alloca_next /\
        (!x v. not_fresh_at sa x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\
-       (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b))
+       (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b) /\
+       (!frame_start. frame_start.cs_next_id <= aa.inst_id /\
+          frame_start.cs_next_id <= sb0.cs_next_id ==>
+          alloca_frame cenv es frame_start cc cenv ee s))
      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
     (irule for_loop_mem >>
-     ntac 4 (conj_tac >- simp[]) >>
-     conj_tac >- (qexists_tac `lctx` >> simp[]) >>
-     ntac 3 (conj_tac >- simp[]) >>
+     rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
+     TRY (qexists_tac `lctx` >> simp[] >> NO_TAC) >>
      qexists_tac `P` >> qhdtm_assum `for_code` (irule_at Any) >>
-     qexistsl_tac [`w`, `n2`] >> simp[Abbr `aa`, mk_inst_def] >>
+     rpt (qexists_tac `w` ORELSE qexists_tac `n2`) >> simp[Abbr `aa`, mk_inst_def] >>
      rpt strip_tac >>
      qpat_x_assum `!ei j gs r2 es2 sc rest. _` irule >>
      simp[] >> goal_assum (drule_at Any) >> simp[]) >>
@@ -158,6 +163,11 @@ Resume compile_for_range_lit_frag_mem[finish]:
   disch_then (mp_then Any mp_tac for_outcome_consequence_mem) >>
   simp[] >> disch_then irule >> simp[] >>
   rpt gen_tac >> strip_tac >>
+  `alloca_frame cenv es sa cc cenv ee t` by
+    (qpat_x_assum `!frame_start. _` irule >> simp[Abbr `aa`, mk_inst_def]) >>
+  `alloca_frame cenv es sa s0 cenv ee t` by
+    (irule alloca_frame_trans >> qexistsl_tac [`cenv`, `es`, `cc`, `sa`] >>
+     simp[] >> metis_tac[]) >>
   simp[stmt_lands_def, cenv_top_ext_def] >>
   conj_tac >- simp[block_is_terminated_def] >>
   Cases_on `d` >- gvs[return_buf_frame_def] >>

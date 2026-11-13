@@ -418,6 +418,13 @@ QED
 
 Resume compile_assign_attr_storage_mem[store]:
   rpt gen_tac >> BETA_TAC >> strip_tac >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `bind _ _ (es with gas_obs := _) = _`
+       (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv ee t` by
+    (irule expr_post_alloca_frame >>
+     qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     fs[]) >>
   `value_has_type ftv v` by metis_tac[] >>
   `encode_value ftv v = SOME [(0, typed_val_to_w256 ftv v)]` by
     (irule encode_value_word_typed >> metis_tac[]) >>
@@ -448,8 +455,12 @@ Resume compile_assign_attr_storage_mem[store]:
   conj_tac >- fs[write_storage_slot_gas_obs] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   disj1_tac >> simp[stmt_lands_def, cenv_top_ext_refl] >>
-  irule return_buf_frame_frame >>
-  qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >> metis_tac[]
+  conj_tac
+  >- (irule return_buf_frame_frame >>
+      qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `alloca_frame cenv es sa s0 cenv ee t`
+    (irule o MATCH_MP alloca_frame_keep_regs) >>
+  simp[]
 QED
 
 Finalise compile_assign_attr_storage_mem

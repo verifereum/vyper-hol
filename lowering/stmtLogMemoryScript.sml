@@ -252,6 +252,23 @@ Resume compile_log_ready_stmt_frag_mem[suffix]:
 QED
 
 Resume compile_log_ready_stmt_frag_mem[post]:
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (drule log_args_scopes_dom >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv (es_end with gas_obs := []) t` by
+    (irule log_wb_alloca_frame >> simp[] >> metis_tac[log_args_post_frame]) >>
+  `alloca_frame cenv (es_end with gas_obs := []) sm t cenv
+     (es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|>) u` by
+    (irule log_suffix_alloca_frame >> simp[Excl "enc_def"] >>
+     metis_tac[stmt_state_rel_gas_obs]) >>
+  `alloca_frame cenv (es_end with gas_obs := []) sm t cenv
+     (es_end with logs := es_end.logs ++ [ev]) u` by
+    (`es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|> =
+      (es_end with logs := es_end.logs ++ [ev]) with gas_obs := []` by
+       simp[evaluation_state_component_equality] >>
+     qpat_x_assum `alloca_frame _ _ sm t _ _ u` mp_tac >>
+     pop_assum SUBST1_TAC >> rewrite_tac[alloca_frame_gas_obs]) >>
+  `sa.cs_next_id <= sm.cs_next_id` by
+    (drule compile_log_eval_all_grows >> simp[]) >>
   drule log_args_post_frame >> simp[wb_frame_def, Excl "enc_def"] >> strip_tac >>
   `sa.cs_next_var <= sm.cs_next_var` by
     (drule_all compile_log_eval_all_grows >> simp[]) >>
@@ -278,12 +295,16 @@ Resume compile_log_ready_stmt_frag_mem[post]:
         simp[Abbr `E1`, Abbr `E2`, Abbr `ev`, wordsTheory.w2w_id,
              evaluation_state_component_equality, Excl "enc_def"] >>
       simp[Excl "enc_def"])
-  >- fs[lookup_var_def, Excl "enc_def"] >>
-  qspecl_then [`d`, `cenv`, `cenv`, `sa`, `sb`, `s0`,
-               `u with vs_inst_idx := LENGTH sb.cs_current_insts`]
-    mp_tac return_buf_frame_frame >>
-  impl_tac >- fs[lookup_var_def, Excl "enc_def"] >>
-  simp[Excl "enc_def"]
+  >- fs[lookup_var_def, Excl "enc_def"]
+  >- (qspecl_then [`d`, `cenv`, `cenv`, `sa`, `sb`, `s0`,
+                   `u with vs_inst_idx := LENGTH sb.cs_current_insts`]
+        mp_tac return_buf_frame_frame >>
+      impl_tac >- fs[lookup_var_def, Excl "enc_def"] >>
+      simp[Excl "enc_def"]) >>
+  irule alloca_frame_same_state >> qexists_tac `u` >> simp[] >>
+  irule alloca_frame_trans >>
+  qexistsl_tac [`cenv`, `es_end with gas_obs := []`, `t`, `sm`] >>
+  fs[Excl "enc_def"]
 QED
 
 Finalise compile_log_ready_stmt_frag_mem
@@ -470,6 +491,23 @@ Resume compile_log_ready_stmt_frag_mem_widen[suffix]:
 QED
 
 Resume compile_log_ready_stmt_frag_mem_widen[post]:
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (drule log_args_scopes_dom >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv (es_end with gas_obs := []) t` by
+    (irule log_wb_alloca_frame >> simp[] >> metis_tac[log_args_post_frame]) >>
+  `alloca_frame cenv (es_end with gas_obs := []) sm t cenv
+     (es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|>) u` by
+    (irule log_suffix_alloca_frame >> simp[Excl "enc_def"] >>
+     metis_tac[stmt_state_rel_gas_obs]) >>
+  `alloca_frame cenv (es_end with gas_obs := []) sm t cenv
+     (es_end with logs := es_end.logs ++ [ev]) u` by
+    (`es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|> =
+      (es_end with logs := es_end.logs ++ [ev]) with gas_obs := []` by
+       simp[evaluation_state_component_equality] >>
+     qpat_x_assum `alloca_frame _ _ sm t _ _ u` mp_tac >>
+     pop_assum SUBST1_TAC >> rewrite_tac[alloca_frame_gas_obs]) >>
+  `sa.cs_next_id <= sm.cs_next_id` by
+    (drule compile_log_eval_all_grows >> simp[]) >>
   drule log_args_post_frame >> simp[wb_frame_def, Excl "enc_def"] >> strip_tac >>
   `sa.cs_next_var <= sm.cs_next_var` by
     (drule compile_log_eval_all_grows >> simp[]) >>
@@ -496,12 +534,16 @@ Resume compile_log_ready_stmt_frag_mem_widen[post]:
         simp[Abbr `E1`, Abbr `E2`, Abbr `ev`, wordsTheory.w2w_id,
              evaluation_state_component_equality, Excl "enc_def"] >>
       simp[Excl "enc_def"])
-  >- fs[lookup_var_def, Excl "enc_def"] >>
-  qspecl_then [`d`, `cenv`, `cenv`, `sa`, `sb`, `s0`,
-               `u with vs_inst_idx := LENGTH sb.cs_current_insts`]
-    mp_tac return_buf_frame_frame >>
-  impl_tac >- fs[lookup_var_def, Excl "enc_def"] >>
-  simp[Excl "enc_def"]
+  >- fs[lookup_var_def, Excl "enc_def"]
+  >- (qspecl_then [`d`, `cenv`, `cenv`, `sa`, `sb`, `s0`,
+                   `u with vs_inst_idx := LENGTH sb.cs_current_insts`]
+        mp_tac return_buf_frame_frame >>
+      impl_tac >- fs[lookup_var_def, Excl "enc_def"] >>
+      simp[Excl "enc_def"]) >>
+  irule alloca_frame_same_state >> qexists_tac `u` >> simp[] >>
+  irule alloca_frame_trans >>
+  qexistsl_tac [`cenv`, `es_end with gas_obs := []`, `t`, `sm`] >>
+  fs[Excl "enc_def"]
 QED
 
 Finalise compile_log_ready_stmt_frag_mem_widen

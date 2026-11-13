@@ -22,6 +22,8 @@ Theorem tuple_scratch_run_allocation[local]:
   eval_operand src s = SOME sw /\ n < dimword (:256) /\
   run_inst_seq (emitted_insts sa sm) s = OK a /\
   run_inst_seq (emitted_insts sm sn) a = OK t ==>
+  (!aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+     mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
   ?w. eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
     (!x. buf.buf_operand = Var x ==> not_fresh_at sn x)
@@ -43,6 +45,14 @@ Proof
   drule_all buffer_copy_memory_run >> strip_tac >> gvs[] >>
   `sm.cs_next_var = sn.cs_next_var` by
     metis_tac[buffer_copy_memory_shape] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `regions_disjoint (w2n w) n b len` by metis_tac[] >>
+      `mem_bytes_at b len (mcopy (w2n w) (w2n sw) n a).vs_memory =
+       mem_bytes_at b len a.vs_memory` by
+        (irule mcopy_mem_bytes_at_disjoint >>
+         fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+      Cases_on `n = 0` >> asm_rewrite_tac[]) >>
   qexists_tac `w` >>
   Cases_on `n = 0` >>
   gvs[mcopy_def, write_memory_with_expansion_def, LET_THM,
@@ -74,7 +84,8 @@ Theorem tuple_scratch_path_mem:
     val_in_memory tv v (w2n w) t.vs_memory /\
     w2n w + n <= t.vs_alloca_next /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
-    (!x. buf.buf_operand = Var x ==> not_fresh_at sn x)
+    (!x. buf.buf_operand = Var x ==> not_fresh_at sn x) /\
+    alloca_frame ce es sa s ce es t
 Proof
   strip_tac >> drule_all body_scratch_prefix_shape >> strip_tac >>
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
@@ -102,6 +113,21 @@ Proof
   `alloca_history func (t with vs_inst_idx := LENGTH sn.cs_current_insts)` by
     (irule body_store_memory_history >> simp[] >>
      qexistsl_tac [`s`, `sa`] >> simp[]) >>
+  `alloca_frame ce es sa s ce es t` by
+    (mp_tac (Q.INST [`cenv` |-> `ce`, `s0` |-> `s`, `es'` |-> `es`, `s` |-> `t`]
+       (SPEC_ALL alloca_frame_of_mem_frame)) >>
+     impl_tac
+     >- (rpt conj_tac
+         >- first_assum ACCEPT_TAC
+         >- first_assum ACCEPT_TAC
+         >- simp[]
+         >- (rpt strip_tac >> metis_tac[])
+         >> rpt strip_tac >> metis_tac[]) >>
+     disch_then ACCEPT_TAC) >>
+  `alloca_frame ce es sa s ce es
+     (t with vs_inst_idx := LENGTH sn.cs_current_insts)` by
+    (irule alloca_frame_same_state >> qexists `t` >> simp[] >>
+     first_assum ACCEPT_TAC) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH sn.cs_current_insts`, `w`] >>
   simp[stmt_state_rel_inst_idx] >> conj_tac
   >- (Cases_on `d` >- fs[return_buf_frame_def] >>
@@ -151,7 +177,8 @@ Theorem tuple_stage_copy_path_mem:
     val_in_memory tv v (w2n w) t.vs_memory /\
     w2n w + n <= t.vs_alloca_next /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
-    (!x. staged = Var x ==> not_fresh_at sb x)
+    (!x. staged = Var x ==> not_fresh_at sb x) /\
+    alloca_frame ce es sa s ce es t
 Proof
   strip_tac >>
   qpat_x_assum `(do _ od) sa = _` mp_tac >>
@@ -205,7 +232,8 @@ Theorem optional_tuple_stage_path_mem:
       gas_path_mem ctx func s 0 (OK t) /\
       alloca_history func t /\ return_buf_frame d cenv sb t /\
       s.vs_alloca_next <= t.vs_alloca_next /\
-      w2n w + type_memory_size_list tvs <= t.vs_alloca_next
+      w2n w + type_memory_size_list tvs <= t.vs_alloca_next /\
+      alloca_frame cenv es sa s cenv es t
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all expr_tuple_memory_owned >>
@@ -231,6 +259,7 @@ Proof
       conj_tac >- gvs[val_in_memory_def] >>
       qexistsl_tac [`w2n w`, `type_memory_size_list tvs`] >> simp[] >> metis_tac[]) >>
   gvs[comp_return_def] >> qexistsl_tac [`s`, `sw`] >> simp[cj 1 gas_path_mem_rules] >>
+  (reverse conj_tac >- simp[alloca_frame_same]) >>
   qexistsl_tac [`b`, `sz`] >> simp[] >> metis_tac[]
 QED
 

@@ -423,12 +423,15 @@ Theorem compile_for_dynarray_code_ready:
     (!x. not_fresh_at st1 x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
     not_fresh_at st1 lv /\
     not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\
-    (!x. arr_op = Var x ==> not_fresh_at sb0 x)
+    (!x. arr_op = Var x ==> not_fresh_at sb0 x) /\
+    st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= sb0.cs_next_id
 Proof
   strip_tac >>
   `!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==>
                 cs_extends sa sb` by metis_tac[] >>
   drule_all compile_for_dynarray_parts >> strip_tac >>
+  `st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= sb0.cs_next_id` by
+    (conj_tac >- simp[] >> decide_tac) >>
   drule_all declare_local_ptr >> strip_tac >>
   `st.cs_next_var + 9 <= sj.cs_next_var` by
     (qpat_x_assum `!c lc sa sb. _ ==> _ /\ _` drule >> simp[]) >>

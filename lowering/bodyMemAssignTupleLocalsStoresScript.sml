@@ -204,6 +204,45 @@ Proof
   conj_tac >- fs[lookup_var_def] >> first_assum ACCEPT_TAC
 QED
 
+(* A head store that writes at most the local's own bytes, keeping the
+   older registers, keeps the allocation frame. *)
+Theorem tuple_local_store_alloca_frame[local]:
+  find_containing_scope id es.scopes = SOME (pre,env,entry,rest) /\
+  alloca_frame c0 e0 sa0 s0 cenv es s /\
+  stmt_state_rel ctx func cenv cx es s /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) dsz) /\
+  lookup_var p s = SOME dw /\ local_ptrs_reserved cenv st /\
+  (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
+  (!a len. a + len <= w2n dw \/ w2n dw + k <= a ==>
+     mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+  k <= type_memory_size entry.type ==>
+  alloca_frame c0 e0 sa0 s0 cenv
+    (es with scopes := pre ++ (env |+ (id, e)) :: rest) t
+Proof
+  strip_tac >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  drule_all tuple_store_destination_region >> strip_tac >>
+  `MAP FDOM (es with scopes := pre ++ (env |+ (id, e)) :: rest).scopes =
+   MAP FDOM es.scopes` by
+    (qpat_x_assum `find_containing_scope _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     drule find_containing_scope_structure >> strip_tac >>
+     gvs[FLOOKUP_DEF, pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `!id p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ==>
+     lookup_var p t = lookup_var p s` by
+    (rpt strip_tac >> first_x_assum irule >>
+     fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `!a len. a + len <= w2n dw \/ w2n dw + dsz <= a ==>
+     mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!a len. _ ==> mem_bytes_at a len t.vs_memory = _` irule >>
+     decide_tac) >>
+  drule_at (Pat `local_region _ _ _ _ _ _`) tuple_local_region_write_frame >>
+  disch_then irule >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem tuple_local_store_head_path_mem:
   (if is_word_type ty then emit_void MSTORE [Var p; op]
    else compile_store_memory cenv op (Var p) vt ty) st = ((),st') /\
@@ -239,18 +278,34 @@ Theorem tuple_local_store_head_path_mem:
        w2n dw + (if is_word_type ty then 32
                   else MIN (type_memory_size tv) (type_memory_size entry.type)) <= a ==>
        mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
-    gas_marked_path T ctx func s 0 (OK t)
+    gas_marked_path T ctx func s 0 (OK t) /\
+    (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+      alloca_frame c0 e0 sa0 s0 cenv
+        (es with scopes := pre ++
+          (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `is_word_type ty`
   >- (gvs[] >> drule_all tuple_local_word_store_head_path_mem >>
-      strip_tac >> goal_assum (drule_at Any) >> simp[] >>
-      first_assum ACCEPT_TAC) >>
+      strip_tac >>
+      `!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s` by
+        metis_tac[] >>
+      `32 <= type_memory_size entry.type` by fs[store_lays_out_def] >>
+      qexistsl [`dw`, `t`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+      rpt gen_tac >> strip_tac >>
+      drule_all tuple_local_store_alloca_frame >> disch_then irule) >>
   gnvs[] >>
   qpat_x_assum `~is_word_type vt /\ _`
     (map_every assume_tac o CONJUNCTS) >>
   drule_all tuple_local_nonword_store_head_path_mem >>
-  strip_tac >> goal_assum (drule_at Any) >> simp[] >> first_assum ACCEPT_TAC
+  strip_tac >>
+  `MIN (type_memory_size tv) (type_memory_size entry.type) <=
+   type_memory_size entry.type` by simp[arithmeticTheory.MIN_LE] >>
+  qexistsl [`dw`, `t`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  drule_all tuple_local_store_alloca_frame >> disch_then irule
 QED
 
 (* Memory-counted twin of S1 tuple_store_mixed_locals_path. *)
@@ -300,7 +355,9 @@ Theorem tuple_store_mixed_locals_path_mem:
         t.vs_current_bb = st'.cs_current_bb /\ t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
         t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-        alloca_history func t /\ gas_marked_path T ctx func s 0 (OK t)
+        alloca_history func t /\ gas_marked_path T ctx func s 0 (OK t) /\
+        (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+          alloca_frame c0 e0 sa0 s0 cenv es' t)
 Proof
   Induct
   >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -496,8 +553,12 @@ Resume tuple_store_mixed_locals_path_mem[compose]:
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  `gas_marked_path T ctx func s (0 + 0) (OK t)` by
-    (irule gas_marked_path_then >> qexists `s1` >> simp[]) >> fs[]
+  conj_tac
+  >- (`gas_marked_path T ctx func s (0 + 0) (OK t)` by
+        (irule gas_marked_path_then >> qexists `s1` >> simp[]) >> fs[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `es1 = _` SUBST_ALL_TAC >>
+  first_x_assum irule >> first_x_assum irule >> first_assum ACCEPT_TAC
 QED
 
 Resume tuple_store_mixed_locals_path_mem[compose_vars]:

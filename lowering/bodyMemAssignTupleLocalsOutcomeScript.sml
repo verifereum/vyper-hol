@@ -16,6 +16,15 @@ Ancestors
 Libs
   monadsyntax
 
+(* A step that keeps memory and the live locals' regions keeps the frame. *)
+Theorem alloca_frame_same_regions[local]:
+  alloca_frame c0 e0 sa s0 c ee t /\ u.vs_memory = t.vs_memory /\
+  (!n b z. local_region c ee.scopes u n b z = local_region c ee.scopes t n b z) ==>
+  alloca_frame c0 e0 sa s0 c ee u
+Proof
+  rewrite_tac[alloca_frame_def] >> strip_tac >> asm_rewrite_tac[]
+QED
+
 (* S1 assign_tuple_locals_memory_suffix_path, with allocation history and
    the memory frontier carried by the staging/load/store interfaces. *)
 Theorem assign_tuple_locals_memory_suffix_path_mem:
@@ -65,7 +74,8 @@ Theorem assign_tuple_locals_memory_suffix_path_mem:
       (!aid b. FLOOKUP sv.vs_allocas aid = SOME b ==>
         FLOOKUP t.vs_allocas aid = SOME b) /\
       alloca_history func t /\ sv.vs_alloca_next <= t.vs_alloca_next /\
-      gas_marked_path T ctx func sv 0 (OK t)
+      gas_marked_path T ctx func sv 0 (OK t) /\
+      alloca_frame cenv es1 su sv cenv es' t
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `values_have_types tvs vs` by gvs[value_has_type_def] >>
@@ -97,7 +107,7 @@ Resume assign_tuple_locals_memory_suffix_path_mem[code]:
   `type_memory_bytes cenv (TupleT tys) = type_memory_size_list tvs` by
     (irule type_memory_bytes_tuple_list >> first_assum ACCEPT_TAC) >>
   `?sw. eval_operand op sv = SOME sw` by metis_tac[expr_val_rel_def] >>
-  drule_all optional_tuple_stage_path_mem >>
+  drule_all bodyMemAssignTupleLocalsPrefixTheory.optional_tuple_stage_path_mem >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `?t w. _`
     (qx_choosel_then [`st`, `w`] (map_every assume_tac o CONJUNCTS)) >>
@@ -108,6 +118,9 @@ Resume assign_tuple_locals_memory_suffix_path_mem[code]:
   `w2n w + type_memory_size_list tvs < dimword (:256)` by
     (drule_all tuple_container_bound >> decide_tac) >>
   drule_all compile_tuple_load_all_typed_path_mem >> strip_tac >>
+  `alloca_frame cenv es1 su sv cenv es1 t` by
+    (irule alloca_frame_same_regions >> qexists `st` >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `EVERY (\op. !x. op = Var x ==> not_fresh_at ss x) elems` by
     (simp[EVERY_MEM] >> metis_tac[]) >>
   suspend "store"
@@ -166,6 +179,9 @@ Resume assign_tuple_locals_memory_suffix_path_mem[store_ready]:
 QED
 
 Resume assign_tuple_locals_memory_suffix_path_mem[compose]:
+  `alloca_frame cenv es1 su sv cenv es' sfv` by
+    (qpat_x_assum `!c0 e0 sa0 s0. alloca_frame _ _ _ _ _ _ _ ==> _` irule >>
+     first_assum ACCEPT_TAC) >>
   conj_tac >- (first_x_assum irule >> simp[]) >>
   qexists `sfv` >> simp[] >>
   conj_tac
@@ -427,7 +443,34 @@ Resume compile_assign_tuple_locals_memory_stmt_frag_mem[frames]:
   >- (rpt strip_tac >>
       `not_fresh_at su x` by metis_tac[not_fresh_at_mono] >>
       metis_tac[]) >>
-  irule return_buf_frame_frame >> qexistsl [`cenv`, `s0`, `sa`] >>
+  conj_tac
+  >- (irule return_buf_frame_frame >> qexistsl [`cenv`, `s0`, `sa`] >>
+      simp[]) >>
+  suspend "alloca_frame"
+QED
+
+Resume compile_assign_tuple_locals_memory_stmt_frag_mem[alloca_frame]:
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `bind _ _ (es with gas_obs := _) = _`
+       (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv es_end t` by
+    (mp_tac (Q.INST [`es'` |-> `es_end`, `s` |-> `t`]
+       (SPEC_ALL alloca_frame_of_mem_frame)) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  `sa.cs_next_id <= su.cs_next_id` by
+    (qpat_assum `lower_value _ _ _ _ sa = (op, su)`
+       (strip_assume_tac o MATCH_MP (cj 2 compile_expr_grows)) >> simp[]) >>
+  mp_tac (Q.INST [`c0` |-> `cenv`, `e0` |-> `es`, `sa0` |-> `sa`,
+                  `c1` |-> `cenv`, `e1` |-> `es_end`, `s1` |-> `t`,
+                  `sa1` |-> `su`, `c2` |-> `cenv`, `e2` |-> `ee'`,
+                  `s2` |-> `t'`] (SPEC_ALL alloca_frame_trans)) >>
+  impl_tac
+  >- (rpt conj_tac
+      >- first_assum ACCEPT_TAC
+      >- (qpat_x_assum `alloca_frame cenv _ su t _ _ _` mp_tac >> simp[])
+      >- first_assum ACCEPT_TAC >>
+      first_assum ACCEPT_TAC) >>
   simp[]
 QED
 

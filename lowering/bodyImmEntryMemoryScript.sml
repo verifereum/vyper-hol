@@ -12,6 +12,7 @@ Ancestors
   whitelistForIterImmCopy whitelistForIterImmLoop exprSimCopy
   bodyLiteralBufferMemory emitHelperProps
   stmtSimForArrayLoop loweringPosts loweringStateRelDefs
+  stmtSimDefs stmtSimDeclCompose venomMemDefs
 Libs
   monadsyntax
 
@@ -487,7 +488,10 @@ Theorem immutable_array_entry_run_mem:
     s2.vs_allocas = s.vs_allocas /\ s2.vs_alloca_next = s.vs_alloca_next /\
     alloca_history func s2 /\ return_buf_frame d bc sb0 s2 /\
     (!x. not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep ==>
-      lookup_var x s2 = lookup_var x s)
+      lookup_var x s2 = lookup_var x s) /\
+    (!c0. c0.cs_next_id <= sa.cs_next_id /\ c0.cs_next_id <= ainst.inst_id ==>
+      alloca_frame cenv es c0 s bc (es with scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes) s2)
 Proof
   strip_tac >> drule_all immutable_array_entry_seq >>
   disch_then (qspecl_then [`j5`, `j4`, `j3`] strip_assume_tac) >>
@@ -505,7 +509,9 @@ Proof
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
   `run_inst_seq_mem_ok (emitted_insts sa sb0) s1 /\
    t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t /\
-   return_buf_frame d cenv sb0 t` by
+   return_buf_frame d cenv sb0 t /\
+   (!off len. off + len <= w2n dst \/ w2n dst + stride <= off ==>
+     mem_bytes_at off len t.vs_memory = mem_bytes_at off len s1.vs_memory)` by
     suspend "copy" >>
   `run_inst_seq_mem_ok sb0.cs_current_insts s` by suspend "safety" >>
   `gas_marked_path T ctx func s 0
@@ -520,7 +526,8 @@ Proof
   conj_tac >- suspend "caller" >>
   conj_tac >- suspend "history" >>
   conj_tac >- suspend "return" >>
-  suspend "vars"
+  conj_tac >- suspend "vars" >>
+  suspend "frame"
 QED
 
 Resume immutable_array_entry_run_mem[copy]:
@@ -579,7 +586,10 @@ Resume immutable_array_entry_run_mem[copy]:
   (impl_tac >- simp[]) >>
   strip_tac >>
   `z = t` by fs[copy_runtime_frame_def] >>
-  Cases_on `dyn` >> gvs[update_var_def]
+  Cases_on `dyn` >> gvs[update_var_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ t.vs_memory = _` irule >>
+  fs[]
 QED
 
 Resume immutable_array_entry_run_mem[safety]:
@@ -633,5 +643,65 @@ Resume immutable_array_entry_run_mem[return]:
 QED
 Resume immutable_array_entry_run_mem[vars]:
   simp[lookup_var_def] >> metis_tac[lookup_var_def]
+QED
+Resume immutable_array_entry_run_mem[frame]:
+  gen_tac >> strip_tac >>
+  irule alloca_frame_same_state >> qexists_tac `t` >> simp[] >>
+  `s1.vs_allocas = s.vs_allocas /\ s1.vs_memory = s.vs_memory /\
+   lookup_var p s1 = SOME dst` by
+    (qpat_x_assum `s1 = _` SUBST1_TAC >> Cases_on `dyn` >>
+     gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+  `venomMemDefs$allocas_non_overlapping s` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ s` (strip_assume_tac o
+       REWRITE_RULE [stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `venomMemDefs$allocas_non_overlapping s1` by
+    (qpat_x_assum `venomMemDefs$allocas_non_overlapping s` mp_tac >>
+     qpat_assum `s1.vs_allocas = _` (fn th =>
+       rewrite_tac[venomMemDefsTheory.allocas_non_overlapping_def, th])) >>
+  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s1` by
+    fs[copy_runtime_frame_def] >>
+  `alloca_frame bc (es with scopes := FEMPTY :: es.scopes) c0 s1 bc
+     (es with scopes := (FEMPTY |+ (id,
+       <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes) t` by
+    (irule stmtSimDeclComposeTheory.alloca_frame_declare_store >>
+     qexistsl_tac [`ainst.inst_id`,
+       `<|assignable := F; type := tv; value := v; popped := []|>`,
+       `es with scopes := FEMPTY :: es.scopes`, `id`, `p`, `es.scopes`,
+       `s1`, `sa`, `sa`, `FEMPTY`, `dst`, `sz`] >>
+     simp[alloca_frame_same] >>
+     rpt strip_tac >>
+     rename1 `FLOOKUP _ aid = SOME (aoff, az)` >>
+     `aid <> ainst.inst_id` by decide_tac >>
+     `aoff + az <= w2n dst \/ w2n dst + sz <= aoff` by
+       (qpat_x_assum `allocas_non_overlapping s1` mp_tac >>
+        rewrite_tac[allocas_non_overlapping_def] >>
+        disch_then (qspecl_then
+          [`aid`, `ainst.inst_id`, `aoff`, `az`, `w2n dst`, `sz`] mp_tac) >>
+        simp[]) >>
+     Cases_on `dyn` >> simp[update_var_def] >>
+     qpat_x_assum `s1.vs_memory = _` (SUBST1_TAC o SYM) >>
+     qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ t.vs_memory = _` irule >>
+     decide_tac) >>
+  `alloca_frame cenv es c0 s1 bc
+     (es with scopes := (FEMPTY |+ (id,
+       <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes) t` by
+    (irule stmtSimDeclComposeTheory.alloca_frame_cenv_pre >>
+     qexists_tac `bc` >> simp[GSYM alloca_frame_push_pre] >>
+     rpt strip_tac >> spose_not_then assume_tac >>
+     fs[cenv_top_ext_def, vyperStateTheory.lookup_scopes_def] >>
+     qpat_x_assum `!n'. FLOOKUP bc.ce_vars n' <> _ ==> _`
+       (qspec_then `n` mp_tac) >>
+     qpat_x_assum `IS_SOME _` mp_tac >>
+     qpat_x_assum `FLOOKUP cenv.ce_vars n <> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[optionTheory.IS_SOME_EXISTS, optionTheory.NOT_SOME_NONE]) >>
+  `alloca_frame cenv es c0 s cenv es s1` by
+    (qpat_assum `s1 = _` SUBST1_TAC >> Cases_on `dyn` >> rewrite_tac[] >>
+     rpt (match_mp_tac alloca_frame_update_var >> reverse conj_tac
+          >- first_assum ACCEPT_TAC) >>
+     irule alloca_frame_same >> simp[]) >>
+  irule alloca_frame_trans >> qexistsl_tac [`cenv`, `es`, `s1`, `c0`] >>
+  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]
 QED
 Finalise immutable_array_entry_run_mem

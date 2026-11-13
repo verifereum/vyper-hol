@@ -355,7 +355,7 @@ Proof
   simp[mstore_def, lookup_var_def, LET_THM] >> metis_tac[]
 QED
 
-Theorem for_counter_entry_frame[local]:
+Theorem for_counter_entry_frame:
   !ctx func cenv bc cx es s t id entry p dv w sz counter sa value.
   stmt_state_rel ctx func cenv cx es s /\
   FLOOKUP s.vs_allocas counter = SOME (w2n w, sz) /\

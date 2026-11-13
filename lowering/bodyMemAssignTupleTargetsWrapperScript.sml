@@ -113,6 +113,7 @@ Resume compile_assign_tuple_targets_stmt_frag_mem[normal]:
   simp[] >>
   disch_then (qspecl_then [`lctx`, `flag`, `d`] mp_tac) >>
   (impl_tac >- (fs[])) >> strip_tac >>
+  `alloca_frame cenv es sa s0 cenv ee' t'` by suspend "frame" >>
   qexistsl_tac [`INL ()`, `ee'`, `OK t'`] >> conj_tac
   >- (pure_rewrite_tac [tuple_targets_source_action] >>
       irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
@@ -126,6 +127,23 @@ Resume compile_assign_tuple_targets_stmt_frag_mem[normal]:
   fs[stmt_post_def] >>
   decide_tac
 QED
+Resume compile_assign_tuple_targets_stmt_frag_mem[frame]:
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. bind _ _ _ = _`
+       (qspec_then `[]` (mp_tac o MATCH_MP eval_read_preserves_scopes_dom)) >>
+     simp[]) >>
+  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] expr_post_alloca_frame)) >>
+  impl_tac >- fs[] >> impl_tac >- fs[] >> impl_tac >- fs[] >> strip_tac >>
+  `sa.cs_next_id <= su.cs_next_id` by metis_tac[cj 2 compile_expr_grows] >>
+  `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b` by
+    fs[expr_post_def] >>
+  mp_tac (Q.INST [`c0` |-> `cenv`, `e0` |-> `es`, `sa0` |-> `sa`,
+    `c1` |-> `cenv`, `e1` |-> `es_end`, `s1` |-> `t`, `sa1` |-> `su`,
+    `c2` |-> `cenv`, `e2` |-> `ee'`, `s2` |-> `t'`] alloca_frame_trans) >>
+  impl_tac >- fs[] >> simp[]
+QED
+
 Resume compile_assign_tuple_targets_stmt_frag_mem[exception]:
   Cases_on `res` >- fs[expr_exit_def] >>
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac

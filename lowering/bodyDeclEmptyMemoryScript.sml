@@ -195,6 +195,17 @@ Proof
      simp[gas_marked_exec_def] >> strip_tac >>
      drule gas_marked_path_exec >> strip_tac >> drule gas_path_normal >> simp[]) >>
   drule_all annassign_continuation_all_tails >> strip_tac >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `alloca_frame c es sA salloc c ee t` by
+    (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` (mp_tac o MATCH_MP
+       (REWRITE_RULE [GSYM AND_IMP_INTRO] vv_post_alloca_frame)) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     impl_tac >- (qpat_x_assum `MAP FDOM ee.scopes = _` mp_tac >> simp[]) >>
+     disch_then (ACCEPT_TAC o
+       SIMP_RULE bool_ss [stmtSimDefsTheory.alloca_frame_gas_obs])) >>
   qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[vv_post_def] >> strip_tac >>
   `lookup_var p t = SOME w` by metis_tac[] >>
@@ -262,5 +273,27 @@ Proof
   `return_buf_frame d c sb u` by
     (irule return_buf_frame_frame >>
      qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
+  `st.cs_next_id = sa.cs_next_id` by simp[] >>
+  `sa.cs_next_id <= sA.cs_next_id` by
+    (qpat_x_assum `emit_inst ALLOCA _ _ _ = _`
+       (strip_assume_tac o MATCH_MP emit_inst_extends) >> simp[]) >>
+  `allocas_non_overlapping t` by fs[venomMemDefsTheory.alloca_inv_def] >>
+  `!aid off z'. FLOOKUP t.vs_allocas aid = SOME (off, z') /\ aid < sa.cs_next_id ==>
+     mem_bytes_at off z' u.vs_memory = mem_bytes_at off z' t.vs_memory` by
+    (rpt strip_tac >> simp[Abbr `u`] >>
+     mp_tac (Q.SPECL [`t`, `st.cs_next_id`, `w`, `type_memory_bytes cenv vtyp`]
+       mstore_alloca_others) >>
+     impl_tac >- simp[] >>
+     disch_then irule >> qexists_tac `aid` >> simp[]) >>
+  `alloca_frame cenv es sa s0 c ee' u` by
+    (qpat_x_assum `c with <|ce_vars := _; ce_var_type := _;
+                      ce_dynarray_capacity := _|> = cenv` kall_tac >>
+     mp_tac (Q.INST [`aid0` |-> `st.cs_next_id`, `z` |-> `type_memory_bytes cenv vtyp`,
+       `sB` |-> `sA`,
+       `entry` |-> `<|assignable := T; type := tyv; value := v; popped := []|>`]
+       annassign_alloca_frame_mem) >>
+     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+                  simp[Abbr `ee'`]) >>
+     disch_then ACCEPT_TAC) >>
   simp[stmt_lands_def]
 QED

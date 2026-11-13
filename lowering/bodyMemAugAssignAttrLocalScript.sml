@@ -772,6 +772,7 @@ Theorem augassign_attr_local_load_mem[local]:
     local_ptrs_reserved cenv sb /\ alloca_history func t /\
     (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
     t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+    t.vs_memory = s0.vs_memory /\
     sa.cs_next_var <= sb.cs_next_var /\
     (?out. cur = Var out /\ not_fresh_at sb out) /\
     (?dv. dst = Var dv /\ not_fresh_at sb dv)
@@ -824,7 +825,9 @@ Theorem assign_attr_local_word_store_path_mem:
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\
       (!x. lookup_var x t = lookup_var x s) /\
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-      alloca_history func t /\ gas_marked_path T ctx func s 0 (OK t)
+      alloca_history func t /\ gas_marked_path T ctx func s 0 (OK t) /\
+      (!ad len. ad + len <= w2n wbase \/ w2n wbase + sz <= ad ==>
+         mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory)
 Proof
   strip_tac >>
   `lookup_scopes id es.scopes = SOME entry` by
@@ -839,6 +842,17 @@ Proof
       `s.vs_alloca_next < dimword (:256)` by
         metis_tac[stmt_state_rel_def, alloca_room_next_lt] >>
       drule_all body_field_address_no_wrap >> simp[]) >>
+  `struct_field_offset fields fld + 32 <= sz` by
+    (`local_ptrs_rel func cenv es.scopes s` by
+       fs[stmt_state_rel_def, state_rel_def] >>
+     `type_memory_size entry.type <= sz` by
+       (qpat_x_assum `local_ptrs_rel _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
+        first_x_assum drule_all >> strip_tac >> simp[]) >>
+     `type_memory_size ftv = 32` by metis_tac[word_value_type_memory_size] >>
+     `struct_field_offset fields fld + 32 <= type_memory_size_fields fs` by
+       metis_tac[exprSimFieldLayoutTheory.struct_field_offset_le] >>
+     qpat_x_assum `entry.type = _` (fn th => fs[th, type_memory_size_def])) >>
   drule_all stmt_state_rel_write_field >> strip_tac >>
   drule emitted_insts_emit_void >> strip_tac >>
   drule emit_void_same_blocks >> strip_tac >>
@@ -869,7 +883,12 @@ Proof
     simp[Abbr `u`] >>
   qexists_tac `u with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   simp[stmt_state_rel_inst_idx, gas_marked_path_def] >>
-  simp[Abbr `u`, lookup_var_def, mstore_def]
+  rpt conj_tac >>
+  TRY (simp[Abbr `u`, lookup_var_def, mstore_def] >> NO_TAC) >>
+  rpt gen_tac >> strip_tac >> qunabbrev_tac `u` >>
+  qpat_x_assum `w2n (wbase + _) = w2n wbase + _` (fn th => REWRITE_TAC [th]) >>
+  irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+  decide_tac
 QED
 
 Theorem stmt_state_rel_scopes_gas_obs_mem[local]:
@@ -1162,6 +1181,36 @@ Resume compile_augassign_attr_local_mem[post]:
      `FLOOKUP u.vs_allocas aid = SOME b` by
        (qpat_x_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
         simp[expr_post_def] >> metis_tac[]) >> metis_tac[]) >>
+  `alloca_frame cenv es sa s0 cenv
+     (ee with <|scopes := pre ++
+        (env1 |+ (id, cur with
+          <|value := StructV (AFUPDKEY fld (K result) vals'); popped := []|>)) ::
+        rest; gas_obs := []|>) last` by
+    (`sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= s2.cs_next_id` by
+       metis_tac[ci_mono_emit_op, ci_mono_lower_value_cfn, compile_expr_ci_mono,
+         ci_mono_def, pairTheory.SND, arithmeticTheory.LESS_EQ_TRANS] >>
+     `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+       (qpat_assum `bind (eval_expr cx e) (read_result cx) _ = (INL _, _)`
+          (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
+     `alloca_frame cenv es sa s0 cenv ee s` by
+       (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+          augassign_attr_pre_store_frame >>
+        disch_then irule >> simp[] >> metis_tac[]) >>
+     `lookup_scopes id ee.scopes = SOME cur` by
+       metis_tac[find_containing_scope_lookup] >>
+     `ee.scopes = pre ++ env1 :: rest /\ id IN FDOM env1` by
+       (qpat_assum `find_containing_scope _ _ = _`
+          (mp_tac o MATCH_MP vyperLookupTheory.find_containing_scope_structure) >>
+        simp[finite_mapTheory.FLOOKUP_DEF]) >>
+     `local_region cenv ee.scopes s id (w2n w0) sz` by
+       (rewrite_tac[local_region_def] >> metis_tac[]) >>
+     irule alloca_frame_region_write >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     qpat_x_assum `ee.scopes = _` SUBST1_TAC >>
+     qpat_assum `id IN FDOM env1`
+       (fn th => simp_tac (srw_ss()) [pred_setTheory.ABSORPTION_RWT, th])) >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>
   conj_tac
   >- simp[stmt_state_rel_scopes_gas_obs_mem] >>

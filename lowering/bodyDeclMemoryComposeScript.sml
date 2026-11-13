@@ -107,3 +107,43 @@ Proof
   irule gas_exempt_cert_error_value >>
   simp[ignore_bind_def]
 QED
+
+(* The frame of a declaration from its start (sa, s0): the local's ALLOCA
+   (to salloc) writes no memory, the right-hand side's fragment (sA, from
+   salloc to t) keeps the frame, and the store into the new local (from t
+   to u) keeps the bytes of every alloca older than the declaration. *)
+Theorem annassign_alloca_frame_mem:
+  alloca_frame c es sA salloc c ee t /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  (!x. not_fresh_at sa x ==> lookup_var x salloc = lookup_var x s0) /\
+  salloc.vs_memory = s0.vs_memory /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP salloc.vs_allocas aid = SOME b) /\
+  sa.cs_next_id <= sA.cs_next_id /\
+  (!aid b. FLOOKUP salloc.vs_allocas aid = SOME b ==>
+           FLOOKUP t.vs_allocas aid = SOME b) /\
+  allocas_non_overlapping t /\
+  FLOOKUP t.vs_allocas aid0 = SOME (w2n w, z) /\ sa.cs_next_id <= aid0 /\
+  lookup_var p t = SOME w /\
+  FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) z) /\
+  (!n. n <> id ==> FLOOKUP c.ce_vars n = FLOOKUP cenv.ce_vars n) /\
+  ee.scopes = sc :: rest /\ ee'.scopes = (sc |+ (id, entry)) :: rest /\
+  (!aid off z'. FLOOKUP t.vs_allocas aid = SOME (off, z') /\ aid < sa.cs_next_id ==>
+     mem_bytes_at off z' u.vs_memory = mem_bytes_at off z' t.vs_memory) /\
+  local_ptrs_reserved c sB /\
+  (!x. not_fresh_at sB x ==> lookup_var x u = lookup_var x t) /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes /\ lookup_scopes id ee.scopes = NONE ==>
+  alloca_frame cenv es sa s0 c ee' u
+Proof
+  strip_tac >>
+  `alloca_frame cenv es sa salloc c ee' u` by
+    (mp_tac (Q.INST [`sa` |-> `sA`, `s0` |-> `salloc`, `es1` |-> `ee`,
+       `s` |-> `t`, `sa0` |-> `sa`, `t` |-> `u`, `sa1` |-> `sB`,
+       `old` |-> `cenv`, `ee` |-> `ee'`]
+       stmtSimDeclComposeTheory.alloca_frame_declare_local_store) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  `alloca_frame cenv es sa s0 cenv es salloc` by
+    (irule alloca_frame_of_mem_frame >> simp[] >> metis_tac[]) >>
+  irule alloca_frame_trans >> metis_tac[arithmeticTheory.LESS_EQ_REFL]
+QED

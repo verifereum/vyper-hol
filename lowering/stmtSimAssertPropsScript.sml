@@ -141,7 +141,9 @@ Theorem assert_success_post_mem:
   ~t.vs_halted /\ sb.cs_current_insts = [] /\
   sa.cs_next_var <= sb.cs_next_var /\
   return_buf_frame d cenv sa s0 /\ alloca_history func t /\
-  s0.vs_alloca_next <= t.vs_alloca_next ==>
+  s0.vs_alloca_next <= t.vs_alloca_next /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes ==>
   ?cenv''. stmt_lands lctx sb (INL () : unit + exception)
       (jump_to sb.cs_current_bb t) /\
     ~(jump_to sb.cs_current_bb t).vs_halted /\
@@ -154,9 +156,14 @@ Theorem assert_success_post_mem:
       FLOOKUP (jump_to sb.cs_current_bb t).vs_allocas aid = SOME b) /\
     return_buf_frame d cenv'' sb (jump_to sb.cs_current_bb t) /\
     alloca_history func (jump_to sb.cs_current_bb t) /\
-    s0.vs_alloca_next <= (jump_to sb.cs_current_bb t).vs_alloca_next
+    s0.vs_alloca_next <= (jump_to sb.cs_current_bb t).vs_alloca_next /\
+    alloca_frame cenv es sa s0 cenv'' ee (jump_to sb.cs_current_bb t)
 Proof
-  strip_tac >> qexists_tac `cenv` >>
+  strip_tac >>
+  `alloca_frame cenv es sa s0 cenv ee (jump_to sb.cs_current_bb t)` by
+    (irule alloca_frame_same_state >> qexists_tac `t` >>
+     simp[jump_to_def] >> drule_all expr_post_alloca_frame >> simp[]) >>
+  qexists_tac `cenv` >>
   `return_buf_frame d cenv sb (jump_to sb.cs_current_bb t)` by
     (simp[return_buf_frame_jump_to] >> irule return_buf_frame_frame >>
      qexistsl_tac [`cenv`, `s0`, `sa`] >>

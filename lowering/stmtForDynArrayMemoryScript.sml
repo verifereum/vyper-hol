@@ -153,16 +153,23 @@ Proof
 QED
 Resume compile_for_dynarray_frag_mem[loop]:
   qpat_x_assum `cc = _` kall_tac >>
+  `!x. not_fresh_at (st1 with cs_next_id := sa.cs_next_id) x <=>
+       not_fresh_at st1 x` by simp[not_fresh_at_def] >>
+  `sa.cs_next_id <= ainst.inst_id` by simp[mk_inst_def] >>
   `array_round_inv d ctx func cenv cx P vs id idx (Var arr_ptr) arr_base p dst
-     (type_memory_bytes cenv et) ainst cond st1 cc 0 es cc` by
+     (type_memory_bytes cenv et) ainst cond (st1 with cs_next_id := sa.cs_next_id)
+     es cc 0 es cc` by
     (pure_rewrite_tac[array_round_inv_def] >> conj_tac
      >- (qhdtm_assum `array_loop_inv` mp_tac >>
          pure_rewrite_tac[array_loop_inv_def, ret_pc_ok_def] >>
          qpat_x_assum `!x. not_fresh_at sa x ==> not_fresh_at st1 x` mp_tac >>
+         qpat_x_assum `!x. not_fresh_at (st1 with cs_next_id := _) x <=> _` mp_tac >>
          POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
-     pure_rewrite_tac[array_round_frame_def] >> simp[] >>
-     irule array_caller_return_buf_frame >>
-     qexistsl_tac [`s0`, `sa`] >> simp[]) >>
+     conj_tac
+     >- (pure_rewrite_tac[array_round_frame_def] >> simp[] >>
+         irule array_caller_return_buf_frame >>
+         qexistsl_tac [`s0`, `sa`] >> simp[]) >>
+     irule alloca_frame_same >> simp[]) >>
   `?bb. lookup_block bod func.fn_blocks = SOME bb /\
     isPREFIX sb0.cs_current_insts bb.bb_instructions` by
     (`cs_extends sb0 sb1 /\ fn_has_code sb0 sb1 func /\ sb0.cs_current_bb = bod` by
@@ -186,17 +193,19 @@ Resume compile_for_dynarray_frag_mem[loop]:
   `gas_outcome T (cx_tops cx) (ctx,func)
      (eval_for cx tv id stmts (MAP Value (DROP 0 vs))) (es,cc)
      (\res ee t. res = INL () /\
-       array_round_done d ctx func cenv cx st1 cc exit ee t)
+       array_round_done d ctx func cenv cx (st1 with cs_next_id := sa.cs_next_id)
+         es cc exit ee t)
      (\res ee rr. ?ex. res = INR ex /\
        !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)` by
     (drule dynarray_code_loop_outcome_mem >> disch_then irule >>
-     simp[] >> conj_tac
+     simp[] >>
+     rpt (conj_tac
      >- (qhdtm_assum `dynarray_for_code`
            (strip_assume_tac o PURE_REWRITE_RULE [dynarray_for_code_def]) >>
          qpat_x_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _` mp_tac >>
          mp_tac (cj 6 ci_mono_stmt_helpers) >>
          POP_ASSUM_LIST (K ALL_TAC) >>
-         rpt strip_tac >> fs[ci_mono_def] >> metis_tac[pairTheory.SND]) >>
+         rpt strip_tac >> fs[ci_mono_def, mk_inst_def] >> metis_tac[pairTheory.SND])) >>
      conj_tac >- (qexists_tac `\r. T` >> simp[gas_admissible_def]) >>
      qexistsl_tac [`P`, `arr_base`, `dst`] >>
      conj_tac >- suspend "snapshot" >>
@@ -233,7 +242,8 @@ Resume compile_for_dynarray_frag_mem[public]:
   `gas_outcome T (cx_tops cx) (ctx,func)
      (eval_for cx tv id stmts (MAP Value vs)) (es,s0)
      (\res ee t. res = INL () /\
-       array_round_done d ctx func cenv cx st1 cc exit ee t)
+       array_round_done d ctx func cenv cx (st1 with cs_next_id := sa.cs_next_id)
+         es cc exit ee t)
      (\res ee rr. ?ex. res = INR ex /\
        !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)` by
     (irule array_round_outcome_prefix_mem >> goal_assum (drule_at Any) >> gvs[]) >>
@@ -249,6 +259,11 @@ Resume compile_for_dynarray_frag_mem[public]:
     (qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
      simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
           comp_return_def, comp_ignore_bind_def]) >>
+  `alloca_frame cenv es sa s0 cenv ee t` by
+    (irule alloca_frame_trans >>
+     qexistsl_tac [`cenv`, `es`, `cc`, `st1 with cs_next_id := sa.cs_next_id`] >>
+     fs[array_round_done_def, array_caller_frame_def] >>
+     irule alloca_frame_of_mem_frame >> simp[] >> metis_tac[]) >>
   gvs[array_round_done_def, array_round_frame_def] >>
   simp[stmt_lands_def, cenv_top_ext_def, block_is_terminated_def] >>
   conj_tac

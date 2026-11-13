@@ -283,7 +283,9 @@ Theorem local_memory_store_body_path[local]:
       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       return_buf_frame d cenv sb t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!wp ad len. lookup_var p s = SOME wp /\ (ad + len <= w2n wp \/ w2n wp + sz <= ad) ==>
+         mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   `lookup_scopes id es.scopes = SOME entry` by
@@ -326,12 +328,24 @@ Proof
   `alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule body_store_memory_history >> simp[] >>
      qexistsl_tac [`s`, `sa`] >> simp[]) >>
+  `!wp ad len. lookup_var p s = SOME wp /\ (ad + len <= w2n wp \/ w2n wp + sz <= ad) ==>
+     mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory` by
+    (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     `wp = w` by fs[] >> pop_assum SUBST_ALL_TAC >>
+     `type_memory_size tyv <= sz` by
+       (qpat_x_assum `entry.type = tyv` (SUBST_ALL_TAC o SYM) >>
+        first_assum ACCEPT_TAC) >>
+     qpat_x_assum `!a len. _ ==> mem_bytes_at a len t.vs_memory = _` irule >>
+     qpat_x_assum `ad + len <= _ \/ _` mp_tac >>
+     qpat_x_assum `type_memory_size tyv <= sz` mp_tac >>
+     rpt (pop_assum kall_tac) >> decide_tac) >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[stmt_state_rel_inst_idx] >> conj_tac
   >- (Cases_on `d` >- fs[return_buf_frame_def] >>
       rename1 `return_buf_frame (SOME pair)` >> PairCases_on `pair` >>
       fs[return_buf_frame_def, lookup_var_def]) >>
-  fs[lookup_var_def]
+  fs[lookup_var_def] >> rpt strip_tac >>
+  qpat_x_assum `!wp ad len. _` irule >> qexists_tac `w` >> simp[]
 QED
 
 Theorem local_header_store_path_mem[local]:
@@ -353,7 +367,9 @@ Theorem local_header_store_path_mem[local]:
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x. lookup_var x t = lookup_var x s) /\
         t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-        alloca_history func t /\ gas_path_mem ctx func s 0 (OK t)
+        alloca_history func t /\ gas_path_mem ctx func s 0 (OK t) /\
+        (!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
+           mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   `lookup_scopes id es.scopes = SOME entry` by
@@ -385,7 +401,21 @@ Proof
   `alloca_history func (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule body_store_memory_history >> simp[is_terminator_def] >>
      qexistsl_tac [`s`, `sa`] >> simp[is_terminator_def]) >>
+  `!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
+     mem_bytes_at ad len u.vs_memory = mem_bytes_at ad len s.vs_memory` by
+    (rpt gen_tac >> disch_then assume_tac >> qunabbrev_tac `u` >>
+     irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+     qpat_x_assum `ad + len <= _ \/ _` mp_tac >>
+     qpat_x_assum `type_memory_size _ <= sz` mp_tac >>
+     qpat_x_assum `32 <= type_memory_size _` mp_tac >>
+     rpt (pop_assum kall_tac) >> decide_tac) >>
   qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  rpt conj_tac >~ [`(_ with vs_inst_idx := _).vs_memory`]
+  >- (rpt gen_tac >>
+      disch_then (fn th =>
+        qpat_x_assum `!ad len. _ ==> mem_bytes_at ad len u.vs_memory = _`
+          (mp_tac o C MATCH_MP th)) >>
+      simp_tac (srw_ss()) []) >>
   simp[stmt_state_rel_inst_idx] >>
   simp[Abbr `u`, lookup_var_def, mstore_def]
 QED
@@ -435,6 +465,28 @@ Proof
     (drule emitted_insts_emit_void >> simp[]) >>
   `return_buf_frame d cenv sb t` by
     (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv (es with scopes := pre ++
+     (env |+ (id, entry with <|value := default_value tyv; popped := []|>)) :: rest) t` by
+    (`es.scopes = pre ++ env :: rest /\ id IN FDOM env` by
+       (qpat_assum `find_containing_scope _ _ = _`
+          (mp_tac o MATCH_MP vyperLookupTheory.find_containing_scope_structure) >>
+        simp[finite_mapTheory.FLOOKUP_DEF]) >>
+     `alloca_frame cenv es sa s0 cenv es s0` by (irule alloca_frame_same >> simp[]) >>
+     mp_tac (Q.INST [`c0` |-> `cenv`, `c` |-> `cenv`, `ee` |-> `es`, `t` |-> `s0`,
+       `u` |-> `t`, `n0` |-> `id`, `b` |-> `w2n (w:bytes32)`, `z` |-> `sz`,
+       `ee1` |-> `es with scopes := pre ++
+          (env |+ (id, entry with <|value := default_value tyv; popped := []|>)) :: rest`]
+       alloca_frame_region_write) >>
+     impl_tac
+     >- (rpt conj_tac
+         >- first_assum ACCEPT_TAC
+         >- (simp[local_region_def] >> metis_tac[])
+         >- (qpat_x_assum `es.scopes = _` SUBST1_TAC >>
+             qpat_assum `id IN FDOM env`
+               (fn th => simp[pred_setTheory.ABSORPTION_RWT, th]))
+         >- first_assum ACCEPT_TAC >>
+         first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INL ()`, `es with scopes := pre ++
@@ -444,7 +496,7 @@ Proof
   >- (simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def] >>
       gen_tac >> drule assign_local_admissible_run >>
       disch_then (qspec_then `tail` SUBST1_TAC) >> simp[bind_def]) >>
-  disj1_tac >> simp[stmt_lands_def, cenv_top_ext_refl]
+  disj1_tac >> simp[stmt_lands_def, cenv_top_ext_refl] >> first_assum ACCEPT_TAC
 QED
 
 Theorem local_memory_assign_staged_code[local]:
@@ -522,7 +574,10 @@ Theorem local_memory_assign_widen_body_path[local]:
       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       return_buf_frame d cenv sb t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!wp aid off z. lookup_var p s = SOME wp /\ FLOOKUP s.vs_allocas aid = SOME (off,z) /\
+         aid < sa.cs_next_id /\ (off + z <= w2n wp \/ sz + w2n wp <= off) ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule local_memory_assign_staged_code >>
@@ -563,6 +618,18 @@ Proof
   `not_fresh_at sn p` by simp[] >>
   drule_all local_memory_store_body_path >>
   disch_then (qx_choose_then `t2` strip_assume_tac) >>
+  `!wp aid off z. lookup_var p s = SOME wp /\ FLOOKUP s.vs_allocas aid = SOME (off,z) /\
+     aid < sa.cs_next_id /\ (off + z <= w2n wp \/ sz + w2n wp <= off) ==>
+     mem_bytes_at off z t2.vs_memory = mem_bytes_at off z s.vs_memory` by
+    (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     `lookup_var p t = SOME wp` by metis_tac[] >>
+     `mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory` by
+       (qpat_x_assum `!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\
+                        aid < sa.cs_next_id ==> _` irule >>
+        qexists_tac `aid` >> simp[]) >>
+     qpat_x_assum `!wp ad len. lookup_var p t = SOME wp /\ _ ==> _`
+       (qspecl_then [`wp`, `off`, `z`] mp_tac) >>
+     impl_tac >- simp[] >> simp[]) >>
   qexists_tac `t2` >>
   `gas_path_mem ctx func s (0 + 0) (OK t2)` by
     (irule gas_path_mem_then >> qexists_tac `t` >> simp[]) >>
@@ -608,7 +675,10 @@ Theorem assign_local_memory_post_path_mem[local]:
       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       return_buf_frame d cenv sf t /\
       (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
-      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!wp aid off z. lookup_var p s = SOME wp /\ FLOOKUP s.vs_allocas aid = SOME (off,z) /\
+         aid < sb.cs_next_id /\ (off + z <= w2n wp \/ sz + w2n wp <= off) ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `post_value_type cenv e = expr_type e` by
@@ -655,8 +725,41 @@ Proof
     (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_assign_value_def] >>
      metis_tac[compile_store_memory_bytestring_src]) >>
-  irule local_memory_store_body_path >> simp[] >>
-  goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >> simp[]
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es1`, `s`, `id`, `p`, `sz`, `pre`, `env`,
+    `entry`, `rest`, `v`, `tyv`, `op`, `vtyp`, `sb`, `sf`, `sw`, `d`]
+    mp_tac local_memory_store_body_path >>
+  impl_tac >- simp[] >> strip_tac >>
+  qexists_tac `t` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `!wp ad len. lookup_var p s = SOME wp /\ _ ==> _`
+    (qspecl_then [`wp`, `off`, `z`] mp_tac) >>
+  impl_tac >- simp[] >> simp[]
+QED
+
+(* A store confined to one local's region, which keeps the older allocas
+   outside it and every local's pointer, keeps the frame. *)
+Theorem alloca_frame_local_region_store[local]:
+  local_region c ee.scopes t id b sz /\
+  MAP FDOM ee1.scopes = MAP FDOM ee.scopes /\
+  (!n q z'. FLOOKUP c.ce_vars n = SOME (PtrVar (Var q) z') ==>
+     lookup_var q u = lookup_var q t) /\
+  (!aid off z. FLOOKUP t.vs_allocas aid = SOME (off,z) /\ aid < sb.cs_next_id /\
+     (off + z <= b \/ b + sz <= off) ==>
+     mem_bytes_at off z u.vs_memory = mem_bytes_at off z t.vs_memory) ==>
+  alloca_frame c ee sb t c ee1 u
+Proof
+  rewrite_tac[alloca_frame_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (qpat_x_assum `!aid off z. _ ==> mem_bytes_at off z u.vs_memory = _` irule >>
+      conj_tac >- (qexists_tac `aid` >> conj_tac >> first_assum ACCEPT_TAC) >>
+      qpat_assum `!n b sz'. local_region c ee.scopes t _ _ _ ==> _` irule >>
+      qexists_tac `id` >> first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!n b sz'. local_region c ee.scopes t _ _ _ ==> _` irule >>
+  qexists_tac `n` >> fs[local_region_def] >>
+  `IS_SOME (lookup_scopes n ee.scopes)` by
+    metis_tac[vyperTypeEnvPreservationTheory.lookup_scopes_same_fdoms_some] >>
+  fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]
 QED
 
 Theorem compile_assign_local_memory_widen_stmt_frag_mem[local]:
@@ -785,6 +888,74 @@ Resume compile_assign_local_memory_widen_stmt_frag_mem[normal]:
      metis_tac[bytestring_memory_bytes_positive]) >>
   `~block_is_terminated sb` by
     (drule_at (Pos last) stmtSimDeclMemTheory.compile_assign_value_memory_widen_open >> simp[]) >>
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. bind _ _ _ = _`
+       (qspec_then `[]` (mp_tac o MATCH_MP eval_read_preserves_scopes_dom)) >>
+     simp[]) >>
+  `alloca_frame cenv es sa s0 cenv es_end t` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (mp_tac o MATCH_MP
+       (REWRITE_RULE [GSYM AND_IMP_INTRO] expr_post_alloca_frame)) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     impl_tac >- (qpat_x_assum `MAP FDOM es_end.scopes = _` mp_tac >> simp[]) >>
+     disch_then (ACCEPT_TAC o
+       SIMP_RULE bool_ss [stmtSimDefsTheory.alloca_frame_gas_obs])) >>
+  `alloca_frame cenv es sa s0 cenv (es_end with scopes := pre ++
+     (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) u` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     `?wp. lookup_var p t = SOME wp` by
+       (qpat_x_assum `stmt_state_rel ctx func cenv cx _ t`
+          (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def, state_rel_def,
+             local_ptrs_rel_def]) >>
+        qpat_x_assum `!name entry p sz. lookup_scopes _ _ = SOME _ /\ _ ==> _`
+          (qspecl_then [`id`, `entry`, `p`, `sz`] mp_tac) >>
+        impl_tac >- simp[] >> strip_tac >> simp[]) >>
+     `sa.cs_next_id <= sB.cs_next_id` by
+       (qpat_assum `lower_value _ _ _ _ sa = (op, sB)`
+          (strip_assume_tac o MATCH_MP (cj 2 compile_expr_grows)) >> simp[]) >>
+     `es_end.scopes = pre ++ env :: rest /\ id IN FDOM env` by
+       (qpat_assum `find_containing_scope _ _ = _`
+          (mp_tac o MATCH_MP vyperLookupTheory.find_containing_scope_structure) >>
+        simp[finite_mapTheory.FLOOKUP_DEF]) >>
+     `local_region cenv es_end.scopes t id (w2n wp) sz` by
+       (simp[local_region_def] >> metis_tac[]) >>
+     `MAP FDOM (es_end with scopes := pre ++
+        (env |+ (id, entry with <|value := v; popped := []|>)) :: rest).scopes =
+      MAP FDOM es_end.scopes` by
+       (qpat_x_assum `es_end.scopes = _` SUBST1_TAC >>
+        qpat_assum `id IN FDOM env`
+          (fn th => simp[pred_setTheory.ABSORPTION_RWT, th])) >>
+     `!n q z'. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) z') ==>
+        lookup_var q u = lookup_var q t` by
+       (rpt strip_tac >>
+        `not_fresh_at sa q` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+        `not_fresh_at sB q` by
+          (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+        qpat_x_assum `!x. not_fresh_at sB x ==> _` irule >> first_assum ACCEPT_TAC) >>
+     `!aid off z. FLOOKUP t.vs_allocas aid = SOME (off,z) /\ aid < sB.cs_next_id /\
+        (off + z <= w2n wp \/ w2n wp + sz <= off) ==>
+        mem_bytes_at off z u.vs_memory = mem_bytes_at off z t.vs_memory` by
+       (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+        qpat_x_assum `!wp aid off z. lookup_var p t = SOME wp /\ _ ==> _`
+          (qspecl_then [`wp`, `aid`, `off`, `z`] mp_tac) >>
+        impl_tac >- simp[] >> simp[]) >>
+     `alloca_frame cenv es_end sB t cenv (es_end with scopes := pre ++
+        (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) u` by
+       (mp_tac (Q.INST [`c` |-> `cenv`, `ee` |-> `es_end`, `b` |-> `w2n (wp:bytes32)`,
+          `sb` |-> `sB`,
+          `ee1` |-> `es_end with scopes := pre ++
+             (env |+ (id, entry with <|value := v; popped := []|>)) :: rest`]
+          alloca_frame_local_region_store) >>
+        impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+        disch_then ACCEPT_TAC) >>
+     mp_tac (Q.INST [`c0` |-> `cenv`, `e0` |-> `es`, `sa0` |-> `sa`,
+       `c1` |-> `cenv`, `e1` |-> `es_end`, `s1` |-> `t`, `sa1` |-> `sB`,
+       `c2` |-> `cenv`, `e2` |-> `es_end with scopes := pre ++
+          (env |+ (id, entry with <|value := v; popped := []|>)) :: rest`, `s2` |-> `u`]
+       alloca_frame_trans) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   disj1_tac >> simp[stmt_lands_def, cenv_top_ext_refl] >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_post_def] >> strip_tac >>
@@ -803,6 +974,7 @@ Resume compile_assign_local_memory_widen_stmt_frag_mem[normal]:
         (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
       qpat_x_assum `!x. not_fresh_at sB x ==> _` drule >>
       qpat_x_assum `!x w. not_fresh_at sa x /\ _ ==> _` drule_all >> simp[]) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   rpt strip_tac >>
   qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` drule >>
   disch_then assume_tac >>

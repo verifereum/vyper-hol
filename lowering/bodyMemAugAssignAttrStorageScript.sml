@@ -11,6 +11,7 @@
    stated for any target whose place is a fixed storage slot. *)
 Theory bodyMemAugAssignAttrStorage
 Ancestors
+  stmtSimAugAssignAttr
   supportedExprTraverse allocLimitsProps
   bodySimStmtCases
   bodySim vyperTypeCallGraph
@@ -449,12 +450,15 @@ Theorem emit_op_word_path_mem:
       local_ptrs_reserved cenv sb /\ alloca_history func t /\
       (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
       t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+      t.vs_memory = s0.vs_memory /\
       sa.cs_next_var <= sb.cs_next_var /\
       (?out. op = Var out /\ not_fresh_at sb out)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all emit_op_word_path_frame_mem >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
+  `t.vs_memory = s0.vs_memory` by
+    (qpat_assum `t = _` SUBST1_TAC >> simp[update_var_def]) >>
   qexists_tac `t` >> simp[]
 QED
 
@@ -482,6 +486,7 @@ Theorem augassign_attr_storage_load_mem[local]:
       local_ptrs_reserved cenv sb /\ alloca_history func t /\
       (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
       t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+      t.vs_memory = s0.vs_memory /\
       sa.cs_next_var <= sb.cs_next_var /\
       (?out. op = Var out /\ not_fresh_at sb out) /\
       (?dv. dst = Var dv /\ not_fresh_at sb dv)
@@ -531,7 +536,7 @@ Theorem storage_store_op_path_mem:
     ?t. stmt_state_rel ctx func cenv cx es' t /\
         ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
         t.vs_inst_idx = LENGTH st'.cs_current_insts /\
-        (!x. lookup_var x t = lookup_var x s) /\
+        (!x. lookup_var x t = lookup_var x s) /\ t.vs_memory = s.vs_memory /\
         t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
         alloca_history func t /\
         gas_marked_path T ctx func s 0 (OK t)
@@ -842,9 +847,26 @@ Resume compile_augassign_attr_storage_mem[post]:
        (qpat_x_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
         simp[expr_post_def] >> metis_tac[]) >>
      metis_tac[]) >>
+  `alloca_frame cenv es sa s0 cenv ee s` by
+    (`sa.cs_next_id <= s1.cs_next_id` by
+       (qpat_x_assum `emit_op _ _ sa = _`
+          (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+        qpat_x_assum `emit_op _ _ sn = _`
+          (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+        simp[]) >>
+     `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+       (qpat_assum `bind (eval_expr cx e) (read_result cx) _ = (INL _, _)`
+          (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
+     drule_at (Pat `expr_post _ _ _ _ e _ _ _ _ _ _ _ _`)
+       stmtSimAugAssignAttrTheory.augassign_attr_pre_store_frame >>
+     disch_then irule >> simp[] >> metis_tac[]) >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>
-  irule return_buf_frame_frame >>
-  qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]
+  conj_tac
+  >- (irule return_buf_frame_frame >>
+      qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
+  qpat_x_assum `alloca_frame cenv es sa s0 cenv ee s`
+    (irule o MATCH_MP alloca_frame_keep_regs) >>
+  simp[]
 QED
 
 Resume compile_augassign_attr_storage_mem[operator_exit]:

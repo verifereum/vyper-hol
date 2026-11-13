@@ -25,7 +25,8 @@ Theorem array_body_mem_post_projection:
     (!aid b. FLOOKUP s_body.vs_allocas aid = SOME b ==>
              FLOOKUP t.vs_allocas aid = SOME b) /\
     return_buf_frame d ce sb1 t /\ alloca_history func t /\
-    s_body.vs_alloca_next <= t.vs_alloca_next) ==>
+    s_body.vs_alloca_next <= t.vs_alloca_next /\
+    alloca_frame bc ef sb0 s_body ce es2 t) ==>
   stmt_lands lctx sb1 r t /\ ~t.vs_halted /\
   (r = INL () ==> ~block_is_terminated sb1) /\
   stmt_state_rel ctx func cenv cx (es2 with scopes := rest) t /\
@@ -34,9 +35,31 @@ Theorem array_body_mem_post_projection:
   (!aid b. FLOOKUP s_body.vs_allocas aid = SOME b ==>
            FLOOKUP t.vs_allocas aid = SOME b) /\
   return_buf_frame d cenv sb1 t /\ alloca_history func t /\
-  s_body.vs_alloca_next <= t.vs_alloca_next
+  s_body.vs_alloca_next <= t.vs_alloca_next /\
+  (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 bc ef s_body /\
+     sa0.cs_next_id <= sb0.cs_next_id /\
+     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+              FLOOKUP s_body.vs_allocas aid = SOME b) ==>
+     alloca_frame c0 e0 sa0 s0 cenv (es2 with scopes := rest) t)
 Proof
   strip_tac >>
+  `cenv_top_ext cenv ce es2.scopes` by
+    (qpat_assum `eval_stmts _ _ _ = _`
+       (strip_assume_tac o MATCH_MP
+          vyperEvalPreservesScopesTheory.eval_stmts_preserves_scopes_dom) >>
+     irule stmtSimPropsTheory.cenv_top_ext_trans >>
+     qexistsl_tac [`bc`, `ei.scopes`] >>
+     gvs[vyperEvalPreservesScopesTheory.preserves_scopes_dom_def]) >>
+  `!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 bc ef s_body /\
+     sa0.cs_next_id <= sb0.cs_next_id /\
+     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+              FLOOKUP s_body.vs_allocas aid = SOME b) ==>
+     alloca_frame c0 e0 sa0 s0 cenv (es2 with scopes := rest) t` by
+    (rpt strip_tac >> irule stmtSimDefsTheory.alloca_frame_pop >>
+     conj_tac >- (qexists_tac `sc` >> simp[]) >>
+     qexists_tac `ce` >> simp[] >>
+     irule stmtSimDefsTheory.alloca_frame_trans >>
+     qexistsl_tac [`bc`, `ef`, `s_body`, `sb0`] >> simp[]) >>
   `stmt_state_rel ctx func cenv cx (es2 with scopes := rest) t` by
     (irule array_body_scope_projection >> conj_tac
      >- (qexists_tac `sc` >> simp[]) >>

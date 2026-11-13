@@ -105,7 +105,8 @@ Definition stmt_frag_mem_def:
           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                    FLOOKUP t.vs_allocas aid = SOME b) /\
           return_buf_frame d cenv'' sb t /\ alloca_history func t /\
-          s0.vs_alloca_next <= t.vs_alloca_next)
+          s0.vs_alloca_next <= t.vs_alloca_next /\
+          alloca_frame cenv es sa s0 cenv'' ee t)
         (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 End
 
@@ -237,6 +238,24 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!n b sz'. local_region c ee.scopes t _ _ _ ==> _` irule >>
   fs[local_region_def, lookup_var_def] >> metis_tac[]
+QED
+
+(* A step that keeps the memory, every register and the scopes' names
+   keeps the frame. *)
+Theorem alloca_frame_keep_regs:
+  alloca_frame c0 e0 sa s0 c ee t ==>
+  !ee' u. ee'.scopes = ee.scopes /\ u.vs_memory = t.vs_memory /\
+          (!x. lookup_var x u = lookup_var x t) ==>
+          alloca_frame c0 e0 sa s0 c ee' u
+Proof
+  rewrite_tac[alloca_frame_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  conj_tac >- fs[] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!n b sz'. local_region c ee.scopes t _ _ _ ==> _` irule >>
+  fs[local_region_def] >> metis_tac[]
 QED
 
 (* An expression's fragment from sa to sm, then a fragment that keeps the

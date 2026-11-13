@@ -13,6 +13,29 @@ Ancestors
 Libs
   monadsyntax
 
+(* The entry keeps the memory and the caller's variables, so the frame
+   from the loop's start state u to its first round state cc is trivial. *)
+Theorem alloca_frame_entry_caller_frames[local]:
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  st.cs_next_var <= st1.cs_next_var /\
+  array_caller_frame st s u /\ array_caller_frame st1 u cc /\
+  u.vs_memory = s.vs_memory /\ cc.vs_memory = s.vs_memory ==>
+  alloca_frame cenv es st1 u cenv es cc
+Proof
+  strip_tac >> rewrite_tac[alloca_frame_def] >> rpt gen_tac >> strip_tac >>
+  conj_tac >- fs[] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!n b sz'. _` (qspecl_then [`n`, `b`, `sz'`] irule) >>
+  fs[array_caller_frame_def] >>
+  `!x. not_fresh_at st x ==> not_fresh_at st1 x` by
+    (rw[not_fresh_at_def] >> first_x_assum irule >> decide_tac) >>
+  `local_region cenv es.scopes s n b sz'` by
+    (irule local_region_kept >>
+     conj_tac >- (qexistsl_tac [`es`, `cc`, `st`] >> simp[] >> metis_tac[]) >>
+     metis_tac[]) >>
+  fs[local_region_def, local_ptrs_reserved_def] >> metis_tac[]
+QED
+
 Theorem immutable_compiled_loop_outcome_mem:
   !d ctx func cx cenv lctx RetQ ty id et bd n src name off stmts tv vs es P st st' s.
   FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
@@ -63,7 +86,8 @@ Theorem immutable_compiled_loop_outcome_mem:
     (\res ee t. res = INL () /\
        t.vs_current_bb = st'.cs_current_bb /\
        t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
-       stmt_state_rel ctx func cenv cx ee t /\ array_caller_frame st s t /\
+       stmt_state_rel ctx func cenv cx ee t /\
+       alloca_frame cenv es st s cenv ee t /\ array_caller_frame st s t /\
        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
        return_buf_frame d cenv st' t /\ alloca_history func t /\
        s.vs_alloca_next <= t.vs_alloca_next)
@@ -146,20 +170,41 @@ Proof
      rpt (pop_assum kall_tac) >>
      simp[ret_pc_ok_def, array_caller_frame_def] >> metis_tac[]) >>
   `array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
-    p dst (type_memory_bytes cenv et) ainst cond st1 u 0 es cc` by
+    p dst (type_memory_bytes cenv et) ainst cond st1 es u 0 es cc` by
     (pure_rewrite_tac [array_round_inv_def] >> conj_tac
      >- (qhdtm_x_assum `array_loop_inv` mp_tac >>
          simp[array_loop_inv_def]) >>
-     simp[array_round_frame_def] >>
-     qpat_x_assum `array_caller_frame st1 u cc` mp_tac >>
-     simp[array_caller_frame_def]) >>
+     conj_tac
+     >- (simp[array_round_frame_def] >>
+         qpat_x_assum `array_caller_frame st1 u cc` mp_tac >>
+         simp[array_caller_frame_def]) >>
+     irule alloca_frame_entry_caller_frames >>
+     qpat_assum `stmt_state_rel _ _ _ _ es s` (irule_at Any) >>
+     qpat_assum `array_caller_frame st s u` (irule_at Any) >> simp[]) >>
+  `alloca_frame cenv es st s cenv es u` by
+    (irule alloca_frame_of_mem_frame >>
+     qpat_assum `stmt_state_rel _ _ _ _ es s` (irule_at Any) >> simp[] >>
+     qpat_assum `array_caller_frame st s u`
+       (strip_assume_tac o REWRITE_RULE [array_caller_frame_def]) >>
+     rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC, simp[],
+            qpat_x_assum `u.vs_memory = _` (fn th => simp[th])]) >>
+  `st.cs_next_id <= st1.cs_next_id` by
+    (qpat_assum `(if dyn then _ else _) st = (lvo,st1)` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `dyn` >> simp[comp_return_def, compile_imm_load_word_def] >>
+     Cases_on `cenv.ce_is_ctor` >> simp[] >> Cases_on `cenv.ce_imm_alloca` >>
+     simp[emit_op_def, fresh_var_def, fresh_id_def, emit_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     rpt strip_tac >> gvs[]) >>
   `!ei t k. P ei /\ stmt_state_rel ctx func cenv cx ei t /\ k < LENGTH vs ==>
     immutable_holds cenv cx et (Value (EL k vs))
       (n2w off + n2w ((if dyn then 32 else 0) + k * type_memory_size tv)) ei t` by
     (qpat_x_assum `!ei s. P ei /\ stmt_state_rel _ _ _ _ _ _ ==> _` mp_tac >>
      qpat_x_assum `dyn <=> _` mp_tac >>
      rpt (pop_assum kall_tac) >> Cases_on `bd` >> simp[] >> metis_tac[]) >>
-  mp_tac (Q.INST [`ok` |-> `stmt_res_ok lctx`] immutable_code_loop_outcome_mem) >>
+  mp_tac (Q.INST [`ok` |-> `stmt_res_ok lctx`, `eo` |-> `es`]
+    immutable_code_loop_outcome_mem) >>
   impl_tac >- suspend "round_premises" >>
   disch_then (qspecl_then [`0`, `es`, `cc`, `dst`] mp_tac) >>
   suspend "round_execution"
@@ -187,6 +232,9 @@ Resume immutable_compiled_loop_outcome_mem[round_execution]:
   goal_assum (drule_at Any) >>
   rpt gen_tac >> BETA_TAC >>
   simp[array_round_done_def, array_round_frame_def] >> strip_tac >>
+  conj_tac
+  >- (irule alloca_frame_trans >> qexistsl_tac [`cenv`, `es`, `u`, `st1`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   conj_asm1_tac
   >- (qpat_x_assum `array_caller_frame st s u` mp_tac >>
       qpat_x_assum `!x w. not_fresh_at st1 x /\ _ ==> _` mp_tac >>

@@ -58,8 +58,16 @@ Proof
           fs[vv_post_def, stmt_lands_def, cenv_top_ext_refl] >>
           `ci_mono sa sb` by
             metis_tac[cj 1 compile_expr_ci_mono, pairTheory.SND] >>
-          fs[ci_mono_def] >> irule return_buf_frame_frame >>
-          qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
+          fs[ci_mono_def] >> conj_tac
+          >- (irule return_buf_frame_frame >>
+              qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
+          irule alloca_frame_of_mem_frame >>
+          qpat_assum `stmt_state_rel _ _ cenv _ es s0` (irule_at Any) >>
+          simp[] >>
+          qpat_x_assum `!tail. eval_expr _ _ _ = _`
+            (qspec_then `[]` assume_tac) >> fs[] >>
+          drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
+          simp[] >> metis_tac[]) >>
       Cases_on `res` >- fs[expr_exit_def] >>
       qexistsl_tac [`INR y`, `es_end`, `r`] >>
       conj_tac

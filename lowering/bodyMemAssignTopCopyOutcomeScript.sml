@@ -85,6 +85,16 @@ QED
 
 Resume compile_assign_storage_copy_stmt_frag_mem[success]:
   rpt gen_tac >> BETA_TAC >> strip_tac >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `bind _ _ (es with gas_obs := _) = _`
+       (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
+  `!aid off sz.
+     FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+     (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                off + sz <= b \/ b + sz' <= off) ==>
+     mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s0.vs_memory` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[expr_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `value_has_type tvt v` by metis_tac[] >>
   `~cx.txn.is_static` by fs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
   drule_all typed_storage_copy_write >>
@@ -103,8 +113,17 @@ Resume compile_assign_storage_copy_stmt_frag_mem[success]:
   conj_tac >- metis_tac[topcopy_write_storage_gas_tail] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   disj1_tac >> simp[stmt_lands_def, cenv_top_ext_refl] >>
-  irule return_buf_frame_frame >>
-  qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >> metis_tac[]
+  conj_tac
+  >- (irule return_buf_frame_frame >>
+      qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >> metis_tac[]) >>
+  mp_tac (Q.INST [`es'` |-> `ee'`, `s` |-> `u`]
+    (SPEC_ALL alloca_frame_of_mem_frame)) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+      TRY (qpat_assum `ee'.scopes = _` SUBST1_TAC >> first_assum ACCEPT_TAC >>
+           NO_TAC) >>
+      qpat_assum `u.vs_memory = _` SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED
 
 Finalise compile_assign_storage_copy_stmt_frag_mem

@@ -62,6 +62,9 @@ Proof
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
   conj_tac
   >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+      `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+        (qpat_assum `bind _ _ (es with gas_obs := _) = _`
+           (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
       `encode_value tv v = SOME [(0,typed_val_to_w256 etv v)]` by metis_tac[] >>
       qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
         (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
@@ -91,6 +94,28 @@ Proof
              lookup_var x t' = SOME w` by
             (rpt strip_tac >> irule append_registers_compose_mem >>
              qexistsl_tac [`s0`, `t`, `sa`, `sB`] >> simp[]) >>
+          `MAP FDOM ee'.scopes = MAP FDOM es.scopes` by
+            (qpat_assum `append_place _ _ _ ee = _`
+               (assume_tac o MATCH_MP
+                  vyperScopePreservationTheory.append_place_scopes_dom) >>
+             fs[]) >>
+          `alloca_frame cenv es sa s0 cenv ee' t'` by
+            (mp_tac (Q.INST [`es'` |-> `ee'`, `s` |-> `t'`]
+               (SPEC_ALL alloca_frame_of_mem_frame)) >>
+             impl_tac >- (
+             rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+             rpt strip_tac >>
+             qpat_assum `t'.vs_memory = _` SUBST1_TAC >>
+             qpat_x_assum `!aid off sz. _ ==> mem_bytes_at off sz t.vs_memory = _`
+               (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+             impl_tac
+             >- (rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
+                 rpt strip_tac >>
+                 qpat_x_assum `!n b sz'. local_region cenv es.scopes s0 _ _ _ ==> _`
+                   irule >>
+                 qpat_assum `local_region cenv es.scopes s0 _ _ _` (irule_at Any)) >>
+             disch_then ACCEPT_TAC) >>
+             disch_then ACCEPT_TAC) >>
           qexistsl_tac [`res`, `ee'`, `r`] >>
           conj_tac >- metis_tac[append_storage_place_gas_obs] >>
           simp[cenv_top_ext_refl] >> disj1_tac >>

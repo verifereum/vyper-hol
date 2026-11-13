@@ -37,7 +37,7 @@ Theorem assign_storage_store_path_mem:
     ?t. stmt_state_rel ctx func cenv cx es' t /\
         ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
         t.vs_inst_idx = LENGTH st'.cs_current_insts /\
-        (!x. lookup_var x t = lookup_var x s) /\
+        (!x. lookup_var x t = lookup_var x s) /\ t.vs_memory = s.vs_memory /\
         t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
         alloca_history func t /\
         gas_marked_path T ctx func s 0 (OK t)
@@ -140,6 +140,13 @@ Proof
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
   conj_tac
   >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+      `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+        (qpat_assum `bind _ _ (es with gas_obs := _) = _`
+           (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
+      `alloca_frame cenv es sa s0 cenv ee t` by
+        (irule expr_post_alloca_frame >>
+         qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+         fs[]) >>
       `value_has_type tvt v` by metis_tac[] >>
       `encode_value tvt v = SOME [(0, typed_val_to_w256 tvt v)]` by
         (irule encode_value_word_typed >> metis_tac[]) >>
@@ -170,8 +177,11 @@ Proof
       conj_tac >- fs[write_storage_slot_gas_obs] >>
       conj_tac >- first_assum ACCEPT_TAC >>
       disj1_tac >> simp[stmt_lands_def, cenv_top_ext_refl] >>
-      irule return_buf_frame_frame >>
-      qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >> metis_tac[]) >>
+      conj_tac
+      >- (irule return_buf_frame_frame >>
+          qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >> metis_tac[]) >>
+      qpat_x_assum `alloca_frame _ _ _ _ _ ee t` mp_tac >>
+      fs[alloca_frame_def, local_region_def] >> metis_tac[]) >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
   disch_then (qspecl_then [`sa`, `sB`, `op`, `s0`] mp_tac) >> simp[]

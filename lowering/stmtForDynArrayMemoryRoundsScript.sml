@@ -34,7 +34,11 @@ Theorem dynarray_code_copy_entry_mem[local]:
     t.vs_inst_idx = LENGTH sb0.cs_current_insts /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     (!x. not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep ==>
-      lookup_var x t = lookup_var x s)
+      lookup_var x t = lookup_var x s) /\
+    (!c0. c0.cs_next_id <= sa.cs_next_id /\ c0.cs_next_id <= ainst.inst_id ==>
+      alloca_frame cenv es c0 s bc (es with scopes :=
+        (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
+          :: es.scopes) t)
 Proof
   strip_tac >>
   `cenv_top_ext cenv bc (FEMPTY :: es.scopes)` by
@@ -69,7 +73,7 @@ Theorem dynarray_code_body_outcome_mem[local]:
     p sz ainst idx dv ov tot ep nv lv cond exit stmts_lbl incr
     j1 j2 j3 j4 j5 i1 i2 i3 sa sb0 sb1 sj /\
   array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
-    ainst stmts_lbl caller orig k es s /\
+    ainst stmts_lbl caller eo orig k es s /\
   k < LENGTH vs /\ evaluate_type (get_tenv cx) et = SOME tv /\
   value_has_type tv (EL k vs) /\ val_wf tv (EL k vs) /\
   val_in_memory tv (EL k vs) (w2n arr_base + 32 + k * stride) s.vs_memory /\
@@ -79,6 +83,7 @@ Theorem dynarray_code_body_outcome_mem[local]:
   lookup_block stmts_lbl func.fn_blocks = SOME bb /\
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
   caller.cs_next_var <= sa.cs_next_var /\ sa.cs_next_var <= sb0.cs_next_var /\
+  caller.cs_next_id <= sa.cs_next_id /\ caller.cs_next_id <= ainst.inst_id /\
   (!x. not_fresh_at caller x ==> x <> ov /\ x <> tot /\ x <> ep) /\
   (!l. saved_base <> Label l) /\
   ei = es with scopes :=
@@ -90,9 +95,10 @@ Theorem dynarray_code_body_outcome_mem[local]:
   ?s_body. gas_marked_path T ctx func s 0 (OK s_body) /\
     gas_outcome T (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (ei,s_body)
       (array_body_post_mem d ctx func cx (InLoop exit incr) bc
-        (FST (stmts_env bc (InLoop exit incr) ty stmts sb0)) sb0 sb1 s_body)
+        (FST (stmts_env bc (InLoop exit incr) ty stmts sb0)) sb0 sb1 s_body ei)
       (\r ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) r rr) /\
     array_round_frame d func cenv caller orig s_body /\
+    alloca_frame cenv eo caller orig bc ei s_body /\
     ret_pc_ok cenv caller s_body /\ ret_pc_ok bc sb0 s_body /\
     lookup_var idx s_body = SOME (n2w k) /\ lookup_var p s_body = SOME dst /\
     eval_operand saved_base s_body = SOME arr_base /\
@@ -104,6 +110,11 @@ Proof
     return_buf_frame d cenv caller s` by
     fs[array_round_inv_def, array_round_frame_def] >>
   drule_all dynarray_code_copy_entry_mem >> strip_tac >>
+  `alloca_frame cenv es caller s bc ei t` by
+    (qpat_x_assum `!c0. _` (qspec_then `caller` mp_tac) >> simp[]) >>
+  `alloca_frame cenv eo caller orig bc ei t` by
+    (irule alloca_frame_trans >> qexistsl_tac [`cenv`, `es`, `s`, `caller`] >>
+     fs[array_round_inv_def, array_round_frame_def]) >>
   `!x w. not_fresh_at caller x /\ lookup_var x s = SOME w ==>
     lookup_var x t = SOME w` by
     (rpt strip_tac >>
@@ -149,13 +160,13 @@ Theorem dynarray_round_condition_mem[local]:
     p sz ainst idx dv ov tot ep nv lv cond exit stmts_lbl incr
     j1 j2 j3 j4 j5 i1 i2 i3 sa sb0 sb1 sj /\
   array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
-    ainst cond caller orig k es s /\
+    ainst cond caller eo orig k es s /\
   LENGTH vs < dimword (:256) /\
   lookup_var lv orig = SOME (n2w (LENGTH vs)) /\ not_fresh_at caller lv /\
   (!x. not_fresh_at caller x ==> x <> dv) ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
     array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
-      ainst (if k = LENGTH vs then exit else stmts_lbl) caller orig k es t
+      ainst (if k = LENGTH vs then exit else stmts_lbl) caller eo orig k es t
 Proof
   strip_tac >> drule dynarray_for_code_entry_static >> strip_tac >>
   `array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
@@ -168,6 +179,9 @@ Proof
   drule dynarray_condition_boundary_mem >> simp[] >>
   disch_then drule >> simp[] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_path_mem ctx func s 0 (OK t)` >>
+  `alloca_frame cenv eo caller orig cenv es t` by
+    (simp[Abbr `t`, alloca_frame_jump_to] >>
+     irule alloca_frame_update_var >> fs[array_round_inv_def]) >>
   qexists_tac `t` >> simp[gas_marked_path_def, array_round_inv_def] >>
   irule array_round_frame_transport >> simp[] >> qexists_tac `s` >>
   fs[array_round_inv_def] >> rpt strip_tac >>
@@ -180,8 +194,9 @@ Theorem dynarray_code_body_finish_mem[local]:
   dynarray_for_code func cenv bc ty stmts id et tv stride saved_base
     p sz ainst idx dv ov tot ep nv lv cond exit stmts_lbl incr
     j1 j2 j3 j4 j5 i1 i2 i3 sa sb0 sb1 sj /\
-  array_body_post_mem d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body r es2 t /\
+  array_body_post_mem d ctx func cx (InLoop exit incr) bc bc' sb0 sb1 s_body ef r es2 t /\
   array_round_frame d func cenv caller orig s_body /\
+  alloca_frame cenv eo caller orig bc ef s_body /\ caller.cs_next_id <= sb0.cs_next_id /\
   ret_pc_ok cenv caller s_body /\ ret_pc_ok bc sb0 s_body /\
   lookup_var idx s_body = SOME (n2w k) /\ lookup_var p s_body = SOME dst /\
   eval_operand saved_base s_body = SOME arr_base /\
@@ -199,10 +214,10 @@ Theorem dynarray_code_body_finish_mem[local]:
        | INR e => if e = ContinueException then INL F
                   else if e = BreakException then INL T else INR e) = INL b /\
     gas_marked_path T ctx func t 0 (OK u) /\
-    (b ==> array_round_done d ctx func cenv cx caller orig exit
+    (b ==> array_round_done d ctx func cenv cx caller eo orig exit
       (es2 with scopes := rest) u) /\
     (~b ==> array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
-      ainst cond caller orig (SUC k) (es2 with scopes := rest) u)
+      ainst cond caller eo orig (SUC k) (es2 with scopes := rest) u)
 Proof
   strip_tac >>
   `bc.ce_return_buf = cenv.ce_return_buf` by
@@ -226,6 +241,8 @@ Proof
      metis_tac[]) >>
   `array_round_frame d func cenv caller orig t` by
     (irule array_round_frame_transport >> simp[] >> qexists_tac `s_body` >> simp[]) >>
+  `alloca_frame cenv eo caller orig cenv (es2 with scopes := rest) t` by
+    (qpat_x_assum `!c0 e0 sa0 s0. _` irule >> fs[array_round_frame_def]) >>
   Cases_on `r = INR BreakException`
   >- (qexistsl_tac [`T`, `t`] >> simp[gas_marked_path_def] >> conj_tac
       >- (irule (cj 1 gas_path_mem_rules) >> simp[]) >>
@@ -237,7 +254,7 @@ Proof
        jump_to_def, eval_operand_def, lookup_var_def] >>
   `?u. gas_marked_path T ctx func t 0 (OK u) /\
     array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
-      ainst incr caller orig k (es2 with scopes := rest) u` by
+      ainst incr caller eo orig k (es2 with scopes := rest) u` by
     (irule array_round_postbody_entry >> simp[] >>
      qexistsl_tac [`exit`, `r`, `sb1`, `sj`] >>
      fs[dynarray_for_code_def]) >>
@@ -255,7 +272,7 @@ Theorem dynarray_one_round_mem[local]:
     p sz ainst idx dv ov tot ep nv lv cond exit stmts_lbl incr
     j1 j2 j3 j4 j5 i1 i2 i3 sa sb0 sb1 sj /\
   array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
-    ainst cond caller orig k es s /\
+    ainst cond caller eo orig k es s /\
   k < LENGTH vs /\ LENGTH vs < dimword (:256) /\
   lookup_var lv orig = SOME (n2w (LENGTH vs)) /\ not_fresh_at caller lv /\
   evaluate_type (get_tenv cx) et = SOME tv /\
@@ -264,6 +281,8 @@ Theorem dynarray_one_round_mem[local]:
   lookup_block stmts_lbl func.fn_blocks = SOME bb /\
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
   caller.cs_next_var <= sa.cs_next_var /\ sa.cs_next_var <= sb0.cs_next_var /\
+  caller.cs_next_id <= sa.cs_next_id /\ caller.cs_next_id <= sb0.cs_next_id /\
+  caller.cs_next_id <= ainst.inst_id /\
   (!x. not_fresh_at caller x ==>
     x <> idx /\ x <> dv /\ x <> ov /\ x <> tot /\ x <> ep /\ x <> nv) /\
   (!l. saved_base <> Label l) /\
@@ -291,9 +310,9 @@ Theorem dynarray_one_round_mem[local]:
         finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
           pop_scope od) (es,s)
     (\res ee t. ?b. res = INL b /\
-      (b ==> array_round_done d ctx func cenv cx caller orig exit ee t) /\
+      (b ==> array_round_done d ctx func cenv cx caller eo orig exit ee t) /\
       (~b ==> array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
-        ainst cond caller orig (SUC k) ee t))
+        ainst cond caller eo orig (SUC k) ee t))
     (\res ee rr. ?e. res = INR e /\
       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR e) rr)
 Proof
@@ -323,7 +342,10 @@ Proof
   goal_assum (drule_at (Pat `gas_marked_path _ _ _ live _ _`)) >>
   ho_match_mp_tac (array_body_round_outcome_mem |> Q.INST
     [`B` |-> `array_body_post_mem d ctx func cx (InLoop exit incr) bc
-       (FST (stmts_env bc (InLoop exit incr) ty stmts sb0)) sb0 sb1 s_body`,
+       (FST (stmts_env bc (InLoop exit incr) ty stmts sb0)) sb0 sb1 s_body
+       (es with scopes :=
+        (FEMPTY |+ (id, <|assignable := F; type := tv; value := EL k vs; popped := []|>))
+          :: es.scopes)`,
      `E` |-> `\r ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) r rr`]) >>
   simp[] >> conj_tac >- suspend "nonhalt" >>
   conj_tac >- suspend "scopes" >>
@@ -380,6 +402,8 @@ Theorem dynarray_code_loop_outcome_mem:
   lookup_block stmts_lbl func.fn_blocks = SOME bb /\
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
   caller.cs_next_var <= sa.cs_next_var /\ sa.cs_next_var <= sb0.cs_next_var /\
+  caller.cs_next_id <= sa.cs_next_id /\ caller.cs_next_id <= sb0.cs_next_id /\
+  caller.cs_next_id <= ainst.inst_id /\
   (!x. not_fresh_at caller x ==>
     x <> idx /\ x <> dv /\ x <> ov /\ x <> tot /\ x <> ep /\ x <> nv) /\
   (!l. saved_base <> Label l) /\
@@ -407,12 +431,12 @@ Theorem dynarray_code_loop_outcome_mem:
     w2n arr_base + 32 + LENGTH vs * stride <= t.vs_alloca_next) ==>
   !k es s. k <= LENGTH vs /\
     array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
-      ainst cond caller orig k es s /\
+      ainst cond caller eo orig k es s /\
     gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) ok es ==>
     gas_outcome T (cx_tops cx) (ctx,func)
       (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s)
       (\res ee t. res = INL () /\
-        array_round_done d ctx func cenv cx caller orig exit ee t)
+        array_round_done d ctx func cenv cx caller eo orig exit ee t)
       (\res ee rr. ?ex. res = INR ex /\
         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)
 Proof

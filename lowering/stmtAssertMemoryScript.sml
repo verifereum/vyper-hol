@@ -181,6 +181,9 @@ Resume compile_assert_frag_mem[true]:
           simp[Once bind_def, return_def]) >>
       metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]) >>
   disj1_tac >>
+  `MAP FDOM (es_end with gas_obs := []).scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
   drule_all assert_success_post_mem >> simp[])
 QED
 

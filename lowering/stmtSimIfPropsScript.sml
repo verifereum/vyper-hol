@@ -772,7 +772,8 @@ Theorem if_branch_post_pop_mem:
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
              FLOOKUP t.vs_allocas aid = SOME b) /\
     return_buf_frame d cenv'' sb t /\ alloca_history func t /\
-    s0.vs_alloca_next <= t.vs_alloca_next) /\
+    s0.vs_alloca_next <= t.vs_alloca_next /\
+    alloca_frame cenv (es with scopes := FEMPTY :: es.scopes) sa s0 cenv'' ee t) /\
   ee.scopes = sc :: rest /\
   (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
   ?cenv''.
@@ -785,17 +786,23 @@ Theorem if_branch_post_pop_mem:
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
              FLOOKUP t.vs_allocas aid = SOME b) /\
     return_buf_frame d cenv'' sb t /\ alloca_history func t /\
-    s0.vs_alloca_next <= t.vs_alloca_next
+    s0.vs_alloca_next <= t.vs_alloca_next /\
+    alloca_frame cenv es sa s0 cenv'' (ee with scopes := rest) t
 Proof
-  strip_tac >> qexists_tac `cenv` >> simp[cenv_top_ext_refl] >>
-  conj_tac
-  >- (irule stmt_state_rel_pop_top_ext >>
-      conj_tac >- (qexists_tac `sc` >> simp[]) >>
-      qexists_tac `cenv''` >> simp[]) >>
-  `cenv''.ce_return_buf = cenv.ce_return_buf` by
-    (fs[cenv_top_ext_def, compile_env_component_equality]) >>
-  Cases_on `d` >> gvs[return_buf_frame_def] >>
-  PairCases_on `x` >> gvs[return_buf_frame_def]
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx (ee with scopes := rest) t` by
+    (irule stmt_state_rel_pop_top_ext >>
+     conj_tac >- (qexists_tac `sc` >> simp[]) >>
+     qexists_tac `cenv''` >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv (ee with scopes := rest) t` by
+    (irule alloca_frame_pop >> fs[alloca_frame_push_pre] >>
+     qexists_tac `cenv''` >> simp[]) >>
+  `return_buf_frame d cenv sb t` by
+    (`cenv''.ce_return_buf = cenv.ce_return_buf` by
+       fs[cenv_top_ext_def, compile_env_component_equality] >>
+     Cases_on `d` >> gvs[return_buf_frame_def] >>
+     PairCases_on `x` >> gvs[return_buf_frame_def]) >>
+  qexists_tac `cenv` >> simp[cenv_top_ext_refl]
 QED
 
 Theorem if_branch_outcome_cleanup_mem:
@@ -811,7 +818,8 @@ Theorem if_branch_outcome_cleanup_mem:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb t /\ alloca_history func t /\
-      s0.vs_alloca_next <= t.vs_alloca_next)
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      alloca_frame cenv (es with scopes := FEMPTY :: es.scopes) sa s0 cenv'' ee t)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
   es.gas_obs = [] /\ ~s0.vs_halted ==>
   gas_outcome T (cx_tops cx) (ctx,func)
@@ -826,7 +834,8 @@ Theorem if_branch_outcome_cleanup_mem:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb t /\ alloca_history func t /\
-      s0.vs_alloca_next <= t.vs_alloca_next)
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      alloca_frame cenv es sa s0 cenv'' ee t)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
@@ -868,7 +877,8 @@ Theorem if_branch_post_to_exit_mem:
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
              FLOOKUP t.vs_allocas aid = SOME b) /\
     return_buf_frame d cenv'' last t /\ alloca_history func t /\
-    s0.vs_alloca_next <= t.vs_alloca_next) /\
+    s0.vs_alloca_next <= t.vs_alloca_next /\
+    alloca_frame cenv es sa s0 cenv'' ee t) /\
   last.cs_next_var <= sb.cs_next_var /\
   (~block_is_terminated last ==>
     emit_inst JMP [Label xl] [] last = ((),after) /\
@@ -885,7 +895,8 @@ Theorem if_branch_post_to_exit_mem:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                FLOOKUP u.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb u /\ alloca_history func u /\
-      s0.vs_alloca_next <= u.vs_alloca_next
+      s0.vs_alloca_next <= u.vs_alloca_next /\
+      alloca_frame cenv es sa s0 cenv'' ee u
 Proof
   strip_tac >>
   `return_buf_frame d cenv'' sb t` by
@@ -903,6 +914,9 @@ Proof
         (irule emit_jump_zero_path_mem >> simp[] >>
          qexistsl_tac [`last`, `after`] >>
          fs[] >> drule emit_inst_extends >> simp[]) >>
+      `alloca_frame cenv es sa s0 cenv'' ee (jump_to xl t)` by
+        (irule alloca_frame_same_state >> qexists_tac `t` >>
+         simp[jump_to_def]) >>
       qexists_tac `jump_to xl t` >> simp[] >>
       fs[stmt_lands_def, stmt_state_rel_jump_to, block_is_terminated_def,
          jump_to_def, lookup_var_def, allocaHistoryTheory.alloca_history_def] >>
@@ -925,7 +939,8 @@ Theorem if_branch_outcome_to_exit_mem:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' last t /\ alloca_history func t /\
-      s0.vs_alloca_next <= t.vs_alloca_next) R /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      alloca_frame cenv es sa s0 cenv'' ee t) R /\
   last.cs_next_var <= sb.cs_next_var /\
   (~block_is_terminated last ==>
     emit_inst JMP [Label xl] [] last = ((),after) /\
@@ -942,7 +957,8 @@ Theorem if_branch_outcome_to_exit_mem:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb t /\ alloca_history func t /\
-      s0.vs_alloca_next <= t.vs_alloca_next) R
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      alloca_frame cenv es sa s0 cenv'' ee t) R
 Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
   >- (rename1 `gas_marked_exec _ _ _ _ marks res ee r` >>
@@ -976,7 +992,8 @@ Theorem if_branch_outcome_mem:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' last t /\ alloca_history func t /\
-      s0.vs_alloca_next <= t.vs_alloca_next)
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      alloca_frame cenv (es with scopes := FEMPTY :: es.scopes) sa s0 cenv'' ee t)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
   es.gas_obs = [] /\ ~s0.vs_halted /\
   last.cs_next_var <= sb.cs_next_var /\
@@ -996,7 +1013,8 @@ Theorem if_branch_outcome_mem:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb t /\ alloca_history func t /\
-      s0.vs_alloca_next <= t.vs_alloca_next)
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      alloca_frame cenv es sa s0 cenv'' ee t)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >> irule if_branch_outcome_to_exit_mem >>
@@ -1006,6 +1024,9 @@ QED
 
 Theorem if_condition_stmt_post_mem:
   expr_post ctx func cenv cx c es sa cond s0 mid v op t /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM mid.scopes = MAP FDOM es.scopes /\
+  sa.cs_next_id <= entry.cs_next_id /\
   s0.vs_alloca_next <= t.vs_alloca_next /\
   sa.cs_next_var <= entry.cs_next_var /\
   (?cenv''.
@@ -1018,7 +1039,8 @@ Theorem if_condition_stmt_post_mem:
     (!aid b. FLOOKUP (jump_to label t).vs_allocas aid = SOME b ==>
              FLOOKUP u.vs_allocas aid = SOME b) /\
     return_buf_frame d cenv'' sb u /\ alloca_history func u /\
-    (jump_to label t).vs_alloca_next <= u.vs_alloca_next) ==>
+    (jump_to label t).vs_alloca_next <= u.vs_alloca_next /\
+    alloca_frame cenv mid entry (jump_to label t) cenv'' ee u) ==>
   ?cenv''.
     stmt_lands lctx sb res u /\ ~u.vs_halted /\
     (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
@@ -1029,10 +1051,22 @@ Theorem if_condition_stmt_post_mem:
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
              FLOOKUP u.vs_allocas aid = SOME b) /\
     return_buf_frame d cenv'' sb u /\ alloca_history func u /\
-    s0.vs_alloca_next <= u.vs_alloca_next
+    s0.vs_alloca_next <= u.vs_alloca_next /\
+    alloca_frame cenv es sa s0 cenv'' ee u
 Proof
-  simp[expr_post_def, jump_to_def, lookup_var_def] >>
-  strip_tac >> qexists_tac `cenv''` >> simp[] >>
+  strip_tac >>
+  `alloca_frame cenv es sa s0 cenv mid (jump_to label t)` by
+    (irule alloca_frame_of_mem_frame >>
+     fs[expr_post_def, jump_to_def, lookup_var_def] >> metis_tac[]) >>
+  `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP (jump_to label t).vs_allocas aid = SOME b` by
+    fs[expr_post_def, jump_to_def] >>
+  `alloca_frame cenv es sa s0 cenv'' ee u` by
+    (irule alloca_frame_trans >> metis_tac[]) >>
+  qpat_x_assum `alloca_frame cenv mid _ _ _ _ _` kall_tac >>
+  qpat_x_assum `alloca_frame cenv es sa s0 cenv mid _` kall_tac >>
+  qexists_tac `cenv''` >>
+  fs[expr_post_def, jump_to_def, lookup_var_def] >>
   rpt strip_tac >>
   `not_fresh_at entry x` by fs[not_fresh_at_def] >> metis_tac[]
 QED
@@ -1042,6 +1076,9 @@ Theorem if_selected_outcome_prefix_mem:
     (es,s0) marks (INL (BoolV b)) mid (OK t) /\
   gas_path_mem ctx func t 0 (OK (jump_to label t)) /\
   expr_post ctx func cenv cx c es sa cond s0 (mid with gas_obs := []) (BoolV b) op t /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM mid.scopes = MAP FDOM es.scopes /\
+  sa.cs_next_id <= entry.cs_next_id /\
   s0.vs_alloca_next <= t.vs_alloca_next /\
   sa.cs_next_var <= entry.cs_next_var /\
   gas_outcome T (cx_tops cx) (ctx,func)
@@ -1057,7 +1094,8 @@ Theorem if_selected_outcome_prefix_mem:
       (!aid b. FLOOKUP (jump_to label t).vs_allocas aid = SOME b ==>
                FLOOKUP u.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb u /\ alloca_history func u /\
-      (jump_to label t).vs_alloca_next <= u.vs_alloca_next)
+      (jump_to label t).vs_alloca_next <= u.vs_alloca_next /\
+      alloca_frame cenv (mid with gas_obs := []) entry (jump_to label t) cenv'' ee u)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) ==>
   gas_outcome T (cx_tops cx) (ctx,func) (eval_stmt cx (If c ss1 ss2)) (es,s0)
     (\res ee u. ?cenv''.
@@ -1070,7 +1108,8 @@ Theorem if_selected_outcome_prefix_mem:
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                FLOOKUP u.vs_allocas aid = SOME b) /\
       return_buf_frame d cenv'' sb u /\ alloca_history func u /\
-      s0.vs_alloca_next <= u.vs_alloca_next)
+      s0.vs_alloca_next <= u.vs_alloca_next /\
+      alloca_frame cenv es sa s0 cenv'' ee u)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >>
@@ -1143,6 +1182,7 @@ Theorem compile_if_code_layout_frontiers:
       entry.cs_current_bb = (if b then tl else el) /\
       entry.cs_current_insts = [] /\
       cs_extends sa entry /\ sa.cs_next_var <= entry.cs_next_var /\
+      sa.cs_next_id <= entry.cs_next_id /\
       cs_extends entry last /\ cs_extends last sb /\
       last.cs_next_var <= sb.cs_next_var /\
       fn_has_code entry last func /\ fn_has_code last after func /\
@@ -1178,6 +1218,26 @@ Proof
    cs_extends s7 sb /\ cs_extends s10 sb /\ cs_extends s1 sb /\
    cs_extends s5 sb /\ cs_extends s8 sb /\ cs_extends sa s7 /\
    cs_extends sa s10` by metis_tac[cs_extends_trans] >>
+  `sa.cs_next_id <= s6.cs_next_id /\ sa.cs_next_id <= s9.cs_next_id` by
+    (`ci_mono sa s1` by
+       (qspecl_then [`compile_expr`, `cenv`, `BaseT BoolT`, `c`, `sa`] mp_tac
+          ci_mono_lower_value_cfn >>
+        simp[cj 1 compile_expr_ci_mono]) >>
+     `ci_mono s4 s5` by
+       (qspecl_then [`JNZ`, `[cond_op; Label then_lbl; Label else_lbl]`, `[]`, `s4`]
+          mp_tac ci_mono_emit_inst >> simp[]) >>
+     `ci_mono s5 s6` by
+       (qspecl_then [`then_lbl`, `s5`] mp_tac ci_mono_new_block >> simp[]) >>
+     `ci_mono s8 s9` by
+       (qspecl_then [`else_lbl`, `s8`] mp_tac ci_mono_new_block >> simp[]) >>
+     `ci_mono s6 s7` by
+       (qspecl_then [`cenv`, `lctx`, `ty`, `ss1`, `s6`] mp_tac
+          (cj 2 stmtLoweringMonoTheory.compile_stmt_ci_mono) >> simp[]) >>
+     `s7.cs_next_id <= s8.cs_next_id` by
+       (Cases_on `block_is_terminated s7` >> fs[] >>
+        qspecl_then [`JMP`, `[Label exit_lbl]`, `[]`, `s7`] mp_tac
+          ci_mono_emit_inst >> fs[ci_mono_def]) >>
+     fs[ci_mono_def] >> decide_tac) >>
   qexistsl_tac [`cond_op`, `s1`, `s4`, `s5`, `then_lbl`, `else_lbl`, `exit_lbl`] >>
   simp[] >> conj_tac
   >- metis_tac[cs_extends_refl] >>

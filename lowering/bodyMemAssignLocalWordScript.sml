@@ -43,7 +43,11 @@ Theorem assign_local_word_store_path_mem:
         (!x. lookup_var x t = lookup_var x s) /\
         t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
         alloca_history func t /\
-        gas_marked_path T ctx func s 0 (OK t)
+        gas_marked_path T ctx func s 0 (OK t) /\
+        (?wp. lookup_var p s = SOME wp) /\
+        (!wp ad len. lookup_var p s = SOME wp /\
+           (ad + len <= w2n wp \/ w2n wp + sz <= ad) ==>
+           mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory)
 Proof
   rpt strip_tac >>
   `lookup_scopes id es.scopes = SOME entry` by
@@ -78,6 +82,20 @@ Proof
      qexistsl_tac [`s`, `st`] >> simp[is_terminator_def]) >>
   qexists_tac `u with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   simp[stmt_state_rel_inst_idx, gas_marked_path_def] >>
+  rpt conj_tac >>
+  TRY (qexists_tac `w` >> first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (rpt gen_tac >>
+       disch_then (fn th => MAP_EVERY assume_tac (CONJUNCTS th)) >>
+       TRY (`wp = w` by fs[] >> pop_assum SUBST_ALL_TAC) >>
+       `32 <= sz` by
+         (qpat_x_assum `type_memory_size _ <= sz` mp_tac >>
+          qpat_x_assum `type_memory_size _ = 32` mp_tac >>
+          rpt (pop_assum kall_tac) >> decide_tac) >>
+       qunabbrev_tac `u` >>
+       irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+       qpat_x_assum `ad + len <= _ \/ _` mp_tac >>
+       qpat_x_assum `32 <= sz` mp_tac >>
+       rpt (pop_assum kall_tac) >> decide_tac) >>
   simp[Abbr `u`, lookup_var_def, mstore_def]
 QED
 
@@ -165,6 +183,13 @@ Resume assign_local_word_frag_mem[normal]:
        `gas_explicit marks s0.vs_gas_readings`] >>
      qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. bind _ _ _ = _`
+       (qspec_then `[]` (mp_tac o MATCH_MP eval_read_preserves_scopes_dom)) >>
+     simp[]) >>
+  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] expr_post_alloca_frame)) >>
+  impl_tac >- fs[] >> impl_tac >- fs[] >> impl_tac >- fs[] >> strip_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   `eval_operand op t = SOME (typed_val_to_w256 etv v)` by
@@ -194,8 +219,29 @@ Resume assign_local_word_frag_mem[normal]:
       simp[gas_marked_exec_def, gas_explicit_def, gas_prefix_def]) >>
   disj1_tac >> simp[] >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>
-  irule return_buf_frame_frame >>
-  qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >> metis_tac[])
+  conj_tac
+  >- (irule return_buf_frame_frame >>
+      qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[] >> metis_tac[]) >>
+  `es_end.scopes = pre ++ env :: rest /\ id IN FDOM env` by
+    (qpat_assum `find_containing_scope _ _ = _`
+       (mp_tac o MATCH_MP vyperLookupTheory.find_containing_scope_structure) >>
+     simp[finite_mapTheory.FLOOKUP_DEF]) >>
+  rename1 `lookup_var p t = SOME wp` >>
+  mp_tac (Q.INST [`c0` |-> `cenv`, `c` |-> `cenv`, `ee` |-> `es_end`,
+    `n0` |-> `id`, `b` |-> `w2n (wp:bytes32)`, `z` |-> `sz`,
+    `ee1` |-> `es_end with scopes :=
+       pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest`]
+    alloca_frame_region_write) >>
+  impl_tac
+  >- (rpt conj_tac
+      >- fs[]
+      >- (simp[local_region_def] >> metis_tac[])
+      >- (qpat_x_assum `es_end.scopes = _` SUBST1_TAC >>
+          qpat_assum `id IN FDOM env`
+            (fn th => simp[pred_setTheory.ABSORPTION_RWT, th]))
+      >- fs[] >>
+      metis_tac[]) >>
+  simp[])
 QED
 
 Finalise assign_local_word_frag_mem

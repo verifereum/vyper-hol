@@ -341,12 +341,24 @@ Theorem assign_attr_local_store_layout_path_mem[local]:
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\
       (!x. lookup_var x t = lookup_var x s) /\
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-      alloca_history func t /\ gas_marked_path T ctx func s 0 (OK t)
+      alloca_history func t /\ gas_marked_path T ctx func s 0 (OK t) /\
+      (!ad len. ad + len <= w2n wbase \/ w2n wbase + sz <= ad ==>
+         mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory)
 Proof
   strip_tac >>
   `lookup_scopes id es.scopes = SOME entry` by
     metis_tac[find_containing_scope_lookup] >>
   `type_memory_size ftv = 32` by fs[stmtSimDeclStoreTheory.store_lays_out_def] >>
+  `struct_field_offset fields fld + 32 <= sz` by
+    (`local_ptrs_rel func cenv es.scopes s` by
+       fs[stmt_state_rel_def, state_rel_def] >>
+     `type_memory_size entry.type <= sz` by
+       (qpat_x_assum `local_ptrs_rel _ _ _ _`
+          (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
+        first_x_assum drule_all >> strip_tac >> simp[]) >>
+     `struct_field_offset fields fld + 32 <= type_memory_size_fields fs` by
+       metis_tac[exprSimFieldLayoutTheory.struct_field_offset_le] >>
+     qpat_x_assum `entry.type = _` (fn th => fs[th, type_memory_size_def])) >>
   `w2n wbase + type_memory_size_fields fs <= s.vs_alloca_next` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      first_x_assum drule_all >> simp[type_memory_size_def] >> decide_tac) >>
@@ -387,7 +399,12 @@ Proof
     simp[Abbr `u`] >>
   qexists_tac `u with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   simp[stmt_state_rel_inst_idx, gas_marked_path_def] >>
-  simp[Abbr `u`, lookup_var_def, mstore_def]
+  rpt conj_tac >>
+  TRY (simp[Abbr `u`, lookup_var_def, mstore_def] >> NO_TAC) >>
+  rpt gen_tac >> strip_tac >> qunabbrev_tac `u` >>
+  qpat_x_assum `w2n (wbase + _) = w2n wbase + _` (fn th => REWRITE_TAC [th]) >>
+  irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+  decide_tac
 QED
 
 Theorem assign_attr_local_suffix_mem[local]:
@@ -520,7 +537,11 @@ Theorem assign_attr_local_suffix_layout_mem[local]:
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ alloca_history func t /\
     s0.vs_alloca_next <= t.vs_alloca_next /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
-    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+    alloca_frame cenv es sa s0 cenv
+      (ee with scopes := pre ++
+        (env |+ (id, entry with
+          <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) t
 Proof
   strip_tac >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
@@ -579,6 +600,29 @@ Proof
     metis_tac[gas_marked_path_then, arithmeticTheory.ADD] >>
   `gas_marked_path T ctx func s 0 (OK t)` by
     metis_tac[gas_marked_path_then, arithmeticTheory.ADD] >>
+  `alloca_frame cenv es sa s0 cenv
+     (ee with scopes := pre ++
+       (env |+ (id, entry with
+         <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) t` by
+    (`alloca_frame cenv es sa s0 cenv ee u` by
+       (irule expr_post_alloca_frame >>
+        qpat_assum `expr_post _ _ _ _ _ es _ _ s0 _ _ _ _` (irule_at Any) >>
+        fs[]) >>
+     `lookup_scopes id ee.scopes = SOME entry` by
+       metis_tac[find_containing_scope_lookup] >>
+     `ee.scopes = pre ++ env :: rest /\ id IN FDOM env` by
+       (qpat_assum `find_containing_scope _ _ = _`
+          (mp_tac o MATCH_MP vyperLookupTheory.find_containing_scope_structure) >>
+        simp[finite_mapTheory.FLOOKUP_DEF]) >>
+     `local_region cenv ee.scopes u id (w2n wbase) sz` by
+       (rewrite_tac[local_region_def] >> metis_tac[]) >>
+     irule alloca_frame_region_write >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     qpat_x_assum `ee.scopes = _` SUBST1_TAC >>
+     qpat_assum `id IN FDOM env`
+       (fn th => simp_tac (srw_ss()) [pred_setTheory.ABSORPTION_RWT, th])) >>
   qexists_tac `t` >> simp[] >>
   qpat_x_assum `expr_post _ _ _ _ _ es _ _ s0 _ _ _ _` mp_tac >>
   simp[expr_post_def] >> metis_tac[]

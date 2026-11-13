@@ -25,7 +25,8 @@ Theorem aug_place_memory_post:
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
       FLOOKUP t.vs_allocas aid = SOME b) /\
     return_buf_frame d cenv' sb t /\ alloca_history func t /\
-    s0.vs_alloca_next <= t.vs_alloca_next
+    s0.vs_alloca_next <= t.vs_alloca_next /\
+    alloca_frame cenv es0 sa s0 cenv' ee t
 Proof
   strip_tac >> qexists_tac `cenv` >>
   gvs[stmtSimDefsTheory.stmt_post_def] >>

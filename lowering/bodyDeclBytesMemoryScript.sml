@@ -119,7 +119,10 @@ Theorem annassign_memory_assign_widen_body_path:
       return_buf_frame d cenv sb t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-               FLOOKUP t.vs_allocas aid = SOME b)
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\ aid <> inst.inst_id /\
+                   aid < sa.cs_next_id ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all assign_memory_widen_body_code >> strip_tac >>
@@ -166,6 +169,16 @@ Proof
     `inst`, `v`, `tyv`, `sc`, `rest`, `a`, `w'`, `d`] mp_tac) >>
   impl_tac >- simp[] >>
   disch_then (qx_choose_then `t2:venom_state` strip_assume_tac) >>
+  `!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\ aid <> inst.inst_id /\
+               aid < sa.cs_next_id ==>
+     mem_bytes_at off z t2.vs_memory = mem_bytes_at off z s.vs_memory` by
+    (rpt strip_tac >>
+     `FLOOKUP t.vs_allocas aid = SOME (off,z)` by metis_tac[] >>
+     `mem_bytes_at off z t2.vs_memory = mem_bytes_at off z t.vs_memory` by
+       metis_tac[] >>
+     `mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory` by
+       metis_tac[] >>
+     simp[]) >>
   qexists_tac `t2` >>
   `gas_path_mem ctx func s (0 + 0) (OK t2)` by
     (irule gas_path_mem_then >> qexists_tac `t` >> simp[]) >>
@@ -223,7 +236,10 @@ Theorem annassign_bytes_post_path_mem:
       return_buf_frame d cenv sf t /\
       (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-               FLOOKUP t.vs_allocas aid = SOME b)
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\ aid <> inst.inst_id /\
+                   aid < sb.cs_next_id ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   `!x. op = Var x ==> not_fresh_at sb x` by
@@ -265,7 +281,10 @@ Proof
   drule annassign_memory_store_body_path >>
   disch_then (qspecl_then [`ctx`, `func`, `cx`, `es1`, `s`, `id`, `sz`,
     `w`, `inst`, `v`, `tyv`, `sc`, `rest`, `a`, `sw`, `d`] mp_tac) >>
-  simp[]
+  impl_tac >- simp[] >> strip_tac >>
+  qexists_tac `t` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!aid off z. FLOOKUP s.vs_allocas aid = _ /\ aid <> inst.inst_id ==> _`
+    irule >> qexists_tac `aid` >> simp[]
 QED
 
 (* x: T = e for a bytestring type T, where e has a bytestring type and is
@@ -453,6 +472,41 @@ Proof
       (ee with scopes := scs) with gas_obs := []`
        by simp[evaluation_state_component_equality] >>
      metis_tac[exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
+  `st.cs_next_id = sa.cs_next_id` by simp[] >>
+  `sa.cs_next_id <= sA.cs_next_id` by
+    (qpat_x_assum `emit_inst ALLOCA _ _ _ = _`
+       (strip_assume_tac o MATCH_MP emit_inst_extends) >> simp[]) >>
+  `sA.cs_next_id <= sB.cs_next_id` by metis_tac[cj 2 compile_expr_grows] >>
+  `alloca_inv t` by fs[stmt_state_rel_def] >>
+  `allocas_non_overlapping t` by fs[venomMemDefsTheory.alloca_inv_def] >>
+  `!aid off z'. FLOOKUP t.vs_allocas aid = SOME (off, z') /\ aid < sa.cs_next_id ==>
+     mem_bytes_at off z' tf.vs_memory = mem_bytes_at off z' t.vs_memory` by
+    (rpt strip_tac >>
+     qpat_x_assum `!aid off z. FLOOKUP t.vs_allocas _ = _ /\ _ /\ _ ==> _` irule >>
+     qexists_tac `aid` >> simp[]) >>
+  `local_ptrs_reserved c sB` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sA` >> simp[]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `alloca_frame c es sA salloc c ee t` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (mp_tac o MATCH_MP
+       (REWRITE_RULE [GSYM AND_IMP_INTRO] expr_post_alloca_frame)) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     impl_tac >- (qpat_x_assum `MAP FDOM ee.scopes = _` mp_tac >> simp[]) >>
+     disch_then (ACCEPT_TAC o
+       SIMP_RULE bool_ss [stmtSimDefsTheory.alloca_frame_gas_obs])) >>
+  `alloca_frame cenv es sa s0 c ee' tf` by
+    (qpat_x_assum `c with <|ce_vars := _; ce_var_type := _;
+                      ce_dynarray_capacity := _|> = cenv` kall_tac >>
+     mp_tac (Q.INST [`aid0` |-> `st.cs_next_id`,
+       `z` |-> `type_memory_bytes cenv vtyp`, `u` |-> `tf`,
+       `entry` |-> `<|assignable := T; type := tyv; value := v; popped := []|>`]
+       annassign_alloca_frame_mem) >>
+     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+                  simp[Abbr `ee'`]) >>
+     disch_then ACCEPT_TAC) >>
   simp[stmt_lands_def]
 QED
 

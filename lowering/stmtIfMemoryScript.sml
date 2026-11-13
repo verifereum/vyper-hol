@@ -139,7 +139,9 @@ Resume compile_if_stmt_frag_mem[selected_branch]:
        (!aid bnd. FLOOKUP (jump_to (if b then tl else el) t).vs_allocas aid = SOME bnd ==>
                   FLOOKUP u.vs_allocas aid = SOME bnd) /\
        return_buf_frame d cenv'' sb u /\ alloca_history func u /\
-       (jump_to (if b then tl else el) t).vs_alloca_next <= u.vs_alloca_next)
+       (jump_to (if b then tl else el) t).vs_alloca_next <= u.vs_alloca_next /\
+       alloca_frame cenv (es_end with gas_obs := []) entry
+         (jump_to (if b then tl else el) t) cenv'' ee u)
      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
     (irule if_branch_outcome_mem >> simp[jump_to_def] >>
      qexistsl_tac [`after`, `FST (stmts_env cenv lctx ty (if b then ss1 else ss2) entry)`,
@@ -147,6 +149,9 @@ Resume compile_if_stmt_frag_mem[selected_branch]:
      conj_tac >- (Cases_on `block_is_terminated last` >> fs[]) >>
      qpat_x_assum `gas_outcome _ _ _ (eval_stmts _ _) _ _ _` mp_tac >>
      simp[jump_to_def]) >>
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     strip_tac >> drule eval_read_preserves_scopes_dom >> simp[]) >>
   drule_all if_selected_outcome_prefix_mem >>
   simp[gas_outcome_def, gas_summary_at_def]
 QED

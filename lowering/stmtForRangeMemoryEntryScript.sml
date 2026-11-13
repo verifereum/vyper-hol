@@ -39,7 +39,12 @@ Theorem for_body_entry_mem:
     ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
     32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv /\
     alloca_history func cc ==>
-    ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
+    ?s2. (!frame_start. frame_start.cs_next_id <= ainst.inst_id ==>
+           alloca_frame cenv esk frame_start cc bc
+             (esk with scopes :=
+               (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                  value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes) s2) /\
+         s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
          ~s2.vs_halted /\
          stmt_state_rel ctx func bc cx
            (esk with scopes :=
@@ -115,7 +120,18 @@ Proof
   `alloca_history func s2` by
     (simp[alloca_history_def, Abbr `s2`, mstore_def] >>
      fs[alloca_history_def]) >>
-  qexists_tac `s2` >>
+  `!frame_start. frame_start.cs_next_id <= ainst.inst_id ==>
+     alloca_frame cenv esk frame_start cc bc
+       (esk with scopes :=
+               (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                  value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes) s2` by
+    (rpt strip_tac >> irule for_counter_entry_frame >>
+     simp[] >> conj_tac
+     >- (qexistsl_tac [`ainst.inst_id`, `dv`, `i2w (n1 + &k)`] >>
+         simp[Abbr `s2`, Abbr `s1`, mstore_def, jump_to_def, update_var_def,
+              LET_THM, lookup_var_def, FLOOKUP_UPDATE]) >>
+     metis_tac[]) >>
+  qexists_tac `s2` >> conj_tac >- first_assum ACCEPT_TAC >>
   simp[Abbr `s2`, mstore_def, stmt_state_rel_inst_idx] >>
   conj_tac >- (fs[lookup_var_def] >> metis_tac[]) >>
   irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_mem_then)) >>

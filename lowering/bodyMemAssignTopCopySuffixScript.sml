@@ -14,15 +14,17 @@ Theorem topcopy_normalize_allocations[local]:
   !s t loc b k n.
     store_copy_normalize s t = store_copy_prefix loc b k s n ==>
     t.vs_allocas = s.vs_allocas /\
-    t.vs_alloca_next = s.vs_alloca_next
+    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_memory = s.vs_memory
 Proof
   rpt gen_tac >> strip_tac >>
   `!s. (store_copy_prefix loc b k s n).vs_allocas = s.vs_allocas /\
-        (store_copy_prefix loc b k s n).vs_alloca_next = s.vs_alloca_next`
+        (store_copy_prefix loc b k s n).vs_alloca_next = s.vs_alloca_next /\
+        (store_copy_prefix loc b k s n).vs_memory = s.vs_memory`
     suffices_by
       (strip_tac >>
        qpat_x_assum `store_copy_normalize _ _ = _`
-         (mp_tac o AP_TERM ``\u:venom_state. (u.vs_allocas,u.vs_alloca_next)``) >>
+         (mp_tac o AP_TERM
+            ``\u:venom_state. (u.vs_allocas,u.vs_alloca_next,u.vs_memory)``) >>
        simp[store_copy_normalize_def]) >>
   simp[store_copy_prefix_def] >>
   qid_spec_tac `n` >> Induct >> simp[COUNT_LIST_SNOC, FOLDL_SNOC] >>
@@ -49,7 +51,7 @@ Theorem storage_copy_bulk_run_mem:
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      t.vs_allocas = s.vs_allocas /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
       t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t
 Proof
   rpt gen_tac >> strip_tac >>
@@ -65,7 +67,7 @@ Proof
     (irule storage_copy_normalized_state >> qexistsl_tac [`s`, `sa`] >>
      fs[store_copy_frame_def, store_copy_normalize_def, store_copy_prefix_def] >>
      Cases_on `tr` >> gvs[]) >>
-  `t.vs_allocas = s.vs_allocas /\
+  `t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
    t.vs_alloca_next = s.vs_alloca_next` by
     (fs[store_copy_frame_def] >>
      drule topcopy_normalize_allocations >> simp[]) >>
@@ -96,7 +98,7 @@ Theorem storage_copy_one_run_mem:
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      t.vs_allocas = s.vs_allocas /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
       t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t
 Proof
   rpt gen_tac >> strip_tac >>
@@ -179,7 +181,7 @@ Theorem storage_copy_suffix_run_mem:
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      t.vs_allocas = s.vs_allocas /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
       t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -240,7 +242,7 @@ Theorem storage_copy_success_run_mem:
       (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==>
                   FLOOKUP t.vs_allocas aid = SOME ent) /\
       t.vs_allocas = s1.vs_allocas /\ t.vs_alloca_next = s1.vs_alloca_next /\
-      alloca_history func t
+      t.vs_memory = s1.vs_memory /\ alloca_history func t
 Proof
   rpt gen_tac >> strip_tac >>
   drule compile_lower_value_var >> simp[] >> disch_tac >>
