@@ -12,7 +12,7 @@ Theorem frame_selfdestruct_singleton[local]:
    account_empty (lookup_account (FST (HD es.contexts)).msgParams.callee
                   es.originalAccounts)) /\
   es.contexts = (c,rb)::rest /\ a.as_stack = addr::stk /\
-  asm_selfdestruct a = AsmHalt a1 ==>
+  ~c.msgParams.static /\ asm_selfdestruct a = AsmHalt a1 ==>
   (?exc t. step (es with contexts := [(c,rb)]) = (INR (SOME exc),t) /\
            (exc = OutOfGas \/ exc = StackOverflow)) \/
   (?t. step (es with contexts := [(c,rb)]) = (INR NONE,t) /\
@@ -59,7 +59,6 @@ Proof
   Cases_on `cost + c.gasUsed <= c.msgParams.gasLimit`
   >- (simp[assert_def, bind_def, ignore_bind_def, return_def,
            get_current_context_def, set_current_context_def] >>
-      `~c.msgParams.static` by gvs[asm_frame_rel_def] >>
       simp[assert_not_static_def, get_static_def, update_accounts_def,
            get_original_def, bind_def, ignore_bind_def, return_def,
            get_current_context_def, set_current_context_def, assert_def] >>
@@ -73,6 +72,76 @@ Proof
       simp[reraise_def, handle_exception_def, get_num_contexts_def,
            bind_def, ignore_bind_def, return_def] >>
       gvs[asm_selfdestruct_def, asm_evm_rel_def]) >>
+  simp[assert_def, bind_def, ignore_bind_def, fail_def] >>
+  disj1_tac >>
+  qmatch_goalsub_abbrev_tac `handle_step (SOME OutOfGas) s` >>
+  `s.contexts = [(c with <|stack := stk; returnData := []|>,rb)]` by
+    simp[Abbr `s`] >>
+  drule starve_handle_resource >>
+  disch_then (qspec_then `OutOfGas` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+(* A static frame's SELFDESTRUCT faults (after its gas charge). *)
+Theorem frame_selfdestruct_static_singleton[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+  a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "SELFDESTRUCT" /\
+  es.contexts = (c,rb)::rest /\ a.as_stack = addr::stk /\
+  c.msgParams.static ==>
+  (?exc t. step (es with contexts := [(c,rb)]) = (INR (SOME exc),t) /\
+           (exc = OutOfGas \/ exc = StackOverflow)) \/
+  (?exc t. step (es with contexts := [(c,rb)]) = (INR (SOME exc),t) /\
+           exc <> Reverted /\ ~vfm_abort (SOME exc) /\ LENGTH t.contexts = 1 /\
+           (FST (HD t.contexts)).returnData = [])
+Proof
+  strip_tac >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a es` by
+    gvs[asm_frame_rel_def] >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a
+      (es with contexts := [(c,rb)])` by
+    metis_tac[frame_rel_singleton] >>
+  `asm_encoding_wf prog /\
+   (!j. j <= a.as_pc ==> ~is_data_inst (EL j prog))` by
+    (gvs[asm_frame_prog_ok_def] >> metis_tac[is_data_inst_def]) >>
+  `LENGTH (es with contexts := [(c,rb)]).contexts = 1` by simp[] >>
+  drule_all starve_step_setup >> simp[] >> strip_tac >> gvs[] >>
+  `op = SelfDestruct` by
+    (irule opcode_wf_inj >>
+     gvs[encode_inst_def, opcode_def, wf_opname_def,
+         evm_opcode_byte_def, evm_opcode_table_def]) >>
+  gvs[] >>
+  simp[step_def, handle_def, bind_def, ignore_bind_def,
+       get_current_context_def, return_def] >>
+  asm_rewrite_tac[] >> simp[step_inst_def] >>
+  simp[step_self_destruct_def, pop_stack_def, bind_def, ignore_bind_def,
+       get_current_context_def, set_current_context_def, return_def,
+       assert_def] >>
+  simp[access_address_def, get_callee_def, set_return_data_def,
+       get_accounts_def, bind_def, ignore_bind_def, get_current_context_def,
+       set_current_context_def, return_def, LET_THM] >>
+  `?d. es.msdomain = Collect d` by gvs[asm_frame_rel_def] >>
+  simp[domain_check_def, bind_def, ignore_bind_def, get_current_context_def,
+       set_current_context_def, return_def] >>
+  simp[set_domain_def, bind_def, ignore_bind_def, get_current_context_def,
+       set_current_context_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `consume_gas cost s` >>
+  simp[consume_gas_def, bind_def, ignore_bind_def, get_current_context_def,
+       set_current_context_def, return_def, Abbr `s`] >>
+  Cases_on `cost + c.gasUsed <= c.msgParams.gasLimit`
+  >- (simp[assert_def, bind_def, ignore_bind_def, return_def,
+           get_current_context_def, set_current_context_def] >>
+      simp[assert_not_static_def, get_static_def, bind_def, ignore_bind_def,
+           return_def, get_current_context_def, set_current_context_def,
+           assert_def, fail_def] >>
+      qmatch_goalsub_abbrev_tac `handle_step (SOME WriteInStaticContext) s` >>
+      `?c1. s.contexts = [(c1,rb)] /\ c1.msgParams = c.msgParams` by
+        simp[Abbr `s`] >>
+      drule starve_handle_fault >>
+      disch_then (qspec_then `WriteInStaticContext` mp_tac) >>
+      impl_tac >- (simp[vfm_abort_def] >> metis_tac[]) >> strip_tac
+      >- (disj1_tac >> metis_tac[]) >>
+      disj2_tac >> qexistsl [`WriteInStaticContext`, `es1`] >>
+      simp[vfm_abort_def]) >>
   simp[assert_def, bind_def, ignore_bind_def, fail_def] >>
   disj1_tac >>
   qmatch_goalsub_abbrev_tac `handle_step (SOME OutOfGas) s` >>
@@ -100,8 +169,6 @@ Proof
   `?c rb rest. es.contexts = (c,rb)::rest` by gvs[asm_frame_rel_def] >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) as es` by
     gvs[asm_frame_rel_def] >>
-  `~as.as_call_ctx.cc_static` by
-    (drule_all asm_evm_rel_static >> gvs[asm_frame_rel_def]) >>
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
   drule_all frame_next_opcode >> strip_tac >>
   `op = SelfDestruct` by
@@ -111,6 +178,29 @@ Proof
   `!op. next_opcode c = SOME op ==>
     ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]` by
     simp[] >>
+  `as.as_call_ctx.cc_static <=> c.msgParams.static` by
+    (drule_all asm_evm_rel_static >> simp[]) >>
+  reverse (Cases_on `c.msgParams.static`) >>
+  qpat_x_assum `as.as_call_ctx.cc_static <=> _` mp_tac >>
+  asm_rewrite_tac[] >> disch_tac
+  >- suspend "nonstatic" >>
+  drule frame_selfdestruct_static_singleton >>
+  disch_then drule >> simp[] >>
+  disch_then (DISJ_CASES_THEN2
+    (qx_choose_then `exc` (qx_choose_then `ts` assume_tac))
+    (qx_choose_then `exc` (qx_choose_then `ts` strip_assume_tac)))
+  >- (qpat_x_assum `_ /\ _` strip_assume_tac >>
+      simp[asm_frame_step_ok_def] >>
+      metis_tac[frame_starved_lift]) >>
+  drule frame_terminal_lift >> disch_then drule >> simp[] >> strip_tac >>
+  simp[asm_frame_step_ok_def, asm_step_def, asm_step_op_def,
+       asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
+       asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
+       asm_selfdestruct_def] >>
+  disj2_tac >> gvs[] >> metis_tac[]
+QED
+
+Resume asm_frame_selfdestruct_step[nonstatic]:
   `?a1. asm_selfdestruct as = AsmHalt a1` by simp[asm_selfdestruct_def] >>
   drule frame_selfdestruct_singleton >>
   disch_then drule >> simp[] >>
@@ -130,3 +220,4 @@ Proof
        asm_step_memory_def, asm_step_control_def, asm_step_extcall_def] >>
   gvs[]
 QED
+Finalise asm_frame_selfdestruct_step
