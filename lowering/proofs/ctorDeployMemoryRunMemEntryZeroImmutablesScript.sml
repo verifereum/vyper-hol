@@ -3,7 +3,7 @@ Ancestors
   loweringStateRelDefs
   ctorDeployMemoryRunMemEntrySourceDefaults
   ctorDeployLoweringEntryImmutableMemory immutableRelation compileVyper
-  ctorDeployDefs e2eDeployDefs compileEnv
+  ctorDeployDefs e2eDeployDefs compileEnv immSectionDead
 
 Theorem ctor_source_zero_memory_immutables:
   deploy_source_ok tops am tx /\
