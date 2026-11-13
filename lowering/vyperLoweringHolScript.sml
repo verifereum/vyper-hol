@@ -10,7 +10,8 @@ Ancestors
   entryStateRel entryLocals ctorEntryLocals ctorSourceInputs
   loweringSlice
   memSafeRun instMemFrontier fragExecMem allocaFootprint
-  fragGasOrigin fragGasOriginPtrSafeUpto
+  fragGasOrigin fragGasOriginFocusEvents fragGasOriginPtrSafeUpto
+  gasMaskProjection memInvZeroPad
   varsExt exprSimNameWord exprSimLiteralWord exprSimEnv
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
