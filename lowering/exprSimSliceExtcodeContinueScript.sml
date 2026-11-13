@@ -534,13 +534,17 @@ Resume slice_extcode_tail_outcome[success]:
     (drule_all (cj 1 fragExecTheory.exec_block_run_inst_seq) >> simp[]) >>
   drule_all fragGasSeqTheory.tuple_run_inst_seq_gas_path >> strip_tac >>
   qpat_x_assum `!ctx'. gas_path _ _ _ _ _` (qspec_then `ctx` assume_tac) >>
+  `gas_path ctx func s 0
+     (OK (t with vs_inst_idx := LENGTH sa.cs_current_insts + LENGTH (emitted_insts sa sb)))` by
+    (qpat_x_assum `gas_path _ _ _ _ _` mp_tac >> simp[]) >>
   irule (INST_TYPE [alpha |-> ``:256``] slice_extcode_success_outcome) >> simp[] >>
   qexists_tac `t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx` >>
   simp[fragGasModeTheory.gas_marked_path_def] >>
   `es with gas_obs := [] = es` by
     (qpat_x_assum `es.gas_obs = []` (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
   rpt conj_tac >> rpt strip_tac >>
-  first_x_assum (drule_then (qspec_then `t.vs_inst_idx` mp_tac)) >> simp[]
+  (fn g => fn c => (first_x_assum (drule_then (qspec_then `t.vs_inst_idx` mp_tac)) >> simp[]) g c
+     handle e => (print ("PROBE FAIL " ^ term_to_string (snd g) ^ " :: " ^ General.exnMessage e ^ "\n"); raise e))
 QED
 
 Finalise slice_extcode_tail_outcome
@@ -693,6 +697,7 @@ Resume slice_extcode_continue_entry_seq[outcome]:
      qpat_x_assum `fn_has_code sb sc func` mp_tac >>
      simp[fn_has_code_def, IS_PREFIX_APPEND] >> strip_tac >>
      qexists_tac `bb` >> simp[DROP_APPEND1, IS_PREFIX_APPEND, APPEND_ASSOC]) >>
+  qpat_assum `expr_type result = BaseT _` (fn th => once_rewrite_tac [GSYM th]) >>
   irule slice_extcode_tail_outcome >>
   qpat_assum `compile_slice_extcode _ _ _ _ _ = _` (irule_at Any) >>
   simp[] >>
@@ -709,7 +714,7 @@ Resume slice_extcode_continue_entry_seq[rebase]:
   qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
     (drule_then strip_assume_tac) >>
   `wb_frame cenv es ee sa s t` by
-    (irule expr_post_frame >> goal_assum (drule_at Any)) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] expr_post_frame) >> goal_assum (drule_at Any)) >>
   match_mp_tac (Q.INST [`es1` |-> `ee`, `sm` |-> `sb`, `sb` |-> `sc`]
     exprSimCalldataSliceTheory.vv_post_prefix_frame) >>
   simp[] >> fs[ci_mono_def] >>

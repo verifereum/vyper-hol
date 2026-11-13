@@ -56,6 +56,20 @@ QED
 
 (* The capture entries, with the source post and the facts it carries
    quantified over the horizons valid where the source read ends. *)
+(* The capture entries with their type variables renamed to alpha, so the
+   gas_outcome facts they give share the source type of the goals here. *)
+fun alpha_tyvars th =
+  INST_TYPE (map (fn v => v |-> alpha) (type_vars_in_term (concl th))) th;
+
+(* Closes a per-horizon goal of the capture wrappers from the matching
+   fact of the capture entry: a gas_outcome by its implication, the rest by
+   the implication with its witnesses found among the assumptions. *)
+fun capture_close_tac (g as (_, w)) =
+  (if (#1 (dest_const (#1 (strip_comb w))) = "gas_outcome"
+       handle HOL_ERR _ => false)
+   then first_x_assum irule >> fs[]
+   else first_x_assum irule >> simp[] >> metis_tac[]) g;
+
 Theorem slice_dynamic_capture_horizons[local]:
   expr_body_pre cenv cx env src es /\
   bind (eval_expr cx src) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
@@ -112,13 +126,13 @@ Proof
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (drule_then assume_tac) >>
-  drule_all slice_source_dynamic_capture_entry >> disch_then (qspec_then `st0` strip_assume_tac) >>
+  drule_all (alpha_tyvars slice_source_dynamic_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >>
   qpat_x_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qexistsl_tac [`cap`, `bs`, `p`, `u`] >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     drule >> strip_tac >>
-  drule_all slice_source_dynamic_capture_entry >> disch_then (qspec_then `st0` strip_assume_tac) >> gvs[] >>
-  first_x_assum irule >> simp[] >> metis_tac[]
+  drule_all (alpha_tyvars slice_source_dynamic_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >> gvs[] >>
+  capture_close_tac
 QED
 
 Theorem slice_fixed_capture_horizons[local]:
@@ -170,13 +184,13 @@ Proof
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (drule_then assume_tac) >>
-  drule_all slice_source_fixed_capture_entry >> disch_then (qspec_then `st0` strip_assume_tac) >>
+  drule_all (alpha_tyvars slice_source_fixed_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >>
   qpat_x_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qexistsl_tac [`bs`, `u`, `p`] >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     drule >> strip_tac >>
-  drule_all slice_source_fixed_capture_entry >> disch_then (qspec_then `st0` strip_assume_tac) >> gvs[] >>
-  first_x_assum irule >> simp[] >> metis_tac[]
+  drule_all (alpha_tyvars slice_source_fixed_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >> gvs[] >>
+  capture_close_tac
 QED
 
 Theorem compile_slice_ordinary_case:
