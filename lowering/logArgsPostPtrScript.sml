@@ -46,7 +46,7 @@ Proof
 QED
 
 Theorem log_args_post_ptr_cons:
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   MAP FDOM es1.scopes = MAP FDOM es'.scopes /\
@@ -55,8 +55,8 @@ Theorem log_args_post_ptr_cons:
   (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) /\
   expr_sim_inv cenv cx env0 es0 /\ expr_type e = BaseT bt /\
   post_value_type cenv e = expr_type e /\
-  expr_post ctx func cenv cx e es sa sm s0 es1 v x t /\
-  log_args_post ctx func cenv cx es1 sm sb t es' ys vs u /\
+  expr_post H ctx func cenv cx e es sa sm s0 es1 v x t /\
+  log_args_post H ctx func cenv cx es1 sm sb t es' ys vs u /\
   ptr_val_ok cx (expr_type e) v x G1 tn1 t /\
   (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G1 t) /\
   LIST_REL (\p v. ptr_val_ok cx (SND p) v (FST p) G2 tn2 u) ys vs /\
@@ -64,7 +64,7 @@ Theorem log_args_post_ptr_cons:
     ptr_buf_ok cenv e (FST p) G2 u) args ys /\
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
   ghost_kept cenv es1 sm G1 tn1 t G2 tn2 ==>
-  log_args_post ctx func cenv cx es sa sb s0 es'
+  log_args_post H ctx func cenv cx es sa sb s0 es'
     ((x,expr_type e)::ys) (v::vs) u /\
   LIST_REL (\p v. ptr_val_ok cx (SND p) v (FST p) G2 tn2 u)
     ((x,expr_type e)::ys) (v::vs) /\

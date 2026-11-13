@@ -33,7 +33,7 @@ Ancestors
   memoryLocalRhsProps stmtPoppedKeys exprOpenMain bodyStorageMetadata
   vyperPureExpr targetPlaceSim targetPlaceSimCases exprSimDefs
   placeStore supportedTargets exprSimProps exprSimSource loweringPosts
-  bodyAugPlaceTarget
+  bodyAugPlaceTarget gasStorage vyperStorageTrace vyperStorageFootprint vyperPlaceFrames exprSimSubscriptMap
   stmtSimAugAssignPlace bodySimAugPlaceLoad bodySimAugPlaceLive bodySimAugPlaceScopes
 Libs
   monadsyntax
@@ -372,27 +372,6 @@ Proof
   metis_tac[aug_place_entry_type_agrees]
 QED
 
-Theorem aug_place_outcome_bind_value:
-  gas_outcome memory tops (ctx,func)
-    (a : evaluation_state -> value evaluation_result) (es,s0)
-    (\res mid t. ?v. res = INL v /\
-       gas_outcome memory tops (ctx,func) (k v) (mid,t) Q R)
-    (\res ee r. ?exc. res = INR exc /\ R (INR exc) ee r) ==>
-  gas_outcome memory tops (ctx,func) (bind a k) (es,s0) Q R
-Proof
-  rw[gas_outcome_def, gas_summary_at_def]
-  >- metis_tac[gas_marked_exec_bind_normal]
-  >- metis_tac[gas_marked_exec_bind_normal]
-  >- (qexists `marks ++ marks'` >> disj2_tac >>
-      qexistsl [`err`, `ee`, `leaf`, `finish'`] >>
-      simp[ignore_bind_def, bind_assoc] >>
-      irule gas_exempt_cert_bind_value >>
-      goal_assum (drule_at Any) >> fs[ignore_bind_def])
-  >- metis_tac[gas_marked_exec_bind_exception] >>
-  simp[ignore_bind_def, bind_assoc] >>
-  metis_tac[gas_exempt_cert_error_value]
-QED
-
 Theorem aug_place_memory_write_gas_obs:
   write_place cx (MemoryPlace id path) v ee = (res,ff) ==>
   !tail. write_place cx (MemoryPlace id path) v (ee with gas_obs := tail) =
@@ -506,6 +485,50 @@ Proof
   irule mstore_mem_bytes_at_disjoint >> decide_tac
 QED
 
+Theorem aug_place_store_trace_frame:
+  storage_trace_frame (bind (lift_sum bv) (write_place cx p))
+Proof
+  irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_lifts,
+       vyperStorageTraceTheory.storage_trace_frame_write_place]
+QED
+
+Theorem aug_place_store_backends:
+  write_place cx (MemoryPlace id path) v ee = (res,ff) ==>
+  ff.storage_trace = ee.storage_trace /\
+  (!b. storage_well_formed_on cx ff b <=> storage_well_formed_on cx ee b) /\
+  (!b gs. storage_well_formed_on cx (ff with gas_obs := gs) b <=>
+          storage_well_formed_on cx ee b)
+Proof
+  strip_tac >> drule vyperPlaceFramesTheory.write_memory_place_frame >>
+  strip_tac >>
+  `ff.storage_trace = ee.storage_trace` by simp[] >>
+  `ff.accounts = ee.accounts /\ ff.tStorage = ee.tStorage` by simp[] >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- (gen_tac >>
+      irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+      simp[])
+  >- (rpt gen_tac >>
+      irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+      simp[])
+QED
+
+(* A horizon valid after a source with the storage-trace frame is valid
+   before it. *)
+Theorem aug_place_valid_back:
+  storage_trace_frame f /\
+  f (es with gas_obs := gs) = (res,mid with gas_obs := []) /\
+  valid_horizon cx st0 H mid.storage_trace ==>
+  valid_horizon cx st0 H es.storage_trace
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 H (mid with gas_obs := []).storage_trace` by simp[] >>
+  `valid_horizon cx st0 H (es with gas_obs := gs).storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.valid_horizon_frame] >>
+  fs[]
+QED
+
 Theorem aug_place_memory_store_run[local]:
   emit_void MSTORE [dst;op] sa = ((),sb) /\
   eval_operand dst s = SOME w /\ expr_val_rel cx dty v op s /\
@@ -523,7 +546,8 @@ Theorem aug_place_memory_store_run[local]:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx ff t /\
+      (!H'. stmt_state_rel H' ctx func cenv cx ee s ==>
+            stmt_state_rel H' ctx func cenv cx ff t) /\
       alloca_frame c0 es0 sa0 s0 cenv ff t /\
       (!x. lookup_var x t = lookup_var x s) /\
       t.vs_allocas = s.vs_allocas /\ ~t.vs_halted /\
@@ -532,8 +556,10 @@ Theorem aug_place_memory_store_run[local]:
 Proof
   strip_tac >>
   qabbrev_tac `u = mstore (w2n w) (typed_val_to_w256 tv v) s` >>
-  `stmt_state_rel H ctx func cenv cx ff u` by
-    (simp[Abbr `u`] >> irule place_store_word_memory_state >>
+  `!H'. stmt_state_rel H' ctx func cenv cx ee s ==>
+        stmt_state_rel H' ctx func cenv cx ff u` by
+    (gen_tac >> strip_tac >> simp[Abbr `u`] >>
+     irule place_store_word_memory_state >>
      qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
      qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
      qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
@@ -575,7 +601,10 @@ Theorem aug_place_binop_store_outcome:
   fn_has_code s2 s3 func /\ fn_has_code s3 sf func /\
   fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv s2 /\ local_ptrs_reserved cenv s3 /\
-  stmt_state_rel H ctx func cenv cx ee s /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx ee s /\
+       storage_well_formed_on cx ee (FST H)) /\
   alloca_frame cenv es0 sa s_entry cenv ee s /\
   sa.cs_next_id <= s2.cs_next_id /\
   eval_operand x s = SOME (val_to_w256 cur) /\
@@ -596,8 +625,9 @@ Theorem aug_place_binop_store_outcome:
          lookup_var z s = SOME u) /\
   (!aid b. FLOOKUP s_entry.vs_allocas aid = SOME b ==>
            FLOOKUP s.vs_allocas aid = SOME b) /\
-  (!v ff t. write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
+  (!H v ff t. write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
     stmt_state_rel H ctx func cenv cx ff t /\
+    storage_well_formed_on cx ff (FST H) /\
     alloca_frame cenv es0 sa s_entry cenv ff t /\
     (!z u. not_fresh_at sa z /\ lookup_var z s_entry = SOME u ==>
            lookup_var z t = SOME u) /\
@@ -607,15 +637,15 @@ Theorem aug_place_binop_store_outcome:
     t.vs_inst_idx = LENGTH sf.cs_current_insts ==>
     stmt_post H ctx func cx lctx cenv cenv sa sf es0 s_entry
       (INL ()) (ff with gas_obs := []) t) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
       ptv bop cur rhs)) (write_place cx (MemoryPlace id path))) (ee,s)
-    (stmt_post H ctx func cx lctx cenv cenv sa sf es0 s_entry)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
+    (\H. stmt_post H ctx func cx lctx cenv cenv sa sf es0 s_entry)
+    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
 Proof
   strip_tac >>
-  qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ k _ _ _` >>
+  qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ k _ _ _` >>
   Cases_on `k ee` >> rename1 `k ee = (res,ff)` >>
   `stmt_res_ok lctx res` by
     (unabbrev_all_tac >> drule_all aug_place_pure_suffix_admissible >> simp[]) >>
@@ -638,7 +668,7 @@ Proof
   qpat_x_assum `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [exprBopSimDefsTheory.binop_frag_def,
                           exprBopSimDefsTheory.binop_frag_words_def]) >>
-  disch_then (qspecl_then [`s2`, `s3`, `x`, `y`, `op`, `s`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `s2`, `s3`, `x`, `y`, `op`, `s`] mp_tac) >>
   impl_tac >- simp[] >>
   strip_tac >- suspend "normal" >> suspend "exit"
 QED
@@ -671,19 +701,29 @@ Resume aug_place_binop_store_outcome[normal]:
      goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ t`)) >> simp[]) >>
   `!t0. cenv.ce_var_type id = SOME t0 ==>
         evaluate_type (get_tenv cx) t0 = SOME entry.type` by metis_tac[] >>
+  `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx ee t` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   drule_all aug_place_memory_store_run >>
   strip_tac >>
   `gas_marked_path F ctx func s 0 (OK t')` by
     (drule_all fragGasModeTheory.gas_marked_path_then >> simp[]) >>
-  `stmt_post H ctx func cx lctx cenv cenv sa sf es0 s_entry
-     (INL ()) (ff with gas_obs := []) t'` by
-    (first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
+  drule aug_place_store_backends >> strip_tac >>
+  `!H. valid_horizon cx st0 H ff.storage_trace ==>
+       stmt_post H ctx func cx lctx cenv cenv sa sf es0 s_entry
+         (INL ()) (ff with gas_obs := []) t'` by
+    (gen_tac >> strip_tac >>
+     `valid_horizon cx st0 H ee.storage_trace` by metis_tac[] >>
+     `stmt_state_rel H ctx func cenv cx ee t /\
+      storage_well_formed_on cx ee (FST H)` by metis_tac[] >>
+     `stmt_state_rel H ctx func cenv cx ff t'` by metis_tac[] >>
+     `storage_well_formed_on cx ff (FST H)` by metis_tac[] >>
+     qpat_assum `!H v ff t. write_place _ _ _ _ = (INL (),ff) /\ _ ==> _` irule >>
      metis_tac[]) >>
   `!tail. k (ee with gas_obs := tail) = (INL (),ff with gas_obs := tail)` by
     (unabbrev_all_tac >> drule aug_place_pure_suffix_gas_obs >> simp[]) >>
-  simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def, gas_marked_exec_def] >>
-  qexistsl_tac [`INL ()`, `ff`, `OK t'`] >> simp[]
+  qexistsl_tac [`INL ()`, `ff`, `OK t'`] >> simp[] >> metis_tac[]
 QED
 
 Resume aug_place_binop_store_outcome[exit]:
@@ -693,12 +733,15 @@ Resume aug_place_binop_store_outcome[exit]:
   gvs[] >>
   `!tail. k (ee with gas_obs := tail) = (INR ex,ee with gas_obs := tail)` by
     (unabbrev_all_tac >> drule aug_place_pure_suffix_gas_obs >> simp[]) >>
-  simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-  simp[gas_summary_at_def, gas_marked_exec_def] >>
-  qexistsl_tac [`INR ex`, `ee`, `r`] >> simp[stmt_exit_def] >>
-  disj2_tac >> gen_tac >> disj1_tac >>
-  Cases_on `ex` >> Cases_on `r` >> gvs[expr_exit_def] >>
-  rename1 `expr_exit (INR (Error err)) _` >> Cases_on `err` >> gvs[expr_exit_def]
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
+  qexistsl_tac [`INR ex`, `ee`, `r`] >>
+  conj_tac >- simp[]
+  >- (disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+      gen_tac >> strip_tac >> simp[stmt_exit_def] >> gen_tac >> disj1_tac >>
+      Cases_on `ex` >> Cases_on `r` >> gvs[expr_exit_def] >>
+      rename1 `expr_exit (INR (Error err)) _` >> Cases_on `err` >>
+      gvs[expr_exit_def])
 QED
 
 Finalise aug_place_binop_store_outcome
@@ -735,7 +778,7 @@ Proof
   qexistsl_tac [`get_tenv cx`, `dtv`, `ty`] >> simp[]
 QED
 
-Theorem aug_place_prefix_frame[local]:
+Theorem aug_place_prefix_frame:
   target_post H ctx func cenv cx es sa sc s0 mid pv vt r t /\
   stmt_state_rel H ctx func cenv cx es s0 /\
   stmt_state_rel H ctx func cenv cx mid t /\
@@ -773,7 +816,8 @@ QED
 
 Theorem aug_place_normal_post:
   alloca_frame cenv es0 sa s_entry cenv ff t /\
-  ~block_is_terminated sf /\ stmt_state_rel H ctx func cenv cx ff t /\ 
+  ~block_is_terminated sf /\ stmt_state_rel H ctx func cenv cx ff t /\
+  storage_well_formed_on cx ff (FST H) /\
   (!z u. not_fresh_at sa z /\ lookup_var z s_entry = SOME u ==>
          lookup_var z t = SOME u) /\
   (!aid b. FLOOKUP s_entry.vs_allocas aid = SOME b ==>
@@ -810,8 +854,9 @@ QED
 
 Theorem aug_place_store_post[local]:
   ~block_is_terminated sf ==>
-  !v ff t. write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
+  !H v ff t. write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
     stmt_state_rel H ctx func cenv cx ff t /\
+    storage_well_formed_on cx ff (FST H) /\
     alloca_frame cenv es0 sa s_entry cenv ff t /\
     (!z u. not_fresh_at sa z /\ lookup_var z s_entry = SOME u ==>
            lookup_var z t = SOME u) /\
@@ -822,55 +867,13 @@ Theorem aug_place_store_post[local]:
     stmt_post H ctx func cx lctx cenv cenv sa sf es0 s_entry
       (INL ()) (ff with gas_obs := []) t
 Proof
-  rpt strip_tac >> irule aug_place_normal_post >>
+  rpt strip_tac >>
+  `storage_well_formed_on cx (ff with gas_obs := []) (FST H)` by
+    (`(ff with gas_obs := []).accounts = ff.accounts /\
+      (ff with gas_obs := []).tStorage = ff.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  irule aug_place_normal_post >>
   simp[exprSimWordArgsTheory.stmt_state_rel_gas_obs]
-QED
-
-Theorem aug_place_outcome_exec_conseq[local]:
-  gas_outcome memory tops (ctx,func) source (es,s) Q R /\
-  (!marks res mid t.
-     gas_marked_exec memory (ctx,func) source (es,s) marks res mid (OK t) /\
-     Q res (mid with gas_obs := []) t ==>
-     Q' res (mid with gas_obs := []) t) /\
-  (!res mid r. R res mid r ==> R' res mid r) ==>
-  gas_outcome memory tops (ctx,func) source (es,s) Q' R'
-Proof
-  strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gas_outcome_def] >>
-  disch_then (qx_choose_then `marks` strip_assume_tac)
-  >- (qexists_tac `marks` >> disj1_tac >>
-      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
-      rewrite_tac[gas_summary_at_def] >> strip_tac >>
-      qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >> metis_tac[]) >>
-  qexists_tac `marks` >> disj2_tac >> metis_tac[]
-QED
-
-Theorem aug_place_outcome_with_exec:
-  gas_outcome memory tops (ctx,func) a (es,s0) Q E ==>
-  gas_outcome memory tops (ctx,func) a (es,s0)
-    (\res mid t. Q res mid t /\
-      ?marks raw. mid = raw with gas_obs := [] /\
-        gas_marked_exec memory (ctx,func) a (es,s0) marks res raw (OK t)) E
-Proof
-  strip_tac >> irule aug_place_outcome_exec_conseq >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
-QED
-
-Theorem aug_place_outcome_bind_value_exec[local]:
-  gas_outcome memory tops (ctx,func)
-    (a : evaluation_state -> value evaluation_result) (es,s0) P
-    (\res ee r. ?ex. res = INR ex /\ E (INR ex) ee r) /\
-  (!marks v raw t.
-    gas_marked_exec memory (ctx,func) a (es,s0) marks (INL v) raw (OK t) /\
-    P (INL v) (raw with gas_obs := []) t ==>
-    gas_outcome memory tops (ctx,func) (k v) (raw with gas_obs := [],t) Q E) /\
-  (!res mid t. P res mid t ==> ?v. res = INL v) ==>
-  gas_outcome memory tops (ctx,func) (bind a k) (es,s0) Q E
-Proof
-  strip_tac >> irule aug_place_outcome_bind_value >>
-  irule aug_place_outcome_exec_conseq >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem aug_place_marked_bind_tail:
@@ -914,13 +917,14 @@ QED
 (* x op= e at a field or element of a local: the place is in memory. *)
 Theorem aug_place_mload_boundary[local]:
   emit_op MLOAD [dst] ca = (cur,cb) /\ fn_has_code ca cb func /\
-  stmt_state_rel H ctx func cenv cx st t /\ local_ptrs_reserved cenv ca /\
+  local_ptrs_reserved cenv ca /\
   ~t.vs_halted /\ t.vs_current_bb = ca.cs_current_bb /\
   t.vs_inst_idx = LENGTH ca.cs_current_insts /\
   eval_operand dst t = SOME w /\
   (!z. dst = Var z ==> not_fresh_at ca z) /\ mload (w2n w) t = word ==>
   ?u. gas_marked_path F ctx func t 0 (OK u) /\
-      stmt_state_rel H ctx func cenv cx st u /\
+      (!H. stmt_state_rel H ctx func cenv cx st t ==>
+           stmt_state_rel H ctx func cenv cx st u) /\
       eval_operand cur u = SOME word /\ eval_operand dst u = SOME w /\
       (!z. cur = Var z ==> not_fresh_at cb z) /\
       (!z. not_fresh_at ca z ==> lookup_var z u = lookup_var z t) /\
@@ -940,7 +944,7 @@ Proof
     with vs_inst_idx := SUC t.vs_inst_idx` >>
   conj_tac >- simp[fragGasModeTheory.gas_marked_path_def] >>
   conj_tac
-  >- (simp[stmt_state_rel_inst_idx] >> irule stmt_state_rel_update_var >>
+  >- (rpt strip_tac >> simp[stmt_state_rel_inst_idx] >> irule stmt_state_rel_update_var >>
       simp[] >> irule local_ptrs_reserved_fresh >> qexists_tac `ca` >> simp[]) >>
   `local_ptrs_reserved cenv cb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `ca` >>
@@ -956,7 +960,7 @@ Proof
       FLOOKUP_UPDATE, not_fresh_at_def]
 QED
 
-Theorem aug_place_replay_admissible[local]:
+Theorem aug_place_replay_admissible:
   gas_admissible whole A es /\
   (!gs. whole (es with gas_obs := prefix ++ gs) =
         suffix (mid with gas_obs := gs)) ==>
@@ -1006,47 +1010,105 @@ Proof
   Cases_on `q` >> simp[bind_def] >> strip_tac >> simp[]
 QED
 
-Theorem aug_place_completed_value_prefix[local]:
+Theorem aug_place_completed_value_prefix:
   gas_marked_exec memory (ctx,func)
     (a : evaluation_state -> value evaluation_result)
     (es,s0) left (INL v) mid (OK t) /\
-  gas_outcome memory tops (ctx,func) (k v)
+  gas_outcome memory tops (ctx,func) cx st0 (k v)
     (mid with gas_obs := [],t) Q R ==>
-  gas_outcome memory tops (ctx,func) (bind a k) (es,s0) Q R
+  gas_outcome memory tops (ctx,func) cx st0 (bind a k) (es,s0) Q R
 Proof
-  rw[gas_outcome_def, gas_summary_at_def]
-  >- metis_tac[gas_marked_exec_bind_normal]
-  >- metis_tac[gas_marked_exec_bind_normal] >>
-  qexists_tac `left ++ marks` >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  simp[ignore_bind_def, bind_assoc] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
+  rewrite_tac[gas_outcome_def] >>
+  disch_then (qx_choose_then `right` (DISJ_CASES_THEN mp_tac))
+  >- (strip_tac >> qexists_tac `left ++ right` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_right >>
+      metis_tac[]) >>
+  disch_then (DISJ_CASES_THEN mp_tac)
+  >- (rewrite_tac[gas_summary_at_def] >>
+      disch_then (qx_choose_then `out` (qx_choose_then `fin`
+        (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac assume_tac)))) >>
+      qexists_tac `left ++ right` >> disj2_tac >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl_tac [`out`, `fin`, `r`] >>
+      conj_tac >- (irule gas_marked_exec_bind_normal >>
+                    goal_assum drule >> simp[]) >>
+      first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  rename1 `gas_exempt_cert _ _ _ _ _ right (err, ef) (callee, tf)` >>
+  qexists_tac `left ++ right` >> disj2_tac >> disj2_tac >>
+  qexistsl_tac [`err`, `ef`, `callee`, `tf`] >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
   irule gas_exempt_cert_bind_value >>
   goal_assum (drule_at Any) >> fs[ignore_bind_def]
 QED
 
-Theorem aug_place_completed_result_prefix[local]:
-  gas_marked_exec memory (ctx,func)
-    (a : evaluation_state -> eval_result evaluation_result)
-    (es,s0) left (INL v) mid (OK t) /\
-  gas_outcome memory tops (ctx,func) (k v)
-    (mid with gas_obs := [],t) Q R ==>
-  gas_outcome memory tops (ctx,func) (bind a k) (es,s0) Q R
+Theorem aug_place_bind_value_exec:
+  gas_outcome memory tops (ctx, func) cx st0
+    (a : evaluation_state -> value evaluation_result) (es, s0) P Exit /\
+  (!H res ee t. P H res ee t ==> ?v. res = INL v) /\
+  (!H res ee r. Exit H res ee r ==> ?ex. res = INR ex /\ R H (INR ex) ee r) /\
+  (!marks v mid t.
+     gas_marked_exec memory (ctx, func) a (es, s0) marks (INL v) mid (OK t) /\
+     (!H. valid_horizon cx st0 H mid.storage_trace ==>
+        P H (INL v) (mid with gas_obs := []) t) ==>
+     gas_outcome memory tops (ctx, func) cx st0 (k v)
+       (mid with gas_obs := [], t) Q R) /\
+  (!v. storage_trace_frame (k v)) ==>
+  gas_outcome memory tops (ctx, func) cx st0 (bind a k) (es, s0) Q R
 Proof
-  rw[gas_outcome_def, gas_summary_at_def]
-  >- metis_tac[gas_marked_exec_bind_normal]
-  >- metis_tac[gas_marked_exec_bind_normal] >>
-  qexists_tac `left ++ marks` >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  simp[ignore_bind_def, bind_assoc] >>
-  irule gas_exempt_cert_bind_result >>
-  goal_assum (drule_at Any) >> fs[ignore_bind_def]
+  strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ a _ _ _`
+    (mp_tac o BETA_RULE o REWRITE_RULE [gasOutcomeTheory.gas_outcome_def]) >>
+  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN mp_tac))
+  >- (strip_tac >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+      qexists_tac `marks` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[]) >>
+  disch_then (DISJ_CASES_THEN mp_tac)
+  >- (rewrite_tac[gas_summary_at_def] >> BETA_TAC >>
+      disch_then (qx_choose_then `res` (qx_choose_then `mid`
+        (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
+      reverse (Cases_on `vyperStorageFootprint$storage_trace_domain cx st0 mid.storage_trace`)
+      >- (disch_then kall_tac >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+          qexists_tac `marks` >> disj1_tac >>
+          irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[] >>
+          irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
+          metis_tac[]) >>
+      `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+         mid.storage_trace` by
+        fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+      disch_then (DISJ_CASES_THEN strip_assume_tac)
+      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+            (assume_tac o SIMP_RULE (srw_ss()) []) >>
+          `?v. res = INL v` by metis_tac[] >> gvs[] >>
+          irule aug_place_completed_value_prefix >>
+          qexistsl_tac [`marks`, `mid`, `t`, `v`] >> simp[] >>
+          first_x_assum irule >> simp[] >>
+          goal_assum (drule_at Any)) >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+        (assume_tac o SIMP_RULE (srw_ss()) []) >>
+      `?ex. res = INR ex` by metis_tac[] >> gvs[] >>
+      rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+      qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl_tac [`INR ex`, `mid`, `r`] >>
+      conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+      BETA_TAC >> simp[] >> rpt strip_tac >>
+      `?ex'. INR ex = INR ex' /\ R H (INR ex') (mid with gas_obs := []) r` by
+        metis_tac[] >>
+      gvs[]) >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ef`, `callee`, `tf`] >>
+  pure_rewrite_tac[ignore_bind_def] >>
+  once_rewrite_tac[vyperStateTheory.bind_assoc] >>
+  irule gas_exempt_cert_error_value >> simp[GSYM ignore_bind_def]
 QED
 
 Theorem aug_place_memory_reads_outcome:
   read_place cx (MemoryPlace id path) st = (INL cur,st) /\
   place_type_value cx (MemoryPlace id path) st = (INL ptv,st) /\
-  gas_outcome memory tops (ctx,func) (k cur ptv) (st,s) Q R ==>
-  gas_outcome memory tops (ctx,func)
+  gas_outcome memory tops (ctx,func) cx st0 (k cur ptv) (st,s) Q R ==>
+  gas_outcome memory tops (ctx,func) cx st0
     (bind (read_place cx (MemoryPlace id path))
       (\v. bind (place_type_value cx (MemoryPlace id path)) (k v)))
     (st,s) Q R
@@ -1064,12 +1126,17 @@ Proof
      gvs[place_type_value_def, get_scopes_def, bind_def, return_def,
          lift_option_type_def, lift_sum_def, raise_def] >>
      Cases_on `subscripts_type x.type path` >> gvs[return_def, raise_def]) >>
-  gvs[gas_outcome_def, gas_summary_at_def]
-  >- (qexists_tac `marks` >> disj1_tac >>
-      fs[gas_marked_exec_def, bind_def] >> metis_tac[])
-  >- (qexists_tac `marks` >> disj1_tac >>
-      fs[gas_marked_exec_def, bind_def] >> metis_tac[]) >>
-  qexists_tac `marks` >> disj2_tac >>
+  `!gs. bind (read_place cx (MemoryPlace id path))
+      (\v. bind (place_type_value cx (MemoryPlace id path)) (k v))
+      (st with gas_obs := gs) = k cur ptv (st with gas_obs := gs)` by
+    simp[bind_def] >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks`
+  >- (disj1_tac >> fs[gas_bad_storage_at_def])
+  >- (disj2_tac >> disj1_tac >>
+      gvs[gas_summary_at_def, gas_marked_exec_def] >> metis_tac[]) >>
+  disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   simp[ignore_bind_def, bind_assoc] >>
   irule (aug_place_memory_reads_error_cert |> SPEC_ALL |> Q.INST
@@ -1079,52 +1146,56 @@ Proof
   goal_assum (drule_at Any) >> fs[ignore_bind_def]
 QED
 
-Theorem aug_place_memory_outer_outcome[local]:
-  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
-    (es,s0) marks (INL (PlaceR (MemoryPlace id path))) raw (OK t) /\
+Theorem aug_place_memory_place_outcome[local]:
   gas_marked_path F ctx func t 0 (OK u) /\
-  read_place cx (MemoryPlace id path) (raw with gas_obs := []) =
-    (INL cur,raw with gas_obs := []) /\
-  place_type_value cx (MemoryPlace id path) (raw with gas_obs := []) =
-    (INL ptv,raw with gas_obs := []) /\
-  gas_outcome F tops (ctx,func) (k cur ptv)
-    (raw with gas_obs := [],u) Q R ==>
-  gas_outcome F tops (ctx,func)
-    (bind (eval_target_place cx bt) (\p.
-      bind (read_place cx p) (\v. bind (place_type_value cx p) (k v))))
-    (es,s0) Q R
+  read_place cx (MemoryPlace id path) raw0 = (INL cur,raw0) /\
+  place_type_value cx (MemoryPlace id path) raw0 = (INL ptv,raw0) /\
+  gas_outcome F tops (ctx,func) cx st0 (k (MemoryPlace id path) cur ptv)
+    (raw0,u) Q R ==>
+  gas_outcome F tops (ctx,func) cx st0
+    (bind (get_place (PlaceR (MemoryPlace id path))) (\p.
+      bind (read_place cx p) (\v. bind (place_type_value cx p) (k p v))))
+    (raw0,t) Q R
 Proof
-  strip_tac >> rewrite_tac[aug_place_target_bind_base] >>
-  irule aug_place_completed_result_prefix >>
-  goal_assum (drule_at Any) >>
-  simp[get_place_def, bind_return] >>
+  strip_tac >> simp[get_place_def, bind_return] >>
   irule gas_outcome_zero_prefix >> goal_assum (drule_at Any) >>
   irule aug_place_memory_reads_outcome >>
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem aug_place_memory_outer_place_outcome[local]:
-  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
-    (es,s0) marks (INL (PlaceR (MemoryPlace id path))) raw (OK t) /\
-  gas_marked_path F ctx func t 0 (OK u) /\
-  read_place cx (MemoryPlace id path) (raw with gas_obs := []) =
-    (INL cur,raw with gas_obs := []) /\
-  place_type_value cx (MemoryPlace id path) (raw with gas_obs := []) =
-    (INL ptv,raw with gas_obs := []) /\
-  gas_outcome F tops (ctx,func) (k (MemoryPlace id path) cur ptv)
-    (raw with gas_obs := [],u) Q R ==>
-  gas_outcome F tops (ctx,func)
-    (bind (eval_target_place cx bt) (\p.
-      bind (read_place cx p) (\v. bind (place_type_value cx p) (k p v))))
-    (es,s0) Q R
+Theorem aug_place_stmt_source:
+  eval_stmt cx (AugAssign ty bt bop e) =
+  bind (eval_base_place cx bt) (\pv.
+    bind (get_place pv) (\p.
+      bind (read_place cx p) (\cur.
+        bind (place_type_value cx p) (\ptv.
+          bind (bind (eval_expr cx e) (read_result cx)) (\rhs.
+            bind (lift_sum (evaluate_binop
+              (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+              ptv bop cur rhs)) (write_place cx p))))))
 Proof
-  strip_tac >> rewrite_tac[aug_place_target_bind_base] >>
-  irule aug_place_completed_result_prefix >>
-  goal_assum (drule_at Any) >>
-  simp[get_place_def, bind_return] >>
-  irule gas_outcome_zero_prefix >> goal_assum (drule_at Any) >>
-  irule aug_place_memory_reads_outcome >>
-  goal_assum (drule_at Any) >> simp[]
+  simp[Once evaluate_def, aug_place_target_bind_base, bind_assoc, LET_THM,
+       SF ETA_ss]
+QED
+
+Theorem aug_place_rest_trace_frame:
+  !pv. storage_trace_frame (bind (get_place pv) (\p.
+      bind (read_place cx p) (\cur.
+        bind (place_type_value cx p) (\ptv.
+          bind (bind (eval_expr cx e) (read_result cx)) (\rhs.
+            bind (lift_sum (evaluate_binop
+              (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+              ptv bop cur rhs)) (write_place cx p))))))
+Proof
+  gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_get_place] >> gen_tac >>
+  irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_read_place] >> gen_tac >>
+  irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_place_type] >> gen_tac >>
+  irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+  simp[stmtSimAugAssignTheory.augassign_rhs_trace_frame] >> gen_tac >>
+  simp[aug_place_store_trace_frame]
 QED
 
 Theorem compile_augassign_place_memory_case:
@@ -1172,56 +1243,38 @@ Proof
   `gas_admissible (eval_base_place cx bt) target_res_ok es` by
     metis_tac[aug_place_base_admissible] >>
   qpat_x_assum `target_sim _ _ _ _ _ _ _` mp_tac >>
-  simp[target_sim_def] >>
-  disch_then (qspecl_then [`sa`, `s0'`, `r`, `s0`] mp_tac) >>
+  rewrite_tac[target_sim_def] >>
+  disch_then (qspecl_then [`st0`, `Type ty`, `sa`, `s0'`, `r`, `s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  strip_tac >> drule aug_place_outcome_with_exec >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
-  rewrite_tac[gas_outcome_def] >>
-  (strip_tac >- suspend "base_completed" >> suspend "base_exempt")
-QED
-
-Resume compile_augassign_place_memory_case[base_exempt]:
-  markerLib.RESUME_TAC >>
-  qexists_tac `marks` >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  simp[Once evaluate_def, aug_place_target_bind_base,
-       ignore_bind_def, bind_assoc] >>
-  irule gas_exempt_cert_error_result >> simp[]
-QED
-
-Resume compile_augassign_place_memory_case[base_completed]:
-  markerLib.RESUME_TAC >>
-  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gas_summary_at_def] >>
-  (strip_tac >- suspend "base_normal" >> suspend "base_exit")
-QED
-
-Resume compile_augassign_place_memory_case[base_exit]:
-  markerLib.RESUME_TAC >>
-  Cases_on `res` >> fs[expr_exit_def] >>
-  rename1 `gas_marked_exec _ _ _ _ _ (INR ex) _ _` >>
-  qexists_tac `marks` >> disj1_tac >>
-  qexistsl_tac [`INR ex`, `es_end`, `r''`] >>
-  (conj_tac
-   >- (simp[Once evaluate_def, aug_place_target_bind_base] >>
-       irule gas_marked_exec_bind_exception >> simp[])) >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  strip_tac >>
+  rewrite_tac[aug_place_stmt_source] >>
+  drule exprSimSubscriptMapTheory.gas_outcome_bind_result_exec >>
+  disch_then irule >> rpt conj_tac
+  >- (rpt strip_tac >> fs[])
+  >- (rpt strip_tac >> BETA_TAC >> Cases_on `res` >> fs[expr_exit_def] >>
+      rename1 `expr_exit (INR ex) _` >> qexists_tac `ex` >>
+      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
+  >- (rpt gen_tac >> strip_tac >> suspend "base_normal")
+  >- simp[aug_place_rest_trace_frame]
 QED
 
 Resume compile_augassign_place_memory_case[base_normal]:
-  markerLib.RESUME_TAC >> gvs[] >>
-  (Cases_on `FST (SND r) = NONE`
-   >- (fs[target_post_def] >> Cases_on `pv` >>
-       fs[place_ptr_rel_def] >> rename1 `PlaceR p` >>
-       Cases_on `p` >> fs[place_ptr_rel_def])) >> gvs[] >>
-  qpat_x_assum `gas_marked_exec _ _ _ _ marks _ _ _` kall_tac >>
-  qpat_x_assum `es_end with gas_obs := [] = _` kall_tac >>
+  rename1 `gas_marked_exec _ _ _ _ marks' (INL pv) raw (OK t)` >>
   `?path. pv = PlaceR (MemoryPlace id path)` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      rewrite_tac[gas_marked_exec_def] >> strip_tac >>
      first_x_assum (qspec_then `[]` assume_tac) >>
      metis_tac[aug_place_name_root_base]) >> gvs[] >>
+  reverse (Cases_on `storage_trace_domain cx st0 raw.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[aug_place_rest_trace_frame]) >>
+  qpat_assum `!H. valid_horizon cx st0 H raw.storage_trace ==> _`
+    (mp_tac o Q.SPEC `storage_trace_horizon raw.storage_trace`) >>
+  impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  strip_tac >> gvs[] >>
+  (Cases_on `FST (SND r) = NONE`
+   >- (fs[target_post_def, place_ptr_rel_def])) >> gvs[] >>
   `!tail. eval_target_place cx bt
       (es with gas_obs := gas_explicit marks' s0.vs_gas_readings ++ tail) =
       (INL (MemoryPlace id path), raw with gas_obs := tail)` by
@@ -1255,13 +1308,11 @@ Resume compile_augassign_place_memory_case[base_normal]:
   `is_word_type ty` by metis_tac[exprSimSourceTheory.word_value_type_word] >>
   `expr_sim_inv cenv cx env
      (es with gas_obs := gas_explicit marks' s0.vs_gas_readings ++ [])` by simp[] >>
-  `stmt_state_rel H ctx func cenv cx (raw with gas_obs := []) t` by simp[] >>
   drule_all aug_place_memory_load >> strip_tac >> gvs[] >>
   qpat_assum `!tail. eval_target_place _ _ _ = _`
     (qspec_then `[]` assume_tac) >>
   `expr_sim_inv cenv cx env
      (es with gas_obs := gas_explicit marks' s0.vs_gas_readings ++ [])` by simp[] >>
-  `stmt_state_rel H ctx func cenv cx (raw with gas_obs := []) t` by simp[] >>
   drule_all aug_place_memory_read_typed >> strip_tac >> gvs[] >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   drule compile_binop_grows >> strip_tac >>
@@ -1304,32 +1355,87 @@ Resume compile_augassign_place_memory_case[base_normal]:
      rewrite_tac[expr_sim_case_def] >>
      disch_then (qspecl_then [`env`, `ty`, `raw with gas_obs := []`] mp_tac) >>
      simp[]) >>
+  `!H. valid_horizon cx st0 H (raw with gas_obs := []).storage_trace ==>
+       stmt_state_rel H ctx func cenv cx (raw with gas_obs := []) u /\
+       storage_well_formed_on cx (raw with gas_obs := []) (FST H)` by
+    (gen_tac >> strip_tac >>
+     `valid_horizon cx st0 H raw.storage_trace` by fs[] >>
+     qpat_x_assum `!H. valid_horizon cx st0 H raw.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     rewrite_tac[target_post_def] >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx (raw with gas_obs := []) t` by
+       first_assum ACCEPT_TAC >>
+     metis_tac[]) >>
   qpat_x_assum `expr_sim ctx func cenv cx ty e _` mp_tac >>
   pure_rewrite_tac[expr_sim_def] >>
-  disch_then (qspecl_then [`s1`, `s2`, `rhs`, `u`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `s1`, `s2`, `rhs`, `u`] mp_tac) >>
   (impl_tac >- fs[]) >> strip_tac >>
-  drule aug_place_outcome_with_exec >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
-  rewrite_tac[gas_outcome_def] >>
-  (strip_tac >- suspend "rhs_completed" >> suspend "rhs_exempt")
-QED
-
-Resume compile_augassign_place_memory_case[rhs_completed]:
-  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gas_summary_at_def] >>
-  (strip_tac >- suspend "rhs_normal" >> suspend "rhs_exit")
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  ho_match_mp_tac (GEN_ALL aug_place_memory_place_outcome) >>
+  goal_assum (drule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `read_place _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `place_type_value _ _ _ = _`)) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  drule aug_place_bind_value_exec >>
+  disch_then irule >> rpt conj_tac
+  >- (rpt strip_tac >> fs[])
+  >- (rpt strip_tac >> BETA_TAC >> Cases_on `res` >> fs[expr_exit_def] >>
+      rename1 `expr_exit (INR ex) _` >> qexists_tac `ex` >>
+      simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])
+  >- (rpt gen_tac >> strip_tac >> suspend "rhs_normal")
+  >- simp[aug_place_store_trace_frame]
 QED
 
 Resume compile_augassign_place_memory_case[rhs_normal]:
-  gvs[] >>
-  qpat_x_assum `gas_marked_exec _ _ _ _ marks _ _ _` kall_tac >>
-  qpat_x_assum `es_end with gas_obs := [] = _` kall_tac >>
+  rename1 `gas_marked_exec _ _ _ _ marks'' (INL v'') raw' (OK t')` >>
+  reverse (Cases_on `storage_trace_domain cx st0 raw'.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[aug_place_store_trace_frame]) >>
   `bind (eval_expr cx e) (read_result cx)
      (raw with gas_obs := gas_explicit marks'' u.vs_gas_readings) =
      (INL v'',raw' with gas_obs := [])` by
     (qpat_assum `gas_marked_exec _ _ _ _ marks'' _ _ _` mp_tac >>
      rewrite_tac[gas_marked_exec_def] >> strip_tac >>
      first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `!H. valid_horizon cx st0 H raw'.storage_trace ==>
+       valid_horizon cx st0 H raw.storage_trace /\
+       valid_horizon cx st0 H es.storage_trace` by
+    (gen_tac >> strip_tac >>
+     `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+       simp[stmtSimAugAssignTheory.augassign_rhs_trace_frame] >>
+     `storage_trace_frame (eval_target_place cx bt)` by
+       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+     `valid_horizon cx st0 H raw.storage_trace` by
+       metis_tac[aug_place_valid_back] >>
+     metis_tac[aug_place_valid_back]) >>
+  qpat_assum `!H. valid_horizon cx st0 H raw'.storage_trace ==> _`
+    (mp_tac o Q.SPEC `storage_trace_horizon raw'.storage_trace`) >>
+  impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  strip_tac >> gvs[] >>
+  `target_post (storage_trace_horizon raw'.storage_trace) ctx func cenv cx es sa
+     s0' s0 (raw with gas_obs := []) (PlaceR (MemoryPlace id path)) (Type ty) r t` by
+    (`valid_horizon cx st0 (storage_trace_horizon raw'.storage_trace)
+        raw'.storage_trace` by
+       fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     `valid_horizon cx st0 (storage_trace_horizon raw'.storage_trace)
+        raw.storage_trace` by metis_tac[] >>
+     qpat_assum `!H. valid_horizon cx st0 H raw.storage_trace ==> _`
+       (qspec_then `storage_trace_horizon raw'.storage_trace` mp_tac) >>
+     simp[]) >>
+  `stmt_state_rel (storage_trace_horizon raw'.storage_trace) ctx func cenv cx es s0` by
+    (`valid_horizon cx st0 (storage_trace_horizon raw'.storage_trace)
+        raw'.storage_trace` by
+       fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     `valid_horizon cx st0 (storage_trace_horizon raw'.storage_trace)
+        es.storage_trace` by metis_tac[] >>
+     metis_tac[]) >>
+  `stmt_state_rel (storage_trace_horizon raw'.storage_trace) ctx func cenv cx
+     (raw with gas_obs := []) u` by
+    (qpat_x_assum `target_post (storage_trace_horizon raw'.storage_trace) _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [target_post_def]) >>
+     metis_tac[]) >>
   `expr_body_pre cenv cx env e
      (raw with gas_obs := gas_explicit marks'' u.vs_gas_readings)` by
     simp[expr_body_pre_gas_obs] >>
@@ -1338,7 +1444,7 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
      simp[well_formed_type_def] >> metis_tac[]) >>
   drule_all aug_place_rhs_suffix_ready >>
   disch_then (qspecl_then [`func`, `ctx`] strip_assume_tac) >>
-  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_assum `expr_post (storage_trace_horizon raw'.storage_trace) _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_post_def] >> strip_tac >>
   `gas_marked_path F ctx func u (LENGTH marks'') (OK t')` by
     (qpat_assum `gas_marked_exec _ _ _ _ marks'' _ _ _` mp_tac >>
@@ -1455,103 +1561,29 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
     (drule eval_read_preserves_scopes_dom >> simp[]) >>
   `alloca_frame cenv es sa s0 cenv (raw' with gas_obs := []) t'` by
     (irule aug_place_prefix_frame >>
-     qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-     qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `target_post (storage_trace_horizon raw'.storage_trace) _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `expr_post (storage_trace_horizon raw'.storage_trace) _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
      simp[exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
      metis_tac[]) >>
+  `!H. valid_horizon cx st0 H (raw' with gas_obs := []).storage_trace ==>
+       stmt_state_rel H ctx func cenv cx (raw' with gas_obs := []) t' /\
+       storage_well_formed_on cx (raw' with gas_obs := []) (FST H)` by
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `!H. valid_horizon cx st0 H raw'.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- fs[] >>
+     rewrite_tac[expr_post_def] >> strip_tac >> simp[]) >>
+  `storage_trace_domain cx st0 (raw' with gas_obs := []).storage_trace` by
+    simp[] >>
   drule aug_place_store_post >> disch_then assume_tac >>
-  `gas_outcome F (cx_tops cx) (ctx,func)
-    (bind (lift_sum (evaluate_binop
-      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-      ptv bop v v'')) (write_place cx (MemoryPlace id path)))
-    (raw' with gas_obs := [],t')
-    (stmt_post H ctx func cx lctx cenv cenv sa sb es s0)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)` by
-    (irule aug_place_binop_store_outcome >>
-     conj_tac >- (first_assum ACCEPT_TAC) >>
-     conj_tac >- (metis_tac[]) >>
-     conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
-     conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
-     asm_simp_tac std_ss [] >>
-     conj_tac >- (qexistsl_tac [`entry'`, `old`] >> simp[]) >>
-     conj_tac >-
-       (qpat_assum `word_value_type ty` mp_tac >>
-        qpat_assum `evaluate_type (get_tenv cx) ty = SOME ptv` mp_tac >>
-        qpat_assum `value_has_type ptv v` mp_tac >>
-        rpt (pop_assum kall_tac) >>
-        metis_tac[word_value_type_typed, word_value_not_bytes]) >>
-     conj_tac >- simp[gasContextTheory.gas_admissible_gas_obs] >>
-     conj_tac >- (qexists_tac `env` >> simp[]) >>
-     conj_tac >- simp[] >>
-     goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
-     goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
-     goal_assum (drule_at (Pat `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
-     asm_simp_tac std_ss [exprBopSimPropsTheory.bop_result_gas_obs] >>
-     metis_tac[]) >>
-  `gas_outcome F (cx_tops cx) (ctx,func)
-    (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
-    (stmt_post H ctx func cx lctx cenv cenv sa sb es s0)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
-    suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
-  simp[Once evaluate_def] >>
-  ho_match_mp_tac (GEN_ALL aug_place_memory_outer_place_outcome) >>
-  goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `read_place _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `place_type_value _ _ _ = _`)) >>
-  irule (aug_place_completed_value_prefix |> SPEC_ALL |>
-    Q.INST [`a` |-> `bind (eval_expr cx e) (read_result cx)`] |>
-    REWRITE_RULE [bind_assoc]) >>
-  goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
-QED
-
-Resume compile_augassign_place_memory_case[rhs_exit]:
-  markerLib.RESUME_TAC >>
-  `gas_outcome F (cx_tops cx) (ctx,func)
-    (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
-    (stmt_post H ctx func cx lctx cenv cenv sa sb es s0)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
-    suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
-  simp[Once evaluate_def] >>
-  ho_match_mp_tac (GEN_ALL aug_place_memory_outer_place_outcome) >>
-  goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `read_place _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `place_type_value _ _ _ = _`)) >>
-  Cases_on `res` >> fs[expr_exit_def] >>
-  rename1 `gas_marked_exec _ _ _ _ _ (INR ex) _ _` >>
-  rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
-  qexists_tac `marks` >> disj1_tac >>
-  qexistsl_tac [`INR ex`, `es_end`, `r'`] >>
-  (conj_tac >- (rewrite_tac[GSYM bind_assoc] >>
-    irule gas_marked_exec_bind_exception >> simp[])) >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
-QED
-
-Resume compile_augassign_place_memory_case[rhs_exempt]:
-  markerLib.RESUME_TAC >>
-  `gas_outcome F (cx_tops cx) (ctx,func)
-    (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
-    (stmt_post H ctx func cx lctx cenv cenv sa sb es s0)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
-    suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
-  simp[Once evaluate_def] >>
-  ho_match_mp_tac (GEN_ALL aug_place_memory_outer_place_outcome) >>
-  goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `gas_marked_path _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `read_place _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `place_type_value _ _ _ = _`)) >>
-  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  simp[ignore_bind_def, bind_assoc] >>
-  irule (gas_exempt_cert_error_value |> SPEC_ALL |>
-    Q.INST [`a` |-> `bind (eval_expr cx e) (read_result cx)`] |>
-    REWRITE_RULE [ignore_bind_def, bind_assoc]) >>
-  fs[ignore_bind_def, bind_assoc]
+  irule aug_place_binop_store_outcome >>
+  goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `binop_frag _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
+  asm_simp_tac std_ss [exprBopSimPropsTheory.bop_result_gas_obs] >>
+  metis_tac[]
 QED
 
 Finalise compile_augassign_place_memory_case

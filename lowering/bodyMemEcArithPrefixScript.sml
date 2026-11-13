@@ -27,7 +27,7 @@ QED
 Theorem ec_alloc_buffer_endpoint:
   compile_alloc_buffer sz sa = (buf,sm) /\
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   sz < dimword (:256) /\ alloca_history func s /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\

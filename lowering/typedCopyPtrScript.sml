@@ -53,7 +53,7 @@ Theorem compile_store_word_framed_frag_ptr:
     lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       sf.vs_memory = (mstore (w2n b) (mload (w2n a) s) s).vs_memory /\
@@ -68,7 +68,7 @@ Theorem compile_store_word_framed_frag_ptr:
 Proof
   rpt gen_tac >> strip_tac >> drule_all compile_store_word_code >> strip_tac >>
   drule_all word_load_store_framed_frag_ptr >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
   qexistsl_tac [`Gf`,`tnf`,`sf`] >> asm_rewrite_tac[]
 QED
 
@@ -81,7 +81,7 @@ Theorem compile_store_word_frag_ptr:
     lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       sf.vs_memory = (mstore (w2n b) (mload (w2n a) s) s).vs_memory /\
@@ -91,7 +91,7 @@ Theorem compile_store_word_frag_ptr:
       tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans
 Proof
   rpt strip_tac >> drule_all compile_store_word_framed_frag_ptr >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
 QED
 
@@ -99,12 +99,12 @@ QED
    In particular no positive-footprint provenance assumption is needed. *)
 Theorem expr_post_ptr_return_inputs:
   !ctx fn cenv cx e es sa sb s0 es' v op s d G tn.
-    expr_post ctx fn cenv cx e es sa sb s0 es' v op s /\
-    ghost_inv d cenv cx es' G tn s /\
+    expr_post H ctx fn cenv cx e es sa sb s0 es' v op s /\
+    ghost_inv H d cenv cx es' G tn s /\
     ptr_val_ok cx (expr_type e) v op G tn s ==>
-    stmt_state_rel ctx fn cenv cx es' s /\
+    stmt_state_rel H ctx fn cenv cx es' s /\
     (?w. eval_operand op s = SOME w) /\ op_taint tn op = {} /\
-    stor_taint_ok cx tn s
+    stor_taint_ok H cx tn s
 Proof
   simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
        ghost_inv_def, ptr_val_ok_def] >> metis_tac[]
@@ -124,7 +124,7 @@ Theorem compile_store_word_field_ptr:
      (?x. v = FlagV x) \/ (?x. v = DecimalV x)) /\
     (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
            val_in_memory tv v (w2n a) mem) ==>
-    frag_exec_ptr cx ctx PG sa sb
+    frag_exec_ptr H cx ctx PG sa sb
       (\g t st. g = G /\ t = tn /\ st = s)
       (\g t st. !i. w2n b <= i /\ i < w2n b + 32 ==> i NOTIN t.t_mem) R
 Proof
@@ -133,7 +133,7 @@ Proof
     metis_tac[robust_val_in_memory_prim_clean] >>
   qpat_x_assum `_ \/ _` kall_tac >>
   drule_all compile_store_word_frag_ptr >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
   gvs[frag_exec_ptr_def] >> rpt strip_tac >>
   first_x_assum drule >> simp[] >>
   strip_tac >- (disj1_tac >> goal_assum (drule_at Any) >> simp[]) >>
@@ -235,7 +235,7 @@ QED
    possibly oversized incoming provenance site. *)
 Theorem expr_val_at_ptr_offset_read_covers:
   !ctx func cenv cx t sa sb es v p s tv w G tn off n G' tn' q s'.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx t sa sb es v (Var p) s /\
     ptr_val_ok cx t v (Var p) G tn s /\
     evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
@@ -266,7 +266,7 @@ QED
 
 Theorem alloca_step_offset_ptr_covers:
   !ctx func cenv cx es s id capacity out s1 PG G G1 w off n q s' G' tn'.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w capacity)] [out]) (fn_insts func) /\
     capacity < dimword(:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w capacity)] [out]) s = OK s1 /\
@@ -332,7 +332,7 @@ Theorem mcopy_operand_frag_ptr:
               (mcopy (w2n b) (w2n a) (w2n n) s) tn)
            ((mcopy (w2n b) (w2n a) (w2n n) s) with
               vs_inst_idx := SUC s.vs_inst_idx)) ==>
-    frag_exec_ptr cx ctx PG sa sb P Q R
+    frag_exec_ptr H cx ctx PG sa sb P Q R
 Proof
   rpt strip_tac >> irule ptr_fragment_step >> simp[is_terminator_def] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
@@ -380,7 +380,7 @@ Theorem copy_len_binop_frag_ptr:
               (update_var tmp (f a b) s) tn)
            ((update_var tmp (f a b) s) with
               vs_inst_idx := SUC s.vs_inst_idx)) ==>
-    frag_exec_ptr cx ctx PG sa sb P Q R
+    frag_exec_ptr H cx ctx PG sa sb P Q R
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   irule ptr_fragment_step >> simp[] >>
@@ -456,7 +456,7 @@ Theorem copy_len_not_frag_ptr:
               (update_var tmp (~a) s) tn)
            ((update_var tmp (~a) s) with
               vs_inst_idx := SUC s.vs_inst_idx)) ==>
-    frag_exec_ptr cx ctx PG sa sb P Q R
+    frag_exec_ptr H cx ctx PG sa sb P Q R
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   irule ptr_fragment_step >> simp[] >>
@@ -500,13 +500,13 @@ Proof
 QED
 
 Theorem emit_copy_len_binop_frag_ptr:
-  !opc f G cx ctx PG R sa sb left right out tn s a b.
+  !opc f G H cx ctx PG R sa sb left right out tn s a b.
     (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
     emit_op opc [left;right] sa = (Var out,sb) /\
     eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
     op_taint tn left = {} /\ op_taint tn right = {} ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
@@ -521,11 +521,11 @@ Proof
 QED
 
 Theorem emit_copy_len_not_frag_ptr:
-  !G cx ctx PG R sa sb x out tn s a.
+  !G H cx ctx PG R sa sb x out tn s a.
     emit_op NOT [x] sa = (Var out,sb) /\
     eval_operand x s = SOME a /\ op_taint tn x = {} ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       lookup_var out sf = SOME (~a) /\ op_taint tnf (Var out) = {} /\
@@ -540,12 +540,12 @@ Proof
 QED
 
 Theorem emit_mload_clean_frag_ptr:
-  !cx ctx PG R sa sb src out G tn s a.
+  !H cx ctx PG R sa sb src out G tn s a.
     emit_op MLOAD [Var src] sa = (Var out,sb) /\
     ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       lookup_var out sf = SOME (mload (w2n a) s) /\
@@ -562,12 +562,12 @@ QED
 
 
 Theorem compile_bytestring_copy_len_frag_ptr:
-  !cx ctx PG R sa sb src count_op G tn s a.
+  !H cx ctx PG R sa sb src count_op G tn s a.
     compile_bytestring_copy_len (Var src) sa = (count_op,sb) /\
     ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       eval_operand count_op sf =
@@ -586,7 +586,7 @@ Proof
 QED
 
 Theorem compile_store_bytestring_frag_ptr:
-  !cx ctx PG R sa sb src dst G tn s a b len n.
+  !H cx ctx PG R sa sb src dst G tn s a b len n.
     compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
     not_fresh_at sa src /\ not_fresh_at sa dst /\
     lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
@@ -596,7 +596,7 @@ Theorem compile_store_bytestring_frag_ptr:
     ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\

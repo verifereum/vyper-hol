@@ -10,7 +10,7 @@ Theorem pop_local_robust_layout:
   lookup_var p s = SOME w /\
   entry.type = ArrayTV tv (Dynamic cap) /\
   entry.value = ArrayV (DynArrayV vs) /\
-  ghost_inv d cenv cx es G tn s ==>
+  ghost_inv H d cenv cx es G tn s ==>
   ptr_covers G tn p s sz /\
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
     val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs))

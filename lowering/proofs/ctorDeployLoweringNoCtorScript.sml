@@ -2,6 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringNoCtor
 Ancestors
+  immSectionDead
   structFieldsProps ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
   compileVyper vyperInterpreter e2eDeployDefs moduleLowering
   immutableDeployExecution ctorDeployDefs immSectionDead e2eEntry venomState vyperCompiler
@@ -2568,7 +2569,7 @@ Proof
 QED
 
 Theorem no_ctor_source_halt:
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_state_rel tops deploy_bc am tx es /\
   gas_variant vs (deploy_entry_state prog cplan tops es) /\
   classify_functions tops = (exts,ints,fb,NONE) /\

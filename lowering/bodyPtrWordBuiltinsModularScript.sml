@@ -211,12 +211,12 @@ QED
 Theorem word_modular_output_frame:
   MEM opc [Exp; ADDMOD; MULMOD] /\
   step_inst_base (mk_inst id opc args [x]) s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p. not_fresh_at sc p ==> p <> x) ==>
-  ghost_inv d cenv cx es (step_prov PG G (mk_inst id opc args [x]) t)
+  ghost_inv H d cenv cx es (step_prov PG G (mk_inst id opc args [x]) t)
     (step_taint (mk_inst id opc args [x]) s t tn) t /\
   ghost_kept cenv es0 sc G0 tn0 s0 (step_prov PG G (mk_inst id opc args [x]) t)
     (step_taint (mk_inst id opc args [x]) s t tn) /\
@@ -242,12 +242,12 @@ Theorem word_modular_single_frame:
   MEM opc [Exp; ADDMOD; MULMOD] /\
   inst_seq_ptr D lo ctx fn PG G tn [mk_inst id opc args [x]] s G' tn' /\
   run_inst_seq [mk_inst id opc args [x]] s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p. not_fresh_at sc p ==> p <> x) ==>
-  ghost_inv d cenv cx es G' tn' t /\
+  ghost_inv H d cenv cx es G' tn' t /\
   ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\
   op_taint tn' (Var x) = {} /\ op_prov G' (Var x) = NONE
 Proof
@@ -269,12 +269,12 @@ Theorem word_modular_pair_frame:
   inst_seq_ptr D lo ctx fn PG G tn
     [mk_inst id ASSERT [c] []; mk_inst (id + 1) opc args [x]] s G' tn' /\
   run_inst_seq [mk_inst id ASSERT [c] []; mk_inst (id + 1) opc args [x]] s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p. not_fresh_at sc p ==> p <> x) ==>
-  ghost_inv d cenv cx es G' tn' t /\
+  ghost_inv H d cenv cx es G' tn' t /\
   ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\
   op_taint tn' (Var x) = {} /\ op_prov G' (Var x) = NONE
 Proof
@@ -294,7 +294,7 @@ Proof
     ( `EVERY (\i. ~is_terminator i.inst_opcode) [mk_inst (id + 1) opc args [x]]` by
         gvs[mk_inst_def, is_terminator_def] >>
       simp[run_inst_seq_inst_idx, exec_result_map_def]) >>
-  `ghost_inv d cenv cx es G' tn' (t with vs_inst_idx := SUC s.vs_inst_idx) /\
+  `ghost_inv H d cenv cx es G' tn' (t with vs_inst_idx := SUC s.vs_inst_idx) /\
    ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\
    op_taint tn' (Var x) = {} /\ op_prov G' (Var x) = NONE` by
     (irule word_modular_single_frame >> simp[] >>
@@ -302,7 +302,7 @@ Proof
   gvs[word_interval_ghost_inv_index]
 QED
 
-(* H is a post of this actual run, not of an independently erased path. *)
+(* HG is a post of this actual run, not of an independently erased path. *)
 Theorem word_pow_suffix_outcome:
   (?bb va vb res. compile_pow_mod256 a b sa = (op,sb) /\
   eval_operand a s = SOME va /\ eval_operand b s = SOME vb /\
@@ -310,7 +310,7 @@ Theorem word_pow_suffix_outcome:
   allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==>
     p <> STRING #"%" (toString sa.cs_next_var)) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==>
@@ -320,16 +320,16 @@ Theorem word_pow_suffix_outcome:
   (!p. not_fresh_at sc p ==> p <> STRING #"%" (toString sa.cs_next_var)) /\
   (!tail. source (es with gas_obs := tail) = (res,es with gas_obs := tail)) /\
   (!t. run_inst_seq (emitted_insts sa sb) s = OK t ==>
-    H res (es with gas_obs := []) (t with vs_inst_idx := s.vs_inst_idx + 1))) ==>
+    HG res (es with gas_obs := []) (t with vs_inst_idx := s.vs_inst_idx + 1))) ==>
   gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn)
-    (\r ee G' tn' u. H r ee u /\ ghost_inv d cenv cx es G' tn' u /\
+    (\r ee G' tn' u. HG r ee u /\ ghost_inv H d cenv cx es G' tn' u /\
       ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\
       op_taint tn' op = {} /\ op_prov G' op = NONE) R
 Proof
   strip_tac >> drule_all word_pow_counted_normal >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
   drule word_pow_emitted_insts >> strip_tac >>
-  `ghost_inv d cenv cx es G' tn' t /\
+  `ghost_inv H d cenv cx es G' tn' t /\
    ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\
    op_taint tn' op = {} /\ op_prov G' op = NONE` by
     (gnvs[] >> irule word_modular_single_frame >> simp[] >>
@@ -349,7 +349,7 @@ Theorem word_modular_suffix_outcome:
   allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==>
     p <> STRING #"%" (toString sa.cs_next_var)) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==>
@@ -359,16 +359,16 @@ Theorem word_modular_suffix_outcome:
   (!p. not_fresh_at sc p ==> p <> STRING #"%" (toString sa.cs_next_var)) /\
   (!tail. source (es with gas_obs := tail) = (res,es with gas_obs := tail)) /\
   (!t. run_inst_seq (emitted_insts sa sb) s = OK t ==>
-    H res (es with gas_obs := []) (t with vs_inst_idx := s.vs_inst_idx + 2))) ==>
+    HG res (es with gas_obs := []) (t with vs_inst_idx := s.vs_inst_idx + 2))) ==>
   gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn)
-    (\r ee G' tn' u. H r ee u /\ ghost_inv d cenv cx es G' tn' u /\
+    (\r ee G' tn' u. HG r ee u /\ ghost_inv H d cenv cx es G' tn' u /\
       ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\
       op_taint tn' op = {} /\ op_prov G' op = NONE) R
 Proof
   strip_tac >> drule_all word_modular_counted_normal >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
   drule word_modular_emitted_insts >> strip_tac >>
-  `ghost_inv d cenv cx es G' tn' t /\
+  `ghost_inv H d cenv cx es G' tn' t /\
    ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\
    op_taint tn' op = {} /\ op_prov G' op = NONE` by
     (gnvs[] >> irule word_modular_pair_frame >> simp[] >>

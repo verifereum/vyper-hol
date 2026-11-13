@@ -14,7 +14,7 @@ Proof
 QED
 
 Theorem scratch_store_state_frame:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
   local_ptrs_reserved cenv sa /\
@@ -28,7 +28,7 @@ Theorem scratch_store_state_frame:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
     b+n <= off \/ off+type_memory_size tv <= b) ==>
-  stmt_state_rel ctx fn cenv cx es t
+  stmt_state_rel H ctx fn cenv cx es t
 Proof
   strip_tac >> irule literal_state_memory_frame >>
   qexists `s` >> simp[] >>

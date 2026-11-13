@@ -29,7 +29,7 @@ Proof
 QED
 
 Theorem ifexp_alloca_interior_original_site:
-  vv_post ctx fn ce cx e es sa sb s0 ee tv vv s /\
+  vv_post H ctx fn ce cx e es sa sb s0 ee tv vv s /\
   MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w capacity)] [out]) (fn_insts fn) /\
   sa.cs_next_id <= sb.cs_next_id /\ capacity < dimword(:256) /\
   FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
@@ -41,7 +41,7 @@ Proof
 QED
 
 Theorem ifexp_alloca_interior_original_local:
-  vv_post ctx fn ce cx e es sa sb s0 ee tv vv s /\
+  vv_post H ctx fn ce cx e es sa sb s0 ee tv vv s /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   fn_inst_ids_distinct fn /\
   MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w capacity)] [out]) (fn_insts fn) /\
@@ -55,8 +55,8 @@ Proof
 QED
 
 Theorem ifexp_interior_live_local_bounds:
-  stmt_state_rel ctx fn ce cx es s0 /\
-  vv_post ctx fn ce cx e es sa sc s0 ee raw vv t /\
+  stmt_state_rel H ctx fn ce cx es s0 /\
+  vv_post H ctx fn ce cx e es sa sc s0 ee raw vv t /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   j+n <= capacity /\
   (!name p sz. local_region ce es.scopes s0 name p sz ==>

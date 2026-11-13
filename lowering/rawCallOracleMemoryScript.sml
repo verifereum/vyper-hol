@@ -78,13 +78,16 @@ QED
 Theorem raw_call_outbuf_run_mem:
   compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
   (0 < cap ==> ((cap+31) DIV 32)*32+32 < dimword (:256)) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel (H : (bool # 256 word # type_value) list # num list) ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
   alloca_history func s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
+    (!(H' : (bool # 256 word # type_value) list # num list).
+      stmt_state_rel H' ctx func cenv cx es s ==>
+      stmt_state_rel H' ctx func cenv cx es t) /\
     t.vs_memory = s.vs_memory /\ eval_operand ov t = SOME w /\
     eval_operand op t = SOME (if cap = 0 then w else w+32w) /\
     FLOOKUP t.vs_allocas sa.cs_next_id =
@@ -108,11 +111,21 @@ Proof
   Cases_on `cap = 0`
   >- (gvs[] >> drule_all raw_call_outbuf_zero_run >> strip_tac >>
       drule_all raw_call_outbuf_counted_mem >> strip_tac >>
+      `!(H' : (bool # 256 word # type_value) list # num list).
+         stmt_state_rel H' ctx func cenv cx es s ==>
+         stmt_state_rel H' ctx func cenv cx es t` by
+        (rpt strip_tac >> qpat_x_assum `stmt_state_rel H _ _ _ _ _ s` kall_tac >>
+         drule_all raw_call_outbuf_zero_run >> strip_tac >> gvs[]) >>
       qexistsl_tac [`t`,`w`] >> simp[] >> metis_tac[]) >>
   `0 < cap` by decide_tac >>
   `(cap+31) DIV 32 * 32 + 32 < dimword (:256)` by simp[] >>
   drule_all raw_call_outbuf_positive_run >> strip_tac >>
   drule_all raw_call_outbuf_counted_mem >> strip_tac >>
+  `!(H' : (bool # 256 word # type_value) list # num list).
+     stmt_state_rel H' ctx func cenv cx es s ==>
+     stmt_state_rel H' ctx func cenv cx es t` by
+    (rpt strip_tac >> qpat_x_assum `stmt_state_rel H _ _ _ _ _ s` kall_tac >>
+     drule_all raw_call_outbuf_positive_run >> strip_tac >> gvs[]) >>
   qexistsl_tac [`t`,`w`] >> fs[arithmeticTheory.MULT_COMM] >> metis_tac[]
 QED
 
@@ -120,7 +133,7 @@ Theorem raw_call_oracle_run_mem:
   emit_op (if stat then STATICCALL else CALL)
     (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
      else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]) sa = (ok,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel (H : (bool # 256 word # type_value) list # num list) ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   eval_operand gas_op s = SOME gas /\ eval_operand to_op s = SOME aw /\
   eval_operand dp s = SOME ao /\ eval_operand dl s = SOME az /\
   eval_operand op s = SOME ro /\ eval_operand val_op s = SOME val_word /\
@@ -151,7 +164,10 @@ Theorem raw_call_oracle_run_mem:
     u = update_var (STRING #"%" (toString sa.cs_next_var))
       (bool_to_word outcome.co_success) t /\
     eval_operand ok u = SOME (bool_to_word outcome.co_success) /\
-    stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
+    stmt_state_rel H ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
+    (!(H' : (bool # 256 word # type_value) list # num list).
+      stmt_state_rel H' ctx func cenv cx es s ==>
+      stmt_state_rel H' ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u) /\
     t = s with <| vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
       vs_accounts := t.vs_accounts; vs_transient := t.vs_transient;
       vs_logs := t.vs_logs; vs_pending_deletions := t.vs_pending_deletions;
@@ -173,12 +189,24 @@ Proof
   strip_tac >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
   `w2n (n2w cap : bytes32) = cap` by simp[wordsTheory.w2n_n2w] >>
-  drule_at (Pat `stmt_state_rel _ _ _ _ _ _`) raw_call_oracle_emit_run_aged >>
+  drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`) raw_call_oracle_emit_run_aged >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
   disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`val_word`,`ro`,`gas`,`aw`] mp_tac) >>
   (impl_tac >- (fs[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `t` (qx_choose_then `u` strip_assume_tac)) >>
+  `!(H' : (bool # 256 word # type_value) list # num list).
+     stmt_state_rel H' ctx func cenv cx es s ==>
+     stmt_state_rel H' ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u` by
+    (qx_gen_tac `H'` >> strip_tac >>
+     qpat_x_assum `stmt_state_rel H _ _ _ _ _ s` kall_tac >>
+     drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`) raw_call_oracle_emit_run_aged >>
+     disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
+     disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
+     disch_then (qspecl_then [`val_word`,`ro`,`gas`,`aw`] mp_tac) >>
+     (impl_tac >- (fs[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then (qx_choose_then `t2` (qx_choose_then `u2` strip_assume_tac)) >>
+     `u2 = u` by fs[] >> gvs[]) >>
   `inst_mem_below_frontier
     (mk_inst sa.cs_next_id (if stat then STATICCALL else CALL)
       (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]

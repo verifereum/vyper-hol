@@ -10,7 +10,7 @@ Ancestors
   words arithmetic list valueEncoding abiDecodePtrMemberFrame ptrDiscipline bodyPtrBopHashFrame
 
 Theorem abi_decode_ptr_operand_handoff:
-  expr_post ctx func cenv cx e es0 s0c sa s0 es (BytesV bs) (Var p) s /\
+  expr_post H ctx func cenv cx e es0 s0c sa s0 es (BytesV bs) (Var p) s /\
   ptr_val_ok cx (expr_type e) (BytesV bs) (Var p) G tn s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -21,7 +21,7 @@ Theorem abi_decode_ptr_operand_handoff:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   not_fresh_at sa p /\ abi_decoder_operand_live sa.cs_next_var (Var p) /\
   mn <= LENGTH bs /\ LENGTH bs <= mx /\ mx < dimword (:256) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   fn_inst_ids_distinct func /\ outsz < dimword (:256) ==>
@@ -55,7 +55,7 @@ Proof
   drule_all hash_dynamic_bytes_operand >> strip_tac >>
   `post_value_type cenv e = expr_type e` by
     (irule post_value_type_bytestring >> fs[is_bytestring_type_def]) >>
-  `stmt_state_rel ctx func cenv cx es s /\
+  `stmt_state_rel H ctx func cenv cx es s /\
    expr_val_at cenv cx (expr_type e) s0c sa es (BytesV bs) (Var p) s` by
     fs[expr_post_def] >>
   `sa.cs_next_id <= sh.cs_next_id /\ sa.cs_next_var <= ready.cs_next_var` by
@@ -90,9 +90,9 @@ Resume abi_decode_ptr_operand_handoff[normalize]:
      asm_rewrite_tac[] >> fs[NoAsms, abi_decoder_prune_vars_def] >>
      `b+(LENGTH bs+32) = LENGTH bs+(b+32)` by decide_tac >>
      metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx es (abi_decoder_prune_vars sa.cs_next_var s)` by
+  `stmt_state_rel H ctx func cenv cx es (abi_decoder_prune_vars sa.cs_next_var s)` by
     (irule abi_decode_ptr_prune_stmt_state_rel >> simp[]) >>
-  `ghost_inv d cenv cx es G tn (abi_decoder_prune_vars sa.cs_next_var s)` by
+  `ghost_inv H d cenv cx es G tn (abi_decoder_prune_vars sa.cs_next_var s)` by
     (irule abi_decode_ptr_prune_ghost_reserved >> simp[]) >>
   `fresh_vars_wrt ready (abi_decoder_prune_vars sa.cs_next_var s)` by
     (mp_tac (Q.INST [`st` |-> `sa`, `s` |-> `s`] abi_decoder_prune_fresh) >>

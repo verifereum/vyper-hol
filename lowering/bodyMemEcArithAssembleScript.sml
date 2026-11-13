@@ -74,7 +74,7 @@ QED
 
 Theorem ecmul_prefix_safe_length:
   compile_ecmul_point p scalar sf = (res,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
@@ -94,7 +94,7 @@ Proof
   `96 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
   qpat_assum `context$compile_alloc_buffer 96 sf = _`
     (mp_then Any mp_tac literal_alloc_buffer_run) >>
-  disch_then (qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `ctx`] mp_tac) >>
+  disch_then (qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `s`, `ctx`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sf sa) s = OK s1` >>
   `s1.vs_labels = s.vs_labels` by
@@ -130,7 +130,7 @@ QED
 
 Theorem ecadd_prefix_safe_length:
   compile_ecadd_points p q sf = (res,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
@@ -153,7 +153,7 @@ Proof
   `128 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
   qpat_assum `context$compile_alloc_buffer 128 sf = _`
     (mp_then Any mp_tac literal_alloc_buffer_run) >>
-  disch_then (qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `ctx`] mp_tac) >>
+  disch_then (qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `s`, `ctx`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sf sa) s = OK s1` >>
   `s1.vs_labels = s.vs_labels` by
@@ -196,7 +196,7 @@ QED
 
 Theorem ecmul_prefix_safe:
   compile_ecmul_point p scalar sf = (res,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
@@ -215,7 +215,7 @@ QED
 
 Theorem ecadd_prefix_safe:
   compile_ecadd_points p q sf = (res,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
@@ -237,7 +237,7 @@ QED
 
 Theorem ecmul_prefix_take_safe:
   compile_ecmul_point p scalar sf = (res,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
@@ -255,7 +255,7 @@ QED
 
 Theorem ecadd_prefix_take_safe:
   compile_ecadd_points p q sf = (res,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
@@ -276,7 +276,7 @@ QED
 
 Theorem ecmul_prefix_run:
   compile_ecmul_point p scalar sf = (res,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
@@ -295,7 +295,7 @@ Theorem ecmul_prefix_run:
     (!i. MEM i (emitted_insts sf sm) ==>
       MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
     run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + 96 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\
@@ -358,7 +358,7 @@ QED
 
 Theorem ecadd_prefix_run:
   compile_ecadd_points p q sf = (res,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
@@ -378,7 +378,7 @@ Theorem ecadd_prefix_run:
     (!i. MEM i (emitted_insts sf sm) ==>
       MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
     run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + 128 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\
@@ -446,7 +446,7 @@ QED
 
 Theorem ecmul_prefix_mem:
   compile_ecmul_point p scalar sf = (res,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\ alloca_history func s /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sf sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -468,7 +468,7 @@ Theorem ecmul_prefix_mem:
     (!i. MEM i (emitted_insts sf sm) ==>
       MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
     run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + 96 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\
@@ -501,7 +501,7 @@ QED
 
 Theorem ecadd_prefix_mem:
   compile_ecadd_points p q sf = (res,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\ alloca_history func s /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sf sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -525,7 +525,7 @@ Theorem ecadd_prefix_mem:
     (!i. MEM i (emitted_insts sf sm) ==>
       MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
     run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + 128 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\

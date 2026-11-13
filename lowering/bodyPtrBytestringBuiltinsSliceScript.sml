@@ -172,8 +172,8 @@ Finalise emit_slice_copy_counted
 Theorem slice_bounds_allocation_frame:
   compile_assert_slice_bounds a n limit sa = ((),sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK u /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-  stmt_state_rel ctx fn cenv cx es
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+  stmt_state_rel H ctx fn cenv cx es
     (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   local_ptrs_reserved cenv sb /\
   (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)
@@ -185,7 +185,7 @@ Proof
   drule_all run_inst_seq_writes_fresh >> strip_tac >>
   `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by
     simp[lookup_var_def] >>
-  `stmt_state_rel ctx fn cenv cx es (s with vs_vars := u.vs_vars)` by
+  `stmt_state_rel H ctx fn cenv cx es (s with vs_vars := u.vs_vars)` by
     (irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
      `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
      gvs[lookup_var_def]) >>
@@ -199,7 +199,7 @@ QED
 Theorem compile_slice_data_counted_normal:
   compile_slice_data src_len (Var src) start len N sa = (out,sb) /\
   compile_assert_slice_bounds start len src_len sa = ((),sc) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   local_ptrs_reserved cenv sa /\ fn_inst_ids_distinct fn /\ fresh_vars_wrt sa s /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\

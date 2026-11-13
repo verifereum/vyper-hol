@@ -4,11 +4,11 @@ Ancestors bodyPtrDefs appendStorageGhostPtr exprSimDefs compileEnv
   venomExecSemantics fragExec exprLoweringProps context compileEnv emitHelper
 
 Theorem bytes_writer_stor_taint_ok:
-  stor_taint_ok cx tn s /\
+  stor_taint_ok H cx tn s /\
   sf.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
   sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
   tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm ==>
-  stor_taint_ok cx tnf sf
+  stor_taint_ok H cx tnf sf
 Proof
   simp[stor_taint_ok_def]
 QED
@@ -46,7 +46,7 @@ Proof
 QED
 
 Theorem bytes_writer_ghost_inv:
-  ghost_inv d ce cx es G tn s /\
+  ghost_inv H d ce cx es G tn s /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
@@ -61,11 +61,11 @@ Theorem bytes_writer_ghost_inv:
   (!ft fv p. val_wf ft fv /\ (p+type_memory_size ft <= b \/ b+n <= p) /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory ft fv p m) ==>
     !m. mem_agree_outside tnf.t_mem sf.vs_memory m ==> val_in_memory ft fv p m) /\
-  stor_taint_ok cx tnf sf ==>
-  ghost_inv d ce cx es Gf tnf sf
+  stor_taint_ok H cx tnf sf ==>
+  ghost_inv H d ce cx es Gf tnf sf
 Proof
   strip_tac >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[ghost_inv_def] >> strip_tac >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
       `not_fresh_at sc p` by metis_tac[] >>

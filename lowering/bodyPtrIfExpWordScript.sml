@@ -25,7 +25,7 @@ QED
 (* A word annotation does not exclude located operands: those compile to
    active pointer loads.  Calldata alone is ruled out by the vv post. *)
 Theorem ifexp_word_unwrap_dispatch:
-  vv_post ctx fn cenv cx e es sa sm s0 ee raw (LocatedValue ty p) s /\
+  vv_post H ctx fn cenv cx e es sa sm s0 ee raw (LocatedValue ty p) s /\
   is_word_type (expr_type e) ==>
   ty = expr_type e /\ p.ptr_location <> LocCalldata /\
   unwrap_value cenv (LocatedValue ty p) =
@@ -45,12 +45,12 @@ QED
    follow from this lemma. *)
 Theorem ifexp_stack_unwrap_counted:
   unwrap_value cenv (StackValue ty op) sm = (src,sb) /\
-  vv_post ctx fn cenv cx e es sa sm s0 ee raw (StackValue ty op) s /\
+  vv_post H ctx fn cenv cx e es sa sm s0 ee raw (StackValue ty op) s /\
   ptr_vv_ok cx (expr_type e) raw (StackValue ty op) ee G tn s /\
   ~s.vs_halted ==>
   ?v. sb = sm /\ src = op /\ read_result cx raw ee = (INL v,ee) /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (OK s) /\
-      expr_post ctx fn cenv cx e es sa sb s0 ee v src s /\
+      expr_post H ctx fn cenv cx e es sa sb s0 ee v src s /\
       ptr_val_ok cx (expr_type e) v src G tn s
 Proof
   simp[unwrap_value_def, comp_return_def, ptr_vv_ok_def] >>

@@ -25,10 +25,10 @@ Theorem abi_decode_actual_reject_path:
     (emitted_insts sa sb) /\
   abi_decoder_vars_extend extras r s /\
   abi_decode_reject_witness (emitted_insts sa sb) r u /\
-  inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) r H tf ==>
+  inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) r HG tf ==>
   ?v n j. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort v /\
     vsr_term_frame u = vsr_term_frame v /\
-    gas_path_ptr D lo ctx func PG G tn s n H tf
+    gas_path_ptr D lo ctx func PG G tn s n HG tf
       (Abort Revert_abort (v with vs_inst_idx := j))
 Proof
   strip_tac >>
@@ -54,11 +54,11 @@ Theorem abi_decode_actual_success_path:
     ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
   abi_decoder_vars_extend extras r s /\
   run_inst_seq (emitted_insts sa sb) r = OK u /\
-  inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) r H tf ==>
+  inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) r HG tf ==>
   ?v. run_inst_seq (emitted_insts sa sb) s = OK v /\
     abi_decoder_vars_extend extras u v /\
     gas_path_ptr D lo ctx func PG G tn s
-      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) H tf
+      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) HG tf
       (OK (v with vs_inst_idx := LENGTH sb.cs_current_insts))
 Proof
   strip_tac >>
@@ -82,8 +82,8 @@ Proof
 QED
 
 Theorem abi_decode_actual_stmt_state_rel:
-  abi_decoder_vars_extend extras s t /\ stmt_state_rel ctx func cenv cx es s ==>
-  stmt_state_rel ctx func cenv cx es t
+  abi_decoder_vars_extend extras s t /\ stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx es t
 Proof
   strip_tac >>
   `t = s with vs_vars := t.vs_vars` by
@@ -112,16 +112,16 @@ Theorem abi_decode_actual_success_handoff:
     ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
   abi_decoder_vars_extend extras r s /\
   run_inst_seq (emitted_insts sa sb) r = OK (u with vs_inst_idx := s.vs_inst_idx) /\
-  inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) r H tf /\
+  inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) r HG tf /\
   abi_decode_member_live ret ctx func cenv cx es src b h dst d cap
-    pos z hi sb H tf u /\
+    pos z hi sb HG tf u /\
   (!mem'. mem_agree_outside tf.t_mem u.vs_memory mem' ==>
     tuple_in_memory vs tvs (w2n d) mem') ==>
   ?v. gas_path_ptr D lo ctx func PG G tn s
-      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) H tf (OK v) /\
+      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) HG tf (OK v) /\
     v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv ret cenv cx es H tf v /\ stmt_state_rel ctx func cenv cx es v /\
-    lookup_var dst v = SOME d /\ ptr_covers H tf dst v cap /\
+    ghost_inv H ret cenv cx es HG tf v /\ stmt_state_rel H ctx func cenv cx es v /\
+    lookup_var dst v = SOME d /\ ptr_covers HG tf dst v cap /\
     (!mem'. mem_agree_outside tf.t_mem v.vs_memory mem' ==>
       tuple_in_memory vs tvs (w2n d) mem') /\
     abi_decoder_vars_extend extras u v
@@ -137,11 +137,11 @@ Proof
        (simp_tac (srw_ss()) [NoAsms, venom_state_component_equality] >> simp[]) >>
      simp[]) >>
   drule abi_decode_member_live_resources >> strip_tac >>
-  `ghost_inv ret cenv cx es H tf (v with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+  `ghost_inv H ret cenv cx es HG tf (v with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule abi_decode_ptr_extend_ghost >> goal_assum (drule_at Any) >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx es (v with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+  `stmt_state_rel H ctx func cenv cx es (v with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule abi_decode_actual_stmt_state_rel >> goal_assum (drule_at Any) >> metis_tac[]) >>
-  `ptr_covers H tf dst (v with vs_inst_idx := LENGTH sb.cs_current_insts) cap` by
+  `ptr_covers HG tf dst (v with vs_inst_idx := LENGTH sb.cs_current_insts) cap` by
     (irule abi_decode_ptr_extend_covers >> goal_assum (drule_at Any) >> metis_tac[]) >>
   `eval_operand (Var dst) u = SOME d` by simp[eval_operand_def] >>
   drule_all abi_decoder_vars_extend_eval >>
@@ -225,11 +225,11 @@ Theorem abi_decode_setup_success_handoff:
   run_inst_seq (emitted_insts sa ready) (abi_decoder_prune_vars sa.cs_next_var s) =
     OK (u0 with vs_inst_idx := s.vs_inst_idx) /\
   inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa ready)
-    (abi_decoder_prune_vars sa.cs_next_var s) H tf /\
+    (abi_decoder_prune_vars sa.cs_next_var s) HG tf /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   abi_decode_member_live ret ctx func cenv cx es src b (LENGTH bs) dst d cap
-    (Lit 0w) 0w hi ready H tf u0 /\
+    (Lit 0w) 0w hi ready HG tf u0 /\
   EVERY supported_scalar_type tys /\
   abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields (TupleT tys) (TupleTV tvs) /\
   cap = SUM (MAP (type_memory_bytes ce) tys) /\
@@ -243,11 +243,11 @@ Theorem abi_decode_setup_success_handoff:
   ?v K tk. gas_path_ptr D 0 ctx func PG G tn s
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) K tk (OK v) /\
     v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv ret cenv cx es K tk v /\ stmt_state_rel ctx func cenv cx es v /\
+    ghost_inv H ret cenv cx es K tk v /\ stmt_state_rel H ctx func cenv cx es v /\
     lookup_var dst v = SOME d /\ ptr_covers K tk dst v cap /\
     (!mem'. mem_agree_outside tk.t_mem v.vs_memory mem' ==>
       tuple_in_memory vs tvs (w2n d) mem') /\
-    (?u. abi_decode_member_frame ready H tf u0 K tk u (w2n d) cap /\
+    (?u. abi_decode_member_frame ready HG tf u0 K tk u (w2n d) cap /\
          abi_decoder_vars_extend s.vs_vars u v)
 Proof
   strip_tac >>
@@ -270,11 +270,11 @@ Theorem abi_decode_setup_actual_reject:
   run_inst_seq (emitted_insts sa ready) (abi_decoder_prune_vars sa.cs_next_var s) =
     OK (u0 with vs_inst_idx := s.vs_inst_idx) /\
   inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa ready)
-    (abi_decoder_prune_vars sa.cs_next_var s) H tf /\
+    (abi_decoder_prune_vars sa.cs_next_var s) HG tf /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   abi_decode_member_live ret ctx func cenv cx es src b h dst d cap
-    (Lit 0w) 0w hi ready H tf u0 /\
+    (Lit 0w) 0w hi ready HG tf u0 /\
   EVERY supported_scalar_type tys /\
   abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields (TupleT tys) (TupleTV tvs) /\
   cap = SUM (MAP (type_memory_bytes ce) tys) /\
@@ -307,7 +307,7 @@ Proof
 QED
 
 Theorem abi_decode_operand_success_handoff:
-  expr_post ctx func cenv cx e es0 s0c sa s0 es (BytesV bs) (Var p) s /\
+  expr_post H ctx func cenv cx e es0 s0c sa s0 es (BytesV bs) (Var p) s /\
   ptr_val_ok cx (expr_type e) (BytesV bs) (Var p) G tn s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -318,7 +318,7 @@ Theorem abi_decode_operand_success_handoff:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   not_fresh_at sa p /\ abi_decoder_operand_live sa.cs_next_var (Var p) /\
   mn <= LENGTH bs /\ LENGTH bs <= mx /\ mx < dimword (:256) /\
-  ghost_inv ret cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H ret cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   fn_inst_ids_distinct func /\ outsz < dimword (:256) /\
@@ -335,7 +335,7 @@ Theorem abi_decode_operand_success_handoff:
     gas_path_ptr D 0 ctx func PG G tn s
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) K tk (OK v) /\
     v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv ret cenv cx es K tk v /\ stmt_state_rel ctx func cenv cx es v /\
+    ghost_inv H ret cenv cx es K tk v /\ stmt_state_rel H ctx func cenv cx es v /\
     lookup_var dst v = SOME d /\ ptr_covers K tk dst v outsz /\
     (!mem'. mem_agree_outside tk.t_mem v.vs_memory mem' ==>
       tuple_in_memory vs tvs (w2n d) mem') /\
@@ -459,11 +459,11 @@ Theorem abi_decode_setup_source_reject_or_exempt:
   run_inst_seq (emitted_insts sa ready) (abi_decoder_prune_vars sa.cs_next_var s) =
     OK (u0 with vs_inst_idx := s.vs_inst_idx) /\
   inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa ready)
-    (abi_decoder_prune_vars sa.cs_next_var s) H tf /\
+    (abi_decoder_prune_vars sa.cs_next_var s) HG tf /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   abi_decode_member_live ret ctx func cenv cx es src b (LENGTH bs) dst d cap
-    (Lit 0w) 0w hi ready H tf u0 /\
+    (Lit 0w) 0w hi ready HG tf u0 /\
   EVERY supported_scalar_type tys /\
   abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields (TupleT tys) (TupleTV tvs) /\
   cap = SUM (MAP (type_memory_bytes ce) tys) /\
@@ -486,7 +486,7 @@ Proof
 QED
 
 Theorem abi_decode_operand_actual_reject_or_exempt:
-  expr_post ctx func cenv cx e es0 s0c sa s0 es (BytesV bs) (Var p) s /\
+  expr_post H ctx func cenv cx e es0 s0c sa s0 es (BytesV bs) (Var p) s /\
   ptr_val_ok cx (expr_type e) (BytesV bs) (Var p) G tn s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -497,7 +497,7 @@ Theorem abi_decode_operand_actual_reject_or_exempt:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   not_fresh_at sa p /\ abi_decoder_operand_live sa.cs_next_var (Var p) /\
   mn <= LENGTH bs /\ LENGTH bs <= mx /\ mx < dimword (:256) /\
-  ghost_inv ret cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H ret cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   fn_inst_ids_distinct func /\ outsz < dimword (:256) /\
@@ -533,7 +533,7 @@ Proof
 QED
 
 Theorem abi_decode_operand_header_reject:
-  expr_post ctx func cenv cx e es0 s0c sa s0 es (BytesV bs) (Var p) s /\
+  expr_post H ctx func cenv cx e es0 s0c sa s0 es (BytesV bs) (Var p) s /\
   ptr_val_ok cx (expr_type e) (BytesV bs) (Var p) G tn s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -553,7 +553,7 @@ Proof
   drule_all hash_dynamic_bytes_operand >> strip_tac >>
   `post_value_type cenv e = expr_type e` by
     (irule post_value_type_bytestring >> fs[is_bytestring_type_def]) >>
-  `stmt_state_rel ctx func cenv cx es s /\
+  `stmt_state_rel H ctx func cenv cx es s /\
    expr_val_at cenv cx (expr_type e) s0c sa es (BytesV bs) (Var p) s` by
     fs[expr_post_def] >>
   `sa.cs_next_id <= sh.cs_next_id` by

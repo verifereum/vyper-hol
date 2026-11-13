@@ -45,13 +45,12 @@ Theorem ghost_kept_wb_trans:
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
   ghost_kept cenv es1 sm G1 tn1 s1 G2 tn2 /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\ wb_frame cenv es es' sa s0 s1 ==>
   ghost_kept cenv es sa G0 tn0 s0 G2 tn2
 Proof
   strip_tac >> irule ghost_kept_trans >>
   qexistsl_tac [`G1`,`es1`,`s1`,`sm`,`tn1`] >> simp[] >>
   reverse conj_tac >- (gvs[wb_frame_def] >> metis_tac[]) >>
-  rpt gen_tac >> irule log_frame_local_region >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  rpt gen_tac >> drule_all log_frame_local_region >> simp[]
 QED

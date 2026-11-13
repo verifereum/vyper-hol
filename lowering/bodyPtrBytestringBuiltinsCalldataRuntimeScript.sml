@@ -59,11 +59,11 @@ QED
    witness to feed pointer replay, not an independently chosen execution. *)
 Theorem slice_buffer_allocation_runtime:
   compile_alloc_buffer N sa = (buf,sm) /\ fn_has_code sa sm fn /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ N < dimword (:256) ==>
   ?u w. step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)]
       [STRING #"%" (toString sa.cs_next_var)]) s = OK u /\
-    stmt_state_rel ctx fn cenv cx es u /\
+    stmt_state_rel H ctx fn cenv cx es u /\
     buf.buf_operand = Var (STRING #"%" (toString sa.cs_next_var)) /\
     eval_operand buf.buf_operand u = SOME w /\
     FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,N) /\

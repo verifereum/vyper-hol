@@ -20,7 +20,7 @@ Theorem bop_word_pair_outcome_ptr:
   c1.cs_next_var <= c2.cs_next_var /\ c1.cs_next_id <= c2.cs_next_id /\
   (!z. x = Var z ==> not_fresh_at c1 z) /\ (!l. x <> Label l) /\
   (!z. y = Var z ==> not_fresh_at c2 z) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (bind (bind (eval_expr cx e1) (read_result cx)) (\v1.
      bind (bind (eval_expr cx e2) (read_result cx)) (\v2.
        \st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st))))

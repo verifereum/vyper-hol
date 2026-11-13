@@ -94,7 +94,7 @@ Theorem target_index_pure_storage_source_ptr:
   bind (eval_expr cx e) (read_result cx) em = (INL v,ef) ==>
   ef = es /\
   slots_in_range (get_storage cx ef tr) (w2n slot) tv /\
-  storage_read_live cx tr (get_storage cx ef tr) slot tv
+  storage_read_live H tr (get_storage cx ef tr) slot tv
 Proof
   strip_tac >>
   `em = es` by metis_tac[nested_pop_eval_base_pure_state] >>

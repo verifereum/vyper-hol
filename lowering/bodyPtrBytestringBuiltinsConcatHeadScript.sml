@@ -10,7 +10,7 @@ Libs
   monadsyntax
 
 Theorem concat_operand_fixed_value:
-  expr_post ctx func cenv cx e es sa sb s0 es1 v op t /\
+  expr_post H ctx func cenv cx e es sa sb s0 es1 v op t /\
   expr_type e = BaseT (BytesT (Fixed m)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\ ptr_val_ok cx (post_value_type cenv e) v op G tn t ==>
@@ -36,10 +36,10 @@ Theorem concat_head_arm_ptr:
   lower_value compile_expr cenv (expr_type e) e sa = (op,s1) /\
   (is_bytestring_type (expr_type e) \/ ?m. expr_type e = BaseT (BytesT (Fixed m))) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
-  expr_post ctx func cenv cx e es sa s1 s0 es1 v op t /\
+  expr_post H ctx func cenv cx e es sa s1 s0 es1 v op t /\
   ~t.vs_halted /\ t.vs_current_bb = s1.cs_current_bb /\
   t.vs_inst_idx = LENGTH s1.cs_current_insts /\ fn_has_code sa sb func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   not_fresh_at sa dv /\ not_fresh_at sa ov /\
   lookup_var dv s0 = SOME (n2w (B+32)) /\ lookup_var ov s0 = SOME ow /\
@@ -53,7 +53,7 @@ Theorem concat_head_arm_ptr:
   mload (w2n ow) s0 = n2w k /\ k <= P /\
   32+P+SUM (MAP concat_payload_capacity (MAP expr_type (e::args))) <= bsz /\
   32+concat_data_bound P (MAP expr_type (e::args)) <= bsz /\
-  ghost_inv d cenv cx es1 G tn t /\
+  ghost_inv H d cenv cx es1 G tn t /\
   ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   ptr_covers G0 tn0 dv s0 (bsz-32) /\ ptr_covers G0 tn0 ov s0 32 /\
@@ -68,8 +68,8 @@ Theorem concat_head_arm_ptr:
         else case expr_type e of BaseT (BytesT (Fixed m)) => (F,m) | _ => (F,32:num)) args)
       (Var ov) s2 = ((),sb) /\
     ci_mono sa s1 /\ ci_mono s1 s2 /\ fn_has_code s2 sb func /\
-    gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 Gf tnf (OK t2) /\
-    stmt_state_rel ctx func cenv cx es1 t2 /\ ~t2.vs_halted /\
+    gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 Gf tnf (OK t2) /\
+    stmt_state_rel H ctx func cenv cx es1 t2 /\ ~t2.vs_halted /\
     t2.vs_current_bb = s2.cs_current_bb /\ t2.vs_inst_idx = LENGTH s2.cs_current_insts /\
     lookup_var dv t2 = SOME (n2w (B+32)) /\ lookup_var ov t2 = SOME ow /\
     FLOOKUP t2.vs_allocas binst.inst_id = SOME (B,bsz) /\
@@ -85,7 +85,7 @@ Theorem concat_head_arm_ptr:
     (!p n. (p+n <= B \/ B+bsz <= p) /\ (p+n <= w2n ow \/ w2n ow+64 <= p) ==>
       mem_bytes_at p n t2.vs_memory = mem_bytes_at p n t.vs_memory) /\
     mem_bytes_at (B+32) k t.vs_memory = mem_bytes_at (B+32) k s0.vs_memory /\
-    ghost_inv d cenv cx es1 Gf tnf t2 /\ ghost_kept cenv es1 s1 G tn t Gf tnf /\
+    ghost_inv H d cenv cx es1 Gf tnf t2 /\ ghost_kept cenv es1 s1 G tn t Gf tnf /\
     ptr_covers Gf tnf dv t2 (bsz-32) /\ ptr_covers Gf tnf ov t2 32 /\
     (!i. B+32 <= i /\ i < B+32+k+LENGTH (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) ==> i NOTIN tnf.t_mem) /\
     (!i. w2n ow <= i /\ i < w2n ow+32 ==> i NOTIN tnf.t_mem)
@@ -104,7 +104,7 @@ Proof
     (qpat_x_assum `32+P+SUM _ <= _` mp_tac >> simp[]) >>
   `32+k <= bsz` by decide_tac >>
   drule_all concat_args_pre_ptr >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es1 t` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es1 t` by fs[expr_post_def] >>
   `mload (w2n ow) t = n2w k` by metis_tac[] >>
   Cases_on `is_bytestring_type (expr_type e)`
   >- suspend "bytes"

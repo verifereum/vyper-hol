@@ -11,11 +11,11 @@ Ancestors
 Theorem log_source_store_run_path_ptr:
   compile_alloc_buffer cap st = (buf,start) /\ fn_has_code st start func /\
   compile_log_store_data ce xs (MAP SND xs) buf.buf_operand 0 start = ((),end_st) /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ cap < dimword(:256) /\
   start.cs_next_var <= end_st.cs_next_var /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  ~ctx_has_dalloca ctx /\ ghost_inv d ce cx es G tn s /\
+  ~ctx_has_dalloca ctx /\ ghost_inv H d ce cx es G tn s /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   LIST_REL (\arg v. log_arg_rel ce cx sa st es s arg v /\
@@ -30,18 +30,18 @@ Theorem log_source_store_run_path_ptr:
   isPREFIX (emitted_insts st start) (DROP s.vs_inst_idx bb.bb_instructions) /\
   isPREFIX (emitted_insts start end_st)
     (DROP (s.vs_inst_idx + LENGTH (emitted_insts st start)) bb.bb_instructions) ==>
-  ?H tm t b src.
+  ?HG tm t b src.
     gas_path_ptr D 0 ctx func PG G tn s
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st start)) +
-       LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts start end_st))) H tm
+       LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts start end_st))) HG tm
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st start) +
         LENGTH (emitted_insts start end_st))) /\
     (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
       log_data_layout cx (MAP SND xs) vs b m) /\
-    stmt_state_rel ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
-    ghost_inv d ce cx es H tm t /\ ghost_kept ce es st G tn s H tm /\
+    stmt_state_rel H ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
+    ghost_inv H d ce cx es HG tm t /\ ghost_kept ce es st G tn s HG tm /\
     buf.buf_operand = Var src /\ buf.buf_size = cap /\
-    lookup_var src t = SOME (n2w b) /\ ptr_covers H tm src t cap /\
+    lookup_var src t = SOME (n2w b) /\ ptr_covers HG tm src t cap /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,cap) /\ b+cap < dimword(:256) /\
     st.cs_next_id < start.cs_next_id /\ inst_extends st start /\
     (!name p sz. local_region ce es.scopes t name p sz <=>
@@ -92,9 +92,9 @@ Proof
      metis_tac[]) >>
   `t.vs_halted = s.vs_halted /\ t.vs_current_bb = s.vs_current_bb` by
     fs[log_write_frame_def, venom_state_component_equality] >>
-  qexistsl_tac [`H'`,`tm'`,`t`,`b`] >>
+  qexistsl_tac [`HG'`,`tm'`,`t`,`b`] >>
   conj_tac
-  >- (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ H' tm' _` mp_tac >>
+  >- (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ HG' tm' _` mp_tac >>
       simp_tac bool_ss [AC ADD_ASSOC ADD_COMM]) >>
   asm_simp_tac bool_ss [] >> metis_tac[]
 QED
