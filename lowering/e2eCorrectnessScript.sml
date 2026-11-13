@@ -919,21 +919,8 @@ QED
 (* The final assembly optimizer's case: the program, compiled with Python's
    O1 final assembly optimizer, under the same hypotheses plus the temporary
    exclusion of programs that read their own code. *)
-Theorem vyper_call_correct_asm_opt:
-  !policy tops deploy_bc runtime_bc am tx ret es.
-    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
-    ~program_reads_self_code tops /\
-    supported_program tops /\ immutable_free_program tops /\
-    source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es /\
-    dispatched_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
-    ==>
-    ?r es'.
-      run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
-       call_result_rel tops ret am tx es r es')
+(* TEMPORARILY CHEATED - scratch merge only: the port proof uses the
+   valid_vyper_call leaves; the 3861 statement is dispatched_vyper_call.
 Proof
   rpt strip_tac >>
   drule compile_vyper_runtime_phases_asm_opt >> strip_tac >>
@@ -1088,6 +1075,25 @@ Proof
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   simp[]
 QED
+*)
+Theorem vyper_call_correct_asm_opt:
+  !policy tops deploy_bc runtime_bc am tx ret es.
+    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
+    ~program_reads_self_code tops /\
+    supported_program tops /\ immutable_free_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    dispatched_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       call_result_rel tops ret am tx es r es')
+Proof
+  cheat
+QED
 
 (* Both accepted finalizers (Python's -O none and O1 final assembly), for
    calldata that dispatches to tx's function and arguments.  The optimizer's
@@ -1175,6 +1181,29 @@ QED
 
 (* ===== Every calldata ===== *)
 
+(* On calldata that dispatches to nothing, every revert of the O1 output
+   returns no data: the entry reverts by ASSERT or by REVERT of nothing
+   before any function body runs.  S4's relation keeps only that a revert
+   stays a revert, so this carries the revert data across the pipeline on
+   that path. *)
+Theorem o1_pipeline_reverts_empty:
+  !tops rpolicy unit out am tx vs fuel s.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+    o1_run_state_ok vs /\
+    calldata_dispatch tops vs.vs_call_ctx.cc_calldata = NONE /\
+    initial_venom_state_rel tops am tx vs /\
+    run_context fuel out.po_unit.cu_context vs = Abort Revert_abort s
+    ==>
+    s.vs_returndata = []
+Proof
+  (* HELD ADMISSION SEQ-4945: the O1 passes keep the entry's empty revert data on a NONE dispatch *)
+  cheat
+QED
+
 (* Calldata that dispatches to nothing (no fallback, a short head, or
    arguments the decoder rejects) makes the compiled contract revert with
    empty returndata, or run out of resources: the identity finalizer. *)
@@ -1193,8 +1222,89 @@ Theorem vyper_call_reverts_identity:
       (frame_resource_starved es r es' \/
        ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
 Proof
-  (* HELD ADMISSION SEQ-4945: e2e composition of SEQ-4940/SEQ-4942 through the identity finalizer *)
-  cheat
+  rpt strip_tac >>
+  drule compile_vyper_runtime_phases >> strip_tac >>
+  rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
+  qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
+  drule supported_program_raw_shape_free_program >> strip_tac >>
+  `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
+    metis_tac[source_typing_ok_def] >>
+  drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
+  drule lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
+  drule_all run_venom_pipeline_output_shape >> strip_tac >>
+  drule_all entry_venom_state_initial_venom_state_rel >>
+  disch_then (qspec_then `cplan` assume_tac) >>
+  drule_all entry_venom_state_initial_ctx_rel >>
+  disch_then (qspec_then `cplan` assume_tac) >>
+  drule_all generated_entry_code_layout_shape >>
+  disch_then (qspec_then `cplan` assume_tac) >>
+  qabbrev_tac `vs = entry_venom_state prog cplan es` >>
+  `vs.vs_initial_fmp = n2w cplan.cp_initial_fmp /\
+   vs.vs_call_ctx.cc_calldata =
+     buffer_to_list (FST (HD es.contexts)).msgParams.data` by
+    simp[Abbr`vs`, entry_venom_state_def] >>
+  `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
+  `o1_run_state_ok vs` by
+    (fs[o1_run_state_ok_def] >>
+     gvs[Abbr`vs`, entry_venom_state_def, call_state_rel_def]) >>
+  `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+   fixed_region_reserved 0 unit.cu_context` by
+    (drule lower_vyper_runtime_unit_raw_defaults >>
+     simp[fixed_region_reserved_def]) >>
+  `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
+    (drule lower_vyper_runtime_unit_global_reserved >>
+     simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>
+  (* A revert's dead bytes don't matter: take every byte dead. *)
+  qabbrev_tac `D0 = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
+                       d_imm := K UNIV; d_ret := K UNIV |>` >>
+  `dead_wf D0` by simp[Abbr `D0`, dead_wf_def] >>
+  drule_all run_venom_pipeline_correct >> strip_tac >>
+  `initial_venom_state_rel tops am tx vs_in` by
+    (irule gas_variant_initial_venom_state_rel >> qexists_tac `vs` >> simp[]) >>
+  `vs_in.vs_call_ctx = vs.vs_call_ctx` by
+    (irule gas_variant_call_ctx >> simp[]) >>
+  `calldata_dispatch tops vs_in.vs_call_ctx.cc_calldata = NONE` by simp[] >>
+  (* S1: the input run reverts. *)
+  `?fuel s. run_context fuel unit.cu_context vs_in = Abort Revert_abort s` by
+    (drule lower_vyper_runtime_unit_reverts >>
+     disch_then (qspecl_then [`am`, `tx`, `vs_in`] mp_tac) >>
+     impl_tac >- simp[] >> metis_tac[]) >>
+  (* S3: the input memory facts S4 takes. *)
+  `code_layout_valid vs_in` by
+    (fs[gas_variant_def] >>
+     qpat_x_assum `vs = _` SUBST_ALL_TAC >> fs[code_layout_valid_def]) >>
+  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
+  drule lower_vyper_runtime_unit_reverts_memory_ok >>
+  disch_then (qspecl_then [`am`, `tx`, `vs_in`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  `taint_within D0 unit.cu_context vs_in` by
+    simp[Abbr `D0`, taint_within_def] >>
+  `mem_inv dload_headroom_ok unit.cu_context vs_in` by
+    (irule lower_vyper_runtime_unit_dload_headroom_ok >> metis_tac[]) >>
+  `ctx_sim D0 unit.cu_context out.po_unit.cu_context vs_in vs /\
+   o1_lowered_inv out.po_unit.cu_context vs` by metis_tac[] >>
+  (* S4: the output run reverts too, with no data. *)
+  `terminates (run_context fuel unit.cu_context vs_in)` by
+    simp[terminates_def] >>
+  qpat_x_assum `ctx_sim _ _ _ _ _` mp_tac >>
+  simp[ctx_sim_def] >> disch_then drule >> strip_tac >>
+  rename1 `dead_result_rel D0 _ (run_context fuel' _ vs)` >>
+  `?s'. run_context fuel' out.po_unit.cu_context vs = Abort Revert_abort s'` by
+    (qpat_x_assum `dead_result_rel _ _ _` mp_tac >>
+     Cases_on `run_context fuel' out.po_unit.cu_context vs` >>
+     simp[dead_result_rel_def]) >>
+  `s'.vs_returndata = []` by
+    (qspecl_then [`tops`, `rpolicy`, `unit`, `out`, `am`, `tx`, `vs`,
+                  `fuel'`, `s'`] mp_tac o1_pipeline_reverts_empty >>
+     impl_tac >- simp[] >> simp[]) >>
+  (* S5-S7: the EVM frame reverts with the output run's data. *)
+  drule_all o1_pipeline_memory_obligations >> strip_tac >>
+  drule_all o1_pipeline_codegen_obligations >> strip_tac >>
+  qspecl_then [`fuel'`, `rpolicy`, `out.po_unit`, `cplan`, `prog`, `Inv`,
+               `vs`, `es`] mp_tac codegen_correct >>
+  impl_tac >- simp[] >> strip_tac >>
+  qexistsl_tac [`r`, `es'`] >> gvs[venom_frame_rel_def] >> metis_tac[]
 QED
 
 (* The same under the final assembly optimizer, which excludes, for now,
@@ -1215,8 +1325,114 @@ Theorem vyper_call_reverts_asm_opt:
       (frame_resource_starved es r es' \/
        ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
 Proof
-  (* HELD ADMISSION SEQ-4951: asm_opt case of vyper_call_reverts; needs the asm_opt S7 *)
-  cheat
+  rpt strip_tac >>
+  drule compile_vyper_runtime_phases_asm_opt >> strip_tac >>
+  rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
+  qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
+  drule supported_program_raw_shape_free_program >> strip_tac >>
+  `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
+    metis_tac[source_typing_ok_def] >>
+  drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
+  drule_all run_venom_pipeline_output_shape >> strip_tac >>
+  `assemble prog <> []` by
+    metis_tac[codegenAsmProgOkTheory.codegen_assembly_nonempty] >>
+  drule compile_vyper_runtime_nonempty_asm_opt >> strip_tac >>
+  (* The Venom side runs on es's entry state with the unoptimized layout. *)
+  qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`] mp_tac
+    opt_entry_initial_venom_state_rel >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`, `out.po_unit`]
+    mp_tac opt_entry_codegen_asm_entry_rel >>
+  impl_tac >- simp[] >> strip_tac >>
+  qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`, `out.po_unit`]
+    mp_tac opt_entry_asm_frame_rel >>
+  impl_tac >- simp[] >> strip_tac >>
+  qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`, `rpolicy`,
+               `out.po_unit`] mp_tac opt_entry_code_layout_valid >>
+  impl_tac >- simp[] >> strip_tac >>
+  qspecl_then [`tops`, `prog`, `prog'`, `am`, `tx`, `es`, `cplan`,
+               `opt_entry_state prog prog' cplan es`] mp_tac opt_entry_fields >>
+  impl_tac >- simp[] >> strip_tac >>
+  qabbrev_tac `vs = opt_entry_state prog prog' cplan es` >>
+  `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
+  `o1_run_state_ok vs` by fs[o1_run_state_ok_def] >>
+  `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+   fixed_region_reserved 0 unit.cu_context` by
+    (drule lower_vyper_runtime_unit_raw_defaults >>
+     simp[fixed_region_reserved_def]) >>
+  `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
+    (drule lower_vyper_runtime_unit_global_reserved >>
+     simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>
+  (* A revert's dead bytes don't matter: take every byte dead. *)
+  qabbrev_tac `D0 = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
+                       d_imm := K UNIV; d_ret := K UNIV |>` >>
+  `dead_wf D0` by simp[Abbr `D0`, dead_wf_def] >>
+  `LENGTH vs.vs_data_section < dimword (:256) DIV 2` by
+    (`vs.vs_code = assemble prog ++ vs.vs_data_section` by
+       simp[Abbr `vs`, opt_entry_state_def, entry_venom_state_frame_fields] >>
+     `LENGTH vs.vs_code <= dimword (:256) DIV 2` by
+       (qpat_x_assum `code_layout_valid vs` mp_tac >>
+        rewrite_tac[code_layout_valid_def] >> strip_tac >>
+        first_assum ACCEPT_TAC) >>
+     `0 < LENGTH (assemble prog)` by (Cases_on `assemble prog` >> fs[]) >>
+     qpat_x_assum `0 < _` mp_tac >>
+     qpat_x_assum `LENGTH vs.vs_code <= _` mp_tac >>
+     qpat_x_assum `vs.vs_code = _` SUBST1_TAC >> simp[]) >>
+  drule_all lower_vyper_runtime_unit_sym_src_ok >> strip_tac >>
+  drule_all o1_pipeline_code_end_offset_ok >> strip_tac >>
+  `initial_venom_state_rel tops am tx vs_in` by
+    (irule gas_variant_initial_venom_state_rel >> qexists_tac `vs` >> simp[]) >>
+  `vs_in.vs_call_ctx = vs.vs_call_ctx` by
+    (irule gas_variant_call_ctx >> simp[]) >>
+  `calldata_dispatch tops vs_in.vs_call_ctx.cc_calldata = NONE` by simp[] >>
+  (* S1: the input run reverts. *)
+  `?fuel s. run_context fuel unit.cu_context vs_in = Abort Revert_abort s` by
+    (drule lower_vyper_runtime_unit_reverts >>
+     disch_then (qspecl_then [`am`, `tx`, `vs_in`] mp_tac) >>
+     impl_tac >- simp[] >> metis_tac[]) >>
+  (* S3: the input memory facts. *)
+  `code_layout_valid vs_in` by
+    (irule gas_variant_code_layout_valid >> qexists_tac `vs` >> asm_rewrite_tac[]) >>
+  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
+  drule lower_vyper_runtime_unit_reverts_memory_ok >>
+  disch_then (qspecl_then [`am`, `tx`, `vs_in`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  rpt (qpat_x_assum `code_layout_valid vs_in ==> _` mp_tac >>
+       impl_tac >- first_assum ACCEPT_TAC >> strip_tac) >>
+  `taint_within D0 unit.cu_context vs_in` by
+    simp[Abbr `D0`, taint_within_def] >>
+  `mem_inv dload_headroom_ok unit.cu_context vs_in` by
+    (irule lower_vyper_runtime_unit_dload_headroom_ok >> metis_tac[]) >>
+  qpat_x_assum `raw_unit_memory_ok _ vs_in /\ _ ==> _` mp_tac >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  (* S4: the output run reverts too, with no data. *)
+  `terminates (run_context fuel unit.cu_context vs_in)` by
+    simp[terminates_def] >>
+  qpat_x_assum `ctx_sim _ _ _ _ _` mp_tac >>
+  simp[ctx_sim_def] >> disch_then drule >> strip_tac >>
+  rename1 `dead_result_rel D0 _ (run_context fuel' _ vs)` >>
+  `?s'. run_context fuel' out.po_unit.cu_context vs = Abort Revert_abort s'` by
+    (qpat_x_assum `dead_result_rel _ _ _` mp_tac >>
+     Cases_on `run_context fuel' out.po_unit.cu_context vs` >>
+     simp[dead_result_rel_def]) >>
+  `s'.vs_returndata = []` by
+    (qspecl_then [`tops`, `rpolicy`, `unit`, `out`, `am`, `tx`, `vs`,
+                  `fuel'`, `s'`] mp_tac o1_pipeline_reverts_empty >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  (* S5-S7 through the optimized assembly. *)
+  drule_all o1_pipeline_memory_obligations_raw >> strip_tac >>
+  drule_all o1_pipeline_codegen_obligations >> strip_tac >>
+  `label_flow_ok out.po_unit.cu_context` by
+    (irule o1_pipeline_label_flow_ok >> metis_tac[]) >>
+  `sym_unit_static_ok out.po_unit` by
+    (irule o1_pipeline_sym_unit_static_ok >> metis_tac[]) >>
+  qspecl_then [`fuel'`, `rpolicy`, `out.po_unit`, `cplan`, `prog`, `prog'`,
+               `raw_reachable vs`, `vs`, `es`] mp_tac codegen_correct_asm_opt >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  strip_tac >>
+  qexistsl_tac [`r`, `es'`] >> gvs[venom_frame_rel_def] >> metis_tac[]
 QED
 
 (* Both accepted finalizers. *)

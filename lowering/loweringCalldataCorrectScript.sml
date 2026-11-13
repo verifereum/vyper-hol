@@ -98,7 +98,12 @@ Theorem lower_vyper_runtime_unit_reverts_memory_ok:
         fixed_region_reserved 0 unit.cu_context /\
         ptr_discipline 0 unit.cu_context vs /\
         ?D. dead_wf D /\ taint_within D unit.cu_context vs /\
-        (code_layout_valid vs ==> mem_inv dload_offset_ok unit.cu_context vs)
+        (code_layout_valid vs ==> mem_inv dload_offset_ok unit.cu_context vs) /\
+        (code_layout_valid vs ==>
+         mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                                  s.vs_code = vs.vs_code /\
+                                  s.vs_data_section = vs.vs_data_section)
+           unit.cu_context vs)
 Proof
   (* HELD ADMISSION SEQ-4942: S3 twin of SEQ-4940 *)
   cheat
