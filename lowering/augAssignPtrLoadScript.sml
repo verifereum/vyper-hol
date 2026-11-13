@@ -6,7 +6,7 @@ Ancestors
   finite_map vyperValue emitHelperProps exprSimMemoryPath
   emitHelper compileEnv loweringStateRelDefs fragExec loweringPosts ptrDiscipline codegenRel
   loweringSlice exprLoweringProps valueEncodingProps exprSimNameWord stmtFragPtr
-  accountsRelProps contextCodegenRel exprSimUnwrap
+  accountsRelProps contextCodegenRel exprSimUnwrap sourceUnitExecution
 
 Theorem mload_path_ptr:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
@@ -209,6 +209,7 @@ Theorem augassign_local_load_ptr:
   is_word_type ty /\ lookup_scopes name es.scopes = SOME entry /\
   word_value entry.value /\ emit_op MLOAD [Var p] sa = (Var out,sb) /\
   fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\
   local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   ret_pc_ok cenv sa s /\ return_buf_frame d cenv sa s /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
