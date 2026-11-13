@@ -27,7 +27,7 @@ Proof
 QED
 
 Theorem place_relayout_storage_run:
-  !ctx func cenv cx env ee ff s p w loc dst op src_loc dty sty stv v sa sb
+  !H ctx func cenv cx env ee ff s p w loc dst op src_loc dty sty stv v sa sb
    cfn bt e sc sd sw.
     compile_assign_value cenv dst loc op (is_word_type dty) src_loc dty sty
       (type_memory_bytes cenv dty) sa = ((),sb) /\
@@ -49,12 +49,12 @@ Theorem place_relayout_storage_run:
        b <= w2n sw /\ w2n sw + type_memory_size stv <= b + sz) /\
     expr_sim_inv cenv cx env ee /\ acyclic_struct_metadata cenv.ce_struct_fields /\
     local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
-    stmt_state_rel ctx func cenv cx ee s /\ write_place cx p v ee = (INL (),ff) /\
+    stmt_state_rel H ctx func cenv cx ee s /\ write_place cx p v ee = (INL (),ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path F ctx func s 0 (OK t) /\
-        stmt_state_rel ctx func cenv cx ff t /\
+        stmt_state_rel H ctx func cenv cx ff t /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -114,7 +114,7 @@ Proof
      goal_assum (drule_at Any) >> simp[]) >>
   drule place_normalize_framed_path >>
   disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ s`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ s`)) >>
   disch_then (drule_at (Pat `eval_operand _ s = _`)) >>
   disch_then (qspecl_then [`stv`, `dtv`, `v`] mp_tac) >>
   (impl_tac >- (simp[arithmeticTheory.ADD_COMM] >>
@@ -140,7 +140,7 @@ Proof
   `well_formed_type_value dtv` by
     metis_tac[cj 1 vyperTypingTheory.evaluate_type_well_formed] >>
   `?t. gas_marked_path F ctx func u 0 (OK t) /\
-       stmt_state_rel ctx func cenv cx ff t /\
+       stmt_state_rel H ctx func cenv cx ff t /\
        (!x. not_fresh_at sn x ==> lookup_var x t = lookup_var x u) /\
        t.vs_memory = u.vs_memory /\ t.vs_allocas = u.vs_allocas /\
        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -172,7 +172,7 @@ Resume place_relayout_storage_run[suffix]:
   pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   drule_at (Pat `val_in_memory _ _ _ u.vs_memory`) place_store_slots_suffix_run >>
   disch_then (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ u`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ u`)) >>
   disch_then (drule_at (Pat `storage_subregion _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `encode_value _ _ = _`)) >>

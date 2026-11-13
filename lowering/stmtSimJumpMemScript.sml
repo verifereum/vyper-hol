@@ -20,7 +20,7 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `emit_inst _ _ _ sa = (_, sj)` >>
   drule emit_inst_extends >> strip_tac >>
-  pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   pure_rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR BreakException`, `es`, `OK (jump_to ex s0)`] >>
   conj_tac
@@ -28,9 +28,10 @@ Proof
            raise_def] >> irule emit_jump_zero_path_mem >> simp[] >>
       qexistsl_tac [`sa`, `sj`] >> simp[]) >>
   simp[fragExecTheory.exit_result_def] >>
+  gen_tac >> strip_tac >>
   `stmt_post H ctx func cx (InLoop ex inc) cenv cenv sa sj es s0
      (INR BreakException) (es with gas_obs := []) (jump_to ex s0)` by
-    (irule stmt_post_break >> simp[]) >>
+    (irule stmt_post_break >> gs[]) >>
   gvs[stmt_post_def] >>
   rename1 `cenv_top_ext cenv c es.scopes` >> qexists_tac `c` >> simp[] >>
   conj_tac
@@ -54,7 +55,7 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `emit_inst _ _ _ sa = (_, sj)` >>
   drule emit_inst_extends >> strip_tac >>
-  pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   pure_rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR ContinueException`, `es`, `OK (jump_to inc s0)`] >>
   conj_tac
@@ -62,9 +63,10 @@ Proof
            raise_def] >> irule emit_jump_zero_path_mem >> simp[] >>
       qexistsl_tac [`sa`, `sj`] >> simp[]) >>
   simp[fragExecTheory.exit_result_def] >>
+  gen_tac >> strip_tac >>
   `stmt_post H ctx func cx (InLoop ex inc) cenv cenv sa sj es s0
      (INR ContinueException) (es with gas_obs := []) (jump_to inc s0)` by
-    (irule continue_jump_post >> simp[]) >>
+    (irule continue_jump_post >> gs[]) >>
   gvs[stmt_post_def] >>
   rename1 `cenv_top_ext cenv c es.scopes` >> qexists_tac `c` >> simp[] >>
   conj_tac

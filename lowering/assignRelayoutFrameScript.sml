@@ -7,9 +7,9 @@ Ancestors
   memoryValueEncoding
 
 Theorem stmt_state_rel_control[local]:
-  stmt_state_rel ctx func cenv cx es
+  stmt_state_rel H ctx func cenv cx es
     (s with <|vs_prev_bb := prev; vs_current_bb := bb; vs_inst_idx := idx|>) <=>
-  stmt_state_rel ctx func cenv cx es s
+  stmt_state_rel H ctx func cenv cx es s
 Proof
   `fmp_room ctx func
     (s with <|vs_prev_bb := prev; vs_current_bb := bb; vs_inst_idx := idx|>) <=>
@@ -24,15 +24,15 @@ Proof
 QED
 
 Theorem stmt_state_rel_write_local_copy_effect:
-  !ctx func cenv cx es s t sa sb id p cap dw pre scope entry rest v.
-    stmt_state_rel ctx func cenv cx es s /\
+  !H ctx func cenv cx es s t sa sb id p cap dw pre scope entry rest v.
+    stmt_state_rel H ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre,scope,entry,rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
     lookup_var p s = SOME dw /\ local_ptrs_reserved cenv sa /\
     typed_copy_effect ctx func sa sb s t (w2n dw) (type_memory_size entry.type) /\
     val_wf entry.type v /\ value_has_type entry.type v /\
     val_in_memory entry.type v (w2n dw) t.vs_memory ==>
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes := pre ++
         (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) t
 Proof
@@ -50,7 +50,7 @@ Proof
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
     (irule local_copy_immutables >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      qexists_tac `type_memory_size entry.type` >> simp[] >>
      fs[typed_copy_effect_def] >> first_assum ACCEPT_TAC) >>
   `!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s` by
@@ -62,7 +62,7 @@ Proof
     (gvs[Abbr `u`, immutables_rel_def] >> first_assum ACCEPT_TAC) >>
   `memory_value_rel entry.type v (w2n dw) t.vs_memory` by
     metis_tac[val_in_memory_memory_value_rel] >>
-  `stmt_state_rel ctx func cenv cx
+  `stmt_state_rel H ctx func cenv cx
       (es with scopes := pre ++
         (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) u` by
     (irule stmt_state_rel_write_local >>
@@ -74,7 +74,7 @@ Proof
 QED
 
 Theorem local_memory_relayout_store_path:
-  !ctx func cenv cx es s id p cap pre scope entry rest v src dty sty
+  !H ctx func cenv cx es s id p cap pre scope entry rest v src dty sty
    sa sb sw dw dtv stv.
     compile_store_memory cenv src (Var p) dty sty sa = ((),sb) /\
     ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty /\
@@ -95,13 +95,13 @@ Theorem local_memory_relayout_store_path:
     w2n dw + type_memory_size dtv < dimword (:256) /\
     (w2n sw + type_memory_size stv <= w2n dw \/
      w2n dw + type_memory_size dtv <= w2n sw) /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre,scope,entry,rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) cap) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel ctx func cenv cx
+    ?t. stmt_state_rel H ctx func cenv cx
         (es with scopes := pre ++
           (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
       typed_copy_effect ctx func sa sb s t (w2n dw) (type_memory_size dtv)

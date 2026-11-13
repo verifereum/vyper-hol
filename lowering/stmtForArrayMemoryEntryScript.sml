@@ -18,7 +18,10 @@ Theorem array_loop_initialize_mem:
     SOME <|bb_label := entry; bb_instructions :=
       [mk_inst ei ASSIGN [Lit 0w] [idx]; mk_inst ej JMP [Label cond] []]|> /\
   s0.vs_inst_idx = LENGTH pre /\ ~s0.vs_halted /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ P es /\
+  (?H. valid_horizon cx st0 H es.storage_trace) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ P es /\
   lookup_scopes id es.scopes = NONE /\ name <> id /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar saved_base arr_sz) /\
   eval_operand saved_base s0 = SOME array_base /\ ret_pc_ok cenv st s0 /\
@@ -27,7 +30,7 @@ Theorem array_loop_initialize_mem:
   ?s1 dst s.
     exec_alloca ainst s0 (n2w sz : bytes32) = OK s1 /\
     s = jump_to cond (update_var idx 0w (jump_to entry s1)) /\
-    array_loop_inv ctx func cenv cx P vs id idx saved_base array_base p dst sz
+    array_loop_inv ctx func cenv cx st0 P vs id idx saved_base array_base p dst sz
       ainst cond st 0 es s /\ gas_path_mem ctx func s0 0 (OK s) /\
     (!x. not_fresh_at caller x ==> lookup_var x s = lookup_var x s0) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
@@ -52,12 +55,15 @@ Proof
     (simp[exec_alloca_def] >>
      Cases_on `FLOOKUP s0.vs_allocas ainst.inst_id` >> simp[] >>
      PairCases_on `x` >> simp[]) >>
+  `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
   drule_all stmt_state_rel_exec_alloca >> strip_tac >>
   rename1 `lookup_var p s1 = SOME dst` >>
   qexistsl_tac [`s1`, `dst`, `jump_to cond (update_var idx 0w (jump_to entry s1))`] >>
   simp[] >> suspend "finish"
 QED
 Resume array_loop_initialize_mem[allocation_safe]:
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` kall_tac >>
+  qpat_x_assum `valid_horizon _ _ _ _` kall_tac >>
   fs[not_local_ptr_def, local_ptrs_reserved_def] >>
   `!nm z. FLOOKUP bc.ce_vars nm = SOME (PtrVar (Var p) z) ==> nm = id` by
     metis_tac[] >>
@@ -86,8 +92,11 @@ Resume array_loop_initialize_mem[finish]:
   suspend "history"
 QED
 Resume array_loop_initialize_mem[invariant]:
-  `stmt_state_rel H ctx func cenv cx es (update_var idx 0w (jump_to entry s1))` by
-    (irule stmt_state_rel_update_var >> simp[stmt_state_rel_jump_to]) >>
+  `!H'. valid_horizon cx st0 H' es.storage_trace ==>
+     stmt_state_rel H' ctx func cenv cx es (update_var idx 0w (jump_to entry s1))` by
+    (rpt strip_tac >> irule stmt_state_rel_update_var >>
+     simp[stmt_state_rel_jump_to] >>
+     irule (cj 1 stmt_state_rel_exec_alloca) >> metis_tac[]) >>
   `eval_operand saved_base s1 = SOME array_base` by
     (drule_all exec_alloca_operand_frame >> simp[]) >>
   `eval_operand saved_base (update_var idx 0w (jump_to entry s1)) = SOME array_base` by
@@ -97,6 +106,7 @@ Resume array_loop_initialize_mem[invariant]:
   simp[array_loop_inv_def, stmt_state_rel_jump_to, ret_pc_ok_jump_to] >>
   simp[jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   gvs[ret_pc_ok_def, lookup_var_def] >>
+  conj_tac >- metis_tac[] >>
   rpt strip_tac >>
   qpat_x_assum `!x sz'. _` drule >> strip_tac >>
   simp[FLOOKUP_UPDATE] >> Cases_on `idx = x` >> simp[] >>

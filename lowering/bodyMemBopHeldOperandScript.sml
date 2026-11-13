@@ -115,15 +115,18 @@ Theorem held_digest_operand_outcome:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   gas_admissible (vyperState$bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome T (cx_tops cx) (ctx,func)
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (vyperState$bind (eval_expr cx e) (read_result cx)) (es,s0)
-    (\res ee t. ?v bs. res = INL v /\
+    (\H res ee t. ?v bs. res = INL v /\
       (v = BytesV bs \/ ?str. v = StringV str /\ bs = MAP (n2w o ORD) str) /\
       eval_operand h t = SOME (word_of_bytes_be (Keccak_256_w64 bs):bytes32) /\
-      stmt_state_rel ctx func cenv cx ee t /\
+      stmt_state_rel H ctx func cenv cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -139,7 +142,7 @@ Theorem held_digest_operand_outcome:
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ ~t.vs_halted /\
       s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >> Cases_on `bytestring_literal_hash e`
   >- suspend "runtime" >>
@@ -149,7 +152,14 @@ Proof
 QED
 
 Resume held_digest_operand_outcome[literal]:
-  markerLib.RESUME_TAC >> rpt strip_tac >> simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  `!(H:(bool # bytes32 # type_value) list # num list).
+     storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+     storage_well_formed_on cx es (FST H)` by
+    (gen_tac >> irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+     simp[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >>
+  disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   simp[gas_marked_exec_def, gas_marked_path_def,
        Once evaluate_def, bind_def, read_result_def, return_def,
@@ -166,26 +176,48 @@ Resume held_digest_operand_outcome[runtime]:
     (metis_tac[held_digest_runtime_cut, cs_extends_refl]) >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
-  disch_then (qspecl_then [`sa`, `sm`, `p`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `p`, `s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  simp[gas_outcome_def] >> strip_tac
-  >- (fs[gas_summary_at_def] >>
-      Cases_on `?u. r = OK u /\ ?v. res = INL v /\
-        expr_post ctx func cenv cx e es sa sm s0 (es_end with gas_obs := []) v p u /\
-        expr_store_bound cx (expr_type e) v p u /\
-        u.vs_current_bb = sm.cs_current_bb /\
-        u.vs_inst_idx = LENGTH sm.cs_current_insts /\
-        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next`
-      >- (gvs[] >> suspend "runtime_normal") >>
-      qexists_tac `marks` >> disj1_tac >>
-      simp[gas_summary_at_def] >> metis_tac[]) >>
-  metis_tac[]
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (qexists_tac `marks` >> disj1_tac >>
+           irule gas_bad_storage_at_counted_prefix >> metis_tac[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def]
+      >- suspend "runtime_normal"
+      >> suspend "runtime_exit") >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >> metis_tac[]
+QED
+
+Resume held_digest_operand_outcome[runtime_exit]:
+  qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+  simp[gas_summary_at_def] >> qexistsl_tac [`res`, `es_end`, `r`] >>
+  simp[] >> metis_tac[]
 QED
 
 Resume held_digest_operand_outcome[runtime_normal]:
+  qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> ?v. _`
+    (drule_then (qx_choose_then `v` strip_assume_tac)) >>
+  qpat_x_assum `res = INL v` SUBST_ALL_TAC >>
+  qpat_x_assum `r = OK t` SUBST_ALL_TAC >>
+  (* the post at every horizon of the end trace gives its state relation *)
+  `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t /\
+     storage_well_formed_on cx (es_end with gas_obs := []) (FST H)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> ?v. _`
+       (drule_then strip_assume_tac) >>
+     gvs[expr_post_def]) >>
+  qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> ?v. _` kall_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==>
+     stmt_state_rel H _ _ _ _ _ t /\ _` mp_tac >>
   `~t.vs_halted` by
-    (fs[gas_marked_exec_def, gas_marked_path_def] >>
-     drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
   `vyperState$bind (eval_expr cx e) (read_result cx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL v, es_end with gas_obs := [])` by
@@ -226,18 +258,13 @@ Resume held_digest_operand_outcome[runtime_normal]:
      goal_assum (drule_at Any) >> simp[]) >>
   `!z. p = Var z ==> not_fresh_at sm z` by
     metis_tac[compile_lower_value_var] >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
-    fs[expr_post_def] >>
+  `stmt_state_rel (storage_trace_horizon es_end.storage_trace) ctx func cenv cx
+     (es_end with gas_obs := []) t` by
+    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [expr_post_def]) >> simp[]) >>
   drule_at (Pos hd) held_hash_counted_nofresh >>
   disch_then (drule_at (Pat `mem_bytes_at _ _ _ = _`)) >>
   simp[] >> disch_then drule_all >> strip_tac >>
-  qexists_tac `marks` >> disj1_tac >>
-  qexistsl_tac [`INL v`, `es_end`, `OK t'`] >>
-  (conj_tac
-   >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-       simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
-       simp[] >> metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES])) >>
-  simp[] >>
   `!z. not_fresh_at sa z ==> not_fresh_at sm z` by
     (fs[ci_mono_def, loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
   `locals_kept cenv es (es_end with gas_obs := []) s0 t'` by
@@ -249,8 +276,23 @@ Resume held_digest_operand_outcome[runtime_normal]:
     (strip_tac >> irule exprSimPropsTheory.pure_frame_mem_tail >>
      qexists_tac `t` >> simp[] >>
      metis_tac[exprSimWordArgsTheory.expr_post_pure_frame]) >>
-  fs[expr_post_def] >>
-  asm_rewrite_tac[]
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  strip_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+  simp[gas_summary_at_def] >>
+  qexistsl_tac [`INL v`, `es_end`, `OK t'`] >>
+  (conj_tac
+   >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+       simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
+       simp[] >> metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES])) >>
+  disj1_tac >> simp[] >> gen_tac >> strip_tac >>
+  qexists_tac `bs` >>
+  qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==>
+     stmt_state_rel H _ _ _ _ _ t /\ _` (drule_then strip_assume_tac) >>
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t'` by
+    metis_tac[stmt_state_rel_fields_transport] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]
 QED
 
 Finalise held_digest_operand_outcome
@@ -278,19 +320,21 @@ Theorem held_compare_counted_nofresh:
   (if bop = vyperAST$Eq then emit_op EQ [h1;h2] sa
    else let (q,sm) = emit_op EQ [h1;h2] sa in emit_op ISZERO [q] sm) = (op,sb) /\
   eval_operand h1 s = SOME w1 /\ eval_operand h2 s = SOME w2 /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   alloca_history func s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_path_mem ctx func s 0 (OK t) /\
     eval_operand op t = SOME (bool_to_word (if bop = vyperAST$Eq then w1 = w2 else w1 <> w2)) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s) /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted
+    t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all comparison_digest_run >> strip_tac >>
@@ -310,7 +354,7 @@ Proof
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
     fs[EVERY_MEM] >>
   drule_all alloca_history_run_inst_seq >> simp[] >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule hash_readonly_state_rel >> goal_assum (drule_at Any) >> simp[]) >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   gvs[venom_state_component_equality, stmt_state_rel_inst_idx,

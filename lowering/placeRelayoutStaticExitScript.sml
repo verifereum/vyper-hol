@@ -10,7 +10,7 @@ Theorem owned_target_relayout_store_static_exit:
   compile_assign_value cenv dst loc op (is_word_type dty) src_loc dty sty
     (type_memory_bytes cenv dty) sb = ((),sf) /\
   compile_get_target_ptr cfn cenv bt sa = ((dst,SOME loc,SOME (ValPT dty)),sb) /\
-  target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
+  target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
     (dst,SOME loc,SOME (ValPT dty)) s /\
   expr_val_own cenv cx sty si sj es v op s0 /\
   sj.cs_next_id <= sa.cs_next_id /\ sa.cs_next_id <= sb.cs_next_id /\
@@ -35,6 +35,6 @@ Theorem owned_target_relayout_store_static_exit:
       stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `stmt_state_rel ctx func cenv cx ee s` by fs[target_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee s` by fs[target_post_def] >>
   fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]
 QED
