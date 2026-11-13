@@ -20,9 +20,11 @@ Proof
   `!id t. FLOOKUP env.var_types id = SOME t ==>
     well_formed_type env.type_defs t` by
     metis_tac[expr_body_pre_var_types_well_formed] >>
-  `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
-    metis_tac[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
-      env_context_consistent_def] >>
+  `sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
+   (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+      ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
+    gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+        env_context_consistent_def] >>
   drule ifexp_lowered_type_classify >>
   disch_then (qspec_then `ce` mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >> gvs[] >> metis_tac[]

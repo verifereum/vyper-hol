@@ -8,15 +8,14 @@ Theorem widened_declaration_rhs_outcome_ptr:
  !ctx func old c cx lctx RetQ id typ tyv e es etv ltv sa0 st sa sb sf salloc
    op p sz w inst loc bytes fr d PG Ga tna.
  body_inv tops ctx c cx /\ expr_body_pre c cx env e es /\
- e = Call typ (IntCall fid) args drv /\
  declare_local old id typ sa0 = (c,st) /\ old.ce_alloca_locals /\
  (!l. FLOOKUP old.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
  gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
  ~is_word_type typ /\ ~is_word_type (expr_type e) /\ ~c.ce_is_ctor /\
  ~is_bytestring_type typ /\
- ~(lowered_value_type c e = expr_type e \/
-   is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type c e) /\
-   arg_type_fits (lowered_value_type c e) (expr_type e)) /\
+ post_value_type c e = lowered_value_type c e /\
+ ~is_word_type (lowered_value_type c e) /\ lowered_value_type c e <> typ /\
+ type_widens_to (get_tenv cx) (lowered_value_type c e) typ /\ ~block_is_terminated sa /\
  evaluate_type (get_tenv cx) typ = SOME tyv /\
  evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
  evaluate_type (get_tenv cx) (lowered_value_type c e) = SOME ltv /\
@@ -35,7 +34,7 @@ Theorem widened_declaration_rhs_outcome_ptr:
  fr.cs_next_var <= sa.cs_next_var /\ inst.inst_id < sa.cs_next_id /\
  lower_value compile_expr c (expr_type e) e sa = (op,sb) /\
  compile_assign_value c (Var p) LocMemory op F loc typ
-   (lowered_value_type c e) bytes sb = ((),sf) /\ loc = SOME LocMemory /\
+   (lowered_value_type c e) bytes sb = ((),sf) /\
  fn_has_code sb sf func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
  FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) sz) /\ not_fresh_at sa p /\
  lookup_var p salloc = SOME w /\ ptr_covers Ga tna p salloc sz /\
@@ -66,11 +65,9 @@ Proof
  irule annassign_rhs_outcome_ptr >> goal_assum (drule_at Any) >> simp[] >>
  reverse conj_tac >- metis_tac[] >>
  rpt gen_tac >> strip_tac >>
- qpat_assum `e = Call _ _ _ _` SUBST_ALL_TAC >>
- mp_tac (Q.INST [`e` |-> `Call typ (IntCall fid) args drv`,`s` |-> `t`]
+ mp_tac (Q.INST [`s` |-> `t`]
    (SPEC_ALL widened_declaration_retained_read_store_ptr)) >>
- (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-   fs[vyperASTTheory.expr_type_def] >> metis_tac[])) >>
+ (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[])) >>
  disch_then (qx_choosel_then [`ff`,`u`,`Gf`,`tnf`] strip_assume_tac) >>
  qexistsl [`ff`,`u`,`Gf`,`tnf`] >>
  gvs[ghost_inv_gas_obs, stmt_state_rel_gas_obs]
