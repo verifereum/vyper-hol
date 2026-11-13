@@ -81,16 +81,6 @@ Proof
   gvs[codegen_asm_entry_rel_def, sym_init_def]
 QED
 
-Theorem codegen_entry_reachable:
-  ctx_wf ctx /\ ctx.ctx_functions = fe :: rest /\ ctx.ctx_entry = SOME fe.fn_name ==>
-  MEM fe.fn_name (fcg_analyze ctx).fcg_reachable
-Proof
-  strip_tac >>
-  mp_tac (Q.SPECL [`ctx`, `fe.fn_name`, `fe.fn_name`]
-    fcg_analyze_reachable_complete) >>
-  simp[fcg_is_reachable_def, fcg_path_def, ctx_fn_names_def]
-QED
-
 Theorem codegen_entry_layout:
   !cp rpolicy unit prog fe rest as vs.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -104,32 +94,6 @@ Proof
   drule generate_context_plan_regions_length >>
   Cases_on `cp.cp_regions` >> gvs[codegen_asm_entry_rel_def] >>
   metis_tac[codegen_assembly_first_region]
-QED
-
-Theorem codegen_entry_selection:
-  !unit Inv vs.
-    unit_shape_ok unit /\ codegen_reachability_package Inv unit.cu_context vs ==>
-    ?fe rest lbl.
-      unit.cu_context.ctx_functions = fe :: rest /\
-      unit.cu_context.ctx_entry = SOME fe.fn_name /\
-      get_params (HD fe.fn_blocks).bb_instructions = [] /\
-      entry_fn_no_ret fe /\ fn_entry_label fe = SOME lbl /\
-      reachability_closed Inv unit.cu_context /\
-      fn_entry_inv Inv unit.cu_context fe
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
-Proof
-  rw[unit_shape_ok_def, entry_fn_first_def, codegen_reachability_package_def] >>
-  gvs[lookup_function_def, listTheory.FIND_thm] >> metis_tac[]
-QED
-
-Theorem codegen_entry_no_returns:
-  !cp unit Inv fe rest.
-    codegen_context_obligations Inv unit.cu_context cp /\
-    unit.cu_context.ctx_functions = fe :: rest /\ entry_fn_no_ret fe ==>
-    EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET]) (fn_insts fe)
-Proof
-  rpt gen_tac >> strip_tac >> irule entry_no_ret_opcodes >>
-  gvs[codegen_context_obligations_def, codegen_ready_def]
 QED
 
 Theorem codegen_entry_blocks_sim:

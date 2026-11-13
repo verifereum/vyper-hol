@@ -14,7 +14,10 @@ Ancestors
   codegenEntrySim asmRunBounded codegenEntryRel contextCodegenRel unitMemInv
   codegen asmSem venomExecSemantics venomState unitShapeDefs
   passSimulationDefs frameRel venomInst codegenRel venomRunBounded
-  contextCodegenRelProps
+  contextCodegenRelProps venomToAsmProps fnSimSpec fnPlanPlaceDfsBlock
+  venomRetProps fcgDefs stackPlanGen
+
+val _ = Parse.hide "cp";
 
 (* The assembly state as starts codegen's program prog for the Venom
    state vs at the context's entry: at PC 0 with an empty stack, memory
@@ -61,36 +64,12 @@ Proof
   first_x_assum (qspec_then `0` mp_tac) >> simp[]
 QED
 
-(* Why it should hold.  codegen_entry_asm_sim is proved by
-   gen_fn_simulation (venomToAsmProps), an induction over fuel through
-   gen_fn_sim_at (fnSimSpec) and the block and instruction step lemmas
-   (fnBlockBody*, fnFrameDeep*, deepInstSim); its ?n are not bounded and
-   its intermediate assembly states are hidden, so the bound has to be
-   carried by that induction rather than derived from its result.
-   - Steps: the fnFrameDeep* wrappers already conclude
-     as'.as_pc = as.as_pc + LENGTH (execute_plan ...) and pick n as that
-     length plus a small constant for terminators, postambles and
-     INVOKE.  Venom fuel counts blocks per function and INVOKE runs the
-     callee with the block's fuel, and the reachable call graph is acyclic
-     (codegen_context_obligations), so a bound over fuel, the plan's code
-     lengths and the call depth is static.
-   - Memory: stack plans (execute_plan of stack ops) touch memory only in
-     SOSpill/SORestore (PUSH off; MSTORE/MLOAD), whose offsets
-     plan_slots_bounded (fnBlockBodySteps) puts below the region's spill
-     end; the one emitted Venom opcode has the instruction's operand
-     values on top of the stack (regular_inst_ok_sim_marked,
-     frame_terminal_prefix_setup_marked, regular_abort_frame_prefix_deep
-     expose that state), so its ranges are inst_mem_ranges, below M by
-     the hypothesis.  In a revert forwarding (in_revert_forward,
-     revert_forward_pair) body_inv_static excludes spills, so its first
-     memory access is the RETURNDATACOPY, where asm_run_bounded stops.
-   - unit_shape_ok's inst_shape_ok excludes DELEGATECALL, CREATE, CREATE2
-     and SELFDESTRUCT from the unit, so no plan emits them.
-   N and H depend only on the program, fuel and M.  M bounds the Venom
-   run's own memory accesses (inst_mem_ranges) outside a revert
-   forwarding (in_revert_forward), whose first memory access is its
-   RETURNDATACOPY; H also covers the spill slots and the other static
-   offsets the generated code adds. *)
+(* The resource simulation carries its static step bound and creation
+   safety on the same execution witness. Administrative fragments cannot
+   create; marked CREATE/CREATE2 simulations obtain their size bound from
+   Inv. Every assembly memory range is bounded by twice the word range,
+   so creation safety and terminal execution give asm_run_bounded.
+   The function budget already includes the generated entry prefix. *)
 Theorem codegen_entry_asm_bounded_state:
   !rpolicy unit cp prog fuel M.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -109,8 +88,66 @@ Theorem codegen_entry_asm_bounded_state:
       asm_run_bounded (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
         prog H N as
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qexistsl_tac [`SUC (fn_sim_budget unit.cu_context prog fuel)`,
+                `2 * dimword (:256)`] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_entry_selection >> strip_tac >>
+  `lookup_function fe.fn_name unit.cu_context.ctx_functions = SOME fe`
+    by simp[lookup_function_def, listTheory.FIND_thm] >>
+  `EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET]) (fn_insts fe)`
+    by metis_tac[codegen_entry_no_returns] >>
+  `!ret vs'. run_context fuel unit.cu_context vs <> IntRet ret vs'`
+    by (rpt gen_tac >> irule run_context_not_int_ret >>
+        rpt strip_tac >> gvs[]) >>
+  `run_context fuel unit.cu_context vs = run_blocks fuel unit.cu_context fe
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)`
+    by simp[run_context_def, run_function_def, lookup_function_def,
+            listTheory.FIND_thm] >>
+  `?r rs. cp.cp_regions = r :: rs`
+    by (drule generate_context_plan_regions_length >>
+        Cases_on `cp.cp_regions` >> gvs[]) >>
+  `asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp r.sr_plan)`
+    by (fs[codegen_asm_entry_rel_def] >>
+        metis_tac[codegen_assembly_first_region]) >>
+  `fn_entry_state_rel cp fe
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
+    as 0w []`
+    by metis_tac[codegen_asm_entry_fn_state_rel] >>
+  `MEM fe.fn_name (fcg_analyze unit.cu_context).fcg_reachable`
+    by (irule codegen_entry_reachable >>
+        gvs[codegen_context_obligations_def]) >>
+  mp_tac codegen_invoke_targets_retpc >> (impl_tac >- simp[]) >> strip_tac >>
+  mp_tac (CONJUNCT1 (Q.SPECL [`T`, `fuel`] gen_fn_sims_resource_all)) >>
+  rewrite_tac[gen_fn_sim_resource_at_def] >>
+  disch_then (qspecl_then [`rpolicy`, `unit`, `cp`, `prog`, `unit.cu_context`,
+    `SND (compute_label_offsets prog)`, `build_offset_to_pc prog`,
+    `0`, `r`, `fe`,
+    `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`,
+    `as`, `Inv`, `0w`, `0`, `[]`] mp_tac) >>
+  impl_tac
+  >- (gvs[codegen_asm_entry_rel_def, fn_has_retpc_def] >> metis_tac[]) >>
+  simp[cost_le_def] >> strip_tac >> suspend "bounded"
 QED
+
+Resume codegen_entry_asm_bounded_state[bounded]:
+  `!n R. n <= fn_sim_budget unit.cu_context prog fuel /\
+    create_safe_prefix (SND (compute_label_offsets prog))
+      (build_offset_to_pc prog) prog n as /\
+    asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog n as = R /\
+    (?t. R = AsmHalt t \/ R = AsmRevert t \/ R = AsmFault t) ==>
+    asm_run_bounded (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      prog (2 * dimword (:256)) (SUC (fn_sim_budget unit.cu_context prog fuel)) as`
+    by (rpt strip_tac >> irule asm_run_bounded_mono >>
+        qexists_tac `SUC n` >> simp[] >>
+        irule create_safe_prefix_run_bounded >>
+        goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `run_context fuel unit.cu_context vs` >>
+  gvs[terminates_def] >> metis_tac[run_context_not_ok]
+QED
+
+Finalise codegen_entry_asm_bounded_state
 
 (* The bound from the codegen frame's initial context. *)
 Theorem codegen_entry_asm_bounded:

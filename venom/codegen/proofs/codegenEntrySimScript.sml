@@ -35,6 +35,32 @@ Proof
   rw[EL_APPEND1]
 QED
 
+Theorem codegen_entry_reachable:
+  ctx_wf ctx /\ ctx.ctx_functions = fe :: rest /\ ctx.ctx_entry = SOME fe.fn_name ==>
+  MEM fe.fn_name (fcg_analyze ctx).fcg_reachable
+Proof
+  strip_tac >>
+  mp_tac (Q.SPECL [`ctx`, `fe.fn_name`, `fe.fn_name`]
+    fcg_analyze_reachable_complete) >>
+  simp[fcg_is_reachable_def, fcg_path_def, ctx_fn_names_def]
+QED
+
+Theorem codegen_entry_selection:
+  !unit Inv vs.
+    unit_shape_ok unit /\ codegen_reachability_package Inv unit.cu_context vs ==>
+    ?fe rest lbl.
+      unit.cu_context.ctx_functions = fe :: rest /\
+      unit.cu_context.ctx_entry = SOME fe.fn_name /\
+      get_params (HD fe.fn_blocks).bb_instructions = [] /\
+      entry_fn_no_ret fe /\ fn_entry_label fe = SOME lbl /\
+      reachability_closed Inv unit.cu_context /\
+      fn_entry_inv Inv unit.cu_context fe
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
+Proof
+  rw[unit_shape_ok_def, entry_fn_first_def, codegen_reachability_package_def] >>
+  gvs[lookup_function_def, listTheory.FIND_thm] >> metis_tac[]
+QED
+
 Theorem no_param_insts_find_retpc[local]:
   !insts. no_param_insts insts ==>
           FIND (\inst. inst.inst_opcode = RETPC_PARAM) insts = NONE
@@ -169,6 +195,16 @@ Proof
   rpt strip_tac >> gvs[is_raw_fmp_opcode_def]
 QED
 
+Theorem codegen_entry_no_returns:
+  !cp unit Inv fe rest.
+    codegen_context_obligations Inv unit.cu_context cp /\
+    unit.cu_context.ctx_functions = fe :: rest /\ entry_fn_no_ret fe ==>
+    EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET]) (fn_insts fe)
+Proof
+  rpt gen_tac >> strip_tac >> irule entry_no_ret_opcodes >>
+  gvs[codegen_context_obligations_def, codegen_ready_def]
+QED
+
 (* entry_asm_state meets the entry relation of the first function, with no
    return address and nothing below the (empty) parameter block. *)
 Theorem entry_fn_entry_state_rel[local]:
@@ -222,25 +258,14 @@ Theorem codegen_entry_asm_sim:
          venom_asm_terminal_rel vs' as')
 Proof
   rpt gen_tac >> strip_tac >>
-  `?fe rest. unit.cu_context.ctx_functions = fe :: rest /\
-             unit.cu_context.ctx_entry = SOME fe.fn_name`
-    by gvs[unit_shape_ok_def, entry_fn_first_def] >>
+  drule_all codegen_entry_selection >> strip_tac >>
   `lookup_function fe.fn_name unit.cu_context.ctx_functions = SOME fe`
     by simp[lookup_function_def, FIND_thm] >>
-  `entry_fn_no_ret fe /\ get_params (HD fe.fn_blocks).bb_instructions = []`
-    by gvs[unit_shape_ok_def] >>
-  `ctx_wf unit.cu_context /\ codegen_ready unit.cu_context`
-    by fs[codegen_context_obligations_def] >>
   `EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET]) (fn_insts fe)`
-    by (irule entry_no_ret_opcodes >> gvs[codegen_ready_def]) >>
+    by metis_tac[codegen_entry_no_returns] >>
   conj_tac
   >- (rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >>
       gvs[]) >>
-  `?lbl. fn_entry_label fe = SOME lbl /\ reachability_closed Inv unit.cu_context /\
-         fn_entry_inv Inv unit.cu_context fe
-           (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                       vs_inst_idx := 0 |>)`
-    by gvs[codegen_reachability_package_def] >>
   `run_context fuel unit.cu_context vs =
    run_blocks fuel unit.cu_context fe
      (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)`
@@ -250,9 +275,8 @@ Proof
                  prim_recTheory.LESS_0, listTheory.EL] >>
   `?r rs. cp.cp_regions = r :: rs` by (Cases_on `cp.cp_regions` >> gvs[]) >>
   `MEM fe.fn_name (fcg_analyze unit.cu_context).fcg_reachable`
-    by (mp_tac (Q.SPECL [`unit.cu_context`, `fe.fn_name`, `fe.fn_name`]
-                  fcg_analyze_reachable_complete) >>
-        simp[fcg_is_reachable_def, fcg_path_def, ctx_fn_names_def]) >>
+    by (irule codegen_entry_reachable >>
+        gvs[codegen_context_obligations_def]) >>
   mp_tac codegen_invoke_targets_retpc >> impl_tac >- simp[] >> strip_tac >>
   `!l. FLOOKUP vs.vs_labels l =
        OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)`
