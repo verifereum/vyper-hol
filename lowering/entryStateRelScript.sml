@@ -277,7 +277,7 @@ Proof
 QED
 
 (* Immutable declarations cannot overwrite a populated storage/transient key. *)
-Theorem entry_module_lookup_immutable_frame[local]:
+Theorem entry_module_lookup_immutable_frame:
   !tops sft off key loc.
     ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
     FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME loc ==>
@@ -362,7 +362,7 @@ QED
    (entry_storage_vars_rel) and an env with no immutables (as
    required explicitly by this special-case theorem). *)
 Theorem body_entry_state_rel:
-  !tops func cenv cx am tx vs ss mut env es.
+  !(H:(bool # bytes32 # type_value) list # num list) tops func cenv cx am tx vs ss mut env es.
     initial_venom_state_rel tops am tx vs /\ cx.txn = tx /\
     send_call_value mut cx
       (initial_state am [env] with
@@ -389,7 +389,7 @@ Proof
 QED
 
 Theorem body_entry_state_rel_runtime[local]:
-  !tops func cenv cx am tx vs ss mut env es.
+  !(H:(bool # bytes32 # type_value) list # num list) tops func cenv cx am tx vs ss mut env es.
     initial_venom_state_rel tops am tx vs /\ cx.txn = tx /\
     send_call_value mut cx
       (initial_state am [env] with
@@ -652,7 +652,7 @@ QED
    each argument is a word or has a static ABI encoding (dynamic
    decoding is #762). *)
 Theorem external_body_entry_state_rel:
-  !tops use_trans nkey_map mut rr fargs ret fbody lbl cenv0 pos_args rest
+  !(H:(bool # bytes32 # type_value) list # num list) tops use_trans nkey_map mut rr fargs ret fbody lbl cenv0 pos_args rest
    am tx vs env es st cenv st' ctx func s0.
     supported_program tops /\ source_typing_ok tops am tx /\
     source_deployment_rel tops am tx /\

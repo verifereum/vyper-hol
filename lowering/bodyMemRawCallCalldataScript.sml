@@ -2,7 +2,7 @@
    with calldata. *)
 Theory bodyMemRawCallCalldata
 Ancestors
-  bodyMemoryPreds bodyInvNoDalloca bodyPtrCallCalldata
+  bodyMemoryPreds bodyInvNoDalloca bodyPtrCallCalldata rawCallCalldataDalloca
   exprSimMemDefs exprSimHypsDefs vyperTypeSystem fragExec
 
 Theorem body_raw_call_calldata_mem_case:

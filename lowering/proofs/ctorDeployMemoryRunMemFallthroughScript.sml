@@ -14,7 +14,7 @@ Ancestors
 Theorem compile_constructor_epilogue_related_alloca_frontier:
   compile_constructor_epilogue rt cap imm st = ((),st') /\
   fn_has_code st st' func /\ ~block_is_terminated st /\
-  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   rt + cap < dimword(:256) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st x)) ==>
@@ -46,7 +46,7 @@ Proof
   `!b sz. FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
      sz = w2n (n2w (rt + cap):bytes32)` by
     (rpt strip_tac >>
-     qpat_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[stmt_state_rel_def] >> strip_tac >>
      qpat_x_assum `!inst n base sz. _` drule >>
      disch_then (qspecl_then [`n2w (rt + cap)`, `b`, `sz`] mp_tac) >>
@@ -151,7 +151,7 @@ QED
 Theorem compile_constructor_epilogue_mem_ok:
   compile_constructor_epilogue rt cap imm st = ((),st') /\
   fn_has_code st st' func /\ ~block_is_terminated st /\
-  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   rt + cap < dimword(:256) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st x)) ==>
@@ -265,7 +265,7 @@ QED
 Theorem compile_constructor_epilogue_mem_safe_run:
   compile_constructor_epilogue rt cap imm st = ((),st') /\
   fn_has_code st st' func /\ ~block_is_terminated st /\
-  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   rt + cap < dimword(:256) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st x)) /\
@@ -315,7 +315,7 @@ Theorem constructor_exit_run_mem[local]:
   (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) /\
-  stmt_state_rel ctx func body_cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func body_cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = st_exit.cs_current_bb /\ s.vs_inst_idx = 0 ==>
   ?fuel final. run_from fuel ctx func s = Halt final /\
     mem_safe_run fuel ctx func s
@@ -329,7 +329,7 @@ Proof
     else es` >>
   qabbrev_tac `s1 = (if nr then tstore (n2w nkey) 0w s else s) with
     vs_inst_idx := LENGTH st_epilogue.cs_current_insts` >>
-  `stmt_state_rel ctx func body_cenv cx es1 s1` by
+  `stmt_state_rel H ctx func body_cenv cx es1 s1` by
     (simp[Abbr `s1`, stmt_state_rel_inst_idx] >>
      Cases_on `nr` >> gvs[Abbr `es1`] >>
      irule constructor_unlock_stmt_state_rel >> simp[]) >>
@@ -341,7 +341,7 @@ Proof
   simp[frag_exec_mem_def] >>
   disch_then (qspec_then `func` mp_tac) >>
   simp[] >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `stmt_state_rel ctx func body_cenv cx es1 s1` >>
+  qmatch_asmsub_abbrev_tac `stmt_state_rel H ctx func body_cenv cx es1 s1` >>
   `body_cenv.ce_is_ctor /\
    (cap <> 0 ==> body_cenv.ce_imm_alloca = SOME imm /\
       (!x. imm = Var x ==> not_fresh_at st_epilogue x))` by
@@ -371,7 +371,7 @@ Theorem deploy_ctor_fallthrough_mem_safe:
     (imm_len tops <> 0 ==>
        cenv.ce_imm_alloca = SOME imm /\
        !x. imm = Var x ==> not_fresh_at st_epilogue x) /\
-    stmt_state_rel dunit.cu_context func cenv' cx ee t /\ ~t.vs_halted /\
+    stmt_state_rel H dunit.cu_context func cenv' cx ee t /\ ~t.vs_halted /\
     ~block_is_terminated sb /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     ?fuel. mem_safe_run fuel dunit.cu_context func t /\

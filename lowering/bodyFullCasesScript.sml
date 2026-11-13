@@ -8,10 +8,14 @@
  *)
 Theory bodyFullCases
 Ancestors
-  bodyFullPreds bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
+  bodyFullAssign bodyFullAssignTuple bodyFullAugAssign bodyFullAnnAssign
+  bodyFullAppend annAssignPtrFacts bodyFullIfExp
+  bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
+  bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullCtrlCases
+  gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
-  bodyMemBiEnvMsgGas exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
+  msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
   vyperAST vyperInterpreter vyperState vyperValue list
 
 val _ = Parse.hide "body";
@@ -36,7 +40,23 @@ Theorem body_annassign_case_full:
        body_expr_full_ok cx e) ==>
     body_stmt_full_ok cx (AnnAssign id typ e)
 Proof
-  cheat
+  rw[body_stmt_full_ok_def] >>
+  Cases_on `is_word_type typ`
+  >- (irule body_annassign_word_full >> metis_tac[]) >>
+  `0 < type_memory_bytes cenv typ` by
+    metis_tac[annassign_memory_bytes_pos_ptr] >>
+  Cases_on `expr_type e = typ \/ lowered_value_type cenv e = typ \/
+            is_bytestring_type typ \/
+            has_length_word typ /\ is_empty_value_expr e`
+  >- (Cases_on `(lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e))`
+      >- (`lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
+           has_length_word typ /\ is_empty_value_expr e` by metis_tac[] >>
+          irule body_annassign_memory_full >> fs[] >> metis_tac[]) >>
+      irule body_annassign_widened_full >> metis_tac[]) >>
+  irule body_annassign_other_full >> metis_tac[]
 QED
 
 (* Admitted: the joint twin of body_append_case_ptr_at (bodyPtrLogCases). *)
@@ -47,14 +67,17 @@ Theorem body_append_case_full:
     body_base_target_full_ok cx t ==>
     body_stmt_full_ok cx (Append t e)
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `?nid. t = TopLevelNameTarget nid`
+  >- (gvs[] >> irule body_append_storage_full >> first_assum ACCEPT_TAC) >>
+  Cases_on `t` >> gvs[] >>
+  rw[body_stmt_full_ok_def, supported_stmt_def, supported_append_target_def]
 QED
 
-(* Admitted: the joint twin of body_assert_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_assert_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
 Theorem body_assert_case_full:
   !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Assert e AssertBare)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.assert_bare_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of body_assert_reason_case_ptr_at (bodyPtrExitCases). *)
@@ -67,23 +90,64 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_assert_unreachable_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_assert_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
 Theorem body_assert_unreachable_case_full:
   !cx e.
     body_expr_full_ok cx e ==> body_stmt_full_ok cx (Assert e AssertUnreachable)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.assert_unreachable_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of body_assign_case_ptr_at (bodyPtrAssignCases). *)
 Theorem body_assign_case_full:
   !cx t e.
-    (!s'' pv t'.
-       eval_expr cx e s'' = (INL pv,t') ==> body_base_target_full_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_full_ok cx t) /\
     body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (Assign (BaseTarget t) e)
 Proof
-  cheat
+  rw[body_stmt_full_ok_def] >>
+  Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
+                    is_word_type ty`
+  >- (gvs[] >> irule body_assign_local_word_full >> metis_tac[]) >>
+  Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
+                    ~is_word_type ty /\
+                    (expr_type e = ty \/ lowered_value_type cenv e = ty \/
+                     is_bytestring_type ty \/
+                     has_length_word (expr_type e) /\ is_empty_value_expr e)`
+  >- (`!id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty ==>
+              0 < type_memory_bytes cenv ty` by
+        (rpt strip_tac >> gvs[] >>
+         metis_tac[bodySimStmtCasesTheory.assign_local_memory_bytes_pos]) >>
+      Cases_on `(lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e))`
+      >- (gvs[] >> irule body_assign_local_memory_full >> metis_tac[]) >>
+      gvs[] >> irule body_assign_local_widened_full >> metis_tac[]) >>
+  Cases_on `?nsid. t = TopLevelNameTarget nsid /\
+                   supported_scalar_target tops nsid`
+  >- (gvs[] >> irule body_assign_toplevel_word_full >> metis_tac[]) >>
+  Cases_on `?nsid mut ty slot.
+              t = TopLevelNameTarget nsid /\
+              supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
+              (mut = Storage \/ mut = Transient) /\
+              ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+              0 < type_memory_bytes cenv ty /\ expr_type e = ty`
+  >- (gvs[] >> irule body_assign_toplevel_copy_full >> metis_tac[]) >>
+  Cases_on `?id fld sid fty.
+              t = AttributeTarget (NameTarget id) fld /\
+              FLOOKUP env.var_types id = SOME (StructT sid) /\
+              attribute_type env.type_defs (StructT sid) fld = SOME fty /\
+              is_word_type fty`
+  >- (gvs[] >> irule body_assign_attr_local_full >> metis_tac[]) >>
+  Cases_on `?nsid fld fty.
+              t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+              supported_storage_field_write tops nsid fld /\
+              type_place_target env t = SOME (Type fty) /\ is_word_type fty`
+  >- (gvs[] >> irule body_assign_attr_storage_full >> metis_tac[]) >>
+  irule body_assign_other_full >> simp[] >> metis_tac[]
 QED
 
 (* Admitted: the joint twin of body_assign_tuple_case_ptr_at (bodyPtrAssignCases). *)
@@ -94,7 +158,30 @@ Theorem body_assign_tuple_case_full:
        body_tuple_target_full_ok cx (TupleTarget gs) v) /\ body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (Assign (TupleTarget gs) e)
 Proof
-  cheat
+  rw[body_stmt_full_ok_def] >>
+  reverse (Cases_on `lowered_value_type cenv e = expr_type e`)
+  >- (irule body_assign_tuple_widened_full >> metis_tac[]) >>
+  Cases_on `?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
+                  EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids`
+  >- (gvs[] >> drule_all assign_tuple_locals_bytes_pos >> strip_tac >>
+      `EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
+                        0 < type_memory_bytes cenv ty) ids` by
+        (fs[EVERY_MEM] >> metis_tac[]) >>
+      irule body_assign_tuple_locals_full >> metis_tac[]) >>
+  Cases_on `EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
+                                FLOOKUP env.var_types id = SOME ty /\
+                                0 < type_memory_bytes cenv ty) \/
+                       (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+                               supported_scalar_target tops nsid) \/
+                       (?nsid fld fty.
+                          g = BaseTarget
+                                (AttributeTarget (TopLevelNameTarget nsid) fld) /\
+                          supported_storage_field_write tops nsid fld /\
+                          type_place_target env
+                            (AttributeTarget (TopLevelNameTarget nsid) fld) =
+                            SOME (Type fty) /\ is_word_type fty)) gs`
+  >- (irule body_assign_tuple_targets_full >> metis_tac[]) >>
+  irule body_assign_tuple_other_full >> metis_tac[]
 QED
 
 (* Admitted: the joint twin of body_attribute_case_ptr_at (bodyPtrExprCases). *)
@@ -114,14 +201,25 @@ Theorem body_augassign_case_full:
        body_expr_full_ok cx e) /\ body_base_target_full_ok cx t ==>
     body_stmt_full_ok cx (AugAssign ty t bop e)
 Proof
-  cheat
+  rw[body_stmt_full_ok_def] >>
+  Cases_on `?id. t = NameTarget id`
+  >- (gvs[] >> irule body_augassign_local_full >> metis_tac[]) >>
+  Cases_on `?nsid. t = TopLevelNameTarget nsid /\
+                   supported_scalar_target tops nsid`
+  >- (gvs[] >> irule body_augassign_toplevel_word_full >> metis_tac[]) >>
+  Cases_on `?id fld. t = AttributeTarget (NameTarget id) fld`
+  >- (gvs[] >> irule body_augassign_attr_local_full >> metis_tac[]) >>
+  Cases_on `?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+                       supported_storage_field_write tops nsid fld`
+  >- (gvs[] >> irule body_augassign_attr_storage_full >> metis_tac[]) >>
+  irule body_augassign_other_full >> metis_tac[]
 QED
 
-(* Admitted: the joint twin of body_break_case_ptr_at (bodyPtrCtrlCases). *)
+(* The joint twin of body_break_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_break_case_full:
   !cx. body_stmt_full_ok cx Break
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.break_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of bodyPtrEnvBuiltins's env_builtin_expr_ptr_ok, without Env MsgGas. *)
@@ -214,7 +312,7 @@ Proof
   cheat
 QED
 
-(* msg.gas, by bodyMemBiEnvMsgGas's joint fragment: typing fixes the
+(* msg.gas, by msgGasFull's joint fragment: typing fixes the
    annotation and the empty argument list. *)
 Theorem body_msg_gas_full_case:
   !cx ann args. body_expr_full_ok cx (Builtin ann (Env MsgGas) args)
@@ -258,14 +356,14 @@ Proof
      precompile_builtin_expr_full_ok])
 QED
 
-(* Admitted: the joint twin of body_continue_case_ptr_at (bodyPtrCtrlCases). *)
+(* The joint twin of body_continue_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_continue_case_full:
   !cx. body_stmt_full_ok cx Continue
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.continue_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_create_case_ptr_at (bodyPtrCallCases). *)
+(* Vacuous: expr_body_pre excludes create (expr_evm_run_root). *)
 Theorem body_create_case_full:
   !cx ty kind has_salt rof v26 es v27.
     (!raw_args s'' prefix t s'3' code_size t'.
@@ -294,14 +392,17 @@ Theorem body_create_case_full:
     (kind = RawCreate ==> body_exprs_full_ok cx (TAKE 2 es)) ==>
     body_expr_full_ok cx (Call ty (CreateTarget kind has_salt rof v26) es v27)
 Proof
-  cheat
+  rw[body_expr_full_ok_def] >>
+  gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
 
-(* Admitted: the joint twin of body_expr_stmt_case_ptr_at (bodyPtrCtrlCases). *)
+(* The joint twin of body_expr_stmt_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_expr_stmt_case_full:
   !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Expr e)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.expr_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of body_extcall_case_ptr_at (bodyPtrCallCases). *)
@@ -343,7 +444,7 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_if_case_ptr_at (bodyPtrCtrlCases). *)
+(* The joint twin of body_if_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_if_case_full:
   !cx e ss1 ss2.
     (!s'' tv t s'3' x t'.
@@ -354,10 +455,10 @@ Theorem body_if_case_full:
        body_stmts_full_ok cx ss2) /\ body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (If e ss1 ss2)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.if_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_ifexp_case_ptr_at (bodyPtrExprCases). *)
+(* The joint twin of body_ifexp_case_ptr_at (bodyPtrExprCases): bodyFullIfExp. *)
 Theorem body_ifexp_case_full:
   !cx v5 e1 e2 e3.
     (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok cx e2) /\
@@ -365,7 +466,7 @@ Theorem body_ifexp_case_full:
     body_expr_full_ok cx e1 ==>
     body_expr_full_ok cx (IfExp v5 e1 e2 e3)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullIfExpTheory.ifexp_expr_full_ok
 QED
 
 (* Admitted: the joint twin of body_intcall_case_ptr_at (bodyPtrIntCallCase). *)
@@ -460,11 +561,11 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_raise_bare_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_raise_bare_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
 Theorem body_raise_bare_case_full:
   !cx. body_stmt_full_ok cx (Raise RaiseBare)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.raise_bare_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of body_raise_reason_case_ptr_at (bodyPtrExitCases). *)
@@ -474,11 +575,11 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_raise_unreachable_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_raise_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
 Theorem body_raise_unreachable_case_full:
   !cx. body_stmt_full_ok cx (Raise RaiseUnreachable)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.raise_unreachable_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of body_raw_call_calldata_case_ptr_at (bodyPtrCallCases). *)
@@ -507,12 +608,20 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_raw_revert_case_ptr_at (bodyPtrCallCases). *)
+(* RawRevert, by raw_revert_expr_full_ok; its lower_value shadow-compile
+ * premise is gas_shadow_compile_expr lifted by gas_shadow_compiles_lower_value. *)
 Theorem body_raw_revert_case_full:
   !cx v22 es v23.
     body_exprs_full_ok cx es ==> body_expr_full_ok cx (Call v22 RawRevert es v23)
 Proof
-  cheat
+  rpt strip_tac >>
+  `!cenv ty e. gas_shadow_compiles (lower_value compile_expr cenv ty e)
+     (lower_value compile_expr cenv ty (gas_shadow_expr e))`
+    by (rpt gen_tac >>
+        irule (gas_shadow_compiles_lower_value
+               |> INST [``sh:bool`` |-> ``T``] |> REWRITE_RULE []) >>
+        MATCH_ACCEPT_TAC (CONJUNCT1 gas_shadow_compile_expr)) >>
+  irule raw_revert_expr_full_ok >> asm_rewrite_tac[]
 QED
 
 (* Return e, by the frame's own joint Return fragment and e's case. *)
@@ -527,7 +636,7 @@ Proof
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def,
          body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -545,13 +654,16 @@ Proof
   simp[same_frame_refl]
 QED
 
-(* Admitted: the joint twin of body_selfdestruct_case_ptr_at (bodyPtrCallCases). *)
+(* Vacuous: expr_body_pre excludes selfdestruct (expr_evm_run_root). *)
 Theorem body_selfdestruct_case_full:
   !cx v24 es v25.
     body_exprs_full_ok cx es ==>
     body_expr_full_ok cx (Call v24 SelfDestructTarget es v25)
 Proof
-  cheat
+  rw[body_expr_full_ok_def] >>
+  gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
 
 (* Admitted: the joint twin of body_send_case_ptr_at (bodyPtrCallCases). *)
@@ -566,14 +678,14 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_stmts_cons_case_ptr_at (bodyPtrCtrlCases). *)
+(* The joint twin of body_stmts_cons_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_stmts_cons_case_full:
   !cx s ss.
     (!s'' x t. eval_stmt cx s s'' = (INL x,t) ==> body_stmts_full_ok cx ss) /\
     body_stmt_full_ok cx s ==>
     body_stmts_full_ok cx (s::ss)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.stmts_cons_full_ok
 QED
 
 (* The empty list, by stmtSimZero's joint fragment. *)
