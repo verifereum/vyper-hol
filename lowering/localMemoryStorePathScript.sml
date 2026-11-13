@@ -218,7 +218,9 @@ Proof
   disch_then (qx_choosel_then [`s1`, `w`] strip_assume_tac) >>
   `w2n w + sz < dimword (:256)` by
     (`alloca_room ctx func s1 /\ alloca_next_valid s1` by
-       gvs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+       (gvs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+        qpat_x_assum `!H'. _ ==> state_rel H' _ _ _ _ s1 /\ _`
+          (qspec_then `H` mp_tac) >> simp[]) >>
      drule alloca_room_next_lt >>
      fs[venomMemDefsTheory.alloca_next_valid_def] >>
      first_x_assum (drule_then assume_tac) >> decide_tac) >>
@@ -307,5 +309,5 @@ Theorem alloc_copy_memory_framed_path:
 Proof
   rpt gen_tac >>
   disch_then (strip_assume_tac o MATCH_MP alloc_copy_memory_framed_bounded_path) >>
-  qexistsl_tac [`s2`, `w`] >> simp[]
+  qexistsl_tac [`s2`, `w`] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
