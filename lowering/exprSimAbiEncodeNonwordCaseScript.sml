@@ -81,14 +81,35 @@ QED
 
 Theorem abi_encode_vv_post_pointer_cong:
   p.ptr_operand = q.ptr_operand /\ p.ptr_location = q.ptr_location ==>
-  (vv_post ctx func ce cx e es sa sb s0 es' tv (LocatedValue ty p) s <=>
-   vv_post ctx func ce cx e es sa sb s0 es' tv (LocatedValue ty q) s)
+  (vv_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es sa sb s0 es' tv (LocatedValue ty p) s <=>
+   vv_post H ctx func ce cx e es sa sb s0 es' tv (LocatedValue ty q) s)
 Proof
   simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def]
 QED
 
+Theorem abi_encode_vv_post_fields_transport[local]:
+  vv_post (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es sa sb s0 es' tv
+    (LocatedValue ty p) u /\
+  p.ptr_location = LocMemory /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es' s /\
+  storage_well_formed_on cx es' (FST H) /\
+  u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+  u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx ==>
+  vv_post H ctx func ce cx e es sa sb s0 es' tv (LocatedValue ty p) u
+Proof
+  rewrite_tac[vv_post_def, stmt_state_rel_def,
+              loweringStateRelDefsTheory.state_rel_def] >>
+  strip_tac >> fs[] >>
+  gvs[loweringStateRelDefsTheory.storage_rel_def,
+      loweringStateRelDefsTheory.transient_rel_def,
+      loweringStateRelDefsTheory.accounts_rel_def,
+      venomStateTheory.contract_storage_def,
+      venomStateTheory.contract_transient_def] >>
+  metis_tac[]
+QED
+
 Theorem abi_encode_translated_success_mk_ptr[local]:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
@@ -110,7 +131,9 @@ Theorem abi_encode_translated_success_mk_ptr[local]:
     gas_marked_path F ctx func s 0 (OK actual) /\
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode F mid0) ty [e])
+    actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+    actual.vs_requests = s.vs_requests /\ actual.vs_call_ctx = s.vs_call_ctx /\
+    vv_post H ctx func ce cx (TypeBuiltin ann (AbiEncode F mid0) ty [e])
       es origin sb s0 es'
       (Value (BytesV (abi_encode_method_id_bytes mid0 ++
         enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av)))
@@ -119,7 +142,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_encode_translated_success_suffix >> strip_tac >>
   qexists_tac `actual` >> simp[] >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_type_def, contextTheory.mk_ptr_def] >>
   mp_tac (GEN_ALL (Q.INST
     [`p` |-> `<|ptr_operand := out; ptr_location := LocMemory|>`,
@@ -170,7 +193,12 @@ Proof
   simp[] >> conj_tac
   >- (rpt gen_tac >> Cases_on `exc` >> Cases_on `r` >> simp[expr_exit_def] >>
       rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
-  rpt strip_tac >>
+  conj_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_def] >>
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?H. valid_horizon _ _ _ _` (qx_choose_then `H0` assume_tac) >>
+  qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> disch_tac >>
   `expr_body_pre ce cx env e (es with gas_obs := gs)` by simp[] >>
   drule_at (Pat `bind _ _ _ = _`)
     (CONV_RULE (DEPTH_CONV ETA_CONV) abi_encode_operand_success_type) >>
@@ -197,14 +225,16 @@ Proof
   `?actual. gas_marked_path F ctx func t 0 (OK actual) /\
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode F mid) ty [e])
+    actual.vs_accounts = t.vs_accounts /\ actual.vs_transient = t.vs_transient /\
+    actual.vs_requests = t.vs_requests /\ actual.vs_call_ctx = t.vs_call_ctx /\
+    vv_post H0 ctx func ce cx (TypeBuiltin ann (AbiEncode F mid) ty [e])
       es sa sb s0 ee (Value (BytesV (abi_encode_method_id_bytes mid ++
         enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av)))
       (LocatedValue ann (mk_ptr out LocMemory)) actual` by
     (irule abi_encode_translated_success_mk_ptr >>
      simp[] >> conj_tac
      >- (qexists_tac `env` >> simp[]) >>
-     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      gvs[]) >>
   `ee with gas_obs := [] = ee` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
@@ -212,5 +242,16 @@ Proof
   qexistsl_tac [`INL (Value (BytesV (abi_encode_method_id_bytes mid ++
     enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av)))`,
     `ee`, `OK actual`] >>
-  simp[gasSummaryTheory.gas_marked_exec_def]
+  simp[gasSummaryTheory.gas_marked_exec_def] >>
+  disj1_tac >> gen_tac >> strip_tac >>
+  qpat_x_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS o REWRITE_RULE [expr_post_def]) >>
+  irule abi_encode_vv_post_fields_transport >>
+  rpt conj_tac
+  >- simp[contextTheory.mk_ptr_def]
+  >- first_assum ACCEPT_TAC
+  >- (qexists `t` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qexists `H0` >> first_assum ACCEPT_TAC
 QED

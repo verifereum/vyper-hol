@@ -5389,3 +5389,4 @@ Proof
   simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_gas_obs,
        immutable_alloca_sep_def]
 QED
+
