@@ -45,7 +45,7 @@ Proof
   impl_tac
   >- (simp[] >> rpt strip_tac >> simp[ignore_bind_def, bind_assoc] >>
       irule (cj 4 gas_exempt_cert_rules) >>
-      goal_assum (drule_at Any) >> simp[GSYM ignore_bind_def]) >>
+      goal_assum (drule_at Any) >> fs[GSYM ignore_bind_def]) >>
   simp[]
 QED
 
@@ -108,7 +108,7 @@ Proof
           irule (cj 5 gas_exempt_cert_rules) >> simp[GSYM ignore_bind_def]) >>
       rpt strip_tac >> simp[ignore_bind_def, bind_assoc] >>
       irule (cj 4 gas_exempt_cert_rules) >>
-      goal_assum (drule_at Any) >> simp[GSYM ignore_bind_def]) >>
+      goal_assum (drule_at Any) >> fs[GSYM ignore_bind_def]) >>
   simp[]
 QED
 
@@ -166,13 +166,13 @@ Proof
   qpat_x_assum `gas_admissible _ _ es` mp_tac >>
   asm_rewrite_tac[MAP, eval_for_cons_value_round] >> disch_tac >>
   `?H0. valid_horizon cx st0 H0 mid.storage_trace` by metis_tac[] >>
-  `gas_marked_exec_ptr (D H0) (ctx,fn) PG
-    (do push_scope_with_var nm tyv (EL k vs);
-        finally (try (do eval_stmts cx body; return F od)
-          handle_loop_exception) pop_scope od)
-    (es,s,G,tn) marks (INL F) mid G' tn' (OK t)` by metis_tac[] >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==>
+    gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H0` mp_tac) >>
+  impl_tac >- metis_tac[] >> strip_tac >>
   drule gas_marked_exec_ptr_exec >>
   rewrite_tac[gas_marked_exec_def] >> strip_tac >>
   drule_all gas_admissible_bind_tail >> simp[] >> strip_tac >>
-  qpat_x_assum `!y. _` (qspec_then `SUC k` mp_tac) >> simp[]
+  qpat_x_assum `!y. _` (qspec_then `SUC k` mp_tac) >> simp[] >>
+  disch_then irule >> simp[] >> metis_tac[]
 QED

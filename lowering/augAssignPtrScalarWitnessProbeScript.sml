@@ -9,7 +9,7 @@ Ancestors
   wordLoadStorePtr augAssignPtrLoad augAssignPtrProvenanceProbe gasSummaryComposePtr bodyPtrDefs
   exprSimNameWord exprSimNameValue exprSimValues stmtFragPtr
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
-  ptrDiscipline venomInst venomState finite_map loweringSlice venomExecSemantics fragExec
+  ptrDiscipline venomInst venomState finite_map loweringSlice venomExecSemantics fragExec gasStorage gasSummary
 (* This instruction-level helper exposes the actual clearing ghost, in
    contrast to emit_mload_path_ptr's existentially hidden provenance. *)
 Theorem emit_mload_explicit_ghost_path:
@@ -49,6 +49,7 @@ Theorem local_name_enriched_path:
   is_word_type ty /\ lookup_scopes name es.scopes = SOME entry /\
   word_value entry.value /\ emit_op MLOAD [Var p] sa = (Var out,sb) /\
   fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\
   local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -62,7 +63,13 @@ Theorem local_name_enriched_path:
     ghost_inv H d cenv cx (es with gas_obs := []) HG tm t /\
     ghost_kept cenv es sa G tn s HG tm /\ op_taint tm (Var out) = {} /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ op_prov HG (Var out) = NONE
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ op_prov HG (Var out) = NONE /\
+    HG = step_prov PG G (mk_inst sa.cs_next_id MLOAD [Var p] [out])
+      (update_var out (val_to_w256 entry.value) s) /\
+    tm = step_taint (mk_inst sa.cs_next_id MLOAD [Var p] [out]) s
+      (update_var out (val_to_w256 entry.value) s) tn /\
+    t = update_var out (val_to_w256 entry.value)
+      (s with vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof
   strip_tac >> drule_all ghost_inv_word_local_inputs >> strip_tac >>
   `!rp. not_fresh_at sa rp ==> rp <> out` by
@@ -92,7 +99,7 @@ Proof
   simp[Abbr `t`, update_var_def] >> conj_tac
   >- (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
           fresh_var_def, fresh_id_def, emit_def]) >>
-  simp[Abbr `HG`, load_result_has_no_provenance]
+  simp[Abbr `HG`, Abbr `tm`, load_result_has_no_provenance, update_var_def]
 QED
 
 Theorem local_name_enriched_outcome:
@@ -100,37 +107,58 @@ Theorem local_name_enriched_outcome:
   is_word_type ann /\ lookup_scopes name es.scopes = SOME entry /\
   word_value entry.value /\
   lower_value compile_expr cenv ty (Name ann name) sa = (op,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
-  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
+  fn_has_code sa sb fn /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx fn cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv H d cenv cx es G tn s) /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,fn) PG cx st0
     (bind (eval_expr cx (Name ann name)) (read_result cx)) (es,s,G,tn)
-    (\res ee HG tm t. ?v. res = INL v /\
+    (\H res ee HG tm t. ?v. res = INL v /\
       expr_post H ctx fn cenv cx (Name ann name) es sa sb s ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx ee HG tm t /\ ptr_val_ok cx ann v op HG tm t /\
       (~is_word_type ann ==> ptr_buf_ok cenv (Name ann name) op HG t) /\
       ghost_kept cenv es sa G tn s HG tm /\ op_prov HG op = NONE)
-    (\res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r)
 Proof
   strip_tac >> drule_all lower_value_name_word >> strip_tac >>
   `?out. op = Var out` by
     (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
          fresh_var_def, fresh_id_def, emit_def] >> metis_tac[]) >> gvs[] >>
+  reverse (Cases_on `?H. valid_horizon cx st0 H es.storage_trace`)
+  >- (rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
+      qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+           vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_read_result,
+           vyperStorageFootprintTheory.storage_trace_domain_def] >> fs[]) >>
+  pop_assum strip_assume_tac >>
+  `stmt_state_rel H ctx fn cenv cx es s /\
+   storage_well_formed_on cx es (FST H) /\ ghost_inv H d cenv cx es G tn s` by metis_tac[] >>
   drule_all local_name_enriched_path >>
   disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
-  qexists_tac `[]` >> disj1_tac >>
+  qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[fragGasPathPtrTheory.gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL entry.value`, `es`, `HG`, `tm`, `OK t`] >>
-  simp[gasSummaryTheory.gas_explicit_def, ptr_val_ok_def] >>
-  gen_tac >>
-  qspecl_then [`cx`, `ann`, `name`, `es with gas_obs := tail`, `entry`]
-    mp_tac eval_name_word >> simp[] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+  simp[gasSummaryTheory.gas_explicit_def] >> conj_tac
+  >- (gen_tac >>
+      qspecl_then [`cx`, `ann`, `name`, `es with gas_obs := tail`, `entry`]
+        mp_tac eval_name_word >> simp[] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  gen_tac >> strip_tac >>
+  `stmt_state_rel H' ctx fn cenv cx es s /\
+   storage_well_formed_on cx es (FST H') /\ ghost_inv H' d cenv cx es G tn s` by metis_tac[] >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  drule_all local_name_enriched_path >>
+  disch_then (qspecl_then [`PG`, `cx_dead H' cx`] strip_assume_tac) >>
+  gvs[ptr_val_ok_def]
 QED
