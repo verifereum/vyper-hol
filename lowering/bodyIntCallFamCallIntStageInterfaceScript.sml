@@ -33,7 +33,8 @@ Proof
 QED
 
 (* No wordness is inferred from vv_holds here.  Calling convention supplies
-   wordness of ty separately (intcall_argument_flags). *)
+   wordness of the declared parameter type ty separately
+   (intcall_argument_flags). *)
 Theorem intcall_completed_stack_singleton:
   evaluate_type (get_tenv cx) ty = SOME tv /\ is_word_type ty /\
   eval_operand op s = SOME (typed_val_to_w256 tv v) /\

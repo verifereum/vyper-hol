@@ -10,10 +10,27 @@ Ancestors
   gasSummaryCompose gasExemptCert gasContext fragGasPath fragGasMode fragExec
   vyperState venomState compileEnv exprSimUnwrapProps
 
-(* The IHs at a supported callee (body_intcall_source_selection): no
-   defaults, as many arguments as parameters. *)
+(* A nonreentrant lock with its slot set, outside a static call, is taken
+   from a state where it is free. *)
+Theorem lock_if_nr_runs[local]:
+  (nr ==> IS_SOME cx.nonreentrant_slot) /\ ~cx.txn.is_static ==>
+  ?s u t. lock_if_nr cx nr v s = (INL u,t)
+Proof
+  Cases_on `nr` >> simp[lock_if_nr_def, return_def] >> strip_tac >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[] >>
+  qexists `ARB with tStorage := empty_transient_storage` >>
+  simp[acquire_nonreentrant_lock_def, get_transient_storage_def,
+       update_transient_def, bind_def, ignore_bind_def, return_def,
+       vfmContextTheory.empty_transient_storage_def,
+       vfmExecutionTheory.lookup_transient_storage_def,
+       vfmStateTheory.lookup_storage_def, vfmStateTheory.empty_storage_def] >>
+  rw[return_def]
+QED
+
+(* The IHs at a supported callee (body_intcall_source_selection): the
+   supplied arguments', the omitted defaults' and the callee body's. *)
 Theorem intcall_results_ih[local]:
-  !cx src_id_opt fn es ts mut nr args ret ss.
+  !cx src_id_opt fn es ts mut nr args dflts ret ss.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3'.
        type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
@@ -30,8 +47,9 @@ Theorem intcall_results_ih[local]:
        body_exprs_ok cx es) /\
     get_module_code cx src_id_opt = SOME ts /\
     lookup_callable_function cx.in_deploy fn ts =
-      SOME (mut,nr,args,[],ret,ss) /\
-    LENGTH es = LENGTH args /\ ~MEM (src_id_opt,fn) cx.stk ==>
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts /\
+    ~MEM (src_id_opt,fn) cx.stk ==>
     body_exprs_ok cx es
 Proof
   rpt strip_tac >> first_x_assum irule >>
@@ -39,7 +57,8 @@ Proof
 QED
 
 Theorem intcall_body_ih[local]:
-  !cx src_id_opt fn es ts mut nr args ret ss s1 vs t1 s3 u t3 penv rtv.
+  !cx src_id_opt fn es ts mut nr args dflts ret ss s1 vs t1 sd dvs td
+   penv rtv.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
          t'5' s'8' dflt_vs t'6' all_tenv s'9' env t'7' s'10' rtv
@@ -72,21 +91,83 @@ Theorem intcall_body_ih[local]:
        body_stmts_ok cxf body') /\
     get_module_code cx src_id_opt = SOME ts /\
     lookup_callable_function cx.in_deploy fn ts =
-      SOME (mut,nr,args,[],ret,ss) /\
-    LENGTH es = LENGTH args /\ ~MEM (src_id_opt,fn) cx.stk /\
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts /\
+    ~MEM (src_id_opt,fn) cx.stk /\
     eval_exprs cx es s1 = (INL vs,t1) /\
-    bind_arguments (get_tenv cx) args vs = SOME penv /\
-    lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3) /\
+    eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+      (sd with scopes := [FEMPTY]) = (INL dvs,td) /\
+    bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME penv /\
+    (nr ==> IS_SOME cx.nonreentrant_slot) /\ ~cx.txn.is_static /\
     evaluate_type (get_tenv cx) ret = SOME rtv ==>
     body_stmts_ok (cx with stk updated_by CONS (src_id_opt,fn)) ss
 Proof
-  rpt strip_tac >> first_x_assum irule >>
-  simp[type_check_def, assert_def, lift_option_type_def, return_def,
-       get_scopes_def, finally_def, ignore_bind_def, bind_def,
-       set_scopes_def, push_function_def, Once evaluate_def] >>
-  qexistsl_tac [`penv`,`s1`,`s3`,`s3`,`t1`,`s3`,`t3`,`vs`] >>
-  Cases_on `u` >> qpat_x_assum `lock_if_nr _ _ _ _ = _` mp_tac >>
-  simp[return_def, lock_if_nr_def, ignore_bind_def]
+  rpt strip_tac >>
+  `?s3 u t3. lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)` by
+    (irule lock_if_nr_runs >> simp[]) >>
+  first_x_assum (qspecl_then
+    [`s1`,`()`,`s1`,`s1`,`ts`,`s1`,`s1`,`(mut,nr,args,dflts,ret,ss)`,`s1`,
+     `mut`,`(nr,args,dflts,ret,ss)`,`nr`,`(args,dflts,ret,ss)`,`args`,
+     `(dflts,ret,ss)`,`dflts`,`(ret,ss)`,`ret`,`ss`,`s1`,`()`,`s1`,
+     `s1`,`vs`,`t1`,`DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts`,
+     `cx with stk updated_by CONS (src_id_opt,fn)`,`sd`,`sd.scopes`,`sd`,
+     `sd`,`dvs`,`td with scopes := sd.scopes`,`get_tenv cx`,
+     `s3`,`penv`,`s3`,`s3`,`rtv`,`s3`,`is_view_mut mut`,`s3`,`u`,`t3`,
+     `s3`,`cx with stk updated_by CONS (src_id_opt,fn)`,
+     `s3 with scopes := [penv]`] mp_tac) >>
+  impl_tac
+  >- simp[type_check_def, assert_def, lift_option_type_def, return_def,
+          get_scopes_def, finally_def, ignore_bind_def, bind_def,
+          set_scopes_def, push_function_def] >>
+  simp[]
+QED
+
+(* The defaults' IH: they are evaluated at the callee's stack once the
+   supplied arguments have been. *)
+Theorem intcall_dflts_ih[local]:
+  !cx src_id_opt fn es ts mut nr args dflts ret ss s1 vs t1.
+    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
+         ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
+         t'5' s'8' x'' t'6'.
+       type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
+       lift_option_type (get_module_code cx src_id_opt)
+         "IntCall get_module_code" s'3' = (INL ts,t') /\
+       lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+         "IntCall lookup_function" s'4' = (INL tup,t'') /\ mut = FST tup /\
+       stup = SND tup /\ (nr <=> FST stup) /\ stup2 = SND stup /\
+       args = FST stup2 /\ sstup = SND stup2 /\ dflts = FST sstup /\
+       sstup2 = SND sstup /\ ret = FST sstup2 /\ body' = SND sstup2 /\
+       type_check
+         (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
+         "IntCall args length" s'5' = (INL x',t'3') /\
+       eval_exprs cx es s'6' = (INL vs,t'4') /\
+       needed_dflts = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
+       cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
+       get_scopes s'7' = (INL prev,t'5') /\
+       set_scopes [FEMPTY] s'8' = (INL x'',t'6') ==>
+       body_exprs_ok cxd needed_dflts) /\
+    get_module_code cx src_id_opt = SOME ts /\
+    lookup_callable_function cx.in_deploy fn ts =
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts /\
+    ~MEM (src_id_opt,fn) cx.stk /\
+    eval_exprs cx es s1 = (INL vs,t1) ==>
+    body_exprs_ok (cx with stk updated_by CONS (src_id_opt,fn))
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+Proof
+  rpt strip_tac >>
+  first_x_assum (qspecl_then
+    [`s1`,`()`,`s1`,`s1`,`ts`,`s1`,`s1`,`(mut,nr,args,dflts,ret,ss)`,`s1`,
+     `mut`,`(nr,args,dflts,ret,ss)`,`nr`,`(args,dflts,ret,ss)`,`args`,
+     `(dflts,ret,ss)`,`dflts`,`(ret,ss)`,`ret`,`ss`,`s1`,`()`,`s1`,
+     `s1`,`vs`,`t1`,`DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts`,
+     `cx with stk updated_by CONS (src_id_opt,fn)`,`s1`,`s1.scopes`,`s1`,
+     `s1`,`()`,`s1 with scopes := [FEMPTY]`] mp_tac) >>
+  impl_tac
+  >- simp[type_check_def, assert_def, lift_option_type_def, return_def,
+          get_scopes_def, set_scopes_def] >>
+  simp[]
 QED
 
 Theorem compile_expr_intcall_location[local]:
@@ -291,13 +372,24 @@ Proof
   simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
   rename1 `expr_body_pre cenv cx tenv _ es0` >>
   drule_all body_intcall_source_selection >> strip_tac >>
+  `LENGTH args - LENGTH es <= LENGTH dflts` by decide_tac >>
   `~MEM (src_id_opt,fn) cx.stk ==> body_exprs_ok cx es` by
     (strip_tac >> drule intcall_results_ih >> disch_then drule_all >> simp[]) >>
-  `!s1 vs t1 s3 u t3 penv rtv.
+  `!s1 vs t1.
+     ~MEM (src_id_opt,fn) cx.stk /\
+     eval_exprs cx es s1 = (INL vs,t1) ==>
+     body_exprs_ok (cx with stk updated_by CONS (src_id_opt,fn))
+       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)` by
+    (rpt strip_tac >> drule intcall_dflts_ih >> disch_then drule_all >>
+     simp[]) >>
+  `!s1 vs t1 sd dvs td penv rtv.
      ~MEM (src_id_opt,fn) cx.stk /\
      eval_exprs cx es s1 = (INL vs,t1) /\
-     bind_arguments (get_tenv cx) args vs = SOME penv /\
-     lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3) /\
+     eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+       (sd with scopes := [FEMPTY]) = (INL dvs,td) /\
+     bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME penv /\
+     (nr ==> IS_SOME cx.nonreentrant_slot) /\ ~cx.txn.is_static /\
      evaluate_type (get_tenv cx) ret = SOME rtv ==>
      body_stmts_ok (cx with stk updated_by CONS (src_id_opt,fn)) ss` by
     (rpt strip_tac >> drule intcall_body_ih >> disch_then drule_all >>
@@ -309,7 +401,7 @@ Proof
     by metis_tac[pairTheory.ABS_PAIR_THM] >>
   drule body_inv_module_pins >> strip_tac >>
   irule intcall_args_frame_setup >> simp[] >>
-  qexistsl_tac [`args`,`cenv`,`mut`,`nr`,`ret`,`rr`,`sa`,`sb`,`ss`,`tenv`,`tops`,
+  qexistsl_tac [`args`,`cenv`,`dflts`,`mut`,`nr`,`ret`,`rr`,`sa`,`sb`,`ss`,`tenv`,`tops`,
                 `ty`,`vv`] >>
   simp[] >> rpt strip_tac >>
   Cases_on `cenv.ce_func_return_type (nsid_to_string (NONE,fn)) = v16` >|
@@ -321,6 +413,12 @@ Proof
   (impl_tac
    >- (simp[] >> rpt strip_tac >>
        drule intcall_entry_source >> strip_tac >>
+       `dflts' = dflts` by gvs[] >> gvs[] >>
+       `~cx.txn.is_static` by
+         fs[exprLoweringPropsTheory.stmt_state_rel_def,
+            loweringStateRelDefsTheory.state_rel_def] >>
+       `nr ==> IS_SOME cx.nonreentrant_slot` by
+         (strip_tac >> drule_all body_inv_nonreentrant_slot >> simp[]) >>
        `body_stmts_ok (cx with stk updated_by CONS (NONE,fn)) ss` by
          metis_tac[] >>
        drule_all intcall_callee_body_sim >> simp[]) >>

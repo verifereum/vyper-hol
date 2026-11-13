@@ -49,7 +49,7 @@ Theorem body_internal_package_metadata:
   !tops ctx caller cx mut rr name args ret bd rcn rbs pvs
    trans keys imm lbl ce params has_rb is_nr key use_tr view is_ctor il ss rt.
   body_inv tops ctx caller cx /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret bd) tops /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret bd) tops /\
   caller.ce_func_info (nsid_to_string (NONE,name)) = (rcn,rbs,pvs) /\
   set_internal_package_target caller.ce_target
     (package_internal_fn tops trans keys caller.ce_is_ctor imm

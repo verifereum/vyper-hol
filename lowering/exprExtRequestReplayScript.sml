@@ -134,7 +134,11 @@ QED
 Resume extrequest_evaluate_replay[subscript]:
   rpt strip_tac >> simp[Once evaluate_def] >>
   irule extrequest_replay_bind_guarded >> simp[] >>
-  rpt strip_tac >> irule extrequest_replay_bind >>
+  rpt strip_tac >> irule extrequest_replay_bind_guarded >> conj_tac >>
+  TRY (rw[] >> TRY (irule extrequest_replay_bind >> rw[]) >>
+       simp[extrequest_replay_primitives, extrequest_replay_return] >>
+       NO_TAC) >>
+  rpt strip_tac >> BETA_TAC >> irule extrequest_replay_bind >>
   reverse conj_tac >- metis_tac[] >>
   gen_tac >> simp[] >> irule extrequest_replay_bind >>
   simp[extrequest_replay_primitives, extrequest_replay_return,
@@ -219,7 +223,19 @@ Resume extrequest_evaluate_replay[builtin]:
       simp[extrequest_replay_primitives] >>
       irule extrequest_replay_bind >>
       simp[extrequest_replay_lift_option_type, extrequest_replay_primitives]) >>
-  irule extrequest_replay_bind_guarded >> reverse conj_tac >- metis_tac[] >>
+  irule extrequest_replay_bind_guarded >> reverse conj_tac
+  >- (Cases_on `code_slice_source bt es` >> simp[] >- metis_tac[] >>
+      rename1 `SOME pr` >> PairCases_on `pr` >> simp[] >>
+      gvs[code_slice_source_SOME, supported_expr_exists_def] >>
+      irule extrequest_replay_bind_guarded >> reverse conj_tac
+      >- metis_tac[] >>
+      rpt strip_tac >> simp[] >>
+      irule extrequest_replay_bind_guarded >> reverse conj_tac
+      >- metis_tac[] >>
+      rpt strip_tac >> simp[] >> irule extrequest_replay_bind >>
+      simp[extrequest_replay_primitives] >>
+      gen_tac >> simp[] >> irule extrequest_replay_bind >>
+      simp[extrequest_replay_primitives, extrequest_replay_return]) >>
   rpt strip_tac >> simp[] >> irule extrequest_replay_bind >>
   simp[extrequest_replay_primitives] >>
   gen_tac >> simp[] >> irule extrequest_replay_bind >>

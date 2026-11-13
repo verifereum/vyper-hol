@@ -34,7 +34,7 @@ Theorem collect_locals_supported_bindings_mem:
 Proof
   recInduct collect_locals_ind >>
   simp[collect_locals_def, supported_stmt_bindings_def] >>
-  rpt strip_tac >> metis_tac[]
+  rpt strip_tac >> FIRST_PROVE [metis_tac[]]
 QED
 
 Theorem supported_function_arg_not_collect_locals:
@@ -526,6 +526,12 @@ Proof
   gvs[set_external_package_target_def, package_external_fn_def] >>
   Cases_on `ret = NoneT` >>
   gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
+  `!vis mut rr name args dflts ret ss.
+     MEM (FunctionDecl vis mut T rr name args dflts ret ss) tops ==>
+     lookup_nonreentrant_slot am.layouts tx.target =
+       SOME global_nonreentrant_slot` by
+    (rpt strip_tac >> irule layouts_agree_nonreentrant_slot >>
+     fs[source_deployment_rel_def] >> metis_tac[]) >>
   simp[body_inv_def, cenv_module_pins_def, build_compile_env_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[source_deployment_rel_def, get_module_code_def,

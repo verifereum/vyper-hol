@@ -27,9 +27,15 @@ Theorem body_inv_internal_allocs_ok:
   fn_allocs_ok tops (mut,nr,rr,name,args,dflts,ret,ss)
 Proof
   strip_tac >>
+  `module_consts_env tops [] = []` by
+    (fs[body_inv_def] >>
+     metis_tac[supportedProgramTheory.supported_program_def,
+       supportedDeclsTheory.supported_declaration_headers_def,
+       supportedDeclsTheory.supported_headers_module_consts_env]) >>
   `MEM (mut,nr,rr,name,args,dflts,ret,ss)
      (FST (SND (classify_functions tops)))` by
-    simp[loweringShapePropsTheory.MEM_classify_internal] >>
+    simp[loweringShapePropsTheory.MEM_classify_internal,
+      constSubstTheory.subst_consts_fn_empty] >>
   qpat_x_assum `body_inv _ _ _ _` mp_tac >>
   simp[body_inv_def] >> strip_tac >>
   Cases_on `classify_functions tops` >>

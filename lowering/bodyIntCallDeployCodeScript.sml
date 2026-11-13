@@ -359,7 +359,8 @@ Proof
 QED
 
 Theorem lower_vyper_deploy_unit_selected_internal_code:
-  supported_program tops /\ lower_vyper_deploy_unit tops policy runtime_bc = SOME unit /\
+  supported_program tops /\ supported_program_deploy tops /\
+  lower_vyper_deploy_unit tops policy runtime_bc = SOME unit /\
   IS_SOME (SND (SND (SND (classify_functions tops)))) /\
   MEM (FunctionDecl Internal mut isnr rr name args dflts ret ss) tops /\
   set_internal_package_target policy.rpol_target
@@ -377,11 +378,17 @@ Theorem lower_vyper_deploy_unit_selected_internal_code:
     ctx_inst_ids_distinct unit.cu_context
 Proof
   strip_tac >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supportedProgramTheory.supported_program_def,
+      supportedDeclsTheory.supported_declaration_headers_def,
+      supportedDeclsTheory.supported_headers_module_consts_env] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts,ints,fb,cf)` >>
   Cases_on `cf` >> gvs[] >> rename1 `_ = (exts,ints,fb,SOME cf)` >>
   `MEM (mut,isnr,rr,name,args,dflts,ret,ss) ints` by
-    metis_tac[MEM_classify_internal, pairTheory.FST, pairTheory.SND] >>
+    (`ints = FST (SND (classify_functions tops))` by simp[] >>
+     pop_assum SUBST1_TAC >>
+     simp[MEM_classify_internal, constSubstTheory.subst_consts_fn_empty]) >>
   qpat_x_assum `lower_vyper_deploy_unit _ _ _ = _` mp_tac >>
   simp[lower_vyper_deploy_unit_def] >> pairarg_tac >> simp[] >> strip_tac >>
   `SND (SND (SND (classify_functions tops))) = SOME cf` by simp[] >>

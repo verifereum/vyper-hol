@@ -103,7 +103,8 @@ QED
 
 Theorem abi_args_child_label_replay[local]:
   (!e ce ty sa vv sb l cx es v ee.
-    expr_size e < bound /\ compile_expr ce ty e sa = (vv,sb) /\
+    cenv_defaults_size ce + expr_size e < bound /\
+    compile_expr ce ty e sa = (vv,sb) /\
     vv_operand vv = Label l /\
     bind (eval_expr cx e) (read_result cx) es = (INL v,ee) ==>
     !gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
@@ -116,7 +117,7 @@ Proof
   simp[lower_value_def, comp_bind_def, LET_THM] >> strip_tac >>
   rpt (pairarg_tac >> gvs[]) >>
   drule abi_image_unwrap_label >> strip_tac >>
-  Cases_on `expr_size e < bound`
+  Cases_on `cenv_defaults_size ce + expr_size e < bound`
   >- (gvs[expr_child_callback_def] >> metis_tac[]) >>
   gvs[expr_child_callback_def, invalid_expr_call_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[vv_operand_def])
