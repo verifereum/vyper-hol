@@ -11,6 +11,7 @@
 
 Theory fnFrameDeepAbort
 Ancestors
+  planEmissionProps arithmetic
   deepResidualSim fnPlanPrefix fnFrameTerminal fnFrameTerminalAbort deepInstSim asmRunBounded venomRunBounded
   fnFrameTerminalPrep generatedPrefixSim planSpillBounds stackOpSim
   stackModel stackPlanOps asmFrame asmIR emitSim frameViewFacts
@@ -570,7 +571,9 @@ Theorem regular_abort_frame_prefix_deep:
       AsmOK (mid with as_stack := mid.as_stack ++ rest) /\
     venom_asm_rel lo arranged (frame_view fn ra vs with vs_memory := st.as_memory) mid /\
     venom_asm_terminal_rel vs (mid with as_stack := mid.as_stack ++ rest) /\
-    asm_block_at prog mid.as_pc [AsmOp name]
+    asm_block_at prog mid.as_pc [AsmOp name] /\
+    create_safe_prefix lo o2pc prog
+      (LENGTH (execute_plan cplan.cp_initial_fmp pre)) st
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all regular_plan_selected_prefix >> strip_tac >>
@@ -611,6 +614,17 @@ Resume regular_abort_frame_prefix_deep[decomposed]:
      goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
      gvs[sortingTheory.PERM_REFL, APPEND_ASSOC] >> metis_tac[]) >>
+  `EVERY plan_admin_op (iops ++ rops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `asm_block_at prog st.as_pc
+     (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
+    (qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
+     simp[execute_plan_append, asm_block_at_append]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) st` by
+    (irule plan_admin_create_safe_prefix >> metis_tac[LESS_EQ_REFL]) >>
+  qpat_x_assum `asm_block_at prog st.as_pc
+    (execute_plan cplan.cp_initial_fmp (iops ++ rops))` kall_tac >>
   qexistsl_tac [`iops ++ rops`, `arranged`, `mid`] >>
   conj_tac >- simp[execute_plan_append] >> simp[] >>
   qpat_x_assum `ops = _` SUBST_ALL_TAC >>
@@ -669,6 +683,32 @@ Proof
   gvs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def]
 QED
 
+(* Creation safety at the marked abort operand boundary. *)
+Theorem abort_frame_creation_safe:
+  inst_wf inst /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  inst_create_size_ok inst vs /\
+  ((inst.inst_opcode = CREATE /\ name = "CREATE") \/
+   (inst.inst_opcode = CREATE2 /\ name = "CREATE2")) /\
+  (!op. MEM op (compute_operands inst) ==>
+    eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
+    compute_operands inst /\
+  venom_asm_rel lo arranged (frame_view fn ra vs with vs_memory := m) mid /\
+  eval_operands inst.inst_operands vs = SOME vals ==>
+  create_safe (AsmOp name) (mid.as_stack ++ rest)
+Proof
+  strip_tac >>
+  `mid.as_stack = vals ++ DROP (LENGTH inst.inst_operands) mid.as_stack` by
+    (irule abort_frame_arranged_stack >> simp[] >>
+     conj_tac >- (qexists `dfg` >> gvs[EVERY_MEM] >> metis_tac[]) >>
+     goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >> simp[]) >>
+  qpat_x_assum `mid.as_stack = _` (fn th => once_rewrite_tac[th]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  irule evaluated_creation_safe >> metis_tac[]
+QED
+
 Theorem gen_inst_ext_fault_frame_sim_deep:
   !inst cplan vs fn r final base ps nl lo ra dfg ops ctx rest mem0 st
     lv cfg halting term label prog fuel a vs' o2pc.
@@ -701,7 +741,8 @@ Theorem gen_inst_ext_fault_frame_sim_deep:
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
   ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\ a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
-    venom_asm_terminal_rel vs' out
+    venom_asm_terminal_rel vs' out /\
+    (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n st)
 Proof
   rpt gen_tac >> strip_tac >>
   `?name. venom_to_evm_name inst.inst_opcode = SOME name` by
@@ -731,7 +772,36 @@ Proof
      suspend "returndatacopy") >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp pre) + 1`, `out`] >>
   conj_tac >- simp[] >>
-  simp[] >> irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
+  simp[] >> conj_tac
+  >- (irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]) >>
+  strip_tac >> irule create_safe_prefix_compose >> conj_tac >- asm_rewrite_tac[] >>
+  qexists `mid with as_stack := mid.as_stack ++ rest` >> asm_rewrite_tac[] >>
+  rewrite_tac[ONE, ADD_CLAUSES, create_safe_prefix_suc] >>
+  conj_tac >- suspend "safe_opcode" >>
+  simp[asm_result_distinct]
+QED
+
+Resume gen_inst_ext_fault_frame_sim_deep[safe_opcode]:
+  `EL mid.as_pc prog = AsmOp name` by gvs[asm_block_at_def] >>
+  simp[] >> Cases_on `name = "CREATE" \/ name = "CREATE2"`
+  >- ( `((inst.inst_opcode = CREATE /\ name = "CREATE") \/
+         (inst.inst_opcode = CREATE2 /\ name = "CREATE2"))` by
+         (qpat_x_assum `venom_to_evm_name _ = _` mp_tac >>
+          qpat_x_assum `name = "CREATE" \/ _` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >>
+          Cases_on `inst.inst_opcode` >> simp[venom_to_evm_name_def] >>
+          rpt strip_tac >> gvs[]) >>
+       `?vals. eval_operands inst.inst_operands vs = SOME vals` by
+         (qpat_x_assum `step_inst _ _ _ _ = Abort _ _` mp_tac >>
+          qpat_x_assum `inst.inst_opcode = _` mp_tac >>
+          qpat_x_assum `inst_wf inst` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+          gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+          gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_create_def,
+              eval_operands_def, AllCaseEqs(), venomStateTheory.eval_operands_def] >>
+          gvs[optionTheory.IS_SOME_EXISTS, AllCaseEqs()]) >>
+       irule abort_frame_creation_safe >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  simp[create_safe_def]
 QED
 
 Resume gen_inst_ext_fault_frame_sim_deep[static]:
@@ -1061,32 +1131,6 @@ Proof
   qexistsl_tac [`n`, `out`] >> simp[]
 QED
 
-(* The marked abort setup relates a frame view, but creation safety is a
-   property of the original source operands, before that view is taken. *)
-Theorem abort_frame_creation_safe:
-  inst_wf inst /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
-  inst_create_size_ok inst vs /\
-  ((inst.inst_opcode = CREATE /\ name = "CREATE") \/
-   (inst.inst_opcode = CREATE2 /\ name = "CREATE2")) /\
-  (!op. MEM op (compute_operands inst) ==>
-    eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
-  EVERY (\op. op <> dead_stack_marker /\
-    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
-  arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
-    compute_operands inst /\
-  venom_asm_rel lo arranged (frame_view fn ra vs with vs_memory := m) mid /\
-  eval_operands inst.inst_operands vs = SOME vals ==>
-  create_safe (AsmOp name) (mid.as_stack ++ rest)
-Proof
-  strip_tac >>
-  `mid.as_stack = vals ++ DROP (LENGTH inst.inst_operands) mid.as_stack` by
-    (irule abort_frame_arranged_stack >> simp[] >>
-     conj_tac >- (qexists `dfg` >> gvs[EVERY_MEM] >> metis_tac[]) >>
-     goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >> simp[]) >>
-  qpat_x_assum `mid.as_stack = _` (fn th => once_rewrite_tac[th]) >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
-  irule evaluated_creation_safe >> metis_tac[]
-QED
 
 (* Executable abort probe: a static creation still inspects the prepared
    operands.  Safety and the fault step hold at that same assembly state. *)
