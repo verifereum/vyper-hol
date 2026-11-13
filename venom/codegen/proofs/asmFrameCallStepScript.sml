@@ -1596,6 +1596,13 @@ QED
 
 Finalise asm_call_prepare_budget_no_failure
 
+Theorem div64_le_of_le[local]:
+  x <= z ==> x DIV 64 <= z
+Proof
+  strip_tac >> irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `x` >>
+  simp[arithmeticTheory.DIV_LESS_EQ]
+QED
+
 Theorem asm_step_call_budget_same_depth:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
   EVERY (wf_context o FST) s.contexts /\
@@ -1620,10 +1627,7 @@ Proof
   drule_all asm_pop_stack_underflow >> disch_tac >>
   qpat_x_assum `step_call _ _ = _` mp_tac >>
   simp[asm_step_call_factor, asm_call_prepare_def, bind_def, LET_THM] >>
-  strip_tac >> gvs[] >>
-  irule arithmeticTheory.LESS_EQ_TRANS >>
-  qexists_tac `c.msgParams.gasLimit - c.gasUsed - B` >>
-  simp[arithmeticTheory.DIV_LESS_EQ]
+  strip_tac >> gvs[] >> irule div64_le_of_le >> decide_tac
 QED
 
 Resume asm_step_call_budget_same_depth[adequate]:
@@ -1645,26 +1649,24 @@ Resume asm_step_call_budget_same_depth[adequate]:
       `LENGTH t.contexts = LENGTH u.contexts` by metis_tac[] >>
       drule_all asm_call_finish_same_depth_refund >> strip_tac >>
       conj_tac >- simp[] >> asm_rewrite_tac[] >>
-      irule arithmeticTheory.LESS_EQ_TRANS >>
-      qexists_tac `c.msgParams.gasLimit - c.gasUsed - B` >>
-      simp[arithmeticTheory.DIV_LESS_EQ] >> decide_tac) >>
+      irule div64_le_of_le >> decide_tac) >>
   rename1 `asm_call_prepare op s = (INR e,u)` >>
   `r = INR e /\ t = u` by
     (qpat_x_assum `step_call _ _ = _` mp_tac >>
      rewrite_tac[asm_step_call_factor, bind_def] >>
      qpat_assum `asm_call_prepare _ _ = _` (fn th => rewrite_tac[th]) >>
      simp_tac (srw_ss()) [] >> metis_tac[]) >>
-  qpat_x_assum `r = _ /\ _` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `r = INR e` SUBST_ALL_TAC >>
+  qpat_x_assum `t = u` SUBST_ALL_TAC >>
   drule_all asm_call_prepare_budget_no_failure >> disch_tac >>
-  drule_all asm_call_prepare_failure_view >> strip_tac >- fs[] >>
+  drule_all asm_call_prepare_failure_view >> strip_tac >>
   `(FST (HD u.contexts)).gasUsed = c.gasUsed + (static_gas op + dg + mc)` by
     (qpat_x_assum `e = SOME WriteInStaticContext ==> _` mp_tac >> simp[]) >>
   `(FST (HD u.contexts)).msgParams.gasLimit = c.msgParams.gasLimit` by
     simp[] >>
   Q.SUBGOAL_THEN `mc + oc + 6400 <= B /\ static_gas op <= 100`
     strip_assume_tac
-  >- (rule_assum_tac (SIMP_RULE arith_ss []) >>
-      drule_all (SIMP_RULE arith_ss [] asm_call_prepare_overhead_budget) >> simp[]) >>
+  >- (drule_all asm_call_prepare_overhead_budget >> strip_tac >> decide_tac) >>
   drule_all call_gas_budget_reserve >> strip_tac >>
   conj_tac >- simp[] >>
   qpat_x_assum `(FST (HD u.contexts)).gasUsed = _` (fn th => rewrite_tac[th]) >>
@@ -1778,7 +1780,7 @@ Proof
   mp_tac (Q.INST [`exc` |-> `OutOfGas`, `popped` |-> `c with stack := DROP n c.stack`]
     asm_step_fault_outcome) >>
   impl_tac >- simp[vfm_abort_def] >>
-  strip_tac >> simp[] >> qexistsl_tac [`r`, `s'`] >>
+  strip_tac >>
   simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises] >>
   metis_tac[]
 QED
@@ -1947,10 +1949,20 @@ Proof
   `wf_state s /\ ?d. s.msdomain = Collect d` by fs[asm_frame_rel_def] >>
   Cases_on `e = SOME OutOfGas`
   >- (pop_assum SUBST_ALL_TAC >>
+      drule_all asm_frame_call_prepare_failure_starved >> strip_tac >>
       drule_all asm_frame_call_prepare_oog_step_ok >> simp[]) >>
   `e = SOME WriteInStaticContext` by
     (drule_all asm_call_prepare_failure_kind >> simp[]) >>
-  gvs[asm_frame_call_prepare_static_step_ok]
+  qpat_x_assum `e = SOME WriteInStaticContext` SUBST_ALL_TAC >>
+  `asm_frame_step_ok prog data es0 a s` by
+    (drule_all asm_frame_call_prepare_static_step_ok >> simp[]) >>
+  simp[] >>
+  drule_all asm_call_prepare_failure_step >> disch_tac >>
+  drule_all asm_call_prepare_failure_view >> strip_tac >>
+  mp_tac (Q.INST [`exc` |-> `WriteInStaticContext`,
+    `popped` |-> `c with <|stack := DROP 7 c.stack; gasUsed := used|>`]
+    asm_step_fault_outcome) >>
+  impl_tac >- simp[vfm_abort_def] >> simp[]
 QED
 
 Theorem asm_frame_call_prepare_exit:
@@ -1977,7 +1989,9 @@ Proof
         (drule_all asm_frame_call_decode >> simp[]) >>
       (Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac
         >- (Cases_on `EL a.as_pc prog = AsmOp "CALL"` >> gvs[])) >>
-      gvs[asm_frame_call_prepare_failure_step_ok]) >>
+      `op = Call ==> EL a.as_pc prog = AsmOp "CALL"` by
+        (Cases_on `EL a.as_pc prog = AsmOp "CALL"` >> gvs[]) >>
+      drule_all asm_frame_call_prepare_failure_step_ok >> strip_tac >> simp[]) >>
   Cases_on `EL a.as_pc prog = AsmOp "CALL"` >>
   gvs[call_has_value_def]
   >- (`LENGTH a.as_stack < 7` by simp[] >>
