@@ -25,10 +25,6 @@ Theorem abi_args_captured_head_ptr:
   (!x. vv_operand vv = Var x ==> not_fresh_at mid x) /\
   (!x. op = Var x ==> not_fresh_at sm x) /\ (!l. op <> Label l) /\
   ~is_word_type (expr_type e) /\
-  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
-     ~is_word_type (post_value_type ce e) ==>
-     type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
-     type_memory_size tvt < 2 ** 64) /\
   (!gs v ee. bind (eval_expr cx e) (read_result cx)
       (es with gas_obs := gs) = (INL v,ee) ==>
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\
