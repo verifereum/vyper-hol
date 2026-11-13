@@ -38,9 +38,9 @@ Theorem typed_store_mem_cont:
       vs_prev_bb := s.vs_prev_bb|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
-  strip_tac >> drule_all typed_store_mem_path >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> drule_all typed_store_mem_path >>
   disch_then (qspec_then `ctx` (qx_choose_then `t` strip_assume_tac)) >>
-  qexists_tac `t` >> simp[]
+  qexists_tac `t` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem typed_store_mem_cont_resources:

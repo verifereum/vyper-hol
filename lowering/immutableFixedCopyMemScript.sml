@@ -1,140 +1,7 @@
-(* Memory safety of fixed constructor immutable writes. *)
+(* Existing constructor-base contracts follow from the option-generic core. *)
 Theory immutableFixedCopyMem
 Ancestors
-  immutableAssignStoreMem immutableCopyExecution immutableConstructorRelation
-  valueEncodingProps bodyImmutableCopyMemory
-  abiDecoderBytesPrefix abiEncoderWindowSequence windowSequenceMem
-  instMemFrontier memSafeRun fragExecMem fragExec memContinuation
-  context compileEnv emitHelper emitHelperProps loweringStateRelDefs
-  exprLoweringProps venomExecSemantics venomState venomInst
-  words arithmetic list rich_list finite_map
-
-Theorem immutable_offset_allocation_frame[local]:
-  compile_lit_byte_offset op off sa = (r,sb) /\
-  run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
-Proof
-  Cases_on `off = 0`
-  >- (simp[compile_lit_byte_offset_def, comp_return_def] >>
-      strip_tac >> gvs[emitted_insts_def, run_inst_seq_def]) >>
-  Cases_on `op` >>
-  simp[compile_lit_byte_offset_def, comp_return_def] >> strip_tac >>
-  gvs[emitted_insts_def, run_inst_seq_def] >>
-  irule abi_decode_nonallocating_sequence_frame >>
-  goal_assum (drule_at Any) >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  simp[DROP_APPEND, mk_inst_def, is_terminator_def, is_alloca_op_def]
-QED
-
-Theorem immutable_load_mem_ok[local]:
-  emit_op MLOAD [op] sa = (r,sb) /\
-  eval_operand op s = SOME a /\ w2n a + 32 <= s.vs_alloca_next ==>
-  run_inst_seq_mem_ok (emitted_insts sa sb) s
-Proof
-  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
-  simp[run_inst_seq_mem_ok_last, below_frontier_MLOAD]
-QED
-
-Theorem immutable_load_allocation_frame[local]:
-  emit_op MLOAD [op] sa = (r,sb) /\
-  run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
-Proof
-  strip_tac >> irule abi_decode_nonallocating_sequence_frame >>
-  goal_assum (drule_at Any) >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  simp[DROP_APPEND, mk_inst_def, is_terminator_def, is_alloca_op_def]
-QED
-
-Theorem immutable_frame_mem_append[local]:
-  immutable_execution_frame sa s sm t /\
-  immutable_execution_frame sm t sb u /\
-  run_inst_seq_mem_ok (emitted_insts sa sm) s /\
-  run_inst_seq_mem_ok (emitted_insts sm sb) t ==>
-  run_inst_seq_mem_ok (emitted_insts sa sb) s
-Proof
-  simp[immutable_execution_frame_def] >> strip_tac >>
-  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
-    (irule emitted_insts_append >> simp[]) >>
-  simp[] >> irule run_inst_seq_mem_ok_append >> simp[]
-QED
-
-Theorem immutable_store_allocation_frame[local]:
-  compile_imm_store_word (SOME region) dst value sa = ((),sb) /\
-  run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
-Proof
-  strip_tac >> irule abi_decode_nonallocating_sequence_frame >>
-  goal_assum (drule_at Any) >>
-  drule compile_imm_store_word_result >> strip_tac >>
-  simp[emitted_insts_def, DROP_APPEND, mk_inst_def,
-       is_terminator_def, is_alloca_op_def]
-QED
-
-Theorem immutable_fixed_read_mem[local]:
-  compile_lit_byte_offset src off sa = (op,sm) /\
-  emit_op MLOAD [op] sm = (value,sb) /\
-  eval_operand src s = SOME a /\ fresh_vars_wrt sa s /\
-  w2n (a+n2w off) + 32 <= s.vs_alloca_next ==>
-  ?t. immutable_execution_frame sa s sb t /\
-    run_inst_seq_mem_ok (emitted_insts sa sb) s /\
-    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    t.vs_memory = s.vs_memory /\
-    eval_operand value t = SOME (mload (w2n (a+n2w off)) s)
-Proof
-  strip_tac >> drule_all immutable_offset_frame >> strip_tac >>
-  rename1 `immutable_execution_frame sa s sm u` >>
-  `u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next` by
-    (irule immutable_offset_allocation_frame >>
-     fs[immutable_execution_frame_def] >> metis_tac[]) >>
-  drule immutable_execution_frame_operands >> strip_tac >>
-  drule_all immutable_memory_load_frame >> strip_tac >>
-  rename1 `immutable_execution_frame sm u sb t` >>
-  qexists_tac `t` >> conj_tac
-  >- (irule immutable_execution_frame_trans >> metis_tac[]) >>
-  conj_tac
-  >- (irule immutable_frame_mem_append >> qexistsl_tac [`sm`,`u`,`t`] >>
-      simp[] >> conj_tac
-      >- metis_tac[body_immutable_byte_offset_mem_ok] >>
-      irule immutable_load_mem_ok >> metis_tac[]) >>
-  `t.vs_allocas = u.vs_allocas /\ t.vs_alloca_next = u.vs_alloca_next` by
-    (irule immutable_load_allocation_frame >>
-     fs[immutable_execution_frame_def] >> metis_tac[]) >>
-  gvs[mload_def]
-QED
-
-Theorem immutable_fixed_write_mem[local]:
-  compile_lit_byte_offset dst off sa = (op,sm) /\
-  compile_imm_store_word (SOME region) op value sm = ((),sb) /\
-  eval_operand dst s = SOME b /\ eval_operand region s = SOME 0w /\
-  eval_operand value s = SOME v /\ fresh_vars_wrt sa s /\
-  w2n (b+n2w off) + 32 <= s.vs_alloca_next ==>
-  ?t. immutable_execution_frame sa s sb t /\
-    run_inst_seq_mem_ok (emitted_insts sa sb) s /\
-    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
-Proof
-  strip_tac >> drule_all immutable_offset_frame >> strip_tac >>
-  rename1 `immutable_execution_frame sa s sm u` >>
-  `u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next` by
-    (irule immutable_offset_allocation_frame >>
-     fs[immutable_execution_frame_def] >> metis_tac[]) >>
-  drule immutable_execution_frame_operands >> strip_tac >>
-  `eval_operand value u = SOME v /\ eval_operand region u = SOME 0w` by
-    metis_tac[] >>
-  drule_all immutable_store_execution_frame >> strip_tac >>
-  rename1 `immutable_execution_frame sm u sb t` >>
-  qexists_tac `t` >> conj_tac
-  >- (irule immutable_execution_frame_trans >> metis_tac[]) >>
-  conj_tac
-  >- (irule immutable_frame_mem_append >> qexistsl_tac [`sm`,`u`,`t`] >>
-      simp[] >> conj_tac
-      >- metis_tac[body_immutable_byte_offset_mem_ok] >>
-      irule immutable_store_word_mem_ok >> metis_tac[]) >>
-  `t.vs_allocas = u.vs_allocas /\ t.vs_alloca_next = u.vs_alloca_next` by
-    (irule immutable_store_allocation_frame >>
-     fs[immutable_execution_frame_def] >> metis_tac[]) >>
-  simp[]
-QED
+  immutableFixedOptionMem
 
 Theorem immutable_store_one_mem:
   immutable_store_one (SOME region) src dst off sa = ((),sb) /\
@@ -146,18 +13,8 @@ Theorem immutable_store_one_mem:
     run_inst_seq_mem_ok (emitted_insts sa sb) s /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
 Proof
-  simp[immutable_store_one_def, immutable_comp_bind_cases] >> strip_tac >>
-  drule_all immutable_fixed_read_mem >> strip_tac >>
-  rename1 `immutable_execution_frame sa s sm u` >>
-  drule immutable_execution_frame_operands >> strip_tac >>
-  `eval_operand dst u = SOME b /\ eval_operand region u = SOME 0w` by
-    metis_tac[] >>
-  `w2n (b+n2w off) + 32 <= u.vs_alloca_next` by simp[] >>
-  drule_all immutable_fixed_write_mem >> strip_tac >>
-  rename1 `immutable_execution_frame sm u sb t` >>
-  qexists_tac `t` >> conj_tac
-  >- (irule immutable_execution_frame_trans >> metis_tac[]) >>
-  conj_tac >- (irule immutable_frame_mem_append >> metis_tac[]) >> simp[]
+  strip_tac >> mp_tac (Q.INST [`imm` |-> `SOME region`]
+    (SPEC_ALL immutable_store_one_mem_option)) >> simp[] >> metis_tac[]
 QED
 
 Theorem immutable_fixed_words_mem:
@@ -173,33 +30,8 @@ Theorem immutable_fixed_words_mem:
     run_inst_seq_mem_ok (emitted_insts sa sb) s /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
 Proof
-  Induct
-  >- (simp[compile_imm_store_words_def, comp_return_def] >>
-      rpt strip_tac >> gvs[] >> qexists_tac `s` >>
-      simp[immutable_execution_frame_def, immutable_operand_frame_refl,
-           emitted_insts_def, run_inst_seq_def, run_inst_seq_mem_ok_def,
-           same_blocks_def]) >>
-  simp[immutable_store_suc, comp_ignore_bind_def, immutable_comp_bind_cases] >>
-  rpt strip_tac >>
-  `w2n (a+n2w off) + 32 <= s.vs_alloca_next /\
-   w2n (b+n2w off) + 32 <= s.vs_alloca_next` by
-    (conj_tac >> irule body_immutable_copy_offset_range >>
-     simp[MULT_SUC] >> decide_tac) >>
-  drule_all immutable_store_one_mem >> strip_tac >>
-  rename1 `immutable_execution_frame sa s sm u` >>
-  drule immutable_execution_frame_operands >> strip_tac >>
-  `eval_operand src u = SOME a /\ eval_operand dst u = SOME b /\
-   eval_operand region u = SOME 0w` by metis_tac[] >>
-  `?t. immutable_execution_frame sm u sb t /\
-    run_inst_seq_mem_ok (emitted_insts sm sb) u /\
-    t.vs_allocas = u.vs_allocas /\ t.vs_alloca_next = u.vs_alloca_next` by
-    (qpat_x_assum `!off sa sb s a b. _`
-       (qspec_then `off+32` irule) >>
-     goal_assum (drule_at Any) >> simp[] >> gvs[MULT_SUC] >>
-     metis_tac[]) >>
-  qexists_tac `t` >> conj_tac
-  >- (irule immutable_execution_frame_trans >> metis_tac[]) >>
-  conj_tac >- (irule immutable_frame_mem_append >> metis_tac[]) >> simp[]
+  rpt gen_tac >> strip_tac >> mp_tac (Q.INST [`imm` |-> `SOME region`]
+    (SPEC_ALL immutable_fixed_words_mem_option)) >> simp[] >> metis_tac[]
 QED
 
 Theorem immutable_store_one_code:
@@ -208,24 +40,8 @@ Theorem immutable_store_one_code:
   ?is. sb.cs_current_insts = sa.cs_current_insts ++ is /\
     EVERY (\i. MEM i.inst_opcode [ADD; MLOAD; ISTORE]) is
 Proof
-  simp[immutable_store_one_def, immutable_comp_bind_cases] >> strip_tac >>
-  imp_res_tac immutable_byte_offset_extends >>
-  imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
-  imp_res_tac compile_imm_store_word_result >>
-  imp_res_tac exprSimCopyTheory.code_offset_insts >>
-  `same_blocks st1'' sb` by
-    (qpat_x_assum `compile_imm_store_word _ _ _ _ = _` mp_tac >>
-     simp[compile_imm_store_word_def, comp_bind_def, comp_ignore_bind_def,
-          emit_op_def, emit_void_def, emit_inst_def, fresh_var_def,
-          fresh_id_def, emit_def, comp_return_def, same_blocks_def] >>
-     strip_tac >> gvs[]) >>
-  conj_tac >- gvs[same_blocks_def] >>
-  qmatch_asmsub_abbrev_tac `sb.cs_current_insts = st1''.cs_current_insts ++ stores` >>
-  qexists_tac `emitted_insts sa st1 ++ emitted_insts st1 st1' ++
-    emitted_insts st1' st1'' ++ stores` >>
-  conj_tac >- simp[APPEND_ASSOC] >>
-  simp[Abbr `stores`, mk_inst_def, EVERY_APPEND] >>
-  gvs[EVERY_MEM] >> metis_tac[]
+  strip_tac >> mp_tac (Q.INST [`imm` |-> `SOME region`]
+    (SPEC_ALL immutable_store_one_code_option)) >> simp[] >> metis_tac[]
 QED
 
 Theorem immutable_fixed_words_code:
@@ -235,12 +51,8 @@ Theorem immutable_fixed_words_code:
   ?is. sb.cs_current_insts = sa.cs_current_insts ++ is /\
     EVERY (\i. MEM i.inst_opcode [ADD; MLOAD; ISTORE]) is
 Proof
-  Induct
-  >- simp[compile_imm_store_words_def, comp_return_def, same_blocks_def] >>
-  simp[immutable_store_suc, comp_ignore_bind_def, immutable_comp_bind_cases] >>
-  rpt strip_tac >> drule immutable_store_one_code >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  gvs[same_blocks_def] >> metis_tac[APPEND_ASSOC, EVERY_APPEND]
+  rpt gen_tac >> strip_tac >> mp_tac (Q.INST [`imm` |-> `SOME region`]
+    (SPEC_ALL immutable_fixed_words_code_option)) >> simp[] >> metis_tac[]
 QED
 
 Theorem immutable_fixed_words_mem_cont:
@@ -252,47 +64,8 @@ Theorem immutable_fixed_words_mem_cont:
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof
-  strip_tac >>
-  `frag_exec_mem ctx sa sb (\u. u = s)
-    (\u. u = (t with vs_inst_idx := LENGTH sb.cs_current_insts)) (K F)` by
-    (irule fragExecMemTheory.frag_exec_mem_run_inst_seq >>
-     drule immutable_fixed_words_code >> strip_tac >>
-     fs[immutable_execution_frame_def, same_blocks_def] >>
-     gvs[EVERY_MEM] >> rpt gen_tac >> disch_tac >>
-     qpat_x_assum `!i. MEM i _ ==> _` drule >>
-     strip_tac >> gvs[is_terminator_def]) >>
-  drule mem_cont_sim_from_fragment >>
-  disch_then (qspec_then `s` mp_tac) >> simp[]
-QED
-
-Theorem immutable_fixed_step_frame[local]:
-  MEM i.inst_opcode [ADD; MLOAD; ISTORE] /\ step_inst_base i s = OK t ==>
-  t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory;
-               vs_immutables := t.vs_immutables|>
-Proof
-  simp_tac bool_ss [MEM] >> strip_tac >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  pure_rewrite_tac[step_inst_base_def] >>
-  pure_asm_rewrite_tac[opcode_case_def] >>
-  asm_simp_tac bool_ss [exec_read1_def, exec_pure2_def] >>
-  simp[AllCaseEqs()] >> strip_tac >>
-  gvs[update_var_def, istore_def, mstore_def, write_memory_with_expansion_def,
-      venom_state_component_equality]
-QED
-
-Theorem immutable_fixed_sequence_frame[local]:
-  !code s t.
-  EVERY (\i. MEM i.inst_opcode [ADD; MLOAD; ISTORE]) code /\
-  run_inst_seq code s = OK t ==>
-  t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory;
-               vs_immutables := t.vs_immutables|>
-Proof
-  Induct >- simp[run_inst_seq_def] >> rpt gen_tac >>
-  simp_tac (srw_ss()) [run_inst_seq_def, EVERY_DEF, AllCaseEqs(), Excl "MEM"] >>
-  strip_tac >> drule_at (Pos last) immutable_fixed_step_frame >> simp[] >> strip_tac >>
-  rename1 `run_inst_seq code middle = OK t` >>
-  first_x_assum (qspecl_then [`middle`,`t`] mp_tac) >> simp[] >>
-  strip_tac >> gvs[venom_state_component_equality]
+  strip_tac >> mp_tac (Q.INST [`imm` |-> `SOME region`]
+    (SPEC_ALL immutable_fixed_words_mem_cont_option)) >> simp[] >> metis_tac[]
 QED
 
 Theorem immutable_fixed_copy_mem_endpoint:
@@ -319,24 +92,6 @@ Theorem immutable_fixed_copy_mem_endpoint:
     (!p k. p+k <= b+off \/ b+off+32*n <= p ==>
       mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory)
 Proof
-  strip_tac >>
-  `w2n (n2w a:bytes32) = a /\ w2n (n2w b:bytes32) = b` by
-    (simp[w2n_n2w] >> conj_tac >> irule LESS_MOD >> decide_tac) >>
-  drule immutable_fixed_words_mem >>
-  disch_then (qspecl_then [`s`,`n2w a`,`n2w b`] mp_tac) >> simp[] >> strip_tac >>
-  `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
-    (irule immutable_fixed_words_mem_cont >> metis_tac[]) >>
-  `t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory;
-                 vs_immutables := t.vs_immutables|>` by
-    (drule immutable_fixed_words_code >> strip_tac >>
-     irule immutable_fixed_sequence_frame >>
-     fs[immutable_execution_frame_def, emitted_insts_def, DROP_APPEND] >>
-     metis_tac[]) >>
-  drule (Q.INST [`store` |-> `T`, `ctor` |-> `T`]
-    immutable_compile_memory_snapshot |> SRULE []) >>
-  disch_then (qspecl_then [`a`,`s`,`b`] mp_tac) >> simp[] >> strip_tac >>
-  `s' = t` by gvs[immutable_execution_frame_def] >> gvs[] >>
-  qexists_tac `s'` >> simp[] >>
-  simp[mcopy_mem_bytes_at_same] >> rpt strip_tac >>
-  irule mcopy_mem_bytes_at_disjoint >> decide_tac
+  strip_tac >> mp_tac (Q.INST [`imm` |-> `SOME region`]
+    (SPEC_ALL immutable_fixed_copy_mem_endpoint_option)) >> simp[] >> metis_tac[]
 QED

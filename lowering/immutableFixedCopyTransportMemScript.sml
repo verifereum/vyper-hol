@@ -1,97 +1,7 @@
-(* Transport fixed immutable writes to states with populated temporaries. *)
+(* The original SOME-base interfaces use the option-generic transport core. *)
 Theory immutableFixedCopyTransportMem
 Ancestors
-  immutableFixedCopyMem immutableCopyExecution bodyMemTbExtract32MemoryTransfer
-  appendStorageStageTransportPtr
-  varsExt instMemFrontier memSafeRun fragExecMem fragExec
-  venomExecSemantics venomState venomInst venomInstProps
-  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
-  finite_map list rich_list arithmetic
-
-Theorem immutable_fixed_step_mem_transport[local]:
-  MEM i.inst_opcode [ADD; MLOAD; ISTORE] /\ vars_ext s big /\
-  ((?t. step_inst_base i s = OK t) \/
-   (?a t. step_inst_base i s = Abort a t)) /\
-  inst_mem_below_frontier i s /\ inst_dload_in_section i s ==>
-  inst_mem_below_frontier i big /\ inst_dload_in_section i big
-Proof
-  Cases_on `i` >> simp_tac bool_ss [MEM, instruction_accessors] >> strip_tac >>
-  gvs[step_inst_base_opcode_eqs, exec_pure2_def, exec_read1_def,
-      exec_write2_def, AllCaseEqs()]
-  >- (irule below_frontier_no_ranges >> simp[])
-  >> gvs[vars_ext_def] >>
-  qpat_x_assum `big = _` SUBST1_TAC >>
-  gvs[unitTransformDefsTheory.inst_mem_below_frontier_def,
-      contextCodegenRelTheory.source_memory_read_ranges_def,
-      codegenRelTheory.source_memory_write_ranges_def,
-      codegenRelTheory.fixed_source_write_range_def,
-      eval_operand_vars_ext]
-QED
-
-Theorem immutable_offset_output_fresh[local]:
-  compile_lit_byte_offset op off sa = (r,sb) ==>
-  !x. not_fresh_at sa x ==>
-    EVERY (\i. ~MEM x i.inst_outputs) (emitted_insts sa sb)
-Proof
-  Cases_on `off = 0`
-  >- simp[compile_lit_byte_offset_def, comp_return_def, emitted_insts_def] >>
-  Cases_on `op` >>
-  simp[compile_lit_byte_offset_def, emit_op_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def,
-       emit_def] >> strip_tac >> gvs[] >>
-  simp[emitted_insts_def, DROP_APPEND, mk_inst_def, not_fresh_at_def] >>
-  metis_tac[LESS_EQ_REFL]
-QED
-
-Theorem immutable_store_one_output_fresh[local]:
-  immutable_store_one (SOME region) src dst off sa = ((),sb) ==>
-  sa.cs_next_var <= sb.cs_next_var /\
-  !x. not_fresh_at sa x ==>
-    EVERY (\i. ~MEM x i.inst_outputs) (emitted_insts sa sb)
-Proof
-  simp[immutable_store_one_def, immutable_comp_bind_cases] >> strip_tac >>
-  imp_res_tac immutable_byte_offset_extends >>
-  imp_res_tac immutable_offset_output_fresh >>
-  imp_res_tac emitted_insts_emit_op >>
-  imp_res_tac compile_imm_store_word_result >>
-  conj_tac >- decide_tac >>
-  rpt strip_tac >>
-  `not_fresh_at st1 x /\ not_fresh_at st1' x /\ not_fresh_at st1'' x` by
-    metis_tac[freshWritesTheory.not_fresh_at_mono, LESS_EQ_ADD, LESS_EQ_TRANS] >>
-  qmatch_asmsub_abbrev_tac `sb.cs_current_insts = st1''.cs_current_insts ++ stores` >>
-  `sb.cs_current_insts = sa.cs_current_insts ++
-     (emitted_insts sa st1 ++ emitted_insts st1 st1' ++
-      emitted_insts st1' st1'' ++ stores)` by gvs[APPEND_ASSOC] >>
-  once_rewrite_tac[emitted_insts_def] >>
-  qpat_x_assum `sb.cs_current_insts = sa.cs_current_insts ++ _`
-    (fn th => pure_rewrite_tac[th, DROP_LENGTH_APPEND]) >>
-  simp[EVERY_APPEND] >>
-  simp[Abbr `stores`, mk_inst_def] >>
-  gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL]
-QED
-
-Theorem immutable_fixed_words_output_fresh[local]:
-  !n off sa sb.
-    compile_imm_store_words (SOME region) src dst n off sa = ((),sb) ==>
-    sa.cs_next_var <= sb.cs_next_var /\
-    !x. not_fresh_at sa x ==>
-      EVERY (\i. ~MEM x i.inst_outputs) (emitted_insts sa sb)
-Proof
-  Induct
-  >- simp[compile_imm_store_words_def, comp_return_def, emitted_insts_def] >>
-  simp[immutable_store_suc, comp_ignore_bind_def, immutable_comp_bind_cases] >>
-  rpt gen_tac >> strip_tac >>
-  drule immutable_store_one_output_fresh >> strip_tac >>
-  drule immutable_store_one_code >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  conj_tac >- decide_tac >>
-  rpt strip_tac >>
-  `not_fresh_at st1 x` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  drule immutable_fixed_words_code >> strip_tac >>
-  `emitted_insts sa sb = emitted_insts sa st1 ++ emitted_insts st1 sb` by
-    (irule emitted_insts_append >> simp[emitted_insts_def, DROP_APPEND]) >>
-  simp[EVERY_APPEND]
-QED
+  immutableFixedOptionTransportMem
 
 Theorem immutable_fixed_words_run_transport:
   compile_imm_store_words (SOME region) src dst n off sa = ((),sb) /\
@@ -102,29 +12,9 @@ Theorem immutable_fixed_words_run_transport:
       vars_ext t0 t /\ t = t0 with vs_vars := t.vs_vars /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
-  strip_tac >> drule immutable_fixed_words_code >> strip_tac >>
-  `EVERY (\i. MEM i.inst_opcode [ADD; MLOAD; ISTORE])
-     (emitted_insts sa sb)` by gvs[emitted_insts_def, DROP_LENGTH_APPEND] >>
-  `EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
-             ~is_ext_call_op i.inst_opcode) (emitted_insts sa sb)` by
-    (gvs[EVERY_MEM, emitted_insts_def, DROP_LENGTH_APPEND] >>
-     rpt strip_tac >> first_x_assum drule >> strip_tac >>
-     gvs[is_terminator_def, is_ext_call_op_def]) >>
-  `run_inst_seq (emitted_insts sa sb) (drop_fresh sa s) = OK t0` by
-    fs[immutable_execution_frame_def] >>
-  `vars_ext (drop_fresh sa s) s` by simp[vars_ext_drop_fresh] >>
-  drule_all run_inst_seq_vars_ext_ok >> strip_tac >>
-  qexists_tac `t'` >> simp[] >> conj_tac
-  >- (irule run_inst_seq_mem_ok_total_vars_ext >>
-      reverse conj_tac
-      >- (simp[] >> qexists_tac `drop_fresh sa s` >> simp[]) >>
-      rpt gen_tac >> strip_tac >> irule immutable_fixed_step_mem_transport >>
-      fs[EVERY_MEM] >> metis_tac[]) >>
-  conj_tac >- fs[vars_ext_def] >>
-  rpt strip_tac >> irule run_inst_seq_non_output_vars >>
-  goal_assum (drule_at Any) >>
-  drule immutable_fixed_words_output_fresh >> strip_tac >>
-  gvs[EVERY_MEM] >> metis_tac[]
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.INST [`imm` |-> `SOME region`]
+    (SPEC_ALL immutable_fixed_words_run_transport_option)) >> simp[] >> metis_tac[]
 QED
 
 Theorem immutable_fixed_copy_operand_mem_endpoint:
@@ -158,41 +48,7 @@ Theorem immutable_fixed_copy_operand_mem_endpoint:
     (!p k. p+k <= b+off \/ b+off+32*n <= p ==>
       mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory)
 Proof
-  strip_tac >>
-  `?t0. immutable_execution_frame sa (drop_fresh sa s) sb t0 /\
-    run_inst_seq_mem_ok (emitted_insts sa sb) (drop_fresh sa s) /\
-    t0.vs_allocas = s.vs_allocas /\ t0.vs_alloca_next = s.vs_alloca_next /\
-    t0 = (drop_fresh sa s) with <|vs_vars := t0.vs_vars;
-      vs_memory := t0.vs_memory; vs_immutables := t0.vs_immutables|> /\
-    t0.vs_memory = (mcopy (b+off) (a+off) (32*n) s).vs_memory /\
-    mem_bytes_at (b+off) (32*n) t0.vs_memory =
-      mem_bytes_at (a+off) (32*n) s.vs_memory /\
-    (!p k. p+k <= b+off \/ b+off+32*n <= p ==>
-      mem_bytes_at p k t0.vs_memory = mem_bytes_at p k s.vs_memory)` by
-    (mp_tac (Q.INST [`s` |-> `drop_fresh sa s`] immutable_fixed_copy_mem_endpoint) >>
-     simp[fresh_vars_wrt_drop_fresh, freshWritesTheory.eval_operand_drop_fresh,
-          drop_fresh_def, mcopy_def, write_memory_with_expansion_def] >> metis_tac[]) >>
-  drule_all immutable_fixed_words_run_transport >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts sa sb) s = OK t` >>
-  drule immutable_fixed_words_code >> strip_tac >>
-  suspend "finish"
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.INST [`imm` |-> `SOME region`]
+    (SPEC_ALL immutable_fixed_copy_operand_mem_endpoint_option)) >> simp[] >> metis_tac[]
 QED
-
-Resume immutable_fixed_copy_operand_mem_endpoint[finish]:
-  markerLib.RESUME_TAC >>
-  `frag_exec_mem ctx sa sb (\u. u = s)
-    (\u. u = (t with vs_inst_idx := LENGTH sb.cs_current_insts)) (K F)` by
-    (irule fragExecMemTheory.frag_exec_mem_run_inst_seq >>
-     fs[same_blocks_def, emitted_insts_def, DROP_APPEND] >>
-     gvs[EVERY_MEM] >> rpt gen_tac >> disch_tac >>
-     qpat_x_assum `!i. MEM i _ ==> _` drule >>
-     strip_tac >> gvs[is_terminator_def]) >>
-  `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
-    (drule memContinuationTheory.mem_cont_sim_from_fragment >>
-     disch_then (qspec_then `s` mp_tac) >> simp[]) >>
-  qexists_tac `t` >>
-  gvs[drop_fresh_def, emitted_insts_def, DROP_APPEND,
-      venom_state_component_equality] >> gvs[]
-QED
-
-Finalise immutable_fixed_copy_operand_mem_endpoint
