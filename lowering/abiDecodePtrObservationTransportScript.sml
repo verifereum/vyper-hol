@@ -14,8 +14,8 @@ Proof
 QED
 
 Theorem abi_decode_ptr_extend_ghost:
-  abi_decoder_vars_extend extras s t /\ ghost_inv ret cenv cx es G tn s ==>
-  ghost_inv ret cenv cx es G tn t
+  abi_decoder_vars_extend extras s t /\ ghost_inv H ret cenv cx es G tn s ==>
+  ghost_inv H ret cenv cx es G tn t
 Proof
   strip_tac >>
   drule abi_decoder_vars_extend_restore >> strip_tac >>

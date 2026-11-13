@@ -13,13 +13,13 @@ Ancestors
   ctorDeployDefs ptrDiscipline valueEncoding
 
 Definition deploy_ptr_inv_def:
-  deploy_ptr_inv tops runtime_bc am tx (imm : operand) G tn
+  deploy_ptr_inv H tops runtime_bc am tx (imm : operand) G tn
     (s : venom_state) <=>
     tn.t_stor SUBSET
-      (deploy_dead tops runtime_bc am tx).d_stor s.vs_call_ctx.cc_address
+      (deploy_dead H tops runtime_bc am tx).d_stor s.vs_call_ctx.cc_address
         (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
     tn.t_trans SUBSET
-      (deploy_dead tops runtime_bc am tx).d_trans s.vs_call_ctx.cc_address
+      (deploy_dead H tops runtime_bc am tx).d_trans s.vs_call_ctx.cc_address
         (s.vs_transient s.vs_call_ctx.cc_address) /\
     (!i. i < imm_len tops /\ i IN tn.t_mem ==>
          imm_section_dead tops (mem_bytes_at 0 (imm_len tops) s.vs_memory) i) /\

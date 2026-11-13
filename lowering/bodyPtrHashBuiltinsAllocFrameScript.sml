@@ -274,9 +274,19 @@ Proof
   `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [p]) s = OK t` by
     gvs[run_inst_seq_def, AllCaseEqs()] >>
   `eval_operand value t = SOME v /\ op_taint tn1 value = {}` by
-    (qpat_x_assum `tn1 = _` (fn th => rewrite_tac[th]) >>
-     irule hash_alloca_old_operand >>
-     gvs[] >> metis_tac[]) >>
+    (`!x. value = Var x ==> x <> p` by (rpt strip_tac >> gvs[]) >>
+     `MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w] [p]) (fn_insts fn)` by
+       (qpat_x_assum `MEM _ (fn_insts fn)` mp_tac >>
+        qpat_x_assum `buf.buf_operand = Var p` mp_tac >>
+        qpat_x_assum `buf.buf_operand = Var (STRING _ _)` mp_tac >> simp[]) >>
+     `value <> Var p` by
+       (strip_tac >> qpat_x_assum `!x. value = Var x ==> x <> p`
+         (qspec_then `p` mp_tac) >> simp[]) >>
+     qpat_assum `stmt_state_rel H ctx fn cenv cx es s`
+       (mp_then Any mp_tac (GEN_ALL (SIMP_RULE std_ss []
+         (Q.INST [`n` |-> `32`] (SPEC_ALL hash_alloca_old_operand))))) >>
+     disch_then (qspecl_then [`v`, `value`, `tn`, `t`, `p`,
+       `sa.cs_next_id`, `w2n w`] mp_tac) >> simp[]) >>
   qexistsl_tac [`t`, `w`, `p`, `G1`, `tn1`,
     `step_prov PG G1 (mk_inst sid MSTORE [Var p;value] []) (mstore (w2n w) v t)`,
     `step_taint (mk_inst sid MSTORE [Var p;value] []) t (mstore (w2n w) v t) tn1`] >>
