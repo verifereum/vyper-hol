@@ -1603,6 +1603,7 @@ Proof
   `val_in_memory tv2 v' (w2n p) s.vs_memory` by metis_tac[] >>
   `val_footprint tv2 v' <= type_memory_bytes cenv (lowered_value_type cenv e1)` by simp[] >>
   `post_value_type cenv e = expr_type e` by simp[] >>
+  `storage_well_formed_on cx es1 (FST H)` by fs[expr_post_def] >>
   drule_all convert_widen_copy_owned >> strip_tac >>
   qexistsl_tac [`t`, `v'`] >> simp[] >>
   qpat_assum `expr_post H _ _ _ _ e1 _ _ _ _ _ _ _ _`
@@ -1639,7 +1640,7 @@ Proof
       (Abort Revert_abort ss)` by
     (rpt strip_tac >> first_x_assum drule >> strip_tac >> simp[expr_exit_def]) >>
   drule_all convert_cast_frag_success >>
-  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es1`] mp_tac) >>
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cx`, `es1`] mp_tac) >>
   disch_then (qspecl_then [`p`, `s`] mp_tac) >>
   disch_then (mp_then Any irule frag_exec_weaken) >>
   simp[] >> conj_tac

@@ -523,7 +523,7 @@ Proof
     (Cases_on `tr` >>
      gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
          transient_rel_def, get_storage_def, vfmStateTheory.lookup_account_def]) >>
-  irule storage_range_agree_of_live >> metis_tac[]
+  drule_all storage_range_agree_of_live >> simp[]
 QED
 
 Theorem pop_declared_array_slots:
