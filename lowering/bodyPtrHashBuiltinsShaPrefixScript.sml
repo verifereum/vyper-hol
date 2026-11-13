@@ -89,7 +89,8 @@ Theorem hash_bytes_prepare_counted:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions) /\
   run_inst_seq (emitted_insts sa sm) s = OK t ==>
-  ?G1 tn1. gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1
+  ?G1 tn1. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm) s G1 tn1 /\
+  gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1
     (OK (t with vs_inst_idx := s.vs_inst_idx+2)) /\
   G1 = DRESTRICT G (COMPL {STRING #"%" (toString sa.cs_next_var)}) |+
     (STRING #"%" (toString (sa.cs_next_var+1)),(base,cap)) /\
@@ -130,6 +131,7 @@ Theorem hash_bytes_prepare_frame:
   (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) ==>
   ?t G1 tn1 p.
   run_inst_seq (emitted_insts sa sm) s = OK t /\
+  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm) s G1 tn1 /\
   gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1
     (OK (t with vs_inst_idx := s.vs_inst_idx+2)) /\
   (t with vs_vars := s.vs_vars) = s /\

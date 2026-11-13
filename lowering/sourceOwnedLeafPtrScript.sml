@@ -3,6 +3,7 @@
    (copied in bulk).  Neither allocates scratch. *)
 Theory sourceOwnedLeafPtr
 Ancestors
+  sourcePrimitiveGasMem sourceBulkGasMem
   sourceOwnedArrayLoopPtr sourcePrimitiveReentryPtr abiDecoderSequenceReach
   decoderPrimitiveObservations decoderWorldFramePtr
   sourceBulkArrayLayout calldataBulkReentry calldataBulkUniformPtr
@@ -51,6 +52,8 @@ Theorem source_owned_primitive_decoder_ptr:
   r.vs_inst_idx = LENGTH middle.cs_current_insts ==>
   ?t H u.
     abi_decode_sim ctx fn r t /\
+    gas_path_mem ctx fn r 0 (OK t) /\
+    (!D explicit. gas_origin_ptr_path (D, lower, explicit, ctx, fn, PG) (r, G, tn) [] (OK t, H, u)) /\
     ~t.vs_halted /\ t.vs_current_bb = end_st.cs_current_bb /\
     t.vs_inst_idx = LENGTH end_st.cs_current_insts /\ fresh_vars_wrt limit t /\
     val_in_memory tv v e t.vs_memory /\
@@ -128,6 +131,19 @@ Proof
       !fuel. ptr_safe_run D lower fuel ctx fn PG G tn r)` by
     (irule source_primitive_decoder_reentry_ptr >>
      metis_tac[]) >>
+  `base_addr + owner_cap <= r.vs_alloca_next` by
+    metis_tac[alloca_inv_def, alloca_next_valid_def] >>
+  `e + type_memory_size tv <= r.vs_alloca_next` by decide_tac >>
+  `gas_path_mem ctx fn r 0
+     (OK ((t with vs_inst_idx := r.vs_inst_idx) with
+       vs_inst_idx := LENGTH end_st.cs_current_insts))` by
+    (irule source_primitive_run_gas_path_mem >>
+     conj_tac >- simp[] >>
+     qexistsl [`child`, `type_to_abi_dec_info sf ce ty`, `e`, `middle`,
+       `childsrc`, `type_memory_size tv`] >> metis_tac[]) >>
+  `gas_path_mem ctx fn r 0 (OK t)` by
+    (qpat_x_assum `gas_path_mem _ _ _ _ _` mp_tac >>
+     qpat_x_assum `t.vs_inst_idx = _` (fn th => simp[GSYM th])) >>
   drule decoder_primitive_code_shape >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
   `abi_decode_sim ctx fn r t` by
@@ -207,6 +223,8 @@ Theorem source_owned_bulk_array_ptr:
   r.vs_inst_idx = LENGTH middle.cs_current_insts ==>
   ?t H u.
     abi_decode_sim ctx fn r t /\
+    gas_path_mem ctx fn r 0 (OK t) /\
+    (!D explicit. gas_origin_ptr_path (D, lower, explicit, ctx, fn, PG) (r, G, tn) [] (OK t, H, u)) /\
     ~t.vs_halted /\ t.vs_current_bb = end_st.cs_current_bb /\
     t.vs_inst_idx = LENGTH end_st.cs_current_insts /\ fresh_vars_wrt limit t /\
     val_in_memory tv v e t.vs_memory /\
@@ -295,6 +313,13 @@ Proof
       (abi_embedded_static_size ce.ce_struct_fields ety) (type_memory_size etv) F maxn)
       middle = ((),end_st)` by metis_tac[] >>
   drule_all calldata_bulk_reentry_sequence >> strip_tac >>
+  `base_addr + owner_cap <= r.vs_alloca_next` by
+    metis_tac[alloca_inv_def, alloca_next_valid_def] >>
+  `e + (32 + LENGTH vs * type_memory_size etv) <= r.vs_alloca_next /\
+   e + (32 + LENGTH vs * type_memory_size etv) < dimword (:256)` by decide_tac >>
+  `gas_path_mem ctx fn r 0
+     (OK (t with vs_inst_idx := LENGTH end_st.cs_current_insts))` by
+    (drule_all source_bulk_run_gas_path_mem >> simp_tac (srw_ss()) []) >>
   `not_fresh_at middle child /\ not_fresh_at middle root /\
    (!x. childsrc = Var x ==> not_fresh_at middle x)` by
     (conj_tac >- metis_tac[calldata_operand_live_not_fresh] >>
