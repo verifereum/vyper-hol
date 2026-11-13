@@ -106,7 +106,7 @@ Proof
   `run_blocks (SUC f) unit.cu_context func s0 = r` by
     (qspecl_then [`f`, `unit.cu_context`, `func`, `s0`, `bb`] mp_tac
        run_blocks_run_from_no_phi >> simp[]) >>
-  qexistsl_tac [`func`, `SUC f`] >> simp[] >>
+  qexists_tac `SUC f` >> simp[] >>
   irule mem_safe_blocks_no_phi >> asm_rewrite_tac[] >>
   qexists_tac `bb` >> simp[eval_phis_no_phi]
 QED
