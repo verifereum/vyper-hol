@@ -47,7 +47,7 @@ QED
 
 Theorem internal_return_buffer_immutables[local]:
   bare_globals_layout cenv.ce_is_ctor cenv.ce_module_var_type
-    cenv.ce_module_vars cx env.bare_globals env.bare_global_assignable /\
+    cenv.ce_module_vars cenv.ce_modules cx env.bare_globals env.bare_global_assignable /\
   env_consistent env cx ee /\
   (!nm io ity itv.
     FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc io) /\
