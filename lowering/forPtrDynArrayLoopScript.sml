@@ -490,3 +490,122 @@ Resume for_dynarray_round_ptr[callback_exempt]:
   fs[] >> goal_assum (drule_at Any)
 QED
 Finalise for_dynarray_round_ptr
+
+
+Theorem dynarray_code_loop_counted_ptr:
+  dynarray_for_code func cenv bc ty stmts id et tv stride (Var bp)
+    p sz ainst idx dv ov tot ep nv lv cond exit bod incr
+    j1 j2 j3 j4 j5 i1 i2 i3 sa sb0 sb1 sj /\
+  stmts_env bc (InLoop exit incr) ty stmts sb0 = (bc',sb1) /\
+  (!j ei. j < LENGTH vs /\ P ei /\
+    lookup_scopes name ei.scopes = SOME snapshot /\ lookup_scopes id ei.scopes = NONE ==>
+    stmt_frag_ptr d ctx PG func cx (InLoop exit incr) RetQ bc
+      (stmts_env bc (InLoop exit incr) ty stmts) (eval_stmts cx stmts)
+      (ei with <|scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := EL j vs; popped := []|>)) :: ei.scopes;
+        gas_obs := []|>)) /\
+  (!j ei obs ee. j < LENGTH vs /\ P ei /\
+    (do push_scope_with_var id tv (EL j vs);
+        finally (try (do eval_stmts cx stmts; return F od)
+          handle_loop_exception) pop_scope od) (ei with gas_obs := obs) = (INL F,ee) ==>
+    P ee) /\
+  supported_stmts tops bindings stmts /\
+  FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\
+  type_stmts env ret_ty stmts = SOME env' /\
+  iterator_unmodified (Array (Name aty name)) stmts /\
+  ~supported_stmts_expr_exists expr_internal_call_root stmts /\
+  LENGTH vs <= cap /\ LENGTH vs < dimword (:256) /\
+  snapshot.type = ArrayTV tv (Dynamic cap) /\
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  (!j. j < LENGTH vs ==> value_has_type tv (EL j vs) /\ val_wf tv (EL j vs) /\
+    w2n arr_base+32+j*stride < dimword (:256)) /\
+  (!j ei H un u. j < LENGTH vs /\
+    for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+      bod st s0 G0 tn0 d name snapshot j ei H un u ==>
+    ptr_covers H un bp u (32+(j+1)*stride) /\
+    (!m. mem_agree_outside un.t_mem u.vs_memory m ==>
+      val_in_memory tv (EL j vs) (w2n arr_base+32+j*stride) m)) /\
+  st.cs_next_var <= sa.cs_next_var /\ sa.cs_next_var <= sb0.cs_next_var /\
+  (!ei. lookup_scopes name ei.scopes = SOME snapshot /\
+    lookup_scopes id ei.scopes = NONE ==> not_local_ptr bc (FEMPTY :: ei.scopes) p) /\
+  ~ctx_has_dalloca ctx /\ ~bc.ce_is_ctor /\
+  lookup_block bod func.fn_blocks = SOME bb /\ isPREFIX sb0.cs_current_insts bb.bb_instructions /\
+  (!x. not_fresh_at st x ==> x <> dv /\ x <> ov /\ x <> tot /\ x <> ep /\
+    x <> idx /\ x <> nv) /\
+  (!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) \/
+    cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x) /\
+  not_fresh_at sa lv ==>
+  !k es s G tn. k <= LENGTH vs /\ P es /\
+  for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+    cond st s0 G0 tn0 d name snapshot k es G tn s /\
+  lookup_var lv s = SOME (n2w (LENGTH vs)) /\ FLOOKUP G lv = NONE /\ op_taint tn (Var lv) = {} /\
+  gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s,G,tn)
+    (\res ee gf tf t. res = INL () /\
+      for_array_done_ptr ctx func cenv cx exit st s0 G0 tn0 d ee gf tf t)
+    (\res ee gt r. ?ex. res = INR ex /\
+      !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)
+Proof
+  strip_tac >>
+  `!k es s G tn. k <= LENGTH vs /\
+    (P es /\
+     for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+       cond st s0 G0 tn0 d name snapshot k es G tn s /\
+     lookup_var lv s = SOME (n2w (LENGTH vs)) /\
+     FLOOKUP G lv = NONE /\ op_taint tn (Var lv) = {}) /\
+    gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
+    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+      (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s,G,tn)
+      (\res ee gf tf t. res = INL () /\
+        for_array_done_ptr ctx func cenv cx exit st s0 G0 tn0 d ee gf tf t)
+      (\res ee gt r. ?ex. res = INR ex /\
+        !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac eval_for_rounds_ptr >> conj_tac
+  >- suspend "round" >>
+  suspend "terminal"
+QED
+Resume dynarray_code_loop_counted_ptr[round]:
+  rpt gen_tac >> strip_tac >>
+  `lookup_scopes name es.scopes = SOME snapshot /\
+   lookup_scopes id es.scopes = NONE` by
+    (fs[for_array_inv_ptr_def, array_loop_inv_def] >> metis_tac[]) >>
+  `stmt_frag_ptr d ctx PG func cx (InLoop exit incr) RetQ bc
+    (stmts_env bc (InLoop exit incr) ty stmts) (eval_stmts cx stmts)
+    (es with <|scopes := (FEMPTY |+ (id,
+      <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes;
+      gas_obs := []|>)` by metis_tac[] >>
+  `not_local_ptr bc (FEMPTY :: es.scopes) p /\
+   value_has_type tv (EL k vs) /\ val_wf tv (EL k vs) /\
+   w2n arr_base+32+k*stride < dimword (:256)` by metis_tac[] >>
+  `!ei H un u.
+    for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+      bod st s0 G0 tn0 d name snapshot k ei H un u ==>
+    ptr_covers H un bp u (32+(k+1)*stride) /\
+    (!m. mem_agree_outside un.t_mem u.vs_memory m ==>
+      val_in_memory tv (EL k vs) (w2n arr_base+32+k*stride) m)` by metis_tac[] >>
+  drule_all for_dynarray_round_ptr >> strip_tac >>
+  drule for_outcome_semantic_post_ptr >>
+  disch_then (qspec_then `\res ee. res = INL F ==> P ee` mp_tac) >>
+  (impl_tac >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+    disch_then SUBST_ALL_TAC >>
+    qpat_x_assum `!j ei obs ee. _` drule_all >> simp[NoAsms])) >>
+  strip_tac >> irule gas_outcome_ptr_conseq >>
+  goal_assum (drule_at Any) >> simp[NoAsms] >>
+  rpt gen_tac >> strip_tac >> qexists_tac `broke` >>
+  Cases_on `broke` >> fs[]
+QED
+Resume dynarray_code_loop_counted_ptr[terminal]:
+  rpt gen_tac >> strip_tac >>
+  `lookup_block cond func.fn_blocks = SOME <|bb_label := cond;
+    bb_instructions := [mk_inst j1 EQ [Var idx; Var lv] [dv];
+      mk_inst j2 JNZ [Var dv; Label exit; Label bod] []]|> /\
+   not_local_ptr cenv es.scopes dv` by fs[dynarray_for_code_def] >>
+  `(!x. not_fresh_at st x ==> x <> dv) /\
+   (!x q. cenv.ce_return_buf = SOME (PtrVar (Var x) q) ==> not_fresh_at st x)` by metis_tac[] >>
+  drule_all for_dynarray_terminal_ptr >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+Finalise dynarray_code_loop_counted_ptr
