@@ -312,7 +312,7 @@ Theorem intret_mem_ptr_post[local]:
   stor_taint_ok cx tm (return_unlock_state cenv u with vs_inst_idx := i) /\
   (!m. mem_agree_outside tm.t_mem u.vs_memory m ==>
        val_in_memory ret_tv v (w2n bw) m) ==>
-  intret_ptr_q func cenv cx ret_tv (SOME (bw,cap)) v
+  intret_ptr_q func cenv cx ret_tv (SOME (bw,cap:num)) v
     ((ee0 with gas_obs := tail) with scopes := [])
     (H : string |-> num # num,tm)
     (IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
@@ -365,7 +365,7 @@ Theorem return_widened_compound_exit[local]:
   state_rel func cenv cx (ee0 with scopes := []) s /\
   cenv.ce_returns_count = 0 /\ ~cenv.ce_is_ctor /\
   cenv.ce_module = NONE /\ cenv.ce_imm_alloca = NONE ==>
-  !D tops PG Q dcap.
+  !D tops PG Q (dcap:num).
     gas_outcome_ptr D tops (ctx,func) PG (raise (ReturnException v))
       (ee0 with gas_obs := [], s, G, tn) Q
       (\res ee gt r. !tail. stmt_exit_ptr
@@ -388,7 +388,7 @@ Proof
   drule return_exit_glue >> disch_then irule >> gen_tac >>
   mp_tac (Q.INST [`t` |-> `s`, `u` |-> `t`, `sm` |-> `sa`, `off` |-> `w2n (d:256 word)`,
     `n` |-> `type_memory_size dtv`, `ret_tv` |-> `dtv`, `bw` |-> `(d:256 word)`,
-    `cap` |-> `dcap`] intret_mem_ptr_post) >>
+    `cap` |-> `(dcap:num)`] intret_mem_ptr_post) >>
   impl_tac >- asm_rewrite_tac[] >> simp[]
 QED
 
@@ -417,7 +417,7 @@ Theorem return_widened_bytestring_exit[local]:
   state_rel func cenv cx (ee0 with scopes := []) s /\
   cenv.ce_returns_count = 0 /\ ~cenv.ce_is_ctor /\
   cenv.ce_module = NONE /\ cenv.ce_imm_alloca = NONE ==>
-  !D tops PG Q dcap.
+  !D tops PG Q (dcap:num).
     gas_outcome_ptr D tops (ctx,func) PG (raise (ReturnException v))
       (ee0 with gas_obs := [], s, G, tn) Q
       (\res ee gt r. !tail. stmt_exit_ptr
@@ -448,7 +448,7 @@ Proof
   drule return_exit_glue >> disch_then irule >> gen_tac >>
   mp_tac (Q.INST [`t` |-> `s`, `u` |-> `t`, `sm` |-> `sa`, `off` |-> `w2n (d:256 word)`,
     `n` |-> `32 + 32 * word_size len`, `ret_tv` |-> `tv`, `bw` |-> `(d:256 word)`,
-    `cap` |-> `dcap`, `i` |-> `(return_unlock_state cenv t).vs_inst_idx`]
+    `cap` |-> `(dcap:num)`, `i` |-> `(return_unlock_state cenv t).vs_inst_idx`]
     intret_mem_ptr_post) >>
   impl_tac >- asm_rewrite_tac[] >> simp[]
 QED
@@ -567,7 +567,6 @@ Proof
   rename1 `_ = (ru,sf)` >> Cases_on `ru` >> simp[] >> strip_tac >>
   qpat_x_assum `cenv' = cenv''` SUBST_ALL_TAC >>
   qpat_x_assum `sf = sb` SUBST_ALL_TAC >>
-  goalStack.print_tac "PROBE1" >>
   `cs_extends sa sm` by
     (drule bodyPtrCallCalldataTheory.lower_value_compile_expr_split >>
      metis_tac[compileEnvTheory.cs_extends_trans]) >>
@@ -582,8 +581,8 @@ Proof
     metis_tac[return_forced_admissible] >>
   `!z sz. cenv''.ce_return_pc = SOME (PtrVar (Var z) sz) ==>
       not_fresh_at sa z` by fs[ret_pc_ok_def] >>
-  qpat_x_assum `!ty. expr_sim_ptr _ _ _ _ _ _ _ _ _ /\ _`
-    (mp_tac o Q.SPEC `ret_ty`) >> strip_tac >>
+  qpat_x_assum `!e ty. SOME x = SOME e ==> _`
+    (strip_assume_tac o SIMP_RULE bool_ss [] o Q.SPECL [`x`, `ret_ty`]) >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
   disch_then drule_all >> strip_tac >>
@@ -599,12 +598,13 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       `?exc. res = INR exc` by
         (Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def]) >>
-      gvs[] >> simp[stmt_exit_ptr_def] >>
-      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
-  rpt gen_tac >> strip_tac >> gns[] >>
-  qpat_x_assum `(?v. res = INL v /\ _) /\ _` strip_assume_tac >>
+      qexists_tac `exc` >> RULE_ASSUM_TAC BETA_RULE >>
+      qpat_x_assum `res = INR exc` SUBST_ALL_TAC >>
+      BETA_TAC >> rewrite_tac[stmt_exit_ptr_def] >> rpt strip_tac >>
+      disj1_tac >> qpat_x_assum `expr_exit _ _` (MATCH_ACCEPT_TAC o
+        MATCH_MP (iffLR stmtSimPropsTheory.expr_exit_INR_type))) >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
   qexists_tac `v` >> simp[] >>
-  goalStack.print_tac "PROBE2" >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (fn th => assume_tac th >>
               strip_assume_tac (REWRITE_RULE [expr_post_def] th)) >>
@@ -628,7 +628,11 @@ Proof
     metis_tac[compile_lower_value_var] >>
   `state_rel func cenv cx (ee0 with scopes := []) t` by
     (irule constructor_exit_state_rel >> qexists_tac `cenv''` >>
-     fs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
+     qpat_x_assum `ee = _` (fn th =>
+       qpat_assum `stmt_state_rel _ _ cenv'' cx ee t`
+         (strip_assume_tac o REWRITE_RULE [th, state_rel_gas_obs,
+            exprLoweringPropsTheory.stmt_state_rel_def])) >>
+     asm_rewrite_tac[]) >>
   `~cenv.ce_is_ctor /\ ~cenv''.ce_is_ctor` by metis_tac[same_frame_is_ctor] >>
   `cenv''.ce_returns_count = 0` by
     (fs[same_frame_def] >>
@@ -638,7 +642,6 @@ Proof
   `?etv. evaluate_type (get_tenv cx) (expr_type x) = SOME etv /\
          value_has_type etv v` by
     (irule return_value_typed >> metis_tac[]) >>
-  goalStack.print_tac "PROBE3" >>
   `type_widens_to (get_tenv cx) (expr_type x) ret_ty` by
     (fs[type_stmt_return_some_iff, expr_sim_inv_def, env_consistent_def,
         env_context_consistent_def] >> metis_tac[]) >>
@@ -650,10 +653,14 @@ Proof
            `u` |-> `ret_ty`, `tv` |-> `etv`] type_widens_to_value_has_type) >>
          simp[]) >>
       `ptr_val_ok cx (expr_type x) v val_op G tn t` by gs[] >>
+      qpat_x_assum `cap = _` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+      `type_memory_size ret_tv < dimword (:256)` by decide_tac >>
       irule return_widened_bytestring_exit >>
-      goalStack.print_tac "PROBE4" >>
-      cheat) >>
-  goalStack.print_tac "PROBE5" >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qexistsl_tac [`a`, `slot`, `cenv''`, `dst`, `etv`, `expr_type x`,
+        `val_op`, `pc`, `rpc`, `sm`, `sb`, `lowered_value_type cenv'' x`,
+        `ret_ty`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `is_bytestring_type ret_ty \/ _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   `?stv. evaluate_type (get_tenv cx) (lowered_value_type cenv'' x) = SOME stv /\
@@ -667,26 +674,68 @@ Proof
      asm_rewrite_tac[]) >>
   `type_memory_bytes cenv'' (lowered_value_type cenv'' x) =
      type_memory_size stv` by metis_tac[expr_sim_inv_memory_size] >>
-  `?src. val_op = Var src /\ lookup_var src t = SOME a /\
-     ptr_covers G tn src t (type_memory_size stv)` by
-    (qpat_x_assum `ptr_buf_ok _ _ _ _ _` (mp_tac o SRULE [ptr_buf_ok_def]) >>
-     disch_then (qspec_then `a` mp_tac) >> asm_simp_tac std_ss [] >>
-     strip_tac >> rename1 `FLOOKUP G z = SOME (b,sz)` >> qexists_tac `z` >>
-     gvs[ptr_covers_def, eval_operand_def]) >>
-  `not_fresh_at sm src` by metis_tac[] >>
   `~is_word_type (lowered_value_type cenv'' x) /\
    ~is_bytestring_type (lowered_value_type cenv'' x)` by
     metis_tac[type_widens_to_def, arg_type_fits_word_type,
               arg_type_fits_bytestring_target] >>
+  `?src. val_op = Var src /\ lookup_var src t = SOME a /\
+     ptr_covers G tn src t (type_memory_size stv)` by
+    (`ptr_buf_ok cenv'' x val_op G t` by
+       (qpat_x_assum `~is_word_type (post_value_type _ _) ==> _` irule >>
+        asm_rewrite_tac[]) >>
+     qpat_x_assum `ptr_buf_ok _ _ _ _ _` (mp_tac o REWRITE_RULE [ptr_buf_ok_def]) >>
+     qpat_assum `type_memory_bytes _ _ = _` (fn th => rewrite_tac [th]) >>
+     disch_then (qspec_then `a` mp_tac) >> asm_rewrite_tac[] >>
+     strip_tac >> rename1 `FLOOKUP G z = SOME (b,sz)` >>
+     qpat_x_assum `val_op = Var z` SUBST_ALL_TAC >>
+     qpat_assum `ptr_val_ok _ _ _ (Var z) _ _ _`
+       (strip_assume_tac o REWRITE_RULE [ptr_val_ok_def]) >>
+     `lookup_var z t = SOME a` by
+       (qpat_x_assum `eval_operand (Var z) t = _` mp_tac >>
+        simp_tac std_ss [eval_operand_def]) >>
+     qexists_tac `z` >> rewrite_tac[ptr_covers_def] >> asm_rewrite_tac[] >>
+     qexistsl_tac [`a`, `b`, `sz`] >> asm_rewrite_tac[]) >>
+  `not_fresh_at sm src` by metis_tac[] >>
   `val_footprint stv v = type_memory_size stv` by
     metis_tac[evaluated_nonbytes_footprint] >>
   `w2n a + type_memory_size stv < dimword (:256)` by
     (qspecl_then [`func`, `cenv''`, `cx`, `lowered_value_type cenv'' x`, `sa`,
-       `sm`, `ee0`, `v`, `val_op`, `t`, `stv`, `a`, `ctx`] mp_tac
+       `sm`, `ee`, `v`, `val_op`, `t`, `stv`, `a`, `ctx`] mp_tac
        expr_val_at_bound >>
-     impl_tac >- gs[] >> simp[]) >>
+     impl_tac
+     >- (qpat_assum `post_value_type _ _ = _`
+           (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     simp[]) >>
   `acyclic_struct_metadata cenv''.ce_struct_fields` by
     (drule_all body_inv_same_frame >> simp[body_inv_def]) >>
-  goalStack.print_tac "PROBE6" >>
-  cheat
+  qpat_x_assum `cap = _` SUBST_ALL_TAC >>
+  `ptr_buf_ok cenv'' x val_op G t` by
+    (qpat_x_assum `~is_word_type (post_value_type _ _) ==> _` irule >>
+     asm_rewrite_tac[]) >>
+  `regions_disjoint (w2n a) (type_memory_size stv) (w2n bw)
+     (type_memory_size ret_tv)` by
+    (qpat_x_assum `!x' sa sb op s0 G0 tn0 ee G tn t v sw bw cap stv. _`
+       (mp_tac o Q.SPECL [`x`, `sa`, `sm`, `val_op`, `s0`, `G0`, `tn0`, `ee`,
+          `G`, `tn`, `t`, `v`, `a`, `bw`, `type_memory_size ret_tv`, `stv`]) >>
+     impl_tac >- (rewrite_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     rewrite_tac[]) >>
+  `!m. mem_agree_outside tn.t_mem t.vs_memory m ==>
+       val_in_memory stv v (w2n a) m` by
+    (qpat_assum `ptr_val_ok _ (post_value_type _ _) _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [ptr_val_ok_def, ptr_mem_ok_def]) >>
+     qpat_assum `post_value_type _ _ = _` (fn th => rewrite_tac [th]) >>
+     qpat_assum `~is_word_type (lowered_value_type _ _)`
+       (fn th => rewrite_tac [th]) >>
+     strip_tac >>
+     qpat_x_assum `!tv w. _` (qspecl_then [`stv`, `a`] mp_tac) >>
+     impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `val_op = Var src` SUBST_ALL_TAC >>
+  mp_tac (Q.INST [`ce` |-> `cenv''`, `ty` |-> `ret_ty`,
+    `sty` |-> `lowered_value_type cenv'' x`, `sa` |-> `sm`, `cap` |-> `slot`,
+    `dtv` |-> `ret_tv`, `s` |-> `t`, `d` |-> `bw`]
+    return_widened_compound_exit) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then MATCH_ACCEPT_TAC
 QED
