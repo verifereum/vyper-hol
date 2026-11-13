@@ -124,8 +124,9 @@ Theorem framed_array_element_summary:
   read_result cx r ee = (INL (ArrayV av),ee) /\
   array_index (ArrayTV etv bd) av i = SOME v /\
   val_wf (ArrayTV etv bd) (ArrayV av) /\ val_wf etv v /\ value_has_type etv v /\
-  vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
-    (LocatedValue ann p) q /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
+       (LocatedValue ann p) q) /\
   (p.ptr_location = LocMemory \/ p.ptr_location = LocCode) /\
   (p.ptr_location = LocMemory ==> ?n. bd = Fixed n) /\
   eval_operand p.ptr_operand q = SOME w /\
@@ -137,8 +138,9 @@ Theorem framed_array_element_summary:
   gas_summary_at F (ctx,func) []
     (select_result cx (ArrayT et bd) r (ValueSubscript (IntV i))) (ee,s)
     (\res ee' q. ?child. res = INL child /\
-      vv_post H ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee' child
-        (LocatedValue et (mk_ptr dst p.ptr_location)) q /\
+      (!H. valid_horizon cx st0 H ee'.storage_trace ==>
+         vv_post H ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee' child
+           (LocatedValue et (mk_ptr dst p.ptr_location)) q) /\
       q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts)
     (\res ee' outcome. expr_exit res outcome)
 Proof
@@ -146,7 +148,12 @@ Proof
   drule_all framed_array_select_read >> strip_tac >>
   qpat_assum `select_result _ _ _ _ _ = (INL _, _)`
     (assume_tac o MATCH_MP exprSimPropsTheory.select_result_memory_place) >>
-  drule_all vv_post_array_element >> strip_tac >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee child
+       (LocatedValue et (mk_ptr dst p.ptr_location)) q` by
+    (rpt strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then assume_tac) >>
+     drule_all vv_post_array_element >> simp[]) >>
   irule select_result_counted_summary >> simp[] >>
   qexists_tac `OK q` >> simp[] >>
   `ee with gas_obs := [] = ee` by
@@ -319,9 +326,16 @@ Theorem framed_array_represented_suffix_summary:
     (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca p.ptr_location) sc = (dst,sd) /\
   fn_has_code sc sd func /\ ~s.vs_halted /\
   s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
-  stmt_state_rel H ctx func cenv cx ee s /\
-  vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
-    (LocatedValue (ArrayT et bd) p) s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ee s /\
+     vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
+       (LocatedValue (ArrayT et bd) p) s /\
+     (!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
+          (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
+          q.vs_memory = s.vs_memory /\ stmt_state_rel H ctx func cenv cx ee q ==>
+          vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
+            (LocatedValue (ArrayT et bd) p) q)) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
   evaluate_type (get_tenv cx) et = SOME etv /\
   evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
   read_result cx r ee = (INL (ArrayV av),ee) /\
@@ -330,21 +344,21 @@ Theorem framed_array_represented_suffix_summary:
   eval_operand p.ptr_operand s = SOME w /\ eval_operand iop s = SOME iw /\
   i = (if is_signed_type (expr_type idx) then w2i iw else &(w2n iw)) /\
   array_length (ArrayTV etv bd) av < dimword (:256) /\
-  (!al. av = SArrayV al ==> ?n. bd = Fixed n) /\
-  (!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
-       (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
-       q.vs_memory = s.vs_memory /\ stmt_state_rel H ctx func cenv cx ee q ==>
-       vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
-         (LocatedValue (ArrayT et bd) p) q) ==>
+  (!al. av = SArrayV al ==> ?n. bd = Fixed n) ==>
   gas_summary_at F (ctx,func) []
     (select_result cx (ArrayT et bd) r (ValueSubscript (IntV i))) (ee,s)
     (\res ee' q. ?child. res = INL child /\
-      vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
-        (LocatedValue ann (mk_ptr dst p.ptr_location)) q /\
+      (!H. valid_horizon cx st0 H ee'.storage_trace ==>
+         vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
+           (LocatedValue ann (mk_ptr dst p.ptr_location)) q) /\
       q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts)
     (\res ee' outcome. expr_exit res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qpat_x_assum `valid_horizon cx st0 H0 _` kall_tac >>
   drule_all_then assume_tac array_index_word_bounds >>
   Cases_on `valid_index (ArrayTV etv bd) av i`
   >- suspend "valid" >>
@@ -362,7 +376,7 @@ Proof
       metis_tac[exprSimDefsTheory.expr_exit_def, fragExecTheory.exit_result_def]) >>
   fs[Excl "valid_index_def"] >>
   `immutable_holds cenv cx (ArrayT et (Dynamic n)) r w ee s` by
-    (qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
           vyperASTTheory.expr_type_def]) >>
   drule_all_then assume_tac framed_array_code_length_view >>
@@ -421,9 +435,13 @@ Resume framed_array_represented_suffix_summary[fixed_valid]:
      gvs[vyperTypingTheory.value_has_type_def, vyperValueOperationTheory.array_length_def]) >>
   fs[Excl "valid_index_def"] >>
   drule_all fixed_array_subscript_counted_ok >> strip_tac >>
-  `vv_post H ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sd s0 ee r
-     (LocatedValue (ArrayT et (Fixed n)) p) t'` by
-    (first_x_assum irule >> simp[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sd s0 ee r
+       (LocatedValue (ArrayT et (Fixed n)) p) t'` by
+    (rpt strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+     first_x_assum irule >> simp[] >>
+     metis_tac[exprLoweringPropsTheory.stmt_state_rel_fields_transport]) >>
   `eval_operand p.ptr_operand t' = SOME w` by
     (Cases_on `p.ptr_operand` >> gvs[venomStateTheory.eval_operand_def] >>
      first_x_assum irule >> metis_tac[]) >>
@@ -434,8 +452,8 @@ Resume framed_array_represented_suffix_summary[fixed_valid]:
       w2n w + Num i * type_memory_size etv` by
     (strip_tac >> irule fixed_array_element_nonwrapping >>
      goal_assum (drule_at Any) >> simp[] >>
-     irule (SIMP_RULE (srw_ss()) [] vv_post_memory_footprint_bound) >>
-     goal_assum (drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     qpat_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any mp_tac vv_post_memory_footprint_bound) >>
      simp[vyperASTTheory.expr_type_def]) >>
   qpat_assum `p.ptr_location = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   irule framed_array_element_summary >> simp[] >>
@@ -446,7 +464,7 @@ QED
 Resume framed_array_represented_suffix_summary[dynamic_valid]:
   fs[Excl "valid_index_def"] >>
   `immutable_holds cenv cx (ArrayT et (Dynamic n)) r w ee s` by
-    (qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
           vyperASTTheory.expr_type_def]) >>
   drule_all_then assume_tac framed_array_code_length_view >>
@@ -457,9 +475,13 @@ Resume framed_array_represented_suffix_summary[dynamic_valid]:
      (word_of_bytes T (0w:bytes32)
        (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w)))` by simp[] >>
   drule_all runtime_array_subscript_counted_ok >> strip_tac >>
-  `vv_post H ctx func cenv cx (Subscript (ArrayT ann (Dynamic n)) obj idx) es sa sd s0 ee r
-     (LocatedValue (ArrayT ann (Dynamic n)) p) t'` by
-    (first_x_assum irule >> simp[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func cenv cx (Subscript (ArrayT ann (Dynamic n)) obj idx) es sa sd s0 ee r
+       (LocatedValue (ArrayT ann (Dynamic n)) p) t'` by
+    (rpt strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+     first_x_assum irule >> simp[] >>
+     metis_tac[exprLoweringPropsTheory.stmt_state_rel_fields_transport]) >>
   `eval_operand p.ptr_operand t' = SOME w` by
     (Cases_on `p.ptr_operand` >> gvs[venomStateTheory.eval_operand_def] >>
      first_x_assum irule >> metis_tac[]) >>
@@ -487,8 +509,11 @@ Theorem framed_array_suffix_summary:
   eval_expr cx idx t = (INL ir,ee) /\ read_result cx ir ee = (INL iv,ee) /\
   ee.scopes = t.scopes /\ ee.immutables = t.immutables /\ ee.gas_obs = [] /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
-  vv_post H ctx func cenv cx obj es sa sb s0 t r (LocatedValue (ArrayT et bd) p) u /\
-  expr_post H ctx func cenv cx idx t sb sc u ee iv iop s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func cenv cx obj es sa sb s0 t r (LocatedValue (ArrayT et bd) p) u /\
+     expr_post H ctx func cenv cx idx t sb sc u ee iv iop s /\
+     stmt_state_rel H ctx func cenv cx es s0) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
   ((~cenv.ce_is_ctor /\ p.ptr_location = LocCode) \/
    ((?n. bd = Fixed n) /\
     (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
@@ -496,7 +521,7 @@ Theorem framed_array_suffix_summary:
   (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\
   (!l. p.ptr_operand <> Label l) /\
   (!x. iop = Var x ==> not_fresh_at sc x) /\ (!l. iop <> Label l) /\
-  expr_sim_inv cenv cx env t /\ stmt_state_rel H ctx func cenv cx es s0 /\
+  expr_sim_inv cenv cx env t /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sb /\ local_ptrs_reserved cenv sc /\
   MAP FDOM es.scopes = MAP FDOM t.scopes /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
@@ -512,12 +537,16 @@ Theorem framed_array_suffix_summary:
   gas_summary_at F (ctx,func) []
     (select_result cx (ArrayT et bd) r (ValueSubscript iv)) (ee,s)
     (\res ee' q. ?child. res = INL child /\
-      vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
-        (LocatedValue ann (mk_ptr dst p.ptr_location)) q /\
+      (!H. valid_horizon cx st0 H ee'.storage_trace ==>
+         vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sd s0 ee' child
+           (LocatedValue ann (mk_ptr dst p.ptr_location)) q) /\
       q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts)
     (\res ee' outcome. expr_exit res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule_all_then assume_tac expr_body_pre_array_subscript_base >>
   drule_all_then assume_tac expr_body_pre_array_subscript_index_after_base >>
   drule_all_then strip_assume_tac expr_body_pre_runtime_typed >>
@@ -533,21 +562,6 @@ Proof
           vyperTypingTheory.value_has_type_def, compileEnvTheory.is_word_type_def] >>
      rpt strip_tac >> gvs[vyperTypingTheory.value_has_type_def,
                           compileEnvTheory.is_word_type_def]) >>
-  `stmt_state_rel H ctx func cenv cx ee s` by
-    fs[loweringPostsTheory.expr_post_def] >>
-  `vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
-     (LocatedValue (ArrayT et bd) p) s` by
-    (irule framed_array_base_endpoint >> simp[] >>
-     goal_assum (drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     simp[] >> qexists_tac `env` >> simp[]) >>
-  drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`) framed_array_post_view >>
-  disch_then (qspecl_then [`t`,`env`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-  qpat_x_assum `eval_result_typed _ ir _` kall_tac >>
-  qpat_x_assum `!v. read_result cx ir ee = _ ==> _` kall_tac >>
-  qpat_x_assum `value_has_type tvt iv` kall_tac >>
-  qpat_x_assum `evaluate_type _ (expr_type idx) = _` kall_tac >>
   `cs_extends sc sd /\ sc.cs_next_var <= sd.cs_next_var /\
    sc.cs_next_id <= sd.cs_next_id` by
     (qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ sc = _`
@@ -556,21 +570,55 @@ Proof
      rewrite_tac[GSYM exprLoweringPropsTheory.ci_mono_def] >>
      irule exprLoweringPropsTheory.ci_mono_compile_array_subscript >>
      simp[exprLoweringPropsTheory.ci_mono_compile_ptr_load]) >>
-  `!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
-       (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
-       q.vs_memory = s.vs_memory /\ stmt_state_rel H ctx func cenv cx ee q ==>
-       vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
-         (LocatedValue (ArrayT et bd) p) q` by
-    (rpt strip_tac >>
-     qpat_x_assum `vv_post H _ _ _ _ _ _ sa sc _ _ _ _ _` kall_tac >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ee s /\
+     vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
+       (LocatedValue (ArrayT et bd) p) s /\
+     (!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
+          (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
+          q.vs_memory = s.vs_memory /\ stmt_state_rel H ctx func cenv cx ee q ==>
+          vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
+            (LocatedValue (ArrayT et bd) p) q)` by
+    (gen_tac >> disch_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+     qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+     qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
+     `stmt_state_rel H ctx func cenv cx ee s` by
+       fs[loweringPostsTheory.expr_post_def] >>
+     `!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
+          (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
+          q.vs_memory = s.vs_memory /\ stmt_state_rel H ctx func cenv cx ee q ==>
+          vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
+            (LocatedValue (ArrayT et bd) p) q` by
+       (rpt strip_tac >>
+        irule framed_array_base_endpoint >> simp[] >>
+        goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+        goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+        simp[] >> qexists_tac `env` >> simp[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
      irule framed_array_base_endpoint >> simp[] >>
-     goal_assum (drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      simp[] >> qexists_tac `env` >> simp[]) >>
-  qpat_x_assum `vv_post H _ _ _ _ _ _ sa sb _ _ _ _ _` kall_tac >>
-  qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    kall_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) framed_array_post_view >>
+  disch_then (qspecl_then [`t`,`env`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  qpat_x_assum `eval_result_typed _ ir _` kall_tac >>
+  qpat_x_assum `!v. read_result cx ir ee = _ ==> _` kall_tac >>
+  qpat_x_assum `value_has_type tvt iv` kall_tac >>
+  qpat_x_assum `evaluate_type _ (expr_type idx) = _` kall_tac >>
+  qpat_x_assum `vv_post H0 _ _ _ _ _ _ sa sb _ _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `expr_sim_inv _ _ _ _` kall_tac >>
-  qpat_x_assum `stmt_state_rel H _ _ _ _ es s0` kall_tac >>
+  qpat_x_assum `stmt_state_rel H0 _ _ _ _ es s0` kall_tac >>
   qpat_x_assum `MAP FDOM _ = _` kall_tac >>
   qpat_x_assum `expr_body_pre _ _ _ idx t` kall_tac >>
   qpat_x_assum `eval_expr cx idx t = _` kall_tac >>
