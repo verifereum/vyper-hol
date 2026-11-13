@@ -117,7 +117,7 @@ Proof
   qexistsl_tac [`cap`, `bs`, `p`, `u`] >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     drule >> strip_tac >>
-  drule_all slice_source_dynamic_capture_entry >> disch_then (qspec_then `st0` strip_assume_tac) >> fs[] >> gvs[] >>
+  drule_all slice_source_dynamic_capture_entry >> disch_then (qspec_then `st0` strip_assume_tac) >> gvs[] >>
   first_x_assum (drule_all_then ACCEPT_TAC)
 QED
 
@@ -175,7 +175,7 @@ Proof
   qexistsl_tac [`bs`, `u`, `p`] >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     drule >> strip_tac >>
-  drule_all slice_source_fixed_capture_entry >> disch_then (qspec_then `st0` strip_assume_tac) >> fs[] >> gvs[] >>
+  drule_all slice_source_fixed_capture_entry >> disch_then (qspec_then `st0` strip_assume_tac) >> gvs[] >>
   first_x_assum (drule_all_then ACCEPT_TAC)
 QED
 
