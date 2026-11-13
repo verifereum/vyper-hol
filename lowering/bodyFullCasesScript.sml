@@ -9,7 +9,8 @@
 Theory bodyFullCases
 Ancestors
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
-  bodyFullAssertReason bodyFullPreds bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
+  bodyFullAssertReason bodyFullPreds bodyFullRawRevert gasShadowCompile
+  bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
   bodyMemBiEnvMsgGas exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
@@ -508,12 +509,20 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_raw_revert_case_ptr_at (bodyPtrCallCases). *)
+(* RawRevert, by raw_revert_expr_full_ok; its lower_value shadow-compile
+ * premise is gas_shadow_compile_expr lifted by gas_shadow_compiles_lower_value. *)
 Theorem body_raw_revert_case_full:
   !cx v22 es v23.
     body_exprs_full_ok cx es ==> body_expr_full_ok cx (Call v22 RawRevert es v23)
 Proof
-  cheat
+  rpt strip_tac >>
+  `!cenv ty e. gas_shadow_compiles (lower_value compile_expr cenv ty e)
+     (lower_value compile_expr cenv ty (gas_shadow_expr e))`
+    by (rpt gen_tac >>
+        irule (gas_shadow_compiles_lower_value
+               |> INST [``sh:bool`` |-> ``T``] |> REWRITE_RULE []) >>
+        MATCH_ACCEPT_TAC (CONJUNCT1 gas_shadow_compile_expr)) >>
+  irule raw_revert_expr_full_ok >> asm_rewrite_tac[]
 QED
 
 (* Return e, by the frame's own joint Return fragment and e's case. *)
