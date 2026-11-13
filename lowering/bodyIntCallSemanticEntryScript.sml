@@ -100,6 +100,7 @@ Proof
        ALL_DISTINCT_APPEND] >> rpt strip_tac >>
   gvs[MEM_MAP] >>
   drule (iffLR collect_locals_supported_bindings) >> strip_tac >>
+  Cases_on `y` >>
   gvs[listTheory.EVERY_MEM, MEM_MAP, PULL_EXISTS, pairTheory.FORALL_PROD] >>
   metis_tac[]
 QED
@@ -255,8 +256,10 @@ Proof
          drule >> simp[] >> NO_TAC) >>
   TRY (irule (iffRL placeTypingPropsTheory.place_map_tables_agree_on_defined_cong) >>
        qexistsl [`caller`, `env`] >> simp[] >> NO_TAC) >>
-  qpat_x_assum `bare_globals_layout _ _ _ _ _ _` mp_tac >>
-  fs[bare_globals_layout_def, get_tenv_def] >> rpt strip_tac >> fs[]
+  qpat_x_assum `bare_globals_layout _ _ _ _ _ _ _` mp_tac >>
+  fs[bare_globals_layout_def, get_tenv_def, get_module_code_def,
+     bodySimTheory.cenv_module_pins_def] >>
+  rpt strip_tac >> fs[] >> res_tac >> fs[]
 QED
 
 Theorem internal_prologue_locals_declared:
