@@ -134,6 +134,10 @@ QED
 Resume extrequest_evaluate_replay[subscript]:
   rpt strip_tac >> simp[Once evaluate_def] >>
   irule extrequest_replay_bind_guarded >> simp[] >>
+  rpt strip_tac >> irule extrequest_replay_bind_guarded >> conj_tac >>
+  TRY (rw[] >> TRY (irule extrequest_replay_bind >> rw[]) >>
+       simp[extrequest_replay_primitives, extrequest_replay_return] >>
+       NO_TAC) >>
   rpt strip_tac >> irule extrequest_replay_bind >>
   reverse conj_tac >- metis_tac[] >>
   gen_tac >> simp[] >> irule extrequest_replay_bind >>
