@@ -93,10 +93,10 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; s1-calls: run -> ci_mono *)
 Theorem physical_source_return_dispatch:
   !nret.
-  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
+  ci_mono s2 si /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   (nret = 0 /\ cty = NoneT ==>
     s2 = sa /\ (?u. emit_void INVOKE (Label lbl::args) si = (u,sb)) /\

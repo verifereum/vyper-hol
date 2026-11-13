@@ -5,12 +5,12 @@ Ancestors
 
 (* The compiler's stronger, provenance-carrying branches are consumed here;
    the final source state is restored explicitly, not a matching parameter. *)
-(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; s1-calls: run -> ci_mono *)
 Theorem source_return_dispatch:
   !nret.
   expr_has_effect e /\
   post_value_type ce e = expr_type e /\
-  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
+  ci_mono s2 si /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   nr = nret /\ rb = rbs /\ cty = expr_type e /\
   (nr = 0 /\ cty = NoneT ==>
@@ -65,10 +65,10 @@ Proof
   gen_tac >> strip_tac >>
   irule compiled_return_dispatch >>
   simp[] >>
-  goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `ci_mono _ _`)) >>
   goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
-  qexistsl_tac [`es1`,`lbl`,`prev`,`rbs`,`w`] >>
+  qexistsl_tac [`args`,`es1`,`lbl`,`prev`,`rbs`,`w`] >>
   gvs[] >> asm_rewrite_tac[] >> disch_tac >>
   qpat_x_assum `(_ ==> 0 < LENGTH ir.iret_values) ==> _` mp_tac >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>

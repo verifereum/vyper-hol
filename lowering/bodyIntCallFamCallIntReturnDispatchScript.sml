@@ -8,10 +8,10 @@ Ancestors
   emitHelperProps emitHelper exprLoweringProps compileEnv loweringStateRelDefs venomState
   venomExecSemantics loweringPosts exprSimDefs intCallFrame list finite_map
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; s1-calls: run -> ci_mono *)
 Theorem intcall_stack_return_prepare:
   ci_mono sa s2 /\
-  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
+  ci_mono s2 si /\
   emit_multi_op INVOKE ops nret si = (results,sj) /\
   store_multi_results buf results 0 sj = ((),sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
@@ -152,10 +152,10 @@ Proof
 QED
 
 (* Both zero-count modes land at the same explicit merge successor. *)
-(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; s1-calls: run -> ci_mono *)
 Theorem intcall_zero_return_prepare:
   ci_mono sa s2 /\
-  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
+  ci_mono s2 si /\
   emit_void INVOKE ops si = ((),sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   t.vs_current_bb = si.cs_current_bb /\
@@ -204,10 +204,10 @@ Proof
   gvs[merge_callee_state_def]
 QED
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; s1-calls: run -> ci_mono *)
 Theorem intcall_physical_return_resources:
   !nret.
-  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
+  ci_mono s2 si /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   (nret = 0 /\ cty = NoneT ==>
     s2 = sa /\ (?u. emit_void INVOKE (Label lbl::args) si = (u,sb)) /\
