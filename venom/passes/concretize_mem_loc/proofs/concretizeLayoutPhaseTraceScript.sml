@@ -6,7 +6,7 @@ Ancestors concretizeLayoutPhaseOrigin frameJointTrace frameResolvedTrace
 Theorem layout_ordinary_trace_advance:
   layout_ordinary_trace vs0 C q0 es qs q g s /\ ~g.lop_pending /\
   g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
-  inst.inst_opcode <> DALLOCA /\ g.lop_cursor < LENGTH es /\
+  (inst.inst_opcode = DALLOCA ==> w2n s.vs_initial_fmp <= w2n s.vs_fmp) /\ g.lop_cursor < LENGTH es /\
   EL g.lop_cursor es = SOME (OriginOrdinary fuel post) ==>
   ?k. k.lop_origin = g.lop_origin /\ k.lop_pending /\
     k.lop_cursor = SUC g.lop_cursor /\ k.lop_bound = SUC g.lop_bound /\
@@ -29,7 +29,9 @@ Proof
   `~ctx_has_dalloca C ==> resolved_complete (EL (SUC g.lop_cursor) (q0::qs))
     ((rp,origin_set rv inst.inst_outputs
       (resolved_out birth post.vs_allocas rp (origin_out PG om inst post)))::saved)` by
-    (strip_tac >> drule_at (Pat `joint_transition _ _ _ _`) resolved_complete_ordinary >>
+    (strip_tac >> `inst.inst_opcode <> DALLOCA` by
+       (strip_tac >> drule_all joint_reachable_dalloca >> simp[]) >>
+     drule_at (Pat `joint_transition _ _ _ _`) resolved_complete_ordinary >>
      disch_then drule >> fs[]) >>
   `lifetime_ok (SUC g.lop_bound) (birth::ids) (EL (SUC g.lop_cursor) (q0::qs))` by
     (drule_all lifetime_transition >> simp[lifetime_step_def]) >>
