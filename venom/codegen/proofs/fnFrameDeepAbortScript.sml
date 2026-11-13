@@ -141,7 +141,7 @@ Theorem gen_inst_revert_frame_sim_deep:
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
   ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\ a = Revert_abort /\ asm_steps lo o2pc prog n st = AsmRevert out /\
-    venom_asm_terminal_rel vs' out
+    venom_asm_terminal_rel vs' out /\ create_safe_prefix lo o2pc prog n st
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all step_inst_revert_abort >> strip_tac >>
@@ -161,6 +161,13 @@ Proof
 QED
 
 Resume gen_inst_revert_frame_sim_deep[decomposed]:
+  `EVERY plan_admin_op (iops ++ rops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))) st` by
+    (irule plan_admin_create_safe_prefix >>
+     qexistsl_tac [`cplan.cp_initial_fmp`, `iops ++ rops`] >>
+     simp[] >> gvs[execute_plan_append, asm_block_at_append]) >>
   rename1 `generated_plan_state_wf_marked spillbase ps` >>
   `asm_block_at prog (st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)))
      [AsmOp "REVERT"]` by
@@ -190,6 +197,10 @@ Resume gen_inst_revert_frame_sim_deep[decomposed]:
 QED
 
 Resume gen_inst_revert_frame_sim_deep[prepared]:
+  `create_safe_prefix lo o2pc prog 1
+     (mid with as_stack := mid.as_stack ++ rest)` by
+    (irule asm_block_create_safe_prefix >> qexists `[AsmOp "REVERT"]` >>
+     simp[create_safe_def] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   `!op. operand_val (frame_view fn ra vs with vs_memory := st.as_memory) lo op =
         operand_val (frame_view fn ra vs) lo op` by
     (Cases >> simp[operand_val_def]) >>
@@ -220,7 +231,9 @@ Resume gen_inst_revert_frame_sim_deep[prepared]:
      metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 1`, `out`] >>
   conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
-  simp[] >> irule asm_steps_compose_revert >> goal_assum (drule_at Any) >> simp[]
+  simp[] >> conj_tac
+  >- (irule asm_steps_compose_revert >> goal_assum (drule_at Any) >> simp[]) >>
+  irule create_safe_prefix_compose >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Finalise gen_inst_revert_frame_sim_deep
@@ -942,9 +955,13 @@ Theorem static_log_fault_step[local]:
     n <= 4 /\ n + 2 <= LENGTH st.as_stack /\ st.as_call_ctx.cc_static /\
     venom_asm_terminal_rel vs st ==>
     ?st'. asm_steps lo o2pc prog 1 st = AsmFault st' /\
-      venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st'
+      venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st' /\
+      create_safe_prefix lo o2pc prog 1 st
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `create_safe_prefix lo o2pc prog 1 st` by
+    (irule asm_block_create_safe_prefix >> goal_assum (drule_at Any) >>
+     simp[create_safe_def]) >>
   qexists_tac `st with as_returndata := []` >>
   conj_tac
   >- (rewrite_tac [DECIDE ``1 = SUC 0``] >> simp[asm_steps_def] >>
@@ -997,7 +1014,7 @@ Theorem gen_inst_log_static_frame_sim_deep[local]:
   step_inst fuel ctx inst vs = Abort a vs' ==>
   ?n out. n <= LENGTH (execute_plan cplan.cp_initial_fmp ops) + 7 /\
     a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
-    venom_asm_terminal_rel vs' out
+    venom_asm_terminal_rel vs' out /\ create_safe_prefix lo o2pc prog n st
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all step_inst_log_abort >> strip_tac >>
@@ -1016,6 +1033,13 @@ Proof
 QED
 
 Resume gen_inst_log_static_frame_sim_deep[decomposed]:
+  `EVERY plan_admin_op (input_ops ++ reorder_ops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (input_ops ++ reorder_ops))) st` by
+    (irule plan_admin_create_safe_prefix >>
+     qexistsl_tac [`cplan.cp_initial_fmp`, `input_ops ++ reorder_ops`] >>
+     simp[] >> gvs[execute_plan_append, asm_block_at_append]) >>
   rename1 `generated_plan_state_wf_marked spillbase ps` >>
   `plan_state_residual_wf_marked spillbase lops (LENGTH lops) ps4 /\
    ps4.ps_stack = stack_pop (LENGTH lops) ps4.ps_stack ++ lops /\
@@ -1070,7 +1094,9 @@ Resume gen_inst_log_static_frame_sim_deep[prepared]:
     `st'`] >>
   conj_tac
   >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
-  simp[] >> irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
+  simp[] >> conj_tac
+  >- (irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]) >>
+  irule create_safe_prefix_compose >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Finalise gen_inst_log_static_frame_sim_deep
