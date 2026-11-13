@@ -10,7 +10,7 @@ Theory callTraceFrame
 Ancestors
   callTrace frameObsStep vfmExecution vfmExecutionProp vfmAccountFrame
   vfmState vfmSameFrame callTraceCallEffects callTraceCreateEffects
-  callTraceFrameProvenance callTraceChildFrame
+  callTraceFrameProvenance callTraceChildFrame vfmWfState
 
 Theorem observable_same_depth_fields[local]:
   wf_state s /\
@@ -151,7 +151,7 @@ Proof
   >> `P (lookup_account a s.rollback.accounts,s.rollback.tStorage a)` by gvs[]
   >> drule_all observable_push_initializes_account >> strip_tac
   >> `wf_state c` by
-       (drule vfmRunCallTheory.step_preserves_wf_state >> simp[])
+       (drule vfmWfStateTheory.step_preserves_wf_state >> simp[])
   >> `P (lookup_account a t.rollback.accounts,t.rollback.tStorage a)` by
        (irule observable_child_account_transient_frame
         >> conj_tac >- first_assum ACCEPT_TAC
