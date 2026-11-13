@@ -1,6 +1,6 @@
 (* A layout-changing store initializes the declaration's fresh allocation. *)
 Theory widenedDeclarationPtrStore
-Ancestors widenedAssignPtrCopyRecursive aggregateStorePtrFrame annAssignPtrMemoryAssign
+Ancestors widenedAssignPtrCopyRecursive aggregateStorePtr aggregateStorePtrFrame annAssignPtrMemoryAssign
   annAssignPtrDestinationFrame annAssignPtrBytestring annAssignPtrExterior
   annAssignPtrStore exprSimAggregateChildren exprSimAggregates typedMemoryCopy
   bodyPtrDefs loweringStateRelDefs exprLoweringProps localPtrsProps stmtFragPtr compileEnv
@@ -71,14 +71,12 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `0 < type_memory_size dtv ==> ptr_covers G tn p s (type_memory_size dtv)` by
     (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_MONO_ADD_EQ]) >>
-  `compile_store_memory_typed ce (Var p) dty src sty sa = ((),sb)` by
-    gvs[compile_store_memory_def] >>
   mp_tac (Q.SPECL [`ce`,`get_tenv cx`,`ctx`,`cx_dead cx`,`PG`,
-    `dty`,`sty`,`dtv`,`stv`,`v`] widened_assign_typed_store_counted_ptr) >>
+    `dty`,`sty`,`dtv`,`stv`,`v`] compile_store_memory_aggregate_counted_ptr) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (qspecl_then [`sa`,`sb`,`Var p`,`src`,`dw`,`sw`,`func`,`G`,`tn`,`s`]
+  disch_then (qspecl_then [`sa`,`sb`,`p`,`src`,`dw`,`sw`,`func`,`G`,`tn`,`s`]
     mp_tac) >>
-  (impl_tac >- (simp[eval_operand_def] >> metis_tac[])) >> strip_tac >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   rename1 `gas_path_ptr _ _ _ _ _ G tn s _ H tm (OK t)` >>
   `!name b n. local_region ce es.scopes s name b n ==>
     regions_disjoint (w2n dw) (type_memory_size dtv) b n` by
