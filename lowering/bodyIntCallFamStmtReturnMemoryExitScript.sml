@@ -43,7 +43,7 @@ Proof
      fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def]) >>
   simp[intcall_stmt_exit_def] >> disj2_tac >>
   qpat_assum `~FST _` (fn nr => simp[MATCH_MP return_unlock_state_inactive nr,
-    intret_q_def, result_rel_def, intret_vals_match_def, state_rel_gas_obs]) >>
+    intret_q_inactive, result_rel_def, intret_vals_match_def, state_rel_gas_obs]) >>
   conj_tac
   >- (rpt strip_tac >>
       `regions_disjoint a k (w2n bw) cap` by
