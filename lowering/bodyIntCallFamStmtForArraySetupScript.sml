@@ -12,7 +12,8 @@ Ancestors
 Theorem intcall_array_source_inputs:
   supported_stmt tops bindings (For id fty (Array arr) bound stmts) /\
   type_stmt env ret_ty (For id fty (Array arr) bound stmts) = SOME env' /\
-  expr_sim_inv ce cx env es /\ ce_locals_declared ce env ==>
+  expr_sim_inv ce cx env es /\ ce_locals_declared ce env /\
+  (?m name. arr = Name (ArrayT fty (Fixed m)) name) ==>
   ?name env_b snapshot tv ptr sz al vs.
     arr = Name (ArrayT fty (Fixed bound)) name /\ env' = env /\
     well_typed_expr env (Name (ArrayT fty (Fixed bound)) name) /\
@@ -34,7 +35,7 @@ Theorem intcall_array_source_inputs:
     LENGTH vs = bound /\
     (!k. k < LENGTH vs ==> value_has_type tv (EL k vs) /\ val_wf tv (EL k vs)) /\
     (!gs. eval_iterator cx (Array arr) (es with gas_obs := gs) =
-      (INL vs, es with gas_obs := gs)) /\
+      (INL (MAP Value vs), es with gas_obs := gs)) /\
     FLOOKUP ce.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE
 Proof
   strip_tac >> drule_all array_for_hypotheses >> strip_tac >> gvs[] >>
@@ -186,6 +187,11 @@ Proof
   `local_ptrs_reserved ce sc /\ ret_pc_ok ce sc s0 /\
    stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s0` by
     fs[intcall_joint_res_def, intcall_expr_res_def] >>
+  `EVERY scope_well_typed es.scopes` by
+    fs[intcall_joint_res_def, intcall_expr_res_def, expr_sim_inv_def,
+       state_well_typed_def] >>
+  `value_has_type (ArrayTV tv (Fixed (LENGTH vs))) (ArrayV (SArrayV al))` by
+    metis_tac[vyperTypeEnvTheory.scope_well_typed_lookup_scopes] >>
   `!l. FLOOKUP ce.ce_vars id = SOME l ==> ?q z. l = PtrVar q z` by simp[] >>
   drule_all compile_for_array_code_ready_framed >> strip_tac >>
   `bc.ce_return_pc = ce.ce_return_pc` by

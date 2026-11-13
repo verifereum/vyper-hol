@@ -93,19 +93,17 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
 Theorem physical_source_return_dispatch:
   !nret.
-  compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
-  compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\
+  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   (nret = 0 /\ cty = NoneT ==>
-    s2 = s1 /\ (?u. emit_void INVOKE (Label lbl::args) si = (u,sb)) /\
+    s2 = sa /\ (?u. emit_void INVOKE (Label lbl::args) si = (u,sb)) /\
     vv = StackValue cty (Lit 0w)) /\
   (0 < nret \/ cty <> NoneT ==>
     ?buf aid off.
-      compile_alloc_buffer (if 0 < nret then 32 * nret else rbs) s1 = (buf,s2) /\
+      compile_alloc_buffer (if 0 < nret then 32 * nret else rbs) sa = (buf,s2) /\
       vv = LocatedValue cty (base_ptr buf) /\
       eval_operand buf.buf_operand t = SOME (n2w off) /\
       FLOOKUP t.vs_allocas aid = SOME (off,buf.buf_size) /\
@@ -163,14 +161,11 @@ Proof
       suspend "memory") >>
   suspend "stack"
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Resume physical_source_return_dispatch[void]:
-  qpat_x_assum `_ ==> s2 = s1 /\ _` mp_tac >>
+  qpat_x_assum `_ ==> s2 = sa /\ _` mp_tac >>
   (impl_tac >- simp[]) >> strip_tac >> gvs[] >>
-  `ci_mono s1 s1` by simp[ci_mono_refl] >>
+  `ci_mono s2 s2` by simp[ci_mono_refl] >>
   drule_all intcall_void_compiler_boundary >> strip_tac >>
   `bind_outputs [] ir.iret_values
     (adopt_return_fmp ir (merge_callee_state t cs)) =
@@ -192,15 +187,12 @@ Resume physical_source_return_dispatch[void]:
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   disch_then (SUBST1_TAC o SYM) >> simp[]
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Resume physical_source_return_dispatch[memory]:
   qpat_x_assum `0 < nret \/ _ ==> _` mp_tac >>
   simp[] >> strip_tac >> gvs[] >>
-  `ci_mono s1 s2` by
-    (qspecl_then [`rbs`,`s1`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
+  `ci_mono sa s2` by
+    (qspecl_then [`rbs`,`sa`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
   drule_all intcall_void_compiler_boundary >> strip_tac >>
   `bind_outputs [] ir.iret_values
     (adopt_return_fmp ir (merge_callee_state t cs)) =
@@ -239,16 +231,13 @@ Resume physical_source_return_dispatch[memory]:
   qpat_x_assum `!k. stmt_state_rel _ _ _ _ _ _ /\ _` (qspec_then `SUC (LENGTH si.cs_current_insts)` strip_assume_tac) >>
   fs[regions_disjoint_def] >> metis_tac[ADD_COMM]
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Resume physical_source_return_dispatch[stack]:
   `0 < nret` by decide_tac >>
   qpat_x_assum `0 < nret \/ _ ==> _` mp_tac >> simp[] >> strip_tac >>
   gvs[] >>
-  `ci_mono s1 s2` by
-    (qspecl_then [`32 * LENGTH ir.iret_values`,`s1`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
+  `ci_mono sa s2` by
+    (qspecl_then [`32 * LENGTH ir.iret_values`,`sa`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
   drule_all intcall_stack_compiler_boundary >> strip_tac >>
   drule_all emit_multi_invoke_instruction >> strip_tac >>
   `LENGTH outs = LENGTH ir.iret_values` by simp[] >>
@@ -329,9 +318,5 @@ Resume physical_source_return_dispatch[stack]:
   qexists_tac `out` >> simp[] >>
   qexistsl_tac [`buf`,`ai.inst_id`,`off`] >> simp[] >> gvs[]
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Finalise physical_source_return_dispatch
-*)

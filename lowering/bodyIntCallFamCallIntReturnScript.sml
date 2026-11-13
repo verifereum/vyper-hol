@@ -175,13 +175,13 @@ Resume intcall_nested_return_enriched[physical]:
   suspend "dispatch"
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
+(* HELD: stage-tower return adapters need restating over sup_ops ++ dflt_ops (internal defaults) *)
 Resume intcall_nested_return_enriched[dispatch]:
   (* original proof, kept while held:
   drule (intcall_physical_return_resources |>
     Q.SPEC `rcn` |>
     Q.INST [`lo` |-> `fp.jc_lo`, `P` |-> `fp.jc_prot`, `cty` |-> `ret`]) >>
-  disch_then drule >> disch_then drule >>
+  disch_then drule >>
   disch_then (drule_at (Pat `gas_path _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `state_rel _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
@@ -209,7 +209,7 @@ Resume intcall_nested_return_enriched[dispatch]:
   cheat
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; these Resume blocks hang off a held proof, commented out with it *)
+(* HELD: stage-tower return adapters need restating over sup_ops ++ dflt_ops (internal defaults); these Resume blocks hang off the held [dispatch] *)
 (*
 Resume intcall_nested_return_enriched[endpoint]:
   `~out.vs_halted` by
