@@ -1217,7 +1217,8 @@ Proof
   Cases_on `lookup_function NONE "__init__" Deploy tops` >> simp[] >>
   rename1 `_ = SOME fn` >> PairCases_on `fn` >>
   `fn3 = []` by
-    metis_tac[vyperTypeDeploymentMachineTheory.check_contract_constructor_no_defaults] >>
+    (drule_all vyperTypeDeploymentMachineTheory.check_contract_constructor_no_defaults >>
+     simp[]) >>
   `fn1 = F` by (`~fn1` by metis_tac[] >> simp[]) >>
   `~supported_stmts_expr_exists constructor_call_root fn5` by metis_tac[] >>
   gvs[] >>
