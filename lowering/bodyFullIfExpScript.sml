@@ -148,6 +148,71 @@ Proof
   gvs[ptr_val_ok_def, ptr_mem_ok_def] >> metis_tac[]
 QED
 
+(* Retyping keeps the one physical unwrap endpoint outside the horizon guard. *)
+Theorem ifexp_nocopy_physical_family[local]:
+  expr_type e = t /\ post_value_type ce e <> t /\
+  post_value_type ce e = lowered_value_type ce e /\
+  same_memory_layout ce (lowered_value_type ce e) t /\
+  type_widens_to (get_tenv cx) (lowered_value_type ce e) t /\
+  (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+    type_memory_bytes ce ty = type_memory_size tv) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME sv /\
+  evaluate_type (get_tenv cx) t = SOME dv /\
+  value_has_type dv v /\ ~is_word_type t /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  read_result cx raw ee = (INL v,ee) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK z,Gz,tf) /\
+    expr_post H ctx func ce cx e es sa sb u ee v op z /\
+    ghost_inv_at (DF H) lo d ce cx ee Gz tf z) /\
+  expr_store_bound cx t v op z /\
+  ptr_val_ok cx (post_value_type ce e) v op Gz tf z /\
+  ptr_buf_ok ce e op Gz z /\
+  (!rt w. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME rt /\
+    eval_operand op z = SOME w ==>
+    type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next) ==>
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK z,Gz,tf) /\
+    expr_post H ctx func ce cx (IfExp t c a b) es sa sb u ee v op z /\
+    ghost_inv_at (DF H) lo d ce cx ee Gz tf z) /\
+  vv_at ce cx t sa sb ee raw (LocatedValue t (mk_ptr op LocMemory)) z /\
+  expr_store_bound cx t v op z /\
+  ptr_val_ok cx t v op Gz tf z /\
+  (!e'. lowered_value_type ce e' = t ==> ptr_buf_ok ce e' op Gz z) /\
+  (!rt w. evaluate_type (get_tenv cx) t = SOME rt /\
+    eval_operand op z = SOME w ==>
+    type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= z.vs_alloca_next)
+Proof
+  strip_tac >>
+  `arg_type_fits (post_value_type ce e) t` by
+    fs[type_widens_to_def] >>
+  `~is_bytestring_type t` by metis_tac[post_value_type_bytestring] >>
+  `~is_bytestring_type (post_value_type ce e)` by
+    metis_tac[typedMemoryCopyTheory.type_widens_from_bytestring] >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_x_assum `expr_type e = t` (SUBST_ALL_TAC o SYM) >>
+  rpt conj_tac
+  >- (rpt strip_tac >> res_tac >> simp[] >>
+      irule ifexp_nocopy_physical_post >> goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[])
+  >- (qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+        (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+      irule (INST_TYPE [``:'a`` |-> ``:256``] ifexp_nocopy_physical_endpoint_vv) >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qexistsl_tac [`storage_trace_horizon ee.storage_trace`, `ctx`, `es`, `func`, `u`] >>
+      first_assum ACCEPT_TAC)
+  >- first_assum ACCEPT_TAC
+  >- (irule ifexp_nocopy_physical_ptr >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[])
+  >- (rpt strip_tac >> drule_all ifexp_nocopy_physical_buffer >> simp[])
+  >> fs[same_memory_layout_def] >> metis_tac[]
+QED
+
 (* The value judgment from the vv judgment: lower_value is compile_expr
    then unwrap_value, whose code reads no GAS (unwrap_value_origin_ptr). *)
 Theorem expr_sim_full_of_vv:
