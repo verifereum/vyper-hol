@@ -101,6 +101,8 @@ Resume pop_nested_local_sim[normal]:
      drule_all local_target_live >> strip_tac >> gvs[]) >>
   `place_readable cx (tend with gas_obs := []) (PlaceR p)` by
     fs[target_post_def] >>
+  `storage_well_formed_on cx (tend with gas_obs := []) (FST H)` by
+    fs[target_post_def] >>
   drule_all pop_counted_source_handoff >> strip_tac >> gvs[] >>
   `lookup_scopes id (tend with gas_obs := []).scopes = SOME entry` by simp[] >>
   drule_all memory_target_encoding_handoff >> strip_tac >>

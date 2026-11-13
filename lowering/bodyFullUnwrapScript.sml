@@ -102,6 +102,7 @@ Proof
   TRY (qpat_x_assum `p.ptr_location = LocCalldata`
          (fn th => qpat_x_assum `p.ptr_location <> _`
                      (mp_tac o REWRITE_RULE [th])) >> simp[]) >>
+  TRY (qpat_x_assum `LocCalldata <> LocCalldata` mp_tac >> simp[] >> NO_TAC) >>
   Cases_on `is_word_type t` >>
   FIRST (map (fn th => PIECE_TAC (Q.INST [`vv` |-> `LocatedValue t p`] th))
     [unwrap_memory_origin_ptr, unwrap_memory_word_origin_ptr,

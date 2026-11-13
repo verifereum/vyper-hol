@@ -738,11 +738,10 @@ Proof
   rw[step_inst_base_def, exec_read1_def]
 QED
 
-(* exprSimUnwrap's compile_imm_load_word_ctor_path with the state relation
-   carried at every horizon, as len_emit_op_path carries it. *)
+(* compile_imm_load_word_ctor_path with a post that holds at every horizon
+   whose relation holds at the start: both steps are emit_op steps. *)
 Theorem len_imm_load_word_ctor_path[local]:
-  !(H0:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es pop
-   sm op sb s0 w.
+  !(H0:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es pop sm op sb s0 w.
     compile_imm_load_word T cenv.ce_imm_alloca pop sm = (op, sb) /\
     local_ptrs_reserved cenv sm /\ fn_has_code sm sb func /\
     stmt_state_rel H0 ctx func cenv cx es s0 /\ ~s0.vs_halted /\
@@ -752,9 +751,8 @@ Theorem len_imm_load_word_ctor_path[local]:
     ?s. gas_path ctx func s0 0 (OK s) /\
         s.vs_current_bb = sb.cs_current_bb /\
         s.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        (!(H:(bool # bytes32 # type_value) list # num list).
-           stmt_state_rel H ctx func cenv cx es s0 ==>
-           stmt_state_rel H ctx func cenv cx es s) /\
+        (!(H:(bool # bytes32 # type_value) list # num list). stmt_state_rel H ctx func cenv cx es s0 ==>
+             stmt_state_rel H ctx func cenv cx es s) /\
         eval_operand op s = SOME (mload (w2n w) s0) /\
         (!x w'. not_fresh_at sm x /\ lookup_var x s0 = SOME w' ==>
                 lookup_var x s = SOME w') /\
@@ -785,17 +783,16 @@ Proof
      gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
          comp_ignore_bind_def, comp_return_def, emit_def]) >>
   `eval_operand ib s0 = SOME 0w` by
-    gvs[exprLoweringPropsTheory.stmt_state_rel_def,
-        loweringStateRelDefsTheory.immutable_base_zero_def] >>
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def, immutable_base_zero_def] >>
   qpat_x_assum `emit_op ADD _ _ = _` assume_tac >>
   drule len_emit_op_path >>
   disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `w`]
     mp_tac) >>
   impl_tac
-  >- simp[is_terminator_def, step_inst_base_def, exec_pure2_def,
-          mk_inst_def, wordsTheory.WORD_ADD_0] >>
+  >- simp[is_terminator_def, step_inst_base_def, exec_pure2_def, mk_inst_def,
+          wordsTheory.WORD_ADD_0] >>
   strip_tac >> rename1 `gas_path _ _ s0 0 (OK s1)` >>
-  `~s1.vs_halted` by metis_tac[fragGasPathTheory.gas_path_normal] >>
+  `~s1.vs_halted` by metis_tac[gas_path_normal] >>
   qpat_x_assum `emit_op ILOAD _ _ = _` assume_tac >>
   drule len_emit_op_path >>
   disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s1`,
@@ -806,19 +803,17 @@ Proof
   strip_tac >> rename1 `gas_path _ _ s1 0 (OK s2)` >>
   qexists_tac `s2` >> rpt conj_tac
   >- (`0 = 0 + 0` by simp[] >> pop_assum SUBST1_TAC >>
-      irule fragGasPathTheory.gas_path_then >> metis_tac[])
+      irule gas_path_then >> metis_tac[])
   >- simp[]
   >- simp[]
-  >- (gen_tac >> strip_tac >>
-      qpat_x_assum `!H. stmt_state_rel H _ _ _ _ _ s1 ==> _` irule >>
-      qpat_x_assum `!H. stmt_state_rel H _ _ _ _ _ s0 ==> _` irule >>
-      simp[])
+  >- metis_tac[]
   >- gvs[mload_def]
-  >- (rpt strip_tac >> first_x_assum irule >> conj_tac
-      >- (first_x_assum irule >> simp[]) >>
-      gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
-          comp_ignore_bind_def, comp_return_def, emit_def, not_fresh_at_def])
-  >- (rpt strip_tac >> res_tac >> res_tac) >>
+  >- (rpt strip_tac >>
+      `not_fresh_at sm1 x` by
+        gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+            comp_ignore_bind_def, comp_return_def, emit_def, not_fresh_at_def] >>
+      metis_tac[])
+  >- metis_tac[] >>
   simp[]
 QED
 

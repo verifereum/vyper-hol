@@ -32,6 +32,7 @@ Theorem hash_emit_sha256_tail_abort_path:
     isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
     ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
     ?t j Gf tf. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
+      inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf /\
       gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
         (Abort Revert_abort (t with vs_inst_idx := j))
 Proof
@@ -61,6 +62,7 @@ Theorem hash_emit_sha256_tail_success_path:
     mem_bytes_at (w2n w) (w2n n) s.vs_memory = bs /\
     s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
     ?t Gf tf. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tf /\
       gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
         (OK (t with vs_inst_idx := s.vs_inst_idx+4)) /\
       eval_operand op t = SOME (SHA_256_bytes bs) /\
