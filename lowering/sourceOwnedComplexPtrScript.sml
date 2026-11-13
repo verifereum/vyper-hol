@@ -10,7 +10,7 @@ Ancestors sourceRecursiveComplexPtr sourceOwnedArrayConstructorPtr
   sourceEncodingWindows abiDecoderOffsetHead abiEncoderInput abiDecoderReentry
   venomMemDefs allocaFrontierBound actualAllocCredit calldataDynOwned
   abiEncoderSourceTransport abiDecoderMemberSlice decoderGhostFramePtr ptrDiscipline
-  decoderCalldataShell
+  decoderCalldataShell fragGasPathMem fragGasOriginPtr
 
 (* The calldata instance of the position-form decoder lemmas: the source
    base operand is Lit 0w and the numeric base is 0. *)
@@ -398,7 +398,8 @@ Proof
       qpat_x_assum `sa = sb` SUBST_ALL_TAC >>
       qexistsl_tac [`s`, `G`, `tn`, `[]`] >>
       simp[NoAsms, abi_decode_sim_refl, abi_decode_footprint_frame_refl,
-        abi_footprint_disjoint_def] >>
+        abi_footprint_disjoint_def, cj 1 gas_path_mem_rules,
+        cj 1 gas_origin_ptr_path_rules] >>
       map_every (fn pat => qpat_assum pat mp_tac)
         [`~s.vs_halted`, `s.vs_current_bb = _`, `s.vs_inst_idx = _`,
          `fresh_vars_wrt limit s`, `alloca_inv s`, `alloca_frontier_inv ctx fn site s`,
@@ -791,6 +792,21 @@ Resume source_owned_complex_suffix_ptr[step]:
      qpat_assum `!id p sz. en.cs_next_id <= id /\ _ ==> _` drule_all >>
      strip_tac >> asm_rewrite_tac[] >> qexists_tac `ins` >> asm_rewrite_tac[]) >>
   (rpt (CHANGED_TAC markerLib.RESUME_TAC) >> (
+  `gas_path_mem ctx fn s 0 (OK t')` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`gas_path_mem ctx fn s 0 (OK r)`,
+        `gas_path_mem ctx fn r 0 (OK t)`,
+        `gas_path_mem ctx fn t 0 (OK t')`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     metis_tac[gas_path_mem_then, ADD_CLAUSES]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK t',H',u')` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _`,
+        `!D explicit. gas_origin_ptr_path _ (r,H,u) _ _`,
+        `!D explicit. gas_origin_ptr_path _ (t,J,v) _ _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     metis_tac[gas_origin_ptr_path_append, APPEND_NIL]) >>
   qexistsl_tac [`t'`, `H'`, `u'`, `fp ++ fp'`] >>
   conj_tac
   >- (irule abi_decode_sim_trans >> qexists_tac `t` >>
