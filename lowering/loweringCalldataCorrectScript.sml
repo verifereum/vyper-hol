@@ -41,6 +41,15 @@ QED
    failed decode.  The entry reverts with empty returndata before any
    function body runs, reading no GAS on the way (zero-mark memory and
    pointer paths from __entry), and every run from __entry is pointer safe. *)
+(* supported_program excludes default arguments, so the dispatcher is linear.
+   A missing selector enters REVERT 0 0; a short head fails the size ASSERT;
+   a rejected argument fails its pointer guard or CALLDATALOAD decoder.
+   Earlier arguments may already have allocated and decoded: their pointer
+   provenance and access bounds must reach the failing decoder. The success
+   arm alone cannot establish that path. Entry code reads no GAS or INVOKE,
+   so its memory and pointer paths have zero marks. Choose their common
+   endpoint and ghost before D; derive the run and all-fuel safety there.
+   emit_abort_origin_ptr already covers the terminal fallback instruction. *)
 Theorem lower_vyper_runtime_unit_reverts:
   !tops rpolicy unit am tx vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
