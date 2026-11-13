@@ -44,24 +44,28 @@ Theorem expr_stack_outcome_ptr:
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\H res ee gt r. expr_exit res r)
 Proof
-  strip_tac >>
-  `!s. SND (eval_expr cx e s) = SND (bind (eval_expr cx e) (read_result cx) s)`
-    by (gen_tac >>
-        Cases_on `bind (eval_expr cx e) (read_result cx) s` >>
-        drule_all eval_expr_force_value >> simp[]) >>
-  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gas_outcome_ptr_def] >> strip_tac >> qexists_tac `marks`
-  >- (disj1_tac >> fs[gasStorageTheory.gas_bad_storage_at_def])
-  >- (disj2_tac >> disj1_tac >> gvs[gas_summary_ptr_at_def] >>
+  rw[gas_outcome_ptr_def] >> qexists_tac `marks`
+  >- (disj1_tac >>
+      gvs[gasStorageTheory.gas_bad_storage_at_def] >> gen_tac >>
+      Cases_on `bind (eval_expr cx e) (read_result cx)
+        (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail)` >>
+      drule_all eval_expr_force_value >> strip_tac >> gvs[] >>
+      first_x_assum (qspec_then `tail` mp_tac) >> simp[])
+  >- (disj2_tac >> disj1_tac >>
+      qpat_x_assum `gas_summary_ptr_at _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      rewrite_tac[gas_summary_ptr_at_def] >> strip_tac >>
       qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
-                    `es_end`, `G`, `tn`, `r`] >>
-      conj_tac
-      >- (gen_tac >> qpat_x_assum `!tail. _` (qspec_then `tail` assume_tac) >>
-          drule_all eval_expr_force_value >> simp[]) >>
-      rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[expr_exit_success_map] >>
-      gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-          read_result_def, return_def, vv_own_def, ptr_vv_ok_def] >>
-      first_assum ACCEPT_TAC) >>
+        `es_end`, `G`, `tn`, `r`] >> conj_tac
+      >- (gen_tac >> drule eval_expr_force_value >>
+          disch_then (qspec_then `es with gas_obs :=
+            gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >> simp[]) >>
+      gen_tac >> disch_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _` drule >> strip_tac >>
+      simp[]
+      >- (gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
+              vv_own_def, ptr_vv_ok_def, read_result_def, return_def] >>
+          first_assum ACCEPT_TAC) >>
+      disj2_tac >> fs[expr_exit_success_map]) >>
   disj2_tac >> disj2_tac >> drule eval_expr_force_ignore >>
   disch_then (fn th => fs[th]) >> metis_tac[]
 QED
