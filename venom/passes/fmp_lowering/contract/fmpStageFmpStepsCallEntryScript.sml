@@ -1,6 +1,6 @@
 Theory fmpStageFmpStepsCallEntry
 Ancestors
-  fmpStageRel fmpStageReclaimFresh fmpStepLayout fmpStepStructural
+  fmpStageRunnerFacts fmpStageRel fmpStageReclaimFresh fmpStepLayout fmpStepStructural
   fmpStageControl fmpLowerDefs fmpReclaimDefs fmpLowerReclaimPlan
   finite_map list words venomExecProofs venomExecSemantics contextCodegenRel
   o1PassContract venomInst
@@ -14,18 +14,6 @@ Proof
   simp[fmp_sites_ok_def] >> rpt strip_tac >>
   qpat_x_assum `!b z c id. _ ==> 0 < z /\ _` drule >>
   strip_tac >> decide_tac
-QED
-
-Theorem fmp_call_lowered_shape:
-  fmp_stage_lowered infos ctx runner fn fn' /\
-  wf_function fn /\ first_block_no_phi fn ==>
-  first_block_no_phi fn' /\ fn_entry_label fn' = fn_entry_label fn
-Proof
-  simp[fmp_stage_lowered_def] >> rpt strip_tac >>
-  `fmp_lower_function ctx sp fn = SOME (fn',sp')` by
-    simp[fmp_lower_function_def] >>
-  metis_tac[fmp_lower_function_first_block_no_phi,
-            fmp_lower_function_preserves_entry_label]
 QED
 
 Theorem fmp_call_pending_root:
@@ -91,7 +79,8 @@ Theorem fmp_call_frame_entry:
     fn fn' PG FEMPTY FEMPTY s1 t1
 Proof
   strip_tac >>
-  drule_all fmp_call_lowered_shape >> strip_tac >>
+  drule_all fmp_stage_lowered_shape >> strip_tac >>
+  qpat_x_assum `first_block_no_phi _ ==> _` drule >> strip_tac >>
   `s1 = cs /\ cs.vs_vars = FEMPTY /\ cs.vs_inst_idx = 0 /\
    cs.vs_prev_bb = NONE /\ fn_entry_label fn = SOME cs.vs_current_bb` by
     metis_tac[fmp_call_setup_entry] >>

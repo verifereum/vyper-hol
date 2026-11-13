@@ -1,6 +1,6 @@
 Theory fmpStageFmpStepsRetpcPrefix
 Ancestors
-  fmpStageRel fmpStepLayout fmpLowerDefs fmpLowerProps
+  fmpStageControlLayout fmpStageRel fmpStepLayout fmpLowerDefs fmpLowerProps
   list rich_list finite_map callLayoutDefs irSupply venomInst
 
 Theorem fmp_retpc_install_prefix[local]:
@@ -95,19 +95,9 @@ Proof
   strip_tac >> Cases_on `analyze_fmp_reclaims infos ctx fn`
   >- simp[fmp_stage_plan_def] >>
   rename1 `analyze_fmp_reclaims infos ctx fn = SOME plan` >>
-  simp[fmp_stage_plan_def] >> strip_tac >>
-  drule split_fmp_entry_reconstruct >> simp[] >> strip_tac >> gvs[] >>
-  `lookup_block entry.bb_label fn.fn_blocks = SOME entry` by
-    simp[lookup_block_def, FIND_thm] >>
-  `EVERY (\i. MEM i.inst_opcode [PARAM; RETPC_PARAM; FMP_PARAM])
-     (users ++ [inst])` by
-    (drule split_fmp_entry_parameter_prefix >> simp[]) >>
-  `MEM ((entry.bb_label,n),plan ' (entry.bb_label,n))
-     (fmp_plan_to_alist fn plan)` by
-    simp[MEM_fmp_plan_to_alist, FLOOKUP_DEF] >>
-  drule (Q.INST [`prefix` |-> `users ++ [inst]`]
-    analyze_fmp_reclaims_parameter_prefix_absent) >>
-  simp[] >>
-  qexistsl [`users`, `suffix`, `entry.bb_label`, `inst`, `entry`, `n`,
-    `plan ' (entry.bb_label,n)`] >> gvs[EVERY_APPEND]
+  `FLOOKUP plan (entry.bb_label,n) = NONE` by
+    (irule fmp_control_prefix_plan_absent >>
+     qexistsl [`ctx`, `fn`, `infos`, `SOME inst`, `rest`, `suffix`, `users`] >>
+     simp[OPTION_TO_LIST_def]) >>
+  gvs[fmp_stage_plan_def, FLOOKUP_DEF]
 QED

@@ -28,7 +28,7 @@
 
 Theory fnFrameBoundaryInvoke
 Ancestors
-  fnFrameBoundaryGenRet fnFrameBoundaryEntryParams genFrameSim frameRel contextCodegenRel codegenRel
+  fnFrameBoundaryGenRet venomOperandProps fnFrameBoundaryEntryParams genFrameSim frameRel contextCodegenRel codegenRel
   regularPostfixSim preparedPrefixSim asmFrame prefixSim stackOpSim blockSimHelpers
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs

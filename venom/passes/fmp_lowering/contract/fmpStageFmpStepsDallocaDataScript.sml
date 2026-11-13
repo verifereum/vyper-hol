@@ -1,6 +1,6 @@
 Theory fmpStageFmpStepsDallocaData
 Ancestors
-  fmpStageRel fmpStageOpBase fmpStageReclaimSound
+  fmpStageFmpStepsLive fmpStageOpFrame fmpStageRel fmpStageOpBase fmpStageReclaimSound
   o1LowerDloadRelocationKernel finite_map words list
   livenessTerminationProofs livenessInvariantProofs fmpStepSupply
   frameHistoryCfg simplifyCfgPhiSemantics venomWfProps livenessProofs
@@ -44,18 +44,6 @@ Proof
   strip_tac >> simp[]
 QED
 
-Theorem fmp_dalloca_live_ir[local]:
-  MEM v (live_vars_at (liveness_analyze fn) lbl i) ==> MEM v (fn_ir_vars fn)
-Proof
-  strip_tac >>
-  `lv_bounded fn.fn_blocks (liveness_analyze fn)` by
-    metis_tac[liveness_recompute_invariant, lv_inv_def, liveness_analyze_def] >>
-  `MEM v (livenessDefs$fn_all_vars fn.fn_blocks)` by
-    metis_tac[lv_bounded_read, live_vars_at_def] >>
-  gvs[livenessDefsTheory.fn_all_vars_def, MEM_FLAT, MEM_MAP,
-      fn_ir_vars_member, inst_defs_def] >> metis_tac[]
-QED
-
 Theorem fmp_dalloca_live_transport[local]:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
@@ -68,23 +56,10 @@ Theorem fmp_dalloca_live_transport[local]:
     (SUC s.vs_inst_idx)) ==> ~MEM v scratch)
 Proof
   strip_tac >> reverse conj_tac
-  >- (rpt strip_tac >> drule fmp_dalloca_live_ir >>
+  >- (rpt strip_tac >> drule fmp_live_ir_vars >>
       gvs[EVERY_MEM] >> metis_tac[]) >>
-  drule_all fmp_stage_frame_facts >> strip_tac >>
-  `EVERY wf_function C.ctx_functions` by
-    gvs[fmp_stage_ctx_def, o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
-  drule_all frame_reachable_cfg_histories >> strip_tac >>
-  drule frame_history_cfg_invariant >> simp[] >> strip_tac >>
-  `wf_function fn` by gvs[o1_fn_shape_def] >>
-  `MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
-    (gvs[frame_history_cfg_def] >> irule fn_reachable_in_cfg_dfs_pre >> simp[] >>
-     irule scfg_path_member_reachable >> qexists_tac `history_visits h` >>
-     simp[] >> metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]) >>
-  gvs[active_inst_def] >>
-  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
-    metis_tac[wf_lookup_block] >>
-  rpt strip_tac >> drule live_vars_at_propagate >> simp[inst_defs_def] >>
-  disch_then irule >> simp[] >> metis_tac[]
+  rpt strip_tac >> `~MEM v inst.inst_outputs` by gvs[] >>
+  drule_all fmp_live_ordinary_suc >> simp[]
 QED
 
 Theorem fmp_dalloca_output_value[local]:
@@ -144,7 +119,7 @@ Proof
      simp[step_prov_def, out_prov_def, set_prov_def, lookup_var_def,
        step_taint_def, set_var_taint_def, update_var_def, FLOOKUP_UPDATE] >>
      rpt strip_tac >>
-     `MEM v (fn_ir_vars fn)` by metis_tac[fmp_dalloca_live_ir] >>
+     `MEM v (fn_ir_vars fn)` by metis_tac[fmp_live_ir_vars] >>
      gvs[EVERY_MEM] >> metis_tac[]) >>
   rpt strip_tac >>
   qpat_x_assum `fmp_env_rel _ _ _ _ _ _ _` mp_tac >>

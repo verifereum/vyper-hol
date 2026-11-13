@@ -15,7 +15,7 @@ Ancestors
   list venomWf fmpReclaimDefs fmpAnalysisDefs fmpStepReclaim contextCodegenRel
   frameHistoryCfg simplifyCfgPhiSemantics venomWfProps
 
-Theorem frame_reachable_dfs[local]:
+Theorem frame_reachable_dfs:
   EVERY wf_function C.ctx_functions /\
   frame_reachable vs C stk PG G tn fn inst s ==>
   MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
@@ -30,7 +30,7 @@ Proof
   simp[] >> metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]
 QED
 
-Theorem fmp_live_ordinary_suc[local]:
+Theorem fmp_live_ordinary_suc:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb

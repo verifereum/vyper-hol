@@ -2,8 +2,9 @@ Theory fmpStageFmpStepsRetInvokeCode
 Ancestors
   fmpStageControl fmpStageOpBase fmpStageRel fmpLowerDefs
   o1PassContract contextCodegenRel venomExecSemantics venomInst
-  fmpStageFmpStepsRetInvokePosition fmpStageFmpStepsRetInvokeObserved
-  fmpStageFmpStepsRetInvokeOrigin concretizeAnalysisMetadataOwnership
+  fmpStageFmpStepsInvokePosition fmpStageFmpStepsRetInvokeObserved
+  fmpStageFmpStepsRetInvokeOrigin fmpStageRunnerFacts
+  concretizeAnalysisMetadataOwnership
   concretizeStageLookup fmpStepBridge fmpStepSupply irSupply venomWf
   venomFnScheduleRunner list
 
@@ -38,15 +39,13 @@ Proof
   `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
    fn_inst_ids_distinct fn` by
     gvs[o1_fn_shape_def, wf_function_def, fn_labels_def] >>
-  drule_all fmp_return_saved_invoke_position >> strip_tac >>
+  drule_all fmp_frame_invoke_position >> strip_tac >>
   `?observed sp out. fn_pass_step rp (CFP_Simple VP_FmpLowering)
       observed sp fn out /\ out.fpo_function = fn' /\
       ctx_fn_names observed.cu_context = ctx_fn_names C /\
       o1_walk_view rp 3 C' fn observed` by
-    (qpat_assum `fmp_stage_ctx _ _ _ _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [fmp_stage_ctx_def]) >>
-     drule_all ctx_pass_stage_lookup >> strip_tac >> gvs[] >>
-     qexistsl_tac [`observed`,`s'`,`out`] >> simp[]) >>
+    (drule_all fmpStageFmpStepsCallAbiTheory.fmp_call_actual_witness >>
+     strip_tac >> gvs[] >> metis_tac[]) >>
   drule fmp_fn_pass_step_result >> strip_tac >>
   `!i name args callee sig.
     MEM i (fn_insts fn) /\ i.inst_opcode = INVOKE /\
@@ -109,18 +108,17 @@ Theorem fmp_return_invoke_local_nonclearing[local]:
   LENGTH j.inst_outputs = LENGTH inst.inst_outputs ==>
   ~fmp_clears_marks infos inst
 Proof
-  simp[fmp_lower_inst_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  strip_tac >> drule_all fmp_lower_invoke_inst >> strip_tac >> gvs[] >>
   drule fmp_resolve_invoke_some >> strip_tac >>
   gvs[fmpReclaimDefsTheory.fmp_clears_marks_def,
       fmpReclaimDefsTheory.fmp_callee_info_def,
       fmpAnalysisDefsTheory.fmp_invoke_target_def] >>
-  Cases_on `info.fi_publishes_fmp` >> gvs[]
+  qpat_x_assum `(if _ then _ else _) = _` mp_tac >> rw[]
 QED
 
 Theorem fmp_return_saved_invoke_nonclearing:
   fmp_stage_lowered infos ctx runner fn fn' /\
-  fmp_stage_root infos ctx fn = SOME (rl,rp) /\
-  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  fmp_stage_root infos ctx fn = SOME (rl,rp) /\ wf_function fn /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
   idx < LENGTH bb.bb_instructions /\ EL idx bb.bb_instructions = inst /\
   inst.inst_opcode = INVOKE /\ t.vs_current_bb = lbl /\
@@ -131,21 +129,11 @@ Theorem fmp_return_saved_invoke_nonclearing:
   ~fmp_clears_marks infos inst
 Proof
   strip_tac >>
-  `fn.fn_fmp_signature = NONE /\
-   ?info. FLOOKUP infos fn.fn_name = SOME info /\
-     (info.fi_needs_fmp \/ info.fi_publishes_fmp)` by
-    (gvs[fmp_stage_root_def, AllCaseEqs()] >>
-     Cases_on `FLOOKUP infos fn.fn_name` >> gvs[]) >>
-  drule fmp_return_lowered_full_at_cert >>
-  disch_then (qspecl_then [`lbl`,`idx`,`bb`] mp_tac) >>
-  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   `fn_labels fn' = fn_labels fn` by
-    (qpat_x_assum `fmp_stage_lowered _ _ _ _ _` mp_tac >>
-     simp[fmp_stage_lowered_def, fmp_lower_function_with_info_def, AllCaseEqs()] >>
-     rpt strip_tac >> gvs[] >> drule fmp_checked_seal_some >> strip_tac >>
-     gvs[fmp_seal_def, fn_labels_def] >>
-     drule fmpStepLayoutTheory.fmp_install_root_preserves_labels >>
-     drule fmpStepLayoutTheory.fmp_lower_blocks_preserves_labels >> simp[]) >>
+    metis_tac[fmpStageRunnerFactsTheory.fmp_stage_lowered_shape] >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    gvs[wf_function_def, fn_labels_def] >>
+  gvs[] >> drule_all fmp_stage_invoke_at >> strip_tac >- gvs[] >>
   gvs[active_inst_def] >> rename1 `MEM active_bb fn'.fn_blocks` >>
   `lookup_block t.vs_current_bb fn'.fn_blocks = SOME active_bb` by
     (irule venomExecPropsTheory.MEM_lookup_block >>

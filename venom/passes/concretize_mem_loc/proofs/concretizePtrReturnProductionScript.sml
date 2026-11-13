@@ -8,6 +8,7 @@ Ancestors concretizePtrReturnTransport
   ptrDiscipline memLocDefs unitShapeDefs o1PassContract venomExecSemantics venomState
   venomInst venomWf venomInstProofs1 venomExecProofs
   concretizePtrOperationalOpcodes pointerConfinedDefs finite_map list pred_set
+  ptrDisciplineCallCtx
 
 Theorem ptr_paired_ret_scalar_operands:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -367,57 +368,13 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[] >> decide_tac
 QED
 
-Theorem ptr_ret_phis_call_context[local]:
-  !s t. eval_phis s insts = OK t ==> t.vs_call_ctx = s.vs_call_ctx
-Proof
-  Induct_on `insts` >- simp[eval_phis_def] >>
-  rpt gen_tac >> simp[Once eval_phis_def] >>
-  strip_tac >> gvs[AllCaseEqs(), update_var_def] >> metis_tac[]
-QED
-
-Theorem ptr_ret_block_call_context[local]:
-  enters_block fn s t ==> t.vs_call_ctx = s.vs_call_ctx
-Proof
-  rw[enters_block_def] >> drule ptr_ret_phis_call_context >> simp[]
-QED
-
-Theorem ptr_ret_terminator_call_context[local]:
-  is_terminator inst.inst_opcode /\ step_inst fuel C inst s = OK t ==>
-  t.vs_call_ctx = s.vs_call_ctx
-Proof
-  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
-  strip_tac >> gvs[Once step_inst_def, step_inst_base_opcode_eqs] >>
-  gvs[AllCaseEqs(), jump_to_def] >> pairarg_tac >> gvs[]
-QED
-
-Theorem ptr_ret_reachable_stack_context[local]:
-  !vs C stk PG G tn fn inst s. frame_reachable vs C stk PG G tn fn inst s ==>
-  !f. MEM f stk ==> s.vs_call_ctx = f.cf_state.vs_call_ctx
-Proof
-  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
-  >- simp[]
-  >- (rpt strip_tac >> drule_all venomInstProofsTheory.step_preserves_call_ctx >>
-      strip_tac >> simp[])
-  >- (rpt strip_tac >> drule_all ptr_ret_terminator_call_context >>
-      drule ptr_ret_block_call_context >> metis_tac[])
-  >- (rpt strip_tac >> drule ptr_ret_block_call_context >>
-      qpat_x_assum `setup_callee _ _ _ = _` mp_tac >>
-      simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >> metis_tac[])
-  >> rpt strip_tac >>
-  `s'.vs_call_ctx = f.cf_state.vs_call_ctx` by
-    (qspec_then `(\u. u.vs_call_ctx)` mp_tac bind_outputs_preserves >>
-     simp[update_var_def] >> disch_then drule >>
-     Cases_on `ret.iret_adopt_fmp` >> simp[adopt_return_fmp_def, merge_callee_state_def]) >>
-  gvs[] >> metis_tac[]
-QED
-
 Theorem ptr_ret_reachable_caller_address[local]:
   ptr_observation_reachable vs C a /\ a.po_stack <> [] ==>
   a.po_state.vs_call_ctx.cc_address =
     (HD a.po_stack).cf_state.vs_call_ctx.cc_address
 Proof
   strip_tac >> fs[ptr_observation_reachable_def] >>
-  drule ptr_ret_reachable_stack_context >>
+  drule ptr_reachable_stack_call_ctx >>
   disch_then (qspec_then `HD a.po_stack` mp_tac) >>
   Cases_on `a.po_stack` >> gvs[]
 QED

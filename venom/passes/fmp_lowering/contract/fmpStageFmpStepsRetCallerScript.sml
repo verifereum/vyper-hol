@@ -1,6 +1,6 @@
 Theory fmpStageFmpStepsRetCaller
 Ancestors
-  fmpStageControl fmpStageOpBase fmpStageReclaimSound fmpStageRel
+  fmpStageOpFrame fmpStageControl fmpStageOpBase fmpStageReclaimSound fmpStageRel
   fmpLowerReclaimPlan fmpLedgerProps livenessProofs ptrDiscipline
   o1PassContract venomExecSemantics venomState venomInst rich_list
   fmpStageFmpStepsRetInvokeCode fmpStageFmpStepsRetBind
@@ -23,21 +23,6 @@ Proof
   simp[] >> rw[] >> fs[arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem fmp_return_reachable_dfs[local]:
-  EVERY wf_function C.ctx_functions /\
-  frame_reachable vs C stk PG G tn fn inst s ==>
-  MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
-Proof
-  strip_tac >> drule_all frame_reachable_cfg_histories >> strip_tac >>
-  drule frame_history_cfg_invariant >> simp[] >> strip_tac >>
-  `wf_function fn` by gvs[EVERY_MEM] >>
-  gvs[frame_history_cfg_def] >>
-  irule fn_reachable_in_cfg_dfs_pre >> simp[] >>
-  irule scfg_path_member_reachable >>
-  qexists_tac `history_visits h` >>
-  simp[] >> metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]
-QED
-
 Theorem fmp_return_caller_source_facts[local]:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s ==>
@@ -53,7 +38,7 @@ Proof
   `EVERY wf_function C.ctx_functions` by
     gvs[fmp_stage_ctx_def, o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   `MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[fmp_return_reachable_dfs] >>
+    metis_tac[frame_reachable_dfs] >>
   `wf_function fn /\ ALL_DISTINCT inst.inst_outputs` by
     (conj_tac >- gvs[o1_fn_shape_def] >>
      irule all_distinct_flat_map_member >>
@@ -114,24 +99,20 @@ Proof
   conj_tac >- gvs[fmp_params_rel_def] >>
   conj_tac >- (qpat_x_assum `!b z c id. _` mp_tac >> metis_tac[]) >>
   Cases_on `fmp_stage_root infos ctx fn` >> gvs[] >> PairCases_on `x` >> gvs[] >>
-  drule fmp_return_analysis_suc >> simp[] >>
-  disch_then (qspecl_then [`st`,`s.vs_inst_idx`,`bb`] mp_tac) >>
-  simp[] >> strip_tac >> qexists_tac `st'` >> simp[] >>
-  conj_tac >- metis_tac[fmp_return_covers] >>
-  `t.vs_current_bb = x0 /\ SUC s.vs_inst_idx < x1 <=>
-   t.vs_current_bb = x0 /\ s.vs_inst_idx < x1` by
-    (Cases_on `t.vs_current_bb = x0` >> gvs[] >> decide_tac) >>
-  Cases_on `t.vs_current_bb = x0 /\ s.vs_inst_idx < x1` >> gvs[] >>
-  csimp[] >> conj_tac
-  >- (drule_all inv_bind_outputs_lookup_outside >>
-      gvs[lookup_var_def, adopt_return_fmp_def]) >>
-  qexists_tac `regions` >> simp[] >>
-  irule fmp_return_ledger_bind >>
-  goal_assum (drule_at Any) >>
-  qexistsl_tac [`te`,`j.inst_outputs`,`ret'`,`ret'.iret_values`] >>
-  simp[merge_callee_state_def] >> rpt strip_tac >>
-  `MEM r.fr_mark (MAP (\r. r.fr_mark) regions)` by
-    (simp[MEM_MAP] >> qexists_tac `r` >> simp[]) >>
-  metis_tac[fmp_return_popped_outputs_fresh]
+  mp_tac (Q.INST [`k` |-> `s.vs_inst_idx`, `rl` |-> `x0`, `rp` |-> `x1`,
+    `outs` |-> `j.inst_outputs`, `vals` |-> `ret'.iret_values`,
+    `ret` |-> `ret'`, `callee` |-> `te`,
+    `A` |-> `COMPL (set (EL s.vs_inst_idx bb.bb_instructions).inst_outputs)`,
+    `tidx` |-> `SUC t.vs_inst_idx`, `fmp0` |-> `w2n t.vs_initial_fmp`]
+    fmp_return_root_analysis) >>
+  impl_tac
+  >- (simp[merge_callee_state_def] >> rpt conj_tac >> gvs[]
+      >~ [`MEM _ (SND _)`]
+      >- (mp_tac (Q.INST [`lbl` |-> `t.vs_current_bb`, `idx` |-> `s.vs_inst_idx`,
+            `inst` |-> `EL s.vs_inst_idx bb.bb_instructions`,
+            `live` |-> `liveness_analyze fn`] fmp_return_popped_outputs_fresh) >>
+          simp[]) >>
+      IF_CASES_TAC >> gvs[] >> qexists_tac `regions` >> simp[]) >>
+  strip_tac >> qexists_tac `st1` >> gvs[lookup_var_def]
 QED
 

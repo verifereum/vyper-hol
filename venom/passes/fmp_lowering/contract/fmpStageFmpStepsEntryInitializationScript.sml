@@ -1,6 +1,7 @@
 Theory fmpStageFmpStepsEntryInitialization
 Ancestors
   fmpStageFmpStepsEntryAnalysis fmpStageFmpStepsEntryState
+  fmpStageFmpStepsRestoreControl
   fmpStageRel fmpLedgerProps venomState finite_map words list
 
 Theorem fmp_entry_frame[local]:
@@ -82,7 +83,8 @@ Proof
   strip_tac
   >- (qexistsl_tac [`0`,
         `vs' with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`] >>
-      conj_tac >- metis_tac[fmp_entry_run_zero] >>
+      conj_tac
+      >- (irule fmp_restore_target_run_zero >> simp[] >> metis_tac[]) >>
       mp_tac (Q.INST [`idx` |-> `0`, `vars` |-> `vs'.vs_vars`]
         fmp_entry_relation) >> simp[]) >>
   qexistsl_tac [`1`, `(update_var runner vs'.vs_initial_fmp vs') with

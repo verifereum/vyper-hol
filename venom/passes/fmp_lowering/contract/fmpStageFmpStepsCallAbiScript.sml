@@ -3,7 +3,7 @@ Theory fmpStageFmpStepsCallAbi
 Ancestors
   fmpStageOpBaseActual concretizeStageLookup fmpStepBridge
   fmpLowerProps fmpLowerDefs irSupply fmpStageRel o1PassContract venomPassDispatcher
-  venomPassSchedule venomInst venomFnScheduleRunnerProps list
+  venomPassSchedule venomInst venomFnScheduleRunnerProps fmpStepShape list
 
 Theorem fmp_call_step_signature:
   fn_pass_step rpolicy pass observed s fn out /\
@@ -59,6 +59,8 @@ Theorem fmp_call_actual_witness:
       SOME (fn',out.fpo_supply) /\
     fmp_stage_lowered infos observed.cu_context (FST (fresh_ir_var sp)) fn fn' /\
     observed.cu_context.ctx_entry = C.ctx_entry /\
+    ctx_fn_names observed.cu_context = ctx_fn_names C /\
+    ir_supply_covers_fn sp fn /\
     o1_walk_view rpolicy 3 C' fn observed
 Proof
   strip_tac >>
@@ -73,6 +75,26 @@ Proof
   gvs[fmp_lower_function_def, AllCaseEqs()] >>
   qexistsl [`observed`, `s`, `out`, `infos`] >>
   simp[fmp_stage_lowered_def] >> metis_tac[]
+QED
+
+(* Why: the lowering keeps instruction ids distinct, so a target
+   instruction is pinned by its id whichever witness of the lowering
+   placed it. *)
+Theorem fmp_call_target_wf:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  lookup_function name C.ctx_functions = SOME fn /\
+  lookup_function name C'.ctx_functions = SOME fn' ==>
+  wf_function fn'
+Proof
+  strip_tac >> drule_all fmp_call_actual_witness >> strip_tac >> gvs[] >>
+  `o1_fn_shape C fn` by
+    (gvs[fmp_stage_ctx_def, o1_ctx_shape_def, EVERY_MEM] >>
+     metis_tac[lookup_function_MEM]) >>
+  `o1_fn_shape observed.cu_context fn` by
+    (qpat_x_assum `o1_fn_shape C fn` mp_tac >>
+     simp[o1_fn_shape_def] >> rpt strip_tac >> metis_tac[]) >>
+  drule fmp_fn_pass_step_result >> strip_tac >> gvs[] >>
+  metis_tac[fmp_lower_function_wf_function]
 QED
 
 Theorem fmp_call_lowered_signature_root:

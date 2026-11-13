@@ -32,28 +32,6 @@ Proof
   gvs[enters_block_def, lookup_block_def, FIND_thm]
 QED
 
-Theorem fmp_entry_actual_lowering:
-  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
-  lookup_function name C.ctx_functions = SOME fn ==>
-  ?fn' infos ctx runner.
-    lookup_function name C'.ctx_functions = SOME fn' /\
-    fmp_stage_lowered infos ctx runner fn fn' /\
-    ctx.ctx_entry = C.ctx_entry
-Proof
-  strip_tac >>
-  `ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
-     (o1_walk_view rpolicy 3) C C'` by gvs[fmp_stage_ctx_def] >>
-  drule_all ctx_pass_stage_lookup >> strip_tac >>
-  drule fmp_fn_pass_step_result >> strip_tac >>
-  `ir_supply_covers_fn s fn` by
-    (irule ir_supply_covers_unit_member >> qexists `observed` >>
-     gvs[fn_pass_step_def] >>
-     metis_tac[lookup_unique_function_member]) >>
-  gvs[fmp_lower_function_def, AllCaseEqs()] >>
-  qexistsl [`infos`, `observed.cu_context`, `FST (fresh_ir_var s)`] >>
-  simp[fmp_stage_lowered_def] >> metis_tac[]
-QED
-
 Theorem fmp_entry_split_empty[local]:
   entry_fn_no_params fn /\
   split_fmp_entry fn = SOME (FmpEntryLayout users pc tail) ==>

@@ -1,34 +1,11 @@
 Theory fmpStageFmpStepsRetpcFrame
 Ancestors
-  fmpStageFmpStepsRetpcFrameCore fmpStageFmpStepsRetpcAnalysis
+  fmpStageFmpStepsLive fmpStageFmpStepsRetpcFrameCore fmpStageFmpStepsRetpcAnalysis
   fmpStageFmpStepsRetpcState fmpStageReclaimSound
   fnBlockPlanStaticOffsetLive cfgWf venomWfProps venomExecProofs
   fmpLedgerProps contextCodegenRel venomWf o1PassContract
   cfgDefs venomInst fmpStageRel venomState ptrDiscipline
   fmpStageFmpStepsRetpcPreservation finite_map list pred_set
-
-Theorem fmp_retpc_runner_dead[local]:
-  wf_function fn /\ all_reachable fn /\ active_inst fn inst s /\
-  inst.inst_opcode = RETPC_PARAM /\ fn_inst_wf fn /\
-  fn_defs_reach_uses fn /\
-  (!i. MEM i (fn_insts fn) ==> ~MEM runner i.inst_outputs) ==>
-  ~MEM runner (live_vars_at (liveness_analyze fn) s.vs_current_bb
-    (SUC s.vs_inst_idx))
-Proof
-  strip_tac >>
-  `fn_reachable fn s.vs_current_bb` by
-    (gvs[all_reachable_def, active_inst_def] >> metis_tac[]) >>
-  gvs[active_inst_def] >>
-  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
-    (irule MEM_lookup_block >>
-     gvs[venomWfTheory.wf_function_def, fn_labels_def]) >>
-  `LENGTH (collect_phis bb.bb_instructions) <= s.vs_inst_idx` by
-    (spose_not_then assume_tac >>
-     `s.vs_inst_idx < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
-     drule collect_phis_index >> gvs[]) >>
-  irule fmp_retpc_fresh_runner_not_live >>
-  goal_assum (drule_at Any) >> simp[]
-QED
 
 Theorem fmp_retpc_covers[local]:
   inst.inst_opcode = RETPC_PARAM /\ inst.inst_outputs = [pc] /\
@@ -41,11 +18,9 @@ Proof
 QED
 
 Theorem fmp_retpc_frame_preserves:
-  wf_function fn /\ all_reachable fn /\ fn_inst_wf fn /\
-  fn_defs_reach_uses fn /\ active_inst fn inst s /\
+  wf_function fn /\ all_reachable fn /\ active_inst fn inst s /\
   inst.inst_opcode = RETPC_PARAM /\ inst.inst_operands = [Lit idx] /\
   inst.inst_outputs = [pc] /\ retpc_var fn pc /\
-  (root <> NONE ==> !i. MEM i (fn_insts fn) ==> ~MEM runner i.inst_outputs) /\
   fmp_sites_ok sm fmp0 raw0 lo s.vs_fmp /\
   plan = fmp_stage_plan infos ctx fn /\
   root = fmp_stage_root infos ctx fn /\
@@ -109,7 +84,7 @@ Proof
   >- (qpat_x_assum `s.vs_current_bb = t.vs_current_bb`
         (fn th => fs[GSYM th]) >>
       irule fmp_retpc_env_runner_step >> simp[] >>
-      drule_all fmp_retpc_runner_dead >> metis_tac[])
+      metis_tac[fmp_stage_runner_not_live])
   >- gvs[update_var_def, fmp_params_rel_def]
   >> rpt strip_tac >>
   qpat_x_assum `SOME _ = fmp_stage_root _ _ _` (fn th => fs[GSYM th]) >>
@@ -153,11 +128,9 @@ Theorem fmp_retpc_preserves:
   fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG G tn fn s lo t ts /\
   lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
   eb = fmp_frame_base raw0 stk /\ elo = fmp_frame_lo fmp0 ts /\
-  wf_function fn /\ all_reachable fn /\ fn_inst_wf fn /\
-  fn_defs_reach_uses fn /\ active_inst fn inst s /\
+  wf_function fn /\ all_reachable fn /\ active_inst fn inst s /\
   inst.inst_opcode = RETPC_PARAM /\ inst.inst_operands = [Lit idx] /\
   inst.inst_outputs = [pc] /\ retpc_var fn pc /\
-  (root <> NONE ==> !i. MEM i (fn_insts fn) ==> ~MEM runner i.inst_outputs) /\
   plan = fmp_stage_plan infos ctx fn /\
   root = fmp_stage_root infos ctx fn /\
   insts = (case lookup_block s.vs_current_bb fn.fn_blocks of
