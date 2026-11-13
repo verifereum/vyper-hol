@@ -397,17 +397,7 @@ QED
 
 Resume registration_source_parameter_inputs[params]:
   `supported_declaration_headers tops` by fs[supported_program_def] >>
-  drule_at (Pos last) lookup_function_external_decl >>
-  disch_then (qspec_then `tops` mp_tac) >>
-  (impl_tac >- fs[supportedDeclsTheory.supported_declaration_headers_def]) >> strip_tac >>
-  fs[e2eDefsTheory.source_typing_ok_def] >>
-  drule vyperTypeContractContextTheory.check_contract_main_module_allocated >> simp[] >> strip_tac >>
-  drule vyperTypeContractContextTheory.check_contract_runtime_function_body_MEM >>
-  disch_then (qspecl_then [`External`, `tops`, `NONE`, `ret`, `raw`, `F`,
-    `mut`, `tx.function_name`, `[]`, `fbody`, `args`] mp_tac) >>
-  simp[vyperTypeContractTheory.check_function_body_def,
-    vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
-    finite_mapTheory.FUNION_FEMPTY_2]
+  drule_all source_typing_ok_params_ok >> simp[]
 QED
 
 Resume registration_source_parameter_inputs[coherent]:
