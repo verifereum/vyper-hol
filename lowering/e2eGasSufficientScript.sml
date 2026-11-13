@@ -26,7 +26,7 @@
  * so there is no RETURNDATACOPY exemption: with enough gas the creation
  * frame does not end in OutOfGas, unless the code it deposits is longer than
  * max_code_size, which the EVM rejects with OutOfGas at any gas.  Its
- * identity case is composed from S1b-d (deploy_unit_run_bounded), S6b and
+ * identity case is composed from S1b-d (uniform fuel, run_context_uniform_fuel), S6b and
  * S7g-d (deploy_frame_gas_sufficient).
  *
  * The call theorem, S1b and S6b rely on the lowering's bounded ABI decoder
@@ -42,7 +42,7 @@ Ancestors
   codegenCorrectness immutableCodeLayout frameOutcome frameGas
   venomRunBounded unitMemInv
   asmOptimizer callTrace
-  e2eDeployCorrectness e2eDeployDefs ctorDeployDefs ctorDeployLowering
+  e2eDeployCorrectness e2eDeployDefs ctorDeployDefs ctorDeployBodyJoint
   ctorDeployFrame ctorDeployShape ctorDeployDefsReach ctorDeployInitcode
   ctorDeployEntry ctorDeployDead ctorDeployRunBounded ctorDeployImmBudget
   ctorDeployMemoryFrontier deployUnitExecution deployUnitExitSafe
@@ -277,7 +277,7 @@ Proof
     (drule gas_variant_outcomes >>
      simp[deploy_entry_state_def, entry_venom_state_def]) >>
   `deploy_unit_execution_correct tops runtime_bc am tx dunit vi` by
-    (irule deploy_unit_execution_correct >> metis_tac[]) >>
+    (irule deploy_unit_execution_correct_joint >> metis_tac[]) >>
   pop_assum (qx_choose_then `marks` assume_tac o
              REWRITE_RULE [deploy_unit_execution_correct_def]) >>
   qspecl_then [`marks`, `tops`, `runtime_bc`, `am`, `tx`, `dunit`, `vi`, `[]`]
