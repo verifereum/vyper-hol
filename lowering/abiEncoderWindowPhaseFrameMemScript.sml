@@ -1,6 +1,7 @@
 (* Primitive execution phases with their S3 endpoint frames. *)
 Theory abiEncoderWindowPhaseFrameMem
 Ancestors
+  abiEncoderWindowLoadMemoryMem
   abiEncoderWindowSequenceFrameMem abiEncoderWindowMemFrame windowPhaseMem
   stmtReasonLitFragMemory abiDecoderVarSequence
   abiEncoderWindowSequence emitHelperProps fragExec list rich_list
@@ -77,20 +78,8 @@ Theorem window_cursor_load_phase_mem_frame:
     (!x. out = Var x ==> not_fresh_at en x) /\ t.vs_labels = s.vs_labels /\
     mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t
 Proof
-  strip_tac >> drule_all window_emit_load_pure >> strip_tac >>
-  `window_seq st en s t` by fs[window_pure_seq_def] >>
-  `window_mem_frame ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    (irule window_emit_op_seq_frame >> goal_assum (drule_at Any) >>
-     simp[abi_decoder_reentry_opcode_def] >> metis_tac[]) >>
-  `run_inst_seq_mem_ok (emitted_insts st en) s` by
-    (drule emit_mload_mem_ok >> disch_then irule >> simp[]) >>
-  `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    metis_tac[window_seq_mem_cont] >>
-  qexists `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
-  (conj_tac >- metis_tac[window_pure_seq_phase]) >>
-  simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
-  `t.vs_labels = s.vs_labels` by metis_tac[window_seq_labels] >>
-  Cases_on `out` >> fs[eval_operand_def, lookup_var_def]
+  strip_tac >> drule_all window_cursor_load_phase_memory_mem >>
+  strip_tac >> qexists `t` >> asm_rewrite_tac[] >> metis_tac[]
 QED
 
 Theorem window_emit_alloca32_phase_mem_frame:
