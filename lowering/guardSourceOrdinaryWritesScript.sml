@@ -177,7 +177,7 @@ Proof
   reverse (Cases_on `er`)
   >- (simp_tac(srw_ss())[] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
       qpat_x_assum `!s0 tv t s1 v t1. eval_expr _ _ _ = _ /\ _ ==> _` kall_tac >>
-      qpat_x_assum `!initial_st selected env st res st0. _`
+      qpat_x_assum `!initial_st selected env st res st0. runtime_consistent _ _ _ /\ _ ==> _`
         (qspecl_then [`initial_st`, `selected`] mp_tac) >>
       disch_then (irule o cj 1) >> metis_tac[]) >>
   simp_tac(srw_ss())[] >>
@@ -187,7 +187,7 @@ Proof
   reverse (Cases_on `mr`)
   >- (simp_tac(srw_ss())[] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
       qpat_x_assum `!s0 tv t s1 v t1. eval_expr _ _ _ = _ /\ _ ==> _` kall_tac >>
-      qpat_x_assum `!initial_st selected env st res st0. _`
+      qpat_x_assum `!initial_st selected env st res st0. runtime_consistent _ _ _ /\ _ ==> _`
         (qspecl_then [`initial_st`, `selected`] mp_tac) >>
       disch_then (irule o cj 1) >> metis_tac[]) >>
   simp_tac(srw_ss())[] >> strip_tac >>
@@ -196,10 +196,10 @@ Proof
   `?tail. selected = s1.storage_trace ++ tail` by metis_tac[APPEND_ASSOC] >>
   `storage_well_formed_on cx s1 (FST H) /\
    storage_observations_ok cx H s1.storage_trace` by
-    (qpat_assum `!initial_st selected env st res st0. _`
+    (qpat_assum `!initial_st selected env st res st0. runtime_consistent _ _ _ /\ _ ==> _`
        (qspecl_then [`initial_st`, `selected`] mp_tac) >>
      disch_then (irule o cj 1) >> metis_tac[]) >>
-  qpat_x_assum `!initial_st selected env st res st0. _` kall_tac >>
+  qpat_x_assum `!initial_st selected env st res st0. runtime_consistent _ _ _ /\ _ ==> _` kall_tac >>
   drule_all eval_expr_success_storage_facts >> strip_tac >>
   `value_runtime_typed env (expr_type e) x'` by
     (fs[vyperTypeExprSoundnessTheory.runtime_consistent_def] >>
@@ -216,4 +216,100 @@ Proof
   disch_then drule >>
   disch_then (qspecl_then [`initial_st`, `selected`] mp_tac) >>
   disch_then irule >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> metis_tac[]
+QED
+
+Theorem finite_prefix_Assign_Base:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "Assign_Base")
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `eval_stmt cx (Assign (BaseTarget bt) e) st = (res,st')` >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  `?tty. well_typed_atarget env (BaseTarget bt) tty /\
+         type_widens_to env.type_defs (expr_type e) tty /\
+         assignable_type env.type_defs tty` by
+    metis_tac[vyperTypeArgFitsTheory.atarget_accepts_well_typed_atarget] >>
+  qpat_x_assum `well_typed_atarget env (BaseTarget bt) tty`
+    (assume_tac o REWRITE_RULE [well_typed_atarget_def]) >>
+  qpat_x_assum `call_evaluation_safe _ (int_calls_stmt _)` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_atarget_def] >> strip_tac >>
+  drule call_evaluation_safe_append_left >> strip_tac >>
+  drule call_evaluation_safe_append_right >> strip_tac >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+  Cases_on `eval_expr cx e st` >>
+  rename1 `eval_expr cx e st = (rhs_res,rhs_st)` >>
+  reverse (Cases_on `rhs_res`)
+  >- (simp_tac(srw_ss())[] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!s pv t s3 v t2. eval_expr _ _ _ = _ /\ _ ==> _` kall_tac >>
+      qpat_x_assum `!initial_st selected env st res st0. runtime_consistent _ _ _ /\ _ ==> _`
+        (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+      disch_then (irule o cj 1) >> metis_tac[]) >>
+  rename1 `eval_expr cx e st = (INL pv,rhs_st)` >>
+  simp_tac(srw_ss())[] >>
+  Cases_on `read_result cx pv rhs_st` >>
+  rename1 `read_result cx pv rhs_st = (read_res,read_st)` >>
+  `read_st = rhs_st` by metis_tac[read_result_state] >> BasicProvers.VAR_EQ_TAC >>
+  reverse (Cases_on `read_res`)
+  >- (simp_tac(srw_ss())[] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!s pv t s3 v t2. eval_expr _ _ _ = _ /\ _ ==> _` kall_tac >>
+      qpat_x_assum `!initial_st selected env st res st0. runtime_consistent _ _ _ /\ _ ==> _`
+        (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+      disch_then (irule o cj 1) >> metis_tac[]) >>
+  rename1 `read_result cx pv rhs_st = (INL v,rhs_st)` >>
+  qpat_x_assum `!s pv t s3 v t2. eval_expr _ _ _ = _ /\ _ ==> _`
+    (drule o SIMP_RULE (srw_ss()) []) >> disch_then drule >> strip_tac >>
+  simp_tac(srw_ss())[] >>
+  Cases_on `eval_target_place cx bt rhs_st` >>
+  rename1 `eval_target_place cx bt rhs_st = (target_res,target_st)` >>
+  disch_then (mk_asm "write") >>
+  `?xs. st'.storage_trace = target_st.storage_trace ++ xs` by
+    (Cases_on `target_res` >> asm "write" mp_tac >>
+     simp_tac(srw_ss())[] >> strip_tac >>
+     metis_tac[write_place_trace_unchanged, APPEND_NIL]) >>
+  `?ys. target_st.storage_trace = rhs_st.storage_trace ++ ys` by
+    metis_tac[storage_trace_frame_prefix, cj 8 evaluate_storage_trace_frame] >>
+  `?tail. selected = rhs_st.storage_trace ++ tail` by metis_tac[APPEND_ASSOC] >>
+  `storage_well_formed_on cx rhs_st (FST H) /\
+   storage_observations_ok cx H rhs_st.storage_trace` by
+    (qpat_assum `!initial_st selected env st res st0. runtime_consistent _ _ _ /\ _ ==> _`
+       (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+     disch_then (irule o cj 1) >> metis_tac[]) >>
+  qpat_x_assum `!initial_st selected env st res st0. runtime_consistent _ _ _ /\ _ ==> _` kall_tac >>
+  drule_all eval_expr_success_storage_facts >> strip_tac >>
+  `IS_SOME rhs_st.outcomes` by
+    (drule (cj 5 eval_outcome_suffix_mutual) >>
+     disch_then (mp_tac o MATCH_MP outcome_suffix_modes) >>
+     Cases_on `st.outcomes` >> Cases_on `rhs_st.outcomes` >> simp[] >> metis_tac[]) >>
+  `valid_horizon cx initial_st H rhs_st.storage_trace` by
+    (qpat_x_assum `valid_horizon cx initial_st H st.storage_trace` mp_tac >>
+     simp_tac(srw_ss())[valid_horizon_def] >> metis_tac[]) >>
+  `storage_well_formed_on cx target_st (FST H) /\
+   storage_observations_ok cx H target_st.storage_trace` by
+    (qpat_assum `!initial_st selected env ty st res st0. _`
+       (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+     disch_then irule >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+     metis_tac[APPEND_ASSOC]) >>
+  qpat_x_assum `!initial_st selected env ty st res st0. _` kall_tac >>
+  asm_x "write" mp_tac >>
+  reverse (Cases_on `target_res`)
+  >- (simp_tac(srw_ss())[] >> strip_tac >> BasicProvers.VAR_EQ_TAC >> simp[]) >>
+  rename1 `eval_target_place cx bt rhs_st = (INL p,target_st)` >>
+  simp_tac(srw_ss())[] >> strip_tac >>
+  `st'.storage_trace = target_st.storage_trace` by metis_tac[write_place_trace_unchanged] >>
+  reverse conj_tac >- metis_tac[] >>
+  `value_runtime_typed env (expr_type e) v` by
+    (fs[vyperTypeExprSoundnessTheory.runtime_consistent_def] >>
+     drule_all vyperTypeEvalSoundnessTheory.read_live_result_success_type >> simp[]) >>
+  drule_all eval_target_place_success_storage_type >> strip_tac >>
+  `value_runtime_typed env tty v` by
+    (gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
+     drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >> strip_tac >> gvs[]) >>
+  gvs[vyperTypeInvariantsTheory.eval_result_typed_def,
+      vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
+  irule write_place_preserves_storage_well_formed_on >>
+  goal_assum (drule_at Any) >>
+  qexistsl [`tv'`,`target_st.storage_trace`,`p`,`res`,`target_st`,`v`] >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  drule eval_target_place_observed_region >> simp[]
 QED
