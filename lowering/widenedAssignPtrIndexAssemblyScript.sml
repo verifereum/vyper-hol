@@ -94,7 +94,7 @@ Theorem widened_assign_index_loop_counted:
       tm'.t_imm = tm.t_imm /\
       (!i. ~(w2n aw <= i /\ i < w2n aw + type_memory_size dtv) ==>
         (i IN tm'.t_mem <=> i IN tm.t_mem))) /\
-  fn_has_code sa stx fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa stx fn /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?H tm t.

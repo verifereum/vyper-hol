@@ -63,7 +63,7 @@ Theorem widened_assign_index_child_counted:
         val_in_memory stv (f i) (w2n sw + i * type_memory_size stv) m) /\
       (!i m. i < k /\ mem_agree_outside tn.t_mem s.vs_memory m ==>
         val_in_memory dtv (f i) (w2n dw + i * type_memory_size dtv) m) /\
-      fn_has_code a z fn /\ fn_inst_ids_distinct fn /\
+      fn_has_code a z fn /\ 
       ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
       s.vs_current_bb = a.cs_current_bb /\
       s.vs_inst_idx = LENGTH a.cs_current_insts ==>
