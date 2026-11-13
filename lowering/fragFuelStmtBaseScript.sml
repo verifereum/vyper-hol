@@ -10,7 +10,8 @@
  * TOP-LEVEL:
  *   cenv_ptrs_below_def, cenv_ptrs_in_def, stmt_exits_in_def,
  *   next_stable_cenv_ptrs_below, var_below_le, cenv_ptrs_below_le,
- *   cenv_ptrs_below_update, emit_op_next,
+ *   cenv_ptrs_below_update, emit_op_next, fuel_okS_bind_dep,
+ *   fuel_okS_pre_conj,
  *   fuel_ok_emit_local_alloca, fuel_ok_compile_range_bound_checks,
  *   fuel_ok_compile_iter_elem_copy
  *)
@@ -73,6 +74,28 @@ Proof
   simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >>
   rpt strip_tac >> gvs[]
+QED
+
+(* m starts under P; the rest runs under Q of m's result. *)
+Theorem fuel_okS_bind_dep:
+  !P Q m f Wv E.
+    fuel_okS P Wv {} E m /\
+    (!st x st'. P st /\ m st = (x, st') ==> Q x st') /\
+    (!a. fuel_okS (Q a) Wv {} E (f a)) ==>
+    fuel_okS P Wv {} E (comp_bind m f)
+Proof
+  rpt strip_tac >>
+  `fuel_okS P Wv ({} UNION {}) E (comp_bind m f)` suffices_by simp[] >>
+  match_mp_tac (Q.SPECL [`P`, `Q`, `m`, `f`, `Wv`, `{}`, `{}`, `E`, `E`, `E`]
+                  fuel_okS_bind) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
+QED
+
+Theorem fuel_okS_pre_conj:
+  !b P Wv L E m.
+    (b ==> fuel_okS P Wv L E m) ==> fuel_okS (\st. P st /\ b) Wv L E m
+Proof
+  Cases_on `b` >> simp[fuel_okS_def] >> metis_tac[]
 QED
 
 Theorem next_stable_cenv_ptrs_below:

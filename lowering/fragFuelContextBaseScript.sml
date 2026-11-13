@@ -5,7 +5,8 @@
  * TOP-LEVEL:
  *   fuel_ok_compile_alloc_buffer, fuel_ok_compile_alloc_dynamic,
  *   fuel_ok_compile_fixed_region_with_id, fuel_ok_compile_copy_memory,
- *   fuel_ok_compile_ptr_load, fuel_ok_compile_ptr_store
+ *   fuel_ok_compile_ptr_load, fuel_ok_compile_ptr_store,
+ *   loop_distance_decreases
  *)
 
 Theory fragFuelContextBase
@@ -94,4 +95,14 @@ Proof
   rpt gen_tac >> fuel_auto [fuel_ok_emit_void_any,
              fuel_ok_compile_imm_store_word] >>
   simp[is_terminator_def]
+QED
+
+(* A loop's modular distance to its bound decreases even when the counter
+   wraps; its uniform bound is wordsTheory.w2n_lt. *)
+Theorem loop_distance_decreases:
+  !(i:256 word) l.
+    i <> l ==> w2n (l - (i + 1w)) < w2n (l - i)
+Proof
+  rpt strip_tac >> rewrite_tac[wordsTheory.WORD_SUB_PLUS] >>
+  irule wordsTheory.WORD_PRED_THM >> simp[wordsTheory.WORD_EQ_SUB_ZERO]
 QED

@@ -25,13 +25,13 @@ Libs
   fragFuelLib
 
 (* compile_expr as a callback, in the shape the callback lemmas take *)
-Theorem fuel_ok_compile_expr_cb[local]:
+Theorem fuel_ok_compile_expr_cb:
   !cenv ty e Wv E. fuel_ok Wv {} E (compile_expr cenv ty e)
 Proof
   rpt gen_tac >> mp_tac fuel_ok_compile_expr >> simp[]
 QED
 
-Theorem fuel_ok_compile_get_target_ptr_ce[local]:
+Theorem fuel_ok_compile_get_target_ptr_ce:
   !cenv bt Wv E.
     fuel_ok Wv {} E (compile_get_target_ptr compile_expr cenv bt)
 Proof

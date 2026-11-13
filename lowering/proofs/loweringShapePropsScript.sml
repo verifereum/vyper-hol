@@ -13983,7 +13983,7 @@ Resume compile_group_dispatch_linear_shape[jobs]:
 QED
 Finalise compile_group_dispatch_linear_shape
 
-Theorem grouped_runtime_entry_prefix_shape[local]:
+Theorem grouped_runtime_entry_prefix_shape:
   !groups fallback_fn.
     EVERY external_group_shape_ok groups /\ fallback_shape_ok fallback_fn ==>
     shape_step F jump_label_ok (\st. T)
@@ -14026,7 +14026,7 @@ Resume grouped_runtime_entry_prefix_shape[dispatch]:
   >- (ho_match_mp_tac shape_step_new_block >> simp[shape_stable_def, jump_label_ok_def]) >>
   gen_tac >> BETA_TAC >> irule runtime_fallback_shape >> simp[]
 QED
-Finalise grouped_runtime_entry_prefix_shape[local]
+Finalise grouped_runtime_entry_prefix_shape
 
 Theorem compile_generate_grouped_runtime_shape:
   !groups internal_fns fallback_fn st1.
