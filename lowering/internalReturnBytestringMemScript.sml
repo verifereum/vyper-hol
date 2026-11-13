@@ -17,8 +17,9 @@ Theorem internal_return_bytestring_suffix_mem:
   is_bytestring_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   lower_value compile_expr ce ty e sa = (op,sm) /\
   local_ptrs_reserved ce sa /\
+  compile_return_unlock ce sm = ((),su) /\ ce.ce_returns_count = 0 /\
   compile_internal_return ce (SOME op) (Var rpc) 0 ty
-    (lowered_value_type ce e) elems (SOME (Var bp)) sm = ((),sb) /\
+    (lowered_value_type ce e) elems (SOME (Var bp)) su = ((),sb) /\
   ce.ce_imm_alloca = NONE /\
   ce.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
   ce.ce_return_buf = SOME (PtrVar (Var bp) bsz) /\
@@ -41,7 +42,7 @@ Proof
     (drule_all type_widens_to_value_has_type >> simp[]) >>
   `is_bytestring_type (expr_type e)` by metis_tac[typed_copy_bytestring_source] >>
   `compile_internal_return ce (SOME op) (Var rpc) 0 ty ty elems
-     (SOME (Var bp)) sm = ((),sb)` by
+     (SOME (Var bp)) su = ((),sb)` by
     (qpat_x_assum `compile_internal_return _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_internal_return_def, compile_store_memory_bytestring_src]) >>
   `!x. op = Var x ==> not_fresh_at sm x` by
@@ -51,11 +52,12 @@ Proof
    eval_operand (Var bp) t = SOME bw /\
    w2n bw + type_memory_size tv <= t.vs_alloca_next` by
     gvs[ret_pc_ok_def, return_buf_frame_def, eval_operand_def] >>
+  `~is_word_type ty` by metis_tac[is_bytestring_word_type] >>
   `val_wf tv v` by metis_tac[value_has_type_val_wf] >>
-  drule_at (Pat `compile_internal_return _ _ _ _ _ _ _ _ _ = _`)
-    compile_internal_return_equal_mem >>
-  disch_then (qspecl_then [`ctx`, `func`, `cx`, `ee`, `tv`, `v`, `bw`] mp_tac) >>
-  impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >>
+  mp_tac (Q.SPECL [`ctx`, `func`, `ce`, `cx`, `ee`, `ty`, `ty`,
+    `tv`, `tv`, `v`, `op`, `Var rpc`, `elems`, `Var bp`, `sm`, `su`, `sb`, `bw`]
+    compile_internal_return_compatible_epilogue_mem) >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
   disch_then (irule o MATCH_MP frag_exec_mem_weaken) >> simp[] >>
   rpt strip_tac >>
   `expr_val_rel cx ty v op t` by
