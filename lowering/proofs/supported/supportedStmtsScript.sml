@@ -192,7 +192,6 @@ Definition supported_stmt_def:
            supported_variable_decl tops id =
              SOME (vis, mut, ArrayT (expr_type e) (Dynamic dn), SOME slot))
      | _ =>
-         supported_full_word_type (expr_type e) /\
          ~supported_target_exists (\key. ~pure_expr key) target /\
          ?dn. supported_target_info tops bindings target =
            SOME (ValPT (ArrayT (expr_type e) (Dynamic dn)))) /\
