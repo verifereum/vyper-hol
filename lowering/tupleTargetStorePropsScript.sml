@@ -3,7 +3,7 @@ Theory tupleTargetStoreProps
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
   list rich_list finite_map
-  stmtSimAssignStorage stmtSimAssignAttrStorage tupleLocalStoreRun
+  stmtSimAssignStorage stmtSimAssignStorageFacts stmtSimAssignAttrStorage tupleLocalStoreRun
   stmtSimAssignTuple   vyperExprNoControl
   vyperTypeSystem vyperInterpreter vyperState vyperValue vyperTyping vyperLookup
   stmtLowering exprLowering emitHelper compileEnv
