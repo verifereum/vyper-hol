@@ -127,7 +127,11 @@ Theorem as_wei_value_success_origin:
   ?G' tn'.
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),G',tn')) /\
-    op_prov G' op = NONE /\ op_taint tn' op = {}
+    op_prov G' op = NONE /\ op_taint tn' op = {} /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >> drule_all as_wei_value_canonical_ghosts >>
   disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
@@ -166,4 +170,42 @@ Proof
      >- (fs[EVERY_MEM, fresh_write_op_def] >> metis_tac[MEM]) >>
      metis_tac[]) >>
   drule_all run_inst_seq_writes_fresh >> simp[venomStateTheory.lookup_var_def]
+QED
+
+Theorem as_wei_value_success_full:
+  compile_as_wei_value_int v (denomination_multiplier dn) F sa = (op,sb) /\
+  fn_has_code sa sb fn /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  op_prov G v = NONE /\ op_taint tn v = {} /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  sc.cs_next_var <= sa.cs_next_var /\ local_ptrs_reserved cenv sc /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
+  es'.scopes = es.scopes /\
+  ghost_kept_at lo cenv es0 sc G0 tn0 s0 G tn /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?G' tn'.
+    op_prov G' op = NONE /\ op_taint tn' op = {} /\
+    ghost_kept_at lo cenv es0 sc G0 tn0 s0 G' tn' /\
+    t = s with vs_vars := t.vs_vars /\
+    (!x. not_fresh_at sc x ==> lookup_var x t = lookup_var x s) /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),G',tn') /\
+       (ghost_inv_at D lo d cenv cx es G tn s ==>
+        ghost_inv_at D lo d cenv cx es' G' tn'
+          (t with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  strip_tac >> drule_all as_wei_value_success_origin >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  drule_all as_wei_value_runtime_frame >> strip_tac >>
+  `!x. not_fresh_at sc x ==> FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)` by
+    (gen_tac >> disch_tac >> first_x_assum irule >>
+     metis_tac[not_fresh_at_mono]) >>
+  qexistsl_tac [`G'`, `tn'`] >> simp[] >> conj_tac
+  >- (fs[bodyPtrDefsTheory.ghost_kept_at_def] >> metis_tac[]) >>
+  gen_tac >> strip_tac >> irule ghost_inv_at_exterior_frame >>
+  goal_assum (drule_at Any) >> qexists_tac `sc` >> simp[] >>
+  qpat_x_assum `t = s with vs_vars := _` SUBST1_TAC >>
+  fs[venomStateTheory.lookup_var_def]
 QED
