@@ -246,7 +246,6 @@ QED
 Theorem compile_make_array_elems_open:
   !cfn cenv es elem size lw buf idx sa r sb.
     acyclic_struct_metadata cenv.ce_struct_fields /\
-    EVERY (\e. is_word_type elem \/ is_bytestring_type elem \/ elem = expr_type e) es /\
     ~block_is_terminated sa /\
     compile_make_array_elems cfn cenv es elem size lw buf idx sa = (r,sb) ==>
     ~block_is_terminated sb
@@ -265,7 +264,6 @@ QED
 Theorem compile_make_array_open:
   !cfn cenv es elem size lw buf sa r sb.
     acyclic_struct_metadata cenv.ce_struct_fields /\
-    EVERY (\e. is_word_type elem \/ is_bytestring_type elem \/ elem = expr_type e) es /\
     ~block_is_terminated sa /\
     compile_make_array cfn cenv es elem size lw buf sa = (r,sb) ==>
     ~block_is_terminated sb

@@ -7,6 +7,7 @@ Ancestors
   exprSimDefs vyperState list
 
 Theorem fixed_array_after_base_ptr:
+  ~subscript_reads_base cx obj idx ==>
   gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (eval_expr cx obj)
     (es,s0,G0,tn0) left (INL captured) mid Gb tnb (OK u) /\
   expr_sim_ptr d ctx PG func cenv cx ty idx (mid with gas_obs := []) /\
@@ -37,7 +38,7 @@ Theorem fixed_array_after_base_ptr:
     (eval_expr cx (Subscript ann obj idx)) (es,s0,G0,tn0)
     Q (\res ee gt out. expr_exit res out)
 Proof
-  strip_tac >>
+  strip_tac >> strip_tac >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
   disch_then (qspecl_then [`sb`,`sc`,`iop`,`u`,`Gb`,`tnb`] mp_tac) >>
@@ -50,7 +51,8 @@ Proof
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` mp_tac >>
   qpat_x_assum `!res out. _` (fn th => once_rewrite_tac[GSYM th]) >>
   disch_tac >>
-  pure_once_rewrite_tac[eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
   irule (BETA_RULE (Q.ISPEC
     `\r v. select_result cx (expr_type obj) r (ValueSubscript v)`
     (Q.GEN `k` array_index_outcome_post_compose_ptr))) >>

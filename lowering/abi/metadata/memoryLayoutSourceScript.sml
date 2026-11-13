@@ -175,7 +175,9 @@ QED
 Theorem all_layout_key_transports:
   (!ty. layout_key_transport ty) /\ (!tys. EVERY layout_key_transport tys)
 Proof
-  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops type_induction) >>
+  ho_match_mp_tac
+    (legacyInduction.mutual_ind_from_ops
+       (TypeBase.set_induction_of ``:type``)) >>
   simp[layout_key_transport_base, layout_key_transport_array, layout_key_transport_tuple,
     layout_key_transport_atomic]
 QED
