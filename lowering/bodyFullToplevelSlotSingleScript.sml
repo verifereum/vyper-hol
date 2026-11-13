@@ -7,6 +7,9 @@ Ancestors
   exprLoweringProps bodyPtrDefs venomState venomInst words list rich_list
   bodyMemEcArithPrefix exprPtrUnwrapAllocation bufferAllocationExecution fragGasSeqPtr
   fragGasOriginPtrDead fragGasOriginPtr exprPtrUnwrapLoopEntry
+  exprPtrUnwrapAllocSemantic exprPtrUnwrapEnsureShape
+  venomExecSemantics ptrDiscipline loweringStateRelDefs exprSimStorageCopy
+  slotCopyExecution frameActivationSeparation copyExecution finite_map
 
 Theorem toplevel_slot_single_suffix_origin_ptr:
   compile_expr cenv ty (TopLevelName ann nsid) si = (LocatedValue vt p,sm) /\
@@ -161,4 +164,92 @@ Proof
   qexistsl [`Gf`, `tnf`, `t`] >> asm_rewrite_tac[] >>
   gen_tac >> irule gas_origin_ptr_path_from_no_dead >>
   gvs[Abbr `D0`]
+QED
+
+Theorem toplevel_slot_single_endpoint:
+  compile_expr cenv ty (TopLevelName ann nsid) si = (LocatedValue vt p,sm) /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+  compile_ensure_in_memory p.ptr_operand p.ptr_location nb 1 ctor imm sa = (op,sb) /\
+  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  nb < dimword (:256) /\ 32 <= nb /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sa x) /\
+  eval_operand p.ptr_operand s = SOME key /\ op_taint tn p.ptr_operand = {} ==>
+  ?root d mid buf u a G0 tn0 z Gf tnf.
+    compile_alloc_buffer nb sa = (buf,mid) /\
+    fn_has_code sa mid func /\ fn_has_code mid sb func /\
+    buf.buf_operand = Var root /\ op = Var root /\
+    d = n2w (buffer_allocation_base s sa.cs_next_id) /\
+    u = update_var root d (buffer_allocation_fields s sa.cs_next_id nb) /\
+    step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
+    a = u with vs_inst_idx := LENGTH mid.cs_current_insts /\
+    G0 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) u /\
+    tn0 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK z,Gf,tnf)) /\
+    z = (mstore (w2n d)
+      (slot_copy_word (if p.ptr_location=LocStorage then SLOAD else TLOAD) a key)
+      (update_var (STRING #"%" (toString mid.cs_next_var))
+        (slot_copy_word (if p.ptr_location=LocStorage then SLOAD else TLOAD) a key) a)
+      with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    ptr_covers Gf tnf root z nb /\ eval_operand op z = SOME d /\
+    tnf.t_mem = (tn0.t_mem DIFF {j | w2n d <= j /\ j < w2n d+32}) UNION
+      {w2n d+k | k IN key_taint
+        (if p.ptr_location=LocStorage then tn.t_stor else tn.t_trans) key} /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!x. x <> STRING #"%" (toString mid.cs_next_var) ==>
+      FLOOKUP Gf x = FLOOKUP G0 x /\ op_taint tnf (Var x) = op_taint tn0 (Var x))
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac strip_assume_tac)) >>
+  drule_all ensure_slot_memory_single_code >> strip_tac >>
+  `32*1 <= nb` by simp[] >>
+  drule_all unwrap_alloc_loop_entry >>
+  disch_then (qspecl_then [`PG`, `G`, `ARB`] strip_assume_tac) >>
+  drule_all unwrap_alloc_semantic_frames >> strip_tac >>
+  `exec_alloca (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s
+     (n2w nb : bytes32) = OK u` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  `allocas_from lo u` by metis_tac[frameActivationSeparationTheory.allocas_from_exec_alloca] >>
+  `allocas_from lo a` by
+    (qpat_x_assum `allocas_from lo u` mp_tac >> simp[allocas_from_def]) >>
+  `alloca_inv u` by fs[stmt_state_rel_def, state_rel_def] >>
+  `w2n d + 32 <= a.vs_alloca_next` by
+    (`w2n d + nb <= u.vs_alloca_next` by
+       metis_tac[venomMemDefsTheory.alloca_inv_def,
+         venomMemDefsTheory.alloca_next_valid_def] >>
+     qpat_x_assum `w2n d + nb <= _` mp_tac >> simp[] ) >>
+  drule_all ensure_slot_memory_split >>
+  disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `buf' = buf /\ sm'' = sm'` by fs[] >>
+  qpat_x_assum `buf' = buf` SUBST_ALL_TAC >>
+  qpat_x_assum `sm'' = sm'` SUBST_ALL_TAC >>
+  drule storage_copy_word_layout >> strip_tac >>
+  `root <> STRING #"%" (toString sm'.cs_next_var)` by
+    (qpat_x_assum `slot_copy_external _ (Var root)` mp_tac >>
+     simp[slot_copy_external_def, slot_copy_var_def] >>
+     disch_then (qspec_then `0` mp_tac) >> simp[]) >>
+  `ptr_covers G0 tn0 root a 32` by fs[] >>
+  `a = u with vs_inst_idx := LENGTH sm'.cs_current_insts` by
+    (qpat_x_assum `a.vs_inst_idx = _` mp_tac >>
+     qpat_assum `a = _` (fn th => pure_rewrite_tac[th]) >> simp[]) >>
+  mp_tac (Q.INST [`mid` |-> `sm'`, `addr` |-> `d`,
+    `id` |-> `sm'.cs_next_id`, `out` |-> `STRING #"%" (toString sm'.cs_next_var)`]
+    toplevel_slot_single_common_run) >>
+  (impl_tac >- (asm_rewrite_tac[] >>
+    qpat_x_assum `w2n d + 32 * 1 < _` mp_tac >> simp[dimword_def])) >> strip_tac >>
+  `ptr_covers Gf tnf root t nb` by metis_tac[] >>
+  `ptr_covers Gf tnf root (t with vs_inst_idx := LENGTH sb.cs_current_insts) nb` by
+    (qpat_x_assum `ptr_covers Gf tnf root t nb` mp_tac >>
+     simp[ptr_covers_def, lookup_var_def]) >>
+  `eval_operand op (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME d` by
+    (qpat_x_assum `t = _` (fn th => pure_rewrite_tac[th]) >>
+     simp[eval_operand_def, lookup_var_def, mstore_def,
+       write_memory_with_expansion_def, update_var_def, FLOOKUP_UPDATE]) >>
+  qexistsl [`root`, `d`, `sm'`, `buf`, `u`, `a`, `G0`, `tn0`,
+    `t with vs_inst_idx := LENGTH sb.cs_current_insts`, `Gf`, `tnf`] >>
+  asm_rewrite_tac[]
 QED
