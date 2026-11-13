@@ -8,6 +8,7 @@ Ancestors
   concretizePtrStorageReadProducer unitMemInv o1PassLift
   concretizePtrCoverageStaticMemReachability concretizePtrCurrentObservation
   o1PassContract concretizePtrPairedFields concretizePtrChronologicalHistory list pair
+  pointerConfinedDefs memLocDefs passSharedDefs venomState
   contextCodegenRel concretizePtrOperationalOpcodes stepWriteFootprintBase
   venomExecProofs venomWf venomExecSemantics venomInst codegenRel lowerDloadDefs
   ptrDisciplineEmptyTaint ptrDiscipline ctxLookupAgree
