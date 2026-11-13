@@ -228,10 +228,7 @@ Resume compile_expr_open_general[builtin_dispatch]:
   >~ [`Uint2Str`] >- metis_tac[compile_dispatch_terminal_open]
   >~ [`CalldataSlice`] >- metis_tac[compile_dispatch_terminal_open]
   >~ [`MakeArray elem bound`]
-    >- (Cases_on `elem` >>
-        drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
-          compile_dispatch_make_array_open >>
-        fs[well_typed_builtin_app_def, EVERY_MAP, EVERY_MEM] >> metis_tac[]) >>
+    >- metis_tac[compile_dispatch_make_array_open] >>
   gvs[LENGTH_EQ_NUM_compute]
   >~ [`Bop op`]
     >- (rename1 `compile_builtin_dispatch_body _ _ _ _ (Bop op) [arg_e;arg2_e] sa = (v,st)` >>

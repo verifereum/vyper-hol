@@ -5,6 +5,19 @@ Ancestors
   moduleLowering compileEnv bodyPtrStructLitOwnershipPrimitives
   loweringShapeProps loweringShapeDefs bodyPtrStructLitOwnershipShape
 
+Theorem alloc_run_compile_abi_arg_ptr_guard[local]:
+  alloc_run fresh_outputs (compile_abi_arg_ptr_guard opc src parent)
+    (\u s. fresh_outputs s)
+Proof
+  simp[compile_abi_arg_ptr_guard_def] >> IF_CASES_TAC
+  >- (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+      simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
+      gen_tac >> irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+      simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
+           SRULE [SF ETA_ss] alloc_run_emit_void_fresh]) >>
+  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
+QED
+
 Theorem alloc_run_compile_decode_args:
   !args ce offset opc hi base.
     alloc_run fresh_outputs (compile_decode_args ce args offset opc hi base)
@@ -24,7 +37,8 @@ Proof
     >- (simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
             SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
             SRULE [SF ETA_ss] alloc_run_compile_abi_decode_to_buf,
-            SRULE [SF ETA_ss] alloc_run_compile_abi_clamp_basetype] >>
+            SRULE [SF ETA_ss] alloc_run_compile_abi_clamp_basetype,
+            SRULE [SF ETA_ss] alloc_run_compile_abi_arg_ptr_guard] >>
         simp[comp_return_def, alloc_run_def, alloc_frame_refl]) >>
     gen_tac >> simp[]) >>
   fs[SF ETA_ss] >>

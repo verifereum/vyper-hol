@@ -29,6 +29,16 @@ Proof
     rpt gen_tac >> BETA_TAC) >> simp[]
 QED
 
+Theorem entry_code_abi_arg_ptr_guard[local]:
+  !opc src parent. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_abi_arg_ptr_guard opc src parent)
+Proof
+  rw[compile_abi_arg_ptr_guard_def, entry_code_return] >>
+  rpt (irule entry_code_bind >> reverse conj_tac
+    >- simp[entry_code_emit_op] >> rpt gen_tac >> BETA_TAC) >>
+  simp[entry_code_emit_void]
+QED
+
 Theorem entry_code_decode_args:
   !args ce off hi adj. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_decode_args ce args off CALLDATALOAD hi adj)
@@ -46,7 +56,8 @@ Proof
   IF_CASES_TAC >> BasicProvers.TOP_CASE_TAC >> simp[] >>
   BasicProvers.TOP_CASE_TAC >> simp[] >>
   rpt (irule entry_code_bind >> reverse conj_tac
-    >- simp[entry_code_emit_op, entry_code_decode_to_buf] >>
+    >- simp[entry_code_emit_op, entry_code_decode_to_buf,
+            entry_code_abi_arg_ptr_guard] >>
     rpt gen_tac >> BETA_TAC) >> simp[]
 QED
 
