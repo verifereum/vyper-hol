@@ -10,7 +10,7 @@ Ancestors
 
 Theorem intcall_log_suffix_resources:
   ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
   EVERY (supported_scalar_type o SND) xs /\ LENGTH flags = LENGTH xs /\
@@ -18,7 +18,6 @@ Theorem intcall_log_suffix_resources:
   allocas_above lo t /\ s.vs_alloca_next <= t.vs_alloca_next
 Proof
   strip_tac >>
-  `log_eval_view ce args sa xs sm` by simp[log_eval_view_def, LIST_REL_EL_EQN] >>
   drule_all log_success_suffix_code >> strip_tac >>
   irule intcall_noninvoke_run_resources >> simp[] >>
   qexists_tac `emitted_insts sm sb` >> simp[EVERY_MEM] >>
