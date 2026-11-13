@@ -272,7 +272,8 @@ Proof
         concretizePtrValueTransportTheory.ptr_value_transport_scalar_empty] >>
   `!q. q IN range_bytes (step_writes inst tgt postt) ==>
      w2n x <= q /\ q < w2n x + w2n z` by
-    (irule concretizePtrWriteClassificationTheory.ptr_step_write_max_containment >> metis_tac[]) >>
+    (drule_all concretizePtrWriteClassificationTheory.ptr_step_write_max_containment >>
+     simp[]) >>
   strip_tac >> first_x_assum drule >> decide_tac
 QED
 
