@@ -124,7 +124,7 @@ fun copy_len (load, notop, binop, extends_trans) =
   `eval_operand (Lit 31w) s1 = SOME 31w /\ op_taint tn1 (Lit 31w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
   drule_all notop >>
-  disch_then (qspecl_then [`H`, `G1`, `cx`, `ctx`, `PG`, `R`]
+  disch_then (qspecl_then [`G1`, `H`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `Gm` (qx_choose_then `tnm` (qx_choose_then `sm` strip_assume_tac)))) >>
   `eval_operand (Var v1) sm = SOME (mload (w2n a) s) /\
    op_taint tnm (Var v1) = {} /\
@@ -132,20 +132,20 @@ fun copy_len (load, notop, binop, extends_trans) =
     (qpat_assum `!p. not_fresh_at sc1 p ==> _` (qspec_then `v1` mp_tac) >>
      simp[eval_operand_def, op_taint_def]) >>
   drule_all (SRULE [] (Q.SPECL [`ADD`, `word_add`] binop)) >>
-  disch_then (qspecl_then [`H`, `Gm`, `cx`, `ctx`, `PG`, `R`]
+  disch_then (qspecl_then [`Gm`, `H`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G2` (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
   `eval_operand (Var v2) s2 = SOME (mload (w2n a) s + 31w) /\
    eval_operand (Var vm) s2 = SOME (~31w) /\ op_taint tn2 (Var vm) = {}` by
     (qpat_assum `!p. not_fresh_at scm p ==> _` (qspec_then `vm` mp_tac) >>
      simp[eval_operand_def, op_taint_def]) >>
   drule_all (SRULE [] (Q.SPECL [`AND`, `word_and`] binop)) >>
-  disch_then (qspecl_then [`H`, `G2`, `cx`, `ctx`, `PG`, `R`]
+  disch_then (qspecl_then [`G2`, `H`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G3` (qx_choose_then `tn3` (qx_choose_then `s3` strip_assume_tac)))) >>
   `eval_operand (Var v3) s3 = SOME (mload (w2n a) s + 31w && ~31w) /\
    eval_operand (Lit 32w) s3 = SOME 32w /\ op_taint tn3 (Lit 32w) = {}` by
     simp[eval_operand_def, op_taint_def] >>
   drule_all (SRULE [] (Q.SPECL [`ADD`, `word_add`] binop)) >>
-  disch_then (qspecl_then [`H`, `G3`, `cx`, `ctx`, `PG`, `R`]
+  disch_then (qspecl_then [`G3`, `H`, `cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G4` (qx_choose_then `tn4` (qx_choose_then `s4` strip_assume_tac)))) >>
   qexistsl_tac [`G4`, `tn4`, `s4`] >>
   `cs_extends sa sc1 /\ cs_extends sc1 scm /\ cs_extends scm sc2 /\

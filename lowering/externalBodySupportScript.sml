@@ -11,8 +11,6 @@ Ancestors
   vyperTypeExternalDefaults vyperTypeInitialState vyperTypeBindArguments vyperTypeCallStackSoundness
   vyperInterpreter vyperGetter vyperState vyperContext
 
-(* With no public variables, an external function lookup_function selects
-   is a declared function, not a getter. *)
 Theorem external_selected_body_typing:
   supported_program tops /\ source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\
