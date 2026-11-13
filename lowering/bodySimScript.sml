@@ -271,7 +271,12 @@ Definition body_expr_ok_def:
         (if subscript_reads_base cx e1 e2
          then do v <- read_result cx res; return (Value v) od
          else return res) s3 = (INL res',t') ==>
-        body_expr_ok cx e2))) /\
+        body_expr_ok cx e2)) /\
+    (!ann obj field.
+      e = Attribute ann obj field ==> body_expr_ok cx obj) /\
+    (!ann nsid fields.
+      e = StructLit ann nsid fields ==>
+      body_exprs_ok cx (MAP SND fields))) /\
   body_exprs_ok cx [] = T /\
   body_exprs_ok cx (e::es) =
     (body_expr_ok cx e /\
@@ -282,7 +287,12 @@ Termination
   WF_REL_TAC `measure (\x. case x of
       INL (_, e) => expr_size e
     | INR (_, es) => list_size expr_size es)` >>
-  simp[expr_size_def]
+  simp[expr_size_def] >> rpt gen_tac >>
+  `!fs. list_size (\x. expr_size (SND x)) fs <=
+         list_size (pair_size (list_size char_size) expr_size) fs` by
+    (Induct >> simp[basicSizeTheory.pair_size_def, pairTheory.FORALL_PROD] >>
+     rpt strip_tac >> decide_tac) >>
+  first_x_assum (qspec_then `fields` mp_tac) >> decide_tac
 End
 
 Theorem body_exprs_ok_def = CONJUNCT2 body_expr_ok_def;
@@ -315,9 +325,32 @@ Theorem body_subscript_children_ok:
 Proof
   rpt gen_tac >>
   disch_then
-    (mp_tac o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o
+    (mp_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o
       ONCE_REWRITE_RULE [body_expr_ok_def]) >>
   simp[] >> metis_tac[]
+QED
+
+Theorem body_attribute_child_ok:
+  !cx ann obj field.
+    body_expr_ok cx (Attribute ann obj field) ==> body_expr_ok cx obj
+Proof
+  rpt gen_tac >>
+  disch_then
+    (mp_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o
+      ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+  simp[]
+QED
+
+Theorem body_structlit_children_ok:
+  !cx ann nsid fields.
+    body_expr_ok cx (StructLit ann nsid fields) ==>
+    body_exprs_ok cx (MAP SND fields)
+Proof
+  rpt gen_tac >>
+  disch_then
+    (mp_tac o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o
+      ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+  simp[]
 QED
 
 (* Only a top-level name and a subscript name a mapping. *)
