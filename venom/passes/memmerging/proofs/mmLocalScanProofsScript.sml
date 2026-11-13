@@ -18632,38 +18632,32 @@ Proof
   gvs[mm_flat_map_supply_def, AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem mm_local_zero_forward_layout[local]:
-  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+Theorem mm_local_flat_map_supply_identity[local]:
+  !xs es out es'.
+  (!i es. MEM i xs ==> f es i = ([i],es)) /\
+  mm_flat_map_supply f es xs = (out,es') ==>
+  out = xs /\ es' = es
+Proof
+  Induct_on `xs` >> simp[mm_flat_map_supply_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem mm_local_forward_layout[local]:
   bb.bb_instructions = left ++ a :: gap ++ b :: right /\
-  a.inst_opcode = RETURNDATACOPY /\ b.inst_opcode = REVERT /\
-  EVERY (\i. i.inst_opcode = ASSIGN) gap /\
-  f = apply_memzero_inst_supply
-    (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
-      (scan_block_memzero dfg bb).mz_flushed)
-    (rep_map_of_groups bb.bb_instructions
-      (scan_block_memzero dfg bb).mz_flushed) /\
+  (!i es. MEM i (a :: gap ++ [b]) ==> f es i = ([i],es)) /\
   mm_flat_map_supply f supply left = (pre,sm) /\
-  transform_block_memzero_supply dfg supply bb = (bb',supply') ==>
+  mm_flat_map_supply f supply bb.bb_instructions = (bb'.bb_instructions,supply') ==>
   (?tail. bb'.bb_instructions = pre ++ a :: gap ++ b :: tail /\
     mm_flat_map_supply f sm right = (tail,supply')) /\
   mm_flat_map_supply f supply (left ++ a :: gap) = (pre ++ a :: gap,sm)
 Proof
   strip_tac >>
-  `(!s. f s a = ([a],s)) /\ (!s. f s b = ([b],s))` by
-    (`MEM a bb.bb_instructions /\ MEM b bb.bb_instructions` by simp[] >>
-     `~is_zero_store a /\ ~is_calldatasize_copy dfg a /\
-      ~is_zero_store b /\ ~is_calldatasize_copy dfg b` by
-       gvs[is_zero_store_def, is_calldatasize_copy_def] >>
-     metis_tac[mm_local_memzero_nonselected_unchanged]) >>
+  `(!s. f s a = ([a],s)) /\ (!s. f s b = ([b],s))` by simp[] >>
   Cases_on `mm_flat_map_supply f sm gap` >>
   rename1 `mm_flat_map_supply f sm gap = (gap',sg)` >>
   `gap' = gap /\ sg = sm` by
-    (irule mm_local_zero_assign_interval >>
-     goal_assum (drule_at Any) >> simp[EVERY_MEM] >>
-     gvs[EVERY_MEM] >> qexists `dfg` >>
-     qpat_x_assum `mm_flat_map_supply _ sm gap = _` mp_tac >>
-     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]) >>
-  qpat_x_assum `f = _` (mk_asm "fdef") >>
+    (irule mm_local_flat_map_supply_identity >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   qpat_x_assum `gap' = gap` SUBST_ALL_TAC >>
   qpat_x_assum `sg = sm` SUBST_ALL_TAC >>
   `mm_flat_map_supply f sm (a :: gap) = (a :: gap,sm)` by
@@ -18687,8 +18681,186 @@ Proof
     (qpat_assum `bb.bb_instructions = _` (fn th => pure_once_rewrite_tac[th]) >>
      irule mm_local_flat_map_supply_append >>
      goal_assum (drule_at Any) >> simp[mm_flat_map_supply_def]) >>
-  asm_x "fdef" assume_tac >>
-  gvs[transform_block_memzero_supply_def] >> metis_tac[]
+  metis_tac[pairTheory.PAIR_EQ]
+QED
+
+Theorem mm_local_revert_forward_transport[local]:
+  EVERY (\x. inst_wf x /\
+    !v. MEM (Var v) x.inst_operands ==> v IN P) bb.bb_instructions /\
+  (!x es. MEM x bb.bb_instructions /\
+    x.inst_opcode IN {ASSIGN; RETURNDATACOPY; REVERT} ==>
+    f es x = ([x],es)) /\
+  (!n pre sn p q.
+    (!v. p = Var v ==> v IN P) /\ (!v. q = Var v ==> v IN P) /\
+    mm_flat_map_supply f supply (TAKE n bb.bb_instructions) = (pre,sn) /\
+    same_after_assigns (REVERSE (TAKE n bb.bb_instructions)) p q ==>
+    same_after_assigns (REVERSE pre) p q) /\
+  mm_flat_map_supply f supply (TAKE i bb.bb_instructions) = (pre,si) /\
+  mm_flat_map_supply f supply (TAKE j bb.bb_instructions) = (prej,sj) /\
+  mm_flat_map_supply f supply bb.bb_instructions = (bb'.bb_instructions,supply') /\
+  revert_forward_pair bb i j ==>
+  revert_forward_pair bb' (LENGTH pre) (LENGTH prej)
+
+Proof
+  strip_tac >>
+  qpat_x_assum `revert_forward_pair bb i j`
+    (strip_assume_tac o SIMP_RULE (srw_ss())
+      [contextCodegenRelTheory.revert_forward_pair_def, venomInstTheory.get_instruction_def]) >>
+  qabbrev_tac `inst1 = EL i bb.bb_instructions` >>
+  qabbrev_tac `inst2 = EL j bb.bb_instructions` >>
+  qabbrev_tac `left = TAKE i bb.bb_instructions` >>
+  qabbrev_tac `gap = TAKE (j - SUC i) (DROP (SUC i) bb.bb_instructions)` >>
+  qabbrev_tac `right = DROP (SUC j) bb.bb_instructions` >>
+  `bb.bb_instructions = left ++ inst1 :: gap ++ inst2 :: right /\
+   LENGTH left = i /\ LENGTH gap = j - SUC i /\
+   TAKE j bb.bb_instructions = left ++ inst1 :: gap` by
+    suspend "source_layout" >>
+  `EVERY (\x. x.inst_opcode = ASSIGN) gap` by
+    (simp[Abbr `gap`, EVERY_EL, EL_TAKE, EL_DROP] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `!x es. MEM x (inst1 :: gap ++ [inst2]) ==> f es x = ([x],es)` by
+    (rpt strip_tac >> first_x_assum irule >>
+     gvs[EVERY_MEM, MEM_APPEND] >> metis_tac[]) >>
+  drule_all mm_local_forward_layout >> strip_tac >>
+  `prej = pre ++ inst1 :: gap` by metis_tac[pairTheory.PAIR_EQ] >>
+  `(!v. src = Var v ==> v IN P) /\
+   (!v. p = Var v ==> v IN P) /\
+   (!v. rds = Var v ==> v IN P) /\
+   (!v. p' = Var v ==> v IN P) /\
+   (!v. rds' = Var v ==> v IN P)` by
+    (fs[EVERY_MEM] >> metis_tac[MEM, EL_MEM]) >>
+  `EVERY (\x. !v. MEM (Var v) x.inst_operands ==> v IN P) (REVERSE gap)` by
+    (fs[EVERY_MEM, MEM_REVERSE] >> metis_tac[MEM_APPEND]) >>
+  `(!v. resolve_block_assigns (REVERSE gap) p' = Var v ==> v IN P) /\
+   (!v. resolve_block_assigns (REVERSE gap) rds' = Var v ==> v IN P)` by
+    metis_tac[contextCodegenRelPropsTheory.resolve_block_assigns_preserves_vars] >>
+  `same_after_assigns (REVERSE pre) src (Lit 0w) /\
+   same_after_assigns (REVERSE pre) p (resolve_block_assigns (REVERSE gap) p') /\
+   same_after_assigns (REVERSE pre) rds (resolve_block_assigns (REVERSE gap) rds')` by
+    (qpat_assum `!n pre sn p q. _` (qspecl_then [`i`,`pre`,`si`] mp_tac) >>
+     simp[Abbr `left`] >> metis_tac[]) >>
+  suspend "target_layout"
+QED
+
+Resume mm_local_revert_forward_transport[source_layout]:
+  `SUC i + (j - SUC i) = j /\ SUC (i + j - SUC i) = j` by decide_tac >>
+  `DROP (SUC i) bb.bb_instructions = gap ++ inst2 :: right` by
+    (qspecl_then [`j - SUC i`,`DROP (SUC i) bb.bb_instructions`] mp_tac
+       rich_listTheory.TAKE_DROP_SUC >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+     simp[Abbr `gap`, Abbr `inst2`, Abbr `right`, EL_DROP, DROP_DROP,
+       arithmeticTheory.ADD_CLAUSES]) >>
+  `bb.bb_instructions = left ++ inst1 :: gap ++ inst2 :: right` by
+    (qspecl_then [`i`,`bb.bb_instructions`] mp_tac rich_listTheory.TAKE_DROP_SUC >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+     simp[Abbr `left`, Abbr `inst1`]) >>
+  `LENGTH left = i /\ LENGTH gap = j - SUC i` by
+    simp[Abbr `left`, Abbr `gap`] >>
+  asm_rewrite_tac[] >>
+  `j = LENGTH left + SUC (LENGTH gap)` by decide_tac >>
+  pop_assum SUBST1_TAC >> simp[NoAsms, TAKE_APPEND, TAKE_LENGTH_TOO_LONG, arithmeticTheory.ADD1]
+QED
+
+Resume mm_local_revert_forward_transport[target_layout]:
+  qpat_x_assum `!n pre sn p q. _` kall_tac >>
+  qpat_x_assum `!x es. _` kall_tac >>
+  qpat_x_assum `LENGTH gap = _` kall_tac >>
+  simp[contextCodegenRelTheory.revert_forward_pair_def,
+    venomInstTheory.get_instruction_def, EL_APPEND_EQN,
+    TAKE_APPEND, DROP_APPEND, arithmeticTheory.ADD1] >>
+  `LENGTH pre - (LENGTH gap + (LENGTH pre + 1)) = 0 /\
+   LENGTH pre - (LENGTH pre + 1) = 0 /\
+   LENGTH pre + 1 - (LENGTH gap + (LENGTH pre + 1)) = 0` by decide_tac >>
+  simp[] >> conj_tac >- (
+    rpt strip_tac >>
+    `k - LENGTH pre = SUC (k - LENGTH pre - 1) /\
+     k - LENGTH pre - 1 < LENGTH gap` by decide_tac >>
+    simp[] >> fs[EVERY_EL]) >>
+  `DROP (LENGTH pre + 1) pre = []` by simp[DROP_EQ_NIL] >> simp[]
+QED
+
+Finalise mm_local_revert_forward_transport
+
+Theorem mm_local_in_revert_forward_transport[local]:
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  index < LENGTH fn.fn_blocks /\ bb = EL index fn.fn_blocks /\
+  bb'.bb_label = bb.bb_label /\
+  EVERY (\x. inst_wf x /\
+    !v. MEM (Var v) x.inst_operands ==> v IN P) bb.bb_instructions /\
+  (!x es. MEM x bb.bb_instructions /\
+    x.inst_opcode IN {ASSIGN; RETURNDATACOPY; REVERT} ==>
+    f es x = ([x],es)) /\
+  (!n pre sn p q.
+    (!v. p = Var v ==> v IN P) /\ (!v. q = Var v ==> v IN P) /\
+    mm_flat_map_supply f supply (TAKE n bb.bb_instructions) = (pre,sn) /\
+    same_after_assigns (REVERSE (TAKE n bb.bb_instructions)) p q ==>
+    same_after_assigns (REVERSE pre) p q) /\
+  mm_flat_map_supply f supply bb.bb_instructions = (bb'.bb_instructions,supply') /\
+  mm_flat_map_supply f supply (TAKE n bb.bb_instructions) = (pre,sn) /\
+  s.vs_current_bb = bb.bb_label /\ s.vs_inst_idx = n /\
+  t.vs_current_bb = bb.bb_label /\ t.vs_inst_idx = LENGTH pre /\
+  in_revert_forward fn s ==>
+  in_revert_forward (fn with fn_blocks := LUPDATE bb' index fn.fn_blocks) t
+
+Proof
+  strip_tac >>
+  `MAP (\b. b.bb_label) (LUPDATE bb' index fn.fn_blocks) =
+   MAP (\b. b.bb_label) fn.fn_blocks` by
+    (simp[NoAsms, LUPDATE_MAP] >>
+     `bb'.bb_label = EL index (MAP (\b. b.bb_label) fn.fn_blocks)` by simp[EL_MAP] >>
+     pop_assum SUBST1_TAC >> irule LUPDATE_SAME >> simp[]) >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    (irule venomExecProofsTheory.MEM_lookup_block >> simp[EL_MEM]) >>
+  `lookup_block t.vs_current_bb (LUPDATE bb' index fn.fn_blocks) = SOME bb'` by
+    (irule venomExecProofsTheory.MEM_lookup_block >> simp[MEM_LUPDATE] >>
+     metis_tac[]) >>
+  `revert_forward_at bb n` by
+    gvs[contextCodegenRelTheory.in_revert_forward_def] >>
+  simp[contextCodegenRelTheory.in_revert_forward_def] >>
+  qexists `bb'` >> conj_tac >- metis_tac[] >>
+  qpat_x_assum `revert_forward_at bb n` mp_tac >>
+  pure_rewrite_tac[contextCodegenRelTheory.revert_forward_at_def] >>
+  disch_then (qx_choose_then `j` strip_assume_tac) >>
+  Cases_on `mm_flat_map_supply f supply (TAKE j bb.bb_instructions)` >>
+  rename1 `mm_flat_map_supply f supply (TAKE j bb.bb_instructions) = (prej,sj)` >>
+  qexists `LENGTH prej` >>
+  drule_all mm_local_revert_forward_transport >> simp[]
+QED
+
+Theorem mm_local_zero_forward_layout[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  bb.bb_instructions = left ++ a :: gap ++ b :: right /\
+  a.inst_opcode = RETURNDATACOPY /\ b.inst_opcode = REVERT /\
+  EVERY (\i. i.inst_opcode = ASSIGN) gap /\
+  f = apply_memzero_inst_supply
+    (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed)
+    (rep_map_of_groups bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed) /\
+  mm_flat_map_supply f supply left = (pre,sm) /\
+  transform_block_memzero_supply dfg supply bb = (bb',supply') ==>
+  (?tail. bb'.bb_instructions = pre ++ a :: gap ++ b :: tail /\
+    mm_flat_map_supply f sm right = (tail,supply')) /\
+  mm_flat_map_supply f supply (left ++ a :: gap) = (pre ++ a :: gap,sm)
+Proof
+  strip_tac >>
+  `mm_flat_map_supply f supply bb.bb_instructions = (bb'.bb_instructions,supply')` by
+    (qpat_x_assum `transform_block_memzero_supply _ _ _ = _` mp_tac >>
+     simp[transform_block_memzero_supply_def] >> gvs[] >>
+     simp[AllCaseEqs()] >> strip_tac >> gvs[]) >>
+  `!x es. MEM x bb.bb_instructions /\
+    x.inst_opcode IN {ASSIGN; RETURNDATACOPY; REVERT} ==>
+    f es x = ([x],es)` by
+    (rpt strip_tac >>
+     qpat_assum `f = _` (fn th => pure_once_rewrite_tac[th]) >>
+     irule mm_local_memzero_nonselected_unchanged >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     gvs[is_zero_store_def, is_calldatasize_copy_def,
+       pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
+  `!x es. MEM x (a :: gap ++ [b]) ==> f es x = ([x],es)` by
+    (rpt strip_tac >> first_x_assum irule >>
+     gvs[EVERY_MEM, MEM_APPEND] >> metis_tac[]) >>
+  drule_all mm_local_forward_layout >> simp[]
 QED
 
 Theorem mm_local_zero_revert_forward_transport[local]:
@@ -18708,80 +18880,27 @@ Theorem mm_local_zero_revert_forward_transport[local]:
   revert_forward_pair bb' (LENGTH pre) (LENGTH prej)
 Proof
   strip_tac >>
-  qpat_x_assum `revert_forward_pair bb i j`
-    (strip_assume_tac o SIMP_RULE (srw_ss())
-      [contextCodegenRelTheory.revert_forward_pair_def, venomInstTheory.get_instruction_def]) >>
-  qabbrev_tac `inst1 = EL i bb.bb_instructions` >>
-  qabbrev_tac `inst2 = EL j bb.bb_instructions` >>
-  qabbrev_tac `left = TAKE i bb.bb_instructions` >>
-  qabbrev_tac `gap = TAKE (j - SUC i) (DROP (SUC i) bb.bb_instructions)` >>
-  qabbrev_tac `right = DROP (SUC j) bb.bb_instructions` >>
-  `bb.bb_instructions = left ++ inst1 :: gap ++ inst2 :: right /\
-   LENGTH left = i /\ LENGTH gap = j - SUC i /\
-   TAKE j bb.bb_instructions = left ++ inst1 :: gap` by
-    suspend "source_layout" >>
-  `EVERY (\x. x.inst_opcode = ASSIGN) gap` by
-    (simp[Abbr `gap`, EVERY_EL, EL_TAKE, EL_DROP] >>
-     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
-  drule_all mm_local_zero_forward_layout >> strip_tac >>
-  `prej = pre ++ inst1 :: gap` by metis_tac[pairTheory.PAIR_EQ] >>
-  `(!v. src = Var v ==> v IN P) /\
-   (!v. p = Var v ==> v IN P) /\
-   (!v. rds = Var v ==> v IN P) /\
-   (!v. p' = Var v ==> v IN P) /\
-   (!v. rds' = Var v ==> v IN P)` by
-    (fs[EVERY_MEM] >> metis_tac[MEM, EL_MEM]) >>
-  `EVERY (\x. !v. MEM (Var v) x.inst_operands ==> v IN P) (REVERSE gap)` by
-    (fs[EVERY_MEM, MEM_REVERSE] >> metis_tac[MEM_APPEND]) >>
-  `(!v. resolve_block_assigns (REVERSE gap) p' = Var v ==> v IN P) /\
-   (!v. resolve_block_assigns (REVERSE gap) rds' = Var v ==> v IN P)` by
-    metis_tac[contextCodegenRelPropsTheory.resolve_block_assigns_preserves_vars] >>
-  `same_after_assigns (REVERSE pre) src (Lit 0w) /\
-   same_after_assigns (REVERSE pre) p (resolve_block_assigns (REVERSE gap) p') /\
-   same_after_assigns (REVERSE pre) rds (resolve_block_assigns (REVERSE gap) rds')` by
-    (rpt conj_tac >> irule mm_local_zero_same_after_assigns_list >>
-     qpat_assum `mm_flat_map_supply f supply left = _` (fn th => irule_at Any th) >>
-     qexistsl [`dfg`,`bb`,`P`] >> simp[] >>
-     fs[EVERY_MEM, Abbr `left`] >> metis_tac[rich_listTheory.MEM_TAKE]) >>
-  suspend "target_layout"
+  `mm_flat_map_supply f supply bb.bb_instructions = (bb'.bb_instructions,supply')` by
+    (qpat_x_assum `transform_block_memzero_supply _ _ _ = _` mp_tac >>
+     simp[transform_block_memzero_supply_def] >> gvs[] >>
+     simp[AllCaseEqs()] >> strip_tac >> gvs[]) >>
+  `!x es. MEM x bb.bb_instructions /\
+    x.inst_opcode IN {ASSIGN; RETURNDATACOPY; REVERT} ==>
+    f es x = ([x],es)` by
+    (rpt strip_tac >>
+     qpat_assum `f = _` (fn th => pure_once_rewrite_tac[th]) >>
+     irule mm_local_memzero_nonselected_unchanged >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     gvs[is_zero_store_def, is_calldatasize_copy_def,
+       pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
+  `!n pre sn p q.
+    (!v. p = Var v ==> v IN P) /\ (!v. q = Var v ==> v IN P) /\
+    mm_flat_map_supply f supply (TAKE n bb.bb_instructions) = (pre,sn) /\
+    same_after_assigns (REVERSE (TAKE n bb.bb_instructions)) p q ==>
+    same_after_assigns (REVERSE pre) p q` by
+    (rpt strip_tac >> drule_all mm_local_zero_same_after_assigns_prefix >> simp[]) >>
+  drule_all mm_local_revert_forward_transport >> simp[]
 QED
-
-Resume mm_local_zero_revert_forward_transport[source_layout]:
-  `SUC i + (j - SUC i) = j /\ SUC (i + j - SUC i) = j` by decide_tac >>
-  `DROP (SUC i) bb.bb_instructions = gap ++ inst2 :: right` by
-    (qspecl_then [`j - SUC i`,`DROP (SUC i) bb.bb_instructions`] mp_tac
-       rich_listTheory.TAKE_DROP_SUC >>
-     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
-     simp[Abbr `gap`, Abbr `inst2`, Abbr `right`, EL_DROP, DROP_DROP,
-       arithmeticTheory.ADD_CLAUSES]) >>
-  `bb.bb_instructions = left ++ inst1 :: gap ++ inst2 :: right` by
-    (qspecl_then [`i`,`bb.bb_instructions`] mp_tac rich_listTheory.TAKE_DROP_SUC >>
-     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
-     simp[Abbr `left`, Abbr `inst1`]) >>
-  `LENGTH left = i /\ LENGTH gap = j - SUC i` by
-    simp[Abbr `left`, Abbr `gap`] >>
-  asm_rewrite_tac[] >>
-  `j = LENGTH left + SUC (LENGTH gap)` by decide_tac >>
-  pop_assum SUBST1_TAC >> simp[NoAsms, TAKE_APPEND, TAKE_LENGTH_TOO_LONG, arithmeticTheory.ADD1]
-QED
-
-Resume mm_local_zero_revert_forward_transport[target_layout]:
-  qpat_x_assum `LENGTH gap = _` kall_tac >>
-  simp[contextCodegenRelTheory.revert_forward_pair_def,
-    venomInstTheory.get_instruction_def, EL_APPEND_EQN,
-    TAKE_APPEND, DROP_APPEND, arithmeticTheory.ADD1] >>
-  `LENGTH pre - (LENGTH gap + (LENGTH pre + 1)) = 0 /\
-   LENGTH pre - (LENGTH pre + 1) = 0 /\
-   LENGTH pre + 1 - (LENGTH gap + (LENGTH pre + 1)) = 0` by decide_tac >>
-  simp[] >> conj_tac >- (
-    rpt strip_tac >>
-    `k - LENGTH pre = SUC (k - LENGTH pre - 1) /\
-     k - LENGTH pre - 1 < LENGTH gap` by decide_tac >>
-    simp[] >> fs[EVERY_EL]) >>
-  `DROP (LENGTH pre + 1) pre = []` by simp[DROP_EQ_NIL] >> simp[]
-QED
-
-Finalise mm_local_zero_revert_forward_transport
 
 Theorem mm_local_zero_in_revert_forward_transport[local]:
   ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
@@ -18803,29 +18922,28 @@ Theorem mm_local_zero_in_revert_forward_transport[local]:
   in_revert_forward (fn with fn_blocks := LUPDATE bb' index fn.fn_blocks) t
 Proof
   strip_tac >>
+  `mm_flat_map_supply f supply bb.bb_instructions = (bb'.bb_instructions,supply')` by
+    (qpat_x_assum `transform_block_memzero_supply _ _ _ = _` mp_tac >>
+     simp[transform_block_memzero_supply_def] >> gvs[] >>
+     simp[AllCaseEqs()] >> strip_tac >> gvs[]) >>
+  `!x es. MEM x bb.bb_instructions /\
+    x.inst_opcode IN {ASSIGN; RETURNDATACOPY; REVERT} ==>
+    f es x = ([x],es)` by
+    (rpt strip_tac >>
+     qpat_assum `f = _` (fn th => pure_once_rewrite_tac[th]) >>
+     irule mm_local_memzero_nonselected_unchanged >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     gvs[is_zero_store_def, is_calldatasize_copy_def,
+       pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
+  `!n pre sn p q.
+    (!v. p = Var v ==> v IN P) /\ (!v. q = Var v ==> v IN P) /\
+    mm_flat_map_supply f supply (TAKE n bb.bb_instructions) = (pre,sn) /\
+    same_after_assigns (REVERSE (TAKE n bb.bb_instructions)) p q ==>
+    same_after_assigns (REVERSE pre) p q` by
+    (rpt strip_tac >> drule_all mm_local_zero_same_after_assigns_prefix >> simp[]) >>
   `bb'.bb_label = bb.bb_label` by
     metis_tac[mmSupplyWfProofsTheory.transform_block_memzero_supply_label] >>
-  `MAP (\b. b.bb_label) (LUPDATE bb' index fn.fn_blocks) =
-   MAP (\b. b.bb_label) fn.fn_blocks` by
-    (simp[NoAsms, LUPDATE_MAP] >>
-     `bb'.bb_label = EL index (MAP (\b. b.bb_label) fn.fn_blocks)` by simp[EL_MAP] >>
-     pop_assum SUBST1_TAC >> irule LUPDATE_SAME >> simp[]) >>
-  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
-    (irule venomExecProofsTheory.MEM_lookup_block >> simp[EL_MEM]) >>
-  `lookup_block t.vs_current_bb (LUPDATE bb' index fn.fn_blocks) = SOME bb'` by
-    (irule venomExecProofsTheory.MEM_lookup_block >> simp[MEM_LUPDATE] >>
-     metis_tac[]) >>
-  `revert_forward_at bb n` by
-    gvs[contextCodegenRelTheory.in_revert_forward_def] >>
-  simp[contextCodegenRelTheory.in_revert_forward_def] >>
-  qexists `bb'` >> conj_tac >- metis_tac[] >>
-  qpat_x_assum `revert_forward_at bb n` mp_tac >>
-  pure_rewrite_tac[contextCodegenRelTheory.revert_forward_at_def] >>
-  disch_then (qx_choose_then `j` strip_assume_tac) >>
-  Cases_on `mm_flat_map_supply f supply (TAKE j bb.bb_instructions)` >>
-  rename1 `mm_flat_map_supply f supply (TAKE j bb.bb_instructions) = (prej,sj)` >>
-  qexists `LENGTH prej` >>
-  metis_tac[mm_local_zero_revert_forward_transport]
+  drule_all mm_local_in_revert_forward_transport >> simp[]
 QED
 
 Theorem mm_local_zero_retained_static_if_forward[local]:
