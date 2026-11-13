@@ -20,6 +20,27 @@ Proof
   EVAL_TAC >> simp[dimword_def, wordsTheory.word_0_n2w] >> EVAL_TAC
 QED
 
+Theorem abi_decode_fixed_tuple_source:
+  evaluate_type env ty = SOME tv ==>
+  (abi_decode_source_accepts env (ArrayT ty (Fixed n)) bs v <=>
+    ?vs. abi_decode_source_accepts env (TupleT (REPLICATE n ty)) bs
+      (ArrayV (TupleV vs)) /\
+      v = ArrayV (make_array_value tv (Fixed n) vs))
+Proof
+  strip_tac >>
+  simp_tac std_ss [abi_decode_source_accepts_def, vyper_to_abi_type_def,
+    abiDecoderMembersTheory.vyper_to_abi_types_MAP, map_replicate,
+    Once vyper_decode_valid_enc_def,
+    Once dec_def, LET_THM, abi_decode_array_members, abi_decode_members_value,
+    abi_to_vyper_def, abi_decode_members_length, LENGTH_REPLICATE,
+    REVERSE_DEF, APPEND, compatible_bound_def,
+    GSYM vyper_decode_valid_enc_tuple_REPLICATE] >>
+  simp_tac std_ss [Once vyper_decode_valid_enc_def, Once dec_def,
+    abi_decode_members_value, REVERSE_DEF, APPEND, abi_to_vyper_def] >>
+  asm_simp_tac (srw_ss()) [AllCaseEqs(), Excl "dec_def",
+    Excl "vyper_decode_valid_enc_def"] >> metis_tac[]
+QED
+
 Theorem abi_decode_fixed_array_members_source:
   evaluate_type env ty = SOME tv /\
   n * abi_member_head_size (vyper_to_abi_type env ty) <= LENGTH bs /\
