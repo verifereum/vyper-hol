@@ -20629,6 +20629,277 @@ Proof
   impl_tac >- metis_tac[] >> simp[]
 QED
 
+Theorem mm_local_cds_step_value[local]:
+  fn_inst_wf fn /\ ssa_form fn /\ MEM inst (fn_insts fn) /\
+  dfg_get_def (dfg_build_function fn) v = SOME producer /\
+  producer.inst_opcode = CALLDATASIZE /\
+  (!w. lookup_var v s = SOME w ==>
+       w = n2w (LENGTH s.vs_call_ctx.cc_calldata)) /\
+  step_inst fuel ctx inst s = OK t ==>
+  !w. lookup_var v t = SOME w ==>
+      w = n2w (LENGTH t.vs_call_ctx.cc_calldata)
+Proof
+  strip_tac >>
+  `t.vs_call_ctx = s.vs_call_ctx` by
+    (reverse (Cases_on `is_terminator inst.inst_opcode`)
+     >- metis_tac[venomInstPropsTheory.step_preserves_call_ctx] >>
+     qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+     simp[Once venomExecSemanticsTheory.step_inst_def] >>
+     Cases_on `inst.inst_opcode` >> fs[venomInstTheory.is_terminator_def] >>
+     asm_simp_tac (srw_ss()) [venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
+     simp[AllCaseEqs(), venomStateTheory.jump_to_def] >>
+     rpt strip_tac >> gvs[] >> pairarg_tac >> gvs[]) >>
+  `MEM producer (fn_insts fn) /\ MEM v producer.inst_outputs` by
+    metis_tac[dfgCorrectnessProofTheory.dfg_build_function_correct_proof] >>
+  Cases_on `MEM v inst.inst_outputs`
+  >- (`inst = producer` by
+        metis_tac[allocaRemapSSATheory.ssa_unique_output] >>
+      `inst_wf producer` by
+        (gvs[fn_inst_wf_def, venomInstTheory.fn_insts_def,
+             venomWfPropsTheory.fn_insts_blocks_flat,
+             MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+      gvs[inst_wf_def] >>
+      qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+      simp[venomExecSemanticsTheory.step_inst_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomExecSemanticsTheory.exec_read0_def,
+           AllCaseEqs()] >>
+      rpt strip_tac >> gvs[venomStateTheory.lookup_var_def, venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `lookup_var v t = lookup_var v s` by
+    (Cases_on `is_terminator inst.inst_opcode`
+     >- metis_tac[venomExecProofsTheory.step_terminator_preserves_vars] >>
+     metis_tac[venomInstPropsTheory.step_preserves_non_output_vars]) >>
+  metis_tac[]
+QED
+
+
+
+Theorem mm_local_cds_enter_lookup[local]:
+  ssa_form fn /\
+  dfg_get_def (dfg_build_function fn) v = SOME producer /\
+  producer.inst_opcode = CALLDATASIZE /\ enters_block fn s t ==>
+  lookup_var v t = lookup_var v s
+Proof
+  strip_tac >>
+  `MEM producer (fn_insts fn) /\ MEM v producer.inst_outputs` by
+    metis_tac[dfgCorrectnessProofTheory.dfg_build_function_correct_proof] >>
+  fs[contextCodegenRelTheory.enters_block_def] >>
+  `MEM bb fn.fn_blocks` by
+    metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
+  `!inst. MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI ==>
+          ~MEM v inst.inst_outputs` by
+    (rpt strip_tac >>
+     `MEM inst (fn_insts fn)` by
+       (irule mmWfProofsTheory.fn_insts_mem_block >> metis_tac[]) >>
+     `inst = producer` by
+       metis_tac[allocaRemapSSATheory.ssa_unique_output] >> gvs[]) >>
+  `FLOOKUP s_phi.vs_vars v = FLOOKUP s.vs_vars v` by
+    metis_tac[venomExecProofsTheory.eval_phis_flookup_not_phi_output] >>
+  gvs[venomStateTheory.lookup_var_def]
+QED
+
+Theorem mm_local_cds_entry[local]:
+  s.vs_vars = FEMPTY /\ s.vs_call_ctx.cc_calldata = cd ==>
+  fn_entry_inv
+    (\ctx f i t. t.vs_call_ctx.cc_calldata = cd /\
+      (fn_inst_wf f /\ ssa_form f ==>
+       !v producer w.
+         dfg_get_def (dfg_build_function f) v = SOME producer /\
+         producer.inst_opcode = CALLDATASIZE /\
+         lookup_var v t = SOME w ==> w = n2w (LENGTH cd))) ctx fn s
+Proof
+  rewrite_tac[contextCodegenRelTheory.fn_entry_inv_def] >> BETA_TAC >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `s1.vs_call_ctx = s.vs_call_ctx` by
+    (fs[contextCodegenRelTheory.enters_block_def] >>
+     drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+     disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  simp[] >> rpt strip_tac >>
+  `lookup_var v s1 = lookup_var v s` by
+    metis_tac[mm_local_cds_enter_lookup] >>
+  gvs[venomStateTheory.lookup_var_def]
+QED
+
+Theorem mm_local_cds_closed[local]:
+  reachability_closed
+    (\ctx f i t. t.vs_call_ctx.cc_calldata = cd /\
+      (fn_inst_wf f /\ ssa_form f ==>
+       !v producer w.
+         dfg_get_def (dfg_build_function f) v = SOME producer /\
+         producer.inst_opcode = CALLDATASIZE /\
+         lookup_var v t = SOME w ==> w = n2w (LENGTH cd))) ctx
+Proof
+  rewrite_tac[contextCodegenRelTheory.reachability_closed_def] >> BETA_TAC >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `s'.vs_call_ctx = s.vs_call_ctx` by
+        metis_tac[venomInstPropsTheory.step_preserves_call_ctx] >>
+      simp[] >> rpt strip_tac >>
+      `MEM inst (fn_insts fn)` by
+        (gvs[contextCodegenRelTheory.active_inst_def] >>
+         irule mmWfProofsTheory.fn_insts_mem_block >> metis_tac[EL_MEM]) >>
+      `!w. lookup_var v s = SOME w ==>
+           w = n2w (LENGTH s.vs_call_ctx.cc_calldata)` by metis_tac[] >>
+      `lookup_var v s' = SOME w` by
+        fs[venomStateTheory.lookup_var_def] >>
+      `w = n2w (LENGTH s'.vs_call_ctx.cc_calldata)` by
+        metis_tac[mm_local_cds_step_value] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >>
+      `s'.vs_call_ctx = s.vs_call_ctx` by
+        (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+         simp[Once venomExecSemanticsTheory.step_inst_def] >>
+         Cases_on `inst.inst_opcode` >> fs[venomInstTheory.is_terminator_def] >>
+         asm_simp_tac (srw_ss()) [venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
+         simp[AllCaseEqs(), venomStateTheory.jump_to_def] >>
+         rpt strip_tac >> gvs[] >> pairarg_tac >> gvs[]) >>
+      `s1.vs_call_ctx = s'.vs_call_ctx` by
+        (fs[contextCodegenRelTheory.enters_block_def] >>
+         drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+         disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+      simp[] >> rpt strip_tac >>
+      `lookup_var v s1 = lookup_var v s'` by
+        metis_tac[mm_local_cds_enter_lookup] >>
+      `lookup_var v s' = lookup_var v s` by
+        metis_tac[venomExecProofsTheory.step_terminator_preserves_vars] >>
+      metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> irule mm_local_cds_entry >>
+  gvs[venomExecSemanticsTheory.setup_callee_def, AllCaseEqs()]
+QED
+
+Theorem mm_local_cds_trace[local]:
+  fn_entry_state fn s /\
+  MEM (([],d,id),fn,i,t) (trace_function fuel ctx fn s) ==>
+  t.vs_call_ctx.cc_calldata = s.vs_call_ctx.cc_calldata /\
+  (fn_inst_wf fn /\ ssa_form fn ==>
+   !v producer w.
+     dfg_get_def (dfg_build_function fn) v = SOME producer /\
+     producer.inst_opcode = CALLDATASIZE /\ lookup_var v t = SOME w ==>
+     w = n2w (LENGTH t.vs_call_ctx.cc_calldata))
+Proof
+  strip_tac >>
+  qabbrev_tac `Inv = \(ctx:venom_context) f (i:instruction) t.
+    t.vs_call_ctx.cc_calldata = s.vs_call_ctx.cc_calldata /\
+    (fn_inst_wf f /\ ssa_form f ==>
+     !v producer w.
+       dfg_get_def (dfg_build_function f) v = SOME producer /\
+       producer.inst_opcode = CALLDATASIZE /\
+       lookup_var v t = SOME w ==>
+       w = n2w (LENGTH s.vs_call_ctx.cc_calldata))` >>
+  `reachability_closed Inv ctx` by
+    simp[Abbr `Inv`, mm_local_cds_closed] >>
+  `fn_entry_inv Inv ctx fn s` by
+    (simp[Abbr `Inv`] >> irule mm_local_cds_entry >>
+     fs[fn_entry_state_def]) >>
+  `trace_function fuel ctx fn s = trace_blocks [] 0 fuel ctx fn s` by
+    (gvs[fn_entry_state_def, trace_function_def] >>
+     AP_TERM_TAC >> simp[venomStateTheory.venom_state_component_equality]) >>
+  qspecl_then [`[]`,`0`,`fuel`,`ctx`,`fn`,`s`] mp_tac
+    (cj 3 mmTraceProofsTheory.mm_trace_root_inv) >>
+  simp[] >> simp[EVERY_MEM, pairTheory.FORALL_PROD] >>
+  strip_tac >> `Inv ctx fn i t` by metis_tac[] >>
+  gvs[Abbr `Inv`] >> metis_tac[]
+QED
+
+Theorem mm_local_cds_history_value[local]:
+  fn_inst_wf fn /\ ssa_form fn /\ MEM bb fn.fn_blocks /\
+  is = bb.bb_instructions /\ h <= n /\ n < LENGTH is /\
+  (!q. h <= q /\ q < n ==>
+    ?u. step_inst fuel ctx (EL q is) (H q) = OK u /\
+        H (SUC q) = u with vs_inst_idx := SUC q) /\
+  (!v producer w.
+    dfg_get_def (dfg_build_function fn) v = SOME producer /\
+    producer.inst_opcode = CALLDATASIZE /\ lookup_var v (H h) = SOME w ==>
+    w = n2w (LENGTH (H h).vs_call_ctx.cc_calldata)) ==>
+  !j. h <= j /\ j <= n ==>
+    (H j).vs_call_ctx.cc_calldata = (H h).vs_call_ctx.cc_calldata /\
+    (!v producer w.
+      dfg_get_def (dfg_build_function fn) v = SOME producer /\
+      producer.inst_opcode = CALLDATASIZE /\ lookup_var v (H j) = SOME w ==>
+      w = n2w (LENGTH (H j).vs_call_ctx.cc_calldata))
+Proof
+  strip_tac >> Induct_on `j`
+  >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  strip_tac >> Cases_on `SUC j = h` >- (gvs[] >> metis_tac[]) >>
+  `h <= j /\ j < n /\ j <= n` by decide_tac >>
+  `(H j).vs_call_ctx.cc_calldata = (H h).vs_call_ctx.cc_calldata /\
+   (!v producer w.
+     dfg_get_def (dfg_build_function fn) v = SOME producer /\
+     producer.inst_opcode = CALLDATASIZE /\ lookup_var v (H j) = SOME w ==>
+     w = n2w (LENGTH (H j).vs_call_ctx.cc_calldata))` by metis_tac[] >>
+  `?u. step_inst fuel ctx (EL j is) (H j) = OK u /\
+       H (SUC j) = u with vs_inst_idx := SUC j` by metis_tac[] >>
+  `u.vs_call_ctx = (H j).vs_call_ctx` by
+    (reverse (Cases_on `is_terminator (EL j is).inst_opcode`)
+     >- metis_tac[venomInstPropsTheory.step_preserves_call_ctx] >>
+     qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+     qpat_x_assum `is_terminator _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `(EL j is).inst_opcode` >>
+     simp[venomInstTheory.is_terminator_def,
+          Once venomExecSemanticsTheory.step_inst_def] >>
+     asm_simp_tac (srw_ss()) [venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
+     simp[AllCaseEqs(), venomStateTheory.jump_to_def] >>
+     rpt strip_tac >> gvs[] >> pairarg_tac >> gvs[]) >>
+  `j < LENGTH is` by decide_tac >>
+  `MEM (EL j is) (fn_insts fn)` by
+    (irule mmWfProofsTheory.fn_insts_mem_block >>
+     qexists_tac `bb` >> metis_tac[EL_MEM]) >>
+  simp[] >> rpt strip_tac >>
+  `!w. lookup_var v (H j) = SOME w ==>
+       w = n2w (LENGTH (H j).vs_call_ctx.cc_calldata)` by metis_tac[] >>
+  `lookup_var v u = SOME w` by
+    fs[venomStateTheory.lookup_var_def] >>
+  `w = n2w (LENGTH u.vs_call_ctx.cc_calldata)` by
+    metis_tac[mm_local_cds_step_value] >> metis_tac[]
+QED
+
+Theorem mm_local_memzero_history_producer[local]:
+  fn_inst_wf fn /\ ssa_form fn /\ MEM bb fn.fn_blocks /\
+  is = bb.bb_instructions /\ dfg = dfg_build_function fn /\
+  h <= n /\ n < LENGTH is /\
+  LENGTH (H h).vs_call_ctx.cc_calldata < dimword (:256) /\
+  (!q. h <= q /\ q < n ==>
+    ?u. step_inst fuel ctx (EL q is) (H q) = OK u /\
+        H (SUC q) = u with vs_inst_idx := SUC q) /\
+  (!v producer w.
+    dfg_get_def dfg v = SOME producer /\
+    producer.inst_opcode = CALLDATASIZE /\ lookup_var v (H h) = SOME w ==>
+    w = n2w (LENGTH (H h).vs_call_ctx.cc_calldata)) ==>
+  (!j. h <= j /\ j <= n ==>
+    LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256)) /\
+  (!j dst v len. h <= j /\ j < n /\
+    is_calldatasize_copy dfg (EL j is) /\
+    (EL j is).inst_operands = [Lit dst; Var v; Lit len] ==>
+    lookup_var v (H j) = SOME (n2w (LENGTH (H j).vs_call_ctx.cc_calldata)) /\
+    LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256))
+Proof
+  strip_tac >>
+  `!j. h <= j /\ j <= n ==>
+    (H j).vs_call_ctx.cc_calldata = (H h).vs_call_ctx.cc_calldata /\
+    (!v producer w.
+      dfg_get_def (dfg_build_function fn) v = SOME producer /\
+      producer.inst_opcode = CALLDATASIZE /\ lookup_var v (H j) = SOME w ==>
+      w = n2w (LENGTH (H j).vs_call_ctx.cc_calldata))` by
+    (rpt gen_tac >> strip_tac >>
+     irule mm_local_cds_history_value >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >> rpt gen_tac >> strip_tac >>
+  `j <= n` by decide_tac >>
+  `LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256)` by metis_tac[] >>
+  simp[] >>
+  `?u. step_inst fuel ctx (EL j is) (H j) = OK u` by metis_tac[] >>
+  `(EL j is).inst_opcode = CALLDATACOPY /\
+   ?producer. dfg_get_def dfg v = SOME producer /\
+              producer.inst_opcode = CALLDATASIZE` by
+    (gvs[is_calldatasize_copy_def, operand_var_name_def,
+         operand_lit_val_def, AllCaseEqs()] >>
+     Cases_on `dfg_get_def (dfg_build_function fn) v` >> gvs[]) >>
+  `?w. lookup_var v (H j) = SOME w` by
+    (Cases_on `lookup_var v (H j)` >> simp[] >>
+     qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+     asm_simp_tac (srw_ss())
+       [venomExecSemanticsTheory.step_inst_def,
+        venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+        venomStateTheory.eval_operand_def, AllCaseEqs()]) >>
+  metis_tac[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
