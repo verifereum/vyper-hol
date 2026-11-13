@@ -44,7 +44,7 @@ Ancestors
      with cx_tops_module.
    - CapMcopy: bodySimStmtCases' [local] body_inv_mcopy's proof;
      acyclic_struct_metadata: body_inv_def. *)
-Theorem assign_place_typing[local]:
+Theorem assign_place_typing:
   type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' ==>
   well_typed_expr env e /\
   ?dty. type_place_target env t = SOME (Type dty) /\
@@ -56,7 +56,7 @@ Proof
   rename1 `SOME pt` >> Cases_on `pt` >> gvs[]
 QED
 
-Theorem body_inv_mcopy[local]:
+Theorem body_inv_mcopy:
   !tops ctx cenv cx. body_inv tops ctx cenv cx ==> cenv.ce_target CapMcopy
 Proof
   rw[body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[]
@@ -99,7 +99,7 @@ Proof
   metis_tac[body_target_idx_case, target_case_all]
 QED
 
-Theorem body_assign_place_rhs_pre[local]:
+Theorem body_assign_place_rhs_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -202,7 +202,7 @@ Proof
   metis_tac[call_evaluation_safe_append_left, target_indices_pre_def]
 QED
 
-Theorem body_assign_place_indices_pre[local]:
+Theorem body_assign_place_indices_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (BaseTarget t) e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
