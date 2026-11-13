@@ -272,7 +272,7 @@ Proof
   rpt conj_tac >> metis_tac[stmtSimAssignStorageFactsTheory.encode_value_word_typed]
 QED
 
-Theorem assign_attr_storage_source_counted[local]:
+Theorem assign_attr_storage_source_counted:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr (StructT sid), id_str) /\
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\

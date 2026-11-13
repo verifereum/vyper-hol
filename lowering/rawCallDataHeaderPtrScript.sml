@@ -1,6 +1,6 @@
 (* Standalone readonly data header; no operand-evaluation history. *)
 Theory rawCallDataHeaderPtr
-Ancestors wordLoadStorePtr rawCallHeaderFramePtr rawCallShapePtr typedOperandsPtr rawCallBufferPtr
+Ancestors exprLoweringProps logInstSeqPtr wordLoadStorePtr rawCallHeaderFramePtr typedOperandsPtr rawCallBufferPtr
   gasContext exprSimWordArgs exprSimDefs gasSummaryComposePtr vyperState
   vyperInterpreter exprSimHash exprSimHashBoundary wordOperandsPtr
 
@@ -189,7 +189,7 @@ Proof
   simp[finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem raw_call_mload_header_stage:
+Theorem raw_call_mload_header_stage_run:
   emit_op MLOAD [Var x] sa = (Var lx,sl) /\ fn_has_code sa sl func /\
   stmt_state_rel H ctx func cenv cx es s /\
   ghost_inv H dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
@@ -201,7 +201,11 @@ Theorem raw_call_mload_header_stage:
   ptr_covers G tn x s 32 /\ lookup_var x s = SOME w /\
   op_taint tn (Var x) = {} /\
   (!i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem) ==>
-  ?HG un u. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
+  ?HG un u. inst_seq_ptr (cx_dead H cx) 0 ctx func PG G tn
+      (emitted_insts sa sl) s HG un /\
+    (?t. run_inst_seq (emitted_insts sa sl) s = OK t /\
+      u = t with vs_inst_idx := LENGTH sl.cs_current_insts) /\
+    gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
     ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un /\
     stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sl.cs_current_bb /\
@@ -215,6 +219,18 @@ Proof
   drule_all raw_call_emit_mload_path_ptr >>
   disch_then (qspecl_then [`PG`, `cx_dead H cx`] assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ HG un (OK u)` >>
+  `emitted_insts sa sl = [mk_inst sa.cs_next_id MLOAD [Var x] [lx]]` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >> gvs[]) >>
+  `step_inst_base (mk_inst sa.cs_next_id MLOAD [Var x] [lx]) s = OK (update_var lx (mload (w2n w) s) s)` by
+    (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read1_def, venomStateTheory.eval_operand_def]) >>
+  `ptr_inst_ok (cx_dead H cx) 0 0 ctx func G tn (mk_inst sa.cs_next_id MLOAD [Var x] [lx]) s` by
+    (irule wordLoadStorePtrTheory.ptr_inst_ok_mload >> simp[]) >>
+  `inst_seq_ptr (cx_dead H cx) 0 ctx func PG G tn
+      (emitted_insts sa sl) s HG un /\
+    run_inst_seq (emitted_insts sa sl) s =
+      OK (update_var lx (mload (w2n w) s) s)` by
+    simp[fragGasSeqPtrTheory.inst_seq_ptr_def, run_inst_seq_def,
+      Abbr`HG`, Abbr`un`, Abbr`u`] >>
   `ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un` by
     (qunabbrev_tac `u` >> irule raw_call_emit_mload_ghost_frame >>
      goal_assum (drule_at Any) >> simp[Abbr `HG`, Abbr `un`] >>
@@ -244,7 +260,32 @@ Proof
     venomStateTheory.update_var_def]
 QED
 
-Theorem raw_call_add_header_stage:
+Theorem raw_call_mload_header_stage:
+  emit_op MLOAD [Var x] sa = (Var lx,sl) /\ fn_has_code sa sl func /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv H dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
+  (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ not_fresh_at sa x /\
+  ptr_covers G tn x s 32 /\ lookup_var x s = SOME w /\
+  op_taint tn (Var x) = {} /\
+  (!i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem) ==>
+  ?HG un u. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
+    ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
+    u.vs_current_bb = sl.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sl.cs_current_insts /\ ~u.vs_halted /\
+    eval_operand (Var x) u = SOME w /\ op_taint un (Var x) = {} /\
+    eval_operand (Var lx) u = SOME (mload (w2n w) s) /\
+    op_taint un (Var lx) = {} /\
+    u.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem
+Proof
+  strip_tac >> drule_all raw_call_mload_header_stage_run >> metis_tac[]
+QED
+
+Theorem raw_call_add_header_stage_run:
   emit_op ADD [Var x; Lit 32w] sl = (Var dx,sm) /\ fn_has_code sl sm func /\
   stmt_state_rel H ctx func cenv cx es s /\
   ghost_inv H dep cenv cx es G tn s /\ local_ptrs_reserved cenv sl /\
@@ -256,7 +297,11 @@ Theorem raw_call_add_header_stage:
   not_fresh_at sl x /\ not_fresh_at sl lx /\
   eval_operand (Var x) s = SOME w /\ op_taint tn (Var x) = {} /\
   eval_operand (Var lx) s = SOME len /\ op_taint tn (Var lx) = {} ==>
-  ?HG un u. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
+  ?HG un u. inst_seq_ptr (cx_dead H cx) 0 ctx func PG G tn
+      (emitted_insts sl sm) s HG un /\
+    (?t. run_inst_seq (emitted_insts sl sm) s = OK t /\
+      u = t with vs_inst_idx := LENGTH sm.cs_current_insts) /\
+    gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
     ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sl G tn s HG un /\
     stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sl s u /\
     u.vs_current_bb = sm.cs_current_bb /\
@@ -273,6 +318,18 @@ Proof
   drule_all raw_call_emit_add_path_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `cx_dead H cx`] assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ HG un (OK u)` >>
+  `emitted_insts sl sm = [mk_inst sl.cs_next_id ADD [Var x; Lit 32w] [dx]]` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >> gvs[]) >>
+  `step_inst_base (mk_inst sl.cs_next_id ADD [Var x; Lit 32w] [dx]) s = OK (update_var dx (w+32w) s)` by
+    (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_pure2_def]) >>
+  `ptr_inst_ok (cx_dead H cx) 0 0 ctx func G tn (mk_inst sl.cs_next_id ADD [Var x; Lit 32w] [dx]) s` by
+    (irule typedCopyPtrTheory.ptr_inst_ok_copy_len_binop >> simp[]) >>
+  `inst_seq_ptr (cx_dead H cx) 0 ctx func PG G tn
+      (emitted_insts sl sm) s HG un /\
+    run_inst_seq (emitted_insts sl sm) s =
+      OK (update_var dx (w+32w) s)` by
+    simp[fragGasSeqPtrTheory.inst_seq_ptr_def, run_inst_seq_def,
+      Abbr`HG`, Abbr`un`, Abbr`u`] >>
   `ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sl G tn s HG un` by
     (qunabbrev_tac `u` >> irule raw_call_emit_add_ghost_frame >>
      goal_assum (drule_at Any) >> simp[Abbr `HG`, Abbr `un`] >>
@@ -305,7 +362,33 @@ Proof
   fs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]
 QED
 
-Theorem raw_call_header_two_steps:
+Theorem raw_call_add_header_stage:
+  emit_op ADD [Var x; Lit 32w] sl = (Var dx,sm) /\ fn_has_code sl sm func /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv H dep cenv cx es G tn s /\ local_ptrs_reserved cenv sl /\
+  (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sl z) /\
+  (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sl z) /\
+  s.vs_current_bb = sl.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sl.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  not_fresh_at sl x /\ not_fresh_at sl lx /\
+  eval_operand (Var x) s = SOME w /\ op_taint tn (Var x) = {} /\
+  eval_operand (Var lx) s = SOME len /\ op_taint tn (Var lx) = {} ==>
+  ?HG un u. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
+    ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sl G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sl s u /\
+    u.vs_current_bb = sm.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~u.vs_halted /\
+    eval_operand (Var x) u = SOME w /\ op_taint un (Var x) = {} /\
+    eval_operand (Var lx) u = SOME len /\ op_taint un (Var lx) = {} /\
+    eval_operand (Var dx) u = SOME (w+32w) /\ op_taint un (Var dx) = {} /\
+    op_prov HG (Var dx) = op_prov G (Var x) /\
+    u.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem
+Proof
+  strip_tac >> drule_all raw_call_add_header_stage_run >> metis_tac[]
+QED
+
+Theorem raw_call_header_two_steps_run:
   emit_op MLOAD [Var x] sa = (Var lx,sl) /\
   emit_op ADD [Var x; Lit 32w] sl = (Var dx,sm) /\ fn_has_code sa sm func /\
   stmt_state_rel H ctx func cenv cx es s /\
@@ -318,7 +401,11 @@ Theorem raw_call_header_two_steps:
   ptr_covers G tn x s 32 /\ lookup_var x s = SOME w /\
   op_taint tn (Var x) = {} /\
   (!i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem) ==>
-  ?HG un u. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
+  ?HG un u. inst_seq_ptr (cx_dead H cx) 0 ctx func PG G tn
+      (emitted_insts sa sm) s HG un /\
+    (?t. run_inst_seq (emitted_insts sa sm) s = OK t /\
+      u = t with vs_inst_idx := LENGTH sm.cs_current_insts) /\
+    gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
     ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un /\
     stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sm.cs_current_bb /\
@@ -350,20 +437,47 @@ Proof
     (fs[exprLoweringPropsTheory.ci_mono_def] >>
      metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
        stmtFragPtrTheory.not_fresh_at_mono]) >>
-  drule_all raw_call_mload_header_stage >>
+  drule_all raw_call_mload_header_stage_run >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
-  drule_all raw_call_add_header_stage >>
+  drule_all raw_call_add_header_stage_run >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   suspend "compose"
 QED
 
-Resume raw_call_header_two_steps[compose]:
+Resume raw_call_header_two_steps_run[compose]:
+  `inst_seq_ptr (cx_dead H cx) 0 ctx func PG G tn
+      (emitted_insts sa sm) s HG' un' /\
+    run_inst_seq (emitted_insts sa sm) s =
+      OK (t' with vs_inst_idx := t.vs_inst_idx)` by
+    (qpat_assum `emit_op MLOAD _ _ = _`
+       (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+     qpat_assum `emit_op ADD _ _ = _`
+       (mp_then Any strip_assume_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+     `emitted_insts sa sm = emitted_insts sa sl ++ emitted_insts sl sm` by
+       (irule exprLoweringPropsTheory.emitted_insts_append >> simp[]) >>
+     `s.vs_inst_idx + LENGTH (emitted_insts sa sl) = LENGTH sl.cs_current_insts` by
+       simp[] >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+        (emitted_insts sa sl) /\
+      EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sl sm)` by
+       simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+     mp_tac (logInstSeqPtrTheory.successful_seq_ptr_append |>
+       Q.INST [`H` |-> `HG`] |>
+       Q.INST [`xs` |-> `emitted_insts sa sl`, `ys` |-> `emitted_insts sl sm`,
+         `s` |-> `s`, `t` |-> `t`, `u` |-> `t'`,
+         `D` |-> `cx_dead H cx`, `lo` |-> `0`, `ctx` |-> `ctx`,
+         `fn` |-> `func`, `PG` |-> `PG`, `G` |-> `G`, `tn` |-> `tn`,
+         `tm` |-> `un`, `Gf` |-> `HG'`, `tk` |-> `un'`]) >>
+     (impl_tac >- gvs[]) >> strip_tac >>
+     conj_tac
+     >- (qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ (_ ++ _) _ _ _` mp_tac >> simp[]) >>
+     qpat_x_assum `run_inst_seq (_ ++ _) _ = _` mp_tac >> simp[]) >>
   `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG' un' (OK u')` by
     (drule_all fragGasPathPtrTheory.gas_path_ptr_then >> simp[]) >>
   `wb_frame cenv es es sa s u'` by
     (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s`, `sa`, `es`, `es`, `sl`, `u`, `u'`,
        `ctx`] exprSimWordArgsTheory.wb_frame_trans) >> impl_tac >>
-     fs[exprLoweringPropsTheory.ci_mono_def]) >>
+     gvs[exprLoweringPropsTheory.ci_mono_def]) >>
   `ghost_kept cenv es sa G tn s HG' un'` by
     (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
      >- (qexists_tac `func` >>
@@ -375,9 +489,10 @@ Resume raw_call_header_two_steps[compose]:
      metis_tac[]) >>
   qexistsl_tac [`HG'`, `un'`, `u'`] >> simp[] >>
   conj_tac
-  >- (fs[venomStateTheory.eval_operand_def] >>
-      irule exprSimWordArgsTheory.wb_frame_vars >>
-      qexistsl_tac [`cenv`, `es`, `es`, `u`, `sl`] >> simp[]) >>
+  >- (gvs[venomStateTheory.eval_operand_def, loweringPostsTheory.wb_frame_def,
+        venomStateTheory.lookup_var_def] >>
+      qpat_x_assum `!z v. not_fresh_at sl z /\ _ ==> _`
+        (qspecl_then [`lx`, `mload (w2n w) s`] mp_tac) >> simp[]) >>
   conj_tac
   >- (qpat_x_assum `ghost_kept _ _ sl _ _ _ _ _` mp_tac >>
       simp[bodyPtrDefsTheory.ghost_kept_def] >> metis_tac[]) >>
@@ -395,4 +510,33 @@ Resume raw_call_header_two_steps[compose]:
   qexists_tac `sl.cs_next_var` >> simp[]
 QED
 
-Finalise raw_call_header_two_steps
+Finalise raw_call_header_two_steps_run
+
+Theorem raw_call_header_two_steps:
+  emit_op MLOAD [Var x] sa = (Var lx,sl) /\
+  emit_op ADD [Var x; Lit 32w] sl = (Var dx,sm) /\ fn_has_code sa sm func /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv H dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
+  (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ not_fresh_at sa x /\
+  ptr_covers G tn x s 32 /\ lookup_var x s = SOME w /\
+  op_taint tn (Var x) = {} /\
+  (!i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem) ==>
+  ?HG un u. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK u) /\
+    ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
+    u.vs_current_bb = sm.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~u.vs_halted /\
+    eval_operand (Var x) u = SOME w /\ op_taint un (Var x) = {} /\
+    eval_operand (Var lx) u = SOME (mload (w2n w) s) /\ op_taint un (Var lx) = {} /\
+    eval_operand (Var dx) u = SOME (w+32w) /\ op_taint un (Var dx) = {} /\
+    u.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem /\
+    FLOOKUP HG x = FLOOKUP G x /\
+    op_prov HG (Var dx) = op_prov G (Var x) /\
+    not_fresh_at sm x /\ not_fresh_at sm lx /\ not_fresh_at sm dx
+Proof
+  strip_tac >> drule_all raw_call_header_two_steps_run >> metis_tac[]
+QED

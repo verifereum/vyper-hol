@@ -162,7 +162,10 @@ Proof
           qexistsl_tac [`INR exc`, `fin`, `rr`] >> conj_tac
           >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
               first_assum ACCEPT_TAC) >>
-          disj2_tac >> metis_tac[]) >>
+          disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+          qpat_x_assum `expr_exit _ _` mp_tac >>
+          simp[oneline expr_exit_def] >>
+          BasicProvers.every_case_tac >> simp[]) >>
       qpat_assum `!H. valid_horizon _ _ H _ ==> ?pv. _`
         (drule_then strip_assume_tac) >>
       gvs[] >>
@@ -183,7 +186,7 @@ Proof
          simp[get_place_def, raise_def, target_place_res_ok_def]) >>
       gvs[] >>
       simp[gas_summary_at_def] >>
-      qexistsl_tac [`INL p`, `fin`, `rr`] >> conj_tac
+      qexistsl_tac [`INL p`, `fin`, `OK t`] >> conj_tac
       >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
           simp[gas_marked_exec_def, bind_def, get_place_def, return_def]) >>
       disj1_tac >> simp[] >> metis_tac[]) >>
