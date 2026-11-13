@@ -150,7 +150,6 @@ Theorem ptr_paired_current_range_classification:
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
-  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   ~in_revert_forward a.po_fn a.po_state /\
   ((mem_read_ops a.po_inst = SOME ops /\
     MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state)) \/
@@ -233,7 +232,6 @@ Theorem ptr_paired_read_range_classification:
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
-  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   ~in_revert_forward a.po_fn a.po_state /\
   mem_read_ops a.po_inst = SOME ops /\
   eval_operand ops.iao_ofst a.po_state = SOME x /\
@@ -268,7 +266,7 @@ Theorem ptr_paired_mload_address_classification:
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  max_live_eom C' = SOME eom /\
   a.po_inst.inst_opcode = MLOAD /\ ptr_chrono_step C' at zt /\
   a.po_inst.inst_operands = [op] /\
   eval_operand op a.po_state = SOME x /\ eval_operand op at.po_state = SOME y ==>

@@ -183,7 +183,6 @@ Theorem ptr_paired_current_range_static_bound:
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
-  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   ~in_revert_forward a.po_fn a.po_state /\
   ((mem_read_ops a.po_inst = SOME ops /\
     MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state)) \/
@@ -218,7 +217,6 @@ Theorem ptr_paired_read_range_static_bound:
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
-  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   ~in_revert_forward a.po_fn a.po_state /\
   mem_read_ops a.po_inst = SOME ops /\
   eval_operand ops.iao_ofst a.po_state = SOME x /\
@@ -318,7 +316,6 @@ Resume ptr_paired_terminal_static_bound[terminal_operands]:
   `mem_read_ops a.po_inst = SOME
     <|iao_ofst := addr; iao_size := SOME lenop; iao_max_size := SOME lenop|>` by
     simp[mem_read_ops_def] >>
-  `ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp` by fs[] >>
   `!w:word256. ~(dyn_floor C vs <= w2n w)` by
     fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
   drule_at (Pat `mem_read_ops _ = _`) ptr_paired_read_range_static_bound >>

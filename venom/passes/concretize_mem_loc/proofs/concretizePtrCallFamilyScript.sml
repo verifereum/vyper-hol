@@ -515,7 +515,8 @@ Proof
      >- (simp[concretizePtrPairedFieldsTheory.ptr_paired_write_owner_def] >>
          rpt strip_tac >> disj1_tac >>
          Cases_on `w2n n < LENGTH post.vs_returndata` >>
-         gns[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+         gns[arithmeticTheory.MIN_DEF] >> decide_tac)
+     >- fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
      `MEM token tokens` by (drule_all ptr_source_ownership_live_prov >> simp[]) >>
      simp[concretizePtrPairedFieldsTheory.ptr_paired_write_owner_def] >>
      rpt strip_tac >> disj2_tac >> disj1_tac >>
