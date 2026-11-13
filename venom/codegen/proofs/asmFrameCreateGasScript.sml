@@ -122,7 +122,7 @@ Resume asm_frame_create_gas[handled]:
   >- gvs[frame_gas_left_def] >>
   gvs[frame_gas_left_def] >>
   `wf_state mid` by
-    (drule_all vfmRunCallTheory.step_preserves_wf_state >> simp[]) >>
+    (drule_all vfmWfStateTheory.step_preserves_wf_state >> simp[]) >>
   `?dm. mid.msdomain = Collect dm` by
     (drule_at (Pat `step _ = _`) vfmDomainCollectionTheory.step_preserves_collect >> simp[]) >>
   `LENGTH mid.contexts = SUC (LENGTH es.contexts)` by simp[] >>
