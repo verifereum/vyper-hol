@@ -1,7 +1,8 @@
 (* Compiler and execution composition for retained widened local assignments. *)
 Theory widenedAssignPtrContinuation
 Ancestors widenedAssignPtrTypedLocal widenedAssignPtrRhsInput
-  assignBasePtrAllocSeparate valueEncodingProps
+  assignBasePtrAllocSeparate valueEncodingProps bodyDeclMemoryCore
+  tupleLocalStoreRun localPtrsProps venomInst fragGasPathPtr stmtFragPtr exprSimAlloc
   assignBasePtrLocalAssign externalEntryShape stmtLowering context
   abiBuiltinAllocation abiBuiltinEncodeAllocate emitHelper emitHelperProps
   compileEnv exprLoweringProps valueCopyBytes fragExec exprSimBufferStore
@@ -163,3 +164,149 @@ Proof
      simp[mem_bytes_at_def]) >>
   qexistsl_tac [`u`,`a`,`G'`,`tn'`,`p`] >> simp[] >> metis_tac[]
 QED
+
+Theorem widened_assign_staged_local_ptr:
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  type_widens_to (get_tenv cx) sty dty /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  evaluate_type (get_tenv cx) dty = SOME entry.type /\
+  value_has_type stv v /\ value_has_type entry.type v /\
+  val_wf stv v /\ val_wf entry.type v /\ ~is_word_type dty /\ ~is_word_type sty /\
+  type_memory_bytes cenv dty = type_memory_size entry.type /\
+  type_memory_bytes cenv sty = type_memory_size stv /\
+  type_memory_size entry.type + 64 < dimword (:256) /\
+  type_memory_size stv < dimword (:256) /\
+  compile_assign_value cenv (Var p) LocMemory op F (SOME LocMemory)
+    dty sty info bytes sa = ((),sb) /\
+  (!src. op = Var src ==> not_fresh_at sa src) /\
+  expr_val_at cenv cx sty va vb es v op s /\ eval_operand op s = SOME sw /\
+  (0 < type_memory_size stv ==> ?src. op = Var src /\
+    ptr_covers G tn src s (type_memory_size stv)) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory stv v (w2n sw) m) /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\
+  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
+  write_place cx (MemoryPlace id []) v es = (INL (),es') /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  lookup_var p s = SOME dw /\ local_ptrs_reserved cenv sa /\
+  (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
+  (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) ==>
+  ?G' tn' t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+    stmt_state_rel ctx fn cenv cx es' t /\ ghost_inv d cenv cx es' G' tn' t /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all widened_assign_local_staged_code >> strip_tac >>
+  drule bodyDeclMemoryCoreTheory.body_scratch_alloc_operand >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `buf.buf_operand = Var fresh` >>
+  `not_local_ptr cenv es.scopes fresh` by
+    (simp[Abbr `fresh`] >> irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
+  `!x. not_fresh_at sa x ==> x <> fresh` by
+    (simp[Abbr `fresh`, not_fresh_at_def] >> metis_tac[]) >>
+  `(!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> x <> fresh) /\
+   (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> x <> fresh)` by metis_tac[] >>
+  `op <> buf.buf_operand` by (Cases_on `op` >> gvs[] >> metis_tac[]) >>
+  `val_footprint stv v <= type_memory_bytes cenv sty` by
+    metis_tac[exprSimPropsTheory.val_footprint_le] >>
+  `?t a Gf tf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK t) /\
+    stmt_state_rel ctx fn cenv cx es t /\
+    t.vs_current_bb = sn.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sn.cs_current_insts /\ ~t.vs_halted /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n a,type_memory_size stv) /\
+    w2n a + type_memory_size stv < dimword (:256) /\
+    lookup_var fresh t = SOME a /\ ptr_covers Gf tf fresh t (type_memory_size stv) /\
+    (!m. mem_agree_outside tf.t_mem t.vs_memory m ==>
+      val_in_memory stv v (w2n a) m) /\
+    ghost_inv d cenv cx es Gf tf t /\ ghost_kept cenv es sa G tn s Gf tf /\
+    (!q. q <> Var fresh ==> eval_operand q t = eval_operand q s)` by
+    suspend "stage" >>
+  suspend "store"
+QED
+
+Resume widened_assign_staged_local_ptr[stage]:
+  Cases_on `type_memory_size stv = 0`
+  >- suspend "zero" >>
+  `0 < type_memory_size stv` by decide_tac >>
+  `?src. op = Var src /\ ptr_covers G tn src s (type_memory_size stv)` by metis_tac[] >>
+  pop_assum strip_assume_tac >>
+  `src <> fresh` by metis_tac[operand_11] >>
+  `expr_val_at cenv cx sty va vb es v (Var src) s /\
+   eval_operand (Var src) s = SOME sw` by metis_tac[] >>
+  `compile_copy_memory (Var fresh) (Var src) (type_memory_bytes cenv sty) sm = ((),sn)` by metis_tac[] >>
+  `ptr_covers G tn src s (type_memory_bytes cenv sty) /\
+   type_memory_bytes cenv sty < dimword (:256) /\ sa.cs_next_id <= sa.cs_next_id` by simp[] >>
+  unabbrev_all_tac >>
+  drule_all (Q.INST [`frame_sa` |-> `sa`] (SPEC_ALL assignBasePtrStagingTheory.assign_base_alloc_scratch_staging_ptr)) >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`a`,`Gf`,`tf`] >> simp[] >> metis_tac[eval_operand_def]
+QED
+
+Resume widened_assign_staged_local_ptr[zero]:
+  `compile_alloc_buffer 0 sa = (buf,sm) /\
+   compile_copy_memory buf.buf_operand op 0 sm = ((),sn) /\ sa.cs_next_id <= sa.cs_next_id` by (simp[] >> metis_tac[]) >>
+  unabbrev_all_tac >>
+  drule_all (Q.INST [`frame_sa` |-> `sa`] (SPEC_ALL widened_assign_zero_scratch_staging_ptr)) >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`u`,`a`,`Gf`,`tf`] >> simp[] >> metis_tac[operand_11]
+QED
+
+Resume widened_assign_staged_local_ptr[store]:
+  drule_all body_scratch_prefix_shape >> strip_tac >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sn x` by
+    metis_tac[not_fresh_at_mono] >>
+  `local_ptrs_reserved cenv sn` by metis_tac[local_ptrs_reserved_next_var] >>
+  `(!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sn x) /\
+   (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sn x)` by metis_tac[] >>
+  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+  `p <> fresh` by metis_tac[] >>
+  `lookup_var p t = SOME dw` by metis_tac[eval_operand_def, operand_11] >>
+  `lookup_scopes id es.scopes = SOME entry` by metis_tac[find_containing_scope_lookup] >>
+  `local_region cenv es.scopes t id (w2n dw) sz /\ type_memory_size entry.type <= sz` by
+    metis_tac[tuple_store_destination_region] >>
+  `alloca_inv t /\ local_ptrs_rel fn cenv es.scopes t` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv sty))]
+    [fresh]) (fn_insts fn)` by
+    (simp[Abbr `fresh`] >> drule_all buffer_alloc_code >> simp[]) >>
+  Q.SUBGOAL_THEN `regions_disjoint (w2n a) (type_memory_size stv) (w2n dw) sz` assume_tac
+  >- (irule local_ptrs_rel_alloca_disjoint >>
+      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
+      simp[mk_inst_def]) >>
+  Q.SUBGOAL_THEN `w2n dw + type_memory_size entry.type <= w2n a \/
+    w2n a + type_memory_size stv <= w2n dw` assume_tac
+  >- fs[regions_disjoint_def] >>
+  `op_taint tf (Var fresh) = {}` by fs[ptr_covers_def] >>
+  `not_fresh_at sn fresh` by
+    (simp[Abbr `fresh`] >>
+     drule buffer_copy_memory_shape >> strip_tac >>
+     qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[compile_alloc_buffer_def, emit_op_def, fresh_var_def, fresh_id_def,
+       emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     strip_tac >> gvs[not_fresh_at_def]) >>
+  `compile_store_memory cenv (Var fresh) (Var p) dty sty sn = ((),sb)` by metis_tac[] >>
+  drule_all widened_assign_local_store_dispatch_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t')` by
+    (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  qexistsl_tac [`G'`,`tn'`,`t'`] >> simp[] >>
+  rpt strip_tac >> fs[ghost_kept_def] >> metis_tac[eval_operand_def, operand_11]
+QED
+
+Finalise widened_assign_staged_local_ptr
