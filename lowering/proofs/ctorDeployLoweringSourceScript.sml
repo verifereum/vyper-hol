@@ -1161,7 +1161,7 @@ Proof
   irule outcomes_replace_ignore_bind >> conj_tac
   >- simp[send_call_value_outcomes] >>
   irule outcomes_replace_bind >> conj_tac
-  >- simp[eval_external_defaults_nil] >>
+  >~ [`eval_external_defaults _ _`] >- simp[eval_external_defaults_nil] >>
   rpt gen_tac >> BETA_TAC >>
   Cases_on `bind_arguments tenv args (vals ++ v)` >> simp_tac std_ss []
   >- simp[raise_def] >>
