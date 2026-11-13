@@ -13,6 +13,8 @@ Theory bodyFullLiteralBuffer
 Ancestors
   exprSimPtrLiteralBuffer fragGasSeqPtr instSeqPtrLo bodyPtrDefs vyperStorageFootprint
   exprLowering compileEnv loweringStateRelDefs venomState finite_map words
+  exprSimLiteralBuffer ptrSafetyTransport venomExecSemantics venomInst ptrDiscipline
+  context emitHelper exprLoweringProps
 
 (* The pointer twin is exprSimPtrLiteralBuffer's literal_bytelike_ptr_run at
    lo = 0.  What changes at lo > 0 (a constructor frame): the ALLOCA's base
@@ -22,6 +24,66 @@ Ancestors
    state is horizon-free (allocation, stores, provenance and taint are
    deterministic), so those are fixed before H; storage_trace_domain gives
    one valid horizon to read the run's facts at. *)
+Theorem literal_full_prefix_exists[local]:
+  compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
+  compile_alloc_buffer (32+32*word_size (LENGTH bs)) sa = (buf,sm) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  32+32*word_size (LENGTH bs) < dimword (:256) /\
+  stmt_state_rel H ctx func cenv cx es s ==>
+  ?u. run_inst_seq (emitted_insts sa sm) s = OK u
+Proof
+  strip_tac >>
+  drule_all literal_ptr_bytelike_alloca_mem >> strip_tac >>
+  drule_all alloc_buffer_frame_run >> metis_tac[]
+QED
+
+Theorem literal_full_prefix_frame[local]:
+  compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
+  compile_alloc_buffer (32+32*word_size (LENGTH bs)) sa = (buf,sm) /\
+  buf.buf_operand = Var p /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  32+32*word_size (LENGTH bs) < dimword (:256) /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  run_inst_seq (emitted_insts sa sm) s = OK u ==>
+  stmt_state_rel H ctx func cenv cx es u /\
+  step_inst_base (mk_inst sa.cs_next_id ALLOCA
+    [Lit (n2w (32+32*word_size (LENGTH bs)))] [p]) s = OK u /\
+  ?b. lookup_var p u = SOME (n2w b) /\
+    b+32+32*word_size (LENGTH bs) < dimword (:256) /\
+    u.vs_memory = s.vs_memory /\
+    FLOOKUP u.vs_allocas sa.cs_next_id =
+      SOME (b,32+32*word_size (LENGTH bs)) /\ lo <= b /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!aid a len. aid < sa.cs_next_id /\
+       FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+       regions_disjoint b (32+32*word_size (LENGTH bs)) a len) /\
+    (!name a len. local_region cenv es.scopes u name a len ==>
+       regions_disjoint b (32+32*word_size (LENGTH bs)) a len) /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+    u.vs_labels = s.vs_labels /\ wb_frame cenv es es sa s u
+Proof
+  strip_tac >>
+  drule_all literal_ptr_bytelike_alloca_mem >> strip_tac >>
+  drule_all alloc_buffer_frame_run >> strip_tac >> gvs[] >>
+  drule literal_ptr_bytelike_shape >> strip_tac >> gvs[] >>
+  rename1 `run_inst_seq _ s = OK u` >>
+  qmatch_asmsub_abbrev_tac `buf.buf_operand = Var p` >>
+  `step_inst_base (mk_inst sa.cs_next_id ALLOCA
+    [Lit (n2w (32+32*word_size (LENGTH bs)))] [p]) s = OK u` by
+    (qpat_x_assum `run_inst_seq _ s = OK u` mp_tac >>
+     simp[run_inst_seq_def, mk_inst_def, is_terminator_def, AllCaseEqs()]) >>
+  `allocas_from lo u` by
+    (irule (cj 1 step_inst_allocas_from) >>
+     qexistsl_tac [`ctx`, `0`, `mk_inst sa.cs_next_id ALLOCA
+       [Lit (n2w (32+32*word_size (LENGTH bs)))] [p]`, `s`] >>
+     simp[step_inst_non_invoke, mk_inst_def]) >>
+  gvs[eval_operand_def, allocas_from_def] >> metis_tac[]
+QED
+
 Theorem literal_bytelike_full_run:
   !bs sa buf sb DF lo d PG ctx func cenv cx st0 es s G tn.
     compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
