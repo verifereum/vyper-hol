@@ -27,7 +27,8 @@ Theorem ricf_execution_point_ordinary:
     ricf_execution_invariant vs C D stk PG G tn fn inst s t
       n a U B HP H certificates E sites maps targets tn /\
     ricf_analyzed_origins vs C stk PG G tn fn inst s a U B certificates sites maps /\
-    ricf_certificate_readonly vs C log_of stk PG G tn fn inst s U B certificates ==>
+    ricf_certificate_readonly vs C log_of stk PG G tn fn inst s U B certificates /\
+    ricf_mapped_support a B E PG G sites ==>
     ?v. step_inst fuel Ct inst t = OK v /\
       ricf_execution_invariant vs C D stk PG (step_prov PG G inst u)
         (step_taint inst s u tn) fn next
