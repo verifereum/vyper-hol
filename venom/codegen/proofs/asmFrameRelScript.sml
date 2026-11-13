@@ -41,7 +41,7 @@ Definition asm_frame_rel_def:
   asm_frame_rel prog data es0 as es <=>
     ?c0 c rb rest.
       es0.contexts = (c0, rb) :: rest /\ es.contexts = (c, rb) :: rest /\
-      c0.logs = [] /\ c.msgParams = c0.msgParams /\ ~c0.msgParams.static /\
+      c0.logs = [] /\ c.msgParams = c0.msgParams /\
       (as.as_call_ctx.cc_created_in_tx =
         account_empty (lookup_account c.msgParams.callee es.originalAccounts)) /\
       (~as.as_call_ctx.cc_created_in_tx ==>

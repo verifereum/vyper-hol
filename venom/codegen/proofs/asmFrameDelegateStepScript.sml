@@ -85,7 +85,7 @@ Theorem asm_frame_delegate_consume[local]:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\
-   ~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
+   ?d. s.msdomain = Collect d` by
     (fs[asm_frame_rel_def] >> metis_tac[]) >>
   drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_success_view >>
   disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
@@ -120,7 +120,7 @@ Theorem asm_frame_delegate_prepare_exit[local]:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
-   ~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
+   ?d. s.msdomain = Collect d` by
     (fs[asm_frame_rel_def] >> metis_tac[]) >>
   `c.stack = a.as_stack` by gvs[asm_evm_rel_def] >>
   Cases_on `6 <= LENGTH c.stack`
@@ -131,7 +131,7 @@ Proof
       `e = SOME OutOfGas` by
         (qpat_x_assum `asm_call_prepare DelegateCall _ = _` kall_tac >>
          drule_at (Pat `asm_call_prepare _ _ = _`)
-           asm_call_prepare_failure_kind >>
+           asm_call_prepare_failure_view >>
          disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
          simp[call_has_value_def] >> metis_tac[]) >>
       `t.contexts = (c with stack := DROP 6 c.stack,rb)::rest /\
@@ -180,7 +180,7 @@ Theorem asm_frame_delegate_abort[local]:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
-   ~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
+   ?d. s.msdomain = Collect d` by
     (fs[asm_frame_rel_def] >> metis_tac[]) >>
   `LENGTH c.stack <= stack_limit` by gvs[wf_state_def, wf_context_def] >>
   `next_opcode c = SOME DelegateCall` by
@@ -303,7 +303,7 @@ Theorem asm_frame_delegate_terminal_exception[local]:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
-   ~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
+   ?d. s.msdomain = Collect d` by
     (fs[asm_frame_rel_def] >> metis_tac[]) >>
   `next_opcode c = SOME DelegateCall` by
     (drule_all asm_frame_delegate_decode >> simp[]) >>
@@ -401,10 +401,13 @@ Theorem asm_frame_delegate_terminal_none[local]:
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
-   ~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
+   ?d. s.msdomain = Collect d` by
     (fs[asm_frame_rel_def] >> metis_tac[]) >>
   `next_opcode c = SOME DelegateCall` by
     (drule_all asm_frame_delegate_decode >> simp[]) >>
+  `value = 0` by
+    (drule_all asm_call_prepare_success_view >>
+     simp[call_has_value_def, LET_THM]) >>
   drule_at (Pat `asm_call_finish _ _ _ = _`)
     asm_call_prepared_terminal_success_view >>
   disch_then (qspecl_then [`s`,`rest`,`rb`,`d`,`c`] mp_tac) >>
@@ -492,7 +495,7 @@ Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   Cases_on `result`
   >- (drule_all asm_frame_delegate_terminal_none >> simp[]) >>
-  `~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
+  `?d. s.msdomain = Collect d` by
     (fs[asm_frame_rel_def] >> metis_tac[]) >>
   drule_at (Pat `asm_call_finish _ _ _ = _`) asm_call_prepared_terminal_kind >>
   disch_then (qspecl_then [`s`,`rest`,`rb`,`d`,`c`] mp_tac) >>
@@ -520,7 +523,7 @@ Theorem asm_frame_delegate_enter_step_ok[local]:
      frame_next s t1 /\ asm_frame_rel prog data es0 a1 t1)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
+  `wf_state s /\ (?d. s.msdomain = Collect d) /\
    asm_evm_rel (prog ++ [AsmDataItem data]) a s` by
     (fs[asm_frame_rel_def] >> gvs[]) >>
   `next_opcode c = SOME DelegateCall` by
@@ -624,7 +627,7 @@ Proof
 QED
 
 Resume asm_frame_delegate_step[entered]:
-  `wf_state es /\ (?d. es.msdomain = Collect d) /\ ~c.msgParams.static /\
+  `wf_state es /\ (?d. es.msdomain = Collect d) /\
    asm_evm_rel (prog ++ [AsmDataItem data]) as es` by
     (fs[asm_frame_rel_def] >> gvs[]) >>
   `next_opcode c = SOME DelegateCall` by
