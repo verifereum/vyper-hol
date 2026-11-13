@@ -19933,6 +19933,77 @@ Proof
     allocaRemapDefsTheory.mem_byte_at_def]
 QED
 
+Theorem mm_local_calldata_capture_literal[local]:
+  j < n /\ j < LENGTH is /\
+  (EL j is).inst_opcode = CALLDATACOPY /\
+  (EL j is).inst_operands = [Lit dst; Lit src; Lit len] ==>
+  mm_local_calldata_capture is H n j =
+    SOME (w2n dst, mm_local_bytes
+      (\a. if a < LENGTH (H j).vs_call_ctx.cc_calldata
+           then EL a (H j).vs_call_ctx.cc_calldata else 0w)
+      (w2n src) (w2n len))
+Proof
+  simp[mm_local_calldata_capture_def, venomStateTheory.eval_operand_def,
+    mm_local_calldata_bytes]
+QED
+
+Theorem mm_local_calldata_capture_store[local]:
+  j < n /\ j < LENGTH is /\
+  (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dst; Var v] /\
+  lookup_var v (H j) = SOME (word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP src (H j).vs_call_ctx.cc_calldata ++ REPLICATE 32 0w))) ==>
+  mm_local_calldata_capture is H n j = SOME (w2n dst, mm_local_bytes
+    (\a. if a < LENGTH (H j).vs_call_ctx.cc_calldata
+         then EL a (H j).vs_call_ctx.cc_calldata else 0w) src 32)
+Proof
+  strip_tac >>
+  simp[mm_local_calldata_capture_def, mm_local_write_capture_def,
+    venomStateTheory.eval_operand_def, mm_local_calldata_bytes] >>
+  irule venomMemPropsTheory.word_bytes_roundtrip_256 >> simp[LENGTH_TAKE_EQ]
+QED
+
+Theorem mm_local_calldata_bulk_group_captures[local]:
+  j < n /\ j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
+  (EL j is).inst_opcode = CALLDATACOPY /\
+  (EL j is).inst_operands = [Lit dst; Lit src; Lit len] /\
+  c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+         cg_inst_ids := [(EL j is).inst_id] |> ==>
+  mm_local_group_captures is (mm_local_calldata_capture is H n)
+    (\a. if a < LENGTH (H j).vs_call_ctx.cc_calldata
+         then EL a (H j).vs_call_ctx.cc_calldata else 0w) c
+Proof
+  strip_tac >> irule mm_local_group_captures_birth >>
+  conj_tac >- simp[] >> qexists `j` >>
+  simp[] >> metis_tac[mm_local_calldata_capture_literal]
+QED
+
+Theorem mm_local_calldata_store_group_captures[local]:
+  j < n /\ j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
+  (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dst; Var v] /\
+  lookup_var v (H j) = SOME (word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP src (H j).vs_call_ctx.cc_calldata ++ REPLICATE 32 0w))) /\
+  (!q. q < LENGTH is /\ MEM (EL q is).inst_id lids ==>
+    (EL q is).inst_opcode = CALLDATALOAD) /\
+  c = <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
+         cg_inst_ids := [(EL j is).inst_id] ++ lids |> ==>
+  mm_local_group_captures is (mm_local_calldata_capture is H n)
+    (\a. if a < LENGTH (H j).vs_call_ctx.cc_calldata
+         then EL a (H j).vs_call_ctx.cc_calldata else 0w) c
+Proof
+  strip_tac >>
+  `mm_local_calldata_capture is H n j = SOME (w2n dst, mm_local_bytes
+    (\a. if a < LENGTH (H j).vs_call_ctx.cc_calldata
+         then EL a (H j).vs_call_ctx.cc_calldata else 0w) src 32)` by
+    metis_tac[mm_local_calldata_capture_store] >>
+  gvs[mm_local_group_captures_def] >> rpt gen_tac >> strip_tac
+  >- (`j' = j` by metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx] >>
+      gvs[]) >>
+  `(EL j' is).inst_opcode = CALLDATALOAD` by metis_tac[] >>
+  gvs[mm_local_calldata_capture_def]
+QED
+
 Theorem mm_local_payload_due_realize[local]:
   ws = MAP (THE o cap) (due ++ [r]) /\
   (!j. MEM j (due ++ [r]) ==> IS_SOME (cap j)) /\
