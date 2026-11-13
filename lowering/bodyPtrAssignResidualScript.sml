@@ -233,6 +233,8 @@ Proof
               optionTheory.IS_SOME_EXISTS] >>
   `body_expr_ptr_ok cx e` by (drule_all annassign_ih_ptr >> simp[]) >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
+  `body_stmt_safe tops (AnnAssign id typ e)` by
+    metis_tac[supported_stmt_body_safe] >>
   `expr_body_pre cenv cx env e es` by
     (drule_all annassign_rhs_pre_ptr >> simp[]) >>
   drule_all widened_assignment_internal_call >> strip_tac >>
