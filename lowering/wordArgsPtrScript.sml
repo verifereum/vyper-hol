@@ -71,7 +71,7 @@ Proof
 QED
 
 Theorem wb_frame_local_regions:
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   wb_frame cenv es es' sa s0 s1 ==>
   (!n b sz. local_region cenv es.scopes s0 n b sz <=>
@@ -86,7 +86,7 @@ Proof
 QED
 
 Theorem ghost_kept_wb_trans:
-  stmt_state_rel ctx func cenv cx es0 s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es0 s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es1.scopes /\
   wb_frame cenv es0 es' sa s0 s1 /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\

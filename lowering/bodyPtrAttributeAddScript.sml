@@ -120,7 +120,7 @@ Proof
 QED
 
 Theorem attribute_ghost_inv_update:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
      p <> out) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> out) /\
@@ -129,11 +129,11 @@ Theorem attribute_ghost_inv_update:
      op_taint tn' (Var p) = op_taint tn (Var p)) /\
   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
   tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm ==>
-  ghost_inv d cenv cx es G' tn'
+  ghost_inv H d cenv cx es G' tn'
     (update_var out w s with vs_inst_idx := n)
 Proof
   strip_tac >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ _` mp_tac >>
   simp[ghost_inv_def, stor_taint_ok_def, update_var_def] >>
   strip_tac >> rpt conj_tac
   >- (rpt gen_tac >> strip_tac >>

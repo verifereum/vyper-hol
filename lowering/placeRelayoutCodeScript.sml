@@ -21,9 +21,7 @@ Theorem assign_place_relayout_code_parts:
     (!dst loc dty. tr = (dst,SOME loc,SOME (ValPT dty)) ==>
       compile_assign_value cenv dst loc (vv_operand vv) (is_word_type dty)
         (vv_location vv) dty (lowered_value_type cenv e)
-        (case dty of ArrayT et (Dynamic _) =>
-          SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-         | _ => NONE) (type_memory_bytes cenv dty) st = ((),sf))
+        (type_memory_bytes cenv dty) st = ((),sf))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule stmt_env_assign >> strip_tac >>

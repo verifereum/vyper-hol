@@ -15,7 +15,7 @@ Theorem compile_store_word_robust_framed_frag_ptr:
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n a) m) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t st. g = G /\ t = tn /\ st = s)
         (\g t st. g = Gf /\ t = tnf /\ st = sf) R /\
       sf.vs_memory = (mstore (w2n b) (mload (w2n a) s) s).vs_memory /\
@@ -84,7 +84,7 @@ Theorem compile_store_word_robust_frag_ptr:
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n a) m) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t st. g = G /\ t = tn /\ st = s)
         (\g t st. g = Gf /\ t = tnf /\ st = sf) R /\
       sf.vs_memory = (mstore (w2n b) (mload (w2n a) s) s).vs_memory /\

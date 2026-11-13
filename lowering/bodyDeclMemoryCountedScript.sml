@@ -1,7 +1,7 @@
 (* Counted straight-line paths for declaration memory operations. *)
 Theory bodyDeclMemoryCounted
 Ancestors
-  bodyDeclMemoryCore fragGasSeqMem fragGasPathMem
+  bodyDeclZeroGasPath bodyDeclMemoryCore fragGasSeqMem fragGasPathMem
   loweringPosts exprSimProps stmtSimProps exprSimHypsDefs
   bodyNameMemoryFacts bodyCopyMemory bodyMemoryDefs stmtSimDeclMem
   localPtrsProps stmtSimDeclStore stmtSimDecl valueCopy valueCopyBytes
@@ -15,33 +15,6 @@ Ancestors
   vyperTypeSystem vyperTypeInvariants memoryLocalRhsProps
   supportedStmtTraverse supportedExprTraverse vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperInterpreter vyperState
-
-Theorem body_decl_zero_gas_path:
-  fn_has_code sa sb func /\ same_blocks sa sb /\
-  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-  EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-    ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
-  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  run_inst_seq_mem_ok (emitted_insts sa sb) s /\
-  run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  gas_path_mem ctx func s 0
-    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))
-Proof
-  strip_tac >>
-  `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest) /\
-    s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
-    (gvs[fn_has_code_def, IS_PREFIX_APPEND, same_blocks_def] >>
-     simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]) >>
-  `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
-    simp[IS_PREFIX_APPEND] >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-      (emitted_insts sa sb)` by fs[EVERY_MEM] >>
-  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
-    (simp[FILTER_EQ_NIL, EVERY_MEM] >> fs[EVERY_MEM]) >>
-  drule_all run_inst_seq_gas_path_mem >> simp[]
-QED
 
 Theorem annassign_setup_body_gas_path_mem:
   declare_local ce id ty sa = (c,st) /\ ce.ce_alloca_locals /\
@@ -308,9 +281,9 @@ Proof
 QED
 
 Theorem annassign_memory_assign_body_path:
-  !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d info bytes.
+  !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d bytes.
     compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
-      ty ty info bytes sa = ((), sb) /\
+      ty ty bytes sa = ((), sb) /\
     (!x. src = Var x ==> not_fresh_at sa x) /\ not_fresh_at sa p /\
     eval_operand src s = SOME sw /\ lookup_var p s = SOME w /\
     ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
@@ -381,12 +354,12 @@ Proof
 QED
 
 Theorem annassign_name_rhs_body_path:
-  !ctx func cenv cx env source_id es s id p sz w inst v tyv sc rest a src ty sa sm sb d info bytes.
+  !ctx func cenv cx env source_id es s id p sz w inst v tyv sc rest a src ty sa sm sb d bytes.
     lower_value compile_expr cenv ty (Name ty source_id) sa = (src,sm) /\
     expr_sim_pre cenv cx env (Name ty source_id) es /\
     (do result <- eval_expr cx (Name ty source_id); read_result cx result od) es = (INL v,es) /\
     compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
-      ty ty info bytes sm = ((), sb) /\
+      ty ty bytes sm = ((), sb) /\
     not_fresh_at sa p /\ lookup_var p s = SOME w /\
     ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
@@ -420,7 +393,7 @@ Proof
       comp_bind_def, comp_return_def, unwrap_value_def,
       contextTheory.mk_ptr_def, vyperASTTheory.expr_type_def] >>
   irule annassign_memory_assign_body_path >> simp[] >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[eval_operand_def] >>
   qexists_tac `inst` >> simp[] >>
   fs[local_ptrs_reserved_def] >> metis_tac[]

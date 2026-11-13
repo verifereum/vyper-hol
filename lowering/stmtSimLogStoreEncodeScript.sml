@@ -9,7 +9,7 @@ Ancestors
 
 Theorem log_buffer_local_footprint[local]:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
   FLOOKUP s.vs_allocas sa.cs_next_id = SOME (p,cap) ==>
   !name lo sz. local_region ce es.scopes s name lo sz ==>
@@ -21,7 +21,7 @@ QED
 
 Theorem log_buffer_immutable_footprint[local]:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   FLOOKUP s.vs_allocas sa.cs_next_id = SOME (p,cap) ==>
   ce.ce_is_ctor ==> !name tv v off.
     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
@@ -34,7 +34,7 @@ Proof
 QED
 
 Theorem log_tuple_cursor_footprints[local]:
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit (n2w 32)] /\
   inst.inst_outputs = [STRING #"%" (toString st.cs_next_var)] /\
@@ -108,7 +108,7 @@ Theorem log_tuple_encoder_owned[local]:
   eval_operand src initial = SOME (n2w sb) /\
   eval_operand dst.buf_operand initial = SOME (n2w db) /\
   abi_decoder_operand_live prepared.cs_next_var src /\
-  stmt_state_rel ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ fresh_vars_wrt limit_st initial /\
   end_st.cs_next_var <= limit_st.cs_next_var /\
   LENGTH (enc (Tuple ats) (ListV avs)) <= outcap /\
@@ -120,7 +120,7 @@ Theorem log_tuple_encoder_owned[local]:
     mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
       enc (Tuple ats) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
-    stmt_state_rel ctx func ce cx es actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live prepared.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
     (!aid a k. aid < st.cs_next_id /\ FLOOKUP initial.vs_allocas aid = SOME (a,k) ==>
@@ -157,7 +157,7 @@ Proof
           enc (Tuple ats) (ListV avs) /\
         eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
         abi_decode_footprint_frame [(db,outcap)] initial actual /\
-        stmt_state_rel ctx func ce cx es actual /\
+        stmt_state_rel H ctx func ce cx es actual /\
         (!op w. abi_decoder_operand_live prepared.cs_next_var op /\
           eval_operand op initial = SOME w ==> eval_operand op actual = SOME w)`
         (qx_choose_then `actual` strip_assume_tac)
@@ -204,7 +204,7 @@ Resume log_tuple_encoder_owned[dynamic]:
      >- (qexists_tac `st.cs_next_id` >> simp[]) >>
      conj_tac >- (qexistsl_tac [`srccap`,`srcid`] >> simp[]) >>
      conj_tac >- (qexists_tac `prepared` >> simp[]) >>
-     qexistsl_tac [`ctx`,`func`] >> simp[]) >>
+     qexistsl_tac [`H`,`ctx`,`func`] >> simp[]) >>
   Q.SUBGOAL_THEN `?actual.
     run_inst_seq (emitted_insts prepared end_st) initial = OK actual /\
     inst_extends prepared end_st /\ fresh_vars_wrt limit_st actual /\
@@ -212,7 +212,7 @@ Resume log_tuple_encoder_owned[dynamic]:
       enc (Tuple ats) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
     abi_decode_footprint_frame [(db,outcap);(p,32)] initial actual /\
-    stmt_state_rel ctx func ce cx es actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live prepared.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w)`
     (qx_choose_then `actual` strip_assume_tac)
@@ -254,7 +254,7 @@ Theorem log_allocated_tuple_encode_continue_bounded:
   abi_encoder_input ei (Tuple ats) (ListV avs) sb cap initial.vs_memory /\
   eval_operand src initial = SOME (n2w sb) /\
   abi_decoder_operand_live st.cs_next_var src /\
-  stmt_state_rel ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ fresh_vars_wrt limit_st initial /\
   end_st.cs_next_var <= limit_st.cs_next_var /\
   LENGTH (enc (Tuple ats) (ListV avs)) <= outcap /\
@@ -267,7 +267,7 @@ Theorem log_allocated_tuple_encode_continue_bounded:
     mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
       enc (Tuple ats) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
-    stmt_state_rel ctx func ce cx es actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
     db < dimword (:256) /\
@@ -295,7 +295,7 @@ Proof
     mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
       enc (Tuple ats) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
-    stmt_state_rel ctx func ce cx es actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live prepared.cs_next_var op /\
       eval_operand op allocated = SOME w ==> eval_operand op actual = SOME w) /\
     (!aid a k. aid < st.cs_next_id /\ FLOOKUP allocated.vs_allocas aid = SOME (a,k) ==>
@@ -337,7 +337,7 @@ Theorem log_allocated_tuple_encode_continue:
   abi_encoder_input ei (Tuple ats) (ListV avs) sb cap initial.vs_memory /\
   eval_operand src initial = SOME (n2w sb) /\
   abi_decoder_operand_live st.cs_next_var src /\
-  stmt_state_rel ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ fresh_vars_wrt limit_st initial /\
   end_st.cs_next_var <= limit_st.cs_next_var /\
   LENGTH (enc (Tuple ats) (ListV avs)) <= outcap /\
@@ -350,7 +350,7 @@ Theorem log_allocated_tuple_encode_continue:
     mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
       enc (Tuple ats) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
-    stmt_state_rel ctx func ce cx es actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
     (!aid a k. aid < st.cs_next_id /\ FLOOKUP initial.vs_allocas aid = SOME (a,k) ==>

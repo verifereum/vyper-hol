@@ -8,7 +8,7 @@ Ancestors exprSimPtrTopLevelImmutableRun exprSimPtrTopLevelImmutableCopy
   pred_set finite_map venomState words vyperAST vyperState exprLowering compileEnv loweringStateRelDefs
 
 Theorem toplevel_immutable_full_copy_clean:
-  immutable_copy_ghost_frame sa s G tn sb t H tm 0 nb w ==>
+  immutable_copy_ghost_frame sa s G tn sb t HG tm 0 nb w ==>
   (!i. w2n w <= i /\ i < w2n w+nb ==> i NOTIN tm.t_mem)
 Proof
   simp[immutable_copy_ghost_frame_def] >> SET_TAC[]
@@ -16,7 +16,7 @@ QED
 
 Theorem toplevel_immutable_alloc_copy_taint_subset:
   tn1.t_mem SUBSET tn.t_mem UNION {i | w2n w <= i /\ i < w2n w+nb} /\
-  immutable_copy_ghost_frame sa s G1 tn1 sb t H tm 0 nb w ==>
+  immutable_copy_ghost_frame sa s G1 tn1 sb t HG tm 0 nb w ==>
   tm.t_mem SUBSET tn.t_mem
 Proof
   simp[immutable_copy_ghost_frame_def] >> SET_TAC[]
@@ -49,8 +49,8 @@ Theorem toplevel_immutable_alloc_copy_kept:
      FLOOKUP G1 x = FLOOKUP G x /\
      op_taint tn1 (Var x) = op_taint tn (Var x)) /\
   tn1.t_mem SUBSET tn.t_mem UNION {i | w2n w <= i /\ i < w2n w+nb} /\
-  immutable_copy_ghost_frame sa s G1 tn1 sb t H tm 0 nb w ==>
-  ghost_kept cenv es st G tn s0 H tm
+  immutable_copy_ghost_frame sa s G1 tn1 sb t HG tm 0 nb w ==>
+  ghost_kept cenv es st G tn s0 HG tm
 Proof
   strip_tac >> irule literal_ghost_kept >> conj_tac
   >- (gvs[immutable_copy_ghost_frame_def] >> metis_tac[]) >>
@@ -61,25 +61,25 @@ Theorem toplevel_immutable_alloc_copy_run:
   compile_alloc_buffer (32*n) sa = (buf,sm) /\
   compile_imm_copy_to_memory F imm (Lit a) buf.buf_operand n 0 sm = ((),sb) /\
   fn_has_code sa sm fn /\ fn_has_code sm sb fn /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ 32*n < dimword (:256) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?u w Ga ta p t H tm.
+  ?u w Ga ta p t HG tm.
     buf.buf_operand = Var p /\
     run_inst_seq (emitted_insts sa sm) s = OK u /\
-    stmt_state_rel ctx fn cenv cx es u /\ u.vs_memory = s.vs_memory /\
+    stmt_state_rel H ctx fn cenv cx es u /\ u.vs_memory = s.vs_memory /\
     lookup_var p u = SOME w /\ lookup_var p t = SOME w /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-    ptr_covers H tm p t (32*n) /\
+    ptr_covers HG tm p t (32*n) /\
     immutable_copy_ghost_frame sm
-      (u with vs_inst_idx := LENGTH sm.cs_current_insts) Ga ta sb t H tm 0 (32*n) w /\
+      (u with vs_inst_idx := LENGTH sm.cs_current_insts) Ga ta sb t HG tm 0 (32*n) w /\
     (!i. w2n w <= i /\ i < w2n w+32*n ==> i NOTIN tm.t_mem) /\
     tm.t_mem SUBSET tn.t_mem /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
@@ -133,20 +133,20 @@ Proof
    t'.vs_transient = s.vs_transient` by
     (gvs[immutable_copy_ghost_frame_def, copy_runtime_frame_def] >>
      drule copy_static_fields >> simp[Abbr `s1`, copy_static_def]) >>
-  qexistsl_tac [`w`,`Gf`,`tnf`,`t'`,`H'`,`tm'`] >>
+  qexistsl_tac [`w`,`Gf`,`tnf`,`t'`,`HG'`,`tm'`] >>
   fs[Abbr `s1`, eval_operand_def, lookup_var_def] >>
   gvs[immutable_copy_ghost_frame_def, copy_runtime_frame_def, lookup_var_def] >>
   metis_tac[]
 QED
 
 Theorem toplevel_immutable_alloc_copy_ghost_inv:
-  ghost_inv d cenv cx es G tn s /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-    FLOOKUP H x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)) /\
+    FLOOKUP HG x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)) /\
   (!name b len. local_region cenv es.scopes u name b len ==>
     regions_disjoint (w2n w) nb b len) /\
   (!i. i < w2n w \/ w2n w+nb <= i ==>
@@ -155,7 +155,7 @@ Theorem toplevel_immutable_alloc_copy_ghost_inv:
   tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient /\ es'.scopes = es.scopes ==>
-  ghost_inv d cenv cx es' H tm t
+  ghost_inv H d cenv cx es' HG tm t
 Proof
   strip_tac >>
   `!name b sz i. local_region cenv es.scopes s name b sz /\

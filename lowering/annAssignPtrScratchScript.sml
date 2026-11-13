@@ -87,12 +87,12 @@ QED
 
 Theorem annassign_ghost_exterior_ptr:
  !ctx func cenv cx es d G tn s mem mt idx writes.
- stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+ stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
  (!name b sz. local_region cenv es.scopes s name b sz ==>
     !i. b <= i /\ i < b+sz ==> i NOTIN writes) /\
  (!i. i NOTIN writes ==> mem_bytes_at i 1 mem = mem_bytes_at i 1 s.vs_memory) /\
  (!i. i NOTIN writes ==> (i IN mt <=> i IN tn.t_mem)) ==>
- ghost_inv d cenv cx es G (tn with t_mem := mt)
+ ghost_inv H d cenv cx es G (tn with t_mem := mt)
    (s with <|vs_memory := mem;vs_inst_idx := idx|>)
 Proof
  rpt gen_tac >> strip_tac >>
@@ -143,7 +143,7 @@ QED
 Theorem annassign_alloca_copy_ghost_ptr:
  !ctx func cenv cx es d G tn s s' tn' inst p b sz k.
  fn_inst_ids_distinct func /\
- stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+ stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
  inst.inst_outputs = [p] /\ not_local_ptr cenv es.scopes p /\
  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\ k <= sz /\
@@ -152,7 +152,7 @@ Theorem annassign_alloca_copy_ghost_ptr:
  (!i. ~(b <= i /\ i < b+k) ==>
     mem_bytes_at i 1 s'.vs_memory = mem_bytes_at i 1 s.vs_memory /\
     (i IN tn'.t_mem <=> i IN tn.t_mem)) ==>
- ghost_inv d cenv cx es G tn' s'
+ ghost_inv H d cenv cx es G tn' s'
 Proof
  rpt gen_tac >> strip_tac >>
  drule annassign_state_restore_elim_ptr >> disch_tac >>
@@ -171,13 +171,13 @@ QED
 
 Theorem annassign_alloca_copy_state_ptr:
  !ctx func cenv cx es s s' inst p b a sz k.
- stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+ stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
  inst.inst_outputs = [p] /\ not_local_ptr cenv es.scopes p /\
  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\ k <= sz /\
  (s' with <|vs_memory := s.vs_memory;vs_inst_idx := s.vs_inst_idx|>) = s /\
  s'.vs_memory = (if k = 0 then s.vs_memory else (mcopy b a k s).vs_memory) ==>
- stmt_state_rel ctx func cenv cx es s'
+ stmt_state_rel H ctx func cenv cx es s'
 Proof
  rpt gen_tac >> strip_tac >>
  drule annassign_state_restore_elim_ptr >> disch_tac >>
@@ -186,7 +186,7 @@ Proof
        (qpat_x_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
         simp[venom_state_component_equality]) >>
      metis_tac[stmt_state_rel_inst_idx]) >>
- `stmt_state_rel ctx func cenv cx es (mcopy b a k s)` by
+ `stmt_state_rel H ctx func cenv cx es (mcopy b a k s)` by
    (irule stmt_state_rel_mcopy_alloca >> metis_tac[]) >>
  `mcopy b a k s = s with vs_memory := (mcopy b a k s).vs_memory` by
    simp[mcopy_def, write_memory_with_expansion_def,
@@ -213,7 +213,7 @@ QED
 
 Theorem annassign_alloca_copy_kept_ptr:
  !ctx func cenv cx es sa G0 tn0 s0 G tn s tn' inst p b sz k.
- stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+ stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
  MEM inst (fn_insts func) /\ inst.inst_outputs = [p] /\
  not_local_ptr cenv es.scopes p /\
  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\ k <= sz /\
@@ -251,7 +251,7 @@ Theorem annassign_allocated_static_copy_ptr:
  s.vs_current_bb = st.cs_current_bb /\
  s.vs_inst_idx = LENGTH st.cs_current_insts /\
  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ k < dimword (:256) /\
- stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+ stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
  ghost_kept cenv es sa G0 tn0 s0 G tn /\
  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
  ptr_covers G tn src s k /\ ptr_covers G tn dst s sz /\
@@ -265,8 +265,8 @@ Theorem annassign_allocated_static_copy_ptr:
               FLOOKUP s.vs_allocas aid = SOME entry) /\
  (!n lo nsz. local_region cenv es.scopes s0 n lo nsz ==>
               local_region cenv es.scopes s n lo nsz) ==>
- ?s' tn'. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G tn' (OK s') /\
- stmt_state_rel ctx func cenv cx es s' /\ ghost_inv d cenv cx es G tn' s' /\
+ ?s' tn'. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 G tn' (OK s') /\
+ stmt_state_rel H ctx func cenv cx es s' /\ ghost_inv H d cenv cx es G tn' s' /\
  ghost_kept cenv es sa G0 tn0 s0 G tn' /\ ptr_covers G tn' dst s' sz /\
  s'.vs_current_bb = st1.cs_current_bb /\
  s'.vs_inst_idx = LENGTH st1.cs_current_insts /\ ~s'.vs_halted /\
@@ -278,10 +278,10 @@ Proof
  `ptr_covers G tn dst s k` by
    (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS]) >>
  drule_all annassign_counted_copy_robust_ptr >>
- disch_then (qspecl_then [`cx_dead cx`,`PG`] strip_assume_tac) >>
- `ghost_inv d cenv cx es G tn' s'` by
+ disch_then (qspecl_then [`cx_dead H cx`,`PG`] strip_assume_tac) >>
+ `ghost_inv H d cenv cx es G tn' s'` by
    (qpat_x_assum `s'.vs_memory = _` kall_tac >>
-    drule_at (Pat `stmt_state_rel _ _ _ _ _ _`) annassign_alloca_copy_ghost_ptr >>
+    drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`) annassign_alloca_copy_ghost_ptr >>
     disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
     disch_then (drule_at (Pat `_.inst_outputs = _`)) >>
     disch_then (drule_at (Pat `(_ with <|vs_memory := _;vs_inst_idx := _|>) = _`)) >>
@@ -289,13 +289,13 @@ Proof
     disch_then irule >> simp[] >> qexists `k` >> simp[]) >>
  `ghost_kept cenv es sa G0 tn0 s0 G tn'` by
    (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`) annassign_alloca_copy_kept_ptr >>
-    disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+    disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
     disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _.inst_id = SOME _`)) >>
     disch_then (drule_at (Pat `_.inst_outputs = _`)) >>
     disch_then (drule_at (Pat `_.t_var = _`)) >>
     disch_then irule >> simp[] >> qexists `k` >> simp[] >>
     rpt strip_tac >> metis_tac[]) >>
- `stmt_state_rel ctx func cenv cx es s'` by
+ `stmt_state_rel H ctx func cenv cx es s'` by
    (irule annassign_alloca_copy_state_ptr >> metis_tac[]) >>
  `ptr_covers G tn' dst s' sz` by
    (irule annassign_coverage_var_frame_ptr >> metis_tac[]) >>
@@ -308,7 +308,7 @@ QED
    Its bytewise form also handles an empty value at an arbitrary address. *)
 Theorem annassign_alloca_expr_robust_ptr:
  !ctx func cenv cx t sa sb es v op s tv w id n out u tn.
- stmt_state_rel ctx func cenv cx es s /\
+ stmt_state_rel H ctx func cenv cx es s /\
  expr_val_at cenv cx t sa sb es v op s /\
  evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
  eval_operand op s = SOME w /\ val_wf tv v /\
@@ -333,7 +333,7 @@ QED
 
 Theorem annassign_alloca_source_transport_ptr:
  !ctx func cenv cx t sa sb es v src s tv w id n out u PG G tn k.
- stmt_state_rel ctx func cenv cx es s /\
+ stmt_state_rel H ctx func cenv cx es s /\
  expr_val_at cenv cx t sa sb es v (Var src) s /\
  evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
  lookup_var src s = SOME w /\ src <> out /\ val_wf tv v /\
@@ -357,6 +357,6 @@ Proof
  >- (irule alloca_step_old_ptr_covers >> simp[] >> metis_tac[]) >>
  drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`) annassign_alloca_expr_robust_ptr >>
  disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
- disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+ disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
  simp[eval_operand_def] >> disch_then (qspec_then `tn` mp_tac) >> simp[]
 QED

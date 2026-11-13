@@ -6,7 +6,7 @@ Ancestors
   stmtSimDefs compileEnv loweringStateRelDefs venomState placeMemoryLiveRegion exprLoweringProps
 
 Theorem memory_place_write_copy_effect:
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   expr_sim_inv cenv cx env ee /\ local_ptrs_reserved cenv sa /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type dty) /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\ value_has_type dtv v /\
@@ -16,7 +16,7 @@ Theorem memory_place_write_copy_effect:
     evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
   val_in_memory dtv v (w2n w) t.vs_memory /\
   typed_copy_effect ctx func sa sb s t (w2n w) (type_memory_size dtv) ==>
-  stmt_state_rel ctx func cenv cx ff t
+  stmt_state_rel H ctx func cenv cx ff t
 Proof
   strip_tac >>
   drule_all memory_place_live_region >> strip_tac >>

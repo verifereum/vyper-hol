@@ -8,7 +8,7 @@ Ancestors
    positive footprint, however, lies strictly below the allocation frontier. *)
 Theorem expr_val_at_below_frontier:
   !ctx func cenv cx t sa sb es v op s tv w i.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx t sa sb es v op s /\
     evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
     eval_operand op s = SOME w /\
@@ -109,8 +109,8 @@ Theorem fresh_alloca_stor_taint_ok:
   !id n out s s1 tn cx.
     FLOOKUP s.vs_allocas id = NONE /\ n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
-    stor_taint_ok cx tn s ==>
-    stor_taint_ok cx
+    stor_taint_ok H cx tn s ==>
+    stor_taint_ok H cx
       (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn) s1
 Proof
   rpt strip_tac >> drule_all fresh_alloca_ghost >>
@@ -135,7 +135,7 @@ QED
 
 Theorem fresh_alloca_expr_read_clean:
   !ctx func cenv cx t sa sb es v op s tv w id n out s1 tn i.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx t sa sb es v op s /\
     evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
     eval_operand op s = SOME w /\
@@ -207,8 +207,8 @@ QED
 
 Theorem reused_alloca_stor_taint_ok:
   !id n out s b tn cx.
-    FLOOKUP s.vs_allocas id = SOME (b,n) /\ stor_taint_ok cx tn s ==>
-    stor_taint_ok cx
+    FLOOKUP s.vs_allocas id = SOME (b,n) /\ stor_taint_ok H cx tn s ==>
+    stor_taint_ok H cx
       (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s
         (update_var out (n2w b) s) tn) (update_var out (n2w b) s)
 Proof
@@ -230,7 +230,7 @@ QED
 
 Theorem expr_val_at_alloca_disjoint:
   !ctx func cenv cx t sa sb es v op s tv w inst out b n i.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx t sa sb es v op s /\
     evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
     eval_operand op s = SOME w /\ fn_inst_ids_distinct func /\
@@ -260,7 +260,7 @@ QED
 
 Theorem stmt_state_rel_alloca_site_bound:
   !ctx func cenv cx es s id n out b sz.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\ FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
     sz = n /\ b + n < dimword (:256)
@@ -279,7 +279,7 @@ QED
 
 Theorem stmt_state_rel_alloca_fresh_bound:
   !ctx func cenv cx es s id n out.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\ FLOOKUP s.vs_allocas id = NONE ==>
     s.vs_alloca_next + n < dimword (:256)
@@ -294,7 +294,7 @@ QED
 
 Theorem alloca_step_site:
   !ctx func cenv cx es s id n out s1.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
@@ -315,7 +315,7 @@ QED
 
 Theorem alloca_step_ptr_covers:
   !ctx func cenv cx es s id n out s1 PG G tn.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
@@ -334,7 +334,7 @@ QED
 
 Theorem alloca_step_old_ptr_covers:
   !ctx func cenv cx es s id n out s1 PG G tn p sz.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
@@ -355,12 +355,12 @@ QED
 
 Theorem alloca_step_stor_taint_ok:
   !ctx func cenv cx es s id n out s1 tn.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
-    stor_taint_ok cx tn s ==>
-    stor_taint_ok cx
+    stor_taint_ok H cx tn s ==>
+    stor_taint_ok H cx
       (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn) s1
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `FLOOKUP s.vs_allocas id`
@@ -373,7 +373,7 @@ QED
 
 Theorem alloca_step_expr_read_clean:
   !ctx func cenv cx t sa sb es v op s tv w id n out s1 tn i.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx t sa sb es v op s /\
     evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
     eval_operand op s = SOME w /\
@@ -395,7 +395,7 @@ QED
 
 Theorem alloca_step_expr_disjoint:
   !ctx func cenv cx t sa sb es v op s tv w id n out s1 b i.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx t sa sb es v op s /\
     evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
     eval_operand op s = SOME w /\ fn_inst_ids_distinct func /\
