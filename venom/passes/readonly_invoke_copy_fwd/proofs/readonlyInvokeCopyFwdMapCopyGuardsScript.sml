@@ -1,13 +1,14 @@
 (* Suspended translations cannot overlap an allocation of the current owner. *)
 Theory readonlyInvokeCopyFwdMapCopyGuards
 Ancestors
+  readonlyInvokeCopyFwdHeterogeneousMapOrigins readonlyInvokeCopyFwdAlignedOrigins
   readonlyInvokeCopyFwdOperationalMapOrigins readonlyInvokeCopyFwdGlobalSupport
   occurrenceGeometry o1LowerDloadOccurrence readonlyInvokeCopyFwdRel
   readonlyInvokeCopyFwdOperationalSupport
   readonlyInvokeCopyFwdHistoryAvailability pair
   finite_map list rich_list pred_set
 
-Theorem ricf_translation_origin_current_copy_exclusion[local]:
+Theorem ricf_translation_origin_current_copy_exclusion:
   occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
   occurrence_natural_geometry lo a U B stk s /\
   FLOOKUP B id = SOME (db,len) /\ FST id = a /\
@@ -57,6 +58,37 @@ Proof
   rw[ricf_site_triples_def] >>
   drule_all ricf_saved_map_origins_lookup >> strip_tac >>
   metis_tac[ricf_translation_origin_current_copy_exclusion, MEM_DROP_IMP]
+QED
+
+Theorem ricf_heterogeneous_map_origins_current_copy_exclusion:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  occurrence_natural_geometry lo a U B stk s /\
+  FLOOKUP B id = SOME (db,len) /\ FST id = a /\
+  ricf_heterogeneous_map_origins vs C stk PG G tn fn inst s U B sites ==>
+  !b c z k. (b,c,z) IN ricf_site_triples sites /\ k < z ==>
+    ~(db <= b+k /\ b+k < db+len) /\
+    ~(db <= c+k /\ c+k < db+len)
+Proof
+  rw[ricf_site_triples_def] >>
+  fs[ricf_heterogeneous_map_origins_def] >>
+  metis_tac[ricf_aligned_translation_origin_projection,
+    ricf_translation_origin_current_copy_exclusion]
+QED
+
+Theorem ricf_heterogeneous_saved_map_origins_current_copy_exclusion:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  occurrence_natural_geometry lo a U B stk s /\
+  FLOOKUP B id = SOME (db,len) /\ FST id = a /\
+  ricf_heterogeneous_saved_map_origins vs C stk PG G tn fn inst s U B maps ==>
+  !j b c z k. j < LENGTH stk /\
+    (b,c,z) IN ricf_site_triples (EL j maps) /\ k < z ==>
+    ~(db <= b+k /\ b+k < db+len) /\
+    ~(db <= c+k /\ c+k < db+len)
+Proof
+  rw[ricf_site_triples_def] >>
+  fs[ricf_heterogeneous_saved_map_origins_def] >>
+  metis_tac[ricf_aligned_origin_projection,
+    ricf_translation_origin_current_copy_exclusion]
 QED
 
 (* Availability chooses the actual current destination occurrence; map guards
