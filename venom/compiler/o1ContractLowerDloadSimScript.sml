@@ -307,7 +307,9 @@ Proof
   drule_at (Pat `terminates _`) ld_terminating_invoke_inversion >>
   disch_then (qspecl_then [`s`, `fuel`, `inst`, `C`] mp_tac) >>
   simp[] >> strip_tac >>
+  `?sn. enters_block fn' cs sn` by metis_tac[ld_run_enters] >>
   drule_all (ld_whole lower_dload_stage_invoke_entry) >> strip_tac >>
+  qpat_x_assum `enters_block fn' cs sn` kall_tac >>
   first_x_assum (drule_all_then strip_assume_tac o
     SIMP_RULE bool_ss [PULL_EXISTS]) >>
   gvs[] >>
