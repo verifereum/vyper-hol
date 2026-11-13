@@ -22,6 +22,7 @@ Ancestors
   gasStorage gasOutcome vyperStorageTrace vyperStorageFootprint
   stmtSimAugAssignAttrStorage allocaFootprint instMemFrontier memSafeRun
   bodyDeclMemoryCounted bodyDeclMemoryCore
+  exprSimAggregateChildren
 Libs
   monadsyntax
 
@@ -95,21 +96,6 @@ Proof
   Cases_on `tr` >> simp[Abbr `u`, lookup_var_def, sstore_def, tstore_def, LET_THM]
 QED
 
-Theorem vv_at_start_var_mem_src[local]:
-  vv_at ce cx ty (sa with cs_next_var := n) sb es tv vv s <=>
-  vv_at ce cx ty sa sb es tv vv s
-Proof
-  Cases_on `vv` >> simp[vv_at_def, expr_val_at_def]
-QED
-
-Theorem vv_post_rebase_mem_src:
-  vv_post H ctx func ce cx e es sa sm s0 ee tv vv s ==>
-  vv_post H ctx func ce cx e ee (sa with cs_next_var := sm.cs_next_var)
-    sm s ee tv vv s
-Proof
-  simp[vv_post_def, vv_at_start_var_mem_src, locals_kept_refl]
-QED
-
 Theorem expr_post_rebased_operand_mem_src:
   expr_post H ctx func ce cx e ee (sa with cs_next_var := sm.cs_next_var)
     sb s ee v op u /\
@@ -151,7 +137,7 @@ Theorem unwrap_value_rebased_read_mem_src[local]:
     eval_operand dst u = SOME w
 Proof
   strip_tac >>
-  drule vv_post_rebase_mem_src >> strip_tac >>
+  drule exprSimAggregateChildrenTheory.vv_post_rebase >> strip_tac >>
   `local_ptrs_reserved cenv sm` by
     (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
   `local_ptrs_reserved cenv (sa with cs_next_var := sm.cs_next_var)` by
@@ -207,17 +193,6 @@ Proof
   `mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz s.vs_memory` by
     (first_x_assum irule >> simp[] >> metis_tac[]) >>
   metis_tac[]
-QED
-
-Theorem vv_post_emit_cursor_mem_src[local]:
-  vv_post H ctx func ce cx e es sa sm s0 ee tv vv s /\
-  local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
-  sm.cs_next_id <= sn.cs_next_id /\ ~not_fresh_at sm x /\
-  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) ==>
-  vv_post H ctx func ce cx e es sa sn s0 ee tv vv
-    (update_var x w s with vs_inst_idx := n)
-Proof
-  simp[ vv_post_inst_idx] >> metis_tac[vv_post_update_var]
 QED
 
 Theorem vv_store_bound_frame_mem_src:

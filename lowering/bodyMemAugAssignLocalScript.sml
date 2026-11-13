@@ -9,9 +9,8 @@
    the counted level, since an exemption certificate is syntactic in the
    source action; the statement's certificate is built from e's.
 
-   The *_mem_src helpers are copies of S1 source-side lemmas that live only
-   on the S1 branch (stmtSimAugAssign there), generalised over the memory
-   flag where S1's fix it to F. *)
+   The remaining *_mem_src helper is an inline step of S1's proof, stated
+   as a lemma. *)
 Theory bodyMemAugAssignLocal
 Ancestors
   gasStorage vyperStorageTrace vyperStorageFootprint
@@ -42,268 +41,6 @@ Ancestors
   list rich_list finite_map pred_set
 Libs
   monadsyntax
-
-(* ===== The source side (S1 copies) ===== *)
-
-(* S1 stmtSimAugAssign's eval_augassign_local_forced. *)
-Theorem eval_augassign_local_forced_mem_src[local]:
-  lookup_scopes id es.scopes = SOME entry ==>
-  eval_stmt cx (AugAssign ty (NameTarget id) bop e) es =
-  (do v <- bind (eval_expr cx e) (read_result cx);
-      r <- lift_sum (evaluate_binop
-        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-        entry.type bop entry.value v);
-      write_place cx (MemoryPlace id []) r od) es
-Proof
-  strip_tac >>
-  drule_then (qspec_then `cx` strip_assume_tac)
-    stmtSimAugAssignTheory.eval_target_place_local >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def] >>
-  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, st)` >>
-  Cases_on `raw` >> simp[bind_def]
-QED
-
-(* S1 stmtSimAugAssign's augassign_rhs_admissible. *)
-Theorem augassign_rhs_admissible_mem_src[local]:
-  lookup_scopes id es.scopes = SOME entry /\
-  gas_admissible (eval_stmt cx (AugAssign ty (NameTarget id) bop e))
-    (stmt_res_ok lctx) es ==>
-  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
-Proof
-  strip_tac >> rw[gas_admissible_def] >>
-  Cases_on `res` >- simp[expr_res_ok_def] >>
-  rename1 `INR ex` >>
-  `eval_stmt cx (AugAssign ty (NameTarget id) bop e)
-     (es with gas_obs := gs) = (INR ex, ee)` by
-    (`lookup_scopes id (es with gas_obs := gs).scopes = SOME entry` by simp[] >>
-     drule eval_augassign_local_forced_mem_src >>
-     disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`] mp_tac) >>
-     simp[bind_def]) >>
-  `stmt_res_ok lctx (INR ex)` by metis_tac[gas_admissible_result] >>
-  qpat_x_assum `bind _ _ _ = _` mp_tac >> simp[bind_def] >>
-  Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
-  rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
-  imp_res_tac read_result_no_control >>
-  imp_res_tac (cj 1 eval_expr_no_control) >>
-  gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
-QED
-
-(* S1 stmtSimAugAssign's augassign_rhs_exception. *)
-Theorem augassign_rhs_exception_mem_src[local]:
-  lookup_scopes id es.scopes = SOME entry /\
-  bind (eval_expr cx e) (read_result cx) es = (INR ex, ee) ==>
-  eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (INR ex, ee)
-Proof
-  strip_tac >> drule eval_augassign_local_forced_mem_src >>
-  disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`] mp_tac) >>
-  simp[bind_def]
-QED
-
-(* S1 stmtSimAugAssign's augassign_rhs_normal. *)
-Theorem augassign_rhs_normal_mem_src[local]:
-  lookup_scopes id es.scopes = SOME entry /\
-  bind (eval_expr cx e) (read_result cx) es = (INL v, ee) ==>
-  eval_stmt cx (AugAssign ty (NameTarget id) bop e) es =
-  bind (lift_sum (evaluate_binop
-    (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-    entry.type bop entry.value v))
-    (write_place cx (MemoryPlace id [])) ee
-Proof
-  strip_tac >> drule eval_augassign_local_forced_mem_src >>
-  disch_then (qspecl_then [`ty`, `e`, `cx`, `bop`] mp_tac) >>
-  simp[Once bind_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
-QED
-
-(* S1 stmtSimAugAssign's augassign_rhs_exempt. *)
-Theorem augassign_rhs_exempt_mem_src[local]:
-  lookup_scopes id es.scopes = SOME entry /\
-  gas_marked_exec memory (ctx,func) (eval_target_place cx (NameTarget id))
-    (es,s0) [] (INL (MemoryPlace id [])) es (OK t) /\
-  ~t.vs_halted /\
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
-    (es with gas_obs := [],t) marks (err,ee) (leaf,fin) ==>
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (eval_stmt cx (AugAssign ty (NameTarget id) bop e)) (return ()))
-    (es,s0) marks (err,ee) (leaf,fin)
-Proof
-  strip_tac >>
-  `ignore_bind (eval_stmt cx (AugAssign ty (NameTarget id) bop e)) (return ()) =
-   do p <- eval_target_place cx (NameTarget id);
-      cur <- read_place cx p;
-      ptv <- place_type_value cx p;
-      v <- bind (eval_expr cx e) (read_result cx);
-      r <- lift_sum (evaluate_binop
-        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-        ptv bop cur v);
-      ignore_bind (write_place cx p r) (return ()) od` by
-    (simp[Once evaluate_def, ignore_bind_def, bind_assoc]) >>
-  pop_assum SUBST1_TAC >>
-  drule gas_exempt_cert_bind_place >> simp[] >> disch_then irule >>
-  `gas_marked_exec memory (ctx,func) (read_place cx (MemoryPlace id []))
-     (es with gas_obs := [],t) [] (INL entry.value)
-     (es with gas_obs := []) (OK t)` by
-    (simp[gas_marked_exec_def, gas_explicit_def] >> conj_tac
-     >- (gen_tac >>
-         irule (cj 2 stmtSimAugAssignTheory.eval_target_place_local) >>
-         simp[]) >>
-     irule gas_marked_path_from_mem >> simp[gas_path_mem_rules]) >>
-  drule gas_exempt_cert_bind_value >> simp[] >> disch_then irule >>
-  simp[place_type_value_def, bind_assoc] >>
-  irule gas_exempt_cert_get_scopes >>
-  simp[lift_option_type_def, subscripts_type_def, bind_return] >>
-  once_rewrite_tac[GSYM bind_assoc] >>
-  irule gas_exempt_cert_error_value >> simp[]
-QED
-
-(* S1 stmtSimAugAssign's augassign_binop_admissible. *)
-Theorem augassign_binop_admissible_mem_src[local]:
-  lookup_scopes id es.scopes = SOME entry /\ bop <> In /\ bop <> NotIn /\
-  gas_admissible (eval_stmt cx (AugAssign ty (NameTarget id) bop e))
-    (stmt_res_ok lctx) es /\
-  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v, ee) ==>
-  expr_res_ok (bop_result cx ty bop [ty; expr_type e] entry.value v ee)
-Proof
-  strip_tac >>
-  `expr_res_ok (bop_result cx ty bop [ty; expr_type e] entry.value v ee) <=>
-   expr_res_ok (case evaluate_binop
-     (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-     entry.type bop entry.value v of
-       INL w => INL w | INR err => INR (Error err))` by
-    (irule bop_result_augassign_res_ok >> simp[]) >>
-  pop_assum SUBST1_TAC >>
-  Cases_on `evaluate_binop
-     (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-     entry.type bop entry.value v` >- simp[expr_res_ok_def] >>
-  rename1 `_ = INR err` >>
-  `eval_stmt cx (AugAssign ty (NameTarget id) bop e)
-    (es with gas_obs := gs) = (INR (Error err), ee)` by
-    (`lookup_scopes id (es with gas_obs := gs).scopes = SOME entry` by simp[] >>
-     drule_all augassign_rhs_normal_mem_src >>
-     disch_then (qspecl_then [`ty`, `bop`] mp_tac) >>
-     simp[lift_sum_def, bind_def, raise_def]) >>
-  `stmt_res_ok lctx (INR (Error err))` by metis_tac[gas_admissible_result] >>
-  gvs[stmt_res_ok_def, expr_res_ok_def]
-QED
-
-(* S1 stmtSimAugAssign's augassign_write_admissible. *)
-Theorem augassign_write_admissible_mem_src[local]:
-  lookup_scopes id es.scopes = SOME entry /\ bop <> In /\ bop <> NotIn /\
-  gas_admissible (eval_stmt cx (AugAssign ty (NameTarget id) bop e))
-    (stmt_res_ok lctx) es /\
-  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v, ee) /\
-  bop_result cx ty bop [ty; expr_type e] entry.value v ee = INL w /\
-  write_place cx (MemoryPlace id []) w ee = (res, fin) ==>
-  !m. res <> INR (Error (TypeError m))
-Proof
-  strip_tac >>
-  `?actual. evaluate_binop
-     (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-     entry.type bop entry.value v = INL actual` by
-    metis_tac[bop_result_augassign_success] >>
-  Cases_on `write_place cx (MemoryPlace id []) actual ee` >>
-  rename1 `_ = (actual_res, actual_fin)` >>
-  `eval_stmt cx (AugAssign ty (NameTarget id) bop e)
-     (es with gas_obs := gs) = (actual_res, actual_fin)` by
-    (`lookup_scopes id (es with gas_obs := gs).scopes = SOME entry` by simp[] >>
-     drule_all augassign_rhs_normal_mem_src >>
-     disch_then (qspecl_then [`ty`, `bop`] mp_tac) >>
-     simp[lift_sum_def, bind_def, return_def]) >>
-  `stmt_res_ok lctx actual_res` by metis_tac[gas_admissible_result] >>
-  `res = actual_res` by
-    (qspecl_then [`[]`, `cx`, `id`, `w`, `ee`, `actual`]
-       mp_tac write_place_short_memory_result >> simp[]) >>
-  gvs[stmt_res_ok_def, expr_res_ok_def]
-QED
-
-(* S1 stmtSimAugAssign's augassign_rhs_exception_exec, at either memory
-   flag. *)
-Theorem augassign_rhs_exception_exec_mem_src[local]:
-  lookup_scopes id es.scopes = SOME entry /\
-  gas_marked_path memory ctx func s0 0 (OK t) /\
-  gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
-    (es with gas_obs := [],t) marks (INR ex) ee r ==>
-  gas_marked_exec memory (ctx,func)
-    (eval_stmt cx (AugAssign ty (NameTarget id) bop e))
-    (es,s0) marks (INR ex) ee r
-Proof
-  strip_tac >> drule_all stmtSimAugAssignTheory.gas_marked_exec_zero_prefix >>
-  simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
-  gen_tac >> irule augassign_rhs_exception_mem_src >> simp[] >>
-  goal_assum (drule_at Any) >> simp[]
-QED
-
-(* S1 stmtSimAugAssign's augassign_rhs_normal_exec, at either memory
-   flag. *)
-Theorem augassign_rhs_normal_exec_mem_src[local]:
-  lookup_scopes id es.scopes = SOME entry /\
-  gas_marked_path memory ctx func s0 0 (OK t) /\
-  gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
-    (es with gas_obs := [],t) marks (INL v) ee (OK u) /\
-  gas_marked_exec memory (ctx,func)
-    (bind (lift_sum (evaluate_binop
-      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-      entry.type bop entry.value v)) (write_place cx (MemoryPlace id [])))
-    (ee with gas_obs := [],u) [] res fin r ==>
-  gas_marked_exec memory (ctx,func)
-    (eval_stmt cx (AugAssign ty (NameTarget id) bop e))
-    (es,s0) marks res fin r
-Proof
-  strip_tac >>
-  drule_all stmtSimAugAssignTheory.gas_marked_exec_zero_prefix >> strip_tac >>
-  gvs[gas_marked_exec_def] >> conj_tac
-  >- (gen_tac >>
-      qpat_x_assum `!tail. bind (eval_expr cx e) _ _ = _`
-        (qspec_then `tail` assume_tac) >>
-      `lookup_scopes id (es with gas_obs :=
-        gas_explicit marks s0.vs_gas_readings ++ tail).scopes = SOME entry`
-        by simp[] >>
-      drule_all augassign_rhs_normal_mem_src >>
-      disch_then (qspecl_then [`ty`, `bop`] mp_tac) >> simp[]) >>
-  drule_all gas_marked_path_then >> simp[]
-QED
-
-(* S1 stmtSimAugAssign's write_place_local_gas_obs. *)
-Theorem write_place_local_gas_obs_mem_src[local]:
-  !cx id v es res es' obs.
-    write_place cx (MemoryPlace id []) v es = (res, es') /\
-    (!m. res <> INR (Error (TypeError m))) ==>
-    res = INL () /\
-    write_place cx (MemoryPlace id []) v (es with gas_obs := obs) =
-      (res, es' with gas_obs := obs)
-Proof
-  rpt strip_tac >> drule_all write_place_local >> strip_tac >> gvs[] >>
-  simp[write_place_def, bind_def, ignore_bind_def, get_scopes_def,
-       lift_option_type_def, type_check_def, assert_def, lift_sum_def,
-       replace_memory_entry_def, evaluate_subscripts_def,
-       assign_subscripts_def, set_scopes_def, return_def, raise_def]
-QED
-
-(* S1 stmtSimAugAssign's augassign_store_continuation_exec, at either
-   memory flag. *)
-Theorem augassign_store_continuation_exec_mem_src[local]:
-  br = INL w /\
-  write_place cx (MemoryPlace id []) w ee = (res, fin) /\
-  (!m. res <> INR (Error (TypeError m))) /\
-  gas_marked_path memory ctx func u 0 r ==>
-  gas_marked_exec memory (ctx,func)
-    (bind (lift_sum br) (write_place cx (MemoryPlace id [])))
-    (ee,u) [] res fin r
-Proof
-  strip_tac >> drule_all write_place_local_gas_obs_mem_src >> strip_tac >>
-  simp[gas_marked_exec_def, lift_sum_def, bind_def, return_def]
-QED
-
-(* S1 stmtSimAugAssign's augassign_error_continuation_exec, at either
-   memory flag. *)
-Theorem augassign_error_continuation_exec_mem_src[local]:
-  br = INR err /\ gas_marked_path memory ctx func u 0 r ==>
-  gas_marked_exec memory (ctx,func)
-    (bind (lift_sum br) (write_place cx (MemoryPlace id [])))
-    (ee,u) [] (INR (Error err)) ee r
-Proof
-  simp[gas_marked_exec_def, lift_sum_def, bind_def, raise_def]
-QED
 
 (* ===== The load of x ===== *)
 
@@ -464,7 +201,7 @@ QED
 Resume compile_augassign_local_mem[rhs_outcome]:
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
     (es with gas_obs := [])` by
-    (simp[] >> irule augassign_rhs_admissible_mem_src >> metis_tac[]) >>
+    (simp[] >> irule stmtSimAugAssignTheory.augassign_rhs_admissible >> metis_tac[]) >>
   qpat_x_assum `!gs. expr_sim_mem _ _ _ _ _ _ _`
     (qspec_then `[]` (mp_tac o REWRITE_RULE [expr_sim_mem_def])) >>
   disch_then (qspecl_then [`st0`, `s1`, `s2`, `rhs_op`, `t`] mp_tac) >>
@@ -486,7 +223,7 @@ Resume compile_augassign_local_mem[rhs_outcome]:
   >- suspend "rhs_summary" >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  irule augassign_rhs_exempt_mem_src >> conj_tac
+  irule stmtSimAugAssignTheory.augassign_rhs_exempt >> conj_tac
   >- (qexists_tac `entry` >> simp[]) >>
   qexists_tac `t` >> simp[]
 QED
@@ -515,7 +252,7 @@ Resume compile_augassign_local_mem[rhs_summary]:
        (qspec_then `H1` mp_tac) >> simp[]) >>
   `?ex. res = INR ex` by (Cases_on `res` >> fs[expr_exit_def]) >> gvs[] >>
   qexistsl_tac [`INR ex`, `es_end`, `r`] >> conj_tac
-  >- (irule augassign_rhs_exception_exec_mem_src >> conj_tac
+  >- (irule stmtSimAugAssignTheory.augassign_rhs_exception_exec >> conj_tac
       >- (qexists_tac `entry` >> simp[]) >>
       qexists_tac `t` >> simp[]) >>
   disj2_tac >> simp[] >> rpt strip_tac >> simp[stmt_exit_def] >> disj1_tac >>
@@ -547,7 +284,7 @@ Resume compile_augassign_local_mem[rhs_normal]:
   `valid_horizon cx st0 H1 es.storage_trace` by metis_tac[] >>
   `expr_res_ok (bop_result cx ty bop [ty; expr_type e] entry.value v
      (ee with gas_obs := []))` by
-    (irule augassign_binop_admissible_mem_src >> simp[] >>
+    (irule stmtSimAugAssignTheory.augassign_binop_admissible >> simp[] >>
      qexistsl_tac [`es`, `gas_explicit marks t.vs_gas_readings`, `id`, `lctx`] >>
      simp[]) >>
   `expr_body_pre cenv cx env e
@@ -631,7 +368,7 @@ Resume compile_augassign_local_mem[operator_normal]:
   `!m. wr <> INR (Error (TypeError m))` by
     (`bop_result cx ty bop [ty; expr_type e] entry.value v
         (ee with gas_obs := []) = INL result` by simp[] >>
-     drule_all augassign_write_admissible_mem_src >> simp[]) >>
+     drule_all stmtSimAugAssignTheory.augassign_write_admissible >> simp[]) >>
   drule_all write_place_local >> strip_tac >>
   rename1 `find_containing_scope id (ee with gas_obs := []).scopes =
            SOME (pre, env1, cur, rest)` >>
@@ -672,10 +409,10 @@ Resume compile_augassign_local_mem[store]:
        pre ++ (env1 |+ (id, cur with <|value := result; popped := []|>)) ::
        rest`, `OK last`] >>
   conj_tac
-  >- (irule augassign_rhs_normal_exec_mem_src >>
+  >- (irule stmtSimAugAssignTheory.augassign_rhs_normal_exec >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
       goal_assum (drule_at Any) >> simp[] >>
-      irule augassign_store_continuation_exec_mem_src >> simp[] >>
+      irule stmtSimAugAssignTheory.augassign_store_continuation_exec >> simp[] >>
       goal_assum (drule_at Any) >> simp[]) >>
   disj1_tac >> qexists_tac `last` >> conj_tac >- REFL_TAC >>
   qx_gen_tac `H` >> strip_tac >>
@@ -777,10 +514,10 @@ Resume compile_augassign_local_mem[operator_exit]:
   gvs[] >>
   qexistsl_tac [`INR (Error y)`, `ee with gas_obs := []`, `r`] >>
   conj_tac
-  >- (irule augassign_rhs_normal_exec_mem_src >>
+  >- (irule stmtSimAugAssignTheory.augassign_rhs_normal_exec >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
       goal_assum (drule_at Any) >> simp[] >>
-      irule augassign_error_continuation_exec_mem_src >> simp[]) >>
+      irule stmtSimAugAssignTheory.augassign_error_continuation_exec >> simp[]) >>
   disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
   simp[stmt_exit_def] >> rpt strip_tac >>
   metis_tac[expr_exit_INR_type]

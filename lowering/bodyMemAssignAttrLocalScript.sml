@@ -99,161 +99,6 @@ Proof
   irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]
 QED
 
-Theorem assign_attr_local_admissible_run_mem_src[local]:
-  gas_admissible
-    (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-    (stmt_res_ok lctx) es ==>
-  !gs. eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
-      (es with gas_obs := gs) =
-    vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
-      (write_place cx (MemoryPlace id [AttrSubscript fld]))
-      (es with gas_obs := gs)
-Proof
-  strip_tac >> gen_tac >>
-  Cases_on `eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
-    (es with gas_obs := gs)` >>
-  rename1 `_ = (res, ee)` >>
-  `stmt_res_ok lctx res` by metis_tac[gas_admissible_result] >>
-  drule eval_assign_attr_local >>
-  impl_tac >- gvs[stmt_res_ok_def] >>
-  strip_tac >> Cases_on `r` >>
-  gvs[vyperStateTheory.bind_def, pairTheory.UNCURRY]
-QED
-
-Theorem assign_attr_local_admissible_rhs_mem_src[local]:
-  gas_admissible
-    (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-    (stmt_res_ok lctx) es ==>
-  gas_admissible (vyperState$bind (eval_expr cx e) (read_result cx)) expr_res_ok es
-Proof
-  strip_tac >> rw[gas_admissible_def] >>
-  Cases_on `res` >- simp[expr_res_ok_def] >>
-  rename1 `INR ex` >>
-  `no_control_exc ex` by
-    (qpat_x_assum `vyperState$bind _ _ _ = _` mp_tac >>
-     simp[vyperStateTheory.bind_def, AllCaseEqs()] >> strip_tac >> gvs[]
-     >- metis_tac[read_result_no_control]
-     >> metis_tac[cj 1 eval_expr_no_control]) >>
-  `stmt_res_ok lctx (INR ex)` by
-    (drule gas_admissible_result >> disch_then irule >>
-     qexistsl_tac [`ee`, `gs`] >>
-     drule assign_attr_local_admissible_run_mem_src >>
-     disch_then (qspec_then `gs` SUBST1_TAC) >>
-     simp[Once vyperStateTheory.bind_def]) >>
-  gvs[stmt_res_ok_def, expr_res_ok_def, no_control_exc_def]
-QED
-
-Theorem assign_attr_local_admissible_raw_mem_src[local]:
-  gas_admissible
-    (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-    (stmt_res_ok lctx) es ==>
-  gas_admissible (eval_expr cx e) expr_vv_res_ok es
-Proof
-  strip_tac >> irule forced_expr_admissible_raw >>
-  metis_tac[assign_attr_local_admissible_rhs_mem_src]
-QED
-
-Theorem assign_attr_local_marked_exec_mem_src[local]:
-  gas_admissible
-    (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-    (stmt_res_ok lctx) es /\
-  gas_marked_exec memory (ctx,func)
-    (vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
-      (write_place cx (MemoryPlace id [AttrSubscript fld])))
-    (es,s0) marks res ee r ==>
-  gas_marked_exec memory (ctx,func)
-    (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-    (es,s0) marks res ee r
-Proof
-  strip_tac >> drule assign_attr_local_admissible_run_mem_src >>
-  strip_tac >> gvs[gas_marked_exec_def]
-QED
-
-Theorem assign_attr_local_continuation_success_mem_src[local]:
-  gas_admissible
-    (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-    (stmt_res_ok lctx) es /\
-  vyperState$bind (eval_expr cx e) (read_result cx)
-    (es with gas_obs := gs) = (INL v, ee) ==>
-  ?pre env entry rest vals old.
-    find_containing_scope id ee.scopes = SOME (pre, env, entry, rest) /\
-    entry.value = StructV vals /\ ALOOKUP vals fld = SOME old /\
-    write_place cx (MemoryPlace id [AttrSubscript fld]) v ee =
-      (INL (), ee with scopes :=
-        pre ++ (env |+ (id, entry with
-          <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest)
-Proof
-  strip_tac >>
-  Cases_on `eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
-    (es with gas_obs := gs)` >> rename1 `_ = (res, ff)` >>
-  `stmt_res_ok lctx res` by metis_tac[gas_admissible_result] >>
-  drule eval_assign_attr_local >>
-  impl_tac >- gvs[stmt_res_ok_def] >> strip_tac >>
-  gvs[vyperStateTheory.bind_def, pairTheory.UNCURRY] >>
-  `!m. res <> INR (Error (TypeError m))` by gvs[stmt_res_ok_def] >>
-  drule_all write_place_attr_local >> strip_tac >> gvs[] >>
-  metis_tac[]
-QED
-
-Theorem assign_attr_local_continuation_all_tails_mem_src[local]:
-  gas_admissible
-    (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-    (stmt_res_ok lctx) es /\
-  (!tail. vyperState$bind (eval_expr cx e) (read_result cx)
-    (es with gas_obs := prefix ++ tail) = (INL v, ee with gas_obs := tail)) ==>
-  ?pre env entry rest vals old.
-    find_containing_scope id ee.scopes = SOME (pre, env, entry, rest) /\
-    entry.value = StructV vals /\ ALOOKUP vals fld = SOME old /\
-    !tail. write_place cx (MemoryPlace id [AttrSubscript fld]) v
-      (ee with gas_obs := tail) =
-      (INL (), (ee with scopes :=
-        pre ++ (env |+ (id, entry with
-          <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest)
-        with gas_obs := tail)
-Proof
-  strip_tac >>
-  `!tail. ?pre env entry rest vals old.
-    find_containing_scope id ee.scopes = SOME (pre, env, entry, rest) /\
-    entry.value = StructV vals /\ ALOOKUP vals fld = SOME old /\
-    write_place cx (MemoryPlace id [AttrSubscript fld]) v (ee with gas_obs := tail) =
-      (INL (), (ee with scopes :=
-        pre ++ (env |+ (id, entry with
-          <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest)
-        with gas_obs := tail)` by
-    (gen_tac >> drule assign_attr_local_continuation_success_mem_src >>
-     disch_then (qspecl_then [`v`, `prefix ++ tail`, `ee with gas_obs := tail`] mp_tac) >>
-     simp[] >> metis_tac[]) >>
-  pop_assum (fn th => assume_tac th >> mp_tac (Q.SPEC `[]` th)) >>
-  strip_tac >> qexistsl_tac [`pre`, `env`, `entry`, `rest`, `vals`, `old`] >>
-  gvs[] >> gen_tac >>
-  first_x_assum (qspec_then `tail` strip_assume_tac) >> gvs[]
-QED
-
-Theorem assign_attr_local_exempt_mem_src[local]:
-  gas_exempt_cert memory tops (ctx, func)
-    (ignore_bind (eval_expr cx e) (return ()))
-    (es, s0) marks (err, ee) (leaf, fin) ==>
-  gas_exempt_cert memory tops (ctx, func)
-    (ignore_bind
-      (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-      (return ()))
-    (es, s0) marks (err, ee) (leaf, fin)
-Proof
-  strip_tac >>
-  `ignore_bind
-    (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-    (return ()) =
-   vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
-     (\v. ignore_bind
-       (vyperState$bind (eval_target_place cx (AttributeTarget (NameTarget id) fld))
-         (\p. write_place cx p v))
-       (return ()))` by
-    simp[Once evaluate_def, ignore_bind_def, bind_assoc] >>
-  pop_assum SUBST1_TAC >>
-  irule gas_exempt_cert_error_value >> simp[ignore_bind_def, bind_assoc] >>
-  irule gas_exempt_cert_error_result >> simp[]
-QED
-
 Theorem assign_attr_local_vv_bound_frame_mem[local]:
   vv_store_bound cx ty lt es tv vv s /\
   eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) s /\
@@ -596,47 +441,9 @@ Proof
   simp[expr_post_def] >> metis_tac[]
 QED
 
-Theorem assign_attr_local_normal_source_mem_src[local]:
-  gas_admissible
-    (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
-    (stmt_res_ok lctx) es /\
-  expr_body_pre cenv cx env e es /\
-  FLOOKUP env.var_types id = SOME (StructT sid) /\
-  ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
-    fld = SOME (fty,fsz) /\ is_word_type fty /\ expr_type e = fty /\
-  (!tail. vyperState$bind (eval_expr cx e) (read_result cx)
-    (es with gas_obs := gs ++ tail) = (INL v, ee with gas_obs := tail)) ==>
-  ?pre env1 entry rest fs vals ftv.
-    find_containing_scope id ee.scopes = SOME (pre,env1,entry,rest) /\
-    entry.type = StructTV fs /\ entry.value = StructV vals /\
-    fields_layout (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs /\
-    struct_has_type fs vals /\ ALOOKUP fs fld = SOME ftv /\
-    evaluate_type (get_tenv cx) fty = SOME ftv /\ store_lays_out ftv ftv v /\
-    !tail. write_place cx (MemoryPlace id [AttrSubscript fld]) v
-      (ee with gas_obs := tail) =
-      (INL (), ee with <|scopes := pre ++
-        (env1 |+ (id,entry with <|value := StructV (AFUPDKEY fld (K v) vals);
-          popped := []|>)) :: rest; gas_obs := tail|>)
-Proof
-  strip_tac >> drule_all assign_attr_local_continuation_all_tails_mem_src >> strip_tac >>
-  Cases_on `eval_stmt cx
-    (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)
-    (es with gas_obs := gs ++ [])` >> rename1 `_ = (res,ff)` >>
-  `stmt_res_ok lctx res` by metis_tac[gas_admissible_result] >>
-  `expr_body_pre cenv cx env e (es with gas_obs := gs ++ [])` by simp[] >>
-  drule_all assign_attr_local_source >> strip_tac >>
-  qpat_x_assum `!tail. vyperState$bind _ _ _ = _`
-    (qspec_then `[]` assume_tac) >>
-  `r = INL v /\ es1 = (ee with gas_obs := [])` by
-    (qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
-     qpat_x_assum `vyperState$bind _ _ _ = _` mp_tac >>
-     simp[vyperStateTheory.bind_def, pairTheory.UNCURRY]) >>
-  gvs[] >> metis_tac[]
-QED
-
 (* A gas_bad_storage_at goal on the statement, from one on its expression. *)
 val attr_bad_storage_tac =
-  drule assign_attr_local_admissible_run_mem_src >>
+  drule stmtSimAssignAttrTheory.assign_attr_local_admissible_run >>
   disch_then (fn th =>
     PURE_REWRITE_TAC [gasStorageTheory.gas_bad_storage_at_def, th]) >>
   PURE_REWRITE_TAC [GSYM gasStorageTheory.gas_bad_storage_at_def] >>
@@ -695,7 +502,7 @@ Proof
   `~block_is_terminated sb` by
     (drule emit_void_nonterminator_open >> simp[is_terminator_def]) >>
   `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
-    (drule assign_attr_local_admissible_raw_mem_src >> simp[]) >>
+    (drule stmtSimAssignAttrTheory.assign_attr_local_admissible_raw >> simp[]) >>
   qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_mem_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `sm`, `vv`, `s0`] mp_tac) >> simp[] >>
@@ -721,7 +528,7 @@ Proof
   strip_tac >> qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   rename1 `gas_exempt_cert _ _ _ _ _ _ (err0,ee0) (leaf0,fin0)` >>
   qexistsl_tac [`err0`, `ee0`, `leaf0`, `fin0`] >>
-  irule assign_attr_local_exempt_mem_src >> simp[]
+  irule stmtSimAssignAttrTheory.assign_attr_local_exempt >> simp[]
 QED
 
 Resume assign_attr_local_frag_mem[exception]:
@@ -731,7 +538,7 @@ Resume assign_attr_local_frag_mem[exception]:
   `expr_exit res r` by metis_tac[] >>
   Cases_on `res` >- fs[expr_exit_def] >>
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
-  >- (irule assign_attr_local_marked_exec_mem_src >>
+  >- (irule stmtSimAssignAttrTheory.assign_attr_local_marked_exec >>
       (conj_tac >- (qexists_tac `lctx` >> simp[])) >>
       ntac 2 (irule gas_marked_exec_bind_exception) >> simp[]) >>
   disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
@@ -789,7 +596,7 @@ Resume assign_attr_local_frag_mem[normal]:
     (INL v, es_end with gas_obs := tail)` by
     (fs[gas_marked_exec_def, vyperStateTheory.bind_def] >>
      drule read_result_gas_obs >> simp[]) >>
-  drule assign_attr_local_normal_source_mem_src >>
+  drule stmtSimAssignAttrTheory.assign_attr_local_normal_source >>
   disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (StructT _)`)) >>
   disch_then (drule_at (Pat `ALOOKUP _ _ = _`)) >>
@@ -823,7 +630,7 @@ Resume assign_attr_local_frag_mem[normal]:
      drule_all gas_marked_path_then >> simp[]) >>
   qexistsl_tac [`INL ()`, `ff`, `OK t1`] >> conj_tac
   >- (simp[gas_marked_exec_def] >> gen_tac >>
-      drule assign_attr_local_admissible_run_mem_src >>
+      drule stmtSimAssignAttrTheory.assign_attr_local_admissible_run >>
       disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings ++ tail` SUBST1_TAC) >>
       simp[Once vyperStateTheory.bind_def, Abbr `ff`]) >>
   disj1_tac >> qexists_tac `t1` >> conj_tac >- REFL_TAC >>

@@ -4,6 +4,7 @@ Ancestors
   venomState compileEnv exprLowering exprSimIfExp exprSimVVFrame exprSimAlloc
   bodyMemAggregateUnwrap exprSimProps exprLoweringProps exprSimUnwrapProps
   exprSimMemDefs vyperInterpreter vyperState
+  exprSimAggregateChildren
 
 Theorem ifexp_destination_through_post[local]:
   expr_post H ctx func ce cx e ee (origin with cs_next_var := sm.cs_next_var)
@@ -111,7 +112,7 @@ Theorem ifexp_unwrap_destination[local]:
     u.vs_requests = r.vs_requests /\ u.vs_call_ctx = r.vs_call_ctx
 Proof
   strip_tac >>
-  drule vv_post_rebase_mem_src >> strip_tac >>
+  drule exprSimAggregateChildrenTheory.vv_post_rebase >> strip_tac >>
   `local_ptrs_reserved ce (origin with cs_next_var := sm.cs_next_var)` by
     (qpat_x_assum `local_ptrs_reserved ce sm` mp_tac >>
      simp_tac (srw_ss()) [local_ptrs_reserved_def, not_fresh_at_def] >>

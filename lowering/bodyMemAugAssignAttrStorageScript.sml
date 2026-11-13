@@ -6,9 +6,9 @@
    the result at the sum with an SSTORE or TSTORE; none of these touches
    memory, so the pieces compose as in bodyMemAugAssignTopWord.
 
-   The *_mem_src helpers are copies of S1 source-side lemmas
-   (stmtSimAugAssignAttrStorage and stmtSimAugAssignStorage there),
-   stated for any target whose place is a fixed storage slot. *)
+   The *_mem_src helpers lift S1's stmtSimAugAssignAttrStorage place
+   lemmas to the marked execution, for any target whose place is a fixed
+   storage slot. *)
 Theory bodyMemAugAssignAttrStorage
 Ancestors
   supportedExprTraverse allocLimitsProps
@@ -41,10 +41,11 @@ Ancestors
   vyperLookup vyperAST
   venomExecSemantics venomExecProofs venomInst venomState
   list rich_list finite_map pred_set
+  stmtSimAugAssignStorage
 Libs
   monadsyntax
 
-(* ===== The source side (S1 copies) ===== *)
+(* ===== The source side (S1 lifts) ===== *)
 
 (* S1 stmtSimAugAssignAttrStorage's augassign_storage_place_rhs_exception,
    lifted to the marked execution at either memory flag.  The target's
@@ -126,74 +127,7 @@ Proof
   drule_all gas_marked_path_then >> simp[]
 QED
 
-(* S1 stmtSimAugAssignStorage's augassign_storage_continuation_exec, at
-   either memory flag. *)
-Theorem augassign_storage_continuation_exec_mem_src[local]:
-  bind (lift_sum br) (write_storage_slot cx tr slot tvt) ee = (res,fin) /\
-  gas_marked_path memory ctx func u 0 r ==>
-  gas_marked_exec memory (ctx,func)
-    (bind (lift_sum br) (write_storage_slot cx tr slot tvt))
-    (ee,u) [] res fin r
-Proof
-  Cases_on `br` >>
-  simp[gas_marked_exec_def, lift_sum_def, bind_def, return_def, raise_def] >>
-  strip_tac >> simp[] >> gen_tac >>
-  simp[write_storage_slot_gas_obs] >> gvs[]
-QED
-
 (* ===== The code ===== *)
-
-(* S1 stmtSimAugAssignAttrStorage's augassign_attr_storage_code_parts. *)
-Theorem augassign_attr_storage_code_parts_mem_src[local]:
-  !cenv lctx ty0 ty src id fld sid fty fsz bop e sa c sf tr slot.
-    stmt_env cenv lctx ty0
-      (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)
-      sa = (c, sf) /\
-    FLOOKUP cenv.ce_module_vars (src, id) =
-      SOME (if tr then TransientLoc slot else StorageLoc slot) /\
-    cenv.ce_hashmap_info (src, id) = NONE /\
-    cenv.ce_module_var_type (src, id) = SOME (StructT sid) /\
-    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
-      fld = SOME (fty, fsz) ==>
-    c = cenv /\
-    ?dst sn cur_op s1 rhs_op s2 res_op s3.
-      emit_op ADD
-        [Lit slot; Lit (n2w (struct_field_offset_slots
-          (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))]
-        sa = (dst, sn) /\
-      emit_op (if tr then TLOAD else SLOAD) [dst] sn = (cur_op, s1) /\
-      lower_value compile_expr cenv ty e s1 = (rhs_op, s2) /\
-      compile_binop bop cur_op rhs_op ty NONE
-        (if bop = Exp then expr_int_literal e else NONE) s2 = (res_op, s3) /\
-      emit_void (if tr then TSTORE else SSTORE) [dst; res_op] s3 = ((), sf)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all compile_get_target_ptr_toplevel >> strip_tac >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
-  Cases_on `tr` >>
-  asm_simp_tac (srw_ss())
-    [stmt_env_def, declare_stmt_local_def, compile_stmt_def,
-     Once compile_get_target_ptr_def, comp_bind_def, comp_ignore_bind_def,
-     comp_return_def, LET_THM] >>
-  qmatch_goalsub_abbrev_tac `emit_op ADD [Lit slot; Lit (n2w off)] sa` >>
-  Cases_on `emit_op ADD [Lit slot; Lit (n2w off)] sa` >>
-  rename1 `_ = (dst, sn)` >>
-  asm_simp_tac (srw_ss())
-    [comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
-  qmatch_goalsub_abbrev_tac `emit_op load [dst] sn` >>
-  Cases_on `emit_op load [dst] sn` >> rename1 `_ = (cur, s1)` >>
-  Cases_on `lower_value compile_expr cenv ty e s1` >>
-  rename1 `_ = (rhs, s2)` >>
-  Cases_on `compile_binop bop cur rhs ty NONE
-    (if bop = Exp then expr_int_literal e else NONE) s2` >>
-  rename1 `_ = (res_op, s3)` >>
-  qmatch_goalsub_abbrev_tac `emit_void store [dst; res_op] s3` >>
-  Cases_on `emit_void store [dst; res_op] s3` >>
-  asm_simp_tac (srw_ss())
-    [comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM,
-     oneTheory.one] >>
-  strip_tac >> gvs[oneTheory.one]
-QED
 
 (* ===== The ADD and the load, on a memory-safe path ===== *)
 
@@ -428,7 +362,7 @@ Proof
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
     fs[stmt_state_rel_def, state_rel_def] >>
   drule_all toplevel_storage_ce_vars >> strip_tac >>
-  drule_all augassign_attr_storage_code_parts_mem_src >> strip_tac >> gvs[] >>
+  drule_all stmtSimAugAssignAttrStorageTheory.augassign_attr_storage_code_parts >> strip_tac >> gvs[] >>
   qabbrev_tac `off = struct_field_offset_slots
     (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld` >>
   suspend "load"
@@ -740,7 +674,7 @@ Resume compile_augassign_attr_storage_mem[store]:
        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
        ftv bop v0 v)) (write_storage_slot cx tr (n2w slot + n2w off) ftv))
      (ee with gas_obs := [],u) [] (INL ()) fin (OK last)` by
-    (irule augassign_storage_continuation_exec_mem_src >>
+    (irule stmtSimAugAssignStorageTheory.augassign_storage_continuation_exec >>
      simp[lift_sum_def, bind_def, return_def]) >>
   `gas_marked_exec T (ctx,func)
      (eval_stmt cx
@@ -874,7 +808,7 @@ Resume compile_augassign_attr_storage_mem[operator_exit]:
        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
        ftv bop v0 v)) (write_storage_slot cx tr (n2w slot + n2w off) ftv))
      (ee with gas_obs := [],u) [] (INR (Error y)) (ee with gas_obs := []) r` by
-    (irule augassign_storage_continuation_exec_mem_src >>
+    (irule stmtSimAugAssignStorageTheory.augassign_storage_continuation_exec >>
      simp[lift_sum_def, bind_def, raise_def]) >>
   qexistsl_tac [`INR (Error y)`, `ee with gas_obs := []`, `r`] >>
   conj_tac
