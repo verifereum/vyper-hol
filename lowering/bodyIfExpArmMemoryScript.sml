@@ -26,7 +26,7 @@ Proof
   strip_tac >>
   `~expr_has_effect e ==>
      vv_storage_live H cx (LocatedValue (expr_type e) p) es' s` by
-    simp[vv_storage_live_def] >>
+    simp[loweringPostsTheory.vv_storage_live_def] >>
   irule vv_post_frame_intro >>
   simp[loweringPostsTheory.vv_holds_def, loweringPostsTheory.vv_at_def] >>
   disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>

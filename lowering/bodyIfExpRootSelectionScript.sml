@@ -66,7 +66,7 @@ Proof
       `?sel. v = BoolV sel` by (irule ifexp_root_condition_bool >> metis_tac[]) >>
       qpat_x_assum `v = BoolV sel` SUBST_ALL_TAC >>
       qpat_x_assum `!marks sel mid u. _` (qspecl_then
-        [`marks`,`sel`,`es_end`,`t`] mp_tac) >>
+        [`marks`,`sel`,`es_end`,`t'`] mp_tac) >>
       impl_tac
       >- (rpt conj_tac
           >- first_assum ACCEPT_TAC
