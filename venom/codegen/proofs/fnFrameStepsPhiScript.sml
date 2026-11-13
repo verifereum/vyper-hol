@@ -10,7 +10,7 @@ Ancestors
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
   allocaRemapSSA fnPlanPrefix dftCommutation fnFrameDeepInvoke cfgCorrectnessProof livenessProofs fnPlanLineagePhiClasses
-  venomWfProps
+  venomWfProps asmRunBounded planEmissionProps
 
 Theorem phi_regular_plan_spill_support:
   !liveness dfg cfg fn inst next_live halting next_term lbl ps ops ps' at.
@@ -2301,7 +2301,8 @@ Theorem phi_run_prefix:
   asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
   ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
     st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
-    phi_run_config fn ra lo base pred entry source m (done ++ todo) [] last st'
+    phi_run_config fn ra lo base pred entry source m (done ++ todo) [] last st' /\
+    EVERY plan_admin_op ops
 Proof
   Induct >- (rpt gen_tac >>
     simp[generate_block_insts_prefix_def] >> strip_tac >> gvs[] >>
@@ -2318,6 +2319,7 @@ Proof
   Cases_on `generate_phi_plan inst
     (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (LENGTH done))) halt ps` >>
   rename1 `generate_phi_plan _ _ _ _ = (step_ops, next)` >>
+  `EVERY plan_admin_op step_ops` by metis_tac[generate_phi_plan_admin] >>
   simp[AllCaseEqs()] >> strip_tac >>
   gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append,
       listTheory.EVERY_APPEND] >>
@@ -2591,7 +2593,8 @@ Theorem phi_prefix_hits_frame_sim:
         (s_phi with vs_inst_idx := LENGTH phis) as' /\
       (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
          operand_val (frame_view fn ra s_phi) lo at =
-         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at))
+         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at)) /\
+      create_safe_prefix lo o2pc prog n as
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st` >>
@@ -2669,7 +2672,8 @@ Resume phi_prefix_hits_frame_sim[run]:
       (st with as_stack := top) = AsmOK endpoint /\
     endpoint.as_pc = (st with as_stack := top).as_pc +
       LENGTH (execute_plan cplan.cp_initial_fmp phi_ops) /\
-    phi_run_config fn ra lo bound pred ps vs st.as_memory ([] ++ phis) [] ps1 endpoint` by
+    phi_run_config fn ra lo bound pred ps vs st.as_memory ([] ++ phis) [] ps1 endpoint /\
+    EVERY plan_admin_op phi_ops` by
     (irule (INST_TYPE [``:'a`` |-> ``:cfg_analysis``] phi_run_prefix) >>
      goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >>
@@ -2713,6 +2717,8 @@ Resume phi_prefix_hits_frame_sim[lift]:
   conj_tac
   >- (qpat_x_assum `endpoint.as_pc = _` mp_tac >> simp_tac (srw_ss()) []) >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac
+  >- (irule plan_admin_create_safe_prefix >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
   rpt gen_tac >> disch_tac >> irule phi_run_final_alias >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   qpat_assum `phi_run_config _ _ _ _ _ _ _ _ (collect_phis _) [] ps1 endpoint`

@@ -102,7 +102,8 @@ Theorem phi_prefix_frame_sim:
         (s_phi with vs_inst_idx := LENGTH phis) as' /\
       (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
          operand_val (frame_view fn ra s_phi) lo at =
-         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at))
+         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at)) /\
+      create_safe_prefix lo o2pc prog n as
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`liveness`, `dfg`, `cfg`, `fn`, `ch`, `growth`, `spill_base`,

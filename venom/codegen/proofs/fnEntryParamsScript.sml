@@ -12,6 +12,7 @@
 Theory fnEntryParams
 Ancestors
   fnFrameBoundary fnFrameBoundaryEntryParams frameRel contextCodegenRel
+  asmRunBounded planEmissionProps
   stackPlanGen stackPlanTypes venomExecSemantics venomState venomInst
   venomWf livenessDefs dfgDefs list contextCodegenRelProps
   planExec stackOpSim blockSimHelpers stackPlanOps stackModel reorderSim
@@ -333,10 +334,19 @@ Theorem entry_prefix_asm_exact:
         (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) a = AsmOK a' /\
       a'.as_pc = a.as_pc + LENGTH (execute_plan cp.cp_initial_fmp
         (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
-      fn_frame_inv ctx cp lo fn ra rest a.as_memory ps1 vp a'
+      fn_frame_inv ctx cp lo fn ra rest a.as_memory ps1 vp a' /\
+      create_safe_prefix lo o2pc prog
+        (LENGTH (execute_plan cp.cp_initial_fmp
+          (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) a
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `fn_entry_state_rel cplan fn vs a ra rest` >>
+  `EVERY plan_admin_op (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)` by
+    (simp[plan_admin_op_def] >> metis_tac[prepare_params_plan_admin]) >>
+  `create_safe_prefix lo o2pc prog
+    (LENGTH (execute_plan cplan.cp_initial_fmp
+      (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) a` by
+    (irule plan_admin_create_safe_prefix >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
   qabbrev_tac `params = get_params (HD fn.fn_blocks).bb_instructions` >>
   `context_venom_asm_rel cplan lo
     (ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params)
@@ -405,7 +415,10 @@ Theorem entry_prefix_asm:
       asm_steps lo o2pc prog n a = AsmOK a' /\
       a'.as_pc = a.as_pc + LENGTH (execute_plan cp.cp_initial_fmp
         (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
-      fn_frame_inv ctx cp lo fn ra rest a.as_memory ps1 vp a'
+      fn_frame_inv ctx cp lo fn ra rest a.as_memory ps1 vp a' /\
+      create_safe_prefix lo o2pc prog
+        (LENGTH (execute_plan cp.cp_initial_fmp
+          (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))) a
 Proof
   rpt gen_tac >> strip_tac >> drule_all entry_prefix_asm_exact >>
   metis_tac[]
@@ -460,7 +473,8 @@ Theorem entry_prefix_frame_sim:
       (!inst. active_inst fn inst vs_p ==> Inv ctx fn inst vs_p) /\
       (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
          operand_val (frame_view fn ra vs_p) lo at =
-         operand_val (frame_view fn ra vs_p) lo (normalize_operand dfg [] at))
+         operand_val (frame_view fn ra vs_p) lo (normalize_operand dfg [] at)) /\
+      create_safe_prefix lo o2pc prog n as
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `vp = entry_bind_pairs
@@ -487,6 +501,7 @@ Proof
     (rpt strip_tac >> gvs[] >> irule entry_plan_normalize >> metis_tac[]) >>
   qexistsl [`n`, `a'`, `vp`] >>
   pure_asm_rewrite_tac[] >> simp[NoAsms, entry_bind_pairs_normal] >>
+  reverse conj_tac >- gvs[] >>
   rpt strip_tac >>
   `normalize_operand (dfg_build_function fn) [] at = at` by metis_tac[] >>
   pure_asm_rewrite_tac[] >> REFL_TAC
