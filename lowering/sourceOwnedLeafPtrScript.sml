@@ -4,6 +4,9 @@
 Theory sourceOwnedLeafPtr
 Ancestors
   sourcePrimitiveGasMem sourceBulkGasMem
+  abiDecoderGuards abiDecoderDynarrayPrefix abiDecoderDynarrayBound
+  abiDecoderArrayHeader decoderArraySetupPtr compileEnv emitHelperProps exprLoweringProps
+  fragExec words list abiDecoderContract abiDecoderBulk abiEncoder
   sourceOwnedArrayLoopPtr sourcePrimitiveReentryPtr abiDecoderSequenceReach
   decoderPrimitiveObservations decoderWorldFramePtr
   sourceBulkArrayLayout calldataBulkReentry calldataBulkUniformPtr
@@ -12,6 +15,55 @@ Ancestors
   abiDecoderCoherence sourceBytesRepresentation calldataDecodePtr abiDecoderReentry
   venomState abiDecoderBytes calldataDynOwned abiDecoderFrameCompose
   allocaFrontierBound allocaBudgetProps venomMemDefs ptrDiscipline bodyPtrDefs arithmetic
+
+(* Split the successful concrete bulk run before choosing any ghosts. *)
+Theorem source_bulk_phase_runs[local]:
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    (DecDynArray ei abi_sz mem_sz F maxn) sa = ((),sb) /\
+  ~dec_info_needs_clamp ei /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?count_op c1 cnt c2 s1 s2.
+    abi_decode_count_guard CALLDATALOAD src maxn sa = (count_op,c1) /\
+    abi_decode_array_header (Var root) src CALLDATALOAD c1 = (cnt,c2) /\
+    abi_decode_bulk_payload (Var root) src cnt mem_sz CALLDATALOAD (Lit 0w) c2 = ((),sb) /\
+    inst_extends sa c1 /\ inst_extends c1 c2 /\ inst_extends c2 sb /\
+    run_inst_seq (emitted_insts sa c1) s = OK s1 /\
+    run_inst_seq (emitted_insts c1 c2) s1 = OK s2 /\
+    run_inst_seq (emitted_insts c2 sb) s2 = OK t
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bulk_phases,
+    abi_decode_dynarray_position_prefix_def,
+    compile_abi_dec_addr_def,
+    abiDecoderBytesBoundTheory.abi_decode_bytes_head_def,
+    abi_decode_dynarray_payload_guard_def, abi_decode_dynarray_end_guard_def,
+    abi_decode_bulk_body_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, LET_THM, eval_operand_def, ADD_CLAUSES,
+    abi_decoder_operand_live_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  rename1 `abi_decode_count_guard CALLDATALOAD src maxn sa = (count_op,c1)` >>
+  rename1 `abi_decode_array_header (Var root) src CALLDATALOAD c1 = (cnt,c2)` >>
+  `inst_extends sa c1 /\ inst_extends c1 c2 /\ inst_extends c2 sb` by
+    (imp_res_tac abi_decode_count_guard_shape >>
+     qpat_x_assum `abi_decode_array_header _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[abi_decode_bulk_payload_def, compile_abi_dec_addr_def,
+       abi_decode_array_header_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+     imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+     metis_tac[inst_extends_trans]) >>
+  `emitted_insts sa sb = emitted_insts sa c1 ++ emitted_insts c1 c2 ++ emitted_insts c2 sb` by
+    (imp_res_tac inst_extends_trans >> metis_tac[emitted_insts_append,inst_extends_def]) >>
+  qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >> asm_rewrite_tac[] >> strip_tac >>
+  dxrule run_inst_seq_append_ok >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts c2 sb) s2 = OK t` >>
+  dxrule run_inst_seq_append_ok >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa c1) s = OK s1` >>
+  qexistsl_tac [`s1`,`s2`] >> simp[]
+QED
 
 Theorem source_owned_primitive_decoder_ptr:
   abi_decoder_coherent ce env sf ty tv /\
