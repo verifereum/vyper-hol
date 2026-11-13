@@ -210,7 +210,7 @@ Proof
   simp_tac bool_ss [ADD_COMM]
 QED
 
-Theorem copy_lookup_update[local]:
+Theorem copy_lookup_update:
   !a c x st.
     lookup_storage a (update_storage c x st) =
     if a = c then x else lookup_storage a st
@@ -795,7 +795,7 @@ Proof
   disch_then (qspec_then `ix` mp_tac) >> simp[Abbr `s`]
 QED
 
-Theorem copy_dyn_live_index[local]:
+Theorem copy_dyn_live_index:
   !st base tv n j b.
     0 < j /\ j < 1+n*type_slot_size tv /\ b < 32 /\
     ~dead_bytes st base (ArrayTV tv (Dynamic n)) (base+j) b ==>
@@ -820,7 +820,7 @@ Proof
   simp[Abbr `s`] >> rpt IF_CASES_TAC >> gvs[] >> decide_tac
 QED
 
-Theorem copy_dyn_head[local]:
+Theorem copy_dyn_head:
   !tv vs slots k st.
     all_have_type tv vs /\ encode_dyn_array tv 1 vs = SOME slots /\
     w2n k+1+LENGTH vs*type_slot_size tv <= dimword (:256) ==>
@@ -1162,7 +1162,7 @@ Proof
   gvs[lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM]
 QED
 
-Theorem copy_fold_region[local]:
+Theorem copy_fold_region:
   !k n q ws st.
     w2n k+n <= dimword (:256) ==>
     lookup_storage q
@@ -1194,7 +1194,7 @@ Proof
   asm_rewrite_tac[]
 QED
 
-Theorem copy_encoded_outside[local]:
+Theorem copy_encoded_outside:
   !tv v writes k st x.
     encode_value tv v = SOME writes /\ value_has_type tv v /\
     w2n k + type_slot_size tv <= dimword (:256) /\

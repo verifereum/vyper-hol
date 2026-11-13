@@ -70,7 +70,7 @@ Proof
   drule aggregate_store_memory_straight >> gvs[same_blocks_def]
 QED
 
-Theorem normalize_word_straight[local]:
+Theorem normalize_word_straight:
   is_word_type dst_ty /\
   compile_store_memory_typed ce dst dst_ty src src_ty sa = ((),sb) ==>
   sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\

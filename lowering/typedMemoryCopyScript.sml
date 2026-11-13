@@ -3616,7 +3616,7 @@ Proof
   gvs[arg_type_fits_def, is_bytestring_type_def]
 QED
 
-Theorem typed_return_copy_static[local]:
+Theorem typed_return_copy_static:
   (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
             vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
             vs_inst_idx := s.vs_inst_idx|>) = s ==>

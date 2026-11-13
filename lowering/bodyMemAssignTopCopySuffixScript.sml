@@ -9,7 +9,7 @@ Ancestors
   bodyMemAssignTopCopyFacts stmtLowering emitHelperProps
   venomState words arithmetic list rich_list
 
-Theorem topcopy_normalize_allocations[local]:
+Theorem topcopy_normalize_allocations:
   !s t loc b k n.
     store_copy_normalize s t = store_copy_prefix loc b k s n ==>
     t.vs_allocas = s.vs_allocas /\

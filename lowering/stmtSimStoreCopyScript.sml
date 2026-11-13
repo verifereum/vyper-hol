@@ -307,7 +307,7 @@ Proof
   simp[store_copy_prefix_def, COUNT_LIST_SNOC, FOLDL_SNOC]
 QED
 
-Theorem store_copy_prefix_memory[local,simp]:
+Theorem store_copy_prefix_memory[simp]:
   (store_copy_prefix loc b k sbase i).vs_memory = sbase.vs_memory /\
   (store_copy_prefix loc b k sbase i).vs_labels = sbase.vs_labels /\
   (store_copy_prefix loc b k sbase i).vs_call_ctx = sbase.vs_call_ctx
@@ -335,7 +335,7 @@ Proof
   simp[store_copy_normalize_def, update_var_def]
 QED
 
-Theorem store_copy_normalize_store[local]:
+Theorem store_copy_normalize_store:
   store_copy_normalize sbase
     ((if loc = LocStorage then sstore else tstore) key value s) =
   (if loc = LocStorage then sstore else tstore) key value

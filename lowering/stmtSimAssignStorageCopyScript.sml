@@ -580,7 +580,7 @@ Proof
   irule storage_copy_dyn_live_word >> metis_tac[]
 QED
 
-Theorem storage_copy_live_footprint[local]:
+Theorem storage_copy_live_footprint:
   !tv v writes k st i b.
     well_formed_type_value tv /\ value_has_type tv v /\
     encode_value tv v = SOME writes /\
@@ -690,7 +690,7 @@ Proof
   qexists_tac `v` >> simp[]
 QED
 
-Theorem storage_copy_backend_fold[local]:
+Theorem storage_copy_backend_fold:
   !is k ws s tr.
     FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t) s is =
     if tr then
@@ -1102,7 +1102,7 @@ Proof
   simp[set_storage_backend_eq] >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem storage_copy_state_fold[local]:
+Theorem storage_copy_state_fold:
   !ctx func cenv cx es s tr k ws is stor.
     stmt_state_rel ctx func cenv cx es s /\
     storage_agree (storage_dead cx tr stor) stor
@@ -1138,7 +1138,7 @@ Proof
   simp[Abbr `s1`, storage_copy_backend_fold]
 QED
 
-Theorem storage_copy_initial_agree[local]:
+Theorem storage_copy_initial_agree:
   !ctx func cenv cx es s tr.
     stmt_state_rel ctx func cenv cx es s ==>
     storage_agree (storage_dead cx tr (get_storage cx es tr))
@@ -1225,7 +1225,7 @@ Proof
        pending_alloca_size_def, immutable_alloca_sep_def]
 QED
 
-Theorem storage_copy_normalized_state[local]:
+Theorem storage_copy_normalized_state:
   !ctx func cenv cx es s t sa.
     stmt_state_rel ctx func cenv cx es
       (t with <|vs_vars := s.vs_vars; vs_current_bb := s.vs_current_bb;

@@ -71,7 +71,7 @@ Proof
   first_x_assum irule >> gvs[not_fresh_at_def]
 QED
 
-Theorem unwrap_value_rebased_read_mem_src[local]:
+Theorem unwrap_value_rebased_read_mem_src:
   unwrap_value cenv vv sm = (op,sb) /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\
