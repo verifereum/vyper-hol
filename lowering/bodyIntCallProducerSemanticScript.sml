@@ -27,7 +27,7 @@ Proof
   gvs[package_internal_fn_def, set_internal_package_target_def,
       update_cenv_nonreentrant_def, body_inv_def] >>
   conj_tac >- metis_tac[] >>
-  fs[cenv_module_pins_def]
+  fs[cenv_module_pins_def] >> metis_tac[]
 QED
 
 (* Presence alone suffices for this nonfailure fact; no namespace uniqueness
