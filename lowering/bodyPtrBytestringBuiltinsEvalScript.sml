@@ -1,18 +1,22 @@
 Theory bodyPtrBytestringBuiltinsEval
 Ancestors
   bodyPtrBytestringBuiltinsUnary bodyPtrBytestringBuiltinsPrefix fragGasPathPtr fragGasSeqPtr
+  gasOutcomeMarkedPtr gasSummaryComposePtr vyperStorageTrace
 
 Theorem gas_outcome_ptr_eval_evidence:
-  gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0) P E ==>
-  gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0)
-    (\res ee G tn t. P res ee G tn t /\ ~t.vs_halted /\
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 source (es,s0,G0,tn0) P E ==>
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 source (es,s0,G0,tn0)
+    (\H res ee G tn t. P H res ee G tn t /\ ~t.vs_halted /\
       ?marks ee0. ee = ee0 with gas_obs := [] /\
         !tail. source
           (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
           (res,ee0 with gas_obs := tail)) E
 Proof
-  rw[gas_outcome_ptr_def, gas_summary_ptr_at_def] >>
-  metis_tac[gas_path_ptr_ok_not_halted]
+  strip_tac >> irule gas_outcome_ptr_marked_conseq >>
+  qexists_tac `P` >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >> fs[gas_marked_exec_ptr_def] >>
+  `~t.vs_halted` by metis_tac[gas_path_ptr_ok_not_halted] >>
+  simp[] >> qexistsl_tac [`marks`, `mid`] >> simp[]
 QED
 
 Theorem expr_sim_ptr_eval_suffix:
@@ -24,14 +28,20 @@ Theorem expr_sim_ptr_eval_suffix:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (vyperState$bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel H ctx func cenv cx es s0 /\
-  ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv H d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee gt r. expr_exit (INR exc : value + exception) r ==>
-    R (INR exc) ee gt r) /\
+  (!H exc ee gt r. valid_horizon cx st0 H ee.storage_trace /\
+    expr_exit (INR exc : value + exception) r ==>
+    R H (INR exc) ee gt r) /\
+  (!v. storage_trace_frame (k v)) /\
   (!v ee G tn t.
-    expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\
+    (?H. valid_horizon cx st0 H ee.storage_trace) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
     ghost_inv H d cenv cx ee G tn t /\
@@ -42,10 +52,10 @@ Theorem expr_sim_ptr_eval_suffix:
     (?marks ee0. ee = ee0 with gas_obs := [] /\
       !tail. vyperState$bind (eval_expr cx e) (read_result cx)
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
-        (INL v,ee0 with gas_obs := tail)) ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
+        (INL v,ee0 with gas_obs := tail))) ==>
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx, func) PG cx st0
       (k v) (ee, t, G, tn) Q R) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx, func) PG cx st0
     (vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx)) k)
     (es, s0, G0, tn0) Q R
 Proof
@@ -56,8 +66,8 @@ Proof
   dxrule forced_operand_outcome_scopes >> strip_tac >>
   dxrule gas_outcome_ptr_eval_evidence >> strip_tac >>
   irule gas_outcome_ptr_value_bind >>
-  first_assum (irule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _`)) >>
-  conj_tac
+  first_assum (irule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> conj_tac
   >- (rpt strip_tac >> Cases_on `res` >>
       gvs[exprSimDefsTheory.expr_exit_INL] >>
       first_x_assum irule >> simp[] >> metis_tac[]) >>
@@ -73,7 +83,7 @@ Theorem compile_unary_builtin_eval_vv_sim_ptr:
     ?x sm. lower_value compile_expr cenv cty e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
   (!x. cs_appends (code x)) /\
-  (!sa sm sb x vv s0 G0 tn0 v ee G tn t.
+  (!st0 sa sm sb x vv s0 G0 tn0 v ee G tn t.
     lower_value compile_expr cenv cty e sa = (x,sm) /\
     code x sm = (vv,sb) /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
@@ -81,8 +91,12 @@ Theorem compile_unary_builtin_eval_vv_sim_ptr:
     ~cenv.ce_is_ctor /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-    stmt_state_rel H ctx func cenv cx es s0 /\
-    ghost_inv H d cenv cx es G0 tn0 s0 /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx es s0 /\
+      storage_well_formed_on cx es (FST H) /\
+      ghost_inv H d cenv cx es G0 tn0 s0) /\
+    (?H. valid_horizon cx st0 H ee.storage_trace) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
     expr_post H ctx func cenv cx e es sa sm s0 ee v x t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
@@ -94,12 +108,12 @@ Theorem compile_unary_builtin_eval_vv_sim_ptr:
     (?marks ee0. ee = ee0 with gas_obs := [] /\
       !tail. vyperState$bind (eval_expr cx e) (read_result cx)
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
-        (INL v,ee0 with gas_obs := tail)) ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+        (INL v,ee0 with gas_obs := tail))) ==>
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
       (\vst. ((case builtin_result cx vst.accounts ann bt [expr_type e] [v] of
          INL w => INL (Value w) | INR exc => INR exc), vst))
       (ee,t,G,tn)
-      (\res ef Gf tnf u. ?tv. res = INL tv /\
+      (\H res ef Gf tnf u. ?tv. res = INL tv /\
         vv_post H ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 ef tv vv u /\
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -111,7 +125,7 @@ Theorem compile_unary_builtin_eval_vv_sim_ptr:
         (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
           ptr_buf_ok cenv (Builtin ann bt [e]) p.ptr_operand Gf u) /\
         ghost_kept cenv es sa G0 tn0 s0 Gf tnf)
-      (\res ef gt r. expr_exit res r)) ==>
+      (\H res ef gt r. expr_exit res r)) ==>
   expr_vv_sim_ptr d ctx PG func cenv cx ty (Builtin ann bt [e]) es
 Proof
   strip_tac >> rewrite_tac[bodyPtrDefsTheory.expr_vv_sim_ptr_def] >>
@@ -128,6 +142,11 @@ Proof
     metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible] >>
   drule_all exprSimHashTheory.eval_expr_unary_builtin_action >>
   disch_then (fn th => rewrite_tac[th]) >>
+  `!v. storage_trace_frame (\vst.
+    ((case builtin_result cx vst.accounts ann bt [expr_type e] [v] of
+       INL w => INL (Value w) | INR exc => INR exc), vst))` by
+    (simp[storage_trace_frame_def] >> rpt gen_tac >>
+     Cases_on `builtin_result cx st.accounts ann bt [expr_type e] [v]` >> simp[]) >>
   irule expr_sim_ptr_eval_suffix >>
   first_assum (irule_at (Pat `expr_sim_ptr _ _ _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
