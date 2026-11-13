@@ -3,7 +3,7 @@
 Theory bodyMemPopNested
 Ancestors
   bodyMemoryPreds popNestedTargetMemory popNestedImmutableTransport
-  popNestedImmutableAccess
+  popNestedImmutableAccess popNestedImmutablePlaceOrigin
   popNestedLocalTypeMemory popNestedLocalPathMemory
   popNestedLocalAccessMemory popNestedLocalSuffixMemory
   popNestedLocalReadinessMemory
