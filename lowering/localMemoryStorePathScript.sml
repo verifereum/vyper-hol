@@ -186,7 +186,10 @@ Proof
   qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
   simp[venom_state_component_equality] >>
   strip_tac >> gvs[same_blocks_def, lookup_var_def] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!H'. stmt_state_rel H' _ _ _ _ _ _ ==> _` drule >>
+      simp[]) >>
   irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[]
 QED
 

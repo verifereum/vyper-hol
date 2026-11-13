@@ -115,7 +115,7 @@ Theorem forced_base_outcome_facts:
         (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) ee /\
       ~t.vs_halted) R
 Proof
-  strip_tac >> irule operandOutcomePtrTheory.gas_outcome_ptr_marked_conseq >>
+  strip_tac >> irule gasOutcomeMarkedPtrTheory.gas_outcome_ptr_marked_conseq >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
   `?v. res = INL v` by metis_tac[] >> gvs[] >>
   drule_all forced_base_marked_facts >> simp[]
@@ -240,14 +240,14 @@ QED
 
 Resume raw_call_addr_data_sim_ptr[head_cert]:
   POP_ASSUM_LIST (K all_tac) >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  rewrite_tac[operandOutcomePtrTheory.ignore_map_return] >>
+  rewrite_tac[gasOutcomeMapPtrTheory.ignore_bind_map_return] >>
   rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >>
   goal_assum (drule_at Any)
 QED
 
 Resume raw_call_addr_data_sim_ptr[tail_cert]:
   POP_ASSUM_LIST (K all_tac) >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  rewrite_tac[operandOutcomePtrTheory.ignore_map_return] >>
+  rewrite_tac[gasOutcomeMapPtrTheory.ignore_bind_map_return] >>
   rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
   goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)
 QED
@@ -273,7 +273,7 @@ Resume raw_call_addr_data_sim_ptr[data]:
      fs[compileEnvTheory.is_bytestring_type_def]) >>
   drule_all body_base_operand_outcome_ptr >>
   disch_then (qspec_then `PG` assume_tac) >>
-  irule operandOutcomePtrTheory.gas_outcome_ptr_map_return >>
+  irule gasOutcomeMapPtrTheory.gas_outcome_ptr_map_return >>
   goal_assum (drule_at Any) >> conj_tac
   >- suspend "posts" >>
   simp[exprSimDefsTheory.expr_exit_def] >> rpt strip_tac >> Cases_on `res` >> gvs[]
@@ -426,14 +426,14 @@ QED
 
 Resume raw_call_addr_data_header_sim_ptr[head_cert]:
   POP_ASSUM_LIST (K all_tac) >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  rewrite_tac[operandOutcomePtrTheory.ignore_map_return] >>
+  rewrite_tac[gasOutcomeMapPtrTheory.ignore_bind_map_return] >>
   rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >>
   goal_assum (drule_at Any)
 QED
 
 Resume raw_call_addr_data_header_sim_ptr[tail_cert]:
   POP_ASSUM_LIST (K all_tac) >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  rewrite_tac[operandOutcomePtrTheory.ignore_map_return] >>
+  rewrite_tac[gasOutcomeMapPtrTheory.ignore_bind_map_return] >>
   rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
   goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)
 QED

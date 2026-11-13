@@ -53,13 +53,13 @@ fun package shape =
   qexistsl_tac [`Gf`, `tnf`, `sf`] >>
   conj_tac >-
     (irule frag_exec_ptr_seq >>
-     qpat_assum `frag_exec_ptr _ _ _ sa sb _ _ _` (irule_at Any) >>
+     qpat_assum `frag_exec_ptr _ _ _ _ sa sb _ _ _` (irule_at Any) >>
      simp[] >> conj_tac >- metis_tac[cs_extends_trans] >>
      irule frag_exec_ptr_seq >>
-     qpat_assum `frag_exec_ptr _ _ _ sb sc _ _ _` (irule_at Any) >> simp[]) >>
-  qpat_x_assum `frag_exec_ptr _ _ _ sa sb _ _ _` kall_tac >>
-  qpat_x_assum `frag_exec_ptr _ _ _ sb sc _ _ _` kall_tac >>
-  qpat_x_assum `frag_exec_ptr _ _ _ sc sd _ _ _` kall_tac >>
+     qpat_assum `frag_exec_ptr _ _ _ _ sb sc _ _ _` (irule_at Any) >> simp[]) >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ sa sb _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ sb sc _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ sc sd _ _ _` kall_tac >>
   qpat_x_assum `sf.vs_memory = _` kall_tac >>
   qpat_x_assum `n = _` kall_tac >>
   qpat_x_assum `(?bs. _) \/ _` kall_tac >>
