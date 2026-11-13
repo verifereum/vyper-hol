@@ -7,8 +7,24 @@
  *)
 Theory gasSummaryComposePtrAll
 Ancestors
+  fragGasMode
   gasSummaryComposePtr fragGasPathPtr gasStorage gasSummary gasExemptCert
-  fragExec vyperStorageTrace vyperState vyperInterpreter
+  fragExec fragGasMode vyperStorageTrace vyperState vyperInterpreter
+
+Theorem gas_outcome_ptr_horizons:
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 source (es,s0,G0,tn0) Q R ==>
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 source (es,s0,G0,tn0)
+    (\H res ee G tn t.
+      !H'. valid_horizon cx st0 H' ee.storage_trace ==> Q H' res ee G tn t) R
+Proof
+  rw[gas_outcome_ptr_def] >> qexists_tac `marks`
+  >- (disj1_tac >> first_assum ACCEPT_TAC)
+  >- (disj2_tac >> disj1_tac >> fs[gas_summary_ptr_at_def] >>
+      qexistsl_tac [`res`, `es_end`, `G`, `tn`, `r`] >>
+      asm_rewrite_tac[] >> Cases_on `r` >>
+      gvs[exit_result_def] >> metis_tac[]) >>
+  disj2_tac >> disj2_tac >> metis_tac[]
+QED
 
 Theorem gas_outcome_ptr_bind_all:
   gas_outcome_ptr D tops (ctx, func) PG cx st0 source (es, s0, G0, tn0) P E /\
@@ -93,7 +109,7 @@ Proof
           simp[]) >>
       `valid_horizon cx st0 H (es_end with gas_obs := []).storage_trace` by
         simp[] >>
-      qpat_x_assum `!H res ee gt r. _ ==> ?exc. _`
+      qpat_x_assum `!H res ee gt r. _ /\ _ /\ E H res ee gt r ==> _`
         (fn th => assume_tac th >> drule_all_then strip_assume_tac th) >>
       gvs[] >>
       rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `marks` >>
@@ -101,14 +117,15 @@ Proof
       mp_tac (Q.INST [`fin` |-> `es_end`]
                 gas_summary_ptr_at_bind_exception) >>
       impl_tac >- (
-        simp[] >> gen_tac >> strip_tac >>
-        `valid_horizon cx st0 H' (es_end with gas_obs := []).storage_trace` by
+        simp[] >> qx_gen_tac `H2` >> strip_tac >>
+        `valid_horizon cx st0 H2 (es_end with gas_obs := []).storage_trace` by
           simp[] >>
         qpat_x_assum `!H. valid_horizon cx st0 H es_end.storage_trace ==> _`
           (drule_then strip_assume_tac) >>
         gvs[exit_result_def] >>
-        qpat_x_assum `!H res ee gt r. _ ==> ?exc. _`
-          (drule_all_then strip_assume_tac) >> gvs[]) >>
+        qpat_x_assum `!H res ee gt r. _ /\ _ /\ E H res ee gt r ==> _`
+          (qspecl_then [`H2`, `INR exc`, `es_end with gas_obs := []`,
+            `(G,tn)`, `r`] mp_tac) >> simp[]) >>
       simp[]) >>
   `ignore_bind (bind source next) (return ()) =
      bind source (\v. ignore_bind (next v) (return ()))` by
