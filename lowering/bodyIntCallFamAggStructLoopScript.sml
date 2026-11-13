@@ -6,13 +6,15 @@ Ancestors
   exprSimHypsDefs exprSimHyps exprLowering compileEnv exprSimMemDefs
   valueEncoding valueEncodingDefs vyperValue
 
+(* Each field is typed by its declared type t, which the field expression
+   only has to fit (arg_type_fits): widened fields are stored at t. *)
 Theorem intcall_struct_fields_counted:
-  !fields tvs off sa sb es s out.
+  !fields ts tvs off sa sb es s out.
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
-  EVERY (\(name,e). ALOOKUP (get_struct_fields ce.ce_struct_fields
+  LIST_REL (\t (name,e). ALOOKUP (get_struct_fields ce.ce_struct_fields
     (case ty of StructT n => nsid_to_string n | _ => "")) name =
-    SOME (expr_type e,type_memory_bytes ce (expr_type e))) fields /\
-  OPT_MMAP (evaluate_type (get_tenv fp.jc_cx)) (MAP expr_type (MAP SND fields)) = SOME tvs /\
+    SOME (t,type_memory_bytes ce t) /\ arg_type_fits (expr_type e) t) ts fields /\
+  OPT_MMAP (evaluate_type (get_tenv fp.jc_cx)) ts = SOME tvs /\
   (!e. MEM e (MAP SND fields) ==> intcall_expr_producer fp e /\
     supportedExprs$supported_expr fp.jc_tops e /\
     calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e)) /\
@@ -51,6 +53,9 @@ Theorem intcall_struct_fields_counted:
         mem_bytes_at a n u.vs_memory = mem_bytes_at a n s.vs_memory))
     (\res ee r. expr_exit res r)
 Proof
+  (* Named repair for the AggStruct run: the typing premise was restated
+     from exact field types to declared types with arg_type_fits.
+     Original proof (it and the Resume blocks below are its starting point):
   Induct_on `fields`
   >- (rpt gen_tac >> strip_tac >>
       gvs[compile_struct_lit_def, comp_return_def] >>
@@ -91,8 +96,11 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   drule_all gas_marked_materialised_child_wf >> strip_tac >>
   suspend "tail"
+  *)
+  cheat
 QED
 
+(* Original suspended parts of the proof above:
 Resume intcall_struct_fields_counted[head_store]:
     (`intcall_expr_producer fp e /\
       supportedExprs$supported_expr fp.jc_tops e /\
@@ -145,3 +153,4 @@ Resume intcall_struct_fields_counted[tail]:
 QED
 
 Finalise intcall_struct_fields_counted
+*)

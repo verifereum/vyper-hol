@@ -25,7 +25,8 @@ Proof
   gvs[] >>
   `type_memory_bytes ce (StructT nm) = type_memory_size_list tvs` by
     (`LENGTH (MAP FST fields) = LENGTH tvs` by
-       metis_tac[vyperTypeABITheory.OPT_MMAP_LENGTH, listTheory.LENGTH_MAP] >>
+       (imp_res_tac vyperTypeABITheory.OPT_MMAP_LENGTH >>
+        imp_res_tac listTheory.LIST_REL_LENGTH >> fs[]) >>
      `expr_sim_inv ce fp.jc_cx env es` by fs[expr_body_pre_def] >>
      drule_all expr_sim_inv_memory_size >>
      simp[valueEncodingTheory.type_memory_size_def, struct_layout_size_zip]) >>
