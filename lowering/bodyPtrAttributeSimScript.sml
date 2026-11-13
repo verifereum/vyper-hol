@@ -46,7 +46,8 @@ Resume attribute_vv_sim_ptr[exception]:
   `eval_expr cx (Attribute ann obj fld) = bind (eval_expr cx obj)
     (\v. select_result cx (expr_type obj) v (AttrSubscript fld))` by
     simp[FUN_EQ_THM, eval_expr_attribute] >> asm_rewrite_tac[] >>
-  irule gas_marked_exec_ptr_bind_exception >> simp[]
+  conj_tac >- (irule gas_marked_exec_ptr_bind_exception >> simp[]) >>
+  fs[]
 QED
 Resume attribute_vv_sim_ptr[exempt]:
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>

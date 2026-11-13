@@ -47,7 +47,10 @@ Proof
       Cases_on `res` >> gvs[expr_exit_def] >>
       rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `marks` >>
       disj1_tac >> rewrite_tac[gas_summary_ptr_at_marked] >>
-      metis_tac[gas_marked_exec_ptr_bind_exception]) >>
+      qexistsl_tac [`INR y`, `es_end`, `G`, `tn`, `r`] >>
+      conj_tac >- (irule gas_marked_exec_ptr_bind_exception >> simp[]) >>
+      disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+      qpat_x_assum `!exc ee gt r. _ ==> R _ _ _ _` irule >> fs[]) >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `marks` >> disj2_tac >>
   simp[ignore_bind_def, bind_assoc] >>
   metis_tac[gas_exempt_cert_error_value]

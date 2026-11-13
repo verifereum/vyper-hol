@@ -83,7 +83,7 @@ Theorem word_builtin_continuation_summary_mem:
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res fin r. expr_exit res r)
+    (\res fin r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
@@ -101,7 +101,7 @@ Proof
       qexistsl_tac [`sm`,`t0`,`vs`,`xs`] >> simp[]) >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`builtin_result cx ee.accounts ann bt (MAP expr_type args) vs`,
-                `ee`, `r`] >> simp[gas_marked_exec_def]
+                `ee`, `r`] >> simp[gas_marked_exec_def, halt_exit_def]
 QED
 
 Theorem compile_typed_word_builtin_sim_mem:
@@ -206,7 +206,7 @@ Resume compile_typed_word_builtin_sim_mem[normal]:
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts /\
        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-     (\res fin r. expr_exit res r)` by
+     (\res fin r. expr_exit res r /\ halt_exit cx fin res r)` by
     (irule word_builtin_continuation_summary_mem >> simp[] >>
      qexistsl_tac [`code`,`sm`,`xs`] >> simp[] >>
      rpt strip_tac >> first_x_assum irule >> simp[] >>

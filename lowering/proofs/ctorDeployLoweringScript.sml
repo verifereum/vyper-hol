@@ -26,7 +26,7 @@ Proof
 QED
 
 Theorem deploy_expr_exit_result[local]:
-  expr_exit (INR e : unit + exception) r ==>
+  e <> HaltException /\ expr_exit (INR e : unit + exception) r ==>
   deploy_venom_result_rel tops runtime_bc tx (INR e) r
 Proof
   Cases_on `r` >> simp[expr_exit_def] >>
@@ -112,7 +112,7 @@ Proof
   `!gs res ee.
      eval_stmts cx body
        (es0 with <| gas_obs := gs; outcomes := SOME vs.vs_outcomes |>) =
-       (res, ee) ==> stmt_res_ok NoLoop res` by
+       (res, ee) ==> stmt_res_ok NoLoop res /\ res <> INR HaltException` by
     metis_tac[deploy_ctor_body_source_ok] >>
   `SND (stmts_env cenv NoLoop NoneT body sa) = sb` by
     (qpat_x_assum `compile_stmts _ _ _ _ _ = _` mp_tac >>
@@ -139,6 +139,7 @@ Proof
          >- (qpat_x_assum `!tail. eval_stmts _ _ _ = _`
                (qspec_then `[]` mp_tac) >> simp[]) >>
          metis_tac[gas_marked_path_exec]) >>
+      `res <> INR HaltException` by metis_tac[] >>
       qabbrev_tac `es' = es_end with gas_obs := []` >>
       `load_contract NONE gx am tx [(NONE, tops)] [] =
          deploy_ctor_finish tops tx cx nr mut am_c res es'` by
@@ -181,7 +182,7 @@ Proof
           `e <> ReturnException NoneV` by
             (strip_tac >> Cases_on `r` >> gvs[expr_exit_def]) >>
           simp[deploy_ctor_finish_def] >> irule deploy_expr_exit_result >>
-          first_assum ACCEPT_TAC) >>
+          fs[]) >>
       (* a return *)
       `v = NoneV /\ ?final. r = Halt final` by
         fs[Abbr `RetQ`, constructor_return_q_def] >>
