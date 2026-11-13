@@ -71,6 +71,8 @@ Proof
   `tp < tp+(j-p)` by gvs[revert_forward_pair_def] >>
   qpat_x_assum `revert_forward_pair bb p j` mp_tac >>
   rewrite_tac[revert_forward_pair_def] >> strip_tac >>
+  rename [`inst1.inst_operands = [pr; src; rds]`,
+          `inst2.inst_operands = [pv; rdv]`] >>
   `get_instruction bb' tp = SOME inst1 /\
    get_instruction bb' (tp+(j-p)) = SOME inst2` by
     (conj_tac >- (qpat_x_assum `!h. h <= j-p ==> _`
@@ -99,7 +101,7 @@ Resume fmp_cover_forward_from_prefix[operands]:
      rpt (pop_assum kall_tac) >>
      simp[get_instruction_def, AllCaseEqs()] >> rpt strip_tac >>
      gvs[] >> simp[MEM_EL] >> metis_tac[]) >>
-  `!op v. MEM op [p'; src; rds; p''; rds'] /\ op = Var v ==>
+  `!op v. MEM op [pr; src; rds; pv; rdv] /\ op = Var v ==>
       MEM v (fn_ir_vars fn)` by
     (qpat_assum `lookup_block lbl fn.fn_blocks = SOME bb` mp_tac >>
      qpat_assum `MEM inst1 bb.bb_instructions` mp_tac >>
@@ -108,7 +110,7 @@ Resume fmp_cover_forward_from_prefix[operands]:
      qpat_assum `inst2.inst_operands = _` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      fs[] >> metis_tac[fmp_cover_block_operand, MEM]) >>
-  qmatch_asmsub_abbrev_tac `same_after_assigns _ p' (resolve_block_assigns mid p'')` >>
+  qmatch_asmsub_abbrev_tac `same_after_assigns _ pr (resolve_block_assigns mid pv)` >>
   `!q v. MEM q mid /\ MEM (Var v) q.inst_operands ==> MEM v (fn_ir_vars fn)` by
     (rpt strip_tac >> irule fmp_cover_block_operand >>
      qexistsl_tac [`bb`,`lbl`,`q`] >> simp[] >>
@@ -119,7 +121,7 @@ Resume fmp_cover_forward_from_prefix[operands]:
      resolve_block_assigns mid op = Var v ==> MEM v (fn_ir_vars fn)` by
     (rpt strip_tac >> irule resolve_block_assigns_tracked >>
      qexistsl_tac [`op`,`mid`] >> simp[] >> metis_tac[]) >>
-  qexistsl_tac [`inst2`,`p''`,`rds'`] >>
+  qexistsl_tac [`inst2`,`pv`,`rdv`] >>
   `j+tp-p = tp+(j-p) /\ j+tp-(p+SUC tp) = tp+(j-p)-SUC tp` by decide_tac >>
   qpat_x_assum `j+tp-p = _` (fn th => rewrite_tac[th]) >>
   qpat_x_assum `j+tp-(p+SUC tp) = _` (fn th => rewrite_tac[th]) >>

@@ -144,8 +144,11 @@ Proof
   IF_CASES_TAC >> simp[] >>
   simp[simplify_current_phi_raw_def] >> IF_CASES_TAC >> simp[] >>
   Cases_on `current_phi_output inst.inst_outputs` >> simp[] >>
-  Cases_on `current_phi_values (remove_current_phi_self x inst.inst_operands)` >>
-  simp[] >> Cases_on `x'` >> simp[] >> IF_CASES_TAC >> simp[]
+  rename1 `current_phi_output inst.inst_outputs = SOME out` >>
+  Cases_on `current_phi_values (remove_current_phi_self out inst.inst_operands)` >>
+  simp[] >>
+  rename1 `current_phi_values _ = SOME vals` >>
+  Cases_on `vals` >> simp[] >> IF_CASES_TAC >> simp[]
 QED
 
 Theorem reassign_labels[local]:

@@ -164,11 +164,11 @@ Theorem scfg_param_map_count[local]:
   LENGTH (FILTER (\i. i.inst_opcode = PARAM) (MAP h xs)) =
   LENGTH (FILTER (\i. i.inst_opcode = PARAM) xs)
 Proof
-  Induct >> simp[] >> rpt strip_tac >>
+  Induct >- simp[] >> qx_gen_tac `y` >> simp[] >> rpt strip_tac >>
   `LENGTH (FILTER (\i. i.inst_opcode = PARAM) (MAP h xs)) =
    LENGTH (FILTER (\i. i.inst_opcode = PARAM) xs)` by
     (first_x_assum irule >> metis_tac[]) >>
-  Cases_on `h'.inst_opcode = PARAM` >> simp[]
+  Cases_on `y.inst_opcode = PARAM` >> simp[]
 QED
 
 Theorem scfg_entry_count_blocks[local]:
@@ -226,9 +226,11 @@ Proof
       bb.bb_instructions) bs <> []` by
     (Cases_on `bs` >> simp[replace_block_def] >> rw[]) >>
   first_x_assum drule >> disch_then SUBST1_TAC >>
-  Cases_on `bs` >> simp[replace_block_def] >>
-  Cases_on `h'.bb_label = h` >> simp[] >>
-  `h' = bb` by gvs[lookup_block_def, FIND_thm] >> gvs[] >>
+  Cases_on `bs` >- gvs[] >>
+  rename1 `lookup_block h (b0::rest) = SOME bb` >>
+  simp[replace_block_def] >>
+  Cases_on `b0.bb_label = h` >> simp[] >>
+  `b0 = bb` by gvs[lookup_block_def, FIND_thm] >> gvs[] >>
   irule scfg_param_map_count >> simp[subst_label_inst_def] >> rw[]
 QED
 
