@@ -5,7 +5,7 @@ Ancestors forPtrArrayFrag bodyPtrPreds bodyPtrDefs bodySimDeclCases
   vyperTypeSystem vyperTypeInvariants vyperTypeValues
   supportedStmts supportedStmtTraverse allocLimits compileVyper
   vyperTypeCallGraph exprLoweringProps finite_map list vyperTypeCallStackSoundness
-  bodyDynArraySource whitelistForIterDynFrag
+  bodyDynArraySource whitelistForIterDynFrag forPtrDynArraySource
 Libs monadsyntax
 
 val _ = Parse.hide "body";
