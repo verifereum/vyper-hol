@@ -7,12 +7,15 @@ Ancestors
   loweringPosts context compileEnv
 
 Theorem eval_subscript_bind[local]:
+  ~subscript_reads_base cx obj idx ==>
   eval_expr cx (Subscript ann obj idx) =
     bind (eval_expr cx obj) (\tv.
       bind (bind (eval_expr cx idx) (read_result cx)) (\v.
         select_result cx (expr_type obj) tv (ValueSubscript v)))
 Proof
-  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_assoc]
+  strip_tac >>
+  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_assoc] >>
+  simp[FUN_EQ_THM, vyperStateTheory.bind_def, vyperStateTheory.return_def]
 QED
 
 Theorem intcall_mapping_base_outcome:
@@ -65,7 +68,10 @@ Proof
      qexistsl_tac [`A`, `ann`, `idx`] >> simp[]) >>
   qpat_x_assum `intcall_map_producer _ _` mp_tac >>
   rewrite_tac[intcall_map_producer_def] >> disch_then drule_all >>
-  rewrite_tac[eval_subscript_bind] >>
+  `~subscript_reads_base fp.jc_cx obj idx` by
+    (drule map_base_no_overlap >> simp[]) >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    rewrite_tac[MATCH_MP eval_subscript_bind th]) >>
   disch_then (mp_then Any irule gas_outcome_bind_result_exec) >>
   reverse conj_tac
   >- (conj_tac

@@ -485,14 +485,7 @@ Theorem intcall_immutable_holds_frame:
 Proof
   simp[loweringPostsTheory.immutable_holds_def] >> strip_tac >>
   qexistsl [`name`, `off`, `itv`, `iv`, `k`, `tvt`, `v`] >> simp[] >>
-  disj2_tac >> simp[] >>
-  irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
-  conj_tac >- metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
-  qexistsl [`type_memory_size tvt`, `s.vs_memory`] >> simp[] >>
-  `mem_bytes_at off (type_memory_size itv) s.vs_memory =
-   mem_bytes_at off (type_memory_size itv) u.vs_memory` by metis_tac[] >>
-  drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
-  strip_tac >> sym_tac >> first_x_assum irule >> simp[]
+  metis_tac[]
 QED
 
 Theorem intcall_pure_child_immutable_holds:

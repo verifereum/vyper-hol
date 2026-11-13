@@ -63,6 +63,11 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `vt = Type ann` by (drule_all intcall_subscript_mapping_value_type >> simp[]) >>
   gvs[] >>
+  `~copies_subscript_base ce obj idx` by
+    (`expr_map_pre ce fp.jc_cx env obj es` by
+       (drule_all expr_body_pre_map_subscript_base >> simp[]) >>
+     drule_all expr_map_pre_checked_type >> strip_tac >>
+     drule map_base_no_overlap >> simp[]) >>
   drule_all compile_expr_mapping_subscript_parts >> strip_tac >>
   `intcall_map_producer fp obj /\ intcall_forced_producer fp idx` by
     (conj_tac

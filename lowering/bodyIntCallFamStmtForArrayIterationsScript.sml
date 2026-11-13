@@ -64,7 +64,7 @@ Theorem intcall_array_iterations:
   (!op. fp.jc_reserved op ==> op <> Var dv) /\
   (!x. not_fresh_at sc x ==> x <> dv) /\
   (!k es s. k < LENGTH vs /\ Inv k es s /\
-    gas_admissible (eval_for fp.jc_cx tyv id stmts (DROP k vs)) ok es ==>
+    gas_admissible (eval_for fp.jc_cx tyv id stmts (MAP Value (DROP k vs))) ok es ==>
     gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
       (ignore_bind (push_scope_with_var id tyv (EL k vs))
         (finally (try (ignore_bind (eval_stmts fp.jc_cx stmts) (return F))
@@ -72,14 +72,14 @@ Theorem intcall_array_iterations:
       (es,s) (H k s)
       (\res ee r. ?ex. res = INR ex /\ intcall_stmt_exit fp (INR ex) ee r)) ==>
   !k es s. k <= LENGTH vs /\ Inv k es s /\
-    gas_admissible (eval_for fp.jc_cx tyv id stmts (DROP k vs)) ok es ==>
+    gas_admissible (eval_for fp.jc_cx tyv id stmts (MAP Value (DROP k vs))) ok es ==>
     gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
-      (eval_for fp.jc_cx tyv id stmts (DROP k vs)) (es,s)
+      (eval_for fp.jc_cx tyv id stmts (MAP Value (DROP k vs))) (es,s)
       (\res ee t. res = INL () /\ Done ee t)
       (\res ee r. ?ex. res = INR ex /\ intcall_stmt_exit fp (INR ex) ee r)
 Proof
   BasicProvers.LET_ELIM_TAC >>
-  irule (eval_for_rounds |> SPEC_ALL |>
+  irule (eval_for_value_rounds |> SPEC_ALL |>
     Q.INST [`R` |-> `\ex ee r. intcall_stmt_exit fp (INR ex) ee r`] |>
     SRULE []) >>
   conj_tac >- simp[] >>
