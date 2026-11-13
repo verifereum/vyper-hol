@@ -232,14 +232,25 @@ Resume extcall_protframe_operand_cps[kwargs_landing]:
      simp[cj 1 compile_expr_ci_mono] >> metis_tac[SND]) >>
   qpat_assum `extrequest_kwargs_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o SRULE [exprExtRequestKwargsTheory.extrequest_kwargs_post_def]) >>
-  `wb_frame cenv es ee sa s0 t'` by
-    (irule wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl [`ee`, `s1`, `t`] >> simp[]) >> metis_tac[]) >>
+  `!x g y a b c.
+     (wb_frame cenv (x with gas_obs := g) y a b c <=> wb_frame cenv x y a b c) /\
+     (wb_frame cenv y (x with gas_obs := g) a b c <=> wb_frame cenv y x a b c)` by
+    simp[wb_frame_def, locals_kept_def, popped_kept_def] >>
+  pop_assum (fn th => RULE_ASSUM_TAC (SRULE [th])) >>
+  `!x y a b c. wb_frame cenv x y a b c ==> MAP FDOM x.scopes = MAP FDOM y.scopes` by
+    simp[wb_frame_def, locals_kept_def] >>
+  `wb_frame cenv es ee' sa s0 t'` by
+    (irule wb_frame_trans >>
+     qpat_assum `wb_frame _ _ _ _ s0 t` (irule_at Any) >>
+     qpat_assum `wb_frame _ _ _ s1 t t'` (irule_at Any) >>
+     metis_tac[]) >>
   `sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id` by
     (fs[ci_mono_def] >> decide_tac) >>
-  `wb_frame cenv es ee sa s0 t''` by
-    (irule wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl [`ee'`, `s2`, `t'`] >> simp[]) >> metis_tac[]) >>
+  `wb_frame cenv es ee'' sa s0 t''` by
+    (irule wb_frame_trans >>
+     qpat_assum `wb_frame _ _ _ sa s0 t'` (irule_at Any) >>
+     qpat_assum `wb_frame _ _ _ s2 t' t''` (irule_at Any) >>
+     metis_tac[]) >>
   `safe_operand s2 addr_op` by
     (irule safe_operand_mono >> qexists `s1` >> gvs[ci_mono_def]) >>
   `safe_operand s3 addr_op` by metis_tac[safe_operand_mono] >>
