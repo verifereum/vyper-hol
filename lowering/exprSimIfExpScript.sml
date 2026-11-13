@@ -604,7 +604,7 @@ Proof
 QED
 
 (* The same destination as the place of any source result reading to v. *)
-Theorem ifexp_destination_vv_at[local]:
+Theorem ifexp_destination_vv_at:
   !cenv cx ty tvt v sa sb es op s w aid tv t'.
     evaluate_type (get_tenv cx) ty = SOME tvt /\ val_wf tvt v /\
     read_result cx tv es = (INL v,es) /\ eval_operand op s = SOME w /\
@@ -2189,7 +2189,7 @@ Proof
 QED
 
 (* vv_at of an arm's result holds of the conditional result it gives. *)
-Theorem ifexp_vv_at_conditional[local]:
+Theorem ifexp_vv_at_conditional:
   vv_at cenv cx t sa sb es raw vv s /\ read_result cx raw es = (INL v,es) /\
   (tv = raw \/ tv = Value v) ==>
   vv_at cenv cx t sa sb es tv vv s
@@ -2653,7 +2653,7 @@ Proof
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
-Theorem ifexp_root_suffix_path[local]:
+Theorem ifexp_root_suffix_path:
   emit_inst ASSIGN [op] [rv] sx = ((),sy) /\
   emit_inst JMP [Label xl] [] sy = ((),sz) /\
   fn_has_code sx sy func /\ fn_has_code sy sz func /\
@@ -2680,7 +2680,7 @@ Proof
 QED
 
 (* The selected arm's vv_at, moved to the result variable it is assigned to. *)
-Theorem ifexp_vv_at_root_frame[local]:
+Theorem ifexp_vv_at_root_frame:
   vv_at cenv cx t sc sd es tv (LocatedValue t (mk_ptr op LocMemory)) u /\
   eval_operand op u = SOME w /\ local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> x <> rv) /\
