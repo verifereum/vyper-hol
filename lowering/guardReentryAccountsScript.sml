@@ -1,7 +1,7 @@
 Theory guardReentryAccounts
 Ancestors
   evmCreationGuard vfmAccountFrame vfmRunCall vfmExecution vfmExecutionProp vfmState
-  list arithmetic
+  vfmDecreasesGas pair list arithmetic
 
 val guard_protected_rollbacks = ``\(base:execution_state) s.
   EVERY (\rb. !addr.
@@ -61,4 +61,38 @@ Proof
     (mp_tac (Q.INST [`s` |-> `current_st`, `t` |-> `next_st`,
        `r` |-> `INL u`, `a` |-> `a`] step_creation_original_empty) >> simp[]) >>
   fs[]
+QED
+
+Theorem guard_reached_step_weight:
+  wf_state es /\ run_call_reaches es s /\
+  LENGTH es.contexts <= LENGTH s.contexts /\
+  step s = (INL u, e) ==>
+  ($< LEX $<) (contexts_weight 0 e.contexts)
+    (contexts_weight 0 es.contexts)
+Proof
+  strip_tac >>
+  `wf_state s /\
+   ~($< LEX $<) (contexts_weight 0 es.contexts)
+      (contexts_weight 0 s.contexts)` by
+    (irule (BETA_RULE (Q.INST
+       [`Q` |-> `\st. wf_state st /\
+          ~($< LEX $<) (contexts_weight 0 es.contexts)
+             (contexts_weight 0 st.contexts)`,
+        `es` |-> `es`, `s` |-> `s`] run_call_reaches_inv)) >>
+     simp[contexts_weight_def, LEX_DEF] >>
+     rpt gen_tac >> strip_tac >>
+     rename1 `step current_st = (INL v, next_st)` >>
+     `wf_state next_st` by
+       (drule_all step_preserves_wf_state >> simp[]) >>
+     `current_st.contexts <> []` by
+       (Cases_on `current_st.contexts` >> gvs[wf_state_def]) >>
+     mp_tac (Q.SPEC `current_st`
+       (REWRITE_RULE [decreases_gas_cred_def] decreases_gas_cred_step)) >>
+     simp[] >> strip_tac >>
+     fs[contexts_weight_def, LEX_DEF] >> decide_tac) >>
+  `s.contexts <> []` by (Cases_on `s.contexts` >> gvs[wf_state_def]) >>
+  mp_tac (Q.SPEC `s`
+    (REWRITE_RULE [decreases_gas_cred_def] decreases_gas_cred_step)) >>
+  simp[] >> strip_tac >>
+  metis_tac[transitive_LT_LEX_LE]
 QED
