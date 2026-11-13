@@ -1016,6 +1016,16 @@ val invoke_enter_marked_tac =
     (irule asm_steps_compose_ok >> qexists `mid` >>
      conj_tac >> first_assum ACCEPT_TAC);
 
+val invoke_create_prefix_tac =
+  strip_tac >>
+  match_mp_tac (Q.SPECL
+    [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3`,
+     `n`, `st`, `cas`] create_safe_prefix_compose) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `safe ==> create_safe_prefix _ _ _ n cas` irule >>
+  first_assum ACCEPT_TAC;
+
 (* Quantitative call interface: only the callee consumes a runtime-sized
    witness.  Entry and return fragments have the exact syntactic costs
    supplied by invoke_enter_callee_marked and invoke_return_frame_numeric. *)
@@ -1181,14 +1191,7 @@ Proof
       first_x_assum drule >> strip_tac >>
       `safe ==> create_safe_prefix lo o2pc prog
          (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3 + n) st` by
-        (strip_tac >>
-         match_mp_tac (Q.SPECL
-           [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3`,
-            `n`, `st`, `cas`] create_safe_prefix_compose) >>
-         conj_tac >- first_assum ACCEPT_TAC >>
-         conj_tac >- first_assum ACCEPT_TAC >>
-         qpat_x_assum `safe ==> create_safe_prefix _ _ _ n cas` irule >>
-         first_assum ACCEPT_TAC) >>
+        invoke_create_prefix_tac >>
       qexistsl [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3 + n`,
         `as'`] >>
       conj_tac
@@ -1199,14 +1202,7 @@ Proof
   first_x_assum drule >> strip_tac >>
   `safe ==> create_safe_prefix lo o2pc prog
      (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3 + n) st` by
-    (strip_tac >>
-     match_mp_tac (Q.SPECL
-       [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3`,
-        `n`, `st`, `cas`] create_safe_prefix_compose) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qpat_x_assum `safe ==> create_safe_prefix _ _ _ n cas` irule >>
-     first_assum ACCEPT_TAC) >>
+    invoke_create_prefix_tac >>
   qexistsl [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3 + n`,
     `as'`] >>
   (conj_tac
@@ -1221,14 +1217,7 @@ Resume gen_invoke_frame_sim_deep_resource_reachable[ok]:
   rename1 `asm_steps lo o2pc prog n cas = AsmOK asr` >>
   `safe ==> create_safe_prefix lo o2pc prog
      (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3 + n) st` by
-    (strip_tac >>
-     match_mp_tac (Q.SPECL
-       [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3`,
-        `n`, `st`, `cas`] create_safe_prefix_compose) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qpat_x_assum `safe ==> create_safe_prefix _ _ _ n cas` irule >>
-     first_assum ACCEPT_TAC) >>
+    invoke_create_prefix_tac >>
   drule_all invoke_plan_decompose >> strip_tac >>
   map_every (fn q => qpat_x_assum q kall_tac) [`ctx = _`, `lo = _`, `o2pc = _`] >>
   gvs[] >>
@@ -1266,6 +1255,10 @@ Resume gen_invoke_frame_sim_deep_resource_reachable[frame]:
         LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3` by fs[] >>
      pop_assum SUBST1_TAC >> irule invoke_return_block >>
      qexists `(EL j ctx.ctx_functions).fn_name` >> first_assum ACCEPT_TAC) >>
+  suspend "return"
+QED
+
+Resume gen_invoke_frame_sim_deep_resource_reachable[return]:
   `?m fin.
      m = LENGTH (execute_plan cplan.cp_initial_fmp
        (SOLabel ret_lbl :: (pops ++ opts))) /\
