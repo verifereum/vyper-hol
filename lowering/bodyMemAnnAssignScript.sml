@@ -3,12 +3,11 @@
    the declared type: a word (bodyDeclWordMemory), the empty value of a type
    with a length word (bodyDeclEmptyMemory), a bytestring
    (bodyDeclBytesMemory), any other type copied from a value of the type
-   itself (bodyDeclCopyMemory), or a widened aggregate call
-   (bodyMemAnnAssignWidened, HELD).  A supported declaration copies a value
-   of the declared type, a word, or a bytestring (supported_copy_types), so
-   there are no other cases. *)
+   itself (bodyDeclCopyMemory), or a widened aggregate, from an internal call
+   or from any other expression (bodyMemAnnAssignWidened, HELD). *)
 Theory bodyMemAnnAssign
 Ancestors
+  supportedExprTraverse allocLimitsProps
   bodyMemoryPreds bodyDeclWordMemory bodyDeclCopyMemory bodyDeclEmptyMemory
   bodyDeclBytesMemory bodyMemAnnAssignWidened bodySimDeclCases
   memoryLocalRhsProps bodyExprPreFacts exprSimHyps exprSimSource
@@ -28,29 +27,30 @@ Theorem body_annassign_mem_rhs_pre[local]:
        (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
        occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    body_stmt_safe tops (AnnAssign id typ e) /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) ==>
     expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by (irule cx_tops_module >> fs[body_inv_def]) >>
   irule stmt_expr_body_pre >>
-  gvs[body_inv_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[body_inv_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[]
-QED
-
-(* A supported copy into a type other than the source's, and not a word,
-   is a bytestring copy. *)
-Theorem copy_types_not_word_bytestring_mem[local]:
-  !dst src.
-    supported_copy_types dst src /\ dst <> src /\ ~is_word_type dst ==>
-    is_bytestring_type dst
-Proof
-  simp[supported_copy_types_def] >> rpt strip_tac
-  >- metis_tac[supported_word_type_is_word] >>
-  BasicProvers.every_case_tac >> gvs[is_bytestring_type_def]
 QED
 
 Theorem body_annassign_mem_case:
@@ -63,8 +63,7 @@ Theorem body_annassign_mem_case:
     body_stmt_mem_ok cx (AnnAssign id typ e)
 Proof
   rw[body_stmt_mem_ok_def] >>
-  `supported_expr tops e /\ supported_copy_types typ (expr_type e)` by
-    gvs[supported_stmt_def] >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
   `FLOOKUP cenv.ce_vars id = NONE` by
     (irule declared_name_unbound >> metis_tac[]) >>
   `well_typed_expr env e /\ assignable_type env.type_defs typ /\
@@ -94,7 +93,7 @@ Proof
        (drule_then irule declare_local_same_frame >> simp[]) >>
      `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
      `stmt_exprs_ok c (AnnAssign id typ e)` by
-       metis_tac[stmt_exprs_ok_same_frame] >>
+       metis_tac[annassign_declare_exprs_ok] >>
      `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
      `expr_body_pre c cx env e es` by metis_tac[body_annassign_mem_rhs_pre] >>
      metis_tac[body_expr_mem_ok_def]) >>
@@ -105,7 +104,7 @@ Proof
   `type_memory_bytes cenv typ = type_memory_size tyv` by
     metis_tac[expr_sim_inv_memory_size] >>
   `type_memory_bytes cenv typ < 2 ** 64` by
-    gvs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+    gvs[stmt_exprs_ok_flat, alloc_limits_stmt_def] >>
   `type_memory_size tyv + 64 < dimword (:256)` by
     metis_tac[allocation_limit_word_room] >>
   Cases_on `has_length_word typ /\ is_empty_value_expr e`
@@ -116,7 +115,11 @@ Proof
             arg_type_fits (lowered_value_type cenv e) (expr_type e)`
   >- (Cases_on `is_bytestring_type typ`
       >- suspend "bytes" >>
-      suspend "copy") >>
+      `lowered_value_type cenv e = expr_type e` by
+        metis_tac[type_widens_to_def, arg_type_fits_bytestring_target] >>
+      Cases_on `expr_type e = typ`
+      >- suspend "copy" >>
+      irule body_annassign_widened_aggregate_mem >> metis_tac[]) >>
   irule body_annassign_widened_aggregate_call_mem >> metis_tac[]
 QED
 
@@ -146,8 +149,6 @@ Resume body_annassign_mem_case[empty]:
 QED
 
 Resume body_annassign_mem_case[copy]:
-  `expr_type e = typ` by
-    (CCONTR_TAC >> metis_tac[copy_types_not_word_bytestring_mem]) >>
   `lowered_value_type cenv e = typ` by gvs[] >>
   irule compile_annassign_copy_stmt_frag_mem >> simp[] >> rpt conj_tac
   >>~- ([`value_has_type _ _`],
@@ -206,7 +207,7 @@ Resume body_annassign_mem_case[bytes]:
       (drule_then irule declare_local_same_frame >> simp[]) >>
     `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
     `stmt_exprs_ok c (AnnAssign id typ e)` by
-      metis_tac[stmt_exprs_ok_same_frame] >>
+      metis_tac[annassign_declare_exprs_ok] >>
     `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
     `expr_body_pre c cx env e es` by metis_tac[body_annassign_mem_rhs_pre] >>
     drule_all declare_local_memory_types_mem >> strip_tac >>

@@ -1,7 +1,7 @@
 (* Normal suffix and counted statement composition for tuple locals. *)
 Theory bodyMemAssignTupleLocalsOutcome
 Ancestors
-  bodyMemAssignTupleLocalsPrefix bodyMemAssignTupleLocalsStores
+  bodyMemAssignTupleLocalsPrefix bodyMemAssignTupleLocalsStores stmtSimForced
   tupleAssignMemory tupleAssignPrefix tupleTypedLoad tupleStageProps
   tupleLocalStoreProps tupleMemoryFrame tupleMemoryLayout
   stmtSimAssignTuple stmtSimDeclMem stmtSimDeclStore stmtSimDefs exprSimDefs
@@ -238,16 +238,6 @@ Proof
   metis_tac[assign_tuple_target_list_locals_gas]
 QED
 
-(* S1 stmtSimForced's local associativity boundary. *)
-Theorem ignore_bind_bind_value[local]:
-  !(a : evaluation_state -> value evaluation_result) k.
-    ignore_bind (bind a k) (return ()) =
-    bind a (\v. ignore_bind (k v) (return ()))
-Proof
-  simp[ignore_bind_def, FUN_EQ_THM, bind_def] >> rpt gen_tac >>
-  Cases_on `a x` >> Cases_on `q` >> simp[]
-QED
-
 (* S1 compile_assign_tuple_locals_memory_stmt_frag, using the memory
    expression outcome and the counted, memory-checked suffix above. *)
 Theorem compile_assign_tuple_locals_memory_stmt_frag_mem:
@@ -401,9 +391,15 @@ Resume compile_assign_tuple_locals_memory_stmt_frag_mem[suffix]:
     (simp[Abbr `flag`] >> metis_tac[type_memory_size_def]) >>
   qpat_x_assum `(if flag then _ else _) su = _`
     (assume_tac o REWRITE_RULE [optional_tuple_stage_code]) >>
+  `post_value_type cenv e = expr_type e` by
+    (`lowered_value_type cenv e = expr_type e` by simp[] >>
+     pop_assum mp_tac >> rpt (pop_assum kall_tac) >> strip_tac >>
+     Cases_on `e` >> gvs[post_value_type_def] >>
+     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+     gvs[post_value_type_def, vyperASTTheory.expr_type_def]) >>
   `expr_val_rel cx (TupleT tys) (ArrayV (TupleV vs)) op t /\
    expr_val_at cenv cx (TupleT tys) sa su (es_end with gas_obs := []) (ArrayV (TupleV vs)) op t` by
-    (qpat_x_assum `expr_type e = _` SUBST_ALL_TAC >> simp[]) >>
+    (qpat_x_assum `expr_type e = _` SUBST_ALL_TAC >> gvs[]) >>
   drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) assign_tuple_locals_memory_suffix_path_mem) >>
   strip_tac >> suspend "post"
 QED

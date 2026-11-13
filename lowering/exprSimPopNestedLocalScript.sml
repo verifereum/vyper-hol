@@ -5,7 +5,7 @@
 
 Theory exprSimPopNestedLocal
 Ancestors
-  exprSimPopNestedBase exprSimPopNestedLocalPopped
+  exprSimPopNestedBase targetLocalLive popTargetPre
   exprSimPopNestedLocalPost exprSimPopNestedLocalRun exprSimCalldataSlice
   exprSimPopNestedLocalSuffix vyperEvalExprPreservesScopesDom
   exprSimPopNestedLocalSource exprSimPopNestedLocalHandoff gasOutcome gasSummary gasSummaryCompose gasExemptCert
@@ -20,22 +20,17 @@ Ancestors
   vyperPlaceFrames vyperStatePreservation vyperLookup
 
 (* Pop on an array inside a memory local, the local itself included
-   (x.pop(), x.a.pop(), x[i].pop()), when every evaluation of the target
-   leaves its place live in the local's value or unreadable.  The run is
+   (x.pop(), x.a.pop(), x[i].pop()).  The target's evaluation ends on a
+   place live in the local's value (local_target_live).  The run is
    compile_pop_name_sim's at the target's pointer: the pop stores the
    array's new length word inside the local's region, which locals_kept
    exempts (dynarray_len_at), and the result is the element's pointer,
    read back through the popped history. *)
-Theorem pop_nested_local_live_case:
+Theorem pop_nested_local_sim:
   !ctx func cenv cx env ann bt ty es id.
     pop_target_frag ctx func cenv cx env bt es /\
     expr_body_pre cenv cx env (Pop ann bt) es /\
-    target_root bt = NameTarget id /\
-    (!s path t entry err.
-       eval_target_place cx bt s = (INL (MemoryPlace id path), t) /\
-       lookup_scopes id t.scopes = SOME entry /\
-       evaluate_subscripts entry.type entry.value path = INR err ==>
-       read_popped entry.type path entry.popped = NONE) ==>
+    target_root bt = NameTarget id ==>
     expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -71,7 +66,7 @@ Proof
   first_assum (irule_at Any o MATCH_MP gas_exempt_cert_error_place)
 QED
 
-Resume pop_nested_local_live_case[summary]:
+Resume pop_nested_local_sim[summary]:
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
   simp[gas_summary_at_def] >>
   disch_then (qx_choosel_then [`tres`, `tend`, `tr0`] strip_assume_tac) >>
@@ -83,7 +78,27 @@ Resume pop_nested_local_live_case[summary]:
   metis_tac[expr_exit_INR_type]
 QED
 
-Resume pop_nested_local_live_case[normal]:
+Resume pop_nested_local_sim[normal]:
+  `!path entry err. p = MemoryPlace id path /\
+     lookup_scopes id tend.scopes = SOME entry /\
+     evaluate_subscripts entry.type entry.value path = INR err ==>
+     read_popped entry.type path entry.popped = NONE` by
+    (rpt strip_tac >> gvs[] >>
+     `target_pre cenv cx env bt
+        (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
+       (irule target_pre_of_pop >>
+        simp[immutable_root_def, exprSimSourceTheory.expr_body_pre_gas_obs] >>
+        metis_tac[]) >>
+     `eval_target_place cx bt
+        (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+        (INL (MemoryPlace id path),tend with gas_obs := [])` by
+       (qpat_x_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
+          mp_tac >>
+        rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+        first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+     `lookup_scopes id (tend with gas_obs := []).scopes = SOME entry` by
+       simp[] >>
+     drule_all local_target_live >> strip_tac >> gvs[]) >>
   `place_readable cx (tend with gas_obs := []) (PlaceR p)` by
     fs[target_post_def] >>
   drule_all pop_counted_source_handoff >> strip_tac >> gvs[] >>
@@ -98,8 +113,8 @@ Resume pop_nested_local_live_case[normal]:
      (w2n b + k) t.vs_memory` by
     (drule_all exprSimPopNestedLocalMemoryTheory.val_in_memory_mutable_path >> simp[]) >>
   `mload (w2n (b + n2w k)) t = n2w (LENGTH vs)` by
-    (fs[valueEncodingTheory.val_in_memory_def] >>
-     gvs[venomStateTheory.mload_def, valueEncodingTheory.mem_word_at_def,
+    (fs[valueEncodingDefsTheory.val_in_memory_def] >>
+     gvs[venomStateTheory.mload_def, valueEncodingDefsTheory.mem_word_at_def,
          arithmeticTheory.ADD_COMM]) >>
   `MAP FDOM es.scopes = MAP FDOM tend.scopes` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
@@ -108,9 +123,16 @@ Resume pop_nested_local_live_case[normal]:
      strip_tac >> drule eval_target_place_preserves_scopes_dom >> simp[]) >>
   drule_all pop_array_element_layout >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `popped_keys_indexed tend.scopes` by
+    (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `expr_sim_inv _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rewrite_tac[gas_marked_exec_def] >>
+     rpt strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[] >>
+     strip_tac >>
+     drule stmtPoppedKeysTheory.eval_target_place_popped_keys_indexed >>
+     fs[expr_sim_inv_def]) >>
   qpat_x_assum `expr_body_pre _ _ _ _ _` kall_tac >>
   qpat_x_assum `target_root _ = _` kall_tac >>
-  qpat_x_assum `!s path t entry err. _` kall_tac >>
   qpat_x_assum `type_place_target _ _ = _` kall_tac >>
   qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` kall_tac >>
   qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
@@ -129,7 +151,7 @@ Resume pop_nested_local_live_case[normal]:
   suspend "nonempty"
 QED
 
-Resume pop_nested_local_live_case[empty]:
+Resume pop_nested_local_sim[empty]:
   qpat_x_assum `vs = []` SUBST_ALL_TAC >>
   `mload (w2n (b + n2w k)) t = 0w` by simp[] >>
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0]` by fs[listTheory.ALL_DISTINCT] >>
@@ -149,11 +171,11 @@ Resume pop_nested_local_live_case[empty]:
   simp[expr_exit_def, exit_result_def]
 QED
 
-Resume pop_nested_local_live_case[nonempty]:
+Resume pop_nested_local_sim[nonempty]:
   `well_formed_type_value (ArrayTV etv (Dynamic n'))` by
     metis_tac[vyperPlaceStatePreservationTheory.subscripts_type_well_formed] >>
   `LENGTH vs < dimword (:256)` by
-    (fs[valueEncodingTheory.val_wf_def, vyperTypingTheory.well_formed_type_value_def]) >>
+    (fs[valueEncodingDefsTheory.val_wf_def, vyperTypingTheory.well_formed_type_value_def]) >>
   `mload (w2n (b + n2w k)) t <> 0w` by
     (simp[] >> simp[wordsTheory.n2w_11] >> Cases_on `vs` >> gvs[]) >>
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0]` by fs[listTheory.ALL_DISTINCT] >>
@@ -173,7 +195,7 @@ Resume pop_nested_local_live_case[nonempty]:
   disch_then (qspec_then `cx` mp_tac) >>
   simp[Abbr `fin`] >> strip_tac >>
   `k + 32 + (LENGTH vs - 1) * type_memory_size etv <= sz` by
-    (`LENGTH vs <= n'` by fs[valueEncodingTheory.val_wf_def] >>
+    (`LENGTH vs <= n'` by fs[valueEncodingDefsTheory.val_wf_def] >>
      ` (LENGTH vs - 1) * type_memory_size etv <= n' * type_memory_size etv` by
        (irule arithmeticTheory.LESS_MONO_MULT >> decide_tac) >>
      qpat_x_assum `(LENGTH vs - 1) * _ <= _` mp_tac >>
@@ -207,6 +229,19 @@ Resume pop_nested_local_live_case[nonempty]:
     (simp[Abbr `scopes'`] >> metis_tac[lookup_scopes_update_other]) >>
   `k + 32 <= sz` by decide_tac >>
   `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
+  `local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv)
+     etv result` by
+    (`mem_step_offset (ArrayTV etv (Dynamic n'))
+        (ValueSubscript (IntV &(LENGTH vs - 1))) =
+      SOME (32 + (LENGTH vs - 1) * type_memory_size etv, etv)` by
+       (simp[loweringPostsTheory.mem_step_offset_def] >>
+        fs[valueEncodingDefsTheory.val_wf_def] >> Cases_on `vs` >> gvs[]) >>
+     `mem_path_offset entry.type
+        (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))]) =
+      SOME (k + 32 + (LENGTH vs - 1) * type_memory_size etv, etv)` by
+       (drule_all exprSimPropsTheory.mem_path_offset_snoc >> simp[]) >>
+     gvs[Abbr `result`, loweringPostsTheory.local_place_at_def] >>
+     metis_tac[]) >>
   qexistsl_tac [`INL result`, `(tend with gas_obs := []) with scopes := scopes'`,
     `OK (u with vs_inst_idx := LENGTH r.cs_current_insts)`] >>
   conj_tac
@@ -215,45 +250,21 @@ Resume pop_nested_local_live_case[nonempty]:
       simp[Abbr `result`, Abbr `scopes'`]) >>
   disj1_tac >> simp[] >>
   irule (pop_memory_live_suffix_post |> Q.INST [`mid` |-> `tend with gas_obs := []`, `e` |-> `Pop ann bt`]
-    |> SRULE [exprSimVVFrameTheory.vv_post_inst_idx, expr_type_def]) >>
+    |> SRULE [exprSimVVFrameTheory.vv_post_inst_idx, expr_type_def,
+             loweringPostsTheory.expr_has_effect_thm]) >>
   goal_assum (drule_at Any) >>
   simp[] >> conj_tac >- metis_tac[] >>
   qpat_assum `mem_path_offset entry.type path = _` (irule_at Any) >>
   qpat_assum `FLOOKUP cenv.ce_vars id = _` (irule_at Any) >>
-  qpat_assum `wb_frame cenv es sa s0 t` (irule_at Any) >>
+  qpat_assum `wb_frame cenv es _ sa s0 t` (irule_at Any) >>
   qpat_assum `local_ptrs_reserved cenv sm` (irule_at Any) >>
-  simp[] >>
-  qexists_tac `record_pop path (ArrayV (DynArrayV vs)) (LAST vs) entry.popped` >>
+  fs[record_pop_def] >>
   gvs[Abbr `scopes'`] >>
   drule exprSimMemorySourceTheory.read_result_gas_obs >>
-  disch_then (qspec_then `[]` mp_tac) >> simp[]
+  disch_then (qspec_then `[]` mp_tac) >> simp[] >>
+  strip_tac >>
+  full_simp_tac std_ss [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]
 QED
 
-Finalise pop_nested_local_live_case
+Finalise pop_nested_local_sim
 
-(* By whether some evaluation of the target leaves its place reading a
-   popped snapshot (pop_nested_local_popped_case) or none does. *)
-Theorem pop_nested_local_sim:
-  !ctx func cenv cx env ann bt ty es id.
-    pop_target_frag ctx func cenv cx env bt es /\
-    expr_body_pre cenv cx env (Pop ann bt) es /\
-    target_root bt = NameTarget id ==>
-    expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
-Proof
-  rpt strip_tac >>
-  Cases_on `?s path t entry err v.
-              eval_target_place cx bt s = (INL (MemoryPlace id path), t) /\
-              lookup_scopes id t.scopes = SOME entry /\
-              evaluate_subscripts entry.type entry.value path = INR err /\
-              read_popped entry.type path entry.popped = SOME v`
-  >- (fs[] >> metis_tac[pop_nested_local_popped_case]) >>
-  `!s path t entry err.
-     eval_target_place cx bt s = (INL (MemoryPlace id path), t) /\
-     lookup_scopes id t.scopes = SOME entry /\
-     evaluate_subscripts entry.type entry.value path = INR err ==>
-     read_popped entry.type path entry.popped = NONE` by
-    (rpt strip_tac >>
-     Cases_on `read_popped entry.type path entry.popped` >> fs[] >>
-     metis_tac[]) >>
-  metis_tac[pop_nested_local_live_case]
-QED

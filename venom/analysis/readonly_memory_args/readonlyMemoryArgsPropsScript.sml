@@ -75,6 +75,41 @@ Proof
   irule wmwe_byte_at_outside >> simp[mcopy_data_length]
 QED
 
+(* Lemmas about icf_equiv (passResidualFrame). *)
+Theorem icf_equiv_refl[simp]:
+  !s. icf_equiv s s
+Proof
+  simp[icf_equiv_def]
+QED
+
+Theorem icf_equiv_sym:
+  !s1 s2. icf_equiv s1 s2 ==> icf_equiv s2 s1
+Proof
+  rw[icf_equiv_def]
+QED
+
+Theorem icf_equiv_trans:
+  !s1 s2 s3. icf_equiv s1 s2 /\ icf_equiv s2 s3 ==> icf_equiv s1 s3
+Proof
+  rw[icf_equiv_def]
+QED
+
+Theorem icf_frame_observable_equiv:
+  !s1 s2. icf_frame s1 = icf_frame s2 ==> observable_equiv s1 s2
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `icf_frame s1 = icf_frame s2`
+    (mp_tac o REWRITE_RULE [icf_frame_eq_reconstruct]) >>
+  disch_then (SUBST1_TAC o SYM) >>
+  simp[observable_equiv_def]
+QED
+
+Theorem icf_equiv_observable_equiv:
+  !s1 s2. icf_equiv s1 s2 ==> observable_equiv s1 s2
+Proof
+  rw[icf_equiv_def] >> irule icf_frame_observable_equiv >> simp[]
+QED
+
 Definition copy_fwd_state_rel_def:
   copy_fwd_state_rel (dst_addr : num) (src_addr : num) (sz : num)
                      (s1 : venom_state) (s2 : venom_state) : bool <=>

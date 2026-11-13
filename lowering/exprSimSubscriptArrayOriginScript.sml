@@ -4,18 +4,7 @@ Ancestors
   exprSimSubscriptArraySource exprLowering vyperState vyperInterpreter
   vyperAST vyperValue vyperMisc pair vyperTypeContract vyperTypeSystem
   compileEnv finite_map context exprSafeOperandBuiltins
-
-Theorem extend_storage_place_not_memory:
-  extend_storage_place cx tr slot tv sb s = (INL p,t) ==>
-  !id path. p <> MemoryPlace id path
-Proof
-  Cases_on `tv` >> Cases_on `sb` >>
-  simp[oneline extend_storage_place_def, bind_def, ignore_bind_def,
-       raise_def, return_def, AllCaseEqs()] >>
-  rpt strip_tac >>
-  gvs[value_CASE_rator, AllCaseEqs(), raise_def, return_def,
-      bind_def, ignore_bind_def, UNCURRY]
-QED
+  vyperStoragePlaceProvenance stmtSimForArrayFrame
 
 Theorem extend_place_memory_origin:
   extend_place cx r sb s = (INL (PlaceR (MemoryPlace id path)),t) ==>
@@ -26,7 +15,7 @@ Proof
       simp[extend_place_def, extend_memory_place_def, bind_def,
            ignore_bind_def, return_def, AllCaseEqs()] >>
       rpt strip_tac >> gvs[] >>
-      drule extend_storage_place_not_memory >> simp[]) >>
+      drule extend_storage_place_subregion >> simp[]) >>
   Cases_on `sb` >>
   simp[extend_place_def, bind_def, lift_option_type_def, return_def,
        raise_def, AllCaseEqs()] >>
@@ -44,16 +33,6 @@ Proof
   strip_tac >> drule extend_place_memory_origin >> simp[]
 QED
 
-Theorem lookup_global_not_memory:
-  lookup_global cx src id s = (INL r,t) ==>
-  !name path. r <> PlaceR (MemoryPlace name path)
-Proof
-  simp[lookup_global_def, bind_def, lift_option_type_def,
-       return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[option_CASE_rator, prod_CASE_rator, var_decl_info_CASE_rator,
-      bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()]
-QED
-
 Theorem eval_base_place_memory_origin:
   !bt cx s id path t.
     eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id path)),t) ==>
@@ -63,7 +42,7 @@ Proof
   Cases_on `bt` >> rpt strip_tac >>
   gvs[toplevel_target_def, Once evaluate_def, bind_def, AllCaseEqs()]
   >- (PairCases_on `p` >> gvs[Once evaluate_def] >>
-      drule lookup_global_not_memory >> simp[]) >>
+      gvs[lookup_global_not_memory]) >>
   drule extend_place_memory_origin >> strip_tac >> gvs[] >>
   first_x_assum (qspec_then `base_assignment_target_size b` mp_tac) >>
   (impl_tac >- simp[]) >>
@@ -119,8 +98,11 @@ Proof
   completeInduct_on `expr_size e` >> Cases_on `e` >> rpt strip_tac >>
   gvs[Once well_typed_expr_def, AllCaseEqs()]
   >- (PairCases_on `p` >> gvs[Once evaluate_def] >>
-      drule lookup_global_not_memory >> simp[]) >>
+      gvs[lookup_global_not_memory]) >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  qpat_x_assum `(if subscript_reads_base _ _ _ then _ else _) _ = _` mp_tac >>
+  IF_CASES_TAC >> simp[bind_def, return_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
   drule select_result_memory_origin >> strip_tac >> gvs[] >>
   rename1 `type_place_expr env obj = SOME obj_vt` >>
   first_x_assum (qspec_then `expr_size obj` mp_tac) >>
@@ -128,6 +110,14 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+
+Theorem snapshot_vv_location[local]:
+  compile_snapshot_vv cenv T vv s = (v,t) ==>
+  vv_location v = NONE \/ vv_location v = SOME LocMemory
+Proof
+  rw[compile_snapshot_vv_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[vv_location_def, mk_ptr_def]
+QED
 
 Theorem compile_subscript_code_origin:
   vv_location (FST (compile_subscript f cenv rt ty obj idx sa)) = SOME LocCode ==>
@@ -138,8 +128,15 @@ Proof
   Cases_on `place_type cenv obj` >>
   simp[compile_subscript_def, comp_bind_def, comp_return_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >>
-  simp[vv_location_def, mk_ptr_def] >>
+  qpat_x_assum `(if copies_subscript_base _ _ _ then _ else _) _ = _` mp_tac >>
+  rw[comp_return_def] >> imp_res_tac snapshot_vv_location >> gvs[] >>
+  gvs[vv_location_def, mk_ptr_def] >>
   Cases_on `t` >> simp[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[vv_location_def, mk_ptr_def] >>
+  (* snapshot cases: the base sits in memory (or is a stack value), so the
+     element pointer is in memory, contradicting the LocCode result *)
+  qpat_x_assum `vv_location (FST _) = SOME LocCode` mp_tac >>
+  simp[comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> simp[vv_location_def, mk_ptr_def]
 QED
 
@@ -216,7 +213,7 @@ Proof
          comp_return_def, vv_location_def, mk_ptr_def, expr_type_def])
   >~ [`eval_expr cx (TopLevelName ann nsid) _ = _`] >-
     (PairCases_on `nsid` >> gvs[Once evaluate_def] >>
-     drule lookup_global_not_memory >> simp[])
+     gvs[lookup_global_not_memory])
   >~ [`eval_expr cx (Literal ann lit) _ = _`] >-
     gvs[Once evaluate_def, return_def]
   >~ [`eval_expr cx (Subscript ann obj idx) _ = _`] >- suspend "subscript"
@@ -247,6 +244,9 @@ Resume code_expr_not_memory[subscript]:
   simp[exprCallBoundsTheory.expr_child_callback_def, expr_size_def] >>
   strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  qpat_x_assum `(if subscript_reads_base _ _ _ then _ else _) _ = _` mp_tac >>
+  IF_CASES_TAC >> simp[bind_def, return_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
   drule select_result_memory_origin >> strip_tac >> gvs[] >>
   fs[Once well_typed_expr_def]
   >~ [`type_place_expr env obj = SOME vt`] >-
@@ -316,7 +316,8 @@ Proof
   gvs[AllCaseEqs(), oneline as_stack_val_def, oneline as_ptr_val_def,
       vv_location_def, mk_ptr_def, base_ptr_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  rpt strip_tac >>
+  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  fs[vv_location_def, mk_ptr_def, base_ptr_def] >>
   gvs[AllCaseEqs(), vv_location_def, mk_ptr_def, base_ptr_def]
   >~ [`compile_literal_vv _ _ _ = _`] >-
     (Cases_on `rt` >> gvs[compile_literal_vv_def, comp_return_def, vv_location_def]
@@ -421,8 +422,9 @@ Proof
     drule compile_attribute_safe_operand >>
     simp[exprSafeOperandTheory.safe_operand_def, vv_operand_def])
   >>~- ([`well_typed_expr env (Builtin _ bi args)`],
-    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def,
-         AllCaseEqs()]
+    qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+    simp[Once compile_expr_def, compile_expr_body_def] >> strip_tac >>
+    gvs[AllCaseEqs()]
      >>~- ([`compile_builtin_dispatch _ _ _ _ _ _ = _`],
        qpat_x_assum `compile_builtin_dispatch _ _ _ _ _ _ = _` mp_tac >>
        pure_once_rewrite_tac[cj 2 compile_expr_raw_def] >> strip_tac >>

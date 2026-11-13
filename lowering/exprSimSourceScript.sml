@@ -1,7 +1,7 @@
 (* Source preconditions and invariant preservation for expression evaluation. *)
 Theory exprSimSource
 Ancestors
-  exprWordOperand
+  exprWordOperand exprSimPopNestedLocalPath
   compileEnv valueEncoding
   exprSimHypsDefs exprSimDefs loweringSlice allocLimits gasContext list finite_map pair
   vyperTyping
@@ -12,7 +12,7 @@ Ancestors
   vyperStorageLayoutSafety vyperTypeStoragePreservation
   vyperTypeEvalStoragePreservation vyperCallOutcomeStorage
   supportedExprTraverse exprStoragePreservation
-  vyperLookup vyperEvalExprPreservesScopesDom vyperPlaceResultTyping supportedProgram bodyStoragePreservation
+  vyperLookup vyperEvalExprPreservesScopesDom vyperPlaceResultTyping supportedProgram bodyStoragePreservation evalNoHalt
   vyperTypeABI vyperValue vyperPlaceInvariants placeTypingProps
 Libs
   pairLib monadsyntax
@@ -67,6 +67,11 @@ Proof
       `?tops. supported_program tops /\ get_module_code cx NONE = SOME tops`
         by (Cases_on `int_calls_expr e` >> gvs[expr_body_pre_def] >>
             metis_tac[]) >>
+      `EVERY (\c. FST c = NONE /\
+                  IS_SOME (supported_function_decl tops c Internal))
+         (int_calls_expr e)` by
+        (gvs[expr_body_pre_def, listTheory.EVERY_MEM] >>
+         rpt strip_tac >> res_tac >> gvs[]) >>
       irule eval_expr_body_oracle_storage >>
       gvs[expr_body_pre_def, expr_sim_inv_def, listTheory.EVERY_CONJ,
           runtime_storage_consistent_def, runtime_consistent_def] >>
@@ -184,6 +189,41 @@ Proof
   metis_tac[]
 QED
 
+(* A pop keeps every history path dead and records a dead one: a live pop
+   shortens the array at its path, so the popped index is out of range and
+   no dead path revives; a pop at a dead path leaves the value alone. *)
+Theorem entry_pop_step_dead[local]:
+  entry_pop_step entry path next /\
+  subscripts_type entry.type path = SOME ptv /\
+  EVERY (\k. ?err. evaluate_subscripts entry.type entry.value k = INR err)
+    (MAP FST entry.popped) ==>
+  EVERY (\k. ?err. evaluate_subscripts next.type next.value k = INR err)
+    (MAP FST next.popped)
+Proof
+  simp[entry_pop_step_def] >> strip_tac >>
+  Cases_on `arr` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  gvs[vyperValueOperationTheory.popped_value_def] >>
+  rename1 `DynArrayV vs` >>
+  gvs[vyperValueOperationTheory.pop_element_def, record_pop_def]
+  >- (gvs[read_memory_path_def] >>
+      drule assign_subscripts_replace_read >> strip_tac >>
+      conj_tac
+      >- (drule_all evaluate_subscripts_append >>
+          disch_then (qspec_then `[ValueSubscript (IntV &(LENGTH vs - 1))]`
+                        SUBST1_TAC) >>
+          simp[evaluate_subscripts_def, vyperValueOperationTheory.array_index_def, listTheory.oEL_THM,
+               rich_listTheory.LENGTH_FRONT]) >>
+      `!tv' k e. evaluate_subscripts tv' (ArrayV (DynArrayV vs)) k = INR e ==>
+                 ?e'. evaluate_subscripts tv' (ArrayV (DynArrayV (FRONT vs))) k =
+                      INR e'` by metis_tac[evaluate_subscripts_front_dead] >>
+      gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+      first_x_assum drule >> strip_tac >>
+      metis_tac[assign_subscripts_replace_dead]) >>
+  `MAP FST history = MAP FST entry.popped` by metis_tac[replace_popped_keys] >>
+  simp[] >> drule evaluate_subscripts_append_err >> simp[]
+QED
+
 Theorem scope_pop_step_keys_indexed[local]:
   !sc ev sc'.
     scope_pop_step sc ev sc' /\ EVERY scope_well_typed sc /\
@@ -204,6 +244,10 @@ Proof
   drule entry_pop_step_metadata >> strip_tac >>
   drule entry_pop_step_keys_indexed >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
+  `EVERY (\k. ?err. evaluate_subscripts next.type next.value k = INR err)
+     (MAP FST next.popped)` by
+    (irule entry_pop_step_dead >> gvs[entry_pop_event_valid_def] >>
+     metis_tac[]) >>
   rw[FLOOKUP_UPDATE] >> gvs[] >> metis_tac[]
 QED
 
@@ -218,6 +262,17 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
+
+(* Every path in a live local's popped history is dead in its value. *)
+Theorem popped_keys_indexed_lookup_dead:
+  !sc id entry. popped_keys_indexed sc /\ lookup_scopes id sc = SOME entry ==>
+    EVERY (\k. ?err. evaluate_subscripts entry.type entry.value k = INR err)
+      (MAP FST entry.popped)
+Proof
+  Induct >> simp[lookup_scopes_def, popped_keys_indexed_def] >>
+  rpt gen_tac >> Cases_on `FLOOKUP h id` >>
+  simp[] >> rpt strip_tac >> gvs[] >> metis_tac[popped_keys_indexed_def]
+QED
 
 (* Evaluating an expression changes the scopes only by pops
    (eval_mutual_scope_pop_effect).  A pop from a well-typed local, whose
@@ -315,6 +370,20 @@ Proof
   simp[bind_def, AllCaseEqs()] >> metis_tac[]
 QED
 
+Theorem eval_expr_calls_no_halt:
+  ~expr_has_evm_run e /\
+  EVERY (\c. FST c = NONE /\
+             ?tops. supported_program tops /\
+                    get_module_code cx NONE = SOME tops /\
+                    IS_SOME (supported_function_decl tops c Internal))
+    (int_calls_expr e) ==>
+  eval_expr cx e st <> (INR HaltException, st')
+Proof
+  strip_tac >> irule (cj 1 eval_no_halt) >> fs[expr_has_evm_run_def] >>
+  Cases_on `int_calls_expr e` >> fs[] >> fs[EVERY_MEM] >>
+  metis_tac[optionTheory.SOME_11]
+QED
+
 Theorem expr_body_pre_res_ok:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
@@ -327,8 +396,13 @@ Proof
     (qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
      simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
      metis_tac[cj 1 eval_expr_no_control, read_result_no_control]) >>
-  Cases_on `exc` >> gvs[no_control_exc_def, no_type_error_result_def] >>
-  rename1 `Error err` >> Cases_on `err` >> gvs[]
+  Cases_on `exc` >> gvs[no_control_exc_def, no_type_error_result_def]
+  >~ [`Error err`] >- (Cases_on `err` >> gvs[]) >>
+  `!st st'. eval_expr cx e st <> (INR HaltException, st')` by
+    (rpt gen_tac >> irule eval_expr_calls_no_halt >> fs[expr_body_pre_def]) >>
+  qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _`
+    mp_tac >>
+  simp[bind_def, AllCaseEqs()] >> metis_tac[read_result_no_halt]
 QED
 
 Theorem word_value_type_typed:
@@ -588,6 +662,7 @@ Proof
       gvs[eval_result_typed_def]) >>
   drule (cj 1 eval_expr_no_control) >>
   rename1 `INR exc` >> Cases_on `exc` >>
-  gvs[no_control_exc_def, no_type_error_result_def] >>
-  rename1 `Error err` >> Cases_on `err` >> gvs[]
+  gvs[no_control_exc_def, no_type_error_result_def]
+  >~ [`Error err`] >- (Cases_on `err` >> gvs[]) >>
+  metis_tac[eval_expr_calls_no_halt, expr_body_pre_def]
 QED

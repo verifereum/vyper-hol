@@ -21,16 +21,12 @@ Ancestors
   codegenEntryRel asmDataSuffixProps codegenRel asmSem asmWf symbolResolve
   frameOutcome callTrace vfmExecution vfmExecutionProp
 
-(* asm_encoding_wf, data only at the end, and no opcodes beyond the two
-   message calls that start another frame or end this one by destruction. *)
+(* Well-formed instruction encodings, with data confined to the suffix. *)
 Definition asm_frame_prog_ok_def:
   asm_frame_prog_ok prog <=>
     asm_encoding_wf prog /\
     (!i. i < LENGTH prog /\ ~is_data_inst (EL i prog) ==>
-         !j. j <= i ==> ~is_data_inst (EL j prog)) /\
-    (!i name. i < LENGTH prog /\ EL i prog = AsmOp name ==>
-       name <> "DELEGATECALL" /\ name <> "CREATE" /\ name <> "CREATE2" /\
-       name <> "SELFDESTRUCT")
+         !j. j <= i ==> ~is_data_inst (EL j prog))
 End
 
 (* es is the frame es0 part way through: the same depth, saved rollback,
@@ -43,6 +39,11 @@ Definition asm_frame_rel_def:
     ?c0 c rb rest.
       es0.contexts = (c0, rb) :: rest /\ es.contexts = (c, rb) :: rest /\
       c0.logs = [] /\ c.msgParams = c0.msgParams /\ ~c0.msgParams.static /\
+      (as.as_call_ctx.cc_created_in_tx =
+        account_empty (lookup_account c.msgParams.callee es.originalAccounts)) /\
+      (~as.as_call_ctx.cc_created_in_tx ==>
+        account_already_created (lookup_account c.msgParams.callee
+          es.rollback.accounts)) /\
       es.txParams = es0.txParams /\ wf_state es /\
       (?d. es.msdomain = Collect d) /\
       asm_evm_rel (prog ++ [AsmDataItem data]) as es /\
@@ -51,13 +52,15 @@ Definition asm_frame_rel_def:
       as.as_requests ++ call_requests es = call_requests es0
 End
 
-(* The step of prog at as.as_pc: either the frame starves from es, or the
+(* The step of prog at as.as_pc: either the frame starves at this step
+   (so the frame makes no more requests from es), or the
    frame's run from es ends as the step does (codegen_asm_run_call's
-   clauses), or the step continues and the relation holds again at a
+   clauses; a reverting or faulting step makes no more requests), or the step continues and the relation holds again at a
    state the frame's run passes through. *)
 Definition asm_frame_step_ok_def:
   asm_frame_step_ok prog data es0 as es <=>
-    (?r es'. run_call es = SOME (r, es') /\ frame_resource_starved es0 r es') \/
+    (?r es'. run_call es = SOME (r, es') /\ frame_resource_starved es0 r es' /\
+             call_requests es = []) \/
     case asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
                   (EL as.as_pc prog) as of
       AsmOK as1 =>
@@ -71,10 +74,12 @@ Definition asm_frame_step_ok_def:
           as1.as_requests = call_requests es0
     | AsmRevert as1 =>
         ?r es'. run_call es = SOME (r, es') /\
-          ?lgs. frame_outcome es0 r es' (SOME Reverted) as1.as_returndata lgs
+          (?lgs. frame_outcome es0 r es' (SOME Reverted) as1.as_returndata lgs) /\
+          call_requests es = []
     | AsmFault as1 =>
         ?r es'. run_call es = SOME (r, es') /\
-          ?exc lgs. exc <> Reverted /\ frame_outcome es0 r es' (SOME exc) [] lgs
+          (?exc lgs. exc <> Reverted /\ frame_outcome es0 r es' (SOME exc) [] lgs) /\
+          call_requests es = []
     | AsmError _ => T
 End
 
@@ -103,7 +108,10 @@ QED
 
 (* The frame starts in the relation with its own entry assembly state. *)
 Theorem asm_frame_rel_entry:
-  initial_ctx_rel cplan prog ctx vs es ==>
+  initial_ctx_rel cplan prog ctx vs es /\
+  (vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
+    (lookup_account (FST (HD es.contexts)).msgParams.callee
+      es.rollback.accounts)) ==>
   asm_frame_rel prog vs.vs_data_section es (entry_asm_state vs es) es
 Proof
   rw[initial_ctx_rel_def, initial_state_rel_def, asm_frame_rel_def,

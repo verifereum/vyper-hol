@@ -1,6 +1,6 @@
 Theory makeSsaCurrentDemand
 Ancestors
-  makeSsaCurrentDemandBoundary makeSsaCurrentAnalysis venomWf cfgDefs livenessDefs
+  makeSsaCurrentDemandBoundary makeSsaCurrentAnalysis venomWf cfgDefs livenessDefs venomWfProps
   livenessBlockProofs livenessTerminationProofs
 Libs
   listTheory arithmeticTheory venomInstTheory
@@ -151,14 +151,6 @@ Proof
   qexistsl_tac [`bb`, `df_at [] (liveness_block fn.fn_blocks cfg l st) l (SUC i)`] >> simp[]
 QED
 
-Theorem current_wf_phi_operand_vars:
-  !ops. phi_well_formed ops ==>
-    operand_vars ops = MAP SND (phi_pairs ops)
-Proof
-  ho_match_mp_tac phi_pairs_ind >>
-  simp[phi_well_formed_def, phi_pairs_def, operand_vars_def, operand_var_def]
-QED
-
 Theorem current_phi_in_prefix:
   !insts k. k < LENGTH insts /\
     (!i j. i < j /\ j < LENGTH insts /\ (EL j insts).inst_opcode = PHI ==>
@@ -191,7 +183,7 @@ Proof
   `phi_well_formed (EL k bb.bb_instructions).inst_operands` by
     gvs[inst_wf_def] >>
   qexists_tac `EL k bb.bb_instructions` >> simp[] >>
-  drule current_wf_phi_operand_vars >>
+  drule phi_well_formed_uses_pairs >>
   gvs[inst_uses_def] >> metis_tac[]
 QED
 

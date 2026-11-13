@@ -6,7 +6,7 @@ Ancestors
   exprSimProps gasNormalPrefix gasSummary fragGasMode loweringPosts exprSimMemDefs
   fragExecMem instMemFrontier allocaHistoryFragment emitHelperProps
   exprLoweringProps emitHelper venomInst venomState words list rich_list
-  compileEnv fragExec exprSimDefs valueEncoding vyperValue vyperAST venomExecSemantics
+  compileEnv loweringStateRelDefs fragExec exprSimDefs valueEncoding vyperValue vyperAST venomExecSemantics
   loweringSlice exprLowering vyperState vyperTyping vyperTypeSystem
 
 Theorem body_calldatasize_prefix_mem_ok[local]:
@@ -252,7 +252,8 @@ QED
 Theorem body_calldatalen_mem_case:
   !cx ann args. body_expr_mem_ok cx (Builtin ann CalldataLen args)
 Proof
-  rpt gen_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >>
   rpt gen_tac >> strip_tac >>
   metis_tac[compile_calldatasize_body_sim_mem,
             compile_calldatasize_body_vv_sim_mem]

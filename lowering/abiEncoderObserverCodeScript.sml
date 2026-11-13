@@ -27,9 +27,9 @@ Proof
   rw[observer_region_safe_def, abi_word_observer_def, abi_word_region_def] >>
   gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def,
       EL_APPEND_EQN] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_read1_def, exec_write2_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, exec_write2_def] >>
   rpt strip_tac >>
-  gvs[Once step_inst_base_def, mk_inst_def, exec_read1_def, exec_write2_def,
+  gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, exec_write2_def,
       AllCaseEqs(), mstore_def, update_var_def]
 QED
 

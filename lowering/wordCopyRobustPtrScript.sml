@@ -1,7 +1,7 @@
 (* Primitive normalization consumes the framed word-copy boundary. *)
 Theory wordCopyRobustPtr
 Ancestors typedCopyPtr valueEncodingProps representationCleanPtr robustCopyTransportPtr
-  bodyPtrDefs valueEncoding valueEncodingProofs list venomMemProofs
+  bodyPtrDefs valueEncoding valueEncodingDefs valueEncodingProofs list venomMemProofs
 
 Theorem compile_store_word_robust_framed_frag_ptr:
   !cx ctx PG R cenv dst dst_ty src src_ty sa sb G tn s a b tv v.

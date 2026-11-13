@@ -15,7 +15,7 @@ Ancestors
   stmtSimDefs exprLoweringProps loweringPosts fragGasPathMem fragGasMode
   fragGasSeqMem fragExec fragExecMem instMemFrontier freshWrites venomMemDefs
   venomInstProps exprLowering stmtLowering emitHelper emitHelperProps
-  compileEnv valueEncoding vfmConstants vyperValue vyperInterpreter
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs vfmConstants vyperValue vyperInterpreter
   venomExecSemantics venomState venomInst context
   words list rich_list finite_map arithmetic
 Libs
@@ -340,9 +340,11 @@ Proof
      simp[vv_operand_def]) >>
   `vv_post ctx func cenv cx se es sa sm s0 ee (Value (StringV str))
      (LocatedValue ty p) t` by metis_tac[vv_post_read_result] >>
+  `post_value_type cenv se = BaseT (StringT n)` by
+    simp[post_value_type_bytestring, is_bytestring_type_def] >>
   `ty = BaseT (StringT n)` by
     (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value _) _ _` mp_tac >>
-     simp[vv_post_def, vv_holds_def]) >>
+     simp[vv_post_def, vv_holds_def] >> rpt strip_tac >> gvs[]) >>
   qpat_x_assum `ty = _` SUBST_ALL_TAC >>
   qabbrev_tac `tr = (p.ptr_location = LocTransient)` >>
   `(if tr then LocTransient else LocStorage) = p.ptr_location` by
@@ -436,7 +438,7 @@ Proof
     (rpt conj_tac >>
      qpat_assum `!i. MEM i hcode ==> MEM i (fn_insts func)` irule >>
      simp[Abbr `hcode`, reason_head_def]) >>
-  `MEM (mk_inst (j + 5) ALLOCA [Lit 32w] ["%" ++ toString (u0 + 4)])
+  `MEM (mk_inst (j + 6) ALLOCA [Lit 32w] ["%" ++ toString (u0 + 5)])
        (fn_insts func)` by
     (qpat_assum `!i. MEM i tcode ==> MEM i (fn_insts func)` irule >>
      simp[Abbr `tcode`, reason_tail_def]) >>
@@ -606,8 +608,8 @@ Proof
     (irule room_by_fields >>
      qexists `s1 with <| vs_allocas := A; vs_alloca_next := N |>` >>
      simp[]) >>
-  `j + 5 <> id0 /\ j + 5 <> id0 + 3 /\ j + 5 <> id0 + 4` by decide_tac >>
-  `FLOOKUP z.vs_allocas (j + 5) = FLOOKUP t.vs_allocas (j + 5)` by
+  `j + 6 <> id0 /\ j + 6 <> id0 + 3 /\ j + 6 <> id0 + 4` by decide_tac >>
+  `FLOOKUP z.vs_allocas (j + 6) = FLOOKUP t.vs_allocas (j + 6)` by
     metis_tac[] >>
   `v0 + 2 < u0` by decide_tac >>
   `!x. Var out = Var x ==> !k. x <> "%" ++ toString (u0 + k)` by
@@ -635,11 +637,11 @@ Proof
   `B + 64 + Z <= z.vs_alloca_next /\ TP + Z <= z.vs_alloca_next /\
    z.vs_alloca_next < dimword (:256)` by
     (asm_rewrite_tac[] >> decide_tac) >>
-  `FLOOKUP z.vs_allocas (j + 5) = NONE ==>
+  `FLOOKUP z.vs_allocas (j + 6) = NONE ==>
    z.vs_alloca_next + 32 < dimword (:256)` by
     (strip_tac >>
      qspecl_then [`func`, `z`,
-       `mk_inst (j + 5) ALLOCA [Lit 32w] ["%" ++ toString (u0 + 4)]`,
+       `mk_inst (j + 6) ALLOCA [Lit 32w] ["%" ++ toString (u0 + 5)]`,
        `32w`, `ctx`] mp_tac alloca_room_fresh >>
      impl_tac
      >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -647,13 +649,13 @@ Proof
          qpat_x_assum `FLOOKUP z.vs_allocas _ = NONE` mp_tac >>
          simp_tac (srw_ss()) [mk_inst_def, FLOOKUP_DEF]) >>
      disch_then (mp_tac o CONJUNCT1) >> simp[dimword_def]) >>
-  `!z' m. FLOOKUP z.vs_allocas (j + 5) = SOME (z', m) ==>
+  `!z' m. FLOOKUP z.vs_allocas (j + 6) = SOME (z', m) ==>
           z' + 32 <= z.vs_alloca_next /\ (z' + 32 <= TP \/ TP + 32 <= z')` by
     (rpt gen_tac >> strip_tac >>
-     `FLOOKUP t.vs_allocas (j + 5) = SOME (z', m)` by metis_tac[] >>
+     `FLOOKUP t.vs_allocas (j + 6) = SOME (z', m)` by metis_tac[] >>
      `m = 32` by
-       (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `j + 5`, `32`,
-          `["%" ++ toString (u0 + 4)]`] mp_tac state_rel_site_size >>
+       (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `j + 6`, `32`,
+          `["%" ++ toString (u0 + 5)]`] mp_tac state_rel_site_size >>
         impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
         disch_then drule >> simp[]) >>
      `z' + m <= t.vs_alloca_next` by metis_tac[alloca_next_valid_def] >>
@@ -668,7 +670,7 @@ Proof
            disch_then drule >> simp[]) >>
         qpat_x_assum `allocas_non_overlapping t`
           (mp_tac o REWRITE_RULE [allocas_non_overlapping_def]) >>
-        disch_then (qspecl_then [`j + 5`, `id0 + 3`, `z'`, `m`, `x0`, `x1`]
+        disch_then (qspecl_then [`j + 6`, `id0 + 3`, `z'`, `m`, `x0`, `x1`]
           mp_tac) >>
         asm_rewrite_tac[] >> fs[] >> decide_tac) >>
      asm_rewrite_tac[] >> decide_tac) >>

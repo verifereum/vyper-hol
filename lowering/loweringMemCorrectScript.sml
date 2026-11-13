@@ -78,7 +78,7 @@ Theorem lower_vyper_runtime_unit_run_mem_safe:
 Proof
   rpt gen_tac >> strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
-    metis_tac[gas_explicit_nil] >>
+    first_assum (ACCEPT_TAC o REWRITE_RULE [gasSummaryTheory.gas_explicit_nil] o Q.SPEC `[]`) >>
   `?mut args fbody.
      lookup_function NONE tx.function_name External tops =
        SOME (mut, F, args, [], ret, fbody) /\
@@ -93,8 +93,8 @@ Proof
       <| outcomes := SOME vs.vs_outcomes; requests := [] |>)` >>
   rename1 `_ = (sres, es0)` >> Cases_on `sres`
   >- (rename1 `INL u` >> Cases_on `u` >>
-      irule lower_vyper_runtime_unit_body_mem >> metis_tac[]) >>
-  irule external_entry_value_revert_mem >> metis_tac[]
+      drule_all lower_vyper_runtime_unit_body_mem >> simp[]) >>
+  drule_all external_entry_value_revert_mem >> simp[]
 QED
 
 (* S3's pointer discipline and taint bound: the rest of o1PassContract's
@@ -125,13 +125,12 @@ Theorem lower_vyper_runtime_unit_ptr_taint:
 Proof
   rpt strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
-    metis_tac[gas_explicit_nil] >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >>
+    first_assum (ACCEPT_TAC o REWRITE_RULE [gasSummaryTheory.gas_explicit_nil] o Q.SPEC `[]`) >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
-    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+    (imp_res_tac lookup_function_MEM >>
+     imp_res_tac lookup_function_result_name >> simp[]) >>
   `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
   `?lbl. fn_entry_label fn = SOME lbl` by
     (Cases_on `fn.fn_blocks` >>
@@ -176,15 +175,14 @@ Theorem lower_vyper_runtime_unit_memory_ok:
           unit.cu_context vs
 Proof
   rpt strip_tac >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   drule lowering_context_ok_integrity >> strip_tac >>
   drule lowering_context_ok_static_integrity >> strip_tac >>
   drule lowering_context_ok_alloca_budget >> strip_tac >>
   `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
-    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+    (imp_res_tac lookup_function_MEM >>
+     imp_res_tac lookup_function_result_name >> simp[]) >>
   `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
   `?lbl. fn_entry_label fn = SOME lbl` by
     (Cases_on `fn.fn_blocks` >>
@@ -208,7 +206,7 @@ Proof
                         vs_inst_idx := 0 |>)` by
     (drule_all lower_vyper_runtime_unit_run_mem_safe >> simp[]) >>
   drule_all mem_safe_raw_unit_memory_ok >> strip_tac >>
-  drule run_lowering_eom_none >> strip_tac >>
+  drule lower_vyper_runtime_unit_raw_defaults >> strip_tac >>
   drule_all lower_vyper_runtime_unit_ptr_taint >> strip_tac >>
   simp[fixed_region_reserved_def]
 QED
@@ -237,12 +235,11 @@ Theorem lower_vyper_runtime_unit_dload_offset_ok:
     ==> mem_inv dload_offset_ok unit.cu_context vs
 Proof
   rpt strip_tac >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
-    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+    (imp_res_tac lookup_function_MEM >>
+     imp_res_tac lookup_function_result_name >> simp[]) >>
   `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
   `?lbl. fn_entry_label fn = SOME lbl` by
     (Cases_on `fn.fn_blocks` >>
@@ -298,15 +295,14 @@ Theorem lower_vyper_runtime_unit_dload_headroom_ok:
     ==> mem_inv dload_headroom_ok unit.cu_context vs
 Proof
   rpt strip_tac >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   drule lowering_context_ok_integrity >> strip_tac >>
   drule lowering_context_ok_static_integrity >> strip_tac >>
   drule lowering_context_ok_dload_budget >> strip_tac >>
   `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
-    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+    (imp_res_tac lookup_function_MEM >>
+     imp_res_tac lookup_function_result_name >> simp[]) >>
   `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
   `?lbl. fn_entry_label fn = SOME lbl` by
     (Cases_on `fn.fn_blocks` >>

@@ -2,7 +2,7 @@
  * The body simulation of S1: in and not in on an array literal of words
  * (#636 operands with internal calls).  Its lowering compiles each element
  * (exprSimBopInLiteralWord), so this takes the elements' judgments.  The
- * induction hypotheses give the array's only; bodySimBopHeld's
+ * induction hypotheses give the array's only; bodySim's
  * body_make_array_children_ok extracts the elements' from it.
  *
  * TOP-LEVEL:
@@ -29,7 +29,12 @@ Theorem body_bop_in_literal_word_case:
     body_expr_ok cx
       (Builtin ty (Bop bop) [e1; Builtin a (MakeArray t n) elems])
 Proof
-  rpt strip_tac >> simp[body_expr_ok_def] >> rpt gen_tac >> strip_tac >>
+  (* rpt strip_tac splits bop = In \/ bop = NotIn into two goals, so the
+     mapping half is closed under each of them *)
+  rpt strip_tac >> simp[body_expr_ok_def] >>
+  (reverse conj_tac
+   >- (rpt strip_tac >> drule expr_map_pre_shape >> simp[])) >>
+  rpt gen_tac >> strip_tac >>
   `builtin_args_length_ok (MakeArray t n) (LENGTH elems)` by
     (gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
      qpat_x_assum `well_typed_builtin_app a _ _`

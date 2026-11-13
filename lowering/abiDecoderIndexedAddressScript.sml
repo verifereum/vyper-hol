@@ -1,7 +1,7 @@
 (* The three instructions used for both array payload addresses in the loop. *)
 Theory abiDecoderIndexedAddress
 Ancestors
-  abiDecoderReentryAddress abiDecoderReentry abiDecoderGuards abiDecoderContract
+  abiDecoderRange abiDecoderReentryAddress abiDecoderReentry abiDecoderGuards abiDecoderContract
   emitHelperProps exprLoweringProps compileEnv emitHelper
   venomExecSemantics venomState words arithmetic
 

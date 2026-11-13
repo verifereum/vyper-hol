@@ -2,10 +2,10 @@
 Theory builtinBytesMemory
 Ancestors
   builtinBytes allocaFootprint fragExecMem instMemFrontier abiBuiltinAllocation
-  exprLoweringProps emitHelperProps emitHelper compileEnv context venomInst
+  exprLoweringProps emitHelperProps emitHelper compileEnv loweringStateRelDefs context venomInst
   venomState venomExecSemantics venomMemDefs finite_map list words arithmetic
 
-Theorem slice_bounds_shape[local]:
+Theorem slice_bounds_shape:
   compile_assert_slice_bounds a n limit sa = ((), sb) ==>
   sb.cs_next_var = sa.cs_next_var + 5 /\
   sb.cs_next_id = sa.cs_next_id + 6 /\

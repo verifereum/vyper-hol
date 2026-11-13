@@ -773,6 +773,12 @@ Proof
   simp[] >> disj1_tac >> irule starve_handle_resource >> simp[]
 QED
 
+(* The assembly's static check is off when the EVM frame isn't static. *)
+val starve_nonstatic_tac : tactic =
+  `~as.as_call_ctx.cc_static` by
+    (Cases_on `es.contexts` >> gvs[] >> PairCases_on `h` >>
+     drule_all asm_evm_rel_static >> gvs[]);
+
 Theorem starve_tstore:
   !prog as es.
     asm_encoding_wf prog /\ asm_evm_rel prog as es /\
@@ -788,7 +794,8 @@ Theorem starve_tstore:
     | AsmError _ => T
     | _ => F
 Proof
-  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_tstore_def, LET_THM] >>
+  rpt strip_tac >> starve_nonstatic_tac >>
+  Cases_on `as.as_stack` >> simp[asm_tstore_def, LET_THM] >>
   Cases_on `t` >> simp[] >>
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
   drule_all asm_evm_step_setup >> strip_tac >>
@@ -1197,7 +1204,7 @@ Theorem starve_log:
     | AsmError _ => T
     | _ => F
 Proof
-  rpt strip_tac >> simp[asm_log_def, LET_THM] >>
+  rpt strip_tac >> starve_nonstatic_tac >> simp[asm_log_def, LET_THM] >>
   Cases_on `LENGTH as.as_stack < n + 2` >> simp[] >>
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
   drule_all asm_evm_step_setup >> strip_tac >>
@@ -1262,7 +1269,8 @@ Theorem starve_sstore:
     | AsmError _ => T
     | _ => F
 Proof
-  rpt strip_tac >> Cases_on `as.as_stack` >> simp[asm_sstore_def, LET_THM] >>
+  rpt strip_tac >> starve_nonstatic_tac >>
+  Cases_on `as.as_stack` >> simp[asm_sstore_def, LET_THM] >>
   Cases_on `t` >> simp[] >>
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
   drule_all asm_evm_step_setup >> strip_tac >>
@@ -2329,8 +2337,10 @@ Resume starve_context_dispatch[blockhash]:
           simp[inc_pc_or_jump_def, LET_THM, bind_def,
                get_current_context_def, return_def,
                set_current_context_def, is_call_def] >>
-          qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-          simp[asm_evm_rel_def] >> strip_tac >>
+          qpat_x_assum `es.contexts = _` (fn contexts =>
+            qpat_x_assum `asm_evm_rel _ _ _`
+              (strip_assume_tac o
+               SIMP_RULE (srw_ss()) [asm_evm_rel_def, contexts])) >>
           simp[asm_evm_rel_def, asm_next_def] >>
           once_rewrite_tac[GSYM ADD1] >> simp[asm_pc_to_offset_suc] >>
           simp[opcode_def, asm_inst_size_def] >> EVAL_TAC) >>

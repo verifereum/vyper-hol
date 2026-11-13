@@ -6,7 +6,7 @@ Ancestors
   exprSimAggregateChildren exprSimLiteralBuffer exprSimAlloc exprSimOps instMemFrontier
   fragExec fragExecMem allocaHistoryFragment rich_list
   bodyMemoryDefs loweringSlice exprSimDefs exprSimOperators exprSimHyps stmtSimAugAssign vyperTypeEnv vyperTypeSystem vyperTypeInvariants
-  emitHelperProps emitHelper compileEnv context venomInst venomState
+  emitHelperProps emitHelper compileEnv loweringStateRelDefs context venomInst venomState
   venomExecSemantics venomMemDefs vyperInterpreter vyperState list finite_map words arithmetic
 
 Theorem compile_alloc_buffer_body_inst[local]:
@@ -190,7 +190,7 @@ Proof
   rpt gen_tac >> strip_tac >> first_x_assum drule >> simp[]
 QED
 
-Theorem compile_alloc_buffer_body_history[local]:
+Theorem compile_alloc_buffer_body_history:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
   ~block_is_terminated sa /\ fn_inst_ids_distinct func /\
   alloca_history func s /\ alloca_inv s /\

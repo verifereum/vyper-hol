@@ -101,7 +101,7 @@ Proof
   strip_tac >> drule abi_encoder_counters >> strip_tac >>
   Cases_on `is_abi_dynamic ce.ce_struct_fields (TupleT tys)`
   >- (`EXISTS (\t. is_abi_dynamic ce.ce_struct_fields t) tys` by
-        gvs[is_abi_dynamic_def] >>
+        (gvs[is_abi_dynamic_def, EXISTS_MEM] >> metis_tac[]) >>
       `EVERY (\(ei,asz,mz,dyn). log_scalar_enc_info ei)
         (MAP (\t. (type_to_abi_enc_info sf ce t,
           abi_embedded_static_size ce.ce_struct_fields t, type_memory_bytes ce t,
@@ -116,8 +116,8 @@ Proof
 QED
 
 Theorem log_success_suffix_code:
-  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
+  log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
   EVERY (supported_scalar_type o SND) xs /\ LENGTH flags = LENGTH xs ==>

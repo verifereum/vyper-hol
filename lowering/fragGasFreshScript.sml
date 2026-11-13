@@ -1,6 +1,6 @@
 Theory fragGasFresh
 Ancestors
-  freshWrites varsExt fragGasSeq fragGasSeqAbort fragGasMode exprSimProps compileEnv
+  freshWrites varsExt fragGasSeq fragGasSeqAbort fragGasMode exprSimProps compileEnv loweringStateRelDefs
   fragExec exprLoweringProps venomInst venomState venomExecSemantics
   venomInstProofs instIdxIndep list rich_list arithmetic
 

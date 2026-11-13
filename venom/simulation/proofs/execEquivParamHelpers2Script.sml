@@ -68,11 +68,19 @@ Theorem vsr_step_inst_selfdestruct:
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >>
+  `s1.vs_pending_deletions = s2.vs_pending_deletions` by
+    (drule_all vsr_R_ok_frame >>
+     disch_then (mp_tac o AP_TERM ``\s:venom_state. s.vs_pending_deletions``) >>
+     simp[vsr_frame_def]) >>
   `eval_operands inst.inst_operands s1 = eval_operands inst.inst_operands s2` by
     (vsr_irule vsr_eval_operands >> simp[]) >>
   vsr_eval_rewrite_tac () >>
   IF_CASES_TAC >- (REWRITE_TAC [] >> irule vsr_static_abort >> simp[]) >>
-  rpt (CASE_TAC >> gvs[lift_result_def, halt_state_def, set_returndata_def]) >>
+  Cases_on `inst.inst_operands` >> gvs[lift_result_def] >>
+  rename1 `inst.inst_operands = arg :: args` >>
+  Cases_on `args` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand arg s2` >>
+  gvs[lift_result_def, halt_state_def, set_returndata_def] >>
   vsr_terminal_tac ()
 QED
 

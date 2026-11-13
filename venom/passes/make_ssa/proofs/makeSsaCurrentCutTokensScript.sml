@@ -1,9 +1,9 @@
 Theory makeSsaCurrentCutTokens
 Ancestors
   makeSsaCurrentLastSite makeSsaCurrentTokens makeSsaCurrentGraphCut
-  makeSsaCurrentAnalysis makeSsaCurrentDefs makeSsaCurrentSelectedLive
+  makeSsaCurrentAnalysis makeSsaDefs makeSsaCurrentSelectedLive
   venomInst venomWf venomExecProps list rich_list alist dominatorDefs
-  cfgAnalysisProps dominatorAnalysisProps
+  cfgAnalysisProps dominatorProofs cfgCorrectnessProof
 
 Theorem current_output_token_constant:
   !xs j t u. MEM v xs ==>

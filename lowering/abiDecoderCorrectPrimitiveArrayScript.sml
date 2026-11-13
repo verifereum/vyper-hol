@@ -37,11 +37,11 @@ Theorem abi_decoder_correct_primitive_array:
 Proof
   strip_tac >> simp_tac bool_ss [abi_decoder_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qhdtm_assum `abi_decoder_recursive_pre`
     (MAP_EVERY assume_tac o CONJUNCTS o
       PURE_REWRITE_RULE [abi_decoder_recursive_pre_def, abi_decoder_pre_def]) >>
   drule_all abi_decoder_primitive_array_info >> strip_tac >>
-  drule abi_decoder_dynarray_metadata_shape >> strip_tac >> gvs[Excl "enc_def"] >>
+  drule abi_decoder_dynarray_metadata_shape >> strip_tac >> gnvs[Excl "enc_def"] >>
   (SUBGOAL_THEN ``dec_info_needs_clamp (DecPrimWord clamp) ==>
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0`` assume_tac

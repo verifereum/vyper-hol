@@ -1,7 +1,7 @@
 (* The dynamic-array decoder's emitted payload-end arithmetic and guard. *)
 Theory abiDecoderDynarrayBound
 Ancestors
-  abiDecoderBytesBound abiDecoderGuard abiDecoderGuards emitHelperProps exprLoweringProps
+  abiDecoderRange abiDecoderBytesBound abiDecoderGuard abiDecoderGuards emitHelperProps exprLoweringProps
   compileEnv emitHelper venomExecSemantics venomState words arithmetic
 
 Theorem abi_decode_mul_sequence:
@@ -102,4 +102,71 @@ Proof
   drule abi_decode_le_guard_shape >> strip_tac >>
   drule_all abi_decode_sequence_chain >> strip_tac >> qexists_tac `t` >>
   gvs[] >> metis_tac[]
+QED
+
+Definition abi_decode_dynarray_payload_guard_def:
+  abi_decode_dynarray_payload_guard head cnt abi_sz hi =
+    if hi = Lit 0w then return ()
+    else do payload <- emit_op MUL [cnt; Lit (n2w abi_sz)];
+            e <- emit_op ADD [head; payload];
+            compile_abi_decode_range_check head e hi
+         od
+End
+
+Theorem abi_decode_dynarray_payload_guard_shape:
+  abi_decode_dynarray_payload_guard head cnt abi_sz hi st = ((),st') ==>
+  inst_extends st st'
+Proof
+  Cases_on `hi = Lit 0w`
+  >- simp[abi_decode_dynarray_payload_guard_def, comp_return_def, inst_extends_refl] >>
+  simp[abi_decode_dynarray_payload_guard_def, comp_bind_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  imp_res_tac inst_extends_emit_op >>
+  imp_res_tac compile_abi_decode_range_check_shape >>
+  metis_tac[inst_extends_trans]
+QED
+
+Theorem abi_decode_dynarray_payload_guard_sequence:
+  abi_decode_dynarray_payload_guard head cnt abi_sz hi st = ((),st') /\
+  (hi = Lit 0w \/ ?a n h.
+     eval_operand head s = SOME (n2w a) /\
+     eval_operand cnt s = SOME (n2w n) /\
+     eval_operand hi s = SOME (n2w h) /\
+     a + n * abi_sz <= h /\ h < dimword (:256)) /\
+  fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\ fresh_vars_wrt st' t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_data_section = s.vs_data_section /\ inst_extends st st'
+Proof
+  Cases_on `hi = Lit 0w`
+  >- (simp[abi_decode_dynarray_payload_guard_def, comp_return_def] >> strip_tac >>
+      gvs[] >> qexists_tac `s` >> simp[emitted_insts_def, run_inst_seq_def,
+        inst_extends_refl]) >>
+  simp[abi_decode_dynarray_payload_guard_def, comp_bind_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `emit_op MUL [cnt; Lit (n2w abi_sz)] st = (payload,c1)` >>
+  rename1 `emit_op ADD [head; payload] c1 = (e,c2)` >>
+  `eval_operand (Lit (n2w abi_sz)) s = SOME (n2w abi_sz)` by
+    simp[eval_operand_def] >>
+  drule_all abi_decode_mul_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
+  gvs[word_mul_n2w] >>
+  `eval_operand head s1 = SOME (n2w a)` by metis_tac[] >>
+  drule_all abi_decode_add_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts c1 c2) s1 = OK s2` >>
+  gvs[word_add_n2w] >>
+  `eval_operand head s2 = SOME (n2w a) /\
+   eval_operand hi s2 = SOME (n2w h)` by metis_tac[] >>
+  `eval_operand e s2 = SOME (n2w (a + n * abi_sz))` by simp[ADD_COMM] >>
+  `a < dimword (:256) /\ a + n * abi_sz < dimword (:256)` by decide_tac >>
+  `w2n (n2w a : bytes32) <= w2n (n2w (a + n * abi_sz) : bytes32) /\
+   w2n (n2w (a + n * abi_sz) : bytes32) <= w2n (n2w h : bytes32)` by
+    simp[w2n_n2w] >>
+  drule_all compile_abi_decode_range_check_sequence >> strip_tac >>
+  imp_res_tac compile_abi_decode_range_check_shape >>
+  drule_all abi_decode_sequence_chain >> strip_tac >>
+  `run_inst_seq (emitted_insts st st') s = OK t /\ inst_extends st st'` by
+    (irule abi_decode_sequence_chain >> qexistsl_tac [`s1`, `c1`] >> simp[]) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED

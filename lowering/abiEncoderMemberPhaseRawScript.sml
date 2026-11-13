@@ -4,7 +4,7 @@ Ancestors
   abiEncoderChildSuffix abiEncoderChildPrefix abiDecoderFrame abiEncoderArrayTail abiBuiltinPrefix
   abiEncoderExtendSim abiEncoderAddressReach emitHelperProps emitHelper venomInst
   abiDecoderReentryAddress abiDecoderReentry abiDecoderDynamicLoopSetup
-  abiDecoderContract abiDecoderLoop fragExec compileEnv venomState
+  abiDecoderContract abiDecoderLoop fragExec compileEnv loweringStateRelDefs venomState
   venomExecSemantics venomInstProps exprLoweringProps abiEncoderChildCode
   instIdxIndep words list
 

@@ -76,17 +76,17 @@ Ancestors
   loweringPosts
   exprSimAlloc
   allocLimits
-  list  exprSimHyps exprSimConvert exprLowering compileEnv
+  list  exprSimHyps exprSimConvert exprLowering compileEnv loweringStateRelDefs
   exprSimValues gasNormalPrefix gasSummary gasOutcome gasContext
   fragGasMode fragGasPath fragGasSeq
-  valueEncoding vyperAST vyperInterpreter vyperState vyperContext
+  valueEncoding valueEncodingDefs vyperAST vyperInterpreter vyperState vyperContext
   vyperValueOperation vyperTypeSystem fragExec venomState
   exprSimBuffer exprSimBufferEmptyExec exprSimAggregateLayout
   exprSimAggregateSource exprSimAggregateLoops exprSimAggregateChildren
   exprLoweringProps
 
 (* The allocation must be a generated ALLOCA, not merely a tracked map entry. *)
-Theorem aggregate_alloca_immutable_sep[local]:
+Theorem aggregate_alloca_immutable_sep:
   stmt_state_rel ctx func cenv cx es t /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
   FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
@@ -184,6 +184,7 @@ QED
 
 Theorem compile_struct_lit_vv_case:
   !nocalls ctx func cenv cx ann nsid fields.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
     (~nocalls ==> !e. MEM e (MAP SND fields) ==>
        int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
@@ -214,8 +215,8 @@ Proof
   qmatch_asmsub_abbrev_tac `compile_alloc_buffer sz sa` >>
   gvs[] >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_sim >>
-  simp[] >> disch_then drule >>
-  simp[] >> disch_then drule >>
+  simp[] >> disch_then drule >> disch_then drule >>
+  simp[] >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[] >>
@@ -256,13 +257,40 @@ Proof
      (StructV (ZIP (MAP FST fields,vs))) <= type_memory_size_list tvs` by
     (drule val_footprint_le >> simp[type_memory_size_def] >>
      `LENGTH (MAP FST fields) = LENGTH tvs` by
-       (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+       (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >>
+        imp_res_tac listTheory.LIST_REL_LENGTH >> fs[]) >>
      simp[struct_layout_size_zip]) >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
   `!nm lb len. local_region cenv ee.scopes s nm lb len ==>
      b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
     (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
+  `~expr_has_effect (StructLit (StructT nsid) nsid fields) ==>
+     pure_frame cenv func es sa s0 s` by
+    (rewrite_tac[expr_has_effect_thm] >> strip_tac >>
+     qpat_x_assum `EVERY _ _ ==> _` mp_tac >>
+     (impl_tac >- (qpat_x_assum `~EXISTS _ _` mp_tac >>
+        simp_tac (srw_ss()) [listTheory.EVERY_MAP, listTheory.EXISTS_MAP,
+                             combinTheory.o_DEF])) >>
+     strip_tac >>
+     qpat_assum `FLOOKUP t.vs_allocas _ = SOME (b,_)` (fn th =>
+       qpat_assum `!aid a. FLOOKUP t.vs_allocas aid = SOME a ==> _` (fn th2 =>
+         assume_tac (MATCH_MP th2 th))) >>
+     irule (Q.SPECL [`cenv`, `func`, `es`, `sa`, `sm`, `s0`, `t`, `s`]
+       aggregate_pure_frame_buffer) >>
+     qpat_assum `MEM (mk_inst sa.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
+     qpat_assum `FLOOKUP s.vs_allocas _ = SOME (b,_)` (irule_at Any) >>
+     qexistsl_tac [`s0`, `sm`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (rewrite_tac[] >> NO_TAC) >>
+     TRY (qpat_x_assum `ci_mono sa sm` mp_tac >> rewrite_tac[ci_mono_def] >>
+          strip_tac >> first_assum ACCEPT_TAC >> NO_TAC) >>
+     rpt strip_tac >>
+     qpat_x_assum `!p n. (n + p <= b \/ _) /\ _ ==> _` irule >>
+     conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (qpat_x_assum `p + n <= b` mp_tac) >>
+     TRY (qpat_x_assum `b + type_memory_size_list tvs <= p` mp_tac) >>
+     rpt (pop_assum kall_tac) >> decide_tac) >>
   irule buffer_loop_memory_vv_post >>
   simp[expr_type_def, is_word_type_def, contextTheory.mk_ptr_def, contextTheory.base_ptr_def,
     eval_operand_def, val_in_memory_def] >>
@@ -271,12 +299,14 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qpat_x_assum `!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ _ ==> _` mp_tac >>
+  qpat_x_assum `_ ==> pure_frame _ _ _ _ _ _` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem compile_make_array_vv_case:
   !nocalls ctx func cenv cx ann topt bnd args.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     exprs_case nocalls ctx func cenv cx args /\
     (~nocalls ==> !e. MEM e args ==>
        int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
@@ -290,6 +320,7 @@ Resume compile_make_array_vv_case[tuple]:
   rw[expr_vv_case_def, expr_vv_sim_def] >>
   drule compile_tuple_literal_inv >> strip_tac >> gvs[] >>
   drule make_tuple_evaluated_layout >> strip_tac >> gvs[] >>
+  gvs[exprLoweringTheory.tuple_literal_types_def, listTheory.MAP_MAP_o] >>
   `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
   `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
     expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
@@ -305,14 +336,16 @@ Resume compile_make_array_vv_case[tuple]:
     metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND] >>
   `cs_extends sa sm /\ cs_extends sm sb` by gvs[ci_mono_def] >>
   drule_all fn_has_code_split >> strip_tac >>
-  `SUM (MAP (type_memory_bytes cenv o expr_type) args) < dimword (:256)` by
-    (gvs[expr_body_pre_def, alloc_limits_expr_def] >>
-     simp[wordsTheory.dimword_def] >> decide_tac) >>
+  `SUM (MAP (type_memory_bytes cenv) tys) < 2 ** 64` by
+    gvs[expr_body_pre_def, alloc_limits_expr_def, type_alloc_ok_def,
+        type_memory_bytes_def, is_word_type_def] >>
+  `SUM (MAP (type_memory_bytes cenv) tys) < dimword (:256)` by
+    fs[wordsTheory.dimword_def] >>
   `type_memory_size_list tvs < dimword (:256)` by metis_tac[] >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all buffer_alloc_counted >> strip_tac >> gvs[] >>
-  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`) aggregate_make_tuple_sim >>
-  disch_then drule >> disch_then drule >>
+  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`) aggregate_make_tuple_fits_sim >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   disch_then (qspecl_then [`ctx`,`nocalls`] mp_tac) >> simp[] >>
@@ -331,14 +364,14 @@ Resume compile_make_array_vv_case[tuple]:
   conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP]) >>
   rpt strip_tac >> gvs[sumTheory.SUM_MAP] >>
   rename1 `eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee)` >>
-  `eval_expr cx (Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args)
+  `eval_expr cx (Builtin (TupleT tys) (MakeArray NONE bnd) args)
     (es with gas_obs := gs) = (INL (Value (ArrayV (TupleV vs))),ee)` by
     (drule_all aggregate_eval_make_tuple >> simp[]) >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
   rename1 `stmt_state_rel ctx func cenv cx ee s` >>
   `expr_body_pre cenv cx env
-    (Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args)
+    (Builtin (TupleT tys) (MakeArray NONE bnd) args)
     (es with gas_obs := gs)` by simp[] >>
   `val_wf (TupleTV tvs) (ArrayV (TupleV vs))` by
     (irule aggregate_materialised_child_wf >>
@@ -352,8 +385,34 @@ Resume compile_make_array_vv_case[tuple]:
   `!nm lb len. local_region cenv ee.scopes s nm lb len ==>
      b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
     (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
+  `~expr_has_effect (Builtin (TupleT tys) (MakeArray NONE bnd) args) ==>
+     pure_frame cenv func es sa s0 s` by
+    (rewrite_tac[expr_has_effect_thm] >> strip_tac >>
+     qpat_x_assum `EVERY _ _ ==> _` mp_tac >>
+     (impl_tac >- (qpat_x_assum `~EXISTS _ _` mp_tac >>
+        simp_tac (srw_ss()) [listTheory.EVERY_MAP, listTheory.EXISTS_MAP,
+                             combinTheory.o_DEF])) >>
+     strip_tac >>
+     qpat_assum `FLOOKUP t.vs_allocas _ = SOME (b,_)` (fn th =>
+       qpat_assum `!aid a. FLOOKUP t.vs_allocas aid = SOME a ==> _` (fn th2 =>
+         assume_tac (MATCH_MP th2 th))) >>
+     irule (Q.SPECL [`cenv`, `func`, `es`, `sa`, `sm`, `s0`, `t`, `s`]
+       aggregate_pure_frame_buffer) >>
+     qpat_assum `MEM (mk_inst sa.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
+     qpat_assum `FLOOKUP s.vs_allocas _ = SOME (b,_)` (irule_at Any) >>
+     qexistsl_tac [`s0`, `sm`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (rewrite_tac[] >> NO_TAC) >>
+     TRY (qpat_x_assum `ci_mono sa sm` mp_tac >> rewrite_tac[ci_mono_def] >>
+          strip_tac >> first_assum ACCEPT_TAC >> NO_TAC) >>
+     rpt strip_tac >>
+     qpat_x_assum `!p n. (n + p <= b \/ _) /\ _ ==> _` irule >>
+     conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (qpat_x_assum `p + n <= b` mp_tac) >>
+     TRY (qpat_x_assum `b + _ <= p` mp_tac) >>
+     rpt (pop_assum kall_tac) >> decide_tac) >>
   irule (buffer_loop_memory_vv_post |> Q.INST
-    [`e` |-> `Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args`]
+    [`e` |-> `Builtin (TupleT tys) (MakeArray NONE bnd) args`]
     |> SIMP_RULE (srw_ss()) [expr_type_def]) >>
   simp[expr_type_def, is_word_type_def, contextTheory.mk_ptr_def, contextTheory.base_ptr_def,
     eval_operand_def, val_in_memory_def] >>
@@ -362,6 +421,7 @@ Resume compile_make_array_vv_case[tuple]:
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qpat_x_assum `!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ _ ==> _` mp_tac >>
+  qpat_x_assum `_ ==> pure_frame _ _ _ _ _ _` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
@@ -442,6 +502,32 @@ Resume compile_make_array_vv_case[array]:
   `!nm lb len. local_region cenv ee.scopes s nm lb len ==>
      b + type_memory_bytes cenv (ArrayT x bnd) <= lb \/ lb + len <= b` by
     (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
+  `~expr_has_effect (Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args) ==>
+     pure_frame cenv func es sa s0 s` by
+    (rewrite_tac[expr_has_effect_thm] >> strip_tac >>
+     qpat_x_assum `EVERY _ _ ==> _` mp_tac >>
+     (impl_tac >- (qpat_x_assum `~EXISTS _ _` mp_tac >>
+        simp_tac (srw_ss()) [listTheory.EVERY_MAP, listTheory.EXISTS_MAP,
+                             combinTheory.o_DEF])) >>
+     strip_tac >>
+     qpat_assum `FLOOKUP t.vs_allocas _ = SOME (b,_)` (fn th =>
+       qpat_assum `!aid a. FLOOKUP t.vs_allocas aid = SOME a ==> _` (fn th2 =>
+         assume_tac (MATCH_MP th2 th))) >>
+     irule (Q.SPECL [`cenv`, `func`, `es`, `sa`, `sm`, `s0`, `t`, `s`]
+       aggregate_pure_frame_buffer) >>
+     qpat_assum `MEM (mk_inst sa.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
+     qpat_assum `FLOOKUP s.vs_allocas _ = SOME (b,_)` (irule_at Any) >>
+     qexistsl_tac [`s0`, `sm`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (rewrite_tac[] >> NO_TAC) >>
+     TRY (qpat_x_assum `ci_mono sa sm` mp_tac >> rewrite_tac[ci_mono_def] >>
+          strip_tac >> first_assum ACCEPT_TAC >> NO_TAC) >>
+     rpt strip_tac >>
+     qpat_x_assum `!p n. (n + p <= b \/ _) /\ _ ==> _` irule >>
+     conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (qpat_x_assum `p + n <= b` mp_tac) >>
+     TRY (qpat_x_assum `b + _ <= p` mp_tac) >>
+     rpt (pop_assum kall_tac) >> decide_tac) >>
   irule (buffer_loop_memory_vv_post |> Q.INST
     [`e` |-> `Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args`]
     |> SIMP_RULE (srw_ss()) [expr_type_def]) >>
@@ -468,17 +554,21 @@ Finalise compile_make_array_vv_case
 
 Theorem compile_struct_lit_case:
   !nocalls ctx func cenv cx ann nsid fields.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
     (~nocalls ==> !e. MEM e (MAP SND fields) ==>
        int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
     expr_sim_case nocalls ctx func cenv cx (StructLit ann nsid fields) /\
     expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
+  rpt strip_tac >>
+  `post_value_type cenv (StructLit ann nsid fields) = expr_type (StructLit ann nsid fields)` by simp[] >>
   metis_tac[compile_struct_lit_vv_case, expr_sim_case_of_vv]
 QED
 
 Theorem compile_make_array_case:
   !nocalls ctx func cenv cx ann topt bnd args.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     exprs_case nocalls ctx func cenv cx args /\
     (~nocalls ==> !e. MEM e args ==>
        int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
@@ -487,11 +577,14 @@ Theorem compile_make_array_case:
     expr_vv_case nocalls ctx func cenv cx
       (Builtin ann (MakeArray topt bnd) args)
 Proof
+  rpt strip_tac >>
+  `post_value_type cenv (Builtin ann (MakeArray topt bnd) args) = expr_type (Builtin ann (MakeArray topt bnd) args)` by simp[] >>
   metis_tac[compile_make_array_vv_case, expr_sim_case_of_vv]
 QED
 
 Theorem compile_struct_lit_sim:
   !cenv ann nsid fields.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_below cenv (expr_size (StructLit ann nsid fields)) ==>
     expr_vv_ok cenv (StructLit ann nsid fields)
 Proof
@@ -502,6 +595,7 @@ QED
 
 Theorem compile_make_array_sim:
   !cenv ann topt bnd args.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann (MakeArray topt bnd) args)
 Proof
@@ -792,7 +886,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ b len` drule >>
-      simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >>
       first_x_assum irule >> decide_tac) >>
   drule_all expr_sim_inv_memory_size >> strip_tac >>
   simp[val_footprint_le, valueEncodingProofsTheory.val_wf_default_value_proof] >>

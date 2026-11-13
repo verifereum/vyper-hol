@@ -3,7 +3,7 @@ Theory bodyNotMemoryProps
 Ancestors
   loweringPosts exprSimDefs exprLoweringProps emitHelper emitHelperProps
   fragExec fragExecMem instMemFrontier allocaHistoryFragment
-  compileEnv venomInst venomState venomExecSemantics freshWrites
+  compileEnv loweringStateRelDefs venomInst venomState venomExecSemantics freshWrites
   words list rich_list
 
 Theorem body_not_prefix_mem_ok:

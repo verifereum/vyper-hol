@@ -56,7 +56,7 @@ Proof
    eval_operand (Var z2) s6 = SOME (bool_to_word (bool_to_word bad2 = 0w))` by
     (gvs[ALL_DISTINCT, eval_operand_def, lookup_var_update_var]) >>
   `step_inst_base (mk_inst i ASSIGN [op1] [cv]) ee = OK s1` by
-    simp[step_inst_base_def, mk_inst_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   `step_inst_base (mk_inst (i+1) SUB [op2;op1] [rv]) s1 = OK s2` by
     (simp[] >> irule step_SUB >> metis_tac[]) >>
   `step_inst_base (mk_inst (i+2) cmp [op1;op2] [g1]) s2 = OK s3` by
@@ -296,7 +296,7 @@ Resume for_entry_checked_path_mem[success]:
     (first_x_assum irule >> simp[]) >>
   `step_inst_base (mk_inst (i+9) JMP [Label cond_lbl] [])
      (s7 with vs_inst_idx := 9) = OK (jump_to cond_lbl (s7 with vs_inst_idx := 9))` by
-    simp[step_inst_base_def, mk_inst_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   drule_at (Pat `step_inst_base _ _ = _`) for_range_jump_at_zero_path_mem >>
   simp[mk_inst_def, is_terminator_def, below_frontier_no_ranges,
        inst_dload_in_section_other] >>

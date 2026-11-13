@@ -1,7 +1,7 @@
 (* Finite traversal boundaries for the supply-aware dominator tree. *)
 Theory makeSsaCurrentTree
 Ancestors
-  makeSsaCurrentDefs dominatorDefs relation list sorting combin
+  makeSsaDefs dominatorDefs relation list sorting combin
 
 Definition current_tree_edge_def:
   current_tree_edge dom x y <=> MEM y (dominated_of dom x)

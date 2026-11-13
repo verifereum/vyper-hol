@@ -20,9 +20,8 @@ Proof
     (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[]) >>
   `step_inst_base (mk_inst id STOP [] []) s =
      Halt (halt_state (s with vs_returndata := []))` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accfupds,
-                      instruction_accessors, opcode_case_def] >> simp[]) >>
+    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accfupds,
+                      instruction_accessors, opcode_case_def, combinTheory.K_THM] >> simp[]) >>
   `run_from 0 ctx fn s = Halt (halt_state (s with vs_returndata := []))` by
     (irule run_from_halt >>
      qexistsl_tac [`bb`, `mk_inst id STOP [] []`] >> simp[mk_inst_def]) >>
@@ -318,7 +317,7 @@ Proof
     (qspecl_then [`0`, `ctx`, `fn`, `s`, `bb`, `st.cs_next_id`, `buf`,
                   `op`, `w`, `0`, `n`] mp_tac return_copy_run >>
      impl_tac >- gvs[] >>
-     simp[valueEncodingTheory.mem_bytes_at_def] >> strip_tac >> metis_tac[]) >>
+     simp[valueEncodingDefsTheory.mem_bytes_at_def] >> strip_tac >> metis_tac[]) >>
   qexists_tac `0` >> simp[exit_result_def] >>
   (conj_tac >- metis_tac[]) >>
   `MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [buf]) (fn_insts fn)` by

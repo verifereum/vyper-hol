@@ -2,7 +2,7 @@
 Theory normalizationAllocPtr
 Ancestors allocationPtr robustCopyTransportPtr loweringHalt bodyPtrDefs loweringPosts exprSimDefs exprSimProps
   venomState venomExecSemantics venomInst finite_map ptrDiscipline fragExec
-  localPtrsProps compileEnv exprLoweringProps
+  localPtrsProps compileEnv loweringStateRelDefs exprLoweringProps
 
 Theorem alloca_step_expr_robust_preserved:
   !ctx func cenv cx es s t sa sb v op tv w id n out s1 b tn.
@@ -59,8 +59,8 @@ Theorem compile_alloc_buffer_expr_resources_separated:
     (!p. op = Var p ==> p <> STRING #"%" (toString sb.cs_next_var)) /\
     fn_inst_ids_distinct func /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc func /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    ~is_word_type (expr_type e) /\ val_wf tv v /\ n < dimword (:256) /\
+    evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv /\
+    ~is_word_type (post_value_type cenv e) /\ val_wf tv v /\ n < dimword (:256) /\
     eval_operand op s = SOME w /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n w) m) ==>
@@ -115,7 +115,7 @@ Resume compile_alloc_buffer_expr_resources_separated[resources]:
   qpat_x_assum `!aid off sz. _` kall_tac >>
   qpat_x_assum `!aid b. _` kall_tac >>
   qpat_x_assum `!x w. _` kall_tac >>
-  qpat_x_assum `locals_kept _ _ _ _` kall_tac >>
+  qpat_x_assum `locals_kept _ _ _ _ _` kall_tac >>
   rpt conj_tac
   >- suspend "operand"
   >- (drule_all alloca_step_ptr_covers >> simp[])
@@ -148,8 +148,8 @@ Theorem compile_alloc_buffer_expr_resources:
     expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     fresh_vars_wrt sb s /\ fn_inst_ids_distinct func /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc func /\
-    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    ~is_word_type (expr_type e) /\ val_wf tv v /\ n < dimword (:256) /\
+    evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv /\
+    ~is_word_type (post_value_type cenv e) /\ val_wf tv v /\ n < dimword (:256) /\
     eval_operand op s = SOME w /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n w) m) ==>

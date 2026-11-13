@@ -3,7 +3,7 @@ Theory ctorAbiActualArrayClosure
 Ancestors
  ctorAbiActualArrayRun ctorAbiActualComplex abiDecoderFixedInputs
  abiDecoderFixedMemory abiDecoderMemberInfos rich_list
- vyperABI vyperTypeABI compileEnv abiCanonicalHeadSize
+ vyperABI vyperTypeABI compileEnv loweringStateRelDefs abiCanonicalHeadSize
  ctorAbiActualBulk ctorAbiActualNarrowWord abiDecoderBulkReentry
  abiDecoderCorrectPrimitiveArray
  abiDecoderLoop abiDecoderTypedContract abiDecoderContract
@@ -12,7 +12,7 @@ Ancestors
 
 val C = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -53,7 +53,7 @@ Proof
  `LIST_REL (^C) (REPLICATE (LENGTH vs) ty) (REPLICATE (LENGTH vs) tv)` by
    (simp_tac bool_ss [LIST_REL_REPLICATE_same] >> BETA_TAC >>
     strip_tac >> first_assum ACCEPT_TAC) >>
- qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+ qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
    (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
  drule_all (SIMP_RULE bool_ss [map_replicate, SUM_REPLICATE]
    (Q.INST [`tys` |-> `REPLICATE (LENGTH vs) ty`,
@@ -87,14 +87,14 @@ Proof
    (drule_all alloca_frontier_inv_bound >> strip_tac >> decide_tac) >>
  `abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
    (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))) (ListV avs) (ArrayV (DynArrayV vs))
-   st st.cs_next_id src dst DLOAD hi sb d initial.vs_alloca_next 0
+   st st.cs_next_id src dst DLOAD (Lit 0w) hi 0 sb d initial.vs_alloca_next 0
    (abi_decoder_prune_vars st.cs_next_var initial)` by
    (irule ctor_actual_bulk_empty_window_pre >>
     asm_simp_tac bool_ss [vyper_to_abi_type_def] >>
     goal_assum (drule_at Any)) >>
- qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+ qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
    (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
- qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+ qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
    (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
  gnvs[Excl "enc_def"] >>
  drule_all ctor_actual_bulk_labels_fragment >>

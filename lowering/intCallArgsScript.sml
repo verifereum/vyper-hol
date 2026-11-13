@@ -10,13 +10,18 @@
  *   stage_mem_arg_frag — the ALLOCA and the store: the buffer, at the old
  *                        allocation frontier, holds the value, and memory
  *                        changes only there
+ *
+ * stage_mem_arg_frag predates eager argument staging: it runs the store
+ * right after the ALLOCA, while compile_stage_intcall_args now unwraps
+ * the argument between the two. The internal-call step has to split it
+ * into the ALLOCA and a store from a later state.
  *)
 
 Theory intCallArgs
 Ancestors
   list rich_list arithmetic finite_map
   fragExec loweringHalt valueCopy freshWrites context
-  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
+  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs
   valueEncoding vyperTyping vyperValue venomExecSemantics venomState
 
 (* One memory-passed argument of compile_stage_intcall_args, after its
@@ -25,17 +30,40 @@ Ancestors
    store.  From a state s in P, the ALLOCA leaves s1, which binds the
    buffer operand to s.vs_alloca_next, and the store leaves t, which
    differs from s1 only in variables fresh at sm and in memory, where it
-   holds the value at the buffer and keeps the bytes outside the buffer. *)
+   holds the value at the buffer and keeps the bytes outside the buffer.
+   ty is the callee's declared parameter type and sty the argument's
+   lowered type, which the aggregate store copies from.  An argument of a
+   narrower String or Bytes type is the same bytes in memory at ty
+   (bytestring_val_in_memory_transfer), so the premises hold there; an
+   aggregate argument is covered when its type is ty, and one whose layout
+   differs (a narrower member) is not. *)
+Theorem stage_store_compile_store_memory[local]:
+  (if is_word_type ty then emit_void MSTORE [dst; src]
+   else if is_bytestring_type ty then
+     do compile_store_bytestring src dst; return () od
+   else compile_store_memory cenv src dst ty sty) sa = ((),sb) /\
+  (~is_word_type ty /\ ~is_bytestring_type ty ==> sty = ty) ==>
+  compile_store_memory cenv src dst ty ty sa = ((),sb)
+Proof
+  strip_tac >>
+  Cases_on `is_word_type ty \/ is_bytestring_type ty` >- (
+    qpat_x_assum `(if _ then _ else _) sa = _` mp_tac >>
+    Cases_on `is_word_type ty` >> fs[compile_store_memory_def] >>
+    Cases_on `compile_store_bytestring src dst sa` >>
+    simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
+  gvs[]
+QED
+
 Theorem stage_mem_arg_frag:
-  !ctx cenv ty tenv tv v val_op sa sm sb buf P Q R.
+  !ctx cenv ty sty tenv tv v val_op sa sm sb buf P Q R.
     compile_alloc_buffer (MAX 32 (type_memory_bytes cenv ty)) sa =
       (buf, sm) /\
     (if is_word_type ty then emit_void MSTORE [buf.buf_operand; val_op]
      else if is_bytestring_type ty then
        do compile_store_bytestring val_op buf.buf_operand; return () od
-     else emit_void MCOPY [buf.buf_operand; val_op;
-                           Lit (n2w (type_memory_bytes cenv ty))]) sm =
+     else compile_store_memory cenv val_op buf.buf_operand ty sty) sm =
       ((),sb) /\
+    (~is_word_type ty /\ ~is_bytestring_type ty ==> sty = ty) /\
     (!x. val_op = Var x ==> not_fresh_at sa x) /\
     evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
     type_memory_bytes cenv ty = type_memory_size tv /\
@@ -65,6 +93,7 @@ Theorem stage_mem_arg_frag:
     frag_exec ctx sa sb P Q R
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_all stage_store_compile_store_memory >> strip_tac >>
   drule compile_alloc_buffer_insts >> strip_tac >>
   `type_memory_size tv <= MAX 32 (type_memory_size tv)` by simp[] >>
   qabbrev_tac `alloc = \s:venom_state.
@@ -105,7 +134,7 @@ Proof
   qspecl_then [`cenv`, `val_op`, `buf.buf_operand`, `ty`, `sm`, `sb`,
                `alloc s with vs_inst_idx := L`, `tenv`, `tv`, `v`,
                `THE (eval_operand val_op (alloc s with vs_inst_idx := L))`,
-               `n2w s.vs_alloca_next`] mp_tac stage_store_run >>
+               `n2w s.vs_alloca_next`] mp_tac compile_store_memory_run >>
   impl_tac >- fs[] >>
   (* the shape only: the run from s is the store resume's business *)
   disch_then (fn th => let val cs = CONJUNCTS th
@@ -158,7 +187,7 @@ Resume stage_mem_arg_frag[store]:
   qspecl_then [`cenv`, `val_op`, `buf.buf_operand`, `ty`, `sm`, `sb`,
                `alloc s2 with vs_inst_idx := L`, `tenv`, `tv`, `v`,
                `THE (eval_operand val_op (alloc s2 with vs_inst_idx := L))`,
-               `n2w s2.vs_alloca_next`] mp_tac stage_store_run >>
+               `n2w s2.vs_alloca_next`] mp_tac compile_store_memory_run >>
   `s2.vs_alloca_next + (type_memory_size tv + 64) < dimword (:256)` by
     decide_tac >>
   impl_tac >- fs[] >> strip_tac >>

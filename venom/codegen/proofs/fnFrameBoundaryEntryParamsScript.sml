@@ -3,7 +3,7 @@ Ancestors
   asmFrame allocMono frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel stackPlanOps doSwapSim cleanOpsSim strongPrefixSim planAlign stackOpSim planWf prefixExec blockSimHelpers foldlSim
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list pred_set
   arithmetic words unitShapeDefs venomWf cfgHelpers
-  livenessAnalysisProps cfgAnalysisProps asmSem planExec fnFrameTerminalPrep codegenRel contextCodegenRel mixedPrefixSim prefixSim
+  livenessAnalysisProps cfgAnalysisProps asmSem planExec fnFrameTerminalPrep codegenRel contextCodegenRel mixedPrefixSim prefixSim livenessProofs
   venomWfProps
 
 (* Installing the symbolic parameter names emits no code. *)
@@ -266,8 +266,8 @@ Theorem entry_param_step:
     OK (entry_bind_pairs (entry_param_pairs s [inst]) s)
 Proof
   rw[entry_param_shape_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def,
-       entry_param_pairs_def, update_var_def]
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  simp[entry_param_pairs_def, update_var_def]
 QED
 
 Theorem entry_param_run_insts:
@@ -297,7 +297,7 @@ Theorem entry_param_skip_prefix:
       vs_inst_idx := LENGTH insts)
 Proof
   strip_tac >>
-  qspec_then `insts` mp_tac venomWfPropsTheory.exec_block_skip_prefix_non_invoke >>
+  qspec_then `insts` mp_tac runInstsPropsTheory.exec_block_skip_prefix >>
   disch_then (qspecl_then [`fuel`, `ctx`, `bb`, `s`, `0`] mp_tac) >>
   simp[ADD_CLAUSES] >> disch_then irule >>
   simp[entry_param_run_insts, EL_APPEND_EQN] >>
@@ -884,7 +884,7 @@ Proof
   rpt strip_tac >>
   qspecl_then [`entry_ret_family n`, `"entry"`,
     `HD (entry_ret_family n).fn_blocks`, `idx`, `v`] mp_tac
-    livenessAnalysisPropsTheory.live_vars_at_uses >>
+    livenessProofsTheory.live_vars_at_uses >>
   simp_tac pure_ss [entry_ret_family_wf, LET_THM] >>
   disch_then irule >>
   simp[entry_ret_family_preorder_entry, entry_ret_family_blocks]
@@ -901,7 +901,7 @@ Proof
   rpt strip_tac >>
   qspecl_then [`entry_ret_family n`, `"entry"`,
     `HD (entry_ret_family n).fn_blocks`, `i`, `j`, `v`] mp_tac
-    livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+    livenessProofsTheory.live_vars_at_propagate_range >>
   simp_tac pure_ss [entry_ret_family_wf, LET_THM] >>
   disch_then irule >>
   simp[entry_ret_family_preorder_entry, entry_ret_family_blocks]
@@ -921,7 +921,7 @@ Proof
   rpt strip_tac >>
   qspecl_then [`entry_ret_family n`, `"entry"`,
     `HD (entry_ret_family n).fn_blocks`, `i`, `j`, `v`] mp_tac
-    livenessAnalysisPropsTheory.live_vars_at_forward_or_used >>
+    livenessProofsTheory.live_vars_at_forward_or_used >>
   simp_tac pure_ss [entry_ret_family_wf, LET_THM] >>
   disch_then irule >>
   simp[entry_ret_family_preorder_entry, entry_ret_family_blocks]
@@ -937,7 +937,7 @@ Proof
   rpt strip_tac >>
   qspecl_then [`entry_ret_family n`, `"entry"`,
     `HD (entry_ret_family n).fn_blocks`, `idx`] mp_tac
-    livenessAnalysisPropsTheory.live_vars_at_transfer >>
+    livenessProofsTheory.live_vars_at_transfer >>
   simp_tac pure_ss [entry_ret_family_wf, LET_THM] >>
   disch_then irule >>
   simp[entry_ret_family_preorder_entry, entry_ret_family_blocks]
@@ -955,7 +955,7 @@ Proof
     livenessProofsTheory.liveness_convergence) >>
   simp[entry_ret_family_wf, livenessBlockProofsTheory.liveness_instrs_def,
        livenessBlockProofsTheory.liveness_out_def,
-       cfgAnalysisPropsTheory.cfg_analyze_succs, entry_ret_family_blocks] >>
+       cfgHelpersTheory.cfg_analyze_succs, entry_ret_family_blocks] >>
   once_rewrite_tac[entry_ret_family_single] >>
   simp[cfgDefsTheory.build_succs_def, cfgDefsTheory.init_succs_def,
        cfgDefsTheory.fmap_lookup_list_def, finite_mapTheory.FLOOKUP_UPDATE,
@@ -1019,7 +1019,8 @@ Proof
   impl_tac >- decide_tac >>
   disch_then SUBST1_TAC >> pop_assum SUBST1_TAC >>
   simp[livenessDefsTheory.liveness_transfer_def,
-       livenessDefsTheory.live_update_def, entry_ret_family_el_assign,
+       livenessDefsTheory.live_update_def,
+       livenessDefsTheory.MEM_FOLDL_append_unseen, entry_ret_family_el_assign,
        mk_inst_def, inst_defs_def, livenessDefsTheory.ordered_inst_uses_def,
        python_stack_operands_def, venomInstTheory.operand_vars_def,
        venomInstTheory.operand_var_def, MEM_FILTER]

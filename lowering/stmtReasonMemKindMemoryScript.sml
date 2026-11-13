@@ -9,7 +9,7 @@ Ancestors
   stmtSimReasonExpr stmtSimReason exprOperandVar localPtrsProps
   stmtSimDefs exprLoweringProps loweringPosts fragGasPathMem fragGasMode
   fragExec instMemFrontier venomMemDefs exprLowering stmtLowering
-  emitHelper compileEnv valueEncoding vfmConstants vyperValue
+  emitHelper compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs vfmConstants vyperValue
   vyperInterpreter venomExecSemantics venomState venomInst context
   words list rich_list finite_map arithmetic
 Libs
@@ -45,6 +45,8 @@ Proof
     (simp[evaluate_type_def, type_slot_size_def, word_size_def] >>
      fs[dimword_def]) >>
   `~is_word_type (BaseT (StringT n))` by simp[is_word_type_def] >>
+  `post_value_type cenv se = BaseT (StringT n)` by
+    simp[post_value_type_bytestring, is_bytestring_type_def] >>
   Cases_on `vv` >> fs[reason_vv_def] >> rpt BasicProvers.VAR_EQ_TAC >>
   fs[vv_post_def, vv_holds_def, vv_at_def, expr_val_rel_def,
      expr_val_at_def] >>
@@ -124,7 +126,7 @@ Proof
        (fn_insts func) /\
    MEM (mk_inst (id0 + 3) ALLOCA [Lit (n2w Z)] ["%" ++ toString (v0 + 2)])
        (fn_insts func) /\
-   MEM (mk_inst (id0 + 4 + 5) ALLOCA [Lit 32w] ["%" ++ toString (v0 + 3 + 4)])
+   MEM (mk_inst (id0 + 4 + 6) ALLOCA [Lit 32w] ["%" ++ toString (v0 + 3 + 5)])
        (fn_insts func)` by
     (rpt conj_tac >>
      qpat_assum `!i. MEM i ecode ==> MEM i (fn_insts func)` irule >>
@@ -193,8 +195,8 @@ Proof
           impl_tac >- simp[] >> simp[])
       >- (gen_tac >> strip_tac >>
           `SND x = 32` by
-            (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 4 + 5`,
-               `32`, `["%" ++ toString (v0 + 3 + 4)]`] mp_tac
+            (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 4 + 6`,
+               `32`, `["%" ++ toString (v0 + 3 + 5)]`] mp_tac
                state_rel_site_size >>
              impl_tac >- simp[] >> disch_then drule >> simp[]) >>
           simp[] >> gen_tac >> strip_tac >>
@@ -206,7 +208,7 @@ Proof
           PairCases_on `x` >> PairCases_on `y` >> fs[] >>
           qpat_x_assum `allocas_non_overlapping t`
             (mp_tac o REWRITE_RULE [allocas_non_overlapping_def]) >>
-          disch_then (qspecl_then [`id0 + 4 + 5`, `id0 + 3`, `x0`, `32`,
+          disch_then (qspecl_then [`id0 + 4 + 6`, `id0 + 3`, `x0`, `32`,
                                    `y0`, `Z`] mp_tac) >>
           simp[])
       >- (rpt strip_tac >> fs[not_fresh_at_def] >>

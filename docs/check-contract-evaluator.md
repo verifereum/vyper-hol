@@ -31,6 +31,16 @@ conversion produces assumptions or an unexpected theorem shape, or the
 artifact is open. `check_contract_conv` can be used directly when a caller
 needs to inspect a computed rejection theorem ending in `NONE`.
 
+Literal integer ranges require a strictly increasing pair of endpoints and
+an iteration bound equal to their difference, as recorded by the frontend.
+The bound may exceed the loop variable type's maximum: `range(-128, 127)`
+with an `int8` loop variable has bound 255. Constructor headers reject
+`@nonreentrant` in both runtime and deployment checking modes.
+
+Array loops require the statement's bound to equal the array type's fixed
+length or dynamic capacity. A dynamic array may contain fewer elements at
+runtime; its loop still carries the type's maximum bound.
+
 `in_deploy` is an ML `bool`; the library constructs the corresponding HOL
 Boolean internally. Use `true` when checking the deployment context and
 `false` for the runtime context.
@@ -63,7 +73,8 @@ val checked = vyperCheckContractLib.check_contract
 The lower-level operations are:
 
 - `mk_check_contract`: construct and validate the closed application term;
-- `check_contract_conv`: compute an application, including a result of `NONE`;
+- `check_contract_conv`: compute an application, including a result of `NONE`
+  (staged for a full `check_contract` application, see below);
 - `check_contract_with`: use a caller-supplied conversion while retaining all
   success-result validation;
 - `check_contract`: use the standard static checker conversion.
@@ -96,6 +107,44 @@ val checked = vyperCheckContractLib.check_contract_with extended_conv input;
 Rules added this way must be trusted kernel theorems. A local extension is
 preferable to changing the shared compset for contract-specific definitions;
 the shared compset should contain only dependencies of the general checker.
+
+## Deployed interface
+
+`check_contract` checks selector uniqueness separately for each source module.
+For a loaded contract, `exports_ok` also requires distinct four-byte selectors
+across the main module's external entries and the library entries named in the
+exports map. Both checks include every default-argument prefix and public
+variable/hashmap getter. Unexported library entries do not enter the combined
+interface. `check_contract_single_module_exports_ok` proves that a successfully
+checked single module with no exports already satisfies this additional check.
+
+## Member names
+
+The checker requires a single member-name namespace per module: every function
+(internal, external or deploy), variable and hashmap contributes its name.
+Repeating a name across those declaration kinds or visibilities rejects the
+contract in both runtime and deployment mode. Different modules may reuse a
+name. The signature, getter-name and selector checks also remain in force.
+
+## Staged evaluation
+
+`check_contract_conv` evaluates a `check_contract` application with all four
+arguments in stages; every other term is evaluated with the plain
+call-by-value conversion over `check_contract_compset`. `check_contract_def`
+binds the live functions and the restricted artifact with `let`, and
+call-by-value reduces a `let` argument only to weak head normal form. The
+artifact's `DRESTRICT` maps would then reach every lookup in the checked
+bodies unreduced and be restricted again at each one. The staged conversion
+instead:
+
+1. unfolds `check_contract_def`;
+2. evaluates the `live` and `art` arguments to normal form with the plain
+   conversion, substituting each into the body;
+3. evaluates the body with the plain conversion.
+
+Every step is the checker's own evaluation, so the result is the same
+`check_contract_def` equation, reached with fewer reductions. A caller that
+supplies its own conversion to `check_contract_with` bypasses staging.
 
 ## Constant initializers
 

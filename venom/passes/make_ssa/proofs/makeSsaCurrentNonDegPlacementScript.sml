@@ -1,7 +1,7 @@
 Theory makeSsaCurrentNonDegPlacement
 Ancestors
   makeSsaCurrentPlacement makeSsaCurrentPlacementCut makeSsaCurrentDefSupport
-  makeSsaCurrentAnalysis makeSsaCurrentFrontier makeSsaCurrentDefs alist list sorting
+  makeSsaCurrentAnalysis makeSsaCurrentFrontier makeSsaDefs alist list sorting
 
 (* A recursive self-frontier cannot be the first cause of reachability. *)
 Theorem current_pruned_reach_nonself_source:

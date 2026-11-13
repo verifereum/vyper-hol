@@ -1,7 +1,7 @@
 Theory makeSsaCurrentPathBridge
 Ancestors
   makeSsaCurrentTreePaths makeSsaCurrentTokenGraph dominatorQueryProofs
-  makeSsaCurrentDefs makeSsaCurrentTokens venomWf venomInst
+  makeSsaDefs makeSsaCurrentTokens venomWf venomInst
   list rich_list
 
 Theorem current_tree_aux_path_chain:

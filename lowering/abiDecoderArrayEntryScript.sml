@@ -4,7 +4,7 @@ Ancestors
   abiDecoderArraySetupInputs abiDecoderArraySlice abiDecoderPointed
   abiDecoderCoherence abiDecoderTypedContract abiDecoderReentry
   abiDecoderDynamicLoopSetup abiDecoderLoop abiDecoderContract
-  fragExec instIdxIndep compileEnv valueEncoding vyperABI vyperValue
+  fragExec instIdxIndep compileEnv loweringStateRelDefs valueEncoding vyperABI vyperValue
   venomState venomExecSemantics emitHelperProps words list
 
 Theorem abi_decoder_prune_inst_idx:
@@ -15,28 +15,28 @@ Proof
 QED
 
 Theorem abi_decoder_pruned_pre_inst_idx:
-  abi_decoder_recursive_pre ce env sf ty tv di av v st last src dst opc hi sb d b cap
+  abi_decoder_recursive_pre ce env sf ty tv di av v st last src dst opc base_op hi B sb d b cap
     (abi_decoder_prune_vars next (s with vs_inst_idx := ix)) <=>
-  abi_decoder_recursive_pre ce env sf ty tv di av v st last src dst opc hi sb d b cap
+  abi_decoder_recursive_pre ce env sf ty tv di av v st last src dst opc base_op hi B sb d b cap
     (abi_decoder_prune_vars next s)
 Proof
   simp_tac bool_ss [abi_decoder_prune_inst_idx, abi_decoder_recursive_pre_inst_idx]
 QED
 
 Definition abi_decoder_array_entry_def:
-  abi_decoder_array_entry ce env sf ty tv av v child_st last ops opc hi
+  abi_decoder_array_entry ce env sf ty tv av v child_st last ops opc base_op hi B
       child_sb child_d b cap next limit_st initial i t <=>
     abi_decoder_recursive_pre ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v
-      child_st last (FST (SND ops)) (SND (SND ops)) opc hi child_sb child_d b cap
+      child_st last (FST (SND ops)) (SND (SND ops)) opc base_op hi B child_sb child_d b cap
       (abi_decoder_prune_vars child_st.cs_next_var t) /\
     eval_operand (FST ops) t = SOME (n2w i) /\ fresh_vars_wrt limit_st t /\
     abi_decoder_address_frame next initial t
 End
 
 Theorem abi_decoder_array_entry_inst_idx[simp]:
-  abi_decoder_array_entry ce env sf ty tv av v child_st last ops opc hi
+  abi_decoder_array_entry ce env sf ty tv av v child_st last ops opc base_op hi B
     child_sb child_d b cap next limit_st initial i (t with vs_inst_idx := ix) <=>
-  abi_decoder_array_entry ce env sf ty tv av v child_st last ops opc hi
+  abi_decoder_array_entry ce env sf ty tv av v child_st last ops opc base_op hi B
     child_sb child_d b cap next limit_st initial i t
 Proof
   simp[abi_decoder_array_entry_def, abi_decoder_pruned_pre_inst_idx,
@@ -44,25 +44,25 @@ Proof
 QED
 
 Theorem abi_decoder_array_setup_from_state:
-  abi_decode_array_element_setup ip src dst opc hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst opc base_op hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV (pre ++ av::post)) (ArrayV (DynArrayV (vpre ++ v::vpost))) /\
   LENGTH pre = LENGTH vpre /\
-  abi_decoder_ranges opc hi src dst sb
+  abi_decoder_ranges opc base_op hi src dst B sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post))))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
-  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
+  mem_bytes_at (B+sb) (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
     (ListV (pre ++ av::post)))) (abi_decode_source opc initial) =
     enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post)) /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w (LENGTH pre) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-  abi_decoder_operand_live st.cs_next_var hi /\
+  abi_decoder_operand_live st.cs_next_var hi /\ abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_reservation middle.cs_next_id last b cap initial /\
   middle.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   frag_exec ctx st middle (\s. s = initial)
-    (abi_decoder_array_entry ce env sf ty tv av v middle last ops opc hi
+    (abi_decoder_array_entry ce env sf ty tv av v middle last ops opc base_op hi B
       (sb + abi_array_child_offset NONE (vyper_to_abi_type env ty) (pre ++ av::post) (LENGTH pre))
       (d + 32 + LENGTH pre * type_memory_bytes ce ty) b cap st.cs_next_var limit_st
       initial (LENGTH pre)) (K F)
@@ -76,27 +76,27 @@ Proof
 QED
 
 Theorem abi_decoder_array_setup_reach:
-  abi_decode_array_element_setup ip src dst opc hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst opc base_op hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
   fn_has_code st middle func /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV (pre ++ av::post)) (ArrayV (DynArrayV (vpre ++ v::vpost))) /\
   LENGTH pre = LENGTH vpre /\
-  abi_decoder_ranges opc hi src dst sb
+  abi_decoder_ranges opc base_op hi src dst B sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post))))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
-  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
+  mem_bytes_at (B+sb) (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
     (ListV (pre ++ av::post)))) (abi_decode_source opc initial) =
     enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post)) /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w (LENGTH pre) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-  abi_decoder_operand_live st.cs_next_var hi /\
+  abi_decoder_operand_live st.cs_next_var hi /\ abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_reservation middle.cs_next_id last b cap initial /\
   middle.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?prepared. abi_decoder_array_entry ce env sf ty tv av v middle last ops opc hi
+  ?prepared. abi_decoder_array_entry ce env sf ty tv av v middle last ops opc base_op hi B
       (sb + abi_array_child_offset NONE (vyper_to_abi_type env ty) (pre ++ av::post) (LENGTH pre))
       (d + 32 + LENGTH pre * type_memory_bytes ce ty) b cap st.cs_next_var limit_st
       initial (LENGTH pre) prepared /\

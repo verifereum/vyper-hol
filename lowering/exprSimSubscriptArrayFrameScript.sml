@@ -2,8 +2,8 @@
 Theory exprSimSubscriptArrayFrame
 Ancestors
   exprSimSubscriptArraySource exprSimProps exprSimAttributeFields
-  loweringPosts valueEncodingProofs valueEncoding exprBopSimProps
-  list rich_list finite_map pair vyperState compileEnv exprLoweringProps vyperValue
+  loweringPosts valueEncodingProofs valueEncoding valueEncodingDefs exprBopSimProps
+  list rich_list finite_map pair vyperState compileEnv loweringStateRelDefs exprLoweringProps vyperValue
 
 Theorem immutable_holds_runtime_frame:
   ~cenv.ce_is_ctor /\ immutable_holds cenv cx ty r w es s /\
@@ -23,14 +23,17 @@ Proof
 QED
 
 Theorem locals_kept_dynarray_free_value:
-  expr_sim_inv cenv cx env es /\ locals_kept cenv es s s' /\
+  expr_sim_inv cenv cx env es /\ locals_kept cenv es ee s s' /\
   local_region cenv es.scopes s n b sz /\
   b <= off /\ off + val_footprint tv v <= b + sz /\
   local_val_at cenv cx n (off - b) tv v /\ val_wf tv v /\ dynarray_free tv ==>
   mem_bytes_at off (val_footprint tv v) s'.vs_memory =
     mem_bytes_at off (val_footprint tv v) s.vs_memory
 Proof
-  strip_tac >> gvs[locals_kept_def] >> first_x_assum irule >>
+  strip_tac >>
+  qpat_x_assum `locals_kept _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
+  disch_then irule >>
   qexistsl_tac [`b`, `n`, `sz`] >> simp[] >> rpt strip_tac >>
   drule_all local_val_at_dynarray_apart >> simp[]
 QED
@@ -42,7 +45,7 @@ Theorem vv_at_memory_bytes_frame:
   evaluate_type (get_tenv cx) ty = SOME tv /\
   eval_operand p.ptr_operand s = SOME w /\
   expr_sim_inv cenv cx env es /\ dynarray_free tv /\
-  wb_frame cenv es sb s s' ==>
+  wb_frame cenv es ee sb s s' ==>
   mem_bytes_at (w2n w) (val_footprint tv v) s'.vs_memory =
     mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
 Proof
@@ -58,7 +61,7 @@ Proof
 QED
 
 Theorem local_region_wb_frame:
-  wb_frame cenv es sb s s' /\ local_ptrs_reserved cenv sb /\
+  wb_frame cenv es ee sb s s' /\ local_ptrs_reserved cenv sb /\
   local_ptrs_rel func cenv es.scopes s ==>
   (local_region cenv es.scopes s' n b sz <=> local_region cenv es.scopes s n b sz)
 Proof
@@ -76,7 +79,7 @@ Theorem vv_at_located_frame:
        eval_operand p.ptr_operand s' = SOME w) /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
   es'.scopes = es.scopes /\ es'.immutables = es.immutables /\
-  wb_frame cenv es sb s s' /\ local_ptrs_reserved cenv sb /\
+  wb_frame cenv es ee sb s s' /\ local_ptrs_reserved cenv sb /\
   local_ptrs_rel func cenv es.scopes s /\ sb.cs_next_id <= sc.cs_next_id ==>
   vv_at cenv cx ty sa sc es' r (LocatedValue ty p) s'
 Proof
@@ -107,7 +110,7 @@ Theorem vv_holds_located_nonword_frame:
        eval_operand p.ptr_operand s' = SOME w) /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
   es'.scopes = es.scopes /\ es'.immutables = es.immutables /\
-  expr_sim_inv cenv cx env es /\ wb_frame cenv es sb s s' ==>
+  expr_sim_inv cenv cx env es /\ wb_frame cenv es ee sb s s' ==>
   vv_holds cenv cx ty r (LocatedValue ty p) es' s'
 Proof
   strip_tac
@@ -147,7 +150,7 @@ Theorem framed_array_base_transport:
   vv_at cenv cx (ArrayT et bd) sa sc t' r (LocatedValue (ArrayT et bd) p) v
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `wb_frame cenv t sb u v` by
+  `wb_frame cenv t t' sb u v` by
     (gvs[expr_post_def, wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `!w. eval_operand p.ptr_operand u = SOME w ==>
        eval_operand p.ptr_operand v = SOME w` by
@@ -156,7 +159,12 @@ Proof
   `local_ptrs_rel func cenv t.scopes u` by
     gvs[vv_post_def, stmt_state_rel_def, state_rel_def] >>
   qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[vv_post_def] >> disch_then (map_every assume_tac o CONJUNCTS) >> conj_tac
+  simp[vv_post_def] >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type cenv obj = ArrayT et bd` by
+    (qpat_x_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>
+     simp[Once vv_holds_def] >> strip_tac >> gvs[is_bytestring_type_def]) >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  conj_tac
   >- (irule vv_holds_located_nonword_frame >>
       goal_assum (drule_at Any) >> simp[is_word_type_def] >>
       gvs[evaluate_type_def, AllCaseEqs()] >> metis_tac[dynarray_free_fixed]) >>

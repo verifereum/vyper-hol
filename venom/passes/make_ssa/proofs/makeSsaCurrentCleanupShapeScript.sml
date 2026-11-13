@@ -1,6 +1,6 @@
 Theory makeSsaCurrentCleanupShape
 Ancestors
-  makeSsaCurrentDefs makeSsaCurrentProps cfgTransformProps venomInst
+  makeSsaDefs makeSsaCurrentProps cfgTransformProps venomInst
   list rich_list pair
 
 Definition current_inst_no_id_def:

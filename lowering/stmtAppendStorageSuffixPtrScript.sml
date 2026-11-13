@@ -2,7 +2,7 @@
 Theory stmtAppendStorageSuffixPtr
 Ancestors stmtAppendStorageGuardPtr stmtAppendStorageRunPtr instSeqComposePtr
   exprLoweringProps emitHelperProps freshWrites stateFrame venomInst venomState
-  ptrDiscipline finite_map list arithmetic compileEnv emittedSeqComposePtr
+  ptrDiscipline finite_map list arithmetic compileEnv loweringStateRelDefs emittedSeqComposePtr
   abiDecoderArrayInit
 
 Theorem emit_append_binary_uniform_ptr:

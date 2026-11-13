@@ -1,7 +1,8 @@
 Theory o1MakeSsaTraversalFrames
 Ancestors
   o1MakeSsaPatchFrames o1MakeSsaVisitTrace o1MakeSsaVisitRetention
-  makeSsaCurrentDefs makeSsaCurrentInduct makeSsaHelper makeSsaCurrentProps list pair
+  makeSsaDefs makeSsaCurrentInduct makeSsaCurrentProps list pair
+  venomExecProofs
 
 Theorem visit_excluded_projection:
   (!i ops. i.inst_opcode = PHI ==> f (i with inst_operands := ops) = f i) ==>

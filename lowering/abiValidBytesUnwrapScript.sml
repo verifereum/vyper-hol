@@ -43,6 +43,7 @@ Theorem lower_abi_decode_valid_bytes_unwrap:
   lower_abi_decode data (type_to_abi_dec_info sf ce wrapped_ty) min_size max_size
     (type_memory_bytes ce wrapped_ty) st = (out,final) /\ fn_has_code st final func /\
   abi_builtin_valid_bytes_resources n bs st data min_size max_size p d initial /\
+  (p + 32 + LENGTH bs <= d \/ d + abi_decode_bytes_copy_size n <= p + 32) /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?actual. eval_operand out actual = SOME (n2w d) /\ val_in_memory tv v d actual.vs_memory /\
@@ -58,6 +59,9 @@ Proof
   qpat_x_assum `evaluate_type_builtin _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_source_decode_wrapping_iff]) >>
   Cases_on `unwrap` >> gvs[needs_external_call_wrap_def, Excl "dec_def", Excl "valid_enc_def"] >>
+  (SUBGOAL_THEN
+    ``p + 32 + LENGTH (bs:word8 list) <= d \/ d + abi_decode_bytes_copy_size n <= p + 32``
+    assume_tac >- decide_tac) >>
   FIRST (List.map (fn th => drule_all th >>
     disch_then (qspec_then `ctx` strip_assume_tac)) valid_bytes_source_rules) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []

@@ -1,6 +1,6 @@
 Theory placeMemoryLiveRegion
 Ancestors
-  loweringPosts exprSimProps exprLoweringProps compileEnv vyperLookup
+  loweringPosts exprSimProps exprLoweringProps compileEnv loweringStateRelDefs vyperLookup
   vyperState vyperInterpreter vyperStoragePlaceProvenance words
 
 Theorem memory_place_live_region:

@@ -8,8 +8,9 @@ the native runner (`../native/README.md`); from `bytecode/`:
 ./native/bytecode_parity_native.exe . builtin-forms
 ```
 
-`uint2str_local` is out of parity for now and is skipped by the runner; see
-`../pending-uint2str-buffer.md`.
+The sources whose bytes vyperlang/vyper#5127 changed at the v0.5.0b1 pin are
+skipped; [`pending-5127-port.md`](../pending-5127-port.md) names what
+brings each back.
 
 | Source | Checks |
 |---|---|
@@ -31,7 +32,7 @@ the native runner (`../native/README.md`); from `bytecode/`:
 | `uint2str_local` | `concat("n=", uint2str(x))` |
 | `concat_storage` | `concat` with a storage `Bytes` argument |
 | `self_code_slice` | `slice(self.code, 0, 10)`: `CODESIZE`/`CODECOPY` |
-| `ext_code_slice` | `slice(a.code, s, 10)`: the non-literal start and the output buffer before the address, then `EXTCODESIZE`/`EXTCODECOPY` |
+| `ext_code_slice` | `slice(a.code, s, 10)`: the non-literal start, then the address, `EXTCODESIZE` and the bounds check before the output buffer, then `EXTCODECOPY` |
 | `struct_code_slice` | a struct member named `code` is an ordinary memory slice |
 | `struct_data_slice` | control: the same with a member named `data` |
 | `p94_rbuf_bytes_ret_concat_arg` | internal call with a `concat` argument, `Bytes` return |

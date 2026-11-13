@@ -30,7 +30,7 @@
 Theory emitHelperProps
 Ancestors
   fragGasPath gasCount fragExec
-  exprLoweringProps localPtrsProps emitHelper compileEnv
+  exprLoweringProps localPtrsProps emitHelper compileEnv loweringStateRelDefs
   venomExecSemantics venomExecProofs venomState venomInst
   instIdxIndep vfmState freshLabelStringProps ASCIInumbers
   list pred_set arithmetic
@@ -388,6 +388,14 @@ Theorem lookup_var_mstore[simp]:
   lookup_var v (mstore a b s) = lookup_var v s
 Proof
   rw[lookup_var_def, mstore_def]
+QED
+
+Theorem slot_copy_operand_update:
+  eval_operand op (update_var name value s) =
+    if op = Var name then SOME value else eval_operand op s
+Proof
+  Cases_on `op` >> simp[eval_operand_def, lookup_var_def, update_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
 (* Lookup the variable just written *)
@@ -807,7 +815,9 @@ Proof
   simp[Once exec_block_def] >>
   simp[Once step_inst_def] >>
   simp_tac (srw_ss()) [mk_inst_def] >>
-  simp[step_inst_base_def, is_terminator_def, jump_to_def]
+  once_rewrite_tac [step_inst_base_def] >>
+  simp_tac (srw_ss()) [] >>
+  simp[is_terminator_def, jump_to_def]
 QED
 
 (* Full single-block execution ending with JNZ *)
@@ -2173,7 +2183,8 @@ Proof
   conj_tac >- (
     gvs[fresh_vars_wrt_def, write_memory_with_expansion_def, LET_THM,
         emit_void_def, comp_bind_def, fresh_id_def, emit_def]) >>
-  simp[write_memory_with_expansion_def, LET_THM]
+  rw[write_memory_with_expansion_def, LET_THM] >>
+  Cases_on `op` >> gvs[eval_operand_def, lookup_var_def]
 QED
 
 (* ===== ALLOCA ===== *)

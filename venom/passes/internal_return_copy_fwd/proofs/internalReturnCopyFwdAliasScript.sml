@@ -6,7 +6,7 @@ Ancestors
   venomMemProps basePtrProofs o1FrameLockstep ssaAvailablePred venomExecProofs venomWf rangeAnalysisProofs contextCodegenRel
   tailMergeStep venomInstProofs1 ptrDisciplineControl venomInstProps relation
   singleUseExpansionSupplySim occurrenceOrigin unitShapeDefs o1LowerDloadOccurrence occurrenceGeometry
-  allocaRemapProofs frameAllocationHistory
+  lowerDloadDescriptorObservation frameAllocationHistory
 
 Definition ircf_alias_value_def:
   ircf_alias_value fn s G v <=>
@@ -1333,7 +1333,7 @@ Theorem ircf_fwd_later_writer_occurrence_exclusion:
 Proof
   strip_tac >> strip_tac >>
   `MEM (Var v) inst.inst_operands` by
-    (metis_tac[allocaRemapProofsTheory.mem_ops_ofst_is_operand]) >>
+    (metis_tac[lowerDloadDescriptorObservationTheory.ld_descriptor_offset_operand]) >>
   `v IN pointer_derived_vars fn {root}` by
     (drule_all occurrence_syntax_origin_planned_root >> simp[]) >>
   Cases_on `root = d`
@@ -1583,7 +1583,7 @@ Theorem ircf_planned_destination_reader_occurrence_exclusion:
 Proof
   strip_tac >> strip_tac >>
   `MEM (Var v) inst.inst_operands` by
-    metis_tac[allocaRemapProofsTheory.mem_ops_ofst_is_operand] >>
+    metis_tac[lowerDloadDescriptorObservationTheory.ld_descriptor_offset_operand] >>
   `v IN pointer_derived_vars fn {d}` by
     (drule_all occurrence_syntax_origin_planned_root >> simp[]) >>
   `ircf_fwd_ok fn pb k d sr sz` by
@@ -1777,7 +1777,7 @@ Proof
   `ssa_form fn` by fs[wf_ssa_def] >>
   drule_all ircf_redirect_changed_forward >> strip_tac >>
   `MEM (Var v) inst.inst_operands` by
-    metis_tac[allocaRemapProofsTheory.mem_ops_ofst_is_operand] >>
+    metis_tac[lowerDloadDescriptorObservationTheory.ld_descriptor_offset_operand] >>
   `k <> s.vs_inst_idx` by metis_tac[] >>
   `k < s.vs_inst_idx` by (irule ircf_fwd_dst_use_later >> metis_tac[]) >>
   `active_inst fn inst s` by

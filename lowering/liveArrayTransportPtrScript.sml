@@ -1,6 +1,6 @@
 (* Dynamic-array copying transports live elements, not unused capacity. *)
 Theory liveArrayTransportPtr
-Ancestors robustCopyTransportPtr exprSimMemoryTransport valueEncoding valueEncodingProps
+Ancestors robustCopyTransportPtr exprSimMemoryTransport valueEncoding valueEncodingDefs valueEncodingProps
   valueEncodingProofs list arithmetic
 
 Theorem elems_in_memory_relocate_window:

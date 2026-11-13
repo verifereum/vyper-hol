@@ -1,6 +1,6 @@
 Theory o1MakeSsaVisitTrace
 Ancestors
-  makeSsaCurrentDefs makeSsaCurrentInduct irSupply venomInst list pair alist
+  makeSsaDefs makeSsaCurrentInduct irSupply venomInst list pair alist
 
 (* Snapshots follow the lexical ancestor path, never the traversal prefix. *)
 Datatype:

@@ -2,7 +2,7 @@
 Theory occurrenceOrigin
 Ancestors
   o1LowerDloadOccurrence o1LowerDloadClosure o1FrameLockstep
-  ptrDiscipline o1LowerDloadGhost finite_map list pred_set
+  ptrDiscipline o1LowerDloadGhost venomInstIdsProps finite_map list pred_set
 
 Theorem occurrence_out_identity_cases:
   occurrence_out a HP H inst s = SOME id ==>
@@ -385,7 +385,7 @@ Theorem occurrence_syntax_origin_planned_root:
 Proof
   simp[occurrence_syntax_origin_def] >> strip_tac >>
   first_x_assum drule >> strip_tac >>
-  drule_all venomWfPropsTheory.fn_inst_ids_distinct_inj >>
+  drule_all venomInstIdsPropsTheory.fn_inst_ids_distinct_inj >>
   strip_tac >> gvs[]
 QED
 

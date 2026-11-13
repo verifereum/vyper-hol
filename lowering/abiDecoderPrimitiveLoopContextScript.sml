@@ -10,13 +10,13 @@ Libs
   Omega
 
 Definition abi_decoder_primitive_loop_compiled_def:
-  abi_decoder_primitive_loop_compiled fn st0 middle st1 ops ip src dst opc hi clamp
+  abi_decoder_primitive_loop_compiled fn st0 middle st1 ops ip src dst opc base_op hi clamp
       hdr exit_lbl hid first iv limit_st <=>
-    abi_decode_array_element_setup ip src dst opc hi (DecPrimWord clamp) 32 32
+    abi_decode_array_element_setup ip src dst opc base_op hi (DecPrimWord clamp) 32 32
       st0 = (ops,middle) /\
-    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi (DecPrimWord clamp)
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi (DecPrimWord clamp)
       middle = ((),st1) /\
-    abi_decoder_primitive_loop_code fn st0 st1 ops ip src opc hdr exit_lbl hid first iv /\
+    abi_decoder_primitive_loop_code fn st0 st1 ops ip src opc base_op hdr exit_lbl hid first iv /\
     st1.cs_next_var < limit_st.cs_next_var
 End
 
@@ -40,34 +40,36 @@ Definition abi_decoder_primitive_loop_data_def:
 End
 
 Definition abi_decoder_loop_inputs_def:
-  abi_decoder_loop_inputs first ip src dst sb d slot initial <=>
+  abi_decoder_loop_inputs first ip src dst base_op B sb d slot initial <=>
     abi_decoder_operand_live first ip /\ abi_decoder_operand_live first src /\
-    abi_decoder_operand_live first dst /\
+    abi_decoder_operand_live first dst /\ abi_decoder_operand_live first base_op /\
+    eval_operand base_op initial = SOME (n2w B) /\
     eval_operand ip initial = SOME (n2w slot) /\ eval_operand src initial = SOME (n2w sb) /\
     eval_operand dst initial = SOME (n2w d)
 End
 
 Theorem abi_decoder_loop_inputs_eval:
-  abi_decoder_loop_inputs first ip src dst sb d slot initial /\
+  abi_decoder_loop_inputs first ip src dst base_op B sb d slot initial /\
   abi_decoder_loop_rel first limit_st fp initial s ==>
   eval_operand ip s = SOME (n2w slot) /\ eval_operand src s = SOME (n2w sb) /\
-  eval_operand dst s = SOME (n2w d)
+  eval_operand dst s = SOME (n2w d) /\ eval_operand base_op s = SOME (n2w B)
 Proof
   simp_tac bool_ss [abi_decoder_loop_inputs_def] >> metis_tac[abi_decoder_loop_rel_eval]
 QED
 
 Theorem abi_decoder_loop_inputs_live:
-  abi_decoder_loop_inputs first ip src dst sb d slot initial /\ first <= next ==>
+  abi_decoder_loop_inputs first ip src dst base_op B sb d slot initial /\ first <= next ==>
   abi_decoder_operand_live next ip /\ abi_decoder_operand_live next src /\
-  abi_decoder_operand_live next dst
+  abi_decoder_operand_live next dst /\ abi_decoder_operand_live next base_op
 Proof
   simp_tac bool_ss [abi_decoder_loop_inputs_def] >> metis_tac[abi_decoder_operand_live_mono]
 QED
 
 Theorem abi_decoder_primitive_compiled_facts:
-  abi_decoder_primitive_loop_compiled fn st0 middle st1 ops ip src dst opc hi clamp
+  abi_decoder_primitive_loop_compiled fn st0 middle st1 ops ip src dst opc base_op hi clamp
     hdr exit_lbl hid first iv limit_st /\ abi_decode_source_opcode opc ==>
-  first + 4 <= limit_st.cs_next_var /\ first <= st0.cs_next_var /\
+  first + 4 + abi_decode_position_header_delta base_op <= limit_st.cs_next_var /\
+  first <= st0.cs_next_var /\
   first <= st1.cs_next_var /\ st1.cs_next_var <= limit_st.cs_next_var /\
   st1.cs_current_bb = st0.cs_current_bb /\ fn_has_code st0 st1 fn
 Proof
@@ -75,7 +77,7 @@ Proof
   drule_all abi_decoder_primitive_body_counters >> strip_tac >>
   drule_all abi_decoder_primitive_loop_body_shape >> strip_tac >>
   drule_all abi_decoder_primitive_body_contained >> strip_tac >>
-  qpat_assum `abi_decoder_primitive_loop_code _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_primitive_loop_code _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_primitive_loop_code_def]) >>
   asm_simp_tac bool_ss [] >> decide_tac
 QED

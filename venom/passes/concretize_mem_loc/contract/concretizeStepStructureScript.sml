@@ -2,6 +2,7 @@ Theory concretizeStepStructure
 Ancestors
   concretizeMemLocDefs passSimulationProps passSharedProps venomWf
   passSharedDefs passSimulationDefs venomInst list indexedLists unitLabelMapIdentity
+  passTransform
 
 Theorem concretize_positions_inst_id:
   (concretize_inst_with_positions p i).inst_id = i.inst_id
@@ -290,4 +291,12 @@ Proof
   `fn_cfg_edge (concretize_function_with_positions positions fn) = fn_cfg_edge fn`
     by (simp[FUN_EQ_THM, concretize_positions_cfg_edge]) >>
   simp[fn_reachable_def, concretize_positions_entry_label]
+QED
+
+Theorem concretize_positions_not_invoke:
+  i.inst_opcode <> INVOKE ==>
+  (concretize_inst_with_positions p i).inst_opcode <> INVOKE
+Proof
+  rw[concretize_inst_with_positions_def] >> rpt CASE_TAC >>
+  simp[mk_assign_inst_def, mk_nop_inst_def]
 QED

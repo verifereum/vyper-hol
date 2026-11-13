@@ -2,7 +2,7 @@
 Theory abiDecoderArrayPrefix
 Ancestors
   abiDecoderContract valueEncodingProps valueEncodingProofs valueEncodingTyping
-  valueEncoding vyperTyping venomState list arithmetic
+  valueEncoding valueEncodingDefs vyperTyping venomState list arithmetic
 
 Theorem elems_in_memory_append:
   !xs ys off tv mem.

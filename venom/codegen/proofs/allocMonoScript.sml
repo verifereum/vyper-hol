@@ -256,13 +256,13 @@ Theorem do_dup_next_offset:
     do_dup dist ps = (ops, ps') ==>
     ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset
 Proof
-  rpt gen_tac >> simp[do_dup_def] >>
+  rpt gen_tac >> simp[do_dup_def, top_n_def] >>
   IF_CASES_TAC >> gvs[]
   >- (strip_tac >> gvs[])
   >> CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
   strip_tac >> gvs[] >>
   simp[foldl_free_next_offset] >>
-  qspecl_then [`REVERSE (top_n (dist - 15) ps.ps_stack)`,
+  qspecl_then [`TAKE (dist - 15) (REVERSE ps.ps_stack)`,
                `([],[],ps.ps_alloc)`]
     mp_tac foldl_alloc_next_offset >> simp[]
 QED

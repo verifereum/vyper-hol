@@ -5,11 +5,7 @@ Ancestors
 Libs
   wordsLib
 
-Theorem dimindex_256[local,simp]:
-  dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
+val _ = augment_srw_ss [rewrites [dimindex_256]];
 
 Theorem ceil32_div_mul:
   !n. ceil32 n = ((n + 31) DIV 32) * 32

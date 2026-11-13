@@ -5,7 +5,7 @@
 Theory abiBuiltinPrefix
 Ancestors
   abiDecoderReentryAddress abiDecoderReentryAddress abiDecoderReentry abiDecoderDynamicLoopSetup
-  abiDecoderGuards abiDecoderContract emitHelperProps exprLoweringProps
+  abiDecoderRange abiDecoderGuards abiDecoderContract emitHelperProps exprLoweringProps
   compileEnv emitHelper venomExecSemantics venomExecProofs venomState venomInst
   words arithmetic finite_map list
 

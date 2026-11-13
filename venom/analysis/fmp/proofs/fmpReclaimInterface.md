@@ -3,8 +3,7 @@
 Reference: VYPER_PIN cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c;
 source snapshot `.agent-files/vyper-reference/vyper` supplied by the lead.
 This document records source comparison, not a theorem of Python/HOL equivalence.
-The deleted `fmpReclaimProbe` theory supplied executable HOL reference cases, not
-production reclaim correctness. No executable production definitions changed in C1.1.
+No executable production definitions changed in C1.1.
 
 ## Exact Python boundaries
 
@@ -66,19 +65,6 @@ production reclaim correctness. No executable production definitions changed in 
    appends endpoint restores; it must instead select and emit before each
    original instruction and consume the selected entry once.
 
-## Probe coverage and limits
-
-The `fmpReclaimProbe` theory used eligibility/veto parameters to isolate stack
-and instruction-effect behavior. It has been deleted, so none of the cases
-below is checked now. They covered partial pop in both live/dead orders,
-unknown blocker, lowest target, capture veto, push-after-pop, GETFMP, SETFMP,
-needs/publishes/unresolved INVOKE summaries, all three branches, RET (no
-endpoint), unreachable and reclaim-disabled states, join orientation and
-capture union, as well as old MLOAD capture over-pinning, old CALL allocation
-pinning, occurrence counts and original dataflow boundary indexing. They did
-not test production capture escape or exact base-pointer equivalence, which
-still require the interfaces above.
-
 ## Existing proof coverage and BUMP-dependent build closure
 
 `fmpLowerProps` has structural no-raw, signature sealing, metadata and
@@ -93,15 +79,13 @@ Primary explicit arithmetic consumers: `emitSim`'s `bump_round_word_correct`,
 integration in `genBlockSim` around lines 4264-4939; `fmpWfDefs`/`fmpWfProps`;
 `mem2varBlockSimHelpers` around 1816 (distinguish DALLOCA from BUMP before edits).
 Structural BUMP branches also occur in `venomExecProofs`, `venomMemProofs`,
-`execEquivProofs`, `execEquivParamHelpers2`, `allocaRemapProofs`,
-`dftCommutation`/`dftBlockSim`, `ssaRenamedSim`, `dfgSoundStep`,
-`overflowElimHelpers`, `tailMergeStep`, `prevBbIndep`, `instIdxIndep`.
+`execEquivProofs`, `execEquivParamHelpers2`,
+`dftCommutation`/`dftBlockSim`, `tailMergeStep`, `prevBbIndep`, `instIdxIndep`.
 
 Build these primary logical targets after semantics changes, then their
 consumers: venomExecProofsTheory, venomMemProofsTheory, fmpWfPropsTheory,
-execEquivProofsTheory, execEquivParamHelpers2Theory, allocaRemapProofsTheory,
+execEquivProofsTheory, execEquivParamHelpers2Theory,
 mem2varBlockSimHelpersTheory, dftCommutationTheory, dftBlockSimTheory,
-ssaRenamedSimTheory, dfgSoundStepTheory, overflowElimHelpersTheory,
 tailMergeStepTheory, prevBbIndepTheory, instIdxIndepTheory, emitSimTheory,
 genBlockSimTheory, fmpLowerPropsTheory, fmpLowerInvokePropsTheory,
 fmpReclaimPropsTheory, evalCompilerAllocationBudgetTheory.

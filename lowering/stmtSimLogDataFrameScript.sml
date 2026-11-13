@@ -2,7 +2,7 @@ Theory stmtSimLogDataFrame
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts
   stmtSimLogData stmtSimLogArgs  exprSimMemoryTransport
-  exprSimOps compileEnv venomState valueEncoding words
+  exprSimOps compileEnv loweringStateRelDefs venomState valueEncoding valueEncodingDefs words
 
 Definition log_write_frame_def:
   log_write_frame st b n s t <=>

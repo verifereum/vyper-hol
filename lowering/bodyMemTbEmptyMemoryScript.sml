@@ -2,7 +2,7 @@
    a fresh zeroed buffer with a counted memory-safe initialization path. *)
 Theory bodyMemTbEmptyMemory
 Ancestors
-  bodyMemoryPreds compileEnv bodyEmptyBufferMemory exprSimAggregates
+  bodyMemoryPreds compileEnv loweringStateRelDefs bodyEmptyBufferMemory exprSimAggregates
   exprSimMemDefs exprSimMemoryValues exprSimBuffer exprSimAggregateLayout
   exprSimBufferEmptyExec gasSummary loweringPosts exprLoweringProps
   exprLowering exprSimHypsDefs exprSimDefs exprSimProps valueEncoding
@@ -11,7 +11,7 @@ Ancestors
   context valueEncodingProofs arithmetic exprSimVVFrame venomMemDefs
   gasOutcome venomInstProofs venomExecSemantics list fragGasMode exprSimMemUnwrap
 
-Theorem memory_value_post_gas_obs[local]:
+Theorem memory_value_post_gas_obs:
   p.ptr_location = LocMemory /\
   vv_post ctx func cenv cx e es sa sb s0 ee (Value v) (LocatedValue ty p) t /\
   stmt_state_rel ctx func cenv cx (ee with gas_obs := gs) t ==>
@@ -19,11 +19,15 @@ Theorem memory_value_post_gas_obs[local]:
     (Value v) (LocatedValue ty p) t
 Proof
   strip_tac >>
-  gvs[vv_post_def, vv_holds_def, vv_at_def, read_result_def, return_def] >>
-  first_assum ACCEPT_TAC
+  `locals_kept cenv es (ee with gas_obs := gs) s0 t <=>
+   locals_kept cenv es ee s0 t` by
+    simp[NoAsms, locals_kept_def, popped_kept_def] >>
+  gvs[vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
+      read_result_def, return_def] >>
+  metis_tac[]
 QED
 
-Theorem value_store_bound_gas_obs[local]:
+Theorem value_store_bound_gas_obs:
   vv_store_bound cx ty lt (ee with gas_obs := gs) (Value v) vv t <=>
   vv_store_bound cx ty lt ee (Value v) vv t
 Proof
@@ -77,7 +81,7 @@ Proof
      conj_tac
      >- (rpt strip_tac >>
          qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ b len` drule >>
-         simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >>
+         simp[loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >>
          first_x_assum irule >> decide_tac) >>
      reverse conj_tac
      >- (drule_all expr_sim_inv_memory_size >> strip_tac >>

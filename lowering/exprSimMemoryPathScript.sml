@@ -2,7 +2,7 @@
 Theory exprSimMemoryPath
 Ancestors
   exprSimUnwrapProps emitHelperProps fragGasMode exprLoweringProps
-  exprLowering context compileEnv freshWrites venomInst venomState emitHelper
+  exprLowering context compileEnv loweringStateRelDefs freshWrites venomInst venomState emitHelper
 
 Theorem unwrap_memory_compile:
   p.ptr_location = LocMemory ==>

@@ -61,7 +61,7 @@ Proof
   rpt BasicProvers.VAR_EQ_TAC >>
   drule_all deploy_ctor_entry_run_mem >> strip_tac >>
   `call_outcomes_ok am tx (MAP SND (call_trace es))` by
-    fs[deploy_state_rel_def] >>
+    metis_tac[deploy_state_rel_call_outcomes_ok] >>
   drule_all deploy_ctor_body_frame >> strip_tac >>
   `cenv.ce_ctor_exit_label = SOME exit_lbl /\
    st_exit.cs_current_bb = exit_lbl /\ st_exit.cs_current_insts = [] /\
@@ -107,7 +107,8 @@ Proof
     (simp[Abbr `cx`] >>
      metis_tac[SIMP_RULE (srw_ss()) [] deploy_ctor_body_source_ok]) >>
   `SND (stmts_env cenv NoLoop NoneT body sa) = sb` by
-    metis_tac[compile_stmts_env, pairTheory.PAIR_EQ] >>
+    (qpat_x_assum `compile_stmts _ _ _ _ _ = _` mp_tac >>
+     simp[compile_stmts_env]) >>
   Cases_on `stmts_env cenv NoLoop NoneT body sa` >> fs[] >>
   qpat_x_assum `_ = sb` SUBST_ALL_TAC >>
   rename1 `stmts_env _ _ _ _ _ = (cenv', sb)` >>

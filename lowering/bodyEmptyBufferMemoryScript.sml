@@ -5,7 +5,7 @@ Ancestors
   allocaFootprint allocLimits exprSimAlloc venomMemDefs venomMemProps
   fragExec fragGasSeqMem fragGasPathMem allocaHistoryFragment gasSummary
   fragExecMem instMemFrontier venomExecSemantics venomState venomInst
-  compileEnv context emitHelper finite_map words list rich_list arithmetic
+  compileEnv loweringStateRelDefs context emitHelper finite_map words list rich_list arithmetic
 
 Theorem compile_zero_words_seq_mem:
   !n pop sa sb s w.

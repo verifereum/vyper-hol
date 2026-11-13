@@ -1,6 +1,6 @@
 Theory makeSsaCurrentNonDegShape
 Ancestors
-  makeSsaCurrentNonDegCleanup makeSsaCurrentDefs makeSsaDefs venomWf venomInst list
+  makeSsaCurrentNonDegCleanup makeSsaDefs venomWf venomInst list
   simplifyCfgStruct
   venomExecProps
 

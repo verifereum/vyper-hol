@@ -12,7 +12,8 @@ End
 Definition log_encode_safe_opcode_def:
   log_encode_safe_opcode opc <=>
     opc = ALLOCA \/ opc = ADD \/ opc = AND \/ opc = MLOAD \/
-    opc = MSTORE \/ opc = MCOPY \/ opc = CALLDATASIZE \/ opc = CALLDATACOPY
+    opc = MSTORE \/ opc = MCOPY \/ opc = CALLDATASIZE \/ opc = CALLDATACOPY \/
+    opc = NOT
 End
 
 Theorem log_encode_alloca_external[local]:
@@ -29,7 +30,7 @@ Theorem log_encode_copy_external[local]:
   log_encode_external t = log_encode_external s
 Proof
   strip_tac >>
-  gvs[step_inst_base_def, AllCaseEqs(), mcopy_def,
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs(), mcopy_def,
       write_memory_with_expansion_def, log_encode_external_def]
 QED
 
@@ -38,20 +39,22 @@ Theorem log_encode_step_external:
   log_encode_external t = log_encode_external s
 Proof
   simp_tac bool_ss [log_encode_safe_opcode_def] >> strip_tac
-  >- (gvs[step_inst_base_def, AllCaseEqs()] >>
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
       drule log_encode_alloca_external >> simp[])
-  >- gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs(),
+  >- gvs[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs(),
          log_encode_external_def, update_var_def]
-  >- gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs(),
+  >- gvs[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs(),
          log_encode_external_def, update_var_def]
-  >- gvs[step_inst_base_def, exec_read1_def, AllCaseEqs(),
+  >- gvs[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs(),
          log_encode_external_def, update_var_def]
-  >- gvs[step_inst_base_def, exec_write2_def, AllCaseEqs(),
+  >- gvs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs(),
          mstore_def, write_memory_with_expansion_def, log_encode_external_def]
   >- (irule log_encode_copy_external >> qexists_tac `i` >> asm_simp_tac bool_ss [])
-  >- gvs[step_inst_base_def, exec_read0_def, AllCaseEqs(),
-         log_encode_external_def, update_var_def] >>
-  irule log_encode_copy_external >> qexists_tac `i` >> asm_simp_tac bool_ss []
+  >- gvs[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs(),
+         log_encode_external_def, update_var_def]
+  >- (irule log_encode_copy_external >> qexists_tac `i` >> asm_simp_tac bool_ss []) >>
+  gvs[step_inst_base_opcode_eqs, exec_pure1_def, AllCaseEqs(),
+      log_encode_external_def, update_var_def]
 QED
 
 Theorem log_encode_run_external:

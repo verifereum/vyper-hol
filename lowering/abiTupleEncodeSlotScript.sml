@@ -1,9 +1,10 @@
 Theory abiTupleEncodeSlot
 Ancestors
+  abiDecoderRange
   abiTupleEncodeInput abiBuiltinEncodeCorrect abiBuiltinEncodeWord abiEncoderInput
   abiEncoderInputFrame abiEncoderWrites abiEncoderBytes abiDecoderReentry abiDecoderContract
   abiDecoderGuards abiDecoderFrameCompose compileEnv context emitHelper emitHelperProps
-  exprLoweringProps valueEncoding valueEncodingProps venomState venomExecSemantics words list
+  exprLoweringProps valueEncoding valueEncodingDefs valueEncodingProps venomState venomExecSemantics words list
   arithmetic abiTupleProps abiBuiltinPrefix abiDecoderReentryAddress abiDecoderDynamicLoopSetup
   venomInst rich_list
 

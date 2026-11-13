@@ -2,8 +2,8 @@ Theory abiValidWrapped
 Ancestors
   vyperABIValid abiValidSingletonArray vyperABI vyperValue contractABI words list abiValidSingletonPrefix
   abiValidDecodedMetadata abiValidStatic abiDecoderCoherence abiDecoderTypedContract
-  abiDecoderContract abiDecoderReentry compileEnv valueEncoding venomState arithmetic
-  abiValidSingletonBytes abiValidSingletonSetup abiDecoderValidBytes abiDecoderBytes
+  abiDecoderRange abiDecoderContract abiDecoderReentry compileEnv valueEncoding venomState arithmetic
+  abiValidBytes abiValidSingletonBytes abiValidSingletonSetup abiDecoderValidBytes abiDecoderBytes
   abiDecoderSingletonSetup abiDecoderReservation abiEncoder emitHelperProps abiDecoderWrapped
   abiDecoderWrappedBytesFragment abiDecoderBytesTyped abiDecoderTypedCompose abiDecoderGuards
   abiDecoderReentryPointer exprLoweringProps emitHelper venomExecSemantics venomInst rich_list
@@ -52,13 +52,14 @@ Theorem abi_valid_singleton_prefix_pre_from_conversion:
   TAKE (LENGTH (enc (vyper_to_abi_type env ty)
     (dec (vyper_to_abi_type env ty) (DROP (abi_head_word bs) bs)))) (DROP (abi_head_word bs) bs) =
     enc (vyper_to_abi_type env ty) (dec (vyper_to_abi_type env ty) (DROP (abi_head_word bs) bs)) /\
-  abi_decoder_ranges opc hi src dst sb (LENGTH bs) d (type_memory_bytes ce ty) b cap s /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc s) = bs /\
+  abi_decoder_ranges opc base_op hi src dst B sb (LENGTH bs) d (type_memory_bytes ce ty) b cap s /\
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc s) = bs /\
   abi_decoder_operand_live st.cs_next_var src /\
-  abi_decoder_operand_live st.cs_next_var dst /\ abi_decoder_operand_live st.cs_next_var hi ==>
+  abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\ abi_decoder_operand_live st.cs_next_var hi ==>
   abi_valid_singleton_prefix_pre ce env sf ty tv bs
     (dec (vyper_to_abi_type env ty) (DROP (abi_head_word bs) bs)) v
-    st src dst opc hi sb d b cap s
+    st src dst opc base_op hi B sb d b cap s
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `dec (Tuple [vyper_to_abi_type env ty]) bs =
@@ -73,14 +74,15 @@ Theorem abi_valid_wrapped_array_prefix_pre:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   evaluate_abi_decode env (TupleT [ArrayT ty (Dynamic maxn)]) bs = INL (ArrayV (TupleV [v])) /\
   ~is_dynamic (vyper_to_abi_type env ty) /\
-  abi_decoder_ranges opc hi src dst sb (LENGTH bs)
+  abi_decoder_ranges opc base_op hi src dst B sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc s) = bs /\
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc s) = bs /\
   abi_decoder_operand_live st.cs_next_var src /\
-  abi_decoder_operand_live st.cs_next_var dst /\ abi_decoder_operand_live st.cs_next_var hi ==>
+  abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\ abi_decoder_operand_live st.cs_next_var hi ==>
   abi_valid_singleton_prefix_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) bs
     (dec (Array NONE (vyper_to_abi_type env ty)) (DROP (abi_head_word bs) bs)) v
-    st src dst opc hi sb d b cap s
+    st src dst opc base_op hi B sb d b cap s
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `is_dynamic (vyper_to_abi_type env (ArrayT ty (Dynamic maxn)))` by
@@ -106,11 +108,12 @@ QED
 (* Valid wrapped Bytes/String input establishes the real singleton child input. *)
 
 Definition abi_valid_wrapped_bytes_pre_def:
-  abi_valid_wrapped_bytes_pre n at bs payload st src dst hi sb d s <=>
+  abi_valid_wrapped_bytes_pre n at bs payload st src dst base_op hi B sb d s <=>
     (at = Bytes NONE \/ at = String) /\ vyper_decode_valid_enc (Tuple [at]) bs /\
     dec (Tuple [at]) bs = ListV [contractABI$BytesV payload] /\ LENGTH payload <= n /\
-    mem_bytes_at sb (LENGTH bs) (abi_decode_source MLOAD s) = bs /\
-    n < dimword (:256) /\ sb + LENGTH bs < dimword (:256) /\
+    mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source MLOAD s) = bs /\
+    n < dimword (:256) /\ B + sb + LENGTH bs < dimword (:256) /\
+    eval_operand base_op s = SOME (n2w B) /\
     d + abi_decode_bytes_copy_size n < dimword (:256) /\
     eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
     fresh_vars_wrt st s /\
@@ -119,8 +122,8 @@ Definition abi_valid_wrapped_bytes_pre_def:
 End
 
 Theorem abi_valid_wrapped_bytes_setup_pre:
-  abi_valid_wrapped_bytes_pre n at bs payload st src dst hi sb d s ==>
-  abi_valid_singleton_setup_pre st src dst MLOAD hi sb d (abi_head_word bs) s
+  abi_valid_wrapped_bytes_pre n at bs payload st src dst base_op hi B sb d s ==>
+  abi_valid_singleton_setup_pre st src dst MLOAD base_op hi B sb d (abi_head_word bs) s
 Proof
   simp_tac bool_ss [abi_valid_wrapped_bytes_pre_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -134,23 +137,32 @@ Proof
 QED
 
 Theorem abi_valid_wrapped_bytes_child_pre:
-  abi_valid_wrapped_bytes_pre n at bs payload st src dst hi sb d s /\
+  abi_valid_wrapped_bytes_pre n at bs payload st src dst base_op hi B sb d s /\
+  (base_op <> Lit 0w ==> B + sb + LENGTH bs <= d \/
+    d + abi_decode_bytes_copy_size n <= B + sb) /\
   eval_operand child_src t = SOME (n2w (sb + abi_head_word bs)) /\
   eval_operand child_dst t = SOME (n2w d) /\ fresh_vars_wrt st' t /\
   (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
   t.vs_memory = s.vs_memory ==>
   abi_decoder_valid_bytes_pre n at (DROP (abi_head_word bs) bs) payload
-    st' child_src child_dst MLOAD hi (sb + abi_head_word bs) d t
+    st' child_src child_dst MLOAD base_op hi B (sb + abi_head_word bs) d t
 Proof
-  strip_tac >> qpat_x_assum `abi_valid_wrapped_bytes_pre _ _ _ _ _ _ _ _ _ _ _`
+  strip_tac >> qpat_x_assum `abi_valid_wrapped_bytes_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_valid_wrapped_bytes_pre_def]) >>
   drule_all abi_valid_singleton_bytes_decode >> strip_tac >>
   drule_all abi_valid_singleton_bytes_load >> strip_tac >>
-  `sb + abi_head_word bs + LENGTH (DROP (abi_head_word bs) bs) < dimword (:256)` by
+  `B + sb + abi_head_word bs + LENGTH (DROP (abi_head_word bs) bs) < dimword (:256)` by
     (simp[LENGTH_DROP] >> decide_tac) >>
-  `mem_bytes_at (sb + abi_head_word bs) (LENGTH (DROP (abi_head_word bs) bs))
+  `mem_bytes_at (B + (sb + abi_head_word bs)) (LENGTH (DROP (abi_head_word bs) bs))
     (abi_decode_source MLOAD t) = DROP (abi_head_word bs) bs` by
     fs[abi_decode_source_def, Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
+  `32 + LENGTH payload <= LENGTH (DROP (abi_head_word bs) bs)` by
+    (drule_all abi_valid_bytes_decode >> simp[]) >>
+  `base_op <> Lit 0w ==> B + (sb + abi_head_word bs) + 32 + LENGTH payload <= d \/
+     d + abi_decode_bytes_copy_size n <= B + (sb + abi_head_word bs)` by
+    (strip_tac >> qpat_x_assum `base_op <> Lit 0w ==> _` drule >>
+     fs[LENGTH_DROP] >> decide_tac) >>
+  `eval_operand base_op t = SOME (n2w B)` by metis_tac[] >>
   asm_simp_tac bool_ss [abi_decoder_valid_bytes_pre_def, abi_decode_source_opcode_def] >>
   Cases_on `hi = Lit 0w` >> simp[] >>
   qpat_x_assum `_ \/ _` mp_tac >> simp[] >> strip_tac >>
@@ -158,11 +170,13 @@ Proof
 QED
 
 Theorem abi_valid_wrapped_bytes_setup:
-  abi_decode_singleton_setup dst src MLOAD hi st = ((child_src,child_dst),st') /\
-  abi_valid_wrapped_bytes_pre n at bs payload st src dst hi sb d s ==>
+  abi_decode_singleton_setup dst src MLOAD base_op hi st = ((child_src,child_dst),st') /\
+  abi_valid_wrapped_bytes_pre n at bs payload st src dst base_op hi B sb d s /\
+  (base_op <> Lit 0w ==> B + sb + LENGTH bs <= d \/
+    d + abi_decode_bytes_copy_size n <= B + sb) ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_valid_bytes_pre n at (DROP (abi_head_word bs) bs) payload
-      st' child_src child_dst MLOAD hi (sb + abi_head_word bs) d t /\
+      st' child_src child_dst MLOAD base_op hi B (sb + abi_head_word bs) d t /\
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_data_section = s.vs_data_section /\
@@ -185,9 +199,11 @@ QED
 (* Execute the actual dynamic singleton constructor from valid ABI bytes. *)
 
 Theorem abi_valid_wrapped_bytes_sequence:
-  compile_abi_decode_to_buf dst src MLOAD hi
+  compile_abi_decode_to_buf dst src MLOAD base_op hi
     (DecComplex T [(DecBytestring n,32,mem_sz)]) st = ((),st') /\
-  abi_valid_wrapped_bytes_pre n at bs payload st src dst hi sb d s ==>
+  abi_valid_wrapped_bytes_pre n at bs payload st src dst base_op hi B sb d s /\
+  (base_op <> Lit 0w ==> B + sb + LENGTH bs <= d \/
+    d + abi_decode_bytes_copy_size n <= B + sb) ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     val_in_memory (BaseTV (BytesT (Dynamic n))) (vyperValue$BytesV payload) d t.vs_memory /\
     val_in_memory (BaseTV (StringT n)) (StringV (MAP (CHR o w2n) payload)) d t.vs_memory /\
@@ -196,18 +212,19 @@ Theorem abi_valid_wrapped_bytes_sequence:
     fresh_vars_wrt st' t /\ t.vs_halted = s.vs_halted /\
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w)
 Proof
-  strip_tac >> qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  strip_tac >> qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_wrapped_bytes_phases, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >>
-  rename1 `abi_decode_singleton_setup dst src MLOAD hi st = (child_ops,c1)` >>
+  rename1 `abi_decode_singleton_setup dst src MLOAD base_op hi st = (child_ops,c1)` >>
   PairCases_on `child_ops` >> gvs[] >>
-  rename1 `abi_decode_singleton_setup dst src MLOAD hi st = ((child_src,child_dst),c1)` >>
-  `compile_abi_decode_to_buf child_dst child_src MLOAD hi (DecBytestring n) c1 =
+  rename1 `abi_decode_singleton_setup dst src MLOAD base_op hi st = ((child_src,child_dst),c1)` >>
+  `compile_abi_decode_to_buf child_dst child_src MLOAD base_op hi (DecBytestring n) c1 =
     ((),st')` by
     (qpat_x_assum `_ = ((),st')` mp_tac >> asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF]) >>
-  drule_all abi_valid_wrapped_bytes_setup >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [GSYM ADD_ASSOC] abi_valid_wrapped_bytes_setup) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK mid` >>
-  drule_all abi_decoder_valid_bytes_sequence >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss []
+    (Q.INST [`opc` |-> `MLOAD`] abi_decoder_valid_bytes_sequence)) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts c1 st') mid = OK t` >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_bytes_shape >> strip_tac >>

@@ -16,7 +16,7 @@
 
 Theory removeUnusedSsaProofs
 Ancestors
-  removeUnusedProofs removeUnusedDefs
+  venomExecProofs removeUnusedProofs removeUnusedDefs
   passSimulationDefs passSimulationProps analysisSimProps
   livenessProofs livenessDefs
   dfAnalyzeDefs dfAnalyzeProps dfHelperProps
@@ -30,7 +30,6 @@ Ancestors
   venomWfProps
 
 (* ===== Fixpoint bridge: edge_transfer ⊆ live_exit ===== *)
-
 
 (* ===== NOP output liveness helpers ===== *)
 
@@ -182,7 +181,7 @@ Proof
   `MEM p (cfg_analyze fn).cfg_dfs_pre` by
     (irule fn_reachable_in_cfg_dfs_pre >> simp[]) >>
   `MEM x (cfg_succs_of (cfg_analyze fn) p)` by
-    (irule fn_cfg_edge_succs >> simp[]) >>
+    (irule fn_cfg_edge_cfg_succs >> simp[]) >>
   (* v live at x entry → v live at p exit (cross-block) *)
   `MEM v (live_vars_at (liveness_analyze fn) p
                        (LENGTH p_bb.bb_instructions))` by (

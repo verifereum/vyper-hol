@@ -2,7 +2,7 @@ Theory ctorDeployMemoryRunMemPrefixLayout
 Ancestors
   ctorDeployMemoryRunMemPrefixSource ctorDeployInitcode ctorDeployShape
   ctorDeployLoweringCode ctorDeployLoweringDefs ctorDeployDefs e2eDeployDefs
-  compileVyper moduleLowering compileEnv fragExec vyperCompiler context
+  compileVyper moduleLowering compileEnv loweringStateRelDefs fragExec vyperCompiler context
   supportedProgram supportedNames ctorRegisterArgs deployUnitProducers venomInst e2eEntry o1PassContract venomState vyperTypeContractSoundness words loweringShapeProps loweringShapeSource ctorGeneratorShape list ctorUnitShape loweringShapeDefs
 
 Theorem ctor_prefix_package_nonpayable:
@@ -11,7 +11,7 @@ Theorem ctor_prefix_package_nonpayable:
   vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
     SOME (mut,F,args,[],NoneT,ffbody) /\ mut <> Payable /\
   set_constructor_package_target rpolicy.rpol_target
-    (package_constructor tops F (assign_nkeys tops 0) cf) =
+    (package_constructor tops T (K global_nonreentrant_slot) cf) =
     (cenv,pos_args,pay,nr,nkey,ut,cb,ret) ==>
   ~pay
 Proof
@@ -48,7 +48,7 @@ Theorem ctor_prefix_code_restrict:
     (fbody,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,se,sp,sf,func) /\
   (!ce args pay nr key ut fbody ret.
     set_constructor_package_target rpolicy.rpol_target
-      (package_constructor tops F (assign_nkeys tops 0) cf) =
+      (package_constructor tops T (K global_nonreentrant_slot) cf) =
         (ce,args,pay,nr,key,ut,fbody,ret) ==> ~pay) /\
   classify_functions tops = (exts,ints,fb,SOME cf) ==>
   ?cv nv s1 s2 st_pay.
@@ -165,48 +165,10 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem package_constructor_shape_ok[local]:
-  !tops use_trans nkey_map target cf cenv args pay nr nkey trans fbody ret.
-    supported_program tops /\
-    SND (SND (SND (classify_functions tops))) = SOME cf /\
-    set_constructor_package_target target
-      (package_constructor tops use_trans nkey_map cf) =
-      (cenv,args,pay,nr,nkey,trans,fbody,ret) ==>
-    cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
-    ~supported_stmts_expr_exists expr_shape_root fbody
-Proof
-  rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
-  drule classify_functions_ctor_mem >> strip_tac >>
-  drule_all supported_program_function >> strip_tac >>
-  drule supported_function_body_shape >> strip_tac >>
-  gvs[package_constructor_def, set_constructor_package_target_def,
-      update_cenv_nonreentrant_def, ctor_prefix_env_return_pc] >>
-  simp[cenv_static_ok_def] >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
-QED
-
-Theorem package_internal_fn_ctor_shape_ok[local]:
-  !tops use_trans nkey_map imm target src.
-    supported_program tops /\
-    MEM src (FST (SND (classify_functions tops))) ==>
-    internal_fn_shape_ok
-      (set_internal_package_target target
-        (package_internal_fn tops use_trans nkey_map T imm src))
-Proof
-  rpt gen_tac >> PairCases_on `src` >> strip_tac >>
-  drule (iffLR MEM_classify_internal) >> strip_tac >>
-  drule_all supported_program_function >> strip_tac >>
-  drule supported_function_body_shape >> strip_tac >>
-  simp[package_internal_fn_def, set_internal_package_target_def,
-       update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
-       cenv_static_ok_def] >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
-QED
-
 Theorem ctor_prefix_lowering_run[local]:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops ==>
+    supported_program tops /\ supported_program_deploy tops ==>
     ?has_constructor imm args ctor_internal_fns cenv fbody pay nr nkey trans.
       run_deploy_lowering has_constructor rpolicy runtime_bc imm args 0
         ctor_internal_fns cenv fbody pay nr nkey trans "__deploy" = SOME unit /\
@@ -226,17 +188,17 @@ Proof
   Cases_on `ctor_fn` >> gvs[internal_fn_descriptors_def] >>
   rename1 `classify_functions tops = (ext_fns, int_fns, fb_fn, SOME cf)` >>
   `SND (SND (SND (classify_functions tops))) = SOME cf` by simp[] >>
-  drule_all package_constructor_shape_ok >> strip_tac >> simp[] >>
+  drule_all ctorDeployShapeTheory.package_constructor_shape_ok >> strip_tac >> simp[] >>
   `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
                    (FST (SND (classify_functions tops))))`
-    by metis_tac[supported_names_internal_names_distinct,
-                 supported_program_names, supported_declaration_names_unique] >>
+    by metis_tac[classified_internal_names_distinct,
+                 supported_program_internal_names] >>
   qspecl_then [`tops`, `T`] mp_tac internal_descriptors_ok >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
   gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
      internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
   simp[EVERY_MEM] >> rpt strip_tac >>
-  irule package_internal_fn_ctor_shape_ok >> simp[]
+  irule ctorDeployShapeTheory.package_internal_fn_ctor_shape_ok >> simp[]
 QED
 
 Theorem ctor_prefix_entry_not_halted:
@@ -277,7 +239,6 @@ Proof
   rename1 `_ = (u, st1)` >> Cases_on `u` >>
   drule compile_generate_deploy_shape >> simp[] >> strip_tac >>
   drule_all shape_state_source_certificates >> strip_tac >>
-  drule_all raw_checked_internal_segments >> strip_tac >>
   `package_internal_blocks (internal_fn_descriptors ctor_internal_fns)
      (entry_blocks ++ FLAT segs) =
    SOME (entry_blocks,
@@ -299,7 +260,7 @@ QED
 
 Theorem ctor_prefix_lowered_entry_label:
   lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
-  supported_program tops /\
+  supported_program tops /\ supported_program_deploy tops /\
   lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn ==>
   fn_entry_label fn = SOME "__deploy"
 Proof
@@ -316,6 +277,7 @@ Theorem ctor_prefix_task_entry_label:
 Proof
   rpt strip_tac >>
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
-   supported_program tops` by fs[deploy_phases_def, deploy_source_ok_def] >>
+   supported_program tops /\ supported_program_deploy tops` by
+    fs[deploy_phases_def, deploy_source_ok_def] >>
   drule_all ctor_prefix_lowered_entry_label >> simp[]
 QED

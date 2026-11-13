@@ -11,8 +11,8 @@ Ancestors
   immutableCopyExecution valueEncodingProps valueEncodingProofs
   stmtSimDefs exprLoweringProps loweringPosts fragGasPathMem fragGasMode
   fragExec fragExecMem instMemFrontier freshWrites venomMemDefs venomInstProps
-  exprLowering stmtLowering emitHelper emitHelperProps compileEnv
-  valueEncoding vfmConstants vyperValue vyperInterpreter
+  exprLowering stmtLowering emitHelper emitHelperProps compileEnv loweringStateRelDefs
+  valueEncoding valueEncodingDefs vfmConstants vyperValue vyperInterpreter
   venomExecSemantics venomState venomInst context
   words list rich_list finite_map arithmetic
 Libs
@@ -97,6 +97,8 @@ Theorem reason_code_revert_path_mem:
     ?u. gas_path_mem ctx func t 0 (Abort Revert_abort u)
 Proof
   rpt gen_tac >> strip_tac >>
+  `post_value_type cenv se = expr_type se` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   qpat_x_assum `expr_type se = _` (fn th =>
     RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
   `?ty p. vv = LocatedValue ty p /\ ~is_word_type ty /\
@@ -187,7 +189,7 @@ Proof
    MEM (mk_inst (id0 + 3) ALLOCA [Lit (n2w Z)] ["%" ++ toString (v0 + 2)])
        (fn_insts func) /\
    MEM allocI (fn_insts func) /\
-   MEM (mk_inst (j + 5) ALLOCA [Lit 32w] ["%" ++ toString (u0 + 4)])
+   MEM (mk_inst (j + 6) ALLOCA [Lit 32w] ["%" ++ toString (u0 + 5)])
        (fn_insts func)` by
     (rpt conj_tac >>
      qpat_assum `!i. MEM i ecode ==> MEM i (fn_insts func)` irule >>
@@ -309,8 +311,8 @@ Proof
     (irule room_by_fields >>
      qexists `s1 with <| vs_allocas := A; vs_alloca_next := N |>` >>
      simp[]) >>
-  `j + 5 <> id0 /\ j + 5 <> id0 + 3 /\ j + 5 <> id0 + 4` by decide_tac >>
-  `FLOOKUP s3.vs_allocas (j + 5) = FLOOKUP t.vs_allocas (j + 5)` by
+  `j + 6 <> id0 /\ j + 6 <> id0 + 3 /\ j + 6 <> id0 + 4` by decide_tac >>
+  `FLOOKUP s3.vs_allocas (j + 6) = FLOOKUP t.vs_allocas (j + 6)` by
     metis_tac[] >>
   `v0 + 2 < u0` by decide_tac >>
   `!x. Var out = Var x ==> !k. x <> "%" ++ toString (u0 + k)` by
@@ -338,11 +340,11 @@ Proof
   `B + 64 + Z <= s3.vs_alloca_next /\ TP + Z <= s3.vs_alloca_next /\
    s3.vs_alloca_next < dimword (:256)` by
     (asm_rewrite_tac[] >> decide_tac) >>
-  `FLOOKUP s3.vs_allocas (j + 5) = NONE ==>
+  `FLOOKUP s3.vs_allocas (j + 6) = NONE ==>
    s3.vs_alloca_next + 32 < dimword (:256)` by
     (strip_tac >>
      qspecl_then [`func`, `s3`,
-       `mk_inst (j + 5) ALLOCA [Lit 32w] ["%" ++ toString (u0 + 4)]`,
+       `mk_inst (j + 6) ALLOCA [Lit 32w] ["%" ++ toString (u0 + 5)]`,
        `32w`, `ctx`] mp_tac alloca_room_fresh >>
      impl_tac
      >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -350,13 +352,13 @@ Proof
          qpat_x_assum `FLOOKUP s3.vs_allocas _ = NONE` mp_tac >>
          simp_tac (srw_ss()) [mk_inst_def, FLOOKUP_DEF]) >>
      disch_then (mp_tac o CONJUNCT1) >> simp[dimword_def]) >>
-  `!z m. FLOOKUP s3.vs_allocas (j + 5) = SOME (z, m) ==>
+  `!z m. FLOOKUP s3.vs_allocas (j + 6) = SOME (z, m) ==>
          z + 32 <= s3.vs_alloca_next /\ (z + 32 <= TP \/ TP + 32 <= z)` by
     (rpt gen_tac >> strip_tac >>
-     `FLOOKUP t.vs_allocas (j + 5) = SOME (z, m)` by metis_tac[] >>
+     `FLOOKUP t.vs_allocas (j + 6) = SOME (z, m)` by metis_tac[] >>
      `m = 32` by
-       (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `j + 5`, `32`,
-          `["%" ++ toString (u0 + 4)]`] mp_tac state_rel_site_size >>
+       (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `j + 6`, `32`,
+          `["%" ++ toString (u0 + 5)]`] mp_tac state_rel_site_size >>
         impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
         disch_then drule >> simp[]) >>
      `z + m <= t.vs_alloca_next` by metis_tac[alloca_next_valid_def] >>
@@ -371,7 +373,7 @@ Proof
            disch_then drule >> simp[]) >>
         qpat_x_assum `allocas_non_overlapping t`
           (mp_tac o REWRITE_RULE [allocas_non_overlapping_def]) >>
-        disch_then (qspecl_then [`j + 5`, `id0 + 3`, `z`, `m`, `x0`, `x1`]
+        disch_then (qspecl_then [`j + 6`, `id0 + 3`, `z`, `m`, `x0`, `x1`]
           mp_tac) >>
         asm_rewrite_tac[] >> fs[] >> decide_tac) >>
      asm_rewrite_tac[] >> decide_tac) >>

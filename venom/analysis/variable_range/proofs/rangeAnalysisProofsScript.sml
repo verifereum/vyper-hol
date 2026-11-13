@@ -1,16 +1,15 @@
 (*
  * Range Analysis — Proofs
  *
- * Internal proof machinery for range analysis soundness.
- * Consumer-facing theorems are in variableRangeAnalysisPropsScript.sml.
+ * Range analysis soundness, re-exported by variableRangeAnalysisScript.sml.
  *)
 
 Theory rangeAnalysisProofs
 Ancestors
   rangeAnalysisDefs rangeEvalDefs rangeEvalProofs valueRangeDefs valueRangeProofs
   venomExecSemantics venomExecProofs venomExecProps venomState venomInst venomInstProps venomWf dfAnalyzeWidenDefs
-  dfAnalyzeWidenProofs dfAnalyzeWidenProps cfgAnalysisProps
-  dfgAnalysisProps dfgCorrectnessProof
+  dfAnalyzeWidenProofs cfgAnalysisProps
+  dfgAnalysisProps dfgCorrectnessProof dfgSoundDefs cfgHelpers
 
 (* ===== rs_write helper ===== *)
 
@@ -30,7 +29,7 @@ QED
 
 (* If in_range_state holds and we look up a variable, its range contains
    the concrete value. Bridges rs_lookup and in_range_state. *)
-Theorem rs_lookup_in_range[local]:
+Theorem rs_lookup_in_range:
   ∀rs env v w.
     in_range_state rs env ∧ FLOOKUP env v = SOME w ⇒
     in_range (rs_lookup rs v) w
@@ -40,26 +39,6 @@ Proof
 QED
 
 (* ===== Lattice ===== *)
-
-Theorem range_join_two_sound:
-  ∀s1 s2 env.
-    in_range_state s1 env ∧ in_range_state s2 env ⇒
-    in_range_state (range_join_two s1 s2) env
-Proof
-  rw[in_range_state_def, range_join_two_def] >>
-  rpt strip_tac >>
-  `FINITE (FDOM s1 ∩ FDOM s2)` by
-    simp[pred_setTheory.FINITE_INTER, finite_mapTheory.FDOM_FINITE] >>
-  fs[finite_mapTheory.FLOOKUP_FUN_FMAP] >>
-  Cases_on `v ∈ FDOM s1 ∩ FDOM s2` >> fs[] >>
-  fs[pred_setTheory.IN_INTER] >>
-  `∃r1. FLOOKUP s1 v = SOME r1` by
-    fs[finite_mapTheory.FLOOKUP_DEF] >>
-  `∃r2. FLOOKUP s2 v = SOME r2` by
-    fs[finite_mapTheory.FLOOKUP_DEF] >>
-  gvs[rs_lookup_def] >>
-  irule in_range_union_l >> res_tac
-QED
 
 Theorem range_widen_states_sound:
   ∀old_st new_st env.
@@ -105,10 +84,10 @@ Proof
   >> `w2i w ≠ 0` by (res_tac >> gvs[integer_wordTheory.w2i_eq_0])
   >> gvs[in_range_def]
   >- (irule in_range_clamp_intro >> gvs[in_range_def] >>
-      intLib.ARITH_TAC)
+      Omega.OMEGA_TAC)
   >> irule in_range_intersect_intro >> simp[in_range_def]
   >> mp_tac (Q.SPEC `w` (INST_TYPE [alpha |-> ``:256``] integer_wordTheory.w2i_le))
-  >> simp[INT256_MAX_def] >> intLib.ARITH_TAC
+  >> simp[INT256_MAX_def] >> Omega.OMEGA_TAC
 QED
 
 Theorem range_apply_eq_sound:
@@ -185,11 +164,11 @@ Proof
       qabbrev_tac `nn = w2n c` >>
       qabbrev_tac `dd = dimword(:256)` >>
       qabbrev_tac `hh = INT_MIN(:256)` >>
-      intLib.ARITH_TAC)) >>
-  TRY (`w2n w < INT_MIN(:256)` by intLib.ARITH_TAC >>
+      Omega.OMEGA_TAC)) >>
+  TRY (`w2n w < INT_MIN(:256)` by Omega.OMEGA_TAC >>
        `w2i w = &(w2n w)` by simp[integer_wordTheory.w2i_eq_w2n] >>
        `w2i c = &(w2n c)` by simp[integer_wordTheory.w2i_eq_w2n] >>
-       intLib.ARITH_TAC) >>
+       Omega.OMEGA_TAC) >>
   `w2n w < INT_MIN(:256)` by (
     CCONTR_TAC >> fs[arithmeticTheory.NOT_LESS] >>
     `w2i w = &(w2n w) - &dimword(:256)` by
@@ -201,10 +180,10 @@ Proof
     qabbrev_tac `nn = w2n w` >>
     qabbrev_tac `dd = dimword(:256)` >>
     qabbrev_tac `hh = INT_MIN(:256)` >>
-    intLib.ARITH_TAC) >>
+    Omega.OMEGA_TAC) >>
   `w2i w = &(w2n w)` by simp[integer_wordTheory.w2i_eq_w2n] >>
   `w2i c = &(w2n c)` by simp[integer_wordTheory.w2i_eq_w2n] >>
-  intLib.ARITH_TAC
+  Omega.OMEGA_TAC
 QED
 
 Theorem range_apply_compare_sound:
@@ -242,26 +221,26 @@ Proof
   TRY (mp_tac (INST_TYPE [alpha |-> ``:256``] integer_wordTheory.w2i_ge
                |> Q.SPEC `w`) >> simp[INT256_MIN_def] >> NO_TAC) >>
   (* Layer 2: Signed comparison cases *)
-  TRY intLib.ARITH_TAC >>
+  TRY Omega.OMEGA_TAC >>
   (* Layer 3: Bridge via w2i_unsigned_bridge *)
-  `0 < w2i c` by intLib.ARITH_TAC >>
+  `0 < w2i c` by Omega.OMEGA_TAC >>
   mp_tac (Q.SPECL [`c`, `w`] w2i_unsigned_bridge) >> simp[] >> strip_tac >>
   (* Layer 3a: strict forward (w2n w < w2n c) *)
   TRY (`w2n w < w2n c` by fs[arithmeticTheory.GREATER_DEF] >>
-       res_tac >> intLib.ARITH_TAC) >>
+       res_tac >> Omega.OMEGA_TAC) >>
   (* Layer 3b: non-strict forward (w2n w ≤ w2n c from negated strict) *)
   TRY (`w2n w ≤ w2n c` by
          fs[arithmeticTheory.NOT_LESS, arithmeticTheory.NOT_GREATER,
             arithmeticTheory.GREATER_DEF] >>
-       res_tac >> intLib.ARITH_TAC) >>
+       res_tac >> Omega.OMEGA_TAC) >>
   (* Layer 3c: reverse direction — need 0 ≤ w2i w from vr_lo *)
   `in_range (rs_lookup rs s) w` by
     (mp_tac (Q.SPECL [`rs`, `env`, `s`, `w`] rs_lookup_in_range) >> simp[]) >>
   `0 ≤ w2i w` by
     (Cases_on `rs_lookup rs s` >>
-     gvs[vr_is_top_def, vr_lo_def, in_range_def] >> intLib.ARITH_TAC) >>
+     gvs[vr_is_top_def, vr_lo_def, in_range_def] >> Omega.OMEGA_TAC) >>
   TRY (`w2n c < w2n w` by fs[arithmeticTheory.GREATER_DEF] >>
-       res_tac >> intLib.ARITH_TAC) >>
+       res_tac >> Omega.OMEGA_TAC) >>
   `w2n c ≤ w2n w` by
     fs[arithmeticTheory.NOT_LESS, arithmeticTheory.NOT_GREATER,
        arithmeticTheory.GREATER_DEF] >>
@@ -355,27 +334,6 @@ Proof
 QED
 
 (* ===== Transfer function soundness ===== *)
-
-(* in_range_state is preserved when the environment only changes at
-   variables not tracked by rs (or tracked with compatible ranges). *)
-Theorem in_range_state_env_equiv[local]:
-  ∀rs env env'.
-    in_range_state rs env ∧
-    (∀v. v ∈ FDOM rs ⇒ FLOOKUP env' v = FLOOKUP env v) ⇒
-    in_range_state rs env'
-Proof
-  rw[in_range_state_def] >>
-  `v ∈ FDOM rs` by fs[finite_mapTheory.FLOOKUP_DEF] >>
-  `FLOOKUP env' v = FLOOKUP env v` by res_tac >>
-  gvs[] >> res_tac
-QED
-
-(* For eval_range returning VR_Top: trivially sound for any word value *)
-Theorem eval_range_top_sound[local]:
-  ∀w. in_range VR_Top w
-Proof
-  simp[in_range_top]
-QED
 
 (* rs_write is sound when env changes: non-output vars preserved,
    output variable gets a value in the new range. *)
@@ -522,23 +480,7 @@ Triviality vr_union_absorb:
 Proof
   Cases_on `a` >> Cases_on `b` >>
   simp[vr_union_def, integerTheory.INT_MIN, integerTheory.INT_MAX] >>
-  intLib.ARITH_TAC
-QED
-
-(* vr_widen is absorptive *)
-Triviality vr_widen_absorb:
-  ∀a b. vr_widen (vr_widen a b) b = vr_widen a b
-Proof
-  Cases_on `a` >> Cases_on `b` >>
-  simp[vr_widen_def, integerTheory.int_gt] >>
-  rpt COND_CASES_TAC >> gvs[vr_widen_def, integerTheory.int_gt]
-QED
-
-(* vr_widen is idempotent *)
-Triviality vr_widen_idem:
-  ∀a. vr_widen a a = a
-Proof
-  Cases_on `a` >> simp[vr_widen_def, integerTheory.int_gt]
+  Omega.OMEGA_TAC
 QED
 
 (* range_normalize is idempotent *)
@@ -630,20 +572,6 @@ Proof
   simp[range_normalize_idem]
 QED
 
-(* Instantiation helper for normalize_join_stable with idem *)
-Triviality normalize_join_self:
-  ∀x. range_normalize (range_join_two (range_normalize x) x) =
-      range_normalize x
-Proof
-  gen_tac >> irule normalize_join_stable >> simp[range_normalize_fdom] >>
-  rpt strip_tac >>
-  `(range_normalize x) ' k = x ' k` by
-    (irule range_normalize_value >> simp[]) >>
-  `k ∈ FDOM x` by
-    metis_tac[range_normalize_fdom, pred_setTheory.SUBSET_DEF] >>
-  simp[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF, vr_union_idem]
-QED
-
 (* range_join_opt absorption *)
 Triviality range_join_opt_absorb:
   ∀a b. range_join_opt (range_join_opt a b) b = range_join_opt a b
@@ -683,138 +611,8 @@ Proof
        pred_setTheory.INTER_SUBSET]
 QED
 
-(* range_widen_states is idempotent: widen(x, x) = x *)
-Triviality range_widen_states_idem:
-  ∀x. range_widen_states x x = x
-Proof
-  gen_tac >> simp[range_widen_states_def] >>
-  `FINITE (FDOM x)` by simp[finite_mapTheory.FDOM_FINITE] >>
-  simp[finite_mapTheory.fmap_eq_flookup, finite_mapTheory.FLOOKUP_FUN_FMAP] >>
-  rpt strip_tac >> Cases_on `x' ∈ FDOM x` >>
-  simp[finite_mapTheory.FLOOKUP_DEF] >>
-  simp[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF,
-       vr_widen_def] >>
-  Cases_on `x ' x'` >> simp[vr_widen_def, integerTheory.int_gt]
-QED
-
-(* vr_widen VR_Top x = VR_Top *)
-Triviality vr_widen_top_l:
-  ∀x. vr_widen VR_Top x = VR_Top
-Proof
-  Cases_on `x` >> simp[vr_widen_def]
-QED
-
-(* Helper: rs_lookup through FUN_FMAP of vr_widen *)
-Triviality rs_lookup_fun_fmap_widen:
-  FINITE (FDOM b0) ∧ x ∈ FDOM b0 ⇒
-  rs_lookup (FUN_FMAP (λv. vr_widen (rs_lookup n0 v) (rs_lookup b0 v))
-     (FDOM b0)) x = vr_widen (rs_lookup n0 x) (rs_lookup b0 x)
-Proof
-  simp[rs_lookup_def, finite_mapTheory.FLOOKUP_FUN_FMAP]
-QED
-
-(* Core helper: normalize(widen_states(n, b)) = n when n's entries absorb
-   under vr_widen and are not Top. *)
-Triviality normalize_widen_stable:
-  ∀n0 b0.
-    FINITE (FDOM b0) ∧ FDOM n0 ⊆ FDOM b0 ∧
-    (∀k. k ∈ FDOM n0 ⇒ vr_widen (n0 ' k) (rs_lookup b0 k) = n0 ' k) ∧
-    (∀k. k ∈ FDOM n0 ⇒ ¬vr_is_top (n0 ' k)) ⇒
-    range_normalize (range_widen_states n0 b0) = n0
-Proof
-  rpt strip_tac >>
-  simp[range_normalize_def, range_widen_states_def,
-       finite_mapTheory.fmap_eq_flookup,
-       finite_mapTheory.FLOOKUP_DRESTRICT,
-       finite_mapTheory.FLOOKUP_FUN_FMAP,
-       finite_mapTheory.FDOM_FMAP] >>
-  rpt strip_tac >>
-  Cases_on `x ∈ FDOM b0` >> simp[rs_lookup_fun_fmap_widen] >>
-  Cases_on `x ∈ FDOM n0`
-  >- (res_tac >>
-      sg `rs_lookup n0 x = n0 ' x`
-      >- simp[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF] >>
-      sg `rs_lookup b0 x = b0 ' x`
-      >- (simp[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF] >>
-          fs[pred_setTheory.SUBSET_DEF]) >>
-      fs[finite_mapTheory.FLOOKUP_DEF])
-  >- simp[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF,
-          vr_widen_top_l, vr_is_top_def]
-  >- (fs[pred_setTheory.SUBSET_DEF] >> res_tac)
-  >- simp[finite_mapTheory.FLOOKUP_DEF]
-QED
-
 (* normalize(widen_states(normalize(widen_states(a,b)), b)) =
    normalize(widen_states(a,b)) — absorption via normalize_widen_stable *)
-(* Helper: normalize entries are never vr_is_top *)
-Triviality normalize_not_top:
-  ∀rs k. k ∈ FDOM (range_normalize rs) ⇒
-    ¬vr_is_top ((range_normalize rs) ' k)
-Proof
-  simp[range_normalize_def, finite_mapTheory.FDOM_DRESTRICT,
-       finite_mapTheory.DRESTRICT_DEF,
-       pred_setTheory.IN_INTER, pred_setTheory.GSPECIFICATION] >>
-  rpt strip_tac >> rfs[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF]
-QED
-
-(* Helper: FDOM(normalize(widen_states a b)) ⊆ FDOM b *)
-Triviality normalize_widen_fdom_sub:
-  ∀a b. FDOM (range_normalize (range_widen_states a b)) ⊆ FDOM b
-Proof
-  rpt gen_tac >>
-  irule pred_setTheory.SUBSET_TRANS >>
-  qexists_tac `FDOM (range_widen_states a b)` >>
-  simp[range_normalize_fdom, range_widen_states_def,
-       finite_mapTheory.FDOM_FMAP]
-QED
-
-(* Helper: normalize value lookup for widen_states *)
-Triviality normalize_widen_states_value:
-  ∀a b k. k ∈ FDOM (range_normalize (range_widen_states a b)) ⇒
-    (range_normalize (range_widen_states a b)) ' k =
-    vr_widen (rs_lookup a k) (rs_lookup b k)
-Proof
-  rpt strip_tac >>
-  sg `(range_normalize (range_widen_states a b)) ' k =
-      (range_widen_states a b) ' k`
-  >- (irule range_normalize_value >> simp[]) >>
-  sg `k ∈ FDOM (range_widen_states a b)`
-  >- (mp_tac range_normalize_fdom >>
-      simp[pred_setTheory.SUBSET_DEF]) >>
-  fs[range_widen_states_def, finite_mapTheory.FUN_FMAP_DEF]
-QED
-
-(* normalize(widen_states(normalize(widen_states(a,b)), b)) =
-   normalize(widen_states(a,b)) — absorption via normalize_widen_stable *)
-Triviality normalize_widen_absorb:
-  ∀a b.
-    range_normalize (range_widen_states (range_normalize (range_widen_states a b)) b) =
-    range_normalize (range_widen_states a b)
-Proof
-  rpt gen_tac >>
-  irule normalize_widen_stable >>
-  simp[finite_mapTheory.FDOM_FINITE, normalize_widen_fdom_sub] >>
-  conj_tac >- metis_tac[normalize_not_top] >>
-  rpt strip_tac >> fs[normalize_widen_states_value, vr_widen_absorb]
-QED
-
-(* normalize(widen_states(normalize x, x)) = normalize x — self via stable *)
-Triviality normalize_widen_self:
-  ∀x. range_normalize (range_widen_states (range_normalize x) x) =
-      range_normalize x
-Proof
-  gen_tac >>
-  irule normalize_widen_stable >>
-  simp[finite_mapTheory.FDOM_FINITE, range_normalize_fdom] >>
-  conj_tac >- metis_tac[normalize_not_top] >>
-  rpt strip_tac >>
-  sg `(range_normalize x) ' k = x ' k`
-  >- (irule range_normalize_value >> simp[]) >>
-  sg `k ∈ FDOM x`
-  >- (mp_tac range_normalize_fdom >>
-      simp[pred_setTheory.SUBSET_DEF]) >>
-  simp[rs_lookup_def, finite_mapTheory.FLOOKUP_DEF, vr_widen_idem]
-QED
 
 (* range_widen_opt idempotent — with the equality guard, trivially true *)
 Triviality range_widen_opt_idem:
@@ -834,29 +632,6 @@ QED
 
 (* ===== Fixpoint ===== *)
 
-(* Entry identity when entry is FEMPTY: widen_opt always returns FEMPTY *)
-Triviality widen_states_fempty_all_top:
-  ∀x v. v ∈ FDOM x ⇒
-    (range_widen_states FEMPTY x) ' v = VR_Top
-Proof
-  rpt strip_tac >>
-  simp[range_widen_states_def, finite_mapTheory.FUN_FMAP_DEF] >>
-  simp[rs_lookup_def, finite_mapTheory.FLOOKUP_EMPTY, vr_widen_def] >>
-  CASE_TAC >> simp[vr_widen_def] >> CASE_TAC >> simp[]
-QED
-
-Triviality normalize_all_top_fempty:
-  ∀fm. (∀v. v ∈ FDOM fm ⇒ fm ' v = VR_Top) ⇒
-    range_normalize fm = FEMPTY
-Proof
-  rpt strip_tac >>
-  simp[range_normalize_def, finite_mapTheory.fmap_eq_flookup,
-       finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_EMPTY] >>
-  rpt strip_tac >>
-  Cases_on `x ∈ FDOM fm` >> simp[] >>
-  res_tac >> simp[vr_is_top_def, rs_lookup_def, finite_mapTheory.FLOOKUP_DEF]
-QED
-
 Triviality widen_opt_fempty_stable:
   ∀x. range_widen_opt (SOME FEMPTY) x = SOME FEMPTY
 Proof
@@ -872,61 +647,6 @@ Proof
   rpt (COND_CASES_TAC >> simp[])
 QED
 
-(* Edge symmetry holds unconditionally for cfg_analyze.
-   build_succs only maps block labels, build_preds inverts exactly. *)
-Triviality cfg_edge_symmetry_always:
-  ∀fn a b.
-    MEM b (cfg_succs_of (cfg_analyze fn) a) ⇔
-    MEM a (cfg_preds_of (cfg_analyze fn) b)
-Proof
-  rpt strip_tac >>
-  simp[cfgHelpersTheory.cfg_analyze_succs,
-       cfgHelpersTheory.cfg_analyze_preds,
-       cfgHelpersTheory.mem_build_preds] >>
-  eq_tac >> rpt strip_tac >> gvs[]
-  >- (`MEM a (MAP (λbb. bb.bb_label) fn.fn_blocks)` by
-        (CCONTR_TAC >>
-         imp_res_tac cfgHelpersTheory.cfg_succs_of_not_in_labels >> fs[]) >>
-      fs[listTheory.MEM_MAP] >> metis_tac[])
-QED
-
-(* Helper: dfs_post labels are in dfs_pre *)
-Triviality cfg_dfs_post_mem_pre_local:
-  ∀fn lbl.
-    MEM lbl (cfg_analyze fn).cfg_dfs_post ⇒
-    MEM lbl (cfg_analyze fn).cfg_dfs_pre
-Proof
-  rw[cfgHelpersTheory.cfg_analyze_dfs_post,
-     cfgHelpersTheory.cfg_analyze_dfs_pre] >>
-  Cases_on `entry_block fn` >> fs[] >>
-  metis_tac[cfgHelpersTheory.dfs_post_walk_sound_thm,
-            cfgHelpersTheory.dfs_pre_walk_complete]
-QED
-
-Triviality cfg_succs_closure[local]:
-  ∀fn lbl.
-    MEM lbl (cfg_analyze fn).cfg_dfs_pre ⇒
-    EVERY (λs. MEM s (cfg_analyze fn).cfg_dfs_pre)
-      (cfg_succs_of (cfg_analyze fn) lbl)
-Proof
-  rw[listTheory.EVERY_MEM, cfgHelpersTheory.cfg_analyze_dfs_pre,
-     cfgDefsTheory.cfg_succs_of_def] >>
-  Cases_on `entry_block fn` >> fs[] >> rpt strip_tac >>
-  `(cfg_analyze fn).cfg_succs = build_succs fn.fn_blocks` by
-    (simp[cfgDefsTheory.cfg_analyze_def] >>
-     Cases_on `entry_block fn` >> simp[] >>
-     pairarg_tac >> simp[] >> pairarg_tac >> simp[]) >>
-  fs[] >>
-  `MEM s (FST (dfs_pre_walk (build_succs fn.fn_blocks) [] x.bb_label))` by
-    metis_tac[cfgHelpersTheory.dfs_pre_walk_closure |> CONJUNCT1] >>
-  mp_tac (Q.SPECL [`build_succs fn.fn_blocks`, `[] : string list`,
-                    `x.bb_label`]
-    (CONJUNCT1 (INST_TYPE [alpha |-> ``:string``]
-      cfgHelpersTheory.dfs_pre_walk_visited_eq))) >>
-  simp[pred_setTheory.UNION_EMPTY, pred_setTheory.EXTENSION] >>
-  metis_tac[]
-QED
-
 (* === Fixpoint infrastructure ===
    Named invariant P for the by_visits convergence proof.
    Extracted as a Definition to avoid lambda/beta issues in batch mode. *)
@@ -939,17 +659,6 @@ Definition range_fold_result_def:
          NONE => [] | SOME bb => bb.bb_instructions)
       (df_widen_entry NONE st lbl)
 End
-
-Triviality submap_funion_disjoint[local]:
-  ∀a b c. DISJOINT (FDOM a) (FDOM b) ∧ a ⊑ c ⇒ a ⊑ b ⊌ c
-Proof
-  rw[finite_mapTheory.SUBMAP_DEF, finite_mapTheory.FLOOKUP_FUNION,
-     finite_mapTheory.FDOM_FUNION] >>
-  rpt strip_tac >> res_tac >> fs[] >>
-  fs[pred_setTheory.IN_DISJOINT] >>
-  `x NOTIN FDOM b` by metis_tac[] >>
-  simp[finite_mapTheory.FUNION_DEF]
-QED
 
 Definition range_fixpoint_P_def:
   range_fixpoint_P fn st ⇔
@@ -982,35 +691,6 @@ Proof
   rpt strip_tac >>
   fs[range_fixpoint_P_def, range_fold_result_def] >>
   first_x_assum (qspec_then `lbl` mp_tac) >> simp[]
-QED
-
-(* P at lbl when visits > WT: widen either gives SOME FEMPTY or
-   returns identity (old_entry), in which case process = st. *)
-Triviality range_P_entry_fempty[local]:
-  ∀fn lbl st entry joined final_val inst_map.
-    range_fixpoint_P fn st ⇒
-    df_widen_visits st lbl >= WIDEN_THRESHOLD ⇒
-    entry = range_widen_opt (df_widen_entry NONE st lbl) joined ⇒
-    df_fold_block Forward (range_transfer_opt (dfg_build_function fn, fn.fn_blocks))
-      lbl (case lookup_block lbl fn.fn_blocks of NONE => [] | SOME bb => bb.bb_instructions)
-      entry = (final_val, inst_map) ⇒
-    ¬(range_join_opt (df_widen_boundary NONE st lbl) final_val =
-        df_widen_boundary NONE st lbl ∧
-      entry = df_widen_entry NONE st lbl) ⇒
-    entry = SOME FEMPTY
-Proof
-  rpt strip_tac >>
-  `df_widen_visits st lbl > 0` by (
-    `WIDEN_THRESHOLD > 0` by simp[WIDEN_THRESHOLD_def] >> DECIDE_TAC) >>
-  `range_widen_opt (df_widen_entry NONE st lbl) joined = SOME FEMPTY ∨
-   range_widen_opt (df_widen_entry NONE st lbl) joined =
-     df_widen_entry NONE st lbl` by
-    simp[widen_opt_dichotomy] >>
-  gvs[] >>
-  (* Identity case: entry = old_entry → boundary absorbs → contradiction *)
-  mp_tac range_process_identity >>
-  disch_then (qspecl_then [`fn`, `lbl`, `st`, `final_val`, `inst_map`] mp_tac) >>
-  simp[]
 QED
 
 (* P is preserved by processing any block *)
@@ -1171,8 +851,8 @@ Proof
   >- simp[range_join_opt_absorb]
   >- simp[range_widen_opt_absorb]
   >- simp[range_widen_opt_idem]
-  >- simp[cfg_edge_symmetry_always]
-  >- simp[cfg_succs_closure]
+  >- simp[cfg_edge_symmetry_uncond]
+  >- simp[cfgHelpersTheory.cfg_dfs_pre_succs_closed]
   (* K and P *)
   >> qexistsl_tac [`WIDEN_THRESHOLD + 1`, `range_fixpoint_P fn`] >>
   simp[range_fixpoint_P_preserved, range_fixpoint_P_stabilization] >>
@@ -1215,7 +895,7 @@ Proof
       ``lbl : string``,
       ``bb : basic_block``,
       ``idx : num``]
-    dfAnalyzeWidenPropsTheory.df_widen_at_intra_transfer))) >>
+    dfAnalyzeWidenProofsTheory.df_widen_at_intra_transfer))) >>
   impl_tac >- (
     conj_tac >- first_assum ACCEPT_TAC >>
     mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[]) >>
@@ -1271,35 +951,6 @@ Triviality range_sound_flookup_preserve[local]:
 Proof
   Cases >> simp[range_sound_def, in_range_state_def] >>
   rpt strip_tac >> res_tac >> gvs[]
-QED
-
-Triviality eval_phis_flookup_idx[local]:
-  !s insts x.
-    (!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs) ==>
-    !s'. eval_phis s insts = OK s' ==> FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x
-Proof
-  Induct_on `insts` >> simp[eval_phis_def] >>
-  rpt strip_tac >>
-  Cases_on `h.inst_opcode = PHI` >> gvs[eval_phis_def, AllCaseEqs()] >>
-  `!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs` by (
-    rpt strip_tac >>
-    first_x_assum (qspec_then `SUC i` mp_tac) >>
-    simp[phi_prefix_length_def]) >>
-  `FLOOKUP s''.vs_vars x = FLOOKUP s.vs_vars x` by
-    (first_x_assum drule >> simp[]) >>
-  `~MEM x h.inst_outputs` by
-    (last_x_assum (qspec_then `0` mp_tac) >> simp[phi_prefix_length_def]) >>
-  `MEM out h.inst_outputs` by
-    (drule venomExecProofsTheory.eval_one_phi_output_mem >> simp[]) >>
-  `out <> x` by (CCONTR_TAC >> fs[]) >>
-  gvs[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-Theorem phi_prefix_length_el_phi:
-  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode = PHI
-Proof
-  Induct_on `l` >> simp[phi_prefix_length_def] >> rw[] >>
-  Cases_on `i` >> simp[phi_prefix_length_def]
 QED
 
 Theorem range_sound_phi_prefix_on_s:
@@ -1395,19 +1046,6 @@ Proof
 QED
 
 (* ===== in_range_state monotonicity ===== *)
-
-Triviality in_range_state_weaken:
-  ∀rs1 rs2 env.
-    in_range_state rs1 env ∧ FDOM rs2 ⊆ FDOM rs1 ∧
-    (∀v. v ∈ FDOM rs2 ⇒ FLOOKUP rs2 v = FLOOKUP rs1 v) ⇒
-    in_range_state rs2 env
-Proof
-  rw[in_range_state_def] >>
-  `v ∈ FDOM rs2` by fs[finite_mapTheory.FLOOKUP_DEF] >>
-  `v ∈ FDOM rs1` by fs[pred_setTheory.SUBSET_DEF] >>
-  `FLOOKUP rs2 v = FLOOKUP rs1 v` by res_tac >>
-  gvs[] >> res_tac
-QED
 
 (* join_two is sound from right argument alone *)
 Theorem range_join_two_sound_r:
@@ -1522,37 +1160,6 @@ Triviality range_unwrap_transfer[local]:
 Proof
   rpt gen_tac >> Cases_on `rs` >>
   simp[range_transfer_opt_def, range_unwrap_def]
-QED
-
-(* bb_well_formed: if a later instruction is PHI, earlier ones are too *)
-Triviality wf_phi_earlier[local]:
-  ∀bb idx j.
-    bb_well_formed bb ∧ idx < j ∧
-    j < LENGTH bb.bb_instructions ∧
-    (EL j bb.bb_instructions).inst_opcode = PHI ⇒
-    (EL idx bb.bb_instructions).inst_opcode = PHI
-Proof
-  rpt strip_tac >> fs[bb_well_formed_def] >> res_tac
-QED
-
-(* MEM in DROP (SUC idx) with opcode = PHI ⇒ EL idx is also PHI *)
-Triviality wf_phi_from_drop_suc[local]:
-  ∀bb idx inst.
-    bb_well_formed bb ∧ idx < LENGTH bb.bb_instructions ∧
-    MEM inst (DROP (SUC idx) bb.bb_instructions) ∧
-    inst.inst_opcode = PHI ⇒
-    (EL idx bb.bb_instructions).inst_opcode = PHI
-Proof
-  rpt strip_tac
-  >> fs[listTheory.MEM_EL]
-  >> `n + SUC idx < LENGTH bb.bb_instructions` by DECIDE_TAC
-  >> `(DROP (SUC idx) bb.bb_instructions)❲n❳ =
-       bb.bb_instructions❲n + SUC idx❳` by
-       (irule listTheory.EL_DROP >> DECIDE_TAC)
-  >> `idx < n + SUC idx` by DECIDE_TAC
-  >> match_mp_tac wf_phi_earlier
-  >> qexists_tac `n + SUC idx`
-  >> gvs[]
 QED
 
 (* Core induction: fold over instructions preserves in_range_state.
@@ -1695,7 +1302,7 @@ Proof
 QED
 
 (* range_transfer_opt always returns SOME *)
-Triviality range_transfer_opt_some[local]:
+Theorem range_transfer_opt_some:
   ∀ctx inst acc. ∃rs. range_transfer_opt ctx inst acc = SOME rs
 Proof
   rpt gen_tac >> Cases_on `acc` >>
@@ -1736,7 +1343,7 @@ QED
 
 (* Combined invariant: range_fixpoint_P + visits bound + unvisited boundary.
    Gives everything needed for block soundness proof.
-   Uses df_widen_process_boundary_other from dfAnalyzeWidenProofs. *)
+   Uses df_widen_process_boundary from dfAnalyzeWidenProofs. *)
 Triviality foldl_update_all_same[local]:
   ∀lbls v fm k w.
     FLOOKUP (FOLDL (λm l. m |+ (l, v)) fm lbls) k = SOME w ⇒
@@ -1746,17 +1353,6 @@ Proof
   res_tac >> simp[] >>
   fs[finite_mapTheory.FLOOKUP_UPDATE] >>
   BasicProvers.every_case_tac >> fs[]
-QED
-
-Triviality init_boundary_none[local]:
-  ∀lbls lbl.
-    df_widen_boundary NONE (init_df_widen_state NONE lbls) lbl = NONE
-Proof
-  rpt gen_tac >>
-  simp[df_widen_boundary_def, init_df_widen_state_def] >>
-  CASE_TAC >> simp[] >>
-  imp_res_tac foldl_update_all_same >>
-  fs[finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
 (* Specialize visits_inc to range analysis parameters *)
@@ -1804,7 +1400,7 @@ Proof
   mp_tac (INST_TYPE [alpha |-> ``:(string |-> value_range) option``,
                      beta |-> ``:dfg_analysis # basic_block list``]
     (SIMP_RULE std_ss [LET_THM]
-      dfAnalyzeWidenProofsTheory.df_widen_process_boundary_other)) >>
+      dfAnalyzeWidenProofsTheory.df_widen_process_boundary)) >>
   disch_then (qspecl_then [`Forward`, `NONE`,
     `range_join_opt`, `range_widen_opt`, `WIDEN_THRESHOLD`,
     `range_transfer_opt`, `range_edge_transfer_opt`,
@@ -1860,140 +1456,106 @@ Proof
       res_tac >> simp[])
 QED
 
-Triviality foldl_inst_only_preserves[local]:
-  ∀lbls (f:'a df_widen_state -> string -> 'a df_widen_state) acc.
-    (∀st lbl. (f st lbl).dws_boundary = st.dws_boundary) ∧
-    (∀st lbl. (f st lbl).dws_entry = st.dws_entry) ∧
-    (∀st lbl. (f st lbl).dws_visits = st.dws_visits) ⇒
-    (FOLDL f acc lbls).dws_boundary = acc.dws_boundary ∧
-    (FOLDL f acc lbls).dws_entry = acc.dws_entry ∧
-    (FOLDL f acc lbls).dws_visits = acc.dws_visits
+(* The worklist's convergence invariant is independent of consumer invariants. *)
+Theorem range_worklist_initial[local]:
+  !fn st. (case fn_entry_label fn of
+     NONE => init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks)
+   | SOME lbl => (init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks))
+       with dws_boundary :=
+         (init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks)).dws_boundary
+           |+ (lbl,SOME FEMPTY)) = st ==>
+  range_fixpoint_P fn st /\
+  (!l. df_widen_visits st l <= WIDEN_THRESHOLD + 1) /\
+  (!l. df_widen_visits st l = 0 ==>
+       df_widen_boundary NONE st l = NONE \/
+       df_widen_boundary NONE st l = SOME FEMPTY)
 Proof
-  Induct >> rw[]
-QED
-
-Triviality populate_widen_preserves[local]:
-  ∀dir bottom join widen threshold transfer edge_transfer ctx entry_val
-   cfg bbs lbls (st:'a df_widen_state).
-  (df_populate_widen_inst dir bottom join widen threshold transfer
-    edge_transfer ctx entry_val cfg bbs lbls st).dws_boundary =
-    st.dws_boundary ∧
-  (df_populate_widen_inst dir bottom join widen threshold transfer
-    edge_transfer ctx entry_val cfg bbs lbls st).dws_entry =
-    st.dws_entry ∧
-  (df_populate_widen_inst dir bottom join widen threshold transfer
-    edge_transfer ctx entry_val cfg bbs lbls st).dws_visits =
-    st.dws_visits
-Proof
-  rpt gen_tac >>
-  simp[dfAnalyzeWidenDefsTheory.df_populate_widen_inst_def] >>
-  irule foldl_inst_only_preserves >>
-  rw[] >> pairarg_tac >> rw[]
-QED
-
-Triviality range_analyze_invariant[local]:
-  ∀fn.
-    let ra = range_analyze fn in
-    range_fixpoint_P fn ra ∧
-    (∀lbl. df_widen_visits ra lbl ≤ WIDEN_THRESHOLD + 1) ∧
-    (∀lbl. df_widen_visits ra lbl = 0 ⇒
-           df_widen_boundary NONE ra lbl = NONE ∨
-           df_widen_boundary NONE ra lbl = SOME FEMPTY)
-Proof
-  gen_tac >> simp_tac std_ss [LET_THM, range_analyze_def,
-    df_analyze_widen_def, dfAnalyzeDefsTheory.direction_case_def] >>
-  qabbrev_tac `process = df_process_block_widen Forward NONE
-    range_join_opt range_widen_opt WIDEN_THRESHOLD
-    range_transfer_opt range_edge_transfer_opt
-    (dfg_build_function fn, fn.fn_blocks)
-    (OPTION_MAP (λlbl. (lbl, SOME FEMPTY)) (fn_entry_label fn))
-    (cfg_analyze fn) fn.fn_blocks` >>
-  qabbrev_tac `all_lbls = (cfg_analyze fn).cfg_dfs_pre` >>
-  qmatch_goalsub_abbrev_tac `range_fixpoint_P fn ra` >>
-  `(λst. range_fixpoint_P fn st ∧
-         (∀l. df_widen_visits st l ≤ WIDEN_THRESHOLD + 1) ∧
-         (∀l. df_widen_visits st l = 0 ⇒
-              df_widen_boundary NONE st l = NONE ∨
-              df_widen_boundary NONE st l = SOME FEMPTY)) ra`
-    suffices_by simp[] >>
-  qunabbrev_tac `ra` >>
-  suspend "wl_inv"
-QED
-
-Resume range_analyze_invariant[wl_inv]:
-  (* 1. Beta-reduce the lambda application *)
-  BETA_TAC >>
-  (* 2. Abbreviate SND(wl_iterate ...) to strip populate wrapper *)
-  qmatch_goalsub_abbrev_tac
-    `df_populate_widen_inst _ _ _ _ _ _ _ _ _ _ _ _ swli` >>
-  (* 3. Rewrite field accesses through populate to swli *)
-  simp[range_fixpoint_P_def, df_widen_visits_def, df_widen_boundary_def,
-       df_widen_entry_def, range_fold_result_def,
-       populate_widen_preserves] >>
-  (* 4. Re-package as (λst. P st) swli for irule *)
-  `(λst. range_fixpoint_P fn st ∧
-         (∀l. df_widen_visits st l ≤ WIDEN_THRESHOLD + 1) ∧
-         (∀l. df_widen_visits st l = 0 ⇒
-              df_widen_boundary NONE st l = NONE ∨
-              df_widen_boundary NONE st l = SOME FEMPTY)) swli`
-    suffices_by simp[range_fixpoint_P_def, df_widen_visits_def,
-      df_widen_boundary_def, df_widen_entry_def, range_fold_result_def] >>
-  qunabbrev_tac `swli` >>
-  irule worklistProofsTheory.wl_iterate_invariant_process_restricted >>
-  CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  (* P initial — first conjunct after irule *)
-  conj_tac
-  >- suspend "P_initial"
-  >>
-  (* changed ⇔ process ≠ st — second conjunct *)
-  conj_tac
-  >- suspend "changed"
-  >>
-  qexistsl_tac [
-    `(WIDEN_THRESHOLD + 1) * LENGTH all_lbls`,
-    `λst. SUM (MAP (λl. df_widen_visits st l) all_lbls)`,
-    `λl. MEM l all_lbls`] >>
-  CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  rpt conj_tac >|
-  [(* 1: measure bounded *)
-   rpt strip_tac >>
-   irule dfAnalyzeWidenProofsTheory.sum_bound >>
-   simp[markerTheory.Abbrev_def],
-   (* 2: P preserved *)
-   rpt strip_tac >>
-   mp_tac (SIMP_RULE std_ss [LET_THM] (Q.SPECL [`fn`, `lbl`, `st`]
-     range_invariant_preserved)) >>
-   simp[markerTheory.Abbrev_def],
-   (* 3: measure increases *)
-   rpt strip_tac >>
-   irule dfAnalyzeWidenProofsTheory.sum_map_inc >>
-   qexists_tac `lbl` >>
-   mp_tac (SIMP_RULE std_ss [LET_THM] (Q.SPECL [`fn`, `lbl`, `st`]
-     range_visits_inc)) >>
-   simp[markerTheory.Abbrev_def],
-   (* 4: deps closure *)
-   simp[markerTheory.Abbrev_def, listTheory.EVERY_MEM] >>
-   rpt strip_tac >>
-   mp_tac (Q.SPECL [`fn`, `lbl`] cfg_succs_closure) >>
-   simp[listTheory.EVERY_MEM],
-   (* 5: EVERY valid_lbl *)
-   simp[listTheory.EVERY_MEM, markerTheory.Abbrev_def]
-  ]
-QED
-
-Resume range_analyze_invariant[P_initial]:
+  rpt gen_tac >> strip_tac >> qpat_x_assum `_ = st` (SUBST1_TAC o SYM) >>
   Cases_on `fn_entry_label fn` >>
   simp[range_fixpoint_P_def, init_df_widen_state_def,
        df_widen_visits_def, finite_mapTheory.FLOOKUP_EMPTY] >>
-  rpt strip_tac >>
-  Cases_on `l = x` >>
+  rpt strip_tac >> Cases_on `l = x` >>
   simp[df_widen_boundary_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  CASE_TAC >> simp[] >>
-  imp_res_tac foldl_update_all_same >>
+  CASE_TAC >> simp[] >> imp_res_tac foldl_update_all_same >>
   fs[finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
-Resume range_analyze_invariant[changed]:
+Theorem range_worklist_invariant:
+  !fn P.
+  P (case fn_entry_label fn of
+       NONE => init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks)
+     | SOME lbl => (init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks))
+         with dws_boundary :=
+           (init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks)).dws_boundary
+             |+ (lbl,SOME FEMPTY)) /\
+  (!lbl st. P st ==>
+    P (df_process_block_widen Forward NONE range_join_opt range_widen_opt
+      WIDEN_THRESHOLD range_transfer_opt range_edge_transfer_opt
+      (dfg_build_function fn,fn.fn_blocks)
+      (OPTION_MAP (\lbl. (lbl,SOME FEMPTY)) (fn_entry_label fn))
+      (cfg_analyze fn) fn.fn_blocks lbl st)) ==>
+  P (SND (wl_iterate
+    (\lbl old new.
+      df_widen_boundary NONE new lbl <> df_widen_boundary NONE old lbl \/
+      df_widen_entry NONE new lbl <> df_widen_entry NONE old lbl)
+    (df_process_block_widen Forward NONE range_join_opt range_widen_opt
+      WIDEN_THRESHOLD range_transfer_opt range_edge_transfer_opt
+      (dfg_build_function fn,fn.fn_blocks)
+      (OPTION_MAP (\lbl. (lbl,SOME FEMPTY)) (fn_entry_label fn))
+      (cfg_analyze fn) fn.fn_blocks)
+    (cfg_succs_of (cfg_analyze fn)) (cfg_analyze fn).cfg_dfs_pre
+    (case fn_entry_label fn of
+       NONE => init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks)
+     | SOME lbl => (init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks))
+         with dws_boundary :=
+           (init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks)).dws_boundary
+             |+ (lbl,SOME FEMPTY))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `wl_iterate _ process _ all_lbls initial` >>
+  `(\st. range_fixpoint_P fn st /\
+         (!l. df_widen_visits st l <= WIDEN_THRESHOLD + 1) /\
+         (!l. df_widen_visits st l = 0 ==>
+              df_widen_boundary NONE st l = NONE \/
+              df_widen_boundary NONE st l = SOME FEMPTY) /\ P st)
+     (SND (wl_iterate
+       (\lbl old new.
+         df_widen_boundary NONE new lbl <> df_widen_boundary NONE old lbl \/
+         df_widen_entry NONE new lbl <> df_widen_entry NONE old lbl)
+       process (cfg_succs_of (cfg_analyze fn)) all_lbls initial))`
+    suffices_by simp[] >>
+  irule worklistProofsTheory.wl_iterate_invariant_process_restricted >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  conj_tac
+  >- (mp_tac (Q.SPECL [`fn`,`initial`] range_worklist_initial) >>
+      simp[Abbr `initial`] >> metis_tac[]) >>
+  conj_tac >- suspend "changed" >>
+  qexistsl_tac [
+    `(WIDEN_THRESHOLD + 1) * LENGTH all_lbls`,
+    `\st. SUM (MAP (\l. df_widen_visits st l) all_lbls)`,
+    `\l. MEM l all_lbls`] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  conj_tac
+  >- (rpt strip_tac >> irule dfAnalyzeProofsTheory.sum_map_le_bound >>
+      simp[markerTheory.Abbrev_def, listTheory.EVERY_MEM]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      mp_tac (SIMP_RULE std_ss [LET_THM] (Q.SPECL [`fn`,`lbl`,`st`]
+        range_invariant_preserved)) >>
+      simp[markerTheory.Abbrev_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule dfAnalyzeWidenProofsTheory.sum_map_inc >>
+      qexists_tac `lbl` >>
+      mp_tac (SIMP_RULE std_ss [LET_THM] (Q.SPECL [`fn`,`lbl`,`st`]
+        range_visits_inc)) >> simp[markerTheory.Abbrev_def]) >>
+  conj_tac
+  >- (simp[markerTheory.Abbrev_def,listTheory.EVERY_MEM] >>
+      rpt strip_tac >> mp_tac (Q.SPECL [`fn`,`lbl`] cfgHelpersTheory.cfg_dfs_pre_succs_closed) >>
+      simp[listTheory.EVERY_MEM]) >>
+  simp[listTheory.EVERY_MEM,markerTheory.Abbrev_def]
+QED
+
+Resume range_worklist_invariant[changed]:
   rpt strip_tac >>
   simp[Abbr `process`, df_process_block_widen_def, LET_THM,
        dfAnalyzeDefsTheory.direction_case_def] >>
@@ -2004,55 +1566,57 @@ Resume range_analyze_invariant[changed]:
   simp[df_widen_boundary_def, df_widen_entry_def,
        finite_mapTheory.FLOOKUP_UPDATE,
        df_widen_state_component_equality, df_widen_visits_def] >>
-  fs[] >>
-  (* visits ≠: |+(lbl, v+1) can't equal original map *)
-  rpt strip_tac >>
+  fs[] >> rpt strip_tac >>
   `FLOOKUP (st.dws_visits |+ (lbl,
      (case FLOOKUP st.dws_visits lbl of NONE => 0 | SOME n => n) + 1)) lbl <>
-   FLOOKUP st.dws_visits lbl` by (
-    simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-    Cases_on `FLOOKUP st.dws_visits lbl` >> simp[]) >>
+   FLOOKUP st.dws_visits lbl` by
+    (simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+     Cases_on `FLOOKUP st.dws_visits lbl` >> simp[]) >>
   metis_tac[]
 QED
 
-Finalise range_analyze_invariant
+Finalise range_worklist_invariant
 
-(* Bridge: exec_pure2 success extracts operand values and output *)
-Triviality exec_pure2_output[local]:
-  ∀f inst s r.
-    exec_pure2 f inst s = OK r ⇒
-    ∃v1 v2 op1 op2 out.
-      inst.inst_operands = [op1; op2] ∧
-      inst.inst_outputs = [out] ∧
-      eval_operand op1 s = SOME v1 ∧
-      eval_operand op2 s = SOME v2 ∧
-      FLOOKUP r.vs_vars out = SOME (f v1 v2) ∧
-      (∀x. x ≠ out ⇒ FLOOKUP r.vs_vars x = FLOOKUP s.vs_vars x)
+Triviality range_analyze_invariant[local]:
+  !fn.
+    let ra = range_analyze fn in
+    range_fixpoint_P fn ra /\
+    (!lbl. df_widen_visits ra lbl <= WIDEN_THRESHOLD + 1) /\
+    (!lbl. df_widen_visits ra lbl = 0 ==>
+           df_widen_boundary NONE ra lbl = NONE \/
+           df_widen_boundary NONE ra lbl = SOME FEMPTY)
 Proof
-  rpt gen_tac >> strip_tac >>
-  fs[exec_pure2_def] >>
-  BasicProvers.every_case_tac >> fs[] >> gvs[] >>
-  simp[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-Triviality exec_pure1_output[local]:
-  ∀f inst s r.
-    exec_pure1 f inst s = OK r ⇒
-    ∃v1 op1 out.
-      inst.inst_operands = [op1] ∧
-      inst.inst_outputs = [out] ∧
-      eval_operand op1 s = SOME v1 ∧
-      FLOOKUP r.vs_vars out = SOME (f v1) ∧
-      (∀x. x ≠ out ⇒ FLOOKUP r.vs_vars x = FLOOKUP s.vs_vars x)
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[exec_pure1_def] >>
-  BasicProvers.every_case_tac >> fs[] >> gvs[] >>
-  simp[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+  gen_tac >> simp_tac std_ss [LET_THM, range_analyze_def,
+    df_analyze_widen_def, dfAnalyzeDefsTheory.direction_case_def] >>
+  qmatch_goalsub_abbrev_tac
+    `df_populate_widen_inst _ _ _ _ _ _ _ _ _ _ _ _ swli` >>
+  `(\st. range_fixpoint_P fn st /\
+         (!l. df_widen_visits st l <= WIDEN_THRESHOLD + 1) /\
+         (!l. df_widen_visits st l = 0 ==>
+              df_widen_boundary NONE st l = NONE \/
+              df_widen_boundary NONE st l = SOME FEMPTY)) swli`
+    suffices_by
+      simp[range_fixpoint_P_def, df_widen_visits_def, df_widen_boundary_def,
+           df_widen_entry_def, range_fold_result_def, populate_widen_inst_preserves_fields] >>
+  qunabbrev_tac `swli` >>
+  qspec_then `fn` (qspec_then
+    `\st. range_fixpoint_P fn st /\
+      (!l. df_widen_visits st l <= WIDEN_THRESHOLD + 1) /\
+      (!l. df_widen_visits st l = 0 ==>
+        df_widen_boundary NONE st l = NONE \/
+        df_widen_boundary NONE st l = SOME FEMPTY)` mp_tac)
+    range_worklist_invariant >>
+  impl_tac
+  >- (CONV_TAC (DEPTH_CONV BETA_CONV) >> conj_tac
+      >- (irule range_worklist_initial >> simp[]) >>
+      rpt strip_tac >>
+      mp_tac (SIMP_RULE std_ss [LET_THM] (Q.SPECL [`fn`,`lbl`,`st`]
+        range_invariant_preserved)) >> simp[]) >>
+  Cases_on `fn_entry_label fn` >> simp[]
 QED
 
 (* operand_range is sound for any successfully-evaluated operand *)
-Triviality operand_range_sound[local]:
+Theorem operand_range_sound:
   ∀rs s op w.
     in_range_state rs s.vs_vars ∧
     eval_operand op s = SOME w ⇒
@@ -2063,6 +1627,15 @@ Proof
   >- (gvs[] >> simp[in_range_constant])
   >- (irule rs_lookup_in_range >> qexists_tac `s.vs_vars` >> fs[])
   >> simp[in_range_top]
+QED
+
+(* Equivalence between range_get_range and operand_range *)
+Theorem range_get_range_eq_v:
+  !ra lbl idx op.
+    range_get_range ra lbl idx op =
+    operand_range (range_at_inst ra lbl idx) op
+Proof
+  Cases_on `op` >> simp[range_get_range_def, operand_range_def]
 QED
 
 (* operand_lit is sound: if eval_operand gives SOME w and
@@ -2292,7 +1865,7 @@ Proof
   drule_all step_eval_range_sound >> simp[]
 QED
 
-Theorem range_analyze_block_sound_proof:
+Theorem range_analyze_block_sound:
   ∀fn lbl bb fuel ctx s s'.
     let ra = range_analyze fn in
     lookup_block lbl fn.fn_blocks = SOME bb ∧
@@ -2362,7 +1935,7 @@ Proof
   fs[range_unwrap_def]
 QED
 
-Theorem range_get_range_sound_proof:
+Theorem range_get_range_sound:
   ∀ra lbl idx op w env.
     in_range_state (range_at_inst ra lbl idx) env ∧
     (∀v. op = Var v ⇒ FLOOKUP env v = SOME w) ∧
@@ -2424,75 +1997,6 @@ Proof
   >> first_x_assum irule >> metis_tac[]
 QED
 
-(* ===== DFG Semantic Soundness — per-opcode predicates ===== *)
-
-(* Each predicate captures what the DFG tells us about variable values
-   in the runtime environment. These are small enough for fs[]/simp[].
-   The monolithic dfg_sound_def caused rewriter timeouts. *)
-
-Definition dfg_assign_sound_def:
-  dfg_assign_sound dfg env =
-    !v inst u. dfg_get_def dfg v = SOME inst /\
-      inst.inst_opcode = ASSIGN /\ inst.inst_operands = [Var u] /\
-      v IN FDOM env ==>
-      FLOOKUP env v = FLOOKUP env u
-End
-
-Definition dfg_iszero_sound_def:
-  dfg_iszero_sound dfg env =
-    !v inst tv. dfg_get_def dfg v = SOME inst /\
-      inst.inst_opcode = ISZERO /\ inst.inst_operands = [Var tv] ==>
-      !w. FLOOKUP env v = SOME w ==>
-        (w <> 0w ==> FLOOKUP env tv = SOME 0w) /\
-        (w = 0w ==> !w'. FLOOKUP env tv = SOME w' ==> w' <> 0w)
-End
-
-Definition dfg_eq_sound_def:
-  dfg_eq_sound dfg env =
-    !v inst lhs rhs. dfg_get_def dfg v = SOME inst /\
-      inst.inst_opcode = EQ /\ inst.inst_operands = [lhs; rhs] ==>
-      !w. FLOOKUP env v = SOME w ==> w <> 0w ==>
-        (!u. lhs = Var u ==> ?wu. FLOOKUP env u = SOME wu) /\
-        (!u. rhs = Var u ==> ?wu. FLOOKUP env u = SOME wu) /\
-        (!u wu wl. lhs = Var u /\ rhs = Lit wl /\
-                    FLOOKUP env u = SOME wu ==> wu = wl) /\
-        (!u wu wl. rhs = Var u /\ lhs = Lit wl /\
-                    FLOOKUP env u = SOME wu ==> wu = wl) /\
-        (!u1 u2 w1 w2. lhs = Var u1 /\ rhs = Var u2 /\
-           FLOOKUP env u1 = SOME w1 /\ FLOOKUP env u2 = SOME w2 ==>
-           w1 = w2)
-End
-
-Definition dfg_compare_sound_def:
-  dfg_compare_sound dfg env =
-    !v inst lhs rhs. dfg_get_def dfg v = SOME inst /\
-      (inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
-       inst.inst_opcode = SLT \/ inst.inst_opcode = SGT) /\
-      inst.inst_operands = [lhs; rhs] ==>
-      !w. FLOOKUP env v = SOME w ==>
-        (!u wl wu. lhs = Var u /\ rhs = Lit wl /\
-          FLOOKUP env u = SOME wu ==>
-          ((w <> 0w) =
-            (if inst.inst_opcode = LT then w2n wu < w2n wl
-             else if inst.inst_opcode = GT then w2n wu > w2n wl
-             else if inst.inst_opcode = SLT then w2i wu < w2i wl
-             else w2i wu > w2i wl))) /\
-        (!u wl wu. rhs = Var u /\ lhs = Lit wl /\
-          FLOOKUP env u = SOME wu ==>
-          ((w <> 0w) =
-            (if inst.inst_opcode = LT then w2n wl < w2n wu
-             else if inst.inst_opcode = GT then w2n wl > w2n wu
-             else if inst.inst_opcode = SLT then w2i wl < w2i wu
-             else w2i wl > w2i wu)))
-End
-
-(* Combined predicate for convenience *)
-Definition dfg_sound_def:
-  dfg_sound dfg env =
-    (dfg_assign_sound dfg env /\ dfg_iszero_sound dfg env /\
-     dfg_eq_sound dfg env /\ dfg_compare_sound dfg env)
-End
-
 (* ===== range_apply_condition_sound ===== *)
 
 Triviality dfg_eq_literal_constraints[local]:
@@ -2525,15 +2029,14 @@ Proof
   \\ Cases_on `op` >> simp[range_apply_condition_def]
   \\ gvs[]
   \\ Cases_on `dfg_get_def dfg s` >> simp[]
+  \\ `dfg_entry_base_sound env s x` by metis_tac[dfg_sound_def, FDOM_FLOOKUP]
   \\ IF_CASES_TAC >> gvs[]
   (* ASSIGN *)
   >- (Cases_on `x.inst_operands` >> simp[] >>
       Cases_on `t` >> simp[] >>
       first_x_assum irule >> rpt conj_tac
       >- (rpt strip_tac >> Cases_on `h` >> gvs[] >>
-          fs[dfg_sound_def, dfg_assign_sound_def] >>
-          `s IN FDOM env` by fs[finite_mapTheory.FLOOKUP_DEF] >>
-          res_tac >> qexists_tac `w` >> gvs[])
+          gvs[dfg_entry_base_sound_def] >> qexists_tac `w` >> gvs[])
       >- first_assum ACCEPT_TAC
       >- first_assum ACCEPT_TAC)
   \\ IF_CASES_TAC >> gvs[]
@@ -2543,9 +2046,9 @@ Proof
       Cases_on `h` >> simp[] >>
       irule range_apply_iszero_sound >> simp[] >>
       rpt strip_tac >>
-      gvs[dfg_sound_def, dfg_iszero_sound_def] >>
-      first_x_assum drule >> simp[] >>
-      disch_then drule >> simp[])
+      qpat_x_assum `dfg_entry_base_sound _ _ _` (mp_tac o el 2 o
+        CONJUNCTS o PURE_REWRITE_RULE [dfg_entry_base_sound_def]) >>
+      simp[] >> disch_then drule >> simp[])
   \\ IF_CASES_TAC >> gvs[]
   (* EQ *)
   >- (Cases_on `x.inst_operands` >> simp[] >>
@@ -2553,11 +2056,9 @@ Proof
       Cases_on `t'` >> simp[] >>
       irule range_apply_eq_sound >> simp[] >>
       strip_tac >>
-      `dfg_eq_sound dfg env` by fs[dfg_sound_def] >>
-      pop_assum mp_tac >> PURE_REWRITE_TAC[dfg_eq_sound_def] >>
-      disch_then (qspecl_then [`s`, `x`, `h`, `h'`] mp_tac) >>
-      impl_tac >- simp[] >>
-      disch_then (qspec_then `w` mp_tac) >> simp[] >> strip_tac >>
+      qpat_x_assum `dfg_entry_base_sound _ _ _` (mp_tac o el 3 o
+        CONJUNCTS o PURE_REWRITE_RULE [dfg_entry_base_sound_def]) >>
+      simp[] >> strip_tac >>
       rpt conj_tac
       >- (rpt strip_tac >> gvs[] >> res_tac >> gvs[])
       >- (qspecl_then [`env`, `h`, `h'`] mp_tac
@@ -2572,21 +2073,11 @@ Proof
       Cases_on `t'` >> simp[] >>
       irule range_apply_compare_sound >> simp[] >>
       (rpt conj_tac >> rpt strip_tac >>
-       `dfg_compare_sound dfg env` by fs[dfg_sound_def] >>
-       pop_assum mp_tac >> simp[dfg_compare_sound_def] >>
-       disch_then drule >> simp[] >>
-       disch_then drule >> simp[]))
+       qpat_x_assum `dfg_entry_base_sound _ _ _` (mp_tac o el 4 o
+         CONJUNCTS o PURE_REWRITE_RULE [dfg_entry_base_sound_def]) >>
+       simp[] >> disch_then drule >> simp[]))
   (* Default: identity *)
   \\ simp[]
-QED
-
-(* ===== DFG semantic soundness ===== *)
-
-Theorem dfg_sound_fempty:
-  !dfg. dfg_sound dfg FEMPTY
-Proof
-  simp[dfg_sound_def, dfg_assign_sound_def, dfg_iszero_sound_def,
-       dfg_eq_sound_def, dfg_compare_sound_def]
 QED
 
 (* range_branch_refine preserves in_range_state soundness when dfg_sound holds.

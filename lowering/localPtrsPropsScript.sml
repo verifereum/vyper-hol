@@ -7,7 +7,7 @@
  * re-establishes it.
  *
  * TOP-LEVEL:
- *   mstore_keeps_val_in_memory    — an MSTORE outside a value keeps it
+ *   mstore_keeps_memory_value_rel    — an MSTORE outside a value keeps it
  *   local_ptrs_rel_frame          — kept when the pointers, allocations and
  *                                   the locals' values in memory are kept
  *   local_ptrs_rel_mem_agree      — kept by any step that keeps the pointers
@@ -44,8 +44,8 @@ Theory localPtrsProps
 Ancestors
   list finite_map words
   venomMemDefs
-  vyperState valueEncoding valueEncodingProps compileEnv
-  venomState venomExecSemantics venomInst venomWf venomWfProps
+  vyperState valueEncoding valueEncodingProps compileEnv loweringStateRelDefs memoryValueDefs memoryValueFrame
+  venomState venomExecSemantics venomInst venomWf
 
 (* Updating a name outside the live scopes preserves pointer exclusion. *)
 Theorem not_local_ptr_name_update:
@@ -59,7 +59,6 @@ Proof
   `name <> id` by (strip_tac >> gvs[]) >> metis_tac[]
 QED
 
-(* An MSTORE outside a value's footprint keeps it. *)
 Theorem mstore_keeps_val_in_memory:
   ∀ty v off ss off2 (w:bytes32).
     val_in_memory ty v off ss.vs_memory ∧ val_wf ty v ∧
@@ -71,6 +70,20 @@ Proof
     simp[mstore_def] >>
   pop_assum SUBST1_TAC >>
   irule (CONJUNCT1 mstore_preserves_val_in_memory) >> simp[]
+QED
+
+(* An MSTORE outside a value's footprint keeps it. *)
+Theorem mstore_keeps_memory_value_rel:
+  ∀ty v off ss off2 (w:bytes32).
+    memory_value_rel ty v off ss.vs_memory ∧ val_wf ty v ∧
+    (off2 + 32 ≤ off ∨ off + type_memory_size ty ≤ off2) ⇒
+    memory_value_rel ty v off (mstore off2 w ss).vs_memory
+Proof
+  rpt strip_tac >>
+  `mstore off2 w ss = mstore off2 w (ss with vs_memory := ss.vs_memory)` by
+    simp[mstore_def] >>
+  pop_assum SUBST1_TAC >>
+  irule mstore_preserves_memory_value_rel >> simp[]
 QED
 
 (* A region below the old frontier stays backed when allocations are only
@@ -114,8 +127,8 @@ Theorem local_ptrs_rel_frame:
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ∧
        lookup_var p ss = SOME w ∧ w2n w + sz ≤ ss.vs_alloca_next ∧
        type_memory_size entry.type ≤ sz ∧ val_wf entry.type entry.value ∧
-       val_in_memory entry.type entry.value (w2n w) ss.vs_memory ⇒
-       val_in_memory entry.type entry.value (w2n w) ss'.vs_memory) ⇒
+       memory_value_rel entry.type entry.value (w2n w) ss.vs_memory ⇒
+       memory_value_rel entry.type entry.value (w2n w) ss'.vs_memory) ⇒
     local_ptrs_rel func cenv scopes ss'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -181,8 +194,8 @@ Theorem local_ptrs_rel_mem_agree:
     local_ptrs_rel func cenv scopes ss'
 Proof
   rpt strip_tac >> irule local_ptrs_rel_frame >> qexists_tac `ss` >>
-  rpt conj_tac >~ [`val_in_memory`]
-  >- (rpt strip_tac >> irule val_in_memory_mem_agree >>
+  rpt conj_tac >~ [`memory_value_rel`]
+  >- (rpt strip_tac >> irule memory_value_rel_mem_agree_region >>
       simp[] >> qexistsl_tac [`sz`, `ss.vs_memory`] >> simp[] >>
       first_x_assum irule >> simp[local_region_def] >>
       qexistsl_tac [`name`, `entry`, `p`] >> simp[]) >>
@@ -337,6 +350,23 @@ Proof
   metis_tac[]
 QED
 
+(* Instruction ids of a function name its instructions. *)
+Theorem fn_inst_ids_distinct_inj:
+  ∀func i1 i2.
+    fn_inst_ids_distinct func ∧ MEM i1 (fn_insts func) ∧
+    MEM i2 (fn_insts func) ∧ i1.inst_id = i2.inst_id ⇒ i1 = i2
+Proof
+  rpt strip_tac >>
+  `∀bbs. MAP (λi. i.inst_id) (fn_insts_blocks bbs) =
+         FLAT (MAP (λbb. MAP (λi. i.inst_id) bb.bb_instructions) bbs)` by
+    (Induct >> simp[fn_insts_blocks_def, MAP_APPEND]) >>
+  `ALL_DISTINCT (MAP (λi. i.inst_id) (fn_insts func))` by
+    fs[fn_inst_ids_distinct_def, fn_insts_def] >>
+  fs[MEM_EL] >> rename1 `i2 = EL m _` >>
+  `EL n (MAP (λi. i.inst_id) (fn_insts func)) =
+   EL m (MAP (λi. i.inst_id) (fn_insts func))` by gvs[EL_MAP] >>
+  `n = m` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >> gvs[]
+QED
 
 (* An allocation of another instruction of func, one whose output is no
    live local's pointer, misses every live local: the step a consumer needs
@@ -446,7 +476,7 @@ Theorem write_local_same_frame[local]:
                mem_bytes_at b sz' ss.vs_memory =
                mem_bytes_at b sz' ss'.vs_memory) ∧
     type_memory_size entry.type ≤ sz ∧ val_wf entry.type entry.value ∧
-    val_in_memory entry.type entry.value (w2n w) ss'.vs_memory ⇒
+    memory_value_rel entry.type entry.value (w2n w) ss'.vs_memory ⇒
     local_ptrs_rel func cenv scopes' ss'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -477,7 +507,7 @@ Proof
       qpat_x_assum `∀name entry p sz. P name entry p sz ⇒ ∃w. Q name entry p sz w`
         drule_all >>
       strip_tac >> qexists_tac `w'` >> simp[] >>
-      irule val_in_memory_mem_agree >>
+      irule memory_value_rel_mem_agree_region >>
       simp[] >> qexistsl_tac [`sz'`, `ss.vs_memory`] >> simp[] >>
       first_x_assum irule >> qexists_tac `name'` >>
       REWRITE_TAC[local_region_def] >> conj_tac >- first_assum ACCEPT_TAC >>
@@ -518,7 +548,7 @@ Theorem local_ptrs_rel_write_local:
                mem_bytes_at b sz' ss.vs_memory =
                mem_bytes_at b sz' ss'.vs_memory) ∧
     type_memory_size entry.type ≤ sz ∧ val_wf entry.type entry.value ∧
-    val_in_memory entry.type entry.value (w2n w) ss'.vs_memory ⇒
+    memory_value_rel entry.type entry.value (w2n w) ss'.vs_memory ⇒
     local_ptrs_rel func cenv scopes' ss'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -551,7 +581,7 @@ Theorem local_ptrs_rel_set_local:
     lookup_var p ss = SOME w ∧ local_backed func p ss (w2n w) sz ∧
     w2n w + sz ≤ ss.vs_alloca_next ∧
     type_memory_size entry.type ≤ sz ∧ val_wf entry.type entry.value ∧
-    val_in_memory entry.type entry.value (w2n w) ss.vs_memory ∧
+    memory_value_rel entry.type entry.value (w2n w) ss.vs_memory ∧
     (∀n b sz'. n ≠ name ∧ local_region cenv scopes ss n b sz' ⇒
                regions_disjoint (w2n w) sz b sz') ⇒
     local_ptrs_rel func cenv scopes' ss

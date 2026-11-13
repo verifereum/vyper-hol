@@ -3,7 +3,7 @@ Ancestors
   ctorAbiActualArrayInvariant ctorAbiActualArrayIteration ctorAbiActualFrame
   ctorAbiActualSites abiDecoderDynamicLoopSetup abiDecoderReentry
   abiEncoderRegisteredEffect abiDecoderTypedContract venomState valueEncoding
-  compileEnv finite_map words list arithmetic pred_set
+  compileEnv loweringStateRelDefs finite_map words list arithmetic pred_set
   abiDecoderArraySetupInputs abiDecoderContract abiDecoderLoop fragExec
   abiDecoderVarSequence abiDecoderDynamic abiEncoderProps instIdxIndep venomExecSemantics
   exprLoweringProps abiDecoderArrayInvariant rich_list abiDecoderArraySetupCode
@@ -60,13 +60,13 @@ Proof
 QED
 
 Theorem ctor_actual_array_setup_sim:
-  abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,st') /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV (pre ++ av::post)) (ArrayV (DynArrayV (vpre ++ v::vpost))) /\
   LENGTH pre = LENGTH vpre /\
-  abi_decoder_ranges DLOAD hi src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post))))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
@@ -102,7 +102,7 @@ Proof
 QED
 
 Theorem ctor_actual_array_setup_ids[local]:
-  abi_decode_array_element_setup ip src dst DLOAD hi di esz msz st = (ops,middle) ==>
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi di esz msz st = (ops,middle) ==>
   st.cs_next_id <= middle.cs_next_id
 Proof
   simp_tac bool_ss [abi_decode_array_element_setup_def,
@@ -112,10 +112,10 @@ Proof
   gvs[] >> strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac emit_op_next_id >>
   `!src data hi sz a v z.
-    compile_abi_decode_dyn_elem_ptr DLOAD src data hi sz a = (v,z) ==>
+    compile_abi_decode_dyn_elem_ptr DLOAD (Lit 0w) src data hi sz a = (v,z) ==>
     a.cs_next_id <= z.cs_next_id` by
     (rpt strip_tac >>
-     qpat_x_assum `compile_abi_decode_dyn_elem_ptr DLOAD _ _ _ _ a = (v,z)` mp_tac >>
+     qpat_x_assum `compile_abi_decode_dyn_elem_ptr DLOAD _ _ _ _ _ a = (v,z)` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
      mp_tac (GEN_ALL (Q.INST [`opc` |-> `DLOAD`] abi_decoder_code_dyn_elem_ptr)) >>
      simp[abi_decoder_code_def] >> metis_tac[pairTheory.SND]) >>
@@ -125,7 +125,7 @@ QED
 (* Same child interface as MemberRun: labels are an execution observation. *)
 val C = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -152,9 +152,9 @@ val C = ``\ty tv.
 
 Theorem ctor_actual_array_body_at_index:
   (^C) ty tv /\
-  abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   fn_has_code st end_st func /\ fn_inst_ids_distinct func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -165,7 +165,7 @@ Theorem ctor_actual_array_body_at_index:
   ctor_actual_array_observation ctx func site ids D N d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
     tv vs slot_id slot initial j j s /\ j < LENGTH vs /\
-  abi_decoder_ranges DLOAD hi src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -200,7 +200,7 @@ Proof
     (mp_tac (Q.ISPEC `vs:vyperValue$value list` (Q.SPEC `j:num` TAKE_DROP_SUC)) >>
      asm_simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND]) >>
   `LENGTH (TAKE j avs) = j /\ LENGTH (TAKE j vs) = j` by simp[LENGTH_TAKE, MIN_DEF] >>
-  `abi_decoder_ranges DLOAD hi src dst sb
+  `abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s` by
     metis_tac[ctor_actual_array_observation_ranges] >>
@@ -260,7 +260,7 @@ Proof
   pure_asm_rewrite_tac [] >> disch_tac >>
   qpat_x_assum `eval_operand (SND (SND ops)) prepared = _` mp_tac >>
   pure_asm_rewrite_tac [] >> disch_tac >>
-  asm "child" (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`) o BETA_RULE) >>
+  asm "child" (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) o BETA_RULE) >>
   disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand (FST (SND ops)) _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand (SND (SND ops)) _ = _`)) >>
@@ -347,9 +347,9 @@ QED
 
 Theorem ctor_actual_array_iteration:
   (^C) ty tv /\
-  abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   fn_has_code st end_st func /\ fn_inst_ids_distinct func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -360,7 +360,7 @@ Theorem ctor_actual_array_iteration:
   ctor_actual_array_observation ctx func site ids D N d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
     tv vs slot_id slot initial j j s /\ j < LENGTH vs /\
-  abi_decoder_ranges DLOAD hi src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))

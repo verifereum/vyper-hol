@@ -1,7 +1,7 @@
 Theory makeSsaRfLocalBridge
 Ancestors makeSsaCurrentAllocation makeSsaCurrentRenameTrace
   makeSsaRfRenameTrace makeSsaRfAllocation makeSsaRfAssign makeSsaRfWitness
-  makeSsaCurrentDefs venomInst list pair
+  makeSsaDefs venomInst list pair
 
 Theorem current_outputs_trace_nonoutput:
   !anns s rs H E names s' rs' H' E' w.

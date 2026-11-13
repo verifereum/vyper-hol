@@ -277,7 +277,7 @@ Proof
      qexists_tac `C.ctx_functions` >> simp[MEM_MAP] >> metis_tac[]) >>
   gvs[] >>
   `ai' = ai` by
-    (irule venomWfPropsTheory.fn_inst_ids_distinct_inj >> simp[] >> qexists_tac `fn` >>
+    (irule venomInstIdsPropsTheory.fn_inst_ids_distinct_inj >> simp[] >> qexists_tac `fn` >>
      metis_tac[allocaFrontierBoundTheory.ctx_inst_ids_distinct_fn,
                fn_inst_ids_distinct_def, fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat,
                MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]) >>
@@ -303,7 +303,7 @@ Proof
   Cases_on `(EL k bb.bb_instructions).inst_id =
             (EL k' bb'.bb_instructions).inst_id`
   >- (`EL k bb.bb_instructions = EL k' bb'.bb_instructions` by
-        (irule venomWfPropsTheory.fn_inst_ids_distinct_inj >> simp[] >>
+        (irule venomInstIdsPropsTheory.fn_inst_ids_distinct_inj >> simp[] >>
          qexists_tac `fn` >> gvs[wf_function_def, ircf_fwd_ok_def] >>
          simp[fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
          metis_tac[EL_MEM]) >>
@@ -436,7 +436,7 @@ Proof
     metis_tac[occurrence_geometry_site_bounds] >>
   `dai.inst_id <> rai.inst_id` by
     (strip_tac >> `dai = rai` by
-       (irule venomWfPropsTheory.fn_inst_ids_distinct_inj >> simp[] >>
+       (irule venomInstIdsPropsTheory.fn_inst_ids_distinct_inj >> simp[] >>
         qexists_tac `fn` >> simp[] >>
         gvs[wf_function_def]) >>
      gvs[ircf_fwd_ok_def]) >>

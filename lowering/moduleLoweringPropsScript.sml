@@ -32,7 +32,7 @@ Ancestors
   stmtLoweringProps
   emitHelperProps
   exprLoweringProps
-  moduleLowering compileEnv context
+  moduleLowering compileEnv loweringStateRelDefs context kwargBufferProps
   venomExecSemantics venomState venomInst venomExecProofs venomMemProps
   stateEquiv
   abiEncoder abiDecoderAppend
@@ -190,7 +190,7 @@ Theorem step_CALLDATASIZE:
     step_inst_base (mk_inst id CALLDATASIZE [] [out]) ss =
     OK (update_var out (n2w (LENGTH ss.vs_call_ctx.cc_calldata)) ss)
 Proof
-  rw[step_inst_base_def, exec_read0_def, exec_gas_def, mk_inst_def]
+  rw[step_inst_base_opcode_eqs, exec_read0_def, exec_gas_def, mk_inst_def]
 QED
 
 Theorem compile_selector_checks_appends:
@@ -603,7 +603,7 @@ Proof
       >> qexistsl_tac [`bb2`, `mk_inst (st.cs_next_id + 4) CALLDATALOAD [Lit 0w]
       [STRING #"%" (toString (st.cs_next_var + 3))]`] >> fs[] >> rpt conj_tac
       >- simp[is_terminator_def]
-      >- (simp[step_inst_base_def, mk_inst_def, exec_read1_def,
+      >- (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
       eval_operand_def] >> fs[jump_to_def]) >> metis_tac[])) >>
     (`u5.vs_current_bb = a6.cs_current_bb /\ u5.vs_inst_idx = 1 /\ eval_operand
       (Var (STRING #"%" (toString (st.cs_next_var + 3)))) u5 = SOME
@@ -702,6 +702,14 @@ val _ = Feedback.set_trace "Theory.allow_rebinds" 1;
 
 (* ===== Argument Decoding (helpers only) ===== *)
 
+Theorem cs_appends_abi_arg_ptr_guard:
+  !opc actual parent. cs_appends (compile_abi_arg_ptr_guard opc actual parent)
+Proof
+  rw[compile_abi_arg_ptr_guard_def, cs_appends_return] >>
+  ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers] >> gen_tac >>
+  ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers]
+QED
+
 Theorem cs_appends_decode_args:
   !args cenv off opc hi base.
     cs_appends (compile_decode_args cenv args off opc hi base)
@@ -724,7 +732,8 @@ Proof
   rpt (ho_match_mp_tac cs_appends_bind >> conj_tac
     >- simp[cs_appends_emit_helpers] >> gen_tac) >>
   irule cs_appends_ignore_bind >>
-  simp[cs_appends_abi_decode_mutual]
+  simp[cs_appends_ignore_bind, cs_appends_abi_arg_ptr_guard,
+       cs_appends_abi_decode_mutual]
 QED
 
 Theorem compile_decode_args_nil:
@@ -1086,7 +1095,7 @@ Proof
   qpat_x_assum `run_inst_seq _ _ = OK ss'` mp_tac >>
   asm_rewrite_tac[run_inst_seq_def] >>
   simp[mk_inst_def] >>
-  simp[Once step_inst_base_def] >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[exec_alloca_def] >> disch_then (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `eval_operand v _ = _` mp_tac >>
   simp[eval_operand_def, lookup_var_def, update_var_def,
@@ -1135,7 +1144,7 @@ Proof
   drule emitted_insts_emit_void >> strip_tac >>
   qexists_tac `ss'` >> asm_rewrite_tac[] >>
   qpat_x_assum `run_inst_seq _ _ = OK ss'` mp_tac >>
-  simp[run_inst_seq_def, step_inst_base_def]
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs]
 QED
 
 Theorem epilogue_RETURN_exact[local]:
@@ -1150,7 +1159,7 @@ Theorem epilogue_RETURN_exact[local]:
 Proof
   rpt strip_tac >>
   drule emitted_insts_emit_inst >> strip_tac >>
-  simp[run_inst_seq_def, step_inst_base_def, halt_state_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, halt_state_def,
        set_returndata_def, read_memory_def]
 QED
 

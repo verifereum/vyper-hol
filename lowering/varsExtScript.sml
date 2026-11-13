@@ -54,7 +54,7 @@ Theory varsExt
 Ancestors
   list rich_list finite_map pred_set
   venomExecSemantics venomExecProofs venomState venomInst exprLoweringProps
-  compileEnv
+  compileEnv loweringStateRelDefs
   fragExec
 
 (* ===== More variables bound ===== *)
@@ -568,7 +568,7 @@ val vars_ext_opcode_facts =
    ([``MSTORE``], step_inst_base_MSTORE_vars_ext),
    ([``RETURNDATACOPY``], step_inst_base_RETURNDATACOPY_vars_ext),
    ([``ISZERO``, ``NOT``], step_inst_base_pure1_vars_ext),
-   ([``SUB``, ``MUL``, ``Div``, ``Mod``, ``SDIV``, ``SMOD``, ``Exp``, ``OFFSET``],
+   ([``SUB``, ``MUL``, ``venomInst$Div``, ``venomInst$Mod``, ``SDIV``, ``SMOD``, ``venomInst$Exp``, ``OFFSET``],
     step_inst_base_arith_vars_ext),
    ([``EQ``, ``LT``, ``GT``, ``SLT``, ``SGT``], step_inst_base_compare_vars_ext),
    ([``AND``, ``OR``, ``XOR``, ``SHL``, ``SHR``, ``SAR``, ``SIGNEXTEND``, ``BYTE``],

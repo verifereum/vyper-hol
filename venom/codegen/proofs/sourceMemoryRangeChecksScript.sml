@@ -110,7 +110,10 @@ Theorem ILOAD_reads_byte_memory:
   OK (update_var "x" 7w ((init_venom_state "") with
       <| vs_memory := REPLICATE 31 0w ++ [7w]; vs_immutables := FEMPTY |>))
 Proof
-  EVAL_TAC
+  qmatch_goalsub_abbrev_tac `step_inst_base _ st` >>
+  `mload 0 st = 7w` by (simp[Abbr `st`] >> EVAL_TAC) >>
+  `eval_operand (Lit 0w) st = SOME 0w` by simp[eval_operand_def] >>
+  drule step_inst_base_ILOAD >> simp[]
 QED
 
 (* Destination ranges are intentionally unchanged, including CALL's original

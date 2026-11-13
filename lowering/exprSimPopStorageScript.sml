@@ -5,7 +5,7 @@ Ancestors
   vyperInterpreter vyperState vyperValueOperation finite_map
   vyperTypeAssignContext vyperPlaceResultTyping vyperTypeEnv vyperTypeInvariants
   vyperStorageBackend vyperStorage
-  exprLowering compileEnv vyperAST emitHelper
+  exprLowering compileEnv loweringStateRelDefs vyperAST emitHelper
   exprSimHyps exprSimHypsDefs exprSimAttributeFields exprSimFieldLayout vfmState
   exprLoweringProps venomState vyperLookupStorage list
   emitHelperProps venomExecSemantics venomInst exprSimVVFrame
@@ -117,19 +117,14 @@ Theorem dead_bytes_dynarray_shorten:
 Proof
   rpt gen_tac >> strip_tac >> simp[dead_bytes_def] >> rpt strip_tac >>
   qexists_tac `i` >> simp[] >>
-  Cases_on `i < w2n (lookup_storage (n2w bs) st')`
-  >- (`i < w2n (lookup_storage (n2w bs) st)` by decide_tac >>
-      gvs[] >>
-      `dead_bytes st' (bs + 1 + i * type_slot_size tv) tv j b <=>
-       dead_bytes st (bs + 1 + i * type_slot_size tv) tv j b` suffices_by simp[] >>
-      irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
-      first_x_assum irule >>
-      `i * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
-        (qpat_x_assum `i < n` (strip_assume_tac o MATCH_MP arithmeticTheory.LESS_ADD_1) >>
-         simp[arithmeticTheory.RIGHT_ADD_DISTRIB, arithmeticTheory.LEFT_ADD_DISTRIB]) >>
-      decide_tac) >>
-  gvs[] >> Cases_on `i < w2n (lookup_storage (n2w bs) st)` >> gvs[] >>
-  drule (cj 1 dead_bytes_range) >> simp[]
+  `dead_bytes st' (bs + 1 + i * type_slot_size tv) tv j b <=>
+   dead_bytes st (bs + 1 + i * type_slot_size tv) tv j b` suffices_by simp[] >>
+  irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
+  first_x_assum irule >>
+  `i * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
+    (qpat_x_assum `i < n` (strip_assume_tac o MATCH_MP arithmeticTheory.LESS_ADD_1) >>
+     simp[arithmeticTheory.RIGHT_ADD_DISTRIB, arithmeticTheory.LEFT_ADD_DISTRIB]) >>
+  decide_tac
 QED
 
 Theorem dead_bytes_pop_header:
@@ -264,11 +259,11 @@ Proof
   rpt strip_tac >> qpat_x_assum `!k b. _` irule >>
   reverse conj_tac >- decide_tac >> strip_tac >>
   qpat_x_assum `~dead_bytes _ _ _ _ _` mp_tac >>
+  qpat_x_assum `len = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   simp_tac bool_ss [arithmeticTheory.ADD_ASSOC] >>
   irule dyn_array_elem_dead >>
-  conj_tac >- simp[] >>
-  conj_tac >- decide_tac >>
-  conj_tac >- decide_tac >> qexists_tac `n` >> simp[]
+  simp[arithmeticTheory.MULT_COMM] >>
+  qexists_tac `n` >> simp[] >> decide_tac
 QED
 
 Theorem storage_range_agree_frame:
@@ -460,6 +455,8 @@ QED
 
 (* Postcondition packaging stays independent of the header-write proof. *)
 Theorem pop_storage_vv_post:
+  (!id path. tv <> PlaceR (MemoryPlace id path)) /\
+  es'.scopes = es.scopes /\
   stmt_state_rel ctx func cenv cx es' u /\
   storage_holds cx tr ann tv slot es' u /\
   lookup_var x u = SOME slot /\
@@ -468,10 +465,12 @@ Theorem pop_storage_vv_post:
   vv_post ctx func cenv cx (Pop ann tgt) es sa sb s0 es' tv
     (LocatedValue ann (mk_ptr (Var x) (if tr then LocTransient else LocStorage))) u
 Proof
+  strip_tac >>
+  `locals_kept cenv es es' s0 u` by (irule locals_kept_mem >> simp[]) >>
   Cases_on `tr` >>
   simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
        loweringPostsTheory.vv_at_def, contextTheory.mk_ptr_def, eval_operand_def,
-       loweringPostsTheory.locals_kept_def, expr_type_def]
+       expr_type_def]
 QED
 
 Theorem pop_declared_array_agree:
@@ -545,10 +544,9 @@ Theorem pop_array_last_slots:
 Proof
   strip_tac >>
   `len <= n` by metis_tac[pop_array_length_bound] >>
-  `MIN len n = len` by simp[arithmeticTheory.MIN_DEF] >>
-  `dyn_slots_in_range st (w2n w + 1) tv len` by
+  `dyn_slots_in_range st (w2n w + 1) tv n` by
     gvs[Once slots_in_range_def, read_slot_def] >>
-  `len - 1 < len` by decide_tac >>
+  `len - 1 < n` by decide_tac >>
   drule_all vyperStorageWritePreservationTheory.dyn_slots_in_range_index >>
   strip_tac >>
   `slots_in_range st
@@ -653,7 +651,7 @@ Proof
       LET_THM, apply_writes_def, vfmStateTheory.lookup_account_def]
 QED
 
-Theorem pop_storage_gas_obs[local]:
+Theorem pop_storage_gas_obs:
   get_storage cx (es with gas_obs := g) tr = get_storage cx es tr /\
   set_storage cx (es with gas_obs := g) tr X =
     set_storage cx es tr X with gas_obs := g
@@ -661,7 +659,7 @@ Proof
   Cases_on `tr` >> simp[get_storage_def, set_storage_def]
 QED
 
-Theorem pop_storage_holds_gas_obs[local]:
+Theorem pop_storage_holds_gas_obs:
   storage_holds cx tr t (PlaceR (StoragePlace tr' sl tvv)) w es s ==>
   storage_holds cx tr t (PlaceR (StoragePlace tr' sl tvv)) w
     (es with gas_obs := g) s
@@ -670,7 +668,7 @@ Proof
   qexistsl_tac [`tvt`, `v`] >> simp[len_rss_obs, pop_storage_gas_obs]
 QED
 
-Theorem pop_ssr_gas_obs[local]:
+Theorem pop_ssr_gas_obs:
   stmt_state_rel ctx func cenv cx es s ==>
   stmt_state_rel ctx func cenv cx (es with gas_obs := g) s
 Proof
@@ -740,7 +738,7 @@ QED
 Resume compile_pop_storage_normalized_sim[positive]:
   `(if tr then tload (n2w slot) s0 else sload (n2w slot) s0) <> 0w` by simp[] >>
   `~s0.vs_call_ctx.cc_static` by
-    fs[stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   drule_all dynarray_pop_storage_run >>
   disch_then (qspecl_then [`sa.cs_next_id`, `type_slot_size tv`] strip_assume_tac) >>
   `run_inst_seq (emitted_insts sa r) s0 = OK u` by
@@ -788,10 +786,12 @@ Resume compile_pop_storage_normalized_sim[positive]:
      u` by
     (irule pop_storage_vv_post >>
      conj_tac >- simp[] >>
+     conj_tac >- simp[] >>
      conj_tac >- (qpat_x_assum `u = _` mp_tac >> Cases_on `tr` >>
                  simp[sstore_def, tstore_def, venom_state_component_equality]) >>
      conj_tac >- (qpat_x_assum `u = _` mp_tac >> Cases_on `tr` >>
                  simp[sstore_def, tstore_def, venom_state_component_equality]) >>
+     conj_tac >- simp[] >>
      conj_tac
      >- (irule pop_ssr_gas_obs >> irule pop_storage_updated_state_rel >>
          metis_tac[]) >>

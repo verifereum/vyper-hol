@@ -1,11 +1,11 @@
 Theory simplifyCfgRetpc
 Ancestors
   unitShapeDefs simplifyCfgDefs simplifyCfgShape simplifyCfgLabelProps rich_list
-  simplifyCfgStruct cfgTransform venomWf venomWfProps venomInst list
-  cfgNormBase simplifyCfgBypassPhi simplifyCfgPhiSemantics
+  simplifyCfgStruct cfgTransform venomWf venomInst list
+  cfgNormBase simplifyCfgBypassPhi simplifyCfgPhiSemantics venomWfProps
   venomExecSemantics alist option
   simplifyCfgRepairDataflow simplifyCfgCollapseShape simplifyCfgPhiShape
-  simplifyCfgChainDataflow simplifyCfgBypassShape mmWfProofs simplifyCfgWfssa
+  simplifyCfgChainDataflow simplifyCfgBypassShape venomInstIdsProps mmWfProofs simplifyCfgWfssa
   simplifyCfgBypassDataflow simplifyCfgBypassClosure
   simplifyCfgFixupShape simplifyCfgFixupClosure
 
@@ -221,7 +221,7 @@ Proof
   `resolve_phi p i.inst_operands = SOME (Var y)` by
     (irule retpc_phi_pair_selected >> simp[]) >>
   drule_all scfg_update_phi_bypass_selected >> strip_tac >>
-  drule scfg_resolve_phi_pair >> strip_tac >>
+  drule resolve_phi_pair >> strip_tac >>
   metis_tac[phi_pairs_mem_var]
 QED
 
@@ -638,7 +638,7 @@ Resume retpc_normalized_transport[unique]:
   asm "data" (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
   `i.inst_id = j.inst_id` by
     (fs[retpc_shape_ok_def] >> metis_tac[]) >>
-  metis_tac[venomWfPropsTheory.fn_inst_ids_distinct_inj]
+  metis_tac[fn_inst_ids_distinct_inj]
 QED
 
 Finalise retpc_normalized_transport
