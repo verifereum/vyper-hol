@@ -288,7 +288,8 @@ Theorem lower_vyper_deploy_unit_sym_src_ok:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan.
   deploy_phases policy tops (deploy_bc, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
-  supported_program tops /\ ~program_reads_self_code tops ==>
+  supported_program tops /\ supported_program_deploy tops /\
+  ~program_reads_self_code tops ==>
   label_flow_ok dunit.cu_context /\
   (!fn inst. MEM fn dunit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
              ~MEM (Label "code_end") inst.inst_operands) /\
