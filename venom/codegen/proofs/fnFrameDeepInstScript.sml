@@ -11,7 +11,8 @@
 
 Theory fnFrameDeepInst
 Ancestors
-  deepInstSim asmFrame deepResidualSim fnPlanPrefix genFrameSim frameRel contextCodegenRel
+  deepInstSim asmFrame asmRunBounded venomRunBounded fnFrameTerminalHalt
+  deepResidualSim fnPlanPrefix genFrameSim frameRel contextCodegenRel
   codegenRel blockSimHelpers unitShapeDefs genBlockSim mixedPrefixSim
   stackPlanGen stackPlanTypes planExec asmSem venomExecSemantics venomState
   venomInst fcgDefs livenessDefs dfgDefs cfgDefs
@@ -39,7 +40,9 @@ Theorem frame_inst_local_setup:
       (frame_view fn ra vs' with vs_memory := m') /\
     EVERY (\(off,len). len = 0 \/ off + len <= final.ps_alloc.sa_spill_base \/
       final.ps_alloc.sa_next_offset <= off)
-      (source_memory_read_ranges inst (frame_view fn ra vs with vs_memory := ast.as_memory))
+      (source_memory_read_ranges inst (frame_view fn ra vs with vs_memory := ast.as_memory)) /\
+    (inst_create_size_ok inst vs ==>
+     inst_create_size_ok inst (frame_view fn ra vs with vs_memory := ast.as_memory))
 Proof
   rpt gen_tac >> strip_tac >> rename1 `MEM r cplan.cp_regions` >>
   qpat_assum `fn_frame_inv _ _ _ _ _ _ _ _ _ _`
@@ -60,10 +63,15 @@ Proof
       (frame_view fn ra vs' with vs_memory := m')` by
     (irule frame_view_safe_step >> goal_assum (drule_at Any) >>
      simp[] >> qexists_tac `r` >> simp[]) >>
-  qexistsl_tac [`top`, `m'`] >> simp[] >>
-  simp[source_read_ranges_frame_view] >>
-  irule (SRULE [arithmeticTheory.ADD_COMM] context_reads_local) >>
-  qexistsl_tac [`cplan`, `r`] >> simp[]
+  qexistsl_tac [`top`, `m'`] >> simp[] >> conj_tac
+  >- (simp[source_read_ranges_frame_view] >>
+      irule (SRULE [arithmeticTheory.ADD_COMM] context_reads_local) >>
+      qexistsl_tac [`cplan`, `r`] >> simp[]) >>
+  rw[inst_create_size_ok_def] >>
+  `eval_operand sz (frame_view fn ra vs with vs_memory := ast.as_memory) =
+   eval_operand sz vs` by
+    (irule ordinary_inst_operand_frame_view >> simp[] >> qexists_tac `inst` >> simp[]) >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem frame_inst_local_lift:
@@ -83,7 +91,9 @@ Theorem frame_inst_local_lift:
   asm_steps lo o2pc prog n ast =
     AsmOK (out with as_stack := out.as_stack ++ rest) /\
   fn_frame_inv ctx cp lo fn ra rest mem0 final vs'
-    (out with as_stack := out.as_stack ++ rest)
+    (out with as_stack := out.as_stack ++ rest) /\
+  (create_safe_prefix lo o2pc prog n (ast with as_stack := top) ==>
+   create_safe_prefix lo o2pc prog n ast)
 Proof
   rpt gen_tac >> strip_tac >> rename1 `MEM r cplan.cp_regions` >>
   `~vs'.vs_halted` by
@@ -100,9 +110,14 @@ Proof
   >- (`ast with as_stack := top ++ rest = ast` by
         simp[asmSemTheory.asm_state_component_equality] >>
       pop_assum (SUBST1_TAC o GSYM) >> irule asm_steps_frame >> simp[]) >>
-  irule frame_local_result >> simp[] >> conj_tac
-  >- (qexists_tac `r` >> simp[]) >>
-  qexistsl_tac [`ast`, `m'`, `ps`, `vs`] >> simp[]
+  conj_tac
+  >- (irule frame_local_result >> simp[] >> conj_tac
+      >- (qexists_tac `r` >> simp[]) >>
+      qexistsl_tac [`ast`, `m'`, `ps`, `vs`] >> simp[]) >>
+  strip_tac >>
+  `ast with as_stack := top ++ rest = ast` by simp[asm_state_component_equality] >>
+  drule_all create_safe_prefix_frame >>
+  disch_then (qspec_then `rest` mp_tac) >> simp[]
 QED
 
 (* gen_inst_frame_sim with any-depth ownership, generated_plan_state_wf_marked and an
@@ -218,7 +233,9 @@ Theorem gen_inst_frame_sim_deep:
         n <= LENGTH (execute_plan cp.cp_initial_fmp ops) /\
         asm_steps lo o2pc prog n as = AsmOK as' /\
         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
-        as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops)
+        as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops) /\
+        (venomRunBounded$inst_create_size_ok inst vs ==>
+         asmRunBounded$create_safe_prefix lo o2pc prog n as)
 Proof
   rpt gen_tac >> strip_tac >> rename1 `MEM r cplan.cp_regions` >>
   gen_tac >> strip_tac >>
@@ -239,7 +256,7 @@ Proof
   qpat_x_assum `o2pc = _` SUBST_ALL_TAC >>
   drule_all frame_inst_local_lift >> strip_tac >>
   qexistsl_tac [`n`, `out with as_stack := out.as_stack ++ rest`] >>
-  simp[]
+  simp[] >> metis_tac[]
 QED
 
 (* Count-aligned companion; the shape premise restricts only the local dispatcher. *)
@@ -314,7 +331,8 @@ Theorem gen_inst_frame_sim_deep_count:
         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
         as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops) /\
         n = LENGTH (execute_plan cp.cp_initial_fmp ops) -
-          (if inst.inst_opcode = ASSERT_UNREACHABLE then 1 else 0)
+          (if inst.inst_opcode = ASSERT_UNREACHABLE then 1 else 0) /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt gen_tac >> strip_tac >> rename1 `MEM r cplan.cp_regions` >>
   gen_tac >> strip_tac >>
@@ -334,5 +352,6 @@ Proof
   qpat_x_assum `lo = _` SUBST_ALL_TAC >>
   qpat_x_assum `o2pc = _` SUBST_ALL_TAC >>
   drule_all frame_inst_local_lift >> strip_tac >>
-  simp[]
+  qexists_tac `out with as_stack := out.as_stack ++ rest` >>
+  simp[] >> metis_tac[]
 QED
