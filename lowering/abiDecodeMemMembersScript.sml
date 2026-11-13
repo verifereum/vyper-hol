@@ -7,7 +7,7 @@ Ancestors
   finite_map pred_set list rich_list arithmetic words compileEnv emitHelper
   emitHelperProps exprLoweringProps loweringStateRelDefs
 
-Theorem abi_decode_mem_owned_footprint_exists[local]:
+Theorem abi_decode_mem_owned_footprint_exists:
   !lo hi (m:num |-> (num # num)).
     ?fp. !p n. MEM (p,n) fp <=>
       ?id. lo <= id /\ id < hi /\ FLOOKUP m id = SOME (p,n)
