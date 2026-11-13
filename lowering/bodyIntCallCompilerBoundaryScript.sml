@@ -16,18 +16,32 @@ Proof
 QED
 
 (* RESTATED (train 17): 0.5.0b1 per-argument staging *)
+(* The two staging runs of an internal call (supplied args under ce, then
+   omitted defaults under cenv_without_defaults) grow the state as one. *)
+Theorem intcall_stage_split_mono:
+  compile_stage_intcall_args compile_expr ce1 es1 f1 t1 s2 = (ops1,s3) /\
+  compile_stage_intcall_args compile_expr ce2 es2 f2 t2 s3 = (ops2,si) ==>
+  ci_mono s2 si
+Proof
+  strip_tac >> irule ci_mono_trans >> qexists_tac `s3` >>
+  conj_tac >| [
+    qspecl_then [`compile_expr`,`ce1`,`es1`,`f1`,`t1`,`s2`] mp_tac
+      ci_mono_compile_stage_intcall_args,
+    qspecl_then [`compile_expr`,`ce2`,`es2`,`f2`,`t2`,`s3`] mp_tac
+      ci_mono_compile_stage_intcall_args] >>
+  simp[cj 1 ci_mono_compile_expr_sa]
+QED
+
+(* RESTATED (train 17): 0.5.0b1 per-argument staging;
+   (s1-calls) staging run weakened to ci_mono for the internal-defaults split *)
 Theorem intcall_compiler_prefix:
   ci_mono sa s2 /\
-  compile_stage_intcall_args compile_expr ce es flags tys s2 = (ops,si) /\
+  ci_mono s2 si /\
   local_ptrs_reserved ce sa ==>
   cs_extends sa si /\ local_ptrs_reserved ce si /\
   sa.cs_next_var <= si.cs_next_var /\ s2.cs_next_var <= si.cs_next_var
 Proof
   strip_tac >>
-  `ci_mono s2 si` by
-    (qspecl_then [`compile_expr`,`ce`,`es`,`flags`,`tys`,`s2`] mp_tac
-       ci_mono_compile_stage_intcall_args >>
-     simp[cj 1 ci_mono_compile_expr_sa]) >>
   fs[ci_mono_def] >>
   `sa.cs_next_var <= si.cs_next_var` by decide_tac >>
   conj_tac >- metis_tac[cs_extends_trans] >>
@@ -35,10 +49,10 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; s1-calls: run -> ci_mono *)
 Theorem intcall_void_compiler_boundary:
   ci_mono sa s2 /\
-  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
+  ci_mono s2 si /\
   emit_void opc ops si = (u,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa ==>
   fn_has_code si sb func
@@ -49,10 +63,10 @@ Proof
   fs[ci_mono_def] >> drule_all fn_has_code_split >> simp[]
 QED
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; s1-calls: run -> ci_mono *)
 Theorem intcall_stack_compiler_boundary:
   ci_mono sa s2 /\
-  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
+  ci_mono s2 si /\
   emit_multi_op opc ops n si = (results,sj) /\
   store_multi_results buf results off sj = (u,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa ==>

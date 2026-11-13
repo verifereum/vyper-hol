@@ -175,12 +175,12 @@ Resume intcall_nested_return_enriched[physical]:
   suspend "dispatch"
 QED
 
-(* HELD: stage-tower return adapters need restating over sup_ops ++ dflt_ops (internal defaults) *)
 Resume intcall_nested_return_enriched[dispatch]:
-  (* original proof, kept while held:
+  `ci_mono st2 st3` by (irule bodyIntCallCompilerBoundaryTheory.intcall_stage_split_mono >> metis_tac[]) >>
   drule (intcall_physical_return_resources |>
     Q.SPEC `rcn` |>
-    Q.INST [`lo` |-> `fp.jc_lo`, `P` |-> `fp.jc_prot`, `cty` |-> `ret`]) >>
+    Q.INST [`lo` |-> `fp.jc_lo`, `P` |-> `fp.jc_prot`, `cty` |-> `ret`,
+            `args` |-> `invoke_args`]) >>
   disch_then drule >>
   disch_then (drule_at (Pat `gas_path _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `state_rel _ _ _ _ _`)) >>
@@ -188,29 +188,27 @@ Resume intcall_nested_return_enriched[dispatch]:
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `LENGTH _ = _`)) >>
   disch_then (drule_at (Pat `value_has_type _ _`)) >>
-  disch_then (qspecl_then [`HD argv`,`vv`,`ret`,`rbs`,`lbl`,`fp`] mp_tac) >>
+  disch_then (qspecl_then [`HD argv`,`vv`,`ret`,`rbs`,`lbl`,`invoke_args`,`fp`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >> conj_tac
     >- (qpat_assum `rcn = 0 /\ _ ==> st2 = _ /\ _` mp_tac >>
         qpat_assum `ce.ce_func_return_type _ = ret` mp_tac >>
         qpat_assum `rcn = returns_stack_count _ _` mp_tac >>
         qpat_assum `lbl = _` mp_tac >>
+        qpat_assum `invoke_args = _` mp_tac >>
         POP_ASSUM_LIST (K all_tac) >> simp[]) >>
     qpat_assum `0 < rcn \/ _ ==> _` mp_tac >>
     qpat_assum `ce.ce_func_return_type _ = ret` mp_tac >>
     qpat_assum `rcn = returns_stack_count _ _` mp_tac >>
     qpat_assum `lbl = _` mp_tac >>
+    qpat_assum `invoke_args = _` mp_tac >>
     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
     metis_tac[])) >>
   disch_then (qx_choose_then `k` (qx_choose_then `out` assume_tac)) >>
   qpat_x_assum `gas_path _ _ _ _ _ /\ _`
     (map_every assume_tac o CONJUNCTS) >>
   suspend "endpoint"
-  *)
-  cheat
 QED
 
-(* HELD: stage-tower return adapters need restating over sup_ops ++ dflt_ops (internal defaults); these Resume blocks hang off the held [dispatch] *)
-(*
 Resume intcall_nested_return_enriched[endpoint]:
   `~out.vs_halted` by
     (drule_at Any fragGasPathTheory.gas_path_normal >> simp[]) >>
@@ -339,7 +337,6 @@ Resume intcall_nested_return_enriched[widebuffer]:
   simp[] >>
   qexistsl [`aid`, `off`, `buf.buf_size`] >> simp[] >> metis_tac[]
 QED
-*)
 
 Finalise intcall_nested_return_enriched
 

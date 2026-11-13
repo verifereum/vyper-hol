@@ -186,7 +186,7 @@ Finalise compile_internal_return_memory_frag_raw
 
 (* Memory and fresh-variable writes commute with the exact epilogue.  The
    index on the pre-unlock witness omits precisely the release instruction. *)
-Theorem return_unlock_memory_frame[local]:
+Theorem return_unlock_memory_frame:
   !cenv s vars mem n id.
     LENGTH (return_unlock_insts cenv id) <= n ==>
     (return_unlock_state cenv s) with

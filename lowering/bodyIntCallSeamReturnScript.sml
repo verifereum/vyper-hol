@@ -4,7 +4,8 @@
 
 Theory bodyIntCallSeamReturn
 Ancestors
-  bodyIntCallSeamDefs
+  bodyIntCallNrEndpoint bodyIntCallNrCompiler bodyIntCallNrVoid bodyIntCallNrMemory bodyIntCallNrStack
+  bodyIntCallNrCleanup bodyIntCallNrCleanupCert bodyIntCallNrGuardCert bodyIntCallSeamDefs
   bodyIntCallJointContract
   bodyIntCallSource bodyIntCallWidenedPost bodyIntCallWidenedEndpoint
   bodyIntCallSourceReturn bodyIntCallMetadata bodyIntCallReturnAdapters bodyIntCallCompilerBoundary bodyIntCallAssemblySource bodyIntCallAssemblyModes bodyIntCallAssembly bodyIntCallCompletedModes bodyIntCallCompletedFrame bodyIntCallCompletedFacts bodyIntCallCompletedSource bodyIntCallExemptReturn bodyIntCallStorePath bodyIntCallStoreRun bodyIntCallStorePost bodyIntCallEmitBoundary memoryLocalRhsProps supportedProgram supportedNames bodyIntCallReturnLayout bodyIntCallRestoreResults bodyIntCallRestoreFrame bodyIntCallCallerFrame bodyIntCallCountedPath bodyIntCallReturnBoundaryChecks bodyIntCallImmutableFrame bodyIntCallReturnSource bodySim exprSimDefs exprSimHyps exprSimHypsDefs loweringPosts
@@ -54,7 +55,56 @@ Theorem intcall_seam3_nonreentrant:
          t'.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [intcall_entry_def]) >>
+  first_x_assum drule_all >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome F _ _ _ _ _ R` >>
+  irule intcall_nr_cleanup_outcome >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`\v ee ir cs. R (INL v) ee (IntRet ir cs)`,
+    `R`,`callee`,`entered`] >>
+  BETA_TAC >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `R _ _ _` mp_tac >>
+    simp[NoAsms, Abbr `R`, intcall_callee_exit_def, expr_exit_def,
+      Excl "unlock_if_nr_def", Excl "is_view_mut_def"] >> strip_tac >>
+    rename1 `unlock_if_nr _ _ _ (ee with gas_obs := []) = (INL (),clean)` >>
+    `clean = eu with gas_obs := []` by
+      (qspec_then `ee` strip_assume_tac
+        (Q.SPECL [`cx`,`T`,`is_view_mut mut`] unlock_if_nr_transport) >>
+       qpat_x_assum `!gs. unlock_if_nr _ _ _ _ = _`
+         (qspec_then `[]` mp_tac) >>
+       disch_tac >> metis_tac[pairTheory.PAIR_EQ, sumTheory.INL_11]) >>
+    qpat_x_assum `clean = _` SUBST_ALL_TAC >>
+    `immutable_alloca_sep func cenv cx (eu with scopes := prev) t` by
+      (irule nr_marked_callee_success_separation >>
+       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+       metis_tac[stmt_state_rel_def]) >>
+    `gas_path ctx callee entered (LENGTH marks) (IntRet ir cs)` by
+      (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+       simp[gasSummaryTheory.gas_marked_exec_def,
+         fragGasModeTheory.gas_marked_path_def]) >>
+    irule (SRULE [arithmeticTheory.ADD_COMM] intcall_nr_return_endpoint) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- simp[] >>
+    goal_assum (drule_at (Pat `intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+    goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
+    goal_assum (drule_at (Pat `ce_func_info _ _ = _`)) >>
+    goal_assum (drule_at (Pat `MEM (FunctionDecl _ _ _ _ _ _ _ _ _) _`)) >>
+    qexistsl_tac [`retc`,`pvs`,`rbs`] >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- (rpt strip_tac >>
+      `cenv.ce_func_return_type (nsid_to_string (NONE,name)) = ret` by
+        metis_tac[nr_declared_return_type] >>
+      metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ]) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  conj_tac >- (rpt gen_tac >>
+    simp[NoAsms, Abbr `R`, intcall_callee_exit_def,
+      Excl "unlock_if_nr_def", Excl "is_view_mut_def"] >>
+    POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Seam 3: return and revert handling.  The INVOKE with the callee's run
@@ -62,7 +112,6 @@ QED
    caller's buffer, the frame's cleanup and the cast: the call's
    expr_vv_sim post, or an abort passed on.  Only the case where the
    callee's return type is the call's annotation. *)
-(* HELD: stage-tower return adapters need restating over sup_ops ++ dflt_ops (internal defaults) *)
 Theorem intcall_return_restore_F:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
    mut args ret ss rr prev penv rtv es1 t retc rbs pvs.
@@ -101,7 +150,6 @@ Theorem intcall_return_restore_F:
          t'.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
 Proof
-  (* original proof, kept while held:
   rpt strip_tac >>
   `post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt) =
    expr_type (Call ann (IntCall (NONE,name)) es dflt)` by
@@ -171,18 +219,17 @@ Proof
       [intcall_callee_exit_F, expr_exit_def]) >>
   simp[NoAsms] >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  `ci_mono st2 st3` by (irule intcall_stage_split_mono >> metis_tac[]) >>
   irule source_return_dispatch >> asm_rewrite_tac[] >>
   conj_tac >- simp[] >>
   reverse conj_tac >- (qexists_tac `es1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `ci_mono _ _`)) >>
   goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
-  qexistsl_tac [`arg_ops`,`ann`,`lbl`,`retc`,`retc`,`rbs`,`rbs`,`rtv`,`HD argv`] >>
+  qexistsl_tac [`arg_ops`,`invoke_args`,`ann`,`lbl`,`retc`,`retc`,`rbs`,`rbs`,`rtv`,`HD argv`] >>
   asm_rewrite_tac[] >> simp[NoAsms, expr_type_def] >>
   qpat_assum `retc = returns_stack_count _ _` (fn th => rewrite_tac[GSYM th]) >>
   asm_rewrite_tac[]
-  *)
-  cheat
 QED
 
 
@@ -264,7 +311,6 @@ Proof
   metis_tac[arg_type_fits_bytestring_source]
 QED
 
-(* HELD: stage-tower return adapters need restating over sup_ops ++ dflt_ops (internal defaults) *)
 Theorem intcall_return_widened_F:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
    mut args ret ss rr prev penv rtv es1 t retc rbs pvs.
@@ -303,7 +349,6 @@ Theorem intcall_return_widened_F:
          t'.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
 Proof
-  (* original proof, kept while held:
   rpt strip_tac >>
   drule_all widened_call_return_type >> strip_tac >>
   `ret <> ann` by metis_tac[] >>
@@ -381,15 +426,16 @@ Proof
       val_footprint rtv v <= buf.buf_size /\
       (!id lb lsz. local_region cenv prev out id lb lsz ==>
         off + buf.buf_size <= lb \/ lb + lsz <= off))` by
-    (qpat_assum `ret <> NoneT` (fn th =>
+    (`ci_mono st2 st3` by (irule intcall_stage_split_mono >> metis_tac[]) >>
+     qpat_assum `ret <> NoneT` (fn th =>
        irule (Q.INST [`cty` |-> `ret`] (Q.SPEC `retc` physical_source_return_dispatch)
          |> SIMP_RULE (srw_ss()) [th])) >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      TRY (qexists_tac `es1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `ci_mono _ _`)) >>
      goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
-     qexistsl_tac [`lbl`,`rbs`,`retc`,`HD argv`] >>
+     qexistsl_tac [`invoke_args`,`lbl`,`rbs`,`retc`,`HD argv`] >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
      >- (qpat_x_assum `0 < retc \/ ret <> NoneT ==> _` mp_tac >>
          qpat_assum `ret <> NoneT` (fn th => simp[NoAsms, th]) >>
@@ -426,8 +472,6 @@ Proof
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qpat_assum `off < dimword (:256)` (fn th => simp[NoAsms, th]) >>
   first_assum ACCEPT_TAC
-  *)
-  cheat
 QED
 
 
