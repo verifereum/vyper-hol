@@ -1,17 +1,20 @@
 Theory readonlyInvokeCopyFwdExecutionCompare
 Ancestors
   readonlyInvokeCopyFwdExecutionLocal readonlyInvokeCopyFwdExecution
+  readonlyInvokeCopyFwdOpaque frameViewFacts frameRel unitShapeDefs
   readonlyInvokeCopyFwdHeterogeneousLedger readonlyInvokeCopyFwdValues
   readonlyInvokeCopyFwdRel readonlyInvokeCopyFwdOperationalSupport
-  readonlyInvokeCopyFwdEndpointBounds
+  readonlyInvokeCopyFwdEndpointBounds readonlyInvokeCopyFwdHeterogeneousMapOrigins
+  readonlyInvokeCopyFwdAlignedOrigins
   o1LowerDloadPtrDiscipline o1LowerDloadGhost o1LowerDloadRelocationKernel
   o1LowerDloadOccurrence allocaFrontierBound internalReturnCopyFwdSim
   unitMemInv taintAgree ptrDiscipline pointerConfinedDefs memLocDefs
   venomExecSemantics venomState venomInst codegenRel finite_map list pred_set words
 
 Theorem ricf_execution_comparison_values[local]:
-  ricf_execution_invariant vs C ctx0 log D stk PG G tn fn inst s t
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets tn /\
+  ssa_form fn /\ opaque_use_ok fn /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs /\
   ptr_discipline lo C vs /\ active_inst fn inst s /\
@@ -29,19 +32,25 @@ Proof
     metis_tac[ptr_discipline_def] >>
   `op_taint tn p = {} /\ op_taint tn q = {}` by
     (fs[MEM] >> gvs[taint_ok_def] >> metis_tac[]) >>
-  `ricf_frame_agree D (ircf_dead (ricf_original_copy_ids C) s stk) sites
+  `(!name. p = Var name ==> ~retpc_var fn name) /\
+   (!name. q = Var name ==> ~retpc_var fn name)` by
+    (conj_tac >> rpt gen_tac >> strip_tac >>
+     irule ordinary_operand_not_retpc >> simp[] >>
+     qexists_tac `inst` >> fs[MEM] >>
+     metis_tac[active_inst_mem_fn_insts]) >>
+  `ricf_opaque_frame_agree fn D (ircf_dead (ricf_original_copy_ids C) s stk) sites
     (ricf_complete_params PG s.vs_params) G tn s t /\
-   ricf_map_origins vs C ctx0 log stk PG G tn fn inst s U B sites` by
+   ricf_heterogeneous_map_origins vs C stk PG G tn fn inst s U B sites` by
     fs[ricf_execution_invariant_def] >>
   `?x'. eval_operand p t = SOME x' /\
-    ricf_value_agree sites (op_prov G p) {} x x'` by
-    metis_tac[ricf_frame_agree_operand] >>
+    ricf_opaque_value_agree sites (op_prov G p) {} x x'` by
+    metis_tac[ricf_opaque_frame_operand] >>
   `?y'. eval_operand q t = SOME y' /\
-    ricf_value_agree sites (op_prov G q) {} y y'` by
-    metis_tac[ricf_frame_agree_operand] >>
+    ricf_opaque_value_agree sites (op_prov G q) {} y y'` by
+    metis_tac[ricf_opaque_frame_operand] >>
   qexistsl_tac [`x'`,`y'`] >> simp[] >>
   Cases_on `op_prov G p = NONE /\ op_prov G q = NONE`
-  >- (gvs[ricf_value_agree_def] >>
+  >- (gvs[ricf_opaque_value_agree_def, ricf_is_zero_prov_def, ricf_value_agree_def] >>
       imp_res_tac ld_value_agree_clean >> gvs[]) >>
   `?P. FDOM G SUBSET fn_pv P fn /\ ptr_use_ok P (fn_pv P fn) inst` by
     (`?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
@@ -62,6 +71,10 @@ Proof
     b <= w2n y /\ w2n y <= b+z` by
     (qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
      gvs[access_ok_def, MEM] >> metis_tac[]) >>
+  `z <> 0` by decide_tac >>
+  `ricf_value_agree sites (SOME (b,z)) {} x x' /\
+   ricf_value_agree sites (SOME (b,z)) {} y y'` by
+    gvs[ricf_opaque_value_agree_def, ricf_is_zero_prov_def, op_prov_def] >>
   namedCases_on `FLOOKUP sites (b,z)` ["", "endpoint_tr"]
   >- (`(b,z) NOTIN FDOM sites` by fs[FLOOKUP_DEF] >>
       `ld_value_agree sites NONE {} x x' /\ ld_value_agree sites NONE {} y y'` by
@@ -69,19 +82,21 @@ Proof
       imp_res_tac ld_value_agree_clean >> gvs[]) >>
   PairCases_on `endpoint_tr : num # num # num` >>
   `endpoint_tr0 = b /\ endpoint_tr2 = z` by
-    (fs[ricf_frame_agree_def, ricf_sites_ok_def] >> metis_tac[]) >>
+    (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def, ricf_sites_ok_def] >> metis_tac[]) >>
   qpat_x_assum `endpoint_tr0 = b` SUBST_ALL_TAC >>
   qpat_x_assum `endpoint_tr2 = z` SUBST_ALL_TAC >>
   `b+z < dimword (:256) /\ endpoint_tr1+z < dimword (:256)` by
-    (fs[ricf_map_origins_def] >>
-     metis_tac[ricf_translation_origin_endpoint_bounds]) >>
-  `ricf_sites_ok sites` by fs[ricf_frame_agree_def] >>
+    (fs[ricf_heterogeneous_map_origins_def] >>
+     metis_tac[ricf_aligned_translation_origin_projection,
+       ricf_translation_origin_endpoint_bounds]) >>
+  `ricf_sites_ok sites` by fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def] >>
   gvs[op_prov_def] >> metis_tac[ricf_value_agree_comparisons])
 QED
 
 Theorem ricf_execution_comparison_next:
-  ricf_execution_invariant vs C ctx0 log D stk PG G tn fn inst s t
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets tn /\
+  ssa_form fn /\ opaque_use_ok fn /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs /\
   ptr_discipline lo C vs /\ active_inst fn inst s /\
@@ -89,7 +104,7 @@ Theorem ricf_execution_comparison_next:
   step_inst fuel C inst s = OK u /\
   active_inst fn next (u with vs_inst_idx := SUC s.vs_inst_idx) ==>
   ?v. step_inst fuel Ct inst t = OK v /\
-    ricf_execution_invariant vs C ctx0 log D stk PG (step_prov PG G inst u)
+    ricf_execution_invariant vs C D stk PG (step_prov PG G inst u)
       (step_taint inst s u tn) fn next
       (u with vs_inst_idx := SUC s.vs_inst_idx)
       (v with vs_inst_idx := SUC s.vs_inst_idx)
@@ -113,7 +128,7 @@ Proof
   `out_taint tn inst s = {} /\ written_taint tn inst s = {}` by
     (fs[MEM] >> gvs[out_taint_def, written_taint_def] >> rpt CASE_TAC >> simp[]) >>
   irule (Q.INST [`p` |-> `NONE`, `m` |-> `{}`] ricf_execution_bind_next) >>
-  simp[ricf_value_agree_def, ld_value_agree_def, word_agree_except_def] >>
+  simp[ricf_opaque_value_agree_def, ricf_is_zero_prov_def, ricf_value_agree_def, ld_value_agree_def, word_agree_except_def] >>
   fs[MEM] >>
   gvs[step_prov_def, out_prov_def, step_taint_def, out_taint_def,
     mem_taint_def, adopt_reset_def, store_taint_def,

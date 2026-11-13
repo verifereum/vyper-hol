@@ -1,6 +1,7 @@
 Theory readonlyInvokeCopyFwdExecutionReads
 Ancestors
   readonlyInvokeCopyFwdExecutionLocal readonlyInvokeCopyFwdExecution
+  readonlyInvokeCopyFwdOpaque frameViewFacts frameRel unitShapeDefs
   readonlyInvokeCopyFwdExecutionOrdinary readonlyInvokeCopyFwdHeterogeneousLedger
   readonlyInvokeCopyFwdRel internalReturnCopyFwdSim
   o1LowerDloadRelocationKernel o1LowerDloadOccurrence o1LowerDloadJointRead1
@@ -9,8 +10,9 @@ Ancestors
   finite_map list pred_set words
 
 Theorem ricf_execution_read0_next:
-  ricf_execution_invariant vs C ctx0 log D stk PG G tn fn inst s t
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets rt /\
+  ssa_form fn /\ opaque_use_ok fn /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   active_inst fn inst s /\
   MEM inst.inst_opcode [CALLER;ADDRESS;CALLVALUE;ORIGIN;GASPRICE;CHAINID;
@@ -19,7 +21,7 @@ Theorem ricf_execution_read0_next:
   step_inst fuel C inst s = OK u /\
   active_inst fn next (u with vs_inst_idx := SUC s.vs_inst_idx) ==>
   ?v. step_inst fuel Ct inst t = OK v /\
-    ricf_execution_invariant vs C ctx0 log D stk PG (step_prov PG G inst u)
+    ricf_execution_invariant vs C D stk PG (step_prov PG G inst u)
       (step_taint inst s u tn) fn next
       (u with vs_inst_idx := SUC s.vs_inst_idx)
       (v with vs_inst_idx := SUC s.vs_inst_idx)
@@ -28,17 +30,22 @@ Theorem ricf_execution_read0_next:
       (step_taint inst s u rt)
 Proof
   strip_tac >>
+  Cases_on `inst.inst_opcode = RETPC_PARAM`
+  >- (`?idx out. inst.inst_operands = [Lit idx] /\ inst.inst_outputs = [out]` by
+        gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      metis_tac[ricf_execution_retpc_next]) >>
   `ld_shared_agree D s.vs_call_ctx.cc_address rt s t` by
-    fs[ricf_execution_invariant_def, ricf_frame_agree_def, taint_agree_def,
-      ld_shared_agree_def] >>
+    fs[ricf_execution_invariant_def, ricf_opaque_frame_agree_def,
+      ricf_frame_agree_def, taint_agree_def, ld_shared_agree_def,
+      ricf_opaque_view_def, ricf_retpc_view_def, frame_view_def] >>
   drule ld_shared_account_observations >> strip_tac >>
   `t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_returndata = s.vs_returndata /\
    t.vs_code = s.vs_code /\ t.vs_fmp = s.vs_fmp /\
-   t.vs_initial_fmp = s.vs_initial_fmp /\
-   t.vs_return_pc_token = s.vs_return_pc_token` by
-    (fs[ricf_execution_invariant_def, ricf_frame_agree_def, taint_agree_def] >>
-     qpat_x_assum `_ = s` mp_tac >> simp[venom_state_component_equality]) >>
+   t.vs_initial_fmp = s.vs_initial_fmp` by
+    fs[ricf_execution_invariant_def, ricf_opaque_frame_agree_def,
+      ricf_frame_agree_def, taint_agree_def, ricf_opaque_view_def, ricf_retpc_view_def, frame_view_def,
+      venom_state_component_equality] >>
   `?out value. u = update_var out value s /\ inst.inst_outputs = [out] /\
     step_inst fuel Ct inst t = OK (update_var out value t)` by
     (qpat_x_assum `step_inst fuel C inst s = OK u` mp_tac >> fs[MEM] >>
@@ -48,9 +55,9 @@ Proof
   `out_taint rt inst s = {} /\ written_taint rt inst s = {}` by
     (fs[MEM] >> gvs[out_taint_def, written_taint_def] >> rpt CASE_TAC >> simp[]) >>
   irule (Q.INST [`p` |-> `NONE`, `m` |-> `{}`] ricf_execution_bind_next) >>
-  simp[ricf_value_agree_def, ld_value_agree_def, word_agree_except_def] >>
+  simp[ricf_opaque_value_agree_def, ricf_is_zero_prov_def, ricf_value_agree_def, ld_value_agree_def, word_agree_except_def] >>
   fs[MEM] >>
-  gvs[step_prov_def, out_prov_def, step_taint_def, out_taint_def,
+  simp[step_prov_def, out_prov_def, step_taint_def,
     mem_taint_def, adopt_reset_def, store_taint_def,
     imm_taint_def, new_site_bytes_def, step_writes_def, written_taint_def,
     range_bytes_def, taint_component_equality, occurrence_sites_step_def,
@@ -60,8 +67,9 @@ Proof
 QED
 
 Theorem ricf_execution_read1_next:
-  ricf_execution_invariant vs C ctx0 log D stk PG G tn fn inst s t
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets tn /\
+  ssa_form fn /\ opaque_use_ok fn /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   ptr_discipline lo C vs /\ active_inst fn inst s /\
   MEM inst.inst_opcode
@@ -69,7 +77,7 @@ Theorem ricf_execution_read1_next:
   step_inst fuel C inst s = OK u /\
   active_inst fn next (u with vs_inst_idx := SUC s.vs_inst_idx) ==>
   ?v. step_inst fuel Ct inst t = OK v /\
-    ricf_execution_invariant vs C ctx0 log D stk PG (step_prov PG G inst u)
+    ricf_execution_invariant vs C D stk PG (step_prov PG G inst u)
       (step_taint inst s u tn) fn next
       (u with vs_inst_idx := SUC s.vs_inst_idx)
       (v with vs_inst_idx := SUC s.vs_inst_idx)
@@ -88,18 +96,20 @@ Proof
      `op_taint tn op = {}` by
        (fs[MEM] >> gvs[taint_ok_def] >> metis_tac[]) >>
      `~is_pointer_preserving_op inst.inst_opcode /\
-      ~MEM inst.inst_opcode [LT;GT;EQ;INVOKE] /\
+      ~MEM inst.inst_opcode [LT;GT;EQ;INVOKE;RET;RETFMP;DRET] /\
       mem_read_ops inst = NONE /\ mem_write_ops inst = NONE` by
        (fs[MEM] >> gvs[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]) >>
      metis_tac[ricf_execution_scalar_operand]) >>
   `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
-    fs[ricf_execution_invariant_def, ricf_frame_agree_def, taint_agree_def,
-      ld_shared_agree_def] >>
+    fs[ricf_execution_invariant_def, ricf_opaque_frame_agree_def,
+      ricf_frame_agree_def, taint_agree_def, ld_shared_agree_def,
+      ricf_opaque_view_def, ricf_retpc_view_def, frame_view_def] >>
   drule ld_shared_account_observations >> strip_tac >>
   `t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_data_section = s.vs_data_section` by
-    (fs[ricf_execution_invariant_def, ricf_frame_agree_def, taint_agree_def] >>
-     qpat_x_assum `_ = s` mp_tac >> simp[venom_state_component_equality]) >>
+    fs[ricf_execution_invariant_def, ricf_opaque_frame_agree_def,
+      ricf_frame_agree_def, taint_agree_def, ricf_opaque_view_def, ricf_retpc_view_def, frame_view_def,
+      venom_state_component_equality] >>
   `?out value. u = update_var out value s /\ inst.inst_outputs = [out] /\
     step_inst fuel Ct inst t = OK (update_var out value t)` by
     (qpat_x_assum `step_inst fuel C inst s = OK u` mp_tac >> fs[MEM] >>
@@ -113,9 +123,9 @@ Proof
   `out_taint tn inst s = {} /\ written_taint tn inst s = {}` by
     (fs[MEM] >> gvs[out_taint_def, written_taint_def] >> rpt CASE_TAC >> simp[]) >>
   irule (Q.INST [`p` |-> `NONE`, `m` |-> `{}`] ricf_execution_bind_next) >>
-  simp[ricf_value_agree_def, ld_value_agree_def, word_agree_except_def] >>
+  simp[ricf_opaque_value_agree_def, ricf_is_zero_prov_def, ricf_value_agree_def, ld_value_agree_def, word_agree_except_def] >>
   fs[MEM] >>
-  gvs[step_prov_def, out_prov_def, step_taint_def, out_taint_def,
+  simp[step_prov_def, out_prov_def, step_taint_def,
     mem_taint_def, adopt_reset_def, store_taint_def,
     imm_taint_def, new_site_bytes_def, step_writes_def, written_taint_def,
     range_bytes_def, taint_component_equality, occurrence_sites_step_def,
