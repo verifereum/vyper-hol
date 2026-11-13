@@ -1,6 +1,8 @@
 Theory runtimeSymSrcArithmetic
 Ancestors
   runtimeSymSrcInterfaces runtimeSymSrcEmission runtimeSymSrcGeneratorContracts
+  runtimeSymSrcBinops runtimeSymSrcConversions runtimeSymSrcLiteralEnv
+  runtimeSymSrcNameFastpaths runtimeSymSrcDynarrayPop
   exprLowering builtinMath compileEnv emitHelper loweringShapeDefs list venomInst
 
 Theorem runtime_sym_addmod:
@@ -41,4 +43,24 @@ Proof
   conj_tac >- MATCH_ACCEPT_TAC runtime_sym_addmod >>
   conj_tac >- MATCH_ACCEPT_TAC runtime_sym_mulmod >>
   MATCH_ACCEPT_TAC runtime_sym_pow_mod256
+QED
+
+Theorem runtime_sym_expr_primitives:
+  runtime_sym_expr_primitive_clauses
+Proof
+  rewrite_tac[runtime_sym_expr_primitive_clauses_def] >>
+  conj_tac >- MATCH_ACCEPT_TAC runtime_sym_literal_vv >>
+  conj_tac >- MATCH_ACCEPT_TAC runtime_sym_env_var >>
+  conj_tac >- MATCH_ACCEPT_TAC runtime_sym_binop >>
+  conj_tac >- MATCH_ACCEPT_TAC runtime_sym_invert >>
+  conj_tac >- MATCH_ACCEPT_TAC runtime_sym_neg >>
+  conj_tac >- MATCH_ACCEPT_TAC runtime_sym_type_convert >>
+  MATCH_ACCEPT_TAC runtime_sym_dynarray_pop
+QED
+
+Theorem runtime_sym_arithmetic_name_fastpaths:
+  runtime_sym_context_clauses ==> runtime_sym_name_fastpath_clauses
+Proof
+  strip_tac >> irule runtime_sym_name_fastpaths >>
+  simp[runtime_sym_math]
 QED
