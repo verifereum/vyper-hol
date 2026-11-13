@@ -7,6 +7,7 @@ Ancestors
   compileEnv loweringStateRelDefs emitHelper emitHelperProps venomState venomExecSemantics venomMemProps
   valueEncodingProps intCallFrame exprSimProps exprSimAlloc venomInst
   fragGasMode context exprSimAggregateLoops exprSimAggregateEncoding
+  bodyIntCallFamStmtReturnTypes typedCopyCompatibility vyperTypeArgFits
   exprSimWordArgs gasOutcome gasSummary gasSummaryCompose
   exprLoweringProps fragExec valueEncodingProofs stmtReasonVvMemory
   exprOperandVar bodyIntCallRestoreResults abiStaticAggregateProps
@@ -16,7 +17,7 @@ Ancestors
 Theorem intcall_array_child_layout:
   expr_body_pre ce cx env (Builtin ann (MakeArray (SOME et) bnd) args) es /\
   MEM e args /\ expr_sim_inv ce cx env ee ==>
-  expr_type e = et /\
+  arg_type_fits (expr_type e) et /\
   type_widens_to (get_tenv cx) (post_value_type ce e) et /\
   ?tv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv
 Proof
@@ -24,13 +25,18 @@ Proof
   `expr_body_pre ce cx env e ee` by
     (drule expr_body_pre_builtin_arg >> disch_then irule >> simp[]) >>
   drule make_array_evaluated_layout >> strip_tac >>
-  `expr_type e = et` by fs[listTheory.EVERY_MEM] >>
+  `arg_type_fits (expr_type e) et` by fs[listTheory.EVERY_MEM] >>
   `env.type_defs = get_tenv cx` by
     fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
        env_context_consistent_def] >>
   simp[] >> conj_tac
-  >- (drule post_value_type_widens >>
-      fs[expr_body_pre_def] >> metis_tac[]) >>
+  >- (irule typedCopyCompatibilityTheory.type_widens_to_trans >>
+      qexists_tac `expr_type e` >>
+      conj_tac
+      >- (drule post_value_type_widens >>
+          fs[expr_body_pre_def] >> metis_tac[]) >>
+      fs[vyperTypeSystemTheory.type_widens_to_def,
+         vyperTypeSystemTheory.well_formed_type_def]) >>
   metis_tac[post_type_evaluates]
 QED
 
@@ -226,7 +232,7 @@ Theorem intcall_array_elems_outcome:
   (!e. MEM e args ==> intcall_expr_producer fp e /\
      supportedExprs$supported_expr fp.jc_tops e /\
      calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) /\
-     expr_type e = et) /\
+     arg_type_fits (expr_type e) et) /\
   (!e ee. MEM e args /\ expr_sim_inv ce fp.jc_cx env ee ==>
      expr_body_pre ce fp.jc_cx env e ee /\
      type_widens_to (get_tenv fp.jc_cx) (post_value_type ce e) et /\
@@ -293,7 +299,7 @@ Resume intcall_array_elems_outcome[cons]:
   rename1 `compile_make_array_elems compile_expr ce (e::args) _ _ _ _ _ _ = _` >>
   drule intcall_array_elems_cons_compile >> strip_tac >>
   `expr_sim_inv ce fp.jc_cx env es` by fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def] >>
-  `expr_type e = et /\ intcall_expr_producer fp e /\
+  `arg_type_fits (expr_type e) et /\ intcall_expr_producer fp e /\
    supportedExprs$supported_expr fp.jc_tops e /\
    calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e)` by
     (qpat_x_assum `!e'. MEM e' (e::args) ==> _` (qspec_then `e` mp_tac) >> simp[]) >>
@@ -306,10 +312,8 @@ Resume intcall_array_elems_outcome[cons]:
                pairTheory.SND]) >>
   `ci_mono sm sn` by
     (metis_tac[ci_mono_emit_op, pairTheory.SND]) >>
-  `EVERY (\e. expr_type e = et) args` by
-    (simp[listTheory.EVERY_MEM] >> metis_tac[listTheory.MEM]) >>
   `ci_mono st sb` by
-    (`compile_make_tuple compile_expr ce args buf
+    (`compile_make_tuple compile_expr ce args (REPLICATE (LENGTH args) et) buf
         ((if header then 32 else 0) + (idx+1) * type_memory_bytes ce et) st = (out,sb)` by
        metis_tac[compile_make_array_elems_as_tuple] >>
      metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND]) >>
@@ -318,8 +322,20 @@ Resume intcall_array_elems_outcome[cons]:
    fn_has_code st sb fp.jc_func` by
     metis_tac[fn_has_code_split, ci_mono_def, cs_extends_trans] >>
   `well_typed_expr env e` by fs[expr_body_pre_def] >>
+  `!id t. FLOOKUP env.var_types id = SOME t ==>
+     well_formed_type env.type_defs t` by
+    metis_tac[expr_body_pre_var_types_well_formed] >>
+  `sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
+   env.type_defs = get_tenv fp.jc_cx` by
+    (qpat_x_assum `expr_body_pre ce fp.jc_cx env e es` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     rw[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+        env_context_consistent_def]) >>
+  `type_widens_to env.type_defs (expr_type e) et` by
+    fs[vyperTypeSystemTheory.type_widens_to_def,
+       vyperTypeSystemTheory.well_formed_type_def] >>
   `compile_store_memory ce op dst et (post_value_type ce e) su = ((),st)` by
-    metis_tac[compile_store_memory_post_type] >>
+    metis_tac[bodyIntCallFamStmtReturnTypesTheory.return_store_post_type] >>
   drule_at (Pat `compile_expr _ _ _ _ = _`) intcall_counted_child_store >>
   disch_then (drule_at (Pat `emit_op ADD _ _ = _`)) >>
   disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
@@ -382,9 +398,11 @@ Resume intcall_array_elems_outcome[cons_post]:
      fs[vyperStateTheory.bind_def, expr_body_pre_gas_obs]) >>
   `env.type_defs = get_tenv fp.jc_cx` by
     (fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]) >>
+  `arg_type_fits (expr_type e) et` by metis_tac[] >>
   `val_wf dtv v` by
     (irule (cj 1 valueEncodingTypingTheory.value_has_type_val_wf) >>
-     gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def]) >>
+     gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
+     metis_tac[cj 1 vyperTypeArgFitsTheory.arg_type_fits_value_has_type]) >>
   suspend "cons_memory"
 QED
 
@@ -446,7 +464,7 @@ Resume intcall_array_value_producer[entry]:
     (Cases_on `bnd` >> gvs[comp_return_def] >>
      metis_tac[ci_mono_emit_void, pairTheory.SND, ci_mono_refl]) >>
   `ci_mono sh sb` by
-    (`compile_make_tuple compile_expr ce args ba.buf_operand
+    (`compile_make_tuple compile_expr ce args (REPLICATE (LENGTH args) et) ba.buf_operand
         (if (case bnd of vyperAST$Fixed cap => F | Dynamic cap => T) then 32 else 0) sh = (u,sb)` by
        (qpat_x_assum `compile_make_array_elems _ _ _ _ _ _ _ _ _ = _` mp_tac >>
         qpat_x_assum `type_memory_bytes ce et = _` (fn th => pure_rewrite_tac[GSYM th]) >>
