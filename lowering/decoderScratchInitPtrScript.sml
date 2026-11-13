@@ -91,7 +91,7 @@ Proof
      Cases_on `src` >> fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def]) >>
   `lookup_var root initial = SOME (n2w d)` by fs[eval_operand_def] >>
   drule_all calldata_array_init_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] strip_assume_tac) >>
   `slot + 32 < dimword (:256)` by
     (drule abi_decoder_budget_word_bound >> decide_tac) >>
   `slot = p` by
@@ -145,7 +145,7 @@ Proof
   `32 <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))` by
     simp[Once type_memory_bytes_def] >>
   drule_all calldata_scratch_array_init_reentry_ptr >>
-  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`,`H`] strip_assume_tac) >>
   qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac >>
   drule_all (calldata_pos abi_decode_array_loop_init_shape) >> strip_tac >>
   `abi_scratch_effect first last st.cs_next_id loop_st.cs_next_id st.cs_next_var
