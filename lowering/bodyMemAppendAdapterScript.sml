@@ -27,6 +27,7 @@ Proof
 QED
 
 Theorem body_append_storage_fragment_mem:
+  body_stmt_safe tops (Append (TopLevelNameTarget (src,id)) e) /\
   (!s p t. eval_target_place cx (TopLevelNameTarget (src,id)) s = (INL p,t) ==>
              body_expr_mem_ok cx e) /\
   body_inv tops ctx cenv cx /\ supported_storage_dynamic_array tops (src,id) /\
@@ -44,6 +45,9 @@ Proof
   strip_tac >> drule_all body_append_target_bounds >> strip_tac >>
   drule append_typing_target >> strip_tac >>
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  `cenv.ce_hashmap_info (src,id) = NONE` by
+    (drule supported_append_storage_decl >> strip_tac >>
+     drule_all body_append_root_metadata >> simp[]) >>
   drule_all body_append_runtime_metadata >> strip_tac >> gvs[] >>
   drule supported_append_element_layout >>
   disch_then (qspec_then `get_tenv cx` strip_assume_tac) >>

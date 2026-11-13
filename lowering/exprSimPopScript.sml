@@ -575,6 +575,7 @@ Proof
    u.vs_outcomes = s0.vs_outcomes /\ u.vs_requests = s0.vs_requests /\
    u.vs_immutables = s0.vs_immutables /\
    u.vs_data_section = s0.vs_data_section /\
+   u.vs_code = s0.vs_code /\
    u.vs_allocas = s0.vs_allocas /\ u.vs_alloca_next = s0.vs_alloca_next` by
     (qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
   `state_rel H func cenv cx es s0` by fs[stmt_state_rel_def] >>
@@ -731,8 +732,9 @@ Proof
 QED
 
 Theorem pop_vv_post:
-  !func cenv cx ann id es sa sb s0 u k pre envs entry rest p sz w etv n vs x6 ctx.
+  !H func cenv cx ann id es sa sb s0 u k pre envs entry rest p sz w etv n vs x6 ctx.
     stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
     local_ptrs_rel func cenv es.scopes s0 /\
     popped_keys_indexed es.scopes /\
     find_containing_scope id es.scopes = SOME (pre, envs, entry, rest) /\
@@ -811,6 +813,12 @@ Proof
       simp[] >>
       rpt strip_tac >> irule pop_regions_backwards >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[])
+  >- (qmatch_goalsub_abbrev_tac `storage_well_formed_on cx es1 _` >>
+      `storage_well_formed_on cx es1 (FST H) <=>
+       storage_well_formed_on cx es (FST H)` by
+        (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+         simp[Abbr `es1`]) >>
+      simp[])
   >- (qpat_assum `read_result _ _ _ = _` (fn th =>
         simp[vv_holds_def, contextTheory.mk_ptr_def, eval_operand_def,
              lookup_var_inst_idx, th]) >>
@@ -931,6 +939,15 @@ Theorem compile_pop_name_sim:
     expr_vv_sim ctx func cenv cx ty (Pop ann (NameTarget id)) es
 Proof
   rw[expr_vv_sim_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
+  `local_ptrs_rel func cenv es.scopes s0` by
+    fs[stmt_state_rel_def, state_rel_def] >>
   drule_all pop_name_facts >> strip_tac >>
   `popped_keys_indexed es.scopes` by fs[expr_sim_pre_def, expr_sim_inv_def] >>
   drule_all compile_expr_pop_name >> strip_tac >> gvs[] >>
@@ -977,7 +994,7 @@ Proof
       >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
           simp[mk_inst_def, is_terminator_def]) >>
       strip_tac >>
-      simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      simp[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR (Error (RuntimeError "pop empty memory array"))`,
                     `es`, `Abort a (s' with vs_inst_idx := j)`] >>
@@ -1000,8 +1017,6 @@ Proof
   `gas_path ctx func s0 0
      (OK (u with vs_inst_idx := LENGTH sa.cs_current_insts + 9))` by
     (qpat_x_assum `gas_path _ _ _ _ _` mp_tac >> simp[mk_inst_def]) >>
-  `local_ptrs_rel func cenv es.scopes s0` by
-    fs[stmt_state_rel_def, state_rel_def] >>
   `!q n' sq. FLOOKUP cenv.ce_vars n' = SOME (PtrVar (Var q) sq) ==>
              lookup_var q u = lookup_var q s0` by metis_tac[] >>
   `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s0` by
@@ -1018,20 +1033,7 @@ Proof
     (qpat_x_assum `u = _` mp_tac >> simp[venom_state_component_equality]) >>
   `u.vs_current_bb = s0.vs_current_bb` by
     (qpat_x_assum `u = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
-                   mp_tac) >>
-     simp[NoAsms]) >>
-  mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `ann`, `id`, `es with gas_obs := []`]
-            pop_vv_post) >>
-  simp[vv_post_initial_gas] >>
-  disch_then (qspecl_then [`sa`, `sc`, `s0`, `u`, `w`, `vs`, `x6`, `ctx`] mp_tac) >>
-  impl_tac
-  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      qpat_x_assum `u = _` mp_tac >> simp[]) >>
-  strip_tac >>
-  simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INL (PlaceR (MemoryPlace id
                    [ValueSubscript (IntV &(LENGTH vs - 1))]))`,
@@ -1039,8 +1041,31 @@ Proof
                    pre ++ envs |+ (id, pop_name_entry entry vs) :: rest`,
                 `OK (u with vs_inst_idx := LENGTH sa.cs_current_insts + 9)`] >>
   simp[gas_marked_exec_def, gas_marked_path_def, exit_result_def] >>
-  gen_tac >>
-  qspecl_then [`cx`, `ann`, `id`, `es with gas_obs := tail`, `entry`, `vs`,
-               `pre`, `envs`, `rest`] mp_tac eval_pop_name_ok >>
+  conj_tac
+  >- (gen_tac >>
+      qspecl_then [`cx`, `ann`, `id`, `es with gas_obs := tail`, `entry`, `vs`,
+                   `pre`, `envs`, `rest`] mp_tac eval_pop_name_ok >>
+      simp[]) >>
+  gen_tac >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es s0 /\
+   storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
+    (drule (Q.SPEC `H` msg_gas_state_frame) >>
+     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
+                   mp_tac) >>
+     simp[NoAsms]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+      storage_well_formed_on cx es (FST H)` by
+       (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+        simp[]) >>
+     simp[]) >>
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `ann`, `id`,
+               `es with gas_obs := []`] mp_tac pop_vv_post >>
+  simp[vv_post_initial_gas] >>
+  disch_then (qspecl_then [`sa`, `sc`, `s0`, `u`, `w`, `vs`, `x6`, `ctx`] mp_tac) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qpat_x_assum `u = _` mp_tac >> simp[]) >>
   simp[]
 QED

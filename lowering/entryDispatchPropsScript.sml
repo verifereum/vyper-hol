@@ -27,11 +27,14 @@
 Theory entryDispatchProps
 Ancestors
   list rich_list words
-  moduleLoweringProps selectorDispatch compileVyper vyperInterpreter
+  moduleLoweringProps selectorDispatch compileVyper constSubst vyperInterpreter
   vyperTypeBytesCrypto contractABI moduleLowering compileEnv loweringStateRelDefs fragExec
-  emitHelper emitHelperProps venomState
+  emitHelper emitHelperProps venomState vyperTypeContract vyperGetter
+  vyperTypeContractGetter supportedDecls
 Libs
   wordsLib
+
+val _ = Parse.hide "body";
 
 (* ===== The 4-byte selector ===== *)
 
@@ -122,9 +125,250 @@ Proof
   assume_tac calldata_method_id_lt >> fs[]
 QED
 
+Theorem public_getter_source_tuple:
+  public_getter decl = SOME (mut,nr,rr,name,args,dflts,ret,body) <=>
+  rr = F /\ is_public_getter_decl name decl /\
+  external_getter_tuple NONE decl = SOME (mut,nr,args,dflts,ret,body)
+Proof
+  Cases_on `decl` >>
+  simp[public_getter_def, is_public_getter_decl_def, external_getter_tuple_def] >>
+  Cases_on `v` >>
+  simp[public_getter_def, is_public_getter_decl_def, external_getter_tuple_def] >>
+  rpt CASE_TAC >> simp[getter_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
+Theorem lookup_raw_return_source_irrelevant[local]:
+  !tops src src' name vis.
+    lookup_raw_return src name vis tops = lookup_raw_return src' name vis tops
+Proof
+  Induct >- simp[lookup_raw_return_def] >>
+  rpt gen_tac >> Cases_on `h` >> simp[lookup_raw_return_def] >> metis_tac[]
+QED
+
+Theorem lookup_raw_return_external_absent:
+  !tops src name.
+    ~MEM (src,name) (FLAT (MAP (external_name_keys_toplevel src) tops)) ==>
+    lookup_raw_return src name External tops = NONE
+Proof
+  Induct >- simp[lookup_raw_return_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[external_name_keys_toplevel_def, lookup_raw_return_def] >>
+  rpt CASE_TAC >> gvs[external_name_keys_toplevel_def] >>
+  Cases_on `f` >> gvs[external_name_keys_toplevel_def]
+QED
+
+(* Checked external names distinguish explicit declarations from getters;
+   lookup_raw_return itself scans only the explicit declarations. *)
+Theorem lookup_function_external_raw_cases:
+  !tops src name mut nr args dflts ret body.
+    lookup_function src name External tops = SOME (mut,nr,args,dflts,ret,body) ==>
+    (?rr. MEM (FunctionDecl External mut nr rr name args dflts ret body) tops /\
+          lookup_raw_return src name External tops = SOME rr) \/
+    (?decl. MEM decl tops /\ is_public_getter_decl name decl /\
+       external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body))
+Proof
+  Induct >- simp[lookup_function_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[lookup_function_def, lookup_raw_return_def]
+  >~ [`lookup_function src name External (VariableDecl v m id ty init::tops)`]
+  >- (Cases_on `v` >> simp[lookup_function_def]
+      >- (Cases_on `id = name` >> simp[]
+          >- (strip_tac >> disj2_tac >>
+              qexists_tac `VariableDecl (Public b) m id ty init` >>
+              gvs[is_public_getter_decl_def, external_getter_tuple_def] >>
+              rpt CASE_TAC >> gvs[]) >> metis_tac[])
+      >> metis_tac[])
+  >~ [`lookup_function src name External (HashMapDecl v tr id kt vt init::tops)`]
+  >- (Cases_on `v` >> simp[lookup_function_def]
+      >- (Cases_on `id = name` >> simp[]
+          >- (strip_tac >> disj2_tac >>
+              qexists_tac `HashMapDecl (Public b) tr id kt vt init` >>
+              gvs[is_public_getter_decl_def, external_getter_tuple_def]) >>
+          metis_tac[])
+      >> metis_tac[]) >>
+  rpt CASE_TAC >> gvs[] >> metis_tac[]
+QED
+
+Theorem public_getter_external_key[local]:
+  !decl src name. is_public_getter_decl name decl ==>
+    MEM (src,name) (external_name_keys_toplevel src decl)
+Proof
+  Cases >> simp[is_public_getter_decl_def] >>
+  Cases_on `v` >>
+  simp[is_public_getter_decl_def, external_name_keys_toplevel_def]
+QED
+
+Theorem public_getter_raw_return_none:
+  !tops src name decl.
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel src) tops)) /\
+    MEM decl tops /\ is_public_getter_decl name decl ==>
+    lookup_raw_return src name External tops = NONE
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `h`
+  >~ [`FunctionDecl f m nr rr id args ds ret bd`]
+  >- (Cases_on `f` >>
+      simp[external_name_keys_toplevel_def, lookup_raw_return_def] >>
+      rpt strip_tac >> gvs[is_public_getter_decl_def] >>
+      drule public_getter_external_key >>
+      disch_then (qspec_then `src` assume_tac) >>
+      gvs[MEM_FLAT, MEM_MAP] >> metis_tac[])
+  >~ [`VariableDecl v m id ty init`]
+  >- (Cases_on `v` >>
+      simp[external_name_keys_toplevel_def, lookup_raw_return_def] >>
+      rpt strip_tac >> gvs[is_public_getter_decl_def] >>
+      metis_tac[lookup_raw_return_external_absent])
+  >~ [`HashMapDecl v tr id kt vt init`]
+  >- (Cases_on `v` >>
+      simp[external_name_keys_toplevel_def, lookup_raw_return_def] >>
+      rpt strip_tac >> gvs[is_public_getter_decl_def] >>
+      metis_tac[lookup_raw_return_external_absent]) >>
+  simp[external_name_keys_toplevel_def, lookup_raw_return_def] >>
+  rpt strip_tac >> gvs[is_public_getter_decl_def] >> metis_tac[]
+QED
+
+Theorem classify_fold_external_member:
+  !tops mut nr rr name args dflts ret body.
+    name <> "__default__" /\
+    MEM (FunctionDecl External mut nr rr name args dflts ret body) tops ==>
+    MEM (mut,nr,rr,name,args,dflts,ret,body)
+      (FST (FOLDR classify_function ([],[],NONE,NONE) tops))
+Proof
+  Induct_on `tops` >- simp[] >> rpt gen_tac >>
+  simp[Once listTheory.FOLDR] >>
+  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
+  PairCases_on `acc` >> fs[] >>
+  Cases_on `h` >> simp[classify_function_def] >>
+  rpt CASE_TAC >> gvs[] >> metis_tac[]
+QED
+
+Theorem lookup_function_external_member:
+  lookup_function NONE name External tops =
+    SOME (mut,nr,args,dflts,ret,body) /\ name <> "__default__" ==>
+  ?rr. MEM (subst_consts_fn (module_consts_env tops [])
+    (mut,nr,rr,name,args,dflts,ret,body)) (FST (classify_functions tops))
+Proof
+  strip_tac >> drule lookup_function_External_cases >> strip_tac
+  >- (drule_all classify_fold_external_member >>
+      simp[classify_functions_def] >> pairarg_tac >>
+      gvs[MEM_MAP] >> metis_tac[]) >>
+  `public_getter decl = SOME (mut,nr,F,name,args,dflts,ret,body)` by
+    simp[public_getter_source_tuple] >>
+  qexists_tac `F` >> simp[classify_functions_def] >>
+  pairarg_tac >> simp[MEM_MAP] >> disj2_tac >>
+  qexists_tac `(mut,nr,F,name,args,dflts,ret,body)` >>
+  simp[MEM_public_getters] >> metis_tac[]
+QED
+
 (* An external function lookup_function selects is in the compiler's table
    of external functions, unless a public getter shadows it or it is the
    fallback. *)
+(* Getters are external entries even when their identifier is __default__;
+   explicit fallback functions occupy the separate fallback slot. *)
+Theorem lookup_function_default_unsubstituted[local]:
+  !tops mut nr args dflts ret body.
+  lookup_function NONE "__default__" External tops =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  (?rr. FST (SND (SND (FOLDR classify_function ([],[],NONE,NONE) tops))) =
+    SOME (mut,nr,rr,"__default__",args,dflts,ret,body)) \/
+  MEM (mut,nr,F,"__default__",args,dflts,ret,body) (public_getters tops)
+Proof
+  Induct >- simp[lookup_function_def] >> rpt gen_tac >>
+  simp[Once FOLDR] >>
+  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
+  PairCases_on `acc` >> fs[] >> Cases_on `h` >>
+  simp[lookup_function_def, classify_function_def, public_getters_def,
+       public_getter_def]
+  >~ [`lookup_function NONE "__default__" External (VariableDecl v m id ty init::tops)`]
+  >- (Cases_on `v` >>
+      simp[lookup_function_def, public_getter_def] >>
+      rpt CASE_TAC >> gvs[] >> metis_tac[])
+  >~ [`lookup_function NONE "__default__" External (HashMapDecl v tr id kt vt init::tops)`]
+  >- (Cases_on `v` >>
+      simp[lookup_function_def, public_getter_def] >>
+      rpt CASE_TAC >> gvs[] >> metis_tac[]) >>
+  rpt CASE_TAC >> gvs[] >> metis_tac[]
+QED
+
+Theorem lookup_function_external_classified:
+  lookup_function NONE name External tops = SOME (mut,nr,args,dflts,ret,body) ==>
+  ?rr.
+    MEM (subst_consts_fn (module_consts_env tops [])
+      (mut,nr,rr,name,args,dflts,ret,body)) (FST (classify_functions tops)) \/
+    FST (SND (SND (classify_functions tops))) =
+      SOME (subst_consts_fn (module_consts_env tops [])
+        (mut,nr,rr,name,args,dflts,ret,body))
+Proof
+  strip_tac >> Cases_on `name = "__default__"`
+  >- (gvs[] >> drule lookup_function_default_unsubstituted >>
+      simp[classify_functions_def] >> pairarg_tac >> gvs[] >>
+      strip_tac
+      >- (qexists_tac `rr` >> simp[]) >>
+      qexists_tac `F` >> simp[MEM_MAP] >> metis_tac[]) >>
+  drule_all lookup_function_external_member >> metis_tac[]
+QED
+
+Theorem lookup_function_external_raw_member:
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
+  lookup_function NONE name External tops = SOME (mut,nr,args,dflts,ret,body) /\
+  name <> "__default__" ==>
+  MEM (subst_consts_fn (module_consts_env tops [])
+    (mut,nr,lookup_raw_return_or_F (NONE:num option) name External tops,
+     name,args,dflts,ret,body)) (FST (classify_functions tops))
+Proof
+  strip_tac >> drule_all lookup_function_external_raw_cases >> strip_tac
+  >- (drule_all classify_fold_external_member >>
+      simp[classify_functions_def, lookup_raw_return_or_F_def] >>
+      pairarg_tac >> gvs[MEM_MAP] >> metis_tac[]) >>
+  `lookup_raw_return (NONE:num option) name External tops = NONE` by
+    metis_tac[public_getter_raw_return_none, lookup_raw_return_source_irrelevant] >>
+  `public_getter decl = SOME (mut,nr,F,name,args,dflts,ret,body)` by
+    simp[public_getter_source_tuple] >>
+  simp[classify_functions_def, lookup_raw_return_or_F_def] >>
+  pairarg_tac >> simp[MEM_MAP] >> disj2_tac >>
+  qexists_tac `(mut,nr,F,name,args,dflts,ret,body)` >>
+  simp[MEM_public_getters] >> metis_tac[]
+QED
+
+(* Supported headers currently exclude every module constant, so the compiler's
+   substitution preserves the source body and defaults at this entry boundary. *)
+Theorem supported_headers_external_member:
+  supported_declaration_headers tops /\ name <> "__default__" /\
+  lookup_function NONE name External tops =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  ?rr. MEM (mut,nr,rr,name,args,dflts,ret,body)
+    (FST (classify_functions tops))
+Proof
+  strip_tac >>
+  `module_consts_env tops [] = []` by
+    (metis_tac[supported_declaration_headers_def,
+               supported_headers_module_consts_env]) >>
+  drule_all lookup_function_external_member >>
+  simp[subst_consts_fn_empty]
+QED
+
+Theorem supported_headers_external_plain_member:
+  supported_declaration_headers tops /\
+  lookup_function NONE name External tops = SOME (mut,nr,args,dflts,ret,body) /\
+  name <> "__default__" /\
+  ~lookup_raw_return_or_F (NONE:num option) name External tops ==>
+  MEM (mut,nr,F,name,args,dflts,ret,body) (FST (classify_functions tops))
+Proof
+  strip_tac >>
+  `module_consts_env tops [] = []` by
+    (metis_tac[supported_declaration_headers_def,
+               supported_headers_module_consts_env]) >>
+  drule lookup_function_external_raw_cases >> strip_tac
+  >- (gvs[lookup_raw_return_or_F_def] >>
+      drule_all classify_fold_external_member >>
+      simp[classify_functions_def] >> pairarg_tac >>
+      gvs[MEM_MAP, subst_consts_fn_empty] >> metis_tac[]) >>
+  `public_getter decl = SOME (mut,nr,F,name,args,dflts,ret,body)` by
+    simp[public_getter_source_tuple] >>
+  simp[classify_functions_def] >> pairarg_tac >>
+  simp[MEM_MAP, MEM_public_getters] >> metis_tac[]
+QED
+
 Theorem lookup_function_external_mem:
   !tops src name mut nr args dflts ret body.
     lookup_function src name External tops =
@@ -132,23 +376,65 @@ Theorem lookup_function_external_mem:
     name <> "__default__" /\
     (!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops) /\
     (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops) ==>
-    ?rr. MEM (mut, nr, rr, name, args, dflts, ret, body)
+    ?rr. MEM (subst_consts_fn (module_consts_env tops [])
+               (mut, nr, rr, name, args, dflts, ret, body))
            (FST (classify_functions tops))
 Proof
+  `!tops src name mut nr args dflts ret body.
+     lookup_function src name External tops =
+       SOME (mut,nr,args,dflts,ret,body) /\
+     name <> "__default__" /\
+     (!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops) /\
+     (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops) ==>
+     ?rr. MEM (mut,nr,rr,name,args,dflts,ret,body)
+       (FST (FOLDR classify_function ([],[],NONE,NONE) tops))`
+    suffices_by
+      (rpt strip_tac >> first_x_assum drule_all >> strip_tac >>
+       simp[classify_functions_def] >> pairarg_tac >> gvs[] >>
+       simp[MEM_MAP] >> metis_tac[]) >>
   Induct >- simp[lookup_function_def] >>
-  rpt gen_tac >> strip_tac >> fs[classify_functions_def] >>
+  rpt gen_tac >> strip_tac >>
   `?a1 a2 a3 a4. FOLDR classify_function ([],[],NONE,NONE) tops =
                  (a1,a2,a3,a4)` by metis_tac[pairTheory.ABS_PAIR_THM] >>
-  fs[] >> Cases_on `h` >>
-  TRY (qmatch_goalsub_rename_tac `FunctionDecl vis _ _ _ _ _ _ _ _` >>
-       Cases_on `vis`) >>
-  TRY (qmatch_goalsub_rename_tac `VariableDecl vis _ _ _ _` >>
-       Cases_on `vis`) >>
-  TRY (qmatch_goalsub_rename_tac `HashMapDecl vis _ _ _ _ _` >>
-       Cases_on `vis`) >>
-  gvs[lookup_function_def, classify_function_def] >> rw[] >> gvs[] >>
-  TRY (qpat_x_assum `(if _ then _ else _) = _` mp_tac >> rw[]) >>
+  Cases_on `h` >>
+  gvs[lookup_function_def, classify_function_def, AllCaseEqs()] >>
+  simp[classify_function_def, AllCaseEqs(), EXISTS_OR_THM]
+  >>~- ([`case vis of External => _ | Internal => _ | Deploy => _`],
+    Cases_on `vis` >> simp[] >> rw[] >> gvs[] >> metis_tac[])
+  >>~- ([`lookup_function _ _ _ (VariableDecl vis _ _ _ _ :: _) = _`],
+    Cases_on `vis` >> gvs[lookup_function_def] >> rw[] >> gvs[] >> metis_tac[])
+  >>~- ([`lookup_function _ _ _ (HashMapDecl vis _ _ _ _ _ :: _) = _`],
+    Cases_on `vis` >> gvs[lookup_function_def] >> rw[] >> gvs[] >> metis_tac[]) >>
   metis_tac[]
+QED
+
+(* Dispatch depends only on membership and preserved ABI metadata. *)
+Theorem linear_dispatch_selects_entry:
+  !tenv exts mut nr rr name args dflts ret body vals cd fb.
+    MEM (mut,nr,rr,name,args,dflts,ret,body) exts /\
+    ALL_DISTINCT (MAP FST (build_selectors tenv exts)) /\
+    calldata_encodes tenv name (MAP SND args) vals cd /\
+    LENGTH vals = LENGTH args ==>
+    linear_dispatch_target cd
+      (MAP (\(sel,lbl,_). (sel,lbl)) (build_selectors tenv exts))
+      fb = "fn_" ++ name
+Proof
+  rpt strip_tac >>
+  drule build_selectors_mem >>
+  disch_then (qspec_then `tenv` assume_tac) >>
+  drule calldata_encodes_hits_selector >>
+  `TAKE (LENGTH vals) (MAP SND args) = MAP SND args` by
+    simp[TAKE_LENGTH_ID_rwt] >>
+  simp[] >> strip_tac >>
+  irule linear_dispatch_target_distinct >> conj_tac
+  >- (`!l:(num # string # bool) list.
+         MAP FST (MAP (\(sel,lbl,_). (sel,lbl)) l) = MAP FST l` by
+        (Induct >> simp[] >> PairCases >> simp[]) >>
+      simp[]) >>
+  qexists_tac `FST (compute_selector tenv name (MAP SND args))` >>
+  simp[MEM_MAP] >>
+  qexists_tac `compute_selector tenv name (MAP SND args)` >>
+  simp[compute_selector_def]
 QED
 
 (* Linear dispatch over the compiler's selector table picks the entry of
@@ -159,8 +445,6 @@ Theorem linear_dispatch_selects_function:
     lookup_function NONE name External tops =
       SOME (mut, nr, args, dflts, ret, body) /\
     name <> "__default__" /\
-    (!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops) /\
-    (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops) /\
     ALL_DISTINCT
       (MAP FST (build_selectors (type_env tops)
                   (FST (classify_functions tops)))) /\
@@ -172,22 +456,138 @@ Theorem linear_dispatch_selects_function:
       fb = "fn_" ++ name
 Proof
   rpt strip_tac >>
-  drule_all lookup_function_external_mem >> strip_tac >>
-  drule build_selectors_mem >>
-  disch_then (qspec_then `type_env tops` assume_tac) >>
-  drule calldata_encodes_hits_selector >>
-  `TAKE (LENGTH vals) (MAP SND args) = MAP SND args` by
-    simp[TAKE_LENGTH_ID_rwt] >>
-  simp[] >> strip_tac >>
-  irule linear_dispatch_target_distinct >> conj_tac
-  >- (`!l:(num # string # bool) list.
-         MAP FST (MAP (\(sel,lbl,_). (sel,lbl)) l) = MAP FST l` by
-        (Induct >> simp[] >> PairCases >> simp[]) >>
-      simp[]) >>
-  qexists_tac `FST (compute_selector (type_env tops) name (MAP SND args))` >>
-  simp[MEM_MAP] >>
-  qexists_tac `compute_selector (type_env tops) name (MAP SND args)` >>
-  simp[compute_selector_def]
+  drule_all lookup_function_external_member >> strip_tac >>
+  gvs[subst_consts_fn_def] >>
+  drule_all linear_dispatch_selects_entry >> simp[]
+QED
+
+(* A declaration not exposing this name cannot intercept its lookup. *)
+Theorem lookup_function_external_skip:
+  !top name tops src.
+    ~MEM (NONE,name) (external_name_keys_toplevel (NONE:num option) top) ==>
+    lookup_function src name External (top::tops) =
+    lookup_function src name External tops
+Proof
+  Cases >> simp[external_name_keys_toplevel_def, lookup_function_def] >>
+  rpt gen_tac
+  >>~- ([`FunctionDecl vis _ _ _ _ _ _ _ _`],
+    Cases_on `vis` >> simp[external_name_keys_toplevel_def, lookup_function_def])
+  >>~- ([`VariableDecl vis _ _ _ _`],
+    Cases_on `vis` >> simp[external_name_keys_toplevel_def, lookup_function_def])
+  >>~- ([`HashMapDecl vis _ _ _ _ _`],
+    Cases_on `vis` >> simp[external_name_keys_toplevel_def, lookup_function_def]) >>
+  metis_tac[]
+QED
+
+Theorem lookup_function_external_unique_decl:
+  !tops top name result.
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+    MEM top tops /\
+    MEM (NONE,name) (external_name_keys_toplevel (NONE:num option) top) /\
+    lookup_function NONE name External [top] = SOME result ==>
+    lookup_function NONE name External tops = SOME result
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `top = h` >> gvs[]
+  >- (Cases_on `h` >>
+      gvs[external_name_keys_toplevel_def, lookup_function_def]
+      >>~- ([`FunctionDecl vis _ _ _ _ _ _ _ _`],
+        Cases_on `vis` >> gvs[external_name_keys_toplevel_def, lookup_function_def])
+      >>~- ([`VariableDecl vis _ _ _ _`],
+        Cases_on `vis` >> gvs[external_name_keys_toplevel_def, lookup_function_def])
+      >>~- ([`HashMapDecl vis _ _ _ _ _`],
+        Cases_on `vis` >> gvs[external_name_keys_toplevel_def, lookup_function_def])) >>
+  `~MEM (NONE,name) (external_name_keys_toplevel (NONE:num option) h)` by
+    (qpat_x_assum `!top name result. _` kall_tac >>
+     qpat_x_assum `lookup_function _ _ _ _ = _` kall_tac >>
+     gvs[ALL_DISTINCT_APPEND] >>
+     `MEM (NONE,name) (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+       (simp[MEM_FLAT, MEM_MAP] >>
+        qexists_tac `external_name_keys_toplevel (NONE:num option) top` >>
+        conj_tac >- (qexists_tac `top` >> simp[]) >> simp[]) >>
+     metis_tac[]) >>
+  simp[lookup_function_external_skip] >> first_x_assum irule >>
+  gvs[ALL_DISTINCT_APPEND] >> metis_tac[]
+QED
+
+Theorem public_getter_lookup_singleton:
+  !top mut nr rr name args dflts ret body.
+    public_getter top = SOME (mut,nr,rr,name,args,dflts,ret,body) ==>
+    MEM (NONE,name) (external_name_keys_toplevel (NONE:num option) top) /\
+    lookup_function NONE name External [top] =
+      SOME (mut,nr,args,dflts,ret,body)
+Proof
+  Cases >> simp[public_getter_def] >> rpt gen_tac
+  >>~- ([`VariableDecl vis _ id typ _`],
+    Cases_on `vis` >> simp[public_getter_def] >>
+    Cases_on `is_ArrayT typ`
+    >- (qmatch_goalsub_abbrev_tac `getter flag ne kt vt` >>
+        qabbrev_tac `g = (getter flag ne kt vt : function_mutability # bool # (string # type) list # expr list # type # stmt list)` >> PairCases_on `g` >>
+        gvs[markerTheory.Abbrev_def] >>
+        qpat_x_assum `(_,_,_,_,_,_) = getter _ _ _ _` (assume_tac o SYM) >>
+        qpat_assum `getter _ _ _ _ = _` (fn th => rewrite_tac[th]) >>
+        strip_tac >>
+        gvs[external_name_keys_toplevel_def, lookup_function_def]) >>
+    simp[] >> strip_tac >> gvs[external_name_keys_toplevel_def, lookup_function_def])
+  >>~- ([`HashMapDecl vis _ id kt vt _`],
+    Cases_on `vis` >> simp[public_getter_def] >>
+    qmatch_goalsub_abbrev_tac `getter flag ne key value` >>
+    qabbrev_tac `g = (getter flag ne key value : function_mutability # bool # (string # type) list # expr list # type # stmt list)` >> PairCases_on `g` >>
+    gvs[markerTheory.Abbrev_def] >>
+        qpat_x_assum `(_,_,_,_,_,_) = getter _ _ _ _` (assume_tac o SYM) >>
+        qpat_assum `getter _ _ _ _ = _` (fn th => rewrite_tac[th]) >>
+        strip_tac >>
+    gvs[external_name_keys_toplevel_def, lookup_function_def])
+QED
+
+Theorem public_getter_lookup_agrees:
+  !tops mut nr rr name args dflts ret body.
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+    MEM (mut,nr,rr,name,args,dflts,ret,body) (public_getters tops) ==>
+    lookup_function NONE name External tops =
+      SOME (mut,nr,args,dflts,ret,body)
+Proof
+  rw[MEM_public_getters] >>
+  drule public_getter_lookup_singleton >> strip_tac >>
+  irule lookup_function_external_unique_decl >> metis_tac[]
+QED
+
+Theorem public_getter_classified_mem:
+  !tops g.
+    MEM g (public_getters tops) ==>
+    MEM (subst_consts_fn (module_consts_env tops []) g)
+      (FST (classify_functions tops))
+Proof
+  rpt strip_tac >> simp[classify_functions_def] >> pairarg_tac >>
+  simp[MEM_MAP] >> metis_tac[MEM_APPEND]
+QED
+
+(* Source lookup and the selector dispatcher agree on the synthesized getter.
+   The classified body/defaults are normalized, while ABI metadata is unchanged. *)
+Theorem public_getter_dispatch_agrees:
+  !tops mut nr rr name args dflts ret body vals cd fb.
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+    MEM (mut,nr,rr,name,args,dflts,ret,body) (public_getters tops) /\
+    ALL_DISTINCT
+      (MAP FST (build_selectors (type_env tops)
+                  (FST (classify_functions tops)))) /\
+    calldata_encodes (type_env tops) name (MAP SND args) vals cd /\
+    LENGTH vals = LENGTH args ==>
+    lookup_function NONE name External tops =
+      SOME (mut,nr,args,dflts,ret,body) /\
+    MEM (subst_consts_fn (module_consts_env tops [])
+           (mut,nr,rr,name,args,dflts,ret,body))
+      (FST (classify_functions tops)) /\
+    linear_dispatch_target cd
+      (MAP (\(sel,lbl,_). (sel,lbl))
+        (build_selectors (type_env tops) (FST (classify_functions tops))))
+      fb = "fn_" ++ name
+Proof
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- (irule public_getter_lookup_agrees >> metis_tac[]) >>
+  conj_asm1_tac >- (irule public_getter_classified_mem >> simp[]) >>
+  gvs[subst_consts_fn_def] >>
+  drule_all linear_dispatch_selects_entry >> simp[]
 QED
 
 (* ===== The fallback ===== *)
@@ -213,24 +613,40 @@ Theorem lookup_function_default:
   !tops src.
     (!nr' mut typ x. ~MEM (VariableDecl (Public nr') mut "__default__" typ x) tops) /\
     (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b "__default__" kt vt x) tops) ==>
-    lookup_function src "__default__" External tops =
-    OPTION_MAP (\(mut, nr, rr, fname, args, dflts, ret, fbody).
-                  (mut, nr, args, dflts, ret, fbody))
-      (FST (SND (SND (classify_functions tops))))
+    case lookup_function src "__default__" External tops of
+      NONE => FST (SND (SND (classify_functions tops))) = NONE
+    | SOME (mut, nr, args, dflts, ret, fbody) =>
+        ?rr. FST (SND (SND (classify_functions tops))) =
+          SOME (subst_consts_fn (module_consts_env tops [])
+            (mut, nr, rr, "__default__", args, dflts, ret, fbody))
 Proof
-  Induct >- simp[lookup_function_def, classify_functions_def] >>
-  rpt gen_tac >> strip_tac >> fs[classify_functions_def] >>
+  `!tops src.
+     (!nr' mut typ x. ~MEM (VariableDecl (Public nr') mut "__default__" typ x) tops) /\
+     (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b "__default__" kt vt x) tops) ==>
+     case lookup_function src "__default__" External tops of
+       NONE => FST (SND (SND (FOLDR classify_function ([],[],NONE,NONE) tops))) = NONE
+     | SOME (mut,nr,args,dflts,ret,rawbody) =>
+       ?rr. FST (SND (SND (FOLDR classify_function ([],[],NONE,NONE) tops))) =
+         SOME (mut,nr,rr,"__default__",args,dflts,ret,rawbody)`
+    suffices_by
+      (rpt strip_tac >> first_x_assum drule_all >>
+       disch_then (qspec_then `src` mp_tac) >>
+       simp[classify_functions_def] >> pairarg_tac >>
+       Cases_on `lookup_function src "__default__" External tops`
+       >- simp[] >>
+       PairCases_on `x` >> simp[] >> metis_tac[]) >>
+  Induct >- simp[lookup_function_def] >>
+  rpt gen_tac >> strip_tac >>
   `?a1 a2 a3 a4. FOLDR classify_function ([],[],NONE,NONE) tops =
                  (a1,a2,a3,a4)` by metis_tac[pairTheory.ABS_PAIR_THM] >>
-  fs[] >> Cases_on `h` >>
-  TRY (qmatch_goalsub_rename_tac `FunctionDecl vis _ _ _ _ _ _ _ _` >>
-       Cases_on `vis`) >>
-  TRY (qmatch_goalsub_rename_tac `VariableDecl vis _ _ _ _` >>
-       Cases_on `vis`) >>
-  TRY (qmatch_goalsub_rename_tac `HashMapDecl vis _ _ _ _ _` >>
-       Cases_on `vis`) >>
-  gvs[lookup_function_def, classify_function_def] >> rw[] >> gvs[] >>
-  metis_tac[]
+  Cases_on `h` >> gvs[lookup_function_def, classify_function_def]
+  >>~- ([`case vis of External => _ | Internal => _ | Deploy => _`],
+    Cases_on `vis` >> gvs[] >> rw[] >> gvs[] >> metis_tac[])
+  >>~- ([`lookup_function _ _ _ (VariableDecl vis _ _ _ _ :: _)`],
+    Cases_on `vis` >> gvs[lookup_function_def] >> rw[] >> gvs[] >> metis_tac[])
+  >>~- ([`lookup_function _ _ _ (HashMapDecl vis _ _ _ _ _ :: _)`],
+    Cases_on `vis` >> gvs[lookup_function_def] >> rw[] >> gvs[] >> metis_tac[]) >>
+  first_x_assum drule_all >> simp[]
 QED
 
 (* The fallback the runtime lowering packages (lower_vyper_runtime_unit)
@@ -246,17 +662,20 @@ Theorem fallback_package_lookup:
            (package_fallback_fn tops ut nkm fb) of
       NONE => vyperInterpreter$lookup_function src "__default__" External tops = NONE
     | SOME (cenv, is_payable, nr, nkey, ut', iv, fbody, rt) =>
-        ?mut args dflts ret.
+        ?mut args dflts ret rawbody.
           vyperInterpreter$lookup_function src "__default__" External tops =
-            SOME (mut, nr, args, dflts, ret, fbody) /\
+            SOME (mut, nr, args, dflts, ret, rawbody) /\
+          fbody = subst_consts_stmts (module_consts_env tops []) rawbody /\
           is_payable = (mut = Payable)
 Proof
   rpt strip_tac >> drule_all lookup_function_default >>
   disch_then (qspec_then `src` mp_tac) >>
-  Cases_on `fb` >>
-  simp[package_fallback_fn_def, set_fallback_package_target_def] >>
-  PairCases_on `x` >> simp[package_fallback_fn_def, LET_THM,
-                           set_fallback_package_target_def]
+  Cases_on `lookup_function src "__default__" External tops`
+  >- (simp[] >> strip_tac >> gvs[] >>
+      simp[package_fallback_fn_def, set_fallback_package_target_def]) >>
+  PairCases_on `x` >> simp[] >> strip_tac >>
+  gvs[subst_consts_fn_def] >>
+  simp[package_fallback_fn_def, set_fallback_package_target_def]
 QED
 
 (* The entry part of the fallback body.  A payable fallback goes straight

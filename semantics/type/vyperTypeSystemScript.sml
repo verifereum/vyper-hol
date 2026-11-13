@@ -281,12 +281,59 @@ Definition account_item_type_def:
   account_item_type Code = BaseT (BytesT (Dynamic 24576))
 End
 
-(* Static capacities used by Vyper's concat result inference. *)
+(* Static capacities used by Vyper's concat and slice result inference. *)
 Definition bytelike_type_bound_def:
   bytelike_type_bound (BaseT (BytesT bd)) = bound_length bd /\
   bytelike_type_bound (BaseT (StringT n)) = n /\
   bytelike_type_bound _ = 0
 End
+
+(* Slice's result bound depends on its reduced length expression. Folded
+   names lose literal-start provenance, so start bounds stay runtime checks. *)
+Definition slice_operands_ok_def:
+  slice_operands_ok bi es <=>
+    case bi of
+    | Slice n =>
+      (case EL 0 es of
+       | Builtin _ (Acc Code) [addr] =>
+           (case EL 2 es of
+            | Literal _ (IntL len) => 1 <= len /\ len <= &n
+            | _ => F)
+       | _ =>
+        let src_bound = bytelike_type_bound (expr_type (EL 0 es)) in
+        (case EL 2 es of
+         | Literal _ (IntL len) =>
+             1 <= len /\ len <= &src_bound /\ len <= &n
+         | _ => src_bound <= n))
+    | _ => T
+End
+(* A value of type t fits a slot declared as u (a call argument, a struct
+   literal field, a DynArray or static-array literal element), as in Vyper's
+   compare_type (validate_expected_type): a bytestring or dynamic array may
+   have a smaller bound, elementwise, and every other type must match
+   exactly. *)
+Definition arg_type_fits_def:
+  (arg_type_fits (BaseT (StringT n)) (BaseT (StringT m)) <=> n <= m) /\
+  (arg_type_fits (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic m))) <=>
+     n <= m) /\
+  (arg_type_fits (ArrayT t (Dynamic n)) (ArrayT u (Dynamic m)) <=>
+     n <= m /\ arg_type_fits t u) /\
+  (arg_type_fits (ArrayT t (Fixed n)) (ArrayT u (Fixed m)) <=>
+     n = m /\ arg_type_fits t u) /\
+  (arg_type_fits (TupleT ts) (TupleT us) <=> arg_types_fit ts us) /\
+  (arg_type_fits t u <=> t = u) /\
+  (arg_types_fit [] [] <=> T) /\
+  (arg_types_fit (t::ts) (u::us) <=> arg_type_fits t u /\ arg_types_fit ts us) /\
+  (arg_types_fit _ _ <=> F)
+End
+
+Theorem arg_type_fits_refl[simp]:
+  (!t. arg_type_fits t t) /\ (!ts. arg_types_fit ts ts)
+Proof
+  `(!t u. t = u ==> arg_type_fits t u) /\
+   (!ts us. ts = us ==> arg_types_fit ts us)` suffices_by simp[] >>
+  ho_match_mp_tac arg_type_fits_ind >> rw[arg_type_fits_def]
+QED
 
 Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Bop bop) ts =
@@ -320,9 +367,11 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Uint2Str n) ts =
     (LENGTH ts = 1 /\ ty = BaseT (StringT n) /\ (?k. HD ts = BaseT (UintT k)) /\ 78 <= n) /\
   well_typed_builtin_app ty (MakeArray NONE bd) ts =
-    (ty = TupleT ts /\ compatible_bound bd (LENGTH ts)) /\
+    ((?tys. ty = TupleT tys /\ arg_types_fit ts tys) /\
+     compatible_bound bd (LENGTH ts)) /\
   well_typed_builtin_app ty (MakeArray (SOME elem_ty) bd) ts =
-    (ty = ArrayT elem_ty bd /\ compatible_bound bd (LENGTH ts) /\ EVERY ($= elem_ty) ts) /\
+    (ty = ArrayT elem_ty bd /\ compatible_bound bd (LENGTH ts) /\
+     EVERY (\t. arg_type_fits t elem_ty) ts) /\
   well_typed_builtin_app ty Ceil ts =
     (LENGTH ts = 1 /\ HD ts = BaseT DecimalT /\ ty = BaseT (IntT 256)) /\
   well_typed_builtin_app ty Floor ts =
@@ -712,25 +761,6 @@ Definition raw_call_kws_ok_def:
      ~MEM EKValue flags.rcf_kws)
 End
 
-(* An external-call argument of type t fits a parameter declared as u, as in
-   Vyper's compare_type (validate_expected_type in fetch_call_return): a
-   bytestring or dynamic array may have a smaller bound, elementwise, and
-   every other type must match exactly. *)
-Definition arg_type_fits_def:
-  (arg_type_fits (BaseT (StringT n)) (BaseT (StringT m)) <=> n <= m) /\
-  (arg_type_fits (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic m))) <=>
-     n <= m) /\
-  (arg_type_fits (ArrayT t (Dynamic n)) (ArrayT u (Dynamic m)) <=>
-     n <= m /\ arg_type_fits t u) /\
-  (arg_type_fits (ArrayT t (Fixed n)) (ArrayT u (Fixed m)) <=>
-     n = m /\ arg_type_fits t u) /\
-  (arg_type_fits (TupleT ts) (TupleT us) <=> arg_types_fit ts us) /\
-  (arg_type_fits t u <=> t = u) /\
-  (arg_types_fit [] [] <=> T) /\
-  (arg_types_fit (t::ts) (u::us) <=> arg_type_fits t u /\ arg_types_fit ts us) /\
-  (arg_types_fit _ _ <=> F)
-End
-
 (* A value of type t may be stored where type u is declared: the same type, or
    t fits u by Vyper's implicit bound widening (a String, Bytes or DynArray
    with a smaller bound, elementwise) and u is well formed. *)
@@ -860,7 +890,8 @@ Definition well_typed_expr_def:
     (well_typed_named_exprs env kes /\ well_formed_type env.type_defs ty /\
      ?args. ty = StructT nsid /\
        FLOOKUP env.type_defs nsid = SOME (StructArgs args) /\
-       MAP FST kes = MAP FST args /\ MAP (expr_type o SND) kes = MAP SND args) /\
+       MAP FST kes = MAP FST args /\
+       arg_types_fit (MAP (expr_type o SND) kes) (MAP SND args)) /\
   well_typed_expr env (Subscript ty e1 e2) =
     (well_typed_expr env e2 /\ well_formed_type env.type_defs ty /\
      ((well_typed_expr env e1 /\ subscript_type_ok (expr_type e1) e2 ty /\
@@ -872,7 +903,8 @@ Definition well_typed_expr_def:
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (Builtin ty blt es) =
     (well_typed_exprs env es /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
-     builtin_operands_ok ty blt es /\ well_formed_type env.type_defs ty) /\
+     slice_operands_ok blt es /\ builtin_operands_ok ty blt es /\
+     well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\ well_formed_type env.type_defs ty /\
      type_builtin_result_ok env.type_defs tb ty target_ty (MAP expr_type es) /\
@@ -890,7 +922,8 @@ Definition well_typed_expr_def:
        type_widens_to env.type_defs sig.ret_ty ty /\
        LENGTH args <= LENGTH sig.param_types /\
        LENGTH sig.param_types - sig.num_defaults <= LENGTH args /\
-       MAP expr_type args = TAKE (LENGTH args) sig.param_types) /\
+       LIST_REL (type_widens_to env.type_defs) (MAP expr_type args)
+         (TAKE (LENGTH args) sig.param_types)) /\
   well_typed_expr env (Call ty (ExtCall is_static _ (_, arg_types, ret_ty) opts) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ well_formed_type env.type_defs ty /\
      ty = ret_ty /\ ext_call_opts_ok is_static opts /\
@@ -1437,3 +1470,24 @@ Termination
             | INR ts => list_size stmt_size ts)` >>
   simp[stmt_size_def]
 End
+
+(* Place typing carries the expression's annotation, including module names. *)
+Theorem type_place_expr_vtype_annotation:
+  !e env vt. type_place_expr env e = SOME vt ==>
+    vtype_annotation_ok vt (expr_type e)
+Proof
+  Cases_on `e` >> simp[expr_type_def] >> rpt strip_tac >>
+  qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
+  simp[Once well_typed_expr_def, vtype_annotation_ok_def, AllCaseEqs()]
+  >- (Cases_on `p` >>
+      simp[Once well_typed_expr_def, vtype_annotation_ok_def, AllCaseEqs()]) >>
+  metis_tac[]
+QED
+
+Theorem type_place_expr_annotation:
+  !e env ty. type_place_expr env e = SOME (Type ty) ==>
+    expr_type e = ty
+Proof
+  rpt strip_tac >> drule type_place_expr_vtype_annotation >>
+  simp[vtype_annotation_ok_def]
+QED

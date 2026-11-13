@@ -1,6 +1,7 @@
 (* Pure metadata transport from a runtime package through any registration prefix. *)
 Theory entryReachBodyPackageAlignment
 Ancestors
+  supportedGetterProps
   returnMetadataPtr calldataRegistration entryReachBodySourceMemberEntry externalBodyFrame
   externalBodySupport
   e2eDefs supportedProgram supportedDecls vyperABIRoundtrip
@@ -99,30 +100,14 @@ Theorem entry_selected_parameter_types:
     SOME (mut,F,args,[],ret,fbody) ==>
   contract_namespaces_ok F [(NONE,tops)] /\
   EVERY (assignable_type (type_env tops)) (MAP SND args) /\
-  EVERY (supported_place_type tops) (MAP SND args)
+  EVERY (entry_abi_support (type_env tops)) (MAP SND args)
 Proof
   strip_tac >>
-  `?raw. MEM (FunctionDecl External mut F raw tx.function_name args [] ret fbody) tops` by
-    (irule lookup_function_external_decl >> simp[] >> qexists_tac `tops` >>
-     gvs[supported_program_def, supported_declaration_headers_def]) >>
-  `EVERY (supported_place_type tops) (MAP SND args)` by
-    (gvs[supported_program_def, supported_declaration_headers_def, EVERY_MEM] >>
-     qpat_x_assum `!e. MEM e tops ==> supported_declaration_header tops e` drule >>
-     simp[supported_declaration_header_def, supported_function_argument_def,
-       EVERY_MEM, MEM_MAP, pairTheory.FORALL_PROD] >>
-     strip_tac >> rpt strip_tac >> PairCases_on `y` >> gvs[] >> metis_tac[]) >>
-  gvs[source_typing_ok_def] >>
-  `contract_namespaces_ok F [(NONE,tops)]` by metis_tac[check_contract_namespaces_ok] >>
-  `module_allocated am.layouts tx.target NONE tops` by
-    (drule check_contract_main_module_allocated >> simp[]) >>
-  `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
-     External mut F args [] ret fbody` by
-    (irule check_contract_runtime_function_body_MEM >> simp[] >>
-     qexistsl_tac [`tx.function_name`, `raw`] >> simp[]) >>
-  gvs[check_function_body_def, params_ok_def, EVERY_MAP, EVERY_MEM,
-    pairTheory.FORALL_PROD, combinTheory.o_DEF,
-    vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def] >>
-  metis_tac[]
+  `supported_declaration_headers tops` by fs[supported_program_def] >>
+  drule_all source_typing_ok_params_ok >> strip_tac >>
+  gvs[params_ok_def, EVERY_MEM, MEM_MAP, PULL_EXISTS, pairTheory.FORALL_PROD] >>
+  fs[source_typing_ok_def] >> metis_tac[check_contract_namespaces_ok,
+    entryReachBodyConversionSupportTheory.assignable_type_entry_abi_support]
 QED
 
 Theorem entry_runtime_package_memlocs:
@@ -188,10 +173,6 @@ Proof
     evaluate_type (type_env tops) (SND (EL i args)) = SOME tv /\
     value_has_type tv (EL i tx.args)` by
     metis_tac[entryDecodePropsTheory.bind_arguments_word_arg] >>
-  conj_tac
-  >- (simp[EVERY_EL, LENGTH_MAP, EL_MAP] >> rpt strip_tac >>
-      irule entry_supported_place_evaluated >>
-      fs[EVERY_EL, EL_MAP] >> metis_tac[]) >>
   conj_tac
   >- (simp[LIST_REL_EL_EQN, LENGTH_MAP, EL_MAP] >> metis_tac[]) >>
   rpt strip_tac >>

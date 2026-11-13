@@ -87,7 +87,7 @@ Theorem unop_frag_read_then:
     (!c. straight_fresh (g c)) /\
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           w = typed_val_to_w256 tv v) /\
-    (!x ss n out.
+    (!(H:(bool # bytes32 # type_value) list # num list) x ss n out.
        eval_operand x ss = SOME w1 /\ stmt_state_rel H ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) /\
@@ -101,18 +101,20 @@ Theorem unop_frag_read_then:
 Proof
   rpt gen_tac >> strip_tac >> simp[unop_frag_def] >> rpt gen_tac >>
   strip_tac >>
+  rename1 `valid_horizon cx st0 H0 es0.storage_trace` >>
   qpat_x_assum `comp_bind _ _ _ = _` mp_tac >> simp[comp_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
   rename1 `emit_op opc [x] sa = (c, s1)` >>
   `opc <> GAS` by
     (strip_tac >> gvs[] >>
-     `stmt_state_rel H ctx func cenv cx es0
+     `stmt_state_rel H0 ctx func cenv cx es0
         (s0 with <|vs_gas_readings := [1w]; vs_inst_idx := s0.vs_inst_idx|>)` by
-       (first_assum (mp_then Any
+       (`stmt_state_rel H0 ctx func cenv cx es0 s0` by metis_tac[] >>
+        first_assum (mp_then Any
           (qspecl_then [`[1w]`, `s0.vs_inst_idx`, `es0.gas_obs`] mp_tac)
           msg_gas_state_frame) >>
         simp[]) >>
-     first_x_assum (qspecl_then [`x`,
+     first_x_assum (qspecl_then [`H0`, `x`,
         `s0 with <|vs_gas_readings := [1w]; vs_inst_idx := s0.vs_inst_idx|>`,
         `0`, `"o"`] mp_tac) >>
      `!ss. step_inst_base (mk_inst 0 GAS [x] ["o"]) ss =
@@ -151,11 +153,14 @@ Proof
     (qunabbrev_tac `out` >> irule emitHelperPropsTheory.emit_op_zero_path >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      qexistsl_tac [`[x]`, `c`, `opc`, `s1`] >> simp[] >>
-     rpt strip_tac >> first_x_assum irule >> simp[]) >>
+     rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
   qabbrev_tac `u = (update_var out r s0) with vs_inst_idx := SUC s0.vs_inst_idx` >>
-  `stmt_state_rel H ctx func cenv cx es0 u` by
-    (simp[Abbr `u`, stmt_state_rel_inst_idx] >>
+  `!(H:(bool # bytes32 # type_value) list # num list).
+     stmt_state_rel H ctx func cenv cx es0 s0 ==>
+       stmt_state_rel H ctx func cenv cx es0 u` by
+    (rpt strip_tac >> simp[Abbr `u`, stmt_state_rel_inst_idx] >>
      irule stmt_state_rel_update_var >> simp[]) >>
+  `stmt_state_rel H0 ctx func cenv cx es0 u` by metis_tac[] >>
   `eval_operand c u = SOME r` by
     simp[Abbr `u`, eval_operand_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   `~u.vs_halted /\ u.vs_current_bb = s1.cs_current_bb /\
@@ -177,6 +182,16 @@ Proof
   `!z. not_fresh_at sa z ==> not_fresh_at s1 z` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >>
      asm_rewrite_tac[]) >>
+  `!H. valid_horizon cx st0 H es0.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es0
+         (t' with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+       storage_well_formed_on cx es0 (FST H)` by
+    (gen_tac >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es0 s0 /\
+      storage_well_formed_on cx es0 (FST H)` by metis_tac[] >>
+     `stmt_state_rel H ctx func cenv cx es0 u` by metis_tac[] >>
+     qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ u` kall_tac >>
+     drule_all fragGasFreshTheory.straight_fresh_run_post >> simp[]) >>
   qexists_tac `OK (t' with vs_inst_idx := LENGTH sb.cs_current_insts)` >>
   conj_tac
   >- (`gas_marked_path F ctx func s0 (0 + 0)
@@ -205,7 +220,7 @@ Theorem unop_frag_read:
     opc <> INVOKE /\ ~is_terminator opc /\ is_word_type t /\
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           r = typed_val_to_w256 tv v) /\
-    (!x ss n out.
+    (!(H:(bool # bytes32 # type_value) list # num list) x ss n out.
        eval_operand x ss = SOME w1 /\ stmt_state_rel H ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) ==>
@@ -218,7 +233,8 @@ Proof
   simp[straight_fresh_return] >>
   qexists_tac `r` >>
   simp[comp_return_def, emitted_insts_refl, run_inst_seq_def] >>
-  qexists_tac `r` >> asm_simp_tac bool_ss []
+  qexists_tac `r` >> conj_tac >- simp[] >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Each read but .code: its code from the address's word, against the

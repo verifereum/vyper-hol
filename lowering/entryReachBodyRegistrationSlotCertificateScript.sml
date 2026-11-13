@@ -51,9 +51,10 @@ QED
 Theorem entry_slot_compiler_counters:
   compile_alloc_buffer n st = (buf,allocated) /\
   emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] allocated = (head,after_head) /\
-  (if dyn then ?offset after_load.
+  (if dyn then ?offset after_load after_src.
     emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
-    emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
+    emit_op ADD [Lit (n2w 4); offset] after_load = (src,after_src) /\
+    compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) after_src = ((),first)
    else src = head /\ first = after_head) /\
   compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last) /\
   last.cs_next_var <= limit.cs_next_var ==>
@@ -106,9 +107,10 @@ Theorem entry_selected_slot_allocation:
     compile_alloc_buffer (type_memory_size tv) st = (buf,allocated) /\
     FLOOKUP cei1.ce_vars name = SOME (PtrVar buf.buf_operand (type_memory_size tv)) /\
     emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] allocated = (head,after_head) /\
-    (if dyn /\ ~prim then ?offset after_load.
+    (if dyn /\ ~prim then ?offset after_load after_src.
       emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
-      emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
+      emit_op ADD [Lit (n2w 4); offset] after_load = (src,after_src) /\
+      compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) after_src = ((),first)
      else src = head /\ first = after_head) /\
     compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last) /\
     fn_has_code st allocated fn /\ fn_has_code allocated first fn /\ fn_has_code first last fn /\

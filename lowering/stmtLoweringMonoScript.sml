@@ -374,7 +374,7 @@ Proof
    stmt_ci_tac,
    stmt_ci_tac,
    stmt_ci_tac,
-   stmt_ci_tac,
+   suspend "return_some",
    stmt_ci_tac,
    stmt_ci_tac,
    stmt_ci_tac,
@@ -430,6 +430,17 @@ Resume compile_stmt_ci_mono[range]:
   gen_tac >> match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_inst] >>
   gen_tac >> match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_new_block] >>
   simp[ci_mono_comp_return]
+QED
+
+Resume compile_stmt_ci_mono[return_some]:
+  rpt gen_tac >> simp[Once compile_stmt_def] >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  simp[pairTheory.ELIM_UNCURRY] >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step
 QED
 
 Finalise compile_stmt_ci_mono

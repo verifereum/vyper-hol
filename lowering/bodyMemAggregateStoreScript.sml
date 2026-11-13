@@ -190,7 +190,8 @@ Theorem aggregate_store_rebased_slice_mem_cursor:
     locals_kept ce es' es' r q /\
     q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func q /\ q.vs_alloca_next = s.vs_alloca_next
+    alloca_history func q /\ q.vs_alloca_next = s.vs_alloca_next /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\ q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >> (
   `compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb)` by
@@ -223,6 +224,13 @@ Proof
      qpat_x_assum `_ with <|vs_memory := _; vs_vars := _|> = s` mp_tac >>
      simp[venom_state_component_equality] >> strip_tac >>
      fs[same_blocks_def]) >>
+  `q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+   q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx` by
+    (drule_all (SRULE [] buffer_store_memory_encoding) >> strip_tac >>
+     drule buffer_store_memory_shape >> strip_tac >>
+     gvs[] >>
+     qpat_x_assum `_ with <|vs_memory := _; vs_vars := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
   qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   conj_tac >- (simp_tac (srw_ss()) [] >> ACCEPT_TAC alloc) >>
   conj_tac >- (simp_tac (srw_ss()) [] >> ACCEPT_TAC ext) >>
