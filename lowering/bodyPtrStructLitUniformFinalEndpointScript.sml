@@ -1,6 +1,7 @@
 (* Representation and source interfaces for the uniform struct endpoint. *)
 Theory bodyPtrStructLitUniformFinalEndpoint
 Ancestors bodyPtrMakeArrayPackage bodyPtrMakeArrayConsInvariant
+  bodyPtrLiteralPackageCore
   exprSimAggregateSource exprSimHyps valueEncoding valueEncodingDefs bodyPtrDefs
   fragGasPathPtr gasSummaryComposePtr vyperState exprSimProps compileEnv exprSimHash
 

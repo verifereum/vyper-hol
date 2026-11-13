@@ -1,6 +1,7 @@
 (* Prefix the uniform fields loop with its counted allocation path. *)
 Theory bodyPtrStructLitUniformAllocated
 Ancestors bodyPtrStructLitUniformFieldsLoop bodyPtrMakeArrayPackage
+  bodyPtrLiteralPackageCore
   bodyPtrMakeArrayConsInvariant exprLoweringProps fragExec freshWrites
   gasSummaryComposePtr
 
