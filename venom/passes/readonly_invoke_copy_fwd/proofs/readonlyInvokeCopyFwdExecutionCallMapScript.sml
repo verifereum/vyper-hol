@@ -4,11 +4,13 @@ Ancestors
   readonlyInvokeCopyFwdExecutionCallArgs readonlyInvokeCopyFwdExecutionCallSites
   readonlyInvokeCopyFwdExecution readonlyInvokeCopyFwdHeterogeneousLedger
   readonlyInvokeCopyFwdOpaque readonlyInvokeCopyFwdOpaqueReturn
+  readonlyInvokeCopyFwdRel
   readonlyInvokeCopyFwdHistoryOrigin readonlyInvokeCopyFwdHistoryPhase
   readonlyInvokeCopyFwdHistoryVisitAccess readonlyInvokeCopyFwdHistoryCopyUniqueness
   readonlyInvokeCopyFwdHistory readonlyInvokeCopyFwdPlan
   internalReturnCopyFwdPlan invokeCopyFwdCommonDefs occurrenceGeometry
-  o1LowerDloadOccurrence ptrDiscipline
+  o1LowerDloadOccurrence o1LowerDloadRelocationKernel ptrDiscipline
+  taintAgree unitShapeDefs venomExecSemantics contextCodegenRel
   allocaRemapSSA mem2varProofs o1PassContract venomWf venomInst
   list finite_map pred_set arithmetic words
 
@@ -217,4 +219,51 @@ Proof
      simp[optionTheory.IS_SOME_EXISTS]) >>
   qexistsl_tac [`db`,`y`] >>
   simp[ricf_opaque_value_agree_def, ricf_is_zero_prov_def, op_prov_def]
+QED
+
+Theorem ricf_call_opaque_value_same_lookup[local]:
+  ricf_opaque_value_agree sites p m x y /\
+  (!id. p = SOME id ==> FLOOKUP callsites id = FLOOKUP sites id) ==>
+  ricf_opaque_value_agree callsites p m x y
+Proof
+  Cases_on `p`
+  >- simp[ricf_opaque_value_agree_def, ricf_is_zero_prov_def,
+       ricf_value_agree_def, ld_value_agree_def] >>
+  rename1 `ricf_opaque_value_agree sites (SOME id) m x y` >> strip_tac >>
+  `id IN FDOM callsites <=> id IN FDOM sites` by
+    (Cases_on `id IN FDOM callsites` >> Cases_on `id IN FDOM sites` >>
+     gvs[FLOOKUP_DEF]) >>
+  Cases_on `id IN FDOM sites` >>
+  fs[ricf_opaque_value_agree_def, ricf_value_agree_def, ld_value_agree_def]
+QED
+
+Theorem ricf_call_unchanged_argument_values:
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
+    n a U B HP H ledger E sites maps targets tn /\
+  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  inst.inst_opcode = INVOKE /\ MEM op inst.inst_operands /\
+  eval_operand op s = SOME x /\
+  (!id. op_prov G op = SOME id ==>
+    FLOOKUP callsites id = FLOOKUP sites id) ==>
+  ?y. eval_operand op t = SOME y /\
+    ricf_opaque_value_agree callsites (op_prov G op) {} x y
+Proof
+  strip_tac >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    (fs[ricf_execution_invariant_def, ricf_heterogeneous_source_ledger_def] >>
+     metis_tac[occ_frame_reachable_projection]) >>
+  `taint_ok fn tn inst s` by
+    (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `op_taint tn op = {}` by metis_tac[taint_ok_invoke_operand] >>
+  `MEM inst (fn_insts fn)` by
+    (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
+  `!v. op = Var v ==> ~retpc_var fn v` by
+    (rpt strip_tac >> gvs[] >>
+     drule_all opaque_use_ok_retpc_use >> simp[retpc_use_ok_def]) >>
+  `ricf_opaque_frame_agree fn D (ircf_dead (ricf_original_copy_ids C) s stk)
+    sites (ricf_complete_params PG s.vs_params) G tn s t` by
+    fs[ricf_execution_invariant_def] >>
+  drule_all ricf_opaque_frame_operand >> strip_tac >>
+  qexists_tac `y` >> simp[] >>
+  irule ricf_call_opaque_value_same_lookup >> metis_tac[]
 QED
