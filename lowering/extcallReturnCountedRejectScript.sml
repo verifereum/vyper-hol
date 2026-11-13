@@ -27,7 +27,7 @@ Proof
        pending_alloca_size_def, immutable_alloca_sep_def]
 QED
 
-Theorem return_reject_entry_control[local]:
+Theorem return_reject_entry_control:
   abi_malformed_entry H ctx func ce cx es st sites dstid live
     base_op hi src dst B len xs p d n s ==>
   abi_malformed_entry H ctx func ce cx es (start_relabel L ids st)
@@ -43,7 +43,7 @@ Proof
      return_reject_stmt_control] >> metis_tac[]
 QED
 
-Theorem return_reject_sites[local]:
+Theorem return_reject_sites:
   abi_malformed_scratch_sites (start_relabel L ids st)
     (start_swap st L ids en) func = abi_malformed_scratch_sites st en func
 Proof
