@@ -4,6 +4,7 @@ Ancestors
   exprExtRequestSourceProbe exprExtRequestReadProbe vyperCallOutcomeFrame
   sum supportedExprTraverse vyperInterpreter
   vyperStatePreservation vyperPlaceFrames vyperState vyperAST
+  bodyIntCallJointPureSource list
 
 (* State-observing primitives used by the pure evaluator branches. *)
 Theorem extrequest_read_primitive_frames:
@@ -258,21 +259,30 @@ Theorem extrequest_pure_expr_read_frame:
   ~expr_has_effect e ==>
   state_rel_frame (extrequest_read_frame cx) (eval_expr cx e)
 Proof
-  simp[expr_has_effect_def, extrequest_evaluate_read_frame]
+  strip_tac >> rw[state_rel_frame_result] >>
+  drule_all effect_free_eval_expr_frame >>
+  simp[evaluation_state_component_equality] >>
+  strip_tac >> gvs[extrequest_read_frame_def]
 QED
 
 Theorem extrequest_pure_exprs_read_frame:
   EVERY (\e. ~expr_has_effect e) es ==>
   state_rel_frame (extrequest_read_frame cx) (eval_exprs cx es)
 Proof
-  simp[expr_has_effect_def, supported_exprs_exists_every,
-       combinTheory.o_DEF, extrequest_evaluate_read_frame]
+  strip_tac >> rw[state_rel_frame_result] >>
+  drule_all effect_free_eval_exprs_frame >>
+  simp[evaluation_state_component_equality] >>
+  strip_tac >> gvs[extrequest_read_frame_def]
 QED
 
 Theorem extrequest_pure_results_read_frame:
   EVERY (\e. ~expr_has_effect e) es ==>
   state_rel_frame (extrequest_read_frame cx) (eval_expr_results cx es)
 Proof
-  simp[expr_has_effect_def, supported_exprs_exists_every,
-       combinTheory.o_DEF, extrequest_evaluate_read_frame]
+  Induct_on `es` >> simp[EVERY_DEF, Once evaluate_def]
+  >- simp[state_rel_frame_def, return_def, extrequest_read_frame_def] >>
+  rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+  simp[extrequest_read_frame_def, extrequest_pure_expr_read_frame] >>
+  rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+  simp[extrequest_read_frame_def, extrequest_read_pure_frames] >> metis_tac[]
 QED
