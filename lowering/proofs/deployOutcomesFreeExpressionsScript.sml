@@ -3,7 +3,7 @@ Ancestors
   deployOutcomesFreeLowering deployOutcomesFreeGenerators
   exprLowering exprCallBounds e2eDeployDefs supportedExprTraverse vyperTypeSystem
   deployOutcomesFreeExprBody deployOutcomesFreeBuiltinBody
-  deployOutcomesFreeGeneralBuiltinBody
+  deployOutcomesFreeGeneralBuiltinBody deployOutcomesFreeBodyGenerators
   deployOutcomesFreeExprGenerators deployOutcomesFreeBuiltinGenerators
   deployOutcomesFreeAggregateGenerators deployOutcomesFreeAbiGenerators
   deployOutcomesFreeTypeBuiltinBody deployOutcomesFreeSelectors compileEnv
@@ -13,7 +13,7 @@ val safe_generators = map
   (SRULE [DISJ_IMP_THM, FORALL_AND_THM] o
    Q.INST [`P` |-> `\op. op <> CALL /\ op <> STATICCALL /\
       op <> DELEGATECALL /\ op <> CREATE /\ op <> CREATE2 /\ op <> INVOKE`])
-  [outcomes_free_emit_ops, outcomes_free_alloc_buffer,
+  [outcomes_free_snapshot, outcomes_free_emit_ops, outcomes_free_alloc_buffer,
    outcomes_free_ptr_load, outcomes_free_unwrap_value,
    outcomes_free_mapping_subscript, outcomes_free_keccak256_key,
    outcomes_free_tuple_subscript, outcomes_free_array_subscript,
@@ -202,8 +202,10 @@ Resume outcomes_free_builtin_generators[generators]:
     qexistsl [`env`, `constructor_call_root`] >> simp[] >> metis_tac[]) >>
   conj_tac >- (metis_tac[]) >>
   conj_tac >- (metis_tac[List.nth (safe_aggregates, 5)]) >>
-  conj_tac >- (metis_tac[List.nth (safe_aggregates, 2)]) >>
-  conj_tac >- (metis_tac[List.nth (safe_aggregates, 0)]) >>
+  conj_tac >- (rpt strip_tac >> irule (List.nth (safe_aggregates, 0)) >>
+    simp[] >> qexistsl [`env`, `constructor_call_root`] >> simp[] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> irule (List.nth (safe_aggregates, 2)) >>
+    simp[] >> qexistsl [`env`, `constructor_call_root`] >> simp[] >> metis_tac[]) >>
   conj_tac >- (metis_tac[List.nth (safe_aggregates, 1)]) >> simp[]
 QED
 Finalise outcomes_free_builtin_generators

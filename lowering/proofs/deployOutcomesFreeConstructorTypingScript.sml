@@ -2,10 +2,11 @@ Theory deployOutcomesFreeConstructorTyping
 Ancestors
   ctorDeployDefs ctorDeployShape ctorDeployInitcode
   vyperTypeContractContext vyperTypeContract compileVyper
-  e2eDeployDefs vyperTypeSystem supportedStmtTraverse
+  e2eDeployDefs vyperTypeSystem supportedStmtTraverse supportedProgram
 
 Theorem outcomes_free_classified_constructor_typing:
   !layouts addr mods art tops mut nr rr fname args defaults ret fbody.
+  supported_program tops /\
   check_contract T layouts addr mods = SOME art /\
   ALOOKUP mods NONE = SOME tops /\
   SND (SND (SND (classify_functions tops))) =
@@ -14,6 +15,11 @@ Theorem outcomes_free_classified_constructor_typing:
 Proof
   rpt gen_tac >> strip_tac >>
   drule classify_functions_ctor_mem >> strip_tac >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supported_program_def,
+      supportedDeclsTheory.supported_declaration_headers_def,
+      supportedDeclsTheory.supported_headers_module_consts_env] >>
+  gvs[constSubstTheory.subst_consts_fn_empty] >>
   drule_all check_contract_deploy_function_body_MEM >>
   simp[check_function_body_def] >>
   strip_tac >>
@@ -40,7 +46,12 @@ Proof
   qspec_then `tops` (qspecl_then [`NONE`, `"__init__"`] mp_tac)
     classify_functions_ctor_lookup >>
   simp[] >> strip_tac >>
-  fs[constructor_call_free_def] >> metis_tac[]
+  `module_consts_env tops [] = []` by
+    metis_tac[supported_program_def,
+      supportedDeclsTheory.supported_declaration_headers_def,
+      supportedDeclsTheory.supported_headers_module_consts_env] >>
+  gvs[constSubstTheory.subst_consts_fn_empty, constructor_call_free_def] >>
+  metis_tac[]
 QED
 
 (* This is the very package consumed by lower_vyper_deploy_unit, including

@@ -5,7 +5,7 @@ Ancestors
   deployOutcomesFreeExprGenerators deployOutcomesFreeStmtLog
   deployOutcomesFreeStmtValues deployOutcomesFreeAbiGenerators
   supportedStmtTraverse deployOutcomesFreeBodyGenerators
-  exprLowering deployOutcomesFreeLowering
+  exprLowering deployOutcomesFreeLowering deployOutcomesFreeStoreSlots
 
 val safe_generators = map
   (SRULE [DISJ_IMP_THM, FORALL_AND_THM] o
@@ -13,7 +13,7 @@ val safe_generators = map
      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]`])
   [outcomes_free_unwrap_value, outcomes_free_alloc_buffer,
    outcomes_free_store_memory, cj 1 outcomes_free_typed_copy,
-   outcomes_free_copy_memory, outcomes_free_dynarray_to_storage,
+   outcomes_free_copy_memory, cj 1 outcomes_free_store_slots_mutual,
    outcomes_free_slot_copies, outcomes_free_imm_store,
    outcomes_free_store_immutable_bytestring, outcomes_free_imm_store_words,
    outcomes_free_load_memory, outcomes_free_binop, outcomes_free_bytelike_literal,

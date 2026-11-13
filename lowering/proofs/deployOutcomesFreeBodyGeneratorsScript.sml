@@ -29,9 +29,9 @@ Theorem outcomes_free_dynarray_append:
   (!ce a b ty sty st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_store_memory ce a b ty sty st)))) /\
-  (!a b n loc st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
+  (!ce src slot ty tr st. EVERY (\i. P i.inst_opcode) (state_insts st) ==>
     EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_word_copy_loop a b n LocMemory loc F st)))) ==>
+      (state_insts (SND (compile_store_slots ce src slot ty tr st)))) ==>
   !ce a b ws sz ty sty cap prim s.
     EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode)

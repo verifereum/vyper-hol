@@ -1,5 +1,6 @@
 Theory deployOutcomesFreeStatements
 Ancestors
+  deployOutcomesFreeCustomErrors
   deployOutcomesFreeStmtLog deployOutcomesFreeStmtValues
   deployOutcomesFreeStmtControl deployOutcomesFreeTyping
   deployOutcomesFreeStmtAssign deployOutcomesFreeStmtTuple
@@ -76,8 +77,8 @@ Theorem outcomes_free_compile_statements_mutual:
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_store_memory_typed ce a ty b sty s)))) /\
   (!a b n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_copy_memory a b n s)))) /\
-  (!a b ew ems tr s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-    EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_dynarray_to_storage a b ew ems tr s)))) /\
+  (!ce a b ty tr s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_store_slots ce a b ty tr s)))) /\
   (!a b n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_memory_to_storage a b n s)))) /\
   (!a b n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
@@ -129,18 +130,15 @@ Theorem outcomes_free_compile_statements_mutual:
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_stmts ce lc ty sts s))))
 Proof
   strip_tac >>
-  `!ce dst loc value prim sl dt st info n s.
+  `!ce dst loc value prim sl dt st n s.
      EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-     EVERY (\i. P i.inst_opcode) (state_insts (SND
-       (compile_assign_value ce dst loc value prim sl dt st info n s)))`
+     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_assign_value ce dst loc value prim sl dt st n s)))`
     by (simp[outcomes_free_compile_assign_value]) >>
   `!imm dst value loc s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-     EVERY (\i. P i.inst_opcode) (state_insts (SND
-       (compile_store_at_loc imm dst value loc s)))`
+     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_store_at_loc imm dst value loc s)))`
     by (simp[outcomes_free_compile_store_at_loc]) >>
   `!tys ce base offset s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-     EVERY (\i. P i.inst_opcode) (state_insts (SND
-       (compile_tuple_load_all ce base tys offset s)))`
+     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_tuple_load_all ce base tys offset s)))`
     by (simp[outcomes_free_compile_tuple_load_all]) >>
   `!tys tgts vals env ce s.
      EVERY (\tgt. ?t. well_typed_atarget env tgt t) tgts /\
@@ -169,6 +167,8 @@ Proof
   >~ [`compile_stmt _ _ _ (Return (SOME _))`] >- suspend "return_some"
   >~ [`compile_stmt _ _ _ (Return NONE)`] >- suspend "return_none"
   >~ [`compile_stmts _ _ _ (_::_)`] >- suspend "cons"
+  >~ [`compile_stmt _ _ _ (Assert _ (AssertCustomError _))`] >- suspend "assert_custom"
+  >~ [`compile_stmt _ _ _ (Raise (RaiseCustomError _))`] >- suspend "raise_custom"
   >~ [`compile_stmt _ _ _ (Assert _ (AssertReason _))`] >- suspend "assert_reason"
   >~ [`compile_stmt _ _ _ (Assert _ AssertBare)`] >- suspend "assert_simple"
   >~ [`compile_stmt _ _ _ (Assert _ AssertUnreachable)`] >- suspend "assert_simple"
@@ -258,9 +258,9 @@ Resume outcomes_free_compile_statements_mutual[append]:
   markerLib.RESUME_TAC >> drule outcomes_free_typed_append >> strip_tac >>
   qpat_x_assum `~supported_stmt_expr_exists _ _` mp_tac >>
   simp[supported_stmt_expr_exists_def] >> strip_tac >>
-  irule outcomes_free_stmt_append >> simp[] >> conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >>
-      Cases_on `infer_array_location ce (target_to_expr target)` >>
+  irule outcomes_free_stmt_append >> simp[] >> rpt conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) 
+  >- (rpt strip_tac >> first_x_assum irule >> Cases_on `loc` >>
       simp[compileEnvTheory.load_opc_for_def, compileEnvTheory.store_opc_for_def]) >>
   rpt strip_tac >> simp[lower_value_def] >>
   irule outcomes_free_bind >> simp[] >> metis_tac[]
@@ -329,12 +329,11 @@ Resume outcomes_free_compile_statements_mutual[raise_reason]:
   markerLib.RESUME_TAC >> drule outcomes_free_typed_raise_reason >> strip_tac >>
   qpat_x_assum `~supported_stmt_expr_exists _ _` mp_tac >>
   simp[supported_stmt_expr_exists_def] >> strip_tac >>
-  irule outcomes_free_stmt_raise >> simp[] >> conj_tac
-  >- (rpt strip_tac >> irule outcomes_free_compile_reason_message >> simp[] >>
-      conj_tac >- metis_tac[] >>
-      fs[supported_raise_exists_def] >> metis_tac[]) >>
-  rpt gen_tac >> rpt disch_tac >>
-  irule outcomes_free_compile_revert_with_reason >> simp[]
+  simp[Once compile_stmt_def] >> irule outcomes_free_bind >> conj_tac
+  >- (rpt strip_tac >> simp[outcomes_free_compile_revert_with_reason]) >>
+  simp[] >> rpt strip_tac >> irule outcomes_free_compile_reason_message >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  fs[supported_raise_exists_def] >> metis_tac[]
 QED
 
 Resume outcomes_free_compile_statements_mutual[cons]:
@@ -348,6 +347,35 @@ Resume outcomes_free_compile_statements_mutual[cons]:
   >- simp[outcomes_free_declare_stmt_local] >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
   irule outcomes_free_ignore_bind >> conj_tac >> rpt strip_tac >> metis_tac[]
+QED
+
+Resume outcomes_free_compile_statements_mutual[assert_custom]:
+  markerLib.RESUME_TAC >> drule outcomes_free_typed_assert >> strip_tac >>
+  drule outcomes_free_typed_assert_custom >> strip_tac >>
+  qpat_x_assum `~supported_stmt_expr_exists _ _` mp_tac >>
+  simp[supported_stmt_expr_exists_def, supported_assert_exists_def] >> strip_tac >>
+  irule outcomes_free_stmt_assert_custom >> simp[] >> conj_tac
+  >- (rpt strip_tac >> irule outcomes_free_compile_revert_with_custom_error >>
+      simp[] >> rpt strip_tac >> first_x_assum irule >> simp[] >>
+      qpat_x_assum `EVERY (well_typed_expr _) _` mp_tac >>
+      qpat_x_assum `EVERY ($~ o _) _` mp_tac >>
+      pure_rewrite_tac [listTheory.EVERY_MEM, combinTheory.o_THM] >> metis_tac[]) >>
+  rpt strip_tac >> simp[lower_value_def] >>
+  irule outcomes_free_bind >> simp[] >> metis_tac[]
+QED
+
+
+Resume outcomes_free_compile_statements_mutual[raise_custom]:
+  markerLib.RESUME_TAC >> drule outcomes_free_typed_raise_custom >> strip_tac >>
+  qpat_x_assum `~supported_stmt_expr_exists _ _` mp_tac >>
+  simp[supported_stmt_expr_exists_def, supported_raise_exists_def] >> strip_tac >>
+  irule outcomes_free_stmt_raise_custom >> simp[] >> rpt strip_tac >>
+  irule outcomes_free_compile_revert_with_custom_error >>
+  simp[] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >>
+  qpat_x_assum `EVERY (well_typed_expr _) _` mp_tac >>
+      qpat_x_assum `EVERY ($~ o _) _` mp_tac >>
+      pure_rewrite_tac [listTheory.EVERY_MEM, combinTheory.o_THM] >> metis_tac[]
 QED
 
 Finalise outcomes_free_compile_statements_mutual
@@ -368,7 +396,7 @@ Theorem outcomes_free_compile_stmt_conditional:
   (!ce a b ty sty s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_store_memory ce a b ty sty s)))) /\
   (!ce a ty b sty s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_store_memory_typed ce a ty b sty s)))) /\
   (!a b n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_copy_memory a b n s)))) /\
-  (!a b ew ems tr s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_dynarray_to_storage a b ew ems tr s)))) /\
+  (!ce a b ty tr s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_store_slots ce a b ty tr s)))) /\
   (!a b n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_memory_to_storage a b n s)))) /\
   (!a b n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_memory_to_transient a b n s)))) /\
   (!imm a b s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_imm_store_word imm a b s)))) /\
@@ -411,7 +439,7 @@ Theorem outcomes_free_compile_stmts_conditional:
   (!ce a b ty sty s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_store_memory ce a b ty sty s)))) /\
   (!ce a ty b sty s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_store_memory_typed ce a ty b sty s)))) /\
   (!a b n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_copy_memory a b n s)))) /\
-  (!a b ew ems tr s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_dynarray_to_storage a b ew ems tr s)))) /\
+  (!ce a b ty tr s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_store_slots ce a b ty tr s)))) /\
   (!a b n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_memory_to_storage a b n s)))) /\
   (!a b n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_memory_to_transient a b n s)))) /\
   (!imm a b s. EVERY (\i. P i.inst_opcode) (state_insts s) ==> EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_imm_store_word imm a b s)))) /\

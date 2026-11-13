@@ -3,10 +3,9 @@ Ancestors
   ptrDiscipline deployOutcomesFreeStep venomState venomExecSemantics codegenRel contextCodegenRel ctxLookupAgreeHelpers
 
 Theorem outcomes_operand[simp]:
-  eval_operand op (s with vs_outcomes := os) = eval_operand op s /\
   lookup_var v (s with vs_outcomes := os) = lookup_var v s
 Proof
-  Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
+  simp[lookup_var_def]
 QED
 
 Theorem outcomes_provenance[simp]:
@@ -26,12 +25,6 @@ Theorem outcomes_taint_parts[simp]:
 Proof
   simp[written_taint_def, out_taint_def, store_taint_def, imm_taint_def,
        ret_taint_def]
-QED
-
-Theorem outcomes_operands[simp]:
-  !ops s os. eval_operands ops (s with vs_outcomes := os) = eval_operands ops s
-Proof
-  Induct >> simp[eval_operands_def]
 QED
 
 Theorem outcomes_memory_ranges[simp]:

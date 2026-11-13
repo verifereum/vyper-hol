@@ -111,7 +111,7 @@ Theorem outcomes_free_builtin_slice_general:
   (!a b sz st. Q st ==> Q (SND (compile_slice_calldata a b sz st))) /\
   (!a b sz st. Q st ==> Q (SND (compile_slice_code a b sz st))) /\
   (!sz st. Q st ==> Q (SND (compile_slice_out_buf sz st))) /\
-  (!a b c buf dat st. Q st ==> Q (SND (compile_slice_extcode a b c buf dat st))) /\
+  (!a b c sz st. Q st ==> Q (SND (compile_slice_extcode a b c sz st))) /\
   (!a st. Q st ==> Q (SND (compile_bytestring_src a st))) /\
   (!a b c d sz st. Q st ==> Q (SND (compile_slice_data a b c d sz st))) /\
   well_typed_exprs env args /\
@@ -303,15 +303,15 @@ Theorem outcomes_free_builtin_body_general:
   (!es ptr infos off st. well_typed_exprs env es /\
      ~supported_exprs_exists constructor_call_root es /\ Q st ==>
      Q (SND (compile_concat f ce es ptr infos off st))) /\
-  (!es ptr off st. well_typed_exprs env es /\
+  (!es tys ptr off st. well_typed_exprs env es /\
      ~supported_exprs_exists constructor_call_root es /\ Q st ==>
-     Q (SND (compile_make_tuple f ce es ptr off st))) /\
+     Q (SND (compile_make_tuple f ce es tys ptr off st))) /\
   (!es ety sz lw ptr st. well_typed_exprs env es /\
      ~supported_exprs_exists constructor_call_root es /\ Q st ==>
      Q (SND (compile_make_array f ce es ety sz lw ptr st))) /\
   (!a b sz st. Q st ==> Q (SND (compile_slice_code a b sz st))) /\
   (!sz st. Q st ==> Q (SND (compile_slice_out_buf sz st))) /\
-  (!a b c buf dat st. Q st ==> Q (SND (compile_slice_extcode a b c buf dat st))) /\
+  (!a b c sz st. Q st ==> Q (SND (compile_slice_extcode a b c sz st))) /\
   (!a st. Q st ==> Q (SND (compile_bytestring_src a st))) /\
   (!a b c d sz st. Q st ==> Q (SND (compile_slice_data a b c d sz st))) /\
   (!v st. Q st ==> Q (SND (compile_keccak256_bytes v st))) /\

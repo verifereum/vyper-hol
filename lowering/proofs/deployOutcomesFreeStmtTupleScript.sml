@@ -10,10 +10,10 @@ Theorem outcomes_free_compile_tuple_store_all:
     EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_get_target_ptr compile_expr ce bt s)))) /\
-  (!ce dst loc value prim bounded dt st info bytes s.
+  (!ce dst loc value prim bounded dt st bytes s.
     EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND
-      (compile_assign_value ce dst loc value prim bounded dt st info bytes s)))) /\
+      (compile_assign_value ce dst loc value prim bounded dt st bytes s)))) /\
   (!imm dst value loc s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_store_at_loc imm dst value loc s)))) ==>

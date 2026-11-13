@@ -8,10 +8,10 @@ Theorem outcomes_free_stmt_annassign:
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_expr ce (expr_type e) e s)))) /\
   (!vv s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (unwrap_value ce vv s)))) /\
-  (!dst loc value prim src dt st info bytes s.
+  (!dst loc value prim src dt st bytes s.
     EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND
-      (compile_assign_value ce dst loc value prim src dt st info bytes s)))) ==>
+      (compile_assign_value ce dst loc value prim src dt st bytes s)))) ==>
   !lc ty id vt s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_stmt ce lc ty (AnnAssign id vt e) s)))
@@ -45,10 +45,10 @@ Theorem outcomes_free_stmt_assign_base:
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_snapshot_vv ce T vv s)))) /\
   (!dst value loc s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_store_at_loc ce.ce_imm_alloca dst value loc s)))) /\
-  (!dst loc value prim src dt st info bytes s.
+  (!dst loc value prim src dt st bytes s.
     EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND
-      (compile_assign_value ce dst loc value prim src dt st info bytes s)))) ==>
+      (compile_assign_value ce dst loc value prim src dt st bytes s)))) ==>
   !lc ty s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_stmt ce lc ty (Assign (BaseTarget bt) e) s)))
@@ -113,20 +113,21 @@ Proof
 QED
 
 Theorem outcomes_free_stmt_append:
+  (!s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode) (state_insts
+      (SND (compile_get_target_ptr compile_expr ce target s)))) /\
   (!et s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (lower_value compile_expr ce et e s)))) /\
   (!n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_alloc_buffer n s)))) /\
   (!value ptr et sty s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_store_memory ce value ptr et sty s)))) /\
-  (!value et sty prim s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+  (!ptr value loc et sty cap prim s.
+    EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode) (state_insts (SND
-      (compile_dynarray_append ce (compile_target_base ce target) value
-        (word_scale (infer_array_location ce (target_to_expr target)))
-        (elem_size_in_location ce (infer_array_location ce (target_to_expr target)) et)
-        et sty (target_root_capacity ce target) prim
-        (load_opc_for (infer_array_location ce (target_to_expr target)))
-        (store_opc_for (infer_array_location ce (target_to_expr target))) s)))) ==>
+      (compile_dynarray_append ce ptr value (word_scale loc)
+        (elem_size_in_location ce loc et) et sty cap prim
+        (load_opc_for loc) (store_opc_for loc) s)))) ==>
   !lc ty s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_stmt ce lc ty (Append target e) s)))
@@ -134,11 +135,13 @@ Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   simp[Once compile_stmt_def] >> irule outcomes_free_bind >> simp[] >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
-  irule outcomes_free_bind >> simp[] >> reverse conj_tac
+  irule outcomes_free_bind >> simp[] >>
+  rpt gen_tac >> strip_tac >> BETA_TAC >>
+  irule outcomes_free_bind >> reverse conj_tac
   >- (IF_CASES_TAC >> simp[outcomes_free_return] >>
       rpt gen_tac >> strip_tac >> irule outcomes_free_bind >> simp[] >>
       rpt gen_tac >> strip_tac >> BETA_TAC >>
       irule outcomes_free_ignore_bind >> simp[outcomes_free_return]) >>
   rpt gen_tac >> strip_tac >> BETA_TAC >>
-  irule outcomes_free_bind >> simp[outcomes_free_return]
+  simp[comp_bind_def, comp_return_def]
 QED

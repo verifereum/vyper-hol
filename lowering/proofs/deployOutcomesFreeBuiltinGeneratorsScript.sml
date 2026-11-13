@@ -204,12 +204,14 @@ Proof
 QED
 
 Theorem outcomes_free_compile_slice_extcode:
-  (!opc. MEM opc [ADD; LT; GT; OR; ISZERO; ASSERT; EXTCODESIZE; EXTCODECOPY; MSTORE] ==> P opc) /\
+  (!opc. MEM opc [ADD; LT; GT; OR; ISZERO; ASSERT; ALLOCA; EXTCODESIZE; EXTCODECOPY; MSTORE] ==> P opc) /\
   EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_slice_extcode a b c buf dat s)))
+  EVERY (\i. P i.inst_opcode) (state_insts (SND (compile_slice_extcode a b c sz s)))
 Proof
   strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_slice_extcode_def, compile_assert_slice_bounds_def] >> builtin_preserve_tac
+  simp[compile_slice_extcode_def, compile_assert_slice_bounds_def,
+    compile_slice_out_buf_def] >> builtin_preserve_tac >>
+  pairarg_tac >> gvs[] >> builtin_preserve_tac
 QED
 
 Theorem outcomes_free_compile_keccak256_word:

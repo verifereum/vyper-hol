@@ -566,18 +566,3 @@ Proof
   simp[compile_load_memory_def, outcomes_free_return, outcomes_free_emit_ops]
 QED
 
-Theorem outcomes_free_dynarray_to_storage:
-  (!opc. MEM opc [ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD; MLOAD;
-    SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE; TSTORE; LT; ISZERO]
-    ==> P opc) /\ EVERY (\i. P i.inst_opcode) (state_insts s) ==>
-  EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_dynarray_to_storage src dst words sz trans s)))
-Proof
-  strip_tac >> fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  Cases_on `trans` >> simp[compile_dynarray_to_storage_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[outcomes_free_return, outcomes_free_emit_ops,
-    outcomes_free_fresh, outcomes_free_new_block,
-    SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_word_copy]),
-    gen_tac, strip_tac, irule outcomes_free_bind, irule outcomes_free_ignore_bind,
-    conj_tac, IF_CASES_TAC])
-QED

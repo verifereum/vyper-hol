@@ -191,11 +191,12 @@ Proof
   gen_tac >> PairCases_on `h` >> rpt strip_tac >>
   Cases_on `h1` >> Cases_on `h2` >>
   Cases_on `FLOOKUP env.ce_vars h0` >>
-  simp[compile_decode_args_def] >>
+  simp[compile_decode_args_def, compile_abi_arg_ptr_guard_def] >>
   rpt (FIRST [gen_tac, strip_tac,
     CHANGED_TAC (gvs[outcomes_free_emit_ops, outcomes_free_return,
       outcomes_free_abi_clamp, cj 1 outcomes_free_abi_decode]),
     irule outcomes_free_bind, irule outcomes_free_ignore_bind, conj_tac,
+    IF_CASES_TAC,
     (qmatch_goalsub_rename_tac `var_location_decode_operand loc` >>
       Cases_on `var_location_decode_operand loc`)]) >>
   qpat_x_assum `!env off opc hi base s. _` irule >> simp[]
@@ -219,6 +220,7 @@ Proof
     CHANGED_TAC (gvs[outcomes_free_alloc_buffer, outcomes_free_return,
       outcomes_free_decode_args]),
     irule outcomes_free_bind, irule outcomes_free_ignore_bind, conj_tac,
+    IF_CASES_TAC,
     (qmatch_goalsub_rename_tac `var_location_memory_size loc` >>
       Cases_on `var_location_memory_size loc`)]) >>
   qpat_x_assum `!env off sz s. _` irule >> simp[]

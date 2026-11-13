@@ -5,7 +5,7 @@ Ancestors
   supportedExprTraverse vyperTypeSystem
 
 Theorem outcomes_free_make_tuple:
-  !es buf off s.
+  !es tys buf off s.
   (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
     MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
     TSTORE; CALLDATACOPY; NOT; AND; MCOPY; LT; ISZERO; GT; ASSERT] ==> P opc) /\
@@ -13,11 +13,11 @@ Theorem outcomes_free_make_tuple:
     EVERY (\i. P i.inst_opcode) (state_insts (SND (f ce ty e st)))) /\
   EVERY (\i. P i.inst_opcode) (state_insts s) ==>
   EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_make_tuple f ce es buf off s)))
+    (state_insts (SND (compile_make_tuple f ce es tys buf off s)))
 Proof
   Induct_on `es` >> rpt strip_tac >>
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-  simp[compile_make_tuple_def, outcomes_free_return] >>
+  Cases_on `tys` >> simp[compile_make_tuple_def, outcomes_free_return] >>
   rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops,
       SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_unwrap_value,
       SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_store_memory]),
@@ -213,7 +213,7 @@ Theorem outcomes_free_aggregate_typed:
   well_typed_exprs env es /\ ~supported_exprs_exists root es /\
   EVERY (\i. P i.inst_opcode) (state_insts s) ==>
   EVERY (\i. P i.inst_opcode)
-    (state_insts (SND (compile_make_tuple f ce es buf off s))) /\
+    (state_insts (SND (compile_make_tuple f ce es tys buf off s))) /\
   EVERY (\i. P i.inst_opcode)
     (state_insts (SND (compile_make_array f ce es ety sz lw buf s))) /\
   EVERY (\i. P i.inst_opcode)

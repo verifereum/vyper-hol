@@ -87,6 +87,7 @@ Theorem outcomes_free_subscript:
   (!v s. Q s ==> Q (SND (compile_keccak256_key v F s))) /\
   (!b k s. Q s ==> Q (SND (compile_mapping_subscript b k s))) /\
   (!b n s. Q s ==> Q (SND (compile_tuple_subscript b n s))) /\
+  (!ce v s. Q s ==> Q (SND (compile_snapshot_vv ce T v s))) /\
   (!b i d n ws sz sg loc s. Q s ==>
     Q (SND (compile_array_subscript b i d n ws sz sg
       (compile_ptr_load ce.ce_is_ctor ce.ce_imm_alloca loc) s))) /\ Q s ==>
@@ -99,6 +100,11 @@ Proof
   pairarg_tac >> simp[] >>
   rename1 `f ce ty base_e s = (vv,s1)` >>
   `Q s1` by metis_tac[pairTheory.SND] >>
+  `!st. Q st ==> Q (SND ((if copies_subscript_base ce base_e idx_e
+      then compile_snapshot_vv ce T vv else comp_return vv) st))`
+    by (gen_tac >> IF_CASES_TAC >> simp[comp_return_def]) >>
+  pairarg_tac >> simp[] >>
+  `Q cs'` by metis_tac[pairTheory.SND] >>
   Cases_on `place_type ce base_e`
   >- (simp[comp_bind_def, comp_return_def] >>
       rpt (pairarg_tac >> simp[]) >>
@@ -178,6 +184,7 @@ Theorem outcomes_free_typed_expr_body:
   (!v s. Q s ==> Q (SND (compile_keccak256_key v F s))) /\
   (!b k s. Q s ==> Q (SND (compile_mapping_subscript b k s))) /\
   (!b n s. Q s ==> Q (SND (compile_tuple_subscript b n s))) /\
+  (!ce v s. Q s ==> Q (SND (compile_snapshot_vv ce T v s))) /\
   (!ce b i d n ws sz sg loc s. Q s ==>
     Q (SND (compile_array_subscript b i d n ws sz sg
       (compile_ptr_load ce.ce_is_ctor ce.ce_imm_alloca loc) s))) /\

@@ -59,7 +59,10 @@ Theorem outcomes_free_stmt_raise:
       (state_insts (SND (compile_reason_message ce e s)))) /\
   (!op ty n s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode)
-      (state_insts (SND (compile_revert_with_reason ce op (ty : type) n s)))) ==>
+      (state_insts (SND (compile_revert_with_reason ce op (ty : type) n s)))) /\
+  (!err s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
+    EVERY (\i. P i.inst_opcode)
+      (state_insts (SND (compile_revert_with_custom_error ce err s)))) ==>
   !lc ty s. EVERY (\i. P i.inst_opcode) (state_insts s) ==>
     EVERY (\i. P i.inst_opcode)
       (state_insts (SND (compile_stmt ce lc ty (Raise reason) s)))
