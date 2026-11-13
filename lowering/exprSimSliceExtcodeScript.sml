@@ -44,17 +44,19 @@ Proof
 QED
 
 Theorem slice_extcode_decompose:
-  compile_slice_extcode addr start len out dst sa = (r,sb) ==>
-  ?sc sd se src_len.
-    r = out /\ emit_op EXTCODESIZE [addr] sa = (src_len,sc) /\
+  compile_slice_extcode addr start len sz sa = (r,sb) ==>
+  ?sc sd se sf src_len dst.
+    emit_op EXTCODESIZE [addr] sa = (src_len,sc) /\
     compile_assert_slice_bounds start len src_len sc = ((),sd) /\
-    emit_void EXTCODECOPY [addr;dst;start;len] sd = ((),se) /\
-    emit_void MSTORE [out;len] se = ((),sb)
+    compile_slice_out_buf sz sd = ((r,dst),se) /\
+    emit_void EXTCODECOPY [addr;dst;start;len] se = ((),sf) /\
+    emit_void MSTORE [r;len] sf = ((),sb)
 Proof
   simp[compile_slice_extcode_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-  metis_tac[pairTheory.PAIR]
+  rpt (pairarg_tac >>
+       simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
+  strip_tac >> gvs[] >> metis_tac[pairTheory.PAIR]
 QED
 
 Theorem slice_extcode_copy_store_run:
@@ -112,46 +114,67 @@ Proof
  fs[not_fresh_at_def] >> metis_tac[DECIDE ``a < b ==> a < b+1``]
 QED
 
+Theorem slice_extcode_out_buf_insts[local]:
+  compile_slice_out_buf sz sa = ((out,data),sb) ==>
+  sb.cs_next_var = sa.cs_next_var + 2 /\ sb.cs_next_id = sa.cs_next_id + 2 /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  emitted_insts sa sb =
+    [mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+       [STRING #"%" (toString sa.cs_next_var)];
+     mk_inst (sa.cs_next_id + 1) ADD [out; Lit 32w]
+       [STRING #"%" (toString (sa.cs_next_var + 1))]]
+Proof
+  simp[compile_slice_out_buf_def, compile_alloc_buffer_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, emitHelperTheory.emit_op_def,
+       fresh_var_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def, DROP_APPEND1, mk_inst_def]
+QED
+
 Theorem slice_extcode_shape:
- compile_slice_extcode addr start len out dst sa = (r,sb) ==>
- ?sc sd se src_len.
-   r = out /\ emit_op EXTCODESIZE [addr] sa = (src_len,sc) /\
+ compile_slice_extcode addr start len sz sa = (r,sb) ==>
+ ?sc sd se sf src_len dst.
+   emit_op EXTCODESIZE [addr] sa = (src_len,sc) /\
    compile_assert_slice_bounds start len src_len sc = ((),sd) /\
-   emit_void EXTCODECOPY [addr;dst;start;len] sd = ((),se) /\
-   emit_void MSTORE [out;len] se = ((),sb) /\
-   emitted_insts sa sb = emitted_insts sa sc ++ emitted_insts sc sd ++ emitted_insts sd sb
+   compile_slice_out_buf sz sd = ((r,dst),se) /\
+   emit_void EXTCODECOPY [addr;dst;start;len] se = ((),sf) /\
+   emit_void MSTORE [r;len] sf = ((),sb) /\
+   sd.cs_next_var = sa.cs_next_var + 6 /\ sd.cs_next_id = sa.cs_next_id + 7 /\
+   se.cs_next_var = sd.cs_next_var + 2 /\ se.cs_next_id = sd.cs_next_id + 2 /\
+   sb.cs_next_var = se.cs_next_var /\ sb.cs_next_id = se.cs_next_id + 2 /\
+   sd.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sd /\
+   se.cs_current_insts = sd.cs_current_insts ++ emitted_insts sd se /\
+   sb.cs_current_insts = se.cs_current_insts ++ emitted_insts se sb /\
+   emitted_insts sa sd = emitted_insts sa sc ++ emitted_insts sc sd /\
+   emitted_insts sd se =
+     [mk_inst sd.cs_next_id ALLOCA [Lit (n2w sz)]
+        [STRING #"%" (toString sd.cs_next_var)];
+      mk_inst (sd.cs_next_id + 1) ADD [r; Lit 32w]
+        [STRING #"%" (toString (sd.cs_next_var + 1))]] /\
+   emitted_insts sa sb =
+     emitted_insts sa sd ++ (emitted_insts sd se ++ emitted_insts se sb)
 Proof
  strip_tac >> drule slice_extcode_decompose >> strip_tac >>
- qexistsl_tac [`sc`,`sd`,`se`,`src_len`] >>
- rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
- >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
+ qexistsl_tac [`sc`,`sd`,`se`,`sf`,`src_len`,`dst`] >> simp[] >>
  drule emitted_insts_emit_op >> strip_tac >>
  drule slice_bounds_shape >> strip_tac >>
+ drule slice_extcode_out_buf_insts >> strip_tac >>
  imp_res_tac emitted_insts_emit_void >>
- `sc.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc` by simp[] >>
- `se.cs_current_insts = sd.cs_current_insts ++ emitted_insts sd se` by simp[] >>
- `sb.cs_current_insts = se.cs_current_insts ++ emitted_insts se sb` by simp[] >>
+ `emitted_insts sa sd = emitted_insts sa sc ++ emitted_insts sc sd` by
+   (irule emitted_insts_append >> simp[]) >>
+ `emitted_insts se sb = emitted_insts se sf ++ emitted_insts sf sb` by
+   (irule emitted_insts_append >> simp[]) >>
+ `sd.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sd` by
+   simp[] >>
+ `sb.cs_current_insts = se.cs_current_insts ++ emitted_insts se sb` by
+   simp[] >>
  `emitted_insts sd sb = emitted_insts sd se ++ emitted_insts se sb` by
-   (irule emitted_insts_append >> conj_tac >> first_assum ACCEPT_TAC) >>
- `sb.cs_current_insts = sd.cs_current_insts ++ emitted_insts sd sb` by
-   (qpat_x_assum `sb.cs_current_insts = se.cs_current_insts ++ emitted_insts se sb`
-     (fn th => pure_rewrite_tac[th]) >>
-    qpat_x_assum `se.cs_current_insts = sd.cs_current_insts ++ emitted_insts sd se`
-     (fn th => pure_rewrite_tac[th]) >>
-    qpat_x_assum `emitted_insts sd sb = _` (fn th => pure_rewrite_tac[th]) >>
-    simp[APPEND_ASSOC]) >>
- `emitted_insts sc sb = emitted_insts sc sd ++ emitted_insts sd sb` by
-   (irule emitted_insts_append >> conj_tac >> first_assum ACCEPT_TAC) >>
- `sb.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sb` by
-   (qpat_x_assum `sb.cs_current_insts = sd.cs_current_insts ++ emitted_insts sd sb`
-     (fn th => pure_rewrite_tac[th]) >>
-    qpat_x_assum `sd.cs_current_insts = sc.cs_current_insts ++ emitted_insts sc sd`
-     (fn th => pure_rewrite_tac[th]) >>
-    qpat_x_assum `emitted_insts sc sb = _` (fn th => pure_rewrite_tac[th]) >>
-    simp[APPEND_ASSOC]) >>
- `emitted_insts sa sb = emitted_insts sa sc ++ emitted_insts sc sb` by
-   (irule emitted_insts_append >> conj_tac >> first_assum ACCEPT_TAC) >>
- simp[APPEND_ASSOC]
+   (irule emitted_insts_append >> simp[]) >>
+ `emitted_insts sa sb = emitted_insts sa sd ++ emitted_insts sd sb` by
+   (irule emitted_insts_append >> simp[] >>
+    qpat_x_assum `emitted_insts sd sb = _` (fn th => rewrite_tac[th]) >>
+    simp[]) >>
+ simp[]
 QED
 
 Theorem slice_extcode_prefix_run:
@@ -210,79 +233,41 @@ Proof
 QED
 
 Theorem slice_extcode_tail_run:
-  compile_slice_extcode addr start len out dst sa = (r,sb) /\
+  emit_void EXTCODECOPY [addr;dst;start;len] sa = ((),sm) /\
+  emit_void MSTORE [out;len] sm = ((),sb) /\
   eval_operand addr s = SOME a /\ eval_operand start s = SOME b /\
   eval_operand len s = SOME n /\ eval_operand out s = SOME p /\
   eval_operand dst s = SOME d /\
-  (!x. MEM (Var x) [addr;start;len;out;dst] ==> not_fresh_at sa x) /\
-  LENGTH (lookup_account (w2w a) s.vs_accounts).code < dimword (:256) ==>
-  if LENGTH (lookup_account (w2w a) s.vs_accounts).code < w2n b + w2n n then
-    ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
-  else
-    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      t.vs_memory =
-        (mstore (w2n p) n
-          (write_memory_with_expansion (w2n d)
-            (TAKE (w2n n) (DROP (w2n b)
-              (lookup_account (w2w a) s.vs_accounts).code)) s)).vs_memory /\
-      (t with <| vs_memory := s.vs_memory; vs_vars := s.vs_vars |>) = s /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      eval_operand r t = SOME p
+  w2n b + w2n n <= LENGTH (lookup_account (w2w a) s.vs_accounts).code ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    t.vs_memory =
+      (mstore (w2n p) n
+        (write_memory_with_expansion (w2n d)
+          (TAKE (w2n n) (DROP (w2n b)
+            (lookup_account (w2w a) s.vs_accounts).code)) s)).vs_memory /\
+    (t with <| vs_memory := s.vs_memory; vs_vars := s.vs_vars |>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    eval_operand out t = SOME p
 Proof
- strip_tac >> drule slice_extcode_shape >> strip_tac >>
- `!x. MEM (Var x) [addr;start;len] ==> not_fresh_at sa x` by
-   (fs[MEM] >> metis_tac[]) >>
- drule_all slice_extcode_prefix_run >>
- qpat_x_assum `emitted_insts sa sb = _`
-   (fn th => pure_rewrite_tac[th, APPEND_ASSOC]) >>
- Cases_on `LENGTH (lookup_account (w2w a) s.vs_accounts).code < w2n b + w2n n`
- >- (simp[] >> strip_tac >>
-     qspecl_then [`emitted_insts sa sc ++ emitted_insts sc sd`,
-       `emitted_insts sd sb`,`s`] mp_tac run_inst_seq_append_err >>
-     simp[] >> metis_tac[]) >>
- simp[] >> strip_tac >>
- `!op. MEM op [addr;start;len;out;dst] ==> eval_operand op u = eval_operand op s` by
-   (rpt strip_tac >> first_x_assum irule >> metis_tac[MEM]) >>
- `u.vs_accounts = s.vs_accounts` by
-   (qpat_x_assum `u = s with vs_vars := _`
-      (fn th => once_rewrite_tac[th]) >> simp[]) >>
- `eval_operand addr u = SOME a /\ eval_operand start u = SOME b /\
-  eval_operand len u = SOME n /\ eval_operand out u = SOME p /\
-  eval_operand dst u = SOME d` by metis_tac[MEM] >>
- `w2n b + w2n n <= LENGTH (lookup_account (w2w a) u.vs_accounts).code` by simp[] >>
- drule_all slice_extcode_copy_store_run >> strip_tac >>
- qpat_assum `run_inst_seq (_ ++ _) s = OK u`
-   (mp_then Any (fn th => once_rewrite_tac[th]) run_inst_seq_append) >>
- qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts sd sb) u = OK v` >>
- qexists_tac `v` >>
- simp[] >>
- `u.vs_memory = s.vs_memory` by
-   (qpat_x_assum `u = s with vs_vars := _`
-     (fn th => once_rewrite_tac[th]) >> simp[]) >>
- conj_tac
- >- (qpat_x_assum `u = s with vs_vars := _` kall_tac >>
-     ASM_SIMP_TAC (srw_ss() ++ boolSimps.LET_ss) [Abbr `v`, mstore_def, write_memory_with_expansion_def]) >>
- conj_tac
- >- (ASM_SIMP_TAC (srw_ss() ++ boolSimps.LET_ss) [Abbr `v`, mstore_def, write_memory_with_expansion_def] >>
-     qpat_x_assum `u = s with vs_vars := _`
-       (fn th => once_rewrite_tac[th]) >> simp[]) >>
- conj_tac
+ strip_tac >> drule_all slice_extcode_copy_store_run >> strip_tac >>
+ qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts sa sb) s = OK v` >>
+ qexists_tac `v` >> simp[] >> rpt conj_tac
+ >- ASM_SIMP_TAC (srw_ss() ++ boolSimps.LET_ss)
+      [Abbr `v`, mstore_def, write_memory_with_expansion_def]
  >- simp[Abbr `v`, mstore_def, write_memory_with_expansion_def, lookup_var_def] >>
- qpat_x_assum `eval_operand out u = SOME p` mp_tac >>
- qpat_x_assum `u = s with vs_vars := _` kall_tac >>
+ qpat_x_assum `eval_operand out s = SOME p` mp_tac >>
  Cases_on `out` >>
  ASM_SIMP_TAC (srw_ss() ++ boolSimps.LET_ss)
    [Abbr `v`, mstore_def, write_memory_with_expansion_def, eval_operand_def, lookup_var_def]
-
 QED
 
 Theorem slice_extcode_tail_frame:
-  compile_slice_extcode addr start len out dst sa = (r,sb) /\
+  emit_void EXTCODECOPY [addr;dst;start;len] sa = ((),sm) /\
+  emit_void MSTORE [out;len] sm = ((),sb) /\
   eval_operand addr s = SOME a /\ eval_operand start s = SOME b /\
   eval_operand len s = SOME n /\ eval_operand out s = SOME p /\
   eval_operand dst s = SOME (p + 32w) /\
   (!x. MEM (Var x) [addr;start;len;out;dst] ==> not_fresh_at sa x) /\
-  LENGTH (lookup_account (w2w a) s.vs_accounts).code < dimword (:256) /\
   w2n b + w2n n <= LENGTH (lookup_account (w2w a) s.vs_accounts).code /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   sbase.cs_next_var <= sa.cs_next_var /\ sbase.cs_next_id <= aid /\ aid < sa.cs_next_id /\
@@ -337,8 +322,6 @@ Proof
     qpat_assum `t = w with vs_vars := _` SUBST1_TAC >> simp[NoAsms] >> metis_tac[]) >>
  `FLOOKUP t.vs_allocas aid = SOME (w2n p,cap)` by
    (qpat_assum `t = w with vs_vars := _` SUBST1_TAC >> simp[]) >>
- `eval_operand out t = SOME p` by
-   (drule slice_extcode_decompose >> strip_tac >> gvs[]) >>
  qexists_tac `t` >> simp[] >> conj_tac
  >- (qpat_x_assum `t.vs_memory = w.vs_memory` (fn th => pure_rewrite_tac[th]) >>
      simp[Abbr `w`]) >>
@@ -352,12 +335,12 @@ Proof
 QED
 
 Theorem slice_extcode_tail_vv_post:
-  compile_slice_extcode addr start len out dst sa = (r,sb) /\
+  emit_void EXTCODECOPY [addr;dst;start;len] sa = ((),sm) /\
+  emit_void MSTORE [out;len] sm = ((),sb) /\
   eval_operand addr s = SOME a /\ eval_operand start s = SOME b /\
   eval_operand len s = SOME n /\ eval_operand out s = SOME p /\
   eval_operand dst s = SOME (p + 32w) /\
   (!x. MEM (Var x) [addr;start;len;out;dst] ==> not_fresh_at sa x) /\
-  LENGTH (lookup_account (w2w a) s.vs_accounts).code < dimword (:256) /\
   w2n b + w2n n <= LENGTH (lookup_account (w2w a) s.vs_accounts).code /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   sbase.cs_next_var <= sa.cs_next_var /\ sbase.cs_next_id <= aid /\ aid < sa.cs_next_id /\

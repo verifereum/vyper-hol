@@ -5,7 +5,7 @@
       "expected": 5,
       "fixture": "pop_refill",
       "returned": 5,
-      "runtime_sha256": "707b4bad77aadfab040e92ae27ad96e3a8874610976963c96091c364e5e7a9c2",
+      "runtime_sha256": "61bfee4421bc100b906d59ffe0c68daa08344da85b58827fb1fafb783fff6abb",
       "signature": "f()"
     },
     {
@@ -15,7 +15,7 @@
       "expected": 5,
       "fixture": "conditional_snapshot",
       "returned": 5,
-      "runtime_sha256": "06504848625b7c153c0e9188a3c3aba8a30a46d535bda8b3754d1ca9e6cc3e8c",
+      "runtime_sha256": "3df66bc45e18d5acb4c3f0c9a0758e747e14462408d8367729a5102e0ba49a1d",
       "signature": "f(bool)"
     },
     {
@@ -25,7 +25,7 @@
       "expected": 5,
       "fixture": "conditional_snapshot",
       "returned": 5,
-      "runtime_sha256": "06504848625b7c153c0e9188a3c3aba8a30a46d535bda8b3754d1ca9e6cc3e8c",
+      "runtime_sha256": "3df66bc45e18d5acb4c3f0c9a0758e747e14462408d8367729a5102e0ba49a1d",
       "signature": "f(bool)"
     },
     {
@@ -35,7 +35,7 @@
       "expected": 2,
       "fixture": "conditional_memory_view",
       "returned": 2,
-      "runtime_sha256": "55962a80a15fd709b637195ce07150f18960f88c97fe3d423fcf06b973a4a9fd",
+      "runtime_sha256": "a8a52c08e934a43ef7ac1bcefdf0dcba89cb70982ac29cad91e8db9885e8f28b",
       "signature": "f(bool)"
     },
     {
@@ -45,7 +45,7 @@
       "expected": 2,
       "fixture": "conditional_memory_view",
       "returned": 2,
-      "runtime_sha256": "55962a80a15fd709b637195ce07150f18960f88c97fe3d423fcf06b973a4a9fd",
+      "runtime_sha256": "a8a52c08e934a43ef7ac1bcefdf0dcba89cb70982ac29cad91e8db9885e8f28b",
       "signature": "f(bool)"
     },
     {
@@ -77,7 +77,7 @@
       "expected": 5,
       "fixture": "subscript_base_copy",
       "returned": 5,
-      "runtime_sha256": "7b42e69d3a3c4530af17909518bb1520ec1d8946b8a1992e6341e508aca4eeb9",
+      "runtime_sha256": "903c9498ba84a7b8702f347d94da21dce9503a796cb937bb08638f057877b013",
       "signature": "f()"
     },
     {
