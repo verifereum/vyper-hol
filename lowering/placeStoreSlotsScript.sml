@@ -124,7 +124,7 @@ Proof
   simp[MEM_COUNT_LIST]
 QED
 
-Theorem store_slots_bytes_footprint[local]:
+Theorem store_slots_bytes_footprint:
   (tv = BaseTV (BytesT (Dynamic cap)) \/ tv = BaseTV (StringT cap)) /\
   value_has_type tv v /\ val_in_memory tv v off mem /\
   off + type_memory_size tv < dimword (:256) /\
@@ -399,7 +399,7 @@ Proof
   simp[store_copy_normalize_def, tstore_def, sstore_def]
 QED
 
-Theorem store_slots_shift_fold[local]:
+Theorem store_slots_shift_fold:
   a.vs_memory = s.vs_memory /\
   w2n sw + i * type_memory_size tv < dimword (:256) ==>
   FOLDL (\q j. (if tr then tstore else sstore)
@@ -428,7 +428,7 @@ Proof
   simp[mload_def]
 QED
 
-Theorem store_slots_compose_fold[local]:
+Theorem store_slots_compose_fold:
   a.vs_memory = s.vs_memory /\
   w2n sw + i * type_memory_size tv < dimword (:256) /\
   store_copy_normalize s a =
@@ -458,7 +458,7 @@ Proof
   irule store_slots_shift_fold >> simp[]
 QED
 
-Theorem store_slots_element_bounds[local]:
+Theorem store_slots_element_bounds:
   i < N /\
   w2n (sw:bytes32) + N * type_memory_size tv < dimword (:256) /\
   w2n (dw:bytes32) + N * type_slot_size tv <= dimword (:256) ==>
@@ -758,13 +758,13 @@ Definition store_slots_prefix_def:
     ~u.vs_halted
 End
 
-Theorem store_slots_prefix_empty[local]:
+Theorem store_slots_prefix_empty:
   ~s.vs_halted ==> store_slots_prefix sa etv el tr sw dw s 0 [] s
 Proof
   simp[store_slots_prefix_def, store_copy_normalize_def]
 QED
 
-Theorem store_slots_prefix_transfer[local]:
+Theorem store_slots_prefix_transfer:
   store_slots_prefix sa etv el tr sw dw s i ks u /\
   store_copy_normalize s v = store_copy_normalize s u /\
   (!x. not_fresh_at sa x ==> lookup_var x v = lookup_var x u) /\
@@ -776,7 +776,7 @@ Proof
   simp[store_slots_prefix_def] >> metis_tac[]
 QED
 
-Theorem store_slots_prefix_control[local]:
+Theorem store_slots_prefix_control:
   store_slots_prefix sa etv el tr sw dw s i ks u /\
   (!x. not_fresh_at sa x ==> x <> a /\ x <> b) ==>
   store_slots_prefix sa etv el tr sw dw s i ks
@@ -790,7 +790,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem store_slots_prefix_init_control[local]:
+Theorem store_slots_prefix_init_control:
   store_slots_prefix sa etv el tr sw dw s i ks u /\
   (!x. not_fresh_at sa x ==> x <> a) ==>
   store_slots_prefix sa etv el tr sw dw s i ks
@@ -804,7 +804,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem store_slots_prefix_members_step[local]:
+Theorem store_slots_prefix_members_step:
   (!k. MEM k ks <=> ?r writes j. r < i /\
     encode_value etv (el r) = SOME writes /\
     MEM j (MAP FST writes) /\ k = r * type_slot_size etv + j) /\
@@ -1054,7 +1054,7 @@ Proof
   fs[store_slots_prefix_def]
 QED
 
-Theorem store_slots_dyn_element_encoded[local]:
+Theorem store_slots_dyn_element_encoded:
   !vs tv off ws i.
     encode_dyn_array tv off vs = SOME ws /\ i < LENGTH vs ==>
     IS_SOME (encode_value tv (EL i vs))
@@ -1065,7 +1065,7 @@ Proof
   Cases_on `i` >> gvs[] >> first_x_assum irule >> metis_tac[]
 QED
 
-Theorem store_slots_dyn_encoding_support[local]:
+Theorem store_slots_dyn_encoding_support:
   !vs tv off ws.
     encode_dyn_array tv off vs = SOME ws ==>
     !k. MEM k (MAP FST ws) <=>
@@ -1091,7 +1091,7 @@ Proof
   simp[ADD_ASSOC, ADD_COMM] >> metis_tac[]
 QED
 
-Theorem store_slots_dynarray_encoding_support[local]:
+Theorem store_slots_dynarray_encoding_support:
   encode_value (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) = SOME ws ==>
   !k. MEM k (MAP FST ws) <=> k = 0 \/
     ?i ew j. i < LENGTH vs /\ encode_value tv (EL i vs) = SOME ew /\
@@ -1101,7 +1101,7 @@ Proof
   drule store_slots_dyn_encoding_support >> gvs[]
 QED
 
-Theorem store_slots_dyn_prefix_fresh[local]:
+Theorem store_slots_dyn_prefix_fresh:
   emit_op MLOAD [src] sa = (cnt,s1) /\
   emit_op ADD [src; Lit 32w] s1 = (data,s2) /\
   emit_op ADD [slot; Lit 1w] s2 = (dst,sc) /\
@@ -1201,20 +1201,20 @@ QED
 
 Finalise store_slots_dyn_prefix_path
 
-Theorem store_slots_normalize_compose[local]:
+Theorem store_slots_normalize_compose:
   store_copy_normalize a (store_copy_normalize b t) = store_copy_normalize a t
 Proof
   simp[store_copy_normalize_def]
 QED
 
-Theorem store_slots_normalize_store[local]:
+Theorem store_slots_normalize_store:
   store_copy_normalize a ((if tr then tstore else sstore) k v t) =
     (if tr then tstore else sstore) k v (store_copy_normalize a t)
 Proof
   Cases_on `tr` >> simp[store_copy_normalize_def, tstore_def, sstore_def]
 QED
 
-Theorem store_slots_dyn_fold_header[local]:
+Theorem store_slots_dyn_fold_header:
   store_copy_normalize s p = s /\ p.vs_memory = s.vs_memory /\
   w2n (sw:bytes32) + 32 < dimword (:256) /\
   store_copy_normalize p u =
@@ -1303,7 +1303,7 @@ QED
 
 (* Successful type evaluation guards the literal element count, even for
    nested array types whose raw layout could otherwise have zero size. *)
-Theorem store_slots_fixed_count_bound[local]:
+Theorem store_slots_fixed_count_bound:
   evaluate_type tenv (ArrayT elem (Fixed n)) = SOME tv ==>
   n < dimword (:256)
 Proof
@@ -1315,7 +1315,7 @@ Proof
   decide_tac
 QED
 
-Theorem store_slots_sparse_support[local]:
+Theorem store_slots_sparse_support:
   !sparse tv offset writes.
     encode_static_array tv offset sparse = SOME writes ==>
     !k. MEM k (MAP FST writes) <=>
@@ -1337,7 +1337,7 @@ Proof
   >> disj2_tac >> metis_tac[]
 QED
 
-Theorem store_slots_sarray_support[local]:
+Theorem store_slots_sarray_support:
   value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse)) /\
   encode_value (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse)) = SOME writes ==>
   !k. MEM k (MAP FST writes) <=>
@@ -1570,7 +1570,7 @@ Proof
   simp[compile_with_byte_offset_def] >> metis_tac[]
 QED
 
-Theorem store_slots_lit_offset_fresh[local]:
+Theorem store_slots_lit_offset_fresh:
   !ptr0 off sa op sb.
   compile_lit_byte_offset ptr0 off sa = (op,sb) /\
   (!x. ptr0 = Var x ==> not_fresh_at sa x) ==>
@@ -1662,7 +1662,7 @@ Proof
   simp[store_copy_normalize_def, mload_def]
 QED
 
-Theorem store_slots_fold_compose[local]:
+Theorem store_slots_fold_compose:
   u.vs_memory = s.vs_memory /\
   store_copy_normalize s u =
     FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
@@ -1793,7 +1793,7 @@ Proof
   metis_tac[ADD_COMM]
 QED
 
-Theorem store_slots_tuple_support[local]:
+Theorem store_slots_tuple_support:
   !tvs vs off writes.
     LENGTH vs = LENGTH tvs /\ encode_tuple off tvs vs = SOME writes ==>
     !k. MEM k (MAP FST writes) <=>
@@ -1942,7 +1942,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem store_slots_struct_support[local]:
+Theorem store_slots_struct_support:
   !fts vals off writes.
     encode_struct off fts vals = SOME writes ==>
     !k. MEM k (MAP FST writes) <=>
