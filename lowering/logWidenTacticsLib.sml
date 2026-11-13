@@ -63,36 +63,54 @@ fun scalar_transport cases =
   fs[log_arg_clear_def] >> rpt strip_tac >>
   metis_tac[local_val_at_base, arithmeticTheory.LESS_EQ_REFL]
 
-fun declared_structure g = (
+fun declared_evaluation g = (
   TRY strip_tac >> Cases_on `compile_log_eval_all cenv args sa` >>
   rename1 `compile_log_eval_all cenv args sa = (ys,sm)` >>
   `LENGTH ys = LENGTH args` by
     (mp_tac (Q.SPECL [`cenv`,`args`,`sa`] compile_log_eval_all_length) >> simp[]) >>
   `MAP SND ys = MAP (lowered_value_type cenv) args` by
-    (mp_tac (Q.SPECL [`cenv`,`args`,`sa`] compile_log_eval_all_types) >> simp[]) >>
-  `LENGTH tys = LENGTH args` by metis_tac[LIST_REL_LENGTH] >>
+    (mp_tac (Q.SPECL [`cenv`,`args`,`sa`] compile_log_eval_all_types) >> simp[])) g
+
+fun declared_pairs g = (
   qabbrev_tac `xs = ZIP (MAP FST ys,tys)` >>
-  `MAP SND xs = tys /\ LENGTH xs = LENGTH args` by simp[Abbr `xs`, MAP_ZIP] >>
+  `MAP SND xs = tys /\ LENGTH xs = LENGTH args` by simp[Abbr `xs`, MAP_ZIP]) g
+
+fun declared_arguments g = (
+  declared_evaluation >>
+  `LENGTH tys = LENGTH args` by metis_tac[LIST_REL_LENGTH] >>
+  declared_pairs) g
+
+fun declared_view g = (
   `log_eval_view cenv args sa xs sm` by
     (simp[log_eval_view_def, LIST_REL_EL_EQN, Abbr `xs`, EL_ZIP, EL_MAP] >>
      rpt strip_tac >>
      qpat_x_assum `MAP SND ys = _` (mp_tac o Q.AP_TERM `EL n`) >>
-     gvs[EL_MAP, LIST_REL_EL_EQN] >> metis_tac[]) >>
+     gvs[EL_MAP, LIST_REL_EL_EQN] >> metis_tac[])) g
+
+fun declared_topics g = (
   Cases_on `compile_log_topic_ops (FST (split_log_ops xs flags)) sm` >>
   rename1 `compile_log_topic_ops _ sm = (ops,st)` >>
   `EVERY (supported_scalar_type o SND) xs` by
     (gvs[EVERY_MAP, combinTheory.o_DEF]) >>
   `LENGTH flags = LENGTH xs` by decide_tac >>
-  `cenv.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags)` by simp[] >>
+  `cenv.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags)` by simp[]) g
+
+fun declared_frames g = (
   drule_all log_success_suffix_code >> strip_tac >>
   `cs_extends sa sm` by (drule_all compile_log_eval_all_grows >> simp[]) >>
   `cs_extends sm sb` by
     (irule cs_extends_same_block >>
      gvs[same_blocks_def, inst_extends_def, rich_listTheory.IS_PREFIX_APPEND] >>
-     metis_tac[]) >>
+     metis_tac[])) g
+
+fun declared_structure_finish g = (
   map_every qexists_tac [`ys`,`xs`,`sm`,`ops`,`st`] >>
   simp[markerTheory.Abbrev_def] >> fs[markerTheory.Abbrev_def] >>
   metis_tac[fn_has_code_mid, cs_extends_refl]) g
+
+fun declared_structure g = (
+  declared_arguments >> declared_view >> declared_topics >>
+  declared_frames >> declared_structure_finish) g
 
 fun compatible_cases g = (
   ho_match_mp_tac event_arg_compatible_ind >> rw[event_arg_compatible_def]) g

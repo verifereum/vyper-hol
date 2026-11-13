@@ -263,34 +263,12 @@ Proof
         `fn_has_code sa sb func`] >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      `LENGTH flags = LENGTH args` by decide_tac >>
-     Cases_on `compile_log_eval_all cenv args sa` >>
-     rename1 `compile_log_eval_all cenv args sa = (ys,sm)` >>
-     `LENGTH ys = LENGTH args` by
-       (mp_tac (Q.SPECL [`cenv`,`args`,`sa`] compile_log_eval_all_length) >> simp[]) >>
-     `MAP SND ys = MAP (lowered_value_type cenv) args` by
-       (mp_tac (Q.SPECL [`cenv`,`args`,`sa`]
-         eventLoweringStructureTheory.compile_log_eval_all_types) >> simp[]) >>
-     qabbrev_tac `xs = ZIP (MAP FST ys,tys)` >>
-     `MAP SND xs = tys /\ LENGTH xs = LENGTH args` by simp[Abbr `xs`, MAP_ZIP] >>
-     `log_eval_view cenv args sa xs sm` by
-       (simp[stmtSimLogTraceTheory.log_eval_view_def, LIST_REL_EL_EQN,
-             Abbr `xs`, EL_ZIP, EL_MAP] >> rpt strip_tac >>
-        qpat_x_assum `MAP SND ys = _` (mp_tac o Q.AP_TERM `EL n`) >>
-        gvs[EL_MAP, LIST_REL_EL_EQN] >> metis_tac[]) >>
-     Cases_on `compile_log_topic_ops (FST (split_log_ops xs flags)) sm` >>
-     rename1 `compile_log_topic_ops _ sm = (ops,st)` >>
-     `EVERY (supported_scalar_type o SND) xs` by
-       gvs[EVERY_MAP, combinTheory.o_DEF] >>
-     `LENGTH flags = LENGTH xs` by decide_tac >>
-     `cenv.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags)` by simp[] >>
-     drule_all stmtSimLogSuffixCodeTheory.log_success_suffix_code >> strip_tac >>
-     `cs_extends sa sm` by (drule_all compile_log_eval_all_grows >> simp[]) >>
-     `cs_extends sm sb` by
-       (irule cs_extends_same_block >>
-        gvs[same_blocks_def, inst_extends_def, IS_PREFIX_APPEND] >> metis_tac[]) >>
-     map_every qexists_tac [`ys`,`xs`,`sm`,`ops`,`st`] >>
-     simp[markerTheory.Abbrev_def] >> fs[markerTheory.Abbrev_def] >>
-     metis_tac[fn_has_code_mid, cs_extends_refl]) >>
+     logWidenTacticsLib.declared_evaluation >>
+     logWidenTacticsLib.declared_pairs >>
+     logWidenTacticsLib.declared_view >>
+     logWidenTacticsLib.declared_topics >>
+     logWidenTacticsLib.declared_frames >>
+     logWidenTacticsLib.declared_structure_finish) >>
   pop_assum strip_assume_tac >>
   qabbrev_tac `axs = ZIP (MAP FST ys,MAP expr_type args)` >>
   `gas_admissible (eval_exprs cx args)
