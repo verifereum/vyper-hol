@@ -13,9 +13,6 @@ Theorem return_capped_counted_success:
   cs_extends st en /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
   (!l. dst <> Label l /\ base_op <> Label l /\ hi <> Label l) /\
-  (en.cs_current_insts <> [] \/
-   !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   rt = (if needs_external_call_wrap ty then TupleT [ty] else ty) /\
   rv = (if needs_external_call_wrap ty then ArrayV (TupleV [v]) else v) /\
   cap = vyper_abi_size_bound env rt /\
