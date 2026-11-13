@@ -6,7 +6,7 @@ Ancestors
   readonlyInvokeCopyFwdHistoryAnalysis readonlyInvokeCopyFwdProtectionLifetime
   readonlyInvokeCopyFwdProtectionProducers readonlyInvokeCopyFwdHistory
   readonlyInvokeCopyFwdPlan invokeCopyFwdCommonDefs list indexedLists
-  venomWfProps venomWf venomInst
+  venomWfProps venomWf venomInstIdsProps venomInst
 
 Theorem ricf_located_event_owner_call_cutoff:
   ricf_located_event (icf_build_ctx fm fs rma fn) fn log
