@@ -432,7 +432,7 @@ Proof
   gvs[storage_well_formed_on_def]
 QED
 
-Theorem pop_place_preserves_storage_well_formed_on[local]:
+Theorem pop_place_preserves_storage_well_formed_on:
   regions_consistent (FST H) /\ storage_well_formed_on cx st (FST H) /\
   storage_observations_ok cx H observations /\
   (!b slot leaf. p = StoragePlace b slot leaf ==>
