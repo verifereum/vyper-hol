@@ -5,6 +5,7 @@
    bytes, as the local's type lays out in a word) is below the frontier. *)
 Theory bodyMemAssignLocalWord
 Ancestors
+  supportedExprTraverse allocLimits allocLimitsProps
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyDeclMemoryCounted bodyDeclMemoryCore
   allocaFootprint exprSimMemDefs exprSimSource bodyExprPreFacts
@@ -30,11 +31,11 @@ Theorem assign_local_word_store_path_mem:
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     eval_operand op s = SOME (typed_val_to_w256 etv v) /\
-    stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
+    stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     store_lays_out etv entry.type v ==>
-    ?t. stmt_state_rel H ctx func cenv cx
+    ?t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
@@ -164,7 +165,7 @@ Resume assign_local_word_frag_mem[normal]:
        `gas_explicit marks s0.vs_gas_readings`] >>
      qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   `eval_operand op t = SOME (typed_val_to_w256 etv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
@@ -201,6 +202,7 @@ Finalise assign_local_word_frag_mem
 
 Theorem body_assign_local_word_mem:
   !cx id e ty d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (Assign (BaseTarget (NameTarget id)) e) /\
     body_expr_mem_ok cx e /\
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings
       (Assign (BaseTarget (NameTarget id)) e) /\
@@ -227,7 +229,19 @@ Proof
      Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >>
      Cases_on `asg` >> gvs[] >> metis_tac[type_widens_to_word]) >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>

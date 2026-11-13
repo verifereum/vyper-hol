@@ -21,11 +21,11 @@ Theorem emit_acc_path_frame_mem:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
+    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
     alloca_history func s0 ==>
     ?t. gas_marked_path T ctx func s0 0 (OK t) /\
       eval_operand op t = SOME w /\
-      stmt_state_rel H ctx func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       local_ptrs_reserved cenv sb /\ alloca_history func t /\
@@ -65,7 +65,7 @@ Proof
      qexists_tac `sa` >> simp[]) >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx es (update_var out w s0)` by
+  `stmt_state_rel ctx func cenv cx es (update_var out w s0)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   qexists_tac `update_var out w s0 with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[gas_marked_path_def, stmt_state_rel_inst_idx, eval_operand_def] >>
@@ -82,7 +82,7 @@ Theorem unop_frag_mem_read_then:
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           w = typed_val_to_w256 tv v) /\
     (!x ss n out.
-       eval_operand x ss = SOME w1 /\ stmt_state_rel H ctx func cenv cx es0 ss ==>
+       eval_operand x ss = SOME w1 /\ stmt_state_rel ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) /\
     (!c sa sb op ss.
@@ -90,11 +90,11 @@ Theorem unop_frag_mem_read_then:
        eval_operand c ss = SOME r ==>
        ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
              eval_operand op ss' = SOME w) ==>
-    unop_frag_mem H ctx func cenv cx (\x. comp_bind (emit_op opc [x]) g) w1 t
+    unop_frag_mem ctx func cenv cx (\x. comp_bind (emit_op opc [x]) g) w1 t
       (INL v) es0
 Proof
   rpt gen_tac >> strip_tac >>
-  `unop_frag_mem H ctx func cenv cx g r t (INL v) es0` by
+  `unop_frag_mem ctx func cenv cx g r t (INL v) es0` by
     (irule unop_frag_mem_straight >> simp[] >> strip_tac >>
      qexists_tac `w` >> simp[] >> metis_tac[]) >>
   simp[unop_frag_mem_def] >> rpt gen_tac >> strip_tac >>
@@ -109,7 +109,7 @@ Proof
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
   `?u. gas_marked_path T ctx func s0 0 (OK u) /\
       eval_operand c u = SOME r /\
-      stmt_state_rel H ctx func cenv cx es0 u /\
+      stmt_state_rel ctx func cenv cx es0 u /\
       ~u.vs_halted /\ u.vs_current_bb = s1.cs_current_bb /\
       u.vs_inst_idx = LENGTH s1.cs_current_insts /\
       local_ptrs_reserved cenv s1 /\ alloca_history func u /\
@@ -118,7 +118,7 @@ Proof
       (?out. c = Var out /\ not_fresh_at s1 out) /\
       u.vs_memory = s0.vs_memory` by
     (drule emit_acc_path_frame_mem >>
-     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
+     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
      disch_then (qspec_then `r` mp_tac) >> simp[] >>
      (impl_tac >- (qpat_x_assum `!x ss n out. _ ==> step_inst_base _ _ = _` mp_tac >> simp[] >>
                   disch_then irule >> simp[])) >>
@@ -127,7 +127,7 @@ Proof
                     with vs_inst_idx := LENGTH s1.cs_current_insts` >>
      gvs[update_var_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
      rw[] >> gvs[]) >>
-  qpat_x_assum `unop_frag_mem _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `unop_frag_mem _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[unop_frag_mem_def] >>
   disch_then (qspecl_then [`s1`, `sb`, `c`, `op`, `u`] mp_tac) >>
   simp[] >> strip_tac >>
@@ -148,10 +148,10 @@ Theorem unop_frag_mem_read:
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           r = typed_val_to_w256 tv v) /\
     (!x ss n out.
-       eval_operand x ss = SOME w1 /\ stmt_state_rel H ctx func cenv cx es0 ss ==>
+       eval_operand x ss = SOME w1 /\ stmt_state_rel ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) ==>
-    unop_frag_mem H ctx func cenv cx (\x. emit_op opc [x]) w1 t (INL v) es0
+    unop_frag_mem ctx func cenv cx (\x. emit_op opc [x]) w1 t (INL v) es0
 Proof
   rpt gen_tac >> strip_tac >>
   once_rewrite_tac[GSYM comp_bind_comp_return] >>
@@ -164,7 +164,7 @@ QED
 Theorem compile_acc_frag_mem:
   !ctx func cenv cx item bs es0.
     item <> Code /\ LENGTH bs = 20 /\ accounts_well_typed es0.accounts ==>
-    unop_frag_mem H ctx func cenv cx
+    unop_frag_mem ctx func cenv cx
       (\x. case item of
              Balance => emit_op BALANCE [x]
            | Codesize => emit_op EXTCODESIZE [x]

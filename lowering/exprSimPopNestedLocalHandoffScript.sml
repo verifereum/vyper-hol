@@ -98,14 +98,14 @@ QED
 (* This boundary is independent of the path's final type.  Root type
    coherence is supplied by the source environment, not by pointer bytes. *)
 Theorem memory_target_encoding_handoff:
-  target_post H ctx func cenv cx es sa sb s0 es'
+  target_post ctx func cenv cx es sa sb s0 es'
     (PlaceR (MemoryPlace id path)) (Type ty) (hdr,loc,pt) s /\
   lookup_scopes id es'.scopes = SOME entry /\
   value_has_type entry.type entry.value /\
   cenv.ce_var_type id = SOME root_ty /\
   evaluate_type (get_tenv cx) root_ty = SOME entry.type ==>
   loc = SOME LocMemory /\ pt = SOME (value_type_place (Type ty)) /\
-  stmt_state_rel H ctx func cenv cx es' s /\
+  stmt_state_rel ctx func cenv cx es' s /\
   wb_frame cenv es es' sa s0 s /\
   (!x. hdr = Var x ==> not_fresh_at sb x) /\
   ?p b sz k tv w.

@@ -84,8 +84,8 @@ QED
 
 Theorem expr_post_unop:
   !func cenv cx ann bi e1 es es' sa s1 sb s0 t0 ss x op v1 v ctx.
-    expr_post H ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
-    stmt_state_rel H ctx func cenv cx es' ss /\
+    expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
+    stmt_state_rel ctx func cenv cx es' ss /\
     expr_val_rel cx ann v op ss /\
     (!z w. not_fresh_at s1 z /\ lookup_var z t0 = SOME w ==>
            lookup_var z ss = SOME w) /\
@@ -93,7 +93,7 @@ Theorem expr_post_unop:
              FLOOKUP ss.vs_allocas aid = SOME b) /\
     ss.vs_memory = t0.vs_memory /\
     is_word_type ann /\ sa.cs_next_var <= s1.cs_next_var ==>
-    expr_post H ctx func cenv cx (Builtin ann bi [e1]) es sa sb s0 es' v op ss
+    expr_post ctx func cenv cx (Builtin ann bi [e1]) es sa sb s0 es' v op ss
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
   `locals_kept cenv es es' s0 ss` by

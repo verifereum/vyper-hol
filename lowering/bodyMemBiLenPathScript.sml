@@ -71,20 +71,20 @@ Theorem len_vv_path_mem:
     fn_has_code sm sb func /\ ~t.vs_halted /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    vv_post H ctx func cenv cx e es sa sm s0 es' tv vv t /\
+    vv_post ctx func cenv cx e es sa sm s0 es' tv vv t /\
     fn_inst_ids_distinct func /\ alloca_history func t /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es' tv vv t ==>
     ?t' n. gas_path_mem ctx func t 0 (OK t') /\
       t'.vs_current_bb = sb.cs_current_bb /\
       t'.vs_inst_idx = LENGTH sb.cs_current_insts /\
       result_array_length cx tv es' = (INL n,es') /\
-      vv_post H ctx func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
+      vv_post ctx func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
         sa sb s0 es' (Value (IntV (&n)))
         (StackValue (BaseT (UintT 256)) op) t' /\
       alloca_history func t' /\ t'.vs_alloca_next = t.vs_alloca_next
 Proof
   rpt gen_tac >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es' t /\
+  `stmt_state_rel ctx func cenv cx es' t /\
    vv_holds cenv cx (post_value_type cenv e) tv vv es' t` by fs[vv_post_def] >>
   drule_all len_mem_vv_holds_sized_length_success_widens >> strip_tac >>
   `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by simp[] >>
@@ -113,8 +113,8 @@ Proof
           lookup_var x t' = SOME w` by
     (drule rest_word_ptr_load_fresh >> strip_tac >>
      fs[EVERY_MEM, lookup_var_def] >> metis_tac[]) >>
-  `stmt_state_rel H ctx func cenv cx es' t'` by
-    (`stmt_state_rel H ctx func cenv cx es'
+  `stmt_state_rel ctx func cenv cx es' t'` by
+    (`stmt_state_rel ctx func cenv cx es'
         (t' with vs_inst_idx := t.vs_inst_idx)` suffices_by
        simp[stmt_state_rel_inst_idx] >>
      `state_frame (t' with vs_inst_idx := t.vs_inst_idx) = state_frame t` by

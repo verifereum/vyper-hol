@@ -5,7 +5,7 @@ Ancestors
   exprSimCopy
 
 Theorem aggregate_body_header_state_rel[local]:
-  stmt_state_rel H ctx func ce cx es s /\
+  stmt_state_rel ctx func ce cx es s /\
   (!name lo sz. local_region ce es.scopes s name lo sz ==>
      lo + sz <= b \/ b + 32 <= lo) /\
   (ce.ce_is_ctor ==> !name tv v io.
@@ -13,10 +13,10 @@ Theorem aggregate_body_header_state_rel[local]:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
     regions_disjoint io (type_memory_size tv) b 32) ==>
-  stmt_state_rel H ctx func ce cx es (mstore b w s)
+  stmt_state_rel ctx func ce cx es (mstore b w s)
 Proof
   strip_tac >>
-  qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
   rewrite_tac[Once stmt_state_rel_def] >> strip_tac >>
   `local_ptrs_rel func ce es.scopes (mstore b w s)` by
     (irule local_ptrs_rel_mstore >> gvs[state_rel_def] >> metis_tac[]) >>
@@ -49,7 +49,7 @@ Proof
 QED
 
 Theorem aggregate_body_header_store_boundary:
-  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
   not_local_ptr ce es.scopes x /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,asz) /\ 32 <= asz /\
@@ -58,7 +58,7 @@ Theorem aggregate_body_header_store_boundary:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
     regions_disjoint io (type_memory_size tv) b 32) ==>
-  stmt_state_rel H ctx func ce cx es (mstore b w s) /\
+  stmt_state_rel ctx func ce cx es (mstore b w s) /\
   locals_kept ce es es s (mstore b w s) /\
   mem_word_at b (mstore b w s).vs_memory = w /\
   (!p n. p+n <= b \/ b+32 <= p ==>

@@ -35,13 +35,13 @@ Theorem unwrap_value_path_mem_room[local]:
     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
-    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
+    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es' (Value v) vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_path_mem ctx func s 0 (OK u) /\
-        expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
+        expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
         expr_store_bound cx (expr_type e) v op u /\
         (vv_location vv = SOME LocMemory ==>
          !sw tvt. eval_operand op u = SOME sw /\
@@ -64,7 +64,7 @@ Proof
   rename1 `LocatedValue t p` >>
   reverse (Cases_on `p.ptr_location = LocMemory`)
   >- (drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_path_mem >>
-      disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       simp[vv_location_def] >> strip_tac >> qexists_tac `u` >> simp[]) >>
   `~is_word_type t` by
     (gvs[vv_post_def, vv_holds_def] >> metis_tac[is_bytestring_word_type]) >>
@@ -91,14 +91,14 @@ Theorem unwrap_value_marked_read_mem_room[local]:
     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
-    vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
+    vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?v u. gas_marked_exec T (ctx,func) (read_result cx tv) (ee,s)
             [] (INL v) ee (OK u) /\
-      expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
+      expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
       expr_store_bound cx (expr_type e) v op u /\
       (vv_location vv = SOME LocMemory ==>
        !sw tvt. eval_operand op u = SOME sw /\
@@ -121,7 +121,7 @@ Proof
      rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
   drule_all vv_post_read_result >> strip_tac >>
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_path_mem_room >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[] >> strip_tac >>
   qexistsl_tac [`v`, `u`] >> simp[] >>
   simp[gas_marked_exec_def, gas_marked_path_def] >>
@@ -148,14 +148,14 @@ Theorem expr_sim_mem_room:
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
       gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-      stmt_state_rel H ctx func cenv cx es s0 /\
+      stmt_state_rel ctx func cenv cx es s0 /\
       alloca_history func s0 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       gas_outcome T (cx_tops cx) (ctx, func)
         (bind (eval_expr cx e) (read_result cx)) (es, s0)
         (\res ee t. ?v. res = INL v /\
-          expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
+          expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
           expr_store_bound cx (expr_type e) v op t /\
           (vv_location vv = SOME LocMemory ==>
            !sw tvt. eval_operand op t = SOME sw /\
@@ -183,7 +183,7 @@ Proof
   rewrite_tac[gas_outcome_def] >> strip_tac >>
   qexists_tac `marks`
   >- (disj1_tac >> gvs[gas_summary_at_def]
-      >- (rename1 `vv_post _ _ _ _ _ _ _ _ _ _ _ tv vv u` >>
+      >- (rename1 `vv_post _ _ _ _ _ _ _ _ _ _ tv vv u` >>
           `~u.vs_halted` by
             metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
           `MAP FDOM es.scopes = MAP FDOM (es_end with gas_obs := []).scopes` by
@@ -193,7 +193,7 @@ Proof
              drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
              simp[]) >>
           drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read_mem_room >>
-          disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+          disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
           impl_tac >- simp[] >> strip_tac >>
           rename1 `gas_marked_exec T _ (read_result _ _) _ [] _ _ (OK u2)` >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u2`] >>

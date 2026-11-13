@@ -40,23 +40,17 @@ Theorem env_target_prefix:
   item <> PrevHash /\ item <> MsgGas /\ ann = env_item_type item /\
   lower_value compile_expr cenv ty (Builtin ann (Env item) []) sa = (op, sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx es s0 /\
-    storage_well_formed_on cx es (FST H)) /\
-  (?H. valid_horizon cx st0 H es.storage_trace) /\ ~s0.vs_halted /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   evaluate_builtin cx es.accounts ann (Env item) [] [] = INL v ==>
   ?t. gas_path ctx func s0 0 (OK t) /\
-      (!H. valid_horizon cx st0 H es.storage_trace ==>
-        expr_post H ctx func cenv cx (Builtin ann (Env item) []) es sa sb s0
-        (es with gas_obs := []) v op t) /\
+      expr_post ctx func cenv cx (Builtin ann (Env item) []) es sa sb s0
+        (es with gas_obs := []) v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
-  rename1 `valid_horizon cx st0 H0 es.storage_trace` >>
-  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   `is_word_type (env_item_type item) /\
    !tv. evaluate_type (get_tenv cx) (env_item_type item) = SOME tv ==>
         typed_val_to_w256 tv v = val_to_w256 v` by
@@ -70,8 +64,7 @@ Proof
     ~is_terminator opc /\
     !out. step_inst_base (mk_inst sa.cs_next_id opc [] [out]) s0 =
           OK (update_var out (val_to_w256 v) s0)` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` kall_tac >>
-     Cases_on `item` >>
+    (Cases_on `item` >>
      gvs[compile_env_var_def, evaluate_builtin_def] >>
      goal_assum (drule_at Any) >>
      simp[is_terminator_def, step_inst_base_opcode_eqs, exec_read0_def,
@@ -83,23 +76,6 @@ Proof
                 vs_inst_idx := SUC s0.vs_inst_idx` >>
   conj_tac
   >- (drule_all emit_op_zero_path >> simp[Abbr `out`]) >>
-  `!H. valid_horizon cx st0 H es.storage_trace ==>
-     expr_post H ctx func cenv cx (Builtin ann (Env item) []) es sa sb s0
-        (es with gas_obs := []) v op
-          (update_var out (val_to_w256 v) s0 with
-                          vs_inst_idx := SUC s0.vs_inst_idx) /\
-     (update_var out (val_to_w256 v) s0 with
-                vs_inst_idx := SUC s0.vs_inst_idx).vs_current_bb = sb.cs_current_bb /\
-     (update_var out (val_to_w256 v) s0 with
-                vs_inst_idx := SUC s0.vs_inst_idx).vs_inst_idx = LENGTH sb.cs_current_insts` suffices_by
-    (strip_tac >> metis_tac[]) >>
-  rpt strip_tac >>
-  qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
-    (drule_then strip_assume_tac) >>
-  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-    (`(es with gas_obs := []).accounts = es.accounts /\
-      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
-     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   drule emitted_insts_emit_op >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb` by
     gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
@@ -110,7 +86,7 @@ Proof
   `not_local_ptr cenv es.scopes out` by
     (simp[Abbr `out`] >> irule local_ptrs_reserved_fresh >>
      metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
-  `stmt_state_rel H ctx func cenv cx es
+  `stmt_state_rel ctx func cenv cx es
       (update_var out (val_to_w256 v) s0)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   drule msg_gas_state_frame >>
@@ -130,7 +106,7 @@ Theorem compile_env_sim:
     item <> PrevHash /\ item <> MsgGas /\ ann = env_item_type item ==>
     expr_sim ctx func cenv cx ty (Builtin ann (Env item) []) es
 Proof
-  rpt strip_tac >> irule expr_sim_values_domain >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> irule expr_sim_values >> rpt strip_tac >>
   gvs[] >>
   `?v. evaluate_builtin cx es.accounts (env_item_type item) (Env item) [] [] = INL v /\
        !tail. bind (eval_expr cx (Builtin (env_item_type item) (Env item) []))
@@ -138,15 +114,13 @@ Proof
          (INL v, es with gas_obs := tail)` by
     metis_tac[PURE_REWRITE_RULE [ETA_THM] env_source_all_tails] >>
   `?t. gas_path ctx func s0 0 (OK t) /\
-       (!H. valid_horizon cx st0 H es.storage_trace ==>
-         expr_post H ctx func cenv cx (Builtin (env_item_type item) (Env item) [])
-         es sa sb s0 (es with gas_obs := []) v op t) /\
+       expr_post ctx func cenv cx (Builtin (env_item_type item) (Env item) [])
+         es sa sb s0 (es with gas_obs := []) v op t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts` by
     metis_tac[env_target_prefix] >>
   qexistsl_tac [`[]`, `v`, `es`, `t`] >>
   simp[gas_value_prefix_def, gas_marked_exec_def, gas_marked_path_def,
-       GSYM ETA_THM] >>
-  rpt strip_tac >> metis_tac[]
+       GSYM ETA_THM]
 QED
 

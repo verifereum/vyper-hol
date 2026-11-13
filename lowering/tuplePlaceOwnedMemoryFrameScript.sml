@@ -114,10 +114,7 @@ Finalise tuple_place_nonword_size_effect
 Theorem tuple_place_owned_memory_forward_frame[local]:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     loc = LocMemory /\ ~is_word_type dty /\
-    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty
-      (case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-       | _ => NONE) (type_memory_bytes cenv dty) sa = ((),sb) /\
+    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty (type_memory_bytes cenv dty) sa = ((),sb) /\
     eval_operand dst_op s = SOME w /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
     (!x. dst_op = Var x ==> not_fresh_at sa x) /\
@@ -149,14 +146,14 @@ Theorem tuple_place_owned_memory_forward_frame[local]:
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==>
        0 < type_memory_size dtv /\ type_memory_size dtv + 64 < dimword (:256)) /\
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==> 0 < type_slot_size dtv) /\
-    stmt_state_rel H ctx func cenv cx ee s /\ write_place cx p v ee = (INL (),ff) /\
+    stmt_state_rel ctx func cenv cx ee s /\ write_place cx p v ee = (INL (),ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?dtv r t.
       evaluate_type (get_tenv cx) dty = SOME dtv /\
       val_in_memory dtv v (w2n w) t.vs_memory /\
-      stmt_state_rel H ctx func cenv cx ee r /\
+      stmt_state_rel ctx func cenv cx ee r /\
       gas_marked_path F ctx func s 0 (OK t) /\
       (t with <|vs_vars := r.vs_vars; vs_memory := r.vs_memory;
         vs_prev_bb := r.vs_prev_bb; vs_current_bb := r.vs_current_bb;
@@ -261,7 +258,7 @@ Resume tuple_place_owned_memory_forward_frame[staged]:
   `fn_has_code sa sn func /\ fn_has_code sn sb func` by metis_tac[fn_has_code_split] >>
   `type_memory_size stv < dimword (:256)` by decide_tac >>
   `?r u tw. gas_marked_path F ctx func s 0 (OK r) /\
-    stmt_state_rel H ctx func cenv cx ee r /\
+    stmt_state_rel ctx func cenv cx ee r /\
     eval_operand buf.buf_operand r = SOME tw /\
     FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n tw,type_memory_size stv) /\
     w2n tw+type_memory_size stv < dimword (:256) /\ r.vs_memory = s.vs_memory /\
@@ -344,7 +341,7 @@ Resume tuple_place_owned_memory_forward_frame[staged]:
      `w2n tw + type_memory_size stv <= ob \/ ob+ol <= w2n tw` by
        (irule abi_builtin_allocate_separate >>
         qexistsl_tac [`sep_id`, `s`, `sa.cs_next_id`] >> simp[] >>
-        qpat_x_assum `stmt_state_rel H ctx func cenv cx ee s` mp_tac >>
+        qpat_x_assum `stmt_state_rel ctx func cenv cx ee s` mp_tac >>
         simp[stmt_state_rel_def]) >> decide_tac) >>
   pop_assum (mk_asm "old_scratch_sep") >>
   `cenv.ce_is_ctor ==> !nm tv iv off.
@@ -402,10 +399,7 @@ Finalise tuple_place_owned_memory_forward_frame
 Theorem tuple_place_owned_memory_run_frame:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     loc = LocMemory /\
-    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty
-      (case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-       | _ => NONE) (type_memory_bytes cenv dty) sa = ((),sb) /\
+    compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty (type_memory_bytes cenv dty) sa = ((),sb) /\
     eval_operand dst_op s = SOME w /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
     (!x. dst_op = Var x ==> not_fresh_at sa x) /\
@@ -439,12 +433,12 @@ Theorem tuple_place_owned_memory_run_frame:
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==> 0 < type_slot_size dtv) /\
     (loc <> LocMemory /\ dty <> sty /\
      ~(is_bytestring_type dty /\ is_bytestring_type sty) ==> type_alloc_ok cenv dty) /\
-    stmt_state_rel H ctx func cenv cx ee s /\ write_place cx p v ee = (INL (),ff) /\
+    stmt_state_rel ctx func cenv cx ee s /\ write_place cx p v ee = (INL (),ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx ff t /\
+      stmt_state_rel ctx func cenv cx ff t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -460,7 +454,7 @@ Proof
   >- suspend "word" >>
   drule_all tuple_place_owned_memory_forward_frame >> strip_tac >>
   drule_all type_widens_to_value_has_type >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx ff t` by
+  `stmt_state_rel ctx func cenv cx ff t` by
     (irule memory_place_write_stmt_state >>
      goal_assum (drule_at (Pat `val_in_memory _ _ _ t.vs_memory`)) >>
      qexistsl_tac [`dty`, `ee`, `env`, `p`, `r`, `s`, `sa`] >>
@@ -476,7 +470,7 @@ Resume tuple_place_owned_memory_run_frame[word]:
     gvs[compile_assign_value_def] >>
   `eval_operand op s = SOME (typed_val_to_w256 stv v)` by fs[expr_val_rel_def] >>
   qabbrev_tac `u = mstore (w2n w) (typed_val_to_w256 stv v) s` >>
-  `stmt_state_rel H ctx func cenv cx ff u` by
+  `stmt_state_rel ctx func cenv cx ff u` by
     (Cases_on `p`
      >- (gvs[place_ptr_rel_def, slot_loc_def] >> Cases_on `b` >> gvs[])
      >- (rename1 `MemoryPlace id path` >>
@@ -495,7 +489,9 @@ Resume tuple_place_owned_memory_run_frame[word]:
                     `typed_val_to_w256 stv v`] >> simp[]) >>
   qexists_tac `u with vs_inst_idx := SUC s.vs_inst_idx` >>
   simp[stmt_state_rel_inst_idx, lookup_var_def] >>
-  rpt strip_tac >> gvs[] >> simp[Abbr `u`] >>
+  rpt strip_tac >> gvs[] >> simp[Abbr `u`]
+  >~ [`FLOOKUP (mstore _ _ _).vs_vars _`]
+  >- simp[venomStateTheory.mstore_def] >>
   irule mstore_mem_bytes_at_disjoint >>
   drule_all abi_word_type_size >> simp[]
 QED

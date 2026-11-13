@@ -278,9 +278,10 @@ Theorem lower_dload_run_contract:
 Proof
   `EL 1 o1_fn_passes = CFP_Simple VP_LowerDload` by
     simp[o1_fn_passes_def] >>
-  simp[o1_run_contract_def, o1_stage_contract_def, o1_inv_def] >>
+  simp[o1_run_contract_def, o1_stage_contract_def, o1_inv_def,
+       pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
-  `ctx_sim D C C' vs vs` by metis_tac[lower_dload_stage_sim] >>
+  `ctx_sim_fuel I D C C' vs vs` by metis_tac[lower_dload_stage_sim_fuel] >>
   `mem_inv raw_mem_ok C' vs` by metis_tac[lower_dload_stage_mem] >>
   `taint_within D C' vs` by metis_tac[lower_dload_stage_taint] >>
   `mem_inv dload_offset_ok C' vs` by

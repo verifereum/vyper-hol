@@ -1,12 +1,14 @@
 (* Creation-frame boundary: a run of the root-shadowed frame related to the
  * deployment unit's result gives the real creation frame's result
  * (shadow_root_run_halt/_exception and deploy_frame_complete).
- * TOP-LEVEL: deploy_venom_frame (a piece of e2e_deploy_correctness; admitted until proved).
+ * TOP-LEVEL: deploy_venom_frame (a piece of e2e_deploy_correctness; admitted until proved),
+ * deploy_frame_gas_sufficient (S7g-d, a piece of e2e_deploy_gas_sufficient; a planned admission).
  *)
 Theory ctorDeployFrame
 Ancestors
   ctorDeployDefs deployFrameReplay codegenCorrectness e2eDeployFrame
   frameOutcome vfmRunCall vfmState passSimulationDefs e2eDeployDefs
+  frameGas venomRunBounded
 
 (* Single-frame outcomes depend on the start state only through its one
    context's logs and the transaction parameters. *)
@@ -103,18 +105,34 @@ Proof
   simp[]
 QED
 
+(* The unit's logs correspond to the EVM's exactly when they are equal. *)
+Theorem logs_correspond_eq[local]:
+  logs_correspond info tenv addr l1 l2 <=> l1 = l2
+Proof
+  `log_entry_corresponds info tenv addr = $=` by
+    simp[FUN_EQ_THM, e2eDefsTheory.log_entry_corresponds_concrete_event] >>
+  simp[e2eDefsTheory.logs_correspond_def, listTheory.LIST_REL_eq]
+QED
+
+(* The shadow run records the real frame's call requests. *)
+Theorem shadow_root_call_requests[local]:
+  es.contexts <> [] ==> call_requests (shadow_root es) = call_requests es
+Proof
+  simp[callTraceTheory.call_requests_def, callTraceTheory.call_trace_def, shadow_root_frame_obs]
+QED
+
 Theorem deploy_venom_frame:
-  !tops runtime_bc deploy_bc am tx es src res.
+  !H tops runtime_bc deploy_bc am tx es src res.
     deploy_state_rel tops deploy_bc am tx es /\
     runtime_bc <> [] /\ ~(?t. runtime_bc = 0xEFw :: t) /\
-    deploy_venom_result_rel HS tops runtime_bc tx src res /\
+    deploy_venom_result_rel H tops runtime_bc tx src res /\
     (?r g. run_call (shadow_root es) = SOME (r, g) /\
            (frame_resource_starved (shadow_root es) r g \/
             venom_frame_rel (shadow_root es) r g res))
     ==>
     ?r es'. run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       deploy_result_rel tops runtime_bc tx es r es' src)
+       deploy_result_rel H tops runtime_bc tx es r es' src)
 Proof
   rpt strip_tac >>
   `?c0 rb0. es.contexts = [(c0,rb0)] /\
@@ -128,10 +146,12 @@ Proof
   Cases_on `res` >> gvs[venom_frame_rel_def]
   >~ [`Halt ss`]
   >- (drule_all deploy_frame_halt_mid >> strip_tac >>
+      `call_requests (shadow_root es) = call_requests es` by
+        (irule shadow_root_call_requests >> simp[]) >>
       Cases_on `src`
       >- (PairCases_on `x` >>
           Cases_on `ALOOKUP x0.sources tx.target = NONE`
-          >- (gvs[deploy_venom_result_rel_def] >>
+          >- (gvs[deploy_venom_result_rel_def, logs_correspond_eq] >>
               qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
                 deploy_frame_complete >>
               impl_tac >- simp[] >>
@@ -139,7 +159,6 @@ Proof
               >- (disj1_tac >> irule frame_resource_starved_single_transfer >>
                   metis_tac[]) >>
               disj2_tac >> simp[deploy_result_rel_def] >>
-              qexists_tac `ss.vs_logs` >>
               simp[lookup_account_def, update_account_def,
                    combinTheory.APPLY_UPDATE_THM] >>
               conj_tac
@@ -151,7 +170,7 @@ Proof
                process_deletions ss.vs_pending_deletions ss.vs_accounts` by
                 (irule process_deletions_update_mem >> simp[]) >>
               fs[update_account_def, lookup_account_def]) >>
-          gvs[deploy_venom_result_rel_def] >>
+          gvs[deploy_venom_result_rel_def, logs_correspond_eq] >>
           qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
             deploy_frame_complete >>
           impl_tac >- (Cases_on `runtime_bc` >> gvs[]) >>
@@ -159,9 +178,9 @@ Proof
           >- (disj1_tac >> irule frame_resource_starved_single_transfer >>
               metis_tac[]) >>
           disj2_tac >> simp[deploy_result_rel_def] >>
-          qexistsl [`section`,`ss.vs_logs`] >>
+          qexists `section` >>
           gvs[lookup_account_def, update_account_def,
-              combinTheory.APPLY_UPDATE_THM] >>
+              combinTheory.APPLY_UPDATE_THM, combinTheory.UPDATE_EQ] >>
           irule frame_outcome_single_transfer_none >> metis_tac[]) >>
       Cases_on `y` >>
       gvs[deploy_venom_result_rel_def, deploy_result_rel_def] >>
@@ -177,4 +196,47 @@ Proof
       gvs[deploy_venom_result_rel_def, deploy_result_rel_def] >>
       metis_tac[]) >>
   drule deploy_venom_result_rel_terminates >> simp[terminates_def]
+QED
+
+(* PLANNED ADMISSION S7g-d, sufficient gas for deployment: the deploy-side
+   counterpart of codegen_gas_sufficient together with deploy_venom_frame.
+   Given the constructor unit's resource bound, some gas g, independent of
+   the creation frame, is enough: with g' >= g more gas, the creation frame
+   ends in OutOfGas only when the code it deposits, runtime_bc and the
+   immutables section, is longer than max_code_size, which handle_create
+   rejects with OutOfGas at any gas.  No RETURNDATACOPY exemption: the
+   constructor makes no calls.  The last premise says what the constructor
+   returns, so the deposit's length is LENGTH runtime_bc + imm_len tops.
+   Proof idea: S7g's per-instruction argument on the root-shadowed frame
+   codegen runs (shadow_root), with no RETURNDATACOPY run, plus the
+   deposit, which costs at most code_deposit_cost * max_code_size. *)
+Theorem deploy_frame_gas_sufficient:
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan fuel M.
+    deploy_phases policy tops (deploy_bc, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    unit_shape_ok dout.po_unit /\
+    constructor_call_free tops
+    ==>
+    ?g. !g' am tx es Inv.
+      g <= g' /\
+      deploy_state_rel tops deploy_bc am tx (add_frame_gas g' es) /\
+      LENGTH (FST (HD (add_frame_gas g' es).contexts)).msgParams.code
+        <= dimword(:256) DIV 2 /\
+      codegen_context_obligations Inv dout.po_unit.cu_context cplan /\
+      codegen_reachability_package Inv dout.po_unit.cu_context
+        (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
+      venom_run_bounded fuel M dout.po_unit.cu_context
+        (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
+      (?H src vfuel.
+         ~deploy_source_exempt tops src /\
+         deploy_venom_result_rel H tops runtime_bc tx src
+           (run_context vfuel dout.po_unit.cu_context
+              (deploy_entry_state prog cplan tops (add_frame_gas g' es))))
+      ==>
+      ?r es'.
+        run_call (add_frame_gas g' es) = SOME (r, es') /\
+        (r = INR (SOME OutOfGas) ==>
+         max_code_size < LENGTH runtime_bc + imm_len tops)
+Proof
+  cheat
 QED

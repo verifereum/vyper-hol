@@ -4,7 +4,7 @@ Ancestors
   exprSimMemDefs exprSimHash exprSimHashBoundary exprSimProps compileEnv words
 
 Theorem keccak_dynamic_post_bounds:
-  expr_post H ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
+  expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -25,7 +25,7 @@ Proof
 QED
 
 Theorem keccak_string_post_bounds:
-  expr_post H ctx func cenv cx e es sa sm s0 es' (StringV str) op s /\
+  expr_post ctx func cenv cx e es sa sm s0 es' (StringV str) op s /\
   expr_type e = BaseT (StringT cap) /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (StringT cap)) /\

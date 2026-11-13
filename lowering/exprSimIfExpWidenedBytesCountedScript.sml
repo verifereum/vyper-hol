@@ -28,7 +28,7 @@ Theorem bytestring_store_allocated_counted_frame:
   value_has_type tv v /\ val_in_memory tv v (w2n w) s.vs_memory /\
   type_memory_size tv < dimword (:256) /\ type_memory_size tv <= N /\
   FLOOKUP s.vs_allocas aid = SOME (w2n d,N) /\
-  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
   (!name b sz. local_region ce es.scopes s name b sz ==>
     b+sz <= w2n d \/ w2n d+N <= b) /\
   (ce.ce_is_ctor ==> !name itv iv off.
@@ -41,7 +41,7 @@ Theorem bytestring_store_allocated_counted_frame:
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     val_in_memory tv v (w2n d) t.vs_memory /\
-    stmt_state_rel H ctx func ce cx es t /\
+    stmt_state_rel ctx func ce cx es t /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
               vs_inst_idx := s.vs_inst_idx|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\

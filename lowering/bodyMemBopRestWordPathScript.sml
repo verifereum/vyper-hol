@@ -25,7 +25,7 @@ Proof
 QED
 
 Theorem rest_word_state_alloca_inv:
-  stmt_state_rel H ctx func cenv cx es s ==> alloca_inv s
+  stmt_state_rel ctx func cenv cx es s ==> alloca_inv s
 Proof
   simp[exprLoweringPropsTheory.stmt_state_rel_def]
 QED

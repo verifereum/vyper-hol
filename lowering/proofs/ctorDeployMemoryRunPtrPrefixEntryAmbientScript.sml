@@ -28,6 +28,7 @@ Theorem deploy_ptr_entry_actual_state_rel:
   deploy_ctor_start tops am tx (mut,F,body,am_c,es0) /\
   lookup_function NONE tx.function_name Deploy tops = SOME (mut,F,args,[],NoneT,body) /\
   bind_arguments (type_env tops) args tx.args = SOME scope /\
+  actual.vs_code = vs.vs_code /\
   actual.vs_accounts = vs.vs_accounts /\ actual.vs_transient = vs.vs_transient /\
   actual.vs_logs = vs.vs_logs /\ actual.vs_requests = vs.vs_requests /\
   actual.vs_pending_deletions = vs.vs_pending_deletions /\
@@ -48,7 +49,8 @@ Proof
   qpat_x_assum `gas_variant _ _` mp_tac >>
   rewrite_tac[gas_variant_def] >>
   disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_accounts,s.vs_transient,s.vs_logs,
-    s.vs_call_ctx,s.vs_tx_ctx,s.vs_block_ctx,s.vs_requests,s.vs_pending_deletions)`) >>
+    s.vs_call_ctx,s.vs_tx_ctx,s.vs_block_ctx,s.vs_requests,s.vs_pending_deletions,
+    s.vs_code)`) >>
   simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def] >>
   strip_tac >>
   gvs[deploy_state_rel_def] >>

@@ -19,12 +19,12 @@ Theorem tuple_local_word_store_head_path_mem:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   eval_operand op s = SOME (typed_val_to_w256 tv v) /\
-  stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
+  stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
   find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   store_lays_out tv entry.type v ==>
   ?dw t. lookup_var p s = SOME dw /\
-    stmt_state_rel H ctx func cenv cx
+    stmt_state_rel ctx func cenv cx
       (es with scopes := pre ++
         (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
     ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
@@ -139,14 +139,14 @@ Theorem tuple_local_nonword_store_head_path_mem:
   type_memory_bytes cenv vt = type_memory_size entry.type /\
   type_memory_size entry.type + 64 < dimword (:256) /\
   w2n w + val_store_size tv v <= s.vs_alloca_next /\
-  stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
+  stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
   find_containing_scope id es.scopes = SOME (pre,env,entry,rest) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) dsz) /\
   fn_has_code st st' func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?dw t. lookup_var p s = SOME dw /\
-    stmt_state_rel H ctx func cenv cx
+    stmt_state_rel ctx func cenv cx
       (es with scopes := pre ++
         (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
     ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
@@ -177,7 +177,7 @@ Proof
     (rpt gen_tac >> disch_tac >>
      qpat_x_assum `!a len. _ ==> mem_bytes_at a len t.vs_memory = _` irule >>
      simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-  `stmt_state_rel H ctx func cenv cx
+  `stmt_state_rel ctx func cenv cx
       (es with scopes := pre ++
         (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t` by
     (irule local_memory_write_frame >> simp[] >>
@@ -220,14 +220,14 @@ Theorem tuple_local_store_head_path_mem:
      type_memory_size entry.type + 64 < dimword (:256) /\
      w2n w + val_store_size tv v <= s.vs_alloca_next) /\
   (!x. op = Var x ==> not_fresh_at st x) /\ local_ptrs_reserved cenv st /\
-  stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
+  stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
   find_containing_scope id es.scopes = SOME (pre,env,entry,rest) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) dsz) /\
   fn_has_code st st' func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?dw t. lookup_var p s = SOME dw /\
-    stmt_state_rel H ctx func cenv cx
+    stmt_state_rel ctx func cenv cx
       (es with scopes := pre ++
         (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
     ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
@@ -294,9 +294,9 @@ Theorem tuple_store_mixed_locals_path_mem:
     alloca_history func s /\ fn_inst_ids_distinct func /\
     fn_has_code st st' func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
-    s.vs_inst_idx = LENGTH st.cs_current_insts /\ stmt_state_rel H ctx func cenv cx es s ==>
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\ stmt_state_rel ctx func cenv cx es s ==>
     (ids <> [] \/ ~block_is_terminated st ==> ~block_is_terminated st') /\
-    ?t. stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
         t.vs_current_bb = st'.cs_current_bb /\ t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
         t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
@@ -486,7 +486,7 @@ QED
 
 Resume tuple_store_mixed_locals_path_mem[compose]:
   conj_tac >- (first_x_assum irule >> asm_rewrite_tac []) >>
-  qpat_x_assum `?t. stmt_state_rel H ctx _ _ _ _ _ /\ _` strip_assume_tac >>
+  qpat_x_assum `?t. stmt_state_rel ctx _ _ _ _ _ /\ _` strip_assume_tac >>
   qexists `t` >> simp_tac (srw_ss()) [] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>

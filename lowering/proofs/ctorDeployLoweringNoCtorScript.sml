@@ -2,7 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringNoCtor
 Ancestors
-  structFieldsProps ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
+  structFieldsProps accountsRelProps ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
   compileVyper vyperInterpreter e2eDeployDefs moduleLowering
   immutableDeployExecution ctorDeployDefs immSectionDead e2eEntry venomState vyperCompiler
   immutableEncoding immutableEncodingProofs immutableSectionRel immutableValue
@@ -18,15 +18,10 @@ Theorem no_ctor_lookup:
     vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
       SOME (Payable, F, [], [], NoneT, [])
 Proof
-  Induct_on `tops` >- simp[classify_functions_def, lookup_function_def] >>
-  qabbrev_tac `acc = classify_functions tops` >>
-  PairCases_on `acc` >>
-  Cases_on `h` >>
-  fs[classify_functions_def, classify_function_def, lookup_function_def] >>
   rpt gen_tac >> strip_tac >>
-  gvs[AllCaseEqs()] >>
-  simp[Once (oneline lookup_function_def)] >>
-  Cases_on `v` >> simp[]
+  qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac
+    ctorDeployDefsTheory.classify_functions_ctor_lookup >>
+  simp[]
 QED
 
 Theorem no_ctor_args:
@@ -1971,7 +1966,9 @@ Theorem no_ctor_fresh_sequence:
      mk_inst (id + 2) RETURN [Var buf; Lit (n2w (LENGTH bytes))] []] s = Halt ss /\
     ss.vs_returndata = bytes /\ ss.vs_halted /\
     ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
-    ss.vs_logs = s.vs_logs
+    ss.vs_logs = s.vs_logs /\
+    ss.vs_pending_deletions = s.vs_pending_deletions /\
+    ss.vs_requests = s.vs_requests
 Proof
   strip_tac >>
   qabbrev_tac `t = update_var buf (n2w s.vs_alloca_next)
@@ -2008,7 +2005,9 @@ Theorem no_ctor_entry_sequence:
      mk_inst 2 RETURN [Var "%0"; Lit (n2w (LENGTH runtime_bc + imm_len tops))] []] vs = Halt ss /\
     ss.vs_returndata = runtime_bc ++ REPLICATE (imm_len tops) 0w /\ ss.vs_halted /\
     ss.vs_accounts = vs.vs_accounts /\ ss.vs_transient = vs.vs_transient /\
-    ss.vs_logs = vs.vs_logs
+    ss.vs_logs = vs.vs_logs /\
+    ss.vs_pending_deletions = vs.vs_pending_deletions /\
+    ss.vs_requests = vs.vs_requests
 Proof
   strip_tac >> drule_all no_ctor_runtime_suffix >> strip_tac >>
   drule_all no_ctor_entry_code >> strip_tac >>
@@ -2045,7 +2044,9 @@ Theorem no_ctor_simple_context_execution:
       (SOME "__deploy"))) s = Halt ss /\
     ss.vs_returndata = bytes /\ ss.vs_halted /\
     ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
-    ss.vs_logs = s.vs_logs
+    ss.vs_logs = s.vs_logs /\
+    ss.vs_pending_deletions = s.vs_pending_deletions /\
+    ss.vs_requests = s.vs_requests
 Proof
   strip_tac >>
   qabbrev_tac `t = s with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
@@ -2056,7 +2057,9 @@ Proof
      mk_inst 2 RETURN [Var "%0"; Lit (n2w (LENGTH bytes))] []] t = Halt ss /\
     ss.vs_returndata = bytes /\ ss.vs_halted /\
     ss.vs_accounts = t.vs_accounts /\ ss.vs_transient = t.vs_transient /\
-    ss.vs_logs = t.vs_logs` by
+    ss.vs_logs = t.vs_logs /\
+    ss.vs_pending_deletions = t.vs_pending_deletions /\
+    ss.vs_requests = t.vs_requests` by
     (irule (no_ctor_fresh_sequence |> Q.INST [`id` |-> `0`] |> SRULE []) >>
      simp[Abbr `t`] >> qexists_tac `codepos` >> simp[]) >>
   qmatch_goalsub_abbrev_tac `run_context 1 ctx s` >>
@@ -2100,7 +2103,9 @@ Theorem no_ctor_target_execution:
   ?fuel ss. run_context fuel dunit.cu_context vs = Halt ss /\
     ss.vs_returndata = runtime_bc ++ REPLICATE (imm_len tops) 0w /\
     ss.vs_accounts = vs.vs_accounts /\ ss.vs_transient = vs.vs_transient /\
-    ss.vs_logs = vs.vs_logs
+    ss.vs_logs = vs.vs_logs /\
+    ss.vs_pending_deletions = vs.vs_pending_deletions /\
+    ss.vs_requests = vs.vs_requests
 Proof
   strip_tac >> drule_all no_ctor_deploy_context_shape >> disch_tac >>
   drule_all no_ctor_runtime_suffix >> strip_tac >>
@@ -2561,13 +2566,15 @@ Theorem no_ctor_entry_frame:
   deploy_state_rel tops deploy_bc am tx es /\
   gas_variant vs (deploy_entry_state prog cplan tops es) ==>
   vs.vs_accounts = accounts_after_transfer tx am.accounts /\
-  vs.vs_transient = am.tStorage /\ vs.vs_logs = []
+  vs.vs_transient = am.tStorage /\ vs.vs_logs = [] /\
+  vs.vs_pending_deletions = [] /\ vs.vs_requests = []
 Proof
   strip_tac >>
   qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
   simp[deploy_state_rel_def] >> strip_tac >>
   qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
-  disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_accounts, s.vs_transient, s.vs_logs)`) >>
+  disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_accounts, s.vs_transient, s.vs_logs,
+    s.vs_pending_deletions, s.vs_requests)`) >>
   simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def] >>
   metis_tac[]
 QED
@@ -2579,7 +2586,9 @@ Theorem no_ctor_source_halt:
   classify_functions tops = (exts,ints,fb,NONE) /\
   ss.vs_returndata = runtime_bc ++ REPLICATE (imm_len tops) 0w /\
   ss.vs_accounts = vs.vs_accounts /\
-  ss.vs_transient = vs.vs_transient /\ ss.vs_logs = vs.vs_logs ==>
+  ss.vs_transient = vs.vs_transient /\ ss.vs_logs = vs.vs_logs /\
+  ss.vs_pending_deletions = vs.vs_pending_deletions /\
+  ss.vs_requests = vs.vs_requests ==>
   ?marks. deploy_venom_result_rel HS tops runtime_bc tx
     (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx [(NONE,tops)] [])
     (Halt ss)
@@ -2593,10 +2602,16 @@ Proof
   drule no_ctor_source_observations >> simp[] >>
   disch_then (qspecl_then [`tx`, `[]`, `am`] mp_tac) >> simp[] >> strip_tac >>
   qexists `[]` >>
+  `!A a. update_account a (lookup_account a A with
+           code := (lookup_account a A).code) A = A` by
+    rw[FUN_EQ_THM, vfmStateTheory.update_account_def,
+       vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM,
+       vfmStateTheory.account_state_component_equality] >>
   simp[no_ctor_gas_marks, deploy_venom_result_rel_def] >>
-  gvs[loweringStateRelDefsTheory.storage_agree_def, loweringStateRelDefsTheory.transient_agree_def,
-      e2eDefsTheory.logs_correspond_def,
-      vfmStateTheory.account_state_component_equality]
+  gvs[vfmExecutionTheory.process_deletions_def,
+      accountsRelPropsTheory.accounts_agree_refl,
+      accountsRelPropsTheory.transient_agree_refl,
+      e2eDefsTheory.logs_correspond_def]
 QED
 
 (* Without a constructor, load_contract runs the synthetic empty one, and the

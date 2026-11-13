@@ -176,7 +176,7 @@ Theorem send_tail_path_mem:
   emit_void ASSERT [success] s3 = (u, sb) /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel H ctx func cenv cx es1 t /\ alloca_history func t /\
+  stmt_state_rel ctx func cenv cx es1 t /\ alloca_history func t /\
   wb_frame cenv es es1 sa s0 t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -192,7 +192,7 @@ Theorem send_tail_path_mem:
   ?r. gas_marked_path T ctx func t 0 r /\
       ((?t'. r = OK t' /\
              (?v. res = INL v /\
-                  expr_post H ctx func cenv cx e es sa sb s0 es' v (Lit 0w) t') /\
+                  expr_post ctx func cenv cx e es sa sb s0 es' v (Lit 0w) t') /\
              t'.vs_current_bb = sb.cs_current_bb /\
              t'.vs_inst_idx = LENGTH sb.cs_current_insts /\
              alloca_history func t' /\
@@ -334,7 +334,7 @@ Theorem send_args_summary_mem:
     (bind (eval_expr cx (Call NoneT (Send has_gas) args dflt)) (read_result cx))
     (es,s0)
     (\res ee t. ?v. res = INL v /\
-       expr_post H ctx func cenv cx (Call NoneT (Send has_gas) args dflt)
+       expr_post ctx func cenv cx (Call NoneT (Send has_gas) args dflt)
          es sa sb s0 ee v (Lit 0w) t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -385,7 +385,7 @@ Resume send_args_summary_mem[normal]:
   `?r. gas_marked_path T ctx func t 0 r /\
        ((?t'. r = OK t' /\
               (?w. res = INL w /\
-                   expr_post H ctx func cenv cx
+                   expr_post ctx func cenv cx
                      (Call NoneT (Send has_gas) (a::v::gs) dflt)
                      es sa sb s0 fin w (Lit 0w) t') /\
               t'.vs_current_bb = sb.cs_current_bb /\

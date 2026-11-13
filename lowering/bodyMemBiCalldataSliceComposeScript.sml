@@ -24,8 +24,8 @@ Theorem calldata_slice_continuation_summary_mem:
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
   ee.gas_obs = [] /\ value_has_type (BaseTV (UintT 256)) v /\
-  expr_post H ctx func cenv cx e es sa sm s0 ee v x s /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s /\
+  expr_post ctx func cenv cx e es sa sm s0 ee v x s /\
+  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s /\
   s0.vs_alloca_next <= s.vs_alloca_next /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -36,7 +36,7 @@ Theorem calldata_slice_continuation_summary_mem:
       (CalldataSlice n) [expr_type e] [v] of
         INL rv => INL (Value rv) | INR exc => INR exc),st)) (ee,s)
     (\res fin t. ?tv. res = INL tv /\
-      vv_post H ctx func cenv cx
+      vv_post ctx func cenv cx
         (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])
         es sa sb s0 fin tv vv t /\
       vv_store_bound cx (BaseT (BytesT (Dynamic n)))
@@ -62,7 +62,7 @@ Proof
     (drule expr_body_pre_builtin_arg >> disch_then irule >>
      gvs[expr_body_pre_def]) >>
   drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx ee s` by metis_tac[expr_post_state] >>
+  `stmt_state_rel ctx func cenv cx ee s` by metis_tac[expr_post_state] >>
   `eval_operand x s = SOME (n2w a)` by
     (drule expr_post_word_operand >>
      simp[evaluate_type_def, is_word_type_def, word_value_def, val_to_w256_def,
@@ -88,7 +88,7 @@ Proof
     ((?u. out = OK u /\
       (?rv. (case evaluate_calldata_slice cx.txn.calldata (IntV (&a)) n of
         INL v => INL v | INR err => INR (Error err)) = INL rv /\
-       vv_post H ctx func cenv cx
+       vv_post ctx func cenv cx
         (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])
         ee sm r s ee (Value rv)
         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr q LocMemory)) u /\
@@ -112,7 +112,7 @@ Proof
 QED
 
 Resume calldata_slice_continuation_summary_mem[success]:
-  `vv_post H ctx func cenv cx
+  `vv_post ctx func cenv cx
     (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])
     es sa r s0 ee (Value rv)
     (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr q LocMemory)) u` by

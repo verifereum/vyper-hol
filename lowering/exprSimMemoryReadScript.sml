@@ -10,12 +10,12 @@ Theorem unwrap_memory_marked_read:
   p.ptr_location = LocMemory /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\
   sa.cs_next_var <= sm.cs_next_var /\
-  vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
+  vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?v u. gas_marked_exec F (ctx,func) (read_result cx tv) (ee,s)
           [] (INL v) ee (OK u) /\
-    expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
+    expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -28,7 +28,7 @@ Proof
        (is_word_type (post_value_type cenv e) ==>
         mem_word_at (w2n w) s.vs_memory = typed_val_to_w256 tvt v))` by
     gvs[vv_post_def, vv_holds_def, is_bytestring_word_type] >>
-  `vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s` by
+  `vv_post ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s` by
     metis_tac[vv_post_read_result] >>
   `!u. gas_marked_path F ctx func s 0 (OK u) ==>
        gas_marked_exec F (ctx,func) (read_result cx tv) (ee,s) [] (INL v) ee (OK u)` by
@@ -55,7 +55,7 @@ Proof
       conj_tac
       >- (simp[Abbr `u`, stmt_state_rel_inst_idx] >>
           irule stmt_state_rel_update_var >>
-          `stmt_state_rel H ctx func cenv cx ee s` by fs[vv_post_def] >>
+          `stmt_state_rel ctx func cenv cx ee s` by fs[vv_post_def] >>
           simp[] >> irule local_ptrs_reserved_fresh >>
           qexists_tac `sm` >> simp[]) >>
       qexistsl_tac [`p`, `s`, `sm`, `post_value_type cenv e`] >> simp[]) >>

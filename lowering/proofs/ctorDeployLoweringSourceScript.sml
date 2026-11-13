@@ -4,7 +4,7 @@ Theory ctorDeployLoweringSource
 Ancestors
   ctorDeployLoweringDefs vyperState vyperInterpreter vyperScopePreservation
   supportedStmtTraverse supportedExprTraverse e2eDeployDefs
-  vyperTypeDeploymentSoundness evalNoHalt
+  vyperTypeDeploymentSoundness evalNoHalt vyperStorageTrace
 
 Theorem outcomes_replace_bind:
   (!s oc. f (s with outcomes := oc) =
@@ -56,6 +56,21 @@ Theorem outcomes_replace_raise[simp]:
     (FST (raise e s), SND (raise e s) with outcomes := oc)
 Proof
   simp[raise_def]
+QED
+
+Theorem outcomes_replace_record_storage[simp]:
+  record_storage_event ob (s with outcomes := oc) =
+    (FST (record_storage_event ob s),
+     SND (record_storage_event ob s) with outcomes := oc) /\
+  record_storage_backend (s with outcomes := oc) =
+    (FST (record_storage_backend s),
+     SND (record_storage_backend s) with outcomes := oc) /\
+  ignore_bind (record_storage_event ob) (return x) (s with outcomes := oc) =
+    (FST (ignore_bind (record_storage_event ob) (return x) s),
+     SND (ignore_bind (record_storage_event ob) (return x) s) with outcomes := oc)
+Proof
+  simp[record_storage_event_def, record_storage_backend_def, return_def,
+       ignore_bind_def, bind_def]
 QED
 
 Theorem outcomes_replace_finally:
@@ -441,7 +456,9 @@ Proof
       BasicProvers.TOP_CASE_TAC >> simp[return_def, raise_def]) >>
   rename1 `SOME decl` >> PairCases_on `decl` >> Cases_on `decl0` >> simp[] >>
   irule outcomes_replace_bind >> simp[outcomes_replace_lifts, return_def] >>
-  gen_tac >> irule outcomes_replace_bind >> simp[outcomes_replace_lifts, return_def]
+  gen_tac >> irule outcomes_replace_bind >> simp[outcomes_replace_lifts, return_def]>>
+  gen_tac >> rewrite_tac[ignore_bind_def] >>
+  irule outcomes_replace_bind >> simp[return_def]
 QED
 
 Theorem outcomes_replace_result_array_length:
@@ -649,9 +666,11 @@ Proof
   Cases_on `cx.nonreentrant_slot` >> simp[raise_def] >>
   simp[acquire_nonreentrant_lock_def, ignore_bind_def, bind_def,
     get_transient_storage_def, update_transient_def, return_def,
+    record_storage_event_def,
     raise_def, check_not_static_def, check_def, assert_def, COND_RATOR] >>
   rpt IF_CASES_TAC >>
-  simp[bind_def, return_def, raise_def, update_transient_def, assert_def] >>
+  simp[bind_def, return_def, raise_def, update_transient_def, assert_def,
+       record_storage_event_def] >>
   Cases_on `view` >> simp[]
 QED
 
@@ -741,12 +760,31 @@ Proof
   qpat_x_assum `supported_program _` kall_tac >>
   qpat_x_assum `constructor_call_free _` kall_tac >>
   qpat_x_assum `checked_deployment_constants_ready _ _ _ _` kall_tac >>
-  qpat_x_assum `deploy_storage_ok _ _ _` kall_tac >>
   drule_at (Pat `_ = (INR (ReturnException _),_)`)
     checked_constructor_prefix_return_typed >>
   disch_then drule >> simp[] >>
   disch_then (qspecl_then [`tx.args`, `[]`] mp_tac) >>
   gvs[Abbr `cx`, deploy_evaluation_context_def]
+QED
+
+(* A checked deployment's constructor is never nonreentrant. *)
+Theorem deploy_source_ctor_not_nr[local]:
+  !tops am tx fname mut nr args dflts ret body.
+    deploy_source_ok tops am tx /\
+    lookup_function NONE fname Deploy tops = SOME (mut,nr,args,dflts,ret,body) ==>
+    ~nr
+Proof
+  rpt strip_tac >>
+  drule vyperTypeContractStaticMapsTheory.lookup_function_Deploy_SOME_cases >>
+  strip_tac >> gvs[] >>
+  gvs[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
+  qspecl_then [`T`, `am.layouts`, `tx.target`, `[(NONE,tops)]`, `deploy_art`,
+      `NONE`, `tops`, `mut`, `T`, `raw`, `fname`, `args`, `dflts`, `ret`, `body'`]
+    mp_tac
+    (Q.GENL [`in_deploy`, `layouts`, `addr`, `mods`, `art`, `src`, `tls`, `mut`,
+        `nr`, `rr`, `name`, `args`, `dflts`, `ret`, `body`]
+      vyperTypeContractTheory.check_contract_deploy_nonreentrant) >>
+  simp[]
 QED
 
 Theorem deploy_ctor_source_run_none:
@@ -802,37 +840,66 @@ Proof
     ignore_bind (set_scopes [env])
       (ignore_bind (lock_if_nr cx nr (is_view_mut mut)) (eval_stmts cx bdy))` by
     simp[FUN_EQ_THM, bind_def, eval_external_defaults_nil] >>
-  simp[load_contract_def, call_external_function_def,
+  (* The constructor is never nonreentrant, so the lock and unlock are
+     returns. *)
+  `~nr` by metis_tac[deploy_source_ctor_not_nr] >>
+  (* The trace semantics seeds the run's storage_trace with the constant
+     evaluation's observations; the body carries it along. *)
+  qpat_x_assum `evaluate_all_constants _ _ _ _ = _` mp_tac >>
+  simp_tac std_ss [evaluate_all_constants_def, evaluate_module_constants_def] >>
+  qmatch_goalsub_abbrev_tac `FST ctrace = SOME am_c` >>
+  Cases_on `ctrace` >> simp_tac std_ss [] >>
+  disch_then SUBST_ALL_TAC >>
+  qpat_x_assum `Abbrev _`
+    (assume_tac o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  rename1 `_ = (SOME am_c, obs)` >>
+  `storage_trace_frame (ignore_bind (send_call_value mut cx)
+     (ignore_bind (set_scopes [env])
+       (ignore_bind (lock_if_nr cx nr (is_view_mut mut)) (eval_stmts cx bdy))))` by
+    (irule storage_trace_frame_ignore_bind >>
+     conj_tac >- MATCH_ACCEPT_TAC send_call_value_storage_trace_frame >>
+     irule storage_trace_frame_ignore_bind >>
+     conj_tac >- MATCH_ACCEPT_TAC (cj 6 storage_trace_frame_state_updates) >>
+     irule storage_trace_frame_ignore_bind >>
+     conj_tac >- MATCH_ACCEPT_TAC (cj 1 storage_trace_frame_optional_locks) >>
+     MATCH_ACCEPT_TAC (cj 2 evaluate_storage_trace_frame)) >>
+  `ignore_bind (send_call_value mut cx)
+     (ignore_bind (set_scopes [env])
+       (ignore_bind (lock_if_nr cx nr (is_view_mut mut)) (eval_stmts cx bdy)))
+     (initial_state am_c [FEMPTY] with
+       <|outcomes := NONE; requests := []; gas_obs := gobs;
+         storage_trace := obs|>) =
+   (res, st with storage_trace := obs ++ st.storage_trace)` by
+    (drule_all storage_trace_frame_result >>
+     disch_then (qspec_then `obs` mp_tac) >>
+     simp[initial_state_def]) >>
+  `bind (eval_external_defaults cx [])
+      (\dflt_vs. case bind_arguments (type_env_all_modules [(NONE,tops)]) args
+          (tx.args ++ dflt_vs) of
+        NONE => raise (Error (RuntimeError "call bind_arguments"))
+      | SOME env => ignore_bind (set_scopes [env])
+          (ignore_bind (return ()) (eval_stmts cx bdy))) =
+    ignore_bind (set_scopes [env])
+      (ignore_bind (return ()) (eval_stmts cx bdy))` by
+    simp[FUN_EQ_THM, bind_def] >>
+  qpat_x_assum `_ (initial_state _ _ with
+       <|outcomes := NONE; requests := []; gas_obs := gobs;
+         storage_trace := obs|>) = _` mp_tac >>
+  simp[load_contract_def, load_contract_trace_def,
+    call_external_function_trace_def,
+    abstract_machine_from_state_storage_trace,
+    lock_if_nr_def, unlock_if_nr_def, return_def,
     GSYM deploy_evaluation_context_def,
-    eval_external_defaults_nil,
-    Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
-  qpat_x_assum `deploy_source_ok _ _ _` kall_tac >>
-  qpat_x_assum `lookup_function _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `LENGTH _ = _` kall_tac >>
-  qpat_x_assum `bind_arguments _ _ _ = _` kall_tac >>
-  qpat_x_assum `initial_immutables _ _ = _` kall_tac >>
-  qpat_x_assum `evaluate_all_constants _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `eval_stmts _ _ _ = _` kall_tac >>
-  rpt (qpat_x_assum `ignore_bind _ _ _ = _` kall_tac) >>
-  qpat_x_assum `bind _ _ = _` kall_tac >>
+    eval_external_defaults_nil] >>
+  strip_tac >>
   Cases_on `res`
   >- (Cases_on `x` >>
-      simp[deploy_ctor_finish_def, Abbr `cx`, unlock_if_nr_def] >>
-      qmatch_goalsub_abbrev_tac `action st` >>
-      namedCases_on `action st` ["rr ss"] >> Cases_on `rr` >> simp[] >>
-      qpat_x_assum `action st = _` mp_tac >> simp[Abbr `action`] >>
-      Cases_on `(deploy_evaluation_context tops am tx).nonreentrant_slot` >>
-      rw[return_def, release_nonreentrant_lock_def, bind_def,
-         get_transient_storage_def, update_transient_def]) >>
+      simp[deploy_ctor_finish_def, unlock_if_nr_def, return_def,
+           abstract_machine_from_state_storage_trace]) >>
   rename1 `INR ex` >> Cases_on `ex` >>
-  gvs[deploy_ctor_finish_def, Abbr `cx`, unlock_if_nr_def] >>
-  simp[vyperValueOperationTheory.safe_cast_def] >>
-  qmatch_goalsub_abbrev_tac `action st` >>
-  namedCases_on `action st` ["rr ss"] >> Cases_on `rr` >> simp[] >>
-  qpat_x_assum `action st = _` mp_tac >> simp[Abbr `action`] >>
-  Cases_on `(deploy_evaluation_context tops am tx).nonreentrant_slot` >>
-  rw[return_def, release_nonreentrant_lock_def, bind_def,
-     get_transient_storage_def, update_transient_def]
+  gvs[deploy_ctor_finish_def, unlock_if_nr_def, return_def,
+      abstract_machine_from_state_storage_trace,
+      vyperValueOperationTheory.safe_cast_def]
 QED
 
 Theorem deploy_ctor_finish_outcomes:
@@ -842,10 +909,13 @@ Proof
   Cases_on `nr` >> Cases_on `cx.nonreentrant_slot` >>
   simp[deploy_ctor_finish_def, unlock_if_nr_def,
     release_nonreentrant_lock_def, update_transient_def,
-    return_def, raise_def, abstract_machine_from_state_def] >>
+    ignore_bind_def, bind_def, record_storage_event_def,
+    return_def, raise_def, abstract_machine_from_state_def,
+    Excl "outcomes_replace_record_storage"] >>
   Cases_on `mut` >>
   simp[bind_def, get_transient_storage_def, update_transient_def,
-    return_def, abstract_machine_from_state_def]
+    record_storage_event_def, return_def, abstract_machine_from_state_def,
+    Excl "outcomes_replace_record_storage"]
 QED
 
 Theorem outcomes_replace_evaluate_call_free:
@@ -916,7 +986,33 @@ Proof
           Cases_on `bt = Env MsgGas`
           >- gvs[outcomes_replace_next_gas_reading] >>
           gvs[] >> match_mp_tac outcomes_replace_bind >> conj_tac
-          >- metis_tac[] >>
+          >- (Cases_on `code_slice_source bt es` >> simp[]
+              >- metis_tac[] >>
+              rename1 `code_slice_source bt es = SOME csa` >> PairCases_on `csa` >>
+              `~supported_exprs_exists constructor_call_root (TL es) /\
+               ~supported_expr_exists constructor_call_root csa1` by
+                (qpat_x_assum `~supported_exprs_exists _ es` mp_tac >>
+                 qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+                 rpt (pop_assum kall_tac) >>
+                 rw[code_slice_source_SOME] >>
+                 gvs[supported_expr_exists_def, constructor_call_root_def]) >>
+              `!s oc. eval_exprs cx (TL es) (s with outcomes := oc) =
+                 (FST (eval_exprs cx (TL es) s),
+                  SND (eval_exprs cx (TL es) s) with outcomes := oc)` by metis_tac[] >>
+              `!s0 v t. eval_exprs cx (TL es) s0 = (INL v,t) ==>
+                 !s oc. eval_exprs cx [csa1] (s with outcomes := oc) =
+                   (FST (eval_exprs cx [csa1] s),
+                    SND (eval_exprs cx [csa1] s) with outcomes := oc)` by metis_tac[] >>
+              map_every qid_spec_tac [`oc`, `s`] >> simp_tac (srw_ss()) [] >>
+              irule outcomes_replace_bind_guarded >> conj_tac >> simp[] >>
+              rpt strip_tac >>
+              qpat_x_assum `!s0 v t. eval_exprs cx (TL es) s0 = _ ==> _` drule >>
+              strip_tac >>
+              irule outcomes_replace_bind >> simp[] >> rpt gen_tac >>
+              irule outcomes_replace_bind >> simp[outcomes_replace_basic] >>
+              rpt gen_tac >>
+              irule outcomes_replace_bind >>
+              simp[outcomes_replace_lifts, outcomes_replace_basic, return_def]) >>
           simp[outcomes_replace_bind, outcomes_replace_ignore_bind,
                outcomes_replace_basic, outcomes_replace_lifts,
                outcomes_replace_precompile_call_success, return_def]) >>
@@ -1003,4 +1099,152 @@ Proof
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>
   gvs[deploy_ctor_finish_outcomes]
+QED
+
+(* ===== The call-free bridge: load_contract_trace ignores its outcome oracle
+   when the constructor makes no external calls ===== *)
+
+Theorem send_call_value_outcomes[local]:
+  send_call_value mut cx (s with outcomes := oc) =
+  (FST (send_call_value mut cx s),
+   SND (send_call_value mut cx s) with outcomes := oc)
+Proof
+  Cases_on `cx.txn.value = 0` >>
+  simp[send_call_value_def, transfer_value_def, COND_RATOR,
+    ignore_bind_def, bind_def, check_def, assert_def, get_accounts_def,
+    update_accounts_def, return_def, raise_def] >>
+  Cases_on `mut = Payable` >>
+  simp[bind_def, assert_def, get_accounts_def, update_accounts_def,
+    return_def, raise_def, COND_RATOR] >>
+  Cases_on `cx.txn.sender = cx.txn.target` >>
+  simp[bind_def, assert_def, get_accounts_def, update_accounts_def,
+    return_def, raise_def, COND_RATOR] >>
+  rpt IF_CASES_TAC >> simp[bind_def, return_def, raise_def, update_accounts_def]
+QED
+
+(* The setup-and-body block of call_external_function_trace for a
+   constructor without lock, defaults or external calls. *)
+Theorem ctor_call_block_outcomes[local]:
+  ~supported_stmts_expr_exists constructor_call_root body ==>
+  !s oc.
+    ignore_bind (send_call_value mut cx)
+      (bind (eval_external_defaults cx (DROP n []))
+         (\dflt_vs.
+            case bind_arguments tenv args (vals ++ dflt_vs) of
+              NONE => raise (Error (RuntimeError "call bind_arguments"))
+            | SOME env =>
+                ignore_bind (set_scopes [env])
+                  (ignore_bind (lock_if_nr cx F iv) (eval_stmts cx body))))
+      (s with outcomes := oc) =
+    (FST (ignore_bind (send_call_value mut cx)
+      (bind (eval_external_defaults cx (DROP n []))
+         (\dflt_vs.
+            case bind_arguments tenv args (vals ++ dflt_vs) of
+              NONE => raise (Error (RuntimeError "call bind_arguments"))
+            | SOME env =>
+                ignore_bind (set_scopes [env])
+                  (ignore_bind (lock_if_nr cx F iv) (eval_stmts cx body)))) s),
+     SND (ignore_bind (send_call_value mut cx)
+      (bind (eval_external_defaults cx (DROP n []))
+         (\dflt_vs.
+            case bind_arguments tenv args (vals ++ dflt_vs) of
+              NONE => raise (Error (RuntimeError "call bind_arguments"))
+            | SOME env =>
+                ignore_bind (set_scopes [env])
+                  (ignore_bind (lock_if_nr cx F iv) (eval_stmts cx body)))) s)
+       with outcomes := oc)
+Proof
+  strip_tac >>
+  drule (cj 2 outcomes_replace_evaluate_call_free) >>
+  disch_then (qspec_then `cx` assume_tac) >>
+  `DROP n ([] : expr list) = []` by simp[] >> pop_assum SUBST1_TAC >>
+  irule outcomes_replace_ignore_bind >> conj_tac
+  >- simp[send_call_value_outcomes] >>
+  irule outcomes_replace_bind >> conj_tac
+  >- simp[eval_external_defaults_nil] >>
+  rpt gen_tac >> BETA_TAC >>
+  Cases_on `bind_arguments tenv args (vals ++ v)` >> simp_tac std_ss []
+  >- simp[raise_def] >>
+  map_every qid_spec_tac [`oc`, `s`] >>
+  irule outcomes_replace_ignore_bind >> conj_tac
+  >- simp[outcomes_replace_basic] >>
+  irule outcomes_replace_ignore_bind >> conj_tac
+  >- simp[lock_if_nr_def, return_def] >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem call_external_function_trace_call_free[local]:
+  !orc gobs am cx mut ts mods args vals body ret.
+    ~supported_stmts_expr_exists constructor_call_root body ==>
+    call_external_function_trace orc gobs am cx F mut ts mods args [] vals body ret =
+    call_external_function_trace NONE gobs am cx F mut ts mods args [] vals body ret
+Proof
+  rpt strip_tac >>
+  drule ctor_call_block_outcomes >> strip_tac >>
+  `!am_c ct. initial_state am_c [FEMPTY] with
+       <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := ct|> =
+     (initial_state am_c [FEMPTY] with
+       <|outcomes := NONE; requests := []; gas_obs := gobs; storage_trace := ct|>)
+       with outcomes := orc` by simp[evaluation_state_component_equality] >>
+  rewrite_tac[call_external_function_trace_def] >>
+  simp_tac bool_ss [LET_THM] >>
+  pop_assum (fn th => once_rewrite_tac[th]) >>
+  pop_assum (fn th => rewrite_tac[th]) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  every_case_tac >>
+  gvs[unlock_if_nr_def, return_def, abstract_machine_from_state_def]
+QED
+
+(* TOP-LEVEL bridge: a checked, call-free constructor's run, its result and
+   its storage observations, is the same at every callee-outcome oracle. *)
+Theorem load_contract_trace_call_free:
+  !tops am tx orc gobs.
+    deploy_source_ok tops am tx /\ tx.function_name = "__init__" ==>
+    load_contract_trace orc gobs am tx [(NONE,tops)] [] =
+    load_contract_trace NONE gobs am tx [(NONE,tops)] []
+Proof
+  rpt strip_tac >>
+  `!fname mut nr args dflts ret body.
+     lookup_function NONE fname Deploy tops =
+       SOME (mut,nr,args,dflts,ret,body) ==> ~nr` by
+    metis_tac[deploy_source_ctor_not_nr] >>
+  gvs[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_constants_ready,
+      constructor_call_free_def] >>
+  `ALOOKUP [(NONE,tops)] NONE = SOME tops /\
+   MEM (NONE,tops) [(NONE,tops)]` by simp[] >>
+  simp[load_contract_trace_def] >>
+  Cases_on `initial_immutables (type_env_all_modules [(NONE,tops)])
+              [(NONE,tops)]` >> simp[] >>
+  Cases_on `lookup_function NONE "__init__" Deploy tops` >> simp[] >>
+  rename1 `_ = SOME fn` >> PairCases_on `fn` >>
+  `fn3 = []` by
+    metis_tac[vyperTypeDeploymentMachineTheory.check_contract_constructor_no_defaults] >>
+  `fn1 = F` by (`~fn1` by metis_tac[] >> simp[]) >>
+  `~supported_stmts_expr_exists constructor_call_root fn5` by metis_tac[] >>
+  gvs[] >>
+  drule call_external_function_trace_call_free >>
+  disch_then (qspec_then `orc` (fn th => once_rewrite_tac[th])) >>
+  simp[]
+QED
+
+Theorem load_contract_call_free:
+  !tops am tx orc gobs.
+    deploy_source_ok tops am tx /\ tx.function_name = "__init__" ==>
+    load_contract orc gobs am tx [(NONE,tops)] [] =
+    load_contract NONE gobs am tx [(NONE,tops)] []
+Proof
+  rpt strip_tac >> rewrite_tac[load_contract_def] >>
+  drule_all load_contract_trace_call_free >>
+  disch_then (qspecl_then [`orc`, `gobs`] SUBST1_TAC) >> rewrite_tac[]
+QED
+
+Theorem deploy_storage_trace_call_free:
+  !tops am tx orc gobs.
+    deploy_source_ok tops am tx /\ tx.function_name = "__init__" ==>
+    deploy_storage_trace orc gobs am tx tops =
+    deploy_storage_trace NONE gobs am tx tops
+Proof
+  rpt strip_tac >> rewrite_tac[deploy_storage_trace_def] >>
+  drule_all load_contract_trace_call_free >>
+  disch_then (qspecl_then [`orc`, `gobs`] SUBST1_TAC) >> rewrite_tac[]
 QED

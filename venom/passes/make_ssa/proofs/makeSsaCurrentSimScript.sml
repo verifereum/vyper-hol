@@ -626,3 +626,19 @@ Resume make_ssa_current_fn_fn_bisim[assemble]:
   qexistsl [`s`, `s'`] >> simp[]
 QED
 Finalise make_ssa_current_fn_fn_bisim
+
+
+(* The forward half at the input's fuel: the output finishes on the fuel
+   the input took. *)
+Theorem make_ssa_current_fn_fn_bisim_fuel:
+  make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
+  first_block_no_preds fn /\ first_block_no_phi fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  make_ssa_current_fn s fn = (fn',s') ==>
+  fn_bisim_fuel I fn fn'
+Proof
+  strip_tac >> drule_all make_ssa_current_fn_fn_bisim >>
+  simp[fn_bisim_def, fn_bisim_fuel_def] >> rpt strip_tac >>
+  irule current_entry_run_forward >> simp[] >>
+  qexistsl [`s`, `s'`] >> simp[]
+QED

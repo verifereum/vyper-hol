@@ -116,11 +116,13 @@ Proof
    (drule ctor_bound_package_no_ptr >> simp[]) >>
  drule_all ctor_task_actual_encoded_inputs >> strip_tac >>
  drule ctor_task_checked_namespaces >> strip_tac >> gvs[] >>
- drule_all (SRULE [] (Q.INST [
-   `ce0` |-> `ce_pack with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)`,
-   `immo` |-> `(if imm_len tops > 0 then SOME imm else NONE)`]
-   (Q.INST [`imm` |-> `immo`] ctor_task_registration_metadata))) >>
- disch_then (qspec_then `imm` strip_assume_tac) >> gvs[] >>
+ drule_all (ctor_task_registration_metadata
+   |> Q.INST [`imm` |-> `immo`]
+   |> Q.INST [`nkey_map` |-> `K global_nonreentrant_slot`]
+   |> Q.INST [`ce0` |-> `ce_pack with ce_imm_alloca := immo`]
+   |> SRULE [combinTheory.K_THM]) >>
+ disch_then (qspec_then `if imm_len tops > 0 then SOME imm else NONE`
+   strip_assume_tac) >> gvs[] >>
  `has_types (vyper_to_abi_types (type_env tops) (MAP SND fargs)) avs` by
    (simp[contractABITheory.has_types_LIST_REL, abiDecoderMembersTheory.vyper_to_abi_types_MAP,
       LIST_REL_EL_EQN] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>

@@ -102,7 +102,7 @@ Proof
   simp[gas_marked_exec_def] >>
   `t'.vs_current_bb = sb.cs_current_bb` by
     (drule_all run_inst_seq_preserves_entry_control >> fs[same_blocks_def]) >>
-  `vv_post H ctx func cenv cx
+  `vv_post ctx func cenv cx
     (Builtin (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))) MethodId [e])
     es sa sb s0 (mid with gas_obs := []) (Value r)
     (if fixed then StackValue (BaseT (BytesT (Fixed 4))) op else

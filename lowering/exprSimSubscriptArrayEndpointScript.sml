@@ -6,13 +6,13 @@ Ancestors
   loweringPosts compileEnv freshWrites finite_map
 
 Theorem word_expr_post_readonly_tail:
-  expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
+  expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
   is_word_type (expr_type e) /\ sa.cs_next_var <= sb.cs_next_var /\
   (!x. op = Var x ==> not_fresh_at sb x) /\ (!l. op <> Label l) /\
   (!x w. not_fresh_at sb x /\ lookup_var x s = SOME w ==> lookup_var x t = SOME w) /\
   (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
-  t.vs_memory = s.vs_memory /\ stmt_state_rel H ctx func cenv cx es' t ==>
-  expr_post H ctx func cenv cx e es sa sc s0 es' v op t
+  t.vs_memory = s.vs_memory /\ stmt_state_rel ctx func cenv cx es' t ==>
+  expr_post ctx func cenv cx e es sa sc s0 es' v op t
 Proof
   strip_tac >>
   `wb_frame cenv es es' sa s0 s` by metis_tac[expr_post_frame] >>
@@ -30,8 +30,8 @@ Proof
 QED
 
 Theorem framed_array_base_endpoint:
-  vv_post H ctx func cenv cx obj es sa sb s0 t r (LocatedValue (ArrayT et bd) p) u /\
-  expr_post H ctx func cenv cx idx t sb sc u t' iv iop v /\
+  vv_post ctx func cenv cx obj es sa sb s0 t r (LocatedValue (ArrayT et bd) p) u /\
+  expr_post ctx func cenv cx idx t sb sc u t' iv iop v /\
   expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
   is_word_type (expr_type idx) /\
   ((~cenv.ce_is_ctor /\ p.ptr_location = LocCode) \/
@@ -44,24 +44,24 @@ Theorem framed_array_base_endpoint:
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
   t'.scopes = t.scopes /\ t'.immutables = t.immutables /\
   expr_sim_inv cenv cx env t /\
-  stmt_state_rel H ctx func cenv cx es s0 /\
+  stmt_state_rel ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sb /\
   MAP FDOM es.scopes = MAP FDOM t.scopes /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   sb.cs_next_var <= sc.cs_next_var /\ sb.cs_next_id <= sd.cs_next_id /\
   (!x w. not_fresh_at sc x /\ lookup_var x v = SOME w ==> lookup_var x q = SOME w) /\
   (!aid a. FLOOKUP v.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
-  q.vs_memory = v.vs_memory /\ stmt_state_rel H ctx func cenv cx t' q ==>
-  vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 t' r
+  q.vs_memory = v.vs_memory /\ stmt_state_rel ctx func cenv cx t' q ==>
+  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 t' r
     (LocatedValue (ArrayT et bd) p) q
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `expr_post H ctx func cenv cx idx t sb sd u t' iv iop q` by
+  `expr_post ctx func cenv cx idx t sb sd u t' iv iop q` by
     (irule word_expr_post_readonly_tail >> simp[] >>
      qexistsl_tac [`v`,`sc`] >> simp[]) >>
   drule_all_then strip_assume_tac framed_array_base_transport >>
   `wb_frame cenv es t sa s0 u` by
-    (qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_tac o REWRITE_RULE [vv_post_def]) >>
      disch_then (map_every assume_tac o CONJUNCTS) >>
      simp[wb_frame_def] >> first_assum ACCEPT_TAC) >>
@@ -71,7 +71,7 @@ Proof
   `~expr_has_effect obj /\ ~expr_has_effect idx ==> pure_frame cenv func es sa s0 q` by
     (strip_tac >>
      `pure_frame cenv func es sa s0 u` by
-       (qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+       (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
         simp[vv_post_def]) >>
      `pure_frame cenv func t sb u q` by
        (match_mp_tac expr_post_pure_frame >>

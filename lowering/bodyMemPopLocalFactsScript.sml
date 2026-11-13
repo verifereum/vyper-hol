@@ -24,9 +24,9 @@ Proof
 QED
 
 Theorem pop_local_vv_post_mem:
-  vv_post H ctx func cenv cx (Pop ann (NameTarget id)) es sa sb s0
+  vv_post ctx func cenv cx (Pop ann (NameTarget id)) es sa sb s0
     es' tv (LocatedValue ann (mk_ptr op LocMemory)) t /\
-  stmt_state_rel H ctx func cenv cx es s0 /\
+  stmt_state_rel ctx func cenv cx es s0 /\
   evaluate_type (get_tenv cx) ann = SOME etv /\
   eval_operand op t =
     SOME (w + 32w + (n2w len - 1w) * n2w (type_memory_size etv)) /\

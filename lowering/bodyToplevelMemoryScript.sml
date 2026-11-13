@@ -48,7 +48,7 @@ Proof
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
     gvs[stmt_state_rel_def, state_rel_def] >>
   fs[] >> drule_all toplevel_storage_ce_vars >> strip_tac >>
-  `!st. storage_read_live H tr st (n2w slot) tvt` by
+  `!st. storage_read_live cx tr st (n2w slot) tvt` by
     (gen_tac >> irule declared_storage_region_read_live >>
      qexistsl [`src`, `id`, `[]`] >> simp[declared_storage_region_def]) >>
   `compile_expr cenv ty (TopLevelName ann (src,id)) sa =

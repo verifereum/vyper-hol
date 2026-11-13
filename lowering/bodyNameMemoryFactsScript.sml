@@ -13,7 +13,7 @@ Ancestors
 
 Theorem body_word_name_region:
   expr_sim_pre ce cx env (Name ann id) es /\ word_value_type ann /\
-  stmt_state_rel H ctx func ce cx es s ==>
+  stmt_state_rel ctx func ce cx es s ==>
   ?entry p sz w.
     lookup_scopes id es.scopes = SOME entry /\
     FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -40,7 +40,7 @@ QED
 
 Theorem body_word_name_MLOAD_frontier:
   expr_sim_pre ce cx env (Name ann id) es /\ word_value_type ann /\
-  stmt_state_rel H ctx func ce cx es s /\
+  stmt_state_rel ctx func ce cx es s /\
   FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) ==>
   inst_mem_below_frontier (mk_inst iid MLOAD [Var p] outs) s
 Proof
@@ -51,7 +51,7 @@ QED
 
 Theorem body_name_source_region:
   expr_sim_pre ce cx env (Name ann id) es /\
-  stmt_state_rel H ctx func ce cx es s ==>
+  stmt_state_rel ctx func ce cx es s ==>
   ?entry p sz w.
     lookup_scopes id es.scopes = SOME entry /\
     evaluate_type (get_tenv cx) ann = SOME entry.type /\

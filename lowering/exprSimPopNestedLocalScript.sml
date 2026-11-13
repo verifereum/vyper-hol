@@ -5,7 +5,7 @@
 
 Theory exprSimPopNestedLocal
 Ancestors
-  exprSimPopNestedBase exprSimPopNestedLocalPopped
+  exprSimPopNestedBase targetLocalLive popTargetPre
   exprSimPopNestedLocalPost exprSimPopNestedLocalRun exprSimCalldataSlice
   exprSimPopNestedLocalSuffix vyperEvalExprPreservesScopesDom
   exprSimPopNestedLocalSource exprSimPopNestedLocalHandoff gasOutcome gasSummary gasSummaryCompose gasExemptCert
@@ -20,8 +20,8 @@ Ancestors
   vyperPlaceFrames vyperStatePreservation vyperLookup
 
 (* Pop on an array inside a memory local, the local itself included
-   (x.pop(), x.a.pop(), x[i].pop()), when every evaluation of the target
-   leaves its place live in the local's value or unreadable.  The run is
+   (x.pop(), x.a.pop(), x[i].pop()).  The target's evaluation ends on a
+   place live in the local's value (local_target_live).  The run is
    compile_pop_name_sim's at the target's pointer: the pop stores the
    array's new length word inside the local's region, which locals_kept
    exempts (dynarray_len_at), and the result is the element's pointer,
@@ -79,18 +79,26 @@ Resume pop_nested_local_sim[summary]:
 QED
 
 Resume pop_nested_local_sim[normal]:
-  Cases_on `?path entry err v. p = MemoryPlace id path /\
-              lookup_scopes id tend.scopes = SOME entry /\
-              evaluate_subscripts entry.type entry.value path = INR err /\
-              read_popped entry.type path entry.popped = SOME v`
-  >- (pop_assum strip_assume_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-      drule_all pop_nested_local_popped_case >> disch_then ACCEPT_TAC) >>
   `!path entry err. p = MemoryPlace id path /\
      lookup_scopes id tend.scopes = SOME entry /\
      evaluate_subscripts entry.type entry.value path = INR err ==>
      read_popped entry.type path entry.popped = NONE` by
-    (rpt strip_tac >> Cases_on `read_popped entry.type path entry.popped` >>
-     fs[] >> metis_tac[]) >>
+    (rpt strip_tac >> gvs[] >>
+     `target_pre cenv cx env bt
+        (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
+       (irule target_pre_of_pop >>
+        simp[immutable_root_def, exprSimSourceTheory.expr_body_pre_gas_obs] >>
+        metis_tac[]) >>
+     `eval_target_place cx bt
+        (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+        (INL (MemoryPlace id path),tend with gas_obs := [])` by
+       (qpat_x_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
+          mp_tac >>
+        rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+        first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+     `lookup_scopes id (tend with gas_obs := []).scopes = SOME entry` by
+       simp[] >>
+     drule_all local_target_live >> strip_tac >> gvs[]) >>
   `place_readable cx (tend with gas_obs := []) (PlaceR p)` by
     fs[target_post_def] >>
   drule_all pop_counted_source_handoff >> strip_tac >> gvs[] >>
@@ -127,7 +135,7 @@ Resume pop_nested_local_sim[normal]:
   qpat_x_assum `target_root _ = _` kall_tac >>
   qpat_x_assum `type_place_target _ _ = _` kall_tac >>
   qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `target_post H _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `place_readable _ _ _` kall_tac >>
   qpat_x_assum `gas_admissible (eval_target_place _ _) _ _` kall_tac >>
   drule memory_pop_shape >> strip_tac >>

@@ -32,8 +32,8 @@ Ancestors
   venomExecSemantics venomInst venomState
 
 Theorem stmt_state_rel_declare_memory:
-  !H func cenv cx es s t id p sz w inst v tyv sc rest a ctx.
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  !func cenv cx es s t id p sz w inst v tyv sc rest a ctx.
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -49,6 +49,7 @@ Theorem stmt_state_rel_declare_memory:
     t.vs_immutables = s.vs_immutables /\
     t.vs_pending_deletions = s.vs_pending_deletions /\
     t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels /\
+    t.vs_code = s.vs_code /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
     (!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
          lookup_var q t = lookup_var q s) /\
@@ -56,7 +57,7 @@ Theorem stmt_state_rel_declare_memory:
          mem_bytes_at b sz' s.vs_memory = mem_bytes_at b sz' t.vs_memory) /\
     type_memory_size tyv <= sz /\ val_wf tyv v /\
     memory_value_rel tyv v (w2n w) t.vs_memory ==>
-    stmt_state_rel H ctx func cenv cx
+    stmt_state_rel ctx func cenv cx
       (es with scopes :=
          (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest) t
 Proof
@@ -92,7 +93,7 @@ Proof
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac >- first_assum ACCEPT_TAC >>
      rpt strip_tac >> gvs[]) >>
-  `state_rel H func cenv cx (es with scopes := scs') t` by
+  `state_rel func cenv cx (es with scopes := scs') t` by
     (irule state_rel_frame >> conj_tac >- simp[] >>
      qexists_tac `es` >> qexists_tac `s` >>
      simp[vyperStateTheory.evaluation_state_component_equality] >>
@@ -128,8 +129,8 @@ QED
    the stored word (the zero length word of an empty bytestring or dynamic
    array), as long as it fits the region. *)
 Theorem stmt_state_rel_declare_store:
-  !H func cenv cx es s id p sz w inst v tyv sc rest a x ctx.
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  !func cenv cx es s id p sz w inst v tyv sc rest a x ctx.
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -139,7 +140,7 @@ Theorem stmt_state_rel_declare_store:
     32 <= sz /\ type_memory_size tyv <= sz /\
     memory_value_rel tyv v (w2n w) (mstore (w2n w) x s).vs_memory /\
     val_wf tyv v ==>
-    stmt_state_rel H ctx func cenv cx
+    stmt_state_rel ctx func cenv cx
       (es with scopes :=
          (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
       (mstore (w2n w) x s)

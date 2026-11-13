@@ -20,7 +20,7 @@ Ancestors
 Theorem buffer_alloc_counted:
   compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  sz < dimword (:256) /\ stmt_state_rel H ctx func ce cx es s0 /\
+  sz < dimword (:256) /\ stmt_state_rel ctx func ce cx es s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?inst x t b. buf.buf_operand = Var x /\ MEM inst (fn_insts func) /\
@@ -30,7 +30,7 @@ Theorem buffer_alloc_counted:
     gas_marked_path F ctx func s0 0 (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    stmt_state_rel H ctx func ce cx es t /\
+    stmt_state_rel ctx func ce cx es t /\
     lookup_var x t = SOME (n2w b) /\
     FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\
     b + sz < dimword (:256) /\ t.vs_memory = s0.vs_memory /\

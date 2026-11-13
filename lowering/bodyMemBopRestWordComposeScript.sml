@@ -13,7 +13,7 @@ Theorem rest_word_mixed_outcome_mem:
   fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
   sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
+  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   gas_admissible (bind (eval_expr cx (Builtin ann (Bop bop) [e1;e2])) (read_result cx))
     expr_res_ok es /\
@@ -21,7 +21,7 @@ Theorem rest_word_mixed_outcome_mem:
   (!left v1 mid t.
     gas_marked_exec T (ctx,func) (bind (eval_expr cx e1) (read_result cx))
       (es,s0) left (INL v1) mid (OK t) /\
-    expr_post H ctx func cenv cx e1 es sa s1 s0 (mid with gas_obs := []) v1 x t /\
+    expr_post ctx func cenv cx e1 es sa s1 s0 (mid with gas_obs := []) v1 x t /\
     expr_store_bound cx (expr_type e1) v1 x t /\
     t.vs_current_bb = s1.cs_current_bb /\ t.vs_inst_idx = LENGTH s1.cs_current_insts /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next ==>
@@ -31,7 +31,7 @@ Theorem rest_word_mixed_outcome_mem:
     !right tv fin u.
       gas_marked_exec T (ctx,func) (eval_expr cx e2)
         (mid with gas_obs := [],t) right (INL tv) fin (OK u) /\
-      vv_post H ctx func cenv cx e2 (mid with gas_obs := []) s1 sm t
+      vv_post ctx func cenv cx e2 (mid with gas_obs := []) s1 sm t
         (fin with gas_obs := []) tv vv u /\
       vv_store_bound cx (expr_type e2) (lowered_value_type cenv e2)
         (fin with gas_obs := []) tv vv u /\
@@ -43,7 +43,7 @@ Theorem rest_word_mixed_outcome_mem:
         gas_marked_exec T (ctx,func)
           (\ee. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 ee,ee))
           (fin with gas_obs := [],u) suffix (INL v) last (OK q) /\
-        vv_post H ctx func cenv cx e2 (mid with gas_obs := []) s1 sm t
+        vv_post ctx func cenv cx e2 (mid with gas_obs := []) s1 sm t
           (last with gas_obs := []) tv vv q /\
         expr_val_rel cx ann v out q /\
         expr_val_at cenv cx ann sa ct (last with gas_obs := []) v out q /\
@@ -52,7 +52,7 @@ Theorem rest_word_mixed_outcome_mem:
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (eval_expr cx (Builtin ann (Bop bop) [e1;e2])) (read_result cx)) (es,s0)
     (\res ee q. ?v. res = INL v /\
-      expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
+      expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
         es sa ct s0 ee v out q /\
       q.vs_current_bb = ct.cs_current_bb /\ q.vs_inst_idx = LENGTH ct.cs_current_insts /\
       alloca_history func q /\ s0.vs_alloca_next <= q.vs_alloca_next)
@@ -90,9 +90,9 @@ QED
 
 Resume rest_word_mixed_outcome_mem[left_normal]:
   qpat_x_assum `(\res ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
-  gnvs[] >> rename1 `expr_post _ _ _ _ _ e1 _ _ _ _ _ v1 _ t` >>
+  gnvs[] >> rename1 `expr_post _ _ _ _ e1 _ _ _ _ _ v1 _ t` >>
   qpat_x_assum `!left v1 mid t. _` drule_all >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
+  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
     fs[loweringPostsTheory.expr_post_def] >>
   `~t.vs_halted` by
     metis_tac[gasSummaryTheory.gas_marked_exec_def,
@@ -133,11 +133,11 @@ Resume rest_word_mixed_outcome_mem[right_normal]:
   qpat_x_assum `(\res ee t'. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
   gnvs[] >>
   qpat_x_assum `!right tv fin u. _` drule_all >> strip_tac >>
-  `expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
+  `expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
      es sa ct s0 (last with gas_obs := []) v out q` by
     (irule rest_word_mixed_post >>
-     qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _` (irule_at Any) >>
-     qpat_assum `vv_post _ _ _ _ _ e2 _ _ _ _ _ _ _ q` (irule_at Any) >> simp[]) >>
+     qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `vv_post _ _ _ _ e2 _ _ _ _ _ _ _ q` (irule_at Any) >> simp[]) >>
   `s0.vs_alloca_next <= q.vs_alloca_next` by decide_tac >>
   qexists `marks ++ marks' ++ suffix` >> disj1_tac >>
   irule rest_word_mixed_tail_summary >>

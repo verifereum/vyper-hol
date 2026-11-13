@@ -149,12 +149,13 @@ Proof
   drule_all ctor_task_actual_encoded_inputs >> strip_tac >>
   drule ctor_task_checked_namespaces >> strip_tac >>
   gvs[] >>
-  drule_all (SRULE [] (Q.INST [
-    `nkey_map` |-> `(K global_nonreentrant_slot : string -> num)`,
-    `ce0` |-> `ce_pack with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)`,
-    `immo` |-> `(if imm_len tops > 0 then SOME imm else NONE)`]
-    (Q.INST [`imm` |-> `immo`] ctor_task_registration_metadata))) >>
-  disch_then (qspec_then `imm` strip_assume_tac) >>
+  drule_all (ctor_task_registration_metadata
+    |> Q.INST [`imm` |-> `immo`]
+    |> Q.INST [`nkey_map` |-> `K global_nonreentrant_slot`]
+    |> Q.INST [`ce0` |-> `ce_pack with ce_imm_alloca := immo`]
+    |> SRULE [combinTheory.K_THM]) >>
+  disch_then (qspec_then `if imm_len tops > 0 then SOME imm else NONE`
+    strip_assume_tac) >>
   gvs[] >>
   qpat_x_assum `!i. i < LENGTH fargs ==> ?entry. _` (fn th =>
     assume_tac th) >>

@@ -8,7 +8,7 @@ Ancestors
   vyperAST list rich_list transientLockFrameProps
 
 Theorem compile_return_unlock_source_correct:
-  state_rel H func cenv cx vs ss /\
+  state_rel func cenv cx vs ss /\
   cenv.ce_nonreentrant = (T,key,T,is_view) /\
   compile_return_unlock cenv st = ((),st') ==>
   ?vs' ss'.
@@ -16,7 +16,7 @@ Theorem compile_return_unlock_source_correct:
        vyperInterpreter$release_nonreentrant_lock cx.txn.target key) vs =
       (INL (),vs') /\
     run_inst_seq (emitted_insts st st') ss = OK ss' /\
-    state_rel H func cenv cx vs' ss'
+    state_rel func cenv cx vs' ss'
 Proof
   rpt strip_tac >> fs[compile_return_unlock_def] >>
   qpat_x_assum `cenv.ce_nonreentrant = _` SUBST_ALL_TAC >> fs[] >>
@@ -94,7 +94,7 @@ Proof
   Cases_on `eval_operands right ss` >> simp[]
 QED
 
-Theorem step_RET_values[local]:
+Theorem step_RET_values:
   !values ss words rpc pc id.
   eval_operands values ss = SOME words /\ eval_operand rpc ss = SOME pc ==>
   step_inst_base (mk_inst id RET (values ++ [rpc]) []) ss =

@@ -1,7 +1,7 @@
 (* Storage contracts over the roots observed by an execution. *)
 Theory vyperStorageFootprint
 Ancestors
-  vyperStorageTrace vyperStorageWritePreservation vyperStorageLayoutSafety vyperStorageBackend
+  vyperStorageWritePreservation vyperStorageLayoutSafety vyperStorageBackend
   vyperValue vyperTyping vyperLookupStorage vyperStorage vyperStorageFrame
   vyperRuntimeAccounts vyperState extCallOracle
   list
@@ -316,19 +316,4 @@ Theorem natural_root_wrap_rejected:
 Proof
   simp[storage_roots_fit_def, storage_trace_regions_def,
        type_slot_size_def, wordsTheory.n2w_dimword]
-QED
-
-Theorem valid_horizon_prefix[local]:
-  valid_horizon cx st0 H (xs ++ ys) ==> valid_horizon cx st0 H xs
-Proof
-  simp[valid_horizon_def]
-QED
-
-Theorem valid_horizon_frame:
-  storage_trace_frame f /\ f st = (res, st') /\
-  valid_horizon cx st0 H st'.storage_trace ==>
-  valid_horizon cx st0 H st.storage_trace
-Proof
-  strip_tac >> drule_all storage_trace_frame_prefix >> strip_tac >>
-  fs[] >> metis_tac[valid_horizon_prefix]
 QED
