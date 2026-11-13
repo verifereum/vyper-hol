@@ -204,7 +204,7 @@ Resume compile_rest_word_membership_sim_mem[typed_tail]:
   `?av. v2 = ArrayV av` by
     (Cases_on `v2` >> fs[vyperTypingTheory.value_has_type_def]) >>
   gnvs[] >>
-  `vv_post ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
+  `vv_post H ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
       (fin with gas_obs := []) (Value (ArrayV av)) arr_vv u` by
     (qpat_assum `!tail. read_result _ _ _ = _`
        (qspec_then `[]` assume_tac) >>
@@ -215,7 +215,7 @@ Resume compile_rest_word_membership_sim_mem[typed_tail]:
     (drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_word_value) >>
      strip_tac >> gvs[]) >>
   `eval_operand needle t = SOME (typed_val_to_w256 et v1)` by
-    (qpat_x_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def] >>
      metis_tac[]) >>
   `eval_operand needle u = SOME (typed_val_to_w256 et v1)` by
@@ -256,14 +256,14 @@ Resume compile_rest_word_membership_sim_mem[safe_tail]:
        alloca_history func q /\ u.vs_alloca_next <= q.vs_alloca_next /\
        q.vs_current_bb = sb.cs_current_bb /\
        q.vs_inst_idx = LENGTH sb.cs_current_insts /\
-       vv_post ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
+       vv_post H ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
          (fin with gas_obs := []) tv arr_vv q /\
        eval_operand op q = SOME (bool_to_word
          (if bop = In then evaluate_in_array (ArrayTV et bd) v1 av
           else ~evaluate_in_array (ArrayTV et bd) v1 av))` by
     (qpat_assum `!tail. read_result cx tv (fin with gas_obs := tail) = _`
        (qspec_then `[]` assume_tac) >>
-     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value _) _ _` kall_tac >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ (Value _) _ _` kall_tac >>
      Cases_on `bd` >> gnvs[]
      >- (drule (Q.INST [`loc` |-> `(case vv_location vv of SOME l => l | NONE => LocMemory)`]
            rest_word_fixed_tail_mem) >>

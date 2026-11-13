@@ -124,7 +124,7 @@ Proof
 QED
 
 Theorem ifexp_jnz_path_mem:
-  expr_post ctx func cenv cx c es sa sc s0 mid (BoolV sel) cop u /\
+  expr_post H ctx func cenv cx c es sa sc s0 mid (BoolV sel) cop u /\
   expr_type c = BaseT BoolT /\
   emit_inst JNZ [cop; Label tl; Label el] [] sj = ((),sn) /\
   fn_has_code sj sn func /\ sj.cs_current_bb = sc.cs_current_bb /\
@@ -215,10 +215,11 @@ Proof
 QED
 
 
+
 Theorem ifexp_forced_arm_finish_mem[local]:
-  expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
+  expr_post H ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   is_word_type t /\ expr_type e = t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
@@ -230,12 +231,12 @@ Theorem ifexp_forced_arm_finish_mem[local]:
   s0.vs_alloca_next <= tt.vs_alloca_next /\
   gas_outcome T tops (ctx,func) source (es1,jump_to lbl tt)
     (\res ee u. ?v. res = INL v /\
-      expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
+      expr_post H ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
       u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts /\
       alloca_history func u /\ tt.vs_alloca_next <= u.vs_alloca_next) R ==>
   gas_outcome T tops (ctx,func) source (es1,jump_to lbl tt)
     (\res ee u. ?v. res = INL v /\
-      expr_post ctx func cenv cx (IfExp t c a b) es sa sb s0 ee v (Var rv) u /\
+      expr_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee v (Var rv) u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next) R
 Proof
@@ -555,7 +556,7 @@ Resume compile_ifexp_word_vv_sim_mem[selected_entry]:
      first_x_assum (qspecl_then [`gs`,`BoolV sel`,
        `es_end with gas_obs := []`] mp_tac) >>
      simp[SF ETA_ss] >> Cases_on `sel` >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := [])
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := [])
       (jump_to se.cs_current_bb t)` by
     fs[expr_post_def, stmt_state_rel_jump_to] >>
   `alloca_history func (jump_to se.cs_current_bb t)` by
@@ -591,7 +592,7 @@ Resume compile_ifexp_word_vv_sim_mem[selected_raw_arm]:
   simp[expr_vv_sim_mem_def] >> disch_then drule >>
   disch_then (qspec_then `jump_to se.cs_current_bb t` mp_tac) >>
   impl_tac
-  >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with gas_obs := []) _` mp_tac >>
+  >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ (_ with gas_obs := []) _` mp_tac >>
       simp[jump_to_def, exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
   strip_tac >>
   simp[Abbr `root_exit`] >>
@@ -610,7 +611,7 @@ Resume compile_ifexp_word_vv_sim_mem[selected_raw_arm]:
      strip_tac >> first_x_assum (qspec_then `[]` assume_tac) >>
      drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read_mem >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[] >> strip_tac >>
   drule_at (Pat `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _`)
     ifexp_marked_conditional_of_read_mem >>
@@ -638,9 +639,9 @@ Resume compile_ifexp_word_vv_sim_mem[route_after_unwrap]:
         (Cases_on `sel` >>
      rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
      strip_tac >> asm_rewrite_tac[]) >>
-      qpat_assum `expr_post _ _ _ _ c _ _ _ _ _ _ _ _`
+      qpat_assum `expr_post _ _ _ _ _ c _ _ _ _ _ _ _ _`
         (mp_then Any mp_tac ifexp_root_finish_post) >>
-      disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
       qpat_assum `is_word_type _` (fn th => simp[th]) >>
       disch_then irule >> gvs[post_value_type_word]) >>
@@ -747,7 +748,7 @@ Resume compile_ifexp_nonword_vv_sim_mem[selected]:
   `sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id` by
     (qpat_x_assum `!sa sb op. _` drule >> simp[]) >>
   drule ifexp_selected_entry_facts_mem >>
-  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`ty`,`se`,`marks`,`se.cs_current_bb`] mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   suspend "raw_arm"
@@ -810,7 +811,7 @@ Resume compile_ifexp_nonword_vv_sim_mem[converted_endpoint]:
      simp[SF ETA_ss] >> strip_tac >> rpt strip_tac >>
      first_x_assum irule >> Cases_on `sel` >> simp[] >> metis_tac[]) >>
   drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`) ifexp_selected_marked_endpoint_mem >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspec_then `marks'` mp_tac) >>
   impl_tac >- (simp[] >> conj_tac
     >- (Cases_on `sel` >> gvs[] >> strip_tac >>
@@ -841,9 +842,9 @@ Resume compile_ifexp_nonword_vv_sim_mem[route_result]:
         (Cases_on `sel` >>
          rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
          strip_tac >> asm_rewrite_tac[]) >>
-      qpat_assum `expr_post _ _ _ _ c _ _ _ _ _ _ _ _`
+      qpat_assum `expr_post _ _ _ _ _ c _ _ _ _ _ _ _ _`
         (mp_then Any mp_tac ifexp_root_finish_post) >>
-      disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
       simp[] >> disch_then irule >> gvs[]) >>
   conj_tac >- (irule ifexp_pointer_bound_assign >> metis_tac[]) >>
@@ -1026,7 +1027,7 @@ Resume compile_ifexp_word_sim_mem[forced_entry]:
      first_x_assum (qspecl_then [`gs`,`BoolV sel`,
        `es_end with gas_obs := []`] mp_tac) >>
      simp[SF ETA_ss] >> Cases_on `sel` >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := [])
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := [])
       (jump_to se.cs_current_bb t)` by
     fs[expr_post_def, stmt_state_rel_jump_to] >>
   `alloca_history func (jump_to se.cs_current_bb t)` by
@@ -1035,7 +1036,7 @@ Resume compile_ifexp_word_sim_mem[forced_entry]:
   simp[expr_sim_mem_def] >> disch_then drule >>
   disch_then (qspec_then `jump_to se.cs_current_bb t` mp_tac) >>
   impl_tac
-  >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with gas_obs := []) _` mp_tac >>
+  >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ (_ with gas_obs := []) _` mp_tac >>
       simp[jump_to_def, exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
   strip_tac >>
   `expr_type (if sel then a else b) = expr_type a` by (Cases_on `sel` >> simp[]) >>

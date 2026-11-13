@@ -9,7 +9,7 @@ Ancestors
 Theorem compile_ceil_frag_mem:
   !ctx func cenv cx es i.
     within_int_bound (Signed 168) i ==>
-    unop_frag_mem ctx func cenv cx (\x. compile_ceil x 10000000000)
+    unop_frag_mem H ctx func cenv cx (\x. compile_ceil x 10000000000)
       (typed_val_to_w256 (BaseTV DecimalT) (DecimalV i))
       (BaseT (IntT 256))
       (unop_result cx (BaseT (IntT 256)) Ceil [BaseT DecimalT] (DecimalV i) es) es

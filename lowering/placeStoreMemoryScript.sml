@@ -116,13 +116,13 @@ Theorem place_store_value_memory_run:
            w2n w + type_memory_size dtv + 64 < dimword (:256)) /\
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==>
            0 < type_slot_size dtv) /\
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     write_place cx p v ee = (INL (), ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path F ctx func s 0 (OK t) /\
-        stmt_state_rel ctx func cenv cx ff t /\
+        stmt_state_rel H ctx func cenv cx ff t /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                  FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -132,7 +132,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all compile_assign_memory_forward_local_frame >> strip_tac >>
   drule_all type_widens_to_value_has_type >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx ff t` by
+  `stmt_state_rel H ctx func cenv cx ff t` by
     (irule memory_place_write_stmt_state >>
      goal_assum (drule_at (Pat `val_in_memory _ _ _ t.vs_memory`)) >>
      qexistsl_tac [`dty`, `ee`, `env`, `p`, `r`, `s`, `sa`] >>
