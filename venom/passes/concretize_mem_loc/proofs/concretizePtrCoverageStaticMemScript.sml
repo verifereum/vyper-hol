@@ -151,7 +151,8 @@ Proof
     (drule ptr_chrono_history_reachable >>
      simp[ptr_observation_reachable_def] >> strip_tac >>
      drule ptr_frame_context_membership >> fs[EVERY_MEM]) >>
-  drule ptr_chrono_history_suspended_invokes >> strip_tac >>
+  qpat_assum `ptr_chrono_history vs0 ctx h a`
+    (assume_tac o MATCH_MP ptr_chrono_history_suspended_invokes) >>
   drule_all ptr_chrono_step_window_fmp >> strip_tac >> simp[]
 QED
 
