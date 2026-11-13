@@ -27,9 +27,6 @@ Theorem assign_effectful_snapshot_unified_store_ready:
          w2n sw + sz <= b \/ b+len <= w2n sw)) /\
   compile_assign_value cenv dst loc (vv_operand snap) (is_word_type dty)
     (vv_location snap) dty (lowered_value_type cenv e)
-    (case dty of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et + 31) DIV 32,
-             type_memory_bytes cenv et) | _ => NONE)
     (type_memory_bytes cenv dty) st = ((),sf) /\
   type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty /\
   expr_sim_inv cenv cx env mid /\ cenv.ce_target CapMcopy /\
@@ -69,7 +66,7 @@ Proof
   irule assign_effectful_snapshot_owned_store_ready >> simp[] >>
   conj_tac >- metis_tac[] >>
   goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qexistsl_tac [`dtv`, `dw`, `stv`, `sw`, `v`] >> simp[] >>
   Cases_on `loc = LocMemory` >> gvs[arithmeticTheory.ADD_COMM]
 QED
@@ -117,7 +114,7 @@ Resume assign_effectful_snapshot_unified_store_ready[relayout]:
      fs[alloca_next_valid_def] >> res_tac >> decide_tac) >>
   fs[] >> irule place_relayout_memory_run >> simp[] >>
   conj_tac >- metis_tac[] >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
   simp[val_footprint_le]
 QED

@@ -34,10 +34,6 @@ Theorem assign_effectful_value_code:
         SOME loc =>
           compile_assign_value ce (FST r) loc op (is_word_type dty)
             (vv_location vv) dty (lowered_value_type ce e)
-            (case dty of ArrayT et (Dynamic _) =>
-               SOME ((type_memory_bytes ce et + 31) DIV 32,
-                     type_memory_bytes ce et)
-             | _ => NONE)
             (type_memory_bytes ce dty) su = ((),sb)
       | NONE => emit_void INVALID [] su = ((),sb)))
 Proof

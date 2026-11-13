@@ -79,9 +79,6 @@ Theorem assign_effectful_snapshot_bytes_store_ready:
          w2n sw + sz <= b \/ b+len <= w2n sw)) /\
   compile_assign_value cenv dst loc (vv_operand snap) (is_word_type dty)
     (vv_location snap) dty (lowered_value_type cenv e)
-    (case dty of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et + 31) DIV 32,
-             type_memory_bytes cenv et) | _ => NONE)
     (type_memory_bytes cenv dty) st = ((),sf) /\
   type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty /\
   expr_sim_inv cenv cx env mid /\ cenv.ce_target CapMcopy /\

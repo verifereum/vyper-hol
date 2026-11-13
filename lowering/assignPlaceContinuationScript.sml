@@ -59,10 +59,6 @@ Theorem assign_place_pure_continuation:
        (vv_location vv)
        (case SND (SND tr) of SOME (ValPT tt) => tt | _ => lowered_value_type cenv e)
        (lowered_value_type cenv e)
-       (case (case SND (SND tr) of SOME (ValPT tt) => tt | _ => lowered_value_type cenv e) of
-          ArrayT et (Dynamic _) =>
-            SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-        | _ => NONE)
        (type_memory_bytes cenv (case SND (SND tr) of SOME (ValPT tt) => tt | _ => lowered_value_type cenv e))
    | NONE => emit_void INVALID []) su = ((),sb) /\
   ci_mono sa sm /\ ci_mono sm st /\ ci_mono st su /\ ci_mono su sb /\
@@ -310,7 +306,7 @@ Proof
        alloca_frame cenv (mid' with gas_obs := []) su u cenv ff z` by
     (irule assign_place_store_from_expr_post >> simp[] >>
      (conj_tac >- metis_tac[expr_sim_inv_gas_obs]) >>
-     goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      simp[] >>
      goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >> simp[] >>

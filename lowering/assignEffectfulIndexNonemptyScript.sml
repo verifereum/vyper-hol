@@ -79,9 +79,6 @@ Theorem assign_place_mutating_nonempty_case_with_store:
            w2n sw + sz <= b \/ b+len <= w2n sw)) /\
     compile_assign_value cenv dst loc (vv_operand snap) (is_word_type dty)
       (vv_location snap) dty (lowered_value_type cenv e)
-      (case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et + 31) DIV 32,
-               type_memory_bytes cenv et) | _ => NONE)
       (type_memory_bytes cenv dty) st = ((),sf) /\
     type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty /\
     expr_sim_inv cenv cx env mid /\ cenv.ce_target CapMcopy /\
@@ -404,7 +401,7 @@ Resume assign_place_mutating_nonempty_case_with_store[store]:
     (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   qpat_x_assum `case FST _ of NONE => _ | SOME loc' => _`
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
-  disch_then (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand (vv_operand _) _ = _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ (lowered_value_type _ _) = _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>

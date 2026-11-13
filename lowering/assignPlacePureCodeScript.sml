@@ -17,10 +17,6 @@ Theorem assign_place_pure_code_parts:
          (vv_location vv)
          (case SND (SND tr) of SOME (ValPT t) => t | _ => lowered_value_type ce e)
          (lowered_value_type ce e)
-         (case (case SND (SND tr) of SOME (ValPT t) => t | _ => lowered_value_type ce e) of
-            ArrayT et (Dynamic _) =>
-              SOME ((type_memory_bytes ce et + 31) DIV 32, type_memory_bytes ce et)
-          | _ => NONE)
          (type_memory_bytes ce (case SND (SND tr) of SOME (ValPT t) => t | _ => lowered_value_type ce e))
      | NONE => emit_void INVALID []) su = ((),sf)
 Proof

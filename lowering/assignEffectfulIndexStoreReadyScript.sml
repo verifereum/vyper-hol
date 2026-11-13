@@ -26,9 +26,6 @@ Theorem assign_effectful_snapshot_store_ready:
          w2n sw + sz <= b \/ b+len <= w2n sw)) /\
   compile_assign_value cenv dst loc (vv_operand snap) (is_word_type dty)
     (vv_location snap) dty (lowered_value_type cenv e)
-    (case dty of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et + 31) DIV 32,
-             type_memory_bytes cenv et) | _ => NONE)
     (type_memory_bytes cenv dty) st = ((),sf) /\
   type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty /\
   expr_sim_inv cenv cx env mid /\ cenv.ce_target CapMcopy /\
@@ -86,7 +83,7 @@ Proof
     metis_tac[not_fresh_at_mono] >>
   `is_word_type (lowered_value_type cenv e) = is_word_type dty` by
     metis_tac[arg_type_fits_word_type, vyperTypeSystemTheory.type_widens_to_def] >>
-  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)
     tuple_place_value_run_frame >>
   disch_then (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>

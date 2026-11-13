@@ -8,9 +8,6 @@ Libs monadsyntax
 Theorem assign_place_store_from_expr_post:
   compile_assign_value cenv dst loc src (is_word_type dty) src_loc dty
     (lowered_value_type cenv e)
-    (case dty of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et + 31) DIV 32,
-             type_memory_bytes cenv et) | _ => NONE)
     (type_memory_bytes cenv dty) su = ((),sb) /\
   expr_post ctx func cenv cx e es sa su s0 ee v src s /\
   expr_sim_inv cenv cx env ee /\

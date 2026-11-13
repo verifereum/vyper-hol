@@ -12,9 +12,6 @@ Libs monadsyntax
 Theorem assign_place_memory_from_expr_post:
   compile_assign_value cenv dst LocMemory src (is_word_type dty) src_loc dty
     (lowered_value_type cenv e)
-    (case dty of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et + 31) DIV 32,
-             type_memory_bytes cenv et) | _ => NONE)
     (type_memory_bytes cenv dty) su = ((),sb) /\
   expr_post ctx func cenv cx e es sa su s0 ee v src s /\
   expr_sim_inv cenv cx env ee /\
@@ -103,7 +100,7 @@ Resume assign_place_memory_from_expr_post[aggregate]:
   Cases_on `src_loc = NONE \/ src_loc = SOME LocMemory`
   >- (irule assignPlaceRelayoutProvenanceTheory.assign_place_relayout_from_provenance >>
       simp[] >> (conj_tac >- metis_tac[]) >>
-      goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
       simp[] >> metis_tac[]) >>
   suspend "relayout_direct"
 QED
@@ -165,7 +162,7 @@ QED
 
 Resume assign_place_memory_from_expr_post[bytes_staged]:
   markerLib.RESUME_TAC >> (rpt strip_tac >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_assign_value_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> simp[comp_ignore_bind_def, comp_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
@@ -196,7 +193,7 @@ Resume assign_place_memory_from_expr_post[same_staged]:
   `?sw. eval_operand src s = SOME sw /\
         val_in_memory dtv v (w2n sw) s.vs_memory` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_assign_value_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> simp[comp_ignore_bind_def, comp_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
@@ -211,15 +208,12 @@ Resume assign_place_memory_from_expr_post[relayout_direct]:
   markerLib.RESUME_TAC >> (rpt strip_tac >>
   `compile_assign_value cenv dst LocMemory src F NONE dty
     (lowered_value_type cenv e)
-    (case dty of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et + 31) DIV 32,
-             type_memory_bytes cenv et) | _ => NONE)
     (type_memory_bytes cenv dty) su = ((),sb)` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_assign_value_def] >> metis_tac[]) >>
   irule assignPlaceRelayoutProvenanceTheory.assign_place_relayout_from_provenance >>
   simp[] >> (conj_tac >- metis_tac[]) >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[] >> metis_tac[])
 QED
 

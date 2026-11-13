@@ -43,12 +43,12 @@ Proof
        vyperTypeInvariantsTheory.env_context_consistent_def] >>
   `~is_word_type dty` by metis_tac[strict_widened_assignment_nonword] >>
   drule_all assignRelayoutCallerTheory.assign_relayout_source_classify >> strip_tac >>
-  `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by
-    (Cases_on `e` >>
-     gvs[stmtLoweringTheory.is_empty_value_expr_def,
-       oneline exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def]) >>
   `post_value_type cenv e <> expr_type e /\
    ~is_word_type (post_value_type cenv e)` by fs[] >>
+  `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by
+    (qpat_x_assum `post_value_type cenv e <> expr_type e` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `e` >>
+     simp[post_value_type_def, stmtLoweringTheory.is_empty_value_expr_def]) >>
   rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all assign_place_relayout_code_parts >> strip_tac >>
@@ -241,7 +241,7 @@ Proof
      strip_tac >> gvs[contextTheory.vv_location_def]) >>
   `~block_is_terminated sb` by
     (qpat_assum `~is_word_type dty` (fn th =>
-       qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+       qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
          (mp_tac o REWRITE_RULE [th])) >>
      disch_then (mp_then Any mp_tac compile_assign_place_endpoint_open) >>
      simp[]) >>
