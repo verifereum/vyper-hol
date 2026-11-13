@@ -9504,6 +9504,38 @@ Proof
        noninvoke_adjacent_packets_nogas)) >> asm_rewrite_tac[]
 QED
 
+(* Actual-entry extraction interface (bounded diagnostic, not an induction).
+   For pre=[], the recursive entry is the actual head successor
+       v = u with vs_inst_idx := SUC s.vs_inst_idx.
+   R [] at v is OK v; the entry bridge must therefore include the head's
+   concrete update, not just equality of cursors.
+
+   For pre=[x], x INVOKE, P rest v mt et at k=0 supplies the packet
+   contract at v itself (TAKE 0 rest=[]).  Its arbitrary target suffix
+   and supported-update clauses, together with invoke_fixed_segment_inst_idx,
+   are the providers for moving this SAME packet back across y.  No P
+   contract at an arbitrary source endpoint is implied by T.
+
+   GAS y: write v=(update_var out w (s with readings:=rs))[idx:=SUC idx].
+   invoke_gas_adjacent_packet transports the consumed-core packet;
+   source_cut_invoke_gas and source_cut_gas_after_invoke give, on an
+   actual OK invocation result u, the SAME full endpoint
+       (update_var out w u)[readings:=r,idx:=SUC(SUC s.vs_inst_idx)]
+   for the two orders with readings w::(p++r) and p++w::r respectively.
+   The checked source_cut_invoke_successor obtains the source invocation
+   witness from residual_result, rather than an existential endpoint join.
+   On stopped calls those two suffixes differ (r versus w::r): use
+   invoke_gas_adjacent_stopped_packet, event slack and the non-OK barrier;
+   do not assert a shared stopped state.
+
+   Non-GAS y: invoke_partner_concrete_updates gives the supported update
+   list for the actual head step. invoke_nongas_adjacent_packet transports
+   the invocation packet from its actual post-head entry to s, proves
+   shared OK successors, and supplies stopped coverage/non-OK cuts.
+   These providers validate the singleton interface only. A general lift
+   must carry actual entry equations plus packet-prefix events/readings
+   at each reached cut; recursive T alone is not such a state equation. *)
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
