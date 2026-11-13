@@ -181,7 +181,7 @@ Resume raw_call_allocated_oracle_mem[call]:
   disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `wb_frame _ initial_es es initial s0 a`)) >>
   disch_then (qspecl_then [`val_word`,`if cap=0 then w else w+32w`,`gas`,`aw`] mp_tac) >>
-  (impl_tac >- (gs[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `r` (qx_choose_then `u` strip_assume_tac)) >>
   `safe_operand sc ov /\ safe_operand sc ok` by
     (conj_tac >- (irule safe_operand_mono >> qexists_tac `sm` >> fs[ci_mono_def]) >>
@@ -199,7 +199,13 @@ Resume raw_call_allocated_oracle_mem[endpoint]:
   `mem_bytes_at (if cap=0 then w2n w else w2n w+32)
     (LENGTH (TAKE cap outcome.co_returnData)) u.vs_memory = TAKE cap outcome.co_returnData` by
     (Cases_on `cap=0` >- fs[valueEncodingDefsTheory.mem_bytes_at_def] >>
-     `0 < cap` by decide_tac >> gs[]) >>
+     `0 < cap` by decide_tac >>
+     qpat_x_assum `0 < cap ==> w2n (w + 32w) = _` drule >> strip_tac >>
+     qpat_x_assum `u.vs_memory = r.vs_memory` SUBST1_TAC >>
+     qpat_x_assum `mem_bytes_at _ _ r.vs_memory = _` mp_tac >>
+     qpat_x_assum `~(cap = 0)` (fn th => REWRITE_TAC [th]) >>
+     qpat_x_assum `w2n (w + 32w) = _` (fn th => REWRITE_TAC [th]) >>
+     disch_then ACCEPT_TAC) >>
   qpat_x_assum `r.vs_memory = _` kall_tac >>
   qpat_x_assum `u.vs_memory = r.vs_memory` kall_tac >>
   qpat_x_assum `u = update_var _ _ r` kall_tac >>

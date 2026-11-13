@@ -142,5 +142,3 @@ They remain out of parity until regenerated with that fix.
 ## Not yet attributed
 
 - `memory-stores/w01_return_intcall_dynarray_bytes_widen`
-- `narrow-elems/n05_intcall_dynarr_lit_wider_str`
-- `narrow-elems/n11_intcall_dynarr_lit_same_str`
