@@ -326,6 +326,7 @@ Proof
   >- (`step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
       `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
         metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+      `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
       first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
         `t with vs_inst_idx := SUC s.vs_inst_idx`, `a`, `ctx`, `fn`, `bb`] mp_tac) >>
       simp[run_inst_seq_inst_idx, exec_result_map_def] >> strip_tac >>
