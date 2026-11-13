@@ -204,9 +204,8 @@ Proof
   gvs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]
 QED
 
-(* Statement moved to the bytestring arm's premise form (!D inside the
-   endpoint; the witnesses don't depend on the dead mask).  The proof below
-   is the earlier one, for an outer !D: it needs that change. *)
+(* The witnesses come from one dead mask; by inst_seq_ptr_ghost_unique the
+   check's endpoint is the same at every D, so the path holds for each. *)
 Theorem compile_store_bytestring_origin_ptr_path:
   !lo explicit ctx fn PG sa sb src dst G tn s a b len n bb.
       compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
@@ -238,7 +237,12 @@ Theorem compile_store_bytestring_origin_ptr_path:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all compile_store_bytestring_seq_ptr >>
-  disch_then (qspecl_then [`D`, `fn`, `PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`ARB`, `fn`, `PG`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[] >> gen_tac >>
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf` by
+    (drule_all compile_store_bytestring_seq_ptr >>
+     disch_then (qspecl_then [`D`, `fn`, `PG`] strip_assume_tac) >>
+     metis_tac[inst_seq_ptr_ghost_unique]) >>
   drule compile_store_bytestring_code >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE) (emitted_insts sa sb)` by
     gvs[listTheory.EVERY_MEM] >>
@@ -250,6 +254,5 @@ Proof
   `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
     (simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >>
      gvs[listTheory.EVERY_MEM]) >>
-  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[] >>
   drule_all run_inst_seq_gas_origin_ptr_path >> simp[]
 QED
