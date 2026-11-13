@@ -4,7 +4,8 @@ Ancestors
   readonlyInvokeCopyFwdOperationalMapOrigins readonlyInvokeCopyFwdGlobalSupport
   readonlyInvokeCopyFwdHistoryPhase readonlyInvokeCopyFwdOperationalSupport
   readonlyInvokeCopyFwdRel readonlyInvokeCopyFwdStepsCore ptrDiscipline taintAgree
-  occurrenceGeometry o1LowerDloadOccurrence ptrPhiUpdate finite_map list pred_set arithmetic
+  occurrenceGeometry o1LowerDloadOccurrence ptrPhiUpdate ptrFreshAllocaPath
+  finite_map list pred_set arithmetic
 
 Theorem ricf_alloca_support_fresh:
   ricf_global_support_origins vs C ctx0 a fn U stk B E /\
@@ -133,4 +134,68 @@ Proof
   irule ricf_cert_alloca_fresh >> reverse conj_tac
   >- (simp[] >> qexistsl_tac [`G`,`tn`,`tn0`] >> simp[] >> metis_tac[]) >>
   match_mp_tac ricf_allocation_certificate_bounds >> metis_tac[]
+QED
+
+Theorem ricf_actual_fresh_alloca_annotations:
+  (!f. MEM f C.ctx_functions ==> wf_function f /\ fn_inst_wf f /\ wf_ssa f) /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit amount] /\
+  inst.inst_outputs = [out] /\ FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  G = ricf_effective_prov fn s G0 /\ tn = ricf_effective_taint fn s tn0 /\
+  u = update_var out (n2w s.vs_alloca_next)
+    (s with <|vs_allocas := s.vs_allocas |+ (inst.inst_id,(s.vs_alloca_next,w2n amount));
+              vs_alloca_next := s.vs_alloca_next+w2n amount|>) /\
+  H = set_prov G0 [out] (SOME (s.vs_alloca_next,w2n amount)) /\
+  un = (tn0 with t_mem := tn0.t_mem UNION
+    {i | s.vs_alloca_next <= i /\ i < s.vs_alloca_next+w2n amount})
+    with t_var := set_var_taint tn0.t_var [out] {} ==>
+  ricf_effective_prov fn u H = step_prov PG G inst u /\
+  ricf_effective_taint fn u un = step_taint inst s u tn /\
+  ricf_effective_prov fn (u with vs_inst_idx := SUC s.vs_inst_idx) H =
+    ricf_effective_prov fn u H /\
+  ricf_effective_taint fn (u with vs_inst_idx := SUC s.vs_inst_idx) un =
+    ricf_effective_taint fn u un
+Proof
+  strip_tac >>
+  `!xs prev t1 t2. t1.t_var = t2.t_var ==>
+    phis_taint prev t1 xs = phis_taint prev t2 xs` by
+    (Induct >> simp[phis_taint_def] >> rpt strip_tac >>
+     `!prev. phis_taint prev t1 xs = phis_taint prev t2 xs` by metis_tac[] >>
+     Cases_on `h.inst_opcode = PHI` >> simp[] >>
+     Cases_on `prev` >> simp[phi_taint_def] >>
+     Cases_on `resolve_phi x h.inst_operands` >> simp[] >>
+     Cases_on `x'` >> simp[op_taint_def]) >>
+  `!bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
+    EVERY (\i. ~MEM out i.inst_outputs /\
+      (!lbl. s.vs_prev_bb = SOME lbl ==>
+        resolve_phi lbl i.inst_operands <> SOME (Var out)))
+      (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions)` by
+    (rpt strip_tac >> `MEM out inst.inst_outputs` by simp[] >>
+     drule_all frame_reachable_fresh_alloca_phi_prefix_independent >> simp[]) >>
+  `new_site_bytes s u =
+    {i | s.vs_alloca_next <= i /\ i < s.vs_alloca_next+w2n amount}` by
+    (gvs[new_site_bytes_def, venomStateTheory.update_var_def] >>
+     simp[EXTENSION, FLOOKUP_UPDATE] >> gen_tac >> eq_tac
+     >- (strip_tac >> Cases_on `inst.inst_id = aid` >> gvs[FLOOKUP_DEF]) >>
+     strip_tac >> qexistsl_tac [`inst.inst_id`,`s.vs_alloca_next`,`w2n amount`] >>
+     fs[FLOOKUP_DEF]) >>
+  gvs[ricf_effective_prov_def, ricf_effective_taint_def,
+      entry_prov_def, entry_taint_vars_def, venomStateTheory.update_var_def,
+      step_prov_def, out_prov_def, step_taint_def, out_taint_def,
+      mem_taint_def, new_site_bytes_def, step_writes_def, written_taint_def,
+      store_taint_def, adopt_reset_def, imm_taint_def, set_prov_def,
+      set_var_taint_def, FLOOKUP_UPDATE, venomStateTheory.eval_operand_def,
+      codegenRelTheory.source_memory_write_ranges_def, range_bytes_def] >>
+  Cases_on `s.vs_prev_bb = NONE` >> gvs[taint_component_equality] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
+  gvs[taint_component_equality] >>
+  conj_tac
+  >- (once_rewrite_tac[phis_prov_prefix] >>
+      irule phis_prov_update_commute >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `phis_taint prev post xs` >>
+  `phis_taint prev post xs = phis_taint prev (tn0 with t_var := tn0.t_var |+ (out,{})) xs` by
+    (first_x_assum irule >> simp[Abbr `post`]) >>
+  pop_assum SUBST1_TAC >>
+  once_rewrite_tac[phis_taint_prefix] >>
+  irule phis_taint_update_commute >> simp[Abbr `prev`, Abbr `xs`]
 QED

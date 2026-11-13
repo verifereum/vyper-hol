@@ -59,3 +59,21 @@ Proof
   Cases_on `h.inst_opcode = PHI` >> simp[] >>
   simp[phi_taint_update_independent, set_var_taint_update_commute]
 QED
+
+Theorem phis_prov_prefix:
+  !xs prev G. phis_prov prev G xs =
+    phis_prov prev G (TAKE (phi_prefix_length xs) xs)
+Proof
+  Induct >> simp[phis_prov_def, venomExecSemanticsTheory.phi_prefix_length_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >>
+  simp[phis_prov_def, venomExecSemanticsTheory.phi_prefix_length_def]
+QED
+
+Theorem phis_taint_prefix:
+  !xs prev tn. phis_taint prev tn xs =
+    phis_taint prev tn (TAKE (phi_prefix_length xs) xs)
+Proof
+  Induct >> simp[phis_taint_def, venomExecSemanticsTheory.phi_prefix_length_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >>
+  simp[phis_taint_def, venomExecSemanticsTheory.phi_prefix_length_def]
+QED

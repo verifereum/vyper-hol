@@ -259,3 +259,29 @@ Proof
     metis_tac[frame_reachable_alloca_path] >>
   metis_tac[frame_alloca_path_fresh_phi_exclusion]
 QED
+
+Theorem frame_reachable_fresh_alloca_phi_prefix_independent:
+  (!f. MEM f C.ctx_functions ==> wf_function f /\ fn_inst_wf f /\ wf_ssa f) /\
+  frame_reachable vs C stk PG G tn fn ai s /\ active_inst fn ai s /\
+  ai.inst_opcode = ALLOCA /\ MEM out ai.inst_outputs /\
+  FLOOKUP s.vs_allocas ai.inst_id = NONE /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
+  EVERY (\i. ~MEM out i.inst_outputs /\
+    (!lbl. s.vs_prev_bb = SOME lbl ==>
+      resolve_phi lbl i.inst_operands <> SOME (Var out)))
+    (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions)
+Proof
+  strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
+  `MEM i bb.bb_instructions /\ i.inst_opcode = PHI` by
+    (qpat_x_assum `MEM i (TAKE _ _)` mp_tac >>
+     simp[MEM_EL] >> rpt strip_tac >>
+     gvs[LENGTH_TAKE, phi_prefix_length_le, EL_TAKE] >>
+     metis_tac[EL_MEM, phi_prefix_length_el_phi, phi_prefix_length_le,
+               arithmeticTheory.LESS_LESS_EQ_TRANS])
+  >- (`MEM fn C.ctx_functions` by metis_tac[frame_reachable_alloca_path] >>
+      `wf_ssa fn` by metis_tac[] >>
+      fs[contextCodegenRelTheory.active_inst_def] >>
+      `ai = i` by metis_tac[ssa_unique_output_block, wf_ssa_def,
+                             lookup_block_MEM, EL_MEM] >> gvs[]) >>
+  metis_tac[frame_reachable_fresh_alloca_phi_exclusion]
+QED
