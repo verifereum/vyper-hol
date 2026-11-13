@@ -210,19 +210,6 @@ Proof
   rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
 QED
 
-Theorem runtime_data_frame_store_storage[simp]:
-  runtime_data_frame (compile_store_storage v slot b n)
-Proof
-  simp[compile_store_storage_def, comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
-QED
-
-Theorem runtime_data_frame_store_transient[simp]:
-  runtime_data_frame (compile_store_transient v slot b n)
-Proof
-  simp[compile_store_transient_def, comp_ignore_bind_def] >>
-  rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
-QED
 
 Theorem runtime_data_frame_load_storage[simp]:
   runtime_data_frame (compile_load_storage slot b wc n)
@@ -306,12 +293,21 @@ Proof
   simp[compile_store_immutable_def]
 QED
 
-Theorem runtime_data_frame_dynarray_storage[simp]:
-  runtime_data_frame (compile_dynarray_to_storage src dst ew es trans)
+Theorem runtime_data_frame_store_slots[simp]:
+  (!cenv src slot ty trans.
+    runtime_data_frame (compile_store_slots cenv src slot ty trans)) /\
+  (!cenv src slot members mo so trans.
+    runtime_data_frame (compile_store_slots_members cenv src slot members mo so trans)) /\
+  (!cenv src slot elem count trans.
+    runtime_data_frame (compile_copy_elements_to_slots cenv src slot elem count trans))
 Proof
-  simp[compile_dynarray_to_storage_def, comp_ignore_bind_def] >>
+  ho_match_mp_tac compile_store_slots_ind >> rpt strip_tac >>
+  simp[Once compile_store_slots_def, comp_ignore_bind_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  simp[compile_word_copy_loop_op_def] >>
   rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >>
-  Cases_on `ew = 1` >> simp[] >>
+  rpt (CASE_TAC >> gvs[]) >>
+  Cases_on `acyclic_struct_metadata cenv.ce_struct_fields` >> gvs[] >>
   rpt (irule runtime_data_frame_bind >> reverse conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
 QED
 

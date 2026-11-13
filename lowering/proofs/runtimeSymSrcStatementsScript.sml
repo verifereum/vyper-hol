@@ -61,6 +61,12 @@ Theorem runtime_sym_stmt:
     EVERY runtime_sym_inst (state_insts s) /\
     compile_get_target_ptr compile_expr ce bt s = ((op,loc,pt),s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
+  (!ce target s op loc pt s'. runtime_sym_env ce /\
+    supported_append_target tops target /\
+    ~supported_target_exists is_self_code target /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_get_target_ptr compile_expr ce target s = ((op,loc,pt),s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
   (!ce base v ws es et st cap prim load store s u s'.
     ~is_label_operand base /\ ~is_label_operand v /\
     load <> CODESIZE /\ load <> CODECOPY /\
@@ -102,16 +108,13 @@ Proof
           disch_then match_mp_tac >> metis_tac[]) >> conj_tac >>
       irule runtime_sym_stmts_from_members >> metis_tac[])
   >> qpat_x_assum `!cfn ce ty e s op s'. _` kall_tac
-  >- (rpt gen_tac >> Cases_on `a` >>
-      simp[runtime_sym_assert_bare_closed,
-        runtime_sym_assert_unreachable_closed, runtime_sym_assert_reason_closed] >>
-      simp[runtime_sym_stmt_contract_def, supported_stmt_def, supported_assert_reason_def])
+  >- suspend "assert"
   >- (rpt gen_tac >> match_mp_tac runtime_sym_log_closed >> conj_tac
       >- simp[] >> first_assum MATCH_ACCEPT_TAC)
   >- (gen_tac >> Cases_on `r` >>
       simp[runtime_sym_stmt_raise_bare, runtime_sym_stmt_raise_unreachable,
         runtime_sym_raise_reason_closed] >>
-      simp[runtime_sym_stmt_contract_def, supported_stmt_def, supported_raise_reason_def])
+      simp[NoAsms, runtime_sym_stmt_contract_def, supported_stmt_def, supported_raise_reason_def])
   >- (gen_tac >> Cases_on `o'` >- simp[runtime_sym_return_none_closed] >>
       rpt gen_tac >> match_mp_tac runtime_sym_return_some_closed >> conj_tac
       >- simp[] >> first_assum MATCH_ACCEPT_TAC)
@@ -123,9 +126,19 @@ Proof
   >- (rpt gen_tac >> match_mp_tac runtime_sym_assignment_augassign_closed >>
       conj_tac >- first_assum MATCH_ACCEPT_TAC >> simp[])
   >- (rpt gen_tac >> match_mp_tac runtime_sym_assignment_append_closed >>
+      conj_tac >- first_assum MATCH_ACCEPT_TAC >>
       conj_tac >- simp[] >> first_assum MATCH_ACCEPT_TAC)
   >> simp[runtime_sym_assignment_annassign_closed]
 QED
+
+Resume runtime_sym_stmt[assert]:
+  rpt gen_tac >> Cases_on `a` >>
+  simp[runtime_sym_assert_bare_closed,
+       runtime_sym_assert_unreachable_closed, runtime_sym_assert_reason_closed] >>
+  simp[NoAsms, runtime_sym_stmt_contract_def, supported_stmt_def, supported_assert_reason_def]
+QED
+
+Finalise runtime_sym_stmt
 
 Theorem runtime_sym_stmts:
   (!ce ty e. runtime_sym_expr_contract tops compile_expr ce ty e) /\
@@ -140,6 +153,12 @@ Theorem runtime_sym_stmts:
     ~supported_target_exists is_self_code bt /\
     EVERY runtime_sym_inst (state_insts s) /\
     compile_get_target_ptr compile_expr ce bt s = ((op,loc,pt),s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
+  (!ce target s op loc pt s'. runtime_sym_env ce /\
+    supported_append_target tops target /\
+    ~supported_target_exists is_self_code target /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_get_target_ptr compile_expr ce target s = ((op,loc,pt),s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
   (!ce base v ws es et st cap prim load store s u s'.
     ~is_label_operand base /\ ~is_label_operand v /\

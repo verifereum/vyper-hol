@@ -45,7 +45,7 @@ Theorem runtime_data_frame_call_composed:
   (!v dst ty sty. runtime_data_frame (compile_store_memory cenv v dst ty sty)) /\
   (!es. (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
     runtime_data_frame (compile_multi_vvs cfn cenv es)) /\
-  (!vs stack tys. runtime_data_frame (compile_stage_intcall_args cenv vs stack tys)) /\
+  (!stack tys. runtime_data_frame (compile_stage_intcall_args cfn cenv args stack tys)) /\
   (!buf vs off. runtime_data_frame (store_multi_results buf vs off)) /\
   (!a vs ts ms az mid rz mn rb sc v g sk hd d rt dt ei di.
     runtime_data_frame (compile_external_call_kwargs cenv a vs ts ms az mid rz mn rb
@@ -70,8 +70,8 @@ Theorem runtime_data_frame_call_composed:
   runtime_data_frame (compile_call cfn cenv rt ty target args dr)
 Proof
   strip_tac >> irule runtime_data_frame_call >>
-  simp[runtime_data_frame_ext_call_kwargs, runtime_data_frame_materialize_vv,
-       runtime_data_frame_create_call_composed]
+  simp[runtime_data_frame_ext_call_kwargs, runtime_data_frame_snapshot_vv,
+       runtime_data_frame_materialize_vv, runtime_data_frame_create_call_composed]
 QED
 
 (* Coverage audit of exprLowering's lower_value .. compile_powmod256_names

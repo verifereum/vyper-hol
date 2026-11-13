@@ -7,10 +7,10 @@ Ancestors
    join. The selected target implication is discharged there with the
    guarded target-pointer contract (C1.1.3); it is not global target safety. *)
 Theorem runtime_sym_tuple_store_all:
-  (!d l v p sl dt st di n s u s'.
+  (!d l v p sl dt st n s u s'.
     ~is_label_operand d /\ ~is_label_operand v /\
     EVERY runtime_sym_inst (state_insts s) /\
-    compile_assign_value ce d l v p sl dt st di n s = (u,s') ==>
+    compile_assign_value ce d l v p sl dt st n s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')) /\
   (!d v loc s u s'. ~is_label_operand d /\ ~is_label_operand v /\
     EVERY runtime_sym_inst (state_insts s) /\

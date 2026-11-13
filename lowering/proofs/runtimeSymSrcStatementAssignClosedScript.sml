@@ -66,10 +66,15 @@ Proof
   reverse conj_tac >- metis_tac[runtime_sym_binop] >>
   mp_tac runtime_sym_lower_value >>
   impl_tac >- metis_tac[runtime_sym_unwrap_value] >>
-  simp[runtime_sym_lower_value_clause_def] >> metis_tac[]
+  rewrite_tac[runtime_sym_lower_value_clause_def] >> metis_tac[]
 QED
 
 Theorem runtime_sym_assignment_append_closed:
+  (!s op loc pt s'. runtime_sym_env ce /\ supported_append_target tops target /\
+    ~supported_target_exists is_self_code target /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_get_target_ptr compile_expr ce target s = ((op,loc,pt),s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
   (!t. runtime_sym_expr_contract tops compile_expr ce t val_e) /\
   (!base v ws es et st cap prim load store s u s'.
     ~is_label_operand base /\ ~is_label_operand v /\
@@ -80,9 +85,10 @@ Theorem runtime_sym_assignment_append_closed:
     EVERY runtime_sym_inst (state_insts s')) ==>
   runtime_sym_stmt_contract tops bindings compile_stmt ce lc ty (Append target val_e)
 Proof
-  strip_tac >> irule runtime_sym_assignment_append >>
+  strip_tac >> match_mp_tac runtime_sym_assignment_append >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   mp_tac runtime_sym_lower_value >>
   impl_tac >- metis_tac[runtime_sym_unwrap_value] >>
-  simp[runtime_sym_lower_value_clause_def] >> metis_tac[]
+  rewrite_tac[runtime_sym_lower_value_clause_def] >> metis_tac[]
 QED

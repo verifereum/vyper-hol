@@ -22,10 +22,12 @@ Theorem runtime_sym_call_internal:
   (!sz s buf s'. EVERY runtime_sym_inst (state_insts s) /\
     compile_alloc_buffer sz s = (buf,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand buf.buf_operand) /\
-  (!ce vals flags tys s ops s'.
-    runtime_sym_env ce /\ EVERY runtime_sym_value vals /\
+  (!cfn ce es flags tys s ops s'.
+    runtime_sym_env ce /\ EVERY (supported_pure_expr tops) es /\
+    ~supported_exprs_exists is_self_code es /\
+    (!e t. MEM e es ==> runtime_sym_expr_contract tops cfn ce t e) /\
     EVERY runtime_sym_inst (state_insts s) /\
-    compile_stage_intcall_args ce vals flags tys s = (ops,s') ==>
+    compile_stage_intcall_args cfn ce es flags tys s = (ops,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\
     EVERY (\op. ~is_label_operand op) ops) /\
   (!ops buf off s u s'. EVERY (\op. ~is_label_operand op) ops /\
@@ -52,26 +54,30 @@ Proof
   simp[Once compile_call_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
   `!e t. MEM e es ==> runtime_sym_expr_contract tops cfn ce t e` by metis_tac[] >>
-  qpat_x_assum `runtime_sym_multi_vvs_clause tops` mp_tac >>
-  pure_rewrite_tac[runtime_sym_multi_vvs_clause_def] >> disch_then drule_all >>
-  strip_tac >>
+
   Cases_on `returns_count > 0` >> gvs[]
   >- (ntac 5 (pairarg_tac >> gvs[]) >>
       qpat_assum `!sz s buf s'. _` drule_all >> strip_tac >>
-      qpat_assum `!ce vals flags tys s ops s'. _` drule_all >> strip_tac >>
+      qpat_assum `!cfn ce es flags tys s ops s'. _`
+        (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ _ = _`)) >>
+      simp[] >> strip_tac >>
       drule_at (Pat `emit_multi_op _ _ _ _ = _`) runtime_sym_emit_multi_op >>
       simp[runtime_sym_internal_label] >>
       (impl_tac >- (gvs[EVERY_MEM] >> metis_tac[])) >> strip_tac >>
       qpat_assum `!ops buf off s s'. _ ==> EVERY runtime_sym_inst (state_insts s')` drule_all >>
       simp[runtime_sym_value_def, base_ptr_def]) >>
   Cases_on `return_buf_size > 0` >> gvs[]
-  >- (ntac 4 (pairarg_tac >> gvs[]) >>
+  >- (rpt (pairarg_tac >> gvs[]) >>
       qpat_assum `!sz s buf s'. _` drule_all >> strip_tac >>
-      qpat_assum `!ce vals flags tys s ops s'. _` drule_all >> strip_tac >>
+      qpat_assum `!cfn ce es flags tys s ops s'. _`
+        (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ _ = _`)) >>
+      simp[] >> strip_tac >>
       drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_invoke_void >>
       simp[runtime_sym_internal_label, runtime_sym_value_def, base_ptr_def]) >>
   ntac 2 (pairarg_tac >> gvs[]) >>
-  qpat_assum `!ce vals flags tys s ops s'. _` drule_all >> strip_tac >>
+  qpat_assum `!cfn ce es flags tys s ops s'. _`
+        (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ _ = _`)) >>
+      simp[] >> strip_tac >>
   drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_invoke_void >>
   simp[runtime_sym_internal_label, runtime_sym_value_def, is_label_operand_def]
 QED

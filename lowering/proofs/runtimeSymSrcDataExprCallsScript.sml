@@ -1,6 +1,7 @@
 Theory runtimeSymSrcDataExprCalls
 Ancestors
-  runtimeSymSrcDataFrame runtimeSymSrcDataExprCallbacks exprLowering compileEnv
+  runtimeSymSrcDataFrame runtimeSymSrcDataExprCallbacks runtimeSymSrcDataExtCallArgs
+  exprLowering compileEnv
 
 Theorem runtime_data_frame_store_words:
   !vs buf off. runtime_data_frame (compile_store_words buf vs off)
@@ -35,7 +36,7 @@ Theorem runtime_data_frame_call_internal:
   (!es. (!e ty. MEM e es ==> runtime_data_frame (cfn cenv ty e)) ==>
         runtime_data_frame (compile_multi_vvs cfn cenv es)) /\
   (!n. runtime_data_frame (compile_alloc_buffer n)) /\
-  (!vs stack tys. runtime_data_frame (compile_stage_intcall_args cenv vs stack tys)) /\
+  (!stack tys. runtime_data_frame (compile_stage_intcall_args cfn cenv args stack tys)) /\
   (!buf vs off. runtime_data_frame (store_multi_results buf vs off)) ==>
   runtime_data_frame (compile_call cfn cenv rt ty (IntCall id) args dr)
 Proof
@@ -90,8 +91,7 @@ QED
 Theorem runtime_data_frame_call_external:
   (!e ty. MEM e args ==> runtime_data_frame (cfn cenv ty e)) /\
   (!vv. runtime_data_frame (unwrap_value cenv vv)) /\
-  (!es. (!e ty. MEM e es ==> runtime_data_frame (cfn cenv ty e)) ==>
-    runtime_data_frame (compile_multi_vvs cfn cenv es)) /\
+  (!copy vv. runtime_data_frame (compile_snapshot_vv cenv copy vv)) /\
   (!es rt ks. (!e ty. MEM e es ==> runtime_data_frame (cfn cenv ty e)) ==>
     runtime_data_frame (compile_ext_call_kwargs cfn cenv rt ks es)) /\
   (!a vs ts ms az mid rz mn rb sc v g sk hd d rt dt ei di.
@@ -105,8 +105,12 @@ Proof
       metis_tac[runtime_data_frame_def, runtime_data_frame_emit_inst, pairTheory.SND]) >>
   `runtime_data_frame (lower_value cfn cenv (BaseT AddressT) h)` by
     (irule runtime_data_frame_lower_value >> simp[]) >>
-  `runtime_data_frame (compile_multi_vvs cfn cenv (TAKE (LENGTH sig1) t))` by
-    (first_x_assum irule >> metis_tac[rich_listTheory.MEM_TAKE, listTheory.MEM]) >>
+  `runtime_data_frame (compile_ext_call_args cfn cenv
+      (DROP (LENGTH sig1) t)
+      (MAP (lowered_value_type cenv) (TAKE (LENGTH sig1) t))
+      (TAKE (LENGTH sig1) t))` by
+    (irule runtime_data_frame_ext_call_args >> simp[] >>
+     metis_tac[rich_listTheory.MEM_TAKE, listTheory.MEM]) >>
   `runtime_data_frame (compile_ext_call_kwargs cfn cenv sig2 opts (DROP (LENGTH sig1) t))` by
     (first_x_assum irule >> metis_tac[rich_listTheory.MEM_DROP_IMP, listTheory.MEM]) >>
   rw[runtime_data_frame_def, compile_call_def] >>
@@ -252,6 +256,7 @@ Proof
 QED
 
 Theorem runtime_data_frame_call:
+  (!copy vv. runtime_data_frame (compile_snapshot_vv cenv copy vv)) /\
   (!e ty. MEM e args ==> runtime_data_frame (cfn cenv ty e)) /\
   (!topics data e. target = RawLog /\ args = [topics; data] /\
      MEM e (raw_log_topic_exprs topics) ==>
@@ -262,7 +267,7 @@ Theorem runtime_data_frame_call:
   (!es rt ks. (!e ty. MEM e es ==> runtime_data_frame (cfn cenv ty e)) ==>
     runtime_data_frame (compile_ext_call_kwargs cfn cenv rt ks es)) /\
   (!n. runtime_data_frame (compile_alloc_buffer n)) /\
-  (!vs stack tys. runtime_data_frame (compile_stage_intcall_args cenv vs stack tys)) /\
+  (!stack tys. runtime_data_frame (compile_stage_intcall_args cfn cenv args stack tys)) /\
   (!buf vs off. runtime_data_frame (store_multi_results buf vs off)) /\
   (!a vs ts ms az mid rz mn rb sc v g sk hd d rt dt ei di.
     runtime_data_frame (compile_external_call_kwargs cenv a vs ts ms az mid rz mn rb

@@ -1,5 +1,6 @@
 Theory runtimeSymSrcExternalCalls
 Ancestors
+  runtimeSymSrcExternalArgStaging
   runtimeSymSrcGeneratorContracts runtimeSymSrcEmission runtimeSymSrcInterfaces
   runtimeSymSrcContextComplete exprLowering context compileEnv emitHelper loweringShapeDefs
   list rich_list venomInst stackPlanTypes supportedExprs supportedExprTraverse
@@ -145,9 +146,9 @@ Proof
      first_x_assum irule >>
      gvs[supported_expr_exists_def, supported_expr_def] >> metis_tac[]) >>
   `EVERY runtime_sym_inst (state_insts st2) /\ EVERY runtime_sym_value arg_vals` by
-    (qpat_x_assum `runtime_sym_multi_vvs_clause tops` mp_tac >>
-     rewrite_tac[runtime_sym_multi_vvs_clause_def] >> strip_tac >>
-     first_x_assum irule >>
+    (drule_at (Pat `compile_ext_call_args _ _ _ _ _ _ = _`)
+       runtime_sym_ext_call_args >>
+     disch_then irule >>
      gvs[supported_exprs_exists_every, GSYM EVERY_NOT_EXISTS, EVERY_MEM] >>
      metis_tac[MEM_TAKE]) >>
   drule runtime_sym_ext_call_kwargs >>

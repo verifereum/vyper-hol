@@ -9,9 +9,9 @@ Theorem runtime_sym_external_no_defaults:
   MEM (mut,nr,rr,name,args,defaults,ret,fbody) (FST (classify_functions tops)) ==>
   defaults = []
 Proof
-  strip_tac >> drule classify_functions_external_source >> strip_tac >>
-  drule_all supported_program_declaration >>
-  simp[supported_function_header_contract, NULL_EQ]
+  strip_tac >> drule supported_program_no_external_defaults >>
+  simp[EVERY_MEM] >> disch_then drule >>
+  simp[external_has_defaults_def, NULL_EQ]
 QED
 
 Theorem runtime_sym_packaged_group_provenance:

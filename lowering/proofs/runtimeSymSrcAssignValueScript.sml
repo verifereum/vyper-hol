@@ -48,17 +48,9 @@ Theorem runtime_sym_compile_assign_value:
     EVERY runtime_sym_inst (state_insts s) /\
     compile_store_memory_typed ce d dt v st s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')) /\
-  (!v d ew em tr s u s'. ~is_label_operand v /\ ~is_label_operand d /\
+  (!v d dt tr s u s'. ~is_label_operand v /\ ~is_label_operand d /\
     EVERY runtime_sym_inst (state_insts s) /\
-    compile_dynarray_to_storage v d ew em tr s = (u,s') ==>
-    EVERY runtime_sym_inst (state_insts s')) /\
-  (!v d n s u s'. ~is_label_operand v /\ ~is_label_operand d /\
-    EVERY runtime_sym_inst (state_insts s) /\
-    compile_memory_to_storage v d n s = (u,s') ==>
-    EVERY runtime_sym_inst (state_insts s')) /\
-  (!v d n s u s'. ~is_label_operand v /\ ~is_label_operand d /\
-    EVERY runtime_sym_inst (state_insts s) /\
-    compile_memory_to_transient v d n s = (u,s') ==>
+    compile_store_slots ce v d dt tr s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')) /\
   (!d v s u s'. ~is_label_operand d /\ ~is_label_operand v /\
     (!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b) /\
@@ -75,11 +67,11 @@ Theorem runtime_sym_compile_assign_value:
     EVERY runtime_sym_inst (state_insts s) /\
     compile_imm_store_words ce.ce_imm_alloca v d n off s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')) ==>
-  !dst loc value prim srcLoc dstTy srcTy da sz s u s'.
+  !dst loc value prim srcLoc dstTy srcTy sz s u s'.
     ~is_label_operand dst /\ ~is_label_operand value /\
     (!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b) /\
     EVERY runtime_sym_inst (state_insts s) /\
-    compile_assign_value ce dst loc value prim srcLoc dstTy srcTy da sz s = (u,s') ==>
+    compile_assign_value ce dst loc value prim srcLoc dstTy srcTy sz s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')
 Proof
   disch_then (CONJUNCTS_THEN2 (mk_asm "alloc")
@@ -87,11 +79,9 @@ Proof
     (CONJUNCTS_THEN2 (mk_asm "store")
     (CONJUNCTS_THEN2 (mk_asm "typed")
     (CONJUNCTS_THEN2 (mk_asm "dyn")
-    (CONJUNCTS_THEN2 (mk_asm "storage")
-    (CONJUNCTS_THEN2 (mk_asm "transient")
     (CONJUNCTS_THEN2 (mk_asm "imm")
     (CONJUNCTS_THEN2 (mk_asm "bytes")
-      (mk_asm "words")))))))))) >>
+      (mk_asm "words")))))))) >>
   rpt gen_tac >> Cases_on `loc`
   >- suspend "memory"
   >- suspend "storage"
@@ -120,15 +110,7 @@ Resume runtime_sym_compile_assign_value[storage]:
   dxrule_all runtime_sym_assign_normalize >> strip_tac >>
   Cases_on `prim` >> gvs[]
   >- (drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >> simp[]) >>
-  Cases_on `da` >> gvs[]
-  >- (Cases_on `(if is_bytestring_type dstTy then type_memory_bytes ce srcTy else sz) <= 32` >>
-      gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-      rpt (pairarg_tac >> gvs[])
-      >- (drule_at (Pat `emit_op _ _ _ = _`) runtime_sym_emit_op >>
-          simp[] >> strip_tac >>
-          drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >> simp[]) >>
-      asm "storage" drule_all >> simp[]) >>
-  PairCases_on `x` >> gvs[] >> asm "dyn" drule_all >> simp[]
+  asm "dyn" drule_all >> simp[]
 QED
 
 Resume runtime_sym_compile_assign_value[transient]:
@@ -138,15 +120,7 @@ Resume runtime_sym_compile_assign_value[transient]:
   dxrule_all runtime_sym_assign_normalize >> strip_tac >>
   Cases_on `prim` >> gvs[]
   >- (drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >> simp[]) >>
-  Cases_on `da` >> gvs[]
-  >- (Cases_on `(if is_bytestring_type dstTy then type_memory_bytes ce srcTy else sz) <= 32` >>
-      gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-      rpt (pairarg_tac >> gvs[])
-      >- (drule_at (Pat `emit_op _ _ _ = _`) runtime_sym_emit_op >>
-          simp[] >> strip_tac >>
-          drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >> simp[]) >>
-      asm "transient" drule_all >> simp[]) >>
-  PairCases_on `x` >> gvs[] >> asm "dyn" drule_all >> simp[]
+  asm "dyn" drule_all >> simp[]
 QED
 
 Resume runtime_sym_compile_assign_value[code]:

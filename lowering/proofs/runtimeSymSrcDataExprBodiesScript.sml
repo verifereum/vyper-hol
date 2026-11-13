@@ -159,7 +159,7 @@ Theorem runtime_data_frame_builtin_dispatch_body:
   (!a b c d. runtime_data_frame (compile_concat cfn cenv a b c d)) /\
   (!a b c. runtime_data_frame (compile_slice_code a b c)) /\
   (!n. runtime_data_frame (compile_slice_out_buf n)) /\
-  (!a b c d e. runtime_data_frame (compile_slice_extcode a b c d e)) /\
+  (!a b c d. runtime_data_frame (compile_slice_extcode a b c d)) /\
   (!v. runtime_data_frame (compile_bytestring_src v)) /\
   (!a b c d e. runtime_data_frame (compile_slice_data a b c d e)) /\
   (!a b c. runtime_data_frame (compile_uint2str a b c)) /\
@@ -167,7 +167,7 @@ Theorem runtime_data_frame_builtin_dispatch_body:
   (!a b c. runtime_data_frame (compile_as_wei_value_int a b c)) /\
   (!t l. runtime_data_frame (compile_literal_vv t l)) /\
   (!a b c. runtime_data_frame (compile_method_id_runtime a b c)) /\
-  (!a b c. runtime_data_frame (compile_make_tuple cfn cenv a b c)) /\
+  (!a b c d. runtime_data_frame (compile_make_tuple cfn cenv a b c d)) /\
   (!a b c d e. runtime_data_frame (compile_make_array cfn cenv a b c d e)) ==>
   runtime_data_frame (compile_builtin_dispatch_body cfn cenv ret_ty ty bi args)
 Proof

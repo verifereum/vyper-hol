@@ -275,43 +275,6 @@ Proof
     simp[is_label_operand_def] >> strip_tac) >> gvs[]
 QED
 
-Theorem runtime_sym_store_storage:
-  ~is_label_operand src /\ ~is_label_operand dst /\
-  EVERY runtime_sym_inst (state_insts s) /\
-  compile_store_storage src dst prim n s = (u,s') ==>
-  EVERY runtime_sym_inst (state_insts s')
-Proof
-  Cases_on `prim` >> Cases_on `n = 1` >>
-  simp[compile_store_storage_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  rpt (FIRST [
-    qpat_x_assum `emit_op _ _ _ = _`
-      (mp_then Any mp_tac runtime_sym_emit_op),
-    qpat_x_assum `emit_void _ _ _ = _`
-      (mp_then Any mp_tac runtime_sym_emit_void),
-    qpat_x_assum `compile_memory_to_storage _ _ _ _ = _`
-      (mp_then Any mp_tac runtime_sym_memory_to_storage)] >>
-    simp[] >> strip_tac) >> gvs[]
-QED
-
-Theorem runtime_sym_store_transient:
-  ~is_label_operand src /\ ~is_label_operand dst /\
-  EVERY runtime_sym_inst (state_insts s) /\
-  compile_store_transient src dst prim n s = (u,s') ==>
-  EVERY runtime_sym_inst (state_insts s')
-Proof
-  Cases_on `prim` >> Cases_on `n = 1` >>
-  simp[compile_store_transient_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  rpt (FIRST [
-    qpat_x_assum `emit_op _ _ _ = _`
-      (mp_then Any mp_tac runtime_sym_emit_op),
-    qpat_x_assum `emit_void _ _ _ = _`
-      (mp_then Any mp_tac runtime_sym_emit_void),
-    qpat_x_assum `compile_memory_to_transient _ _ _ _ = _`
-      (mp_then Any mp_tac runtime_sym_memory_to_transient)] >>
-    simp[] >> strip_tac) >> gvs[]
-QED
 
 Theorem runtime_sym_store_immutable:
   ~is_label_operand src /\
@@ -357,37 +320,6 @@ Proof
   >- (strip_tac >> gvs[]) >> metis_tac[runtime_sym_zero_memory_loop]
 QED
 
-Theorem runtime_sym_dynarray_to_storage:
-  ~is_label_operand src /\ ~is_label_operand dst /\
-  EVERY runtime_sym_inst (state_insts s) /\
-  compile_dynarray_to_storage src dst ew em transient s = (u,s') ==>
-  EVERY runtime_sym_inst (state_insts s')
-Proof
-  Cases_on `ew = 1` >> Cases_on `transient` >>
-  simp[compile_dynarray_to_storage_def, comp_bind_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  rpt (FIRST [
-    qpat_x_assum `fresh_label _ _ = _`
-      (mp_then Any mp_tac runtime_sym_fresh_label),
-    qpat_x_assum `fresh_var _ = _`
-      (mp_then Any mp_tac runtime_sym_fresh_var)] >> strip_tac) >> gvs[] >>
-  rpt (FIRST [
-    qpat_x_assum `emit_op _ _ _ = _`
-      (mp_then Any mp_tac runtime_sym_emit_op),
-    qpat_x_assum `emit_void _ _ _ = _`
-      (mp_then Any mp_tac runtime_sym_emit_void),
-    qpat_x_assum `emit_inst ASSIGN [_] [_] _ = _`
-      (mp_then Any mp_tac runtime_sym_assign),
-    qpat_x_assum `emit_inst JMP _ _ _ = _`
-      (mp_then Any mp_tac runtime_sym_jump),
-    qpat_x_assum `emit_inst JNZ _ _ _ = _`
-      (mp_then Any mp_tac runtime_sym_jnz),
-    qpat_x_assum `new_block _ _ = _`
-      (mp_then Any mp_tac runtime_sym_copy_new_block),
-    qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _`
-      (mp_then Any mp_tac runtime_sym_word_copy_loop)] >>
-    simp[is_label_operand_def] >> strip_tac) >> gvs[]
-QED
 
 Theorem runtime_sym_store_immutable_bytestring:
   ~is_label_operand src /\ ~is_label_operand dst /\
@@ -404,3 +336,4 @@ Proof
   qpat_assum `compile_word_copy_loop_base _ _ _ _ _ _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_word_copy_loop_base) >> simp[]
 QED
+

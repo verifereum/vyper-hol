@@ -1,7 +1,7 @@
 Theory runtimeSymSrcModuleArgs
 Ancestors
   runtimeSymSrcInterfaces runtimeSymSrcEmission moduleLowering finite_map compileEnv loweringShapeDefs emitHelper
-  exprLowering builtinStrings stackPlanTypes
+  exprLowering builtinStrings stackPlanTypes runtimeSymSrcAbiArgGuard
 
 Theorem runtime_sym_register_kwarg_vars:
   !vars ce. runtime_sym_env ce /\
@@ -79,20 +79,23 @@ Theorem runtime_sym_kwarg_calldata_source:
   (do head <- emit_op ADD [Lit 4w; Lit (n2w (off - 4))];
       if dyn then
         do relative <- emit_op CALLDATALOAD [head];
-           emit_op ADD [Lit 4w; relative] od
+           actual <- emit_op ADD [Lit 4w; relative];
+           compile_abi_arg_ptr_guard CALLDATALOAD actual (Lit 4w);
+           return actual od
       else return head od) s = (src,s') ==>
   EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand src
 Proof
   simp[comp_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
   drule_at (Pat `emit_op _ _ _ = _`) runtime_sym_emit_op >>
   simp[is_label_operand_def] >> strip_tac >>
-  Cases_on `dyn` >> gvs[comp_return_def, comp_bind_def] >>
-  pairarg_tac >> gvs[] >>
+  Cases_on `dyn` >> gvs[comp_return_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  qpat_x_assum `emit_op CALLDATALOAD _ _ = _`
+    (mp_then Any mp_tac runtime_sym_emit_op) >> simp[] >> strip_tac >>
   drule_at (Pat `emit_op _ _ _ = _`) runtime_sym_emit_op >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `emit_op CALLDATALOAD _ _ = _` kall_tac >>
-  drule_at (Pat `emit_op _ _ _ = _`) runtime_sym_emit_op >>
-  simp[is_label_operand_def]
+  simp[is_label_operand_def] >> strip_tac >>
+  drule_at (Pat `compile_abi_arg_ptr_guard _ _ _ _ = _`)
+    runtime_sym_abi_arg_ptr_guard >> simp[is_label_operand_def]
 QED
 
 Theorem runtime_sym_init_kwargs:
@@ -131,7 +134,7 @@ Proof
          qexistsl [`is_abi_dynamic ce.ce_struct_fields h2`, `off`, `s`] >>
          simp[NoAsms, comp_bind_def] >>
          pure_asm_rewrite_tac[] >> CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
-         asm_rewrite_tac[]) >>
+         asm_rewrite_tac[comp_ignore_bind_def]) >>
       first_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
       disch_then drule >> disch_then drule >> disch_then drule >> strip_tac >>
       first_x_assum (drule_at (Pat `compile_init_kwargs _ _ _ _ _ _ = _`)) >>

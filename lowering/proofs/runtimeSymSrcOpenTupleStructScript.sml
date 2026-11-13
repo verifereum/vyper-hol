@@ -19,6 +19,7 @@ Proof
   strip_tac >> gen_tac >> gen_tac >> Induct >-
     simp[compile_make_tuple_def, comp_return_def] >>
   rpt gen_tac >> strip_tac >>
+  Cases_on `tys` >- (qpat_x_assum `compile_make_tuple _ _ _ [] _ _ _ = _` mp_tac >> simp[Once compile_make_tuple_def, comp_return_def] >> strip_tac >> metis_tac[]) >>
   qpat_x_assum `~supported_exprs_exists _ (h::es)` mp_tac >>
   simp[supported_exprs_exists_every, NoAsms] >> strip_tac >>
   `runtime_sym_expr_contract tops cfn ce (expr_type h) h` by
@@ -30,7 +31,7 @@ Proof
   `!e ty. MEM e es ==> runtime_sym_expr_contract tops cfn ce ty e` by
     (rpt strip_tac >> first_x_assum irule >> simp[]) >>
   qpat_x_assum `!e ty. MEM e (h::es) ==> _` kall_tac >>
-  qpat_x_assum `compile_make_tuple _ _ (h::es) _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_make_tuple _ _ (h::es) _ _ _ _ = _` mp_tac >>
   simp[Once compile_make_tuple_def, comp_bind_def, comp_ignore_bind_def, NoAsms] >>
   pairarg_tac >> asm_rewrite_tac[] >> simp[NoAsms] >>
   `EVERY runtime_sym_inst (state_insts cs') /\ runtime_sym_value vv` by
@@ -51,7 +52,7 @@ Proof
   first_x_assum irule >>
   asm_rewrite_tac[] >> simp[EVERY_DEF, NoAsms] >>
   conj_tac >- (qpat_x_assum `EVERY _ (h::es)` mp_tac >> simp[EVERY_DEF, NoAsms]) >>
-  qexistsl [`buf`, `off + type_memory_bytes ce (expr_type h)`, `cs''''`] >>
+  qexistsl [`buf`, `off + type_memory_bytes ce h'`, `cs''''`, `t`] >>
   asm_rewrite_tac[]
 QED
 

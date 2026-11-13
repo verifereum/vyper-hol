@@ -232,7 +232,8 @@ QED
 
 Theorem runtime_data_frame_dynarray_append:
   (!v dst dt st. runtime_data_frame (compile_store_memory cenv v dst dt st)) /\
-  (!src dst n sl dl imm. runtime_data_frame (compile_word_copy_loop src dst n sl dl imm)) ==>
+  (!src dst n sl dl imm. runtime_data_frame (compile_word_copy_loop src dst n sl dl imm)) /\
+  (!src slot ty trans. runtime_data_frame (compile_store_slots cenv src slot ty trans)) ==>
   runtime_data_frame (compile_dynarray_append cenv arr v ws sz dt st cap prim ld sd)
 Proof
   strip_tac >> simp[compile_dynarray_append_def] >>
@@ -252,13 +253,15 @@ Theorem runtime_data_frame_stage_intcall_args:
   (!n. runtime_data_frame (compile_alloc_buffer n)) /\
   (!v dst. runtime_data_frame (compile_store_bytestring v dst)) /\
   (!v dst dt st. runtime_data_frame (compile_store_memory cenv v dst dt st)) ==>
-  !vs flags tys. runtime_data_frame (compile_stage_intcall_args cenv vs flags tys)
+  !vs flags tys.
+    (!e. MEM e vs ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
+    runtime_data_frame (compile_stage_intcall_args cfn cenv vs flags tys)
 Proof
   strip_tac >> Induct >> simp[compile_stage_intcall_args_def] >>
   rpt gen_tac >> Cases_on `flags` >> Cases_on `tys` >>
   simp[compile_stage_intcall_args_def] >>
   TRY (Cases_on `h'` >> simp[compile_stage_intcall_args_def]) >>
-  frame_tac >> rpt (IF_CASES_TAC >> simp[] >> frame_tac)
+  strip_tac >> frame_tac >> rpt (IF_CASES_TAC >> simp[] >> frame_tac)
 QED
 
 Theorem runtime_data_frame_store_multi_results[simp]:

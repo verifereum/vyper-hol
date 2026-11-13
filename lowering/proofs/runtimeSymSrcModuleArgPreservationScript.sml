@@ -1,6 +1,7 @@
 Theory runtimeSymSrcModuleArgPreservation
 Ancestors
   runtimeSymSrcAbiDecode runtimeSymSrcAbiCalls runtimeSymSrcEmission
+  runtimeSymSrcAbiArgGuard
   moduleLowering context compileEnv emitHelper loweringShapeDefs venomInst
   runtimeSymSrcInterfaces finite_map list stackPlanTypes
 
@@ -59,6 +60,14 @@ Proof
   `~is_label_operand x'` by metis_tac[runtime_sym_decode_operand] >>
   rpt (rev_dxrule_at (Pat `emit_op _ _ _ = _`) runtime_sym_emit_op >>
        simp[is_label_operand_def] >> strip_tac) >>
+  all_tac >~ [`compile_abi_arg_ptr_guard _ _ _ _ = _`] >-
+   (drule_at (Pat `compile_abi_arg_ptr_guard _ _ _ _ = _`)
+      runtime_sym_abi_arg_ptr_guard >>
+    simp[is_label_operand_def] >> strip_tac >>
+    qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+      (mp_then Any mp_tac runtime_sym_abi_decode_to_buf) >>
+    simp[is_label_operand_def] >> strip_tac >>
+    first_x_assum drule_all >> simp[]) >>
   qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (mp_then Any mp_tac runtime_sym_abi_decode_to_buf) >>
   simp[is_label_operand_def] >> strip_tac >> metis_tac[]

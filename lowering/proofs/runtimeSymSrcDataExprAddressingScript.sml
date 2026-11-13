@@ -60,6 +60,7 @@ Proof
 QED
 
 Theorem runtime_data_frame_subscript:
+  (!copy vv. runtime_data_frame (compile_snapshot_vv cenv copy vv)) /\
   runtime_data_frame (cfn cenv ty base_e) /\
   runtime_data_frame (cfn cenv ty idx_e) /\
   runtime_data_frame (cfn cenv (expr_type idx_e) idx_e) /\
@@ -79,6 +80,12 @@ Proof
   >- (simp[] >>
       rpt (match_mp_tac runtime_data_frame_bind >> conj_tac
            >- simp[runtime_data_frame_lower_value] >> gen_tac >> BETA_TAC) >>
+      rpt IF_CASES_TAC >> simp[] >>
+      rpt (match_mp_tac runtime_data_frame_bind >> conj_tac
+           >- simp[runtime_data_frame_lower_value] >> gen_tac >> BETA_TAC) >>
       rpt IF_CASES_TAC >> simp[]) >>
-  Cases_on `bt` >> simp[runtime_data_frame_lower_value]
+  Cases_on `bt` >> simp[runtime_data_frame_lower_value] >>
+  rpt (match_mp_tac runtime_data_frame_bind >> conj_tac
+       >- (rpt IF_CASES_TAC >> simp[runtime_data_frame_lower_value]) >>
+       gen_tac >> BETA_TAC) >> simp[]
 QED

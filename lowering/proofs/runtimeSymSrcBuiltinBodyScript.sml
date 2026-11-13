@@ -252,10 +252,10 @@ Resume runtime_sym_builtin_body[array]:
   qpat_assum `!n s b s'. _` (drule_at_then (Pat `compile_alloc_buffer _ _ = _`) mp_tac) >>
   simp[] >> strip_tac
   >~ [`compile_make_tuple _ _ _ _ _ _`]
-  >- (Cases_on `compile_make_tuple cfn ce args buf_op_alloc.buf_operand 0 st2` >>
+  >- (Cases_on `compile_make_tuple cfn ce args (tuple_literal_types rt args) buf_op_alloc.buf_operand 0 st2` >>
       simp[as_ptr_val_def] >> strip_tac >> gnvs[] >>
-      qpat_x_assum `!cfn ce es buf off s op s'. _`
-        (drule_at_then (Pat `compile_make_tuple _ _ _ _ _ _ = _`) mp_tac) >>
+      qpat_x_assum `!cfn ce es tys buf off s op s'. _`
+        (drule_at_then (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`) mp_tac) >>
       simp[runtime_sym_value_def, mk_ptr_def]) >>
   Cases_on `compile_make_array cfn ce args x (type_memory_bytes ce x)
     (case bound of Fixed v2 => F | Dynamic v3 => T) buf_op_alloc.buf_operand st2` >>

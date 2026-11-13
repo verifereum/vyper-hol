@@ -1,5 +1,5 @@
 Theory runtimeSymSrcDataStmt
-Ancestors
+Ancestors runtimeSymSrcDataCustomError
   runtimeSymSrcDataFrame stmtLowering compileEnv
 
 (* Distribute the projection frame through control selection, keeping branch
@@ -199,13 +199,13 @@ Theorem runtime_data_frame_compile_assign_value:
   (!a b n. runtime_data_frame (compile_copy_memory a b n)) /\
   (!c v b t s. runtime_data_frame (compile_store_memory c v b t s)) /\
   (!c b t v s. runtime_data_frame (compile_store_memory_typed c b t v s)) /\
-  (!v b w n t. runtime_data_frame (compile_dynarray_to_storage v b w n t)) /\
+  (!c v b t tr. runtime_data_frame (compile_store_slots c v b t tr)) /\
   (!v b n. runtime_data_frame (compile_memory_to_storage v b n)) /\
   (!v b n. runtime_data_frame (compile_memory_to_transient v b n)) /\
   (!i b v. runtime_data_frame (compile_imm_store_word i b v)) /\
   (!i v b. runtime_data_frame (compile_store_immutable_bytestring i v b)) /\
   (!i v b n k. runtime_data_frame (compile_imm_store_words i v b n k)) ==>
-  runtime_data_frame (compile_assign_value cenv dst loc v prim sloc ty sty di n)
+  runtime_data_frame (compile_assign_value cenv dst loc v prim sloc ty sty n)
 Proof
   strip_tac >> Cases_on `loc` >> simp[compile_assign_value_def, comp_ignore_bind_def] >>
   rpt (FIRST [CHANGED_TAC (simp[]),
@@ -216,8 +216,8 @@ QED
 Theorem runtime_data_frame_compile_tuple_store_all:
   (!c bt. runtime_data_frame (compile_get_target_ptr compile_expr c bt)) /\
   (!i b v. runtime_data_frame (compile_imm_store_word i b v)) /\
-  (!c b l v p sl t s di n.
-    runtime_data_frame (compile_assign_value c b l v p sl t s di n)) ==>
+  (!c b l v p sl t s n.
+    runtime_data_frame (compile_assign_value c b l v p sl t s n)) ==>
   !tys targets vals cenv.
     runtime_data_frame (compile_tuple_store_all cenv tys targets vals)
 Proof
@@ -259,8 +259,8 @@ QED
 Theorem runtime_data_frame_compile_annassign[local]:
   (!c t e. runtime_data_frame (compile_expr c t e)) /\
   (!c v. runtime_data_frame (unwrap_value c v)) /\
-  (!c dst loc v p sl t s di n.
-    runtime_data_frame (compile_assign_value c dst loc v p sl t s di n)) ==>
+  (!c dst loc v p sl t s n.
+    runtime_data_frame (compile_assign_value c dst loc v p sl t s n)) ==>
   runtime_data_frame (compile_stmt cenv lctx ty (AnnAssign id vtyp e))
 Proof
   strip_tac >> simp[Once compile_stmt_def, comp_ignore_bind_def] >>
@@ -281,8 +281,8 @@ Theorem runtime_data_frame_compile_stmt_conditional:
   (!c v. runtime_data_frame (unwrap_value c v)) /\
   (!c b v. runtime_data_frame (compile_snapshot_vv c b v)) /\
   (!op a b t lo hi. runtime_data_frame (compile_binop op a b t lo hi)) /\
-  (!c dst loc v p sl t s di n.
-    runtime_data_frame (compile_assign_value c dst loc v p sl t s di n)) /\
+  (!c dst loc v p sl t s n.
+    runtime_data_frame (compile_assign_value c dst loc v p sl t s n)) /\
   (!i b v loc. runtime_data_frame (compile_store_at_loc i b v loc)) /\
   (!c e. runtime_data_frame (compile_reason_message c e)) /\
   (!c v (t:type) n. runtime_data_frame (compile_revert_with_reason c v t n)) /\
@@ -311,7 +311,10 @@ Proof
 QED
 
 Resume runtime_data_frame_compile_stmt_conditional[rest]:
-  strip_tac >> ho_match_mp_tac compile_stmt_ind >> rpt strip_tac >>
+  strip_tac >>
+  `!c err. runtime_data_frame (compile_revert_with_custom_error c err)` by
+    (rpt gen_tac >> irule runtime_data_frame_revert_with_custom_error >> simp[]) >>
+  ho_match_mp_tac compile_stmt_ind >> rpt strip_tac >>
   simp[runtime_data_frame_compile_annassign]
   >~ [`compile_stmt _ _ _ (Assign (BaseTarget _) _)`] >- suspend "assign"
   >~ [`compile_stmt _ _ _ (AugAssign _ _ _ _)`] >- suspend "augassign"

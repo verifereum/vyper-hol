@@ -54,8 +54,11 @@ QED
    compile_dynarray_append is the C1.1.3 expression dynarray primitive.
    Opcode side conditions are retained literally for that primitive. *)
 Theorem runtime_sym_stmt_append:
-  (runtime_sym_env ce /\ supported_append_target tops target ==>
-    ~is_label_operand (compile_target_base ce target)) /\
+  (!s op loc pt s'. runtime_sym_env ce /\ supported_append_target tops target /\
+    ~supported_target_exists is_self_code target /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_get_target_ptr compile_expr ce target s = ((op,loc,pt),s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
   (!t s op s'. runtime_sym_env ce /\ supported_expr tops val_e /\
     ~supported_expr_exists is_self_code val_e /\
     EVERY runtime_sym_inst (state_insts s) /\
@@ -83,25 +86,25 @@ Proof
         (CONJUNCTS_THEN2 (mk_asm "store") (mk_asm "append"))))) >>
   pure_rewrite_tac[runtime_sym_stmt_contract_def, supported_stmt_def,
     supported_stmt_expr_exists_def] >> rpt strip_tac >> gvs[] >>
-  `~is_label_operand (compile_target_base ce target)` by
-    (asm "base" irule >> simp[]) >>
   `supported_expr tops val_e` by
     simp[supported_expr_def] >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   simp[Once compile_stmt_def, LET_THM, comp_bind_def, comp_ignore_bind_def,
     comp_return_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  PairCases_on `result` >>
+  asm "base" drule_all >> strip_tac >>
   asm "value" drule_all >> strip_tac >>
   Cases_on `is_word_type
-    (case target_root_type ce target of SOME (ArrayT t _) => t | _ => ty)` >>
+    (case result2 of SOME (ValPT (ArrayT t _)) => t | _ => BaseT (UintT 256))` >>
   gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[])
   >- (asm "append" (drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-      Cases_on `infer_array_location ce (target_to_expr target)` >>
+      Cases_on `result1` >> simp[load_opc_for_def, store_opc_for_def] >> Cases_on `x` >>
       simp[load_opc_for_def, store_opc_for_def]) >>
   asm "alloc" drule_all >> strip_tac >>
   asm "store" drule_all >> strip_tac >>
   asm "append" (drule_at (Pat `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  Cases_on `infer_array_location ce (target_to_expr target)` >>
+  Cases_on `result1` >> simp[load_opc_for_def, store_opc_for_def] >> Cases_on `x` >>
   simp[load_opc_for_def, store_opc_for_def]
 QED

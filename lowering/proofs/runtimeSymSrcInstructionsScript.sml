@@ -4,7 +4,7 @@ Ancestors
   runtimeSymSrcRuntimeBoundary runtimeSymSrcDynarrayAppend runtimeSymSrcAbiEncode
   runtimeSymSrcTargetDomains runtimeSymSrcModuleArgPreservation
   runtimeSymSrcGeneratorContracts runtimeSymSrcInterfaces runtimeSymSrcContext
-  list
+  list supportedStmts supportedExprTraverse
 
 Theorem runtime_sym_expr_closed:
   !tops ce ty e. runtime_sym_expr_contract tops compile_expr ce ty e
@@ -48,11 +48,19 @@ Theorem runtime_sym_stmts_closed:
   !tops stmts bs ce lc ty.
     runtime_sym_stmts_contract tops bs compile_stmts ce lc ty stmts
 Proof
-  gen_tac >> irule runtime_sym_stmts >>
-  conj_tac >- metis_tac[runtime_sym_target_ptr_closed] >>
-  conj_tac >- metis_tac[runtime_sym_assignment_ptr_closed] >>
-  conj_tac >- metis_tac[runtime_sym_dynarray_append] >>
+  gen_tac >> match_mp_tac runtime_sym_stmts >>
   conj_tac >- simp[runtime_sym_expr_closed] >>
+  conj_tac >- metis_tac[runtime_sym_assignment_ptr_closed] >>
+  conj_tac >- metis_tac[runtime_sym_target_ptr_closed] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      mp_tac runtime_sym_generators_target_ptr >>
+      simp[runtime_sym_generators, runtime_sym_target_ptr_clause_def] >>
+      disch_then irule >> goal_assum (drule_at Any) >>
+      simp[runtime_sym_expr_closed] >>
+      Cases_on `target` >>
+      gvs[supported_append_target_def, supported_expr_exists_def]) >>
+  conj_tac >- metis_tac[runtime_sym_dynarray_append] >>
   metis_tac[runtime_sym_abi_encode_to_buf]
 QED
 

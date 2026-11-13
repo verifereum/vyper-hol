@@ -148,26 +148,30 @@ Theorem runtime_data_frame_slice_calldata:
   (!n. runtime_data_frame (compile_alloc_buffer n)) ==>
   runtime_data_frame (compile_slice_calldata s n out)
 Proof
-  strip_tac >> simp[compile_slice_calldata_def] >>
-  match_mp_tac runtime_data_frame_bind >> conj_tac
-  >- simp[runtime_data_frame_slice_out_buf]
-  >> simp[pairTheory.FORALL_PROD, comp_ignore_bind_def]
+  strip_tac >> simp[compile_slice_calldata_def, comp_ignore_bind_def] >>
+  rpt (match_mp_tac runtime_data_frame_bind >> conj_tac
+    >- simp[runtime_data_frame_slice_out_buf] >> gen_tac >> BETA_TAC) >>
+  PairCases_on `x` >> simp[comp_ignore_bind_def]
 QED
 
 Theorem runtime_data_frame_slice_code:
   (!n. runtime_data_frame (compile_alloc_buffer n)) ==>
   runtime_data_frame (compile_slice_code s n out)
 Proof
-  strip_tac >> simp[compile_slice_code_def] >>
-  match_mp_tac runtime_data_frame_bind >> conj_tac
-  >- simp[runtime_data_frame_slice_out_buf]
-  >> simp[pairTheory.FORALL_PROD, comp_ignore_bind_def]
+  strip_tac >> simp[compile_slice_code_def, comp_ignore_bind_def] >>
+  rpt (match_mp_tac runtime_data_frame_bind >> conj_tac
+    >- simp[runtime_data_frame_slice_out_buf] >> gen_tac >> BETA_TAC) >>
+  PairCases_on `x` >> simp[comp_ignore_bind_def]
 QED
 
-Theorem runtime_data_frame_slice_extcode[simp]:
-  runtime_data_frame (compile_slice_extcode a s n b d)
+Theorem runtime_data_frame_slice_extcode:
+  (!n. runtime_data_frame (compile_alloc_buffer n)) ==>
+  runtime_data_frame (compile_slice_extcode a s n b)
 Proof
-  simp[compile_slice_extcode_def]
+  strip_tac >> simp[compile_slice_extcode_def, comp_ignore_bind_def] >>
+  rpt (match_mp_tac runtime_data_frame_bind >> conj_tac
+    >- simp[runtime_data_frame_slice_out_buf] >> gen_tac >> BETA_TAC) >>
+  PairCases_on `x` >> simp[comp_ignore_bind_def]
 QED
 
 Theorem runtime_data_frame_extract32_load[simp]:

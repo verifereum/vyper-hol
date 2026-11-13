@@ -2,6 +2,7 @@ Theory runtimeSymSrcPackageTransport
 Ancestors
   runtimeSymSrcRuntimePackaging runtimeSymSrcEmission supportedProgram e2eProducers list
   supportedExprTraverse exprOracleStorageInterfaces runtimeSymSrcInterfaces
+  runtimeSymSrcClassifiedSource
   compileVyper compileEnv loweringShapeProps pair
 
 Theorem runtime_sym_source_exclusions:
@@ -16,7 +17,7 @@ Proof
 QED
 
 Theorem runtime_sym_source_fbody:
-  supported_program tops /\
+  vis <> Deploy /\ supported_program tops /\
   MEM (FunctionDecl vis mut nr rr name args defaults ret stmts) tops ==>
   supported_stmts tops
     (args ++ supported_stmts_bindings T stmts ++ supported_stmts_bindings F stmts)
@@ -201,15 +202,20 @@ QED
 Theorem runtime_sym_external_source:
   supported_program tops /\ ~program_reads_self_code tops /\
   MEM (mut,nr,rr,name,args,defaults,ret,stmts) (FST (classify_functions tops)) ==>
-  supported_stmts tops
+  (supported_stmts tops
     (args ++ supported_stmts_bindings T stmts ++ supported_stmts_bindings F stmts) stmts /\
-  ~supported_stmts_expr_exists is_self_code stmts /\
-  (!e. MEM e defaults ==> supported_expr tops e /\ ~supported_expr_exists is_self_code e)
+   ~supported_stmts_expr_exists is_self_code stmts /\
+   (!e. MEM e defaults ==> supported_expr tops e /\ ~supported_expr_exists is_self_code e)) \/
+  (?top. MEM top tops /\ public_getter top = SOME (mut,nr,rr,name,args,defaults,ret,stmts))
 Proof
   strip_tac >> drule classify_functions_external_source >> strip_tac >>
-  drule_all runtime_sym_source_fbody >>
-  drule_all runtime_sym_source_exclusions >> rpt strip_tac >>
-  metis_tac[runtime_sym_source_default]
+  gvs[runtime_sym_supported_subst_consts_fn]
+  >- (disj1_tac >>
+      `External <> Deploy` by simp[] >>
+      drule_all runtime_sym_source_fbody >>
+      drule_all runtime_sym_source_exclusions >> rpt strip_tac >>
+      metis_tac[runtime_sym_source_default]) >>
+  disj2_tac >> metis_tac[]
 QED
 
 Theorem runtime_sym_internal_source:
@@ -220,6 +226,8 @@ Theorem runtime_sym_internal_source:
   ~supported_stmts_expr_exists is_self_code stmts
 Proof
   strip_tac >> gvs[MEM_classify_internal] >>
+  gvs[runtime_sym_supported_subst_consts_fn] >>
+  `Internal <> Deploy` by simp[] >>
   drule_all runtime_sym_source_fbody >>
   drule_all runtime_sym_source_exclusions >> simp[]
 QED
@@ -233,6 +241,8 @@ Theorem runtime_sym_fallback_source:
   ~supported_stmts_expr_exists is_self_code stmts
 Proof
   strip_tac >> drule classify_functions_fallback_mem >> strip_tac >>
+  gvs[runtime_sym_supported_subst_consts_fn] >>
+  `External <> Deploy` by simp[] >>
   drule_all runtime_sym_source_fbody >>
   drule_all runtime_sym_source_exclusions >> simp[]
 QED

@@ -48,11 +48,11 @@ QED
 Theorem runtime_data_frame_make_tuple:
   (!vv. runtime_data_frame (unwrap_value cenv vv)) /\
   (!v dst ty sty. runtime_data_frame (compile_store_memory cenv v dst ty sty)) ==>
-  !es buf off.
+  !es tys buf off.
     (!e. MEM e es ==> runtime_data_frame (cfn cenv (expr_type e) e)) ==>
-    runtime_data_frame (compile_make_tuple cfn cenv es buf off)
+    runtime_data_frame (compile_make_tuple cfn cenv es tys buf off)
 Proof
-  strip_tac >> Induct >> simp[compile_make_tuple_def] >>
+  strip_tac >> Induct >> rpt gen_tac >> Cases_on `tys` >> simp[compile_make_tuple_def] >>
   rpt strip_tac >> simp[comp_ignore_bind_def] >>
   rpt (match_mp_tac runtime_data_frame_bind >> conj_tac >- simp[] >> gen_tac >> BETA_TAC) >> simp[]
 QED

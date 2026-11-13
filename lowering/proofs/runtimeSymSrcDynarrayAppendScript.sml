@@ -1,6 +1,7 @@
 Theory runtimeSymSrcDynarrayAppend
 Ancestors
   runtimeSymSrcEmission runtimeSymSrcContextTyped runtimeSymSrcContextCopy
+  runtimeSymSrcStoreSlots
   exprLowering compileEnv emitHelper loweringShapeDefs venomInst list stackPlanTypes
 
 Theorem runtime_sym_dynarray_append:
@@ -39,10 +40,10 @@ Proof
      >- (qpat_assum `emit_void store [elem_ptr; v] _ = _`
            (mp_then Any mp_tac runtime_sym_emit_void) >> simp[]) >>
      Cases_on `loc = LocMemory` >>
-     gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-     pairarg_tac >> gvs[]
-     >- (drule_all runtime_sym_store_memory >> simp[]) >>
-     drule_all runtime_sym_word_copy_loop >> simp[]) >>
+     gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def]
+     >- (pairarg_tac >> gvs[] >>
+         drule_all runtime_sym_store_memory >> simp[]) >>
+     drule_all runtime_sym_store_slots >> simp[]) >>
   qpat_assum `emit_op ADD [len_op; _] store_s' = _`
     (mp_then Any mp_tac runtime_sym_emit_op) >>
   simp[is_label_operand_def] >> strip_tac >>

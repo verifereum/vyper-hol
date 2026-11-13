@@ -14,24 +14,24 @@ Theorem runtime_sym_stmt_annassign:
   (!v s op s'. runtime_sym_env ce /\ runtime_sym_value v /\ EVERY runtime_sym_inst (state_insts s) /\
     unwrap_value ce v s = (op,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
-  (!d loc v prim sl dt st da n s u s'.
+  (!d loc v prim sl dt st n s u s'.
     ~is_label_operand d /\ ~is_label_operand v /\
     (!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b) /\
     EVERY runtime_sym_inst (state_insts s) /\
-    compile_assign_value ce d loc v prim sl dt st da n s = (u,s') ==>
+    compile_assign_value ce d loc v prim sl dt st n s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')) ==>
   runtime_sym_stmt_contract tops bindings compile_stmt ce lc ty (AnnAssign id vtyp e)
 Proof
   strip_tac >> simp[runtime_sym_stmt_contract_def] >> rpt strip_tac >>
   fs[supported_stmt_def, supported_stmt_expr_exists_def] >>
-  qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
+  (qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   simp[Once compile_stmt_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   rename1 `emit_local_alloca ce id s = (u,sa)` >> Cases_on `u` >>
   first_assum drule_all >> strip_tac >>
   fs[runtime_sym_expr_contract_def] >>
   qpat_x_assum `!s v s'. _` drule_all >> strip_tac >>
-  qpat_x_assum `!d loc v prim sl dt st da n s s'. _` (mk_asm "assign") >>
+  qpat_x_assum `!d loc v prim sl dt st n s s'. _` (mk_asm "assign") >>
   Cases_on `has_length_word vtyp /\ is_empty_value_expr e` >> simp[]
   >- (rpt strip_tac >>
       Cases_on `FLOOKUP ce.ce_vars id` >> gvs[comp_return_def]
@@ -51,8 +51,8 @@ Proof
   `~is_label_operand (Lit 0w)` by simp[is_label_operand_def] >>
   imp_res_tac runtime_sym_env_local >>
   fs[runtime_sym_loc_def, runtime_sym_env_def] >>
-  asm "assign" (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  simp[is_label_operand_def]
+  asm "assign" (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[is_label_operand_def])
 QED
 
 Theorem runtime_sym_stmt_tupleassign:
@@ -103,11 +103,11 @@ Theorem runtime_sym_stmt_baseassign:
   (!v s out s'. runtime_sym_env ce /\ runtime_sym_value v /\ EVERY runtime_sym_inst (state_insts s) /\
     compile_snapshot_vv ce T v s = (out,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ runtime_sym_value out) /\
-  (!d loc v prim sl dt st da n s u s'.
+  (!d loc v prim sl dt st n s u s'.
     ~is_label_operand d /\ ~is_label_operand v /\
     (!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b) /\
     EVERY runtime_sym_inst (state_insts s) /\
-    compile_assign_value ce d loc v prim sl dt st da n s = (u,s') ==>
+    compile_assign_value ce d loc v prim sl dt st n s = (u,s') ==>
     EVERY runtime_sym_inst (state_insts s')) /\
   (!d v loc s u s'. ~is_label_operand d /\ ~is_label_operand v /\
     (!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b) /\
@@ -164,7 +164,7 @@ Resume runtime_sym_stmt_baseassign[finish_snapshot]:
   Cases_on `tgt_result1` >> gvs[]
   >- (drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >> simp[]) >>
   fs[runtime_sym_env_def] >>
-  asm "assign" (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >> simp[]
+  asm "assign" (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >> simp[]
 QED
 
 Resume runtime_sym_stmt_baseassign[finish_direct]:
@@ -175,7 +175,7 @@ Resume runtime_sym_stmt_baseassign[finish_direct]:
   Cases_on `tgt_result1` >> gvs[]
   >- (drule_at (Pat `emit_void _ _ _ = _`) runtime_sym_emit_void >> simp[]) >>
   fs[runtime_sym_env_def] >>
-  asm "assign" (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >> simp[]
+  asm "assign" (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >> simp[]
 QED
 
 Finalise runtime_sym_stmt_baseassign

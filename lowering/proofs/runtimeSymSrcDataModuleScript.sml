@@ -6,7 +6,7 @@ val frame_rules = [runtime_data_frame_bind, runtime_data_frame_ignore_bind,
   runtime_data_frame_return, runtime_data_frame_emit_op,
   runtime_data_frame_emit_inst, runtime_data_frame_emit_void,
   runtime_data_frame_fresh_label, runtime_data_frame_new_block,
-  runtime_data_frame_get];
+  runtime_data_frame_get, compile_abi_arg_ptr_guard_def, comp_ignore_bind_def];
 val frame_tac = fs frame_rules;
 
 Theorem runtime_data_frame_selector_checks[simp]:
@@ -34,6 +34,9 @@ Theorem runtime_data_frame_decode_args:
   !args cenv off opc hi adj.
     runtime_data_frame (compile_decode_args cenv args off opc hi adj)
 Proof
+  `!opc src parent. runtime_data_frame (compile_abi_arg_ptr_guard opc src parent)` by
+    (rpt gen_tac >> simp[compile_abi_arg_ptr_guard_def, comp_ignore_bind_def] >>
+     IF_CASES_TAC >> frame_tac) >>
   strip_tac >> Induct >> simp[compile_decode_args_def] >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >>
   Cases_on `h1` >> Cases_on `h2` >>

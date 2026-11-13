@@ -1,7 +1,7 @@
 Theory runtimeSymSrcStatementAssignFamily
 Ancestors
   runtimeSymSrcStatementAssign runtimeSymSrcAssignValue runtimeSymSrcAssignTuple
-  runtimeSymSrcAssignConstructors runtimeSymSrcAssignUpdates
+  runtimeSymSrcAssignConstructors runtimeSymSrcAssignUpdates runtimeSymSrcStoreSlots
   runtimeSymSrcDeclarations runtimeSymSrcContextTyped runtimeSymSrcContextCopy
   runtimeSymSrcContext runtimeSymSrcInterfaces supportedStmts supportedStmtTraverse
   stmtLowering exprLowering compileEnv venomInst stackPlanTypes list
@@ -17,7 +17,7 @@ Theorem runtime_sym_assignment_value:
   ~is_label_operand dst /\ ~is_label_operand value /\
   (!b. ce.ce_imm_alloca = SOME b ==> ~is_label_operand b) /\
   EVERY runtime_sym_inst (state_insts s) /\
-  compile_assign_value ce dst loc value prim sl dt st da n s = (u,s') ==>
+  compile_assign_value ce dst loc value prim sl dt st n s = (u,s') ==>
   EVERY runtime_sym_inst (state_insts s')
 Proof
   mp_tac runtime_sym_compile_assign_value >>
@@ -27,9 +27,7 @@ Proof
       >- metis_tac[runtime_sym_copy_memory]
       >- metis_tac[runtime_sym_store_memory]
       >- metis_tac[runtime_sym_store_memory_typed]
-      >- metis_tac[runtime_sym_dynarray_to_storage]
-      >- metis_tac[runtime_sym_memory_to_storage]
-      >- metis_tac[runtime_sym_memory_to_transient]
+      >- metis_tac[runtime_sym_store_slots]
       >- metis_tac[runtime_sym_imm_store_word]
       >- metis_tac[runtime_sym_store_immutable_bytestring]
       >> metis_tac[runtime_sym_imm_store_words]) >>
@@ -57,15 +55,6 @@ Proof
   mp_tac runtime_sym_tuple_load_all >>
   impl_tac >- metis_tac[runtime_sym_load_memory] >>
   metis_tac[]
-QED
-
-Theorem runtime_sym_assignment_target_base:
-  supported_append_target tops target ==>
-  ~is_label_operand (compile_target_base ce target)
-Proof
-  Cases_on `target` >> simp[supported_append_target_def, compile_target_base_def] >>
-  Cases_on `FLOOKUP ce.ce_module_vars p` >> simp[is_label_operand_def] >>
-  Cases_on `x` >> simp[is_label_operand_def]
 QED
 
 Theorem runtime_sym_assignment_unpack:
@@ -176,6 +165,11 @@ QED
 (* AugAssign has no assignment-local premises: runtime_sym_stmt_augassign
    is already the published constructor boundary, imported unchanged. *)
 Theorem runtime_sym_assignment_append:
+  (!s op loc pt s'. runtime_sym_env ce /\ supported_append_target tops target /\
+    ~supported_target_exists is_self_code target /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_get_target_ptr compile_expr ce target s = ((op,loc,pt),s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op) /\
   (!t s op s'. runtime_sym_env ce /\ supported_expr tops val_e /\
     ~supported_expr_exists is_self_code val_e /\
     EVERY runtime_sym_inst (state_insts s) /\
@@ -190,10 +184,10 @@ Theorem runtime_sym_assignment_append:
     EVERY runtime_sym_inst (state_insts s')) ==>
   runtime_sym_stmt_contract tops bindings compile_stmt ce lc ty (Append target val_e)
 Proof
-  strip_tac >> irule runtime_sym_stmt_append >> rpt conj_tac
-  >- metis_tac[runtime_sym_alloc_buffer]
+  strip_tac >> match_mp_tac runtime_sym_stmt_append >> rpt conj_tac
   >- first_assum ACCEPT_TAC
-  >- metis_tac[runtime_sym_store_memory]
-  >- first_assum ACCEPT_TAC >>
-  metis_tac[runtime_sym_assignment_target_base]
+  >- first_assum ACCEPT_TAC
+  >- metis_tac[runtime_sym_alloc_buffer]
+  >- metis_tac[runtime_sym_store_memory] >>
+  first_assum ACCEPT_TAC
 QED

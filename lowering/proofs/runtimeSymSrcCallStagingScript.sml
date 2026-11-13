@@ -4,6 +4,7 @@ Ancestors
   runtimeSymSrcContextCopy
   runtimeSymSrcEmission runtimeSymSrcEmissionProbe runtimeSymSrcInterfaces exprLowering builtinSimple
   compileEnv emitHelper loweringShapeDefs venomInst list stackPlanTypes
+  supportedExprs supportedExprTraverse
 
 Theorem runtime_sym_stage_op[local]:
   emit_op opc ops s = (v,s') ==>
@@ -108,40 +109,43 @@ Proof
 QED
 
 Theorem runtime_sym_stage_intcall_args:
-  !ce vals flags tys s ops s'.
-  runtime_sym_env ce /\ EVERY runtime_sym_value vals /\
+  !cfn ce es flags tys s ops s'.
+  runtime_sym_env ce /\ EVERY (supported_pure_expr tops) es /\
+  ~supported_exprs_exists is_self_code es /\
+  (!e t. MEM e es ==> runtime_sym_expr_contract tops cfn ce t e) /\
   EVERY runtime_sym_inst (state_insts s) /\
-  compile_stage_intcall_args ce vals flags tys s = (ops,s') ==>
+  compile_stage_intcall_args cfn ce es flags tys s = (ops,s') ==>
   EVERY runtime_sym_inst (state_insts s') /\
   EVERY (\op. ~is_label_operand op) ops
 Proof
   ho_match_mp_tac compile_stage_intcall_args_ind >> rpt conj_tac
-  >- simp[compile_stage_intcall_args_def, comp_return_def]
-  >- (rpt gen_tac >> disch_tac >> rpt gen_tac >> simp[Once compile_stage_intcall_args_def,
-                         comp_bind_def, comp_return_def] >>
-      rpt (pairarg_tac >> simp[]) >> strip_tac >>
-      drule_all runtime_sym_unwrap_value >> strip_tac >>
-      gvs[] >> first_x_assum drule_all >> strip_tac >> simp[]) 
-  >- (rpt gen_tac >> disch_tac >> rpt gen_tac >> simp[Once compile_stage_intcall_args_def,
-                         comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-      rpt (pairarg_tac >> simp[]) >> strip_tac >>
-      drule_all runtime_sym_unwrap_value >> strip_tac >>
-      drule_all runtime_sym_alloc_buffer >> strip_tac >>
-      Cases_on `is_word_type ty` >> gvs[]
-      >- (rev_dxrule runtime_sym_stage_void >> simp[] >> strip_tac >>
-          gvs[] >> first_x_assum drule_all >> strip_tac >> simp[]) >>
-      Cases_on `case ty of BaseT (BytesT (Dynamic _)) => T | BaseT (StringT _) => T | _ => F` >> gvs[]
-      >- (gvs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
-          pairarg_tac >> gvs[] >>
-          drule_all runtime_sym_store_bytestring >> strip_tac >>
-          gvs[] >> first_x_assum drule_all >> strip_tac >> simp[]) >>
-      drule_all runtimeSymSrcContextTypedTheory.runtime_sym_store_memory >> strip_tac >>
-      gvs[] >> first_x_assum drule_all >> strip_tac >> simp[]) >>
+  >- simp[compile_stage_intcall_args_def, comp_return_def] >>
   rpt gen_tac >> disch_tac >> rpt gen_tac >>
-  simp[Once compile_stage_intcall_args_def, comp_bind_def, comp_return_def] >>
+  simp[Once compile_stage_intcall_args_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  `runtime_sym_expr_contract tops cfn ce (expr_type e) e` by metis_tac[] >>
+  fs[supported_expr_exists_def] >>
+  qpat_x_assum `runtime_sym_expr_contract _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[runtime_sym_expr_contract_def] >>
+  disch_then (drule_at (Pat `cfn _ _ _ _ = _`)) >>
+  simp[] >> (impl_tac >- gvs[supported_expr_def]) >> strip_tac >>
+  all_tac
+  >~ [`compile_alloc_buffer _ _ = _`] >-
+    (drule_all runtime_sym_alloc_buffer >> strip_tac >>
+     drule_all runtime_sym_unwrap_value >> strip_tac >>
+     Cases_on `is_word_type ty` >> gvs[]
+     >- (rev_dxrule runtime_sym_stage_void >> simp[] >> strip_tac >>
+         first_x_assum drule_all >> strip_tac >> simp[]) >>
+     Cases_on `case ty of BaseT (BytesT (Dynamic _)) => T | BaseT (StringT _) => T | _ => F` >> gvs[]
+     >- (gvs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+         pairarg_tac >> gvs[] >>
+         drule_all runtime_sym_store_bytestring >> strip_tac >>
+         first_x_assum drule_all >> strip_tac >> simp[]) >>
+     drule_all runtimeSymSrcContextTypedTheory.runtime_sym_store_memory >> strip_tac >>
+     first_x_assum drule_all >> strip_tac >> simp[]) >>
   drule_all runtime_sym_unwrap_value >> strip_tac >>
-  gvs[] >> first_x_assum drule_all >> strip_tac >> simp[]
+  first_x_assum drule_all >> strip_tac >> gvs[]
 QED
 
 Theorem runtime_sym_default_return_path_cond:

@@ -117,12 +117,12 @@ End
 
 Definition runtime_sym_make_tuple_clause_def:
   runtime_sym_make_tuple_clause tops <=>
-  !cfn ce es buf off s op s'.
+  !cfn ce es tys buf off s op s'.
     (!e ty. MEM e es ==> runtime_sym_expr_contract tops cfn ce ty e) /\
     runtime_sym_env ce /\ EVERY (supported_pure_expr tops) es /\
     ~supported_exprs_exists is_self_code es /\ ~is_label_operand buf /\
     EVERY runtime_sym_inst (state_insts s) /\
-    compile_make_tuple cfn ce es buf off s = (op,s') ==>
+    compile_make_tuple cfn ce es tys buf off s = (op,s') ==>
     EVERY runtime_sym_inst (state_insts s') /\ ~is_label_operand op
 End
 
