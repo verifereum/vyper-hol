@@ -115,6 +115,7 @@ Theorem assign_base_ptr_alloc_buffer_counted_separated:
       val_in_memory tv v (w2n w) m) ==>
     ?u a G' tn'.
       gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK u) /\
+      u.vs_memory = s.vs_memory /\
       stmt_state_rel ctx func cenv cx es u /\ ~u.vs_halted /\
       eval_operand buf.buf_operand u = SOME a /\
       FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n a,sz) /\
@@ -140,6 +141,7 @@ Theorem assign_base_ptr_alloc_buffer_counted_separated:
         local_region cenv es.scopes u name b len)
 Proof
   rpt strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
+  drule_all literal_alloc_buffer_run >> strip_tac >>
   drule_all assign_base_ptr_alloc_buffer_sequence_full >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   drule_all assign_base_ptr_alloc_buffer_endpoint_separation >> strip_tac >>

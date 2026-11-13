@@ -102,6 +102,9 @@ Theorem assign_base_alloc_scratch_staging_ptr:
       gas_path_ptr D 0 ctx fn PG Gi ti u 0 Gf tf (OK t) /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK t) /\
       typed_copy_state_frame sm (w2n a) n u t /\
+      u.vs_memory = s.vs_memory /\
+      (!name b len. local_region cenv es.scopes t name b len ==>
+        regions_disjoint (w2n a) n b len) /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
       t.vs_prev_bb = u.vs_prev_bb /\ ptr_covers Gf tf dst t n /\
@@ -146,5 +149,5 @@ Proof
        [STRING #"%" (toString sa.cs_next_var)]`,
        `STRING #"%" (toString sa.cs_next_var)`] >> simp[mk_inst_def]) >>
   qexistsl_tac [`u`, `a`, `G'`, `tn'`, `u'`, `Gf`, `tf`] >>
-  simp[] >> gvs[eval_operand_def]
+  simp[] >> gvs[eval_operand_def] >> first_assum ACCEPT_TAC
 QED
