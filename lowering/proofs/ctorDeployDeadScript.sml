@@ -9,7 +9,7 @@ Theory ctorDeployDead
 Ancestors
   ctorDeployDefs bodyPtrDefs gasContext ctorDeployDeadSectionFrame ctorDeployDeadSectionRel
   ctorDeployDeadLoad ctorDeployDeadImmTypes e2eComposition ptrDiscipline accountsRelProps compileEnv loweringStateRelDefs
-  vyperInterpreter list rich_list
+  vyperInterpreter list rich_list e2eDeployDefs vyperContext sourceUnitExecution
 
 Theorem deploy_dead_wf:
   !H tops runtime_bc am tx.
