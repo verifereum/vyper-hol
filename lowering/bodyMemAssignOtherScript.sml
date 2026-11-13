@@ -22,6 +22,7 @@ Theorem body_assign_other_mem:
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    body_stmt_safe tops (Assign (BaseTarget t) e) /\
     stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
     frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
