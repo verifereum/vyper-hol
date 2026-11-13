@@ -12,7 +12,8 @@ Ancestors
 Theorem intcall_array_source_inputs:
   supported_stmt tops bindings (For id fty (Array arr) bound stmts) /\
   type_stmt env ret_ty (For id fty (Array arr) bound stmts) = SOME env' /\
-  expr_sim_inv ce cx env es /\ ce_locals_declared ce env ==>
+  expr_sim_inv ce cx env es /\ ce_locals_declared ce env /\
+  (?m name. arr = Name (ArrayT fty (Fixed m)) name) ==>
   ?name env_b snapshot tv ptr sz al vs.
     arr = Name (ArrayT fty (Fixed bound)) name /\ env' = env /\
     well_typed_expr env (Name (ArrayT fty (Fixed bound)) name) /\
