@@ -6301,6 +6301,116 @@ Proof
   metis_tac[]
 QED
 
+(* Direct specialization of P's padded-prefix conjunct.  Only the supplied
+   prefix filling is used; no full-array filling is completed. *)
+Theorem identity_padded_prefix_mask_result[local]:
+  !fuel C C' owner xs st ms ess.
+  let R = (\n D xs s. FOLDR (dft_exec_cons n D) OK xs s);
+      E = (\D xs s. gas_events_block fuel D owner
+        <|bb_label := s.vs_current_bb; bb_instructions :=
+          REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> s);
+      S = (\xs s m es unused.
+        LENGTH m = LENGTH es /\
+        PERM (MAP THE (FILTER IS_SOME m) ++ unused) s.vs_gas_readings /\
+        (!u. (R fuel C' xs s = OK u \/ (?ir. R fuel C' xs s = IntRet ir u)) ==>
+          EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+        !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+          (?extra. es = E C xs (s with vs_gas_readings := gs ++ tail) ++ extra) /\
+          ((?j. terminates (R j C xs (s with vs_gas_readings := gs ++ tail))) ==>
+            terminates (R fuel C xs (s with vs_gas_readings := gs ++ tail)) /\
+            dft_res_rel
+              (restore_result [] (R fuel C xs (s with vs_gas_readings := gs ++ tail)))
+              (restore_result [] (R fuel C' xs s)) /\
+            (((?u. R fuel C' xs s = OK u) \/ (?ir u. R fuel C' xs s = IntRet ir u)) ==>
+              E C xs (s with vs_gas_readings := gs ++ tail) = es /\
+              residual_result tail (R fuel C' xs s)
+                (R fuel C xs (s with vs_gas_readings := gs ++ tail)))));
+      pm = GENLIST (\j. if j < LENGTH xs /\ (EL j xs).inst_opcode = GAS /\
+             ~(?t. R fuel C' (TAKE j xs) st = OK t)
+           then [NONE] else EL j ms) (LENGTH xs);
+      pe = GENLIST (\j. if j < LENGTH xs /\ (EL j xs).inst_opcode = GAS /\
+             ~(?t. R fuel C' (TAKE j xs) st = OK t)
+           then [(owner,(EL j xs).inst_id)] else EL j ess) (LENGTH xs)
+  in
+    (!k. k <= LENGTH xs ==> ?unused.
+       S (TAKE k xs) st (FLAT (TAKE k pm)) (FLAT (TAKE k pe)) unused) ==>
+    !k kgss tail.
+      k <= LENGTH xs /\ EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs) /\
+      LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) (TAKE k pm) kgss ==>
+      let pre = TAKE k xs;
+          es = FLAT (TAKE k pe);
+          a = st with vs_gas_readings := FLAT kgss ++ tail
+      in
+      (?extra. es = E C pre a ++ extra) /\
+      (!u. R fuel C pre a = OK u ==>
+        E C pre a = es /\ u.vs_gas_readings = tail /\
+        (?t. R fuel C' pre st = OK t) /\
+        !tail'. R fuel C pre (st with vs_gas_readings := FLAT kgss ++ tail') =
+          OK (u with vs_gas_readings := tail')) /\
+      (((~?u. R fuel C pre a = OK u) /\ (?j. terminates (R j C pre a))) ==>
+        terminates (R fuel C pre a) /\
+        dft_res_rel (restore_result [] (R fuel C pre a))
+          (restore_result [] (R fuel C' xs st))) /\
+      ((~?t. R fuel C' pre st = OK t) ==> ~?u. R fuel C pre a = OK u)
+Proof
+  rpt gen_tac >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!k. k <= LENGTH xs ==> _` (qspec_then `k` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+     (FLAT (TAKE k (GENLIST (\j. if j < LENGTH xs /\
+       (EL j xs).inst_opcode = GAS /\
+       ~(?t. FOLDR (dft_exec_cons fuel C') OK (TAKE j xs) st = OK t)
+       then [NONE] else EL j ms) (LENGTH xs)))) (FLAT kgss)` by
+    (qpat_x_assum `LIST_REL (LIST_REL _) _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     qspec_tac (`kgss`, `bs`) >>
+     qmatch_goalsub_abbrev_tac `LIST_REL (LIST_REL _) as` >>
+     qid_spec_tac `as` >> Induct >> Cases_on `bs` >>
+     simp[] >> metis_tac[LIST_REL_APPEND_suff]) >>
+  qmatch_asmsub_abbrev_tac `LENGTH pmk = LENGTH pek` >>
+  mp_tac (Q.INST [`pre` |-> `TAKE k xs`, `post` |-> `DROP k xs`,
+    `m` |-> `pmk`, `es` |-> `pek`] (SPEC_ALL identity_prefix_mask_result)) >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  pure_rewrite_tac[TAKE_DROP] >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qspecl_then [`FLAT kgss`, `tail`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  simp_tac pure_ss [Abbr `pek`] >> simp[]
+QED
+
+(* Producer audit for the prefix-only strengthening (not a new T premise).
+   Identity order: P's first !n prefix conjunct is exactly the antecedent of
+   identity_padded_prefix_mask_result; its last !n conjunct is the UNPADDED
+   legacy projection and cannot replace it.  The theorem uses only kgss for
+   TAKE k pm, with the caller's arbitrary tail unchanged.
+
+   Reordered successful heads: cuts before the extracted y require the
+   recursive prefix-only certificate on TAKE k pre, with residual tail
+     FLAT (DROP k pgss) ++ gh ++ FLAT postgss ++ tail.
+   Cuts after y require the recursive cut TAKE (k-1) (pre ++ post), with
+   gh removed from the filling.  Successful replay must identify the actual
+   successor with the head update (including cursor), after which the
+   existing extraction splice can reuse the same post execution.  Existing
+   full-filling T supplies neither of these prefix-only quantifiers.
+   For INVOKE heads, preserve the checked successful/stopped split and its
+   packet witnesses; the extra prefix clauses must use the same crossed
+   prefix execution, never an independently chosen endpoint.
+
+   Stopped heads: prefix_extract_mask supplies prefix-plus-head event slack;
+   stopped_extracted_suffix absorbs the remaining source instructions.  A
+   stopped recursive prefix is compared with the FULL recursive target by
+   identity_prefix_mask_result's stopped clause, not by equating endpoints.
+
+   Coverage limit: the new boundary explicitly assumes EVERY nonterminator
+   (TAKE k xs).  At k=LENGTH xs this becomes EVERY nonterminator xs; neither
+   the S-prefix conjunct nor the packet length hypotheses imply that fact.
+   A terminal full cut therefore is NOT covered by this lemma.  The existing
+   unrestricted legacy full-mask certificate remains unchanged; extending
+   the proposed prefix-only boundary to terminal full cuts needs a separate
+   terminal/absorption argument in its producer, not a dropped hypothesis.
+   No T or canonical constructor strengthening is implemented here. *)
 Theorem stopped_extracted_suffix[local]:
   EVERY (\x. dft_gas_swap_pair x y /\ ~dft_must_order x y) pre /\
   EVERY (\i. ~is_terminator i.inst_opcode) pre /\
