@@ -593,17 +593,19 @@ Theorem lower_dload_stage_sim_fuel:
     ctx_sim_fuel I D C C' vs vs
 Proof
   rpt strip_tac >> simp[ctx_sim_fuel_def] >> rpt strip_tac >>
+  `run_context fuel C vs = run_context fuel C vs` by simp[] >>
+  drule_all ld_run_context_entry >> strip_tac >>
+  qpat_x_assum `s0 = _` SUBST_ALL_TAC >>
   drule o1_src_inv_safe_upto >> strip_tac >>
   first_x_assum (qspec_then `SUC (LENGTH vs.vs_gas_readings)` assume_tac) >>
   `0 < SUC (LENGTH vs.vs_gas_readings)` by simp[] >>
-  `run_context fuel C vs = run_context fuel C vs` by simp[] >>
   drule_all lower_dload_stage_root_entry >> strip_tac >>
   `opaque_use_ok fn` by metis_tac[ld_ctx_shape_lookup_opaque] >>
   `fn.fn_name = name` by
     (qpat_assum `lookup_function name C.ctx_functions = SOME fn`
        (mp_tac o REWRITE_RULE [lookup_function_def]) >>
      disch_then (mp_tac o MATCH_MP venomExecPropsTheory.FIND_P) >> simp[]) >>
-  `terminates (run_blocks fuel C fn s0)` by metis_tac[] >>
+  `terminates (run_blocks fuel C fn ^ldS0)` by metis_tac[] >>
   drule_at (Pat `ld_joint_boundary`)
     (SIMP_RULE bool_ss [] (cj 3 ld_runner_simulation_fuel)) >>
   simp[] >>
