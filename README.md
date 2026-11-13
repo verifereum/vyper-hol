@@ -22,7 +22,8 @@ The repository is organised into the following directories:
 
 - **`syntax/`** — Vyper abstract syntax tree definitions
 - **`frontend/`** — JSON import and translation into the core AST
-- **`semantics/`** — Vyper semantics, organised across several theories covering values and types, value-level operations, storage encoding, ABI encoding, evaluation context and builtins, interpreter state and monad, the definitional interpreter itself, and a CPS/small-step version for efficient execution
+- **`semantics/`** — Vyper semantics, organised across several theories covering values and types, value-level operations, storage encoding, ABI encoding, evaluation context and builtins, interpreter state and monad, and the definitional interpreter itself
+  - **`semantics/cv/`** — A CPS/small-step version of the interpreter, proved equivalent to it, that makes the semantics executable with `cv_eval`
   - **`semantics/prop/`** — Properties of the semantics (scope preservation, state preservation, etc.)
 - **`tests/`** — Test infrastructure and generated test scripts from the Vyper test suite
 - **`lowering/`** — Vyper-to-Venom IR compiler definition and correctness proofs
