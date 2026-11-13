@@ -76,10 +76,7 @@ Proof
   `EVERY (\op. op_prov tagged op = NONE) ops` by
     (simp[EVERY_MEM] >> Cases >> simp[op_prov_def] >> strip_tac >>
      spose_not_then assume_tac >>
-     qpat_x_assum `_ \/ _` strip_assume_tac
-     >- (`u = s` by (first_x_assum irule >> simp[]) >> gvs[]) >>
-     qpat_x_assum `!u. FLOOKUP numerical u <> NONE ==> _` (qspec_then `u` mp_tac) >>
-     simp[]) >>
+     `u = s` by (first_x_assum irule >> simp[]) >> gvs[]) >>
   `first_prov tagged ops = NONE` by metis_tac[ptr_first_prov_untagged] >>
   simp[]
 QED
