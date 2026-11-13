@@ -170,7 +170,7 @@ Proof
   simp[abi_decode_window_frame_def]
 QED
 
-Theorem abi_decode_window_bytewise[local]:
+Theorem abi_decode_window_bytewise:
   (!i. q <= i /\ i < q + n ==> mem_bytes_at i 1 m1 = mem_bytes_at i 1 m2) ==>
   mem_bytes_at q n m1 = mem_bytes_at q n m2
 Proof
