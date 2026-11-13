@@ -20,9 +20,6 @@ Theorem intcall_pending_declaration_pre:
   same_frame ce c /\ body_inv fp.jc_tops fp.jc_ctx c fp.jc_cx /\
   intcall_expr_res fp c env es st s /\ expr_body_pre c fp.jc_cx env e es
 Proof
-  (* Named repair for the r7 alan run: on the train-16 base declare_local
-     updates ce_var_type, so stmt_exprs_ok_same_frame's new
-     ce_var_type premise no longer holds here. Original proof:
   strip_tac >>
   `well_typed_expr env e /\ id NOTIN FDOM env.var_types` by
     gvs[type_stmt_def, AllCaseEqs()] >>
@@ -46,14 +43,18 @@ Proof
   irule (Q.INST [`calls` |-> `[]`] (SPEC_ALL stmt_expr_body_pre)) >>
   simp[] >>
   `stmt_exprs_ok c (AnnAssign id ty e)` by
-    metis_tac[stmt_exprs_ok_same_frame] >>
+    (drule_all annassign_declare_exprs_ok >> simp[]) >>
+  `~supported_expr_exists (\e. ~is_extcode e /\ ~alloc_limits_expr c e) e` by
+    (mp_tac (Q.SPECL [`c`, `AnnAssign id ty e`]
+       allocLimitsPropsTheory.alloc_limits_stmt_exists) >>
+     simp[stmt_exprs_ok_def, supported_stmt_expr_exists_def] >>
+     metis_tac[stmt_exprs_ok_def]) >>
   fs[intcall_expr_res_def, stmt_exprs_ok_def,
      supported_stmt_expr_exists_def, intcall_frame_ok_def,
      body_inv_def, gasContextTheory.cx_tops_def,
      call_evaluation_safe_def] >>
-  metis_tac[]
-  *)
-  cheat
+  reverse conj_tac >- (qexists_tac `fp.jc_edges` >> gvs[]) >>
+  simp[LEFT_AND_OVER_OR, supportedExprTraverseTheory.supported_expr_exists_disj]
 QED
 
 (* The compiler's declaration/ALLOCA prefix, with exclusions derived rather
