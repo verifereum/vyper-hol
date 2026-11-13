@@ -112,7 +112,7 @@ Proof
             storage_observations_ok_prefix]
 QED
 
-Theorem push_empty_scope_runtime_consistent[local]:
+Theorem push_empty_scope_runtime_consistent:
   runtime_consistent env cx st ==>
   runtime_consistent env cx (st with scopes := FEMPTY::st.scopes)
 Proof
