@@ -11,10 +11,29 @@
  *)
 Theory bodyFullLiteralBuffer
 Ancestors
+  exprSimPtrLiteralPayload exprLoweringProps list
   exprSimPtrLiteralBuffer fragGasSeqPtr instSeqPtrLo bodyPtrDefs vyperStorageFootprint
   exprLowering compileEnv loweringStateRelDefs venomState finite_map words
   exprSimLiteralBuffer ptrSafetyTransport venomExecSemantics venomInst ptrDiscipline
   context emitHelper exprLoweringProps
+
+Theorem literal_full_ptr_transport[local]:
+  compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_has_code sa sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  ~ctx_has_dalloca ctx /\ 32+32*word_size (LENGTH bs) < dimword (:256) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  inst_seq_ptr D0 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' ==>
+  inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn'
+Proof
+  strip_tac >>
+  drule_all literal_bytelike_ptr_run >>
+  disch_then (qspecl_then [`tn`, `func`, `PG`, `G`, `D`] strip_assume_tac) >>
+  `G' = G'' /\ tn' = tn''` by
+    (irule inst_seq_ptr_ghost_unique >> metis_tac[]) >>
+  gvs[] >> irule inst_seq_ptr_zero_to_lo >> simp[] >>
+  qexists_tac `D` >> simp[]
+QED
 
 (* The pointer twin is exprSimPtrLiteralBuffer's literal_bytelike_ptr_run at
    lo = 0.  What changes at lo > 0 (a constructor frame): the ALLOCA's base
@@ -82,6 +101,39 @@ Proof
        [Lit (n2w (32+32*word_size (LENGTH bs)))] [p]`, `s`] >>
      simp[step_inst_non_invoke, mk_inst_def]) >>
   gvs[eval_operand_def, allocas_from_def] >> metis_tac[]
+QED
+
+(* Recover the payload frame for the actual, pinned ALLOCA endpoint. *)
+Theorem literal_full_payload_frame[local]:
+  compile_store_byte_chunks (Var p) bs 32 sh = ((),sb) /\
+  not_fresh_at sh p /\
+  emitted_insts sa sb =
+    [mk_inst sa.cs_next_id ALLOCA
+       [Lit (n2w (32+32*word_size (LENGTH bs)))] [p];
+     mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] []] ++
+    emitted_insts sh sb /\
+  step_inst_base (mk_inst sa.cs_next_id ALLOCA
+    [Lit (n2w (32+32*word_size (LENGTH bs)))] [p]) s = OK u /\
+  lookup_var p u = SOME (n2w b) /\
+  b+32+32*word_size (LENGTH bs) < dimword (:256) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
+  LENGTH u.vs_memory <= LENGTH t.vs_memory /\
+  (!x. not_fresh_at sh x ==> lookup_var x t = lookup_var x u) /\
+  (!a len. a+len <= b \/ b+32+32*word_size (LENGTH bs) <= a ==>
+    mem_bytes_at a len t.vs_memory = mem_bytes_at a len u.vs_memory) /\
+  mem_word_at b t.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
+  lookup_var p t = SOME (n2w b)
+Proof
+  strip_tac >>
+  `run_inst_seq
+     (mk_inst sm.cs_next_id MSTORE [Var p; Lit (n2w (LENGTH bs))] [] ::
+      emitted_insts sh sb) u = OK t` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = _` mp_tac >>
+     asm_simp_tac bool_ss [APPEND, run_inst_seq_def] >> simp[]) >>
+  drule_all literal_header_chunks_functional >> strip_tac >>
+  metis_tac[]
 QED
 
 Theorem literal_bytelike_full_run:
