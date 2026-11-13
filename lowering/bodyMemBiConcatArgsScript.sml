@@ -374,9 +374,8 @@ Resume concat_args_sim_mem[post]:
     (qunabbrev_tac `pure_args` >> strip_tac >>
      `pure_frame cenv func es sa s0 t` by
        (drule_all expr_post_pure_frame >> disch_then ACCEPT_TAC) >>
-     qpat_x_assum `~EXISTS expr_has_effect args ==> _` mp_tac >>
-     impl_tac
-     >- (rewrite_tac[listTheory.NOT_EXISTS] >> first_assum ACCEPT_TAC) >>
+     qpat_x_assum `EVERY _ args ==> _` mp_tac >>
+     impl_tac >- first_assum ACCEPT_TAC >>
      strip_tac >>
      `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
             lookup_var x t2 = SOME w` by
