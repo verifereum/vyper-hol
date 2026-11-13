@@ -252,8 +252,10 @@ Resume custom_error_store_args_sim_mem_using_head[step]:
       t.vs_inst_idx = LENGTH sm.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
     (\res ee r. expr_exit res r)` by
-    (asm_x "head" kall_tac >> fs[body_exprs_mem_ok_def, body_expr_mem_ok_def] >>
-     first_x_assum (drule_at (Pat `body_inv _ _ _ _`)) >>
+    (asm_x "head" kall_tac >> fs[body_exprs_mem_ok_def] >>
+     qpat_x_assum `body_expr_mem_ok cx h`
+       (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_mem_ok_def]) >>
+     disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
      disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
      simp[expr_vv_sim_mem_def] >> strip_tac >> metis_tac[]) >>
   once_rewrite_tac[evaluate_def] >>
