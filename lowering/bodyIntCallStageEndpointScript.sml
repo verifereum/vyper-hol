@@ -34,9 +34,9 @@ val completed_prefix = ``\cx start current tys flags values ops s.
 (* RESTATED (train 17): 0.5.0b1 per-argument staging.  Replaces the batch
    endpoints over held arguments (intcall_stage_args_endpoint and its
    distinct/return variants): ops are the INVOKE's argument operands, vs the
-   source values.  Every ALLOCA of the staging code, a memory argument's
-   buffer among them, is fresh above t's frontier, so clear of the return
-   buffer and the caller's locals; distinct ALLOCAs are disjoint. *)
+   source values.  Restated again (argon's ruling): no freshness premise on
+   t's allocations, since a loop re-enters the same ALLOCAs; instead the
+   distinct memory arguments' buffers are pairwise disjoint. *)
 Theorem intcall_stage_args_outcome:
   !args flags tys ce env sa ops sb es fp t.
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
@@ -56,16 +56,20 @@ Theorem intcall_stage_args_outcome:
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   intcall_expr_res fp ce env es sa t /\ ~t.vs_halted /\
   t.vs_current_bb = sa.cs_current_bb /\
-  t.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!aid. sa.cs_next_id <= aid ==> aid NOTIN FDOM t.vs_allocas) ==>
+  t.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
     (eval_exprs fp.jc_cx args) (es,t)
     (\res ee u. ?vs. res = INL vs /\
        ^completed_prefix fp.jc_cx sa sb tys (TAKE (LENGTH args) flags) vs ops u /\
-       (!aid off len. FLOOKUP u.vs_allocas aid = SOME (off,len) /\
-          sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
-          t.vs_alloca_next <= off) /\
-       (!aid. sb.cs_next_id <= aid ==> aid NOTIN FDOM u.vs_allocas) /\
+       (!i j tv_i tv_j w_i w_j.
+          i < LENGTH args /\ j < LENGTH args /\ i <> j /\
+          ~EL i flags /\ ~EL j flags /\
+          evaluate_type (get_tenv fp.jc_cx) (EL i tys) = SOME tv_i /\
+          evaluate_type (get_tenv fp.jc_cx) (EL j tys) = SOME tv_j /\
+          eval_operand (EL i ops) u = SOME w_i /\
+          eval_operand (EL j ops) u = SOME w_j ==>
+          regions_disjoint (w2n w_i) (type_memory_size tv_i)
+            (w2n w_j) (type_memory_size tv_j)) /\
        intcall_expr_cont fp ce env es sa t ee sb u /\
        MAP FDOM es.scopes = MAP FDOM ee.scopes)
     (\res ee r. expr_exit res r)
