@@ -141,8 +141,39 @@ Proof
   qexistsl_tac [`A`, `k`, `lo`, `sz`, `tn`] >> simp[GSYM ADD_ASSOC]
 QED
 
+(* Bytes at or above the dynamic floor that neither side's taint mask
+   covers read the same on both sides. *)
+Theorem ld_dyn_read_masked:
+  ld_dyn_agree fl tm s.vs_memory t.vs_memory /\ fl <= off /\
+  off+n < dimword (:256) /\ j < n /\ off+j NOTIN tm ==>
+  EL j (read_memory off n s) = EL j (read_memory off n t)
+Proof
+  strip_tac >> simp[ld_read_memory_byte] >>
+  qpat_x_assum `ld_dyn_agree _ _ _ _` mp_tac >> simp[ld_dyn_agree_def] >>
+  disch_then irule >> rpt conj_tac >> fs[] >> decide_tac
+QED
+
+Theorem ld_dyn_read_memory:
+  ld_dyn_agree fl tm s.vs_memory t.vs_memory /\ fl <= off /\
+  off+n < dimword (:256) /\ (!j. j < n ==> off+j NOTIN tm) ==>
+  read_memory off n s = read_memory off n t
+Proof
+  strip_tac >> irule LIST_EQ >> simp[] >> rpt strip_tac >>
+  irule ld_dyn_read_masked >> simp[] >> metis_tac[]
+QED
+
+Theorem ld_dyn_mload:
+  ld_dyn_agree fl tm s.vs_memory t.vs_memory /\ fl <= off /\
+  off+32 < dimword (:256) ==>
+  word_agree_except (mem_word_taint tm off) (mload off s) (mload off t)
+Proof
+  strip_tac >> irule ld_mload_masked >> simp[mem_word_taint_def] >>
+  rpt strip_tac >> irule ld_dyn_read_masked >> simp[] >> metis_tac[]
+QED
+
 Theorem ld_memory_mload_access:
-  access_ok lo (ld_erase A o_f H) fn inst s /\
+  access_ok lo G fn inst s /\ ld_ghost_ok fl A H G /\
+  ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory /\
   ~in_revert_forward fn s /\ mem_read_ops inst = SOME ops /\
   MEM (w2n x,32) (source_memory_read_ranges inst s) /\
   (op_prov H ops.iao_ofst = NONE ==> x = y) /\
@@ -154,7 +185,8 @@ Theorem ld_memory_mload_access:
 Proof
   strip_tac >>
   `0 < (32:num)` by simp[] >>
-  drule_all ld_read_access_cases >> strip_tac
-  >- (gvs[mem_word_taint_def] >> once_rewrite_tac[ADD_COMM] >> irule ld_memory_mload_low >> metis_tac[]) >>
-  gvs[mem_word_taint_def] >> rewrite_tac[ADD_ASSOC] >> irule ld_memory_mload_slot >> metis_tac[]
+  drule_all (cj 1 ld_access_dyn_cases) >> strip_tac
+  >- (gvs[mem_word_taint_def] >> once_rewrite_tac[ADD_COMM] >> irule ld_memory_mload_low >> metis_tac[])
+  >- (gvs[mem_word_taint_def] >> rewrite_tac[ADD_ASSOC] >> irule ld_memory_mload_slot >> metis_tac[]) >>
+  qpat_x_assum `y = x` SUBST_ALL_TAC >> irule ld_dyn_mload >> metis_tac[]
 QED

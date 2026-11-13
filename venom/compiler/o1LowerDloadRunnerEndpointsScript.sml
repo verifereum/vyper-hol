@@ -22,7 +22,17 @@ Theorem ld_runner_branch_endpoint:
     exec_block fuel C' bb' t = r' /\
     ^ldPacket stk PG fn a U HP ts s.vs_call_ctx.cc_address (OK s1) r'
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >> drule_all ld_terminator_ok_branch >> strip_tac >>
+  drule_all ld_joint_branch_step >>
+  disch_then (qspec_then `fuel` strip_assume_tac) >>
+  `~MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by fs[] >>
+  drule_all ld_joint_unchanged_fetch >> strip_tac >>
+  `~t.vs_halted` by fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
+  `s1.vs_call_ctx = s.vs_call_ctx` by metis_tac[ld_step_ok_call_ctx] >>
+  qexistsl_tac [`fn'`,`bb'`,`OK t1`] >> simp[] >> conj_tac
+  >- (simp[Once exec_block_def]) >>
+  simp[] >> qexistsl_tac [`fuel`,`inst`,`s`,`t`,`n`,`G`,`tn`,`B`,`H`,`sites`,`X`] >>
+  fs[]
 QED
 
 Theorem ld_runner_ret_endpoint:

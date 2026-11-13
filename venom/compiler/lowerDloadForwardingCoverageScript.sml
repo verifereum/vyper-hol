@@ -74,7 +74,8 @@ Proof
   strip_tac >>
   `inst.inst_opcode = ASSIGN \/ inst.inst_opcode = RETURNDATACOPY` by
     (drule ld_forward_opcode >> strip_tac >> gvs[is_terminator_def]) >>
-  `u.vs_current_bb = s.vs_current_bb` by
+  `u.vs_current_bb = s.vs_current_bb /\ u.vs_fmp = s.vs_fmp /\
+   u.vs_initial_fmp = s.vs_initial_fmp` by
     (gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(),
          update_var_def, write_memory_with_expansion_def]) >>
   fs[] >>
