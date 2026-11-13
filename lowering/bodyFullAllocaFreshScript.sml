@@ -32,6 +32,7 @@ Theorem alloca_step_exact[local]:
                   vs_alloca_next := s.vs_alloca_next |> = s /\
         s.vs_alloca_next <= t.vs_alloca_next /\
         b + n <= t.vs_alloca_next /\
+        (FLOOKUP s.vs_allocas id <> SOME (b,n) ==> b = s.vs_alloca_next) /\
         (!lo. allocas_from lo s /\ lo <= s.vs_alloca_next ==>
               allocas_from lo t) /\
         (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s t tn).t_stor =
@@ -51,7 +52,6 @@ Proof
       disch_then (qspecl_then [`[]`, `FEMPTY`, `tn`] strip_assume_tac) >>
       drule step_alloca_fresh >> disch_then (qspec_then `n` mp_tac) >>
       simp[] >> disch_then (qspec_then `out` assume_tac) >> gvs[] >>
-      qexists_tac `s.vs_alloca_next` >>
       simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
            venom_state_component_equality] >>
       simp[allocas_from_def, FLOOKUP_UPDATE] >>
@@ -65,6 +65,7 @@ Proof
   disch_then (qspecl_then [`out`, `[]`, `FEMPTY`, `tn`] strip_assume_tac) >>
   drule reused_alloca_step >> disch_then (qspec_then `out` assume_tac) >>
   gvs[] >>
+  qpat_assum `FLOOKUP s.vs_allocas id = SOME _` (fn th => simp[th]) >>
   simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
        venom_state_component_equality, allocas_from_def] >>
   rpt strip_tac >> eq_tac >> rpt strip_tac >> gvs[]
@@ -95,6 +96,8 @@ Theorem alloc_buffer_origin_ptr_path:
     lookup_var q t = SOME w /\ ptr_covers G' tn' q t n /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
     w2n w + n < dimword (:256) /\ w2n w + n <= t.vs_alloca_next /\
+    (s.vs_alloca_next <= w2n w \/
+     FLOOKUP s.vs_allocas sa.cs_next_id = SOME (w2n w,n)) /\
     (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==>
              FLOOKUP t.vs_allocas aid = SOME e) /\
     (!aid b len. aid < sa.cs_next_id /\
@@ -186,6 +189,9 @@ Proof
   conj_tac >- simp[] >>
   conj_tac >- simp[] >>
   conj_tac >- simp[] >>
+  conj_tac
+  >- (Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id = SOME (w2n w,n)` >>
+      gvs[]) >>
   conj_tac >- simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (rpt strip_tac >>
