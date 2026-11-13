@@ -500,7 +500,7 @@ Proof
 QED
 
 Theorem emit_copy_len_binop_frag_ptr:
-  !opc f G cx ctx PG R sa sb left right out tn s a b.
+  !opc f G H cx ctx PG R sa sb left right out tn s a b.
     (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
     emit_op opc [left;right] sa = (Var out,sb) /\
     eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
@@ -521,7 +521,7 @@ Proof
 QED
 
 Theorem emit_copy_len_not_frag_ptr:
-  !G cx ctx PG R sa sb x out tn s a.
+  !G H cx ctx PG R sa sb x out tn s a.
     emit_op NOT [x] sa = (Var out,sb) /\
     eval_operand x s = SOME a /\ op_taint tn x = {} ==>
     ?Gf tnf sf.
@@ -540,7 +540,7 @@ Proof
 QED
 
 Theorem emit_mload_clean_frag_ptr:
-  !cx ctx PG R sa sb src out G tn s a.
+  !H cx ctx PG R sa sb src out G tn s a.
     emit_op MLOAD [Var src] sa = (Var out,sb) /\
     ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
@@ -562,7 +562,7 @@ QED
 
 
 Theorem compile_bytestring_copy_len_frag_ptr:
-  !cx ctx PG R sa sb src count_op G tn s a.
+  !H cx ctx PG R sa sb src count_op G tn s a.
     compile_bytestring_copy_len (Var src) sa = (count_op,sb) /\
     ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
