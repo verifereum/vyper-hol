@@ -87,7 +87,7 @@ Proof
   simp[] >> Cases_on `e` >> gvs[supportedExprTraverseTheory.expr_effect_root_def]
 QED
 
-Theorem stage_compiler_store_post_type[local]:
+Theorem stage_compiler_store_post_type:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   type_widens_to tenv (expr_type e) dty ==>
   compile_store_memory ce src dst dty (vv_type vv) =
