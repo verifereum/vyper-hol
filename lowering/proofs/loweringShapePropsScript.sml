@@ -3427,7 +3427,7 @@ Proof
   simp[supported_expr_exists_def, expr_shape_root_def, arithmeticTheory.NOT_LESS]
 QED
 
-Theorem expr_shape_extcode_addr[local]:
+Theorem expr_shape_extcode_addr:
   ~supported_expr_exists p e /\ is_extcode e ==>
   ~supported_expr_exists p (extcode_addr_expr e)
 Proof
