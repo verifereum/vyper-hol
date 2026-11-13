@@ -3,7 +3,7 @@
 Theory readonlyInvokeCopyFwdLiveCertificates
 Ancestors
   readonlyInvokeCopyFwdProtectionLifetime readonlyInvokeCopyFwdProtection
-  readonlyInvokeCopyFwdProtectionRetirement readonlyInvokeCopyFwdHistoryPhase
+  readonlyInvokeCopyFwdProtectionRetirement readonlyInvokeCopyFwdHistoryPhase readonlyInvokeCopyFwdHistoryStackAlignment
   readonlyInvokeCopyFwdRel internalReturnCopyFwdSim venomInstProofs
   venomExecSemantics list rich_list pred_set arithmetic
 
@@ -130,13 +130,20 @@ Proof
   >- (simp[ricf_remaining_selected_use_def] >> metis_tac[LESS_EQ_TRANS])
 QED
 
+Theorem ricf_certificate_coverage_advance:
+  ricf_certificate_coverage s history certificates /\
+  t.vs_current_bb = s.vs_current_bb /\ s.vs_inst_idx <= t.vs_inst_idx ==>
+  ricf_certificate_coverage t history certificates
+Proof
+  simp[ricf_certificate_coverage_def] >> metis_tac[ricf_remaining_selected_later]
+QED
+
 Theorem ricf_certificate_coverage_later:
   ricf_certificate_coverage s history certificates /\
   t.vs_current_bb = s.vs_current_bb /\ s.vs_inst_idx <= t.vs_inst_idx ==>
   ricf_certificate_coverage t history (ricf_live_ledger t certificates)
 Proof
-  strip_tac >> irule ricf_certificate_coverage_filter >>
-  fs[ricf_certificate_coverage_def] >> metis_tac[ricf_remaining_selected_later]
+  metis_tac[ricf_certificate_coverage_advance, ricf_certificate_coverage_filter]
 QED
 
 Theorem ricf_certificate_coverage_next:
@@ -147,4 +154,71 @@ Theorem ricf_certificate_coverage_next:
 Proof
   strip_tac >> drule_all step_preserves_control_flow >> strip_tac >>
   irule ricf_certificate_coverage_later >> qexists_tac `s` >> simp[]
+QED
+
+Theorem ricf_visit_owner_state_push:
+  f.cf_state = s ==>
+  ricf_visit_owner_state (f::pre) t = ricf_visit_owner_state pre s
+Proof
+  Cases_on `pre` >> simp[ricf_visit_owner_state_def]
+QED
+
+Theorem ricf_certificate_coverage_push:
+  ricf_certificate_coverage s history certificates /\ f.cf_state = s ==>
+  ricf_certificate_coverage t (ricf_phase_push f history)
+    (ricf_phase_push f certificates)
+Proof
+  simp[ricf_certificate_coverage_def, ricf_phase_push_def,
+    SUBSET_DEF, MEM_MAP] >> rpt strip_tac
+  >- (rename1 `MEM entry certificates` >> Cases_on `entry` >> gvs[] >>
+      rename1 `MEM (p,pre) certificates` >> qexists_tac `(p,pre)` >> simp[]) >>
+  rename1 `MEM entry history` >> Cases_on `entry` >> gvs[] >>
+  rename1 `MEM (p,pre) history` >> qexists_tac `(p,pre)` >> simp[] >>
+  metis_tac[ricf_visit_owner_state_push]
+QED
+
+Theorem ricf_certificate_coverage_inherited:
+  ricf_certificate_coverage s history certificates ==>
+  ricf_certificate_coverage t
+    (FILTER (\entry. SND entry <> []) history)
+    (FILTER (\entry. SND entry <> []) certificates)
+Proof
+  simp[ricf_certificate_coverage_def, SUBSET_DEF, MEM_FILTER] >>
+  rpt strip_tac >>
+  `ricf_visit_owner_state pre t = ricf_visit_owner_state pre s` by
+    simp[ricf_visit_owner_state_def] >> metis_tac[]
+QED
+
+Theorem ricf_visit_owner_state_pop_later[local]:
+  pre <> [] /\ HD pre = f /\
+  t.vs_current_bb = f.cf_state.vs_current_bb /\
+  f.cf_state.vs_inst_idx <= t.vs_inst_idx /\
+  ricf_remaining_selected_use p (ricf_visit_owner_state (TL pre) t) ==>
+  ricf_remaining_selected_use p (ricf_visit_owner_state pre u)
+Proof
+  Cases_on `pre` >> simp[] >> qmatch_goalsub_rename_tac `ricf_visit_owner_state rest t` >>
+  Cases_on `rest` >>
+  simp[ricf_visit_owner_state_def, ricf_remaining_selected_use_def] >>
+  metis_tac[LESS_EQ_TRANS]
+QED
+
+Theorem ricf_certificate_coverage_pop:
+  ricf_certificate_coverage s history certificates /\
+  (!p pre. MEM (p,pre) history /\ pre <> [] ==> HD pre = f) /\
+  t.vs_current_bb = f.cf_state.vs_current_bb /\
+  f.cf_state.vs_inst_idx <= t.vs_inst_idx ==>
+  ricf_certificate_coverage t (ricf_phase_pop history)
+    (ricf_live_ledger t (ricf_phase_pop certificates))
+Proof
+  strip_tac >> irule ricf_certificate_coverage_filter >>
+  fs[ricf_certificate_coverage_def, SUBSET_DEF] >>
+  simp[ricf_certificate_coverage_def, SUBSET_DEF, ricf_phase_pop_def,
+    MEM_MAP, MEM_FILTER] >> rpt strip_tac
+  >- (rename1 `MEM entry certificates` >> Cases_on `entry` >> gvs[] >>
+      rename1 `MEM (p,pre) certificates` >> qexists_tac `(p,pre)` >> simp[]) >>
+  rename1 `MEM entry history` >> Cases_on `entry` >> gvs[] >>
+  rename1 `MEM (p,pre) history` >>
+  qexists_tac `(p,pre)` >> simp[] >>
+  `ricf_remaining_selected_use p (ricf_visit_owner_state pre s)` by
+    (irule ricf_visit_owner_state_pop_later >> metis_tac[]) >> metis_tac[]
 QED

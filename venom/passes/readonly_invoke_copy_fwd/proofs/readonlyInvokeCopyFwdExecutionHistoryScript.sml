@@ -2,10 +2,11 @@
 Theory readonlyInvokeCopyFwdExecutionHistory
 Ancestors
   readonlyInvokeCopyFwdLiveCertificates readonlyInvokeCopyFwdAnalyzedOrigins
+  readonlyInvokeCopyFwdProtection readonlyInvokeCopyFwdProtectionLifetime
   readonlyInvokeCopyFwdAlignedOrigins readonlyInvokeCopyFwdHistoryPhase
   readonlyInvokeCopyFwdHistoryOrigin readonlyInvokeCopyFwdHistorySelected
   readonlyInvokeCopyFwdHistoryInheritedLifecycle
-  invokeCopyFwdCommonDefs readonlyMemoryArgsDefs finite_map list pred_set
+  invokeCopyFwdCommonDefs readonlyMemoryArgsDefs finite_map list rich_list pred_set
 
 Definition ricf_chosen_ledger_def:
   ricf_chosen_ledger vs C log_of stk PG G tn fn s a U B history <=>
@@ -113,4 +114,18 @@ Proof
   simp[ricf_history_inherited_def] >>
   qexistsl_tac [`anchor`,`tail`,`inner`,`atn`] >>
   fs[ricf_aligned_origin_at_def]
+QED
+
+Theorem ricf_certificate_live_outer_retire:
+  ricf_certificate_live s certificates ==>
+  FILTER (\entry. SND entry <> []) (ricf_live_ledger t certificates) =
+    FILTER (\entry. SND entry <> []) certificates
+Proof
+  strip_tac >>
+  rw[ricf_live_ledger_def, Once FILTER_COMM, FILTER_EQ_ID, EVERY_MEM, MEM_FILTER] >>
+  rename1 `MEM entry certificates` >> Cases_on `entry` >> gvs[] >>
+  rename1 `MEM (p,frames) certificates` >>
+  fs[ricf_certificate_live_def, EVERY_MEM] >>
+  first_x_assum (qspec_then `(p,frames)` mp_tac) >>
+  simp[ricf_active_use_def, ricf_visit_owner_state_def]
 QED
