@@ -7,7 +7,7 @@ Ancestors
   exprSimExtract32Post exprSimExtract32Assembly exprSimHypsDefs exprSimDefs
   exprLowering exprLoweringProps builtinBytes compileEnv vyperAST fragExec
   vyperState vyperTypeSystem vyperTypeCallGraph list loweringPosts vyperInterpreter vyperValue exprSimHyps
-  gasStorage vyperStorageTrace vyperStorageFootprint
+  gasStorage vyperStorageTrace vyperStorageFootprint venomState loweringStateRelDefs
 
 Theorem extract32_prepare_counted_horizons[local]:
   (!H. valid_horizon cx st0 H tr ==>
@@ -53,7 +53,8 @@ Proof
   `u1 = u` by fs[] >> pop_assum SUBST_ALL_TAC >>
   qpat_x_assum `expr_post H1 _ _ _ _ _ _ _ sb _ _ _ _ u` mp_tac >>
   simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
-       expr_val_at_def, lookup_var_def, local_region_def, locals_kept_def,
+       expr_val_at_def, venomStateTheory.lookup_var_def,
+       loweringStateRelDefsTheory.local_region_def, locals_kept_def,
        popped_kept_def] >>
   strip_tac >> simp[] >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
@@ -100,7 +101,7 @@ Proof
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then drule_all >> strip_tac >>
   once_rewrite_tac[eval_expr_extract32_vv_bind] >>
-  match_mp_tac extract32_outcome_bind_marked >>
+  match_mp_tac (GEN_ALL extract32_outcome_bind_marked) >>
   qexists_tac `\H v ee t. expr_post H ctx func cenv cx src es sa st1 s0 ee v src_op t /\
      t.vs_current_bb = st1.cs_current_bb /\
      t.vs_inst_idx = LENGTH st1.cs_current_insts` >>
@@ -123,8 +124,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
     (strip_assume_tac o SIMP_RULE bool_ss [IMP_CONJ_THM, FORALL_AND_THM]) >>
-  qpat_x_assum `?H. valid_horizon _ _ H ee.storage_trace`
-    (qx_choose_then `H0` assume_tac) >>
+  rename1 `valid_horizon _ _ H0 ee.storage_trace` >>
   `t.vs_current_bb = st1.cs_current_bb` by
     (qpat_x_assum `!H. _ ==> t.vs_current_bb = _` (drule_then ACCEPT_TAC)) >>
   `t.vs_inst_idx = LENGTH st1.cs_current_insts` by
@@ -158,12 +158,10 @@ Proof
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
        stmt_state_rel H ctx func cenv cx ee u /\ storage_well_formed_on cx ee (FST H)` by
     (rpt strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ src _ _ st2 _ _ _ _ u`
-       drule >>
-     simp[expr_post_def]) >>
+     res_tac >> fs[loweringPostsTheory.expr_post_def]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ off _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then drule_all >> strip_tac >>
-  match_mp_tac extract32_outcome_bind_marked >>
+  match_mp_tac (GEN_ALL extract32_outcome_bind_marked) >>
   qexists_tac `\H v ee' t. expr_post H ctx func cenv cx off ee st2 st3 u ee' v off_op t /\
     t.vs_current_bb = st3.cs_current_bb /\ t.vs_inst_idx = LENGTH st3.cs_current_insts` >>
   conj_tac
@@ -185,8 +183,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H ee'.storage_trace ==> _`
     (strip_assume_tac o SIMP_RULE bool_ss [IMP_CONJ_THM, FORALL_AND_THM]) >>
-  qpat_x_assum `?H. valid_horizon _ _ H ee'.storage_trace`
-    (qx_choose_then `H1` assume_tac) >>
+  rename1 `valid_horizon _ _ H1 ee'.storage_trace` >>
   `t'.vs_current_bb = st3.cs_current_bb` by
     (qpat_x_assum `!H. _ ==> t'.vs_current_bb = _` (drule_then ACCEPT_TAC)) >>
   `t'.vs_inst_idx = LENGTH st3.cs_current_insts` by
@@ -249,10 +246,13 @@ Proof
    eval_operand dp t' = SOME (n2w (p+32)) /\
    eval_operand src_op t' = SOME (n2w p) /\
    eval_operand off_op t' = SOME (n2w (Num i))` by
-    (irule extract32_compiled_offset_post_view >>
+    (irule (INST_TYPE [alpha |-> ``:256``] extract32_compiled_offset_post_view) >>
      goal_assum (drule_at Any) >>
      simp[extract32_expr_post_start_gas_obs, extract32_expr_post_end_gas_obs] >>
-     metis_tac[]) >>
+     qexistsl_tac [`H1`, `MLOAD`, `cenv`, `ctx`, `cx`, `env`, `es`,
+       `ee with gas_obs := gas_explicit marks' u.vs_gas_readings`, `ee'`, `func`,
+       `k`, `off`, `s0`, `u`, `sa`, `st3`, `cs''`, `src`, `st1`, `sy`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all extract32_tail_available >> strip_tac >>
   `~t'.vs_halted` by
     (qpat_assum `gas_marked_exec _ _ _ (ee,u) _ _ _ _`

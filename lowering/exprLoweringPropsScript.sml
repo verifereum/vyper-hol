@@ -5369,3 +5369,20 @@ Proof
   simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_gas_obs,
        immutable_alloca_sep_def]
 QED
+
+Theorem stmt_state_rel_fields_transport:
+  stmt_state_rel H0 ctx func cenv cx es u /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+  u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx ==>
+  stmt_state_rel H ctx func cenv cx es u
+Proof
+  rewrite_tac[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
+  strip_tac >> fs[] >>
+  gvs[loweringStateRelDefsTheory.storage_rel_def,
+      loweringStateRelDefsTheory.transient_rel_def,
+      loweringStateRelDefsTheory.accounts_rel_def,
+      venomStateTheory.contract_storage_def,
+      venomStateTheory.contract_transient_def] >>
+  metis_tac[]
+QED
