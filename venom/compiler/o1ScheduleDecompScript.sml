@@ -72,15 +72,6 @@ Proof
   simp[]
 QED
 
-Theorem chain_facts_suffix:
-  chain_facts R rpolicy passes unit order chains i /\ k <= LENGTH passes ==>
-  fn_steps rpolicy (DROP k passes) (EL k (FST (EL i chains)))
-    (LAST (FST (EL i chains)))
-Proof
-  strip_tac >> drule_all chain_facts_suffix_from >>
-  metis_tac[fn_steps_from_fn_steps]
-QED
-
 Theorem chain_facts_invoke_targets:
   chain_facts R rpolicy passes unit order chains i /\ k <= LENGTH passes /\
   MEM n (fn_invoke_targets (EL k (FST (EL i chains)))) ==>

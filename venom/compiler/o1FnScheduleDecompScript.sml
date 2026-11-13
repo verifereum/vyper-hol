@@ -77,17 +77,6 @@ Proof
   simp[arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem fn_chain_fn_steps:
-  !passes s fs obs k.
-    fn_chain rpolicy passes s fs obs /\ k <= LENGTH passes ==>
-    fn_steps rpolicy (DROP k passes) (EL k fs) (LAST fs)
-Proof
-  rpt strip_tac >>
-  qspecl_then [`passes`,`s`,`fs`,`obs`,`k`,`0`] mp_tac
-    (Q.INST [`R` |-> `\m h. T`] fn_chain_fn_steps_from) >>
-  simp[] >> metis_tac[fn_steps_from_fn_steps]
-QED
-
 Theorem fn_chain_names:
   !passes s fs obs.
     fn_chain rpolicy passes s fs obs ==>
