@@ -172,7 +172,12 @@ Proof
  `tx.function_name = "__init__"` by gvs[deploy_state_rel_def] >>
  `vyperInterpreter$lookup_function NONE tx.function_name Deploy tops =
    SOME (mut,F,fargs,[],NoneT,stmts)` by
-   (qspecl_then [`tops`, `NONE`, `fname`] mp_tac deploy_frame_classified_constructor_lookup >> simp[]) >>
+   (`module_consts_env tops [] = []` by
+      metis_tac[deploy_source_ok_def, supportedProgramTheory.supported_program_def,
+        supportedDeclsTheory.supported_declaration_headers_def,
+        supportedDeclsTheory.supported_headers_module_consts_env] >>
+    qspecl_then [`tops`, `NONE`, `fname`] mp_tac classify_functions_ctor_lookup >>
+    simp[] >> strip_tac >> gvs[constSubstTheory.subst_consts_fn_empty]) >>
  gvs[] >> metis_tac[deploy_ctor_source_start_fields]
 QED
 
