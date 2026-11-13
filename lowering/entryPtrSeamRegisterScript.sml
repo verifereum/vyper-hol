@@ -1392,6 +1392,8 @@ Resume registration_argument_prepare_guarded_robust_resources[guard]:
   simp[]
 QED
 
+Finalise registration_argument_prepare_guarded_robust_resources
+
 Theorem registration_argument_prepare_forward_robust_ptr:
   compile_alloc_buffer n st = (buf,a) /\
   compile_getelemptr_abi (Lit 4w) dyn off CALLDATALOAD (Lit 0w) (Lit 0w)
