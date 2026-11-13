@@ -42,7 +42,7 @@
  *     alloca_room keeps the buffer's end below 2 ** 256, so the stores at
  *     ADD buf off do not wrap either;
  *   - the buffer is a fresh allocation, disjoint from the live locals and
- *     every other allocation, so the stores keep stmt_state_rel and the
+ *     every other allocation, so the stores keep stmt_state_rel H and the
  *     memory expr_post's frame asks for;
  *   - expr_sim_inv's struct fields clauses make the lowering's layout the
  *     source's: type_memory_bytes is type_memory_size, and a struct's
@@ -55,7 +55,7 @@
  * cfn ...; ADD ...; unwrap_value, then stored into the buffer before the
  * next element runs, so an element's value need not outlive the next
  * element's fragment; the buffer's stored elements do, by the next
- * element's expr_post frame (the buffer's allocation id is below the
+ * element's expr_post H frame (the buffer's allocation id is below the
  * element's start counter and its region misses the live locals).  An
  * element that is a storage or transient array evaluates to a captured storage place:
  * these lemmas use exprs_case's expr_vv_case of each element, not its
@@ -87,7 +87,7 @@ Ancestors
 
 (* The allocation must be a generated ALLOCA, not merely a tracked map entry. *)
 Theorem aggregate_alloca_immutable_sep:
-  stmt_state_rel ctx func cenv cx es t /\
+  stmt_state_rel H ctx func cenv cx es t /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
   FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
   cenv.ce_is_ctor ==>
@@ -100,7 +100,7 @@ Theorem aggregate_alloca_immutable_sep:
     regions_disjoint io (type_memory_size itv) b sz
 Proof
   rpt strip_tac >>
-  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
   simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
@@ -223,7 +223,7 @@ Proof
   disch_then (qspecl_then [`ctx`, `nocalls`] mp_tac) >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
     irule aggregate_alloca_immutable_sep >>
-    goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
+    goal_assum (drule_at (Pat `stmt_state_rel H ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
     simp[venomInstTheory.mk_inst_def] >>
@@ -242,7 +242,7 @@ Proof
     (drule aggregate_eval_struct >> simp[]) >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
-  rename1 `stmt_state_rel ctx func cenv cx ee s` >>
+  rename1 `stmt_state_rel H ctx func cenv cx ee s` >>
   `expr_body_pre cenv cx env (StructLit ann nsid fields) (es with gas_obs := gs)` by simp[] >>
   `ann = StructT nsid` by
     gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
@@ -353,7 +353,7 @@ Resume compile_make_array_vv_case[tuple]:
   disch_then (qspecl_then [`ctx`,`nocalls`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
     irule aggregate_alloca_immutable_sep >>
-    goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
+    goal_assum (drule_at (Pat `stmt_state_rel H ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
     simp[venomInstTheory.mk_inst_def] >>
@@ -371,7 +371,7 @@ Resume compile_make_array_vv_case[tuple]:
     (drule_all aggregate_eval_make_tuple >> simp[]) >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
-  rename1 `stmt_state_rel ctx func cenv cx ee s` >>
+  rename1 `stmt_state_rel H ctx func cenv cx ee s` >>
   `expr_body_pre cenv cx env
     (Builtin (TupleT tys) (MakeArray NONE bnd) args)
     (es with gas_obs := gs)` by simp[] >>
@@ -462,7 +462,7 @@ Resume compile_make_array_vv_case[array]:
     `regions_disjoint io (type_memory_size itv) b
        (type_memory_bytes cenv (ArrayT x bnd))` by
       (irule aggregate_alloca_immutable_sep >>
-       goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
+       goal_assum (drule_at (Pat `stmt_state_rel H ctx _ _ _ _ _`)) >>
        qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
        goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
        simp[venomInstTheory.mk_inst_def] >>
@@ -485,7 +485,7 @@ Resume compile_make_array_vv_case[array]:
     (simp[bind_def, return_def]) >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
-  rename1 `stmt_state_rel ctx func cenv cx ee s` >>
+  rename1 `stmt_state_rel H ctx func cenv cx ee s` >>
   `expr_body_pre cenv cx env
     (Builtin (ArrayT x bnd) (MakeArray (SOME x) bnd) args)
     (es with gas_obs := gs)` by simp[] >>
@@ -698,7 +698,7 @@ Proof
     gvs[expr_sim_pre_def, well_typed_expr_def, type_builtin_result_ok_def] >>
   gvs[] >>
   qexistsl_tac [`[]`, `default_value tv`, `es`, `s0`] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
        mp_tac) >> simp[NoAsms]) >>
@@ -863,7 +863,7 @@ Proof
   drule_all compile_builtin_empty_complex_run >> strip_tac >>
   drule_all empty_complex_gas_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := [])
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := [])
      (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`t.vs_gas_readings`,
@@ -983,7 +983,7 @@ Proof
    t = BaseT DecimalT` by
     (Cases_on `t` >> gvs[] >> rename1 `BaseT bt` >> Cases_on `bt` >> gvs[]) >>
   qexistsl_tac [`[]`, `v`, `es`, `s0`] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
        mp_tac) >> simp[NoAsms]) >>

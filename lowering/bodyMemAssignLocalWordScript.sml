@@ -31,11 +31,11 @@ Theorem assign_local_word_store_path_mem:
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     eval_operand op s = SOME (typed_val_to_w256 etv v) /\
-    stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
+    stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     store_lays_out etv entry.type v ==>
-    ?t. stmt_state_rel ctx func cenv cx
+    ?t. stmt_state_rel H ctx func cenv cx
           (es with scopes :=
             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
@@ -165,7 +165,7 @@ Resume assign_local_word_frag_mem[normal]:
        `gas_explicit marks s0.vs_gas_readings`] >>
      qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   `eval_operand op t = SOME (typed_val_to_w256 etv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>

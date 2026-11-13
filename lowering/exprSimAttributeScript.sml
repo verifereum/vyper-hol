@@ -121,10 +121,10 @@ Theorem attr_add_post[local]:
     compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_var <= sm.cs_next_var /\
     emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
     eval_operand (vv_operand vv) s = SOME w ==>
     ?q. run_inst_seq (emitted_insts sm sn) s = OK q /\
-        vv_post ctx func cenv cx e es sa sn s0 es' tv vv q /\
+        vv_post H ctx func cenv cx e es sa sn s0 es' tv vv q /\
         eval_operand (vv_operand vv) q = SOME w /\
         eval_operand dst q = SOME (w + n2w off)
 Proof
@@ -152,8 +152,8 @@ Theorem attr_add_frag:
     sa.cs_next_var <= sm.cs_next_var /\
     emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) ==>
     frag_exec ctx sm sn
-      (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv vv s)
-      (\s. ?w. vv_post ctx func cenv cx e es sa sn s0 es' tv vv s /\
+      (\s. vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s)
+      (\s. ?w. vv_post H ctx func cenv cx e es sa sn s0 es' tv vv s /\
                eval_operand (vv_operand vv) s = SOME w /\
                eval_operand dst s = SOME (w + n2w off)) R
 Proof
@@ -266,7 +266,7 @@ QED
 (* The field's placement in memory, from the base's. *)
 Theorem attr_vv_at_field[local]:
   !func cenv cx sid sa sn es1 tv bvv q w dst ann fld fs ftv vals fv tv' ctx.
-    stmt_state_rel ctx func cenv cx es1 q /\
+    stmt_state_rel H ctx func cenv cx es1 q /\
     vv_at cenv cx (StructT sid) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (StructV vals), es1) /\
     read_result cx tv' es1 = (INL fv, es1) /\
@@ -396,7 +396,7 @@ QED
 (* The field's value_vv after the ADD, from the base's. *)
 Theorem attr_vv_post:
   !func cenv cx obj es sa sn s0 es1 tv bvv q w dst ann fld sid fs ftv tv' ctx.
-    vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    vv_post H ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
     post_value_type cenv obj = expr_type obj /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
@@ -413,11 +413,11 @@ Theorem attr_vv_post:
             read_result cx tv' es1 = (INL fv, es1)) /\
     (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
        ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) ==>
-    vv_post ctx func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
+    vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post ctx _ _ _ obj _ _ _ _ _ _ _ _`
+  qpat_x_assum `vv_post H ctx _ _ _ obj _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   gvs[] >>
   drule_all base_vv_holds_struct >> strip_tac >>
@@ -472,7 +472,7 @@ Proof
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]))
   >~ [`storage_read_live`]
   >- (strip_tac >>
-      qpat_x_assum `~expr_has_effect obj ==> vv_storage_live _ _ _ _` mp_tac >>
+      qpat_x_assum `~expr_has_effect obj ==> vv_storage_live H _ _ _ _` mp_tac >>
       asm_rewrite_tac[] >> strip_tac >>
       drule vyperPlaceResultTypingTheory.struct_field_slot_exists >> strip_tac >>
       drule_all exprSimFieldLayoutTheory.struct_field_offset_slots_eq >>
@@ -510,11 +510,11 @@ Theorem attr_add_path:
     fn_has_code sm sn func /\ ~t.vs_halted /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    vv_post ctx func cenv cx e es sa sm s0 es' tv vv t ==>
+    vv_post H ctx func cenv cx e es sa sm s0 es' tv vv t ==>
     ?t' w. gas_path ctx func t 0 (OK t') /\
       t'.vs_current_bb = sn.cs_current_bb /\
       t'.vs_inst_idx = LENGTH sn.cs_current_insts /\
-      vv_post ctx func cenv cx e es sa sn s0 es' tv vv t' /\
+      vv_post H ctx func cenv cx e es sa sn s0 es' tv vv t' /\
       eval_operand (vv_operand vv) t' = SOME w /\
       eval_operand dst t' = SOME (w + n2w off)
 Proof
@@ -681,13 +681,13 @@ Theorem attr_summary_ok[local]:
     fn_has_code sm sb func /\
     gas_marked_exec F (ctx,func) (eval_expr cx obj) (es,s0) marks
       (INL btv) fe (OK t) /\
-    vv_post ctx func cenv cx obj es sa sm s0 (fe with gas_obs := []) btv bvv t /\
+    vv_post H ctx func cenv cx obj es sa sm s0 (fe with gas_obs := []) btv bvv t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     gas_summary_at F (ctx,func) marks (eval_expr cx (Attribute ann obj fld))
       (es,s0)
       (\res ee t. ?tv. res = INL tv /\
-         vv_post ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv
+         vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv
            (LocatedValue ann (mk_ptr p (vv_loc bvv))) t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts) R
@@ -710,7 +710,7 @@ Proof
   rename1 `gas_path ctx func t 0 (OK t1)` >>
   `?v. read_result cx btv (fe with gas_obs := []) =
        (INL v, fe with gas_obs := [])` by
-    (qpat_x_assum `vv_post _ _ _ _ obj _ _ sb _ _ _ _ t1` mp_tac >>
+    (qpat_x_assum `vv_post H _ _ _ _ obj _ _ sb _ _ _ _ t1` mp_tac >>
      simp[vv_post_def] >> strip_tac >>
      drule_all base_vv_holds_struct >> metis_tac[]) >>
   `value_has_type (StructTV fs) v` by metis_tac[] >>

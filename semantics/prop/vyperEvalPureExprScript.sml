@@ -424,7 +424,19 @@ Proof
       gvs monadic_defs >>
       simp[vyperStateTheory.assert_def, vyperStateTheory.return_def,
            result_array_length_trace] >>
-      imp_res_tac eval_exprs_trace >> metis_tac[])
+      imp_res_tac eval_exprs_trace >>
+      FIRST [
+        rename1 `?out_trace. st with storage_trace := in_trace =
+          st with storage_trace := out_trace` >>
+        qexists_tac `in_trace` >> simp[],
+        qmatch_goalsub_rename_tac
+          `eval_exprs cx [addr] (st with storage_trace := tail_trace)` >>
+        qpat_x_assum `!p. ?q'. eval_exprs cx [addr] _ = _`
+          (qspec_then `tail_trace` strip_assume_tac) >>
+        simp[vyperStateTheory.return_def] >>
+        rename1 `?out_trace. st with storage_trace := in_trace =
+          st with storage_trace := out_trace` >>
+        qexists_tac `in_trace` >> simp[]])
   (* TypeBuiltin *)
   >- (rpt gen_tac >>
       simp[Once eval_pure_expr_def] >> strip_tac >>
@@ -559,8 +571,14 @@ Proof
       imp_res_tac eval_expr_preserves_state >> gvs[] >>
       imp_res_tac read_result_state >>
       imp_res_tac select_result_state >> gvs[read_result_trace] >>
+      qmatch_asmsub_rename_tac `eval_expr cx e st = (INL res,base_st)` >>
+      qmatch_asmsub_rename_tac `eval_expr cx e' base_st = (INL idx,index_st)` >>
+      qpat_x_assum `base_st = _` SUBST_ALL_TAC >>
+      qpat_x_assum `index_st = _` SUBST_ALL_TAC >>
+      gvs[read_result_trace] >>
       imp_res_tac eval_expr_trace_back >>
-      imp_res_tac select_result_trace_back >> metis_tac[])
+      imp_res_tac select_result_trace_back >>
+      imp_res_tac projection_pair >> metis_tac[])
   (* Attribute *)
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def] >>
@@ -647,7 +665,7 @@ Proof
               `s1 = st with storage_trace := s1.storage_trace` by
                 metis_tac[eval_exprs_preserves_state] >>
               pop_assum SUBST_ALL_TAC >>
-              rename1 `eval_exprs cx [p1] st = (INL addr_vs, s2)` >>
+              rename1 `eval_exprs cx [p1] (st with storage_trace := _) = (INL addr_vs, s2)` >>
               `s2 = (st with storage_trace := s1.storage_trace)
                          with storage_trace := s2.storage_trace` by
                 metis_tac[eval_exprs_preserves_state, listTheory.EVERY_DEF] >>

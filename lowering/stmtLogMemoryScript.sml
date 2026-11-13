@@ -163,7 +163,7 @@ Resume compile_log_ready_stmt_frag_mem[args_value]:
         simp[EL_MAP, Excl "enc_def"]) >>
      qpat_x_assum `!n. n < LENGTH args ==> _` (qspec_then `n` mp_tac) >>
      simp[Excl "enc_def"]) >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
     metis_tac[log_args_post_state] >>
   `local_ptrs_reserved cenv sm` by
     (drule_all compile_log_eval_all_grows >> strip_tac >>
@@ -271,9 +271,9 @@ Resume compile_log_ready_stmt_frag_mem[post]:
   disj1_tac >> rpt conj_tac
   >- fs[same_blocks_def]
   >- (drule_all log_stmt_open >> simp[Excl "enc_def"])
-  >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with logs := _) u` mp_tac >>
+  >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ (_ with logs := _) u` mp_tac >>
       qmatch_goalsub_abbrev_tac
-        `stmt_state_rel _ _ _ _ E1 u ==> stmt_state_rel _ _ _ _ E2 u` >>
+        `stmt_state_rel _ _ _ _ _ E1 u ==> stmt_state_rel _ _ _ _ _ E2 u` >>
       `E1 = E2 with gas_obs := []` by
         simp[Abbr `E1`, Abbr `E2`, Abbr `ev`, wordsTheory.w2w_id,
              evaluation_state_component_equality, Excl "enc_def"] >>

@@ -17,7 +17,7 @@ Theory storageCopyLive
 Ancestors
   valueEncodingProps vyperStorageCoverage
   list rich_list arithmetic words byte vfmTypes vfmState valueEncodingProofs
-  compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs accountsRelProps exprSimAttributeFields
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs accountsRelProps
   vyperStorageLayoutSafety vyperStorageFrame
   vyperEncodeDecode vyperTyping vyperStorage vyperValue storageDecodeMemory
 
@@ -1253,50 +1253,50 @@ Proof
 QED
 
 Theorem copy_storage_dead_outside[local]:
-  !cx tr mid n subs k tv v writes st x b.
-    declared_storage_region cx mid n subs = SOME (tr,k,tv) /\
+  !H tr k tv v writes st x b.
+    MEM (tr,k,tv) (FST H) /\
     w2n k + type_slot_size tv <= dimword (:256) /\
     encode_value tv v = SOME writes /\ value_has_type tv v /\
     ~(w2n k <= x /\ x < w2n k + type_slot_size tv) /\
-    storage_dead cx tr st x b ==>
-    storage_dead cx tr (apply_writes k writes st) x b
+    storage_dead H tr st x b ==>
+    storage_dead H tr (apply_writes k writes st) x b
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `storage_dead _ _ _ _ _` mp_tac >>
-  simp_tac bool_ss [storage_dead_def] >> strip_tac >>
+  simp_tac bool_ss [storage_dead_def] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   rename1 `dead_bytes st (w2n slot) t x b` >>
   Cases_on `(slot,t) = (k,tv)`
   >- (gvs[] >> drule (cj 1 dead_bytes_range) >> strip_tac >>
       `F` by decide_tac) >>
   `ranges_disjoint (w2n slot) (type_slot_size t)
       (w2n k) (type_slot_size tv)` by
-    (qpat_x_assum `!mid' n' subs' slot' tv'. _` irule >>
-     conj_tac >- metis_tac[] >>
-     qexistsl_tac [`mid`, `n`, `subs`] >> simp[]) >>
+    (qpat_x_assum `!slot' tv'. _` irule >> simp[]) >>
   `dead_bytes (apply_writes k writes st) (w2n slot) t x b <=>
    dead_bytes st (w2n slot) t x b` by
     (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
      irule copy_encoded_outside >> conj_tac >- decide_tac >>
      qexistsl_tac [`tv`, `v`] >> fs[ranges_disjoint_def] >> decide_tac) >>
-  simp_tac bool_ss [storage_dead_def] >>
-  qexistsl_tac [`mid'`, `n'`, `subs'`, `slot`, `t`] >> asm_rewrite_tac[]
+  simp_tac bool_ss [storage_dead_def] >> asm_rewrite_tac[] >>
+  qexistsl_tac [`slot`, `t`] >> asm_rewrite_tac[]
 QED
 
-(* The source stores v at the declared region (k, tv) on backend tr; the
+(* The source stores v at the observed region (k, tv) on backend tr; the
    Venom side copies v's memory words over the whole region.  If the
    storages agreed up to the dead bytes before, they agree after: inside the
    region by encode_value_memory_live, and outside it nothing changed and no
    byte changed whether it is dead, since every region with dead bytes is
    apart from (k, tv). *)
 Theorem storage_agree_copy_region:
-  !cx tr mid n subs k tv v writes off mem ws st1 st2.
-    declared_storage_region cx mid n subs = SOME (tr, k, tv) /\
+  !H tr k tv v writes off mem ws st1 st2.
+    MEM (tr,k,tv) (FST H) /\
     w2n k + type_slot_size tv <= dimword (:256) /\
-    (!mid' n' subs' k' tv'.
-       declared_storage_region cx mid' n' subs' = SOME (tr, k', tv') /\
+    (!k' tv'.
+       MEM (tr,k',tv') (FST H) /\
        (k', tv') <> (k, tv) ==>
        ranges_disjoint (w2n k) (type_slot_size tv)
                        (w2n k') (type_slot_size tv')) /\
+    storage_locks_separated (FST H) (SND H) /\
     well_formed_type_value tv /\ value_has_type tv v /\
     val_in_memory tv v off mem /\
     encode_value tv v = SOME writes /\
@@ -1307,15 +1307,15 @@ Theorem storage_agree_copy_region:
          (?b. b < 32 /\
               ~dead_bytes (apply_writes k writes st1) (w2n k) tv (w2n k + i) b) ==>
          ws i = mem_word_at (off + 32 * i) mem) /\
-    storage_agree (storage_dead cx tr st1) st1 st2 ==>
-    storage_agree (storage_dead cx tr (apply_writes k writes st1))
+    storage_agree (storage_dead H tr st1) st1 st2 ==>
+    storage_agree (storage_dead H tr (apply_writes k writes st1))
       (apply_writes k writes st1)
       (FOLDL (\t i. update_storage (k + n2w i) (ws i) t)
              st2 (COUNT_LIST (type_slot_size tv)))
 Proof
   rpt gen_tac >> strip_tac >>
   simp_tac bool_ss [storage_agree_def] >> rpt gen_tac >> strip_tac >>
-  rename1 `~storage_dead cx tr (apply_writes k writes st1) (w2n q) b` >>
+  rename1 `~storage_dead H tr (apply_writes k writes st1) (w2n q) b` >>
   `lookup_storage q
     (FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
       st2 (COUNT_LIST (type_slot_size tv))) =
@@ -1326,9 +1326,16 @@ Proof
   Cases_on `w2n k <= w2n q /\ w2n q < w2n k+type_slot_size tv` >>
   asm_rewrite_tac[]
   >- (`~dead_bytes (apply_writes k writes st1) (w2n k) tv (w2n q) b` by
-        (strip_tac >> qpat_x_assum `~storage_dead _ _ _ _ _` mp_tac >>
-         simp_tac bool_ss [storage_dead_def] >>
-         qexistsl_tac [`mid`, `n`, `subs`, `k`, `tv`] >> asm_rewrite_tac[]) >>
+        (strip_tac >>
+         `~tr \/ ~MEM (w2n q) (SND H)` by
+           (Cases_on `tr` >> simp[] >> strip_tac >>
+            `ranges_disjoint (w2n k) (type_slot_size tv) (w2n q) 1` by
+              (qpat_x_assum `storage_locks_separated _ _` mp_tac >>
+               simp_tac bool_ss [vyperStorageFootprintTheory.storage_locks_separated_def] >>
+               metis_tac[]) >> fs[ranges_disjoint_def] >> decide_tac) >>
+         qpat_x_assum `~storage_dead _ _ _ _ _` mp_tac >>
+         simp_tac bool_ss [storage_dead_def] >> asm_rewrite_tac[] >>
+         qexistsl_tac [`k`, `tv`] >> gvs[]) >>
       `w2n k+(w2n q-w2n k) = w2n q` by decide_tac >>
       `w2n q-w2n k < type_slot_size tv` by decide_tac >>
       `ws (w2n q-w2n k) = mem_word_at (off+32*(w2n q-w2n k)) mem` by
@@ -1342,11 +1349,11 @@ Proof
       disch_then drule >> disch_then drule >> disch_then drule >>
       disch_then (qspecl_then [`k`, `st1`, `w2n q-w2n k`, `b`] mp_tac) >>
       simp[] ) >>
-  `~storage_dead cx tr st1 (w2n q) b` by
+  `~storage_dead H tr st1 (w2n q) b` by
     (strip_tac >> qpat_x_assum `~storage_dead _ _ (apply_writes _ _ _) _ _`
        (fn th => mp_tac th) >> simp[] >>
      irule copy_storage_dead_outside >> reverse conj_tac >- asm_rewrite_tac[] >>
-     qexistsl_tac [`mid`, `n`, `subs`, `tv`, `v`] >> asm_rewrite_tac[]) >>
+     qexistsl_tac [`tv`, `v`] >> asm_rewrite_tac[]) >>
   `lookup_storage q (apply_writes k writes st1) = lookup_storage q st1` by
     (`lookup_storage (n2w (w2n q)) (apply_writes k writes st1) =
       lookup_storage (n2w (w2n q)) st1` suffices_by simp[] >>

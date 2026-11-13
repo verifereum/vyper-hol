@@ -18,8 +18,8 @@ Proof
 QED
 
 Theorem vv_post_inst_idx[simp]:
-  vv_post ctx func cenv cx e es sa sb s0 es' tv vv (s with vs_inst_idx := n) <=>
-  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s
+  vv_post H ctx func cenv cx e es sa sb s0 es' tv vv (s with vs_inst_idx := n) <=>
+  vv_post H ctx func cenv cx e es sa sb s0 es' tv vv s
 Proof
   Cases_on `vv` >>
   simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def, vv_own_def,
@@ -99,14 +99,14 @@ Proof
 QED
 
 Theorem vv_post_vars_frame:
-  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
   (t with vs_vars := s.vs_vars) = s /\
   eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
   (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
     lookup_var x t = SOME w) /\
   local_ptrs_reserved cenv sa /\ sm.cs_next_id <= sn.cs_next_id /\
-  stmt_state_rel ctx func cenv cx es' t ==>
-  vv_post ctx func cenv cx e es sa sn s0 es' tv vv t
+  stmt_state_rel H ctx func cenv cx es' t ==>
+  vv_post H ctx func cenv cx e es sa sn s0 es' tv vv t
 Proof
   strip_tac >>
   `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
@@ -116,7 +116,7 @@ Proof
    contract_transient t = contract_transient s` by
     (qpat_x_assum `t with vs_vars := _ = s` (SUBST1_TAC o SYM) >>
      simp[contract_storage_def, contract_transient_def]) >>
-  qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `vv_post H ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   `vv_holds cenv cx (post_value_type cenv e) tv vv es' t` by
     (drule_all vv_holds_vars_frame >> simp[]) >>
@@ -138,13 +138,13 @@ Proof
     (irule locals_kept_mem_tail >> qexists_tac `s` >> asm_rewrite_tac[]) >>
   `pure_frame cenv func es sa s0 t <=> pure_frame cenv func es sa s0 s` by
     (irule pure_frame_state_cong >> conj_tac >> first_assum ACCEPT_TAC) >>
-  `vv_storage_live cx vv es' s ==> vv_storage_live cx vv es' t` by
+  `vv_storage_live H cx vv es' s ==> vv_storage_live H cx vv es' t` by
     (Cases_on `vv` >> fs[contextTheory.vv_operand_def]) >>
   pure_rewrite_tac[vv_post_def] >> asm_rewrite_tac[] >>
   rpt strip_tac
-  >~ [`vv_storage_live _ _ _ t`]
-  >- (qpat_x_assum `vv_storage_live _ _ _ s ==> _` irule >>
-      qpat_x_assum `~expr_has_effect e ==> vv_storage_live _ _ _ _` irule >>
+  >~ [`vv_storage_live H _ _ _ t`]
+  >- (qpat_x_assum `vv_storage_live H _ _ _ s ==> _` irule >>
+      qpat_x_assum `~expr_has_effect e ==> vv_storage_live H _ _ _ _` irule >>
       first_assum ACCEPT_TAC) >>
   qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> _` irule >>
   qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> _`
@@ -153,11 +153,11 @@ Proof
 QED
 
 Theorem vv_post_update_var:
-  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
   sm.cs_next_id <= sn.cs_next_id /\ ~not_fresh_at sm x /\
   (!z. vv_operand vv = Var z ==> not_fresh_at sm z) ==>
-  vv_post ctx func cenv cx e es sa sn s0 es' tv vv (update_var x w s)
+  vv_post H ctx func cenv cx e es sa sn s0 es' tv vv (update_var x w s)
 Proof
   strip_tac >>
   `!z. not_fresh_at sm z ==> z <> x` by metis_tac[] >>
@@ -169,7 +169,7 @@ Proof
      reverse conj_tac >- simp[update_var_def] >>
      qexists_tac `sm` >>
      simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
-  `stmt_state_rel ctx func cenv cx es' (update_var x w s)` by
+  `stmt_state_rel H ctx func cenv cx es' (update_var x w s)` by
     (irule exprLoweringPropsTheory.stmt_state_rel_update_var >>
      gvs[vv_post_def, not_local_ptr_def, local_ptrs_reserved_def] >>
      metis_tac[]) >>

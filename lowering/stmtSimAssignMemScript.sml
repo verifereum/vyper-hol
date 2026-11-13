@@ -117,14 +117,14 @@ Theorem local_memory_store_run_framed:
     (ty = sty \/ is_bytestring_type ty /\ is_bytestring_type sty) /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?dw t. lookup_var p s = SOME dw /\
-        stmt_state_rel ctx func cenv cx
+        stmt_state_rel H ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
              rest) t /\
@@ -160,7 +160,7 @@ Proof
     (rpt strip_tac >> first_x_assum irule >>
      fs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
   qpat_x_assum `entry.type = tyv` (SUBST_ALL_TAC o SYM) >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx es1` >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx es1` >>
   `type_memory_size entry.type <= sz` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
   `local_region cenv es.scopes s id (w2n w) sz` by simp[local_region_def] >>
@@ -170,19 +170,19 @@ Proof
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
     (irule local_copy_immutables >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      qexists_tac `type_memory_size entry.type` >> simp[] >>
      rpt strip_tac >> qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _` irule >>
      decide_tac) >>
   `memory_value_rel entry.type v (w2n w) t.vs_memory` by
     (irule val_in_memory_memory_value_rel >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es1 t` by
+  `stmt_state_rel H ctx func cenv cx es1 t` by
     (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
   `frag_exec ctx sa sb (\u. u = s)
-     (\u. stmt_state_rel ctx func cenv cx es1 u /\
+     (\u. stmt_state_rel H ctx func cenv cx es1 u /\
           (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
           u.vs_allocas = s.vs_allocas /\
           (!a len. a + len <= w2n w \/
@@ -208,13 +208,13 @@ Theorem local_memory_store_run:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel ctx func cenv cx
+    ?t. stmt_state_rel H ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
              rest) t /\
@@ -249,13 +249,13 @@ Theorem local_memory_assign_run:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel ctx func cenv cx
+    ?t. stmt_state_rel H ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
              rest) t /\
@@ -323,13 +323,13 @@ Theorem local_memory_assign_path:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel ctx func cenv cx
+    ?t. stmt_state_rel H ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
              rest) t /\
@@ -421,13 +421,13 @@ Theorem local_memory_assign_widen_path:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel ctx func cenv cx
+    ?t. stmt_state_rel H ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -446,7 +446,7 @@ Proof
     (gvs[compile_assign_value_def] >>
      metis_tac[compile_store_memory_bytestring_src]) >>
   drule local_memory_store_path >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
@@ -487,7 +487,7 @@ Resume local_memory_assign_widen_path[staged]:
   `eval_operand (Var tmp) u = SOME uw` by simp[eval_operand_def] >>
   drule local_memory_store_path >>
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   simp[] >>
@@ -526,17 +526,17 @@ Theorem assign_local_memory_normal_continuation:
       (expr_type e) (expr_type e) bytes sb = ((), sf) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sb /\ (!x. op = Var x ==> not_fresh_at sb x) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_id <= sb.cs_next_id /\
     sa.cs_next_var <= sb.cs_next_var /\ ~block_is_terminated sf /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
       (es,s0) marks (INL v) ee (OK s) /\
-    expr_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s /\
     s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     ?ff u. gas_marked_exec F (ctx,func) (write_place cx (MemoryPlace id []) v)
       (ee with gas_obs := [],s) [] (INL ()) ff (OK u) /\
-      stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
+      stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
 Proof
   rpt gen_tac >> strip_tac >>
   `!tail. bind (eval_expr cx e) (read_result cx)
@@ -558,16 +558,16 @@ Proof
      disch_then (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
   `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) s` by
     (irule expr_post_alloca_frame >> simp[] >>
-     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   qpat_x_assum `post_value_type _ _ = _`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   `?sw. eval_operand op s = SOME sw /\ val_in_memory tyv v (w2n sw) s.vs_memory` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
   `val_wf tyv v` by metis_tac[value_has_type_memory_wf] >>
-  `stmt_state_rel ctx func cenv cx ee s` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+  `stmt_state_rel H ctx func cenv cx ee s` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >> metis_tac[]) >>
   drule_all local_memory_assign_path >> strip_tac >>
   `alloca_frame cenv es sa s0 cenv ee s` by
@@ -602,19 +602,19 @@ Theorem assign_local_memory_rhs_outcome:
     (expr_type e) (expr_type e) bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sb /\ (!x. op = Var x ==> not_fresh_at sb x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_id <= sb.cs_next_id /\
   sa.cs_next_var <= sb.cs_next_var /\ ~block_is_terminated sf /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\res ee t. ?v. res = INL v /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee r. expr_exit res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sf es s0)
+    (stmt_post H ctx func cx lctx cenv cenv sa sf es s0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
@@ -702,13 +702,13 @@ Theorem local_memory_assign_widen_run:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel ctx func cenv cx
+    ?t. stmt_state_rel H ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -786,17 +786,17 @@ Theorem assign_local_memory_widen_normal_continuation:
   compile_assign_value cenv (Var p) LocMemory op F loc vtyp sty bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ ~block_is_terminated sf /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s0 /\ sa.cs_next_id <= sb.cs_next_id /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ sa.cs_next_id <= sb.cs_next_id /\
   sa.cs_next_var <= sb.cs_next_var /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
     (es,s0) marks (INL v) ee (OK s) /\
-  expr_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s /\
+  expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s /\
   s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?ff u. gas_marked_exec F (ctx,func) (write_place cx (MemoryPlace id []) v)
     (ee with gas_obs := [],s) [] (INL ()) ff (OK u) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
+    stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!tail. bind (eval_expr cx e) (read_result cx)
@@ -820,8 +820,8 @@ Proof
      disch_then (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
   `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) s` by
     (irule expr_post_alloca_frame >> simp[] >>
-     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   qpat_x_assum `post_value_type _ _ = _`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
@@ -836,8 +836,8 @@ Proof
   `val_in_memory tyv v (w2n sw) s.vs_memory` by
     (qpat_x_assum `expr_type e = _ \/ _` strip_assume_tac >> gvs[] >>
      irule bytestring_val_in_memory_transfer >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx ee s` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+  `stmt_state_rel H ctx func cenv cx ee s` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >> metis_tac[]) >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
@@ -874,19 +874,19 @@ Theorem assign_local_memory_widen_rhs_outcome:
   compile_assign_value cenv (Var p) LocMemory op F loc vtyp sty bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ ~block_is_terminated sf /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s0 /\ sa.cs_next_id <= sb.cs_next_id /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ sa.cs_next_id <= sb.cs_next_id /\
   sa.cs_next_var <= sb.cs_next_var /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\res ee t. ?v. res = INL v /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee r. expr_exit res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sf es s0)
+    (stmt_post H ctx func cx lctx cenv cenv sa sf es s0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> rewrite_tac[gas_outcome_def] >>
@@ -1025,13 +1025,13 @@ QED
    occupy a larger buffer, but only the header needs to be overwritten. *)
 Theorem local_header_store_state:
   !func cenv cx es s id p sz w pre env entry rest v wd.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ 32 <= type_memory_size entry.type /\
     val_wf entry.type v /\
     memory_value_rel entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes := pre ++
         (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
       (mstore (w2n w) wd s)
@@ -1064,7 +1064,7 @@ QED
 Theorem local_header_store_path:
   !ctx func cenv cx es s id p sz w pre env entry rest v wd sa sb.
     emit_void MSTORE [Var p; Lit wd] sa = ((), sb) /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ 32 <= type_memory_size entry.type /\
@@ -1073,7 +1073,7 @@ Theorem local_header_store_path:
     fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel ctx func cenv cx
+    ?t. stmt_state_rel H ctx func cenv cx
           (es with scopes := pre ++
             (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -1151,14 +1151,14 @@ QED
 Theorem local_header_store_frag:
   !ctx func cenv cx es s id p sz w pre env entry rest v wd sa sb R.
     emit_void MSTORE [Var p; Lit wd] sa = ((), sb) /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ 32 <= type_memory_size entry.type /\
     val_wf entry.type v /\
     memory_value_rel entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
     frag_exec ctx sa sb (\t. t = s)
-      (\t. stmt_state_rel ctx func cenv cx
+      (\t. stmt_state_rel H ctx func cenv cx
          (es with scopes := pre ++
            (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
          (!x. lookup_var x t = lookup_var x s) /\
@@ -1274,7 +1274,7 @@ Proof
   disj1_tac >> simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   drule emit_void_nonterminator_open >> simp[is_terminator_def] >>
   strip_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ (es with scopes := _) t` mp_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ (es with scopes := _) t` mp_tac >>
   disch_then (mp_tac o Q.INST
     [`gs` |-> `[]`, `readings` |-> `t.vs_gas_readings`, `k` |-> `t.vs_inst_idx`]
     o MATCH_MP msg_gas_state_frame) >> simp[stmt_state_rel_inst_idx] >>

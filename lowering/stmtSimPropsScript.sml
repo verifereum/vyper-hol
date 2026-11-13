@@ -467,3 +467,17 @@ Proof
         mem_safe_step_non_invoke]) >>
   qpat_x_assum `frag_exec_mem _ _ _ _ _ _` mp_tac >> simp[frag_exec_mem_def]
 QED
+
+(* A horizon valid for the trace a marked run of a storage-trace frame ends
+   with is valid for the trace it started with. *)
+Theorem gas_marked_exec_valid_prefix:
+  gas_marked_exec memory (ctx,func) source (es,s0) marks res es_end r /\
+  storage_trace_frame source ==>
+  !cx st0 H. valid_horizon cx st0 H es_end.storage_trace ==>
+    valid_horizon cx st0 H es.storage_trace
+Proof
+  rw[gasSummaryTheory.gas_marked_exec_def] >>
+  first_x_assum (qspec_then `[]` assume_tac) >>
+  drule_at (Pos (el 2)) vyperStorageFootprintTheory.valid_horizon_frame >>
+  simp[]
+QED

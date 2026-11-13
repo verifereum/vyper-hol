@@ -38,7 +38,7 @@ Theorem emit_op_path_mem[local]:
     emit_op opc args sa = (op, sb) /\ local_ptrs_reserved cenv sa /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     opc <> INVOKE /\ opc <> GAS /\ opc <> ALLOCA /\ ~is_terminator opc /\
-    stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
     ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -49,7 +49,7 @@ Theorem emit_op_path_mem[local]:
     ?s. gas_path_mem ctx func s0 0 (OK s) /\
         s.vs_current_bb = sb.cs_current_bb /\
         s.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        stmt_state_rel ctx func cenv cx es s /\ eval_operand op s = SOME w /\
+        stmt_state_rel H ctx func cenv cx es s /\ eval_operand op s = SOME w /\
         (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
                 lookup_var x s = SOME w') /\
         (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -117,12 +117,12 @@ Theorem unwrap_storage_word_path_mem:
     is_word_type t /\ local_ptrs_reserved cenv sm /\
     sa.cs_next_var <= sm.cs_next_var /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_path_mem ctx func s 0 (OK u) /\
-        expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+        expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts /\
         alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
@@ -132,7 +132,7 @@ Proof
    ?w. eval_operand p.ptr_operand s = SOME w /\
        storage_holds cx (p.ptr_location = LocTransient) (post_value_type cenv e)
          (Value v) w es' s /\
-       stmt_state_rel ctx func cenv cx es' s` by
+       stmt_state_rel H ctx func cenv cx es' s` by
     gvs[vv_post_def, vv_holds_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   qabbrev_tac `ld = if p.ptr_location = LocTransient then tload w s
@@ -165,12 +165,12 @@ Theorem unwrap_runtime_word_path_mem:
     local_ptrs_reserved cenv sm /\
     sa.cs_next_var <= sm.cs_next_var /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_path_mem ctx func s 0 (OK u) /\
-        expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+        expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts /\
         alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
@@ -179,7 +179,7 @@ Proof
   `t = post_value_type cenv e /\
    ?w. eval_operand p.ptr_operand s = SOME w /\
        immutable_holds cenv cx (post_value_type cenv e) (Value v) w es' s /\
-       stmt_state_rel ctx func cenv cx es' s` by
+       stmt_state_rel H ctx func cenv cx es' s` by
     gvs[vv_post_def, vv_holds_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   `?tv. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv` by
@@ -207,7 +207,7 @@ QED
 
 (* A constructor's immutable word lies below the allocation frontier. *)
 Theorem ctor_immutable_word_frontier[local]:
-  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   is_word_type t /\ immutable_holds cenv cx t tv w es s' ==>
   w2n w + 32 <= s.vs_alloca_next
 Proof
@@ -223,7 +223,7 @@ Theorem compile_imm_load_word_ctor_path_mem[local]:
     compile_imm_load_word T cenv.ce_imm_alloca pop sm = (op, sb) /\
     local_ptrs_reserved cenv sm /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\
-    stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
     ~s0.vs_halted /\
     s0.vs_current_bb = sm.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -231,7 +231,7 @@ Theorem compile_imm_load_word_ctor_path_mem[local]:
     ?s. gas_path_mem ctx func s0 0 (OK s) /\
         s.vs_current_bb = sb.cs_current_bb /\
         s.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        stmt_state_rel ctx func cenv cx es s /\
+        stmt_state_rel H ctx func cenv cx es s /\
         eval_operand op s = SOME (mload (w2n w) s0) /\
         (!x w'. not_fresh_at sm x /\ lookup_var x s0 = SOME w' ==>
                 lookup_var x s = SOME w') /\
@@ -302,12 +302,12 @@ Theorem unwrap_ctor_word_path_mem:
     local_ptrs_reserved cenv sm /\
     sa.cs_next_var <= sm.cs_next_var /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_path_mem ctx func s 0 (OK u) /\
-        expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+        expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts /\
         alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
@@ -316,7 +316,7 @@ Proof
   `t = post_value_type cenv e /\
    ?w. eval_operand p.ptr_operand s = SOME w /\
        immutable_holds cenv cx (post_value_type cenv e) (Value v) w es' s /\
-       stmt_state_rel ctx func cenv cx es' s` by
+       stmt_state_rel H ctx func cenv cx es' s` by
     gvs[vv_post_def, vv_holds_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   `w2n w + 32 <= s.vs_alloca_next` by
@@ -407,7 +407,7 @@ QED
 Theorem alloc_buffer_source_path_mem_endpoint:
   !ctx func cenv cx es sm mid buf sz s src a.
     compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
     eval_operand src s = SOME a /\
     (!x. src = Var x ==> not_fresh_at sm x) /\ alloca_history func s /\
@@ -417,7 +417,7 @@ Theorem alloc_buffer_source_path_mem_endpoint:
       ~u.vs_halted /\ u.vs_current_bb = mid.cs_current_bb /\
       u.vs_inst_idx = LENGTH mid.cs_current_insts /\
       eval_operand src u = SOME a /\
-      stmt_state_rel ctx func cenv cx es u /\
+      stmt_state_rel H ctx func cenv cx es u /\
       eval_operand buf.buf_operand u = SOME w /\
       FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ w2n w + sz <= u.vs_alloca_next /\
@@ -673,7 +673,7 @@ Theorem storage_unwrap_typed_suffix_path_mem:
    else do compile_word_copy_loop src dst (type_slot_size tv) loc LocMemory F;
            return () od) mid = (result,sb) /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at mid x) /\
-  stmt_state_rel ctx func cenv cx es u /\
+  stmt_state_rel H ctx func cenv cx es u /\
   storage_holds cx (loc = LocTransient) t (Value v) a es u /\
   evaluate_type (get_tenv cx) t = SOME tv /\
   eval_operand src u = SOME a /\ eval_operand dst u = SOME w /\
@@ -762,12 +762,12 @@ QED
 
 Theorem storage_unwrap_type_facts:
   post_value_type cenv e = expr_type e /\
-  vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
   (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
     type_memory_bytes cenv t = type_memory_size tvt /\
     type_memory_size tvt < 2**64) ==>
-  t = expr_type e /\ stmt_state_rel ctx func cenv cx es' s /\
+  t = expr_type e /\ stmt_state_rel H ctx func cenv cx es' s /\
   ?a tv. eval_operand p.ptr_operand s = SOME a /\
     storage_holds cx (p.ptr_location = LocTransient) t (Value v) a es' s /\
     evaluate_type (get_tenv cx) t = SOME tv /\
@@ -778,11 +778,11 @@ Theorem storage_unwrap_type_facts:
     type_slot_size tv < 2**256
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `t = expr_type e /\ stmt_state_rel ctx func cenv cx es' s` by
+  `t = expr_type e /\ stmt_state_rel H ctx func cenv cx es' s` by
     (Cases_on `p.ptr_location` >> gvs[vv_post_def, vv_holds_def]) >> simp[] >>
   `?a. eval_operand p.ptr_operand s = SOME a /\
        storage_holds cx (p.ptr_location = LocTransient) t (Value v) a es' s` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      Cases_on `p.ptr_location` >> gvs[vv_post_def, vv_holds_def]) >>
   `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
     (gvs[storage_holds_def] >> metis_tac[]) >>
@@ -793,16 +793,16 @@ Proof
   decide_tac
 QED
 
-(* expr_post of a value copied into a fresh buffer. *)
+(* expr_post H of a value copied into a fresh buffer. *)
 Theorem buffer_post_transport:
   !ctx func cenv cx e es sa sm mid sb s0 es' v t p s u z tv buf w.
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= mid.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\ sm.cs_next_id < mid.cs_next_id /\
     mid.cs_next_id <= sb.cs_next_id /\
-    stmt_state_rel ctx func cenv cx es' u /\ u.vs_memory = s.vs_memory /\
+    stmt_state_rel H ctx func cenv cx es' u /\ u.vs_memory = s.vs_memory /\
     (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP u.vs_allocas aid = SOME entry) /\
@@ -825,11 +825,11 @@ Theorem buffer_post_transport:
     val_wf tv v /\ val_in_memory tv v (w2n w) z.vs_memory /\
     val_footprint tv v <= type_memory_size tv /\
     eval_operand buf.buf_operand z = SOME w ==>
-    expr_post ctx func cenv cx e es sa sb s0 es' v buf.buf_operand z
+    expr_post H ctx func cenv cx e es sa sb s0 es' v buf.buf_operand z
 Proof
   rpt gen_tac >> strip_tac >>
   `post_value_type cenv e = expr_type e` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[vv_post_def, vv_holds_def] >> rpt strip_tac >>
      gvs[post_value_type_bytestring]) >>
   drule_all buffer_alloc_code >> strip_tac >>
@@ -881,7 +881,7 @@ Theorem copy_finish[local]:
   !ctx func s u z cenv cx e es sa sb s0 es' v op w tv t.
   post_value_type cenv e = expr_type e /\
   gas_path_mem ctx func s 0 (OK u) /\ gas_path_mem ctx func u 0 (OK z) /\
-  expr_post ctx func cenv cx e es sa sb s0 es' v op z /\
+  expr_post H ctx func cenv cx e es sa sb s0 es' v op z /\
   eval_operand op z = SOME w /\
   w2n w + type_memory_size tv <= z.vs_alloca_next /\
   evaluate_type (get_tenv cx) t = SOME tv /\ t = expr_type e /\
@@ -891,7 +891,7 @@ Theorem copy_finish[local]:
   alloca_history func z /\ z.vs_current_bb = sb.cs_current_bb /\
   z.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?u. gas_path_mem ctx func s 0 (OK u) /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
       expr_store_bound cx t v op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -914,12 +914,12 @@ Theorem unwrap_storage_copy_capacity_path_mem[local]:
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_path_mem ctx func s 0 (OK u) /\
-        expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+        expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
         expr_store_bound cx t v op u /\
         (~is_word_type t ==> vv_store_bound cx t t es' (Value v)
           (LocatedValue t (mk_ptr op LocMemory)) u) /\
@@ -952,7 +952,7 @@ Proof
   impl_tac
   >- (asm_rewrite_tac [] >> gvs[]) >>
   strip_tac >>
-  `expr_post ctx func cenv cx e es sa sb s0 es' v buf.buf_operand z` by
+  `expr_post H ctx func cenv cx e es sa sb s0 es' v buf.buf_operand z` by
     (irule buffer_post_transport >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
@@ -1225,7 +1225,7 @@ QED
 
 (* A constructor's immutable lies below the allocation frontier. *)
 Theorem ctor_immutable_frontier:
-  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   immutable_holds cenv cx t tv w es s' /\
   evaluate_type (get_tenv cx) t = SOME tvt ==>
   w2n w + type_memory_size tvt <= s.vs_alloca_next
@@ -1271,12 +1271,12 @@ Theorem unwrap_code_copy_capacity_path_mem[local]:
     (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_path_mem ctx func s 0 (OK u) /\
-        expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+        expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
         expr_store_bound cx t v op u /\
         (~is_word_type t ==> vv_store_bound cx t t es' (Value v)
           (LocatedValue t (mk_ptr op LocMemory)) u) /\
@@ -1314,7 +1314,7 @@ Proof
   `fn_has_code sm mid func /\ fn_has_code mid sc func` by
     metis_tac[fn_has_code_split] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx func cenv cx es' s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by fs[vv_post_def] >>
   drule_all alloc_buffer_source_path_mem >> strip_tac >>
   suspend "allocated"
 QED
@@ -1429,7 +1429,7 @@ Resume unwrap_code_copy_capacity_path_mem[finish]:
      >- gvs[] >>
      irule exprSimStorageCopyTheory.storage_copy_operand_preserved >> simp[] >>
      qexists_tac `mid` >> simp[]) >>
-  `expr_post ctx func cenv cx e es sa sc s0 es' v buf.buf_operand z` by
+  `expr_post H ctx func cenv cx e es sa sc s0 es' v buf.buf_operand z` by
     (irule buffer_post_transport >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
@@ -1523,12 +1523,12 @@ Theorem unwrap_copy_path_mem:
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_path_mem ctx func s 0 (OK u) /\
-        expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+        expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
         expr_store_bound cx t v op u /\
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -1555,13 +1555,13 @@ Theorem unwrap_value_path_mem:
            ~is_word_type (expr_type e) ==>
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es' (Value v) vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_path_mem ctx func s 0 (OK u) /\
-        expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+        expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
         expr_store_bound cx (expr_type e) v op u /\
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -1605,7 +1605,7 @@ Proof
          `val_store_size tvt v = 32` by metis_tac[word_val_store_size] >>
          simp[]) >>
       drule_at (Pat `unwrap_value _ _ _ = _`) body_unwrap_memory_counted_read >>
-      disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       simp[] >>
       disch_then (qspec_then `lowered_value_type cenv e` strip_assume_tac) >>
       qexists_tac `u` >> gvs[]) >>
@@ -1615,23 +1615,23 @@ Proof
   >- (Cases_on `p.ptr_location = LocCode`
       >- (Cases_on `cenv.ce_is_ctor`
           >- (drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_ctor_word_path_mem >>
-              disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+              disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
               simp[] >> strip_tac >> qexists_tac `u` >>
               gvs[expr_store_bound_word]) >>
           drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_runtime_word_path_mem >>
-          disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+          disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
           simp[] >> strip_tac >> qexists_tac `u` >>
           gvs[expr_store_bound_word]) >>
       `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient` by
         (Cases_on `p.ptr_location` >> gvs[]) >>
       drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_storage_word_path_mem >>
-      disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       simp[] >> strip_tac >> qexists_tac `u` >>
       gvs[expr_store_bound_word]) >>
   `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
    p.ptr_location = LocCode` by (Cases_on `p.ptr_location` >> gvs[]) >>
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_copy_path_mem >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> strip_tac >> gvs[] >> goal_assum drule >> simp[]
 QED
 
@@ -1652,14 +1652,14 @@ Theorem unwrap_value_marked_read_mem:
            ~is_word_type (expr_type e) ==>
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
-    vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?v u. gas_marked_exec T (ctx,func) (read_result cx tv) (ee,s)
             [] (INL v) ee (OK u) /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
       expr_store_bound cx (expr_type e) v op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -1677,7 +1677,7 @@ Proof
      first_x_assum irule >> metis_tac[]) >>
   drule_all vv_post_read_result >> strip_tac >>
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_path_mem >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[] >> strip_tac >>
   qexistsl_tac [`v`, `u`] >> simp[] >>
   simp[gas_marked_exec_def, gas_marked_path_def] >>
@@ -1720,7 +1720,7 @@ Proof
   rewrite_tac[gas_outcome_def] >> strip_tac >>
   qexists_tac `marks`
   >- (disj1_tac >> gvs[gas_summary_at_def]
-      >- (rename1 `vv_post _ _ _ _ _ _ _ _ _ _ tv vv u` >>
+      >- (rename1 `vv_post _ _ _ _ _ _ _ _ _ _ _ tv vv u` >>
           `~u.vs_halted` by
             metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
           `MAP FDOM es.scopes = MAP FDOM (es_end with gas_obs := []).scopes` by
@@ -1730,7 +1730,7 @@ Proof
              drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
              simp[]) >>
           drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read_mem >>
-          disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+          disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
           impl_tac >- simp[] >> strip_tac >>
           rename1 `gas_marked_exec T _ (read_result _ _) _ [] _ _ (OK u2)` >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u2`] >>

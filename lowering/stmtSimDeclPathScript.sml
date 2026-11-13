@@ -166,7 +166,8 @@ Theorem annassign_word_store_path:
     32 <= sz /\ type_memory_size tyv <= sz /\
     memory_value_rel tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
     val_wf tyv v ==>
-    ?t. stmt_state_rel H ctx func cenv cx
+    ?t. t = mstore (w2n w) wd s with vs_inst_idx := SUC s.vs_inst_idx /\
+        stmt_state_rel H ctx func cenv cx
           (es with scopes :=
              (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
@@ -207,7 +208,9 @@ Theorem annassign_word_store_post_path:
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz ==>
-    ?t. stmt_state_rel H ctx func cenv cx
+    ?t. t = mstore (w2n w) (typed_val_to_w256 etv v) s with
+              vs_inst_idx := SUC s.vs_inst_idx /\
+        stmt_state_rel H ctx func cenv cx
           (es1 with scopes :=
              (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
@@ -236,5 +239,5 @@ Proof
   `type_memory_size tyv <= sz` by simp[] >>
   drule_all annassign_word_store_path >>
   disch_then (qspecl_then [`a`] mp_tac) >> strip_tac >>
-  qexists_tac `t` >> simp[] >> metis_tac[]
+  gvs[] >> metis_tac[]
 QED
