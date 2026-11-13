@@ -54,8 +54,8 @@ Resume body_pop_nested_mem_case[local]:
 QED
 
 Resume body_pop_nested_mem_case[storage]:
-  `target_pre cenv cx env bt es` by
-    (irule target_pre_of_pop >> simp[] >> fs[immutable_root_def]) >>
+  `~immutable_root cx bt` by fs[immutable_root_def] >>
+  `target_pre cenv cx env bt es` by metis_tac[target_pre_of_pop] >>
   `target_sim_mem ctx func cenv cx env bt es` by
     (irule pop_nested_storage_target_mem >> metis_tac[]) >>
   irule pop_nested_storage_sim_mem >> metis_tac[]
