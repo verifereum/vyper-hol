@@ -15,9 +15,10 @@ End
 (* fr is the outer frontier, BEFORE aid.  In particular, stores may modify
    the literal allocation although it is old at each child entry. *)
 Definition literal_loop_frame_def:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es cs G tn s cells off <=>
     stmt_state_rel H ctx func ce cx es s /\ ghost_inv H d ce cx es G tn s /\
+    storage_well_formed_on cx es (FST H) /\
     wb_frame ce ees es fr sf s /\
     ghost_kept ce ees fr Gf tnf sf G tn /\
     MAP FDOM ees.scopes = MAP FDOM es.scopes /\
@@ -81,7 +82,7 @@ Proof
 QED
 
 Theorem literal_loop_frame_runtime:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es cs G tn s cells off ==>
   stmt_state_rel H ctx func ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   ghost_kept ce ees fr Gf tnf sf G tn /\ ~s.vs_halted /\
@@ -91,7 +92,7 @@ Proof
 QED
 
 Theorem literal_loop_frame_allocation:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es cs G tn s cells off ==>
   not_fresh_at cs root /\ lookup_var root s = SOME (n2w addr) /\
   ptr_covers G tn root s capacity /\ FLOOKUP G root = SOME (addr,capacity) /\
@@ -103,7 +104,7 @@ Proof
 QED
 
 Theorem literal_loop_store_ghost:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es cs G tn s cells off ==>
   ghost_kept ce es fr Gf tnf sf G tn
 Proof
@@ -114,7 +115,7 @@ Proof
 QED
 
 Theorem literal_loop_store_exterior:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es cs G tn s cells off /\
   w2n b = addr+off /\ off+k <= capacity ==>
   (!name p n i. local_region ce es.scopes s name p n /\
@@ -136,7 +137,7 @@ Proof
 QED
 
 Theorem literal_loop_prefix_geometry:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es cs G tn s cells off /\ MEM (tv,v,p,k) cells ==>
   addr <= p /\ p+k <= addr+off /\ p+k <= addr+capacity
 Proof
@@ -177,7 +178,7 @@ Proof
 QED
 
 Theorem literal_outer_frame_expr:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
   stmt_state_rel H ctx func ce cx ees sf /\ local_ptrs_reserved ce fr /\
   expr_post H ctx func ce cx e esi si sb s0 es' v op z /\
@@ -191,7 +192,7 @@ Proof
 QED
 
 Theorem literal_loop_frame_materialized:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\
   stmt_state_rel H ctx func ce cx ees sf /\
@@ -202,12 +203,12 @@ Theorem literal_loop_frame_materialized:
   si.cs_next_var <= sb.cs_next_var /\ si.cs_next_id <= sb.cs_next_id /\
   ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
   z.vs_inst_idx = LENGTH sb.cs_current_insts /\ (pure ==> ~expr_has_effect e) ==>
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es' sb HG tm z cells off /\ literal_prefix_ok cells tm z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all literal_outer_frame_expr >> strip_tac >>
-  qpat_x_assum `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `literal_loop_frame H _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     mp_tac >> simp[literal_loop_frame_def] >> strip_tac >>
   `MAP FDOM esi.scopes = MAP FDOM es'.scopes` by
     metis_tac[eval_expr_preserves_scopes_dom] >>
@@ -238,6 +239,7 @@ Proof
      MATCH_MP_TAC (Q.SPECL [`ce`, `func`, `ees`, `esi`, `fr`, `si`, `sf`, `s0`, `z`]
        pure_frame_trans) >>
      fs[wb_frame_def]) >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   simp[literal_loop_frame_def] >> rpt strip_tac >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
@@ -268,9 +270,9 @@ Proof
 QED
 
 Theorem literal_loop_frame_advance:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es cs G tn s cells off /\ off+k <= capacity ==>
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es cs G tn s (cells ++ [(tv,v,addr+off,k)]) (off+k)
 Proof
   simp[literal_loop_frame_def, EVERY_APPEND, EVERY_MEM, FORALL_PROD] >>

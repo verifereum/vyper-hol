@@ -96,19 +96,22 @@ Theorem for_range_callback_contract:
   ~ctx_has_dalloca ctx /\ ~bc.ce_is_ctor /\ ret_pc_ok bc sb0 s0 /\
   (!x sz. bc.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sb0 x) /\
   gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit_lbl incr_lbl)) es /\
-  stmt_state_rel H ctx func bc cx es s0 /\ ghost_inv H d bc cx es G0 tn0 s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func bc cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv H d bc cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sb0.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sb0.cs_current_insts /\
   ptr_covers G0 tn0 p s0 sz /\
   lookup_var cv s0 = SOME c /\ lookup_var ev s0 = SOME e /\
   FLOOKUP G0 cv = NONE /\ FLOOKUP G0 ev = NONE /\
   op_taint tn0 (Var cv) = {} /\ op_taint tn0 (Var ev) = {} ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG (eval_stmts cx stmts)
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0 (eval_stmts cx stmts)
     (es,s0,G0,tn0)
-    (\res ee G tn t. ((?c3.
+    (\H res ee G tn t. ((?c3.
       stmt_lands (InLoop exit_lbl incr_lbl) sb1 res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb1 /\ c3 = bc') /\
       cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel H ctx func c3 cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
       ghost_inv H d c3 cx ee G tn t /\
       (!x w. not_fresh_at sb0 x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!x. not_fresh_at sb0 x ==> FLOOKUP G x = FLOOKUP G0 x /\
@@ -119,7 +122,7 @@ Theorem for_range_callback_contract:
       op_taint tn (Var cv) = {} /\ op_taint tn (Var ev) = {}) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
         FLOOKUP t.vs_allocas aid = SOME b))
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r. !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
 Proof
   strip_tac >> ho_match_mp_tac gas_outcome_ptr_allocation_frame >>
   `fn_has_code sb0 sb1 func /\ local_ptrs_reserved bc sb0 /\
@@ -127,7 +130,7 @@ Proof
   qpat_x_assum `stmt_frag_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[stmt_frag_ptr_def] >> disch_then drule_all >> strip_tac >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _ _ _` kall_tac >>
   reverse conj_tac >- simp[] >> rpt gen_tac >>
   simp_tac bool_ss [] >> strip_tac >>
   irule for_range_callback_control >> goal_assum (drule_at Any) >> metis_tac[]
