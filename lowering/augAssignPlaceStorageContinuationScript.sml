@@ -1,0 +1,116 @@
+(* Source-aware continuation at a loaded storage place. *)
+Theory augAssignPlaceStorageContinuation
+Ancestors
+  augAssignPlaceLoadedContinuation augAssignPlaceSourcePrefix
+  augAssignPlaceSourceMemory augAssignPlaceRhsContinuation
+  exprSimProps exprSimSource exprSimHypsDefs exprSimLen
+  stmtSimAugAssignPlaceStorage vyperState vyperStorageFootprint
+  vyperStoragePlaceObserved vyperStorageTrace
+
+Theorem aug_place_loaded_storage_suffix:
+  type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
+  expr_body_pre cenv cx env e mid /\ expr_sim_mem ctx func cenv cx ty e mid /\
+  (!tail. eval_target_place cx bt (es with gas_obs := prefix ++ tail) =
+    (INL (StoragePlace tr slot tv),mid with gas_obs := tail)) /\
+  gas_admissible (eval_stmt cx (AugAssign ty bt bop e)) (stmt_res_ok lctx) es /\
+  read_place cx (StoragePlace tr slot tv) mid = (INL old,mid) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv old /\
+  type_bits ty MOD 8 = 0 /\ word_value_type ty /\
+  word_value_type (expr_type e) /\ ~cx.txn.is_static /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  (?offset tv0 path delta.
+     MEM (StorageRoot tr offset tv0) mid.storage_trace /\
+     storage_subregion tv0 path delta tv /\ slot = n2w offset + n2w delta) /\
+  lower_value compile_expr cenv ty e sl = (rhs,s2) /\
+  compile_binop bop cur rhs ty NONE
+    (if bop = Exp then expr_int_literal e else NONE) s2 = (result,s3) /\
+  emit_void (if tr then TSTORE else SSTORE) [dst;result] s3 = ((),sf) /\
+  fn_has_code sl s2 func /\ fn_has_code s2 s3 func /\ fn_has_code s3 sf func /\
+  fn_inst_ids_distinct func /\ bop <> In /\ bop <> NotIn /\
+  local_ptrs_reserved cenv sl /\ local_ptrs_reserved cenv s2 /\
+  local_ptrs_reserved cenv s3 /\
+  (!z. cur = Var z ==> not_fresh_at sl z) /\
+  (!z. dst = Var z ==> not_fresh_at sl z) /\
+  (!z. not_fresh_at sa z ==> not_fresh_at sl z) /\
+  (!z. not_fresh_at sl z ==> not_fresh_at s2 z) /\
+  (!z. not_fresh_at s2 z ==> not_fresh_at s3 z) /\
+  (!l. cur <> Label l /\ dst <> Label l) /\
+  eval_operand cur u = SOME (typed_val_to_w256 tv old) /\
+  eval_operand dst u = SOME slot /\
+  place_ptr_rel cenv cx u (PlaceR (StoragePlace tr slot tv)) slot
+    (SOME (slot_loc tr)) (Type ty) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx mid u /\
+       storage_well_formed_on cx mid (FST H)) /\
+  alloca_history func u /\
+  alloca_frame cenv es0 sa s0 cenv mid u /\ sa.cs_next_id <= sl.cs_next_id /\
+  s0.vs_alloca_next <= u.vs_alloca_next /\
+  ~u.vs_halted /\ u.vs_current_bb = sl.cs_current_bb /\
+  u.vs_inst_idx = LENGTH sl.cs_current_insts /\ ~block_is_terminated sf /\
+  (!z v. not_fresh_at sa z /\ lookup_var z s0 = SOME v ==> lookup_var z u = SOME v) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) ==>
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
+    (bind (bind (eval_expr cx e) (read_result cx))
+      (\rhs. bind (lift_sum (evaluate_binop
+        (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
+        tv bop old rhs)) (write_place cx (StoragePlace tr slot tv)))) (mid,u)
+    (\H res ff v. res = INL () /\
+      stmt_post H ctx func cx lctx cenv cenv sa sf es0 s0 res ff v /\
+      alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next)
+    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!gs. read_place cx (StoragePlace tr slot tv) (mid with gas_obs := gs) =
+    (INL old,mid with gas_obs := gs)` by simp[exprSimLenTheory.len_rp_obs] >>
+  `!gs. place_type_value cx (StoragePlace tr slot tv) (mid with gas_obs := gs) =
+    (INL tv,mid with gas_obs := gs)` by simp[place_type_value_def, return_def] >>
+  drule_all aug_place_rhs_suffix_admissible >> strip_tac >>
+  `word_value old` by metis_tac[word_value_type_typed] >>
+  `is_word_type ty /\ is_word_type (expr_type e)` by
+    metis_tac[word_value_type_word] >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid` by
+    metis_tac[expr_body_pre_gas_admissible] >>
+  rule_assum_tac (REWRITE_RULE [bind_assoc]) >>
+  Cases_on `tr` >> fs[loweringPostsTheory.slot_loc_def] >>
+  irule aug_place_rhs_operator_write_mem >>
+  simp[typed_val_to_w256_word_value] >> conj_tac
+  >- (rpt strip_tac >>
+      irule aug_place_storage_rooted_observed >>
+      goal_assum (drule_at (Pat `valid_horizon`)) >>
+      goal_assum (drule_at (Pat `MEM`)) >> goal_assum (drule_at Any) >> simp[]) >>
+  goal_assum (drule_at (Pat `lower_value`)) >>
+  goal_assum (drule_at (Pat `compile_binop`)) >>
+  goal_assum (drule_at (Pat `place_ptr_rel`)) >>
+  qexistsl_tac [`dst`, `env`] >>
+  simp[typed_val_to_w256_word_value] >> rpt gen_tac >> strip_tac >>
+  `?xs. ee.storage_trace = mid.storage_trace ++ xs` by
+    (`storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+       simp[stmtSimAugAssignTheory.augassign_rhs_trace_frame] >>
+     first_assum (fn frame =>
+       qpat_assum `bind (eval_expr cx e) (read_result cx) (mid with gas_obs := _) =
+                   (INL rhs,ee)`
+         (fn eq => mp_tac (MATCH_MP vyperStorageTraceTheory.storage_trace_frame_prefix
+                             (CONJ frame eq)))) >>
+     simp[]) >>
+  `MEM (StorageRoot tr offset tv0) ee.storage_trace` by simp[MEM_APPEND] >>
+  drule_all (SRULE [bind_assoc] aug_place_storage_rhs_callback) >> strip_tac >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
+  gen_tac >> strip_tac >>
+  qpat_assum `!v. bop_result _ _ _ _ _ _ _ = INL v ==> _`
+    (qspec_then `v` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `ff` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  gen_tac >> strip_tac >>
+  irule aug_place_storage_store_wf >>
+  qexistsl_tac [`ee`, `offset`, `tv0`, `path`, `delta`, `tv`, `slot`, `tr`, `v`, `cx`, `st0`] >>
+  simp[] >>
+  metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value]
+QED

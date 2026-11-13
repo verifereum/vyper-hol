@@ -12,6 +12,10 @@ Ancestors
   vyperEvalExprPreservesScopesDom vyperInterpreter vyperState vyperAST
   venomState finite_map vyperTypeSystem fragExec stmtSimProps loweringPosts valueEncoding
 
+(* The posts here keep the source state as `es_end with gas_obs := []`;
+   stripping gas_obs only inside target_post would split it from ghost_inv. *)
+val _ = temp_delsimps ["tuple_place_target_post_gas_obs"];
+
 Theorem pop_nested_live_compose:
   pop_target_frag_ptr d ctx PG func cenv cx env bt es /\
   (!x. bt <> NameTarget x) /\ target_root bt = NameTarget id /\

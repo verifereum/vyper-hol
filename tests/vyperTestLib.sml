@@ -125,11 +125,6 @@ val excluded_test_names = [
   (* Compiles with unbounded (INF-length) types, which are not modelled;
      stays excluded *)
   "test_json_abi_bytes_slice",
-  (* Python reads the subscript base before an index call that mutates it;
-     the interpreter reads it after. Back with the subscript-overlap port. *)
-  "test_array_index_overlap",
-  "test_array_index_overlap_extcall",
-  "test_array_index_overlap_attribute",
   (* raw_create evaluates value= after the positional args (source order);
      the interpreter evaluates it first. Back with the CREATE semantics
      change. *)
@@ -1007,7 +1002,12 @@ in
     val contents = String.concat [
       "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
       "val () = holbuild_extra_deps [\"", jsonp_from_generated,
-      "\", \"", jsonp_from_generated, ".provenance\"];\n", call, "\n"]
+      "\", \"", jsonp_from_generated, ".provenance\", ",
+      "\"../../VYPER_PIN\", \"../semantics-profile.json\", ",
+      "\"../semantics-test-constraints.txt\", \"../semantics-build-constraints.txt\", ",
+      "\"../../tools/vyper_test_exports.py\", \"../../tools/vyper_test_export_plugin.py\", ",
+      "\"../../.github/actions/setup-vyper-test-exports/action.yml\", ",
+      "\"../vyper-regression\"];\n", call, "\n"]
     val existing =
       if OS.FileSys.access(fname, []) then let
         val input = TextIO.openIn fname

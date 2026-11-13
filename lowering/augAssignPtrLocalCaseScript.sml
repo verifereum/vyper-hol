@@ -378,6 +378,7 @@ QED
 Resume compile_augassign_local_case_ptr[normal_outcome]:
   `~block_is_terminated sb` by
     (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
      simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,
        fresh_id_def, emit_def, comp_return_def] >> strip_tac >>
      Cases_on `s3.cs_current_insts` >>

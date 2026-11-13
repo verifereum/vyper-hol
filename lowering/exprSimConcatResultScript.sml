@@ -240,7 +240,7 @@ Proof
   drule abi_decoder_sequence_halted >> simp[]
 QED
 
-Theorem concat_local_region_vars[local]:
+Theorem concat_local_region_vars:
   !cenv sa sc s t n b sz.
     local_ptrs_reserved cenv sa /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>

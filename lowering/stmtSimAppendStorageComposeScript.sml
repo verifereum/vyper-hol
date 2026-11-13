@@ -2,14 +2,11 @@
 Theory stmtSimAppendStorageCompose
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
-  appendStorageRel stmtSimAppendStorage stmtSimAssignStorageFacts stmtSimForced fragExec
-  gasOutcome gasStorage gasSummary gasSummaryCompose gasExemptCert gasContext
+  appendStorageRel stmtSimAppendStorage stmtSimAssignStorageFacts stmtSimForced fragExec gasOutcome gasStorage gasSummary gasSummaryCompose gasExemptCert gasContext stmtSimAssignStorage stmtSimAssignStorageCopy
   fragGasMode fragGasPath fragGasSeq fragGasSeqAbort list rich_list
   varsExt freshWrites stateFrame venomState finite_map 
   accountsRelProps vyperStorage vyperStorageBackend vyperValue vfmState
-  vyperStorageTrace vyperStorageFootprint
-  vyperFiniteStoragePreservation vyperStoragePlaceRegion
-  exprOperandVar
+  vyperStorageTrace vyperStorageFootprint vyperFiniteStoragePreservation vyperStoragePlaceRegion exprOperandVar bodyAppendStorageStaging externalEntryShape loweringHalt context abiTupleProps
   vyperInterpreter vyperState vyperExprNoControl stmtLowering exprLowering
   exprLoweringProps compileEnv loweringStateRelDefs emitHelper emitHelperProps venomInst venomExecSemantics
 Libs
@@ -42,6 +39,57 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = (u,_)` >>
   Cases_on `u` >> simp[]
+QED
+
+
+
+
+
+
+
+Theorem append_copy_prefix_call_ctx[local]:
+  !n. (store_copy_prefix loc b k s n).vs_call_ctx = s.vs_call_ctx /\
+      (store_copy_prefix loc b k s n).vs_labels = s.vs_labels
+Proof
+  Induct >> fs[stmtSimStoreCopyTheory.store_copy_prefix_def,
+    COUNT_LIST_SNOC, FOLDL_SNOC] >>
+  Cases_on `loc = LocStorage` >> gvs[sstore_def, tstore_def, LET_THM]
+QED
+
+Theorem append_copy_prefix_suc[local]:
+  store_copy_prefix loc b k c (SUC n) =
+    (if loc = LocStorage then sstore else tstore) (k+n2w n)
+      (mload (w2n (b+n2w n*32w)) c) (store_copy_prefix loc b k c n)
+Proof
+  simp[stmtSimStoreCopyTheory.store_copy_prefix_def, COUNT_LIST_SNOC, FOLDL_SNOC]
+QED
+
+Theorem append_copy_normalize_store[local]:
+  store_copy_normalize a ((if tr then tstore else sstore) k v c) =
+  (if tr then tstore else sstore) k v (store_copy_normalize a c)
+Proof
+  Cases_on `tr` >>
+  simp[stmtSimStoreCopyTheory.store_copy_normalize_def, sstore_def, tstore_def]
+QED
+
+Theorem append_copy_normalize_nest[local]:
+  store_copy_normalize a (store_copy_normalize d c) = store_copy_normalize a c
+Proof
+  simp[stmtSimStoreCopyTheory.store_copy_normalize_def]
+QED
+
+Theorem append_copy_normalize_prefix[local]:
+  !n. store_copy_normalize a (store_copy_prefix loc b k c n) =
+      store_copy_prefix loc b k (store_copy_normalize a c) n
+Proof
+  `!p. mload p (store_copy_normalize a c) = mload p c` by
+    simp[stmtSimStoreCopyTheory.store_copy_normalize_def, mload_def] >>
+  Induct
+  >- simp[stmtSimStoreCopyTheory.store_copy_prefix_def, COUNT_LIST_def] >>
+  simp[append_copy_prefix_suc] >>
+  Cases_on `loc = LocStorage` >>
+  fs[SRULE [] (Q.INST [`tr` |-> `T`] append_copy_normalize_store),
+     SRULE [] (Q.INST [`tr` |-> `F`] append_copy_normalize_store)]
 QED
 
 Theorem append_storage_word_suffix_structure:

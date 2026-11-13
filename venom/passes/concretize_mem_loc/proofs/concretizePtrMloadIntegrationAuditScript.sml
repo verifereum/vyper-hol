@@ -2,7 +2,7 @@ Theory concretizePtrMloadIntegrationAudit
 Ancestors concretizePtrFixedReadRecovery concretizePtrOwnedReadAudit
   concretizePtrLoadTransport concretizePtrOpaqueRetpc
   concretizePtrMstoreProducer concretizeStepStructure concretizeStepShape
-  concretizeStepCallChecks concretizeStepRetpc concretizeStageShape
+  concretizeStepRetpc concretizeStageShape
   concretizePtrStagePlacements
   concretizePtrOwnerFloor ptrDiscipline list
 

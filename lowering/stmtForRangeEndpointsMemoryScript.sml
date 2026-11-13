@@ -1,40 +1,9 @@
 Theory stmtForRangeEndpointsMemory
 Ancestors
+  stmtSimForRange
   stmtSimForced gasOutcome gasSummary gasSummaryCompose gasExemptCert fragGasMode
   fragGasPath fragGasPathMem fragExec vyperState exprSimMemDefs
   aggregateCountedOutcome gasStorage vyperStorageTrace vyperStorageFootprint
-
-Theorem for_endpoint_error_cert[local]:
-  !memory tops ctx func cx e next es s0 marks err ee leaf finish.
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
-    (es,s0) marks (err,ee) (leaf,finish) ==>
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (bind (bind (eval_expr cx e) (read_result cx)) next)
-      (return ())) (es,s0) marks (err,ee) (leaf,finish)
-Proof
-  rpt strip_tac >> pure_once_rewrite_tac[ignore_bind_def] >>
-  pure_once_rewrite_tac[bind_assoc] >>
-  irule gas_exempt_cert_error_value >> simp[]
-QED
-
-Theorem for_endpoint_tail_cert[local]:
-  !memory tops ctx func cx e next es s0 left v mid t right err ee leaf finish.
-  gas_marked_exec memory (ctx,func)
-    (bind (eval_expr cx e) (read_result cx))
-    (es,s0) left (INL v) mid (OK t) /\
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (next v) (return ()))
-    (mid with gas_obs := [],t) right (err,ee) (leaf,finish) ==>
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (bind (bind (eval_expr cx e) (read_result cx)) next)
-      (return ())) (es,s0) (left ++ right) (err,ee) (leaf,finish)
-Proof
-  rpt strip_tac >> pure_once_rewrite_tac[ignore_bind_def] >>
-  pure_once_rewrite_tac[bind_assoc] >>
-  drule gas_exempt_cert_bind_value >> disch_then irule >>
-  simp[GSYM ignore_bind_def]
-QED
 
 (* Consumer boundary for a forced endpoint.  The continuation receives both
    the memory expression post and the source reachability fact needed by
@@ -77,9 +46,9 @@ Proof
   (impl_tac >- simp[]) >> strip_tac >>
   drule_then irule counted_outcome_bind_exec >>
   rpt conj_tac
-  >- (rpt strip_tac >> irule for_endpoint_error_cert >>
+  >- (rpt strip_tac >> irule forced_endpoint_error_cert >>
       first_assum ACCEPT_TAC)
-  >- (rpt strip_tac >> drule_all for_endpoint_tail_cert >>
+  >- (rpt strip_tac >> drule_all forced_endpoint_tail_cert >>
       disch_then ACCEPT_TAC)
   >- suspend "next"
   >- (BETA_TAC >> rpt strip_tac >> Cases_on `res`
