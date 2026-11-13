@@ -233,5 +233,10 @@ Proof
     (qpat_x_assum `body_exprs_full_ok cx [e]` mp_tac >>
      simp[body_exprs_full_ok_def] >>
      simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
-  FAIL_TAC "Not consumer: child judgment ready"
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx ty (Builtin (expr_type e) Not [e]) es` by
+    (rewrite_tac[expr_sim_full_def] >> rpt gen_tac >> strip_tac >>
+     drule lower_value_not >> strip_tac >>
+     FAIL_TAC "Not consumer: compilation prefix") >>
+  FAIL_TAC "Not consumer: vv bridge"
 QED
