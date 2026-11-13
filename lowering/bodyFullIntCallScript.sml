@@ -13,7 +13,7 @@ Ancestors
   bodyFullIntCallDefs bodyIntCallSeams bodyIntCallSource bodyFullPreds
   bodySim bodySimFull gasOutcomeFull gasShadowState gasShadowCompile gasShadow
   exprSimAccounts exprSimDefs exprSimHypsDefs exprLowering compileEnv
-  bodyPtrDefs
+  bodyPtrDefs vyperStorageTrace fragExec exprSimUnwrap
   vyperInterpreter vyperState vyperAST list pair
 
 val _ = Parse.hide "body";
@@ -209,6 +209,9 @@ Proof
   rewrite_tac[expr_vv_sim_full_def] >> rpt gen_tac >> strip_tac >>
   `?nrc nrbs npvs. cenv.ce_func_info (nsid_to_string (NONE,name)) =
                 (nrc,nrbs,npvs)` by metis_tac[pairTheory.ABS_PAIR_THM] >>
+  `!v : eval_result. storage_trace_frame (return v)` by
+    simp[storage_trace_frame_return] >>
+  `!v : vyper_value. cs_appends (comp_return v)` by simp[cs_appends_return] >>
   mp_tac (intcall_args_full
     |> Q.SPECL [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,`shadow_func`,
                 `tops`,`cenv`,`cx`,`tenv`,`ty`,`ann`,`name`,`es`,`dflt`,`es0`,
@@ -277,6 +280,10 @@ Proof
     (qpat_x_assum `comp_bind (compile_expr _ _ (gas_shadow_expr _)) _ _ = _`
        mp_tac >>
      simp[comp_bind_def] >> pairarg_tac >> simp[]) >>
+  `!v. storage_trace_frame (read_result cx v)` by
+    simp[storage_trace_frame_read_result] >>
+  `!v. cs_appends (unwrap_value cenv v)` by
+    (rw[cs_appends_def] >> metis_tac[unwrap_value_extends]) >>
   `?nrc nrbs npvs. cenv.ce_func_info (nsid_to_string (NONE,name)) =
                 (nrc,nrbs,npvs)` by metis_tac[pairTheory.ABS_PAIR_THM] >>
   mp_tac (intcall_args_full

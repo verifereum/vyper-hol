@@ -9,7 +9,7 @@ Theory bodyFullIntCallArgs
 Ancestors
   bodyFullIntCallDefs bodyIntCallSeams bodyFullPreds bodySimFull
   gasOutcomeFull bodyPtrDefs gasShadow gasContext exprSimHypsDefs
-  exprLowering vyperInterpreter vyperState vyperAST list
+  exprLowering vyperInterpreter vyperState vyperAST vyperStorageTrace fragExec list
 
 val _ = Parse.hide "body";
 
@@ -30,6 +30,8 @@ Theorem intcall_args_full:
     MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) ==>
     !st0 sa sb shadow_sa shadow_sb s0 G0 tn0 kc out f P Q R.
+      (!v. storage_trace_frame (f v)) /\
+      (!v. cs_appends (kc v)) /\
       comp_bind (compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt))
         kc sa = (out, sb) /\
       comp_bind
