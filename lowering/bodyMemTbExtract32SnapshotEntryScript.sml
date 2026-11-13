@@ -108,7 +108,7 @@ Proof
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      conj_tac
      >- (irule extract32_snapshot_entry_frame >> goal_assum (drule_at Any) >>
-         simp[]) >>
+         qexists_tac `sa` >> simp[]) >>
      first_assum ACCEPT_TAC) >>
   `local_ptrs_reserved cenv sb` by
     (irule compiler_ci_mono_reserved >> qexists_tac `sa` >> simp[] >>
