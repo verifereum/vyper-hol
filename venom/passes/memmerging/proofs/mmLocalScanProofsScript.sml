@@ -18995,11 +18995,12 @@ Theorem mm_local_mode_no_output_recognition[local]:
 Proof
   strip_tac >> Cases_on `p = q`
   >- simp[contextCodegenRelPropsTheory.same_after_assigns_refl] >>
+  Cases_on `fresh_ir_var (SND (fresh_inst_id s))` >>
+  drule (cj 1 irSupplyTheory.fresh_ir_var_contract) >> strip_tac >>
   gvs[apply_groups_inst_supply_def, AllCaseEqs()] >>
   gvs[mk_nop_from_def, mk_bulk_copy_inst_def, mk_load_inst_def,
       mk_mstore_from_load_def, irSupplyTheory.fresh_inst_id_def] >>
-  TRY (drule irSupplyTheory.fresh_ir_var_contract >> strip_tac) >>
-  TRY (Cases_on `mode`) >> Cases_on `p` >> Cases_on `q` >>
+  Cases_on `p` >> Cases_on `q` >>
   gvs[contextCodegenRelTheory.same_after_assigns_def,
       contextCodegenRelTheory.step_back_assign_def, mode_load_opcode_def,
       mode_copy_opcode_def] >>
@@ -20246,7 +20247,7 @@ Proof
        `ns`,`rs`,`deleted`,`excluded`,`h`,`H`,`fuel`,`ctx`,`eom`,`TAKE h is`,
        `sk`,`out`,`esn`,`t0`,`fn'`,`bb'`,`sk'`] mm_local_mem2mem_safe_prefix_execution) >>
      (impl_tac >- (gvs[Abbr `f`,Abbr `h`] >> rpt strip_tac >>
-       TRY decide_tac >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ])) >>
+       metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ])) >>
      disch_then (qx_choose_then `t` strip_assume_tac) >>
      qexists `t` >> gvs[Abbr `f`]) >>
   pop_assum strip_assume_tac >>
