@@ -24050,6 +24050,189 @@ Proof
   irule mm_local_payload_bulk_static >> simp[]
 QED
 
+Theorem mm_local_payload_actual_safe_transition_if_forward[local]:
+  mode IN {CalldataMerge; DloadMerge} /\
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  dfg = dfg_build_function fn0 /\ is = bb.bb_instructions /\
+  gs = (scan_block dfg mode bb).ss_flushed /\
+  cap = mm_local_payload_capture mode is H (LENGTH is) /\
+  n < LENGTH is /\ ~is_terminator (EL n is).inst_opcode /\
+  (!j. (if mode = CalldataMerge then (H j).vs_call_ctx.cc_calldata
+         else (H j).vs_data_section) = cd) /\
+  (!j dst v src. j < LENGTH is /\ (EL j is).inst_opcode = MSTORE /\
+    (EL j is).inst_operands = [Lit dst; Var v] /\
+    FLOOKUP (FOLDL (scan_inst dfg mode) empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src cd ++ REPLICATE 32 0w)))) /\
+  (!v. chunk = [EL n is] /\
+    MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded) /\
+  (!v. MEM (EL n is).inst_id (nop_ids_of_groups dfg mode is gs) /\
+    (EL n is).inst_opcode = mode_load_opcode mode /\
+    MEM v (EL n is).inst_outputs ==> v IN excluded) /\
+  step_inst fuel ctx (EL n is) (H n) = OK u /\
+  H (SUC n) = u with vs_inst_idx := SUC n /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!j d bs. j <= n /\ cap j = SOME (d,bs) ==>
+    (H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn (EL j is) (H j) /\
+    ?u. step_inst fuel ctx (EL j is) (H j) = OK u) /\
+  eom < dimword (:256) /\
+  mm_local_payload_cut cap is gs H n excluded pc t /\
+  static_mem_ok eom ctx fn (EL n is) (H n) /\
+  (in_revert_forward fn (H n) ==> in_revert_forward fn' t) /\
+  (!v. v NOTIN excluded ==> MEM v es.irs_used_vars) /\
+  apply_groups_inst_supply mode (nop_ids_of_groups dfg mode is gs)
+    (rep_map_of_groups is gs) es (EL n is) = (chunk,es') ==>
+  ?t'. mm_local_safe_exec_prefix (static_mem_ok eom ctx fn') fuel ctx chunk t t' /\
+    mm_local_payload_cut cap is gs H (SUC n) excluded (pc + LENGTH chunk) t'
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `MEM (EL n is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+  qabbrev_tac `ns = nop_ids_of_groups dfg mode is gs` >>
+  qabbrev_tac `rs = rep_map_of_groups is gs` >>
+  Cases_on `MEM (EL n is).inst_id ns`
+  >- (`?g. MEM g gs /\ MEM (EL n is).inst_id g.cg_inst_ids` by
+        metis_tac[mm_local_nop_group_member] >>
+      `chunk = [mk_nop_from (EL n is)] /\ es' = es` by
+        gvs[apply_groups_inst_supply_def] >>
+      SUBGOAL_THEN ``((EL n is).inst_opcode = mode_load_opcode mode) \/
+        (EL n is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}`` ASSUME_TAC
+      >- (Cases_on `(EL n is).inst_opcode = mode_load_opcode mode` >- simp[] >>
+         Cases_on `(EL n is).inst_opcode = mode_copy_opcode mode`
+         >- (Cases_on `mode` >> gvs[mode_copy_opcode_def]) >>
+         Cases_on `(EL n is).inst_opcode = MSTORE` >- simp[] >>
+         metis_tac[mm_local_prefix_nonselected_group_absent]) >>
+      `?t'. mm_local_exec_prefix fuel ctx chunk t t' /\
+          mm_local_payload_cut cap is gs H (SUC n) excluded (pc + LENGTH chunk) t'` by
+        (qpat_x_assum `(EL n is).inst_opcode = mode_load_opcode mode \/ _` strip_assume_tac
+         >- (`(EL n is).inst_opcode NOTIN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+               (Cases_on `mode` >> gvs[mode_load_opcode_def]) >>
+             `mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n` by
+               metis_tac[mm_local_nonwrite_successor] >>
+             `!v. MEM v (EL n is).inst_outputs ==> v IN excluded` by metis_tac[] >>
+             mp_tac (SPEC_ALL mm_local_payload_erased_load_transition) >>
+             (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+             qexists `t with vs_inst_idx := SUC pc` >> gvs[arithmeticTheory.ADD1]) >>
+         `mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n ++ [n]` by
+           metis_tac[mm_local_erased_write_pending_suc] >>
+         `?c. cap n = SOME (c.cg_dst,
+           mm_local_bytes (\a. if a < LENGTH cd then EL a cd else 0w) c.cg_src c.cg_length)` by
+           (mp_tac (Q.INST [`j` |-> `n`, `N` |-> `LENGTH is`]
+              (SPEC_ALL mm_local_payload_selected_capture_birth)) >>
+            impl_tac >- metis_tac[] >> metis_tac[]) >>
+         mp_tac (Q.INST [`N` |-> `LENGTH is`, `d` |-> `c.cg_dst`,
+           `bs` |-> `mm_local_bytes (\a. if a < LENGTH cd then EL a cd else 0w)
+             c.cg_src c.cg_length`]
+           (SPEC_ALL mm_local_payload_erased_write_transition)) >>
+         (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+         qexists `t with vs_inst_idx := SUC pc` >> gvs[arithmeticTheory.ADD1]) >>
+      qexists `t'` >> simp[] >> irule mm_local_safe_exec_prefix_universal >>
+      conj_tac
+      >- simp[mk_nop_from_def, unitMemInvTheory.static_mem_ok_def,
+        unitMemInvTheory.inst_mem_ranges_def,
+        contextCodegenRelTheory.source_memory_read_ranges_def,
+        codegenRelTheory.source_memory_write_ranges_def] >> gvs[]) >>
+  Cases_on `ALOOKUP rs (EL n is).inst_id`
+  >- (`chunk = [EL n is] /\ es' = es` by gvs[apply_groups_inst_supply_def] >>
+      `!v. MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded` by metis_tac[] >>
+      `static_mem_ok eom ctx fn' (EL n is) t` by
+        metis_tac[mm_local_payload_retained_static_if_forward] >>
+      Cases_on `(EL n is).inst_opcode = DLOAD`
+      >- (`mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n` by
+            (mp_tac (SPEC_ALL mm_local_nonwrite_successor) >>
+             (impl_tac >- gvs[]) >> simp[]) >>
+          `state_equiv excluded
+            ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) t` by
+            gvs[mm_local_payload_cut_def, state_equiv_frame, mm_local_nonmemory_frame_def,
+              stateFrameTheory.state_frame_def, venomStateTheory.lookup_var_def,
+              venomStateTheory.venom_state_component_equality] >>
+          `step_inst fuel ctx (EL n is)
+            ((H n) with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>) =
+            OK (u with <|vs_memory := t.vs_memory; vs_inst_idx := pc|>)` by
+            (qpat_x_assum `step_inst _ _ _ _ = OK u` mp_tac >>
+             simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+             gvs[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+               venomExecSemanticsTheory.exec_read1_def,
+               venomStateTheory.eval_operand_def, AllCaseEqs(),
+               venomStateTheory.update_var_def] >> strip_tac >> gvs[] >>
+             rename1 `eval_operand op (H n) = SOME off` >> Cases_on `op` >>
+             gvs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]) >>
+          drule_all removeUnusedProofsTheory.step_inst_result_equiv_full >>
+          disch_then (qspecl_then [`fuel`,`ctx`] mp_tac) >>
+          Cases_on `step_inst fuel ctx (EL n is) t` >>
+          simp[result_equiv_def] >> strip_tac >>
+          `u.vs_memory = (H n).vs_memory /\ v.vs_memory = t.vs_memory` by
+            (conj_tac
+             >- (mp_tac (Q.INST [`mode` |-> `DloadMerge`, `i` |-> `EL (n:num) (is:instruction list)`,
+                   `s` |-> `H (n:num)`, `t` |-> `u:venom_state`]
+                   (SPEC_ALL mm_local_payload_load_frame)) >>
+                 (impl_tac >- simp[mode_load_opcode_def]) >> simp[]) >>
+             mp_tac (Q.INST [`mode` |-> `DloadMerge`, `i` |-> `EL (n:num) (is:instruction list)`,
+               `s` |-> `t:venom_state`, `t` |-> `v:venom_state`]
+               (SPEC_ALL mm_local_payload_load_frame)) >>
+             (impl_tac >- simp[mode_load_opcode_def]) >> simp[]) >>
+          qexists_tac `v with vs_inst_idx := SUC pc` >> conj_tac
+          >- gvs[mm_local_safe_exec_prefix_def, mm_local_payload_cut_def] >>
+          gvs[mm_local_payload_cut_def, state_equiv_frame, mm_local_nonmemory_frame_def,
+            stateFrameTheory.state_frame_def, venomStateTheory.lookup_var_def,
+            venomStateTheory.venom_state_component_equality] >>
+          gvs[mm_local_pending_def] >> qexists_tac `ws` >> simp[] >>
+          irule mm_local_write_log_memory_cong >> simp[]) >>
+      `((EL n is).inst_opcode IN {MSTORE; mode_copy_opcode mode} ==>
+        ~(?g. MEM g gs /\ MEM (EL n is).inst_id g.cg_inst_ids))` by
+        (strip_tac >> irule mm_local_prefix_retained_write_unselected >>
+         simp[Abbr `ns`,Abbr `rs`] >>
+         Cases_on `mode` >> gvs[mode_copy_opcode_def] >> metis_tac[]) >>
+      `bb.bb_instructions = TAKE n is ++ EL n is::DROP (SUC n) is` by
+        (qspec_then `n` (qspec_then `is` mp_tac) rich_listTheory.TAKE_DROP_SUC >> simp[]) >>
+      SUBGOAL_THEN ``scan_inst dfg mode (FOLDL (scan_inst dfg mode) empty_scan_state (TAKE n is)) (EL n is) =
+         hard_barrier (FOLDL (scan_inst dfg mode) empty_scan_state (TAKE n is)) \/
+        ~is_volatile_memory (EL n is)`` ASSUME_TAC
+      >- (mp_tac (Q.INST [`pre` |-> `TAKE n is`, `post` |-> `DROP (SUC n) is`,
+          `i` |-> `EL n is`, `ss` |-> `FOLDL (scan_inst dfg mode) empty_scan_state (TAKE n is)`]
+          (SPEC_ALL mm_local_mem2mem_ordinary_classification)) >>
+         (impl_tac >- metis_tac[]) >>
+         qpat_x_assum `bb.bb_instructions = TAKE n is ++ EL n is::DROP (SUC n) is` kall_tac >>
+         strip_tac >> simp[] >>
+         Cases_on `mode` >> gvs[mode_load_opcode_def, is_volatile_memory_def,
+           venomEffectsTheory.read_effects_def, venomEffectsTheory.write_effects_def,
+           venomEffectsTheory.empty_effects_def]) >>
+      qpat_x_assum `bb.bb_instructions = TAKE n is ++ EL n is::DROP (SUC n) is` kall_tac >>
+      `?t'. mm_local_exec_prefix fuel ctx [EL n is] t t' /\
+        mm_local_payload_cut cap is gs H (SUC n) excluded (SUC pc) t'` by
+        (qpat_x_assum `_ \/ ~is_volatile_memory (EL n is)` strip_assume_tac
+         >- (`mm_local_pending_indices is gs n = [] /\
+              mm_local_pending_indices is gs (SUC n) = []` by
+               metis_tac[mm_local_hard_barrier_pending_empty,mm_local_hard_barrier_pending_next_empty] >>
+             irule mm_local_payload_barrier_transition >> metis_tac[]) >>
+         `(EL n is).inst_opcode NOTIN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+           (simp[] >> rpt conj_tac >> strip_tac >>
+            qpat_x_assum `~is_volatile_memory (EL n is)` mp_tac >>
+            simp[is_volatile_memory_def, venomEffectsTheory.write_effects_def]) >>
+         `mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n` by
+           metis_tac[mm_local_nonwrite_successor] >>
+         irule mm_local_payload_nonvolatile_transition >> metis_tac[]) >>
+      qexists `t'` >> gvs[mm_local_safe_exec_prefix_def,
+        mm_local_exec_prefix_def, arithmeticTheory.ADD1]) >>
+  `?g. MEM g gs /\ rep_of_group is g = SOME ((EL n is).inst_id,x)` by
+    (drule alistTheory.ALOOKUP_MEM >>
+     qpat_assum `Abbrev (rs = _)`
+       (fn th => pure_rewrite_tac[REWRITE_RULE[markerTheory.Abbrev_def] th]) >>
+     pure_rewrite_tac[rep_map_of_groups_def, MEM_MAP, MEM_FILTER] >>
+     strip_tac >> rename1 `IS_SOME opt` >> Cases_on `opt` >> fs[] >> metis_tac[]) >>
+  `g = x` by gvs[rep_of_group_def, AllCaseEqs()] >>
+  `?t'. mm_local_exec_prefix fuel ctx chunk t t' /\
+    mm_local_payload_cut cap is gs H (SUC n) excluded (pc + LENGTH chunk) t' /\
+    (!w. EVERY (\i. static_mem_ok eom ctx fn' i w) chunk)` by
+    (mp_tac (SPEC_ALL mm_local_payload_representative_transition) >>
+     (impl_tac >- (simp[Abbr `ns`,Abbr `rs`] >> metis_tac[])) >> simp[]) >>
+  qexists `t'` >> simp[] >> metis_tac[mm_local_safe_exec_prefix_universal]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
