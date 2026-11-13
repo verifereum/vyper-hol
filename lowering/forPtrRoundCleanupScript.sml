@@ -80,48 +80,69 @@ QED
 
 Theorem for_body_cleanup_outcome_ptr:
   es.scopes <> [] /\
-  gas_outcome_ptr D tops (ctx,func) PG (eval_stmts cx stmts)
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 (eval_stmts cx stmts)
     (es,s,G0,tn0) Q R /\
-  (!res ee G tn t.
-    Q res ee G tn t ==>
-    Q' (case res of INL u => INL F
+  (!H res ee G tn t.
+    Q H res ee G tn t ==>
+    Q' H (case res of INL u => INL F
         | INR ex => if ex = BreakException then INL T
                     else if ex = ContinueException then INL F else INR ex)
       (ee with scopes := TL ee.scopes) G tn t) /\
-  (!res ee gt r.
-    R res ee gt r ==>
-    R' (case res of INL u => INL F
+  (!H res ee gt r.
+    R H res ee gt r ==>
+    R' H (case res of INL u => INL F
         | INR ex => if ex = BreakException then INL T
                     else if ex = ContinueException then INL F else INR ex)
       (ee with scopes := TL ee.scopes) gt r) ==>
-  gas_outcome_ptr D tops (ctx,func) PG
+  gas_outcome_ptr D tops (ctx,func) PG cx st0
     (finally (try (do eval_stmts cx stmts; return F od)
                   handle_loop_exception) pop_scope)
     (es,s,G0,tn0) Q' R'
 Proof
   strip_tac >>
-  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gas_outcome_ptr_def] >>
-  disch_then (qx_choose_then `marks` strip_assume_tac)
-  >- (gvs[gas_summary_ptr_at_marked] >> suspend "marked") >>
-  suspend "exempt"
-QED
-
-Resume for_body_cleanup_outcome_ptr[marked]:
-  markerLib.RESUME_TAC >> (
-  `es_end.scopes <> []` by (drule_all for_body_marked_scope_ptr >> simp[]) >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_ptr_def])
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `marks` >> disj1_tac >>
+      fs[gasStorageTheory.gas_bad_storage_at_def] >> gen_tac >>
+      qpat_assum `!tail. ~storage_trace_domain _ _ _`
+        (qspec_then `tail` assume_tac) >>
+      Cases_on `eval_stmts cx stmts
+        (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail)` >>
+      rename1 `eval_stmts cx stmts _ = (res,ee)` >>
+      Cases_on `res` >> Cases_on `ee.scopes` >>
+      gvs[finally_def, try_def, ignore_bind_def, bind_def,
+          handle_loop_exception_def, return_def, raise_def, pop_scope_def] >>
+      rpt IF_CASES_TAC >> gvs[return_def, raise_def, bind_def, pop_scope_def])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
+  >- (`ee.scopes <> []` by (drule_all for_body_exempt_scope >> simp[]) >>
+      Cases_on `ee.scopes` >> gvs[] >>
+      rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `marks` >>
+      disj2_tac >> disj2_tac >>
+      drule_all for_body_cleanup_exempt_cert >> metis_tac[]) >>
+  fs[gas_summary_ptr_at_marked] >>
+  `es_end.scopes <> []` by
+    (qpat_assum `!tail. eval_stmts _ _ _ = _`
+       (qspec_then `[]`
+         (mp_tac o MATCH_MP vyperEvalPreservesScopesTheory.eval_stmts_preserves_scopes_dom)) >>
+     simp[vyperEvalPreservesScopesTheory.preserves_scopes_dom_def] >>
+     Cases_on `es_end.scopes` >> gvs[] >> Cases_on `es.scopes` >> gvs[]) >>
   Cases_on `es_end.scopes` >> gvs[] >>
+  rename1 `es_end.scopes = sc :: rest` >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `marks` >>
+  disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_ptr_at_marked] >>
+  qexistsl_tac [`case res of INL u => INL F
+    | INR ex => if ex = BreakException then INL T
+                else if ex = ContinueException then INL F else INR ex`,
+    `es_end with scopes := rest`, `G`, `tn`, `r`] >>
+  conj_tac
+  >- (gen_tac >> Cases_on `res` >>
+      simp[finally_def, try_def, ignore_bind_def, bind_def,
+           handle_loop_exception_def, return_def, raise_def, pop_scope_def] >>
+      rpt IF_CASES_TAC >> gvs[bind_def, return_def, raise_def, pop_scope_def]) >>
+  qx_gen_tac `H` >> simp[] >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule_all for_body_cleanup_exec_ptr >> strip_tac >>
-  qexists_tac `marks` >> disj1_tac >>
-  rewrite_tac[gas_summary_ptr_at_marked] >>
-  goal_assum (drule_at Any) >>
-  simp[] >> first_x_assum drule >> simp[])
+  Cases_on `es_end` >> gvs[] >> metis_tac[]
 QED
-
-Resume for_body_cleanup_outcome_ptr[exempt]:
-  `ee.scopes <> []` by (drule_all for_body_exempt_scope >> simp[]) >>
-  Cases_on `ee.scopes` >> gvs[] >>
-  qexists_tac `marks` >> disj2_tac >>
-  drule_all for_body_cleanup_exempt_cert >> metis_tac[]
-QED
-Finalise for_body_cleanup_outcome_ptr

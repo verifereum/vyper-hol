@@ -288,13 +288,9 @@ Proof
     disch_then (drule_at (Pat `(_ with t_mem := _) = _`)) >>
     disch_then irule >> simp[] >> qexists `k` >> simp[]) >>
  `ghost_kept cenv es sa G0 tn0 s0 G tn'` by
-   (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`) annassign_alloca_copy_kept_ptr >>
-    disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
-    disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _.inst_id = SOME _`)) >>
-    disch_then (drule_at (Pat `_.inst_outputs = _`)) >>
-    disch_then (drule_at (Pat `_.t_var = _`)) >>
-    disch_then irule >> simp[] >> qexists `k` >> simp[] >>
-    rpt strip_tac >> metis_tac[]) >>
+   (mp_tac (Q.INST [`p` |-> `dst`, `b` |-> `w2n b`]
+      (SPEC_ALL annassign_alloca_copy_kept_ptr)) >>
+    (impl_tac >- (simp[] >> rpt strip_tac >> metis_tac[])) >> simp[]) >>
  `stmt_state_rel H ctx func cenv cx es s'` by
    (irule annassign_alloca_copy_state_ptr >> metis_tac[]) >>
  `ptr_covers G tn' dst s' sz` by

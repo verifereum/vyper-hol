@@ -39,10 +39,14 @@ Theorem annassign_store_continuation_ptr:
  (?cenv''. stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\
    (~block_is_terminated sf /\ cenv'' = cenv) /\
    cenv_top_ext old cenv'' ee.scopes /\
-   stmt_state_rel H ctx func cenv'' cx ee t /\ ghost_inv H d cenv'' cx ee G tnf t /\
+   stmt_state_rel H ctx func cenv'' cx ee t /\
+   storage_well_formed_on cx ee (FST H) /\ ghost_inv H d cenv'' cx ee G tnf t /\
    (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==> lookup_var x t = SOME u) /\
    (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
-      op_taint tnf (Var x) = op_taint tn0 (Var x)))
+      op_taint tnf (Var x) = op_taint tn0 (Var x))) /\
+ t = (mstore (w2n w) (typed_val_to_w256 etv v) s)
+   with vs_inst_idx := SUC s.vs_inst_idx /\
+ tnf = tn with t_mem := tn.t_mem DIFF {i | w2n w <= i /\ i < w2n w+32}
 Proof
  rpt gen_tac >> strip_tac >>
  `stmt_state_rel H ctx func cenv cx es1 s /\
@@ -64,10 +68,14 @@ Proof
  `ghost_kept cenv es1 sa G tn s G tn` by simp[ghost_kept_def] >>
  drule_all annassign_declare_store_ptr >>
  disch_then (qspecl_then [`PG`,`T`] strip_assume_tac) >>
+ `!scs. storage_well_formed_on cx (es1 with scopes := scs) (FST H)` by
+   fs[expr_post_def, vyperStorageFootprintTheory.storage_well_formed_on_def,
+      vyperStorageBackendTheory.get_storage_scopes] >>
  qexistsl [`es1 with scopes :=
    (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest`,
    `s'`,`tn'`] >> conj_tac
  >- gvs[gas_marked_exec_ptr_def] >>
+ reverse conj_tac >- simp[] >>
  qexists `cenv` >> simp[stmt_lands_def] >>
  fs[expr_post_def, ghost_kept_def] >> metis_tac[]
 QED
@@ -104,10 +112,14 @@ Theorem annassign_normal_continuation_ptr:
  (?cenv''. stmt_lands lctx sf (INL ()) u /\ ~u.vs_halted /\
    (~block_is_terminated sf /\ cenv'' = c) /\
    cenv_top_ext old cenv'' ff.scopes /\
-   stmt_state_rel H ctx func cenv'' cx ff u /\ ghost_inv H d cenv'' cx ff G tnf u /\
+   stmt_state_rel H ctx func cenv'' cx ff u /\
+   storage_well_formed_on cx ff (FST H) /\ ghost_inv H d cenv'' cx ff G tnf u /\
    (!x z. not_fresh_at sa x /\ lookup_var x salloc = SOME z ==> lookup_var x u = SOME z) /\
    (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP Ga x /\
-      op_taint tnf (Var x) = op_taint tna (Var x)))
+      op_taint tnf (Var x) = op_taint tna (Var x))) /\
+ u = (mstore (w2n w) (typed_val_to_w256 etv v) s)
+   with vs_inst_idx := SUC s.vs_inst_idx /\
+ tnf = tn with t_mem := tn.t_mem DIFF {i | w2n w <= i /\ i < w2n w+32}
 Proof
  rpt gen_tac >> strip_tac >>
  `!tail. bind (eval_expr cx e) (read_result cx)
@@ -150,32 +162,58 @@ Theorem annassign_concrete_rhs_outcome_ptr:
  lookup_var p salloc = SOME w /\ ptr_covers Ga tna p salloc sz /\
  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
  FLOOKUP salloc.vs_allocas inst.inst_id = SOME (w2n w,sz) /\ 32 <= sz /\
- gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+ gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
    (bind (eval_expr cx e) (read_result cx)) (es,salloc,Ga,tna)
-   (\res ee G tn s. ?v. res = INL v /\
+   (\H res ee G tn s. ?v. res = INL v /\
      expr_post H ctx func c cx e es sa sb salloc ee v op s /\
      s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
      ghost_inv H d c cx ee G tn s /\ ptr_val_ok cx (expr_type e) v op G tn s /\
      (~is_word_type (expr_type e) ==> ptr_buf_ok c e op G s) /\
      ghost_kept c es sa Ga tna salloc G tn)
-   (\res ee gt r. expr_exit res r) ==>
- gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+   (\H res ee gt r. expr_exit res r) ==>
+ gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
    (eval_stmt cx (AnnAssign id typ e)) (es,salloc,Ga,tna)
-   (\res ee G tn s. ?cenv''.
+   (\H res ee G tn s. ?cenv''.
      stmt_lands lctx sf res s /\ ~s.vs_halted /\
      (res = INL () ==> ~block_is_terminated sf /\ cenv'' = c) /\
      cenv_top_ext old cenv'' ee.scopes /\
-     stmt_state_rel H ctx func cenv'' cx ee s /\ ghost_inv H d cenv'' cx ee G tn s /\
+     stmt_state_rel H ctx func cenv'' cx ee s /\
+     storage_well_formed_on cx ee (FST H) /\ ghost_inv H d cenv'' cx ee G tn s /\
      (!x z. not_fresh_at sa x /\ lookup_var x salloc = SOME z ==> lookup_var x s = SOME z) /\
      (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP Ga x /\
        op_taint tn (Var x) = op_taint tna (Var x)))
-   (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+   (\H res ee gt r. !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
 Proof
  rpt gen_tac >> strip_tac >> irule annassign_rhs_outcome_ptr >>
  goal_assum (drule_at Any) >> simp[] >>
  reverse conj_tac >- metis_tac[] >>
  rpt gen_tac >> strip_tac >>
- drule_all annassign_normal_continuation_ptr >> strip_tac >>
- qexistsl [`ff`,`u`,`G`,`tnf`] >>
- gvs[ghost_inv_gas_obs, stmt_state_rel_gas_obs]
+ rename1 `valid_horizon cx st0 H0 ee.storage_trace` >>
+ qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+   (qspec_then `H0` mp_tac) >>
+ impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+ drule_all (Q.INST [`H` |-> `H0`] annassign_normal_continuation_ptr) >> strip_tac >>
+ `gas_marked_exec F (ctx,func) (new_variable id tyv v)
+   (ee with gas_obs := [],t) [] (INL ()) ff (OK u)` by
+   metis_tac[gas_marked_exec_ptr_exec] >>
+ qexistsl [`ff`,`u`,`G`,`tnf`] >> conj_tac >- first_assum ACCEPT_TAC >>
+ qx_gen_tac `HH` >> strip_tac >>
+ `new_variable id tyv v (ee with gas_obs := []) =
+   (INL (),ff with gas_obs := [])` by
+   (fs[gasSummaryTheory.gas_marked_exec_def] >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+ `valid_horizon cx st0 HH ee.storage_trace` by
+   (mp_tac (Q.INST [`f` |-> `new_variable id tyv v`,
+      `st` |-> `ee with gas_obs := []`, `st'` |-> `ff with gas_obs := []`,
+      `res` |-> `INL ()`, `H` |-> `HH`]
+      (INST_TYPE [alpha |-> ``:unit``] vyperStorageFootprintTheory.valid_horizon_frame)) >>
+    simp[vyperStorageTraceTheory.storage_trace_frame_new_variable]) >>
+ qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+   (qspec_then `HH` mp_tac) >>
+ impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+ drule_all (Q.INST [`H` |-> `HH`] annassign_normal_continuation_ptr) >> strip_tac >>
+ gvs[gas_marked_exec_ptr_def, ghost_inv_gas_obs, stmt_state_rel_gas_obs] >>
+ Cases_on `ff` >> Cases_on `ff'` >>
+ gvs[ghost_inv_gas_obs, stmt_state_rel_gas_obs,
+   vyperStorageFootprintTheory.storage_well_formed_on_def,
+   vyperStorageBackendTheory.get_storage_def]
 QED
