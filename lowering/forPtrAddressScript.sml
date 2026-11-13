@@ -4,7 +4,7 @@ Ancestors forPtrAdmin forPtrElement typedCopyLoopHeaderPtr typedCopyPtr
   ptrDiscipline ptrSafeRun venomExecSemantics venomInst venomState
   finite_map fragGasPathPtr
 
-Theorem for_mul_scalar_path_ptr[local]:
+Theorem for_mul_scalar_path_ptr:
   op_taint tn (Var idx) = {} /\ lookup_var idx s = SOME a /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -60,7 +60,7 @@ Proof
   Cases_on `eval_operand (Var p) s` >> simp[]
 QED
 
-Theorem for_dynamic_add_path_ptr[local]:
+Theorem for_dynamic_add_path_ptr:
   FLOOKUP G off = NONE /\
   op_taint tn (Var p) = {} /\ op_taint tn (Var off) = {} /\
   lookup_var p s = SOME a /\ lookup_var off s = SOME b /\
