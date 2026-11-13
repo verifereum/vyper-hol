@@ -6,7 +6,7 @@ Ancestors
   exprSimHyps exprSimHypsDefs exprSimSource exprSimVVFrame
   exprSimSliceCompose exprSimSliceOrdinaryFrame exprSimSliceOrdinaryContext
   exprSimSliceDynamicAdapter exprSimSliceFixedAdapter exprSimSliceOrdinaryContinue
-  exprSimSliceOrdinaryEntry compileEnv
+  exprSimSliceOrdinaryEntry exprSimSliceTerminal compileEnv
   exprSimDefs exprLowering exprLoweringProps exprBopLowering exprSimWordArgs vyperState pair
 
 Theorem names_builtin_slice[local]:
@@ -44,6 +44,131 @@ Proof
   simp[eval_exprs_cons_action, bind_assoc] >>
   `eval_exprs cx [] = return []` by simp[FUN_EQ_THM, eval_exprs_nil, return_def] >>
   simp[bind_return, bind_assoc]
+QED
+
+(* The capture entries, with the source post and the facts it carries
+   quantified over the horizons valid where the source read ends. *)
+Theorem slice_dynamic_capture_horizons[local]:
+  expr_body_pre cenv cx env src es /\
+  bind (eval_expr cx src) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     expr_post H ctx func cenv cx src es sa sm s0 ee v src_op t) /\
+  expr_type src = BaseT bt /\ is_bytestring_type (BaseT bt) /\
+  lower_value compile_expr cenv (BaseT bt) src sa = (src_op,sm) /\
+  compile_bytestring_src src_op sm = ((len_op,data),sc) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  fn_has_code sm sc func /\ ~t.vs_halted /\
+  t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?cap bs (p:bytes32) u.
+    ((bt = BytesT (Dynamic cap) /\ v = BytesV bs) \/
+     (?str. bt = StringT cap /\ v = StringV str /\ bs = MAP (n2w o ORD) str)) /\
+    expr_sim_inv cenv cx env ee /\
+    run_inst_seq (emitted_insts sm sc) t = OK u /\
+    w2n p + 32 < dimword (:256) /\
+    w2n p + 32 + LENGTH bs < dimword (:256) /\
+    evaluate_type (get_tenv cx) (BaseT bt) = SOME (BaseTV bt) /\
+    32 + LENGTH bs <= val_footprint (BaseTV bt) v /\
+    let u' = u with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sm sc) in
+      u'.vs_inst_idx = LENGTH sc.cs_current_insts /\
+      u'.vs_current_bb = sc.cs_current_bb /\
+      eval_operand len_op u' = SOME (n2w (LENGTH bs)) /\
+      eval_operand data u' = SOME (n2w (w2n p + 32)) /\
+      eval_operand src_op u' = SOME p /\
+      expr_val_at cenv cx (BaseT bt) sa sc ee v src_op u' /\
+      mem_bytes_at (w2n p + 32) (LENGTH bs) u'.vs_memory = bs /\
+      (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx ee u' /\
+         storage_well_formed_on cx ee (FST H)) /\
+      (!H env' sd se e1 e2 ee1 ee2 v1 v2 op1 op2 r1 r2.
+        valid_horizon cx st0 H ee.storage_trace /\
+        expr_sim_inv cenv cx env' ee1 /\
+        local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd.cs_next_id /\
+        MAP FDOM ee.scopes = MAP FDOM ee1.scopes /\
+        (!z. src_op = Var z ==> not_fresh_at sc z) /\
+        (!l. src_op <> Label l) /\
+        expr_post H ctx func cenv cx e1 ee sc sd u' ee1 v1 op1 r1 /\
+        expr_post H ctx func cenv cx e2 ee1 sd se r1 ee2 v2 op2 r2 ==>
+        mem_bytes_at (w2n p + 32) (LENGTH bs) r2.vs_memory = bs) /\
+      (!tops source Q R.
+        gas_outcome F tops (ctx,func) cx st0 source (ee,u') Q R ==>
+        gas_outcome F tops (ctx,func) cx st0 source (ee,t) Q R)
+Proof
+  strip_tac >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     storage_well_formed_on cx ee (FST H)` by
+    (rpt strip_tac >> first_x_assum drule >>
+     simp[loweringPostsTheory.expr_post_def]) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
+  drule_all slice_source_dynamic_capture_entry >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qexistsl_tac [`cap`, `bs`, `p`, `u`] >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    drule >> strip_tac >>
+  drule_all slice_source_dynamic_capture_entry >> simp[] >> rpt strip_tac >> gvs[] >>
+  first_x_assum (drule_all_then ACCEPT_TAC)
+QED
+
+Theorem slice_fixed_capture_horizons[local]:
+  expr_body_pre cenv cx env src es /\
+  bind (eval_expr cx src) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     expr_post H ctx func cenv cx src es sa sm s0 ee v src_op t) /\
+  expr_type src = BaseT (BytesT (Fixed m)) /\ m <= 32 /\
+  lower_value compile_expr cenv (BaseT (BytesT (Fixed m))) src sa = (src_op,sm) /\
+  compile_alloc_buffer 32 sm = (buf,sb) /\
+  emit_void MSTORE [buf.buf_operand; src_op] sb = ((),sc) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  fn_inst_ids_distinct func /\ fn_has_code sm sc func /\ ~t.vs_halted /\
+  t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?bs u p. v = BytesV bs /\ LENGTH bs = m /\
+    expr_sim_inv cenv cx env ee /\
+    run_inst_seq (emitted_insts sm sb ++ emitted_insts sb sc) t = OK u /\
+    w2n p + LENGTH bs < dimword (:256) /\
+    let u' = u with vs_inst_idx :=
+      t.vs_inst_idx + LENGTH (emitted_insts sm sb ++ emitted_insts sb sc) in
+      u'.vs_inst_idx = LENGTH sc.cs_current_insts /\
+      u'.vs_current_bb = sc.cs_current_bb /\
+      eval_operand buf.buf_operand u' = SOME p /\
+      eval_operand (Lit (n2w (LENGTH bs))) u' = SOME (n2w (LENGTH bs)) /\
+      mem_bytes_at (w2n p) (LENGTH bs) u'.vs_memory = bs /\
+      (?x. buf.buf_operand = Var x /\ not_fresh_at sc x) /\
+      (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx ee u' /\
+         storage_well_formed_on cx ee (FST H)) /\
+      (!H sd se e1 e2 ee1 ee2 v1 v2 op1 op2 r1 r2.
+        valid_horizon cx st0 H ee.storage_trace /\
+        local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd.cs_next_id /\
+        MAP FDOM ee.scopes = MAP FDOM ee1.scopes /\
+        expr_post H ctx func cenv cx e1 ee sc sd u' ee1 v1 op1 r1 /\
+        expr_post H ctx func cenv cx e2 ee1 sd se r1 ee2 v2 op2 r2 ==>
+        mem_bytes_at (w2n p) (LENGTH bs) r2.vs_memory = bs) /\
+      (!tops source Q R.
+        gas_outcome F tops (ctx,func) cx st0 source (ee,u') Q R ==>
+        gas_outcome F tops (ctx,func) cx st0 source (ee,t) Q R)
+Proof
+  strip_tac >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     storage_well_formed_on cx ee (FST H)` by
+    (rpt strip_tac >> first_x_assum drule >>
+     simp[loweringPostsTheory.expr_post_def]) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
+  drule_all slice_source_fixed_capture_entry >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qexistsl_tac [`bs`, `u`, `p`] >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    drule >> strip_tac >>
+  drule_all slice_source_fixed_capture_entry >> simp[] >> rpt strip_tac >> gvs[] >>
+  first_x_assum (drule_all_then ACCEPT_TAC)
 QED
 
 Theorem compile_slice_ordinary_case:
@@ -137,8 +262,9 @@ Resume compile_slice_ordinary_case[dynamic]:
  qmatch_asmsub_abbrev_tac `gas_outcome _ _ _ _ _ _ _ spost _` >>
  drule slice_ordinary_actions >> strip_tac >> asm_rewrite_tac[] >>
  irule slice_gas_outcome_bind_value >>
- qexists_tac `\v ee t. spost (INL v) ee t` >>
- reverse conj_tac
+ qexists_tac `\H v ee t. spost H (INL v) ee t` >>
+ simp[slice_two_read_terminal_frame] >> rpt conj_tac
+ >~ [`gas_outcome _ _ _ _ _ (bind (eval_expr cx src) (read_result cx))`]
  >- (irule slice_gas_outcome_conseq >> goal_assum (drule_at Any) >>
      simp[Abbr `spost`] >> rpt strip_tac >>
      Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR ex) r` >>
@@ -160,7 +286,23 @@ Resume compile_slice_ordinary_case[dynamic]:
     simp[gasSummaryTheory.gas_marked_exec_def,
          fragGasModeTheory.gas_marked_path_def] >>
     strip_tac >> drule fragGasPathTheory.gas_path_normal >> simp[]) >>
- drule_all (INST_TYPE [alpha |-> ``:eval_result``] slice_source_dynamic_capture_entry) >>
+ `storage_trace_domain cx st0 (mid with gas_obs := []).storage_trace /\
+  (!H. valid_horizon cx st0 H (mid with gas_obs := []).storage_trace ==>
+     expr_post H ctx func cenv cx src es sa st1 s0 (mid with gas_obs := []) v src_op t) /\
+  t.vs_current_bb = st1.cs_current_bb /\ t.vs_inst_idx = LENGTH st1.cs_current_insts` by
+   (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+      (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+    impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+    strip_tac >> simp[]) >>
+ `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0` by
+   (rpt strip_tac >>
+    `valid_horizon cx st0 H (es with gas_obs := gs).storage_trace` by
+      (irule vyperStorageFootprintTheory.valid_horizon_frame >>
+       qexistsl_tac [`bind (eval_expr cx src) (read_result cx)`, `INL v`,
+                     `mid with gas_obs := []`] >> simp[slice_read_frame]) >>
+    fs[]) >>
+ drule_all (INST_TYPE [alpha |-> ``:eval_result``] slice_dynamic_capture_horizons) >>
  simp[] >> strip_tac >>
  first_x_assum ho_match_mp_tac >>
  qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ _ (_,uc) _ _` >>
@@ -201,7 +343,7 @@ Resume compile_slice_ordinary_case[dynamic_bytes]:
  Cases_on `compile_slice_data src_len src_data start_op len_op
    (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) st4` >>
  gvs[as_ptr_val_def] >>
- irule slice_gas_outcome_conseq >>
+ irule slice_gas_outcome_conseq_frame >>
  irule_at Any slice_bytes_continue_entry_seq >>
  qpat_assum `compile_slice_data _ _ _ _ _ _ = _` (irule_at Any) >>
  qpat_assum `lower_value _ _ _ start _ = _` (irule_at Any) >>
@@ -211,7 +353,8 @@ Resume compile_slice_ordinary_case[dynamic_bytes]:
 QED
 
 Resume compile_slice_ordinary_case[bytes_entry]:
- simp[Abbr `uc`, vyperTypeSystemTheory.bytelike_type_bound_def] >>
+ simp[Abbr `uc`, vyperTypeSystemTheory.bytelike_type_bound_def,
+      slice_two_read_terminal_frame] >>
  conj_tac >- first_x_assum ACCEPT_TAC >>
  conj_tac >- (qpat_x_assum `nocalls ==> _` mp_tac >>
    simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
@@ -255,7 +398,7 @@ Resume compile_slice_ordinary_case[dynamic_string]:
  Cases_on `compile_slice_data src_len src_data start_op len_op
    (type_memory_bytes cenv (BaseT (StringT n))) st4` >>
  gvs[as_ptr_val_def] >>
- irule slice_gas_outcome_conseq >>
+ irule slice_gas_outcome_conseq_frame >>
  irule_at Any slice_string_continue_entry_seq >>
  qpat_assum `compile_slice_data _ _ _ _ _ _ = _` (irule_at Any) >>
  qpat_assum `lower_value _ _ _ start _ = _` (irule_at Any) >>
@@ -265,7 +408,8 @@ Resume compile_slice_ordinary_case[dynamic_string]:
 QED
 
 Resume compile_slice_ordinary_case[string_entry]:
- simp[Abbr `uc`, vyperTypeSystemTheory.bytelike_type_bound_def] >>
+ simp[Abbr `uc`, vyperTypeSystemTheory.bytelike_type_bound_def,
+      slice_two_read_terminal_frame] >>
  conj_tac >- first_x_assum ACCEPT_TAC >>
  conj_tac >- (qpat_x_assum `nocalls ==> _` mp_tac >>
    simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
@@ -302,6 +446,8 @@ Resume compile_slice_ordinary_case[bytes_rebase]:
  markerLib.RESUME_TAC >> (
  simp[Abbr `outpost`] >> rpt strip_tac >>
  qexists_tac `tv` >> simp[] >>
+ qpat_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ es s0` (drule_then assume_tac) >>
+ qpat_assum `!H. _ ==> expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` (drule_then assume_tac) >>
  irule slice_bytestring_source_post_rebase >>
  goal_assum (drule_at Any) >> simp[] >>
  goal_assum (drule_at Any) >> simp[] >>
@@ -338,6 +484,8 @@ Resume compile_slice_ordinary_case[string_rebase]:
  markerLib.RESUME_TAC >> (
  simp[Abbr `outpost`] >> rpt strip_tac >>
  qexists_tac `tv` >> simp[] >>
+ qpat_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ es s0` (drule_then assume_tac) >>
+ qpat_assum `!H. _ ==> expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` (drule_then assume_tac) >>
  irule slice_bytestring_source_post_rebase >>
  goal_assum (drule_at Any) >> simp[] >>
  goal_assum (drule_at Any) >> simp[] >>
@@ -398,8 +546,9 @@ Resume compile_slice_ordinary_case[fixed_source]:
  qmatch_asmsub_abbrev_tac `gas_outcome _ _ _ _ _ _ _ spost _` >>
  drule slice_ordinary_actions >> strip_tac >> asm_rewrite_tac[] >>
  irule slice_gas_outcome_bind_value >>
- qexists_tac `\v ee t. spost (INL v) ee t` >>
- reverse conj_tac
+ qexists_tac `\H v ee t. spost H (INL v) ee t` >>
+ simp[slice_two_read_terminal_frame] >> rpt conj_tac
+ >~ [`gas_outcome _ _ _ _ _ (bind (eval_expr cx src) (read_result cx))`]
  >- (irule slice_gas_outcome_conseq >> goal_assum (drule_at Any) >>
      simp[Abbr `spost`] >> rpt strip_tac >>
      Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR ex) r` >>
@@ -421,6 +570,22 @@ Resume compile_slice_ordinary_case[fixed_source]:
     simp[gasSummaryTheory.gas_marked_exec_def,
          fragGasModeTheory.gas_marked_path_def] >>
     strip_tac >> drule fragGasPathTheory.gas_path_normal >> simp[]) >>
+ `storage_trace_domain cx st0 (mid with gas_obs := []).storage_trace /\
+  (!H. valid_horizon cx st0 H (mid with gas_obs := []).storage_trace ==>
+     expr_post H ctx func cenv cx src es sa st1 s0 (mid with gas_obs := []) v src_op t) /\
+  t.vs_current_bb = st1.cs_current_bb /\ t.vs_inst_idx = LENGTH st1.cs_current_insts` by
+   (qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+      (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+    impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+    strip_tac >> simp[]) >>
+ `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0` by
+   (rpt strip_tac >>
+    `valid_horizon cx st0 H (es with gas_obs := gs).storage_trace` by
+      (irule vyperStorageFootprintTheory.valid_horizon_frame >>
+       qexistsl_tac [`bind (eval_expr cx src) (read_result cx)`, `INL v`,
+                     `mid with gas_obs := []`] >> simp[slice_read_frame]) >>
+    fs[]) >>
  suspend "fixed_capture"
 QED
 
@@ -436,7 +601,7 @@ Resume compile_slice_ordinary_case[fixed_capture]:
       vyperTypeInvariantsTheory.value_result_typed_def,
       vyperTypeExprSoundnessTheory.value_runtime_typed_def,
       vyperTypingTheory.value_has_type_def, vyperValueTheory.evaluate_type_def]) >>
- drule_all (INST_TYPE [alpha |-> ``:eval_result``] slice_source_fixed_capture_entry) >>
+ drule_all (INST_TYPE [alpha |-> ``:eval_result``] slice_fixed_capture_horizons) >>
  simp[] >> strip_tac >>
  first_x_assum ho_match_mp_tac >>
  qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ _ (_,uc) _ _` >>
@@ -459,7 +624,7 @@ Resume compile_slice_ordinary_case[fixed_continue]:
  Cases_on `compile_slice_data (Lit (n2w (LENGTH bs))) (Var x) start_op len_op
    (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) se` >>
  gvs[as_ptr_val_def, fixed_bytes_size_def] >>
- irule slice_gas_outcome_conseq >>
+ irule slice_gas_outcome_conseq_frame >>
  irule_at Any slice_bytes_continue_entry_seq >>
  qpat_assum `compile_slice_data _ _ _ _ _ _ = _` (irule_at Any) >>
  qpat_assum `lower_value _ _ _ start _ = _` (irule_at Any) >>
@@ -469,7 +634,8 @@ Resume compile_slice_ordinary_case[fixed_continue]:
 QED
 
 Resume compile_slice_ordinary_case[fixed_entry]:
- simp[Abbr `uc`, vyperTypeSystemTheory.bytelike_type_bound_def] >>
+ simp[Abbr `uc`, vyperTypeSystemTheory.bytelike_type_bound_def,
+      slice_two_read_terminal_frame] >>
  conj_tac >- first_x_assum ACCEPT_TAC >>
  conj_tac >- (qpat_x_assum `nocalls ==> _` mp_tac >>
    simp[vyperTypeCallGraphTheory.int_calls_expr_def]) >>
@@ -498,6 +664,8 @@ QED
 
 Resume compile_slice_ordinary_case[fixed_rebase]:
  rpt gen_tac >> strip_tac >> gvs[Abbr `outpost`] >>
+ qpat_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ es s0` (drule_then assume_tac) >>
+ qpat_assum `!H. _ ==> expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` (drule_then assume_tac) >>
  irule slice_fixed_source_post_rebase >>
  goal_assum (drule_at Any) >> simp[] >>
  qpat_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` (irule_at Any) >>
