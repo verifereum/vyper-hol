@@ -271,7 +271,7 @@ Proof
      disch_then (drule_at (Pat `ptr_ledger_block_alignment _ _ _ _`)) >>
      disch_then (drule_at (Pat `ptr_vars_transport _ _ _ _ _ _`)) >>
      disch_then (drule_at (Pat `step_inst _ _ _ _ = _`)) >>
-     disch_then drule >>
+     disch_then drule >> disch_then drule >>
      simp[] >> (impl_tac >- metis_tac[]) >> strip_tac >>
      qexistsl_tac [`delta`,`b`,`births`,`TG'`] >> simp[]) >>
   first_x_assum (qspec_then `b` mp_tac) >>
