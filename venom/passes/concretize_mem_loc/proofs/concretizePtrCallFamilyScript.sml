@@ -10,6 +10,7 @@ Ancestors
   concretizePtrBufferCopyContent venomCallOracleDefs venomExecSemantics
   concretizePtrRequestHistory concretizePtrTaggedSupport
   concretizePtrSourceOwnership concretizePtrAllocationSize concretizeStepStructure
+  frameResolvedTrace
   o1PassContract unitShapeDefs venomWf unitLabelMapIdentity venomInst
   venomExecProofs memSafeRun opcodeClass
   concretizePtrPairedPrefix concretizePtrStructuralTranscript
@@ -85,10 +86,11 @@ Theorem ptr_paired_call_input_bytes:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   MEM a.po_inst.inst_opcode [CALL; STATICCALL] /\
   ~in_revert_forward a.po_fn a.po_state /\
   mem_read_ops a.po_inst = SOME ops /\ inst_read_op a.po_inst = SOME ops.iao_ofst /\
@@ -172,10 +174,11 @@ Theorem ptr_paired_call_step:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
   EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
     first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
@@ -254,8 +257,6 @@ Proof
   `EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def,
         EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn` by
     (rpt strip_tac >> drule_all ptr_source_tagged_var_support >> simp[]) >>
   `~in_revert_forward a.po_fn a.po_state` by
@@ -402,10 +403,11 @@ Theorem ptr_paired_call_prefix_step:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
   EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
     first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
@@ -502,11 +504,16 @@ Proof
   disch_then (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`rpolicy`,`names`,`w2n n`,`eom`] mp_tac) >>
   simp[] >> disch_tac >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `dyn_floor C a.po_state = dyn_floor C vs` by
+    (`frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+       a.po_fn a.po_inst a.po_state` by
+       (drule ptr_gap_ownership_history >> strip_tac >>
+        drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
+     drule frameResolvedTraceTheory.frame_reachable_initial_fmp >>
+     simp[dyn_floor_def]) >>
   `k <= w2n n` by simp[] >>
   `?rho. (!j. j < k ==> rho (w2n x + j) = w2n y + j) /\
-    !dyn. concretizePtrPairedFields$ptr_paired_write_owner dyn lo positions rho
+    concretizePtrPairedFields$ptr_paired_write_owner (dyn_floor C vs) lo positions rho
       (range_bytes (step_writes a.po_inst a.po_state post))
       (tokens,registry,births,PT,TG',saved,entries)` by
     (qexists_tac `\q. w2n y + (q - w2n x)` >> conj_tac
@@ -516,18 +523,17 @@ Proof
          rpt strip_tac >> disj1_tac >>
          Cases_on `w2n n < LENGTH post.vs_returndata` >>
          gns[arithmeticTheory.MIN_DEF] >> decide_tac)
-     >- (`w2n x < dimword(:256)` by simp[wordsTheory.w2n_lt] >>
-         `dimword(:256) <= w2n x` by
-           (qpat_x_assum `_ <= w2n x` mp_tac >>
-            qpat_assum `~ctx_has_dalloca C` (fn th => rewrite_tac[th, dyn_floor_def])) >>
-         `F` suffices_by rewrite_tac[] >> decide_tac) >>
+     >- (simp[concretizePtrPairedFieldsTheory.ptr_paired_write_owner_def] >>
+         rpt strip_tac >> rpt disj2_tac >>
+         Cases_on `w2n n < LENGTH post.vs_returndata` >>
+         gns[arithmeticTheory.MIN_DEF] >> decide_tac) >>
      `MEM token tokens` by (drule_all ptr_source_ownership_live_prov >> simp[]) >>
      simp[concretizePtrPairedFieldsTheory.ptr_paired_write_owner_def] >>
      rpt strip_tac >> disj2_tac >> disj1_tac >>
      qexistsl_tac [`token`,`aid`,`b`,`sz`,`pa`,`q - b`] >>
      Cases_on `w2n n < LENGTH post.vs_returndata` >>
      gns[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-  rename1 `!dyn. concretizePtrPairedFields$ptr_paired_write_owner dyn lo positions reloc _ _` >>
+  rename1 `concretizePtrPairedFields$ptr_paired_write_owner _ lo positions reloc _ _` >>
   `ptr_ledger_write_pair C C' reloc a z at zt` by
     (simp[ptr_ledger_write_pair_def] >>
      conj_tac >- metis_tac[ptr_tagged_chrono_step_projection] >>
@@ -578,10 +584,11 @@ Theorem ptr_paired_call_prefix_normalize:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
   EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
     first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\

@@ -19,8 +19,9 @@ Ancestors
    from the static layout, whose end is fn_eom <= max_live_eom C'; so C'
    has no ALLOCA, its static accesses are at those positions plus the
    in-site offsets ptr_discipline lo C allows, and its PARAM and
-   pointer-compare uses are the input's.  Without DALLOCA, every access
-   of C' is below the layout end. *)
+   pointer-compare uses are the input's.  So every access of C' is below
+   the layout end, or a DALLOCA access at or above the initial free
+   memory pointer, which the headroom keeps above the layout end. *)
 Theorem concretize_stage_static_mem:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
@@ -28,11 +29,13 @@ Theorem concretize_stage_static_mem:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom ==>
+  max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  (ctx_has_dalloca C ==> mem_inv dload_headroom_ok C vs) ==>
   mem_inv (static_mem_ok eom) C' vs
 Proof
   rpt gen_tac >> strip_tac >>
@@ -63,8 +66,6 @@ Proof
     >- (rpt strip_tac >> drule_all ptr_paired_universal_extension >>
         disch_then ACCEPT_TAC) >>
     fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  `ctx_has_dalloca C ==> mem_inv dload_headroom_ok C vs` by
-    (qpat_assum `~ctx_has_dalloca C` (fn th => rewrite_tac[th])) >>
   drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ptr_paired_coverage_static_mem) >>
   disch_then ACCEPT_TAC
 QED

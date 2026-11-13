@@ -19,11 +19,12 @@ Ancestors
   concretizePtrRetpcProducer concretizePtrInitialFmpProducer concretizePtrBumpProducer
   concretizePtrEnvironmentReadProducer concretizePtrUnaryEnvironmentReadProducer
   concretizePtrAssertionProducer concretizePtrStructuralDispatch
+  concretizePtrDallocaProducer
 
 Theorem ptr_paired_universal_jump_extension[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ptr_discipline lo C vs /\ o1_ctx_shape C /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\ o1_ctx_shape C /\
   EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
     EVERY bb_well_formed f.fn_blocks /\ ALL_DISTINCT (fn_labels f) /\
     (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
@@ -59,8 +60,6 @@ Proof
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
         EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `unitShapeDefs$retpc_shape_ok a.po_fn` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def,
         EVERY_MEM] >> metis_tac[]) >>
@@ -241,12 +240,12 @@ QED
 Theorem ptr_paired_universal_excluded[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
-  ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\
   a.po_inst.inst_opcode <> NOP /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   ptr_chrono_step C' at zt ==>
   ~MEM a.po_inst.inst_opcode
-    [MEMTOP; GETFMP; SETFMP; FMP_PARAM; DALLOCA; DRET; RETFMP;
+    [MEMTOP; GETFMP; SETFMP; FMP_PARAM; DRET; RETFMP;
      PHI; NOP; RETURN; REVERT; STOP; SINK; SELFDESTRUCT; INVALID]
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -259,9 +258,8 @@ Proof
   drule concretizePtrChronologicalDemandTheory.ptr_frame_operand_instructions >>
   strip_tac >>
   `~MEM a.po_inst.inst_opcode
-    [MEMTOP; GETFMP; SETFMP; FMP_PARAM; DALLOCA; DRET; RETFMP; NOP]` by
-    (fs[ptr_discipline_def, EVERY_MEM, fn_ptr_ok_def,
-        ctx_has_dalloca_def, EXISTS_MEM, MEM] >> metis_tac[]) >>
+    [MEMTOP; GETFMP; SETFMP; FMP_PARAM; DRET; RETFMP; NOP]` by
+    (fs[ptr_discipline_def, EVERY_MEM, fn_ptr_ok_def, MEM] >> metis_tac[]) >>
   simp[MEM] >> rpt strip_tac >> gvs[] >>
   `at.po_inst = a.po_inst` by simp[concretize_positions_unchanged] >>
   qpat_x_assum `at.po_inst = concretize_inst_with_positions _ _` kall_tac >>
@@ -308,10 +306,11 @@ Theorem ptr_paired_universal_immediate_extension[local]:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   EVERY fn_inst_wf C.ctx_functions /\
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
@@ -332,8 +331,7 @@ Proof
       drule_all ptr_paired_universal_normalize_immediate >> simp[])
   >- (drule_all ptr_paired_prefix_mstore >> strip_tac >>
       drule_all ptr_paired_universal_normalize_immediate >> simp[])
-  >- (`ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp` by simp[] >>
-      drule_all ptr_paired_prefix_mcopy >> strip_tac >>
+  >- (drule_all ptr_paired_prefix_mcopy >> strip_tac >>
       drule_all ptr_paired_universal_normalize_immediate >> simp[])
   >- (drule_all ptr_paired_prefix_assign >> strip_tac >>
       drule_all ptr_paired_universal_normalize_immediate >> simp[])
@@ -348,10 +346,11 @@ Theorem ptr_paired_universal_extension:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
   EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
     first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
@@ -458,6 +457,9 @@ Resume ptr_paired_universal_extension[remaining]:
   >- (drule_all ptr_paired_unary_environment_read_prefix_normalize >> simp[]) >>
   Cases_on `a.po_inst.inst_opcode = GAS`
   >- (drule_all ptr_paired_gas_prefix_normalize >> simp[]) >>
+  Cases_on `a.po_inst.inst_opcode = DALLOCA`
+  >- (drule_all ptr_paired_prefix_dalloca >> strip_tac >>
+      drule_all ptr_paired_universal_normalize_immediate >> simp[]) >>
   Cases_on `a.po_inst.inst_opcode` >> gvs[MEM]
 QED
 Finalise ptr_paired_universal_extension
