@@ -79,3 +79,36 @@ Proof
           venomStateTheory.venom_state_component_equality] >> metis_tac[]) >>
   gvs[]
 QED
+
+Theorem extcall_request_memory_rel:
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
+    calldata has_default default_op default_ty default_opt ee t /\
+  valid_horizon cx st0 H ee.storage_trace /\
+  eval_operand buf_op t = SOME ro /\
+  u.vs_vars = t.vs_vars /\ u.vs_allocas = t.vs_allocas /\
+  u.vs_alloca_next = t.vs_alloca_next /\
+  u.vs_data_section = t.vs_data_section /\
+  u.vs_memory = (write_memory_with_expansion (w2n ro) (TAKE cap rd) t).vs_memory ==>
+  local_ptrs_rel func cenv ee.scopes u /\
+  immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor ee u
+Proof
+  strip_tac >> fs[extcall_request_ready_def] >>
+  `LENGTH (TAKE cap rd) <= cap` by simp[listTheory.LENGTH_TAKE_EQ] >>
+  `local_ptrs_rel func cenv ee.scopes t /\
+   immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor ee t` by
+    metis_tac[exprLoweringPropsTheory.stmt_state_rel_def,
+              loweringStateRelDefsTheory.state_rel_def] >>
+  conj_tac
+  >- (irule local_ptrs_rel_clean_write_frame >>
+      qexistsl_tac [`TAKE cap rd`, `w2n ro`, `t`] >>
+      simp[venomStateTheory.lookup_var_def] >> rpt strip_tac >>
+      first_x_assum drule >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  irule loweringSliceTheory.immutables_rel_mem_agree >> qexists_tac `t` >>
+  simp[venomMemPropsTheory.LENGTH_write_memory_with_expansion] >>
+  rpt strip_tac >>
+  irule valueEncodingPropsTheory.write_memory_mem_bytes_at_disjoint >>
+  first_x_assum drule_all >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
+QED
