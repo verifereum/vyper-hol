@@ -210,5 +210,45 @@ Proof
     (`sb + cap <= s.vs_alloca_next` by metis_tac[] >> decide_tac) >>
   `!x. dst = Var x ==> not_fresh_at st x` by metis_tac[] >>
   drule_all window_word_run >> strip_tac >>
-  cheat
+  `?sp. src = Var sp /\ ptr_covers G tn sp s cap` by metis_tac[] >>
+  `?dp. dst = Var dp /\ ptr_covers G tn dp s 32` by
+    (qpat_x_assum `0 < LENGTH _ ==> _` mp_tac >> simp[]) >>
+  `ptr_covers G tn sp s 32` by
+    (qpat_assum `ptr_covers G tn sp s cap` mp_tac >>
+     pure_rewrite_tac[ptr_covers_def] >> strip_tac >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`w`, `b`, `sz'`] >> simp[] >> decide_tac) >>
+  `sb + 32 <= s.vs_alloca_next /\ d + 32 <= s.vs_alloca_next` by
+    ( `sb + cap <= s.vs_alloca_next` by metis_tac[] >> decide_tac) >>
+  qpat_x_assum `src = Var sp` SUBST_ALL_TAC >>
+  qpat_x_assum `dst = Var dp` SUBST_ALL_TAC >>
+  `not_fresh_at st sp /\ not_fresh_at st dp` by metis_tac[] >>
+  drule_all window_word_joint_path >>
+  disch_then (qspecl_then [`explicit`, `PG`] strip_assume_tac) >>
+  drule_all window_word_strong_endpoint >> strip_tac >>
+  qexistsl_tac [`t with vs_inst_idx := LENGTH en.cs_current_insts`, `G'`, `tn'`] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >-
+    (qpat_x_assum `t = _` SUBST1_TAC >>
+     rewrite_tac[abi_encode_exec_frame_inst_idx] >>
+     irule abi_encode_exec_frame_trans >>
+     qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) (mload sb s) s` >>
+     conj_tac >-
+       simp_tac (srw_ss()) [abi_encode_exec_frame_def, pending_alloca_size_def,
+         update_var_def, exprSimAbiEncodeSemanticTheory.abi_encode_semantic_obs_def] >>
+     rewrite_tac[abi_encode_exec_frame_mstore]) >>
+  conj_tac >- (qpat_x_assum `out = _` SUBST1_TAC >> simp_tac (srw_ss()) [op_taint_def]) >>
+  conj_tac >- (qpat_x_assum `out = _` SUBST1_TAC >> simp_tac (srw_ss()) []) >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `tn'.t_mem = _` SUBST_ALL_TAC >>
+    qpat_x_assum `i IN _ DIFF _` mp_tac >>
+    simp_tac std_ss [pred_setTheory.IN_DIFF, pred_setTheory.GSPECIFICATION] >>
+    qpat_x_assum `LENGTH (enc at av) = 32` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+    metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `tn'.t_mem = _` SUBST_ALL_TAC >>
+    simp_tac std_ss [pred_setTheory.IN_DIFF, pred_setTheory.GSPECIFICATION] >>
+    metis_tac[LESS_LESS_EQ_TRANS, LESS_EQ_ANTISYM]) >>
+  rpt conj_tac >> metis_tac[]
 QED
