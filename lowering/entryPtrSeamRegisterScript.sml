@@ -154,8 +154,8 @@ QED
 (* The logical entry relations do not constrain the code-generator's
    initial free-memory-pointer field. *)
 Theorem registration_stmt_initial_fmp:
-  stmt_state_rel ctx func cenv cx es (s with vs_initial_fmp := w) <=>
-  stmt_state_rel ctx func cenv cx es s
+  stmt_state_rel H ctx func cenv cx es (s with vs_initial_fmp := w) <=>
+  stmt_state_rel H ctx func cenv cx es s
 Proof
   simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
        immutable_alloca_sep_def, immutable_decl_sep_def,
@@ -170,8 +170,8 @@ Proof
 QED
 
 Theorem registration_ghost_initial_fmp:
-  ghost_inv d cenv cx es G tn (s with vs_initial_fmp := w) <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx es G tn (s with vs_initial_fmp := w) <=>
+  ghost_inv H d cenv cx es G tn s
 Proof
   Cases_on `d` >- simp[ghost_inv_def, return_buf_ptr_def,
     ptr_covers_def, lookup_var_def, stor_taint_ok_def] >>
@@ -3067,7 +3067,7 @@ Theorem registration_indexed_locals_ghost:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
     op_taint tn (Var x) = {}) /\
   tn.t_stor = {} /\ tn.t_trans = {} /\ tn.t_imm = {} ==>
-  ghost_inv NONE cenv cx es G tn s
+  ghost_inv H NONE cenv cx es G tn s
 Proof
   strip_tac >>
   simp[bodyPtrDefsTheory.ghost_inv_def, bodyPtrDefsTheory.return_buf_ptr_def,
@@ -3141,9 +3141,9 @@ Theorem registration_actual_endpoint_relations:
   (!inst w b n. MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit w] /\
     FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) ==>
-  stmt_state_rel unit.cu_context efn cenv
+  stmt_state_rel H unit.cu_context efn cenv
     (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-  ghost_inv NONE cenv (initial_evaluation_context am.sources am.layouts tx NONE)
+  ghost_inv H NONE cenv (initial_evaluation_context am.sources am.layouts tx NONE)
     es0 G0 tn0 s0
 Proof
   strip_tac >>
