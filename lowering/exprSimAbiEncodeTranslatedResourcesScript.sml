@@ -9,7 +9,7 @@ Ancestors
   venomMemDefs venomState venomInst compileEnv finite_map words list arithmetic
 
 Theorem abi_encode_translated_nonword_source_split:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   ~is_word_type (expr_type e) /\
   ei = type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e) /\
@@ -62,7 +62,7 @@ Proof
 QED
 
 Theorem abi_encode_translated_nonword_phase_resources:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
@@ -177,7 +177,7 @@ Proof
   asm_rewrite_tac [] >>
   conj_tac >- simp[venomMemDefsTheory.regions_disjoint_def] >>
   rpt gen_tac >> strip_tac >>
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) abi_encode_nonword_scratch_row >>
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) abi_encode_nonword_scratch_row >>
   disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (b,sz)`)) >>
