@@ -1071,7 +1071,7 @@ Proof
   irule cs_extends_trans >> qexists_tac `se` >> simp[]
 QED
 
-Theorem raw_call_size_run[local]:
+Theorem raw_call_size_run:
   !sa op sb s.
     emit_op RETURNDATASIZE [] sa = (op,sb) /\ fresh_vars_wrt sa s ==>
     ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
@@ -1124,7 +1124,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem raw_call_cap_step_frame[local]:
+Theorem raw_call_cap_step_frame:
   !inst s t out.
     MEM inst.inst_opcode [RETURNDATASIZE;LT;XOR;MUL] /\
     inst.inst_outputs = [out] /\ step_inst_base inst s = OK t ==>

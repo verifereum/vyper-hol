@@ -102,3 +102,42 @@ Proof
   Cases_on `vals = []` >> simp[comp_bind_def,comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >> metis_tac[]
 QED
+
+Theorem extcall_compile_effect_stages:
+  (^extcall_effect_compiler rt skip stat addr value gas buf cap offset len)
+    sp = (u,sr) ==>
+  ?sg success sc fail s1 cont s2 sj old_fail sf rds s3 fb s4 s5 se.
+    (if rt = NoneT /\ ~skip then compile_extcodesize_check addr else comp_return ())
+      sp = ((),sg) /\
+    (if stat then emit_op STATICCALL [gas;addr;offset;len;buf;Lit (n2w cap)]
+     else emit_op CALL [gas;addr;value;offset;len;buf;Lit (n2w cap)])
+      sg = (success,sc) /\
+    fresh_label "extcall_fail" sc = (fail,s1) /\
+    fresh_label "extcall_cont" s1 = (cont,s2) /\
+    emit_inst JNZ [success;Label cont;Label fail] [] s2 = ((),sj) /\
+    new_block fail sj = (old_fail,sf) /\
+    emit_op RETURNDATASIZE [] sf = (rds,s3) /\
+    compile_alloc_buffer 0 s3 = (fb,s4) /\
+    emit_void RETURNDATACOPY [fb.buf_operand;Lit 0w;rds] s4 = ((),s5) /\
+    emit_inst REVERT [fb.buf_operand;rds] [] s5 = ((),se) /\
+    new_block cont se = (u,sr)
+Proof
+  Cases_on `(if rt = NoneT /\ ~skip then compile_extcodesize_check addr
+    else comp_return ()) sp` >> rename1 `_ = (ignored,sg)` >>
+  Cases_on `(if stat then emit_op STATICCALL [gas;addr;offset;len;buf;Lit (n2w cap)]
+    else emit_op CALL [gas;addr;value;offset;len;buf;Lit (n2w cap)]) sg` >>
+  rename1 `_ = (success,sc)` >>
+  Cases_on `fresh_label "extcall_fail" sc` >> rename1 `_ = (fail_lbl,s1)` >>
+  Cases_on `fresh_label "extcall_cont" s1` >> rename1 `_ = (cont,s2)` >>
+  Cases_on `emit_inst JNZ [success;Label cont;Label fail_lbl] [] s2` >>
+  rename1 `_ = (ignored2,sj)` >>
+  Cases_on `new_block fail_lbl sj` >> rename1 `_ = (old_fail,sf)` >>
+  Cases_on `emit_op RETURNDATASIZE [] sf` >> rename1 `_ = (rds,s3)` >>
+  Cases_on `compile_alloc_buffer 0 s3` >> rename1 `_ = (fb,s4)` >>
+  Cases_on `emit_void RETURNDATACOPY [fb.buf_operand;Lit 0w;rds] s4` >>
+  rename1 `_ = (ignored3,s5)` >>
+  Cases_on `emit_inst REVERT [fb.buf_operand;rds] [] s5` >>
+  rename1 `_ = (ignored4,se)` >>
+  Cases_on `new_block cont se` >>
+  gvs[comp_bind_def,comp_ignore_bind_def] >> metis_tac[]
+QED

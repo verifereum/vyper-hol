@@ -45,7 +45,7 @@ Proof
   Cases_on `rq.cr_static` >> simp[]
 QED
 
-Theorem extcall_default_memory_frame[local]:
+Theorem extcall_default_memory_frame:
   extcall_default_ready cx ret has op ty opt s /\
   eval_operand op t = eval_operand op s /\
   s.vs_alloca_next <= t.vs_alloca_next /\

@@ -33,7 +33,8 @@ Proof
   simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
     exec_read1_def] >>
   Cases_on `n2w (LENGTH (lookup_account (w2w aw) s.vs_accounts).code) = (0w:bytes32)` >>
-  simp[send_assert_ok, send_assert_fail] >> IF_CASES_TAC >> simp[]
+  simp[send_assert_ok, send_assert_fail, eval_operand_def, lookup_var_def,
+    update_var_def, FLOOKUP_UPDATE] >> IF_CASES_TAC >> fs[n2w_11]
 QED
 
 Theorem extcall_codecheck_path_mem:

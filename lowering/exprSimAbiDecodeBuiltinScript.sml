@@ -39,7 +39,7 @@ Definition abi_builtin_decode_site_resources_def:
         SOME (d,outsz))
 End
 
-Theorem abi_decode_builtin_min_le_max[local]:
+Theorem abi_decode_builtin_min_le_max:
   abi_static_size sf ty <= abi_size_bound sf ty
 Proof
   Cases_on `ty`
