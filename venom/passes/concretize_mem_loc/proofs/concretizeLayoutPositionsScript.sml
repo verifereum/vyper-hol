@@ -5,7 +5,8 @@ Ancestors
   concretizeAnalysisMetadataOwnership concretizeLayoutMetadata
   concretizeAnalysisCollection staticLayoutAllocatorProofs
   ctxLookupAgreeHelpers contextCodegenRel o1PassContract o1ScheduleDecomp o1ScheduleDecompHelpers
-  venomWf venomInst ptrDiscipline staticLayoutDefs frameJointTrace list pair finite_map words
+  venomWf venomInst ptrDiscipline staticLayoutDefs frameJointTrace concretizePtrStageBounds
+  list pair finite_map words
 
 Definition concretize_positions_def:
   concretize_positions C' owner aid =
@@ -120,4 +121,24 @@ Proof
      Cases_on `k` >> fs[EVERY_EL]) >>
   metis_tac[concretize_positions_activation_cache,
             concretize_positions_activation_lower_bound]
+QED
+
+(* A live cache's relocated slot ends below the stage's live memory end. *)
+Theorem concretize_positions_cache_room:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\ fixed_region_reserved lo C /\
+  callee_first names C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  joint_trace vs0 C q0 es qs q /\ k <= LENGTH es /\
+  activation_cache (EL k (q0::qs)) d owner aid (b,sz) ==>
+  concretize_positions C' owner aid + sz <= eom
+Proof
+  strip_tac >>
+  drule_all concretize_positions_trace_cache >> strip_tac >>
+  fs[canonical_metadata_def] >>
+  qpat_x_assum `FIND _ _ = _` (assume_tac o MATCH_MP FIND_MEM) >>
+  qpat_x_assum `lookup_function _ C'.ctx_functions = _`
+    (assume_tac o MATCH_MP lookup_function_MEM) >>
+  drule_all ptr_stage_mems_endpoint_bound >> simp[]
 QED
