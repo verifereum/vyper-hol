@@ -2,6 +2,8 @@
 Theory assignSparseStorageLandingPtr
 Ancestors
   storeSlotsPtrInterface placeStoreSlots placeStoreStorage
+  assignBasePtrStorageSemantic assignBasePtrStorageGhost stmtSimStoreCopy
+  bodyPtrPopNestedLiveGhost vyperInterpreter vyperState
   assignBasePtrStorageTaint assignBasePtrStorageFrame appendStorageGhostPtr accountsRelProps
   bodyPtrDefs exprSimHypsDefs exprLoweringProps vyperStoragePlaceRegion
   vyperStorageBackend vyperTyping compileEnv context loweringStateRelDefs
@@ -125,3 +127,128 @@ Proof
   simp[] >> qexistsl_tac [`mid`,`name`,`subs`] >> simp[]
 QED
 
+
+Theorem store_slots_ptr_storage_landing:
+  !d ce cx env es ctx fn sa ty tv v sw start tr mid name subs
+    rootk rootv path delta writes ks s G tn t H tf.
+    stmt_state_rel ctx fn ce cx es s /\ expr_sim_inv ce cx env es /\
+    ghost_inv d ce cx es G tn s /\ local_ptrs_reserved ce sa /\
+    (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
+    val_wf tv v /\ encode_value tv v = SOME writes /\
+    declared_storage_region cx mid name subs = SOME (tr,rootk,rootv) /\
+    storage_subregion rootv path delta tv /\ start = w2n rootk+delta /\
+    0 < type_slot_size tv /\ start+type_slot_size tv <= dimword (:256) /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory tv v (w2n sw) m) /\
+    store_slots_ptr_frame tr sw (n2w start) s tn ks t tf /\
+    (!j. MEM j ks <=> MEM j (MAP FST writes)) /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_labels = s.vs_labels /\
+    t.vs_call_ctx = s.vs_call_ctx ==>
+    stmt_state_rel ctx fn ce cx
+      (set_storage cx es tr
+        (apply_writes (n2w start) writes (get_storage cx es tr))) t /\
+    ghost_inv d ce cx
+      (set_storage cx es tr
+        (apply_writes (n2w start) writes (get_storage cx es tr))) H tf t /\
+    ghost_kept ce es sa G tn s H tf
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `store_slots_ptr_frame _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [store_slots_ptr_frame_def]) >>
+  `start < dimword (:256)` by decide_tac >>
+  `well_formed_type_value tv` by
+    metis_tac[cj 1 evaluate_type_well_formed] >>
+  `val_in_memory tv v (w2n sw) s.vs_memory` by
+    (first_assum irule >> simp[mem_agree_outside_def]) >>
+  qabbrev_tac `fin = set_storage cx es tr
+    (apply_writes (n2w start) writes (get_storage cx es tr))` >>
+  `stmt_state_rel ctx fn ce cx fin (store_copy_normalize s t)` by
+    (simp[Abbr `fin`] >>
+     qpat_x_assum `store_copy_normalize s t = _` SUBST1_TAC >>
+     qspecl_then [`ce`,`cx`,`env`,`es`,`ctx`,`fn`,`s`,`mid`,`name`,`subs`,
+       `tr`,`rootk`,`rootv`,`path`,`delta`,`tv`,`start`,`writes`,`v`,`ks`,
+       `\i. mload (w2n (sw:bytes32)+32*i) s`] mp_tac
+       place_store_encoded_leaf_state_sparse >>
+     (impl_tac >- (rpt conj_tac
+       >~ [`EL _ (word_to_bytes _ _)`]
+       >- (rpt gen_tac >> strip_tac >> BETA_TAC >>
+           irule place_store_memory_live_at >>
+           conj_tac >- first_assum ACCEPT_TAC >>
+           conj_tac >- first_assum ACCEPT_TAC >>
+           conj_tac >- first_assum ACCEPT_TAC >>
+           qexistsl_tac [`tv`,`v`] >>
+           rpt conj_tac >> first_assum ACCEPT_TAC) >>
+       first_assum ACCEPT_TAC)) >>
+     simp[GSYM word_add_n2w]) >>
+  `stmt_state_rel ctx fn ce cx fin t` by
+    (irule place_store_normalized_stmt_state >>
+     goal_assum (drule_at (Pat `local_ptrs_reserved _ _`)) >>
+     qexists_tac `s` >> simp[] >> metis_tac[]) >>
+  `s.vs_call_ctx.cc_address = cx.txn.target` by
+    fs[stmt_state_rel_def,state_rel_def,call_ctx_rel_def] >>
+  `storage_agree (storage_dead cx tr (get_storage cx es tr))
+    (get_storage cx es tr)
+    (if tr then contract_transient s else contract_storage s)` by
+    (qpat_x_assum `stmt_state_rel ctx fn ce cx es s` mp_tac >>
+     Cases_on `tr` >> simp[stmt_state_rel_def,state_rel_def,accounts_rel_def,
+       accounts_agree_def,transient_agree_def,get_storage_def,
+       vfmStateTheory.lookup_account_def,contract_storage_def,
+       contract_transient_def,call_ctx_rel_def] >> metis_tac[]) >>
+  `storage_dead cx tr (if tr then contract_transient s else contract_storage s) =
+    storage_dead cx tr (get_storage cx es tr)` by
+    metis_tac[storage_agree_storage_dead] >>
+  `storage_agree (storage_dead cx tr (get_storage cx fin tr))
+    (get_storage cx fin tr)
+    (if tr then contract_transient t else contract_storage t)` by
+    (qpat_x_assum `stmt_state_rel ctx fn ce cx fin t` mp_tac >>
+     Cases_on `tr` >> simp[stmt_state_rel_def,state_rel_def,accounts_rel_def,
+       accounts_agree_def,transient_agree_def,get_storage_def,
+       vfmStateTheory.lookup_account_def,contract_storage_def,
+       contract_transient_def,call_ctx_rel_def] >> metis_tac[]) >>
+  `storage_dead cx tr (if tr then contract_transient t else contract_storage t) =
+    storage_dead cx tr (get_storage cx fin tr)` by
+    metis_tac[storage_agree_storage_dead] >>
+  `!q c. (q,c) IN (if tr then tf.t_trans else tf.t_stor) ==>
+    storage_dead cx tr (if tr then contract_transient t else contract_storage t)
+      (w2n q) c` by
+    (`get_storage cx fin tr = apply_writes (n2w start) writes
+       (get_storage cx es tr)` by simp[Abbr `fin`,get_storage_after_set] >>
+     `!q c. (q,c) IN (if tr then tn.t_trans else tn.t_stor) ==>
+       storage_dead cx tr (get_storage cx es tr) (w2n q) c` by
+       (rpt gen_tac >> strip_tac >>
+        qpat_x_assum `storage_dead cx tr
+          (if tr then contract_transient s else contract_storage s) = _`
+          (fn th => once_rewrite_tac[GSYM th]) >>
+        irule assign_base_store_initial_selected_dead >> simp[] >>
+        qexists_tac `tn` >> fs[ghost_inv_def]) >>
+     mp_tac (Q.INST [`st` |-> `get_storage cx es tr`,
+                     `mem` |-> `s.vs_memory`] sparse_store_taint_dead) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     asm_rewrite_tac[]) >>
+  `(if tr then t.vs_accounts = s.vs_accounts else
+      t.vs_transient = s.vs_transient)` by
+    (Cases_on `tr`
+     >- (qpat_x_assum `store_copy_normalize s t = _`
+           (mp_tac o AP_TERM ``\z:venom_state. z.vs_accounts``) >>
+         simp[assign_base_store_backend_fold,store_copy_normalize_def]) >>
+     qpat_x_assum `store_copy_normalize s t = _`
+       (mp_tac o AP_TERM ``\z:venom_state. z.vs_transient``) >>
+     simp[assign_base_store_backend_fold,store_copy_normalize_def]) >>
+  `stor_taint_ok cx tf t` by
+    (irule stor_taint_ok_selected_space >> simp[] >>
+     qexistsl_tac [`s`,`tn`,`tr`] >> simp[] >>
+     fs[ghost_inv_def] >> Cases_on `tr` >>
+     fs[contract_storage_def,contract_transient_def,vfmStateTheory.lookup_account_def] >>
+     metis_tac[ADD_COMM]) >>
+  `ghost_inv d ce cx fin H tf t` by
+    (irule pop_header_ghost_transport >> simp[] >>
+     qexistsl_tac [`G`,`es`,`s`,`sa`,`tn`] >> simp[] >>
+     simp[Abbr `fin`] >> fs[ghost_inv_def] >> metis_tac[]) >>
+  `ghost_kept ce es sa G tn s H tf` by
+    (irule ghost_kept_old_transport >> simp[] >> metis_tac[]) >>
+  asm_rewrite_tac[]
+QED
