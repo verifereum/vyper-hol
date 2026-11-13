@@ -44,22 +44,6 @@ Libs
 
 (* ===== The source side (S1 exports, memory-generic where needed) ===== *)
 
-(* S1 stmtSimAugAssign's gas_marked_exec_zero_prefix, at either memory
-   flag. *)
-Theorem gas_marked_exec_zero_prefix_mem_src[local]:
-  gas_marked_path memory ctx func s0 0 (OK t) /\
-  gas_marked_exec memory (ctx,func) source (es with gas_obs := [],t)
-    marks res ee r ==>
-  gas_marked_exec memory (ctx,func) source (es,s0) marks res ee r
-Proof
-  strip_tac >>
-  `gas_explicit marks s0.vs_gas_readings =
-   gas_explicit marks t.vs_gas_readings` by
-    (drule gas_marked_path_ok_suffix >> simp[]) >>
-  gvs[gas_marked_exec_def] >>
-  drule_all gas_marked_path_then >> simp[]
-QED
-
 (* S1 stmtSimAugAssignStorage's augassign_toplevel_rhs_exception_exec, at
    either memory flag: x's root is recorded by the target's lookup, e runs
    from there. *)

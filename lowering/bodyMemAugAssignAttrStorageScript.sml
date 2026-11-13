@@ -46,74 +46,6 @@ Libs
 
 (* ===== The source side (S1 copies) ===== *)
 
-(* S1 stmtSimAugAssignAttrStorage's augassign_storage_field_read ([local]
-   there): an observed struct root's field reads, and in every state related
-   at a horizon observing the root, the backend holds the field's value. *)
-Theorem augassign_storage_field_read_mem_src[local]:
-  !(H:(bool # bytes32 # type_value) list # num list) cx es tr slot fs fld off
-   ftv ty.
-    MEM (tr,n2w slot,StructTV fs) (FST H) /\ regions_consistent (FST H) /\
-    storage_well_formed_on cx es (FST H) /\
-    well_formed_type_value (StructTV fs) /\
-    struct_field_slot fs fld = SOME (off, ftv) /\
-    evaluate_type (get_tenv cx) ty = SOME ftv ==>
-    ?cur. read_storage_slot cx tr (n2w slot + n2w off) ftv es =
-            (INL cur, es) /\
-          !ctx func cenv s.
-            stmt_state_rel H ctx func cenv cx es s ==>
-            storage_holds cx tr ty (Value cur) (n2w slot + n2w off) es s
-Proof
-  rpt gen_tac >> strip_tac >>
-  `?v. read_storage_slot cx tr (n2w slot) (StructTV fs) es = (INL v, es)` by
-    (`storage_well_formed_on cx es (FST H) /\ MEM (tr,n2w slot,StructTV fs) (FST H) /\
-      well_formed_type_value (StructTV fs)` by simp[] >>
-     pop_assum mp_tac >>
-     rw[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
-     first_x_assum drule >> strip_tac >>
-     drule_all vyperLookupStorageTheory.decode_value_from_slots_in_range >>
-     strip_tac >> qexists_tac `v` >>
-     gvs[read_storage_slot_def, bind_def, lift_option_def, return_def,
-         vyperStorageBackendTheory.get_storage_backend_eq]) >>
-  pop_assum strip_assume_tac >>
-  drule_all read_storage_slot_field >> strip_tac >>
-  `slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32))
-     (StructTV fs)` by
-    fs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
-  drule_all vyperLookupStorageTheory.storage_field_slots_in_range >>
-  strip_tac >>
-  `!st. storage_read_live H tr st (n2w slot) (StructTV fs)` by
-    metis_tac[accountsRelPropsTheory.observed_storage_region_read_live] >>
-  `w2n ((n2w slot):bytes32) + type_slot_size (StructTV fs) <=
-   dimword (:256)` by
-    (fs[vyperStorageFootprintTheory.regions_consistent_def] >>
-     qpat_x_assum `!b slot tv. MEM _ _ ==> _` (drule_then mp_tac) >> simp[]) >>
-  qexists_tac `fv` >> simp[storage_holds_def, read_result_def, return_def] >>
-  rpt strip_tac >>
-  irule storage_range_agree_field >> goal_assum (drule_at Any) >>
-  irule (INST_TYPE [alpha |-> ``:256``] storage_range_agree_of_live) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl_tac [`H`, `tr`] >> simp[] >> Cases_on `tr` >>
-  gvs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
-      vyperStorageBackendTheory.get_storage_def,
-      vfmStateTheory.lookup_account_def]
-QED
-
-(* S1 stmtSimAugAssign's gas_marked_exec_zero_prefix, at either memory
-   flag. *)
-Theorem gas_marked_exec_zero_prefix_mem_src:
-  gas_marked_path memory ctx func s0 0 (OK t) /\
-  gas_marked_exec memory (ctx,func) source (es with gas_obs := [],t)
-    marks res ee r ==>
-  gas_marked_exec memory (ctx,func) source (es,s0) marks res ee r
-Proof
-  strip_tac >>
-  `gas_explicit marks s0.vs_gas_readings =
-   gas_explicit marks t.vs_gas_readings` by
-    (drule gas_marked_path_ok_suffix >> simp[]) >>
-  gvs[gas_marked_exec_def] >>
-  drule_all gas_marked_path_then >> simp[]
-QED
-
 (* S1 stmtSimAugAssignAttrStorage's augassign_storage_place_rhs_exception,
    lifted to the marked execution at either memory flag.  The target's
    place is looked up first (recording evs), e runs from there. *)
@@ -517,7 +449,7 @@ Resume compile_augassign_attr_storage_mem[load]:
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
   `well_formed_type_value (StructTV fs) /\ well_formed_type_value ftv` by
     metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
-  drule_all augassign_storage_field_read_mem_src >> strip_tac >>
+  drule_all stmtSimAugAssignAttrStorageTheory.augassign_storage_field_read >> strip_tac >>
   rename1 `read_storage_slot _ _ _ _ _ = (INL v0, _)` >>
   qspecl_then [`n2w slot`, `n2w off`, `sa`, `dst`, `sn`, `tr`, `cur_op`, `s1`,
     `func`, `s0`, `cenv`, `ctx`, `cx`, `es`, `ty`, `v0`, `ftv`] mp_tac

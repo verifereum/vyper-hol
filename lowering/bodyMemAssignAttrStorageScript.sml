@@ -324,7 +324,7 @@ Proof
   impl_tac >- (simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   strip_tac >> qexistsl_tac [`v`, `u`] >>
   conj_tac >- (rpt conj_tac >> simp[]) >> simp[] >> conj_tac
-  >- (irule gas_marked_exec_zero_prefix_mem_src >>
+  >- (irule stmtSimAugAssignTheory.gas_marked_exec_zero_prefix >>
       goal_assum (drule_at Any) >>
       `ee with gas_obs := [] = ee` by
         simp[vyperStateTheory.evaluation_state_component_equality] >> simp[]) >>

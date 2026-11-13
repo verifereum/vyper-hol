@@ -154,20 +154,6 @@ Proof
   simp[GSYM bind_assoc, bind_def]
 QED
 
-Theorem gas_marked_exec_zero_prefix_mem_src[local]:
-  gas_marked_path memory ctx func s0 0 (OK t) /\
-  gas_marked_exec memory (ctx,func) source (es with gas_obs := [],t)
-    marks res ee r ==>
-  gas_marked_exec memory (ctx,func) source (es,s0) marks res ee r
-Proof
-  strip_tac >>
-  `gas_explicit marks s0.vs_gas_readings =
-   gas_explicit marks t.vs_gas_readings` by
-    (drule gas_marked_path_ok_suffix >> simp[]) >>
-  gvs[gas_marked_exec_def] >>
-  drule_all gas_marked_path_then >> simp[]
-QED
-
 Theorem augassign_attr_rhs_exception_exec_mem_src[local]:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -179,7 +165,7 @@ Theorem augassign_attr_rhs_exception_exec_mem_src[local]:
     (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
     (es,s0) marks (INR ex) ee r
 Proof
-  strip_tac >> drule_all gas_marked_exec_zero_prefix_mem_src >>
+  strip_tac >> drule_all stmtSimAugAssignTheory.gas_marked_exec_zero_prefix >>
   rewrite_tac[gas_marked_exec_def] >> strip_tac >> simp[] >>
   gen_tac >> irule augassign_attr_rhs_exception_mem_src >> simp[] >> metis_tac[]
 QED
@@ -201,7 +187,7 @@ Theorem augassign_attr_rhs_normal_exec_mem_src[local]:
     (es,s0) marks res fin r
 Proof
   strip_tac >>
-  drule_all gas_marked_exec_zero_prefix_mem_src >> strip_tac >>
+  drule_all stmtSimAugAssignTheory.gas_marked_exec_zero_prefix >> strip_tac >>
   `gas_marked_exec memory (ctx,func)
     (do v <- bind (eval_expr cx e) (read_result cx);
         w <- lift_sum (evaluate_binop

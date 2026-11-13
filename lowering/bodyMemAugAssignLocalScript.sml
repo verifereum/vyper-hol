@@ -216,56 +216,6 @@ Proof
   gvs[stmt_res_ok_def, expr_res_ok_def]
 QED
 
-(* S1 stmtSimAugAssign's gas_marked_exec_zero_prefix, at either memory
-   flag. *)
-Theorem gas_marked_exec_zero_prefix_mem_src[local]:
-  gas_marked_path memory ctx func s0 0 (OK t) /\
-  gas_marked_exec memory (ctx,func) source (es with gas_obs := [],t)
-    marks res ee r ==>
-  gas_marked_exec memory (ctx,func) source (es,s0) marks res ee r
-Proof
-  strip_tac >>
-  `gas_explicit marks s0.vs_gas_readings =
-   gas_explicit marks t.vs_gas_readings` by
-    (drule gas_marked_path_ok_suffix >> simp[]) >>
-  gvs[gas_marked_exec_def] >>
-  drule_all gas_marked_path_then >> simp[]
-QED
-
-(* S1 stmtSimAugAssign's augassign_rhs_bad_storage, at either memory
-   flag. *)
-Theorem augassign_rhs_bad_storage_mem_src[local]:
-  lookup_scopes id es.scopes = SOME entry /\
-  gas_marked_path memory ctx func s0 0 (OK t) /\
-  gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
-    (es with gas_obs := []) t marks ==>
-  gas_bad_storage_at cx st0 (eval_stmt cx (AugAssign ty (NameTarget id) bop e))
-    es s0 marks
-Proof
-  strip_tac >>
-  `gas_explicit marks s0.vs_gas_readings =
-   gas_explicit marks t.vs_gas_readings` by
-    (drule gas_marked_path_ok_suffix >> simp[]) >>
-  `gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
-     es s0 marks` by fs[gasStorageTheory.gas_bad_storage_at_def] >>
-  `gas_bad_storage_at cx st0
-     (do v <- bind (eval_expr cx e) (read_result cx);
-         r <- lift_sum (evaluate_binop
-           (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-           entry.type bop entry.value v);
-         write_place cx (MemoryPlace id []) r od) es s0 marks` by
-    (irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[] >>
-     gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-     simp[vyperStorageTraceTheory.storage_trace_frame_lifts,
-          vyperStorageTraceTheory.storage_trace_frame_write_place]) >>
-  fs[gasStorageTheory.gas_bad_storage_at_def] >> gen_tac >>
-  first_x_assum (qspec_then `tail` mp_tac) >>
-  `lookup_scopes id
-     (es with gas_obs := gas_explicit marks t.vs_gas_readings ++ tail).scopes =
-   SOME entry` by simp[] >>
-  drule eval_augassign_local_forced_mem_src >> simp[]
-QED
-
 (* S1 stmtSimAugAssign's augassign_rhs_exception_exec, at either memory
    flag. *)
 Theorem augassign_rhs_exception_exec_mem_src[local]:
@@ -277,7 +227,7 @@ Theorem augassign_rhs_exception_exec_mem_src[local]:
     (eval_stmt cx (AugAssign ty (NameTarget id) bop e))
     (es,s0) marks (INR ex) ee r
 Proof
-  strip_tac >> drule_all gas_marked_exec_zero_prefix_mem_src >>
+  strip_tac >> drule_all stmtSimAugAssignTheory.gas_marked_exec_zero_prefix >>
   simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
   gen_tac >> irule augassign_rhs_exception_mem_src >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
@@ -300,7 +250,7 @@ Theorem augassign_rhs_normal_exec_mem_src[local]:
     (es,s0) marks res fin r
 Proof
   strip_tac >>
-  drule_all gas_marked_exec_zero_prefix_mem_src >> strip_tac >>
+  drule_all stmtSimAugAssignTheory.gas_marked_exec_zero_prefix >> strip_tac >>
   gvs[gas_marked_exec_def] >> conj_tac
   >- (gen_tac >>
       qpat_x_assum `!tail. bind (eval_expr cx e) _ _ = _`
@@ -529,7 +479,7 @@ Resume compile_augassign_local_mem[rhs_outcome]:
       fs[stmt_state_rel_start_gas_obs]) >>
   rewrite_tac[gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
-      irule (Q.INST [`memory` |-> `T`] augassign_rhs_bad_storage_mem_src) >>
+      irule (Q.INST [`memory` |-> `T`] stmtSimAugAssignTheory.augassign_rhs_bad_storage_any) >>
       conj_tac
       >- (qexists_tac `entry` >> simp[]) >>
       qexistsl_tac [`ctx`, `func`, `t`] >> simp[])
@@ -546,7 +496,7 @@ Resume compile_augassign_local_mem[rhs_summary]:
   Cases_on `gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
               (es with gas_obs := []) t marks`
   >- (disj1_tac >>
-      irule (Q.INST [`memory` |-> `T`] augassign_rhs_bad_storage_mem_src) >>
+      irule (Q.INST [`memory` |-> `T`] stmtSimAugAssignTheory.augassign_rhs_bad_storage_any) >>
       conj_tac
       >- (qexists_tac `entry` >> simp[]) >>
       qexistsl_tac [`ctx`, `func`, `t`] >> simp[]) >>
