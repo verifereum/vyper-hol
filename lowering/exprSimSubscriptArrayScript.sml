@@ -135,7 +135,8 @@ Resume compile_subscript_array_framed_base_case[base_exit]:
     pure_once_rewrite_tac[MATCH_MP exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind th]) >>
   conj_tac
   >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
-      first_assum ACCEPT_TAC) >> fs[]
+      first_assum ACCEPT_TAC) >>
+  fs[] >> disj2_tac >> first_assum ACCEPT_TAC
 QED
 Resume compile_subscript_array_framed_base_case[base_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
@@ -178,7 +179,14 @@ Resume compile_subscript_array_framed_base_case[base_normal]:
   qpat_x_assum `~s0.vs_halted` kall_tac >>
   qpat_x_assum `s0.vs_current_bb = _` kall_tac >>
   qpat_x_assum `s0.vs_inst_idx = _` kall_tac >>
-  pure_rewrite_tac[GSYM gasOutcomeTheory.gas_outcome_def] >>
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_expr cx (Subscript ann obj idx)) (es,s0)
+     (\H res ee t'. ?tv. res = INL tv /\
+        vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sb s0 ee tv
+          (LocatedValue ann (mk_ptr dst loc)) t' /\
+        t'.vs_current_bb = sb.cs_current_bb /\
+        t'.vs_inst_idx = LENGTH sb.cs_current_insts)
+     (\H res ee out. expr_exit res out)` suffices_by
+    simp[gasOutcomeTheory.gas_outcome_def] >>
   qpat_assum `~subscript_reads_base _ _ _`
     (irule o MATCH_MP framed_array_after_base) >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >> simp[] >>
@@ -196,6 +204,11 @@ Resume compile_subscript_array_framed_base_case[base_normal]:
      qexists_tac `ann` >> simp[]) >>
   `expr_sim_case nocalls ctx func cenv cx idx` by metis_tac[] >>
   conj_tac
+  >- (gen_tac >> strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (qspec_then `H` mp_tac) >>
+      simp[loweringPostsTheory.vv_post_def]) >>
+  conj_tac
   >- metis_tac[gasSummaryTheory.gas_marked_exec_def,
                fragGasModeTheory.gas_marked_path_exec, fragGasPathTheory.gas_path_normal] >>
   conj_tac >- metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
@@ -204,11 +217,6 @@ Resume compile_subscript_array_framed_base_case[base_normal]:
   >- (simp[gasContextTheory.gas_admissible_def] >> rpt strip_tac >>
       `expr_body_pre cenv cx env idx (es_end with gas_obs := gs)` by fs[] >>
       drule_all (REWRITE_RULE [ETA_THM] expr_body_pre_res_ok) >> simp[]) >>
-  conj_tac
-  >- (gen_tac >> strip_tac >>
-      qpat_x_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-        (qspec_then `H` mp_tac) >>
-      simp[loweringPostsTheory.vv_post_def]) >>
   qpat_x_assum `expr_sim_case _ _ _ _ _ idx` mp_tac >>
   simp[expr_sim_case_def] >> disch_then irule >>
   conj_tac >- (strip_tac >> fs[int_calls_expr_def]) >>
@@ -276,8 +284,11 @@ Resume compile_subscript_array_framed_base_case[base_suffix]:
         metis_tac[pairTheory.FST] >>
       Cases_on `bvv` >>
       gvs[contextTheory.vv_location_def] >>
-      qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
-        (mp_tac o CONJUNCT1 o CONJUNCT2 o
+      qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==>
+                      vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (qspec_then `Hw` mp_tac) >>
+      (impl_tac >- metis_tac[]) >>
+      disch_then (mp_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o
          REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
       simp[loweringPostsTheory.vv_holds_def, compileEnvTheory.is_bytestring_type_def] >> rpt strip_tac >>
       gvs[Abbr `loc`, contextTheory.vv_location_def]) >>
