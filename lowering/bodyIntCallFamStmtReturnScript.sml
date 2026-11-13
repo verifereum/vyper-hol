@@ -69,7 +69,7 @@ Proof
   strip_tac >> Cases_on `eo`
   >- (irule intcall_bare_return_unlock_producer >> simp[]) >>
   rename1 `Return (SOME e)` >>
-  irule intcall_valued_return_from_endpoint >> conj_tac
+  irule intcall_valued_return_from_endpoint >> reverse conj_tac
   >- metis_tac[] >>
   rpt gen_tac >> strip_tac >>
   irule intcall_return_unlock_endpoint >> metis_tac[]
