@@ -288,6 +288,10 @@ Proof
   fs[ctx_pass_stage_def, run_context_def, run_function_def]
 QED
 
+(* The fuel packets run at the whole cut, where every state is inside it. *)
+fun ld_whole th = SIMP_RULE bool_ss [gas_cut_whole]
+  (Q.INST [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`] th);
+
 val ldStepClauseFuel = fst (dest_conj (fst (dest_imp
   (concl ld_runner_conditional_induction_fuel))));
 
@@ -298,13 +302,12 @@ Proof
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[] >>
-  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s` by simp[] >>
   `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
     fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
   drule_at (Pat `terminates _`) ld_terminating_invoke_inversion >>
   disch_then (qspecl_then [`s`, `fuel`, `inst`, `C`] mp_tac) >>
   simp[] >> strip_tac >>
-  drule_all lower_dload_stage_invoke_entry >> strip_tac >>
+  drule_all (ld_whole lower_dload_stage_invoke_entry) >> strip_tac >>
   first_x_assum (drule_all_then strip_assume_tac o
     SIMP_RULE bool_ss [PULL_EXISTS]) >>
   gvs[] >>
@@ -323,7 +326,7 @@ Resume ld_runner_step_clause_fuel[return]:
   `cs.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address` by
     metis_tac[ld_setup_callee_call_ctx] >>
   drule_at (Pat `ld_joint_boundary _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    (SIMP_RULE bool_ss [PULL_EXISTS] ld_return_endpoint_consume) >>
+    (SIMP_RULE bool_ss [PULL_EXISTS] (ld_whole ld_return_endpoint_consume)) >>
   simp[] >> disch_then (drule_all_then strip_assume_tac) >>
   `s1.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address` by
     (qpat_x_assum `bind_outputs _ jr.iret_values _ = _` kall_tac >>

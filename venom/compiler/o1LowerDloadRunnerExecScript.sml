@@ -393,6 +393,10 @@ val _ = if null (hyp ld_runner_exec_clause) andalso
                aconv (concl ld_runner_exec_clause) ldExecClause
         then () else raise Fail "exec clause audit failed";
 
+(* The fuel packets run at the whole cut, where every state is inside it. *)
+fun ld_whole th = SIMP_RULE bool_ss [gas_cut_whole]
+  (Q.INST [`ncut` |-> `SUC (LENGTH vs.vs_gas_readings)`] th);
+
 val ldExecClauseFuel = snd (dest_conj (fst (dest_imp
   (concl ld_runner_conditional_induction_fuel))));
 
@@ -407,14 +411,13 @@ Proof
     (drule ld_joint_source >>
      disch_then (strip_assume_tac o MATCH_MP occ_frame_reachable_projection) >>
      fs[Once frame_reachable_cases] >> metis_tac[]) >>
-  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s` by simp[] >>
   `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs /\
    taint_within_upto D (SUC (LENGTH vs.vs_gas_readings)) C vs /\
    fmp_free_ctx C` by fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
   Cases_on `i.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s`
   >- (fs[] >>
       `exec_block fuel C bb s = exec_block fuel C bb s` by simp[] >>
-      drule_all ld_runner_forward_endpoint >>
+      drule_all (ld_whole ld_runner_forward_endpoint) >>
       strip_tac >> gvs[Abbr `RR`]) >>
   Cases_on `step_inst fuel C i s`
   >- suspend "ok"
@@ -428,7 +431,7 @@ QED
 Resume ld_runner_exec_clause_fuel[ok]:
   `~v.vs_halted` by metis_tac[ld_step_ok_halted] >>
   Cases_on `is_terminator i.inst_opcode`
-  >- (drule_all ld_runner_branch_endpoint >> strip_tac >>
+  >- (drule_all (ld_whole ld_runner_branch_endpoint) >> strip_tac >>
       `exec_block fuel C bb s = OK v` by simp[Once exec_block_def] >>
       fs[Abbr `RR`] >> metis_tac[]) >>
   `v.vs_current_bb = s.vs_current_bb /\
@@ -443,7 +446,7 @@ Resume ld_runner_exec_clause_fuel[ok]:
     (spose_not_then assume_tac >>
      fs[in_revert_forward_def, revert_forward_at_def, revert_forward_pair_def] >>
      gvs[] >> fs[is_terminator_def]) >>
-  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ld_joint_noncall_continue) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] (ld_whole ld_joint_noncall_continue)) >>
   strip_tac >>
   `wf_function fn` by
     (drule ld_joint_source >> strip_tac >> drule occ_frame_reachable_annotation >>
@@ -476,7 +479,7 @@ Resume ld_runner_exec_clause_fuel[halt]:
       `exec_block fuel C' bb' t = Halt te` by simp[Once exec_block_def] >>
       gvs[Abbr `RR`]) >>
   `taint_within D C vs` by fs[o1_src_inv_def] >>
-  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ld_runner_halt_endpoint) >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] (ld_whole ld_runner_halt_endpoint)) >>
   strip_tac >> gvs[Abbr `RR`]
 QED
 
@@ -490,7 +493,7 @@ Resume ld_runner_exec_clause_fuel[abort]:
       drule_all ld_joint_unchanged_fetch >> strip_tac >>
       `exec_block fuel C' bb' t = Abort reason te` by simp[Once exec_block_def] >>
       gvs[Abbr `RR`]) >>
-  drule_all ld_runner_abort_endpoint >>
+  drule_all (ld_whole ld_runner_abort_endpoint) >>
   strip_tac >> gvs[Abbr `RR`]
 QED
 
@@ -511,7 +514,7 @@ Resume ld_runner_exec_clause_fuel[ret]:
     (drule step_inst_intret_opcodes >>
      fs[no_dret_def, EVERY_MEM] >> strip_tac >>
      gvs[is_raw_fmp_opcode_def]) >>
-  drule_all ld_runner_ret_endpoint >> strip_tac >>
+  drule_all (ld_whole ld_runner_ret_endpoint) >> strip_tac >>
   fs[Abbr `RR`] >> metis_tac[]
 QED
 
