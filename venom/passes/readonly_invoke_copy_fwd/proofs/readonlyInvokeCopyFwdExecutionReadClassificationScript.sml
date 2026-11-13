@@ -273,7 +273,7 @@ Theorem ricf_execution_observer_read:
   EVERY fn_inst_wf C.ctx_functions /\ mem_inv raw_mem_ok C vs /\
   ricf_full_alloca_copies fn /\ ricf_src_alloca fn /\
   ptr_discipline lo C vs /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
-  MEM inst.inst_opcode [SHA3;LOG;CALL;STATICCALL] /\
+  MEM inst.inst_opcode [SHA3;LOG;CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2] /\
   mem_read_ops inst = SOME ops /\ ops.iao_ofst = addr /\
   (!name. addr = Var name ==> ~retpc_var fn name) /\
   op_taint tn addr = {} /\ eval_operand addr s = SOME x /\
