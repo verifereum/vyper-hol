@@ -199,3 +199,98 @@ Proof
   once_rewrite_tac[phis_taint_prefix] >>
   irule phis_taint_update_commute >> simp[Abbr `prev`, Abbr `xs`]
 QED
+
+Theorem ricf_operational_fresh_alloca:
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ active_inst fn inst s /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit amount] /\
+  inst.inst_outputs = [out] /\ FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  ricf_cert_core D ids stk PG G tn fn sites maps targets G0 tn0 cur curs s t /\
+  ricf_heterogeneous_source_ledger vs C stk PG G tn fn inst s n a U B HP H ledger /\
+  occurrence_natural_geometry lo a U B stk s /\
+  ricf_global_support_origins vs C ctx0 a fn U stk B E /\
+  ricf_support_agree B E tn s t /\
+  ricf_map_origins vs C ctx0 log stk PG G tn fn inst s U B sites /\
+  ricf_saved_map_origins vs C ctx0 log stk U B maps /\
+  cur = ricf_phase_ranges 0 ledger /\ curs = ricf_phase_stack_ranges stk ledger ==>
+  ?u v H1 tn1.
+    step_inst fuel C inst s = OK u /\ step_inst fuel C' inst t = OK v /\
+    ricf_support_agree (occurrence_sites_step a B inst u) E
+      (step_taint inst s u tn) u v /\
+    ricf_global_support_origins vs C ctx0 a fn U stk (occurrence_sites_step a B inst u) E /\
+    ricf_cert_core D ids stk PG (step_prov PG G inst u) (step_taint inst s u tn)
+      fn sites maps targets H1 tn1 cur curs u v /\
+    (!next. active_inst fn next (u with vs_inst_idx := SUC s.vs_inst_idx) ==>
+      ricf_heterogeneous_source_ledger vs C stk PG (step_prov PG G inst u)
+        (step_taint inst s u tn) fn next (u with vs_inst_idx := SUC s.vs_inst_idx)
+        n a U (occurrence_sites_step a B inst u) HP (occurrence_step a HP H inst u) ledger)
+Proof
+  strip_tac >>
+  `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
+    fs[ricf_heterogeneous_source_ledger_def] >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[occ_frame_reachable_projection] >>
+  `G = ricf_effective_prov fn s G0 /\ tn = ricf_effective_taint fn s tn0 /\
+   s.vs_allocas = t.vs_allocas /\ s.vs_alloca_next = t.vs_alloca_next` by
+    (fs[ricf_cert_core_def, ricf_live_boundary_core_def, ricf_frame_agree_def,
+        ricf_effective_prov_def, ricf_effective_taint_def] >>
+     drule taint_agree_allocation_fields >> simp[]) >>
+  qabbrev_tac `us = s with
+    <|vs_allocas := s.vs_allocas |+ (inst.inst_id,(s.vs_alloca_next,w2n amount));
+      vs_alloca_next := s.vs_alloca_next+w2n amount|>` >>
+  qabbrev_tac `ut = t with
+    <|vs_allocas := t.vs_allocas |+ (inst.inst_id,(t.vs_alloca_next,w2n amount));
+      vs_alloca_next := t.vs_alloca_next+w2n amount|>` >>
+  qabbrev_tac `un = tn0 with t_mem := tn0.t_mem UNION
+    {i | s.vs_alloca_next <= i /\ i < s.vs_alloca_next+w2n amount}` >>
+  ` (a,inst.inst_id) NOTIN E /\
+    step_inst_base inst s = OK (update_var out (n2w s.vs_alloca_next) us) /\
+    step_inst_base inst t = OK (update_var out (n2w s.vs_alloca_next) ut) /\
+    ricf_cert_core D ids stk PG
+      (ricf_effective_prov fn (update_var out (n2w s.vs_alloca_next) us)
+        (set_prov G0 [out] (SOME (s.vs_alloca_next,w2n amount))))
+      (ricf_effective_taint fn (update_var out (n2w s.vs_alloca_next) us)
+        (un with t_var := set_var_taint un.t_var [out] {})) fn sites maps targets
+      (set_prov G0 [out] (SOME (s.vs_alloca_next,w2n amount)))
+      (un with t_var := set_var_taint un.t_var [out] {}) cur curs
+      (update_var out (n2w s.vs_alloca_next) us)
+      (update_var out (n2w s.vs_alloca_next) ut)` by
+    (irule ricf_history_guarded_fresh_alloca >>
+     simp[Abbr `us`, Abbr `ut`, Abbr `un`] >> metis_tac[]) >>
+  `!f. MEM f C.ctx_functions ==> wf_function f /\ fn_inst_wf f /\ wf_ssa f` by
+    fs[EVERY_MEM] >>
+  qabbrev_tac `u = update_var out (n2w s.vs_alloca_next) us` >>
+  qabbrev_tac `v = update_var out (n2w s.vs_alloca_next) ut` >>
+  qabbrev_tac `H1 = set_prov G0 [out] (SOME (s.vs_alloca_next,w2n amount))` >>
+  qabbrev_tac `tn1 = un with t_var := set_var_taint un.t_var [out] {}` >>
+  `ricf_effective_prov fn u H1 = step_prov PG G inst u /\
+   ricf_effective_taint fn u tn1 = step_taint inst s u tn /\
+   ricf_effective_prov fn (u with vs_inst_idx := SUC s.vs_inst_idx) H1 =
+     ricf_effective_prov fn u H1 /\
+   ricf_effective_taint fn (u with vs_inst_idx := SUC s.vs_inst_idx) tn1 =
+     ricf_effective_taint fn u tn1` by
+    (irule ricf_actual_fresh_alloca_annotations >>
+     simp[Abbr `u`, Abbr `us`, Abbr `H1`, Abbr `tn1`, Abbr `un`] >> metis_tac[]) >>
+  `step_inst fuel C inst s = OK u /\ step_inst fuel C' inst t = OK v` by
+    simp[venomExecSemanticsTheory.step_inst_non_invoke, Abbr `u`, Abbr `v`] >>
+  drule_all ricf_support_actual_fresh_alloca >> strip_tac >> gvs[] >>
+  qexistsl_tac [`H1`,`tn1`] >> simp[] >>
+  conj_tac >- (
+    `!f st ta. (ricf_effective_taint f st ta).t_mem = ta.t_mem` by
+      (rpt gen_tac >> simp[ricf_effective_taint_def] >>
+       Cases_on `st.vs_prev_bb = NONE` >> simp[entry_taint_vars_def] >>
+       Cases_on `lookup_block st.vs_current_bb f.fn_blocks` >> simp[]) >>
+    qpat_x_assum `ricf_effective_taint fn u tn1 = _`
+      (mp_tac o AP_TERM ``\x:taint. x.t_mem``) >>
+    simp[Abbr `tn1`, Abbr `un`] >>
+    strip_tac >> fs[ricf_support_agree_def]) >>
+  conj_tac
+  >- (irule ricf_global_support_next >>
+      `occurrence_allocas_ok B a s` by
+        (drule occ_frame_reachable_annotation >> simp[occurrence_annotation_ok_def]) >>
+      metis_tac[]) >>
+  rpt strip_tac >>
+  irule ricf_heterogeneous_source_ledger_actual_next >>
+  simp[venomInstTheory.is_terminator_def] >> metis_tac[]
+QED
