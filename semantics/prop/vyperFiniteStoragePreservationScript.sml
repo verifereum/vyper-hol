@@ -12,7 +12,7 @@ Ancestors
 Libs
   wordsLib
 
-Theorem storage_well_formed_on_stk[local]:
+Theorem storage_well_formed_on_stk:
   storage_well_formed_on (cx with stk updated_by f) st R <=>
   storage_well_formed_on cx st R
 Proof
@@ -21,14 +21,14 @@ Proof
   simp[storage_well_formed_on_def]
 QED
 
-Theorem storage_well_formed_on_scopes[local]:
+Theorem storage_well_formed_on_scopes:
   storage_well_formed_on cx (st with scopes := sc) R <=>
   storage_well_formed_on cx st R
 Proof
   irule storage_well_formed_on_backends >> simp[]
 QED
 
-Theorem storage_observations_ok_stk[local]:
+Theorem storage_observations_ok_stk:
   storage_observations_ok (cx with stk updated_by f) H tr <=>
   storage_observations_ok cx H tr
 Proof
@@ -54,7 +54,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem default_finally_result[local]:
+Theorem default_finally_result:
   finally (do set_scopes [FEMPTY]; eval_exprs cxd ds od)
     (set_scopes base_st.scopes) base_st = (res,out) ==>
   ?framed. eval_exprs cxd ds (base_st with scopes := [FEMPTY]) = (res,framed) /\
@@ -246,7 +246,7 @@ Proof
    simp[MEM_APPEND])
 QED
 
-Theorem eval_target_place_observed_region[local]:
+Theorem eval_target_place_observed_region:
   eval_target_place cx bt st = (INL (StoragePlace b slot leaf),st') ==>
   ?offset tv path delta.
     MEM (StorageRoot b offset tv) st'.storage_trace /\
@@ -378,7 +378,7 @@ Proof
   gvs[] >> simp[word_add_def, w2n_n2w, arithmeticTheory.MOD_LESS]
 QED
 
-Theorem write_place_preserves_storage_well_formed_on[local]:
+Theorem write_place_preserves_storage_well_formed_on:
   regions_consistent (FST H) /\ storage_well_formed_on cx st (FST H) /\
   storage_observations_ok cx H observations /\
   (!b slot leaf. p = StoragePlace b slot leaf ==>
@@ -3117,7 +3117,9 @@ Resume eval_storage_well_formed_on_mutual[Expr_Call_ExtCall]:
                    (drule o SIMP_RULE (srw_ss()) []) >>
                  disch_then drule >> strip_tac >> first_x_assum drule_all >> simp[]) >>
               metis_tac[eval_ext_call_preserves_storage_well_formed_on]) >>
-          strip_tac >> gvs[] >>
+          strip_tac >>
+          qpat_x_assum `INR y = res` (SUBST_ALL_TAC o SYM) >>
+          qpat_x_assum `kw_st = st'` (SUBST_ALL_TAC o SYM) >>
           `storage_observations_ok cx H capture_st.storage_trace` by
             metis_tac[storage_trace_frame_prefix, cj 6 evaluate_storage_trace_frame,
                       storage_observations_ok_prefix] >>
@@ -3130,14 +3132,14 @@ Resume eval_storage_well_formed_on_mutual[Expr_Call_ExtCall]:
           `runtime_consistent env cx target_st` by
             metis_tac[eval_exprs_preserves_runtime_consistent] >>
           `storage_well_formed_on cx capture_st (FST H)` by
-            (qpat_x_assum `!s target t. _ ==> _`
+            (qpat_x_assum `!s target t nargs. eval_exprs _ _ _ = _ /\ _ ==> _`
                (drule o SIMP_RULE (srw_ss()) []) >>
              strip_tac >> first_x_assum drule_all >> simp[]) >>
           `runtime_consistent env cx capture_st` by
             (fs[vyperTypeExprSoundnessTheory.runtime_consistent_def] >>
              drule_all (cj 1 (SPEC_ALL (cj 11 eval_scc_type_sound_results_mutual))) >>
              simp[vyperTypeExprSoundnessTheory.runtime_consistent_def]) >>
-          qpat_x_assum `!s target t s1 rs t1. _ ==> _`
+          qpat_x_assum `!s target t nargs s1 rs t1. _ ==> _`
             (drule o SIMP_RULE (srw_ss()) []) >>
           disch_then drule >> strip_tac >> first_x_assum drule_all >> simp[]) >>
       strip_tac >> gvs[] >>
