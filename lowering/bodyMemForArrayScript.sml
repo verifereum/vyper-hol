@@ -309,6 +309,11 @@ Proof
    ?env_b. type_stmts (extend_local env id typ F) ret_ty body = SOME env_b` by
     gvs[type_stmt_def, well_typed_iterator_def, expr_type_def,
         optionTheory.IS_SOME_EXISTS, AllCaseEqs()] >>
+  `~cx_const_name cx (src,name)` by
+    (drule body_inv_const_name_root >> strip_tac >>
+     drule_all (cj 1 supportedNameRootTheory.supported_stmts_no_name_root) >>
+     simp[supported_stmt_expr_exists_def, supported_iterator_exists_def,
+          supported_expr_exists_def, const_name_root_def]) >>
   drule_all immutable_array_source_ready >> strip_tac >>
   drule evaluate_type_ArrayT_cases >> strip_tac >> gvs[] >>
   rename1 `evaluate_type (get_tenv cx) typ = SOME tv` >>
