@@ -171,7 +171,7 @@ QED
    assembly goes on alone). *)
 Theorem asm_frame_run_requests:
   !n prog data es0 a es a1.
-    asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+    asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a es /\
     (asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
        prog n a = AsmHalt a1 \/
      asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
@@ -189,7 +189,7 @@ Proof
       gvs[is_data_inst_def, asm_step_def, asm_steps_def]) >>
   `a.as_requests ++ call_requests es = call_requests es0` by
     gvs[asm_frame_rel_def] >>
-  `asm_frame_step_ok prog data es0 a es` by (irule asm_frame_step >> simp[]) >>
+  `asm_frame_step_ok gas_tail prog data es0 a es` by (irule asm_frame_step >> simp[]) >>
   pop_assum mp_tac >> simp[asm_frame_step_ok_def] >> strip_tac
   >- (gvs[] >> metis_tac[asm_steps_requests]) >>
   Cases_on `asm_step (SND (compute_label_offsets prog))

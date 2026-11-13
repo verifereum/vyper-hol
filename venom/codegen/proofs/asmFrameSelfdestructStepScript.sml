@@ -6,7 +6,7 @@ Ancestors
   callTrace frameOutcome vfmExecution vfmExecutionProp vfmOperation asmEncodeParse
 
 Theorem frame_selfdestruct_singleton[local]:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a es /\
   a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "SELFDESTRUCT" /\
   (a.as_call_ctx.cc_created_in_tx =
    account_empty (lookup_account (FST (HD es.contexts)).msgParams.callee
@@ -84,9 +84,9 @@ Proof
 QED
 
 Theorem asm_frame_selfdestruct_step:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
   as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp "SELFDESTRUCT" ==>
-  asm_frame_step_ok prog data es0 as es
+  asm_frame_step_ok gas_tail prog data es0 as es
 Proof
   strip_tac >>
   `as.as_call_ctx.cc_created_in_tx =
