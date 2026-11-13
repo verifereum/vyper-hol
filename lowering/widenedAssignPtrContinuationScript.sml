@@ -1,6 +1,7 @@
 (* Compiler and execution composition for retained widened local assignments. *)
 Theory widenedAssignPtrContinuation
-Ancestors widenedAssignPtrTypedLocal widenedAssignPtrRhsInput
+Ancestors memoryLayoutDefs memoryLayoutSource memoryLayoutRel memoryValueEncoding
+  widenedAssignPtrTypedLocal widenedAssignPtrRhsInput
   widenedAssignPtrCopyRecursive widenedAssignPtrLocalLanding
   bodyPtrIfExpZeroStore bodyPtrIfExpReturnMetadata exprSimHypsDefs vyperTypeSystem vyperTypeInvariants
   loweringPosts externalReturnIntcallProducer
@@ -93,6 +94,28 @@ Theorem widened_assign_local_store_dispatch_ptr:
       op_taint tn' (Var x) = op_taint tn (Var x))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `tuple_memory_layout_eq dty sty`
+  >- (`memory_layout_key dty = memory_layout_key sty` by
+        (Cases_on `dty` >> Cases_on `sty` >>
+         gvs[tuple_memory_layout_eq_def, memory_layout_key_tuple]) >>
+      `memory_layout_rel entry.type stv` by metis_tac[memory_layout_key_evaluated] >>
+      `type_memory_size entry.type = type_memory_size stv` by
+        fs[memory_layout_rel_def] >>
+      `~is_bytestring_type dty` by
+        (Cases_on `dty` >> fs[tuple_memory_layout_eq_def, is_bytestring_type_def]) >>
+      `compile_store_memory cenv (Var src) (Var p) dty dty a = ((),b)` by
+        gvs[compile_store_memory_def] >>
+      `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+        val_in_memory entry.type v (w2n sw) m` by
+        (rpt strip_tac >> irule memory_value_rel_val_in_memory >> simp[] >>
+         irule memory_layout_rel_value >> qexists_tac `stv` >> simp[] >>
+         irule val_in_memory_memory_value_rel >> simp[]) >>
+      `es' = es with scopes := pre ++
+        (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest` by
+        (drule stmtSimAssignStoreTheory.write_place_local >> simp[] >> metis_tac[]) >>
+      mp_tac (Q.INST [`ty` |-> `dty`, `sa` |-> `a`, `sb` |-> `b`]
+        (SPEC_ALL assignBasePtrLocalCompilerStoreTheory.assign_base_local_store_memory_ptr)) >>
+      (impl_tac >- (simp[] >> metis_tac[])) >> simp[]) >>
   Cases_on `dty = sty \/ is_bytestring_type dty /\ is_bytestring_type sty`
   >- (`compile_store_memory cenv (Var src) (Var p) dty dty a = ((),b)` by
         metis_tac[compile_store_memory_bytestring_src] >>
