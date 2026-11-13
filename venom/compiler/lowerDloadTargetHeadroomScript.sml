@@ -42,22 +42,7 @@ Proof
   qpat_x_assum `t.vs_initial_fmp = _` (fn th => rewrite_tac[th]) >>
   qpat_x_assum `t.vs_alloca_next = _` (fn th => rewrite_tac[th]) >>
   conj_tac >- decide_tac >>
-  rpt strip_tac >>
-  drule ld_sync_active >> simp[] >> strip_tac >>
-  `d NOTIN f.lf_E` by
-    (spose_not_then assume_tac >>
-     drule_all ld_maps_private >> simp[]) >>
-  `set (MAP (\g. g.lf_fn) (f::fs)) SUBSET set C.ctx_functions` by
-    (qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[ld_sync_def, SUBSET_DEF, MEM_MAP, EVERY_MEM] >> rpt strip_tac >>
-     metis_tac[]) >>
-  `EVERY (ld_maps A) (f::fs)` by
-    (qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[ld_sync_def, EVERY_MEM] >>
-     metis_tac[]) >>
-  `ld_charge (f::fs) + 1 <= ctx_dload_count C` by
-    (irule ld_configured_charge_fresh_bound >> metis_tac[]) >>
+  rpt strip_tac >> drule_all ld_sync_fresh_charge >> strip_tac >>
   decide_tac
 QED
 

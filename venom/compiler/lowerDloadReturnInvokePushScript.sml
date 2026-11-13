@@ -331,12 +331,6 @@ Proof
   simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem ld_setup_callee_memory[local]:
-  setup_callee fn args s = SOME cs ==> cs.vs_memory = s.vs_memory
-Proof
-  simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
-QED
-
 Theorem ld_invoke_active_push:
   ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
@@ -436,13 +430,19 @@ Resume ld_invoke_active_push[sync]:
   conj_tac >-
     (qpat_assum `lookup_function nm C.ctx_functions = SOME callee` mp_tac >>
      rpt (pop_assum kall_tac) >> metis_tac[lookup_function_MEM]) >>
-  rpt conj_tac >>
+  rpt conj_tac
+  >~ [`ld_dyn_agree _ _ _ _`]
+  >- (qpat_assum `setup_callee _ _ s = SOME cs`
+        (strip_assume_tac o MATCH_MP
+           calleeTransportTheory.setup_callee_shared_fields) >>
+      qpat_assum `setup_callee _ _ t = SOME ct`
+        (strip_assume_tac o MATCH_MP
+           calleeTransportTheory.setup_callee_shared_fields) >>
+      qpat_assum `ld_sync _ _ _ _ stk _ _ _ _ _ _ _ _ (f::fs) _`
+        (mp_tac o MATCH_MP ld_sync_dyn_agree) >> fs[])
+  >~ [`ld_params_ok _ _ _ _`]
+  >- (irule ld_params_ok_arguments >> drule ld_sync_ghosts >> simp[]) >>
   FIRST [qexists_tac `X` >> fs[] >> NO_TAC,
-         (imp_res_tac ld_setup_callee_memory >> fs[] >>
-          qpat_assum `ld_sync _ _ _ _ stk _ _ _ _ _ _ _ _ (f::fs) _`
-            (mp_tac o MATCH_MP ld_sync_dyn_agree) >> simp[] >> NO_TAC),
-         (irule ld_params_ok_arguments >> drule ld_sync_ghosts >> simp[] >>
-          NO_TAC),
          fs[] >> NO_TAC,
          qexistsl_tac [`t`,`tn`] >> simp[] >> NO_TAC]
 QED

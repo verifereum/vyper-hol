@@ -241,12 +241,12 @@ Resume ld_sync_dloadbytes_prefix_raw[copy]:
 QED
 Finalise ld_sync_dloadbytes_prefix_raw
 
-Theorem ld_sync_scratch_fresh_headroom:
+(* A fresh private site is one more DLOAD the stack has not charged yet. *)
+Theorem ld_sync_fresh_charge:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  o1_ctx_shape C /\ mem_inv dload_headroom_ok C vs0 /\
   ALL_DISTINCT (MAP (\g. g.lf_fn) (f::fs)) /\
   ld_private f d ai /\ FLOOKUP t.vs_allocas ai = NONE ==>
-  t.vs_alloca_next + 32 < dimword(:256)
+  ld_charge (f::fs) + 1 <= ctx_dload_count C
 Proof
   strip_tac >>
   drule ld_sync_active >> simp[] >> strip_tac >>
@@ -260,8 +260,18 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[ld_sync_def, SUBSET_DEF, MEM_MAP, EVERY_MEM] >> rpt strip_tac >>
      metis_tac[]) >>
-  `ld_charge (f::fs) + 1 <= ctx_dload_count C` by
-    (irule ld_configured_charge_fresh_bound >> metis_tac[]) >>
+  irule ld_configured_charge_fresh_bound >> metis_tac[]
+QED
+
+Theorem ld_sync_scratch_fresh_headroom:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  o1_ctx_shape C /\ mem_inv dload_headroom_ok C vs0 /\
+  ALL_DISTINCT (MAP (\g. g.lf_fn) (f::fs)) /\
+  ld_private f d ai /\ FLOOKUP t.vs_allocas ai = NONE ==>
+  t.vs_alloca_next + 32 < dimword(:256)
+Proof
+  strip_tac >>
+  drule_all ld_sync_fresh_charge >> strip_tac >>
   `dload_headroom_ok C fn inst s` by
     (irule ld_sync_source_mem_inv >> metis_tac[]) >>
   drule ld_sync_frontier >> strip_tac >>
