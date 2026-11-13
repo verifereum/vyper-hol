@@ -858,3 +858,109 @@ Resume finite_prefix_AssertCustomError[arguments]:
 QED
 
 Finalise finite_prefix_AssertCustomError
+
+Theorem finite_prefix_BasePlaceRoot_AttributeTarget:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "BasePlaceRoot_AttributeTarget")
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_place_target _ (AttributeTarget _ _) = _` mp_tac >>
+  simp_tac(srw_ss())[vyperTypeEnvTheory.type_place_target_AttributeTarget] >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_target (AttributeTarget t id))` mp_tac >>
+  pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
+  qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+  Cases_on `eval_base_place cx t st` >> rename1 `eval_base_place cx t st = (br,st1)` >>
+  reverse (Cases_on `br`)
+  >- (simp_tac(srw_ss())[raise_def] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!initial_st selected env vt st res st0. _`
+        (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+      disch_then irule >> metis_tac[]) >>
+  simp_tac(srw_ss())[] >> strip_tac >>
+  `?suffix. st'.storage_trace = st1.storage_trace ++ suffix` by
+    metis_tac[storage_trace_frame_prefix, storage_trace_frame_extend_place] >>
+  `storage_well_formed_on cx st1 (FST H) /\
+   storage_observations_ok cx H st1.storage_trace` by
+    (qpat_x_assum `!initial_st selected env vt st res st0. _`
+      (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+     disch_then irule >> asm_rewrite_tac[APPEND] >> metis_tac[APPEND_ASSOC]) >>
+  qpat_x_assum `!initial_st selected env vt st res st0. _` kall_tac >>
+  `storage_trace_backends_well_formed cx (FST H) st'.storage_trace` by
+    metis_tac[extend_place_backend_observations, storage_observations_ok_def] >>
+  conj_tac
+  >- (drule extend_place_state >> disch_then SUBST1_TAC >>
+      qpat_x_assum `storage_well_formed_on cx st1 _` mp_tac >>
+      simp_tac(srw_ss())[storage_well_formed_on_def, vyperStorageBackendTheory.get_storage_def]) >>
+  gvs[storage_observations_ok_def, storage_trace_regions_append,
+      storage_trace_locks_append, EVERY_APPEND]
+QED
+
+Theorem finite_prefix_BasePlaceRoot_SubscriptTarget:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "BasePlaceRoot_SubscriptTarget")
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_target (SubscriptTarget t e))` mp_tac >>
+  pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
+  drule call_evaluation_safe_append_left >> strip_tac >>
+  drule call_evaluation_safe_append_right >> strip_tac >>
+  qpat_x_assum `type_place_target _ (SubscriptTarget _ _) = _` mp_tac >>
+  rewrite_tac[vyperTypeEnvTheory.type_place_target_SubscriptTarget] >> strip_tac >>
+  qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+  Cases_on `eval_base_place cx t st` >> rename1 `eval_base_place cx t st = (br,st1)` >>
+  reverse (Cases_on `br`)
+  >- (qpat_x_assum `!s pv t0. eval_base_place cx t s = (INL pv,t0) ==> _` kall_tac >>
+      simp_tac(srw_ss())[raise_def] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!initial_st selected env vt st res st0. _`
+        (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+      disch_then irule >> metis_tac[]) >>
+  qpat_x_assum `!s pv t0. eval_base_place cx t s = (INL pv,t0) ==> _`
+    (drule_at (Pat `eval_base_place _ _ _ = _`)) >> strip_tac >>
+  simp_tac(srw_ss())[bind_def] >>
+  Cases_on `eval_expr cx e st1` >> rename1 `eval_expr cx e st1 = (er,st2)` >>
+  strip_tac >>
+  `?suffix. st'.storage_trace = st2.storage_trace ++ suffix` by
+    (qpat_x_assum `!initial_st selected env vt st res st0. _` kall_tac >>
+     qpat_x_assum `!initial_st selected env st res st0. _` kall_tac >>
+     Cases_on `er` >> gvs[AllCaseEqs()] >>
+     imp_res_tac read_result_state >> gvs[] >>
+     metis_tac[storage_trace_frame_prefix, storage_trace_frame_extend_place]) >>
+  `?suffix. st2.storage_trace = st1.storage_trace ++ suffix` by
+    (qpat_x_assum `!initial_st selected env vt st res st0. _` kall_tac >>
+     qpat_x_assum `!initial_st selected env st res st0. _` kall_tac >>
+     metis_tac[storage_trace_frame_prefix, cj 5 evaluate_storage_trace_frame]) >>
+  `storage_well_formed_on cx st1 (FST H) /\
+   storage_observations_ok cx H st1.storage_trace` by
+    (qpat_x_assum `!initial_st selected env vt st res st0. _`
+      (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+     disch_then irule >> asm_rewrite_tac[APPEND] >> metis_tac[APPEND_ASSOC]) >>
+  `runtime_consistent env cx st1` by
+    metis_tac[eval_base_place_preserves_runtime_consistent] >>
+  `IS_SOME st1.outcomes` by
+    (qpat_assum `eval_base_place cx t st = _`
+       (mp_then Any mp_tac (cj 7 eval_outcome_suffix_mutual)) >>
+     disch_then (mp_tac o MATCH_MP outcome_suffix_modes) >>
+     Cases_on `st.outcomes` >> Cases_on `st1.outcomes` >> simp[] >> metis_tac[]) >>
+  `valid_horizon cx initial_st H st1.storage_trace` by
+    (qpat_x_assum `valid_horizon cx initial_st H st.storage_trace` mp_tac >>
+     simp_tac(srw_ss())[valid_horizon_def] >> metis_tac[]) >>
+  `storage_well_formed_on cx st2 (FST H) /\
+   storage_observations_ok cx H st2.storage_trace` by
+    (qpat_x_assum `!initial_st selected env st res st0. _`
+      (qspecl_then [`initial_st`, `selected`, `env`, `st1`, `er`, `st2`] mp_tac) >>
+     (impl_tac >- (asm_rewrite_tac[APPEND] >> metis_tac[APPEND_ASSOC])) >>
+     disch_then (mp_tac o CONJUNCT1) >> asm_rewrite_tac[]) >>
+  qpat_x_assum `!initial_st selected env vt st res st0. _` kall_tac >>
+  qpat_x_assum `!initial_st selected env st res st0. _` kall_tac >>
+  `st'.accounts = st2.accounts /\ st'.tStorage = st2.tStorage /\
+   storage_trace_backends_well_formed cx (FST H) st'.storage_trace` by
+    (Cases_on `er` >> gvs[AllCaseEqs()] >>
+     imp_res_tac read_result_state >> gvs[] >>
+     imp_res_tac (INST_TYPE [alpha |-> ``:256``] extend_place_backend_observations) >>
+     imp_res_tac extend_place_state >>
+     gvs[storage_observations_ok_def] >>
+     simp[storage_trace_backends_well_formed_def] >>
+     simp[GSYM storage_trace_backends_well_formed_def] >> metis_tac[]) >>
+  conj_tac >- metis_tac[storage_well_formed_on_backends] >>
+  gvs[storage_observations_ok_def, storage_trace_regions_append,
+      storage_trace_locks_append, EVERY_APPEND]
+QED
