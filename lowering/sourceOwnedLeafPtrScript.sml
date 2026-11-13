@@ -43,7 +43,8 @@ Theorem source_bulk_payload_origin_from_copy[local]:
       (!D lower explicit ctx func.
         fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
         ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-        s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+        s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+        w2n dw + w2n nw <= s.vs_alloca_next ==>
         gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
           (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u))) ==>
   abi_decode_bulk_payload (Var root) src cnt mem_sz CALLDATALOAD (Lit 0w) sa = ((),sb) /\
@@ -56,6 +57,7 @@ Theorem source_bulk_payload_origin_from_copy[local]:
   op_taint tn cnt = {} /\ op_prov G cnt = NONE /\
   32 + n * mem_sz <= capacity /\ d + 32 < dimword (:256) /\
   n * mem_sz < dimword (:256) /\
+  d + 32 + n * mem_sz <= s.vs_alloca_next /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
   fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -247,7 +249,7 @@ Proof
      (OK (s3 with vs_inst_idx := LENGTH c3.cs_current_insts),H3,u3)` by metis_tac[] >>
   `gas_origin_ptr_path (D,lower,explicit,ctx,func,PG)
      (s3 with vs_inst_idx := LENGTH c3.cs_current_insts,H3,u3) []
-     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H4,u4)` by metis_tac[] >>
+     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H4,u4)` by simp[] >>
   metis_tac[gas_origin_ptr_path_append, APPEND]
 
 QED
