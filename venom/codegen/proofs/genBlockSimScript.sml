@@ -1571,9 +1571,10 @@ Theorem asm_assert_nonzero:
     st.as_stack = v :: rest /\ v <> 0w /\
     IS_SOME (FLOOKUP lo "revert") ==>
     asm_steps lo o2pc prog 3 st =
-      AsmOK (st with <|as_stack := rest; as_pc := st.as_pc + 3|>)
+      AsmOK (st with <|as_stack := rest; as_pc := st.as_pc + 3|>) /\
+    create_safe_prefix lo o2pc prog 3 st
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
   Cases_on `FLOOKUP lo "revert"` >> gvs[] >>
   fs[asm_block_at_def] >>
   `EL st.as_pc prog = AsmOp "ISZERO"` by
@@ -1582,6 +1583,12 @@ Proof
     (first_x_assum (qspec_then `1` mp_tac) >> simp[]) >>
   `EL (st.as_pc + 2) prog = AsmOp "JUMPI"` by
     (first_x_assum (qspec_then `2` mp_tac) >> simp[]) >>
+  reverse conj_tac
+  >- (rewrite_tac[numLib.num_CONV ``3:num``, create_safe_prefix_suc] >>
+      simp[create_safe_def, asm_step_iszero, asm_unop_def, asm_next_def] >>
+      rewrite_tac[numLib.num_CONV ``2:num``, create_safe_prefix_suc] >>
+      simp[create_safe_def, asm_step_def, asm_next_def] >>
+      rewrite_tac[ONE, create_safe_prefix_suc] >> simp[create_safe_def]) >>
   `3 = SUC 2` by decide_tac >> pop_assum SUBST1_TAC >>
   rewrite_tac[Once asm_steps_def] >>
   simp[asm_step_iszero, asm_unop_def, asm_next_def] >>
@@ -1601,15 +1608,22 @@ Theorem asm_assert_unreachable_nonzero:
     FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
     FLOOKUP o2pc off = SOME (st.as_pc + 3) ==>
     asm_steps lo o2pc prog 3 st =
-      AsmOK (st with <|as_stack := rest; as_pc := st.as_pc + 4|>)
+      AsmOK (st with <|as_stack := rest; as_pc := st.as_pc + 4|>) /\
+    create_safe_prefix lo o2pc prog 3 st
 Proof
-  rpt strip_tac >> fs[asm_block_at_def] >>
+  rpt gen_tac >> strip_tac >> fs[asm_block_at_def] >>
   `EL st.as_pc prog = AsmPushLabel lbl` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   `EL (st.as_pc + 1) prog = AsmOp "JUMPI"` by
     (first_x_assum (qspec_then `1` mp_tac) >> simp[]) >>
   `EL (st.as_pc + 3) prog = AsmLabel lbl` by
     (first_x_assum (qspec_then `3` mp_tac) >> simp[]) >>
+  reverse conj_tac
+  >- (rewrite_tac[numLib.num_CONV ``3:num``, create_safe_prefix_suc] >>
+      simp[create_safe_def, asm_step_def, asm_next_def] >>
+      rewrite_tac[numLib.num_CONV ``2:num``, create_safe_prefix_suc] >>
+      simp[create_safe_def, asm_step_jumpi, asm_jumpi_def, asm_next_def] >>
+      rewrite_tac[ONE, create_safe_prefix_suc] >> simp[create_safe_def]) >>
   `3 = SUC 2` by decide_tac >> pop_assum SUBST1_TAC >>
   rewrite_tac[Once asm_steps_def] >>
   simp[asm_step_def, asm_next_def] >>
@@ -1635,7 +1649,7 @@ Theorem terminal_pushlabel_jumpi_invalid:
         (vs with <| vs_returndata := []; vs_halted := T |>) st' /\
       create_safe_prefix lo o2pc prog 3 st
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
   fs[asm_block_at_def] >>
   `EL st.as_pc prog = AsmPushLabel end_lbl` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
