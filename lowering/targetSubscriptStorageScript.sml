@@ -747,5 +747,7 @@ Proof
   `stmt_state_rel H ctx func cenv cx es' s /\
    storage_well_formed_on cx es' (FST H)` by
     metis_tac[target_post_extend_start_rel] >>
-  irule target_post_fields_transport >> qexists_tac `H0` >> simp[]
+  qpat_assum `target_post H0 _ _ _ _ _ _ sb _ es' _ _ _ _`
+    (mp_then (Pos hd) irule target_post_fields_transport) >>
+  simp[] >> qexists_tac `s` >> simp[]
 QED

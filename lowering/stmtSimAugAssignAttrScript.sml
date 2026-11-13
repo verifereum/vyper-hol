@@ -1287,7 +1287,9 @@ Resume augassign_attr_normal_summary[store]:
   >- (gen_tac >> simp[GSYM bind_assoc, bind_def, lift_sum_def, return_def]) >>
   `gas_marked_path F ctx func t' 0 (OK t'')` by
     metis_tac[gas_marked_path_then, arithmeticTheory.ADD] >>
-  metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0]
+  `gas_marked_path F ctx func s0 (LENGTH marks + 0) (OK t'')` by
+    (irule gas_marked_path_then >> qexists_tac `t'` >> simp[]) >>
+  fs[]
 QED
 Resume augassign_attr_normal_summary[operator_error]:
   gvs[] >>
