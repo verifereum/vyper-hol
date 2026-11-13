@@ -4,7 +4,7 @@ Ancestors
   bodyFullRawLogFixedBoundary rawLogPtrInst bodyPtrDefs ptrDiscipline
   ptrSafeRun venomState venomInst venomExecSemantics words list
   rawLogCoreFrame fragGasSeqPtr wordLoadStorePtr exprPtrUnwrapCopyEdges
-  bodyFullUnwrapSlotPost
+  bodyFullUnwrapSlotPost bodyFullGhostFrame
   instMemFrontier emitHelper compileEnv fragExecMem fragExec
   loweringPosts byte valueEncoding vyperEvent
   venomMemDefs valueEncodingProps rich_list finite_map arithmetic venomStepProps venomInstProofs
@@ -285,18 +285,27 @@ Proof
      simp[Abbr `i`, Abbr `t`, Abbr `tf`] >> metis_tac[]) >>
   `lo <= w2n w` by (fs[allocas_from_def] >> metis_tac[]) >>
   `local_ptrs_rel func cenv ee.scopes s` by
-    gvs[exprLoweringPropsTheory.stmt_state_rel_def] >>
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def,
+        loweringStateRelDefsTheory.state_rel_def] >>
   `ghost_inv_at (DF H) lo d cenv cx ee G tf t` by
     (irule unwrap_slot_copy_ghost_inv_at >>
+     (conj_tac >- (simp[Abbr `t`, mstore_def] >> decide_tac)) >>
+     simp[] >>
      goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
-     qexistsl [`32`, `sm`, `w2n w`, `func`] >>
-     simp[Abbr `t`, mstore_def, lookup_var_def, op_taint_def,
-          mstore_mem_bytes_at_disjoint, regions_disjoint_def] >>
-     metis_tac[]) >>
+     qexistsl [`func`, `32`, `sm`, `w2n w`] >>
+     simp[Abbr `t`, lookup_var_def, op_taint_def,
+          mstore_mem_bytes_at_disjoint] >>
+     conj_tac
+     >- (rpt strip_tac >> first_x_assum drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
+     rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> simp[]) >>
   `ghost_kept_at lo cenv es sa G0 tn0 s0 G tf` by
     (irule unwrap_slot_copy_ghost_kept_at >>
      goal_assum (drule_at (Pat `ghost_kept_at _ _ _ _ _ _ _ _ _`)) >>
      simp[op_taint_def]) >>
-  simp[Abbr `tf`, Abbr `v`, Abbr `t1`] >>
-  gvs[ghost_inv_at_def, Abbr `t`, mstore_def, lookup_var_def]
+  gvs[] >>
+  simp[Abbr `v`, Abbr `t1`] >>
+  irule ghost_inv_at_exterior_frame >>
+  simp[] >>
+  goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
+  qexists `sm` >> simp[lookup_var_def]
 QED
