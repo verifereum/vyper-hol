@@ -3,6 +3,7 @@ Ancestors
   concretizePtrDallocaAffine concretizePtrObservationInterface
   concretizePtrDallocaBoundaryProbes concretizePtrBPReverse
   concretizePtrDallocaGhostInterface concretizePtrPrefixLedger o1FrameLockstep
+  concretizePtrDallocaProducer concretizePtrSourceOwnership
   frameRelocationTaintOrder venomExecSemantics
   ptrDiscipline venomState venomInst finite_map pred_set list
 
@@ -150,4 +151,53 @@ Proof
   asm_rewrite_tac[] >> simp[Once opcode_case_def] >>
   simp[AllCaseEqs()] >> rpt strip_tac >>
   gvs[out_prov_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem ptr_dalloca_runtime_dynamic_values:
+  inst.inst_opcode = DALLOCA /\ s.vs_fmp = t.vs_fmp /\
+  eval_operands inst.inst_operands s = eval_operands inst.inst_operands t /\
+  step_inst fuel C inst s = OK s' /\
+  step_inst fuelt Ct inst t = OK t' ==>
+  s'.vs_fmp = t'.vs_fmp /\
+  (!v. MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v t') /\
+  out_prov PG G inst s' = out_prov PGt Gt inst t'
+Proof
+  strip_tac >> drule_all ptr_dalloca_execution >>
+  disch_then (qspec_then `C` strip_assume_tac) >>
+  `step_inst fuel C inst s = step_inst 0 C inst s` by
+    gvs[step_inst_non_invoke] >>
+  gvs[out_prov_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem ptr_dalloca_runtime_assign_sites:
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
+  (!v site. FLOOKUP Gt v = SOME site ==>
+     FLOOKUP G v = SOME site /\ FLOOKUP TG v = NONE) /\
+  (!v site. FLOOKUP TG v = NONE /\ FLOOKUP G v = SOME site ==>
+     FLOOKUP Gt v = SOME site) ==>
+  (!site. out_prov PGt Gt inst t = SOME site ==>
+     out_prov PG G inst s = SOME site /\ out_prov PT TG inst s = NONE) /\
+  (!site. out_prov PT TG inst s = NONE /\ out_prov PG G inst s = SOME site ==>
+     out_prov PGt Gt inst t = SOME site)
+Proof
+  strip_tac >> Cases_on `op` >>
+  gvs[out_prov_def, first_prov_def, op_prov_def] >>
+  gvs[AllCaseEqs()] >> metis_tac[optionTheory.option_nchotomy]
+QED
+
+Theorem ptr_dalloca_runtime_copy_values:
+  (inst.inst_opcode = ASSIGN \/ inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
+  (!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t) /\
+  step_inst fuel C inst s = OK s' /\
+  step_inst fuelt Ct inst t = OK t' ==>
+  !v. MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v t'
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst fuel _ _ _ = _` mp_tac >>
+  qpat_x_assum `step_inst fuelt _ _ _ = _` mp_tac >>
+  simp[step_inst_non_invoke] >> pure_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >>
+  simp[exec_pure1_def, exec_pure2_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]
 QED

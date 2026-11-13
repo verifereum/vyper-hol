@@ -31,7 +31,7 @@ Proof
   qpat_x_assum `s.vs_call_ctx = t.vs_call_ctx` (SUBST_ALL_TAC o SYM) >> simp[]
 QED
 
-Theorem ptr_dalloca_execution[local]:
+Theorem ptr_dalloca_execution:
   inst.inst_opcode = DALLOCA /\ s.vs_fmp = t.vs_fmp /\
   eval_operands inst.inst_operands s = eval_operands inst.inst_operands t /\
   step_inst fuel Ct inst t = OK t' ==>
