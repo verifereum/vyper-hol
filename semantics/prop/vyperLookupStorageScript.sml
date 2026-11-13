@@ -1337,9 +1337,9 @@ Proof
       simp[] >> disch_then irule >>
       gvs[value_has_type_def, well_formed_type_value_def, type_slot_size_def] >>
       gvs[listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >>
-      reverse conj_tac >- (conj_tac >- metis_tac[] >>
-        conj_tac >- (qexists_tac `l` >> simp[]) >>
-        gvs[Once slots_in_range_def]) >>
+      reverse conj_tac >-
+        (conj_tac >- (qexists_tac `l` >> simp[]) >>
+         gvs[Once slots_in_range_def]) >>
       rpt strip_tac >>
       `type_value_size p_2 < type_value_size (StructTV ftypes)` by
         (irule MEM_StructTV_type_value_size >> metis_tac[]) >>
