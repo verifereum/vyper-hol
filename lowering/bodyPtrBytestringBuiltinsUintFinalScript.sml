@@ -7,7 +7,7 @@ Ancestors
   codegenRel valueEncoding
 
 Theorem u2s_final_invariant_ptr:
-  u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr s /\
+  u2s_safe H ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr s /\
   u2s_digits a b n X 0 str s /\
   u2s_ptr_state d cenv cx es a G0 tn0 s0 p b (buf_size+n) n (LENGTH str) G tn s /\
   not_fresh_at a p /\ local_ptrs_reserved cenv a /\
@@ -22,7 +22,7 @@ Theorem u2s_final_invariant_ptr:
     SOME <|bb_label := u2s_label a 4; bb_instructions := u2s_final a (Var p) n|> /\
   s.vs_current_bb = u2s_label a 4 /\ s.vs_inst_idx = 0 ==>
   ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr t /\
+    u2s_safe H ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr t /\
     ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es a G0 tn0 s0 G' tn' /\
     ptr_covers G' tn' (u2s_var a 2) t buf_size /\
     lookup_var (u2s_var a 2) t = SOME (n2w (b+n-LENGTH str)) /\
@@ -40,7 +40,7 @@ Proof
   rename1 `gas_path_ptr D 0 ctx fn PG G tn s 0 gr tr (OK out)` >>
   `LENGTH str <= n` by metis_tac[u2s_ptr_state_suffix] >>
   `b <= b+n-LENGTH str /\ b+n-LENGTH str+32 <= b+(buf_size+n)` by decide_tac >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr out` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr out` by
     (qpat_assum `out = _` SUBST1_TAC >> irule u2s_final_endpoint_safe >> simp[]) >>
   `!mem'. mem_agree_outside tr.t_mem out.vs_memory mem' ==>
     val_in_memory (BaseTV (StringT cap)) (StringV (num_to_dec_string X))

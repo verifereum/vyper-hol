@@ -334,7 +334,7 @@ Theorem raw_call_operands_sim_ptr:
       rr = INL (av::BytesV bs::kvs) /\ value_has_type (BaseTV AddressT) av /\
       expr_post H ctx func cenv cx a es sa s1 s0 ea av addr ta /\
       expr_post H ctx func cenv cx d ea s1 s2 ta ed (BytesV bs) data tb /\
-      typed_args_post ctx func cenv cx ed sm th ee kws xs kvs t /\
+      typed_args_post H ctx func cenv cx ed sm th ee kws xs kvs t /\
       vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
       EVERY (\op. op_taint tn op = {}) xs /\
@@ -505,7 +505,7 @@ Proof
 QED
 
 Theorem typed_args_post_operands_evaluate:
-  typed_args_post ctx func cenv cx es sa s0 ee args xs vs t ==>
+  typed_args_post H ctx func cenv cx es sa s0 ee args xs vs t ==>
   EVERY (\op. ?w. eval_operand op t = SOME w) xs
 Proof
   simp[exprSimPrecompilesTheory.typed_args_post_def,
@@ -538,7 +538,7 @@ Theorem raw_call_prefix_sim_ptr:
       rr = INL (av::BytesV bs::kvs) /\ value_has_type (BaseTV AddressT) av /\
       expr_post H ctx func cenv cx a es sa s1 s0 ea av addr ta /\
       expr_post H ctx func cenv cx d ea s1 s2 ta ed (BytesV bs) data tb /\
-      typed_args_post ctx func cenv cx ed sm th ee kws xs kvs t /\
+      typed_args_post H ctx func cenv cx ed sm th ee kws xs kvs t /\
       vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
       EVERY (\op. op_taint tn op = {}) xs /\

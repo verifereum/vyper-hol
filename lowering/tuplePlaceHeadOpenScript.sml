@@ -3,9 +3,10 @@ Theory tuplePlaceHeadOpen
 Ancestors
   tuplePlaceHeadGas tuplePlaceOpen tuplePlacePointerReady
   tuplePlaceTargetGas targetPlaceSimCases gasSummary fragGasMode fragGasPath
+  vyperStorageFootprint vyperStorageTrace
 
 Theorem tuple_place_head_gas_continuation_open:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   ~block_is_terminated sp /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   target_sim ctx func cenv cx env bt es /\
@@ -33,18 +34,19 @@ Theorem tuple_place_head_gas_continuation_open:
   fn_has_code sp sa func /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sp.cs_next_var <= sa.cs_next_var /\
   (!ff t. ~block_is_terminated sb /\ expr_sim_inv cenv cx env ff /\
-    tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
+    tuple_place_head ctx func cenv cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==> lookup_var x t = SOME v) /\
     (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
       FLOOKUP t.vs_allocas id = SOME entry) /\
     alloca_frame cenv es sp s0 cenv ff t /\
     (?ast ax ast'. assign_tuple_targets cx (BaseTarget bt) (EL i vs) ast = (INL ax,ast')) ==>
-    gas_outcome F (cx_tops cx) (ctx,func) next (ff with gas_obs := [],t) Q
-      (\res ee r. expr_exit res r)) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 next (ff with gas_obs := [],t) Q
+      (\H res ee r. expr_exit res r)) /\
+  storage_trace_frame next ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_target_place cx bt)
       (\p. ignore_bind (write_place cx p (EL i vs)) next)) (es,s0) Q
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[targetPlaceSimTheory.target_pre_def] >>
@@ -53,18 +55,38 @@ Proof
      metis_tac[targetPlaceSimTheory.target_pre_def]) >>
   `type_place_target env bt = SOME (Type (EL i tys))` by
     fs[vyperTypeSystemTheory.well_typed_target_def] >>
-  `gas_outcome F (cx_tops cx) (ctx,func) (eval_target_place cx bt) (es,s0)
-    (\res ee t. ?p. res = INL p /\
-      target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r t /\
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_target_place cx bt) (es,s0)
+    (\H res ee t. ?p. res = INL p /\
+      target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r t /\
       t.vs_current_bb = sa.cs_current_bb /\ t.vs_inst_idx = LENGTH sa.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r)` by
     (irule target_place_sim >> simp[] >>
-     fs[tuplePlaceHeadTheory.tuple_place_head_def] >> metis_tac[]) >>
+     qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [tuplePlaceHeadTheory.tuple_place_head_def]) >>
+     metis_tac[]) >>
   irule tuple_place_gas_outcome_bind_exec >>
-  goal_assum (drule_at Any) >> simp[] >>
-  conj_tac >- (rpt strip_tac >> Cases_on `res` >>
-    gvs[stmtSimPropsTheory.expr_exit_INR_type]) >>
-  rpt strip_tac >> gvs[] >>
+  goal_assum (drule_at Any) >> simp[] >> rpt conj_tac
+  >~ [`storage_trace_frame _`]
+  >- (rpt strip_tac >> irule vyperStorageTraceTheory.storage_trace_frame_ignore_bind >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_write_place])
+  >~ [`expr_exit _ _`]
+  >- (rpt strip_tac >> Cases_on `res` >>
+      gvs[stmtSimPropsTheory.expr_exit_INR_type]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
+  `valid_horizon cx st0 H0 mid.storage_trace` by
+    fs[Abbr `H0`, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `target_post H0 ctx func cenv cx es sp sa s0 (mid with gas_obs := [])
+     (PlaceR v) (Type (EL i tys)) r t /\
+   t.vs_current_bb = sa.cs_current_bb /\ t.vs_inst_idx = LENGTH sa.cs_current_insts` by
+    res_tac >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+     target_post H ctx func cenv cx es sp sa s0 (mid with gas_obs := [])
+       (PlaceR v) (Type (EL i tys)) r t` by
+    (rpt strip_tac >> res_tac) >>
+  rename1 `PlaceR p` >>
   `arg_type_fits (EL i ltys) (EL i tys)` by
     (drule_all tuple_place_index_fit >> simp[]) >>
   `~block_is_terminated sb` by
@@ -84,7 +106,7 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   first_x_assum irule >> simp[] >>
   qpat_assum `assign_tuple_targets _ _ _ _ = _` (irule_at Any) >>
-  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[loweringPostsTheory.target_post_def] >> strip_tac >>
   rpt strip_tac >>
   `not_fresh_at sa x` by

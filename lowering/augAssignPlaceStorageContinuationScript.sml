@@ -4,7 +4,8 @@ Ancestors
   augAssignPlaceLoadedContinuation augAssignPlaceSourcePrefix
   augAssignPlaceSourceMemory augAssignPlaceRhsContinuation
   exprSimProps exprSimSource exprSimHypsDefs exprSimLen
-  stmtSimAugAssignPlaceStorage vyperState
+  stmtSimAugAssignPlaceStorage vyperState vyperStorageFootprint
+  vyperStoragePlaceObserved vyperStorageTrace
 
 Theorem aug_place_loaded_storage_suffix:
   type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
@@ -18,7 +19,9 @@ Theorem aug_place_loaded_storage_suffix:
   word_value_type (expr_type e) /\ ~cx.txn.is_static /\
   IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  storage_place_region cx (StoragePlace tr slot tv) /\
+  (?offset tv0 path delta.
+     MEM (StorageRoot tr offset tv0) mid.storage_trace /\
+     storage_subregion tv0 path delta tv /\ slot = n2w offset + n2w delta) /\
   lower_value compile_expr cenv ty e sl = (rhs,s2) /\
   compile_binop bop cur rhs ty NONE
     (if bop = Exp then expr_int_literal e else NONE) s2 = (result,s3) /\
@@ -37,22 +40,25 @@ Theorem aug_place_loaded_storage_suffix:
   eval_operand dst u = SOME slot /\
   place_ptr_rel cenv cx u (PlaceR (StoragePlace tr slot tv)) slot
     (SOME (slot_loc tr)) (Type ty) /\
-  stmt_state_rel ctx func cenv cx mid u /\ alloca_history func u /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx mid u /\
+       storage_well_formed_on cx mid (FST H)) /\
+  alloca_history func u /\
   alloca_frame cenv es0 sa s0 cenv mid u /\ sa.cs_next_id <= sl.cs_next_id /\
   s0.vs_alloca_next <= u.vs_alloca_next /\
   ~u.vs_halted /\ u.vs_current_bb = sl.cs_current_bb /\
   u.vs_inst_idx = LENGTH sl.cs_current_insts /\ ~block_is_terminated sf /\
   (!z v. not_fresh_at sa z /\ lookup_var z s0 = SOME v ==> lookup_var z u = SOME v) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) ==>
-  gas_outcome T (cx_tops cx) (ctx,func)
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx))
       (\rhs. bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop old rhs)) (write_place cx (StoragePlace tr slot tv)))) (mid,u)
-    (\res ff v. res = INL () /\
-      stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 res ff v /\
+    (\H res ff v. res = INL () /\
+      stmt_post H ctx func cx lctx cenv cenv sa sf es0 s0 res ff v /\
       alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
+    (\H res ff r. !tail. stmt_exit (RetQ H) (ff with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!gs. read_place cx (StoragePlace tr slot tv) (mid with gas_obs := gs) =
@@ -68,11 +74,43 @@ Proof
   rule_assum_tac (REWRITE_RULE [bind_assoc]) >>
   Cases_on `tr` >> fs[loweringPostsTheory.slot_loc_def] >>
   irule aug_place_rhs_operator_write_mem >>
-  simp[typed_val_to_w256_word_value] >>
+  simp[typed_val_to_w256_word_value] >> conj_tac
+  >- (rpt strip_tac >>
+      irule aug_place_storage_rooted_observed >>
+      goal_assum (drule_at (Pat `valid_horizon`)) >>
+      goal_assum (drule_at (Pat `MEM`)) >> goal_assum (drule_at Any) >> simp[]) >>
   goal_assum (drule_at (Pat `lower_value`)) >>
   goal_assum (drule_at (Pat `compile_binop`)) >>
   goal_assum (drule_at (Pat `place_ptr_rel`)) >>
   qexistsl_tac [`dst`, `env`] >>
-  simp[typed_val_to_w256_word_value] >> rpt strip_tac >>
-  drule_all (SRULE [bind_assoc] aug_place_storage_rhs_callback) >> simp[]
+  simp[typed_val_to_w256_word_value] >> rpt gen_tac >> strip_tac >>
+  `?xs. ee.storage_trace = mid.storage_trace ++ xs` by
+    (`storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+       simp[stmtSimAugAssignTheory.augassign_rhs_trace_frame] >>
+     first_assum (fn frame =>
+       qpat_assum `bind (eval_expr cx e) (read_result cx) (mid with gas_obs := _) =
+                   (INL rhs,ee)`
+         (fn eq => mp_tac (MATCH_MP vyperStorageTraceTheory.storage_trace_frame_prefix
+                             (CONJ frame eq)))) >>
+     simp[]) >>
+  `MEM (StorageRoot tr offset tv0) ee.storage_trace` by simp[MEM_APPEND] >>
+  drule_all (SRULE [bind_assoc] aug_place_storage_rhs_callback) >> strip_tac >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
+  gen_tac >> strip_tac >>
+  qpat_assum `!v. bop_result _ _ _ _ _ _ _ = INL v ==> _`
+    (qspec_then `v` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `ff` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  gen_tac >> strip_tac >>
+  irule aug_place_storage_store_wf >>
+  qexistsl_tac [`ee`, `offset`, `tv0`, `path`, `delta`, `tv`, `slot`, `tr`, `v`, `cx`, `st0`] >>
+  simp[] >>
+  metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value]
 QED

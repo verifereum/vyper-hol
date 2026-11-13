@@ -5,6 +5,7 @@ Ancestors
   exprSimUnop exprUnopStraight exprUnopSimDefs exprSimUnopCompose
   exprSimUnopComposeProps exprSimUnopProps exprSimMemDefs
   gasContext gasSummary gasOutcome gasSummaryCompose gasExemptCert
+  gasStorage vyperStorageTrace vyperStorageFootprint
   gasNormalPrefix fragGasMode fragGasPath fragGasPathMem fragGasSeqMem
   fragGasSeqAbort fragGasFresh fragExecMem allocaHistory allocaHistoryFragment
   exprSimSource exprSimMemoryStack exprSimHypsDefs
@@ -25,19 +26,25 @@ Libs
    fragment f from an operand x holding w1 runs memory-safely and keeps
    the allocation history. *)
 Definition unop_frag_mem_def:
-  unop_frag_mem H ctx func cenv cx f w1 t res es0 <=>
-    !sa sb x op s0.
+  unop_frag_mem ctx func cenv cx f w1 t res es0 <=>
+    !st0 sa sb x op s0.
       f x sa = (op, sb) /\ expr_res_ok res /\
       (!z. x = Var z ==> not_fresh_at sa z) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel H ctx func cenv cx es0 s0 /\ alloca_history func s0 /\
+      (?H. valid_horizon cx st0 H es0.storage_trace) /\
+      (!H. valid_horizon cx st0 H es0.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es0 s0 /\
+        storage_well_formed_on cx es0 (FST H)) /\
+      alloca_history func s0 /\
       eval_operand x s0 = SOME w1 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\ res = INL v /\
-                 stmt_state_rel H ctx func cenv cx es0 s /\
+                 (!H. valid_horizon cx st0 H es0.storage_trace ==>
+                   stmt_state_rel H ctx func cenv cx es0 s /\
+                   storage_well_formed_on cx es0 (FST H)) /\
                  expr_val_rel cx t v op s /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\
@@ -119,10 +126,12 @@ Theorem unop_frag_mem_straight:
             eval_operand x ss = SOME w1 ==>
             ?ss'. run_inst_seq (emitted_insts sa sb) ss =
                     Abort Revert_abort ss')) ==>
-    unop_frag_mem H ctx func cenv cx f w1 t res es0
+    unop_frag_mem ctx func cenv cx f w1 t res es0
 Proof
   rpt gen_tac >> strip_tac >> simp[unop_frag_mem_def] >> rpt gen_tac >>
   strip_tac >>
+  rename1 `valid_horizon cx st0 H0 es0.storage_trace` >>
+  `stmt_state_rel H0 ctx func cenv cx es0 s0` by metis_tac[] >>
   `fresh_vars_wrt sa (drop_fresh sa s0)` by
     simp[fresh_vars_wrt_drop_fresh] >>
   `eval_operand x (drop_fresh sa s0) = SOME w1` by
@@ -161,6 +170,18 @@ Proof
       qspecl_then [`emitted_insts sa sb`, `sa`, `s0`, `target`]
         mp_tac run_inst_seq_writes_fresh >>
       (impl_tac >- simp[]) >> strip_tac >>
+      (* The fragment writes only fresh variables, so the fields the horizon
+         reads stay those of s0 and the relation holds at every horizon. *)
+      `!H. valid_horizon cx st0 H es0.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx es0
+             (target with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+           storage_well_formed_on cx es0 (FST H)` by
+        (rpt strip_tac >> res_tac >> asm_rewrite_tac[] >>
+         irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
+         qexistsl_tac [`H0`, `s0`] >> rpt conj_tac
+         >- first_assum ACCEPT_TAC
+         >- first_assum ACCEPT_TAC >>
+         qpat_x_assum `target = _` (fn th => once_rewrite_tac [th]) >> simp[]) >>
       `target.vs_alloca_next = s0.vs_alloca_next` by
         (qpat_x_assum `target = _` (fn th => once_rewrite_tac [th]) >> simp[]) >>
       qexists_tac `OK (target with vs_inst_idx := LENGTH sb.cs_current_insts)` >>
@@ -190,7 +211,7 @@ Theorem compile_not_frag_mem:
     evaluate_type (get_tenv cx) ann = SOME tv1 /\ value_has_type tv1 v1 /\
     (!nsid m. ann = FlagT nsid /\ tv1 = FlagTV m ==>
               cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
-    unop_frag_mem H ctx func cenv cx
+    unop_frag_mem ctx func cenv cx
       (\x. if ann = BaseT BoolT then emit_op ISZERO [x]
            else compile_invert x ann cenv)
       (typed_val_to_w256 tv1 v1) ann (unop_result cx ann Not tys v1 es0) es0
@@ -236,7 +257,7 @@ QED
 Theorem compile_abs_frag_mem:
   !ctx func cenv cx tys v1 es0.
     value_has_type (BaseTV (IntT 256)) v1 ==>
-    unop_frag_mem H ctx func cenv cx compile_builtin_abs
+    unop_frag_mem ctx func cenv cx compile_builtin_abs
       (typed_val_to_w256 (BaseTV (IntT 256)) v1) (BaseT (IntT 256))
       (unop_result cx (BaseT (IntT 256)) Abs tys v1 es0) es0
 Proof
@@ -274,7 +295,7 @@ Theorem compile_neg_frag_mem:
   !ctx func cenv cx t tv v es.
     is_numeric_type t /\ ~is_uint_type t /\
     evaluate_type (get_tenv cx) t = SOME tv /\ value_has_type tv v ==>
-    unop_frag_mem H ctx func cenv cx (\x. compile_neg x t)
+    unop_frag_mem ctx func cenv cx (\x. compile_neg x t)
       (typed_val_to_w256 tv v) t (unop_result cx t Neg [t] v es) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -293,12 +314,14 @@ QED
 (* unop_continuation_summary (exprSimUnopComposeProps) on the
    memory-checked path, carrying the allocation history. *)
 Theorem unop_continuation_summary_mem:
-  expr_post H ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     expr_post H ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
   alloca_history func t0 /\ s0.vs_alloca_next <= t0.vs_alloca_next /\
   evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
-  unop_frag_mem H ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
+  unop_frag_mem ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
     (unop_result cx ann bi [expr_type e1] v1 ee) (ee with gas_obs := []) /\
   expr_res_ok (unop_result cx ann bi [expr_type e1] v1 ee) /\
   f x s1 = (op,sb) /\ (!z. x = Var z ==> not_fresh_at s1 z) /\
@@ -308,26 +331,42 @@ Theorem unop_continuation_summary_mem:
   gas_summary_at T (ctx,func) []
     (\vs. (unop_result cx ann bi [expr_type e1] v1 vs,vs))
     (ee with gas_obs := [],t0)
-    (\res fin t. ?v. res = INL v /\
+    (\res fin t. !H. valid_horizon cx st0 H fin.storage_trace ==>
+      ?v. res = INL v /\
       expr_post H ctx func cenv cx (Builtin ann bi [e1]) es sa sb s0 fin v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res fin r. expr_exit res r)
+    (\res fin r. !H. valid_horizon cx st0 H fin.storage_trace ==>
+      expr_exit res r)
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
-   eval_operand x t0 = SOME (typed_val_to_w256 tv1 v1)` by
-    gvs[expr_post_def, expr_val_rel_def] >>
-  qpat_x_assum `unop_frag_mem _ _ _ _ _ _ _ _ _ _`
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
+     storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (drule_then strip_assume_tac) >>
+     gvs[expr_post_def]) >>
+  `eval_operand x t0 = SOME (typed_val_to_w256 tv1 v1)` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (drule_then strip_assume_tac) >>
+     gvs[expr_post_def, expr_val_rel_def]) >>
+  qpat_x_assum `unop_frag_mem _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [unop_frag_mem_def]) >>
-  disch_then (qspecl_then [`s1`,`sb`,`x`,`op`,`t0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac
-  >- (simp[gas_summary_at_def] >>
+  disch_then (qspecl_then [`st0`,`s1`,`sb`,`x`,`op`,`t0`] mp_tac) >>
+  (impl_tac >- (simp[] >> qexists_tac `H` >> simp[])) >> strip_tac
+  >- (`s0.vs_alloca_next <= s.vs_alloca_next` by decide_tac >>
+      simp[gas_summary_at_def] >>
       qexistsl_tac [`unop_result cx ann bi [expr_type e1] v1 ee`,`ee`,`r`] >>
       conj_tac
       >- (simp[gas_marked_exec_def, unop_result_gas_obs] >> metis_tac[]) >>
-      gvs[] >> irule expr_post_unop >> simp[] >>
+      gvs[] >> disj1_tac >> rpt strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ s /\ _`
+        (drule_then strip_assume_tac) >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (drule_then strip_assume_tac) >>
+      irule expr_post_unop >> simp[] >>
       qexistsl_tac [`s1`,`t0`,`v1`,`x`] >> simp[]) >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`unop_result cx ann bi [expr_type e1] v1 ee`,`ee`,`r`] >>
@@ -353,7 +392,7 @@ Theorem compile_unop_sim_mem:
     (!gs1 v1 es1. (do r <- eval_expr cx e1; read_result cx r od)
         (es with gas_obs := gs1) = (INL v1, es1) ==>
        ?tv1. evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
-             unop_frag_mem H ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
+             unop_frag_mem ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
                (unop_result cx ann bi [expr_type e1] v1 es1) es1) ==>
     expr_sim_mem ctx func cenv cx ty (Builtin ann bi [e1]) es
 Proof
@@ -361,7 +400,7 @@ Proof
   simp[expr_sim_mem_def] >> rpt gen_tac >> strip_tac >>
   irule expr_sim_mem_word_outcome >>
   conj_tac >- simp[vyperASTTheory.expr_type_def] >>
-    qpat_x_assum `!sa sb op. lower_value _ _ ty (Builtin _ _ _) _ = _ ==> _`
+  qpat_x_assum `!sa sb op. lower_value _ _ ty (Builtin _ _ _) _ = _ ==> _`
     (drule_then strip_assume_tac) >>
   qpat_x_assum `!sa sb op. lower_value _ _ ty1 e1 _ = _ ==> _`
     (drule_then strip_assume_tac) >>
@@ -376,15 +415,34 @@ Proof
     (irule unop_operand_admissible >> qexistsl_tac [`ann`,`bi`] >> simp[]) >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ e1 _`
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
-  disch_then (qspecl_then [`sa`,`s1`,`x`,`s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`,`sa`,`s1`,`x`,`s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
+  `!v. storage_trace_frame
+         (\es. (unop_result cx ann bi [expr_type e1] v es, es))` by
+    simp[storage_trace_frame_def, unop_result_def] >>
   rewrite_tac[gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
       asm_simp_tac (srw_ss()) [eval_expr_unop_action_general] >>
-      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
-        (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
-      strip_tac
-      >- (gvs[] >>
+      irule gas_bad_storage_at_bind_left >> simp[])
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (qexists_tac `marks` >> disj1_tac >>
+           asm_simp_tac (srw_ss()) [eval_expr_unop_action_general] >>
+           irule gas_bad_storage_at_bind_left >> simp[] >>
+           irule gas_bad_storage_at_counted_prefix >> metis_tac[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def] >>
+      qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      asm_simp_tac (srw_ss()) [eval_expr_unop_action_general] >> fs[]
+      >- (qpat_assum `!H. valid_horizon _ _ H _ ==> ?v. _`
+            (drule_then strip_assume_tac) >>
+          gvs[] >>
+          `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+               expr_post H ctx func cenv cx e1 es sa s1 s0
+                 (es_end with gas_obs := []) v x t` by
+            (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+          `?H. valid_horizon cx st0 H es_end.storage_trace` by metis_tac[] >>
           `bind (eval_expr cx e1) (read_result cx)
              (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
              (INL v, es_end with gas_obs := [])` by
@@ -403,7 +461,7 @@ Proof
              simp[bind_def, unop_result_gas_obs] >>
              disch_then irule >> simp[]) >>
           fs[unop_result_gas_obs] >>
-          drule_all unop_continuation_summary_mem >>
+          drule_all (SIMP_RULE bool_ss [PULL_EXISTS] unop_continuation_summary_mem) >>
           simp[unop_result_gas_obs] >>
           rewrite_tac[gas_summary_at_def] >> strip_tac >>
           qexistsl_tac [`res`,`es_end'`,`r`] >>
@@ -411,13 +469,15 @@ Proof
            >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
                       |> REWRITE_RULE [APPEND_NIL]) >>
                qexistsl_tac [`es_end`,`t`,`v`] >> gvs[]) >>
-           gvs[])) >>
-      Cases_on `res` >- gvs[] >>
+           gvs[] >> disj2_tac >> first_assum ACCEPT_TAC)) >>
+      Cases_on `res`
+      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+            (drule_then mp_tac) >> simp[]) >>
       simp[gas_summary_at_def] >> qexistsl_tac [`INR y`,`es_end`,`r`] >>
       simp[] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      gvs[]) >>
-  qexists_tac `marks` >> disj2_tac >>
+      gvs[] >> disj2_tac >> first_assum ACCEPT_TAC) >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
   irule unop_exempt_cert >> simp[]
 QED

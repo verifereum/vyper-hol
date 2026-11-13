@@ -8,7 +8,7 @@ Ancestors
   emitHelperProps loweringSlice fragGasMode bodyDeclMemoryCompose fragExec
 
 Theorem aggregate_make_array_elems_body_sim_mem:
-  !args ce cx env elem_ty tv header idx off sa out sb es func inst x b asz s0 ctx tops.
+  !args ce cx env elem_ty tv header idx off sa out sb es func inst x b asz s0 ctx tops st0.
   EVERY (\e. arg_type_fits (expr_type e) elem_ty) args /\
   EVERY (\e. elem_ty = expr_type e \/
     is_bytestring_type elem_ty /\ is_bytestring_type (expr_type e)) args /\
@@ -35,14 +35,17 @@ Theorem aggregate_make_array_elems_body_sim_mem:
        | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (LENGTH args * type_memory_size tv)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func ce cx es s0 /\
+    storage_well_formed_on cx es (FST H)) /\ alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
-  gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+    (\H res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
+      storage_well_formed_on cx es' (FST H) /\
       elems_in_memory vs (b+off) tv r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -67,7 +70,7 @@ Theorem aggregate_make_array_elems_body_sim_mem:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\
+    (\H res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -87,29 +90,21 @@ Proof
   `compile_make_tuple compile_expr ce args (REPLICATE (LENGTH args) elem_ty)
      (Var x) off sa = (out,sb)` by
     (gvs[] >> metis_tac[]) >>
-  drule aggregate_make_tuple_body_sim_mem >> disch_then drule >>
-  disch_then drule >> disch_then drule >>
-  disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
-  disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
-  disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME (_,_)`)) >>
-  disch_then (qspecl_then [`es`, `func`] mp_tac) >>
+  qspecl_then [`st0`, `args`, `REPLICATE (LENGTH args) elem_ty`, `ce`, `cx`,
+               `env`, `off`, `sa`, `out`, `sb`, `es`,
+               `REPLICATE (LENGTH args) tv`, `func`, `inst`, `x`, `b`, `asz`,
+               `s0`, `ctx`, `tops`] mp_tac aggregate_make_tuple_body_sim_mem >>
   pure_rewrite_tac[exprSimAggregateEncodingTheory.type_memory_size_list_replicate] >>
-  (impl_tac >- (gvs[] >> simp[] >> first_assum ACCEPT_TAC)) >>
-  strip_tac >> gvs[] >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  rpt (pop_assum kall_tac) >>
-  pure_rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
-  >- (qexists_tac `marks` >> disj1_tac >>
-      qexistsl_tac [`res`, `es_end`, `r`] >> gvs[] >>
-      qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-      pure_rewrite_tac[gas_marked_exec_def] >> strip_tac >>
-      first_x_assum (qspec_then `[]` mp_tac) >> strip_tac >>
-      drule vyperInterpreterTheory.eval_exprs_length >> strip_tac >>
-      conj_tac
-      >- (irule (iffLR exprSimAggregateEncodingTheory.tuple_in_memory_replicate_elems) >>
-          metis_tac[]) >>
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  metis_tac[]
+  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[])) >>
+  strip_tac >> conj_tac >- asm_rewrite_tac[] >>
+  irule struct_gas_outcome_post >> goal_assum (drule_at Any) >>
+  BETA_TAC >> rpt strip_tac >>
+  `!vs n p. tuple_in_memory vs (REPLICATE n tv) p r.vs_memory ==>
+            elems_in_memory vs p tv r.vs_memory` by
+    (Induct >> Cases >>
+     simp[valueEncodingDefsTheory.val_in_memory_def, rich_listTheory.REPLICATE] >>
+     metis_tac[]) >>
+  qexists_tac `vs` >> asm_rewrite_tac[] >> metis_tac[]
 QED
 
 Theorem array_header_frames[local]:
@@ -162,10 +157,11 @@ Theorem array_header_success_post:
      b + asz <= lb \/ lb + lsz <= b) /\
   (!p n. p+n <= b \/ b+32 <= p ==>
     mem_bytes_at p n sh.vs_memory = mem_bytes_at p n s0.vs_memory) ==>
-  !res es' r.
+  !H res es' r.
   (?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
     r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-    stmt_state_rel ctx func ce cx es' r /\
+    stmt_state_rel H ctx func ce cx es' r /\
+    storage_well_formed_on cx es' (FST H) /\
     elems_in_memory vs (b+32) tv r.vs_memory /\
     (!z w. not_fresh_at sm z /\ lookup_var z sh = SOME w ==>
       lookup_var z r = SOME w) /\
@@ -192,7 +188,8 @@ Theorem array_header_success_post:
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n sh.vs_memory)) ==>
   (?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
     r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-    stmt_state_rel ctx func ce cx es' r /\
+    stmt_state_rel H ctx func ce cx es' r /\
+    storage_well_formed_on cx es' (FST H) /\
     elems_in_memory vs (b+32) tv r.vs_memory /\
     mem_word_at b r.vs_memory = n2w (LENGTH args) /\
     (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -263,7 +260,7 @@ Proof
 QED
 
 Theorem aggregate_make_array_body_sim_mem:
-  !args ce cx env elem_ty tv stride header sa out sb es func inst x b asz s0 ctx tops.
+  !args ce cx env elem_ty tv stride header sa out sb es func inst x b asz s0 ctx tops st0.
   EVERY (\e. arg_type_fits (expr_type e) elem_ty) args /\
   EVERY (\e. elem_ty = expr_type e \/
     is_bytestring_type elem_ty /\ is_bytestring_type (expr_type e)) args /\
@@ -290,14 +287,17 @@ Theorem aggregate_make_array_body_sim_mem:
        | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) b
        ((if header then 32 else 0) + LENGTH args * type_memory_size tv)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func ce cx es s0 /\
+    storage_well_formed_on cx es (FST H)) /\ alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
-  gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-    (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+    (\H res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
+      storage_well_formed_on cx es' (FST H) /\
       elems_in_memory vs (b+(if header then 32 else 0)) tv r.vs_memory /\
       (header ==> mem_word_at b r.vs_memory = n2w (LENGTH args)) /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -323,7 +323,7 @@ Theorem aggregate_make_array_body_sim_mem:
              FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
-    (\res es' exit. ?exc. res = INR exc /\
+    (\H res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >> reverse (Cases_on `header`)
@@ -347,6 +347,22 @@ Proof
   qabbrev_tac `sh = mstore b (n2w (LENGTH args)) s0 with
     vs_inst_idx := SUC s0.vs_inst_idx` >>
   `32 <= asz /\ not_local_ptr ce es.scopes x` by (simp[] >> decide_tac) >>
+  `out = Var x` by
+    (mp_tac (Q.SPECL [`args`, `0`] (Q.INST [`header` |-> `T`,
+       `cfn` |-> `compile_expr`, `buf` |-> `Var x`]
+       compile_make_array_elems_as_tuple)) >>
+     strip_tac >> gvs[] >> metis_tac[exprOperandVarTheory.compiler_make_tuple_result]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  (* Off the trace's domain the run is a bad-storage one; on it, the header
+     store runs at the domain's own horizon and every other horizon follows
+     by the fields the store keeps. *)
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func ce cx es s0` by metis_tac[] >>
   `!name lo sz. local_region ce es.scopes s0 name lo sz ==>
       b + asz <= lo \/ lo + sz <= b` by
     (rpt strip_tac >>
@@ -354,18 +370,26 @@ Proof
        aggregate_alloca_slice_excludes_local)) >> decide_tac) >>
   drule array_header_mem_entry >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME (_,_)`)) >>
   disch_then (qspec_then `sh` mp_tac) >>
   (impl_tac >-
     (simp[Abbr `sh`] >> rpt strip_tac >> first_x_assum drule_all >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >> strip_tac >>
+  `sh.vs_accounts = s0.vs_accounts /\ sh.vs_transient = s0.vs_transient /\
+   sh.vs_requests = s0.vs_requests /\ sh.vs_call_ctx = s0.vs_call_ctx` by
+    simp[Abbr `sh`, mstore_def] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es sh /\
+     storage_well_formed_on cx es (FST H)` by
+    (rpt strip_tac >> res_tac >> asm_rewrite_tac[] >>
+     metis_tac[exprLoweringPropsTheory.stmt_state_rel_fields_transport]) >>
   mp_tac (Q.INST [`header` |-> `T`, `idx` |-> `0`, `off` |-> `32`,
      `sa` |-> `sm`, `s0` |-> `sh`] (SPEC_ALL aggregate_make_array_elems_body_sim_mem)) >>
   (impl_tac >-
     (simp[] >> rpt strip_tac >> first_x_assum drule_all >>
      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)) >>
-  strip_tac >> conj_tac >- simp[] >>
+  strip_tac >>
   irule bodyDeclMemoryComposeTheory.gas_outcome_zero_prefix_mem >>
   qexists_tac `sh` >> conj_tac >- fs[gas_marked_path_def] >>
   drule struct_gas_outcome_post >> disch_then irule >>

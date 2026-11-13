@@ -11,7 +11,7 @@ Theorem convert_widen_copy_frag_mem:
   0 < k /\ k <= d /\ d < dimword (:256) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~block_is_terminated sa /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
   (!z. x = Var z ==> not_fresh_at sa z) /\
   eval_operand x s = SOME p /\ w2n p + k <= s.vs_alloca_next /\
   alloca_history func s /\ val_in_memory tv v (w2n p) s.vs_memory /\
