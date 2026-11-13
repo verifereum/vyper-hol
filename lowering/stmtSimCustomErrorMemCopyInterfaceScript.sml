@@ -10,7 +10,7 @@ Ancestors
   immutableBytestringFootprint typedCopyAgreement valueTypingMemoryProps
   allocaFootprint placeTypedCopyPath unitTransformDefs contextCodegenRel
   venomInst codegenRel memSafeRun loweringStateRelDefs arithmetic
-  emitHelper rich_list fragExec venomMemDefs
+  emitHelper rich_list fragExec venomMemDefs stmtForRangeMemoryParts allocaHistory
 
 Definition typed_copy_checked_entry_def:
   typed_copy_checked_entry cenv ctx dty sty dtv stv v <=>
@@ -456,4 +456,191 @@ Proof
      rpt strip_tac >>
      simp[step_inst_base_def, mk_inst_def, exec_pure1_def]) >>
   qexists_tac `t` >> Cases_on `k < N` >> gvs[bool_to_word_def]
+QED
+
+Theorem typed_copy_branch_checked:
+  emit_inst JNZ [test; Label yes; Label no] [] a = ((),b) /\
+  fn_has_code a b func /\ eval_operand test s = SOME w /\
+  alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  gas_path_mem ctx func s 0 (OK (jump_to (if w = 0w then no else yes) s)) /\
+  alloca_history func (jump_to (if w = 0w then no else yes) s)
+Proof
+  strip_tac >> conj_tac
+  >- (drule_all place_copy_emit_instruction >> strip_tac >>
+      `gas_path_mem ctx func s 0
+         (OK (jump_to (if w <> 0w then yes else no) s))` by
+        (irule for_range_jnz_zero_path_mem >> simp[] >>
+         qexistsl_tac [`a.cs_next_id`, `test`] >> simp[]) >>
+      Cases_on `w = 0w` >> gvs[]) >>
+  irule alloca_history_jump >> simp[jump_to_def] >> qexists_tac `s` >> simp[]
+QED
+
+Theorem typed_copy_counter_increment_checked:
+  emit_op ADD [Var counter; Lit 1w] a = (inc,b) /\
+  emit_inst ASSIGN [inc] [counter] b = ((),c) /\
+  not_fresh_at a counter /\ lookup_var counter s = SOME (n2w k) /\
+  k + 1 < dimword (:256) /\
+  fn_has_code a c func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      lookup_var counter t = SOME (n2w (k + 1)) /\
+      t.vs_memory = s.vs_memory /\
+      (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+                vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
+                vs_inst_idx := s.vs_inst_idx|>) = s /\
+      (!x. not_fresh_at a x /\ x <> counter ==>
+           lookup_var x t = lookup_var x s) /\
+      ~t.vs_halted /\ t.vs_current_bb = c.cs_current_bb /\
+      t.vs_inst_idx = LENGTH c.cs_current_insts /\
+      alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >>
+  `ci_mono a b /\ ci_mono b c` by
+    metis_tac[typed_copy_emit_op_mono, ci_mono_emit_inst, pairTheory.SND] >>
+  `cs_extends a b /\ cs_extends b c` by gvs[ci_mono_def] >>
+  `fn_has_code a b func /\ fn_has_code b c func` by metis_tac[fn_has_code_split] >>
+  qpat_assum `emit_op _ _ _ = _`
+    (mp_then Any mp_tac typed_copy_control_emit_op_checked) >>
+  disch_then (qspecl_then [`n2w (k+1)`, `s`, `0`, `0`, `func`, `ctx`] mp_tac) >>
+  (impl_tac >- simp[step_inst_base_def, mk_inst_def,
+                       exec_pure2_def, eval_operand_def, word_add_n2w]) >> strip_tac >>
+  `alloca_inv t` by
+    (gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
+         typed_copy_state_frame_def, venom_state_component_equality] >> metis_tac[]) >>
+  drule_all typed_copy_assign_checked >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qpat_assum `gas_path_mem ctx func s 0 (OK t)`
+    (mp_then Any mp_tac gas_path_mem_then) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  qexists_tac `t'` >> simp[] >>
+  qpat_x_assum `typed_copy_state_frame a _ _ s t` mp_tac >>
+  simp[typed_copy_state_frame_def] >> strip_tac >>
+  gvs[venom_state_component_equality]
+QED
+
+Theorem typed_copy_index_offsets_checked:
+  emit_op MUL [Var counter; Lit (n2w ss)] a = (so,b) /\
+  emit_op MUL [Var counter; Lit (n2w ds)] b = (doff,c) /\
+  not_fresh_at a counter /\ lookup_var counter s = SOME (n2w k) /\
+  fn_has_code a c func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      eval_operand so t = SOME (n2w (k * ss)) /\
+      eval_operand doff t = SOME (n2w (k * ds)) /\
+      t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t /\
+      ~t.vs_halted /\ t.vs_current_bb = c.cs_current_bb /\
+      t.vs_inst_idx = LENGTH c.cs_current_insts /\
+      alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >> irule typed_copy_two_ops_checked >> simp[] >>
+  qexistsl_tac [`[Var counter; Lit (n2w ss)]`, `[Var counter; Lit (n2w ds)]`,
+               `b`, `MUL`, `MUL`] >>
+  simp[] >> conj_tac
+  >- simp[step_inst_base_def, mk_inst_def, exec_pure2_def,
+          eval_operand_def, word_mul_n2w] >>
+  rpt strip_tac >>
+  `lookup_var counter t = SOME (n2w k)` by gvs[typed_copy_state_frame_def] >>
+  simp[step_inst_base_def, mk_inst_def, exec_pure2_def,
+       eval_operand_def, word_mul_n2w]
+QED
+
+Theorem typed_copy_index_adds_checked:
+  emit_op ADD [src;so] a = (sp,b) /\
+  emit_op ADD [dst;doff] b = (dp,c) /\
+  (!x. dst = Var x ==> not_fresh_at a x) /\
+  (!x. doff = Var x ==> not_fresh_at a x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  eval_operand so s = SOME sv /\ eval_operand doff s = SOME dv /\
+  fn_has_code a c func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      eval_operand sp t = SOME (sw + sv) /\
+      eval_operand dp t = SOME (dw + dv) /\
+      t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t /\
+      ~t.vs_halted /\ t.vs_current_bb = c.cs_current_bb /\
+      t.vs_inst_idx = LENGTH c.cs_current_insts /\
+      alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >> irule typed_copy_two_ops_checked >> simp[] >>
+  qexistsl_tac [`[src;so]`, `[dst;doff]`, `b`, `ADD`, `ADD`] >>
+  simp[] >> conj_tac
+  >- simp[step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  rpt strip_tac >>
+  `eval_operand dst t = SOME dw /\ eval_operand doff t = SOME dv` by
+    metis_tac[typed_copy_state_frame_operand] >>
+  simp[step_inst_base_def, mk_inst_def, exec_pure2_def]
+QED
+
+Theorem typed_copy_jump_checked:
+  emit_inst JMP [Label target] [] a = ((),b) /\ fn_has_code a b func /\
+  alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  gas_path_mem ctx func s 0 (OK (jump_to target s)) /\
+  alloca_history func (jump_to target s)
+Proof
+  strip_tac >> conj_tac
+  >- (drule_all place_copy_emit_instruction >> strip_tac >>
+      irule for_range_jump_at_zero_path_mem >> simp[] >>
+      simp[mk_inst_def, is_terminator_def, step_inst_base_def,
+           inst_mem_below_frontier_def, source_memory_read_ranges_def,
+           source_memory_write_ranges_def, inst_dload_in_section_def]) >>
+  irule alloca_history_jump >> simp[jump_to_def] >> qexists_tac `s` >> simp[]
+QED
+
+Theorem typed_copy_index_addresses_checked:
+  emit_op MUL [Var counter; Lit (n2w ss)] a = (so,b) /\
+  emit_op MUL [Var counter; Lit (n2w ds)] b = (doff,c) /\
+  emit_op ADD [src;so] c = (sp,d) /\ emit_op ADD [dst;doff] d = (dp,e) /\
+  not_fresh_at a counter /\ lookup_var counter s = SOME (n2w k) /\
+  (!x. src = Var x ==> not_fresh_at a x) /\
+  (!x. dst = Var x ==> not_fresh_at a x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  fn_has_code a e func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      eval_operand sp t = SOME (sw + n2w (k * ss)) /\
+      eval_operand dp t = SOME (dw + n2w (k * ds)) /\
+      t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t /\
+      ~t.vs_halted /\ t.vs_current_bb = e.cs_current_bb /\
+      t.vs_inst_idx = LENGTH e.cs_current_insts /\
+      alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >>
+  `ci_mono a b /\ ci_mono b c /\ ci_mono c d /\ ci_mono d e` by
+    metis_tac[typed_copy_emit_op_mono] >>
+  `ci_mono a c /\ ci_mono c e` by
+    (gvs[ci_mono_def] >> metis_tac[cs_extends_trans, LESS_EQ_TRANS]) >>
+  `cs_extends a c /\ cs_extends c e` by gvs[ci_mono_def] >>
+  `fn_has_code a c func /\ fn_has_code c e func` by metis_tac[fn_has_code_split] >>
+  drule_all typed_copy_index_offsets_checked >>
+  disch_then (qspecl_then [`off`, `len`, `ctx`] strip_assume_tac) >>
+  `eval_operand src t = SOME sw /\ eval_operand dst t = SOME dw` by
+    metis_tac[typed_copy_state_frame_operand] >>
+  `!x. dst = Var x ==> not_fresh_at c x` by
+    metis_tac[typed_copy_operand_fresh_mono] >>
+  `!x. doff = Var x ==> not_fresh_at c x` by
+    metis_tac[typed_copy_emit_op_fresh] >>
+  `alloca_inv t` by
+    (gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
+         typed_copy_state_frame_def, venom_state_component_equality] >> metis_tac[]) >>
+  drule_all typed_copy_index_adds_checked >>
+  disch_then (qspecl_then [`off`, `len`, `ctx`] strip_assume_tac) >>
+  `typed_copy_state_frame a off len s t'` by
+    (irule typed_copy_state_frame_trans >> qexists_tac `t` >> simp[] >>
+     irule typed_copy_state_frame_mono >> qexists_tac `c` >> simp[]) >>
+  qpat_assum `gas_path_mem ctx func s 0 (OK t)`
+    (mp_then Any mp_tac gas_path_mem_then) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  qexists_tac `t'` >> simp[]
 QED
