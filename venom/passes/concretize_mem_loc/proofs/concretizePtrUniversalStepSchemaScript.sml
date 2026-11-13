@@ -5,7 +5,7 @@ Ancestors
   concretizePtrPairedPrefixProbe concretizePtrPairedPrefix concretizePtrPairedFields
   concretizePtrOpaqueRetpc concretizePtrSourceOwnership
   concretizePtrActivationChronology concretizePtrChronologicalHistory
-  concretizeStepStructure concretizeStepShape concretizeStepCallChecks
+  concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape
   o1PassContract stackPlanGen ptrDiscipline unitMemInv venomWf cfgWf
   o1ScheduleDecomp venomExecSemantics venomInst list finite_map

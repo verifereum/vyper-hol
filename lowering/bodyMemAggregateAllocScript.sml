@@ -60,7 +60,9 @@ Theorem aggregate_buffer_alloc_counted_mem_any_block:
     (!name p n. local_region ce es.scopes t name p n <=>
       local_region ce es.scopes s0 name p n) /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
-    b + sz <= t.vs_alloca_next
+    b + sz <= t.vs_alloca_next /\
+    t.vs_accounts = s0.vs_accounts /\ t.vs_transient = s0.vs_transient /\
+    t.vs_requests = s0.vs_requests /\ t.vs_call_ctx = s0.vs_call_ctx
 Proof
   strip_tac >>
   drule_all buffer_alloc_provenance >> strip_tac >>
@@ -108,6 +110,14 @@ Proof
      simp[] >> qexistsl [`buf`, `sz`, `s0`, `sa`] >>
      simp[] >> fs[stmt_state_rel_def]) >>
   `s0.vs_alloca_next <= u.vs_alloca_next` by
+    (qpat_x_assum `run_inst_seq _ _ = OK u` mp_tac >>
+     simp[run_inst_seq_def, Once venomExecSemanticsTheory.step_inst_base_def,
+          venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def,
+          venomStateTheory.eval_operand_def] >>
+     Cases_on `FLOOKUP s0.vs_allocas sa.cs_next_id` >>
+     simp[venomStateTheory.update_var_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  `u.vs_accounts = s0.vs_accounts /\ u.vs_transient = s0.vs_transient /\
+   u.vs_requests = s0.vs_requests /\ u.vs_call_ctx = s0.vs_call_ctx` by
     (qpat_x_assum `run_inst_seq _ _ = OK u` mp_tac >>
      simp[run_inst_seq_def, Once venomExecSemanticsTheory.step_inst_base_def,
           venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def,

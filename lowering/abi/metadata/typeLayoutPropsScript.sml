@@ -126,7 +126,9 @@ QED
 Theorem all_type_memory_layouts:
   (!ty. type_memory_layout ty) /\ (!tys. EVERY type_memory_layout tys)
 Proof
-  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops type_induction) >>
+  ho_match_mp_tac
+    (legacyInduction.mutual_ind_from_ops
+       (TypeBase.set_induction_of ``:type``)) >>
   simp[type_memory_layout_base, type_memory_layout_struct, type_memory_layout_flag,
     type_memory_layout_none, type_memory_layout_array, type_memory_layout_tuple]
 QED

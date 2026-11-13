@@ -563,7 +563,8 @@ QED
 
 Theorem compile_expr_mapping_subscript_parts:
   compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
-  place_type cenv obj = MapPT kt vt ==>
+  place_type cenv obj = MapPT kt vt /\
+  ~copies_subscript_base cenv obj idx ==>
   ?bvv sm key sn hashed sp slot.
     compile_expr cenv ty obj sa = (bvv,sm) /\
     lower_value compile_expr cenv (expr_type idx) idx sm = (key,sn) /\
@@ -574,10 +575,11 @@ Theorem compile_expr_mapping_subscript_parts:
       (case vv_location bvv of SOME loc => loc | NONE => LocMemory))
 Proof
   strip_tac >>
-  qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
-  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
-       compile_subscript_def, comp_bind_def, comp_return_def,
-       vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def] >>
+  qpat_x_assum `~copies_subscript_base _ _ _` (fn th =>
+    qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
+    simp[th, Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+         compile_subscript_def, comp_bind_def, comp_return_def,
+         vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def]) >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   qpat_x_assum `lower_value cb cenv ity idx sm = _` mp_tac >>
   `lower_value
@@ -879,10 +881,9 @@ Proof
      match_mp_tac exprSimPropsTheory.pure_frame_trans >>
      qexistsl_tac [`en`, `sp`, `t`] >> simp[]) >>
   qexists_tac `u` >> simp[] >>
-  irule exprSimWordArgsTheory.wb_frame_trans >>
-  goal_assum (drule_at Any) >> simp[] >>
-  reverse conj_tac >- (qexistsl_tac [`en`, `sp`, `t`] >> simp[]) >>
-  goal_assum (drule_at Any)
+  irule (Q.SPECL [`func`, `cenv`, `cx`, `en`, `s`, `sn`, `en`, `en`, `sp`,
+                  `t`, `u`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem compile_hashmap_tail_shape:
@@ -936,9 +937,9 @@ Proof
   `wb_frame cenv es en sa s0 s` by
     (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
   `wb_frame cenv es en sa s0 u` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     reverse conj_tac >- (qexistsl_tac [`en`, `sn`, `s`] >> simp[]) >>
-     goal_assum (drule_at Any)) >>
+    (irule (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `en`, `en`, `sn`,
+                     `s`, `u`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >>
+     simp[] >> metis_tac[]) >>
   qpat_x_assum `wb_frame cenv es en sa s0 u` mp_tac >>
   simp[loweringPostsTheory.wb_frame_def, lookup_var_def] >>
   strip_tac >> first_assum ACCEPT_TAC
@@ -1011,9 +1012,9 @@ Proof
   `wb_frame cenv em en sm s1 t` by
     (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
   `wb_frame cenv em en sm s1 u` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     reverse conj_tac >- (qexistsl_tac [`en`, `sn`, `t`] >> simp[]) >>
-     goal_assum (drule_at Any)) >>
+    (irule (Q.SPECL [`func`, `cenv`, `cx`, `em`, `s1`, `sm`, `en`, `en`, `sn`,
+                     `t`, `u`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >>
+     simp[] >> metis_tac[]) >>
   `~expr_has_effect idx ==> pure_frame cenv func em sm s1 u` by
     (strip_tac >>
      `pure_frame cenv func em sm s1 t` by

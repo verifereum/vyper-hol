@@ -12,7 +12,8 @@ Theorem body_builtin_method_id_mem:
     (builtin_args_length_ok MethodId (LENGTH es) ==> body_exprs_mem_ok cx es) ==>
     body_expr_mem_ok cx (Builtin ty MethodId es)
 Proof
-  rpt gen_tac >> strip_tac >> rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >> (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >>
   rpt gen_tac >> strip_tac >>
   `well_typed_builtin_app ty MethodId (MAP expr_type es)` by
     gvs[expr_body_pre_def, well_typed_expr_def] >>

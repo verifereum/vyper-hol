@@ -1,7 +1,7 @@
 (* Producer boundaries for the actual external Return normalization branch. *)
 Theory externalNormalizePremises
 Ancestors
-  externalReturnBounds typedNormalizeProducer valueEncodingTyping
+  externalReturnBounds typedMemoryCopy typedNormalizeProducer valueEncodingTyping
   typedNormalizeStaticRigidity valueCopyBytes vyperTypeSystem
   exprSimDefs exprSimProps loweringPosts vyperTyping vyperValue compileEnv valueEncoding
   externalReturnNormalizeMem allocaSiteResource exprLoweringProps
@@ -283,25 +283,14 @@ Theorem normalize_external_return_limit:
   type_memory_bytes cenv ret < 2 ** 64
 Proof
   strip_tac >>
-  `(!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops) /\
-   (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops)` by
-    (fs[supported_program_def, supported_declaration_headers_def,
-        listTheory.EVERY_MEM] >> rpt strip_tac >>
-     qpat_x_assum `!e. MEM e tops ==> supported_declaration_header tops e` drule >>
-     simp[supported_declaration_header_def]) >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >>
-  Cases_on `name = "__default__"`
-  >- (gvs[] >> drule_all lookup_function_default >>
-      disch_then (qspec_then `NONE` mp_tac) >>
-      simp[] >> Cases_on `r1` >> simp[] >> PairCases_on `x` >>
-      strip_tac >> gvs[] >>
-      irule (SIMP_RULE (srw_ss()) [] normalize_function_return_limit) >> simp[] >>
-      irule_at Any lower_vyper_runtime_unit_allocs_ok >>
-      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  drule_all lookup_function_external_mem >> strip_tac >> gvs[] >>
+  `module_consts_env tops [] = []` by
+    (irule supported_headers_module_consts_env >>
+     qexists_tac `tops` >>
+     gvs[supported_program_def, supported_declaration_headers_def]) >>
+  drule lookup_function_external_classified >> simp[] >> strip_tac >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
   irule (SIMP_RULE (srw_ss()) [] normalize_function_return_limit) >> simp[] >>
-  irule_at Any lower_vyper_runtime_unit_allocs_ok >>
-  goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> metis_tac[]
+  irule_at Any lower_vyper_runtime_unit_allocs_ok >> metis_tac[]
 QED
 
 (* The allocation-size and nominal-layout producers use the frozen frame's
@@ -313,7 +302,7 @@ Theorem normalize_external_frame_resources:
     SOME (mut,nr,args,defaults,ret,fbody) /\
   set_external_package_target rpolicy.rpol_target
     (package_external_fn tops use_trans keys
-      (mut,nr,rr,tx.function_name,args,defaults,ret,fbody)) =
+      (mut,nr,rr,tx.function_name,args,pkg_defaults,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,payable,nr',key,ut,iv,fbody',rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sa) /\
   same_frame cenv c ==>

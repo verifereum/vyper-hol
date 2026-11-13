@@ -10,7 +10,7 @@ Theorem deploy_ctor_entry_fmp_room:
   !tops rpolicy runtime_bc dunit
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final
    func s.
-    supported_program tops /\
+    supported_program tops /\ supported_program_deploy tops /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) ==>

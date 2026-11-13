@@ -1,6 +1,6 @@
 (* Complete ambient projections on the concrete copy-prefix witnesses. *)
 Theory typedCopyAmbientFramePtr
-Ancestors typedCopyPtr typedCopyLoopHeaderPtr
+Ancestors typedCopyAmbientEffectsPtr typedCopyPtr typedCopyLoopHeaderPtr
 
 Theorem emit_copy_len_binop_ambient_frag_ptr:
   !opc f G cx ctx PG R sa sb left right out tn s a b.
@@ -22,7 +22,9 @@ Theorem emit_copy_len_binop_ambient_frag_ptr:
         FLOOKUP Gf p = FLOOKUP G p /\
         op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  typedCopyAmbientLib.emit_binop (copy_len_binop_frag_ptr, copy_len_binop_ghost_frame)
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all emit_copy_len_binop_effects_frag_ptr >>
+  metis_tac[]
 QED
 
 Theorem emit_copy_len_not_ambient_frag_ptr:
@@ -66,7 +68,8 @@ Theorem emit_mload_clean_ambient_frag_ptr:
         FLOOKUP Gf p = FLOOKUP G p /\
         op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  typedCopyAmbientLib.emit_mload (mload_frag_ptr, mload_ghost_clean)
+  rpt strip_tac >> drule_all emit_mload_clean_effects_frag_ptr >>
+  metis_tac[]
 QED
 
 Theorem compile_bytestring_copy_len_ambient_frag_ptr:
@@ -90,13 +93,12 @@ Theorem compile_bytestring_copy_len_ambient_frag_ptr:
         FLOOKUP Gf p = FLOOKUP G p /\
         op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  typedCopyAmbientLib.copy_len
-    (emit_mload_clean_ambient_frag_ptr, emit_copy_len_not_ambient_frag_ptr,
-     emit_copy_len_binop_ambient_frag_ptr, compileEnvTheory.cs_extends_trans)
+  rpt strip_tac >> drule_all compile_bytestring_copy_len_effects_frag_ptr >>
+  metis_tac[]
 QED
 
 Theorem compile_store_bytestring_ambient_frag_ptr:
-  !cx ctx PG R sa sb src dst G tn s a b len n.
+  !H cx ctx PG R sa sb src dst G tn s a b len n.
     compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
     not_fresh_at sa src /\ not_fresh_at sa dst /\
     lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
@@ -123,10 +125,8 @@ Theorem compile_store_bytestring_ambient_frag_ptr:
         FLOOKUP Gf p = FLOOKUP G p /\
         op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  typedCopyAmbientLib.store_bytestring
-    (compile_bytestring_copy_len_ambient_frag_ptr, mcopy_operand_frag_ptr,
-     mcopy_operand_ghost_frame, exprSimBufferStoreTheory.buffer_round_size,
-     exprSimBufferStoreTheory.buffer_mcopy_exterior)
+  rpt strip_tac >> drule_all compile_store_bytestring_effects_frag_ptr >>
+  metis_tac[]
 QED
 
 Theorem typed_copy_loop_address_ambient_frag_ptr:
