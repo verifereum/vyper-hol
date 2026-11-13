@@ -17147,6 +17147,62 @@ Proof
   metis_tac[mm_local_cut_empty_state_equiv]
 QED
 
+Theorem mm_local_mem2mem_stopping_result[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ n < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  deleted = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  mm_local_cut is gs H n excluded pc t /\
+  ~(?err. dft_exec_suffix fuel ctx [EL n is] (H n) = Error err) /\
+  (is_terminator (EL n is).inst_opcode \/
+    ~(?u. step_inst fuel ctx (EL n is) (H n) = OK u)) ==>
+  (!es. apply_groups_inst_supply Mem2Mem ns rs es (EL n is) = ([EL n is],es)) /\
+   lift_result
+     (\u v. state_equiv excluded (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+     (execution_equiv excluded) revert_equiv
+     (dft_exec_suffix fuel ctx [EL n is] (H n))
+     (dft_exec_suffix fuel ctx [EL n is] t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `is_terminator (EL n is).inst_opcode`
+     >- ( `bb_well_formed bb` by
+            (irule (cj 1 mm_local_prefix_wf_last) >>
+             qexistsl [`fn0`,`index`,`k`,`sk`,`supply`] >>
+             gvs[venomWfTheory.wf_ssa_def, ir_supply_covers_fn_def,
+               irSupplyTheory.fn_ir_inst_ids_def, irSupplyTheory.block_ir_inst_ids_def,
+               EVERY_MEM, MEM_FLAT, MEM_MAP] >> metis_tac[EL_MEM, MEM_MAP]) >>
+          `SUC n = LENGTH is` by
+            (qpat_x_assum `bb_well_formed bb` mp_tac >>
+             simp[venomWfTheory.bb_well_formed_def] >> strip_tac >>
+             `n = PRE (LENGTH is)` by metis_tac[] >>
+             qpat_x_assum `is = _` (fn th => SUBST_ALL_TAC (SYM th)) >> decide_tac) >>
+          drule_all mm_local_mem2mem_terminal_cut >> strip_tac >>
+          conj_tac >- simp[] >>
+          irule mm_local_cut_terminator_result >>
+          reverse conj_tac
+          >- (simp[] >> qexistsl [`gs`,`is`,`pc`] >> gvs[]) >>
+          qx_gen_tac `v` >> disch_tac >>
+          `MEM (EL n is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+          irule (cj 3 mm_local_retained_operand_protected) >>
+          gvs[] >> metis_tac[venomWfPropsTheory.operand_var_in_inst_uses])
+     >- (fs[] >>
+     `~(?err. step_inst fuel ctx (EL n is) (H n) = Error err)` by
+       (Cases_on `step_inst fuel ctx (EL n is) (H n)` >>
+        gvs[dft_exec_suffix_def]) >>
+     mp_tac (Q.INST [`pc` |-> `pc`]
+       mm_local_mem2mem_nonterminator_stopping_boundary) >>
+     (impl_tac >- gvs[]) >> strip_tac >>
+     simp[] >>
+     Cases_on `step_inst fuel ctx (EL n is) (H n)` >>
+     Cases_on `step_inst fuel ctx (EL n is) t` >>
+     gvs[lift_result_def, dft_exec_suffix_def])
+QED
+
 Theorem mm_local_mem2mem_post_phi_result[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -17211,38 +17267,10 @@ Proof
      (execution_equiv excluded) revert_equiv
      (dft_exec_suffix fuel ctx [EL n is] (H n))
      (dft_exec_suffix fuel ctx [EL n is] t)` by
-    (Cases_on `is_terminator (EL n is).inst_opcode`
-     >- ( `bb_well_formed bb` by
-            (irule (cj 1 mm_local_prefix_wf_last) >>
-             qexistsl [`fn0`,`index`,`k`,`sk`,`supply`] >>
-             gvs[venomWfTheory.wf_ssa_def, ir_supply_covers_fn_def,
-               irSupplyTheory.fn_ir_inst_ids_def, irSupplyTheory.block_ir_inst_ids_def,
-               EVERY_MEM, MEM_FLAT, MEM_MAP] >> metis_tac[EL_MEM, MEM_MAP]) >>
-          `SUC n = LENGTH is` by
-            (qpat_x_assum `bb_well_formed bb` mp_tac >>
-             simp[venomWfTheory.bb_well_formed_def] >> strip_tac >>
-             `n = PRE (LENGTH is)` by metis_tac[] >>
-             qpat_x_assum `is = _` (fn th => SUBST_ALL_TAC (SYM th)) >> decide_tac) >>
-          drule_all mm_local_mem2mem_terminal_cut >> strip_tac >>
-          conj_tac >- simp[] >>
-          irule mm_local_cut_terminator_result >>
-          reverse conj_tac
-          >- (simp[] >> qexistsl [`gs`,`is`,`phi_prefix_length is + LENGTH out`] >> gvs[]) >>
-          qx_gen_tac `v` >> disch_tac >>
-          `MEM (EL n is) bb.bb_instructions` by metis_tac[EL_MEM] >>
-          irule (cj 3 mm_local_retained_operand_protected) >>
-          gvs[] >> metis_tac[venomWfPropsTheory.operand_var_in_inst_uses])
-     >- (fs[] >>
-     `~(?err. step_inst fuel ctx (EL n is) (H n) = Error err)` by
-       (Cases_on `step_inst fuel ctx (EL n is) (H n)` >>
-        gvs[dft_exec_suffix_def]) >>
-     mp_tac (Q.INST [`pc` |-> `LENGTH (out:instruction list) + phi_prefix_length is`]
-       mm_local_mem2mem_nonterminator_stopping_boundary) >>
-     (impl_tac >- gvs[]) >> strip_tac >>
-     simp[] >>
-     Cases_on `step_inst fuel ctx (EL n is) (H n)` >>
-     Cases_on `step_inst fuel ctx (EL n is) t` >>
-     gvs[lift_result_def, dft_exec_suffix_def])) >>
+    (`~(?err. dft_exec_suffix fuel ctx [EL n is] (H n) = Error err)` by metis_tac[] >>
+     mp_tac (Q.INST [`pc` |-> `phi_prefix_length is + LENGTH (out:instruction list)`]
+       mm_local_mem2mem_stopping_result) >>
+     (impl_tac >- asm_rewrite_tac[]) >> simp[]) >>
   Cases_on `mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) esn
     (DROP (SUC n) is)` >>
   rename1 `mm_flat_map_supply _ esn (DROP (SUC n) is) = (tail,fin)` >>
@@ -18958,6 +18986,369 @@ Proof
   drule_all mm_local_in_revert_forward_transport >> simp[]
 QED
 
+Theorem mm_local_mode_no_output_recognition[local]:
+  i.inst_outputs = [] /\
+  apply_groups_inst_supply mode ns rm s i = (out,s') /\
+  (!v. p = Var v ==> MEM v s.irs_used_vars) /\
+  (!v. q = Var v ==> MEM v s.irs_used_vars) ==>
+  same_after_assigns (REVERSE out ++ xs) p q = same_after_assigns xs p q
+Proof
+  strip_tac >> Cases_on `p = q`
+  >- simp[contextCodegenRelPropsTheory.same_after_assigns_refl] >>
+  gvs[apply_groups_inst_supply_def, AllCaseEqs()] >>
+  gvs[mk_nop_from_def, mk_bulk_copy_inst_def, mk_load_inst_def,
+      mk_mstore_from_load_def, irSupplyTheory.fresh_inst_id_def] >>
+  TRY (drule irSupplyTheory.fresh_ir_var_contract >> strip_tac) >>
+  TRY (Cases_on `mode`) >> Cases_on `p` >> Cases_on `q` >>
+  gvs[contextCodegenRelTheory.same_after_assigns_def,
+      contextCodegenRelTheory.step_back_assign_def, mode_load_opcode_def,
+      mode_copy_opcode_def] >>
+  rpt IF_CASES_TAC >> gvs[] >> metis_tac[]
+QED
+
+Theorem mm_local_mode_same_after_assigns_list[local]:
+  !xs s out s' P p q.
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  f = apply_groups_inst_supply mode
+    (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+      (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
+    (rep_map_of_groups bb.bb_instructions
+      (scan_block (dfg_build_function fn0) mode bb).ss_flushed) /\
+  EVERY (\i. MEM i bb.bb_instructions /\ inst_wf i /\
+    !v. MEM (Var v) i.inst_operands ==> v IN P) xs /\
+  (!v. v IN P ==> MEM v s.irs_used_vars) /\
+  (!v. p = Var v ==> v IN P) /\ (!v. q = Var v ==> v IN P) /\
+  mm_flat_map_supply f s xs = (out,s') /\
+  same_after_assigns (REVERSE xs) p q ==>
+  same_after_assigns (REVERSE out) p q
+Proof
+  Induct using listTheory.SNOC_INDUCT
+  >- simp[mm_flat_map_supply_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `p = q`
+  >- simp[contextCodegenRelPropsTheory.same_after_assigns_refl] >>
+  fs[listTheory.SNOC_APPEND] >>
+  Cases_on `mm_flat_map_supply f s xs` >>
+  rename1 `mm_flat_map_supply f s xs = (pre,sm)` >>
+  Cases_on `f sm x` >> rename1 `f sm x = (chunk,se)` >>
+  `out = pre ++ chunk /\ s' = se` by
+    (`mm_flat_map_supply f sm [x] = (chunk,se)` by simp[mm_flat_map_supply_def] >>
+     drule_all mm_local_flat_map_supply_append >> simp[]) >>
+  `!v. v IN P ==> MEM v sm.irs_used_vars` by
+    (drule_at (Pat `mm_flat_map_supply _ _ _ = _`)
+       (Q.ISPEC `venomInst$inst_uses` mm_local_list_old_vars) >>
+     simp[] >> (impl_tac >- metis_tac[mm_local_mode_old_use]) >>
+     strip_tac >> metis_tac[]) >>
+  Cases_on `x.inst_outputs = []`
+  >- (`same_after_assigns (REVERSE chunk ++ REVERSE pre) p q =
+       same_after_assigns (REVERSE pre) p q` by
+        (irule mm_local_mode_no_output_recognition >> metis_tac[]) >>
+      `same_after_assigns (REVERSE xs) p q` by
+        (Cases_on `p` >> Cases_on `q` >>
+         gvs[REVERSE_APPEND, contextCodegenRelTheory.same_after_assigns_def,
+             contextCodegenRelTheory.step_back_assign_def]) >>
+      gvs[REVERSE_APPEND] >> first_x_assum irule >> metis_tac[]) >>
+  `ALOOKUP (rep_map_of_groups bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed) x.inst_id = NONE` by
+    (Cases_on `ALOOKUP (rep_map_of_groups bb.bb_instructions
+      (scan_block (dfg_build_function fn0) mode bb).ss_flushed) x.inst_id` >> simp[] >>
+     drule_all mm_local_prefix_rep_write >>
+     disch_then (strip_assume_tac o REWRITE_RULE
+       [pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
+     gvs[inst_wf_def]) >>
+  Cases_on `MEM x.inst_id (nop_ids_of_groups (dfg_build_function fn0) mode
+    bb.bb_instructions (scan_block (dfg_build_function fn0) mode bb).ss_flushed)`
+  >- (`x.inst_opcode <> ASSIGN` by
+        (strip_tac >>
+         `!r. f r x = ([x],r)` by
+           (gvs[] >> irule mm_local_prefix_nonselected_unchanged >>
+            simp[mode_copy_opcode_def, mode_load_opcode_def] >>
+            Cases_on `mode` >> gvs[mode_copy_opcode_def, mode_load_opcode_def] >> metis_tac[]) >>
+         `f sm x = ([mk_nop_from x],sm)` by
+           (qpat_assum `f = _` (fn th => pure_once_rewrite_tac[th]) >>
+            simp[apply_groups_inst_supply_def]) >>
+         `mk_nop_from x = x` by metis_tac[pairTheory.PAIR_EQ, listTheory.CONS_11] >>
+         pop_assum (mp_tac o AP_TERM ``\i:instruction. i.inst_opcode``) >>
+         simp[mk_nop_from_def]) >>
+      `chunk = [mk_nop_from x]` by gvs[apply_groups_inst_supply_def] >>
+      `same_after_assigns (REVERSE xs) p q` by
+        (Cases_on `p` >> Cases_on `q` >>
+         gvs[REVERSE_APPEND, contextCodegenRelTheory.same_after_assigns_def,
+             contextCodegenRelTheory.step_back_assign_def, AllCaseEqs()] >>
+         BasicProvers.EVERY_CASE_TAC >> gvs[]) >>
+      `same_after_assigns (REVERSE chunk ++ REVERSE pre) p q =
+       same_after_assigns (REVERSE pre) p q` by
+        (Cases_on `p` >> Cases_on `q` >>
+         gvs[mk_nop_from_def, contextCodegenRelTheory.same_after_assigns_def,
+           contextCodegenRelTheory.step_back_assign_def]) >>
+      gvs[REVERSE_APPEND] >> first_x_assum irule >> metis_tac[]) >>
+  `chunk = [x] /\ se = sm` by gvs[apply_groups_inst_supply_def] >>
+  gvs[REVERSE_APPEND, contextCodegenRelTheory.same_after_assigns_def] >>
+  Cases_on `step_back_assign x p` >- gvs[] >>
+  Cases_on `step_back_assign x q` >- gvs[] >> gvs[] >>
+  rename1 `step_back_assign x p = SOME p1` >>
+  rename1 `step_back_assign x q = SOME q1` >>
+  `(!v. p1 = Var v ==> v IN P) /\
+   (!v. q1 = Var v ==> v IN P)` by
+    (qpat_x_assum `!s out s' P p q. _` kall_tac >>
+     metis_tac[contextCodegenRelPropsTheory.step_back_assign_preserves_vars]) >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem mm_local_mode_same_after_assigns_prefix[local]:
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  f = apply_groups_inst_supply mode
+    (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+      (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
+    (rep_map_of_groups bb.bb_instructions
+      (scan_block (dfg_build_function fn0) mode bb).ss_flushed) /\
+  EVERY (\i. inst_wf i /\
+    !v. MEM (Var v) i.inst_operands ==> v IN P) bb.bb_instructions /\
+  (!v. v IN P ==> MEM v sk.irs_used_vars) /\
+  (!v. p = Var v ==> v IN P) /\ (!v. q = Var v ==> v IN P) /\
+  mm_flat_map_supply f sk (TAKE n bb.bb_instructions) = (out,s') /\
+  same_after_assigns (REVERSE (TAKE n bb.bb_instructions)) p q ==>
+  same_after_assigns (REVERSE out) p q
+Proof
+  strip_tac >>
+  `EVERY (\i. MEM i bb.bb_instructions /\ inst_wf i /\
+    !v. MEM (Var v) i.inst_operands ==> v IN P)
+    (TAKE n bb.bb_instructions)` by
+    (gvs[EVERY_MEM] >> metis_tac[rich_listTheory.MEM_TAKE]) >>
+  drule_all mm_local_mode_same_after_assigns_list >> simp[]
+QED
+
+Theorem mm_local_mode_in_revert_forward_transport[local]:
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  index < LENGTH fn.fn_blocks /\ bb = EL index fn.fn_blocks /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  f = apply_groups_inst_supply mode
+    (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+      (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
+    (rep_map_of_groups bb.bb_instructions
+      (scan_block (dfg_build_function fn0) mode bb).ss_flushed) /\
+  EVERY (\i. inst_wf i /\
+    !v. MEM (Var v) i.inst_operands ==> v IN P) bb.bb_instructions /\
+  (!v. v IN P ==> MEM v sk.irs_used_vars) /\
+  mm_flat_map_supply f sk (TAKE n bb.bb_instructions) = (pre,sn) /\
+  mm_flat_map_supply f sk bb.bb_instructions = (bb'.bb_instructions,supply') /\
+  bb'.bb_label = bb.bb_label /\
+  s.vs_current_bb = bb.bb_label /\ s.vs_inst_idx = n /\
+  t.vs_current_bb = bb.bb_label /\ t.vs_inst_idx = LENGTH pre /\
+  in_revert_forward fn s ==>
+  in_revert_forward (fn with fn_blocks := LUPDATE bb' index fn.fn_blocks) t
+Proof
+  strip_tac >>
+  `!x es. MEM x bb.bb_instructions /\
+    x.inst_opcode IN {ASSIGN; RETURNDATACOPY; REVERT} ==>
+    f es x = ([x],es)` by
+    (rpt strip_tac >>
+     qpat_assum `f = _` (fn th => pure_once_rewrite_tac[th]) >>
+     irule mm_local_prefix_nonselected_unchanged >>
+     Cases_on `mode` >>
+     gvs[mode_copy_opcode_def,mode_load_opcode_def,
+       pred_setTheory.IN_INSERT,pred_setTheory.NOT_IN_EMPTY] >>
+     metis_tac[]) >>
+  `!n pre sn p q.
+    (!v. p = Var v ==> v IN P) /\ (!v. q = Var v ==> v IN P) /\
+    mm_flat_map_supply f sk (TAKE n bb.bb_instructions) = (pre,sn) /\
+    same_after_assigns (REVERSE (TAKE n bb.bb_instructions)) p q ==>
+    same_after_assigns (REVERSE pre) p q` by
+    (rpt strip_tac >> drule_all mm_local_mode_same_after_assigns_prefix >> simp[]) >>
+  drule_all mm_local_in_revert_forward_transport >> simp[]
+QED
+
+Theorem mm_local_prefix_in_revert_forward[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  f = apply_groups_inst_supply mode
+    (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+      (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
+    (rep_map_of_groups bb.bb_instructions
+      (scan_block (dfg_build_function fn0) mode bb).ss_flushed) /\
+  transform_block_mode_supply (dfg_build_function fn0) mode sk bb = (bb',sk') /\
+  mm_flat_map_supply f sk (TAKE n bb.bb_instructions) = (pre,sn) /\
+  s.vs_current_bb = bb.bb_label /\ s.vs_inst_idx = n /\
+  t.vs_current_bb = bb.bb_label /\ t.vs_inst_idx = LENGTH pre /\
+  in_revert_forward (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks) s ==>
+  in_revert_forward (fn0 with fn_blocks := LUPDATE bb' index fn0.fn_blocks) t
+Proof
+  strip_tac >>
+  `wf_function (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)` by
+    (irule mm_local_prefix_function_wf >> metis_tac[wf_ssa_def]) >>
+  `fn_inst_wf (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)` by
+    (irule mm_local_prefix_inst_wf >> metis_tac[]) >>
+  `ir_supply_covers_fn sk (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)` by
+    (irule mm_local_prefix_supply_covers >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `MEM bb (LUPDATE bb index fn0.fn_blocks)` by simp[MEM_LUPDATE] >>
+  `EVERY (\i. inst_wf i /\
+    !v. MEM (Var v) i.inst_operands ==> MEM v sk.irs_used_vars) bb.bb_instructions` by
+    (gvs[fn_inst_wf_def,mm_local_supply_coverage,EVERY_MEM] >>
+     rpt strip_tac >- metis_tac[] >>
+     `mm_local_inst_covered sk i` by metis_tac[] >>
+     gvs[mm_local_inst_covered_def,irSupplyTheory.inst_ir_vars_def,
+       list_subset_def,EVERY_MEM,venomInstTheory.inst_uses_def,
+       passSharedDefsTheory.MEM_operand_vars_eq_Var] >> metis_tac[]) >>
+  `mm_flat_map_supply f sk bb.bb_instructions = (bb'.bb_instructions,sk') /\
+    bb'.bb_label = bb.bb_label` by
+    (qpat_x_assum `transform_block_mode_supply _ _ _ _ = _` mp_tac >>
+     simp[transform_block_mode_supply_def] >> gvs[] >>
+     simp[AllCaseEqs()] >> strip_tac >> gvs[]) >>
+  `LUPDATE bb' index (LUPDATE bb index fn0.fn_blocks) =
+    LUPDATE bb' index fn0.fn_blocks` by
+    (irule LIST_EQ >> simp[EL_LUPDATE]) >>
+  mp_tac (Q.INST [`fn` |-> `fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks`,
+    `P` |-> `set sk.irs_used_vars`, `supply'` |-> `sk'`] mm_local_mode_in_revert_forward_transport) >>
+  (impl_tac >- (simp[EL_LUPDATE] >> gvs[wf_function_def,venomInstTheory.fn_labels_def])) >>
+  simp[]
+QED
+
+Theorem mm_local_representative_static_bounds[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  h = phi_prefix_length is /\ h <= r /\ r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\ eom < dimword (:256) /\
+  (!q. h <= q /\ q <= r ==> (H q).vs_inst_idx = q /\
+    (H q).vs_current_bb = bb.bb_label /\
+    static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+      (EL q is) (H q) /\
+    ?u. step_inst fuel ctx (EL q is) (H q) = OK u) ==>
+  g.cg_length = 0 \/
+  (g.cg_dst + g.cg_length <= eom /\ g.cg_src + g.cg_length <= eom)
+Proof
+  strip_tac >> Cases_on `g.cg_length = 0` >- simp[] >> simp[] >>
+  qabbrev_tac `due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r)` >>
+  `mm_local_group_coverage is (LENGTH is)
+    (\p. OPTION_MAP (\(d,l). (d,REPLICATE l (0w:word8)))
+      (mm_local_write_footprint (EL p is))) g` by
+    (`MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
+     drule_all (Q.INST [`cap` |-> `\p. OPTION_MAP (\(d,l). (d,REPLICATE l (0w:word8)))
+      (mm_local_write_footprint (EL p is))`] mm_local_final_footprint_extent |> SRULE []) >> simp[]) >>
+  `?j dj lj. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    mm_local_write_footprint (EL j is) = SOME (dj,lj) /\
+    dj <= g.cg_dst + g.cg_length - 1 /\
+    g.cg_dst + g.cg_length - 1 < dj + lj` by
+    (qpat_x_assum `mm_local_group_coverage _ _ _ _` mp_tac >>
+     pure_rewrite_tac[mm_local_group_coverage_def] >>
+     disch_then (qspec_then `g.cg_dst + g.cg_length - 1` mp_tac) >>
+     `g.cg_dst <= g.cg_dst + g.cg_length - 1 /\
+       g.cg_dst + g.cg_length - 1 < g.cg_dst + g.cg_length` by decide_tac >>
+     simp[] >> strip_tac >>
+     rename1 `mm_local_write_footprint (EL j bb.bb_instructions) = SOME pair` >>
+     PairCases_on `pair` >>
+     qexists_tac `j` >> qexists_tac `pair0` >> qexists_tac `pair1` >>
+     gvs[] >> decide_tac) >>
+  `due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r)` by simp[Abbr `due`] >>
+  `MEM j (due ++ [r])` by metis_tac[mm_local_canonical_due_footprint_indices] >>
+  `h <= j /\ j <= r` by
+    (Cases_on `j = r` >- gvs[] >>
+     `MEM j (mm_local_pending_indices is gs r)` by gvs[Abbr `due`, MEM_FILTER] >>
+     drule mm_local_pending_indices_after_phis >>
+     gvs[mm_local_pending_indices_mem] >> decide_tac) >>
+  `wf_function (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)` by
+    (irule mm_local_prefix_function_wf >> metis_tac[wf_ssa_def]) >>
+  `MEM bb (LUPDATE bb index fn0.fn_blocks)` by simp[listTheory.MEM_LUPDATE] >>
+  `lookup_block bb.bb_label (LUPDATE bb index fn0.fn_blocks) = SOME bb` by
+    (mp_tac (Q.SPECL [`fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks`, `bb`]
+       removeUnusedProofsTheory.wf_lookup_block) >> simp[]) >>
+  ` (H j).vs_inst_idx = j /\ (H j).vs_current_bb = bb.bb_label /\
+    static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+      (EL j is) (H j) /\ ?u. step_inst fuel ctx (EL j is) (H j) = OK u` by metis_tac[] >>
+  drule_all (Q.INST [`j` |-> `j`, `s0` |->
+    `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is)`]
+    mm_local_canonical_due_birth_geometry |> PURE_REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES]) >> strip_tac >>
+  `~in_revert_forward (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks) (H j)` by
+    (simp[contextCodegenRelTheory.in_revert_forward_def] >> strip_tac >>
+     `get_instruction bb j = SOME (EL j is)` by gvs[venomInstTheory.get_instruction_def] >>
+     drule_all memSafeRunTheory.revert_forward_at_opcode >> simp[]) >>
+  Cases_on `(EL j is).inst_opcode = MCOPY`
+  >- (qpat_x_assum `!q. h <= q /\ q <= r ==> _` kall_tac >>
+      qpat_x_assum `static_mem_ok _ _ _ (EL j is) _` mp_tac >>
+      simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+        EVERY_APPEND] >> strip_tac >>
+      gvs[mm_local_write_footprint_def, contextCodegenRelTheory.source_memory_read_ranges_def,
+        codegenRelTheory.source_memory_write_ranges_def,
+        codegenRelTheory.sized_source_write_range_def, venomStateTheory.eval_operand_def] >>
+      decide_tac) >>
+  gvs[] >>
+  rename1 `(EL j bb.bb_instructions).inst_operands = [Lit dstw; Var valuev]` >>
+  drule mm_local_scan_lookup_origin >> simp[mode_load_opcode_def] >>
+  disch_then (qx_choose_then `q` (qx_choose_then `w` strip_assume_tac)) >>
+  `?l. l < j /\ l < LENGTH bb.bb_instructions /\ EL l bb.bb_instructions = q` by
+    (qpat_x_assum `MEM q (TAKE j bb.bb_instructions)`
+       (mp_tac o REWRITE_RULE [MEM_EL]) >>
+     disch_then (qx_choose_then `l` strip_assume_tac) >>
+     `l < j /\ l < LENGTH bb.bb_instructions` by
+       (`j <= LENGTH bb.bb_instructions` by decide_tac >>
+        fs[LENGTH_TAKE] >> decide_tac) >>
+     qexists_tac `l` >> gvs[EL_TAKE]) >>
+  `phi_prefix_length bb.bb_instructions <= l` by
+    (CCONTR_TAC >> `l < phi_prefix_length bb.bb_instructions` by decide_tac >>
+     qspec_then `bb.bb_instructions` (mp_tac o REWRITE_RULE [EVERY_EL])
+       analysisSimProofsBaseTheory.phi_prefix_all_phi >>
+     disch_then (qspec_then `l` mp_tac) >>
+     simp[LENGTH_TAKE,venomExecProofsTheory.phi_prefix_length_le,EL_TAKE] >> gvs[]) >>
+  ` (H l).vs_inst_idx = l /\ (H l).vs_current_bb = bb.bb_label /\
+    static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+      (EL l bb.bb_instructions) (H l)` by
+    (qpat_assum `!q. phi_prefix_length bb.bb_instructions <= q /\ q <= r ==> _` (qspec_then `l` mp_tac) >> simp[] >>
+     `l <= r` by decide_tac >> metis_tac[]) >>
+  `~in_revert_forward (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks) (H l)` by
+    (simp[contextCodegenRelTheory.in_revert_forward_def] >> strip_tac >>
+     `get_instruction bb l = SOME q` by gvs[venomInstTheory.get_instruction_def] >>
+     drule_all memSafeRunTheory.revert_forward_at_opcode >> simp[]) >>
+  `static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+    (EL j bb.bb_instructions) (H j)` by
+    (qpat_assum `!q. phi_prefix_length bb.bb_instructions <= q /\ q <= _ ==> _`
+       (qspec_then `j` mp_tac) >> simp[]) >>
+  qpat_x_assum `!q. phi_prefix_length bb.bb_instructions <= q /\ q <= r ==> _` kall_tac >>
+  qpat_x_assum `static_mem_ok _ _ _ (EL l _) _` mp_tac >>
+  qpat_x_assum `static_mem_ok _ _ _ (EL j _) _` mp_tac >>
+  simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+    EVERY_APPEND] >> rpt strip_tac >>
+  gvs[mm_local_write_footprint_def, contextCodegenRelTheory.source_memory_read_ranges_def,
+    codegenRelTheory.source_memory_write_ranges_def,
+    codegenRelTheory.fixed_source_write_range_def, venomStateTheory.eval_operand_def] >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  asm_simp_tac (srw_ss()) [venomExecSemanticsTheory.step_inst_non_invoke] >>
+  with_opcode_clause simp >>
+  simp[venomExecSemanticsTheory.exec_write2_def, venomStateTheory.eval_operand_def] >>
+  Cases_on `lookup_var valuev (H j)` >> simp[] >> strip_tac >> gvs[] >> decide_tac
+QED
+
+Theorem mm_local_retained_static_if_forward[local]:
+  mm_local_cut is gs H n excluded pc t /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  static_mem_ok eom ctx fn i (H n) /\
+  (in_revert_forward fn (H n) ==> in_revert_forward fn' t) ==>
+  static_mem_ok eom ctx fn' i t
+Proof
+  strip_tac >>
+  `inst_mem_ranges i (H n) = inst_mem_ranges i t` by
+    (irule o1ContractCfgNormTheory.supply_inst_mem_ranges_cong >>
+     gvs[mm_local_cut_def, mm_local_nonmemory_frame_def] >>
+     rpt strip_tac >> Cases_on `op` >>
+     gvs[venomStateTheory.eval_operand_def]) >>
+  gvs[unitMemInvTheory.static_mem_ok_def] >> metis_tac[]
+QED
+
 Theorem mm_local_zero_retained_static_if_forward[local]:
   mm_local_zero_cut dfg is gs H n excluded pc t /\
   (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
@@ -19007,6 +19398,278 @@ Theorem mm_local_safe_exec_prefix_universal[local]:
 Proof
   Induct_on `xs` >> simp[mm_local_safe_exec_prefix_def,
     mm_local_exec_prefix_def] >> metis_tac[]
+QED
+
+Theorem mm_local_exec_prefix_deterministic[local]:
+  !xs s t u. mm_local_exec_prefix fuel ctx xs s t /\
+    mm_local_exec_prefix fuel ctx xs s u ==> t = u
+Proof
+  Induct_on `xs` >> simp[mm_local_exec_prefix_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem mm_local_mem2mem_emission_safe[local]:
+  apply_groups_inst_supply Mem2Mem ns rs es i = (chunk,es') /\
+  (chunk = [i] ==> static_mem_ok eom ctx fn i t) /\
+  (!g. ALOOKUP rs i.inst_id = SOME g ==>
+    g.cg_dst < dimword (:256) /\ g.cg_src < dimword (:256) /\
+    g.cg_length < dimword (:256) /\
+    (g.cg_length = 0 \/
+      (g.cg_dst + g.cg_length <= eom /\ g.cg_src + g.cg_length <= eom))) /\
+  mm_local_exec_prefix fuel ctx chunk t t' ==>
+  mm_local_safe_exec_prefix (static_mem_ok eom ctx fn) fuel ctx chunk t t'
+Proof
+  strip_tac >> Cases_on `chunk = [i]`
+  >- gvs[mm_local_exec_prefix_def, mm_local_safe_exec_prefix_def] >>
+  irule mm_local_safe_exec_prefix_universal >> simp[] >>
+  qpat_x_assum `apply_groups_inst_supply _ _ _ _ _ = _` mp_tac >>
+  simp[apply_groups_inst_supply_def] >>
+  Cases_on `MEM i.inst_id ns`
+  >- (simp[] >> strip_tac >> gvs[mk_nop_from_def] >>
+      simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+        contextCodegenRelTheory.source_memory_read_ranges_def,
+        codegenRelTheory.source_memory_write_ranges_def]) >>
+  Cases_on `ALOOKUP rs i.inst_id` >> simp[] >>
+  rename1 `ALOOKUP rs i.inst_id = SOME g` >>
+  qpat_x_assum `!g'. SOME g = SOME g' ==> _`
+    (qspec_then `g` mp_tac) >> asm_rewrite_tac[] >>
+  disch_then assume_tac >>
+  `g.cg_dst < dimword (:256) /\ g.cg_src < dimword (:256) /\
+    g.cg_length < dimword (:256)` by metis_tac[] >>
+  Cases_on `g.cg_length = 32` >> simp[]
+  >- (Cases_on `i.inst_opcode = MSTORE` >> simp[] >>
+      Cases_on `fresh_inst_id es` >> rename1 `fresh_inst_id es = (lid,es1)` >>
+      Cases_on `fresh_ir_var es1` >> rename1 `fresh_ir_var es1 = (v,es2)` >>
+      simp[] >> strip_tac >> gvs[] >> qx_gen_tac `st` >>
+      simp[mk_load_inst_def, mk_mstore_from_load_def, mode_load_opcode_def,
+        unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+        contextCodegenRelTheory.source_memory_read_ranges_def,
+        codegenRelTheory.source_memory_write_ranges_def,
+        codegenRelTheory.fixed_source_write_range_def,
+        venomStateTheory.eval_operand_def, wordsTheory.w2n_n2w, arithmeticTheory.ADD_COMM] >>
+      Cases_on `lookup_var v st` >> gvs[]) >>
+  strip_tac >> gvs[] >>
+  simp[mk_bulk_copy_inst_def, mode_copy_opcode_def,
+    unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+    contextCodegenRelTheory.source_memory_read_ranges_def,
+    codegenRelTheory.source_memory_write_ranges_def,
+    codegenRelTheory.sized_source_write_range_def,
+    venomStateTheory.eval_operand_def, wordsTheory.w2n_n2w, arithmeticTheory.ADD_COMM]
+QED
+
+Theorem mm_local_mem2mem_safe_prefix_if_forward[local]:
+  !n fn0 supply index k bb sk is gs ns rs deleted excluded h H fuel ctx eom pre esh out esn t0 fn'.
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  deleted = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  h = phi_prefix_length is /\ h <= n /\ n <= LENGTH is /\
+  (!q. h <= q /\ q < n ==>
+    (H q).vs_inst_idx = q /\ (H q).vs_current_bb = bb.bb_label /\
+    ~is_terminator (EL q is).inst_opcode /\
+    ?u. step_inst fuel ctx (EL q is) (H q) = OK u /\
+      H (SUC q) = u with vs_inst_idx := SUC q) /\
+  (!q. h <= q /\ q < n ==>
+    static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+      (EL q is) (H q)) /\
+  (!q pref sq tq. h <= q /\ q < n /\
+    mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE q is) = (pref,sq) /\
+    mm_local_cut is gs H q excluded (LENGTH pref) tq ==>
+    in_revert_forward (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks) (H q) ==>
+    in_revert_forward fn' tq) /\
+  eom < dimword (:256) /\
+  state_equiv excluded (H h with vs_inst_idx := LENGTH pre) t0 /\
+  mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE h is) = (pre,esh) /\
+  mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) esh
+    (TAKE (n-h) (DROP h is)) = (out,esn) ==>
+  ?t. mm_local_safe_exec_prefix (static_mem_ok eom ctx fn') fuel ctx out t0 t /\
+    mm_local_cut is gs H n excluded (LENGTH pre + LENGTH out) t /\
+    mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE n is) =
+      (pre ++ out,esn) /\
+    ir_supply_extends sk esh /\ ir_supply_extends esh esn /\
+    t.vs_inst_idx = LENGTH pre + LENGTH out
+Proof
+  completeInduct_on `n` >> rpt strip_tac >>
+  `t0.vs_inst_idx = LENGTH pre` by fs[state_equiv_def] >>
+  Cases_on `n = h`
+  >- (qpat_x_assum `!m. m < _ ==> _` kall_tac >>
+      qpat_x_assum `n = h` SUBST_ALL_TAC >>
+      fs[mm_flat_map_supply_def] >>
+      qexists `t0` >>
+      simp[mm_local_safe_exec_prefix_def, mm_local_extends_refl] >>
+      conj_tac >- (irule mm_local_cut_init >> gvs[]) >>
+      irule (cj 1 mm_local_list_resources) >>
+      qexistsl [`apply_groups_inst_supply Mem2Mem ns rs`,`TAKE h is`] >>
+      metis_tac[mm_local_mode_resources]) >>
+  Cases_on `n` >- fs[] >> rename1 `SUC r <= LENGTH is` >>
+  `h <= r /\ r < LENGTH is` by decide_tac >>
+  Cases_on `mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) esh
+    (TAKE (r-h) (DROP h is))` >>
+  rename1 `mm_flat_map_supply _ esh (TAKE (r-h) (DROP h is)) = (front,es)` >>
+  `!q. h <= q /\ q < r ==>
+    (H q).vs_inst_idx = q /\ (H q).vs_current_bb = bb.bb_label /\
+    ~is_terminator (EL q is).inst_opcode /\
+    ?u. step_inst fuel ctx (EL q is) (H q) = OK u /\
+      H (SUC q) = u with vs_inst_idx := SUC q` by
+    (qx_gen_tac `q` >> strip_tac >>
+     qpat_assum `!q. h <= q /\ q < SUC r ==> (H q).vs_inst_idx = q /\ _`
+       (qspec_then `q` mp_tac) >> simp[]) >>
+  `!q. h <= q /\ q < r ==>
+    static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+      (EL q is) (H q)` by
+    (rpt strip_tac >> first_x_assum irule >> simp[] >> decide_tac) >>
+  `!q pref sq tq. h <= q /\ q < r /\
+    mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE q is) = (pref,sq) /\
+    mm_local_cut is gs H q excluded (LENGTH pref) tq ==>
+    in_revert_forward (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks) (H q) ==>
+    in_revert_forward fn' tq` by
+    (rpt gen_tac >> strip_tac >> strip_tac >>
+     `q < SUC r` by decide_tac >>
+     qpat_assum `!q pref sq tq. h <= q /\ q < SUC r /\ _ ==> _`
+       (qspecl_then [`q:num`,`pref:instruction list`,`sq:ir_supply`,`tq:venom_state`] irule) >>
+     qexistsl [`pref`,`q`,`sq`] >> gvs[]) >>
+  `r <= LENGTH is` by decide_tac >>
+  qpat_x_assum `!m. m < SUC r ==> _` (qspec_then `r` mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then drule_all >> strip_tac >>
+  Cases_on `apply_groups_inst_supply Mem2Mem ns rs es (EL r is)` >>
+  rename1 `apply_groups_inst_supply Mem2Mem ns rs es (EL r is) = (frag,es')` >>
+  `TAKE (SUC r-h) (DROP h is) = TAKE (r-h) (DROP h is) ++ [EL r is]` by
+    (`SUC r-h = SUC (r-h) /\ r-h < LENGTH (DROP h is)` by
+       (simp[] >> gvs[]) >>
+     gvs[rich_listTheory.TAKE_SUC_BY_TAKE, rich_listTheory.SNOC_APPEND,
+       rich_listTheory.EL_DROP]) >>
+  `mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) esh
+     (TAKE (SUC r-h) (DROP h is)) = (front ++ frag,es')` by
+    (qpat_assum `TAKE (SUC r-h) (DROP h is) = _` (fn th => rewrite_tac[th]) >>
+     irule mm_local_flat_map_supply_append >>
+     qexists `es` >> simp[mm_flat_map_supply_def]) >>
+  `out = front ++ frag /\ esn = es'` by metis_tac[pairTheory.PAIR_EQ] >>
+  `?fin. mm_local_exec_prefix fuel ctx out t0 fin /\
+    mm_local_cut is gs H (SUC r) excluded (LENGTH pre + LENGTH out) fin /\
+    mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE (SUC r) is) =
+      (pre ++ out,esn) /\
+    ir_supply_extends sk esh /\ ir_supply_extends esh esn /\
+    fin.vs_inst_idx = LENGTH pre + LENGTH out` by
+    (drule_all (Q.SPEC `SUC r` mm_local_mem2mem_prefix_execution) >> simp[]) >>
+  `mm_local_exec_prefix fuel ctx front t0 t` by
+    metis_tac[mm_local_safe_exec_prefix_erase] >>
+  `mm_local_exec_prefix fuel ctx frag t fin` by
+    (qpat_x_assum `mm_local_exec_prefix _ _ out _ _` mp_tac >>
+     asm_rewrite_tac[mm_local_exec_prefix_append] >>
+     metis_tac[mm_local_exec_prefix_deterministic]) >>
+  `(frag = [EL r is] ==> static_mem_ok eom ctx fn' (EL r is) t)` by
+    (strip_tac >>
+     `apply_groups_inst_supply Mem2Mem ns rs es (EL r is) = ([EL r is],es')` by metis_tac[] >>
+     `!v. MEM (Var v) (EL r is).inst_operands ==> v NOTIN excluded` by
+       (rpt strip_tac >>
+        `MEM (EL r is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+        `MEM v (venomInst$inst_uses (EL r is))` by
+          gvs[venomInstTheory.inst_uses_def,passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+        `ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem bb.bb_instructions
+          (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+         rs = rep_map_of_groups bb.bb_instructions
+          (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
+        qpat_x_assum `is = _` SUBST_ALL_TAC >>
+        drule_all mm_local_retained_operand_protected >> simp[]) >>
+     `static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+       (EL r is) (H r)` by metis_tac[prim_recTheory.LESS_SUC_REFL] >>
+     `(in_revert_forward (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks) (H r) ==>
+       in_revert_forward fn' t)` by
+       (strip_tac >>
+        qpat_x_assum `!q pref sq tq. h <= q /\ q < SUC r /\ _ ==> _`
+          (qspecl_then [`r:num`,`pre ++ front:instruction list`,`es:ir_supply`,`t:venom_state`] mp_tac) >>
+        gvs[arithmeticTheory.ADD_COMM]) >>
+     drule_all mm_local_retained_static_if_forward >> simp[]) >>
+  `!g. ALOOKUP rs (EL r is).inst_id = SOME g ==>
+    g.cg_dst < dimword (:256) /\ g.cg_src < dimword (:256) /\
+    g.cg_length < dimword (:256) /\
+    (g.cg_length = 0 \/
+      (g.cg_dst + g.cg_length <= eom /\ g.cg_src + g.cg_length <= eom))` by
+    (qx_gen_tac `g` >> strip_tac >>
+     `MEM g gs /\ rep_of_group is g = SOME ((EL r is).inst_id,g)` by
+       (drule alistTheory.ALOOKUP_MEM >>
+        pure_asm_rewrite_tac[rep_map_of_groups_def,MEM_MAP,MEM_FILTER] >>
+        strip_tac >> rename1 `IS_SOME opt` >> Cases_on `opt` >> fs[] >>
+        gvs[rep_of_group_def,AllCaseEqs()] >> metis_tac[]) >>
+     `!q. h <= q /\ q <= r ==> (H q).vs_inst_idx = q /\
+       (H q).vs_current_bb = bb.bb_label /\
+       static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+         (EL q is) (H q) /\
+       ?u. step_inst fuel ctx (EL q is) (H q) = OK u` by
+       (rpt strip_tac >> metis_tac[arithmeticTheory.LESS_EQ_IFF_LESS_SUC]) >>
+     `g.cg_dst < dimword (:256) /\ g.cg_src < dimword (:256) /\
+       g.cg_length < dimword (:256)` by
+       (drule_all mm_local_representative_finite_bounds >> simp[]) >>
+     simp[] >> drule_all mm_local_representative_static_bounds >> simp[]) >>
+  `mm_local_safe_exec_prefix (static_mem_ok eom ctx fn') fuel ctx frag t fin` by
+    (drule_all mm_local_mem2mem_emission_safe >> simp[]) >>
+  qexists `fin` >> simp[] >>
+  qpat_assum `out = _` (fn th => pure_once_rewrite_tac[th]) >>
+  metis_tac[mm_local_safe_exec_prefix_append]
+QED
+
+Theorem mm_local_mem2mem_safe_prefix_execution[local]:
+  !n fn0 supply index k bb sk is gs ns rs deleted excluded h H fuel ctx eom pre esh out esn t0 fn' bb' sk'.
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  deleted = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  h = phi_prefix_length is /\ h <= n /\ n <= LENGTH is /\
+  (!q. h <= q /\ q < n ==>
+    (H q).vs_inst_idx = q /\ (H q).vs_current_bb = bb.bb_label /\
+    ~is_terminator (EL q is).inst_opcode /\
+    ?u. step_inst fuel ctx (EL q is) (H q) = OK u /\
+      H (SUC q) = u with vs_inst_idx := SUC q) /\
+  (!q. h <= q /\ q < n ==>
+    static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+      (EL q is) (H q)) /\
+  transform_block_mode_supply (dfg_build_function fn0) Mem2Mem sk bb = (bb',sk') /\
+  fn' = fn0 with fn_blocks := LUPDATE bb' index fn0.fn_blocks /\
+  eom < dimword (:256) /\
+  state_equiv excluded (H h with vs_inst_idx := LENGTH pre) t0 /\
+  mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE h is) = (pre,esh) /\
+  mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) esh
+    (TAKE (n-h) (DROP h is)) = (out,esn) ==>
+  ?t. mm_local_safe_exec_prefix (static_mem_ok eom ctx fn') fuel ctx out t0 t /\
+    mm_local_cut is gs H n excluded (LENGTH pre + LENGTH out) t /\
+    mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE n is) =
+      (pre ++ out,esn) /\
+    ir_supply_extends sk esh /\ ir_supply_extends esh esn /\
+    t.vs_inst_idx = LENGTH pre + LENGTH out
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!q pref sq tq. h <= q /\ q < n /\
+    mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE q is) = (pref,sq) /\
+    mm_local_cut is gs H q excluded (LENGTH pref) tq ==>
+    in_revert_forward (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks) (H q) ==>
+    in_revert_forward fn' tq` by
+    (rpt gen_tac >> strip_tac >> strip_tac >>
+     `(H q).vs_current_bb = bb.bb_label /\ (H q).vs_inst_idx = q` by metis_tac[] >>
+     `tq.vs_current_bb = bb.bb_label /\ tq.vs_inst_idx = LENGTH pref` by
+       (qpat_assum `mm_local_cut _ _ _ _ _ _ tq` mp_tac >>
+        simp[NoAsms,mm_local_cut_def,mm_local_nonmemory_frame_def,
+          stateFrameTheory.state_frame_def, venomStateTheory.venom_state_component_equality] >>
+        strip_tac >> gvs[] >> metis_tac[]) >>
+     qpat_x_assum `fn' = _` SUBST_ALL_TAC >>
+     mp_tac (Q.INST [`f` |-> `apply_groups_inst_supply Mem2Mem ns rs`,
+       `mode` |-> `Mem2Mem`, `n` |-> `q:num`, `pre` |-> `pref:instruction list`,
+       `sn` |-> `sq:ir_supply`, `s` |-> `H (q:num)`, `t` |-> `tq:venom_state`]
+       mm_local_prefix_in_revert_forward) >>
+     (impl_tac >- gvs[]) >> simp[]) >>
+  drule_all mm_local_mem2mem_safe_prefix_if_forward >> simp[]
 QED
 
 Theorem mm_local_safe_exec_prefix_trace[local]:
@@ -19515,6 +20178,141 @@ Proof
   `LENGTH pre - (LENGTH out + LENGTH pre) = 0 /\
    LENGTH pre - (LENGTH out + (LENGTH pre + 1)) = 0` by decide_tac >>
   simp[DROP_APPEND]
+QED
+
+Theorem mm_local_mem2mem_post_phi_trace[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  deleted = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  transform_block_mode_supply (dfg_build_function fn0) Mem2Mem sk bb = (bb',sk') /\
+  s.vs_inst_idx = phi_prefix_length is /\ s.vs_current_bb = bb.bb_label /\
+  state_equiv excluded s t0 /\
+  fn = fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks /\
+  fn' = fn0 with fn_blocks := LUPDATE bb' index fn0.fn_blocks /\
+  eom < dimword (:256) /\
+  EVERY (\((p,d',id),f,i,t). p = [] ==> static_mem_ok eom ctx f i t)
+    (trace_block [] d fuel ctx fn bb s) /\
+  ~(?err. exec_block fuel ctx bb s = Error err) ==>
+  EVERY (\((p,d',id),f,i,t). p = [] ==> static_mem_ok eom ctx f i t)
+    (trace_block [] d fuel ctx fn' bb' t0)
+Proof
+  strip_tac >> qabbrev_tac `h = phi_prefix_length is` >>
+  qabbrev_tac `f = apply_groups_inst_supply Mem2Mem ns rs` >>
+  `t0.vs_inst_idx = h` by gvs[state_equiv_def] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `h <= LENGTH is` by simp[Abbr `h`,venomExecProofsTheory.phi_prefix_length_le] >>
+  `?n H. h <= n /\ n < LENGTH is /\ H h = s /\
+    (!q. h <= q /\ q <= n ==> (H q).vs_inst_idx = q) /\
+    (!q. h <= q /\ q < n ==>
+      ~is_terminator (EL q is).inst_opcode /\
+      ?u. step_inst fuel ctx (EL q is) (H q) = OK u /\
+        H (SUC q) = u with vs_inst_idx := SUC q) /\
+    (!q. h <= q /\ q <= n ==> static_mem_ok eom ctx fn (EL q is) (H q)) /\
+    (is_terminator (EL n is).inst_opcode \/
+      ~(?u. step_inst fuel ctx (EL n is) (H n) = OK u)) /\
+    exec_block fuel ctx bb s = dft_exec_suffix fuel ctx [EL n is] (H n)` by
+    (asm_rewrite_tac[] >> irule mm_local_source_stopping_history >>
+     simp[Abbr `h`] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `!q. h <= q /\ q <= n ==> (H q).vs_current_bb = bb.bb_label` by
+    metis_tac[mm_local_source_history_label] >>
+  `mm_flat_map_supply f sk (TAKE h is) = (TAKE h is,sk)` by
+    (simp[Abbr `f`] >> irule mm_local_mem2mem_phi_emission >>
+     qexistsl [`bb`,`fn0`,`gs`,`index`,`k`,`sk`,`supply`] >>
+     simp[Abbr `h`,EVERY_MEM] >> qx_gen_tac `i` >> strip_tac >>
+     conj_tac >- metis_tac[MEM_TAKE] >>
+     qspec_then `bb.bb_instructions` (mp_tac o REWRITE_RULE[EVERY_MEM])
+       analysisSimProofsBaseTheory.phi_prefix_all_phi >>
+     disch_then (qspec_then `i` mp_tac) >> simp[]) >>
+  Cases_on `mm_flat_map_supply f sk (TAKE (n-h) (DROP h is))` >>
+  rename1 `mm_flat_map_supply f sk (TAKE (n-h) (DROP h is)) = (out,esn)` >>
+  `LENGTH (TAKE h is) = h` by simp[] >>
+  `state_equiv excluded (H h with vs_inst_idx := h) t0` by
+    (`s with vs_inst_idx := h = s` by
+       simp[Abbr `h`,venomStateTheory.venom_state_component_equality] >> metis_tac[]) >>
+  `?t. mm_local_safe_exec_prefix (static_mem_ok eom ctx fn') fuel ctx out t0 t /\
+    mm_local_cut is gs H n excluded (h + LENGTH out) t /\
+    mm_flat_map_supply f sk (TAKE n is) = (TAKE h is ++ out,esn) /\
+    t.vs_inst_idx = h + LENGTH out` by
+    (mp_tac (Q.SPECL [`n`,`fn0`,`supply`,`index`,`k`,`bb`,`sk`,`is`,`gs`,
+       `ns`,`rs`,`deleted`,`excluded`,`h`,`H`,`fuel`,`ctx`,`eom`,`TAKE h is`,
+       `sk`,`out`,`esn`,`t0`,`fn'`,`bb'`,`sk'`] mm_local_mem2mem_safe_prefix_execution) >>
+     (impl_tac >- (gvs[Abbr `f`,Abbr `h`] >> rpt strip_tac >>
+       TRY decide_tac >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ])) >>
+     disch_then (qx_choose_then `t` strip_assume_tac) >>
+     qexists `t` >> gvs[Abbr `f`]) >>
+  pop_assum strip_assume_tac >>
+  `~(?err. dft_exec_suffix fuel ctx [EL n is] (H n) = Error err)` by metis_tac[] >>
+  `(!es. f es (EL n is) = ([EL n is],es)) /\
+   lift_result
+     (\u v. state_equiv excluded (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+     (execution_equiv excluded) revert_equiv
+     (dft_exec_suffix fuel ctx [EL n is] (H n))
+     (dft_exec_suffix fuel ctx [EL n is] t)` by
+    (mp_tac (Q.INST [`pc` |-> `h + LENGTH (out:instruction list)`]
+       mm_local_mem2mem_stopping_result) >>
+     (impl_tac >- asm_rewrite_tac[]) >> simp[Abbr `f`]) >>
+  pop_assum strip_assume_tac >>
+  `mm_flat_map_supply f sk is = (bb'.bb_instructions,sk')` by
+    (qpat_x_assum `transform_block_mode_supply _ _ _ _ = _` mp_tac >>
+     simp[transform_block_mode_supply_def] >> gvs[Abbr `f`] >>
+     simp[AllCaseEqs()] >> strip_tac >> gvs[]) >>
+  `!v. MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded` by
+    (rpt strip_tac >>
+     `MEM (EL n is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+     `MEM v (venomInst$inst_uses (EL n is))` by
+       gvs[venomInstTheory.inst_uses_def,passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+     `apply_groups_inst_supply Mem2Mem ns rs esn (EL n is) = ([EL n is],esn)` by
+       gvs[Abbr `f`] >>
+     `ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem bb.bb_instructions
+        (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+      rs = rep_map_of_groups bb.bb_instructions
+        (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
+     qpat_x_assum `is = _` SUBST_ALL_TAC >>
+     drule_all mm_local_retained_operand_protected >> simp[]) >>
+  `(H n).vs_inst_idx = n /\ (H n).vs_current_bb = bb.bb_label` by
+    metis_tac[arithmeticTheory.LESS_EQ_REFL] >>
+  `static_mem_ok eom ctx fn (EL n is) (H n)` by
+    (qpat_assum `!q. h <= q /\ q <= n ==> static_mem_ok _ _ _ _ _`
+       (qspec_then `n` mp_tac) >> simp[]) >>
+  `(in_revert_forward fn (H n) ==> in_revert_forward fn' t)` by
+    (strip_tac >>
+     `t.vs_current_bb = bb.bb_label` by
+       (qpat_assum `mm_local_cut _ _ _ _ _ _ t` mp_tac >>
+        simp[NoAsms,mm_local_cut_def,mm_local_nonmemory_frame_def,
+          stateFrameTheory.state_frame_def, venomStateTheory.venom_state_component_equality] >>
+        strip_tac >> gvs[] >> metis_tac[]) >>
+     mp_tac (Q.INST [`f` |-> `apply_groups_inst_supply Mem2Mem ns rs`,
+       `mode` |-> `Mem2Mem`, `pre` |-> `TAKE h (is:instruction list) ++ out`,
+       `sn` |-> `esn:ir_supply`, `s` |-> `H (n:num)`]
+       mm_local_prefix_in_revert_forward) >>
+     (impl_tac >- gvs[Abbr `f`,arithmeticTheory.ADD_COMM]) >>
+     asm_rewrite_tac[]) >>
+  `static_mem_ok eom ctx fn' (EL n is) t` by
+    (drule_all mm_local_retained_static_if_forward >> simp[]) >>
+  `is_terminator (EL n is).inst_opcode \/ ~(?u. step_inst fuel ctx (EL n is) t = OK u)` by
+    (qpat_x_assum `is = _` kall_tac >>
+     Cases_on `is_terminator (EL n is).inst_opcode` >> simp[] >>
+     qpat_x_assum `lift_result _ _ _ _ _` mp_tac >>
+     simp[dft_exec_suffix_def] >>
+     Cases_on `step_inst fuel ctx (EL n is) (H n)` >> fs[] >>
+     Cases_on `step_inst fuel ctx (EL n is) t` >> simp[lift_result_def] >>
+     qpat_x_assum `!err. dft_exec_suffix _ _ _ _ <> Error err` mp_tac >>
+     simp[dft_exec_suffix_def]) >>
+  irule (INST_TYPE [alpha |-> ``:ir_supply``] mm_local_emitted_stopping_trace) >>
+  (conj_tac
+   >- (qexists `\c fn i s. T` >>
+       simp[contextCodegenRelTheory.reachability_closed_def,contextCodegenRelTheory.fn_entry_inv_def])) >>
+  qexistsl [`esn`,`f`,`sk'`,`is`,`n`,`out`,`TAKE h is`,`sk`,`t`] >>
+  simp[] >> gvs[]
 QED
 
 Theorem mm_local_zero_stopping_unchanged[local]:
