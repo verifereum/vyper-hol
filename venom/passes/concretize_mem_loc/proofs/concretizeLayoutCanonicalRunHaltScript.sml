@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalRunHalt
-Ancestors concretizeLayoutCanonicalBlock concretizeLayoutCanonicalDriver
+Ancestors concretizeLayoutCutSafe frameGasEvents concretizeLayoutCanonicalBlock concretizeLayoutCanonicalDriver
   concretizeLayoutCanonicalDeferred frameSelectedSimulation
   concretizeLayoutPhaseOrigin concretizeLayoutCanonicalIndex
   concretizeLayoutAlignedControl frameControlAgreement
@@ -53,12 +53,11 @@ Theorem layout_canonical_run_halt_certificate:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))
@@ -71,8 +70,8 @@ Theorem layout_canonical_run_halt_certificate:
   selected_run_halt_certificate C C' q0 path
     (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend))
 Proof
   strip_tac >> simp[selected_run_halt_certificate_def] >> rpt strip_tac >>
   drule layout_canonical_run_phi >>
@@ -109,7 +108,7 @@ Proof
   qexistsl [`actual`, `phi'' with vs_inst_idx := phi_prefix_length actual.bb_instructions`] >>
   conj_tac >- (simp[layout_canonical_EB_def] >> metis_tac[]) >>
   rpt strip_tac >> Cases_on `rb'` >>
-  gvs[layout_canonical_OB_def, layout_canonical_result_def] >>
+  gvs[events_OB_def, layout_canonical_OB_def, layout_canonical_result_def] >>
   first_x_assum drule >> strip_tac >>
   fs[layout_completed_jump_def]
 QED
@@ -119,12 +118,11 @@ Theorem layout_canonical_run_halt_certificate_fuel:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))

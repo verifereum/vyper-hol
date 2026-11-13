@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalCallReturn
-Ancestors concretizeLayoutCanonicalCallEntry concretizeLayoutCanonicalDeferred
+Ancestors concretizeLayoutCutSafe frameGasEvents concretizeLayoutCanonicalCallEntry concretizeLayoutCanonicalDeferred
   concretizeLayoutCanonicalResume concretizeLayoutCanonicalDriver
   concretizeLayoutCallResult concretizeLayoutPhaseOrigin concretizeLayoutAlignedControl
   concretizeLayoutPairedEntry frameRelocationLocal frameDecoratedEndpoints
@@ -107,7 +107,7 @@ Theorem layout_canonical_call_return_certificate:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\ vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs qend /\
   es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
@@ -118,15 +118,18 @@ Theorem layout_canonical_call_return_certificate:
   selected_call_return_certificate C C' q0 path
     (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend))
 Proof
   strip_tac >> rewrite_tac[selected_call_return_certificate_def] >>
   rpt gen_tac >> strip_tac >>
   `joint_segment C qc wc qe` by metis_tac[cj 3 decorated_execution_segment] >>
   drule_all layout_canonical_call_entry >> strip_tac >> gvs[] >>
   qexistsl [`out`, `ct`] >> conj_tac >- simp[] >>
-  rpt strip_tac >> Cases_on `rc'` >>
+  rpt strip_tac >>
+  qpat_x_assum `events_OutR _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [events_OutR_def]) >>
+  Cases_on `rc'` >>
   gvs[layout_canonical_OutR_def, layout_canonical_result_def] >>
   rename1 `layout_canonical_ret _ _ _ _ _ _ _ _ _ _ _ _ ret send ret' tend` >>
   `?b. layout_ret_endpoint D lo vs0 C C' q0 (MAP FST path) (MAP SND path)
@@ -136,6 +139,9 @@ Proof
   simp[selected_step_match_def] >> qexists `OK post'` >>
   conj_tac
   >- (irule finite_step_invoke_return >> simp[] >> metis_tac[]) >>
+  rewrite_tac[events_OS_def] >> reverse conj_tac
+  >- (irule step_events_agree_invoke >> simp[] >>
+      metis_tac[cj 3 decorated_execution_erases]) >>
   once_rewrite_tac[ADD_COMM] >>
   irule (PURE_REWRITE_RULE [LENGTH] layout_canonical_return_deferred) >>
   goal_assum (drule_at Any) >> simp[] >>
@@ -148,7 +154,7 @@ Theorem layout_canonical_call_return_certificate_fuel:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\ vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs qend /\
   es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>

@@ -204,7 +204,7 @@ QED
 
 Theorem ld_load_certificate_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn inst s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!fn. MEM fn CS.ctx_functions ==> fn_ptr_ok P fn) /\
   inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\ inst.inst_outputs = [out] /\
   ~in_revert_forward fn s /\ dload_offset_ok CS fn inst s /\

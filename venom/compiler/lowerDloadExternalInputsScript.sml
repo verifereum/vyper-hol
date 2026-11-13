@@ -11,7 +11,7 @@ Ancestors
 
 Theorem ld_annotated_external_clean:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
   ~in_revert_forward fn s ==>
   (!op. MEM op i.inst_operands ==> op_taint tn op = {}) /\
@@ -53,7 +53,7 @@ QED
 
 Theorem ld_annotated_external_scalar:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
   MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
   ~in_revert_forward fn s /\ ld_owned_vars U E AG BH tn un s t /\
@@ -79,7 +79,7 @@ QED
 
 Theorem ld_normal_external_read:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
   ~in_revert_forward fn s /\
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
@@ -140,7 +140,7 @@ QED
    scalar test is discharged once by ld_external_layout_scalars. *)
 Theorem ld_normal_external_operands:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -197,7 +197,7 @@ QED
 
 Theorem ld_normal_external_input_correspondence:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -257,7 +257,7 @@ Proof
   irule ld_normal_external_read >>
   goal_assum (drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)) >>
-  qexists_tac `THE (mem_read_ops i)` >>
+  qexistsl_tac [`ncut`,`THE (mem_read_ops i)`] >>
   qpat_x_assum `U = _` kall_tac >>
   `!v. off = Var v ==> v IN U` by
     (qx_gen_tac `z` >> strip_tac >>

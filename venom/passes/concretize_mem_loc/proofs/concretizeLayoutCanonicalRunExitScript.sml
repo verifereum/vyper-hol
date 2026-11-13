@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalRunExit
-Ancestors concretizeLayoutCanonicalRunNext
+Ancestors concretizeLayoutCanonicalRunNext concretizeLayoutCutSafe frameGasEvents
   concretizeLayoutCanonicalBlock concretizeLayoutCanonicalDriver
   concretizeLayoutCanonicalDeferred frameSelectedSimulation
   concretizeLayoutStagePairing concretizeLayoutScopedPhase
@@ -13,12 +13,11 @@ Theorem layout_canonical_run_exit_certificate:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))
@@ -31,20 +30,29 @@ Theorem layout_canonical_run_exit_certificate:
   selected_run_exit_certificate C C' q0 path
     (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend))
 Proof
   strip_tac >> rewrite_tac[selected_run_exit_certificate_def] >>
   rpt gen_tac >> strip_tac >>
   drule_all layout_canonical_run_block_entry >> strip_tac >>
   qexistsl [`bb'`, `phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions`] >>
   simp[] >> rpt strip_tac >>
+  qpat_x_assum `events_OB _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [events_OB_def]) >>
   `layout_canonical_result D lo vs0 C C' q0 es qs ass qend qe
     (n + LENGTH w) r rb'` by
     (Cases_on `r` >> Cases_on `rb'` >> gvs[layout_canonical_OB_def]) >>
   `!p. rb' <> OK p` by
     (Cases_on `r` >> Cases_on `rb'` >> gvs[layout_canonical_result_def]) >>
-  simp[selected_run_match_def, layout_canonical_OutR_def] >>
+  `run_events_agree C C' fn s fn' t r rb'` by
+    (irule run_events_agree_exit >>
+     `finite_block C bb
+        (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) r` by
+       metis_tac[cj 2 frameFiniteJointDecorationTheory.decorated_execution_erases] >>
+     `fn'.fn_name = fn.fn_name` by metis_tac[layout_canonical_run_fn_name] >>
+     metis_tac[]) >>
+  simp[selected_run_match_def, events_OutR_def, layout_canonical_OutR_def] >>
   qexists `rb'` >> simp[] >>
   gvs[frameFiniteExecutionTheory.finite_step_run_exit]
 QED
@@ -54,12 +62,11 @@ Theorem layout_canonical_run_exit_certificate_fuel:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))

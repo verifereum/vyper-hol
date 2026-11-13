@@ -14,7 +14,7 @@ Theory o1SafeUpto
 Ancestors
   o1PassContract memSafeRun contextRawReachable contextCodegenRel unitMemInv
   ptrDiscipline lowerDloadDefs staticLayoutDefs venomExecSemantics
-  venomExecProofs venomState list
+  venomExecProofs venomState stateFrame frameRawProjection list
 
 Definition gas_cut_def:
   gas_cut n (vs:venom_state) (s:venom_state) <=>
@@ -171,4 +171,73 @@ Proof
   `dimword (:256) DIV 2 < dimword (:256)` by
     (irule arithmeticTheory.DIV_LESS >> simp[wordsTheory.ZERO_LT_dimword]) >>
   decide_tac
+QED
+
+(* At n past every reading the cut holds of every state. *)
+Theorem gas_cut_whole[simp]:
+  gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s
+Proof
+  simp[gas_cut_def]
+QED
+
+(* States with the same execution frame have popped the same readings. *)
+Theorem gas_cut_execution_frame:
+  gas_cut n vs s' /\ execution_frame s' = execution_frame s ==>
+  gas_cut n vs s
+Proof
+  strip_tac >>
+  `s'.vs_gas_readings = s.vs_gas_readings` by
+    (qpat_x_assum `execution_frame _ = _` mp_tac >>
+     simp[execution_frame_def, venom_state_component_equality]) >>
+  fs[gas_cut_def]
+QED
+
+(* The whole-run facts are the guarded ones at that n. *)
+Theorem ptr_discipline_upto_all:
+  ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) ctx vs ==>
+  ptr_discipline lo ctx vs
+Proof
+  rw[ptr_discipline_def, ptr_discipline_upto_def] >> metis_tac[]
+QED
+
+Theorem taint_within_upto_all:
+  taint_within_upto D (SUC (LENGTH vs.vs_gas_readings)) ctx vs ==>
+  taint_within D ctx vs
+Proof
+  rw[taint_within_def, taint_within_upto_def, final_taint_def] >>
+  metis_tac[]
+QED
+
+(* The alloca frontier fits a word at every frame-reachable state before the
+   cut.  ConcretizeMemLoc's layout chain needs it (cache entries stay below
+   dimword); LowerDload's output provides it on the lowered context. *)
+Definition alloca_frontier_upto_def:
+  alloca_frontier_upto n C vs <=>
+    !stk PG G tn fn inst s.
+      frame_reachable vs C stk PG G tn fn inst s /\ gas_cut n vs s ==>
+      s.vs_alloca_next < dimword (:256)
+End
+
+Theorem alloca_frontier_upto_mono:
+  m <= n /\ alloca_frontier_upto n C vs ==> alloca_frontier_upto m C vs
+Proof
+  rw[alloca_frontier_upto_def] >> metis_tac[gas_cut_mono]
+QED
+
+Theorem mem_inv_raw_alloca_frontier_upto:
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs ==>
+  !n. alloca_frontier_upto n C vs
+Proof
+  rw[alloca_frontier_upto_def, mem_inv_raw_reachable] >>
+  drule_all frame_reachable_raw >> strip_tac >>
+  first_x_assum drule >> simp[raw_mem_ok_def]
+QED
+
+Theorem o1_safe_upto_alloca_frontier:
+  EVERY wf_function C.ctx_functions /\ o1_safe_upto D lo n C vs ==>
+  alloca_frontier_upto n C vs
+Proof
+  rw[alloca_frontier_upto_def, o1_safe_upto_def] >>
+  drule_all frame_reachable_raw >> strip_tac >>
+  first_x_assum (drule_all_then strip_assume_tac) >> fs[raw_mem_ok_def]
 QED

@@ -1,5 +1,5 @@
 Theory concretizeLayoutLocalDemand
-Ancestors concretizeLayoutCommonCall concretizeLayoutInterference
+Ancestors concretizeLayoutCutSafe o1SafeUpto concretizeLayoutCommonCall concretizeLayoutInterference
   concretizeLayoutNumeric concretizeMemLocDefs staticLayoutAllocatorProofs
   concretizeAnalysisWriteLiveset concretizeAnalysisOwnerDemand
   concretizeAnalysisImportSizes concretizePtrOrdering
@@ -73,7 +73,7 @@ Theorem concretize_same_activation_write_demand_disjoint:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ n < LENGTH es /\ n <= j /\ j <= LENGTH es /\
   EL n (q0::qs) = JointConfig stkN PGN GN tnN writer instN sN omsN omN hsN hN /\
   ~in_revert_forward writer sN /\
@@ -135,7 +135,9 @@ Resume concretize_same_activation_write_demand_disjoint[livesets]:
       observed.cu_context owner
       (bp_analyze_fuel (concretize_memloc_fuel owner) (cfg_analyze owner) owner)
       (cfg_analyze owner)) (Allocation aidB) = SOME addrsB /\ MEM loc addrsB` by
-    (qpat_assum `EL n (_::_) = _`
+    (`gas_cut ncut vs0 sN` by (drule_all layout_cut_safe_edge_frame >> simp[]) >>
+     `ptr_discipline_upto lo ncut C vs0` by fs[layout_cut_safe_def] >>
+     qpat_assum `EL n (_::_) = _`
        (fn th => rule_assum_tac (PURE_REWRITE_RULE [th])) >>
      drule_all concretize_write_owner_liveset >> simp[]) >>
   `?addrsA. FLOOKUP (context_mem_livesets (concretize_memloc_fuel owner)
@@ -150,7 +152,7 @@ Resume concretize_same_activation_write_demand_disjoint[livesets]:
      goal_assum (drule_at (Pat `activation_cache (EL j _) _ _ aidA _`)) >>
      goal_assum (drule_at (Pat `EL j (_::_) = _`)) >>
      goal_assum (drule_at (Pat `o1_walk_view _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `ptr_discipline _ _ _`)) >>
+     goal_assum (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
      simp[] >> metis_tac[]) >>
   `?itemsA. static_alloca_items owner = SOME itemsA /\
      MEM (Allocation aidA,szA) itemsA` by
@@ -179,7 +181,7 @@ Resume concretize_same_activation_write_demand_disjoint[numeric]:
         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
      metis_tac[MEM]) >>
   `owner.fn_forced_alloc_positions = FEMPTY` by
-    (gvs[ptr_discipline_def, EVERY_MEM] >> metis_tac[fn_ptr_ok_def]) >>
+    (gvs[layout_cut_safe_def, ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[fn_ptr_ok_def]) >>
   `fn_inst_ids_distinct owner` by metis_tac[source_member_ids_distinct] >>
   `concretize_function_fuel_in_context (concretize_memloc_fuel owner)
     observed.cu_context observed.cu_context.ctx_global_reserved owner = SOME fn'` by

@@ -1,5 +1,5 @@
 Theory concretizeLayoutPhaseResidual
-Ancestors concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
+Ancestors concretizeLayoutCutSafe concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
   concretizeLayoutPhaseAdministration
   concretizeLayoutLocalAssertions concretizeLayoutLocalBump
   concretizeLayoutLocalExtcodeHash concretizeLayoutLocalExtcodeCopy
@@ -8,7 +8,7 @@ Ancestors concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
   venomExecSemantics venomState venomInst ptrDiscipline list
 
 Theorem layout_assert_trace_step:
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -46,6 +46,7 @@ Proof
         (SPEC_ALL concretize_assert_local_complete))) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   disch_then (drule_at (Pat `fn_ptr_ok _ _`)) >> simp[] >> strip_tac >>
   `post = s` by
@@ -64,7 +65,7 @@ Proof
 QED
 
 Theorem layout_extcodehash_trace_step:
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -103,6 +104,7 @@ Proof
         (SPEC_ALL concretize_extcodehash_local_complete))) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   disch_then (drule_at (Pat `fn_ptr_ok _ _`)) >>
   simp[] >> strip_tac >>
@@ -129,7 +131,7 @@ Proof
 QED
 
 Theorem layout_bump_trace_step:
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -167,6 +169,7 @@ Proof
         (SPEC_ALL concretize_bump_local_complete))) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   disch_then (drule_at (Pat `fn_ptr_ok _ _`)) >> simp[] >> strip_tac >>
   `?x y a b. post = update_var w y (update_var v x s) /\
@@ -202,8 +205,8 @@ Theorem layout_extcodecopy_trace_step:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
@@ -247,6 +250,7 @@ Proof
         (SPEC_ALL concretize_extcodecopy_local_complete))) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   disch_then (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `fn_ptr_ok _ _`)) >>

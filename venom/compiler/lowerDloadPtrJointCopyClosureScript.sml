@@ -1,5 +1,5 @@
 Theory lowerDloadPtrJointCopyClosure
-Ancestors lowerDloadPtrCopy lowerDloadPtrNormalNext lowerDloadPtrJointNext
+Ancestors o1SafeUpto lowerDloadPtrGasCut lowerDloadPtrCopy lowerDloadPtrNormalNext lowerDloadPtrJointNext
   lowerDloadPtrBlockEntry lowerDloadPtrCall memSafeRun lowerDloadPtrTerminalClosure
   lowerDloadPtrTerminal
   lowerDloadPtrAggregate lowerDloadPtrPhase lowerDloadPtrRel lowerDloadPtrStatic
@@ -10,8 +10,8 @@ Ancestors lowerDloadPtrCopy lowerDloadPtrNormalNext lowerDloadPtrJointNext
 Theorem dload_joint_tracked_external_copy_normal_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
@@ -143,9 +143,12 @@ QED
 Resume dload_joint_tracked_external_copy_normal_next[semantic]:
   rpt strip_tac >>
   `fn_ptr_ok P f` by fs[EVERY_MEM] >>
+  `gas_cut cut vs s` by
+    metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
   `access_ok lo G f i s /\ taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >> first_x_assum drule >> simp[]) >>
+    (qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+     strip_tac >> first_x_assum drule_all >> simp[]) >>
   `s.vs_labels = t0.vs_labels` by
     (drule dload_boundary_environment >> metis_tac[dload_equal_environment_code]) >>
   `opaque_use_ok f` by fs[o1_fn_shape_def, fn_shape_ok_def] >>
@@ -181,8 +184,8 @@ Finalise dload_joint_tracked_external_copy_normal_next
 Theorem dload_joint_tracked_external_copy_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
@@ -301,8 +304,8 @@ QED
 Theorem dload_joint_tracked_external_copy_routed_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
@@ -426,7 +429,8 @@ Resume dload_joint_tracked_external_copy_routed_next[returndata]:
       disch_then (drule_at (Pat `frame_reachable`)) >>
       disch_then (drule_at (Pat `dload_control_match`)) >>
       simp[] >> disch_then irule >> simp[] >>
-      qexistsl [`C'`,`fuel`] >> simp[]) >>
+      conj_tac >- (qexistsl [`C'`,`fuel`] >> simp[]) >>
+      qexists `cut` >> fs[o1_safe_upto_def, o1_ptr_safe_upto_def]) >>
   `~in_revert_forward f s` by
     (strip_tac >> drule_all dload_control_source_forward_copy >> metis_tac[]) >>
   disj1_tac >> suspend "normal"
@@ -437,8 +441,8 @@ Resume dload_joint_tracked_external_copy_routed_next[ordinary]:
   drule_at (Pat `ctx_pass_stage`) dload_joint_tracked_external_copy_next >>
   disch_then (drule_at (Pat `step_inst`)) >>
   disch_then (drule_at (Pat `active_inst _ next _`)) >>
-  disch_then (drule_at (Pat `ptr_discipline`)) >>
-  disch_then (drule_at (Pat `o1_src_inv`)) >>
+  disch_then (drule_at (Pat `o1_safe_upto`)) >>
+  disch_then (drule_at (Pat `gas_cut`)) >>
   disch_then (drule_at (Pat `callee_first`)) >>
   disch_then (drule_at (Pat `EVERY (fn_ptr_ok _) _`)) >>
   simp[] >> disch_then (qspecl_then [`un0`,`ds`,`PH`,`H0`] mp_tac) >>
@@ -458,8 +462,8 @@ Resume dload_joint_tracked_external_copy_routed_next[normal]:
   drule_at (Pat `ctx_pass_stage`) dload_joint_tracked_external_copy_normal_next >>
   disch_then (drule_at (Pat `step_inst`)) >>
   disch_then (drule_at (Pat `active_inst _ next _`)) >>
-  disch_then (drule_at (Pat `ptr_discipline`)) >>
-  disch_then (drule_at (Pat `o1_src_inv`)) >>
+  disch_then (drule_at (Pat `o1_safe_upto`)) >>
+  disch_then (drule_at (Pat `gas_cut`)) >>
   disch_then (drule_at (Pat `callee_first`)) >>
   disch_then (drule_at (Pat `EVERY (fn_ptr_ok _) _`)) >>
   simp[] >> disch_then (qspecl_then [`un0`,`ds`,`PH`,`H0`] mp_tac) >>

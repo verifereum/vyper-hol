@@ -1,9 +1,9 @@
 Theory concretizeLayoutCanonicalBlock
-Ancestors concretizeLayoutCanonicalDeferred concretizeLayoutCanonicalBase
+Ancestors concretizeLayoutCutSafe concretizeLayoutCanonicalDeferred concretizeLayoutCanonicalBase
   concretizeLayoutCanonicalDriver concretizeLayoutAlignedControl concretizeLayoutPhaseCompose
   concretizeLayoutPhaseCorridor concretizeLayoutPhaseOrigin frameRankedTerminalCorridor
   concretizeLayoutPairedEntry concretizeLayoutStagePairing concretizeStepStructure
-  frameSelectedSimulation frameFiniteExecution venomExecSemantics venomInst
+  frameSelectedPrefix frameSelectedSimulation frameGasEvents fmpAnalysisProps frameFiniteExecution venomExecSemantics venomInst
   fragExec concretizeMemLocDefs passSharedDefs list arithmetic
 
 Theorem layout_canonical_corridor_instruction:
@@ -95,6 +95,14 @@ Proof
   >- (drule_all concretizeLayoutBlockPairingTheory.layout_block_pair_lookup >>
       strip_tac >> metis_tac[]) >>
   metis_tac[]
+QED
+
+Theorem layout_canonical_run_fn_name:
+  layout_canonical_run D lo vs0 C C' q0 es qs ass qend q n fn s fn' t ==>
+  fn'.fn_name = fn.fn_name
+Proof
+  simp[layout_canonical_run_def, layout_driver_row_def] >>
+  metis_tac[fmpAnalysisPropsTheory.lookup_function_name]
 QED
 
 Theorem layout_canonical_block_exit_execution:
@@ -190,22 +198,84 @@ Theorem layout_canonical_block_exit_certificate:
   selected_block_exit_certificate C C' q0 path
     (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend))
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
 Proof
   rw[selected_block_exit_certificate_def] >>
-  drule_all layout_canonical_block_exit_execution >> metis_tac[]
+  `layout_base_lookahead C q0 path q n i s` by
+    (drule_all concretizeLayoutSelectedBaseInterfaceTheory.layout_base_lookahead_exit >>
+     simp[]) >>
+  drule_all layout_canonical_block_step_choice >> strip_tac >>
+  qexists `j` >> simp[] >> rpt strip_tac >>
+  `i.inst_opcode <> NOP` by
+    (strip_tac >> qpat_x_assum `decorated_step _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frameFiniteJointDecorationTheory.decorated_step_cases,
+       step_inst_base_def] >> metis_tac[]) >>
+  qpat_x_assum `events_OS _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [events_OS_def]) >>
+  `layout_canonical_result D lo vs0 C C' q0 es qs ass qend qe
+    (n + LENGTH w) r rs'` by
+    (Cases_on `i.inst_opcode = INVOKE` >>
+     Cases_on `r` >> Cases_on `rs'` >>
+     gvs[layout_deferred_OS_def, layout_canonical_OS_def]) >>
+  `!p. rs' <> OK p` by
+    (Cases_on `r` >> Cases_on `rs'` >>
+     gvs[layout_canonical_result_def]) >>
+  `block_events_agree C C' bb s bb' t r rs'` by
+    (irule block_events_agree_exit >>
+     `finite_step C i s r` by
+       metis_tac[frameFiniteJointDecorationTheory.decorated_execution_erases] >>
+     metis_tac[]) >>
+  simp[selected_block_match_def, events_OB_def] >> qexists `rs'` >> conj_tac
+  >- (irule finite_step_block_exit >> goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `r` >> Cases_on `rs'` >>
+  gvs[layout_canonical_OB_def, layout_canonical_result_def]
 QED
 
 Theorem layout_canonical_term_certificate:
   selected_term_certificate C C' q0 path
     (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend))
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
 Proof
   rw[selected_term_certificate_def] >>
-  drule_all layout_canonical_term_execution >> metis_tac[]
+  `i.inst_opcode <> NOP /\ i.inst_opcode <> INVOKE` by
+    (Cases_on `i.inst_opcode` >> gvs[is_terminator_def]) >>
+  `layout_base_lookahead C q0 path q n i s` by
+    simp[concretizeLayoutSelectedBaseInterfaceTheory.layout_base_lookahead_term] >>
+  drule_all layout_canonical_block_step_choice >> strip_tac >>
+  qexists `j` >> simp[] >> rpt strip_tac >>
+  `w = [] /\ qe = q` by
+    (qpat_x_assum `decorated_step _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frameFiniteJointDecorationTheory.decorated_step_cases] >> metis_tac[]) >>
+  qpat_x_assum `events_OS _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [events_OS_def]) >>
+  gvs[layout_deferred_OS_def, layout_canonical_OS_def] >>
+  Cases_on `rs'` >> gvs[layout_canonical_result_def] >>
+  rename1 `finite_step C' j t (OK tp)` >>
+  `?a. layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+    q n bb s bb' t a` by (fs[layout_canonical_EB_def] >> metis_tac[]) >>
+  `layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t a` by
+    (irule layout_canonical_block_witness_retained >> simp[] >> metis_tac[]) >>
+  first_assum (drule_then strip_assume_tac) >>
+  `~post.vs_halted /\ ~tp.vs_halted /\ is_terminator j.inst_opcode` by
+    fs[concretizeLayoutCompletedJumpTheory.layout_completed_jump_def] >>
+  `!r r'. block_events_agree C C' bb s bb' t r r'` by
+    (rpt gen_tac >> irule block_events_agree_term >>
+     `finite_step C i s (OK post)` by
+       metis_tac[frameFiniteJointDecorationTheory.decorated_execution_erases] >>
+     metis_tac[]) >>
+  simp[selected_block_match_def, events_OB_def] >> qexists `OK tp` >> conj_tac
+  >- (drule_all finite_step_block_term >> simp[]) >>
+  simp[layout_canonical_OB_def] >> rpt strip_tac >>
+  `layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t a'` by
+    (irule layout_canonical_block_witness_retained >> simp[] >> metis_tac[]) >>
+  first_assum (drule_then strip_assume_tac) >>
+  gvs[] >> qexistsl [`g'`, `i`, `j`, `s`, `t`] >>
+  fs[layout_canonical_block_witness_def, layout_paired_ordinary_def]
 QED
 
 Theorem layout_canonical_block_exit_certificate_fuel:
@@ -683,7 +753,7 @@ Proof
 QED
 
 Theorem layout_canonical_nop_next_execution:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -743,6 +813,7 @@ Proof
            (drule_all layout_canonical_block_witness_step >> strip_tac >>
             fs[layout_canonical_step_witness_def] >> metis_tac[]) >>
          drule_at (Pat `layout_canonical_step_witness _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`) layout_canonical_nop_success >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
          simp[] >> disch_then (qspecl_then [`path`, `fn`, `P`] mp_tac) >>
          simp[] >> strip_tac >>
          `k.lop_config = qn /\ k.lop_cursor = SUC n` by
@@ -787,30 +858,97 @@ Theorem layout_canonical_retained_next:
   decorated_step C i s (OK post) q n ws qm ds /\
   ~is_terminator i.inst_opcode /\ decoration_consumes C i q post qm ev qn /\
   decoration_entry fn (post with vs_inst_idx := SUC s.vs_inst_idx) qn /\
-  decorated_block C bb (post with vs_inst_idx := SUC s.vs_inst_idx)
-    r qn (n+LENGTH ws+1) wb qe db /\
-  selected_segment C q0 path n q (ws++[(ev,qn)]++wb) qe /\
+  selected_segment C q0 path n q (ws++[(ev,qn)]) qn /\
   layout_canonical_EB D lo vs0 C C' q0 es qs ass qend q n bb s bb' t ==>
   ?j. layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend q n i s j t /\
     (!rs'. finite_step C' j t rs' /\
-      layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend
+      events_OS C C'
+        (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
         q n qm (n+LENGTH ws) i s j t (OK post) rs' ==>
       ?tb. layout_canonical_EB D lo vs0 C C' q0 es qs ass qend qn
           (n+LENGTH ws+1) bb (post with vs_inst_idx := SUC s.vs_inst_idx) bb' tb /\
-        (!rb'. finite_block C' bb' tb rb' /\
-          layout_canonical_OB D lo vs0 C C' q0 es qs ass qend qn
+        block_advance bb' i j t rs' tb /\
+        !r wb qe db rb'.
+          decorated_block C bb (post with vs_inst_idx := SUC s.vs_inst_idx)
+            r qn (n+LENGTH ws+1) wb qe db /\
+          selected_segment C q0 path n q (ws++[(ev,qn)]++wb) qe /\
+          finite_block C' bb' tb rb' /\
+          events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend) qn
             (n+LENGTH ws+1) qe (n+LENGTH ws+1+LENGTH wb) bb
             (post with vs_inst_idx := SUC s.vs_inst_idx) bb' tb r rb' ==>
           selected_block_match C'
-            (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-            q n (ws++[(ev,qn)]++wb) qe bb s bb' t r))
+            (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
+            q n (ws++[(ev,qn)]++wb) qe bb s bb' t r)
 Proof
-  strip_tac >> drule_all layout_canonical_retained_next_execution >>
-  metis_tac[]
+  strip_tac >>
+  `selected_segment C q0 path n q (ws ++ [(ev,qn)] ++ []) qn` by simp[] >>
+  `layout_base_lookahead C q0 path q n i s` by
+    (irule concretizeLayoutSelectedBaseInterfaceTheory.layout_base_lookahead_next >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  drule_all layout_canonical_block_step_choice >> strip_tac >>
+  `get_instruction bb' t.vs_inst_idx = SOME j` by metis_tac[] >>
+  qexists `j` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `events_OS _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [events_OS_def]) >>
+  Cases_on `rs'` >>
+  gvs[layout_deferred_OS_def, layout_canonical_OS_def, layout_canonical_result_def] >>
+  `joint_segment C q ws qm /\ joint_transition C qm ev qn` by
+    metis_tac[frameFiniteJointDecorationTheory.decorated_execution_segment,
+      frameFiniteJointDecorationTheory.decoration_consumes_def] >>
+  `selected_segment C q0 path (n+LENGTH ws) qm [(ev,qn)] qn` by
+    (irule (cj 2 frameSelectedDecorationTheory.selected_segment_parts) >>
+     simp[frameFiniteJointDecorationTheory.joint_segment_def] >>
+     metis_tac[]) >>
+  `qn = EL (SUC (n + LENGTH ws)) (q0::MAP SND path)` by
+    (qpat_x_assum `selected_segment C q0 path n q (ws ++ [(ev,qn)]) qn`
+       (mp_then Any mp_tac frameSelectedDecorationTheory.selected_segment_indices) >>
+     simp[ADD1] >> strip_tac >>
+     `n + (LENGTH ws + 1) = SUC (n + LENGTH ws)` by decide_tac >>
+     qpat_x_assum `EL (n + (LENGTH ws + 1)) _ = qn` mp_tac >>
+     pop_assum SUBST1_TAC >> simp[]) >>
+  `!a. layout_canonical_step_witness D lo vs0 C C' q0 es (MAP SND path) ass qend
+      q n i s j t a ==>
+    layout_canonical_success D lo vs0 C C' q0 es (MAP SND path) ass qend
+      (n+LENGTH ws) (i.inst_opcode = INVOKE) a post v` by
+    (Cases_on `i.inst_opcode = INVOKE` >> gvs[] >> metis_tac[]) >>
+  `finite_step C i s (OK post)` by
+    metis_tac[frameFiniteJointDecorationTheory.decorated_execution_erases] >>
+  `~is_terminator j.inst_opcode` by
+    (qhdtm_x_assum `layout_canonical_ES` mp_tac >>
+     simp[layout_canonical_ES_def] >> strip_tac >>
+     qhdtm_x_assum `layout_canonical_step_witness` mp_tac >>
+     simp[layout_canonical_step_witness_def] >> strip_tac >>
+     Cases_on `a` >> gvs[]
+     >- simp[concretize_positions_nonterminator] >>
+     fs[layout_canonical_block_witness_def] >> gvs[] >>
+     drule_all layout_canonical_corridor_instruction >> strip_tac >> gvs[]) >>
+  `!a. layout_canonical_block_witness D lo vs0 C C' q0 es (MAP SND path) ass qend
+      q n bb s bb' t a ==>
+    ?b. layout_phase_origin b = layout_phase_origin a /\ (ISL b ==> ISL a) /\
+      layout_canonical_block_witness D lo vs0 C C' q0 es (MAP SND path) ass qend
+        qn (SUC (n+LENGTH ws)) bb (post with vs_inst_idx := SUC s.vs_inst_idx)
+        bb' (v with vs_inst_idx := SUC t.vs_inst_idx) b` by
+    (rpt strip_tac >> irule layout_canonical_retained_successor >>
+     simp[] >> goal_assum (drule_at Any) >> simp[] >>
+     fs[] >> metis_tac[layout_canonical_block_witness_retained]) >>
+  qexists `v with vs_inst_idx := SUC t.vs_inst_idx` >> rpt conj_tac
+  >- (simp[layout_canonical_EB_def, ADD1] >>
+      fs[layout_canonical_EB_def, ADD1] >> metis_tac[])
+  >- simp[block_advance_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `events_OB _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [events_OB_def]) >>
+  `block_events_agree C C' bb s bb' t r rb'` by
+    (irule block_events_agree_next >> metis_tac[]) >>
+  simp[selected_block_match_def] >> qexists `rb'` >> conj_tac
+  >- (irule finite_step_block_next >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  rewrite_tac[events_OB_def] >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  irule layout_canonical_block_outcome_transport >>
+  goal_assum (drule_at Any) >> fs[ADD1] >> metis_tac[]
 QED
 
 Theorem layout_canonical_nop_next:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -824,30 +962,126 @@ Theorem layout_canonical_nop_next:
   decorated_step C i s (OK post) q n ws qm ds /\
   ~is_terminator i.inst_opcode /\ decoration_consumes C i q post qm ev qn /\
   decoration_entry fn (post with vs_inst_idx := SUC s.vs_inst_idx) qn /\
-  decorated_block C bb (post with vs_inst_idx := SUC s.vs_inst_idx)
-    r qn (n+LENGTH ws+1) wb qe db /\
-  selected_segment C q0 path n q (ws++[(ev,qn)]++wb) qe /\
+  selected_segment C q0 path n q (ws++[(ev,qn)]) qn /\
   layout_canonical_EB D lo vs0 C C' q0 es qs ass qend q n bb s bb' t ==>
   ?j. layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend q n i s j t /\
     (!rs'. finite_step C' j t rs' /\
-      layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend
+      events_OS C C'
+        (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
         q n qm (n+LENGTH ws) i s j t (OK post) rs' ==>
       ?tb. layout_canonical_EB D lo vs0 C C' q0 es qs ass qend qn
           (n+LENGTH ws+1) bb (post with vs_inst_idx := SUC s.vs_inst_idx) bb' tb /\
-        (!rb'. finite_block C' bb' tb rb' /\
-          layout_canonical_OB D lo vs0 C C' q0 es qs ass qend qn
+        block_advance bb' i j t rs' tb /\
+        !r wb qe db rb'.
+          decorated_block C bb (post with vs_inst_idx := SUC s.vs_inst_idx)
+            r qn (n+LENGTH ws+1) wb qe db /\
+          selected_segment C q0 path n q (ws++[(ev,qn)]++wb) qe /\
+          finite_block C' bb' tb rb' /\
+          events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend) qn
             (n+LENGTH ws+1) qe (n+LENGTH ws+1+LENGTH wb) bb
             (post with vs_inst_idx := SUC s.vs_inst_idx) bb' tb r rb' ==>
           selected_block_match C'
-            (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-            q n (ws++[(ev,qn)]++wb) qe bb s bb' t r))
+            (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
+            q n (ws++[(ev,qn)]++wb) qe bb s bb' t r)
 Proof
-  strip_tac >> drule_all layout_canonical_nop_next_execution >>
-  metis_tac[]
+  strip_tac >>
+  `selected_segment C q0 path n q (ws ++ [(ev,qn)] ++ []) qn` by simp[] >>
+  `layout_base_lookahead C q0 path q n i s` by
+    (irule concretizeLayoutSelectedBaseInterfaceTheory.layout_base_lookahead_next >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `ws = [] /\ qm = q /\ step_inst_base i s = OK post` by
+    (qpat_x_assum `decorated_step _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frameFiniteJointDecorationTheory.decorated_step_cases] >>
+     simp[] >> metis_tac[]) >>
+  gvs[] >>
+  `post = s` by gvs[step_inst_base_def] >> gvs[] >>
+  rename1 `decoration_at fn i s q` >>
+  `qn = EL (SUC n) (q0::MAP SND path)` by
+    (fs[frameSelectedDecorationTheory.selected_segment_def] >>
+     simp[EL_APPEND_EQN, EL_MAP]) >>
+  `!a. layout_canonical_block_witness D lo vs0 C C' q0 (MAP FST path)
+      (MAP SND path) ass qend q n bb s bb' t a ==>
+    ?b. layout_phase_origin b = layout_phase_origin a /\ (ISL b ==> ISL a) /\
+      layout_canonical_block_witness D lo vs0 C C' q0 (MAP FST path)
+        (MAP SND path) ass qend qn (SUC n) bb
+        (s with vs_inst_idx := SUC s.vs_inst_idx) bb' t b` by
+    (rpt strip_tac >> Cases_on `a`
+     >- (`layout_canonical_step_witness D lo vs0 C C' q0 (MAP FST path)
+           (MAP SND path) ass qend q n i s i t (INL x)` by
+           (drule_all layout_canonical_block_witness_step >> strip_tac >>
+            fs[layout_canonical_step_witness_def] >> metis_tac[]) >>
+         drule_at (Pat `layout_canonical_step_witness _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`) layout_canonical_nop_success >>
+         disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
+         simp[] >> disch_then (qspecl_then [`path`, `fn`, `P`] mp_tac) >>
+         simp[] >> strip_tac >>
+         `k.lop_config = qn /\ k.lop_cursor = SUC n` by
+           gvs[layout_canonical_block_witness_def, layout_paired_ordinary_def,
+               layout_aligned_entry_def, layout_ordinary_entry_def,
+               layout_ordinary_trace_def] >>
+         qexists `INL (k with lop_pending := F)` >>
+         simp[layout_phase_origin_def] >>
+         irule layout_canonical_nop_reenter >> simp[] >>
+         qexistsl [`x`, `fn`, `i`, `s`, `q`, `s`] >> gvs[]) >>
+     fs[layout_canonical_block_witness_def, layout_corridor_entry_def,
+        layout_phase_normalize_def, ranked_terminal_entry_def,
+        ranked_terminal_corridor_def] >>
+     Cases_on `y.ltp_remaining` >> gvs[is_terminator_def] >>
+     first_x_assum (qspec_then `0` mp_tac) >> simp[] >> metis_tac[]) >>
+  `layout_canonical_ES D lo vs0 C C' q0 path (MAP FST path) (MAP SND path)
+     ass qend q n i s i t` by
+    (drule_all layout_canonical_block_step_choice >> strip_tac >>
+     `j = i` by
+       (qhdtm_x_assum `layout_canonical_ES` mp_tac >>
+        simp[layout_canonical_ES_def, layout_canonical_step_witness_def] >>
+        strip_tac >> Cases_on `a` >> gvs[concretize_positions_unchanged] >>
+        fs[layout_canonical_block_witness_def, layout_corridor_entry_def,
+           layout_phase_normalize_def, ranked_terminal_entry_def,
+           ranked_terminal_corridor_def] >>
+        Cases_on `y.ltp_remaining` >> gvs[is_terminator_def] >>
+        qpat_x_assum `!d. d < SUC _ ==> _` (qspec_then `0` mp_tac) >>
+        simp[] >> metis_tac[]) >> gvs[]) >>
+  qexists `i` >> simp[] >> rpt strip_tac >>
+  qexists `t` >> rpt conj_tac
+  >- (fs[layout_canonical_EB_def, ADD1] >> metis_tac[])
+  >- simp[block_advance_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `events_OB _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [events_OB_def]) >>
+  `block_events_agree C C' bb s bb' t r rb'` by
+    (irule block_events_agree_skip >> simp[] >>
+     metis_tac[frameFiniteJointDecorationTheory.decorated_execution_erases]) >>
+  simp[selected_block_match_def, events_OB_def] >> qexists `rb'` >> simp[] >>
+  irule layout_canonical_block_outcome_transport >>
+  goal_assum (drule_at Any) >> fs[ADD1] >> metis_tac[]
+QED
+
+Theorem layout_canonical_next_entry_certificate:
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) ==>
+  selected_next_entry_certificate C C' q0 path
+    (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
+    (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend))
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
+Proof
+  strip_tac >> pure_rewrite_tac[selected_next_entry_certificate_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `i.inst_opcode = NOP`
+  >- (irule layout_canonical_nop_next >>
+      goal_assum (drule_at Any) >> gvs[] >> metis_tac[]) >>
+  irule layout_canonical_retained_next >>
+  goal_assum (drule_at Any) >> gvs[] >> metis_tac[]
 QED
 
 Theorem layout_canonical_next_certificate:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -859,20 +1093,15 @@ Theorem layout_canonical_next_certificate:
   selected_next_certificate C C' q0 path
     (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend))
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
 Proof
-  strip_tac >> pure_rewrite_tac[selected_next_certificate_def] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `i.inst_opcode = NOP`
-  >- (irule layout_canonical_nop_next >>
-      goal_assum (drule_at Any) >> gvs[] >> metis_tac[]) >>
-  irule layout_canonical_retained_next >>
-  goal_assum (drule_at Any) >> gvs[] >> metis_tac[]
+  strip_tac >> irule selected_next_entry_certificate_next >>
+  irule layout_canonical_next_entry_certificate >> metis_tac[]
 QED
 
 Theorem layout_canonical_next_certificate_fuel:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\

@@ -1,5 +1,5 @@
 Theory concretizeLayoutPhaseAccountReaders
-Ancestors concretizeLayoutPhaseBindings concretizeLayoutPhaseOrigin
+Ancestors concretizeLayoutCutSafe concretizeLayoutPhaseBindings concretizeLayoutPhaseOrigin
   concretizeLayoutPhaseSuccess concretizeLayoutLocalBalanceReaders
   concretizeLayoutLocalExtcodeSize
   concretizeLayoutSupplement frameRelocationEnvironment frameRelocationLocal
@@ -7,7 +7,7 @@ Ancestors concretizeLayoutPhaseBindings concretizeLayoutPhaseOrigin
   ptrDiscipline list
 
 Theorem layout_balance_reader_trace_step:
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -47,6 +47,7 @@ Proof
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `fn_ptr_ok _ _`)) >>
   simp[] >> strip_tac >>
   `!u. dead_result_rel D (Halt u) (Halt u)` by
@@ -84,7 +85,7 @@ Proof
 QED
 
 Theorem layout_extcodesize_trace_step:
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -125,6 +126,7 @@ Proof
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `fn_ptr_ok _ _`)) >>
   simp[] >> strip_tac >>
   `!u. dead_result_rel D (Halt u) (Halt u)` by

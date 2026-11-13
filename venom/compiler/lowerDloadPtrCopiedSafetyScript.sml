@@ -1,5 +1,5 @@
 Theory lowerDloadPtrCopiedSafety
-Ancestors lowerDloadPtrRegion lowerDloadPtrRel lowerDloadPtrCompare lowerDloadPtrDynamicSupport
+Ancestors o1SafeUpto lowerDloadPtrGasCut lowerDloadPtrRegion lowerDloadPtrRel lowerDloadPtrCompare lowerDloadPtrDynamicSupport
   lowerDloadPtrMCopy lowerDloadPtrLog lowerDloadPtrDelegateInterfaces
   lowerDloadPtrCallBuffers lowerDloadPtrCreate lowerDloadPtrCopy lowerDloadPtrBytesTransport
   lowerDloadPtrRetpcClean lowerDloadPtrJointScalar lowerDloadPtrTerminal lowerDloadPtrForward lowerDloadPtrJointNext lowerDloadDefs ptrDiscipline
@@ -1012,7 +1012,8 @@ Proof
 QED
 
 Theorem dload_normal_copied_safety:
-  o1_ctx_shape C /\ EVERY fn_shape_ok C'.ctx_functions /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ EVERY fn_shape_ok C'.ctx_functions /\
+  ptr_discipline_upto lo cut C vs /\ gas_cut cut vs t /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
   frame_reachable vs C' ds PH H un g i t /\
@@ -1026,9 +1027,10 @@ Theorem dload_normal_copied_safety:
   access_ok lo H g i t /\ taint_ok g un i t
 Proof
   strip_tac >>
+  `gas_cut cut vs s` by metis_tac[dload_boundary_core_gas_cut] >>
   `access_ok lo G f i s /\ taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-     simp[ptr_discipline_def] >> metis_tac[]) >>
+    (qpat_x_assum `ptr_discipline_upto _ _ _ _` mp_tac >>
+     simp[ptr_discipline_upto_def] >> metis_tac[]) >>
   `MEM f C.ctx_functions /\ FDOM G SUBSET fn_pv P f` by
     (qpat_assum `frame_reachable vs C cs PG G tn f i s`
        (mp_tac o MATCH_MP frame_reachable_prov_supported) >>

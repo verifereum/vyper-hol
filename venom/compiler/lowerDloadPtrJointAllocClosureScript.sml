@@ -1,5 +1,5 @@
 Theory lowerDloadPtrJointAllocClosure
-Ancestors lowerDloadPtrNormalNext lowerDloadPtrJointAlloc lowerDloadPtrJointBudget lowerDloadPtrSupport
+Ancestors o1SafeUpto lowerDloadPtrNormalNext lowerDloadPtrJointAlloc lowerDloadPtrJointBudget lowerDloadPtrSupport
   lowerDloadPtrBlockEntry lowerDloadPtrCall lowerDloadPtrJointNext
   lowerDloadPtrAggregate lowerDloadPtrPhase lowerDloadPtrRel lowerDloadPtrStatic
   lowerDloadDefs o1ContractLowerDload o1PassContract unitTransformDefs lowerDloadPtrRawReachable memSafeRun
@@ -24,8 +24,7 @@ QED
 Theorem dload_joint_tracked_alloca_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
@@ -137,7 +136,7 @@ Proof
   disch_then (drule_at (Pat `dload_control_match`)) >>
   disch_then (drule_at (Pat `step_inst`)) >>
   disch_then (drule_at (Pat `active_inst`)) >>
-  disch_then (drule_at (Pat `o1_src_inv`)) >> simp[] >> strip_tac >>
+  disch_then (drule_at (Pat `o1_safe_upto`)) >> simp[] >> strip_tac >>
   `(!v. lookup_var v s1 = NONE <=> ~MEM v i.inst_outputs /\ lookup_var v s = NONE) /\
     s1.vs_call_ctx = s.vs_call_ctx` by
     (qpat_assum `step_inst fuel C i s = OK s1`

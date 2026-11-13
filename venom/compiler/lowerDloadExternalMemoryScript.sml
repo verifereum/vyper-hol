@@ -101,7 +101,7 @@ QED
 
 Theorem ld_external_memory_preserved:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\ ~in_revert_forward fn s /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\ ~in_revert_forward fn s /\
   MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL] /\
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
     astk live keys d A suspended gstk f /\
@@ -126,7 +126,7 @@ Proof
   drule_all ld_annotated_access_ok >> strip_tac >>
   `op_taint tn ops.iao_ofst = {}` by
     (drule ld_annotated_external_clean >>
-     disch_then (qspec_then `lo` mp_tac) >>
+     disch_then (qspecl_then [`ncut`,`lo`] mp_tac) >>
      simp[MEM] >> impl_tac >- gvs[MEM] >> strip_tac >> metis_tac[]) >>
   `!v owner bs sz. FLOOKUP AG v = SOME(owner,(bs,sz)) ==>
     owner IN live /\ bs+sz < dimword(:256)` by

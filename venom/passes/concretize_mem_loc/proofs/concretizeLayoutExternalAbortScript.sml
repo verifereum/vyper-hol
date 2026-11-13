@@ -1,5 +1,5 @@
 Theory concretizeLayoutExternalAbort
-Ancestors concretizeLayoutPhaseAbort concretizeLayoutExternalCall
+Ancestors concretizeLayoutCutSafe concretizeLayoutPhaseAbort concretizeLayoutExternalCall
   concretizeLayoutExternalCreate concretizeLayoutLocalTerminals
   frameRelocationValues venomExecSemantics venomState ptrDiscipline list
   concretizeLayoutPhaseOrigin frameJointTrace frameJointTransition frameOriginReachable
@@ -68,7 +68,7 @@ Proof
 QED
 
 Theorem layout_external_abort_step:
-  ptr_discipline lo C vs0 /\
+  layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -95,7 +95,9 @@ Proof
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `resolved_config_ok g.lop_config g.lop_ids g.lop_anns` by
     fs[layout_ordinary_trace_def] >>
-  `taint_ok fn tn inst s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `gas_cut ncut vs0 s /\ ptr_discipline_upto lo ncut C vs0` by
+    (drule_all layout_ordinary_entry_cut >> simp[]) >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_at] >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (qpat_x_assum `resolved_config_ok _ _ _` mp_tac >>
      asm_rewrite_tac[] >> strip_tac >> drule resolved_config_current >>

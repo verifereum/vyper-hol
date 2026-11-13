@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalCallEntry
-Ancestors concretizeLayoutCanonicalDriver concretizeLayoutCallRunEntry
+Ancestors concretizeLayoutCutSafe o1SafeUpto concretizeLayoutCanonicalDriver concretizeLayoutCallRunEntry
   concretizeLayoutPairedEntry concretizeLayoutAlignedControl
   concretizeLayoutPhaseCorridor concretizeLayoutPhaseOrigin
   frameRankedTerminalCorridor concretizeStepStructure
@@ -40,7 +40,7 @@ Theorem layout_canonical_call_entry:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\ vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs qend /\
   es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
@@ -101,8 +101,10 @@ Proof
   `o1_fn_shape C caller /\ o1_fn_shape C fn /\ fn.fn_eom = NONE` by
     (fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[lookup_function_MEM]) >>
   `?P. fn_ptr_ok P caller` by
-    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
-  `taint_ok caller tn i s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+    (fs[layout_cut_safe_def, ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
+  `gas_cut ncut vs0 s /\ ptr_discipline_upto lo ncut C vs0` by
+    (drule_all layout_ordinary_entry_cut >> simp[]) >>
+  `taint_ok caller tn i s` by (drule_all ptr_discipline_upto_at >> simp[]) >>
   `MEM i (fn_insts caller)` by
     (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
   drule_all layout_stage_row_produce >> strip_tac >>
