@@ -1,6 +1,6 @@
 Theory lowerDloadPtrStatic
 Ancestors
-  o1ContractLowerDload o1PassContract ptrDiscipline lowerDloadDefs
+  o1ContractLowerDload o1PassContract o1SafeUpto ptrDiscipline lowerDloadDefs
   venomPassSchedule list lowerDloadPtrClosure pointerConfinedDefs pointerConfinedProps memLocDefs
   pred_set venomInst mem2varBlockSimHelpers irSupply venomFnScheduleRunner
   venomExecSemantics venomFnScheduleRunnerProps
@@ -89,13 +89,13 @@ QED
 (* The full source contract excludes DALLOCA; the target conditional is
    therefore vacuous, rather than a bound on relocated alloca sites. *)
 Theorem lower_dload_src_inv_below_fmp:
-  !rpolicy view C C' D vs t.
+  !rpolicy view C C' D lo cut vs t.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    o1_src_inv D C vs ==>
+    o1_ptr_safe_upto D lo cut C vs ==>
     (ctx_has_dalloca C' ==> allocas_below_fmp t)
 Proof
   rpt gen_tac >> strip_tac >>
-  `~ctx_has_dalloca C` by fs[o1_src_inv_def] >>
+  `~ctx_has_dalloca C` by fs[o1_ptr_safe_upto_def] >>
   drule_all lower_dload_stage_no_dalloca >> simp[]
 QED
 

@@ -1,5 +1,5 @@
 Theory lowerDloadPtrJointMemoryStore
-Ancestors lowerDloadPtrBlockEntry lowerDloadPtrByteStore lowerDloadPtrMemoryStore
+Ancestors o1SafeUpto lowerDloadPtrGasCut lowerDloadPtrBlockEntry lowerDloadPtrByteStore lowerDloadPtrMemoryStore
   lowerDloadPtrTaintBounds lowerDloadPtrMCopy lowerDloadPtrCall lowerDloadPtrNormalNext
   lowerDloadPtrJointInterior lowerDloadPtrOrdinary lowerDloadPtrJointNext
   lowerDloadPtrAggregate lowerDloadPtrPhase lowerDloadPtrRel lowerDloadPtrStatic
@@ -22,8 +22,8 @@ QED
 Theorem dload_joint_tracked_mstore8_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
@@ -158,8 +158,11 @@ Resume dload_joint_tracked_mstore8_next[semantic]:
   `fn_ptr_ok P f` by
     (qpat_x_assum `EVERY (fn_ptr_ok P) _` mp_tac >> simp[EVERY_MEM]) >>
   `access_ok lo G f i s /\ taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >> first_x_assum drule >> simp[]) >>
+    (`gas_cut cut vs s` by
+       metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
+     qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+     strip_tac >> first_x_assum drule_all >> simp[]) >>
   `s.vs_labels = t0.vs_labels` by
     (drule dload_boundary_environment >> metis_tac[dload_equal_environment_code]) >>
   `opaque_use_ok f` by gvs[o1_fn_shape_def, fn_shape_ok_def] >>
@@ -225,8 +228,8 @@ QED
 Theorem dload_joint_tracked_mstore_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
@@ -363,8 +366,11 @@ Resume dload_joint_tracked_mstore_next[semantic]:
   `fn_ptr_ok P f` by
     (qpat_x_assum `EVERY (fn_ptr_ok P) _` mp_tac >> simp[EVERY_MEM]) >>
   `access_ok lo G f i s /\ taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >> first_x_assum drule >> simp[]) >>
+    (`gas_cut cut vs s` by
+       metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
+     qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+     strip_tac >> first_x_assum drule_all >> simp[]) >>
   `s.vs_labels = t0.vs_labels` by
     (drule dload_boundary_environment >> metis_tac[dload_equal_environment_code]) >>
   `opaque_use_ok f` by gvs[o1_fn_shape_def, fn_shape_ok_def] >>
@@ -432,8 +438,8 @@ QED
 Theorem dload_joint_tracked_mcopy_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
@@ -568,8 +574,11 @@ Resume dload_joint_tracked_mcopy_next[semantic]:
   `fn_ptr_ok P f` by
     (qpat_x_assum `EVERY (fn_ptr_ok P) _` mp_tac >> simp[EVERY_MEM]) >>
   `access_ok lo G f i s /\ taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >> first_x_assum drule >> simp[]) >>
+    (`gas_cut cut vs s` by
+       metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
+     qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+     strip_tac >> first_x_assum drule_all >> simp[]) >>
   `s.vs_labels = t0.vs_labels` by
     (drule dload_boundary_environment >> metis_tac[dload_equal_environment_code]) >>
   `opaque_use_ok f` by gvs[o1_fn_shape_def, fn_shape_ok_def] >>

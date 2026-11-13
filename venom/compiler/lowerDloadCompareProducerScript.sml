@@ -1,5 +1,6 @@
 Theory lowerDloadCompareProducer
 Ancestors
+  o1SafeUpto
   lowerDloadPureEffects lowerDloadVariableTransport lowerDloadMaskBounds
   lowerDloadParamProducer lowerDloadOpaqueExecution venomState
   lowerDloadProvenanceSupport lowerDloadReachableDiscipline
@@ -37,7 +38,7 @@ QED
 
 Theorem ld_annotated_compare_cases:
   (!f. MEM f ctx.ctx_functions ==> fn_ptr_ok P f) /\
-  ptr_discipline lo ctx vs0 /\
+  ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s /\
   ld_annotated_reachable vs0 ctx astk k L AP AG tn fn i s /\
   MEM i.inst_opcode [EQ;LT;GT] /\ i.inst_operands = [a;b] ==>
   op_taint tn a = {} /\ op_taint tn b = {} /\
@@ -86,7 +87,7 @@ QED
 
 Theorem ld_annotated_compare_backward:
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
   callee_first names CS.ctx_functions /\ ld_stack_origin vs0 CS stk fn s0 /\
@@ -133,7 +134,7 @@ QED
 
 Theorem ld_compare_certificate_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\ ld_stack_origin vs0 CS stk fn s0 /\
   LIST_REL (\A g. FINITE A /\

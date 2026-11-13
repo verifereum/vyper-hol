@@ -1,6 +1,6 @@
 Theory lowerDloadReachableJump
 Ancestors
-  lowerDloadProvenanceSupport lowerDloadJumpProducer lowerDloadSourceInterface
+  o1SafeUpto lowerDloadProvenanceSupport lowerDloadJumpProducer lowerDloadSourceInterface
   lowerDloadCoverageInvariant lowerDloadReachableDiscipline
   ptrDiscipline pointerConfinedDefs contextCodegenRel memLocDefs venomInst
   o1PassContract list pred_set
@@ -30,7 +30,7 @@ Proof
 QED
 
 Theorem ld_reachable_jump_backward:
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
   opaque_use_ok fn /\ MEM i.inst_opcode [JMP; JNZ; DJMP] /\
   ld_frame_data V {v | MEM v (fn_ir_vars fn) /\ ~retpc_var fn v}
@@ -56,7 +56,7 @@ Proof
      qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >>
      strip_tac >> gvs[]) >>
   `?P. !f. MEM f CS.ctx_functions ==> fn_ptr_ok P f` by
-    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+    (fs[ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
   `!op. MEM op i.inst_operands ==> ld_op_prov AG op = NONE` by
     (rpt strip_tac >> drule_all ld_annotated_jump_prov >> simp[]) >>
   `!op. MEM op i.inst_operands ==>

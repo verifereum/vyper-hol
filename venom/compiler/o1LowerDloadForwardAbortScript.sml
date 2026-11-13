@@ -1,6 +1,7 @@
 (* Supply alignment of finite unchanged suffix segments. *)
 Theory o1LowerDloadForwardAbort
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointAssign o1LowerDloadAvailableSuffix o1ContractLowerDload
   lowerDloadDefs contextCodegenRel venomExecSemantics venomExecProps
   o1LowerDloadJointRelation o1LowerDloadExceptional o1LowerDloadJointScalar
@@ -236,7 +237,7 @@ QED
 Theorem ld_joint_forward_abort:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   exec_block fuel C bb s = Abort reason s1 ==>
@@ -268,9 +269,9 @@ Proof
   `?dst src sz. inst.inst_operands = [dst;src;sz]` by
     metis_tac[revert_forward_pair_def, optionTheory.SOME_11] >>
   `eval_operand src s = eval_operand src t` by
-    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
+    (drule ld_joint_copy_scalar_operand >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[]) >>
   `eval_operand sz s = eval_operand sz t` by
-    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
+    (drule ld_joint_copy_scalar_operand >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> disch_then irule >> simp[]) >>
   qhdtm_assum `ld_joint_boundary`
     (strip_assume_tac o REWRITE_RULE [ld_joint_boundary_def]) >>
   qhdtm_assum `ld_joint_frame`

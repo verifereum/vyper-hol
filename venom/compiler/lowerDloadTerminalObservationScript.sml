@@ -70,15 +70,19 @@ Ancestors
 val ld_final_observation_goal = ``
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions ==>
-  !t_h un R.
-    final_taint vs0 CT t_h un R ==>
-    un.t_stor SUBSET D.d_stor t_h.vs_call_ctx.cc_address
-      (t_h.vs_accounts t_h.vs_call_ctx.cc_address).storage /\
-    un.t_trans SUBSET D.d_trans t_h.vs_call_ctx.cc_address
-      (t_h.vs_transient t_h.vs_call_ctx.cc_address) /\
-    un.t_imm SUBSET D.d_imm t_h.vs_immutables /\
-    R SUBSET D.d_ret t_h.vs_returndata``;
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions ==>
+  !stk PG G T0 fn inst s fuel s_h.
+    frame_reachable vs0 CT stk PG G T0 fn inst s /\ gas_cut ncut vs0 s /\
+    active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
+    step_inst fuel CT inst s = Halt s_h ==>
+    (step_taint inst s s_h T0).t_stor SUBSET
+      D.d_stor s_h.vs_call_ctx.cc_address
+        (s_h.vs_accounts s_h.vs_call_ctx.cc_address).storage /\
+    (step_taint inst s s_h T0).t_trans SUBSET
+      D.d_trans s_h.vs_call_ctx.cc_address
+        (s_h.vs_transient s_h.vs_call_ctx.cc_address) /\
+    (step_taint inst s s_h T0).t_imm SUBSET D.d_imm s_h.vs_immutables /\
+    ret_taint T0 inst s SUBSET D.d_ret s_h.vs_returndata``;
 
 Theorem ld_byte_rel_masked_slice:
   (!j. j < n ==> R (a+j) (b+j)) /\
@@ -106,7 +110,7 @@ Theorem ld_normal_return_observation:
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
     astk live keys d A suspended gstk f /\
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -241,13 +245,14 @@ Theorem ld_normal_halt_observation:
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
     astk live keys d A suspended gstk f /\
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   ~in_revert_forward fn s /\ i.inst_opcode <> INVOKE /\
   step_inst fuel CT i t = Halt th ==>
-  ?sh sn Rs. final_taint vs0 CS sh sn Rs /\
+  ?sh sn Rs. step_inst fuel CS i s = Halt sh /\
+    sn = step_taint i s sh tn /\ Rs = ret_taint tn i s /\
     th.vs_call_ctx.cc_address = sh.vs_call_ctx.cc_address /\
     storage_agree_except sn.t_stor
       (sh.vs_accounts sh.vs_call_ctx.cc_address).storage
@@ -332,10 +337,6 @@ Resume ld_normal_halt_observation[self_execution]:
 QED
 
 Resume ld_normal_halt_observation[final]:
-  `final_taint vs0 CS sh (step_taint i s sh tn) (ret_taint tn i s)` by
-    (drule ld_annotated_erasure >>
-     drule ld_annotated_active_inst >>
-     simp[final_taint_def] >> metis_tac[]) >>
   qexistsl_tac [`sh`,`step_taint i s sh tn`,`ret_taint tn i s`] >>
   simp[] >>
   `sh.vs_call_ctx = s.vs_call_ctx /\

@@ -1,5 +1,6 @@
 Theory lowerDloadSourceInterface
 Ancestors
+  o1SafeUpto
   ptrDiscipline list pred_set fmpStepSupply dftCorrectness
   lowerDloadOpaqueExecution venomInst irSupply unitShapeDefs
 
@@ -11,12 +12,12 @@ Proof
 QED
 
 Theorem ld_ctx_ptr_excluded_opcodes:
-  ptr_discipline lo C vs0 /\ MEM fn C.ctx_functions /\
+  ptr_discipline_upto lo ncut C vs0 /\ MEM fn C.ctx_functions /\
   MEM i (fn_insts fn) ==>
   ~MEM i.inst_opcode [MEMTOP; DRET; GETFMP; SETFMP; RETFMP; FMP_PARAM]
 Proof
   strip_tac >> irule ld_fn_ptr_excluded_opcodes >>
-  fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]
+  fs[ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem ld_original_operand_support:

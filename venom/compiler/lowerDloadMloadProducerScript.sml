@@ -71,7 +71,7 @@ QED
 
 Theorem ld_mload_certificate_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   i.inst_opcode = MLOAD /\ i.inst_operands = [op] /\ i.inst_outputs = [out] /\
   ~in_revert_forward fn s /\

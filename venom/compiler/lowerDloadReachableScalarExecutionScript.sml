@@ -1,5 +1,6 @@
 Theory lowerDloadReachableScalarExecution
 Ancestors
+  o1SafeUpto
   lowerDloadProvenanceSupport lowerDloadOrdinaryExecution lowerDloadOwnership
   lowerDloadOperand lowerDloadReachableDiscipline ptrDiscipline
   pointerConfinedDefs contextCodegenRel
@@ -52,7 +53,7 @@ QED
 
 Theorem ld_annotated_clean_scalar_backward:
   (!f. MEM f ctx.ctx_functions ==> fn_ptr_ok P f) /\
-  ptr_discipline lo ctx vs0 /\
+  ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s /\
   ld_annotated_reachable vs0 ctx astk k L AP AG tn fn i s /\
   MEM i.inst_opcode [MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD;
     SLT; SGT; ISZERO; AND; OR; XOR; NOT] /\

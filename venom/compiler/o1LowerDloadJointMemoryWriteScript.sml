@@ -1,6 +1,7 @@
 (* Masked writes under occurrence geometry, including empty protected sites. *)
 Theory o1LowerDloadJointMemoryWrite
 Ancestors
+  o1SafeUpto
   o1LowerDloadPtrDiscipline o1LowerDloadJointRelation o1LowerDloadMemoryConsumer
   o1LowerDloadRelocationKernel ptrDiscipline venomState words finite_map pred_set codegenRel
   o1LowerDloadJointMemoryRead o1LowerDloadJointScalar o1LowerDloadOccurrence
@@ -70,7 +71,7 @@ QED
 
 Theorem ld_joint_mstore_operands[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = MSTORE /\ inst.inst_operands = [p;vop] /\
   eval_operand p s = SOME x /\ eval_operand vop s = SOME v ==>
@@ -84,10 +85,10 @@ Proof
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
-    metis_tac[ptr_discipline_def] >>
+    metis_tac[ptr_discipline_upto_def] >>
   `op_taint tn p = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
-  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_fn_ptr_ok] >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_upto_fn_ptr_ok] >>
   `MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn` by
     metis_tac[o1LowerDloadGhostTheory.frame_reachable_prov_support] >>
   `ptr_use_ok P (fn_pv P fn) inst` by
@@ -151,7 +152,7 @@ QED
 
 Theorem ld_joint_mstore_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
   inst.inst_opcode = MSTORE /\ step_inst fuel C inst s = OK s1 ==>
   ?t1. step_inst fuel C' inst t = OK t1 /\
@@ -236,7 +237,7 @@ QED
 Theorem ld_joint_mstore_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
-  ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\ opaque_use_ok fn /\
   active_inst fn inst s /\ inst.inst_opcode = MSTORE /\ ~in_revert_forward fn s /\
   step_inst fuel C inst s = OK s1 /\
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) ==>

@@ -74,22 +74,20 @@ Ancestors
   ctxLookupAgreeHelpers unitMemInv contextCodegenRelProps list
   o1PassLift ptrDiscipline venomMemProps venomExecProofs
   venomExecSemantics venomState finite_map contextCodegenRel
-  calleeTransport venomInstProofs1
+  calleeTransport venomInstProofs1 o1SafeUpto
 
 Theorem ld_source_frame_raw_bound:
-  o1_src_inv D C vs /\ o1_ctx_shape C /\
+  mem_inv dload_headroom_ok C vs /\ o1_ctx_shape C /\
   frame_reachable vs C stk PG G tn fn inst s ==>
   s.vs_alloca_next < dimword (:256)
 Proof
-  strip_tac >> drule_all ld_frame_reachable_raw >>
-  qpat_x_assum `o1_src_inv D C vs` mp_tac >>
-  simp[o1_src_inv_def, mem_inv_raw_reachable] >> rpt strip_tac >>
-  qpat_x_assum `!f i t. raw_reachable vs C f i t ==> raw_mem_ok C f i t`
-    (drule_then mp_tac) >> simp[raw_mem_ok_def]
+  strip_tac >> drule_all ld_frame_reachable_raw >> strip_tac >>
+  fs[mem_inv_raw_reachable] >> first_x_assum drule >>
+  simp[lowerDloadDefsTheory.dload_headroom_ok_def]
 QED
 
 Theorem ld_source_frame_no_dalloca:
-  o1_src_inv D C vs /\ o1_ctx_shape C /\
+  o1_ptr_safe_upto D lo ncut C vs /\ o1_ctx_shape C /\
   frame_reachable vs C stk PG G tn fn inst s ==>
   inst.inst_opcode <> DALLOCA
 Proof
@@ -97,8 +95,8 @@ Proof
   `MEM fn C.ctx_functions` by metis_tac[ld_stack_origin_member] >>
   `active_inst fn inst s` by metis_tac[frame_reach_active] >>
   `EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)` by
-    (qpat_x_assum `o1_src_inv D C vs` mp_tac >>
-     simp[o1_src_inv_def, ctx_has_dalloca_def, EXISTS_MEM, EVERY_MEM] >>
+    (qpat_x_assum `o1_ptr_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_ptr_safe_upto_def, ctx_has_dalloca_def, EXISTS_MEM, EVERY_MEM] >>
      metis_tac[]) >>
   drule_all EVERY_active_inst >> simp[]
 QED
@@ -614,7 +612,8 @@ QED
 Theorem ld_source_annotation:
   !vs0 ctx stk PG G tn fn inst s.
   frame_reachable vs0 ctx stk PG G tn fn inst s ==>
-  !D. o1_src_inv D ctx vs0 /\ o1_ctx_shape ctx /\ o1_run_state_ok vs0 ==>
+  !D lo ncut. o1_ptr_safe_upto D lo ncut ctx vs0 /\ o1_ctx_shape ctx /\
+    o1_run_state_ok vs0 ==>
   ?astk k L AP AG.
     ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
     MAP ld_erase_frame astk = stk /\ MAP (OPTION_MAP SND) AP = PG /\
@@ -1178,7 +1177,8 @@ QED
 
 Theorem ld_source_ownership:
   frame_reachable vs0 ctx stk PG G tn fn inst s /\
-  o1_src_inv D ctx vs0 /\ o1_ctx_shape ctx /\ o1_run_state_ok vs0 ==>
+  o1_ptr_safe_upto D lo ncut ctx vs0 /\ o1_ctx_shape ctx /\
+  o1_run_state_ok vs0 ==>
   ?astk k L AP AG.
     ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
     MAP ld_erase_frame astk = stk /\ MAP (OPTION_MAP SND) AP = PG /\
