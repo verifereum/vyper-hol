@@ -6,7 +6,8 @@ Ancestors
   loweringPosts context exprSimDefs exprSimCopy loweringStateRelDefs
   exprSimVVFrame exprOperandVar emitHelper emitHelperProps compileEnv
   venomState venomInst finite_map freshWrites ASCIInumbers
-  bodyPtrAttributeSource
+  bodyPtrAttributeSource exprSimFieldLayout exprSimProps exprSimAttributeProps
+  valueEncoding valueEncodingDefs vyperAST bodyIntCallArgType exprSimAttributeFields
 
 (* Only metadata is needed: memory may change provided ownership and the
    operand and local pointer registers are retained. *)
@@ -115,5 +116,76 @@ Proof
   conj_tac
   >- (simp[sub_layout_def, type_memory_size_def] >> rpt strip_tac >>
       irule fields_in_memory_field >> gvs[val_in_memory_def] >> metis_tac[]) >>
-  drule val_footprint_le >> simp[val_footprint_def] >> decide_tac
+  drule val_footprint_le >> strip_tac >>
+  CONV_TAC (RAND_CONV (SIMP_CONV (srw_ss())
+    [val_footprint_def, type_memory_size_def])) >> decide_tac
+QED
+
+Theorem intcall_attribute_dynamic_memory_provenance[local]:
+  expr_body_pre ce cx env (Attribute ann obj fld) es0 /\
+  eval_expr cx obj es0 = (INL raw,ee) /\
+  vv_post ctx func ce cx obj es sa sb s0 ee raw bvv t /\
+  intcall_vv_provenance ce cx (expr_type obj) sa sb ee raw bvv t /\
+  vv_loc bvv = LocMemory /\
+  (!tv. evaluate_type (get_tenv cx) (expr_type obj) = SOME tv ==>
+        ~dynarray_free tv) /\
+  eval_operand dst t = SOME
+    (w + n2w (attr_offset ce (expr_type obj) (vv_loc bvv) fld)) /\
+  eval_operand (vv_operand bvv) t = SOME w /\
+  select_result cx (expr_type obj) raw (AttrSubscript fld) ee = (INL result,ee) ==>
+  intcall_vv_provenance ce cx ann sa sb ee result
+    (LocatedValue ann (mk_ptr dst LocMemory)) t
+Proof
+  strip_tac >> drule_all attribute_typed_selection >> strip_tac >> gvs[] >>
+  `post_value_type ce obj = StructT sid` by
+    (drule attr_pre_base >> strip_tac >> gvs[] >>
+     drule_all attr_post_value_type >> simp[]) >>
+  drule_all attribute_memory_field_address >> strip_tac >>
+  drule_all intcall_struct_field_layout >> strip_tac >>
+  irule intcall_dynamic_memory_selection >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`StructT sid`, `bvv`, `vv_operand bvv`, `raw`] >>
+  simp[attr_offset_def] >>
+  Cases_on `bvv` >> gvs[vv_loc_def, vv_location_def, vv_operand_def, is_word_type_def]
+QED
+
+Theorem intcall_attribute_selection_provenance[local]:
+  expr_body_pre ce cx env (Attribute ann obj fld) es0 /\
+  ~expr_has_effect (Attribute ann obj fld) /\
+  eval_expr cx obj es0 = (INL raw,ee) /\
+  vv_post ctx func ce cx obj es sa sb s0 ee raw bvv t /\
+  intcall_vv_provenance ce cx (expr_type obj) sa sb ee raw bvv t /\
+  vv_post ctx func ce cx (Attribute ann obj fld) es sa sb s0 ee result
+    (LocatedValue ann (mk_ptr dst (vv_loc bvv))) t /\
+  eval_operand dst t = SOME
+    (w + n2w (attr_offset ce (expr_type obj) (vv_loc bvv) fld)) /\
+  eval_operand (vv_operand bvv) t = SOME w /\
+  select_result cx (expr_type obj) raw (AttrSubscript fld) ee = (INL result,ee) ==>
+  intcall_vv_provenance ce cx ann sa sb ee result
+    (LocatedValue ann (mk_ptr dst (vv_loc bvv))) t
+Proof
+  strip_tac >>
+  `post_value_type ce (Attribute ann obj fld) = ann` by
+    simp[bodyIntCallArgTypeTheory.effect_free_post_value_type, expr_type_def] >>
+  Cases_on `vv_loc bvv = LocMemory`
+  >- (drule_all attribute_typed_selection >> strip_tac >> gvs[] >>
+      Cases_on `dynarray_free (StructTV fs)`
+      >- (`dynarray_free ftv` by
+            (drule_all exprSimAttributeFieldsTheory.mem_field_offset_layout >> strip_tac >>
+             simp[dynarray_free_def] >> rpt strip_tac >>
+             qpat_x_assum `dynarray_free (StructTV fs)`
+               (mp_tac o REWRITE_RULE [dynarray_free_def]) >>
+             disch_then (qspec_then `AttrSubscript fld::path` mp_tac) >>
+             simp[mem_path_offset_def, mem_step_offset_def] >> metis_tac[]) >>
+          qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _` kall_tac >>
+          qpat_x_assum `intcall_vv_provenance _ _ _ _ _ _ _ _ _` kall_tac >>
+          gvs[vv_post_def, intcall_vv_provenance_def, mk_ptr_def,
+              vv_at_def, expr_type_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+      drule intcall_attribute_dynamic_memory_provenance >>
+      simp[] >> disch_then irule >> metis_tac[]) >>
+  qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `intcall_vv_provenance _ _ _ _ _ _ _ _ _` kall_tac >>
+  gvs[vv_post_def, intcall_vv_provenance_def, mk_ptr_def, vv_holds_def,
+      immutable_holds_def] >> strip_tac >> gvs[] >>
+  qexistsl_tac [`name`, `off`, `itv`, `iv`, `k`] >> simp[]
 QED
