@@ -3,9 +3,9 @@
 Theory bodyPtrIntCallArrayLoop
 Ancestors
   typedArrayLoopCode typedArrayLoopHeader typedArrayLoopAddress typedArrayLoopCounter
-  bodyPtrBopScalarSeq bodyPtrBopInLoopSegments fragGasSeqPtr
+  bodyPtrBopScalarSeq bodyPtrBopInLoopSegments bodyPtrBopInLoopControl fragGasSeqPtr
   ptrDiscipline fragExec ssaOperandFrame exprLoweringProps
-  bodyPtrBytestringBuiltinsUintBody
+  bodyPtrBytestringBuiltinsUintBody fragGasSeqAbort
   venomInst venomState venomExecSemantics fragGasPathPtr compileEnv finite_map pred_set list rich_list
 
 Theorem intcall_typed_array_header_scalar[local]:
@@ -248,4 +248,71 @@ Proof
       with vs_inst_idx := SUC mid.vs_inst_idx))` by
     metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD_CLAUSES] >>
   gvs[Abbr `mid`, Abbr `g`, Abbr `t`, update_var_def]
+QED
+
+Theorem intcall_typed_array_counter_scalar[local]:
+  compiler_var_name vb 0 NOTIN R /\ counter NOTIN R ==>
+  bop_scalar_seq R {Var counter; Lit 1w}
+    (TAKE 2 (typed_array_loop_counter id vb counter cl))
+    {Var counter; Var (compiler_var_name vb 0); Lit 1w}
+Proof
+  strip_tac >> simp[typed_array_loop_counter_def] >>
+  pure_once_rewrite_tac[bop_scalar_seq_def] >> disj1_tac >>
+  qexistsl_tac [`id`, `ADD`, `[Var counter; Lit 1w]`, `compiler_var_name vb 0`] >>
+  simp[] >> pure_once_rewrite_tac[bop_scalar_seq_def] >> disj1_tac >>
+  qexistsl_tac [`id+1`, `ASSIGN`, `[Var (compiler_var_name vb 0)]`, `counter`] >>
+  simp[bop_scalar_seq_def, EXTENSION] >> metis_tac[]
+QED
+
+Theorem intcall_typed_array_counter_counted:
+  !D ctx fn PG G tn s id vb counter cl cw bb R.
+  compiler_var_name vb 0 NOTIN R /\ counter NOTIN R /\
+  op_prov G (Var counter) = NONE /\ op_taint tn (Var counter) = {} /\
+  eval_operand (Var counter) s = SOME cw /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (typed_array_loop_counter id vb counter cl)
+    (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?H tf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tf
+      (OK (jump_to cl (typed_array_loop_counter_state vb counter cw s))) /\
+    op_prov H (Var counter) = NONE /\ op_taint tf (Var counter) = {} /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!x. x IN R ==> FLOOKUP H x = FLOOKUP G x /\
+      FLOOKUP tf.t_var x = FLOOKUP tn.t_var x)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bop_scalar_seq R {Var counter; Lit 1w}
+    (TAKE 2 (typed_array_loop_counter id vb counter cl))
+    {Var counter; Var (compiler_var_name vb 0); Lit 1w}` by
+    (irule intcall_typed_array_counter_scalar >> simp[]) >>
+  `!op. op IN {Var counter; Lit 1w} ==>
+    op_prov G op = NONE /\ op_taint tn op = {}` by
+    (simp[] >> rpt strip_tac >> gvs[op_prov_def, op_taint_def]) >>
+  `run_inst_seq (TAKE 2 (typed_array_loop_counter id vb counter cl)) s =
+    OK (typed_array_loop_counter_state vb counter cw s)` by
+    (irule typed_array_loop_counter_execution >> simp[]) >>
+  `isPREFIX (TAKE 2 (typed_array_loop_counter id vb counter cl))
+    (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (irule isPREFIX_TRANS >> qexists_tac `typed_array_loop_counter id vb counter cl` >>
+     conj_tac >- simp[typed_array_loop_counter_def] >> simp[]) >>
+  drule_all bop_scalar_seq_path >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `OK u` >>
+  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb /\
+    u.vs_inst_idx = s.vs_inst_idx + 2` by
+    simp[Abbr `u`, typed_array_loop_counter_def] >>
+  `get_instruction bb u.vs_inst_idx = SOME (mk_inst (id+2) JMP [Label cl] [])` by
+    (qpat_x_assum `isPREFIX (typed_array_loop_counter _ _ _ _) _` mp_tac >>
+     pure_rewrite_tac[typed_array_loop_counter_def] >> strip_tac >>
+     dxrule instruction_prefix_cursor >> strip_tac >>
+     dxrule instruction_prefix_cursor >> strip_tac >>
+     drule instruction_prefix_cursor >> simp[arithmeticTheory.ADD_CLAUSES] >>
+     `s.vs_inst_idx + 2 = SUC (SUC s.vs_inst_idx)` by decide_tac >> simp[]) >>
+  `gas_path_ptr D 0 ctx fn PG G' tn' u 0 G' tn' (OK (jump_to cl u))` by
+    (irule membership_jump_path >> simp[] >> metis_tac[]) >>
+  drule_all gas_path_ptr_then >> simp[] >> strip_tac >>
+  qexistsl_tac [`G'`, `tn'`] >>
+  gvs[Abbr `u`, typed_array_loop_counter_def, jump_to_def]
 QED
