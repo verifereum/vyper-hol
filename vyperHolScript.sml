@@ -24,6 +24,9 @@ Ancestors
   (* passes: FMP lowering composition, memory merging *)
   fmpLowerSequenceExec mmTransform memzeroFrame
   mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
+  (* passes: ConcretizeMemLoc's DALLOCA step producer, until the paired
+     simulation's dispatch uses it *)
+  concretizePtrDallocaProducer
   (* O1: lifting per-function pass facts to the stage contract *)
   o1PassLift
   (* codegen and compiler units: frame simulation, stack planning, unit checks,
