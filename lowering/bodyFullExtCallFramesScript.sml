@@ -176,3 +176,63 @@ Proof
   `regions_disjoint (w2n ro) cap (w2n w) (val_footprint tv d)` by metis_tac[] >>
   fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
+
+Theorem extcall_request_structural_frame:
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
+    calldata has_default default_op default_ty default_opt ee t /\
+  take_call_outcome target calldata value_opt ee = (INL (rq,oc),consumed) /\
+  valid_horizon cx st0 H (SND (adopt_call_outcome rq oc consumed)).storage_trace /\
+  state_rel H func cenv cx (SND (adopt_call_outcome rq oc consumed))
+    (update_var out word u) /\
+  ~not_fresh_at sp out /\
+  u = t with <|vs_outcomes := u.vs_outcomes; vs_requests := u.vs_requests;
+    vs_accounts := u.vs_accounts; vs_transient := u.vs_transient;
+    vs_logs := u.vs_logs; vs_pending_deletions := u.vs_pending_deletions;
+    vs_returndata := u.vs_returndata; vs_memory := u.vs_memory|> ==>
+  stmt_state_rel H ctx func cenv cx (SND (adopt_call_outcome rq oc consumed))
+    (update_var out word u)
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 H ee.storage_trace` by
+    (`adopt_call_outcome rq oc consumed =
+        (INL (), SND (adopt_call_outcome rq oc consumed))` by
+       simp[adopt_call_outcome_equation] >>
+     metis_tac[valid_horizon_frame, storage_trace_frame_adopt,
+       storage_trace_frame_take_call]) >>
+  drule oracle_take_adoption_locals >> strip_tac >>
+  fs[extcall_request_ready_def] >>
+  `stmt_state_rel H ctx func cenv cx ee t` by metis_tac[] >>
+  `!x. not_fresh_at sp x ==>
+    lookup_var x (update_var out word u) = lookup_var x t` by
+    (rpt strip_tac >>
+     `x <> out` by metis_tac[] >>
+     simp[venomStateTheory.update_var_def, venomStateTheory.lookup_var_def] >>
+     qpat_x_assum `u = _` (fn th => once_rewrite_tac[th]) >>
+     simp[finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `u.vs_allocas = t.vs_allocas /\ u.vs_alloca_next = t.vs_alloca_next /\
+   u.vs_labels = t.vs_labels /\ u.vs_fmp = t.vs_fmp` by
+    (qpat_x_assum `u = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  fs[exprLoweringPropsTheory.stmt_state_rel_def] >> rpt conj_tac
+  >- (irule localPtrsPropsTheory.alloca_inv_fields >> qexists_tac `t` >>
+      simp[venomStateTheory.update_var_def] >> metis_tac[])
+  >- (fs[exprLoweringPropsTheory.alloca_room_def,
+         exprLoweringPropsTheory.pending_alloca_size_def,
+         venomStateTheory.update_var_def] >> metis_tac[])
+  >- (fs[exprLoweringPropsTheory.fmp_room_def,
+         exprLoweringPropsTheory.pending_alloca_size_def,
+         venomStateTheory.update_var_def] >> metis_tac[])
+  >- (irule exprLoweringPropsTheory.immutable_alloca_sep_fields >>
+      qexistsl_tac [`t`, `ee`] >> simp[venomStateTheory.update_var_def] >>
+      rpt strip_tac >> qexists_tac `id` >>
+      irule exprSimPropsTheory.local_region_frame >> conj_tac
+      >- (qexists_tac `func` >> fs[loweringStateRelDefsTheory.state_rel_def]) >>
+      qexistsl_tac [`sp`, `ee.scopes`, `update_var out word u`] >>
+      simp[venomStateTheory.update_var_def] >>
+      fs[venomStateTheory.update_var_def] >> metis_tac[])
+  >- (irule exprLoweringPropsTheory.immutable_base_zero_frame >>
+      qexists_tac `t` >> simp[venomStateTheory.update_var_def] >>
+      fs[loweringStateRelDefsTheory.local_ptrs_reserved_def,
+         venomStateTheory.update_var_def] >> metis_tac[]) >>
+  fs[venomStateTheory.update_var_def] >> metis_tac[]
+QED
