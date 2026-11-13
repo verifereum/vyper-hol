@@ -18,6 +18,8 @@ Theorem abi_decode_mem_array_body:
        u.vs_inst_idx = k /\ eval_operand ip u = SOME p /\
        eval_operand src u = SOME (n2w sb) /\
        eval_operand base_op u = SOME (n2w B) /\
+       eval_operand dst u = SOME (n2w d) /\
+       eval_operand hi_op u = SOME (n2w H) /\
        mload slot u = n2w j /\ mload (B+sb) u = n2w ncount /\
        j <= ncount /\ B+H <= u.vs_alloca_next /\
        d+sz <= u.vs_alloca_next /\ slot+32 <= u.vs_alloca_next) in
@@ -34,13 +36,10 @@ Theorem abi_decode_mem_array_body:
   abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi_op /\
-  abi_decoder_operand_live st.cs_next_var (Var iv) /\
   hi_op <> Lit 0w /\ B+H < dimword(:256) /\ d+sz < dimword(:256) /\
   asz < dimword(:256) /\ sb+32+ncount*asz <= H /\ 32+ncount*msz <= sz /\
   (dec_info_needs_offset di ==> 32 <= asz) /\
   j < ncount /\ J j st.cs_current_bb (LENGTH st.cs_current_insts) b /\
-  eval_operand dst b = SOME (n2w d) /\ eval_operand hi_op b = SOME (n2w H) /\
-  eval_operand (Var iv) b = SOME (n2w j) /\
   (!u c e.
     alloca_inv u /\ alloca_room ctx fn u /\ alloca_history fn u /\ ~u.vs_halted /\
     u.vs_current_bb = middle.cs_current_bb /\ u.vs_inst_idx = LENGTH middle.cs_current_insts /\
@@ -64,12 +63,13 @@ Theorem abi_decode_mem_array_body:
      (?v. gas_marked_path T ctx fn u 0 (Abort Revert_abort v)))) ==>
   ((?v. gas_path_mem ctx fn b 0 (OK v) /\
       J j end_st.cs_current_bb (LENGTH end_st.cs_current_insts) v /\
-      eval_operand (Var iv) v = SOME (n2w j) /\ R b v) \/
+      eval_operand (FST ops) v = SOME (n2w j) /\ R b v) \/
    (?v. gas_marked_path T ctx fn b 0 (Abort Revert_abort v)))
 Proof
   rpt BasicProvers.LET_ELIM_TAC >>
   `eval_operand ip b = SOME p /\ mload (w2n p) b = n2w j /\
    w2n p+32 <= b.vs_alloca_next /\ eval_operand src b = SOME (n2w sb) /\
+   eval_operand dst b = SOME (n2w d) /\ eval_operand hi_op b = SOME (n2w H) /\
    alloca_history fn b /\ alloca_inv b /\ ~b.vs_halted /\
    b.vs_current_bb = st.cs_current_bb /\ b.vs_inst_idx = LENGTH st.cs_current_insts` by
     gvs[Abbr `J`, Abbr `slot`] >>
