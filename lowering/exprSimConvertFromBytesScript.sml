@@ -2375,8 +2375,8 @@ QED
 
 Resume dynamic_scalar_fragment[abort]:
   drule_all dynamic_scalar_frag_abort >>
-  disch_then (qspecl_then [`s0`,`func`,`es`,`ctx`,`H`] mp_tac) >>
-  disch_then (qspec_then `cenv` (qspec_then `\s. F` mp_tac)) >>
+  disch_then (qspecl_then [`s0`,`func`,`es`,`ctx`] mp_tac) >>
+  disch_then (qspecl_then [`cenv`, `\s. F`, `H`] mp_tac) >>
   disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
   disch_then irule >> simp[wordsTheory.dimword_def] >>
   fs[wordsTheory.dimword_def] >>

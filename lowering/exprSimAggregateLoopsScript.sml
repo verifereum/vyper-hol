@@ -232,6 +232,7 @@ Proof
      qpat_x_assum `vv_post H' _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_then (Pos (el 5)) mp_tac
           exprSimAggregateChildrenTheory.buffer_emit_add_vv_post) >>
+     disch_then (qspecl_then [`w`, `sn`, `off`, `dst`, `buf`] mp_tac) >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      strip_tac >> gvs[]) >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>

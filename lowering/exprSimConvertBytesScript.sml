@@ -1640,7 +1640,7 @@ Proof
       (Abort Revert_abort ss)` by
     (rpt strip_tac >> first_x_assum drule >> strip_tac >> simp[expr_exit_def]) >>
   drule_all convert_cast_frag_success >>
-  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es1`] mp_tac) >>
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cx`, `es1`] mp_tac) >>
   disch_then (qspecl_then [`p`, `s`] mp_tac) >>
   disch_then (mp_then Any irule frag_exec_weaken) >>
   simp[] >> conj_tac

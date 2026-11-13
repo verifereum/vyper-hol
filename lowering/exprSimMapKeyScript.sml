@@ -939,7 +939,7 @@ Proof
   `wb_frame cenv es en sa s0 u` by
     (irule (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `en`, `en`, `sn`,
                      `s`, `u`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >>
-     qexists_tac `H` >> simp[]) >>
+     simp[] >> metis_tac[]) >>
   qpat_x_assum `wb_frame cenv es en sa s0 u` mp_tac >>
   simp[loweringPostsTheory.wb_frame_def, lookup_var_def] >>
   strip_tac >> first_assum ACCEPT_TAC
@@ -1014,7 +1014,7 @@ Proof
   `wb_frame cenv em en sm s1 u` by
     (irule (Q.SPECL [`func`, `cenv`, `cx`, `em`, `s1`, `sm`, `en`, `en`, `sn`,
                      `t`, `u`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >>
-     qexists_tac `H` >> simp[]) >>
+     simp[] >> metis_tac[]) >>
   `~expr_has_effect idx ==> pure_frame cenv func em sm s1 u` by
     (strip_tac >>
      `pure_frame cenv func em sm s1 t` by

@@ -1062,7 +1062,9 @@ Proof
   `storage_well_formed_on cx es (FST H1)` by metis_tac[] >>
   `stmt_state_rel H1 ctx func cenv cx es t` by
     (`stmt_state_rel H1 ctx func cenv cx es s0` by metis_tac[] >>
-     qpat_x_assum `stmt_state_rel H _ _ _ _ _ s0` kall_tac >>
+     qpat_x_assum `stmt_state_rel H1 _ _ _ _ _ s0` mp_tac >>
+     rpt (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ s0` kall_tac) >>
+     strip_tac >>
      drule_all (SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
        [wordsTheory.dimword_def] slice_calldata_run) >>
      gns[wordsTheory.dimword_def] >> rpt strip_tac >> gvs[]) >>
