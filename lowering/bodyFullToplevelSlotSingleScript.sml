@@ -10,6 +10,8 @@ Ancestors
   exprPtrUnwrapAllocSemantic exprPtrUnwrapEnsureShape
   venomExecSemantics ptrDiscipline loweringStateRelDefs exprSimStorageCopy
   slotCopyExecution frameActivationSeparation copyExecution finite_map
+  exprPtrUnwrapRuntimeFrame venomMemProps valueEncodingProps arithmetic
+  exprPtrUnwrapAllocSeparation exprSimAlloc allocationPtr
 
 Theorem toplevel_slot_single_suffix_origin_ptr:
   compile_expr cenv ty (TopLevelName ann nsid) si = (LocatedValue vt p,sm) /\
@@ -252,4 +254,99 @@ Proof
   qexistsl [`root`, `d`, `sm'`, `buf`, `u`, `a`, `G0`, `tn0`,
     `t with vs_inst_idx := LENGTH sb.cs_current_insts`, `Gf`, `tnf`] >>
   asm_rewrite_tac[]
+QED
+
+
+Theorem toplevel_slot_single_copy_projections[local]:
+  compile_expr cenv ty (TopLevelName ann nsid) si = (vv,sm) /\
+  z = (mstore (w2n d) w (update_var (STRING #"%" (toString mid.cs_next_var)) w a)
+    with vs_inst_idx := idx) /\
+  tf.t_mem = (ti.t_mem DIFF {j | w2n d <= j /\ j < w2n d+32}) UNION
+    {w2n d+k | k IN key_taint keys key} ==>
+  slot_copy_runtime_frame mid d 1 a z /\ mem_word_at (w2n d) z.vs_memory = w /\
+  z.vs_requests = a.vs_requests /\
+  (!b. b < 32 /\ w2n d+b IN tf.t_mem ==> b IN key_taint keys key) /\
+  (!j. j < w2n d \/ w2n d+32 <= j ==> (j IN tf.t_mem <=> j IN ti.t_mem))
+Proof
+  strip_tac >>
+  `copy_static z = copy_static a` by
+    simp[copy_static_def, mstore_def, write_memory_with_expansion_def, update_var_def] >>
+  drule copy_static_fields >> strip_tac >>
+  conj_tac
+  >- (simp[slot_copy_runtime_frame_def] >> conj_tac
+      >- (rpt strip_tac >> Cases_on `op` >>
+          simp[eval_operand_def, lookup_var_def, mstore_def,
+            write_memory_with_expansion_def, update_var_def, FLOOKUP_UPDATE] >>
+          qpat_x_assum `slot_copy_external _ _` mp_tac >>
+          simp[slot_copy_external_def, slot_copy_var_def] >>
+          disch_then (qspec_then `0` mp_tac) >> simp[] >> metis_tac[]) >>
+      conj_tac
+      >- (rpt strip_tac >>
+          `a'+1 <= w2n d \/ w2n d+32 <= a'` by decide_tac >>
+          simp[mstore_mem_bytes_at_disjoint, update_var_def]) >>
+      conj_tac >- simp[LENGTH_mstore_eq, update_var_def] >>
+      rpt strip_tac >> simp[mstore_mem_bytes_at_disjoint, update_var_def]) >>
+  conj_tac >- simp[mstore_mem_word_at_same] >>
+  conj_tac >- simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      gvs[pred_setTheory.IN_UNION, pred_setTheory.IN_DIFF,
+        pred_setTheory.GSPECIFICATION, ADD_COMM]) >>
+  rpt strip_tac >>
+  `~(w2n d <= j /\ j < w2n d+32)` by decide_tac >>
+  `~(?k. j = w2n d+k /\ k IN key_taint keys key)` by
+    (strip_tac >> fs[key_taint_def] >> decide_tac) >>
+  simp[pred_setTheory.IN_UNION, pred_setTheory.IN_DIFF, pred_setTheory.GSPECIFICATION] >>
+  metis_tac[ADD_COMM]
+QED
+
+Theorem toplevel_slot_single_allocation_bounds[local]:
+  compile_expr cenv ty (TopLevelName ann nsid) si = (vv,sm) /\
+  compile_alloc_buffer nb sb = (buf,mid) /\ fn_has_code sb mid func /\
+  stmt_state_rel H ctx func cenv cx ee s /\ nb < dimword (:256) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  d = n2w (buffer_allocation_base s sb.cs_next_id) /\
+  u = update_var root d (buffer_allocation_fields s sb.cs_next_id nb) /\
+  step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
+  a = u with vs_inst_idx := LENGTH mid.cs_current_insts ==>
+  buf.buf_size = nb /\ lo <= w2n d /\ allocas_from lo a /\
+  s.vs_alloca_next <= a.vs_alloca_next /\ w2n d+nb <= a.vs_alloca_next /\
+  buffer_allocation_base s sb.cs_next_id < dimword (:256) /\
+  a.vs_memory = s.vs_memory /\ a.vs_accounts = s.vs_accounts /\
+  a.vs_transient = s.vs_transient /\ a.vs_call_ctx = s.vs_call_ctx /\
+  a.vs_requests = s.vs_requests /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> FLOOKUP a.vs_allocas aid = SOME entry)
+Proof
+  strip_tac >>
+  drule_all unwrap_alloc_site_bound >> strip_tac >>
+  `buffer_allocation_base s sb.cs_next_id < dimword (:256)` by decide_tac >>
+  `w2n d = buffer_allocation_base s sb.cs_next_id` by simp[w2n_n2w] >>
+  `lo <= buffer_allocation_base s sb.cs_next_id` by
+    (Cases_on `FLOOKUP s.vs_allocas sb.cs_next_id` >>
+     fs[buffer_allocation_base_def, allocas_from_def] >>
+     PairCases_on `x` >> fs[] >> metis_tac[]) >>
+  `exec_alloca (mk_inst sb.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s
+     (n2w nb : bytes32) = OK u` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def]) >>
+  `allocas_from lo u` by metis_tac[allocas_from_exec_alloca] >>
+  drule_all unwrap_alloc_fields_old >> strip_tac >>
+  drule unwrap_alloc_generated_code >> strip_tac >>
+  `allocas_from lo a` by
+    (qpat_x_assum `allocas_from lo u` mp_tac >> simp[allocas_from_def]) >>
+  `!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP a.vs_allocas aid = SOME entry` by
+    (qpat_x_assum `!id entry. FLOOKUP s.vs_allocas id = SOME entry ==> _` mp_tac >>
+     simp[]) >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `u = _` SUBST_ALL_TAC >>
+  Cases_on `FLOOKUP s.vs_allocas sb.cs_next_id`
+  >- simp[buffer_allocation_fields_def, update_var_def, buffer_allocation_base_def] >>
+  rename1 `FLOOKUP s.vs_allocas sb.cs_next_id = SOME site` >>
+  PairCases_on `site` >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  drule_all stmt_state_rel_alloca_site_bound >> strip_tac >>
+  `alloca_inv s` by fs[stmt_state_rel_def, state_rel_def] >>
+  fs[buffer_allocation_fields_def, update_var_def, buffer_allocation_base_def,
+    venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+  metis_tac[ADD_COMM]
 QED
