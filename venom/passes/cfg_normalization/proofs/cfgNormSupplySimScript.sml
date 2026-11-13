@@ -1309,6 +1309,36 @@ Proof
        combinTheory.o_DEF, COND_RAND]
 QED
 
+Theorem insert_split_supply_entry_opcodes:
+  wf_function fn /\ MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  insert_split_supply s fn pred target = (fn',s') ==>
+  MAP (\i. i.inst_opcode) (fn_entry_insts fn') =
+  MAP (\i. i.inst_opcode) (fn_entry_insts fn)
+Proof
+  strip_tac >>
+  `fn.fn_blocks <> []` by gvs[wf_function_def, fn_has_entry_def] >>
+  Cases_on `fn.fn_blocks` >- gvs[] >>
+  rename1 `fn.fn_blocks = head::tail` >>
+  `head.bb_label = pred.bb_label ==> head = pred` by
+    metis_tac[venomExecProofsTheory.same_label_same_block, listTheory.MEM] >>
+  `head.bb_label = target.bb_label ==> head = target` by
+    metis_tac[venomExecProofsTheory.same_label_same_block, listTheory.MEM] >>
+  qpat_x_assum `MEM pred _` kall_tac >>
+  qpat_x_assum `MEM target _` kall_tac >>
+  Cases_on `build_split_block_supply s pred target` >> PairCases_on `r` >>
+  qpat_x_assum `insert_split_supply _ _ _ _ = _` mp_tac >>
+  simp[insert_split_supply_def] >> strip_tac >>
+  gvs[] >>
+  simp[callLayoutDefsTheory.fn_entry_insts_def, entry_block_def,
+       replace_block_def, COND_RAND] >>
+  Cases_on `head.bb_label = pred.bb_label` >>
+  Cases_on `head.bb_label = target.bb_label` >>
+  fs[] >>
+  rewrite_tac[supply_update_phis_opcodes, supply_subst_terminator_opcodes] >>
+  IF_CASES_TAC >>
+  rewrite_tac[supply_update_phis_opcodes, supply_subst_terminator_opcodes]
+QED
+
 Theorem supply_block_image_outputs:
   MAP (\i. i.inst_outputs)
     (supply_block_image pred target split repls bb).bb_instructions =

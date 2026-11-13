@@ -172,6 +172,42 @@ QED
 
 (* ===== The rows ===== *)
 
+Theorem make_ssa_step_user_param_count:
+  make_ssa_current_fn s fn = (fn',s') /\ o1_fn_shape ctx fn ==>
+  LENGTH (fn_user_param_insts fn') = LENGTH (fn_user_param_insts fn)
+Proof
+  strip_tac >>
+  `wf_function fn /\ first_block_no_preds fn /\ first_block_no_phi fn` by
+    gvs[o1_fn_shape_def] >>
+  `ALL_DISTINCT (fn_labels fn)` by gvs[wf_function_def] >>
+  `?b0 rest. fn.fn_blocks = b0::rest` by
+    (Cases_on `fn.fn_blocks` >> gvs[wf_function_def, fn_has_entry_def]) >>
+  `ALL_DISTINCT (b0.bb_label :: MAP (\bb. bb.bb_label) rest)` by
+    gvs[wf_function_def, fn_labels_def] >>
+  `fn_entry_label fn = SOME b0.bb_label` by
+    simp[fn_entry_label_def, entry_block_def] >>
+  drule make_ssa_current_fn_labels >> strip_tac >>
+  `?b0' rest'. fn'.fn_blocks = b0'::rest'` by
+    (Cases_on `fn'.fn_blocks` >> gvs[]) >>
+  `b0'.bb_label = b0.bb_label` by gvs[] >>
+  `~MEM PHI (MAP (\i. i.inst_opcode) b0.bb_instructions)` by
+    (gvs[first_block_no_phi_def, EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+  `!d fs. ALOOKUP (current_frontier_map fn) d = SOME fs ==>
+          ~MEM b0.bb_label fs` by
+    (rpt strip_tac >>
+     `MEM d (fn_labels fn)` by metis_tac[current_frontier_key] >>
+     drule_all current_frontier_not_entry >> gvs[]) >>
+  `EVERY (\bb. bb.bb_label = b0.bb_label ==>
+     MAP (\i. i.inst_opcode) bb.bb_instructions =
+     MAP (\i. i.inst_opcode) b0.bb_instructions) fn.fn_blocks` by
+    (gvs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+  `EVERY (\bb. bb.bb_label = b0.bb_label ==>
+     MAP (\i. i.inst_opcode) bb.bb_instructions =
+     MAP (\i. i.inst_opcode) b0.bb_instructions) fn'.fn_blocks` by
+    (irule make_ssa_current_fn_entry_op_seq >> metis_tac[]) >>
+  irule fn_user_param_count_entry_ops >> gvs[]
+QED
+
 Theorem make_ssa_step_rows:
   fn_pass_step rpolicy (CFP_Simple VP_MakeSSA) observed s fn out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\

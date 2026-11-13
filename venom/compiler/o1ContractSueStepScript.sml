@@ -1203,6 +1203,39 @@ Proof
   simp[is_param_opcode_def]
 QED
 
+Theorem sue_expand_insts_supply_param_count[local]:
+  !insts s outs s'.
+    sue_expand_insts_supply dfg s insts = (outs,s') ==>
+    LENGTH (FILTER (\i. i.inst_opcode = PARAM) outs) =
+      LENGTH (FILTER (\i. i.inst_opcode = PARAM) insts)
+Proof
+  `!l. EVERY (\i. ~is_pseudo i.inst_opcode) l ==>
+       FILTER (\i. i.inst_opcode = PARAM) l = []` by
+    (Induct >> rw[] >> gvs[is_pseudo_def]) >>
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[sue_expand_insts_supply_def] >>
+  gvs[sue_expand_insts_supply_def, AllCaseEqs()] >>
+  first_x_assum drule >> strip_tac >>
+  drule sue_expand_inst_supply_pseudo >> strip_tac >>
+  Cases_on `is_pseudo h.inst_opcode` >> gvs[] >- rw[] >>
+  `FILTER (\i. i.inst_opcode = PARAM) out = []` by
+    (qpat_x_assum `!l. _` irule >> simp[]) >>
+  simp[listTheory.FILTER_APPEND_DISTRIB] >> rw[] >> gvs[is_pseudo_def]
+QED
+
+Theorem sue_expand_function_supply_user_param_count:
+  sue_expand_function_supply s fn = (fn',s') ==>
+  LENGTH (fn_user_param_insts fn') = LENGTH (fn_user_param_insts fn)
+Proof
+  strip_tac >> gvs[sue_expand_function_supply_def, AllCaseEqs()] >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[sue_expand_blocks_supply_def, sue_expand_block_supply_def,
+      AllCaseEqs(), callLayoutDefsTheory.fn_user_param_insts_def,
+      callLayoutDefsTheory.fn_entry_insts_def,
+      venomInstTheory.entry_block_def] >>
+  drule sue_expand_insts_supply_param_count >> simp[]
+QED
+
 Theorem sue_step_elim[local]:
   fn_pass_step rpolicy (CFP_Simple VP_SingleUseExpansion) observed s fn out /\
   o1_ctx_shape observed.cu_context ==>

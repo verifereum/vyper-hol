@@ -42,8 +42,8 @@ Theorem fmp_call_walk_signature:
   ?callee. lookup_function name observed.cu_context.ctx_functions = SOME callee /\
     callee.fn_fmp_signature = callee'.fn_fmp_signature
 Proof
-  simp[o1_walk_view_def, walk_view_def] >> rpt strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
+  simp[o1_walk_view_def] >> rpt strip_tac >>
+  drule_all walk_view_fn_steps >> strip_tac >>
   drule fmp_call_later_signature >> strip_tac >> metis_tac[]
 QED
 

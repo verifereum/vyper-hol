@@ -23,7 +23,7 @@ Theorem ptr_paired_mcopy_endpoint_inputs:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
@@ -118,8 +118,6 @@ Resume ptr_paired_mcopy_endpoint_inputs[purity]:
   `EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def, EVERY_MEM,
         fn_insts_MEM] >> metis_tac[]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `!x. x IN FDOM TG ==> x IN fn_pv P a.po_fn` by
     (rpt strip_tac >>
      `?tag. FLOOKUP TG x = SOME tag` by metis_tac[FLOOKUP_DEF] >>

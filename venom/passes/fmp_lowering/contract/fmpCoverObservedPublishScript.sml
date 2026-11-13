@@ -110,8 +110,8 @@ Proof
   drule_all ctx_pass_stage_lookup >> strip_tac >>
   `fn_steps rpolicy (DROP 4 o1_fn_passes) fn' callee` by
     (qpat_x_assum `o1_walk_view rpolicy 3 C' fn observed`
-       (mp_tac o REWRITE_RULE [o1_walk_view_def, walk_view_def]) >>
-     disch_then drule_all >> strip_tac >> gvs[]) >>
+       (assume_tac o REWRITE_RULE [o1_walk_view_def]) >>
+     drule_all walk_view_fn_steps >> strip_tac >> gvs[]) >>
   drule fmp_cover_later_signature >> strip_tac >>
   drule_all fmp_cover_output_nonpublish >> strip_tac >>
   gvs[fmp_info_of_signature_def]
