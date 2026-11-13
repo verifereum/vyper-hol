@@ -555,7 +555,7 @@ Resume for_loop_mem[step]:
    >- (simp[Abbr `Exit`, Abbr `R`] >> rpt gen_tac >> strip_tac >>
        Cases_on `res`
        >- (Cases_on `x` >> metis_tac[stmt_exit_loop_ctl]) >>
-       metis_tac[])) >>
+       fs[halt_exit_def])) >>
   simp[Abbr `Done`, Abbr `Final`] >>
   rpt gen_tac >> strip_tac >> gvs[]
 QED

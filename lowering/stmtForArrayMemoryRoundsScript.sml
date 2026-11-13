@@ -655,7 +655,8 @@ Resume array_one_round_mem[exit]:
   gvs[stmt_res_ok_def] >>
   gvs[stmt_exit_def, exprSimDefsTheory.expr_exit_def,
       evaluation_state_fn_updates] >>
-  Cases_on `rr` >> gvs[exprSimDefsTheory.expr_exit_def, halt_exit_def]
+  Cases_on `rr` >> gvs[exprSimDefsTheory.expr_exit_def,
+                       exprSimDefsTheory.halt_exit_def]
 QED
 
 Finalise array_one_round_mem
