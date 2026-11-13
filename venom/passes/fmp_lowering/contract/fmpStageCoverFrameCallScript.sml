@@ -37,8 +37,8 @@ Proof
   drule_all (SRULE [] (Q.INST
     [`fmp0` |-> `w2n vs'.vs_initial_fmp`, `raw0` |-> `w2n fmp`,
      `ivk'` |-> `ti`] fmp_stage_invoke_call)) >>
-  disch_then (qx_choosel_then [`tops`, `tcallee`, `targs`, `tcs`, `t2`]
-    strip_assume_tac) >>
+  strip_tac >>
+  rename1 `fmp_stage_rel _ _ _ _ _ _ F _ _ _ _ _ _ _ t2 _` >>
   gvs[] >>
   `t2 = t1` by
     (gvs[enters_block_def] >> metis_tac[]) >>

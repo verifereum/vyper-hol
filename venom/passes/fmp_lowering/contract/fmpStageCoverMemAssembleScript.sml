@@ -220,7 +220,8 @@ Proof
       drule_at (Pos hd) fmp_cover_root_middle >>
       disch_then drule >> simp[] >> disch_then drule >>
       simp[] >> strip_tac >>
-      first_x_assum drule >> strip_tac >>
+      first_x_assum (drule_then (qspec_then `P` mp_tac)) >>
+      impl_tac >- fs[] >> strip_tac >>
       `!j. j < LENGTH users + LENGTH (OPTION_TO_LIST oldpc) ==>
         FLOOKUP (fmp_stage_plan infos ctx fn) (lbl,j) = NONE` by
         (metis_tac[fmp_control_prefix_plan_absent]) >>
