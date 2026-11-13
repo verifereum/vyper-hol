@@ -18,7 +18,7 @@ Theory targetPureWalkFrame
 Ancestors
   targetPlaceSimDefs loweringStateRelDefs loweringPosts gasOutcome gasContext
   stmtLowering exprLowering compileVyper vyperTypeContract vyperTypeCallGraph
-  vyperMachineFrame
+  vyperMachineFrame targetPureWalkSource targetPureWalkScopes
 
 Theorem target_walk_frame:
   !ctx func cenv cx env bt es vt sa sb op s0.
@@ -49,5 +49,36 @@ Theorem target_walk_frame:
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
+    (\res ee t. ?pv. res = INL pv /\
+      target_post ctx func cenv cx es sa sb s0 ee pv vt op t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r)` by
+    metis_tac[target_sim_def] >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gasSummaryTheory.gas_summary_at_def])
+      >- ( gvs[] >>
+           rename1 `target_post ctx func cenv cx es sa sb s0 _ pv vt op t` >>
+           `eval_base_place cx bt
+              (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+              (INL pv, es_end with gas_obs := [])` by
+             (fs[gasSummaryTheory.gas_marked_exec_def] >>
+              first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+           `machine_frame (es with logs := es_end.logs) es_end` by
+             (drule_all target_walk_source_frame >>
+              simp[machine_frame_def]) >>
+           `es_end.scopes = es.scopes` by
+             (drule_all target_walk_scopes >> simp[]) >>
+           rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+           simp[gasSummaryTheory.gas_summary_at_def] >>
+           qexistsl_tac [`INL pv`, `es_end`, `OK t`] >>
+           gvs[machine_frame_def]) >>
+      rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+      simp[gasSummaryTheory.gas_summary_at_def] >> metis_tac[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj2_tac >>
+  metis_tac[]
 QED
