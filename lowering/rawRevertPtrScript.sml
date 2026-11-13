@@ -76,14 +76,15 @@ Resume raw_revert_vv_sim_ptr[normal]:
   drule_all raw_revert_post_path_ptr >>
   disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
   rewrite_tac[gas_summary_ptr_at_marked] >>
-  qexistsl_tac [`INR (Error (RuntimeError "raw_revert"))`, `es_end`,
+  qexistsl_tac [`INR (Error (RevertData bs))`, `es_end`,
                 `G'`, `tn'`, `Abort Revert_abort t'`] >>
   simp[exit_result_def, expr_exit_def] >>
   irule (Q.INST [`right` |-> `[]`] gas_marked_exec_ptr_bind_normal
     |> REWRITE_RULE [APPEND_NIL]) >>
   qexistsl_tac [`G`, `es_end`, `t`, `tn`, `BytesV bs`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  simp[gas_marked_exec_ptr_def, raise_def]
+  simp[gas_marked_exec_ptr_def, raise_def, bind_def, lift_option_type_def,
+       dest_BytesV_def, return_def]
 QED
 
 Finalise raw_revert_vv_sim_ptr

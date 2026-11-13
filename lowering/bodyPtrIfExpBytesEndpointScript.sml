@@ -30,6 +30,7 @@ Theorem ifexp_bytes_destination_expr_post:
   eval_operand (Var out) sf = SOME w /\
   val_in_memory dtv v (w2n w) sf.vs_memory ==>
   expr_post ctx fn ce cx result es sa sd s0 ee v (Var out) sf /\
+  expr_val_own ce cx (expr_type result) sa sd ee v (Var out) sf /\
   (~expr_has_effect arm ==> pure_frame ce fn es sa s0 sf)
 Proof
   strip_tac >>
@@ -52,6 +53,25 @@ Proof
         qexistsl_tac [`sa`, `ee.scopes`, `sf`] >> simp[]) >>
      qpat_x_assum `!name p sz. local_region ce es.scopes s0 name p sz ==> _` drule >>
      simp[arithmeticTheory.ADD_COMM]) >>
+  `expr_val_own ce cx (expr_type result) sa sd ee v (Var out) sf` by
+    (rewrite_tac[expr_val_own_def] >> rpt strip_tac >>
+     `tv = dtv` by metis_tac[optionTheory.SOME_11] >>
+     qpat_x_assum `tv = dtv` SUBST_ALL_TAC >>
+     qexists_tac `w` >> conj_tac >- first_assum ACCEPT_TAC >> disj1_tac >>
+     qexistsl_tac [`aid`, `w2n w`, `capacity`] >> rpt conj_tac
+     >- (qpat_assum `sf.vs_allocas = _` (fn th => rewrite_tac[th]) >>
+         first_assum ACCEPT_TAC)
+     >- first_assum ACCEPT_TAC
+     >- first_assum ACCEPT_TAC
+     >- simp[]
+     >- simp[] >>
+     rpt strip_tac >> rename1 `local_region _ _ sf nm lb lsz` >>
+     `local_region ce es.scopes s0 nm lb lsz` by
+       (irule local_region_frame >> conj_tac
+        >- (qexists_tac `fn` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+        qexistsl_tac [`sa`, `ee.scopes`, `sf`] >> simp[]) >>
+     qpat_x_assum `!name p sz. local_region ce es.scopes s0 name p sz ==> _` drule >>
+     decide_tac) >>
   `~expr_has_effect arm ==> pure_frame ce fn es sa s0 sf` by
     (strip_tac >>
      `pure_frame ce fn es sa s0 t` by
@@ -80,7 +100,7 @@ Proof
     (strip_tac >> qpat_x_assum `~expr_has_effect arm ==> _` irule >>
      qpat_x_assum `_ ==> ~expr_has_effect arm` irule >> first_assum ACCEPT_TAC) >>
   conj_tac >- (simp[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
-  first_assum ACCEPT_TAC
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem ifexp_bytes_destination_ptr_post:
@@ -107,6 +127,13 @@ Theorem ifexp_expr_post_inst_idx[simp]:
 Proof
   simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
        expr_val_at_def, expr_val_own_def, lookup_var_def, local_region_def]
+QED
+
+Theorem ifexp_expr_val_own_inst_idx[simp]:
+  expr_val_own ce cx t sa sb ee v op (s with vs_inst_idx := k) <=>
+  expr_val_own ce cx t sa sb ee v op s
+Proof
+  simp[expr_val_own_def, lookup_var_def, local_region_def]
 QED
 
 Theorem ifexp_pointer_post_inst_idx[simp]:

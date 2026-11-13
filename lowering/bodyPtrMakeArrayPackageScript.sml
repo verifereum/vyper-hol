@@ -42,7 +42,7 @@ Theorem literal_allocated_loop_start:
   ?a H tm addr.
     gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK a) /\
     addr + capacity < dimword(:256) /\
-    literal_loop_frame ctx func ce cx d root sa.cs_next_id addr capacity
+    literal_loop_frame pure ctx func ce cx d root sa.cs_next_id addr capacity
       es sa s G tn es sm H tm a ([] : (type_value # value # num # num) list) 0
 Proof
   strip_tac >> drule_all allocated_fragment_install >> strip_tac >>
@@ -66,6 +66,12 @@ Proof
   `!name b len. local_region ce es.scopes s name b len ==>
      regions_disjoint (w2n w) capacity b len` by
     metis_tac[exprSimPtrLiteralBufferTheory.literal_ptr_local_region_frame] >>
+  `pure_frame ce func es sa s a` by metis_tac[pure_frame_mem_eq] >>
+  `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+     inst.inst_id = sa.cs_next_id` by
+    (qexists `mk_inst sa.cs_next_id ALLOCA [Lit (n2w capacity)]
+       [STRING #"%" (toString sa.cs_next_var)]` >>
+     conj_tac >- first_assum ACCEPT_TAC >> simp[venomInstTheory.mk_inst_def]) >>
   qexistsl [`a`, `H`, `tm`, `w2n w`] >> simp[] >>
   gvs[literal_loop_frame_def, wb_frame_def, locals_kept_def, popped_kept_def,
     regions_disjoint_def, eval_operand_def] >>
@@ -73,18 +79,22 @@ Proof
 QED
 
 Theorem literal_loop_vv_post:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     es sa s0 G0 tn0 ee sb G tn s (cells : (type_value # value # num # num) list) off /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   ~is_word_type (expr_type e) /\ val_wf tv v /\
   val_footprint tv v <= capacity /\ addr < dimword(:256) /\
-  val_in_memory tv v addr s.vs_memory /\ post_value_type ce e = expr_type e ==>
+  val_in_memory tv v addr s.vs_memory /\ post_value_type ce e = expr_type e /\
+  (~expr_has_effect e ==> pure) ==>
   vv_post ctx func ce cx e es sa sb s0 ee (Value v)
     (LocatedValue (expr_type e) (mk_ptr (Var root) LocMemory)) s
 Proof
   strip_tac >>
   fs[literal_loop_frame_def] >>
   `w2n (n2w addr : bytes32) = addr` by simp[w2n_n2w] >>
+  `~expr_has_effect e ==> pure_frame ce func es sa s0 s` by
+    (strip_tac >> qpat_x_assum `pure ==> _` irule >>
+     qpat_x_assum `_ ==> pure` irule >> first_assum ACCEPT_TAC) >>
   simp[vv_post_def, vv_holds_def, vv_at_def, contextTheory.mk_ptr_def,
     vyperStateTheory.read_result_def, vyperStateTheory.return_def,
     eval_operand_def] >>
@@ -96,7 +106,7 @@ Proof
 QED
 
 Theorem literal_loop_pointer_posts:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     es sa s0 G0 tn0 ee sb G tn s (cells : (type_value # value # num # num) list) off /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   ~is_word_type (expr_type e) /\ val_wf tv v /\
@@ -121,10 +131,10 @@ QED
 
 
 Theorem literal_empty_tuple_loop:
-  compile_make_tuple compile_expr ce args (Var root) 0 sm = (out,sb) /\
+  compile_make_tuple compile_expr ce args (MAP expr_type args) (Var root) 0 sm = (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
   expr_sim_inv ce cx env es /\
-  literal_loop_frame ctx func ce cx d root sa.cs_next_id addr (type_memory_size_list tvs)
+  literal_loop_frame pure ctx func ce cx d root sa.cs_next_id addr (type_memory_size_list tvs)
     es sa s G tn es sm H tm a ([] : (type_value # value # num # num) list) 0 /\
   stmt_state_rel ctx func ce cx es s /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
@@ -135,13 +145,14 @@ Theorem literal_empty_tuple_loop:
   body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
-  (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
+  (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+  (pure ==> ~EXISTS expr_has_effect args) ==>
   out = Var root /\
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx args) (es,a,H,tm)
     (\res ee H' tm' z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
-      literal_loop_frame ctx func ce cx d root sa.cs_next_id addr (type_memory_size_list tvs)
+      literal_loop_frame pure ctx func ce cx d root sa.cs_next_id addr (type_memory_size_list tvs)
         es sa s G tn ee sb H' tm' z ([] ++ added) (0 + type_memory_size_list tvs) /\
       literal_prefix_ok ([] ++ added) tm' z /\
       (!m. mem_agree_outside tm'.t_mem z.vs_memory m ==> tuple_in_memory vs tvs (addr+0) m))
@@ -154,7 +165,7 @@ QED
 Theorem literal_allocated_tuple_outcome:
   compile_alloc_buffer (type_memory_size_list tvs) sa = (buf,sm) /\
   buf.buf_operand = Var root /\
-  compile_make_tuple compile_expr ce args (Var root) 0 sm = (out,sb) /\
+  compile_make_tuple compile_expr ce args (MAP expr_type args) (Var root) 0 sm = (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
   expr_sim_inv ce cx env es /\
   stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
@@ -167,14 +178,15 @@ Theorem literal_allocated_tuple_outcome:
   body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
-  (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
+  (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+  (pure ==> ~EXISTS expr_has_effect args) ==>
   out = Var root /\
   ?addr. addr + type_memory_size_list tvs < dimword(:256) /\
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx args) (es,s,G,tn)
     (\res ee H tm z. ?vs cells. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
-      literal_loop_frame ctx func ce cx d root sa.cs_next_id addr (type_memory_size_list tvs)
+      literal_loop_frame pure ctx func ce cx d root sa.cs_next_id addr (type_memory_size_list tvs)
         es sa s G tn ee sb H tm z cells (type_memory_size_list tvs) /\
       literal_prefix_ok cells tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==> tuple_in_memory vs tvs addr m))
@@ -185,8 +197,8 @@ Proof
     metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND] >>
   `ci_mono sa sm` by metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
   `cs_extends sm sb` by fs[ci_mono_def] >>
-  drule_all literal_allocated_loop_start >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  drule_all (Q.INST [`D` |-> `cx_dead cx`] (SPEC_ALL literal_allocated_loop_start)) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   `fn_has_code sm sb func` by metis_tac[fragExecTheory.fn_has_code_split, ci_mono_def] >>
   `local_ptrs_reserved ce sm` by metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
   `!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p` by
@@ -212,14 +224,14 @@ Proof
 QED
 
 Theorem literal_tuple_endpoint_posts:
-  literal_loop_frame ctx func ce cx d root aid addr (type_memory_size_list tvs)
+  literal_loop_frame pure ctx func ce cx d root aid addr (type_memory_size_list tvs)
     es sa s0 G0 tn0 ee sb G tn s (cells : (type_value # value # num # num) list) off /\
   expr_type e = TupleT tys /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (TupleTV tvs) /\
   type_memory_bytes ce (lowered_value_type ce e) <= type_memory_size_list tvs /\
   addr < dimword(:256) /\ LIST_REL value_has_type tvs vs /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> tuple_in_memory vs tvs addr m) /\
-  post_value_type ce e = expr_type e ==>
+  post_value_type ce e = expr_type e /\ (~expr_has_effect e ==> pure) ==>
   vv_post ctx func ce cx e es sa sb s0 ee (Value (ArrayV (TupleV vs)))
     (LocatedValue (expr_type e) (mk_ptr (Var root) LocMemory)) s /\
   ptr_vv_ok cx (expr_type e) (Value (ArrayV (TupleV vs)))
@@ -243,6 +255,24 @@ Proof
 QED
 
 
+(* PORT_ADMISSION: SEQ-3208. 0f7fb5e29/5e4c70ab0 compile a tuple literal at its
+   declared member types (tuple_literal_types), which may be wider than its
+   elements' own types; the memory side takes that through
+   bodyMemAggregateLoops' aggregate_make_tuple_fits_sim_mem. Pointer twin for a
+   tuple literal whose annotation is not TupleT (MAP expr_type args);
+   literal_tuple_vv_sim_ptr proves the exact case. *)
+Theorem literal_tuple_widened_vv_sim_ptr:
+  expr_body_pre ce cx env (Builtin ann (MakeArray NONE bnd) args) es /\
+  body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
+  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
+    expr_body_pre ce cx env e st) /\
+  (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+  ann <> TupleT (MAP expr_type args) ==>
+  expr_vv_sim_ptr d ctx PG func ce cx ty (Builtin ann (MakeArray NONE bnd) args) es
+Proof
+  cheat
+QED
+
 Theorem literal_tuple_vv_sim_ptr:
   expr_body_pre ce cx env (Builtin ann (MakeArray NONE bnd) args) es /\
   body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
@@ -251,18 +281,30 @@ Theorem literal_tuple_vv_sim_ptr:
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
   expr_vv_sim_ptr d ctx PG func ce cx ty (Builtin ann (MakeArray NONE bnd) args) es
 Proof
-  strip_tac >> rw[expr_vv_sim_ptr_def] >>
+  strip_tac >>
+  reverse (Cases_on `ann = TupleT (MAP expr_type args)`)
+  >- (drule_all literal_tuple_widened_vv_sim_ptr >> simp[]) >>
+  gvs[] >> rw[expr_vv_sim_ptr_def] >>
   drule compile_tuple_literal_inv >> strip_tac >> gvs[] >>
   drule make_tuple_evaluated_layout >> strip_tac >> gvs[] >>
   `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
   `compatible_bound bnd (LENGTH args)` by
     fs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
   `type_memory_size_list tvs < dimword(:256)` by
-    (fs[expr_body_pre_def, alloc_limits_expr_def] >>
-     simp[wordsTheory.dimword_def] >> decide_tac) >>
+    (`type_memory_bytes ce (TupleT (MAP expr_type args)) < 2 ** 64` by
+       fs[expr_body_pre_def, alloc_limits_expr_def, type_alloc_ok_def,
+          is_word_type_def] >>
+     pop_assum mp_tac >>
+     simp[Once type_memory_bytes_def, wordsTheory.dimword_def] >>
+     CONV_TAC (DEPTH_CONV ETA_CONV) >>
+     qpat_x_assum `SUM _ = type_memory_size_list _` (fn th => rewrite_tac[th]) >>
+     decide_tac) >>
   `?root. ba.buf_operand = Var root` by
     metis_tac[bodyPtrMakeArrayAllocBufferTheory.alloc_buffer_emitted] >>
-  fs[] >> drule_all literal_allocated_tuple_outcome >>
+  fs[exprLoweringTheory.tuple_literal_types_def] >>
+  drule_all (REWRITE_RULE []
+    (Q.INST [`pure` |-> `~EXISTS expr_has_effect args`]
+      (SPEC_ALL literal_allocated_tuple_outcome))) >>
   disch_then (qspec_then `PG` strip_assume_tac) >> gvs[] >>
   simp[literal_tuple_action, combinTheory.o_DEF] >>
   drule (gas_outcome_ptr_return_map
@@ -277,7 +319,7 @@ Proof
          (Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args)) <=
          type_memory_size_list tvs` by
         (simp[lowered_value_type_def, vyperASTTheory.expr_type_def, type_memory_bytes_def,
-          listTheory.MAP_MAP_o, combinTheory.o_DEF] >> fs[combinTheory.o_DEF]) >>
+          listTheory.MAP_MAP_o, combinTheory.o_DEF] >> fs[listTheory.MAP_MAP_o, combinTheory.o_DEF]) >>
       drule_at (Pat `type_memory_bytes _ _ <= _`) literal_tuple_endpoint_posts >>
       simp[vyperASTTheory.expr_type_def] >>
       disch_then drule >> simp[] >>
@@ -291,7 +333,7 @@ Theorem literal_empty_array_loop:
   EVERY (\e. expr_type e = et) args /\
   evaluate_type (get_tenv cx) et = SOME tv /\
   expr_sim_inv ce cx env es /\
-  literal_loop_frame ctx func ce cx d root sa.cs_next_id addr capacity
+  literal_loop_frame pure ctx func ce cx d root sa.cs_next_id addr capacity
     es sa s G tn es sm H tm a (cells : (type_value # value # num # num) list)
       (if header then 32 else 0) /\
   literal_prefix_ok cells tm a /\
@@ -305,13 +347,14 @@ Theorem literal_empty_array_loop:
   body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
-  (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
+  (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+  (pure ==> ~EXISTS expr_has_effect args) ==>
   out = Var root /\
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx args) (es,a,H,tm)
     (\res ee H' tm' z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type (REPLICATE (LENGTH args) tv) vs /\
-      literal_loop_frame ctx func ce cx d root sa.cs_next_id addr capacity
+      literal_loop_frame pure ctx func ce cx d root sa.cs_next_id addr capacity
         es sa s G tn ee sb H' tm' z (cells ++ added)
           ((if header then 32 else 0) + type_memory_size_list (REPLICATE (LENGTH args) tv)) /\
       literal_prefix_ok (cells ++ added) tm' z /\
@@ -320,20 +363,23 @@ Theorem literal_empty_array_loop:
     (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
 Proof
   strip_tac >> irule literal_array_loop_outcome_ptr >>
-  simp[] >> (conj_tac >- metis_tac[]) >>
+  simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> fs[listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >> metis_tac[]) >>
+  (conj_tac >- metis_tac[]) >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl [`et`, `header`, `0`] >> simp[]
 QED
 
 Theorem literal_array_header_start:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     es sa s G tn es sm H tm a ([] : (type_value # value # num # num) list) 0 /\
   emit_void MSTORE [Var root; Lit (n2w n)] sm = ((),sn) /\
   fn_has_code sm sn func /\ 32 <= capacity /\
   addr < dimword(:256) /\ local_ptrs_reserved ce sm /\ local_ptrs_reserved ce sa /\
   ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor ==>
   ?z tm'. gas_path_ptr D 0 ctx func PG H tm a 0 H tm' (OK z) /\
-    literal_loop_frame ctx func ce cx d root aid addr capacity
+    literal_loop_frame pure ctx func ce cx d root aid addr capacity
       es sa s G tn es sn H tm' z [(BaseTV (UintT 256),IntV (&(n MOD dimword(:256))),addr,32)] 32 /\
     literal_prefix_ok [(BaseTV (UintT 256),IntV (&(n MOD dimword(:256))),addr,32)] tm' z
 Proof
@@ -357,7 +403,7 @@ QED
 Theorem literal_array_prepare:
   compile_make_array compile_expr ce args et (type_memory_bytes ce et) header (Var root) sm = (out,sb) /\
   EVERY (\e. expr_type e = et) args /\
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     es sa s G tn es sm H tm a ([] : (type_value # value # num # num) list) 0 /\
   fn_has_code sm sb func /\ (header ==> 32 <= capacity) /\
   addr < dimword(:256) /\
@@ -367,7 +413,7 @@ Theorem literal_array_prepare:
     compile_make_array_elems compile_expr ce args et (type_memory_bytes ce et) header (Var root) 0 sn = (out,sb) /\
     ci_mono sm sn /\ ci_mono sn sb /\
     gas_path_ptr D 0 ctx func PG H tm a 0 H tm' (OK z) /\
-    literal_loop_frame ctx func ce cx d root aid addr capacity
+    literal_loop_frame pure ctx func ce cx d root aid addr capacity
       es sa s G tn es sn H tm' z
         (if header then [(BaseTV (UintT 256),IntV (&(LENGTH args MOD dimword(:256))),addr,32)] else [])
         (if header then 32 else 0) /\
@@ -386,8 +432,11 @@ Proof
   Cases_on `emit_void MSTORE [Var root; Lit (n2w (LENGTH args))] sm` >>
   gvs[compile_make_array_def, comp_ignore_bind_def, comp_bind_def] >>
   rename1 `emit_void _ _ sm = ((),sn)` >>
-  drule exprSimAggregateLoopsTheory.compile_make_array_elems_as_tuple >>
-  disch_then (qspecl_then [`T`, `compile_expr`, `ce`, `Var root`, `0`] assume_tac) >>
+  `compile_make_array_elems compile_expr ce args et (type_memory_bytes ce et) T
+     (Var root) 0 =
+   compile_make_tuple compile_expr ce args (REPLICATE (LENGTH args) et)
+     (Var root) 32` by
+    simp[exprSimAggregateLoopsTheory.compile_make_array_elems_as_tuple] >>
   `ci_mono sn sb` by
     metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND] >>
   `ci_mono sm sn` by metis_tac[ci_mono_emit_void, pairTheory.SND] >>
@@ -413,14 +462,15 @@ Theorem literal_allocated_array_outcome:
   body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
-  (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
+  (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+  (pure ==> ~EXISTS expr_has_effect args) ==>
   out = Var root /\
   ?addr. addr + capacity < dimword(:256) /\
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx args) (es,s,G,tn)
     (\res ee H tm z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type (REPLICATE (LENGTH args) tv) vs /\
-      literal_loop_frame ctx func ce cx d root sa.cs_next_id addr capacity
+      literal_loop_frame pure ctx func ce cx d root sa.cs_next_id addr capacity
         es sa s G tn ee sb H tm z
           ((if header then [(BaseTV (UintT 256),IntV (&(LENGTH args MOD dimword(:256))),addr,32)] else []) ++ added)
           ((if header then 32 else 0) + type_memory_size_list (REPLICATE (LENGTH args) tv)) /\
@@ -435,8 +485,8 @@ Proof
     metis_tac[ci_mono_compile_make_array_cfn, compile_expr_ci_mono, pairTheory.SND] >>
   `ci_mono sa sm` by metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
   `cs_extends sm sb` by fs[ci_mono_def] >>
-  drule_all literal_allocated_loop_start >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  drule_all (Q.INST [`D` |-> `cx_dead cx`] (SPEC_ALL literal_allocated_loop_start)) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   `fn_has_code sm sb func` by metis_tac[fragExecTheory.fn_has_code_split, ci_mono_def] >>
   `local_ptrs_reserved ce sm` by metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
   `header ==> 32 <= capacity` by (Cases_on `header` >> gvs[] >> decide_tac) >>
@@ -494,7 +544,7 @@ Proof
 QED
 
 Theorem literal_array_endpoint_posts:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     es sa s0 G0 tn0 ee sb G tn s (cells : (type_value # value # num # num) list) off /\
   expr_type e = ArrayT et bnd /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV tv bnd) /\
@@ -508,7 +558,7 @@ Theorem literal_array_endpoint_posts:
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     tuple_in_memory vs (REPLICATE n tv)
       (addr+(if (case bnd of Dynamic _ => T | _ => F) then 32 else 0)) m) /\
-  post_value_type ce e = expr_type e ==>
+  post_value_type ce e = expr_type e /\ (~expr_has_effect e ==> pure) ==>
   vv_post ctx func ce cx e es sa sb s0 ee (Value (ArrayV (make_array_value tv bnd vs)))
     (LocatedValue (expr_type e) (mk_ptr (Var root) LocMemory)) s /\
   ptr_vv_ok cx (expr_type e) (Value (ArrayV (make_array_value tv bnd vs)))
@@ -539,6 +589,23 @@ Proof
   Cases_on `q` >> simp[bind_def, return_def]
 QED
 
+(* PORT_ADMISSION: SEQ-3208. 0f7fb5e29/5e4c70ab0 let an array literal's
+   elements be narrower than its element type (arg_type_fits); the memory side
+   takes that through bodyMemAggregateLoops' aggregate_make_tuple_fits_sim_mem.
+   Pointer twin for an array literal with an element whose type isn't et;
+   literal_array_vv_sim_ptr proves the exact case. *)
+Theorem literal_array_widened_vv_sim_ptr:
+  expr_body_pre ce cx env (Builtin ann (MakeArray (SOME et) bnd) args) es /\
+  body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
+  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
+    expr_body_pre ce cx env e st) /\
+  (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
+  ~EVERY (\e. expr_type e = et) args ==>
+  expr_vv_sim_ptr d ctx PG func ce cx ty (Builtin ann (MakeArray (SOME et) bnd) args) es
+Proof
+  cheat
+QED
+
 Theorem literal_array_vv_sim_ptr:
   expr_body_pre ce cx env (Builtin ann (MakeArray (SOME et) bnd) args) es /\
   body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
@@ -547,7 +614,10 @@ Theorem literal_array_vv_sim_ptr:
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
   expr_vv_sim_ptr d ctx PG func ce cx ty (Builtin ann (MakeArray (SOME et) bnd) args) es
 Proof
-  strip_tac >> rw[expr_vv_sim_ptr_def] >>
+  strip_tac >>
+  reverse (Cases_on `EVERY (\e. expr_type e = et) args`)
+  >- (drule_all literal_array_widened_vv_sim_ptr >> simp[]) >>
+  rw[expr_vv_sim_ptr_def] >>
   drule compile_array_literal_inv >> strip_tac >> gvs[] >>
   drule make_array_evaluated_layout >> strip_tac >> gvs[] >>
   `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
@@ -560,7 +630,9 @@ Proof
     metis_tac[bodyPtrMakeArrayAllocBufferTheory.alloc_buffer_emitted] >> fs[] >>
   `compile_make_array compile_expr ce args et (type_memory_bytes ce et)
      (case bnd of Dynamic _ => T | _ => F) (Var root) sm = (u,sb)` by metis_tac[] >>
-  drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`) literal_allocated_array_outcome >>
+  drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`)
+    (REWRITE_RULE [] (Q.INST [`pure` |-> `~EXISTS expr_has_effect args`]
+      (SPEC_ALL literal_allocated_array_outcome))) >>
   simp[] >> disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
   simp[type_memory_size_list_replicate] >>
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >> simp[] >>
@@ -587,7 +659,7 @@ Proof
       (Builtin (ArrayT et bnd) (MakeArray (SOME et) bnd) args)) <= type_memory_bytes ce (ArrayT et bnd)` by
       simp[lowered_value_type_def, vyperASTTheory.expr_type_def] >>
     drule_at (Pat `type_memory_bytes _ (lowered_value_type _ _) <= _`) literal_array_endpoint_posts >>
-    disch_then (drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+    disch_then (drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
     simp[vyperASTTheory.expr_type_def] >>
     disch_then (drule_at (Pat `LIST_REL _ _ _`)) >> simp[] >>
     disch_then (qspec_then `[]` mp_tac) >> simp[contextTheory.mk_ptr_def]) >>

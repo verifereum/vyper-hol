@@ -84,7 +84,7 @@ Theorem stmt_state_rel_write_local:
     (!b n. b + n <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
            mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
-    val_wf entry.type v /\ val_in_memory entry.type v (w2n w) t.vs_memory ==>
+    val_wf entry.type v /\ memory_value_rel entry.type v (w2n w) t.vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
          pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
@@ -101,7 +101,8 @@ Proof
    t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
    t.vs_pending_deletions = s.vs_pending_deletions /\
    t.vs_immutables = s.vs_immutables /\
-   t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels` by
+   t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels /\
+   t.vs_code = s.vs_code` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
   `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
@@ -213,7 +214,7 @@ Theorem stmt_state_rel_write_local_word:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\
     type_memory_size entry.type = 32 /\ val_wf entry.type v /\
-    val_in_memory entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
+    memory_value_rel entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
          pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
@@ -256,8 +257,9 @@ Theorem stmt_state_rel_write_local_store:
          pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
       (mstore (w2n w) (typed_val_to_w256 etv v) s)
 Proof
-  rw[store_lays_out_def] >> irule stmt_state_rel_write_local_word >>
-  simp[] >> metis_tac[]
+  rpt strip_tac >> drule store_lays_out_memory_value_rel >>
+  fs[store_lays_out_def] >> strip_tac >>
+  irule stmt_state_rel_write_local_word >> simp[] >> metis_tac[]
 QED
 
 (* The MSTORE of the typed word of v at a live local's pointer, run: it

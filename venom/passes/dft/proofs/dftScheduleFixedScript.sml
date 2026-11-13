@@ -17,29 +17,6 @@ Ancestors
    Subset injectivity
    ================================================================ *)
 
-Triviality subset_all_distinct_inj:
-  !L (ls : instruction list).
-    ALL_DISTINCT (MAP (\i. i.inst_id) L) /\
-    (!x. MEM x ls ==> MEM x L) ==>
-    INJ (\i:instruction. i.inst_id) (set ls) UNIV
-Proof
-  rpt strip_tac >>
-  `!x y. MEM x ls /\ MEM y ls /\ (x.inst_id = y.inst_id) ==> (x = y)` by (
-    rpt strip_tac >>
-    `MEM x L /\ MEM y L` by metis_tac[] >>
-    `?nx. nx < LENGTH L /\ (EL nx L = x)` by metis_tac[MEM_EL] >>
-    `?ny. ny < LENGTH L /\ (EL ny L = y)` by metis_tac[MEM_EL] >>
-    `EL nx (MAP (\i. i.inst_id) L) = x.inst_id` by simp[EL_MAP] >>
-    `EL ny (MAP (\i. i.inst_id) L) = y.inst_id` by simp[EL_MAP] >>
-    `nx < LENGTH (MAP (\i. i.inst_id) L)` by simp[] >>
-    `ny < LENGTH (MAP (\i. i.inst_id) L)` by simp[] >>
-    `EL nx (MAP (\i. i.inst_id) L) = EL ny (MAP (\i. i.inst_id) L)` by
-      metis_tac[] >>
-    `nx = ny` by metis_tac[ALL_DISTINCT_EL_IMP] >>
-    metis_tac[]) >>
-  simp[INJ_DEF]
-QED
-
 (* ================================================================
    DFS idle fixpoint
    ================================================================ *)

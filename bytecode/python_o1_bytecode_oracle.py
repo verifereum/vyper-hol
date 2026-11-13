@@ -35,6 +35,8 @@ def parse_args() -> argparse.Namespace:
         default=Path(__file__).with_name("supported-fixtures.txt"),
     )
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--asm-opt", action="store_true",
+                        help="run the final assembly optimizer (OptimizationLevel.O1)")
     parser.add_argument("--frontend", action="store_true",
                         help="also export annotated AST and layout for the HOL checker")
     return parser.parse_args()
@@ -96,11 +98,13 @@ def main() -> None:
         )
 
     args.output.mkdir(parents=True, exist_ok=True)
+    # At the pinned revision NONE and O1 run the same PASSES_O1 Venom
+    # pipeline; NONE alone disables the final assembly optimizer. NONE matches
+    # HOL's o1_policy with the identity finalizer K SOME, O1 matches it with
+    # asm_opt_finalizer.
+    level = OptimizationLevel.O1 if args.asm_opt else OptimizationLevel.NONE
     settings = Settings(
-        # At the pinned revision NONE and O1 run the same PASSES_O1 Venom
-        # pipeline; NONE alone disables the final assembly optimizer. This
-        # matches HOL's o1_policy combined with identity finalizer K SOME.
-        optimize=OptimizationLevel.NONE,
+        optimize=level,
         evm_version=ORACLE_EVM_VERSION,
         experimental_codegen=True,
     )
@@ -152,9 +156,9 @@ def main() -> None:
         "dependencies": dependencies,
         "settings": {
             "experimental_codegen": True,
-            "optimization_level": "NONE",
+            "optimization_level": level.name,
             "venom_ir_pipeline": "O1",
-            "final_assembly_optimization": False,
+            "final_assembly_optimization": args.asm_opt,
             "evm_version": ORACLE_EVM_VERSION,
             "bytecode_metadata": False,
             "outputs": list(output_formats),

@@ -74,7 +74,9 @@ Theorem aug_place_typing:
     word_value_type ty /\ word_value_type (expr_type e) /\ env' = env
 Proof
   rpt gen_tac >> simp[type_stmt_def, well_typed_target_def] >>
-  strip_tac >> gvs[] >> metis_tac[well_typed_binop_augassign_word]
+  strip_tac >> gvs[] >>
+  imp_res_tac stmtSimAugAssignTheory.augassign_operand_ok_operands >>
+  metis_tac[well_typed_binop_augassign_word]
 QED
 
 Theorem aug_place_code_parts:

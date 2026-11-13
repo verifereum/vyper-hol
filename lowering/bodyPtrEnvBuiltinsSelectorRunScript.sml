@@ -184,7 +184,9 @@ Theorem selector_buffer_run_frame:
     (!name off len. local_region cenv es.scopes s name off len ==>
        mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) /\
     (!name off len. local_region cenv es.scopes t name off len ==>
-       regions_disjoint b 64 off len)
+       regions_disjoint b 64 off len) /\
+    (!off len. regions_disjoint off len b 64 ==>
+       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory)
 Proof
   strip_tac >>
   `64 < dimword (:256)` by simp[dimword_def] >>
@@ -204,7 +206,8 @@ Proof
   conj_tac >- gvs[eval_operand_def] >>
   conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> gvs[]) >>
   conj_tac >- suspend "old_alloc" >>
-  conj_tac >- suspend "locals" >> metis_tac[]
+  conj_tac >- suspend "locals" >>
+  conj_tac >- metis_tac[] >> suspend "window"
 QED
 
 Resume selector_buffer_run_frame[run]:
@@ -237,6 +240,14 @@ Resume selector_buffer_run_frame[locals]:
     (irule local_region_frame_fwd >> goal_assum (drule_at Any) >>
      qexists_tac `sa` >> simp[]) >>
   `regions_disjoint (w2n w') 64 off len` by metis_tac[] >>
+  drule selector_store_tail_memory_frame >>
+  disch_then (qspecl_then [`w`, `u`, `q`] mp_tac) >> simp[]
+QED
+
+Resume selector_buffer_run_frame[window]:
+  rpt strip_tac >>
+  `regions_disjoint (w2n w') 64 off len` by
+    (fs[regions_disjoint_def] >> decide_tac) >>
   drule selector_store_tail_memory_frame >>
   disch_then (qspecl_then [`w`, `u`, `q`] mp_tac) >> simp[]
 QED

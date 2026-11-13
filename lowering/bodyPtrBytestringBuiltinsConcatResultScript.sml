@@ -59,7 +59,8 @@ Theorem concat_result_endpoint_ptr:
   b <= w2n w /\ w2n w + concat_alloc_size (MAP expr_type args) <= b+sz /\
   (!name lb lsz. local_region ce es'.scopes s name lb lsz ==>
     b+sz <= lb \/ lb+lsz <= b) /\
-  wb_frame ce es es' sa s0 s ==>
+  wb_frame ce es es' sa s0 s /\
+  (~expr_has_effect (Builtin ann (Concat n) args) ==> pure_frame ce fn es sa s0 s) ==>
   ?v. evaluate_concat n vs = INL v /\
     vv_post ctx fn ce cx (Builtin ann (Concat n) args) es sa sb s0 es'
       (Value v) (LocatedValue ann <|ptr_operand := Var p; ptr_location := LocMemory|>) s /\
@@ -312,8 +313,76 @@ Resume concat_result_vv_sim_ptr[package]:
   `w2n a <= w2n a /\
    w2n a + concat_alloc_size (MAP expr_type args) <=
      w2n a + concat_alloc_size (MAP expr_type args)` by simp[] >>
+  `~expr_has_effect (Builtin ann (Concat n) args) ==> pure_frame ce fn es sa s0 tf` by
+    suspend "pure" >>
   drule_all concat_result_endpoint_ptr >>
   strip_tac >> suspend "outcome"
+QED
+
+Resume concat_result_vv_sim_ptr[pure]:
+  rewrite_tac[expr_has_effect_thm, pure_frame_def] >> strip_tac >>
+  qpat_x_assum `~EXISTS expr_has_effect args ==> _` mp_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> conj_tac
+  >- (qx_genl_tac [`nm`,`lb`,`lsz`] >> strip_tac >>
+      `local_region ce es.scopes t nm lb lsz` by
+        (qpat_assum `!name b k. local_region ce es.scopes s0 _ _ _ <=> _`
+           (fn th => rewrite_tac[GSYM th]) >> first_assum ACCEPT_TAC) >>
+      qpat_assum `!name b k. local_region ce es.scopes t _ _ _ ==> _ /\ _` drule >>
+      disch_then assume_tac >>
+      `mem_bytes_at lb lsz t.vs_memory = mem_bytes_at lb lsz s0.vs_memory` by
+        (qpat_assum `!b k. b+k <= w2n ow \/ w2n ow+64 <= b ==> _` irule >>
+         qpat_x_assum `(_ \/ _) /\ (_ \/ _)` mp_tac >>
+         rpt (pop_assum kall_tac) >> decide_tac) >>
+      `mem_bytes_at lb lsz t'.vs_memory = mem_bytes_at lb lsz t.vs_memory` by
+        (qpat_assum `!n lb lsz. local_region ce es.scopes t _ _ _ ==>
+                       mem_bytes_at _ _ t'.vs_memory = _` irule >>
+         qexists_tac `nm` >> first_assum ACCEPT_TAC) >>
+      `mem_bytes_at lb lsz tf.vs_memory = mem_bytes_at lb lsz t'.vs_memory` by
+        (qpat_assum `!b k. b+k <= w2n a \/ w2n a+32 <= b ==> _` irule >>
+         qpat_x_assum `(_ \/ _) /\ (_ \/ _)` mp_tac >>
+         qpat_x_assum `32 <= concat_alloc_size _` mp_tac >>
+         rpt (pop_assum kall_tac) >> decide_tac) >>
+      simp[]) >>
+  suspend "pure_fresh"
+QED
+
+Resume concat_result_vv_sim_ptr[pure_fresh]:
+  qx_genl_tac [`po`,`pl`] >> strip_tac >>
+  `FLOOKUP tf.vs_allocas oinst.inst_id = SOME (w2n ow,64)` by
+    (qpat_assum `tf.vs_allocas = t'.vs_allocas` (fn th => rewrite_tac[th]) >>
+     qpat_assum `!aid a. FLOOKUP t.vs_allocas aid = SOME a ==>
+                   FLOOKUP t'.vs_allocas aid = SOME a` irule >>
+     first_assum ACCEPT_TAC) >>
+  `regions_disjoint po pl (w2n a) (concat_alloc_size (MAP expr_type args)) /\
+   regions_disjoint po pl (w2n ow) 64` by
+    (conj_tac >>
+     qpat_assum `!inst b sz. _ ==> regions_disjoint po pl b sz` irule
+     >- (qexists_tac `binst` >> simp[]) >>
+     qexists_tac `oinst` >> simp[]) >>
+  `mem_bytes_at po pl tf.vs_memory = mem_bytes_at po pl t'.vs_memory` by
+    (qpat_assum `!b k. b+k <= w2n a \/ w2n a+32 <= b ==> _` irule >>
+     qpat_x_assum `regions_disjoint po pl (w2n a) _` mp_tac >>
+     qpat_x_assum `32 <= concat_alloc_size _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[regions_disjoint_def] >> decide_tac) >>
+  `mem_bytes_at po pl t'.vs_memory = mem_bytes_at po pl t.vs_memory` by
+    (qpat_assum `!p n. _ /\ _ /\ _ ==> mem_bytes_at p n t'.vs_memory = _` irule >>
+     rpt conj_tac >>
+     TRY (qpat_x_assum `regions_disjoint po pl (w2n a) _` mp_tac >>
+          qpat_x_assum `regions_disjoint po pl (w2n ow) 64` mp_tac >>
+          rpt (pop_assum kall_tac) >> simp[regions_disjoint_def] >> NO_TAC) >>
+     rpt strip_tac >>
+     qpat_assum `!inst b sz. _ ==> regions_disjoint po pl b sz` irule >>
+     qexists_tac `inst` >>
+     qpat_assum `tf.vs_allocas = t'.vs_allocas` (fn th => rewrite_tac[th]) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qpat_x_assum `s4.cs_next_id <= inst.inst_id` mp_tac >>
+     qpat_x_assum `sa.cs_next_id <= s4.cs_next_id` mp_tac >>
+     rpt (pop_assum kall_tac) >> decide_tac) >>
+  `mem_bytes_at po pl t.vs_memory = mem_bytes_at po pl s0.vs_memory` by
+    (qpat_assum `!b k. b+k <= w2n ow \/ w2n ow+64 <= b ==> _` irule >>
+     qpat_x_assum `regions_disjoint po pl (w2n ow) 64` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[regions_disjoint_def]) >>
+  simp[]
 QED
 
 Resume concat_result_vv_sim_ptr[outcome]:

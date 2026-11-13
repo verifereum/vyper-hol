@@ -1,13 +1,13 @@
 (* Structural boundaries for revert forwarding. *)
 Theory fnFrameStepsRevertForward
 Ancestors
-  contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA venomWf
+  singleInputSim contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA venomWf
   stackPlanGen venomExecProofs frameRel
   frameViewFacts instSimHelpers emitSim venomExecSemantics venomInst
   strongPrefixSim asmFrameHelpers planExec prefixExec stackOpAsmSim
   stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel planWf
   reorderSim genBlockSim doSwapSim planAlign livenessAnalysisProps stackPlanOps
-  fnFrameTerminalHalt fnFrameTerminalAbort genericInputReady fnPlanLineageInventory fnPlanLineageReorder fnPlanPrefix
+  fnFrameTerminalHalt fnFrameTerminalAbort genericInputReady inputMaterialised livenessProofs operandInventory reorderStages fnPlanLineageInventory fnPlanLineageReorder fnPlanPrefix
   venomWfProps
 
 Theorem resolve_block_assigns_cong:
@@ -1388,7 +1388,7 @@ Proof
   Cases_on `emit_input_plan opc inputs nl ps_mid` >>
   gnvs[emit_input_plan_cons] >>
   qspecl_then [`opc`, `operand_vars inputs ++ nl`, `h`, `ps`, `Var x`]
-    mp_tac emit_one_input_inventory_mono_aux >> simp[] >> strip_tac >>
+    mp_tac emit_one_input_inventory_mono >> simp[] >> strip_tac >>
   first_x_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
   disch_then (qspec_then `x` mp_tac) >> asm_rewrite_tac[] >>
   (impl_tac >-
@@ -1408,7 +1408,7 @@ Proof
   Cases_on `Var x IN FDOM ps1.ps_spilled` >> gvs[] >> decide_tac
 QED
 
-Theorem rf_reduce_spill_free[local]:
+Theorem rf_reduce_spill_free:
   !fuel pending op f n ps ops ps'.
     reduce_depth_plan fuel pending op f n ps = (ops,ps') /\
     (!off. ~MEM (SOSpill off) ops) ==> ps' = ps /\ ops = []

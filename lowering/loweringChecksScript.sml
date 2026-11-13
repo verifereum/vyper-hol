@@ -16,8 +16,22 @@ Ancestors
   (* branch_opt's output checker on a sample of the parity fixtures'
      compiled functions *)
   branchOptCheckCorpus
+  evalCompilerGettersConstantsParity evalCompilerGettersConstantsRegression
   (* contracts of the lowering's interfaces on concrete inputs *)
   targetPlaceTest
   abiEncodeSnapshotTest
   (* compiled creation code *)
   vyperCtorAliasTest createImmutableBytecodeTest createCompletionProbe
+  (* tests of the bytecode evaluation library the native runner shares *)
+  evalCompilerBytecodeLibTest
+  (* the supported subset: per-construct contracts, membership matrix *)
+  supportedExprFormProps supportedExprProps supportedProgramProps
+  vyperMembershipMatrixTest
+  (* more interface contracts on concrete inputs; raw RETURN's copy *)
+  e2eBoundaryTest groupedDispatchProps rawReturnCopy
+  (* compiled creation code and events, the event endpoints' admission audit *)
+  vyperCreateMemoryTest vyperEventForwardStruct vyperEventArgumentLifetime
+  eventEndpointAudit
+  (* ABI encode/decode edge cases and size boundaries *)
+  abiDecodeBoundsTest abiDecodeAliasTest abiDecoderBytesEdges
+  createSizeBoundaryTest

@@ -12,12 +12,16 @@ Theorem raw_call_keywords_post:
     LIST_REL (\x v. eval_operand x s = SOME
       (typed_val_to_w256 (BaseTV (UintT 256)) v)) xs vs
 Proof
+  simp[exprSimPrecompilesTheory.typed_args_post_def] >> rpt strip_tac >>
+  qpat_x_assum `LIST_REL _ _ _` mp_tac >>
+  qpat_x_assum `LENGTH ks = LENGTH vs` mp_tac >>
+  qpat_x_assum `EVERY _ ks` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  map_every qid_spec_tac [`xs`, `vs`, `ks`] >>
   Induct >> rpt gen_tac >> Cases_on `xs` >> Cases_on `vs` >>
-  simp[exprSimPrecompilesTheory.typed_args_post_def,
-    vyperValueTheory.evaluate_type_def] >>
-  strip_tac >> gvs[vyperValueTheory.evaluate_type_def] >>
-  first_x_assum irule >> simp[exprSimPrecompilesTheory.typed_args_post_def] >>
-  goal_assum (drule_at Any) >> simp[]
+  simp[vyperValueTheory.evaluate_type_def] >>
+  rpt strip_tac >> gvs[vyperValueTheory.evaluate_type_def] >>
+  first_x_assum irule >> simp[]
 QED
 
 Theorem raw_call_value_operand:

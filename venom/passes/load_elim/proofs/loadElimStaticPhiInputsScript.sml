@@ -1,5 +1,5 @@
 Theory loadElimStaticPhiInputs
-Ancestors
+Ancestors cfgCorrectnessProof
   loadElimStaticAvailability loadElimActualGeneration loadElimReachableBoundary
   loadElimConvergence loadElimSolverHelpers loadElimPhiCapture loadElimOriginHelpers
   loadElimDefs codegenReadyCompute cfgAnalysisProps cfgDefs loadElimReachableSSA

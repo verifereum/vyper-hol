@@ -201,7 +201,8 @@ Proof
       es sa fin s0 ee (Value (StringV (num_to_dec_string a)))
       (LocatedValue (BaseT (StringT n))
         <|ptr_operand := out; ptr_location := LocMemory|>) u` by
-    (irule vv_post_prefix_frame >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+    (irule vv_post_prefix_frame >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[exprSimWordArgsTheory.expr_post_pure_frame]) >>
   `ee with gas_obs := [] = ee` by
     (qpat_x_assum `?marks ee0. _` strip_assume_tac >> simp[]) >>
   simp[gas_outcome_ptr_def, gas_summary_ptr_at_def, uint2str_source_result,

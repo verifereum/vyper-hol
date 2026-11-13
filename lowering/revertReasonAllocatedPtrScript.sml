@@ -45,7 +45,7 @@ Theorem revert_reason_framed_tail_ptr[local]:
   fn_has_code sn sb fn /\ sb.cs_current_bb = sn.cs_current_bb /\
   sb.cs_current_insts = sn.cs_current_insts ++
     (revert_reason_copy sn.cs_next_id sn.cs_next_var (Var q) (Var src) ++
-     revert_reason_suffix sn.cs_next_id sn.cs_next_var (Var b) (Var p) (Var q)) /\
+     revert_reason_suffix (sn.cs_next_id+1) (sn.cs_next_var+1) (Var b) (Var p) (Var q)) /\
   t.vs_current_bb = sn.cs_current_bb /\
   t.vs_inst_idx = LENGTH sn.cs_current_insts /\ ~t.vs_halted /\
   sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
@@ -83,9 +83,9 @@ Proof
      asm_rewrite_tac[]) >>
   `not_fresh_at sn b /\ not_fresh_at sn p /\ not_fresh_at sn q` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  `parent <> sn.cs_next_id+5` by decide_tac >>
+  `parent <> sn.cs_next_id+6` by decide_tac >>
   drule_all revert_reason_tail_code >> strip_tac >>
-  `!a sz. FLOOKUP t.vs_allocas (sn.cs_next_id+5) = SOME (a,sz) ==> sz = 32` by
+  `!a sz. FLOOKUP t.vs_allocas (sn.cs_next_id+6) = SOME (a,sz) ==> sz = 32` by
     (rpt strip_tac >>
      qpat_x_assum `!i w a sz. _` drule >>
      simp[mk_inst_def]) >>
@@ -135,7 +135,7 @@ Theorem revert_reason_storage_positive_unwrap_path_ptr:
   fn_has_code sn sb fn /\ sb.cs_current_bb = sn.cs_current_bb /\
   sb.cs_current_insts = sn.cs_current_insts ++
     (revert_reason_copy sn.cs_next_id sn.cs_next_var (Var q) out ++
-     revert_reason_suffix sn.cs_next_id sn.cs_next_var (Var b) (Var p) (Var q)) /\
+     revert_reason_suffix (sn.cs_next_id+1) (sn.cs_next_var+1) (Var b) (Var p) (Var q)) /\
   not_fresh_at sm b /\ not_fresh_at sm p /\ not_fresh_at sm q /\
   lookup_var b s = SOME B /\ lookup_var p s = SOME P /\ lookup_var q s = SOME Q /\
   ptr_covers G tn b s (64+ms) /\ ptr_covers G tn p s (32+ms) /\
@@ -183,7 +183,7 @@ Theorem revert_reason_storage_zero_unwrap_path_ptr:
   fn_has_code sn sb fn /\ sb.cs_current_bb = sn.cs_current_bb /\
   sb.cs_current_insts = sn.cs_current_insts ++
     (revert_reason_copy sn.cs_next_id sn.cs_next_var (Var q) out ++
-     revert_reason_suffix sn.cs_next_id sn.cs_next_var (Var b) (Var p) (Var q)) /\
+     revert_reason_suffix (sn.cs_next_id+1) (sn.cs_next_var+1) (Var b) (Var p) (Var q)) /\
   not_fresh_at sm b /\ not_fresh_at sm p /\ not_fresh_at sm q /\
   lookup_var b s = SOME B /\ lookup_var p s = SOME P /\ lookup_var q s = SOME Q /\
   ptr_covers G tn b s (64+ms) /\ ptr_covers G tn p s (32+ms) /\
@@ -231,7 +231,7 @@ Theorem revert_reason_runtime_immutable_unwrap_path_ptr:
   fn_has_code sn sb fn /\ sb.cs_current_bb = sn.cs_current_bb /\
   sb.cs_current_insts = sn.cs_current_insts ++
     (revert_reason_copy sn.cs_next_id sn.cs_next_var (Var q) out ++
-     revert_reason_suffix sn.cs_next_id sn.cs_next_var (Var b) (Var p) (Var q)) /\
+     revert_reason_suffix (sn.cs_next_id+1) (sn.cs_next_var+1) (Var b) (Var p) (Var q)) /\
   not_fresh_at sm b /\ not_fresh_at sm p /\ not_fresh_at sm q /\
   lookup_var b s = SOME B /\ lookup_var p s = SOME P /\ lookup_var q s = SOME Q /\
   ptr_covers G tn b s (64+ms) /\ ptr_covers G tn p s (32+ms) /\

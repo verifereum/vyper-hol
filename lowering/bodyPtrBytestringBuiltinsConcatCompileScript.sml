@@ -78,6 +78,7 @@ Theorem concat_prefix_args_ready:
     FLOOKUP t.vs_allocas binst.inst_id = SOME (w2n a,bsz) /\
     MEM oinst (fn_insts fn) /\ oinst.inst_opcode = ALLOCA /\
     oinst.inst_id < s4.cs_next_id /\
+    sa.cs_next_id <= oinst.inst_id /\
     FLOOKUP t.vs_allocas oinst.inst_id = SOME (w2n ow,64) /\
     w2n a+bsz < dimword (:256) /\ w2n ow+64 < dimword (:256) /\
     (w2n a+bsz <= w2n ow \/ w2n ow+64 <= w2n a) /\

@@ -12,7 +12,10 @@ Theorem hash_gas_step:
         (s with vs_gas_readings := DROP 1 s.vs_gas_readings))
 Proof
   rpt gen_tac >> Cases_on `s.vs_gas_readings` >>
-  simp[mk_inst_def, step_inst_base_opcode_eqs, exec_gas_def, update_var_def, venom_state_component_equality]
+  (* the per-opcode equations skip simplifying the whole dispatcher, which
+     ran over the step limit *)
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_gas_def, update_var_def,
+       venom_state_component_equality]
 QED
 
 Theorem hash_gas_inst_ok:
@@ -56,7 +59,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
     source_memory_read_ranges_def, source_memory_write_ranges_def,
     allocas_from_def, step_inst_non_invoke, mk_inst_def] >>
-  simp[step_inst_base_opcode_eqs, ] >> Cases_on `eval_operand op s` >> simp[] >>
+  simp[step_inst_base_opcode_eqs] >> Cases_on `eval_operand op s` >> simp[] >>
   rename1 `eval_operand op s = SOME w` >>
   Cases_on `w = 0w` >> simp[]
 QED
@@ -89,7 +92,8 @@ Theorem hash_sha256_load_pair:
 Proof
   rpt gen_tac >> strip_tac >>
   `step_inst_base (mk_inst ia ASSERT [Var success] []) s = OK s` by
-    (simp[mk_inst_def, step_inst_base_opcode_eqs, eval_operand_def]) >>
+    (pure_once_rewrite_tac[step_inst_base_def] >>
+     simp[mk_inst_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   conj_tac >- (irule hash_assert_inst_ok >> simp[]) >>
   simp[hash_assert_ghost] >>
@@ -98,7 +102,8 @@ Proof
     gvs[Abbr `u`, eval_operand_def, lookup_var_def, ptr_covers_def] >>
   `step_inst_base (mk_inst im MLOAD [Var q] [out]) u =
      OK (update_var out (mload (w2n r) u) u)` by
-    (simp[mk_inst_def, step_inst_base_opcode_eqs, exec_read1_def]) >>
+    (pure_once_rewrite_tac[step_inst_base_def] >>
+     simp[mk_inst_def, exec_read1_def]) >>
   simp[Once inst_seq_ptr_def] >>
   conj_tac >- (irule ptr_inst_ok_mload >> simp[]) >>
   drule_all hash_mload_ghost >> strip_tac >>
@@ -115,7 +120,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `step_inst_base (mk_inst ia ASSERT [Var success] []) s =
     Abort Revert_abort (revert_state (set_returndata [] s))` by
-    (simp[mk_inst_def, step_inst_base_opcode_eqs, eval_operand_def]) >>
+    (pure_once_rewrite_tac[step_inst_base_def] >>
+     simp[mk_inst_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >> irule hash_assert_inst_ok >> simp[]
 QED
 
@@ -160,7 +166,8 @@ Proof
     (irule hash_assert_inst_ok >> simp[]) >>
   `step_inst_base (mk_inst ia ASSERT [Var success] []) s =
     Abort Revert_abort (revert_state (set_returndata [] s))` by
-    (simp[mk_inst_def, step_inst_base_opcode_eqs, eval_operand_def]) >>
+    (pure_once_rewrite_tac[step_inst_base_def] >>
+     simp[mk_inst_def, eval_operand_def]) >>
   drule_at (Pat `step_inst_base _ _ = Abort _ _`) gas_path_ptr_abort >>
   simp[mk_inst_def, is_terminator_def] >>
   gvs[mk_inst_def] >> metis_tac[]

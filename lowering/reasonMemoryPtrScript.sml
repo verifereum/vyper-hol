@@ -39,13 +39,14 @@ Theorem reason_memory_suffix_path_ptr:
   compile_alloc_buffer m p3 = (tuplebuf,sa) /\
   outerbuf.buf_operand = Var outer /\ tuplebuf.buf_operand = Var tuple /\
   emit_op MLOAD [Var src] sa = (Var v1,c1) /\
-  emit_op ADD [Var v1;Lit 31w] c1 = (Var v2,c2) /\
-  emit_op AND [Var v2;Lit (i2w (-32))] c2 = (Var v3,c3) /\
-  emit_op ADD [Lit 32w;Var v3] c3 = (Var v4,c4) /\
+  emit_op NOT [Lit 31w] c1 = (Var vm,cm) /\
+  emit_op ADD [Var v1;Lit 31w] cm = (Var v2,c2) /\
+  emit_op AND [Var v2;Var vm] c2 = (Var v3,c3) /\
+  emit_op ADD [Var v3;Lit 32w] c3 = (Var v4,c4) /\
   emit_void MCOPY [Var tuple;Var src;Var v4] c4 = ((),sm) /\
   compile_alloc_buffer 32 sm = (buf,sc) /\ buf.buf_operand = Var slot /\
   emit_void MSTORE [Var slot;Lit 32w] sc = ((),sb) /\
-  fn_has_code sa c1 func /\ fn_has_code c1 c2 func /\
+  fn_has_code sa c1 func /\ fn_has_code c1 cm func /\ fn_has_code cm c2 func /\
   fn_has_code c2 c3 func /\ fn_has_code c3 c4 func /\ fn_has_code c4 sm func /\
   fn_has_code sm sc func /\ fn_has_code sc sb func /\ ~ctx_has_dalloca ctx /\
   t.vs_current_bb = sa.cs_current_bb /\

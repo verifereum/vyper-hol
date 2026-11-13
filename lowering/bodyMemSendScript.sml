@@ -79,7 +79,7 @@ Proof
   rename1 `INL vo` >>
   Cases_on `st.outcomes` >> simp[bind_def, ignore_bind_def, return_def]
   >- (simp[get_accounts_def, get_transient_storage_def, lift_option_def,
-           check_def, assert_def, update_accounts_def, update_transient_def,
+           check_def, assert_def, update_accounts_def, update_pending_deletions_def, update_transient_def,
            append_logs_def, return_def, raise_def] >>
       Cases_on `run_ext_call cx.txn.target addr [] vo
                   (forwarded_gas 0 (ext_call_kwarg EKGas [EKGas] gas_vs))

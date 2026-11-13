@@ -88,7 +88,7 @@ Theorem revert_reason_copy_checks:
   ptr_covers G tn src s (32+contractABI$ceil32 L) /\
   ptr_covers G tn dst s (32+contractABI$ceil32 L) /\
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
-  (!k. k < 4 ==> src <> STRING #"%" (toString (v+k)) /\
+  (!k. k < 5 ==> src <> STRING #"%" (toString (v+k)) /\
                     dst <> STRING #"%" (toString (v+k))) /\
   L+63 < dimword(:256) /\ ~ctx_has_dalloca ctx ==>
   ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn
@@ -96,7 +96,7 @@ Theorem revert_reason_copy_checks:
     (!i. w2n b <= i /\ i < w2n b+32 ==> i NOTIN tnf.t_mem)
 Proof
   strip_tac >> simp[revert_reason_copy_def] >>
-  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [i;j;k;l;m] _ _ _` >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [i;j;k;l;m;n] _ _ _` >>
   `ptr_covers G tn src s 32` by
     (fs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
                                    arithmeticTheory.LESS_EQ_ADD]) >>
@@ -121,25 +121,26 @@ Proof
      simp[Abbr `i`, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `ptr_covers g1 t1 src s1 (32+contractABI$ceil32 L) /\
    ptr_covers g1 t1 dst s1 (32+contractABI$ceil32 L)` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[] >> metis_tac[]) >>
-  suspend "controls"
+    (qpat_x_assum `!k. k < 5 ==> _` (qspec_then `0` mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  suspend "mask"
 QED
 
-Resume revert_reason_copy_checks[controls]:
+Resume revert_reason_copy_checks[mask]:
   `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
-    (simp[Abbr `j`] >> irule ptr_inst_ok_copy_len_binop >>
-     simp[op_taint_def] >> fs[op_taint_def]) >>
+    (simp[Abbr `j`] >> irule ptr_inst_ok_copy_len_not >> simp[op_taint_def]) >>
   `step_inst_base j s1 = OK
-     (update_var (STRING #"%" (toString (v+1))) (n2w L+31w) s1)` by
-    (simp[Abbr `j`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s1`,
-          update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+     (update_var (STRING #"%" (toString (v+1))) (~31w) s1)` by
+    (simp[Abbr `j`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g2 t2 _ s2 _ _` >>
   `op_taint t2 (Var (STRING #"%" (toString (v+1)))) = {}` by
-    (simp[Abbr `t2`, Abbr `j`] >>
-     irule (cj 1 copy_len_binop_ghost_frame) >> simp[]) >>
+    (simp[Abbr `t2`, Abbr `j`] >> irule (cj 1 copy_len_not_ghost_frame)) >>
+  `op_taint t2 (Var (STRING #"%" (toString v))) = {}` by
+    (simp[Abbr `t2`, Abbr `j`, copy_len_not_ghost_frame,
+          ASCIInumbersTheory.toString_11]) >>
   `t2.t_mem = tn.t_mem` by
-    (simp[Abbr `t2`, Abbr `j`, cj 2 copy_len_binop_ghost_frame]) >>
+    (simp[Abbr `t2`, Abbr `j`, cj 2 copy_len_not_ghost_frame]) >>
   `!x C. x <> STRING #"%" (toString (v+1)) /\ ptr_covers g1 t1 x s1 C ==>
      ptr_covers g2 t2 x s2 C` by
     (rpt strip_tac >> simp[Abbr `g2`, Abbr `t2`, Abbr `s2`] >>
@@ -147,29 +148,27 @@ Resume revert_reason_copy_checks[controls]:
      simp[Abbr `j`, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `ptr_covers g2 t2 src s2 (32+contractABI$ceil32 L) /\
    ptr_covers g2 t2 dst s2 (32+contractABI$ceil32 L)` by
-    (qpat_x_assum `!k. k < 4 ==> _` (qspec_then `1` mp_tac) >>
+    (qpat_x_assum `!k. k < 5 ==> _` (qspec_then `1` mp_tac) >>
      simp[] >> metis_tac[]) >>
-  suspend "rounded"
+  suspend "controls"
 QED
 
-Resume revert_reason_copy_checks[rounded]:
+Resume revert_reason_copy_checks[controls]:
   `ptr_inst_ok D 0 0 ctx fn g2 t2 k s2` by
     (simp[Abbr `k`] >> irule ptr_inst_ok_copy_len_binop >>
-     simp[op_taint_def] >> fs[op_taint_def]) >>
-  `(n2w L:bytes32)+31w && 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w =
-   n2w (contractABI$ceil32 L)` by
-    (once_rewrite_tac [WORD_AND_COMM] >>
-     rewrite_tac [Once WORD_ADD_COMM] >>
-     irule abi_encoder_round_ceil32 >> simp[]) >>
-  `step_inst_base k s2 = OK (update_var (STRING #"%" (toString (v+2)))
-     (n2w (contractABI$ceil32 L)) s2)` by
-    (simp[Abbr `k`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s2`,
-          update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
+     simp[op_taint_def]) >>
+  `step_inst_base k s2 = OK
+     (update_var (STRING #"%" (toString (v+2))) (n2w L+31w) s2)` by
+    (simp[Abbr `k`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s2`, Abbr `s1`,
+          update_var_def, lookup_var_def, FLOOKUP_UPDATE, ASCIInumbersTheory.toString_11]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g3 t3 _ s3 _ _` >>
   `op_taint t3 (Var (STRING #"%" (toString (v+2)))) = {}` by
     (simp[Abbr `t3`, Abbr `k`] >>
      irule (cj 1 copy_len_binop_ghost_frame) >> simp[]) >>
+  `op_taint t3 (Var (STRING #"%" (toString (v+1)))) = {}` by
+    (simp[Abbr `t3`, Abbr `k`, copy_len_binop_ghost_frame,
+          ASCIInumbersTheory.toString_11]) >>
   `t3.t_mem = tn.t_mem` by
     (simp[Abbr `t3`, Abbr `k`, cj 2 copy_len_binop_ghost_frame]) >>
   `!x C. x <> STRING #"%" (toString (v+2)) /\ ptr_covers g2 t2 x s2 C ==>
@@ -179,22 +178,32 @@ Resume revert_reason_copy_checks[rounded]:
      simp[Abbr `k`, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `ptr_covers g3 t3 src s3 (32+contractABI$ceil32 L) /\
    ptr_covers g3 t3 dst s3 (32+contractABI$ceil32 L)` by
-    (qpat_x_assum `!k. k < 4 ==> _` (qspec_then `2` mp_tac) >>
+    (qpat_x_assum `!k. k < 5 ==> _` (qspec_then `2` mp_tac) >>
      simp[] >> metis_tac[]) >>
-  suspend "count"
+  suspend "rounded"
 QED
 
-Resume revert_reason_copy_checks[count]:
+Resume revert_reason_copy_checks[rounded]:
   rpt (qpat_x_assum `ptr_inst_ok _ _ _ _ _ _ _ _ _` kall_tac) >>
   rpt (qpat_x_assum `step_inst_base _ _ = _` kall_tac) >>
-  rpt (qpat_x_assum `!x C. _ /\ ptr_covers _ _ _ _ _ ==> _` kall_tac) >>
   `ptr_inst_ok D 0 0 ctx fn g3 t3 l s3` by
     (simp[Abbr `l`] >> irule ptr_inst_ok_copy_len_binop >>
-     simp[op_taint_def] >> fs[op_taint_def]) >>
+     simp[op_taint_def]) >>
+  `(n2w L:bytes32)+31w && ~31w = n2w (contractABI$ceil32 L)` by
+    (`(~31w:bytes32) =
+      0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w`
+       by blastLib.BBLAST_TAC >> pop_assum SUBST1_TAC >>
+     once_rewrite_tac [WORD_AND_COMM] >>
+     rewrite_tac [Once WORD_ADD_COMM] >>
+     irule abi_encoder_round_ceil32 >> decide_tac) >>
+  `(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w:bytes32) && n2w L + 31w =
+   n2w (contractABI$ceil32 L)` by
+    (rewrite_tac [Once WORD_ADD_COMM] >>
+     irule abi_encoder_round_ceil32 >> decide_tac) >>
   `step_inst_base l s3 = OK (update_var (STRING #"%" (toString (v+3)))
-     (n2w (32+contractABI$ceil32 L)) s3)` by
-    (simp[Abbr `l`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s3`,
-          update_var_def, lookup_var_def, FLOOKUP_UPDATE, word_add_n2w]) >>
+     (n2w (contractABI$ceil32 L)) s3)` by
+    (simp[Abbr `l`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s3`, Abbr `s2`,
+          update_var_def, lookup_var_def, FLOOKUP_UPDATE, ASCIInumbersTheory.toString_11]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g4 t4 _ s4 _ _` >>
   `op_taint t4 (Var (STRING #"%" (toString (v+3)))) = {}` by
@@ -209,7 +218,37 @@ Resume revert_reason_copy_checks[count]:
      simp[Abbr `l`, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `ptr_covers g4 t4 src s4 (32+contractABI$ceil32 L) /\
    ptr_covers g4 t4 dst s4 (32+contractABI$ceil32 L)` by
-    (qpat_x_assum `!k. k < 4 ==> _` (qspec_then `3` mp_tac) >>
+    (qpat_x_assum `!k. k < 5 ==> _` (qspec_then `3` mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  suspend "count"
+QED
+
+Resume revert_reason_copy_checks[count]:
+  rpt (qpat_x_assum `ptr_inst_ok _ _ _ _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `step_inst_base _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `!x C. _ /\ ptr_covers _ _ _ _ _ ==> _` kall_tac) >>
+  `ptr_inst_ok D 0 0 ctx fn g4 t4 m s4` by
+    (simp[Abbr `m`] >> irule ptr_inst_ok_copy_len_binop >>
+     simp[op_taint_def] >> fs[op_taint_def]) >>
+  `step_inst_base m s4 = OK (update_var (STRING #"%" (toString (v+4)))
+     (n2w (32+contractABI$ceil32 L)) s4)` by
+    (simp[Abbr `m`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s4`,
+          update_var_def, lookup_var_def, FLOOKUP_UPDATE, word_add_n2w, ADD_COMM]) >>
+  simp[Once inst_seq_ptr_def] >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g5 t5 _ s5 _ _` >>
+  `op_taint t5 (Var (STRING #"%" (toString (v+4)))) = {}` by
+    (simp[Abbr `t5`, Abbr `m`] >>
+     irule (cj 1 copy_len_binop_ghost_frame) >> simp[]) >>
+  `t5.t_mem = tn.t_mem` by
+    (simp[Abbr `t5`, Abbr `m`, cj 2 copy_len_binop_ghost_frame]) >>
+  `!x C. x <> STRING #"%" (toString (v+4)) /\ ptr_covers g4 t4 x s4 C ==>
+     ptr_covers g5 t5 x s5 C` by
+    (rpt strip_tac >> simp[Abbr `g5`, Abbr `t5`, Abbr `s5`] >>
+     irule ptr_covers_step_frame >>
+     simp[Abbr `m`, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `ptr_covers g5 t5 src s5 (32+contractABI$ceil32 L) /\
+   ptr_covers g5 t5 dst s5 (32+contractABI$ceil32 L)` by
+    (qpat_x_assum `!k. k < 5 ==> _` (qspec_then `4` mp_tac) >>
      simp[] >> metis_tac[]) >>
   suspend "copy"
 QED
@@ -217,28 +256,28 @@ QED
 Resume revert_reason_copy_checks[copy]:
   `contractABI$ceil32 L+32 < dimword(:256)` by
     (mp_tac (Q.INST [`cnt` |-> `L`] abi_encoder_ceil32_bounds) >> decide_tac) >>
-  `ptr_inst_ok D 0 0 ctx fn g4 t4 m s4` by
-    (simp[Abbr `m`] >> irule ptr_inst_ok_mcopy_operand >>
-     simp[eval_operand_def, Abbr `s4`, update_var_def, lookup_var_def,
+  `ptr_inst_ok D 0 0 ctx fn g5 t5 n s5` by
+    (simp[Abbr `n`] >> irule ptr_inst_ok_mcopy_operand >>
+     simp[eval_operand_def, Abbr `s5`, update_var_def, lookup_var_def,
           FLOOKUP_UPDATE, w2n_n2w, ADD_COMM] >>
      fs[update_var_def, ADD_COMM]) >>
   `!u i. w2n b <= i /\ i < w2n b+32 ==>
-     i NOTIN (step_taint m s4 u t4).t_mem` by
+     i NOTIN (step_taint n s5 u t5).t_mem` by
     (gen_tac >> gen_tac >> disch_tac >>
-     simp[Abbr `m`] >> irule mcopy_byte_clean >>
+     simp[Abbr `n`] >> irule mcopy_byte_clean >>
      qexistsl_tac [`b`, `a`, `n2w (32+contractABI$ceil32 L)`] >>
-     qpat_assum `!k. k < 4 ==> _` (fn th =>
-       map_every (fn k => qspec_then k assume_tac th) [`0`, `1`, `2`, `3`]) >>
+     qpat_assum `!k. k < 5 ==> _` (fn th =>
+       map_every (fn k => qspec_then k assume_tac th) [`0`, `1`, `2`, `3`, `4`]) >>
      fs[lookup_var_def] >>
-     simp[eval_operand_def, Abbr `s4`, Abbr `s3`, Abbr `s2`, Abbr `s1`,
+     simp[eval_operand_def, Abbr `s5`, Abbr `s4`, Abbr `s3`, Abbr `s2`, Abbr `s1`,
           update_var_def, lookup_var_def, FLOOKUP_UPDATE, w2n_n2w, ADD_COMM] >>
      fs[update_var_def, ADD_COMM]) >>
-  `?u. step_inst_base m s4 = OK u` by
-    (simp[Abbr `m`] >> asm_simp_tac bool_ss [venomInstTheory.mk_inst_def, step_inst_base_opcode_eqs, venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds, combinTheory.K_THM] >>
-     qpat_assum `!k. k < 4 ==> _` (fn th =>
-       map_every (fn k => qspec_then k assume_tac th) [`0`, `1`, `2`, `3`]) >>
+  `?u. step_inst_base n s5 = OK u` by
+    (simp[Abbr `n`] >> asm_simp_tac bool_ss [venomInstTheory.mk_inst_def, step_inst_base_opcode_eqs, venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds, combinTheory.K_THM] >>
+     qpat_assum `!k. k < 5 ==> _` (fn th =>
+       map_every (fn k => qspec_then k assume_tac th) [`0`, `1`, `2`, `3`, `4`]) >>
      fs[lookup_var_def] >>
-     simp[mk_inst_def, eval_operand_def, Abbr `s4`, Abbr `s3`,
+     simp[mk_inst_def, eval_operand_def, Abbr `s5`, Abbr `s4`, Abbr `s3`,
           Abbr `s2`, Abbr `s1`, update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
   simp[inst_seq_ptr_def]
 QED
@@ -250,7 +289,7 @@ Theorem revert_reason_copy_path_ptr:
   ptr_covers G tn src s (32+contractABI$ceil32 L) /\
   ptr_covers G tn dst s (32+contractABI$ceil32 L) /\
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
-  (!k. k < 4 ==> src <> STRING #"%" (toString (v+k)) /\
+  (!k. k < 5 ==> src <> STRING #"%" (toString (v+k)) /\
                     dst <> STRING #"%" (toString (v+k))) /\
   L+63 < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -258,7 +297,7 @@ Theorem revert_reason_copy_path_ptr:
     (DROP s.vs_inst_idx bb.bb_instructions) /\
   run_inst_seq (revert_reason_copy id v (Var dst) (Var src)) s = OK t ==>
   ?Gf tnf. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf
-    (OK (t with vs_inst_idx := s.vs_inst_idx+5)) /\
+    (OK (t with vs_inst_idx := s.vs_inst_idx+6)) /\
     (!i. w2n b <= i /\ i < w2n b+32 ==> i NOTIN tnf.t_mem)
 Proof
   strip_tac >> drule_all revert_reason_copy_checks >>
@@ -303,16 +342,16 @@ QED
 Theorem revert_reason_copy_live_pointer_frame:
   run_inst_seq (revert_reason_copy id v q op) s = OK t /\
   inst_seq_ptr D lo ctx fn PG G tn (revert_reason_copy id v q op) s Gf tnf /\
-  (!k. k < 4 ==> x <> STRING #"%" (toString (v+k))) /\
+  (!k. k < 5 ==> x <> STRING #"%" (toString (v+k))) /\
   ptr_covers G tn x s C ==>
   lookup_var x t = lookup_var x s /\ ptr_covers Gf tnf x t C
 Proof
   strip_tac >> irule inst_seq_ptr_live_pointer_frame >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
   simp[revert_reason_copy_def, mk_inst_def, is_terminator_def] >>
-  qpat_x_assum `!k. k < 4 ==> _` mp_tac >>
+  qpat_x_assum `!k. k < 5 ==> _` mp_tac >>
   disch_then (fn th => map_every (fn k => qspec_then k assume_tac th)
-    [`0`, `1`, `2`, `3`]) >> gvs[]
+    [`0`, `1`, `2`, `3`, `4`]) >> gvs[]
 QED
 
 Theorem take_padded_prefix[local]:
@@ -337,7 +376,7 @@ QED
 Theorem revert_reason_copy_mload:
   lookup_var dst s = SOME b /\ lookup_var src s = SOME a /\
   mload (w2n a) s = n2w L /\ L+63 < dimword(:256) /\
-  (!k. k < 4 ==> src <> STRING #"%" (toString (v+k)) /\
+  (!k. k < 5 ==> src <> STRING #"%" (toString (v+k)) /\
                     dst <> STRING #"%" (toString (v+k))) /\
   run_inst_seq (revert_reason_copy id v (Var dst) (Var src)) s = OK t ==>
   mload (w2n b) t = n2w L
@@ -346,28 +385,47 @@ Proof
   `(n2w L:bytes32)+31w && 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w =
    n2w (contractABI$ceil32 L)` by
     (once_rewrite_tac [WORD_AND_COMM] >> rewrite_tac [Once WORD_ADD_COMM] >>
-     irule abi_encoder_round_ceil32 >> simp[]) >>
+     irule abi_encoder_round_ceil32 >> decide_tac) >>
+  `(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w:bytes32) && n2w L + 31w =
+   n2w (contractABI$ceil32 L)` by
+    (rewrite_tac [Once WORD_ADD_COMM] >>
+     irule abi_encoder_round_ceil32 >> decide_tac) >>
+  `(n2w L:bytes32)+31w && ~31w = n2w (contractABI$ceil32 L)` by
+    (`(~31w:bytes32) =
+      0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w`
+       by blastLib.BBLAST_TAC >> pop_assum SUBST1_TAC >> first_x_assum ACCEPT_TAC) >>
   `contractABI$ceil32 L+32 < dimword(:256)` by
     (mp_tac (Q.INST [`cnt` |-> `L`] abi_encoder_ceil32_bounds) >> decide_tac) >>
-  qpat_x_assum `!k. k < 4 ==> _` (fn th =>
-    map_every (fn k => qspec_then k assume_tac th) [`0`, `1`, `2`, `3`]) >>
+  qpat_x_assum `!k. k < 5 ==> _` (fn th =>
+    map_every (fn k => qspec_then k assume_tac th) [`0`, `1`, `2`, `3`, `4`]) >>
   fs[word_add_n2w] >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
   simp[revert_reason_copy_def] >>
   simp[Once run_inst_seq_def] >>
-  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, exec_pure2_def, eval_operand_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, exec_pure1_def,
+       exec_pure2_def, eval_operand_def, update_var_def, lookup_var_def,
+       FLOOKUP_UPDATE, word_add_n2w, w2n_n2w, ADD_COMM,
+       ASCIInumbersTheory.toString_11] >>
   simp[Once run_inst_seq_def] >>
-  simp[step_inst_base_opcode_eqs] >>
-  simp[exec_pure2_def, eval_operand_def, update_var_def, lookup_var_def,
-       FLOOKUP_UPDATE, word_add_n2w, w2n_n2w, ADD_COMM] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, exec_pure1_def,
+       exec_pure2_def, eval_operand_def, update_var_def, lookup_var_def,
+       FLOOKUP_UPDATE, word_add_n2w, w2n_n2w, ADD_COMM,
+       ASCIInumbersTheory.toString_11] >>
   simp[Once run_inst_seq_def] >>
-  simp[step_inst_base_opcode_eqs] >>
-  simp[exec_pure2_def, eval_operand_def, update_var_def, lookup_var_def,
-       FLOOKUP_UPDATE, word_add_n2w, w2n_n2w, ADD_COMM] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, exec_pure1_def,
+       exec_pure2_def, eval_operand_def, update_var_def, lookup_var_def,
+       FLOOKUP_UPDATE, word_add_n2w, w2n_n2w, ADD_COMM,
+       ASCIInumbersTheory.toString_11] >>
   simp[Once run_inst_seq_def] >>
-  simp[step_inst_base_opcode_eqs] >>
-  simp[exec_pure2_def, eval_operand_def, update_var_def, lookup_var_def,
-       FLOOKUP_UPDATE, word_add_n2w, w2n_n2w, ADD_COMM] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, exec_pure1_def,
+       exec_pure2_def, eval_operand_def, update_var_def, lookup_var_def,
+       FLOOKUP_UPDATE, word_add_n2w, w2n_n2w, ADD_COMM,
+       ASCIInumbersTheory.toString_11] >>
+  simp[Once run_inst_seq_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, exec_pure1_def,
+       exec_pure2_def, eval_operand_def, update_var_def, lookup_var_def,
+       FLOOKUP_UPDATE, word_add_n2w, w2n_n2w, ADD_COMM,
+       ASCIInumbersTheory.toString_11] >>
   simp[Once run_inst_seq_def] >>
   simp[step_inst_base_opcode_eqs] >>
   simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, w2n_n2w, ADD_COMM] >>
@@ -382,7 +440,7 @@ Theorem revert_reason_copy_boundary_ptr:
   ptr_covers G tn src s (32+contractABI$ceil32 L) /\
   ptr_covers G tn dst s (32+contractABI$ceil32 L) /\
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
-  (!k. k < 4 ==> src <> STRING #"%" (toString (v+k)) /\
+  (!k. k < 5 ==> src <> STRING #"%" (toString (v+k)) /\
                     dst <> STRING #"%" (toString (v+k))) /\
   L+63 < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -391,14 +449,14 @@ Theorem revert_reason_copy_boundary_ptr:
   run_inst_seq (revert_reason_copy id v (Var dst) (Var src)) s = OK t ==>
   ?Gf tnf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf
-      (OK (t with vs_inst_idx := s.vs_inst_idx+5)) /\
-    mload (w2n b) (t with vs_inst_idx := s.vs_inst_idx+5) = n2w L /\
+      (OK (t with vs_inst_idx := s.vs_inst_idx+6)) /\
+    mload (w2n b) (t with vs_inst_idx := s.vs_inst_idx+6) = n2w L /\
     (!i. w2n b <= i /\ i < w2n b+32 ==> i NOTIN tnf.t_mem) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    (!x C. (!k. k < 4 ==> x <> STRING #"%" (toString (v+k))) /\
+    (!x C. (!k. k < 5 ==> x <> STRING #"%" (toString (v+k))) /\
            ptr_covers G tn x s C ==>
-      lookup_var x (t with vs_inst_idx := s.vs_inst_idx+5) = lookup_var x s /\
-      ptr_covers Gf tnf x (t with vs_inst_idx := s.vs_inst_idx+5) C)
+      lookup_var x (t with vs_inst_idx := s.vs_inst_idx+6) = lookup_var x s /\
+      ptr_covers Gf tnf x (t with vs_inst_idx := s.vs_inst_idx+6) C)
 Proof
   strip_tac >> drule_all revert_reason_copy_checks >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>

@@ -1,5 +1,5 @@
 Theory fnLineageInvBoundary
-Ancestors fnPlanPrefix fnPlanLineageInventory list rich_list pred_set stackPlanTypes reorderSim
+Ancestors stackModel fnPlanPrefix fnPlanLineageInventory list rich_list pred_set stackPlanTypes reorderSim
 
 Theorem lineage_inventory_live_membership:
   !vs ps. lineage_inventory (set (MAP Var vs)) ps ==>

@@ -22,15 +22,14 @@ End
 Definition revert_reason_copy_def:
   revert_reason_copy id (v:num) q op =
     [mk_inst id MLOAD [op] [STRING #"%" (toString v)];
-     mk_inst (id+1) ADD [Var (STRING #"%" (toString v)); Lit 31w]
-       [STRING #"%" (toString (v+1))];
-     mk_inst (id+2) AND
-       [Var (STRING #"%" (toString (v+1)));
-        Lit 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w]
+     mk_inst (id+1) NOT [Lit 31w] [STRING #"%" (toString (v+1))];
+     mk_inst (id+2) ADD [Var (STRING #"%" (toString v)); Lit 31w]
        [STRING #"%" (toString (v+2))];
-     mk_inst (id+3) ADD [Lit 32w; Var (STRING #"%" (toString (v+2)))]
-       [STRING #"%" (toString (v+3))];
-     mk_inst (id+4) MCOPY [q; op; Var (STRING #"%" (toString (v+3)))] []]
+     mk_inst (id+3) AND [Var (STRING #"%" (toString (v+2)));
+       Var (STRING #"%" (toString (v+1)))] [STRING #"%" (toString (v+3))];
+     mk_inst (id+4) ADD [Var (STRING #"%" (toString (v+3))); Lit 32w]
+       [STRING #"%" (toString (v+4))];
+     mk_inst (id+5) MCOPY [q; op; Var (STRING #"%" (toString (v+4)))] []]
 End
 
 Definition revert_reason_suffix_def:
@@ -57,32 +56,32 @@ Definition revert_reason_suffix_def:
        [STRING #"%" (toString (v+13))];
      mk_inst (id+17) MCOPY [Var (STRING #"%" (toString (v+8)));
        Var (STRING #"%" (toString (v+5))); Var (STRING #"%" (toString (v+13)))] [];
-     mk_inst (id+18) ADD [Var (STRING #"%" (toString (v+9))); Lit 31w]
-       [STRING #"%" (toString (v+14))];
-     mk_inst (id+19) AND [Var (STRING #"%" (toString (v+14)));
-       Lit 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w]
+     mk_inst (id+18) NOT [Lit 31w] [STRING #"%" (toString (v+14))];
+     mk_inst (id+19) ADD [Var (STRING #"%" (toString (v+9))); Lit 31w]
        [STRING #"%" (toString (v+15))];
-     mk_inst (id+20) ADD [Lit 32w; Var (STRING #"%" (toString (v+15)))]
-       [STRING #"%" (toString (v+16))];
-     mk_inst (id+21) MSTORE [Var (STRING #"%" (toString (v+6)));
+     mk_inst (id+20) AND [Var (STRING #"%" (toString (v+15)));
+       Var (STRING #"%" (toString (v+14)))] [STRING #"%" (toString (v+16))];
+     mk_inst (id+21) ADD [Var (STRING #"%" (toString (v+16))); Lit 32w]
+       [STRING #"%" (toString (v+17))];
+     mk_inst (id+22) MSTORE [Var (STRING #"%" (toString (v+6)));
        Var (STRING #"%" (toString (v+7)))] [];
-     mk_inst (id+22) ADD [Var (STRING #"%" (toString (v+7)));
-       Var (STRING #"%" (toString (v+16)))] [STRING #"%" (toString (v+17))];
-     mk_inst (id+23) MSTORE [Var (STRING #"%" (toString (v+4)));
-       Var (STRING #"%" (toString (v+17)))] [];
-     mk_inst (id+24) MLOAD [Var (STRING #"%" (toString (v+4)))]
-       [STRING #"%" (toString (v+18))];
-     mk_inst (id+25) ADD [b; Lit 28w] [STRING #"%" (toString (v+19))];
-     mk_inst (id+26) ADD [Lit 4w; Var (STRING #"%" (toString (v+18)))]
-       [STRING #"%" (toString (v+20))];
-     mk_inst (id+27) REVERT [Var (STRING #"%" (toString (v+19)));
-       Var (STRING #"%" (toString (v+20)))] []]
+     mk_inst (id+23) ADD [Var (STRING #"%" (toString (v+7)));
+       Var (STRING #"%" (toString (v+17)))] [STRING #"%" (toString (v+18))];
+     mk_inst (id+24) MSTORE [Var (STRING #"%" (toString (v+4)));
+       Var (STRING #"%" (toString (v+18)))] [];
+     mk_inst (id+25) MLOAD [Var (STRING #"%" (toString (v+4)))]
+       [STRING #"%" (toString (v+19))];
+     mk_inst (id+26) ADD [b; Lit 28w] [STRING #"%" (toString (v+20))];
+     mk_inst (id+27) ADD [Lit 4w; Var (STRING #"%" (toString (v+19)))]
+       [STRING #"%" (toString (v+21))];
+     mk_inst (id+28) REVERT [Var (STRING #"%" (toString (v+20)));
+       Var (STRING #"%" (toString (v+21)))] []]
 End
 
 Theorem revert_reason_chunk_lengths[simp]:
   LENGTH (revert_reason_prefix id v ms) = 4 /\
-  LENGTH (revert_reason_copy id v q op) = 5 /\
-  LENGTH (revert_reason_suffix id v b p q) = 23
+  LENGTH (revert_reason_copy id v q op) = 6 /\
+  LENGTH (revert_reason_suffix id v b p q) = 24
 Proof
   simp[revert_reason_prefix_def, revert_reason_copy_def, revert_reason_suffix_def]
 QED
@@ -95,12 +94,12 @@ Theorem compile_revert_reason_layout:
       cs_current_insts := sa.cs_current_insts ++
         revert_reason_prefix sa.cs_next_id sa.cs_next_var ms |> /\
     unwrap_value cenv vv sm = (op,sn) /\
-    sb = sn with <| cs_next_var := sn.cs_next_var + 21;
-      cs_next_id := sn.cs_next_id + 28;
+    sb = sn with <| cs_next_var := sn.cs_next_var + 23;
+      cs_next_id := sn.cs_next_id + 30;
       cs_current_insts := sn.cs_current_insts ++
         (revert_reason_copy sn.cs_next_id sn.cs_next_var
           (Var (STRING #"%" (toString (sa.cs_next_var+2)))) op ++
-         revert_reason_suffix sn.cs_next_id sn.cs_next_var
+         revert_reason_suffix (sn.cs_next_id+1) (sn.cs_next_var+1)
           (Var (STRING #"%" (toString sa.cs_next_var)))
           (Var (STRING #"%" (toString (sa.cs_next_var+1))))
           (Var (STRING #"%" (toString (sa.cs_next_var+2))))) |>
@@ -129,14 +128,14 @@ Theorem compile_revert_reason_chunks:
     sm.cs_next_id <= sn.cs_next_id /\ 
     sm.cs_next_var = sa.cs_next_var + 3 /\
     sm.cs_next_id = sa.cs_next_id + 4 /\
-    sb.cs_next_var = sn.cs_next_var + 21 /\
-    sb.cs_next_id = sn.cs_next_id + 28 /\
+    sb.cs_next_var = sn.cs_next_var + 23 /\
+    sb.cs_next_id = sn.cs_next_id + 30 /\
     emitted_insts sa sm = revert_reason_prefix sa.cs_next_id sa.cs_next_var ms /\
     sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm /\
     emitted_insts sn sb =
       revert_reason_copy sn.cs_next_id sn.cs_next_var
         (Var (STRING #"%" (toString (sa.cs_next_var+2)))) op ++
-      revert_reason_suffix sn.cs_next_id sn.cs_next_var
+      revert_reason_suffix (sn.cs_next_id+1) (sn.cs_next_var+1)
         (Var (STRING #"%" (toString sa.cs_next_var)))
         (Var (STRING #"%" (toString (sa.cs_next_var+1))))
         (Var (STRING #"%" (toString (sa.cs_next_var+2)))) /\

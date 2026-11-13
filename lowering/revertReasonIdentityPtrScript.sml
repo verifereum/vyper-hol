@@ -14,7 +14,7 @@ Theorem revert_reason_identity_unwrap_path_ptr:
   fn_has_code sn sb fn /\ sb.cs_current_bb = sn.cs_current_bb /\
   sb.cs_current_insts = sn.cs_current_insts ++
     (revert_reason_copy sn.cs_next_id sn.cs_next_var (Var q) out ++
-     revert_reason_suffix sn.cs_next_id sn.cs_next_var (Var b) (Var p) (Var q)) /\
+     revert_reason_suffix (sn.cs_next_id+1) (sn.cs_next_var+1) (Var b) (Var p) (Var q)) /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~s.vs_halted /\
   not_fresh_at sm b /\ not_fresh_at sm p /\
@@ -30,8 +30,8 @@ Theorem revert_reason_identity_unwrap_path_ptr:
   64+ms < dimword(:256) /\ w2n B+64+ms < dimword(:256) /\
   w2n P+32+ms < dimword(:256) /\
   ~ctx_has_dalloca ctx /\ alloca_inv s /\ alloca_room ctx fn s /\
-  (!a sz. FLOOKUP s.vs_allocas (sm.cs_next_id+5) = SOME (a,sz) ==> sz = 32) /\
-  FLOOKUP s.vs_allocas parent = SOME (w2n Q,ms) /\ parent <> sm.cs_next_id+5 ==>
+  (!a sz. FLOOKUP s.vs_allocas (sm.cs_next_id+6) = SOME (a,sz) ==> sz = 32) /\
+  FLOOKUP s.vs_allocas parent = SOME (w2n Q,ms) /\ parent <> sm.cs_next_id+6 ==>
   ?z Gf tnf. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (Abort Revert_abort z)
 Proof
   strip_tac >>

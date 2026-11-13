@@ -4,7 +4,7 @@ Ancestors
   bodyPtrPopStoragePureEntry bodyPtrDefs exprSimPopNestedBase targetPlaceSimDefs
   exprSimDefs loweringPosts compileEnv loweringStateRelDefs exprLoweringProps venomState context
   vyperStorageBackend vyperStorage vyperValue ptrDiscipline fragGasPathPtr
-  gasSummaryComposePtr appendStorageSourcePtr exprSimPopStorage words list
+  gasSummaryComposePtr stmtSimAppendStorageCompose exprSimPopStorage words list
 
 Theorem pop_storage_live_summary:
   storage_layout_safe cx /\

@@ -10,7 +10,7 @@ Ancestors
 
 Theorem log_source_store_run_path_ptr:
   compile_alloc_buffer cap st = (buf,start) /\ fn_has_code st start func /\
-  compile_log_store_data ce xs buf.buf_operand 0 start = ((),end_st) /\
+  compile_log_store_data ce xs (MAP SND xs) buf.buf_operand 0 start = ((),end_st) /\
   stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ cap < dimword(:256) /\
   start.cs_next_var <= end_st.cs_next_var /\

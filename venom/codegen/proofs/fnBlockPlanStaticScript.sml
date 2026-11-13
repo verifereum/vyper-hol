@@ -1208,7 +1208,7 @@ Proof
   `?succbb. lookup_block succ fn.fn_blocks = SOME succbb` by
     (`cfg_reachable_of (cfg_analyze fn) succ` by
        metis_tac[dfs_block_state_cfg_reachable] >>
-     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels >>
+     drule cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels >>
      simp[fn_labels_def, listTheory.MEM_MAP] >> strip_tac >>
      irule_at Any MEM_lookup_block >> simp[] >>
      gvs[codegen_ready_fn_def, wf_function_def, fn_labels_def] >> metis_tac[]) >>

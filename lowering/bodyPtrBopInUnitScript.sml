@@ -13,12 +13,25 @@ Theorem equality_lower_runtime:
     SOME <| cu_context := equality_runtime_context equality_selector;
             cu_data_segment := [] |>
 Proof
-  simp[lower_vyper_runtime_unit_def, equality_classification, equality_nkeys,
+  `compute_immutables_len (get_struct_fields (make_struct_fields_map equality_tops))
+     equality_tops < 24576` by EVAL_TAC >>
+  `external_return_buffer_ok equality_external_package` by
+    simp[equality_external_package_def, package_external_fn_def,
+         external_return_buffer_ok_def, compileEnvTheory.is_word_type_def] >>
+  `fn_allocs_ok equality_tops
+     (View,F,F,"probe",[],[],BaseT BoolT,[Return (SOME equality_fixture)])` by
+    EVAL_TAC >>
+  `~external_has_defaults
+     (View,F,F,"probe",[],([]:expr list),BaseT BoolT,
+      [Return (SOME equality_fixture)])` by
+    simp[external_has_defaults_def] >>
+  simp[lower_vyper_runtime_unit_def, equality_classification,
+       contextTheory.global_nonreentrant_slot_def,
        equality_selectors, GSYM equality_external_package_def,
        equality_external_package_target, compute_selector_def,
        equality_selector_def, equality_run_lowering] >>
   simp[package_fallback_fn_def, set_fallback_package_target_def,
-       equality_run_lowering] >> EVAL_TAC
+       equality_run_lowering] >> simp[external_has_defaults_def]
 QED
 
 (* This is the entry function actually packaged by the runtime compiler. *)

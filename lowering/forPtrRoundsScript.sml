@@ -99,7 +99,7 @@ Theorem eval_for_rounds_ptr:
   !D tops ctx fn PG cx tyv nm body vs ok Inv Done R.
   (!k es s G tn.
     k < LENGTH vs /\ Inv k es G tn s /\
-    gas_admissible (eval_for cx tyv nm body (DROP k vs)) ok es ==>
+    gas_admissible (eval_for cx tyv nm body (MAP Value (DROP k vs))) ok es ==>
     gas_outcome_ptr D tops (ctx,fn) PG
       (do push_scope_with_var nm tyv (EL k vs);
           finally (try (do eval_stmts cx body; return F od)
@@ -112,9 +112,9 @@ Theorem eval_for_rounds_ptr:
       Done (es with gas_obs := []) gf tf t) ==>
   !k es s G tn.
     k <= LENGTH vs /\ Inv k es G tn s /\
-    gas_admissible (eval_for cx tyv nm body (DROP k vs)) ok es ==>
+    gas_admissible (eval_for cx tyv nm body (MAP Value (DROP k vs))) ok es ==>
     gas_outcome_ptr D tops (ctx,fn) PG
-      (eval_for cx tyv nm body (DROP k vs)) (es,s,G,tn)
+      (eval_for cx tyv nm body (MAP Value (DROP k vs))) (es,s,G,tn)
       (\res ee gf tf t. res = INL () /\ Done ee gf tf t)
       (\res ee gt r. ?ex. res = INR ex /\ R ex ee gt r)
 Proof
@@ -128,12 +128,12 @@ Proof
   `DROP k vs = EL k vs :: DROP (SUC k) vs` by metis_tac[DROP_CONS_EL] >>
   `SUC k <= LENGTH vs /\ LENGTH vs - SUC k < LENGTH vs - k` by decide_tac >>
   qpat_assum `!k es s G tn. _` drule_all >> strip_tac >>
-  asm_rewrite_tac[eval_for_cons_round] >>
+  asm_rewrite_tac[MAP, eval_for_cons_value_round] >>
   irule gas_outcome_ptr_bool_round >>
   qexists_tac `Inv (SUC k)` >> reverse conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `gas_admissible _ _ es` mp_tac >>
-  asm_rewrite_tac[eval_for_cons_round] >> disch_tac >>
+  asm_rewrite_tac[MAP, eval_for_cons_value_round] >> disch_tac >>
   drule gas_marked_exec_ptr_exec >>
   rewrite_tac[gas_marked_exec_def] >> strip_tac >>
   drule_all gas_admissible_bind_tail >> simp[] >> strip_tac >>

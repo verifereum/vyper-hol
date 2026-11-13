@@ -62,13 +62,6 @@ Proof
   imp_res_tac eval_operand_update_other >> gvs[]
 QED
 
-Theorem resolve_phi_mem[local]:
-  !prev ops val_op.
-    resolve_phi prev ops = SOME val_op ==> MEM val_op ops
-Proof
-  recInduct resolve_phi_ind >> rw[resolve_phi_def] >> gvs[AllCaseEqs()]
-QED
-
 val operand_vars_drop = prove(
   ``!ops x n. ~MEM x (operand_vars ops) ==>
               ~MEM x (operand_vars (DROP n ops))``,
@@ -91,73 +84,9 @@ val step_base_result_tac =
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[])));
 
-(* Classify only result heads, as in opcodeClass's local exec_* facts.
-   No ambient rewrites: callback results, words and memory stay opaque. *)
-val exec_result_head_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
-  [LET_THM, pairTheory.ELIM_UNCURRY, AllCaseEqs(), exec_result_distinct];
-
-val exec_call_result_head_ss = exec_result_head_ss ++ rewrites
-  [exec_ext_call_def, exec_delegatecall_def, exec_create_def];
-
-Triviality exec_result_helpers_not_intret[simp]:
-  (!f inst s vs s'. exec_pure1 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_pure2 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_pure3 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_read0 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_read1 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_write2 f inst s <> IntRet vs s') /\
-  (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
-Proof
-  simp_tac exec_result_head_ss
-    [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def, exec_alloca_def]
-QED
-
-Triviality exec_call_helpers_not_intret[simp]:
-  (!inst s g a v ao as_ ro rs is_s vs s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> IntRet vs s') /\
-  (!inst s g a ao as_ ro rs vs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vs s') /\
-  (!inst s v off sz salt vs s'.
-     exec_create inst s v off sz salt <> IntRet vs s')
-Proof
-  simp_tac exec_call_result_head_ss []
-QED
-
-Triviality exec_call_helpers_no_halt_abort[simp]:
-  (!inst s g a v ao as_ ro rs is_s s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Halt s') /\
-  (!inst s g a v ao as_ ro rs is_s ab s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Abort ab s') /\
-  (!inst s g a ao as_ ro rs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Halt s') /\
-  (!inst s g a ao as_ ro rs ab s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
-  (!inst s v off sz salt s'.
-     exec_create inst s v off sz salt <> Halt s')
-Proof
-  simp_tac exec_call_result_head_ss []
-QED
-
-Theorem step_inst_base_no_halt[local]:
-  !inst s s'.
-    step_inst_base inst s = Halt s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >>
-  drule step_inst_base_halt_opcodes >>
-  strip_tac >> gvs[is_terminator_def]
-QED
-
-Theorem step_inst_base_no_intret[local]:
-  !inst s vs s'.
-    step_inst_base inst s = IntRet vs s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >>
-  drule step_inst_base_intret_opcodes >>
-  strip_tac >> gvs[is_terminator_def]
-QED
+val _ = augment_srw_ss [rewrites
+  [exec_result_helpers_not_intret, exec_call_helpers_not_intret,
+   exec_call_helpers_no_halt_abort]];
 
 (* ===================================================================== *)
 (* ===== External call update_var lemmas =============================== *)
@@ -427,13 +356,6 @@ val exec_frame_thms =
    exec_write2_var_frame,
    exec_alloca_var_frame, exec_ext_call_var_frame,
    exec_delegatecall_var_frame, exec_create_var_frame];
-
-Triviality mem_var_operand_vars[local]:
-  !ops x. MEM (Var x) ops ==> MEM x (operand_vars ops)
-Proof
-  Induct >> rw[operand_vars_def] >>
-  Cases_on `operand_var h` >> gvs[operand_var_def]
-QED
 
 (* ===================================================================== *)
 (* ===== step_inst_base_var_frame_full ================================= *)

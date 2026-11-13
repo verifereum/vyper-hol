@@ -99,7 +99,10 @@ Resume compile_assert_frag[true]:
           simp[Once bind_def, return_def]) >>
       metis_tac[gas_path_then, arithmeticTheory.ADD_CLAUSES]) >>
   disj1_tac >> simp[] >> irule assert_success_post >>
-  simp[] >> qexistsl_tac [`e`, `es`, `op`, `s1`] >> simp[])
+  simp[] >> conj_tac
+  >- (qpat_x_assum `!tail. _` (qspec_then `[]` assume_tac) >>
+      drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
+  qexistsl_tac [`e`, `op`, `s1`] >> first_assum ACCEPT_TAC)
 QED
 
 Resume compile_assert_frag[false]:

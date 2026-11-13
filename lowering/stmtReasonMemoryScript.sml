@@ -33,34 +33,36 @@ Definition reason_tail_def:
       (0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w
          : bytes32) in
     [mk_inst j MLOAD [op] [x u];
-     mk_inst (j + 1) ADD [Var (x u); Lit 31w] [x (u + 1)];
-     mk_inst (j + 2) AND [Var (x (u + 1)); Lit mask] [x (u + 2)];
-     mk_inst (j + 3) ADD [Lit 32w; Var (x (u + 2))] [x (u + 3)];
-     mk_inst (j + 4) MCOPY [Var (x (v + 2)); op; Var (x (u + 3))] [];
-     mk_inst (j + 5) ALLOCA [Lit 32w] [x (u + 4)];
-     mk_inst (j + 6) MSTORE [Var (x (u + 4)); Lit 32w] [];
-     mk_inst (j + 7) ADD [Var (x (v + 2)); Lit 0w] [x (u + 5)];
-     mk_inst (j + 8) ADD [Var (x (v + 1)); Lit 0w] [x (u + 6)];
-     mk_inst (j + 9) MLOAD [Var (x (u + 4))] [x (u + 7)];
-     mk_inst (j + 10) ADD [Var (x (v + 1)); Var (x (u + 7))] [x (u + 8)];
-     mk_inst (j + 11) MLOAD [Var (x (u + 5))] [x (u + 9)];
-     mk_inst (j + 12) ADD [Var (x (u + 9)); Lit 31w] [x (u + 10)];
-     mk_inst (j + 13) AND [Var (x (u + 10)); Lit mask] [x (u + 11)];
-     mk_inst (j + 14) ADD [Var (x (u + 8)); Var (x (u + 11))] [x (u + 12)];
-     mk_inst (j + 15) MSTORE [Var (x (u + 12)); Lit 0w] [];
-     mk_inst (j + 16) ADD [Lit 32w; Var (x (u + 9))] [x (u + 13)];
-     mk_inst (j + 17) MCOPY
-       [Var (x (u + 8)); Var (x (u + 5)); Var (x (u + 13))] [];
-     mk_inst (j + 18) ADD [Var (x (u + 9)); Lit 31w] [x (u + 14)];
-     mk_inst (j + 19) AND [Var (x (u + 14)); Lit mask] [x (u + 15)];
-     mk_inst (j + 20) ADD [Lit 32w; Var (x (u + 15))] [x (u + 16)];
-     mk_inst (j + 21) MSTORE [Var (x (u + 6)); Var (x (u + 7))] [];
-     mk_inst (j + 22) ADD [Var (x (u + 7)); Var (x (u + 16))] [x (u + 17)];
-     mk_inst (j + 23) MSTORE [Var (x (u + 4)); Var (x (u + 17))] [];
-     mk_inst (j + 24) MLOAD [Var (x (u + 4))] [x (u + 18)];
-     mk_inst (j + 25) ADD [Var (x v); Lit 28w] [x (u + 19)];
-     mk_inst (j + 26) ADD [Lit 4w; Var (x (u + 18))] [x (u + 20)];
-     mk_inst (j + 27) REVERT [Var (x (u + 19)); Var (x (u + 20))] []]
+     mk_inst (j + 1) NOT [Lit 31w] [x (u + 1)];
+     mk_inst (j + 2) ADD [Var (x u); Lit 31w] [x (u + 2)];
+     mk_inst (j + 3) AND [Var (x (u + 2)); Var (x (u + 1))] [x (u + 3)];
+     mk_inst (j + 4) ADD [Var (x (u + 3)); Lit 32w] [x (u + 4)];
+     mk_inst (j + 5) MCOPY [Var (x (v + 2)); op; Var (x (u + 4))] [];
+     mk_inst (j + 6) ALLOCA [Lit 32w] [x (u + 5)];
+     mk_inst (j + 7) MSTORE [Var (x (u + 5)); Lit 32w] [];
+     mk_inst (j + 8) ADD [Var (x (v + 2)); Lit 0w] [x (u + 6)];
+     mk_inst (j + 9) ADD [Var (x (v + 1)); Lit 0w] [x (u + 7)];
+     mk_inst (j + 10) MLOAD [Var (x (u + 5))] [x (u + 8)];
+     mk_inst (j + 11) ADD [Var (x (v + 1)); Var (x (u + 8))] [x (u + 9)];
+     mk_inst (j + 12) MLOAD [Var (x (u + 6))] [x (u + 10)];
+     mk_inst (j + 13) ADD [Var (x (u + 10)); Lit 31w] [x (u + 11)];
+     mk_inst (j + 14) AND [Var (x (u + 11)); Lit mask] [x (u + 12)];
+     mk_inst (j + 15) ADD [Var (x (u + 9)); Var (x (u + 12))] [x (u + 13)];
+     mk_inst (j + 16) MSTORE [Var (x (u + 13)); Lit 0w] [];
+     mk_inst (j + 17) ADD [Lit 32w; Var (x (u + 10))] [x (u + 14)];
+     mk_inst (j + 18) MCOPY
+       [Var (x (u + 9)); Var (x (u + 6)); Var (x (u + 14))] [];
+     mk_inst (j + 19) NOT [Lit 31w] [x (u + 15)];
+     mk_inst (j + 20) ADD [Var (x (u + 10)); Lit 31w] [x (u + 16)];
+     mk_inst (j + 21) AND [Var (x (u + 16)); Var (x (u + 15))] [x (u + 17)];
+     mk_inst (j + 22) ADD [Var (x (u + 17)); Lit 32w] [x (u + 18)];
+     mk_inst (j + 23) MSTORE [Var (x (u + 7)); Var (x (u + 8))] [];
+     mk_inst (j + 24) ADD [Var (x (u + 8)); Var (x (u + 18))] [x (u + 19)];
+     mk_inst (j + 25) MSTORE [Var (x (u + 5)); Var (x (u + 19))] [];
+     mk_inst (j + 26) MLOAD [Var (x (u + 5))] [x (u + 20)];
+     mk_inst (j + 27) ADD [Var (x v); Lit 28w] [x (u + 21)];
+     mk_inst (j + 28) ADD [Lit 4w; Var (x (u + 20))] [x (u + 22)];
+     mk_inst (j + 29) REVERT [Var (x (u + 21)); Var (x (u + 22))] []]
 End
 
 (* Every opcode of the encoder's head and tail is neither GAS nor INVOKE,
@@ -116,8 +118,8 @@ Theorem compile_revert_reason_shape:
                     cs_current_insts := sa.cs_current_insts ++
                       reason_head sa.cs_next_id sa.cs_next_var M |>) =
         (op, sn) /\
-      sb = sn with <| cs_next_id := sn.cs_next_id + 28;
-                      cs_next_var := sn.cs_next_var + 21;
+      sb = sn with <| cs_next_id := sn.cs_next_id + 30;
+                      cs_next_var := sn.cs_next_var + 23;
                       cs_current_insts := sn.cs_current_insts ++
                         reason_tail sn.cs_next_id sn.cs_next_var
                           sa.cs_next_var op |>
@@ -202,6 +204,18 @@ Theorem step_and_eq:
     | _ => Error "undefined operand"
 Proof
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def]
+QED
+
+(* The ceil32 mask: NOT 31 is the literal mask of the middle rounding. *)
+Theorem step_not31_eq:
+  step_inst_base (mk_inst id NOT [Lit 31w] [out]) s =
+    OK (update_var out
+      (0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w
+         : bytes32) s)
+Proof
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def,
+       eval_operand_def] >>
+  AP_TERM_TAC >> BBLAST_TAC
 QED
 
 Theorem step_mload_eq:
@@ -313,7 +327,7 @@ Proof
 QED
 
 val tail_ss =
-  [step_add_eq, step_and_eq, step_mload_eq, step_mstore_eq,
+  [step_add_eq, step_and_eq, step_not31_eq, step_mload_eq, step_mstore_eq,
    step_mcopy_eq, step_alloca_eq, step_revert_eq,
    below_frontier_MLOAD, below_frontier_MSTORE, below_frontier_MCOPY,
    below_frontier_REVERT, below_frontier_no_ranges,
@@ -356,9 +370,9 @@ Theorem reason_tail_run_mem:
     p + 32 + ((len + 31) DIV 32) * 32 <= s.vs_alloca_next /\
     B + 64 + M <= s.vs_alloca_next /\ TP + M <= s.vs_alloca_next /\
     s.vs_alloca_next < dimword (:256) /\
-    (FLOOKUP s.vs_allocas (j + 5) = NONE ==>
+    (FLOOKUP s.vs_allocas (j + 6) = NONE ==>
      s.vs_alloca_next + 32 < dimword (:256)) /\
-    (!z n. FLOOKUP s.vs_allocas (j + 5) = SOME (z, n) ==>
+    (!z n. FLOOKUP s.vs_allocas (j + 6) = SOME (z, n) ==>
            z + 32 <= s.vs_alloca_next /\ (z + 32 <= TP \/ TP + 32 <= z)) ==>
     run_inst_seq_mem_ok (reason_tail j u v op) s /\
     ?t. run_inst_seq (reason_tail j u v op) s = Abort Revert_abort t
@@ -389,10 +403,12 @@ Proof
   `p < dimword (:256) /\ B + 96 + r < dimword (:256) /\
    TP + 32 + r < dimword (:256)` by decide_tac >>
   fs[] >>
-  Cases_on `FLOOKUP s.vs_allocas (j + 5)`
+  Cases_on `FLOOKUP s.vs_allocas (j + 6)`
   >- (qpat_x_assum `NONE = NONE ==> _` mp_tac >> simp_tac std_ss [] >>
     strip_tac >>
     simp_tac std_ss [reason_tail_def, LET_THM] >>
+    tail_step_tac >>
+    tail_step_tac >>
     tail_step_tac >>
     tail_step_tac >>
     tail_step_tac >>
@@ -429,6 +445,8 @@ Proof
     (rpt gen_tac >> irule mload_mstore_apart >> asm_rewrite_tac[]) >>
   simp_tac std_ss [reason_tail_def, LET_THM] >>
   tail_step_tac >>
+    tail_step_tac >>
+    tail_step_tac >>
     tail_step_tac >>
     tail_step_tac >>
     tail_step_tac >>
@@ -789,14 +807,14 @@ Theorem reason_encoder_run_mem:
       (fn_insts func) /\
     MEM (mk_inst (id + 3) ALLOCA [Lit (n2w M)] ["%" ++ toString (v + 2)])
       (fn_insts func) /\
-    MEM (mk_inst (id + 4 + 5) ALLOCA [Lit 32w] ["%" ++ toString (v + 3 + 4)])
+    MEM (mk_inst (id + 4 + 6) ALLOCA [Lit 32w] ["%" ++ toString (v + 3 + 5)])
       (fn_insts func) /\
     64 + M < dimword (:256) /\
     alloca_room ctx func s /\ alloca_next_valid s /\
     (!x. FLOOKUP s.vs_allocas id = SOME x ==>
          SND x = 64 + M /\ (p + 32 <= FST x \/ FST x + 32 <= p)) /\
     (!x. FLOOKUP s.vs_allocas (id + 3) = SOME x ==> SND x = M) /\
-    (!x. FLOOKUP s.vs_allocas (id + 4 + 5) = SOME x ==>
+    (!x. FLOOKUP s.vs_allocas (id + 4 + 6) = SOME x ==>
          SND x = 32 /\
          !y. FLOOKUP s.vs_allocas (id + 3) = SOME y ==>
              FST x + 32 <= FST y \/ FST y + 32 <= FST x) /\
@@ -846,7 +864,7 @@ Proof
        (* a fresh length word fits *)
        strip_tac >>
        qspecl_then [`func`, `s1`,
-         `mk_inst (id + 4 + 5) ALLOCA [Lit 32w] ["%" ++ toString (v + 3 + 4)]`,
+         `mk_inst (id + 4 + 6) ALLOCA [Lit 32w] ["%" ++ toString (v + 3 + 5)]`,
          `32w`, `ctx`] mp_tac alloca_room_fresh >>
        impl_tac
        >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -857,8 +875,8 @@ Proof
        (* a held length word lies below the frontier, apart from the
           tuple buffer *)
        rpt gen_tac >> strip_tac >>
-       `id + 4 + 5 <> id /\ id + 4 + 5 <> id + 3` by decide_tac >>
-       `FLOOKUP s.vs_allocas (id + 4 + 5) = SOME (z, n)` by metis_tac[] >>
+       `id + 4 + 6 <> id /\ id + 4 + 6 <> id + 3` by decide_tac >>
+       `FLOOKUP s.vs_allocas (id + 4 + 6) = SOME (z, n)` by metis_tac[] >>
        `n = 32 /\ z + n <= s.vs_alloca_next` by
          metis_tac[alloca_next_valid_def, pairTheory.SND] >>
        `z + 32 <= TP \/ TP + 32 <= z` by

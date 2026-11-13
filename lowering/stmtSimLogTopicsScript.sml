@@ -51,6 +51,17 @@ Proof
   first_x_assum drule >> strip_tac >> pairarg_tac >> gvs[]
 QED
 
+Theorem log_split_data_every:
+  !xs flags. LENGTH flags = LENGTH xs /\ EVERY P xs ==>
+    EVERY P (SND (split_log_ops xs flags))
+Proof
+  Induct >- (Cases_on `flags` >> simp[split_log_ops_def]) >>
+  gen_tac >> PairCases_on `h` >> Cases_on `flags` >> simp[] >>
+  rename1 `split_log_ops _ (flag::flags)` >> Cases_on `flag` >>
+  simp[split_log_ops_def] >> rpt strip_tac >> pairarg_tac >> gvs[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
 Theorem split_log_ops_data_rel:
   !xs vs flags. LIST_REL P xs vs /\ LENGTH flags = LENGTH xs ==>
     LIST_REL P (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)
@@ -479,6 +490,7 @@ Theorem compile_split_log_topics_run:
     LIST_REL (log_arg_rel cenv cx sa sb es t)
       (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
     wb_frame cenv es es sm s t /\
+    (t with vs_vars := s.vs_vars) = s /\
     EVERY (\op. (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) ops
 Proof
   strip_tac >>

@@ -6,7 +6,7 @@ Ancestors bodyPtrStructLitUniformEndpoint bodyPtrMakeArrayConsSource
   bodyPtrMakeArrayConsInvariant
 
 Theorem structlit_uniform_marked_cons_outcome:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
@@ -30,11 +30,11 @@ Theorem structlit_uniform_marked_cons_outcome:
     ptr_buf_ok ce e arg G t) /\
   (!tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce e p.ptr_operand G t) /\
-  ghost_kept ce es si G0 tn0 s0 G tn ==>
+  ghost_kept ce es si G0 tn0 s0 G tn /\ (pure ==> ~expr_has_effect e) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (read_result cx raw) (ee,t,G,tn)
     (\res ee H tm z. ?v. res = INL v /\ value_has_type tv v /\
-      literal_loop_frame ctx func ce cx d root aid addr capacity
+      literal_loop_frame pure ctx func ce cx d root aid addr capacity
         ees fr sf Gf tnf ee sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
       literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z)
     (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
@@ -45,7 +45,7 @@ Proof
   drule literal_marked_child_materialises >> simp[] >>
   disch_then drule_all >> strip_tac >>
   qmatch_asmsub_abbrev_tac `eval_expr cx e marked = _` >>
-  `literal_loop_frame ctx func ce cx d root aid addr capacity
+  `literal_loop_frame pure ctx func ce cx d root aid addr capacity
      ees fr sf Gf tnf marked si G0 tn0 s0 cells off` by
     (gvs[Abbr `marked`, literal_loop_frame_def, ghost_inv_def, ghost_kept_def,
        exprSimWordArgsTheory.wb_frame_gas_obs] >> metis_tac[]) >>
@@ -62,7 +62,7 @@ Proof
      simp[gas_marked_exec_ptr_def] >>
      metis_tac[gas_path_ptr_erase, gas_path_normal]) >>
   drule_at (Pat `eval_expr _ _ _ = _`) structlit_uniform_cons_endpoint >>
-  disch_then (drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
   simp[] >> disch_then (drule_at (Pat `ptr_vv_ok _ _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[] >>

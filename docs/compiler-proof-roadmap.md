@@ -178,9 +178,17 @@ successful empty result. Nonzero value or another precompile is ordinary.
 **Gas and observations:** entry `cc_gas = 0` and `vs_gas_readings = gas_readings es`.
 Venom GAS and assembly GAS consume frame-local readings, returning zero on
 exhaustion. `unitShapeDefs.opaque_use_ok` restricts return-address uses. No equality of Venom
-GAS with EVM readings, `msg.gas`/`gas=` guarantee or sufficient-gas existential
-is claimed. The conclusion is actual `run_call` and frame OutOfGas /
-StackOverflow, or `call_result_rel`.
+GAS with EVM readings or `msg.gas`/`gas=` guarantee is claimed. The conclusion
+is actual `run_call` and frame OutOfGas / StackOverflow, or `call_result_rel`.
+Sufficient gas is the companion theorem `vyper_call_gas_sufficient`
+(`lowering/e2eGasSufficientTopScript.sml`): under the call theorem's hypotheses,
+some gas `g` exists such that with any `g' >= g` more gas for the frame, the
+run exists, and, provided the outcomes of that run's call trace are
+storage-valid (`call_outcomes_storage_ok`) and none of its source observations
+is exempt (`~source_exempt`), if the frame runs out of gas then it reaches a
+`RETURNDATACOPY` instruction (`frame_inst_at`). It composes the planned stage bounds S1b
+(`lower_vyper_runtime_unit_run_bounded`), S6b
+(`run_venom_pipeline_run_bounded`) and S7g (`codegen_gas_sufficient`).
 
 On success the result relates `tx_return_bytes`, accounts after EVM pending
 deletions and transient storage modulo dead target storage, ordered concrete logs
@@ -204,7 +212,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | Key | Decision / rejected alternative | Current implementation and explicit deviation or limit | Future owner |
 |---|---|---|---|
 | D1 | Full outcome oracle; requests success-only | `extCallOracle` records and source SOME/Venom/asm call adoption; `call_result_rel` compares filtered successful requests via `request_agree`. The observer sets `cr_gas` to `NONE`; source gas observations are existential and not tied to EVM readings. | 2.1 trace / 7 callee producer |
-| D2 | Resource disjunction, not existential sufficient gas | `frame_resource_starved` is OutOfGas/StackOverflow; a starved computed precompile is an oracle outcome. No gas-bound proof. | 2.1 / 4 |
+| D2 | Resource disjunction, not existential sufficient gas | `frame_resource_starved` is OutOfGas/StackOverflow; a starved computed precompile is an oracle outcome. The gas bound is the separate companion `vyper_call_gas_sufficient`. | 2.1 / 4 |
 | D3 | Frame-local GAS readings | Venom `exec_gas` and `asm_gas` consume readings, zero on exhaustion; entry uses `gas_readings es`. Source observations in the result are existential and not yet tied to EVM readings. | 2.1 / 4.2 |
 | D4 | Compute value-zero precompiles 1/2/6/7's data, take their success from the oracle | `precompile_result`, `take_outcome`, `precompile_call_success`, request filter `call_requests`; helper purity is proved, EVM purity bridge is deferred. | 2.1 |
 | D5 | One evaluator NONE/SOME, not duplicate evaluator or unchecked accounts | Source `evaluation_state.outcomes/requests`, `take_call_outcome` account guard; full triples at call/deploy entry, two-argument initializer retained. Existing storage/type proof guards remain conditional; no universal storage validator. | 6 / 7 |
@@ -499,8 +507,9 @@ Remaining work, roughly in dependency order (all future):
    outcomes; align CALL/STATICCALL requests and complete atomic callee outcomes,
    short writes and static preservation. Lift non-GAS/no-call/single-frame
    interfaces to the actual S7 frame contract. CREATE is excluded here; source
-   callee equivalence is Milestone7. Quantitative gas bounds, if wanted, are a
-   separate theorem, not required by S7's resource disjunction.
+   callee equivalence is Milestone7. The gas bound is a
+   separate admission, S7g `codegen_gas_sufficient`, not required by S7's
+   resource disjunction.
 4. **`codegen_correct`**, from the pieces above. Reuse proved
    `initial_state_bridge`, `block_insts_sim` and `terminal_asm_evm_final` only
    within their actual scopes; they do not already supply the new frame/trace
@@ -511,7 +520,9 @@ Remaining work, roughly in dependency order (all future):
 **Owner: Milestone 5 / vyperLoweringCorrect S2/S3 and o1PipelineCorrect S5.**
 These producers exist as ADMITTED statements; this milestone proves them.
 Actual memory API is
-[unitTransformDefs](../venom/compiler/unitTransformDefsScript.sml).
+[unitTransformDefs](../venom/compiler/unitTransformDefsScript.sml), not the
+older compat `lowering_memory_safe` interface, which was deleted: its proof
+was a `cheat`, and it would not have established S3's raw-unit contract.
 
 | Handoff | Exact current input/contract | Concrete deferred proof |
 |---|---|---|

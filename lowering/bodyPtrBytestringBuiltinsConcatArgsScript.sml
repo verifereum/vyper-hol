@@ -29,6 +29,75 @@ Proof
        cj 1 compile_expr_ci_mono]
 QED
 
+(* The pure frame of a Concat operand list composes from the head's
+   pure_frame, the head copy's frame outside the two buffers, and the tail's. *)
+Theorem concat_args_pure_compose[local]:
+  !cenv func es sa s0 t t2 t' es1 s2 B bsz ow.
+  pure_frame cenv func es sa s0 t /\
+  (!p n. (p + n <= B \/ B + bsz <= p) /\ (p + n <= w2n ow \/ w2n ow + 64 <= p) ==>
+     mem_bytes_at p n t2.vs_memory = mem_bytes_at p n t.vs_memory) /\
+  (!aid a. FLOOKUP t.vs_allocas aid = SOME a ==> FLOOKUP t'.vs_allocas aid = SOME a) /\
+  (!name lb lsz. local_region cenv es.scopes s0 name lb lsz ==>
+     (B+bsz <= lb \/ lb+lsz <= B) /\ (w2n ow+64 <= lb \/ lb+lsz <= w2n ow)) /\
+  (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+     local_region cenv es1.scopes t2 n lb lsz) /\
+  sa.cs_next_id <= s2.cs_next_id /\
+  (!n lb lsz. local_region cenv es1.scopes t2 n lb lsz ==>
+     mem_bytes_at lb lsz t'.vs_memory = mem_bytes_at lb lsz t2.vs_memory) /\
+  (!p n. (n + p <= B \/ B + bsz <= p) /\ (n + p <= w2n ow \/ w2n ow + 64 <= p) /\
+     (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+        s2.cs_next_id <= inst.inst_id /\
+        FLOOKUP t'.vs_allocas inst.inst_id = SOME (b,sz) ==>
+        regions_disjoint p n b sz) ==>
+     mem_bytes_at p n t'.vs_memory = mem_bytes_at p n t2.vs_memory) ==>
+  (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+     mem_bytes_at lb lsz t'.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+  !p n. (n + p <= B \/ B + bsz <= p) /\ (n + p <= w2n ow \/ w2n ow + 64 <= p) /\
+    (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+       sa.cs_next_id <= inst.inst_id /\
+       FLOOKUP t'.vs_allocas inst.inst_id = SOME (b,sz) ==>
+       regions_disjoint p n b sz) ==>
+    mem_bytes_at p n t'.vs_memory = mem_bytes_at p n s0.vs_memory
+Proof
+  rpt gen_tac >> rewrite_tac[pure_frame_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> conj_tac
+  >- (qx_genl_tac [`nm`,`lb`,`lsz`] >> strip_tac >>
+      `mem_bytes_at lb lsz t.vs_memory = mem_bytes_at lb lsz s0.vs_memory` by
+        (qpat_x_assum `!n b sz. local_region _ _ s0 _ _ _ ==>
+                         mem_bytes_at _ _ t.vs_memory = _` irule >>
+         qexists_tac `nm` >> first_assum ACCEPT_TAC) >>
+      `mem_bytes_at lb lsz t2.vs_memory = mem_bytes_at lb lsz t.vs_memory` by
+        (qpat_x_assum `!p n. _ /\ _ ==> mem_bytes_at p n t2.vs_memory = _` irule >>
+         qpat_x_assum `!name lb lsz. local_region _ _ s0 _ _ _ ==> _ /\ _` drule >>
+         decide_tac) >>
+      `mem_bytes_at lb lsz t'.vs_memory = mem_bytes_at lb lsz t2.vs_memory` by
+        (qpat_x_assum `!n lb lsz. local_region _ _ t2 _ _ _ ==> _` irule >>
+         qexists_tac `nm` >>
+         qpat_x_assum `!n lb lsz. local_region _ _ s0 _ _ _ ==>
+                         local_region _ _ _ _ _ _` irule >>
+         first_assum ACCEPT_TAC) >>
+      simp[]) >>
+  qx_genl_tac [`off`,`len`] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `mem_bytes_at off len t'.vs_memory = mem_bytes_at off len t2.vs_memory` by
+    (qpat_x_assum `!p n. _ /\ _ /\ _ ==> mem_bytes_at p n t'.vs_memory = _` irule >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     rpt strip_tac >>
+     qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+     qexists_tac `inst` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     decide_tac) >>
+  `mem_bytes_at off len t2.vs_memory = mem_bytes_at off len t.vs_memory` by
+    (qpat_x_assum `!p n. _ /\ _ ==> mem_bytes_at p n t2.vs_memory = _` irule >>
+     conj_tac >> decide_tac) >>
+  `mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory` by
+    (qpat_x_assum `!off len. _ ==> mem_bytes_at off len t.vs_memory = _` irule >>
+     rpt strip_tac >>
+     qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+     qexists_tac `inst` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qpat_x_assum `!aid a. FLOOKUP t.vs_allocas aid = SOME a ==> _` irule >>
+     first_assum ACCEPT_TAC) >>
+  simp[]
+QED
+
 Theorem concat_args_sim_ptr:
   !args P k ctx func cenv cx env es sa sb s0 dv ov ow binst B bsz oinst G0 tn0 PG tops d.
   compile_concat compile_expr cenv args (Var dv)
@@ -75,7 +144,17 @@ Theorem concat_args_sim_ptr:
         (p+n <= B \/ B+bsz <= p) /\ (p+n <= w2n ow \/ w2n ow+64 <= p) /\
         (!name lo sz. local_region cenv es.scopes s0 name lo sz ==> p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept cenv es ee s0 t /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+      locals_kept cenv es ee s0 t /\
+      (~EXISTS expr_has_effect args ==>
+         (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+            mem_bytes_at lb lsz t.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+         !p n. (p+n <= B \/ B+bsz <= p) /\ (p+n <= w2n ow \/ w2n ow+64 <= p) /\
+           (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+              sa.cs_next_id <= inst.inst_id /\
+              FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
+              regions_disjoint p n b sz) ==>
+           mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+      MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       ghost_inv d cenv cx ee G tn t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
       ptr_covers G tn dv t (bsz-32) /\ ptr_covers G tn ov t 32 /\ ~t.vs_halted /\
       (!i. B+32 <= i /\ i < B+32+k+LENGTH (FLAT (MAP (\v. case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) vs)) ==> i NOTIN tn.t_mem) /\
@@ -165,6 +244,13 @@ Resume concat_args_sim_ptr[tail]:
             `P + concat_payload_capacity (expr_type e)`, `B`] >>
   qpat_x_assum `!P k ctx func cenv cx env es sa sb s0 dv ov ow binst B bsz oinst G0 tn0 PG tops d. _`
     kall_tac >>
+  CONV_TAC (REPEATC (REWR_CONV CONJ_ASSOC)) >>
+  reverse conj_tac
+  >- (rpt gen_tac >> BETA_TAC >> strip_tac >> qexists_tac `exc` >>
+      qpat_x_assum `res = INR exc` SUBST1_TAC >>
+      conj_tac >- simp[NoAsms] >> first_assum ACCEPT_TAC) >>
+  reverse conj_tac >- suspend "compose" >>
+  CONV_TAC (REPEATC (REWR_CONV (GSYM CONJ_ASSOC))) >>
   simp[] >>
   `sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id` by
     (qpat_x_assum `ci_mono sa s1` mp_tac >>
@@ -182,21 +268,22 @@ Resume concat_args_sim_ptr[tail]:
                simp[concat_data_bound_def] >>
                Cases_on `is_bytestring_type (expr_type e)` >> simp[MAX_ALT]) >>
   conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  suspend "compose"
+  metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
 
 Resume concat_args_sim_ptr[compose]:
-  conj_tac >- (rpt gen_tac >> strip_tac >>
-              qpat_x_assum `res = INL vs` SUBST1_TAC >>
-              qexists_tac `v::vs` >> simp[] >>
-              qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-                (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-              conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono, ci_mono_def] >>
-              conj_tac >- metis_tac[] >>
-              suspend "frames") >>
+  `sa.cs_next_var <= s2.cs_next_var /\ sa.cs_next_id <= s2.cs_next_id` by
+    (qpat_assum `ci_mono sa s1` mp_tac >> qpat_assum `ci_mono s1 s2` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[ci_mono_def]) >>
+  simp[] >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `res = INR exc` SUBST1_TAC >> simp[]
+  qpat_x_assum `res = INL vs` SUBST1_TAC >>
+  qexists_tac `v::vs` >> simp[] >>
+  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono, ci_mono_def] >>
+  conj_tac >- metis_tac[] >>
+  suspend "frames"
 QED
 
 Resume concat_args_sim_ptr[frames]:
@@ -252,6 +339,7 @@ Resume concat_args_sim_ptr[locals_ghost]:
       qpat_assum `locals_kept cenv es _ s0 t2` (irule_at (Pat `locals_kept _ _ _ _ _`)) >>
       qpat_assum `locals_kept cenv _ _ t2 t'` (irule_at (Pat `locals_kept _ _ _ _ _`)) >>
       simp[] >> metis_tac[]) >>
+  conj_tac >- suspend "pure" >>
   `ghost_kept cenv es sa G0 tn0 s0 Gf tnf` by
     (irule ghost_kept_locals_trans >>
      qpat_assum `ghost_kept cenv es sa G0 tn0 s0 G tn`
@@ -269,6 +357,26 @@ Resume concat_args_sim_ptr[locals_ghost]:
       qpat_assum `ee = ee0 with gas_obs := []` mp_tac >>
       rpt (pop_assum kall_tac) >> simp[] >> metis_tac[]) >>
   metis_tac[freshWritesTheory.not_fresh_at_mono]
+QED
+
+Resume concat_args_sim_ptr[pure]:
+  strip_tac >>
+  `pure_frame cenv func es sa s0 t` by
+    (qpat_x_assum `~expr_has_effect e ==> _` irule >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `EVERY _ args ==> _` mp_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `sa.cs_next_id <= s2.cs_next_id` by
+    (qpat_assum `ci_mono sa s1` mp_tac >> qpat_assum `ci_mono s1 s2` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[ci_mono_def]) >>
+  `!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+     local_region cenv ee0.scopes t2 n lb lsz` by
+    (rpt strip_tac >>
+     qpat_assum `!n b sz. local_region cenv ee.scopes t2 _ _ _ <=> _` mp_tac >>
+     qpat_assum `ee = _` (fn th => rewrite_tac[th]) >> simp[]) >>
+  qspecl_then [`cenv`,`func`,`es`,`sa`,`s0`,`t`,`t2`,`t'`,`ee0`,`s2`,`B`,`bsz`,`ow`]
+    mp_tac concat_args_pure_compose >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED
 
 Finalise concat_args_sim_ptr

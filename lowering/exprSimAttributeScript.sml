@@ -466,7 +466,10 @@ Proof
       gvs[storage_holds_def])
   >~ [`vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _`]
   >- (simp[expr_type_def] >> irule attr_vv_at_field >> simp[] >>
-      metis_tac[])
+      (conj_tac
+      >- (qexistsl_tac [`ctx`, `func`] >> first_assum ACCEPT_TAC) >>
+      qexistsl_tac [`fld`, `fs`, `sid`, `tv`, `vals`] >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]))
   >~ [`storage_read_live`]
   >- (strip_tac >>
       qpat_x_assum `~expr_has_effect obj ==> vv_storage_live _ _ _ _` mp_tac >>
@@ -485,7 +488,8 @@ Proof
           contextTheory.vv_operand_def, attr_offset_def] >>
       rpt strip_tac >> gvs[] >>
       irule accountsRelPropsTheory.storage_read_live_field >>
-      metis_tac[])
+      (qexistsl_tac [`fs`, `fld`] >> conj_tac >>
+        first_assum MATCH_ACCEPT_TAC))
   >> first_assum ACCEPT_TAC
 QED
 
@@ -571,14 +575,30 @@ Proof
   >- (simp[select_result_def, extend_place_def, place_type_value_def,
            read_place_def, get_scopes_def, bind_def, ignore_bind_def,
            lift_option_type_def, lift_sum_def, return_def, raise_def] >>
-      rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
-      rpt strip_tac >> gvs[]) >>
+      Cases_on `lookup_scopes id ee.scopes` >> simp[return_def, raise_def] >>
+      rename1 `subscripts_type entry.type path` >>
+      Cases_on `subscripts_type entry.type path` >>
+      simp[return_def, raise_def] >>
+      Cases_on `read_memory_path entry path` >> simp[return_def, raise_def] >>
+      rename1 `evaluate_subscripts tv v [AttrSubscript fld]` >>
+      Cases_on `evaluate_subscripts tv v [AttrSubscript fld]` >>
+      simp[return_def, raise_def]) >>
   simp[select_result_def, extend_place_def, place_type_value_def,
        read_place_def, get_immutables_def, get_address_immutables_def,
        bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
        return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
-  rpt strip_tac >> gvs[]
+  Cases_on `ALOOKUP ee.immutables cx.txn.target` >>
+  simp[return_def, raise_def] >>
+  rename1 `FLOOKUP (get_source_immutables src imms) id` >>
+  Cases_on `FLOOKUP (get_source_immutables src imms) id` >>
+  simp[return_def, raise_def] >>
+  rename1 `subscripts_type (FST tva) path` >>
+  Cases_on `subscripts_type (FST tva) path` >> simp[return_def, raise_def] >>
+  Cases_on `evaluate_subscripts (FST tva) (SND tva) path` >>
+  simp[return_def, raise_def] >>
+  rename1 `evaluate_subscripts tv v [AttrSubscript fld]` >>
+  Cases_on `evaluate_subscripts tv v [AttrSubscript fld]` >>
+  simp[return_def, raise_def]
 QED
 
 Theorem attr_operand_admissible[local]:

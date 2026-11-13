@@ -2,7 +2,7 @@
 
 Theory fmpLowerProps
 Ancestors
-  fmpLowerDefs fmpAnalysisProps fmpWfProps venomExecProps
+  venomFnInstsProofs fmpLowerDefs fmpAnalysisProps fmpWfProps venomExecProps
 
 Theorem MEM_fmp_plan_to_alist:
   MEM (p,target) (fmp_plan_to_alist fn plan) <=>
@@ -248,14 +248,6 @@ Proof
   gvs[listTheory.EVERY_MEM]
 QED
 
-Theorem fmp_fn_insts_blocks_mem:
-  MEM inst (fn_insts_blocks blocks) ==>
-  ?bb. MEM bb blocks /\ MEM inst bb.bb_instructions
-Proof
-  Induct_on `blocks` >>
-  simp[venomInstTheory.fn_insts_blocks_def] >> metis_tac[]
-QED
-
 Theorem fmp_blocks_every_no_raw:
   EVERY (\bb. EVERY (\i. ~is_raw_fmp_opcode i.inst_opcode)
                      bb.bb_instructions) blocks ==>
@@ -263,7 +255,7 @@ Theorem fmp_blocks_every_no_raw:
 Proof
   simp[venomInstTheory.no_raw_fmp_ops_def,
        venomInstTheory.fn_insts_def, listTheory.EVERY_MEM] >>
-  metis_tac[fmp_fn_insts_blocks_mem]
+  metis_tac[mem_fn_insts_blocks_rev]
 QED
 
 Theorem fmp_option_every_no_raw:

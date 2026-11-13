@@ -6,7 +6,7 @@ Ancestors gasSummaryComposePtr gasOutcomeInitialObsPtr fragGasPathPtr
 Libs monadsyntax
 
 Theorem for_values_prefix_outcome_ptr:
-  (!gs. source (es with gas_obs := gs) = (INL (vs:value list), es with gas_obs := gs)) /\
+  (!gs. source (es with gas_obs := gs) = (INL (vs:eval_result list), es with gas_obs := gs)) /\
   ~s.vs_halted /\
   gas_outcome_ptr D tops (ctx,func) PG (next vs) (es with gas_obs := [],s,G,tn) Q R ==>
   gas_outcome_ptr D tops (ctx,func) PG (bind source next) (es,s,G,tn) Q R
@@ -20,7 +20,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   rpt gen_tac >> strip_tac >>
   simp[ignore_bind_def, bind_assoc] >>
-  drule gas_exempt_cert_bind_values >>
+  drule gas_exempt_cert_bind_results >>
   disch_then (qspecl_then [`tops`, `\v. bind (next v) (\x. return ())`] mp_tac) >>
   fs[ignore_bind_def] >> disch_then drule >> simp[]
 QED

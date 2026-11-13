@@ -312,7 +312,7 @@ Theorem for_array_round_ptr:
          cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x) /\
   for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
     cond_lbl st s0 G0 tn0 d name snapshot k es G tn s /\
-  gas_admissible (eval_for cx tv id stmts (DROP k vs)) (stmt_res_ok lctx) es ==>
+  gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (do push_scope_with_var id tv (EL k vs);
         finally (try (do eval_stmts cx stmts; return F od)

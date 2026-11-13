@@ -38,6 +38,37 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+(* PORT_ADMISSION: SEQ-3208. 0f7fb5e29/5e4c70ab0 compile a struct literal at its
+   declared field types (get_struct_fields), which may be wider than its
+   values' own types (arg_type_fits); structlit_uniform_allocated_fields_outcome_ptr
+   takes exact field types only. Pointer twin for a struct literal with a field
+   whose declared type isn't its value's expr_type; body_struct_lit_uniform_ptr
+   proves the exact case. *)
+Theorem body_struct_lit_uniform_widened_ptr:
+  !cx v7 src_id_opt id kes d PG tops ctx func cenv env ty es.
+    body_exprs_ptr_ok cx (MAP SND kes) /\
+    body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (StructLit v7 (src_id_opt,id) kes) es /\
+    EVERY (\e. post_value_type cenv e = expr_type e) (MAP SND kes) /\
+    ~EVERY (\(name,e). ALOOKUP (get_struct_fields cenv.ce_struct_fields
+       (nsid_to_string (src_id_opt,id))) name =
+       SOME (expr_type e,type_memory_bytes cenv (expr_type e))) kes ==>
+    expr_vv_sim_ptr d ctx PG func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es
+Proof
+  cheat
+QED
+
+Theorem struct_lookup_types_exact[local]:
+  !ts kes.
+    LIST_REL (\t (name,e). ALOOKUP gfs name = SOME (t,type_memory_bytes ce t)) ts kes /\
+    EVERY (\(name,e). ALOOKUP gfs name =
+      SOME (expr_type e,type_memory_bytes ce (expr_type e))) kes ==>
+    ts = MAP expr_type (MAP SND kes)
+Proof
+  Induct >> Cases_on `kes` >> simp[] >> rpt strip_tac >>
+  Cases_on `h` >> gvs[]
+QED
+
 (* A struct literal lowers like a tuple literal (bodyPtrMakeArray's
    literal_tuple_vv_sim_ptr on the s3-ptr tip): allocate the struct's
    buffer, then for each field compile the element, add the field's
@@ -70,10 +101,18 @@ Theorem body_struct_lit_uniform_ptr:
     EVERY (\e. post_value_type cenv e = expr_type e) (MAP SND kes) ==>
     expr_vv_sim_ptr d ctx PG func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es
 Proof
-  rpt gen_tac >> strip_tac >> rw[expr_vv_sim_ptr_def] >>
+  rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `EVERY (\(name,e). ALOOKUP (get_struct_fields cenv.ce_struct_fields
+       (nsid_to_string (src_id_opt,id))) name =
+       SOME (expr_type e,type_memory_bytes cenv (expr_type e))) kes`)
+  >- (drule_all body_struct_lit_uniform_widened_ptr >> simp[]) >>
+  rw[expr_vv_sim_ptr_def] >>
   drule compile_struct_literal_inv >> strip_tac >> gvs[] >>
   drule struct_literal_lookup_types >> strip_tac >>
   drule struct_literal_evaluated_layout >> strip_tac >>
+  drule_all struct_lookup_types_exact >> strip_tac >>
+  `OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type (MAP SND kes)) = SOME tvs` by
+    metis_tac[] >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   `!e st. MEM e (MAP SND kes) /\ expr_sim_inv cenv cx env st ==>
     expr_body_pre cenv cx env e st` by metis_tac[expr_body_pre_struct_field] >>
@@ -85,7 +124,9 @@ Proof
   `compile_alloc_buffer (type_memory_size_list tvs) sa = (ba,sm)` by metis_tac[] >>
   fs[EVERY_MEM] >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`)
-    structlit_uniform_allocated_fields_outcome_ptr >>
+    (REWRITE_RULE []
+      (Q.INST [`pure` |-> `~EXISTS (expr_has_effect o SND) (fields : (string # expr) list)`]
+        (SPEC_ALL structlit_uniform_allocated_fields_outcome_ptr))) >>
   simp[EVERY_MEM] >> disch_then drule_all >>
   disch_then (qspec_then `PG` strip_assume_tac) >> gvs[] >>
   dxrule structlit_uniform_outcome_source_run >> strip_tac >>
@@ -109,12 +150,15 @@ Proof
          goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
          simp[expr_type_def, read_result_def, return_def] >>
          goal_assum (drule_at Any) >> simp[]) >>
-      drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+      drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
         (Q.INST [`e` |-> `StructLit (StructT (src_id_opt,id)) (src_id_opt,id) kes`]
           structlit_uniform_endpoint_posts) >>
       simp[expr_type_def, lowered_value_type_def, post_value_type_def, type_memory_bytes_def] >>
       disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >> simp[] >>
-      disch_then drule_all >> disch_then (qspec_then `kes` mp_tac) >>
+      disch_then (qspecl_then [`vs`, `kes`] mp_tac) >>
+      impl_tac
+      >- (rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC
+          >- first_assum ACCEPT_TAC >> simp[EVERY_MEM]) >>
       strip_tac >> simp[contextTheory.base_ptr_def] >>
       irule structlit_uniform_pointer_posts_cong >>
       goal_assum (drule_at Any) >> simp[contextTheory.base_ptr_def, contextTheory.mk_ptr_def]) >>

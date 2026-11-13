@@ -54,7 +54,7 @@ Proof
 QED
 
 Theorem finite_copy_step_storage_state_frame:
-  MEM inst.inst_opcode [MLOAD; ADD; AND; MSTORE; MCOPY] /\
+  MEM inst.inst_opcode [MLOAD; NOT; ADD; AND; MSTORE; MCOPY] /\
   step_inst_base inst s = OK t ==>
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient
@@ -62,14 +62,14 @@ Proof
   simp[] >> strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
-  simp[exec_read1_def, exec_pure2_def, exec_write2_def,
+  simp[exec_read1_def, exec_pure1_def, exec_pure2_def, exec_write2_def,
        AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   simp[update_var_def, mstore_def, mcopy_def, write_memory_with_expansion_def]
 QED
 
 Theorem finite_copy_run_storage_state_frame:
   !is s t.
-  EVERY (\i. MEM i.inst_opcode [MLOAD; ADD; AND; MSTORE; MCOPY]) is /\
+  EVERY (\i. MEM i.inst_opcode [MLOAD; NOT; ADD; AND; MSTORE; MCOPY]) is /\
   run_inst_seq is s = OK t ==>
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient
@@ -134,18 +134,20 @@ QED
 
 Theorem bytes_copy_checked_exterior_taint_frame:
   pre = [mk_inst id MLOAD [Var src] [t0];
-    mk_inst (id+1) ADD [Var t0; Lit 31w] [t1];
-    mk_inst (id+2) AND [Var t1; Lit (i2w (-32))] [t2];
-    mk_inst (id+3) ADD [Var t2; Lit 32w] [t3]] /\
+    mk_inst (id+1) NOT [Lit 31w] [m];
+    mk_inst (id+2) ADD [Var t0; Lit 31w] [t1];
+    mk_inst (id+3) AND [Var t1; Var m] [t2];
+    mk_inst (id+4) ADD [Var t2; Lit 32w] [t3]] /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   ptr_covers G tn src s 32 /\
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
   ~ctx_has_dalloca ctx /\
-  src <> t0 /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
-  dst <> t0 /\ dst <> t1 /\ dst <> t2 /\ dst <> t3 /\
-  w2n (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) <= capacity /\
+  src <> t0 /\ src <> m /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
+  dst <> t0 /\ dst <> m /\ dst <> t1 /\ dst <> t2 /\ dst <> t3 /\
+  t0 <> m /\ m <> t1 /\
+  w2n (((mload (w2n a) s + 31w) && ~31w) + 32w) <= capacity /\
   inst_seq_ptr D 0 ctx fn PG G tn
-    (pre ++ [mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []]) s gf tf ==>
+    (pre ++ [mk_inst (id+5) MCOPY [Var dst; Var src; Var t3] []]) s gf tf ==>
   !i. i < w2n b \/ w2n b + capacity <= i ==>
     (i IN tf.t_mem <=> i IN tn.t_mem)
 Proof
@@ -166,7 +168,7 @@ QED
 (* Storage and immutable frames are independent of the payload theorem and
    therefore apply to exactly the caller's checked endpoint witnesses. *)
 Theorem finite_copy_endpoint_frames:
-  EVERY (\i. MEM i.inst_opcode [MLOAD; ADD; AND; MSTORE; MCOPY]) is /\
+  EVERY (\i. MEM i.inst_opcode [MLOAD; NOT; ADD; AND; MSTORE; MCOPY]) is /\
   run_inst_seq is s = OK sf /\
   inst_seq_ptr D lo ctx fn PG G tn is s gf tf ==>
   tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
@@ -196,7 +198,7 @@ Proof
   Cases_on `n = 0`
   >- gvs[inst_seq_ptr_def, run_inst_seq_def] >>
   gvs[] >>
-  `EVERY (\i. MEM i.inst_opcode [MLOAD; ADD; AND; MSTORE; MCOPY])
+  `EVERY (\i. MEM i.inst_opcode [MLOAD; NOT; ADD; AND; MSTORE; MCOPY])
     [mk_inst sa.cs_next_id MCOPY [Var dst; Var src; Lit (n2w n)] []]` by
     simp[mk_inst_def] >>
   drule_all finite_copy_endpoint_frames >> strip_tac >> simp[] >>
@@ -213,7 +215,7 @@ Theorem compile_bytes_copy_endpoint_frames:
   ptr_covers G tn src s 32 /\
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
   ~ctx_has_dalloca ctx /\
-  w2n (((mload (w2n a) s + 31w) && i2w (-32)) + 32w) <= capacity /\
+  w2n (((mload (w2n a) s + 31w) && ~31w) + 32w) <= capacity /\
   run_inst_seq (emitted_insts sa sb) s = OK sf /\
   inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s gf tf ==>
   (!i. i < w2n b \/ w2n b+capacity <= i ==>
@@ -223,11 +225,12 @@ Theorem compile_bytes_copy_endpoint_frames:
   sf.vs_transient = s.vs_transient
 Proof
   strip_tac >> drule for_bytes_copy_code >> strip_tac >>
-  `EVERY (\i. MEM i.inst_opcode [MLOAD; ADD; AND; MSTORE; MCOPY])
+  `EVERY (\i. MEM i.inst_opcode [MLOAD; NOT; ADD; AND; MSTORE; MCOPY])
     (emitted_insts sa sb)` by simp[mk_inst_def] >>
   drule_all finite_copy_endpoint_frames >> strip_tac >> simp[] >>
-  `src <> t0 /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
-   dst <> t0 /\ dst <> t1 /\ dst <> t2 /\ dst <> t3` by metis_tac[] >>
+  `src <> t0 /\ src <> m /\ src <> t1 /\ src <> t2 /\ src <> t3 /\
+   dst <> t0 /\ dst <> m /\ dst <> t1 /\ dst <> t2 /\ dst <> t3` by metis_tac[] >>
+  `t0 <> m /\ m <> t1` by fs[ALL_DISTINCT, MEM] >>
   gen_tac >> disch_tac >> irule bytes_copy_checked_exterior_taint_frame >>
   qpat_x_assum `emitted_insts _ _ = _` SUBST_ALL_TAC >>
   simp_tac bool_ss [APPEND] >>
@@ -250,7 +253,7 @@ Theorem word_copy_endpoint_frames:
   sf.vs_transient = s.vs_transient
 Proof
   strip_tac >>
-  `EVERY (\i. MEM i.inst_opcode [MLOAD; ADD; AND; MSTORE; MCOPY])
+  `EVERY (\i. MEM i.inst_opcode [MLOAD; NOT; ADD; AND; MSTORE; MCOPY])
     [mk_inst id MLOAD [Var src] [tmp];
      mk_inst (id+1) MSTORE [Var dst; Var tmp] []]` by simp[mk_inst_def] >>
   drule_all finite_copy_endpoint_frames >> strip_tac >> simp[] >>

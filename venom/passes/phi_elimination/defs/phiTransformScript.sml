@@ -337,38 +337,6 @@ Proof
   gvs[is_terminator_def]
 QED
 
-Triviality transform_inst_pseudo_phi:
-  !dfg inst.
-    is_pseudo (transform_inst dfg inst).inst_opcode /\
-    inst.inst_opcode = PHI ==>
-    (transform_inst dfg inst).inst_opcode = PHI
-Proof
-  rpt strip_tac >>
-  fs[transform_inst_pseudo_iff, transform_inst_phi_iff]
-QED
-
-Triviality phi_prefix_tail:
-  !h t.
-    (!i j. i < j /\ j < LENGTH (h::t) /\ (EL j (h::t)).inst_opcode = PHI ==>
-           (EL i (h::t)).inst_opcode = PHI) ==>
-    (!i j. i < j /\ j < LENGTH t /\ (EL j t).inst_opcode = PHI ==>
-           (EL i t).inst_opcode = PHI)
-Proof
-  rpt strip_tac >>
-  first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]
-QED
-
-Triviality phi_prefix_non_phi_head_tail_no_phi:
-  !h t.
-    h.inst_opcode <> PHI /\
-    (!i j. i < j /\ j < LENGTH (h::t) /\ (EL j (h::t)).inst_opcode = PHI ==>
-           (EL i (h::t)).inst_opcode = PHI) ==>
-    EVERY (\inst. inst.inst_opcode <> PHI) t
-Proof
-  rpt strip_tac >> simp[EVERY_EL] >> rpt strip_tac >>
-  first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]
-QED
-
 Triviality filter_kept_phi_empty_when_no_phi:
   !dfg l.
     EVERY (\inst. inst.inst_opcode <> PHI) l ==>
@@ -414,12 +382,6 @@ Proof
       transform_inst_def, phi_single_origin_def, is_phi_inst_def]
 QED
 
-Triviality terminator_opcode_not_phi:
-  !op. is_terminator op ==> op <> PHI
-Proof
-  Cases >> simp[is_terminator_def]
-QED
-
 Theorem transform_insts_phi_prefix:
   !dfg insts lbl.
     bb_well_formed <| bb_label := lbl; bb_instructions := insts |> ==>
@@ -451,7 +413,7 @@ Proof
            EVERY_MEM, MEM_FILTER] >>
       conj_tac
       >- (rpt strip_tac >> gvs[is_pseudo_def, is_param_opcode_def]) >>
-      rpt strip_tac >> metis_tac[terminator_opcode_not_phi]) >>
+      rpt strip_tac >> metis_tac[is_terminator_not_phi]) >>
   gvs[APPEND_ASSOC] >>
   qspecl_then [`\inst. inst.inst_opcode = PHI`, `phis`,
                `params ++ regulars ++ terms`]
@@ -622,7 +584,7 @@ Proof
           EVERY_MEM, MEM_FILTER] >>
      conj_tac
      >- (rpt strip_tac >> gvs[is_pseudo_def, is_param_opcode_def]) >>
-     rpt strip_tac >> metis_tac[terminator_opcode_not_phi]) >>
+     rpt strip_tac >> metis_tac[is_terminator_not_phi]) >>
   rpt conj_tac
   >- (qpat_x_assum `transform_insts dfg insts = _` (fn th => rewrite_tac[th]) >>
       irule phi_prefix_length_append_no_phi >> simp[])
@@ -758,12 +720,6 @@ Proof
   Cases_on `P h` >> gvs[FILTER, LAST_DEF]
 QED
 
-Triviality terminator_not_phi:
-  !op. is_terminator op ==> op <> PHI
-Proof
-  Cases >> simp[is_terminator_def]
-QED
-
 Theorem transform_insts_last:
   !dfg insts.
     insts <> [] /\
@@ -783,7 +739,7 @@ Proof
     (irule filter_last_when_last_passes >> simp[]) >>
   `transform_inst dfg (LAST insts) = LAST insts` by
     (irule transform_inst_non_phi >>
-     fs[is_phi_inst_def] >> metis_tac[terminator_not_phi]) >>
+     fs[is_phi_inst_def] >> metis_tac[is_terminator_not_phi]) >>
   simp[LAST_APPEND_NOT_NIL]
 QED
 
@@ -849,7 +805,7 @@ Proof
      qspecl_then [`insts'`] mp_tac filter_terminator_singleton >> simp[] >>
      simp[Abbr `insts'`, LAST_MAP] >>
      `transform_inst dfg (LAST insts) = LAST insts` by
-       (irule transform_inst_non_phi >> fs[is_phi_inst_def] >> metis_tac[terminator_not_phi]) >>
+       (irule transform_inst_non_phi >> fs[is_phi_inst_def] >> metis_tac[is_terminator_not_phi]) >>
      simp[]) >>
   qabbrev_tac `prefix = pseudos ++ regulars` >>
   `pseudos ++ regulars ++ terms = prefix ++ [LAST insts]` by
@@ -1134,7 +1090,7 @@ Proof
   `FILTER (\i. is_terminator i.inst_opcode) (MAP (transform_inst dfg) phis) = []` by
     (simp[FILTER_MAP, listTheory.FILTER_EQ_NIL, EVERY_MAP, EVERY_MEM,
           transform_inst_preserves_terminator] >>
-     fs[EVERY_MEM] >> metis_tac[terminator_not_phi]) >>
+     fs[EVERY_MEM] >> metis_tac[is_terminator_not_phi]) >>
   asm_rewrite_tac[transform_insts_def, LET_THM, GSYM APPEND_ASSOC,
                   MAP_APPEND, FILTER_APPEND] >>
   BETA_TAC >> asm_rewrite_tac[FILTER_APPEND] >>

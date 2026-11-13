@@ -8,15 +8,15 @@ Ancestors
 Theorem revert_reason_tail_code:
   fn_has_code sn sb fn /\ sb.cs_current_bb = sn.cs_current_bb /\
   sb.cs_current_insts = sn.cs_current_insts ++
-    (revert_reason_copy id v q op ++ revert_reason_suffix id v b p q) ==>
+    (revert_reason_copy id v q op ++ revert_reason_suffix (id+1) (v+1) b p q) ==>
   ?bb.
     lookup_block sn.cs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX (revert_reason_copy id v q op)
       (DROP (LENGTH sn.cs_current_insts) bb.bb_instructions) /\
-    isPREFIX (revert_reason_suffix id v b p q)
-      (DROP (LENGTH sn.cs_current_insts+5) bb.bb_instructions) /\
-    MEM (mk_inst (id+5) ALLOCA [Lit 32w]
-      [STRING #"%" (toString (v+4))]) (fn_insts fn)
+    isPREFIX (revert_reason_suffix (id+1) (v+1) b p q)
+      (DROP (LENGTH sn.cs_current_insts+6) bb.bb_instructions) /\
+    MEM (mk_inst (id+6) ALLOCA [Lit 32w]
+      [STRING #"%" (toString (v+5))]) (fn_insts fn)
 Proof
   simp[fn_has_code_def] >> strip_tac >>
   gvs[IS_PREFIX_APPEND] >>
@@ -31,7 +31,7 @@ Theorem revert_reason_tail_at_compile_endpoint_ptr:
   fn_has_code sn sb fn /\ sb.cs_current_bb = sn.cs_current_bb /\
   sb.cs_current_insts = sn.cs_current_insts ++
     (revert_reason_copy sn.cs_next_id sn.cs_next_var (Var q) (Var src) ++
-     revert_reason_suffix sn.cs_next_id sn.cs_next_var (Var b) (Var p) (Var q)) /\
+     revert_reason_suffix (sn.cs_next_id+1) (sn.cs_next_var+1) (Var b) (Var p) (Var q)) /\
   s.vs_current_bb = sn.cs_current_bb /\
   s.vs_inst_idx = LENGTH sn.cs_current_insts /\ ~s.vs_halted /\
   not_fresh_at sn b /\ not_fresh_at sn p /\
@@ -47,12 +47,12 @@ Theorem revert_reason_tail_at_compile_endpoint_ptr:
   64+ms < dimword(:256) /\ w2n B+64+ms < dimword(:256) /\
   w2n P+32+ms < dimword(:256) /\
   ~ctx_has_dalloca ctx /\ alloca_inv s /\ alloca_room ctx fn s /\
-  (!a sz. FLOOKUP s.vs_allocas (sn.cs_next_id+5) = SOME (a,sz) ==> sz = 32) /\
-  FLOOKUP s.vs_allocas parent = SOME (w2n Q,ms) /\ parent <> sn.cs_next_id+5 ==>
+  (!a sz. FLOOKUP s.vs_allocas (sn.cs_next_id+6) = SOME (a,sz) ==> sz = 32) /\
+  FLOOKUP s.vs_allocas parent = SOME (w2n Q,ms) /\ parent <> sn.cs_next_id+6 ==>
   ?z Gf tnf. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (Abort Revert_abort z)
 Proof
   strip_tac >> drule_all revert_reason_tail_code >> strip_tac >>
-  `!k. k <= 20 ==>
+  `!k. k <= 22 ==>
     b <> STRING #"%" (toString (sn.cs_next_var+k)) /\
     p <> STRING #"%" (toString (sn.cs_next_var+k)) /\
     q <> STRING #"%" (toString (sn.cs_next_var+k)) /\
@@ -63,8 +63,8 @@ Proof
      asm_rewrite_tac[] >> decide_tac) >>
   `?t z Gf tnf j.
     run_inst_seq (revert_reason_copy sn.cs_next_id sn.cs_next_var (Var q) (Var src)) s = OK t /\
-    run_inst_seq (revert_reason_suffix sn.cs_next_id sn.cs_next_var (Var b) (Var p) (Var q))
-      (t with vs_inst_idx := s.vs_inst_idx+5) = Abort Revert_abort z /\
+    run_inst_seq (revert_reason_suffix (sn.cs_next_id+1) (sn.cs_next_var+1) (Var b) (Var p) (Var q))
+      (t with vs_inst_idx := s.vs_inst_idx+6) = Abort Revert_abort z /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf
       (Abort Revert_abort (z with vs_inst_idx := j))` by
     (irule revert_reason_tail_resources_path_ptr >>

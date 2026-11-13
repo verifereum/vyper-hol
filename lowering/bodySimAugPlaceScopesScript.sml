@@ -56,6 +56,7 @@ QED
 Resume aug_place_pure_scopes_mutual[subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
 QED
@@ -66,17 +67,23 @@ Resume aug_place_pure_scopes_mutual[attribute]:
 QED
 Resume aug_place_pure_scopes_mutual[builtin]:
   rpt strip_tac >>
+  `code_slice_source blt es = NONE` by
+    (Cases_on `code_slice_source blt es` >> simp[] >>
+     rename1 `SOME p` >> PairCases_on `p` >>
+     gvs[code_slice_source_SOME, supportedExprFormsTheory.supported_builtin_form_def]) >>
   Cases_on `blt = Len` >> Cases_on `blt = Env MsgGas` >>
   Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-      assert_def, return_def, raise_def, AllCaseEqs()] >>
+      assert_def, return_def, raise_def, COND_RATOR, lift_option_type_def,
+      vfmTypesTheory.option_CASE_rator,
+      AllCaseEqs()] >>
   imp_res_tac result_array_length_state >>
   imp_res_tac lift_option_type_state >>
   imp_res_tac next_gas_reading_state >>
   imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
   imp_res_tac precompile_call_success_state >> gvs[] >>
   gvs[builtin_args_length_ok_def] >>
-  Cases_on `es` >> gvs[] >> metis_tac[]
+  Cases_on `es` >> gvs[] >> res_tac >> gvs[]
 QED
 Resume aug_place_pure_scopes_mutual[typebuiltin]:
   rpt strip_tac >>
@@ -112,6 +119,7 @@ QED
 Resume aug_place_pure_scopes_mutual[place_subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
 QED
@@ -210,21 +218,29 @@ Proof
 QED
 
 Theorem aug_place_finally_call_scopes[local]:
-  finally f (do pop_function prev;
-    if nr /\ mut <> View /\ mut <> Pure then
-      (case cx.nonreentrant_slot of NONE => return ()
-       | SOME slot => release_nonreentrant_lock cx.txn.target slot)
-    else return () od) s = (r,s') ==> s'.scopes = prev
+  finally_unless_halt (finally f (pop_function prev))
+    (unlock_if_nr cx nr is_view) s = (r,s') ==> s'.scopes = prev
 Proof
-  simp[finally_def, pop_function_def, bind_def, ignore_bind_def,
-       set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> Cases_on `nr /\ mut <> View /\ mut <> Pure` >> gvs[return_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
-  imp_res_tac release_nonreentrant_lock_scopes >> gvs[]
+  qabbrev_tac `g = unlock_if_nr cx nr is_view` >>
+  `!t r t'. g t = (r,t') ==> t'.scopes = t.scopes`
+    by metis_tac[aug_place_unlock_scopes, markerTheory.Abbrev_def] >>
+  strip_tac >>
+  Cases_on `finally f (pop_function prev) s` >> rename1 `_ = (q0,s0)` >>
+  `s0.scopes = prev` by
+    (qpat_x_assum `finally _ _ _ = _` mp_tac >>
+     simp[finally_def, pop_function_def, set_scopes_def, bind_def,
+          ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+     rw[] >> gvs[]) >>
+  qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
+  simp[finally_unless_halt_def] >>
+  Cases_on `q0` >> TRY (Cases_on `y`) >>
+  simp[ignore_bind_def, bind_def, return_def, raise_def] >>
+  Cases_on `g s0` >> rename1 `g s0 = (gr,gs)` >> Cases_on `gr` >>
+  simp[] >> rw[] >> res_tac >> gvs[]
 QED
 
 Theorem aug_place_intcall_scopes:
-  (!s0 r0 s1. eval_expr_results cx es s0 = (r0,s1) ==>
+  (!s0 r0 s1. eval_exprs cx es s0 = (r0,s1) ==>
     s1.scopes = s0.scopes) /\
   eval_expr cx (Call ty (IntCall id) es kw) s = (r,s') ==>
   s'.scopes = s.scopes
@@ -246,12 +262,15 @@ Proof
   rule_assum_tac (PURE_REWRITE_RULE
     [GSYM (SRULE [] unlock_if_nr_def), GSYM lock_if_nr_def]) >>
   imp_res_tac finally_set_scopes >>
-  imp_res_tac (REWRITE_RULE [ignore_bind_def] aug_place_finally_call_scopes) >>
+  imp_res_tac aug_place_finally_call_scopes >>
   imp_res_tac read_results_state >>
   imp_res_tac aug_place_lock_scopes >>
   imp_res_tac (REWRITE_RULE [lock_if_nr_def, ignore_bind_def] aug_place_lock_scopes) >>
   gvs[option_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
-  first_x_assum drule >> strip_tac >> gvs[push_function_def, return_def]
+  first_x_assum drule >> strip_tac >> gvs[push_function_def, return_def] >>
+  imp_res_tac (GEN_ALL (SRULE [unlock_if_nr_def]
+    (Q.INST [`is_view` |-> `mut = View \/ mut = Pure`]
+       aug_place_finally_call_scopes))) >> gvs[]
 QED
 
 Theorem aug_place_effect_scopes_mutual:
@@ -276,6 +295,7 @@ QED
 Resume aug_place_effect_scopes_mutual[subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
 QED
@@ -287,6 +307,7 @@ QED
 Resume aug_place_effect_scopes_mutual[place_subscript]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[aug_place_pure_expr_scopes, aug_place_place_expr_scopes]
 QED
@@ -328,7 +349,7 @@ QED
 Resume aug_place_effect_scopes_mutual[intcall]:
   rpt strip_tac >> irule aug_place_intcall_scopes >>
   goal_assum (drule_at Any) >>
-  metis_tac[aug_place_pure_results_scopes]
+  metis_tac[aug_place_pure_exprs_scopes]
 QED
 Finalise aug_place_effect_scopes_mutual
 

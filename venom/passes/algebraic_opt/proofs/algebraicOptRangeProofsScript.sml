@@ -1173,7 +1173,7 @@ Theorem ao_range_eval_operand_sound:
   eval_operand op s = SOME w ==>
   in_range (range_get_range ra lbl idx op) w
 Proof
-  strip_tac >> irule rangeAnalysisProofsTheory.range_get_range_sound_proof >>
+  strip_tac >> irule rangeAnalysisProofsTheory.range_get_range_sound >>
   conj_tac
   >- (Cases_on `op` >> gvs[venomStateTheory.eval_operand_def]) >>
   qexists `s.vs_vars` >> simp[] >>

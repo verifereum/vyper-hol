@@ -62,7 +62,7 @@ Theorem log_data_trace_intervals:
   EVERY supported_scalar_type (MAP SND xs) /\
   SUM (MAP (type_memory_bytes ce) (MAP SND xs)) < dimword(:256) /\
   compile_alloc_buffer cap st = (src,s1) /\
-  compile_log_store_data ce xs src.buf_operand 0 s1 = ((),s2) /\
+  compile_log_store_data ce xs (MAP SND xs) src.buf_operand 0 s1 = ((),s2) /\
   compile_alloc_buffer outcap s2 = (dst,s3) /\
   compile_abi_encode_to_buf dst.buf_operand src.buf_operand
     (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP SND xs))) s3 = (len,s4) /\
@@ -122,7 +122,7 @@ Theorem log_data_trace_code:
   EVERY supported_scalar_type (MAP SND xs) /\
   SUM (MAP (type_memory_bytes ce) (MAP SND xs)) < dimword(:256) /\
   compile_alloc_buffer cap st = (src,s1) /\
-  compile_log_store_data ce xs src.buf_operand 0 s1 = ((),s2) /\
+  compile_log_store_data ce xs (MAP SND xs) src.buf_operand 0 s1 = ((),s2) /\
   compile_alloc_buffer outcap s2 = (dst,s3) /\
   compile_abi_encode_to_buf dst.buf_operand src.buf_operand
     (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP SND xs))) s3 = (len,s4) /\
@@ -189,8 +189,9 @@ Proof
 QED
 
 Theorem log_post_topics_compiler_interval:
-  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
+  log_eval_view ce args sa xs sm /\
+  EVERY (supported_scalar_type o SND) xs /\ LENGTH flags = LENGTH xs /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
   data_ops = SND (split_log_ops xs flags) /\
@@ -228,8 +229,9 @@ Proof
 QED
 
 Theorem log_success_suffix_intervals:
-  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
+  log_eval_view ce args sa xs sm /\
+  EVERY (supported_scalar_type o SND) xs /\ LENGTH flags = LENGTH xs /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
   data_ops = SND (split_log_ops xs flags) /\

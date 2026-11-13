@@ -1,7 +1,7 @@
 (* Facts about source states actually reached from the pipeline entry. *)
 Theory mem2varReach
 Ancestors
-  mem2varInvariant mem2varDefs mem2varProofs ptrDiscipline unitTransformDefs
+  venomFnInstsProofs mem2varInvariant mem2varDefs mem2varProofs ptrDiscipline unitTransformDefs
   venomWf venomMemDefs venomMemProps venomExecSemantics venomState
   pointerConfinedDefs pointerConfinedProps contextCodegenRel
   ctxLookupAgreeHelpers contextCodegenRelProps venomExecProofs
@@ -188,8 +188,8 @@ Proof
     (irule dfg_build_function_uses_complete >>
      simp[] >> qpat_x_assum `MEM (Var v) _` mp_tac >>
      qspec_tac (`i.inst_operands`, `ops`) >>
-     Induct >> simp[dfgDefsTheory.operand_vars_def] >>
-     Cases_on `h` >> simp[dfgDefsTheory.operand_var_def] >> metis_tac[]) >>
+     Induct >> simp[venomInstTheory.operand_vars_def] >>
+     Cases_on `h` >> simp[venomInstTheory.operand_var_def] >> metis_tac[]) >>
   gvs[m2v_can_promote_alloca_def, EVERY_MEM]
 QED
 

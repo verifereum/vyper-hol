@@ -120,7 +120,7 @@ Proof
      gvs[codegen_ready_fn_def, venomWfTheory.wf_function_def, fn_labels_def]) >>
   `MEM bb.bb_label (cfg_succs_of (cfg_analyze fn) p)` by
     (gvs[venomWfTheory.fn_cfg_edge_def] >>
-     metis_tac[cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs]) >>
+     metis_tac[cfgCorrectnessProofTheory.cfg_analyze_preserves_bb_succs]) >>
   drule_all livenessConvergenceProofsTheory.liveness_recompute_edge_subset >>
   simp[livenessBlockProofsTheory.liveness_instrs_def, liveness_edge_transfer_def,
        pred_setTheory.SUBSET_DEF] >> strip_tac >>
@@ -170,7 +170,7 @@ Proof
     metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre] >>
   `MEM q (cfg_succs_of (cfg_analyze fn) p)` by
     (gvs[venomWfTheory.fn_cfg_edge_def] >>
-     metis_tac[cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs]) >>
+     metis_tac[cfgCorrectnessProofTheory.cfg_analyze_preserves_bb_succs]) >>
   `!i. i <= LENGTH qb.bb_instructions ==>
     MEM v (live_vars_at (liveness_analyze fn) q i)` by
     (rpt strip_tac >>
