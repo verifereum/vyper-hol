@@ -64,7 +64,8 @@ Theorem optional_tuple_stage_run_ptr:
           FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
           lookup_var p t = SOME u ==>
           w2n u + val_footprint entry.type entry.value <= b \/
-          b + type_memory_size_list tvs <= w2n u)
+          b + type_memory_size_list tvs <= w2n u) /\
+      alloca_frame cenv es sa s cenv es t
 Proof
   rpt gen_tac >> Cases_on `flag`
   >- suspend "copy"
@@ -78,6 +79,8 @@ Resume optional_tuple_stage_run_ptr[identity]:
     (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
   `values_have_types tvs vs` by
     fs[value_has_type_def] >>
+  `alloca_frame cenv es sa s cenv es s` by
+    (irule stmtSimDefsTheory.alloca_frame_same >> simp[]) >>
   simp[] >> qexistsl_tac [`s`, `sw`, `G`, `tn`] >>
   simp[] >> conj_tac
   >- metis_tac[arithmeticTheory.ADD_COMM] >>
@@ -172,9 +175,37 @@ Resume optional_tuple_stage_run_ptr[assemble]:
     val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) b m` by simp[Abbr `u`] >>
   `tuple_val_wf vs tvs /\ values_have_types tvs vs` by
     fs[val_wf_def, value_has_type_def] >>
+  `alloca_frame cenv es sa s cenv es u` by suspend "frame" >>
   simp[] >> qexistsl_tac [`u`, `n2w b`, `G2`, `tn2`] >>
   simp[] >>
   suspend "resources"
+QED
+
+Resume optional_tuple_stage_run_ptr[frame]:
+  `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by metis_tac[] >>
+  qpat_assum `stmt_state_rel _ ctx func cenv cx es s`
+    (mp_then (Pos hd) mp_tac stmtSimDefsTheory.alloca_frame_of_mem_frame) >>
+  disch_then irule >> rpt conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x u = _` drule >> simp[])
+  >- (qx_genl_tac [`aid`, `off`, `asz`] >> strip_tac >>
+      `FLOOKUP t.vs_allocas aid = SOME (off,asz)` by
+        (qpat_x_assum `!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> _` drule >>
+         simp[]) >>
+      `aid <> sa.cs_next_id` by decide_tac >>
+      `allocas_non_overlapping t` by
+        (qpat_x_assum `stmt_state_rel _ ctx func cenv cx es t` mp_tac >>
+         simp[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
+      `off + asz <= b \/ b + type_memory_size_list tvs <= off` by
+        (qpat_x_assum `allocas_non_overlapping t`
+           (mp_tac o REWRITE_RULE [venomMemDefsTheory.allocas_non_overlapping_def]) >>
+         disch_then (qspecl_then [`aid`, `sa.cs_next_id`, `off`, `asz`, `b`,
+           `type_memory_size_list tvs`] mp_tac) >> simp[]) >>
+      `mem_bytes_at off asz u.vs_memory = mem_bytes_at off asz t.vs_memory` by
+        simp[Abbr `u`, mcopy_mem_bytes_at_disjoint] >>
+      simp[])
+  >- REFL_TAC >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume optional_tuple_stage_run_ptr[resources]:

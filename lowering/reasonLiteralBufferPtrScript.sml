@@ -170,7 +170,7 @@ Proof
       [Lit (n2w (32+32*word_size ml))] [p]) (fn_insts func)` by
     (irule hash_emitted_inst_mem >> goal_assum (drule_at Any) >> simp[]) >>
   `word_size (LENGTH bs) <= word_size ml` by
-    metis_tac[exprSimHypsTheory.word_size_monotone] >>
+    metis_tac[exprSimPropsTheory.word_size_monotone] >>
   `MEM (mk_inst sa.cs_next_id ALLOCA
       [Lit (n2w (32+32*word_size ml))]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by metis_tac[] >>

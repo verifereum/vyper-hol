@@ -21,33 +21,6 @@ Ancestors
 
 (* ===== The constructor's source ===== *)
 
-Theorem classify_function_ctor_source_step[local]:
-  !top acc mut nr rr fname args defaults ret body.
-    SND (SND (SND (classify_function top acc))) =
-      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
-    top = FunctionDecl Deploy mut nr rr fname args defaults ret body \/
-    SND (SND (SND acc)) = SOME (mut,nr,rr,fname,args,defaults,ret,body)
-Proof
-  rpt gen_tac >> PairCases_on `acc` >> Cases_on `top` >>
-  simp[classify_function_def] >>
-  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
-  Cases_on `vis` >> rw[]
-QED
-
-Theorem classify_functions_ctor_mem:
-  !tops mut nr rr fname args defaults ret body.
-    SND (SND (SND (classify_functions tops))) =
-      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
-    MEM (FunctionDecl Deploy mut nr rr fname args defaults ret body) tops
-Proof
-  Induct_on `tops` >- simp[classify_functions_def] >>
-  rpt gen_tac >>
-  simp[classify_functions_def] >> strip_tac >>
-  drule classify_function_ctor_source_step >>
-  strip_tac >- simp[] >>
-  fs[GSYM classify_functions_def] >> metis_tac[]
-QED
-
 Theorem build_compile_env_non_internal_no_return_pc[local]:
   !tops vis mut fname args ret body use_trans.
     vis <> Internal ==>
@@ -58,9 +31,9 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem package_constructor_shape_ok[local]:
+Theorem package_constructor_shape_ok:
   !tops use_trans nkey_map target cf cenv args pay nr nkey trans body ret.
-    supported_program tops /\
+    supported_program tops /\ supported_program_deploy tops /\
     SND (SND (SND (classify_functions tops))) = SOME cf /\
     set_constructor_package_target target
       (package_constructor tops use_trans nkey_map cf) =
@@ -70,7 +43,11 @@ Theorem package_constructor_shape_ok[local]:
 Proof
   rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
   drule classify_functions_ctor_mem >> strip_tac >>
-  drule_all supported_program_function >> strip_tac >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def,
+              supportedDeclsTheory.supported_headers_module_consts_env] >>
+  gvs[constSubstTheory.subst_consts_fn_empty] >>
+  drule_all supported_program_deploy_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   gvs[package_constructor_def, set_constructor_package_target_def,
       update_cenv_nonreentrant_def, build_compile_env_non_internal_no_return_pc] >>
@@ -78,7 +55,7 @@ Proof
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
-Theorem package_internal_fn_ctor_shape_ok[local]:
+Theorem package_internal_fn_ctor_shape_ok:
   !tops use_trans nkey_map imm target src.
     supported_program tops /\
     MEM src (FST (SND (classify_functions tops))) ==>
@@ -88,6 +65,12 @@ Theorem package_internal_fn_ctor_shape_ok[local]:
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   drule (iffLR MEM_classify_internal) >> strip_tac >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supported_program_def,
+      supportedDeclsTheory.supported_declaration_headers_def,
+      supportedDeclsTheory.supported_headers_module_consts_env] >>
+  gvs[constSubstTheory.subst_consts_fn_empty] >>
+  `Internal <> Deploy` by simp[] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   simp[package_internal_fn_def, set_internal_package_target_def,
@@ -130,7 +113,6 @@ Proof
   rename1 `_ = (u, st1)` >> Cases_on `u` >>
   drule compile_generate_deploy_shape >> simp[] >> strip_tac >>
   drule_all shape_state_source_certificates >> strip_tac >>
-  drule_all raw_checked_internal_segments >> strip_tac >>
   `package_internal_blocks (internal_fn_descriptors ctor_internal_fns)
      (entry_blocks ++ FLAT segs) =
    SOME (entry_blocks,
@@ -156,7 +138,7 @@ QED
 Theorem lower_vyper_deploy_unit_run[local]:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops ==>
+    supported_program tops /\ supported_program_deploy tops ==>
     ?has_constructor imm args ctor_internal_fns cenv body pay nr nkey trans.
       run_deploy_lowering has_constructor rpolicy runtime_bc imm args 0
         ctor_internal_fns cenv body pay nr nkey trans "__deploy" = SOME unit /\
@@ -192,7 +174,7 @@ QED
 Theorem lower_vyper_deploy_unit_source_unit_ok:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops ==>
+    supported_program tops /\ supported_program_deploy tops ==>
     o1_source_unit_ok unit
 Proof
   rpt strip_tac >> drule_all lower_vyper_deploy_unit_run >> strip_tac >>
@@ -232,7 +214,7 @@ QED
 Theorem lower_vyper_deploy_unit_o1_shape_extras:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops ==>
+    supported_program tops /\ supported_program_deploy tops ==>
     unit_entry_no_params unit /\ unit_fmp_unsealed unit
 Proof
   rpt gen_tac >> strip_tac >>

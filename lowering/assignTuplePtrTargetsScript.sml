@@ -106,6 +106,9 @@ Resume compile_assign_tuple_targets_stmt_frag_ptr[normal]:
     (assume_tac o REWRITE_RULE [optional_tuple_stage_code]) >>
   `ptr_buf_ok cenv e op G t` by fs[is_word_type_def] >>
   `(es_end with gas_obs := []).gas_obs = []` by simp[] >>
+  `MAP FDOM (es_end with gas_obs := []).scopes = MAP FDOM es.scopes` by
+    (qpat_assum `bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) = _`
+       (mp_tac o MATCH_MP stmtSimDefsTheory.eval_read_preserves_scopes_dom) >> simp[]) >>
   drule_all assign_tuple_targets_suffix_ptr >>
   disch_then (qspecl_then [`lctx`, `PG`, `cx_dead H cx`] strip_assume_tac) >>
   suspend "finish"

@@ -11,7 +11,7 @@ Theory bodyFullExprGeneric
 Ancestors
   bodySimFull gasShadowState gasShadow context exprLowering compileEnv
   vyperInterpreter vyperState exprSimStack exprSimMemDefs gasOutcomeFull gasStorage
-  bodyPtrDefs loweringPosts exprSimDefs
+  bodyPtrDefs loweringPosts exprSimDefs gasOutcomeFullCompose
 
 Theorem gas_outcome_full_force_value:
   (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) /\
@@ -26,20 +26,12 @@ Theorem gas_outcome_full_force_value:
       raw = (case res of INL v => INL (Value v) | INR ex => INR ex) /\
       R H res ee gt r)
 Proof
-  rw[gas_outcome_full_def] >> qexists_tac `marks`
-  >- (disj1_tac >> gvs[gas_bad_storage_at_def] >> gen_tac >>
-      Cases_on `bind (eval_expr cx e) (read_result cx)
-        (es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail)` >>
-      drule_all eval_expr_force_value >> strip_tac >> gvs[] >>
-      first_x_assum (qspec_then `tail` mp_tac) >> simp[])
-  >- (disj2_tac >> disj1_tac >>
-      qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
-                   `ee`, `r`, `G'`, `tn'`] >> conj_tac
-      >- (gen_tac >> drule eval_expr_force_value >>
-          disch_then (qspec_then `es with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail` mp_tac) >>
-          simp[]) >> metis_tac[]) >>
-  disj2_tac >> disj2_tac >> drule eval_expr_force_ignore >>
-  disch_then (fn th => fs[th]) >> metis_tac[]
+  strip_tac >>
+  ho_match_mp_tac (GEN_ALL gas_outcome_full_source_map) >>
+  qexists_tac `bind (eval_expr cx e) (read_result cx)` >> simp[] >>
+  qx_gen_tac `st` >>
+  Cases_on `bind (eval_expr cx e) (read_result cx) st` >>
+  drule_all eval_expr_force_value >> simp[]
 QED
 
 (* The full twin of exprStackPtr's expr_vv_sim_stack_ptr.  As in the memory
