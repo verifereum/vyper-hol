@@ -195,7 +195,7 @@ Resume abi_args_label_replay_mutual[builtin]:
   goal_assum (drule_at Any) >> rpt strip_tac >>
   first_x_assum (qspecl_then [`e'`, `ce'`] mp_tac) >>
   impl_tac >- (fs[] >> decide_tac) >>
-  metis_tac[]
+  disch_then irule >> metis_tac[]
 QED
 
 Resume abi_args_label_replay_mutual[type_builtin]:
@@ -211,7 +211,7 @@ Resume abi_args_label_replay_mutual[type_builtin]:
       goal_assum (drule_at Any) >> rpt strip_tac >>
       first_x_assum (qspecl_then [`e'`, `ce'`] mp_tac) >>
       impl_tac >- (fs[] >> decide_tac) >>
-      metis_tac[]) >>
+      disch_then irule >> metis_tac[]) >>
   goal_assum (drule_at Any)
 QED
 
