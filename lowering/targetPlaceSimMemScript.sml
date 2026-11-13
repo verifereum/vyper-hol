@@ -6,7 +6,7 @@ Theory targetPlaceSimMem
 Ancestors
   bodyMemoryPreds targetPlaceSimCases targetPlaceSim exprSimMemDefs
   bodyPtrPopTargetFragTransport
-  allocaHistory exprSimDefs targetPlaceSimDefs gasContext gasOutcome gasSummary
+  allocaHistory exprSimDefs targetPlaceSimDefs gasContext gasOutcome gasSummary gasSummaryCompose
   gasExemptCert gasStorage vyperStorageFootprint vyperStorageTrace
   stmtSimProps loweringPosts exprLowering compileEnv
   supportedTargets vyperAST vyperInterpreter vyperState vyperTypeSystem
