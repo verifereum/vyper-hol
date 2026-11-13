@@ -1,6 +1,8 @@
 Theory typedOperandsPtr
 Ancestors
-  wordOperandsPtr bodyPtrPreds exprSimPrecompiles gasSummaryComposePtr gasOutcomeMarkedPtr gasOutcomeMapPtr vyperState list
+  wordOperandsPtr bodyPtrPreds exprSimPrecompiles gasSummaryComposePtr
+  gasSummaryComposePtrAll gasOutcomeMarkedPtr gasOutcomeMapPtr
+  gasStorage vyperStorageTrace vyperStorageFootprint stmtSimProps vyperState list
 
 (* A recursive readiness interface is needed because facts about later
    operands are available only when the preceding operand can evaluate.
@@ -83,13 +85,15 @@ Proof
 QED
 
 Theorem lower_typed_args_nil_sim_ptr:
-  stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
-  ghost_inv H d cenv cx es G0 tn0 s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv H d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx, func) PG cx st0
     (eval_exprs cx []) (es, s0, G0, tn0)
-    (\rr ee G tn t. ?vs. rr = INL vs /\
+    (\H rr ee G tn t. ?vs. rr = INL vs /\
        typed_args_post H ctx func cenv cx es sa s0 ee [] [] vs t /\
        MAP FDOM es.scopes = MAP FDOM ee.scopes /\
        t.vs_current_bb = sa.cs_current_bb /\
@@ -97,11 +101,11 @@ Theorem lower_typed_args_nil_sim_ptr:
        ghost_inv H d cenv cx ee G tn t /\
        EVERY (\x. op_taint tn x = {}) [] /\
        ghost_kept cenv es sa G0 tn0 s0 G tn)
-    (\rr ee gt r. wb_args_exit rr r)
+    (\H rr ee gt r. wb_args_exit rr r)
 Proof
   strip_tac >>
   simp[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
-  qexists_tac `[]` >> disj1_tac >>
+  qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[fragGasPathPtrTheory.gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL []`, `es`, `G0`, `tn0`, `OK s0`] >>
   simp[exprSimWordArgsTheory.eval_exprs_nil, return_def,
@@ -109,7 +113,13 @@ Proof
        fragGasPathPtrTheory.gas_path_ptr_rules,
        typed_args_post_def, loweringPostsTheory.wb_frame_def,
        bodyPtrDefsTheory.ghost_kept_def, stmtFragPtrTheory.ghost_inv_gas_obs] >>
-  fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_gas_obs]
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+      `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+        (`(es with gas_obs := []).accounts = es.accounts /\
+          (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+         metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_gas_obs,
+     vyperStorageFootprintTheory.storage_well_formed_on_def, vyperStorageBackendTheory.get_storage_def]
 QED
 
 Theorem typed_args_ready_ptr_admissible:
@@ -169,40 +179,45 @@ QED
 Theorem typed_args_head_outcome_ptr[local]:
   typed_args_ready_ptr d ctx PG func cenv cx arg_ty Inv (e::args) /\ Inv es /\
   (!ee gs. Inv ee ==> Inv (ee with gas_obs := gs)) /\
-  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG cx st0
     (do r <- eval_expr cx e; read_result cx r od) (es,s0,G0,tn0) Q R /\
-  (!res ee G tn t. Q res ee G tn t ==> ?v. res = INL v) ==>
-  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
+  (!H res ee G tn t. Q H res ee G tn t ==> ?v. res = INL v) ==>
+  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG cx st0
     (do r <- eval_expr cx e; read_result cx r od) (es,s0,G0,tn0)
-    (\res ee G tn t. Q res ee G tn t /\ ~t.vs_halted /\ Inv ee /\
+    (\H res ee G tn t. Q H res ee G tn t /\ ~t.vs_halted /\ Inv ee /\
       typed_args_ready_ptr d ctx PG func cenv cx arg_ty Inv args /\
       MAP FDOM es.scopes = MAP FDOM ee.scopes) R
 Proof
   strip_tac >> irule gas_outcome_ptr_marked_conseq >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
-  `?v. res = INL v` by metis_tac[] >> gvs[] >>
+  qpat_x_assum `!H res ee G tn t. Q H res ee G tn t ==> _`
+    (drule_then strip_assume_tac) >> gvs[] >>
+  drule gas_marked_exec_ptr_exec >> strip_tac >>
   drule_all typed_args_ready_ptr_marked_facts >>
   drule operand_marked_exec_not_halted >> simp[]
 QED
 
 Theorem lower_typed_args_sim_ptr:
-  !args ctx func cenv cx arg_ty Inv es sa xs sb s0 G0 tn0.
+  !args ctx func cenv cx st0 arg_ty Inv es sa xs sb s0 G0 tn0.
     typed_args_ready_ptr d ctx PG func cenv cx arg_ty Inv args /\ Inv es /\
     (!es gs. Inv es ==> Inv (es with gas_obs := gs)) /\
     wb_args_shape cenv arg_ty args /\
     lower_word_args cenv arg_ty args sa = (xs,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx es s0 /\
+      storage_well_formed_on cx es (FST H) /\
+      ghost_inv H d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    ghost_inv H d cenv cx es G0 tn0 s0 /\ ~ctx_has_dalloca ctx /\
+     ~ctx_has_dalloca ctx /\
     ~cenv.ce_is_ctor /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
       (eval_exprs cx args) (es,s0,G0,tn0)
-      (\rr ee G tn t. ?vs. rr = INL vs /\
+      (\H rr ee G tn t. ?vs. rr = INL vs /\
         typed_args_post H ctx func cenv cx es sa s0 ee args xs vs t /\
         MAP FDOM es.scopes = MAP FDOM ee.scopes /\
         t.vs_current_bb = sb.cs_current_bb /\
@@ -210,7 +225,7 @@ Theorem lower_typed_args_sim_ptr:
         ghost_inv H d cenv cx ee G tn t /\
         EVERY (\x. op_taint tn x = {}) xs /\
         ghost_kept cenv es sa G0 tn0 s0 G tn)
-      (\rr ee gt r. wb_args_exit rr r)
+      (\H rr ee gt r. wb_args_exit rr r)
 Proof
   Induct >> rpt gen_tac >> strip_tac
   >- (gvs[exprSimWordArgsTheory.lower_word_args_nil] >>
@@ -231,45 +246,90 @@ Proof
   simp_tac pure_ss [bodyPtrDefsTheory.expr_sim_ptr_def, forced_eval_bind_action] >>
   disch_then (drule_all_then assume_tac) >>
   drule typed_args_head_outcome_ptr >>
-  disch_then (drule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- (simp[] >> metis_tac[]) >>
   disch_then assume_tac >>
-  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ (\res ee G tn t. ?v. _) _` kall_tac >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _ (\H res ee G tn t. ?v. _) _` kall_tac >>
   rewrite_tac[exprSimWordArgsTheory.eval_exprs_cons_action, forced_eval_bind_action] >>
-  irule gas_outcome_ptr_bind >> rpt conj_tac
+  irule gas_outcome_ptr_bind_all >>
+  first_assum (irule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+       storage_trace_frame_return] >> rpt conj_tac
   >- suspend "tail_cert"
   >- suspend "head_cert"
-  >> suspend "head_bind"
+  >- suspend "head_bind"
+  >- (rpt strip_tac >> gvs[]) >>
+  rpt strip_tac >> Cases_on `res` >>
+  fs[exprSimWordArgsTheory.wb_args_exit_def] >>
+  metis_tac[stmtSimPropsTheory.expr_exit_INR_type]
+
 QED
 
 Resume lower_typed_args_sim_ptr[head_bind]:
-  irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-  conj_tac >- suspend "tail" >>
-  simp[exprSimWordArgsTheory.wb_args_exit_def, exprSimDefsTheory.expr_exit_def] >>
-  rpt strip_tac >> Cases_on `res` >> gvs[]
-QED
-
-Resume lower_typed_args_sim_ptr[tail]:
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
-  `stmt_state_rel H ctx func cenv cx ee t` by
-    metis_tac[exprSimWordArgsTheory.expr_post_state] >>
+  qx_genl_tac [`left`, `v`, `mid`, `t`, `G1`, `tn1`] >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _` drule >>
+  strip_tac >> gvs[] >>
   `local_ptrs_reserved cenv s1` by
     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
   `(!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at s1 z) /\
    (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at s1 z)` by
     metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
-  qpat_x_assum `!ctx func cenv cx arg_ty Inv es sa xs sb s0 G0 tn0. _`
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+     expr_post H ctx func cenv cx h es sa s1 s0
+       (mid with gas_obs := []) v x t /\
+     stmt_state_rel H ctx func cenv cx es s0` by
+    (qx_gen_tac `H1` >> disch_tac >>
+     `valid_horizon cx st0 H1 es.storage_trace` by
+       (drule gas_marked_exec_valid_prefix >>
+        simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+             storage_trace_frame_read_result] >> metis_tac[]) >>
+     qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `H1` mp_tac) >>
+     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+       (qspec_then `H1` mp_tac) >> simp[]) >>
+  `!H. valid_horizon cx st0 H (mid with gas_obs := []).storage_trace ==>
+     stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t /\
+     storage_well_formed_on cx (mid with gas_obs := []) (FST H) /\
+     ghost_inv H d cenv cx (mid with gas_obs := []) G1 tn1 t` by
+    (qx_gen_tac `H1` >> disch_tac >>
+     `valid_horizon cx st0 H1 mid.storage_trace` by fs[] >>
+     qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+       gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H1` mp_tac) >> simp[] >> strip_tac >>
+     fs[loweringPostsTheory.expr_post_def]) >>
+  qpat_x_assum `!ctx func cenv cx st0 arg_ty Inv es sa xs sb s0 G0 tn0. _`
     (drule_all_then assume_tac) >>
-  irule gas_outcome_ptr_map_return >> goal_assum (drule_at Any) >>
+  qmatch_assum_abbrev_tac
+    `gas_outcome_ptr _ _ _ _ _ _ (eval_exprs cx args) _ TailQ TailR` >>
+  `gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
+     (eval_exprs cx args) (mid with gas_obs := [],t,G1,tn1)
+     (\H res ee G tn u. TailQ H res ee G tn u /\
+       valid_horizon cx st0 H mid.storage_trace) TailR` by
+    (irule gasOutcomeMarkedPtrTheory.gas_outcome_ptr_marked_conseq >>
+     goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
+     drule gas_marked_exec_ptr_exec >> strip_tac >>
+     drule gas_marked_exec_valid_prefix >>
+     simp[evaluate_storage_trace_frame] >> metis_tac[]) >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _ TailQ TailR` kall_tac >>
+  irule gas_outcome_ptr_map_return >>
+  first_assum (irule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _ _ _`)) >>
   conj_tac
-  >- (rpt gen_tac >> strip_tac >> gvs[] >>
-      Cases_on `evaluate_type (get_tenv cx) (expr_type h)` >> gvs[] >>
-      fs[bodyPtrDefsTheory.ptr_val_ok_def] >>
-      `MAP FDOM es.scopes = MAP FDOM ee.scopes` by metis_tac[] >>
-      drule_all typed_args_post_cons_ptr >> simp[]) >>
+  >- suspend "tail_post" >>
   simp[exprSimWordArgsTheory.wb_args_exit_def] >>
-  rpt strip_tac >> Cases_on `res` >> gvs[]
+  rpt strip_tac >> Cases_on `res` >> gvs[Abbr`TailR`, exprSimWordArgsTheory.wb_args_exit_def]
+QED
+
+Resume lower_typed_args_sim_ptr[tail_post]:
+  qx_genl_tac [`H2`, `rr`, `ee`, `G2`, `tn2`, `u`] >>
+  strip_tac >> gvs[Abbr`TailQ`] >>
+  Cases_on `evaluate_type (get_tenv cx) (expr_type h)` >> gvs[] >>
+  fs[bodyPtrDefsTheory.ptr_val_ok_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
+    expr_post H ctx func cenv cx h es sa s1 s0
+      (mid with gas_obs := []) v x t /\ _`
+    (qspec_then `H2` (drule_then strip_assume_tac)) >>
+  `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by simp[] >>
+  drule_all typed_args_post_cons_ptr >> simp[]
 QED
 
 Resume lower_typed_args_sim_ptr[tail_cert]:

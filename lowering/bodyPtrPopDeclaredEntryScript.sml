@@ -41,10 +41,10 @@ Proof
   `s.vs_call_ctx.cc_address = cx.txn.target /\ stor_taint_ok H cx tn s` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def, ghost_inv_def] >>
   Cases_on `tr` >> gvs[]
-  >- (irule pop_region_taint_transient_entry >>
-      qexists_tac `H` >> simp[] >>
+  >- (irule (INST_TYPE [alpha |-> ``:256``] pop_region_taint_transient_entry) >>
+      simp[] >> qexists_tac `H` >> simp[] >>
       irule observed_storage_region_read_live >> simp[]) >>
-  irule pop_region_taint_storage_entry >>
-  qexists_tac `H` >> simp[] >>
+  irule (INST_TYPE [alpha |-> ``:256``] pop_region_taint_storage_entry) >>
+  simp[] >> qexists_tac `H` >> simp[] >>
   irule observed_storage_region_read_live >> simp[]
 QED
