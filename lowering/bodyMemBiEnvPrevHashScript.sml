@@ -11,7 +11,8 @@ Ancestors
   vyperInterpreter vyperState vyperValue vyperContext vyperTypeSystem vyperTyping
   vyperAST valueEncoding valueEncodingProofs exprSimUnopProps
 
-Theorem body_prevhash_counted:
+(* As body_prevhash_counted, also keeping the fields the horizon reads. *)
+Theorem body_prevhash_counted_fields[local]:
   compile_env_var PrevHash sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
@@ -24,7 +25,9 @@ Theorem body_prevhash_counted:
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z t = SOME w) /\
       t.vs_memory = s0.vs_memory /\ t.vs_allocas = s0.vs_allocas /\
       t.vs_alloca_next = s0.vs_alloca_next /\ alloca_history func t /\
-      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      t.vs_accounts = s0.vs_accounts /\ t.vs_transient = s0.vs_transient /\
+      t.vs_requests = s0.vs_requests /\ t.vs_call_ctx = s0.vs_call_ctx
 Proof
   strip_tac >>
   `call_ctx_rel cx.txn s0.vs_call_ctx s0.vs_tx_ctx s0.vs_block_ctx` by
@@ -75,16 +78,37 @@ Proof
   qpat_x_assum `t = _ with vs_vars := _` SUBST_ALL_TAC >> gvs[]
 QED
 
+Theorem body_prevhash_counted:
+  compile_env_var PrevHash sa = (op,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
+  alloca_history func s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s0 0 (OK t) /\
+      eval_operand op t = SOME (HD cx.txn.block_hashes) /\
+      stmt_state_rel H ctx func cenv cx es t /\
+      (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z t = SOME w) /\
+      t.vs_memory = s0.vs_memory /\ t.vs_allocas = s0.vs_allocas /\
+      t.vs_alloca_next = s0.vs_alloca_next /\ alloca_history func t /\
+      t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule_all body_prevhash_counted_fields >> strip_tac >>
+  qexists_tac `t` >> simp[]
+QED
+
 Theorem body_prevhash_mem_prefix[local]:
   lower_value compile_expr cenv ty
     (Builtin (env_item_type PrevHash) (Env PrevHash) []) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel H0 ctx func cenv cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?v t. gas_value_prefix H T (ctx,func,cenv,cx)
-    (ty,Builtin (env_item_type PrevHash) (Env PrevHash) [])
-    (sa,sb,op) (es,s0) [] (v,es,t)
+  ?v t. !(H:(bool # bytes32 # type_value) list # num list).
+    stmt_state_rel H ctx func cenv cx es s0 /\ storage_well_formed_on cx es (FST H) ==>
+    gas_value_prefix H T (ctx,func,cenv,cx)
+      (ty,Builtin (env_item_type PrevHash) (Env PrevHash) [])
+      (sa,sb,op) (es,s0) [] (v,es,t)
 Proof
   strip_tac >>
   `tx_env_ok cx.txn` by gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
@@ -98,11 +122,25 @@ Proof
      simp[Once evaluate_def, bind_def, read_result_def, return_def,
           evaluate_builtin_def, tx_env_ok_evaluate_prevhash]) >>
   drule lower_value_env >> strip_tac >>
-  drule_all body_prevhash_counted >> strip_tac >>
+  drule_all body_prevhash_counted_fields >> strip_tac >>
+  qexistsl_tac [`BytesV (word_to_bytes_be (EL 0 cx.txn.block_hashes))`, `t`] >>
+  rpt strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es t` by
+    (qpat_assum `stmt_state_rel H0 _ _ _ _ _ t` (fn a =>
+     qpat_assum `stmt_state_rel H _ _ _ _ _ s0` (fn b =>
+     qpat_assum `t.vs_accounts = _` (fn c =>
+     qpat_assum `t.vs_transient = _` (fn d =>
+     qpat_assum `t.vs_requests = _` (fn e =>
+     qpat_assum `t.vs_call_ctx = _` (fn f =>
+       ACCEPT_TAC (MATCH_MP stmt_state_rel_fields_transport
+         (LIST_CONJ [a, b, c, d, e, f]))))))))) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   drule msg_gas_state_frame >>
   disch_then (qspecl_then [`t.vs_gas_readings`, `t.vs_inst_idx`, `[]`] mp_tac) >>
   simp[NoAsms] >> strip_tac >>
-  qexistsl_tac [`BytesV (word_to_bytes_be (EL 0 cx.txn.block_hashes))`, `t`] >>
   simp[gas_value_prefix_def, gas_marked_exec_def, gas_marked_path_def,
        gas_explicit_def, expr_post_def, expr_val_rel_def, expr_val_at_def,
        expr_type_def, env_item_type_def, is_word_type_def,
@@ -115,11 +153,16 @@ Theorem body_prevhash_sim_mem[local]:
     expr_sim_mem ctx func cenv cx ty
       (Builtin (env_item_type PrevHash) (Env PrevHash) []) es
 Proof
-  rpt gen_tac >> irule expr_sim_mem_word_values >> reverse conj_tac
+  rpt gen_tac >> irule expr_sim_mem_word_values_domain >> reverse conj_tac
   >- simp[expr_type_def, env_item_type_def, is_word_type_def] >>
   rpt gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
   drule_all body_prevhash_mem_prefix >> strip_tac >>
-  qexistsl_tac [`[]`, `v`, `es`, `t`] >> simp[]
+  qexistsl_tac [`[]`, `v`, `es`, `t`] >>
+  conj_tac >- (first_x_assum drule_all >> simp[gas_value_prefix_def]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  first_x_assum irule >> simp[]
 QED
 
 Theorem body_prevhash_vv_sim_mem[local]:
