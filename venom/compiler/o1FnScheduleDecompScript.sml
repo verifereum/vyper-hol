@@ -51,23 +51,6 @@ Proof
   >> first_x_assum drule >> disch_then (qspec_then `j` mp_tac) >> simp[]
 QED
 
-Theorem fn_chain_fn_steps:
-  !passes s fs obs k.
-    fn_chain rpolicy passes s fs obs /\ k <= LENGTH passes ==>
-    fn_steps rpolicy (DROP k passes) (EL k fs) (LAST fs)
-Proof
-  Induct
-  >- (simp[fn_chain_def, fn_steps_def] >> rw[] >> gvs[]) >>
-  rpt gen_tac >> strip_tac >>
-  fs[fn_chain_def] >> gvs[] >>
-  Cases_on `k`
-  >- (simp[fn_steps_def] >>
-      first_x_assum (drule_at Any) >>
-      disch_then (qspec_then `0` mp_tac) >>
-      simp[] >> metis_tac[]) >>
-  gvs[] >> first_x_assum drule >> simp[]
-QED
-
 Theorem fn_chain_fn_steps_from:
   !passes s fs obs k k0.
     fn_chain rpolicy passes s fs obs /\ k <= LENGTH passes /\
@@ -92,6 +75,17 @@ Proof
       simp[]) >>
   first_x_assum (drule_then (qspecl_then [`n`,`SUC k0`] mp_tac)) >>
   simp[arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem fn_chain_fn_steps:
+  !passes s fs obs k.
+    fn_chain rpolicy passes s fs obs /\ k <= LENGTH passes ==>
+    fn_steps rpolicy (DROP k passes) (EL k fs) (LAST fs)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`passes`,`s`,`fs`,`obs`,`k`,`0`] mp_tac
+    (Q.INST [`R` |-> `\m h. T`] fn_chain_fn_steps_from) >>
+  simp[] >> metis_tac[fn_steps_from_fn_steps]
 QED
 
 Theorem fn_chain_names:
