@@ -2,7 +2,7 @@
 Theory internalReturnBoundaryCommonMem
 Ancestors
   bodyMemoryDefs stmtLowering loweringPosts exprLoweringProps compileEnv
-  ctorReturnFrame bodySim loweringStateRelDefs stmtSimReturn stmtSimDefs
+  bodySim loweringStateRelDefs stmtSimReturn stmtSimDefs
   externalReturnPrefix stmtLoweringMono exprOperandVar loweringShapeDefs
   fragExec venomState vyperState intCallReturnMem
 
