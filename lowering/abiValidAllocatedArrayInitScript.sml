@@ -57,7 +57,7 @@ Proof
     (irule local_ptrs_reserved_next_var >> qexists_tac `guard_st` >>
      fs[abi_malformed_entry_def]) >>
   `stmt_state_rel H ctx func cenv cx es prepared` by
-    fs[abi_malformed_resource_post_def] >>
+    fs[abi_malformed_resource_post_def, abi_malformed_entry_def] >>
   `MEM (mk_inst header_st.cs_next_id ALLOCA [Lit 32w]
      [STRING #"%" (toString header_st.cs_next_var)]) (fn_insts func) /\
    header_st.cs_next_id IN sites` by
@@ -301,7 +301,8 @@ Proof
     (irule local_ptrs_reserved_next_var >> qexists_tac `guard_st` >>
      fs[abi_malformed_entry_def]) >>
   `stmt_state_rel H ctx func cenv cx es prepared` by
-    fs[abi_valid_allocated_effect_def, abi_malformed_resource_post_def] >>
+    fs[abi_valid_allocated_effect_def, abi_malformed_resource_post_def,
+       abi_malformed_entry_def] >>
   `MEM (mk_inst header_st.cs_next_id ALLOCA [Lit 32w]
      [STRING #"%" (toString header_st.cs_next_var)]) (fn_insts func) /\
    header_st.cs_next_id IN sites` by
