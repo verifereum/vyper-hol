@@ -24,7 +24,7 @@ Theorem declared_header_key_taint_empty:
   0 < type_slot_size tv ==>
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {}
 Proof
-  strip_tac >> irule storage_dead_key_taint_empty >>
+  strip_tac >> irule (INST_TYPE [alpha |-> ``:256``] storage_dead_key_taint_empty) >>
   qexistsl_tac [`H`,
     `if tr then contract_transient s else contract_storage s`, `tr`, `tv`] >>
   simp[] >> conj_tac
