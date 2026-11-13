@@ -116,9 +116,12 @@ Theorem compile_log_topic_ops_mem_ok:
   compile_log_topic_ops (MAP (\p. (FST p,is_bytestring_type (SND p))) xs) sm = (ops,sb) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
     (!l. FST p <> Label l)) xs /\
-  LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
-    supported_scalar_type (SND arg) /\
-    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
   LIST_REL (\arg v. !w n. ~is_word_type (SND arg) /\
     eval_operand (FST arg) s = SOME w /\
     ((?bs. v = BytesV bs /\ n = LENGTH bs) \/
@@ -129,13 +132,23 @@ Proof
   Induct >- (simp[compile_log_topic_ops_def, comp_return_def] >>
     rpt strip_tac >> gvs[emitted_insts_def, run_inst_seq_mem_ok_def]) >>
   rpt gen_tac >> Cases_on `vs` >> simp[compile_log_topic_ops_cons] >>
-  strip_tac >> gvs[] >> rename1 `log_arg_rel ce cx sa sm es s arg v` >>
-  Cases_on `arg` >> gvs[] >>
-  drule compile_encode_log_topic_scalar_mem_ok >> disch_then drule >>
-  disch_then (qspecl_then [`tv`,`sm'`,`op`] mp_tac) >>
-  (impl_tac >- (asm_simp_tac (srw_ss()) [] >>
-    qpat_x_assum `!w n. _` mp_tac >>
-    simp_tac (srw_ss()) [AC ADD_ASSOC ADD_COMM])) >> strip_tac >>
+  strip_tac >> gvs[] >> PairCases_on `h` >> gvs[] >>
+  `compile_encode_log_topic h0 (is_bytestring_type aty) sm = (op,sm')` by simp[] >>
+  `!w n. ~is_word_type aty /\ eval_operand h0 s = SOME w /\
+    ((?bs. h' = BytesV bs /\ n = LENGTH bs) \/
+     (?str. h' = StringV str /\ n = LENGTH str)) ==>
+    w2n w + 32 + 32 * ((n+31) DIV 32) <= s.vs_alloca_next` by
+    (rpt strip_tac >>
+     `is_bytestring_type aty` by metis_tac[log_scalar_topic_shape] >>
+     `~is_word_type h1` by
+       (Cases_on `h1` >> gvs[is_bytestring_type_def, is_word_type_def] >>
+        rename1 `BaseT bt` >> Cases_on `bt` >>
+        gvs[is_bytestring_type_def, is_word_type_def] >>
+        rename1 `BytesT bd` >> Cases_on `bd` >>
+        gvs[is_bytestring_type_def, is_word_type_def]) >>
+     qpat_x_assum `!w n. _` (qspecl_then [`w`,`n`] mp_tac) >>
+     asm_simp_tac (srw_ss()) [AC ADD_ASSOC ADD_COMM]) >>
+  drule_all compile_encode_log_topic_scalar_mem_ok >> strip_tac >>
   drule_all compile_encode_log_topic_scalar_run >> strip_tac >>
   drule_all log_topic_frontier >> strip_tac >>
   suspend "compose"
@@ -146,7 +159,20 @@ Resume compile_log_topic_ops_mem_ok[compose]:
     (irule hash_readonly_state_rel >> goal_assum (drule_at Any) >> simp[]) >>
   `local_ptrs_reserved ce sc` by
     (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
-  drule_all log_readonly_args >> strip_tac >>
+  `LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sc es u (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs t` by
+    (qpat_x_assum `LIST_REL (\arg v. supported_scalar_type _ /\ _) xs t` mp_tac >>
+     simp[LIST_REL_EL_EQN] >> strip_tac >> gen_tac >> strip_tac >>
+     qpat_x_assum `!n. n < LENGTH xs ==> supported_scalar_type _ /\ _`
+       (qspec_then `n` mp_tac) >> simp[] >>
+     disch_then (CONJUNCTS_THEN2 assume_tac
+       (qx_choose_then `aty'` (qx_choose_then `tv'` strip_assume_tac))) >>
+     qexistsl_tac [`aty'`,`tv'`] >> simp[] >>
+     irule log_readonly_arg >> gvs[EVERY_EL] >> metis_tac[]) >>
   `EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sc z) /\
      (!l. FST p <> Label l)) xs` by
     (gvs[EVERY_MEM] >> metis_tac[not_fresh_at_mono]) >>
@@ -180,9 +206,12 @@ Theorem compile_split_log_topics_mem_ok:
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,sb) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
     (!l. FST p <> Label l)) xs /\
-  LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
-    supported_scalar_type (SND arg) /\
-    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
   encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics /\
   LIST_REL (\arg v. !w n. ~is_word_type (SND arg) /\
     eval_operand (FST arg) s = SOME w /\
@@ -210,9 +239,12 @@ Proof
       simp[] >> conj_tac >> irule log_indexed_selection_rel >> simp[]) >>
   `LENGTH vs = LENGTH xs` by metis_tac[LIST_REL_LENGTH] >>
   drule_all log_indexed_encoding_select >> strip_tac >>
-  `LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
-     supported_scalar_type (SND arg) /\
-     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
+  `LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+     ?aty tv. supported_scalar_type aty /\
+       log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+       evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+       (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+       encode_event_topic aty v = encode_event_topic (SND arg) v)
      (MAP FST (FILTER SND (ZIP (xs,flags))))
      (MAP FST (FILTER SND (ZIP (vs,flags))))` by
     (irule log_indexed_selection_rel >> simp[]) >>

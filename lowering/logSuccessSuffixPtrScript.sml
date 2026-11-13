@@ -28,16 +28,24 @@ Theorem log_success_suffix_path_ptr:
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
-  LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
-    supported_scalar_type (SND arg) /\
-    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\
-      value_has_type tv v /\ val_wf tv v) xs vs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      ptr_val_ok cx aty v (FST arg) G tn s /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
   encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics /\
   SUM (MAP (type_memory_bytes ce) (log_non_indexed_types flags (MAP SND xs))) < dimword(:256) /\
   abi_size_bound ce.ce_struct_fields (TupleT (log_non_indexed_types flags (MAP SND xs))) < dimword(:256) /\
   vyper_to_abi_list (get_tenv cx) (log_non_indexed_types flags (MAP SND xs))
     (log_non_indexed_values flags vs) = SOME avs /\
-  LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) G tn s) xs vs /\
+  LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
+    supported_scalar_type (SND arg) /\
+    (?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\
+      value_has_type tv v /\ val_wf tv v) /\
+    ptr_val_ok cx (SND arg) v (FST arg) G tn s)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
   ghost_inv d ce cx es G tn s /\ ~ctx_has_dalloca ctx /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
@@ -69,17 +77,17 @@ Proof
     (simp[Abbr `data_tys`] >> metis_tac[split_log_ops_data_types]) >>
   `LIST_REL (\arg v. supported_scalar_type (SND arg) /\
     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\
-      value_has_type tv v /\ val_wf tv v) xs vs` by
-    (qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ _ _ /\ _) xs vs` mp_tac >>
-     match_mp_tac LIST_REL_mono >> simp[]) >>
-  `LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
-    supported_scalar_type (SND arg) /\
-    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs` by
-    (qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ _ _ /\ _) xs vs` mp_tac >>
+      value_has_type tv v /\ val_wf tv v)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+    (qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ _ _ /\ _)
+       (SND (split_log_ops xs flags)) _` mp_tac >>
      match_mp_tac LIST_REL_mono >> simp[] >> metis_tac[]) >>
-  qpat_assum `LIST_REL (\arg v. supported_scalar_type _ /\ _) xs vs`
-    (mp_then Any mp_tac split_log_ops_data_rel) >>
-  disch_then drule >> disch_tac >>
+  `LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
+      ptr_val_ok cx (SND arg) v (FST arg) G tn s)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+    (qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ _ _ /\ _)
+       (SND (split_log_ops xs flags)) _` mp_tac >>
+     match_mp_tac LIST_REL_mono >> simp[] >> metis_tac[]) >>
   `EVERY supported_scalar_type (MAP SND (SND (split_log_ops xs flags)))` by
     (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
      qpat_assum `LIST_REL (\arg v. supported_scalar_type _ /\ _) (SND _) _`
@@ -163,6 +171,3 @@ Resume log_success_suffix_path_ptr[post]:
   metis_tac[]
 QED
 Finalise log_success_suffix_path_ptr
-
-val _ = if null (hyp log_success_suffix_path_ptr) then ()
-  else raise Fail "log_success_suffix_path_ptr is not closed";

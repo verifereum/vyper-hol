@@ -138,9 +138,14 @@ Theorem log_success_empty_run[local]:
   fresh_vars_wrt limit_st s /\ sb.cs_next_var <= limit_st.cs_next_var /\
   LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
-  LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
-    supported_scalar_type (SND arg) /\
-    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
+  LIST_REL (log_arg_rel ce cx sa sm es s)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
   encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     stmt_state_rel ctx func ce cx
@@ -156,6 +161,9 @@ Proof
   `emit_inst LOG
     (Lit (n2w (LENGTH (Lit (n2w h)::ops))) ::
       REVERSE (Lit (n2w h)::ops) ++ [Lit 0w;Lit 0w]) [] st = ((),sb)` by gvs[] >>
+  `LIST_REL (log_arg_rel ce cx sa sm es s)
+     (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+    (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
   drule_all compile_split_log_topics_run >> strip_tac >>
   `LENGTH (Lit (n2w h)::ops) < dimword (:256)` by
     (drule_all log_emitted_topic_count_exact >> simp[dimword_def]) >>
@@ -319,8 +327,8 @@ Theorem log_selected_typed[local]:
   !xs vs flags.
   LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
     supported_scalar_type (SND arg) /\
-    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
-  LENGTH flags = LENGTH xs /\
+    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
   LIST_REL (log_arg_rel ce cx sa st es t)
     (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) ==>
   LIST_REL (\arg v. log_arg_rel ce cx sa st es t arg v /\
@@ -328,15 +336,7 @@ Theorem log_selected_typed[local]:
     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
     (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)
 Proof
-  rpt gen_tac >> strip_tac >> drule_all split_log_ops_data_rel >>
-  qpat_abbrev_tac `ds = SND (split_log_ops xs flags)` >>
-  qpat_abbrev_tac `ws = log_non_indexed_values flags vs` >>
-  qpat_x_assum `LIST_REL _ xs vs` kall_tac >>
-  qpat_x_assum `Abbrev (ds = _)` kall_tac >>
-  qpat_x_assum `Abbrev (ws = _)` kall_tac >>
-  qpat_x_assum `LIST_REL _ ds ws` mp_tac >>
-  qid_spec_tac `ws` >> qid_spec_tac `ds` >>
-  Induct >> Cases_on `ws` >> simp[] >> metis_tac[]
+  simp[LIST_REL_EL_EQN] >> metis_tac[]
 QED
 
 Theorem log_data_stage_code[local]:
@@ -409,9 +409,16 @@ Theorem log_success_suffix_run:
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
   LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
     supported_scalar_type (SND arg) /\
-    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
+    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
   encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics /\
   SUM (MAP (type_memory_bytes ce) (log_non_indexed_types flags (MAP SND xs))) < dimword (:256) /\
   abi_size_bound ce.ce_struct_fields (TupleT (log_non_indexed_types flags (MAP SND xs))) < dimword (:256) /\
@@ -447,7 +454,10 @@ Resume log_success_suffix_run[empty]:
   drule_all split_log_ops_data_rel >> strip_tac >>
   `log_non_indexed_values flags vs = []` by gvs[] >>
   `log_non_indexed_types flags (MAP SND xs) = []` by gvs[] >>
-  gvs[] >> drule_all log_success_empty_run >> simp[enc_def, listTheory.REV_DEF]
+  gvs[] >>
+  `LIST_REL (log_arg_rel ce cx sa sm es s)
+     (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by simp[] >>
+  drule_all log_success_empty_run >> simp[enc_def, listTheory.REV_DEF]
 QED
 
 Resume log_success_suffix_run[data]:
@@ -468,6 +478,9 @@ Resume log_success_suffix_run[data]:
      drule_all compile_log_store_data_shape >> strip_tac >>
      drule abi_encoder_counters >> strip_tac >>
      imp_res_tac log_output_buffer_shape >> decide_tac) >>
+  `LIST_REL (log_arg_rel ce cx sa sm es s)
+     (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+    (irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
   drule_all compile_split_log_topics_run >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
   drule_all log_selected_typed >> strip_tac >>

@@ -8,7 +8,7 @@ Ancestors
   vyperInterpreter vyperState vyperTyping list stmtSimLogTrace emitHelper context venomInst
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasSeq rich_list vyperEvalExprPreservesScopesDom
-  eventLoweringStructure
+  eventLoweringStructure stmtSimLogTopics
 Libs
   monadsyntax
 
@@ -268,6 +268,21 @@ Resume compile_log_ready_stmt_frag[args_value]:
      metis_tac[local_ptrs_reserved_next_var]) >>
   `LENGTH flags = LENGTH xs` by
     (qpat_assum `MAP SND xs = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
+  `LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel cenv cx sa sm (es_end with gas_obs := []) t (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs` by
+    (gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+     qpat_x_assum `!n. n < LENGTH vs ==> log_arg_rel _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `n` mp_tac) >> simp[] >> strip_tac >>
+     qexistsl_tac [`SND (EL n xs)`,`tv`] >> simp[]) >>
+  `LIST_REL (\arg v. log_arg_rel cenv cx sa sm (es_end with gas_obs := []) t arg v /\
+    supported_scalar_type (SND arg) /\
+    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+    (irule split_log_ops_data_rel >> simp[]) >>
   qpat_assum `MAP SND xs = MAP expr_type args`
     (fn th => drule_all (REWRITE_RULE [th] log_success_suffix_actual_run)) >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
