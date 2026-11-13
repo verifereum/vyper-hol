@@ -170,8 +170,8 @@ Proof
  `call_ctx_rel (tx with created_in_tx := T) vs.vs_call_ctx vs.vs_tx_ctx
     vs.vs_block_ctx` by fs[call_ctx_rel_def, tx_env_ok_def] >>
  `vs.vs_code = tx.code` by
-  (qpat_assum `gas_variant _ _` mp_tac >>
-   simp[gas_variant_def] >>
+  (qpat_x_assum `gas_variant _ _` mp_tac >>
+   rewrite_tac[gas_variant_def] >>
    disch_then (mp_tac o Q.AP_TERM `\s. s.vs_code`) >>
    simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def] >>
    gvs[deploy_state_rel_def]) >>
