@@ -1,7 +1,7 @@
 (* Counted memory paths for the storage Append suffix. *)
 Theory bodyMemAppendPath
 Ancestors
-  bodyMemAppendFacts bodyDeclMemoryCounted bodyDeclMemoryCore bodyUnopFragMemory
+  bodyMemAppendFacts bodyDeclMemoryCounted bodyDeclZeroGasPath bodyDeclMemoryCore bodyUnopFragMemory
   stmtSimAppendStorageCompose stmtSimAppendStorage appendStorageRel
   varsExt freshWrites stateFrame exprOperandVar stmtSimProps stmtSimDefs exprSimDefs
   fragGasMode fragGasPathMem fragExecMem fragExec

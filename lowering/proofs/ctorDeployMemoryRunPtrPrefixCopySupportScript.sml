@@ -2,9 +2,10 @@
 Theory ctorDeployMemoryRunPtrPrefixCopySupport
 Ancestors
   valueEncodingDefs
+  valueEncoding
   ctorDeployMemoryRunPtrPrefixCanonical valueEncodingProps valueEncodingTyping
   abiDecoderCoherence abiDecoderTypedContract ptrDiscipline
-  valueEncoding vyperTyping list pred_set
+  vyperTyping list pred_set
 
 Theorem prefix_copy_capacity_support:
   val_in_memory tv v d m /\ val_wf tv v /\ type_memory_size tv <= n /\

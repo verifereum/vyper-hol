@@ -84,57 +84,9 @@ Proof
   simp[SF CONJ_ss]
 QED
 
-Theorem prefix_dloadbytes_window:
-  eval_operand dst s = SOME d /\ eval_operand src s = SOME sb /\
-  eval_operand lenop s = SOME k /\
-  step_inst fuel ctx (mk_inst iid DLOADBYTES [dst;src;lenop] []) s = OK t ==>
-  mem_bytes_at (w2n d) (w2n k) t.vs_memory =
-    TAKE (w2n k) (DROP (w2n sb) s.vs_data_section ++ REPLICATE (w2n k) 0w)
-Proof
-  rpt strip_tac >>
-  `t = write_memory_with_expansion (w2n d)
-    (TAKE (w2n k) (DROP (w2n sb) s.vs_data_section ++ REPLICATE (w2n k) 0w)) s` by
-    (qpat_x_assum `step_inst _ _ _ _ = OK t` mp_tac >>
-     simp[step_inst_non_invoke, REWRITE_RULE [mk_inst_def] prefix_dloadbytes_dispatch, mk_inst_def]) >> gvs[] >>
-  `LENGTH (TAKE (w2n k)
-    (DROP (w2n sb) s.vs_data_section ++ REPLICATE (w2n k) 0w)) = w2n k` by simp[] >>
-  metis_tac[write_memory_mem_bytes_at_same]
-QED
 
-Theorem prefix_dloadbytes_zero:
-  eval_operand dst s = SOME d /\ eval_operand src s = SOME sb /\
-  eval_operand lenop s = SOME 0w ==>
-  step_inst fuel ctx (mk_inst iid DLOADBYTES [dst;src;lenop] []) s =
-    OK (write_memory_with_expansion (w2n d) [] s)
-Proof
-  rpt strip_tac >> simp[step_inst_non_invoke, REWRITE_RULE [mk_inst_def] prefix_dloadbytes_dispatch, mk_inst_def]
-QED
 
-Theorem prefix_dloadbytes_past_data:
-  eval_operand dst s = SOME d /\ eval_operand src s = SOME sb /\
-  eval_operand lenop s = SOME k /\ LENGTH s.vs_data_section <= w2n sb ==>
-  step_inst fuel ctx (mk_inst iid DLOADBYTES [dst;src;lenop] []) s =
-    OK (write_memory_with_expansion (w2n d) (REPLICATE (w2n k) 0w) s)
-Proof
-  rpt strip_tac >> simp[step_inst_non_invoke, REWRITE_RULE [mk_inst_def] prefix_dloadbytes_dispatch, mk_inst_def, DROP_LENGTH_TOO_LONG, TAKE_LENGTH_TOO_LONG]
-QED
 
-Theorem prefix_dloadbytes_frame:
-  eval_operand dst s = SOME d /\ eval_operand src s = SOME sb /\
-  eval_operand lenop s = SOME k /\
-  step_inst fuel ctx (mk_inst iid DLOADBYTES [dst;src;lenop] []) s = OK t ==>
-  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-  (allocas_from lo t <=> allocas_from lo s) /\
-  t.vs_data_section = s.vs_data_section /\ t.vs_call_ctx = s.vs_call_ctx /\
-  t.vs_vars = s.vs_vars /\ t.vs_current_bb = s.vs_current_bb /\
-  t.vs_inst_idx = s.vs_inst_idx /\ t.vs_halted = s.vs_halted
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `step_inst _ _ _ _ = OK t` mp_tac >>
-  simp[step_inst_non_invoke, mk_inst_def,
-       REWRITE_RULE [mk_inst_def] prefix_dloadbytes_dispatch] >>
-  strip_tac >> gvs[write_memory_with_expansion_def, allocas_from_def]
-QED
 
 Theorem prefix_dloadbytes_clean:
   eval_operand dst s = SOME d /\ eval_operand src s = SOME sb /\

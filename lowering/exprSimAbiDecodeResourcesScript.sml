@@ -37,7 +37,7 @@ QED
 
 (* The source is below the frontier and misses every pre-existing decoder site. *)
 Theorem abi_decode_caller_source[local]:
-  expr_post (H : (bool # bytes32 # type_value) list # num list)
+  expr_post (H:(bool # bytes32 # type_value) list # num list)
     ctx func ce cx e es st st2 s0 es1 (BytesV bs) data s2 /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic n))) /\
   ~is_word_type (expr_type e) /\
@@ -72,7 +72,7 @@ Proof
 QED
 
 Theorem abi_decode_caller_resources:
-  expr_post (H : (bool # bytes32 # type_value) list # num list)
+  expr_post (H:(bool # bytes32 # type_value) list # num list)
     ctx func ce cx e es st st2 s0 es1 (BytesV bs) data s2 /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (BytesT (Dynamic n))) /\
