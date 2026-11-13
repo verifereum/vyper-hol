@@ -6,9 +6,6 @@ Theory bodyMemIntCall
 Ancestors
   bodyMemoryPreds bodyMemIntCallStep bodyMemIntCallFrameRet
 
-(* PORT_ADMISSION: SEQ-3889. 7ff9cacbf reads IntCall arguments eagerly
-   (eval_exprs, no read_results), so the induction obligation changed shape;
-   intcall_mem_call_step still proves the old shape. *)
 Theorem body_intcall_mem_case:
   !cx v16 src_id_opt fn es v17.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
@@ -77,5 +74,5 @@ Theorem body_intcall_mem_case:
        body_exprs_mem_ok cx es) ==>
     body_expr_mem_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
-  cheat
+  ACCEPT_TAC (MATCH_MP intcall_mem_call_step internal_frame_ret_ok_mem)
 QED
