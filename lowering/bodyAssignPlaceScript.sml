@@ -43,10 +43,11 @@ Ancestors
      supported_target_exists for the keys, and the ABI coverage premise
      with cx_tops_module.
    - CapMcopy: bodySimStmtCases' [local] body_inv_mcopy's proof;
+     acyclic_struct_metadata: body_inv_def. *)
 
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
 val irule_body_pre = bodyConstNameLib.irule_body_pre;
-     acyclic_struct_metadata: body_inv_def. *)
+
 Theorem assign_place_typing[local]:
   type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' ==>
   well_typed_expr env e /\

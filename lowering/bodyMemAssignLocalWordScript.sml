@@ -21,11 +21,11 @@ Ancestors
 Libs
   monadsyntax
 
-(* The MSTORE of the typed word of v at a live local's pointer, run on a
-   memory-safe path: the local's region holds a word (store_lays_out) and
-
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
 val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
+(* The MSTORE of the typed word of v at a live local's pointer, run on a
+   memory-safe path: the local's region holds a word (store_lays_out) and
    lies below the frontier (local_ptrs_rel). *)
 Theorem assign_local_word_store_path_mem:
   !ctx func cenv cx es s id p sz pre env entry rest v etv op st st'.

@@ -22,11 +22,11 @@ Ancestors
 Libs
   monadsyntax
 
-(* The SSTORE or TSTORE of w at slot, run on a memory-safe path: it
-   touches no memory, so it lands past the store with every variable and
-
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
 val irule_body_pre = bodyConstNameLib.irule_body_pre;
+
+(* The SSTORE or TSTORE of w at slot, run on a memory-safe path: it
+   touches no memory, so it lands past the store with every variable and
    allocation kept. *)
 Theorem assign_storage_store_path_mem:
   !ctx func cenv cx es' s tr slot op w st st'.

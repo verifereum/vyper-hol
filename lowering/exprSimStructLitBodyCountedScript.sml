@@ -143,8 +143,11 @@ Resume compile_struct_lit_body_case[at]:
     (`well_typed_expr env (StructLit ann nsid fields)` by fs[expr_body_pre_def] >>
      drule structFieldsPropsTheory.struct_literal_decl_types >> simp[]) >>
   `env.type_defs = get_tenv cx` by
-    fs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
-       vyperTypeInvariantsTheory.env_context_consistent_def] >>
+    (qpat_assum `expr_sim_inv _ _ env _` (strip_assume_tac o
+       SIMP_RULE std_ss [expr_sim_inv_def,
+         vyperTypeInvariantsTheory.env_consistent_def,
+         vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+     asm_simp_tac std_ss []) >>
   `lookup_var x t' = SOME (n2w b)` by metis_tac[] >>
   simp[vv_at_def, read_result_def, return_def, venomStateTheory.eval_operand_def] >>
   gvs[expr_type_def] >>
