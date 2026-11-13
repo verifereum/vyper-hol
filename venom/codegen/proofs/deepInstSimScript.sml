@@ -15,7 +15,7 @@ Ancestors
   codegenReadyCompute regularMemorySim reorderSpillFresh prefixSpillReplay deepDupCallerSim
   stackOpAsmSim planSim asmIR venomInstProofs1 venomEffects indexedLists instSimHelpers
   opcodeClass strongPrefixSim emitInputSim planAlign asmOpSim spillSim allocMono cleanOpsSim
-  contextCodegenRelProps unitShapeDefs asmRunBounded venomRunBounded preparedStackValues
+  contextCodegenRelProps unitShapeDefs asmRunBounded venomRunBounded preparedStackValues planEmissionProps
   regularEmitSim regularPlanSim emitSim prefixExec prefixSim venomWf
   generatedPrefixSim preparedPrefixSim generatedReorderSim reorderSim
   doSwapSim mixedPrefixSim codegenRel blockSimHelpers planSpillBounds
@@ -266,6 +266,43 @@ QED
 
 Finalise regular_inst_prepared_emit_marked
 
+(* Operand bridge shared by successful and aborting creation instructions. *)
+Theorem evaluated_creation_safe:
+  inst_wf inst /\ inst_create_size_ok inst vs /\
+  ((inst.inst_opcode = CREATE /\ name = "CREATE") \/
+   (inst.inst_opcode = CREATE2 /\ name = "CREATE2")) /\
+  eval_operands inst.inst_operands vs = SOME values ==>
+  create_safe (AsmOp name) (values ++ rest)
+Proof
+  strip_tac >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  gvs[eval_operands_def, AllCaseEqs(), create_safe_def] >>
+  fs[inst_create_size_ok_def] >> metis_tac[]
+QED
+
+Theorem prepared_creation_safe:
+  inst_wf inst /\ inst_create_size_ok inst vs /\
+  ((inst.inst_opcode = CREATE /\ name = "CREATE") \/
+   (inst.inst_opcode = CREATE2 /\ name = "CREATE2")) /\
+  venom_asm_rel lo arranged vs mid /\
+  arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
+    compute_operands inst /\
+  EVERY (\op. op <> dead_stack_marker) (compute_operands inst) /\
+  (!op. MEM op (compute_operands inst) ==>
+    eval_operand op vs = operand_val vs lo op) /\
+  eval_operands inst.inst_operands vs = SOME values ==>
+  create_safe (AsmOp name) (mid.as_stack ++ rest)
+Proof
+  strip_tac >>
+  `REVERSE (compute_operands inst) = inst.inst_operands` by
+    (gvs[compute_operands_def, python_stack_operands_def,
+         ir_specific_operand_order_def] >>
+     fs[inst_wf_def] >> gvs[]) >>
+  `eval_operands (REVERSE (compute_operands inst)) vs = SOME values` by simp[] >>
+  drule_all prepared_operands_values >> strip_tac >>
+  asm_rewrite_tac[] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  irule evaluated_creation_safe >> metis_tac[]
+QED
+
 Theorem regular_inst_ok_sim_marked_count:
   !fuel ctx lo o2pc prog liveness dfg cfg fn inst next_liveness is_halting
    next_is_term bb_label spill_base ps vs as ops ps' name initial_fmp.
@@ -319,7 +356,8 @@ Theorem regular_inst_ok_sim_marked_count:
         (~is_terminator inst.inst_opcode ==>
          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops)) /\
         (~is_terminator inst.inst_opcode ==>
-         n = LENGTH (execute_plan initial_fmp ops))
+         n = LENGTH (execute_plan initial_fmp ops)) /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt strip_tac >> drule_all regular_inst_prepared_emit_marked >>
   disch_then (qspec_then `o2pc`
@@ -358,17 +396,71 @@ Resume regular_inst_ok_sim_marked_count[postfix_done]:
       >- asm_rewrite_tac[] >>
       irule asm_steps_compose_ok >> qexists `after_emit` >> asm_rewrite_tac[]) >>
   conj_tac >- asm_rewrite_tac[] >>
-  reverse conj_tac
+  conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `ops = _` SUBST1_TAC >>
+      qpat_x_assum `endpoint.as_pc = _` mp_tac >>
+      qpat_x_assum `after_emit.as_pc = _` mp_tac >>
+      qpat_x_assum `mid.as_pc = _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      pure_rewrite_tac[execute_plan_append, execute_plan_def, APPEND, LENGTH_APPEND, LENGTH] >>
+      simp[exec_stack_op_def] >> decide_tac) >>
+  conj_tac
   >- (strip_tac >> qpat_x_assum `ops = _` SUBST1_TAC >>
       simp[execute_plan_append, execute_plan_def, exec_stack_op_def]) >>
+  suspend "creation_safe"
+QED
+
+Resume regular_inst_ok_sim_marked_count[creation_safe]:
   strip_tac >>
-  qpat_x_assum `ops = _` SUBST1_TAC >>
-  qpat_x_assum `endpoint.as_pc = _` mp_tac >>
-  qpat_x_assum `after_emit.as_pc = _` mp_tac >>
-  qpat_x_assum `mid.as_pc = _` mp_tac >>
-  POP_ASSUM_LIST (K all_tac) >>
-  pure_rewrite_tac[execute_plan_append, execute_plan_def, APPEND, LENGTH_APPEND, LENGTH] >>
-  simp[exec_stack_op_def] >> decide_tac
+  `EVERY plan_admin_op (iops ++ rops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `EVERY plan_admin_op (popops ++ optops)` by
+    (simp[EVERY_APPEND] >> conj_tac
+     >- (Cases_on `inst.inst_outputs = [] \/ is_halting` >> gvs[] >>
+         metis_tac[popmany_plan_admin]) >>
+     Cases_on `FILTER (\out. MEM out next_liveness) inst.inst_outputs = []` >>
+     gvs[] >> metis_tac[optimistic_swap_plan_admin]) >>
+  `asm_block_at prog as.as_pc (execute_plan initial_fmp (iops ++ rops))` by
+    (qpat_x_assum `asm_block_at prog as.as_pc _` mp_tac >>
+     simp[execute_plan_append, execute_plan_def, exec_stack_op_def,
+       asm_block_at_append]) >>
+  irule create_safe_prefix_compose >> conj_tac
+  >- (irule plan_admin_create_safe_prefix >> metis_tac[LESS_EQ_REFL]) >>
+  qexists `mid` >> asm_rewrite_tac[] >>
+  rewrite_tac[arithmeticTheory.ONE, arithmeticTheory.ADD_CLAUSES,
+    create_safe_prefix_suc] >> conj_tac
+  >- suspend "safe_opcode" >>
+  strip_tac >> qx_gen_tac `t` >> strip_tac >>
+  `EL mid.as_pc prog = AsmOp name` by gvs[asm_block_at_def] >>
+  `t = after_emit` by metis_tac[asm_result_11] >>
+  asm_rewrite_tac[] >>
+  irule plan_admin_create_safe_prefix >> metis_tac[LESS_EQ_REFL]
+QED
+
+Resume regular_inst_ok_sim_marked_count[safe_opcode]:
+  `EL mid.as_pc prog = AsmOp name` by gvs[asm_block_at_def] >>
+  asm_rewrite_tac[] >>
+  Cases_on `name = "CREATE" \/ name = "CREATE2"`
+  >- ( `((inst.inst_opcode = CREATE /\ name = "CREATE") \/
+         (inst.inst_opcode = CREATE2 /\ name = "CREATE2"))` by
+         (qpat_x_assum `venom_to_evm_name _ = _` mp_tac >>
+          qpat_x_assum `name = "CREATE" \/ _` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >>
+          Cases_on `inst.inst_opcode` >> simp[venom_to_evm_name_def] >>
+          rpt strip_tac >> gvs[]) >>
+       `selected = compute_operands inst` by
+         (gvs[is_commutative_def]) >>
+       `?values. eval_operands inst.inst_operands vs = SOME values` by
+         (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+          qpat_x_assum `inst.inst_opcode = _` mp_tac >>
+          qpat_x_assum `inst_wf inst` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+          gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+          gvs[step_inst_def, step_inst_base_def, eval_operands_def, AllCaseEqs()]) >>
+       `create_safe (AsmOp name) (mid.as_stack ++ [])` suffices_by simp[] >>
+       irule prepared_creation_safe >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  simp[create_safe_def]
 QED
 
 Finalise regular_inst_ok_sim_marked_count
@@ -424,7 +516,8 @@ Theorem regular_inst_ok_sim_marked:
         asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
-         as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
+         as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops)) /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all regular_inst_ok_sim_marked_count >> metis_tac[]
@@ -3278,7 +3371,8 @@ Theorem regular_dispatch_ok_count[local]:
     venom_asm_rel lo ps' vs' as' /\
     as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops) /\
     n = LENGTH (execute_plan initial_fmp ops) -
-      (if inst.inst_opcode = ASSERT_UNREACHABLE then 1 else 0)
+      (if inst.inst_opcode = ASSERT_UNREACHABLE then 1 else 0) /\
+    (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt strip_tac >>
   qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
@@ -3370,7 +3464,7 @@ Proof
      first_x_assum drule >> simp[inst_shape_ok_def]) >>
   Cases_on `venom_to_evm_name inst.inst_opcode`
   >- suspend "none" >>
-  drule_all regular_dispatch_ok_count >> simp[]
+  drule_all regular_dispatch_ok_count >> simp[] >> metis_tac[]
 QED
 
 Resume gen_inst_ok_sim_marked_count[none]:
@@ -3389,40 +3483,4 @@ QED
 
 Finalise gen_inst_ok_sim_marked_count
 
-(* This bridge is independent of the result of the creation instruction:
-   it applies equally to the marked OK and static-abort input states. *)
-Theorem evaluated_creation_safe:
-  inst_wf inst /\ inst_create_size_ok inst vs /\
-  ((inst.inst_opcode = CREATE /\ name = "CREATE") \/
-   (inst.inst_opcode = CREATE2 /\ name = "CREATE2")) /\
-  eval_operands inst.inst_operands vs = SOME values ==>
-  create_safe (AsmOp name) (values ++ rest)
-Proof
-  strip_tac >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
-  gvs[eval_operands_def, AllCaseEqs(), create_safe_def] >>
-  fs[inst_create_size_ok_def] >> metis_tac[]
-QED
 
-Theorem prepared_creation_safe:
-  inst_wf inst /\ inst_create_size_ok inst vs /\
-  ((inst.inst_opcode = CREATE /\ name = "CREATE") \/
-   (inst.inst_opcode = CREATE2 /\ name = "CREATE2")) /\
-  venom_asm_rel lo arranged vs mid /\
-  arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
-    compute_operands inst /\
-  EVERY (\op. op <> dead_stack_marker) (compute_operands inst) /\
-  (!op. MEM op (compute_operands inst) ==>
-    eval_operand op vs = operand_val vs lo op) /\
-  eval_operands inst.inst_operands vs = SOME values ==>
-  create_safe (AsmOp name) (mid.as_stack ++ rest)
-Proof
-  strip_tac >>
-  `REVERSE (compute_operands inst) = inst.inst_operands` by
-    (gvs[compute_operands_def, python_stack_operands_def,
-         ir_specific_operand_order_def] >>
-     fs[inst_wf_def] >> gvs[]) >>
-  `eval_operands (REVERSE (compute_operands inst)) vs = SOME values` by simp[] >>
-  drule_all prepared_operands_values >> strip_tac >>
-  asm_rewrite_tac[] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
-  irule evaluated_creation_safe >> metis_tac[]
-QED
