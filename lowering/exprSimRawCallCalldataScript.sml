@@ -1437,7 +1437,10 @@ Proof
   rpt strip_tac >> gvs[] >>
   drule_all raw_call_output_restore_run >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx es t` by
-    (drule_all raw_call_output_restore_frame >> simp[]) >>
+    (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s`, `u`, `t`, `saved`,
+                  `inst`, `q`, `b`, `sz`, `w`,
+                  `n2w (MIN n (LENGTH s.vs_returndata))`]
+       mp_tac raw_call_output_restore_frame >> simp[]) >>
   qexists_tac `t` >>
   simp[stmt_state_rel_inst_idx, fresh_vars_wrt_def,
        instIdxIndepTheory.eval_op_inst_idx] >>
