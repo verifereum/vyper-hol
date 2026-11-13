@@ -5,7 +5,7 @@
    and bodyAugAssignOther's immutable_deploy_augassign_case. *)
 Theory bodyMemImmutableDeploy
 Ancestors
-  immutableAssignEmpty immutableAssignState bodyMemoryPreds targetPlaceSim bodyImmutableAssignFacts immutableAssignStoreMem immutableFixedCopyMem immutableFixedCopyTransportMem immutableLoopStoreMem immutableNormalizeMem immutableAssignAdmissibility immutableAssignWordMem immutableAssignFixedMem immutableAssignBytesMem immutableAssignNormalizedMem
+  immutableFixedCopyPathMem immutableAssignEmpty immutableAssignState bodyMemoryPreds targetPlaceSim bodyImmutableAssignFacts immutableAssignStoreMem immutableFixedCopyMem immutableFixedCopyTransportMem immutableLoopStoreMem immutableNormalizeMem immutableAssignAdmissibility immutableAssignWordMem immutableAssignFixedMem immutableAssignBytesMem immutableAssignNormalizedMem
 
 (* RESIDUAL (held): as its S1 twin immutable_deploy_assign_case, which is
    admitted on this base. *)
@@ -53,6 +53,15 @@ Theorem body_assign_immutable_deploy_mem:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all immutable_assignment_shape >> strip_tac >> gvs[] >>
+  `expr_body_pre cenv cx env e es` by
+    metis_tac[bodyAssignPlaceTheory.body_assign_place_rhs_pre] >>
+  `expr_vv_sim_mem ctx func cenv cx (expr_type e) e es` by
+    metis_tac[body_expr_mem_ok_def] >>
+  Cases_on `nsid` >> rename1 `TopLevelNameTarget (src,id)` >>
+  drule_all immutable_assignment_globals >> strip_tac >>
+  drule_all immutable_assignment_layout >> strip_tac >> gvs[] >>
   cheat
 QED
 
