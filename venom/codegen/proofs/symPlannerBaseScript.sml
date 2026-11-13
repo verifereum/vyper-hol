@@ -34,23 +34,6 @@ Proof
   strip_tac >> first_x_assum irule >> simp[in_mem_range_def]
 QED
 
-Theorem mem_label_at_cong:
-  (!i. in_mem_range off 32 i ==> FLOOKUP a i = FLOOKUP b i) ==>
-  mem_label_at a off = mem_label_at b off
-Proof
-  strip_tac >> map_every imp_res_tac [mem_range_lookup_bytes, mem_range_lookup_start] >>
-  simp[mem_label_at_def, mem_range_lookup_start, EVERY_MEM, MEM_COUNT_LIST]
-QED
-
-Theorem mem_sval_at_cong:
-  (!i. in_mem_range off 32 i ==> FLOOKUP a i = FLOOKUP b i) ==>
-  (mem_sval_at a off sv <=> mem_sval_at b off sv)
-Proof
-  Cases_on `sv` >> simp[mem_sval_at_def]
-  >- metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
-  metis_tac[mem_label_at_cong]
-QED
-
 Theorem clear_lookup_outside:
   ~in_mem_range off 32 i ==>
   FLOOKUP (mem_labels_clear labs (in_mem_range off 32)) i = FLOOKUP labs i

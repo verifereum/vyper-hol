@@ -10,7 +10,7 @@ Theory exprSimAbiDecode
 Ancestors
   exprSimHypsDefs exprSimDefs exprSimAbiDecodeEntryTyping exprSimUnwrap
   vyperAST exprSimHyps exprSimSource exprOpenFirstOperand
-  exprSimAbiDecodeCompose exprSimAbiDecodeInputBound exprSimAbiDecodeBodyEntry
+  exprSimAbiDecodeCompose exprSimSliceCompose vyperStorageTrace exprSimAbiDecodeInputBound exprSimAbiDecodeBodyEntry
   exprSimAbiDecodeResources exprSimAbiDecodeCountedOutcome
   exprSimAbiDecodeBodySuccess exprSimAbiDecodeReject
   exprLowering exprLoweringProps loweringPosts compileEnv
@@ -53,24 +53,25 @@ Proof
     metis_tac[expr_body_pre_gas_admissible] >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `start`, `data`, `s0`] mp_tac) >>
-  (impl_tac >- metis_tac[]) >>
-  rewrite_tac[gas_outcome_def] >> strip_tac
-  >- (qexists_tac `marks` >> disj1_tac >>
-      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
-        (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
-      strip_tac
-      >- (gvs[] >>
-          `~t.vs_halted` by
-            metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-          irule abi_decode_normal_prefix_summary >>
-          goal_assum (drule_at Any) >> metis_tac[]) >>
-      Cases_on `res` >- gvs[expr_exit_def] >>
-      irule abi_decode_child_exit_summary >>
-      qexistsl_tac [`es_end`, `y`, `r`] >> simp[] >>
-      Cases_on `y` >> Cases_on `r` >> gvs[expr_exit_def] >>
-      Cases_on `e'` >> gvs[expr_exit_def]) >>
-  qexists_tac `marks` >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  irule abi_decode_child_exempt_cert >> simp[]
+  disch_then (qspecl_then [`st0`, `sa`, `start`, `data`, `s0`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  rewrite_tac[abi_decode_singleton_source] >>
+  irule slice_gas_outcome_bind_value >>
+  conj_tac
+  >- (gen_tac >> BETA_TAC >> simp[storage_trace_frame_def] >>
+      rpt gen_tac >> Cases_on `evaluate_type_builtin cx (AbiDecode unwrap) ann [BaseT (BytesT (Dynamic n))] [v]` >>
+      simp[bind_def, lift_sum_def, return_def, raise_def]) >>
+  qexists_tac `\H v ee t.
+    expr_post H ctx func cenv cx e es sa start s0 ee v data t /\
+    t.vs_current_bb = start.cs_current_bb /\
+    t.vs_inst_idx = LENGTH start.cs_current_insts` >>
+  reverse conj_tac
+  >- (irule slice_gas_outcome_conseq >> goal_assum (drule_at Any) >>
+      simp[] >> rpt strip_tac >> Cases_on `res` >> gvs[] >>
+      rename1 `expr_exit (INR ex) r` >>
+      qspec_then `Value` (qspec_then `INR ex` mp_tac) expr_exit_success_map >>
+      simp[]) >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  irule abi_decode_suffix_outcome >> simp[] >>
+  metis_tac[]
 QED

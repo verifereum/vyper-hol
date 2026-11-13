@@ -7,8 +7,8 @@ Ancestors
   exprSimAbiEncodeRelabelBoundary exprLoweringProps loweringPosts compileEnv venomMemDefs
 
 Theorem abi_encode_translated_stmt_rel_prev_bb[local]:
-  stmt_state_rel ctx func ce cx es (s with vs_prev_bb := L) <=>
-  stmt_state_rel ctx func ce cx es s
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es (s with vs_prev_bb := L) <=>
+  stmt_state_rel H ctx func ce cx es s
 Proof
   `fmp_room ctx func (s with vs_prev_bb := L) <=> fmp_room ctx func s` by
     (irule fmp_room_fields_cong >> simp[]) >>
@@ -21,7 +21,7 @@ Proof
 QED
 
 Theorem abi_encode_translated_counted_suffix:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
@@ -48,9 +48,11 @@ Theorem abi_encode_translated_counted_suffix:
       mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes selector) /\
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    stmt_state_rel ctx func ce cx es' actual /\
+    stmt_state_rel H ctx func ce cx es' actual /\
     LENGTH s.vs_memory <= LENGTH actual.vs_memory /\
     actual.vs_fmp = s.vs_fmp /\ actual.vs_call_ctx = s.vs_call_ctx /\
+    actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+    actual.vs_requests = s.vs_requests /\
     actual.vs_data_section = s.vs_data_section /\
     abi_encode_semantic_obs actual = abi_encode_semantic_obs s /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> lookup_var x actual = SOME w) /\
@@ -68,9 +70,11 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all lower_abi_encode_frag_facts >> strip_tac >>
   qabbrev_tac `Q = \actual.
-    stmt_state_rel ctx func ce cx es' actual /\
+    stmt_state_rel H ctx func ce cx es' actual /\
     LENGTH s.vs_memory <= LENGTH actual.vs_memory /\
     actual.vs_fmp = s.vs_fmp /\ actual.vs_call_ctx = s.vs_call_ctx /\
+    actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+    actual.vs_requests = s.vs_requests /\
     actual.vs_data_section = s.vs_data_section /\
     abi_encode_semantic_obs actual = abi_encode_semantic_obs s /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> lookup_var x actual = SOME w) /\
@@ -123,7 +127,7 @@ Resume abi_encode_translated_counted_suffix[no_blocks]:
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   qexists `actual` >> conj_tac
   >- (fs[abi_encode_exec_frame_def] >> simp_tac bool_ss [Abbr `Q`] >>
-      ntac 11 (conj_tac >- first_assum ACCEPT_TAC) >>
+      ntac 14 (conj_tac >- first_assum ACCEPT_TAC) >>
       qexists `p` >> asm_rewrite_tac[]) >>
   gvs[]
 QED
@@ -139,7 +143,7 @@ Resume abi_encode_translated_counted_suffix[blocks]:
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   qexists `actual` >> conj_tac
   >- (fs[abi_encode_exec_frame_def] >> simp_tac bool_ss [Abbr `Q`] >>
-      ntac 11 (conj_tac >- first_assum ACCEPT_TAC) >>
+      ntac 14 (conj_tac >- first_assum ACCEPT_TAC) >>
       qexists `p` >> asm_rewrite_tac[]) >>
   gvs[]
 QED

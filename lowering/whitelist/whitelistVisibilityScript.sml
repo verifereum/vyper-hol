@@ -235,7 +235,8 @@ Theorem body_append_runtime_metadata_vis:
     lookup_var_slot_from_layout cx tr src key = SOME slot /\
     evaluate_type (get_tenv cx) ty = SOME tv /\
     eval_target_place cx (TopLevelNameTarget (src,id)) es =
-      (INL (StoragePlace tr (n2w slot) tv),es)
+      (INL (StoragePlace tr (n2w slot) tv),
+       es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
 Proof
   strip_tac >>
   `ALL_DISTINCT
@@ -267,7 +268,8 @@ Theorem body_append_target_bounds_vis:
     lookup_var_slot_from_layout cx tr src key = SOME slot /\
     evaluate_type (get_tenv cx) (ArrayT elem (Dynamic n)) = SOME tv /\
     eval_target_place cx (TopLevelNameTarget (src,id)) es =
-      (INL (StoragePlace tr (n2w slot) tv),es)
+      (INL (StoragePlace tr (n2w slot) tv),
+       es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
 Proof
   REWRITE_TAC [GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule append_typing_target >> strip_tac >>

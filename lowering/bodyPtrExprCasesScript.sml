@@ -20,7 +20,7 @@ Ancestors
   bodyPtrBop bodyPtrBopIn bodyPtrMakeArray bodyPtrWordBuiltins
   bodyPtrEnvBuiltins bodyPtrHashBuiltins bodyPtrBytestringBuiltins
   bodyPtrPrecompileBuiltins bodyPtrTypeBuiltins bodyPtrAbiEncode
-  bodyPtrAbiDecode
+  bodyPtrAbiDecode bodyPtrCodeSliceCase
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list
 
@@ -92,9 +92,12 @@ Theorem body_builtin_case_ptr:
 Proof
   rpt gen_tac >> strip_tac >>
   reverse (Cases_on `code_slice_source bt es`)
-  >- ((* HELD: slice(x.code, ...) operands; admitted on this branch before
-         the trunk's proof of the other builtins arrived. *)
-      cheat) >>
+  >- (rename1 `code_slice_source bt es = SOME src` >>
+      Cases_on `src` >> gvs[code_slice_source_SOME] >>
+      irule body_code_slice_some_ptr >>
+      gvs[code_slice_source_def, type_check_def, assert_def,
+          builtin_args_length_ok_def] >>
+      metis_tac[]) >>
   `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len /\ bt <> Env MsgGas ==>
    body_exprs_ptr_ok cx es` by
     (strip_tac >> first_x_assum irule >> simp[type_check_def, assert_def] >>

@@ -7,8 +7,8 @@ Ancestors
   exprSimAbiEncodeRelabelBoundary exprLoweringProps loweringPosts compileEnv venomMemDefs
 
 Theorem abi_encode_stmt_rel_prev_bb[local]:
-  stmt_state_rel ctx func ce cx es (s with vs_prev_bb := L) <=>
-  stmt_state_rel ctx func ce cx es s
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es (s with vs_prev_bb := L) <=>
+  stmt_state_rel H ctx func ce cx es s
 Proof
   `fmp_room ctx func (s with vs_prev_bb := L) <=> fmp_room ctx func s` by
     (irule fmp_room_fields_cong >> simp[]) >>
@@ -21,7 +21,7 @@ Proof
 QED
 
 Theorem abi_encode_nonword_counted_suffix:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
@@ -53,7 +53,7 @@ Theorem abi_encode_nonword_counted_suffix:
       mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes selector) /\
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    stmt_state_rel ctx func ce cx es' actual /\
+    stmt_state_rel H ctx func ce cx es' actual /\
     LENGTH s.vs_memory <= LENGTH actual.vs_memory /\
     actual.vs_fmp = s.vs_fmp /\ actual.vs_call_ctx = s.vs_call_ctx /\
     actual.vs_data_section = s.vs_data_section /\
@@ -75,7 +75,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all lower_abi_encode_frag_facts >> strip_tac >>
   qabbrev_tac `Q = \actual.
-    stmt_state_rel ctx func ce cx es' actual /\
+    stmt_state_rel H ctx func ce cx es' actual /\
     LENGTH s.vs_memory <= LENGTH actual.vs_memory /\
     actual.vs_fmp = s.vs_fmp /\ actual.vs_call_ctx = s.vs_call_ctx /\
     actual.vs_data_section = s.vs_data_section /\

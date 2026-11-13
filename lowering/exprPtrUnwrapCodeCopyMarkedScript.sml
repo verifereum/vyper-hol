@@ -10,7 +10,9 @@ Theorem unwrap_code_marked_read_ptr:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type t /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
-  vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
+  (!H. P H ==>
+     vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
+     ghost_inv H ret cenv cx ee G tn s) /\ P H0 /\
   ptr_vv_ok cx (expr_type e) tv (LocatedValue t p) ee G tn s /\
   (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
@@ -23,29 +25,35 @@ Theorem unwrap_code_marked_read_ptr:
     ~is_word_type (expr_type e) ==>
     type_memory_bytes cenv (expr_type e) = type_memory_size ty /\
     type_memory_size ty < 2**64) /\
-  ghost_inv H ret cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
+  ghost_kept cenv es sa Gi ti s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
   ?v HG tf z.
-    gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (read_result cx tv)
-      (ee,s,G,tn) [] (INL v) ee HG tf (OK z) /\
-    expr_post H ctx func cenv cx e es sa sb s0 ee v op z /\
+    (!D. gas_marked_exec_ptr D (ctx,func) PG (read_result cx tv)
+           (ee,s,G,tn) [] (INL v) ee HG tf (OK z)) /\
+    (!H. P H ==>
+       expr_post H ctx func cenv cx e es sa sb s0 ee v op z /\
+       ghost_inv H ret cenv cx ee HG tf z) /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv H ret cenv cx ee HG tf z /\
     ptr_val_ok cx (expr_type e) v op HG tf z /\ ptr_buf_ok cenv e op HG z /\
     ghost_kept cenv es sa Gi ti s0 HG tf
 Proof
   strip_tac >>
   `post_value_type cenv e = expr_type e` by
     metis_tac[post_value_type_lowered] >>
+  `vv_post H0 ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s` by
+    metis_tac[] >>
   drule_all vv_post_code_source >> strip_tac >>
   `?ty. evaluate_type (get_tenv cx) t = SOME ty /\ val_wf ty v` by
     (fs[immutable_holds_def, read_result_def, return_def] >>
      metis_tac[value_has_type_val_wf]) >>
   `type_memory_bytes cenv t = type_memory_size ty /\ type_memory_size ty < 2**64` by
     metis_tac[] >>
-  `vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s` by
-    metis_tac[vv_post_read_result] >>
+  `!H. P H ==>
+     vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
+     ghost_inv H ret cenv cx ee G tn s` by
+    (qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+     metis_tac[vv_post_read_result]) >>
   `ptr_vv_ok cx (expr_type e) (Value v) (LocatedValue t p) ee G tn s` by
     fs[ptr_vv_ok_def] >>
   `compile_ensure_in_memory p.ptr_operand LocCode (type_memory_bytes cenv t)
@@ -56,20 +64,24 @@ Proof
     metis_tac[unwrap_typed_buffer_count, type_memory_size_slots] >>
   `type_memory_bytes cenv t < dimword (:256)` by (fs[dimword_def] >> decide_tac) >>
   `?HG tf z.
-    gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (read_result cx (Value v))
-      (ee,s,G,tn) [] (INL v) ee HG tf (OK z) /\
-    expr_post H ctx func cenv cx e es sa sb s0 ee v op z /\
+    (!D. gas_marked_exec_ptr D (ctx,func) PG (read_result cx (Value v))
+           (ee,s,G,tn) [] (INL v) ee HG tf (OK z)) /\
+    (!H. P H ==>
+       expr_post H ctx func cenv cx e es sa sb s0 ee v op z /\
+       ghost_inv H ret cenv cx ee HG tf z) /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv H ret cenv cx ee HG tf z /\
     ptr_val_ok cx (expr_type e) v op HG tf z /\ ptr_buf_ok cenv e op HG z /\
     ghost_kept cenv es sa Gi ti s0 HG tf` by
     (qpat_assum `post_value_type cenv e = expr_type e`
        (fn th => rewrite_tac[GSYM th]) >>
-     irule unwrap_code_ensure_marked_read_ptr >> ntac 10 (conj_tac >- simp[]) >>
-     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     irule unwrap_code_ensure_marked_read_ptr >> simp[] >>
+     conj_tac >- (qexists_tac `H0` >> first_assum ACCEPT_TAC) >>
      qexistsl [`cenv.ce_imm_alloca`, `((type_memory_bytes cenv t+31) DIV 32)`,
-       `type_memory_bytes cenv t`, `ty`] >> gvs[]) >>
-  pop_assum strip_assume_tac >> qexistsl [`v`, `HG`, `tf`, `z`] >> simp[] >>
-  fs[gas_marked_exec_ptr_def, read_result_def, return_def] >>
-  metis_tac[read_result_gas_obs]
+       `p`, `sm`, `t`, `ty`] >> gvs[]) >>
+  pop_assum strip_assume_tac >> qexistsl [`v`, `HG`, `tf`, `z`] >>
+  conj_tac
+  >- (gen_tac >> qpat_x_assum `!D. _` (qspec_then `D` mp_tac) >>
+      simp[gas_marked_exec_ptr_def, gas_explicit_def] >>
+      metis_tac[read_result_gas_obs]) >>
+  asm_rewrite_tac[]
 QED

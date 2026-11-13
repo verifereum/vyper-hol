@@ -44,12 +44,18 @@ Theorem extract32_word_suffix_success:
 Proof
   strip_tac >>
   `?H. valid_horizon cx st0 H es'.storage_trace` by metis_tac[] >>
-  qpat_x_assum `~expr_has_effect _ ==> _` (assume_tac o SRULE []) >>
-  drule_all (SRULE [] (Q.INST
-    [`code` |-> `emitted_insts sa sc ++ emitted_insts sc sb`,
-     `e` |-> `TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;ofs]`]
-    extract32_suffix_success_entry) |> SRULE [expr_type_def]) >>
-  disch_then (qspec_then `BaseT bt` strip_assume_tac) >>
+  mp_tac (Q.INST
+    [`sa` |-> `ca`, `sc` |-> `cm`, `sb` |-> `cb`, `s0c` |-> `c0`,
+     `code` |-> `emitted_insts ca cm ++ emitted_insts cm cb`,
+     `e` |-> `TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;ofs]`,
+     `lt` |-> `BaseT bt`]
+    (SPEC_ALL extract32_suffix_success_entry)) >>
+  impl_tac >-
+    (rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC, REFL_TAC,
+            (qexists_tac `H` >> first_assum ACCEPT_TAC),
+            (simp[expr_type_def] >> NO_TAC)]) >>
+  strip_tac >>
   qexists_tac `u` >> rpt conj_tac
   >- first_assum ACCEPT_TAC
   >- (qx_gen_tac `H1` >> strip_tac >>

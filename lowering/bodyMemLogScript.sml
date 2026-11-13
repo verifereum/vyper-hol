@@ -149,10 +149,9 @@ Proof
   qabbrev_tac `RR = \tail s. EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) tail /\ body_exprs_mem_ok cx tail /\ expr_sim_inv cenv cx env s /\ supported_pure_exprs tops tail /\ well_typed_exprs env tail /\ ~supported_exprs_exists (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) tail /\ call_evaluation_safe cx (int_calls_exprs tail) /\ (!target. supported_exprs_exists (expr_abi_decode_target_root target) tail ==> occurs_abi_decode_target target tops)` >>
   `~exprs_can_mutate cenv args` by metis_tac[supported_pure_expr_no_mutate] >>
   `EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
-              is_bytestring_type (expr_type e)) args` by
+               is_bytestring_type (expr_type e)) args` by
     metis_tac[supported_pure_exprs_bytestring_iff] >>
-  irule compile_log_ready_stmt_frag_mem_widen >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  irule compile_log_ready_stmt_frag_mem_widen >> simp[] >>
   conj_tac >- (
     qexists_tac `RR` >> simp[Abbr `RR`] >>
     rpt gen_tac >> strip_tac >>
@@ -160,9 +159,6 @@ Proof
     qmatch_goalsub_rename_tac `expr_sim_mem ctx func cenv cx (expr_type e) e s` >>
     qspecl_then [`tops`, `ctx`, `func`, `cenv`, `cx`, `env`, `e`, `tail`, `s`]
       mp_tac log_mem_args_step >> simp[DE_MORGAN_THM]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- (
-    qexistsl_tac [`MAP SND fields`, `h`, `MAP (SND o FST) fields`] >> simp[]) >>
   qexists_tac `env` >> simp[]
 QED
 

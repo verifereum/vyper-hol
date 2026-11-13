@@ -142,12 +142,6 @@ Proof
       `?dw. lookup_var p s = SOME dw` by
         (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
          first_x_assum drule_all >> metis_tac[]) >>
-      `!H'. stmt_state_rel H' ctx func cenv cx es s ==>
-            stmt_state_rel H' ctx func cenv cx
-              (es with scopes :=
-                pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
-              (mstore (w2n dw) (typed_val_to_w256 tv v) s)` by
-        (rpt strip_tac >> irule stmt_state_rel_write_local_store >> simp[]) >>
       drule_all stmt_state_rel_write_local_store >> strip_tac >>
       drule_all emit_mstore_marked_path >> strip_tac >>
       `st'.cs_current_bb = st.cs_current_bb /\
@@ -177,13 +171,10 @@ Proof
 QED
 
 Resume tuple_local_store_head_path[word_frame]:
-  conj_tac
-  >- (gen_tac >> strip_tac >> drule_all stmt_state_rel_write_local_store >>
-      simp[mstore_def, LET_THM]) >>
-  conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _`
-        (qspecl_then [`a`, `len`] mp_tac) >> simp[]) >>
+  conj_tac >-
+    (rpt strip_tac >> drule_all stmt_state_rel_write_local_store >>
+     simp[mstore_def, LET_THM]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   rpt gen_tac >> strip_tac >>
   drule_all tuple_store_destination_region >> strip_tac >>
   `32 <= dsz` by

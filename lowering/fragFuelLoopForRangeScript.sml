@@ -25,15 +25,6 @@ Ancestors
 Libs
   fragFuelLib
 
-(* Unsigned modular distance decreases even when the counter wraps. *)
-Theorem range_distance_decreases[local]:
-  !(a:256 word) b.
-    a <> b ==> w2n (b - (a + 1w)) < w2n (b - a)
-Proof
-  rpt strip_tac >> rewrite_tac[wordsTheory.WORD_SUB_PLUS] >>
-  irule wordsTheory.WORD_PRED_THM >> simp[wordsTheory.WORD_EQ_SUB_ZERO]
-QED
-
 (* Recover the caller's frame from the smaller body write set.  The
    optional fresh local pointer need not be in the caller's write set. *)
 Theorem range_body_frame[local]:
@@ -572,7 +563,7 @@ Proof
      qexists_tac `j` >> conj_tac >- decide_tac >>
      drule fuel_outcome_weaken >> disch_then irule >>
      simp[Abbr `Q`, Abbr `mu`] >> rpt strip_tac >>
-     simp[range_distance_decreases]) >>
+     simp[loop_distance_decreases]) >>
   first_x_assum (qspec_then `s` mp_tac) >> simp[Abbr `H`, Abbr `Q`]
 QED
 

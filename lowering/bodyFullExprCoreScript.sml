@@ -14,6 +14,7 @@
  *)
 Theory bodyFullExprCore
 Ancestors
+  bodyFullNameVV bodyFullNameNonword bodyFullNameWord
   gasOutcomeFullCompose exprSimProps exprSimSource exprLoweringProps
   exprLowering vyperTyping vyperTypeSystem loweringPosts valueEncoding vyperValueOperation
   exprSimMemDefs bodyPtrDefs gasShadow fragGasOriginPtr ptrDiscipline loweringSlice
@@ -27,7 +28,10 @@ val _ = Parse.hide "body";
 Theorem name_expr_full_ok:
   !cx ann id. body_expr_full_ok cx (Name ann id)
 Proof
-  cheat
+  simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
+  conj_tac >- (Cases_on `is_word_type ann` >>
+    metis_tac[name_word_full, name_nonword_full]) >>
+  irule name_vv_full >> metis_tac[]
 QED
 
 Theorem toplevel_name_expr_full_ok:

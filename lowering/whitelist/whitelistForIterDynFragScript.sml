@@ -698,18 +698,19 @@ Theorem dynarray_loop_initialize:
     alloca_frame cenv es st s0 cenv es cc
 Proof
   strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
   drule_all (SIMP_RULE pure_ss [PULL_EXISTS] dynarray_loop_initialize_explicit) >>
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
   `stmt_state_rel H ctx func cenv cx es
      (update_var lv (n2w (LENGTH vs)) s0)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   drule_all array_alloca_frame >> strip_tac >>
   `alloca_frame cenv es st s0 cenv es cc` by
-    (qpat_x_assum `stmt_state_rel H ctx func cenv cx es s0` assume_tac >>
-     drule_at (Pos hd) alloca_frame_of_mem_frame >> disch_then irule >>
+    (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_of_mem_frame) >>
+     goal_assum (drule_at Any) >>
      gvs[ALL_DISTINCT] >>
      simp[jump_to_def, update_var_def] >>
+     reverse conj_tac >- metis_tac[] >>
      rpt strip_tac >>
      `x <> lv /\ x <> p /\ x <> idx /\ x <> g /\ x <> vld` by metis_tac[] >>
      qpat_x_assum `!x. x <> p ==> _` (qspec_then `x` mp_tac) >>
@@ -1059,7 +1060,8 @@ Proof
   drule_all stmtSimDeclComposeTheory.gas_outcome_zero_prefix >> strip_tac >>
   `LENGTH (MAP Value vs) <= n` by simp[] >>
   drule_all for_source_prefix_bounded >> strip_tac >>
-  irule array_outcome_stmt_post >> gvs[alloca_frame_gas_obs]
+  irule array_outcome_stmt_post >> gvs[alloca_frame_gas_obs] >>
+  goal_assum (drule_at Any)
 QED
 
 Theorem compile_for_dynarray_frag:

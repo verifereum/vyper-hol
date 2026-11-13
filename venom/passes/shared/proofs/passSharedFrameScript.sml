@@ -290,6 +290,23 @@ Proof
   gvs[exec_write2_def, AllCaseEqs(), eval_operands_def]
 QED
 
+(* Base-instruction abort guards do not issue external requests. *)
+Theorem step_inst_base_abort_requests:
+  step_inst_base inst s = Abort a post ==>
+  post.vs_requests = s.vs_requests
+Proof
+  strip_tac >>
+  drule step_inst_base_abort_opcodes >> strip_tac >>
+  TRY (drule step_inst_base_static_write_abort >> simp[] >> strip_tac >>
+       gvs[halt_state_def, set_returndata_def]) >>
+  qpat_x_assum `step_inst_base inst s = Abort a post` mp_tac >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[venomInstTheory.opcode_case_def] >>
+  simp[AllCaseEqs(), exec_create_abort_iff] >>
+  rpt strip_tac >>
+  gvs[halt_state_def, revert_state_def, set_returndata_def]
+QED
+
 (* In a static frame, a state write other than CALL aborts once its
    operands evaluate. *)
 Theorem step_inst_base_static_write_guard:

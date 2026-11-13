@@ -4,7 +4,7 @@ Ancestors
   loweringPosts compileEnv venomMemDefs freshWrites
 
 Theorem abi_encode_nonword_origin_frame:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   local_ptrs_reserved ce origin /\
   origin.cs_next_var <= sa.cs_next_var /\
   origin.cs_next_id <= sa.cs_next_id /\

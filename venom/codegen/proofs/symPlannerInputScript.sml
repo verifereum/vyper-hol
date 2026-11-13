@@ -28,7 +28,7 @@ Theorem sym_exec_push_kind:
     last.sym_mem_labels = ss.sym_mem_labels
 Proof
   rw[] >> drule_all_then strip_assume_tac sym_push_kind_step >>
-  metis_tac[sym_steps_singleton]
+  metis_tac[sym_steps_single]
 QED
 
 Theorem sym_exec_push_label:
@@ -54,7 +54,7 @@ Theorem sym_exec_push_literal:
     last.sym_mem_labels = ss.sym_mem_labels
 Proof
   rw[execute_plan_def, exec_stack_op_def] >>
-  drule_then (qspec_then `env` SUBST1_TAC) sym_steps_singleton >>
+  drule_then (qspec_then `env` SUBST1_TAC) sym_steps_single >>
   simp[sym_step_push_bytes, sym_kinds_ok_base_change,
     sym_kinds_ok_push, op_kind_ok_def, asm_next_def]
 QED

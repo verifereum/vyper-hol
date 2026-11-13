@@ -7,7 +7,7 @@ Ancestors concretizeLayoutCanonicalCallEntry concretizeLayoutCanonicalDeferred
   frameSelectedDecoration frameJointTransition frameControlAgreement
   venomExecSemantics list arithmetic
 
-Theorem layout_canonical_caller_bind[local]:
+Theorem layout_canonical_caller_bind:
   layout_ordinary_entry D lo vs0 C C' q0 es qs qend a s t /\
   layout_ret_endpoint D lo vs0 C C' q0 es qs qend b sc tc ret ret' /\
   bind_outputs outs ret.iret_values
@@ -42,35 +42,34 @@ Proof
   first_x_assum (qspec_then `0` mp_tac) >> simp[] >> metis_tac[]
 QED
 
-Theorem layout_canonical_call_return_certificate:
-  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
-    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
-  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
-  joint_trace vs0 C q0 es qs qend /\
+Theorem layout_canonical_return_deferred:
   es = MAP FST path /\ qs = MAP SND path /\
+  decoration_at caller i s q /\ i.inst_opcode = INVOKE /\
+  decode_invoke i = SOME (name,ops) /\
+  lookup_function name C.ctx_functions = SOME fn /\
+  eval_operands ops s = SOME args /\ setup_callee fn args s = SOME cs /\
+  vs0.vs_allocas = FEMPTY /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))
       (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
-      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) ==>
-  selected_call_return_certificate C C' q0 path
-    (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  joint_transition C q NONE qc /\
+  decorated_run C fn cs (IntRet ret send) qc (n+1) wc qe dc /\
+  selected_segment C q0 path n q ((NONE,qc)::wc) qe /\
+  layout_driver_indexed es ass phase /\ ~phase.lop_pending /\
+  phase.lop_config = q /\ phase.lop_cursor = n /\
+  layout_ordinary_entry D lo vs0 C C' q0 es qs qend phase s t /\
+  layout_canonical_ret D lo vs0 C C' q0 es qs ass qend qe
+    (n+1+LENGTH wc) ret send ret' tend /\
+  bind_outputs i.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state s send)) = SOME post /\
+  bind_outputs i.inst_outputs ret'.iret_values
+    (adopt_return_fmp ret' (merge_callee_state t tend)) = SOME post' ==>
+  layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend q n qe
+    (n+LENGTH ((NONE,qc)::wc)) i s j t (OK post) (OK post')
 Proof
-  strip_tac >> rewrite_tac[selected_call_return_certificate_def] >>
-  rpt gen_tac >> strip_tac >>
-  `joint_segment C qc wc qe` by metis_tac[cj 3 decorated_execution_segment] >>
-  drule_all layout_canonical_call_entry >> strip_tac >> gvs[] >>
-  qexistsl [`out`, `ct`] >> conj_tac >- simp[] >>
-  rpt strip_tac >> Cases_on `rc'` >>
-  gvs[layout_canonical_OutR_def, layout_canonical_result_def, layout_canonical_ret_def] >>
-  drule_all layout_canonical_caller_bind >> strip_tac >>
-  simp[selected_step_match_def] >> qexists `OK post'` >>
-  conj_tac
-  >- (irule finite_step_invoke_return >> simp[] >> metis_tac[]) >>
+  strip_tac >> gvs[layout_canonical_ret_def] >>
   simp[layout_deferred_OS_def] >> rpt strip_tac >>
   drule_all layout_invoke_paired_witness >> strip_tac >> gvs[] >>
   `?stk PG G tn callee inst oms om hs h.
@@ -102,6 +101,47 @@ Proof
   simp[ADD_CLAUSES] >> disch_then drule_all >>
   strip_tac >> irule layout_canonical_resume_success >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem layout_canonical_call_return_certificate:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  joint_trace vs0 C q0 es qs qend /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) ==>
+  selected_call_return_certificate C C' q0 path
+    (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
+    (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
+    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
+    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+Proof
+  strip_tac >> rewrite_tac[selected_call_return_certificate_def] >>
+  rpt gen_tac >> strip_tac >>
+  `joint_segment C qc wc qe` by metis_tac[cj 3 decorated_execution_segment] >>
+  drule_all layout_canonical_call_entry >> strip_tac >> gvs[] >>
+  qexistsl [`out`, `ct`] >> conj_tac >- simp[] >>
+  rpt strip_tac >> Cases_on `rc'` >>
+  gvs[layout_canonical_OutR_def, layout_canonical_result_def] >>
+  rename1 `layout_canonical_ret _ _ _ _ _ _ _ _ _ _ _ _ ret send ret' tend` >>
+  `?b. layout_ret_endpoint D lo vs0 C C' q0 (MAP FST path) (MAP SND path)
+      qend b send tend ret ret'` by
+    (fs[layout_canonical_ret_def] >> metis_tac[]) >>
+  drule_all layout_canonical_caller_bind >> strip_tac >>
+  simp[selected_step_match_def] >> qexists `OK post'` >>
+  conj_tac
+  >- (irule finite_step_invoke_return >> simp[] >> metis_tac[]) >>
+  once_rewrite_tac[ADD_COMM] >>
+  irule (PURE_REWRITE_RULE [LENGTH] layout_canonical_return_deferred) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (qexists `phase` >> simp[]) >>
+  qexistsl [`dc`, `qc`, `ret`, `ret'`, `send`, `tend`] >> simp[]
 QED
 
 Theorem layout_canonical_call_return_certificate_fuel:

@@ -30,7 +30,7 @@ Theorem aggregate_alloc_buffer_entry_mem:
         alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next) R
 Proof
   strip_tac >> drule_all compile_alloc_buffer_body_frag_mem >>
-  disch_then (qspecl_then [`s0`, `es`, `cx`, `ctx`, `R`] strip_assume_tac) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   qexistsl_tac [`inst`, `x`] >> simp[] >>
   qpat_x_assum `frag_exec_mem _ _ _ _ _ _` mp_tac >>
   simp[frag_exec_mem_def] >> strip_tac >> rpt strip_tac >>

@@ -15,7 +15,7 @@ Ancestors
   abiDecoderReentry exprSimAbiGasBridge
 
 Theorem compile_abi_encode_args_sim_live:
-  !args ctx func ce cx Inv env es sa ops sb s0.
+  !args ctx func ce cx Inv env es sa ops sb s0 st0.
     abi_args_ready ctx func ce cx Inv args /\ Inv es /\
     (!s. Inv s ==> expr_sim_inv ce cx env s) /\
     (!s gs. Inv s ==> Inv (s with gas_obs := gs)) /\
@@ -23,31 +23,33 @@ Theorem compile_abi_encode_args_sim_live:
     compile_abi_encode_args compile_expr ce args sa = (ops,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved ce sa /\
-    stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func ce cx es s0 /\
+       storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-      (\rr ee t. ?vs. rr = INL vs /\
-         abi_args_post ctx func ce cx es sa sb s0 ee args ops vs t /\
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+      (\H rr ee t. ?vs. rr = INL vs /\
+         abi_args_post H ctx func ce cx es sa sb s0 ee args ops vs t /\
          (~EXISTS expr_has_effect args ==> pure_frame ce func es sa s0 t) /\
          EVERY (abi_decoder_operand_live sb.cs_next_var) ops /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r)
 Proof
   Induct_on `args`
   >- (rpt strip_tac >>
       gvs[exprLoweringTheory.compile_abi_encode_args_def,
           compileEnvTheory.comp_return_def] >>
       irule exprSimMemDefsTheory.gas_outcome_post_mono >>
-      qexists_tac `\rr ee t. ?vs. rr = INL vs /\
-        wb_args_post ctx func ce cx es sa s0 ee [] vs t /\
+      qexists_tac `\H rr ee t. ?vs. rr = INL vs /\
+        wb_args_post H ctx func ce cx es sa s0 ee [] vs t /\
         pure_frame ce func es sa s0 t /\
         t.vs_current_bb = sa.cs_current_bb /\
         t.vs_inst_idx = LENGTH sa.cs_current_insts` >>
       conj_tac
       >- (simp[wb_args_post_def, abi_args_post_nil] >> metis_tac[]) >>
-      irule lower_word_args_nil_sim >> simp[])
+      irule lower_word_args_nil_sim >> simp[] >> metis_tac[])
   >> rpt strip_tac
   >> rename1 `abi_args_ready ctx func ce cx Inv (e::args)`
   >> gvs[abi_args_compile_cons, listTheory.EVERY_DEF]
@@ -146,7 +148,7 @@ Proof
 QED
 
 Theorem compile_abi_encode_args_sim:
-  !args ctx func ce cx Inv env es sa ops sb s0.
+  !args ctx func ce cx Inv env es sa ops sb s0 st0.
     abi_args_ready ctx func ce cx Inv args /\ Inv es /\
     (!s. Inv s ==> expr_sim_inv ce cx env s) /\
     (!s gs. Inv s ==> Inv (s with gas_obs := gs)) /\
@@ -154,16 +156,18 @@ Theorem compile_abi_encode_args_sim:
     compile_abi_encode_args compile_expr ce args sa = (ops,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved ce sa /\
-    stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func ce cx es s0 /\
+       storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-      (\rr ee t. ?vs. rr = INL vs /\
-         abi_args_post ctx func ce cx es sa sb s0 ee args ops vs t /\
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+      (\H rr ee t. ?vs. rr = INL vs /\
+         abi_args_post H ctx func ce cx es sa sb s0 ee args ops vs t /\
          (~EXISTS expr_has_effect args ==> pure_frame ce func es sa s0 t) /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r)
 Proof
   rpt strip_tac >>
   drule_all compile_abi_encode_args_sim_live >>
@@ -172,7 +176,7 @@ Proof
 QED
 
 Theorem compile_abi_encode_args_case_gas_sim:
-  !nocalls ctx func ce cx env ann ensure mid ty args es sa ops sb s0.
+  !nocalls ctx func ce cx env ann ensure mid ty args es sa ops sb s0 st0.
     exprs_case nocalls ctx func ce cx args /\
     expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid) ty args) es /\
     (nocalls ==>
@@ -180,17 +184,19 @@ Theorem compile_abi_encode_args_case_gas_sim:
     compile_abi_encode_args compile_expr ce args sa = (ops,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved ce sa /\
-    stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func ce cx es s0 /\
+       storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
-      (\rr ee t. ?vs. rr = INL vs /\
-         abi_args_post ctx func ce cx es sa sb s0 ee args ops vs t /\
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx args) (es,s0)
+      (\H rr ee t. ?vs. rr = INL vs /\
+         abi_args_post H ctx func ce cx es sa sb s0 ee args ops vs t /\
          (~EXISTS expr_has_effect args ==> pure_frame ce func es sa s0 t) /\
          EVERY (abi_decoder_operand_live sb.cs_next_var) ops /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\rr ee r. wb_args_exit rr r)
+      (\H rr ee r. wb_args_exit rr r)
 Proof
   rpt strip_tac >>
   irule compile_abi_encode_args_sim_live >> simp[] >>

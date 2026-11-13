@@ -1,7 +1,7 @@
 (* Memory-safe compilation of local names. *)
 Theory bodyNameNonwordMemory
 Ancestors
-  bodyNameMemoryFacts exprSimMemDefs vyperStorageFootprint
+  bodyNameMemoryFacts exprSimMemDefs
   exprSimSource exprSimHypsDefs exprSimDefs exprSimProps bodyMemoryDefs
   exprSimMemoryValues exprSimMemoryStack fragGasSeqMem fragGasPathMem
   gasNormalPrefix gasSummary gasContext gasCount fragGasMode loweringPosts
@@ -19,7 +19,7 @@ Theorem compile_name_nonword_body_sim_mem:
 Proof
   rpt gen_tac >> strip_tac >>
   irule expr_sim_mem_values_domain >> rpt gen_tac >> strip_tac >>
-  first_assum drule >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
   drule_all body_name_source_region >> strip_tac >>
   `ce.ce_var_type id = SOME ann` by
     gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
@@ -29,27 +29,25 @@ Proof
       unwrap_value_def, contextTheory.mk_ptr_def] >>
   qexistsl_tac [`[]`, `entry.value`, `es`, `s0`] >>
   conj_tac
-  >- (simp[gas_marked_exec_def, gas_explicit_def,
-           gas_marked_path_def, gas_path_mem_rules] >>
+  >- (simp[gas_marked_exec_def, gas_explicit_def, gas_marked_path_def,
+           gas_path_mem_rules] >>
       gen_tac >>
       qspecl_then [`cx`, `ann`, `id`, `es with gas_obs := tail`, `entry`]
         mp_tac eval_name_word >> simp[vyperStateTheory.bind_def]) >>
   conj_tac
   >- (simp[expr_store_bound_def, vyperASTTheory.expr_type_def,
            eval_operand_def] >>
-      rpt strip_tac >> gvs[] >> drule val_store_size_le >> strip_tac >>
-      decide_tac) >>
-  X_GEN_TAC ``(Hn:(bool # bytes32 # type_value) list # num list)`` >> strip_tac >>
-  first_x_assum (qspec_then `Hn` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >>
-  strip_tac >>
-  `stmt_state_rel Hn ctx func ce cx (es with gas_obs := []) s0` by
+      rpt strip_tac >> gvs[] >> drule val_store_size_le >> decide_tac) >>
+  qx_gen_tac `H1` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  `stmt_state_rel H1 ctx func ce cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
-  `(es with gas_obs := []).accounts = es.accounts /\
-   (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
-  `storage_well_formed_on cx (es with gas_obs := []) (FST Hn)` by
-    metis_tac[storage_well_formed_on_backends] >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H1)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   simp[gas_value_prefix_def, gas_marked_exec_def, gas_explicit_def,
        gas_marked_path_def, gas_path_mem_rules,
        lower_value_def, comp_bind_def, comp_return_def,

@@ -15,7 +15,7 @@
  *   fuel_ok_compile_constructor_epilogue, fuel_ok_compile_simple_deploy,
  *   fuel_ok_compile_register_constructor_args,
  *   compile_register_constructor_args_ptrs,
- *   package_constructor_cenv_ptrs_below, package_internal_fns_fuel_any
+ *   package_constructor_cenv_ptrs_below
  *)
 
 Theory ctorDeployRunBounded
@@ -427,49 +427,6 @@ Proof
   drule_all allocate_args_vars >> simp[]
 QED
 
-(* fragFuelUnit's package_internal_fn_ctor_exit, for any constructor flag
-   and immutables length. *)
-Theorem package_internal_fn_ctor_exit_any[local]:
-  !tops use_trans nkey_map is_ctor imm_len src target.
-    (FST (SND (set_internal_package_target target
-                 (package_internal_fn tops use_trans nkey_map is_ctor imm_len
-                    src)))).ce_ctor_exit_label = NONE
-Proof
-  rpt gen_tac >> PairCases_on `src` >>
-  simp[package_internal_fn_def, set_internal_package_target_def,
-       update_cenv_nonreentrant_def, build_compile_env_def] >>
-  rpt (pairarg_tac >> gvs[])
-QED
-
-(* fragFuelUnit's package_internal_fns_fuel, for any constructor flag and
-   immutables length: the deploy unit's internal functions. *)
-Theorem package_internal_fns_fuel_any:
-  !tops ut nkm ic il target srcs.
-    EVERY (\(fn_lbl, cenv, params, has_ret_buf, is_nr, nkey, use_trans,
-             is_view, is_ctor, imm_len, body, ret_type).
-             ?Wv. fuel_okS (\st. T) Wv {} {}
-                    (compile_internal_function cenv params has_ret_buf is_nr
-                       nkey use_trans is_view is_ctor imm_len body ret_type))
-      (MAP (set_internal_package_target target o
-            package_internal_fn tops ut nkm ic il) srcs)
-Proof
-  rpt gen_tac >> simp[EVERY_MAP, listTheory.EVERY_MEM] >>
-  qx_gen_tac `src` >> strip_tac >>
-  qspecl_then [`tops`, `ut`, `nkm`, `ic`, `il`, `src`,
-               `target`] mp_tac package_internal_fn_ctor_exit_any >>
-  qspecl_then [`tops`, `ut`, `nkm`, `ic`, `il`, `src`,
-               `target`] assume_tac package_internal_fn_cenv_ptrs_below >>
-  Cases_on `set_internal_package_target target
-              (package_internal_fn tops ut nkm ic il src)` >>
-  PairCases_on `r` >> fs[] >> rpt strip_tac >>
-  qexists_tac `UNIV` >>
-  `(\st:compile_state. cenv_ptrs_below st.cs_next_var r0) = (\st. T)` by
-    simp[FUN_EQ_THM] >>
-  pop_assum (SUBST1_TAC o SYM) >>
-  irule fuel_okS_compile_internal_function >> simp[] >>
-  rpt strip_tac >> irule (CONJUNCT2 fuel_okS_compile_stmt) >> simp[]
-QED
-
 (* ===== The deploy unit with a constructor ===== *)
 
 (* Local in ctorDeployLoweringCode. *)
@@ -598,7 +555,7 @@ Proof
                `ctx`, `data`, `UNIV`] mp_tac extract_context_fuel_stable >>
   impl_tac >- (
     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    simp[next_stable_def, package_internal_fns_fuel_any]) >>
+    simp[next_stable_def, package_internal_fns_fuel]) >>
   simp[]
 QED
 

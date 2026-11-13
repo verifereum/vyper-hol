@@ -51,6 +51,13 @@ Theorem compile_pop_name_sim_mem:
     expr_vv_sim_mem ctx func cenv cx ty (Pop ann (NameTarget id)) es
 Proof
   rw[expr_vv_sim_mem_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   drule_all pop_name_facts >> strip_tac >>
   `popped_keys_indexed es.scopes` by fs[expr_sim_pre_def, expr_sim_inv_def] >>
   drule_all compile_expr_pop_name >> strip_tac >> gvs[] >>
@@ -66,7 +73,7 @@ Proof
   >- (gvs[] >> drule dynarray_pop_local_empty_path_mem >>
       disch_then (qspecl_then [`s0`, `w`, `ctx`, `func`] mp_tac) >>
       (impl_tac >- (simp[] >> decide_tac)) >> strip_tac >>
-      simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      simp[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR (Error (RuntimeError "pop empty memory array"))`,
                     `es`, `Abort a t`] >>
@@ -75,21 +82,23 @@ Proof
   `mload (w2n w) s0 <> 0w` by
     (`LENGTH vs <> 0 /\ LENGTH vs < dimword (:256)` by
       (Cases_on `vs` >> gvs[]) >> simp[n2w_11]) >>
-  `alloca_inv s0` by fs[stmt_state_rel_def] >>
+  `alloca_inv s0 /\ local_ptrs_rel func cenv es.scopes s0` by
+    (qpat_assum `!H. valid_horizon _ _ _ _ ==> _` (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     rewrite_tac[stmt_state_rel_def, state_rel_def] >>
+     disch_then strip_assume_tac >> simp[]) >>
   drule_all dynarray_pop_local_path_mem >> strip_tac >>
   first_x_assum (qspec_then `ctx` strip_assume_tac) >>
   drule dynarray_pop_mem_shape >> strip_tac >> gvs[] >>
   drule lookup_scopes_find_containing_scope >> strip_tac >>
   rename1 `find_containing_scope id es.scopes = SOME (pre, envs, entry, rest)` >>
-  `local_ptrs_rel func cenv es.scopes s0` by
-    fs[stmt_state_rel_def, state_rel_def] >>
   `!q n' sq. FLOOKUP cenv.ce_vars n' = SOME (PtrVar (Var q) sq) ==>
              lookup_var q u = lookup_var q s0` by
     (rpt strip_tac >> first_x_assum irule >>
      fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   `!q. cenv.ce_imm_alloca = SOME (Var q) ==> lookup_var q u = lookup_var q s0`
     by metis_tac[local_ptrs_reserved_imm_base] >>
-  simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INL (PlaceR (MemoryPlace id
                   [ValueSubscript (IntV &(LENGTH vs - 1))]))`,
@@ -98,6 +107,12 @@ Proof
   simp[gas_marked_exec_def, gas_marked_path_def, exit_result_def] >>
   conj_tac >-
     (gen_tac >> irule pop_local_source_nonempty >> simp[]) >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _` (drule_then strip_assume_tac) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   conj_asm1_tac
   >- (irule (SRULE [vv_post_initial_gas, vv_post_inst_idx]
         (Q.INST [`es` |-> `es with gas_obs := []`] (SPEC_ALL pop_vv_post))) >>

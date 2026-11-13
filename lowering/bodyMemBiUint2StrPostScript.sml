@@ -5,15 +5,6 @@ Ancestors
   exprSimHypsDefs exprSimMemDefs loweringPosts exprSimUint2Str exprSimHash
   exprLoweringProps exprSimSource exprSafeOperand vyperTyping vyperTypeSystem vyperArith arithmetic context compileEnv valueEncoding loweringSlice vyperValue vyperAST
 
-Theorem u2s_safe_fields[local]:
-  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s ==>
-  s.vs_accounts = s0.vs_accounts /\ s.vs_transient = s0.vs_transient /\
-  s.vs_requests = s0.vs_requests /\ s.vs_call_ctx = s0.vs_call_ctx
-Proof
-  strip_tac >>
-  gvs[u2s_safe_def, u2s_frame_def, venomStateTheory.venom_state_component_equality]
-QED
-
 Theorem u2s_alloc_mem_ready_mem[local]:
   compile_alloc_buffer sz sa = (ba,a) /\ fn_has_code sa a fn /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\

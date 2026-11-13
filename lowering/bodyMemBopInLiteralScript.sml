@@ -168,7 +168,7 @@ Theorem literal_typed_continuation_summary_mem[local]:
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
      stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
      storage_well_formed_on cx (ee with gas_obs := []) (FST H)) /\
-  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  valid_horizon cx st0 H0 ee.storage_trace /\
   LIST_REL (\x v. eval_operand x t0 = SOME (typed_val_to_w256 tv v)) xs vs /\
   eval_operand needle t0 = SOME (typed_val_to_w256 tv v) /\
   wb_frame cenv es (ee with gas_obs := []) sa s0 t0 /\
@@ -193,7 +193,6 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `wb_frame _ _ (_ with gas_obs := _) _ _ _`
     (assume_tac o REWRITE_RULE [exprSimWordArgsTheory.wb_frame_gas_obs]) >>
-  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
     (qspec_then `H0` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
@@ -220,7 +219,7 @@ Proof
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s` by
     (mp_tac (Q.INST [`u` |-> `s`, `s` |-> `t0`, `es` |-> `ee with gas_obs := []`]
-               stmt_state_rel_fields_transport) >>
+               (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``] stmt_state_rel_fields_transport)) >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then ACCEPT_TAC) >>
   qexists_tac `BoolV (if bop = In then MEM v vs else ~MEM v vs)` >>
@@ -275,8 +274,8 @@ Proof
   rewrite_tac[gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
       drule_all literal_body_action_flat >> disch_then (fn th => rewrite_tac[th]) >>
-      irule gas_bad_storage_at_bind_left >> conj_tac >- first_assum ACCEPT_TAC >>
-      simp[storage_trace_frame_return])
+      irule gas_bad_storage_at_bind_left >> conj_tac >>
+      FIRST [first_assum ACCEPT_TAC, simp[storage_trace_frame_return]])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
       disch_then (qx_choosel_then [`res`, `es_end`, `r`]
@@ -287,12 +286,12 @@ Proof
            disch_then (fn th => rewrite_tac[th]) >>
            irule gas_bad_storage_at_bind_left >>
            conj_tac
-           >- (drule_all_then ACCEPT_TAC gas_bad_storage_at_counted_prefix) >>
-           simp[storage_trace_frame_return])) >>
+           >- simp[storage_trace_frame_return] >>
+           drule_all_then ACCEPT_TAC gas_bad_storage_at_counted_prefix)) >>
       `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
          es_end.storage_trace` by
-        (qpat_assum `storage_trace_domain _ _ _` mp_tac >>
-         simp[storage_trace_domain_def]) >>
+        (qpat_assum `storage_trace_domain _ _ _`
+           (ACCEPT_TAC o REWRITE_RULE [storage_trace_domain_def])) >>
       qpat_x_assum `(?t. r = OK t /\ _) \/ _`
         (DISJ_CASES_THEN2 (qx_choose_then `tt` strip_assume_tac) strip_assume_tac)
       >- suspend "normal"
@@ -354,7 +353,7 @@ Resume literal_expr_sim_mem[normal]:
    pure_frame cenv func es sa s0 tt` by
     (strip_tac >>
      qpat_x_assum `_ ==> pure_frame cenv func es sa s0 tt` irule >>
-     fs[listTheory.EVERY_NOT_EXISTS]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `?H. valid_horizon cx st0 H es_end.storage_trace` by
     (qexists_tac `storage_trace_horizon es_end.storage_trace` >>
      first_assum ACCEPT_TAC) >>
@@ -378,9 +377,9 @@ Resume literal_expr_sim_mem[normal]:
   qpat_x_assum `(?t. r2 = OK t /\ _) \/ _`
     (DISJ_CASES_THEN2 (qx_choose_then `uu` strip_assume_tac) strip_assume_tac)
   >- (disj1_tac >> qexists_tac `uu` >> conj_tac >- first_assum ACCEPT_TAC >>
-      BETA_TAC >> gen_tac >> BETA_TAC >> strip_tac >>
+      BETA_TAC >> qx_gen_tac `H1` >> BETA_TAC >> strip_tac >>
       qpat_x_assum `(\res fin s. _) _ _ _` (mp_tac o BETA_RULE) >>
-      disch_then (qspec_then `H` mp_tac) >>
+      disch_then (qspec_then `H1` mp_tac) >>
       (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
       qexists_tac `w` >> rpt conj_tac >>
       FIRST [first_assum ACCEPT_TAC,

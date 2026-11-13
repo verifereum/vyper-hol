@@ -144,7 +144,7 @@ Proof
 QED
 
 Theorem abi_encode_caller_state_rel:
-  state_rel func cenv cx vs initial /\
+  state_rel (H:(bool # bytes32 # type_value) list # num list) func cenv cx vs initial /\
   abi_encode_exec_frame observer initial actual /\
   abi_encoder_registered_effect ids outs prepared actual /\
   prepared.vs_accounts = initial.vs_accounts /\
@@ -168,7 +168,7 @@ Theorem abi_encode_caller_state_rel:
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME(tv,v) ==>
     mem_bytes_at off (type_memory_size tv) actual.vs_memory =
       mem_bytes_at off (type_memory_size tv) initial.vs_memory) ==>
-  state_rel func cenv cx vs actual
+  state_rel H func cenv cx vs actual
 Proof
   strip_tac >>
   `local_ptrs_rel func cenv vs.scopes initial /\
@@ -436,7 +436,7 @@ Proof
 QED
 
 Theorem abi_encode_phases_caller_state:
- stmt_state_rel ctx func ce cx vs initial /\
+ stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs initial /\
  local_ptrs_reserved ce st /\
  abi_builtin_encode_setup mid maxlen st = (ops,ready) /\
  compile_abi_encode_to_buf (SND ops) src ei ready = (len,body_end) /\
@@ -465,7 +465,7 @@ Theorem abi_encode_phases_caller_state:
  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
    FLOOKUP initial.vs_allocas st.cs_next_id = SOME(p,outsz)) /\
  actual.vs_labels = initial.vs_labels ==>
- stmt_state_rel ctx func ce cx vs actual /\
+ stmt_state_rel H ctx func ce cx vs actual /\
  (!name b n. local_region ce vs.scopes initial name b n ==>
    mem_bytes_at b n actual.vs_memory = mem_bytes_at b n initial.vs_memory) /\
  FLOOKUP actual.vs_allocas st.cs_next_id = SOME(p,outsz) /\
@@ -548,7 +548,7 @@ Proof
      >- (qexists `allocation` >> simp[]) >>
      fs[Abbr `B`, window_alloca_sites_def] >> qexists `inst` >> simp[] >>
      qpat_x_assum `!j. MEM j (fn_insts obs) /\ _ ==> _` irule >> simp[]) >>
-  `state_rel func ce cx vs initial /\ local_ptrs_rel func ce vs.scopes initial /\
+  `state_rel H func ce cx vs initial /\ local_ptrs_rel func ce vs.scopes initial /\
    immutable_alloca_sep func ce cx vs initial` by
     fs[stmt_state_rel_def, state_rel_def] >>
   `initial.vs_alloca_next <= actual.vs_alloca_next /\
@@ -570,7 +570,7 @@ Proof
     (`st.cs_next_id IN sites` by simp[Abbr `sites`] >>
      strip_tac >> rpt gen_tac >> strip_tac >>
      drule_all abi_encode_caller_immutable_reads >> simp[]) >>
-  `state_rel func ce cx vs actual` by
+  `state_rel H func ce cx vs actual` by
     (drule_all abi_encode_caller_state_rel >> simp[]) >>
   `immutable_alloca_sep func ce cx vs actual` by
     (drule_all abi_encode_caller_immutable_separation >> simp[]) >>
@@ -641,7 +641,7 @@ QED
 (* The encoder only writes its registered sites, which are fresh ALLOCAs
    of func, so it keeps every window outside them. *)
 Theorem abi_encode_phases_caller_pure_frame:
- stmt_state_rel ctx func ce cx vs initial /\
+ stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs initial /\
  local_ptrs_reserved ce st /\
  abi_builtin_encode_setup mid maxlen st = (ops,ready) /\
  compile_abi_encode_to_buf (SND ops) src ei ready = (len,body_end) /\
