@@ -26,7 +26,9 @@ Theorem ld_load_normal_data_backward:
     SOME (n2w (LENGTH s.vs_code - LENGTH s.vs_data_section)) /\
   a.inst_id IN keys /\ allocas_non_overlapping t0 /\ alloca_next_valid t0 /\
   t0.vs_alloca_next < dimword (:256) /\
-  (a.inst_id NOTIN A ==> t0.vs_alloca_next + 32 < dimword (:256)) ==>
+  (a.inst_id NOTIN A ==> t0.vs_alloca_next + 32 < dimword (:256)) /\
+  (a.inst_id NOTIN A ==> t0.vs_alloca_next + 32 <= dyn_floor CS s) /\
+  t0.vs_alloca_next <= dyn_floor CS s ==>
   ?z. step_inst fuel CS inst s = OK z /\
     ld_normal_data CS fn V U lo E L H AP BP
       (ld_set_prov AG [out] NONE)
@@ -88,6 +90,9 @@ Proof
   disch_then (qspecl_then [`live`,`fuel`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qx_choose_then `z` strip_assume_tac) >>
+  `dyn_floor CS z = dyn_floor CS s` by
+    (qpat_assum `z with vs_vars := _ = s` (SUBST1_TAC o SYM) >>
+     simp[dyn_floor_def]) >>
   qexists_tac `z` >> asm_rewrite_tac[] >>
   irule ld_normal_data_assemble >> asm_rewrite_tac[] >>
   rpt conj_tac

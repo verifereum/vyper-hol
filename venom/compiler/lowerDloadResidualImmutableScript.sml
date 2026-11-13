@@ -36,26 +36,39 @@ Proof
   drule_all ld_annotated_scalar_prov >> simp[]
 QED
 
-Theorem ld_immutable_scalar_access_low:
+Theorem ld_immutable_scalar_access_low[local]:
   MEM i.inst_opcode [ILOAD;ISTORE] /\
   ld_op_prov AG op = NONE /\
   (i.inst_opcode = ILOAD ==> i.inst_operands = [op]) /\
   (i.inst_opcode = ISTORE ==>
      i.inst_operands = [op;value] /\ IS_SOME (eval_operand value s)) /\
   eval_operand op s = SOME addr /\
-  access_ok lo (ld_erase AG) fn i s /\ ~in_revert_forward fn s ==>
-  w2n addr + 32 <= lo
+  access_ok lo G fn i s /\
+  (!v x. FLOOKUP (ld_erase AG) v = SOME x ==> FLOOKUP G v = SOME x) /\
+  (!v b z. FLOOKUP AG v = NONE /\ FLOOKUP G v = SOME (b,z) ==>
+     fl <= b /\ b + z < dimword (:256)) /\
+  ~in_revert_forward fn s ==>
+  w2n addr + 32 <= lo \/ (fl <= w2n addr /\ w2n addr + 32 < dimword (:256))
 Proof
   strip_tac >>
-  qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >>
-  Cases_on `eval_operand value s` >> gvs[] >>
-  fs[access_ok_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
-     mem_read_ops_def, mem_write_ops_def,
-     fixed_source_write_range_def] >>
-  spose_not_then assume_tac >>
-  `lo < w2n addr + 32` by decide_tac >>
-  gvs[ld_op_prov_def, ld_erase_lookup, op_prov_def] >>
-  metis_tac[]
+  Cases_on `w2n addr + 32 <= lo` >- (disj1_tac >> first_assum ACCEPT_TAC) >>
+  disj2_tac >>
+  `?v b sz. op = Var v /\ FLOOKUP G v = SOME (b,sz) /\
+     b <= w2n addr /\ w2n addr + 32 <= b + sz` by
+    (`lo < w2n addr + 32` by decide_tac >>
+     qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
+     rewrite_tac[access_ok_def] >> asm_rewrite_tac[] >> strip_tac >>
+     qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >>
+     gvs[optionTheory.IS_SOME_EXISTS]
+     >- (first_x_assum (qspecl_then [`w2n addr`,`32`] mp_tac) >>
+         simp[source_memory_read_ranges_def, mem_read_ops_def])
+     >- (qpat_x_assum `!off len. MEM (off,len) (source_memory_write_ranges _ _) /\ _ ==> _`
+           (qspecl_then [`w2n addr`,`32`] mp_tac) >>
+         simp[source_memory_write_ranges_def, mem_write_ops_def,
+              fixed_source_write_range_def])) >>
+  `FLOOKUP AG v = NONE` by gvs[ld_op_prov_def] >>
+  `fl <= b /\ b + sz < dimword (:256)` by metis_tac[] >>
+  decide_tac
 QED
 
 (* ILOAD and MLOAD have exactly the same execution and taint effect.  The
@@ -84,10 +97,15 @@ Theorem ld_iload_low_backward:
   ld_owned_vars U E AG BH tn un s t /\
   (!v. op = Var v ==> v IN U) /\ op_taint tn op = {} /\
   ld_op_prov AG op = NONE /\
-  access_ok lo (ld_erase AG) fn i s /\ ~in_revert_forward fn s /\
+  access_ok lo G fn i s /\
+  (!v x. FLOOKUP (ld_erase AG) v = SOME x ==> FLOOKUP G v = SOME x) /\
+  (!v b z. FLOOKUP AG v = NONE /\ FLOOKUP G v = SOME (b,z) ==>
+     fl <= b /\ b + z < dimword (:256)) /\
+  ~in_revert_forward fn s /\
   ld_byte_rel R tn.t_mem un.t_mem
     (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
   (!a. a < lo ==> R a a) /\
+  (!a. fl <= a /\ a < dimword (:256) ==> R a a) /\
   step_inst fuel CT i t = OK t' ==>
   ?s'. step_inst fuel CS i s = OK s' /\
     ld_owned_vars U E (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
@@ -107,10 +125,12 @@ Proof
     (irule ld_owned_mload_backward >> simp[] >> qexists_tac `R` >> simp[] >>
      rpt strip_tac >>
      `x = y` by (drule_all ld_owned_operand_clean >> simp[]) >> gvs[] >>
-     `w2n x + 32 <= lo` by
-       (irule ld_immutable_scalar_access_low >>
-        goal_assum (drule_at (Pat `access_ok _ _ _ _ _`)) >> simp[]) >>
-     first_x_assum irule >> decide_tac) >>
+     mp_tac (Q.INST [`addr` |-> `x`] ld_immutable_scalar_access_low) >>
+     impl_tac >- (rpt conj_tac >>
+       FIRST [first_assum ACCEPT_TAC, asm_simp_tac (srw_ss()) []]) >>
+     strip_tac
+     >- (qpat_x_assum `!a. a < lo ==> R a a` irule >> decide_tac) >>
+     qpat_x_assum `!a. fl <= a /\ _ ==> R a a` irule >> decide_tac) >>
   qexists_tac `s'` >>
   gvs[] >> metis_tac[ld_iload_mload_effect]
 QED
@@ -142,7 +162,7 @@ Proof
      simp[] >> metis_tac[MEM]) >>
   `ld_owned_vars {v | v IN V /\ ~retpc_var fn v} E AG BH tn un s t` by
     (drule ld_normal_data_frame >> simp[ld_frame_data_def]) >>
-  `access_ok lo (ld_erase AG) fn i s` by metis_tac[ld_annotated_access_ok] >>
+  drule_all ld_annotated_access_ok >> strip_tac >>
   `taint_ok fn tn i s` by metis_tac[ld_annotated_taint_ok] >>
   `op_taint tn op = {}` by
     (irule ld_taint_operand_clean >> qexistsl_tac [`fn`,`i`,`s`] >> simp[]) >>
@@ -158,7 +178,9 @@ Proof
     (irule ld_iload_low_backward >> simp[] >>
      conj_tac >- metis_tac[] >>
      conj_tac >- (fs[] >> metis_tac[]) >>
-     qexistsl_tac [`\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b`, `fn`, `lo`] >> simp[]) >>
+     qexistsl_tac [`G`,
+       `\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b`,
+       `dyn_floor CS s`, `fn`, `lo`] >> simp[] >> rpt conj_tac >> fs[]) >>
   qexists_tac `s'` >> (conj_tac >- asm_rewrite_tac[]) >>
   suspend "completion"
 QED
@@ -248,7 +270,7 @@ Theorem ld_normal_istore_complete:
   ld_shared_state
     (step_taint i s (istore p x s) tn) (step_taint i t (istore q y t) un)
     (istore p x s) (istore q y t) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     (step_taint i s (istore p x s) tn).t_mem
     (step_taint i t (istore q y t) un).t_mem
     (\a. read_memory a 1 (istore p x s)) (\b. read_memory b 1 (istore q y t)) ==>
@@ -279,7 +301,7 @@ Proof
    ((step_taint i t (istore q y t) un).t_imm SUBSET
       (step_taint i s (istore p x s) tn).t_imm)` by
     fs[ld_shared_state_def] >>
-  gvs[ld_normal_data_def, ld_empty_outputs_prov_tvar,
+  gvs[ld_normal_data_def, ld_empty_outputs_prov_tvar, dyn_floor_def,
       ld_alloc_account_def, istore_def, mstore_def, allocas_from_def, op_taint_def] >>
   asm_rewrite_tac[]
 QED
@@ -350,7 +372,7 @@ Proof
   `ld_owned_vars {v | v IN V /\ ~retpc_var fn v} E AG BH tn un s t /\
    ld_shared_state tn un s t` by
     (drule ld_normal_data_frame >> simp[ld_frame_data_def]) >>
-  `access_ok lo (ld_erase AG) fn i s` by metis_tac[ld_annotated_access_ok] >>
+  drule_all ld_annotated_access_ok >> strip_tac >>
   `taint_ok fn tn i s` by metis_tac[ld_annotated_taint_ok] >>
   `op_taint tn dst = {}` by
     (irule ld_taint_store_address_clean >> qexistsl_tac [`fn`,`i`,`s`,`value`] >> simp[]) >>
@@ -382,20 +404,24 @@ Resume ld_normal_istore_backward[shared]:
 QED
 
 Resume ld_normal_istore_backward[bytes]:
-  `w2n off + 32 <= lo` by
-    (irule ld_immutable_scalar_access_low >>
-     goal_assum (drule_at (Pat `access_ok _ _ _ _ _`)) >> simp[]) >>
+  `w2n off + 32 <= lo \/
+    (dyn_floor CS s <= w2n off /\ w2n off + 32 < dimword (:256))` by
+    (mp_tac (Q.INST [`addr` |-> `off`, `op` |-> `dst`,
+                     `fl` |-> `dyn_floor CS s`] ld_immutable_scalar_access_low) >>
+     impl_tac >- (rpt conj_tac >>
+       FIRST [first_assum ACCEPT_TAC, asm_simp_tac (srw_ss()) []]) >>
+     simp[]) >>
   `op_taint tn value SUBSET count 32 /\ op_taint un value SUBSET count 32` by
     (drule ld_normal_data_masks >> strip_tac >>
      conj_tac >> irule ld_op_taint_bound >> simp[]) >>
-  `(!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) ==>
+  `(!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) ==>
       ((w2n off <= a /\ a < w2n off+32) <=> (w2n off <= b /\ b < w2n off+32))) /\
-   (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) /\
+   (!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) /\
       w2n off <= a /\ a < w2n off+32 ==> a=b)` by
     (drule ld_normal_data_geometry >> strip_tac >>
-     `(!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) ==>
+     `(!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) ==>
         ((w2n off <= a /\ a < w2n off+32) <=> (w2n off <= b /\ b < w2n off+32))) /\
-      (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) /\
+      (!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) /\
         w2n off <= a /\ a < w2n off+32 ==> a-w2n off=b-w2n off)` by
        (irule ld_fixed_live_write_footprint >> simp[] >> metis_tac[]) >>
      conj_tac >- metis_tac[] >>

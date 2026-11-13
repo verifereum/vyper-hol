@@ -94,13 +94,15 @@ Theorem ld_reachable_mstore_state_backward:
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     lo <= bs /\ lo <= bt /\ bs+sz < dimword(:256) /\
     bt+sz < dimword(:256)) /\
+  (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
+    bs+sz <= dyn_floor CS s /\ bt+sz <= dyn_floor CS s) /\
   (!owner other bs bt sz cs ct cz.
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
     (bs+sz <= cs \/ cs+cz <= bs) /\
     (bt+sz <= ct \/ ct+cz <= bt)) /\
   op_taint tn value SUBSET count 32 /\ op_taint un value SUBSET count 32 /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
   ld_frame_embedding E L H s t /\ ld_alloc_account keys d A s t /\
   (!v:string. v IN full_names ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
@@ -110,7 +112,7 @@ Theorem ld_reachable_mstore_state_backward:
     s' = mstore (w2n x) v s /\ t' = mstore (w2n y) w t /\
     eval_operand dst s = SOME x /\ eval_operand dst t = SOME y /\
     eval_operand value s = SOME v /\ eval_operand value t = SOME w /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
       (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
     ld_owned_vars V E (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
@@ -179,7 +181,7 @@ C9  !owner other bs bt sz cs ct cz.
       owner IN live /\ other IN live /\ owner <> other /\
       ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
       (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)
-C10 ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+C10 ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t)
 C11 (!v. op_taint tn (Var v) SUBSET count 32) /\
     (!v. op_taint un (Var v) SUBSET count 32)
@@ -456,7 +458,7 @@ A generalized scratch separation consumer should then conclude
  ?p. f<=p /\ p+32<dimword(:256) /\
    ((FLOOKUP t.vs_allocas id=NONE /\ p=t.vs_alloca_next) \/
      FLOOKUP t.vs_allocas id=SOME(p,32)) /\
-   (!aa bb. ((aa=bb /\ aa<lo) \/ ld_site_bytes E live aa bb) ==>
+   (!aa bb. ((aa=bb /\ aa<lo) \/ (aa=bb /\ dyn_floor CS s <= aa /\ aa < dimword (:256)) \/ ld_site_bytes E live aa bb) ==>
      bb<p \/ p+32<=bb).
 Its remaining premises are ld_live_scratch_separation's account, id/key,
 nonoverlap, validity and headroom premises, with allocation floor f rather

@@ -14,7 +14,7 @@ Proof
   simp[ld_normal_data_def, ld_frame_data_def,
        ld_jump_frame_transport, ld_jump_owned_transport,
        ld_jump_account_transport, ld_shared_state_def,
-       jump_to_def, lookup_var_def, allocas_from_def, read_memory_def]
+       jump_to_def, lookup_var_def, allocas_from_def, read_memory_def, dyn_floor_def]
 QED
 
 Theorem ld_successful_terminator_branch:
