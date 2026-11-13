@@ -7,7 +7,6 @@ Ancestors
   bodyIntCallJointContract exprLoweringProps exprSimHypsDefs loweringPosts
   bodyIntCallFamAggSubscriptArraySetup
 
-(* HELD (train 15): obj-level vv_post past idx is false; Subscript-level restatement (train 17) *)
 Theorem intcall_framed_array_child_suffix:
   ((?ty. vv_location (FST (compile_expr ce ty obj sa)) = SOME LocCode) \/
    (?n. bd = Fixed n)) /\
@@ -78,7 +77,6 @@ Theorem intcall_framed_array_child_suffix:
       intcall_expr_cont fp ce env es sa s0 ee' sd q)
     (\res ee' outcome. expr_exit res outcome)
 Proof
-  (* original proof, kept while held:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all_then assume_tac expr_body_pre_array_subscript_base >>
   drule_all_then assume_tac expr_body_pre_array_subscript_index_after_base >>
@@ -95,16 +93,6 @@ Proof
      rpt strip_tac >> gvs[vyperTypingTheory.value_has_type_def,
                           compileEnvTheory.is_word_type_def]) >>
   drule_all intcall_framed_array_index_endpoint >> strip_tac >>
-  `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript (ArrayT et bd) obj idx)
-     es sa sc s0 ee r (LocatedValue (ArrayT et bd) p) s` by
-    (`expr_sim_inv ce fp.jc_cx env t /\
-      stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s0 /\
-      stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee s` by
-       fs[intcall_expr_cont_def, intcall_expr_res_def] >>
-     irule framed_array_base_endpoint >>
-     qpat_assum `vv_post _ _ _ _ _ _ _ sb _ _ _ _ u` (irule_at Any) >>
-     qpat_assum `expr_post _ _ _ _ idx _ _ _ _ _ _ _ _` (irule_at Any) >>
-     fs[]) >>
   drule_at (Pat `vv_post _ _ _ _ (Subscript _ _ _) _ _ _ _ _ _ _ _`)
     framed_array_post_view >>
   disch_then (qspecl_then [`t`,`env`] mp_tac) >>
@@ -122,8 +110,8 @@ Proof
   `!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
        (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
        q.vs_memory = s.vs_memory /\ stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee q ==>
-       vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sd s0 ee r
-         (LocatedValue (ArrayT et bd) p) q` by
+       vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript (ArrayT et bd) obj idx)
+         es sa sd s0 ee r (LocatedValue (ArrayT et bd) p) q` by
     (rpt strip_tac >>
      qpat_x_assum `vv_post _ _ _ _ _ _ sa sc _ _ _ _ _` kall_tac >>
      irule framed_array_base_endpoint >> simp[] >>
@@ -149,6 +137,4 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `!x. p.ptr_operand = Var x ==> _` drule >>
   simp[loweringStateRelDefsTheory.not_fresh_at_def]
-  *)
-  cheat
 QED
