@@ -75,12 +75,12 @@ Theorem convert_continuation_summary_mem:
   gas_summary_at T (ctx,func) []
     (\vs. (convert_result cx (expr_type e1) t v1,vs))
     (ee with gas_obs := [],t0)
-    (\res fin t. !H. valid_horizon cx st0 H fin.storage_trace ==>
+    (\res fin tf. !H. valid_horizon cx st0 H fin.storage_trace ==>
       ?v. res = INL v /\
-      expr_post H ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0 fin v op t /\
-      t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0 fin v op tf /\
+      tf.vs_current_bb = sb.cs_current_bb /\
+      tf.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func tf /\ s0.vs_alloca_next <= tf.vs_alloca_next)
     (\res fin r. !H. valid_horizon cx st0 H fin.storage_trace ==>
       expr_exit res r)
 Proof
