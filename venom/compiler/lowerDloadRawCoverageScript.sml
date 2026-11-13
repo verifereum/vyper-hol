@@ -255,7 +255,7 @@ Resume ld_raw_coverage_fixed[block]:
   >- suspend "block_owned"
   >> RULE_ASSUM_TAC BETA_RULE >>
   drule_all (BETA_RULE ld_forward_no_terminator_ok) >>
-  disch_then (qspecl_then [`s'`,`fuel`,`C'`] mp_tac) >> simp[]
+  disch_then (qspecl_then [`s'`,`fuel`] mp_tac) >> simp[]
 QED
 Resume ld_raw_coverage_fixed[block_owned]:
   drule_all ld_raw_fixed_ambient >> strip_tac >>

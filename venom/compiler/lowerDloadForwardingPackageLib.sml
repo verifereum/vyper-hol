@@ -2,11 +2,12 @@
 structure lowerDloadForwardingPackageLib =
 struct
 open HolKernel boolLib bossLib
-open lowerDloadTerminalSafetyTheory
+open lowerDloadTerminalSafetyTheory ptrDisciplineTheory
 val ld_forward = ``\(ctx:venom_context) fn ti t.
   ?bb i j. lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
     revert_forward_pair bb i j /\ i <= t.vs_inst_idx /\
     t.vs_inst_idx <= j /\ get_instruction bb t.vs_inst_idx = SOME ti /\
     t.vs_alloca_next < dimword (:256) /\
-    w2n t.vs_initial_fmp <= w2n t.vs_fmp``;
+    w2n t.vs_initial_fmp <= w2n t.vs_fmp /\
+    (ctx_has_dalloca ctx ==> t.vs_alloca_next <= w2n t.vs_initial_fmp)``;
 end

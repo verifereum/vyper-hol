@@ -33,6 +33,10 @@ Proof
     (`w2n s.vs_initial_fmp <= w2n s.vs_fmp` by fs[unitMemInvTheory.raw_mem_ok_def] >>
      `ld_nonghost tn s t0` by fs[ld_sync_def] >>
      fs[ld_nonghost_def] >> metis_tac[]) >>
+  `ctx_has_dalloca C' ==> t.vs_alloca_next <= w2n t.vs_initial_fmp` by
+    (strip_tac >> `ctx_has_dalloca C` by res_tac >>
+     qpat_x_assum `t = t0` SUBST_ALL_TAC >>
+     drule_all ld_sync_dalloca_room >> decide_tac) >>
   `t.vs_current_bb = s.vs_current_bb` by metis_tac[ld_sync_control] >>
   `t.vs_inst_idx = p` by
     (drule_all ld_sync_envelope_position >> simp[]) >>
