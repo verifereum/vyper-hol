@@ -80,7 +80,7 @@ QED
 
 Theorem ld_annotated_observation_clean:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\ MEM i.inst_opcode [SHA3; LOG] ==>
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\ MEM i.inst_opcode [SHA3; LOG] ==>
   (!op. MEM op i.inst_operands ==> op_taint tn op = {}) /\
   (!a n. MEM (a,n) (source_memory_read_ranges i s) ==>
     DISJOINT tn.t_mem {q | a <= q /\ q < a+n})
@@ -141,7 +141,7 @@ QED
 
 Theorem ld_normal_observation_read:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\ MEM i.inst_opcode [SHA3; LOG] /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\ MEM i.inst_opcode [SHA3; LOG] /\
   ~in_revert_forward fn s /\
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
     astk live keys d A suspended gstk f /\
@@ -177,7 +177,7 @@ QED
 
 Theorem ld_normal_sha3_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -273,7 +273,7 @@ Resume ld_normal_sha3_backward[completion]:
 QED
 
 Resume ld_normal_sha3_backward[read_fields]:
-  conj_tac >- (gvs[] >> metis_tac[]) >>
+  qexists_tac `ncut` >> conj_tac >- (gvs[] >> metis_tac[]) >>
   simp[memory_range_of_operands_def]
 QED
 
@@ -293,7 +293,7 @@ QED
 
 Theorem ld_normal_log_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\

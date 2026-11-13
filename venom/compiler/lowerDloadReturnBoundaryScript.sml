@@ -1,5 +1,6 @@
 Theory lowerDloadReturnBoundary
 Ancestors
+  o1SafeUpto
   lowerDloadProvenanceSupport lowerDloadReachableDiscipline
   lowerDloadPairedBoundary lowerDloadOwnership ptrDiscipline memLocDefs venomExecSemantics
   venomState venomInst finite_map pred_set list pointerConfinedDefs
@@ -49,7 +50,7 @@ Proof
 QED
 
 Theorem ld_annotated_ret_operands_equal:
-  ptr_discipline lo ctx vs0 /\
+  ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s /\
   ld_annotated_reachable vs0 ctx astk k L AP AG tn fn i s /\
   i.inst_opcode = RET /\ ld_owned_vars V E AG BH tn un s t /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) ==>
@@ -57,8 +58,8 @@ Theorem ld_annotated_ret_operands_equal:
 Proof
   strip_tac >>
   `taint_ok fn tn i s` by metis_tac[ld_annotated_taint_ok] >>
-  qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-  simp[ptr_discipline_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `ptr_discipline_upto _ _ _ _` mp_tac >>
+  simp[ptr_discipline_upto_def, EVERY_MEM] >> strip_tac >>
   `FDOM AG SUBSET fn_pv P fn` by metis_tac[ld_annotated_prov_support] >>
   `MEM fn ctx.ctx_functions` by metis_tac[ld_annotated_fn_member] >>
   `active_inst fn i s` by metis_tac[ld_annotated_active_inst] >>

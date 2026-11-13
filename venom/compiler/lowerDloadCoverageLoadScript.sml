@@ -11,7 +11,7 @@ Theorem ld_configured_load_next_backward:
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn u0 s t0
     astk live keys d0 A suspended gstk f /\
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!fn. MEM fn CS.ctx_functions ==> fn_ptr_ok P fn) /\
   i.inst_opcode = DLOAD /\ i.inst_operands = [off] /\ i.inst_outputs = [out] /\
   ~in_revert_forward fn s /\ dload_offset_ok CS fn i s /\

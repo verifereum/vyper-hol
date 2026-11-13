@@ -1,5 +1,6 @@
 Theory lowerDloadLoadProducer
 Ancestors
+  o1SafeUpto
   lowerDloadLoadValues lowerDloadLoadMemory lowerDloadLoadAccount
   lowerDloadLoadRepresentation lowerDloadOwnership lowerDloadRelocation
   lowerDloadAllocation ptrDiscipline finite_map pred_set
@@ -16,7 +17,7 @@ Theorem ld_load_semantic_backward:
   ld_owned_vars V E AG AH tn un s t0 /\
   (!v. off = Var v ==> v IN V) /\
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn inst s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
   ~in_revert_forward fn s /\ dload_offset_ok CS fn inst s /\
   code_layout_valid s /\ t0.vs_code = s.vs_code /\
