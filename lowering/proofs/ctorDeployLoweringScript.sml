@@ -27,7 +27,7 @@ QED
 
 Theorem deploy_expr_exit_result[local]:
   expr_exit (INR e : unit + exception) r ==>
-  deploy_venom_result_rel tops runtime_bc tx (INR e) r
+  deploy_venom_result_rel HS tops runtime_bc tx (INR e) r
 Proof
   Cases_on `r` >> simp[expr_exit_def] >>
   Cases_on `e` >> simp[expr_exit_def, deploy_venom_result_rel_def] >>
@@ -63,7 +63,7 @@ Theorem deploy_unit_execution_correct:
       deploy_source_exempt tops
         (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
            [(NONE, tops)] []) \/
-      ?fuel. deploy_venom_result_rel tops runtime_bc tx
+      ?fuel. deploy_venom_result_rel HS tops runtime_bc tx
                (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
                   [(NONE, tops)] [])
                (run_context fuel dunit.cu_context vs)
@@ -83,7 +83,7 @@ Proof
   drule_all deploy_ctor_entry_reaches_body >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
   `call_outcomes_ok am tx (MAP SND (call_trace es))` by
-    fs[deploy_state_rel_def] >>
+    metis_tac[deploy_state_rel_call_outcomes_ok] >>
   drule_all deploy_ctor_body_frame >> strip_tac >>
   drule deploy_ctor_code_facts >> strip_tac >>
   `?args. lookup_function NONE tx.function_name Deploy tops =
@@ -134,7 +134,8 @@ Proof
          (es0 with <| gas_obs := gx; outcomes := SOME vs.vs_outcomes |>) =
          (res, es_end with gas_obs := []) /\
        gas_path dunit.cu_context func s0 (LENGTH marks) r` by
-        (fs[gas_marked_exec_def] >>
+        (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def]) >>
          conj_tac
          >- (qpat_x_assum `!tail. eval_stmts _ _ _ = _`
                (qspec_then `[]` mp_tac) >> simp[]) >>

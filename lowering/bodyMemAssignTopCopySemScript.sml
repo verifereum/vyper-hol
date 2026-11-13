@@ -156,11 +156,11 @@ QED
 
 Theorem topcopy_accounts_fold:
   !cx es s tr k ws is stor.
-    accounts_rel cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
-    storage_agree (storage_dead cx tr stor) stor
+    accounts_rel H cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+    storage_agree (storage_dead H tr stor) stor
       (FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
         (if tr then contract_transient s else contract_storage s) is) ==>
-    accounts_rel cx (set_storage cx es tr stor)
+    accounts_rel H cx (set_storage cx es tr stor)
       (FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t) s is)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -175,20 +175,20 @@ QED
 
 Theorem topcopy_state_fold:
   !ctx func cenv cx es s tr k ws is stor.
-    stmt_state_rel ctx func cenv cx es s /\
-    storage_agree (storage_dead cx tr stor) stor
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_agree (storage_dead H tr stor) stor
       (FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
         (if tr then contract_transient s else contract_storage s) is) ==>
-    stmt_state_rel ctx func cenv cx (set_storage cx es tr stor)
+    stmt_state_rel H ctx func cenv cx (set_storage cx es tr stor)
       (FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t) s is)
 Proof
   rpt gen_tac >> strip_tac >>
-  `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel cx es s` by
+  `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel H cx es s` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   drule_all topcopy_accounts_fold >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `accounts_rel cx es1 s1` >>
+  qmatch_asmsub_abbrev_tac `accounts_rel H cx es1 s1` >>
   drule accounts_rel_storage_transient >> strip_tac >>
-  `state_rel func cenv cx es1 s1` by
+  `state_rel H func cenv cx es1 s1` by
     (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`, topcopy_backend_fold] >>
      fs[stmt_state_rel_def, state_rel_def, set_storage_def,
         local_ptrs_rel_def, local_backed_def, local_region_def, lookup_var_def,
@@ -211,8 +211,8 @@ QED
 
 Theorem topcopy_initial_agree:
   !ctx func cenv cx es s tr.
-    stmt_state_rel ctx func cenv cx es s ==>
-    storage_agree (storage_dead cx tr (get_storage cx es tr))
+    stmt_state_rel H ctx func cenv cx es s ==>
+    storage_agree (storage_dead H tr (get_storage cx es tr))
       (get_storage cx es tr)
       (if tr then contract_transient s else contract_storage s)
 Proof
@@ -223,7 +223,7 @@ QED
 
 Theorem topcopy_state_region:
   !ctx func cenv cx es s tr mid id subs k tv v writes off mem ws res es'.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     declared_storage_region cx mid id subs = SOME (tr, k, tv) /\
     w2n k + type_slot_size tv <= dimword (:256) /\
     (!mid' id' subs' k' tv'.
@@ -240,7 +240,7 @@ Theorem topcopy_state_region:
          ws i = mem_word_at (off + 32 * i) mem) /\
     write_storage_slot cx tr k tv v es = (res, es') ==>
     res = INL () /\
-    stmt_state_rel ctx func cenv cx es'
+    stmt_state_rel H ctx func cenv cx es'
       (FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t)
         s (COUNT_LIST (type_slot_size tv)))
 Proof
@@ -254,10 +254,10 @@ QED
 
 Theorem topcopy_control_frame:
   !ctx func cenv cx es s V bb ix prev.
-    stmt_state_rel ctx func cenv cx es
+    stmt_state_rel H ctx func cenv cx es
       (s with <|vs_vars := V; vs_current_bb := bb;
                 vs_inst_idx := ix; vs_prev_bb := prev|>) =
-    stmt_state_rel ctx func cenv cx es (s with vs_vars := V)
+    stmt_state_rel H ctx func cenv cx es (s with vs_vars := V)
 Proof
   rpt gen_tac >>
   `fmp_room ctx func
@@ -277,18 +277,18 @@ QED
 
 Theorem topcopy_normalized_state:
   !ctx func cenv cx es s t sa.
-    stmt_state_rel ctx func cenv cx es
+    stmt_state_rel H ctx func cenv cx es
       (t with <|vs_vars := s.vs_vars; vs_current_bb := s.vs_current_bb;
                 vs_inst_idx := s.vs_inst_idx; vs_prev_bb := s.vs_prev_bb|>) /\
     local_ptrs_reserved cenv sa /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>
-    stmt_state_rel ctx func cenv cx es t
+    stmt_state_rel H ctx func cenv cx es t
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
   simp[topcopy_control_frame] >>
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es
+  `stmt_state_rel H ctx func cenv cx es
      ((t with vs_vars := s.vs_vars) with vs_vars := t.vs_vars)` suffices_by simp[] >>
   irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
   fs[local_ptrs_reserved_def, lookup_var_def] >> metis_tac[]
@@ -324,7 +324,7 @@ QED
 Theorem topcopy_post_words:
   !ctx func cenv cx e es sa sm s0 es1 v op s tv w.
     post_value_type cenv e = expr_type e /\
-    expr_post ctx func cenv cx e es sa sm s0 es1 v op s /\
+    expr_post H ctx func cenv cx e es sa sm s0 es1 v op s /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
     eval_operand op s = SOME w ==>
@@ -347,7 +347,7 @@ QED
 Theorem topcopy_post_region:
   !ctx func cenv cx e es sa sm s0 es1 v op s tv tr mid id slot es'.
     post_value_type cenv e = expr_type e /\
-    expr_post ctx func cenv cx e es sa sm s0 es1 v op s /\
+    expr_post H ctx func cenv cx e es sa sm s0 es1 v op s /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
     value_has_type tv v /\
@@ -359,7 +359,7 @@ Theorem topcopy_post_region:
        ranges_disjoint slot (type_slot_size tv) (w2n k') (type_slot_size tv')) /\
     write_storage_slot cx tr (n2w slot) tv v es1 = (INL (),es') ==>
     ?w. eval_operand op s = SOME w /\ type_slot_size tv < dimword (:256) /\
-      stmt_state_rel ctx func cenv cx es'
+      stmt_state_rel H ctx func cenv cx es'
         (FOLDL (\t i. (if tr then tstore else sstore)
           (n2w slot+n2w i) (mload (w2n (w+n2w i*32w)) s) t)
           s (COUNT_LIST (type_slot_size tv)))
@@ -369,7 +369,7 @@ Proof
   `IS_SOME (encode_value tv v)` by metis_tac[value_has_type_equiv] >>
   Cases_on `encode_value tv v` >> gvs[] >>
   rename1 `encode_value tv v = SOME writes` >>
-  `stmt_state_rel ctx func cenv cx es1 s /\
+  `stmt_state_rel H ctx func cenv cx es1 s /\
    expr_val_rel cx (expr_type e) v op s` by gvs[expr_post_def] >>
   qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
   simp[expr_val_rel_def] >> strip_tac >>

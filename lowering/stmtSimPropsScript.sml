@@ -31,8 +31,8 @@ Proof
 QED
 
 Theorem exec_alloca_prefix_base:
-  !func cenv cx es inst s n s' p w cap ctx.
-    stmt_state_rel ctx func cenv cx es s /\ alloca_prefix cap s /\
+  !H func cenv cx es inst s n s' p w cap ctx.
+    stmt_state_rel H ctx func cenv cx es s /\ alloca_prefix cap s /\
     inst.inst_outputs = [p] /\ exec_alloca inst s n = OK s' /\
     lookup_var p s' = SOME w ==> cap <= w2n w
 Proof
@@ -183,11 +183,11 @@ Proof
 QED
 
 Theorem stmt_state_rel_pop_top_ext:
-  !func cenv cenv' cx es ss sc rest ctx.
-    stmt_state_rel ctx func cenv' cx es ss /\ cenv_top_ext cenv cenv' es.scopes /\
+  !H func cenv cenv' cx es ss sc rest ctx.
+    stmt_state_rel H ctx func cenv' cx es ss /\ cenv_top_ext cenv cenv' es.scopes /\
     es.scopes = sc :: rest /\
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-    stmt_state_rel ctx func cenv cx (es with scopes := rest) ss
+    stmt_state_rel H ctx func cenv cx (es with scopes := rest) ss
 Proof
   rpt strip_tac >>
   drule_all stmt_state_rel_pop_scope >> strip_tac >>

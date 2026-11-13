@@ -5,7 +5,7 @@ Ancestors
   venomInst finite_map words list arithmetic
 
 Theorem log_event_buffer_resource:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit (n2w bufsz)] /\ bufsz < dimword (:256) ==>
   ?p. ((FLOOKUP s.vs_allocas inst.inst_id = NONE /\ p = s.vs_alloca_next) \/

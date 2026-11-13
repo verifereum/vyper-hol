@@ -260,13 +260,13 @@ QED
 
 Theorem bytes_buffer_write_state_rel:
   !func cenv cx es s p data sz ctx.
-  stmt_state_rel ctx func cenv cx es s /\ 32 + LENGTH data <= sz /\
+  stmt_state_rel H ctx func cenv cx es s /\ 32 + LENGTH data <= sz /\
   (!name b len. local_region cenv es.scopes s name b len ==>
      b + len <= p \/ p + sz <= b) /\
   immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
     (mstore p (n2w (LENGTH data))
       (write_memory_with_expansion (p + 32) data s)) ==>
-  stmt_state_rel ctx func cenv cx es
+  stmt_state_rel H ctx func cenv cx es
     (mstore p (n2w (LENGTH data))
       (write_memory_with_expansion (p + 32) data s))
 Proof
@@ -289,7 +289,7 @@ Proof
     (irule immutable_base_zero_frame >> qexists_tac `s` >>
      simp[mstore_def, write_memory_with_expansion_def, lookup_var_def, LET_THM] >>
      gvs[stmt_state_rel_def]) >>
-  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
   rewrite_tac[Once stmt_state_rel_def] >> strip_tac >>
   rewrite_tac[stmt_state_rel_def] >> conj_tac
   >- (irule state_rel_frame >> simp[] >> qexistsl_tac [`es`, `s`] >>
@@ -307,7 +307,7 @@ Proof
   qpat_x_assum `immutable_base_zero cenv (mstore _ _ _)` kall_tac >>
   qpat_x_assum `immutables_rel _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `local_ptrs_rel _ _ _ _` kall_tac >>
-  qpat_x_assum `state_rel _ _ _ _ _` kall_tac >>
+  qpat_x_assum `state_rel H _ _ _ _ _` kall_tac >>
   full_simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def,
       LET_THM, immutable_alloca_sep_def, local_region_def, lookup_var_def] >>
   metis_tac[]
@@ -602,7 +602,7 @@ Theorem slice_calldata_run:
   !op n sa ptr sb func cenv cx es s a ctx.
   compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa = (ptr,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
   context_well_typed cx /\ 0 < n /\ n < dimword (:256) /\ a < dimword (:256) /\
   32 + 32 * word_size n < 2 ** 64 /\
   eval_operand op s = SOME (n2w a) /\
@@ -610,7 +610,7 @@ Theorem slice_calldata_run:
   if dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n then
     ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
   else ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ eval_operand ptr t = SOME w /\
+    stmt_state_rel H ctx func cenv cx es t /\ eval_operand ptr t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,32 + 32 * word_size n) /\
     pure_frame cenv func es sa s t /\
     val_in_memory (BaseTV (BytesT (Dynamic n)))
@@ -644,7 +644,7 @@ Proof
      regions_disjoint off (type_memory_size tv) (w2n w)
        (32 * word_size n + 32))` by
     (rpt strip_tac >>
-     qpat_assum `stmt_state_rel ctx func cenv cx es t` mp_tac >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx es t` mp_tac >>
      pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
      qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> strip_tac >>
@@ -655,7 +655,7 @@ Proof
      simp[mk_inst_def]) >>
   `t.vs_call_ctx.cc_calldata = cx.txn.calldata /\
    LENGTH t.vs_call_ctx.cc_calldata < dimword (:256)` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
+    (qpat_x_assum `stmt_state_rel H _ _ _ _ _ t` mp_tac >>
      qpat_x_assum `context_well_typed cx` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
@@ -840,7 +840,7 @@ Theorem slice_calldata_vv_post:
   !func cenv cx e es sa sb s t p a n w ctx.
   expr_type e = BaseT (BytesT (Dynamic n)) /\ p.ptr_location = LocMemory /\
   eval_operand p.ptr_operand t = SOME w /\ a+n <= LENGTH cx.txn.calldata /\
-  stmt_state_rel ctx func cenv cx es t /\
+  stmt_state_rel H ctx func cenv cx es t /\
   FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,32 + 32 * word_size n) /\
   pure_frame cenv func es sa s t /\
   sa.cs_next_id < sb.cs_next_id /\
@@ -854,7 +854,7 @@ Theorem slice_calldata_vv_post:
   (!nm lb len. local_region cenv es.scopes t nm lb len ==>
      regions_disjoint (w2n w) (32 + 32 * word_size n) lb len) /\
   locals_kept cenv es es s t ==>
-  !k. vv_post ctx func cenv cx e es sa sb s es
+  !k. vv_post H ctx func cenv cx e es sa sb s es
     (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
     (LocatedValue (expr_type e) p) (t with vs_inst_idx := k)
 Proof
@@ -892,9 +892,9 @@ Theorem slice_calldata_frag[local]:
   res = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
            INL v => INL (Value v) | INR err => INR (Error err)) ==>
   frag_exec ctx sa sb
-    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+    (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s /\
          eval_operand op s = SOME (n2w a))
-    (\t. ?tv. res = INL tv /\ vv_post ctx func cenv cx e es sa sb s0 es tv
+    (\t. ?tv. res = INL tv /\ vv_post H ctx func cenv cx e es sa sb s0 es tv
            (LocatedValue (expr_type e) p) t)
     (expr_exit res)
 Proof
@@ -936,12 +936,12 @@ Theorem slice_calldata_path[local]:
   (!x. op = Var x ==> not_fresh_at sa x) /\
   bres = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
            INL v => INL v | INR err => INR (Error err)) /\
-  stmt_state_rel ctx func cenv cx es s0 /\ eval_operand op s0 = SOME (n2w a) /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ eval_operand op s0 = SOME (n2w a) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?m r. gas_marked_path F ctx func s0 m r /\
     ((?u. r = OK u /\
-          (?rv. bres = INL rv /\ vv_post ctx func cenv cx e es sa sb s0 es
+          (?rv. bres = INL rv /\ vv_post H ctx func cenv cx e es sa sb s0 es
              (Value rv) (LocatedValue (expr_type e) p) u) /\
           u.vs_current_bb = sb.cs_current_bb /\
           u.vs_inst_idx = LENGTH sb.cs_current_insts) \/
@@ -950,7 +950,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule slice_calldata_shape >> strip_tac >>
   qspecl_then [`ctx`, `func`, `sa`, `sb`, `s0`,
-    `\u. ?rv. bres = INL rv /\ vv_post ctx func cenv cx e es sa sb s0 es
+    `\u. ?rv. bres = INL rv /\ vv_post H ctx func cenv cx e es sa sb s0 es
             (Value rv) (LocatedValue (expr_type e) p) u`, `expr_exit bres`]
     mp_tac run_inst_seq_gas_path >>
   BETA_TAC >> reverse impl_tac >- (disch_then ACCEPT_TAC) >>
@@ -1006,24 +1006,24 @@ Proof
 QED
 
 Theorem vv_post_prefix_frame:
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   wb_frame cenv es es1 sa s0 t /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
-  vv_post ctx func cenv cx e es1 sm sb t es2 tv vv u ==>
-  vv_post ctx func cenv cx e es sa sb s0 es2 tv vv u
+  vv_post H ctx func cenv cx e es1 sm sb t es2 tv vv u ==>
+  vv_post H ctx func cenv cx e es sa sb s0 es2 tv vv u
 Proof
   strip_tac >>
   `wb_frame cenv es1 es2 sm t u` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
      rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qspecl_then [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `es1`, `es2`, `sm`,
                `t`, `u`, `ctx`] mp_tac wb_frame_trans >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   rewrite_tac[wb_frame_def] >> strip_tac >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   rewrite_tac[vv_post_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >~ [`vv_at _ _ _ sa _ _ _ _ _`]
@@ -1067,14 +1067,14 @@ Theorem compile_unary_builtin_rel_vv_sim:
       (INL v,es') /\
     value_has_type (BaseTV bty) v /\ expr_sim_inv cenv cx env es' /\
     expr_res_ok (builtin_result cx es'.accounts ann bt [expr_type e] [v]) /\
-    stmt_state_rel ctx func cenv cx es s0 /\
-    expr_post ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?n r. gas_marked_path F ctx func s n r /\
       ((?t rv. r = OK t /\
           builtin_result cx es'.accounts ann bt [expr_type e] [v] = INL rv /\
-          vv_post ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es'
+          vv_post H ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es'
             (Value rv) vv t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
@@ -1190,7 +1190,7 @@ Proof
      gvs[]) >>
   qpat_x_assum `v = IntV _` SUBST_ALL_TAC >>
   qpat_x_assum `LocatedValue _ _ = vv` (SUBST_ALL_TAC o SYM) >>
-  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
   `eval_operand x s = SOME (n2w a)` by
     (drule expr_post_word_operand >>
      simp[evaluate_type_def, is_word_type_def, word_value_def, val_to_w256_def,
@@ -1227,6 +1227,6 @@ Proof
    pure_frame cenv func es sa s0 s` by
     (simp[expr_has_effect_thm] >> metis_tac[expr_post_pure_frame]) >>
   irule vv_post_prefix_frame >>
-  first_assum (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
 QED

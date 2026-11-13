@@ -140,7 +140,7 @@ QED
 
 Theorem aggregate_store_rebased_slice_mem_cursor:
   compile_store_memory ce op (Var x) (expr_type e) (lowered_value_type ce e) su = ((),sb) /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
   not_fresh_at sm x /\ lookup_var x r = SOME w /\
   sm.cs_next_var <= su.cs_next_var /\
@@ -150,7 +150,7 @@ Theorem aggregate_store_rebased_slice_mem_cursor:
   value_has_type tv v /\ val_wf tv v /\
   type_memory_bytes ce (expr_type e) = type_memory_size tv /\
   type_memory_size tv < dimword (:256) /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b + k <= w2n w \/ w2n w + type_memory_size tv <= b) /\
   (ce.ce_is_ctor ==> !name itv iv off.
@@ -175,7 +175,7 @@ Theorem aggregate_store_rebased_slice_mem_cursor:
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
     gas_path_mem ctx func s 0 (OK q) /\
     val_in_memory tv v (w2n w) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
       lookup_var z q = SOME a) /\
     (!aid b. FLOOKUP r.vs_allocas aid = SOME b ==>
@@ -234,7 +234,7 @@ QED
 (* Compatibility interface: callers not needing the block may forget it. *)
 Theorem aggregate_store_rebased_slice_mem:
   compile_store_memory ce op (Var x) (expr_type e) (lowered_value_type ce e) su = ((),sb) /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
   not_fresh_at sm x /\ lookup_var x r = SOME w /\
   sm.cs_next_var <= su.cs_next_var /\
@@ -244,7 +244,7 @@ Theorem aggregate_store_rebased_slice_mem:
   value_has_type tv v /\ val_wf tv v /\
   type_memory_bytes ce (expr_type e) = type_memory_size tv /\
   type_memory_size tv < dimword (:256) /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b + k <= w2n w \/ w2n w + type_memory_size tv <= b) /\
   (ce.ce_is_ctor ==> !name itv iv off.
@@ -265,7 +265,7 @@ Theorem aggregate_store_rebased_slice_mem:
   s.vs_inst_idx = LENGTH su.cs_current_insts ==>
   ?q. gas_path_mem ctx func s 0 (OK q) /\
     val_in_memory tv v (w2n w) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
       lookup_var z q = SOME a) /\
     (!aid b. FLOOKUP r.vs_allocas aid = SOME b ==>

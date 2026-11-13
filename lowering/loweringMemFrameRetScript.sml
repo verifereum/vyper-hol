@@ -30,7 +30,7 @@ Theorem return_none_counted_mem[local]:
      stmt_env cenv lctx ty (Return NONE) sa = (cenv'', sb) /\
      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
      local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
-     stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+     stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
      ?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
@@ -74,14 +74,14 @@ Theorem return_value_summary_mem[local]:
   gas_summary_at T (ctx,func) marks
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\res ee t. ?v. res = INL v /\
-       expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
+       expr_post H ctx func cenv cx e es sa s1 s0 ee v op t /\
        expr_store_bound cx (expr_type e) v op t /\
        t.vs_current_bb = s1.cs_current_bb /\
        t.vs_inst_idx = LENGTH s1.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
     (\res ee r. expr_exit res r) /\
   (!ee v t.
-     expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
+     expr_post H ctx func cenv cx e es sa s1 s0 ee v op t /\
      (?gs ee'. bind (eval_expr cx e) (read_result cx)
                  (es with gas_obs := gs) = (INL v, ee')) /\
      t.vs_current_bb = s1.cs_current_bb /\
@@ -129,10 +129,10 @@ Theorem return_value_counted_mem[local]:
      lower_value compile_expr cenv ty e sa = (op, s1) /\
      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
      local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
-     stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+     stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-     expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
+     expr_post H ctx func cenv cx e es sa s1 s0 ee v op t /\
      (?gs ee'. bind (eval_expr cx e) (read_result cx)
                  (es with gas_obs := gs) = (INL v, ee')) /\
      (!ty'. expr_sim_mem ctx func cenv cx ty' e es /\

@@ -515,7 +515,7 @@ Theorem asm_frame_create_consume[local]:
   a.as_stack = value::off::sz::
     (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
-  w2n sz <= 2 * max_code_size ==>
+  w2n sz <= 2 * max_code_size /\ ~a.as_call_ctx.cc_static ==>
   asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
     (EL a.as_pc prog) a =
   asm_consume_create_outcome (request_of s) stk
@@ -562,6 +562,8 @@ Proof
   `next_opcode c = SOME (case salt_opt of NONE => Create | SOME salt => Create2)` by
     (drule_at (Pat `asm_evm_rel _ _ _`) asm_frame_create_decode >> simp[] >>
      Cases_on `salt_opt` >> gvs[]) >>
+  `~a.as_call_ctx.cc_static` by
+    (drule_all evmStepSimTheory.asm_evm_rel_static >> gvs[asm_frame_rel_def]) >>
   drule_all asm_frame_create_consume >> disch_tac >>
   `(request_of s).cr_kind <> MessageCall /\
    (request_of s).cr_kind <> DelegateMessageCall /\ ~(request_of s).cr_static` by

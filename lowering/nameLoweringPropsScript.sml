@@ -85,7 +85,7 @@ QED
 
 Theorem state_rel_simple_vs_vars:
   !cenv cx es ss vars.
-    state_rel_simple cenv cx es (ss with vs_vars := vars) = state_rel_simple cenv cx es ss
+    state_rel_simple H cenv cx es (ss with vs_vars := vars) = state_rel_simple H cenv cx es ss
 Proof
   simp[state_rel_simple_def, vars_rel_def, storage_rel_def, transient_rel_def,
     immutables_rel_simple_def, logs_rel_def, call_ctx_rel_def,
@@ -94,11 +94,11 @@ QED
 
 Theorem state_rel_simple_assignment_frame:
   !cenv cx es ss out.
-    state_rel_simple cenv cx es ss /\ out with vs_vars := ss.vs_vars = ss ==>
-    state_rel_simple cenv cx es out
+    state_rel_simple H cenv cx es ss /\ out with vs_vars := ss.vs_vars = ss ==>
+    state_rel_simple H cenv cx es out
 Proof
   rpt strip_tac >>
-  `state_rel_simple cenv cx es (out with vs_vars := ss.vs_vars)` by simp[] >>
+  `state_rel_simple H cenv cx es (out with vs_vars := ss.vs_vars)` by simp[] >>
   fs[state_rel_simple_vs_vars]
 QED
 

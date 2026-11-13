@@ -27,41 +27,41 @@ Theorem deploy_ctor_body_ptr:
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
     deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) /\
-    stmt_state_rel dunit.cu_context func cenv
+    stmt_state_rel H dunit.cu_context func cenv
       (deploy_evaluation_context tops am tx)
       (es0 with outcomes := SOME vs.vs_outcomes) s0 /\
     s0.vs_gas_readings = vs.vs_gas_readings /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    deploy_ptr_inv tops runtime_bc am tx imm G0 tn0 s0 /\
+    deploy_ptr_inv HS tops runtime_bc am tx imm G0 tn0 s0 /\
     (!body_cenv ee s G tn.
        same_frame cenv body_cenv /\
-       stmt_state_rel dunit.cu_context func body_cenv
+       stmt_state_rel H dunit.cu_context func body_cenv
          (deploy_evaluation_context tops am tx) ee s /\
        ~s.vs_halted /\ s.vs_current_bb = st_exit.cs_current_bb /\
        s.vs_inst_idx = 0 /\
-       deploy_ptr_inv tops runtime_bc am tx imm G tn s ==>
+       deploy_ptr_inv HS tops runtime_bc am tx imm G tn s ==>
        ?fuel final.
          run_from fuel dunit.cu_context func s = Halt final /\
-         ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops) fuel
+         ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops) fuel
            dunit.cu_context func [] G tn s) ==>
     (?s G tn cenv' ee.
        ~s.vs_halted /\ ~block_is_terminated sb /\
        s.vs_current_bb = sb.cs_current_bb /\
        s.vs_inst_idx = LENGTH sb.cs_current_insts /\
        cenv_top_ext cenv cenv' ee.scopes /\
-       stmt_state_rel dunit.cu_context func cenv'
+       stmt_state_rel H dunit.cu_context func cenv'
          (deploy_evaluation_context tops am tx) ee s /\
-       deploy_ptr_inv tops runtime_bc am tx imm G tn s /\
+       deploy_ptr_inv HS tops runtime_bc am tx imm G tn s /\
        !fuel r. run_from fuel dunit.cu_context func s = r /\
                 (!e. r <> Error e) ==>
          ?fuel'. run_from fuel' dunit.cu_context func s0 = r /\
-           (ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+           (ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
               fuel dunit.cu_context func [] G tn s ==>
-            ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+            ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
               fuel' dunit.cu_context func [] G0 tn0 s0)) \/
     (?fuel r. run_from fuel dunit.cu_context func s0 = r /\ exit_result r /\
-              ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+              ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
                 fuel dunit.cu_context func [] G0 tn0 s0)
 Proof
   cheat

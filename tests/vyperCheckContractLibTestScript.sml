@@ -1780,6 +1780,29 @@ val () = List.app (fn deploy =>
    assert_some (literal_range_check deploy ``BaseT (IntT 8)`` (~128) 127 255)))
   [false,true]
 
+(* Array loops use the type's maximum bound, including when a dynamic array
+   currently contains fewer elements. *)
+fun array_bound_check in_deploy bd count = let
+  val arr = ``ArrayT ^u256 ^bd``
+in
+  check_selector_decls in_deploy empty_layouts
+    ``[FunctionDecl ^(if in_deploy then ``Deploy`` else ``External``)
+         Nonpayable F F ^(if in_deploy then ``"__init__"`` else ``"f"``)
+         [] [] NoneT
+         [AnnAssign "xs" ^arr
+            (Builtin ^arr (MakeArray (SOME ^u256) ^bd)
+               [^(const_lit 1); ^(const_lit 2)]);
+          For "i" ^u256 (Array (Name ^arr "xs"))
+            ^(numSyntax.term_of_int count) [Pass]]]``
+end
+
+val () = List.app (fn deploy => List.app (fn (bd, count) =>
+  (assert_some (array_bound_check deploy bd count);
+   List.app (fn mismatch =>
+     assert_none (array_bound_check deploy bd mismatch))
+     [0, count - 1, count + 1]))
+  [(``Fixed 2``, 2), (``Dynamic 3``, 3)]) [false,true]
+
 (* A valid lock layout must not make a guarded constructor legal. Headers
    are checked in runtime mode too, when the constructor body is inactive. *)
 val () = List.app (fn deploy => List.app (fn layouts =>

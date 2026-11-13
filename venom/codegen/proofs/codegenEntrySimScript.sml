@@ -257,8 +257,6 @@ Proof
   `!l. FLOOKUP vs.vs_labels l =
        OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)`
     by gvs[initial_ctx_rel_def] >>
-  `~vs.vs_call_ctx.cc_static`
-    by gvs[initial_ctx_rel_def, initial_state_rel_def, msg_ctx_rel_def] >>
   `asm_block_at prog 0 (execute_plan cp.cp_initial_fmp r.sr_plan)`
     by metis_tac[codegen_assembly_first_region] >>
   `fn_entry_state_rel cp fe

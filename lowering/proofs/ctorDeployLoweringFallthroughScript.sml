@@ -19,7 +19,7 @@ Theorem deploy_ctor_fallthrough:
     (imm_len tops <> 0 ==>
        cenv.ce_imm_alloca = SOME imm /\
        !x. imm = Var x ==> not_fresh_at st_epilogue x) /\
-    stmt_state_rel dunit.cu_context func cenv' cx ee t /\ ~t.vs_halted /\
+    stmt_state_rel H dunit.cu_context func cenv' cx ee t /\ ~t.vs_halted /\
     ~block_is_terminated sb /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     ?fuel final.

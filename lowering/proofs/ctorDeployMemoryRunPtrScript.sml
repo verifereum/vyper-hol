@@ -37,7 +37,7 @@ Theorem deploy_unit_run_ptr_safe:
     lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl
     ==>
-    !fuel. ptr_safe_blocks (deploy_dead tops runtime_bc am tx) (imm_len tops) fuel dunit.cu_context fn
+    !fuel. ptr_safe_blocks (deploy_dead HS tops runtime_bc am tx) (imm_len tops) fuel dunit.cu_context fn
              [] FEMPTY entry_taint
              (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                          vs_inst_idx := 0 |>)
@@ -57,7 +57,7 @@ Proof
   rpt BasicProvers.VAR_EQ_TAC >>
   drule_all deploy_ctor_entry_run_ptr >> strip_tac >>
   `call_outcomes_ok am tx (MAP SND (call_trace es))` by
-    fs[deploy_state_rel_def] >>
+    metis_tac[deploy_state_rel_call_outcomes_ok] >>
   drule_all deploy_ctor_body_frame >> strip_tac >>
   `~ctx_has_dalloca dunit.cu_context` by
     (drule_all ctorDeployShapeTheory.deploy_unit_shape_ok >> strip_tac >>

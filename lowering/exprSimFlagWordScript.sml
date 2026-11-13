@@ -29,13 +29,20 @@ Proof
        comp_bind_def, comp_return_def, unwrap_value_def] >>
   conj_tac
   >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_rules] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      qpat_x_assum `s0.vs_inst_idx = _` kall_tac >> simp[]) >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def, locals_kept_def,
        vyperASTTheory.expr_type_def, eval_operand_def, is_word_type_def,
-       typed_val_to_w256_word_value, word_value_def, val_to_w256_def]
+       typed_val_to_w256_word_value, word_value_def, val_to_w256_def,
+       gas_marked_exec_def, gas_marked_path_def, gas_path_rules]
 QED
 
 Theorem compile_flag_member_case_sim:

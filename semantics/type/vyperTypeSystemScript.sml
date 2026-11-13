@@ -787,6 +787,30 @@ Theorem create_arg_types_ok_compute =
        (CONJUNCTS create_arg_types_ok_def) @
      [GEN_ALL create_arg_types_ok_raw_create])
 
+(* A subscript reads its value base at the base's type, so an internal call
+   used as one is typed at its callee's exact return type, as Vyper's
+   annotator types a Call under a Subscript (visit_Subscript). *)
+Definition subscript_base_type_exact_def:
+  subscript_base_type_exact env (Call ty (IntCall nsid) _ _) =
+    (case FLOOKUP env.fn_sigs nsid of SOME sig => sig.ret_ty = ty | NONE => F) /\
+  subscript_base_type_exact env _ = T
+End
+
+Theorem subscript_base_type_exact_transfer:
+  !env1 env2 e.
+    (!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==>
+             FLOOKUP env2.fn_sigs k = SOME sig) /\
+    subscript_base_type_exact env1 e ==> subscript_base_type_exact env2 e
+Proof
+  rpt strip_tac >>
+  Cases_on `?ty nsid args drv. e = Call ty (IntCall nsid) args drv`
+  >- (gvs[subscript_base_type_exact_def] >>
+      Cases_on `FLOOKUP env1.fn_sigs nsid` >> gvs[] >>
+      first_x_assum drule >> simp[]) >>
+  Cases_on `e` >> gvs[subscript_base_type_exact_def] >>
+  rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> gvs[subscript_base_type_exact_def]
+QED
+
 (* Pinned Vyper local.py:_handle_modification counts direct immutable writes,
    but explicitly excludes complex (struct/array) projections in constructors.
    Do not inherit a direct-root ban through projections. Their deploy/runtime
@@ -839,7 +863,8 @@ Definition well_typed_expr_def:
        MAP FST kes = MAP FST args /\ MAP (expr_type o SND) kes = MAP SND args) /\
   well_typed_expr env (Subscript ty e1 e2) =
     (well_typed_expr env e2 /\ well_formed_type env.type_defs ty /\
-     ((well_typed_expr env e1 /\ subscript_type_ok (expr_type e1) e2 ty) \/
+     ((well_typed_expr env e1 /\ subscript_type_ok (expr_type e1) e2 ty /\
+       subscript_base_type_exact env e1) \/
       (?vt. type_place_expr env e1 = SOME vt /\
             subscript_vtype vt (expr_type e2) = SOME (Type ty)))) /\
   well_typed_expr env (Attribute ty e id) =
@@ -1317,7 +1342,8 @@ Definition type_stmt_def:
            Range (Literal _ (IntL start)) (Literal _ (IntL finish)) =>
              start < finish /\ n = Num (finish - start)
          | Range _ _ => 0 < n /\ well_typed_literal typ (IntL (&n))
-         | Array _ => T) /\
+         | Array e => expr_type e = ArrayT typ (Fixed n) \/
+                      expr_type e = ArrayT typ (Dynamic n)) /\
         id NOTIN FDOM env.var_types /\ iterator_unmodified it body /\
         IS_SOME (type_stmts (extend_local env id typ F) ret_ty body)
      then SOME env else NONE) /\
@@ -1335,6 +1361,14 @@ Theorem type_stmt_for_range_literal_bounds:
     (For id typ (Range (Literal start_ty (IntL start))
                       (Literal end_ty (IntL finish))) n body) = SOME env' ==>
   start < finish /\ n = Num (finish - start)
+Proof
+  rw[type_stmt_def, AllCaseEqs()]
+QED
+
+Theorem type_stmt_for_array_bound:
+  type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' ==>
+  expr_type e = ArrayT typ (Fixed n) \/
+  expr_type e = ArrayT typ (Dynamic n)
 Proof
   rw[type_stmt_def, AllCaseEqs()]
 QED

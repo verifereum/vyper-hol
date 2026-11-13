@@ -46,7 +46,7 @@ Ancestors
 (* cenv agrees with every function's build_compile_env for tops on the
    module-level fields no declaration changes: the module (the main one),
    module-variable types and locations (immutables included), flag
-   metadata and method ids (build_compile_env_module_pins, bodySimEntry). *)
+   metadata, custom-error parameters and method ids (build_compile_env_module_pins, bodySimEntry). *)
 Definition cenv_module_pins_def:
   cenv_module_pins tops cenv <=>
     cenv.ce_module = NONE /\
@@ -56,6 +56,7 @@ Definition cenv_module_pins_def:
         tops 0 (add_module_var_locations tops FEMPTY) /\
     cenv.ce_flag_member_id = FST (build_flag_info tops (K (K 0)) (K 0)) /\
     cenv.ce_flag_n_members = SND (build_flag_info tops (K (K 0)) (K 0)) /\
+    cenv.ce_error_info = (\name. lookup_custom_error_args_in name tops) /\
     cenv.ce_method_id =
       (\s tys. w2n (calldata_method_id
                      (function_selector s (vyper_to_abi_types (type_env tops) tys))))

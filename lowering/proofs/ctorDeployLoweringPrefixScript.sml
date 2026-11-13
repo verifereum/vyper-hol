@@ -135,7 +135,7 @@ Theorem deploy_prefix_constants_ready:
       tx.target [(NONE,tops)] = SOME am_c /\
     am_c.accounts = am.accounts
 Proof
-  strip_tac >> gvs[e2eDeployDefsTheory.deploy_typing_ok_def] >>
+  strip_tac >> gvs[e2eDeployDefsTheory.deploy_typing_ok_constants_ready] >>
   drule vyperTypeEntryReadinessTheory.checked_deployment_constants_ready_setup >>
   strip_tac >>
   drule vyperTypeEntryReadinessTheory.evaluate_all_constants_preserves_accounts >>
@@ -473,7 +473,7 @@ Proof
        (mp_tac o Q.AP_TERM `\s. s.vs_call_ctx.cc_callvalue`) >> simp[]) >>
   `tx.value < 2 ** 256` by
     fs[ctorDeployDefsTheory.deploy_source_ok_def,
-       e2eDeployDefsTheory.deploy_typing_ok_def, call_tx_well_typed_def] >>
+       e2eDeployDefsTheory.deploy_typing_ok_constants_ready, call_tx_well_typed_def] >>
   fs[wordsTheory.n2w_11, wordsTheory.dimword_def, arithmeticTheory.LESS_MOD]
 QED
 
@@ -512,7 +512,7 @@ Theorem deploy_ctor_prefix_fail:
     (!mut nr body am_c es0.
        ~deploy_ctor_start tops am tx (mut, nr, body, am_c, es0)) ==>
     ?fuel. !gobs.
-      deploy_venom_result_rel tops runtime_bc tx
+      deploy_venom_result_rel HS tops runtime_bc tx
         (load_contract NONE gobs am tx [(NONE, tops)] [])
         (run_context fuel dunit.cu_context vs)
 Proof

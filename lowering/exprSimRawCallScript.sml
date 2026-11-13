@@ -4948,7 +4948,11 @@ Resume raw_call_outbuf_positive_tail_vv_path[call_metadata]:
   >- (fs[] >> drule raw_call_finish_revert_compile >>
       simp[arithmeticTheory.GREATER_DEF] >> strip_tac >>
       rename1 `fresh_label "call_failed" ce = (fl,s2)` >>
-      `ce = sc` by (Cases_on `value_opt = NONE` >> gvs[]) >> gvs[] >>
+      `ce = sc` by
+        (POP_ASSUM_LIST (MAP_EVERY ASSUME_TAC o List.filter (fn th =>
+         List.exists (fn v => mem (fst (dest_var v)) ["ce", "sc", "value_opt"])
+           (free_vars (concl th)))) >>
+         Cases_on `value_opt = NONE` >> gvs[]) >> gvs[] >>
       rename1 `fresh_label "call_failed" sc = _` >>
       `ci_mono sc s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\
        ci_mono s4 s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7 /\
@@ -5278,7 +5282,10 @@ Resume raw_call_outbuf_tail_vv_frag[positive_finish]:
           simp[Abbr `entry`, local_region_def, lookup_var_def] >>
       simp[Abbr `entry`] >>
       rpt conj_tac
-      >- (Cases_on `value_opt` >> gvs[])
+      >- (POP_ASSUM_LIST (MAP_EVERY ASSUME_TAC o List.filter (fn th =>
+            List.exists (fn v => mem (fst (dest_var v)) ["value_opt", "val_word"])
+              (free_vars (concl th)))) >>
+          Cases_on `value_opt` >> gvs[])
       >- (rpt strip_tac >>
           qpat_x_assum `!name b sz. local_region cenv es.scopes t name b sz ==> _ /\ _`
             drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)

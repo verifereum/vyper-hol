@@ -4,7 +4,7 @@ Theory ctorDeployLoweringNoCtor
 Ancestors
   structFieldsProps ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
   compileVyper vyperInterpreter e2eDeployDefs moduleLowering
-  immutableDeployExecution ctorDeployDefs e2eEntry venomState vyperCompiler
+  immutableDeployExecution ctorDeployDefs immSectionDead e2eEntry venomState vyperCompiler
   immutableEncoding immutableEncodingProofs immutableSectionRel immutableValue
   valueEncoding valueEncodingDefs vyperValue vyperTypeInitialState vyperTypeContractStaticMaps
   vyperTypeConstantCells abiCallerBuiltinInput entryStateRel
@@ -2391,7 +2391,7 @@ Theorem no_ctor_initialized_zero_section:
 Proof
   strip_tac >>
   `?art. check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
-    gvs[deploy_typing_ok_def] >>
+    gvs[deploy_typing_ok_constants_ready] >>
   pop_assum strip_assume_tac >>
   irule no_ctor_zero_section >> rpt gen_tac >> strip_tac >>
   `MEM (VariableDecl vis Immutable name ty slot) tops` by simp[] >>
@@ -2430,7 +2430,7 @@ Theorem no_ctor_constants_ready:
                   exports updated_by CONS (tx.target,[]) |>)
       tx.target [(NONE,tops)] = SOME am_c
 Proof
-  strip_tac >> gvs[deploy_typing_ok_def] >>
+  strip_tac >> gvs[deploy_typing_ok_constants_ready] >>
   drule vyperTypeEntryReadinessTheory.checked_deployment_constants_ready_setup >>
   metis_tac[]
 QED
@@ -2540,6 +2540,7 @@ Theorem no_ctor_source_observations:
   tx.function_name = "__init__" /\ tx.args = [] /\
   value_transfer_ok tx am.accounts /\ am.pending_deletions = [] ==>
   ?am'. load_contract NONE gobs am tx [(NONE,tops)] [] = INL (am',[]) /\
+    ALOOKUP am'.sources tx.target = SOME [(NONE,tops)] /\
     am'.accounts = accounts_after_transfer tx am.accounts /\
     am'.tStorage = am.tStorage /\ am'.logs = am.logs /\
     immutables_section_rel tops (account_immutables am' tx.target)
@@ -2579,7 +2580,7 @@ Theorem no_ctor_source_halt:
   ss.vs_returndata = runtime_bc ++ REPLICATE (imm_len tops) 0w /\
   ss.vs_accounts = vs.vs_accounts /\
   ss.vs_transient = vs.vs_transient /\ ss.vs_logs = vs.vs_logs ==>
-  ?marks. deploy_venom_result_rel tops runtime_bc tx
+  ?marks. deploy_venom_result_rel HS tops runtime_bc tx
     (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx [(NONE,tops)] [])
     (Halt ss)
 Proof
@@ -2613,7 +2614,7 @@ Theorem deploy_no_ctor_correct:
       deploy_source_exempt tops
         (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
            [(NONE, tops)] []) \/
-      ?fuel. deploy_venom_result_rel tops runtime_bc tx
+      ?fuel. deploy_venom_result_rel HS tops runtime_bc tx
                (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
                   [(NONE, tops)] [])
                (run_context fuel dunit.cu_context vs)

@@ -78,7 +78,7 @@ Proof
   drule_all (cj 2 vyper_to_abi_enc_length_bound) >> strip_tac >>
   `sfields_tenv_consistent (make_struct_fields_map tops) (type_env tops)` by (
     irule make_struct_fields_map_consistent >>
-    gvs[deploy_typing_ok_def, check_contract_def] >>
+    gvs[deploy_typing_ok_constants_ready, check_contract_def] >>
     drule contract_namespaces_ok_module_type_def_keys >> simp[]) >>
   `EVERY (\t. IS_SOME (evaluate_type (type_env tops) t)) (MAP SND args)` by (
     gvs[listTheory.EVERY_MEM, listTheory.LIST_REL_EL_EQN,

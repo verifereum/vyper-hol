@@ -3,7 +3,7 @@
 Theory ctorDeployLoweringFrame
 Ancestors
   ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract bodySim e2eDefs callTrace
-  ctorDeployLoweringFramePayload ctorDeployDefs e2eDeployDefs e2eEntry
+  ctorDeployLoweringFramePayload ctorDeployDefs immSectionDead e2eDeployDefs e2eEntry
   vyperTypeStoragePreservation list supportedDecls supportedProgram
   compileEnv loweringStateRelDefs compileVyper moduleLowering entryLocals ctorEntryLocals bodySimEntry
   exprLoweringProps context finite_map stmtLoweringMono freshWrites fragExec vyperScopePreservation
@@ -523,7 +523,7 @@ Theorem deploy_frame_source_start_setup:
 Proof
   rpt gen_tac >> strip_tac >>
   `~nr` by metis_tac[deploy_ctor_not_nonreentrant] >>
-  gvs[deploy_source_ok_def, deploy_typing_ok_def, deploy_ctor_start_def] >>
+  gvs[deploy_source_ok_def, deploy_typing_ok_constants_ready, deploy_ctor_start_def] >>
   qpat_x_assum `ignore_bind _ _ _ = _` mp_tac >>
   simp[lock_if_nr_def, ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
@@ -678,6 +678,7 @@ Theorem deploy_frame_register_static_fields:
     cenv'.ce_module = cenv.ce_module /\
     cenv'.ce_modules = cenv.ce_modules /\
     cenv'.ce_event_info = cenv.ce_event_info /\
+    cenv'.ce_error_info = cenv.ce_error_info /\
     cenv'.ce_is_external = cenv.ce_is_external
 Proof
   Induct >- simp[compile_register_constructor_args_def, comp_return_def] >>
@@ -708,6 +709,7 @@ Theorem deploy_ctor_static_tables:
       cenv.ce_module_var_type = build_var_type_map tops /\
       cenv.ce_module = NONE /\
       cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
+      cenv.ce_error_info = (\name. lookup_custom_error_args_in name tops) /\
       ~cenv.ce_is_external
 Proof
   rpt gen_tac >> simp[deploy_ctor_code_def] >> strip_tac >>
@@ -1190,7 +1192,7 @@ Theorem deploy_ctor_body_inv:
        st_epilogue,st_final,func) ==>
     body_inv tops dunit.cu_context cenv (deploy_evaluation_context tops am tx)
 Proof
-  rpt gen_tac >> simp[deploy_source_ok_def, deploy_typing_ok_def,
+  rpt gen_tac >> simp[deploy_source_ok_def, deploy_typing_ok_constants_ready,
                       deploy_ctor_code_def] >> strip_tac >>
   `body_inv tops dunit.cu_context cenv0 (deploy_evaluation_context tops am tx)` by
     (irule deploy_frame_package_body_inv >> simp[] >>

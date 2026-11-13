@@ -1,8 +1,10 @@
-(* A piece of deploy_unit_execution_correct (ctorDeployLowering).
-   ADMITTED until proved. *)
+(* A piece of deploy_unit_execution_correct (ctorDeployLowering). *)
 Theory ctorDeployLoweringEntry
 Ancestors
   ctorDeployLoweringDefs o1PassContract stmtSimDefs ctorDeployLoweringEntryFmp
+  ctorDeployLoweringEntryPrefix ctorDeployLoweringEntryBodyResources
+  ctorDeployLoweringEntryStatic ctorDeployLoweringEntryStateRel
+  exprLoweringProps compileEnv
 
 (* The run from the unit's entry, after the payable check, the immutables
    region, the constructor arguments' registration and the lock, reaches
@@ -25,7 +27,7 @@ Theorem deploy_ctor_entry_reaches_body:
     nr' = nr /\ body' = body /\
     local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
     ?s0.
-      stmt_state_rel dunit.cu_context func cenv (deploy_evaluation_context tops am tx)
+      stmt_state_rel H dunit.cu_context func cenv (deploy_evaluation_context tops am tx)
         (es0 with outcomes := SOME vs.vs_outcomes) s0 /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -35,5 +37,12 @@ Theorem deploy_ctor_entry_reaches_body:
                (!e. r <> Error e) ==>
                ?fuel'. run_context fuel' dunit.cu_context vs = r
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all deploy_ctor_entry_body_resources >> strip_tac >>
+  drule_all deploy_ctor_body_entry_static >> strip_tac >>
+  drule_all deploy_ctor_entry_body_state_rel >> strip_tac >>
+  gvs[] >> qexists `actual` >>
+  gvs[stmt_state_rel_def, immutable_alloca_sep_def,
+      fresh_label_def, comp_bind_def, comp_return_def] >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
