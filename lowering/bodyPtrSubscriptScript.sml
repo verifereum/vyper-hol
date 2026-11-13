@@ -30,9 +30,48 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+(* Under a base the subscript does not read first, the read-gated
+   hypothesis on the index is the plain one. *)
+Theorem subscript_ih_not_read[local]:
+  !cx e1 e2 P.
+    (!s'' res t s3 res' t'.
+       eval_expr cx e1 s'' = (INL res,t) /\
+       (if subscript_reads_base cx e1 e2 then
+          bind (read_result cx res) (\v. return (Value v))
+        else return res) s3 = (INL res',t') ==> P) /\
+    ~subscript_reads_base cx e1 e2 ==>
+    !s0 r0 t0. eval_expr cx e1 s0 = (INL r0,t0) ==> P
+Proof
+  rpt strip_tac >>
+  first_x_assum (qspecl_then [`s0`,`r0`,`t0`,`t0`,`r0`,`t0`] mp_tac) >>
+  fs[vyperStateTheory.return_def]
+QED
+
+(* The plain hypothesis on the index, from the read-gated one in the
+   assumptions, given a tactic proving the base is not read first. *)
+fun old_ih_tac not_read_tac =
+  qspecl_then [`cx`,`e1`,`e2`,`body_expr_ptr_ok cx e2`] mp_tac
+    subscript_ih_not_read >>
+  impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >> not_read_tac) >>
+  disch_then ACCEPT_TAC;
+
+(* A mapping base is never read first. *)
+Theorem expr_map_pre_not_read[local]:
+  !cenv cx env e1 es e2.
+    expr_map_pre cenv cx env e1 es ==> ~subscript_reads_base cx e1 e2
+Proof
+  rw[exprSimMapDefsTheory.expr_map_pre_def] >>
+  metis_tac[exprSimSubscriptMapTheory.map_base_no_overlap]
+QED
+
 Theorem subscript_expr_ptr_ok:
   !cx v8 e1 e2.
-    (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ptr_ok cx e2) /\
+    (!s'' res t s3 res' t'.
+       eval_expr cx e1 s'' = (INL res,t) /\
+       (if subscript_reads_base cx e1 e2 then
+          bind (read_result cx res) (\v. return (Value v))
+        else return res) s3 = (INL res',t') ==>
+       body_expr_ptr_ok cx e2) /\
     body_expr_ptr_ok cx e1 ==>
     body_expr_ptr_ok cx (Subscript v8 e1 e2)
 Proof
@@ -45,6 +84,8 @@ Proof
         (qpat_x_assum `body_expr_ptr_ok cx e1`
            (mp_tac o CONJUNCT2 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ptr_ok_def]) >>
          metis_tac[]) >>
+      `!s0 r0 t0. eval_expr cx e1 s0 = (INL r0,t0) ==> body_expr_ptr_ok cx e2` by
+        old_ih_tac (metis_tac[expr_map_pre_not_read]) >>
       metis_tac[subscript_map_map_ptr]) >>
   rpt gen_tac >> strip_tac >>
   reverse (Cases_on `post_value_type cenv e1 = expr_type e1`)
@@ -62,12 +103,14 @@ Proof
                  first_assum ACCEPT_TAC) >>
   Cases_on `place_type cenv e1`
   >- (rename1 `MapPT kt vt` >>
+      `expr_map_pre cenv cx env e1 es` by
+        metis_tac[exprSimSubscriptMapTheory.expr_body_pre_map_subscript_base] >>
       `expr_map_sim_ptr d ctx PG func cenv cx ty e1 es` by
-        (`expr_map_pre cenv cx env e1 es` by
-           metis_tac[exprSimSubscriptMapTheory.expr_body_pre_map_subscript_base] >>
-         qpat_x_assum `body_expr_ptr_ok cx e1`
+        (qpat_x_assum `body_expr_ptr_ok cx e1`
            (mp_tac o CONJUNCT2 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ptr_ok_def]) >>
          metis_tac[]) >>
+      `!s0 r0 t0. eval_expr cx e1 s0 = (INL r0,t0) ==> body_expr_ptr_ok cx e2` by
+        old_ih_tac (metis_tac[expr_map_pre_not_read]) >>
       qspecl_then [`cx`,`v8`,`e1`,`e2`,`d`,`PG`,`tops`,`ctx`,`func`,`cenv`,
                    `env`,`ty`,`es`,`kt`,`vt`] mp_tac subscript_map_ptr >>
       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -93,6 +136,7 @@ QED
 Resume subscript_expr_ptr_ok[array]:
   Cases_on `(!t r t'. eval_expr cx e2 t = (INL r, t') ==>
                       t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
+            ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
             (!s tr slot vt t.
                eval_expr cx e1 s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
             ((~cenv.ce_is_ctor /\
@@ -100,7 +144,9 @@ Resume subscript_expr_ptr_ok[array]:
              ((?n. bd = Fixed n) /\
               (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
               !ty st. vv_location (FST (compile_expr cenv ty e1 st)) = SOME LocMemory))`
-  >- (qpat_x_assum `(!t r t'. _) /\ _` strip_assume_tac
+  >- ((qpat_x_assum `(!t r t'. _) /\ _` strip_assume_tac >>
+       `!s0 r0 t0. eval_expr cx e1 s0 = (INL r0,t0) ==> body_expr_ptr_ok cx e2` by
+         old_ih_tac (first_assum ACCEPT_TAC))
       >- (qspecl_then [`cx`,`v8`,`e1`,`e2`,`d`,`PG`,`tops`,`ctx`,`func`,
                        `cenv`,`env`,`ty`,`es`,`et`,`bd`] mp_tac
             subscript_array_framed_code_ptr >>
