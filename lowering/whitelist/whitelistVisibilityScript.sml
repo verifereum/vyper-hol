@@ -605,30 +605,6 @@ Proof
   BasicProvers.every_case_tac >> gvs[]
 QED
 
-(* The compile env of any function ignores an ErrorDecl entry. *)
-Theorem build_compile_env_error_decl:
-  !pre suf fvis fmut fname args ret body ut.
-    (build_compile_env (pre ++ ErrorDecl eid ps :: suf)
-      fvis fmut fname args ret body ut with ce_modules := [(NONE,pre ++ suf)]) =
-    build_compile_env (pre ++ suf) fvis fmut fname args ret body ut
-Proof
-  rpt gen_tac >>
-  `!sft tenv.
-     make_struct_fields_map (pre ++ ErrorDecl eid ps :: suf) =
-       make_struct_fields_map (pre ++ suf) /\
-     type_env (pre ++ ErrorDecl eid ps :: suf) = type_env (pre ++ suf)` by
-    simp[make_struct_fields_map_def, type_env_def,
-         type_env_for_module_error_decl, build_struct_fields_map_inert_decl] >>
-  simp[build_compile_env_def, build_flag_info_error_decl,
-       extract_layout_inert_decl, build_var_type_map_inert_decl,
-       build_hashmap_info_inert_decl, build_event_info_inert_decl,
-       add_immutable_locations_inert_decl, add_module_var_locations_inert_decl,
-       collect_module_vars_inert_decl, build_func_info_inert_decl,
-       build_func_param_types_inert_decl, build_func_return_type_inert_decl,
-       build_func_ids_inert_decl, build_func_mutability_inert_decl] >>
-  rpt (pairarg_tac >> simp[])
-QED
-
 (* A FlagDecl entry: the compile env's module-variable bindings and
    function tables are those of the program without it, except that the
    struct field sizes (and the immutable offsets and function info sized
