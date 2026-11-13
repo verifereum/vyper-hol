@@ -100,13 +100,7 @@ Theorem alloc_run_assign_suffix_frame:
              compile_store_at_loc ce.ce_imm_alloca dst v (SOME loc) od
         else compile_imm_store_words ce.ce_imm_alloca src dst
           ((bytes + 31) DIV 32) 0)
-     else case da of
-       SOME (ew, ems) => compile_dynarray_to_storage src dst ew ems (loc = LocTransient)
-     | NONE => if bytes <= 32 then
-          do v <- emit_op MLOAD [src];
-             compile_store_at_loc ce.ce_imm_alloca dst v (SOME loc) od
-        else do (if loc = LocTransient then compile_memory_to_transient src dst (bytes DIV 32)
-                 else compile_memory_to_storage src dst (bytes DIV 32)); return () od)
+     else compile_store_slots ce src dst dt (loc = LocTransient))
     (\u s. shape_state s /\ R s /\ cenv_shape_ok s ce)
 Proof
   strip_tac >> Cases_on `prim` >> simp[alloc_run_compile_store_at_loc_frame] >>
@@ -115,15 +109,8 @@ Proof
       irule alloc_run_conseq >>
       irule_at Any (SRULE [] (Q.INST [`loc` |-> `LocCode`] alloc_run_assign_bulk_frame)) >>
       qexists `R` >> simp[]) >>
-  Cases_on `da`
-  >- (simp[] >> Cases_on `bytes <= 32` >> simp[alloc_run_assign_loaded_frame] >>
-      Cases_on `loc = LocTransient` >> simp[] >>
-      irule alloc_run_conseq >>
-      FIRST [irule_at Any (SRULE [] (Q.INST [`loc` |-> `LocTransient`] alloc_run_assign_bulk_frame)),
-        irule_at Any (SRULE [] (Q.INST [`loc` |-> `LocStorage`] alloc_run_assign_bulk_frame))] >>
-      qexistsl [`ce`, `R`] >> simp[]) >>
-  PairCases_on `x` >> simp[] >> irule alloc_run_conseq >>
-  irule_at Any alloc_run_compile_dynarray_to_storage_frame >> qexistsl [`ce`, `R`] >> simp[]
+  irule alloc_run_conseq >>
+  irule_at Any alloc_run_compile_store_slots_frame >> qexistsl [`ce`, `R`] >> simp[]
 QED
 
 Theorem alloc_run_assign_normalize_bind:
@@ -151,7 +138,7 @@ Theorem alloc_run_compile_assign_value_frame:
   shape_stable R ==>
   alloc_run (\s. shape_state s /\ R s /\ cenv_shape_ok s ce /\
     plain_operand s dst /\ plain_operand s src)
-    (compile_assign_value ce dst loc src prim NONE dt st da bytes)
+    (compile_assign_value ce dst loc src prim NONE dt st bytes)
     (\u s. shape_state s /\ R s /\ cenv_shape_ok s ce)
 Proof
   strip_tac >> Cases_on `loc` >> simp[Once compile_assign_value_def]
@@ -190,14 +177,14 @@ Resume alloc_run_compile_assign_value_frame[storage]:
   gen_tac >> BETA_TAC >> irule alloc_run_conseq >>
   irule_at Any (SRULE [compile_store_at_loc_def]
     (Q.INST [`loc` |-> `LocStorage`] alloc_run_assign_suffix_frame)) >>
-  qexistsl [`ce`, `R`] >> simp[]
+  qexists `R` >> simp[]
 QED
 Resume alloc_run_compile_assign_value_frame[transient]:
   irule alloc_run_assign_normalize_bind >> simp[] >>
   gen_tac >> BETA_TAC >> irule alloc_run_conseq >>
   irule_at Any (SRULE [compile_store_at_loc_def]
     (Q.INST [`loc` |-> `LocTransient`] alloc_run_assign_suffix_frame)) >>
-  qexistsl [`ce`, `R`] >> simp[]
+  qexists `R` >> simp[]
 QED
 Resume alloc_run_compile_assign_value_frame[code]:
   irule alloc_run_assign_normalize_bind >> simp[] >>

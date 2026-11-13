@@ -141,8 +141,18 @@ Proof
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (simp[immutable_mstore_capacity] >> decide_tac) >>
   `stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sc s t` by
-    (irule scratch_memory_frame >> simp[] >>
-     conj_tac >- metis_tac[] >> qexists `sa` >> simp[]) >>
+    (mp_tac (Q.INST [`scratch_base` |-> `w2n (p:256 word)`, `scratch_len` |-> `128`]
+               scratch_memory_frame) >>
+     impl_tac >-
+       (rpt conj_tac
+        >~ [`cenv.ce_is_ctor ==> _`]
+        >- (rpt strip_tac >>
+            qpat_x_assum `!sz inst b name tv iv off. _`
+              (qspecl_then [`128`, `inst`, `w2n p`, `name`, `tv`, `iv`, `off`]
+                 mp_tac) >>
+            simp[]) >>
+        first_assum ACCEPT_TAC) >>
+     simp[]) >>
   qexists `t` >> simp[] >>
   conj_tac
   >- (drule bodyPtrPrecompileBuiltinsPayloadFramesTheory.scratch_reset_allocations >>

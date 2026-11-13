@@ -2,6 +2,7 @@
    account remains zero in originalAccounts even when creation targets it. *)
 Theory frameCreationGuard
 Ancestors
+  vfmWfState
   vfmExecution vfmExecutionProp vfmAccountFrame vfmRunCall vfmRunWithinFrame
   vfmState vfmContext vfmTypes list arithmetic pair While evmCreationGuard
 

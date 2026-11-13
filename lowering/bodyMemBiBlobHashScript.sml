@@ -10,7 +10,8 @@ Theorem body_builtin_blobhash_mem:
     (builtin_args_length_ok BlobHash (LENGTH es) ==> body_exprs_mem_ok cx es) ==>
     body_expr_mem_ok cx (Builtin ty BlobHash es)
 Proof
-  rpt gen_tac >> strip_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >> (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >>
   rpt gen_tac >> strip_tac >>
   `?e. es = [e] /\ ty = BaseT (BytesT (Fixed 32)) /\
        expr_type e = BaseT (UintT 256)` by

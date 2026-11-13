@@ -598,8 +598,70 @@ val word_raw_call_tac =
   metis_tac[compile_raw_call_finish_zero_safe_operand,
             safe_operand_mono, ci_mono_emit_void, ci_mono_def, pairTheory.SND]
 
+Theorem nv_unwrap_value[local]:
+  unwrap_value cenv vv sa = (x,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> mp_tac (Q.SPECL [`cenv`,`vv`,`sa`] ci_mono_unwrap_value) >>
+  gvs[ci_mono_def]
+QED
+
+Theorem nv_compile_alloc_buffer[local]:
+  compile_alloc_buffer n sa = (x,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> mp_tac (Q.SPECL [`n`,`sa`] ci_mono_compile_alloc_buffer) >>
+  gvs[ci_mono_def]
+QED
+
+Theorem nv_emit_void[local]:
+  emit_void opc ops sa = (x,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> mp_tac (Q.SPECL [`opc`,`ops`,`sa`] ci_mono_emit_void) >>
+  gvs[ci_mono_def]
+QED
+
+Theorem nv_compile_store_bytestring[local]:
+  compile_store_bytestring v d sa = (x,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >>
+  mp_tac (Q.SPECL [`v`,`d`,`sa`] ci_mono_compile_store_bytestring) >>
+  gvs[ci_mono_def]
+QED
+
+Theorem nv_compile_store_memory[local]:
+  compile_store_memory cenv src dst dty sty sa = (x,sb) ==>
+  sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >>
+  mp_tac (Q.SPECL [`cenv`,`src`,`dst`,`dty`,`sty`,`sa`]
+            ci_mono_compile_store_memory) >>
+  gvs[ci_mono_def]
+QED
+
+(* The staged arguments are lowered inside compile_stage_intcall_args, so
+   its cs_next_var growth needs the callback's. *)
+Theorem compile_stage_intcall_args_next_var[local]:
+  !cfn cenv es flags tys sa.
+    (!ce t e s r s'. cfn ce t e s = (r,s') ==> s.cs_next_var <= s'.cs_next_var) ==>
+    !r sb. compile_stage_intcall_args cfn cenv es flags tys sa = (r,sb) ==>
+      sa.cs_next_var <= sb.cs_next_var
+Proof
+  ho_match_mp_tac compile_stage_intcall_args_ind >> rpt conj_tac >>
+  rpt gen_tac >> rpt strip_tac >>
+  qpat_x_assum `compile_stage_intcall_args _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_stage_intcall_args_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  rpt (qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+       rw[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+       rpt (pairarg_tac >> gvs[])) >>
+  imp_res_tac nv_unwrap_value >> imp_res_tac nv_compile_alloc_buffer >>
+  imp_res_tac nv_emit_void >> imp_res_tac nv_compile_store_bytestring >>
+  imp_res_tac nv_compile_store_memory >> res_tac >> gvs[]
+QED
+
 Theorem compile_call_steps_next_var[local]:
-  (compile_stage_intcall_args cenv vals flags tys sa = (r1,sb) ==>
+  ((!ce t e s r s'. cfn ce t e s = (r,s') ==> s.cs_next_var <= s'.cs_next_var) /\
+   compile_stage_intcall_args cfn cenv vals flags tys sa = (r1,sb) ==>
    sa.cs_next_var <= sb.cs_next_var) /\
   (emit_multi_op opc ops n sa = (r2,sb) ==>
    sa.cs_next_var <= sb.cs_next_var) /\
@@ -608,8 +670,7 @@ Theorem compile_call_steps_next_var[local]:
   (emit_void opc ops sa = (r4,sb) ==> sa.cs_next_var <= sb.cs_next_var)
 Proof
   rpt conj_tac >> strip_tac
-  >- (qspecl_then [`cenv`, `vals`, `flags`, `tys`, `sa`] mp_tac
-        ci_mono_compile_stage_intcall_args >> simp[ci_mono_def])
+  >- metis_tac[compile_stage_intcall_args_next_var]
   >- (qspecl_then [`opc`, `ops`, `n`, `sa`] mp_tac ci_mono_emit_multi_op >>
       simp[ci_mono_def])
   >- (qspecl_then [`buf_op`, `results`, `offset`, `sa`] mp_tac
@@ -634,7 +695,8 @@ val safe_buf_mono_tac : tactic = fn (g as (asl, w)) =>
   end
 
 Theorem compile_call_steps_next_var[local]:
-  (compile_stage_intcall_args cenv vals flags tys sa = (r1,sb) ==>
+  ((!ce t e s r s'. cfn ce t e s = (r,s') ==> s.cs_next_var <= s'.cs_next_var) /\
+   compile_stage_intcall_args cfn cenv vals flags tys sa = (r1,sb) ==>
    sa.cs_next_var <= sb.cs_next_var) /\
   (emit_multi_op opc ops n sa = (r2,sb) ==>
    sa.cs_next_var <= sb.cs_next_var) /\
@@ -643,8 +705,7 @@ Theorem compile_call_steps_next_var[local]:
   (emit_void opc ops sa = (r4,sb) ==> sa.cs_next_var <= sb.cs_next_var)
 Proof
   rpt conj_tac >> strip_tac
-  >- (qspecl_then [`cenv`, `vals`, `flags`, `tys`, `sa`] mp_tac
-        ci_mono_compile_stage_intcall_args >> simp[ci_mono_def])
+  >- metis_tac[compile_stage_intcall_args_next_var]
   >- (qspecl_then [`opc`, `ops`, `n`, `sa`] mp_tac ci_mono_emit_multi_op >>
       simp[ci_mono_def])
   >- (qspecl_then [`buf_op`, `results`, `offset`, `sa`] mp_tac
@@ -669,6 +730,7 @@ val safe_buf_mono_tac : tactic = fn (g as (asl, w)) =>
   end
 
 Theorem compile_call_word_result_ok:
+  (!ce t e s r s'. cfn ce t e s = (r,s') ==> s.cs_next_var <= s'.cs_next_var) /\
   is_word_type rt /\ compile_call cfn cenv rt ty target args default_ret sa = (vv,sb) ==>
   word_result_ok sb vv
 Proof

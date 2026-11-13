@@ -179,6 +179,7 @@ Proof
     (irule ifexp_copy_assign_check >> simp[] >> metis_tac[]) >>
   `step_inst_base (mk_inst sid ASSIGN [Var next] [ctr]) s1 =
      OK (update_var ctr w s1)` by
-    simp[step_inst_base_opcode_eqs, mk_inst_def] >>
+    gvs[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
+        lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   simp[inst_seq_ptr_def] >> gvs[]
 QED

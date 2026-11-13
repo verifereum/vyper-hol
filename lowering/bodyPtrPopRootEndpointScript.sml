@@ -6,7 +6,7 @@ Ancestors
 Theorem pop_root_endpoint_ghost:
   ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   s.vs_call_ctx.cc_address = cx.txn.target /\
-  declared_storage_region cx mid name subs = SOME (tr,hdr,ArrayTV tv (Dynamic cap)) /\
+  MEM (tr,hdr,ArrayTV tv (Dynamic cap)) (FST H) /\
   len = w2n (lookup_storage hdr
     (if tr then contract_transient s else contract_storage s)) /\
   sf = (if tr then tstore hdr (n2w (len - 1)) s

@@ -4,8 +4,7 @@ Ancestors
   venomState vyperStorage words pred_set compileEnv loweringStateRelDefs
 
 Theorem pop_header_taint_dead_subset:
-  declared_storage_region cx mid name subs =
-    SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   X SUBSET {(k,b) | storage_dead H tr st (w2n k) b} ==>
   key_update X slot {} SUBSET
     {(k,b) | storage_dead H tr
@@ -20,8 +19,7 @@ QED
 
 Theorem pop_header_stor_taint_ok:
   stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
-  declared_storage_region cx mid name subs =
-    SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   len = w2n (lookup_storage slot
     (if tr then contract_transient s else contract_storage s)) /\
   tn'.t_stor = (if tr then tn.t_stor else key_update tn.t_stor slot {}) /\

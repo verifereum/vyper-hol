@@ -10,33 +10,6 @@ Ancestors
 Libs
   monadsyntax
 
-(* Storage well-formedness reads only accounts and transient storage. *)
-Theorem for_storage_wf_scopes_gas_obs[local,simp]:
-  (storage_well_formed_on cx (es with scopes := scs) r <=>
-   storage_well_formed_on cx es r) /\
-  (storage_well_formed_on cx (es with gas_obs := gs) r <=>
-   storage_well_formed_on cx es r)
-Proof
-  conj_tac >> irule storage_well_formed_on_backends >> simp[]
-QED
-
-(* S1's local for_round_frame in stmtSimForLoop. *)
-Theorem for_round_frame_mem[local]:
-  storage_trace_frame
-    (do push_scope_with_var id tyv v;
-        finally (try (do eval_stmts cx stmts; return F od)
-                     handle_loop_exception) pop_scope od)
-Proof
-  irule storage_trace_frame_ignore_bind >>
-  simp[storage_trace_frame_state_updates] >>
-  irule storage_trace_frame_finally >>
-  simp[storage_trace_frame_pop_scope] >>
-  irule storage_trace_frame_try >>
-  simp[storage_trace_frame_loop_handler] >>
-  irule storage_trace_frame_ignore_bind >>
-  simp[evaluate_storage_trace_frame, storage_trace_frame_return]
-QED
-
 Theorem for_body_outcome_mem:
   for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
     cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
@@ -270,7 +243,8 @@ Theorem for_frag_start_gas_mem:
 Proof
   simp[stmt_frag_mem_def, for_outcome_start_gas_mem,
        stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_gas_obs,
-       immutable_alloca_sep_def]
+       immutable_alloca_sep_def, storage_well_formed_on_def,
+       oneline vyperStorageBackendTheory.get_storage_def]
 QED
 
 Theorem for_iteration_mem:
@@ -327,7 +301,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 esk.storage_trace`)
   >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-      irule gas_bad_storage_at_initial >> simp[for_round_frame_mem]) >>
+      irule gas_bad_storage_at_initial >> simp[for_round_frame]) >>
   `?H0. valid_horizon cx st0 H0 esk.storage_trace` by
     metis_tac[storage_trace_domain_def] >>
   `bc.ce_module_vars = cenv.ce_module_vars /\ bc.ce_module = cenv.ce_module /\
@@ -374,7 +348,10 @@ Proof
      storage_well_formed_on cx
        (esk with scopes := (FEMPTY |+ (id, <|assignable := F; type := tyv;
           value := IntV (n1 + &k); popped := []|>)) :: esk.scopes) (FST H)` by
-    (rpt gen_tac >> strip_tac >> fs[]) >>
+    (rpt gen_tac >> strip_tac >> fs[] >>
+     qpat_x_assum `!H. valid_horizon _ _ H esk.storage_trace ==> _ /\ storage_well_formed_on _ _ _`
+       drule >>
+     simp[storage_well_formed_on_def, oneline vyperStorageBackendTheory.get_storage_def]) >>
   drule_all for_body_outcome_mem >> strip_tac >>
   irule for_outcome_zero_prefix_mem >> qexists_tac `s2` >> simp[] >>
   irule for_round_outcome_mem >> conj_tac >- first_assum ACCEPT_TAC >>
@@ -426,7 +403,8 @@ Resume for_iteration_mem[landing]:
      (irule for_body_pop_mem >> conj_tac
       >- (qexists_tac `sc` >> simp[]) >>
       qexistsl_tac [`bc`, `cbody`, `id`] >> simp[] >> fs[for_code_def]) >>
-   simp[] >> metis_tac[])
+   simp[] >> qpat_x_assum `storage_well_formed_on cx ee (FST H)` mp_tac >>
+   simp[storage_well_formed_on_def, oneline vyperStorageBackendTheory.get_storage_def])
 QED
 Finalise for_iteration_mem
 
@@ -514,6 +492,11 @@ Resume for_loop_mem[zero_path]:
      drule msg_gas_state_frame >>
      disch_then (qspecl_then [`cc.vs_gas_readings`, `cc.vs_inst_idx`, `[]`] mp_tac) >>
      simp[]) >>
+  `storage_well_formed_on cx (esk with gas_obs := []) (FST H)` by
+    (`storage_well_formed_on cx esk (FST H)` by metis_tac[] >>
+     `(esk with gas_obs := []).accounts = esk.accounts /\
+      (esk with gas_obs := []).tStorage = esk.tStorage` by simp[] >>
+     metis_tac[storage_well_formed_on_backends]) >>
   gvs[jump_to_def, update_var_def]
 QED
 Resume for_loop_mem[zero_post]:

@@ -10,7 +10,7 @@ Ancestors
   concretizePtrSourceOwnership concretizePtrStructuralTranscript
   concretizePtrStructuralTrace concretizePtrActivationChronology
   concretizePtrChronologicalHistory concretizePtrHistoricalWriteClassification
-  concretizeStepStructure concretizeStepShape concretizeStepCallChecks
+  concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape o1PassContract
   o1ScheduleDecomp venomWf cfgWf ptrDiscipline unitMemInv
   contextCodegenRel codegenRel memLocDefs venomExecSemantics venomState venomInst

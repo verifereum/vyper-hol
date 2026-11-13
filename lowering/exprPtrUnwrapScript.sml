@@ -136,15 +136,15 @@ Resume expr_sim_ptr_of_vv[normal]:
     (drule eval_expr_preserves_scopes_dom >> simp[]) >>
   `~t.vs_halted` by
     (fs[gas_marked_exec_ptr_def] >> metis_tac[gas_path_ptr_ok_not_halted]) >>
-  `?v H tf z.
+  `?v HG tf z.
      gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (read_result cx tv)
-       (mid with gas_obs := [],t,G,tn) [] (INL v) (mid with gas_obs := []) H tf (OK z) /\
+       (mid with gas_obs := [],t,G,tn) [] (INL v) (mid with gas_obs := []) HG tf (OK z) /\
      expr_post H ctx func cenv cx e es sa sb s0 (mid with gas_obs := []) v op z /\
      z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-     ghost_inv H d cenv cx (mid with gas_obs := []) H tf z /\
-     ptr_val_ok cx (post_value_type cenv e) v op H tf z /\
-     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op H z) /\
-     ghost_kept cenv es sa G0 tn0 s0 H tf` by
+     ghost_inv H d cenv cx (mid with gas_obs := []) HG tf z /\
+     ptr_val_ok cx (post_value_type cenv e) v op HG tf z /\
+     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op HG z) /\
+     ghost_kept cenv es sa G0 tn0 s0 HG tf` by
     (Cases_on `post_value_type cenv e = expr_type e`
      >- (qpat_assum `post_value_type cenv e = expr_type e`
            (fn th => fs[th] >> assume_tac th) >>
@@ -171,7 +171,7 @@ Resume expr_sim_ptr_of_vv[normal]:
   pop_assum strip_assume_tac >>
   rewrite_tac[gas_outcome_ptr_def, gas_summary_ptr_at_marked] >>
   qexists `[]` >> disj1_tac >>
-  qexistsl [`INL v`, `mid with gas_obs := []`, `H`, `tf`, `OK z`] >> simp[]
+  qexistsl [`INL v`, `mid with gas_obs := []`, `HG`, `tf`, `OK z`] >> simp[]
 QED
 Finalise expr_sim_ptr_of_vv
 

@@ -15,6 +15,7 @@ Theorem entry_runtime_state_rel:
   ss.vs_tx_ctx = vs.vs_tx_ctx /\ ss.vs_block_ctx = vs.vs_block_ctx /\
   ss.vs_outcomes = vs.vs_outcomes /\ ss.vs_requests = vs.vs_requests /\
   ss.vs_pending_deletions = vs.vs_pending_deletions /\
+  ss.vs_code = vs.vs_code /\
   local_ptrs_rel func cenv [env] ss /\
   storage_vars_rel cenv (initial_evaluation_context am.sources am.layouts tx NONE) /\
   transient_vars_rel cenv (initial_evaluation_context am.sources am.layouts tx NONE) /\

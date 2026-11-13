@@ -1,6 +1,7 @@
 (* Source loop-round interfaces for counted memory fragments. *)
 Theory stmtForRangeMemoryRound
 Ancestors
+  stmtSimForLoop
   stmtSimForRounds stmtSimDeclGas stmtSimDefs exprSimDefs gasContext gasSummary vyperInterpreter vyperState
   vyperEvalPreservesScopes gasExemptCert gasOutcome fragGasMode fragGasPathMem list finite_map
   gasStorage vyperStorageFootprint vyperStorageTrace
@@ -120,33 +121,6 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-(* The body's cleanup only extends the body's storage trace (S1's local
-   finally_try_trace in stmtSimForLoop). *)
-Theorem for_finally_try_trace[local]:
-  (!e. storage_trace_frame (h e)) /\ storage_trace_frame g ==>
-  ?xs. (SND (finally (try (ignore_bind f (return b)) h) g st)).storage_trace =
-       (SND (f st)).storage_trace ++ xs
-Proof
-  strip_tac >> Cases_on `f st` >> rename1 `_ = (r0,t)` >>
-  `?r1 u xs. try (ignore_bind f (return b)) h st = (r1,u) /\
-             u.storage_trace = t.storage_trace ++ xs` by
-    (Cases_on `r0` >> simp[try_def, ignore_bind_def, bind_def, return_def] >>
-     rename1 `h e t` >> Cases_on `h e t` >>
-     metis_tac[vyperStorageTraceTheory.storage_trace_frame_prefix]) >>
-  `!k. storage_trace_frame k ==>
-       ?ys. (SND (k u)).storage_trace = u.storage_trace ++ ys` by
-    (rpt strip_tac >> Cases_on `k u` >>
-     metis_tac[vyperStorageTraceTheory.storage_trace_frame_prefix, pairTheory.SND]) >>
-  Cases_on `r1` >> simp[finally_def] >>
-  qmatch_goalsub_abbrev_tac `SND (k u)` >>
-  `storage_trace_frame k` by
-    simp[Abbr `k`, vyperStorageTraceTheory.storage_trace_frame_ignore_bind,
-         vyperStorageTraceTheory.storage_trace_frame_return,
-         vyperStorageTraceTheory.storage_trace_frame_raise] >>
-  qpat_x_assum `!k. _` drule >> strip_tac >> simp[] >>
-  qexists_tac `xs ++ ys` >> simp[]
-QED
-
 (* A body run that left the storage domain makes the whole round one. *)
 Theorem for_round_bad_mem[local]:
   gas_bad_storage_at cx st0 (eval_stmts cx stmts)
@@ -178,7 +152,7 @@ Proof
   `?xs. (SND (finally (try (ignore_bind (eval_stmts cx stmts) (return F))
             handle_loop_exception) pop_scope st)).storage_trace =
          (SND (eval_stmts cx stmts st)).storage_trace ++ xs` by
-    (irule for_finally_try_trace >>
+    (irule finally_try_trace >>
      simp[vyperStorageTraceTheory.storage_trace_frame_loop_handler,
           vyperStorageTraceTheory.storage_trace_frame_pop_scope]) >>
   qpat_x_assum `gas_bad_storage_at _ _ _ _ _ _` mp_tac >>

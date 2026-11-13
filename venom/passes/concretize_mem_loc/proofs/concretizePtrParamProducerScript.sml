@@ -1,7 +1,7 @@
 Theory concretizePtrParamProducer
 Ancestors concretizePtrRequestHistory concretizePtrAssignProducer concretizePtrValueSelection
   concretizePtrOrdinaryNext concretizePtrOpaqueRetpc
-  concretizeStepStructure concretizeStepShape concretizeStepCallChecks
+  concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape concretizePtrValueTransport
   ptrDiscipline venomExecSemantics venomState venomInst finite_map words list rich_list
   concretizePtrPairedNextAttach concretizePtrPairedPrefix concretizePtrPairedFields

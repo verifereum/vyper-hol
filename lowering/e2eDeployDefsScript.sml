@@ -125,6 +125,7 @@ Definition deploy_state_rel_def:
       ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
       ctxt.msgParams.outputTo = Code tx.target /\
       ctxt.msgParams.code = deploy_bc ++ args_bytes /\
+      tx.code = ctxt.msgParams.code /\
       ctxt.msgParams.parsed = parse_code 0 FEMPTY (deploy_bc ++ args_bytes) /\
       buffer_to_list ctxt.msgParams.data = [] /\
       tx.calldata = [] /\
@@ -180,6 +181,20 @@ Definition deploy_result_rel_def:
   deploy_result_rel H tops runtime_bc tx es r es' src <=>
     case src of
       INL (am', rqs) =>
+        if ALOOKUP am'.sources tx.target = NONE then
+          (* The constructor halted (selfdestruct): load_contract installed
+           * no source, and the EVM deposited no code. *)
+          let cx = initial_evaluation_context
+                     ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE in
+          ?lgs.
+            frame_outcome es r es' NONE [] lgs /\
+            (lookup_account tx.target es'.rollback.accounts).code = [] /\
+            accounts_agree cx am'.accounts
+              (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+            transient_agree cx am'.tStorage es'.rollback.tStorage /\
+            logs_correspond (compiled_event_info tops) (type_env tops)
+              tx.target am'.logs lgs
+        else
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?section.
           immutables_section_rel tops (account_immutables am' tx.target) section /\
