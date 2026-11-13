@@ -543,8 +543,7 @@ Resume slice_extcode_tail_outcome[success]:
   `es with gas_obs := [] = es` by
     (qpat_x_assum `es.gas_obs = []` (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
   rpt conj_tac >> rpt strip_tac >>
-  (fn g => fn c => (first_x_assum (drule_then (qspec_then `t.vs_inst_idx` mp_tac)) >> simp[]) g c
-     handle e => (print ("PROBE FAIL " ^ term_to_string (snd g) ^ " :: " ^ General.exnMessage e ^ "\n"); raise e))
+  first_x_assum (drule_then (qspec_then `t.vs_inst_idx` mp_tac)) >> simp[]
 QED
 
 Finalise slice_extcode_tail_outcome
