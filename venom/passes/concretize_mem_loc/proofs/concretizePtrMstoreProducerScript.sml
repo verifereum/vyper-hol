@@ -287,6 +287,7 @@ Resume ptr_mstore_write_producer[classified]:
     w2n addr + 32 <= db+sb /\ pb+sb < dimword(:256))` by
     (irule ptr_historical_write_classification >>
      simp[Abbr `ops`] >>
+     conj_tac >- (qexists_tac `names` >> first_assum ACCEPT_TAC) >>
      conj_tac
      >- (qexists_tac `a.po_fn` >> simp[]) >>
      rpt (goal_assum (drule_at Any)) >> simp[]) 
