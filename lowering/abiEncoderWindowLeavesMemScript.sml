@@ -209,9 +209,16 @@ Proof
   drule_all window_bytes_sequence_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `window_seq st st' s actual` >>
+  drule_all window_bytes_sequence >> strip_tac >>
+  `t = actual` by
+    (qpat_x_assum `window_seq st st' s t` mp_tac >>
+     qpat_x_assum `window_seq st st' s actual` mp_tac >>
+     simp[window_seq_def]) >>
+  qpat_x_assum `t = actual` SUBST_ALL_TAC >>
   `sb + cap <= d \/ d + LENGTH (enc at (BytesV bs)) <= sb` by
     (qpat_x_assum `venomMemDefs$regions_disjoint _ _` mp_tac >>
-     pure_asm_rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+     pure_asm_rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >>
+     strip_tac >> gvs[]) >>
   `mem_bytes_at d (LENGTH (enc at (BytesV bs))) actual.vs_memory = enc at (BytesV bs)` by
     (qpat_assum `actual.vs_memory = _` (fn th => rewrite_tac[th]) >>
      irule window_bytes_input_memory >> qexistsl_tac [`cap`, `maxlen`] >> asm_rewrite_tac[]) >>
