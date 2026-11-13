@@ -567,6 +567,7 @@ Proof
   strip_tac >>
   `pass_fuel (EL (PRE n) o1_fn_passes) (stage n) = I` by
     (irule pass_fuel_walk_I >> fs[o1_fn_passes_def] >> Cases_on `n` >> fs[]) >>
+  REWRITE_TAC [prim_recTheory.PRE] >>
   `pass_fuel (EL n o1_fn_passes) (stage (SUC n)) =
    pass_fuel (EL n o1_fn_passes) (stage (SUC n)) o I` by
     simp[combinTheory.I_o_ID] >>
