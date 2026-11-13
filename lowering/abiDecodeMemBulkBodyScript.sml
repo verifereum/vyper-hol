@@ -9,7 +9,7 @@ Ancestors
   fragExec emitHelperProps exprLoweringProps compileEnv emitHelper
   instMemFrontier memSafeRun contextCodegenRel venomExecSemantics venomState venomInst words arithmetic list rich_list
 
-Theorem abi_decode_array_header_mem_ok[local]:
+Theorem abi_decode_array_header_mem_ok:
   abi_decode_array_header dst addr MLOAD st = (cnt,st') /\
   eval_operand addr s = SOME a /\ eval_operand dst s = SOME (n2w d) /\
   d < dimword (:256) /\ w2n a+32 <= s.vs_alloca_next /\
