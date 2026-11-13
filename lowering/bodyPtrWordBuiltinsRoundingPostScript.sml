@@ -22,10 +22,10 @@ Theorem word_round_actual_post:
   (if up then compile_ceil else compile_floor) v divisor sa = (op,sb) /\
   (!z. v = Var z ==> not_fresh_at sa z) /\ eval_operand v s = SOME w /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+  stmt_state_rel H ctx func cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   eval_operand op (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME
     (safe_sdiv (if word_lt w 0w then
        (if up then w else w - n2w (divisor-1))

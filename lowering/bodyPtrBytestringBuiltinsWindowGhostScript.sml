@@ -42,23 +42,23 @@ Proof
 QED
 
 Theorem ghost_inv_local_window_transport:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
     lookup_var x s' = SOME w) /\
-  (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+  (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
     op_taint tm (Var x) = op_taint tn (Var x)) /\
   (!name b len. local_region cenv es.scopes s name b len ==>
     mem_bytes_at b len s'.vs_memory = mem_bytes_at b len s.vs_memory /\
     (!i. b <= i /\ i < b+len /\ i IN tm.t_mem ==> i IN tn.t_mem)) /\
-  stor_taint_ok cx tm s' ==>
-  ghost_inv d cenv cx es H tm s'
+  stor_taint_ok H cx tm s' ==>
+  ghost_inv H d cenv cx es HG tm s'
 Proof
   strip_tac >>
   `!x sz. not_fresh_at sa x /\ ptr_covers G tn x s sz ==>
-    ptr_covers H tm x s' sz` by
+    ptr_covers HG tm x s' sz` by
     (rw[ptr_covers_def] >> metis_tac[]) >>
   fs[ghost_inv_def] >> rpt conj_tac
   >- (rpt gen_tac >> strip_tac >>

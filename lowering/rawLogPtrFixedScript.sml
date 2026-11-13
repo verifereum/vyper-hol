@@ -165,13 +165,13 @@ QED
 Theorem raw_log_fixed_ghost_frame:
   !PG G tn s id p value a w d cenv cx es ctx fn sa logs vlogs k.
     lookup_var p s = SOME a /\ eval_operand value s = SOME w /\
-    op_taint tn value = {} /\ ghost_inv d cenv cx es G tn s /\
-    stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    op_taint tn value = {} /\ ghost_inv H d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
     (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
     (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
     (!n b z i. local_region cenv es.scopes s n b z /\ b <= i /\ i < b+z ==>
       ~(w2n a <= i /\ i < w2n a+32)) ==>
-    ghost_inv d cenv cx (es with logs := logs) G
+    ghost_inv H d cenv cx (es with logs := logs) G
       (step_taint (mk_inst id MSTORE [Var p;value] []) s (mstore (w2n a) w s) tn)
       (((mstore (w2n a) w s) with vs_logs := vlogs) with vs_inst_idx := k) /\
     ghost_kept cenv es sa G tn s G
@@ -188,18 +188,18 @@ QED
    expression's ordinary and ghost frames retain precisely those facts. *)
 Theorem raw_log_fixed_data_frame:
   !ctx fn cenv cx es es' sa s t G tn G' tn' p a d id value w logs vlogs k.
-    stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     wb_frame cenv es es' sa s t /\ ghost_kept cenv es sa G tn s G' tn' /\
     ptr_covers G tn p s 32 /\ lookup_var p s = SOME a /\ not_fresh_at sa p /\
     (!n b z. local_region cenv es.scopes s n b z ==>
       regions_disjoint (w2n a) 32 b z) /\
-    stmt_state_rel ctx fn cenv cx es' t /\ ghost_inv d cenv cx es' G' tn' t /\
+    stmt_state_rel H ctx fn cenv cx es' t /\ ghost_inv H d cenv cx es' G' tn' t /\
     eval_operand value t = SOME w /\ op_taint tn' value = {} /\
     (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
     (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) ==>
     ptr_covers G' tn' p t 32 /\ lookup_var p t = SOME a /\
-    ghost_inv d cenv cx (es' with logs := logs) G'
+    ghost_inv H d cenv cx (es' with logs := logs) G'
       (step_taint (mk_inst id MSTORE [Var p;value] []) t (mstore (w2n a) w t) tn')
       (((mstore (w2n a) w t) with vs_logs := vlogs) with vs_inst_idx := k) /\
     ghost_kept cenv es' sa G' tn' t G'
@@ -234,7 +234,7 @@ Theorem raw_log_fixed_tail:
       [mk_inst sid MSTORE [Var p;value] [];
        mk_inst lid LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;Var p]) []]
       (DROP s.vs_inst_idx bb.bb_instructions) /\
-    ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
+    ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx fn cenv cx es s /\
     local_ptrs_reserved cenv sa /\
     (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
     (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
@@ -247,7 +247,7 @@ Theorem raw_log_fixed_tail:
         s = OK t /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 G tn'
         (OK (t with vs_inst_idx := s.vs_inst_idx+2)) /\
-      ghost_inv d cenv cx (es with logs := logs) G tn'
+      ghost_inv H d cenv cx (es with logs := logs) G tn'
         (t with vs_inst_idx := s.vs_inst_idx+2) /\
       ghost_kept cenv es sa G tn s G tn'
 Proof

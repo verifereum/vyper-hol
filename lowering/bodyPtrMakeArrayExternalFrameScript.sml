@@ -20,13 +20,13 @@ Proof
 QED
 
 Theorem external_load_ghost_inv:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (opc = SLOAD \/ opc = TLOAD \/ opc = DLOAD) /\
   eval_operand src s = SOME a /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> p <> tmp) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> tmp) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> tmp) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id opc [src] [tmp]) (update_var tmp w s))
     (step_taint (mk_inst id opc [src] [tmp]) s (update_var tmp w s) tn)
     ((update_var tmp w s) with vs_inst_idx := SUC s.vs_inst_idx)

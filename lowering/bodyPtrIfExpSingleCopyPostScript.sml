@@ -4,7 +4,7 @@ Ancestors bodyPtrIfExpActiveCopyPost bodyPtrIfExpStorageAllocationFrame
 
 Theorem ifexp_single_allocated_copy_post:
   post_value_type ce e = expr_type e /\
-  vv_post ctx fn ce cx e es sa sb s0 ee raw vv s /\
+  vv_post H ctx fn ce cx e es sa sb s0 ee raw vv s /\
   read_result cx raw ee = (INL v,ee) /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
@@ -18,7 +18,7 @@ Theorem ifexp_single_allocated_copy_post:
   evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
   val_wf ty v /\ val_in_memory ty v (w2n d) t.vs_memory /\
   val_footprint ty v <= 32 /\ eval_operand op t = SOME d ==>
-  (~is_word_type (expr_type e) ==> expr_post ctx fn ce cx e es sa sd s0 ee v op t)
+  (~is_word_type (expr_type e) ==> expr_post H ctx fn ce cx e es sa sd s0 ee v op t)
 Proof
   strip_tac >> strip_tac >>
   `copy_static t = copy_static u /\

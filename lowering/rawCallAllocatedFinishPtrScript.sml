@@ -13,7 +13,7 @@ Theorem raw_call_allocation_request_checks:
     (if stat then [gas;addr;dp;dl] else [gas;addr;value;dp;dl]) /\
   (!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
     eval_operand arg u = eval_operand arg s /\
-    op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg) /\
+    op_prov HG arg = op_prov G arg /\ op_taint un arg = op_taint tn arg) /\
   eval_operand dp s = SOME (n2w (b+32)) /\
   eval_operand dl s = SOME (n2w (LENGTH bs)) /\
   op_prov G dp = SOME (region_base,sz) /\ region_base <= b /\
@@ -21,11 +21,11 @@ Theorem raw_call_allocation_request_checks:
   LENGTH bs < dimword(:256) /\ cap < dimword(:256) /\
   mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\ u.vs_memory = s.vs_memory /\
   (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN un.t_mem) /\
-  eval_operand (Var rp) u = SOME ro /\ ptr_covers H un rp u cap ==>
+  eval_operand (Var rp) u = SOME ro /\ ptr_covers HG un rp u cap ==>
   read_memory (w2n (n2w (b+32):bytes32))
     (w2n (n2w (LENGTH bs):bytes32)) u = bs /\
   (!iid outs.
-    access_ok 0 H func (mk_inst iid (if stat then STATICCALL else CALL)
+    access_ok 0 HG func (mk_inst iid (if stat then STATICCALL else CALL)
       (if stat then [gas;addr;dp;dl;Var rp;Lit (n2w cap)]
        else [gas;addr;value;dp;dl;Var rp;Lit (n2w cap)]) outs) u /\
     taint_ok func un (mk_inst iid (if stat then STATICCALL else CALL)
@@ -34,7 +34,7 @@ Theorem raw_call_allocation_request_checks:
 Proof
   strip_tac >>
   `EVERY (\arg. eval_operand arg u = eval_operand arg s /\
-      op_prov H arg = op_prov G arg /\ op_taint un arg = {})
+      op_prov HG arg = op_prov G arg /\ op_taint un arg = {})
     (if stat then [gas;addr;dp;dl] else [gas;addr;value;dp;dl])` by
     (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
   qpat_x_assum `!arg. (!z. arg = Var z ==> _) /\ _ ==> _` kall_tac >>
@@ -57,7 +57,7 @@ Theorem raw_call_allocated_scalar_outcome:
   compile_raw_call_finish addr dp dl gas_op value_op
     (if flags.rcf_is_static then StaticCall else RegularCall) 0 F ov op sb = (result,sc) /\
   fn_has_code sa sb func /\ fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H dep cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -78,26 +78,26 @@ Theorem raw_call_allocated_scalar_outcome:
   (~flags.rcf_is_static ==> w2n vw = amount) /\
   flags.rcf_max_outsize = 0 /\ ~flags.rcf_revert_on_failure /\ ~flags.rcf_is_delegate /\
   gas_admissible (eval_raw_call cx flags (w2w aw) bs amount source_gas) expr_vv_res_ok es ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_raw_call cx flags (w2w aw) bs amount source_gas) (es,s,G,tn)
-    (\res ee H un t. ?v u J jn.
-      res = INL (Value v) /\ ptr_val_ok cx (BaseT BoolT) v result H un t /\
+    (\res ee HG un t. ?v u J jn.
+      res = INL (Value v) /\ ptr_val_ok cx (BaseT BoolT) v result HG un t /\
       expr_val_rel cx (BaseT BoolT) v result t /\
       expr_val_at cenv cx (BaseT BoolT) sa sc ee v result t /\
-      stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
+      stmt_state_rel H ctx func cenv cx ee t /\ ghost_inv H dep cenv cx ee HG un t /\
       ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es es sa s u /\
-      ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es ee sa u t /\
+      ghost_kept cenv es sa J jn u HG un /\ wb_frame cenv es ee sa u t /\
       t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
   strip_tac >>
   `(!z. dp = Var z ==> not_fresh_at sa z)` by (Cases_on `flags.rcf_is_static` >> fs[]) >>
   drule_all (SRULE[] (Q.INST [`cap` |-> `0`] raw_call_outbuf_ready_stage)) >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   drule_all raw_call_outbuf_finish_metadata >> strip_tac >>
   `dst = ob` by fs[wordsTheory.n2w_11] >> gvs[] >>
   `read_memory (b+32) (LENGTH bs) u = bs /\
-    (!iid outs. access_ok 0 H func (mk_inst iid (if flags.rcf_is_static then STATICCALL else CALL)
+    (!iid outs. access_ok 0 HG func (mk_inst iid (if flags.rcf_is_static then STATICCALL else CALL)
       (if flags.rcf_is_static then [gas_op;addr;dp;dl;Var dx;Lit 0w]
        else [gas_op;addr;value_op;dp;dl;Var dx;Lit 0w]) outs) u /\
       taint_ok func un (mk_inst iid (if flags.rcf_is_static then STATICCALL else CALL)
@@ -112,25 +112,25 @@ Proof
   `EVERY (\arg. eval_operand arg u = eval_operand arg s)
     (if flags.rcf_is_static then [gas_op;addr;dp;dl] else [gas_op;addr;value_op;dp;dl])` by
     (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  `allocas_from 0 u /\ stor_taint_ok cx un u` by
+  `allocas_from 0 u /\ stor_taint_ok H cx un u` by
     fs[ptrDisciplineTheory.allocas_from_def, bodyPtrDefsTheory.ghost_inv_def] >>
   `eval_operand gas_op u = SOME gas /\ eval_operand addr u = SOME aw /\
     (~flags.rcf_is_static ==> eval_operand value_op u = SOME vw) /\
     eval_operand dp u = SOME (n2w (b+32)) /\ eval_operand dl u = SOME (n2w (LENGTH bs))` by
     (Cases_on `flags.rcf_is_static` >> gvs[]) >>
   drule_all raw_call_prepared_source_total >> strip_tac >>
-  drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)
+  drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)
     (SRULE[compileEnvTheory.is_word_type_def] (Q.INST
       [`ty` |-> `BaseT BoolT`] raw_call_scalar_finish_outcome)) >>
   disch_then (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  simp[] >> disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  simp[] >> disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   simp[] >> disch_then (drule_at (Pat `ci_mono _ _`)) >>
   simp[] >> disch_then (qspecl_then [`vw`, `source_gas`, `PG`] mp_tac) >>
   impl_tac >- (Cases_on `flags.rcf_is_static` >> simp[] >> metis_tac[]) >>
   strip_tac >> irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `H`, `un`] >> gvs[] >>
+  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `HG`, `un`] >> gvs[] >>
   simp[loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
     compileEnvTheory.is_word_type_def, vyperValueTheory.evaluate_type_def,
     valueEncodingTheory.typed_val_to_w256_def]
@@ -141,7 +141,7 @@ Theorem raw_call_allocated_zero_reverting_outcome:
   compile_raw_call_finish addr dp dl gas_op value_op
     (if flags.rcf_is_static then StaticCall else RegularCall) 0 T ov op sb = (result,sc) /\
   fn_has_code sa sb func /\ fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H dep cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -163,26 +163,26 @@ Theorem raw_call_allocated_zero_reverting_outcome:
   type_memory_bytes cenv (lowered_value_type cenv e) = 0 /\
   flags.rcf_max_outsize = 0 /\ flags.rcf_revert_on_failure /\ ~flags.rcf_is_delegate /\
   gas_admissible (eval_raw_call cx flags (w2w aw) bs amount source_gas) expr_vv_res_ok es ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_raw_call cx flags (w2w aw) bs amount source_gas) (es,s,G,tn)
-    (\res ee H un t. ?v u J jn.
-      res = INL (Value v) /\ ptr_val_ok cx NoneT v result H un t /\ ptr_buf_ok cenv e result H t /\
+    (\res ee HG un t. ?v u J jn.
+      res = INL (Value v) /\ ptr_val_ok cx NoneT v result HG un t /\ ptr_buf_ok cenv e result HG t /\
       expr_val_rel cx NoneT v result t /\
       expr_val_at cenv cx NoneT sa sc ee v result t /\
-      stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
+      stmt_state_rel H ctx func cenv cx ee t /\ ghost_inv H dep cenv cx ee HG un t /\
       ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es es sa s u /\
-      ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es ee sa u t /\
+      ghost_kept cenv es sa J jn u HG un /\ wb_frame cenv es ee sa u t /\
       t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
   strip_tac >>
   `(!z. dp = Var z ==> not_fresh_at sa z)` by (Cases_on `flags.rcf_is_static` >> fs[]) >>
   drule_all (SRULE[] (Q.INST [`cap` |-> `0`] raw_call_outbuf_ready_stage)) >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   drule_all raw_call_outbuf_finish_metadata >> strip_tac >>
   `dst = ob` by fs[wordsTheory.n2w_11] >> gvs[] >>
   `read_memory (b+32) (LENGTH bs) u = bs /\
-    (!iid outs. access_ok 0 H func (mk_inst iid (if flags.rcf_is_static then STATICCALL else CALL)
+    (!iid outs. access_ok 0 HG func (mk_inst iid (if flags.rcf_is_static then STATICCALL else CALL)
       (if flags.rcf_is_static then [gas_op;addr;dp;dl;Var dx;Lit 0w]
        else [gas_op;addr;value_op;dp;dl;Var dx;Lit 0w]) outs) u /\
       taint_ok func un (mk_inst iid (if flags.rcf_is_static then STATICCALL else CALL)
@@ -197,7 +197,7 @@ Proof
   `EVERY (\arg. eval_operand arg u = eval_operand arg s)
     (if flags.rcf_is_static then [gas_op;addr;dp;dl] else [gas_op;addr;value_op;dp;dl])` by
     (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  `allocas_from 0 u /\ stor_taint_ok cx un u` by
+  `allocas_from 0 u /\ stor_taint_ok H cx un u` by
     fs[ptrDisciplineTheory.allocas_from_def, bodyPtrDefsTheory.ghost_inv_def] >>
   `eval_operand gas_op u = SOME gas /\ eval_operand addr u = SOME aw /\
     (~flags.rcf_is_static ==> eval_operand value_op u = SOME vw) /\
@@ -207,16 +207,16 @@ Proof
   `LENGTH outcome.co_returnData < dimword(:256)` by
     (irule take_call_outcome_returnData_length >> goal_assum (drule_at Any) >>
      fs[exprSimHypsDefsTheory.expr_sim_inv_def]) >>
-  drule_at (Pat `ghost_inv _ _ _ _ _ _ _`) raw_call_zero_reverting_finish_outcome >>
+  drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`) raw_call_zero_reverting_finish_outcome >>
   disch_then (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  simp[] >> disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  simp[] >> disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   simp[] >> disch_then (drule_at (Pat `ci_mono _ _`)) >>
   simp[] >> disch_then (qspecl_then [`vw`, `source_gas`, `e`, `PG`] mp_tac) >>
   impl_tac >- (Cases_on `flags.rcf_is_static` >> simp[] >> metis_tac[]) >>
   strip_tac >> irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `H`, `un`] >> gvs[] >>
+  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `HG`, `un`] >> gvs[] >>
   simp[loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
     vyperValueTheory.evaluate_type_def, compileEnvTheory.is_word_type_def,
     venomStateTheory.eval_operand_def, valueEncodingDefsTheory.val_wf_def,
@@ -229,7 +229,7 @@ Theorem raw_call_allocated_positive_reverting_outcome:
   compile_raw_call_finish addr dp dl gas_op value_op
     (if flags.rcf_is_static then StaticCall else RegularCall) n T ov op sb = (result,sc) /\
   fn_has_code sa sb func /\ fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H dep cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -252,16 +252,16 @@ Theorem raw_call_allocated_positive_reverting_outcome:
   type_memory_bytes cenv (lowered_value_type cenv e) <= 32+((n+31) DIV 32)*32 /\
   flags.rcf_max_outsize = n /\ flags.rcf_revert_on_failure /\ ~flags.rcf_is_delegate /\
   gas_admissible (eval_raw_call cx flags (w2w aw) bs amount source_gas) expr_vv_res_ok es ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_raw_call cx flags (w2w aw) bs amount source_gas) (es,s,G,tn)
-    (\res ee H un t. ?v u J jn.
-      res = INL (Value v) /\ ptr_val_ok cx (BaseT (BytesT (Dynamic n))) v result H un t /\
+    (\res ee HG un t. ?v u J jn.
+      res = INL (Value v) /\ ptr_val_ok cx (BaseT (BytesT (Dynamic n))) v result HG un t /\
       expr_val_rel cx (BaseT (BytesT (Dynamic n))) v result t /\
       expr_val_at cenv cx (BaseT (BytesT (Dynamic n))) sa sc ee v result t /\
-      ptr_buf_ok cenv e result H t /\ stmt_state_rel ctx func cenv cx ee t /\
-      ghost_inv dep cenv cx ee H un t /\
+      ptr_buf_ok cenv e result HG t /\ stmt_state_rel H ctx func cenv cx ee t /\
+      ghost_inv H dep cenv cx ee HG un t /\
       ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es es sa s u /\
-      ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es ee sa u t /\
+      ghost_kept cenv es sa J jn u HG un /\ wb_frame cenv es ee sa u t /\
       t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -269,12 +269,12 @@ Proof
   `(!z. dp = Var z ==> not_fresh_at sa z)` by (Cases_on `flags.rcf_is_static` >> fs[]) >>
   `(if n = 0 then 0 else ((n+31) DIV 32)*32+32) < dimword(:256)` by simp[] >>
   drule_all raw_call_outbuf_ready_stage >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   drule_all raw_call_outbuf_finish_metadata >> strip_tac >>
   `dst = ob+32` by (gvs[] >> fs[wordsTheory.n2w_11] >> decide_tac) >>
   qpat_x_assum `flags.rcf_max_outsize = n` mp_tac >> gvs[] >> disch_tac >>
   `read_memory (b+32) (LENGTH bs) u = bs /\
-    (!iid outs. access_ok 0 H func (mk_inst iid (if flags.rcf_is_static then STATICCALL else CALL)
+    (!iid outs. access_ok 0 HG func (mk_inst iid (if flags.rcf_is_static then STATICCALL else CALL)
       (if flags.rcf_is_static then [gas_op;addr;dp;dl;Var dx;Lit (n2w n)]
        else [gas_op;addr;value_op;dp;dl;Var dx;Lit (n2w n)]) outs) u /\
       taint_ok func un (mk_inst iid (if flags.rcf_is_static then STATICCALL else CALL)
@@ -288,7 +288,7 @@ Proof
   `EVERY (\arg. eval_operand arg u = eval_operand arg s)
     (if flags.rcf_is_static then [gas_op;addr;dp;dl] else [gas_op;addr;value_op;dp;dl])` by
     (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  `allocas_from 0 u /\ stor_taint_ok cx un u` by fs[ptrDisciplineTheory.allocas_from_def, bodyPtrDefsTheory.ghost_inv_def] >>
+  `allocas_from 0 u /\ stor_taint_ok H cx un u` by fs[ptrDisciplineTheory.allocas_from_def, bodyPtrDefsTheory.ghost_inv_def] >>
   `eval_operand gas_op u = SOME gas /\ eval_operand addr u = SOME aw /\
     (~flags.rcf_is_static ==> eval_operand value_op u = SOME vw) /\
     eval_operand dp u = SOME (n2w (b+32)) /\ eval_operand dl u = SOME (n2w (LENGTH bs))` by
@@ -299,10 +299,10 @@ Proof
   `n < dimword(:256)` by decide_tac >>
   drule_all raw_call_positive_bytes_finish_shape >>
   disch_then (qspec_then `outcome.co_returnData` assume_tac) >>
-  drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)
+  drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)
     (Q.INST [`ty` |-> `BaseT (BytesT (Dynamic n))`] raw_call_positive_reverting_finish_outcome) >>
   disch_then (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  simp[venomStateTheory.eval_operand_def] >> disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  simp[venomStateTheory.eval_operand_def] >> disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   simp[] >> disch_then (drule_at (Pat `ci_mono _ _`)) >>
   simp[] >> disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
@@ -312,7 +312,7 @@ Proof
     Cases_on `flags.rcf_is_static` >> fs[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
   strip_tac >> irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `H`, `un`] >> gvs[] >>
+  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `HG`, `un`] >> gvs[] >>
   suspend "semantic"
 QED
 
@@ -353,7 +353,7 @@ Theorem raw_call_allocated_positive_nonreverting_outcome:
   compile_raw_call_finish addr dp dl gas_op value_op
     (if flags.rcf_is_static then StaticCall else RegularCall) n F ov op sb = (result,sc) /\
   fn_has_code sa sb func /\ fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H dep cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -377,29 +377,29 @@ Theorem raw_call_allocated_positive_nonreverting_outcome:
   type_memory_bytes cenv (lowered_value_type cenv e) <= 64+((n+31) DIV 32)*32 /\
   flags.rcf_max_outsize = n /\ ~flags.rcf_revert_on_failure /\ ~flags.rcf_is_delegate /\
   gas_admissible (eval_raw_call cx flags (w2w aw) bs amount source_gas) expr_vv_res_ok es ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_raw_call cx flags (w2w aw) bs amount source_gas) (es,s,G,tn)
-    (\res ee H un t. ?v u J jn.
+    (\res ee HG un t. ?v u J jn.
       res = INL (Value v) /\
-      ptr_val_ok cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))]) v result H un t /\
+      ptr_val_ok cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))]) v result HG un t /\
       expr_val_rel cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))]) v result t /\
       expr_val_at cenv cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))]) sa sc ee v result t /\
-      ptr_buf_ok cenv e result H t /\ stmt_state_rel ctx func cenv cx ee t /\
-      ghost_inv dep cenv cx ee H un t /\
+      ptr_buf_ok cenv e result HG t /\ stmt_state_rel H ctx func cenv cx ee t /\
+      ghost_inv H dep cenv cx ee HG un t /\
       ghost_kept cenv es sa G tn s J jn /\ wb_frame cenv es es sa s u /\
-      ghost_kept cenv es sa J jn u H un /\ wb_frame cenv es ee sa u t /\
+      ghost_kept cenv es sa J jn u HG un /\ wb_frame cenv es ee sa u t /\
       t.vs_current_bb = sc.cs_current_bb /\ t.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~t.vs_halted)
     (\res ee gt r. expr_exit res r)
 Proof
   strip_tac >>
   `(!z. dp = Var z ==> not_fresh_at sa z)` by (Cases_on `flags.rcf_is_static` >> fs[]) >>
   `(if n = 0 then 0 else ((n+31) DIV 32)*32+32) < dimword(:256)` by simp[] >>
-  drule_all raw_call_outbuf_ready_stage >> disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  drule_all raw_call_outbuf_ready_stage >> disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   drule_all raw_call_outbuf_finish_metadata >> strip_tac >>
   `dst = ob+32` by (gvs[] >> fs[wordsTheory.n2w_11] >> decide_tac) >>
   qpat_x_assum `flags.rcf_max_outsize = n` mp_tac >> gvs[] >> disch_tac >>
   `read_memory (b+32) (LENGTH bs) u = bs /\
-    (!iid outs. access_ok 0 H func (mk_inst iid (if flags.rcf_is_static then STATICCALL else CALL)
+    (!iid outs. access_ok 0 HG func (mk_inst iid (if flags.rcf_is_static then STATICCALL else CALL)
       (if flags.rcf_is_static then [gas_op;addr;dp;dl;Var dx;Lit (n2w n)]
        else [gas_op;addr;value_op;dp;dl;Var dx;Lit (n2w n)]) outs) u /\
       taint_ok func un (mk_inst iid (if flags.rcf_is_static then STATICCALL else CALL)
@@ -413,7 +413,7 @@ Proof
   `EVERY (\arg. eval_operand arg u = eval_operand arg s)
     (if flags.rcf_is_static then [gas_op;addr;dp;dl] else [gas_op;addr;value_op;dp;dl])` by
     (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  `allocas_from 0 u /\ stor_taint_ok cx un u` by fs[ptrDisciplineTheory.allocas_from_def, bodyPtrDefsTheory.ghost_inv_def] >>
+  `allocas_from 0 u /\ stor_taint_ok H cx un u` by fs[ptrDisciplineTheory.allocas_from_def, bodyPtrDefsTheory.ghost_inv_def] >>
   `eval_operand gas_op u = SOME gas /\ eval_operand addr u = SOME aw /\
     (~flags.rcf_is_static ==> eval_operand value_op u = SOME vw) /\
     eval_operand dp u = SOME (n2w (b+32)) /\ eval_operand dl u = SOME (n2w (LENGTH bs))` by
@@ -428,8 +428,8 @@ Proof
   drule
     (Q.INST [`bty` |-> `BaseT (BytesT (Dynamic n))`,
       `ty` |-> `TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))]`] raw_call_positive_nonreverting_finish_outcome) >>
-  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
-  simp[venomStateTheory.eval_operand_def] >> disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
+  simp[venomStateTheory.eval_operand_def] >> disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   simp[] >> disch_then (drule_at (Pat `ci_mono _ _`)) >>
   simp[] >> disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
@@ -439,7 +439,7 @@ Proof
     Cases_on `flags.rcf_is_static` >> fs[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
   strip_tac >> irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `H`, `un`] >> gvs[] >>
+  simp[] >> rpt strip_tac >> qexistsl_tac [`u`, `HG`, `un`] >> gvs[] >>
   suspend "semantic"
 QED
 
@@ -459,7 +459,7 @@ Resume raw_call_allocated_positive_nonreverting_outcome[semantic]:
       mp_tac (Q.SPEC `flags.rcf_max_outsize` valueTypingMemoryPropsTheory.word_size_capacity) >>
       simp[listTheory.LENGTH_TAKE_EQ] >> decide_tac) >>
   `b' < dimword(:256)` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ ee t` mp_tac >>
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ ee t` mp_tac >>
      simp[exprLoweringPropsTheory.stmt_state_rel_def] >> strip_tac >>
      `t.vs_alloca_next < dimword(:256)` by
        (irule exprLoweringPropsTheory.alloca_room_next_lt >> goal_assum (drule_at Any)) >>

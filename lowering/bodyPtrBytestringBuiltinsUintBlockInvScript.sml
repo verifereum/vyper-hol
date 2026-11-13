@@ -151,11 +151,11 @@ Proof
 QED
 
 Theorem u2s_clean_update_ambient:
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es a G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es a G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv a /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) ==>
-  ghost_inv d cenv cx es (DRESTRICT G (COMPL {u2s_var a k}))
+  ghost_inv H d cenv cx es (DRESTRICT G (COMPL {u2s_var a k}))
     (tn with t_var := tn.t_var |+ (u2s_var a k,{}))
     (update_var (u2s_var a k) w s) /\
   ghost_kept cenv es a G0 tn0 s0 (DRESTRICT G (COMPL {u2s_var a k}))
@@ -168,7 +168,7 @@ Proof
 QED
 
 Theorem u2s_scalar_initialize:
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es a G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es a G0 tn0 s0 G tn /\
   FLOOKUP G p = SOME (b,sz) /\ lookup_var p s = SOME (n2w b) /\
   op_taint tn (Var p) = {} /\ not_fresh_at a p /\ local_ptrs_reserved cenv a /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
@@ -213,7 +213,7 @@ Proof
 QED
 
 Theorem u2s_setup_ptr_state:
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es a G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es a G0 tn0 s0 G tn /\
   FLOOKUP G p = SOME (b,sz) /\ lookup_var p s = SOME (n2w b) /\
   op_taint tn (Var p) = {} /\ not_fresh_at a p /\ local_ptrs_reserved cenv a /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
@@ -234,7 +234,7 @@ Proof
 QED
 
 Theorem u2s_setup_invariant_ptr:
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es a G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es a G0 tn0 s0 G tn /\
   u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr s /\
   FLOOKUP G p = SOME (b,sz) /\ lookup_var p s = SOME (n2w b) /\
   op_taint tn (Var p) = {} /\ not_fresh_at a p /\ local_ptrs_reserved cenv a /\

@@ -38,7 +38,7 @@ QED
 
 Theorem compile_revert_reason_storage_path_ptr:
   compile_revert_with_reason cenv (LocatedValue (BaseT (StringT max)) r) mt ms sa = ((),sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\
   (!k. k < 3 ==> not_local_ptr cenv es.scopes
     (STRING #"%" (toString (sa.cs_next_var+k)))) /\
@@ -104,7 +104,7 @@ QED
 
 Theorem compile_revert_reason_runtime_code_path_ptr:
   compile_revert_with_reason cenv (LocatedValue (BaseT (StringT max)) r) mt ms sa = ((),sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\
   (!k. k < 3 ==> not_local_ptr cenv es.scopes
     (STRING #"%" (toString (sa.cs_next_var+k)))) /\
@@ -154,7 +154,7 @@ Theorem compile_revert_reason_memory_path_ptr:
   (vv = StackValue ty (Var src) \/
    (vv = LocatedValue ty r /\ ~is_word_type ty /\
     r.ptr_location = LocMemory /\ r.ptr_operand = Var src)) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\
   (!k. k < 3 ==> not_local_ptr cenv es.scopes
     (STRING #"%" (toString (sa.cs_next_var+k)))) /\

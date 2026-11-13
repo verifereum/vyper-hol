@@ -22,7 +22,7 @@ Ancestors
   e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec entryDispatchProps
   compileEnv loweringStateRelDefs compileVyper moduleLowering supportedProgram supportedNames
   supportedDecls immutableLocationProps immutableSectionRel immutableRelation
-  structFieldsProps
+  structFieldsProps externalBodySupport
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractContext
   vyperTypeContractGetter
   vyperInterpreter vyperState vyperContext vyperAST vyperValue vyperTypeDefaults
@@ -376,7 +376,7 @@ Theorem body_entry_state_rel:
     local_ptrs_rel func cenv [env] ss /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     (!n off. FLOOKUP cenv.ce_module_vars n <> SOME (ImmutableLoc off)) ==>
-    state_rel func cenv cx es ss
+    state_rel H func cenv cx es ss
 Proof
   rpt gen_tac >> strip_tac >>
   drule send_call_value_accounts >> strip_tac >>
@@ -404,7 +404,7 @@ Theorem body_entry_state_rel_runtime[local]:
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     cenv.ce_module = NONE /\ ~cenv.ce_is_ctor /\
     immutable_section_layout cenv tops /\ ss.vs_data_section = vs.vs_data_section ==>
-    state_rel func cenv cx es ss
+    state_rel H func cenv cx es ss
 Proof
   rpt gen_tac >> strip_tac >>
   drule send_call_value_accounts >> strip_tac >>
@@ -682,7 +682,7 @@ Theorem external_body_entry_state_rel:
     s0.vs_inst_idx = LENGTH st.cs_current_insts ==>
     EVERY (\a. ?p. FLOOKUP cenv.ce_vars (FST a) =
                    SOME (PtrVar (Var p) (type_memory_bytes cenv0 (SND a)))) fargs /\
-    ?t. state_rel func cenv
+    ?t. state_rel H func cenv
           (initial_evaluation_context am.sources am.layouts tx NONE) es t /\
         fresh_vars_wrt st' t /\ ~t.vs_halted /\
         t.vs_current_bb = st'.cs_current_bb /\

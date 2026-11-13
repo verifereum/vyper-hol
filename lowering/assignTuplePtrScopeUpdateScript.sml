@@ -5,7 +5,7 @@ Ancestors
   bodyPtrDefs robustCopyTransportPtr
 
 Theorem ghost_inv_local_copy_update:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!name entry. lookup_scopes name es'.scopes = SOME entry ==>
     (?old. lookup_scopes name es.scopes = SOME old) /\
     (name = id ==> entry.type = tv /\ entry.value = v) /\
@@ -31,8 +31,8 @@ Theorem ghost_inv_local_copy_update:
   return_buf_ptr d cenv G' tn' t /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
     op_taint tn' (Var x) = op_taint tn (Var x)) /\
-  stor_taint_ok cx tn' t
-  ==> ghost_inv d cenv cx es' G' tn' t
+  stor_taint_ok H cx tn' t
+  ==> ghost_inv H d cenv cx es' G' tn' t
 Proof
   strip_tac >>
   `!m. mem_agree_outside tn'.t_mem t.vs_memory m ==>

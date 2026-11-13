@@ -19,7 +19,7 @@ Ancestors
   loweringPosts exprLowering compileEnv ptrDiscipline vyperInterpreter
   vyperState venomState
 
-(* New definition: target_post (with ghost_inv) says what the target's
+(* New definition: target_post H (with ghost_inv) says what the target's
    pointer holds, not where it may point, and a fresh pointer derived
    from a local's (an attribute's or an element's) needs the local's site
    for the pop's MLOAD and MSTORE access checks.  The site is the one the
@@ -55,17 +55,17 @@ Definition target_sim_ptr_def:
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       gas_admissible (eval_base_place cx bt) target_res_ok es /\
-      stmt_state_rel ctx func cenv cx es s0 /\
-      ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es s0 /\
+      ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+      gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
         (eval_base_place cx bt) (es, s0, G0, tn0)
         (\res ee G tn t. ?pv. res = INL pv /\
-          target_post ctx func cenv cx es sa sb s0 ee pv vt op t /\
+          target_post H ctx func cenv cx es sa sb s0 ee pv vt op t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-          ghost_inv d cenv cx ee G tn t /\
+          ghost_inv H d cenv cx ee G tn t /\
           target_ptr_ok cenv pv op G tn t /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
         (\res ee gt r. expr_exit res r)
@@ -85,18 +85,18 @@ Definition pop_target_frag_ptr_def:
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
-      stmt_state_rel ctx func cenv cx es s0 /\
-      ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es s0 /\
+      ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+      gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
         (eval_target_place cx bt) (es, s0, G0, tn0)
         (\res ee G tn t. ?p. res = INL p /\
-          target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty)
+          target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty)
             r t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-          ghost_inv d cenv cx ee G tn t /\
+          ghost_inv H d cenv cx ee G tn t /\
           target_ptr_ok cenv (PlaceR p) r G tn t /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
         (\res ee gt r. expr_exit res r)

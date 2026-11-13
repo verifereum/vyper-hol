@@ -7,7 +7,7 @@ Ancestors
   finite_map freshWrites exprSimPtrProps
 
 Theorem vv_post_storage_source:
-  vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   p.ptr_location = slot_loc tr ==>
   t = post_value_type cenv e /\ ?v a.
     read_result cx tv ee = (INL v,ee) /\
@@ -20,7 +20,7 @@ Proof
 QED
 
 Theorem unwrap_storage_word_input:
-  vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   p.ptr_location = slot_loc tr /\ is_word_type t /\
   ptr_vv_ok cx (post_value_type cenv e) tv (LocatedValue t p) ee G tn s /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ty ==>
@@ -41,23 +41,23 @@ Proof
 QED
 
 Theorem unwrap_storage_word_post:
-  vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   read_result cx tv ee = (INL v,ee) /\ p.ptr_location = slot_loc tr /\
   is_word_type t /\ sa.cs_next_var <= sm.cs_next_var /\
   local_ptrs_reserved cenv sa /\
   emit_op (if tr then TLOAD else SLOAD) [p.ptr_operand] sm = (op,sb) /\
   eval_operand p.ptr_operand s = SOME a ==>
-  expr_post ctx func cenv cx e es sa sb s0 ee v op
+  expr_post H ctx func cenv cx e es sa sb s0 ee v op
     (update_var (STRING #"%" (toString sm.cs_next_var))
       (if tr then tload a s else sload a s) s
        with vs_inst_idx := SUC s.vs_inst_idx)
 Proof
   strip_tac >> drule_all vv_post_storage_source >> strip_tac >> gvs[] >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx ee s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee s` by fs[vv_post_def] >>
   `not_local_ptr cenv ee.scopes (STRING #"%" (toString sm.cs_next_var))` by
     (irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx ee
+  `stmt_state_rel H ctx func cenv cx ee
      (update_var (STRING #"%" (toString sm.cs_next_var))
        (if tr then tload a s else sload a s) s
         with vs_inst_idx := SUC s.vs_inst_idx)` by
@@ -80,20 +80,20 @@ Theorem unwrap_storage_word_marked_read_ptr:
   fn_has_code sm sb func /\ ~ctx_has_dalloca ctx /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  ghost_inv d cenv cx ee G tn s /\
+  ghost_inv H d cenv cx ee G tn s /\
   ptr_vv_ok cx (post_value_type cenv e) tv (LocatedValue t p) ee G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ty ==>
   ?v Gf tnf u.
-    gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (read_result cx tv)
+    gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (read_result cx tv)
       (ee,s,G,tn) [] (INL v) ee Gf tnf (OK u) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+    expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv d cenv cx ee Gf tnf u /\
+    ghost_inv H d cenv cx ee Gf tnf u /\
     ptr_val_ok cx (post_value_type cenv e) v op Gf tnf u /\
     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op Gf u) /\
     ghost_kept cenv es sa G0 tn0 s0 Gf tnf
@@ -102,7 +102,7 @@ Proof
   `emit_op (if tr then TLOAD else SLOAD) [p.ptr_operand] sm = (op,sb)` by
     (Cases_on `tr` >> gvs[slot_loc_def, unwrap_value_def, compile_ptr_load_def]) >>
   drule_all emit_storage_load_ptr_path >>
-  disch_then (qspecl_then [`PG`, `G`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `G`, `cx_dead H cx`] strip_assume_tac) >>
   drule unwrap_storage_word_post >>
   disch_then (qspecl_then [`v`, `tr`, `sb`, `op`, `a`] mp_tac) >>
   simp[] >> strip_tac >>

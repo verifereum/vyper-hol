@@ -186,7 +186,7 @@ QED
 Theorem ec_result_pointer_post:
   post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
-  stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es es' sa s0 t /\
+  stmt_state_rel H ctx fn cenv cx es' t /\ wb_frame cenv es es' sa s0 t /\
   eval_operand pop t = SOME w /\
   mem_bytes_at (w2n w) 64 t.vs_memory =
     word_to_bytes (n2w x:bytes32) T ++ word_to_bytes (n2w y:bytes32) T /\
@@ -195,7 +195,7 @@ Theorem ec_result_pointer_post:
   (!name b sz. local_region cenv es'.scopes t name b sz ==>
      regions_disjoint (w2n w) 64 b sz) /\
   pure_frame cenv fn es sa s0 t ==>
-  vv_post ctx fn cenv cx e es sa sb s0 es' (Value (mk_ec_result (x,y)))
+  vv_post H ctx fn cenv cx e es sa sb s0 es' (Value (mk_ec_result (x,y)))
     (FST (as_ptr_val (expr_type e) LocMemory (pop,sb))) t
 Proof
   strip_tac >>
@@ -269,7 +269,7 @@ QED
 (* Common ordinary and pointer posts for the arithmetic memory result. *)
 Theorem ec_builtin_result_posts:
   (!c. bt <> Concat c) /\
-  stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es es' sa s0 t /\
+  stmt_state_rel H ctx fn cenv cx es' t /\ wb_frame cenv es es' sa s0 t /\
   eval_operand (Var dst) t = SOME w /\ ptr_covers G tn dst t 64 /\
   (!i. w2n w <= i /\ i < w2n w+64 ==> i NOTIN tn.t_mem) /\
   mem_bytes_at (w2n w) 64 t.vs_memory =
@@ -282,7 +282,7 @@ Theorem ec_builtin_result_posts:
   ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2))
     (mk_ec_result (x,y)) (Var dst) G tn t /\
   ptr_buf_ok cenv (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args) (Var dst) G t /\
-  vv_post ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args)
+  vv_post H ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args)
     es sa sb s0 es' (Value (mk_ec_result (x,y)))
     (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (Var dst,sb))) t /\
   ptr_vv_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Value (mk_ec_result (x,y)))

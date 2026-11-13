@@ -5,9 +5,9 @@ Ancestors bodyPtrIfExpStorageAllocation bodyPtrIfExpRuntimeCopy
   slotCopyExecution exprSimCopy loweringPosts bodyPtrIfExpRuntimeFrame
 
 Theorem ifexp_runtime_allocated_execution:
-  stmt_state_rel ctx fn ce cx es s0 /\
-  vv_post ctx fn ce cx e es sa sb s0 ee raw vv s /\
-  ghost_inv rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
+  stmt_state_rel H ctx fn ce cx es s0 /\
+  vv_post H ctx fn ce cx e es sa sb s0 ee raw vv s /\
+  ghost_inv H rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   fn_inst_ids_distinct fn /\ sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -17,17 +17,17 @@ Theorem ifexp_runtime_allocated_execution:
   fn_has_code cs sd fn /\ 32*n < dimword (:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
   fresh_vars_wrt sb s /\ eval_operand src s = SOME a /\ op_taint tn src = {} ==>
-  ?out d q J tr t H tt.
+  ?out d q J tr t HG tt.
     buf.buf_operand = Var out /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tt (OK t) /\
-    stmt_state_rel ctx fn ce cx ee q /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tt (OK t) /\
+    stmt_state_rel H ctx fn ce cx ee q /\
     t.vs_memory = (immutable_transfers F F a d n 0 q).vs_memory /\
     t.vs_current_bb = sd.cs_current_bb /\
     t.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~t.vs_halted /\
-    ptr_covers H tt out t (32*n) /\ lookup_var out t = SOME d /\
+    ptr_covers HG tt out t (32*n) /\ lookup_var out t = SOME d /\
     w2n d+32*n < dimword (:256) /\
     tt.t_mem = tr.t_mem DIFF {i | w2n d <= i /\ i < w2n d+32*n} /\
-    ghost_inv rty ce cx ee H tt t /\ ghost_kept ce es sa G0 tn0 s0 H tt /\
+    ghost_inv H rty ce cx ee HG tt t /\ ghost_kept ce es sa G0 tn0 s0 HG tt /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 J tr (OK q) /\
     copy_runtime_frame cs q sd (t with vs_inst_idx := q.vs_inst_idx) /\
     (?u. step_inst_base (mk_inst sb.cs_next_id ALLOCA
@@ -53,9 +53,9 @@ Proof
     (drule compile_alloc_buffer_parts >> strip_tac >> decide_tac) >>
   `local_ptrs_reserved ce sb /\ local_ptrs_reserved ce cs` by
     metis_tac[local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx fn ce cx ee s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx fn ce cx ee s` by fs[vv_post_def] >>
   drule_all compile_alloc_buffer_raw_resources >> strip_tac >>
-  `stmt_state_rel ctx fn ce cx ee (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+  `stmt_state_rel H ctx fn ce cx ee (u with vs_inst_idx := SUC s.vs_inst_idx)` by
     simp[stmt_state_rel_inst_idx] >>
   suspend "copy"
 QED
@@ -84,7 +84,7 @@ QED
 Resume ifexp_runtime_allocated_execution[finish]:
   drule_all ifexp_runtime_allocation_frame >> strip_tac >>
   qexistsl_tac [`out`, `d`, `u with vs_inst_idx := SUC s.vs_inst_idx`,
-    `G1`, `tn1`, `t`, `H`, `tt`] >>
+    `G1`, `tn1`, `t`, `HG`, `tt`] >>
   simp[] >> conj_tac >- (drule_all gas_path_ptr_then >> simp[]) >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>

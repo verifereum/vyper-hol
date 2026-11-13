@@ -4,7 +4,7 @@ Ancestors
   venomState venomInst venomExecSemantics finite_map words exprSimCopy
 
 Theorem ifexp_bytes_mcopy_semantic_state:
-  stmt_state_rel ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst aid ALLOCA [Lit (n2w capacity)] [out]) (fn_insts fn) /\
   not_local_ptr ce es.scopes out /\ n <= capacity /\
   FLOOKUP s.vs_allocas aid = SOME (b,capacity) /\
@@ -12,10 +12,10 @@ Theorem ifexp_bytes_mcopy_semantic_state:
   sf.vs_memory = (mcopy b a n s).vs_memory /\
   local_ptrs_reserved ce sc /\
   (!p. not_fresh_at sc p ==> lookup_var p sf = lookup_var p s) ==>
-  stmt_state_rel ctx fn ce cx es sf
+  stmt_state_rel H ctx fn ce cx es sf
 Proof
   strip_tac >>
-  `stmt_state_rel ctx fn ce cx es (mcopy b a n s)` by
+  `stmt_state_rel H ctx fn ce cx es (mcopy b a n s)` by
     (irule stmt_state_rel_mcopy_alloca >> simp[] >>
      qexistsl_tac [`capacity`, `mk_inst aid ALLOCA [Lit (n2w capacity)] [out]`, `out`] >>
      simp[mk_inst_def]) >>
@@ -42,7 +42,7 @@ Proof
 QED
 
 Theorem ifexp_bytes_original_semantic_frame:
-  vv_post ctx fn ce cx arm es sa sc s0 ee raw vv t /\
+  vv_post H ctx fn ce cx arm es sa sc s0 ee raw vv t /\
   sa.cs_next_var <= sc.cs_next_var /\ n <= capacity /\
   (!x. not_fresh_at sc x ==> lookup_var x sf = lookup_var x t) /\
   sf.vs_allocas = t.vs_allocas /\

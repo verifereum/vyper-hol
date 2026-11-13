@@ -8,7 +8,7 @@ Ancestors
   robustCopyTransportPtr emitHelperProps valueEncodingProps
 
 Theorem alloca_store_offset_alloca_checks:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   32 <= n /\ n < dimword(:256) /\ ~ctx_has_dalloca ctx /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
@@ -56,7 +56,7 @@ Proof
 QED
 
 Theorem revert_reason_prefix_path_ptr:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts func) /\
   64+ms < dimword(:256) /\ ~ctx_has_dalloca ctx /\
@@ -88,12 +88,12 @@ Proof
 QED
 
 Theorem stmt_state_rel_mstore_alloca:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [p] /\ not_local_ptr cenv es.scopes p /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
   b <= a /\ a+32 <= b+sz ==>
-  stmt_state_rel ctx func cenv cx es (mstore a w s)
+  stmt_state_rel H ctx func cenv cx es (mstore a w s)
 Proof
   strip_tac >> irule literal_mstore_state_rel >> simp[] >>
   qexistsl_tac [`b`, `inst`, `sz`] >> simp[] >>
@@ -105,18 +105,18 @@ Proof
 QED
 
 Theorem alloca_mstore_literal_state_rel:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   not_local_ptr cenv es.scopes out /\ 32 <= n /\ n < dimword(:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
   ?b. lookup_var out s1 = SOME (n2w b) /\ b+n < dimword(:256) /\
-      stmt_state_rel ctx func cenv cx es (mstore b value s1)
+      stmt_state_rel H ctx func cenv cx es (mstore b value s1)
 Proof
   strip_tac >>
   `exec_alloca (mk_inst id ALLOCA [Lit (n2w n)] [out]) s (n2w n:bytes32) = OK s1` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
      simp[step_inst_base_opcode_eqs, mk_inst_def] >> strip_tac >> first_x_assum ACCEPT_TAC) >>
-  `stmt_state_rel ctx func cenv cx es s1` by
+  `stmt_state_rel H ctx func cenv cx es s1` by
     (drule_at (Pat `exec_alloca _ _ _ = _`) stmt_state_rel_exec_alloca >>
      gvs[mk_inst_def] >> metis_tac[]) >>
   drule_all alloca_step_site >> strip_tac >>
@@ -128,7 +128,7 @@ QED
 
 
 Theorem alloca_store_offset_alloca_state_rel:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   MEM (mk_inst (id+3) ALLOCA [Lit sz] [q]) (fn_insts func) /\
   not_local_ptr cenv es.scopes out /\ not_local_ptr cenv es.scopes p /\
@@ -138,7 +138,7 @@ Theorem alloca_store_offset_alloca_state_rel:
      mk_inst (id+1) MSTORE [Var out; Lit value] [];
      mk_inst (id+2) ADD [Var out; Lit off] [p];
      mk_inst (id+3) ALLOCA [Lit sz] [q]] s = OK t ==>
-  stmt_state_rel ctx func cenv cx es t
+  stmt_state_rel H ctx func cenv cx es t
 Proof
   strip_tac >>
   Cases_on `step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s` >>
@@ -156,7 +156,7 @@ Proof
      OK (update_var p (n2w b + off) s2)` by
     (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def,
           Abbr `s2`, mstore_def, lookup_var_def]) >>
-  `stmt_state_rel ctx func cenv cx es (update_var p (n2w b+off) s2)` by
+  `stmt_state_rel H ctx func cenv cx es (update_var p (n2w b+off) s2)` by
     (irule stmt_state_rel_update_var >> simp[Abbr `s2`]) >>
   simp[Once run_inst_seq_def] >>
   qmatch_goalsub_abbrev_tac `run_inst_seq _ s3` >>
@@ -170,7 +170,7 @@ Proof
 QED
 
 Theorem revert_reason_prefix_state_rel:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts func) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
@@ -178,7 +178,7 @@ Theorem revert_reason_prefix_state_rel:
   (!k. k < 3 ==> not_local_ptr cenv es.scopes (STRING #"%" (toString (v+k)))) /\
   64+ms < dimword(:256) /\
   run_inst_seq (revert_reason_prefix id v ms) s = OK t ==>
-  stmt_state_rel ctx func cenv cx es t
+  stmt_state_rel H ctx func cenv cx es t
 Proof
   strip_tac >>
   fs[revert_reason_prefix_def] >>
@@ -236,14 +236,14 @@ Proof
 QED
 
 Theorem alloca_store_offset_state_rel:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   not_local_ptr cenv es.scopes out /\ not_local_ptr cenv es.scopes p /\
   32 <= n /\ n < dimword(:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
   step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit value] []) s1 = OK s2 /\
   step_inst_base (mk_inst (id+2) ADD [Var out; Lit off] [p]) s2 = OK s3 ==>
-  stmt_state_rel ctx func cenv cx es s3
+  stmt_state_rel H ctx func cenv cx es s3
 Proof
   strip_tac >> drule_all alloca_mstore_literal_state_rel >>
   disch_then (qspec_then `value` strip_assume_tac) >>
@@ -252,7 +252,7 @@ Proof
 QED
 
 Theorem alloca_store_offset_ptr_covers:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword(:256) /\ out <> p /\ off + m <= n /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
@@ -288,7 +288,7 @@ Proof
 QED
 
 Theorem alloca_store_offset_alloca_ptr_covers:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]) (fn_insts func) /\
   not_local_ptr cenv es.scopes out /\ not_local_ptr cenv es.scopes p /\
@@ -310,7 +310,7 @@ Theorem alloca_store_offset_alloca_ptr_covers:
   ptr_covers G4 tn4 q t sz
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es s3` by
+  `stmt_state_rel H ctx func cenv cx es s3` by
     (irule alloca_store_offset_state_rel >> metis_tac[]) >>
   drule_all alloca_store_offset_ptr_covers >> strip_tac >>
   conj_tac >-
@@ -321,7 +321,7 @@ Proof
 QED
 
 Theorem alloca_store_offset_alloca_run_covers:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]) (fn_insts func) /\
   not_local_ptr cenv es.scopes out /\ not_local_ptr cenv es.scopes p /\
@@ -372,7 +372,7 @@ Proof
 QED
 
 Theorem revert_reason_prefix_covers:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts func) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
@@ -398,7 +398,7 @@ Proof
 QED
 
 Theorem alloca_step_ptr_mem_ok:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at cenv cx t sa sb es v op s /\ ~is_word_type t /\
   ptr_mem_ok cx t v op G tn s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
@@ -431,7 +431,7 @@ Proof
 QED
 
 Theorem alloca_step_ptr_val_ok:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at cenv cx t sa sb es v op s /\ ptr_val_ok cx t v op G tn s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   not_local_ptr cenv es.scopes out /\
@@ -512,7 +512,7 @@ Proof
 QED
 
 Theorem alloca_step_expr_store_disjoint:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at cenv cx t sa sb es v op s /\ ~is_word_type t /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   not_local_ptr cenv es.scopes out /\
@@ -605,7 +605,7 @@ Proof
 QED
 
 Theorem alloca_mstore_literal_ptr_val_ok:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at cenv cx ty sa sb es v op s /\ ~is_word_type ty /\
   ptr_val_ok cx ty v op G tn s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
@@ -764,7 +764,7 @@ Proof
 QED
 
 Theorem alloca_store_offset_ptr_val_ok:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at cenv cx ty sa sb es v op s /\ ~is_word_type ty /\
   ptr_val_ok cx ty v op G tn s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
@@ -797,7 +797,7 @@ Proof
 QED
 
 Theorem alloca_store_offset_alloca_ptr_val_ok:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at cenv cx ty sa sb es v op s /\ ~is_word_type ty /\
   ptr_val_ok cx ty v op G tn s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
@@ -823,7 +823,7 @@ Theorem alloca_store_offset_alloca_ptr_val_ok:
     (step_taint (mk_inst (id+3) ALLOCA [Lit (n2w sz)] [q]) s3 t tn3) t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `stmt_state_rel ctx func cenv cx es s3` by
+  `stmt_state_rel H ctx func cenv cx es s3` by
     (irule alloca_store_offset_state_rel >> simp[] >> metis_tac[]) >>
   `ptr_val_ok cx ty v op G3 tn3 s3` by
     (qpat_x_assum `G3 = _` SUBST_ALL_TAC >>
@@ -839,7 +839,7 @@ Proof
 QED
 
 Theorem alloca_store_offset_alloca_run_ptr_val_ok:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at cenv cx ty sa sb es v op s /\ ~is_word_type ty /\
   ptr_val_ok cx ty v op G tn s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
@@ -897,7 +897,7 @@ Proof
 QED
 
 Theorem revert_reason_prefix_ptr_val_ok:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at cenv cx ty sa sb es v op s /\ ~is_word_type ty /\
   ptr_val_ok cx ty v op G tn s /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]

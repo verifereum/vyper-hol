@@ -26,7 +26,7 @@ Theorem unwrap_runtime_aggregate_ptr_probe:
   p.ptr_location = LocCode /\ ~is_word_type t /\ ~cenv.ce_is_ctor /\
   type_memory_bytes cenv t = type_memory_size tv /\
   (type_memory_size tv + 31) DIV 32 = type_slot_size tv /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ type_memory_size tv < dimword (:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_size tv))]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\

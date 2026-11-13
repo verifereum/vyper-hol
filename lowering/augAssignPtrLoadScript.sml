@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem ghost_inv_scalar_local_clean:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME a /\
@@ -139,18 +139,18 @@ QED
 (* A load changes only a fresh temporary.  Keep the ambient proof separate
    from the instruction path so it also applies to field/storage loads. *)
 Theorem ghost_inv_load_frame:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!p. not_fresh_at sa p ==>
-    lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+    lookup_var p t = lookup_var p s /\ FLOOKUP HG p = FLOOKUP G p /\
     op_taint un (Var p) = op_taint tn (Var p)) /\
   t.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem /\
   un.t_stor = tn.t_stor /\ un.t_trans = tn.t_trans /\ un.t_imm = tn.t_imm /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient ==>
-  ghost_inv d cenv cx es H un t
+  ghost_inv H d cenv cx es HG un t
 Proof
   strip_tac >>
   gvs[ghost_inv_def, local_ptrs_reserved_def, ret_pc_ok_def,
@@ -176,7 +176,7 @@ Proof
 QED
 
 Theorem ghost_inv_word_local_inputs:
-  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   word_value entry.value ==>
@@ -208,17 +208,17 @@ Theorem augassign_local_load_ptr:
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   is_word_type ty /\ lookup_scopes name es.scopes = SOME entry /\
   word_value entry.value /\ emit_op MLOAD [Var p] sa = (Var out,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   ret_pc_ok cenv sa s /\ return_buf_frame d cenv sa s /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
-    expr_post ctx fn cenv cx (Name ty name) es sa sb s
+    expr_post H ctx fn cenv cx (Name ty name) es sa sb s
       (es with gas_obs := []) entry.value (Var out) sf /\
-    ghost_inv d cenv cx (es with gas_obs := []) Gf tnf sf /\
+    ghost_inv H d cenv cx (es with gas_obs := []) Gf tnf sf /\
     ghost_kept cenv es sa G tn s Gf tnf /\ op_taint tnf (Var out) = {} /\
     ~sf.vs_halted /\ sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -246,12 +246,12 @@ Proof
 QED
 
 Theorem live_storage_head_clean:
-  stor_taint_ok cx tn s /\
-  (!st. storage_read_live cx tr st slot tv) /\ 0 < type_slot_size tv ==>
+  stor_taint_ok H cx tn s /\
+  (!st. storage_read_live H tr st slot tv) /\ 0 < type_slot_size tv ==>
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {}
 Proof
   strip_tac >>
-  `!st b. ~storage_dead cx tr st (w2n slot) b` by
+  `!st b. ~storage_dead H tr st (w2n slot) b` by
     metis_tac[storage_read_live_head] >>
   Cases_on `tr` >>
   Cases_on `s.vs_call_ctx.cc_address = cx.txn.target` >>
@@ -377,17 +377,17 @@ Theorem augassign_storage_load_ptr:
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx fn cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx fn cenv cx es s /\
   is_word_type ty /\ storage_holds cx tr ty (Value v) slot es s /\
   evaluate_type (get_tenv cx) ty = SOME tvt /\
-  (!st. storage_read_live cx tr st slot tvt) /\ 0 < type_slot_size tvt /\
-  ghost_inv d cenv cx es G tn s /\ ret_pc_ok cenv sa s /\
+  (!st. storage_read_live H tr st slot tvt) /\ 0 < type_slot_size tvt /\
+  ghost_inv H d cenv cx es G tn s /\ ret_pc_ok cenv sa s /\
   return_buf_frame d cenv sa s ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
     eval_operand (Var out) sf = SOME (typed_val_to_w256 tvt v) /\
-    stmt_state_rel ctx fn cenv cx es sf /\
-    ghost_inv d cenv cx es Gf tnf sf /\
+    stmt_state_rel H ctx fn cenv cx es sf /\
+    ghost_inv H d cenv cx es Gf tnf sf /\
     ghost_kept cenv es sa G tn s Gf tnf /\ op_taint tnf (Var out) = {} /\
     ~sf.vs_halted /\ sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -395,7 +395,7 @@ Theorem augassign_storage_load_ptr:
     (!rp. not_fresh_at sa rp ==> lookup_var rp sf = lookup_var rp s)
 Proof
   strip_tac >>
-  `stor_taint_ok cx tn s` by gvs[ghost_inv_def] >>
+  `stor_taint_ok H cx tn s` by gvs[ghost_inv_def] >>
   drule_all live_storage_head_clean >> strip_tac >>
   drule_all emit_storage_load_path_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>

@@ -159,18 +159,18 @@ Proof
 QED
 
 Theorem ghost_inv_clean_write_frame:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_rel func cenv es.scopes s /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_rel func cenv es.scopes s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+  (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
     op_taint un (Var x) = op_taint tn (Var x) /\ lookup_var x u = lookup_var x s) /\
   ee.scopes = es.scopes /\
   u.vs_memory = (write_memory_with_expansion dst bytes s).vs_memory /\
   (!i. ~(dst <= i /\ i < dst+LENGTH bytes) ==> (i IN un.t_mem <=> i IN tn.t_mem)) /\
   (!name a len. local_region cenv es.scopes s name a len ==>
-    regions_disjoint dst (LENGTH bytes) a len) /\ stor_taint_ok cx un u ==>
-  ghost_inv d cenv cx ee H un u
+    regions_disjoint dst (LENGTH bytes) a len) /\ stor_taint_ok H cx un u ==>
+  ghost_inv H d cenv cx ee HG un u
 Proof
   strip_tac >> fs[bodyPtrDefsTheory.ghost_inv_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
@@ -231,7 +231,7 @@ QED
 Theorem oracle_call_ghost_frame:
   (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
   inst.inst_outputs = [out] /\ source_memory_write_ranges inst s = [(dst,cap)] /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_rel func cenv es.scopes s /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_rel func cenv es.scopes s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -243,14 +243,14 @@ Theorem oracle_call_ghost_frame:
     regions_disjoint dst cap a len) /\
   (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
     regions_disjoint dst cap a len) /\
-  H = step_prov PG G inst t /\ un = step_taint inst s t tn /\
-  stor_taint_ok cx un t ==>
-  ghost_inv d cenv cx ee H un (t with vs_inst_idx := pc) /\
-  ghost_kept cenv es sa G tn s H un /\
+  HG = step_prov PG G inst t /\ un = step_taint inst s t tn /\
+  stor_taint_ok H cx un t ==>
+  ghost_inv H d cenv cx ee HG un (t with vs_inst_idx := pc) /\
+  ghost_kept cenv es sa G tn s HG un /\
   wb_frame cenv es ee sa s (t with vs_inst_idx := pc)
 Proof
   strip_tac >> (
-  `!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+  `!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
     op_taint un (Var x) = op_taint tn (Var x) /\
     lookup_var x (t with vs_inst_idx := pc) = lookup_var x s` by
     (gen_tac >> strip_tac >> conj_tac
@@ -270,7 +270,7 @@ Proof
      first_x_assum drule_all >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   conj_tac
   >- (irule ghost_inv_clean_write_frame >>
-      first_assum (irule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+      first_assum (irule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
       qexistsl_tac [`sa`, `func`, `dst`, `TAKE cap t.vs_returndata`] >>
       fs[bodyPtrDefsTheory.stor_taint_ok_def] >> metis_tac[]) >>
   conj_tac
