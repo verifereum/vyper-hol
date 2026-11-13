@@ -166,7 +166,7 @@ Proof
   Induct >> simp[inline_parameter_boundary_path_def, inline_parameter_boundary_key]
 QED
 
-Theorem inline_parameter_boundary_path_keys[local]:
+Theorem inline_parameter_boundary_path_keys:
   MAP inline_choice_key path = MAP inline_choice_key path' /\
   inline_parameter_boundary_path path' fn l j root rl rj ==>
   inline_parameter_boundary_path path fn l j root rl rj
