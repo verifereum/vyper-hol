@@ -55,7 +55,8 @@ Proof
      simp[mk_inst_def, mstore_def, lookup_var_def, Abbr `s2`] >>
      fs[ptr_covers_def, eval_operand_def, lookup_var_def]) >>
   simp[inst_seq_ptr_def] >> conj_tac
-  >- (fs[ptr_covers_def, eval_operand_def, lookup_var_def, mstore_def, Abbr `s2`]) >>
+  >- (qpat_x_assum `ptr_covers _ _ out (mstore _ _ s2) 32` mp_tac >>
+      simp[ptr_covers_def, lookup_var_def, mstore_def, Abbr `s2`]) >>
   `eval_operand (Lit value) s2 = SOME value /\ op_taint t1 (Lit value) = {}` by
     simp[eval_operand_def, op_taint_def] >>
   drule_all (cj 5 mstore_ghost_frame) >> simp[]
