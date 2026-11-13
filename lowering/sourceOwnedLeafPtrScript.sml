@@ -33,7 +33,8 @@ Ancestors
   decoderPrimitiveObservations decoderWorldFramePtr
   sourceBulkArrayLayout calldataBulkReentry calldataBulkUniformPtr
   abiDecoderBulkExecute abiStaticDynarrayLayout calldataTypedRobustPtr dynarrayLiveRobustPtr
-  abiDecoderClampedWord abiDecoderBytesTyped abiValueEncoding
+  abiDecoderClampedWord abiDecoderBytesTyped abiValueEncoding abiCanonicalBytes
+  valueTypingMemoryProps exprSimProps
   abiDecoderCoherence sourceBytesRepresentation calldataDecodePtr abiDecoderReentry
   venomState abiDecoderBytes calldataDynOwned abiDecoderFrameCompose
   allocaFrontierBound allocaBudgetProps venomMemDefs ptrDiscipline bodyPtrDefs arithmetic
@@ -2182,6 +2183,89 @@ Proof
      simp[eval_operand_def, lookup_var_def]) >>
   drule_all decoder_run_world_frame >>
   simp_tac (srw_ss()) [] >> strip_tac >>
+  rename1 `ptr_covers Hphys uphys child t (type_memory_size tv)` >>
+  `?H u.
+    (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
+      (r,G,tn) [] (OK t,H,u)) /\
+    ptr_covers H u child t (type_memory_size tv) /\
+    (!j. e <= j /\ j < e + type_memory_size tv ==> j NOTIN u.t_mem) /\
+    (!x. not_fresh_at middle x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint u (Var x) = op_taint tn (Var x)) /\
+    u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lower fuel ctx fn PG G tn r)` by
+    (Cases_on `?clamp. type_to_abi_dec_info sf ce ty = DecPrimWord clamp`
+     >- (pop_assum strip_assume_tac >>
+         `is_word_type ty` by metis_tac[abi_dec_info_distinct] >>
+         `type_memory_size tv = 32` by metis_tac[abi_word_type_size] >>
+         `compile_abi_decode_to_buf (Var child) childsrc CALLDATALOAD (Lit 0w) (Lit 0w)
+           (DecPrimWord clamp) middle = ((),end_st)` by metis_tac[] >>
+         `ptr_covers G tn child r 32 /\
+           w2n (n2w e : bytes32) + 32 <= r.vs_alloca_next /\
+           w2n (n2w e : bytes32) + 32 < dimword (:256)` by
+           (qpat_x_assum `ptr_covers G tn child r _` mp_tac >>
+            qpat_x_assum `e + type_memory_size tv <= r.vs_alloca_next` mp_tac >>
+            qpat_x_assum `e + type_memory_size tv < dimword (:256)` mp_tac >>
+            qpat_x_assum `type_memory_size tv = 32` mp_tac >>
+            qpat_x_assum `e < dimword (:256)` mp_tac >>
+            POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+         drule_all (Q.INST [`dw` |-> `n2w e : bytes32`,
+           `sw` |-> `n2w srcpos : bytes32`] owned_word_run_origin_certificate) >>
+         disch_then (qspec_then `PG` mp_tac) >>
+         qpat_x_assum `t.vs_inst_idx = LENGTH end_st.cs_current_insts`
+           (fn th => rewrite_tac[GSYM th]) >>
+         qpat_x_assum `type_memory_size tv = 32` (fn th => rewrite_tac[th]) >>
+         `w2n (n2w e : bytes32) = e` by
+           (qpat_x_assum `e < dimword (:256)` mp_tac >>
+            POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+         pure_asm_rewrite_tac [] >>
+         simp_tac (srw_ss()) [venom_state_accfupds, venom_state_fupdfupds]) >>
+     `?m. type_to_abi_dec_info sf ce ty = DecBytestring m` by metis_tac[] >>
+     drule_all coherent_source_bytes_representation >> strip_tac >>
+     `LENGTH bs <= m` by metis_tac[abi_dec_info_11] >>
+     `type_memory_size tv = abi_decode_bytes_copy_size m /\
+       m < dimword (:256)` by metis_tac[abi_decoder_bytes_copy_size] >>
+     `abi_decode_load CALLDATALOAD (n2w srcpos : bytes32) r = n2w (LENGTH bs)` by
+       (irule canonical_bytes_count_load >> metis_tac[abi_decode_source_def]) >>
+     `compile_abi_decode_to_buf (Var child) childsrc CALLDATALOAD (Lit 0w) (Lit 0w)
+       (DecBytestring m) middle = ((),end_st)` by metis_tac[] >>
+     `ptr_covers G tn child r (abi_decode_bytes_copy_size m) /\
+       abi_decode_bytes_copy_size m < dimword (:256) /\
+       w2n (n2w e : bytes32) + abi_decode_bytes_copy_size m <= r.vs_alloca_next /\
+       w2n (n2w e : bytes32) + abi_decode_bytes_copy_size m < dimword (:256)` by
+       (qpat_x_assum `ptr_covers G tn child r _` mp_tac >>
+        qpat_x_assum `e + type_memory_size tv <= r.vs_alloca_next` mp_tac >>
+        qpat_x_assum `e + type_memory_size tv < dimword (:256)` mp_tac >>
+        qpat_x_assum `type_memory_size tv < dimword (:256)` mp_tac >>
+        qpat_x_assum `type_memory_size tv = abi_decode_bytes_copy_size m` mp_tac >>
+        qpat_x_assum `e < dimword (:256)` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+     drule_all (REWRITE_RULE [GSYM abi_decode_bytes_copy_size_def]
+       (Q.INST [`C` |-> `abi_decode_bytes_copy_size m`,
+         `dw` |-> `n2w e : bytes32`, `sw` |-> `n2w srcpos : bytes32`]
+         owned_bytes_run_origin_certificate)) >>
+     disch_then (qspec_then `PG` mp_tac) >>
+     qpat_x_assum `t.vs_inst_idx = LENGTH end_st.cs_current_insts`
+       (fn th => rewrite_tac[GSYM th]) >>
+     qpat_x_assum `type_memory_size tv = abi_decode_bytes_copy_size m`
+       (fn th => rewrite_tac[th]) >>
+     `w2n (n2w e : bytes32) = e` by
+       (qpat_x_assum `e < dimword (:256)` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+     pure_asm_rewrite_tac [] >>
+     simp_tac (srw_ss()) [venom_state_accfupds, venom_state_fupdfupds]) >>
+  `!mem. mem_agree_outside u.t_mem t.vs_memory mem ==> val_in_memory tv v e mem` by
+    (`val_wf tv v` by metis_tac[value_has_type_memory_wf] >>
+     `val_footprint tv v <= type_memory_size tv` by metis_tac[val_footprint_le] >>
+     `!i. e <= i /\ i < e + val_footprint tv v ==> i NOTIN u.t_mem` by
+       (gen_tac >> strip_tac >>
+        qpat_x_assum `!j. e <= j /\ j < e + type_memory_size tv ==> _` irule >>
+        decide_tac) >>
+     qpat_x_assum `val_wf tv v` mp_tac >>
+     qpat_x_assum `val_in_memory tv v e t.vs_memory` mp_tac >>
+     qpat_x_assum `!i. e <= i /\ i < e + val_footprint tv v ==> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[clean_footprint_val_in_memory_robust]) >>
   qexistsl [`t`,`H`,`u`] >>
   pure_asm_rewrite_tac [] >>
   simp_tac bool_ss [] >>
