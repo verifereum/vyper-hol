@@ -1799,8 +1799,10 @@ QED
 
 Resume append_sparse_dynarray_checked[support]:
   drule placeStoreSlotsTheory.store_slots_dynarray_encoding_support >> strip_tac >>
-  simp[MEM_APPEND, MEM_MAP] >>
+  qpat_x_assum `!k. MEM k (MAP FST _) <=> _` mp_tac >>
   qpat_x_assum `!k. MEM k ks <=> _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[MEM_APPEND, MEM_MAP] >>
   BETA_TAC >> rpt strip_tac >>
   eq_tac >> strip_tac >> gvs[] >>
   metis_tac[ADD1, ADD_ASSOC]
