@@ -18,59 +18,6 @@ Ancestors
 
 (* Shared recursive consumer interface. B is semantic support, not capacity.
    Singleton windows observe explicit and implicit zero bytes identically. *)
-val canonical_pair = ``\ty tv.
- !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
-  G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
-   (type_to_abi_dec_info sf ce ty) st = ((),st') /\
- abi_decoder_coherent ce env sf ty tv /\
- abi_decoder_metadata ce env ty tv root_di av v /\
- eval_operand src initial = SOME (n2w sb) /\
- eval_operand (Var dst) initial = SOME (n2w d) /\
- sb + LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
- mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) av))
-   initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
- (!x. src = Var x \/ Var dst = Var x \/ Lit 0w = Var x ==> not_fresh_at st x) /\
- st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
- fn_has_code st st' func /\ fn_inst_ids_distinct func /\
- (st.cs_blocks = st'.cs_blocks \/ !bb.
-    lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
-    phi_prefix_length bb.bb_instructions = 0) /\
- alloca_inv initial /\ alloca_frontier_inv ctx func site initial /\
- unit_alloca_budget ctx < dimword (:256) /\
- D <= d /\ d + type_memory_bytes ce ty <= D+N /\ D+N <= initial.vs_alloca_next /\
- frag_ids st st' SUBSET ids /\ ctor_actual_scratch func ids D N initial /\
- ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
- initial.vs_inst_idx = LENGTH st.cs_current_insts /\
- FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
- d + type_memory_bytes ce ty <= b+sz /\
- op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
- allocas_from lo initial /\ ~ctx_has_dalloca ctx ==>
- ?actual H qt B.
- val_in_memory tv v d actual.vs_memory /\
- abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st'))
-   [(d,type_memory_bytes ce ty)] initial actual /\
- alloca_inv actual /\ alloca_frontier_inv ctx func site actual /\
- ctor_actual_scratch func ids D N actual /\ D+N <= actual.vs_alloca_next /\
- actual.vs_data_section = initial.vs_data_section /\
- actual.vs_call_ctx = initial.vs_call_ctx /\
- (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==>
-    lookup_var x actual = SOME w) /\
- ~actual.vs_halted /\ actual.vs_current_bb = st'.cs_current_bb /\
- actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
- abi_decode_sim ctx func initial actual /\ fresh_vars_wrt limit_st actual /\
- actual.vs_labels = initial.vs_labels /\
- FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\
- DISJOINT B qt.t_mem /\
- (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem =
-                        mem_bytes_at a 1 actual.vs_memory) ==>
-    val_in_memory tv v d mem) /\
- qt.t_mem SUBSET tn.t_mem /\
- qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
- (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
-                           op_taint qt (Var x) = op_taint tn (Var x)) /\
- ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
-   !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)``;
 
 Theorem prefix_canonical_noclamp_value:
   compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
@@ -620,16 +567,5 @@ Resume prefix_canonical_noclamp_paired_allocations[continuation]:
 QED
 Finalise prefix_canonical_noclamp_paired_allocations
 
-Theorem prefix_canonical_noclamp_paired:
-  type_to_abi_dec_info sf ce ty = DecPrimWord NoClamp ==>
-  (^canonical_pair) ty tv
-Proof
-  strip_tac >> BETA_TAC >> rpt gen_tac >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule prefix_canonical_noclamp_paired_allocations >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  disch_then (drule_all_then (qspecl_then [`Ddead`,`PG`] strip_assume_tac)) >>
-  qexistsl [`actual`,`H`,`qt`,`B`] >> asm_rewrite_tac[]
-QED
 
 val _ = export_theory();
