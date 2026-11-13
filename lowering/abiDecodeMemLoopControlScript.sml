@@ -34,7 +34,8 @@ Proof
        word_add_n2w, AllCaseEqs(), toString_11] >>
   gvs[eval_operand_def, GSYM word_add_n2w] >>
   qpat_x_assum `_ + 32 <= _` mp_tac >>
-  once_rewrite_tac[GSYM arithmeticTheory.MOD_PLUS] >> simp[]
+  once_rewrite_tac[GSYM arithmeticTheory.MOD_PLUS] >>
+  simp[lookup_var_update_var, toString_11]
 QED
 
 Theorem abi_decode_position_header_path_mem:
