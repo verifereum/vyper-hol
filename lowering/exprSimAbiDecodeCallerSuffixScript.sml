@@ -31,7 +31,7 @@ Theorem abi_decode_caller_suffix_summary:
     (bind (lift_sum (evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [BytesV bs]))
       (\w. return (Value w))) (ee with gas_obs := [],s)
     (\res es1 t. ?v. res = INL (Value v) /\
-      vv_post ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
+      vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
         es1 (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts)
     (\res es1 r. expr_exit res r)
@@ -102,7 +102,7 @@ Resume abi_decode_caller_suffix_summary[success]:
      drule abi_decode_wrapped_type >> metis_tac[optionTheory.SOME_11]) >>
   gvs[] >>
   `?v. evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [BytesV bs] = INL v /\
-    vv_post ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
+    vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
       (ee with gas_obs := []) (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t` by
     (irule abi_decode_body_caller_success >> simp[] >>
      metis_tac[]) >>

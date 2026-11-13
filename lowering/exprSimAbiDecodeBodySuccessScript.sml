@@ -63,7 +63,7 @@ Theorem abi_decode_body_caller_success:
     (if unwrap /\ needs_external_call_wrap ty then TupleTV [tv] else tv)
     bs out d start final ctx func cx es1 s t ==>
   ?v. evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [BytesV bs] = INL v /\
-    vv_post ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
+    vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
       es1 (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t
 Proof
   strip_tac >>

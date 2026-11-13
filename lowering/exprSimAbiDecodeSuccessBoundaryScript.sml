@@ -27,7 +27,7 @@ Theorem abi_decode_caller_frames:
   vv_holds ce cx ty (Value v) (LocatedValue ty (mk_ptr out LocMemory)) es1 t /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
   type_memory_size tv <= type_memory_bytes ce dec_ty ==>
-  vv_post ctx func ce cx (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es sa final s0
+  vv_post H ctx func ce cx (TypeBuiltin ty (AbiDecode unwrap) ty [e]) es sa final s0
     es1 (Value v) (LocatedValue ty (mk_ptr out LocMemory)) t
 Proof
   strip_tac >>
@@ -47,6 +47,7 @@ Proof
   `locals_kept ce es1 es1 s t` by
     (drule_all abi_decode_success_locals_kept >> simp[]) >>
   simp[vv_post_def, expr_type_def] >> rpt conj_tac
+  >- fs[expr_post_def]
   >- simp[contextTheory.mk_ptr_def]
   >- (rpt strip_tac >>
       `not_fresh_at start x` by metis_tac[not_fresh_at_mono] >>
@@ -97,7 +98,7 @@ Theorem abi_decode_caller_success:
     (if unwrap /\ needs_external_call_wrap ty then TupleTV [tv] else tv)
     bs out d start final ctx func cx es1 s t ==>
   ?v. evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [BytesV bs] = INL v /\
-    vv_post ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
+    vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
       es1 (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t
 Proof
   strip_tac >>
