@@ -324,7 +324,7 @@ Proof
 QED
 
 (* Recover block lookups without exposing the final function's block list. *)
-Theorem array_emitted_block_lookup[local]:
+Theorem array_emitted_block_lookup:
   fn_has_code sa sb func /\ sb.cs_blocks = blocks ++ sa.cs_blocks /\
   MEM bb blocks /\ bb.bb_label = lbl ==>
   lookup_block lbl func.fn_blocks = SOME bb
@@ -335,7 +335,7 @@ Proof
   fs[fn_has_code_def] >> metis_tac[]
 QED
 
-Theorem array_prefix_extends[local]:
+Theorem array_prefix_extends:
   sa.cs_blocks =
     [cond_bb; entry_bb;
      <|bb_label := st.cs_current_bb;
@@ -347,7 +347,7 @@ Proof
 QED
 
 (* Code ownership for the four opaque compiler segments. *)
-Theorem array_stages_code[local]:
+Theorem array_stages_code:
   cs_extends st sa /\ cs_extends sa sb0 /\ cs_extends sb0 sb1 /\
   cs_extends sb1 sj /\ cs_extends sj st' /\ fn_has_code st st' func ==>
   fn_has_code st sa func /\ fn_has_code sa sb0 func /\

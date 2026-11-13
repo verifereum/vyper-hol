@@ -17,6 +17,18 @@ Proof
   imp_res_tac emit_void_terminated >> gvs[is_terminator_def]
 QED
 
+Theorem registration_guard_open[local]:
+  !opc actual parent a x b. ~block_is_terminated a /\
+    compile_abi_arg_ptr_guard opc actual parent a = (x,b) ==>
+    ~block_is_terminated b
+Proof
+  rpt gen_tac >> Cases_on `opc = CALLDATALOAD` >>
+  simp[compile_abi_arg_ptr_guard_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac emit_void_terminated >> gvs[is_terminator_def]
+QED
+
 Theorem registration_decode_open[local]:
   !args ce off a x b. ~block_is_terminated a /\
     compile_decode_args ce args off CALLDATALOAD (Lit 0w) 4 a = (x,b) ==>
@@ -34,6 +46,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac emit_op_nonterminator_open >>
   imp_res_tac registration_clamp_open >>
+  imp_res_tac registration_guard_open >>
   imp_res_tac compile_abi_decode_to_buf_open >>
   imp_res_tac emit_void_terminated >>
   gvs[is_terminator_def] >> metis_tac[]

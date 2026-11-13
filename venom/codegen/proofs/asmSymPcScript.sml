@@ -215,7 +215,7 @@ Theorem asm_log_pc_add[local]:
   asm_log k (s with as_pc := s.as_pc + n) =
   asm_result_pc_add n (asm_log k s)
 Proof
-  simp[asm_log_def] >> IF_CASES_TAC >>
+  simp[asm_log_def] >> rpt IF_CASES_TAC >>
   simp[asm_result_pc_add_def, asm_next_def]
 QED
 

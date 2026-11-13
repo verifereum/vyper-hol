@@ -38,6 +38,23 @@ Ancestors
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
   unitShapeDefs o1PassContract
   loweringPtrBodyRun extEntryValueRevertPtr gasSummary
+  calldataScratchArrayConstructorPtr
+  calldataScratchArrayEntryPtr calldataScratchArrayCompletePtr
+  calldataScratchLoopPtr calldataScratchArrayPtr decoderScratchInitPtr
+  calldataScratchTuplePtr calldataScratchBytesPtr calldataScratchWordPtr
+  decoderArrayInitPtr decoderAllocationBoundsPtr decoderArraySetupPtr
+  decoderScratchLoopPtr decoderLoopControlPtr decoderProtectedScratchPtr
+  decoderIndexInitPtr
+  normalizationAllocPtr
+  fragExecPtr typedCopyFieldsPtr typedCopyBytesRobustPtr typedCopyOffsetPtr
+  typedCopyBytesFieldsPtr typedCopyTuplePtr robustCopyTransportPtr
+  structChildPtr wordCopyRobustPtr
+  rawEntryCode entryChecksPtr sourceValueRejection entryCheckIntervals
+  sourceEntrySelection entryDispatchPtr sourceEntryCode entryValueRevertPtr
+  loweringShapeProps loweringShapeSource supportedNames supportedDecls
+  entryDispatchProps o1PipelineCorrect selectedBodyCode calldataDecodePtr
+  calldataTypedRobustPtr entryPtrSeamDead
+  entryPtrSeamPrefix entryPtrSeamRegister
 
 val _ = Parse.hide "body";
 

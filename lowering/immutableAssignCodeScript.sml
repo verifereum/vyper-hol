@@ -30,9 +30,7 @@ Theorem immutable_assign_code_parts:
     lower_value compile_expr ce (expr_type e) e sa = (op,su) /\
     compile_assign_value ce (Lit (n2w off)) LocCode op (is_word_type ity)
       (vv_location vv) ity (lowered_value_type ce e)
-      (case ity of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes ce et + 31) DIV 32, type_memory_bytes ce et)
-       | _ => NONE) (type_memory_bytes ce ity) su = ((),sb) /\
+      (type_memory_bytes ce ity) su = ((),sb) /\
     cs_extends sa sm /\ cs_extends sm su /\ cs_extends su sb /\
     fn_has_code sa sm func /\ fn_has_code sm su func /\ fn_has_code su sb func
 Proof

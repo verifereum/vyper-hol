@@ -31,7 +31,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore allocLimitsProps
   stmtSimDecl stmtSimDeclCompose stmtSimDeclPath stmtSimDeclSource
   gasSummary gasContext
   fragGasSeq fragGasPath fragGasMode
@@ -65,12 +65,12 @@ Proof
       ho_match_mp_tac type_memory_bytes_ind >>
       rw[type_memory_bytes_def] >>
       AP_TERM_TAC >> irule MAP_CONG >> simp[]) >>
-  gen_tac >> gvs[oneline lowered_value_type_def]
+  rpt strip_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >> simp[]
 QED
 
 Theorem compile_assign_memory_appends:
-  !cenv dst src loc ty info sz.
-    cs_appends (compile_assign_value cenv dst LocMemory src F loc ty ty info sz)
+  !cenv dst src loc ty sz.
+    cs_appends (compile_assign_value cenv dst LocMemory src F loc ty ty sz)
 Proof
   rpt gen_tac >>
   simp[compile_assign_value_def, compile_store_memory_def] >>
@@ -116,9 +116,9 @@ Proof
 QED
 
 Theorem compile_assign_memory_widen_appends:
-  !cenv dst src loc dty sty info sz.
+  !cenv dst src loc dty sty sz.
     sty = dty \/ is_bytestring_type dty ==>
-    cs_appends (compile_assign_value cenv dst LocMemory src F loc dty sty info sz)
+    cs_appends (compile_assign_value cenv dst LocMemory src F loc dty sty sz)
 Proof
   rpt gen_tac >> strip_tac >- simp[compile_assign_memory_appends] >>
   simp[compile_assign_value_def, compile_store_memory_bytestring_src] >>
@@ -145,9 +145,6 @@ Theorem compile_annassign_memory_parts[local]:
       lower_value compile_expr cenv (expr_type e) e sA = (op, sB) /\
       compile_assign_value cenv (Var p) LocMemory op F (vv_location vv)
         vtyp (lowered_value_type cenv e)
-        (case vtyp of ArrayT elem_ty (Dynamic _) =>
-           SOME ((type_memory_bytes cenv elem_ty + 31) DIV 32,
-                 type_memory_bytes cenv elem_ty) | _ => NONE)
         (type_memory_bytes cenv vtyp) sB = ((), sf)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -240,9 +237,6 @@ Theorem annassign_memory_code_parts[local]:
       lower_value compile_expr c (expr_type e) e sA = (op, sB) /\
       compile_assign_value c (Var p) LocMemory op F (vv_location vv) vtyp
         (lowered_value_type cenv e)
-        (case vtyp of ArrayT elem_ty (Dynamic _) =>
-           SOME ((type_memory_bytes c elem_ty + 31) DIV 32,
-                 type_memory_bytes c elem_ty) | _ => NONE)
         (type_memory_bytes c vtyp) sB = ((), sf) /\
       local_ptrs_reserved c st /\ local_ptrs_reserved c sA /\ not_fresh_at sA p /\
       cs_extends st sA /\ cs_extends sA sB /\ cs_extends sB sf /\
@@ -267,7 +261,7 @@ Proof
   qexistsl [`st`, `sA`, `sV`, `sB`, `vv`, `op`,
             `STRING #"%" (toString sa.cs_next_var)`] >>
   simp[] >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[]
 QED
 
@@ -570,9 +564,9 @@ QED
    destination copies the runtime length whatever the source's bound.  The
    allocation output is fresh at the assignment entry. *)
 Theorem annassign_staged_memory_widen_parts:
-  !cenv dst src dty sty info bytes sa sb func.
+  !cenv dst src dty sty bytes sa sb func.
     compile_assign_value cenv dst LocMemory src F (SOME LocMemory)
-      dty sty info bytes sa = ((),sb) /\
+      dty sty bytes sa = ((),sb) /\
     (sty = dty \/ is_bytestring_type dty) /\
     0 < type_memory_bytes cenv sty /\ fn_has_code sa sb func ==>
     ?sx sm sn tmp.
@@ -594,7 +588,7 @@ Proof
     (rpt gen_tac >> qpat_x_assum `_ \/ _` strip_assume_tac >>
      simp[compile_store_memory_bytestring_src]) >>
   qpat_x_assum `_ \/ _` kall_tac >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
@@ -627,9 +621,9 @@ Proof
 QED
 
 Theorem annassign_staged_memory_parts:
-  !cenv dst src ty info bytes sa sb func.
+  !cenv dst src ty bytes sa sb func.
     compile_assign_value cenv dst LocMemory src F (SOME LocMemory)
-      ty ty info bytes sa = ((),sb) /\
+      ty ty bytes sa = ((),sb) /\
     0 < type_memory_bytes cenv ty /\ fn_has_code sa sb func ==>
     ?sx sm sn tmp.
       sx = sa with cs_next_var := sa.cs_next_var + 1 /\
@@ -650,8 +644,8 @@ QED
 
 (* As above, and the other allocas older than the store keep their bytes. *)
 Theorem annassign_memory_assign_framed_path[local]:
-  !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sty sa sb sw loc info bytes.
-    compile_assign_value cenv (Var p) LocMemory src F loc ty sty info bytes sa = ((),sb) /\
+  !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sty sa sb sw loc bytes.
+    compile_assign_value cenv (Var p) LocMemory src F loc ty sty bytes sa = ((),sb) /\
     (sty = ty \/ is_bytestring_type ty) /\
     0 < type_memory_bytes cenv sty /\ type_memory_bytes cenv sty < dimword (:256) /\
     val_footprint tyv v <= type_memory_bytes cenv sty /\
@@ -702,7 +696,7 @@ Proof
       `src <> Var tmp /\ p <> tmp` by metis_tac[] >>
       `s.vs_current_bb = sx.cs_current_bb /\
        s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-      drule_all alloc_copy_memory_framed_path >>
+      drule_all alloc_copy_memory_framed_bounded_path >>
       disch_then
         (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
       `lookup_var p u = SOME w /\
@@ -774,7 +768,7 @@ QED
 
 Theorem annassign_memory_store_post_path[local]:
   !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v etv tyv vtyp sty
-   sc rest a loc info bytes.
+   sc rest a loc bytes.
     expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
     post_value_type cenv e = expr_type e /\
     lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
@@ -792,7 +786,7 @@ Theorem annassign_memory_store_post_path[local]:
     0 < type_memory_bytes cenv sty /\ type_memory_bytes cenv sty < dimword (:256) /\
     val_footprint tyv v <= type_memory_bytes cenv sty /\
     compile_assign_value cenv (Var p) LocMemory op F loc
-      vtyp sty info bytes sb = ((),sf) /\
+      vtyp sty bytes sb = ((),sf) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -903,9 +897,9 @@ Proof
 QED
 
 Theorem compile_assign_value_memory_widen_open:
-  !cenv dst src loc dty sty info bytes sa sb.
+  !cenv dst src loc dty sty bytes sa sb.
     0 < type_memory_bytes cenv dty /\ (sty = dty \/ is_bytestring_type dty) /\
-    compile_assign_value cenv dst LocMemory src F loc dty sty info bytes sa = ((),sb) ==>
+    compile_assign_value cenv dst LocMemory src F loc dty sty bytes sa = ((),sb) ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -922,9 +916,9 @@ Proof
 QED
 
 Theorem compile_assign_value_memory_same_open:
-  !cenv dst src loc ty info bytes sa sb.
+  !cenv dst src loc ty bytes sa sb.
     0 < type_memory_bytes cenv ty /\
-    compile_assign_value cenv dst LocMemory src F loc ty ty info bytes sa = ((),sb) ==>
+    compile_assign_value cenv dst LocMemory src F loc ty ty bytes sa = ((),sb) ==>
     ~block_is_terminated sb
 Proof
   rpt strip_tac >>
@@ -933,7 +927,7 @@ QED
 
 Theorem annassign_memory_normal_continuation[local]:
   !ctx func old c cx lctx id typ tyv e es etv ltv sa0 st sa sb sf salloc
-    marks v ee s op p sz w inst loc info bytes.
+    marks v ee s op p sz w inst loc bytes.
     declare_local old id typ sa0 = (c,st) /\ old.ce_alloca_locals /\
     (!l. FLOOKUP old.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
@@ -960,7 +954,7 @@ Theorem annassign_memory_normal_continuation[local]:
     sa0.cs_next_var <= sa.cs_next_var /\
     lower_value compile_expr c (expr_type e) e sa = (op,sb) /\
     compile_assign_value c (Var p) LocMemory op F loc typ
-      (lowered_value_type c e) info bytes sb = ((),sf) /\
+      (lowered_value_type c e) bytes sb = ((),sf) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) sz) /\ not_fresh_at sa p /\
     lookup_var p salloc = SOME w /\
@@ -1137,7 +1131,9 @@ Proof
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   `!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
      !a b op. lower_value compile_expr c (expr_type e) e a = (op, b) ==>
-              cs_extends a b` by metis_tac[] >>
+              cs_extends a b` by
+    (rpt strip_tac >> qpat_assum `!st0 c st1. _ ==> _ /\ _` drule >> strip_tac >>
+     qpat_x_assum `!sa sb op. _` drule >> simp[]) >>
   drule_all annassign_memory_code_parts >>
   disch_then (qx_choosel_then [`st`, `sA`, `sV`, `sB`, `vv`, `op`, `p`] strip_assume_tac) >>
   rename1 `declare_local cenv id vtyp sa = (c, st)` >>
@@ -1193,12 +1189,12 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[stmt_post_def, stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def,
           alloca_frame_def] >>
-     metis_tac[]) >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   irule annassign_memory_normal_continuation >>
   qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `declare_local _ _ _ _ = _` (irule_at Any) >>
   simp[] >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   simp[] >>
   qexistsl_tac [`marks`, `ai`] >> simp[] >>
   qpat_x_assum `!gs v es1. _ ==> value_has_type _ _ /\ value_has_type _ _` mp_tac >>
