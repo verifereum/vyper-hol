@@ -129,8 +129,7 @@ Theorem ifexp_selected_arm_step_full[local]:
     ghost_kept_at lo cenv es1 sa G1 tn1 u Gz tf
 Proof
   strip_tac
-  >~ [`type_widens_to _ _ _`]
-  >- (irule ifexp_widened_call_arm_step_full >>
+  >>~- ([`type_widens_to _ _ _`], (irule ifexp_widened_call_arm_step_full >>
       rpt conj_tac >>
       FIRST_PROVE [MATCH_ACCEPT_TAC (GEN_ALL unwrap_value_origin_ptr),
              MATCH_ACCEPT_TAC (GEN_ALL ifexp_alloca_origin_ptr_edge),
@@ -141,14 +140,27 @@ Proof
              (qexists_tac `rty` >> simp[] >> rpt strip_tac >>
               qpat_x_assum `!v. read_result cx tva ee = _ ==> _` drule >> simp[]),
              (qexistsl_tac [`e`,`stv`,`sm`,`stv`,`ty`,`vv`] >>
-              simp[] >> rpt strip_tac >> first_x_assum drule >> simp[])] )
-  >~ [`is_bytestring_type t`, `~same_memory_layout _ _ _`]
-  >- (irule ifexp_widen_arm_step_full >> FAIL_TAC "bytes premises") >>
-  irule ifexp_unwrap_arm_step_full >>
-  asm_rewrite_tac[] >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac >>
-  irule unwrap_value_origin_ptr >>
-  asm_rewrite_tac[]
+              simp[] >> rpt strip_tac >> first_x_assum drule >> simp[])] >> gvs[]))
+  >>~- ([`is_bytestring_type _`, `~same_memory_layout _ _ _`], (irule ifexp_widen_arm_step_full >> rpt conj_tac >>
+      FIRST [MATCH_ACCEPT_TAC (GEN_ALL unwrap_value_origin_ptr),
+             MATCH_ACCEPT_TAC (GEN_ALL ifexp_alloca_origin_ptr_edge),
+             MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_ghost_frame_at),
+             MATCH_ACCEPT_TAC (GEN_ALL compile_alloc_buffer_kept_frame_at),
+             MATCH_ACCEPT_TAC (GEN_ALL compile_store_bytestring_origin_ptr_path),
+             first_assum MATCH_ACCEPT_TAC,
+             (qexists_tac `rty` >> simp[] >> rpt strip_tac >>
+              qpat_x_assum `!v. read_result cx tva ee = _ ==> _` drule >> simp[]),
+             (irule valueCopyBytesTheory.is_bytestring_word_type >> first_assum MATCH_ACCEPT_TAC),
+             (qexistsl_tac [`e`,`sm`,`ty`,`vv`] >> gvs[]),
+             FAIL_TAC "bytes concrete"] >> gvs[])) >>
+  irule ifexp_unwrap_arm_step_full >> rpt conj_tac >>
+  FIRST [MATCH_ACCEPT_TAC (GEN_ALL unwrap_value_origin_ptr),
+         first_assum MATCH_ACCEPT_TAC,
+         (qexists_tac `rty` >> simp[] >> rpt strip_tac >>
+          qpat_x_assum `!v. read_result cx tva ee = _ ==> _` drule >> simp[]),
+         (qexistsl_tac [`e`,`sm`,`ty`,`vv`] >> simp[]),
+         FAIL_TAC "unwrap concrete"] >> simp[] >>
+  gvs[]
 QED
 
 (* The ternary's root from the condition's value judgment and the arms'
