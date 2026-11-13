@@ -3,7 +3,8 @@ Ancestors
   abiTupleEncodeSlot abiDecodePtrBytesTail bodyPtrAttributeAdd
   rawCallHeaderFramePtr assignBasePtrMcopyGhost assignBasePtrCopyPath
   exprLowering venomMemProofs abiDecoderContract context valueEncodingProps
-  augAssignPtrStore wordLoadStorePtr
+  augAssignPtrStore wordLoadStorePtr abiTupleProps fragExec
+  localPtrsProps exprSimCopy logGhostFramePtr fragGasPathPtr
   bodyPtrEnvBuiltinsSelectorBuffer bodyPtrStructLitFieldStore
   ghostPcTransportPtr ptrCoverage bodyPtrDefs compileEnv emitHelper emitHelperProps
   loweringStateRelDefs venomState venomInst venomExecSemantics
@@ -192,3 +193,151 @@ Proof
   simp[ptr_covers_def, op_taint_def, mstore_def, lookup_var_def] >>
   simp[Abbr `tf`, step_taint_def, mk_inst_def, imm_taint_def]
 QED
+
+Theorem compile_abi_tuple_slot_resources_ptr:
+  compile_abi_tuple_slot ce (Var bx) off op ty st = ((),final) /\
+  n = type_memory_bytes ce ty /\ (is_word_type ty ==> n = 32) /\
+  fn_has_code st final func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  lookup_var bx s = SOME (n2w b) /\ ptr_covers G tn bx s N /\
+  not_fresh_at st bx /\ off+n <= N /\ b+N < dimword(:256) /\
+  eval_operand op s = SOME v /\
+  (!x. op = Var x ==> not_fresh_at st x) /\
+  (is_word_type ty ==> op_taint tn op = {}) /\
+  (~is_word_type ty /\ 0 < n ==> ?x. op = Var x /\ ptr_covers G tn x s n) /\
+  local_ptrs_reserved cenv st /\ local_ptrs_rel func cenv es.scopes s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
+  ghost_inv rb cenv cx es G tn s /\
+  fr.cs_next_id <= st.cs_next_id /\
+  (!x. not_fresh_at fr x ==> not_fresh_at st x) /\
+  (!name base sz. local_region cenv es.scopes s name base sz ==>
+    regions_disjoint (b+off) n base sz) /\
+  (!aid base sz. FLOOKUP s.vs_allocas aid = SOME (base,sz) /\
+    aid < fr.cs_next_id /\
+    (!name p k. local_region cenv es.scopes s name p k ==>
+      base+sz <= p \/ p+k <= base) ==>
+    regions_disjoint (b+off) n base sz) ==>
+  ?H tm t.
+    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK t) /\
+    ghost_inv rb cenv cx es H tm t /\ ghost_kept cenv es fr G tn s H tm /\
+    ~t.vs_halted /\ t.vs_current_bb = final.cs_current_bb /\
+    t.vs_inst_idx = LENGTH final.cs_current_insts /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    ptr_covers H tm bx t N /\
+    (!x. not_fresh_at st x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x) /\
+      (!k. ptr_covers G tn x s k ==> ptr_covers H tm x t k)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    t.vs_memory = (if is_word_type ty then mstore (b+off) v s
+      else if n = 0 then s else mcopy (b+off) (w2n v) n s).vs_memory /\
+    tm.t_mem = (if is_word_type ty then tn.t_mem DIFF {j | b+off <= j /\ j < b+off+n}
+      else (tn.t_mem DIFF {j | b+off <= j /\ j < b+off+n}) UNION
+        {b+off+j | j < n /\ w2n v+j IN tn.t_mem}) /\
+    abi_decode_frame (b+off) n s t
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_abi_tuple_slot _ _ _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [compile_abi_tuple_slot_def, comp_bind_def, LET_THM] >>
+  pairarg_tac >> strip_tac >>
+  rename1 `emit_op ADD _ st = (dst,sa)` >>
+  gvs[] >>
+  `cs_extends st sa /\ cs_extends sa final` by
+    (Cases_on `is_word_type ty` >>
+     Cases_on `type_memory_bytes ce ty` >>
+     gvs[emit_op_def, emit_void_def, compile_copy_memory_def,
+       comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
+       emit_def, comp_return_def, cs_extends_def] >>
+     simp[rich_listTheory.IS_PREFIX_APPEND]) >>
+  `fn_has_code st sa func /\ fn_has_code sa final func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  mp_tac (abi_tuple_slot_address_resources_ptr |> SPEC_ALL
+    |> Q.INST [`ready` |-> `sa`, `n` |-> `type_memory_bytes ce ty`]) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `ghost_inv rb cenv cx es H tf u` >>
+  qpat_x_assum `H = step_prov _ _ _ _` kall_tac >>
+  qpat_x_assum `tf = step_taint _ _ _ _` kall_tac >>
+  `u.vs_labels = s.vs_labels /\ u.vs_call_ctx = s.vs_call_ctx /\
+   u.vs_data_section = s.vs_data_section` by simp[update_var_def] >>
+  qpat_x_assum `u = _` kall_tac >>
+  `(!name base sz. local_region cenv es.scopes u name base sz <=>
+      local_region cenv es.scopes s name base sz)` by
+    (rpt gen_tac >> irule copy_buffer_local_region_frame >>
+     qexists_tac `st` >> simp[]) >>
+  `local_ptrs_rel func cenv es.scopes u` by
+    (irule local_ptrs_rel_mem_agree >> qexists_tac `s` >> simp[] >>
+     rpt strip_tac >> gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `eval_operand op u = SOME v /\ op_taint tf op = op_taint tn op` by
+    (Cases_on `op` >> gvs[eval_operand_def, op_taint_def]) >>
+  `ghost_kept cenv es fr G tn s H tf` by
+    (gvs[ghost_kept_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  Cases_on `is_word_type ty`
+  >- suspend "word"
+  >> Cases_on `type_memory_bytes ce ty = 0`
+  >- suspend "zero"
+  >> suspend "copy"
+QED
+
+Resume compile_abi_tuple_slot_resources_ptr[word]:
+  gvs[] >>
+  `b+off < dimword(:256)` by decide_tac >>
+  `!name base sz. local_region cenv es.scopes u name base sz ==>
+     base+sz <= w2n (n2w (b+off):bytes32) \/
+     w2n (n2w (b+off):bytes32)+32 <= base` by
+    (simp[w2n_n2w] >> rpt strip_tac >>
+     qpat_x_assum `!name base sz. local_region cenv es.scopes s name base sz ==> regions_disjoint _ _ base sz` drule >>
+     simp[regions_disjoint_def] >> decide_tac) >>
+  drule_all abi_tuple_slot_word_resources_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`tf'`,`t`] >>
+  simp[w2n_n2w] >>
+  conj_tac >- (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []) >> goal_assum (drule_at Any) >>
+    gvs[w2n_n2w]) >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!x. not_fresh_at st x ==> _` drule >>
+    simp[op_taint_def]) >>
+  conj_tac >- simp[mstore_def, write_memory_with_expansion_def] >>
+  gvs[w2n_n2w, abi_decode_frame_def] >> metis_tac[]
+QED
+Resume compile_abi_tuple_slot_resources_ptr[zero]:
+  gvs[compile_copy_memory_def, comp_return_def] >>
+  qexistsl_tac [`H`,`tf`,`u`] >>
+  simp[mcopy_def, abi_decode_frame_def] >>
+  metis_tac[]
+QED
+Resume compile_abi_tuple_slot_resources_ptr[copy]:
+  gvs[] >>
+  `0 < type_memory_bytes ce ty /\ type_memory_bytes ce ty < dimword(:256) /\
+   b+off < dimword(:256)` by decide_tac >>
+  `ptr_covers H tf x u (type_memory_bytes ce ty)` by metis_tac[] >>
+  `!name base sz. local_region cenv es.scopes u name base sz ==>
+     regions_disjoint (w2n (n2w (b+off):bytes32)) (type_memory_bytes ce ty) base sz` by
+    (simp[w2n_n2w] >> metis_tac[]) >>
+  `!aid base sz. FLOOKUP u.vs_allocas aid = SOME (base,sz) /\
+    aid < fr.cs_next_id /\
+    (!name p k. local_region cenv es.scopes u name p k ==>
+      base+sz <= p \/ p+k <= base) ==>
+    regions_disjoint (w2n (n2w (b+off):bytes32)) (type_memory_bytes ce ty) base sz` by
+    (simp[w2n_n2w] >> metis_tac[]) >>
+  mp_tac (abi_tuple_slot_copy_resources_ptr |> SPEC_ALL
+    |> Q.INST [`b` |-> `bw`]
+    |> Q.INST [`s` |-> `u`, `sb` |-> `final`, `n` |-> `type_memory_bytes ce ty`,
+      `bw` |-> `n2w (b+off):bytes32`, `a` |-> `v`,
+      `G` |-> `H`, `tn` |-> `tf`, `dst` |-> `out`, `src` |-> `x`]) >>
+  (impl_tac >- (gvs[eval_operand_def] >> metis_tac[])) >>
+  strip_tac >>
+  qexistsl_tac [`H`,`tf'`,`t`] >>
+  simp[w2n_n2w] >>
+  conj_tac >- (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []) >>
+    goal_assum (drule_at Any) >> gvs[w2n_n2w]) >>
+  conj_tac >- (irule wordArgsPtrTheory.ghost_kept_trans >>
+    goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+    simp[] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!x. not_fresh_at st x ==> _` drule >> simp[op_taint_def]) >>
+  conj_tac >- simp[mcopy_def, write_memory_with_expansion_def] >>
+  gvs[w2n_n2w, abi_decode_frame_def] >> metis_tac[]
+QED
+Finalise compile_abi_tuple_slot_resources_ptr
