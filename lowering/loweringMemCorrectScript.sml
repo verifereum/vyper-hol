@@ -84,23 +84,22 @@ Proof
   simp[fixed_region_reserved_def]
 QED
 
-(* S3's twin for LowerDload: every reachable DLOAD/DLOADBYTES offset,
-   added to the length of the code before the data section, stays below
-   2^256, so LowerDload's code_end-relative CODECOPY offset does not wrap.
-   The memory-safe run checks that each offset is at most the data
-   section's length (inst_dload_in_section); the code and the data section
-   never change, and code_layout_valid keeps the code within 2^255
-   bytes. *)
-Theorem lower_vyper_runtime_unit_dload_offset_ok:
+(* Every reachable DLOAD/DLOADBYTES offset is within the data section,
+   with the code and the data section those of the entry state: the
+   memory-safe run checks the offset (inst_dload_in_section), and no
+   instruction changes the code or the data section. *)
+Theorem lower_vyper_runtime_unit_dload_in_section:
   !tops rpolicy unit vs fn lbl.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    code_layout_valid vs /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
     (!fuel. mem_safe_blocks fuel unit.cu_context fn
        (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                    vs_inst_idx := 0 |>))
-    ==> mem_inv dload_offset_ok unit.cu_context vs
+    ==> mem_inv (\ctx fn inst s. inst_dload_in_section inst s /\
+                                 s.vs_code = vs.vs_code /\
+                                 s.vs_data_section = vs.vs_data_section)
+          unit.cu_context vs
 Proof
   rpt strip_tac >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
@@ -137,8 +136,30 @@ Proof
                       vs_inst_idx := 0 |>`] mp_tac code_data_entry >>
         simp[]) >>
       gvs[]) >>
+  rw[] >> metis_tac[mem_safe_point_dload]
+QED
+
+(* S3's twin for LowerDload: every reachable DLOAD/DLOADBYTES offset,
+   added to the length of the code before the data section, stays below
+   2^256, so LowerDload's code_end-relative CODECOPY offset does not wrap.
+   The offset is at most the data section's length
+   (lower_vyper_runtime_unit_dload_in_section), and code_layout_valid
+   keeps the code within 2^255 bytes. *)
+Theorem lower_vyper_runtime_unit_dload_offset_ok:
+  !tops rpolicy unit vs fn lbl.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    code_layout_valid vs /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    (!fuel. mem_safe_blocks fuel unit.cu_context fn
+       (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                   vs_inst_idx := 0 |>))
+    ==> mem_inv dload_offset_ok unit.cu_context vs
+Proof
+  rpt strip_tac >> drule_all lower_vyper_runtime_unit_dload_in_section >>
+  strip_tac >> irule unitMemInvTheory.mem_inv_mono >>
+  first_x_assum (irule_at Any) >>
   rw[dload_offset_ok_def] >>
-  `inst_dload_in_section inst s` by metis_tac[mem_safe_point_dload] >>
   `w2n off <= LENGTH s.vs_data_section` by
     (fs[inst_dload_in_section_def] >> metis_tac[]) >>
   gvs[code_layout_valid_def, wordsTheory.dimword_def]
