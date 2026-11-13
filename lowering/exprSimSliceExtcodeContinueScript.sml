@@ -642,16 +642,15 @@ Proof
   strip_tac >> drule_all slice_extcode_suffix_context >> strip_tac >>
   irule slice_address_read_outcome >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-  simp[] >> qexistsl_tac [`cenv`, `env`, `nocalls`, `aop`, `sa`, `sb`, `ty`] >>
-  simp[] >> rpt conj_tac
-  >~ [`storage_trace_frame _`]
+  simp[] >> conj_tac
   >- (gen_tac >>
       rpt (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
            simp[vyperStorageTraceTheory.storage_trace_frame_state_reads,
                 vyperStorageTraceTheory.storage_trace_frame_lifts,
                 vyperStorageTraceTheory.storage_trace_frame_return] >>
            rpt gen_tac)) >>
-  rpt gen_tac >> strip_tac >>
+  qexistsl_tac [`cenv`, `env`, `nocalls`, `aop`, `sa`, `sb`, `ty`] >>
+  simp[] >> rpt gen_tac >> strip_tac >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      valid_horizon cx st0 H es.storage_trace` by
     (rpt strip_tac >>
