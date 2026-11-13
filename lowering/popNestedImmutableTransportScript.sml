@@ -2,7 +2,7 @@
    Root lookup equality is a diagnostic hypothesis, not a body premise. *)
 Theory popNestedImmutableTransport
 Ancestors
-  exprSimPopImmutableTarget exprSimWordArgs loweringPosts exprBopSimProps
+  popNestedImmutableIndexFrame exprSimPopImmutableTarget
 
 Theorem imm_place_at_root_lookup[local]:
   FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
@@ -31,23 +31,7 @@ Theorem imm_target_post_index_root_lookup:
   imm_target_post ctx func cenv cx es sa sn s0 ee
     (PlaceR (ImmutablePlace src id path)) ty rb u
 Proof
-  strip_tac >>
-  `wb_frame cenv es em sa s0 t` by
-    (fs[imm_target_post_def, wb_frame_def] >> metis_tac[]) >>
-  `wb_frame cenv em ee sm t u` by metis_tac[expr_post_frame] >>
-  `wb_frame cenv es ee sa s0 u` by metis_tac[wb_frame_trans] >>
-  `?w. eval_operand (FST rb) t = SOME w /\
-       imm_place_at cenv cx em (PlaceR (ImmutablePlace src id path)) w ty`
-    by fs[imm_target_post_def] >>
-  `imm_place_at cenv cx ee (PlaceR (ImmutablePlace src id path)) w ty` by
-    metis_tac[imm_place_at_root_lookup] >>
-  `eval_operand (FST rb) u = SOME w` by
-    (irule eval_operand_frame >> (conj_tac >- simp[]) >>
-     qexistsl_tac [`sm`, `t`] >>
-     fs[expr_post_def, imm_target_post_def]) >>
-  `stmt_state_rel ctx func cenv cx ee u` by fs[expr_post_def] >>
-  `!x. FST rb = Var x ==> not_fresh_at sn x` by
-    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
-     qexists_tac `sm` >> fs[imm_target_post_def]) >>
-  fs[imm_target_post_def, wb_frame_def] >> metis_tac[]
+  strip_tac >> irule imm_target_post_index >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[imm_place_at_root_lookup]
 QED
