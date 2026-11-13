@@ -27,6 +27,7 @@ Theorem dyn_storage_multi_round_keep_counted:
     op_taint tt' (Var ctr) = {} /\
     v.vs_current_bb = hdr /\ v.vs_inst_idx = 0 /\ ~v.vs_halted /\
     v.vs_labels = u.vs_labels /\
+    execution_frame v = execution_frame u /\
     (!x. keep x /\ x <> ctr /\ x <> nv ==>
       lookup_var x v = lookup_var x s /\ FLOOKUP H' x = FLOOKUP G x /\
       op_taint tt' (Var x) = op_taint tn (Var x))
@@ -81,10 +82,17 @@ Theorem dyn_storage_multi_round_counted:
     op_taint tt' (Var ctr) = {} /\
     v.vs_current_bb = hdr /\ v.vs_inst_idx = 0 /\ ~v.vs_halted /\
     v.vs_labels = u.vs_labels /\
+    execution_frame v = execution_frame u /\
     (!x. ~MEM x (ctr::nv::scratch) ==>
       lookup_var x v = lookup_var x s /\ FLOOKUP H' x = FLOOKUP G x /\
       op_taint tt' (Var x) = op_taint tn (Var x))
 Proof
-  mp_tac (Q.INST [`keep` |-> `\x. ~MEM x scratch`]
-    dyn_storage_multi_round_keep_counted) >> simp[] >> metis_tac[]
+  strip_tac >>
+  drule_all (BETA_RULE (Q.INST [`keep` |-> `\x. ~MEM x scratch`]
+    dyn_storage_multi_round_keep_counted)) >>
+  disch_then (qx_choosel_then [`H'`, `tt'`, `v`]
+    (map_every assume_tac o CONJUNCTS)) >>
+  qexistsl_tac [`H'`, `tt'`, `v`] >>
+  asm_simp_tac bool_ss [MEM, DE_MORGAN_THM] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
 QED

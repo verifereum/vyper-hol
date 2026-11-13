@@ -344,3 +344,11 @@ Proof
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   asm_rewrite_tac[expr_post_def] >> simp[expr_val_rel_def] >> metis_tac[]
 QED
+
+Theorem assign_base_storage_model_lookup:
+  !n. lookup_var x (store_copy_prefix loc b k t n) = lookup_var x t
+Proof
+  Induct >> simp[assign_base_store_prefix_zero, assign_base_store_prefix_suc] >>
+  Cases_on `loc = LocStorage` >> gvs[sstore_def, tstore_def, lookup_var_def]
+QED
+

@@ -5,7 +5,7 @@ Ancestors
 
 (* Every slot beyond the stored length prefix is dead, including nested
    arrays whose individual live elements may themselves contain dead bytes. *)
-Theorem dynarray_live_prefix[local]:
+Theorem dynarray_live_prefix:
   !st start et cap j b.
     start <= j /\ j < start + 1 + cap * type_slot_size et /\ b < 32 /\
     ~dead_bytes st start (ArrayTV et (Dynamic cap)) j b ==>

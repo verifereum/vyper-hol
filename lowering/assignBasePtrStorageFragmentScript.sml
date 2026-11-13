@@ -59,13 +59,6 @@ Proof
   Cases_on `b` >> gvs[has_length_word_def]
 QED
 
-Theorem assign_base_storage_model_lookup[local]:
-  !n. lookup_var x (store_copy_prefix loc b k t n) = lookup_var x t
-Proof
-  Induct >> simp[assign_base_store_prefix_zero, assign_base_store_prefix_suc] >>
-  Cases_on `loc = LocStorage` >> gvs[sstore_def, tstore_def, lookup_var_def]
-QED
-
 Theorem assign_base_storage_suffix_open[local]:
   ~is_bytestring_type ty /\ ~block_is_terminated sa /\
   compile_assign_value cenv (Lit k) (if tr then LocTransient else LocStorage)

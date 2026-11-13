@@ -2,6 +2,7 @@
 Theory assignTupleDynamicStoragePtr
 Ancestors
   assignBasePtrStorageLayout assignBasePtrStorageLoop assignBasePtrStoragePath
+  assignStorageExecFramePtr placeDynStorageEffect
   context compileEnv loweringStateRelDefs emitHelper emitHelperProps
   venomInst venomState finite_map list arithmetic ptrSafeRun ptrDiscipline
   venomExecSemantics typedCopyLoopHeaderPtr fragGasPathPtr fragGasSeqPtr stateFrame words
@@ -548,6 +549,9 @@ Theorem tuple_dynamic_storage_loop_remaining[local]:
     (!x. dst = Var x ==> ~MEM x [ctr;lt;done;mv;off;pvar;value;slot;dv;nv]) /\
     assign_base_store_frame (if tr then LocTransient else LocStorage)
       (a+32w) (k+1w) s0 tn0 i s tn /\
+    execution_frame s = execution_frame
+      (store_copy_prefix (if tr then LocTransient else LocStorage)
+        (a+32w) (k+1w) s0 i) /\
     ptr_covers G tn root s capacity /\ lookup_var root s = SOME a /\
     eval_operand dst s = SOME k /\ op_taint tn dst = {} /\
     lookup_var len s = SOME (n2w n) /\ FLOOKUP G len = NONE /\ op_taint tn (Var len) = {} /\
@@ -557,6 +561,9 @@ Theorem tuple_dynamic_storage_loop_remaining[local]:
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       assign_base_store_frame (if tr then LocTransient else LocStorage)
         (a+32w) (k+1w) s0 tn0 n u tf /\
+      execution_frame u = execution_frame
+        (store_copy_prefix (if tr then LocTransient else LocStorage)
+          (a+32w) (k+1w) s0 n) /\
       ptr_covers Gf tf root u capacity /\ lookup_var root u = SOME a /\
       eval_operand dst u = SOME k /\ op_taint tf dst = {} /\
       lookup_var len u = SOME (n2w n) /\ FLOOKUP Gf len = NONE /\ op_taint tf (Var len) = {} /\
@@ -577,13 +584,19 @@ Proof
   disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
   disch_then (qx_choose_then `g1` (qx_choose_then `t1`
     (qx_choose_then `s1` strip_assume_tac))) >>
+  `execution_frame s1 = execution_frame
+    (store_copy_prefix (if tr then LocTransient else LocStorage)
+      (a+32w) (k+1w) s0 i)` by metis_tac[] >>
   `assign_base_store_frame (if tr then LocTransient else LocStorage)
      (a+32w) (k+1w) s0 tn0 i s1 t1` by
     metis_tac[assign_base_store_frame_preserve] >>
   `ptr_covers g1 t1 root s1 capacity /\ lookup_var root s1 = SOME a` by
     (irule assign_base_store_root_transport >> qexistsl_tac [`G`, `s`, `tn`] >> simp[] >> gvs[ALL_DISTINCT]) >>
   `eval_operand dst s1 = SOME k /\ op_taint t1 dst = {}` by
-    (Cases_on `dst` >> gvs[eval_operand_def, op_taint_def] >> metis_tac[]) >>
+    (ntac 2 (qpat_x_assum `execution_frame _ = execution_frame
+       (store_copy_prefix _ _ _ _ _)` kall_tac) >>
+     rpt (qpat_x_assum `!i s G tn. _` kall_tac) >>
+     Cases_on `dst` >> gvs[eval_operand_def, op_taint_def] >> metis_tac[]) >>
   `lookup_var len s1 = SOME (n2w n) /\ FLOOKUP g1 len = NONE /\ op_taint t1 (Var len) = {} /\
    lookup_var ctr s1 = SOME (n2w i) /\ FLOOKUP g1 ctr = NONE /\ op_taint t1 (Var ctr) = {}` by
     gvs[ALL_DISTINCT] >-
@@ -609,23 +622,46 @@ Proof
   disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
   disch_then (qx_choose_then `g2` (qx_choose_then `t2`
     (qx_choose_then `s2` strip_assume_tac))) >>
+  `execution_frame s2 = execution_frame
+    (store_copy_prefix (if tr then LocTransient else LocStorage)
+      (a+32w) (k+1w) s0 (SUC i))` by
+    (`execution_frame s2 = execution_frame
+       (store_copy_prefix (if tr then LocTransient else LocStorage)
+        ((a+32w)+n2w i*32w) ((k+1w)+n2w i) s1 1)` by
+       (qpat_assum `execution_frame s2 = _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> Cases_on `tr` >>
+        pure_rewrite_tac
+          [SRULE [] (Q.INST [`i` |-> `0`] (SPEC_ALL assign_base_store_prefix_suc)),
+           assign_base_store_prefix_zero] >>
+        simp_tac bool_ss [COND_CLAUSES,word_mul_n2w,word_add_n2w,
+          WORD_MULT_CLAUSES,WORD_ADD_0,GSYM WORD_ADD_ASSOC,ADD1,
+          data_location_distinct,ADD_CLAUSES,AC ADD_ASSOC ADD_COMM,AC MULT_ASSOC MULT_COMM]) >>
+     `SUC i = i+1` by simp[ADD1] >> asm_rewrite_tac [] >>
+     irule store_copy_block_execution_frame >> qexists_tac `s1` >>
+     asm_rewrite_tac []) >>
   `assign_base_store_frame (if tr then LocTransient else LocStorage)
      (a+32w) (k+1w) s0 tn0 (SUC i) s2 t2` by
     (irule tuple_dynamic_storage_frame_advance >>
      qexistsl_tac [`s1`, `t1`] >> simp[]) >>
   `ptr_covers g2 t2 root s2 capacity /\ lookup_var root s2 = SOME a` by
-    (irule assign_base_store_root_transport >> qexistsl_tac [`g1`, `s1`, `t1`] >>
+    (ntac 3 (qpat_x_assum `execution_frame _ = execution_frame
+       (store_copy_prefix _ _ _ _ _)` kall_tac) >>
+     irule assign_base_store_root_transport >> qexistsl_tac [`g1`, `s1`, `t1`] >>
      simp[] >> gvs[ALL_DISTINCT]) >>
   `s2.vs_labels = s1.vs_labels` by
-    (qpat_x_assum `execution_frame s2 = _` mp_tac >>
+    (qpat_x_assum `execution_frame s2 = execution_frame (if tr then _ else _)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
      Cases_on `tr` >> simp[execution_frame_def, sstore_def, tstore_def] >> metis_tac[]) >>
   `eval_operand dst s2 = SOME k /\ op_taint t2 dst = {}` by
-    (qpat_x_assum `!i s G tn. _` kall_tac >>
+    (ntac 3 (qpat_x_assum `execution_frame _ = execution_frame
+       (store_copy_prefix _ _ _ _ _)` kall_tac) >>
+     qpat_x_assum `!i s G tn. _` kall_tac >>
      qpat_x_assum `eval_operand dst s1 = _` mp_tac >>
      qpat_x_assum `op_taint t1 dst = _` mp_tac >>
      Cases_on `dst` >> simp[eval_operand_def, op_taint_def] >> metis_tac[op_taint_def]) >>
   `lookup_var len s2 = SOME (n2w n) /\ FLOOKUP g2 len = NONE /\ op_taint t2 (Var len) = {}` by
-    gvs[ALL_DISTINCT] >>
+    (ntac 3 (qpat_x_assum `execution_frame _ = execution_frame
+       (store_copy_prefix _ _ _ _ _)` kall_tac) >> gvs[ALL_DISTINCT]) >>
   `SUC i+remaining=n` by decide_tac >>
   first_x_assum (qspecl_then [`SUC i`, `s2`, `g2`, `t2`] mp_tac) >>
   asm_rewrite_tac[] >>
@@ -635,7 +671,7 @@ Proof
     (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
       (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[] >>
      disch_then (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
-  asm_rewrite_tac[] >> simp[] >> metis_tac[]
+  asm_simp_tac bool_ss [MEM,DE_MORGAN_THM] >> metis_tac[MEM]
 QED
 
 Theorem tuple_dynamic_storage_init_counted:
@@ -707,6 +743,8 @@ Theorem tuple_dynamic_storage_compiled_counted:
         with vs_inst_idx := 1) /\
       tf = (if tr then tv with t_trans := key_update tv.t_trans k {}
             else tv with t_stor := key_update tv.t_stor k {}) /\
+      execution_frame u = execution_frame
+        (store_copy_prefix (if tr then LocTransient else LocStorage) a k s (1+n)) /\
       ptr_covers Gf tf root u capacity /\ lookup_var root u = SOME a /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
@@ -736,6 +774,9 @@ Proof
     gas_path_ptr D 0 ctx fn PG g1 t1 s1 0 g2 t2 (OK s2) /\
     assign_base_store_frame (if tr then LocTransient else LocStorage)
       (a+32w) (k+1w) s tn n s2 t2 /\
+    execution_frame s2 = execution_frame
+      (store_copy_prefix (if tr then LocTransient else LocStorage)
+        (a+32w) (k+1w) s n) /\
     ptr_covers g2 t2 root s2 capacity /\ lookup_var root s2 = SOME a /\
     eval_operand dst s2 = SOME k /\ op_taint t2 dst = {} /\
     lookup_var len s2 = SOME (n2w n) /\ FLOOKUP g2 len = NONE /\ op_taint t2 (Var len) = {} /\
@@ -745,15 +786,64 @@ Proof
       lookup_var x s2 = lookup_var x s1 /\ FLOOKUP g2 x = FLOOKUP g1 x /\
       op_taint t2 (Var x) = op_taint t1 (Var x))` by
     (irule (Q.SPEC `n` tuple_dynamic_storage_loop_remaining) >>
-     simp[ALL_DISTINCT] >>
-     qexistsl_tac [`bodyblock`, `sa.cs_next_id+6`, `bodylbl`, `sa.cs_next_id+3`] >>
-     simp[Abbr `bodyblock`, Abbr `headerblock`, get_instruction_def]) >>
+     simp[ALL_DISTINCT, assign_base_store_prefix_zero] >> conj_tac
+     >- (qexistsl_tac [`bodyblock`, `sa.cs_next_id+6`, `bodylbl`, `sa.cs_next_id+3`] >>
+         simp[Abbr `bodyblock`, Abbr `headerblock`, get_instruction_def]) >>
+     qpat_assum `execution_frame s1 = execution_frame s` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[execution_frame_def]) >>
   `lookup_block s2.vs_current_bb fn.fn_blocks = SOME bb /\
    get_instruction bb s2.vs_inst_idx = SOME (mk_inst (sa.cs_next_id+16)
      (if tr then TSTORE else SSTORE) [dst;Var len] []) /\
    eval_operand (Var len) s2 = SOME (n2w n) /\ ~s2.vs_call_ctx.cc_static` by
     (Cases_on `bb.bb_instructions` >>
      gvs[eval_operand_def, get_instruction_def, assign_base_store_frame_def]) >>
+  `!x. not_fresh_at sa x ==>
+    lookup_var x s2 = lookup_var x s /\ FLOOKUP g2 x = FLOOKUP G x /\
+    op_taint t2 (Var x) = op_taint tn (Var x)` by
+    (gen_tac >> strip_tac >>
+     `~MEM x [len;ctr] /\
+      ~MEM x [ctr;lt;done;mv;off;ptr';value;slot;dv;nv]` by
+       (simp[MEM] >> metis_tac[]) >>
+     qpat_assum `!x. ~MEM x [ctr;lt;done;mv;off;ptr';value;slot;dv;nv] ==> _`
+       (mp_tac o Q.SPEC `x`) >>
+     qpat_assum `!x. ~MEM x [len;ctr] ==> _`
+       (mp_tac o Q.SPEC `x`) >>
+     qpat_assum `~MEM x [len;ctr]` mp_tac >>
+     qpat_assum `~MEM x [ctr;lt;done;mv;off;ptr';value;slot;dv;nv]` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[MEM] >> metis_tac[]) >>
+  `n+1 < dimword (:256)` by decide_tac >>
+  `!h. h < n ==> k <> (k+1w)+n2w h` by
+    (rpt gen_tac >> strip_tac >>
+     `1+h < dimword (:256) /\ 1+h <> 0` by decide_tac >>
+     `(0w:bytes32) <> n2w (1+h)` by simp[] >>
+     CCONTR_TAC >>
+     qpat_x_assum `~(k <> (k+1w)+n2w h)`
+       (assume_tac o SIMP_RULE (srw_ss()) []) >>
+     `k+0w = k+n2w (1+h)` by
+       (pure_rewrite_tac [GSYM word_add_n2w, WORD_ADD_ASSOC, WORD_ADD_0] >>
+        first_assum ACCEPT_TAC) >> metis_tac[WORD_EQ_ADD_LCANCEL]) >>
+  `((if tr then tstore else sstore) k (n2w n)
+     (store_copy_prefix (if tr then LocTransient else LocStorage)
+       (a+32w) (k+1w) s n)) =
+    store_copy_prefix (if tr then LocTransient else LocStorage) a k s (1+n)` by
+    (mp_tac (Q.INST [`j` |-> `n`, `ew` |-> `1`,
+       `loc` |-> `if tr then LocTransient else LocStorage`,
+       `b` |-> `a`, `k` |-> `k`, `s` |-> `s`, `x` |-> `n2w n`]
+       (SPEC_ALL place_dyn_prefix_header_flat)) >>
+     simp[place_dyn_prefix_flat] >> Cases_on `tr` >> simp[]) >>
+  `execution_frame (((if tr then tstore k (n2w n) s2
+       else sstore k (n2w n) s2)) with vs_inst_idx := 1) =
+    execution_frame (store_copy_prefix (if tr then LocTransient else LocStorage)
+      a k s (1+n))` by
+    (qpat_assum `((if tr then tstore else sstore) k (n2w n)
+       (store_copy_prefix (if tr then LocTransient else LocStorage)
+         (a+32w) (k+1w) s (n))) = _`
+       (fn th => pure_rewrite_tac [GSYM th]) >>
+     qpat_assum `execution_frame s2 = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `tr` >> simp[execution_frame_def, sstore_def, tstore_def] >> rpt strip_tac >> gvs[]) >>
+  qpat_assum `execution_frame (_ with vs_inst_idx := 1) = _`
+    (strip_assume_tac o SIMP_RULE (srw_ss())
+      [execution_frame_def,placeStoreCopyPathTheory.place_store_prefix_fields]) >>
   drule_all assign_base_storage_write_counted >>
   disch_then (qspecl_then [`g2`, `D`, `PG`] assume_tac) >>
   qexistsl_tac [`g2`, `s2`, `t2`] >>
@@ -761,9 +851,22 @@ Proof
     (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
       (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[] >>
      disch_then (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
-  simp[] >> conj_tac >-
+  asm_rewrite_tac[] >>
+  rpt (qpat_x_assum `execution_frame _ = _` kall_tac) >>
+  qpat_x_assum `((if tr then tstore else sstore) k (n2w n)
+    (store_copy_prefix (if tr then LocTransient else LocStorage)
+      (a+32w) (k+1w) s (n))) = _` kall_tac >>
+  simp[placeStoreCopyPathTheory.place_store_prefix_fields] >>
+  asm_rewrite_tac[] >> conj_tac >-
     (Cases_on `tr` >> gvs[bodyPtrDefsTheory.ptr_covers_def, lookup_var_def, op_taint_def,
       sstore_def, tstore_def]) >>
-  Cases_on `tr` >> simp[sstore_def, tstore_def, lookup_var_def, op_taint_def] >>
-  gvs[MEM, lookup_var_def, op_taint_def] >> metis_tac[]
+  Cases_on `tr` >> simp[sstore_def,tstore_def,lookup_var_def,op_taint_def] >>
+  qpat_assum `!x. not_fresh_at sa x ==> lookup_var x s2 = lookup_var x s /\
+    FLOOKUP g2 x = FLOOKUP G x /\ op_taint t2 (Var x) = op_taint tn (Var x)` mp_tac >>
+  qpat_assum `lookup_var root s2 = SOME a` mp_tac >>
+  qpat_assum `s2.vs_current_bb = sb.cs_current_bb` mp_tac >>
+  qpat_assum `~s2.vs_halted` mp_tac >>
+  qpat_assum `~s.vs_halted` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[lookup_var_def,op_taint_def,placeStoreCopyPathTheory.place_store_prefix_fields] >> metis_tac[]
 QED
