@@ -49,6 +49,7 @@ Theorem local_memory_vv_post:
   expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   stmt_state_rel H ctx func cenv cx es' u /\
+  storage_well_formed_on cx es' (FST H) /\
   wb_frame cenv es es' sa s0 u /\
   read_result cx result es' = (INL v,es') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -209,6 +210,7 @@ Theorem pop_path_vv_post:
   expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   stmt_state_rel H ctx func cenv cx es' u /\ wb_frame cenv es es' sa s0 u /\
+  storage_well_formed_on cx es' (FST H) /\
   read_result cx result es' = (INL (LAST vs),es') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
   mutable_place_path tv path /\ value_has_type tv a /\
