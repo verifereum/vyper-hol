@@ -1738,12 +1738,15 @@ Proof
   rename1 `lookup_var q ready = SOME (n2w p)` >>
   drule_all registration_preparation_forward_slots >> strip_tac >>
   `st.cs_next_id < first.cs_next_id` by
-    ( `emit_op ALLOCA [Lit (n2w (type_memory_size tv))] st = (buf.buf_operand,a)` by
-        (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
-         simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
-         pairarg_tac >> simp[] >> strip_tac >> gvs[]) >>
-      drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
-      fs[cs_extends_def]) >>
+    (`st.cs_next_id < mid.cs_next_id` by
+       (qpat_x_assum `!id entry. FLOOKUP ready.vs_allocas id = SOME entry ==>
+                        id < mid.cs_next_id` irule >>
+        qexists_tac `(p,type_memory_size tv)` >> first_assum ACCEPT_TAC) >>
+     `mid.cs_next_id <= first.cs_next_id` by
+       (Cases_on `dyn` >> fs[] >>
+        drule calldataRegistrationExecTheory.registration_ptr_guard_code >>
+        simp[]) >>
+     decide_tac) >>
   `first.cs_next_var <= last.cs_next_var` by
     metis_tac[abiDecoderCountersTheory.abi_decoder_vars_mono_mutual,
       abiDecoderCountersTheory.abi_decoder_vars_mono_def, pairTheory.SND] >>
