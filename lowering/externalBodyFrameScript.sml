@@ -1356,9 +1356,17 @@ Proof
       irule external_signature_return >>
       qexistsl [`initial_evaluation_context am.sources am.layouts tx NONE`,
                 `art.cta_fn_sigs`, `tops`] >> simp[] >>
-      gvs[env_context_consistent_def, body_inv_def,
-          source_deployment_rel_def, get_module_code_def,
-          initial_evaluation_context_def])
+      rpt conj_tac
+      >- (qpat_x_assum `source_deployment_rel _ _ _` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >>
+          simp[source_deployment_rel_def, get_module_code_def,
+               initial_evaluation_context_def] >> rpt strip_tac >> gvs[])
+      >- simp[initial_evaluation_context_def]
+      >- (qpat_x_assum `body_inv _ _ _ _` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >> simp[body_inv_def])
+      >- (qpat_x_assum `env_context_consistent _ _` mp_tac >>
+          qpat_x_assum `env_t.fn_sigs = art.cta_fn_sigs` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >> simp[env_context_consistent_def]))
   >- (rpt strip_tac >> irule external_source_flag_member_id >>
       gvs[body_inv_def] >> metis_tac[source_typing_ok_type_def_keys_distinct])
   >- gvs[dec_cenv_agrees_def]
