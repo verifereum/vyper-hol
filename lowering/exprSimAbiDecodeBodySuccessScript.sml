@@ -3,7 +3,7 @@ Ancestors
   exprSimAbiDecodeSuccessBoundary exprSimAbiDecodeBodyEntry
   exprSimAbiDecodeValueFrame exprSimAbiDecodeResources exprSimAbiDecodeEntryTyping
   exprSimAbiDecodeImmutableOutcome exprSimAbiDecodeOblivious
-  exprSimAbiDecodeStateFrame freshWrites
+  exprSimAbiDecodeStateFrame freshWrites abiDecoderSiteEffect
   exprBopSimProps exprLoweringProps loweringPosts compileEnv venomState
   abiValidBytesUnwrap abiDecodeUnwrapCase exprSimAbiDecodeEntryLayout
   exprSimAbiDecodeEntryMetadata exprSimAbiDecodeConsumerProbe
@@ -42,6 +42,24 @@ Proof
        vyperStateTheory.bind_def, vyperStateTheory.return_def]
 QED
 
+(* The decoder writes only memory and allocation state: the fields that
+   storage_rel, transient_rel and accounts_rel read are unchanged, so a
+   horizon-uniform consumer can move the post between horizons. *)
+Theorem abi_decode_immutable_success_fields:
+  abi_decode_immutable_success ce env ty tv bs out d start final ctx func cx es s t ==>
+  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+  t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
+Proof
+  strip_tac >>
+  `abi_decode_success_closed ce env ty tv bs out d start final ctx func s t` by
+    fs[abi_decode_immutable_success_def] >>
+  drule abi_decode_closed_effect >> strip_tac >>
+  fs[decode_site_effect_def, decode_static_frame_def] >>
+  qpat_x_assum `u = _` (fn th => mp_tac (Q.AP_TERM
+    `\x. (x.vs_accounts, x.vs_transient, x.vs_requests, x.vs_call_ctx)` th)) >>
+  simp[]
+QED
+
 Theorem abi_decode_body_caller_success:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
   expr_post H ctx func ce cx e es sa start s0 es1 (BytesV bs) data s /\
@@ -64,9 +82,12 @@ Theorem abi_decode_body_caller_success:
     bs out d start final ctx func cx es1 s t ==>
   ?v. evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [BytesV bs] = INL v /\
     vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
-      es1 (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t
+      es1 (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
+  drule abi_decode_immutable_success_fields >> strip_tac >>
   `ann = ty` by metis_tac[abi_decode_body_target] >>
   qpat_x_assum `ann = ty` SUBST_ALL_TAC >>
   `sa.cs_next_var <= start.cs_next_var /\ sa.cs_next_id <= start.cs_next_id` by
