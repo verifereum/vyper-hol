@@ -61,9 +61,7 @@ Proof
      impl_tac
      >- (conj_tac >- first_assum ACCEPT_TAC >>
          conj_tac >- first_assum ACCEPT_TAC >>
-         Cases_on `w2n d + len <= lo`
-         >- (disj2_tac >> qexists_tac `ops` >> fs[]) >>
-         disj1_tac >> decide_tac) >>
+         strip_tac >> fs[] >> decide_tac) >>
      strip_tac >> gvs[]) >>
   `ptr_owner_erases (dyn_floor C vs) bj (FLOOKUP TGj dv) (SOME (db,sb))` by
     (fs[ptr_ledger_erases_def] >> metis_tac[]) >>
