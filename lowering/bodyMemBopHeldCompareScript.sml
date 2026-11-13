@@ -391,9 +391,9 @@ Resume held_bytestring_compare_sim_mem[third]:
             (fn th => simp[th]))
       >- (irule gas_marked_path_from_mem >> simp[] >> first_assum ACCEPT_TAC)) >>
   disj1_tac >> qexists_tac `u` >> conj_tac >- REFL_TAC >>
-  gen_tac >> strip_tac >>
+  BETA_TAC >> qx_gen_tac `H2` >> BETA_TAC >> strip_tac >>
   qpat_assum `!H. valid_horizon cx st0 H (mid' with gas_obs := []).storage_trace ==>
-              expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (qspec_then `H` mp_tac) >>
+              expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (qspec_then `H2` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qexists_tac `BoolV (if bop = Eq then (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) = word_of_bytes_be (Keccak_256_w64 bs2)
       else (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) <> word_of_bytes_be (Keccak_256_w64 bs2))` >>
