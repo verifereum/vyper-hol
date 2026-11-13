@@ -216,7 +216,7 @@ Proof
 QED
 
 Theorem slice_allocated_bytes_write_frame:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (p,sz) /\
   32 + LENGTH bytes <= sz /\
@@ -227,7 +227,7 @@ Theorem slice_allocated_bytes_write_frame:
      regions_disjoint p sz b len) ==>
   let t = mstore p (n2w (LENGTH bytes))
             (write_memory_with_expansion (p+32) bytes s)
-  in stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t
+  in stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sa s t
 Proof
   strip_tac >> simp[] >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s /\
@@ -299,7 +299,7 @@ QED
 Theorem slice_data_success_run:
  compile_slice_data src_len src_data start len sz sa = (out,sb) /\
  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
- local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
+ local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
  eval_operand src_len s = SOME (n2w (LENGTH bs)) /\
  eval_operand src_data s = SOME (n2w src_base) /\
  eval_operand start s = SOME (n2w a) /\ eval_operand len s = SOME (n2w n) /\
@@ -309,7 +309,7 @@ Theorem slice_data_success_run:
  32+n <= sz /\ sz < dimword (:256) ==>
  ?t p aid.
  run_inst_seq (emitted_insts sa sb) s = OK t /\
- stmt_state_rel ctx func cenv cx es t /\ loweringPosts$wb_frame cenv es es sa s t /\
+ stmt_state_rel H ctx func cenv cx es t /\ loweringPosts$wb_frame cenv es es sa s t /\
  eval_operand out t = SOME p /\
  FLOOKUP t.vs_allocas aid = SOME (w2n p,sz) /\
  sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
@@ -332,7 +332,7 @@ Proof
   `!z. src_len = Var z ==> not_fresh_at sa z` by metis_tac[MEM] >>
   drule_all slice_bounds_run_frame >> simp[] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sc) s = OK u` >>
-  `stmt_state_rel ctx func cenv cx es u` by
+  `stmt_state_rel H ctx func cenv cx es u` by
     (qpat_assum `u = s with vs_vars := _` SUBST1_TAC >>
      irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >>
      rpt strip_tac >> fs[local_ptrs_reserved_def, lookup_var_def] >> metis_tac[]) >>
@@ -437,7 +437,7 @@ Resume slice_data_success_run[finish]:
   qpat_x_assum `emitted_insts sa sb = _` kall_tac >>
   `local_ptrs_reserved cenv sd` by
     (fs[local_ptrs_reserved_def, not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
-  `stmt_state_rel ctx func cenv cx es v` by
+  `stmt_state_rel H ctx func cenv cx es v` by
     (qpat_assum `v = t with vs_vars := _` SUBST1_TAC >>
      irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >>
      rpt strip_tac >> fs[local_ptrs_reserved_def, lookup_var_def] >> metis_tac[]) >>
@@ -496,7 +496,7 @@ Resume slice_data_success_run[finish]:
        POP_ASSUM_LIST (K all_tac) >> metis_tac[th, ADD_COMM])) >>
   `final = mstore (w2n p) (n2w (LENGTH (TAKE n (DROP a bs))))
      (write_memory_with_expansion (w2n p+32) (TAKE n (DROP a bs)) v)` by simp[] >>
-  `stmt_state_rel ctx func cenv cx es final /\ wb_frame cenv es es sa v final` by
+  `stmt_state_rel H ctx func cenv cx es final /\ wb_frame cenv es es sa v final` by
     (qpat_assum `final = mstore _ (n2w (LENGTH _)) _` SUBST1_TAC >>
      irule (SIMP_RULE std_ss [LET_THM] slice_allocated_bytes_write_frame) >>
      reverse conj_tac >- first_assum ACCEPT_TAC >>
