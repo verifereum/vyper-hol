@@ -3,9 +3,9 @@ Theory tupleWidenedEntryPtr
 Ancestors
   tupleWidenedSourceReady externalNormalizePremises assignTuplePtrBodyTargets
   tupleTargetStoreProps exprSimHyps exprSimHypsDefs vyperTypeValues
-  vyperTypeInvariants vyperTypeSystem vyperValue valueEncoding
+  vyperTypeInvariants vyperTypeSystem vyperTypeArgFits vyperValue valueEncoding
   supportedStmts supportedExprs supportedTypes memoryLocalRhsProps bodySim
-  exprLowering loweringPosts list
+  exprLowering typedNormalizeWidening loweringPosts list
 
 Theorem tuple_widened_entry_ready_ptr:
   body_inv tops ctx cenv cx /\
@@ -79,4 +79,36 @@ Proof
   drule_all supported_internal_return_type >> strip_tac >>
   drule_all supported_internal_return_admissible >> strip_tac >>
   gvs[lowered_value_type_def,supported_return_type_def,supported_value_tuple_depth]
+QED
+
+Theorem tuple_widened_annotation_scalars_ptr:
+  expr_body_pre cenv cx env e es /\
+  post_value_type cenv e = TupleT stys /\ expr_type e = TupleT atys /\
+  TupleT stys <> TupleT atys /\ EVERY supported_scalar_type stys ==>
+  LIST_REL arg_type_fits stys atys /\ EVERY supported_scalar_type atys
+Proof
+  strip_tac >>
+  `expr_sim_inv cenv cx env es /\ well_typed_expr env e` by fs[expr_body_pre_def] >>
+  drule_all post_value_type_widens >>
+  simp[type_widens_to_def,arg_type_fits_def] >> strip_tac >>
+  `LIST_REL arg_type_fits stys atys` by
+    (simp[LIST_REL_EL_EQN] >> metis_tac[arg_types_fit_LENGTH,
+       typedNormalizeWideningTheory.arg_types_fit_EL]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  simp[EVERY_EL] >> qx_gen_tac `i` >> strip_tac >>
+  `supported_scalar_type (EL i stys) /\ arg_type_fits (EL i stys) (EL i atys)` by
+    (fs[EVERY_EL,LIST_REL_EL_EQN] >> metis_tac[]) >>
+  qpat_assum `arg_type_fits (EL i stys) (EL i atys)` mp_tac >>
+  qpat_assum `supported_scalar_type (EL i stys)` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  Cases_on `EL i stys` >> Cases_on `EL i atys` >>
+  simp[supported_scalar_type_def,supported_word_type_def,
+       supported_string_type_def,arg_type_fits_def] >>
+  rename1 `arg_type_fits (BaseT sb) (BaseT db)` >>
+  Cases_on `sb` >> Cases_on `db` >>
+  simp[supported_word_type_def,supported_string_type_def,arg_type_fits_def] >>
+  rpt strip_tac >> gvs[] >>
+  rename1 `arg_type_fits (BaseT (BytesT ss)) (BaseT (BytesT ds))` >>
+  Cases_on `ss` >> Cases_on `ds` >>
+  gvs[supported_word_type_def,supported_string_type_def,arg_type_fits_def]
 QED

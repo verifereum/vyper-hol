@@ -1,4 +1,4 @@
-(* Scalar tuple stores end in a store or in an open copy-loop exit. *)
+(* Tuple loads and scalar stores leave the compiler endpoint open. *)
 Theory assignTupleStoreOpenPtr
 Ancestors
   stmtLowering exprLowering context compileEnv exprOpenPrimitives exprOpenTerminals
@@ -61,4 +61,26 @@ Proof
   Cases_on `dty` >> gvs[is_bytestring_type_def] >>
   drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)
     tuple_assign_scalar_open >> simp[]
+QED
+
+Theorem tuple_loads_open:
+  !tys cenv op off sa ops sb.
+    compile_tuple_load_all cenv op tys off sa = (ops,sb) /\
+    (tys <> [] \/ ~block_is_terminated sa) ==>
+    ~block_is_terminated sb
+Proof
+  Induct >> rpt gen_tac
+  >- (rw[compile_tuple_load_all_def,comp_return_def] >> gvs[]) >>
+  strip_tac >>
+  Cases_on `emit_op ADD [op;Lit (n2w off)] sa` >>
+  rename1 `emit_op ADD _ sa = (elem,s1)` >>
+  Cases_on `compile_load_memory elem (is_word_type h) s1` >>
+  rename1 `compile_load_memory _ _ s1 = (value,s2)` >>
+  Cases_on `compile_tuple_load_all cenv op tys (off+type_memory_bytes cenv h) s2` >>
+  rename1 `compile_tuple_load_all _ _ tys _ s2 = (rest,s3)` >>
+  gvs[compile_tuple_load_all_def,LET_THM,comp_bind_def,comp_return_def] >>
+  `~block_is_terminated s2` by
+    (Cases_on `is_word_type h` >> gvs[compile_load_memory_def,comp_return_def] >>
+     drule emit_op_nonterminator_open >> simp[is_terminator_def]) >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
 QED

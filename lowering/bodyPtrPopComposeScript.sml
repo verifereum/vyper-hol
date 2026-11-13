@@ -43,7 +43,7 @@ Proof
 QED
 
 (* As exprSimPopNested's no_storage_root_untyped_runtime. *)
-Theorem no_storage_root_untyped_runtime[local]:
+Theorem no_storage_root_untyped_runtime:
   !env cx src id.
     env_context_consistent env cx /\ ~cx.in_deploy /\
     (!ts. get_module_code cx src = SOME ts ==>
@@ -60,7 +60,7 @@ Proof
 QED
 
 (* As exprSimPopNested's target_root_untyped. *)
-Theorem target_root_untyped[local]:
+Theorem target_root_untyped:
   !env bt. type_place_target env (target_root bt) = NONE ==>
     type_place_target env bt = NONE
 Proof
@@ -71,6 +71,24 @@ Proof
   Cases_on `type_place_target env tgt` >> simp[] >>
   gvs[Abbr `tgt`, type_place_target_AttributeTarget,
       type_place_target_SubscriptTarget]
+QED
+
+(* Runtime typing excludes roots that have no mutable storage declaration. *)
+Theorem runtime_typed_target_not_immutable_ptr:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  ~cenv.ce_is_ctor /\ IS_SOME (type_place_target env bt) ==>
+  ~immutable_root cx bt
+Proof
+  strip_tac >> simp[immutable_root_def] >> rpt strip_tac >>
+  `~cx.in_deploy` by fs[body_inv_def] >>
+  `env_context_consistent env cx` by
+    fs[expr_sim_inv_def,env_consistent_def] >>
+  `!ts'. get_module_code cx src = SOME ts' ==>
+    find_var_decl_by_name id ts' = NONE` by (rpt strip_tac >> gvs[]) >>
+  `type_place_target env (TopLevelNameTarget (src,id)) = NONE` by
+    metis_tac[no_storage_root_untyped_runtime] >>
+  `type_place_target env (target_root bt) = NONE` by metis_tac[] >>
+  drule target_root_untyped >> Cases_on `type_place_target env bt` >> gvs[]
 QED
 
 (* A target rooted at a module name with no storage declaration (an
