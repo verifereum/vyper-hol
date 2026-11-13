@@ -34,7 +34,7 @@ Ancestors
   stmtSimProps
   exprSimHypsDefs
   vyperTypeStoragePreservation
-  list finite_map bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps stmtSimDecl stmtSimReturn stmtSimAssign bodyExprPreFacts bodyAppendStorageFacts
+  list finite_map bodySim bodySimExprCases bodySimStmtCases allocLimits exprSimHyps exprLoweringProps stmtSimDecl stmtSimReturn stmtSimAssign bodyExprPreFacts bodyAppendStorageFacts
   stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps stmtSimDeclTyped
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono
   stmtSimForArray stmtSimForArrayFrag stmtSimForArrayFrame vyperTyping
@@ -1200,7 +1200,8 @@ Proof
      qexists_tac `int_calls_stmts body'` >>
      metis_tac[call_evaluation_safe_append_right, listTheory.APPEND_ASSOC]) >>
   `expr_sim ctx func cenv cx typ e1 es` by
-    (gvs[body_iterator_ok_def, body_expr_ok_def] >> metis_tac[]) >>
+    (gvs[body_iterator_ok_def] >>
+     metis_tac[body_expr_ok_case, expr_sim_case_def]) >>
   `!x t. FLOOKUP env.var_types x = SOME t ==> well_formed_type env.type_defs t` by
     (qpat_assum `expr_sim_inv cenv cx env es` mp_tac >>
      simp[NoAsms, expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
@@ -1230,8 +1231,8 @@ Resume body_for_range[endpoints]:
   rename1 `tv = IntV lo` >> qexists_tac `lo` >> simp[] >>
   `expr_body_pre cenv cx env e2 es1` by metis_tac[] >>
   conj_tac
-  >- (gvs[body_iterator_ok_def, body_expr_ok_def, bind_def, AllCaseEqs()] >>
-      metis_tac[]) >>
+  >- (gvs[body_iterator_ok_def, bind_def, AllCaseEqs()] >>
+      metis_tac[body_expr_ok_case, expr_sim_case_def]) >>
   rpt strip_tac >>
   `expr_body_pre cenv cx env e2 (es1 with gas_obs := gs2)` by simp[] >>
   qpat_x_assum `expr_body_pre cenv cx env e1 (es with gas_obs := gs)` kall_tac >>
