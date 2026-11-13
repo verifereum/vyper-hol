@@ -279,7 +279,9 @@ Theorem compile_imm_load_word_runtime_path:
     gas_marked_path F ctx func s 0
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
-    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >> drule_all compile_imm_load_word_runtime_run >> strip_tac >>
   qexists_tac `update_var p (word_of_bytes T (0w:bytes32)
@@ -316,6 +318,8 @@ Theorem runtime_array_split_counted:
     u.vs_current_bb = sm.cs_current_bb /\
     u.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~u.vs_halted /\
     u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx /\
     (!t0. run_inst_seq (emitted_insts sm sb) (drop_fresh sm u) = OK t0 ==>
       ?t. vars_ext t0 t /\ gas_marked_path F ctx func s 0
         (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))) /\
@@ -358,7 +362,9 @@ Theorem fixed_array_subscript_counted_ok:
     (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==> lookup_var z t = SOME v) /\
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `eval_operand base_op (drop_fresh sa s) = SOME b /\
@@ -372,6 +378,14 @@ Proof
     simp[straight_fresh_compile_array_subscript] >>
   drule_all straight_fresh_clean_success_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts sa sb) s = OK tf` >>
+  `tf.vs_accounts = s.vs_accounts /\ tf.vs_transient = s.vs_transient /\
+   tf.vs_requests = s.vs_requests /\ tf.vs_call_ctx = s.vs_call_ctx` by
+    (`writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
+     qspecl_then [`emitted_insts sa sb`, `sa`, `s`, `tf`] mp_tac
+       run_inst_seq_writes_fresh >>
+     impl_tac >- simp[] >>
+     disch_then (SUBST1_TAC o CONJUNCT1) >> simp[]) >>
   drule_all straight_fresh_run_post >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
 QED
@@ -528,7 +542,9 @@ Theorem runtime_array_subscript_counted_ok:
     (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==> lookup_var z t = SOME v) /\
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   simp[compile_array_subscript_split, comp_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
@@ -590,6 +606,13 @@ Proof
   drule_all straight_fresh_run_post >> strip_tac >>
   `gas_marked_path F ctx func s 0 (OK (t'' with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (drule_all gas_marked_path_then >> simp[]) >>
+  `t''.vs_accounts = s.vs_accounts /\ t''.vs_transient = s.vs_transient /\
+   t''.vs_requests = s.vs_requests /\ t''.vs_call_ctx = s.vs_call_ctx` by
+    (`writes_fresh sm (emitted_insts sm sb)` by metis_tac[straight_fresh_def] >>
+     qspecl_then [`emitted_insts sm sb`, `sm`, `u`, `t''`] mp_tac
+       run_inst_seq_writes_fresh >>
+     impl_tac >- simp[] >>
+     disch_then (SUBST1_TAC o CONJUNCT1) >> simp[Abbr `u`]) >>
   qexists_tac `t'' with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[Abbr `u`] >> rpt strip_tac >>
   qpat_x_assum `!z v. not_fresh_at sm z /\ _ ==> _`
