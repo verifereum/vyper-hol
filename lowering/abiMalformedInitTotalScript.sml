@@ -182,13 +182,12 @@ Proof
         abi_decoder_older_vars_def, not_fresh_at_def]) >>
   `local_ptrs_reserved cenv st` by fs[abi_malformed_entry_def] >>
   drule_all abi_malformed_resource_restore >> strip_tac >>
+  `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid
+     s actual` by
+    (irule abi_malformed_resource_input_unprune >> simp[] >>
+     goal_assum (drule_at Any)) >>
   disj2_tac >> qexistsl_tac [`actual`, `slot`, `n`] >>
-  simp[] >> reverse conj_tac >- fs[mload_def] >>
-  fs[abi_malformed_resource_post_def, abi_decoder_prune_vars_def] >>
-  conj_tac >- metis_tac[] >> rpt strip_tac >>
-  `eval_operand op (abi_decoder_prune_vars st.cs_next_var s) = SOME w` by
-    simp[abi_decoder_prune_eval] >>
-  fs[abi_decoder_prune_vars_def] >> metis_tac[]
+  simp[] >> fs[mload_def]
 QED
 
 Theorem abi_malformed_init_shape:
