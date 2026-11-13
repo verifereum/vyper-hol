@@ -3,7 +3,7 @@ Ancestors
   fmpStageRunnerFacts fmpStageFmpStepsCallArgs fmpStageFmpStepsCallEntry fmpStageFmpStepsCallPush
   fmpStageCallArity fmpStageOpBase fmpAnalysisProps
   fmpStageRel o1PassContract venomExecSemantics venomInst venomState list finite_map
-  fnFrameBoundaryGenRet arithmetic
+  venomOperandProps arithmetic
 
 Theorem fmp_call_setup_push[local]:
   fmp_stage_rel D C' sm fmp0 raw0 eom T stk PG G tn fn s lo t ts /\

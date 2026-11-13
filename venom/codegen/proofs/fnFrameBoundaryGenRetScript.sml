@@ -1,6 +1,6 @@
 Theory fnFrameBoundaryGenRet
 Ancestors
-  fnPlanPrefix
+  fnPlanPrefix venomOperandProps
   genFrameSim frameRel contextCodegenRel codegenRel emitSim
   fnFrameTerminalPrep preparedPrefixSim asmFrame strongPrefixSim prefixSim stackOpSim
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
@@ -47,26 +47,6 @@ Proof
   `MEM (Var x) inst.inst_operands` by simp[] >>
   drule_all opaque_use_ok_retpc_use >>
   simp[retpc_use_ok_def] >> strip_tac >> gvs[]
-QED
-
-Theorem eval_operands_append:
-  !xs ys s. eval_operands (xs ++ ys) s =
-    OPTION_BIND (eval_operands xs s) (\vx.
-      OPTION_BIND (eval_operands ys s) (\vy. SOME (vx ++ vy)))
-Proof
-  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
-  Cases_on `eval_operand h s` >> simp[] >>
-  Cases_on `eval_operands xs s` >> simp[] >>
-  Cases_on `eval_operands ys s` >> simp[]
-QED
-
-Theorem eval_operands_reverse:
-  !xs s. eval_operands (REVERSE xs) s =
-    OPTION_MAP REVERSE (eval_operands xs s)
-Proof
-  Induct >> simp[eval_operands_def, eval_operands_append] >> rpt gen_tac >>
-  Cases_on `eval_operand h s` >> simp[] >>
-  Cases_on `eval_operands xs s` >> simp[]
 QED
 
 Theorem ret_frame_view_values:
