@@ -171,7 +171,7 @@ Proof
   `EVERY wf_function C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
   `raw_mem_ok C a.po_fn a.po_inst a.po_state` by
-    (drule_all frame_reachable_mem_inv >> simp[]) >>
+    (drule_all (Q.INST [`M` |-> `raw_mem_ok`] frame_reachable_mem_inv) >> simp[]) >>
   `a.po_state.vs_initial_fmp = at.po_state.vs_initial_fmp /\
    a.po_state.vs_fmp = at.po_state.vs_fmp` by
     (fs[ptr_paired_sample_def] >> drule ptr_history_content_control >>

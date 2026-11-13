@@ -30,7 +30,7 @@ Theorem ptr_frame_dyn_range_in_fmp_region:
   len = 0 \/ (w2n s.vs_initial_fmp <= off /\ off + len <= w2n s.vs_fmp)
 Proof
   strip_tac >>
-  `raw_mem_ok C fn inst s` by (drule_all frame_reachable_mem_inv >> simp[]) >>
+  `raw_mem_ok C fn inst s` by (drule_all (Q.INST [`M` |-> `raw_mem_ok`] frame_reachable_mem_inv) >> simp[]) >>
   `raw_reachable vs C fn inst s` by
     metis_tac[frameRawProjectionTheory.frame_reachable_raw] >>
   `s.vs_alloca_next + 32 * ctx_dload_count C <= dyn_floor C vs` by
