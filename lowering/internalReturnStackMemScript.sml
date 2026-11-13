@@ -46,7 +46,7 @@ Proof
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   goal_assum (drule_at Any) >>
   simp[intret_q_def] >>
-  qexists_tac `s` >>
+  qexistsl_tac [`s`, `(return_unlock_state cenv s).vs_inst_idx`] >>
   simp[result_rel_def] >> conj_tac
   >- fs[stmt_state_rel_def] >>
   metis_tac[intret_vals_match_word]

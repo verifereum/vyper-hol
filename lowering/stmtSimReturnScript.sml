@@ -55,14 +55,24 @@ End
    exactly ce_returns_count stack words (excluding the memory-return []
    alternative when the count is positive).  The returned VM state is
    precisely its optional unlock, not an arbitrary state with selected
-   effects equal.  No guard cases are excluded. *)
+   effects equal, except for the instruction index: RET may sit at the start
+   of a block that a looping copy opened after the release.  No guard cases
+   are excluded. *)
 Definition intret_q_def:
   intret_q func cenv cx ret_tv v (es : evaluation_state) r <=>
-    ?ir s. r = IntRet ir (return_unlock_state cenv s) /\
+    ?ir s i. r = IntRet ir (return_unlock_state cenv s with vs_inst_idx := i) /\
            LENGTH ir.iret_values = cenv.ce_returns_count /\
            result_rel func ret_tv cenv cx (INR (ReturnException v), es)
              (IntRet ir s)
 End
+
+Theorem return_unlock_state_idx_self[simp]:
+  return_unlock_state cenv s with
+    vs_inst_idx := (return_unlock_state cenv s).vs_inst_idx =
+  return_unlock_state cenv s
+Proof
+  simp[venom_state_component_equality]
+QED
 
 Theorem intret_q_gas_obs:
   intret_q func cenv cx ret_tv v (es with gas_obs := readings) r =

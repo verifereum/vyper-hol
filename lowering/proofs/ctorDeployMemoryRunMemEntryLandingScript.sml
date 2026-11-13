@@ -105,6 +105,7 @@ Theorem ctor_task_landing_state_rel:
    (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,st_epilogue,st_final,func) /\
  local_ptrs_rel func cenv es0.scopes actual /\
  (!p. p < imm_len tops ==> mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 []) /\
+ actual.vs_code = (deploy_evaluation_context tops am tx).txn.code /\
  actual.vs_accounts = accounts_after_transfer tx am.accounts /\
  actual.vs_transient = am.tStorage /\ actual.vs_call_ctx.cc_address = tx.target /\
  actual.vs_logs = [] /\ actual.vs_requests = [] /\ actual.vs_pending_deletions = [] /\
@@ -171,7 +172,12 @@ Proof
  `tx.function_name = "__init__"` by gvs[deploy_state_rel_def] >>
  `vyperInterpreter$lookup_function NONE tx.function_name Deploy tops =
    SOME (mut,F,fargs,[],NoneT,stmts)` by
-   (qspecl_then [`tops`, `NONE`, `fname`] mp_tac deploy_frame_classified_constructor_lookup >> simp[]) >>
+   (`module_consts_env tops [] = []` by
+      metis_tac[deploy_source_ok_def, supportedProgramTheory.supported_program_def,
+        supportedDeclsTheory.supported_declaration_headers_def,
+        supportedDeclsTheory.supported_headers_module_consts_env] >>
+    qspecl_then [`tops`, `NONE`, `fname`] mp_tac classify_functions_ctor_lookup >>
+    simp[] >> strip_tac >> gvs[constSubstTheory.subst_consts_fn_empty]) >>
  gvs[] >> metis_tac[deploy_ctor_source_start_fields]
 QED
 

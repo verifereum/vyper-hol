@@ -9,8 +9,8 @@ Ancestors
 Theorem body_intcall_mem_case:
   !cx v16 src_id_opt fn es v17.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
-         ret body' s'5' x' t'3' s'6' results t'4' needed_dflts cxd s'7' prev
-         t'5' s'8' dflt_vs t'6' s'9' vs t'7' all_tenv s'10' env t'8' s'11' rtv
+         ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
+         t'5' s'8' dflt_vs t'6' all_tenv s'10' env t'8' s'11' rtv
          t'9' is_view s'12' x'' t'10' s'13' cxf t'11'.
        type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
        lift_option_type (get_module_code cx src_id_opt)
@@ -23,14 +23,13 @@ Theorem body_intcall_mem_case:
        type_check
          (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
          "IntCall args length" s'5' = (INL x',t'3') /\
-       eval_expr_results cx es s'6' = (INL results,t'4') /\
+       eval_exprs cx es s'6' = (INL vs,t'4') /\
        needed_dflts = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
        cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
        get_scopes s'7' = (INL prev,t'5') /\
        finally
          (ignore_bind (set_scopes [FEMPTY]) (eval_exprs cxd needed_dflts))
          (set_scopes prev) s'8' = (INL dflt_vs,t'6') /\
-       read_results cx results s'9' = (INL vs,t'7') /\
        all_tenv = get_tenv cx /\
        lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs))
          "IntCall bind_arguments" s'10' = (INL env,t'8') /\
@@ -40,7 +39,7 @@ Theorem body_intcall_mem_case:
        push_function (src_id_opt,fn) env cx s'13' = (INL cxf,t'11') ==>
        body_stmts_mem_ok cxf body') /\
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
-         ret body' s'5' x' t'3' s'6' results t'4' needed_dflts cxd s'7' prev
+         ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
          t'5' s'8' x'' t'6'.
        type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
        lift_option_type (get_module_code cx src_id_opt)
@@ -53,7 +52,7 @@ Theorem body_intcall_mem_case:
        type_check
          (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
          "IntCall args length" s'5' = (INL x',t'3') /\
-       eval_expr_results cx es s'6' = (INL results,t'4') /\
+       eval_exprs cx es s'6' = (INL vs,t'4') /\
        needed_dflts = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
        cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
        get_scopes s'7' = (INL prev,t'5') /\
@@ -72,7 +71,7 @@ Theorem body_intcall_mem_case:
        type_check
          (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
          "IntCall args length" s'5' = (INL x',t'3') ==>
-       body_results_mem_ok cx es) ==>
+       body_exprs_mem_ok cx es) ==>
     body_expr_mem_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
   ACCEPT_TAC (MATCH_MP intcall_mem_call_step internal_frame_ret_ok_mem)

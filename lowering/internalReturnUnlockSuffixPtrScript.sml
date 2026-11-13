@@ -41,7 +41,7 @@ Proof
 QED
 
 (* Helper: the release state, the facts the suffix needs at it. *)
-Theorem return_unlock_start[local]:
+Theorem return_unlock_start:
   !ce ty sty op rpc sa sb func ctx s cx tn D PG G.
   compile_internal_return_from_env ce ty sty op rpc sa = ((),sb) /\
   (!nr nkey ut iv. ce.ce_nonreentrant = (nr,nkey,ut,iv) ==> ut) /\
@@ -320,6 +320,18 @@ Theorem intret_q_unlock_intro:
   LENGTH ir.iret_values = cenv.ce_returns_count /\
   result_rel func ret_tv cenv cx (INR (ReturnException v), es) (IntRet ir s) ==>
   intret_q func cenv cx ret_tv v es (IntRet ir (return_unlock_state cenv s))
+Proof
+  rw[intret_q_def] >> qexistsl_tac [`s`, `(return_unlock_state cenv s).vs_inst_idx`] >>
+  simp[venom_state_component_equality]
+QED
+
+(* The same at any instruction index: RET may sit at the start of a block
+   that a looping copy opened after the release. *)
+Theorem intret_q_unlock_idx_intro:
+  LENGTH ir.iret_values = cenv.ce_returns_count /\
+  result_rel func ret_tv cenv cx (INR (ReturnException v), es) (IntRet ir s) ==>
+  intret_q func cenv cx ret_tv v es
+    (IntRet ir (return_unlock_state cenv s with vs_inst_idx := i))
 Proof
   rw[intret_q_def] >> metis_tac[]
 QED

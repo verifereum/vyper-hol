@@ -41,7 +41,7 @@ Proof
   `ce.ce_nonreentrant = cenv.ce_nonreentrant /\
    ce.ce_returns_count = cenv.ce_returns_count` by
     fs[same_frame_def, compile_env_component_equality] >>
-  qexists_tac `s` >> gvs[return_unlock_state_def, result_rel_def] >>
+  qexistsl_tac [`s`, `i`] >> gvs[return_unlock_state_def, result_rel_def] >>
   drule_all constructor_exit_state_rel >> simp[]
 QED
 

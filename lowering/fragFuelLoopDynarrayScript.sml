@@ -15,7 +15,7 @@ Libs
 (* The body may allocate temporaries and change memory freely.  Its empty
    write-set instance keeps every earlier variable, and frames the entry
    variables through the fragment. *)
-Theorem dynarray_body_outcome[local]:
+Theorem dynarray_body_outcome:
   !G N ctx fn st st' Kbody s entry Wv.
     frag_fuel {} {} {} st st' Kbody /\
     no_phi_fn fn /\ fn_has_code st st' fn /\ callees_stable G ctx fn /\
@@ -38,17 +38,18 @@ Proof
 QED
 
 (* Runtime interface for the condition block.  The two result variables
-   may contain stale values on reentry; each is overwritten before use. *)
-Theorem dynarray_condition_outcome[local]:
-  !G ctx fn s bb ctr len lt done v n id1 id2 id3 body_lbl exit P.
+   may contain stale values on reentry; each is overwritten before use.
+   The count is any operand with a value. *)
+Theorem dynarray_condition_outcome:
+  !G ctx fn s bb ctr cnt lt done v n id1 id2 id3 body_lbl exit P.
     no_phi_fn fn /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     bb.bb_instructions =
-      [mk_inst id1 LT [Var ctr; Var len] [lt];
+      [mk_inst id1 LT [Var ctr; cnt] [lt];
        mk_inst id2 ISZERO [Var lt] [done];
        mk_inst id3 JNZ [Var done; Label exit; Label body_lbl] []] /\
     s.vs_inst_idx = 0 /\
-    lookup_var ctr s = SOME v /\ lookup_var len s = SOME n /\
+    lookup_var ctr s = SOME v /\ eval_operand cnt s = SOME n /\
     (!t. t = jump_to (if w2n v < w2n n then body_lbl else exit)
                 ((update_var done (bool_to_word (~(w2n v < w2n n)))
                    (update_var lt (bool_to_word (w2n v < w2n n)) s))
@@ -62,7 +63,7 @@ Proof
                        with vs_inst_idx := SUC s1.vs_inst_idx` >>
   `!f. run_from f ctx fn s = run_from f ctx fn s1` by
     (gen_tac >> qunabbrev_tac `s1` >> irule run_from_step >>
-     qexistsl_tac [`bb`, `mk_inst id1 LT [Var ctr; Var len] [lt]`] >>
+     qexistsl_tac [`bb`, `mk_inst id1 LT [Var ctr; cnt] [lt]`] >>
      simp[get_instruction_def, mk_inst_def, is_terminator_def] >>
      simp[GSYM mk_inst_def, step_inst_base_opcode_eqs, exec_pure2_def,
           eval_operand_def]) >>
@@ -91,7 +92,7 @@ QED
 
 (* The tail can lie after an arbitrary fragment, possibly in a different
    block from the body entry.  Its instruction index is therefore explicit. *)
-Theorem dynarray_increment_outcome[local]:
+Theorem dynarray_increment_outcome:
   !G ctx fn s bb ctr tmp v id1 id2 id3 cond P.
     no_phi_fn fn /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -131,21 +132,37 @@ Proof
   simp[GSYM mk_inst_def, step_inst_base_opcode_eqs, update_var_def]
 QED
 
+(* A count operand that is no label keeps its value while its variable
+   does. *)
+Theorem dynarray_count_frame:
+  !cnt s t.
+    (!x. cnt = Var x ==> lookup_var x t = lookup_var x s) /\
+    (!l. cnt <> Label l) ==>
+    eval_operand cnt t = eval_operand cnt s
+Proof
+  Cases >> simp[eval_operand_def]
+QED
+
 (* A complete round.  H is indexed by the natural counter, so the consumer
-   can choose its measure without exposing execution details again. *)
-Theorem dynarray_round_outcome[local]:
-  !G ctx fn N Wv entry ctr len lt done tmp n cond body_lbl exit
+   can choose its measure without exposing execution details again.  The
+   count is a literal or a variable the body leaves alone. *)
+Theorem dynarray_round_outcome:
+  !G ctx fn N Wv entry ctr cnt lt done tmp n cond body_lbl exit
    id1 id2 id3 id4 id5 id6 cb st st' Kbody.
     no_phi_fn fn /\ callees_stable G ctx fn /\ n < dimword(:256) /\
     lookup_block cond fn.fn_blocks = SOME cb /\
     cb.bb_instructions =
-      [mk_inst id1 LT [Var ctr; Var len] [lt];
+      [mk_inst id1 LT [Var ctr; cnt] [lt];
        mk_inst id2 ISZERO [Var lt] [done];
        mk_inst id3 JNZ [Var done; Label exit; Label body_lbl] []] /\
     st.cs_current_bb = body_lbl /\ st.cs_current_insts = [] /\
     frag_fuel {} {} {} st st' Kbody /\ fn_has_code st st' fn /\
     N <= st.cs_next_var /\
-    var_below st.cs_next_var ctr /\ var_below st.cs_next_var len /\
+    var_below st.cs_next_var ctr /\
+    (!x. cnt = Var x ==>
+       var_below st.cs_next_var x /\
+       x <> lt /\ x <> done /\ x <> ctr /\ x <> tmp) /\
+    (!l. cnt <> Label l) /\
     (!s. at_point st' s ==>
       ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
         get_instruction bb s.vs_inst_idx =
@@ -154,39 +171,38 @@ Theorem dynarray_round_outcome[local]:
           SOME (mk_inst id5 ASSIGN [Var tmp] [ctr]) /\
         get_instruction bb (SUC (SUC s.vs_inst_idx)) =
           SOME (mk_inst id6 JMP [Label cond] [])) /\
-    ctr <> lt /\ ctr <> done /\ len <> lt /\ len <> done /\
-    len <> ctr /\ len <> tmp /\
+    ctr <> lt /\ ctr <> done /\
     ~var_below N lt /\ ~var_below N done /\
     ~var_below N ctr /\ ~var_below N tmp ==>
     !i s. i <= n /\
       (s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
        lookup_var ctr s = SOME (n2w i) /\
-       lookup_var len s = SOME (n2w n) /\ vars_kept N Wv entry s) ==>
+       eval_operand cnt s = SOME (n2w n) /\ vars_kept N Wv entry s) ==>
       ?j. j <= Kbody + 2 /\
         fuel_outcome G ctx fn s j
           (\t. (t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\ vars_kept N Wv entry t) \/
                (i < n /\ t.vs_current_bb = cond /\ t.vs_inst_idx = 0 /\
                 lookup_var ctr t = SOME (n2w (i + 1)) /\
-                lookup_var len t = SOME (n2w n) /\ vars_kept N Wv entry t))
+                eval_operand cnt t = SOME (n2w n) /\ vars_kept N Wv entry t))
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `H = \i s. s.vs_current_bb = cond /\ s.vs_inst_idx = 0 /\
      lookup_var ctr s = SOME (n2w i) /\
-     lookup_var len s = SOME (n2w n) /\ vars_kept N Wv entry s` >>
+     eval_operand cnt s = SOME (n2w n) /\ vars_kept N Wv entry s` >>
   qabbrev_tac `Q = \s. s.vs_current_bb = exit /\ s.vs_inst_idx = 0 /\
      vars_kept N Wv entry s` >>
   rpt gen_tac >> strip_tac >>
   `i < dimword(:256)` by decide_tac >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME cb /\ s.vs_inst_idx = 0 /\
-   lookup_var ctr s = SOME (n2w i) /\ lookup_var len s = SOME (n2w n)` by
+   lookup_var ctr s = SOME (n2w i) /\ eval_operand cnt s = SOME (n2w n)` by
     gvs[] >>
   qabbrev_tac `B = \t. t.vs_current_bb = body_lbl /\ t.vs_inst_idx = 0 /\
-     lookup_var ctr t = SOME (n2w i) /\ lookup_var len t = SOME (n2w n) /\
+     lookup_var ctr t = SOME (n2w i) /\ eval_operand cnt t = SOME (n2w n) /\
      vars_kept N Wv entry t` >>
   `fuel_outcome G ctx fn s 1 (\t. Q t \/ (i < n /\ B t))` by
     (drule_at (Pos (el 3)) dynarray_condition_outcome >>
-     disch_then irule >> simp[] >>
-     rpt strip_tac >> gvs[Abbr `B`, Abbr `Q`, jump_to_def, lookup_var_def,
+     disch_then irule >> simp[] >> Cases_on `cnt` >>
+     gvs[Abbr `B`, Abbr `Q`, eval_operand_def, jump_to_def, lookup_var_def,
        update_var_def, finite_mapTheory.FLOOKUP_UPDATE, w2n_n2w, LESS_MOD] >>
      Cases_on `i < n` >> gvs[vars_kept_def, lookup_var_def,
        update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
@@ -196,7 +212,7 @@ Proof
   >- (rpt gen_tac >> BETA_TAC >> strip_tac
       >- (qexists_tac `0` >> simp[fuel_outcome_refl]) >>
       `at_point st t /\ lookup_var ctr t = SOME (n2w i) /\
-       lookup_var len t = SOME (n2w n) /\ vars_kept N Wv entry t` by
+       eval_operand cnt t = SOME (n2w n) /\ vars_kept N Wv entry t` by
         gvs[Abbr `B`, at_point_def] >>
       drule_all dynarray_body_outcome >> strip_tac >>
       drule fuel_outcome_compose >>
@@ -204,13 +220,15 @@ Proof
       impl_tac
       >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
           qpat_x_assum `!s. at_point st' s ==> _` drule >> strip_tac >>
-          `lookup_var ctr t' = SOME (n2w i) /\
-           lookup_var len t' = SOME (n2w n)` by gvs[vars_kept_def] >>
+          `lookup_var ctr t' = SOME (n2w i)` by gvs[vars_kept_def] >>
+          `eval_operand cnt t' = SOME (n2w n)` by
+            (qpat_x_assum `eval_operand cnt t = _` (SUBST1_TAC o SYM) >>
+             irule dynarray_count_frame >> simp[] >> rpt strip_tac >>
+             gvs[vars_kept_def]) >>
           qexists_tac `1` >> simp[] >>
           drule_at (Pos (el 3)) dynarray_increment_outcome >>
-          disch_then irule >> simp[mk_inst_def] >>
-          rpt strip_tac >>
-          gvs[Abbr `H`, jump_to_def, lookup_var_def, update_var_def,
+          disch_then irule >> simp[mk_inst_def] >> Cases_on `cnt` >>
+          gvs[Abbr `H`, eval_operand_def, jump_to_def, lookup_var_def, update_var_def,
               finite_mapTheory.FLOOKUP_UPDATE, vars_kept_def] >>
           simp[GSYM word_add_n2w] >> metis_tac[]) >>
       disch_then (qx_choose_then `jtail` strip_assume_tac) >>
@@ -221,7 +239,7 @@ QED
 
 (* Convert the indexed round interface to the state measure expected by
    fuel_outcome_iterate.  Values never wrap: the next index is at most n. *)
-Theorem dynarray_counted_iteration[local]:
+Theorem dynarray_counted_iteration:
   !G ctx fn ctr H Q n Kround.
     n < dimword(:256) /\
     (!i s. H i s ==> lookup_var ctr s = SOME (n2w i)) /\
@@ -381,7 +399,7 @@ Proof
 QED
 
 (* Exact condition block, including its terminator. *)
-Theorem dynarray_condition_code[local]:
+Theorem dynarray_condition_code:
   !a13 a14 a15 a16 a17 a18 hdr body exit ctr len lt done fn.
     new_block hdr a13 = (a13.cs_current_bb,a14) /\
     emit_op LT [Var ctr;len] a14 = (lt,a15) /\
@@ -404,7 +422,7 @@ Proof
 QED
 
 (* Exact increment cut: the recursive body may have emitted many blocks. *)
-Theorem dynarray_increment_code[local]:
+Theorem dynarray_increment_code:
   !a23 a24 a25 a26 ctr next hdr fn.
     emit_op ADD [Var ctr;Lit 1w] a23 = (next,a24) /\
     emit_inst ASSIGN [next] [ctr] a24 = ((),a25) /\
@@ -437,7 +455,7 @@ Proof
 QED
 
 (* Embed the three runtime cuts in any function containing the loop. *)
-Theorem dynarray_loop_intervals[local]:
+Theorem dynarray_loop_intervals:
   !sa a12 a13 a14 a15 a16 a17 a18 a23 a24 a25 a26 sz
    hdr body exit ctr len lt done next fn.
     cs_extends sa a12 /\ cs_extends a18 a23 /\
@@ -571,23 +589,31 @@ Proof
   simp[fuel_outcome_def]
 QED
 
-(* The prefix tail writes the fresh counter and enters the header. *)
-Theorem dynarray_initialize_outcome[local]:
-  !G ctx fn s bb ctr len n N Wv entry id1 id2 hdr.
+(* The prefix tail writes the fresh counter and enters the header.  A
+   count operand other than the counter and labels keeps its value. *)
+Theorem dynarray_initialize_outcome:
+  !G ctx fn s bb ctr cnt N Wv entry id1 id2 hdr.
     no_phi_fn fn /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id1 ASSIGN [Lit 0w] [ctr]) /\
     get_instruction bb (SUC s.vs_inst_idx) =
       SOME (mk_inst id2 JMP [Label hdr] []) /\
-    lookup_var len s = SOME (n2w n) /\ vars_kept N Wv entry s /\
-    len <> ctr /\ ~var_below N ctr ==>
+    vars_kept N Wv entry s /\
+    (!x. cnt = Var x ==> x <> ctr) /\ (!l. cnt <> Label l) /\
+    ~var_below N ctr ==>
     fuel_outcome G ctx fn s 1
       (\t. t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
            lookup_var ctr t = SOME 0w /\
-           lookup_var len t = SOME (n2w n) /\ vars_kept N Wv entry t)
+           eval_operand cnt t = eval_operand cnt s /\ vars_kept N Wv entry t)
 Proof
   rpt strip_tac >>
+  `eval_operand cnt
+     (jump_to hdr (update_var ctr 0w s with vs_inst_idx := SUC s.vs_inst_idx)) =
+   eval_operand cnt s` by
+    (irule dynarray_count_frame >> simp[] >> rpt strip_tac >>
+     gvs[jump_to_def, lookup_var_def, update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE]) >>
   qabbrev_tac `s1 = update_var ctr 0w s with vs_inst_idx := SUC s.vs_inst_idx` >>
   `!f. run_from f ctx fn s = run_from f ctx fn s1` by
     (gen_tac >> qunabbrev_tac `s1` >> irule run_from_step >>
@@ -597,15 +623,20 @@ Proof
   `fuel_outcome G ctx fn s1 1
       (\t. t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
            lookup_var ctr t = SOME 0w /\
-           lookup_var len t = SOME (n2w n) /\ vars_kept N Wv entry t)`
+           eval_operand cnt t = eval_operand cnt s /\ vars_kept N Wv entry t)`
     suffices_by simp[fuel_outcome_def] >>
   irule fuel_outcome_jump >> simp[] >>
   qexistsl_tac [`bb`, `mk_inst id2 JMP [Label hdr] []`, `hdr`] >>
+  `(jump_to hdr s1).vs_current_bb = hdr /\ (jump_to hdr s1).vs_inst_idx = 0 /\
+   lookup_var ctr (jump_to hdr s1) = SOME 0w /\
+   vars_kept N Wv entry (jump_to hdr s1)` by
+    (simp[Abbr `s1`, jump_to_def, vars_kept_def, lookup_var_def,
+          update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+     gvs[vars_kept_def, lookup_var_def] >> metis_tac[]) >>
+  simp[] >>
   simp[Abbr `s1`, update_var_def, mk_inst_def, is_terminator_def] >>
-  simp[GSYM mk_inst_def, step_inst_base_opcode_eqs, jump_to_def,
-       vars_kept_def, lookup_var_def, update_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE] >>
-  gvs[vars_kept_def, lookup_var_def] >> metis_tac[]
+  simp[GSYM mk_inst_def, step_inst_base_opcode_eqs, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 (* The intervening arithmetic, checks and stores preserve the loaded length:
@@ -654,6 +685,33 @@ Proof
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED
 
+(* The loop entry: the counter's initialization and the jump to the
+   header, in one block. *)
+Theorem dynarray_init_code:
+  !a11 a12 a13 ctr hdr fn.
+    emit_inst ASSIGN [Lit 0w] [ctr] a11 = ((),a12) /\
+    emit_inst JMP [Label hdr] [] a12 = ((),a13) /\
+    fn_has_code a11 a13 fn ==>
+    !s. at_point a11 s ==>
+      ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        get_instruction bb s.vs_inst_idx = SOME
+          (mk_inst a11.cs_next_id ASSIGN [Lit 0w] [ctr]) /\
+        get_instruction bb (SUC s.vs_inst_idx) = SOME
+          (mk_inst a12.cs_next_id JMP [Label hdr] [])
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`a11`, `a13`, `fn`] mp_tac fn_has_code_same_block >>
+  disch_then (qspec_then
+    `[mk_inst a11.cs_next_id ASSIGN [Lit 0w] [ctr];
+      mk_inst a12.cs_next_id JMP [Label hdr] []]` mp_tac) >>
+  impl_tac
+  >- gvs[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  strip_tac >> rpt strip_tac >> gvs[at_point_def] >>
+  qpat_x_assum `!i. i < 2 ==> _`
+    (fn th => map_every (fn i => mp_tac (Q.SPEC i th)) [`0`,`1`]) >>
+  simp[ADD1]
+QED
+
 (* Prefix code cuts used by the value-establishing execution interface. *)
 Theorem dynarray_prefix_code[local]:
   !sa a1 a11 a12 a13 src len ctr hdr fn.
@@ -692,16 +750,7 @@ Proof
              comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
       strip_tac >> rpt strip_tac >> gvs[at_point_def] >>
       first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  qspecl_then [`a11`, `a13`, `fn`] mp_tac fn_has_code_same_block >>
-  disch_then (qspec_then
-    `[mk_inst a11.cs_next_id ASSIGN [Lit 0w] [ctr];
-      mk_inst a12.cs_next_id JMP [Label hdr] []]` mp_tac) >>
-  impl_tac
-  >- gvs[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
-  strip_tac >> rpt strip_tac >> gvs[at_point_def] >>
-  qpat_x_assum `!i. i < 2 ==> _`
-    (fn th => map_every (fn i => mp_tac (Q.SPEC i th)) [`0`,`1`]) >>
-  simp[ADD1]
+  match_mp_tac dynarray_init_code >> metis_tac[]
 QED
 
 (* Compose the two value-establishing endpoints with the ordinary fragment
@@ -755,8 +804,9 @@ Proof
           `lookup_var len t' = SOME (n2w n)` by gvs[vars_kept_def] >>
           qexists_tac `1` >> simp[] >>
           irule fuel_outcome_weaken >>
-          irule_at Any dynarray_initialize_outcome >>
-          simp[] >> metis_tac[]) >>
+          irule_at Any (INST [``cnt:operand`` |-> ``Var len``]
+                          (SPEC_ALL dynarray_initialize_outcome)) >>
+          simp[eval_operand_def] >> metis_tac[]) >>
       disch_then (qx_choose_then `jtail` strip_assume_tac) >>
       qexists_tac `jtail` >> simp[] >> decide_tac) >>
   simp[]
@@ -826,7 +876,10 @@ Proof
         ?j. j <= Kbody + 2 /\ fuel_outcome G ctx fn u j
           (\v. Q v \/ (i < n /\ H (i + 1) v))` by
         (simp[Abbr `H`, Abbr `Q`] >>
-         match_mp_tac dynarray_round_outcome >> simp[] >>
+         match_mp_tac (GEN_ALL (SIMP_RULE std_ss
+           [eval_operand_def, operand_11, operand_distinct]
+           (INST [``cnt:operand`` |-> ``Var lv``] (SPEC_ALL dynarray_round_outcome)))) >>
+         simp[] >>
          qpat_assum `frag_fuel {} {} {} a18 a23 Kbody`
            (irule_at Any) >> simp[] >>
          simp[mk_inst_def] >>

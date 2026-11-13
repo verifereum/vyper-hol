@@ -61,6 +61,8 @@ Theorem log_tuple_encoder_shape:
 Proof
   strip_tac >> simp[log_tuple_enc_info_selected] >>
   Cases_on `is_abi_dynamic ce.ce_struct_fields (TupleT tys)` >> simp[] >>
-  conj_tac >- gvs[is_abi_dynamic_def, EXISTS_MAP, combinTheory.o_DEF] >>
+  conj_tac
+  >- (gvs[is_abi_dynamic_def, EXISTS_MAP, EXISTS_MEM, combinTheory.o_DEF] >>
+      metis_tac[]) >>
   irule log_tuple_enc_members_scalar >> simp[]
 QED

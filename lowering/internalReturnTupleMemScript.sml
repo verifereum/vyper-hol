@@ -283,8 +283,11 @@ Proof
   `LENGTH tys = LENGTH tvs /\ LENGTH tvs = LENGTH vs` by
     metis_tac[listTheory.LIST_REL_LENGTH, abi_values_have_types] >>
   simp[intret_q_def] >>
-  qexists_tac `s with <|vs_vars := vars;
-    vs_inst_idx := idx - LENGTH (return_unlock_insts cenv sa.cs_next_id)|>` >>
+  qexistsl_tac [`s with <|vs_vars := vars;
+    vs_inst_idx := idx - LENGTH (return_unlock_insts cenv sa.cs_next_id)|>`,
+    `(return_unlock_state cenv (s with <|vs_vars := vars;
+       vs_inst_idx := idx - LENGTH (return_unlock_insts cenv sa.cs_next_id)|>)).vs_inst_idx`] >>
+  simp_tac std_ss [return_unlock_state_idx_self] >>
   simp[return_unlock_load_frame, loweringStateRelDefsTheory.result_rel_def,
        loweringStateRelDefsTheory.intret_vals_match_def] >>
   `stmt_state_rel ctx func cenv cx (es with scopes := []) (s with vs_vars := vars)` by

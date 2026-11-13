@@ -29,7 +29,7 @@ Proof
 QED
 
 (* Both runtime and deploy compilation check every internal declaration. *)
-Theorem body_inv_internal_allocs_ok:
+Theorem body_inv_internal_subst_allocs_ok:
   body_inv tops ctx cenv cx /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
   fn_allocs_ok tops
@@ -59,7 +59,7 @@ Theorem body_inv_internal_return_size:
   type_memory_size tv + 64 < dimword (:256)
 Proof
   rpt strip_tac >>
-  drule_all body_inv_internal_allocs_ok >>
+  drule_all body_inv_internal_subst_allocs_ok >>
   simp[fn_allocs_ok_def, subst_consts_fn_def] >> strip_tac >>
   `type_memory_bytes cenv ret = type_memory_size tv` by
     metis_tac[expr_sim_inv_memory_size] >>

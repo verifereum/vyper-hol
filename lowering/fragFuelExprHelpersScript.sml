@@ -107,17 +107,6 @@ QED
 
 (* ===== Memory-address helpers and list membership ===== *)
 
-Theorem emit_op_var:
-  !opc ops st x st'.
-    emit_op opc ops st = (x, st') ==>
-    !y. x = Var y ==> var_below st'.cs_next_var y
-Proof
-  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[] >> simp[var_below_def] >> rpt strip_tac >>
-  fs[ASCIInumbersTheory.toString_inj]
-QED
-
 Theorem compile_ptr_load_var:
   !c i loc op st x st'.
     compile_ptr_load c i loc op st = (x, st') ==>
@@ -128,14 +117,6 @@ Proof
   rpt gen_tac >> TRY (Cases_on `c`) >> TRY (Cases_on `i`) >>
   simp_tac (srw_ss()) [] >> rpt strip_tac >>
   TRY (gvs[comp_bind_def] >> rpt (pairarg_tac >> gvs[])) >> metis_tac[emit_op_var]
-QED
-
-Theorem emit_op_not_label:
-  !opc ops st x st'. emit_op opc ops st = (x, st') ==> !l. x <> Label l
-Proof
-  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[]
 QED
 
 Theorem compile_ptr_load_not_label:

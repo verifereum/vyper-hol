@@ -172,6 +172,8 @@ Proof
   strip_tac >>
   `SUM (MAP (type_memory_bytes cenv) ltys) = type_memory_size_list ltvs` by
     (irule abiCallerTupleLayoutTheory.abi_caller_memory_size_list >> simp[]) >>
+  `type_memory_bytes cenv (TupleT ltys) = type_memory_size_list ltvs` by
+    (simp[compileEnvTheory.type_memory_bytes_def] >> metis_tac[]) >>
   `~(flag /\ EXISTS (\t. ~is_word_type t) ltys /\
      0 < type_memory_size_list ltvs /\ ~cenv.ce_target CapMcopy)` by metis_tac[] >>
   qpat_x_assum `compile_tuple_unpack _ _ _ _ _ _ = _` mp_tac >>
@@ -186,8 +188,12 @@ Proof
   Cases_on `compile_tuple_load_all cenv staged ltys 0 sl` >>
   rename1 `compile_tuple_load_all _ _ _ _ _ = (elems,ss)` >>
   simp[] >> strip_tac >> qunabbrev_tac `stage` >>
-  drule (SRULE [compileEnvTheory.comp_ignore_bind_def]
-    stmtSimAssignTupleTheory.tuple_stage_grows) >> strip_tac >>
+  `cs_extends su sl /\ su.cs_next_var <= sl.cs_next_var` by
+    (irule stmtSimAssignTupleTheory.tuple_stage_grows >>
+     qexistsl [`guard`, `op`, `staged`, `type_memory_bytes cenv (TupleT ltys)`] >>
+     Cases_on `guard` >>
+     gvs[compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def,
+       compileEnvTheory.comp_return_def]) >>
   drule stmtSimReturnTheory.compile_tuple_load_all_grows >> strip_tac >>
   drule tuple_target_stores_growth >> strip_tac >>
   `cs_extends sl sf` by metis_tac[compileEnvTheory.cs_extends_trans] >>
@@ -195,8 +201,6 @@ Proof
     metis_tac[fragExecTheory.fn_has_code_split] >>
   `fn_has_code sl ss func /\ fn_has_code ss sf func` by
     metis_tac[fragExecTheory.fn_has_code_split] >>
-  `type_memory_bytes cenv (TupleT ltys) = type_memory_size_list ltvs` by
-    (simp[compileEnvTheory.type_memory_bytes_def] >> metis_tac[]) >>
   `(if guard then
       do buf <- compile_alloc_buffer (type_memory_bytes cenv (TupleT ltys));
          emit_void MCOPY [buf.buf_operand; op;
