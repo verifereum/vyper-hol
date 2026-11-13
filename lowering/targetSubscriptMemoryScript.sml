@@ -1129,7 +1129,8 @@ Proof
   drule_all target_memory_array_suffix_fields >> strip_tac >>
   qexists_tac `u` >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then assume_tac) >>
-  `stmt_state_rel H ctx func cenv cx es' s /   storage_well_formed_on cx es' (FST H)` by
+  `stmt_state_rel H ctx func cenv cx es' s /\
+   storage_well_formed_on cx es' (FST H)` by
     metis_tac[target_post_extend_start_rel] >>
   irule target_post_fields_transport >> qexists_tac `H0` >> simp[]
 QED

@@ -1250,10 +1250,9 @@ Resume augassign_attr_normal_summary[store]:
   disch_then (drule_at (Pat `lookup_var _ u = _`)) >>
   disch_then (drule_at (Pat `eval_operand out u = SOME (typed_val_to_w256 _ _)`)) >>
   disch_then (drule_at (Pat `ALOOKUP fs' fld = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ ee u`)) >>
   disch_then (drule_at (Pat `entry'.value = _`)) >>
   disch_then (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
-  disch_then (qspec_then `lctx` mp_tac) >>
+  disch_then (qspecl_then [`lctx`, `func`, `cx`, `ctx`, `H1`] mp_tac) >>
   impl_tac >- simp[] >>
   strip_tac >>
   `bop_result cx ty bop [ty;expr_type e] fv v ee =
