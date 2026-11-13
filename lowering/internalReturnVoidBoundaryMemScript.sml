@@ -1,7 +1,7 @@
 (* Source and compilation boundary for bare internal returns. *)
 Theory internalReturnVoidBoundaryMem
 Ancestors
-  internalReturnVoidMem ctorReturnFrame bodyMemoryDefs vyperTypeSystem
+  internalReturnVoidMem bodyMemoryDefs vyperTypeSystem
   vyperTyping stmtLowering loweringPosts bodySim compileEnv stmtSimReturn
   stmtSimDefs exprLoweringProps loweringStateRelDefs venomExecSemantics venomState
 
