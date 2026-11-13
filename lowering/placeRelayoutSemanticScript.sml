@@ -47,8 +47,10 @@ Proof
    sfields_tenv_consistent cenv.ce_struct_fields env.type_defs /\
    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
       cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
-    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
-       env_context_consistent_def] >>
+    (qpat_assum `expr_body_pre _ _ env _ _` (strip_assume_tac o
+       SIMP_RULE std_ss [expr_body_pre_def, expr_sim_inv_def,
+         env_consistent_def, env_context_consistent_def]) >>
+     asm_simp_tac std_ss []) >>
   drule ifexp_lowered_type_classify >>
   disch_then (qspec_then `cenv` mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >> gvs[] >>
@@ -60,8 +62,10 @@ Proof
      (expr_type (Call ty (IntCall fid) args drv))` by
     metis_tac[exprSafeOperandTheory.well_typed_expr_type_well_formed] >>
   `env.type_defs = get_tenv cx` by
-    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
-       env_context_consistent_def] >>
+    (qpat_assum `expr_body_pre _ _ env _ _` (strip_assume_tac o
+       SIMP_RULE std_ss [expr_body_pre_def, expr_sim_inv_def,
+         env_consistent_def, env_context_consistent_def]) >>
+     asm_simp_tac std_ss []) >>
   `type_widens_to (get_tenv cx)
     (lowered_value_type cenv (Call ty (IntCall fid) args drv)) ty` by
     fs[type_widens_to_def, expr_type_def] >>
@@ -114,8 +118,10 @@ Proof
   `value_runtime_typed env dty v` by
     metis_tac[memoryLocalRhsPropsTheory.memory_rhs_read_destination_typed] >>
   `env.type_defs = get_tenv cx` by
-    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
-       env_context_consistent_def] >>
+    (qpat_assum `expr_body_pre _ _ env _ _` (strip_assume_tac o
+       SIMP_RULE std_ss [expr_body_pre_def, expr_sim_inv_def,
+         env_consistent_def, env_context_consistent_def]) >>
+     asm_simp_tac std_ss []) >>
   fs[vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
   `type_widens_to env.type_defs (expr_type e) dty` by metis_tac[] >>
   drule_all annassign_relayout_read_layout >> strip_tac >>
