@@ -211,6 +211,14 @@ Proof
   asm_simp_tac bool_ss [abi_scratch_effect_def] >> first_assum ACCEPT_TAC
 QED
 
+(* Recursive calls retain every lower bound on the allocation frontier. *)
+Theorem abi_scratch_effect_alloca_next_mono:
+  abi_scratch_effect first last lo hi next limit_st d sz b cap s t ==>
+  s.vs_alloca_next <= t.vs_alloca_next
+Proof
+  simp[abi_scratch_effect_def, abi_scratch_evolution_def]
+QED
+
 Theorem abi_scratch_effect_trans_tail:
   abi_scratch_effect first last lo hi next limit_st d sz b cap initial middle /\
   abi_scratch_effect first last tail_lo tail_hi tail_next limit_st d sz b cap middle actual /\

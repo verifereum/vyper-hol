@@ -1364,6 +1364,10 @@ QED
 Resume first_emission_compile_stmt[append_stmt]:
   ntac 5 gen_tac >> pure_rewrite_tac[compile_stmt_def, LET_THM] >> BETA_TAC >>
   ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (match_mp_tac first_emission_get_target_ptr >>
+      metis_tac[first_emission_compile_expr]) >>
+  qx_gen_tac `result` >> BETA_TAC >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
   >- (match_mp_tac first_emission_lower_value >> metis_tac[first_emission_compile_expr]) >>
   gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- (IF_CASES_TAC >- metis_tac[first_emission_return] >>
@@ -1377,8 +1381,11 @@ Resume first_emission_compile_stmt[append_stmt]:
   ho_match_mp_tac first_emission_strong >>
   pure_rewrite_tac[compile_dynarray_append_def, LET_THM] >> BETA_TAC >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
-  >- (Cases_on `infer_array_location ce (target_to_expr target)` >>
-      pure_rewrite_tac[load_opc_for_def] >> rpt strip_tac >>
+  >- (Cases_on `FST (SND result)`
+      >- (simp[load_opc_for_def] >> rpt strip_tac >>
+          drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
+      rename1 `SOME loc` >> Cases_on `loc` >>
+      simp[load_opc_for_def] >> rpt strip_tac >>
       drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
   gen_tac >> BETA_TAC >> rewrite_tac[GSYM cs_appends_def] >>
   rpt (FIRST [irule cs_appends_bind >> conj_tac,

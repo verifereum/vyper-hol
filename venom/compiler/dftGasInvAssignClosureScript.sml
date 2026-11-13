@@ -1,6 +1,7 @@
 Theory dftGasInvAssignClosure
 Ancestors
-  dftGasInvPendingCut dftCallChecks dftDefs
+  dftScheduleOrder
+  dftGasInvPendingCut dftDefs
 
 Theorem inv_closed_assign_suffix:
   !front mids rev order.

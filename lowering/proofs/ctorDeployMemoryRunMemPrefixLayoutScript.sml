@@ -165,52 +165,10 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem package_constructor_shape_ok[local]:
-  !tops use_trans nkey_map target cf cenv args pay nr nkey trans fbody ret.
-    supported_program tops /\
-    SND (SND (SND (classify_functions tops))) = SOME cf /\
-    set_constructor_package_target target
-      (package_constructor tops use_trans nkey_map cf) =
-      (cenv,args,pay,nr,nkey,trans,fbody,ret) ==>
-    cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
-    ~supported_stmts_expr_exists expr_shape_root fbody
-Proof
-  rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
-  drule classify_functions_ctor_mem >> strip_tac >>
-  drule_all supported_program_function >> strip_tac >>
-  drule supported_function_body_shape >> strip_tac >>
-  qspecl_then [`tops`, `Deploy`, `cf0`, `cf3`, `cf4`, `cf6`, `cf7`, `use_trans`]
-    (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
-  gvs[package_constructor_def, set_constructor_package_target_def,
-      update_cenv_nonreentrant_def, ctor_prefix_env_return_pc] >>
-  simp[cenv_static_ok_def, ctor_prefix_env_return_pc] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Theorem package_internal_fn_ctor_shape_ok[local]:
-  !tops use_trans nkey_map imm target src.
-    supported_program tops /\
-    MEM src (FST (SND (classify_functions tops))) ==>
-    internal_fn_shape_ok
-      (set_internal_package_target target
-        (package_internal_fn tops use_trans nkey_map T imm src))
-Proof
-  rpt gen_tac >> PairCases_on `src` >> strip_tac >>
-  drule (iffLR MEM_classify_internal) >> strip_tac >>
-  drule_all supported_program_function >> strip_tac >>
-  drule supported_function_body_shape >> strip_tac >>
-  qspecl_then [`tops`, `Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
-    (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
-  simp[package_internal_fn_def, set_internal_package_target_def,
-       update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
-       cenv_static_ok_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
 Theorem ctor_prefix_lowering_run[local]:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops ==>
+    supported_program tops /\ supported_program_deploy tops ==>
     ?has_constructor imm args ctor_internal_fns cenv fbody pay nr nkey trans.
       run_deploy_lowering has_constructor rpolicy runtime_bc imm args 0
         ctor_internal_fns cenv fbody pay nr nkey trans "__deploy" = SOME unit /\
@@ -230,7 +188,7 @@ Proof
   Cases_on `ctor_fn` >> gvs[internal_fn_descriptors_def] >>
   rename1 `classify_functions tops = (ext_fns, int_fns, fb_fn, SOME cf)` >>
   `SND (SND (SND (classify_functions tops))) = SOME cf` by simp[] >>
-  drule_all package_constructor_shape_ok >> strip_tac >> simp[] >>
+  drule_all ctorDeployShapeTheory.package_constructor_shape_ok >> strip_tac >> simp[] >>
   `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
                    (FST (SND (classify_functions tops))))`
     by metis_tac[classified_internal_names_distinct,
@@ -240,7 +198,7 @@ Proof
   gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
      internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
   simp[EVERY_MEM] >> rpt strip_tac >>
-  irule package_internal_fn_ctor_shape_ok >> simp[]
+  irule ctorDeployShapeTheory.package_internal_fn_ctor_shape_ok >> simp[]
 QED
 
 Theorem ctor_prefix_entry_not_halted:
@@ -281,7 +239,6 @@ Proof
   rename1 `_ = (u, st1)` >> Cases_on `u` >>
   drule compile_generate_deploy_shape >> simp[] >> strip_tac >>
   drule_all shape_state_source_certificates >> strip_tac >>
-  drule_all raw_checked_internal_segments >> strip_tac >>
   `package_internal_blocks (internal_fn_descriptors ctor_internal_fns)
      (entry_blocks ++ FLAT segs) =
    SOME (entry_blocks,
@@ -303,7 +260,7 @@ QED
 
 Theorem ctor_prefix_lowered_entry_label:
   lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
-  supported_program tops /\
+  supported_program tops /\ supported_program_deploy tops /\
   lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn ==>
   fn_entry_label fn = SOME "__deploy"
 Proof
@@ -320,6 +277,7 @@ Theorem ctor_prefix_task_entry_label:
 Proof
   rpt strip_tac >>
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
-   supported_program tops` by fs[deploy_phases_def, deploy_source_ok_def] >>
+   supported_program tops /\ supported_program_deploy tops` by
+    fs[deploy_phases_def, deploy_source_ok_def] >>
   drule_all ctor_prefix_lowered_entry_label >> simp[]
 QED

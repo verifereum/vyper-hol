@@ -1,7 +1,7 @@
 (* Return metadata for the function selected by an external call. *)
 Theory externalReturnSelectedMetadata
 Ancestors
-  externalReturnAbiMetadata supportedProgram supportedDecls entryStateRel
+  externalReturnAbiMetadata supportedProgram supportedDecls supportedGetterProps vyperTypeContractGetter entryStateRel
   vyperInterpreter vyperLookup vyperTyping vyperTypeContract vyperTypeContractStaticMaps e2eDefs
 
 Theorem supported_external_lookup_return:
@@ -11,13 +11,11 @@ Theorem supported_external_lookup_return:
       SOME (mut,nr,args,defaults,ret,body) ==>
     ret = NoneT \/ supported_place_type tops ret
 Proof
-  Induct >- simp[lookup_function_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  Cases_on `h` >>
-  gvs[supported_declaration_header_def, supported_function_return_def,
-      lookup_function_def] >>
-  BasicProvers.every_case_tac >>
-  gvs[lookup_function_def, supported_function_return_def, AllCaseEqs()] >> metis_tac[]
+  rpt gen_tac >> strip_tac >> drule lookup_function_External_cases >> strip_tac
+  >- (fs[listTheory.EVERY_MEM] >> first_x_assum drule >>
+      simp[supported_declaration_header_def, supported_function_return_def])
+  >- (`supported_declaration_header tops decl` by fs[listTheory.EVERY_MEM] >>
+      metis_tac[supported_public_getter_return])
 QED
 
 Theorem selected_external_frame_source_abi_metadata:

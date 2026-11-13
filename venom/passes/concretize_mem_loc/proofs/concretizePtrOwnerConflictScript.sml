@@ -83,18 +83,21 @@ Proof
   fs[active_inst_def] >>
   qpat_assum `bb.bb_label = _` (fn th => rewrite_tac[GSYM th]) >>
   `MEM a (sinter alloc_to
-     (ml_lookup (FST iter) (bb.bb_label,(ptr_owner_view d (EL t h)).cf_state.vs_inst_idx))
+     (smerge alloc_to (ml_escaped_allocas bp fn)
+        (ml_lookup (FST iter) (bb.bb_label,(ptr_owner_view d (EL t h)).cf_state.vs_inst_idx)))
      (ml_lookup (SND iter) (bb.bb_label,(ptr_owner_view d (EL t h)).cf_state.vs_inst_idx)))` by
     (imp_res_tac ptr_ml_ordered_lookup >>
-     qpat_assum `!addr. OL alloc_to (ml_lookup (FST iter) addr)`
-       (qspec_then `(bb.bb_label,(ptr_owner_view d (EL t h)).cf_state.vs_inst_idx)`
-         (mp_tac o MATCH_MP OL_INTER_IMP)) >>
+     `OL alloc_to (smerge alloc_to (ml_escaped_allocas bp fn)
+        (ml_lookup (FST iter) (bb.bb_label,(ptr_owner_view d (EL t h)).cf_state.vs_inst_idx)))` by
+       metis_tac[enumeralTheory.smerge_OL, ptr_escaped_allocas_ordered] >>
+     pop_assum (mp_tac o MATCH_MP OL_INTER_IMP) >>
      disch_then (qspec_then `ml_lookup (SND iter)
        (bb.bb_label,(ptr_owner_view d (EL t h)).cf_state.vs_inst_idx)` mp_tac) >>
-     simp[EXTENSION] >> metis_tac[]) >>
+     simp[EXTENSION, ptr_smerge_union] >> metis_tac[]) >>
   `context_mem_livesets (concretize_memloc_fuel fn) observed_ctx fn bp
       (cfg_analyze fn) =
-    ml_mark_stores_live bp fn (ml_compute_livesets (FST iter) (SND iter) fn)` by
+    ml_mark_stores_live bp fn
+      (ml_compute_livesets (ml_escaped_allocas bp fn) (FST iter) (SND iter) fn)` by
     simp[context_mem_livesets_def, mem_liveness_analyze_fuel_def,
          pairTheory.ELIM_UNCURRY, Abbr `iter`] >>
   qpat_assum `bp = _` (fn th => rewrite_tac[GSYM th]) >>

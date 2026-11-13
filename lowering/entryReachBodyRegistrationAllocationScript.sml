@@ -158,7 +158,7 @@ Proof
   simp[abiDecoderContractTheory.abi_decode_source_opcode_def]
 QED
 
-Theorem registration_address_limit_framed:
+Theorem registration_address_prelude_limit_framed[local]:
   emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] st = (head,after_head) /\
   (if dyn then
     ?offset after_load.
@@ -209,13 +209,88 @@ Proof
   metis_tac[abi_decoder_operand_live_mono]
 QED
 
+Theorem registration_address_limit_framed:
+  emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] st = (head,after_head) /\
+  (if dyn then
+    ?offset after_load after_src.
+      emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
+      emit_op ADD [Lit (n2w 4); offset] after_load = (src,after_src) /\
+      compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) after_src = ((),first)
+   else src = head /\ first = after_head) /\
+  (dyn ==> ~(n2w 4 + abi_decode_load CALLDATALOAD
+     (n2w 4 + n2w (off-4):bytes32) s <+ 4w)) /\
+  fresh_vars_wrt limit s /\ first.cs_next_var <= limit.cs_next_var ==>
+  ?t. frag_exec_mem ctx st first (\u. u = s) (\u. u = t) (\r. F) /\
+    eval_operand src t = SOME
+      (if dyn then n2w 4 + abi_decode_load CALLDATALOAD
+         (n2w 4 + n2w (off-4):bytes32) s else n2w 4 + n2w (off-4)) /\
+    abi_decoder_operand_live first.cs_next_var src /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    entry_prelude_frame s t /\ fresh_vars_wrt limit t
+Proof
+  strip_tac >>
+  qpat_x_assum `if dyn then _ else _` (strip_assume_tac o
+    MATCH_MP calldataRegistrationExecTheory.registration_address_mid) >>
+  drule_all calldataRegistrationExecTheory.registration_address_prelude_mid_bounds >>
+  strip_tac >>
+  `mid.cs_next_var <= first.cs_next_var` by
+    (Cases_on `dyn` >> gvs[] >>
+     drule calldataRegistrationExecTheory.registration_ptr_guard_code >> simp[]) >>
+  `mid.cs_next_var <= limit.cs_next_var` by decide_tac >>
+  drule_all registration_address_prelude_limit_framed >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  reverse (Cases_on `dyn`) >> gvs[] >- (qexists_tac `t` >> simp[]) >>
+  drule calldataRegistrationExecTheory.registration_ptr_guard_code >> strip_tac >>
+  drule calldataRegistrationExecTheory.registration_ptr_guard_extends >> strip_tac >>
+  suspend "guard"
+QED
+
+Resume registration_address_limit_framed[guard]:
+  drule_all calldataRegistrationExecTheory.registration_ptr_guard_frag_mem >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  qmatch_asmsub_abbrev_tac
+    `frag_exec_mem _ _ _ _ (\u. u = gs)
+       (\r. _ <+ 4w /\ ?z. r = Abort Revert_abort z)` >>
+  `frag_exec_mem ctx st first (\u. u = s) (\u. u = gs) (\r. F)` by
+    (irule frag_exec_mem_seq >> qexistsl_tac [`\u. u = t`, `mid`] >> simp[] >>
+     irule frag_exec_mem_pre_exit >> goal_assum (drule_at Any) >> simp[]) >>
+  `!op. abi_decoder_operand_live mid.cs_next_var op ==>
+     eval_operand op gs = eval_operand op t` by
+    (rpt strip_tac >>
+     simp[Abbr `gs`, instIdxIndepTheory.eval_op_inst_idx,
+       calldataRegistrationExecTheory.registration_guard_state_live]) >>
+  `mid.cs_next_var < limit.cs_next_var /\
+   mid.cs_next_var + 1 < limit.cs_next_var` by decide_tac >>
+  `fresh_vars_wrt limit
+     (update_var (STRING #"%" (toString (mid.cs_next_var + 1))) 1w
+       (update_var (STRING #"%" (toString mid.cs_next_var)) 0w t))` by
+    (match_mp_tac fresh_vars_wrt_update_var >>
+     qexists_tac `mid.cs_next_var + 1` >> simp[] >>
+     match_mp_tac fresh_vars_wrt_update_var >>
+     qexists_tac `mid.cs_next_var` >> simp[]) >>
+  qexists_tac `gs` >> rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- metis_tac[]
+  >- (irule abi_decoder_operand_live_mono >>
+      qexists_tac `mid.cs_next_var` >> simp[])
+  >- (rpt strip_tac >> metis_tac[abi_decoder_operand_live_mono])
+  >- fs[Abbr `gs`, entry_prelude_frame_def, update_var_def] >>
+  fs[Abbr `gs`, fresh_vars_wrt_def]
+QED
+
+Finalise registration_address_limit_framed
+
 Theorem registration_address_framed_run:
   emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] st = (head,after_head) /\
   (if dyn then
-    ?offset after_load.
+    ?offset after_load after_src.
       emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
-      emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
+      emit_op ADD [Lit (n2w 4); offset] after_load = (src,after_src) /\
+      compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) after_src = ((),first)
    else src = head /\ first = after_head) /\
+  (dyn ==> ~(n2w 4 + abi_decode_load CALLDATALOAD
+     (n2w 4 + n2w (off-4):bytes32) s <+ 4w)) /\
   fn_has_code st first fn /\ fresh_vars_wrt limit s /\
   first.cs_next_var <= limit.cs_next_var /\
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
@@ -254,10 +329,13 @@ Theorem registration_allocation_address_run:
   compile_alloc_buffer n st = (buf,allocated) /\
   emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] allocated = (head,after_head) /\
   (if dyn then
-    ?offset after_load.
+    ?offset after_load after_src.
       emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
-      emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
+      emit_op ADD [Lit (n2w 4); offset] after_load = (src,after_src) /\
+      compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) after_src = ((),first)
    else src = head /\ first = after_head) /\
+  (dyn ==> ~(n2w 4 + abi_decode_load CALLDATALOAD
+     (n2w 4 + n2w (off-4):bytes32) initial <+ 4w)) /\
   fn_has_code st allocated fn /\ fn_has_code allocated first fn /\
   alloca_inv initial /\ alloca_frontier_inv ctx fn site initial /\
   ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
@@ -297,6 +375,12 @@ Proof
     (drule_all calldataRegistrationExecTheory.registration_address_prelude_bounds >> simp[]) >>
   `allocated.cs_next_var <= limit.cs_next_var` by decide_tac >>
   drule_all registration_alloc_buffer_framed >> strip_tac >>
+  `abi_decode_load CALLDATALOAD (n2w 4 + n2w (off-4):bytes32) v =
+   abi_decode_load CALLDATALOAD (n2w 4 + n2w (off-4):bytes32) initial` by
+    simp[abiDecoderContractTheory.abi_decode_load_def,
+      abiDecoderContractTheory.abi_decode_source_def] >>
+  `dyn ==> ~(n2w 4 + abi_decode_load CALLDATALOAD
+     (n2w 4 + n2w (off-4):bytes32) v <+ 4w)` by asm_rewrite_tac[] >>
   drule_all registration_address_framed_run >> strip_tac >>
   `abi_decoder_operand_live first.cs_next_var buf.buf_operand` by
     metis_tac[abi_decoder_operand_live_mono] >>

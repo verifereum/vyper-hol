@@ -131,7 +131,7 @@ Proof
   Cases_on `t` >> gvs[is_bytestring_type_def]
 QED
 
-Theorem lower_value_convert_bytestring[local]:
+Theorem lower_value_convert_bytestring:
   !cenv ty ann t e1 sa op sb.
     lower_value compile_expr cenv ty (TypeBuiltin ann Convert t [e1]) sa =
       (op,sb) /\ is_bytestring_type t ==>
@@ -205,7 +205,7 @@ Proof
   gvs[venomInstTheory.mk_inst_def, not_fresh_at_def]
 QED
 
-Theorem convert_widen_copy_opcodes[local]:
+Theorem convert_widen_copy_opcodes:
   !d x k sm op sb.
     compile_bytestring_widen_copy d x k sm = (op,sb) /\ 0 < k ==>
     same_blocks sm sb /\ isPREFIX sm.cs_current_insts sb.cs_current_insts /\
@@ -225,7 +225,7 @@ Proof
        venomInstTheory.is_terminator_def]
 QED
 
-Theorem convert_widen_copy_run_path[local]:
+Theorem convert_widen_copy_run_path:
   !d x k sm op sb func s t ctx.
     compile_bytestring_widen_copy d x k sm = (op,sb) /\ 0 < k /\
     fn_has_code sm sb func /\ ~s.vs_halted /\
@@ -255,7 +255,7 @@ Proof
   simp[] >> disch_then irule >> fs[EVERY_MEM]
 QED
 
-Theorem bytestring_type_cases[local]:
+Theorem bytestring_type_cases:
   !t. is_bytestring_type t <=>
     (?n. t = BaseT (BytesT (Dynamic n))) \/ (?n. t = BaseT (StringT n))
 Proof
@@ -746,7 +746,7 @@ Proof
       exprLoweringPropsTheory.run_inst_seq_def, exprLoweringPropsTheory.same_blocks_def]
 QED
 
-Theorem convert_cast_run_frame[local]:
+Theorem convert_cast_run_frame:
   !x n i sa op sb s p L.
     compile_type_convert x (ConvBytestringCast n i) sa = (op,sb) /\
     eval_operand x s = SOME p /\ mload (w2n p) s = n2w L /\
@@ -874,7 +874,7 @@ Proof
   qpat_x_assum `!z w. _ ==> lookup_var _ _ = _` drule >> simp[lookup_var_def]
 QED
 
-Theorem convert_cast_counted[local]:
+Theorem convert_cast_counted:
   !ctx func cenv cx es sa sb op x p L n i s.
     compile_type_convert x (ConvBytestringCast n i) sa = (op,sb) /\
     fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
@@ -1128,7 +1128,8 @@ Theorem convert_buffer_expr_post:
     post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     val_wf tv v /\ val_in_memory tv v (w2n p) tt.vs_memory /\
-    stmt_state_rel H ctx func cenv cx es' tt /\ eval_operand op tt = SOME p /\
+    stmt_state_rel H ctx func cenv cx es' tt /\
+    storage_well_formed_on cx es' (FST H) /\ eval_operand op tt = SOME p /\
     FLOOKUP tt.vs_allocas sa.cs_next_id = SOME (w2n p,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tv v <= sz /\
     (!name lb lsz. local_region cenv es'.scopes tt name lb lsz ==>
@@ -1145,12 +1146,13 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem convert_widen_copy_run[local]:
+Theorem convert_widen_copy_run:
   !ctx func cenv cx es sm sb s x op p d k e v tv.
     compile_bytestring_widen_copy d x k sm = (op,sb) /\
     0 < k /\ k <= d /\ d < dimword (:256) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\ local_ptrs_reserved cenv sm /\
     (!z. x = Var z ==> not_fresh_at sm z) /\ eval_operand x s = SOME p /\
     ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -1262,7 +1264,8 @@ Theorem convert_widen_copy_owned:
     compile_bytestring_widen_copy d x k sm = (op,sb) /\
     0 < k /\ k <= d /\ d < dimword (:256) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\ local_ptrs_reserved cenv sm /\
     (!z. x = Var z ==> not_fresh_at sm z) /\
     eval_operand x s = SOME p /\ ~is_word_type (expr_type e) /\
     post_value_type cenv e = expr_type e /\
@@ -1449,7 +1452,7 @@ Proof
   gvs[expr_post_def] >> first_assum ACCEPT_TAC
 QED
 
-Theorem convert_cast_grows[local]:
+Theorem convert_cast_grows:
   !x n i sa op sb.
     compile_type_convert x (ConvBytestringCast n i) sa = (op,sb) ==>
     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
@@ -1479,7 +1482,7 @@ Proof
   metis_tac[convert_cast_grows]
 QED
 
-Theorem convert_operand_typed[local]:
+Theorem convert_operand_typed:
   !cenv cx env t e1 es v es1.
     expr_body_pre cenv cx env (TypeBuiltin t Convert t [e1]) es /\
     (do r <- eval_expr cx e1; read_result cx r od) es = (INL v,es1) ==>
@@ -1503,7 +1506,7 @@ Proof
   Cases_on `evaluate_type (get_tenv cx) t` >> gvs[]
 QED
 
-Theorem convert_bytestring_operand_facts[local]:
+Theorem convert_bytestring_operand_facts:
   expr_body_pre cenv cx env (TypeBuiltin t Convert t [e1]) es /\
   is_bytestring_type t /\
   (!a f args d. e1 = Call a (IntCall f) args d ==>
@@ -1530,7 +1533,7 @@ Proof
   drule bop_value_scopes_dom >> simp[]
 QED
 
-Theorem convert_dynamic_view[local]:
+Theorem convert_dynamic_view:
   !cx src dst tv1 tv2 v x s i n.
     ((src = BaseT (BytesT (Dynamic i))) \/ src = BaseT (StringT i)) /\
     ((dst = BaseT (BytesT (Dynamic n))) \/ dst = BaseT (StringT n)) /\
@@ -1607,7 +1610,7 @@ Proof
   disch_then drule_all >> simp[]
 QED
 
-Theorem convert_dynamic_cont[local]:
+Theorem convert_dynamic_cont:
   !ctx func cenv cx e e1 es es1 sa sm sb s0 s v x op tv1 tv2 i n.
     ((expr_type e1 = BaseT (BytesT (Dynamic i))) \/
       expr_type e1 = BaseT (StringT i)) /\
@@ -1655,7 +1658,7 @@ Proof
   qexistsl_tac [`s`, `sm`, `x`] >> simp[]
 QED
 
-Theorem convert_dynamic_counted_cont[local]:
+Theorem convert_dynamic_counted_cont:
   !ctx func cenv cx e e1 es es1 sa sm sb s0 s v x op tv1 tv2 i n.
     ((expr_type e1 = BaseT (BytesT (Dynamic i))) \/
       expr_type e1 = BaseT (StringT i)) /\
@@ -1711,7 +1714,7 @@ QED
 
 Finalise convert_dynamic_counted_cont
 
-Theorem convert_bytestring_cont[local]:
+Theorem convert_bytestring_cont:
   !ctx func cenv cx e e1 es es1 sa sm sb s0 s v x op tv1 tv2.
     valid_conversion (expr_type e1) (expr_type e) /\
     is_bytestring_type (expr_type e) /\
@@ -1740,7 +1743,7 @@ Proof
   simp[] >> qexists_tac `x` >> simp[]
 QED
 
-Theorem convert_bytestring_counted_cont[local]:
+Theorem convert_bytestring_counted_cont:
   !ctx func cenv cx e e1 es es1 sa sm sb s0 s v x op tv1 tv2.
     valid_conversion (expr_type e1) (expr_type e) /\
     is_bytestring_type (expr_type e) /\
@@ -1788,7 +1791,7 @@ Proof
   simp[] >> qexistsl_tac [`sm`, `x`] >> simp[]
 QED
 
-Theorem convert_bytestring_continuation_summary[local]:
+Theorem convert_bytestring_continuation_summary:
   valid_conversion (expr_type e1) (expr_type e) /\
   is_bytestring_type (expr_type e) /\
   is_bytestring_type (lowered_value_type cenv e1) /\
@@ -1833,7 +1836,7 @@ Proof
   simp[gas_marked_exec_def, exit_result_def]
 QED
 
-Theorem compile_convert_bytestring_frag_sim[local]:
+Theorem compile_convert_bytestring_frag_sim:
   !ctx func cenv cx env ty t e1 es.
     expr_body_pre cenv cx env (TypeBuiltin t Convert t [e1]) es /\
     is_bytestring_type t /\
