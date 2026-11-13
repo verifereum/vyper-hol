@@ -35,15 +35,11 @@ Theorem membership_lower_typed_args:
         EVERY (\op. op_prov G op = NONE) xs /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\rr ee ghosts r. wb_args_exit rr r)
+      (\rr ee ghosts r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   Induct
   >- (rpt strip_tac >> gvs[lower_word_args_nil] >>
-      mp_tac (Q.INST [`D` |-> `cx_dead cx`]
-        typedWordArgsPostPtrTheory.lower_typed_args_nil_sim_ptr) >>
-      impl_tac >- simp[] >> strip_tac >>
-      irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-      simp[]) >>
+      irule lower_typed_args_nil_sim_ptr >> simp[]) >>
   rpt gen_tac >> strip_tac >> gvs[lower_word_args_cons, SF ETA_ss] >>
   `cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
    sa.cs_next_id <= s1.cs_next_id /\

@@ -53,7 +53,7 @@ Theorem abi_args_uncaptured_cons_sim_counted[local]:
           (live ==> EVERY (abi_decoder_operand_live sb.cs_next_var) ops) /\
           u.vs_current_bb = sb.cs_current_bb /\
           u.vs_inst_idx = LENGTH sb.cs_current_insts)
-       (\rr ee r. wb_args_exit rr r)) ==>
+       (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx (e::args)) (es,s0)
     (\rr ee u. ?vs. rr = INL vs /\
        abi_args_post ctx func ce cx es sa sb s0 ee (e::args) (op::ops) vs u /\
@@ -61,7 +61,7 @@ Theorem abi_args_uncaptured_cons_sim_counted[local]:
        (live ==> EVERY (abi_decoder_operand_live sb.cs_next_var) (op::ops)) /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. wb_args_exit rr r)
+    (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> drule_all expr_sim_apply >>
   rewrite_tac[gas_outcome_def] >> strip_tac
@@ -239,14 +239,14 @@ Theorem abi_args_uncaptured_cons_sim:
           (~EXISTS expr_has_effect args ==> pure_frame ce func es1 sm t u) /\
           u.vs_current_bb = sb.cs_current_bb /\
           u.vs_inst_idx = LENGTH sb.cs_current_insts)
-       (\rr ee r. wb_args_exit rr r)) ==>
+       (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx (e::args)) (es,s0)
     (\rr ee u. ?vs. rr = INL vs /\
        abi_args_post ctx func ce cx es sa sb s0 ee (e::args) (op::ops) vs u /\
        (~EXISTS expr_has_effect (e::args) ==> pure_frame ce func es sa s0 u) /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. wb_args_exit rr r)
+    (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   mp_tac (Q.INST [`live` |-> `F`] abi_args_uncaptured_cons_sim_counted) >>
   simp[]
@@ -290,7 +290,7 @@ Theorem abi_args_uncaptured_cons_sim_live:
           EVERY (abi_decoder_operand_live sb.cs_next_var) ops /\
           u.vs_current_bb = sb.cs_current_bb /\
           u.vs_inst_idx = LENGTH sb.cs_current_insts)
-       (\rr ee r. wb_args_exit rr r)) ==>
+       (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx (e::args)) (es,s0)
     (\rr ee u. ?vs. rr = INL vs /\
        abi_args_post ctx func ce cx es sa sb s0 ee (e::args) (op::ops) vs u /\
@@ -298,7 +298,7 @@ Theorem abi_args_uncaptured_cons_sim_live:
        EVERY (abi_decoder_operand_live sb.cs_next_var) (op::ops) /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. wb_args_exit rr r)
+    (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   mp_tac (Q.INST [`live` |-> `T`] abi_args_uncaptured_cons_sim_counted) >>
   simp[]

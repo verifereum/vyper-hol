@@ -13,8 +13,8 @@ Theorem ec_mem_outcome_then:
   gas_outcome T tops (ctx,func)
     (m : evaluation_state -> value evaluation_result) (es,s0)
     (\res ee t. ?v. res = INL v /\ P v ee t) (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==>
-     R (INR exc) ee r) /\
+  (!exc ee r. expr_exit (INR exc : value + exception) r /\
+     halt_exit cx ee (INR exc : value + exception) r ==> R (INR exc) ee r) /\
   (!gs v ee t. m (es with gas_obs := gs) = (INL v, ee) /\ ee.gas_obs = [] /\
      P v ee t /\ ~t.vs_halted ==>
      gas_outcome T tops (ctx,func) (k v) (ee,t) Q R) ==>
@@ -46,7 +46,8 @@ Theorem ec_mem_operands_then:
   stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
+  (!exc ee r. expr_exit (INR exc : value + exception) r /\
+     halt_exit cx ee (INR exc : value + exception) r ==> R (INR exc) ee r) /\
   (!es1 es2 v1 v2 t u.
     expr_post ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
     expr_post ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
@@ -92,18 +93,18 @@ Proof
   `!l. p <> Label l` by gvs[safe_operand_def] >>
   `expr_sim_mem ctx func cenv cx (expr_type a) a es` by
     (gvs[body_exprs_mem_ok_def, body_expr_mem_ok_def] >> metis_tac[]) >>
-  irule ec_mem_outcome_then >>
-  conj_tac >- simp[] >>
+  match_mp_tac (Q.GEN `P` ec_mem_outcome_then) >>
   qexists_tac `\v1 ee t. expr_post ctx func cenv cx a es sa s1 s0 ee v1 p t /\
     expr_store_bound cx (expr_type a) v1 p t /\
     t.vs_current_bb = s1.cs_current_bb /\
     t.vs_inst_idx = LENGTH s1.cs_current_insts /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
-  BETA_TAC >> reverse conj_tac
+  BETA_TAC >> conj_tac
   >- (qpat_x_assum `expr_sim_mem _ _ _ _ _ a _`
         (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
       disch_then irule >> simp[] >>
       metis_tac[expr_body_pre_gas_admissible]) >>
+  conj_tac >- simp[] >>
   suspend "first_success"
 QED
 
@@ -132,16 +133,17 @@ Resume ec_mem_operands_then[first_success]:
      gvs[body_expr_mem_ok_def] >> metis_tac[]) >>
   `stmt_state_rel ctx func cenv cx es1 t` by
     metis_tac[exprSimWordArgsTheory.expr_post_state] >>
-  irule ec_mem_outcome_then >> conj_tac >- simp[] >>
+  match_mp_tac (Q.GEN `P` ec_mem_outcome_then) >>
   qexists_tac `\v2 ee u. expr_post ctx func cenv cx b es1 s1 sm t ee v2 q u /\
     expr_store_bound cx (expr_type b) v2 q u /\
     u.vs_current_bb = sm.cs_current_bb /\
     u.vs_inst_idx = LENGTH sm.cs_current_insts /\
     alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next` >>
-  BETA_TAC >> reverse conj_tac
+  BETA_TAC >> conj_tac
   >- (qpat_x_assum `expr_sim_mem _ _ _ _ _ b _`
         (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
       disch_then irule >> simp[] >> metis_tac[expr_body_pre_gas_admissible]) >>
+  conj_tac >- simp[] >>
   suspend "second_success"
 QED
 

@@ -696,7 +696,7 @@ Theorem abi_args_vv_error_prefix:
        read_result cx tv ee = (INL v,ee) /\
        t.vs_current_bb = mid.cs_current_bb /\
        t.vs_inst_idx = LENGTH mid.cs_current_insts)
-    (\rr ee r. expr_exit rr r)
+    (\rr ee r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>

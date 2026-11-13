@@ -325,7 +325,7 @@ Theorem raw_call_prepared_prefix_sim_ptr:
         (!l. arg <> Label l) /\ op_taint tn arg = {})
         (if flags.rcf_is_static then [gas_op;addr;data_op;len_op]
          else [gas_op;addr;(case vo of NONE => Lit 0w | SOME v => v);data_op;len_op]))
-    (\rr ee gt r. wb_args_exit rr r)
+    (\rr ee gt r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> drule_all rawCallPrefixPtrTheory.raw_call_prefix_sim_ptr >>
   disch_then (qspec_then `PG` assume_tac) >>

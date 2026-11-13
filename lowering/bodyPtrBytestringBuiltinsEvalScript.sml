@@ -28,8 +28,8 @@ Theorem expr_sim_ptr_eval_suffix:
   ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee gt r. expr_exit (INR exc : value + exception) r ==>
-    R (INR exc) ee gt r) /\
+  (!exc ee gt r. expr_exit (INR exc : value + exception) r /\
+    halt_exit cx ee (INR exc : value + exception) r ==> R (INR exc) ee gt r) /\
   (!v ee G tn t.
     expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
     t.vs_current_bb = sm.cs_current_bb /\

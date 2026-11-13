@@ -15,8 +15,11 @@ Theorem select_result_ptr_counted_summary:
     Q (\res ee gt outcome. expr_exit res outcome /\ halt_exit cx ee res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `res <> INR HaltException` by
+    (strip_tac >> qpat_x_assum `select_result _ _ _ _ _ = _` mp_tac >>
+     simp[evalNoHaltTheory.select_result_nh]) >>
   rewrite_tac[gas_summary_ptr_at_def] >>
-  qexistsl [`res`,`es`,`G`,`tn`,`outcome`] >> simp[] >>
+  qexistsl [`res`,`es`,`G`,`tn`,`outcome`] >> simp[exprSimDefsTheory.halt_exit_def] >>
   drule select_result_nonstorage_gas_obs >> simp[]
 QED
 
@@ -51,7 +54,7 @@ Theorem code_array_element_ptr_summary:
       ptr_vv_ok cx (post_value_type cenv (Subscript et obj idx)) child
         (LocatedValue et (mk_ptr dst LocCode)) ee' G tn q /\
       ghost_kept cenv es sa Ginit tninit s0 G tn)
-    (\res ee' gt outcome. expr_exit res outcome)
+    (\res ee' gt outcome. expr_exit res outcome /\ halt_exit cx ee' res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `?child. select_result cx (ArrayT et bd) r (ValueSubscript (IntV i)) ee =
@@ -83,7 +86,7 @@ Theorem code_array_rejection_ptr_summary:
     (Abort Revert_abort (revert_state (set_returndata [] q))) ==>
   gas_summary_ptr_at D (ctx,func) PG []
     (select_result cx (ArrayT et bd) r (ValueSubscript (IntV i))) (ee,s,G0,tn0)
-    Q (\res ee' gt outcome. expr_exit res outcome)
+    Q (\res ee' gt outcome. expr_exit res outcome /\ halt_exit cx ee' res outcome)
 Proof
   strip_tac >> drule_all framed_array_select_error >> strip_tac >>
   irule select_result_ptr_counted_summary >> simp[] >>

@@ -71,7 +71,7 @@ Proof
     (?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v)` >>
   reverse conj_tac
   >- (irule gas_outcome_ptr_conseq >>
-      qexistsl_tac [`Qfacts`, `\res ee gt r. expr_exit res r`] >>
+      qexistsl_tac [`Qfacts`, `\res ee gt r. expr_exit res r /\ halt_exit cx ee res r`] >>
       simp[Abbr `Qfacts`] >> rpt strip_tac >> gvs[] >> Cases_on `res` >> gvs[expr_exit_def]) >>
   rpt gen_tac >> strip_tac >>
   pop_assum mp_tac >> simp[expr_type_def, is_word_type_def] >> strip_tac >>

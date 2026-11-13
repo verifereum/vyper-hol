@@ -159,7 +159,8 @@ Theorem concat_args_sim_ptr:
       ptr_covers G tn dv t (bsz-32) /\ ptr_covers G tn ov t 32 /\ ~t.vs_halted /\
       (!i. B+32 <= i /\ i < B+32+k+LENGTH (FLAT (MAP (\v. case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) vs)) ==> i NOTIN tn.t_mem) /\
       (!i. w2n ow <= i /\ i < w2n ow+32 ==> i NOTIN tn.t_mem))
-    (\rr ee gt r. ?exc. rr = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\rr ee gt r. (?exc. rr = INR exc /\ expr_exit (INR exc : eval_result + exception) r) /\
+      halt_exit cx ee rr r)
 Proof
   Induct
   >- (rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -246,9 +247,10 @@ Resume concat_args_sim_ptr[tail]:
     kall_tac >>
   CONV_TAC (REPEATC (REWR_CONV CONJ_ASSOC)) >>
   reverse conj_tac
-  >- (rpt gen_tac >> BETA_TAC >> strip_tac >> qexists_tac `exc` >>
-      qpat_x_assum `res = INR exc` SUBST1_TAC >>
-      conj_tac >- simp[NoAsms] >> first_assum ACCEPT_TAC) >>
+  >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+      qpat_x_assum `res = INR exc` SUBST_ALL_TAC >> conj_tac
+      >- (qexists_tac `exc` >> conj_tac >- simp[NoAsms] >> first_assum ACCEPT_TAC) >>
+      qpat_x_assum `halt_exit _ _ _ _` mp_tac >> simp[NoAsms]) >>
   reverse conj_tac >- suspend "compose" >>
   CONV_TAC (REPEATC (REWR_CONV (GSYM CONJ_ASSOC))) >>
   simp[] >>

@@ -95,7 +95,7 @@ Resume compile_struct_lit_body_case[outcome]:
   qpat_assum `(_ : (value list + exception) -> evaluation_state -> venom_state -> bool) = Q`
     (fn eqth => qspecl_then
       [`\vs ee r. Q (INL vs) ee r`,
-       `\res ee r. expr_exit res r`,
+       `\res ee r. expr_exit res r /\ halt_exit cx ee res r`,
        `\vs. Value (StructV (ZIP (MAP FST fields,vs)))`]
       (drule o REWRITE_RULE [GSYM AND_IMP_INTRO, eqth] o BETA_RULE)
       (Q.GENL [`P`, `R`, `f`] counted_outcome_map_values)) >>

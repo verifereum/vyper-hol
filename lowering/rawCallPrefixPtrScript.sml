@@ -358,7 +358,7 @@ Theorem raw_call_operands_sim_ptr:
       (!v. addr = Var v \/ data = Var v \/ len_op = Var v \/ data_op = Var v ==>
         not_fresh_at s5 v) /\
       expr_val_at cenv cx (expr_type d) s1 s5 ee (BytesV bs) data t)
-    (\rr ee gt r. wb_args_exit rr r)
+    (\rr ee gt r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >>
   drule rawCallShapePtrTheory.raw_call_kwargs_types >> strip_tac >>
@@ -568,7 +568,7 @@ Theorem raw_call_prefix_sim_ptr:
       t.vs_gas_readings = (case go of SOME g => t5.vs_gas_readings
         | NONE => TL t5.vs_gas_readings) /\
       expr_val_at cenv cx (expr_type d) s1 s6 ee (BytesV bs) data t)
-    (\rr ee gt r. wb_args_exit rr r)
+    (\rr ee gt r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >>
   drule rawCallShapePtrTheory.raw_call_kwargs_types >> strip_tac >>

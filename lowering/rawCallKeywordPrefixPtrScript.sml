@@ -176,7 +176,7 @@ Theorem raw_call_kwargs_execution_ptr:
       ghost_inv dep cenv cx ee G tn t /\
       wb_frame cenv es ee sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
       sa.cs_next_id <= sb.cs_next_id)
-    (\rr ee gt r. wb_args_exit rr r)
+    (\rr ee gt r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> drule rawCallShapePtrTheory.raw_call_kwargs_types >> strip_tac >>
   `LENGTH kws = LENGTH flags.rcf_kws` by
@@ -215,7 +215,7 @@ Resume raw_call_kwargs_execution_ptr[posts]:
       ghost_inv dep cenv cx ee G tn t /\ EVERY (\x. op_taint tn x = {}) xs /\
       ghost_kept cenv es sa G0 tn0 s0 G tn) /\
       expr_sim_inv cenv cx env ee /\ ~t.vs_halted)
-    (\rr ee gt r. wb_args_exit rr r)` by
+    (\rr ee gt r. wb_args_exit rr r /\ halt_exit cx ee rr r)` by
     (ho_match_mp_tac (Q.INST [`arg_ty` |-> `K (BaseT (UintT 256))`] typed_args_outcome_inv_ptr) >>
      first_assum (irule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _`)) >>
      simp[] >> metis_tac[]) >>
@@ -278,7 +278,7 @@ Theorem raw_call_kwargs_sim_ptr:
       (!op. MEM op saved ==> op_prov G op = op_prov G0 op /\
         op_taint tn op = op_taint tn0 op /\
         (!w. eval_operand op s0 = SOME w ==> eval_operand op t = SOME w)))
-    (\rr ee gt r. wb_args_exit rr r)
+    (\rr ee gt r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> drule_all raw_call_kwargs_execution_ptr >>
   disch_then (qspec_then `PG` assume_tac) >>

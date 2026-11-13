@@ -97,7 +97,7 @@ Theorem lower_typed_args_nil_sim_ptr:
        ghost_inv d cenv cx ee G tn t /\
        EVERY (\x. op_taint tn x = {}) [] /\
        ghost_kept cenv es sa G0 tn0 s0 G tn)
-    (\rr ee gt r. wb_args_exit rr r)
+    (\rr ee gt r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >>
   simp[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
@@ -210,7 +210,7 @@ Theorem lower_typed_args_sim_ptr:
         ghost_inv d cenv cx ee G tn t /\
         EVERY (\x. op_taint tn x = {}) xs /\
         ghost_kept cenv es sa G0 tn0 s0 G tn)
-      (\rr ee gt r. wb_args_exit rr r)
+      (\rr ee gt r. wb_args_exit rr r /\ halt_exit cx ee rr r)
 Proof
   Induct >> rpt gen_tac >> strip_tac
   >- (gvs[exprSimWordArgsTheory.lower_word_args_nil] >>

@@ -78,8 +78,9 @@ Theorem concat_args_sim_mem:
                  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
                  regions_disjoint p n b sz) ==>
               mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory))
-      (\rr ee r. ?exc. rr = INR exc /\
-         expr_exit (INR exc : eval_result + exception) r)
+      (\rr ee r. (?exc. rr = INR exc /\
+         expr_exit (INR exc : eval_result + exception) r) /\
+         halt_exit cx ee rr r)
 Proof
   Induct
   >- (rpt strip_tac >>
@@ -153,11 +154,14 @@ Resume concat_args_sim_mem[head_exit]:
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
   disj2_tac >>
-  qpat_x_assum `(\res ee r. expr_exit res r /\ halt_exit cx ee res r) _ _ _` mp_tac >>
-  qpat_x_assum `exit_result r` mp_tac >> simp[] >> rpt strip_tac >>
-  qpat_x_assum `expr_exit _ r` mp_tac >>
-  Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
-  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
+  qpat_x_assum `(\res ee r. expr_exit res r /\ halt_exit cx ee res r) _ _ _`
+    (strip_assume_tac o BETA_RULE) >>
+  BETA_TAC >> rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- (qpat_x_assum `expr_exit _ r` mp_tac >>
+      Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
+      rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
+  qpat_x_assum `halt_exit _ _ _ r` mp_tac >> simp[]
 QED
 Resume concat_args_sim_mem[head_exempt]:
   qexists_tac `marks` >> disj2_tac >>

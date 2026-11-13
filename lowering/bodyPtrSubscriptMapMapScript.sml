@@ -150,12 +150,13 @@ Resume subscript_map_map_ptr[base_success]:
   rewrite_tac[bodyPtrDefsTheory.expr_sim_ptr_def] >>
   disch_then (qspecl_then [`sm`, `sn`, `key`, `t`, `G1`, `tn1`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  `!(res : value + exception) r. expr_exit res r <=>
-     ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r` by
+  `!(res : value + exception) ee r. expr_exit res r /\ halt_exit cx ee res r <=>
+     ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r /\
+           halt_exit cx ee (INR exc : eval_result + exception) r` by
     (Cases >> simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
   asm_rewrite_tac[] >>
   disch_then (mp_then Any mp_tac
-    (Q.INST [`R` |-> `\res ee gt r. expr_exit res r`]
+    (Q.INST [`R` |-> `\res ee gt r. expr_exit res r /\ halt_exit cx ee res r`]
       bodyPtrSubscriptMarkedComposeTheory.array_index_outcome_post_compose_ptr
       |> BETA_RULE)) >>
   disch_then ho_match_mp_tac >> goal_assum (drule_at Any) >>

@@ -73,7 +73,7 @@ Proof
          ptr_buf_ok cenv e p.ptr_operand G t) /\
        ghost_kept cenv es sa G0 tn0 s0 G tn) /\
        P res ee /\ ee.gas_obs = [] /\ ~t.vs_halted`,
-     `\res ee gt r. expr_exit res r`] >>
+     `\res ee gt r. expr_exit res r /\ halt_exit cx ee res r`] >>
   conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
   conj_tac
   >- (rpt strip_tac >> Cases_on `res`

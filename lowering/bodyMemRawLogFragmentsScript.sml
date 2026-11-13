@@ -87,7 +87,7 @@ Theorem raw_log_dynamic_frag_mem:
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\rr ee r. expr_exit rr r)
+    (\rr ee r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> gvs[] >>
   drule_all raw_log_mem_source_prepare >> strip_tac >> gvs[] >>
@@ -239,7 +239,7 @@ Theorem raw_log_fixed_allocated_mem[local]:
       expr_post ctx func cenv cx call es sa sb s0 ee v (Lit 0w) u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
-    (\rr ee r. expr_exit rr r)
+    (\rr ee r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >>
   `expr_body_pre cenv cx env data (mid with gas_obs := [])` by metis_tac[] >>
@@ -296,7 +296,7 @@ Theorem raw_log_fixed32_frag_mem:
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\rr ee r. expr_exit rr r)
+    (\rr ee r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> gvs[] >>
   drule_all raw_log_mem_source_prepare >> strip_tac >> gvs[] >>

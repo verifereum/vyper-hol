@@ -70,7 +70,7 @@ Theorem target_array_normal_suffix_ptr:
       ghost_inv d cenv cx ef' H' un' q /\
       target_ptr_ok cenv pv' (dst,loc,SOME (ValPT et)) H' un' q /\
       ghost_kept cenv es sa G0 tn0 s0 H' un')
-    (\res ef' gt r. expr_exit res r)
+    (\res ef' gt r. expr_exit res r /\ halt_exit cx ef' res r)
 Proof
   strip_tac >> suspend "common"
 QED
