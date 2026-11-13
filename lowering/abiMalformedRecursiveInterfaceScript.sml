@@ -121,10 +121,9 @@ Theorem abi_malformed_resource_post_intro:
 Proof
   strip_tac >> match_mp_tac (GEN_ALL abi_malformed_resource_post_frame_intro) >>
   qexists_tac `H` >> simp[] >> rpt strip_tac
-  >~ [`mem_bytes_at`]
-  >- (first_x_assum irule >> qexistsl_tac [`aid`, `cap`] >> simp[]) >>
-  irule stmt_state_rel_fields_transport >>
-  first_assum (irule_at Any) >> first_assum (irule_at Any) >> simp[]
+  >- (irule stmt_state_rel_fields_transport >>
+      first_assum (irule_at Any) >> first_assum (irule_at Any) >> simp[]) >>
+  first_x_assum irule >> qexistsl_tac [`aid`, `cap`] >> simp[]
 QED
 
 Theorem abi_malformed_resource_weaken:
