@@ -67,6 +67,15 @@ fun alpha_tyvars th =
     INST_TYPE ((tv |-> alpha) :: map (fn v => v |-> gen_tyvar ()) others) th
   end;
 
+(* Drops the facts about the trace's own horizon once the goal is about an
+   arbitrary valid one, so they don't weigh on the simplifier. *)
+val drop_horizon0_tac =
+  rpt (first_x_assum (fn th =>
+    if can (find_term (fn t => is_const t andalso
+                          fst (dest_const t) = "storage_trace_horizon"))
+           (concl th)
+    then ALL_TAC else NO_TAC));
+
 (* Closes a per-horizon goal of the capture wrappers from the matching
    fact of the capture entry: a gas_outcome by its implication, the rest by
    the implication with its witnesses found among the assumptions. *)
@@ -137,6 +146,7 @@ Proof
   drule_all (alpha_tyvars slice_source_dynamic_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >>
   qpat_x_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qexistsl_tac [`cap`, `bs`, `p`, `u`] >> simp[] >> rpt strip_tac >>
+  drop_horizon0_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     drule >> strip_tac >>
   drule_all (alpha_tyvars slice_source_dynamic_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >> gvs[] >>
@@ -195,6 +205,7 @@ Proof
   drule_all (alpha_tyvars slice_source_fixed_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >>
   qpat_x_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qexistsl_tac [`bs`, `u`, `p`] >> simp[] >> rpt strip_tac >>
+  drop_horizon0_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     drule >> strip_tac >>
   drule_all (alpha_tyvars slice_source_fixed_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >> gvs[] >>
