@@ -312,12 +312,11 @@ Proof
 QED
 
 Theorem log_data_store_aggregate_shape[local]:
-  (if is_word_type ty then emit_void MSTORE [dst;src]
-   else if is_bytestring_type ty then compile_store_bytestring src dst
-   else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes cenv ty))]) sa = ((),sb) ==>
+  compile_store_memory cenv src dst ty ty sa = ((),sb) ==>
   inst_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
   sa.cs_next_id <= sb.cs_next_id
 Proof
+  simp[compile_store_memory_def] >>
   Cases_on `is_word_type ty` >> simp[]
   >- (strip_tac >> drule emit_void_extends >>
       simp[inst_extends_def, cs_extends_def] >>
@@ -326,56 +325,19 @@ Proof
   Cases_on `is_bytestring_type ty` >> simp[]
   >- (strip_tac >> drule buffer_store_bytestring_shape >>
       simp[inst_extends_def]) >>
+  Cases_on `type_memory_bytes cenv ty` >>
+  simp[compile_copy_memory_def, comp_return_def]
+  >- (strip_tac >> gvs[inst_extends_def, same_blocks_def, emitted_insts_def]) >>
   strip_tac >> drule emit_void_extends >>
   simp[inst_extends_def, cs_extends_def] >>
       gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,
           comp_return_def, fresh_id_def, emit_def]
 QED
 
-Theorem log_data_store_aggregate_encoding[local]:
-  (if is_word_type ty then emit_void MSTORE [dst;src]
-   else if is_bytestring_type ty then compile_store_bytestring src dst
-   else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes cenv ty))]) sa = ((),sb) /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
-  val_wf tv v /\ expr_val_rel cx ty v src s /\
-  type_memory_bytes cenv ty = type_memory_size tv /\
-  type_memory_size tv < dimword (:256) /\ eval_operand dst s = SOME d /\
-  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
-  ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
-    val_in_memory tv v (w2n d) q.vs_memory /\
-    (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
-    (!a k. a + k <= w2n d \/ w2n d + type_memory_size tv <= a ==>
-      mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory)
-Proof
-  rpt strip_tac >> Cases_on `is_word_type ty`
-  >- (gvs[] >>
-      `compile_store_memory cenv src dst ty ty sa = ((),sb)` by
-        simp[compile_store_memory_def] >>
-      drule_all buffer_store_memory_encoding >> simp[]) >>
-  Cases_on `is_bytestring_type ty`
-  >- (gvs[] >>
-      `compile_store_memory cenv src dst ty ty sa = ((),sb)` by
-        simp[compile_store_memory_def] >>
-      drule_all buffer_store_memory_encoding >> simp[]) >>
-  gvs[expr_val_rel_def] >>
-  `val_footprint tv v <= type_memory_size tv` by
-    simp[exprSimPropsTheory.val_footprint_le] >>
-  drule_all log_emit_mcopy_encoding >> strip_tac >>
-  `q.vs_vars = s.vs_vars` by
-    (qpat_assum `q with vs_memory := _ = s`
-      (mp_tac o AP_TERM ``\z. z.vs_vars``) >> simp[]) >>
-  qexists_tac `q` >> simp[venomStateTheory.lookup_var_def] >>
-  qpat_assum `q with vs_memory := _ = s`
-    (mp_tac o AP_TERM ``\z. z with vs_vars := s.vs_vars``) >>
-  simp[] >> metis_tac[ADD_COMM]
-QED
 
 Theorem log_data_field_aggregate_run[local]:
   emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm) /\
-  (if is_word_type ty then emit_void MSTORE [dst;src]
-   else if is_bytestring_type ty then compile_store_bytestring src dst
-   else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes cenv ty))]) sm = ((),sb) /\
+  compile_store_memory cenv src dst ty ty sm = ((),sb) /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   value_has_type tv v /\ val_wf tv v /\ expr_val_rel cx ty v src s /\
   type_memory_bytes cenv ty = type_memory_size tv /\
@@ -392,7 +354,7 @@ Proof
     (rpt strip_tac >- (irule freshWritesTheory.not_fresh_at_mono >>
        qexists_tac `sa` >> simp[]) >> simp[]) >>
   `type_memory_size tv < dimword (:256)` by metis_tac[] >>
-  drule_all log_data_store_aggregate_encoding >> simp[] >> strip_tac >>
+  drule_all buffer_store_memory_encoding >> simp[] >> strip_tac >>
   drule emit_op_extends >> strip_tac >>
   drule log_data_store_aggregate_shape >> strip_tac >>
   `sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb` by
@@ -414,21 +376,18 @@ Proof
 QED
 
 Theorem compile_log_store_data_aggregate_split[local]:
-  compile_log_store_data cenv ((src,ty)::xs) buf off sa = ((),sb) ==>
+  compile_log_store_data cenv ((src,ty)::xs) (ty::MAP SND xs) buf off sa = ((),sb) ==>
   ?dst sm sn. emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm) /\
-    (if is_word_type ty then emit_void MSTORE [dst;src]
-     else if is_bytestring_type ty then compile_store_bytestring src dst
-     else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes cenv ty))]) sm = ((),sn) /\
-    compile_log_store_data cenv xs buf (off + type_memory_bytes cenv ty) sn = ((),sb) /\
+    compile_store_memory cenv src dst ty ty sm = ((),sn) /\
+    compile_log_store_data cenv xs (MAP SND xs) buf (off + type_memory_bytes cenv ty) sn = ((),sb) /\
     inst_extends sa sn /\ sa.cs_next_var <= sn.cs_next_var /\
     sa.cs_next_id <= sn.cs_next_id
 Proof
-  simp[Once compile_log_store_data_def, comp_bind_def, comp_ignore_bind_def] >>
+  simp[Once compile_log_store_data_def,
+       comp_bind_def, comp_ignore_bind_def] >>
   Cases_on `emit_op ADD [buf; Lit (n2w off)] sa` >> simp[] >>
   rename1 `emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm)` >>
-  Cases_on `(if is_word_type ty then emit_void MSTORE [dst;src]
-     else if is_bytestring_type ty then compile_store_bytestring src dst
-     else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes cenv ty))]) sm` >>
+  Cases_on `compile_store_memory cenv src dst ty ty sm` >>
   rename1 `_ sm = (u,sn)` >> Cases_on `u` >> simp[] >> strip_tac >>
   drule emit_op_extends >> strip_tac >>
   drule log_data_address_shape >> strip_tac >>
@@ -451,7 +410,7 @@ Proof
   Induct_on `xs`
   >- simp[compile_log_store_data_def, comp_return_def, inst_extends_def,
           same_blocks_def, emitted_insts_def] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  gen_tac >> PairCases_on `h` >> simp[] >> rpt gen_tac >> strip_tac >>
   drule compile_log_store_data_aggregate_split >> strip_tac >>
   first_x_assum drule >> strip_tac >> conj_tac
   >- (irule inst_extends_trans >> qexists_tac `sn` >> simp[]) >> decide_tac
@@ -496,7 +455,7 @@ QED
 
 Theorem compile_log_store_data_aggregate_core[local]:
   !xs vs off sa sb s.
-    compile_log_store_data cenv xs buf off sa = ((),sb) /\
+    compile_log_store_data cenv xs (MAP SND xs) buf off sa = ((),sb) /\
     LIST_REL (\(op,ty) v.
       (?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
         value_has_type tv v /\ val_wf tv v /\

@@ -469,23 +469,57 @@ Theorem compile_log_store_data_aggregate_mem_ok:
   b + cap < dimword (:256) /\ b + cap <= s.vs_alloca_next ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
-  disch_then (mk_asm "head") >> Induct_on `xs`
+  disch_then (mk_asm "head") >>
+  `!src ty dst sm sn start s off tv v.
+    emit_op ADD [buf; Lit (n2w off)] start = (dst,sm) /\
+    compile_store_memory ce src dst ty ty sm = ((),sn) /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+    type_memory_bytes ce ty = type_memory_size tv /\ expr_val_rel cx ty v src s /\
+    eval_operand buf s = SOME (n2w b) /\ b + off < dimword (:256) /\
+    type_memory_bytes ce ty < dimword (:256) /\
+    (!x. src = Var x ==> not_fresh_at start x) ==>
+    inst_extends start sm /\ inst_extends sm sn /\ start.cs_next_var <= sn.cs_next_var /\
+    ?q. run_inst_seq (emitted_insts start sn) s = OK q /\
+      log_write_frame start (b+off) (type_memory_bytes ce ty) s q` by
+    (rpt gen_tac >> strip_tac >>
+     Cases_on `is_word_type ty`
+     >- (asm "head" irule >> gvs[compile_store_memory_def] >> metis_tac[]) >>
+     Cases_on `is_bytestring_type ty`
+     >- (asm "head" irule >> gvs[compile_store_memory_def] >> metis_tac[]) >>
+     Cases_on `type_memory_bytes ce ty`
+     >- (gvs[compile_store_memory_def, compile_copy_memory_def, comp_return_def] >>
+         drule_all log_data_address_value >> strip_tac >>
+         drule emit_op_extends >> strip_tac >>
+         drule log_data_address_shape >> strip_tac >>
+         (conj_tac >- simp[inst_extends_def]) >>
+         (conj_tac >- simp[inst_extends_def, same_blocks_def, emitted_insts_def]) >>
+         `t.vs_memory = s.vs_memory` by
+           (qpat_assum `t with vs_vars := _ = s`
+             (mp_tac o Q.AP_TERM `\z. z.vs_memory`) >> simp[]) >>
+         simp[log_write_frame_def] >>
+         qpat_assum `t with vs_vars := _ = s`
+           (mp_tac o Q.AP_TERM `\z. z with vs_memory := s.vs_memory`) >> simp[]) >>
+     asm "head" (qspecl_then [`src`,`ty`] mp_tac) >> simp[] >>
+     disch_then irule >>
+     fs[compile_store_memory_def] >>
+     qpat_x_assum `SUC _ = _` (fn th => fs[GSYM th, compile_copy_memory_def]) >>
+     metis_tac[]) >>
+  pop_assum (mk_asm "actual_head") >>
+  Induct_on `xs`
   >- (simp[stmtLoweringTheory.compile_log_store_data_def, comp_return_def] >>
       rpt strip_tac >> gvs[emitted_insts_def, run_inst_seq_mem_ok_def]) >>
   gen_tac >> PairCases_on `h` >> Cases_on `vs` >> simp[] >>
   rpt gen_tac >> strip_tac >>
   rename1 `expr_val_rel cx ty v src s` >>
-  qpat_x_assum `compile_log_store_data _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_log_store_data _ _ _ _ _ _ = _` mp_tac >>
   simp[Once stmtLoweringTheory.compile_log_store_data_def,
        comp_bind_def, comp_ignore_bind_def] >>
   Cases_on `emit_op ADD [buf; Lit (n2w off)] sa` >> simp[] >>
   rename1 `emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm)` >>
-  Cases_on `(if is_word_type ty then emit_void MSTORE [dst;src]
-    else if is_bytestring_type ty then compile_store_bytestring src dst
-    else emit_void MCOPY [dst;src;Lit (n2w (type_memory_bytes ce ty))]) sm` >>
+  Cases_on `compile_store_memory ce src dst ty ty sm` >>
   rename1 `_ sm = (a,sn)` >> Cases_on `a` >> simp[] >> strip_tac >> fs[] >>
   `b + off < dimword (:256) /\ type_memory_bytes ce ty < dimword (:256)` by decide_tac >>
-  asm "head" drule_all >> strip_tac >>
+  asm "actual_head" drule_all >> strip_tac >>
   suspend "head_memory"
 QED
 Resume compile_log_store_data_aggregate_mem_ok[head_memory]:
@@ -501,7 +535,7 @@ Resume compile_log_store_data_aggregate_mem_ok[head_memory]:
   `expr_val_rel cx ty v src u /\ expr_store_bound cx ty v src u` by
     gvs[loweringPostsTheory.expr_val_rel_def, exprSimMemDefsTheory.expr_store_bound_def] >>
   `run_inst_seq_mem_ok (emitted_insts sm sn) u` by
-    (irule log_data_store_aggregate_mem_ok >>
+    (irule log_equal_type_store_mem_ok >>
      goal_assum (drule_at (Pat `evaluate_type _ _ = _`)) >>
      qexistsl_tac [`ce`,`n2w (b+off)`,`dst`,`src`,`v`] >>
      simp[w2n_n2w] >> metis_tac[not_fresh_at_mono, ADD_COMM]) >>

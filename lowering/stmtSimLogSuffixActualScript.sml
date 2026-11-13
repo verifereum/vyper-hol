@@ -133,7 +133,7 @@ Proof
   imp_res_tac compile_alloc_buffer_extends >>
   `cs_extends s1 s2` by
     (mp_tac (cj 3 ci_mono_list_helpers) >>
-     disch_then (qspecl_then [`ce`, `xs`, `src.buf_operand`, `0`, `s1`] mp_tac) >>
+     disch_then (qspecl_then [`ce`, `xs`, `MAP SND xs`, `src.buf_operand`, `0`, `s1`] mp_tac) >>
      simp[ci_mono_def]) >>
   drule cs_extends_abi_encode >> strip_tac >>
   drule emit_inst_extends >> strip_tac >>
