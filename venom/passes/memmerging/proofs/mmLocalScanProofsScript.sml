@@ -20630,6 +20630,408 @@ Proof
   metis_tac[]
 QED
 
+Theorem mm_local_payload_final_certificate[local]:
+  mode IN {CalldataMerge; DloadMerge} /\
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  (!j. j < LENGTH bb.bb_instructions ==>
+    (if mode = CalldataMerge then (H j).vs_call_ctx.cc_calldata
+     else (H j).vs_data_section) = cd) /\
+  (!j dst v src. j < LENGTH bb.bb_instructions /\
+    (EL j bb.bb_instructions).inst_opcode = MSTORE /\
+    (EL j bb.bb_instructions).inst_operands = [Lit dst; Var v] /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode)
+      empty_scan_state (TAKE j bb.bb_instructions)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src cd ++ REPLICATE 32 0w)))) /\
+  MEM g (scan_block (dfg_build_function fn0) mode bb).ss_flushed ==>
+  mm_local_group_captures bb.bb_instructions
+    (mm_local_payload_capture mode bb.bb_instructions H (LENGTH bb.bb_instructions))
+    (\a. if a < LENGTH cd then EL a cd else 0w) g /\
+  mm_local_group_coverage bb.bb_instructions (LENGTH bb.bb_instructions)
+    (mm_local_payload_capture mode bb.bb_instructions H (LENGTH bb.bb_instructions)) g /\
+  mm_local_group_endpoint bb.bb_instructions (LENGTH bb.bb_instructions)
+    (mm_local_payload_capture mode bb.bb_instructions H (LENGTH bb.bb_instructions)) g
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  reverse conj_tac >- metis_tac[mm_local_payload_final_extent] >>
+  `mm_local_scan_every
+      (mm_local_group_captures bb.bb_instructions
+        (mm_local_payload_capture mode bb.bb_instructions H (LENGTH bb.bb_instructions))
+        (\a. if a < LENGTH cd then EL a cd else 0w))
+      (FOLDL (scan_inst (dfg_build_function fn0) mode) empty_scan_state
+        (TAKE (LENGTH bb.bb_instructions) bb.bb_instructions))` by
+    (irule mm_local_payload_scan_captures >> simp[] >> metis_tac[]) >>
+  fs[scan_block_def, hard_barrier_def, mm_local_scan_every_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem mm_local_payload_due_capture_indices[local]:
+  mode IN {CalldataMerge; DloadMerge} /\
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  r < N /\ r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r) ==>
+  !j d bs.
+    (MEM j (due ++ [r]) /\ mm_local_payload_capture mode is H N j = SOME (d,bs)) <=>
+    (j < N /\ j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+      mm_local_payload_capture mode is H N j = SOME (d,bs))
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `due = FILTER (\j. j < r /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    MEM (EL j is).inst_id g.cg_inst_ids) (COUNT_LIST r)` by
+    (irule mm_local_canonical_due_group >> metis_tac[]) >>
+  `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  rpt gen_tac >>
+  Cases_on `mm_local_payload_capture mode is H N j` >> simp[] >>
+  rename1 `mm_local_payload_capture mode is H N j = SOME w` >>
+  `j < N /\ j < LENGTH is /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+    (Cases_on `j < N /\ j < LENGTH is` >>
+     Cases_on `(EL j is).inst_opcode = mode_copy_opcode mode` >>
+     Cases_on `(EL j is).inst_opcode = MSTORE` >>
+     gvs[mm_local_payload_capture_def, mode_copy_opcode_def, mode_load_opcode_def]) >>
+  Cases_on `MEM (EL j is).inst_id g.cg_inst_ids`
+  >- (`j <= r` by metis_tac[mm_local_rep_position_max] >>
+      Cases_on `j = r` >> gvs[MEM_APPEND, MEM_FILTER, MEM_COUNT_LIST] >> decide_tac) >>
+  Cases_on `j = r` >> gvs[MEM_APPEND, MEM_FILTER, MEM_COUNT_LIST]
+QED
+
+Theorem mm_local_payload_due_captures_some[local]:
+  mode IN {CalldataMerge; DloadMerge} /\
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  r < N /\ r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r) /\
+  (!j dst v src. j <= r /\ j < LENGTH is /\
+    (EL j is).inst_opcode = MSTORE /\
+    (EL j is).inst_operands = [Lit dst; Var v] /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    IS_SOME (lookup_var v (H j))) ==>
+  !j. MEM j (due ++ [r]) ==> IS_SOME (mm_local_payload_capture mode is H N j)
+Proof
+  strip_tac >>
+  `due = FILTER (\j. j < r /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    MEM (EL j is).inst_id g.cg_inst_ids) (COUNT_LIST r)` by
+    (irule mm_local_canonical_due_group >> metis_tac[]) >>
+  qpat_x_assum `due = FILTER (\j. mm_local_rep_index _ _ j = _) _` kall_tac >>
+  drule_all mm_local_canonical_rep_write >> strip_tac >>
+  `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  gen_tac >> strip_tac >>
+  `j <= r /\ j < N /\ j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+    (Cases_on `j = r` >> gvs[MEM_APPEND, MEM_FILTER, MEM_COUNT_LIST] >> decide_tac) >>
+  `MEM g (scan_block (dfg_build_function fn0) mode bb).ss_flushed` by metis_tac[] >>
+  drule_all mm_local_final_write_birth >> strip_tac
+  >- simp[mm_local_payload_capture_def, mm_local_payload_opcodes, venomStateTheory.eval_operand_def] >>
+  `IS_SOME (lookup_var v (H j))` by metis_tac[] >>
+  Cases_on `lookup_var v (H j)` >> gvs[] >>
+  simp[mm_local_payload_capture_def, mm_local_payload_opcodes, mm_local_write_capture_def,
+    venomStateTheory.eval_operand_def]
+QED
+
+Theorem mm_local_payload_selected_capture_birth[local]:
+  mode IN {CalldataMerge; DloadMerge} /\
+  wf_ssa fn0 /\ wf_function fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\ is = bb.bb_instructions /\
+  j < N /\ j < LENGTH is /\
+  MEM g (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  (if mode = CalldataMerge then (H j).vs_call_ctx.cc_calldata
+   else (H j).vs_data_section) = cd /\
+  (!dst v src. (EL j is).inst_opcode = MSTORE /\
+    (EL j is).inst_operands = [Lit dst; Var v] /\ FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src cd ++ REPLICATE 32 0w)))) ==>
+  ?c. mm_local_payload_capture mode is H N j = SOME
+      (c.cg_dst, mm_local_bytes (\a. if a < LENGTH cd then EL a cd else 0w)
+        c.cg_src c.cg_length) /\
+    ((?dst src len. (EL j is).inst_opcode = mode_copy_opcode mode /\
+       (EL j is).inst_operands = [Lit dst; Lit src; Lit len] /\
+       c = <|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+              cg_inst_ids := [(EL j is).inst_id]|>) \/
+     (?dst v src. (EL j is).inst_opcode = MSTORE /\
+       (EL j is).inst_operands = [Lit dst; Var v] /\
+       FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode)
+         empty_scan_state (TAKE j is)).ss_loads v = SOME src /\
+       c = <|cg_dst := w2n dst; cg_src := src; cg_length := 32;
+         cg_inst_ids := [(EL j is).inst_id] ++
+           (case dfg_get_def (dfg_build_function fn0) v of
+              NONE => [] | SOME li => [li.inst_id])|>))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all mm_local_final_write_birth >> strip_tac
+  >- (qexists `<|cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+          cg_inst_ids := [(EL j is).inst_id]|>` >> simp[] >>
+      mp_tac (Q.INST [`n` |-> `N`]
+        (SPEC_ALL mm_local_payload_capture_literal)) >> simp[]) >>
+  qexists `<|cg_dst := w2n dst; cg_src := src; cg_length := 32;
+    cg_inst_ids := [(EL j is).inst_id] ++
+      (case dfg_get_def (dfg_build_function fn0) v of
+         NONE => [] | SOME li => [li.inst_id])|>` >> simp[] >>
+  mp_tac (Q.INST [`n` |-> `N`]
+    (SPEC_ALL mm_local_payload_capture_store)) >> simp[] >> gvs[]
+QED
+
+Theorem mm_local_payload_capture_finite[local]:
+  mode IN {CalldataMerge; DloadMerge} /\ is = bb.bb_instructions /\
+  mm_local_payload_capture mode is H n j = SOME (d,bs) /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j /\
+  static_mem_ok eom ctx fn (EL j is) (H j) /\ eom < dimword (:256) ==>
+  d + LENGTH bs < dimword (:256) /\
+  (LENGTH bs = 0 \/ d + LENGTH bs <= eom)
+Proof
+  strip_tac >>
+  `j < LENGTH is /\
+   (EL j is).inst_opcode IN {MSTORE; CALLDATACOPY; DLOADBYTES}` by
+    (Cases_on `mode` >> gvs[mm_local_payload_capture_def,
+      mode_copy_opcode_def, AllCaseEqs()]) >>
+  `~in_revert_forward fn (H j)` by
+    (simp[contextCodegenRelTheory.in_revert_forward_def] >> strip_tac >>
+     `get_instruction bb j = SOME (EL j is)` by
+       gvs[venomInstTheory.get_instruction_def] >>
+     drule_all memSafeRunTheory.revert_forward_at_opcode >>
+     gvs[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]) >>
+  Cases_on `mode` >>
+  gvs[mm_local_payload_capture_def, mode_copy_opcode_def,
+    mm_local_write_capture_def, AllCaseEqs()] >>
+  qpat_x_assum `static_mem_ok _ _ _ _ _` mp_tac >>
+  simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+    codegenRelTheory.source_memory_write_ranges_def,
+    codegenRelTheory.fixed_source_write_range_def,
+    codegenRelTheory.sized_source_write_range_def,
+    EVERY_APPEND, copyFwdEquivTheory.mcopy_data_length] >>
+  strip_tac >> gvs[] >>
+  mp_tac (Q.ISPEC `dst:256 word` wordsTheory.w2n_lt) >> simp[]
+QED
+
+Theorem mm_local_group_source_finite[local]:
+  MEM g (scan_block dfg mode bb).ss_flushed ==> g.cg_src < dimword (:256)
+Proof
+  strip_tac >>
+  `!n. n <= LENGTH bb.bb_instructions ==>
+    mm_local_scan_every (\g. g.cg_src < dimword (:256))
+      (FOLDL (scan_inst dfg mode) empty_scan_state (TAKE n bb.bb_instructions))` by
+    (Induct
+     >- simp[mm_local_scan_every_def, empty_scan_state_def] >>
+     strip_tac >>
+     `n < LENGTH bb.bb_instructions /\ n <= LENGTH bb.bb_instructions` by decide_tac >>
+     qpat_x_assum `n <= LENGTH bb.bb_instructions ==> _` mp_tac >>
+     simp[] >> strip_tac >>
+     simp[rich_listTheory.TAKE_SUC, FOLDL_APPEND] >>
+     irule mm_local_inst_birth_every >> simp[copy_merge_def] >> conj_tac
+     >- (rpt strip_tac >> drule mm_local_scan_lookup_origin >>
+         disch_then (qx_choose_then `q` (qx_choose_then `w` strip_assume_tac)) >>
+         gvs[] >> mp_tac (Q.ISPEC `w:256 word` wordsTheory.w2n_lt) >> simp[]) >>
+     rpt strip_tac >> mp_tac (Q.ISPEC `src:256 word` wordsTheory.w2n_lt) >> simp[]) >>
+  first_x_assum (qspec_then `LENGTH bb.bb_instructions` mp_tac) >>
+  gvs[scan_block_def, hard_barrier_def, mm_local_scan_every_def, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_payload_group_finite[local]:
+  mm_local_group_coverage is n cap g /\ mm_local_group_endpoint is n cap g /\
+  (!j d bs. j < n /\ j < LENGTH is /\
+    MEM (EL j is).inst_id g.cg_inst_ids /\ cap j = SOME (d,bs) ==>
+    d + LENGTH bs < dimword (:256) /\
+    (LENGTH bs = 0 \/ d + LENGTH bs <= eom)) ==>
+  g.cg_dst < dimword (:256) /\ g.cg_length < dimword (:256) /\
+  (g.cg_length = 0 \/ g.cg_dst + g.cg_length <= eom)
+Proof
+  strip_tac >>
+  `g.cg_dst + g.cg_length < dimword (:256)` by
+    (fs[mm_local_group_endpoint_def] >> metis_tac[]) >>
+  conj_tac >- decide_tac >> conj_tac >- decide_tac >>
+  Cases_on `g.cg_length = 0` >- simp[] >> simp[] >>
+  `?j d bs. j < n /\ j < LENGTH is /\
+    MEM (EL j is).inst_id g.cg_inst_ids /\ cap j = SOME (d,bs) /\
+    d <= g.cg_dst + g.cg_length - 1 /\
+    g.cg_dst + g.cg_length - 1 < d + LENGTH bs` by
+    (qpat_x_assum `mm_local_group_coverage _ _ _ _` mp_tac >>
+     pure_rewrite_tac[mm_local_group_coverage_def] >>
+     disch_then (qspec_then `g.cg_dst + g.cg_length - 1` mp_tac) >>
+     `g.cg_dst <= g.cg_dst + g.cg_length - 1 /\
+       g.cg_dst + g.cg_length - 1 < g.cg_dst + g.cg_length` by decide_tac >>
+     simp[] >> metis_tac[]) >>
+  `LENGTH bs = 0 \/ d + LENGTH bs <= eom` by metis_tac[] >> decide_tac
+QED
+
+Theorem mm_local_payload_bytes_compatible[local]:
+  (~copy_overwrites c (copy_dst_interval h) \/
+    c.cg_src + h.cg_dst = c.cg_dst + h.cg_src) ==>
+  mm_local_write_compatible c.cg_dst (mm_local_bytes B c.cg_src c.cg_length)
+    h.cg_dst (mm_local_bytes B h.cg_src h.cg_length)
+Proof
+  strip_tac
+  >- (gvs[copy_overwrites_def, copy_dst_interval_def,
+        mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+        mmIntervalTheory.interval_end_def, arithmeticTheory.MAX_DEF,
+        arithmeticTheory.MIN_DEF, mm_local_write_compatible_def,
+        mm_local_bytes_length] >> rpt strip_tac >> gvs[] >> decide_tac) >>
+  simp[mm_local_write_compatible_def, mm_local_bytes_length] >>
+  rpt strip_tac >> simp[mm_local_bytes_def, EL_GENLIST] >>
+  AP_TERM_TAC >> decide_tac
+QED
+
+Theorem mm_local_payload_selected_captures_compatible[local]:
+  mode IN {CalldataMerge; DloadMerge} /\
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ j < l /\ l <= r /\ r < LENGTH is /\ r < N /\
+  MEM g (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  MEM g2 (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  MEM (EL l is).inst_id g2.cg_inst_ids /\
+  (!q. q <= r ==>
+    (if mode = CalldataMerge then (H q).vs_call_ctx.cc_calldata
+     else (H q).vs_data_section) = cd) /\
+  (!q dst v src. q <= r /\ (EL q is).inst_opcode = MSTORE /\
+    (EL q is).inst_operands = [Lit dst; Var v] /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode)
+      empty_scan_state (TAKE q is)).ss_loads v = SOME src ==>
+    lookup_var v (H q) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src cd ++ REPLICATE 32 0w)))) /\
+  mm_local_payload_capture mode is H N j = SOME (d,bs) /\
+  mm_local_payload_capture mode is H N l = SOME (a,cs) ==>
+  mm_local_write_compatible d bs a cs
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `j < N /\ l < N /\ j < LENGTH is /\ l < LENGTH is /\ j <= r` by decide_tac >>
+  `(EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+   (EL l is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+    (Cases_on `mode` >> gvs[mm_local_payload_capture_def,
+      mode_copy_opcode_def, AllCaseEqs()]) >>
+  mp_tac (SPEC_ALL mm_local_payload_selected_capture_birth) >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qx_choose_then `c` (CONJUNCTS_THEN assume_tac)) >>
+  mp_tac (Q.INST [`j` |-> `l`,`g` |-> `g2`]
+    (SPEC_ALL mm_local_payload_selected_capture_birth)) >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qx_choose_then `h` (CONJUNCTS_THEN assume_tac)) >>
+  `d = c.cg_dst /\ bs = mm_local_bytes
+     (\a. if a < LENGTH cd then EL a cd else 0w) c.cg_src c.cg_length` by
+    (qpat_x_assum `mm_local_payload_capture mode is H N j = SOME (d,bs)` mp_tac >> simp[]) >>
+  `a = h.cg_dst /\ cs = mm_local_bytes
+     (\a. if a < LENGTH cd then EL a cd else 0w) h.cg_src h.cg_length` by
+    (qpat_x_assum `mm_local_payload_capture mode is H N l = SOME (a,cs)` mp_tac >> simp[]) >>
+  mp_tac (Q.INST
+    [`s0` |-> `FOLDL (scan_inst (dfg_build_function fn0) mode)
+        empty_scan_state (TAKE j is)`,
+     `ss` |-> `FOLDL (scan_inst (dfg_build_function fn0) mode)
+        empty_scan_state (TAKE l is)`]
+    (SPEC_ALL mm_local_indexed_selected_hazard_geometry)) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  asm_rewrite_tac[] >> irule mm_local_payload_bytes_compatible >> simp[]
+QED
+
+Theorem mm_local_payload_pending_compatible[local]:
+  mode IN {CalldataMerge; DloadMerge} /\
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  cap = mm_local_payload_capture mode is H (LENGTH is) /\
+  MEM j (mm_local_pending_indices is gs n) /\ j < l /\ l <= n /\
+  MEM h gs /\ MEM (EL l is).inst_id h.cg_inst_ids /\
+  (!q. (if mode = CalldataMerge then (H q).vs_call_ctx.cc_calldata
+         else (H q).vs_data_section) = cd) /\
+  (!q dst v src. q < LENGTH is /\ (EL q is).inst_opcode = MSTORE /\
+    (EL q is).inst_operands = [Lit dst; Var v] /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode)
+      empty_scan_state (TAKE q is)).ss_loads v = SOME src ==>
+    lookup_var v (H q) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src cd ++ REPLICATE 32 0w)))) /\
+  cap j = SOME (d,bs) /\ cap l = SOME (a,cs) ==>
+  mm_local_write_compatible d bs a cs
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `MEM j (mm_local_pending_indices _ _ _)`
+    (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+  `l <= r` by decide_tac >>
+  mp_tac (Q.INST [`g2` |-> `h`, `N` |-> `LENGTH is`]
+    (SPEC_ALL mm_local_payload_selected_captures_compatible)) >>
+  impl_tac >- (simp[] >> rpt strip_tac >>
+    metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS]) >>
+  simp[]
+QED
+
+Theorem mm_local_payload_representative_pending_suc[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  gs = (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  is = bb.bb_instructions /\ r < LENGTH is /\ MEM g gs /\
+  (EL r is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  mm_local_pending_indices is gs (SUC r) =
+    FILTER (\j. mm_local_rep_index is gs j <> r) (mm_local_pending_indices is gs r)
+Proof
+  strip_tac >>
+  `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  `!j h q. j < LENGTH is /\
+      (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\ MEM h gs /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+      q < LENGTH is /\ rep_of_group is h = SOME ((EL q is).inst_id,h) ==>
+      mm_local_rep_index is gs j = q` by
+    (rpt strip_tac >> qpat_assum `is = _` SUBST1_TAC >>
+     irule mm_local_rep_index_eq >> metis_tac[]) >>
+  `~MEM r (mm_local_pending_indices is gs (SUC r))` by
+    (strip_tac >>
+     qpat_x_assum `MEM r (mm_local_pending_indices _ _ _)`
+       (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+     rename1 `rep_of_group is h = SOME ((EL rr is).inst_id,h)` >>
+     `mm_local_rep_index is gs r = r` by metis_tac[] >>
+     `mm_local_rep_index is gs r = rr` by metis_tac[] >> decide_tac) >>
+  `mm_local_pending_indices is gs (SUC r) =
+    FILTER (\j. j < r) (mm_local_pending_indices is gs (SUC r))` by
+    (sym_tac >> rewrite_tac[FILTER_EQ_ID, EVERY_MEM] >> rpt strip_tac >>
+     rename1 `MEM j (mm_local_pending_indices is gs (SUC r))` >>
+     `j < SUC r` by (drule (iffLR mm_local_pending_indices_mem) >> simp[]) >>
+     `j <> r` by metis_tac[] >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  simp[NoAsms, mm_local_pending_indices_def, FILTER_FILTER,
+    rich_listTheory.COUNT_LIST_SNOC, rich_listTheory.SNOC_APPEND, FILTER_APPEND] >>
+  IF_CASES_TAC >> simp[NoAsms] >>
+  rewrite_tac[rich_listTheory.FILTER_EQ] >> qx_gen_tac `j` >>
+  simp[NoAsms, MEM_COUNT_LIST] >> strip_tac >>
+  `j < LENGTH is` by decide_tac >>
+  eq_tac
+  >- (strip_tac >>
+      rename1 `rep_of_group is h = SOME ((EL rr is).inst_id,h)` >>
+      `mm_local_rep_index is gs j = rr` by
+        (qpat_x_assum `!j h q. _` (qspecl_then [`j`,`h`,`rr`] mp_tac) >> simp[]) >>
+      `mm_local_rep_index is gs j <> r` by decide_tac >>
+      simp[] >> qexistsl [`h`,`rr`] >> gvs[]) >>
+  strip_tac >>
+  rename1 `rep_of_group is h = SOME ((EL rr is).inst_id,h)` >>
+  `mm_local_rep_index is gs j = rr` by
+        (qpat_x_assum `!j h q. _` (qspecl_then [`j`,`h`,`rr`] mp_tac) >> simp[]) >>
+  `SUC r <= rr` by decide_tac >>
+  simp[] >> qexistsl [`h`,`rr`] >> gvs[]
+QED
+
 Theorem mm_local_run_block_pair[local]:
   ~(?err. run_block fuel ctx bb s = Error err) /\
   (!sp. eval_phis s bb.bb_instructions = OK sp ==>
