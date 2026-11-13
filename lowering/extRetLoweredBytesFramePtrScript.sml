@@ -27,7 +27,8 @@ Proof
   >- (Cases_on `builtin` >>
       gvs[lowered_value_type_def, expr_type_def, is_bytestring_type_def] >>
       rw[concat_buffer_type_def] >>
-      rpt CASE_TAC >> simp[is_bytestring_type_def]) >>
+      Cases_on `ty` >> gvs[is_bytestring_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_bytestring_type_def]) >>
   rename1 `Call ty target args drv` >> Cases_on `target` >>
   gvs[lowered_value_type_def, expr_type_def] >>
   PairCases_on `p` >> gvs[well_typed_expr_def] >>

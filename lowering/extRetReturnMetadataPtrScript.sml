@@ -27,7 +27,9 @@ Proof
   gvs[supported_declaration_header_def, check_toplevel_decl_def,
       lookup_function_def]
   >~ [`if s = name /\ f = External then _ else _`]
-  >- (Cases_on `s = name /\ f = External` >> gvs[] >>
+  >- (Cases_on `s = name /\ f = External` >> gvs[]
+      >~ [`well_formed_type _ NoneT`]
+      >- simp[well_formed_type_def, vyperValueTheory.evaluate_type_def] >>
       first_x_assum irule >> simp[] >> metis_tac[])
   >~ [`lookup_function _ _ _ (VariableDecl vis _ _ _ _ :: _)`]
   >- (Cases_on `vis` >> gvs[lookup_function_def] >>
@@ -35,7 +37,6 @@ Proof
   >~ [`lookup_function _ _ _ (HashMapDecl vis _ _ _ _ _ :: _)`]
   >- (Cases_on `vis` >> gvs[lookup_function_def] >>
       first_x_assum irule >> simp[] >> metis_tac[])
-  >~ [`well_formed_type _ NoneT`] >- simp[well_formed_type_def, vyperValueTheory.evaluate_type_def] >>
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
