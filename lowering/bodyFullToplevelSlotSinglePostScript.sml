@@ -5,6 +5,7 @@ Ancestors
   exprSimMemDefs exprLoweringProps vyperStorageFootprint
   loweringPosts bodyPtrDefs venomState venomInst words arithmetic
   exprSimIfExpWidenedAdapter loweringShapeDefs
+  exprPtrUnwrapStorageSource context exprLowering exprSimProps
 
 Theorem toplevel_slot_single_semantic_family:
   storage_trace_domain cx st0 ee.storage_trace /\
@@ -147,4 +148,44 @@ Proof
   >- (`w2n d+nb <= b \/ b+sz <= w2n d` by metis_tac[] >>
       `i < w2n d \/ w2n d+nb <= i` by decide_tac >> metis_tac[]) >>
   `i < w2n d` by decide_tac >> metis_tac[]
+QED
+
+Theorem toplevel_slot_single_value_posts:
+  storage_holds cx tr (post_value_type cenv (TopLevelName ann nsid)) tv key ee s /\
+  read_result cx tv ee = (INL v,ee) /\
+  ~is_word_type (post_value_type cenv (TopLevelName ann nsid)) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv (TopLevelName ann nsid)) = SOME rty /\
+  type_memory_size rty <= nb /\
+  type_memory_bytes cenv (lowered_value_type cenv (TopLevelName ann nsid)) <= nb /\
+  eval_operand (Var root) z = SOME d /\ ptr_covers Gf tnf root z nb /\
+  FLOOKUP z.vs_allocas sb.cs_next_id = SOME (w2n d,nb) /\
+  sa.cs_next_id <= sb.cs_next_id /\ sb.cs_next_id < sc.cs_next_id /\
+  w2n d+nb <= z.vs_alloca_next /\
+  (!name b len. local_region cenv ee.scopes z name b len ==>
+    w2n d+nb <= b \/ b+len <= w2n d) /\
+  (!mem. mem_agree_outside tnf.t_mem z.vs_memory mem ==>
+    val_in_memory rty v (w2n d) mem) ==>
+  vv_at cenv cx (post_value_type cenv (TopLevelName ann nsid)) sa sc ee tv
+    (LocatedValue (post_value_type cenv (TopLevelName ann nsid)) (mk_ptr (Var root) LocMemory)) z /\
+  expr_store_bound cx (expr_type (TopLevelName ann nsid)) v (Var root) z /\
+  ptr_val_ok cx (post_value_type cenv (TopLevelName ann nsid)) v (Var root) Gf tnf z /\
+  ptr_buf_ok cenv (TopLevelName ann nsid) (Var root) Gf z /\
+  (!rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv (TopLevelName ann nsid)) = SOME rt /\
+    eval_operand (Var root) z = SOME w ==>
+    type_memory_size rt = 0 \/ w2n w+type_memory_size rt <= z.vs_alloca_next)
+Proof
+  strip_tac >> fs[post_value_type_def] >>
+  `val_wf rty v /\ val_footprint rty v <= type_memory_size rty` by
+    (irule storage_holds_value_bounds >> goal_assum drule >> simp[] >> metis_tac[]) >>
+  `ptr_val_ok cx (post_value_type cenv (TopLevelName ann nsid)) v (Var root) Gf tnf z /\
+   ptr_buf_ok cenv (TopLevelName ann nsid) (Var root) Gf z` by
+    (irule unwrap_storage_pointer_posts >> simp[post_value_type_def] >>
+     qexists `nb` >> simp[]) >>
+  simp[] >> conj_tac
+  >- (simp[vv_at_def, mk_ptr_def] >> rpt strip_tac >> gvs[] >>
+      disj1_tac >>
+      qexistsl [`sb.cs_next_id`, `w2n d`, `nb`] >> simp[] >> metis_tac[]) >>
+  fs[post_value_type_def, lowered_value_type_def] >>
+  simp[expr_store_bound_def] >> rpt strip_tac >> gvs[] >>
+  imp_res_tac val_store_size_le >> decide_tac
 QED
