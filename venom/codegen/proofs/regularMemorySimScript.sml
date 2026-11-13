@@ -181,29 +181,3 @@ Proof
   `~(off <= i /\ i < off + LENGTH (TAKE capacity data))` by decide_tac >>
   simp[]
 QED
-
-(* Venom RETURN returndata = GENLIST of read_byte *)
-Theorem venom_returndata_read_byte:
-  !off sz (mem : byte list).
-    TAKE sz (DROP off mem ++ REPLICATE sz (0w:byte)) =
-    GENLIST (\i. read_byte (off + i) mem) sz
-Proof
-  rpt gen_tac >>
-  simp[LIST_EQ_REWRITE, LENGTH_TAKE_EQ, LENGTH_GENLIST,
-       LENGTH_APPEND, LENGTH_DROP] >>
-  rpt strip_tac >>
-  `x < MIN sz (LENGTH (DROP off mem) + sz)` by simp[MIN_DEF] >>
-  simp[EL_TAKE, EL_GENLIST] >>
-  simp[read_byte_def] >>
-  Cases_on `off + x < LENGTH mem`
-  >- (
-    `x < LENGTH (DROP off mem)` by (fs[LENGTH_DROP] >> decide_tac) >>
-    simp[EL_APPEND1, EL_DROP]
-  )
-  >- (
-    simp[] >>
-    `LENGTH (DROP off mem) <= x` by (fs[LENGTH_DROP] >> decide_tac) >>
-    `x - LENGTH (DROP off mem) < sz` by decide_tac >>
-    simp[EL_APPEND2, EL_REPLICATE]
-  )
-QED

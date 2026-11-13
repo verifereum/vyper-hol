@@ -5,11 +5,12 @@
  * lines, as read by evalCompilerBytecodeLib.read_hex_bytes).
  *
  * Usage: bytecode_parity_native.exe BYTECODE_DIR [PATH ...]
- * A fixture is named by its .hex file's path under BYTECODE_DIR, such as
+ * A fixture is named by its .hex file's path relative to BYTECODE_DIR, such as
  * python-o1-no-asm-opt/add_arg.hex or builtin-forms/oracle/ceil_dec.hex.  A
  * PATH selects that fixture, or every fixture under that directory; without
  * one, every fixture runs.  Every .hex file in a directory a selected fixture
- * sits in must have a fixture, except the pending ones below.  Exits non-zero
+ * sits in must have a fixture, except the oracles listed in
+ * ../pending-5127-port.md.  Exits non-zero
  * unless every selected fixture matches.
  *)
 structure compilerNativeParity = struct
@@ -61,18 +62,12 @@ structure compilerNativeParity = struct
                " (expected " ^ Int.toString (size expected div 2) ^ " bytes, got " ^
                Int.toString (size got div 2) ^ ")")
 
-  (* Out of parity on purpose; see ../pending-uint2str-buffer.md. *)
-  val pending = ["builtin-forms/oracle/uint2str_local.hex"]
-
   (* Fixtures that must compile but differ from the pinned oracle, so that a
      list entry that starts to match fails and gets removed: bounded memory
      decoding checks relative positions and head words before forming
      pointers, which the pinned Python does not (see
      ../pending-bounded-decode-guards.md). *)
   val decoder_divergent = [
-      "python-o1-no-asm-opt/abi_dynamic.hex",
-      "python-o1-no-asm-opt/abi_static.hex",
-      "python-o1-no-asm-opt/interface_calls.hex",
       "abi-codegen/oracle/dec_bytes_unwrapT.hex",
       "abi-codegen/oracle/dec_uint_unwrapT.hex",
       "external-calls/oracle/e04_ret_string.hex",
@@ -84,18 +79,7 @@ structure compilerNativeParity = struct
       "external-calls/oracle/e30_default_ret_tuple.hex",
       "external-calls/oracle/e37_default_ret_string.hex",
       "external-calls/oracle/e38_default_ret_local_array.hex",
-      "external-calls/oracle/e40_extcall_gas.hex",
-      "external-calls/oracle/e41_staticcall_gas.hex",
-      "external-calls/oracle/e42_extcall_gas_value_order.hex",
-      "external-calls/oracle/e43_extcall_all_kwargs.hex",
       "external-calls/oracle/e45_default_ret_ifexp.hex",
-      "external-calls/oracle/i02_iface_default_param.hex",
-      "external-calls/oracle/i03_two_ifaces_same_name.hex",
-      "external-calls/oracle/i09_iface_ret_iface.hex",
-      "external-calls/oracle/i13_ext_fn_before_iface.hex",
-      "external-calls/oracle/i15_iface_ret_iface_direct.hex",
-      "external-calls/oracle/m10c_iface_storage_main.hex",
-      "internal-frames/oracle/p74_int_ext_call.hex",
       "memory-stores/oracle/dec_from_memory2.hex",
       "memory-stores/oracle/t03_tuple_assign_abi_decode.hex",
       "memory-stores/oracle/t04_tuple_assign_extcall.hex",
@@ -110,6 +94,26 @@ structure compilerNativeParity = struct
   in loop [] before OS.FileSys.closeDir d end
 
   fun under path name = name = path orelse String.isPrefix (path ^ "/") name
+
+  (* Oracles out of parity until their vyperlang/vyper#5127 port lands, as
+     listed in ../pending-5127-port.md: `main/NAME` is the main corpus
+     (python-o1-no-asm-opt/NAME.hex), `SUITE/NAME` a feature suite's
+     SUITE/oracle/NAME.hex, except load_timing under ../tests/fixtures. *)
+  fun pending_oracles root = let
+    val path = OS.Path.concat (root, "pending-5127-port.md")
+    val prefix = "- `"
+    fun name line =
+      if String.isPrefix prefix line then
+        case String.fields (fn c => c = #"/")
+               (hd (String.fields (fn c => c = #"`")
+                      (String.extract (line, size prefix, NONE)))) of
+          ["main", n] => SOME ("python-o1-no-asm-opt/" ^ n ^ ".hex")
+        | ["load_timing", n] => SOME ("../tests/fixtures/load_timing/oracle/" ^ n ^ ".hex")
+        | [suite, n] => SOME (suite ^ "/oracle/" ^ n ^ ".hex")
+        | _ => NONE
+      else NONE
+  in List.mapPartial name (String.tokens (fn c => c = #"\n") (read_all path))
+  end handle IO.Io _ => []
 
   fun run_one dir (name, thunk) = let
     val t0 = Time.now ()
@@ -143,8 +147,14 @@ structure compilerNativeParity = struct
         root :: paths => (root, map (fn p => OS.Path.mkCanonical p) paths)
       | [] => (print "usage: bytecode_parity_native.exe BYTECODE_DIR [PATH ...]\n";
                OS.Process.exit OS.Process.failure)
-    val selected = List.filter (fn (n, _) => null paths orelse
-                     List.exists (fn p => under p n) paths) compilerNativeML.fixtures
+    (* A pending fixture runs only when its own path is requested. *)
+    val pending = pending_oracles root
+    fun is_pending n = List.exists (fn k => k = n) pending
+    val selected = List.filter (fn (n, _) =>
+                     List.exists (fn p => p = n) paths orelse
+                     (not (is_pending n) andalso
+                      (null paths orelse List.exists (fn p => under p n) paths)))
+                     compilerNativeML.fixtures
     (* A requested path, or an oracle file, with no compiled-in fixture
        would otherwise be skipped without a failure. *)
     val known = map #1 compilerNativeML.fixtures

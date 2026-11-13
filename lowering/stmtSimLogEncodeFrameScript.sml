@@ -29,7 +29,7 @@ Proof
   `abi_footprint_disjoint (w2n w) sz fp` by metis_tac[] >>
   `mem_bytes_at (w2n w) sz t.vs_memory = mem_bytes_at (w2n w) sz s.vs_memory` by
     (irule abi_decode_footprint_frame_slice >> goal_assum (drule_at Any) >> simp[]) >>
-  irule val_in_memory_mem_agree >> simp[] >>
+  irule memoryValueFrameTheory.memory_value_rel_mem_agree_region >> simp[] >>
   qexistsl_tac [`sz`,`s.vs_memory`] >> simp[]
 QED
 
@@ -64,9 +64,10 @@ Proof
       simp[mstore_memory_nondecreasing])
   >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), mcopy_def] >>
       simp[write_memory_with_expansion_nondecreasing])
-  >- gvs[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs(), update_var_def] >>
-  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
-  simp[write_memory_with_expansion_nondecreasing]
+  >- gvs[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs(), update_var_def]
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      simp[write_memory_with_expansion_nondecreasing]) >>
+  gvs[step_inst_base_opcode_eqs, exec_pure1_def, AllCaseEqs(), update_var_def]
 QED
 
 Theorem log_encode_run_memory_mono:
@@ -113,17 +114,6 @@ Proof
   drule log_encode_external_fields >> strip_tac >>
   irule state_rel_frame >> (conj_tac >- first_assum ACCEPT_TAC) >>
   qexistsl_tac [`es`,`s`] >> asm_simp_tac (srw_ss()) []
-QED
-
-Theorem log_encode_local_region_frame[local]:
-  (!name entry p sz. lookup_scopes name scopes = SOME entry /\
-    FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
-    lookup_var p t = lookup_var p s) ==>
-  (local_region ce scopes t name lo sz <=> local_region ce scopes s name lo sz)
-Proof
-  strip_tac >> simp[local_region_def] >>
-  eq_tac >> strip_tac >> qexistsl_tac [`entry`,`p`,`w`] >>
-  asm_simp_tac bool_ss [] >> metis_tac[]
 QED
 
 Theorem log_encode_immutable_sep_frame[local]:
@@ -264,7 +254,7 @@ Proof
      qpat_x_assum `t.vs_alloca_next = _` kall_tac >>
      `!name lo sz. local_region ce es.scopes t name lo sz ==>
        local_region ce es.scopes s name lo sz` by
-       (drule log_encode_local_region_frame >> metis_tac[]) >>
+       (drule local_region_lookup_cong >> metis_tac[]) >>
      irule log_encode_immutable_sep_frame >> qexists_tac `s` >>
      asm_simp_tac bool_ss [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `immutable_base_zero ce t` by

@@ -246,6 +246,17 @@ Proof
   metis_tac[]
 QED
 
+Theorem bb_well_formed_subst_label_terminator:
+  !old_lbl new_lbl bb.
+    bb_well_formed bb ==>
+    bb_well_formed (subst_label_terminator old_lbl new_lbl bb)
+Proof
+  rw[subst_label_terminator_def] >>
+  irule bb_well_formed_map_opcode_preserving >> rw[] >>
+  Cases_on `is_terminator inst.inst_opcode` >>
+  simp[subst_label_inst_def]
+QED
+
 Theorem wf_function_remove_block:
   !fn lbl.
     wf_function fn /\

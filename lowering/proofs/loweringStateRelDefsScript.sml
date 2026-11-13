@@ -3,6 +3,7 @@
  *
  * TOP-LEVEL:
  *   state_rel        — cross-level simulation relation
+ *   state_rel_simple — legacy fixed-offset, vars_rel-based event relation
  *   result_rel       — maps Vyper exceptions to Venom exec_result
  *   local_ptrs_rel   — live locals held through pointer variables match memory
  *   accounts_rel     — every address's accounts and transient storage match,
@@ -29,7 +30,7 @@
 
 Theory loweringStateRelDefs
 Ancestors
-  compileEnv valueEncodingDefs immutableValue immutableEncoding vyperStorageLayoutSafety
+  compileEnv valueEncodingDefs memoryValueDefs immutableValue immutableEncoding vyperStorageLayoutSafety
   venomExecSemantics vyperState vyperContext vyperValue vyperEvent
   byte keccak finite_map pred_set list rich_list
 
@@ -141,6 +142,24 @@ Definition well_formed_cenv_def:
        FLOOKUP cenv.ce_vars n = SOME (MemLoc off sz) ⇒ sz > 0 ∧ (sz MOD 32 = 0))
 End
 
+(* Compatibility helper for fixed-offset environments; state_rel below uses
+   local_ptrs_rel for allocation-backed locals instead. *)
+(* Local variables in Vyper scopes match Venom memory.
+   Only handles MemLoc (local memory variables) because:
+   - StorageLoc variables (self.x) are covered by storage_rel
+   - TransientLoc/ImmutableLoc are similar global state
+   - Scopes only contain local (stack-like) variables *)
+Definition vars_rel_def:
+  vars_rel cenv scopes ss =
+    ∀ name entry offset size.
+      lookup_scopes name scopes = SOME entry ∧
+      FLOOKUP cenv.ce_vars name = SOME (MemLoc offset size)
+      ⇒
+      (* The complete layout includes defaults omitted by sparse fixed arrays;
+         entry.type also selects the correct address/fixed-bytes alignment. *)
+      memory_value_rel entry.type entry.value offset ss.vs_memory
+End
+
 (* ===== Locals held through allocations ===== *)
 (* After its declaration in an external or fallback body a local is
    PtrVar (Var p) sz: the ALLOCA emitted at its declaration binds p to the base
@@ -160,6 +179,18 @@ Definition local_region_def:
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ∧
       lookup_var p ss = SOME w ∧ base = w2n w
 End
+
+(* Live local regions depend only on the locals' pointer variables. *)
+Theorem local_region_lookup_cong:
+  (∀name entry p sz.
+     lookup_scopes name scopes = SOME entry ∧
+     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ⇒
+     lookup_var p t = lookup_var p s) ⇒
+  (local_region cenv scopes t name lo sz ⇔
+   local_region cenv scopes s name lo sz)
+Proof
+  rw[local_region_def] >> metis_tac[]
+QED
 
 (* x is not the pointer variable of a live local, so assigning it leaves the
    locals in place. *)
@@ -237,7 +268,7 @@ End
      it;
    - the value fits the region and is well formed (val_wf), which is what
      lets a write outside the region leave it unchanged;
-   - val_in_memory holds at the base.
+   - the complete typed memory layout holds at the base.
    And the regions of distinct live locals are disjoint, so writing one
    local leaves the others unchanged.
    Bump allocation alone gives this for ALLOCA, so it does not depend on the
@@ -256,7 +287,7 @@ Definition local_ptrs_rel_def:
          w2n w + sz ≤ ss.vs_alloca_next ∧
          type_memory_size entry.type ≤ sz ∧
          val_wf entry.type entry.value ∧
-         val_in_memory entry.type entry.value (w2n w) ss.vs_memory) ∧
+         memory_value_rel entry.type entry.value (w2n w) ss.vs_memory) ∧
     (∀n1 n2 b1 sz1 b2 sz2.
        n1 ≠ n2 ∧
        local_region cenv scopes ss n1 b1 sz1 ∧
@@ -266,13 +297,13 @@ End
 
 (* ===== Storage Relation up to Dead Bytes ===== *)
 (* The source writes a bytestring as its length and the slots its bytes use
-   (encode_dyn_bytes_slots), zero-padding the last one.  The lowering copies
-   the value's whole storage block from its memory buffer
-   (compile_memory_to_storage, Python's _store_memory_to_storage), so the
-   bytes past the length, up to the capacity, hold whatever the buffer held
-   there.  A DynArray nested in another value is copied the same way, so its
-   elements past its length do too.  Nothing reads them: decoding reads a
-   length first and only the bytes or elements below it.  The relation on
+   (encode_dyn_bytes_slots), zero-padding the last one.  The lowering
+   (compile_store_slots) writes the same slots, but copies the last word of
+   a bytestring from its memory buffer as it is, so the bytes past a
+   bytestring's length can differ.  DynArray capacity elements remain
+   related even after a shrink: both sides write only the active elements,
+   and a previously captured child pointer may still read the inactive
+   ones' headers or values.  The relation on
    the running contract's storage and transient storage therefore only
    compares the bytes that are not dead.
 
@@ -280,8 +311,8 @@ End
    dead in a value of type tv stored at slot base of st, by the lengths
    that st holds:
    - a bytestring: a data byte at or past the length, within the capacity;
-   - a DynArray: every byte of an element at or past the length, and the
-     dead bytes of the elements below it;
+   - a DynArray: the dead bytes of every capacity element, regardless of
+     the current length;
    - a struct, tuple or static array: the dead bytes of its members. *)
 Definition dyn_bytes_dead_def:
   dyn_bytes_dead (st:storage) base max (j:num) (b:num) ⇔
@@ -302,11 +333,7 @@ Definition dead_bytes_def:
      ∃i. i < n ∧ dead_bytes st (base + i * type_slot_size tv) tv j b) ∧
   (dead_bytes st base (ArrayTV tv (Dynamic n)) j b ⇔
      ∃i. i < n ∧
-         if i < w2n (lookup_storage (n2w base) st) then
-           dead_bytes st (base + 1 + i * type_slot_size tv) tv j b
-         else
-           base + 1 + i * type_slot_size tv ≤ j ∧
-           j < base + 1 + (i + 1) * type_slot_size tv ∧ b < 32) ∧
+         dead_bytes st (base + 1 + i * type_slot_size tv) tv j b) ∧
   (dead_bytes st base (StructTV fields) j b ⇔
      dead_bytes_fields st base fields j b) ∧
   (dead_bytes_list st base [] j b ⇔ F) ∧
@@ -413,7 +440,8 @@ Definition transient_rel_def:
       (vs.tStorage addr) (contract_transient ss)
 End
 
-(* The accounts and the transient storage of every address agree.
+(* The accounts and the transient storage of every address agree, and
+   Venom's active frame code (ss.vs_code) equals cx.txn.code.
    Other addresses' accounts and
    transient storage change during a body only through the call oracle,
    whose outcome both sides adopt the same way (adopt_outcome), which makes
@@ -422,7 +450,8 @@ End
 Definition accounts_rel_def:
   accounts_rel cx (vs:evaluation_state) ss ⇔
     accounts_agree cx vs.accounts ss.vs_accounts ∧
-    transient_agree cx vs.tStorage ss.vs_transient
+    transient_agree cx vs.tStorage ss.vs_transient ∧
+    ss.vs_code = cx.txn.code
 End
 
 (* ===== Immutables Relation ===== *)
@@ -711,7 +740,7 @@ QED
    - accounts_rel: the accounts and transient storage of every address (the
      running contract's storage up to dead bytes); storage_rel and
      transient_rel are its case for the running contract.
-   - immutables_rel: immutables (vs_immutables in a constructor, the data
+   - immutables_rel: immutables (staged memory in a constructor, the data
      section at runtime).
    - logs_rel: emitted logs.
    - call_ctx_rel: transaction, call and block context.
@@ -740,6 +769,50 @@ Definition state_rel_def:
      vs.outcomes = SOME ss.vs_outcomes ∧
      LIST_REL (request_agree cx) vs.requests ss.vs_requests ∧
      vs.pending_deletions = ss.vs_pending_deletions)
+End
+
+(* Legacy event invariant: retain the word-indexed immutable bookkeeping
+   contract of the fixed-offset proofs. This is not the constructor memory
+   representation or deployment relation; those use immutables_rel above.
+   Neither legacy relation implies the current simulation relation. *)
+Definition immutables_rel_simple_def:
+  immutables_rel_simple cenv (addr:address) src_id_opt is_ctor
+      (vs:evaluation_state) ss <=>
+    let interp_imms = (case ALOOKUP vs.immutables addr of
+                         NONE => FEMPTY
+                       | SOME mod_imms => get_source_immutables src_id_opt mod_imms) in
+    if is_ctor then
+      !name tv v byte_offset.
+        FLOOKUP cenv.ce_module_vars (src_id_opt, name) =
+          SOME (ImmutableLoc byte_offset) /\
+        FLOOKUP interp_imms name = SOME (tv, v) ==>
+        FLOOKUP ss.vs_immutables (byte_offset DIV 32) =
+          SOME (typed_val_to_w256 tv v)
+    else
+      !name tv v byte_offset.
+        FLOOKUP cenv.ce_module_vars (src_id_opt, name) =
+          SOME (ImmutableLoc byte_offset) /\
+        FLOOKUP interp_imms name = SOME (tv, v) ==>
+        byte_offset + type_memory_size tv <= LENGTH ss.vs_data_section /\
+        val_in_memory tv v byte_offset ss.vs_data_section
+End
+
+(* Legacy fixed-offset oracle-mode relation used by the event proofs.
+   Unlike state_rel, it retains the legacy immutable bookkeeping contract
+   and does not relate allocation-backed local pointers; those proofs
+   maintain local_ptrs_rel separately. *)
+Definition state_rel_simple_def:
+  state_rel_simple cenv cx vs ss =
+    (vars_rel cenv vs.scopes ss ∧
+     storage_rel cx cx.txn.target vs ss ∧
+     storage_vars_rel cenv cx ∧
+     transient_rel cx cx.txn.target vs ss ∧
+     transient_vars_rel cenv cx ∧
+     immutables_rel_simple cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
+     logs_rel cenv cx.txn.target vs ss ∧
+     call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
+     vs.outcomes = SOME ss.vs_outcomes ∧
+     vs.requests = ss.vs_requests)
 End
 
 Theorem state_rel_gas_obs:

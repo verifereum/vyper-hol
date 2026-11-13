@@ -5,7 +5,7 @@
    externalReturnWidenedCallMem's. *)
 Theory externalReturnValueMem
 Ancestors
-  returnValueTyped
+  returnValueTyped externalReturnDirectMem externalReturnNormalizedMem
   externalReturnLeafMem externalNormalizePremises typedNormalizeRankMem
   externalReturnZeroLayout
   nonreentrantExit
@@ -37,7 +37,7 @@ Theorem external_frame_ret_value_run_mem:
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env0 /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =
@@ -69,6 +69,9 @@ Theorem external_frame_ret_value_run_mem:
        expr_post unit.cu_context func cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE)
          e es sa s1 s0 ee v op t /\
+       expr_store_bound
+         (initial_evaluation_context am.sources am.layouts tx NONE)
+         (expr_type e) v op t /\
        (?gs ee'.
           bind (eval_expr
                   (initial_evaluation_context am.sources am.layouts tx NONE) e)
@@ -82,5 +85,12 @@ Theorem external_frame_ret_value_run_mem:
        ?fuel r. run_from fuel unit.cu_context func t = r /\ exit_result r /\
                 mem_safe_run fuel unit.cu_context func t
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `~is_word_type ret /\
+    ~(is_bytestring_type (lowered_value_type cenv' e) /\ is_bytestring_type ret) /\
+    lowered_value_type cenv' e <> ret`
+  >- (qpat_x_assum `~is_word_type ret /\ _` strip_assume_tac >>
+      drule_all external_frame_ret_value_normalized_run_mem >> simp[]) >>
+  drule_all external_frame_ret_value_direct_run_mem >> simp[]
 QED

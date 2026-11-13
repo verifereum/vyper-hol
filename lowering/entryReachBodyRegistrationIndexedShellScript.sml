@@ -43,7 +43,7 @@ Theorem entry_selected_prefix_offset:
     SOME (mut,F,args,[],ret,fbody) /\
   bind_arguments (type_env tops) args tx.args = SOME scope /\
   set_external_package_target target
-    (package_external_fn tops F keys
+    (package_external_fn tops T keys
       (mut,F,raw,tx.function_name,args,([]:expr list),ret,fbody)) =
     (lbl,ce,pos,cds,pay,F,key,ut,view,fbody,rt) /\
   compile_register_positional_args ce pos 4 st = (cef,last) /\
@@ -99,7 +99,7 @@ Theorem entry_selected_indexed_shell:
     SOME (mut,F,args,[],ret,fbody) /\
   bind_arguments (type_env tops) args tx.args = SOME scope /\
   set_external_package_target target
-    (package_external_fn tops F keys
+    (package_external_fn tops T keys
       (mut,F,raw,tx.function_name,args,([]:expr list),ret,fbody)) =
     (lbl,ce,pos,cds,pay,F,key,ut,view,fbody,rt) /\
   compile_register_positional_args ce pos 4 st = (cef,last) /\

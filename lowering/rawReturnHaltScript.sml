@@ -45,7 +45,7 @@ Theorem return_raw_run[local]:
     ?ss. run_from fuel ctx fn s = Halt ss /\ ss.vs_returndata = bs /\
          ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
          ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
-            ss.vs_pending_deletions = s.vs_pending_deletions
+         ss.vs_pending_deletions = s.vs_pending_deletions
 Proof
   rpt strip_tac >>
   qabbrev_tac `s1 = update_var len (n2w (LENGTH bs)) s with

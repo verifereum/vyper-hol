@@ -80,8 +80,7 @@ Theorem emit_input_plan_one:
       emit_one_input opc next_liveness op ps
 Proof
   rpt gen_tac >>
-  simp[emit_input_plan_def, venomInstTheory.operand_vars_def,
-       dfgDefsTheory.operand_vars_def] >>
+  simp[emit_input_plan_def, venomInstTheory.operand_vars_def] >>
   Cases_on `emit_one_input opc next_liveness op ps` >> simp[]
 QED
 
@@ -97,7 +96,7 @@ Proof
   simp[emit_input_plan_def] >>
   Cases_on `emit_one_input opc (operand_vars [op2] ++ next_liveness) op1 ps` >>
   Cases_on `emit_one_input opc next_liveness op2 r` >>
-  simp[venomInstTheory.operand_vars_def, dfgDefsTheory.operand_vars_def]
+  simp[venomInstTheory.operand_vars_def]
 QED
 
 (* =========================================================================
@@ -219,6 +218,18 @@ Definition generate_emit_ops_def:
           ([SOEmit "SWAP1"; SOEmit "MSTORE"], ps)
         else ([], ps)
 End
+
+Theorem generate_emit_ops_some:
+  !inst ltc ps name.
+    venom_to_evm_name inst.inst_opcode = SOME name ==>
+    generate_emit_ops inst ltc ps = ([SOEmit name], ps)
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = INITIAL_FMP` >> gvs[asmIRTheory.venom_to_evm_name_def] >>
+  Cases_on `inst.inst_opcode = BUMP` >> gvs[asmIRTheory.venom_to_evm_name_def] >>
+  simp[generate_emit_ops_def, LET_THM]
+QED
+
 
 (* =========================================================================
    Compute Operands for an Instruction

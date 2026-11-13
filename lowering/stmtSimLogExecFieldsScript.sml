@@ -12,7 +12,8 @@ End
 Definition log_encode_safe_opcode_def:
   log_encode_safe_opcode opc <=>
     opc = ALLOCA \/ opc = ADD \/ opc = AND \/ opc = MLOAD \/
-    opc = MSTORE \/ opc = MCOPY \/ opc = CALLDATASIZE \/ opc = CALLDATACOPY
+    opc = MSTORE \/ opc = MCOPY \/ opc = CALLDATASIZE \/ opc = CALLDATACOPY \/
+    opc = NOT
 End
 
 Theorem log_encode_alloca_external[local]:
@@ -50,8 +51,10 @@ Proof
          mstore_def, write_memory_with_expansion_def, log_encode_external_def]
   >- (irule log_encode_copy_external >> qexists_tac `i` >> asm_simp_tac bool_ss [])
   >- gvs[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs(),
-         log_encode_external_def, update_var_def] >>
-  irule log_encode_copy_external >> qexists_tac `i` >> asm_simp_tac bool_ss []
+         log_encode_external_def, update_var_def]
+  >- (irule log_encode_copy_external >> qexists_tac `i` >> asm_simp_tac bool_ss []) >>
+  gvs[step_inst_base_opcode_eqs, exec_pure1_def, AllCaseEqs(),
+      log_encode_external_def, update_var_def]
 QED
 
 Theorem log_encode_run_external:

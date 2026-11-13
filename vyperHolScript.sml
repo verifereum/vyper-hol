@@ -11,31 +11,48 @@ Theory vyperHol
 Ancestors
   (* semantics properties *)
   vyperSemanticsHol
-  (* frontend and test runner *)
-  vyperTestRunner
+  (* frontend, its cv translation, and the test runner *)
+  vyperTestRunner jsonToVyperCV
   (* compiler passes *)
   venomPassesHol
   (* analysis roll-up *)
   venomAnalysisHol
   (* lowering, pipeline, codegen and e2e *)
   vyperLoweringHol
-  (* calldata and ABI *)
-  abiProofs
+  (* Venom execution: alloca size caching, jump independence *)
+  allocaCacheProps jumpIndep
+  (* passes: FMP lowering composition, memory merging *)
+  fmpLowerSequenceExec mmTransform memzeroFrame
+  mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
+  (* O1: lifting per-function pass facts to the stage contract *)
+  o1PassLift
+  (* codegen and compiler units: frame simulation, stack planning, unit checks,
+     codegen request prefix *)
+  genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
+  codegenRequestPrefix
+  (* lowering: ABI correctness, target/place steps, typed copies and hashing,
+     place typing *)
+  abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
   placeTypingE2EProps
-  (* statements: nonreentrancy *)
-  nonreentrantEntry
+  (* lowering: entry decoding, allocation frames and registration, constructor
+     arguments, nonreentrancy, byte-builtin and concat memory, conversion from
+     bytes, widened returns, body memory *)
+  actualDecoderPackaging actualRegistrationCode actualEntryAllocationFrame
+  allocaHistoryFragment ctorRegisterArgs
+  nonreentrantEntry nonreentrantSource nonreentrantExit
+  builtinBytesMemory concatMemory exprSimConvertFromBytes
+  stmtSimReturnWiden bodyMemory
   (* pointer safety of the lowering *)
   batchCopyRobustPtr entryHaltPtr liveArrayTransportPtr normalizationAllocPtr
   ptrSafetyTransport returnMetadataPtr staticTypeFitsPtr structChildPtr
   typedCopyArrayExecutionPtr wordCopyRobustPtr
   (* end-to-end runtime correctness *)
   e2eCorrectness
+  (* sufficient gas, the companions to the call and deploy theorems *)
+  e2eGasSufficient e2eGasSufficientTop
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
-  (* Venom execution: jump independence *)
-  jumpIndep
-  (* passes: oracle projections, FMP lowering, memory merging, SSA *)
-  fmpLowerSequenceExec
-  mmBlockSimProofs mmSupplySsaProofs mmSupplyWfProofs
-  (* codegen: stack planning *)
-  stackPlanGenCompute
+  (* body induction: custom-error rows, admitted until the gate admits them *)
+  bodyCustomErrorCases
+  (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
+  codegenLabelDisciplined

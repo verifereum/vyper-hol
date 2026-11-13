@@ -7,7 +7,7 @@ Ancestors
 Theorem tuple_place_head_gas_continuation_open:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
   ~block_is_terminated sp /\
-  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   target_sim ctx func cenv cx env bt es /\
   well_typed_target env bt (EL i tys) /\
   call_evaluation_safe cx (int_calls_target bt) /\ ~immutable_root cx bt /\
@@ -22,16 +22,13 @@ Theorem tuple_place_head_gas_continuation_open:
   type_alloc_ok cenv (TupleT tys) /\ i < LENGTH tys /\
   (let dst = FST r; loc_opt = FST (SND r); dst_ty_opt = SND (SND r);
        loc = case loc_opt of SOME l => l | NONE => LocMemory;
-       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys;
-       arr = case dty of ArrayT et (Dynamic _) =>
-         SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-         | _ => NONE
+       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys
    in (if is_word_type (EL i ltys) then
          if is_word_type dty then
            compile_store_at_loc cenv.ce_imm_alloca dst (EL i elems) loc_opt
          else emit_void INVALID []
        else compile_assign_value cenv dst loc (EL i elems) (is_word_type dty)
-         NONE dty (EL i ltys) arr (type_memory_bytes cenv dty)) sa) = ((),sb) /\
+         NONE dty (EL i ltys) (type_memory_bytes cenv dty)) sa) = ((),sb) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\ local_ptrs_reserved cenv sa /\
   fn_has_code sp sa func /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sp.cs_next_var <= sa.cs_next_var /\
@@ -40,7 +37,8 @@ Theorem tuple_place_head_gas_continuation_open:
     (!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==> lookup_var x t = SOME v) /\
     (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
       FLOOKUP t.vs_allocas id = SOME entry) /\
-    alloca_frame cenv es sp s0 cenv ff t ==>
+    alloca_frame cenv es sp s0 cenv ff t /\
+    (?ast ax ast'. assign_tuple_targets cx (BaseTarget bt) (EL i vs) ast = (INL ax,ast')) ==>
     gas_outcome F (cx_tops cx) (ctx,func) next (ff with gas_obs := [],t) Q
       (\res ee r. expr_exit res r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
@@ -51,7 +49,8 @@ Proof
   strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[targetPlaceSimTheory.target_pre_def] >>
   `gas_admissible (eval_target_place cx bt) target_place_res_ok es` by
-    (irule tuple_place_target_gas_admissible >> metis_tac[]) >>
+    (irule tuple_place_target_gas_admissible >>
+     metis_tac[targetPlaceSimTheory.target_pre_def]) >>
   `type_place_target env bt = SOME (Type (EL i tys))` by
     fs[vyperTypeSystemTheory.well_typed_target_def] >>
   `gas_outcome F (cx_tops cx) (ctx,func) (eval_target_place cx bt) (es,s0)
@@ -75,9 +74,16 @@ Proof
     (fs[gas_marked_exec_def] >> drule gas_marked_path_exec >>
      strip_tac >> metis_tac[gas_path_normal]) >>
   drule_all (SRULE [LET_THM] tuple_place_marked_head_step) >> strip_tac >>
+  `?ast ast'. assign_tuple_targets cx (BaseTarget bt) (EL i vs) ast = (INL (),ast')` by
+    (qpat_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` strip_assume_tac o CONJUNCT1) >> fs[] >>
+     qexists `es with gas_obs := gas_explicit marks s0.vs_gas_readings` >>
+     simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def]) >>
   irule tuple_place_write_gas_prefix >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   first_x_assum irule >> simp[] >>
+  qpat_assum `assign_tuple_targets _ _ _ _ = _` (irule_at Any) >>
   qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[loweringPostsTheory.target_post_def] >> strip_tac >>
   rpt strip_tac >>

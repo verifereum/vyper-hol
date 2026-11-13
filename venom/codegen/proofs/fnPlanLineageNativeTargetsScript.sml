@@ -23,11 +23,11 @@ Proof
     (qpat_x_assum `!k. k < SUC n ==> _` (qspec_then `n` mp_tac) >> simp[]) >>
   first_x_assum (qspecl_then [`fn`, `lbl`, `bb`, `v`] mp_tac) >>
   simp[] >> disch_then SUBST1_TAC >>
-  drule livenessAnalysisPropsTheory.live_vars_at_transfer >>
+  drule livenessProofsTheory.live_vars_at_transfer >>
   disch_then (qspecl_then [`lbl`, `bb`, `n`] mp_tac) >>
   simp[] >> disch_then SUBST1_TAC >>
   simp[livenessDefsTheory.liveness_transfer_def,
-       livenessProofsTheory.live_update_mem, livenessDefsTheory.MEM_ordered_inst_uses] >>
+       livenessTransferProofsTheory.live_update_mem, livenessDefsTheory.MEM_ordered_inst_uses] >>
   metis_tac[DECIDE ``k < SUC n <=> k < n \/ k = n``]
 QED
 

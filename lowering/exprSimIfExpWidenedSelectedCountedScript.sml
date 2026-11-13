@@ -8,6 +8,7 @@ Ancestors
   exprSimIfExpWidenedArm exprSimIfExpCompat exprSimUnwrapProps
   exprSimSource exprSimProps exprSimHyps exprSimHypsDefs exprLoweringProps
   exprLowering compileEnv loweringPosts vyperAST vyperState context fragGasMode
+  memoryLayoutDefs memoryLayoutSource exprSimIfExpWidenedAggregate
 
 Theorem compile_selected_ifexp_post_path:
   (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
@@ -49,6 +50,8 @@ Proof
   >- (irule compile_bytes_ifexp_post_path >> metis_tac[expr_has_effect_thm]) >>
   `lowered_value_type ce e <> expr_type e` by
     (strip_tac >> fs[same_memory_layout_def, punnable_reflexive]) >>
+  `~tuple_memory_layout_eq (expr_type e) (lowered_value_type ce e)` by
+    metis_tac[tuple_memory_layout_eq_same_layout] >>
   `?ann fid args drv. e = Call ann (IntCall fid) args drv` by
     (drule expr_body_pre_var_types_well_formed >> disch_then assume_tac >>
      qspecl_then [`ce`, `e`, `env`] mp_tac ifexp_lowered_type_classify >>

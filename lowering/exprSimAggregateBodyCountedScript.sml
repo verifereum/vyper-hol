@@ -173,8 +173,10 @@ Proof
         qexistsl_tac [`sm`, `es'.scopes`, `s`] >> simp[] >>
         metis_tac[expr_post_rebased_lookup]) >>
      first_x_assum drule >> simp[arithmeticTheory.ADD_COMM]) >>
-  Cases_on `post_value_type ce e = expr_type e`
+  Cases_on `post_value_type ce e = expr_type e \/
+    tuple_memory_layout_eq (expr_type e) (post_value_type ce e)`
   >- suspend "same_layout" >>
+  pop_assum (strip_assume_tac o SRULE [DE_MORGAN_THM]) >>
   `~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e)` by
     metis_tac[post_value_type_word, post_value_type_bytestring] >>
   `acyclic_struct_metadata ce.ce_struct_fields` by
@@ -240,6 +242,16 @@ Proof
 QED
 
 Resume aggregate_store_body_rebased_slice_path[same_layout]:
+  (* Equal types, or tuples with equal member layouts: both store by a
+     same-type bulk copy. *)
+  `compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb) /\
+   expr_val_rel cx (expr_type e) v op s` by
+    (qpat_x_assum `post_value_type ce e = expr_type e \/ _` strip_assume_tac
+     >- gvs[expr_post_def] >>
+     conj_tac
+     >- (qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
+         simp[contextTheory.compile_store_memory_def]) >>
+     drule_all aggregate_child_tuple_layout_val_rel >> simp[]) >>
   `type_memory_size tv + 64 < dimword (:256)` by
     (Cases_on `is_word_type (expr_type e)`
      >- (drule_all word_tv_memory_size >> simp[wordsTheory.dimword_def]) >>
@@ -247,9 +259,7 @@ Resume aggregate_store_body_rebased_slice_path[same_layout]:
   `?sw. eval_operand op s = SOME sw /\
     (if is_word_type (expr_type e) then sw = typed_val_to_w256 tv v
      else val_in_memory tv v (w2n sw) s.vs_memory)` by
-    (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
-  `compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb)` by
-    metis_tac[] >>
+    (fs[expr_val_rel_def] >> metis_tac[]) >>
   drule compile_store_memory_same_type_size_forward >>
   disch_then (drule_at (Pat `evaluate_type _ _ = SOME tv`)) >>
   disch_then (drule_at (Pat `eval_operand op s = SOME sw`)) >>

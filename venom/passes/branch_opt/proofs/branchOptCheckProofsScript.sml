@@ -12,7 +12,7 @@
  *)
 Theory branchOptCheckProofs
 Ancestors
-  branchOptCheck stateEquiv stateEquivProps execEquivParamProps
+  branchOptCheck stateEquiv stateEquivProps stateEquivProofs execEquivParamProps
   execEquivParamBase execEquivProofs blockPrefixEquiv venomExecProofs venomExecSemantics venomState venomInst venomInstProps
   venomWfProps irSupply list rich_list pred_set finite_map
 

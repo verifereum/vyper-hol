@@ -32,7 +32,9 @@ bounds are not excluded by this whitelist; typing and allocation are separate.
 ### `supportedDeclsTheory`
 
 - `supported_declaration_header tops top`, `supported_declaration_headers tops`:
-  function flags false, no defaults, value arguments and NoneT/value return;
+  no raw return, defaults only on external functions, value arguments and
+  NoneT/value return (nonreentrant guards and external defaults are admitted;
+  `check_contract` separately validates their headers);
   private explicitly slotted storage of storage types; private explicitly slotted
   transient full words; private non-transient non-nested maps with permitted
   keys and full-word values; value-typed struct/interface fields; word/string
@@ -64,15 +66,18 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
   `__return_buf__`/`__return_pc__` (dedicated `ce_return_*` fields). The statement checks supply
   **all** AnnAssign and For names across all branches/nesting, as lists rather
   than deduplicated sets. This rejects duplicates within and across each class.
-- `supported_function_header_names tops top`: argument-name checks,
-  no-argument `__default__`. Internal function names are unrestricted: their
-  Venom labels come from `internal_fn_label`, which no other label can equal.
-- `supported_struct_field_names tops top`: no field/module-variable/map collision.
+- `supported_function_header_names tops top`: argument-name checks.
+  Internal function names are unrestricted: their Venom labels come from
+  `internal_fn_label`, which no other label can equal. External fallback
+  argument checks belong to `function_header_ok` in `check_contract`.
 - `supported_selectors_distinct tops`: uses **the actual compiler**
   `build_selectors (type_env tops) (FST (classify_functions tops))`; excludes
   fallback, Internal, Deploy; does not approximate selector uniqueness by names.
-- `supported_declaration_names tops`: distinct function/event names plus the
-  header, field-collision, and selector checks. It does not inspect locals/loops:
+- `supported_declaration_names tops`: distinct event names plus argument-name
+  checks. Struct fields may share names with module variables or maps.
+  `check_contract` separately checks external
+  names and all ABI-prefix/public-getter selectors; the selector helper above
+  is not a whitelist precondition. It does not inspect locals/loops:
   the statement checks additionally call `supported_function_bindings` on its collected
   names and enforce the internal-function/loop body restrictions.
 
@@ -118,10 +123,9 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
   positional arguments in source order, each kind at most once, and no
   `value=` on a staticcall. They are pure like every other operand, and both
   the lowering and the semantics evaluate them before the call.
-  The interpreter captures internal argument results before reading them after
-  defaults; external positional arguments are read after keyword evaluation.
-  This deferred-read behavior does not remove the whitelist's pure-operand
-  restriction. Builtin and log arguments remain eager.
+  The interpreter and the lowering read each internal- and external-call
+  argument as soon as it is evaluated, before the next argument, the defaults
+  and the keyword operands. Builtin and log arguments are eager too.
 - `supported_expr tops e`: P or E, for later statement expression positions.
   No statement or whole-program placeholder is provided.
 - Symbolic contracts: pure Call/Pop rejection, external-call inversion,

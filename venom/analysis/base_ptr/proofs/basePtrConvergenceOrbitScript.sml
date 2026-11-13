@@ -1,7 +1,7 @@
 Theory basePtrConvergenceOrbit
 Ancestors
   basePtrConvergenceTransfer basePtrConvergenceOrder basePtrDefs
-  allocaRemapSSA venomWf venomInst finite_map list pred_set dfIterateProofs arithmetic
+  allocaRemapSSA venomWf venomInst finite_map list pred_set dfIterateProofs arithmetic venomFnInstsProofs
 
 Theorem inst_output_member:
   inst_output i = SOME out ==> MEM out i.inst_outputs
@@ -87,7 +87,7 @@ Proof
   rename1 `FIND _ _ = SOME bb` >>
   `MEM bb fn.fn_blocks` by metis_tac[bp_find_some_mem] >>
   `EVERY (\i. MEM i (fn_insts fn)) bb.bb_instructions` by
-    (simp[EVERY_MEM, fn_insts_def] >> metis_tac[allocaRemapSSATheory.mem_fn_insts_blocks]) >>
+    (simp[EVERY_MEM, fn_insts_def] >> metis_tac[venomFnInstsProofsTheory.mem_fn_insts_blocks]) >>
   `bp_unique_writers (fn_insts fn)` by metis_tac[ssa_unique_writers] >>
   drule_all bp_inv_block >> strip_tac >>
   first_x_assum (qspec_then `SND (bp_process_block r bb.bb_instructions)` mp_tac) >>

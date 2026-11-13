@@ -30,7 +30,7 @@
 
 Theory sccpProofsBase
 Ancestors
-  sccpDefs sccpSound sccpConvergence
+  venomExecProofs venomFnInstsProofs instIdxIndep sccpDefs sccpSound sccpConvergence
   analysisSimDefs analysisSimProps analysisSimProofsBase
   passSimulationDefs passSimulationProps
   venomWf venomExecSemantics venomInst venomInstProps venomExecProps venomState
@@ -271,7 +271,7 @@ Proof
         metis_tac[sccpConvergenceTheory.sccp_measure_bounded])
     >- metis_tac[sccpConvergenceTheory.sccp_measure_inv_preserved]
     >- metis_tac[sccpConvergenceTheory.sccp_measure_monotone, MEM_APPEND]
-    >- metis_tac[analysisSimProofsTheory.cfg_dfs_pre_succs_closed]
+    >- metis_tac[cfgHelpersTheory.cfg_dfs_pre_succs_closed]
     >- simp[listTheory.EVERY_MEM]
     >- (mp_tac (Q.SPEC `fn` sccpConvergenceTheory.sccp_measure_inv_initial) >>
         Cases_on `fn_entry_label fn` >> simp[]))
@@ -343,108 +343,7 @@ Proof
   simp[sccp_refold, sccp_is_fixpoint]
 QED
 
-(* Well-formed functions contain only well-formed basic blocks *)
-Theorem wf_function_bb_well_formed:
-  wf_function fn /\ MEM bb fn.fn_blocks ==> bb_well_formed bb
-Proof
-  fs[wf_function_def]
-QED
-
 (* ===== Exit soundness from nophi at entry ===== *)
-
-(* ALL_DISTINCT on sublist of fn_insts_blocks *)
-Triviality ssa_block_outputs_distinct_aux[local]:
-  !bbs bb.
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs))) ==>
-    MEM bb bbs ==>
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
-Proof
-  Induct >> simp[fn_insts_blocks_def] >>
-  rpt gen_tac >> strip_tac >> strip_tac >> gvs[]
-  >- fs[ALL_DISTINCT_APPEND]
-  >> (first_x_assum irule >> gvs[] >> fs[ALL_DISTINCT_APPEND])
-QED
-
-Triviality ssa_block_outputs_distinct[local]:
-  !fn bb.
-    ssa_form fn /\ MEM bb fn.fn_blocks ==>
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
-Proof
-  rpt strip_tac >> irule ssa_block_outputs_distinct_aux >>
-  fs[ssa_form_def, fn_insts_def] >> metis_tac[]
-QED
-
-(* ALL_DISTINCT FLAT MAP: elements at different indices are disjoint *)
-Triviality all_distinct_flat_map_disjoint[local]:
-  !l (f:'a -> 'b list) k j y.
-    ALL_DISTINCT (FLAT (MAP f l)) /\
-    k < LENGTH l /\ j < LENGTH l /\ k <> j /\
-    MEM y (f (EL k l)) ==>
-    ~MEM y (f (EL j l))
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  fs[FLAT_APPEND, ALL_DISTINCT_APPEND] >>
-  Cases_on `k` >> Cases_on `j` >> gvs[]
-  >- (fs[MEM_FLAT, MEM_MAP] >> metis_tac[MEM_EL])
-  >- (fs[MEM_FLAT, MEM_MAP] >> metis_tac[MEM_EL])
-  >> (first_x_assum irule >> simp[] >> metis_tac[])
-QED
-
-(* SSA: outputs of different instructions in the same block are disjoint *)
-Triviality ssa_no_output_overlap[local]:
-  !fn bb k j y.
-    ssa_form fn /\ MEM bb fn.fn_blocks /\
-    k < LENGTH bb.bb_instructions /\ j < LENGTH bb.bb_instructions /\
-    k <> j /\
-    MEM y (EL k bb.bb_instructions).inst_outputs ==>
-    ~MEM y (EL j bb.bb_instructions).inst_outputs
-Proof
-  rpt strip_tac >>
-  drule_all ssa_block_outputs_distinct >>
-  strip_tac >>
-  metis_tac[all_distinct_flat_map_disjoint]
-QED
-
-(* In SSA form, different instructions in the same block produce disjoint
-   output variables *)
-Theorem ssa_no_output_overlap_inst:
-  !fn bb k idx y.
-    ssa_form fn /\ MEM bb fn.fn_blocks /\
-    k < LENGTH bb.bb_instructions /\ idx < LENGTH bb.bb_instructions /\
-    k <> idx /\
-    MEM y (EL k bb.bb_instructions).inst_outputs ==>
-    ~MEM y (EL idx bb.bb_instructions).inst_outputs
-Proof
-  rpt strip_tac >>
-  metis_tac[ssa_no_output_overlap]
-QED
-
-(* Terminator step_inst_base is independent of vs_inst_idx *)
-Triviality term_step_base_idx_0[local]:
-  !inst s v.
-    is_terminator inst.inst_opcode /\
-    step_inst_base inst s = OK v ==>
-    step_inst_base inst (s with vs_inst_idx := 0) = OK v
-Proof
-  rpt strip_tac >>
-  `v.vs_inst_idx = 0` by
-    metis_tac[instIdxIndepTheory.terminator_OK_inst_idx_0] >>
-  qabbrev_tac `f = \st:venom_state. st with vs_inst_idx := 0` >>
-  `exec_result_map f (step_inst_base inst (s with vs_inst_idx := 0)) =
-   exec_result_map f (step_inst_base inst s)` by
-    (unabbrev_all_tac >>
-     metis_tac[instIdxIndepTheory.terminator_step_inst_base_idx_norm0]) >>
-  `exec_result_map f (step_inst_base inst s) = OK v` by
-    (simp[Abbr `f`, instIdxIndepTheory.exec_result_map_def] >>
-     `v with vs_inst_idx := 0 = v` by
-       simp[venom_state_component_equality] >> fs[]) >>
-  fs[] >>
-  Cases_on `step_inst_base inst (s with vs_inst_idx := 0)` >>
-  fs[Abbr `f`, instIdxIndepTheory.exec_result_map_def] >>
-  `v'.vs_inst_idx = 0` by
-    metis_tac[instIdxIndepTheory.terminator_OK_inst_idx_0] >>
-  fs[venom_state_component_equality]
-QED
 
 (* ===== Conditional const_sound ===== *)
 
@@ -955,25 +854,6 @@ Proof
       by (simp[EVERY_MEM] >> rpt strip_tac >> gvs[]) >>
     metis_tac[const_try_fold_drestrict]) >>
   irule const_try_fold_sound >> metis_tac[]
-QED
-
-(* ASSIGN step result: evaluates operand and stores in output *)
-Triviality step_assign_result[local]:
-  !fuel ctx inst src_op dst s s'.
-    inst.inst_opcode = ASSIGN /\
-    inst.inst_operands = [src_op] /\
-    inst.inst_outputs = [dst] /\
-    step_inst fuel ctx inst s = OK s' ==>
-    ?val. eval_operand src_op s = SOME val /\
-          s' = update_var dst val s
-Proof
-  rpt strip_tac >>
-  `step_inst_base inst s = OK s'` by (
-    `inst.inst_opcode <> INVOKE` by simp[] >>
-    metis_tac[step_inst_non_invoke]) >>
-  pop_assum mp_tac >>
-  simp_tac std_ss [Once step_inst_base_def] >>
-  Cases_on `eval_operand src_op s` >> simp[]
 QED
 
 (* sccp_transfer_inst preserves cond_const_sound through each step *)
@@ -1577,19 +1457,6 @@ QED
 
 (* ===== Cross-block helpers ===== *)
 
-(* sccp_eval_phis_for_edge preserves FLOOKUP for non-PHI-output vars *)
-Triviality sccp_eval_phi_for_edge_output[local]:
-  !src_lbl src_vals inst out v.
-    sccp_eval_phi_for_edge src_lbl src_vals inst = SOME (out, v) ==>
-    MEM out inst.inst_outputs
-Proof
-  rpt gen_tac >> simp[sccp_eval_phi_for_edge_def] >>
-  Cases_on `inst.inst_outputs` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `FIND (\(lbl, _0). lbl = src_lbl) (sccp_phi_pairs inst.inst_operands)` >>
-  simp[] >> PairCases_on `x` >> simp[]
-QED
-
 Triviality sccp_eval_phis_cons[local]:
   !h t src_lbl src_vals lat.
     sccp_eval_phis_for_edge src_lbl src_vals (h::t) lat =
@@ -1621,7 +1488,7 @@ Proof
   Cases_on `h.inst_opcode = PHI` >> simp[] >>
   Cases_on `sccp_eval_phi_for_edge src_lbl src_vals h` >> simp[] >>
   PairCases_on `x'` >> simp[FLOOKUP_UPDATE] >>
-  imp_res_tac sccp_eval_phi_for_edge_output >>
+  imp_res_tac sccp_eval_phi_output_bound >>
   `~MEM x h.inst_outputs` by (first_x_assum (qspec_then `h` mp_tac) >> simp[]) >>
   `x'0 <> x` by (CCONTR_TAC >> gvs[]) >>
   simp[]
@@ -2485,7 +2352,7 @@ Resume sccp_cross_block_inv[xb_dfs_pre]:
     metis_tac[venomExecPropsTheory.exec_block_current_bb_in_succs] >>
   `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze f) bb.bb_label)` by
     metis_tac[cfgAnalysisPropsTheory.bb_succs_in_cfg_succs] >>
-  imp_res_tac cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]
+  imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]
 QED
 
 (* --- xb_sound: nophi_sound at successor --- *)
@@ -2604,16 +2471,6 @@ Proof
 QED
 
 (* ===== Function-level lift_result ===== *)
-
-(* FLAT (MAPi with singleton wrapper) = MAPi *)
-Theorem flat_mapi_singleton:
-  !(g:num -> 'a -> 'b) l.
-    FLAT (MAPi (\i x. [g i x]) l) = MAPi g l
-Proof
-  Induct_on `l` >> simp[indexedListsTheory.MAPi_def] >>
-  rpt strip_tac >> first_x_assum (qspec_then `g o SUC` mp_tac) >>
-  simp[combinTheory.o_DEF]
-QED
 
 (* SCCP block transformation preserves instruction count *)
 Theorem sccp_bt_length:

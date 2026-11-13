@@ -22,6 +22,7 @@ Ancestors
   finite_map pred_set fragExec localPtrsProps loweringSlice stmtSimDeclStore
   stmtSimDecl stmtSimDeclMem valueCopyBytes stmtSimDeclCompose
   stmtSimDeclSource stmtSimDeclPath gasOutcome gasContext gasSummary
+  memoryValueEncoding
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv loweringStateRelDefs valueEncoding valueEncodingProps vyperInterpreter vyperState
   vyperValue vyperTyping venomExecSemantics venomInst venomState
@@ -55,7 +56,7 @@ Proof
   gvs[is_empty_value_expr_def] >>
   rename1 `MakeArray et bd` >> Cases_on `et` >> gvs[is_empty_value_expr_def] >>
   Cases_on `args` >> gvs[is_empty_value_expr_def] >>
-  simp[Ntimes evaluate_def 12, vyperContextTheory.builtin_args_length_ok_def,
+  simp[Ntimes evaluate_def 24, vyperContextTheory.builtin_args_length_ok_def,
        type_check_def, assert_def, ignore_bind_def, bind_def, return_def,
        get_accounts_def, vyperContextTheory.evaluate_builtin_def] >>
   Cases_on `compatible_bound bd 0` >>
@@ -114,6 +115,9 @@ Proof
    val_wf tyv (default_value tyv) /\ 32 <= type_memory_size tyv` by
     (irule memory_length_word_layout >> simp[mstore_mem_word_at_same] >>
      metis_tac[]) >>
+  `memory_value_rel tyv (default_value tyv) (w2n w)
+     (mstore (w2n w) 0w s).vs_memory` by
+    (irule (CONJUNCT1 default_memory_layout) >> simp[]) >>
   `32 <= sz` by decide_tac >>
   `eval_operand (Lit 0w) s = SOME 0w` by simp[eval_operand_def] >>
   drule_all annassign_word_store_path >>

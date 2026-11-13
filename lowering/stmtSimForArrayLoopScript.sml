@@ -278,7 +278,7 @@ Proof
      simp[Abbr `bb`, get_instruction_def,
           mk_inst_def, is_terminator_def, update_var_def] >>
      Cases_on `a = b` >>
-     gvs[step_inst_base_def, bool_to_word_def, eval_operand_def,
+     gvs[step_inst_base_opcode_eqs, bool_to_word_def, eval_operand_def,
           lookup_var_def, FLOOKUP_UPDATE, jump_to_def, update_var_def]) >>
   fs[]
 QED
@@ -345,7 +345,7 @@ Proof
   gvs[n2w_11]
 QED
 
-Theorem array_ret_pc_update[local]:
+Theorem array_ret_pc_update:
   ret_pc_ok cenv st s ==> ret_pc_ok cenv st (update_var v w s)
 Proof
   rw[ret_pc_ok_def] >> first_x_assum drule >> strip_tac >> simp[] >>
@@ -1262,7 +1262,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem array_body_continue_iteration_framed[local]:
+Theorem array_body_continue_iteration_framed:
   !ctx func cenv cx P vs id idx saved_base arr_base p dst sz ainst st k es s
    r sb sj exit_lbl incr_lbl cond_lbl nv i1 i2 i3.
   stmt_lands (InLoop exit_lbl incr_lbl) sb r s /\
@@ -1854,12 +1854,12 @@ Theorem array_for_loop_counted:
   k <= LENGTH vs /\
   array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
     ainst cond_lbl st k es cc /\ array_caller_frame caller old cc /\
-  gas_admissible (eval_for cx tv id stmts (DROP k vs)) (stmt_res_ok lctx) es /\
+  gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es /\
   caller.cs_next_id <= sa.cs_next_id /\ caller.cs_next_id <= ainst.inst_id /\
   caller.cs_next_id <= st.cs_next_id /\ caller.cs_next_id <= sb0.cs_next_id /\
   alloca_frame cenv origin_es caller old cenv es cc ==>
   gas_outcome F (cx_tops cx) (ctx,func)
-    (eval_for cx tv id stmts (DROP k vs)) (es,cc)
+    (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,cc)
     (\res ee t. res = INL () /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
       array_caller_frame caller old t /\
@@ -1878,7 +1878,7 @@ Proof
     alloca_frame cenv origin_es caller old cenv ei s` >>
   qabbrev_tac `R = \ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r` >>
   `(!j ei s. j < LENGTH vs /\ Inv j ei s /\
-      gas_admissible (eval_for cx tv id stmts (DROP j vs)) (stmt_res_ok lctx) ei ==>
+      gas_admissible (eval_for cx tv id stmts (MAP Value (DROP j vs))) (stmt_res_ok lctx) ei ==>
       gas_outcome F (cx_tops cx) (ctx,func)
         (do push_scope_with_var id tv (EL j vs);
             finally (try (do eval_stmts cx stmts; return F od)
@@ -1889,7 +1889,7 @@ Proof
     (!ei s. Inv (LENGTH vs) ei s ==>
       ?t. gas_marked_path F ctx func s 0 (OK t) /\ Done (ei with gas_obs := []) t)` by
     (conj_tac >- suspend "round" >> suspend "last") >>
-  drule eval_for_rounds >>
+  drule eval_for_value_rounds >>
   disch_then (qspecl_then [`k`, `es`, `cc`] mp_tac) >>
   simp[Abbr `Inv`, Abbr `Done`, Abbr `R`]
 QED

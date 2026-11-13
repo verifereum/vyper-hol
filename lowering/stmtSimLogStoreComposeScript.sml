@@ -66,7 +66,9 @@ Theorem log_tuple_encoder_shape[local]:
 Proof
   strip_tac >> simp[log_tuple_enc_info_selected] >>
   Cases_on `is_abi_dynamic ce.ce_struct_fields (TupleT tys)` >> simp[] >>
-  conj_tac >- gvs[is_abi_dynamic_def, EXISTS_MAP, combinTheory.o_DEF] >>
+  conj_tac
+  >- (gvs[is_abi_dynamic_def, EXISTS_MAP, EXISTS_MEM, combinTheory.o_DEF] >>
+      metis_tac[]) >>
   irule log_tuple_enc_members_scalar >> simp[]
 QED
 
@@ -83,7 +85,7 @@ Theorem log_store_encode_continue_bounded:
   LIST_REL (log_data_source cx b srccap initial) xs vs /\
   EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at start x) xs /\
   abi_decoder_operand_live start.cs_next_var src /\
-  compile_log_store_data ce xs src 0 start = ((),stored_st) /\
+  compile_log_store_data ce xs (MAP SND xs) src 0 start = ((),stored_st) /\
   compile_alloc_buffer outcap stored_st = (dst,prepared) /\
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand src ei prepared = (out,end_st) /\
@@ -219,7 +221,7 @@ Theorem log_store_encode_continue:
   LIST_REL (log_data_source cx b srccap initial) xs vs /\
   EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at start x) xs /\
   abi_decoder_operand_live start.cs_next_var src /\
-  compile_log_store_data ce xs src 0 start = ((),stored_st) /\
+  compile_log_store_data ce xs (MAP SND xs) src 0 start = ((),stored_st) /\
   compile_alloc_buffer outcap stored_st = (dst,prepared) /\
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand src ei prepared = (out,end_st) /\
