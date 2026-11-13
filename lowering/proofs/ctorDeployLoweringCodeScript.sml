@@ -55,7 +55,8 @@ Proof
          supportedDeclsTheory.supported_declaration_headers_def,
          supportedDeclsTheory.supported_headers_module_consts_env] >>
      gvs[constSubstTheory.subst_consts_fn_empty]) >>
-  `supported_program_deploy tops` by fs[deploy_source_ok_def] >>
+  `supported_program tops /\ supported_program_deploy tops` by
+    fs[deploy_source_ok_def] >>
   drule_all supported_program_deploy_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   imp_res_tac supported_program_runtime_bodies_shape_ok >>

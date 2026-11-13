@@ -98,6 +98,7 @@ Definition body_inv_def:
         else lower_vyper_runtime_unit tops rpolicy = SOME unit) /\
        ctx = unit.cu_context /\ cenv.ce_target = rpolicy.rpol_target) /\
     get_module_code cx NONE = SOME tops /\
+    (cx.in_deploy ==> supported_program_deploy tops) /\
     (cx.in_deploy ==> IS_SOME (SND (SND (SND (classify_functions tops))))) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
               is_dynamic (vyper_to_abi_type (type_env tops) target)) /\
