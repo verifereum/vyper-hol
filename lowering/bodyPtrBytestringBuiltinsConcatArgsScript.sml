@@ -225,8 +225,9 @@ Resume concat_args_sim_ptr[head]:
      simp[bind_def, AllCaseEqs()] >>
      qpat_assum `(?s tv t s1 v t1. _) ==> body_exprs_ptr_ok cx args` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
-  drule_all concat_head_arm_ptr >>
-  disch_then (qspec_then `PG` strip_assume_tac) >>
+  mp_tac (Q.INST [`es1` |-> `ee`] (SPEC_ALL concat_head_arm_ptr)) >>
+  impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  strip_tac >>
   suspend "tail"
 QED
 
