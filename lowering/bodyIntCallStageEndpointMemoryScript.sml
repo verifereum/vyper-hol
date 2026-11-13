@@ -9,7 +9,7 @@ Ancestors
   exprBopSimProps exprSimHyps valueEncodingTyping exprLoweringProps
   exprSimIfExp bodyIntCallForcingReadOnly bodyIntCallStageOwned
 
-Theorem stage_incompatible_geometry[local]:
+Theorem stage_incompatible_geometry:
   type_widens_to tenv sty dty /\
   evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
   (!src:256 word. ~is_word_type sty /\ val_footprint stv v <> 0 /\
