@@ -1,6 +1,7 @@
 (* Counted scratch allocation on both fresh entry and reused instruction sites. *)
 Theory abiDecodeMemScratch
 Ancestors
+  abiDecodeScratchMetadata
   abiEncoderWindowCursor abiEncoderWindowSequence exprSimAlloc memSafeRun
   abiDecoderIndexInit abiDecoderReentryAddress abiDecoderArrayHeader abiDecoderContract
   abiBufferAllocationCode bodyDeclWordMemory loweringHalt fragGasPathMem freshWrites venomMemProps
@@ -35,6 +36,11 @@ Theorem abi_decode_scratch_allocate_path_mem:
     eval_operand buf.buf_operand t = SOME (n2w p) /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,32) /\
     p+32 <= t.vs_alloca_next /\ p+32 < dimword (:256) /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    (!q. q <> st.cs_next_id ==>
+      FLOOKUP t.vs_allocas q = FLOOKUP s.vs_allocas q) /\
+    (case FLOOKUP s.vs_allocas st.cs_next_id of
+       NONE => p = s.vs_alloca_next | SOME (b,sz) => p = b) /\
     alloca_room ctx func t /\ alloca_inv t /\ alloca_history func t /\
     fresh_vars_wrt limit_st t /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==>
@@ -54,6 +60,7 @@ Proof
     (drule_all buffer_alloc_code >> simp[]) >>
   drule_all window_emit_alloca32_sequence >> strip_tac >>
   fs[window_seq_def] >>
+  drule_all abi_decode_alloca_sequence_metadata >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts st st') s` by
     (drule emitted_insts_emit_op >> strip_tac >>
      simp[run_inst_seq_mem_ok_last, below_frontier_no_ranges,
@@ -89,6 +96,11 @@ Theorem abi_decode_index_init_path_mem:
     eval_operand ip t = SOME (n2w p) /\ mload p t = 0w /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,32) /\
     p+32 <= t.vs_alloca_next /\ p+32 < dimword (:256) /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    (!q. q <> st.cs_next_id ==>
+      FLOOKUP t.vs_allocas q = FLOOKUP s.vs_allocas q) /\
+    (case FLOOKUP s.vs_allocas st.cs_next_id of
+       NONE => p = s.vs_alloca_next | SOME (b,sz) => p = b) /\
     alloca_room ctx func t /\ alloca_inv t /\ alloca_history func t /\
     fresh_vars_wrt limit_st t /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==>
