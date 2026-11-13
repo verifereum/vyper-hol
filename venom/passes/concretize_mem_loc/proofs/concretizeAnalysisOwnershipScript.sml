@@ -1,5 +1,5 @@
 Theory concretizeAnalysisOwnership
-Ancestors venomWfProps
+Ancestors venomWfProps venomFnInstsProofs
   concretizeAnalysisSizes o1ScheduleDecomp o1PassContract fcgDefs mem2varProofs
   relation list words arithmetic venomWf venomInst removeUnusedSsaProofs
   mem2varBlockSimHelpers pair
@@ -79,24 +79,14 @@ Proof
   simp[MEM_MAP] >> metis_tac[]
 QED
 
-Theorem source_instruction_unique:
-  ctx_inst_ids_distinct C /\ MEM f C.ctx_functions /\ MEM g C.ctx_functions /\
-  MEM i (fn_insts f) /\ MEM j (fn_insts g) /\ i.inst_id = j.inst_id ==>
-  i = j
-Proof
-  strip_tac >>
-  `f = g` by metis_tac[source_instruction_owner_unique] >> gvs[] >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts f))` by
-    (gvs[ctx_inst_ids_flat] >> drule_all all_distinct_flat_map_member >> simp[]) >>
-  gvs[MEM_EL] >> metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP, EL_MAP]
-QED
+
 
 Theorem source_owns_size_unique:
   ctx_inst_ids_distinct C /\ source_owns C f aid s /\
   source_owns C g aid t ==> s = t
 Proof
   rw[source_owns_def] >>
-  `inst = inst'` by metis_tac[source_instruction_unique] >> gvs[]
+  `inst = inst'` by metis_tac[venomFnInstsProofsTheory.source_instruction_unique] >> gvs[]
 QED
 
 Theorem source_owns_callee_excludes:
@@ -141,7 +131,7 @@ Theorem source_owns_size_lookup:
   FLOOKUP (source_alloca_sizes owner) id = SOME sz
 Proof
   rw[source_owns_def] >>
-  `inst = inst'` by metis_tac[source_instruction_unique] >> gvs[] >>
+  `inst = inst'` by metis_tac[venomFnInstsProofsTheory.source_instruction_unique] >> gvs[] >>
   irule source_alloca_sizes_literal >> simp[] >>
   metis_tac[source_member_ids_distinct]
 QED
