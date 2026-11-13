@@ -51,6 +51,9 @@ Proof
      layout_ordinary_state_def] >> gvs[] >>
   `callinst.inst_opcode = INVOKE` by
     (fs[joint_transition_call_iff]) >>
+  `~ctx_has_dalloca C ==> resolved_complete (EL (SUC a.lop_cursor) (q0::qs))
+     ((MAP (resolved_op rv) ops,FEMPTY)::(rp,rv)::anns)` by
+    (strip_tac >> irule resolved_complete_call >> fs[] >> metis_tac[]) >>
   `!i token aid site. i < LENGTH args /\
       EL i (MAP (resolved_op rv) ops) = SOME ((token,aid),site) ==>
       token <> SUC a.lop_cursor` by

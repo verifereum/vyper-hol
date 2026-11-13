@@ -14,7 +14,10 @@ Theorem layout_bound_resolved_ordinary:
 Proof
   simp[joint_transition_ordinary] >> rpt strip_tac >> gvs[] >>
   gvs[resolved_config_ok_def] >>
-  `resolved_frame_ok birth post.vs_allocas PG G om rp rv
+  `post.vs_initial_fmp = s.vs_initial_fmp` by
+    metis_tac[venomExecSemanticsTheory.step_inst_non_invoke,
+              ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp] >>
+  `resolved_frame_ok (w2n s.vs_initial_fmp) birth post.vs_allocas PG G om rp rv
     (birth::ids)
     ((fn,post.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk)` by
     (irule resolved_frame_cache_transport >> goal_assum (drule_at Any) >>
@@ -49,6 +52,11 @@ Proof
       (resolved_out birth post.vs_allocas rp (origin_out PG om inst post)))::anns)` by
     (simp[] >> irule layout_bound_resolved_ordinary >> goal_assum (drule_at Any) >> simp[] >>
      metis_tac[]) >>
+  `~ctx_has_dalloca C ==> resolved_complete (EL (SUC g.lop_cursor) (q0::qs))
+    ((rp, origin_set rv inst.inst_outputs
+      (resolved_out birth post.vs_allocas rp (origin_out PG om inst post)))::anns)` by
+    (strip_tac >> drule_at (Pat `joint_transition _ _ _ _`) frameResolvedCoherentTheory.resolved_complete_ordinary >>
+     disch_then drule >> fs[]) >>
   `lifetime_ok (SUC g.lop_bound) g.lop_ids (EL (SUC g.lop_cursor) (q0::qs))` by
     (drule_all lifetime_transition >> simp[lifetime_step_def]) >>
   `LENGTH es = LENGTH qs` by metis_tac[joint_trace_def, joint_chain_length] >>

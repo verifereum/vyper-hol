@@ -78,6 +78,7 @@ Theorem concretize_read_demand_geometry:
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -103,7 +104,7 @@ Proof
          metis_tac[operand_domain_agreement, optionTheory.NOT_SOME_NONE]) >>
       qexists_tac `offT` >> simp[]) >>
   `?offT. eval_operand opd t = SOME offT /\
-    ((w2n off+len <= lo /\ w2n offT = w2n off) \/
+    (((w2n off+len <= lo \/ dyn_floor C s <= w2n off) /\ w2n offT = w2n off) \/
      (?d owner aid b sz.
        activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
          d owner aid (b,sz) /\ lo <= b /\ b <= w2n off /\
@@ -112,11 +113,13 @@ Proof
     (irule concretize_memory_access_geometry >> simp[] >>
      conj_tac >- (qexists_tac `ops` >> simp[]) >>
      conj_tac >- metis_tac[] >>
+     conj_tac >- metis_tac[] >>
      goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[] >> metis_tac[]) >>
   `!i. i < len ==> relocation_pair lo (concretize_positions C')
       (EL c (q0::qs)) (w2n off+i) (w2n offT+i)` by
-    (rpt strip_tac >> irule relocation_pair_range >> metis_tac[]) >>
+    (rpt strip_tac >> `c <= LENGTH es` by decide_tac >>
+     irule (Q.INST [`len:num` |-> `len`] access_geometry_relocation_pairs) >> metis_tac[]) >>
   qexists_tac `offT` >> simp[] >> rpt strip_tac >>
   irule joint_relocation_demand_current >> simp[] >>
   (conj_tac
@@ -141,6 +144,7 @@ Theorem concretize_sha3_demand_execution:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -233,6 +237,7 @@ Theorem concretize_sha3_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -257,15 +262,11 @@ Theorem concretize_sha3_local_complete:
       (\s t. dead_result_rel D (Halt s) (Halt t)) post tpost /\
     relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
-    step_prov PG G inst post = SND o_f (origin_set rv [v] NONE) /\
     relocation_env post tpost /\ relocation_reader_context post tpost
 Proof
   strip_tac >>
   `s.vs_labels = t.vs_labels` by fs[relocation_env_def] >>
   drule_all concretize_sha3_demand_execution >> strip_tac >>
-  `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >>
-     metis_tac[resolved_frame_erasure]) >>
   `!a b. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a b ==>
          joint_relocation_demand lo (concretize_positions C') q0 es qs c a b` by
     (rpt strip_tac >> irule joint_relocation_demand_retained >>

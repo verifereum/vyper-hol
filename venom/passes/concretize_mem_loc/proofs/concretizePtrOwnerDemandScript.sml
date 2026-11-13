@@ -9,7 +9,6 @@ Ancestors
 
 Theorem ptr_chrono_owner_allocation_inst:
   ptr_chrono_history vs C h endpoint /\ vs.vs_allocas = FEMPTY /\
-  (!k. k < LENGTH h ==> (EL k h).po_inst.inst_opcode <> DALLOCA) /\
   j < LENGTH h /\ d <= LENGTH (EL j h).po_stack /\
   FLOOKUP (ptr_owner_view d (EL j h)).cf_state.vs_allocas aid = SOME site ==>
   ?inst. MEM inst (fn_insts (ptr_owner_view d (EL j h)).cf_fn) /\
@@ -44,7 +43,6 @@ QED
 Theorem ptr_owner_interval_no_kill[local]:
   ptr_chrono_history vs C h endpoint /\ i <= j /\ j < LENGTH h /\
   (!k. i <= k /\ k <= j ==> d <= LENGTH (EL k h).po_stack) /\
-  (!k. k < LENGTH h ==> (EL k h).po_inst.inst_opcode <> DALLOCA) /\
   (ptr_owner_view d (EL i h)).cf_fn = fn /\
   FLOOKUP (ptr_owner_view d (EL i h)).cf_state.vs_allocas aid = SOME (b,sz) /\
   b <= byte /\ byte < b + sz /\
@@ -53,11 +51,10 @@ Theorem ptr_owner_interval_no_kill[local]:
     (!n off len. inst_write_size (EL k h).po_inst = SOME n /\
       MEM (off,len) (source_memory_write_ranges (EL k h).po_inst (EL k h).po_state) ==>
       ~(off <= byte /\ byte < off + len))) /\
-  o1_run_state_ok vs /\ o1_ctx_shape C /\ ~ctx_has_dalloca C /\
+  o1_run_state_ok vs /\ o1_ctx_shape C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_inst_wf C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  EVERY (\f. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   wf_function fn /\ all_reachable fn /\ ptr_discipline lo C vs /\
   ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) /\
   ~MEM (Allocation aid) (MAP FST imports) ==>
@@ -90,7 +87,7 @@ Proof
        suffices_by gvs[] >>
      irule ptr_owner_view_lookup_interval >>
      conj_tac >- decide_tac >> conj_tac
-     >- (qexists `i` >> simp[] >> conj_tac >> rpt strip_tac >>
+     >- (qexists `i` >> simp[] >> rpt strip_tac >>
          first_x_assum irule >> decide_tac) >> metis_tac[]) >>
   simp[] >> strip_tac >>
   `?n. inst_write_size (EL k h).po_inst = SOME n` by
@@ -130,11 +127,10 @@ Theorem ptr_stage_owner_interval_no_kill:
     (!n off len. inst_write_size (EL k h).po_inst = SOME n /\
       MEM (off,len) (source_memory_write_ranges (EL k h).po_inst (EL k h).po_state) ==>
       ~(off <= byte /\ byte < off + len))) /\
-  o1_run_state_ok vs /\ o1_ctx_shape C /\ ~ctx_has_dalloca C /\
+  o1_run_state_ok vs /\ o1_ctx_shape C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_inst_wf C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  EVERY (\f. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   wf_function fn /\ all_reachable fn /\ ptr_discipline lo C vs /\
   ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) ==>
   !k. i <= k /\ k < j ==>
@@ -145,18 +141,6 @@ Theorem ptr_stage_owner_interval_no_kill:
     (ptr_owner_view d (EL k h)).cf_inst
 Proof
   strip_tac >>
-  `!k. k < LENGTH h ==> (EL k h).po_inst.inst_opcode <> DALLOCA` by
-    (rpt strip_tac >>
-     `ptr_observation_reachable vs C (EL k h)` by
-       (drule ptr_chrono_history_reachable >> simp[EVERY_EL] >> metis_tac[]) >>
-     gvs[ptr_observation_reachable_def] >>
-     drule ptr_frame_operand_instructions >> strip_tac >>
-     `MEM (EL k h).po_fn C.ctx_functions` by
-       metis_tac[concretizePtrParamSupportTheory.ptr_frame_current_static] >>
-     qpat_x_assum `EVERY (\f. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts f)) _`
-       (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
-     disch_then (qspec_then `(EL k h).po_fn` mp_tac) >> simp[] >>
-     qexists `(EL k h).po_inst` >> simp[]) >>
   `vs.vs_allocas = FEMPTY` by
     gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
   `d <= LENGTH (EL i h).po_stack /\ i < LENGTH h` by

@@ -48,6 +48,12 @@ Theorem concretize_comparison_geometry:
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ((!k aid b sz.
+      k < LENGTH ((fn,s.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk) /\
+      FLOOKUP (SND (EL k ((fn,s.vs_allocas)::
+        MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk))) aid = SOME (b,sz) ==>
+      b + sz <= w2n s.vs_initial_fmp) \/
+   SND o_f rv = G) /\
   access_ok lo G fn inst s /\
   (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/ inst.inst_opcode = GT) /\
   inst.inst_operands = [Var u; Var w] /\
@@ -66,17 +72,17 @@ Proof
   drule resolved_config_current >> simp[] >> strip_tac >>
   drule resolved_compare_access >> disch_then drule >>
   disch_then (qspecl_then [`w`, `u`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  (impl_tac >- (fs[] >> metis_tac[])) >> strip_tac >>
   PairCases_on `tu` >> PairCases_on `tw` >>
-  `((tu0,tu1):num # num) = (tw0,tw1)` by
-    (irule resolved_positive_site_tokens >> goal_assum (drule_at Any) >>
-     simp[] >> metis_tac[]) >> gvs[] >>
   `?d owner.
     activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
       d owner tu1 (b,sz) /\
     activation_lookup (0:num) (concretize_positions C') (birth::ids)
       (fn::MAP (\f. f.cf_fn) stk) (tu0,tu1) = concretize_positions C' owner tu1` by
     metis_tac[resolved_activation_lookup] >>
+  `((tu0,tu1):num # num) = (tw0,tw1)` by
+    (irule resolved_positive_site_tokens >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >> gvs[] >>
   `b+sz < dimword (:256)` by
     (drule_all joint_activation_cache_strict >> simp[]) >>
   drule_all concretize_positions_activation_numeric >> strip_tac >>
@@ -114,6 +120,7 @@ Theorem concretize_compare_local_complete:
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  (~ctx_has_dalloca C ==> SND o_f rv = G) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/ inst.inst_opcode = GT) /\
   inst.inst_outputs = [v] /\ step_inst_base inst s = OK post /\
@@ -152,6 +159,15 @@ Proof
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `taint_ok fn tn inst s /\ access_ok lo G fn inst s` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
+  Q.SUBGOAL_THEN `(!k aid b sz.
+      k < LENGTH ((fn,s.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk) /\
+      FLOOKUP (SND (EL k ((fn,s.vs_allocas)::
+        MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk))) aid = SOME (b,sz) ==>
+      b + sz <= w2n s.vs_initial_fmp) \/
+   SND o_f rv = G` assume_tac
+  >- (Cases_on `ctx_has_dalloca C`
+      >- (disj1_tac >> rpt strip_tac >> irule frame_reachable_caches_below >> metis_tac[]) >>
+      fs[]) >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (drule resolved_config_current >> simp[] >> strip_tac >>
      rpt strip_tac >> irule reachable_resolved_support >>
@@ -198,8 +214,10 @@ Proof
   drule_at (Pat `ctx_pass_stage _ _ _ _ _`) concretize_comparison_geometry >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
   disch_then (drule_at (Pat `lifetime_ok _ _ _`)) >>
-  disch_then (qspecl_then [`k`, `vs0`, `u`, `lo`] mp_tac) >>
-  simp[] >> strip_tac >>
+  disch_then (qspecl_then [`k`, `vs0`, `u`, `lo`]
+    (drule_at (Pat `_ \/ SND o_f _ = _`))) >>
+  disch_then (qspecl_then [`vs0`, `u`, `lo`, `k`] mp_tac) >>
+  impl_tac >- fs[] >> strip_tac >>
   drule_at (Pat `local_rel _ _ _ _ _ _ _`) guarded_pointer_compare_step >>
   disch_then (drule_at (Pat `step_inst_base _ _ = OK _`)) >>
   simp[] >>
@@ -222,12 +240,13 @@ Proof
   `step_prov PG (SND o_f rv) inst post = SND o_f (origin_set rv [v] NONE)` by
     (irule compare_prov_erasure >> simp[]) >>
   qexists_tac `tpost` >> gvs[] >>
-  conj_tac
-  >- (fs[local_rel_def] >> irule demand_agree_restrict >> goal_assum (drule_at Any) >> simp[]) >>
-  conj_tac
-  >- (irule relocation_clean_write_taint >> goal_assum (drule_at Any) >> simp[]) >>
-  conj_tac >- (irule relocation_env_update_var >> simp[]) >>
-  irule relocation_reader_context_update_var >> simp[])
+  rpt conj_tac >>
+  FIRST [
+    irule relocation_env_update_var >> simp[] >> NO_TAC,
+    irule relocation_reader_context_update_var >> simp[] >> NO_TAC,
+    irule relocation_clean_write_taint >> goal_assum (drule_at Any) >> simp[] >> NO_TAC,
+    fs[local_rel_def] >> irule demand_agree_restrict >> goal_assum (drule_at Any) >>
+      simp[] >> NO_TAC])
 QED
 
 val _ = export_theory();

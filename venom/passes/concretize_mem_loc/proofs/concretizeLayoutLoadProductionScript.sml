@@ -21,6 +21,7 @@ Theorem concretize_word_load_execution_clean_lanes:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -48,16 +49,13 @@ Proof
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
-  `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >>
-     metis_tac[resolved_frame_erasure]) >>
   `~in_revert_forward fn s` by fs[joint_read_exempt_def] >>
   `post = update_var v (mload (w2n dst) s) s` by
     (fs[MEM] >> qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_ordinary, step_inst_def, step_inst_base_def, exec_read1_def] >>
      metis_tac[]) >>
   `?dstT. eval_operand opd t = SOME dstT /\
-    ((w2n dst+32 <= lo /\ w2n dstT = w2n dst) \/
+    (((w2n dst+32 <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
      (?d owner aid b sz.
        activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
          d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
@@ -69,13 +67,15 @@ Proof
                     iao_max_size := SOME (Lit 32w) |>` >>
      fs[MEM] >> simp[source_memory_read_ranges_def, mem_read_ops_def]) >>
      conj_tac >- metis_tac[] >>
+     conj_tac >- metis_tac[] >>
      goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
      simp[] >> metis_tac[]) >>
   (all_tac >>
   `!i. i < 32 ==> relocation_pair lo (concretize_positions C')
       (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
-    (rpt strip_tac >> irule relocation_pair_range >> metis_tac[]) >>
+    (rpt strip_tac >> `c <= LENGTH es` by decide_tac >>
+     irule (Q.INST [`len:num` |-> `32`] access_geometry_relocation_pairs) >> metis_tac[]) >>
   qexists_tac `dstT` >> simp[step_inst_base_def, exec_read1_def] >>
   rpt strip_tac >> irule joint_relocation_demand_current >> simp[] >>
   conj_tac
@@ -102,6 +102,7 @@ Theorem concretize_word_load_demand_execution:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -145,6 +146,7 @@ Theorem concretize_mload_execution_clean_lanes:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -181,6 +183,7 @@ Theorem concretize_mload_demand_execution:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
