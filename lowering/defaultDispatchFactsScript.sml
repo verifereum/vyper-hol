@@ -158,3 +158,24 @@ Proof
   qexists_tac `HashMapDecl (Public nr') b "__default__" kt vt x` >>
   simp[vyperTypeContractTheory.external_name_keys_toplevel_def]
 QED
+
+Theorem default_fallback_classified:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  EXISTS is_default_decl tops /\
+  vyperInterpreter$lookup_function NONE "__default__" External tops =
+    SOME (mut,nr,args,[],ret,fbody) ==>
+  ?rr. FST (SND (SND (classify_functions tops))) =
+    SOME (mut,nr,rr,"__default__",args,([]:expr list),ret,fbody)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
+  drule_all default_fallback_lookup_decl >> strip_tac >>
+  drule_all default_decl_no_getter >> strip_tac >>
+  `module_consts_env tops [] = []` by
+    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
+     gvs[supportedProgramTheory.supported_program_def,
+       supportedDeclsTheory.supported_declaration_headers_def] >> metis_tac[]) >>
+  drule_all lookup_function_default >>
+  disch_then (qspec_then `NONE` mp_tac) >> simp[]
+QED
