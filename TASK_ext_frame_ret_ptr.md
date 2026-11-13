@@ -138,6 +138,18 @@ AbiComplex, the return wrapped in a one-element tuple), and the
 a wider declared type). No counterexample was found: in each branch the
 bytes in the RETURN range are written with untainted data first.
 
+## Repairs first (2026-11-13 14:30, merged landed trunk de9659903: train 16 + HOL switch)
+
+The cone build on the merged head (holbuild v0.14.34 / Poly seq8) has two
+reds, both tactic timeouts in leaves of this task (proof-only repairs):
+- `extRetAbiCeil32Ptr.ceil32_pure_sequence_frame` line 39: the `gvs[step_inst_base_def, ...]` on a `MEM i.inst_opcode [NOT; ADD; AND]` goal; split the opcode first.
+- `extRetBulkCopyCountedPtr.emit_bulk_binop_counted_ptr` line 295: `simp[mk_inst_def, exec_pure2_def, Abbr `t`]` leaves the opcode case unreduced; normalize the record field first.
+71 leaves behind them were skipped and may show more of the same.
+Known effects of the HOL switch: `TypeBase.set_induction_of` for mutual
+induction; import `vfmWfState` for relocated verifereum lemmas; `vyperMisc`
+imports `keccak`; tuple/aggregate bound proofs need a normalization step
+before `simp`.
+
 ## Repairs first (2026-11-13, merged train-16 head 8af3fb5d5)
 
 These ported leaves fail on this base and are part of this run's work
