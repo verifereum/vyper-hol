@@ -6,7 +6,7 @@ Ancestors
   venomInst venomState venomExecSemantics words finite_map loweringHalt
 
 Theorem stmt_state_rel_alloca_bounds:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   n < dimword (:256) ==>
   (FLOOKUP s.vs_allocas id = NONE ==>

@@ -105,20 +105,29 @@ Proof
   simp[]
 QED
 
+(* The shadow run records the real frame's call requests. *)
+Theorem shadow_root_call_requests[local]:
+  es.contexts <> [] ==> call_requests (shadow_root es) = call_requests es
+Proof
+  simp[callTraceTheory.call_requests_def, callTraceTheory.call_trace_def, shadow_root_frame_obs]
+QED
+
 Theorem deploy_venom_frame:
-  !tops runtime_bc deploy_bc am tx es src res.
+  !H tops runtime_bc deploy_bc am tx es src res.
     deploy_state_rel tops deploy_bc am tx es /\
     runtime_bc <> [] /\ ~(?t. runtime_bc = 0xEFw :: t) /\
-    deploy_venom_result_rel HS tops runtime_bc tx src res /\
+    deploy_venom_result_rel H tops runtime_bc tx src res /\
     (?r g. run_call (shadow_root es) = SOME (r, g) /\
            (frame_resource_starved (shadow_root es) r g \/
             venom_frame_rel (shadow_root es) r g res))
     ==>
     ?r es'. run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       deploy_result_rel tops runtime_bc tx es r es' src)
+       deploy_result_rel H tops runtime_bc tx es r es' src)
 Proof
   rpt strip_tac >>
+  `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
+    simp[FUN_EQ_THM, e2eDefsTheory.log_entry_corresponds_concrete_event] >>
   `?c0 rb0. es.contexts = [(c0,rb0)] /\
             c0.msgParams.outputTo = Code tx.target`
     by gvs[deploy_state_rel_def] >>
@@ -130,10 +139,13 @@ Proof
   Cases_on `res` >> gvs[venom_frame_rel_def]
   >~ [`Halt ss`]
   >- (drule_all deploy_frame_halt_mid >> strip_tac >>
+      `call_requests (shadow_root es) = call_requests es` by
+        (irule shadow_root_call_requests >> simp[]) >>
       Cases_on `src`
       >- (PairCases_on `x` >>
           Cases_on `ALOOKUP x0.sources tx.target = NONE`
-          >- (gvs[deploy_venom_result_rel_def] >>
+          >- (gvs[deploy_venom_result_rel_def, e2eDefsTheory.logs_correspond_def,
+                  listTheory.LIST_REL_eq] >>
               qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
                 deploy_frame_complete >>
               impl_tac >- simp[] >>
@@ -141,7 +153,6 @@ Proof
               >- (disj1_tac >> irule frame_resource_starved_single_transfer >>
                   metis_tac[]) >>
               disj2_tac >> simp[deploy_result_rel_def] >>
-              qexists_tac `ss.vs_logs` >>
               simp[lookup_account_def, update_account_def,
                    combinTheory.APPLY_UPDATE_THM] >>
               conj_tac
@@ -153,7 +164,8 @@ Proof
                process_deletions ss.vs_pending_deletions ss.vs_accounts` by
                 (irule process_deletions_update_mem >> simp[]) >>
               fs[update_account_def, lookup_account_def]) >>
-          gvs[deploy_venom_result_rel_def] >>
+          gvs[deploy_venom_result_rel_def, e2eDefsTheory.logs_correspond_def,
+              listTheory.LIST_REL_eq] >>
           qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
             deploy_frame_complete >>
           impl_tac >- (Cases_on `runtime_bc` >> gvs[]) >>
@@ -161,9 +173,9 @@ Proof
           >- (disj1_tac >> irule frame_resource_starved_single_transfer >>
               metis_tac[]) >>
           disj2_tac >> simp[deploy_result_rel_def] >>
-          qexistsl [`section`,`ss.vs_logs`] >>
+          qexists `section` >>
           gvs[lookup_account_def, update_account_def,
-              combinTheory.APPLY_UPDATE_THM] >>
+              combinTheory.APPLY_UPDATE_THM, combinTheory.UPDATE_EQ] >>
           irule frame_outcome_single_transfer_none >> metis_tac[]) >>
       Cases_on `y` >>
       gvs[deploy_venom_result_rel_def, deploy_result_rel_def] >>

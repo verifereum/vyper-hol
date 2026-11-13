@@ -15,6 +15,7 @@ Proof
   drule_all bound_builtin_source_gas >> strip_tac >>
   drule_all bound_builtin_typed_literal >> strip_tac >> gvs[] >>
   irule gas_outcome_ptr_pure >> simp[] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
   simp[expr_type_def, ghost_inv_gas_obs, wordArgsPtrTheory.ghost_kept_refl, ptr_val_ok_word_literal] >>
   irule expr_post_initial_literal >> simp[expr_type_def]
 QED
@@ -29,6 +30,7 @@ Proof
   drule_all empty_source_gas >> strip_tac >>
   drule_all empty_word_typed_literal >> strip_tac >> gvs[] >>
   irule gas_outcome_ptr_pure >> simp[] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
   simp[expr_type_def, ghost_inv_gas_obs, wordArgsPtrTheory.ghost_kept_refl, ptr_val_ok_word_literal] >>
   irule expr_post_initial_literal >> simp[expr_type_def]
 QED

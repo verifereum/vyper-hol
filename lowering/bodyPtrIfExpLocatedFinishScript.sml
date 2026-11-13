@@ -45,19 +45,19 @@ QED
 
 Theorem ifexp_root_finish_post[local]:
   post_value_type cenv e = expr_type e /\
-  expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
-  expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
+  expr_post H ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
+  expr_post H ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
   read_result cx tv ee = (INL v,ee) /\ expr_type e = t /\
   (~is_word_type t ==>
    vv_at cenv cx t sc sd ee tv (LocatedValue t (mk_ptr op LocMemory)) u) /\
   eval_operand op u = SOME w /\ (!x. not_fresh_at sa x ==> x <> rv) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
   (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   sd.cs_next_id <= sb.cs_next_id ==>
-  vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
+  vv_post H ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
     (if is_word_type t then StackValue t (Var rv)
      else LocatedValue t (mk_ptr (Var rv) LocMemory))
     (jump_to xl (update_var rv w u with vs_inst_idx := k))
@@ -80,10 +80,10 @@ Proof
 QED
 
 Theorem ifexp_located_arm_finish_ptr:
-  expr_post ctx fn ce cx c es sa s1 s0 es1 v1 cop tt /\
+  expr_post H ctx fn ce cx c es sa s1 s0 es1 v1 cop tt /\
   post_value_type ce e = expr_type e /\
   expr_type e = t /\ ~is_word_type t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
-  local_ptrs_reserved ce sa /\ stmt_state_rel ctx fn ce cx es s0 /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel H ctx fn ce cx es s0 /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ghost_kept ce es sa G0 tn0 s0 G1 tn1 /\
@@ -97,19 +97,19 @@ Theorem ifexp_located_arm_finish_ptr:
   fn_has_code sd sy fn /\ fn_has_code sy sz fn /\ ~ctx_has_dalloca ctx /\
   gas_outcome_ptr D tops (ctx,fn) PG source (es1,jump_to lbl tt,G1,tn1)
     (\res ee G tn u. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
-      expr_post ctx fn ce cx e es1 sc sd (jump_to lbl tt) ee v op u /\
+      expr_post H ctx fn ce cx e es1 sc sd (jump_to lbl tt) ee v op u /\
       vv_at ce cx t sc sd ee tv (LocatedValue t (mk_ptr op LocMemory)) u /\
       ptr_val_ok cx t v op G tn u /\ ptr_buf_ok ce (IfExp t c a b) op G u /\
-      ghost_inv d ce cx ee G tn u /\
+      ghost_inv H d ce cx ee G tn u /\
       ghost_kept ce es1 sc G1 tn1 (jump_to lbl tt) G tn /\
       u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts) R ==>
   gas_outcome_ptr D tops (ctx,fn) PG source (es1,jump_to lbl tt,G1,tn1)
     (\res ee G tn u. ?tv. res = INL tv /\
-      vv_post ctx fn ce cx (IfExp t c a b) es sa sb s0 ee tv
+      vv_post H ctx fn ce cx (IfExp t c a b) es sa sb s0 ee tv
         (LocatedValue t (mk_ptr (Var rv) LocMemory)) u /\
       ptr_vv_ok cx t tv (LocatedValue t (mk_ptr (Var rv) LocMemory)) ee G tn u /\
       ptr_buf_ok ce (IfExp t c a b) (Var rv) G u /\
-      ghost_inv d ce cx ee G tn u /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
+      ghost_inv H d ce cx ee G tn u /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts) R
 Proof
   strip_tac >>
@@ -126,10 +126,10 @@ Proof
    (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> rv)` by metis_tac[] >>
   drule_all ifexp_nonword_suffix_ghost >>
   disch_then (qspecl_then [`xl`,`LENGTH sy.cs_current_insts`,`sd.cs_next_id`,`PG`] strip_assume_tac) >>
-  `vv_post ctx fn ce cx (IfExp t c a b) es sa sb s0 ee tv
+  `vv_post H ctx fn ce cx (IfExp t c a b) es sa sb s0 ee tv
      (LocatedValue t (mk_ptr (Var rv) LocMemory))
      (jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts))` by
-    (`vv_post ctx fn ce cx (IfExp t c a b) es sa sb s0 ee tv
+    (`vv_post H ctx fn ce cx (IfExp t c a b) es sa sb s0 ee tv
         (if is_word_type t then StackValue t (Var rv)
          else LocatedValue t (mk_ptr (Var rv) LocMemory))
         (jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts))`

@@ -49,19 +49,19 @@ QED
 (* C1.4.1 interface audit (not an admitted execution theorem).
    Compiler-facing candidate: under compile_builtin_empty_complex sz header
    sa = (buf,sb), fn_has_code sa sb func, fn_inst_ids_distinct func,
-   local_ptrs_reserved cenv sa, stmt_state_rel ctx func cenv cx es s,
-   ghost_inv d cenv cx es G tn s, return-variable freshness at sa,
+   local_ptrs_reserved cenv sa, stmt_state_rel H ctx func cenv cx es s,
+   ghost_inv H d cenv cx es G tn s, return-variable freshness at sa,
    ~ctx_has_dalloca ctx, ~s.vs_halted, and the entry PC/index equations,
    sz < dimword (:256), and (if header then 32 <= sz else sz MOD 32 = 0),
    obtain ONE t,w,G',tn' with:
-   - gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G' tn'
+   - gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 G' tn'
        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts));
    - every semantic/frame clause of compile_builtin_empty_complex_run
        (exprSimBufferEmptyExec lines 149-165), at that same t,w;
    - ptr_covers G' tn' p t sz and buf.buf_operand = Var p;
    - if header then [w2n w,w2n w+32) is clean in tn'.t_mem,
        else [w2n w,w2n w+sz) is clean;
-   - ghost_inv d cenv cx es G' tn' t and
+   - ghost_inv H d cenv cx es G' tn' t and
        ghost_kept cenv es sa G tn s G' tn'.
 
    Exact missing bridge: inst_seq_ptr along emitted_insts sa sb, with

@@ -22,7 +22,7 @@ Theorem raw_log_dynamic_tail_ptr:
   eval_operands ops s = SOME vals /\
   EVERY (\op. !z. op = Var z ==> not_fresh_at sa z) ops /\
   EVERY (\op. op_taint tn op = {}) ops /\
-  ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx fn cenv cx es s /\
   local_ptrs_reserved cenv sa /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
@@ -32,7 +32,7 @@ Theorem raw_log_dynamic_tail_ptr:
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-    ghost_inv d cenv cx (es with logs := logs) G' tn'
+    ghost_inv H d cenv cx (es with logs := logs) G' tn'
       (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     ghost_kept cenv es sa G tn s G' tn' /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
@@ -50,7 +50,7 @@ Proof
   qexistsl_tac [`G'`, `tn'`, `t`] >> simp[] >>
   conj_tac >- suspend "path" >>
   conj_tac
-  >- (`ghost_inv d cenv cx es G' tn' mid` by
+  >- (`ghost_inv H d cenv cx es G' tn' mid` by
         (irule hash_readonly_ghost_inv >> qexistsl_tac [`G`, `s`, `sa`, `tn`] >>
          simp[]) >>
       qpat_x_assum `t = mid with vs_logs := _` SUBST1_TAC >>

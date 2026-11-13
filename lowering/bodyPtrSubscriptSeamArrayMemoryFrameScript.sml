@@ -88,7 +88,7 @@ Theorem captured_memory_ptr_index_frame:
   vv_at cenv cx ty sa sb es r (LocatedValue ty p) s /\
   ptr_vv_ok cx ty r (LocatedValue ty p) es G tn s /\
   ptr_buf_ok cenv obj p.ptr_operand G s /\
-  expr_post ctx func cenv cx idx es sb sc s es' iv iop s' /\
+  expr_post H ctx func cenv cx idx es sb sc s es' iv iop s' /\
   p.ptr_location = LocMemory /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   expr_sim_inv cenv cx env es /\ dynarray_free tv /\

@@ -22,7 +22,7 @@ Proof
 QED
 
 Theorem abi_encode_nonword_scratch_row:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   ~is_word_type (post_value_type ce e) /\ eval_operand op s = SOME w /\
   abi_builtin_encode_setup mid maxlen sa = (ops,ready) /\
@@ -48,7 +48,7 @@ Proof
   `FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz)` by
     (`sa.cs_next_id <> inst.inst_id` by decide_tac >>
      metis_tac[abi_encode_allocate_other_row]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp_tac bool_ss [expr_post_def] >> strip_tac >>
   `sz = 32` by
     (fs[stmt_state_rel_def] >>
@@ -62,7 +62,7 @@ QED
    state. A fresh row is above its bounded footprint; a reused row is
    separated by the expression's ownership certificate. *)
 Theorem abi_encode_nonword_output_site:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   ~is_word_type (post_value_type ce e) /\ eval_operand op s = SOME w /\
   (0 < val_footprint tv v ==> w2n w + val_footprint tv v <= s.vs_alloca_next) /\
@@ -78,7 +78,7 @@ Theorem abi_encode_nonword_output_site:
       venomMemDefs$regions_disjoint (w2n w,val_footprint tv v) (p,outsz)
 Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
-  `stmt_state_rel ctx func ce cx es' s` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func ce cx es' s` by fs[expr_post_def] >>
   drule_all abi_encode_allocate_resources >>
   simp_tac bool_ss [LET_THM] >> strip_tac >> simp[] >>
   Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
@@ -95,7 +95,7 @@ Proof
 QED
 
 Theorem abi_encode_nonword_setup_output:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   ~is_word_type (post_value_type ce e) /\ eval_operand op s = SOME w /\
   (0 < val_footprint tv v ==> w2n w + val_footprint tv v <= s.vs_alloca_next) /\

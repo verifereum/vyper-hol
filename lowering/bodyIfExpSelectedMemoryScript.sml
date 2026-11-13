@@ -21,7 +21,7 @@ QED
 Theorem ifexp_memory_arm_endpoint:
   ~is_word_type t /\ same_memory_layout cenv at t /\
   compile_ifexp_arm cenv t at (LocatedValue t (mk_ptr src LocMemory)) sm = (op,sb) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee raw
+  vv_post H ctx func cenv cx e es sa sm s0 ee raw
     (LocatedValue t (mk_ptr src LocMemory)) s /\
   read_result cx raw ee = (INL v,ee) /\
   vv_store_bound cx t at ee raw (LocatedValue t (mk_ptr src LocMemory)) s /\
@@ -29,7 +29,7 @@ Theorem ifexp_memory_arm_endpoint:
     ?avt. evaluate_type (get_tenv cx) at = SOME avt /\
           type_memory_size tvt <= type_memory_size avt) ==>
   sb = sm /\ op = src /\
-  expr_post ctx func cenv cx e es sa sb s0 ee v op s /\
+  expr_post H ctx func cenv cx e es sa sb s0 ee v op s /\
   vv_store_bound cx t t ee raw (LocatedValue t (mk_ptr op LocMemory)) s
 Proof
   simp[compile_ifexp_arm_def, unwrap_value_def,

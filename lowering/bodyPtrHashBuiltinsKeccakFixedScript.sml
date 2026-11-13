@@ -22,7 +22,7 @@ QED
 
 Theorem hash_alloca_store_input:
   !ctx func cenv cx es s id p s1 PG G tn G1 tn1 sid value w.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit 32w] [p]) (fn_insts func) /\
     step_inst_base (mk_inst id ALLOCA [Lit 32w] [p]) s = OK s1 /\
     G1 = step_prov PG G (mk_inst id ALLOCA [Lit 32w] [p]) s1 /\

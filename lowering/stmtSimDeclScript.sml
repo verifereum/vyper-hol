@@ -39,12 +39,12 @@ Libs
 (* ===== A word-local declaration ===== *)
 
 Theorem stmt_state_rel_declare_local_entry:
-  !func cenv cx es ss id ty st c st1 ctx.
+  !H func cenv cx es ss id ty st c st1 ctx.
     declare_local cenv id ty st = (c, st1) /\ cenv.ce_alloca_locals /\
     lookup_scopes id es.scopes = NONE /\
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?p sz. l = PtrVar p sz) /\
-    stmt_state_rel ctx func cenv cx es ss ==>
-    stmt_state_rel ctx func c cx es ss
+    stmt_state_rel H ctx func cenv cx es ss ==>
+    stmt_state_rel H ctx func c cx es ss
 Proof
   rpt strip_tac >> drule_all declare_local_ptr >> strip_tac >>
   irule stmt_state_rel_cenv_cong >> qexists `cenv` >> simp[] >>
@@ -63,9 +63,9 @@ QED
 
 
 Theorem annassign_alloca_operand_framed_frag:
-  !ctx func cenv cx es st st1 p sz s0 R.
+  !H ctx func cenv cx es st st1 p sz s0 R.
     emit_inst ALLOCA [Lit (n2w sz)] [p] st = ((), st1) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
     MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
     not_local_ptr cenv es.scopes p /\ sz < dimword (:256) ==>
     ?s1 w. (!op. op <> Var p ==> eval_operand op s1 = eval_operand op s0) /\
@@ -75,7 +75,7 @@ Theorem annassign_alloca_operand_framed_frag:
       (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                    FLOOKUP s1.vs_allocas aid = SOME entry) /\
       frag_exec ctx st st1 (\s. s = s0)
-        (\s. s = s1 /\ stmt_state_rel ctx func cenv cx es s) R
+        (\s. s = s1 /\ stmt_state_rel H ctx func cenv cx es s) R
 Proof
   rpt strip_tac >> imp_res_tac emit_inst_extends >>
   qabbrev_tac `A = mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
@@ -102,17 +102,17 @@ Proof
 QED
 
 Theorem annassign_mstore_framed_frag:
-  !w wd p val_op ctx func cenv cx es' st st' Pre R keep s0.
+  !H w wd p val_op ctx func cenv cx es' st st' Pre R keep s0.
     emit_void MSTORE [Var p; val_op] st = ((), st') /\
     (!s. Pre s ==>
       lookup_var p s = SOME w /\
       eval_operand val_op s = SOME wd /\
-      stmt_state_rel ctx func cenv cx es' (mstore (w2n w) wd s) /\
+      stmt_state_rel H ctx func cenv cx es' (mstore (w2n w) wd s) /\
       (!x. keep x ==> lookup_var x s = lookup_var x s0) /\
       (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                    FLOOKUP s.vs_allocas aid = SOME entry)) ==>
     frag_exec ctx st st' Pre
-      (\s. stmt_state_rel ctx func cenv cx es' s /\
+      (\s. stmt_state_rel H ctx func cenv cx es' s /\
            (!x. keep x ==> lookup_var x s = lookup_var x s0) /\
            (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                         FLOOKUP s.vs_allocas aid = SOME entry)) R
@@ -148,9 +148,9 @@ Proof
 QED
 
 Theorem annassign_alloca_operand_framed_run:
-  !ctx func cenv cx es st st1 p sz s0.
+  !H ctx func cenv cx es st st1 p sz s0.
     emit_inst ALLOCA [Lit (n2w sz)] [p] st = ((), st1) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
     MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
     not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\
     fn_has_code st st1 func /\ ~s0.vs_halted /\
@@ -162,7 +162,7 @@ Theorem annassign_alloca_operand_framed_run:
       (!x. x <> p ==> lookup_var x s1 = lookup_var x s0) /\
       (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                    FLOOKUP s1.vs_allocas aid = SOME entry) /\
-      stmt_state_rel ctx func cenv cx es s1 /\ ~s1.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es s1 /\ ~s1.vs_halted /\
       s1.vs_current_bb = st1.cs_current_bb /\
       s1.vs_inst_idx = LENGTH st1.cs_current_insts /\
       !fuel r. run_from fuel ctx func s1 = r /\ (!e. r <> Error e) ==>
@@ -177,9 +177,9 @@ Proof
 QED
 
 Theorem annassign_alloca_framed_run:
-  !ctx func cenv cx es st st1 p sz s0.
+  !H ctx func cenv cx es st st1 p sz s0.
     emit_inst ALLOCA [Lit (n2w sz)] [p] st = ((), st1) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
     MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
     not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\
     fn_has_code st st1 func /\ ~s0.vs_halted /\
@@ -190,7 +190,7 @@ Theorem annassign_alloca_framed_run:
       (!x. x <> p ==> lookup_var x s1 = lookup_var x s0) /\
       (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                    FLOOKUP s1.vs_allocas aid = SOME entry) /\
-      stmt_state_rel ctx func cenv cx es s1 /\ ~s1.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es s1 /\ ~s1.vs_halted /\
       s1.vs_current_bb = st1.cs_current_bb /\
       s1.vs_inst_idx = LENGTH st1.cs_current_insts /\
       !fuel r. run_from fuel ctx func s1 = r /\ (!e. r <> Error e) ==>
@@ -202,13 +202,13 @@ Proof
 QED
 
 Theorem annassign_word_store_run:
-  !ctx func cenv cx es s id p sz w inst v tyv sc rest a op st st' wd.
+  !H ctx func cenv cx es s id p sz w inst v tyv sc rest a op st st' wd.
     emit_void MSTORE [Var p; op] st = ((), st') /\
     fn_has_code st st' func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     eval_operand op s = SOME wd /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -218,7 +218,7 @@ Theorem annassign_word_store_run:
     32 <= sz /\ type_memory_size tyv <= sz /\
     memory_value_rel tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
     val_wf tyv v ==>
-    ?t. stmt_state_rel ctx func cenv cx
+    ?t. stmt_state_rel H ctx func cenv cx
           (es with scopes :=
              (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
@@ -230,12 +230,12 @@ Theorem annassign_word_store_run:
                  ?fuel'. run_from fuel' ctx func s = r
 Proof
   rpt strip_tac >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx es'` >>
-  `stmt_state_rel ctx func cenv cx es' (mstore (w2n w) wd s)` by
+  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx es'` >>
+  `stmt_state_rel H ctx func cenv cx es' (mstore (w2n w) wd s)` by
     (simp[Abbr `es'`] >> irule stmt_state_rel_declare_store >> simp[] >>
      qexists_tac `inst` >> gvs[]) >>
   `frag_exec ctx st st' (\t. t = s)
-     (\t. stmt_state_rel ctx func cenv cx es' t /\
+     (\t. stmt_state_rel H ctx func cenv cx es' t /\
           (!x. lookup_var x t = lookup_var x s) /\
           (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
                        FLOOKUP t.vs_allocas aid = SOME entry)) (\r. F)` by
@@ -278,8 +278,8 @@ Proof
 QED
 
 Theorem annassign_word_store_post_run[local]:
-  !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v etv tyv sc rest a.
-    expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
+  !H ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v etv tyv sc rest a.
+    expr_post H ctx func cenv cx e es sa sb s0 es1 v op s /\
     is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
     store_lays_out etv tyv v /\
@@ -293,7 +293,7 @@ Theorem annassign_word_store_post_run[local]:
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz ==>
-    ?t. stmt_state_rel ctx func cenv cx
+    ?t. stmt_state_rel H ctx func cenv cx
           (es1 with scopes :=
              (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
@@ -306,7 +306,7 @@ Theorem annassign_word_store_post_run[local]:
                  ?fuel'. run_from fuel' ctx func s = r
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   `eval_operand op s = SOME (typed_val_to_w256 etv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
@@ -420,6 +420,12 @@ Theorem compile_annassign_stmt_frag:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   `!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
      !a b op. lower_value compile_expr c (expr_type e) e a = (op, b) ==>
               cs_extends a b` by metis_tac[] >>
@@ -427,26 +433,27 @@ Proof
   disch_then (qx_choosel_then [`st`, `sA`, `sB`, `op`, `p`] strip_assume_tac) >>
   rename1 `declare_local cenv id vtyp sa = (c, st)` >>
   qpat_x_assum `!st0 c st1. _ ==> _ /\ _` drule >> strip_tac >>
-  `stmt_state_rel ctx func c cx es s0` by
-    (irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func c cx es s0` by
+    (rpt strip_tac >> irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
   `not_local_ptr c es.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
   `s0.vs_current_bb = st.cs_current_bb /\
    s0.vs_inst_idx = LENGTH st.cs_current_insts` by
     (drule_all declare_local_ptr >> simp[] >> strip_tac >> gvs[]) >>
-  drule_all annassign_alloca_operand_framed_path >>
+  drule_all (SRULE [PULL_EXISTS] annassign_alloca_operand_framed_path) >>
   disch_then (qx_choosel_then [`salloc`, `w`] strip_assume_tac) >>
   drule annassign_admissible_type >> strip_tac >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     (irule annassign_admissible_rhs >> metis_tac[]) >>
-  `gas_outcome F (cx_tops cx) (ctx,func)
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,salloc)
-    (\res ee t. ?v. res = INL v /\
-      expr_post ctx func c cx e es sA sB salloc ee v op t /\
+    (\H res ee t. ?v. res = INL v /\
+      expr_post H ctx func c cx e es sA sB salloc ee v op t /\
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r)` by
     (qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_sim_def] >> disch_then irule >> simp[]) >>
+     simp[expr_sim_def] >> disch_then irule >> simp[] >> metis_tac[]) >>
   `~block_is_terminated sb` by
     (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
      simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,
@@ -473,7 +480,8 @@ Proof
      drule emit_inst_extends >>
      simp[Abbr `ai`, venomInstTheory.mk_inst_def]) >>
   irule annassign_outcome_entry_prefix >>
-  simp[] >> qexists_tac `salloc` >> simp[] >>
+  simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  qexists_tac `salloc` >> simp[] >>
   irule annassign_concrete_rhs_outcome >>
   goal_assum (drule_at Any) >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>

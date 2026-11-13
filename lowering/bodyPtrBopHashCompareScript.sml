@@ -12,7 +12,7 @@ Theorem bop_hash_compare_ptr:
   not_fresh_at sc p /\ not_fresh_at sc r /\ local_ptrs_reserved cenv sc /\
   fn_has_code sc sf fn /\ s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ stmt_state_rel ctx func cenv cx es s /\
+  ~ctx_has_dalloca ctx /\ stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty1 sa1 sb1 es v1 (Var p) s /\
   expr_val_at cenv cx ty2 sa2 sb2 es v2 (Var r) s /\
   ptr_val_ok cx ty1 v1 (Var p) G tn s /\

@@ -11,7 +11,7 @@ Ancestors
 
 (* ALLOCA can taint its own newly registered bytes, never exterior bytes. *)
 Theorem alloca_step_taint_outside_site:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword(:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
@@ -73,7 +73,7 @@ QED
 Theorem log_cursor_prefix_frames:
   compile_alloc_buffer 32 sa = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand;Lit w] sm = ((),sb) /\
-  fn_has_code sa sm func /\ stmt_state_rel ctx func ce cx es s /\
+  fn_has_code sa sm func /\ stmt_state_rel H ctx func ce cx es s /\
   run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t /\
   inst_seq_ptr D 0 ctx func PG G tn
     (emitted_insts sa sm ++ emitted_insts sm sb) s Gf tm /\
@@ -135,7 +135,7 @@ QED
 Theorem log_cursor_prefix_fresh:
   compile_alloc_buffer 32 sa = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand;Lit w] sm = ((),sb) /\
-  fn_has_code sa sm func /\ stmt_state_rel ctx func ce cx es s /\
+  fn_has_code sa sm func /\ stmt_state_rel H ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
   sm.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   ~ctx_has_dalloca ctx /\
@@ -158,7 +158,7 @@ QED
 Theorem log_tuple_cursor_entry:
   compile_alloc_buffer 32 sa = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand;Lit (n2w hl)] sm = ((),final) /\
-  fn_has_code sa sm func /\ stmt_state_rel ctx func ce cx es s /\
+  fn_has_code sa sm func /\ stmt_state_rel H ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
   sm.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   ~ctx_has_dalloca ctx /\
@@ -177,10 +177,10 @@ Theorem log_tuple_cursor_entry:
   abi_encoder_member_span infos <= srcCap /\
   LENGTH (enc (Tuple tys) (ListV avs)) <= cap /\
   hl = SUM (MAP (\(_,asz,_,_). asz) infos) ==>
-  ?t p H tm dp.
+  ?t p HG tm dp.
     run_inst_seq (emitted_insts sa sm ++ emitted_insts sm final) s = OK t /\
     inst_seq_ptr D 0 ctx func PG G tn
-      (emitted_insts sa sm ++ emitted_insts sm final) s H tm /\
+      (emitted_insts sa sm ++ emitted_insts sm final) s HG tm /\
     buf.buf_operand = Var dp /\ buf.buf_size = 32 /\
     fresh_vars_wrt limit_st t /\ inst_extends sa sm /\ inst_extends sm final /\
     not_fresh_at final src /\ not_fresh_at final dst /\ not_fresh_at final dp /\
@@ -190,8 +190,8 @@ Theorem log_tuple_cursor_entry:
         (abi_encoder_member_span infos) q) /\
     lookup_var src t = SOME (n2w sb) /\ lookup_var dst t = SOME (n2w d) /\
     lookup_var dp t = SOME (n2w p) /\ mload p t = n2w hl /\
-    ptr_covers H tm src t srcCap /\ ptr_covers H tm dst t cap /\
-    ptr_covers H tm dp t 32 /\ p+32 < dimword(:256) /\
+    ptr_covers HG tm src t srcCap /\ ptr_covers HG tm dst t cap /\
+    ptr_covers HG tm dp t 32 /\ p+32 < dimword(:256) /\
     (sb+abi_encoder_member_span infos <= d \/ d+cap <= sb) /\
     (sb+abi_encoder_member_span infos <= p \/ p+32 <= sb) /\
     (d+cap <= p \/ p+32 <= d) /\
@@ -200,7 +200,7 @@ Theorem log_tuple_cursor_entry:
     (!i. ~(p <= i /\ i < p+32) ==> (i IN tm.t_mem <=> i IN tn.t_mem)) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==>
-      lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+      lookup_var x t = lookup_var x s /\ FLOOKUP HG x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x))
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>

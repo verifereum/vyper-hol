@@ -11,7 +11,7 @@ Ancestors bodyPtrPopTargetSimMapScratchRun bodyPtrPopTargetSimMapKeyRun
   bodyPtrHashBuiltinsShaEndpoint fragExec exprBopSimProps ptrDiscipline
 
 Theorem map_key_typed_input:
-  expr_post ctx fn cenv cx e es sa sm s0 en kv key s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 en kv key s /\
   ptr_val_ok cx (expr_type e) kv key G tn s /\
   is_bytestring_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv kv ==>
@@ -46,17 +46,17 @@ Proof
 QED
 
 Theorem map_key_typed_checked:
-  expr_post ctx fn cenv cx e es sa sm s0 en kv key s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 en kv key s /\
   ptr_val_ok cx (expr_type e) kv key G tn s /\
   is_bytestring_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv kv /\
   compile_keccak256_key key F sm = (hashed,sp) /\
   (!x. key = Var x ==> not_fresh_at sm x) /\ ~ctx_has_dalloca ctx ==>
-  ?H tm. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sm sp) s H tm /\
-    op_taint tm hashed = {} /\ op_prov H hashed = NONE /\
+  ?HG tm. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sm sp) s HG tm /\
+    op_taint tm hashed = {} /\ op_prov HG hashed = NONE /\
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
-    (!x. not_fresh_at sm x ==> FLOOKUP H x = FLOOKUP G x /\
+    (!x. not_fresh_at sm x ==> FLOOKUP HG x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >> drule_all map_key_typed_input >> strip_tac >> gvs[] >>
@@ -65,26 +65,26 @@ Proof
 QED
 
 Theorem map_key_typed_frame:
-  expr_post ctx fn cenv cx e es sa sm s0 en kv key s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 en kv key s /\
   ptr_val_ok cx (expr_type e) kv key G tn s /\
   is_bytestring_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv kv /\
   compile_keccak256_key key F sm = (hashed,sp) /\
   (!x. key = Var x ==> not_fresh_at sm x) /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx en G tn s /\ local_ptrs_reserved cenv sm /\
+  ghost_inv H d cenv cx en G tn s /\ local_ptrs_reserved cenv sm /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sm x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sm x) ==>
-  ?t H tm. run_inst_seq (emitted_insts sm sp) s = OK t /\
+  ?t HG tm. run_inst_seq (emitted_insts sm sp) s = OK t /\
     eval_operand hashed t = SOME (encode_hashmap_key (expr_type e) kv) /\
-    stmt_state_rel ctx fn cenv cx en t /\
+    stmt_state_rel H ctx fn cenv cx en t /\
     (t with vs_vars := s.vs_vars) = s /\
     (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
-    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sm sp) s H tm /\
-    ghost_inv d cenv cx en H tm t /\ ghost_kept cenv en sm G tn s H tm /\
-    op_taint tm hashed = {} /\ op_prov H hashed = NONE /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sm sp) s HG tm /\
+    ghost_inv H d cenv cx en HG tm t /\ ghost_kept cenv en sm G tn s HG tm /\
+    op_taint tm hashed = {} /\ op_prov HG hashed = NONE /\
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
-    (!x. not_fresh_at sm x ==> FLOOKUP H x = FLOOKUP G x /\
+    (!x. not_fresh_at sm x ==> FLOOKUP HG x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >> drule_all map_key_typed_checked >>
@@ -92,7 +92,7 @@ Proof
   drule_at (Pat `compile_keccak256_key _ _ _ = _`)
     compile_hashmap_dynamic_key_frame >>
   simp[] >> disch_then drule_all >> strip_tac >>
-  qexistsl_tac [`t`, `H`, `tm`] >> simp[] >> conj_tac
+  qexistsl_tac [`t`, `HG`, `tm`] >> simp[] >> conj_tac
   >- (irule ghost_inv_register_transport >>
       qexistsl_tac [`G`, `s`, `sm`, `tn`] >> simp[] >>
       qpat_x_assum `t with vs_vars := _ = _`
@@ -102,33 +102,33 @@ Proof
 QED
 
 Theorem map_key_typed_counted:
-  expr_post ctx fn cenv cx e es sa sm s0 en kv key s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 en kv key s /\
   ptr_val_ok cx (expr_type e) kv key G tn s /\
   is_bytestring_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv kv /\
   compile_keccak256_key key F sm = (hashed,sp) /\
   (!x. key = Var x ==> not_fresh_at sm x) /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx en G tn s /\ local_ptrs_reserved cenv sm /\
+  ghost_inv H d cenv cx en G tn s /\ local_ptrs_reserved cenv sm /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sm x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sm x) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sp) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?t H tm. run_inst_seq (emitted_insts sm sp) s = OK t /\
+  ?t HG tm. run_inst_seq (emitted_insts sm sp) s = OK t /\
     eval_operand hashed t = SOME (encode_hashmap_key (expr_type e) kv) /\
-    stmt_state_rel ctx fn cenv cx en t /\
+    stmt_state_rel H ctx fn cenv cx en t /\
     (t with vs_vars := s.vs_vars) = s /\
     (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sp))) /\
-    ghost_inv d cenv cx en H tm t /\ ghost_kept cenv en sm G tn s H tm /\
-    op_taint tm hashed = {} /\ op_prov H hashed = NONE /\
+    ghost_inv H d cenv cx en HG tm t /\ ghost_kept cenv en sm G tn s HG tm /\
+    op_taint tm hashed = {} /\ op_prov HG hashed = NONE /\
     tm.t_mem = tn.t_mem /\
-    (!x. not_fresh_at sm x ==> FLOOKUP H x = FLOOKUP G x /\
+    (!x. not_fresh_at sm x ==> FLOOKUP HG x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >> drule_all map_key_typed_frame >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qexistsl_tac [`t`, `H`, `tm`] >> simp[] >>
+  qexistsl_tac [`t`, `HG`, `tm`] >> simp[] >>
   drule (cj 1 (REWRITE_RULE [DISJ_IMP_THM] mapping_suffix_shape)) >> strip_tac >>
   `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sm sp)) = 0 /\
    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -149,30 +149,30 @@ Proof
 QED
 
 Theorem map_index_key_prefix_ptr:
-  expr_post ctx fn cenv cx e es sa sm s0 en kv key s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 en kv key s /\
   ptr_val_ok cx (expr_type e) kv key G tn s /\ hashmap_key_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv kv /\
   (if is_bytestring_type (expr_type e) then compile_keccak256_key key F sm
    else (key,sm)) = (hashed,sp) /\
   (!x. key = Var x ==> not_fresh_at sm x) /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx en G tn s /\ local_ptrs_reserved cenv sm /\
+  ghost_inv H d cenv cx en G tn s /\ local_ptrs_reserved cenv sm /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sm x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sm x) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sp) (DROP s.vs_inst_idx bb.bb_instructions) /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?t H tm. gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+  ?t HG tm. gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
     eval_operand hashed t = SOME (encode_hashmap_key (expr_type e) kv) /\
-    stmt_state_rel ctx fn cenv cx en t /\ wb_frame cenv en en sm s t /\
-    ghost_inv d cenv cx en H tm t /\ ghost_kept cenv en sm G tn s H tm /\
-    op_taint tm hashed = {} /\ op_prov H hashed = NONE /\
+    stmt_state_rel H ctx fn cenv cx en t /\ wb_frame cenv en en sm s t /\
+    ghost_inv H d cenv cx en HG tm t /\ ghost_kept cenv en sm G tn s HG tm /\
+    op_taint tm hashed = {} /\ op_prov HG hashed = NONE /\
     (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)) /\
     tm.t_mem = tn.t_mem /\ t.vs_current_bb = sp.cs_current_bb /\
     t.vs_inst_idx = LENGTH sp.cs_current_insts /\ ~t.vs_halted
 Proof
   strip_tac >> Cases_on `is_bytestring_type (expr_type e)`
-  >- (gvs[] >> drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  >- (gvs[] >> drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
         map_key_typed_counted >> simp[] >> disch_then drule_all >>
       disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
       suspend "dynamic") >>
@@ -200,7 +200,7 @@ Resume map_index_key_prefix_ptr[dynamic]:
      simp[wb_frame_refl]) >>
   `~t.vs_halted` by
     (drule gas_path_ptr_ok_not_halted >> simp[]) >>
-  qexistsl_tac [`t with vs_inst_idx := LENGTH sp.cs_current_insts`, `H`, `tm`] >>
+  qexistsl_tac [`t with vs_inst_idx := LENGTH sp.cs_current_insts`, `HG`, `tm`] >>
   gvs[stmt_state_rel_inst_idx, bodyPtrEnvBuiltinsScalarTheory.ghost_inv_inst_idx, same_blocks_def,
       wb_frame_def, lookup_var_def]
 QED
@@ -208,7 +208,7 @@ QED
 Finalise map_index_key_prefix_ptr
 
 Theorem compile_mapping_index_success_tail_ptr:
-  expr_post ctx func cenv cx idx em sm sn s1 en kv key t /\
+  expr_post H ctx func cenv cx idx em sm sn s1 en kv key t /\
   expr_type idx = kt /\ hashmap_key_type kt /\
   evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
   (if is_bytestring_type kt then compile_keccak256_key key F sn
@@ -218,22 +218,22 @@ Theorem compile_mapping_index_success_tail_ptr:
   (!x. base_op = Var x ==> not_fresh_at sm x) /\ (!l. base_op <> Label l) /\
   eval_operand base_op s1 = SOME base_slot /\
   fn_inst_ids_distinct func /\ fn_has_code sp sb func /\ fn_has_code sn sb func /\
-  stmt_state_rel ctx func cenv cx em s1 /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx em s1 /\ local_ptrs_reserved cenv sm /\
   MAP FDOM em.scopes = MAP FDOM en.scopes /\
   sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
   ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
   t.vs_inst_idx = LENGTH sn.cs_current_insts /\
   ptr_val_ok cx kt kv key G tn t /\ op_taint tn base_op = {} /\
-  ghost_inv d cenv cx en G tn t /\ ~ctx_has_dalloca ctx /\
+  ghost_inv H d cenv cx en G tn t /\ ~ctx_has_dalloca ctx /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sn x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sn x) ==>
-  ?u H tm. gas_path_ptr D 0 ctx func PG G tn t 0 H tm (OK u) /\
+  ?u HG tm. gas_path_ptr D 0 ctx func PG G tn t 0 HG tm (OK u) /\
     eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-    stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv em en sm s1 u /\
+    stmt_state_rel H ctx func cenv cx en u /\ wb_frame cenv em en sm s1 u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv d cenv cx en H tm u /\ ghost_kept cenv en sn G tn t H tm /\
-    op_taint tm slot = {} /\ op_prov H slot = NONE
+    ghost_inv H d cenv cx en HG tm u /\ ghost_kept cenv en sn G tn t HG tm /\
+    op_taint tm slot = {} /\ op_prov HG slot = NONE
 Proof
   strip_tac >>
   `sn.cs_next_var <= sp.cs_next_var /\ sn.cs_next_id <= sp.cs_next_id /\
@@ -248,7 +248,7 @@ Proof
     by suspend "prefix_site" >>
   `isPREFIX (emitted_insts sn sp)
      (DROP (LENGTH sn.cs_current_insts) bb.bb_instructions)` by metis_tac[] >>
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) map_index_key_prefix_ptr >>
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) map_index_key_prefix_ptr >>
   simp[] >> disch_then drule_all >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   suspend "scratch"
@@ -299,7 +299,7 @@ Resume compile_mapping_index_success_tail_ptr[compose]:
   `!x. not_fresh_at sn x ==> not_fresh_at sp x` by metis_tac[not_fresh_at_mono] >>
   `ghost_kept cenv en sn G tn t G'' tn''` by
     (irule hash_ghost_kept_then >> simp[] >>
-     qexistsl_tac [`H`, `t'`, `sp`, `tm`] >> simp[] >>
+     qexistsl_tac [`HG`, `t'`, `sp`, `tm`] >> simp[] >>
      fs[wb_frame_def] >> metis_tac[]) >>
   `wb_frame cenv em en sm s1 t` by
     (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>

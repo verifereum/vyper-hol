@@ -61,8 +61,8 @@ Theorem signed_dynamic_length_bounds_counted:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-      stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel H ctx func cenv cx es sf)
 Proof
   strip_tac >>
   `ci_mono sa s1 /\ ci_mono s1 sk /\ ci_mono sk s2 /\
@@ -128,8 +128,8 @@ Theorem signed_dynamic_selector_counted:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-      stmt_state_rel ctx func cenv cx es sf) /\
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel H ctx func cenv cx es sf) /\
     (elem_size = type_memory_size tv ==>
       val_in_memory tv (EL i vs) (w2n (a + n2w (32 + i * elem_size))) sf.vs_memory /\
       (!mem. mem_agree_outside tnf.t_mem sf.vs_memory mem ==>

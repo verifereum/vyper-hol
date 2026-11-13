@@ -17,13 +17,13 @@ Proof
 QED
 
 Theorem ifexp_storage_allocation_frame:
-  stmt_state_rel ctx fn ce cx ee s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn ce cx ee s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sb /\
   compile_alloc_buffer (32*n) sb = (buf,cs) /\ fn_has_code sb cs fn /\
   buf.buf_operand = Var out /\ 32*n < dimword (:256) /\
   step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w (32*n))] [out]) s = OK u /\
   ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee cs load src dst
-    (u with vs_inst_idx := SUC s.vs_inst_idx) Gb tb p d n X i t H tt ==>
+    (u with vs_inst_idx := SUC s.vs_inst_idx) Gb tb p d n X i t HG tt ==>
   (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
     FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -53,7 +53,7 @@ Proof
 QED
 
 Theorem ifexp_storage_single_allocation_frame:
-  stmt_state_rel ctx fn ce cx ee s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn ce cx ee s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sb /\
   compile_alloc_buffer 32 sb = (buf,cs) /\ fn_has_code sb cs fn /\
   buf.buf_operand = Var out /\

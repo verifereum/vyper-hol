@@ -24,7 +24,7 @@ Theorem assign_base_bytes_local_landing_ptr:
     val_wf entry.type v /\ val_footprint entry.type v <= 32 + 32 * word_size len /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory entry.type v (w2n a) m) /\
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_rel fn cenv es.scopes s /\ local_ptrs_reserved cenv sa /\
@@ -38,7 +38,7 @@ Theorem assign_base_bytes_local_landing_ptr:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
       u.vs_prev_bb = s.vs_prev_bb /\
       typed_copy_state_frame sa (w2n dst) (32 + 32 * word_size len) s u /\
-      ghost_inv d cenv cx
+      ghost_inv H d cenv cx
         (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
         Gf tf u /\
       (!x. not_fresh_at sa x ==>
@@ -48,7 +48,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all assign_base_store_bytestring_robust_counted >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
-  `stor_taint_ok cx tf u` by
+  `stor_taint_ok H cx tf u` by
     (fs[ghost_inv_def, stor_taint_ok_def, typed_copy_state_frame_def,
         venom_state_component_equality]) >>
   `!i. ~(w2n dst <= i /\ i < w2n dst + (32 + 32 * word_size len)) ==>
@@ -73,7 +73,7 @@ Theorem assign_base_flat_local_landing_ptr:
     val_wf entry.type v /\ val_footprint entry.type v <= n /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory entry.type v (w2n a) m) /\
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_rel fn cenv es.scopes s /\ local_ptrs_reserved cenv sa /\
@@ -86,7 +86,7 @@ Theorem assign_base_flat_local_landing_ptr:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
       u.vs_prev_bb = s.vs_prev_bb /\
       typed_copy_state_frame sa (w2n dst) n s u /\
-      ghost_inv d cenv cx
+      ghost_inv H d cenv cx
         (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
         Gf tf u /\
       (!x. not_fresh_at sa x ==>
@@ -99,7 +99,7 @@ Proof
         val_in_memory entry.type v (w2n dst) m` by
         (rpt strip_tac >> irule valueCopyTheory.val_in_memory_relocate >> simp[] >>
          qexistsl_tac [`w2n a`, `0`, `m`] >> simp[mem_bytes_at_def]) >>
-      `stor_taint_ok cx tn s` by fs[ghost_inv_def] >>
+      `stor_taint_ok H cx tn s` by fs[ghost_inv_def] >>
       `!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x s /\
         FLOOKUP G x = FLOOKUP G x /\ op_taint tn (Var x) = op_taint tn (Var x)`
         by simp[] >>
@@ -126,7 +126,7 @@ Proof
   qpat_x_assum `tf = step_taint _ _ _ _` kall_tac >>
   fs[Abbr `u`, Abbr `tf`] >> gs[] >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 G tf (OK t)` >>
-  `stor_taint_ok cx tf t` by
+  `stor_taint_ok H cx tf t` by
     (fs[ghost_inv_def, stor_taint_ok_def, typed_copy_state_frame_def,
         venom_state_component_equality]) >>
   `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\

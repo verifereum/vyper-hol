@@ -6,8 +6,8 @@ Ancestors
   exprSimMemorySource loweringPosts gasSummary vyperState
 
 Theorem literal_vv_post_marked_input:
-  vv_post ctx func ce cx e (es with gas_obs := gs) si sm s0 ee raw vv s <=>
-  vv_post ctx func ce cx e es si sm s0 ee raw vv s
+  vv_post H ctx func ce cx e (es with gas_obs := gs) si sm s0 ee raw vv s <=>
+  vv_post H ctx func ce cx e es si sm s0 ee raw vv s
 Proof
   simp[vv_post_def, locals_kept_def, popped_kept_def]
 QED
@@ -17,13 +17,13 @@ Theorem literal_marked_child_materialises:
     (es,s0,G0,tn0) marks (INL raw) mid G tn (OK s) /\
   expr_body_pre ce cx env e es /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-  vv_post ctx func ce cx e es si sm s0 (mid with gas_obs := []) raw vv s ==>
+  vv_post H ctx func ce cx e es si sm s0 (mid with gas_obs := []) raw vv s ==>
   ?v.
     eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
       (INL raw,mid with gas_obs := []) /\
     expr_body_pre ce cx env e
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings) /\
-    vv_post ctx func ce cx e
+    vv_post H ctx func ce cx e
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings)
       si sm s0 (mid with gas_obs := []) raw vv s /\
     read_result cx raw (mid with gas_obs := []) =

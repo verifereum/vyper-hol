@@ -13,7 +13,7 @@ Theorem target_fixed_slot_array_continue_ptr:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sn sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   wb_frame cenv es ef sa s0 s /\
-  stmt_state_rel ctx fn cenv cx ef s /\ ghost_inv d cenv cx ef G tn s /\
+  stmt_state_rel H ctx fn cenv cx ef s /\ ghost_inv H d cenv cx ef G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sn /\ sa.cs_next_var <= sn.cs_next_var /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sn x) /\
@@ -28,16 +28,16 @@ Theorem target_fixed_slot_array_continue_ptr:
     (bop,loc,SOME (ValPT (ArrayT et (Fixed cnt)))) G tn s ==>
   (?child. extend_place cx (PlaceR (StoragePlace tr slot (ArrayTV etv (Fixed cnt))))
      (ValueSubscript iv) ef = (INL child,ef) /\
-   ?t H un. gas_path_ptr D 0 ctx fn PG G tn s 0 H un (OK t) /\
-     target_post ctx fn cenv cx es sa sb s0 ef child (Type et) (dst,loc,SOME (ValPT et)) t /\
-     ghost_inv d cenv cx ef H un t /\
-     target_ptr_ok cenv child (dst,loc,SOME (ValPT et)) H un t /\
-     ghost_kept cenv es sa G0 tn0 s0 H un /\
+   ?t HG un. gas_path_ptr D 0 ctx fn PG G tn s 0 HG un (OK t) /\
+     target_post H ctx fn cenv cx es sa sb s0 ef child (Type et) (dst,loc,SOME (ValPT et)) t /\
+     ghost_inv H d cenv cx ef HG un t /\
+     target_ptr_ok cenv child (dst,loc,SOME (ValPT et)) HG un t /\
+     ghost_kept cenv es sa G0 tn0 s0 HG un /\
      t.vs_current_bb = s.vs_current_bb /\
      t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sn sb)) \/
   (?msg. extend_place cx (PlaceR (StoragePlace tr slot (ArrayTV etv (Fixed cnt))))
      (ValueSubscript iv) ef = (INR (Error (RuntimeError msg)),ef) /\
-   ?t H un fuel pc. gas_path_ptr D 0 ctx fn PG G tn s fuel H un
+   ?t HG un fuel pc. gas_path_ptr D 0 ctx fn PG G tn s fuel HG un
      (Abort Revert_abort (t with vs_inst_idx := pc)))
 Proof
   strip_tac >>

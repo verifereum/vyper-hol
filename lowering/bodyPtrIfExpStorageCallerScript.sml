@@ -5,9 +5,9 @@ Ancestors bodyPtrIfExpStorageAllocation bodyPtrIfExpStorageCountedLoop
   bodyPtrIfExpStorageAllocationFrame loweringPosts exprLoweringProps
 
 Theorem ifexp_copy_allocated_execution:
-  stmt_state_rel ctx fn ce cx es s0 /\
-  vv_post ctx fn ce cx e es sa sb s0 ee raw vv s /\
-  ghost_inv rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
+  stmt_state_rel H ctx fn ce cx es s0 /\
+  vv_post H ctx fn ce cx e es sa sb s0 ee raw vv s /\
+  ghost_inv H rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   fn_inst_ids_distinct fn /\ sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -60,7 +60,7 @@ Proof
   `eval_operand (Var out) t = SOME d` by
     (fs[bodyPtrIfExpStorageInvariantTheory.ifexp_copy_ptr_inv_def, slotCopyExecutionTheory.slot_copy_inv_def] >> metis_tac[]) >>
   `local_ptrs_reserved ce sb` by metis_tac[local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx fn ce cx ee s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx fn ce cx ee s` by fs[vv_post_def] >>
   drule_all ifexp_storage_allocation_frame >> strip_tac >>
   qexistsl_tac [`out`, `u`, `d`, `G1`, `tn1`, `t`, `G'`, `tn'`] >>
   simp[] >> conj_tac >- (drule_all gas_path_ptr_then >> simp[]) >>

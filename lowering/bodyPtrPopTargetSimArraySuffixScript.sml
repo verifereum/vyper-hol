@@ -43,33 +43,33 @@ Theorem target_array_normal_suffix_ptr:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  target_post ctx func cenv cx es sa sm s0 ee pv (Type (ArrayT et bd))
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  target_post H ctx func cenv cx es sa sm s0 ee pv (Type (ArrayT et bd))
     (bop,loc,SOME (ValPT (ArrayT et bd))) t /\
   target_ptr_ok cenv pv (bop,loc,SOME (ValPT (ArrayT et bd))) G tn t /\
-  ghost_inv d cenv cx ee G tn t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx ee G tn t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
   ee = em with gas_obs := [] /\
   source_start = es with gas_obs := gs /\
   eval_base_place cx bt source_start = (INL pv,em) /\
   bind (eval_expr cx e) (read_result cx) em = (INL v,ef) /\
   expr_body_pre cenv cx env e em /\ expr_sim_inv cenv cx env em /\
   expr_sim_inv cenv cx env ef /\ ef.gas_obs = [] /\
-  expr_post ctx func cenv cx e ee sm sn t ef v idx u /\
-  ghost_inv d cenv cx ef H un u /\
-  ptr_val_ok cx (post_value_type cenv e) v idx H un u /\
-  ghost_kept cenv ee sm G tn t H un /\
+  expr_post H ctx func cenv cx e ee sm sn t ef v idx u /\
+  ghost_inv H d cenv cx ef HG un u /\
+  ptr_val_ok cx (post_value_type cenv e) v idx HG un u /\
+  ghost_kept cenv ee sm G tn t HG un /\
   u.vs_current_bb = sn.cs_current_bb /\
   u.vs_inst_idx = LENGTH sn.cs_current_insts /\ ~u.vs_halted ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
-    (extend_place cx pv (ValueSubscript v)) (ef,u,H,un)
-    (\res ef' H' un' q. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es sa sb s0 ef' pv' (Type et)
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+    (extend_place cx pv (ValueSubscript v)) (ef,u,HG,un)
+    (\res ef' HG' un' q. ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es sa sb s0 ef' pv' (Type et)
         (dst,loc,SOME (ValPT et)) q /\
       q.vs_current_bb = sb.cs_current_bb /\
       q.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ef' H' un' q /\
-      target_ptr_ok cenv pv' (dst,loc,SOME (ValPT et)) H' un' q /\
-      ghost_kept cenv es sa G0 tn0 s0 H' un')
+      ghost_inv H d cenv cx ef' HG' un' q /\
+      target_ptr_ok cenv pv' (dst,loc,SOME (ValPT et)) HG' un' q /\
+      ghost_kept cenv es sa G0 tn0 s0 HG' un')
     (\res ef' gt r. expr_exit res r)
 Proof
   strip_tac >> suspend "common"
@@ -83,7 +83,7 @@ Resume target_array_normal_suffix_ptr[common]:
   `wb_frame cenv es ef sa s0 u` by
     (drule target_post_index_frame >> simp[] >>
      disch_then irule >> fs[ci_mono_def] >> metis_tac[]) >>
-  `ghost_kept cenv es sa G0 tn0 s0 H un` by
+  `ghost_kept cenv es sa G0 tn0 s0 HG un` by
     (`wb_frame cenv es (em with gas_obs := []) sa s0 t` by
        fs[target_post_wb_frame] >>
      `local_ptrs_rel func cenv es.scopes s0` by
@@ -91,7 +91,7 @@ Resume target_array_normal_suffix_ptr[common]:
      `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by
        fs[ci_mono_def] >>
      `MAP FDOM es.scopes = MAP FDOM (em with gas_obs := []).scopes` by fs[] >>
-     qpat_assum `ghost_kept cenv (em with gas_obs := []) sm G tn t H un`
+     qpat_assum `ghost_kept cenv (em with gas_obs := []) sm G tn t HG un`
        (mp_then (Pos (el 2)) mp_tac wordOperandsPtrTheory.ghost_kept_trans) >>
      disch_then irule >>
      first_assum (irule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
@@ -122,9 +122,9 @@ Resume target_array_normal_suffix_ptr[scalar]:
   `is_word_type (expr_type e)` by
     (Cases_on `expr_type e` >> fs[is_int_type_def] >>
      Cases_on `b` >> fs[is_int_type_def, is_word_type_def]) >>
-  `op_prov H idx = NONE /\ op_taint un idx = {}` by
+  `op_prov HG idx = NONE /\ op_taint un idx = {}` by
     fs[ptr_val_ok_def] >>
-  `stmt_state_rel ctx func cenv cx ef u /\
+  `stmt_state_rel H ctx func cenv cx ef u /\
    eval_operand idx u = SOME (val_to_w256 (IntV i))` by
     (fs[expr_post_def, expr_val_rel_def] >>
      Cases_on `itv` >> simp[typed_val_to_w256_def] >>
@@ -219,7 +219,7 @@ Resume target_array_normal_suffix_ptr[memory_fixed_code]:
   `op_taint un bop = {}` by
     (Cases_on `bop` >> fs[target_ptr_ok_def, op_taint_def]) >>
   drule_all target_fixed_memory_array_continue_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   irule target_array_suffix_outcome_ptr >> simp[] >>
   qexists_tac `sn` >> simp[] >>
   `LENGTH sn.cs_current_insts + LENGTH (emitted_insts sn sb) =
@@ -276,7 +276,7 @@ Resume target_array_normal_suffix_ptr[memory_dynamic_cuts]:
    w = a` by fs[copy_old_operand_def, target_ptr_ok_def, eval_operand_def] >>
   qpat_x_assum `w = a` SUBST_ALL_TAC >> `32 <= (32:num)` by simp[] >>
   drule_all target_live_dynamic_memory_array_continue_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   `sb.cs_current_bb = sn.cs_current_bb` by fs[same_blocks_def] >>
   `sb.cs_current_insts = sn.cs_current_insts ++
     (emitted_insts sn sl ++ emitted_insts sl sg ++ emitted_insts sg sb)` by fs[APPEND_ASSOC] >>
@@ -361,9 +361,9 @@ Resume target_array_normal_suffix_ptr[storage_fixed]:
 QED
 
 Resume target_array_normal_suffix_ptr[storage_fixed_code]:
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) u` by simp[] >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) u` by simp[] >>
   drule_all target_fixed_slot_array_continue_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   (irule target_array_suffix_outcome_ptr >> simp[] >>
    qexists_tac `sn` >>
    `LENGTH sn.cs_current_insts + LENGTH (emitted_insts sn sb) =
@@ -372,12 +372,12 @@ QED
 
 Resume target_array_normal_suffix_ptr[storage_dynamic]:
   gvs[] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) u` by simp[] >>
-  `stor_taint_ok cx un u` by fs[ghost_inv_def] >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) u` by simp[] >>
+  `stor_taint_ok H cx un u` by fs[ghost_inv_def] >>
   `0 < type_slot_size (ArrayTV etv (Dynamic n))` by simp[type_slot_size_def] >>
   `key_taint (if tr then un.t_trans else un.t_stor) slot = {}` by
     (drule_all target_storage_header_clean_ptr >> simp[]) >>
-  `op_prov H bop = NONE` by fs[target_ptr_ok_def] >>
+  `op_prov HG bop = NONE` by fs[target_ptr_ok_def] >>
   qpat_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   `compile_ptr_load F cenv.ce_imm_alloca (slot_loc tr) =
      emit_op (if tr then TLOAD else SLOAD) o (\x. [x])` by
@@ -408,9 +408,9 @@ Resume target_array_normal_suffix_ptr[storage_dynamic_layout]:
 QED
 
 Resume target_array_normal_suffix_ptr[storage_dynamic_code]:
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) u` by simp[] >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) u` by simp[] >>
   drule_all target_live_dynamic_slot_array_continue_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   `sb.cs_current_bb = sn.cs_current_bb` by fs[same_blocks_def] >>
   `sb.cs_current_insts = sn.cs_current_insts ++
     (emitted_insts sn sl ++ emitted_insts sl sg ++ emitted_insts sg sb)` by fs[APPEND_ASSOC] >>
