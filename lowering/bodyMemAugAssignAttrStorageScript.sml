@@ -11,6 +11,8 @@
    stated for any target whose place is a fixed storage slot. *)
 Theory bodyMemAugAssignAttrStorage
 Ancestors
+  supportedExprTraverse allocLimitsProps
+  bodySimStmtCases
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyMemAssignTopWord bodyDeclMemoryCounted
   bodyDeclMemoryCore bodyMemEmitOpFrame allocaFootprint instMemFrontier memSafeRun
@@ -873,6 +875,7 @@ Finalise compile_augassign_attr_storage_mem
 
 Theorem body_augassign_attr_storage_mem:
   !cx ty src id fld bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (AugAssign ty (AttributeTarget (TopLevelNameTarget (src,id)) fld) bop e) /\
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx (AttributeTarget (TopLevelNameTarget (src, id)) fld) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
@@ -895,22 +898,7 @@ Theorem body_augassign_attr_storage_mem:
 Proof
   rpt strip_tac >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
-  `!ts vis mut id ty init.
-     MEM (VariableDecl vis mut id ty init) ts /\
-     (mut = Storage \/ mut = Transient) ==>
-     find_var_decl_by_name id ts <> NONE` by
-    (Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >>
-     metis_tac[]) >>
-  `src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-   ?mut sid slot. MEM (VariableDecl Private mut id (StructT sid) slot) tops` by
-    (qpat_x_assum `supported_storage_field_write _ _ _` mp_tac >>
-     simp[supported_storage_field_write_def, supported_storage_fields_def] >>
-     Cases_on `supported_variable_decl tops (src, id)` >> simp[] >>
-     rename1 `SOME x` >> PairCases_on `x` >>
-     drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
-     Cases_on `x0` >> Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >>
-     simp[] >> metis_tac[]) >>
-  gvs[] >>
+  drule supported_storage_field_write_decl >> strip_tac >> gvs[] >>
   `get_module_code cx NONE = SOME tops /\ supported_program tops /\
    ALL_DISTINCT
      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
@@ -932,7 +920,8 @@ Proof
    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
    (bop = Exp ==> nonneg_int_literal e) /\
    (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
-    gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+    (gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+     metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
   gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
   >- (qpat_x_assum `env_consistent _ _ _`
         (strip_assume_tac o REWRITE_RULE [env_consistent_def,
@@ -955,11 +944,23 @@ Proof
   drule struct_field_slot_exists >> strip_tac >>
   rename1 `struct_field_slot fs fld = SOME (off, ftv)` >>
   drule_all struct_field_offset_slots_eq >> strip_tac >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supportedExprTraverseTheory.supported_expr_exists_def,
          int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>

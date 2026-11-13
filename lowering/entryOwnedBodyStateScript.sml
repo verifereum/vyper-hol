@@ -99,7 +99,7 @@ Theorem source_selected_owned_body_state:
   fn_entry_label efn = SOME elbl ==>
   ?lbl ce pa mc pay key tr view rt sc sk cer registered completed t out.
     set_external_package_target rp.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE : num option)
           tx.function_name External tops,tx.function_name,args,([] : expr list),ret,fbody)) =
       (lbl,ce,pa,mc,pay,F,key,tr,view,fbody,rt) /\
@@ -141,6 +141,12 @@ Proof
   `entry_decoder_obs vs out` by
     (irule entry_owned_endpoint_observations >>
      qexistsl [`elbl`, `t`] >> simp[]) >>
+  `EVERY (\(ty,tv,v,(at:abi_type),(av:abi_value)). value_has_type tv v) values` by
+    (qpat_x_assum `LIST_REL _ pa values` mp_tac >>
+     rewrite_tac[listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL] >> strip_tac >> rpt strip_tac >>
+     first_x_assum (qspec_then `n` mp_tac) >>
+     qabbrev_tac `x = EL n values` >> qabbrev_tac `y = EL n pa` >>
+     PairCases_on `x` >> PairCases_on `y` >> fs[]) >>
   `local_ptrs_rel efn cer [env] out` by
     (irule owned_source_arguments_local_ptrs >> simp[] >>
      reverse conj_tac
@@ -149,7 +155,8 @@ Proof
      qpat_assum `compile_register_positional_args _ _ _ _ = _` (irule_at Any) >>
      simp[] >>
      qpat_assum `LIST_REL _ (MAP _ _) outputs` (irule_at Any) >>
-     qpat_assum `LIST_REL _ args values` (irule_at Any) >> simp[]) >>
+     qpat_assum `LIST_REL _ args values` (irule_at Any) >>
+     qpat_assum `EVERY _ values` (irule_at Any) >> simp[]) >>
   drule_all owned_runtime_body_state >> strip_tac >>
   qexistsl [`lbl`, `ce`, `pa`, `mc`, `pay`, `key`, `tr`, `view`, `rt`,
     `sc`, `sk`, `cer`, `registered`, `completed`, `t`, `out`] >> simp[]

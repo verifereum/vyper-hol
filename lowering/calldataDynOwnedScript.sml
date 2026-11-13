@@ -233,7 +233,11 @@ Proof
   gvs[run_inst_seq_def, AllCaseEqs()] >>
   `abi_decoder_operand_live (st.cs_next_var + 1) op /\
    abi_decoder_operand_live (st.cs_next_var + 2) op` by
-    (Cases_on `op` >>
+    (Cases_on `op`
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac)
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac) >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   qpat_x_assum `step_inst_base _ s = _` mp_tac >>
@@ -370,7 +374,11 @@ Resume calldata_array_loop_init_safe_live[live]:
   rpt strip_tac >>
   `abi_decoder_operand_live guard_st.cs_next_var op /\
    abi_decoder_operand_live header_st.cs_next_var op` by
-    (Cases_on `op` >>
+    (Cases_on `op`
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac)
+     >- (gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac) >>
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   `eval_operand op g = eval_operand op initial` by
@@ -4623,8 +4631,8 @@ Proof
   qpat_assum `lookup_block exit_lbl _ = _`
     (irule_at (Pat `lookup_block exit_lbl _ = _`)) >>
   qexistsl_tac [`p`,`oid`,`header_st`,`cap`,`body_bb`,`base_addr`] >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []]
-  >- (first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [] o BETA_RULE)) >>
+  rpt conj_tac >>
+  FIRST [first_assum (ACCEPT_TAC o BETA_RULE), simp_tac bool_ss []] >>
   irule calldata_owned_header_initial_repeat_simp >>
   qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`
     (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>
@@ -5909,8 +5917,9 @@ Proof
   qpat_assum `lookup_block exit_lbl _ = _`
     (irule_at (Pat `lookup_block exit_lbl _ = _`)) >>
   qexistsl_tac [`p`,`oid`,`header_st`,`cap`,`body_bb`,`base_addr`] >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []]
-  >- (first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [] o BETA_RULE)) >>
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC, first_assum (ACCEPT_TAC o BETA_RULE),
+         simp_tac bool_ss []] >>
   irule calldata_owned_header_initial_repeat_observed_simp >>
   qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`
     (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>

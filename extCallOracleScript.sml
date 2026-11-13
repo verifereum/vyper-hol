@@ -15,8 +15,10 @@ Libs
 
 (* ===== Requests and outcomes ===== *)
 
+(* DelegateMessageCall: a DELEGATECALL, which runs the target's code in the
+ * caller's own context (its storage, address, caller and value). *)
 Datatype:
-  call_kind = MessageCall | CreateCall | Create2Call bytes32
+  call_kind = MessageCall | DelegateMessageCall | CreateCall | Create2Call bytes32
 End
 
 Datatype:
@@ -127,11 +129,15 @@ End
 
 val () = cv_auto_trans record_request_def;
 
+(* A failed CREATE keeps its effects on the creator (its nonce); a failed
+ * message call, delegate or not, has none. *)
 Definition adopt_outcome_def:
   adopt_outcome rq outcome (accounts, tStorage, logs) =
-    (if ~rq.cr_static /\ (outcome.co_success \/ rq.cr_kind <> MessageCall)
+    (if ~rq.cr_static /\ (outcome.co_success \/
+         rq.cr_kind <> MessageCall /\ rq.cr_kind <> DelegateMessageCall)
      then outcome.co_accounts else accounts,
-     if ~rq.cr_static /\ (outcome.co_success \/ rq.cr_kind <> MessageCall)
+     if ~rq.cr_static /\ (outcome.co_success \/
+         rq.cr_kind <> MessageCall /\ rq.cr_kind <> DelegateMessageCall)
      then outcome.co_tStorage else tStorage,
      if outcome.co_success /\ ~rq.cr_static
      then logs ++ outcome.co_logs else logs)
@@ -453,8 +459,19 @@ Proof
   rw[adopt_outcome_def] >> gvs[]
 QED
 
+Theorem adopt_outcome_delegate:
+  rq.cr_kind = DelegateMessageCall ==>
+  adopt_outcome rq outcome (accounts,ts,logs) =
+    if outcome.co_success /\ ~rq.cr_static
+    then (outcome.co_accounts,outcome.co_tStorage,logs ++ outcome.co_logs)
+    else (accounts,ts,logs)
+Proof
+  rw[adopt_outcome_def] >> gvs[]
+QED
+
 Theorem adopt_outcome_failed_create:
-  rq.cr_kind <> MessageCall /\ ~rq.cr_static /\ ~outcome.co_success ==>
+  rq.cr_kind <> MessageCall /\ rq.cr_kind <> DelegateMessageCall /\
+  ~rq.cr_static /\ ~outcome.co_success ==>
   adopt_outcome rq outcome (accounts,ts,logs) =
     (outcome.co_accounts,outcome.co_tStorage,logs) /\
   adopt_outcome_deletions rq outcome pending = pending

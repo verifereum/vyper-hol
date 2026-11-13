@@ -6,6 +6,7 @@ Ancestors
   vyperInterpreter vyperState compileEnv exprLoweringProps venomState context words finite_map
 
 Theorem raw_call_zero_finish_post_mem:
+  expr_has_effect e /\
   expr_type e = (if rev then NoneT else BaseT BoolT) /\
   lowered_value_type ce e = expr_type e /\
   stmt_state_rel ctx func ce cx es' u /\ wb_frame ce es es' sa s0 u /\
@@ -29,6 +30,7 @@ Proof
 QED
 
 Theorem raw_call_bytes_finish_post_mem:
+  expr_has_effect e /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   lowered_value_type ce e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\

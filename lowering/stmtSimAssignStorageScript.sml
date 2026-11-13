@@ -74,12 +74,15 @@ Proof
   simp[Once evaluate_def, bind_def] >>
   Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
   Cases_on `r1` >> simp[]
-  >- (simp[Once evaluate_def, bind_def] >>
-      simp[Once evaluate_def, lookup_global_def, bind_def,
-           lift_option_type_def, return_def, LET_THM, get_place_def] >>
-      Cases_on `read_result cx x es1` >>
+  >- (Cases_on `read_result cx x es1` >>
       rename1 `read_result cx x es1 = (r2, es2)` >>
-      Cases_on `r2` >> simp[write_place_def] >> strip_tac >> gvs[] >>
+      imp_res_tac read_result_state >> gvs[] >>
+      Cases_on `r2` >> simp[]
+      >- (simp[Once evaluate_def, bind_def] >>
+          simp[Once evaluate_def, lookup_global_def, bind_def,
+               lift_option_type_def, return_def, LET_THM, get_place_def] >>
+          simp[write_place_def] >> strip_tac >> gvs[]) >>
+      strip_tac >> gvs[] >>
       drule read_result_no_control >> simp[]) >>
   strip_tac >> gvs[] >>
   imp_res_tac (cj 1 eval_expr_no_control) >> simp[]
@@ -220,7 +223,8 @@ Proof
      qpat_x_assum `c = cenv` SUBST_ALL_TAC >>
      qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
      asm_simp_tac (srw_ss())
-       [compile_stmt_def, compile_assign_value_def, comp_bind_def,
+       [compile_stmt_def, exprLoweringTheory.expr_can_mutate_def,
+     stmtLoweringTheory.target_to_expr_def, compile_assign_value_def, comp_bind_def,
         comp_ignore_bind_def, comp_return_def, LET_THM] >>
      Cases_on `compile_expr cenv (expr_type e) e sa` >>
      rename1 `compile_expr _ _ _ _ = (src_vv, st2)` >>
@@ -284,12 +288,13 @@ Proof
   simp[Once evaluate_def, bind_def] >>
   Cases_on `eval_expr cx e x` >> rename1 `eval_expr cx e x = (r1, es1)` >>
   Cases_on `r1` >> simp[] >>
-  simp[Once evaluate_def, bind_def] >>
-  simp[Once evaluate_def, lookup_global_def, bind_def,
-       lift_option_type_def, return_def, LET_THM, get_place_def] >>
   Cases_on `read_result cx x' es1` >>
   rename1 `read_result cx _ es1 = (r2, es2)` >>
-  Cases_on `r2` >> simp[write_place_def]
+  Cases_on `r2` >> simp[] >>
+  simp[Once evaluate_def, bind_def] >>
+  simp[Once evaluate_def, lookup_global_def, bind_def,
+       lift_option_type_def, return_def, LET_THM, get_place_def,
+       write_place_def]
 QED
 
 (* A storage write reads no gas. *)
@@ -320,7 +325,7 @@ Proof
   qexistsl_tac [`[Lit slot; op]`, `if tr then TSTORE else SSTORE`, `[]`,
                 `st`, `st'`] >>
   Cases_on `tr` >> gvs[emit_void_def, emit_inst_def, is_terminator_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   fs[mk_inst_def, exec_write2_def, eval_operand_def]
 QED
 
@@ -331,6 +336,8 @@ Theorem assign_storage_word_suffix:
   !ctx func cx lctx cenv e es ee v op t sa sb sf s0 src id ts tr typ id_str
    slot tvt etv.
     expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    MAP FDOM ee.scopes = MAP FDOM es.scopes /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     get_module_code cx src = SOME ts /\
@@ -348,10 +355,11 @@ Theorem assign_storage_word_suffix:
                 (ee with gas_obs := tail) = (INL (), ee' with gas_obs := tail)) /\
       gas_marked_path F ctx func t 0 r /\
       ?t'. r = OK t' /\
-           stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ())
+           stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ())
              (ee' with gas_obs := []) t'
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_all expr_post_alloca_frame >> strip_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `eval_operand op t = SOME (typed_val_to_w256 etv v)` by
@@ -372,6 +380,14 @@ Proof
      simp[set_storage_def] >> strip_tac >> gvs[]) >>
   `ee' with gas_obs := [] = ee'` by
     simp[evaluation_state_component_equality] >>
+  `alloca_frame cenv es sa s0 cenv ee'
+     ((if tr then tstore (n2w slot) (typed_val_to_w256 etv v) t
+       else sstore (n2w slot) (typed_val_to_w256 etv v) t)
+      with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (irule alloca_frame_same_state >> qexists_tac `t` >>
+     Cases_on `tr` >> simp[sstore_def, tstore_def, LET_THM] >>
+     qpat_x_assum `alloca_frame _ _ _ _ _ ee t` mp_tac >>
+     simp[alloca_frame_def]) >>
   qexistsl_tac [`ee'`,
     `OK ((if tr then tstore (n2w slot) (typed_val_to_w256 etv v) t
           else sstore (n2w slot) (typed_val_to_w256 etv v) t)
@@ -447,6 +463,10 @@ Proof
   `encode_value tvt v = SOME [(0, typed_val_to_w256 etv v)]` by
     (qpat_x_assum `!gs v es1. _ ==> encode_value _ _ = _` irule >>
      fs[ETA_THM] >> metis_tac[]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_x_assum `_ (es with gas_obs := gs) = (INL v, ee)`
+       (mp_tac o MATCH_MP stmtSimDefsTheory.eval_read_preserves_scopes_dom) >>
+     simp[]) >>
   drule_all assign_storage_word_suffix >>
   disch_then (qspec_then `lctx` strip_assume_tac) >>
   qexistsl_tac [`INL ()`, `ee'`, `r`] >> simp[]

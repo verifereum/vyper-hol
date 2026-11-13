@@ -348,6 +348,7 @@ Proof
 QED
 
 Theorem send_tail_none_post:
+  expr_has_effect e /\
   stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   ~not_fresh_at sm out /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
@@ -391,6 +392,7 @@ Proof
 QED
 
 Theorem send_tail_path_ptr:
+  expr_has_effect e /\
   emit_op CALL [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (void, sb) /\ fn_has_code sm sb fn /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -494,6 +496,7 @@ QED
 Finalise send_tail_path_ptr
 
 Theorem send_tail_summary_ptr:
+  expr_has_effect e /\
   emit_op CALL [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (void, sb) /\ fn_has_code sm sb fn /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -641,6 +644,7 @@ Resume send_expr_sim_ptr[tail_summary]:
   `!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p` by
     metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `expr_type (Call NoneT (Send has_gas) (a::v::gs) dflt) = NoneT` by simp[vyperASTTheory.expr_type_def] >>
+  `expr_has_effect (Call NoneT (Send has_gas) (a::v::gs) dflt)` by simp[loweringPostsTheory.expr_has_effect_thm] >>
   `post_value_type cenv (Call NoneT (Send has_gas) (a::v::gs) dflt) =
    expr_type (Call NoneT (Send has_gas) (a::v::gs) dflt)` by simp[] >>
   drule_all (Q.INST [`e` |-> `Call NoneT (Send has_gas) (a::v::gs) dflt`]

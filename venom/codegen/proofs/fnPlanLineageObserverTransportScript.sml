@@ -515,7 +515,7 @@ Proof
     (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, EVERY_MEM] >>
      metis_tac[EL_MEM]) >>
   irule ordinary_inst_uses_compute_operands >> simp[] >>
-  gvs[livenessDefsTheory.liveness_transfer_def, livenessProofsTheory.live_update_mem,
+  gvs[livenessDefsTheory.liveness_transfer_def, livenessTransferProofsTheory.live_update_mem,
       livenessDefsTheory.MEM_ordered_inst_uses]
 QED
 
@@ -2242,7 +2242,7 @@ Proof
          qpat_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
          simp[] >> decide_tac) >>
       `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
-        metis_tac[removeUnusedProofsTheory.wf_lookup_block, codegen_ready_fn_def] >>
+        metis_tac[venomExecProofsTheory.wf_lookup_block, codegen_ready_fn_def] >>
       `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
         (SUC (LENGTH (get_params bb.bb_instructions)+k)))` by
         (irule fnPlanLineagePathTheory.analyzed_offset_output_live_after >>
@@ -3010,7 +3010,7 @@ Theorem ready_edge_source_nonhalting:
 Proof
   rpt gen_tac >> strip_tac >>
   `wf_function fn` by gvs[codegen_ready_fn_def] >>
-  drule_all cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs >>
+  drule_all cfgCorrectnessProofTheory.cfg_analyze_preserves_bb_succs >>
   disch_then (fn th => fs[th]) >>
   strip_tac >>
   gvs[cfgTransformTheory.bb_is_halting_def] >>
@@ -3337,7 +3337,9 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) live` >> gvs[] >>
   imp_res_tac deepResidualBudgetTheory.do_dup_spilled_eq >> gvs[] >>
-  metis_tac[fnPlanLineageInventoryTheory.popmany_plan_spilled_unchanged, pairTheory.SND,
+  qpat_x_assum `popmany_plan _ _ = _`
+    (mp_tac o AP_TERM ``\p : stack_op list # plan_state. (SND p).ps_spilled``) >>
+  simp[fnPlanLineageInventoryTheory.popmany_plan_spilled_unchanged,
     stackPlanTypesTheory.plan_state_accfupds]
 QED
 

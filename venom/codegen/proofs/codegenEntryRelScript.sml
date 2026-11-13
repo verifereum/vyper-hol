@@ -127,6 +127,9 @@ Definition initial_ctx_rel_def:
       wf_state es /\ (?d. es.msdomain = Collect d) /\
       ~ctxt.msgParams.static /\
       ctxt.msgParams.code = assemble prog ++ vs.vs_data_section /\
+      (ctxt.msgParams.code <> [] /\ ~vs.vs_call_ctx.cc_created_in_tx ==>
+       account_already_created
+         (lookup_account ctxt.msgParams.callee es.rollback.accounts)) /\
       ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
       vs.vs_vars = FEMPTY /\ vs.vs_params = [] /\ ctxt.logs = [] /\
       (!l. FLOOKUP vs.vs_labels l =

@@ -105,11 +105,24 @@ Proof
   gvs[] >> first_x_assum drule >> simp[]
 QED
 
+(* The callee's scopes are restored whether or not it halts, and the lock
+   release after it leaves them alone. *)
+Theorem finally_unless_halt_set_scopes_then[local]:
+  !f prev g st res st'.
+    finally_unless_halt (finally f (set_scopes prev)) g st = (res,st') ==>
+    (!s r t. g s = (r,t) ==> t.scopes = s.scopes) ==>
+    st'.scopes = prev
+Proof
+  rw[finally_unless_halt_def, ignore_bind_def, bind_def, return_def,
+     raise_def, AllCaseEqs()] >>
+  imp_res_tac finally_set_scopes >> gvs[] >> res_tac >> gvs[]
+QED
+
 Theorem eval_mutual_scopes_progress[local]:
   (!cx:evaluation_context. !s:stmt. T) /\
   (!cx:evaluation_context. !ss:stmt list. T) /\
   (!cx:evaluation_context. !it:iterator. T) /\
-  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:value list. T) /\
+  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:eval_result list. T) /\
   (!cx e st res st'. eval_expr cx e st = (res,st') ==>
     scopes_progress st.scopes st'.scopes) /\
   (!cx es st res st'. eval_exprs cx es st = (res,st') ==>
@@ -146,6 +159,7 @@ Proof
       metis_tac[])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
       imp_res_tac read_result_state >> imp_res_tac select_result_state >>
       gvs[] >> imp_res_tac eval_expr_preserves_scopes_dom >>
       metis_tac[scopes_progress_trans])
@@ -209,6 +223,23 @@ Resume eval_mutual_scopes_progress[Builtin]:
   >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
       Cases_on `bt = Env MsgGas` >>
       Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+      Cases_on `code_slice_source bt es`
+      >>~- ([`code_slice_source bt es = SOME _`],
+            rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
+            gvs[code_slice_source_SOME, type_check_def, assert_def,
+                return_def, raise_def] >>
+            qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+            simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+                 assert_def, return_def, raise_def, AllCaseEqs()] >>
+            strip_tac >> gvs[] >>
+            imp_res_tac precompile_call_success_state >>
+            imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
+            gvs[] >> res_tac >> res_tac >>
+            rpt (qpat_x_assum `!x. _` kall_tac) >>
+            imp_res_tac eval_exprs_preserves_scopes_dom >>
+            metis_tac[scopes_progress_trans]) >>
+      (* the code-slice IHs are vacuous from here on *)
+      rpt (qpat_x_assum `!s'' x t v. _` kall_tac) >>
       gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
           assert_def, return_def, raise_def, lift_option_type_def,
           vyperMiscTheory.option_CASE_rator,
@@ -287,7 +318,8 @@ QED
 Resume eval_mutual_scopes_progress[PureCall]:
   rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
-      raise_def, check_def, type_check_def, assert_def] >> metis_tac[]
+      raise_def, check_def, type_check_def, assert_def, lift_option_type_def,
+      option_CASE_rator] >> metis_tac[]
 QED
 
 Resume eval_mutual_scopes_progress[Transfer]:
@@ -296,7 +328,9 @@ Resume eval_mutual_scopes_progress[Transfer]:
        raise_def, check_def, type_check_def, assert_def, lift_option_def,
        lift_option_type_def, get_accounts_def, option_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac transfer_value_scopes >> gvs[] >> metis_tac[]
+  imp_res_tac transfer_value_scopes >>
+  gvs[COND_RATOR, bind_def, update_accounts_def, update_pending_deletions_def,
+      return_def, raise_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 Resume eval_mutual_scopes_progress[CreateTarget]:
@@ -319,7 +353,7 @@ Resume eval_mutual_scopes_progress[IntCall]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum
     `!s t s1 ts t1 s2 tup t2 s3 t3. _ ==>
-       !st res st'. eval_expr_results cx es st = (res,st') ==> _`
+       !st res st'. eval_exprs cx es st = (res,st') ==> _`
     (mp_tac o SRULE [type_check_def, assert_def, lift_option_type_def,
                      option_CASE_rator, return_def, raise_def, AllCaseEqs()]) >>
   disch_then assume_tac >>
@@ -368,7 +402,14 @@ Resume eval_mutual_scopes_progress[IntCall]:
   Cases_on `FST (SND x'')` >> Cases_on `cx.nonreentrant_slot` >>
   gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(),
       return_def, raise_def, check_not_static_def, check_def, assert_def] >>
-  imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[]
+  imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[] >>
+  TRY (qpat_x_assum `finally_unless_halt _ _ _ = _`
+         (mp_tac o MATCH_MP finally_unless_halt_set_scopes_then) >>
+       impl_tac
+       >- (simp[COND_RATOR, option_CASE_rator, unlock_if_nr_def] >>
+           rpt strip_tac >> gvs[return_def, AllCaseEqs()] >>
+           imp_res_tac release_nonreentrant_lock_scopes) >>
+       strip_tac >> gvs[])
 QED
 
 Finalise eval_mutual_scopes_progress

@@ -925,25 +925,15 @@ Theorem le_padded_exec_delegatecall:
     (exec_delegatecall i t gas addr ao az ro rz)
 Proof
   strip_tac >>
-  `read_memory (w2n ao) (w2n az) s = read_memory (w2n ao) (w2n az) t` by
-    metis_tac[le_padded_control_def, padded_exec_equiv_read_memory] >>
-  `s.vs_accounts = t.vs_accounts /\ s.vs_call_ctx = t.vs_call_ctx` by
-    gvs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def,
-        venom_state_component_equality] >>
-  `!target gas data code static.
-     make_venom_delegatecall_state s target gas data code static =
-     make_venom_delegatecall_state t target gas data code static` by
-    metis_tac[le_padded_delegate_state] >>
-  simp[exec_delegatecall_def] >>
-  qmatch_goalsub_abbrev_tac `extract_venom_result s 1w (w2n ro) (w2n rz) rr` >>
-  `OPTREL (\p q. FST p = FST q /\ le_padded_control V (SND p) (SND q))
-     (extract_venom_result s 1w (w2n ro) (w2n rz) rr)
-     (extract_venom_result t 1w (w2n ro) (w2n rz) rr)` by
-    (irule le_padded_extract_result >> simp[]) >>
-  Cases_on `extract_venom_result s 1w (w2n ro) (w2n rz) rr` >>
-  Cases_on `extract_venom_result t 1w (w2n ro) (w2n rz) rr` >>
-  gvs[lift_result_def] >>
-  PairCases_on `x` >> PairCases_on `x'` >> gvs[] >>
+  `venom_call_request s addr 0w ao az F =
+   venom_call_request t addr 0w ao az F` by
+    metis_tac[le_padded_requests] >>
+  simp[exec_delegatecall_def] >> rpt (pairarg_tac >> simp[]) >>
+  drule le_padded_consume_call >>
+  disch_then (qspecl_then [`w2n rz`,
+    `venom_call_request t addr 0w ao az F with cr_kind := DelegateMessageCall`,
+    `w2n ro`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
   namedCases_on `i.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
   Cases_on `outs` >> simp[lift_result_def, le_padded_control_update_var]
 QED

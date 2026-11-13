@@ -30,14 +30,34 @@ Proof
   strip_tac >> `l < dimword(:256)` by decide_tac >>
   Cases_on `src` >> Cases_on `dst` >>
   gvs[eval_operand_def, lookup_var_def] >>
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_read1_def, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_pure2_def, eval_operand_def, lookup_var_update_var, w2n_n2w,
+       bool_to_word_def] >>
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_pure1_def, eval_operand_def, lookup_var_update_var,
+       bool_to_word_def] >>
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       eval_operand_def, lookup_var_update_var, bool_to_word_def] >>
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_write2_def, eval_operand_def, lookup_var_update_var,
+       mstore_def, write_memory_with_expansion_def] >>
   simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
-       exec_pure1_def, exec_pure2_def, exec_read1_def, exec_write2_def,
-       eval_operand_def, lookup_var_update_var, w2n_n2w, bool_to_word_def,
-       mstore_def, write_memory_with_expansion_def, update_var_def,
-       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+       exec_pure2_def, eval_operand_def, lookup_var_update_var,
+       update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE,
                        venom_state_component_equality]
 QED
+
+val typed_dynarray_mem_ok_tac =
+  simp[run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last,
+       below_frontier_MLOAD, below_frontier_MSTORE, below_frontier_no_ranges,
+       step_inst_base_opcode_eqs, mk_inst_def,
+       exec_pure1_def, exec_pure2_def, exec_read1_def, exec_write2_def,
+       eval_operand_def, lookup_var_update_var, w2n_n2w, bool_to_word_def,
+       mstore_def, write_memory_with_expansion_def, update_var_def,
+       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE];
 
 Theorem typed_dynarray_prologue_mem_ok[local]:
   code =
@@ -58,14 +78,16 @@ Theorem typed_dynarray_prologue_mem_ok[local]:
 Proof
   strip_tac >> `l < dimword(:256)` by decide_tac >>
   Cases_on `src` >> Cases_on `dst` >>
-  gvs[eval_operand_def, lookup_var_def] >>
-  simp[run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last,
-       below_frontier_MLOAD, below_frontier_MSTORE, below_frontier_no_ranges,
-       step_inst_base_opcode_eqs, mk_inst_def,
-       exec_pure1_def, exec_pure2_def, exec_read1_def, exec_write2_def,
-       eval_operand_def, lookup_var_update_var, w2n_n2w, bool_to_word_def,
-       mstore_def, write_memory_with_expansion_def, update_var_def,
-       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+  gvs[eval_operand_def, lookup_var_def]
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >- typed_dynarray_mem_ok_tac
+  >> typed_dynarray_mem_ok_tac
 QED
 
 Theorem typed_dynarray_prologue_window_run:
@@ -309,7 +331,7 @@ Proof
 QED
 
 (* The header and data writes together affect only the live destination. *)
-Theorem typed_dynarray_equal_exterior[local]:
+Theorem typed_dynarray_equal_exterior:
   !s d p l stride a k.
     a+k <= d \/ d+32+l*stride <= a ==>
     mem_bytes_at a k
@@ -324,7 +346,7 @@ Proof
   simp[] >> irule mstore_mem_bytes_at_disjoint >> decide_tac
 QED
 
-Theorem typed_dynarray_equal_window[local]:
+Theorem typed_dynarray_equal_window:
   !s d p l stride src_size.
     mload p s = n2w l /\ 32+l*stride <= src_size /\
     (p+src_size <= d \/ d+32+l*stride <= p) ==>

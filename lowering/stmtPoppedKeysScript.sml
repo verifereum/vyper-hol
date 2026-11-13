@@ -114,7 +114,9 @@ Proof
   rpt gen_tac >> Cases_on `it` >> simp[Once evaluate_def] >>
   rpt (gen_tac ORELSE
        (irule scope_pop_effect_bind >> conj_tac >>
-        simp[cj 5 eval_mutual_scope_pop_effect]))
+        simp[cj 5 eval_mutual_scope_pop_effect]) ORELSE
+       (irule scope_pop_effect_identity >> rpt strip_tac >>
+        imp_res_tac array_iterator_results_state >> gvs[] >> NO_TAC))
 QED
 
 Theorem eval_iterator_popped_keys_indexed:
@@ -154,7 +156,7 @@ Proof
   simp[write_place_def, bind_def, get_immutables_def,
        get_address_immutables_def, lift_option_type_def, lift_sum_def,
        return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
+  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
        gvs[bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
            get_immutables_def, get_address_immutables_def, return_def, raise_def]) >>
   metis_tac[set_immutable_scopes]
@@ -193,7 +195,7 @@ Proof
   `(!(cx:evaluation_context) (s:stmt). T) /\
    (!(cx:evaluation_context) (ss:stmt list). T) /\
    (!(cx:evaluation_context) (it:iterator). T) /\
-   (!(cx:evaluation_context) (ty:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+   (!(cx:evaluation_context) (ty:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
    (!(cx:evaluation_context) (e:expr). T) /\
    (!(cx:evaluation_context) (es:expr list). T) /\
    (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
@@ -357,8 +359,8 @@ Proof
   drule_all eval_expr_popped_keys_indexed >> strip_tac >>
   drule_all (cj 1 (cj 5 eval_scc_type_sound_mutual)) >>
   strip_tac >> gvs[] >>
+  imp_res_tac read_result_state >> gvs[] >>
   imp_res_tac eval_target_place_popped_keys_indexed >>
-  imp_res_tac read_result_scopes >> gvs[] >>
   metis_tac[write_place_popped_keys_indexed]
 QED
 
@@ -465,15 +467,16 @@ Theorem typed_loop_bracket_runtime[local]:
   runtime_consistent env cx after
 Proof
   rpt strip_tac >>
-  `eval_for cx tyv id body' [v] st =
+  `eval_for cx tyv id body' [Value v] st =
     ((case r of INL b => INL () | INR ex => INR ex),after)` by
     (fs[ignore_bind_def] >>
-     simp[Once evaluate_def, bind_def] >>
+     simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
      Cases_on `r` >- (rename1 `INL b` >> Cases_on `b` >>
        simp[Once evaluate_def, return_def, bind_def, ignore_bind_def]) >>
      simp[ignore_bind_def, bind_def]) >>
   fs[runtime_consistent_def] >>
-  `EVERY (value_has_type tyv) [v]` by simp[] >>
+  `EVERY (iterator_result_typed tyv) [Value v]` by
+    simp[iterator_result_typed_def] >>
   drule_all (cj 4 eval_scc_type_sound_mutual) >> simp[]
 QED
 
@@ -492,7 +495,7 @@ Theorem eval_statement_loop_popped_keys_mutual[local]:
      popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
   (!cx tyv id body vs env ret_ty ty env_after st res st'.
-    evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
+    evaluate_type env.type_defs ty = SOME tyv /\ EVERY (iterator_result_typed tyv) vs /\
     id NOTIN FDOM env.var_types /\
     type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
     runtime_consistent env cx st /\ functions_well_typed cx /\
@@ -641,6 +644,17 @@ Resume eval_statement_loop_popped_keys_mutual[for]:
 QED
 Resume eval_statement_loop_popped_keys_mutual[loop]:
   rpt strip_tac >> fs[EVERY_DEF] >>
+  rename1 `iterator_result_typed tyv r` >>
+  Cases_on `read_result cx r st` >> rename1 `read_result cx r st = (rr,st0)` >>
+  drule_all iterator_result_read_typed >> strip_tac >> gvs[] >>
+  reverse (Cases_on `rr`) >- (
+    qpat_x_assum `eval_for _ _ _ _ (_::_) _ = _` mp_tac >>
+    simp[Once evaluate_def, bind_def] >> strip_tac >> gvs[]) >>
+  gvs[] >> rename1 `read_result cx r st = (INL v,st)` >>
+  qpat_x_assum `read_result cx r st = (INL v,st)` (fn rd =>
+    rpt (last_x_assum (fn ih => assume_tac (REWRITE_RULE [rd]
+      (SPECL [``st:evaluation_state``, ``v:value``, ``st:evaluation_state``] ih)))) >>
+    assume_tac rd) >>
   qabbrev_tac `pushed = st with scopes updated_by
     CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>))` >>
   `push_scope_with_var id tyv v st = (INL (),pushed)` by

@@ -9,7 +9,8 @@ Ancestors
 
 Theorem body_assign_place_widened_aggregate_call_mem:
   !cx t e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
-    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==>
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
                  body_base_target_mem_ok cx t) /\
     body_expr_mem_ok cx e /\
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings
@@ -35,7 +36,8 @@ Theorem body_assign_place_widened_aggregate_call_mem:
         t = TopLevelNameTarget nsid /\
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
-        ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        ~is_word_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
+        (!elem n. ty <> ArrayT elem (Dynamic n)) /\
         0 < type_memory_bytes cenv ty /\ expr_type e = ty) /\
     ~(?id fld sid fty.
         t = AttributeTarget (NameTarget id) fld /\

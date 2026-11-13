@@ -9,8 +9,28 @@
 
 Theory asmFrameRun
 Ancestors
-  asmFrameRel asmFrameLocalStep asmFrameCallStep asmSem asmWf symbolResolve
+  asmFrameRel asmFrameLocalStep asmFrameCallStep asmFrameCreateStep
+  asmFrameDelegateStep asmFrameSelfdestructStep asmSem asmWf symbolResolve
   frameOutcome callTrace vfmExecution
+
+(* Preserve the local-step interface while dispatching stateful frame steps. *)
+Theorem asm_frame_local_step:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
+  as.as_pc < LENGTH prog /\ ~is_data_inst (EL as.as_pc prog) /\
+  EL as.as_pc prog <> AsmOp "CALL" /\
+  EL as.as_pc prog <> AsmOp "STATICCALL" ==>
+  asm_frame_step_ok prog data es0 as es
+Proof
+  strip_tac >>
+  Cases_on `EL as.as_pc prog = AsmOp "DELEGATECALL"`
+  >- (irule asm_frame_delegate_step >> simp[]) >>
+  Cases_on `EL as.as_pc prog = AsmOp "CREATE" \/
+            EL as.as_pc prog = AsmOp "CREATE2"`
+  >- (irule asm_frame_create_step >> simp[]) >>
+  Cases_on `EL as.as_pc prog = AsmOp "SELFDESTRUCT"`
+  >- (irule asm_frame_selfdestruct_step >> simp[]) >>
+  irule asm_frame_noncall_step >> simp[] >> metis_tac[]
+QED
 
 Theorem asm_frame_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\

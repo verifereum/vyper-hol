@@ -15,8 +15,8 @@
 
 Theory bodySimMain
 Ancestors
-  list bodySim bodySimStmtCases bodySimDeclCases bodySimExprCases
-  bodySimCallCases
+  list bodySim bodyExprPreFacts bodySimStmtCases bodySimDeclCases bodySimExprCases
+  bodySimCallCases whitelistForIter
   bodySimEntry bodySimLog stmtSimIf
   supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph
@@ -69,7 +69,7 @@ Proof
     (* 24 *) simp[body_iterator_ok_def],
     (* 25 *) rw[body_iterator_ok_def] >> metis_tac[],
     (* 26 *) simp[body_for_ok_def],
-    (* 27 *) rw[body_for_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def],
+    (* 27 *) rw[body_for_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def] >> metis_tac[],
     (* 28 *) rpt strip_tac >> irule body_expr_ok_intro >> simp[int_calls_expr_def],
     (* 29 *) rpt strip_tac >> irule body_expr_ok_intro >> simp[int_calls_expr_def],
     (* 30 *) rpt strip_tac >> irule body_expr_ok_intro >> simp[int_calls_expr_def],
@@ -78,9 +78,9 @@ Proof
     (* 33 *) MATCH_ACCEPT_TAC body_structlit_case,
     (* 34 *) MATCH_ACCEPT_TAC body_subscript_case,
     (* 35 *) MATCH_ACCEPT_TAC body_attribute_case,
-    (* 36 *) rpt strip_tac >> irule body_builtin_case >> conj_tac
-               >- (rpt strip_tac >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-                   metis_tac[]) >> metis_tac[],
+    (* 36 *) rpt strip_tac >> irule body_builtin_case >> rpt conj_tac >> rpt strip_tac >>
+               (Cases_on `bt = Bop In \/ bt = Bop NotIn`
+                >- (gvs[] >> metis_tac[]) >> metis_tac[]),
     (* 37 *) MATCH_ACCEPT_TAC body_pop_case,
     (* 38 *) MATCH_ACCEPT_TAC body_type_builtin_case,
     (* 39 *) MATCH_ACCEPT_TAC body_send_case,
@@ -122,13 +122,13 @@ Theorem body_stmts_sim:
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
-    EVERY (stmt_exprs_ok cenv) ss /\
+    stmts_exprs_ok cenv ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
     stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)
       (eval_stmts cx ss) es
 Proof
-  metis_tac[body_sim_mutual, body_stmts_ok_def]
+  metis_tac[body_sim_mutual, body_stmts_ok_def, supported_stmts_body_safe]
 QED
 
 Theorem body_stmt_sim:
@@ -145,7 +145,7 @@ Theorem body_stmt_sim:
     stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ret_ty s)
       (eval_stmt cx s) es
 Proof
-  metis_tac[body_sim_mutual, body_stmt_ok_def]
+  metis_tac[body_sim_mutual, body_stmt_ok_def, supported_stmt_body_safe]
 QED
 
 (* compile_expr_sim without its int_calls_expr e = [], in a frame of the

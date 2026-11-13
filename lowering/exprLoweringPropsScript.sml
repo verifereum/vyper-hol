@@ -17,7 +17,7 @@
  *   alloca_room_callee       — a callee, entered at the caller's frontier,
  *                              has room
  *   compile_literal_vv_correct  — word literal case
- *   compile_name_correct     — variable lookup case
+ *   compile_name_correct     — allocation-backed word variable lookup
  *   compile_expr_grows, compile_binop_grows — compile_expr, lower_value
  *                              and compile_binop only append (cs_extends)
  *                              and grow the counters
@@ -54,17 +54,24 @@
 
 Theory exprLoweringProps
 Ancestors
-  exprLowering emitHelper compileEnv loweringStateRelDefs accountsRelProps builtinSystem builtinSimple
+  exprLowering emitHelper compileEnv loweringStateRelDefs accountsRelProps builtinSystem builtinSimple exprCallBounds
   builtinCreate context
   venomExecSemantics venomExecProofs venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
-  valueEncoding valueEncodingDefs valueEncodingProofs localPtrsProps venomMemDefs
+  valueEncoding valueEncodingDefs valueEncodingProofs localPtrsProps venomMemDefs valueLoadProps
   vyperAST vyperTyping fcgDefs
 Libs
   pairLib BasicProvers monadsyntax
 
 
+
+Theorem exprs_can_mutate_append:
+  !l1 l2. exprs_can_mutate cenv (l1 ++ l2) <=>
+          exprs_can_mutate cenv l1 \/ exprs_can_mutate cenv l2
+Proof
+  Induct >> simp[expr_can_mutate_def, DISJ_ASSOC]
+QED
 
 Theorem lower_value_nonword_memory:
   compile_expr cenv ty e sa = (LocatedValue t p,sm) /\
@@ -895,14 +902,15 @@ Theorem state_rel_frame:
     s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
     s'.vs_pending_deletions = s.vs_pending_deletions /\
     s'.vs_immutables = s.vs_immutables /\
-    s'.vs_data_section = s.vs_data_section ==>
+    s'.vs_data_section = s.vs_data_section /\
+    s'.vs_code = s.vs_code ==>
     state_rel func cenv cx es' s'
 Proof
   rpt strip_tac >>
   qpat_x_assum `es' = _` SUBST1_TAC >>
   gvs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
-     immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
-     contract_transient_def] >>
+      immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
+      contract_transient_def] >>
   first_assum ACCEPT_TAC
 QED
 
@@ -1185,48 +1193,51 @@ Proof
          emitted_insts_def, same_blocks_def, listTheory.DROP_LENGTH_NIL]
 QED
 
-(* A well-typed word value held in memory is the word at its base. *)
-Theorem word_val_in_memory_mem_word_at[local]:
-  ∀bt v off mem.
-    val_in_memory (BaseTV bt) v off mem ∧ value_has_type (BaseTV bt) v ∧
-    is_word_type (BaseT bt) ⇒
-    mem_word_at off mem = typed_val_to_w256 (BaseTV bt) v
+(* --- Name (local variable load) --- *)
+Theorem lower_value_name_memloc:
+  !cenv id offset size ty ann cs.
+  FLOOKUP cenv.ce_vars id = SOME (MemLoc offset size) ==>
+  lower_value compile_expr cenv ty (Name ann id) cs =
+    if is_word_type ann then emit_op MLOAD [Lit (n2w offset)] cs
+    else (Lit (n2w offset),cs)
 Proof
-  rpt strip_tac >> Cases_on `v` >> Cases_on `bt` >>
-  gvs[value_has_type_def, is_word_type_def]
-  >~ [`BytesT bd`]
-  >- (Cases_on `bd` >>
-      gvs[value_has_type_def, is_word_type_def,
-          valueEncodingPropsTheory.val_in_memory_fixed_bytes])
-  >~ [`BaseTV AddressT`]
-  >- gvs[valueEncodingPropsTheory.val_in_memory_address] >>
-  gvs[val_in_memory_def, typed_val_to_w256_def]
+  rpt gen_tac >> strip_tac >> PURE_REWRITE_TAC [lower_value_def, comp_bind_def] >>
+  PURE_ONCE_REWRITE_TAC [compile_expr_raw_def] >>
+  simp[compile_expr_body_def, expr_type_def, compile_name_vv_def,
+    comp_return_def, unwrap_value_def, contextTheory.mk_ptr_def,
+    contextTheory.compile_ptr_load_def, LET_THM] >>
+  IF_CASES_TAC >> simp[comp_return_def]
 QED
 
-(* --- Name (local variable load) --- *)
+Theorem lower_value_name_ptrvar:
+  !cenv id ptr size ty ann cs.
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar ptr size) ==>
+  lower_value compile_expr cenv ty (Name ann id) cs =
+    if is_word_type ann then emit_op MLOAD [ptr] cs else (ptr,cs)
+Proof
+  rpt gen_tac >> strip_tac >> PURE_REWRITE_TAC [lower_value_def, comp_bind_def] >>
+  PURE_ONCE_REWRITE_TAC [compile_expr_raw_def] >>
+  simp[compile_expr_body_def, expr_type_def, compile_name_vv_def,
+    comp_return_def, unwrap_value_def, contextTheory.mk_ptr_def,
+    contextTheory.compile_ptr_load_def, LET_THM] >>
+  IF_CASES_TAC >> simp[comp_return_def]
+QED
+
 (* v must be a primitive (word-sized) value.  The local is held through its
    pointer variable (PtrVar), which is what state_rel relates.
    Uses typed_val_to_w256 (not val_to_w256) to avoid BytesV address heuristic.
    The type_value tv from the scope correctly distinguishes address from bytesN. *)
-(* NOTE: original statement was FALSE for v = NoneV and for
-   type/value mismatches like entry.type=BaseTV BoolT with v=BytesV [1w]
-   (ruled out by value_has_type). val_in_memory (BaseTV (UintT n)) NoneV
-   offset mem = T (vacuously true) but mload offset ss is unconstrained,
-   while typed_val_to_w256 NoneV = 0w.
-   Fix: added v ≠ NoneV and value_has_type entry.type v.
-   It was also false for a non-word annotation ann: compile_name_vv tags the
-   pointer with ann, and unwrap_value loads only if is_word_type ann, else it
-   returns the pointer; eval_expr ignores ann.  Fix: added is_word_type ann. *)
+(* A well-typed word value rules out NoneV and type/value mismatches.
+   A word annotation selects MLOAD; aggregate annotations return the pointer. *)
 Theorem compile_name_correct:
-  ∀ func cenv cx ty ann id es ss st op st' v es' p size entry.
+  ∀ func cenv cx ty ann id es ss st op st' v es' p sz entry.
     state_rel func cenv cx es ss ∧
     (do result <- eval_expr cx (Name ann id); read_result cx result od) es =
       (INL v, es') ∧
     lower_value compile_expr cenv ty (Name ann id) st = (op, st') ∧
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) size) ∧
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ∧
     lookup_scopes id es.scopes = SOME entry ∧
     entry.value = v ∧
-    v ≠ NoneV ∧
     value_has_type entry.type v ∧
     (∃ bt. entry.type = BaseTV bt ∧ is_word_type (BaseT bt)) ∧
     is_word_type ann
@@ -1243,25 +1254,25 @@ Proof
      simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
           type_check_def, assert_def, check_def, ignore_bind_def] >>
      metis_tac[read_result_state]) >>
-  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
-  simp[lower_value_def, compile_expr_def, expr_type_def, compile_name_vv_def,
-       unwrap_value_def, contextTheory.mk_ptr_def,
-       contextTheory.compile_ptr_load_def, comp_bind_def,
-       comp_return_def] >>
-  strip_tac >>
+  `emit_op MLOAD [Var p] st = (op,st')` by
+    (drule lower_value_name_ptrvar >> simp[] >> strip_tac >> gvs[]) >>
   drule emit_op_extends >> drule emitted_insts_emit_op_local >>
   rpt strip_tac >> gvs[] >>
   `∃w. lookup_var p ss = SOME w ∧
-       val_in_memory (BaseTV bt) entry.value (w2n w) ss.vs_memory` by
-    (fs[state_rel_def, local_ptrs_rel_def] >> first_x_assum drule_all >>
-     strip_tac >> qexists_tac `w` >> gvs[]) >>
+       memory_value_rel (BaseTV bt) entry.value (w2n w) ss.vs_memory` by
+    (qpat_x_assum `state_rel _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [state_rel_def]) >>
+     simp[local_ptrs_rel_def] >> strip_tac >>
+     qpat_x_assum `!name ent ptr size. P name ent ptr size ==> ?w. Q name ent ptr size w`
+       (qspecl_then [`id`, `entry`, `p`, `sz`] mp_tac) >>
+     simp[] >> strip_tac >> qexists_tac `w` >> gvs[]) >>
   `eval_operand (Var p) ss = SOME w` by simp[eval_operand_def] >>
   drule step_MLOAD_local >> strip_tac >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
   `mload (w2n w) ss = mem_word_at (w2n w) ss.vs_memory` by
     simp[mload_def, mem_word_at_def] >>
-  simp[] >> irule word_val_in_memory_mem_word_at >> simp[]
+  simp[] >> irule memory_value_rel_base_word >> simp[]
 QED
 
 (* --- Not (boolean negation) --- *)
@@ -1548,7 +1559,7 @@ Proof
   simp[ci_mono_def, cs_extends_refl]
 QED
 
-Theorem ci_mono_trans[local]:
+Theorem ci_mono_trans:
   ci_mono a b ∧ ci_mono b c ⇒ ci_mono a c
 Proof
   simp[ci_mono_def] >> rpt strip_tac >> gvs[] >>
@@ -1701,11 +1712,18 @@ Proof
   ci_mono_chain_tac ci_mono_emit_rws
 QED
 
+Theorem ci_mono_compile_word_copy_loop_op:
+  ∀ src dst cnt ll sl ic sa.
+    ci_mono sa (SND (compile_word_copy_loop_op src dst cnt ll sl ic sa))
+Proof
+  simp[contextTheory.compile_word_copy_loop_op_def, ci_mono_word_copy]
+QED
+
 Theorem ci_mono_compile_word_copy_loop:
   ∀ src dst wc ll sl ic sa.
     ci_mono sa (SND (compile_word_copy_loop src dst wc ll sl ic sa))
 Proof
-  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, ci_mono_word_copy]
+  simp[contextTheory.compile_word_copy_loop_def, ci_mono_compile_word_copy_loop_op]
 QED
 
 Theorem ci_mono_store_immutable_bytestring:
@@ -1749,7 +1767,7 @@ Proof
   ci_mono_chain_tac [ci_mono_compile_word_copy_loop]
 QED
 
-Theorem ci_mono_compile_lit_byte_offset[local]:
+Theorem ci_mono_compile_lit_byte_offset:
   !op off sa. ci_mono sa (SND (compile_lit_byte_offset op off sa))
 Proof
   rpt gen_tac >> simp[contextTheory.compile_lit_byte_offset_def] >>
@@ -2209,6 +2227,31 @@ Proof
   irule ci_mono_bind >> simp[ci_mono_comp_return, ci_mono_emit_op]
 QED
 
+Theorem ci_mono_compile_materialize_vv:
+  ∀cenv ty vv sa. ci_mono sa (SND (compile_materialize_vv cenv ty vv sa))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_alloc_buffer] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_unwrap_value] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- simp[ci_mono_compile_store_memory] >>
+  simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_snapshot_vv:
+  ∀cenv copy vv sa. ci_mono sa (SND (compile_snapshot_vv cenv copy vv sa))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
+  rpt IF_CASES_TAC
+  >- (ho_match_mp_tac ci_mono_bind >> simp[ci_mono_unwrap_value, ci_mono_comp_return])
+  >- (ho_match_mp_tac ci_mono_bind >>
+      simp[ci_mono_compile_materialize_vv, ci_mono_comp_return]) >>
+  simp[ci_mono_comp_return]
+QED
+
 Theorem ci_mono_compile_subscript_cfn[local]:
   ∀ cfn cenv ret_ty ty base_e idx_e sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
@@ -2218,6 +2261,10 @@ Proof
   rewrite_tac[compile_subscript_def] >> BETA_TAC >>
   irule ci_mono_bind >> conj_tac
   >- (rpt gen_tac >> simp[LET_THM] >>
+      irule ci_mono_bind >> reverse conj_tac
+      >- (IF_CASES_TAC >>
+          simp[ci_mono_compile_snapshot_vv, ci_mono_comp_return]) >>
+      rpt gen_tac >> BETA_TAC >>
       Cases_on `place_type cenv base_e` >> simp[]
       >- (irule ci_mono_bind >> conj_tac
           >- (rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >> conj_tac
@@ -2978,14 +3025,15 @@ Proof
 QED
 
 Theorem ci_mono_compile_slice_extcode[local]:
-  ∀ addr_op start_op len_op out_buf out_data sa. ci_mono sa (SND (compile_slice_extcode addr_op start_op len_op out_buf out_data sa))
+  ∀ addr_op start_op len_op out_size sa. ci_mono sa (SND (compile_slice_extcode addr_op start_op len_op out_size sa))
 Proof
   rpt gen_tac >>
   rewrite_tac[builtinBytesTheory.compile_slice_extcode_def] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
-       gen_tac ORELSE strip_tac ORELSE CASE_TAC) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds, ci_mono_compile_slice_out_buf]) ORELSE
+       gen_tac ORELSE strip_tac ORELSE CASE_TAC ORELSE
+       (Cases_on `av` >> rewrite_tac[pairTheory.UNCURRY_DEF] >> BETA_TAC)) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds, ci_mono_compile_slice_out_buf]
 QED
 
 Theorem ci_mono_compile_uint2str[local]:
@@ -3287,17 +3335,35 @@ QED
 
 (* Reuse ci_mono_typed_memory_family and ci_mono_compile_store_memory above
    for both aggregate construction and external-call default materialization. *)
-Theorem ci_mono_compile_materialize_vv:
-  ∀cenv ty vv sa. ci_mono sa (SND (compile_materialize_vv cenv ty vv sa))
+Theorem ci_mono_compile_multi_vvs:
+  ∀cfn cenv es sa.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_multi_vvs cfn cenv es sa))
 Proof
-  rpt gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
+  Induct_on `es` >> rpt strip_tac
+  >- simp[compile_multi_vvs_def, ci_mono_comp_return] >>
+  simp[Once compile_multi_vvs_def] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- simp[ci_mono_compile_alloc_buffer] >>
+  >- (first_x_assum irule >> simp[]) >>
+  simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_ext_call_args:
+  ∀es tys cfn cenv kw_es sa.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_ext_call_args cfn cenv kw_es tys es sa))
+Proof
+  Induct >> rpt gen_tac >> Cases_on `tys` >> strip_tac >>
+  simp[Once compile_ext_call_args_def, ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
   rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_unwrap_value] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_snapshot_vv] >>
   rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
-  >- simp[ci_mono_compile_store_memory] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (first_x_assum irule >> simp[]) >>
   simp[ci_mono_comp_return]
 QED
 
@@ -3486,7 +3552,8 @@ Proof
     conj_tac >- (
       IF_CASES_TAC >> gvs[]
       >- simp[ci_mono_compile_abi_encode_dyn_static_loop]
-      >> rpt strip_tac >> first_x_assum irule) >>
+      >> rpt strip_tac >>
+         first_x_assum irule >> simp[]) >>
     rpt strip_tac >>
     rpt (ho_match_mp_tac ci_mono_bind ORELSE
          ho_match_mp_tac ci_mono_ignore_bind ORELSE
@@ -3732,26 +3799,31 @@ Proof
 QED
 
 Theorem ci_mono_compile_stage_intcall_args:
-  ∀ cenv vals flags tys sa.
-    ci_mono sa (SND (compile_stage_intcall_args cenv vals flags tys sa))
+  ∀cfn cenv es flags tys sa.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_stage_intcall_args cfn cenv es flags tys sa))
 Proof
   ho_match_mp_tac compile_stage_intcall_args_ind >> rpt conj_tac
   >- simp[Once compile_stage_intcall_args_def, ci_mono_comp_return]
-  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       simp[Once compile_stage_intcall_args_def] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[ci_mono_unwrap_value] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- (first_x_assum (fn ih => irule (SRULE [] ih))) >>
+      >- (first_x_assum (fn ih => irule (SRULE [] ih)) >> metis_tac[]) >>
       rpt strip_tac >> simp[ci_mono_comp_return])
-  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       simp[Once compile_stage_intcall_args_def] >>
-      ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- simp[ci_mono_unwrap_value] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[ci_mono_compile_alloc_buffer] >>
+      rpt strip_tac >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac
+      >- simp[ci_mono_unwrap_value] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
       >- (IF_CASES_TAC >> simp[ci_mono_emit_void] >>
@@ -3761,39 +3833,28 @@ Proof
              simp[ci_mono_compile_store_bytestring, ci_mono_comp_return])) >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- (first_x_assum (fn ih => irule (SRULE [] ih))) >>
+      >- (first_x_assum (fn ih => irule (SRULE [] ih)) >> metis_tac[]) >>
       rpt strip_tac >> simp[ci_mono_comp_return])
-  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       simp[Once compile_stage_intcall_args_def] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[ci_mono_unwrap_value] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- (first_x_assum (fn ih => irule (SRULE [] ih))) >>
+      >- (first_x_assum (fn ih => irule (SRULE [] ih)) >> metis_tac[]) >>
       rpt strip_tac >> simp[ci_mono_comp_return])
-  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       simp[Once compile_stage_intcall_args_def] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[ci_mono_unwrap_value] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- (first_x_assum (fn ih => irule (SRULE [] ih))) >>
+      >- (first_x_assum (fn ih => irule (SRULE [] ih)) >> metis_tac[]) >>
       rpt strip_tac >> simp[ci_mono_comp_return])
-QED
-
-Theorem ci_mono_compile_multi_vvs:
-  ∀cfn cenv es sa.
-    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
-    ci_mono sa (SND (compile_multi_vvs cfn cenv es sa))
-Proof
-  Induct_on `es` >> rpt strip_tac
-  >- simp[compile_multi_vvs_def, ci_mono_comp_return] >>
-  simp[Once compile_multi_vvs_def] >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- (first_x_assum irule >> simp[]) >>
-  simp[ci_mono_comp_return]
 QED
 
 Theorem ci_mono_ext_call_gas_opt[local]:
@@ -4236,18 +4297,31 @@ Proof
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
-(* Cache only the INVALID branch: never normalize the large IntCall /
-   ExtCall bodies while speculatively closing this primitive case. *)
-val ci_mono_invalid_call_tac =
-  let
-    val invalid_calls = map
-      (SIMP_RULE pure_ss [LET_THM, pairTheory.UNCURRY, pairTheory.SND])
-      (map (fn n => cj n compile_call_def) [8])
-  in
-    CONV_TAC
-      (RAND_CONV (RAND_CONV (FIRST_CONV (map REWR_CONV invalid_calls)))) >>
-    REWRITE_TAC [pairTheory.SND] >> irule ci_mono_emit_inst
-  end;
+Theorem compile_selfdestruct_terminated:
+  block_is_terminated (SND (compile_selfdestruct to_op st))
+Proof
+  simp[compile_selfdestruct_def, emit_void_def, comp_bind_def,
+       fresh_id_def, emit_def, LET_THM, pairTheory.UNCURRY,
+       block_is_terminated_def, listTheory.LAST_APPEND_CONS,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+  Cases_on `st.cs_current_insts` >>
+  simp[listTheory.LAST_CONS_cond, listTheory.LAST_APPEND_CONS,
+       venomInstTheory.is_terminator_def]
+QED
+
+Theorem ci_mono_compile_selfdestruct[local]:
+  (!cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ==>
+  ci_mono sa (SND (compile_call cfn cenv ret_ty ty SelfDestructTarget args default_ret sa))
+Proof
+  strip_tac >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
+  Cases_on `args` >> simp[ci_mono_emit_inst] >>
+  Cases_on `t` >>
+  simp[ci_mono_emit_inst, compile_selfdestruct_def, comp_bind_def,
+       LET_THM, pairTheory.UNCURRY] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >>
+  irule ci_mono_lower_value_cfn >> simp[]
+QED
 
 Theorem ci_mono_compile_call[local]:
   ∀ cfn cenv ret_ty ty target args default_ret sa.
@@ -4255,13 +4329,13 @@ Theorem ci_mono_compile_call[local]:
     ci_mono sa (SND (compile_call cfn cenv ret_ty ty target args default_ret sa))
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `target` >>
-  TRY (ci_mono_invalid_call_tac >> NO_TAC) >>
   TRY (irule ci_mono_compile_create_target_call >> simp[] >> NO_TAC) >>
   TRY (irule ci_mono_compile_send_call >> simp[] >> NO_TAC) >>
   TRY (irule ci_mono_compile_raw_call_target >> simp[] >> NO_TAC) >>
   TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC) >>
   TRY (irule ci_mono_compile_raw_log >> simp[] >> NO_TAC) >>
-  TRY (irule ci_mono_compile_raw_revert >> simp[] >> NO_TAC)
+  TRY (irule ci_mono_compile_raw_revert >> simp[] >> NO_TAC) >>
+  TRY (irule ci_mono_compile_selfdestruct >> simp[] >> NO_TAC)
   >- ( (* IntCall *)
     simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
 rpt IF_CASES_TAC >> gvs[] >>
@@ -4282,10 +4356,9 @@ rpt (CHANGED_TAC (
   (irule ci_mono_trans >>
    irule_at (Pos last) ci_mono_compile_stage_intcall_args) ORELSE
   (irule ci_mono_trans >>
-   irule_at (Pos last) ci_mono_compile_alloc_buffer) ORELSE
-  (irule ci_mono_compile_multi_vvs)
+   irule_at (Pos last) ci_mono_compile_alloc_buffer)
 )) >>
-rpt strip_tac >> first_assum irule)
+rpt strip_tac >> simp[ci_mono_compile_alloc_buffer, ci_mono_refl])
   >- ( (* ExtCall *)
     rename1 `ExtCall _ _ signature _` >> PairCases_on `signature` >>
     Cases_on `args`
@@ -4301,7 +4374,7 @@ rpt strip_tac >> first_assum irule)
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_emit_op >> simp[]) ORELSE
       (irule ci_mono_trans >>
-       irule_at (Pos last) ci_mono_compile_multi_vvs >> simp[]) ORELSE
+       irule_at (Pos last) ci_mono_compile_ext_call_args >> simp[]) ORELSE
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_ext_call_kwargs >> simp[]) ORELSE
       (irule ci_mono_trans >>
@@ -4315,7 +4388,7 @@ rpt strip_tac >> first_assum irule)
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_external_call_kwargs) ORELSE
       (irule ci_mono_lower_value_cfn >> simp[]) ORELSE
-      (irule ci_mono_compile_multi_vvs >> simp[]) ORELSE
+      (irule ci_mono_compile_ext_call_args >> simp[]) ORELSE
       (irule ci_mono_compile_extcall_store_args >> simp[])
     )) >>
     gvs[] >> rpt strip_tac >>
@@ -4689,12 +4762,13 @@ Proof
 QED
 
 Theorem ci_mono_compile_make_tuple_cfn:
-  ∀cfn cenv es buf_op cur_offset st.
+  ∀cfn cenv es tys buf_op cur_offset st.
     (∀ce ty e s. ci_mono s (SND (cfn ce ty e s))) ⇒
-    ci_mono st (SND (compile_make_tuple cfn cenv es buf_op cur_offset st))
+    ci_mono st (SND (compile_make_tuple cfn cenv es tys buf_op cur_offset st))
 Proof
   gen_tac >> gen_tac >> Induct >> rpt gen_tac >> strip_tac
   >- simp[compile_make_tuple_def, ci_mono_comp_return] >>
+  Cases_on `tys` >- simp[compile_make_tuple_def, ci_mono_comp_return] >>
   simp[Once compile_make_tuple_def, LET_THM, comp_ignore_bind_def] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind >> conj_tac
        >- simp[ci_mono_emit_op, ci_mono_unwrap_value, ci_mono_compile_store_memory]
@@ -5043,7 +5117,7 @@ Proof
   metis_tac[step_inst_base_ok_jump_ctxs]
 QED
 
-Theorem step_inst_base_preserves_call_ctx[local]:
+Theorem step_inst_base_preserves_call_ctx:
   !inst s s'.
     step_inst_base inst s = OK s' ==>
     s'.vs_call_ctx = s.vs_call_ctx

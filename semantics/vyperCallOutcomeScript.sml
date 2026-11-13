@@ -23,12 +23,14 @@ Definition call_outcome_request_def:
 End
 val () = cv_auto_trans call_outcome_request_def;
 
-Definition take_call_outcome_def:
-  take_call_outcome target calldata value_opt st =
+(* Taking an outcome for a request: the request is recorded, and a
+   successful non-static outcome's accounts must be well typed.  Calls and
+   delegate calls differ only in the request they take for. *)
+Definition take_request_outcome_def:
+  take_request_outcome rq st =
     case st.outcomes of
       NONE => (INR (Error (RuntimeError "take_call_outcome")), st)
     | SOME os =>
-      let rq = call_outcome_request target calldata value_opt st in
       let (outcome, rest) = take_outcome rq os in
       let st' = st with <| outcomes := SOME rest;
                           requests := record_request rq st.requests |> in
@@ -37,7 +39,29 @@ Definition take_call_outcome_def:
       then (INR (Error (RuntimeError "call outcome accounts")), st')
       else (INL (rq, outcome), st')
 End
-val () = take_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
+val () = take_request_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
+
+Definition take_call_outcome_def:
+  take_call_outcome target calldata value_opt st =
+    take_request_outcome (call_outcome_request target calldata value_opt st) st
+End
+val () = cv_auto_trans take_call_outcome_def;
+
+(* A DELEGATECALL observes the target's code address, the calldata, no value
+   and the caller's static flag: value_opt is SOME 0, or NONE in a static
+   frame. Its outcome's accounts carry its effects on self's storage. *)
+Definition delegate_outcome_request_def:
+  delegate_outcome_request target calldata value_opt st =
+    call_outcome_request target calldata value_opt st with
+      cr_kind := DelegateMessageCall
+End
+val () = cv_auto_trans delegate_outcome_request_def;
+
+Definition take_delegate_outcome_def:
+  take_delegate_outcome target calldata value_opt st =
+    take_request_outcome (delegate_outcome_request target calldata value_opt st) st
+End
+val () = cv_auto_trans take_delegate_outcome_def;
 
 Definition adopt_call_outcome_def:
   adopt_call_outcome rq outcome st =
@@ -72,16 +96,32 @@ Theorem take_call_outcome_plan:
         (INR (Error (RuntimeError "call outcome accounts")),st')
       else (INL (rq,outcome),st')
 Proof
-  simp[take_call_outcome_def, call_outcome_request_def]
+  simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def]
+QED
+
+Theorem take_request_outcome_frame:
+  take_request_outcome rq st = (res, st') ==>
+  st' = st with <|outcomes := st'.outcomes; requests := st'.requests|>
+Proof
+  Cases_on `st.outcomes` >>
+  simp[take_request_outcome_def] >>
+  pairarg_tac >> rw[] >> gvs[]
 QED
 
 Theorem take_call_outcome_frame:
   take_call_outcome target calldata value_opt st = (res, st') ==>
   st' = st with <|outcomes := st'.outcomes; requests := st'.requests|>
 Proof
-  Cases_on `st.outcomes` >>
-  simp[take_call_outcome_def] >>
-  pairarg_tac >> rw[] >> gvs[]
+  PURE_REWRITE_TAC [take_call_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_frame
+QED
+
+Theorem take_delegate_outcome_frame:
+  take_delegate_outcome target calldata value_opt st = (res, st') ==>
+  st' = st with <|outcomes := st'.outcomes; requests := st'.requests|>
+Proof
+  PURE_REWRITE_TAC [take_delegate_outcome_def] >>
+  MATCH_ACCEPT_TAC take_request_outcome_frame
 QED
 
 Theorem adopt_call_outcome_equation:
@@ -92,7 +132,7 @@ Theorem adopt_call_outcome_equation:
                    tStorage := outcome.co_tStorage;
                    logs := st.logs ++ outcome.co_logs;
                    pending_deletions := outcome.co_toDelete ++ st.pending_deletions|>
-       else if rq.cr_kind = MessageCall then st
+       else if rq.cr_kind = MessageCall \/ rq.cr_kind = DelegateMessageCall then st
        else st with <|accounts := outcome.co_accounts;
                      tStorage := outcome.co_tStorage|>)
 Proof
@@ -308,7 +348,7 @@ Proof
 QED
 
 Theorem adopt_create_outcome_equation:
-  kind <> MessageCall ==>
+  kind <> MessageCall /\ kind <> DelegateMessageCall ==>
   adopt_call_outcome (create_outcome_request kind value initcode st0) outcome st =
     (INL (), st with <|accounts := outcome.co_accounts;
                       tStorage := outcome.co_tStorage;
@@ -321,7 +361,7 @@ Proof
 QED
 
 Theorem take_adopt_create_outcome_typed:
-  kind <> MessageCall /\
+  kind <> MessageCall /\ kind <> DelegateMessageCall /\
   take_create_outcome kind value initcode st = (INL (rq,outcome),st') /\
   adopt_call_outcome rq outcome st' = (INL (),st'') ==>
   accounts_runtime_well_typed st''.accounts
@@ -374,7 +414,7 @@ Proof
 QED
 
 Theorem adopt_create_outcome_accounts:
-  kind <> MessageCall ==>
+  kind <> MessageCall /\ kind <> DelegateMessageCall ==>
   (SND (adopt_call_outcome (create_outcome_request kind value initcode st0)
            outcome st)).accounts = outcome.co_accounts /\
   (SND (adopt_call_outcome (create_outcome_request kind value initcode st0)

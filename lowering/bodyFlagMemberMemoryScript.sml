@@ -88,7 +88,7 @@ Proof
   conj_tac
   >- (PairCases_on `nsid` >> rpt gen_tac >>
       simp[Once evaluate_def, lookup_flag_mem_def] >>
-      rpt (BasicProvers.TOP_CASE_TAC >> simp[raise_def, return_def]) >> rw[]) >>
+      rpt (BasicProvers.PURE_TOP_CASE_TAC >> simp[raise_def, return_def]) >> rw[]) >>
   irule compile_flag_member_body_sim_mem >> metis_tac[]
 QED
 

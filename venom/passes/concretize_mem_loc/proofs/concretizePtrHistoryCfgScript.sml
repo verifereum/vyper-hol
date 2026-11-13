@@ -1,5 +1,6 @@
 Theory concretizePtrHistoryCfg
 Ancestors
+  cfgCorrectnessProof
   concretizePtrHistoryUsed cfgAnalysisProps cfgWf codegenReadyCompute
   venomExecProps venomExecSemantics venomWf venomInst list pred_set
 

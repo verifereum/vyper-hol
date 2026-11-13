@@ -592,17 +592,21 @@ Theorem current_exec_delegatecall_pair:
   ?t. exec_delegatecall inst st gas addr ao sz ro rs = OK t /\ state_rel sg1 t t'
 Proof
   strip_tac >>
-  `st'.vs_memory = st.vs_memory /\ st'.vs_accounts = st.vs_accounts /\
-   st'.vs_call_ctx = st.vs_call_ctx` by fs[state_rel_def, execution_frame_def] >>
-  fs[exec_delegatecall_def, read_memory_def, AllCaseEqs()] >>
-  `!target gas data code static.
-    make_venom_delegatecall_state st target gas data code static =
-    make_venom_delegatecall_state st' target gas data code static` by
-    metis_tac[current_exec_delegatecall_state_pair] >>
-  gvs[] >> drule_all current_exec_extract_result_pair >> strip_tac >> simp[] >>
+  `venom_call_request st addr 0w ao sz F =
+   venom_call_request st' addr 0w ao sz F` by
+    metis_tac[current_exec_oracle_requests_pair] >>
+  qmatch_asmsub_abbrev_tac `venom_call_request st addr 0w ao sz F = rq` >>
+  `FST (consume_call_outcome (rq with cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) st) =
+   FST (consume_call_outcome (rq with cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) st') /\
+   state_rel sg (SND (consume_call_outcome (rq with cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) st))
+                (SND (consume_call_outcome (rq with cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) st'))` by
+    metis_tac[current_exec_consume_call_pair] >>
+  fs[exec_delegatecall_def, AllCaseEqs()] >>
   `LENGTH inst.inst_outputs = 1` by fs[current_last_output_slots_def] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
-  metis_tac[current_exec_update_last_slots]
+  (* The oracle terms are too big for metis: name the instance directly. *)
+  irule current_exec_update_last_slots >> qexists_tac `sg` >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem current_exec_delegatecall_opcode_pair:

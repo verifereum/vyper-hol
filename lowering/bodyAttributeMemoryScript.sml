@@ -67,8 +67,13 @@ Proof
            read_place_def, get_immutables_def, get_address_immutables_def,
            bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
            return_def, raise_def] >>
-      rpt (BasicProvers.FULL_CASE_TAC >>
-           simp[bind_def, return_def, raise_def])) >>
+      (* one split per lookup: a repeated FULL_CASE_TAC/gvs runs over the
+         step limit here *)
+      CASE_TAC >> simp[return_def, raise_def] >>
+      CASE_TAC >> simp[return_def, raise_def] >>
+      CASE_TAC >> simp[return_def, raise_def] >>
+      CASE_TAC >> simp[return_def, raise_def] >>
+      CASE_TAC >> simp[return_def, raise_def]) >>
   simp[select_result_def, extend_place_def, raise_def]
 QED
 
@@ -245,7 +250,9 @@ Proof
      simp[]) >>
   `vv_post ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
      (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u` by
-    (irule attr_vv_post >> simp[] >> qexists_tac `tv` >> gvs[]) >>
+    (qpat_assum `!tail. select_result _ _ _ _ _ = _`
+       (qspec_then `[]` (assume_tac o MATCH_MP select_result_memory_place)) >>
+     irule attr_vv_post >> simp[] >> qexists_tac `tv` >> gvs[]) >>
   qexistsl_tac [`tv'`, `u`] >> simp[] >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ann`, `obj`, `fld`, `es`, `sa`,
                `sb`, `s0`, `ee`, `tv'`, `dst`, `bvv`, `u`, `tv`, `sid`, `fs`,

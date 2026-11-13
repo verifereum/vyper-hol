@@ -38,7 +38,7 @@ Ancestors
   list rich_list finite_map arithmetic words
   fragExec loweringSlice  exprSimHyps exprSimLeaves exprSimAggregateLayout
   exprSimAggregateEncoding exprLowering exprLoweringProps emitHelper
-  emitHelperProps compileEnv loweringStateRelDefs localPtrsProps valueEncoding valueEncodingDefs valueEncodingProps
+  emitHelperProps compileEnv loweringStateRelDefs localPtrsProps valueEncoding valueEncodingDefs valueEncodingProps memoryValueEncoding
   vyperAST vyperInterpreter vyperState vyperValue vyperValueOperation
   vyperLookup vyperTyping vyperTypeSystem vyperTypeInvariants vyperTypeEnv
   vyperTypeExprResult vyperTypeExprSoundness
@@ -458,6 +458,8 @@ Proof
   qpat_x_assum `local_ptrs_rel _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
   qpat_x_assum `!name entry p sz. _` (drule_all_then strip_assume_tac) >>
+  `val_in_memory entry.type entry.value (w2n w) s0.vs_memory` by
+    metis_tac[memory_value_rel_val_in_memory] >>
   qpat_x_assum `val_wf _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [val_wf_def] o
      REWRITE_RULE [ASSUME ``entry.type = ArrayTV etv (Dynamic n)``,
@@ -492,7 +494,7 @@ Theorem pop_local_ptrs_rel:
     lookup_var p s0 = SOME w /\ local_backed func p s0 (w2n w) sz /\
     w2n w + sz <= s0.vs_alloca_next /\
     entry.type = ArrayTV etv (Dynamic n) /\ vs <> [] /\
-    LENGTH vs <= n /\ elems_val_wf vs etv /\
+    LENGTH vs <= n /\ elems_val_wf vs etv /\ EVERY (value_has_type etv) vs /\
     32 + n * type_memory_size etv <= sz /\
     elems_in_memory vs (w2n w + 32) etv s0.vs_memory /\
     u.vs_memory = (mstore (w2n w) (n2w (LENGTH vs) - 1w) s0).vs_memory /\
@@ -541,9 +543,13 @@ Proof
   >~ [`type_memory_size _ <= _`] >- fs[type_memory_size_def, pop_name_entry_def]
   >~ [`val_wf`]
   >- fs[val_wf_def, LENGTH_FRONT, elems_val_wf_FRONT, pop_name_entry_def]
-  >~ [`val_in_memory`]
-  >- fs[val_in_memory_def, mstore_mem_word_at_same, elems_in_memory_FRONT,
-        elems_in_memory_mstore_before, pop_name_entry_def] >>
+  >~ [`memory_value_rel`]
+  >- (irule val_in_memory_memory_value_rel >> conj_tac
+      >- (simp[pop_name_entry_def, value_has_type_def, all_have_type_EVERY,
+               LENGTH_FRONT] >>
+          fs[EVERY_MEM] >> metis_tac[MEM_FRONT_NOT_NIL]) >>
+      fs[val_in_memory_def, mstore_mem_word_at_same, elems_in_memory_FRONT,
+         elems_in_memory_mstore_before, pop_name_entry_def]) >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -569,6 +575,7 @@ Proof
    u.vs_outcomes = s0.vs_outcomes /\ u.vs_requests = s0.vs_requests /\
    u.vs_immutables = s0.vs_immutables /\
    u.vs_data_section = s0.vs_data_section /\
+   u.vs_code = s0.vs_code /\
    u.vs_allocas = s0.vs_allocas /\ u.vs_alloca_next = s0.vs_alloca_next` by
     (qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
   `state_rel func cenv cx es s0` by fs[stmt_state_rel_def] >>
@@ -789,7 +796,7 @@ Proof
    (INL (LAST vs),
     es with scopes := pre ++ envs |+ (id, pop_name_entry entry vs) :: rest)` by
     (irule read_result_pop_name >> fs[lookup_scopes_update] >> metis_tac[]) >>
-  simp[vv_post_def, expr_type_def, stmt_state_rel_inst_idx, lookup_var_inst_idx] >>
+  simp[vv_post_def, expr_type_def, expr_has_effect_thm, stmt_state_rel_inst_idx, lookup_var_inst_idx] >>
   rpt conj_tac
   >- (irule pop_stmt_state_rel_scopes >>
       qpat_assum `immutable_base_zero cenv _` (irule_at Any) >>
@@ -831,6 +838,10 @@ Proof
         (irule local_path_at_val_at >> simp[local_path_at_def] >>
          qexists_tac `[ValueSubscript (IntV &(LENGTH vs - 1))]` >>
          simp[mem_path_offset_def, mem_step_offset_def]) >>
+      `local_place_at cenv cx id
+         (32 + (LENGTH vs - 1) * type_memory_size etv) etv
+         (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))]))` by
+        simp[local_place_at_def, mem_path_offset_def, mem_step_offset_def] >>
       simp[] >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[] >> gvs[] >>
       TRY (fs[local_region_def, lookup_var_inst_idx] >> metis_tac[]))

@@ -6,6 +6,7 @@ Ancestors
   entryDispatchMem entryDispatchProps moduleLoweringProps compileVyper compileEnv
   supportedProgram supportedDecls e2eDefs vyperLoweringCorrect venomWf
   removeUnusedSsaProofs venomInst venomState fragExec finite_map list words venomWfProps
+  entryStateRel
 
 Theorem source_selected_compiler_inputs:
   lower_vyper_runtime_unit tops rp = SOME u /\ supported_program tops /\
@@ -20,7 +21,7 @@ Theorem source_selected_compiler_inputs:
   fn_entry_label efn = SOME elbl ==>
   ?lbl ce pa mc pay key tr view rt sels fl sf sd sc sk cer registered completed.
     set_external_package_target rp.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE : num option)
           tx.function_name External tops,tx.function_name,args,([] : expr list),ret,fbody)) =
       (lbl,ce,pa,mc,pay,F,key,tr,view,fbody,rt) /\
@@ -41,17 +42,20 @@ Theorem source_selected_compiler_inputs:
     fn_inst_ids_distinct efn /\ ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts efn)) /\
     ~block_is_terminated registered /\ sc.cs_current_bb = lbl
 Proof
-  strip_tac >> drule_all source_selected_guarded_code >> strip_tac >>
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
+  drule_all source_selected_guarded_code >> strip_tac >>
   drule_all lower_runtime_selected_source_packages >> strip_tac >>
   `MEM (lbl,ce,pa,mc,pay,F,key,tr,view,fbody,rt) exts` by
     (asm_rewrite_tac[] >> rewrite_tac[MEM_MAP] >>
      qexists `(mut,F,lookup_raw_return_or_F (NONE : num option)
        tx.function_name External tops,tx.function_name,args,([] : expr list),ret,fbody)` >>
      simp[combinTheory.o_THM] >>
-     irule supported_external_lookup_classified >>
-     conj_tac >- gvs[valid_vyper_call_def] >>
-     simp[] >> qexists `tops` >>
-     gvs[supported_program_def, supported_declaration_headers_def]) >>
+     `tx.function_name <> "__default__"` by gvs[valid_vyper_call_def] >>
+     `EVERY (supported_declaration_header tops) tops` by
+       gvs[supported_program_def, supported_declaration_headers_def] >>
+     drule_all supported_external_lookup_classified >> simp[]) >>
   drule_all run_lowering_selected_registration_intervals >> strip_tac >>
   drule_all run_lowering_entry_label >> strip_tac >> gvs[] >>
   qexistsl [`MAP (\(sel,lbl,z). (sel,lbl))

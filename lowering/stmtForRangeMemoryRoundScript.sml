@@ -8,7 +8,7 @@ Libs
 
 Theorem for_round_body_admissible:
   !cx tyv id stmts v vs lctx esk ex inc.
-    gas_admissible (eval_for cx tyv id stmts (v :: vs)) (stmt_res_ok lctx) esk ==>
+    gas_admissible (eval_for cx tyv id stmts (Value v :: vs)) (stmt_res_ok lctx) esk ==>
     gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop ex inc))
       (esk with scopes :=
         (FEMPTY |+ (id, <| assignable := F; type := tyv;
@@ -26,7 +26,7 @@ Proof
   qpat_x_assum `gas_admissible _ _ _` mp_tac >>
   rewrite_tac[gas_admissible_def] >>
   disch_then (qspec_then `gs` mp_tac) >>
-  simp[eval_for_cons_round, push_scope_with_var_def, return_def,
+  simp[eval_for_cons_value_round, push_scope_with_var_def, return_def,
        ignore_bind_def, bind_def, finally_def, try_def,
        handle_loop_exception_def] >>
   `esk with <|scopes updated_by

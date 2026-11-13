@@ -1,7 +1,7 @@
 (* Frame-local observers for the run_call execution boundary.
  * TOP-LEVEL: trace_obs, next_opcode, request_of, outcome_of, observe,
  * frame_obs_tr, frame_obs, call_trace, call_requests, gas_readings.
- * Helper: observable_call (the Call/StaticCall stack-shape guard).
+ * Helper: observable_call (the call and create stack-shape guard).
  * Totality uses only Verifereum's step gas-decrease theorem; semantic
  * trace/observer correctness is deliberately deferred to Milestone 2.1.
  *)
@@ -34,6 +34,7 @@ Definition observable_call_def:
   observable_call c <=>
     (next_opcode c = SOME Call /\ 7 <= LENGTH c.stack) \/
     (next_opcode c = SOME StaticCall /\ 6 <= LENGTH c.stack) \/
+    (next_opcode c = SOME DelegateCall /\ 6 <= LENGTH c.stack) \/
     (next_opcode c = SOME Create /\ 3 <= LENGTH c.stack) \/
     (next_opcode c = SOME Create2 /\ 4 <= LENGTH c.stack)
 End
@@ -57,7 +58,9 @@ Definition request_of_def:
             cr_static := F;
             cr_accounts := s.rollback.accounts;
             cr_tStorage := s.rollback.tStorage |>
-       else <| cr_kind := MessageCall; cr_gas := NONE;
+       else <| cr_kind := if next_opcode c = SOME DelegateCall
+                          then DelegateMessageCall else MessageCall;
+          cr_gas := NONE;
           cr_data_len := w2n (EL (3 + valueOffset) c.stack);
           cr_target := w2w (EL 1 c.stack);
           cr_value := if valueOffset = 1 then w2n (EL 2 c.stack) else 0;
@@ -68,14 +71,17 @@ Definition request_of_def:
           cr_tStorage := s.rollback.tStorage |>
 End
 
-(* The caller's post-step top stack word is the success flag. Only logs
- * after the saved pre-call count n, and deletions consed on top of the saved
- * pre-call count m, belong to this outcome. *)
+(* Message calls return a success flag. Creation returns an address, which
+ * can be zero even on success: retain its observed effects independently
+ * of that word. Failed creation has no added logs or deletions.
+ * Only effects after the saved counts belong to this outcome. *)
 Definition outcome_of_def:
   outcome_of kind s n m =
     let c = FST (HD s.contexts)
-    in <| co_created := if kind = MessageCall then 0w else w2w (HD c.stack);
-          co_success := (HD c.stack <> 0w);
+    in <| co_created := if kind = MessageCall \/ kind = DelegateMessageCall
+                        then 0w else w2w (HD c.stack);
+          co_success := ((kind <> MessageCall /\ kind <> DelegateMessageCall) \/
+                         HD c.stack <> 0w);
           co_returnData := c.returnData;
           co_accounts := s.rollback.accounts;
           co_tStorage := s.rollback.tStorage;
@@ -219,7 +225,8 @@ QED
 
 (* The request kind is retained across entry/return: the post-step pc no
    longer identifies the creating opcode. Failed outcomes keep live accounts
-   (including the nonce increment); adoption filters logs/deletions separately. *)
+   (including the nonce increment). Creation always retains the actual
+   effect delta, including when its returned address is zero. *)
 Theorem outcome_of_fields:
   (outcome_of kind s n m).co_accounts = s.rollback.accounts /\
   (outcome_of kind s n m).co_tStorage = s.rollback.tStorage /\
@@ -227,9 +234,12 @@ Theorem outcome_of_fields:
     TAKE (LENGTH s.rollback.toDelete - m) s.rollback.toDelete /\
   (outcome_of kind s n m).co_logs = DROP n (FST (HD s.contexts)).logs /\
   (outcome_of kind s n m).co_returnData = (FST (HD s.contexts)).returnData /\
-  ((outcome_of kind s n m).co_success <=> HD (FST (HD s.contexts)).stack <> 0w) /\
+  ((outcome_of kind s n m).co_success <=>
+    (kind <> MessageCall /\ kind <> DelegateMessageCall) \/
+    HD (FST (HD s.contexts)).stack <> 0w) /\
   (outcome_of kind s n m).co_created =
-    (if kind = MessageCall then 0w else w2w (HD (FST (HD s.contexts)).stack))
+    (if kind = MessageCall \/ kind = DelegateMessageCall then 0w
+     else w2w (HD (FST (HD s.contexts)).stack))
 Proof
   simp[outcome_of_def]
 QED
@@ -332,7 +342,7 @@ QED
 
 Theorem create_outcome_zero_probe:
   HD (FST (HD s.contexts)).stack = 0w ==>
-  ~(outcome_of CreateCall s n m).co_success /\
+  (outcome_of CreateCall s n m).co_success /\
   (outcome_of CreateCall s n m).co_created = 0w /\
   (outcome_of CreateCall s n m).co_accounts = s.rollback.accounts
 Proof

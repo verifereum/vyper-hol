@@ -1,6 +1,6 @@
 (* Allocated zero-layout normalization of the actual returned value. *)
 Theory externalReturnBufferlessAlloc
-Ancestors externalReturnIntcallMetadata externalReturnBufferlessNormalize externalReturnSiteSemantics
+Ancestors typedCopyCompatibility externalReturnIntcallMetadata externalReturnBufferlessNormalize externalReturnSiteSemantics
   externalReturnZeroWidening externalReturnCopyAlloc externalReturnCopyRecursive
   externalReturnCopyFrame exprSimAlloc localPtrsProps loweringSlice
   compileEnv context venomState fragExec runFromGasPath vyperTypeSystem exprLoweringProps
@@ -143,7 +143,7 @@ Proof
     >- simp[]) >>
   drule_all return_bufferless_site_zero_semantics >> strip_tac >>
   `type_widens_to (get_tenv cx) phy dst` by
-    metis_tac[vyperTypeArgFitsTheory.type_widens_to_trans] >>
+    metis_tac[type_widens_to_trans] >>
   fs[] >>
   `compile_alloc_buffer (type_memory_size dtv) sa = (buf,sm)` by simp[] >>
   drule_all return_alloc_zero_value_run >> strip_tac >>
@@ -159,7 +159,7 @@ QED
 
 Theorem return_selected_bufferless_alloc_exit:
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ ce.ce_func_info name = (0,0,pvs) /\

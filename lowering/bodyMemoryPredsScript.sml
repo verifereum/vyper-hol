@@ -3,7 +3,7 @@ Theory bodyMemoryPreds
 Ancestors
   stmtSimZero stmtSimPass stmtSimJumpMem gasContext
   bodyMemoryDefs bodyExprMemory stmtSimDefs
-  bodySim exprSimHypsDefs supportedExprTraverse supportedStmtTraverse
+  bodySim bodyExprPreFacts exprSimHypsDefs exprSimMapMemDefs supportedExprTraverse supportedStmtTraverse
   supportedStmts vyperTypeCallGraph
   vyperInterpreter vyperTypeSystem vyperState vyperAST list
 
@@ -11,7 +11,10 @@ val _ = Parse.hide "body";
 
 (* A literal array's elements are memory-safe too, since membership and
    raw_log compile its elements without compiling the array; as
-   bodySim's body_expr_ok. *)
+   bodySim's body_expr_ok.  A subscript naming a mapping is memory-safe
+   as a mapping too (bodySim's expr_map_sim clause); it is the only
+   expression that needs the clause, since a top-level mapping name emits
+   no code (bodyMemMapBase's body_expr_mem_ok_map). *)
 Definition body_expr_mem_ok_mutual_def:
   (body_expr_mem_ok cx e <=>
     (!tops ctx func cenv env ty es.
@@ -21,7 +24,11 @@ Definition body_expr_mem_ok_mutual_def:
     (!a t n elems.
       e = Builtin a (MakeArray t n) elems /\
       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-      body_exprs_mem_ok cx elems)) /\
+      body_exprs_mem_ok cx elems) /\
+    (!ann e1 e2 tops ctx func cenv env ty es.
+      e = Subscript ann e1 e2 /\
+      body_inv tops ctx cenv cx /\ expr_map_pre cenv cx env e es ==>
+      expr_map_sim_mem ctx func cenv cx ty e es)) /\
   body_exprs_mem_ok cx [] = T /\
   body_exprs_mem_ok cx (e::es) =
     (body_expr_mem_ok cx e /\
@@ -49,15 +56,17 @@ Theorem body_make_array_children_mem_ok:
 Proof
   rpt strip_tac >>
   qpat_x_assum `body_expr_mem_ok _ _`
-    (mp_tac o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_mem_ok_def]) >>
+    (mp_tac o CONJUNCT1 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_mem_ok_def]) >>
   simp[]
 QED
 
-(* Introduction form of body_expr_mem_ok, as bodySim's body_expr_ok_intro:
-   the array-literal clause first, then the simulation. *)
+(* Introduction form of body_expr_mem_ok, as bodySim's body_expr_ok_intro,
+   for an expression other than a subscript: the side conditions first
+   (not a subscript, and the array-literal clause), then the simulation. *)
 Theorem body_expr_mem_ok_intro:
   !cx e.
-    (!a t n elems.
+    ((!ann e1 e2. e <> Subscript ann e1 e2) /\
+     !a t n elems.
        e = Builtin a (MakeArray t n) elems /\
        builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
        body_exprs_mem_ok cx elems) /\
@@ -74,6 +83,7 @@ Definition body_stmt_mem_ok_def:
   body_stmt_mem_ok cx s <=>
     !d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
+      body_stmt_safe tops s /\
       (!target. supported_stmt_expr_exists
          (expr_abi_decode_target_root target) s ==>
          occurs_abi_decode_target target tops) /\
@@ -90,13 +100,14 @@ Definition body_stmts_mem_ok_def:
   body_stmts_mem_ok cx ss <=>
     !d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+      body_stmts_safe tops ss /\
       (!target. supported_stmts_expr_exists
          (expr_abi_decode_target_root target) ss ==>
          occurs_abi_decode_target target tops) /\
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
-      EVERY (stmt_exprs_ok cenv) ss /\
+      stmts_exprs_ok cenv ss /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
       frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
       stmt_frag_mem d ctx func cx lctx RetQ cenv
@@ -121,8 +132,10 @@ Definition body_iterator_mem_ok_def:
 End
 
 Definition body_for_mem_ok_def:
-  body_for_mem_ok cx (tyv : type_value) (nm : identifier) body (vs : value list)
-  <=> vs <> [] ==> body_stmts_mem_ok cx body
+  body_for_mem_ok cx (tyv : type_value) (nm : identifier) body (vs : eval_result list)
+  <=>
+    (?s v t. vs <> [] /\ read_result cx (HD vs) s = (INL v,t)) ==>
+    body_stmts_mem_ok cx body
 End
 
 Definition body_base_target_mem_ok_def:
@@ -169,13 +182,13 @@ Theorem body_stmts_mem_projection:
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
-    EVERY (stmt_exprs_ok cenv) ss /\
+    stmts_exprs_ok cenv ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
     frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv
       (stmts_env cenv lctx ret_ty ss) (eval_stmts cx ss) es
 Proof
-  rw[body_stmts_mem_ok_def] >> metis_tac[]
+  rw[body_stmts_mem_ok_def] >> metis_tac[supported_stmts_body_safe]
 QED
 
 Theorem body_pass_mem_ok:

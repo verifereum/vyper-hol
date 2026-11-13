@@ -207,6 +207,11 @@ Theorem expr_post_convert:
       v op ss
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
+  `~expr_has_effect (TypeBuiltin ann Convert t [e1]) ==>
+   pure_frame cenv func es sa s0 ss` by
+    (simp[loweringPostsTheory.expr_has_effect_thm] >> strip_tac >>
+     match_mp_tac exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `t0` >>
+     simp[]) >>
   `locals_kept cenv es es' s0 ss` by
     (irule locals_kept_mem_tail >> qexists_tac `t0` >> asm_rewrite_tac[]) >>
   simp[expr_val_at_def, expr_type_def] >>

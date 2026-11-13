@@ -24,4 +24,4 @@ program decodes a memory value differs, including ones with no bytestring (for
 example an external call with a `gas=` keyword). The oracles stay the pinned
 compiler's output.
 
-The decoder-divergent fixtures are the 30 listed in `decoder_divergent`.
+The decoder-divergent fixtures are the ones listed in `decoder_divergent`.

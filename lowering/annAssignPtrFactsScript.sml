@@ -1,6 +1,7 @@
 (* Source and environment boundaries shared by pointer-safe declarations. *)
 Theory annAssignPtrFacts
 Ancestors
+  supportedExprTraverse allocLimits allocLimitsProps
   bodyPtrPreds bodySimDeclCases bodyExprPreFacts exprSimSource
   exprSimHypsDefs bodySim stmtSimProps exprSimHyps exprLoweringProps
   vyperTyping vyperTypeCallGraph supportedStmts supportedStmtTraverse gasContext
@@ -10,6 +11,7 @@ Ancestors
 
 Theorem annassign_rhs_pre_ptr:
   !cenv cx env e es tops id typ ctx.
+    body_stmt_safe tops (AnnAssign id typ e) /\
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
@@ -20,17 +22,30 @@ Theorem annassign_rhs_pre_ptr:
     expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by
     (irule cx_tops_module >> fs[body_inv_def]) >>
   irule stmt_expr_body_pre >>
-  gvs[body_inv_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[body_inv_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[]
 QED
 
 Theorem annassign_declared_rhs_pre_ptr:
   !cenv cx env e es tops id typ st c st1 ctx.
+    body_stmt_safe tops (AnnAssign id typ e) /\
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
@@ -48,13 +63,14 @@ Proof
     (drule_then irule declare_local_same_frame >> simp[]) >>
   `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
   `stmt_exprs_ok c (AnnAssign id typ e)` by
-    metis_tac[stmt_exprs_ok_same_frame] >>
+    metis_tac[bodyExprPreFactsTheory.annassign_declare_exprs_ok] >>
   `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
   irule annassign_rhs_pre_ptr >> metis_tac[]
 QED
 
 Theorem annassign_declared_expr_sim_ptr:
   !cenv cx env e es tops id typ st c st1 ctx func d PG.
+    body_stmt_safe tops (AnnAssign id typ e) /\
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
@@ -73,6 +89,7 @@ QED
 
 Theorem annassign_declared_expr_vv_sim_ptr:
   !cenv cx env e es tops id typ st c st1 ctx func d PG.
+    body_stmt_safe tops (AnnAssign id typ e) /\
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>

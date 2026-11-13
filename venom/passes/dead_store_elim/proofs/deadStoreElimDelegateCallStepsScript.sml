@@ -79,16 +79,16 @@ Theorem dse_exec_delegatecall_ok:
       s1 t1 /\
     s1.vs_allocas = s.vs_allocas /\ t1.vs_allocas = t.vs_allocas
 Proof
-  strip_tac >>
-  drule dse_local_agrees_memory_accounts >> strip_tac >>
-  `s.vs_call_ctx = t.vs_call_ctx` by
-    (drule dse_local_agrees_frame >> simp[]) >>
-  drule dse_local_agrees_delegatecall_state >> strip_tac >>
+  strip_tac >> drule_all dse_call_request >> strip_tac >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[exec_delegatecall_def] >> strip_tac >>
-  gvs[AllCaseEqs()] >>
-  drule_all dse_extract_venom_result >> strip_tac >>
-  simp[] >>
+  simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
+  namedCases_on `consume_call_outcome
+    (venom_call_request t addr 0w off sz F with cr_kind := DelegateMessageCall)
+    (w2n ro) (w2n rs) s` ["output source"] >>
+  simp[Excl "consume_call_outcome_eq"] >>
+  strip_tac >> gvs[AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+  drule_all dse_consume_call_outcome >> strip_tac >>
+  simp[Excl "consume_call_outcome_eq"] >>
   irule dse_local_agrees_update_var >>
   qpat_x_assum `dse_local_agrees _ (FILTER _ _) _ _` mp_tac >>
   simp_tac bool_ss [arithmeticTheory.ADD_COMM, DE_MORGAN_THM]
@@ -127,12 +127,8 @@ Theorem dse_exec_delegatecall_results:
   (?s1. exec_delegatecall inst s gas addr ao sz ro rs = OK s1) \/
   (?e. exec_delegatecall inst s gas addr ao sz ro rs = Error e)
 Proof
-  simp[exec_delegatecall_def] >>
-  Cases_on `extract_venom_result s 1w (w2n ro) (w2n rs)
-    (run (make_venom_delegatecall_state s (w2w addr) (w2n gas)
-      (read_memory (w2n ao) (w2n sz) s)
-      (lookup_account (w2w addr) s.vs_accounts).code s.vs_call_ctx.cc_static))` >> simp[] >>
-  rename1 `SOME result` >> PairCases_on `result` >> simp[] >>
+  simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
+  pairarg_tac >> simp[Excl "consume_call_outcome_eq"] >>
   Cases_on `inst.inst_outputs` >> simp[] >>
   rename1 `h::rest` >> Cases_on `rest` >> simp[]
 QED

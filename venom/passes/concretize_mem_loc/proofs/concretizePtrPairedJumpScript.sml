@@ -5,7 +5,7 @@ Ancestors
   concretizePtrStructuralTranscript concretizePtrStructuralTrace concretizePtrEventEmbedding
   concretizePtrActivationChronology concretizePtrChronologicalHistory
   concretizePtrMixedPhi concretizeStepStructure concretizeStepShape
-  concretizeStepCallChecks concretizeStepRetpc concretizeStageShape
+  concretizeStepRetpc concretizeStageShape
   concretizePtrLedgerAlignment concretizePtrDeletedGapHistory ptrDisciplineEmptyTaint
   passSimulationDefs contextCodegenRel venomExecProofs venomState venomInst
   venomExecSemantics venomWf unitShapeDefs ptrDiscipline finite_map list rich_list arithmetic

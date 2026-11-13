@@ -3,7 +3,7 @@ Ancestors
   lowerDloadExternalBoundary lowerDloadOracleCallAssembly lowerDloadSafetyKernel
   lowerDloadSafetyValues lowerDloadSafetyUpdates lowerDloadSafetyAssemblyPremises
   lowerDloadSafetyRelation lowerDloadSafetyAmbient lowerDloadSafetyAllocBounds
-  ptrDiscipline venomExecSemantics venomState pointerConfinedDefs
+  ptrDiscipline venomExecSemantics venomCallOracleDefs extCallOracle venomState pointerConfinedDefs
   codegenRel contextCodegenRel memLocDefs venomInst finite_map pred_set list words arithmetic
 
 Theorem ld_delegate_dispatch:
@@ -75,31 +75,76 @@ Proof
   simp[DISJ_IMP_THM, FORALL_AND_THM, EL]
 QED
 
-(* The concrete EVM run is shared, but extraction still retains separate locals. *)
+(* With equal accounts and transient storage, both runs adopt the same
+   outcome; only the relocated return-buffer write differs. *)
+Theorem ld_consume_delegate_effect[local]:
+  ld_memory lo A tn s t /\ ld_nonghost tn s t /\
+  tn.t_stor = {} /\ tn.t_trans = {} /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> lo <= u /\ lo <= v) /\
+  (!a k u v z b c sz.
+    FLOOKUP A a = SOME (u,v,z) /\ FLOOKUP A k = SOME (b,c,sz) /\
+    a <> k /\ 0 < z /\ 0 < sz ==>
+    (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
+  consume_call_outcome rq rt n t = (w,ts) /\
+  xs = TAKE n ts.vs_returndata /\
+  tn'.t_mem = tn.t_mem DIFF {ro+j | j < LENGTH xs} /\
+  tn'.t_imm = tn.t_imm /\ tn'.t_stor = {} /\ tn'.t_trans = {} /\
+  (xs = [] \/ (ro = rt /\ ro + LENGTH xs <= lo) \/
+   (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
+     ro = b+delta /\ rt = c+delta /\ delta + LENGTH xs <= sz)) ==>
+  ?ss. consume_call_outcome rq ro n s = (w,ss) /\
+    ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
+    ss.vs_returndata = ts.vs_returndata /\
+    ss.vs_params = s.vs_params /\ ts.vs_params = t.vs_params /\
+    ss.vs_fmp = s.vs_fmp /\ ts.vs_fmp = t.vs_fmp /\
+    ss.vs_vars = s.vs_vars /\ ts.vs_vars = t.vs_vars /\
+    ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
+    ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
+    ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
+    ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb /\
+    ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `s.vs_accounts = t.vs_accounts` by
+    metis_tac[ld_nonghost_accounts_empty] >>
+  `s.vs_transient = t.vs_transient` by
+    metis_tac[ld_nonghost_transient_empty] >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[ld_nonghost_def] >>
+  `ld_memory lo A tn'
+     (write_memory_with_expansion ro xs s)
+     (write_memory_with_expansion rt xs t)` by
+    (irule ld_memory_write_classified >> metis_tac[]) >>
+  qpat_x_assum `consume_call_outcome _ _ _ _ = _` mp_tac >>
+  simp[consume_call_outcome_eq, adopt_outcome_def] >> strip_tac >> gvs[] >>
+  gvs[ld_memory_def, ld_nonghost_def, storage_agree_except_def,
+      word_agree_except_def] >> metis_tac[]
+QED
+
+(* Both runs consume the shared oracle with the source's delegate request. *)
 Theorem ld_delegate_execution:
   ld_nonghost tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
   read_memory (w2n (ao:bytes32)) (w2n (az:bytes32)) s =
     read_memory (w2n (at:bytes32)) (w2n az) t /\
   exec_delegatecall inst t (gas:bytes32) (addr:bytes32) at az (rt:bytes32) (rz:bytes32) = OK ts ==>
-  ?R out w u.
-    R = run (make_venom_delegatecall_state s (w2w addr) (w2n gas)
-      (read_memory (w2n ao) (w2n az) s)
-      (lookup_account (w2w addr) s.vs_accounts).code s.vs_call_ctx.cc_static) /\
-    extract_venom_result t 1w (w2n rt) (w2n rz) R = SOME (w,u) /\
+  ?rq out w u.
+    rq = venom_call_request s addr 0w ao az F with cr_kind := DelegateMessageCall /\
+    consume_call_outcome rq (w2n rt) (w2n rz) t = (w,u) /\
     inst.inst_outputs = [out] /\ ts = update_var out w u
 Proof
   strip_tac >>
-  `s.vs_accounts = t.vs_accounts /\ s.vs_call_ctx = t.vs_call_ctx` by
-    (conj_tac >- metis_tac[ld_nonghost_accounts_empty] >> fs[ld_nonghost_def]) >>
-  `make_venom_delegatecall_state s (w2w addr) (w2n gas)
-      (read_memory (w2n ao) (w2n az) s)
-      (lookup_account (w2w addr) s.vs_accounts).code s.vs_call_ctx.cc_static =
-   make_venom_delegatecall_state t (w2w addr) (w2n gas)
-      (read_memory (w2n at) (w2n az) t)
-      (lookup_account (w2w addr) t.vs_accounts).code t.vs_call_ctx.cc_static` by
-    (asm_rewrite_tac[] >> irule ld_delegate_state_equal >> metis_tac[]) >>
+  `s.vs_accounts = t.vs_accounts` by
+    metis_tac[ld_nonghost_accounts_empty] >>
+  `s.vs_transient = t.vs_transient` by
+    metis_tac[ld_nonghost_transient_empty] >>
+  `s.vs_call_ctx = t.vs_call_ctx` by fs[ld_nonghost_def] >>
+  `venom_call_request s addr 0w ao az F = venom_call_request t addr 0w at az F` by
+    simp[venom_call_request_def] >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[exec_delegatecall_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  simp[exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
+  qmatch_goalsub_abbrev_tac `consume_call_outcome rq _ _ t` >>
+  Cases_on `consume_call_outcome rq (w2n rt) (w2n rz) t` >>
+  simp[AllCaseEqs(), Excl "consume_call_outcome_eq"] >> strip_tac >>
+  gvs[Abbr `rq`, Excl "consume_call_outcome_eq"]
 QED
 
 val _ = if null (hyp ld_delegate_execution) then ()
@@ -138,21 +183,19 @@ Proof
   drule_at Any ld_delegate_execution >>
   disch_then (qspecl_then [`tn`,`f.lf_src`,`ao`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `extract_venom_result _ _ _ _ _ = SOME (w,u)` >>
   qabbrev_tac `xs = TAKE (w2n rz) u.vs_returndata` >>
   qabbrev_tac `tn' = tn with t_mem := tn.t_mem DIFF {w2n ro+j | j < LENGTH xs}` >>
   `LENGTH xs <= w2n rz` by simp[Abbr `xs`, LENGTH_TAKE_EQ, MIN_DEF] >>
   `xs = [] \/ (w2n ro = w2n rt /\ w2n ro + LENGTH xs <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
      w2n ro = b+delta /\ w2n rt = c+delta /\ delta + LENGTH xs <= sz)` by
-    (qpat_x_assum `R = _` kall_tac >>
-     qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` kall_tac >>
+    (qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` kall_tac >>
      qpat_x_assum `w2n rz = 0 \/ _` strip_assume_tac
      >- (disj1_tac >> fs[Abbr `xs`])
      >- (disj2_tac >> disj1_tac >> (conj_tac >- asm_rewrite_tac[]) >> decide_tac) >>
      disj2_tac >> disj2_tac >>
      qexistsl [`k`,`b`,`c`,`sz`,`delta`] >> simp[] >> decide_tac) >>
-  `?rs. extract_venom_result f.lf_src 1w (w2n ro) (w2n rz) R = SOME (w,rs) /\
+  `?rs. consume_call_outcome rq (w2n ro) (w2n rz) f.lf_src = (w,rs) /\
     ld_memory lo A tn' rs u /\ ld_nonghost tn' rs u /\
     rs.vs_returndata = u.vs_returndata /\
     rs.vs_params = f.lf_src.vs_params /\ u.vs_params = f.lf_tgt.vs_params /\
@@ -163,8 +206,8 @@ Proof
     rs.vs_current_bb = f.lf_src.vs_current_bb /\ u.vs_current_bb = f.lf_tgt.vs_current_bb /\
     rs.vs_prev_bb = f.lf_src.vs_prev_bb /\ u.vs_prev_bb = f.lf_tgt.vs_prev_bb /\
     rs.vs_inst_idx = f.lf_src.vs_inst_idx /\ u.vs_inst_idx = f.lf_tgt.vs_inst_idx` by
-    (irule ld_extract_venom_effect >>
-     qpat_x_assum `R = _` kall_tac >>
+    (irule ld_consume_delegate_effect >>
+     qpat_x_assum `rq = _` kall_tac >>
      qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` kall_tac >>
      (conj_tac >- metis_tac[]) >>
      (conj_tac >- metis_tac[]) >>
@@ -183,13 +226,13 @@ Proof
           taint_component_equality]) >>
   qexists `update_var out w rs` >>
   (conj_tac >-
-    (simp[NoAsms, exec_delegatecall_def] >>
-     qpat_x_assum `R = _` (SUBST1_TAC o SYM) >>
-     asm_rewrite_tac[] >> simp[])) >>
+    (simp[NoAsms, exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
+     qpat_x_assum `rq = _` (SUBST1_TAC o SYM) >>
+     asm_rewrite_tac[] >> simp[Excl "consume_call_outcome_eq"])) >>
   (conj_tac >- (simp[update_var_def] >> irule ld_oracle_call_vars >> simp[] >>
      (conj_tac >- (qexists `w` >> simp[])) >>
      irule ld_inst_output_ir >> qexists `inst` >> simp[])) >>
-  qpat_x_assum `R = _` kall_tac >>
+  qpat_x_assum `rq = _` kall_tac >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` kall_tac >>
   simp[update_var_def] >>
   conj_tac

@@ -24,6 +24,10 @@ val checker_defs =
    check_function_body_in_mode_def,
    check_function_body_def,
    check_toplevel_decl_def,
+   callee_write_ok_def,
+   callee_writes_ok_def,
+   stmt_loop_calls_ok_def,
+   loop_iterator_place_def,
    function_header_ok_def,
    function_mutability_ok_def,
    call_mutability_ok_def,
@@ -48,6 +52,7 @@ val checker_defs =
    function_live_def,
    live_artifact_def,
    exports_ok_def,
+   vyperABIEntriesTheory.abi_deployed_signatures_def,
    finite_mapTheory.DRESTRICT_FEMPTY,
    finite_mapTheory.DRESTRICT_FUPDATE,
    IN_function_live,
@@ -88,6 +93,7 @@ val checker_defs =
    flag_member_keys_toplevel_def,
    error_sig_keys_toplevel_def,
    type_def_keys_toplevel_def,
+   self_member_keys_toplevel_def,
     external_name_keys_toplevel_def,
     vyperABIEntriesTheory.abi_external_method_ids_def,
     vyperABIEntriesTheory.abi_external_signatures_def,
@@ -138,25 +144,27 @@ val checker_defs =
    assignable_type_def,
    abi_decode_bytes_widths_def,
    valid_conversion_def,
-   event_arg_compatible_def,
    hashmap_key_type_def,
    defaults_env_def,
    extend_local_def,
+   target_mutable_def,
    well_typed_expr_compute,
    well_typed_target_def,
    well_typed_atarget_def,
    atarget_accepts_def,
+   call_result_expr_def, call_target_static_def, expr_static_calls_def,
    well_typed_iterator_def,
    well_typed_custom_error_def,
    place_access_def,
    place_contains_def,
-   expr_place_def,
+   expr_places_def,
    expr_writes_ok_def,
    atarget_writes_ok_def,
    stmt_writes_ok_def,
    iterator_unmodified_def,
    type_stmt_def,
    stmt_no_fallthrough_def,
+   expr_no_fallthrough_def,
    stmt_no_control_escape_def,
    vyperValueTheory.evaluate_type_def,
    vyperASTTheory.bound_length_def,
@@ -171,17 +179,23 @@ val checker_defs =
    expr_type_def,
    well_typed_literal_def,
    well_typed_binop_def,
+   integer_value_bits_def,
+   power_exponent_ok_def,
+   power_operands_ok_def,
+   builtin_operands_ok_def,
+   augassign_operand_ok_def,
    is_prim_word_type_def,
    well_typed_builtin_app_def,
    bytelike_type_bound_def,
+   slice_operands_ok_def,
    int_literal_value_def,
    nonneg_int_literal_def,
    shift_amount_ok_def,
-   builtin_operands_ok_def,
    is_int_type_def,
    bound_at_most_def,
    vtype_annotation_ok_def,
    subscript_type_ok_def,
+   subscript_base_type_exact_def,
    subscript_vtype_def,
    attribute_type_def,
    attribute_type_ok_def,
@@ -475,8 +489,33 @@ in
   |> computeLib.seal
 end
 
-fun check_contract_conv tm =
-  computeLib.CBV_CONV check_contract_compset tm
+(* Plain call-by-value evaluation with the shared compset. *)
+val plain_conv = computeLib.CBV_CONV check_contract_compset
+
+(* check_contract_def binds the live functions and the restricted artifact with
+   lets. CBV_CONV reduces a let argument only to weak head normal form, so the
+   artifact's DRESTRICT maps reach every lookup in the body still unreduced and
+   are restricted again at each one. For a full application the staged
+   conversion unfolds check_contract_def and evaluates both lets to normal
+   form before the body, so each lookup finds the maps already restricted.
+   Every step is the checker's own conversion, so the result is the same
+   check_contract_def equation, reached with fewer reductions. *)
+local
+  val check_contract_const = prim_mk_const
+    {Thy = "vyperTypeContract", Name = "check_contract"}
+  val let_conv = REWR_CONV LET_THM THENC BETA_CONV
+in
+  fun check_contract_conv tm = let
+    val (head, arguments) = strip_comb tm
+  in
+    if same_const head check_contract_const andalso length arguments = 4
+    then (REWR_CONV check_contract_def THENC
+          RAND_CONV plain_conv THENC let_conv THENC
+          RAND_CONV plain_conv THENC let_conv THENC
+          plain_conv) tm
+    else plain_conv tm
+  end
+end
 
 fun mk_check_contract {in_deploy, layouts, address, modules} =
   let

@@ -128,7 +128,7 @@ Proof
   gvs[] >>
   simp_tac bool_ss [abiEncoderWindowArrayInvariantTheory.window_array_root_def] >>
   qpat_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp_tac bool_ss [abi_encoder_window_pre_def] >> strip_tac >>
+  pure_rewrite_tac [abi_encoder_window_pre_def] >> strip_tac >>
   asm_rewrite_tac[] >>
   conj_tac
   >- (simp[abiEncoderWindowArrayInvariantTheory.window_sizes32_def] >>

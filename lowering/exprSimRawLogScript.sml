@@ -25,7 +25,9 @@ Theorem raw_log_topics_post_words:
   EVERY (value_has_type (BaseTV (BytesT (Fixed 32)))) vs ==>
   eval_operands ops t = SOME (MAP event_value_to_word vs)
 Proof
-  simp[typed_args_post_def] >>
+  simp[typed_args_post_def] >> strip_tac >>
+  qpat_x_assum `_ ==> pure_frame _ _ _ _ _ _` kall_tac >>
+  rpt (pop_assum mp_tac) >>
   map_every qid_spec_tac [`vs`, `ops`, `topics`] >>
   Induct >> rpt gen_tac >> Cases_on `vs` >> Cases_on `ops` >>
   simp[eval_operands_def] >> rpt strip_tac >> gvs[] >>
@@ -385,6 +387,7 @@ Proof
 QED
 
 Theorem raw_log_dynamic_tail_core:
+  expr_has_effect e /\
   emit_op MLOAD [data_op] sm = (len_op, s1) /\
   emit_op ADD [data_op; Lit 32w] s1 = (ptr_op, s2) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) ::
@@ -509,6 +512,7 @@ Proof
 QED
 
 Theorem raw_log_fixed_tail_core:
+  expr_has_effect e /\
   emit_void MSTORE [ptr_op; data_op] sm = (u, s1) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) ::
     (REVERSE ops ++ [Lit 32w; ptr_op])) [] s1 = (u', sb) /\

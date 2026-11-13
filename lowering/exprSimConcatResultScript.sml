@@ -301,7 +301,7 @@ Theorem concat_prefix_run:
       MEM binst (fn_insts func) /\ binst.inst_opcode = ALLOCA /\
       binst.inst_id = sa.cs_next_id /\ binst.inst_id < s4.cs_next_id /\
       MEM oinst (fn_insts func) /\ oinst.inst_opcode = ALLOCA /\
-      oinst.inst_id < s4.cs_next_id /\
+      sa.cs_next_id <= oinst.inst_id /\ oinst.inst_id < s4.cs_next_id /\
       FLOOKUP t.vs_allocas binst.inst_id = SOME (B, bsz) /\
       FLOOKUP t.vs_allocas oinst.inst_id = SOME (w2n ow, 64) /\
       (!name lb lsz. local_region cenv es.scopes t name lb lsz ==>
@@ -835,6 +835,69 @@ Proof
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   TRY (simp[base_ptr_def] >> NO_TAC) >>
   TRY (simp[vyperASTTheory.expr_type_def] >> NO_TAC)
+  >~ [`_ ==> pure_frame _ _ _ _ _ _`]
+  >- (strip_tac >>
+      qpat_x_assum `_ ==> (!n lb lsz. local_region _ _ t _ _ _ ==>
+                      mem_bytes_at _ _ t5.vs_memory = _) /\ _` mp_tac >>
+      impl_tac
+      >- (qpat_x_assum `~expr_has_effect _` mp_tac >> simp[expr_has_effect_thm]) >>
+      strip_tac >>
+      `t6.vs_allocas = t5.vs_allocas` by simp[Abbr `t6`] >>
+      rewrite_tac[pure_frame_def] >> conj_tac
+      >- (qx_genl_tac [`nm`, `lb`, `lsz`] >> strip_tac >>
+          `local_region cenv es.scopes t nm lb lsz` by
+            (qpat_x_assum `!nm lb lsz. local_region cenv es.scopes t _ _ _ <=> _`
+               (fn th => rewrite_tac[th]) >> first_assum ACCEPT_TAC) >>
+          qpat_assum `!name lb lsz. local_region cenv es.scopes t _ _ _ ==> _ /\ _`
+            drule >> strip_tac >>
+          `mem_bytes_at lb lsz t.vs_memory = mem_bytes_at lb lsz s0.vs_memory` by
+            (qpat_x_assum `!p n. _ \/ _ ==> mem_bytes_at p n t.vs_memory = _` irule >>
+             decide_tac) >>
+          `mem_bytes_at lb lsz t5.vs_memory = mem_bytes_at lb lsz t.vs_memory` by
+            (qpat_x_assum `!n lb lsz. local_region _ _ t _ _ _ ==>
+                             mem_bytes_at _ _ t5.vs_memory = _` irule >>
+             qexists_tac `nm` >> first_assum ACCEPT_TAC) >>
+          `mem_bytes_at lb lsz t6.vs_memory = mem_bytes_at lb lsz t5.vs_memory` by
+            (qpat_assum `!p q. _ ==> mem_bytes_at p q t6.vs_memory = _` irule >>
+             qpat_x_assum `32 <= bsz` mp_tac >>
+             TRY (qpat_x_assum `B + bsz <= lb` mp_tac) >>
+             TRY (qpat_x_assum `lb + lsz <= B` mp_tac) >>
+             rpt (pop_assum kall_tac) >> decide_tac) >>
+          simp[]) >>
+      qx_genl_tac [`off`, `len`] >> strip_tac >>
+      `FLOOKUP t6.vs_allocas oinst.inst_id = SOME (w2n ow,64)` by
+        (qpat_x_assum `t6.vs_allocas = _` (fn th => rewrite_tac[th]) >>
+         qpat_x_assum `!aid a. FLOOKUP t.vs_allocas aid = SOME a ==>
+                         FLOOKUP t5.vs_allocas aid = SOME a` irule >>
+         first_assum ACCEPT_TAC) >>
+      `regions_disjoint off len B bsz` by
+        (qpat_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+         qexists_tac `binst` >> simp[]) >>
+      `regions_disjoint off len (w2n ow) 64` by
+        (qpat_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+         qexists_tac `oinst` >> simp[]) >>
+      `mem_bytes_at off len t6.vs_memory = mem_bytes_at off len t5.vs_memory` by
+        (qpat_assum `!p q. _ ==> mem_bytes_at p q t6.vs_memory = _` irule >>
+         qpat_x_assum `32 <= bsz` mp_tac >>
+         qpat_x_assum `regions_disjoint off len B bsz` mp_tac >>
+         rpt (pop_assum kall_tac) >> simp[regions_disjoint_def]) >>
+      `mem_bytes_at off len t5.vs_memory = mem_bytes_at off len t.vs_memory` by
+        (qpat_x_assum `!p n. _ /\ _ /\ (!inst b sz. _ ==> _) ==>
+                         mem_bytes_at p n t5.vs_memory = _` irule >>
+         rpt conj_tac >>
+         TRY (qpat_x_assum `regions_disjoint off len B bsz` mp_tac >>
+              simp[regions_disjoint_def] >> NO_TAC) >>
+         TRY (qpat_x_assum `regions_disjoint off len (w2n ow) 64` mp_tac >>
+              simp[regions_disjoint_def] >> NO_TAC) >>
+         rpt strip_tac >>
+         qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+         qexists_tac `inst` >>
+         qpat_x_assum `t6.vs_allocas = _` (fn th => rewrite_tac[th]) >>
+         rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+      `mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory` by
+        (qpat_x_assum `!p n. _ \/ _ ==> mem_bytes_at p n t.vs_memory = _` irule >>
+         fs[regions_disjoint_def]) >>
+      simp[])
   >~ [`val_in_memory`]
   >- (qexistsl_tac [`sa.cs_next_id`, `B`, `bsz`, `tvr`, `n2w B`] >>
       qpat_assum `w2n _ = B` (fn th => rewrite_tac[th]) >>
@@ -976,4 +1039,5 @@ Proof
             (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
           rewrite_tac[concat_state_rws] >> first_assum ACCEPT_TAC) >>
       disch_then ACCEPT_TAC)
+
 QED

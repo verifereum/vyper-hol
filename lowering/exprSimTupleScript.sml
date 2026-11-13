@@ -31,7 +31,7 @@
  *   eval_expr_tuple_subscript, base_vv_holds_loc, base_vv_at_mem,
  *   tuple_elem_ptr, tuple_vv_at_elem, sub_layout_tuple_elem,
  *   immutable_holds_tuple_elem, tuple_slots_in_range_el,
- *   tuple_elem_slots_in_range, tuple_prefix_el_bound, dead_bytes_list_el,
+ *   tuple_elem_slots_in_range, tuple_prefix_el_bound,
  *   storage_range_agree_tuple_elem, tuple_vv_holds_elem, tuple_base_read,
  *   tuple_vv_post, lookup_scopes_popped_keys_indexed,
  *   tuple_memory_no_snapshot
@@ -112,6 +112,7 @@ End
 Theorem compile_expr_tuple_subscript[local]:
   !cenv ty ann obj idx tys st vv st'.
     compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
+    expr_type obj = TupleT tys /\
     place_type cenv obj = ValPT (TupleT tys) ==>
     ?bvv st1 p.
       compile_expr cenv ty obj st = (bvv, st1) /\
@@ -121,6 +122,9 @@ Theorem compile_expr_tuple_subscript[local]:
       vv = LocatedValue ann (mk_ptr p (vv_loc bvv))
 Proof
   rpt gen_tac >> strip_tac >>
+  `~copies_subscript_base cenv obj idx` by
+    simp[exprLoweringTheory.copies_subscript_base_def,
+         vyperSubscriptOverlapTheory.subscript_overlap_def] >>
   qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
        compile_subscript_def, compile_tuple_subscript_def, comp_bind_def,
@@ -477,7 +481,7 @@ Proof
     (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
      simp[expr_body_pre_def, Once well_typed_expr_def] >>
      rpt strip_tac >> gvs[] >>
-     drule type_place_expr_vtype_annotation >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
      Cases_on `vt` >> TRY (rename1 `Type t` >> Cases_on `t`) >>
      gvs[subscript_vtype_def, vtype_annotation_ok_def]) >>
   `?ity k. idx = Literal ity (IntL (&k)) /\ k < LENGTH tys /\ EL k tys = ann` by
@@ -504,7 +508,18 @@ Theorem eval_expr_tuple_subscript[local]:
         select_result cx (expr_type obj) r (ValueSubscript (IntV (&k))) od)
       es
 Proof
-  rpt gen_tac >> simp[Once evaluate_def, bind_def] >>
+  rpt gen_tac >>
+  `~subscript_reads_base cx obj (Literal ity (IntL (&k)))` by
+    (`!vs. ~any_written vs []` by
+       (Induct >> simp[vyperSubscriptOverlapTheory.any_written_def]) >>
+     simp[vyperInterpreterTheory.subscript_reads_base_def,
+          vyperSubscriptOverlapTheory.subscript_overlap_def,
+          vyperSubscriptOverlapTheory.expr_accesses_def,
+          vyperSubscriptOverlapTheory.accesses_expr_def,
+          vyperSubscriptOverlapTheory.reached_functions_def,
+          vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    simp[th, Once evaluate_def, bind_def, return_def]) >>
   Cases_on `eval_expr cx obj es` >> rename1 `_ = (rr, es1)` >>
   Cases_on `rr` >> simp[] >>
   simp[Once evaluate_def, evaluate_literal_def, return_def, read_result_def]
@@ -555,14 +570,16 @@ Theorem base_vv_at_mem[local]:
                               b + sz <= lb \/ lb + lsz <= b)) \/
      (?n b sz. local_region cenv es.scopes s n b sz /\
                b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
-               local_path_at cenv cx n (w2n w - b) tvt) \/
+               local_path_at cenv cx n (w2n w - b) tvt /\
+               local_place_at cenv cx n (w2n w - b) tvt tv) \/
      val_footprint tvt v = 0)
 Proof
   rpt gen_tac >> Cases_on `vv` >>
   simp[vv_at_def, vv_loc_def, vv_location_def, vv_operand_def,
        expr_val_at_def, local_val_at_def] >>
   rpt strip_tac >> gvs[] >>
-  TRY (first_x_assum drule_all >> strip_tac >> gvs[]) >> metis_tac[]
+  TRY (first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  gvs[local_place_at_def] >> metis_tac[]
 QED
 
 (* The element's pointer in memory: the element lies inside the base's
@@ -589,7 +606,8 @@ Theorem tuple_elem_ptr[local]:
                               b + sz <= lb \/ lb + lsz <= b)) \/
      (?n b sz. local_region cenv es1.scopes q n b sz /\
                b <= w2n w /\ w2n w + type_memory_size_list tvs <= b + sz /\
-               local_path_at cenv cx n (w2n w - b) (TupleTV tvs)) \/
+               local_path_at cenv cx n (w2n w - b) (TupleTV tvs) /\
+               local_place_at cenv cx n (w2n w - b) (TupleTV tvs) tv) \/
      type_memory_size_list tvs = 0)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -624,12 +642,20 @@ Theorem tuple_vv_at_elem[local]:
       SOME (w + n2w (tuple_offset cenv tys (vv_loc bvv) k)) /\
     OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
-    LENGTH vs = LENGTH tvs /\ k < LENGTH tvs ==>
+    LENGTH vs = LENGTH tvs /\ k < LENGTH tvs /\
+    (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+       ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) ==>
     vv_at cenv cx (EL k tys) sa sn es1 tv'
       (LocatedValue t (mk_ptr dst (vv_loc bvv))) q
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[vv_at_def, mk_ptr_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  simp[vv_at_def, mk_ptr_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `?p0. tv = PlaceR (MemoryPlace id p0)` by metis_tac[] >>
+      qpat_x_assum `vv_at _ _ (TupleT _) _ _ _ _ _ _` mp_tac >>
+      Cases_on `bvv` >>
+      gvs[vv_at_def, vv_loc_def, vv_location_def, is_word_type_def]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
   `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by
     (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>
      impl_tac >- (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
@@ -649,10 +675,13 @@ Proof
       `mem_step_offset (TupleTV tvs) (ValueSubscript (IntV &k)) =
        SOME (SUM (TAKE k (MAP type_memory_size tvs)), EL k tvs)` by
         simp[mem_step_offset_def, type_memory_size_list_sum, MAP_TAKE] >>
+      `local_place_at cenv cx n
+         (w2n w - b + SUM (TAKE k (MAP type_memory_size tvs))) (EL k tvs) tv'` by
+        (irule local_place_at_step >> metis_tac[]) >>
       drule_all local_path_at_step >>
       `w2n w - b + SUM (TAKE k (MAP type_memory_size tvs)) =
        w2n w + SUM (TAKE k (MAP type_memory_size tvs)) - b` by decide_tac >>
-      simp[local_path_at_val_at] >> decide_tac) >>
+      gvs[local_path_at_val_at] >> decide_tac) >>
   disj2_tac >> disj2_tac >> decide_tac
 QED
 
@@ -748,22 +777,6 @@ Proof
   simp[vyperValueTheory.type_slot_size_def]
 QED
 
-Theorem dead_bytes_list_el[local]:
-  !tvs k st base j b.
-    dead_bytes_list st base tvs j b /\ k < LENGTH tvs /\
-    base + tuple_prefix_slot_size k tvs <= j /\
-    j < base + tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) ==>
-    dead_bytes st (base + tuple_prefix_slot_size k tvs) (EL k tvs) j b
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `dead_bytes_list _ _ _ _ _` mp_tac >>
-  simp[Once dead_bytes_def] >> strip_tac >>
-  Cases_on `k` >> gvs[tuple_prefix_slot_size_def] >>
-  imp_res_tac (cj 1 accountsRelPropsTheory.dead_bytes_range) >>
-  imp_res_tac (cj 2 accountsRelPropsTheory.dead_bytes_range) >> gvs[] >>
-  first_x_assum drule >> disch_then (qspec_then `n` mp_tac) >>
-  impl_tac >- decide_tac >> rewrite_tac[arithmeticTheory.ADD_ASSOC]
-QED
 
 (* A tuple element of a value whose slots agree has its slots agree. *)
 Theorem storage_range_agree_tuple_elem[local]:
@@ -793,7 +806,7 @@ Proof
   `dead_bytes_list st (w2n w) tvs (w2n k) b` by
     (qpat_x_assum `dead_bytes _ _ (TupleTV _) _ _` mp_tac >>
      simp[Once dead_bytes_def]) >>
-  drule dead_bytes_list_el >>
+  drule accountsRelPropsTheory.dead_bytes_list_el >>
   disch_then (qspec_then `i` mp_tac) >> simp[]
 QED
 
@@ -823,7 +836,7 @@ Proof
   `dead_bytes_list st (w2n w) tvs j b` by
     (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >>
      simp[Once dead_bytes_def]) >>
-  drule dead_bytes_list_el >>
+  drule accountsRelPropsTheory.dead_bytes_list_el >>
   disch_then (qspec_then `i` mp_tac) >> simp[]
 QED
 
@@ -920,7 +933,9 @@ Theorem tuple_vv_post[local]:
     k < LENGTH tvs /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     values_have_types tvs vs /\
-    read_result cx tv' es1 = (INL (EL k vs), es1) ==>
+    read_result cx tv' es1 = (INL (EL k vs), es1) /\
+    (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
+       ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) ==>
     vv_post ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q
 Proof
@@ -928,7 +943,10 @@ Proof
   qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   rewrite_tac[vv_post_def] >> gvs[vyperASTTheory.expr_type_def] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (strip_tac >>
+       qpat_x_assum `~expr_has_effect obj ==> pure_frame _ _ _ _ _ _` irule >>
+       first_assum ACCEPT_TAC >> NO_TAC)
   >- (irule tuple_vv_holds_elem >> simp[] >> metis_tac[]) >>
   `vv_at cenv cx (EL k tys) sa sn es1 tv'
      (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q` by
@@ -937,7 +955,7 @@ Proof
                   `EL k tys`, `ctx`] mp_tac tuple_vv_at_elem >>
      imp_res_tac values_have_types_length >> simp[]) >>
   simp[] >> rpt strip_tac >>
-  qpat_x_assum `~expr_has_effect obj ==> _` mp_tac >>
+  qpat_x_assum `~expr_has_effect obj ==> vv_storage_live _ _ _ _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by
     (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>
@@ -1200,6 +1218,8 @@ Proof
       qexistsl_tac [`fe`,`t`,`btv`] >> simp[] >>
       simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def]) >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  qpat_assum `select_result _ _ _ _ _ = (INL tv2, _)`
+    (assume_tac o MATCH_MP select_result_memory_place) >>
   disj1_tac >> irule tuple_vv_post >> simp[] >>
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`btv`, `vs`] >> simp[]

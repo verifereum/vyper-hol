@@ -6,7 +6,7 @@ Ancestors
   valueEncoding valueEncodingDefs words list arithmetic stmtSimLogTopicFresh stmtSimLogSourceAllocate
   exprSimWordArgs stmtSimLogArgs fragExec stmtLowering stmtSimLogStoreEncode
   stmtSimLogDataRun abiEncoderCounters abiDecoderReentry abiEncoderAppend
-  loweringHalt vyperABI contractABI
+  loweringHalt vyperABI contractABI abiBuiltinAllocation
 
 Theorem log_emit_continuation:
   emit_inst LOG
@@ -92,7 +92,7 @@ QED
 Theorem log_empty_suffix_finish[local]:
   compile_log_topic_ops raw sm = (ops,st) /\
   run_inst_seq (emitted_insts sm st) s = OK u /\
-  wb_frame ce es es sm s u /\
+  wb_frame ce es es sm s u /\ u.vs_memory = s.vs_memory /\
   LIST_REL (\op w. eval_operand op u = SOME w) ops topics /\
   stmt_state_rel ctx func ce cx es u /\ fresh_vars_wrt limit_st s /\
   sb.cs_next_var <= limit_st.cs_next_var /\
@@ -106,7 +106,9 @@ Theorem log_empty_suffix_finish[local]:
         [<|logger := w2w cx.txn.target; topics := n2w h::topics; data := [] |>]) t /\
     fresh_vars_wrt limit_st t /\ inst_extends sm sb /\
     (!op w. (!z. op = Var z ==> not_fresh_at sm z) /\ (!l. op <> Label l) /\
-      eval_operand op s = SOME w ==> eval_operand op t = SOME w)
+      eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    (!aid a k. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory)
 Proof
   strip_tac >> drule emit_inst_extends >> strip_tac >>
   `st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
@@ -119,24 +121,16 @@ Proof
     (drule_all run_inst_seq_compose_ok >> simp[]) >>
   `inst_extends sm sb` by
     (irule inst_extends_trans >> qexists_tac `st` >> simp[]) >>
+  `t.vs_memory = u.vs_memory` by
+    (qpat_x_assum `(t with vs_logs := _) = u`
+      (mp_tac o Q.AP_TERM `\v. v.vs_memory`) >> simp[]) >>
   qexists_tac `t` >> gvs[] >> rpt strip_tac >>
   drule_all log_frame_operand >> simp[]
 QED
 
-Theorem log_split_data_every:
-  !xs flags. LENGTH flags = LENGTH xs /\ EVERY P xs ==>
-    EVERY P (SND (split_log_ops xs flags))
-Proof
-  Induct >- (Cases_on `flags` >> simp[split_log_ops_def]) >>
-  gen_tac >> PairCases_on `h` >> Cases_on `flags` >> simp[] >>
-  rename1 `split_log_ops _ (flag::flags)` >> Cases_on `flag` >>
-  simp[split_log_ops_def] >> rpt strip_tac >> pairarg_tac >> gvs[] >>
-  first_x_assum drule_all >> simp[]
-QED
-
 Theorem log_success_empty_run[local]:
-  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
+  log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   SND (split_log_ops xs flags) = [] /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
@@ -154,7 +148,9 @@ Theorem log_success_empty_run[local]:
         [<|logger := w2w cx.txn.target; topics := n2w h::topics; data := [] |>]) t /\
     fresh_vars_wrt limit_st t /\ inst_extends sm sb /\
     (!op w. (!z. op = Var z ==> not_fresh_at sm z) /\ (!l. op <> Label l) /\
-      eval_operand op s = SOME w ==> eval_operand op t = SOME w)
+      eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    (!aid a k. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory)
 Proof
   strip_tac >> drule_all compile_log_empty_trace >> strip_tac >>
   `emit_inst LOG
@@ -163,6 +159,9 @@ Proof
   drule_all compile_split_log_topics_run >> strip_tac >>
   `LENGTH (Lit (n2w h)::ops) < dimword (:256)` by
     (drule_all log_emitted_topic_count_exact >> simp[dimword_def]) >>
+  `t.vs_memory = s.vs_memory` by
+    (qpat_assum `(t with vs_vars := _) = s`
+      (mp_tac o Q.AP_TERM `\v. v.vs_memory`) >> simp[]) >>
   irule log_empty_suffix_finish >> simp[] >>
   qexistsl_tac [`ops`,`FST (split_log_ops xs flags)`,`st`,`t`] >> gvs[]
 QED
@@ -174,7 +173,7 @@ Theorem log_data_prepare_run[local]:
   ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP SND xs)) /\
   compile_alloc_buffer srccap source_st = (srcbuf,start) /\
   fn_has_code source_st start func /\
-  compile_log_store_data ce xs srcbuf.buf_operand 0 start = ((),stored_st) /\
+  compile_log_store_data ce xs (MAP SND xs) srcbuf.buf_operand 0 start = ((),stored_st) /\
   compile_alloc_buffer outcap stored_st = (dst,prepared) /\
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand srcbuf.buf_operand ei prepared = (out,end_st) /\
@@ -200,7 +199,9 @@ Theorem log_data_prepare_run[local]:
     db < dimword (:256) /\
     LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)) < dimword (:256) /\
     (!op w. abi_decoder_operand_live source_st.cs_next_var op /\
-      eval_operand op s = SOME w ==> eval_operand op actual = SOME w)
+      eval_operand op s = SOME w ==> eval_operand op actual = SOME w) /\
+    (!aid a k. aid < source_st.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k actual.vs_memory = mem_bytes_at a k s.vs_memory)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `compile_alloc_buffer _ source_st = _`
@@ -226,10 +227,16 @@ Proof
   `inst_extends source_st end_st` by
     (irule inst_extends_trans >> qexists_tac `start` >> simp[]) >>
   qexistsl_tac [`avs`,`actual`,`db`] >> asm_simp_tac bool_ss [] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `abi_decoder_operand_live start.cs_next_var op` by
+        (irule abi_decoder_operand_live_mono >> qexists_tac `source_st.cs_next_var` >> simp[]) >>
+      `eval_operand op allocated = SOME w` by metis_tac[] >>
+      first_x_assum drule_all >> simp[]) >>
   rpt strip_tac >>
-  `abi_decoder_operand_live start.cs_next_var op` by
-    (irule abi_decoder_operand_live_mono >> qexists_tac `source_st.cs_next_var` >> simp[]) >>
-  `eval_operand op allocated = SOME w` by metis_tac[] >>
+  `FLOOKUP allocated.vs_allocas aid = SOME (a,k)` by
+    (drule_at (Pat `abi_builtin_allocation_frame _ _ _ _ _`)
+      abi_builtin_allocation_frame_outside >> simp[]) >>
   first_x_assum drule_all >> simp[]
 QED
 
@@ -255,7 +262,7 @@ Theorem log_data_emit_run[local]:
   ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP SND xs)) /\
   compile_alloc_buffer srccap source_st = (srcbuf,start) /\
   fn_has_code source_st start func /\
-  compile_log_store_data ce xs srcbuf.buf_operand 0 start = ((),stored_st) /\
+  compile_log_store_data ce xs (MAP SND xs) srcbuf.buf_operand 0 start = ((),stored_st) /\
   compile_alloc_buffer outcap stored_st = (dst,prepared) /\
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand srcbuf.buf_operand ei prepared = (out,end_st) /\
@@ -283,7 +290,9 @@ Theorem log_data_emit_run[local]:
           (MAP SND xs))) (ListV avs) |>]) t /\
     fresh_vars_wrt limit_st t /\ inst_extends source_st final /\
     (!op w. abi_decoder_operand_live source_st.cs_next_var op /\
-      eval_operand op s = SOME w ==> eval_operand op t = SOME w)
+      eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    (!aid a k. aid < source_st.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all log_data_prepare_run >>
@@ -296,8 +305,11 @@ Proof
     (drule_all run_inst_seq_compose_ok >> simp[]) >>
   `inst_extends source_st final` by
     (irule inst_extends_trans >> qexists_tac `end_st` >> simp[]) >>
+  `t.vs_memory = actual.vs_memory` by
+    (qpat_x_assum `(t with vs_logs := _) = actual`
+      (mp_tac o Q.AP_TERM `\u. u.vs_memory`) >> simp[]) >>
   qexistsl_tac [`avs`,`t`] >> asm_simp_tac bool_ss [] >>
-  rpt strip_tac >> first_x_assum drule_all >> simp[]
+  first_assum ACCEPT_TAC
 QED
 
 val _ = if null (hyp log_data_emit_run) then ()
@@ -330,7 +342,7 @@ QED
 Theorem log_data_stage_code[local]:
   cs_extends sm st /\
   compile_alloc_buffer cap st = (src,s1) /\
-  compile_log_store_data ce xs src.buf_operand 0 s1 = ((),s2) /\
+  compile_log_store_data ce xs (MAP SND xs) src.buf_operand 0 s1 = ((),s2) /\
   EVERY (supported_scalar_type o SND) xs /\
   compile_alloc_buffer outcap s2 = (dst,s3) /\
   compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
@@ -367,6 +379,7 @@ Theorem log_selected_frontier[local]:
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) ==>
   cs_extends sm st /\ sm.cs_next_var <= st.cs_next_var /\
+  sm.cs_next_id <= st.cs_next_id /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at st z) /\ (!l. FST p <> Label l))
     (SND (split_log_ops xs flags)) /\
   EVERY (abi_decoder_operand_live st.cs_next_var) (Lit (n2w h)::ops)
@@ -387,8 +400,8 @@ Proof
 QED
 
 Theorem log_success_suffix_run:
-  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
+  log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
   stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
@@ -411,12 +424,16 @@ Theorem log_success_suffix_run:
           (log_non_indexed_types flags (MAP SND xs)))) (ListV avs) |>]) t /\
     fresh_vars_wrt limit_st t /\ inst_extends sm sb /\
     (!op w. (!z. op = Var z ==> not_fresh_at sm z) /\ (!l. op <> Label l) /\
-      eval_operand op s = SOME w ==> eval_operand op t = SOME w)
+      eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    (!aid a k. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory)
 Proof
   strip_tac >> drule_all split_log_ops_data_types >> strip_tac >>
   drule_all log_selected_frontier >> disch_then (qspec_then `h` strip_assume_tac) >>
   Cases_on `SND (split_log_ops xs flags) = []`
   >- suspend "empty" >>
+  `EVERY (supported_scalar_type o SND) xs` by
+    (gvs[LIST_REL_EL_EQN, EVERY_EL] >> metis_tac[]) >>
   drule_all (SRULE [] (Q.INST [`data_ops` |-> `SND (split_log_ops xs flags)`]
     compile_log_data_trace)) >> strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >> simp[Excl "enc_def"] >>
@@ -442,6 +459,9 @@ Resume log_success_suffix_run[data]:
      simp[GSYM EVERY_MAP, combinTheory.o_DEF, Excl "enc_def"]) >>
   `EVERY (supported_scalar_type o SND) (SND (split_log_ops xs flags))` by
     gvs[EVERY_MAP, combinTheory.o_DEF, Excl "enc_def"] >>
+  qpat_assum `MAP SND _ = _` (fn th =>
+    qpat_x_assum `compile_log_store_data _ _ _ _ _ _ = _`
+      (assume_tac o REWRITE_RULE [GSYM th])) >>
   drule_all log_data_stage_code >> strip_tac >>
   `st.cs_next_var <= limit_st.cs_next_var` by
     (drule log_output_buffer_shape >> strip_tac >>
@@ -459,7 +479,7 @@ Resume log_success_suffix_run[data]:
   `LENGTH (Lit (n2w h)::ops) < dimword (:256)` by
     (drule_all log_emitted_topic_count_exact >> simp[dimword_def, Excl "enc_def"]) >>
   qpat_x_assum `ce.ce_event_info _ = _` kall_tac >>
-  qpat_x_assum `compile_log_eval_all _ _ _ = _` kall_tac >>
+  qpat_x_assum `log_eval_view _ _ _ _ _` kall_tac >>
   qpat_x_assum `LIST_REL (\arg v. _ /\ _) xs vs` kall_tac >>
   qpat_x_assum `EVERY supported_scalar_type (MAP SND xs)` kall_tac >>
   qpat_x_assum `encode_indexed_event_topics _ _ _ = _` kall_tac >>
@@ -480,7 +500,18 @@ Resume log_success_suffix_run[finish]:
     (drule_all run_inst_seq_compose_ok >> simp[Excl "enc_def"]) >>
   `inst_extends sm sb` by
     (irule inst_extends_trans >> qexists_tac `st` >> simp[Excl "enc_def"]) >>
-  qexists_tac `t` >> gvs[Excl "enc_def"] >> rpt strip_tac >>
+  `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas` by
+    (qpat_assum `(u with vs_vars := _) = s`
+      (fn th => mp_tac (Q.AP_TERM `\v. (v.vs_memory,v.vs_allocas)` th)) >> simp[]) >>
+  `!aid a k. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,k) ==>
+      mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory` by
+    (rpt strip_tac >>
+     `aid < st.cs_next_id` by decide_tac >>
+     `FLOOKUP u.vs_allocas aid = SOME (a,k)` by simp[] >>
+     first_x_assum drule_all >> simp[]) >>
+  qexists_tac `t` >> gvs[Excl "enc_def"] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >>
   `eval_operand op u = SOME w` by (drule_all log_frame_operand >> simp[]) >>
   `abi_decoder_operand_live st.cs_next_var op` by
     (Cases_on `op` >> gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,

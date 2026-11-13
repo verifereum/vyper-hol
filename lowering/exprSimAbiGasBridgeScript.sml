@@ -309,7 +309,7 @@ Proof
   fs[frag_gas_free_def, EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem frag_successful_terminator_jump[local]:
+Theorem frag_successful_terminator_jump:
   step_inst 0 ctx inst s = OK middle /\ ~middle.vs_halted /\
   is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
   inst.inst_opcode <> STOP /\ inst.inst_opcode <> RETURN ==>
@@ -641,7 +641,7 @@ Proof
   pairarg_tac >> gvs[]
 QED
 
-Theorem frag_cut_run_prefix_aux[local]:
+Theorem frag_cut_run_prefix_aux:
   !fuel n s bb h.
     (!bb. lookup_block (FST cut) fn.fn_blocks = SOME bb ==>
       ?id. get_instruction bb (SND cut) = SOME (mk_inst id STOP [] [])) /\
@@ -786,25 +786,77 @@ Proof
   qexists_tac `0` >> simp[gas_count_step_def] >> metis_tac[]
 QED
 
+Theorem frag_jump_step_jump_to[local]:
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\ step_inst_base inst s = OK u ==>
+  ?lbl. u = jump_to lbl s
+Proof
+  simp[] >> strip_tac >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem eval_phis_phi_zero[local]:
+  phi_prefix_length l = 0 ==> eval_phis s l = OK s
+Proof
+  Cases_on `l` >> simp[phi_prefix_length_def, eval_phis_def] >> rw[]
+QED
+
+(* Every observer block a fragment jump can enter starts without a PHI:
+   the cut block when the fragment left its start block, or an emitted
+   block other than the start block, whose code is in frag_code. *)
+Theorem frag_observer_target_phi_zero[local]:
+  cs_extends sa sb /\ frag_gas_free sa sb /\ lbl <> sa.cs_current_bb /\
+  lookup_block lbl (frag_observer sa sb fn id).fn_blocks = SOME bb ==>
+  phi_prefix_length bb.bb_instructions = 0
+Proof
+  strip_tac >> drule frag_observer_lookup_cases >> strip_tac
+  >- (gvs[] >> drule_all frag_observer_end_nonphi >> strip_tac >>
+      Cases_on `sb.cs_current_insts` >>
+      gvs[phi_prefix_length_def, mk_inst_def]) >>
+  `emitted_blocks sa sb <> []` by (strip_tac >> gvs[]) >>
+  drule frag_extends_emitted_shape >> simp[] >> strip_tac >>
+  `bb <> LAST (emitted_blocks sa sb)` by (strip_tac >> gvs[]) >>
+  `MEM bb (FRONT (emitted_blocks sa sb))` by
+    metis_tac[frag_emitted_front_member] >>
+  `EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions` by
+    (fs[frag_gas_free_def, frag_code_def, NULL_EQ, EVERY_APPEND,
+        EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+     metis_tac[]) >>
+  Cases_on `bb.bb_instructions` >> gvs[phi_prefix_length_def]
+QED
+
+(* A step of the observer is a GAS-free edge of any function with the
+   fragment's code.  A jump closes the edge directly (gas_path_edge's
+   jump_to disjunct): its target starts without a PHI. *)
 Theorem frag_observer_step_zero_edge:
   cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
-  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
-   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb /\
   abi_observer_step ctx (frag_observer sa sb fn id) (frag_observer_cut sb) s t ==>
   gas_path_edge ctx fn s 0 (OK t)
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  `abi_observer_step ctx fn (frag_observer_cut sb) s t` by
-    (irule frag_observer_step_transfer >> metis_tac[]) >>
-  irule abi_observer_step_zero_edge >>
-  reverse conj_tac >- metis_tac[] >>
-  rpt strip_tac >>
-  qpat_x_assum `abi_observer_step ctx (frag_observer sa sb fn id) _ s t`
+  qpat_assum `abi_observer_step _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE[abi_observer_step_def]) >>
-  drule_all frag_observer_instruction_agrees >> strip_tac >> gvs[] >>
-  metis_tac[frag_observer_off_cut_opcodes]
+  drule_all frag_observer_off_cut_opcodes >> strip_tac >>
+  drule_all frag_observer_instruction_agrees >> strip_tac
+  >- (rewrite_tac[gas_path_edge_def] >> simp[] >>
+      qexists_tac `0` >> gvs[gas_count_step_def]) >>
+  `MEM inst.inst_opcode [JMP; JNZ; DJMP]` by
+    metis_tac[frag_successful_terminator_jump] >>
+  `?lbl. middle = jump_to lbl s` by
+    metis_tac[frag_jump_step_jump_to, step_inst_non_invoke] >>
+  `middle.vs_current_bb <> sa.cs_current_bb` by
+    (irule frag_observer_jump_no_reentry >>
+     qexistsl_tac [`inst`, `s`] >> metis_tac[step_inst_non_invoke]) >>
+  `phi_prefix_length target.bb_instructions = 0` by
+    (irule frag_observer_target_phi_zero >> metis_tac[]) >>
+  `entered = middle` by
+    (drule eval_phis_phi_zero >>
+     disch_then (qspec_then `middle` mp_tac) >> gvs[]) >>
+  `t = jump_to lbl s` by gvs[jump_to_def] >>
+  rewrite_tac[gas_path_edge_def] >> asm_rewrite_tac[] >>
+  qexistsl_tac [`0`, `original`, `inst`, `OK (jump_to lbl s)`] >>
+  asm_simp_tac (srw_ss()) [gas_count_step_def] >>
+  metis_tac[]
 QED
 
 Theorem frag_observer_prefix_zero_path:
@@ -812,9 +864,6 @@ Theorem frag_observer_prefix_zero_path:
   !sa sb fn id.
   observed = frag_observer sa sb fn id /\ cut = frag_observer_cut sb /\
   cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
-  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
-   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb ==>
   gas_path ctx fn s 0 (OK t)
 Proof
@@ -849,10 +898,7 @@ Proof
 QED
 
 Theorem frag_observer_exit_path_aux[local]:
-  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
-  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
-   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) ==>
+  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb ==>
   !fuel n s bb r.
     (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb /\
     ~s.vs_halted /\
@@ -974,9 +1020,6 @@ Finalise frag_observer_exit_path_aux
 
 Theorem frag_observer_exit_path:
   cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
-  (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
-   !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb /\
   ~s.vs_halted /\
   run_from fuel ctx (frag_observer sa sb fn id) s = r /\
@@ -1049,9 +1092,6 @@ Theorem frag_exec_gas_path:
     frag_exec ctx sa sb P Q R /\ cs_extends sa sb /\ frag_gas_free sa sb /\
     (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\ (!h. ~R (Halt h)) /\
     fn_has_code sa sb fn /\
-    (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
-     !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
-          phi_prefix_length bb.bb_instructions = 0) /\
     P s /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -1801,7 +1841,7 @@ Proof
   simp[frag_relabel_state_def] >> rpt strip_tac >> simp[]
 QED
 
-Theorem frag_eval_operand_control[local]:
+Theorem frag_eval_operand_control:
   !op s b p.
     eval_operand op (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
     eval_operand op s
@@ -1809,7 +1849,7 @@ Proof
   Cases >> simp[eval_operand_def, lookup_var_def]
 QED
 
-Theorem frag_eval_operands_control[local]:
+Theorem frag_eval_operands_control:
   !ops s b p.
     eval_operands ops (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
     eval_operands ops s
@@ -1817,7 +1857,7 @@ Proof
   Induct >> simp[eval_operands_def, frag_eval_operand_control]
 QED
 
-Theorem frag_pure1_control[local]:
+Theorem frag_pure1_control:
   exec_pure1 f inst (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
     exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
       (exec_pure1 f inst s)
@@ -1835,7 +1875,7 @@ Proof
   simp[exec_pure1_def, instIdxIndepTheory.exec_result_map_def]
 QED
 
-Theorem frag_pure2_control[local]:
+Theorem frag_pure2_control:
   exec_pure2 f inst (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
     exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
       (exec_pure2 f inst s)
@@ -1857,7 +1897,7 @@ Proof
   simp[exec_pure2_def, instIdxIndepTheory.exec_result_map_def]
 QED
 
-Theorem frag_pure3_control[local]:
+Theorem frag_pure3_control:
   exec_pure3 f inst (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
     exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
       (exec_pure3 f inst s)
@@ -1883,14 +1923,14 @@ Proof
   simp[exec_pure3_def, instIdxIndepTheory.exec_result_map_def]
 QED
 
-Theorem frag_call_request_control[local]:
+Theorem frag_call_request_control:
   venom_call_request (s with <|vs_prev_bb := p; vs_current_bb := b|>)
     addr value off sz static = venom_call_request s addr value off sz static
 Proof
   simp[venomCallOracleDefsTheory.venom_call_request_def, read_memory_def]
 QED
 
-Theorem frag_create_request_control[local]:
+Theorem frag_create_request_control:
   venom_create_request (s with <|vs_prev_bb := p; vs_current_bb := b|>)
     value off sz salt = venom_create_request s value off sz salt
 Proof
@@ -1916,7 +1956,7 @@ Proof
   simp[venomCallOracleDefsTheory.consume_create_outcome_eq]
 QED
 
-Theorem frag_ext_call_control[local]:
+Theorem frag_ext_call_control:
   exec_ext_call inst (s with <|vs_prev_bb := p; vs_current_bb := b|>)
     gas addr value ao az ro rz static =
     exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
@@ -1931,7 +1971,7 @@ Proof
        instIdxIndepTheory.exec_result_map_def]
 QED
 
-Theorem frag_create_control[local]:
+Theorem frag_create_control:
   exec_create inst (s with <|vs_prev_bb := p; vs_current_bb := b|>)
     value off sz salt =
     exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
@@ -1947,50 +1987,22 @@ Proof
   IF_CASES_TAC >> simp[instIdxIndepTheory.exec_result_map_def]
 QED
 
-Theorem frag_delegate_state_control[local]:
-  make_venom_delegatecall_state
-    (s with <|vs_prev_bb := p; vs_current_bb := b|>) target gas data code static =
-  make_venom_delegatecall_state s target gas data code static
-Proof
-  simp[make_venom_delegatecall_state_def, venom_to_tx_params_def]
-QED
-
-Theorem frag_extract_control[local]:
-  extract_venom_result (s with <|vs_prev_bb := p; vs_current_bb := b|>)
-    output ro rz result =
-  OPTION_MAP (\v. (FST v, SND v with <|vs_prev_bb := p; vs_current_bb := b|>))
-    (extract_venom_result s output ro rz result)
-Proof
-  Cases_on `result` >- simp[extract_venom_result_def] >>
-  rename1 `SOME pair` >> PairCases_on `pair` >>
-  simp[extract_venom_result_def] >>
-  namedCases_on `pair1.contexts` ["", "ctxt rest"] >> simp[] >>
-  Cases_on `rest` >> simp[] >>
-  PairCases_on `ctxt` >>
-  Cases_on `pair0` >> simp[write_memory_with_expansion_def] >>
-  qmatch_goalsub_rename_tac `case outcome of NONE => _ | SOME _ => _` >>
-  Cases_on `outcome` >>
-  simp[write_memory_with_expansion_def]
-QED
-
 Theorem frag_delegatecall_control[local]:
   exec_delegatecall inst (s with <|vs_prev_bb := p; vs_current_bb := b|>)
     gas addr ao az ro rz =
     exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
       (exec_delegatecall inst s gas addr ao az ro rz)
 Proof
-  simp[exec_delegatecall_def, read_memory_def, frag_delegate_state_control,
-       frag_extract_control] >>
-  qmatch_goalsub_abbrev_tac `extract_venom_result s 1w (w2n ro) (w2n rz) run_result` >>
-  Cases_on `extract_venom_result s 1w (w2n ro) (w2n rz) run_result` >>
-  simp[instIdxIndepTheory.exec_result_map_def] >>
-  rename1 `_ = SOME pair` >> PairCases_on `pair` >> simp[] >>
-  namedCases_on `inst.inst_outputs` ["", "out outs"] >>
-  simp[instIdxIndepTheory.exec_result_map_def] >>
-  Cases_on `outs` >> simp[instIdxIndepTheory.exec_result_map_def, update_var_def]
+  namedCases_on `inst.inst_outputs` ["", "out outs"]
+  >- simp[exec_delegatecall_def, instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `outs` >>
+  simp[exec_delegatecall_def, frag_call_request_control,
+       venomCallOracleDefsTheory.consume_call_outcome_eq,
+       write_memory_with_expansion_def, update_var_def,
+       instIdxIndepTheory.exec_result_map_def]
 QED
 
-Theorem frag_read0_control[local]:
+Theorem frag_read0_control:
   f (s with <|vs_prev_bb := p; vs_current_bb := b|>) = f s ==>
   exec_read0 f inst (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
     exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
@@ -2002,7 +2014,7 @@ Proof
   simp[exec_read0_def, instIdxIndepTheory.exec_result_map_def, update_var_def]
 QED
 
-Theorem frag_read1_control[local]:
+Theorem frag_read1_control:
   (!v. f v (s with <|vs_prev_bb := p; vs_current_bb := b|>) = f v s) ==>
   exec_read1 f inst (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
     exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
@@ -2020,7 +2032,7 @@ Proof
   simp[exec_read1_def, instIdxIndepTheory.exec_result_map_def]
 QED
 
-Theorem frag_write2_control[local]:
+Theorem frag_write2_control:
   (!v w. f v w (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
      f v w s with <|vs_prev_bb := p; vs_current_bb := b|>) ==>
   exec_write2 f inst (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
@@ -2064,7 +2076,7 @@ Proof
   gvs[exec_alloca_def, exec_gas_def, AllCaseEqs(), update_var_def]
 QED
 
-Theorem frag_relabel_base_nonphi[local]:
+Theorem frag_relabel_base_nonphi:
   inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode /\
   inst.inst_opcode <> INVOKE /\ step_inst_base inst s = OK t ==>
   step_inst_base inst (s with <|vs_current_bb := b; vs_prev_bb := p|>) =
@@ -2078,7 +2090,7 @@ Proof
   metis_tac[frag_relabel_base_ordinary]
 QED
 
-Theorem frag_relabel_ordinary_edge[local]:
+Theorem frag_relabel_ordinary_edge:
   frag_relabel_state L entry u v /\ ~u.vs_halted /\
   lookup_block v.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb u.vs_inst_idx = SOME inst /\
@@ -2105,7 +2117,7 @@ Proof
   qexists_tac `p` >> simp[venom_state_component_equality]
 QED
 
-Theorem frag_relabel_jump_control[local]:
+Theorem frag_relabel_jump_control:
   MEM inst.inst_opcode [JMP; JNZ; DJMP] /\ step_inst_base inst u = OK middle ==>
   step_inst_base inst (u with <|vs_current_bb := b; vs_prev_bb := p|>) =
     OK (middle with vs_prev_bb := SOME b)
@@ -2129,7 +2141,7 @@ Definition frag_relabel_context_def:
           phi_prefix_length bb.bb_instructions = 0)
 End
 
-Theorem frag_relabel_region_entry_bound[local]:
+Theorem frag_relabel_region_entry_bound:
   (u.vs_current_bb,u.vs_inst_idx) IN
     frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb) /\
   LENGTH ids = LENGTH sa.cs_current_insts ==>
@@ -2232,7 +2244,7 @@ Proof
   simp[venom_state_component_equality])
 QED
 
-Theorem frag_relabel_base_abort[local]:
+Theorem frag_relabel_base_abort:
   inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> PHI /\
   step_inst_base inst s = Abort a t ==>
   step_inst_base inst (s with <|vs_current_bb := b; vs_prev_bb := p|>) =
@@ -2254,14 +2266,14 @@ Proof
   qpat_x_assum `_ = Abort _ _` mp_tac >> pairarg_tac >> simp[]
 QED
 
-Theorem frag_mcopy_control[local]:
+Theorem frag_mcopy_control:
   mcopy dst src sz (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
     (mcopy dst src sz s) with <|vs_prev_bb := p; vs_current_bb := b|>
 Proof
   simp[mcopy_def, read_memory_def, write_memory_with_expansion_def]
 QED
 
-Theorem frag_pack_dret_control[local]:
+Theorem frag_pack_dret_control:
   !pairs cursor s b p.
   pack_dret_dynamic cursor pairs (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
     (FST (pack_dret_dynamic cursor pairs s),
@@ -2276,7 +2288,7 @@ Proof
   pairarg_tac >> simp[]
 QED
 
-Theorem frag_relabel_base_intret[local]:
+Theorem frag_relabel_base_intret:
   inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> PHI /\
   step_inst_base inst s = IntRet vals t ==>
   step_inst_base inst (s with <|vs_current_bb := b; vs_prev_bb := p|>) =
@@ -2300,7 +2312,7 @@ Proof
   strip_tac >> gvs[]
 QED
 
-Theorem frag_relabel_base_exit[local]:
+Theorem frag_relabel_base_exit:
   inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> PHI /\
   step_inst_base inst u = r /\ exit_result r /\ (!h. r <> Halt h) ==>
   step_inst_base inst (u with <|vs_current_bb := b; vs_prev_bb := p|>) =

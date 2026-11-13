@@ -21,7 +21,7 @@ Ancestors
   codegenReadyCompute venomExecProofs venomWf venomExecProps venomInst
   relation list finite_map dominatorProofs cfgAnalysisProps
   cfgNormBase livenessProofs livenessTransferProofs
-  fnFrameStepsRevertForward dominatorAnalysisProps dfgAnalysisProps
+  fnFrameStepsRevertForward dominatorProofs dfgAnalysisProps cfgCorrectnessProof dfHelperProofs
   venomWfProps
 
 Theorem lineage_state_entry_cases:

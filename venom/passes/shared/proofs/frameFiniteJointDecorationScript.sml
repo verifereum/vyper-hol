@@ -200,7 +200,8 @@ Theorem decorated_execution_segment:
 Proof
   ho_match_mp_tac decorated_step_ind >> rpt strip_tac >>
   gvs[joint_segment_def, decoration_consumes_def] >>
-  metis_tac[joint_segment_append, joint_segment_def]
+  once_rewrite_tac[GSYM APPEND_ASSOC] >>
+  irule joint_segment_append >> simp[joint_segment_def] >> metis_tac[]
 QED
 
 Theorem decorated_execution_interval:

@@ -4,7 +4,7 @@ Ancestors
   externalReturnDirectMem externalReturnNormalizeRun externalNormalizePremises
   externalReturnSelectedMetadata externalReturnEncoderSuffixMem
   stmtSimReturnWiden typedStoreEndpoint externalReturnPrefix returnValueTyped
-  incompatibleReturnLayout
+  incompatibleReturnLayout typedCopyCompatibility
   vyperTypeSystem stmtLowering exprLoweringProps loweringPosts
   exprSimDefs vyperTypeArgFits compileEnv loweringStateRelDefs typedNormalizeEntryBoundary
   stmtLoweringMono fragExec exprOperandVar externalReturnRegisteredWindowMem
@@ -37,7 +37,7 @@ Proof
        vyperTypeInvariantsTheory.env_consistent_def,
        vyperTypeInvariantsTheory.env_context_consistent_def]) >>
   drule_all exprSimHypsTheory.post_value_type_widens >> strip_tac >>
-  conj_tac >- metis_tac[vyperTypeArgFitsTheory.type_widens_to_trans] >>
+  conj_tac >- metis_tac[typedCopyCompatibilityTheory.type_widens_to_trans] >>
   Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
   >- (gvs[] >>
       `(do r <- eval_expr cx (Call ty (IntCall fid) args drv);
@@ -67,7 +67,7 @@ Theorem external_frame_ret_value_normalized_run_mem:
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env0 /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =
@@ -134,6 +134,13 @@ Proof
   `~(is_bytestring_type ret /\
      is_bytestring_type (lowered_value_type cenv' e))` by metis_tac[] >>
   drule_all normalize_return_source_kinds >> strip_tac >>
+  drule_all external_package_raw_flag >> strip_tac >>
+  `~cenv'.ce_raw_return` by
+    (strip_tac >>
+     `lookup_raw_return_or_F (NONE : num option) tx.function_name External tops` by
+       metis_tac[] >>
+     drule_all source_typing_raw_return_type >> strip_tac >>
+     gvs[is_bytestring_type_def]) >>
   suspend "compile"
 QED
 
@@ -191,7 +198,7 @@ Resume external_frame_ret_value_normalized_run_mem[resources]:
   qpat_x_assum `cenv' = cenv''` (SUBST_ALL_TAC o SYM) >>
   (* the statement's [] has a free element type; package_external_fn ignores it *)
   `set_external_package_target rpolicy.rpol_target
-     (package_external_fn tops F (assign_nkeys tops 0)
+     (package_external_fn tops T (K global_nonreentrant_slot)
         (mut, F, lookup_raw_return_or_F (NONE : num option)
                     tx.function_name External tops,
          tx.function_name, args, ([] : expr list), ret, fbody)) =
@@ -228,13 +235,6 @@ QED
 Resume external_frame_ret_value_normalized_run_mem[suffix]:
   `ret <> NoneT` by metis_tac[valued_return_type_not_none] >>
   drule_all external_package_encoder_admissible >> strip_tac >>
-  drule_all external_package_raw_flag >> strip_tac >>
-  `~cenv'.ce_raw_return` by
-    (strip_tac >>
-     `lookup_raw_return_or_F (NONE : num option) tx.function_name External tops` by
-       metis_tac[] >>
-     drule_all source_typing_raw_return_type >> strip_tac >>
-     gvs[is_bytestring_type_def]) >>
   `cenv'.ce_is_external` by suspend "external_flag" >>
   `return_buffer_ok cenv'` by
     (qpat_x_assum `stmt_exprs_ok _ _` mp_tac >>

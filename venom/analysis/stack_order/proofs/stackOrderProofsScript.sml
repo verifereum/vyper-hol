@@ -5,19 +5,19 @@
  *
  * Internal lemmas:
  *   so_handle_inst_stack_top_proof  — operands on top after handle_inst
- *   so_analyze_block_needed_distinct_proof — needed list has no duplicates
+ *   so_analyze_block_needed_distinct — needed list has no duplicates
  *   so_needed_are_live_proof        — needed vars are live at block entry
  *
- * API proofs (consumed by stackOrderProps via ACCEPT_TAC):
- *   so_get_stack_sound_proof
- *   so_merge_prefix_proof
- *   so_from_to_includes_live_proof
- *   so_from_to_includes_base_proof
+ * API proofs:
+ *   so_get_stack_sound
+ *   so_merge_prefix
+ *   so_from_to_includes_live
+ *   so_from_to_includes_base
  *)
 
 Theory stackOrderProofs
 Ancestors
-  stackOrderDefs cfgAnalysisProps
+  stackOrderDefs cfgAnalysisProps cfgCorrectnessProof
 Libs
   rich_listTheory listTheory arithmeticTheory pred_setTheory finite_mapTheory
   venomInstTheory stackOrderInternalDefsTheory stackOrderDefsTheory
@@ -86,20 +86,12 @@ Proof
   rw[] >> simp[ALL_DISTINCT_SNOC]
 QED
 
-(* so_add_needed preserves membership *)
-Theorem so_add_needed_mem[local]:
-  ∀needed v w. MEM w needed ⇒ MEM w (so_add_needed needed v)
-Proof
-  simp[so_add_needed_def] >> rpt strip_tac >>
-  rw[] >> simp[SNOC_APPEND]
-QED
-
 (* ==========================================================================
    API proofs — easy three (standalone, no deps on other theorems)
    ========================================================================== *)
 
 (* Merge is a prefix of every input order *)
-Theorem so_merge_prefix_proof:
+Theorem so_merge_prefix:
   ∀orders n. MEM n orders ⇒
     isPREFIX (so_merge orders) n
 Proof
@@ -112,7 +104,7 @@ Proof
 QED
 
 (* from_to query includes base *)
-Theorem so_from_to_includes_base_proof:
+Theorem so_from_to_includes_base:
   ∀lr fn from_to origin succ v needed.
     FLOOKUP from_to (origin, succ) = SOME needed ∧
     MEM v needed ⇒
@@ -125,7 +117,7 @@ Proof
 QED
 
 (* from_to query includes live input vars *)
-Theorem so_from_to_includes_live_proof:
+Theorem so_from_to_includes_live:
   ∀lr fn from_to origin succ v succ_bb.
     lookup_block succ fn.fn_blocks = SOME succ_bb ∧
     MEM v (input_vars_from origin succ_bb.bb_instructions
@@ -269,23 +261,6 @@ Proof
   first_x_assum irule >> rw[]
 QED
 
-(* The FOLDL only grows the stack (never shrinks) *)
-Theorem handle_inst_foldl_length_ge[local]:
-  ∀ops s0 n0.
-    LENGTH s0 ≤
-    LENGTH (FST (FOLDL (λ(s,n) op.
-      (if MEM op s then s else SNOC op s,
-       case op of
-         Var v => if ¬MEM op s then so_add_needed n v else n
-       | _ => n)) (s0,n0) ops))
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  first_x_assum (qspecl_then [`if MEM h s0 then s0 else SNOC h s0`,
-    `case h of Var v => if ¬MEM h s0 then so_add_needed n0 v else n0
-     | _ => n0`] mp_tac) >>
-  rw[]
-QED
-
 (* --- stack_find properties --- *)
 
 Theorem stack_find_correct[local]:
@@ -307,44 +282,7 @@ QED
 
 (* --- stack_swap EL properties --- *)
 
-(* Combined: stack_swap preserves length and puts op at top *)
-Theorem stack_swap_top[local]:
-  ∀stack op. MEM op stack ∧ stack <> [] ⇒
-    EL (LENGTH stack - 1) (stack_swap stack op) = op
-Proof
-  rpt strip_tac >>
-  simp[stack_swap_def, LET_THM] >>
-  `∃i. stack_find op stack = SOME i` by metis_tac[stack_find_exists] >>
-  simp[] >> imp_res_tac stack_find_correct >> simp[LUPDATE_SEM]
-QED
-
-Theorem stack_swap_el_other[local]:
-  ∀stack op j i.
-    stack_find op stack = SOME i ∧
-    j < LENGTH stack ∧ j <> i ∧ j <> LENGTH stack - 1 ⇒
-    EL j (stack_swap stack op) = EL j stack
-Proof
-  simp[stack_swap_def, LET_THM, LUPDATE_SEM]
-QED
-
 (* --- stack_swap_to EL properties --- *)
-
-Theorem stack_swap_to_at_depth[local]:
-  ∀stack d.
-    d < LENGTH stack ⇒
-    EL (LENGTH stack - 1 - d) (stack_swap_to stack d) =
-    EL (LENGTH stack - 1) stack
-Proof
-  simp[stack_swap_to_def, LET_THM, LUPDATE_SEM]
-QED
-
-Theorem stack_swap_to_el_other[local]:
-  ∀stack d j.
-    j < LENGTH stack ∧ j <> LENGTH stack - 1 ∧ j <> LENGTH stack - 1 - d ⇒
-    EL j (stack_swap_to stack d) = EL j stack
-Proof
-  simp[stack_swap_to_def, LET_THM, LUPDATE_SEM]
-QED
 
 (* --- so_reorder_aux correctness ---
    Inductive invariant for so_reorder_aux stack count idx ops:
@@ -628,7 +566,7 @@ Proof
   first_x_assum irule >> simp[so_step_needed_distinct]
 QED
 
-Theorem so_analyze_block_needed_distinct_proof:
+Theorem so_analyze_block_needed_distinct:
   ∀cfg lr from_to lbl insts needed stack.
     (needed, stack) = so_analyze_block cfg lr from_to lbl insts ⇒
     ALL_DISTINCT needed
@@ -638,8 +576,8 @@ Proof
   irule foldl_step_distinct >> simp[]
 QED
 
-(* so_needed_are_live_proof: DROPPED — FALSE without single_use_form.
-   See stackOrderCexScript.sml for counterexample. *)
+(* so_needed_are_live_proof: DROPPED — FALSE without single_use_form;
+   see docs/deleted-counterexamples.md. *)
 
 (* ==========================================================================
    so_get_stack_sound — ALL_DISTINCT preservation through the analysis
@@ -658,40 +596,6 @@ Theorem foldl_update_other_snd[local]:
     FLOOKUP ft (a,b)
 Proof
   Induct >> rw[FOLDL, FLOOKUP_UPDATE]
-QED
-
-Theorem so_record_from_to_other_key[local]:
-  ∀cfg ft lbl needed a b.
-    b <> lbl ⇒
-    FLOOKUP (so_record_from_to cfg ft lbl needed) (a,b) = FLOOKUP ft (a,b)
-Proof
-  rw[so_record_from_to_def] >> irule foldl_update_other_snd >> simp[]
-QED
-
-Theorem so_analyze_succ_other_key[local]:
-  ∀cfg lr fn ft succ_lbl a b.
-    b <> succ_lbl ⇒
-    FLOOKUP (so_analyze_succ cfg lr fn ft succ_lbl) (a,b) = FLOOKUP ft (a,b)
-Proof
-  rw[so_analyze_succ_def] >>
-  Cases_on `lookup_block succ_lbl fn.fn_blocks` >> gvs[] >>
-  pairarg_tac >> gvs[] >>
-  irule so_record_from_to_other_key >> simp[]
-QED
-
-Theorem foldl_succ_preserves[local]:
-  ∀succs cfg lr fn ft a b.
-    ~MEM b succs ⇒
-    FLOOKUP (FOLDL (so_analyze_succ cfg lr fn) ft succs) (a,b) =
-    FLOOKUP ft (a,b)
-Proof
-  Induct >> rw[FOLDL] >>
-  `FLOOKUP (FOLDL (so_analyze_succ cfg lr fn)
-              (so_analyze_succ cfg lr fn ft h) succs) (a,b) =
-   FLOOKUP (so_analyze_succ cfg lr fn ft h) (a,b)` by metis_tac[] >>
-  `FLOOKUP (so_analyze_succ cfg lr fn ft h) (a,b) = FLOOKUP ft (a,b)`
-    by (irule so_analyze_succ_other_key >> simp[]) >>
-  gvs[]
 QED
 
 Theorem mem_map_find[local]:
@@ -748,7 +652,7 @@ Proof
   qexists_tac `needed` >> conj_tac >-
   (irule foldl_update_mem_writes >> simp[]) >>
   qpat_x_assum `so_analyze_block _ _ _ _ _ = _` (assume_tac o GSYM) >>
-  metis_tac[so_analyze_block_needed_distinct_proof]
+  metis_tac[so_analyze_block_needed_distinct]
 QED
 
 Theorem foldl_update_value[local]:
@@ -789,7 +693,7 @@ Proof
   pairarg_tac >> gvs[] >>
   drule_all so_record_from_to_value >> strip_tac >> gvs[] >>
   qpat_x_assum `so_analyze_block _ _ _ _ _ = _` (assume_tac o GSYM) >>
-  metis_tac[so_analyze_block_needed_distinct_proof]
+  metis_tac[so_analyze_block_needed_distinct]
 QED
 
 Theorem foldl_succ_values[local]:
@@ -802,7 +706,7 @@ Proof
   metis_tac[so_analyze_succ_writes_distinct]
 QED
 
-Theorem so_get_stack_sound_proof:
+Theorem so_get_stack_sound:
   ∀fn cfg lr from_to lbl merged from_to'.
     wf_function fn ∧
     cfg = cfg_analyze fn ∧
@@ -817,7 +721,7 @@ Proof
     (strip_tac >> irule prefix_all_distinct >>
      qexists_tac `case FLOOKUP (FOLDL (so_analyze_succ (cfg_analyze fn) lr fn)
        from_to (h::t)) (lbl,h) of NONE => [] | SOME n => n` >>
-     simp[] >> match_mp_tac so_merge_prefix_proof >> simp[MEM]) >>
+     simp[] >> match_mp_tac so_merge_prefix >> simp[MEM]) >>
   Cases_on `FLOOKUP (FOLDL (so_analyze_succ (cfg_analyze fn) lr fn) from_to
               (h::t)) (lbl,h)` >> simp[] >>
   qpat_x_assum `FLOOKUP (FOLDL _ _ (h::t)) _ = _`

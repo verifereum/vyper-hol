@@ -10,6 +10,7 @@ Libs
   monadsyntax
 
 Theorem raw_call_outbuf_tail_mem:
+  expr_has_effect e /\
   compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
     (if stat then StaticCall else RegularCall) cap flags.rcf_revert_on_failure ov op sm = (result,sb) /\
