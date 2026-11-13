@@ -266,7 +266,7 @@ Resume immutable_allocate_initialize_mem[allocation_history]:
 QED
 Finalise immutable_allocate_initialize_mem
 
-Theorem immutable_optional_length_mem[local]:
+Theorem immutable_optional_length_mem:
   (if dyn then
      compile_imm_load_word cenv.ce_is_ctor cenv.ce_imm_alloca (Lit (n2w off))
    else return (Lit (n2w cap))) sa = (lvo,sb) /\

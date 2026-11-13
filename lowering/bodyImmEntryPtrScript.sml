@@ -314,7 +314,12 @@ Resume immutable_allocate_initialize_ptr[ghost_finish]:
   `ghost_inv d cenv cx es G' tn' cc` by
     (qpat_x_assum `ghost_inv _ _ _ _ G1 _ _` mp_tac >>
      simp[ghost_inv_def, stor_taint_ok_def] >> strip_tac >>
-     rpt conj_tac >- (rpt strip_tac >> metis_tac[]) >-
+     rpt conj_tac >-
+       (rpt strip_tac >>
+        qpat_assum `!name ent x z. _ ==> x <> idx /\ _` drule >>
+        disch_then drule >> strip_tac >>
+        qpat_assum `!name entry p' sz'. _ ==> ptr_covers _ _ _ _ _ /\ _` drule >>
+        disch_then drule >> strip_tac >> fs[] >> metis_tac[]) >-
        (Cases_on `d` >> simp[return_buf_ptr_def] >> PairCases_on `x` >>
         fs[return_buf_ptr_def] >> metis_tac[]) >>
      rpt strip_tac >> metis_tac[]) >>
@@ -345,3 +350,90 @@ Resume immutable_allocate_initialize_ptr[ghost_finish]:
   rpt strip_tac >> fs[MEM] >> metis_tac[]
 QED
 Finalise immutable_allocate_initialize_ptr
+
+(* Join the checked optional header read with allocated scalar entry. *)
+Theorem immutable_entry_initialize_ptr:
+  (if dyn then
+     compile_imm_load_word cenv.ce_is_ctor cenv.ce_imm_alloca (Lit (n2w off))
+   else return (Lit (n2w cap))) sa = (lvo,sb) /\
+  ~cenv.ce_is_ctor /\ ~ctx_has_dalloca ctx /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s /\
+  (!x q. cenv.ce_return_buf = SOME (PtrVar (Var x) q) ==> not_fresh_at sa x) /\
+  (dyn ==>
+    immutable_holds cenv cx (ArrayT et (Dynamic cap)) (Value (ArrayV av))
+      (n2w off) es s /\
+    evaluate_type (get_tenv cx) et = SOME tv /\
+    value_has_type (ArrayTV tv (Dynamic cap)) (ArrayV av) /\
+    LENGTH vs = array_length (ArrayTV tv (Dynamic cap)) av) /\
+  (~dyn ==> LENGTH vs = cap) /\ fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  MEM (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
+  fn_inst_ids_distinct func /\ sz < dimword (:256) /\
+  lookup_block sb.cs_current_bb func.fn_blocks =
+    SOME <|bb_label := lbl; bb_instructions :=
+      sb.cs_current_insts ++
+      [mk_inst aid ALLOCA [Lit (n2w sz)] [p]; mk_inst j JMP [Label entry] []]|> /\
+  lookup_block entry func.fn_blocks =
+    SOME <|bb_label := entry; bb_instructions :=
+      [mk_inst e1 ASSIGN [Lit 0w] [idx]] ++
+      (if dyn then
+        [mk_inst e2 GT [lvo; Lit (n2w cap)] [g];
+         mk_inst e3 ISZERO [Var g] [vld];
+         mk_inst e4 ASSERT [Var vld] []] else []) ++
+      [mk_inst e5 JMP [Label cond_lbl] []]|> /\
+  P es /\ lookup_scopes id es.scopes = NONE /\
+  LENGTH vs <= cap /\ cap < dimword (:256) /\ ALL_DISTINCT [p; idx; g; vld] /\
+  not_local_ptr cenv es.scopes p /\ not_local_ptr cenv es.scopes idx /\
+  not_local_ptr cenv es.scopes g /\ not_local_ptr cenv es.scopes vld /\
+  (!x. lvo = Var x ==> ~MEM x [p; idx; g; vld]) /\
+  (!x. not_fresh_at sb x ==> ~MEM x [p; idx; g; vld]) /\
+  alloca_history func s ==>
+  ?dst cc H tm.
+    array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+      p dst sz (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) cond_lbl sa 0 es cc /\
+    ghost_inv d cenv cx es H tm cc /\ ptr_covers H tm p cc sz /\
+    eval_operand lvo cc = SOME (n2w (LENGTH vs)) /\
+    op_prov H (Var idx) = NONE /\ op_taint tm (Var idx) = {} /\
+    op_prov H lvo = NONE /\ op_taint tm lvo = {} /\
+    array_caller_frame sa s cc /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK cc) /\
+    cc.vs_memory = s.vs_memory /\ s.vs_alloca_next <= cc.vs_alloca_next /\
+    alloca_history func cc /\
+    tm.t_mem = tn.t_mem UNION new_site_bytes s cc /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all immutable_optional_length_path_ptr >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `alloca_history func u` by
+    (drule_all immutable_optional_length_mem >> strip_tac >>
+     irule allocaHistoryTheory.alloca_history_frame >>
+     qexists_tac `u'` >>
+     `u.vs_allocas = s.vs_allocas` by
+       (qpat_x_assum `u = s with <|vs_vars := _; vs_inst_idx := _|>` SUBST1_TAC >> simp[]) >>
+     simp[]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sb x` by
+    (simp[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+  `!x q. cenv.ce_return_buf = SOME (PtrVar (Var x) q) ==>
+    ~MEM x [p; idx; g; vld]` by metis_tac[] >>
+  `!x. not_fresh_at sa x ==> ~MEM x [p; idx; g; vld]` by metis_tac[] >>
+  `lookup_block u.vs_current_bb func.fn_blocks =
+    SOME <|bb_label := lbl; bb_instructions := sb.cs_current_insts ++
+      [mk_inst aid ALLOCA [Lit (n2w sz)] [p]; mk_inst j JMP [Label entry] []]|>` by simp[] >>
+  drule_all immutable_allocate_initialize_ptr >>
+  disch_then (qspecl_then [`off`,`PG`,`D`] strip_assume_tac) >>
+  `tm.t_imm = tn.t_imm` by
+    (fs[ghost_inv_def, stor_taint_ok_def]) >>
+  `gas_path_ptr D 0 ctx func PG G tn s 0 H' tm' (OK cc)` by
+    (drule_all gas_path_ptr_then >> simp[]) >>
+  `new_site_bytes u cc = new_site_bytes s cc` by
+    (qpat_x_assum `u = s with <|vs_vars := _; vs_inst_idx := _|>` SUBST1_TAC >>
+     simp[new_site_bytes_def]) >>
+  qexistsl_tac [`dst`,`cc`,`H'`,`tm'`] >> simp[] >>
+  `u.vs_memory = s.vs_memory /\ u.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_x_assum `u = s with <|vs_vars := _; vs_inst_idx := _|>` SUBST1_TAC >> simp[]) >>
+  fs[array_caller_frame_def] >> metis_tac[]
+QED
