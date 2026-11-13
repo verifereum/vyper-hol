@@ -1,7 +1,7 @@
 (* Typed outcomes over the canonical actual-site memory decoder boundary. *)
 Theory abiDecodeMemTyped
 Ancestors
-  abiDecoderCoherence abiDecoderFrame abiDecoderFrameCompose
+  abiDecoderCoherence abiDecoderFrame abiDecoderFrameCompose abiDecodeMemActualFrame
   exprSimAbiDecodePrimitiveOwned exprSimAbiDecodeMemberExecute
   abiDecodeMemPrimitive abiDecodeMemPrimitiveReentry abiDecodeMemBytesReentry
   abiDecodeMemStaticFrame actualDecoderSites abiDecoderScalarOutcome abiDecoderReentryPointer
@@ -79,6 +79,11 @@ val typed_decoder_result = ``\ce env ty tv st fin s sb d.
         st.cs_next_id <= id /\ id < fin.cs_next_id /\
         FLOOKUP t.vs_allocas id = SOME (p,n)) /\
       abi_decode_footprint_frame ((d,type_memory_bytes ce ty)::fp) s t) /\
+    (?afp. (!p n. MEM (p,n) afp <=> ?inst.
+        MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+        st.cs_next_id <= inst.inst_id /\ inst.inst_id < fin.cs_next_id /\
+        FLOOKUP t.vs_allocas inst.inst_id = SOME (p,n)) /\
+      abi_decode_footprint_frame ((d,type_memory_bytes ce ty)::afp) s t) /\
     t.vs_current_bb = fin.cs_current_bb /\
     t.vs_inst_idx = LENGTH fin.cs_current_insts /\ ~t.vs_halted) \/
   (?t. gas_marked_path T ctx func s 0 (Abort Revert_abort t) /\
@@ -248,8 +253,8 @@ Resume abi_decode_typed_finite_success[normal_package]:
   >-
     (rpt strip_tac >> irule abi_decode_footprint_frame_mload >>
       qexists_tac `[(d,type_memory_bytes ce ty)]` >>
-      simp[GSYM abi_decode_frame_footprint, abi_footprint_disjoint_def] >> metis_tac[]) >>
-  qexists_tac `MAP SND (FILTER (\e. st.cs_next_id <= FST e /\
+      simp[GSYM abi_decode_frame_footprint, abi_footprint_disjoint_def] >> metis_tac[])
+  >- (qexists_tac `MAP SND (FILTER (\e. st.cs_next_id <= FST e /\
     FST e < fin.cs_next_id) (fmap_to_alist t.vs_allocas))` >>
   conj_tac
   >- (simp[MEM_MAP, MEM_FILTER, MEM_fmap_to_alist_FLOOKUP] >>
@@ -259,7 +264,11 @@ Resume abi_decode_typed_finite_success[normal_package]:
   irule abi_decode_footprint_frame_weaken >>
   qexists_tac `[(d,type_memory_bytes ce ty)]` >>
   simp[GSYM abi_decode_frame_footprint] >> rpt strip_tac >>
-  qexistsl_tac [`d`, `type_memory_bytes ce ty`] >> simp[])
+  qexistsl_tac [`d`, `type_memory_bytes ce ty`] >> simp[]) >>
+  qpat_assum `abi_decode_frame _ _ s (t with vs_inst_idx := _)`
+    (fn frame => mp_tac (Q.INST
+      [`func` |-> `func`, `lo` |-> `st.cs_next_id`, `hi` |-> `fin.cs_next_id`]
+      (MATCH_MP abi_decode_actual_output_frame frame))) >> simp[])
 QED
 
 Finalise abi_decode_typed_finite_success[local]
@@ -391,9 +400,16 @@ Resume abi_decode_typed_scalar_memory[success]:
   qexists_tac `v` >> simp[] >>
   rpt conj_tac
   >- first_assum ACCEPT_TAC
-  >- first_assum ACCEPT_TAC >>
-  qmatch_assum_rename_tac `abi_decode_footprint_frame ((d,32)::actual_fp) s _` >>
-  qexists_tac `actual_fp` >> conj_tac >> first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (qmatch_assum_rename_tac `!p n. MEM (p,n) coarse_fp <=> ?id.
+        st.cs_next_id <= id /\ id < fin.cs_next_id /\
+        FLOOKUP _ id = SOME (p,n)` >>
+      qexists_tac `coarse_fp` >> conj_tac >> first_assum ACCEPT_TAC) >>
+  qmatch_assum_rename_tac `!p n. MEM (p,n) site_fp <=> ?inst.
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    st.cs_next_id <= inst.inst_id /\ inst.inst_id < fin.cs_next_id /\
+    FLOOKUP _ inst.inst_id = SOME (p,n)` >>
+  qexists_tac `site_fp` >> conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Resume abi_decode_typed_scalar_memory[reject]:
