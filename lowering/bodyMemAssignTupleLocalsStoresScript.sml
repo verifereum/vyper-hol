@@ -429,6 +429,10 @@ Resume tuple_store_mixed_locals_path_mem[tail_premises]:
         qpat_x_assum `if is_word_type ty then store_lays_out _ _ _ else _` mp_tac >>
         simp[store_lays_out_def]) >> simp[]) >>
   `!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP s1.vs_allocas aid = SOME bs` by simp[] >>
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ es s`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def, state_rel_def]) >>
+     asm_rewrite_tac[]) >>
   drule_all tuple_store_memory_tail >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt conj_tac

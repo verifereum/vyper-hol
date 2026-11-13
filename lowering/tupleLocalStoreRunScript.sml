@@ -36,8 +36,8 @@ QED
 (* This applies to either a 32-byte MSTORE or a runtime-sized memory
    copy. Only the unread suffix, not the already-consumed head, survives. *)
 Theorem tuple_local_write_suffix:
-  !H func cenv cx es s id p dsz entry dw b sz addr elem vs tvs written mem' ctx.
-    stmt_state_rel H ctx func cenv cx es s /\
+  !func cenv es s id p dsz entry dw b sz addr elem vs tvs written mem'.
+    local_ptrs_rel func cenv es.scopes s /\ alloca_inv s /\
     lookup_scopes id es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) dsz) /\
     lookup_var p s = SOME dw /\
@@ -52,9 +52,12 @@ Theorem tuple_local_write_suffix:
     tuple_in_memory vs tvs (addr + elem) mem'
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all tuple_store_destination_region >> strip_tac >>
-  `alloca_inv s /\ local_ptrs_rel func cenv es.scopes s` by
-    fs[stmt_state_rel_def, state_rel_def] >>
+  `type_memory_size entry.type <= dsz` by
+    (qpat_assum `local_ptrs_rel _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
+     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  `local_region cenv es.scopes s id (w2n dw) dsz` by
+    (simp[local_region_def] >> metis_tac[]) >>
   `written <= dsz` by decide_tac >>
   drule_all (tuple_in_memory_unread_suffix |> SPEC_ALL
     |> Q.INST [`off` |-> `0`] |> GEN_ALL |> SRULE []) >> simp[]
@@ -257,8 +260,8 @@ Proof
 QED
 
 Theorem tuple_store_memory_tail:
-  !H func cenv cx es s t st scopes' id p dsz entry dw b sz addr tv tvs v vs written ctx.
-    stmt_state_rel H ctx func cenv cx es s /\
+  !func cenv es s t st scopes' id p dsz entry dw b sz addr tv tvs v vs written.
+    local_ptrs_rel func cenv es.scopes s /\ alloca_inv s /\
     lookup_scopes id es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) dsz) /\
     lookup_var p s = SOME dw /\
@@ -570,6 +573,10 @@ Resume tuple_store_mixed_locals_path[tail_memory]:
         qpat_x_assum `if is_word_type ty then store_lays_out _ _ _ else _` mp_tac >>
         simp[stmtSimDeclStoreTheory.store_lays_out_def]) >>
      simp[]) >>
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ es s`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def, state_rel_def]) >>
+     asm_rewrite_tac[]) >>
   drule_all tuple_store_memory_tail >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `values_have_types tvs1 vs1` by
