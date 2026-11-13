@@ -1,8 +1,7 @@
-(* Equal-layout immutable assignment uses the fixed word-copy endpoint. *)
+(* Existing SOME-base assignment contract follows from the counted endpoint. *)
 Theory immutableAssignFixedMem
 Ancestors
-  immutableFixedCopyTransportMem immutableConstructorRelation immutableDeployAssignBytes
-  exprLoweringProps stmtLowering context compileEnv loweringSlice valueEncodingProps venomState loweringStateRelDefs vyperTypeValues
+  immutableAssignFixedPathMem loweringStateRelDefs
 
 Theorem immutable_assign_fixed_mem_endpoint:
   compile_assign_value ce dst LocCode src F sl dty dty
@@ -36,44 +35,10 @@ Theorem immutable_assign_fixed_mem_endpoint:
     t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
-  `?n. type_memory_size dtv = 32 * n /\ 0 < n` by
-    (qexists_tac `type_memory_size dtv DIV 32` >>
-     mp_tac (Q.SPEC `32` arithmeticTheory.DIVISION) >>
-     simp[] >> disch_then (qspec_then `type_memory_size dtv` mp_tac) >>
-     simp[] >> decide_tac) >>
-  `compile_imm_store_words (SOME region) src dst n 0 sm = ((),sb)` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[compile_assign_value_def, comp_bind_def, comp_return_def] >>
-     Cases_on `n = 1` >-
-       (gvs[] >> CONV_TAC (DEPTH_CONV numLib.num_CONV) >>
-        simp[compile_imm_store_words_def, compile_lit_byte_offset_def,
-             comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-        pairarg_tac >> gvs[] >> pairarg_tac >> gvs[]) >>
-     `~(32*n <= 32) /\ (32*n+31) DIV 32 = n` by simp[] >> simp[]) >>
-  `!x. src = Var x ==> not_fresh_at sm x` by metis_tac[] >>
-  `!x. dst = Var x ==> not_fresh_at sm x` by metis_tac[] >>
-  `!x. region = Var x ==> not_fresh_at sm x` by metis_tac[] >>
-  `a + 0 + 32*n <= s.vs_alloca_next /\
-   off + 0 + 32*n <= s.vs_alloca_next /\
-   a + 0 + 32*n < dimword (:256) /\
-   off + 0 + 32*n < dimword (:256) /\
-   (off+0+32*n <= a+0 \/ a+0+32*n <= off+0)` by
-    gvs[regions_disjoint_def] >>
-  drule immutable_fixed_copy_operand_mem_endpoint >>
-  disch_then (qspecl_then [`s`, `func`, `ctx`, `off`, `a`] mp_tac) >>
-  simp[] >> strip_tac >>
-  `val_wf dtv v` by metis_tac[immutable_admissible_val_wf] >>
-  `well_formed_type_value dtv` by
-    metis_tac[evaluate_type_well_formed_type_value] >>
-  `val_in_memory dtv v off (mcopy off a (32*n) s).vs_memory` by
-    (irule mcopy_establishes_val_in_memory >> simp[]) >>
-  qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  gvs[] >>
-  `immutable_value_bytes_rel dtv v
-    (mem_bytes_at a (32*n) s.vs_memory)` by
-    metis_tac[immutable_memory_bytes] >>
-  fs[lookup_var_def, same_blocks_def] >>
-  conj_tac >- metis_tac[] >>
-  qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
-  metis_tac[]
+  `!base. ce.ce_imm_alloca = SOME base ==> eval_operand base s = SOME 0w` by
+    simp[] >>
+  `!x. src = Var x \/ dst = Var x \/
+      (?r. ce.ce_imm_alloca = SOME r /\ r = Var x) ==> not_fresh_at sm x` by
+    (simp[] >> metis_tac[]) >>
+  drule_all immutable_assign_fixed_mem_path_endpoint >> metis_tac[]
 QED
