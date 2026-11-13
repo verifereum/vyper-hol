@@ -365,7 +365,7 @@ Proof
   rpt strip_tac >>
   drule_all (cj 1 (SPEC_ALL (cj 6 eval_scc_type_sound_mutual))) >> simp[]
 QED
-Theorem eval_expr_results_preserves_runtime_consistent_from_eval[local]:
+Theorem eval_expr_results_preserves_runtime_consistent_from_eval:
   eval_expr_results cx es st = (res,st') /\
   well_typed_exprs env es /\ runtime_consistent env cx st /\
   functions_well_typed cx /\
