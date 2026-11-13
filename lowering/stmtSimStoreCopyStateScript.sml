@@ -6,19 +6,6 @@ Ancestors
   vfmState venomState venomMemDefs valueEncoding
   list rich_list arithmetic words
 
-Theorem stmt_state_selected_storage_agree:
- !ctx func cenv cx es s tr.
- stmt_state_rel ctx func cenv cx es s ==>
- storage_agree (storage_dead cx tr (get_storage cx es tr))
-   (get_storage cx es tr)
-   (if tr then contract_transient s else contract_storage s)
-Proof
- rpt gen_tac >> strip_tac >> Cases_on `tr` >>
- gvs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
-     get_storage_def, lookup_account_def]
-QED
-
-
 Theorem place_store_normalize_state:
   stmt_state_rel ctx func cenv cx es (store_copy_normalize q t) /\
   local_ptrs_reserved cenv sa /\

@@ -1,7 +1,7 @@
 Theory appendStorageAggregateRel
 Ancestors
   appendStorageRel storageCopyLive placeStoreSlots
-  stmtSimStoreCopyState
+  stmtSimStoreCopyState stmtSimAssignStorageCopy
   stmtSimAppendStorage stmtSimStoreCopy bodyMemAssignTopCopySem
   stmtSimDefs stmtSimProps exprSimProps exprLoweringProps
   accountsRelProps loweringStateRelDefs vyperStorageFrame vyperStorageBackend
@@ -95,29 +95,6 @@ Proof
   gvs[lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM]
 QED
 
-(* The reusable fold in assignBasePtrStorageSemantic currently imports the
-   constSubstCorrect red cone; keep this field calculation local. *)
-Theorem assign_base_store_backend_fold[local]:
-  !is k ws s tr.
-    FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t) s is =
-    if tr then
-      s with vs_transient :=
-        (s.vs_call_ctx.cc_address =+
-          FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
-            (contract_transient s) is) s.vs_transient
-    else
-      s with vs_accounts :=
-        (s.vs_call_ctx.cc_address =+
-          (lookup_account s.vs_call_ctx.cc_address s.vs_accounts with storage :=
-            FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
-              (contract_storage s) is)) s.vs_accounts
-Proof
-  Induct >> rpt gen_tac >> Cases_on `tr` >>
-  simp[listTheory.FOLDL, sstore_def, tstore_def, contract_storage_def,
-       contract_transient_def, vfmStateTheory.lookup_account_def,
-       combinTheory.APPLY_UPDATE_THM, combinTheory.APPLY_UPDATE_ID]
-QED
-
 Theorem append_aggregate_accounts_fold[local]:
   accounts_rel cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
   storage_agree (storage_dead cx tr stor) stor
@@ -127,7 +104,7 @@ Theorem append_aggregate_accounts_fold[local]:
     ((if tr then tstore else sstore) slot h
       (FOLDL (\t i. (if tr then tstore else sstore) (a+n2w i) (ws i) t) s is))
 Proof
-  strip_tac >> simp[assign_base_store_backend_fold] >> Cases_on `tr` >> gvs[]
+  strip_tac >> simp[storage_copy_backend_fold] >> Cases_on `tr` >> gvs[]
   >- (irule accounts_rel_set_transient >>
       qexistsl_tac [`es`, `s`, `stor`] >>
       simp[set_storage_backend_eq, tstore_def, contract_transient_def,
@@ -160,7 +137,7 @@ Proof
   qmatch_asmsub_abbrev_tac `accounts_rel cx es1 s1` >>
   drule accounts_rel_storage_transient >> strip_tac >>
   `state_rel func cenv cx es1 s1` by
-    (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`, assign_base_store_backend_fold] >>
+    (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`, storage_copy_backend_fold] >>
      fs[stmt_state_rel_def, state_rel_def, set_storage_def, sstore_def, tstore_def,
         local_ptrs_rel_def, local_backed_def, local_region_def, lookup_var_def,
         immutables_rel_def, logs_rel_def] >> gvs[] >> metis_tac[]) >>
@@ -168,16 +145,16 @@ Proof
     (`immutable_alloca_sep func cenv cx es s` by fs[stmt_state_rel_def] >>
      irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
      simp[] >> Cases_on `tr` >>
-     simp[Abbr `s1`, Abbr `es1`, assign_base_store_backend_fold, sstore_def, tstore_def,
+     simp[Abbr `s1`, Abbr `es1`, storage_copy_backend_fold, sstore_def, tstore_def,
           set_storage_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
   `immutable_base_zero cenv s1` by
     (`immutable_base_zero cenv s` by fs[stmt_state_rel_def] >>
      irule immutable_base_zero_frame >> qexists_tac `s` >>
-     Cases_on `tr` >> simp[Abbr `s1`, assign_base_store_backend_fold, sstore_def, tstore_def, lookup_var_def]) >>
+     Cases_on `tr` >> simp[Abbr `s1`, storage_copy_backend_fold, sstore_def, tstore_def, lookup_var_def]) >>
   irule stmt_state_rel_allocas_frame >>
   qpat_assum `immutable_base_zero cenv _` (irule_at Any) >> simp[] >>
   qexistsl_tac [`s`, `es`] >> simp[] >> Cases_on `tr` >>
-  simp[Abbr `s1`, assign_base_store_backend_fold, sstore_def, tstore_def]
+  simp[Abbr `s1`, storage_copy_backend_fold, sstore_def, tstore_def]
 QED
 
 Theorem append_sparse_agree_at_word[local]:
@@ -265,7 +242,7 @@ Proof
       conj_tac >- metis_tac[] >>
       conj_asm1_tac
       >- (gvs[type_slot_size_def] >> decide_tac) >>
-      reverse conj_tac >- metis_tac[stmt_state_selected_storage_agree] >>
+      reverse conj_tac >- metis_tac[storage_copy_initial_agree] >>
       rpt strip_tac >>
       `w2n dst < dimword (:256)` by simp[] >>
       `EL b (word_to_bytes
