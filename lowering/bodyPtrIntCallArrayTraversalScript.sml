@@ -7,6 +7,7 @@ Ancestors
   bodyPtrIntCallArraySuccessor bodyPtrIntCallArrayIteration
   typedArrayLoopStructure typedArrayLoopCode abiStaticLoopCode
   context logValueFramePtr loweringStateRelDefs venomState arithmetic
+  ptrDiscipline finite_map pred_set ssaOperandFrame
 
 (* All seven parent temporaries predate the recursive child.  In particular
    its counter and derived pointers can be protected by the usual fresh
@@ -189,4 +190,42 @@ Proof
      fs[venom_state_component_equality]) >>
   drule_all intcall_array_header_iteration_counted >>
   simp[Abbr `Inv`]
+QED
+
+(* Entry inputs have no counter requirement: entry creates the clean zero. *)
+val array_initial = ``
+  ~s.vs_halted /\
+  eval_operand len s = SOME (n2w (LENGTH vs)) /\
+  op_prov G len = NONE /\ op_taint tn len = {} /\
+  eval_operand src s = SOME (n2w a) /\ eval_operand dst s = SOME (n2w b) /\
+  op_prov G src = SOME sp /\ op_prov G dst = SOME dp /\
+  op_taint tn src = {} /\ op_taint tn dst = {} /\
+  (!i. i < LENGTH vs ==> !m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory stv (EL i vs) (a+i*ss) m) /\
+  (?aid. FLOOKUP s.vs_allocas aid = SOME sp) /\
+  (?aid. FLOOKUP s.vs_allocas aid = SOME dp)``;
+
+Theorem intcall_typed_array_entry_invariant[local]:
+  !D ctx fn PG G tn s id vb cl len src dst vs a b sp dp stv dtv ss ds R bb.
+  ^array_initial /\ ~ctx_has_dalloca ctx /\
+  compiler_var_name vb 0 NOTIN
+    (R UNION {x | len = Var x \/ src = Var x \/ dst = Var x}) /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (typed_array_loop_entry id vb cl)
+    (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?t H tf. gas_path_ptr D 0 ctx fn PG G tn s 0 H tf (OK t) /\
+    (\s0 G0 tn0. ^array_header_invariant) s G tn 0 t H tf
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `Q = R UNION {x | len = Var x \/ src = Var x \/ dst = Var x}` >>
+  drule_all intcall_typed_array_entry_counted >>
+  disch_then (qspecl_then [`D`, `PG`, `G`, `tn`] strip_assume_tac) >>
+  qpat_assum `gas_path_ptr D 0 ctx fn PG G tn s 0 _ _ _` (irule_at Any) >>
+  BETA_TAC >>
+  Cases_on `src` >> gvs[op_prov_def] >>
+  Cases_on `dst` >> gvs[op_prov_def] >>
+  Cases_on `len` >>
+  gvs[Abbr `Q`, jump_to_def, update_var_def, eval_operand_def,
+    lookup_var_def, op_prov_def, op_taint_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
 QED
