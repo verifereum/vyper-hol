@@ -36,8 +36,8 @@ val extcall_return_compiler = ``\ce rt dt has def addr skip buf mn mx bytes info
         (compile_abi_decode_to_buf result.buf_operand (Lit 0w) MLOAD buf hi info)
         (comp_return result.buf_operand)))``;
 
-Theorem extcall_compile_call_stages:
-  compile_call cfn ce ann ty (ExtCall stat skip (fname,ats,rt) opts)
+val extcall_call_stages_statement =
+  rhs (concl (SIMP_CONV bool_ss [LET_THM] ``compile_call cfn ce ann ty (ExtCall stat skip (fname,ats,rt) opts)
     (addr::rest) dflt sa = (vv,sb) ==>
   let pos = TAKE (LENGTH ats) rest;
       kws = DROP (LENGTH ats) rest;
@@ -59,7 +59,10 @@ Theorem extcall_compile_call_stages:
        (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT cats))
        (type_to_abi_dec_info ce.ce_struct_fields ce wrapped) s5 = (result,sb)) /\
     vv = if rt = NoneT then StackValue ann result
-         else LocatedValue ann (mk_ptr result LocMemory)
+         else LocatedValue ann (mk_ptr result LocMemory)``));
+
+Theorem extcall_compile_call_stages:
+  ^extcall_call_stages_statement
 Proof
   simp_tac std_ss [compile_call_def, LET_THM, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>

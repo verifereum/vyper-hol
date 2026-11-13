@@ -65,10 +65,12 @@ Theorem extcall_return_decoder_types:
   expr_body_pre ce cx env
     (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dflt) es /\
   rt <> NoneT ==>
-  let wrapped = if needs_external_call_wrap rt then TupleT [rt] else rt in
-  assignable_type (get_tenv cx) wrapped /\
-  abi_decode_bytes_widths (get_tenv cx) wrapped /\
-  ?tv. abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields wrapped tv
+  assignable_type (get_tenv cx)
+    (if needs_external_call_wrap rt then TupleT [rt] else rt) /\
+  abi_decode_bytes_widths (get_tenv cx)
+    (if needs_external_call_wrap rt then TupleT [rt] else rt) /\
+  ?tv. abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields
+    (if needs_external_call_wrap rt then TupleT [rt] else rt) tv
 Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   `expr_sim_inv ce cx env es /\
@@ -96,11 +98,16 @@ QED
 Theorem extcall_return_size_bounds:
   expr_body_pre ce cx env
     (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dflt) es ==>
-  let wrapped = if needs_external_call_wrap rt then TupleT [rt] else rt in
-  abi_static_size ce.ce_struct_fields wrapped <= abi_size_bound ce.ce_struct_fields wrapped /\
-  abi_size_bound ce.ce_struct_fields wrapped < 2 ** 64 /\
-  abi_static_size ce.ce_struct_fields wrapped < dimword (:256) /\
-  abi_size_bound ce.ce_struct_fields wrapped < dimword (:256)
+  abi_static_size ce.ce_struct_fields
+    (if needs_external_call_wrap rt then TupleT [rt] else rt) <=
+  abi_size_bound ce.ce_struct_fields
+    (if needs_external_call_wrap rt then TupleT [rt] else rt) /\
+  abi_size_bound ce.ce_struct_fields
+    (if needs_external_call_wrap rt then TupleT [rt] else rt) < 2 ** 64 /\
+  abi_static_size ce.ce_struct_fields
+    (if needs_external_call_wrap rt then TupleT [rt] else rt) < dimword (:256) /\
+  abi_size_bound ce.ce_struct_fields
+    (if needs_external_call_wrap rt then TupleT [rt] else rt) < dimword (:256)
 Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   `ext_call_alloc_ok ce (ExtCall stat skip (fname,ats,rt) opts) args` by
