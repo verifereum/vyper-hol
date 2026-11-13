@@ -8,7 +8,7 @@ Ancestors
   stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel planWf
   reorderSim genBlockSim doSwapSim planAlign livenessAnalysisProps stackPlanOps
   fnFrameTerminalHalt fnFrameTerminalAbort genericInputReady inputMaterialised livenessProofs operandInventory reorderStages fnPlanLineageInventory fnPlanLineageReorder fnPlanPrefix
-  venomWfProps
+  venomWfProps planEmissionProps asmRunBounded
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -3824,7 +3824,8 @@ Theorem rf_strict_suffix_abort:
   a = Revert_abort /\
   ?n out. n <= LENGTH (execute_plan initial_fmp ops) /\
     asm_steps lo o2pc prog n st = AsmRevert out /\
-    venom_asm_terminal_rel s_end out
+    venom_asm_terminal_rel s_end out /\
+    create_safe_prefix lo o2pc prog n st
 Proof
   measureInduct_on `j - k` >> rpt gen_tac >> strip_tac >> disch_tac >>
   `i <= k` by decide_tac >>
@@ -3861,6 +3862,13 @@ Proof
     gvs[execute_plan_append, asm_block_at_append] >>
   `!off. ~MEM (SOSpill off) step_ops /\ ~MEM (SORestore off) step_ops` by
     fs[MEM_APPEND] >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan initial_fmp step_ops)) st` by
+    (drule generate_regular_forward_execute_safe >> simp[] >>
+     impl_tac >- (rpt IF_CASES_TAC >> simp[]) >>
+     disch_then (qspec_then `initial_fmp` assume_tac) >>
+     irule asm_block_create_safe_prefix >>
+     goal_assum (drule_at Any) >> simp[]) >>
   Cases_on `k = j` >- suspend "revert" >>
   suspend "assign"
 QED
@@ -3949,6 +3957,8 @@ Resume rf_strict_suffix_abort[assign]:
   simp[] >> strip_tac >> simp[] >>
   qexistsl_tac [`LENGTH (execute_plan initial_fmp step_ops) + n`, `out'`] >>
   conj_tac >- simp[execute_plan_append] >>
+  reverse conj_tac
+  >- simp[create_safe_prefix_compose] >>
   simp[] >>
   qpat_x_assum `asm_steps _ _ _ _ st = AsmOK _`
     (mp_then Any (qspec_then `n` mp_tac) asm_steps_add_ok) >>
@@ -4154,10 +4164,19 @@ Theorem rf_entry_forward_abort:
       n <= LENGTH (execute_plan cp.cp_initial_fmp ops) /\
       ((a = Revert_abort /\ asm_steps lo o2pc prog n ast = AsmRevert ast_end) \/
        (a = ExHalt_abort /\ asm_steps lo o2pc prog n ast = AsmFault ast_end)) /\
-      venom_asm_terminal_rel vs_end ast_end
+      venom_asm_terminal_rel vs_end ast_end /\
+      create_safe_prefix lo o2pc prog n ast
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all rf_entry_copy_setup >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `execute_plan fmp step_ops` >>
+  `create_safe_prefix lo o2pc prog
+     (LENGTH (execute_plan fmp step_ops)) ast` by
+    (drule generate_regular_forward_execute_safe >> simp[] >>
+     disch_then (qspec_then `fmp` assume_tac) >>
+     irule asm_block_create_safe_prefix >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  qunabbrev_tac `fmp` >>
   drule_all rf_copy_source_alignment >> disch_then (assume_tac o GSYM) >>
   Cases_on `emit_input_plan RETURNDATACOPY (compute_operands inst)
     (live_vars_at liveness bb.bb_label (SUC i)) ps` >>
@@ -4252,6 +4271,7 @@ Proof
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   qexistsl_tac [`LENGTH (execute_plan cp'.cp_initial_fmp step_ops) + n`, `out`] >>
   conj_tac >- simp[execute_plan_append] >>
+  reverse conj_tac >- simp[create_safe_prefix_compose] >>
   simp[] >>
   qpat_x_assum `asm_steps _ _ _ _ ast = AsmOK _`
     (mp_then Any (qspec_then `n` mp_tac) asm_steps_add_ok) >>

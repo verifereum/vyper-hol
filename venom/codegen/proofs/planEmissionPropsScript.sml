@@ -425,13 +425,27 @@ Theorem plan_admin_create_safe_prefix:
   n <= LENGTH (execute_plan fmp ops) ==>
   create_safe_prefix lo o2pc prog n s
 Proof
-  strip_tac >> drule plan_admin_execute_safe >> strip_tac >>
-  rw[create_safe_prefix_def] >>
-  `t.as_pc = s.as_pc + j` by
-    (irule asm_steps_pc_advance >> goal_assum (drule_at Any) >>
-     qexists `execute_plan fmp ops` >> simp[EVERY_MEM] >>
-     gvs[EVERY_MEM] >> metis_tac[]) >>
-  `EL t.as_pc prog = EL j (execute_plan fmp ops)` by
-    (gvs[asm_block_at_def]) >>
-  gvs[EVERY_EL] >> metis_tac[]
+  strip_tac >> irule asm_block_create_safe_prefix >>
+  goal_assum (drule_at Any) >> simp[plan_admin_execute_safe]
+QED
+
+Theorem generate_regular_forward_execute_safe:
+  generate_regular_inst_plan lv dfg cfg fn inst live halting term cur ps =
+    (ops, ps') /\ MEM inst.inst_opcode [ASSIGN; RETURNDATACOPY; REVERT] ==>
+  EVERY (\i. i <> AsmOp "JUMP" /\ i <> AsmOp "JUMPI" /\
+             !stk. create_safe i stk) (execute_plan fmp ops)
+Proof
+  strip_tac >>
+  `EVERY (\op. EVERY (\i. i <> AsmOp "JUMP" /\ i <> AsmOp "JUMPI" /\
+    !stk. create_safe i stk) (exec_stack_op fmp op)) ops` suffices_by
+    (simp[execute_plan_def, EVERY_FLAT, EVERY_MAP]) >>
+  drule generate_regular_inst_plan_preserves >>
+  disch_then (qspec_then `\op. EVERY (\i. i <> AsmOp "JUMP" /\
+    i <> AsmOp "JUMPI" /\ !stk. create_safe i stk)
+    (exec_stack_op fmp op)` mp_tac) >> simp[] >>
+  impl_tac >- (conj_tac
+    >- metis_tac[plan_admin_exec_safe] >>
+    rpt gen_tac >> strip_tac >>
+    gvs[generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def,
+        exec_stack_op_def, create_safe_def]) >> simp[]
 QED

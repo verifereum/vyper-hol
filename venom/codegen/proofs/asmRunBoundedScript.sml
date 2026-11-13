@@ -12,7 +12,7 @@
 
 Theory asmRunBounded
 Ancestors
-  asmSem asmWf vfmConstants words list
+  asmSem asmWf vfmConstants words list stackOpSim
 
 (* The memory ranges (offset, size) an assembly instruction reads or
    writes, from its operands on the stack (top first, as the EVM pops
@@ -248,4 +248,21 @@ Proof
   namedCases_on `tail` ["", "off tail2"] >> simp[asm_inst_gas_ok_def] >>
   namedCases_on `tail2` ["", "sz tail3"] >>
   simp[asm_inst_gas_ok_def, asm_mem_ranges_def]
+QED
+
+(* A straight-line footprint certifies every inspected instruction, including
+   a faulting or reverting last step. *)
+Theorem asm_block_create_safe_prefix:
+  EVERY (\i. i <> AsmOp "JUMP" /\ i <> AsmOp "JUMPI" /\
+             !stk. create_safe i stk) code /\
+  asm_block_at prog s.as_pc code /\ n <= LENGTH code ==>
+  create_safe_prefix lo o2pc prog n s
+Proof
+  strip_tac >> rw[create_safe_prefix_def] >>
+  `t.as_pc = s.as_pc + j` by
+    (irule asm_steps_pc_advance >> goal_assum (drule_at Any) >>
+     qexists `code` >> simp[EVERY_MEM] >>
+     gvs[EVERY_MEM] >> metis_tac[]) >>
+  `EL t.as_pc prog = EL j code` by gvs[asm_block_at_def] >>
+  gvs[EVERY_EL] >> metis_tac[]
 QED
