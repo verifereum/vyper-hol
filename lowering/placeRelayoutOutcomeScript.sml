@@ -31,9 +31,7 @@ QED
 
 Theorem owned_target_relayout_store_outcome:
   compile_assign_value cenv dst loc op (is_word_type dty) src_loc dty sty
-    (case dty of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-     | _ => NONE) (type_memory_bytes cenv dty) sb = ((),sf) /\
+    (type_memory_bytes cenv dty) sb = ((),sf) /\
   compile_get_target_ptr cfn cenv bt sa = ((dst,SOME loc,SOME (ValPT dty)),sb) /\
   target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
     (dst,SOME loc,SOME (ValPT dty)) s /\

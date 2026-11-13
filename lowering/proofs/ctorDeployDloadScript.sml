@@ -6,7 +6,7 @@
 Theory ctorDeployDload
 Ancestors
   ctorDeployDefs o1PassContract gasSummary unitMemInv lowerDloadDefs
-  ctorDeployMemoryFrontier ctorDeployMemoryRunMem ctorDeployImmBudget
+  ctorDeployMemoryFrontier loweredUnitMemoryFrontier ctorDeployMemoryRunMem ctorDeployImmBudget
 
 Theorem deploy_unit_dload_ok:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
