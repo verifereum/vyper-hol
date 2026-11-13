@@ -1094,8 +1094,6 @@ Resume extcall_call_step[call_success]:
      >- metis_tac[exprSafeOperandTheory.safe_operand_mono]
      >- metis_tac[exprSafeOperandTheory.safe_operand_mono]
      >- metis_tac[exprSafeOperandTheory.safe_operand_mono]
-     >- simp[wordsTheory.dimword_def]
-     >- (simp[wordsTheory.dimword_def] >> decide_tac)
      >- (qexistsl [`live`, `buf_size`] >> simp[] >> decide_tac) >>
      metis_tac[]) >>
   `gas_path ctx func t (n + (n' + n'')) (OK (jump_to sr.cs_current_bb u'))` by
