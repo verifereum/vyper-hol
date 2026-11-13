@@ -88,7 +88,8 @@ QED
 
 Theorem abi_encode_bytes_vv_post:
   expr_type e = BaseT (BytesT (Dynamic N)) /\
-  stmt_state_rel ctx func ce cx es' actual /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es' actual /\
+  storage_well_formed_on cx es' (FST H) /\
   read_result cx result es' = (INL (BytesV payload),es') /\
   eval_operand out actual = SOME (n2w p) /\ p < dimword (:256) /\
   LENGTH payload <= N /\
@@ -99,13 +100,14 @@ Theorem abi_encode_bytes_vv_post:
   (!name b n. local_region ce es'.scopes actual name b n ==> p+sz <= b \/ b+n <= p) /\
   wb_frame ce es es' origin s0 actual /\
   (~expr_has_effect e ==> pure_frame ce func es origin s0 actual) ==>
-  vv_post ctx func ce cx e es origin sb s0 es' result
+  vv_post H ctx func ce cx e es origin sb s0 es' result
     (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) actual
 Proof
   strip_tac >>
   `post_value_type ce e = expr_type e` by
     (irule post_value_type_bytestring >> simp[compileEnvTheory.is_bytestring_type_def]) >>
   simp_tac bool_ss [vv_post_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (simp[] >> irule abi_encode_bytes_vv_holds >>
     goal_assum (drule_at Any) >> simp[]) >>
@@ -115,7 +117,7 @@ Proof
 QED
 
 Theorem abi_encode_nonword_success_suffix:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
@@ -137,7 +139,7 @@ Theorem abi_encode_nonword_success_suffix:
     gas_marked_path F ctx func s 0 (OK actual) /\
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode F mid0) ty [e])
+    vv_post H ctx func ce cx (TypeBuiltin ann (AbiEncode F mid0) ty [e])
       es origin sb s0 es'
       (Value (BytesV (abi_encode_method_id_bytes mid0 ++
         enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av)))
@@ -177,7 +179,7 @@ Proof
   drule abi_encode_strict_id_growth >> strip_tac >>
   `~expr_has_effect e ==> pure_frame ce func es origin s0 actual` by
     (strip_tac >>
-     qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _`
+     qpat_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
      `pure_frame ce func es origin s0 s` by
        (qpat_x_assum `~expr_has_effect e ==> _` irule >> first_assum ACCEPT_TAC) >>
@@ -189,6 +191,7 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   irule abi_encode_bytes_vv_post >>
   goal_assum (drule_at Any) >>
   simp[read_result_def, return_def] >>
