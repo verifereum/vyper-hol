@@ -197,9 +197,11 @@ Resume slice_extcode_typed_entry[address]:
   `expr_sim_inv cenv cx env (mid' with gas_obs := []) /\
    MAP FDOM (mid with gas_obs := []).scopes = MAP FDOM (mid' with gas_obs := []).scopes /\
    ?k. v = IntV (&k) /\ k < dimword (:256) /\ eval_operand len_op t' = SOME (n2w k)` by
-    (irule (INST_TYPE [alpha |-> ``:256``] slice_uint_read_post) >>
-     goal_assum (drule_at Any) >> simp[] >>
-     qexists_tac `gs2` >> fs[] >> metis_tac[]) >>
+    (qpat_assum `expr_post _ _ _ _ _ len _ _ _ _ _ _ _ _`
+       (mp_then (Pos last) mp_tac
+          (INST_TYPE [alpha |-> ``:256``] slice_uint_read_post)) >>
+     disch_then (qspec_then `gs2` mp_tac) >>
+     impl_tac >- (fs[] >> metis_tac[]) >> simp[]) >>
   `~t'.vs_halted` by metis_tac[slice_marked_read_ok_not_halted] >>
   qpat_x_assum `gas_marked_exec _ _ _ _ marks _ _ _` kall_tac >>
   qpat_x_assum `gas_marked_exec _ _ _ _ marks' _ _ _` kall_tac >>

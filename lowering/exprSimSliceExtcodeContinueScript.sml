@@ -537,11 +537,9 @@ Resume slice_extcode_tail_outcome[success]:
   irule slice_extcode_success_outcome >> simp[] >>
   qexists_tac `t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx` >>
   simp[fragGasModeTheory.gas_marked_path_def] >>
-  conj_tac
-  >- (qpat_x_assum `gas_path _ _ _ _ _` mp_tac >> simp[]) >>
   `es with gas_obs := [] = es` by
     (qpat_x_assum `es.gas_obs = []` (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
-  rpt strip_tac >>
+  rpt conj_tac >> rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> !k. _`
     (drule_then (qspec_then `t.vs_inst_idx` mp_tac)) >> simp[]
 QED
