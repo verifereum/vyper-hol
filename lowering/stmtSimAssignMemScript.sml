@@ -366,7 +366,7 @@ Proof
         metis_tac[val_footprint_le] >>
       `s.vs_current_bb = sx.cs_current_bb /\
        s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-      drule_all alloc_copy_memory_framed_path >>
+      drule_all alloc_copy_memory_framed_bounded_path >>
       disch_then (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
       `alloca_frame cenv es sa s cenv es u` by
         (irule alloca_frame_owned_copy >>
@@ -472,7 +472,7 @@ Resume local_memory_assign_widen_path[staged]:
   `src <> Var tmp` by metis_tac[] >>
   `s.vs_current_bb = sx.cs_current_bb /\
    s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-  drule_all alloc_copy_memory_framed_path >>
+  drule_all alloc_copy_memory_framed_bounded_path >>
   disch_then (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
   `alloca_frame cenv es sa s cenv es u` by
     (irule alloca_frame_owned_copy >> simp[] >>

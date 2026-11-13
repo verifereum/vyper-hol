@@ -23,6 +23,7 @@ QED
 
 Theorem source_selected_guarded_code:
   lower_vyper_runtime_unit tops rp = SOME u /\ supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
   valid_vyper_call tops tx cd ret /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,F,args,[],ret,fbody) /\
@@ -41,10 +42,10 @@ Proof
   `MEM (mut,F,lookup_raw_return_or_F (NONE : num option)
      tx.function_name External tops,tx.function_name,args,([] : expr list),ret,fbody)
      (FST (classify_functions tops))` by
-    (irule supported_external_lookup_classified >>
-     conj_tac >- gvs[valid_vyper_call_def] >>
-     simp[] >> qexists `tops` >>
-     gvs[supported_program_def, supported_declaration_headers_def]) >>
+    (`tx.function_name <> "__default__"` by gvs[valid_vyper_call_def] >>
+     `EVERY (supported_declaration_header tops) tops` by
+       gvs[supported_program_def, supported_declaration_headers_def] >>
+     drule_all supported_external_lookup_classified >> simp[]) >>
   drule_all lower_runtime_selected_source_packages >> strip_tac >>
   qabbrev_tac `pkg = set_external_package_target rp.rpol_target
     (package_external_fn tops T (K global_nonreentrant_slot)

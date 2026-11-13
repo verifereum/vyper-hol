@@ -68,7 +68,8 @@ Theorem deploy_ptr_entry_normalized:
         phi_prefix_length bb.bb_instructions = 0)
 Proof
   strip_tac >>
-  `supported_program tops` by fs[deploy_source_ok_def] >>
+  `supported_program tops /\ supported_program_deploy tops` by
+    fs[deploy_source_ok_def] >>
   drule_all ctorDeployMemoryRunMemEntryBoundaryTheory.ctor_checked_code_lookup_identity >> strip_tac >> gvs[] >>
   drule_all deploy_prefix_ctor_entry_label >> strip_tac >> gvs[] >>
   drule_all deploy_prefix_no_dalloca >> strip_tac >>
@@ -174,7 +175,8 @@ Proof
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac
     classify_functions_ctor_lookup >> simp[] >> strip_tac >>
   fs[deploy_ctor_start_def] >>
-  gvs[package_constructor_def, set_constructor_package_target_def]
+  gvs[package_constructor_def, set_constructor_package_target_def,
+      constSubstTheory.subst_consts_fn_metadata]
 QED
 
 (* One concrete endpoint for both semantic reconstruction and the ghost. *)
@@ -276,8 +278,13 @@ Proof
   drule_all deploy_ctor_entry_data_section >> strip_tac >>
   `constructor_args_encode tops tx initial.vs_data_section` by simp[Abbr `initial`] >>
   drule_all ctorDeployLoweringEntryInputsTheory.deploy_ctor_common_source_witness >> strip_tac >>
+  `supported_program tops` by fs[deploy_source_ok_def] >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supportedDeclsTheory.supported_headers_module_consts_env,
+              supportedProgramTheory.supported_program_def,
+              supportedDeclsTheory.supported_declaration_headers_def] >>
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac classify_functions_ctor_lookup >>
-  simp[] >> strip_tac >> gvs[] >>
+  simp[] >> strip_tac >> gvs[constSubstTheory.subst_consts_fn_empty] >>
   drule_all lower_vyper_deploy_unit_ctor_named_init >> strip_tac >>
   PairCases_on `cf` >> gvs[ctor_named_init_def] >>
   `is_payable = (cf0 = Payable) /\ ret = NoneT` by
@@ -424,7 +431,8 @@ QED
 Proof
   strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.SPEC `T` deploy_ptr_entry_prefix_source_mode)) >> strip_tac >> gvs[] >>
   drule deploy_ptr_ctor_environment >> strip_tac >>
-  `deploy_typing_ok tops am tx /\ supported_program tops` by fs[deploy_source_ok_def] >>
+  `deploy_typing_ok tops am tx /\ supported_program tops /\
+   supported_program_deploy tops` by fs[deploy_source_ok_def] >>
   `immutables_rel ce (deploy_evaluation_context tops am tx).txn.target
      ce.ce_module ce.ce_is_ctor (es0 with outcomes := SOME vs.vs_outcomes) actual` by
     (simp[] >> irule ctorDeployLoweringEntryImmutableMemoryTheory.deploy_ctor_zero_memory_immutables >>

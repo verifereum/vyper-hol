@@ -17,7 +17,7 @@
 Theory e2eDefs
 Ancestors
   vfmExecution vfmExecutionProp vfmState vfmRunCall
-  vfmTotalBalance vfmReturndataBound
+  vfmTotalBalance vfmReturndataBound vfmWfState
   frameOutcome callTrace
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
