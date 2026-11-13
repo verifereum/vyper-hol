@@ -95,3 +95,65 @@ Definition extrequest_snapshot_store_contract_def:
          mem_bytes_at io (type_memory_size itv) q.vs_memory =
          mem_bytes_at io (type_memory_size itv) s.vs_memory)
 End
+
+(* A snapshot cell whose store-time unwrap also keeps the protected windows
+   prot: below the alloca frontier, holding the bytes of M, and apart from
+   every alloca. *)
+Definition extrequest_snapshot_cell_protected_def:
+  extrequest_snapshot_cell_protected prot M ctx func ce cx eb cb tb (vv,ty,tv,v) <=>
+    extrequest_snapshot_cell ctx func ce cx eb cb tb (vv,ty,tv,v) /\
+    (!ee sm su s op.
+      extrequest_history_frame ce cx eb cb tb ee sm s /\
+      stmt_state_rel ctx func ce cx ee s /\ ee.gas_obs = [] /\
+      unwrap_value ce vv sm = (op,su) /\
+      fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved ce sm /\ ~s.vs_halted /\
+      s.vs_current_bb = sm.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+      (!pa pk. prot pa pk ==> pa + pk <= s.vs_alloca_next /\
+        mem_bytes_at pa pk s.vs_memory = mem_bytes_at pa pk M /\
+        !i b n. FLOOKUP s.vs_allocas i = SOME (b,n) ==>
+          loweringStateRelDefs$regions_disjoint pa pk b n) ==>
+      ?u. gas_marked_path F ctx func s 0 (OK u) /\
+        stmt_state_rel ctx func ce cx ee u /\
+        expr_val_rel cx ty v op u /\ safe_operand su op /\
+        extrequest_history_frame ce cx ee sm s ee su u /\
+        ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
+        u.vs_inst_idx = LENGTH su.cs_current_insts /\
+        (!aid p k. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
+          mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory) /\
+        (!pa pk. prot pa pk ==> pa + pk <= u.vs_alloca_next /\
+          mem_bytes_at pa pk u.vs_memory = mem_bytes_at pa pk M /\
+          !i b n. FLOOKUP u.vs_allocas i = SOME (b,n) ==>
+            loweringStateRelDefs$regions_disjoint pa pk b n))
+End
+
+Theorem extrequest_snapshot_cell_protected_history:
+  extrequest_snapshot_cell_protected prot M ctx func ce cx eb cb tb cell /\
+  stmt_state_rel ctx func ce cx eb tb /\
+  extrequest_history_frame ce cx eb cb tb ec sc tc ==>
+  extrequest_snapshot_cell_protected prot M ctx func ce cx ec sc tc cell
+Proof
+  PairCases_on `cell` >> simp[extrequest_snapshot_cell_protected_def] >>
+  rpt strip_tac
+  >- metis_tac[extrequest_snapshot_cell_history] >>
+  `extrequest_history_frame ce cx eb cb tb ee sm s` by
+    (drule_all extrequest_history_frame_trans >> simp[]) >>
+  first_x_assum drule_all >> simp[]
+QED
+
+(* With nothing protected, every snapshot cell is a protected one. *)
+Theorem extrequest_snapshot_cell_unprotected:
+  extrequest_snapshot_cell ctx func ce cx eb cb tb cell ==>
+  extrequest_snapshot_cell_protected (\pa pk. F) M ctx func ce cx eb cb tb cell
+Proof
+  PairCases_on `cell` >> rw[extrequest_snapshot_cell_protected_def] >>
+  fs[extrequest_snapshot_cell_def] >> first_x_assum drule_all >> simp[]
+QED
+
+Theorem extrequest_snapshot_cell_protected_plain:
+  extrequest_snapshot_cell_protected prot M ctx func ce cx eb cb tb cell ==>
+  extrequest_snapshot_cell ctx func ce cx eb cb tb cell
+Proof
+  PairCases_on `cell` >> simp[extrequest_snapshot_cell_protected_def]
+QED
