@@ -15,11 +15,11 @@ Theorem internal_return_void_boundary_mem:
   same_frame cenv cenv' /\
   stmt_env cenv' lctx ret_ty (Return NONE) sa = (cenv'',sb) /\
   fn_has_code sa sb func /\ ret_pc_ok cenv' sa s0 /\
-  stmt_state_rel ctx func cenv' cx es s0 /\
+  stmt_state_rel H ctx func cenv' cx es s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?n r. gas_path_mem ctx func s0 n r /\
-    intret_q func cenv cx ret_tv NoneV (es with scopes := []) r
+    intret_q H func cenv cx ret_tv NoneV (es with scopes := []) r
 Proof
   strip_tac >>
   `ret_ty = NoneT` by (gvs[type_stmt_def, AllCaseEqs()]) >>
