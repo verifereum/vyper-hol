@@ -1,7 +1,7 @@
 (* Ordinary environment reads under the joint full judgment. *)
 Theory bodyFullBuiltinEnvReads
 Ancestors
-  bodyFullBuiltinEnvReadsStep
+  bodyFullBuiltinEnvReadsStep bodyPtrDefs exprSimMemDefs loweringPosts
   bodyFullExprGeneric bodyFullPreds bodySimFull exprSimHypsDefs
   bodyFullGhostFrame gasOutcomeFullCompose fragGasSeqPtr
   exprSimSource exprSimProps exprLoweringProps emitHelperProps
@@ -68,7 +68,19 @@ Proof
       qexistsl_tac [`G'`, `es`, `INL v`, `t`, `tn'`] >>
       simp[] >> gen_tac >> strip_tac >>
       first_x_assum drule >> strip_tac >>
-      FAIL_TAC "posts") >>
+      simp[expr_type_def, expr_store_bound_def, ptr_val_ok_def,
+           ghost_kept_at_def] >>
+      conj_tac
+      >- (simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+               expr_type_def, stmt_state_rel_start_gas_obs,
+               locals_kept_def, pure_frame_def, popped_kept_def,
+               vyperEvalScopesProgressTheory.scopes_progress_refl] >>
+          `storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+          gvs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+          rpt gen_tac >> Cases_on `b` >>
+          gvs[vyperStorageBackendTheory.get_storage_def] >>
+          metis_tac[vyperStorageBackendTheory.get_storage_def]) >>
+      gvs[ghost_inv_at_def] >> metis_tac[]) >>
   irule expr_vv_sim_stack_full >> simp[expr_type_def] >>
   conj_tac
   >- (gen_tac >> simp[compile_expr_def] >>
