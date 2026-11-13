@@ -5,7 +5,7 @@ Ancestors
   bodyMemoryPreds popNestedTargetMemory popNestedImmutableTransport
   popNestedImmutableAccess popNestedImmutablePlaceOrigin
   popNestedImmutableMutationFrame popNestedImmutableFrame
-  popNestedLocalTypeMemory popNestedLocalPathMemory
+  popNestedLocalTypeMemory popNestedLocalPathMemory popNestedImmutablePathMemory
   popNestedLocalAccessMemory popNestedLocalSuffixMemory
   popNestedLocalReadinessMemory
   popNestedStorageSuffixMemory popNestedStorageMemory

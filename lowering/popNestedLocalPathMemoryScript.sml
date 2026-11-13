@@ -24,7 +24,7 @@ Proof
   simp[eval_result_typed_place, runtime_place_typed_memory] >> metis_tac[]
 QED
 
-Theorem local_path_fixed_snoc[local]:
+Theorem local_path_fixed_snoc:
   !path tv sb.
   (!prefix i suffix et n.
     path = prefix ++ ValueSubscript (IntV i)::suffix ==>

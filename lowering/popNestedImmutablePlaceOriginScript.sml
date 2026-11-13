@@ -5,7 +5,7 @@ Ancestors
   vyperSubscriptOverlap vyperInterpreter vyperState vyperMisc
   list alist finite_map
 
-Theorem extend_place_immutable_origin[local]:
+Theorem extend_place_immutable_origin:
   extend_place cx r sb s = (INL (PlaceR (ImmutablePlace src id path)),t) ==>
   ?path0. r = PlaceR (ImmutablePlace src id path0)
 Proof
