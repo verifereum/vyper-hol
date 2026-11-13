@@ -5,7 +5,7 @@ Ancestors
   bodyIntCallSeams bodyIntCallSource bodySimExprCases exprSimHypsDefs exprSimDefs
   list bodySim exprSimHyps vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeCallGraph exprSimSend exprLowering context
-  exprSimUnwrap exprSimMemoryRead exprSimMemoryForce
+  exprSimUnwrap exprSimMemoryRead
   exprSimMemorySource exprSimProps exprLoweringProps gasOutcome gasSummary
   gasSummaryCompose gasExemptCert gasContext fragGasPath fragGasMode fragExec
   venomState compileEnv exprSimUnwrapProps
@@ -123,31 +123,11 @@ Proof
     metis_tac[forced_expr_admissible_raw] >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
   simp[expr_vv_sim_def] >>
-  disch_then (qspecl_then [`st0`, `sa`, `sm`, `vv`, `s0`] mp_tac) >> simp[] >>
-  rewrite_tac[gas_outcome_def] >> BETA_TAC >>
-  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN mp_tac))
-  >- (strip_tac >> qexists_tac `marks` >> disj1_tac >>
-      irule gas_bad_storage_at_bind_left >>
-      simp[storage_trace_frame_read_result]) >>
-  disch_then (DISJ_CASES_THEN mp_tac)
-  >- (rewrite_tac[gas_summary_at_def] >>
-      disch_then (qx_choose_then `res` (qx_choose_then `es_end`
-        (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
-      reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
-      >- (disch_then kall_tac >> qexists_tac `marks` >> disj1_tac >>
-          irule gas_bad_storage_at_bind_left >>
-          simp[storage_trace_frame_read_result] >>
-          irule gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
-      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
-         es_end.storage_trace` by fs[storage_trace_domain_def] >>
-      disch_then (DISJ_CASES_THEN (strip_assume_tac o BETA_RULE)) >>
-      qexists_tac `marks` >> disj2_tac >> disj1_tac >>
-      rewrite_tac[gas_summary_at_def] >> BETA_TAC
-      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
-            (assume_tac o SIMP_RULE (srw_ss()) []) >>
-          first_assum (drule_then strip_assume_tac) >> gvs[] >>
-          rename1 `gas_marked_exec _ _ _ _ _ (INL tv) _ (OK s1)` >>
-          `~s1.vs_halted` by
+  disch_then (qspecl_then [`sa`, `sm`, `vv`, `s0`] mp_tac) >> simp[] >>
+  rewrite_tac[gas_outcome_def] >> strip_tac >>
+  qexists_tac `marks`
+  >- (disj1_tac >> gvs[gas_summary_at_def]
+      >- (`~t.vs_halted` by
             metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
           qpat_x_assum `!sa vv sm. compile_expr _ _ _ _ = _ ==> _` drule >>
           strip_tac >> gvs[]
@@ -155,22 +135,20 @@ Proof
               `?v. read_result cx tv (es_end with gas_obs := []) =
                    (INL v,es_end with gas_obs := [])` by
                 gvs[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def] >>
-              qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK s1`] >>
+              `vv_post H ctx func cenv cx e es sa sb s0
+                (es_end with gas_obs := []) (Value v) (StackValue t' op) t` by
+                metis_tac[vv_post_read_result] >>
+              qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK t`] >>
               simp[] >> conj_tac
               >- (drule read_result_gas_obs >> strip_tac >>
                   gvs[gas_marked_exec_def, vyperStateTheory.bind_def]) >>
-              rpt strip_tac >> irule expr_post_of_vv_post_stack >>
-              irule_at Any vv_post_read_result >>
-              goal_assum (drule_at Any) >> metis_tac[]) >>
-          drule_all unwrap_memory_marked_read_horizons >> strip_tac >>
+              metis_tac[expr_post_of_vv_post_stack]) >>
+          drule_all unwrap_memory_marked_read >> simp[] >> strip_tac >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u`] >>
           simp[] >>
           `marks = marks ++ []` by simp[] >>
           pop_assum SUBST1_TAC >> irule gas_marked_exec_bind_normal >>
           goal_assum drule >> simp[]) >>
-      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
-        (assume_tac o SIMP_RULE (srw_ss()) []) >>
-      `expr_exit res r` by metis_tac[] >>
       Cases_on `res`
       >- (Cases_on `r` >> gvs[expr_exit_def]) >>
       rename1 `expr_exit (INR exc) r` >>
@@ -181,8 +159,7 @@ Proof
       qexistsl_tac [`INR exc`, `es_end`, `r`] >>
       simp[GSYM expr_exit_exception_transport] >>
       irule gas_marked_exec_bind_exception >> goal_assum drule) >>
-  strip_tac >> qexists_tac `marks` >> disj2_tac >> disj2_tac >>
-  metis_tac[force_exempt_cert]
+  disj2_tac >> metis_tac[force_exempt_cert]
 QED
 
 (* A widened internal call is laid out at the callee's return type.
@@ -335,13 +312,11 @@ Proof
                 `ty`,`vv`] >>
   simp[] >> rpt strip_tac >>
   qspecl_then [`tops`,`ctx`,`func`,`cenv`,`cx`,`tenv`,`ty`,`v16`,`fn`,`es`,
-               `v17`,`es0`,`st0`,`sa`,`sb`,`vv`,`s0`,`mut`,`nr`,`args`,`ret`,`ss`,`rr`,
+               `v17`,`es0`,`sa`,`sb`,`vv`,`s0`,`mut`,`nr`,`args`,`ret`,`ss`,`rr`,
                `prev`,`penv`,`rtv`,`es1`,`t`,`nrc`,`nrbs`,`npvs`]
     mp_tac intcall_return_restore >>
   impl_tac
   >- (simp[] >> rpt strip_tac >>
-      qpat_assum `!H. valid_horizon _ _ H _ ==> intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-        (drule_then assume_tac) >>
       drule intcall_entry_source >> strip_tac >>
       `body_stmts_ok (cx with stk updated_by CONS (NONE,fn)) ss` by
         (Cases_on `u` >>
