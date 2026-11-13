@@ -1,7 +1,8 @@
 (* Shared event metadata and pure argument readiness for the Log cases. *)
 Theory bodySimLogArgs
 Ancestors
-  allocLimits allocLimitsProps
+  allocLimits allocLimitsProps bodyMemoryPreds
+  vyperValue valueEncodingProps placeMemoryTypeInterfaces structFieldsProps exprSimProps arithmetic
   bodyMemAssignTopCopyFacts bodyMemoryDefs stmtSimLogDataFrame
   exprSimMemDefs venomMemDefs
   exprSimSource bodyExprPreFacts exprSimHypsDefs list bodySim bodySimStmtCases stmtSimLog exprSimHyps
@@ -664,4 +665,219 @@ Proof
   drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >>
   strip_tac >> gvs[] >>
   metis_tac[valueEncodingTypingTheory.value_has_type_val_wf]
+QED
+
+(* The argument's explicit body-safety facts supply the call preconditions. *)
+Theorem log_mem_arg_body_pre[local]:
+  !tops ctx cenv cx env e es.
+    body_stmt_safe tops (Expr e) /\ ~is_extcode e /\
+    body_inv tops ctx cenv cx /\ supported_pure_expr tops e /\
+    well_typed_expr env e /\
+    ~supported_expr_exists
+       (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
+    call_evaluation_safe cx (int_calls_expr e) /\
+    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+              occurs_abi_decode_target target tops) /\
+    expr_sim_inv cenv cx env es ==>
+    expr_body_pre cenv cx env e es
+Proof
+  rpt strip_tac >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      int_calls_stmt_def, listTheory.EVERY_CONJ, GSYM expr_has_evm_run_def]) >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
+   (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+       is_dynamic (vyper_to_abi_type (type_env tops) target))` by
+    fs[body_inv_def] >>
+  `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
+  qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `[]`]
+    irule stmt_expr_body_pre >> simp[] >> metis_tac[]
+QED
+
+(* One step of the arguments: the head simulates under the memory
+   judgment, and once it evaluates, the tail meets the same conditions
+   and the head's value has its type. *)
+Theorem log_mem_args_step:
+  !tops ctx func cenv cx env e tail s.
+    EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) (e::tail) /\
+    body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx (e::tail) /\
+    expr_sim_inv cenv cx env s /\
+    supported_pure_exprs tops (e::tail) /\ well_typed_exprs env (e::tail) /\
+    ~supported_exprs_exists
+       (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) (e::tail) /\
+    call_evaluation_safe cx (int_calls_exprs (e::tail)) /\
+    (!target. supported_exprs_exists (expr_abi_decode_target_root target) (e::tail) ==>
+              occurs_abi_decode_target target tops) ==>
+    expr_sim_mem ctx func cenv cx (expr_type e) e s /\
+    !v s1. (do r <- eval_expr cx e; read_result cx r od) s = (INL v,s1) ==>
+      (EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) tail /\
+       body_exprs_mem_ok cx tail /\ expr_sim_inv cenv cx env s1 /\
+       supported_pure_exprs tops tail /\ well_typed_exprs env tail /\
+       ~supported_exprs_exists
+          (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) tail /\
+       call_evaluation_safe cx (int_calls_exprs tail) /\
+       (!target. supported_exprs_exists (expr_abi_decode_target_root target) tail ==>
+                 occurs_abi_decode_target target tops)) /\
+      ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+           value_has_type tv v
+Proof
+  rpt gen_tac >> simp[EVERY_DEF] >> strip_tac >>
+  qpat_x_assum `supported_pure_exprs _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [Once supported_pure_expr_def]) >>
+  qpat_x_assum `well_typed_exprs _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [Once well_typed_expr_def]) >>
+  qpat_x_assum `~supported_exprs_exists _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [Once supported_expr_exists_def, DE_MORGAN_THM]) >>
+  qpat_x_assum `call_evaluation_safe _ _` (assume_tac o
+    SIMP_RULE std_ss [Once int_calls_expr_def]) >>
+  qpat_x_assum `!target. supported_exprs_exists _ _ ==> _` (strip_assume_tac o
+    SIMP_RULE std_ss [Once supported_expr_exists_def, DISJ_IMP_THM,
+                      FORALL_AND_THM]) >>
+  gvs[body_exprs_mem_ok_def] >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    (irule call_evaluation_safe_append_left >>
+     qexists_tac `int_calls_exprs tail` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_exprs tail)` by
+    (irule call_evaluation_safe_append_right >>
+     qexists_tac `int_calls_expr e` >> simp[]) >>
+  `expr_body_pre cenv cx env e s` by
+    (irule log_mem_arg_body_pre >> simp[DE_MORGAN_THM] >> metis_tac[]) >>
+  conj_tac >- metis_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_body_pre_eval >> strip_tac >>
+  `?tv t s2 t1. eval_expr cx e s = (INL tv, t) /\
+                read_result cx tv s2 = (INL v, t1)` by
+    (qpat_x_assum `(do r <- eval_expr cx e; read_result cx r od) s = _` mp_tac >>
+     simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def,
+      value_runtime_typed_def] >>
+  `env.type_defs = get_tenv cx` suffices_by metis_tac[] >>
+  gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]
+QED
+
+(* The memory capture head keeps the whole-tail purity/readiness invariant.
+   All premises are the same body facts used by log_mem_args_step above. *)
+Theorem body_log_mem_args_pure_step:
+  !tops ctx func cenv cx env e tail s.
+    EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) (e::tail) /\
+    body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx (e::tail) /\
+    expr_sim_inv cenv cx env s /\
+    supported_pure_exprs tops (e::tail) /\ well_typed_exprs env (e::tail) /\
+    ~supported_exprs_exists
+       (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) (e::tail) /\
+    call_evaluation_safe cx (int_calls_exprs (e::tail)) /\
+    (!target. supported_exprs_exists (expr_abi_decode_target_root target) (e::tail) ==>
+              occurs_abi_decode_target target tops) ==>
+    expr_sim_mem ctx func cenv cx (expr_type e) e s /\
+    post_value_type cenv e = expr_type e /\
+    !v s1. (do r <- eval_expr cx e; read_result cx r od) s = (INL v,s1) ==>
+      (EVERY (\e. body_stmt_safe tops (Expr e) /\ ~is_extcode e) tail /\
+       body_exprs_mem_ok cx tail /\ expr_sim_inv cenv cx env s1 /\
+       supported_pure_exprs tops tail /\ well_typed_exprs env tail /\
+       ~supported_exprs_exists
+          (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) tail /\
+       call_evaluation_safe cx (int_calls_exprs tail) /\
+       (!target. supported_exprs_exists (expr_abi_decode_target_root target) tail ==>
+                 occurs_abi_decode_target target tops)) /\
+      s1.scopes = s.scopes /\
+      ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+           value_has_type tv v
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all log_mem_args_step >> strip_tac >>
+  `supported_pure_expr tops e` by
+    gvs[Once supported_pure_expr_def] >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[supported_pure_int_calls,
+              exprSimHypsTheory.post_value_type_no_calls] >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  `s1.scopes = s.scopes` by
+    (irule bodySimAugPlaceLoadTheory.aug_place_rhs_scopes >>
+     qexistsl_tac [`cx`, `e`, `INL v`, `tops`] >>
+     simp[supported_expr_def]) >>
+  metis_tac[]
+QED
+
+
+Theorem log_compatible_bounded_evaluation:
+  (!lty dty cenv cx env es ltv.
+    expr_sim_inv cenv cx env es /\ arg_type_fits lty dty /\
+    evaluate_type (get_tenv cx) lty = SOME ltv /\
+    type_memory_bytes cenv dty < 2 ** 64 ==>
+    IS_SOME (evaluate_type (get_tenv cx) dty)) /\
+  (!ltys dtys cenv cx env es ltvs.
+    expr_sim_inv cenv cx env es /\ arg_types_fit ltys dtys /\
+    OPT_MMAP (evaluate_type (get_tenv cx)) ltys = SOME ltvs /\
+    SUM (MAP (type_memory_bytes cenv) dtys) < 2 ** 64 ==>
+    IS_SOME (OPT_MMAP (evaluate_type (get_tenv cx)) dtys))
+Proof
+  ho_match_mp_tac arg_type_fits_ind >>
+  rw[arg_type_fits_def, evaluate_type_def, type_memory_bytes_def,
+     AllCaseEqs(), evaluate_types_OPT_MMAP] >>
+  gvs[type_slot_size_def, vfmConstantsTheory.word_size_def,
+      wordsTheory.dimword_def, evaluate_type_def, evaluate_types_OPT_MMAP, ETA_THM] >>
+  RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV)
+  >~ [`m < 115792089237316195423570985008687907853269984665640564039457584007913129639936`]
+  >- (qspec_then `m` mp_tac le_word_size_mul >>
+      simp[vfmConstantsTheory.word_size_def] >> decide_tac)
+  >~ [`m < 115792089237316195423570985008687907853269984665640564039457584007913129639936`]
+  >- (qspec_then `m` mp_tac le_word_size_mul >>
+      simp[vfmConstantsTheory.word_size_def] >> decide_tac)
+  >~ [`ArrayTV _ (Dynamic m)`]
+  >- (`0 < m` by decide_tac >>
+      `type_memory_bytes cenv dty <= m * type_memory_bytes cenv dty` by
+        (Cases_on `m` >> gvs[MULT_CLAUSES]) >>
+      `type_memory_bytes cenv dty < 18446744073709551616` by decide_tac >>
+      `?dtv. evaluate_type (get_tenv cx) dty = SOME dtv` by
+        (first_x_assum (qspecl_then [`cenv`, `cx`, `env`, `es`, `tv`] mp_tac) >>
+         simp[optionTheory.IS_SOME_EXISTS]) >>
+      `0 < type_slot_size dtv` by
+        metis_tac[cj 1 arg_type_fits_zero_slots, NOT_ZERO_LT_ZERO] >>
+      `type_memory_bytes cenv dty = 32 * type_slot_size dtv` by
+        metis_tac[expr_sim_inv_memory_size, cj 1 type_memory_size_slots] >>
+      `32 * (m * type_slot_size dtv) + 32 < 18446744073709551616` by
+        (qpat_x_assum `m * type_memory_bytes cenv dty + 32 < _` mp_tac >>
+         qpat_assum `type_memory_bytes cenv dty = _`
+           (fn th => simp_tac std_ss
+             [th, MULT_ASSOC, Q.SPECL [`m`, `32`] MULT_COMM])) >>
+      simp[] >> decide_tac)
+  >~ [`ArrayTV _ (Fixed m)`]
+  >- (`type_memory_bytes cenv dty <= m * type_memory_bytes cenv dty` by
+        (Cases_on `m` >> gvs[MULT_CLAUSES]) >>
+      `type_memory_bytes cenv dty < 18446744073709551616` by decide_tac >>
+      `?dtv. evaluate_type (get_tenv cx) dty = SOME dtv` by
+        (first_x_assum (qspecl_then [`cenv`, `cx`, `env`, `es`, `tv`] mp_tac) >>
+         simp[optionTheory.IS_SOME_EXISTS]) >>
+      `0 < type_slot_size dtv` by
+        metis_tac[cj 1 arg_type_fits_zero_slots, NOT_ZERO_LT_ZERO] >>
+      `type_memory_bytes cenv dty = 32 * type_slot_size dtv` by
+        metis_tac[expr_sim_inv_memory_size, cj 1 type_memory_size_slots] >>
+      `32 * (m * type_slot_size dtv) < 18446744073709551616` by
+        (qpat_x_assum `m * type_memory_bytes cenv dty < _` mp_tac >>
+         qpat_assum `type_memory_bytes cenv dty = _`
+           (fn th => simp_tac std_ss
+             [th, MULT_ASSOC, Q.SPECL [`m`, `32`] MULT_COMM])) >>
+      simp[] >> decide_tac)
+  >~ [`TupleTV _`]
+  >- (`?dtvs. OPT_MMAP (evaluate_type (get_tenv cx)) dtys = SOME dtvs` by
+        (first_x_assum (qspecl_then [`cenv`, `cx`, `env`, `es`, `tvs`] mp_tac) >>
+         simp[optionTheory.IS_SOME_EXISTS]) >>
+      `SUM (MAP (type_memory_bytes cenv) dtys) = type_memory_size_list dtvs` by
+        (irule tuple_memory_bytes_size >> qexists_tac `get_tenv cx` >>
+         simp[] >> metis_tac[expr_sim_inv_memory_size]) >>
+      `type_slot_size_list dtvs <=
+         115792089237316195423570985008687907853269984665640564039457584007913129639936` by
+        (gvs[cj 2 type_memory_size_slots] >> decide_tac) >>
+      simp[]) >>
+  `type_memory_bytes cenv dty < 18446744073709551616 /\
+   SUM (MAP (type_memory_bytes cenv) dtys) < 18446744073709551616` by
+    decide_tac >>
+  `IS_SOME (evaluate_type (get_tenv cx) dty) /\
+   IS_SOME (OPT_MMAP (evaluate_type (get_tenv cx)) dtys)` by
+    (conj_tac >> metis_tac[]) >>
+  Cases_on `evaluate_type (get_tenv cx) dty` >>
+  Cases_on `OPT_MMAP (evaluate_type (get_tenv cx)) dtys` >> gvs[]
+
 QED
