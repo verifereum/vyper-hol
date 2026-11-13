@@ -7,6 +7,7 @@ Ancestors
   abiEncoderLeaves abiEncoderWrites abiEncoderReentryLeaves moduleLoweringProps
   abiEncoderMemory abiEncoder abiEncoderOpenInput abiEncoderInput contractABI valueEncoding
   abiEncoderPrimitiveEffect abiEncoderExtendSim abiEncoderWindow abiEncoderRegisteredEffect
+  abiEncoderLeafGlobals
   valueEncodingProofs valueEncodingProps emitHelperProps exprLoweringProps localPtrsProps
   emitHelper compileEnv venomState venomExecSemantics venomInst words list arithmetic
 
@@ -215,6 +216,11 @@ Proof
   `mem_bytes_at d (LENGTH (enc at (BytesV bs))) actual.vs_memory = enc at (BytesV bs)` by
     (qpat_assum `actual.vs_memory = _` (fn th => rewrite_tac[th]) >>
      irule window_bytes_input_memory >> qexistsl_tac [`cap`, `maxlen`] >> asm_rewrite_tac[]) >>
+  `EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND; NOT})
+    (emitted_insts st st')` by metis_tac[abi_encoder_bytes_global_code] >>
+  `run_inst_seq (emitted_insts st st') s = OK actual` by
+    fs[window_seq_def] >>
+  drule_all abi_encoder_leaf_sequence_globals >> strip_tac >>
   `abi_encoder_registered_effect (window_alloca_sites func (frag_ids st st'))
      [(d,LENGTH (enc at (BytesV bs)))] s actual` by
     (asm_rewrite_tac[] >> irule window_bytes_effect >> simp[] >>
