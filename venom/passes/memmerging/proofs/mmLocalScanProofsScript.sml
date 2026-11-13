@@ -20005,6 +20005,72 @@ Proof
   gvs[mm_local_calldata_capture_def]
 QED
 
+Theorem mm_local_calldata_cached_ids_opcode[local]:
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  q <= LENGTH bb.bb_instructions /\
+  FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) CalldataMerge)
+    empty_scan_state (TAKE q bb.bb_instructions)).ss_loads v = SOME src /\
+  p < LENGTH bb.bb_instructions /\
+  MEM (EL p bb.bb_instructions).inst_id
+    (case dfg_get_def (dfg_build_function fn0) v of NONE => [] | SOME li => [li.inst_id]) ==>
+  (EL p bb.bb_instructions).inst_opcode = CALLDATALOAD
+Proof
+  strip_tac >> Cases_on `dfg_get_def (dfg_build_function fn0) v` >> gvs[] >>
+  `bb.bb_instructions = TAKE q bb.bb_instructions ++ DROP q bb.bb_instructions` by simp[] >>
+  drule_all mm_local_prefix_cached_def_before_cut >> strip_tac >>
+  `MEM x bb.bb_instructions` by metis_tac[MEM_APPEND] >>
+  gvs[MEM_EL, mode_load_opcode_def] >>
+  metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx]
+QED
+
+Theorem mm_local_calldata_scan_captures[local]:
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  n <= LENGTH bb.bb_instructions /\
+  (!j. j < n ==> (H j).vs_call_ctx.cc_calldata = cd) /\
+  (!j dst v src. j < n /\ (EL j bb.bb_instructions).inst_opcode = MSTORE /\
+    (EL j bb.bb_instructions).inst_operands = [Lit dst; Var v] /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) CalldataMerge)
+      empty_scan_state (TAKE j bb.bb_instructions)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src cd ++ REPLICATE 32 0w)))) ==>
+  !t. t <= n ==>
+    mm_local_scan_every
+      (mm_local_group_captures bb.bb_instructions
+        (mm_local_calldata_capture bb.bb_instructions H n)
+        (\a. if a < LENGTH cd then EL a cd else 0w))
+      (FOLDL (scan_inst (dfg_build_function fn0) CalldataMerge)
+        empty_scan_state (TAKE t bb.bb_instructions))
+Proof
+  strip_tac >> Induct
+  >- simp[mm_local_scan_every_def, empty_scan_state_def] >>
+  strip_tac >> `t < n /\ t < LENGTH bb.bb_instructions /\ t <= n` by decide_tac >>
+  simp[rich_listTheory.TAKE_SUC, FOLDL_APPEND] >>
+  irule mm_local_inst_ordered_every >> conj_tac
+  >- metis_tac[mm_local_group_captures_merge] >>
+  `SORTED (\a b. a.cg_dst <= b.cg_dst)
+    (FOLDL (scan_inst (dfg_build_function fn0) CalldataMerge)
+      empty_scan_state (TAKE t bb.bb_instructions)).ss_copies` by
+    (irule mm_local_fold_order >> simp[empty_scan_state_def]) >>
+  simp[mode_copy_opcode_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `(H t).vs_call_ctx.cc_calldata = cd` by metis_tac[] >>
+      pop_assum (fn th => pure_rewrite_tac[GSYM th]) >>
+      irule mm_local_calldata_store_group_captures >> simp[] >>
+      rpt strip_tac >> `t <= LENGTH bb.bb_instructions` by decide_tac >>
+      drule_all mm_local_calldata_cached_ids_opcode >> simp[]) >>
+  rpt strip_tac >>
+  `(H t).vs_call_ctx.cc_calldata = cd` by metis_tac[] >>
+  pop_assum (fn th => pure_rewrite_tac[GSYM th]) >>
+  irule mm_local_calldata_bulk_group_captures >> simp[] >>
+  qexists `t` >> simp[]
+QED
+
 Theorem mm_local_payload_due_realize[local]:
   ws = MAP (THE o cap) (due ++ [r]) /\
   (!j. MEM j (due ++ [r]) ==> IS_SOME (cap j)) /\
