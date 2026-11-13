@@ -1,13 +1,10 @@
-(* Staged typed normalization followed by an immutable destination copy. *)
+(* The original constructor-base normalized assignment boundary is unchanged. *)
 Theory immutableAssignNormalizedMem
 Ancestors
-  immutableNormalizedCopyFrame immutableNormalizeMem immutableAssignFixedMem immutableFixedCopyTransportMem
-  immutableDeployAssignBytes stmtLowering compileEnv context
-  immutableFixedCopyMem fragExec loweringSlice exprLoweringProps localPtrsProps valueEncodingProps
-  venomState venomExecSemantics loweringStateRelDefs finite_map words arithmetic list pair
+  immutableAssignNormalizedPathMem
 
 Theorem immutable_assign_normalized_mem_endpoint:
-  compile_assign_value ce dst LocCode src F sl dty sty di
+  compile_assign_value ce dst LocCode src F sl dty sty
     (type_memory_bytes ce dty) sm = ((),sb) /\
   ce.ce_imm_alloca = SOME region /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
@@ -83,37 +80,16 @@ Theorem immutable_assign_normalized_mem_endpoint:
     t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
-  `type_memory_bytes ce dty = type_memory_size dtv` by metis_tac[] >>
-  drule_all immutable_normalized_compiler_parts >> strip_tac >>
-  drule_all immutable_normalized_code_windows >> strip_tac >>
-  `!x. src = Var x ==> not_fresh_at sm x` by metis_tac[] >>
-  `compile_alloc_buffer (type_memory_bytes ce dty) sm = (buf,mid) /\
-   type_memory_bytes ce dty < dimword (:256) /\
-   ~(is_bytestring_type dty /\ is_bytestring_type sty)` by
-    (conj_tac >- metis_tac[] >> simp[] >> decide_tac) >>
-  drule_all immutable_normalize_mem_endpoint >>
-  disch_then (qx_choose_then `dtv1` (qx_choose_then `u`
-    (qx_choose_then `r` (qx_choose_then `b` (map_every assume_tac o CONJUNCTS))))) >>
-  `dtv1 = dtv` by gvs[] >> qpat_x_assum `dtv1 = dtv` SUBST_ALL_TAC >>
-  `!x. dst = Var x \/ region = Var x ==> not_fresh_at sm x` by metis_tac[] >>
-  drule_all immutable_normalized_copy_freshness >> strip_tac >>
-  drule_all immutable_normalized_copy_operands >> strip_tac >>
-  `off + type_memory_bytes ce dty <= s.vs_alloca_next /\
-   FLOOKUP u.vs_allocas sm.cs_next_id = SOME (b,type_memory_bytes ce dty) /\
-   (!aid q k. FLOOKUP s.vs_allocas aid = SOME (q,k) ==>
-     regions_disjoint off (type_memory_bytes ce dty) q k)` by metis_tac[] >>
-  drule_all immutable_normalized_allocation_extension >> strip_tac >>
-  drule_all immutable_normalized_copy_bounds >> strip_tac >>
-  `r.vs_current_bb = sb.cs_current_bb` by metis_tac[] >>
-  drule_all immutable_normalized_copy_mem_endpoint >> strip_tac >>
-  rename1 `mem_cont_sim ctx func r t` >>
-  `mem_cont_sim ctx func s t` by metis_tac[memContinuationTheory.mem_cont_sim_trans] >>
-  `!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s` by
-    (qpat_assum `!x. not_fresh_at sm x ==> lookup_var x r = _` mp_tac >>
-     qpat_assum `!x. not_fresh_at sn x ==> lookup_var x t = _` mp_tac >>
-     qpat_assum `sm.cs_next_var <= sn.cs_next_var` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
-  drule_all immutable_normalized_allocation_transport >> strip_tac >>
+  `!base. ce.ce_imm_alloca = SOME base ==> eval_operand base s = SOME 0w` by
+    simp[] >>
+  `!x. src = Var x \/ dst = Var x ==> not_fresh_at sm x` by metis_tac[] >>
+  `!base x. ce.ce_imm_alloca = SOME base /\ base = Var x ==>
+    not_fresh_at sm x` by (simp[] >> metis_tac[]) >>
+  drule_all immutable_assign_normalized_mem_path_endpoint >>
+  disch_then (qx_choose_then `buf` (qx_choose_then `mid`
+    (qx_choose_then `sn` (qx_choose_then `u` (qx_choose_then `r`
+      (qx_choose_then `t` (qx_choose_then `b`
+        (map_every assume_tac o CONJUNCTS)))))))) >>
   qexistsl_tac [`buf`,`mid`,`sn`,`u`,`r`,`t`,`b`] >>
-  rpt (conj_tac >- first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
