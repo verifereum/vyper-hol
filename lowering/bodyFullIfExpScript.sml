@@ -544,6 +544,102 @@ Finalise ifexp_arm_outcome_full_conditional
 
 (* The ternary's root from the condition's value judgment and the arms'
    vv judgments.  Each arm is one of the three arm steps' kinds. *)
+Theorem ifexp_body_post_nonword[local]:
+  expr_body_pre ce cx env e es /\ ~is_word_type (expr_type e) ==>
+  ~is_word_type (post_value_type ce e)
+Proof
+  strip_tac >> Cases_on `post_value_type ce e = expr_type e`
+  >- gvs[] >>
+  `~is_bytestring_type (expr_type e)` by
+    metis_tac[post_value_type_bytestring] >>
+  `?ann fid args drv. e = Call ann (IntCall fid) args drv` by
+    metis_tac[post_value_type_not_int_call] >>
+  gvs[expr_type_def] >>
+  drule_all exprSimHypsTheory.ifexp_intcall_copy_source >> strip_tac >>
+  fs[type_widens_to_def] >> metis_tac[exprSimLayoutTransportTheory.compatible_word_type]
+QED
+
+Theorem ifexp_body_punnable_refl[local]:
+  (!t. punnable ce t t) /\ (!ts. punnable_list ce ts ts)
+Proof
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops type_induction) >>
+  simp[punnable_def]
+QED
+
+Theorem ifexp_body_bytestring_evaluates[local]:
+  !src dst tenv tv.
+    is_bytestring_type src /\ is_bytestring_type dst /\
+    arg_type_fits src dst /\ evaluate_type tenv dst = SOME tv ==>
+    ?sv. evaluate_type tenv src = SOME sv
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `src` >> gvs[is_bytestring_type_def] >>
+  rename1 `is_bytestring_type (BaseT sb)` >> Cases_on `sb` >>
+  gvs[is_bytestring_type_def] >>
+  Cases_on `dst` >> gvs[is_bytestring_type_def] >>
+  rename1 `is_bytestring_type (BaseT db)` >> Cases_on `db` >>
+  gvs[is_bytestring_type_def, arg_type_fits_def,
+      vyperValueTheory.evaluate_type_def, vyperValueTheory.type_slot_size_def] >>
+  TRY (rename1 `arg_type_fits (BaseT (BytesT sbd)) (BaseT (BytesT dbd))` >>
+       Cases_on `sbd` >> Cases_on `dbd` >>
+       gvs[is_bytestring_type_def, arg_type_fits_def,
+           vyperValueTheory.evaluate_type_def, vyperValueTheory.type_slot_size_def]) >>
+  rename1 `word_size n + 1 <= dimword (:256)` >>
+  qpat_x_assum `n <= m` mp_tac >>
+  disch_then (mp_tac o MATCH_MP exprSimPropsTheory.word_size_monotone) >> simp[]
+QED
+
+Theorem ifexp_body_arm_kind[local]:
+  expr_body_pre ce cx env e es ==>
+  (is_word_type (post_value_type ce e) ==> is_word_type (expr_type e)) /\
+  (post_value_type ce e = expr_type e /\
+    (is_word_type (expr_type e) \/
+     same_memory_layout ce (lowered_value_type ce e) (expr_type e) /\
+       (?rtp. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME rtp) \/
+     ~same_memory_layout ce (lowered_value_type ce e) (expr_type e) /\
+       is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+       arg_type_fits (lowered_value_type ce e) (expr_type e)) \/
+   ~is_word_type (expr_type e) /\
+     post_value_type ce e = lowered_value_type ce e /\
+     type_widens_to (get_tenv cx) (lowered_value_type ce e) (expr_type e) /\
+     (?stv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME stv))
+Proof
+  strip_tac >> conj_tac >- metis_tac[ifexp_body_post_nonword] >>
+  Cases_on `is_word_type (expr_type e)` >- simp[] >>
+  Cases_on `?ann fid args drv. e = Call ann (IntCall fid) args drv`
+  >- (Cases_on `is_bytestring_type (expr_type e)`
+      >- (gvs[expr_type_def] >>
+          drule exprSimHypsTheory.ifexp_body_pre_intcall_physical >> strip_tac >>
+          Cases_on `same_memory_layout ce (lowered_value_type ce (Call ann (IntCall fid) args drv)) ann` >>
+          simp[] >> Cases_on `ann` >>
+          gvs[is_bytestring_type_def, arg_type_fits_def] >>
+          Cases_on `lowered_value_type ce (Call (BaseT b) (IntCall fid) args drv)` >>
+          gvs[arg_type_fits_def, is_bytestring_type_def] >>
+          Cases_on `b` >> gvs[is_bytestring_type_def, arg_type_fits_def] >>
+          Cases_on `b'` >> gvs[is_bytestring_type_def, arg_type_fits_def] >>
+          rename1 `arg_type_fits (BaseT (BytesT src)) (BaseT (BytesT dst))` >>
+          Cases_on `src` >> Cases_on `dst` >>
+          gvs[is_bytestring_type_def, is_word_type_def, arg_type_fits_def]) >>
+      gvs[expr_type_def] >> drule_all exprSimHypsTheory.ifexp_intcall_copy_source >> simp[]) >>
+  `lowered_value_type ce e = expr_type e \/
+   is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+   arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    (drule exprSimSourceTheory.expr_body_pre_var_types_well_formed >> disch_then assume_tac >>
+     mp_tac exprSimIfExpCompatTheory.ifexp_lowered_type_classify >>
+     disch_then (qspecl_then [`ce`, `e`, `env`] mp_tac) >>
+     gvs[exprSimHypsDefsTheory.expr_body_pre_def, exprSimHypsDefsTheory.expr_sim_inv_def,
+       vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_context_consistent_def] >>
+     disch_then irule >> first_assum ACCEPT_TAC) >>
+  `post_value_type ce e = expr_type e` by metis_tac[post_value_type_not_int_call] >>
+  drule exprSimHypsTheory.expr_body_pre_type_evaluates >>
+  simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  Cases_on `same_memory_layout ce (lowered_value_type ce e) (expr_type e)`
+  >- (drule ifexp_body_pre_lowered_type_compatible >> simp[] >>
+      metis_tac[ifexp_body_bytestring_evaluates]) >>
+  gvs[] >> metis_tac[same_memory_layout_def, ifexp_body_punnable_refl]
+QED
+
 Theorem ifexp_vv_full_root:
   expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
   (!e. (e = a \/ e = b) ==>
