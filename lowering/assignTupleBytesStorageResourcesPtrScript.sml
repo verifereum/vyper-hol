@@ -4,6 +4,7 @@ Ancestors
   assignTuplePtrLocalCompat assignTuplePtrBytesResources exprSimBufferStore bodyPtrDefs
   exprSimProps valueTypingMemoryProps valueEncodingProps vyperTypeArgFits
   vyperTyping vyperTypeSystem compileEnv exprLowering valueEncoding valueEncodingDefs vyperValue loweringPosts words arithmetic vfmConstants
+  bytestringCopyExecution vyperEncodeDecode vyperStorage
 
 Theorem bytestring_fit_slot_bounds_ptr:
   is_bytestring_type sty /\ is_bytestring_type dty /\ arg_type_fits sty dty /\
@@ -21,6 +22,56 @@ Proof
   gvs[is_bytestring_type_def,arg_type_fits_def,evaluate_type_def] >>
   strip_tac >> gvs[type_slot_size_def,word_size_def] >>
   irule DIV_LE_MONOTONE >> decide_tac
+QED
+
+Theorem bytestring_live_count_bounds_ptr:
+  0 < n /\ len <= 32*(n-1) /\ 32*n < dimword (:256) ==>
+  (len+63) DIV 32 = 1 + word_size len /\
+  0 < (len+63) DIV 32 /\ 32*((len+63) DIV 32) <= 32*n /\
+  (len+63) DIV 32 < dimword (:256) /\ len+63 < dimword (:256)
+Proof
+  strip_tac >>
+  `(len+63) DIV 32 = 1 + word_size len` by
+    (mp_tac (Q.SPECL [`len+31`,`32`]
+       (MATCH_MP ADD_DIV_RWT (DECIDE ``0 < 32``))) >>
+     simp[word_size_def] >> decide_tac) >>
+  `32*(1 + word_size len) <= 32*n` by
+    (`(len+31) DIV 32 < n` by
+       (simp[DIV_LT_X] >> decide_tac) >>
+     fs[word_size_def] >> decide_tac) >>
+  `len+63 < dimword (:256)` by
+    (irule bytestring_word_count_no_wrap >> decide_tac) >>
+  gvs[] >> decide_tac
+QED
+
+Theorem bytestring_live_storage_shape_ptr:
+  ((?bs. dtv = BaseTV (BytesT (Dynamic cap)) /\ v = BytesV bs /\ len = LENGTH bs) \/
+   (?str. dtv = BaseTV (StringT cap) /\ v = StringV str /\ len = LENGTH str)) /\
+  (!mem. mem_agree_outside tm s.vs_memory mem ==>
+    val_in_memory dtv v a mem) ==>
+  (!mem. mem_agree_outside tm s.vs_memory mem ==>
+    mload a (s with vs_memory := mem) = n2w len) /\
+  (!writes. encode_value dtv v = SOME writes ==>
+    !j. MEM j (MAP FST writes) <=> j < (len+63) DIV 32)
+Proof
+  strip_tac >>
+  `(len+63) DIV 32 = 1 + word_size len` by
+    (mp_tac (Q.SPECL [`len+31`,`32`]
+       (MATCH_MP ADD_DIV_RWT (DECIDE ``0 < 32``))) >>
+     simp[word_size_def] >> decide_tac) >>
+  gvs[] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      mp_tac (Q.SPECL [`cap`,`bs`,`a`,`s with vs_memory := mem`] buffer_bytes_header) >>
+      simp[] >> metis_tac[])
+  >- (simp[encode_value_def] >> gen_tac >> strip_tac >>
+      drule (ONCE_REWRITE_RULE [ADD_COMM] encode_dyn_bytes_slots_keys) >>
+      disch_then ACCEPT_TAC)
+  >- (rpt strip_tac >>
+      mp_tac (Q.SPECL [`cap`,`str`,`a`,`s with vs_memory := mem`] buffer_string_header) >>
+      simp[] >> metis_tac[]) >>
+  simp[encode_value_def] >> gen_tac >> strip_tac >>
+  drule (ONCE_REWRITE_RULE [ADD_COMM] encode_dyn_bytes_slots_keys) >>
+  disch_then (ACCEPT_TAC o PURE_REWRITE_RULE [listTheory.LENGTH_MAP])
 QED
 
 Theorem bytestring_storage_resources_ptr:

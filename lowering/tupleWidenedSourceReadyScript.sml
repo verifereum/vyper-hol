@@ -46,6 +46,9 @@ Proof
    sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
     gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
         env_context_consistent_def] >>
+  `!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+     ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty` by
+    gvs[expr_body_pre_def,expr_sim_inv_def] >>
   drule_all ifexp_lowered_type_classify >>
   simp[is_bytestring_type_def] >> strip_tac >>
   gvs[vyperASTTheory.expr_type_def] >>

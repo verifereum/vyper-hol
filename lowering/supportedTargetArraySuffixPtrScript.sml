@@ -18,6 +18,8 @@ Ancestors
   bodyPtrPopTargetSimStorageHeader accountsRelProps vyperStoragePlaceProvenance
   targetEffectfulStorageHeader
 
+val _ = temp_delsimps ["tuple_place_target_post_gas_obs"];
+
 Theorem target_toplevel_array_normal_suffix_ptr:
   bt = TopLevelNameTarget (mid,name) /\
   target_pre cenv cx env (SubscriptTarget bt e) es /\

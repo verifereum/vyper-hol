@@ -2,7 +2,7 @@
 Theory tupleTargetStaticPtr
 Ancestors
   bodyAugPlaceTarget bodyPtrPopCompose bodyPtrStructLitTupleFrame
-  bodyExprPreFacts tupleTargetStoreProps bodySim supportedStmts supportedStmtTraverse
+  bodyExprPreFacts bodyStorageCases targetPlaceLive tupleTargetStoreProps bodySim supportedStmts supportedStmtTraverse
   exprSimHyps exprSimHypsDefs supportedTargets supportedExprForms targetPlaceSim
   allocLimits vyperTypeCallGraph vyperTypeCallStackSoundness
   vyperTypeSystem vyperAST list option
@@ -38,14 +38,20 @@ Proof
       `IS_SOME (supported_target_info tops bindings (SubscriptTarget b key))` by
         (gvs[supported_target_def] >> Cases_on `b` >> gvs[] >>
          irule aug_place_legacy_subscript_info >> fs[body_inv_def]) >>
-      irule aug_place_target_indices_pre >> fs[body_inv_def] >>
-      qexists_tac `bindings` >> simp[]) >>
+      `EVERY (\e. ~is_extcode e) (target_indices (SubscriptTarget b key))` by
+        metis_tac[alloc_limits_target_indices_not_extcode] >>
+      mp_tac (Q.SPEC `SubscriptTarget b key` aug_place_target_indices_pre) >>
+      (impl_tac >- (fs[body_inv_def] >>
+        metis_tac[supported_target_storage_syntax])) >> simp[]) >>
   rename1 `AttributeTarget b fld` >>
   `IS_SOME (supported_target_info tops bindings (AttributeTarget b fld))` by
     (gvs[supported_target_def] >> Cases_on `b` >> gvs[] >>
      irule aug_place_legacy_field_info >> fs[body_inv_def]) >>
-  irule aug_place_target_indices_pre >> fs[body_inv_def] >>
-  qexists_tac `bindings` >> simp[]
+  `EVERY (\e. ~is_extcode e) (target_indices (AttributeTarget b fld))` by
+    metis_tac[alloc_limits_target_indices_not_extcode] >>
+  mp_tac (Q.SPEC `AttributeTarget b fld` aug_place_target_indices_pre) >>
+  (impl_tac >- (fs[body_inv_def] >>
+    metis_tac[supported_target_storage_syntax])) >> simp[]
 QED
 
 Theorem tuple_assignment_target_static_ptr:

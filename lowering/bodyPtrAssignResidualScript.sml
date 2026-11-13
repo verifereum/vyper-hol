@@ -16,8 +16,6 @@ Ancestors
   assignTupleStoreOpenPtr assignTupleBytesStorageResourcesPtr tupleTargetStaticPtr
   supportedTargetSimPtr allocaPtrValueFrame assignTuplePtrOutcome tupleWidenedReadTyped
   tupleWidenedPrefixPtr countedPtrLoop
-  assignDynStorageRoundPtr assignTupleDynamicStoragePtr
-  assignDynStorageCompiledPtr
   tupleUnstagedParts tupleWidenedMarkedReadPtr
   tupleWidenedEntryPtr
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps supportedStmts supportedDecls

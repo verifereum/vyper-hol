@@ -2,13 +2,13 @@
 Theory assignTupleStoreOpenPtr
 Ancestors
   stmtLowering exprLowering context compileEnv exprOpenPrimitives exprOpenTerminals
-  venomInst list option
+  stmtSimAssignStorageCopy venomInst list option
 
 Theorem tuple_assign_scalar_open:
   (loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient) /\
   ((prim /\ is_word_type dty) \/
    (~prim /\ is_bytestring_type dty /\ is_bytestring_type sty)) /\
-  compile_assign_value cenv dst loc src prim NONE dty sty NONE sz sa = (z,sb) ==>
+  compile_assign_value cenv dst loc src prim NONE dty sty sz sa = (z,sb) ==>
   ~block_is_terminated sb
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -17,12 +17,17 @@ Proof
       gvs[compile_assign_value_def,LET_THM,comp_bind_def,comp_return_def] >>
       drule emit_void_terminated >> simp[is_terminator_def]) >>
   Cases_on `is_word_type dty` >> Cases_on `loc` >>
-  Cases_on `type_memory_bytes cenv sty <= 32` >>
   gvs[compile_assign_value_def,compile_store_memory_def,compile_store_bytestring_def,
+      LET_THM,comp_bind_def,comp_ignore_bind_def,comp_return_def] >>
+  Cases_on `is_abi_dynamic cenv.ce_struct_fields dty` >>
+  Cases_on `type_memory_bytes cenv dty DIV 32 = 1` >>
+  gvs[Once compile_store_slots_def,
       compile_memory_to_storage_def,compile_memory_to_transient_def,
       LET_THM,comp_bind_def,comp_ignore_bind_def,comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  metis_tac[emit_void_terminated,is_terminator_def,compile_word_copy_loop_open]
+  FIRST [drule emit_void_terminated >> simp[is_terminator_def],
+         drule word_copy_loop_op_open >> simp[],
+         drule compile_word_copy_loop_open >> simp[]]
 QED
 
 Theorem tuple_store_scalar_at_loc_open:
@@ -59,7 +64,7 @@ Proof
      comp_return_def,LET_THM] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   Cases_on `dty` >> gvs[is_bytestring_type_def] >>
-  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)
     tuple_assign_scalar_open >> simp[]
 QED
 
