@@ -258,7 +258,7 @@ Proof
   conj_tac >- (irule expr_body_pre_res_ok >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   rename1 `struct_field_slot fs fld = SOME (off, ftv)` >>
-  qexistsl_tac [`fs`, `off`, `ftv`] >> simp[] >>
+  simp[] >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
   drule_all struct_field_offset_slots_eq >> strip_tac >> gvs[] >>
@@ -269,7 +269,7 @@ Proof
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   gvs[expr_result_typed_def, expr_runtime_typed_def,
       value_result_typed_def] >>
-  rpt conj_tac >> metis_tac[encode_value_word_typed]
+  rpt conj_tac >> metis_tac[stmtSimAssignStorageFactsTheory.encode_value_word_typed]
 QED
 
 Theorem assign_attr_storage_source_counted[local]:
@@ -314,7 +314,7 @@ Proof
   `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
   drule_all assign_attr_storage_source >> simp[bind_def] >> strip_tac >>
   drule_all assign_attr_storage_tail >> strip_tac >>
-  qexistsl_tac [`fs`, `off`, `ftv`, `res`, `ee'`] >> simp[]
+  qexistsl_tac [`fs`, `ftv`, `res`, `ee'`] >> fs[bind_def]
 QED
 
 (* ===== The code ===== *)
@@ -347,7 +347,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `~has_length_word (expr_type e)` by
     metis_tac[is_word_type_no_length_word] >>
-  drule_all compile_get_target_ptr_toplevel >> strip_tac >>
+  drule_all stmtSimAssignStorageFactsTheory.compile_get_target_ptr_toplevel >> strip_tac >>
   drule stmt_env_assign >> strip_tac >> gvs[] >>
   rename1 `FLOOKUP cenv.ce_module_vars _` >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
@@ -468,6 +468,10 @@ Proof
     simp[evaluation_state_component_equality] >>
   `eval_operand op u = SOME (typed_val_to_w256 ftv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
+  `~u.vs_halted` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >>
+     metis_tac[gas_marked_path_exec, gas_path_normal]) >>
   `gas_marked_path F ctx func u 0
     (OK ((if tr then tstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u
           else sstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u)
@@ -492,6 +496,7 @@ Proof
       with vs_inst_idx := SUC u.vs_inst_idx)` by
     (irule alloca_frame_same_state >> qexists_tac `u` >>
      Cases_on `tr` >> simp[sstore_def, tstore_def, LET_THM] >>
+     qpat_x_assum `_ ==> alloca_frame _ _ _ _ _ ee u` kall_tac >>
      qpat_x_assum `alloca_frame _ _ _ _ _ ee u` mp_tac >>
      simp[alloca_frame_def]) >>
   qexistsl_tac [`INL ()`, `ee'`,
@@ -551,7 +556,7 @@ Proof
      irule vyperStorageFootprintTheory.contained_write_preserves_storage_well_formed_on >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> simp[] >>
-     qexistsl [`ee1`, `n2w slot + n2w off`, `ftv`, `v`] >> simp[] >>
+     qexistsl [`v`, `n2w slot + n2w off`, `ftv`] >> simp[] >>
      decide_tac) >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl,
        stmt_state_rel_inst_idx] >>
@@ -589,7 +594,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def,stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
-  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  >- (rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
       irule gasStorageTheory.gas_bad_storage_at_initial >>
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by

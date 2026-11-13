@@ -18,7 +18,7 @@ Ancestors
   wordLoadStorePtr bodyPtrDefs fragGasPathPtr exprSimStack exprSimDefs loweringPosts
   gasExemptCert exprLowering emitHelper compileEnv loweringStateRelDefs vyperInterpreter
   vyperState ptrDiscipline fragGasSeqPtr typedCopyPtr decoderGhostFramePtr
-  emitHelperProps fragExec exprLoweringProps venomInst venomState gasStorage
+  emitHelperProps fragExec exprLoweringProps venomInst venomState
 
 Theorem expr_stack_outcome_ptr:
   (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) /\
@@ -44,25 +44,28 @@ Theorem expr_stack_outcome_ptr:
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\H res ee gt r. expr_exit res r)
 Proof
-  rewrite_tac[gas_outcome_ptr_def] >> rpt strip_tac >> qexists_tac `marks`
-  >- (disj1_tac >> fs[gas_bad_storage_at_def] >> gen_tac >>
-      first_x_assum (qspec_then `tail` mp_tac) >>
+  rw[gas_outcome_ptr_def] >> qexists_tac `marks`
+  >- (disj1_tac >>
+      gvs[gasStorageTheory.gas_bad_storage_at_def] >> gen_tac >>
       Cases_on `bind (eval_expr cx e) (read_result cx)
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail)` >>
-      drule eval_expr_force_value >> disch_then drule >> simp[])
-  >- (disj2_tac >> disj1_tac >> fs[gas_summary_ptr_at_def] >>
+      drule_all eval_expr_force_value >> strip_tac >> gvs[] >>
+      first_x_assum (qspec_then `tail` mp_tac) >> simp[])
+  >- (disj2_tac >> disj1_tac >>
+      qpat_x_assum `gas_summary_ptr_at _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      rewrite_tac[gas_summary_ptr_at_def] >> strip_tac >>
       qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
-                    `es_end`, `G`, `tn`, `r`] >>
-      conj_tac
+        `es_end`, `G`, `tn`, `r`] >> conj_tac
       >- (gen_tac >> drule eval_expr_force_value >>
           disch_then (qspec_then `es with gas_obs :=
-            gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >>
-          simp[]) >>
-      rpt strip_tac >> first_x_assum drule >> strip_tac >> simp[]
-      >- (gvs[vv_post_def, vv_holds_def, vv_at_def, vv_own_def, expr_post_def,
-              read_result_def, return_def, ptr_vv_ok_def] >>
+            gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >> simp[]) >>
+      gen_tac >> disch_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _` drule >> strip_tac >>
+      simp[]
+      >- (gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
+              vv_own_def, ptr_vv_ok_def, read_result_def, return_def] >>
           first_assum ACCEPT_TAC) >>
-      simp[expr_exit_success_map]) >>
+      disj2_tac >> fs[expr_exit_success_map]) >>
   disj2_tac >> disj2_tac >> drule eval_expr_force_ignore >>
   disch_then (fn th => fs[th]) >> metis_tac[]
 QED

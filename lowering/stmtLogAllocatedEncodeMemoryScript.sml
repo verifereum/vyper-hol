@@ -111,7 +111,7 @@ Resume log_allocated_tuple_encode_continue_mem[ready]:
       conj_tac >- metis_tac[] >>
       qpat_assum `compile_abi_encode_to_buf _ _ _ _ = _` (irule_at Any) >>
       qpat_assum `abi_encoder_input _ _ _ _ _ initial.vs_memory` (irule_at Any) >>
-      qpat_assum `stmt_state_rel _ _ _ _ _ allocated` (irule_at Any) >>
+      qpat_assum `stmt_state_rel _ _ _ _ _ _ allocated` (irule_at Any) >>
       qpat_assum `FLOOKUP allocated.vs_allocas srcid = _` (irule_at Any) >>
       qpat_assum `FLOOKUP allocated.vs_allocas st.cs_next_id = _` (irule_at Any) >>
       qexists_tac `p` >> asm_simp_tac bool_ss [] >>

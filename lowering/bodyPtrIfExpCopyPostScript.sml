@@ -88,6 +88,7 @@ Resume ifexp_copy_buffer_post_transport[post]:
      rpt gen_tac >> disch_tac >>
      qpat_x_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = _` drule >>
      fs[]) >>
+  `storage_well_formed_on cx es' (FST H)` by fs[vv_post_def] >>
   irule copy_buffer_expr_post >>
   simp[] >> conj_tac
   >- (gvs[vv_post_def] >> metis_tac[]) >>

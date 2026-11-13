@@ -107,6 +107,10 @@ Theorem hash_sha256_tail_success_path:
     mem_bytes_at (w2n w) (w2n n) s.vs_memory = bs /\
     s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
     ?t. run_inst_seq code s = OK t /\
+      inst_seq_ptr D 0 ctx fn PG G tn code s
+        (DRESTRICT G (COMPL {gv;sv;out}))
+        (tn with <|t_var := tn.t_var |+ (gv,{}) |+ (sv,{}) |+ (out,{});
+          t_mem := tn.t_mem DIFF range_bytes [(w2n r,32)]|>) /\
       gas_path_ptr D 0 ctx fn PG G tn s 1
         (DRESTRICT G (COMPL {gv;sv;out}))
         (tn with <|t_var := tn.t_var |+ (gv,{}) |+ (sv,{}) |+ (out,{});
@@ -116,8 +120,11 @@ Theorem hash_sha256_tail_success_path:
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   irule_at Any sha256_tail_run >>
-  simp[] >> reverse conj_tac >-
-    simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  simp[] >> rpt conj_tac
+  >~ [`eval_operand _ _ = SOME _ (* g *)`]
+  >- simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+  >~ [`inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _ (* g *)`]
+  >- (irule (SRULE [] hash_sha256_tail_success_check) >> simp[] >> metis_tac[]) >>
   qmatch_goalsub_abbrev_tac `OK (t with vs_inst_idx := s.vs_inst_idx+4)` >>
   qabbrev_tac `code = [mk_inst i0 GAS [] [gv];
     mk_inst i1 STATICCALL [Var gv;Lit 2w;Var p;len;Var q;Lit 32w] [sv];
@@ -302,6 +309,9 @@ Theorem hash_sha256_tail_abort_path:
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
     ?t j. run_inst_seq code s = Abort Revert_abort t /\
+      inst_seq_ptr D 0 ctx fn PG G tn code s
+        (DRESTRICT G (COMPL {gv;sv}))
+        (tn with t_var := tn.t_var |+ (gv,{}) |+ (sv,{})) /\
       gas_path_ptr D 0 ctx fn PG G tn s 1
         (DRESTRICT G (COMPL {gv;sv}))
         (tn with t_var := tn.t_var |+ (gv,{}) |+ (sv,{}))
@@ -312,6 +322,13 @@ Proof
     mk_inst i1 STATICCALL [Var gv;Lit 2w;Var p;len;Var q;Lit 32w] [sv];
     mk_inst i2 ASSERT [Var sv] []; mk_inst i3 MLOAD [Var q] [out]] s =
     Abort Revert_abort t` by (irule sha256_tail_fail >> simp[] >> metis_tac[]) >>
+  `inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst i0 GAS [] [gv];
+     mk_inst i1 STATICCALL [Var gv;Lit 2w;Var p;len;Var q;Lit 32w] [sv];
+     mk_inst i2 ASSERT [Var sv] []; mk_inst i3 MLOAD [Var q] [out]] s
+    (DRESTRICT G (COMPL {gv;sv}))
+    (tn with t_var := tn.t_var |+ (gv,{}) |+ (sv,{}))` by
+    (irule hash_sha256_tail_abort_check >> simp[] >> metis_tac[]) >>
   qexists `t` >> simp[] >> irule hash_gas_head_abort_path >> simp[] >>
   qexistsl [`[mk_inst i1 STATICCALL [Var gv;Lit 2w;Var p;len;Var q;Lit 32w] [sv];
     mk_inst i2 ASSERT [Var sv] []; mk_inst i3 MLOAD [Var q] [out]]`, `gv`, `i0`] >>
