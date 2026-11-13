@@ -74,7 +74,7 @@ Proof
     (mstore d w (s with vs_vars := vars)).vs_requests = s.vs_requests /\
     (mstore d w (s with vs_vars := vars)).vs_call_ctx = s.vs_call_ctx` by
     simp[mstore_def, write_memory_with_expansion_def] >>
-  irule abi_malformed_resource_post_intro >> qexists_tac `H` >> simp[] >> conj_tac
+  match_mp_tac (GEN_ALL abi_malformed_resource_post_intro) >> qexists_tac `H` >> simp[] >> conj_tac
   >- (rpt strip_tac >>
       `mem_bytes_at B' L' (mstore d w (s with vs_vars := vars)).vs_memory =
        mem_bytes_at B' L' (s with vs_vars := vars).vs_memory` suffices_by simp[] >>
@@ -384,7 +384,7 @@ Proof
    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `t = s with vs_vars := _` SUBST1_TAC >> simp[]) >>
-  irule abi_malformed_resource_post_intro >> qexists_tac `H` >> simp[] >> rpt strip_tac >> Cases_on `op` >>
+  match_mp_tac (GEN_ALL abi_malformed_resource_post_intro) >> qexists_tac `H` >> simp[] >> rpt strip_tac >> Cases_on `op` >>
   fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
      not_fresh_at_def, eval_operand_def, lookup_var_def]
 QED

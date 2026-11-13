@@ -53,7 +53,7 @@ Proof
   `!H':(bool # bytes32 # type_value) list # num list.
      stmt_state_rel H' ctx func cenv cx es s ==>
      stmt_state_rel H' ctx func cenv cx es t` by suspend "state" >>
-  irule abi_malformed_resource_post_frame_intro >> qexists_tac `H` >> simp[] >>
+  match_mp_tac (GEN_ALL abi_malformed_resource_post_frame_intro) >> qexists_tac `H` >> simp[] >>
   rpt strip_tac >>
   qhdtm_assum `abi_decode_frame`
     (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>

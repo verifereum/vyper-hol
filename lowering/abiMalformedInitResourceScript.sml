@@ -53,7 +53,7 @@ Proof
      stmt_state_rel H' ctx func cenv cx es allocated` by
     (rpt strip_tac >> drule_all literal_alloc_buffer_run >> strip_tac >> gvs[]) >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s allocated` by
-    (irule abi_malformed_resource_post_frame_intro >> qexists_tac `H` >> simp[] >>
+    (match_mp_tac (GEN_ALL abi_malformed_resource_post_frame_intro) >> qexists_tac `H` >> simp[] >>
      metis_tac[]) >>
   `not_local_ptr cenv es.scopes (STRING #"%" (toString st.cs_next_var))` by
     (irule local_ptrs_reserved_fresh >> qexists_tac `st` >> simp[]) >>

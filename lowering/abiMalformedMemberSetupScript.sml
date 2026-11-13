@@ -43,7 +43,7 @@ Proof
      irule abi_malformed_reserved_vars_state >> simp[lookup_var_def] >>
      qexists_tac `st` >> simp[]) >>
   qpat_x_assum `t = s with vs_vars := _` SUBST_ALL_TAC >>
-  irule abi_malformed_resource_post_intro >> qexists_tac `H` >> simp[] >> rpt strip_tac >>
+  match_mp_tac (GEN_ALL abi_malformed_resource_post_intro) >> qexists_tac `H` >> simp[] >> rpt strip_tac >>
   Cases_on `op` >>
   fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
      not_fresh_at_def, eval_operand_def, lookup_var_def] >> metis_tac[]

@@ -119,7 +119,7 @@ Theorem abi_malformed_resource_post_intro:
      eval_operand op t = SOME w) ==>
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s t
 Proof
-  strip_tac >> irule abi_malformed_resource_post_frame_intro >>
+  strip_tac >> match_mp_tac (GEN_ALL abi_malformed_resource_post_frame_intro) >>
   qexists_tac `H` >> simp[] >> rpt strip_tac >>
   irule stmt_state_rel_fields_transport >>
   first_assum (irule_at Any) >> first_assum (irule_at Any) >> simp[]
