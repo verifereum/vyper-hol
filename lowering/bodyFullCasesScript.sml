@@ -10,7 +10,9 @@ Theory bodyFullCases
 Ancestors
   bodyFullAssign bodyFullAssignTuple bodyFullAugAssign bodyFullAnnAssign
   bodyFullAppend annAssignPtrFacts
-  bodyFullPreds bodyFullRawRevert bodyFullCtrlCases gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
+  bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
+  bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullCtrlCases
+  gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
   msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
