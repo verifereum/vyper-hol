@@ -7,7 +7,7 @@ Ancestors
   allocaHistory venomInstProofs venomExecSemantics venomState compileEnv
   loweringPosts loweringStateRelDefs vyperState words arithmetic list finite_map venomInst
   venomExecProps memSafeRun instMemFrontier gasCount exprSimDefs
-  gasOutcome gasSummary gasContext vyperInterpreter stmtSimDefs stmtFragPtr
+  gasOutcome gasSummary gasContext vyperInterpreter stmtSimDefs stmtFragPtr bodyMemoryDefs
 Libs
   monadsyntax
 
@@ -201,6 +201,7 @@ Theorem immutable_prepared_one_round_mem:
       ret_pc_ok bc sb0 s_body /\ gas_marked_path T ctx func live 0 (OK s_body) /\
       s_body.vs_allocas = live.vs_allocas /\ s_body.vs_alloca_next = live.vs_alloca_next /\
       alloca_history func s_body /\ return_buf_frame d bc sb0 s_body /\
+      ret_buf_frontier d bc s_body /\
       (!x. not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep ==>
         lookup_var x s_body = lookup_var x live)) /\
   cenv_top_ext cenv bc ((FEMPTY |+ (id,
@@ -262,6 +263,8 @@ Proof
 QED
 
 Resume immutable_prepared_one_round_mem[live]:
+  `!lo. alloca_prefix lo s ==> alloca_prefix lo live` by
+    metis_tac[gas_marked_path_exec, gas_path_alloca_prefix] >>
   simp[array_round_inv_def] >>
   irule array_round_frame_transport >> simp[] >> qexists_tac `s` >>
   fs[array_round_inv_def, Abbr `live`, lookup_var_def, jump_to_def, update_var_def,
@@ -271,7 +274,12 @@ Resume immutable_prepared_one_round_mem[body_outcome]:
   qhdtm_x_assum `stmt_frag_mem` mp_tac >>
   rewrite_tac[stmt_frag_mem_def] >>
   disch_then (qspecl_then [`sb0`, `sb1`, `s_body`, `bc'`] mp_tac) >>
-  simp[GSYM array_body_post_mem_def, SF ETA_ss]
+  impl_tac >- simp[] >>
+  disch_then (assume_tac o BETA_RULE o MATCH_MP gas_outcome_alloca_prefix) >>
+  irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+  first_x_assum (irule_at Any) >>
+  BETA_TAC >> rpt strip_tac >> simp[array_body_post_mem_def] >>
+  qexists_tac `cenv''` >> fs[]
 QED
 Resume immutable_prepared_one_round_mem[scopes]:
   rpt strip_tac >> qpat_x_assum `!gs r ee. _` drule >> metis_tac[]
@@ -335,6 +343,7 @@ Theorem immutable_prepared_loop_outcome_mem:
       ret_pc_ok bc sb0 s_body /\ gas_marked_path T ctx func live 0 (OK s_body) /\
       s_body.vs_allocas = live.vs_allocas /\ s_body.vs_alloca_next = live.vs_alloca_next /\
       alloca_history func s_body /\ return_buf_frame d bc sb0 s_body /\
+      ret_buf_frontier d bc s_body /\
       (!x. not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep ==>
         lookup_var x s_body = lookup_var x live)) /\
   (!k ei. k < LENGTH vs /\ P ei /\ lookup_scopes id ei.scopes = NONE ==>
@@ -396,6 +405,8 @@ Resume immutable_prepared_loop_outcome_mem[last]:
   simp[] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_marked_path T ctx func s 0 (OK t)` >>
   qexists_tac `t` >> simp[] >>
+  `!lo. alloca_prefix lo s ==> alloca_prefix lo t` by
+    metis_tac[gas_marked_path_exec, gas_path_alloca_prefix] >>
   `array_round_frame d func cenv caller orig t` by
     (irule array_round_frame_transport >> simp[] >> qexists_tac `s` >>
      fs[array_round_inv_def, Abbr `t`, lookup_var_def, jump_to_def, update_var_def,
