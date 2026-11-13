@@ -25,7 +25,7 @@ QED
 
 Theorem slice_extcode_output_entry:
   compile_slice_out_buf sz sa = ((out,data),sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ sz < dimword (:256) ==>
   ?t p. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand out t = SOME p /\ eval_operand data t = SOME (p + 32w) /\
@@ -35,7 +35,7 @@ Theorem slice_extcode_output_entry:
       regions_disjoint (w2n p) sz off len) /\
     (?x. out = Var x /\ not_fresh_at sb x) /\
     (?x. data = Var x /\ not_fresh_at sb x) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!j b len. j < sa.cs_next_id /\ FLOOKUP t.vs_allocas j = SOME (b,len) ==>
@@ -52,8 +52,8 @@ Proof
 QED
 
 Theorem slice_extcode_output_post:
-  expr_post ctx func cenv cx a es sa sb s ee v addr t /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  expr_post H ctx func cenv cx a es sa sb s ee v addr t /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   eval_operand out s = SOME p /\ eval_operand data s = SOME (p + 32w) /\
   (?x. out = Var x /\ not_fresh_at sa x) /\
@@ -62,7 +62,7 @@ Theorem slice_extcode_output_post:
   (!nm off sz. local_region cenv es.scopes s nm off sz ==>
     regions_disjoint (w2n p) cap off sz) /\
   sbase.cs_next_id <= aid ==>
-  stmt_state_rel ctx func cenv cx ee t /\
+  stmt_state_rel H ctx func cenv cx ee t /\
   eval_operand out t = SOME p /\ eval_operand data t = SOME (p + 32w) /\
   FLOOKUP t.vs_allocas aid = SOME (w2n p,cap) /\
   (!nm off sz. local_region cenv ee.scopes t nm off sz ==>
@@ -76,7 +76,7 @@ Proof
     (rpt strip_tac >> gvs[MEM, eval_operand_def] >>
      fs[expr_post_def] >> first_x_assum irule >> simp[]) >>
   `FLOOKUP t.vs_allocas aid = SOME (w2n p,cap)` by fs[expr_post_def] >>
-  `stmt_state_rel ctx func cenv cx ee t` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee t` by fs[expr_post_def] >>
   simp[] >> conj_tac
   >- (rpt strip_tac >>
       `local_region cenv es.scopes s nm off sz` by
