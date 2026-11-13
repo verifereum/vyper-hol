@@ -57,7 +57,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem bop_scalar_binop_input_clean[local]:
+Theorem bop_scalar_binop_input_clean:
   op_prov G x = NONE /\ op_taint tn x = {} /\
   op_prov G y = NONE /\ op_taint tn y = {} ==>
   !op. op IN ({x; y} UNION IMAGE Lit UNIV) ==>
@@ -76,7 +76,8 @@ Theorem bop_scalar_binop_success_path:
   ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts st st') s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
+  ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G' tn' /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st st'))) /\
     op_prov G' v = NONE /\ op_taint tn' v = {} /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\

@@ -456,7 +456,7 @@ Proof
        `DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem`,`u.t_mem = tn.t_mem`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[DISJOINT_DEF, EXTENSION] >> metis_tac[LESS_TRANS]) >>
   drule_all calldata_array_element_setup_endpoint_ptr_core >>
-  disch_then (qspecl_then [`ARB`,`ctx`,`PG`,`\g r. F`] strip_assume_tac) >>
+  disch_then (qspecl_then [`ARB`,`ARB`,`ctx`,`PG`,`\g r. F`] strip_assume_tac) >>
   rename1 `SND (SND ops) = Var child` >>
   rename1 `op_taint u' (FST ops) = {}` >>
   qabbrev_tac `r = t' with vs_inst_idx := LENGTH middle.cs_current_insts` >>
@@ -465,9 +465,9 @@ Proof
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`inst_extends body_st middle`,`body_st.cs_current_insts = []`,`t.vs_inst_idx = 0`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[emitted_insts_def, inst_extends_def]) >>
-  `ptr_covers H' u' child r (type_memory_size tv)` by
+  `ptr_covers HG u' child r (type_memory_size tv)` by
     (unabbrev_all_tac >>
-     qpat_assum `ptr_covers H' u' child _ _` mp_tac >>
+     qpat_assum `ptr_covers HG u' child _ _` mp_tac >>
      qpat_assum `LENGTH (emitted_insts body_st middle) + _ = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
   `cs_extends middle end_st` by
@@ -485,7 +485,7 @@ Proof
   `abi_decode_sim ctx fn t r /\ ~r.vs_halted /\
     r.vs_current_bb = middle.cs_current_bb /\
     r.vs_inst_idx = LENGTH middle.cs_current_insts` by
-    (qpat_assum `frag_exec_ptr _ _ _ body_st middle _ _ _` mp_tac >>
+    (qpat_assum `frag_exec_ptr _ _ _ _ body_st middle _ _ _` mp_tac >>
      map_every (fn pat => qpat_assum pat mp_tac)
        [`fn_has_code body_st middle fn`,`~ctx_has_dalloca ctx`,
         `~t.vs_halted`,`t.vs_current_bb = body_lbl`,
@@ -544,7 +544,7 @@ Proof
      qpat_assum `fresh_vars_wrt limit t''` mp_tac >>
      qpat_assum `t'' = t'` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[fresh_vars_wrt_def]) >>
-  `ptr_covers H' u' root r outsz` by
+  `ptr_covers HG u' root r outsz` by
     (simp_tac bool_ss [Abbr `r`] >>
      map_every (fn pat => qpat_assum pat mp_tac)
        [`ptr_covers H u root t outsz`,`not_fresh_at body_st root`,
@@ -845,7 +845,7 @@ Proof
     (qpat_assum `abi_decoder_operand_live middle.cs_next_var (Var q)` mp_tac >>
      rpt (pop_assum kall_tac) >> metis_tac[calldata_operand_live_not_fresh]) >>
   `lookup_var q child_end = lookup_var q r /\
-    FLOOKUP childG q = FLOOKUP H' q /\
+    FLOOKUP childG q = FLOOKUP HG q /\
     op_taint childtn (Var q) = op_taint u' (Var q)` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`!op. abi_decoder_operand_live middle.cs_next_var op ==>
@@ -854,7 +854,7 @@ Proof
        `abi_decoder_operand_live middle.cs_next_var (Var q)`, `not_fresh_at middle q`] >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      metis_tac[eval_operand_def]) >>
-  `ptr_covers H' u' q r 32` by
+  `ptr_covers HG u' q r 32` by
     (simp_tac bool_ss [Abbr `r`] >>
      map_every (fn pat => qpat_assum pat mp_tac)
        [`ptr_covers H u q t 32`,`not_fresh_at body_st q`,
@@ -864,11 +864,11 @@ Proof
      goal_assum (drule_at Any) >> fs[lookup_var_def] >> metis_tac[]) >>
   `ptr_covers childG childtn q child_end 32` by
     (map_every (fn pat => qpat_assum pat mp_tac)
-      [`ptr_covers H' u' q r 32`, `lookup_var q child_end = _`,
+      [`ptr_covers HG u' q r 32`, `lookup_var q child_end = _`,
        `FLOOKUP childG q = _`, `op_taint childtn (Var q) = _`] >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      irule decoderGhostFramePtrTheory.ptr_covers_frame >>
-     qexistsl_tac [`H'`, `r`, `u'`] >> simp[]) >>
+     qexistsl_tac [`HG`, `r`, `u'`] >> simp[]) >>
   `abi_decoder_operand_live middle.cs_next_var (Var elem_idx) /\
     not_fresh_at middle elem_idx` by
     (map_every (fn pat => qpat_assum pat mp_tac)
@@ -878,7 +878,7 @@ Proof
      drule abiDecoderArraySetupInputsTheory.abi_decode_array_element_setup_operands >>
      metis_tac[calldata_operand_live_not_fresh]) >>
   `eval_operand (Var elem_idx) child_end = eval_operand (Var elem_idx) r /\
-    FLOOKUP childG elem_idx = FLOOKUP H' elem_idx /\
+    FLOOKUP childG elem_idx = FLOOKUP HG elem_idx /\
     op_taint childtn (Var elem_idx) = op_taint u' (Var elem_idx)` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`!op. abi_decoder_operand_live middle.cs_next_var op ==>
@@ -892,7 +892,7 @@ Proof
     op_prov childG (Var elem_idx) = NONE` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`eval_operand (FST ops) t' = _`, `FST ops = Var elem_idx`,
-       `op_taint u' (FST ops) = {}`, `op_prov H' (FST ops) = NONE`,
+       `op_taint u' (FST ops) = {}`, `op_prov HG (FST ops) = NONE`,
        `eval_operand (Var elem_idx) child_end = _`,
        `FLOOKUP childG elem_idx = _`, `op_taint childtn (Var elem_idx) = _`] >>
      simp_tac bool_ss [Abbr `r`] >> rpt (pop_assum kall_tac) >>
@@ -1310,7 +1310,7 @@ Proof
     (qpat_assum `t.vs_allocas = s.vs_allocas` mp_tac >>
      qpat_assum `allocas_from lower s` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[allocas_from_def] >> metis_tac[]) >>
-  `!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H' u' r) ==>
+  `!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG HG u' r) ==>
     !fuel. ptr_safe_run D lower fuel ctx fn PG H u t` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`!D lower ctx' func. _`, `fn_has_code body_st middle fn`,
@@ -1323,7 +1323,7 @@ Proof
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s`,
        `!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx fn PG H u t`,
-       `!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx fn PG H' u' r`,
+       `!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx fn PG HG u' r`,
        `!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx fn PG childG childtn child_end`,
        `!D. _ ==> !fuel. ptr_safe_run D lower fuel ctx fn PG backG backtn backstate`] >>
      rpt (pop_assum kall_tac) >> metis_tac[]) >>

@@ -154,8 +154,8 @@ QED
 (* The logical entry relations do not constrain the code-generator's
    initial free-memory-pointer field. *)
 Theorem registration_stmt_initial_fmp:
-  stmt_state_rel ctx func cenv cx es (s with vs_initial_fmp := w) <=>
-  stmt_state_rel ctx func cenv cx es s
+  stmt_state_rel H ctx func cenv cx es (s with vs_initial_fmp := w) <=>
+  stmt_state_rel H ctx func cenv cx es s
 Proof
   simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
        immutable_alloca_sep_def, immutable_decl_sep_def,
@@ -170,8 +170,8 @@ Proof
 QED
 
 Theorem registration_ghost_initial_fmp:
-  ghost_inv d cenv cx es G tn (s with vs_initial_fmp := w) <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx es G tn (s with vs_initial_fmp := w) <=>
+  ghost_inv H d cenv cx es G tn s
 Proof
   Cases_on `d` >- simp[ghost_inv_def, return_buf_ptr_def,
     ptr_covers_def, lookup_var_def, stor_taint_ok_def] >>

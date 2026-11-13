@@ -23,7 +23,7 @@ Theorem raw_log_body_topics_sim_ptr:
   gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx topics) (es,s0,G0,tn0)
     (\rr ee G tn t. ?vs. rr = INL vs /\
-       typed_args_post_ptr d ctx func cenv cx es sa s0 G0 tn0 ee topics ops vs G tn t /\
+       typed_args_post_ptr H d ctx func cenv cx es sa s0 G0 tn0 ee topics ops vs G tn t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\rr ee ghosts r. wb_args_exit rr r)
@@ -50,10 +50,10 @@ Theorem raw_log_topics_marked_post_ptr:
   expr_sim_inv cenv cx env es /\
   gas_marked_exec_ptr D (ctx,func) PG (eval_exprs cx topics) (es,s0,G0,tn0)
     marks (INL vs) ee G tn r /\
-  typed_args_post_ptr d ctx func cenv cx es sa s0 G0 tn0
+  typed_args_post_ptr H d ctx func cenv cx es sa s0 G0 tn0
     (ee with gas_obs := []) topics ops vs G tn t ==>
   expr_sim_inv cenv cx env (ee with gas_obs := []) /\
-  wb_args_post ctx func cenv cx es sa s0 (ee with gas_obs := []) ops vs t /\
+  wb_args_post H ctx func cenv cx es sa s0 (ee with gas_obs := []) ops vs t /\
   ghost_inv H d cenv cx (ee with gas_obs := []) G tn t /\
   EVERY (\op. op_taint tn op = {}) ops /\
   ghost_kept cenv es sa G0 tn0 s0 G tn

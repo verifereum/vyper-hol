@@ -43,7 +43,7 @@ Proof
     (qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = OK t` mp_tac >>
      simp[run_inst_seq_def, AllCaseEqs()] >> metis_tac[]) >>
   drule_all budget_alloca_endpoint_exact_ptr_core >>
-  disch_then (qspecl_then [`tn`,`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   `t = mstore p 0w v` by
     (qpat_x_assum `run_inst_seq (emitted_insts allocation_st sb) v = OK t` mp_tac >>
      simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,

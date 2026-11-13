@@ -122,7 +122,7 @@ Proof
   strip_tac >> drule_all actual_word_alloca_credit_run >> strip_tac >>
   drule_at (Pos (el 2)) actual_alloca_endpoint_exact_ptr_core >>
   simp[] >>
-  disch_then (qspecl_then [`tn`,`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   gvs[AllCaseEqs()] >>
   qexistsl_tac [`HG`,`u`] >>
   fs[fresh_vars_wrt_def]
@@ -183,7 +183,7 @@ Theorem actual_word_alloca_twice_ptr:
 Proof
   strip_tac >>
   drule_all actual_word_alloca_replay_ptr >>
-  disch_then (qspecl_then [`tn`,`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   `!entry. FLOOKUP (t with vs_inst_idx := LENGTH sa.cs_current_insts).vs_allocas
       sa.cs_next_id = SOME entry ==>
     ?base. entry = (base,32) /\
@@ -200,7 +200,7 @@ Proof
   disch_then drule >> disch_then drule >>
   disch_then drule >> disch_then drule >>
   disch_then drule >> simp[] >>
-  disch_then (qspecl_then [`u`,`cx`,`ctx`,`R`,`PG`,`HG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`u`,`cx`,`ctx`,`R`,`PG`,`H`,`HG`] strip_assume_tac) >>
   drule_at (Pos (el 4)) emitted_alloca_occupied_frame >>
   simp[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >> strip_tac >>
   qpat_x_assum `!insts. _` (qspec_then `insts` strip_assume_tac) >>

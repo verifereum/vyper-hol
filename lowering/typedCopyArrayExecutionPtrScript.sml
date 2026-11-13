@@ -108,7 +108,7 @@ Proof
    w2n a+0*64 < dimword(:256) /\ w2n b+0*96 < dimword(:256)` by
     suspend "address0_resources" >>
   drule_all typedCopyAmbientFramePtrTheory.typed_copy_loop_address_ambient_frag_ptr >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
   rename1 `lookup_var sp u0 = SOME _` >>
   rename1 `ptr_covers ga0 ta0 sp u0 64` >>
   qabbrev_tac `nx = 32 + 32 * ((LENGTH x + 31) DIV 32)` >>
@@ -130,7 +130,7 @@ Proof
      (?str. StringV x = StringV str /\ LENGTH x = LENGTH str)`
     assume_tac >- simp[] >>
   drule_all compile_store_bytestring_robust_ambient_frag_ptr >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
   rename1 `frag_exec_ptr H cx ctx PG si se
     (\g t v. g = ga0 /\ t = ta0 /\ v = u0)
     (\g t v. g = gc0 /\ t = tc0 /\ v = v0) R` >>
@@ -150,7 +150,7 @@ Proof
    w2n a+1*64 < dimword(:256) /\ w2n b+1*96 < dimword(:256)` by
     suspend "address1_resources" >>
   drule_all typedCopyAmbientFramePtrTheory.typed_copy_loop_address_ambient_frag_ptr >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
   rename1 `frag_exec_ptr H cx ctx PG sb' si
     (\g t v. g = gh1 /\ t = th1 /\ v = sh1)
     (\g t v. g = ga1 /\ t = ta1 /\ v = u1) R` >>
@@ -169,7 +169,7 @@ Proof
      (?str. StringV y = StringV str /\ LENGTH y = LENGTH str)`
     assume_tac >- simp[] >>
   drule_all compile_store_bytestring_robust_ambient_frag_ptr >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
   rename1 `frag_exec_ptr H cx ctx PG si se
     (\g t v. g = ga1 /\ t = ta1 /\ v = u1)
     (\g t v. g = gc1 /\ t = tc1 /\ v = v1) R` >>
