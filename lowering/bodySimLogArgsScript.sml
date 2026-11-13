@@ -6,7 +6,7 @@ Ancestors
   exprSimMemDefs venomMemDefs
   exprSimSource bodyExprPreFacts exprSimHypsDefs list bodySim bodySimStmtCases stmtSimLog exprSimHyps
   compileEnv compileVyper supportedStmts supportedDecls supportedTypes
-  supportedExprs supportedExprTraverse supportedStmtTraverse vyperEvent vyperInterpreter
+  supportedExprs supportedExprTraverse supportedStmtTraverse vyperEvent vyperEventArgCompat vyperInterpreter
   vyperState vyperTypeSystem supportedProgram supportedNames vyperContext
   vyperABI vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallGraph
   vyperTypeCallStackSoundness exprLowering retAbiPlanProps abiDecoderMembers finite_map pred_set
