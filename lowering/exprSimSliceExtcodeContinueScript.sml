@@ -150,13 +150,19 @@ Theorem slice_address_read_outcome:
   (nocalls ==> int_calls_expr addr = []) /\
   lower_value compile_expr cenv ty addr sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s /\
+     storage_well_formed_on cx es (FST H)) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!v. storage_trace_frame (finish_slice v)) /\
   (!ee t bs gs.
     bind (eval_expr cx addr) (read_result cx) (es with gas_obs := gs) =
       (INL (BytesV bs),ee) /\
-    expr_post H ctx func cenv cx addr es sa sb s ee (BytesV bs) op t /\
+    storage_trace_domain cx st0 ee.storage_trace /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       expr_post H ctx func cenv cx addr es sa sb s ee (BytesV bs) op t) /\
     expr_sim_inv cenv cx env ee /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     LENGTH bs = 20 /\ ~t.vs_halted /\ ee.gas_obs = [] /\
     eval_operand op t = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) /\
@@ -182,8 +188,12 @@ Proof
   `?gs. bind (eval_expr cx addr) (read_result cx) (es with gas_obs := gs) =
     (INL v,mid with gas_obs := [])` by
     (fs[gasSummaryTheory.gas_marked_exec_def] >> metis_tac[]) >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  strip_tac >>
   drule_all slice_address_read_post >> strip_tac >> gvs[] >>
-  first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
+  first_x_assum irule >> simp[] >>
   qexists_tac `gs` >> simp[]
 QED
 

@@ -63,7 +63,7 @@ Proof
   qexists_tac `marks`
   >- (disj1_tac >> first_assum ACCEPT_TAC)
   >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`, `es_end`, `r`] >>
-      drule_all stmtSimPropsTheory.gas_marked_exec_valid_prefix >> strip_tac >>
+      drule_then (drule_then assume_tac) stmtSimPropsTheory.gas_marked_exec_valid_prefix >>
       fs[] >> metis_tac[]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
@@ -81,7 +81,7 @@ Proof
 QED
 
 (* So a start outside the storage domain is already a bad-storage outcome. *)
-Theorem slice_terminal_domain_intro[local]:
+Theorem slice_terminal_domain_intro:
   (storage_trace_domain cx st0 es.storage_trace ==>
    gas_outcome F tops (ctx,func) cx st0
      (do acc <- get_accounts; v <- lift_sum (f acc); return (Value v) od)
