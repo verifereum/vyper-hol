@@ -53,7 +53,7 @@ Proof
  Cases_on `evaluate_type (get_tenv cx) (expr_type e)`
  >- (irule vv_post_frame_intro >>
      simp[vv_holds_def, vv_at_def, mk_ptr_def, vyperStateTheory.read_result_def] >>
-     simp[vyperStateTheory.return_def] >> first_assum ACCEPT_TAC) >>
+     simp[vyperStateTheory.return_def]) >>
  `x = BaseTV (BytesT (Dynamic bound))` by
    (qpat_x_assum `evaluate_type _ _ = SOME x` mp_tac >>
     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
@@ -128,7 +128,7 @@ Proof
  Cases_on `evaluate_type (get_tenv cx) (expr_type e)`
  >- (irule vv_post_frame_intro >>
      simp[vv_holds_def, vv_at_def, mk_ptr_def, vyperStateTheory.read_result_def] >>
-     simp[vyperStateTheory.return_def] >> first_assum ACCEPT_TAC) >>
+     simp[vyperStateTheory.return_def]) >>
  `x = BaseTV (StringT bound)` by
    (qpat_x_assum `evaluate_type _ _ = SOME x` mp_tac >>
     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>

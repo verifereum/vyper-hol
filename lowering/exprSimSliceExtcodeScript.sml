@@ -390,7 +390,6 @@ Proof
        stmt_state_rel_inst_idx,
        evaluate_type_def, is_word_type_def, vyperStateTheory.read_result_def,
        vyperStateTheory.return_def] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
   reverse conj_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   conj_tac
   >- (simp[val_wf_def, type_memory_size_def] >>

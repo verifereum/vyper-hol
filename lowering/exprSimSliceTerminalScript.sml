@@ -3,7 +3,7 @@ Theory exprSimSliceTerminal
 Ancestors
   exprSimSliceDataPost exprSimSliceCapacityRead exprSimSliceCompose
   fragGasSeqAbort exprSimSliceData exprSimSliceBounds gasOutcome gasSummary
-  vyperState vyperContext exprSimWordArgs list
+  vyperState vyperContext exprSimWordArgs stmtSimProps list
 
 Theorem slice_data_zero_code:
   compile_slice_data sl src start len sz sa = (out,sb) ==>
@@ -61,25 +61,26 @@ Theorem slice_gas_outcome_conseq_frame:
 Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac >>
   qexists_tac `marks`
-  >- simp[]
+  >- (disj1_tac >> first_assum ACCEPT_TAC)
   >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`, `es_end`, `r`] >>
-      `?obs. es_end.storage_trace = es.storage_trace ++ obs` by
-        (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
-           (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
-         disch_then (qspec_then `[]` assume_tac) >>
-         qpat_assum `storage_trace_frame source`
-           (fn th => drule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
-              vyperStorageTraceTheory.storage_trace_frame_prefix) th)) >>
-         simp[]) >>
-      `!H. valid_horizon cx st0 H es_end.storage_trace ==>
-           valid_horizon cx st0 H es.storage_trace` by
-        fs[vyperStorageFootprintTheory.valid_horizon_def] >>
+      drule_all stmtSimPropsTheory.gas_marked_exec_valid_prefix >> strip_tac >>
       fs[] >> metis_tac[]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
-(* The terminal action reads accounts only, so a start outside the storage
-   domain is already a bad-storage outcome. *)
+(* The terminal action reads accounts only. *)
+Theorem slice_terminal_source_frame:
+  storage_trace_frame
+    (do acc <- get_accounts; v <- lift_sum (f acc); return (Value v) od)
+Proof
+  irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_state_reads] >>
+  gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_lifts,
+       vyperStorageTraceTheory.storage_trace_frame_return]
+QED
+
+(* So a start outside the storage domain is already a bad-storage outcome. *)
 Theorem slice_terminal_domain_intro[local]:
   (storage_trace_domain cx st0 es.storage_trace ==>
    gas_outcome F tops (ctx,func) cx st0
@@ -92,12 +93,8 @@ Proof
   strip_tac >> Cases_on `storage_trace_domain cx st0 es.storage_trace`
   >- fs[] >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-  irule gasStorageTheory.gas_bad_storage_at_initial >> simp[] >>
-  irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-  simp[vyperStorageTraceTheory.storage_trace_frame_state_reads] >>
-  gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-  simp[vyperStorageTraceTheory.storage_trace_frame_lifts,
-       vyperStorageTraceTheory.storage_trace_frame_return]
+  irule gasStorageTheory.gas_bad_storage_at_initial >>
+  asm_rewrite_tac[slice_terminal_source_frame]
 QED
 
 Theorem slice_data_range_path:
