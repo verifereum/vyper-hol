@@ -739,19 +739,17 @@ Proof
        (es with <|scopes := (FEMPTY |+ (id,
           <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes;
           gas_obs := []|>) (FST H)` by
-    (rpt strip_tac >>
+    (gen_tac >> strip_tac >>
      qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ bc _ _ s2 /\ _`
-       drule >> strip_tac >>
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
      conj_tac
      >- (drule msg_gas_state_frame >>
          disch_then (qspecl_then [`s2.vs_gas_readings`, `s2.vs_inst_idx`, `[]`] mp_tac) >>
          simp[stmt_state_rel_inst_idx]) >>
-     `storage_well_formed_on cx
-        (es with <|scopes := (FEMPTY |+ (id,
-          <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes;
-          gas_obs := []|>) (FST H) <=> storage_well_formed_on cx es (FST H)` by
-       (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
-     metis_tac[]) >>
+     qpat_x_assum `storage_well_formed_on cx es (FST H)` mp_tac >>
+     match_mp_tac (METIS_PROVE [] ``(A <=> B) ==> B ==> A``) >>
+     irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
   simp[] >> metis_tac[]
 QED
 
