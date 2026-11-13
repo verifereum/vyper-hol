@@ -65,7 +65,7 @@ Proof
          (mut = Storage \/ mut = Transient) /\ ~is_word_type ty /\
          (!elem n. ty <> ArrayT elem (Dynamic n)) /\
          0 < type_memory_bytes cenv ty /\ expr_type e = ty)` by
-        (strip_tac >> gvs[target_to_expr_def, expr_can_mutate_def]) >>
+        (strip_tac >> gvs[stmtLoweringTheory.target_to_expr_def, expr_can_mutate_def]) >>
       qspecl_then [`cx`,`t`,`e`,`d`,`tops`,`bindings`,`ctx`,`func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] mp_tac body_assign_place_snapshot_mem >>
       (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
       disch_then ACCEPT_TAC) >>
