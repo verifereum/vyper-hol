@@ -4,7 +4,7 @@ Ancestors
   lowerDloadSafetyKernel lowerDloadLiveAllocation lowerDloadScratchSafety
   lowerDloadConfiguredOrigins ptrDiscipline unitShapeDefs finite_map pred_set
   list rich_list venomExecSemantics venomState venomWf venomFnInstsProofs
-  pointerConfinedDefs
+  pointerConfinedDefs o1LowerDloadGhost
 
 Datatype:
   ld_frame = <| lf_serial : num; lf_supply : ir_supply; lf_fn : ir_function;
@@ -172,39 +172,6 @@ Proof
       rw[] >> gvs[] >> metis_tac[]) >>
   Cases_on `po` >> Cases_on `po'` >>
   gvs[set_prov_def, FLOOKUP_DRESTRICT] >> rw[] >> gvs[] >> metis_tac[]
-QED
-
-Theorem ld_ghost_first_prov[local]:
-  !ops.
-    (!v x. FLOOKUP (Ke:(string, num # num) fmap) v = SOME x ==>
-           FLOOKUP G v = SOME x) /\
-    (!v. FLOOKUP Ke v = NONE ==>
-       FLOOKUP G v = NONE \/
-       ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) /\
-    (!v w. MEM (Var v) ops /\ MEM (Var w) ops /\ v IN FDOM G /\
-           w IN FDOM G ==> v = w) ==>
-    (!x. first_prov Ke ops = SOME x ==> first_prov G ops = SOME x) /\
-    (first_prov Ke ops = NONE ==>
-       first_prov G ops = NONE \/
-       ?b z. first_prov G ops = SOME (b,z) /\ fl <= b /\
-             b + z < dimword (:256))
-Proof
-  Induct >> simp[first_prov_def] >> rpt gen_tac >> strip_tac >>
-  `!v w. MEM (Var v) ops /\ MEM (Var w) ops /\ v IN FDOM G /\
-         w IN FDOM G ==> v = w` by metis_tac[] >>
-  first_x_assum drule_all >> strip_tac >>
-  Cases_on `h` >> simp[op_prov_def] >>
-  rename1 `FLOOKUP Ke v` >>
-  Cases_on `FLOOKUP Ke v` >> simp[]
-  >- (`FLOOKUP G v = NONE \/
-       ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)`
-        by metis_tac[] >>
-      pop_assum strip_assume_tac >> simp[] >> rpt strip_tac >>
-      drule first_prov_origin >> strip_tac >>
-      `FLOOKUP G v' = SOME x` by metis_tac[] >>
-      `v' = v` by metis_tac[flookup_thm] >> gvs[]) >>
-  rename1 `FLOOKUP Ke v = SOME y` >>
-  `FLOOKUP G v = SOME y` by metis_tac[] >> simp[]
 QED
 
 (* Opcodes whose output provenance reads neither the ghosts nor the

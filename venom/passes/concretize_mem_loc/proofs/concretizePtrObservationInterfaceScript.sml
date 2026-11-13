@@ -115,7 +115,7 @@ Proof
 QED
 
 Theorem ptr_mixed_scalar_eval:
-  ptr_ledger_erases births TG G /\
+  ptr_ledger_erases dyn births TG G /\
   ptr_mixed_vars births positions TG tn f g s t /\
   ptr_nonopaque_operand f op /\ s.vs_labels = t.vs_labels /\
   op_prov G op = NONE /\ op_taint tn op = {} ==>
@@ -125,14 +125,14 @@ Proof
   drule ptr_owner_op_projection >>
   disch_then (qspec_then `op` strip_assume_tac) >>
   `op_prov TG op = NONE` by
-    (Cases_on `op_prov TG op` >> gvs[ptr_owner_project_def, FLOOKUP_DEF]) >>
+    (Cases_on `op_prov TG op` >> gvs[ptr_owner_erases_def, FLOOKUP_DEF]) >>
   drule_all ptr_mixed_vars_eval >>
   Cases_on `eval_operand op s` >> Cases_on `eval_operand op t` >>
   simp[ptr_lookup_transport_def, ptr_value_transport_scalar_empty]
 QED
 
 Theorem ptr_terminal_read_range_transport:
-  ptr_ledger_erases births TG G /\
+  ptr_ledger_erases dyn births TG G /\
   ptr_mixed_vars births positions TG tn f g s t /\
   s.vs_labels = t.vs_labels /\ ptr_use_ok P pv inst /\
   FDOM G SUBSET pv /\ taint_ok f tn inst s /\
@@ -286,7 +286,6 @@ QED
 
 Resume ptr_paired_terminal_static_bound[terminal_operands]:
   markerLib.RESUME_TAC >> rpt disch_tac >>
-  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
   `taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
   qpat_assum `ptr_discipline _ _ _` mp_tac >>
@@ -295,6 +294,7 @@ Resume ptr_paired_terminal_static_bound[terminal_operands]:
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >>
      metis_tac[]) >>
+  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
   drule_all ptr_frame_current_static >> strip_tac >>
   `FDOM a.po_prov SUBSET fn_pv P a.po_fn` by
     (fs[ptr_static_support_def, pred_setTheory.SUBSET_DEF, FLOOKUP_DEF] >>

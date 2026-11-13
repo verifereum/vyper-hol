@@ -16,8 +16,12 @@ Definition ld_normal_data_def:
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
     (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/
+      (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/
+      ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
+  (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
+    bs+sz <= dyn_floor CS s /\ bt+sz <= dyn_floor CS s) /\
   ld_alloc_account keys d A s t /\
   d = 32 * SUM (MAP CARD suspended) /\
   ld_frame_bound t.vs_alloca_next H BP BH /\ ld_stack_bound t.vs_alloca_next gstk /\
@@ -56,7 +60,9 @@ QED
 Theorem ld_normal_data_memory:
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
     astk live keys d A suspended gstk f ==>
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/
+      (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/
+      ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t)
 Proof
   simp[ld_normal_data_def]
@@ -72,6 +78,8 @@ Theorem ld_normal_data_geometry:
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
     (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
+  (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
+    bs+sz <= dyn_floor CS s /\ bt+sz <= dyn_floor CS s) /\
   ld_alloc_account keys d A s t /\
   d = 32 * SUM (MAP CARD suspended) /\
   ld_frame_bound t.vs_alloca_next H BP BH /\ ld_stack_bound t.vs_alloca_next gstk /\
@@ -133,8 +141,12 @@ Theorem ld_normal_data_assemble:
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
     (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/
+      (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/
+      ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
+  (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
+    bs+sz <= dyn_floor CS s /\ bt+sz <= dyn_floor CS s) /\
   ld_alloc_account keys d A s t /\
   d = 32 * SUM (MAP CARD suspended) /\
   ld_frame_bound t.vs_alloca_next H BP BH /\ ld_stack_bound t.vs_alloca_next gstk /\
