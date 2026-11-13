@@ -10,6 +10,7 @@
    below the frontier. *)
 Theory stmtLogSuffixMemory
 Ancestors
+  freshVarLimit
   stmtSimLogSuffixActual stmtSimLogArgs stmtSimLogSource fragExecMem
   exprLoweringProps stmtLowering compileEnv loweringPosts
   vyperEvent vyperInterpreter vyperState venomState

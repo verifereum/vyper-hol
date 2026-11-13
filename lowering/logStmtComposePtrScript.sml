@@ -1,6 +1,7 @@
 (* Readiness-parametric composition over counted pointer outcomes. *)
 Theory logStmtComposePtr
 Ancestors
+  freshVarLimit
   logReadyRunPtr logArgsRunPtr logSuccessSuffixPtr logComposeFacts stmtSimLogCompose
   bodyPtrDefs stmtFragPtr
   stmtSimLogArgs stmtSimLogSource stmtSimLogArgsGrowth stmtSimProps
