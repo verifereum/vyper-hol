@@ -119,6 +119,7 @@ QED
 Theorem deploy_ctor_checked_argument_inputs:
  !tops layouts addr art mut nr args body.
  supported_program tops /\
+ supported_program_deploy tops /\
  check_contract T layouts addr [(NONE,tops)] = SOME art /\
  lookup_function NONE "__init__" Deploy tops = SOME (mut,nr,args,[],NoneT,body) ==>
  contract_namespaces_ok T [(NONE,tops)] /\
@@ -130,17 +131,14 @@ Proof
  `contract_namespaces_ok T [(NONE,tops)]` by
    metis_tac[check_contract_namespaces_ok] >> simp[] >>
  drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
- drule_all supported_program_declaration >>
- simp[supported_function_header_contract, supported_function_argument_def,
-      supported_function_header_names_def, supported_declaration_header_def] >>
- strip_tac >>
+ drule_all supported_program_deploy_function >> strip_tac >>
  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
  simp[check_contract_def] >> strip_tac >>
  gvs[check_module_def, EVERY_MEM] >>
  qpat_x_assum `!e. MEM e tops ==> check_toplevel_decl _ _ _ _` drule >>
  simp[check_toplevel_decl_def, params_ok_def] >> strip_tac >>
  gvs[deploy_ctor_singleton_type_env, EVERY_MAP, EVERY_MEM, FORALL_PROD,
-     supported_function_argument_def, MEM_MAP, EXISTS_PROD] >> metis_tac[]
+     MEM_MAP, EXISTS_PROD] >> metis_tac[]
 QED
 
 Theorem deploy_ctor_common_source_witness:
@@ -219,7 +217,7 @@ Proof
  qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac classify_functions_ctor_lookup >>
  simp[] >> strip_tac >>
  gvs[constSubstTheory.subst_consts_fn_empty] >> gvs[] >>
- `supported_program tops /\ ?art.
+ `supported_program tops /\ supported_program_deploy tops /\ ?art.
    check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
    fs[deploy_source_ok_def, deploy_typing_ok_def] >>
  drule_all deploy_ctor_checked_argument_inputs >> strip_tac >>
