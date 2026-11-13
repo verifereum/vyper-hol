@@ -272,6 +272,8 @@ Proof
      `ann = typ` by
        metis_tac[assignRelayoutCallerTheory.type_widens_to_antisym] >>
      gvs[]) >>
+  `~is_word_type (lowered_value_type cenv e)` by
+    metis_tac[normalize_return_source_kinds] >>
   `0 < type_memory_size ltv` by
     (irule externalNormalizePremisesTheory.normalize_return_source_positive >>
      qexistsl_tac [`typ`,`lowered_value_type cenv e`,`get_tenv cx`] >>
