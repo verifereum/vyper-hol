@@ -53,7 +53,7 @@ Theorem ptr_stage_live_zero_position:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\ FLOOKUP TG v = SOME (token,aid) /\
   FLOOKUP a.po_prov v = SOME (b,0) ==>
