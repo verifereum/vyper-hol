@@ -1,13 +1,13 @@
 Theory bodyFullLiteralNonword
 Ancestors
-  bodyFullLiteralGhost bodyFullLiteralEndpoint bodyFullLiteralBuffer
+  bodyFullLiteralGhost bodyFullLiteralEndpoint bodyFullLiteralBuffer gasOutcomeFull
   vyperStorageTrace vyperStorageFootprint bodySimFull gasOutcomeFullCompose
   exprSimSource exprSimHypsDefs exprSimHyps exprSimUnwrapProps exprSimProps
   exprLoweringProps exprLowering loweringPosts bodyPtrDefs gasShadow
   vyperTyping vyperTypeSystem valueEncodingProofs valueEncodingDefs
   vyperInterpreter vyperState vyperValue venomState context compileEnv
   list finite_map pred_set words vyperTypeCallGraph exprSimPtrLiteralOps allocLimits vyperAST
-  vyperValueOperation valueEncoding
+  vyperValueOperation valueEncoding gasShadowCompile gasShadowState gasContext exprSimDefs
   exprSimPtrLiteralBuffer exprSimLiteralBuffer bodyPtrMakeArrayAllocBuffer
   exprSimPtrLiteralPayload venomInst venomExecSemantics exprSimMemDefs ptrDiscipline
 
@@ -206,3 +206,88 @@ Resume literal_nonword_vv_full[string]:
 QED
 
 Finalise literal_nonword_vv_full
+
+Theorem literal_nonword_memory_compile[local]:
+  expr_body_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
+  ?p sb. compile_expr cenv ty (Literal ann l) sa = (LocatedValue ann p,sb) /\
+    p.ptr_location = LocMemory
+Proof
+  strip_tac >>
+  `expr_sim_pre cenv cx env (Literal ann l) es` by
+    gvs[expr_sim_pre_def, expr_body_pre_def, int_calls_expr_def] >>
+  drule_all literal_nonword_classify >> strip_tac >> gvs[] >>
+  simp[compile_expr_def, compile_literal_vv_def, comp_bind_def,
+       comp_return_def, is_word_type_def, base_ptr_def, expr_type_def] >>
+  pairarg_tac >> simp[base_ptr_def]
+QED
+
+Theorem literal_nonword_value_full:
+  expr_body_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Literal ann l) es
+Proof
+  strip_tac >>
+  drule_all literal_nonword_vv_full >>
+  simp[expr_vv_sim_full_def] >> disch_tac >>
+  rw[expr_sim_full_def] >>
+  `?p sm. compile_expr cenv ty (Literal ann l) sa = (LocatedValue ann p,sm) /\
+    p.ptr_location = LocMemory` by metis_tac[literal_nonword_memory_compile] >>
+  `op = p.ptr_operand /\ sb = sm` by
+    (drule_all lower_value_nonword_memory >> simp[]) >>
+  gvs[] >>
+  `?sc. compile_expr cenv ty (gas_shadow_expr (Literal ann l)) shadow_sa =
+     (LocatedValue ann p,sc)` by
+    (mp_tac (Q.SPECL [`cenv`, `ty`, `Literal ann l`, `T`]
+      (CONJUNCT1 gas_shadow_compile_expr)) >>
+     simp[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >>
+     simp[] >> Cases_on `compile_expr cenv ty (gas_shadow_expr (Literal ann l)) shadow_sa` >>
+     simp[]) >>
+  `sc = shadow_sb` by
+    (qpat_x_assum `lower_value _ _ _ _ shadow_sa = _` mp_tac >>
+     simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def]) >>
+  gvs[] >>
+  `!st. eval_expr cx (Literal ann l) st = (INL (Value (evaluate_literal l)),st)` by
+    simp[Once evaluate_def, return_def] >>
+  `gas_admissible (eval_expr cx (Literal ann l)) expr_vv_res_ok es` by
+    simp[gas_admissible_def, expr_vv_res_ok_def] >>
+  first_x_assum drule_all >> disch_then (qspec_then `PG` assume_tac) >>
+  suspend "value"
+QED
+
+Resume literal_nonword_value_full[value]:
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Q R` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (eval_expr cx (Literal ann l)) (es,s0,G0,tn0)
+     (\H res ee G tn t. Q H res ee G tn t /\ res = INL (Value (evaluate_literal l))) R` by
+    (irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >> simp[] >>
+     rpt strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx (Literal ann l)) (read_result cx))
+     (es,s0,G0,tn0)
+     (\H raw ee G tn t. ?res.
+       raw = (case res of INL raw => INL (evaluate_literal l) | INR ex => INR ex) /\
+       (Q H res ee G tn t /\ res = INL (Value (evaluate_literal l))))
+     (\H raw ee gt r. ?res.
+       raw = (case res of INL raw => INL (evaluate_literal l) | INR ex => INR ex) /\
+       R H res ee gt r)` by
+    (ho_match_mp_tac (Q.ISPEC `eval_expr cx (Literal ann l)`
+       (Q.GEN `source` (SPEC_ALL gas_outcome_full_source_map))) >>
+     simp[bind_def, read_result_def, return_def] >> goal_assum (drule_at Any)) >>
+  irule gas_outcome_full_post_mono >> goal_assum (drule_at Any) >>
+  conj_tac >- suspend "post" >>
+  simp[Abbr `R`] >> rpt strip_tac >> gvs[] >>
+  simp[expr_exit_success_map]
+QED
+
+Resume literal_nonword_value_full[post]:
+  simp[Abbr `Q`] >> rpt strip_tac >> gvs[]
+  >~ [`expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`] >-
+    (drule_all expr_post_of_vv_post_memory >> simp[]) 
+  >~ [`expr_store_bound _ _ _ _ _`] >-
+    (gvs[vv_store_bound_def, expr_store_bound_def, read_result_def, return_def] >>
+     metis_tac[]) >>
+  gvs[ptr_vv_ok_def, ptr_val_ok_def, read_result_def, return_def, expr_type_def]
+QED
+
+Finalise literal_nonword_value_full
