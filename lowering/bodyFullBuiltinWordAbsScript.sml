@@ -306,5 +306,34 @@ Proof
      drule_at (Pat `run_inst_seq _ _ = _`) run_inst_seq_gas_origin_ptr_path >>
      simp[is_terminator_def] >>
      disch_then irule >> simp[]) >>
-  FAIL_TAC "abs abort prefix path"
+  `get_instruction bb (s.vs_inst_idx + 5) = SOME i5` by
+    (`LENGTH (DROP s.vs_inst_idx bb.bb_instructions) =
+        LENGTH (i0::i1::i2::i3::i4::i5::i6::i7::i8::l)` by asm_rewrite_tac[] >>
+     `EL 5 (DROP s.vs_inst_idx bb.bb_instructions) = i5` by (asm_rewrite_tac[] >> simp[]) >>
+     gvs[LENGTH_DROP, EL_DROP, get_instruction_def, arithmeticTheory.ADD_COMM]) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s5 with vs_inst_idx := s.vs_inst_idx + 5,G5,tn5) []
+      (Abort Revert_abort (t with vs_inst_idx := s.vs_inst_idx + 5),G5,tn5)` by
+    (gen_tac >> irule fragGasEmitCtrlTheory.exit_inst_origin_ptr >>
+     conj_tac >- simp[fragExecTheory.exit_result_def] >>
+     conj_tac >- simp[Abbr `s5`, Abbr `s4`, Abbr `s3`, Abbr `s2`, Abbr `s1`,
+                        venomStateTheory.update_var_def] >>
+     qexistsl_tac [`bb`, `i5`] >>
+     simp[Abbr `i5`, venomExecSemanticsTheory.step_inst_non_invoke,
+          instIdxIndepTheory.step_inst_inst_idx_indep,
+          instIdxIndepTheory.exec_result_map_def] >>
+     simp[is_terminator_def,
+          instIdxIndepTheory.step_inst_inst_idx_indep,
+          instIdxIndepTheory.exec_result_map_def,
+          gasEventsTheory.gas_events_step_def, gasCountTheory.gas_count_step_def,
+          mem_safe_step_def] >>
+     simp[Abbr `s5`, Abbr `s4`, Abbr `s3`, Abbr `s2`, Abbr `s1`,
+          venomStateTheory.update_var_def] >>
+     simp[below_frontier_no_ranges]) >>
+  qexistsl_tac [`G5`, `tn5`] >>
+  gen_tac >>
+  qpat_x_assum `!D. gas_origin_ptr_path _ (s,G,tn) _ _`
+    (qspec_then `D` mp_tac) >>
+  disch_then (mp_then Any mp_tac fragGasOriginPtrTheory.gas_origin_ptr_path_append) >>
+  simp[] >> metis_tac[]
 QED
