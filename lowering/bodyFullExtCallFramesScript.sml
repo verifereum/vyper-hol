@@ -144,3 +144,35 @@ Proof
   first_x_assum drule >>
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
+
+Theorem extcall_request_default_frame:
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
+    calldata has_default default_op default_ty default_opt ee t /\
+  eval_operand buf_op t = SOME ro /\
+  v.vs_alloca_next = t.vs_alloca_next /\
+  v.vs_memory = (write_memory_with_expansion (w2n ro) (TAKE cap rd) t).vs_memory /\
+  (!x. not_fresh_at sp x ==> lookup_var x v = lookup_var x t) ==>
+  extcall_default_ready cx ret_type has_default default_op default_ty default_opt v
+Proof
+  strip_tac >> fs[extcall_request_ready_def] >>
+  `safe_operand sp default_op` by fs[] >>
+  `!w. eval_operand default_op t = SOME w ==>
+       eval_operand default_op v = SOME w` by
+    (rpt strip_tac >> irule exprBopSimPropsTheory.eval_operand_frame >>
+     fs[exprSafeOperandTheory.safe_operand_def] >>
+     qexistsl_tac [`sp`, `t`] >> metis_tac[]) >>
+  fs[extcall_default_ready_def] >> rpt strip_tac >>
+  first_x_assum drule >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  qexistsl_tac [`tv`, `rtv`, `w`] >> simp[] >>
+  Cases_on `is_word_type default_ty`
+  >- gvs[loweringPostsTheory.expr_val_rel_def] >>
+  irule exprSimPropsTheory.expr_val_rel_footprint_agree >>
+  simp[] >> qexists_tac `t` >> simp[] >>
+  sym_tac >>
+  irule valueEncodingPropsTheory.write_memory_mem_bytes_at_disjoint >>
+  `LENGTH (TAKE cap rd) <= cap` by simp[listTheory.LENGTH_TAKE_EQ] >>
+  `regions_disjoint (w2n ro) cap (w2n w) (val_footprint tv d)` by metis_tac[] >>
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
+QED
