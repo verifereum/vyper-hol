@@ -84,13 +84,6 @@ Proof
   strip_tac >> drule do_swap_admin >> metis_tac[plan_admin_no_push_ofst]
 QED
 
-Theorem reorder_one_no_push_ofst[local]:
-  reorder_one dfg target_ops idx op ps = (ops, ps') ==>
-  !lbl d. ~MEM (SOPushOfst lbl d) ops
-Proof
-  strip_tac >> drule reorder_one_admin >> metis_tac[plan_admin_no_push_ofst]
-QED
-
 Theorem reorder_plan_no_push_ofst:
   reorder_plan dfg target_ops ps = (ops, ps') ==>
   !lbl d. ~MEM (SOPushOfst lbl d) ops

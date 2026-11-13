@@ -69,7 +69,7 @@ Ancestors
   symbolResolve venomExecSemantics venomState venomInst contextCodegenRel
   stackOpSim fnPlanDecomp list rich_list finite_map arithmetic
   frameOutcome callTrace unitShapeDefs vfmExecutionProp unitMemInv
-  frameGas venomRunBounded frameStep codegenEntryBounded asmFrameNext
+  frameGas venomRunBounded frameStep codegenEntryBounded
   codegenAsmProgOk asmFrameRel
   asmFrameGas asmFrameSurplus
 Libs
