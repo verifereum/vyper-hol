@@ -262,3 +262,21 @@ Proof
   rpt strip_tac >> gvs[clone_basic_block_def, MEM_MAP, clone_instruction_def] >>
   metis_tac[]
 QED
+
+Theorem inline_frontier_control[simp]:
+  (jump_to lbl s).vs_alloca_next = s.vs_alloca_next
+Proof simp[jump_to_def]
+QED
+
+Theorem inline_frontier_fix_phis:
+  inline_frontier_function fn ==>
+  inline_frontier_function (fix_inline_phis old new bb fn)
+Proof
+  simp[inline_frontier_function_def, fix_inline_phis_def, EVERY_MAP,
+       EVERY_MEM, inline_frontier_instruction_def] >>
+  rpt strip_tac >>
+  gvs[MEM_MAP, cfgTransformTheory.subst_label_inst_def] >>
+  Cases_on `MEM bb''.bb_label (bb_succs bb)` >>
+  gvs[MEM_MAP] >>
+  gvs[COND_RAND, COND_RATOR] >> metis_tac[]
+QED
