@@ -9431,6 +9431,79 @@ Proof
   qexistsl_tac [`fn`, `bb`, `suffix`] >> asm_rewrite_tac[]
 QED
 
+(* Exhaust the disjoint opcode families without selecting new packets. *)
+Theorem noninvoke_adjacent_packets[local]:
+  !fuel C owner x y s mx my ex ey.
+  let R = (\n xs st. FOLDR (dft_exec_cons n C) OK xs st);
+      E = (\xs st. gas_events_block fuel C owner
+        <|bb_label := st.vs_current_bb; bb_instructions :=
+          REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> st)
+  in
+  dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+  x.inst_opcode <> INVOKE /\ y.inst_opcode <> INVOKE /\
+  ~s.vs_call_ctx.cc_static /\
+  (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
+  (y.inst_opcode <> CODECOPY ==>
+    !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels) /\
+  ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+    write_effects x.inst_opcode = empty_effects) /\
+  terminates (R fuel [x;y] s) /\
+  LENGTH (E [x;y] s) <= LENGTH s.vs_gas_readings /\
+  (if x.inst_opcode = GAS then
+     mx = [SOME (HD s.vs_gas_readings)] /\ ex = [(owner,x.inst_id)]
+   else mx = [] /\ ex = []) /\
+  (y.inst_opcode <> GAS ==> my = [] /\ ey = []) /\
+  (y.inst_opcode = GAS ==>
+    ((!v. R fuel [x] s = OK v ==>
+       my = [SOME (HD v.vs_gas_readings)] /\ ey = [(owner,y.inst_id)]) /\
+     (~(?v. R fuel [x] s = OK v) ==> my = [] /\ ey = []))) ==>
+  let px = mx; qx = ex;
+      py = if y.inst_opcode = GAS /\ ~(?v. R fuel [x] s = OK v)
+           then [NONE : bytes32 option] else my;
+      qy = if y.inst_opcode = GAS /\ ~(?v. R fuel [x] s = OK v)
+           then [(owner,y.inst_id)] else ey;
+      M = [py;px]; ES = [qy;qx];
+      unused = DROP (LENGTH (E [x;y] s)) s.vs_gas_readings
+  in
+  LIST_REL (\m es. LENGTH m = LENGTH es) M ES /\
+  PERM (MAP THE (FILTER IS_SOME (FLAT M)) ++ unused) s.vs_gas_readings /\
+  (!u. R fuel [x;y] s = OK u ==>
+    EVERY IS_SOME (FLAT M) /\ unused = u.vs_gas_readings) /\
+  !gy gx tail.
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) py gy /\
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) px gx ==>
+    (?extra. qy ++ qx =
+      E [y;x] (s with vs_gas_readings := gy ++ gx ++ tail) ++ extra) /\
+    ((?j. terminates (R j [y;x]
+       (s with vs_gas_readings := gy ++ gx ++ tail))) ==>
+      terminates (R fuel [y;x] (s with vs_gas_readings := gy ++ gx ++ tail)) /\
+      dft_res_rel
+        (restore_result [] (R fuel [y;x] (s with vs_gas_readings := gy ++ gx ++ tail)))
+        (restore_result [] (R fuel [x;y] s))) /\
+    (!u. R fuel [x;y] s = OK u ==>
+      R fuel [y;x] (s with vs_gas_readings := gy ++ gx ++ tail) =
+        OK (u with vs_gas_readings := tail) /\
+      E [y;x] (s with vs_gas_readings := gy ++ gx ++ tail) = qy ++ qx) /\
+    (!k v. k <= 2 /\ R fuel (TAKE k [y;x])
+        (s with vs_gas_readings := gy ++ gx ++ tail) = OK v ==>
+      E (TAKE k [y;x]) (s with vs_gas_readings := gy ++ gx ++ tail) =
+        FLAT (TAKE k ES) /\
+      v.vs_gas_readings = FLAT (DROP k [gy;gx]) ++ tail) /\
+    (~(?u. R fuel [x;y] s = OK u) ==>
+      ~(?v. R fuel [y;x] (s with vs_gas_readings := gy ++ gx ++ tail) = OK v))
+Proof
+  rpt gen_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >> disch_tac >>
+  Cases_on `x.inst_opcode = GAS` >> Cases_on `y.inst_opcode = GAS`
+  >- (irule (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
+        noninvoke_adjacent_packets_twogas)) >> asm_rewrite_tac[])
+  >- (irule (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
+        noninvoke_adjacent_packets_onegas)) >> asm_rewrite_tac[])
+  >- (irule (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
+        noninvoke_adjacent_packets_onegas)) >> asm_rewrite_tac[])
+  >> irule (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
+       noninvoke_adjacent_packets_nogas)) >> asm_rewrite_tac[]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
