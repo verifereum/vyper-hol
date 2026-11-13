@@ -17,27 +17,6 @@ QED
 (* A memory pointer's post at one horizon moves to every horizon at which the
    start state is related: only the storage-side Venom fields enter the
    horizon-dependent part, and the uint2str code leaves them alone. *)
-Theorem u2s_vv_post_transport[local]:
-  !(H0:(bool # bytes32 # type_value) list # num list)
-   (H:(bool # bytes32 # type_value) list # num list)
-   ctx func cenv cx e es sa sb s0 es' tv vv vt u s.
-  vv_post H0 ctx func cenv cx e es sa sb s0 es' tv vv u /\
-  (?p. vv = LocatedValue vt p /\ p.ptr_location = LocMemory) /\
-  stmt_state_rel H ctx func cenv cx es' s /\ storage_well_formed_on cx es' (FST H) /\
-  u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
-  u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx ==>
-  vv_post H ctx func cenv cx e es sa sb s0 es' tv vv u
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
-  `stmt_state_rel H ctx func cenv cx es' u` by
-    metis_tac[INST_TYPE [alpha |-> ``:256``] stmt_state_rel_fields_transport] >>
-  rewrite_tac[vv_post_def] >> rpt conj_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  strip_tac >> gvs[vv_storage_live_def]
-QED
-
 Theorem uint2str_typed_mem_path[local]:
   expr_body_pre cenv cx env (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) es /\
   expr_type e = BaseT (UintT k) /\ 78 <= n /\
@@ -175,9 +154,11 @@ Resume compile_uint2str_typed_vv_sim_mem[continuation]:
      es sa sb s0 cee (Value rv) vv t'` by
     (mp_tac (Q.SPECL [`H0`, `H`, `ctx`, `func`, `cenv`, `cx`,
        `Builtin (BaseT (StringT n)) (Uint2Str n) [e]`, `es`, `sa`, `sb`, `s0`,
-       `cee`, `Value rv`, `vv`, `BaseT (StringT n)`, `t'`, `ct`]
-       u2s_vv_post_transport) >>
-     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+       `cee`, `Value rv`, `vv`, `t'`, `ct`]
+       vv_post_fields_transport) >>
+     impl_tac >-
+       (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+        strip_tac >> gvs[vv_storage_live_def]) >>
      simp[]) >>
   qexists_tac `Value rv` >>
   simp[expr_type_def, lowered_value_type_def] >>

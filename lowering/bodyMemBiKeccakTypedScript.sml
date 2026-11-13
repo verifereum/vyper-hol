@@ -12,27 +12,6 @@ Ancestors
 Libs
   pairLib
 
-Theorem keccak_vv_post_transport[local]:
-  !(H0:(bool # bytes32 # type_value) list # num list)
-   (H:(bool # bytes32 # type_value) list # num list)
-   ctx func cenv cx e es sa sb s0 es' tv vt op u s.
-  vv_post H0 ctx func cenv cx e es sa sb s0 es' tv (StackValue vt op) u /\
-  stmt_state_rel H ctx func cenv cx es' s /\ storage_well_formed_on cx es' (FST H) /\
-  u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
-  u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx ==>
-  vv_post H ctx func cenv cx e es sa sb s0 es' tv (StackValue vt op) u
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
-  `stmt_state_rel H ctx func cenv cx es' u` by
-    metis_tac[INST_TYPE [alpha |-> ``:256``]
-      exprLoweringPropsTheory.stmt_state_rel_fields_transport] >>
-  rewrite_tac[vv_post_def] >> rpt conj_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  strip_tac >> gvs[vv_storage_live_def]
-QED
-
 Theorem compile_keccak256_sim_mem:
   expr_body_pre cenv cx env (Builtin ann Keccak256 [e]) es /\
   expr_sim_mem ctx func cenv cx (expr_type e) e es ==>
@@ -162,9 +141,9 @@ Resume compile_keccak256_sim_mem[normal_or_exception]:
       `vv_post H2 ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
          es sa sb s0 (es_end with gas_obs := []) (Value r)
          (StackValue (BaseT (BytesT (Fixed 32))) op) t'` by
-        (irule keccak_vv_post_transport >>
+        (irule vv_post_fields_transport >>
          qexistsl_tac [`storage_trace_horizon es_end.storage_trace`, `t`] >>
-         simp[] >>
+         simp[vv_storage_live_def] >>
          qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
            (qspec_then `H2` mp_tac) >>
          simp[expr_post_def]) >>

@@ -52,15 +52,10 @@ Theorem attr_vv_post_transport[local]:
   vv_post H ctx func cenv cx e es sa sn s0 es' tv vv u
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
-  `stmt_state_rel H ctx func cenv cx es' u` by
-    metis_tac[INST_TYPE [alpha |-> ``:256``]
-      exprLoweringPropsTheory.stmt_state_rel_fields_transport] >>
-  rewrite_tac[vv_post_def] >> rpt conj_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  irule vv_post_fields_transport >> qexistsl_tac [`H0`, `t`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   strip_tac >>
   qpat_x_assum `~expr_has_effect e ==> vv_storage_live H _ _ _ t` drule >>
   strip_tac >> Cases_on `vv` >> gvs[vv_storage_live_def, vv_operand_def]

@@ -13,27 +13,6 @@ Ancestors
   gasExemptCert fragGasMode fragGasPath exprSimMemDefs exprSimMemUnwrap
   fragGasPathMem gasStorage vyperStorageTrace vyperStorageFootprint
 
-Theorem len_vv_post_transport[local]:
-  !(H0:(bool # bytes32 # type_value) list # num list)
-   (H:(bool # bytes32 # type_value) list # num list)
-   ctx func cenv cx e es sa sb s0 es' tv vt op u s.
-  vv_post H0 ctx func cenv cx e es sa sb s0 es' tv (StackValue vt op) u /\
-  stmt_state_rel H ctx func cenv cx es' s /\ storage_well_formed_on cx es' (FST H) /\
-  u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
-  u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx ==>
-  vv_post H ctx func cenv cx e es sa sb s0 es' tv (StackValue vt op) u
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
-  `stmt_state_rel H ctx func cenv cx es' u` by
-    metis_tac[INST_TYPE [alpha |-> ``:256``]
-      exprLoweringPropsTheory.stmt_state_rel_fields_transport] >>
-  rewrite_tac[vv_post_def] >> rpt conj_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  strip_tac >> gvs[vv_storage_live_def]
-QED
-
 Theorem compile_len_singleton_sim_mem:
   !ctx func cenv cx env ty e es.
     expr_body_pre cenv cx env (Builtin (BaseT (UintT 256)) Len [e]) es /\
@@ -141,9 +120,9 @@ Proof
           first_x_assum (qspec_then `H2` mp_tac) >>
           impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
           rpt conj_tac
-          >- (irule len_vv_post_transport >>
+          >- (irule vv_post_fields_transport >>
               qexistsl_tac [`H0`, `t`] >>
-              fs[vv_post_def])
+              fs[vv_post_def, vv_storage_live_def])
           >- simp[vv_store_bound_stack_word, expr_type_def, is_word_type_def]
           >> simp[expr_type_def] >> gvs[]) >>
       rename1 `gas_marked_exec _ _ _ _ _ _ fe _` >>
