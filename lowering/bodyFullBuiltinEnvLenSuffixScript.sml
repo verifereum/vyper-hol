@@ -63,5 +63,59 @@ Theorem len_full_suffix:
         ghost_kept_at lo cenv es sa G0 tn0 s0 G2 tn2
 Proof
   rpt gen_tac >> strip_tac >>
-  FAIL_TAC "Len suffix contract"
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    gvs[storage_trace_domain_def] >>
+  `vv_post (storage_trace_horizon ee.storage_trace) ctx func cenv cx e es sa sm s0 ee tv vv t` by
+    metis_tac[] >>
+  `vv_holds cenv cx (post_value_type cenv e) tv vv ee t` by
+    gvs[vv_post_def] >>
+  drule_all vv_holds_sized_length_success_widens >> strip_tac >>
+  `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by simp[] >>
+  `stmt_state_rel (storage_trace_horizon ee.storage_trace) ctx func cenv cx ee t` by
+    gvs[vv_post_def] >>
+  drule_all vv_holds_len_header_widens >> strip_tac >>
+  `(case vv_location vv of NONE => LocMemory | SOME l => l) <> LocCalldata` by
+    (Cases_on `vv` >> simp[contextTheory.vv_location_def] >>
+     rename1 `LocatedValue _ p` >> Cases_on `p.ptr_location` >>
+     gvs[vv_holds_def, contextTheory.vv_location_def]) >>
+  Cases_on `(case vv_location vv of NONE => LocMemory | SOME l => l) = LocCode /\ cenv.ce_is_ctor`
+  >- suspend "ctor" >>
+  Cases_on `(case vv_location vv of NONE => LocMemory | SOME l => l)` >>
+  gvs[builtinSimpleTheory.compile_builtin_len_def, contextTheory.compile_ptr_load_def,
+      contextTheory.compile_imm_load_word_runtime, builtinPropsTheory.ptr_load_val_def] >>
+  suspend "scalar"
+QED
+
+Resume len_full_suffix[scalar]:
+  markerLib.RESUME_TAC >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  `sb.cs_current_bb = sm.cs_current_bb` by
+    gvs[emitHelperTheory.emit_op_def, compileEnvTheory.comp_bind_def,
+        compileEnvTheory.fresh_var_def, compileEnvTheory.fresh_id_def,
+        compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
+        compileEnvTheory.emit_def] >>
+  drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
+  qpat_x_assum `!i. i < LENGTH [_] ==> _` (qspec_then `0` mp_tac) >>
+  simp[] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `get_instruction bb _ = SOME inst` >>
+  qabbrev_tac `u = update_var (STRING #"%" (toString sm.cs_next_var)) (n2w n) t` >>
+  qexistsl_tac [`u with vs_inst_idx := SUC t.vs_inst_idx`,
+    `step_prov PG G inst u`, `step_taint inst t u tn`] >>
+  qx_gen_tac `H` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  conj_tac
+  >- ( `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (t,G,tn) []
+         (OK (u with vs_inst_idx := SUC t.vs_inst_idx),
+          step_prov PG G inst u, step_taint inst t u tn)` by
+       (mp_tac (Q.INST [`i` |-> `inst`, `u` |-> `u`, `s` |-> `t`, `D` |-> `DF H`] straight_line_origin_ptr_edge) >>
+        simp[Abbr `inst`, Abbr `u`, venomInstTheory.mk_inst_def,
+             venomInstTheory.is_terminator_def] >>
+        impl_tac >- (
+          simp[unitTransformDefsTheory.inst_mem_below_frontier_def,
+               memSafeRunTheory.inst_dload_in_section_def,
+               contextCodegenRelTheory.source_memory_read_ranges_def,
+               codegenRelTheory.source_memory_write_ranges_def] >>
+          FAIL_TAC "Len load safety conjuncts") >> simp[]) >>
+       FAIL_TAC "Len scalar path join") >>
+  FAIL_TAC "Len scalar posts"
 QED
