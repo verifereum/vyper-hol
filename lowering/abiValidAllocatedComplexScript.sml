@@ -53,7 +53,7 @@ Proof
   qexists_tac `t` >> simp[] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   fs[abi_decoder_address_frame_def, fresh_vars_wrt_def,
-     abi_malformed_resource_post_def, stmt_state_rel_inst_idx, eval_op_inst_idx] >>
+     abi_malformed_resource_post_inst_idx] >>
   qpat_x_assum `actual = _` SUBST_ALL_TAC >> simp[]
 QED
 
