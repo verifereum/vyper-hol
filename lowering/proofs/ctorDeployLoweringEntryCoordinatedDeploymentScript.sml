@@ -80,7 +80,8 @@ Proof
   fn_inst_ids_distinct func` by fs[deploy_ctor_code_def] >>
  drule_all deploy_ctor_registration_code >> strip_tac >>
  drule deploy_ctor_shifted_budget >> strip_tac >>
- `supported_program tops` by fs[deploy_source_ok_def] >>
+ `supported_program tops /\ supported_program_deploy tops` by
+   fs[deploy_source_ok_def] >>
  `!bb. lookup_block st2.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0` by
    (rpt strip_tac >> drule_all deploy_ctor_raw_blocks_no_phi >> simp[]) >>
@@ -168,12 +169,18 @@ Proof
  rewrite_tac[deploy_ctor_code_def] >> strip_tac >>
  drule_all lower_vyper_deploy_unit_ctor_named_init >> strip_tac >>
  PairCases_on `cf` >> gvs[ctor_named_init_def] >>
+ `supported_program tops` by fs[deploy_source_ok_def] >>
+ `module_consts_env tops [] = []` by
+   metis_tac[supportedDeclsTheory.supported_headers_module_consts_env,
+             supportedProgramTheory.supported_program_def,
+             supportedDeclsTheory.supported_declaration_headers_def] >>
  drule_all deploy_ctor_entry_selection_agrees >> strip_tac >>
  qpat_assum `deploy_ctor_start _ _ _ _` mp_tac >>
  rewrite_tac[deploy_ctor_start_def] >> strip_tac >>
  `tx.function_name = "__init__"` by fs[deploy_state_rel_def] >>
  qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac classify_functions_ctor_lookup >>
  simp[] >> strip_tac >>
+ gvs[constSubstTheory.subst_consts_fn_empty] >>
  `is_payable = (cf0 = Payable) /\ nr = cf1 /\ ret = NoneT` by
    fs[set_constructor_package_target_def, package_constructor_def] >>
  gvs[] >>

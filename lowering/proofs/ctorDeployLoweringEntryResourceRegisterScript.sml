@@ -298,6 +298,32 @@ val covered_db = fn t => ho_match_mp_tac deploy_ctor_covered_bind >>
 val covered_dib = fn t => ho_match_mp_tac deploy_ctor_covered_ignore_bind >>
   conj_tac >- simp (t::covered_simps);
 
+Theorem deploy_ctor_covered_abi_arg_ptr_guard:
+  !opc src parent.
+  (!st. cs_extends st (SND (compile_abi_arg_ptr_guard opc src parent st)) /\
+    st.cs_next_id <= (SND (compile_abi_arg_ptr_guard opc src parent st)).cs_next_id /\
+    !func aid.
+      fn_has_code st (SND (compile_abi_arg_ptr_guard opc src parent st)) func /\
+      st.cs_next_id <= aid /\
+      aid < (SND (compile_abi_arg_ptr_guard opc src parent st)).cs_next_id ==>
+      ?inst. inst.inst_id = aid /\
+        abi_decoder_code_member inst (SND (compile_abi_arg_ptr_guard opc src parent st)) /\
+        MEM inst (fn_insts func)) /\
+  (!st. abi_decoder_code st (SND (compile_abi_arg_ptr_guard opc src parent st)))
+Proof
+  rpt gen_tac >> conj_tac
+  >- (rewrite_tac[compile_abi_arg_ptr_guard_def] >> IF_CASES_TAC
+      >- (ntac 2 (covered_db deploy_ctor_coverage_emit_op) >>
+          simp covered_simps) >>
+      simp covered_simps) >>
+  rewrite_tac[compile_abi_arg_ptr_guard_def] >> IF_CASES_TAC
+  >- (gen_tac >>
+      ntac 2 (ho_match_mp_tac abi_decoder_code_bind >> conj_tac
+        >- simp[abi_decoder_code_emit_op] >> rpt gen_tac) >>
+      simp[abi_decoder_code_emit_void]) >>
+  simp[abi_decoder_code_return]
+QED
+
 Theorem deploy_ctor_covered_alloc_buffer:
   !sz st. cs_extends st (SND (compile_alloc_buffer sz st)) /\
     st.cs_next_id <= (SND (compile_alloc_buffer sz st)).cs_next_id /\
@@ -602,6 +628,7 @@ Resume deploy_ctor_covered_decode_args[compound]:
   Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
   Cases_on `var_location_decode_operand x` >> simp[]
   >- (ntac 3 (covered_db deploy_ctor_coverage_emit_op) >>
+      covered_dib (cj 1 deploy_ctor_covered_abi_arg_ptr_guard) >>
       covered_dib (cj 1 deploy_ctor_covered_decoder_mutual) >>
       first_x_assum irule >> simp[]) >>
   covered_db deploy_ctor_coverage_emit_op >>
@@ -652,6 +679,7 @@ Proof
   Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
   Cases_on `var_location_decode_operand x` >> simp[]
   >- (ntac 3 (list_code_db abi_decoder_code_emit_op) >>
+      list_code_dib (cj 2 deploy_ctor_covered_abi_arg_ptr_guard) >>
       list_code_dib (cj 1 abi_decoder_code_mutual) >> simp[]) >>
   list_code_db abi_decoder_code_emit_op >>
   list_code_dib (cj 1 abi_decoder_code_mutual) >> simp[]
@@ -1188,6 +1216,11 @@ Resume deploy_ctor_shape_covered_decode_args[compound]:
   Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
   Cases_on `var_location_decode_operand x` >> simp[]
   >- (ntac 3 (shape_db deploy_ctor_shape_coverage_emit_op) >>
+      ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
+      >- (rewrite_tac[compile_abi_arg_ptr_guard_def] >> IF_CASES_TAC >>
+          simp shape_simps >>
+          ntac 2 (shape_db deploy_ctor_shape_coverage_emit_op) >>
+          simp shape_simps) >>
       shape_dib (cj 1 deploy_ctor_shape_covered_decoder_mutual) >>
       first_x_assum irule >> simp[]) >>
   shape_db deploy_ctor_shape_coverage_emit_op >>
