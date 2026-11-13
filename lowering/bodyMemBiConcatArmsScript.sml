@@ -96,7 +96,7 @@ Proof
     qexists_tac `mload (w2n ow) (mstore (w2n ow) (n2w (k + m)) (mstore a wd t))` >>
     conj_tac >- simp[Abbr `t2`, mload_def] >> simp[mload_mstore_same]) >>
   conj_tac >- suspend "frame" >>
-  conj_tac >- suspend "history" >> simp[Abbr `t2`, mstore_def]
+  conj_tac >- suspend "history" >> suspend "fields"
 QED
 
 Resume concat_fixed_arm_mem[relation]:
@@ -148,6 +148,14 @@ Resume concat_fixed_arm_mem[history]:
     (drule concat_fixed_shape >> simp[mk_inst_def, is_terminator_def]) >>
   drule_all alloca_history_run_inst_seq >>
   simp[Abbr `t2`, word_add_n2w]
+QED
+
+Resume concat_fixed_arm_mem[fields]:
+  conj_tac >- simp[Abbr `t2`, mstore_def] >>
+  conj_tac >- simp[Abbr `t2`, mstore_def] >>
+  conj_tac >- simp[Abbr `t2`, mstore_def] >>
+  conj_tac >- simp[Abbr `t2`, mstore_def] >>
+  simp[Abbr `t2`, mstore_def]
 QED
 
 Finalise concat_fixed_arm_mem
@@ -241,7 +249,7 @@ Proof
     conj_tac >- simp[Abbr `t2`, mload_def] >> simp[mload_mstore_same]) >>
   conj_tac >- suspend "frame" >>
   conj_tac >- suspend "history" >>
-  simp[Abbr `t2`, Abbr `t1`, mstore_def, mcopy_def, write_memory_with_expansion_def]
+  suspend "fields"
 QED
 
 Resume concat_bytes_arm_mem[path]:
@@ -302,6 +310,19 @@ Resume concat_bytes_arm_mem[history]:
     (drule concat_bytes_shape >> simp[mk_inst_def, is_terminator_def]) >>
   drule_all alloca_history_run_inst_seq >>
   simp[Abbr `t2`, Abbr `t1`, word_add_n2w]
+QED
+
+Resume concat_bytes_arm_mem[fields]:
+  conj_tac >- simp[Abbr `t2`, Abbr `t1`, mstore_def, mcopy_def,
+                   write_memory_with_expansion_def] >>
+  conj_tac >- simp[Abbr `t2`, Abbr `t1`, mstore_def, mcopy_def,
+                   write_memory_with_expansion_def] >>
+  conj_tac >- simp[Abbr `t2`, Abbr `t1`, mstore_def, mcopy_def,
+                   write_memory_with_expansion_def] >>
+  conj_tac >- simp[Abbr `t2`, Abbr `t1`, mstore_def, mcopy_def,
+                   write_memory_with_expansion_def] >>
+  simp[Abbr `t2`, Abbr `t1`, mstore_def, mcopy_def,
+                   write_memory_with_expansion_def]
 QED
 
 Finalise concat_bytes_arm_mem
