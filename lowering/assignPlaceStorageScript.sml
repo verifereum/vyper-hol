@@ -1,16 +1,14 @@
 Theory assignPlaceStorage
 Ancestors
   assignPlaceRelayoutProvenance assignPlacePhysicalBytes assignPlaceNormalizeFrame
-  assignPlaceStorageSuffix assignPlaceStorageCompile assignPlaceLayout
+  assignPlaceStorageSuffix placeStoreSlots assignPlaceLayout
   loweringPosts stmtSimDefs stmtLowering compileEnv placeStore valueCopyBytes
+  entryArgPtrs stmtLoweringMono fragExec
 Libs monadsyntax
 
 Theorem assign_place_storage_from_expr_post:
   compile_assign_value cenv dst loc src (is_word_type dty) src_loc dty
     (lowered_value_type cenv e)
-    (case dty of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et + 31) DIV 32,
-             type_memory_bytes cenv et) | _ => NONE)
     (type_memory_bytes cenv dty) su = ((),sb) /\
   expr_post ctx func cenv cx e es sa su s0 ee v src s /\
   expr_sim_inv cenv cx env ee /\
@@ -73,7 +71,7 @@ Resume assign_place_storage_from_expr_post[bytes]:
     t.vs_inst_idx = LENGTH sb.cs_current_insts` by
     (irule assign_place_physical_bytes_storage >> simp[] >>
      (conj_tac >- metis_tac[]) >>
-     goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
      simp[] >> metis_tac[]) >>
   qexists_tac `t` >> simp[]
 QED
@@ -147,32 +145,36 @@ Resume assign_place_storage_from_expr_post[equal_layout]:
      (conj_tac >- metis_tac[]) >>
      `type_memory_bytes cenv (expr_type e) = type_memory_size dtv` by
        metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
-     Cases_on `?et n. expr_type e = ArrayT et (Dynamic n)`
-     >- (pop_assum strip_assume_tac >> gvs[compile_assign_value_def,
-           comp_bind_def, comp_return_def]) >>
-     Cases_on `type_memory_size dtv <= 32` >>
-     qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-     Cases_on `expr_type e` >>
-     simp[compile_assign_value_def, comp_bind_def, comp_return_def]
-     >>~- ([`ArrayT et bd`], Cases_on `bd` >>
-        fs[compile_assign_value_def, comp_bind_def, comp_return_def] >>
-        simp[GSYM pairTheory.pair_case_eq, pairTheory.pair_CASE_UNCURRY,
-             combinTheory.C_DEF, comp_ignore_bind_def, comp_bind_def, comp_return_def,
-             pairTheory.UNCURRY, quantHeuristicsTheory.PAIR_EQ_EXPAND]) >>
-     simp[GSYM pairTheory.pair_case_eq, pairTheory.pair_CASE_UNCURRY,
-             combinTheory.C_DEF, comp_ignore_bind_def, comp_bind_def, comp_return_def,
-             pairTheory.UNCURRY, quantHeuristicsTheory.PAIR_EQ_EXPAND]) >>
+     gvs[compile_assign_value_def, comp_bind_def, comp_return_def]) >>
   qexists_tac `t` >> simp[]
 QED
 
 Resume assign_place_storage_from_expr_post[normalize]:
   `type_memory_bytes cenv dty = type_memory_size dtv` by
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
-  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)
-    assign_place_storage_normalize_compile >>
-  disch_then (qspecl_then [`func`, `dtv`] mp_tac) >>
-  (impl_tac >- gvs[]) >>
-  disch_then (qx_choosel_then [`buf`, `sm`, `sn`] (map_every assume_tac o CONJUNCTS)) >>
+  `loc = slot_loc (loc = LocTransient)` by (Cases_on `loc` >> gvs[slot_loc_def]) >>
+  `dty <> expr_type e /\ lowered_value_type cenv e = expr_type e` by metis_tac[] >>
+  mp_tac (Q.INST [`tr` |-> `loc = LocTransient`, `sa` |-> `su`,
+      `src` |-> `src`, `sty` |-> `lowered_value_type cenv e`]
+    (SPEC_ALL place_store_storage_compile)) >>
+  (impl_tac >- metis_tac[]) >>
+  qpat_x_assum `loc = slot_loc (loc = LocTransient)` kall_tac >>
+  asm_simp_tac bool_ss [] >> strip_tac >>
+  qpat_x_assum `_ = a.buf_operand` SUBST_ALL_TAC >>
+  `cs_extends su sm` by metis_tac[loweringHaltTheory.compile_alloc_buffer_extends] >>
+  `cs_extends sm sc` by
+    (drule exprSimTypedAllocTheory.typed_return_store_mono >>
+     simp[exprLoweringPropsTheory.ci_mono_def]) >>
+  `cs_extends sc sb` by
+    metis_tac[cj 1 stmtLoweringMonoTheory.ci_mono_compile_store_slots,
+              exprLoweringPropsTheory.ci_mono_def, pairTheory.SND] >>
+  `fn_has_code su sc func /\ fn_has_code sc sb func /\
+   fn_has_code su sm func /\ fn_has_code sm sc func` by
+    metis_tac[fragExecTheory.fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
+  `MEM (mk_inst su.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv dty))]
+    [STRING #"%" (toString su.cs_next_var)]) (fn_insts func)` by
+    (irule entryArgPtrsTheory.entry_alloc_buffer_inst >>
+     goal_assum (drule_at Any) >> simp[]) >>
   fs[expr_post_def] >>
   `?sw. eval_operand src s = SOME sw /\
     val_in_memory stv v (w2n sw) s.vs_memory` by gvs[expr_val_rel_def] >>
@@ -185,7 +187,11 @@ Resume assign_place_storage_from_expr_post[normalize]:
      simp[] >> metis_tac[]) >>
   `val_wf stv v /\ val_wf dtv v` by
     simp[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
-  drule_at (Pat `compile_alloc_buffer _ _ = _`) assign_place_normalize_framed_path >>
+  qpat_assum `type_memory_bytes cenv dty = type_memory_size dtv`
+    (fn size => drule_at (Pat `compile_alloc_buffer _ _ = _`)
+      (PURE_REWRITE_RULE [size]
+        (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `ee`, `dty`]
+          assign_place_normalize_framed_path))) >>
   disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ s`)) >>
   disch_then (drule_at (Pat `eval_operand src s = _`)) >>
@@ -201,23 +207,24 @@ Resume assign_place_storage_from_expr_post[normalize]:
       (irule widening_source_memory_size_pos >> metis_tac[]) >>
     `val_footprint stv v = type_memory_size stv` by
       (irule annassignRelayoutSourceTheory.nonbytes_evaluated_val_footprint >> metis_tac[]) >>
-    gvs[arithmeticTheory.ADD_COMM] >> metis_tac[])) >>
+    gvs[arithmeticTheory.ADD_COMM, exprSimHypsDefsTheory.expr_sim_inv_def] >>
+    metis_tac[])) >>
   suspend "normalized_suffix"
 QED
 
 Resume assign_place_storage_from_expr_post[normalized_suffix]:
   markerLib.RESUME_TAC >> strip_tac >>
-  `su.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
-   su.cs_next_id <= sn.cs_next_id` by
+  `su.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sc.cs_next_var /\
+   su.cs_next_id <= sc.cs_next_id` by
     (qspec_then `type_memory_bytes cenv dty` (qspec_then `su` mp_tac)
        exprLoweringPropsTheory.ci_mono_compile_alloc_buffer >>
      drule exprSimTypedAllocTheory.typed_return_store_mono >>
      gvs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
-  `local_ptrs_reserved cenv sn` by
+  `local_ptrs_reserved cenv sc` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >> qexists_tac `su` >> simp[]) >>
-  `!x. buf.buf_operand = Var x ==> not_fresh_at sm x` by
+  `!x. a.buf_operand = Var x ==> not_fresh_at sm x` by
     (drule loweringHaltTheory.compile_alloc_buffer_emission >> strip_tac >> gvs[]) >>
-  `!x. buf.buf_operand = Var x \/ dst = Var x ==> not_fresh_at sn x` by
+  `!x. a.buf_operand = Var x \/ dst = Var x ==> not_fresh_at sc x` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   `u.vs_labels = s.vs_labels` by
     metis_tac[stmtSimAugAssignPlaceMemoryTheory.aug_place_marked_path_labels] >>
@@ -230,16 +237,16 @@ Resume assign_place_storage_from_expr_post[normalized_suffix]:
     metis_tac[vyperTypingTheory.evaluate_type_well_formed] >>
   `?t. gas_marked_path F ctx func u 0 (OK t) /\
     stmt_state_rel ctx func cenv cx ff t /\
-    (!x. not_fresh_at sn x ==> lookup_var x t = lookup_var x u) /\
+    (!x. not_fresh_at sc x ==> lookup_var x t = lookup_var x u) /\
     t.vs_memory = u.vs_memory /\ t.vs_allocas = u.vs_allocas /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_frame cenv ee sn u cenv ff t` by
+    alloca_frame cenv ee sc u cenv ff t` by
     (irule assign_place_typed_storage_suffix_run >> simp[] >>
      (conj_tac >- metis_tac[]) >>
      goal_assum (drule_at (Pat `place_ptr_rel _ _ u _ _ _ _`)) >>
      goal_assum (drule_at (Pat `val_in_memory _ _ _ u.vs_memory`)) >>
-     qexistsl_tac [`dst`, `buf.buf_operand`] >> simp[] >>
+     qexistsl_tac [`dst`, `a.buf_operand`] >> simp[] >>
      first_assum ACCEPT_TAC) >>
   `gas_marked_path F ctx func s 0 (OK t)` by
     metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_0] >>
