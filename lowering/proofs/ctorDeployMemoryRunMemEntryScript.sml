@@ -128,8 +128,8 @@ Proof
        vs_current_bb := lbl; vs_inst_idx := 0|>) _ (OK actual)`
        (mp_tac o MATCH_MP ctor_path_mem_code) >> simp[]) >>
   `vs.vs_code = (deploy_evaluation_context tops am tx).txn.code` by
-    (qpat_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
-     qpat_assum `gas_variant _ _` mp_tac >>
+    (qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
+     qpat_x_assum `gas_variant _ _` mp_tac >>
      simp[deploy_state_rel_def, gas_variant_def, deploy_entry_state_def,
           entry_venom_state_def, init_venom_state_def,
           deploy_evaluation_context_def,
