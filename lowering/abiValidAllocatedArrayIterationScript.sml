@@ -254,8 +254,7 @@ Resume abi_valid_allocated_array_iteration[backedge]:
   `abi_valid_allocated_effect ctx func cenv cx es setup.cs_next_var
      sites dstid d outsz h b` by
     (`abi_malformed_resource_post ctx func cenv cx es setup.cs_next_var sites dstid h b` by
-       (fs[abi_malformed_resource_post_def, stmt_state_rel_inst_idx,
-           eval_operand_def, lookup_var_def]) >>
+       fs[abi_malformed_resource_post_inst_idx] >>
      `b.vs_memory = h.vs_memory /\ b.vs_allocas = h.vs_allocas` by
        (drule_all abi_malformed_setup_frame >> strip_tac >>
         qpat_x_assum `a = _ with vs_vars := _` SUBST_ALL_TAC >> fs[]) >>
