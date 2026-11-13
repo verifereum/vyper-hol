@@ -965,7 +965,7 @@ QED
    source's accounts, transient storage and logs. *)
 Theorem deploy_ctor_return:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
-   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func mut am_c es0 gs res st final.
+   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func mut am_c es0 gs res st final H.
     deploy_phases policy tops (deploy_bc, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
@@ -979,10 +979,10 @@ Theorem deploy_ctor_return:
       (es0 with <| gas_obs := gs; outcomes := SOME vs.vs_outcomes |>) =
       (res, st) /\
     (res = INL () \/ res = INR (ReturnException NoneV)) /\
-    constructor_return_q func cenv (deploy_evaluation_context tops am tx) (LENGTH runtime_bc)
+    constructor_return_q H func cenv (deploy_evaluation_context tops am tx) (LENGTH runtime_bc)
       (imm_len tops) nr nkey NoneV (st with scopes := []) (Halt final) /\
     final.vs_code = vs.vs_code /\ final.vs_labels = vs.vs_labels ==>
-    deploy_venom_result_rel HS tops runtime_bc tx
+    deploy_venom_result_rel H tops runtime_bc tx
       (deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx) nr mut am_c res st) (Halt final)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -993,7 +993,7 @@ Proof
    INL (abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st
      with sources updated_by CONS (tx.target,[(NONE,tops)]),st.requests)` by
     metis_tac[deploy_ctor_finish_normal] >>
-  qpat_x_assum `constructor_return_q _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `constructor_return_q _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[constructor_return_q_def] >> strip_tac >>
   `TAKE (LENGTH runtime_bc)
       (DROP (w2n codepos) before.vs_code ++ REPLICATE (LENGTH runtime_bc) 0w) = runtime_bc` by

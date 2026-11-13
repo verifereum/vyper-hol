@@ -9,13 +9,15 @@ Ancestors
    unlock and the epilogue (constructor_exit_run). *)
 Theorem deploy_ctor_fallthrough:
   !tops rpolicy runtime_bc dunit
-   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func cx cenv' ee t.
+   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func cx cenv' ee t H.
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
        st_epilogue, st_final, func) /\
     cenv.ce_is_ctor /\ cenv_top_ext cenv cenv' ee.scopes /\
     LENGTH runtime_bc + imm_len tops < dimword(:256) /\
-    (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
+    (nr ==> ut /\ cx.nonreentrant_slot = SOME nkey /\
+            storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
+            nkey < dimword (:256)) /\
     (imm_len tops <> 0 ==>
        cenv.ce_imm_alloca = SOME imm /\
        !x. imm = Var x ==> not_fresh_at st_epilogue x) /\
@@ -24,7 +26,7 @@ Theorem deploy_ctor_fallthrough:
     t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     ?fuel final.
       run_from fuel dunit.cu_context func t = Halt final /\
-      constructor_return_q func cenv cx (LENGTH runtime_bc) (imm_len tops)
+      constructor_return_q H func cenv cx (LENGTH runtime_bc) (imm_len tops)
         nr nkey NoneV (ee with scopes := []) (Halt final)
 Proof
   rpt gen_tac >> simp[deploy_ctor_code_def] >> strip_tac >>
@@ -32,7 +34,7 @@ Proof
   drule cenv_top_ext_same_frame >> strip_tac >>
   `?fuel final.
      run_from fuel dunit.cu_context func (jump_to exit_lbl t) = Halt final /\
-     constructor_return_q func (cenv1 with ce_ctor_exit_label := SOME exit_lbl)
+     constructor_return_q H func (cenv1 with ce_ctor_exit_label := SOME exit_lbl)
        cx (LENGTH runtime_bc) (imm_len tops) nr nkey NoneV
        (ee with scopes := []) (Halt final)` by
     (irule constructor_exit_run >> rpt conj_tac >|
