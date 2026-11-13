@@ -207,8 +207,8 @@ Proof
   drule_all log_compile_structure_widen >> strip_tac >>
   qabbrev_tac `axs = ZIP (MAP FST ys,MAP expr_type args)` >>
   `gas_admissible (eval_exprs cx args) log_args_res_ok es` by
-    (simp[log_args_res_ok_def] >>
-     irule log_arguments_admissible >> simp[]) >>
+    (drule_all log_arguments_admissible >>
+     simp[GSYM log_args_res_ok_def, ETA_THM]) >>
   qspecl_then [`args`, `ctx`, `func`, `cenv`, `cx`, `R`, `es`, `sa`, `axs`, `sm`,
                `s0`, `env`, `env`, `es`, `ys`] mp_tac compile_log_eval_all_gas >>
   impl_tac
