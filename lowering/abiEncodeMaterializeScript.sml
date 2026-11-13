@@ -40,7 +40,7 @@ QED
    Only bytestring capacities can differ; the copy reads the actual payload. *)
 Theorem materialize_expr_post_lowered_source:
   expr_body_pre ce cx env e es /\
-  expr_post ctx func ce cx e es0 sa sb s0 es' v src s /\
+  expr_post H ctx func ce cx e es0 sa sb s0 es' v src s /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v ==>
@@ -96,8 +96,8 @@ QED
 (* Transport the incoming captured value over allocation, before unwrap.
    The allocation may extend the map; it does not change existing bytes. *)
 Theorem materialize_vv_post_alloc_storage_frame:
-  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
-  stmt_state_rel ctx func cenv cx es' t /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  stmt_state_rel H ctx func cenv cx es' t /\
   t.vs_memory = s.vs_memory /\
   contract_storage t = contract_storage s /\
   contract_transient t = contract_transient s /\
@@ -108,7 +108,7 @@ Theorem materialize_vv_post_alloc_storage_frame:
   local_ptrs_reserved cenv sm /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   sm.cs_next_id <= sn.cs_next_id ==>
-  vv_post ctx func cenv cx e es sa sn s0 es' tv vv t
+  vv_post H ctx func cenv cx e es sa sn s0 es' tv vv t
 Proof
   strip_tac >>
   `!n b sz. local_region cenv es'.scopes s n b sz <=>
@@ -118,7 +118,7 @@ Proof
   `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s` by
     (rpt strip_tac >> first_x_assum irule >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[vv_post_def] >> strip_tac >>
   `vv_holds cenv cx (post_value_type cenv e) tv vv es' t` by
     (irule exprSimVVFrameTheory.vv_holds_vars_frame >> qexists_tac `s` >> simp[]) >>
@@ -135,7 +135,7 @@ Proof
      rpt strip_tac >> gvs[vv_operand_def] >>
      disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
      metis_tac[]) >>
-  `~expr_has_effect e ==> vv_storage_live cx vv es' t` by
+  `~expr_has_effect e ==> vv_storage_live H cx vv es' t` by
     (Cases_on `vv` >>
      gvs[vv_storage_live_def, vv_operand_def]) >>
   `~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by
@@ -150,7 +150,7 @@ Theorem materialize_unwrap_owned_sim:
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tvv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
@@ -160,7 +160,7 @@ Theorem materialize_unwrap_owned_sim:
   not_fresh_at sm p /\ lookup_var p r = SOME w /\
   FLOOKUP r.vs_allocas aid = SOME (w2n w,sz) ==>
   frag_exec ctx sm su (\s. s = r)
-    (\s. expr_post ctx func ce cx e es'
+    (\s. expr_post H ctx func ce cx e es'
            (sa with cs_next_var := sm.cs_next_var) su r es' v op s /\
          lookup_var p s = SOME w /\
          FLOOKUP s.vs_allocas aid = SOME (w2n w,sz)) R
@@ -168,7 +168,7 @@ Proof
   strip_tac >> irule frag_exec_conseq >>
   qexistsl
     [`\s. s = r`,
-     `\s. expr_post ctx func ce cx e es'
+     `\s. expr_post H ctx func ce cx e es'
         (sa with cs_next_var := sm.cs_next_var) su r es' v op s`, `R`] >>
   simp[] >> conj_tac
   >- (gen_tac >> strip_tac >> conj_tac
@@ -189,12 +189,12 @@ Theorem materialize_store_state_run:
   (if is_word_type ty then sw = typed_val_to_w256 tv v
    else val_in_memory tv v (w2n sw) s.vs_memory) /\
   type_memory_size tv + 64 < dimword (:256) /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   (!name b len. local_region ce es.scopes s name b len ==>
      w2n dw + type_memory_size tv <= b \/ b + len <= w2n dw) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel ctx func ce cx es t /\
+      stmt_state_rel H ctx func ce cx es t /\
       val_in_memory tv v (w2n dw) t.vs_memory /\
       lookup_var p t = SOME dw /\ t.vs_allocas = s.vs_allocas /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -206,7 +206,7 @@ Proof
   `copy_static t = copy_static s` by
     (qpat_x_assum `(t with <|vs_vars := _; vs_memory := _|>) = s`
        (mp_tac o Q.AP_TERM `copy_static`) >> simp[copy_static_def]) >>
-  `stmt_state_rel ctx func ce cx es t` by
+  `stmt_state_rel H ctx func ce cx es t` by
     (irule copy_buffer_state_rel_frame >>
      qexistsl [`w2n dw`, `inst`, `s`, `sa`, `type_memory_size tv`] >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
@@ -253,7 +253,7 @@ Proof
 QED
 
 Theorem materialize_vv_post_operand:
-  vv_post ctx func ce cx e es sa sm s0 es' tv vv s ==>
+  vv_post H ctx func ce cx e es sa sm s0 es' tv vv s ==>
   ?w. eval_operand (vv_operand vv) s = SOME w
 Proof
   Cases_on `vv` >>
@@ -264,14 +264,14 @@ QED
 Theorem materialize_alloc_vv_sim:
   compile_alloc_buffer n sm = (buf,mid) /\
   fn_has_code sm mid func /\ fn_inst_ids_distinct func /\
-  vv_post ctx func ce cx e es sa sm s0 es' tv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tv vv r /\
   local_ptrs_reserved ce sm /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   sm.cs_next_id <= mid.cs_next_id /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   n < dimword (:256) ==>
   ?u w. frag_exec ctx sm mid (\z. z = r) (\z. z = u) R /\
-    vv_post ctx func ce cx e es sa mid s0 es' tv vv u /\
+    vv_post H ctx func ce cx e es sa mid s0 es' tv vv u /\
     eval_operand buf.buf_operand u = SOME w /\
     FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,n) /\
     w2n w + n < dimword (:256) /\
@@ -284,10 +284,10 @@ Theorem materialize_alloc_vv_sim:
     (?p. buf.buf_operand = Var p /\ not_fresh_at mid p)
 Proof
   strip_tac >> drule materialize_vv_post_operand >> strip_tac >>
-  `stmt_state_rel ctx func ce cx es' r` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx func ce cx es' r` by gvs[vv_post_def] >>
   drule_all alloc_buffer_source_frag >>
   disch_then (qspec_then `R` strip_assume_tac) >>
-  `vv_post ctx func ce cx e es sa mid s0 es' tv vv u` by
+  `vv_post H ctx func ce cx e es sa mid s0 es' tv vv u` by
     (irule materialize_vv_post_alloc_storage_frame >> simp[] >>
      qexistsl [`r`, `sm`] >> simp[]) >>
   qexistsl [`u`, `w'`] >> simp[] >> metis_tac[]
@@ -308,8 +308,8 @@ Proof
 QED
 
 Theorem materialize_expr_post_inst_idx[local]:
-  expr_post ctx func ce cx e es sa sb s0 es' v op (s with vs_inst_idx := n) <=>
-  expr_post ctx func ce cx e es sa sb s0 es' v op s
+  expr_post H ctx func ce cx e es sa sb s0 es' v op (s with vs_inst_idx := n) <=>
+  expr_post H ctx func ce cx e es sa sb s0 es' v op s
 Proof
   simp[expr_post_def, exprLoweringPropsTheory.stmt_state_rel_inst_idx,
        expr_val_rel_def, expr_val_at_def, expr_val_own_def,
@@ -318,13 +318,13 @@ Proof
 QED
 
 Theorem materialize_rebase_post:
-  vv_post ctx func ce cx e es sa mid s0 es' tvv vv u /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := mid.cs_next_var)
+  vv_post H ctx func ce cx e es sa mid s0 es' tvv vv u /\
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := mid.cs_next_var)
     su u es' v src z /\
-  stmt_state_rel ctx func ce cx es s0 /\
+  stmt_state_rel H0 ctx func ce cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   local_ptrs_reserved ce sa /\ sa.cs_next_var <= mid.cs_next_var ==>
-  expr_post ctx func ce cx e es sa su s0 es' v src z
+  expr_post H ctx func ce cx e es sa su s0 es' v src z
 Proof
   strip_tac >>
   `local_ptrs_rel func ce es.scopes s0` by
@@ -334,13 +334,13 @@ Proof
     (rpt strip_tac >> irule local_region_frame >> conj_tac
      >- (qexists_tac `func` >> simp[]) >>
      qexistsl [`sa`, `es'.scopes`, `u`] >> simp[] >>
-     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[vv_post_def]) >>
   `locals_kept ce es es' s0 z` by
     (irule exprBopSimPropsTheory.locals_kept_trans >>
      goal_assum (drule_at Any) >> qexistsl [`es'`, `u`] >>
-     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[vv_post_def, expr_post_def] >> metis_tac[]) >>
   gvs[vv_post_def, expr_post_def] >> rpt conj_tac
   >- (strip_tac >> irule expr_val_own_start_mono >>
@@ -400,7 +400,7 @@ QED
 Theorem materialize_store_owned_post_sim:
   compile_store_memory ce src (Var p) (lowered_value_type ce e)
     (lowered_value_type ce e) su = ((),sb) /\
-  expr_post ctx func ce cx e es sa su s0 es' v src z /\
+  expr_post H ctx func ce cx e es sa su s0 es' v src z /\
   expr_body_pre ce cx env e es_pre /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
@@ -418,7 +418,7 @@ Theorem materialize_store_owned_post_sim:
   (!name b len. local_region ce es.scopes s0 name b len ==>
      w2n w + type_memory_size tv <= b \/ b + len <= w2n w) ==>
   frag_exec ctx su sb (\s. s = z)
-    (\s. stmt_state_rel ctx func ce cx es' s /\
+    (\s. stmt_state_rel H ctx func ce cx es' s /\
       wb_frame ce es es' sa s0 s /\
       expr_val_rel cx (lowered_value_type ce e) v (Var p) s /\
       expr_val_at ce cx (lowered_value_type ce e) sa sb es' v (Var p) s /\
@@ -435,7 +435,7 @@ Proof
   drule_all materialize_expr_post_lowered_source >> strip_tac >>
   `~is_word_type (lowered_value_type ce e)` by
     metis_tac[expr_body_pre_lowered_fits, compatible_word_type] >>
-  `stmt_state_rel ctx func ce cx es' z /\ wb_frame ce es es' sa s0 z` by
+  `stmt_state_rel H ctx func ce cx es' z /\ wb_frame ce es es' sa s0 z` by
     (gvs[expr_post_def, wb_frame_def] >> metis_tac[]) >>
   drule (cj 1 materialize_store_state_run) >>
   disch_then (drule_at Any) >>
@@ -492,7 +492,7 @@ QED
 Theorem materialize_store_post_sim:
   compile_store_memory ce src (Var p) (lowered_value_type ce e)
     (lowered_value_type ce e) su = ((),sb) /\
-  expr_post ctx func ce cx e es sa su s0 es' v src z /\
+  expr_post H ctx func ce cx e es sa su s0 es' v src z /\
   expr_body_pre ce cx env e es_pre /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
@@ -510,7 +510,7 @@ Theorem materialize_store_post_sim:
   (!name b len. local_region ce es.scopes s0 name b len ==>
      w2n w + type_memory_size tv <= b \/ b + len <= w2n w) ==>
   frag_exec ctx su sb (\s. s = z)
-    (\s. stmt_state_rel ctx func ce cx es' s /\
+    (\s. stmt_state_rel H ctx func ce cx es' s /\
       wb_frame ce es es' sa s0 s /\
       expr_val_rel cx (lowered_value_type ce e) v (Var p) s /\
       expr_val_at ce cx (lowered_value_type ce e) sa sb es' v (Var p) s /\
@@ -527,8 +527,8 @@ QED
 Theorem compile_materialize_vv_owned_sim:
   compile_materialize_vv ce (lowered_value_type ce e) vv sm = (dst,sb) /\
   expr_body_pre ce cx env e es_pre /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
-  stmt_state_rel ctx func ce cx es s0 /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  stmt_state_rel H0 ctx func ce cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -546,7 +546,7 @@ Theorem compile_materialize_vv_owned_sim:
   type_memory_size tv < 2 ** 64 /\
   type_memory_size tv + 64 < dimword (:256) ==>
   frag_exec ctx sm sb (\s. s = r)
-    (\s. stmt_state_rel ctx func ce cx es' s /\
+    (\s. stmt_state_rel H ctx func ce cx es' s /\
       wb_frame ce es es' sa s0 s /\
       expr_val_rel cx (lowered_value_type ce e) v dst s /\
       expr_val_at ce cx (lowered_value_type ce e) sa sb es' v dst s /\
@@ -610,7 +610,7 @@ Resume compile_materialize_vv_owned_sim[store_continuation]:
      qpat_x_assum `!name b len. local_region _ _ u _ _ _ ==> _` mp_tac >>
      disch_then (qspecl_then [`name`, `b`, `len`] mp_tac) >>
      `local_region ce es'.scopes u name b len` by
-       (qpat_assum `expr_post _ _ _ _ _ es' _ _ u _ _ _ _`
+       (qpat_assum `expr_post _ _ _ _ _ _ es' _ _ u _ _ _ _`
           (mp_then Any strip_assume_tac expr_post_frame) >>
         irule exprSimPropsTheory.local_region_frame >>
         conj_tac
@@ -643,8 +643,8 @@ Finalise compile_materialize_vv_owned_sim
 Theorem compile_materialize_vv_sim:
   compile_materialize_vv ce (lowered_value_type ce e) vv sm = (dst,sb) /\
   expr_body_pre ce cx env e es_pre /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
-  stmt_state_rel ctx func ce cx es s0 /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  stmt_state_rel H0 ctx func ce cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -662,7 +662,7 @@ Theorem compile_materialize_vv_sim:
   type_memory_size tv < 2 ** 64 /\
   type_memory_size tv + 64 < dimword (:256) ==>
   frag_exec ctx sm sb (\s. s = r)
-    (\s. stmt_state_rel ctx func ce cx es' s /\
+    (\s. stmt_state_rel H ctx func ce cx es' s /\
       wb_frame ce es es' sa s0 s /\
       expr_val_rel cx (lowered_value_type ce e) v dst s /\
       expr_val_at ce cx (lowered_value_type ce e) sa sb es' v dst s /\
