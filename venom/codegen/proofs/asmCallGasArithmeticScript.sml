@@ -78,3 +78,37 @@ Proof
   rpt IF_CASES_TAC >> simp[] >>
   metis_tac[memory_expansion_cost_bound, MULT_COMM]
 QED
+
+(* CREATE's bounded initcode and its single memory range. *)
+Theorem create_upfront_cost_bound:
+  sz <= 2 * max_code_size /\ (sz = 0 \/ off + sz <= H) ==>
+  32000 + (if two then 8 else 2) * word_size sz +
+    memory_expansion_cost old
+      (if 0 < sz then word_size (off + sz) * 32 else 0) <=
+    44288 + memory_cost H
+Proof
+  strip_tac >>
+  `word_size sz <= 1536` by
+    (gvs[vfmConstantsTheory.word_size_def,
+         vfmConstantsTheory.max_code_size_def] >>
+     qspec_then `32` (qspecl_then [`sz + 31`, `49183`] mp_tac)
+       DIV_LE_MONOTONE >> simp[]) >>
+  `memory_expansion_cost old
+      (if 0 < sz then word_size (off + sz) * 32 else 0) <= memory_cost H` by
+    (Cases_on `sz = 0`
+     >- simp[memory_expansion_cost_def, memory_cost_def,
+             vfmConstantsTheory.word_size_def, MAX_DEF] >>
+     simp[] >> metis_tac[memory_expansion_cost_bound, MULT_COMM]) >>
+  Cases_on `two` >> gvs[] >> decide_tac
+QED
+
+Theorem create_forwarded_gas_reserve:
+  k <= B /\ B <= L ==>
+  (L - B) DIV 64 <=
+    (L - k) - ((L - k) - (L - k) DIV 64)
+Proof
+  strip_tac >>
+  `(L - k) DIV 64 <= L - k` by simp[DIV_LESS_EQ] >>
+  `(L - k) - ((L - k) - (L - k) DIV 64) = (L - k) DIV 64` by decide_tac >>
+  asm_rewrite_tac[] >> irule DIV_LE_MONOTONE >> simp[]
+QED

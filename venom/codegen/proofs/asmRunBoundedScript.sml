@@ -118,7 +118,7 @@ QED
 (* The CALL families expose the same two ranges, after their value slot. *)
 Theorem asm_inst_gas_ok_call_ranges:
   asm_inst_gas_ok H (AsmOp name) stk /\
-  (name = "CALL" \/ name = "STATICCALL") /\
+  (name = "CALL" \/ name = "STATICCALL" \/ name = "DELEGATECALL") /\
   6 + (if name = "CALL" then 1 else 0) <= LENGTH stk ==>
   (w2n (EL (3 + (if name = "CALL" then 1 else 0)) stk) = 0 \/
    w2n (EL (2 + (if name = "CALL" then 1 else 0)) stk) +
@@ -236,4 +236,16 @@ Proof
   drule create_safe_imp_gas_ok >> strip_tac >> gvs[] >>
   simp[Once asm_run_bounded_def] >>
   first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem asm_inst_gas_ok_create_ranges:
+  asm_inst_gas_ok H (AsmOp (if two then "CREATE2" else "CREATE")) stk ==>
+  3 <= LENGTH stk /\ w2n (EL 2 stk) <= 2 * max_code_size /\
+  (w2n (EL 2 stk) = 0 \/ w2n (EL 1 stk) + w2n (EL 2 stk) <= H)
+Proof
+  Cases_on `two` >>
+  namedCases_on `stk` ["", "value tail"] >> simp[asm_inst_gas_ok_def] >>
+  namedCases_on `tail` ["", "off tail2"] >> simp[asm_inst_gas_ok_def] >>
+  namedCases_on `tail2` ["", "sz tail3"] >>
+  simp[asm_inst_gas_ok_def, asm_mem_ranges_def]
 QED
