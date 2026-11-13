@@ -183,7 +183,7 @@ Proof
   `stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st` by
     fs[abi_malformed_entry_def] >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t` by
-    (irule abi_malformed_setup_resource >>
+    (first_assum (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule abi_malformed_setup_resource) >>
      qhdtm_assum `abi_decode_array_element_setup` (irule_at Any) >> simp[]) >>
   `st.cs_next_var <= en.cs_next_var` by
     (drule abi_decode_dynamic_element_setup_counters >> strip_tac >>

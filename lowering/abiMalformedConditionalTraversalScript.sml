@@ -88,7 +88,7 @@ Proof
        fresh_vars_wrt limit_st h /\ mload slot h = n2w j /\
        abi_malformed_allocated_window live B L xs h`
      >- simp[] >>
-     irule abi_malformed_array_header >> simp[] >>
+     first_assum (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule abi_malformed_array_header) >> simp[] >>
      reverse conj_tac >- (qexists_tac `start` >> simp[]) >>
      qexistsl_tac [`base_op`, `hid`, `ip`] >>
      qexistsl_tac [`p`, `src`] >> simp[]) >>

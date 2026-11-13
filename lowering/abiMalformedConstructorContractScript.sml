@@ -425,7 +425,8 @@ Proof
   `p <= L` by fs[w2n_n2w] >>
   drule_all abi_decoder_sequence_reentry_prefix >> strip_tac >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s actual` by
-    (irule abi_malformed_read_sequence_resource >>
+    (`stmt_state_rel HZ ctx func cenv cx es s` by fs[abi_malformed_entry_def] >>
+     first_assum (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule abi_malformed_read_sequence_resource) >>
      conj_tac
      >- (qexists_tac `emitted_insts st en` >> simp[] >>
          drule_all abi_malformed_complex_guard_writes >> simp[]) >>

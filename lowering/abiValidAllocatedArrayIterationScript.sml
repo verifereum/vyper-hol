@@ -173,7 +173,7 @@ Resume abi_valid_allocated_array_iteration[body]:
      rename1 `run_inst_seq (emitted_insts setup child) h = OK a` >>
      `stmt_state_rel H ctx func cenv cx es h` by fs[abi_malformed_entry_def] >>
      `abi_malformed_resource_post ctx func cenv cx es setup.cs_next_var sites dstid h a` by
-       (irule abi_malformed_setup_resource >>
+       (first_assum (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule abi_malformed_setup_resource) >>
         qhdtm_assum `abi_decode_array_element_setup` (irule_at Any) >> simp[]) >>
      `local_ptrs_reserved cenv child` by
        (irule local_ptrs_reserved_next_var >> qexists_tac `setup` >> simp[]) >>

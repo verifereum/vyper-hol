@@ -150,7 +150,8 @@ Proof
     (drule_all abi_malformed_complex_guard_writes >> simp[]) >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var
      (abi_malformed_scratch_sites st en func) dstid s actual` by
-    (irule abi_malformed_read_sequence_resource >>
+    (`stmt_state_rel H ctx func cenv cx es s` by fs[abi_malformed_entry_def] >>
+     first_assum (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule abi_malformed_read_sequence_resource) >>
      conj_tac >- (qexists_tac `emitted_insts st en` >> simp[] >>
        drule_all abi_malformed_complex_guard_writes >> simp[]) >>
      fs[abi_malformed_entry_def]) >>

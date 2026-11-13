@@ -41,7 +41,7 @@ Proof
   drule abi_malformed_complex_guard_writes >> strip_tac >>
   drule_all abi_malformed_read_sequence_frame >> strip_tac >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s actual` by
-    (irule abi_malformed_read_sequence_resource >>
+    (first_assum (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule abi_malformed_read_sequence_resource) >>
      simp[] >> qexists_tac `emitted_insts st middle` >> simp[]) >>
   drule abi_decoder_complex_guard_code >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)

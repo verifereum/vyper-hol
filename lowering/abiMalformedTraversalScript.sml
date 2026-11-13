@@ -147,8 +147,9 @@ Proof
      drule abi_decoder_generated_update_operand >>
      simp[update_var_def]) >>
   `abi_malformed_resource_post ctx func cenv cx es first sites dstid u (mstore slot w u)` by
-    (irule abi_malformed_index_store_resource >> simp[] >>
-     qexistsl_tac [`inst`, `q`] >> simp[Abbr `u`, update_var_def]) >>
+    (irule abi_malformed_index_store_resource >> simp[] >> conj_tac
+     >- (qexistsl_tac [`inst`, `q`] >> simp[Abbr `u`, update_var_def]) >>
+     qexists_tac `H` >> simp[]) >>
   drule_all abi_malformed_resource_trans >> strip_tac >>
   conj_tac
   >- simp[] >>
@@ -637,7 +638,7 @@ Proof
     (abi_decode_position_header_state base_op first B p j n s)` >>
   `abi_malformed_resource_post ctx func cenv cx es first sites dstid s h /\
    fresh_vars_wrt limit_st h` by
-    (simp_tac bool_ss [Abbr `h`] >> irule abi_malformed_header_resource >>
+    (simp_tac bool_ss [Abbr `h`] >> first_assum (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule abi_malformed_header_resource) >>
      simp[] >> qexists_tac `st` >> simp[]) >>
   qexists_tac `h` >> simp[] >>
   Cases_on `base_op = Lit 0w` >>
@@ -736,7 +737,7 @@ Proof
        fresh_vars_wrt limit_st h /\ mload slot h = n2w (abi_head_word (DROP p xs)) /\
        abi_malformed_allocated_window live B L xs h`
      >- simp[] >>
-     irule abi_malformed_array_header >> simp[] >>
+     first_assum (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule abi_malformed_array_header) >> simp[] >>
      reverse conj_tac >- (qexists_tac `start` >> simp[]) >>
      qexistsl_tac [`base_op`, `id`, `ip`] >>
      qexistsl_tac [`p`, `src`] >> simp[]) >>
@@ -812,7 +813,7 @@ Proof
    fresh_vars_wrt limit_st
       (jump_to hdr (mstore slot (n2w (SUC j))
         (update_var (STRING #"%" (toString next)) (n2w (SUC j)) u)))` by
-    (irule abi_malformed_backedge_resource >> simp[] >>
+    (first_assum (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule abi_malformed_backedge_resource) >> simp[] >>
      conj_tac >- (qexists_tac `start` >> simp[]) >>
      qexistsl_tac [`inst`, `q`] >> simp[]) >>
   qmatch_asmsub_abbrev_tac `abi_malformed_resource_post ctx func cenv cx es
@@ -956,7 +957,7 @@ Proof
        fresh_vars_wrt limit_st h /\ mload slot h = n2w j /\
        abi_malformed_allocated_window live B L xs h`
      >- simp[] >>
-     irule abi_malformed_array_header >> simp[] >>
+     first_assum (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule abi_malformed_array_header) >> simp[] >>
      reverse conj_tac >- (qexists_tac `start` >> simp[]) >>
      qexistsl_tac [`base_op`, `hid`, `ip`] >>
      qexistsl_tac [`p`, `src`] >> simp[]) >>

@@ -59,7 +59,7 @@ Proof
     (irule local_ptrs_reserved_fresh >> qexists_tac `st` >> simp[]) >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid
      allocated (mstore (w2n w) 0w allocated)` by
-    (irule abi_malformed_index_store_resource >> simp[] >>
+    (first_assum (mp_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) irule abi_malformed_index_store_resource) >> simp[] >>
      qexistsl_tac [`mk_inst st.cs_next_id ALLOCA [Lit 32w]
        [STRING #"%" (toString st.cs_next_var)]`, `STRING #"%" (toString st.cs_next_var)`] >>
      simp[mk_inst_def]) >>
