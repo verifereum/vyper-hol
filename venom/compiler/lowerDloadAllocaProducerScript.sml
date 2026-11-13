@@ -357,11 +357,11 @@ Resume ld_alloca_certificate_backward[endpoints]:
       gvs[] >> rpt gen_tac >>
       simp[ld_site_entry_def, FLOOKUP_UPDATE] >>
       Cases_on `owner = (0,k)` >> simp[] >> rpt strip_tac >>
-      qpat_x_assum `!owner bs bt sz. _ IN live /\ _ ==> _`
+      qpat_x_assum `!owner bs bt sz. _ IN live /\ _ ==> lo <= _ /\ _`
         (qspecl_then [`owner`,`b`,`c`,`n'`] mp_tac) >>
       simp[ld_site_entry_def] >> strip_tac >> simp[]) >>
   gvs[] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!owner bs bt sz. _ IN live /\ _ ==> _`
+  qpat_x_assum `!owner bs bt sz. _ IN live /\ _ ==> lo <= _ /\ _`
     (qspecl_then [`owner`,`b`,`c`,`n'`] mp_tac) >>
   simp[] >> strip_tac >> simp[]
 QED
@@ -380,7 +380,7 @@ Resume ld_alloca_certificate_backward[separation]:
       `!owner b c n. owner IN live /\ ld_site_entry E owner b c n ==>
         b+n <= bs /\ c+n <= bt` by
         (rpt gen_tac >> strip_tac >>
-         qpat_x_assum `!owner bs bt sz. _ IN live /\ _ ==> _`
+         qpat_x_assum `!owner bs bt sz. _ IN live /\ _ ==> lo <= _ /\ _`
            (qspecl_then [`owner`,`b`,`c`,`n'`] mp_tac) >> simp[]) >>
       gvs[] >>
       mp_tac (Q.INST [`fresh` |-> `(0,k)`, `E` |-> `E`,
@@ -405,12 +405,12 @@ Resume ld_alloca_certificate_backward[floor]:
         metis_tac[ld_alloca_fresh_extent] >>
       `t'.vs_alloca_next <= dyn_floor CS s` by metis_tac[] >>
       rpt gen_tac >> simp[ld_site_entry_def, FLOOKUP_UPDATE] >>
-      Cases_on `owner = (0,k)` >> simp[]
-      >- (rpt strip_tac >> gvs[] >> decide_tac) >>
-      rpt strip_tac >>
-      qpat_x_assum `!owner bs bt sz. _ IN live /\ _ ==> _ <= dyn_floor _ _ /\ _`
-        (qspecl_then [`owner`,`b`,`c`,`n'`] mp_tac) >>
-      simp[ld_site_entry_def]) >>
+      reverse (Cases_on `owner = (0,k)`) >> simp[]
+      >- (rpt strip_tac >>
+          qpat_x_assum `!owner bs bt sz. _ IN live /\ _ ==> _ <= dyn_floor _ _ /\ _`
+            (qspecl_then [`owner`,`b`,`c`,`n'`] mp_tac) >>
+          simp[ld_site_entry_def]) >>
+      rpt strip_tac >> gvs[] >> decide_tac) >>
   simp[] >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `!owner bs bt sz. _ IN live /\ _ ==> _ <= dyn_floor _ _ /\ _`
     drule_all >> simp[]

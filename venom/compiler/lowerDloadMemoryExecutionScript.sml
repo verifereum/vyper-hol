@@ -94,9 +94,9 @@ Proof
   strip_tac >>
   `MEM (w2n x,32) (source_memory_read_ranges i s)` by
     simp[source_memory_read_ranges_def] >>
-  mp_tac (Q.INST [`off` |-> `w2n x`, `len` |-> `32`, `inst` |-> `i`]
+  mp_tac (Q.INST [`off` |-> `w2n (x:bytes32)`, `len` |-> `32`, `inst` |-> `i`]
     ld_access_read_classification) >>
-  impl_tac >- simp[] >>
+  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >>
   strip_tac
   >- (`op_prov (ld_erase AG) op = NONE` by
         (qpat_x_assum `!ops. mem_read_ops i = SOME ops ==> _` mp_tac >>
@@ -119,9 +119,9 @@ Proof
       simp[] >> decide_tac) >>
   gvs[mem_read_ops_def] >>
   `ld_op_prov AG (Var v) = NONE` by simp[ld_op_prov_def] >>
-  drule_all ld_owned_operand_clean >> strip_tac >>
-  `x = y` by metis_tac[optionTheory.SOME_11] >> gvs[] >>
-  rpt strip_tac >> first_x_assum irule >> decide_tac
+  `x = y` by
+    (mp_tac (Q.INST [`op` |-> `Var v`] ld_owned_operand_clean) >> simp[]) >>
+  gvs[] >> rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
 
 Theorem ld_owned_mload_range:
@@ -146,8 +146,7 @@ Proof
   strip_tac >>
   `!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     bt+sz < dimword(:256)` by metis_tac[] >>
-  rpt strip_tac >> irule ld_owned_mload_live_range >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  rpt strip_tac >> drule_all ld_owned_mload_live_range >> simp[]
 QED
 
 Theorem ld_owned_mload_access_backward:

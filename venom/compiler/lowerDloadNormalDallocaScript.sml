@@ -28,7 +28,7 @@ Proof
   reverse conj_tac >- metis_tac[] >>
   strip_tac >- metis_tac[] >>
   disj2_tac >>
-  qpat_x_assum `_ \/ ld_site_bytes _ _ _ _` strip_assume_tac >- gvs[] >>
+  qpat_x_assum `_ \/ _ \/ ld_site_bytes _ _ _ _` strip_assume_tac >- gvs[] >- gvs[] >>
   gvs[ld_site_bytes_def] >>
   `bt + sz <= n` by metis_tac[] >>
   `n <= bt + d` by metis_tac[] >>

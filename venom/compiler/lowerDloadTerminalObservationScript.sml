@@ -176,12 +176,28 @@ Resume ld_normal_return_observation[observation]:
       (w2n p+j = w2n q+j /\ dyn_floor CS s <= w2n p+j /\ w2n p+j < dimword (:256)) \/
       ld_site_bytes E live (w2n p+j) (w2n q+j))` by
     (drule_all ld_annotated_access_ok >> strip_tac >>
-     mp_tac (Q.INST [`fl` |-> `dyn_floor CS s`, `n` |-> `w2n (n:bytes32)`,
-       `ops` |-> `<|iao_ofst := off; iao_size := SOME sz; iao_max_size := SOME sz|>`]
-       ld_owned_read_range_geometry) >>
+     `mem_read_ops i =
+        SOME <|iao_ofst := off; iao_size := SOME sz; iao_max_size := SOME sz|>` by
+       (qpat_assum `i.inst_opcode = RETURN` mp_tac >>
+        qpat_assum `i.inst_operands = _` mp_tac >>
+        simp[mem_read_ops_def]) >>
+     qmatch_asmsub_abbrev_tac `mem_read_ops i = SOME ops` >>
+     (* the goal's n is a word, the lemma's a num: instantiate by term *)
+     mp_tac (INST [mk_var ("n", ``:num``) |-> ``w2n (n:bytes32)``]
+       (Q.INST [`fl` |-> `dyn_floor CS s`] ld_owned_read_range_geometry)) >>
      asm_rewrite_tac[] >>
-     impl_tac >- (simp[mem_read_ops_def, source_memory_read_ranges_def,
-                       memory_range_of_operands_def] >> metis_tac[MEM]) >>
+     impl_tac
+     >- (simp[Abbr `ops`, mem_read_ops_def, source_memory_read_ranges_def,
+              memory_range_of_operands_def] >> conj_tac
+         >- (rpt gen_tac >> disch_tac >>
+             qpat_x_assum `!v. MEM (Var v) i.inst_operands ==> v IN U`
+               (qspec_then `v` mp_tac) >>
+             qpat_assum `i.inst_operands = _` (fn th => rewrite_tac[th]) >>
+             qpat_assum `off = _` (fn th => rewrite_tac[th, MEM]) >>
+             qpat_assum `U = _` (fn th => rewrite_tac[th]) >> simp[]) >>
+         rpt strip_tac >>
+         qpat_x_assum `!owner bs bt sz. _ ==> _ /\ _ /\ _ < _ /\ _ < _` drule_all >>
+         simp[]) >>
      simp[]) >>
   `LENGTH (read_memory (w2n p) (w2n n) s) =
      LENGTH (read_memory (w2n q) (w2n n) t) /\

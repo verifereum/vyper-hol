@@ -105,11 +105,12 @@ Proof
     (drule ld_owned_operand_clean >> disch_then (qspec_then `value` mp_tac) >> simp[]) >>
   `MEM (w2n x,1) (source_memory_write_ranges i s)` by
     simp[source_memory_write_ranges_def, fixed_source_write_range_def] >>
-  `((w2n x = w2n y /\ w2n x+1 <= lo) \/
+  (* one goal, not three: a label shared by 3+ goals breaks Finalise *)
+  Q.SUBGOAL_THEN `((w2n x = w2n y /\ w2n x+1 <= lo) \/
     (?owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz /\
       bs <= w2n x /\ w2n x+1 <= bs+sz /\ w2n y = bt+(w2n x-bs)) \/
-    (w2n x = w2n y /\ dyn_floor CS s <= w2n x))` by
-    suspend "write_classification" >>
+    (w2n x = w2n y /\ dyn_floor CS s <= w2n x))` assume_tac
+  >- suspend "write_classification" >>
   `!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) ==>
      (a = w2n x <=> b = w2n y)` by
     (`(!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) ==>
@@ -153,15 +154,15 @@ Resume ld_mstore8_certificate_backward[value_provenance]:
 QED
 
 Resume ld_mstore8_certificate_backward[write_classification]:
-  mp_tac (Q.INST [`off` |-> `w2n x`, `len` |-> `1`, `inst` |-> `i`,
+  mp_tac (Q.INST [`off` |-> `w2n (x:bytes32)`, `len` |-> `1`, `inst` |-> `i`,
                   `fl` |-> `dyn_floor CS s`] ld_access_write_classification) >>
-  impl_tac >- simp[] >> strip_tac
+  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >> strip_tac
   >- (disj1_tac >> simp[] >>
       `ld_op_prov AG dst = NONE` by
         (qpat_x_assum `!ops. _` mp_tac >>
          simp[mem_write_ops_def, GSYM ld_erase_op_prov]) >>
       drule ld_owned_operand_clean >> disch_then (qspec_then `dst` mp_tac) >> simp[])
-  >~ [`dyn_floor CS s <= w2n _`]
+  >>> REVERSE_LT
   >- (rpt disj2_tac >>
       `ld_op_prov AG dst = NONE` by gvs[mem_write_ops_def, ld_op_prov_def] >>
       drule ld_owned_operand_clean >>
@@ -180,7 +181,7 @@ Resume ld_mstore8_certificate_backward[write_classification]:
 QED
 
 Resume ld_mstore8_certificate_backward[frame_transport]:
-  markerLib.RESUME_TAC >> rpt strip_tac >> qexists_tac `s'` >> asm_rewrite_tac[] >>
+  rpt strip_tac >> qexists_tac `s'` >> asm_rewrite_tac[] >>
   dxrule ld_memory_restore_normalize >> disch_then SUBST_ALL_TAC >>
   dxrule ld_memory_restore_normalize >> disch_then SUBST_ALL_TAC >>
   simp[ld_empty_outputs_prov_tvar, ld_frame_embedding_def, ld_alloc_account_def,

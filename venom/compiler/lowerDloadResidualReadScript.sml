@@ -123,15 +123,15 @@ Theorem ld_owned_read_range_geometry:
      ld_site_bytes E live (w2n p+j) (w2n q+j))
 Proof
   strip_tac >> Cases_on `n = 0` >- simp[] >>
-  mp_tac (Q.INST [`off` |-> `w2n p`, `len` |-> `n`, `inst` |-> `i`]
+  mp_tac (Q.INST [`off` |-> `w2n (p:bytes32)`, `len` |-> `n`, `inst` |-> `i`]
     ld_access_read_classification) >>
-  impl_tac >- simp[] >> strip_tac
+  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >> strip_tac
   >- (`ld_op_prov AG ops.iao_ofst = NONE` by
         (gvs[GSYM ld_erase_op_prov]) >>
       drule ld_owned_operand_clean >>
       disch_then (qspec_then `ops.iao_ofst` mp_tac) >>
       simp[] >> rpt strip_tac >> gvs[] >> decide_tac)
-  >~ [`fl <= w2n p`]
+  >>> REVERSE_LT
   >- (`ld_op_prov AG ops.iao_ofst = NONE` by gvs[ld_op_prov_def] >>
       drule ld_owned_operand_clean >>
       disch_then (qspec_then `ops.iao_ofst` mp_tac) >>

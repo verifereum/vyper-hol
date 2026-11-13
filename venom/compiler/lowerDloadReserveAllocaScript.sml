@@ -32,11 +32,12 @@ Proof
   strip_tac >>
   drule ld_normal_data_geometry >> strip_tac >>
   qpat_assum `step_inst fuelT CT i t = OK t'`
-    (mp_then Any (qspecl_then [`out`,`Lit n`] mp_tac) ld_alloca_step_effects) >>
+    (mp_then Any (qspecl_then [`out`,`Lit n`] mp_tac) lowerDloadAllocaProducerTheory.ld_alloca_step_effects) >>
   (impl_tac >- simp[]) >> strip_tac >>
   fs[eval_operand_def] >>
   drule_all ld_alloca_frontier_floor >> strip_tac >>
-  drule ld_alloc_account_frontier >> strip_tac >>
+  qpat_assum `ld_alloc_account keys (32 * SUM (MAP CARD ss)) A s t`
+    (mp_then Any strip_assume_tac ld_alloc_account_frontier) >>
   rewrite_tac[dyn_floor_def] >> IF_CASES_TAC
   >- (`s1.vs_alloca_next + 32 * ctx_dload_count CS <= w2n s1.vs_initial_fmp` by
         (irule ld_alloca_source_dyn_headroom >>
@@ -47,8 +48,11 @@ Proof
          simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
               exec_alloca_def, update_var_def] >>
          strip_tac >> gvs[]) >>
+      rpt BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `s1.vs_initial_fmp = _`
+        (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
       decide_tac) >>
-  decide_tac
+  fs[] >> decide_tac
 QED
 
 Theorem ld_alloca_normal_data_backward_reserve:

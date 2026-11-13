@@ -32,10 +32,10 @@ Proof
   qpat_assum `!owner bs bt sz. _ ==> lo <= bs /\ lo <= bt /\ _`
     (fn th => imp_res_tac th) >>
   TRY decide_tac >>
-  Cases_on `owner = owner'`
-  >- (gvs[ld_site_entry_def] >> decide_tac) >>
-  qpat_x_assum `!owner other bs bt sz cs ct cz. _` drule_all >>
-  decide_tac
+  (Cases_on `owner = owner'`
+   >- (gvs[ld_site_entry_def] >> decide_tac) >>
+   qpat_x_assum `!owner other bs bt sz cs ct cz. _` drule_all >>
+   decide_tac)
 QED
 
 Theorem ld_mstore_value_not_pointer[local]:
@@ -147,16 +147,16 @@ Resume ld_reachable_mstore_backward[source_operands]:
 QED
 
 Resume ld_reachable_mstore_backward[write_classification]:
-  mp_tac (Q.INST [`off` |-> `w2n x`, `len` |-> `32`, `inst` |-> `i`,
+  mp_tac (Q.INST [`off` |-> `w2n (x:bytes32)`, `len` |-> `32`, `inst` |-> `i`,
                   `fl` |-> `dyn_floor CS s`] ld_access_write_classification) >>
-  impl_tac >- simp[] >> strip_tac
+  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >> strip_tac
   >- (disj1_tac >> simp[] >>
       `ld_op_prov AG dst = NONE` by
         (qpat_x_assum `!ops. _` mp_tac >>
          simp[mem_write_ops_def, GSYM ld_erase_op_prov]) >>
       drule ld_owned_operand_clean >>
       disch_then (qspec_then `dst` mp_tac) >> simp[])
-  >~ [`dyn_floor CS s <= w2n _`]
+  >>> REVERSE_LT
   >- (rpt disj2_tac >>
       `ld_op_prov AG dst = NONE` by gvs[mem_write_ops_def, ld_op_prov_def] >>
       drule ld_owned_operand_clean >>

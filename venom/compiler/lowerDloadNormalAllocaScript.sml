@@ -65,7 +65,7 @@ Proof
     bt+sz <= f \/ ?j. j NOTIN keys /\ FLOOKUP t.vs_allocas j = SOME(bt,sz)` by
     metis_tac[] >>
   drule_all ld_alloca_certificate_backward >>
-  disch_then (qspecl_then [`fuelS`,`CS`] strip_assume_tac) >>
+  disch_then (qspec_then `fuelS` strip_assume_tac) >>
   `n' = n` by fs[] >> qpat_x_assum `n' = n` SUBST_ALL_TAC >>
   qexistsl [`s'`,`k'`,`L'`,`H'`] >> simp[] >>
   `FLOOKUP L i.inst_id = NONE ==> sz = w2n n` by
@@ -156,7 +156,7 @@ Resume ld_alloca_normal_data_backward_fresh_bounds[fresh_strict_endpoints]:
   `s'.vs_alloca_next < dimword(:256) /\
    t'.vs_alloca_next < dimword(:256)` by decide_tac >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!owner b c n. _ IN _ /\ _ ==> _`
+  qpat_x_assum `!owner b c n. _ IN _ /\ _ ==> lo <= _ /\ _`
     drule >> strip_tac >> first_x_assum drule >> strip_tac >> decide_tac
 QED
 

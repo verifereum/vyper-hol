@@ -577,7 +577,8 @@ Resume ld_historical_combined_entry_clause[data]:
        lowerDloadAllocationTheory.ld_alloc_account_init,
        ld_frame_bound_def, ld_stack_bound_def, ld_live_def, ld_selected_def,
        lowerDloadRelocationTheory.ld_byte_rel_def, allocas_from_def] >>
-  simp[lowerDloadLifetimeTheory.ld_site_bytes_def, entry_taint_def, op_taint_def]
+  simp[lowerDloadLifetimeTheory.ld_site_bytes_def, entry_taint_def, op_taint_def] >>
+  rpt strip_tac >> BasicProvers.VAR_EQ_TAC >> rewrite_tac[]
 QED
 
 Finalise ld_historical_combined_entry_clause
@@ -4866,6 +4867,14 @@ Resume ld_recursive_return_normal_prefix[frame_data]:
 QED
 
 Resume ld_recursive_return_normal_prefix[normal_clauses]:
+  `dyn_floor CS s' = dyn_floor CS s` by
+    (qpat_assum `ld_annotated_reachable vs0 CS (sf::astail) _ _ _ _ _ _ _ s` mp_tac >>
+     qpat_assum `bind_outputs sf.lf_inst.inst_outputs _ _ = SOME s'` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule ctxLookupAgreeHelpersTheory.bind_outputs_initial_fmp >> strip_tac >>
+     drule lowerDloadOwnershipTheory.ld_annotated_erasure >> strip_tac >>
+     drule o1LowerDloadOccurrenceTheory.frame_reachable_initial_fmp >> strip_tac >>
+     gvs[LIST_REL_CONS1, dyn_floor_def]) >>
   drule ld_normal_data_geometry >> strip_tac >>
   drule ld_normal_data_masks >> strip_tac >>
   drule ld_normal_data_memory >> strip_tac >>
@@ -4897,6 +4906,14 @@ Resume ld_recursive_return_normal_prefix[normal_clauses]:
         fs[lowerDloadLifetimeTheory.ld_site_entry_restrict] >>
       qpat_x_assum `!owner other bs bt sz cs ct cz. _` drule_all >> simp[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qpat_assum `dyn_floor CS s' = _` (fn th => rewrite_tac[th]) >>
+      map_every qx_gen_tac [`owner`, `bx`, `tx`, `sx`] >> strip_tac >>
+      `owner IN live` by metis_tac[SUBSET_DEF] >>
+      `ld_site_entry E owner bx tx sx` by
+        fs[lowerDloadLifetimeTheory.ld_site_entry_restrict] >>
+      qpat_x_assum `!owner bs bt sz. _ ==> _ <= dyn_floor CS s /\ _` drule_all >>
+      simp[]) >>
   qpat_assum `ld_saved_embedded _ E sk _ _ sf tf`
     (mp_then (Pat `ld_saved_embedded _ _ _ _ _ _ _`) mp_tac
       lowerDloadTargetGeometryTheory.ld_return_geometry) >>

@@ -219,9 +219,9 @@ Resume ld_normal_payload_copy_backward[geometry]:
 QED
 
 Resume ld_normal_payload_copy_backward[destination]:
-  mp_tac (Q.INST [`off` |-> `w2n p`, `len` |-> `w2n n`, `inst` |-> `i`,
+  mp_tac (Q.INST [`off` |-> `w2n (p:bytes32)`, `len` |-> `w2n (n:bytes32)`, `inst` |-> `i`,
                   `fl` |-> `dyn_floor CS s`] ld_access_write_classification) >>
-  impl_tac >- simp[] >> strip_tac
+  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >> strip_tac
   >- (disj1_tac >> simp[] >>
       `ld_op_prov AG dst = NONE` by
         (qpat_x_assum `!ops. _` mp_tac >>
@@ -229,7 +229,7 @@ Resume ld_normal_payload_copy_backward[destination]:
          simp[mem_write_ops_def, GSYM ld_erase_op_prov]) >>
       drule ld_owned_operand_clean >> disch_then (qspec_then `dst` mp_tac) >>
       Cases_on `i.inst_opcode = EXTCODECOPY` >> fs[MEM])
-  >~ [`dyn_floor CS s <= w2n _`]
+  >>> REVERSE_LT
   >- (rpt disj2_tac >>
       `ld_op_prov AG dst = NONE` by
         (qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >>

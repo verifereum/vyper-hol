@@ -52,7 +52,11 @@ Proof
    (q NOTIN A ==> t.vs_alloca_next + 32 <= s.vs_alloca_next + 32 * ctx_dload_count C)` by
     (Cases_on `q IN A` >> fs[CARD_INSERT] >> decide_tac) >>
   qpat_x_assum `dload_headroom_ok _ _ _ _` mp_tac >>
+  qpat_x_assum `FLOOKUP t.vs_allocas q = NONE ==> _` mp_tac >>
+  qpat_x_assum `t.vs_alloca_next <= _` mp_tac >>
+  qpat_x_assum `q NOTIN A ==> _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
   rewrite_tac[dload_headroom_ok_def, dyn_floor_def, GSYM ctx_has_dalloca_def] >>
-  Cases_on `ctx_has_dalloca C` >> asm_rewrite_tac[] >> strip_tac >>
-  rpt conj_tac >> rpt strip_tac >> res_tac >> decide_tac
+  Cases_on `ctx_has_dalloca C` >> asm_rewrite_tac[] >>
+  rpt strip_tac >> res_tac >> fs[] >> decide_tac
 QED

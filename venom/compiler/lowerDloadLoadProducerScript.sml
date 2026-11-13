@@ -50,7 +50,7 @@ Proof
   disch_then (qspecl_then [`fuel`] strip_assume_tac) >>
   `!v. off = Var v ==> v <> av` by metis_tac[] >>
   drule_all ld_live_load_memory >>
-  disch_then (qspecl_then [`fuel`,`CS`] strip_assume_tac) >> gvs[] >>
+  disch_then (qspec_then `fuel` strip_assume_tac) >> gvs[] >>
   drule_all (SRULE [] ld_load_completed_account) >> strip_tac >>
   simp[] >>
   ho_match_mp_tac (Q.INST [`n` |-> `4`] ld_load_prefix_live_representation) >>

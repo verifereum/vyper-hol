@@ -77,6 +77,12 @@ Proof
   conj_tac >- asm_rewrite_tac[] >>
   conj_tac >- asm_rewrite_tac[] >>
   conj_tac
+  >- (qpat_x_assum `ld_byte_rel _ _ _ _ _` mp_tac >>
+      rpt BasicProvers.VAR_EQ_TAC >>
+      qpat_assum `rS.vs_initial_fmp = _`
+        (fn th => simp[th, update_var_def, dyn_floor_def])) >>
+  conj_tac >- asm_rewrite_tac[] >>
+  conj_tac
   >- (qpat_x_assum `ld_alloc_account _ _ _ _ _` mp_tac >>
       simp[ld_alloc_account_def, update_var_def]) >>
   conj_tac >- (irule ld_frame_bound_restrict >> simp[]) >>

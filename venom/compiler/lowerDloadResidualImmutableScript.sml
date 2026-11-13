@@ -55,11 +55,17 @@ Proof
   disj2_tac >>
   `?v b sz. op = Var v /\ FLOOKUP G v = SOME (b,sz) /\
      b <= w2n addr /\ w2n addr + 32 <= b + sz` by
-    (qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >>
-     Cases_on `eval_operand value s` >> gvs[] >>
-     fs[access_ok_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
-        mem_read_ops_def, mem_write_ops_def, fixed_source_write_range_def] >>
-     `lo < w2n addr + 32` by decide_tac >> fs[] >> metis_tac[]) >>
+    (`lo < w2n addr + 32` by decide_tac >>
+     qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
+     rewrite_tac[access_ok_def] >> asm_rewrite_tac[] >> strip_tac >>
+     qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >>
+     gvs[optionTheory.IS_SOME_EXISTS]
+     >- (first_x_assum (qspecl_then [`w2n addr`,`32`] mp_tac) >>
+         simp[source_memory_read_ranges_def, mem_read_ops_def])
+     >- (qpat_x_assum `!off len. MEM (off,len) (source_memory_write_ranges _ _) /\ _ ==> _`
+           (qspecl_then [`w2n addr`,`32`] mp_tac) >>
+         simp[source_memory_write_ranges_def, mem_write_ops_def,
+              fixed_source_write_range_def])) >>
   `FLOOKUP AG v = NONE` by gvs[ld_op_prov_def] >>
   `fl <= b /\ b + sz < dimword (:256)` by metis_tac[] >>
   decide_tac

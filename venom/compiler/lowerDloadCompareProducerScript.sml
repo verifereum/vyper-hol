@@ -60,7 +60,9 @@ Proof
   `op_taint tn a = {} /\ op_taint tn b = {}` by metis_tac[MEM] >> simp[] >>
   Cases_on `ld_op_prov AG a = NONE /\ ld_op_prov AG b = NONE` >> simp[] >>
   `?u v. a = Var u /\ b = Var v /\ u IN fn_pv P fn /\ v IN fn_pv P fn` by
-    metis_tac[ld_annotated_compare_shape] >> gvs[] >>
+    metis_tac[ld_annotated_compare_shape] >>
+  (* substitute without splitting the opcode MEM: shared_site must stay one goal *)
+  rpt BasicProvers.VAR_EQ_TAC >>
   drule_all ld_annotated_access_ok >> strip_tac >>
   `?bs sz x y. FLOOKUP (ld_erase AG) u = SOME(bs,sz) /\
      FLOOKUP (ld_erase AG) v = SOME(bs,sz) /\ 0 < sz /\
@@ -88,7 +90,7 @@ Theorem ld_compare_shared_site[local]:
   (!v b z. FLOOKUP AG v = NONE /\ FLOOKUP G v = SOME (b,z) ==>
      fl <= b /\ b + z < dimword (:256)) /\
   (!v owner bs sz. FLOOKUP AG v = SOME (owner,(bs,sz)) ==> bs + sz <= fl) /\
-  FLOOKUP G u = SOME (b,z) /\ FLOOKUP G v = SOME (b,z) /\ 0 < z /\
+  FLOOKUP G (u:string) = SOME (b,z) /\ FLOOKUP G v = SOME (b,z) /\ 0 < z /\
   (FLOOKUP AG u <> NONE \/ FLOOKUP AG v <> NONE) ==>
   FLOOKUP (ld_erase AG) u = SOME (b,z) /\ FLOOKUP (ld_erase AG) v = SOME (b,z)
 Proof
@@ -109,25 +111,27 @@ Proof
 QED
 
 Resume ld_annotated_compare_cases[shared_site]:
-  markerLib.RESUME_TAC >>
-  `FLOOKUP AG u <> NONE \/ FLOOKUP AG v <> NONE` by
-    (spose_not_then strip_assume_tac >> gvs[ld_op_prov_def]) >>
-  `!w ow bw zw. FLOOKUP AG w = SOME (ow,(bw,zw)) ==> FLOOKUP G w = SOME (bw,zw)` by
-    (rpt strip_tac >>
-     qpat_x_assum `!v x. FLOOKUP (ld_erase AG) v = SOME x ==> _` irule >>
-     simp[ld_erase_lookup]) >>
-  `u IN FDOM G \/ v IN FDOM G` by
-    (Cases_on `FLOOKUP AG u` >> Cases_on `FLOOKUP AG v` >> fs[] >>
-     rename1 `FLOOKUP AG _ = SOME p` >> PairCases_on `p` >> res_tac >>
-     fs[FLOOKUP_DEF]) >>
-  qpat_x_assum `access_ok _ _ _ _ _` mp_tac >> simp[access_ok_def] >> strip_tac >>
-  qpat_x_assum `!u w. (_ \/ _ \/ _) /\ _ ==> _` (qspecl_then [`u`,`v`] mp_tac) >>
-  impl_tac >- (fs[MEM] >> metis_tac[]) >>
-  disch_then (qx_choosel_then [`bb`,`zz`,`xx`,`yy`] strip_assume_tac) >>
-  mp_tac (Q.INST [`fl` |-> `dyn_floor ctx s`, `b` |-> `bb`, `z` |-> `zz`]
-    ld_compare_shared_site) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  qexistsl_tac [`bb`,`zz`,`xx`,`yy`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+  (Q.SUBGOAL_THEN `FLOOKUP AG u <> NONE \/ FLOOKUP AG v <> NONE` assume_tac
+   >- (spose_not_then strip_assume_tac >> gvs[ld_op_prov_def]) >>
+   `!w ow bw zw. FLOOKUP AG w = SOME (ow,(bw,zw)) ==> FLOOKUP G w = SOME (bw,zw)` by
+     (rpt strip_tac >>
+      qpat_x_assum `!v x. FLOOKUP (ld_erase AG) v = SOME x ==> _` irule >>
+      simp[ld_erase_lookup]) >>
+   Q.SUBGOAL_THEN `u IN FDOM G \/ v IN FDOM G` assume_tac
+   >- (Cases_on `FLOOKUP AG u` >> Cases_on `FLOOKUP AG v` >> fs[] >>
+       rename1 `FLOOKUP AG _ = SOME p` >> PairCases_on `p` >> res_tac >>
+       fs[FLOOKUP_DEF]) >>
+   qpat_x_assum `access_ok _ _ _ _ _` mp_tac >> rewrite_tac[access_ok_def] >> strip_tac >>
+   qpat_x_assum `!u w. (_ \/ _ \/ _) /\ _ ==> _` (qspecl_then [`u`,`v`] mp_tac) >>
+   impl_tac >- (fs[MEM] >> metis_tac[]) >>
+   strip_tac >>
+   rename1 `FLOOKUP G u = SOME (bb,zz)` >>
+   rename1 `eval_operand (Var u) s = SOME xx` >>
+   rename1 `eval_operand (Var v) s = SOME yy` >>
+   mp_tac (Q.INST [`fl` |-> `dyn_floor ctx s`, `b` |-> `bb`, `z` |-> `zz`]
+     ld_compare_shared_site) >>
+   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+   qexistsl_tac [`bb`,`zz`,`xx`,`yy`] >> rpt conj_tac >> first_assum ACCEPT_TAC)
 QED
 
 Finalise ld_annotated_compare_cases
@@ -169,9 +173,10 @@ Proof
      `!v owner bs sz. FLOOKUP AG v = SOME (owner,(bs,sz)) ==>
         bs + sz <= dyn_floor CS s` by
        (rpt strip_tac >>
-        `ld_owned_selection E (FLOOKUP AG v) (FLOOKUP BH v)` by metis_tac[] >>
         `?bt. ld_site_entry E owner bs bt sz` by
-          (gvs[ld_owned_selection_def] >> metis_tac[]) >>
+          (qpat_x_assum `!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP BH v)`
+             (qspec_then `v` mp_tac) >>
+           simp[ld_owned_selection_def] >> metis_tac[]) >>
         `ld_live astk L AP AG (owner,(bs,sz))` by
           (simp[ld_live_def, ld_selected_def] >> metis_tac[]) >>
         `bs+sz <= s.vs_alloca_next` by metis_tac[] >> decide_tac) >>

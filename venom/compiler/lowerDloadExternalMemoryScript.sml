@@ -72,9 +72,9 @@ Proof
     (?owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz /\
       bs <= w2n p /\ w2n p+m <= bs+sz /\ w2n q = bt+(w2n p-bs)) \/
     (w2n p = w2n q /\ fl <= w2n p))` by
-    (mp_tac (Q.INST [`off` |-> `w2n p`, `len` |-> `n`, `inst` |-> `i`]
+    (mp_tac (Q.INST [`off` |-> `w2n (p:bytes32)`, `len` |-> `n`, `inst` |-> `i`]
        ld_access_write_classification) >>
-     impl_tac >- simp[] >> strip_tac
+     impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >> strip_tac
      >- (disj1_tac >>
          `ld_op_prov AG ops.iao_ofst = NONE` by gvs[GSYM ld_erase_op_prov] >>
          drule ld_owned_operand_clean >>
@@ -150,7 +150,7 @@ Proof
        (w2n q<=b /\ b<w2n q+LENGTH (TAKE n bs)))) /\
    (!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) /\
       w2n p<=a /\ a<w2n p+LENGTH (TAKE n bs) ==> a-w2n p=b-w2n q)` by
-    (mp_tac (Q.INST [`fl` |-> `dyn_floor CS s`, `m` |-> `LENGTH (TAKE n bs)`]
+    (mp_tac (Q.INST [`fl` |-> `dyn_floor CS s`, `m` |-> `LENGTH (TAKE n (bs:word8 list))`]
        ld_owned_write_prefix_geometry) >>
      asm_rewrite_tac[] >>
      impl_tac >- (simp[LENGTH_TAKE_EQ] >> metis_tac[]) >> simp[]) >>

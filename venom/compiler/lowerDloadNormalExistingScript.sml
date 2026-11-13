@@ -194,8 +194,10 @@ Proof
    (!v. v IN V ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
    (!v. ld_owned_selection E (FLOOKUP (ld_step_prov AP AG L i) v)
     (FLOOKUP (ld_step_prov BP BH H i) v))` by
-    gvs[ld_frame_data_def] >>
-  simp[] >> gvs[] >> simp[ld_update_var_restore, ld_param_taint_nonvar]
+    (qpat_assum `ld_frame_data _ _ _ _ _ _ _ (ld_step_prov _ _ _ _) _ _ _ _ _` mp_tac >>
+     rewrite_tac[ld_frame_data_def] >> strip_tac >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[] >> simp[ld_update_var_restore, ld_param_taint_nonvar]
 QED
 
 Theorem ld_normal_retpc_param_backward:
