@@ -48,7 +48,7 @@ QED
 Theorem immutable_rhs_normalization_source_range:
   compile_alloc_buffer cap sa = (buf,mid) /\ fn_has_code sa mid func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  stmt_state_rel ctx func ce cx ee s /\
+  stmt_state_rel H ctx func ce cx ee s /\
   expr_val_at ce cx sty si sa ee v op s /\
   evaluate_type (get_tenv cx) sty = SOME stv /\
   ~is_word_type sty /\ ~is_bytestring_type sty /\

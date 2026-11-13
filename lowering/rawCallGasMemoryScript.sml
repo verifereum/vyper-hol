@@ -5,7 +5,7 @@ Ancestors
   fragExecMem instMemFrontier entrySinkExtraction emitHelperProps emitHelper
   context compileEnv venomState venomExecSemantics venomInst rich_list
   exprSimHash exprLoweringProps memSafeRun gasOutcome gasSummary gasSummaryCompose gasExemptCert
-  vyperInterpreter vyperState
+  vyperInterpreter vyperState gasStorage vyperStorageFootprint vyperStorageTrace
 
 Theorem raw_call_optional_gas_counted_mem:
   (case go of SOME g => (g,sa) | NONE => emit_op GAS [] sa) = (gas,sb) /\
@@ -54,27 +54,34 @@ QED
 
 Theorem raw_call_implicit_mem_suffix:
   gas_path_mem ctx func s n (OK t) /\ es.gas_obs = [] /\
-  gas_outcome T tops (ctx,func) k (es,t) Q R ==>
-  gas_outcome T tops (ctx,func) k (es,s) Q R
+  gas_outcome T tops (ctx,func) cx st0 k (es,t) Q R ==>
+  gas_outcome T tops (ctx,func) cx st0 k (es,s) Q R
 Proof
   strip_tac >>
   `es with gas_obs := [] = es` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   `gas_marked_exec T (ctx,func) (return ()) (es,s) (REPLICATE n F) (INL ()) es (OK t)` by
     simp[gas_marked_exec_def, return_def, gas_marked_path_def] >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `REPLICATE n F ++ marks` >> disj1_tac >>
+      `gas_bad_storage_at cx st0 (bind (return ()) (\u. k)) es s
+         (REPLICATE n F ++ marks)` suffices_by simp[bind_return] >>
+      irule gas_bad_storage_at_bind_right >>
+      qpat_assum `gas_marked_exec _ _ (return ()) _ _ _ _ _` (irule_at Any) >>
+      simp[])
   >- (fs[gas_summary_at_def] >>
       `gas_marked_exec T (ctx,func) (bind (return ()) (\u. k))
          (es,s) (REPLICATE n F ++ marks) res es_end r` by
         (irule gas_marked_exec_bind_normal >>
          qexistsl_tac [`es`, `t`, `()`] >> gvs[]) >>
-      qexists_tac `REPLICATE n F ++ marks` >> disj1_tac >>
+      qexists_tac `REPLICATE n F ++ marks` >> disj2_tac >> disj1_tac >>
       fs[bind_return] >> simp[gas_summary_at_def] >> metis_tac[]) >>
   `gas_exempt_cert T tops (ctx,func)
      (bind (return ()) (\u. ignore_bind k (return ())))
      (es,s) (REPLICATE n F ++ marks) (err,ee) (leaf,finish')` by
     (irule gas_exempt_cert_bind_unit >>
      qexistsl_tac [`es`, `t`, `()`] >> simp[]) >>
-  qexists_tac `REPLICATE n F ++ marks` >> disj2_tac >> fs[bind_return] >> metis_tac[]
+  qexists_tac `REPLICATE n F ++ marks` >> disj2_tac >> disj2_tac >>
+  fs[bind_return] >> metis_tac[]
 QED

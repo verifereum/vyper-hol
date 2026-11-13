@@ -16,7 +16,7 @@ Theorem checked_compile_log_save_arg_state:
     evaluate_type (type_env tops) ty = SOME tv /\
     compile_log_save_arg cenv ty src suffix cs = (op,cs') /\
     lowered_value_rel ty tv v src ss /\ abi_operand_before cs.cs_next_var src /\
-    state_well_typed es /\ state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+    state_well_typed es /\ state_rel_simple H cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==>
       abi_operand_before cs.cs_next_var (Var p)) /\
@@ -32,7 +32,7 @@ Theorem checked_compile_log_save_arg_state:
     ?out. fragment_path ctx func ss out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\
       out.vs_halted = ss.vs_halted /\ lowered_value_rel ty tv v op out /\
-      state_rel_simple cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
+      state_rel_simple H cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
       log_args_rel args atvs values out /\ (fresh_vars_wrt cs ss ==> fresh_vars_wrt cs' out) /\ alloca_inv out /\
       array_copy_frame tv 1 (w2n (memory_snapshot_addr cs.cs_next_id ss)) ss.vs_memory out.vs_memory /\
       abi_state_frame ss out /\ allocation_growth ss out /\
@@ -55,9 +55,10 @@ Proof
   >- (`out = ss` by fs[] >> qexists_tac `out` >> asm_simp_tac bool_ss [] >> gvs[]) >>
   `source_memory_separated cenv es.scopes ss (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size tv)` by
     (qpat_x_assum `_ ==> source_memory_separated _ _ _ _ _` mp_tac >> impl_tac >- fs[] >> simp[]) >>
-  mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `ss`, `out`, `tv`, `1`,
-    `w2n (memory_snapshot_addr cs.cs_next_id ss)`, `cs.cs_next_var`] source_relations_copy_frame) >>
-  impl_tac >- (simp_tac bool_ss [MULT_CLAUSES] >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  drule_all (SIMP_RULE bool_ss [MULT_CLAUSES]
+    (Q.SPECL [`func`, `cenv`, `cx`, `es`, `ss`, `out`, `tv`, `1`,
+      `w2n (memory_snapshot_addr cs.cs_next_id ss)`, `cs.cs_next_var`]
+      source_relations_copy_frame)) >>
   strip_tac >> qexists_tac `out` >> asm_simp_tac bool_ss []
 QED
 
@@ -70,7 +71,7 @@ Theorem checked_compile_log_save_arg_allocated_state:
     evaluate_type (type_env tops) ty = SOME tv /\
     compile_log_save_arg cenv ty src suffix cs = (op,cs') /\
     lowered_value_rel ty tv v src ss /\ abi_operand_before cs.cs_next_var src /\
-    state_well_typed es /\ state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+    state_well_typed es /\ state_rel_simple H cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
     fn_inst_ids_distinct func /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==>
@@ -90,7 +91,7 @@ Theorem checked_compile_log_save_arg_allocated_state:
     ?out. fragment_path ctx func ss out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\
       out.vs_halted = ss.vs_halted /\ lowered_value_rel ty tv v op out /\
-      state_rel_simple cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
+      state_rel_simple H cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
       log_args_rel args atvs values out /\ (fresh_vars_wrt cs ss ==> fresh_vars_wrt cs' out) /\ alloca_inv out /\
       array_copy_frame tv 1 (w2n (memory_snapshot_addr cs.cs_next_id ss)) ss.vs_memory out.vs_memory /\
       abi_state_frame ss out /\ allocation_growth ss out /\

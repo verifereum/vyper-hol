@@ -28,7 +28,7 @@ Theorem saved_log_topics_source_state:
     LIST_REL (\flag ty. flag ==> event_indexable_type ty) flags fts /\
     LIST_REL (\arg tv. evaluate_type tenv (SND arg) = SOME tv) args atvs /\
     log_args_rel args atvs values ss /\ log_args_safe args atvs ss dst byte_count /\
-    state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+    state_rel_simple H cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
     compile_log_topic_ops (FST (split_log_ops args flags)) cs = (ops,cs') /\
@@ -39,7 +39,7 @@ Theorem saved_log_topics_source_state:
       eval_operands ops out = SOME topics /\ encode_indexed_event_topics flags fts values = SOME topics /\
       EVERY (abi_operand_before cs'.cs_next_var) ops /\ cs.cs_next_var <= cs'.cs_next_var /\
       copy_state_frame ss out /\ out.vs_memory = ss.vs_memory /\ allocation_growth ss out /\
-      state_rel_simple cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
+      state_rel_simple H cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
       (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
         FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs'.cs_next_var (Var p)) /\
       log_args_rel args atvs values out /\ log_args_safe args atvs out dst byte_count /\
@@ -165,7 +165,7 @@ Theorem checked_compile_saved_log_statement:
   LIST_REL (\ty tv. evaluate_type (type_env tops) ty = SOME tv) fts ftvs /\
   LIST_REL (\arg tv. evaluate_type (type_env tops) (SND arg) = SOME tv) args atvs /\
   values_have_types ftvs values /\ env_consistent env cx es /\ state_well_typed es /\
-  state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+  state_rel_simple H cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
   fn_has_code eval_cut topic_cut func /\ fn_has_code topic_cut store_cut func /\
   fn_has_code store_cut packed_cut func /\ fn_has_code packed_cut encoder_start func /\
   fn_has_code packed_cut final func /\
@@ -186,7 +186,7 @@ Theorem checked_compile_saved_log_statement:
   ?out ev.
     encode_source_event (get_tenv cx) cx.sources cx.txn.target event_id values = SOME ev /\
     out.vs_logs = ss.vs_logs ++ [ev] /\
-    state_rel_simple cenv cx (es with logs := es.logs ++ [ev]) out /\
+    state_rel_simple H cenv cx (es with logs := es.logs ++ [ev]) out /\
     local_ptrs_rel func cenv es.scopes out /\
     out.vs_current_bb = final.cs_current_bb /\ out.vs_inst_idx = LENGTH final.cs_current_insts /\ ~out.vs_halted /\
     (!fuel r. run_from fuel ctx func out = r /\ (!e. r <> Error e) ==>
@@ -211,7 +211,7 @@ Resume checked_compile_saved_log_statement[allocation]:
     (type_memory_size (TupleTV (select_log_args F flags ftvs)))` by fs[] >>
   drule_all compile_log_data_allocation_path >>
   disch_then (qspec_then `ctx` (qx_choose_then `allocated` strip_assume_tac)) >>
-  `state_rel_simple cenv cx es allocated /\ local_ptrs_rel func cenv es.scopes allocated` by
+  `state_rel_simple H cenv cx es allocated /\ local_ptrs_rel func cenv es.scopes allocated` by
     (qpat_x_assum `allocated = _` SUBST1_TAC >>
      simp_tac (srw_ss()) [] >>
      drule_all log_buffer_source_relations >> simp[]) >>
@@ -396,9 +396,9 @@ Theorem checked_compile_log_data_execution:
   EVERY (\e. compiler_id_flow (lower_value compile_expr cenv (expr_type e) e)) exprs /\
   LIST_REL (\e tv. evaluate_type (type_env tops) (lowered_value_type cenv e) = SOME tv /\
     type_memory_size tv < dimword(:256)) exprs layout_tvs /\
-  EVERY (log_argument_lowering tops env ctx func cenv cx ids reserved requests final charge) exprs /\
+  EVERY (log_argument_lowering H tops env ctx func cenv cx ids reserved requests final charge) exprs /\
   log_argument_charges charge cx exprs es values es' total_charge /\ total_charge <= credit /\
-  log_prefix_ready env cx cenv func ids reserved requests final exprs begin es before credit [] [] [] /\
+  log_prefix_ready H env cx cenv func ids reserved requests final exprs begin es before credit [] [] [] /\
   EVERY (\e. !st op finish. lower_value compile_expr cenv (expr_type e) e st = (op,finish) ==>
     !l. op <> Label l) exprs /\
   eval_cut.cs_next_var <= topic_cut.cs_next_var /\
@@ -406,14 +406,14 @@ Theorem checked_compile_log_data_execution:
   MEM (topic_cut.cs_next_id,data_capacity) requests /\
   LENGTH (Lit (n2w sig_hash)::ops) < dimword(:256) /\ ~before.vs_halted /\
   (!saved tvs. fragment_path ctx func before saved /\
-    log_prefix_ready env cx cenv func ids reserved requests final [] eval_cut es' saved
+    log_prefix_ready H env cx cenv func ids reserved requests final [] eval_cut es' saved
       (credit - total_charge) args tvs values ==>
     ?lo top. log_statement_resources cenv es'.scopes eval_cut topic_cut packed_cut encoder_start encoder_end
       data_capacity capacity lo top (TupleTV (select_log_args F flags ftvs)) saved) ==>
   ?out ev.
     eval_stmt cx (Log event_id exprs) es = (INL (),es' with logs := es'.logs ++ [ev]) /\
     encode_source_event (get_tenv cx) cx.sources cx.txn.target event_id values = SOME ev /\
-    state_rel_simple cenv cx (es' with logs := es'.logs ++ [ev]) out /\
+    state_rel_simple H cenv cx (es' with logs := es'.logs ++ [ev]) out /\
     local_ptrs_rel func cenv es'.scopes out /\
     out.vs_current_bb = final.cs_current_bb /\ out.vs_inst_idx = LENGTH final.cs_current_insts /\ ~out.vs_halted /\
     (!fuel r. run_from fuel ctx func out = r /\ (!e. r <> Error e) ==>
@@ -448,7 +448,7 @@ Proof
   `log_args_safe args atvs saved (w2n (memory_snapshot_addr topic_cut.cs_next_id saved))
     (type_memory_size (TupleTV (select_log_args F flags ftvs)))` by
     (drule_all log_ready_arguments_buffer_safe >> simp[]) >>
-  qpat_x_assum `log_prefix_ready _ _ _ _ _ _ _ _ [] _ _ _ _ _ _ _`
+  qpat_x_assum `log_prefix_ready _ _ _ _ _ _ _ _ _ [] _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [log_prefix_ready_def]) >>
   `env_consistent env cx es'` by fs[runtime_consistent_def] >>
   `~saved.vs_halted` by fs[] >>

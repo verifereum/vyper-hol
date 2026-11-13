@@ -11,6 +11,7 @@ Ancestors
   emitHelperProps context vyperContext exprSimSource fragExec bodyDeclMemoryCompose
   vyperEvalExprPreservesScopesDom venomState venomMemDefs allocaHistoryFragment
   exprSimConcatPath exprSimUint2Str locatedValueStoreBound
+  gasStorage vyperStorageTrace vyperStorageFootprint
 
 Theorem concat_result_summary_mem[local]:
   evaluate_concat n vs = INL v /\
@@ -66,7 +67,17 @@ Proof
   `concat_alloc_size (MAP expr_type args) < 2 ** 64` by
     (qpat_x_assum `alloc_limits_expr _ _` mp_tac >> simp[alloc_limits_expr_def]) >>
   rewrite_tac[expr_vv_sim_mem_def] >> rpt gen_tac >> strip_tac >>
-  drule concat_compile_shape >> strip_tac >> suspend "prefix"
+  drule concat_compile_shape >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >> simp[evaluate_storage_trace_frame]) >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace`
+    by fs[storage_trace_domain_def] >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _ /\ _`
+       (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >> first_assum ACCEPT_TAC) >>
+  suspend "prefix"
 QED
 
 Resume concat_result_vv_sim_mem[prefix]:
@@ -114,10 +125,22 @@ Resume concat_result_vv_sim_mem[operands]:
   `not_fresh_at s4 (STRING #"%" (toString (sa.cs_next_var + 1))) /\
    not_fresh_at s4 (STRING #"%" (toString (sa.cs_next_var + 2)))` by
     simp[not_fresh_at_def] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es t /\
+       storage_well_formed_on cx es (FST H)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _ /\ _`
+       (drule_then strip_assume_tac) >>
+     conj_tac
+     >- (qpat_assum `stmt_state_rel _ _ _ _ _ es t`
+           (fn th0 => irule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                                         stmt_state_rel_fields_transport) th0)) >>
+         qexists_tac `s0` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
   qpat_assum `compile_concat _ _ _ _ _ _ s4 = _`
     (mp_then Any mp_tac concat_args_sim_mem) >>
-  disch_then (qspecl_then [`0`, `0`, `tops`, `ctx`, `func`, `cx`, `env`, `es`,
-    `t`, `ow`, `binst`, `B`, `bsz`, `oinst`] mp_tac) >>
+  disch_then (qspecl_then [`0`, `0`, `tops`, `ctx`, `func`, `cx`, `env`, `st0`,
+    `es`, `t`, `ow`, `binst`, `B`, `bsz`, `oinst`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >> simp[])) >>
   strip_tac >> suspend "bind"
 QED
@@ -128,11 +151,13 @@ Resume concat_result_vv_sim_mem[bind]:
   conj_tac >- first_assum ACCEPT_TAC >>
   qspecl_then [`cx`, `ann`, `n`, `args`] mp_tac eval_expr_concat_bind >>
   (impl_tac >- first_assum ACCEPT_TAC) >> disch_then SUBST1_TAC >>
-  irule ecrecover_eval_exprs_suffix_mem >>
-  conj_tac >-
-    (simp[wb_args_exit_def] >> rpt gen_tac >>
-     Cases_on `exc` >> Cases_on `r` >> simp[expr_exit_def] >>
-     rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
+  irule ecrecover_eval_exprs_suffix_mem >> rpt conj_tac
+  >~ [`storage_trace_frame _`]
+  >- (gen_tac >> simp[storage_trace_frame_def])
+  >~ [`wb_args_exit (INR _) _`]
+  >- (simp[wb_args_exit_def] >> rpt gen_tac >>
+      Cases_on `exc` >> Cases_on `r` >> simp[expr_exit_def] >>
+      rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
   `!(rr : value list + exception) ee r.
      (?exc. rr = INR exc /\ expr_exit (INR exc : eval_result + exception) r) =
      wb_args_exit rr r` by
@@ -141,13 +166,17 @@ Resume concat_result_vv_sim_mem[bind]:
      simp[expr_exit_def] >> rename1 `Error err` >> Cases_on `err` >>
      simp[expr_exit_def]) >>
   qmatch_asmsub_abbrev_tac
-    `gas_outcome _ _ _ (eval_exprs _ _) _ Post _` >>
-  qexists_tac `\vs ee tt. Post (INL vs) ee tt` >> reverse conj_tac
-  >- (qpat_x_assum `gas_outcome _ _ _ (eval_exprs _ _) _ _ _` mp_tac >>
+    `gas_outcome _ _ _ _ _ (eval_exprs _ _) _ Post _` >>
+  qexists_tac `\H vs ee tt. Post H (INL vs) ee tt` >> reverse conj_tac
+  >- (qpat_x_assum `gas_outcome _ _ _ _ _ (eval_exprs _ _) _ _ _` mp_tac >>
       simp[Abbr `Post`]) >>
   simp[Abbr `Post`] >> rpt gen_tac >> strip_tac >> suspend "normal"
 QED
 Resume concat_result_vv_sim_mem[normal]:
+  qpat_x_assum `?H. valid_horizon _ _ H ee.storage_trace`
+    (qx_choose_then `H1` assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (qpat_assum `eval_exprs _ _ _ = _` mp_tac >> rpt (pop_assum kall_tac) >>
      strip_tac >> drule eval_exprs_preserves_scopes_dom >> simp[]) >>
@@ -180,7 +209,7 @@ Resume concat_result_vv_sim_mem[suffix]:
 QED
 
 Resume concat_result_vv_sim_mem[post]:
-  qpat_x_assum `gas_outcome _ _ _ (eval_exprs _ _) _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ (eval_exprs _ _) _ _ _` kall_tac >>
   qpat_x_assum `gas_path_mem _ _ s0 _ _` kall_tac >>
   qmatch_asmsub_abbrev_tac `gas_path_mem ctx func t' 0 (OK tf)` >>
   qexists_tac `[]` >> irule concat_result_summary_mem >>
@@ -191,7 +220,14 @@ Resume concat_result_vv_sim_mem[post]:
 QED
 
 Resume concat_result_vv_sim_mem[finalpost]:
-  `alloca_inv t'` by fs[stmt_state_rel_def] >>
+  gen_tac >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx ee t' /\
+   storage_well_formed_on cx ee (FST H)` by
+    (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+       (drule_then strip_assume_tac) >> simp[]) >>
+  `alloca_inv t'` by
+    (qpat_assum `stmt_state_rel H _ _ _ _ ee t'` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[stmt_state_rel_def]) >>
   `?bb. lookup_block t'.vs_current_bb func.fn_blocks = SOME bb /\
         isPREFIX (emitted_insts s5 sb)
           (DROP t'.vs_inst_idx bb.bb_instructions)` by
@@ -229,7 +265,8 @@ Resume concat_result_vv_sim_mem[frame]:
     (irule (INST_TYPE [alpha |-> ``:256``] concat_prefix_list_frame) >>
      conj_tac >- first_assum ACCEPT_TAC >>
      conj_tac
-     >- (qexistsl_tac [`ctx`, `cx`, `func`] >> first_assum ACCEPT_TAC) >>
+     >- (qexistsl_tac [`storage_trace_horizon es.storage_trace`, `ctx`, `cx`,
+                       `func`] >> first_assum ACCEPT_TAC) >>
      qexistsl_tac [`B`, `bsz`, `es`, `ow`, `s4`, `t`] >>
      asm_rewrite_tac[] >> simp[] >> first_assum ACCEPT_TAC) >>
   `~expr_has_effect (Builtin ann (Concat n) args) ==>
@@ -353,7 +390,7 @@ Resume concat_result_vv_sim_mem[suffix_value]:
       `local_region cenv es.scopes t name p n'` by
         (irule exprSimPropsTheory.local_region_frame >> conj_tac
          >- (qexists_tac `func` >>
-             qpat_assum `stmt_state_rel _ _ _ _ es t` mp_tac >>
+             qpat_assum `stmt_state_rel _ _ _ _ _ es t` mp_tac >>
              pure_rewrite_tac[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
              strip_tac >> first_assum ACCEPT_TAC) >>
          qexistsl_tac [`s4`, `ee.scopes`, `t'`] >>

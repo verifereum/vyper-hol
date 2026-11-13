@@ -8,6 +8,7 @@ Ancestors
   list rich_list bodyMemBopHeldFacts vyperAST exprSimOperators stmtReasonVvMemory
   exprBopDigestProps bodyMemBopHeldPost vyperTypeExprSoundness byte
   vyperTypeExprResult vyperTypeInvariants fragGasMode
+  gasStorage vyperStorageTrace vyperStorageFootprint exprSimWordArgs exprBopSimDefs
 Libs
   pairLib
 
@@ -84,22 +85,76 @@ Proof
   qpat_assum `(h1,s1) = _` (assume_tac o SYM) >>
   drule_all (PURE_REWRITE_RULE [LET_THM] held_digest_operand_outcome) >>
   disch_tac >>
+  `!H xs ys. valid_horizon cx st0 H (xs ++ ys) ==> valid_horizon cx st0 H xs` by
+    simp[valid_horizon_def] >>
+  `storage_trace_frame (vyperState$bind (eval_expr cx e1) (read_result cx))` by
+    (irule storage_trace_frame_bind_all >>
+     simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  `storage_trace_frame (vyperState$bind (eval_expr cx e2) (read_result cx))` by
+    (irule storage_trace_frame_bind_all >>
+     simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
   pure_once_rewrite_tac[CONV_RULE (DEPTH_CONV ETA_CONV) eval_expr_bop_bind] >>
-  qmatch_asmsub_abbrev_tac `gas_outcome T _ _ _ _ Qa Ra` >>
   irule gas_outcome_bind_value >>
-  qexistsl_tac [`Qa`, `Ra`] >>
-  reverse conj_tac
-  >- (conj_tac
-      >- (simp[Abbr `Ra`] >> rpt gen_tac >>
-          Cases_on `res` >> simp[]) >>
-      first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `Qa _ _ _` mp_tac >>
-  simp_tac (srw_ss()) [Abbr `Qa`] >>
+  qpat_assum `gas_outcome _ _ _ _ _ (vyperState$bind (eval_expr cx e1) _) _ _ _`
+    (irule_at Any) >>
+  rpt conj_tac >>
+  FIRST
+    [(rpt gen_tac >> BETA_TAC >> strip_tac >>
+      qpat_assum `exit_result _` (K ALL_TAC) >> Cases_on `res` >|
+      [qpat_x_assum `expr_exit _ _` mp_tac >> simp[expr_exit_def],
+       simp[]] >> NO_TAC),
+     (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      gen_tac >> BETA_TAC >>
+      simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def] >> NO_TAC),
+     suspend "second"]
+QED
+
+Resume held_bytestring_compare_sim_mem[second]:
+  qx_genl_tac [`marks`, `res`, `mid`, `t`] >> BETA_TAC >> strip_tac >>
+  `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
+    (qexists_tac `storage_trace_horizon mid.storage_trace` >>
+     qpat_x_assum `storage_trace_domain cx st0 mid.storage_trace`
+       (ACCEPT_TAC o REWRITE_RULE [storage_trace_domain_def])) >>
+  `!H. valid_horizon cx st0 H (mid with gas_obs := []).storage_trace ==>
+       stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t /\
+       storage_well_formed_on cx (mid with gas_obs := []) (FST H)` by
+    (gen_tac >> strip_tac >>
+     `valid_horizon cx st0 H mid.storage_trace` by
+       (qpat_x_assum `valid_horizon cx st0 H (mid with gas_obs := []).storage_trace`
+          mp_tac >> simp[]) >>
+     qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (qx_choose_then `v1x` (qx_choose_then `bs1x`
+       (map_every assume_tac o CONJUNCTS))) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `?obs1. mid.storage_trace = es.storage_trace ++ obs1` by
+    (qpat_assum `gas_marked_exec _ _ _ (es,s0) _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` assume_tac) >>
+     qpat_assum `storage_trace_frame (vyperState$bind (eval_expr cx e1) _)`
+       (fn th => drule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                                   storage_trace_frame_prefix) th)) >>
+     simp[]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H xs ys. valid_horizon cx st0 H (xs ++ ys) ==>
+                 valid_horizon cx st0 H xs`
+       (qspecl_then [`H`, `es.storage_trace`, `obs1`] mp_tac) >>
+     (impl_tac >-
+        (qpat_x_assum `mid.storage_trace = _` (fn eq =>
+           qpat_x_assum `valid_horizon cx st0 H mid.storage_trace`
+             (ACCEPT_TAC o REWRITE_RULE [eq])))) >>
+     disch_then ACCEPT_TAC) >>
+  qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> ?v bs. _`
+    (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (qx_choose_then `v1` (qx_choose_then `bs1`
     (map_every assume_tac o CONJUNCTS))) >>
   qexists_tac `v1` >>
-  conj_tac >- first_assum ACCEPT_TAC >> BETA_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qpat_x_assum `res = INL v1` SUBST_ALL_TAC >>
   drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) bop_second_admissible) >> disch_tac >>
   `expr_sim_inv cenv cx env (mid with gas_obs := [])` by
@@ -132,32 +187,69 @@ Proof
      disch_then drule_all >>
      disch_then (qspecl_then [`func`, `expr_type e2`] (ACCEPT_TAC o CONJUNCT1))) >>
   `is_bytestring_type (expr_type e2)` by metis_tac[] >>
-  `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t` by
-    (rewrite_tac[exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
-     first_assum ACCEPT_TAC) >>
   qpat_assum `expr_type e1 = expr_type e2` (fn th =>
     qpat_assum `(h2,s2) = _`
       (assume_tac o SYM o PURE_REWRITE_RULE [th])) >>
   drule_all (Q.INST [`e` |-> `e2`]
     (PURE_REWRITE_RULE [LET_THM] held_digest_operand_outcome)) >>
   disch_tac >>
-  qmatch_asmsub_abbrev_tac
-    `gas_outcome T _ _ _ (mid with gas_obs := [],t) Qb Rb` >>
   irule gas_outcome_bind_value >>
-  qexistsl_tac [`Qb`, `Rb`] >>
-  reverse conj_tac
-  >- (conj_tac
-      >- (simp[Abbr `Rb`, Abbr `Ra`] >> rpt gen_tac >>
-          Cases_on `res` >> simp[]) >>
-      first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `Qb _ _ _` mp_tac >>
-  simp_tac (srw_ss()) [Abbr `Qb`] >>
+  qpat_assum `gas_outcome _ _ _ _ _ _ (mid with gas_obs := [],t) _ _`
+    (irule_at Any) >>
+  rpt conj_tac >>
+  FIRST
+    [(rpt gen_tac >> BETA_TAC >> strip_tac >>
+      qpat_assum `exit_result _` (K ALL_TAC) >> Cases_on `res` >|
+      [qpat_x_assum `expr_exit _ _` mp_tac >> simp[expr_exit_def],
+       simp[]] >> NO_TAC),
+     (gen_tac >> BETA_TAC >>
+      simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def] >> NO_TAC),
+     suspend "third"]
+QED
+
+Resume held_bytestring_compare_sim_mem[third]:
+  qx_genl_tac [`marks2`, `res2`, `mid'`, `t'`] >> BETA_TAC >> strip_tac >>
+  `?H1. valid_horizon cx st0 H1 mid'.storage_trace` by
+    (qexists_tac `storage_trace_horizon mid'.storage_trace` >>
+     qpat_x_assum `storage_trace_domain cx st0 mid'.storage_trace`
+       (ACCEPT_TAC o REWRITE_RULE [storage_trace_domain_def])) >>
+  `!H. valid_horizon cx st0 H mid'.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx (mid' with gas_obs := []) t' /\
+       storage_well_formed_on cx (mid' with gas_obs := []) (FST H)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==> ?v bs. _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >>
+     disch_then (qx_choose_then `v2x` (qx_choose_then `bs2x`
+       (map_every assume_tac o CONJUNCTS))) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `?obs2. mid'.storage_trace = mid.storage_trace ++ obs2` by
+    (qpat_assum `gas_marked_exec _ _ _ (mid with gas_obs := [],t) _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` assume_tac) >>
+     qpat_assum `storage_trace_frame (vyperState$bind (eval_expr cx e2) _)`
+       (fn th => drule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                                   storage_trace_frame_prefix) th)) >>
+     simp[]) >>
+  `!H. valid_horizon cx st0 H mid'.storage_trace ==>
+       valid_horizon cx st0 H mid.storage_trace` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H xs ys. valid_horizon cx st0 H (xs ++ ys) ==>
+                 valid_horizon cx st0 H xs`
+       (qspecl_then [`H`, `mid.storage_trace`, `obs2`] mp_tac) >>
+     (impl_tac >-
+        (qpat_x_assum `mid'.storage_trace = _` (fn eq =>
+           qpat_x_assum `valid_horizon cx st0 H mid'.storage_trace`
+             (ACCEPT_TAC o REWRITE_RULE [eq])))) >>
+     disch_then ACCEPT_TAC) >>
+  qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==> ?v bs. _`
+    (qspec_then `H1` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (qx_choose_then `v2` (qx_choose_then `bs2`
     (map_every assume_tac o CONJUNCTS))) >>
   qexists_tac `v2` >>
-  conj_tac >- first_assum ACCEPT_TAC >> BETA_TAC >>
-  qpat_x_assum `res = INL v2` SUBST_ALL_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `res2 = INL v2` SUBST_ALL_TAC >>
   `!lbl. h1 <> Label lbl` by
     (qpat_assum `(h1,s1) = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
@@ -202,8 +294,7 @@ Proof
        value_result_typed_def, value_runtime_typed_def] >>
      strip_tac >> first_x_assum (qspec_then `v` mp_tac) >> simp[]) >>
   `!ee. bop_result cx (BaseT BoolT) bop [expr_type e1; expr_type e2] v1 v2 ee =
-    INL (BoolV (if bop = Eq then
-      (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) = word_of_bytes_be (Keccak_256_w64 bs2)
+    INL (BoolV (if bop = Eq then (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) = word_of_bytes_be (Keccak_256_w64 bs2)
       else (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) <> word_of_bytes_be (Keccak_256_w64 bs2)))` by
     (qpat_assum `expr_type e2 = expr_type e1`
        (fn th => pure_rewrite_tac[th]) >>
@@ -214,42 +305,91 @@ Proof
      qexists_tac `env` >> conj_tac >- first_assum ACCEPT_TAC >>
      qpat_assum `expr_type e2 = expr_type e1` (fn th =>
        qpat_assum `value_runtime_typed _ _ v2` (ACCEPT_TAC o PURE_REWRITE_RULE [th]))) >>
-  simp_tac (srw_ss()) [gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-  simp_tac (srw_ss()) [gas_summary_at_def] >>
-  qexistsl_tac [`INL (BoolV (if bop = Eq then
-      (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) = word_of_bytes_be (Keccak_256_w64 bs2)
-      else (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) <> word_of_bytes_be (Keccak_256_w64 bs2)))`,
-    `mid'`, `OK u`] >>
-  conj_tac >- simp[gas_marked_exec_def, gas_marked_path_def] >>
-  simp_tac (srw_ss()) [] >>
-  disj1_tac >> reverse conj_tac
-  >- (simp[] >> decide_tac) >>
-  irule held_digest_compare_post >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  `sa.cs_next_id <= s1.cs_next_id /\
+   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var` by
+    (qpat_assum `ci_mono sa s1` mp_tac >>
+     qpat_assum `ci_mono s1 s2` mp_tac >>
+     simp_tac (srw_ss()) [exprLoweringPropsTheory.ci_mono_def] >>
+     rpt strip_tac >> first_assum ACCEPT_TAC) >>
+  `locals_kept cenv es mid s0 t` by
+    (qpat_assum `locals_kept _ es (mid with gas_obs := []) _ _` mp_tac >>
+     rewrite_tac[locals_kept_def, popped_kept_def] >>
+     simp_tac (srw_ss()) [] >> strip_tac >> rpt conj_tac >>
+     first_assum ACCEPT_TAC) >>
+  `locals_kept cenv mid (mid' with gas_obs := []) t t'` by
+    (qpat_assum
+       `locals_kept _ (mid with gas_obs := []) (mid' with gas_obs := []) _ _`
+       mp_tac >>
+     rewrite_tac[locals_kept_def, popped_kept_def] >>
+     simp_tac (srw_ss()) [] >> strip_tac >> rpt conj_tac >>
+     first_assum ACCEPT_TAC) >>
+  `~expr_has_effect e2 ==> pure_frame cenv func mid s1 t t'` by
+    (qpat_assum `~expr_has_effect e2 ==> _` mp_tac >>
+     simp_tac (srw_ss()) [pure_frame_gas_obs]) >>
+  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
+    (qpat_x_assum `MAP FDOM es.scopes = MAP FDOM _` mp_tac >> simp[]) >>
+  `!aid off sz. FLOOKUP t.vs_allocas aid = SOME (off,sz) /\
+      aid < s1.cs_next_id /\
+      (!n b sz'. local_region cenv mid.scopes t n b sz' ==>
+                 off + sz <= b \/ b + sz' <= off) ==>
+      mem_bytes_at off sz t'.vs_memory = mem_bytes_at off sz t.vs_memory` by
+    (qpat_x_assum `!aid off sz. FLOOKUP t.vs_allocas aid = _ /\ _ ==> _`
+       mp_tac >> simp[]) >>
+  `s0.vs_alloca_next <= u.vs_alloca_next` by (simp[] >> decide_tac) >>
+  `!H. valid_horizon cx st0 H (mid' with gas_obs := []).storage_trace ==>
+     expr_post H ctx func cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
+       es sa sb s0 (mid' with gas_obs := []) (BoolV (if bop = Eq then (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) = word_of_bytes_be (Keccak_256_w64 bs2)
+      else (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) <> word_of_bytes_be (Keccak_256_w64 bs2))) op u` by
+    (gen_tac >> strip_tac >>
+     `valid_horizon cx st0 H mid'.storage_trace` by
+       (qpat_x_assum
+          `valid_horizon cx st0 H (mid' with gas_obs := []).storage_trace`
+          mp_tac >> simp[]) >>
+     `valid_horizon cx st0 H mid.storage_trace` by
+       (qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==>
+                    valid_horizon cx st0 H mid.storage_trace`
+          (qspec_then `H` mp_tac) >>
+        (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>
+     `valid_horizon cx st0 H es.storage_trace` by
+       (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==>
+                    valid_horizon cx st0 H es.storage_trace`
+          (qspec_then `H` mp_tac) >>
+        (impl_tac >- first_assum ACCEPT_TAC) >> disch_then ACCEPT_TAC) >>
+     qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H mid'.storage_trace ==>
+                 stmt_state_rel H _ _ _ _ _ t' /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx (mid' with gas_obs := []) u` by
+       (mp_tac (Q.INST [`H0` |-> `H1`, `es` |-> `mid' with gas_obs := []`,
+                        `s` |-> `t'`] stmt_state_rel_fields_transport) >>
+        (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+        disch_then ACCEPT_TAC) >>
+     mp_tac (Q.SPECL [`H`, `ctx`, `func`, `cenv`, `cx`, `bop`, `e1`, `e2`,
+        `es`, `mid`, `mid' with gas_obs := []`, `sa`, `s1`, `s2`, `sb`, `s0`,
+        `t`, `t'`, `u`, `op`, `(if bop = Eq then (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) = word_of_bytes_be (Keccak_256_w64 bs2)
+      else (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) <> word_of_bytes_be (Keccak_256_w64 bs2))`] held_digest_compare_post) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then ACCEPT_TAC) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INL (BoolV (if bop = Eq then (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) = word_of_bytes_be (Keccak_256_w64 bs2)
+      else (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) <> word_of_bytes_be (Keccak_256_w64 bs2)))`, `mid'`, `OK u`] >>
   conj_tac
-  >- (qexistsl_tac [`mid`, `s1`, `s2`, `t`, `t'`] >>
-      `sa.cs_next_id <= s1.cs_next_id /\
-       sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var` by
-        (qpat_assum `ci_mono sa s1` mp_tac >>
-         qpat_assum `ci_mono s1 s2` mp_tac >>
-         simp_tac (srw_ss()) [exprLoweringPropsTheory.ci_mono_def] >>
-         rpt strip_tac >> first_assum ACCEPT_TAC) >>
-      `locals_kept cenv es mid s0 t` by
-        (qpat_assum `locals_kept _ es (mid with gas_obs := []) _ _` mp_tac >>
-         rewrite_tac[locals_kept_def, popped_kept_def] >>
-         simp_tac (srw_ss()) [] >> strip_tac >> rpt conj_tac >>
-         first_assum ACCEPT_TAC) >>
-      `locals_kept cenv mid (mid' with gas_obs := []) t t'` by
-        (qpat_assum
-           `locals_kept _ (mid with gas_obs := []) (mid' with gas_obs := []) _ _`
-           mp_tac >>
-         rewrite_tac[locals_kept_def, popped_kept_def] >>
-         simp_tac (srw_ss()) [] >> strip_tac >> rpt conj_tac >>
-         first_assum ACCEPT_TAC) >>
-      `~expr_has_effect e2 ==> pure_frame cenv func mid s1 t t'` by
-        (qpat_assum `~expr_has_effect e2 ==> _` mp_tac >>
-         simp_tac (srw_ss()) [pure_frame_gas_obs]) >>
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[exprSimWordArgsTheory.stmt_state_rel_gas_obs]
+  >- (rewrite_tac[gas_marked_exec_def] >> conj_tac
+      >- (qpat_assum `!ee. bop_result _ _ _ _ _ _ ee = INL _`
+            (fn th => simp[th]))
+      >- (irule gas_marked_path_from_mem >> simp[] >> first_assum ACCEPT_TAC)) >>
+  disj1_tac >> qexists_tac `u` >> conj_tac >- REFL_TAC >>
+  gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon cx st0 H (mid' with gas_obs := []).storage_trace ==>
+              expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qexists_tac `BoolV (if bop = Eq then (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) = word_of_bytes_be (Keccak_256_w64 bs2)
+      else (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) <> word_of_bytes_be (Keccak_256_w64 bs2))` >>
+  rpt conj_tac >> FIRST [REFL_TAC, first_assum ACCEPT_TAC]
 QED
+
+Finalise held_bytestring_compare_sim_mem
