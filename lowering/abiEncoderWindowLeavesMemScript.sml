@@ -10,11 +10,12 @@ Ancestors
   valueEncodingProofs valueEncodingProps emitHelperProps exprLoweringProps localPtrsProps
   emitHelper compileEnv venomState venomExecSemantics venomInst words list arithmetic
 
-Theorem window_copy_contract_mem:
+Theorem window_copy_contract_counted_mem:
   !dst src st out st' ctx func s at av sb cap d.
   compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') /\
   abi_encoder_window_pre ctx func st st' dst src (AbiCopy sz) at av sb cap d s ==>
-  ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t
+  ?t count. window_strong_result ctx func st st' out at av d s t /\
+    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s count (OK t)
 Proof
   rpt gen_tac >> strip_tac >>
   `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
@@ -51,7 +52,11 @@ Proof
     (drule emit_mcopy_mem_ok >> disch_then irule >> simp[] >> decide_tac) >>
   `mem_cont_sim ctx func s ((mcopy d sb sz s) with vs_inst_idx := LENGTH st'.cs_current_insts)` by
     metis_tac[window_seq_mem_cont] >>
-  qexists_tac `(mcopy d sb sz s) with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  `gas_path_mem ctx func s
+     (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st')))
+     (OK ((mcopy d sb sz s) with vs_inst_idx := LENGTH st'.cs_current_insts))` by metis_tac[window_seq_counted_mem] >>
+  qexistsl_tac [`(mcopy d sb sz s) with vs_inst_idx := LENGTH st'.cs_current_insts`,
+    `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st'))`] >>
   asm_rewrite_tac[] >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
   simp[eval_operand_def, mcopy_mem_bytes_at_same, abi_encoder_extend_sim_sim] >>
@@ -59,6 +64,15 @@ Proof
     `ix` |-> `LENGTH st'.cs_current_insts`] window_copy_state_resources) >>
   simp[] >> strip_tac >> conj_tac >- asm "sizes" ACCEPT_TAC >>
   simp[mcopy_def, write_memory_with_expansion_def]
+QED
+
+Theorem window_copy_contract_mem:
+  !dst src st out st' ctx func s at av sb cap d.
+  compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src (AbiCopy sz) at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t
+Proof
+  metis_tac[window_copy_contract_counted_mem]
 QED
 
 Theorem window_word_mem_checks[local]:
@@ -93,11 +107,12 @@ Proof
   gvs[update_var_def]
 QED
 
-Theorem window_word_contract_mem:
+Theorem window_word_contract_counted_mem:
   !dst src st out st' ctx func s at av sb cap d.
   compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') /\
   abi_encoder_window_pre ctx func st st' dst src AbiPrimWord at av sb cap d s ==>
-  ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t
+  ?t count. window_strong_result ctx func st st' out at av d s t /\
+    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s count (OK t)
 Proof
   rpt gen_tac >> strip_tac >>
   `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
@@ -121,6 +136,10 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts st st') s` by metis_tac[window_word_mem_checks] >>
   `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
     metis_tac[window_seq_mem_cont] >>
+  suspend "package"
+QED
+
+Resume window_word_contract_counted_mem[package]:
   `abi_encoder_extend_sim ctx func s
     (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
     metis_tac[window_seq_extend_sim] >>
@@ -137,7 +156,11 @@ Proof
     (irule abi_encoder_registered_effect_enlarge >>
      qexistsl_tac [`window_alloca_sites func (frag_ids st st')`, `[(d,32)]`] >>
      simp[window_alloca_sites_subset]) >>
-  qexists_tac `t with vs_inst_idx := LENGTH st'.cs_current_insts` >> asm_rewrite_tac[] >>
+  `gas_path_mem ctx func s
+     (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st')))
+     (OK (t with vs_inst_idx := LENGTH st'.cs_current_insts))` by metis_tac[window_seq_counted_mem] >>
+  qexistsl_tac [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,
+    `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st'))`] >> asm_rewrite_tac[] >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
   simp[eval_operand_def, abi_encoder_extend_sim_sim] >>
   mp_tac (Q.INST [`d` |-> `d`, `w` |-> `mload sb s`,
@@ -147,6 +170,17 @@ Proof
     GSYM mem_word_at_eq_mload, mstore_def, write_memory_with_expansion_def] >>
   conj_tac >- metis_tac[abi_encoder_extend_sim_sim] >>
   asm "sizes" ACCEPT_TAC
+QED
+
+Finalise window_word_contract_counted_mem
+
+Theorem window_word_contract_mem:
+  !dst src st out st' ctx func s at av sb cap d.
+  compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src AbiPrimWord at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t
+Proof
+  metis_tac[window_word_contract_counted_mem]
 QED
 
 Theorem window_leaf_sequence_result[local]:
@@ -180,11 +214,12 @@ Proof
   Cases_on `out` >> gvs[eval_operand_def, lookup_var_def]
 QED
 
-Theorem window_bytes_contract_mem:
+Theorem window_bytes_contract_counted_mem:
   !dst src st out st' ctx func s at av sb cap d.
   compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') /\
   abi_encoder_window_pre ctx func st st' dst src (AbiBytestring maxlen) at av sb cap d s ==>
-  ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t
+  ?t count. window_strong_result ctx func st st' out at av d s t /\
+    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s count (OK t)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -222,6 +257,19 @@ Proof
      [(d,LENGTH (enc at (BytesV bs)))] s actual` by
     (asm_rewrite_tac[] >> irule window_bytes_effect >> simp[] >>
      qexistsl_tac [`LENGTH bs`, `sb`] >> simp[]) >>
-  qexists_tac `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+  `gas_path_mem ctx func s
+     (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st')))
+     (OK (actual with vs_inst_idx := LENGTH st'.cs_current_insts))` by metis_tac[window_seq_counted_mem] >>
+  qexistsl_tac [`actual with vs_inst_idx := LENGTH st'.cs_current_insts`,
+    `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st'))`] >>
   asm_rewrite_tac[] >> metis_tac[window_leaf_sequence_result]
+QED
+
+Theorem window_bytes_contract_mem:
+  !dst src st out st' ctx func s at av sb cap d.
+  compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src (AbiBytestring maxlen) at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t
+Proof
+  metis_tac[window_bytes_contract_counted_mem]
 QED

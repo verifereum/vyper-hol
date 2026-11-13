@@ -2,7 +2,7 @@
 Theory windowTransitionMem
 Ancestors
   abiEncoderWindowArrayBody abiEncoderWindowArrayInvariant
-  abiEncoderWindowPhase memContinuation arithmetic
+  abiEncoderWindowPhase memContinuation fragGasPathMem arithmetic
 
 Theorem window_phase_chain_mem:
   window_phase ctx func st mid left left_out s t /\ mem_cont_sim ctx func s t /\
@@ -95,4 +95,50 @@ Theorem window_array_loop_run_mem:
 Proof
   strip_tac >> irule window_array_loop_finite_mem >>
   qexistsl_tac [`N`, `P`, `j`, `N-j`] >> asm_rewrite_tac[] >> decide_tac
+QED
+
+Theorem window_array_loop_finite_counted_mem:
+  !steps j s.
+    j+steps = N /\ P j s /\
+    (!k u. k < N /\ P k u ==>
+      ?v count. window_array_transition ctx func owner ids outs u v /\
+        mem_cont_sim ctx func u v /\ gas_path_mem ctx func u count (OK v) /\
+        P (SUC k) v) /\
+    (!u. P N u ==>
+      ?v count. window_array_transition ctx func owner ids outs u v /\
+        mem_cont_sim ctx func u v /\ gas_path_mem ctx func u count (OK v) /\ Q v) ==>
+    ?t count. window_array_transition ctx func owner ids outs s t /\
+      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s count (OK t) /\ Q t
+Proof
+  Induct >- (rpt gen_tac >> simp[] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `j < N` by decide_tac >>
+  `?v left. window_array_transition ctx func owner ids outs s v /\
+    mem_cont_sim ctx func s v /\ gas_path_mem ctx func s left (OK v) /\
+    P (SUC j) v` by metis_tac[] >>
+  `SUC j+steps = N` by decide_tac >>
+  `?t right. window_array_transition ctx func owner ids outs v t /\
+    mem_cont_sim ctx func v t /\ gas_path_mem ctx func v right (OK t) /\ Q t` by
+    (qpat_x_assum `!j s. j + steps = N /\ _ ==> _`
+       (qspecl_then [`SUC j`,`v`] mp_tac) >> simp[]) >>
+  `window_array_transition ctx func owner ids outs s t /\ mem_cont_sim ctx func s t` by
+    (irule window_array_transition_trans_mem >> qexists_tac `v` >> simp[]) >>
+  qexistsl_tac [`t`,`left+right`] >> simp[] >>
+  irule gas_path_mem_then >> qexists_tac `v` >> simp[]
+QED
+
+Theorem window_array_loop_run_counted_mem:
+  j <= N /\ P j s /\
+  (!k u. k < N /\ P k u ==>
+    ?v count. window_array_transition ctx func owner ids outs u v /\
+      mem_cont_sim ctx func u v /\ gas_path_mem ctx func u count (OK v) /\
+      P (SUC k) v) /\
+  (!u. P N u ==>
+    ?v count. window_array_transition ctx func owner ids outs u v /\
+      mem_cont_sim ctx func u v /\ gas_path_mem ctx func u count (OK v) /\ Q v) ==>
+  ?t count. window_array_transition ctx func owner ids outs s t /\
+    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s count (OK t) /\ Q t
+Proof
+  strip_tac >> irule window_array_loop_finite_counted_mem >>
+  qexistsl_tac [`N`,`P`,`j`,`N-j`] >> asm_rewrite_tac[] >> decide_tac
 QED
