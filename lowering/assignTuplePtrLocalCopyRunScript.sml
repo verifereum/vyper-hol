@@ -45,12 +45,12 @@ Theorem tuple_local_copy_run_state_ptr:
   val_in_memory entry.type v (w2n sw) s.vs_memory /\
   type_memory_bytes cenv ty = type_memory_size entry.type /\
   type_memory_size entry.type + 64 < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   local_ptrs_reserved cenv sa /\ run_inst_seq (emitted_insts sa sb) s = OK u ==>
   ?dw. lookup_var p s = SOME dw /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes :=
         pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) u /\
     (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
@@ -93,7 +93,7 @@ Proof
   reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
   rpt strip_tac >>
   `regions_disjoint off (type_memory_size tv) (w2n dw) sz` by
-    (qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
      first_x_assum drule_all >> strip_tac >>
      qpat_x_assum `!id b sz. local_region _ _ _ id b sz ==> _` drule >> simp[]) >>

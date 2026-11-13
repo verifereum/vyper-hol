@@ -8,7 +8,7 @@ Ancestors
 (* With no pending items and no certified historical owners, this is the
    entire represented-root obligation. Initial entry.popped is unrestricted. *)
 Theorem empty_pending_current_roots:
-  ghost_inv d cenv cx es G tn s ==>
+  ghost_inv H d cenv cx es G tn s ==>
   !id entry p sz.
     lookup_scopes id es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ==>
@@ -34,7 +34,7 @@ QED
    it is not reconstructed from arbitrary bytes or a historical child. *)
 Theorem current_root_capture:
   expr_body_pre cenv cx env (Name ann id) es /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s ==>
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s ==>
   ?entry p sz a.
     lookup_scopes id es.scopes = SOME entry /\
     evaluate_type (get_tenv cx) ann = SOME entry.type /\
@@ -46,7 +46,7 @@ Theorem current_root_capture:
     ptr_covers G tn p s sz /\
     (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
        val_in_memory entry.type entry.value (w2n a) mem) /\
-    ghost_inv d cenv cx es G tn s
+    ghost_inv H d cenv cx es G tn s
 Proof
   strip_tac >> drule_all named_root_preparation >> strip_tac >>
   qexistsl_tac [`entry`, `p`, `sz`, `a`] >> simp[current_root_read]
@@ -55,7 +55,7 @@ QED
 (* The ordinary normal post's OWN read and robust representation are on one
    endpoint. No statement about other captures or complete owners follows. *)
 Theorem ordinary_memory_endpoint:
-  vv_post ctx func cenv cx e es sa sb s0 ee result (LocatedValue ty p) s /\
+  vv_post H ctx func cenv cx e es sa sb s0 ee result (LocatedValue ty p) s /\
   ptr_vv_ok cx (expr_type e) result (LocatedValue ty p) ee G tn s /\
   p.ptr_location = LocMemory /\ post_value_type cenv e = expr_type e /\
   ~is_bytestring_type (expr_type e) /\

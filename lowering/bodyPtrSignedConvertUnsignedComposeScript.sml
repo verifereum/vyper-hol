@@ -35,16 +35,16 @@ Theorem unsigned_loader_fixed_frame_raw:
     mk_inst l SUB [Lit 32w;Var len] [sub];
     mk_inst m MUL [Var sub;Lit 8w] [bits];
     mk_inst r SHR [Var bits;Var data] [dst]] s = OK t ==>
-  ?H th.
+  ?HG th.
     (!q. inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst i MLOAD [Var src] [len];
        mk_inst j ADD [Var src;Lit 32w] [dp];
        mk_inst k MLOAD [Var dp] [data];
        mk_inst l SUB [Lit 32w;Var len] [sub];
        mk_inst m MUL [Var sub;Lit 8w] [bits];
-       mk_inst r SHR [Var bits;Var data] [dst]] (s with vs_inst_idx := q) H th) /\
-    op_prov H (Var dst) = NONE /\ op_taint th (Var dst) = {} /\
-    op_prov H (Var bits) = NONE /\ op_taint th (Var bits) = {} /\
+       mk_inst r SHR [Var bits;Var data] [dst]] (s with vs_inst_idx := q) HG th) /\
+    op_prov HG (Var dst) = NONE /\ op_taint th (Var dst) = {} /\
+    op_prov HG (Var bits) = NONE /\ op_taint th (Var bits) = {} /\
     eval_operand (Var bits) t = SOME (n2w (8*(32-n))) /\
     t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem /\
     th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
@@ -52,7 +52,7 @@ Theorem unsigned_loader_fixed_frame_raw:
     t.vs_transient = s.vs_transient /\ t.vs_current_bb = s.vs_current_bb /\
     t = s with vs_vars := t.vs_vars /\
     (!p. ~MEM p [len;dp;data;sub;bits;dst] ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
+      FLOOKUP HG p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >>
   `src <> len` by fs[] >> drule_all bytestring_source_run >>
@@ -86,8 +86,8 @@ Proof
        mk_inst r SHR [Var bits;Var data] [dst]]` mp_tac) >> simp[]) >>
   drule_all unsigned_suffix_fixed_frame >>
   disch_then (qspecl_then [`fn`,`PG`,`D`]
-    (qx_choose_then `H` (qx_choose_then `th` strip_assume_tac))) >>
-  qexistsl_tac [`H`,`th`] >> conj_tac
+    (qx_choose_then `HG` (qx_choose_then `th` strip_assume_tac))) >>
+  qexistsl_tac [`HG`,`th`] >> conj_tac
   >- (irule (SRULE [APPEND] (Q.INST [`xs` |->
         `[mk_inst i MLOAD [Var src] [len]; mk_inst j ADD [Var src;Lit 32w] [dp]]`]
         inst_seq_ptr_uniform_append)) >>
@@ -104,11 +104,11 @@ Theorem unsigned_loader_fixed_frame:
   w2n a+32 < dimword(:256) /\ mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?H th.
+  ?HG th.
     (!q. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
-      (s with vs_inst_idx := q) H th) /\
-    op_prov H out = NONE /\ op_taint th out = {} /\
-    op_prov H bits = NONE /\ op_taint th bits = {} /\
+      (s with vs_inst_idx := q) HG th) /\
+    op_prov HG out = NONE /\ op_taint th out = {} /\
+    op_prov HG bits = NONE /\ op_taint th bits = {} /\
     eval_operand bits t = SOME (n2w (8*(32-n))) /\
     t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem /\
     th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
@@ -116,14 +116,14 @@ Theorem unsigned_loader_fixed_frame:
     t.vs_transient = s.vs_transient /\ t.vs_current_bb = s.vs_current_bb /\
     t = s with vs_vars := t.vs_vars /\
     (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
+      FLOOKUP HG p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >> drule_all unsigned_loader_shape_fresh >> strip_tac >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >> simp[] >> strip_tac >>
   drule_all unsigned_loader_fixed_frame_raw >>
   disch_then (qspecl_then [`fn`,`PG`,`D`]
-    (qx_choose_then `H` (qx_choose_then `th` strip_assume_tac))) >>
-  qexistsl_tac [`H`,`th`] >> simp[] >> metis_tac[]
+    (qx_choose_then `HG` (qx_choose_then `th` strip_assume_tac))) >>
+  qexistsl_tac [`HG`,`th`] >> simp[] >> metis_tac[]
 QED
 
 Theorem unsigned_loader_counted_frame:
@@ -135,11 +135,11 @@ Theorem unsigned_loader_counted_frame:
   w2n a+32 < dimword(:256) /\ mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?H th.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  ?HG th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx+6)) /\
-    op_prov H out = NONE /\ op_taint th out = {} /\
-    op_prov H bits = NONE /\ op_taint th bits = {} /\
+    op_prov HG out = NONE /\ op_taint th out = {} /\
+    op_prov HG bits = NONE /\ op_taint th bits = {} /\
     eval_operand bits t = SOME (n2w (8*(32-n))) /\
     t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem /\
     th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
@@ -147,18 +147,18 @@ Theorem unsigned_loader_counted_frame:
     t.vs_transient = s.vs_transient /\ t.vs_current_bb = s.vs_current_bb /\
     t = s with vs_vars := t.vs_vars /\
     (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
+      FLOOKUP HG p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >> drule_all unsigned_loader_fixed_frame >>
   disch_then (qspecl_then [`fn`,`PG`,`D`]
-    (qx_choose_then `H` (qx_choose_then `th` strip_assume_tac))) >>
+    (qx_choose_then `HG` (qx_choose_then `th` strip_assume_tac))) >>
   drule_all unsigned_loader_shape_fresh >> strip_tac >>
-  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th` by
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th` by
     (first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]) >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts sa sb)` by simp[mk_inst_def, is_terminator_def] >>
   drule_all run_inst_seq_gas_path_ptr >> strip_tac >>
-  qexistsl_tac [`H`,`th`] >> simp[] >>
+  qexistsl_tac [`HG`,`th`] >> simp[] >>
   qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[mk_inst_def, arithmeticTheory.ADD_COMM]
 QED
@@ -172,35 +172,35 @@ Theorem unsigned_loader_counted_ghost_frame:
   w2n a+32 < dimword(:256) /\ mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
   s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  ?H th.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  ?HG th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx+6)) /\
-    op_prov H out = NONE /\ op_taint th out = {} /\
-    op_prov H bits = NONE /\ op_taint th bits = {} /\
+    op_prov HG out = NONE /\ op_taint th out = {} /\
+    op_prov HG bits = NONE /\ op_taint th bits = {} /\
     eval_operand bits t = SOME (n2w (8*(32-n))) /\
-    ghost_inv d cenv cx es H th (t with vs_inst_idx := s.vs_inst_idx+6) /\
-    ghost_kept cenv es0 s0a G0 tn0 s0 H th /\
+    ghost_inv H d cenv cx es HG th (t with vs_inst_idx := s.vs_inst_idx+6) /\
+    ghost_kept cenv es0 s0a G0 tn0 s0 HG th /\
     (t with vs_inst_idx := s.vs_inst_idx+6) =
       s with <|vs_vars := t.vs_vars; vs_inst_idx := s.vs_inst_idx+6|> /\
     (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
+      FLOOKUP HG p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >> drule_all unsigned_loader_counted_frame >>
   disch_then (qspecl_then [`PG`,`D`]
-    (qx_choose_then `H` (qx_choose_then `th` strip_assume_tac))) >>
-  `ghost_inv d cenv cx es H th (t with vs_inst_idx := s.vs_inst_idx+6)` by
+    (qx_choose_then `HG` (qx_choose_then `th` strip_assume_tac))) >>
+  `ghost_inv H d cenv cx es HG th (t with vs_inst_idx := s.vs_inst_idx+6)` by
     (irule ghost_inv_readonly_frame >>
      qexistsl_tac [`G`,`not_fresh_at sa`,`s`,`tn`] >>
      simp[lookup_var_def] >> metis_tac[lookup_var_def]) >>
-  `ghost_kept cenv es0 s0a G0 tn0 s0 H th` by
+  `ghost_kept cenv es0 s0a G0 tn0 s0 HG th` by
     (irule ghost_kept_readonly_frame >>
      qexistsl_tac [`G`,`not_fresh_at sa`,`tn`] >> simp[] >>
      fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  qexistsl_tac [`H`,`th`] >> simp[] >>
+  qexistsl_tac [`HG`,`th`] >> simp[] >>
   qpat_x_assum `t = s with vs_vars := _` (fn eq => once_rewrite_tac[eq]) >> simp[]
 QED

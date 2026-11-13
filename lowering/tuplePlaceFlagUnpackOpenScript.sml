@@ -9,7 +9,9 @@ Theorem tuple_place_flag_unpack_outcome_open:
   value_has_type (TupleTV ltvs) (ArrayV (TupleV vs)) /\
   evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) /\
   LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) ltys ltvs /\
-  expr_post ctx func cenv cx e es sa su s0 ee (ArrayV (TupleV vs)) op sv /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       expr_post H ctx func cenv cx e es sa su s0 ee (ArrayV (TupleV vs)) op sv) /\
   (!x. op = Var x ==> not_fresh_at su x) /\ sa.cs_next_id <= su.cs_next_id /\
   (EXISTS (\t. ~is_word_type t) ltys ==> cenv.ce_target CapMcopy) /\
   compile_tuple_unpack cenv (TupleT ltys) flag gs op su = ((),sf) /\
@@ -29,17 +31,18 @@ Theorem tuple_place_flag_unpack_outcome_open:
     type_memory_size (EL j tvs)+64 < dimword (:256) /\
     type_memory_size (EL j ltvs)+64 < dimword (:256)) /\
   type_alloc_ok cenv (TupleT tys) /\ acyclic_struct_metadata cenv.ce_struct_fields ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (assign_tuple_targets cx (TupleTarget gs) (ArrayV (TupleV vs))) (ee,sv)
-    (\res ff t. res = INL () /\ expr_sim_inv cenv cx env ff /\ ~block_is_terminated sf /\
-      stmt_state_rel ctx func cenv cx ff t /\ ~t.vs_halted /\
+    (\H res ff t. res = INL () /\ expr_sim_inv cenv cx env ff /\ ~block_is_terminated sf /\
+      stmt_state_rel H ctx func cenv cx ff t /\
+      storage_well_formed_on cx ff (FST H) /\ ~t.vs_halted /\
       t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x v. not_fresh_at su x /\ lookup_var x sv = SOME v ==> lookup_var x t = SOME v) /\
       (!aid entry. FLOOKUP sv.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
       alloca_frame cenv ee su sv cenv ff t)
-    (\res ff r. expr_exit res r)
+    (\H res ff r. expr_exit res r)
 Proof
   strip_tac >>
   drule_all tuple_place_compiler_flag_prefix_head >> strip_tac >>
@@ -61,16 +64,18 @@ Proof
      simp[compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def]) >>
   `sl.cs_next_var <= ss.cs_next_var` by
     metis_tac[stmtSimReturnTheory.compile_tuple_load_all_grows] >>
-  `gas_outcome F (cx_tops cx) (ctx,func)
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0
      (assign_tuple_target_list cx gs vs) (ee,t)
-     (\res ff q. res = INL () /\ expr_sim_inv cenv cx env ff /\ ~block_is_terminated sf /\
-       tuple_place_head ctx func cenv cx ff sa.cs_next_id sf
+     (\H res ff q. res = INL () /\ expr_sim_inv cenv cx env ff /\ ~block_is_terminated sf /\
+       tuple_place_head ctx func cenv cx st0 ff sa.cs_next_id sf
          tys ltys ltvs vs elems w (LENGTH tys) q /\
+       stmt_state_rel H ctx func cenv cx ff q /\
+       storage_well_formed_on cx ff (FST H) /\
        (!x v. not_fresh_at ss x /\ lookup_var x t = SOME v ==> lookup_var x q = SOME v) /\
        (!aid entry. FLOOKUP t.vs_allocas aid = SOME entry ==>
          FLOOKUP q.vs_allocas aid = SOME entry) /\
        alloca_frame cenv ee ss t cenv ff q)
-     (\res ff r. expr_exit res r)` by
+     (\H res ff r. expr_exit res r)` by
     (irule (SRULE [] (DISCH_ALL (Q.SPEC `0` (UNDISCH (SPEC_ALL tuple_place_suffix_run_open))))) >>
      simp[] >> metis_tac[]) >>
   simp[Once evaluate_def] >>

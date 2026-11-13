@@ -55,7 +55,7 @@ Theorem external_entry_reaches_body_mem:
       compile_guarded_body cenv F nkey ut' iv fbody rt sa = ((), st') /\
       fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
-      stmt_state_rel unit.cu_context func cenv
+      stmt_state_rel H unit.cu_context func cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
       alloca_history func s0 /\
       ~s0.vs_halted /\ s0.vs_gas_readings = vs.vs_gas_readings /\

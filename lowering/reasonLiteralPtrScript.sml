@@ -12,7 +12,7 @@ Theorem reason_literal_encoder_path_ptr:
     (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf))
     (BaseT (StringT ml)) (type_memory_bytes cenv (BaseT (StringT ml))) sm = ((),sb) /\
   expr_body_pre cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -52,7 +52,7 @@ Resume reason_literal_encoder_path_ptr[encoder]:
     fs[expr_post_def, expr_val_at_def, is_word_type_def, vyperASTTheory.expr_type_def] >>
   `~t.vs_halted` by
     (drule gas_path_ptr_ok_not_halted >> simp[]) >>
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     (REWRITE_RULE [GSYM AND_IMP_INTRO] reason_memory_encoder_path_ptr) >>
   rpt (disch_then drule) >> simp[vyperASTTheory.expr_type_def, is_word_type_def] >>
   disch_then (qspecl_then
@@ -112,7 +112,7 @@ Resume compile_raise_reason_lit_frag_ptr[literal]:
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fragExecTheory.fn_has_code_split] >>
   drule_all reason_literal_encoder_path_ptr >>
-  disch_then (qspecl_then [`tn0`, `PG`, `G0`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`tn0`, `PG`, `G0`, `cx_dead H cx`] strip_assume_tac) >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   simp[gas_summary_ptr_at_def, reason_eval_raise_literal] >>
   qexistsl_tac [`INR (AssertException str)`, `es`, `Gf`, `tnf`] >>

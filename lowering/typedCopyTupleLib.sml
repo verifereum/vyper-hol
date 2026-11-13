@@ -63,7 +63,7 @@ fun copy (fields, tuple_from_elements) =
   markerLib.RESUME_TAC >>
   qpat_assum `compile_typed_copy_fields _ _ _ _ _ _ _ _ = _`
     (mp_then Any mp_tac fields) >>
-  disch_then (qspecl_then [`dtvs`, `stvs`, `vals`, `lens`, `tenv`] mp_tac) >>
+  disch_then (qspecl_then [`H`, `dtvs`, `stvs`, `vals`, `lens`, `tenv`] mp_tac) >>
   pure_rewrite_tac[ADD_CLAUSES] >> disch_then drule_all >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
   qpat_x_assum `!i. i < LENGTH dts ==> is_bytestring_type _ /\ _` kall_tac >>

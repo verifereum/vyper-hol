@@ -89,8 +89,8 @@ Theorem ptr_inst_ok_send_call:
   eval_operand value s = SOME vw /\
   op_taint tn gas = {} /\ op_taint tn addr = {} /\
   op_taint tn value = {} /\ ~ctx_has_dalloca ctx /\
-  stor_taint_ok cx tn s ==>
-  ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn inst s
+  stor_taint_ok H cx tn s ==>
+  ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn inst s
 Proof
   strip_tac >> irule ptr_inst_ok_call >> simp[allocas_from_def] >>
   gvs[bodyPtrDefsTheory.stor_taint_ok_def, sourceUnitExecutionTheory.cx_dead_def] >>
@@ -136,12 +136,12 @@ Proof
 QED
 
 Theorem send_call_stor_taint:
-  ~s.vs_call_ctx.cc_static /\ stor_taint_ok cx tn s /\
+  ~s.vs_call_ctx.cc_static /\ stor_taint_ok H cx tn s /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
   eval_operand gas s = SOME gw /\ eval_operand addr s = SOME aw /\
   eval_operand value s = SOME vw /\ step_inst_base inst s = OK u ==>
-  stor_taint_ok cx (step_taint inst s u tn) u
+  stor_taint_ok H cx (step_taint inst s u tn) u
 Proof
   strip_tac >> drule_all send_call_runtime_frame >> strip_tac >>
   irule call_stor_taint_ok >> simp[] >> strip_tac >>
@@ -153,7 +153,7 @@ Proof
 QED
 
 Theorem send_call_ghost_inv:
-  ~s.vs_call_ctx.cc_static /\ ghost_inv d cenv cx es G tn s /\
+  ~s.vs_call_ctx.cc_static /\ ghost_inv H d cenv cx es G tn s /\
   es'.scopes = es.scopes /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
@@ -162,12 +162,12 @@ Theorem send_call_ghost_inv:
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> out) ==>
-  ghost_inv d cenv cx es' (step_prov PG G inst u) (step_taint inst s u tn) u
+  ghost_inv H d cenv cx es' (step_prov PG G inst u) (step_taint inst s u tn) u
 Proof
   strip_tac >>
-  `stor_taint_ok cx tn s` by gvs[bodyPtrDefsTheory.ghost_inv_def] >>
+  `stor_taint_ok H cx tn s` by gvs[bodyPtrDefsTheory.ghost_inv_def] >>
   drule_all send_call_runtime_frame >> strip_tac >>
-  `stor_taint_ok cx (step_taint inst s u tn) u` by
+  `stor_taint_ok H cx (step_taint inst s u tn) u` by
     (irule send_call_stor_taint >> metis_tac[]) >>
   `(step_taint inst s u tn).t_mem = tn.t_mem` by
     (irule call_zero_region_memory_taint >> metis_tac[]) >>
@@ -272,7 +272,7 @@ QED
 
 (* Read-result correspondence for any zero-region CALL, not just an emitted id. *)
 Theorem send_read_call_step:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   outcomes_accounts_typed es.outcomes /\ accounts_runtime_well_typed es.accounts /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
@@ -290,12 +290,12 @@ Theorem send_read_call_step:
                       vs_pending_deletions := s'.vs_pending_deletions;
                       vs_returndata := s'.vs_returndata |> /\
     ((res = INL NoneV /\ step_inst_base inst s = OK (update_var out 1w s') /\
-      state_rel fn cenv cx es' s') \/
+      state_rel H fn cenv cx es' s') \/
      (res = INR (Error (RuntimeError "send failed")) /\
       step_inst_base inst s = OK (update_var out 0w s')))
 Proof
   strip_tac >> drule eval_send_read >> strip_tac >>
-  `state_rel fn cenv cx es s` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
+  `state_rel H fn cenv cx es s` by fs[exprLoweringPropsTheory.stmt_state_rel_def] >>
   `?os. es.outcomes = SOME os` by fs[loweringStateRelDefsTheory.state_rel_def] >>
   drule_all eval_send_outcome_typed >> strip_tac >>
   drule_all extCallOracleStepTheory.send_call_oracle_step >>
@@ -303,7 +303,7 @@ Proof
 QED
 
 Theorem send_read_checked_tail:
-  stmt_state_rel ctx fn cenv cx es s /\ stor_taint_ok cx tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ stor_taint_ok H cx tn s /\
   outcomes_accounts_typed es.outcomes /\ accounts_runtime_well_typed es.accounts /\
   inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
   inst.inst_operands = [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
@@ -325,18 +325,18 @@ Theorem send_read_checked_tail:
                   vs_returndata := t.vs_returndata |> /\
     u = update_var out w t /\ step_inst_base inst s = OK u /\
     eval_operand (Var out) u = SOME w /\
-    ((res = INL NoneV /\ w = 1w /\ state_rel fn cenv cx es' t /\
-      gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0
+    ((res = INL NoneV /\ w = 1w /\ state_rel H fn cenv cx es' t /\
+      gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0
         (step_prov PG G inst u) (step_taint inst s u tn)
         (OK (u with vs_inst_idx := SUC (SUC s.vs_inst_idx)))) \/
      (res = INR (Error (RuntimeError "send failed")) /\ w = 0w /\
-      gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0
+      gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0
         (step_prov PG G inst u) (step_taint inst s u tn)
         (Abort Revert_abort (revert_state
           (set_returndata [] (u with vs_inst_idx := SUC s.vs_inst_idx))))))
 Proof
   strip_tac >>
-  `ptr_inst_ok (cx_dead cx) 0 0 ctx fn G tn inst s` by
+  `ptr_inst_ok (cx_dead H cx) 0 0 ctx fn G tn inst s` by
     (irule ptr_inst_ok_send_call >> metis_tac[]) >>
   `IS_SOME (eval_operand gas s)` by simp[] >>
   `!w st. eval_operand (Var out) (update_var out w st) = SOME w` by
@@ -350,16 +350,16 @@ QED
 
 Theorem send_tail_none_post:
   expr_has_effect e /\
-  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
+  stmt_state_rel H ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   ~not_fresh_at sm out /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   es'.scopes = es1.scopes /\ es'.immutables = es1.immutables /\
-  state_rel fn cenv cx es' t /\
+  state_rel H fn cenv cx es' t /\
   t = s with <| vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
                 vs_accounts := t.vs_accounts; vs_transient := t.vs_transient;
                 vs_logs := t.vs_logs; vs_pending_deletions := t.vs_pending_deletions;
                 vs_returndata := t.vs_returndata |> ==>
-  expr_post ctx fn cenv cx e es sa sb s0 es' NoneV (Lit 0w)
+  expr_post H ctx fn cenv cx e es sa sb s0 es' NoneV (Lit 0w)
     ((update_var out w t) with vs_inst_idx := k)
 Proof
   strip_tac >>
@@ -397,8 +397,8 @@ Theorem send_tail_path_ptr:
   emit_op CALL [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (void, sb) /\ fn_has_code sm sb fn /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
-  ghost_inv d cenv cx es1 G tn s /\
+  stmt_state_rel H ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
+  ghost_inv H d cenv cx es1 G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -411,10 +411,10 @@ Theorem send_tail_path_ptr:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es1 = (res, es') /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
-  ?G' tn' r. gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn s 0 G' tn' r /\
+  ?G' tn' r. gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 G' tn' r /\
     ((?z. r = OK z /\ res = INL NoneV /\
-          expr_post ctx fn cenv cx e es sa sb s0 es' NoneV (Lit 0w) z /\
-          ghost_inv d cenv cx es' G' tn' z /\
+          expr_post H ctx fn cenv cx e es sa sb s0 es' NoneV (Lit 0w) z /\
+          ghost_inv H d cenv cx es' G' tn' z /\
           ghost_kept cenv es sa G tn s G' tn' /\
           z.vs_current_bb = sb.cs_current_bb /\
           z.vs_inst_idx = LENGTH sb.cs_current_insts) \/
@@ -433,7 +433,7 @@ Proof
      SOME (mk_inst (sm.cs_next_id + 1) ASSERT [Var out] []) /\
    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
     simp[Abbr `inst`, mk_inst_def] >>
-  `stor_taint_ok cx tn s` by fs[bodyPtrDefsTheory.ghost_inv_def] >>
+  `stor_taint_ok H cx tn s` by fs[bodyPtrDefsTheory.ghost_inv_def] >>
   `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
     (drule eval_send_read >> strip_tac >>
      drule vyperCallOutcomeFrameTheory.eval_send_preserves_non_accounts >> simp[]) >>
@@ -461,14 +461,14 @@ QED
 Resume send_tail_path_ptr[normal]:
   qmatch_asmsub_abbrev_tac `step_inst_base inst s = OK u` >>
   `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
-  `ghost_inv d cenv cx es' (step_prov PG G inst u)
+  `ghost_inv H d cenv cx es' (step_prov PG G inst u)
      (step_taint inst s u tn) u` by
     (irule send_call_ghost_inv >> simp[] >>
      fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   `ghost_kept cenv es sa G tn s (step_prov PG G inst u)
      (step_taint inst s u tn)` by
     (irule send_call_ghost_kept >> metis_tac[]) >>
-  `ghost_inv d cenv cx es' (step_prov PG G inst u)
+  `ghost_inv H d cenv cx es' (step_prov PG G inst u)
      (step_taint inst s u tn)
      (u with <| vs_prev_bb := u.vs_prev_bb; vs_current_bb := u.vs_current_bb;
                 vs_inst_idx := SUC (SUC s.vs_inst_idx) |>)` by
@@ -501,8 +501,8 @@ Theorem send_tail_summary_ptr:
   emit_op CALL [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (void, sb) /\ fn_has_code sm sb fn /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
-  ghost_inv d cenv cx es1 G tn s /\
+  stmt_state_rel H ctx fn cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
+  ghost_inv H d cenv cx es1 G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -514,12 +514,12 @@ Theorem send_tail_summary_ptr:
   eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\ es1.gas_obs = [] ==>
-  gas_summary_ptr_at (cx_dead cx) (ctx,fn) PG []
+  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
     (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs); read_result cx tv od)
     (es1,s,G,tn)
     (\res ee G' tn' z. res = INL NoneV /\
-      expr_post ctx fn cenv cx e es sa sb s0 ee NoneV (Lit 0w) z /\
-      ghost_inv d cenv cx ee G' tn' z /\
+      expr_post H ctx fn cenv cx e es sa sb s0 ee NoneV (Lit 0w) z /\
+      ghost_inv H d cenv cx ee G' tn' z /\
       ghost_kept cenv es sa G tn s G' tn' /\
       z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee ghosts r. expr_exit res r)

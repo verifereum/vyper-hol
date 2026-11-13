@@ -8,17 +8,40 @@ Ancestors
   vyperLoweringCorrect supportedProgram o1PipelineCorrect loweringShapeProps
   vyperCompiler vyperContext immutableCodeLayout
 
+(* A terminating raw run has a matching lowered request prefix on either
+   exit path; ctx_sim supplies the halt case and ctx_abort_rq the abort. *)
+Theorem ctx_sim_abort_request_prefix:
+  ctx_sim D C C' si so /\ ctx_abort_rq D C C' si so /\
+  (run_context fuel C si = Halt ss \/
+   ?a. run_context fuel C si = Abort a ss) ==>
+  ?fuel' ts.
+    (run_context fuel' C' so = Halt ts \/
+     ?a. run_context fuel' C' so = Abort a ts) /\
+    request_prefix_rel D ss.vs_requests ts.vs_requests
+Proof
+  strip_tac
+  >- (fs[ctx_sim_def] >>
+      first_x_assum (qspec_then `fuel` mp_tac) >>
+      simp[terminates_def] >> strip_tac >>
+      Cases_on `run_context fuel' C' so` >>
+      gvs[dead_result_rel_def] >>
+      rename1 `run_context matched_fuel C' so = Halt matched_state` >>
+      qexistsl_tac [`matched_fuel`, `matched_state`] >>
+      simp[LIST_REL_imp_request_prefix_rel]) >>
+  fs[ctx_abort_rq_def] >> metis_tac[]
+QED
+
 Theorem compiled_request_outcome_alignment:
   ctx_sim D raw.cu_context lowered.cu_context si so /\
   ctx_abort_rq D raw.cu_context lowered.cu_context si so /\
   (run_context fuel raw.cu_context si = Halt ss \/
    ?a. run_context fuel raw.cu_context si = Abort a ss) /\
-  generate_context_plan lowered.cu_context = SOME cp /\
+  generate_context_plan lowered.cu_context = SOME cplan /\
   codegen_assembly rpolicy lowered = SOME prog /\
   unit_shape_ok lowered /\
-  codegen_context_obligations Inv lowered.cu_context cp /\
+  codegen_context_obligations Inv lowered.cu_context cplan /\
   codegen_reachability_package Inv lowered.cu_context so /\
-  initial_ctx_rel cp prog lowered.cu_context so es /\
+  initial_ctx_rel cplan prog lowered.cu_context so es /\
   EVERY (\p. ~computed_precompile (FST p)) (call_trace es) /\
   si.vs_outcomes = MAP SND (call_trace es) /\
   k < LENGTH si.vs_outcomes ==>
@@ -44,13 +67,13 @@ Theorem source_compiled_request_alignment:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   o1_pipeline rpolicy unit = SOME out /\
   codegen_assembly rpolicy out.po_unit = SOME prog /\
-  generate_context_plan out.po_unit.cu_context = SOME cp /\
-  gas_variant vs (entry_venom_state prog cp es) /\
+  generate_context_plan out.po_unit.cu_context = SOME cplan /\
+  gas_variant vs (entry_venom_state prog cplan es) /\
   ctx_sim (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
-    unit.cu_context out.po_unit.cu_context vs (entry_venom_state prog cp es) /\
+    unit.cu_context out.po_unit.cu_context vs (entry_venom_state prog cplan es) /\
   ctx_abort_rq (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
-    unit.cu_context out.po_unit.cu_context vs (entry_venom_state prog cp es) /\
-  o1_lowered_inv out.po_unit.cu_context (entry_venom_state prog cp es) /\
+    unit.cu_context out.po_unit.cu_context vs (entry_venom_state prog cplan es) /\
+  o1_lowered_inv out.po_unit.cu_context (entry_venom_state prog cplan es) /\
   (run_context fuel unit.cu_context vs = Halt ss \/
    ?a. run_context fuel unit.cu_context vs = Abort a ss) /\
   EVERY (\p. ~computed_precompile (FST p)) (call_trace es) /\
@@ -69,12 +92,12 @@ Proof
   drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
   drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
-  `(entry_venom_state prog cp es).vs_initial_fmp = n2w cp.cp_initial_fmp` by
+  `(entry_venom_state prog cplan es).vs_initial_fmp = n2w cplan.cp_initial_fmp` by
     simp[entry_venom_state_def] >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
-  `initial_ctx_rel cp prog out.po_unit.cu_context
-     (entry_venom_state prog cp es) es` by
+  `initial_ctx_rel cplan prog out.po_unit.cu_context
+     (entry_venom_state prog cplan es) es` by
     (irule entry_venom_state_initial_ctx_rel >> metis_tac[]) >>
   `vs.vs_outcomes = MAP SND (call_trace es)` by
     (drule gas_variant_outcomes >> simp[entry_venom_state_def]) >>

@@ -77,7 +77,7 @@ Theorem layout_canonical_run_exit_certificate_fuel:
 Proof
   strip_tac >> rewrite_tac[selected_run_exit_certificate_fuel_def] >>
   rpt gen_tac >> strip_tac >>
-  drule_all layout_run_exit_phi_entry >> strip_tac >>
+  drule_all layout_canonical_run_block_entry >> strip_tac >>
   qexistsl [`bb'`, `phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions`] >>
   (conj_tac >- first_assum ACCEPT_TAC) >> rpt gen_tac >> strip_tac >>
   `layout_canonical_result D lo vs0 C C' q0 es qs ass qend qe

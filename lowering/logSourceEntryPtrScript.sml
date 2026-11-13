@@ -11,15 +11,15 @@ Ancestors
 Theorem log_buffer_data_values_seq_ptr:
   compile_alloc_buffer cap st = (buf,start) /\ fn_has_code st start func /\
   run_inst_seq (emitted_insts st start) s = OK t /\
-  inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st start) s H tm /\
-  stmt_state_rel ctx func ce cx es s /\ cap < dimword(:256) /\
+  inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st start) s HG tm /\
+  stmt_state_rel H ctx func ce cx es s /\ cap < dimword(:256) /\
   LIST_REL (\arg v. log_arg_rel ce cx sa st es s arg v /\
     supported_scalar_type (SND arg) /\
     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\
       value_has_type tv v /\ val_wf tv v) xs vs /\
   LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op G tn s) xs vs /\
   EVERY (\arg. !x. FST arg = Var x ==> not_fresh_at st x) xs ==>
-  LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op H tm t) xs vs
+  LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op HG tm t) xs vs
 Proof
   strip_tac >> drule_all log_buffer_alloca_step >> strip_tac >>
   drule abi_builtin_alloc_buffer_shape >> strip_tac >>
@@ -43,10 +43,10 @@ QED
 
 Theorem log_buffer_allocate_sources_seq_ptr:
   compile_alloc_buffer cap st = (buf,start) /\ fn_has_code st start func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ cap < dimword(:256) /\
   start.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  ~ctx_has_dalloca ctx /\ ghost_inv d ce cx es G tn s /\
+  ~ctx_has_dalloca ctx /\ ghost_inv H d ce cx es G tn s /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   LIST_REL (\arg v. log_arg_rel ce cx sa st es s arg v /\
@@ -56,18 +56,18 @@ Theorem log_buffer_allocate_sources_seq_ptr:
   LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op G tn s) xs vs /\
   EVERY (\arg. (!x. FST arg = Var x ==> not_fresh_at st x) /\
     (!l. FST arg <> Label l)) xs ==>
-  ?t b H tm out.
+  ?t b HG tm out.
     run_inst_seq (emitted_insts st start) s = OK t /\
-    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st start) s H tm /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st start) s HG tm /\
     buf.buf_operand = Var out /\ buf.buf_size = cap /\
-    ptr_covers H tm out t cap /\ lookup_var out t = SOME (n2w b) /\
+    ptr_covers HG tm out t cap /\ lookup_var out t = SOME (n2w b) /\
     b+cap < dimword(:256) /\ FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,cap) /\
-    stmt_state_rel ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
+    stmt_state_rel H ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
     LIST_REL (log_data_source cx b cap t) xs vs /\
-    LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op H tm t) xs vs /\
-    ghost_inv d ce cx es H tm t /\ ghost_kept ce es st G tn s H tm /\
+    LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op HG tm t) xs vs /\
+    ghost_inv H d ce cx es HG tm t /\ ghost_kept ce es st G tn s HG tm /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op t = eval_operand op s) /\
-    (!p. not_fresh_at st p ==> FLOOKUP H p = FLOOKUP G p /\
+    (!p. not_fresh_at st p ==> FLOOKUP HG p = FLOOKUP G p /\
       op_taint tm (Var p) = op_taint tn (Var p)) /\
     t.vs_memory = s.vs_memory /\
     abi_builtin_allocation_frame st.cs_next_var st.cs_next_id cap s t /\
@@ -84,7 +84,7 @@ Proof
     (qpat_x_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ arg v /\ _) xs vs` mp_tac >>
      match_mp_tac LIST_REL_mono >> simp[] >> metis_tac[]) >>
   drule_all log_buffer_allocate_sources >> strip_tac >>
-  qpat_x_assum `stmt_state_rel ctx func ce cx es t` kall_tac >>
+  qpat_x_assum `stmt_state_rel H ctx func ce cx es t` kall_tac >>
   drule_all log_buffer_seq_ptr >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
   gvs[] >>

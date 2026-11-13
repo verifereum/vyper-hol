@@ -103,7 +103,7 @@ Theorem tuple_store_sequential_path_ptr:
       MAP FDOM ee.scopes = MAP FDOM ee'.scopes /\
       (!n. OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n ee'.scopes) =
            OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n ee.scopes))) /\
-    (!g ty tv v src sw sa sb ee ee' u H tt.
+    (!g ty tv v src sw sa sb ee ee' u HG tt.
       compile_tuple_store_all cenv [ty] [g] [Var src] sa = ((),sb) /\
       assign_tuple_targets cx g v ee = (INL (),ee') /\ P ee.scopes g ty tv v /\
       value_has_type tv v /\ val_wf tv v /\ evaluate_type (get_tenv cx) ty = SOME tv /\
@@ -111,16 +111,16 @@ Theorem tuple_store_sequential_path_ptr:
       (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
       (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
       lookup_var src u = SOME sw /\ (is_word_type ty ==> sw = typed_val_to_w256 tv v) /\
-      (~is_word_type ty ==> ptr_covers H tt src u (type_memory_size tv)) /\
-      ptr_val_ok cx ty v (Var src) H tt u /\ stmt_state_rel ctx func cenv cx ee u /\
-      ghost_inv d cenv cx ee H tt u /\ fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
+      (~is_word_type ty ==> ptr_covers HG tt src u (type_memory_size tv)) /\
+      ptr_val_ok cx ty v (Var src) HG tt u /\ stmt_state_rel H ctx func cenv cx ee u /\
+      ghost_inv H d cenv cx ee HG tt u /\ fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
       ~u.vs_halted /\ u.vs_current_bb = sa.cs_current_bb /\
       u.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      ?t H' tt'. stmt_state_rel ctx func cenv cx ee' t /\ ghost_inv d cenv cx ee' H' tt' t /\
+      ?t HG' tt'. stmt_state_rel H ctx func cenv cx ee' t /\ ghost_inv H d cenv cx ee' HG' tt' t /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x u /\
-          FLOOKUP H' x = FLOOKUP H x /\ op_taint tt' (Var x) = op_taint tt (Var x)) /\
+          FLOOKUP HG' x = FLOOKUP HG x /\ op_taint tt' (Var x) = op_taint tt (Var x)) /\
         (!aid bs. FLOOKUP u.vs_allocas aid = SOME bs ==> FLOOKUP t.vs_allocas aid = SOME bs) /\
         ((t.vs_memory = u.vs_memory /\ tt'.t_mem = tt.t_mem) \/
          ?id dst dsz written. local_region cenv ee.scopes u id dst dsz /\
@@ -128,7 +128,7 @@ Theorem tuple_store_sequential_path_ptr:
            (!i. ~(dst <= i /\ i < dst+written) ==>
              mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 u.vs_memory /\
              (i IN tt'.t_mem <=> i IN tt.t_mem))) /\
-        gas_path_ptr D 0 ctx func PG H tt u 0 H' tt' (OK t)) /\
+        gas_path_ptr D 0 ctx func PG HG tt u 0 HG' tt' (OK t)) /\
     compile_tuple_store_all cenv tys gs ops st = ((),st') /\
     assign_tuple_target_list cx gs vs es = (INL (),es') /\
     LENGTH gs = LENGTH tys /\ LENGTH tys = LENGTH tvs /\
@@ -151,8 +151,8 @@ Theorem tuple_store_sequential_path_ptr:
      (?name. local_region cenv es.scopes s name b sz)) /\
     fn_has_code st st' func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
     s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
-    stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s ==>
-    ?t G' tn'. stmt_state_rel ctx func cenv cx es' t /\ ghost_inv d cenv cx es' G' tn' t /\
+    stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s ==>
+    ?t G' tn'. stmt_state_rel H ctx func cenv cx es' t /\ ghost_inv H d cenv cx es' G' tn' t /\
       ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\
       (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
@@ -177,7 +177,7 @@ Proof
     (mk_asm "stable") >>
   qpat_x_assum `!scopes g ty tv v. P scopes g ty tv v ==> _` (mk_asm "base") >>
   qpat_x_assum `!g ty tv v ee ee'. P ee.scopes g ty tv v /\ _ ==> _` (mk_asm "source") >>
-  qpat_x_assum `!g ty tv v src sw sa sb ee ee' u H tt.
+  qpat_x_assum `!g ty tv v src sw sa sb ee ee' u HG tt.
     compile_tuple_store_all _ _ _ _ _ = _ /\ _ ==> _` (mk_asm "callback") >>
   Cases_on `tys` >- fs[] >> Cases_on `tvs` >- fs[] >>
   Cases_on `vs` >- fs[] >> Cases_on `ops` >- fs[] >>
@@ -221,8 +221,8 @@ QED
 Resume tuple_store_sequential_path_ptr[tail]:
   markerLib.RESUME_TAC >>
   asm_x "ih" (drule_at (Pat `compile_tuple_store_all _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `assign_tuple_target_list _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`tvs1`, `addr + type_memory_size tv`, `b`, `sz`] mp_tac) >>
   asm "callback" assume_tac >>
@@ -257,7 +257,7 @@ Resume tuple_store_sequential_path_ptr[premises]:
   >- (irule tuple_container_transport >>
       qexistsl_tac [`s`, `st`, `es.scopes`] >> simp[] >>
       asm_x "callback" kall_tac >>
-      qpat_x_assum `!g ty tv v src sw sa sb ee ee' u H tt. _` kall_tac >>
+      qpat_x_assum `!g ty tv v src sw sa sb ee ee' u HG tt. _` kall_tac >>
       metis_tac[])
   >> asm_rewrite_tac [])
 QED
@@ -268,7 +268,7 @@ Resume tuple_store_sequential_path_ptr[resources]:
   `i < LENGTH ops1 /\ i < LENGTH tys1 /\ i < LENGTH tvs1` by fs[] >>
   `?p. EL i ops1 = Var p /\ not_fresh_at st p` by
     (asm_x "callback" kall_tac >>
-     qpat_x_assum `!g ty tv v src sw sa sb ee ee' u H tt. _` kall_tac >>
+     qpat_x_assum `!g ty tv v src sw sa sb ee ee' u HG tt. _` kall_tac >>
      fs[EVERY_EL] >> metis_tac[]) >>
   qpat_assum `!i. i < _ ==> ptr_val_ok _ _ _ _ _ _ _ /\ _`
     (qspec_then `SUC i` mp_tac) >> simp_tac (srw_ss()) [] >>
@@ -277,7 +277,7 @@ Resume tuple_store_sequential_path_ptr[resources]:
   `lookup_var p t = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
    op_taint tn' (Var p) = op_taint tn (Var p)` by
     (asm_x "callback" kall_tac >>
-     qpat_x_assum `!g ty tv v src sw sa sb ee ee' u H tt. _` kall_tac >> metis_tac[]) >>
+     qpat_x_assum `!g ty tv v src sw sa sb ee ee' u HG tt. _` kall_tac >> metis_tac[]) >>
   `eval_operand (Var p) t = SOME w /\
    op_prov G' (Var p) = op_prov G (Var p)` by
     gvs[eval_operand_def, op_prov_def] >>
@@ -285,14 +285,14 @@ Resume tuple_store_sequential_path_ptr[resources]:
   conj_tac >- gvs[] >>
   qexists `w` >> simp[] >> rpt strip_tac >>
   asm_x "callback" kall_tac >>
-  qpat_x_assum `!g ty tv v src sw sa sb ee ee' u H tt. _` kall_tac >>
+  qpat_x_assum `!g ty tv v src sw sa sb ee ee' u HG tt. _` kall_tac >>
   gvs[ptr_covers_def])
 QED
 
 Resume tuple_store_sequential_path_ptr[robust]:
   markerLib.RESUME_TAC >> (
   asm_x "callback" kall_tac >>
-  qpat_x_assum `!g ty tv v src sw sa sb ee ee' u H tt. _` kall_tac >>
+  qpat_x_assum `!g ty tv v src sw sa sb ee ee' u HG tt. _` kall_tac >>
   Cases_on `is_word_type (EL i tys1)`
   >- gvs[ptr_val_ok_def, op_prov_def] >>
   `evaluate_type (get_tenv cx) (EL i tys1) = SOME (EL i tvs1)` by
@@ -321,7 +321,7 @@ QED
 Resume tuple_store_sequential_path_ptr[compose]:
   markerLib.RESUME_TAC >> (
   asm_x "callback" kall_tac >>
-  qpat_x_assum `!g ty tv v src sw sa sb ee ee' u H tt. _` kall_tac >>
+  qpat_x_assum `!g ty tv v src sw sa sb ee ee' u HG tt. _` kall_tac >>
   asm_x "stable" kall_tac >> asm_x "base" kall_tac >> asm_x "source" kall_tac >>
   qpat_x_assum `?t' G'' tn''. _`
     (qx_choose_then `sf` (qx_choose_then `Gf` (qx_choose_then `tnf`

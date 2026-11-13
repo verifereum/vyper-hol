@@ -77,9 +77,9 @@ QED
 
 Theorem body_calldatasize_state_post[local]:
   emit_op CALLDATASIZE [] sm = (dst,sn) /\
-  local_ptrs_reserved cenv sm /\ stmt_state_rel ctx func cenv cx es s ==>
+  local_ptrs_reserved cenv sm /\ stmt_state_rel H ctx func cenv cx es s ==>
   ?q. run_inst_seq (emitted_insts sm sn) s = OK q /\
-      stmt_state_rel ctx func cenv cx es q /\
+      stmt_state_rel H ctx func cenv cx es q /\
       eval_operand dst q = SOME (val_to_w256 (IntV &LENGTH cx.txn.calldata)) /\
       (!z v. not_fresh_at sm z /\ lookup_var z s = SOME v ==>
              lookup_var z q = SOME v) /\
@@ -110,9 +110,9 @@ Theorem body_calldatasize_frag_mem[local]:
   emit_op CALLDATASIZE [] sm = (dst,sn) /\ local_ptrs_reserved cenv sm /\
   fn_has_code sm sn func /\ fn_inst_ids_distinct func ==>
   frag_exec_mem ctx sm sn
-    (\s. s = entry /\ stmt_state_rel ctx func cenv cx es s /\
+    (\s. s = entry /\ stmt_state_rel H ctx func cenv cx es s /\
          alloca_history func s)
-    (\s. stmt_state_rel ctx func cenv cx es s /\
+    (\s. stmt_state_rel H ctx func cenv cx es s /\
          eval_operand dst s = SOME (val_to_w256 (IntV &LENGTH cx.txn.calldata)) /\
          (!z v. not_fresh_at sm z /\ lookup_var z entry = SOME v ==>
                 lookup_var z s = SOME v) /\
@@ -121,12 +121,12 @@ Theorem body_calldatasize_frag_mem[local]:
 Proof
   rpt strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   drule emit_op_extends >> strip_tac >>
-  qabbrev_tac `P = \s. s = entry /\ stmt_state_rel ctx func cenv cx es s /\
+  qabbrev_tac `P = \s. s = entry /\ stmt_state_rel H ctx func cenv cx es s /\
     alloca_history func s /\ ~s.vs_halted /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   `frag_exec_mem ctx sm sn P
-    (\s. stmt_state_rel ctx func cenv cx es s /\
+    (\s. stmt_state_rel H ctx func cenv cx es s /\
          eval_operand dst s = SOME (val_to_w256 (IntV &LENGTH cx.txn.calldata)) /\
          (!z v. not_fresh_at sm z /\ lookup_var z entry = SOME v ==>
                 lookup_var z s = SOME v) /\
@@ -153,10 +153,10 @@ Theorem body_calldatasize_mem_prefix[local]:
   lower_value compile_expr cenv ty (Builtin (BaseT (UintT 256)) CalldataLen []) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t. gas_value_prefix T (ctx,func,cenv,cx)
+  ?t. gas_value_prefix H T (ctx,func,cenv,cx)
     (ty,Builtin (BaseT (UintT 256)) CalldataLen [])
     (sa,sb,op) (es,s0) [] (IntV &LENGTH cx.txn.calldata,es,t)
 Proof
@@ -171,7 +171,7 @@ Proof
   `alloca_inv s0` by gvs[stmt_state_rel_def] >>
   drule_all body_calldatasize_history >> strip_tac >>
   drule_all body_calldatasize_gas_path >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) q` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) q` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`q.vs_gas_readings`, `q.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>

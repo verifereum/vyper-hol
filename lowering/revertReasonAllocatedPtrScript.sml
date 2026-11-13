@@ -216,7 +216,7 @@ QED
 Theorem revert_reason_runtime_immutable_unwrap_path_ptr:
   ~cenv.ce_is_ctor /\ r.ptr_location = LocCode /\
   unwrap_value cenv (LocatedValue (BaseT (StringT max)) r) sm = (out,sn) /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   immutable_holds cenv cx (BaseT (StringT max)) (Value (StringV str)) a es s /\
   evaluate_type (get_tenv cx) (BaseT (StringT max)) = SOME (BaseTV (StringT max)) /\
   fn_has_code sm sn fn /\ copy_old_operand sm r.ptr_operand /\

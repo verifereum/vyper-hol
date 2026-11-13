@@ -124,8 +124,8 @@ Theorem hash_bytes_prepare_frame:
   mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
-  ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
   (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) ==>
   ?t G1 tn1 p.
@@ -133,7 +133,7 @@ Theorem hash_bytes_prepare_frame:
   gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1
     (OK (t with vs_inst_idx := s.vs_inst_idx+2)) /\
   (t with vs_vars := s.vs_vars) = s /\
-  stmt_state_rel ctx fn cenv cx es t /\ ghost_inv d cenv cx es G1 tn1 t /\
+  stmt_state_rel H ctx fn cenv cx es t /\ ghost_inv H d cenv cx es G1 tn1 t /\
   ghost_kept cenv es sa G tn s G1 tn1 /\ data_op = Var p /\
   eval_operand data_op t = SOME (n2w (b+32)) /\ eval_operand len_op t = SOME (n2w n) /\
   ptr_covers G1 tn1 p t n /\ op_taint tn1 len_op = {} /\
@@ -156,12 +156,12 @@ Proof
   `!z. not_fresh_at sa z ==> FLOOKUP G1 z = FLOOKUP G z /\
      op_taint tn1 (Var z) = op_taint tn (Var z)` by
     (rpt strip_tac >> gvs[op_taint_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]) >>
-  `ghost_inv d cenv cx es G1 tn1 t` by
+  `ghost_inv H d cenv cx es G1 tn1 t` by
     (irule hash_readonly_ghost_inv >> qexistsl_tac [`G`, `s`, `sa`, `tn`] >>
      simp[] >> metis_tac[]) >>
   `ghost_kept cenv es sa G tn s G1 tn1` by
     (irule hash_ghost_kept_frame >> simp[]) >>
-  `stmt_state_rel ctx fn cenv cx es t` by
+  `stmt_state_rel H ctx fn cenv cx es t` by
     (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
   suspend "coverage"
 QED

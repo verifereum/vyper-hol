@@ -20,9 +20,9 @@ Proof
   gvs[evaluate_type_def, type_memory_size_def] >>
   all_tac
   >~ [`word_size _ <= word_size _`]
-  >- (irule word_size_monotone >> simp[])
+  >- (irule exprSimPropsTheory.word_size_monotone >> simp[])
   >~ [`word_size _ <= word_size _`]
-  >- (irule word_size_monotone >> simp[])
+  >- (irule exprSimPropsTheory.word_size_monotone >> simp[])
   >~ [`_ * _ <= _ * _`]
   >- (irule LESS_MONO_MULT2 >> simp[])
   >~ [`_ + _ <= _ + _`]

@@ -5,7 +5,7 @@ Ancestors bodyPtrBopScalarOutcome
    inferable before matching the generic continuation conclusion. *)
 Theorem bop_scalar_suffix_outcome_ptr_anchored:
   compile_binop bop x y ty bl el sa = (op,sb) ==>
-  ghost_inv d cenv cx es G tn s ==>
+  ghost_inv H d cenv cx es G tn s ==>
   well_typed_binop ann bop t1 t2 ==>
   bop <> In /\ bop <> NotIn /\
   op_prov G x = NONE /\ op_taint tn x = {} /\
@@ -25,7 +25,7 @@ Theorem bop_scalar_suffix_outcome_ptr_anchored:
       run_inst_seq (emitted_insts sa sb) s = OK t /\
       eval_operand op t = SOME (val_to_w256 v) /\
       op_prov G' op = NONE /\ op_taint tn' op = {} /\
-      ghost_inv d cenv cx (es with gas_obs := []) G' tn'
+      ghost_inv H d cenv cx (es with gas_obs := []) G' tn'
         (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
       ghost_kept cenv es sa G tn s G' tn' ==>
       Q (INL v) (es with gas_obs := []) G' tn'

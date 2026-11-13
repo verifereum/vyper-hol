@@ -28,7 +28,7 @@ Ancestors
   loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
   list rich_list selectorDispatch byte contractABI vyperABIRoundtrip
   valueEncoding valueEncodingDefs entryDispatchProps ctorDeployInitcode abiCallerBuiltinInput compileVyper
-  ctorDeployMemoryFrontier registrationSizeAdmissibility argumentRegistrationOpen
+  ctorDeployMemoryFrontier loweredUnitMemoryFrontier registrationSizeAdmissibility argumentRegistrationOpen
 
 (* Supported checked source excludes all runtime DALLOCA producers.  This
    rules out the proposed near-limit source family before budgeting it. *)
@@ -154,8 +154,8 @@ QED
 (* The logical entry relations do not constrain the code-generator's
    initial free-memory-pointer field. *)
 Theorem registration_stmt_initial_fmp:
-  stmt_state_rel ctx func cenv cx es (s with vs_initial_fmp := w) <=>
-  stmt_state_rel ctx func cenv cx es s
+  stmt_state_rel H ctx func cenv cx es (s with vs_initial_fmp := w) <=>
+  stmt_state_rel H ctx func cenv cx es s
 Proof
   simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
        immutable_alloca_sep_def, immutable_decl_sep_def,
@@ -170,8 +170,8 @@ Proof
 QED
 
 Theorem registration_ghost_initial_fmp:
-  ghost_inv d cenv cx es G tn (s with vs_initial_fmp := w) <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx es G tn (s with vs_initial_fmp := w) <=>
+  ghost_inv H d cenv cx es G tn s
 Proof
   Cases_on `d` >- simp[ghost_inv_def, return_buf_ptr_def,
     ptr_covers_def, lookup_var_def, stor_taint_ok_def] >>
@@ -3424,11 +3424,15 @@ Theorem register_positional_args_ptr:
     tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\
     tn1.t_imm = {} ==>
     ?s0 G0 tn0.
-      stmt_state_rel unit.cu_context efn cenv
+      stmt_state_rel H unit.cu_context efn cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-      ghost_inv NONE cenv
+      ghost_inv H NONE cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) es0
         G0 tn0 s0 /\
+      gas_path_mem unit.cu_context efn s1 0 (OK s0) /\
+      (!D explicit.
+         gas_origin_ptr_path (D, 0, explicit, unit.cu_context, efn, [])
+           (s1, G1, tn1) [] (OK s0, G0, tn0)) /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
       s0.vs_gas_readings = s1.vs_gas_readings /\

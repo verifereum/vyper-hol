@@ -93,10 +93,10 @@ Proof
   rw[source_deployment_rel_def] >>
   `type_env_all_modules [(NONE, tops)] = type_env tops` by
     simp[type_env_all_modules_def, type_env_def] >>
-  simp[call_external_def, find_function_module_def,
+  simp[call_external_def, call_external_trace_def, find_function_module_def,
        lookup_exported_function_def, get_self_code_def, get_module_code_def,
        initial_evaluation_context_def] >>
-  qmatch_goalsub_abbrev_tac `call_external_function orc gobs am cx` >>
+  qmatch_goalsub_abbrev_tac `call_external_function_trace orc gobs am cx` >>
   qabbrev_tac `es1 = (es0 with gas_obs := gobs) with scopes := [FEMPTY]` >>
   `send_call_value mut cx
      (initial_state am [FEMPTY] with
@@ -120,7 +120,35 @@ Proof
    call_external_body am cx F mut (type_env tops) es1 env fbody ret` by
     (qpat_assum `_ = type_env tops` (SUBST1_TAC o SYM) >>
      irule call_external_function_body >> gvs[Abbr `cx`]) >>
-  gvs[Abbr `es1`, call_external_body_scopes]
+  gvs[Abbr `es1`, call_external_body_scopes] >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _`
+    (mp_tac o GSYM) >>
+  simp[call_external_function_def] >>
+  Cases_on `call_external_function_trace orc gobs am cx F mut tops
+              [(NONE,tops)] args [] tx.args fbody ret` >>
+  PairCases_on `r` >> Cases_on `q` >> simp[] >>
+  rename1 `INR exc` >> Cases_on `exc` >> simp[]
+QED
+
+(* The selected call's storage observations are the body run's: with no
+   lock and no defaults, nothing else records storage. *)
+Theorem call_external_selected_body_trace:
+  !tops am tx ret mut args fbody env orc gobs es0 res ee.
+    source_deployment_rel tops am tx /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    LENGTH tx.args = LENGTH args /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
+      (INL (), es0) /\
+    eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
+      fbody (es0 with gas_obs := gobs) = (res, ee) ==>
+    ?r am' rqs.
+      call_external_trace orc gobs am tx = (r, am', rqs, ee.storage_trace)
+Proof
+  cheat
 QED
 
 (* call_external_selected_body_gas without gas observations. *)
