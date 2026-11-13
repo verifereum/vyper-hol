@@ -3632,9 +3632,9 @@ QED
 Theorem registration_actual_endpoint_relations:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ source_typing_ok tops am tx /\
-  source_storage_ok tops am tx /\ source_deployment_rel tops am tx /\
+  source_deployment_rel tops am tx /\
   valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-  initial_venom_state_rel tops am tx vs /\ call_outcomes_ok am tx vs.vs_outcomes /\
+  initial_venom_state_rel tops am tx vs /\
   lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
   bind_arguments (type_env tops) args tx.args = SOME env /\
   send_call_value mut (initial_evaluation_context am.sources am.layouts tx NONE)
@@ -3848,9 +3848,9 @@ Theorem registration_positional_args_joint[local]:
    pos_args min_cds is_payable nkey ut' iv rt st cenv sa s1 G1 tn1.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\ source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\ source_deployment_rel tops am tx /\
+    source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\ call_outcomes_ok am tx vs.vs_outcomes /\
+    initial_venom_state_rel tops am tx vs /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -3944,9 +3944,9 @@ Theorem registration_positional_args_ptr_no_dalloca:
    pos_args min_cds is_payable nkey ut' iv rt st cenv sa s1 G1 tn1.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\ source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\ source_deployment_rel tops am tx /\
+    source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel tops am tx vs /\ call_outcomes_ok am tx vs.vs_outcomes /\
+    initial_venom_state_rel tops am tx vs /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -3995,11 +3995,9 @@ Theorem register_positional_args_ptr:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok am tx vs.vs_outcomes /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\

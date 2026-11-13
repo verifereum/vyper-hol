@@ -74,11 +74,9 @@ Theorem external_entry_reaches_registration_ptr:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok am tx vs.vs_outcomes /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -129,9 +127,7 @@ Theorem external_entry_reaches_registration_ptr:
 Proof
   rpt gen_tac >> strip_tac >>
   `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
-  qpat_x_assum `source_storage_ok _ _ _` kall_tac >>
   qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
-  qpat_x_assum `call_outcomes_ok _ _ _` kall_tac >>
   `o1_source_unit_ok unit` by
     (irule lower_vyper_runtime_unit_source_unit_ok_shape >>
      goal_assum (drule_at Any) >> conj_tac
