@@ -1,6 +1,6 @@
 (* Counted typed copying and semantic local landing share one endpoint. *)
 Theory widenedAssignPtrTypedLocal
-Ancestors widenedAssignPtrCopyRecursive widenedAssignPtrLocalLanding
+Ancestors widenedAssignPtrCopyRecursive aggregateStorePtr widenedAssignPtrLocalLanding
   tupleLocalStoreRun bodyPtrDefs compileEnv loweringStateRelDefs
   exprLoweringProps localPtrsProps allocLimits valueEncoding valueEncodingDefs
   vyperLookup venomState venomExecSemantics ptrDiscipline finite_map words
@@ -19,7 +19,8 @@ Theorem widened_assign_typed_local_store_ptr:
     evaluate_type tenv dty = SOME entry.type /\
     value_has_type stv v /\ value_has_type entry.type v /\
     val_wf stv v /\ val_wf entry.type v /\
-    compile_store_memory_typed cenv (Var p) dty (Var src) sty a = ((),b) /\
+    ~is_word_type dty /\ type_memory_bytes cenv dty = type_memory_size entry.type /\
+    compile_store_memory cenv (Var src) (Var p) dty sty a = ((),b) /\
     not_fresh_at a src /\ lookup_var src s = SOME sw /\
     op_taint tn (Var src) = {} /\
     (0 < type_memory_size stv ==> ptr_covers G tn src s (type_memory_size stv)) /\
@@ -73,11 +74,9 @@ Proof
   `eval_operand (Var p) s = SOME dw /\ eval_operand (Var src) s = SOME sw /\
    op_taint tn (Var p) = {}` by gvs[eval_operand_def, ptr_covers_def] >>
   mp_tac (Q.SPECL [`cenv`,`tenv`,`ctx`,`D`,`PG`,`dty`,`sty`,
-    `entry.type`,`stv`,`v`] widened_assign_typed_store_counted_ptr) >>
+    `entry.type`,`stv`,`v`] compile_store_memory_aggregate_counted_ptr) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then drule >>
-  simp[] >>
-  disch_then (qspecl_then [`dw`,`sw`,`fn`,`G`,`tn`,`s`] mp_tac) >>
+  disch_then (qspecl_then [`a`,`b`,`p`,`Var src`,`dw`,`sw`,`fn`,`G`,`tn`,`s`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   rename1 `gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK t)` >>
   `stmt_state_rel ctx fn cenv cx es' t /\ ghost_inv d cenv cx es' Gf tf t` by

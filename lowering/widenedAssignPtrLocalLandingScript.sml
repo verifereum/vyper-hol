@@ -14,7 +14,8 @@ Theorem widened_local_write_state_post:
     local_region cenv es.scopes s id (w2n dst) sz /\
     n <= sz /\ n <= type_memory_size entry.type /\
     typed_copy_state_frame sa (w2n dst) n s t /\
-    val_wf entry.type v /\ val_in_memory entry.type v (w2n dst) t.vs_memory ==>
+    val_wf entry.type v /\ value_has_type entry.type v /\
+    val_in_memory entry.type v (w2n dst) t.vs_memory ==>
     stmt_state_rel ctx fn cenv cx
       (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) t
 Proof
@@ -41,6 +42,7 @@ Theorem widened_local_write_landing_ptr:
     local_region cenv es.scopes s id (w2n dst) sz /\
     n <= sz /\ n <= type_memory_size entry.type /\
     typed_copy_state_frame sa (w2n dst) n s t /\ val_wf entry.type v /\
+    value_has_type entry.type v /\
     (!m. mem_agree_outside tf.t_mem t.vs_memory m ==>
       val_in_memory entry.type v (w2n dst) m) /\
     (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\

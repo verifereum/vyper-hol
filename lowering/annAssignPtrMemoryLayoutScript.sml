@@ -84,11 +84,8 @@ Proof
    (mp_tac compile_assign_value_labels >>
     disch_then (qspecl_then [`c`,`Var (STRING #"%" (toString sa.cs_next_var))`,`LocMemory`,`op`,`F`,
       `vv_location vv`,`vtyp`,`lowered_value_type c e`,
-      `case vtyp of ArrayT elem_ty (Dynamic _) =>
-        SOME ((type_memory_bytes c elem_ty + 31) DIV 32,
-          type_memory_bytes c elem_ty) | _ => NONE`,
       `type_memory_bytes c vtyp`,`sB`] mp_tac) >>
-    qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+    qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
       (fn th => pure_rewrite_tac[th]) >> simp[]) >>
  `cs_extends sA sf` by metis_tac[cs_extends_trans] >>
  drule_all annassign_alloca_code >> strip_tac >>

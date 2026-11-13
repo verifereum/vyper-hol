@@ -15,7 +15,7 @@ Ancestors widenedAssignPtrTypedLocal widenedAssignPtrRhsInput
 
 Theorem widened_assign_local_staged_code:
   compile_assign_value ce dst LocMemory src F (SOME LocMemory)
-    dty sty info bytes sa = ((),sb) /\ fn_has_code sa sb fn ==>
+    dty sty bytes sa = ((),sb) /\ fn_has_code sa sb fn ==>
   ?buf sm sn.
     compile_alloc_buffer (type_memory_bytes ce sty) sa = (buf,sm) /\
     compile_copy_memory buf.buf_operand src (type_memory_bytes ce sty) sm = ((),sn) /\
@@ -28,7 +28,7 @@ Proof
     compile_alloc_buffer (type_memory_bytes ce sty) sa = (buf,sm) /\
     compile_copy_memory buf.buf_operand src (type_memory_bytes ce sty) sm = ((),sn) /\
     compile_store_memory ce buf.buf_operand dst dty sty sn = ((),sb)` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
      rpt (pairarg_tac >> gvs[]) >> strip_tac >> metis_tac[pairTheory.PAIR]) >>
   qexistsl_tac [`buf`, `sm`, `sn`] >> simp[] >>
@@ -102,9 +102,6 @@ Proof
       drule_all assign_base_local_compatible_store_ptr >> metis_tac[]) >>
   `~is_bytestring_type dty /\ dty <> sty` by
     metis_tac[normalize_return_source_kinds] >>
-  `compile_store_memory_typed cenv (Var p) dty (Var src) sty a = ((),b)` by
-    (qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
-     simp[compile_store_memory_def]) >>
   `0 < type_memory_size stv ==> ptr_covers G tn src s (type_memory_size stv)` by simp[] >>
   drule_all widened_assign_typed_local_store_ptr >> metis_tac[]
 QED
@@ -185,7 +182,7 @@ Theorem widened_assign_staged_local_ptr:
   type_memory_size entry.type + 64 < dimword (:256) /\
   type_memory_size stv < dimword (:256) /\
   compile_assign_value cenv (Var p) LocMemory op F (SOME LocMemory)
-    dty sty info bytes sa = ((),sb) /\
+    dty sty bytes sa = ((),sb) /\
   (!src. op = Var src ==> not_fresh_at sa src) /\
   expr_val_at cenv cx sty va vb es v op s /\ eval_operand op s = SOME sw /\
   (0 < type_memory_size stv ==> ?src. op = Var src /\

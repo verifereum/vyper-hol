@@ -28,7 +28,7 @@ Theorem widened_declaration_staged_store_ptr:
   value_has_type stv v /\ value_has_type dtv v /\
   val_wf stv v /\ val_wf dtv v /\
   compile_assign_value ce (Var p) LocMemory (Var src) F (SOME LocMemory)
-    dty sty info bytes sa = ((),sb) /\
+    dty sty bytes sa = ((),sb) /\
   not_fresh_at sa p /\ not_fresh_at sa src /\
   lookup_var p s = SOME dw /\ lookup_var src s = SOME sw /\
   ptr_covers G tn p s cap /\ type_memory_size dtv <= cap /\
