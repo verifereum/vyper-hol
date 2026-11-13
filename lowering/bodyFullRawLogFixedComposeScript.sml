@@ -2,7 +2,7 @@
 Theory bodyFullRawLogFixedCompose
 Ancestors
   bodyFullRawLogFixedBoundary bodySimFull gasOutcomeFullCompose gasOutcomeFull
-  gasOutcomeFullStmts gasShadowState gasShadow bodyFullShared
+  gasOutcomeFullStmts gasOutcomeFullGuarded gasShadowState gasShadow bodyFullShared
   exprLoweringProps exprOperandVar exprSimProps exprSimWordArgs
   stmtSimDefs exprSimMemDefs exprSimDefs gasExemptCert
   vyperStorageTrace vyperStorageFootprint loweringPosts bodyPtrDefs
@@ -226,19 +226,117 @@ Proof
      simp[] >>
      qpat_x_assum `compile_call _ _ _ _ RawLog _ _ _ = _` mp_tac >>
      simp[exprLoweringTheory.compile_call_def]) >>
-  FAIL_TAC "allocation prefix"
+  irule gas_outcome_full_zero_prefix_guarded >>
+  conj_tac >- suspend "prefix_frame" >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl [`Gu`, `u`, `tnu`] >>
+  conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+    (qspec_then `storage_trace_horizon es.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `sa.cs_next_var <= sd.cs_next_var /\ sa.cs_next_id <= sd.cs_next_id` by
+    (qspec_then `32` (qspec_then `sa` mp_tac) ci_mono_compile_alloc_buffer >>
+     fs[ci_mono_def]) >>
+  `local_ptrs_reserved cenv sd` by
+    (irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
+  `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sd x` by
+    (rpt strip_tac >> irule not_fresh_at_mono >> qexists `sa` >> simp[] >>
+     first_x_assum irule >> goal_assum (drule_at Any)) >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sd x` by
+    (rpt strip_tac >> irule not_fresh_at_mono >> qexists `sa` >> simp[] >>
+     first_x_assum irule >> goal_assum (drule_at Any)) >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_full_def] >>
+  disch_then (qspecl_then [`st0`, `sd`, `sm`, `shadow_sd`, `shadow_sm`, `data_op`,
+    `u`, `Gu`, `tnu`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt strip_tac >> first_x_assum drule >> simp[])) >>
+  strip_tac >>
+  asm_x "alloc_endpoint" kall_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ Qdata _` >>
+  irule gas_outcome_full_bind_all >>
+  irule_at Any gas_outcome_full_post_source >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qexists `\H res ee G tn t. Qdata H res ee G tn t /\ ~t.vs_halted` >>
+  conj_tac >- simp[] >>
+  conj_tac >- (simp[] >> rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]) >>
+  conj_tac >- suspend "next_frame" >>
+  conj_tac >- suspend "right_cert" >>
+  conj_tac >- suspend "left_cert" >>
+  conj_tac >- suspend "child_frame" >>
+  suspend "data_next"
 QED
 
 Resume raw_log_fixed_data_full_from_endpoints[source_frame]:
-  irule storage_trace_frame_bind_all >>
+  match_mp_tac storage_trace_frame_bind_all >>
   conj_tac
-  >- (irule storage_trace_frame_bind_all >>
+  >- (match_mp_tac storage_trace_frame_bind_all >>
       simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
-  gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
-  reverse conj_tac >- simp[storage_trace_frame_lifts] >>
-  gen_tac >> BETA_TAC >> irule storage_trace_frame_ignore_bind >>
+  gen_tac >> BETA_TAC >> match_mp_tac storage_trace_frame_bind_all >>
+  conj_tac >- simp[storage_trace_frame_lifts] >>
+  gen_tac >> BETA_TAC >> match_mp_tac storage_trace_frame_ignore_bind >>
   conj_tac >- simp[storage_trace_frame_checks] >>
-  irule storage_trace_frame_ignore_bind >>
+  match_mp_tac storage_trace_frame_ignore_bind >>
   simp[storage_trace_frame_state_updates, storage_trace_frame_return]
+QED
+Resume raw_log_fixed_data_full_from_endpoints[prefix_frame]:
+  simp[storage_trace_frame_bind_all, storage_trace_frame_ignore_bind,
+    evaluate_storage_trace_frame, storage_trace_frame_read_result,
+    storage_trace_frame_lifts, storage_trace_frame_checks,
+    storage_trace_frame_state_updates, storage_trace_frame_return]
+QED
+Resume raw_log_fixed_data_full_from_endpoints[child_frame]:
+  simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+    storage_trace_frame_read_result]
+QED
+Resume raw_log_fixed_data_full_from_endpoints[next_frame]:
+  simp[storage_trace_frame_bind_all, storage_trace_frame_ignore_bind,
+    storage_trace_frame_lifts, storage_trace_frame_checks,
+    storage_trace_frame_state_updates, storage_trace_frame_return]
+QED
+Resume raw_log_fixed_data_full_from_endpoints[left_cert]:
+  rpt strip_tac >> irule gas_exempt_cert_error_value >>
+  first_assum ACCEPT_TAC
+QED
+Resume raw_log_fixed_data_full_from_endpoints[right_cert]:
+  rpt strip_tac >> irule gas_exempt_cert_bind_value >>
+  goal_assum (drule_at Any) >> gvs[]
+QED
+Resume raw_log_fixed_data_full_from_endpoints[data_next]:
+  rpt gen_tac >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  BETA_TAC >> disch_then strip_assume_tac >>
+  qpat_x_assum `Qdata _ res mid _ _ _` mp_tac >>
+  simp[Abbr `Qdata`] >> strip_tac >>
+  disj1_tac >> qexists `v` >> simp[] >>
+  `?bs. v = BytesV bs` by
+    (Cases_on `dest_BytesV v`
+     >- (qpat_x_assum `gas_admissible (bind (bind _ _) _) _ _`
+           (mp_tac o REWRITE_RULE [gasContextTheory.gas_admissible_def]) >>
+         disch_then (qspec_then `gas_explicit marks u.vs_gas_readings ++ []` mp_tac) >>
+         qpat_assum `!tail. bind (eval_expr _ _) _ _ = _`
+           (qspec_then `[]` assume_tac) >>
+         simp[bind_def, lift_option_type_def, lift_option_def, raise_def,
+              expr_res_ok_def]) >>
+     qpat_x_assum `dest_BytesV v = SOME _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `v` >> simp[dest_BytesV_def]) >>
+  qpat_x_assum `v = BytesV bs` SUBST_ALL_TAC >>
+  qpat_x_assum `res = INL _` SUBST_ALL_TAC >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+      expr_post H ctx func cenv cx data es sd sm u mid (BytesV bs) data_op t /\
+      expr_store_bound cx (expr_type data) (BytesV bs) data_op t /\
+      t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+      alloca_history func t /\ u.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t /\
+      ptr_val_ok cx (post_value_type cenv data) (BytesV bs) data_op G1 tn1 t /\
+      (~is_word_type (post_value_type cenv data) ==> ptr_buf_ok cenv data data_op G1 t) /\
+      ghost_kept_at lo cenv es sd Gu tnu u G1 tn1` by
+    (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  FAIL_TAC "fixed scratch child transport"
 QED
 Finalise raw_log_fixed_data_full_from_endpoints
