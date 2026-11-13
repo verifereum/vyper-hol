@@ -5,7 +5,7 @@ Ancestors
 
 Theorem unwrap_expr_post_capacity:
   ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
-  expr_post ctx func cenv cx e es sa sb s0 ee v op s /\
+  expr_post H ctx func cenv cx e es sa sb s0 ee v op s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   eval_operand op s = SOME w /\
   w2n w + type_memory_size tv <= s.vs_alloca_next ==>

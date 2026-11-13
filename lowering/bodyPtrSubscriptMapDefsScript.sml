@@ -8,7 +8,7 @@
  *
  * NEW DEFINITIONS: expr_map_sim_ptr_at, at the dead bytes D and the bound
  * lo as bodyPtrDefs' expr_vv_sim_ptr_at, and expr_map_sim_ptr, its
- * (cx_dead cx, 0) instance in a runtime frame, as expr_vv_sim_ptr is.
+ * (cx_dead H cx, 0) instance in a runtime frame, as expr_vv_sim_ptr is.
  * Its premises are expr_vv_sim_ptr's,
  * with the admissible results S1's expr_map_res_ok; its normal post is
  * expr_map_sim's (the operand holding the mapping's declared slot, and

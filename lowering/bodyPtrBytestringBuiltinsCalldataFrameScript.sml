@@ -219,4 +219,3 @@ Resume calldata_size_bounds_semantic[frame]:
 QED
 Finalise calldata_size_bounds_semantic
 
-

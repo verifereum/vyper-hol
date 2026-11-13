@@ -987,10 +987,10 @@ Theorem compile_slice_calldata_bounds_abort:
     ((update_var (STRING #"%" (toString sa.cs_next_var))
       (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s) with
       vs_inst_idx := SUC s.vs_inst_idx) = Abort ab u ==>
-  ab = Revert_abort /\ ?H tm j.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm
+  ab = Revert_abort /\ ?HG tm j.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm
       (Abort Revert_abort (u with vs_inst_idx := j)) /\
-    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+    (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x)) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
 Proof
@@ -1013,7 +1013,7 @@ Proof
   qpat_assum `step_inst_base _ s = _`
     (mp_then Any mp_tac external_query_bounds_reserved_counted_abort) >>
   disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[] >>
-  strip_tac >> gvs[] >> qexistsl_tac [`H`,`tm`,`j`] >> gvs[]
+  strip_tac >> gvs[] >> qexistsl_tac [`HG`,`tm`,`j`] >> gvs[]
 QED
 
 Theorem compile_slice_code_bounds_abort:
@@ -1058,7 +1058,7 @@ Proof
   qpat_assum `step_inst_base _ s = _`
     (mp_then Any mp_tac external_query_bounds_reserved_counted_abort) >>
   disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[] >>
-  strip_tac >> gvs[] >> qexistsl_tac [`H`,`tm`,`j`] >> gvs[]
+  strip_tac >> gvs[] >> qexistsl_tac [`HG`,`tm`,`j`] >> gvs[]
 QED
 
 Theorem compile_slice_extcode_counted_ok:

@@ -22,6 +22,8 @@ Theorem tuple_place_load_snapshot_path:
     (!x. MEM (Var x) elems ==> not_fresh_at sb x) /\
     local_ptrs_reserved cenv sb /\
     ?t. stmt_state_rel H ctx func cenv cx es t /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+            stmt_state_rel H' ctx func cenv cx es t) /\
       gas_marked_path F ctx func s 0 (OK t) /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\

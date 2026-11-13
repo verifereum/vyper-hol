@@ -1,5 +1,6 @@
 Theory bodyPtrPopRegionInvariant
 Ancestors
+  sourceUnitExecution
   bodyPtrDefs compileEnv loweringStateRelDefs pred_set ptrDiscipline accountsRelProps
 
 (* A fixed captured child needs an observer separate from global liveness:

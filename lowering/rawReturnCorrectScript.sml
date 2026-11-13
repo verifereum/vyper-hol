@@ -4,7 +4,7 @@ Ancestors
   fragExec e2eDefs valueEncoding vyperTyping
 
 Theorem external_raw_halt_unlock_result[local]:
-  !func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts v bs ret.
+  !H func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts v bs ret.
     lookup_raw_return_or_F (NONE:num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     state_rel H func cenv cx es s /\
@@ -45,7 +45,7 @@ QED
 (* A raw return reads the value's length prefix and payload directly.
    The memory bound describes the representation at the return point. *)
 Theorem external_return_raw_unlock_result_rel:
-  !ctx op prim ei msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
+  !H ctx op prim ei msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
      tops tx srcs exps layouts Q.
     lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\

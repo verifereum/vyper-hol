@@ -76,6 +76,6 @@ Proof
       valueEncodingTheory.type_memory_size_def] >>
   qmatch_goalsub_abbrev_tac `word_size len` >>
   `len <= dst_cap` by (simp[Abbr `len`] >> decide_tac) >>
-  drule word_size_monotone >>
+  drule exprSimPropsTheory.word_size_monotone >>
   mp_tac (Q.SPEC `len` word_size_capacity) >> decide_tac
 QED

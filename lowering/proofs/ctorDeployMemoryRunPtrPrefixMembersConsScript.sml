@@ -2,6 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixMembersCons
 Ancestors
   loweringStateRelDefs valueEncodingDefs
+  compileEnv valueEncoding
   ctorDeployMemoryRunPtrPrefixCanonicalFloor ctorDeployMemoryRunPtrPrefixMembersFloor
   ctorDeployMemoryRunPtrPrefixMemberFloor ctorDeployMemoryRunPtrPrefixEmptyFloor
   ctorDeployMemoryRunPtrPrefixMemberInputs
@@ -15,7 +16,7 @@ Ancestors
   abiDecoderMembers abiDecoderMemberInfos abiDecoderDynamic abiDecoderOffset
   abiDecoderCoherence abiDecoderContract abiDecoderTypedContract
   abiDecoderReentry abiDecoderDynamicLoopSetup abiEncoderRegisteredEffect
-  abiDecoderLoop fragExec compileEnv valueEncoding abiEncoder contractABI
+  abiDecoderLoop fragExec abiEncoder contractABI
   allocaFrontierBound allocaBudgetProps abiDecoderReentryPointer
   venomState ptrDiscipline ptrSafeRun finite_map pred_set words list rich_list arithmetic
 
@@ -124,27 +125,6 @@ val paired_members_floor = ``\tys tvs.
                           op_taint qt (Var x) = op_taint tn (Var x)) /\
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)``;
-
-Theorem prefix_member_setup_zero_base_reentry[local]:
-  abi_decode_member_setup dst src opc (Lit 0w) hi dyn ao vo st = (ops,st') /\
-  abi_decode_source_opcode opc /\
-  eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
-  (dyn ==> abi_decode_load opc (n2w (sb + ao) : bytes32) s = n2w payload_off /\
-    sb + payload_off < dimword (:256)) /\
-  abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
-  ?t. run_inst_seq (emitted_insts st st') s = OK t /\
-    eval_operand (FST ops) t = SOME (n2w (sb + if dyn then payload_off else ao)) /\
-    eval_operand (SND ops) t = SOME (n2w (d + vo)) /\
-    abi_decoder_operand_live st'.cs_next_var (FST ops) /\
-    abi_decoder_operand_live st'.cs_next_var (SND ops) /\
-    fresh_vars_wrt limit_st t /\ abi_decoder_address_frame st.cs_next_var s t /\
-    inst_extends st st'
-Proof
-  mp_tac (Q.INST [`B` |-> `0:num`, `base_op` |-> `Lit 0w`]
-    (SPEC_ALL abi_decode_member_setup_reentry)) >>
-  simp[eval_operand_def, abi_decoder_operand_live_def]
-QED
 
 Theorem prefix_paired_members_cons_floor:
   (^canonical_pair_floor) ty tv /\ (^paired_members_floor) tys tvs ==>

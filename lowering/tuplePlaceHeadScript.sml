@@ -7,9 +7,12 @@ Ancestors
 Libs monadsyntax
 
 Definition tuple_place_head_def:
-  tuple_place_head ctx func cenv cx es lo cs tys ltys ltvs vs elems
+  tuple_place_head ctx func cenv cx st0 es lo cs tys ltys ltvs vs elems
       (w:256 word) i s <=>
-    stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s /\
+         storage_well_formed_on cx es (FST H)) /\ ~s.vs_halted /\
     s.vs_current_bb = cs.cs_current_bb /\
     s.vs_inst_idx = LENGTH cs.cs_current_insts /\
     LENGTH elems = LENGTH ltys /\ LENGTH ltvs = LENGTH ltys /\
@@ -28,7 +31,10 @@ Definition tuple_place_head_def:
 End
 
 Theorem tuple_place_head_intro:
-  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
+  (?H. valid_horizon cx st0 H es.storage_trace) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s /\
+       storage_well_formed_on cx es (FST H)) /\ ~s.vs_halted /\
   s.vs_current_bb = cs.cs_current_bb /\ s.vs_inst_idx = LENGTH cs.cs_current_insts /\
   LENGTH elems = LENGTH ltys /\ LENGTH ltvs = LENGTH ltys /\
   EVERY (\op. ?x. op = Var x) elems /\
@@ -39,21 +45,35 @@ Theorem tuple_place_head_intro:
   (!j. j < LENGTH ltys ==> ?v. eval_operand (EL j elems) s = SOME v /\
     if is_word_type (EL j ltys) then v = typed_val_to_w256 (EL j ltvs) (EL j vs)
     else w2n v = w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) ==>
-  tuple_place_head ctx func cenv cx es lo cs tys ltys ltvs vs elems w 0 s
+  tuple_place_head ctx func cenv cx st0 es lo cs tys ltys ltvs vs elems w 0 s
 Proof
-  strip_tac >> simp[tuple_place_head_def] >> rpt strip_tac >>
+  strip_tac >> simp[tuple_place_head_def] >>
+  conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >> rpt strip_tac >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule abi_encoder_tuple_memory >> simp[] >>
   gvs[values_have_types_LIST_REL, LIST_REL_EL_EQN]
 QED
 
+(* The head's own horizon witness, for its H-independent facts. *)
+Theorem tuple_place_head_witness:
+  tuple_place_head ctx func cenv cx st0 es lo cs tys ltys ltvs vs elems w i s ==>
+  ?H. valid_horizon cx st0 H es.storage_trace /\
+      stmt_state_rel H ctx func cenv cx es s /\
+      storage_well_formed_on cx es (FST H)
+Proof
+  rewrite_tac[tuple_place_head_def] >> strip_tac >>
+  qexists_tac `H` >> simp[]
+QED
+
 Theorem tuple_place_assignment_prefix_head:
-  !H ctx func cenv cx es es1 tys ltys ltvs vs sa su sl ss op staged elems sv s0 e.
+  !cx st0 ctx func cenv es es1 tys ltys ltvs vs sa su sl ss op staged elems sv s0 e.
     expr_type e = TupleT tys /\ lowered_value_type cenv e = TupleT ltys /\
     value_has_type (TupleTV ltvs) (ArrayV (TupleV vs)) /\
     evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) /\
     LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) ltys ltvs /\
-    expr_post H ctx func cenv cx e es sa su s0 es1 (ArrayV (TupleV vs)) op sv /\
+    (?H. valid_horizon cx st0 H es1.storage_trace) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+         expr_post H ctx func cenv cx e es sa su s0 es1 (ArrayV (TupleV vs)) op sv) /\
     (!x. op = Var x ==> not_fresh_at su x) /\ sa.cs_next_id <= su.cs_next_id /\
     (if is_memory_view e /\ EXISTS (\t. ~is_word_type t) ltys /\
         0 < type_memory_size_list ltvs then
@@ -67,7 +87,7 @@ Theorem tuple_place_assignment_prefix_head:
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv su /\
     ~sv.vs_halted /\ sv.vs_current_bb = su.cs_current_bb /\
     sv.vs_inst_idx = LENGTH su.cs_current_insts ==>
-    ?t w. tuple_place_head ctx func cenv cx es1 sa.cs_next_id ss
+    ?t w. tuple_place_head ctx func cenv cx st0 es1 sa.cs_next_id ss
       tys ltys ltvs vs elems w 0 t /\
       (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x sv) /\
       (!aid entry. FLOOKUP sv.vs_allocas aid = SOME entry ==>
@@ -75,8 +95,19 @@ Theorem tuple_place_assignment_prefix_head:
       gas_marked_path F ctx func sv 0 (OK t)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all tuple_place_assignment_prefix_path >> strip_tac >>
+  qspecl_then [`cx`, `st0`, `ctx`, `func`, `cenv`, `es`, `es1`, `tys`, `ltys`, `ltvs`,
+    `vs`, `sa`, `su`, `sl`, `ss`, `op`, `staged`, `elems`, `sv`, `s0`, `e`]
+    mp_tac tuple_place_assignment_prefix_path >>
+  impl_tac >- (asm_rewrite_tac[] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
   qexistsl_tac [`t`, `w`] >> simp[] >> irule tuple_place_head_intro >>
+  conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (rpt strip_tac >- res_tac >>
+      qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (qspec_then `H'` mp_tac) >>
+      impl_tac >- first_assum ACCEPT_TAC >>
+      disch_then (ACCEPT_TAC o cj 2 o REWRITE_RULE [expr_post_def])) >>
   simp[] >> gvs[LIST_REL_EL_EQN]
 QED
 

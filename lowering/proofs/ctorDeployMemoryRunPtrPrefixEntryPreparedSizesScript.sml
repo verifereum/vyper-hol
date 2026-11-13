@@ -69,9 +69,9 @@ Theorem deploy_ptr_entry_register_prepared_sizes:
     qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
     (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
       op_taint qt (Var x) = op_taint tn (Var x)) /\
-    ((!fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+    ((!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
         fuel ctx func [] H qt actual) ==>
-      !fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+      !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
         fuel ctx func [] G tn t) /\
     (!j. j < LENGTH fargs ==>
       ?entry d B.
@@ -90,7 +90,7 @@ Proof
       `t.vs_data_section`,`scope`,`0`] |> SPEC_ALL |>
     Q.INST [`initial` |-> `t`, `site` |-> `ARB:instruction`,
       `k` |-> `imm_len tops`, `lo` |-> `imm_len tops`,
-      `PG` |-> `[]`, `D` |-> `deploy_dead tops runtime_bc am tx`] |>
+      `PG` |-> `[]`, `D` |-> `deploy_dead HS tops runtime_bc am tx`] |>
     SRULE []) >>
   (impl_tac >- (asm_rewrite_tac[] >> simp[])) >>
   strip_tac >> qexistsl [`actual`,`H`,`qt`] >>

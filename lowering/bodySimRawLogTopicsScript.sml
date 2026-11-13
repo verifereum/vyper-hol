@@ -13,15 +13,17 @@ Theorem raw_log_body_topics_sim:
   expr_sim_inv cenv cx env es /\
   lower_word_args cenv expr_type topics sa = (ops,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx topics) (es,s0)
-    (\rr ee t. ?vs. rr = INL vs /\
-       typed_args_post ctx func cenv cx es sa s0 ee topics ops vs t /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_exprs cx topics) (es,s0)
+    (\H rr ee t. ?vs. rr = INL vs /\
+       typed_args_post H ctx func cenv cx es sa s0 ee topics ops vs t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\rr ee r. wb_args_exit rr r)
+    (\H rr ee r. wb_args_exit rr r)
 Proof
   strip_tac >>
   `typed_args_ready ctx func cenv cx expr_type
@@ -42,9 +44,9 @@ Theorem raw_log_topics_marked_post:
   expr_sim_inv cenv cx env es /\
   gas_marked_exec F (ctx,func) (eval_exprs cx topics) (es,s0)
     marks (INL vs) ee r /\
-  typed_args_post ctx func cenv cx es sa s0 (ee with gas_obs := []) topics ops vs t ==>
+  typed_args_post H ctx func cenv cx es sa s0 (ee with gas_obs := []) topics ops vs t ==>
   expr_sim_inv cenv cx env (ee with gas_obs := []) /\
-  wb_args_post ctx func cenv cx es sa s0 (ee with gas_obs := []) ops vs t
+  wb_args_post H ctx func cenv cx es sa s0 (ee with gas_obs := []) ops vs t
 Proof
   strip_tac >>
   `eval_exprs cx topics

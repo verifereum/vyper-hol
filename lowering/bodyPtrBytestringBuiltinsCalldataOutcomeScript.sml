@@ -251,7 +251,7 @@ Proof
   `val_footprint (BaseTV (BytesT (Dynamic bound)))
     (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) <= N` by
     (simp[val_footprint_def] >> decide_tac) >>
-  qexistsl_tac [`zf`,`H`,`tm`] >>
+  qexistsl_tac [`zf`,`HG`,`tm`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
   >- (irule vv_post_allocated_memory_intro >> simp[] >>

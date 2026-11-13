@@ -557,7 +557,7 @@ Proof
   simp[fresh_id_def, fresh_label_def, comp_get_def]
 QED
 
-Theorem emit_frag_inst[local]:
+Theorem emit_frag_inst:
   fn_has_code st (st with cs_current_insts := st.cs_current_insts ++ [inst]) fn /\
   at_point st s ==>
   ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -1028,13 +1028,6 @@ Proof
 QED
 
 (* Monad laws, to bring a helper's fresh variable to the top. *)
-Theorem comp_bind_assoc:
-  !m g f. comp_bind (comp_bind m g) f = comp_bind m (\a. comp_bind (g a) f)
-Proof
-  rw[FUN_EQ_THM, comp_bind_def] >> Cases_on `m x` >> simp[] >>
-  Cases_on `g q r` >> simp[]
-QED
-
 Theorem comp_bind_return:
   !x f. comp_bind (comp_return x) f = f x
 Proof

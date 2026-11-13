@@ -41,7 +41,7 @@ Proof
 QED
 
 Theorem dynarray_round_copy_entry_mem:
-  !ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+  !ctx func cenv bc cx st0 es s id p sz dst ainst tv v et tenv sa sb0
    idx saved_base arr_base k stride ov tot ep j3 j4 j5 bb.
   compile_iter_elem_copy cenv (Var ep) (Var p) stride LocMemory F et et sa = ((),sb0) /\
   stride = type_memory_size tv /\ type_memory_bytes cenv et = stride /\
@@ -50,7 +50,9 @@ Theorem dynarray_round_copy_entry_mem:
   w2n arr_base + 32 + k * stride < dimword (:256) /\ stride + 64 < dimword (:256) /\
   w2n arr_base + 32 + k * stride + stride <= s.vs_alloca_next /\
   w2n dst + stride <= s.vs_alloca_next /\
-  stmt_state_rel ctx func cenv cx es s /\
+  (?H. valid_horizon cx st0 H es.storage_trace) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s) /\
   cenv_top_ext cenv bc (FEMPTY :: es.scopes) /\ local_ptrs_reserved bc sa /\
   lookup_scopes id es.scopes = NONE /\
   FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -73,10 +75,11 @@ Theorem dynarray_round_copy_entry_mem:
   isPREFIX sb0.cs_current_insts bb.bb_instructions /\
   alloca_history func s /\ alloca_inv s ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\ alloca_history func t /\
-    stmt_state_rel ctx func bc cx
-      (es with scopes :=
-        (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
-          :: es.scopes) t /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func bc cx
+         (es with scopes :=
+           (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+             :: es.scopes) t) /\
     ~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
     t.vs_inst_idx = LENGTH sb0.cs_current_insts /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
@@ -84,8 +87,19 @@ Theorem dynarray_round_copy_entry_mem:
       lookup_var x t = lookup_var x s)
 Proof
   rpt gen_tac >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
   drule_all dynarray_for_body_entry_run >>
   disch_then (qspecl_then [`j3`, `j4`, `j5`] strip_assume_tac) >>
+  `!H'. valid_horizon cx st0 H' es.storage_trace ==>
+     stmt_state_rel H' ctx func bc cx
+       (es with scopes :=
+         (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+           :: es.scopes) t` by
+    (rpt strip_tac >>
+     qpat_x_assum `stmt_state_rel H _ _ cenv _ _ s` kall_tac >>
+     `stmt_state_rel H' ctx func cenv cx es s` by metis_tac[] >>
+     drule_all dynarray_for_body_entry_run >>
+     disch_then (qspecl_then [`j3`, `j4`, `j5`] strip_assume_tac) >> gvs[]) >>
   `run_inst_seq_mem_ok sb0.cs_current_insts s` by
     (`!x. x = ep \/ x = p ==> not_fresh_at sa x` by metis_tac[] >>
      drule_all dynarray_body_prefix_mem_ok >>

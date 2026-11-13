@@ -6,7 +6,7 @@ Ancestors
   list rich_list words
 
 Theorem abi_encode_args_value_at:
-  abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa sb s0 es' args ops vs s /\
   k < LENGTH args ==>
   expr_val_at ce cx (lowered_value_type ce (EL k args)) sa sb es' (EL k vs) (EL k ops) s
 Proof
@@ -16,7 +16,7 @@ Proof
 QED
 
 Theorem abi_encode_args_footprint_site_disjoint:
-  abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa sb s0 es' args ops vs s /\
   k < LENGTH args /\
   evaluate_type (get_tenv cx) (lowered_value_type ce (EL k args)) = SOME tv /\
   ~is_word_type (lowered_value_type ce (EL k args)) /\

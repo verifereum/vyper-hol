@@ -58,14 +58,14 @@ Theorem membership_vv_outcome_word_kept:
   ptr_val_ok cx wt v op G0 tn0 s0 /\ is_word_type wt /\
   (!x. op = Var x ==> not_fresh_at sa x) /\ (!l. op <> Label l) /\
   eval_operand op s0 = SOME w /\
-  gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0)
-    (\res ee G tn u. ?tv. res = INL tv /\
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 source (es,s0,G0,tn0)
+    (\H res ee G tn u. ?tv. res = INL tv /\
        vv_post H ctx func cenv cx e es sa sb s0 ee tv vv u /\
-       ghost_kept cenv es sa G0 tn0 s0 G tn /\ P res ee G tn u) R ==>
-  gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0)
-    (\res ee G tn u. ?tv. res = INL tv /\
+       ghost_kept cenv es sa G0 tn0 s0 G tn /\ P H res ee G tn u) R ==>
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 source (es,s0,G0,tn0)
+    (\H res ee G tn u. ?tv. res = INL tv /\
        vv_post H ctx func cenv cx e es sa sb s0 ee tv vv u /\
-       ghost_kept cenv es sa G0 tn0 s0 G tn /\ P res ee G tn u /\
+       ghost_kept cenv es sa G0 tn0 s0 G tn /\ P H res ee G tn u /\
        eval_operand op u = SOME w /\ ptr_val_ok cx wt v op G tn u) R
 Proof
   strip_tac >> irule gas_outcome_ptr_conseq >>

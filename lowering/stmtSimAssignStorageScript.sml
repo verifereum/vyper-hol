@@ -36,6 +36,7 @@
 
 Theory stmtSimAssignStorage
 Ancestors
+  gasOutcome gasStorage vyperStorageFootprint vyperStorageTrace
   stmtSimAssignStorageFacts stmtSimForced stmtSimDeclPath gasContext fragGasMode
   stmtSimProps
   stmtSimDefs
@@ -266,7 +267,7 @@ Proof
        write_place_def, ignore_bind_def, record_storage_event_def]
 QED
 
-Theorem write_storage_slot_storage_trace[local]:
+Theorem write_storage_slot_storage_trace:
   write_storage_slot cx tr slot tv v st = (res, st') ==>
   write_storage_slot cx tr slot tv v (st with storage_trace := obs) =
     (res, st' with storage_trace := obs)
@@ -398,6 +399,15 @@ Proof
   gvs[sstore_def, tstore_def, lookup_var_def, LET_THM]
 QED
 
+Theorem stmt_post_storage_trace[local]:
+  stmt_post H ctx func cx lctx old c sa sf es0 s0 res
+    (ee with storage_trace := obs) t =
+  stmt_post H ctx func cx lctx old c sa sf es0 s0 res ee t
+Proof
+  simp[stmt_post_def, alloca_frame_def,
+       vyperStorageFootprintTheory.storage_well_formed_on_def]
+QED
+
 (* self.x = e for a storage or transient variable x the lowering holds in
    one word (is_word_type vtyp) and e of a word type, for every outcome:
    e's errors exit, and on a value its word is stored at x's slot.  x's
@@ -445,16 +455,17 @@ Proof
   rename1 `lower_value _ _ _ _ sa = (op, sB)` >> gvs[] >>
   drule_all eval_assign_toplevel_action >>
   disch_then (qspec_then `e` assume_tac) >>
-  irule forced_then_stmt_outcome >>
-  qexistsl_tac [
-    `\H v ee t. expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
-                t.vs_current_bb = sB.cs_current_bb /\
-                t.vs_inst_idx = LENGTH sB.cs_current_insts`,
-    `e`,
-    `\v. ignore_bind (record_storage_event (StorageRoot tr slot tvt))
-           (write_storage_slot cx tr (n2w slot) tvt v)`] >>
+  match_mp_tac (Q.SPECL [`ctx`, `func`, `cx`, `st0`, `lctx`, `RetQ`, `cenv`,
+      `cenv`, `sa`, `sb`, `s0`,
+      `Assign (BaseTarget (TopLevelNameTarget (src, id))) e`, `e`,
+      `\v. ignore_bind (record_storage_event (StorageRoot tr slot tvt))
+             (write_storage_slot cx tr (n2w slot) tvt v)`, `es`,
+      `\H v ee t. expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
+                  t.vs_current_bb = sB.cs_current_bb /\
+                  t.vs_inst_idx = LENGTH sB.cs_current_insts`]
+    forced_then_stmt_outcome) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   rpt conj_tac
-  >~ [`eval_stmt _ _ = _`] >- first_assum ACCEPT_TAC
   >~ [`storage_trace_frame _`]
   >- (gen_tac >> BETA_TAC >>
       irule vyperStorageTraceTheory.storage_trace_frame_ignore_bind >>
@@ -511,13 +522,13 @@ Proof
        vyperStorageFootprintTheory.storage_observations_ok_def,
        listTheory.EVERY_APPEND,
        vyperStorageFootprintTheory.storage_trace_regions_def] >>
-  `stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ())
+  `stmt_post H ctx func cx lctx cenv cenv sa sb es s0 (INL ()) ee' t'`
+    suffices_by simp[stmtSimDeclComposeTheory.stmt_post_end_gas_obs,
+                     stmt_post_storage_trace] >>
+  `stmt_post H ctx func cx lctx cenv cenv sa sb es s0 (INL ())
      (ee' with gas_obs := []) t'` by
     (first_x_assum irule >> metis_tac[]) >>
-  pop_assum mp_tac >>
-  simp[stmt_post_def, vyperStorageFootprintTheory.storage_well_formed_on_def,
-       alloca_frame_def] >>
-  metis_tac[]
+  fs[stmtSimDeclComposeTheory.stmt_post_end_gas_obs]
 QED
 
 (* self.x = e when e has x's declared word type typ and its values are of

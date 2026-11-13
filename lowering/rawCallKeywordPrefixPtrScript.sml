@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem saved_dynamic_bytes_across_word_args:
-  typed_args_post ctx func cenv cx es sb s es' args xs vs t /\
+  typed_args_post H ctx func cenv cx es sb s es' args xs vs t /\
   ghost_kept cenv es sb (G0 : string |-> num # num) tn0 s G tn /\
   expr_sim_inv cenv cx env es /\
   expr_val_at cenv cx (BaseT (BytesT (Dynamic n))) sa sb es
@@ -137,7 +137,7 @@ Theorem typed_args_outcome_inv_ptr:
     (\rr ee G tn t. Q rr ee G tn t /\ Inv ee /\ ~t.vs_halted) R
 Proof
   strip_tac >> drule gas_outcome_ptr_nonhalted >> strip_tac >>
-  irule operandOutcomePtrTheory.gas_outcome_ptr_marked_conseq >>
+  irule gasOutcomeMarkedPtrTheory.gas_outcome_ptr_marked_conseq >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
   `?vs. res = INL vs` by metis_tac[] >> gvs[] >>
   irule typed_args_ready_ptr_inv >>
@@ -163,7 +163,7 @@ Theorem raw_call_kwargs_execution_ptr:
   gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx kws) (es,s0,G0,tn0)
     (\rr ee G tn t. ?vs xs. rr = INL vs /\
-      typed_args_post ctx func cenv cx es sa s0 ee kws xs vs t /\
+      typed_args_post H ctx func cenv cx es sa s0 ee kws xs vs t /\
       MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
@@ -208,7 +208,7 @@ Resume raw_call_kwargs_execution_ptr[posts]:
   `gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx kws) (es,s0,G0,tn0)
     (\rr ee G tn t. (?vs. rr = INL vs /\
-      typed_args_post ctx func cenv cx es sa s0 ee kws xs vs t /\
+      typed_args_post H ctx func cenv cx es sa s0 ee kws xs vs t /\
       MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -255,7 +255,7 @@ Theorem raw_call_kwargs_sim_ptr:
   gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx kws) (es,s0,G0,tn0)
     (\rr ee G tn t. ?vs xs. rr = INL vs /\
-      typed_args_post ctx func cenv cx es sa s0 ee kws xs vs t /\
+      typed_args_post H ctx func cenv cx es sa s0 ee kws xs vs t /\
       MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
