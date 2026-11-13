@@ -325,7 +325,8 @@ Proof
       (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))` by
     (qpat_x_assum `!slot' tv'. _`
        (qspecl_then [`slot`, `ArrayTV tv (Dynamic cap)`] mp_tac) >>
-     asm_rewrite_tac []) >>
+     impl_tac >- (asm_rewrite_tac [] >> strip_tac >> gvs[]) >>
+     simp[]) >>
   `len*type_slot_size tv + type_slot_size tv <= cap*type_slot_size tv` by
     (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
   `dead_bytes st' (w2n other) otv j b <=> dead_bytes st (w2n other) otv j b`

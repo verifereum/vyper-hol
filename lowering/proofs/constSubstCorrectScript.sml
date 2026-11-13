@@ -1064,6 +1064,7 @@ Proof
     vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
   Cases_on `v` >>
   gvs[vyperStateTheory.bind_def, vyperStateTheory.lift_option_type_def,
+    vyperStateTheory.ignore_bind_def, vyperStateTheory.record_storage_event_def,
     vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()]
 QED
 
