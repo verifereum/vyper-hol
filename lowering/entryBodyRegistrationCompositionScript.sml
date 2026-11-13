@@ -26,7 +26,7 @@ Theorem entry_selected_check_premises:
   send_call_value mut
     (initial_evaluation_context am.sources am.layouts tx NONE) st = (INL (),es) /\
   set_external_package_target target
-    (package_external_fn tops F keys
+    (package_external_fn tops T keys
       (mut,F,raw,tx.function_name,args,([]:expr list),ret,fbody)) =
     (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) ==>
   (pay \/ s.vs_call_ctx.cc_callvalue = 0w) /\
@@ -43,7 +43,7 @@ Proof
      simp[set_external_package_target_def, package_external_fn_def, LET_THM] >>
      rpt strip_tac >> gvs[]) >>
   `mincd <= LENGTH vs.vs_call_ctx.cc_calldata` by
-    (qabbrev_tac `pkg = package_external_fn tops F keys
+    (qabbrev_tac `pkg = package_external_fn tops T keys
       (mut,F,raw,tx.function_name,args,([]:expr list),ret,fbody)` >>
      PairCases_on `pkg` >> fs[markerTheory.Abbrev_def] >>
      qpat_x_assum `(_,_,_,_,_,_,_,_,_,_,_) = package_external_fn _ _ _ _`
@@ -68,7 +68,7 @@ Theorem entry_canonical_registration_reached:
       <|outcomes := SOME vs.vs_outcomes; requests := []|>) = (INL (),es0) ==>
   ?lbl ce pos mincd pay key ut iv rt fn start cenv registered final site t.
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
          tx.function_name,args,([]:expr list),ret,fbody)) =
       (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) /\

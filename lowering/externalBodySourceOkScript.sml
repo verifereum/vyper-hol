@@ -12,7 +12,7 @@ Ancestors
   externalBodySupport vyperTypeInvariants vyperTypeStmtSoundness
   vyperTypeEvalSoundness vyperTypeExprSoundness
   vyperInterpreter vyperState vyperContext
-  venomState venomExecSemantics venomWf
+  venomState venomExecSemantics venomWf evalNoHalt
 
 val _ = Parse.hide "body";
 
@@ -47,9 +47,12 @@ Proof
   conj_tac
   >- (Cases_on `res` >> simp[stmt_res_ok_def] >>
       drule_all stmts_no_control_escape_eval_stmts_no_loop_control >>
-      strip_tac >> Cases_on `y` >> gvs[stmt_res_ok_def] >>
-      rename1 `Error e` >> Cases_on `e` >>
-      gvs[stmt_res_ok_def, no_type_error_result_def]) >>
+      strip_tac >> Cases_on `y` >> gvs[stmt_res_ok_def]
+      >~ [`Error e`]
+      >- (Cases_on `e` >> gvs[stmt_res_ok_def, no_type_error_result_def]) >>
+      `get_module_code cx NONE = SOME tops` by
+        (unabbrev_all_tac >> metis_tac[source_deployment_context]) >>
+      metis_tac[external_body_no_halt]) >>
   strip_tac >> Cases_on `ret = NoneT` >> simp[] >>
   `stmts_no_fallthrough fbody` by simp[] >>
   drule (cj 2 no_fallthrough_eval_no_success) >> metis_tac[]

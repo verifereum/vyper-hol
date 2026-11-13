@@ -140,7 +140,12 @@ Resume compile_expr_open_general[builtin]:
      drule_at (Pat `lower_value _ _ _ _ _ = _`) lower_value_child_open >>
      simp[] >> disch_then irule >>
      rpt gen_tac >> strip_tac >>
-     drule eval_builtin_head_success >> strip_tac >>
+     drule eval_builtin_head_success >>
+     impl_tac
+     >- (disj1_tac >> rpt strip_tac >>
+         gvs[supported_expr_def, supported_pure_expr_def,
+             supported_effect_expr_def, supported_builtin_form_def]) >>
+     strip_tac >>
      drule expr_body_pre_builtin_head >>
      impl_tac >- simp[] >>
      disch_tac >>
@@ -223,10 +228,7 @@ Resume compile_expr_open_general[builtin_dispatch]:
   >~ [`Uint2Str`] >- metis_tac[compile_dispatch_terminal_open]
   >~ [`CalldataSlice`] >- metis_tac[compile_dispatch_terminal_open]
   >~ [`MakeArray elem bound`]
-    >- (Cases_on `elem` >>
-        drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
-          compile_dispatch_make_array_open >>
-        fs[well_typed_builtin_app_def, EVERY_MAP, EVERY_MEM] >> metis_tac[]) >>
+    >- metis_tac[compile_dispatch_make_array_open] >>
   gvs[LENGTH_EQ_NUM_compute]
   >~ [`Bop op`]
     >- (rename1 `compile_builtin_dispatch_body _ _ _ _ (Bop op) [arg_e;arg2_e] sa = (v,st)` >>

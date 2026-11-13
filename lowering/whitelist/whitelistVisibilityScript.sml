@@ -1,105 +1,13 @@
-(*
- * Whitelist removal: public storage variables and FlagDecl/ErrorDecl
- * declarations.
- *
- * The supported subset admits Private storage/transient variables and
- * hashmaps only, and rejects FlagDecl and ErrorDecl in its declaration
- * header.  The lowering does neither: add_module_var_locations binds a
- * variable of any visibility, and a flag or error declaration contributes
- * nothing to the module variables or the function tables.  This theory
- * proves the visibility-general facts the S1 storage lemmas extract, and
- * that the compile environment does not depend on FlagDecl/ErrorDecl
- * entries, so the supported_* clauses can widen.
- *
- * TOP-LEVEL:
- *   supported_variable_decl_storage_binding,
- *   supported_hashmap_decl_storage_binding,
- *   build_compile_env_storage_binding,
- *   build_compile_env_hashmap_binding
- *                   -- a storage/transient variable or hashmap of any
- *                      visibility is bound to its slot, with its type
- *   body_append_runtime_metadata_vis, body_append_target_bounds_vis,
- *   body_assign_copy_target_vis
- *                   -- the S1 lemmas whose statements name Private, with
- *                      the clause replaced by a lookup of any visibility
- *   *_inert_decl    -- each builder over tops ignores a FlagDecl or
- *                      ErrorDecl entry
- *   build_compile_env_error_decl
- *                   -- the compile env ignores an ErrorDecl entry
- *   build_compile_env_flag_decl
- *                   -- a FlagDecl entry changes only the flag tables and
- *                      the type environment (and what is sized by it)
- *
- * Survey (branch head 0eb28fa1a): every lemma outside lowering/supported/
- * that takes a Private-only storage clause or the declaration header.
- *
- * Already general (Private appears in neither the statement nor the
- * proof's use of the clause; the extraction helpers
- * supported_variable_decl_mem and supported_variable_decl_runtime_lookup
- * take any vis), 13:
- *   bodySimStmtCases:561 supported_scalar_target_decl (src, MEM decl,
- *     find_var_decl_by_name <> NONE, word type), and its consumers
- *     :583 body_assign_toplevel_word, :1593 body_tuple_target_toplevel_aligned,
- *     :2004 body_augassign_toplevel_word, :2166 body_augassign_other,
- *     :2194 body_augassign_case;
- *   exprOpenCases:76 supported_storage_value_runtime_lookup (src,
- *     find_var_decl_by_name), :91 compile_expr_toplevel_open;
- *   entryStateRel:115 supported_storage_decl_slot, :127
- *     supported_hashmap_decl_slot (slot is SOME; Cases_on vis), :174
- *     entry_storage_vars_rel, :255 entry_storage_vars_rel_immutable
- *     (add_module_var_locations_mem, any vis);
- *   bodySimEntry:239 supported_bare_global_immutable (rejects constants;
- *     its FlagDecl/ErrorDecl case is is_bare_global_decl_inert_decl).
- *
- * Visibility-general here, 9 (Private only in the statement or in the
- * clause the proof unfolds; nothing downstream uses it):
- *   bodyAppendStorageFacts:9 supported_append_storage_decl (concludes the
- *     lookup with Private), and its consumers :123
- *     body_append_runtime_metadata and :182 body_append_target_bounds:
- *     proved as body_append_runtime_metadata_vis and
- *     body_append_target_bounds_vis;
- *   bodyAppendStorageAdapter:59 body_append_storage_fragment: by the two
- *     _vis lemmas (not re-proved: its last step is the admitted
- *     compile_append_storage_word_stmt_frag);
- *   bodySimStmtCases:954 body_assign_copy_target (Private premise):
- *     proved as body_assign_copy_target_vis;
- *   bodySimStmtCases:1111 body_assign_toplevel_copy, :1206
- *     body_assign_other, :1272 body_assign_case (Private premise; :1155
- *     reads supported_storage_type from the variable's header entry):
- *     widen with the header's VariableDecl clauses, the rest is
- *     body_assign_copy_target_vis;
- *   bodySimStmtCases:818 supported_storage_field_write_decl (concludes
- *     MEM (VariableDecl Private ...)): Private -> vis in its statement,
- *     the proof (supported_variable_decl_mem) is unchanged, and its
- *     consumers use the MEM fact through build_maps_variable, any vis.
- *   The bindings these extract, for any vis: the _storage_binding
- *   theorems below.
- *
- * Not affected (read the header of a FunctionDecl, StructDecl or EventDecl
- * only), 4: bodyStorageCases:24 supported_callable_body_contract,
- *   typedCopyMetadata:376 make_struct_fields_map_acyclic, :403
- *   build_compile_env_struct_metadata_acyclic, bodySimLog:75
- *   body_log_metadata.
- *
- * Not this piece, 6: entryStateRel:523 lookup_function_external_decl,
- *   :539 source_typing_ok_params_ok, :631 external_body_entry_state_rel,
- *   rawReturnHeader:21 supported_lookup_none_raw, :45
- *   source_typing_none_return_plain: they use that the header rejects
- *   public variables, so lookup_function returns no getter; a public
- *   variable's getter has no lowered entry point (classify_functions takes
- *   FunctionDecls only; vyper-hol #565).  Their FlagDecl/ErrorDecl cases
- *   are lookup_function_inert_decl and lookup_raw_return_inert_decl.
- *   e2eBoundaryTest:191 source_lookup_getter_outside_supported: a test.
- *
- * Hazard: supported_declaration_body (supportedProgram:42-52) has no
- * ErrorDecl equation, so its value at an ErrorDecl is unspecified.  Nothing
- * here uses it.
- *)
+(* Visibility-independent storage bindings and declaration-inert builders.
+   Public storage/transient variables and hashmaps also synthesize getters;
+   their entry and typing proofs live in entryDispatchProps, entryStateRel
+   and supportedGetterProps. FlagDecl/ErrorDecl leave compiler storage and
+   function classification unchanged. *)
 
 Theory whitelistVisibility
 Ancestors
   bodyAppendStorageFacts entryStateRel bodyStorageMetadata exprOpenCases
-  supportedDecls compileVyper compileEnv vyperTypeEnv vyperTypeContract
+  supportedDecls compileVyper constSubst compileEnv vyperTypeEnv vyperTypeContract
   vyperContext vyperInterpreter vyperState vyperTypeInvariants exprSimHyps
   exprSimHypsDefs vyperTypeSystem
   bodySim list finite_map pair
@@ -556,6 +464,27 @@ Proof
   BasicProvers.every_case_tac >> gvs[]
 QED
 
+Theorem module_consts_env_inert_decl[local]:
+  !pre suf acc d.
+    (d = FlagDecl fid ms \/ d = ErrorDecl eid ps) ==>
+    module_consts_env (pre ++ d :: suf) acc =
+    module_consts_env (pre ++ suf) acc
+Proof
+  Induct >- (rw[] >> simp[module_consts_env_def]) >>
+  rw[] >> Cases_on `h` >> gvs[module_consts_env_def] >>
+  rename1 `VariableDecl vis mode name ty slot` >>
+  Cases_on `mode` >> gvs[module_consts_env_def] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem public_getters_inert_decl[local]:
+  !pre suf d.
+    (d = FlagDecl fid ms \/ d = ErrorDecl eid ps) ==>
+    public_getters (pre ++ d :: suf) = public_getters (pre ++ suf)
+Proof
+  Induct >> rw[] >> gvs[public_getters_def, public_getter_def]
+QED
+
 Theorem classify_functions_inert_decl:
   !pre suf d.
     (d = FlagDecl fid ms \/ d = ErrorDecl eid ps) ==>
@@ -563,7 +492,8 @@ Theorem classify_functions_inert_decl:
 Proof
   rw[] >>
   simp[classify_functions_def, rich_listTheory.FOLDR_APPEND,
-       classify_function_def]
+       classify_function_def, module_consts_env_inert_decl,
+       public_getters_inert_decl]
 QED
 
 Theorem find_var_decl_by_name_inert_decl:
@@ -673,29 +603,6 @@ Theorem build_flag_info_error_decl:
 Proof
   Induct >> rw[build_flag_info_def] >>
   BasicProvers.every_case_tac >> gvs[]
-QED
-
-(* The compile env of any function ignores an ErrorDecl entry. *)
-Theorem build_compile_env_error_decl:
-  !pre suf fvis fmut fname args ret body ut.
-    build_compile_env (pre ++ ErrorDecl eid ps :: suf)
-      fvis fmut fname args ret body ut =
-    build_compile_env (pre ++ suf) fvis fmut fname args ret body ut
-Proof
-  rpt gen_tac >>
-  `!sft tenv.
-     make_struct_fields_map (pre ++ ErrorDecl eid ps :: suf) =
-       make_struct_fields_map (pre ++ suf) /\
-     type_env (pre ++ ErrorDecl eid ps :: suf) = type_env (pre ++ suf)` by
-    simp[make_struct_fields_map_def, type_env_def,
-         type_env_for_module_error_decl, build_struct_fields_map_inert_decl] >>
-  simp[build_compile_env_def, build_flag_info_error_decl,
-       extract_layout_inert_decl, build_var_type_map_inert_decl,
-       build_hashmap_info_inert_decl, build_event_info_inert_decl,
-       add_immutable_locations_inert_decl, add_module_var_locations_inert_decl,
-       collect_module_vars_inert_decl, build_func_info_inert_decl,
-       build_func_param_types_inert_decl, build_func_return_type_inert_decl,
-       build_func_ids_inert_decl, build_func_mutability_inert_decl]
 QED
 
 (* A FlagDecl entry: the compile env's module-variable bindings and

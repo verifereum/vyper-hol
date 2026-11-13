@@ -90,7 +90,7 @@ The exported test funnel alone cannot detect either historical mismatch:
 `setup-vyper-test-exports` deselects fuzzing tests, including the only
 runtime bytes32 inversion test; negative `test_unimplemented_unary_not`
 cases export no traces/source and cannot be replayed. Direct deterministic
-HOL regressions are build roots, independent of exported traces; they do not
+HOL regressions are built by default, independent of exported traces; they do not
 convert the upstream compile-only tests into replayed tests.
 
 ### Lowering definitions
@@ -125,7 +125,7 @@ convert the upstream compile-only tests into replayed tests.
 | HOL file/area | Pinned Python source area | Status | Notes |
 |---|---|---|---|
 | `venom/compiler/venomPipelineScript.sml` | `vyper/venom/optimization_levels/*`, compiler pipeline entry | needs update | Legacy uniform `venom_pipeline`; not used by `compile_vyper`. Existing comments explicitly omit `mem_merge`; pinned pipelines include additional memory/FMP passes and changed ordering. |
-| Minimal mandatory pipeline | `PASSES_O1` / `OptimizationLevel.NONE` | matches on the fixture corpus | `o1_pipeline_spec` (`venom/defs/venomPassScheduleScript.sml`) run by `run_venom_pipeline`; exact bytecode agreement on the 101-fixture corpus. |
+| Minimal mandatory pipeline | `PASSES_O1` / `OptimizationLevel.NONE` | matches on the fixture corpus | `o1_pipeline_spec` (`venom/defs/venomPassScheduleScript.sml`) run by `run_venom_pipeline`; exact bytecode agreement on the 89 retained fixtures of the 101-fixture corpus. |
 | Individual pass definitions | `vyper/venom/passes/*` | unknown | Audit mandatory passes first. |
 | O2 configuration | `vyper/venom/optimization_levels/O2.py` | needs update | Current pinned pass list differs from existing HOL O2 definition. |
 | O3 configuration | `vyper/venom/optimization_levels/O3.py` | unknown | Optional for first e2e theorem. |
@@ -154,9 +154,17 @@ are described in [abi-encoder-contracts.md](abi-encoder-contracts.md).
 | HOL file/area | Purpose | Status | Notes |
 |---|---|---|---|
 | `bytecode/eval/evalCompilerScript.sml` and `evalCompilerSubset*` | checked compiler fixture programs | reviewed for the frozen 101-fixture supported-subset corpus | Program definitions correspond to the tracked Vyper sources; the original 23 fixtures remain the first milestone. |
-| `bytecode/native/compilerNativeEmitScript.sml` and `bytecode_parity_native` | HOL-to-Python bytecode parity tests | 286 of 316 fixtures match byte for byte; the other 30 are the expected bounded-decode differences (`decoder_divergent`) | `compile_vyper` is emitted to native code and its deployment and runtime bytes compared with the pinned-Python oracle fixtures. |
+| `bytecode/native/compilerNativeEmitScript.sml` and `bytecode_parity_native` | HOL-to-Python bytecode parity tests | exact for every fixture not listed in `bytecode/pending-5127-port.md`, apart from the expected bounded-decode differences (`decoder_divergent`, `bytecode/pending-bounded-decode-guards.md`) | `compile_vyper` is emitted to native code and its deployment and runtime bytes compared with the pinned-Python oracle fixtures. |
 | `bytecode/python-o1-bytecode-fixtures`, `python_o1_bytecode_oracle.py`, and `python-o1-no-asm-opt*/` | independently generated pinned-Python O1 bytecode oracle and comparison entrypoint | reproducible from pin | The generator verifies a clean checkout against `VYPER_PIN` and uses pinned `PASSES_O1`, `evm_version="prague"`, disabled metadata, and disabled final assembly optimization. |
 | `tests/vyper-test-exports` and generators | language-test AST/metadata export | uses repository pin by policy | Keep aligned with `VYPER_PIN`. |
+
+The external-entry fixture `nr_internal_return` checks exact bytes with
+DFTPass abort-run ordering from
+[vyperlang/vyper#5336](https://github.com/vyperlang/vyper/pull/5336). Its pinned
+Python oracle predates this fix. The
+`nr_internal_return_matches_upstream_dft` theorem checks the fixed output;
+separate theorems assert successful compilation and divergence from the pinned
+oracle.
 
 ### Finite supported-subset acceptance
 
@@ -166,7 +174,7 @@ For a concise tested-versus-untested summary, see
 The HOL classification is the generated TASK_089 ledger under
 `.agent-files/tasks/evidence/`: 1,485 rows (506 supported, 795 partial with
 explicit shape/type boundaries, 184 unsupported). The frozen corpus has 101
-physical source/oracle pairs and checks 202 exact byte lists. A strict
+physical source/oracle pairs; the 89 retained fixtures check 178 exact byte lists. A strict
 source-term audit verifies that 148 of 187 variant HOL
 AST constructors occur in fixture inputs, and 39 do not; none constructs
 the separate `raw_call_flags` record. The ledger now gives each AST row
@@ -179,11 +187,9 @@ outside the pinned-Python elaborated-input differential target: Python's
 `AsWeiValue` rejects those units, while HOL's semantics and classification
 remain unchanged. No complete lowering-arm execution census is claimed.
 
-This is finite differential evidence for the 101 tested programs, not
+This is finite differential evidence for the 89 checked programs, not
 a universal equivalence theorem or a claim that every HOL-supported row is
-already exercised. The cached comparison reproduces all 202 byte
-lists; the rebuilt parity theories and the proved `collapse_dfs` definition
-have no `Saved CHEAT` tags. This does not assert that unrelated pre-existing
+already exercised. The native runner reproduces the retained byte lists. This does not assert that unrelated pre-existing
 admissions elsewhere in the repository have been removed. TASK_091's separate
 fresh, uncached final acceptance gate has not been run.
 

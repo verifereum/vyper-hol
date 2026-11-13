@@ -29,6 +29,20 @@ Proof
        arithmeticTheory.MOD_LESS] >> fs[wordsTheory.dimword_def] >> decide_tac
 QED
 
+Theorem storage_place_region_slots_in_range:
+  storage_layout_safe cx /\ contract_storage_well_formed cx st /\
+  storage_place_region cx (StoragePlace tr slot leaf) /\
+  0 < type_slot_size leaf ==>
+  slots_in_range (vyperStorageBackend$get_storage cx st tr) (w2n slot) leaf
+Proof
+  strip_tac >> drule_all storage_place_region_numeric >> strip_tac >>
+  `slots_in_range (vyperStorageBackend$get_storage cx st tr) (w2n root) tv` by
+    (irule contract_storage_well_formed_region >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     simp[get_storage_backend_eq]) >>
+  drule_all storage_subregion_slots_in_range >> simp[]
+QED
+
 Theorem write_storage_place_preserves_contract_storage:
   contract_storage_well_formed cx st /\ storage_layout_safe cx /\
   storage_place_region cx (StoragePlace tr slot leaf) /\

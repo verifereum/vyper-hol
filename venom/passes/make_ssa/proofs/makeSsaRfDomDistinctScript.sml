@@ -3,7 +3,7 @@ Theory makeSsaRfDomDistinct
 Ancestors dominatorQueryProofs dominatorRankProofs makeSsaCurrentAnalysis makeSsaCurrentTree makeSsaCurrentTreeTrace
   makeSsaDefs makeSsaCurrentInduct
   dominatorDefs relation list sorting combin cfgAnalysisProps cfgHelpers
-  dominatorAnalysisProps venomWf cfgWf cfgDefs venomInst venomExecProps
+  dominatorProofs venomWf cfgWf cfgDefs venomInst venomExecProps
 
 
 

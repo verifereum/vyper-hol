@@ -1,5 +1,6 @@
 Theory fnBlockPlanStaticInventory
 Ancestors
+  inputMaterialised reorderStages
   stackModel stackPlanOps planWf doSwapSim reorderSim sorting list rich_list pred_set
   fnFrameStepsRevertForward stackPlanGen livenessDefs cfgDefs venomInst venomWf
   fnBlockPlanStaticRetRegion genericInputReady
@@ -672,7 +673,7 @@ Theorem inventory_dup_count[local]:
   LENGTH (FILTER (\a. a = Var v) ps.ps_stack) + (if op = Var v then 1 else 0)
 Proof
   strip_tac >> drule stack_get_depth_props >> strip_tac >>
-  drule do_dup_stack_exact >> simp[] >>
+  drule (cj 2 do_dup_stack_exact) >> simp[] >>
   disch_then SUBST1_TAC >> simp[FILTER_APPEND] >>
   Cases_on `op = Var v` >> simp[]
 QED
@@ -957,7 +958,7 @@ Proof
   qmatch_asmsub_abbrev_tac `do_dup dist before` >>
   `stack_get_depth (Var s) before.ps_stack = SOME dist` by simp[Abbr `before`] >>
   drule stack_get_depth_props >> strip_tac >>
-  drule do_dup_stack_exact >> simp[] >> strip_tac >> gvs[Abbr `before`]
+  drule (cj 2 do_dup_stack_exact) >> simp[] >> strip_tac >> gvs[Abbr `before`]
 QED
 
 Theorem inventory_emit_physical_origin:
@@ -988,7 +989,7 @@ Proof
   qmatch_asmsub_abbrev_tac `do_dup dist before` >>
   `stack_get_depth (Var s) before.ps_stack = SOME dist` by simp[Abbr `before`] >>
   drule stack_get_depth_props >> strip_tac >>
-  drule do_dup_stack_exact >> simp[] >> strip_tac >>
+  drule (cj 2 do_dup_stack_exact) >> simp[] >> strip_tac >>
   gvs[Abbr `before`, LIST_ELEM_COUNT_DEF, FILTER_APPEND, FILTER_SNOC] >>
   Cases_on `x = Var s` >> gvs[stackPlanTypesTheory.is_var_operand_def]
 QED
@@ -2404,8 +2405,10 @@ Proof
   rename1 `stack_get_phi_depth _ ps.ps_stack = SOME d` >>
   `d < LENGTH ps.ps_stack` by
     (gvs[stack_get_phi_depth_def] >> drule stack_find_bound >> simp[]) >>
-  `~MEM dead_stack_marker (SND (do_dup d ps)).ps_stack` by
-    (drule do_dup_stack_exact >> simp[] >> strip_tac >>
+  `!dup_ops ps1. do_dup d ps = (dup_ops,ps1) ==>
+     ~MEM dead_stack_marker ps1.ps_stack` by
+    (rpt strip_tac >> drule (cj 2 do_dup_stack_exact) >>
+     disch_then drule >> strip_tac >> gvs[] >>
      metis_tac[stack_peek_mem]) >>
   `!i stk out. ~MEM dead_stack_marker stk ==>
       ~MEM dead_stack_marker (stack_poke i (Var out) stk)` by

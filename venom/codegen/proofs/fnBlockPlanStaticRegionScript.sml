@@ -1,5 +1,6 @@
 Theory fnBlockPlanStaticRegion
 Ancestors
+  dfHelperProofs inputMaterialised reduceDepthSim reorderStages
   fnBlockPlanStaticDfsTrace fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
   planWfMarked fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet codegenReadyCompute
   fnBlockPlanStaticOffsetLive livenessProofs livenessTransferProofs venomWf venomExecProofs rich_list
@@ -346,7 +347,7 @@ Proof
   strip_tac >>
   `wf_function fn` by fs[codegen_ready_fn_def] >>
   `MEM succ (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
-    metis_tac[cfgAnalysisPropsTheory.cfg_analyze_succ_labels,
+    metis_tac[cfgCorrectnessProofTheory.cfg_analyze_succ_labels,
               venomInstTheory.fn_labels_def] >>
   drule dfAnalyzeProofsTheory.lookup_block_exists >> strip_tac >>
   `cfg_reachable_of (cfg_analyze fn) pred` by
@@ -1058,7 +1059,7 @@ Proof
     (`wf_function fn` by gvs[codegen_ready_fn_def] >>
      `cfg_reachable_of (cfg_analyze fn) first` by
        (gvs[] >> metis_tac[fn_reachable_cfg_analyze]) >>
-     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels >>
+     drule cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels >>
      simp[fn_labels_def, MEM_MAP] >> strip_tac >>
      irule_at Any MEM_lookup_block >> simp[] >>
      gvs[wf_function_def, fn_labels_def] >> metis_tac[]) >>
@@ -3716,7 +3717,7 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem regional_regular_outputs_marked_wf[local]:
+Theorem regional_regular_outputs_marked_wf:
   generated_plan_state_wf_marked sb ps /\
   LENGTH operands <= 16 /\ PERM pending operands /\
   (!op. MEM op operands /\ is_var_operand op ==>

@@ -10,7 +10,6 @@ roots = [
   # the results: semantics, analyses, passes, lowering and compiler proofs
   "vyperHolScript.sml",
   # whitelist-removal leaves awaiting integration into the stage proofs
-  "lowering/whitelist/whitelistDeployScript.sml",
   "lowering/whitelist/whitelistVisibilityScript.sml",
   "lowering/whitelist/whitelistExprOpenScript.sml",
   "lowering/whitelist/whitelistS2ExtrasScript.sml",
@@ -39,4 +38,23 @@ deps = ["compilerNativeEmitTheory"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "47a9174eb5214df0837b3cf3ca42f12c68b39abb"
+rev = "09c122c01da3a4680aa8afdc5a68f2f99db5b0c3"
+
+# Functor parameter signatures are not inferred by HOL's module scanner.
+[actions.JsonASTDecodeFn]
+loads = ["jsonImportTerm"]
+
+[actions.JsonTraceDecodeFn]
+loads = ["jsonImportTerm"]
+
+[actions.JsonImportHol]
+loads = ["jsonImportTerm"]
+
+[actions.jsonASTLib]
+loads = ["jsonImportTerm", "JsonImportHol", "JsonASTDecodeFn"]
+
+[actions.vyperTestLib]
+loads = ["jsonImportTerm", "JsonTraceDecodeFn"]
+
+[actions.vyperJsonReplayLib]
+loads = ["jsonImportTerm", "jsonASTLib", "JsonTraceDecodeFn", "jsonDocumentLib"]

@@ -270,6 +270,8 @@ Theorem compile_for_dynarray_parts:
        mk_inst (st.cs_next_id + 11) ADD [Lit 32w; Var ov] [tot];
        mk_inst (st.cs_next_id + 12) ADD [arr_op; Var tot] [ep]] /\
     sa.cs_next_var = st.cs_next_var + 9 /\
+    sa.cs_next_id = st.cs_next_id + 13 /\
+    sa.cs_next_id <= sb0.cs_next_id /\
     compile_iter_elem_copy cenv (Var ep) (Var p)
       (elem_size_in_location cenv LocMemory et) LocMemory F et et sa = ((),sb0) /\
     sb0.cs_current_bb = bod /\ same_blocks sa sb0 /\
@@ -408,6 +410,8 @@ Theorem compile_for_dynarray_code_ready:
          mk_inst (st.cs_next_id + 7) JMP [Label cond] []]|> /\
     st'.cs_current_bb = exit /\ st'.cs_current_insts = [] /\
     (?sd. declare_local cenv id et st1 = (bc,sd)) /\
+    st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= ainst.inst_id /\
+    st.cs_next_id <= sb0.cs_next_id /\
     ALL_DISTINCT [lv; p; idx; g; vld] /\
     (!scs. not_local_ptr cenv scs lv /\ not_local_ptr cenv scs g /\
            not_local_ptr cenv scs vld /\ not_local_ptr cenv scs idx) /\
@@ -441,7 +445,7 @@ Proof
   qexistsl_tac [`st1`, `bc`, `lv`, `p`, `idx`, `g`, `vld`, `dv`, `ov`, `tot`,
     `ep`, `nv`, `entry`, `cond`, `bod`, `incr`, `exit`, `sa`, `sb0`, `sb1`,
     `sj`] >>
-  simp[] >> rpt conj_tac
+  simp[mk_inst_def] >> rpt conj_tac
   >- (`elem_size_in_location cenv LocMemory et = type_memory_size tv` by
         simp[elem_size_in_location_def, is_slot_addressed_def] >>
       simp[dynarray_for_code_def, mk_inst_def] >> gvs[ALL_DISTINCT] >>
@@ -468,7 +472,7 @@ Proof
 QED
 
 (* The entry block: index zero, then the capacity check passes. *)
-Theorem dynarray_entry_block_run[local]:
+Theorem dynarray_entry_block_run:
   lookup_var lv s = SOME (n2w L) /\ L <= c /\ c < dimword (:256) /\
   ALL_DISTINCT [lv; idx; g; vld] ==>
   run_inst_seq
@@ -637,8 +641,8 @@ Proof
           gvs[Abbr `sl`, lookup_var_update_var]) >>
       `FLOOKUP sl.vs_allocas aid = SOME b` by
         simp[Abbr `sl`, update_var_def] >>
-      metis_tac[]) >>
-  drule_all gas_marked_path_then >> simp[]
+      metis_tac[])
+  >> (drule_all gas_marked_path_then >> simp[])
 QED
 
 Theorem dynarray_loop_initialize:
@@ -668,15 +672,31 @@ Theorem dynarray_loop_initialize:
   not_local_ptr cenv es.scopes idx /\ not_local_ptr cenv es.scopes g /\
   not_local_ptr cenv es.scopes vld /\
   (!x. saved_base = Var x ==> ~MEM x [lv; p; idx; g; vld]) /\
-  (!x. not_fresh_at st x ==> ~MEM x [lv; p; idx; g; vld]) ==>
+  (!x. not_fresh_at st x ==> ~MEM x [lv; p; idx; g; vld]) /\
+  local_ptrs_reserved cenv st ==>
   ?dst cc.
     array_loop_inv ctx func cenv cx P vs id idx saved_base array_base p dst sz
       ainst cond st 0 es cc /\
     lookup_var lv cc = SOME (n2w (LENGTH vs)) /\
     array_caller_frame st s0 cc /\
-    gas_marked_path F ctx func s0 0 (OK cc)
+    gas_marked_path F ctx func s0 0 (OK cc) /\
+    alloca_frame cenv es st s0 cenv es cc
 Proof
-  strip_tac >> drule_all dynarray_loop_initialize_explicit >> metis_tac[]
+  strip_tac >> drule_all dynarray_loop_initialize_explicit >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es
+     (update_var lv (n2w (LENGTH vs)) s0)` by
+    (irule stmt_state_rel_update_var >> simp[]) >>
+  drule_all array_alloca_frame >> strip_tac >>
+  `alloca_frame cenv es st s0 cenv es cc` by
+    (irule alloca_frame_of_mem_frame >> goal_assum (drule_at Any) >>
+     gvs[ALL_DISTINCT] >>
+     simp[jump_to_def, update_var_def] >>
+     reverse conj_tac >- metis_tac[] >>
+     rpt strip_tac >>
+     `x <> lv /\ x <> p /\ x <> idx /\ x <> g /\ x <> vld` by metis_tac[] >>
+     qpat_x_assum `!x. x <> p ==> _` (qspec_then `x` mp_tac) >>
+     gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  metis_tac[]
 QED
 
 (* The source loads the iterable and checks its length before the loop. *)
@@ -741,6 +761,9 @@ Theorem dynarray_public_entry_ready[local]:
       sj.cs_next_id (sj.cs_next_id + 1) (sj.cs_next_id + 2) sa sb0 sb1 sj /\
     st'.cs_current_bb = exit /\ st'.cs_current_insts = [] /\
     declare_local cenv id et st1 = (bc,sd) /\
+    st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= ainst.inst_id /\
+    st.cs_next_id <= sb0.cs_next_id /\
+    alloca_frame cenv es st s0 cenv es cc /\
     (!x. not_fresh_at st x ==> not_fresh_at st1 x) /\
     (!x. not_fresh_at st1 x ==>
       not_fresh_at sa x /\ x <> dv /\ x <> ov /\ x <> tot /\ x <> ep) /\
@@ -774,7 +797,8 @@ Proof
   `?dst cc. array_loop_inv ctx func cenv cx P vs id idx (Var arr_ptr) addr p dst
       (type_memory_bytes cenv et) ainst cond st 0 es cc /\
       lookup_var lv cc = SOME (n2w (LENGTH vs)) /\
-      array_caller_frame st s0 cc /\ gas_marked_path F ctx func s0 0 (OK cc)` by
+      array_caller_frame st s0 cc /\ gas_marked_path F ctx func s0 0 (OK cc) /\
+      alloca_frame cenv es st s0 cenv es cc` by
     (irule dynarray_loop_initialize >> simp[] >>
      qpat_assum `lookup_block entry _ = _` (irule_at Any) >> simp[] >>
      qexistsl_tac [`st.cs_next_id`, `st.cs_next_id + 2`] >>
@@ -823,11 +847,13 @@ Theorem dynarray_code_loop_counted[local]:
         P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
   array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
     ainst cond st 0 es cc /\ array_caller_frame st s0 cc /\
-  gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx) es ==>
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_for cx tv id stmts vs) (es,cc)
+  gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx) es /\
+  st.cs_next_id <= sa.cs_next_id /\ st.cs_next_id <= ainst.inst_id /\
+  st.cs_next_id <= sb0.cs_next_id /\ alloca_frame cenv es st s0 cenv es cc ==>
+  gas_outcome F (cx_tops cx) (ctx,func) (eval_for cx tv id stmts (MAP Value vs)) (es,cc)
     (\res ee t. res = INL () /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
-      array_caller_frame st s0 t)
+      array_caller_frame st s0 t /\ alloca_frame cenv es st s0 cenv ee t)
     (\res ee r. ?ex. res = INR ex /\
       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
 Proof
@@ -870,12 +896,27 @@ Proof
         ((r = INL () \/ r = INR ContinueException) ==>
           P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE))` by
     suspend "callback" >>
-  `array_caller_frame st1 cc cc` by simp[] >>
-  drule_all (SRULE [DROP_0] (Q.INST [`k` |-> `0`] dynarray_for_loop_counted)) >>
-  strip_tac >>
+  qabbrev_tac `caller = st1 with cs_next_id := st.cs_next_id` >>
+  `(!x. not_fresh_at caller x = not_fresh_at st1 x) /\
+   caller.cs_next_id = st.cs_next_id /\
+   (!t. array_caller_frame caller cc t = array_caller_frame st1 cc t) /\
+   (!ee t. alloca_frame cenv es caller cc cenv ee t =
+           alloca_frame cenv es st cc cenv ee t)` by
+    simp[Abbr `caller`, not_fresh_at_def, array_caller_frame_def, alloca_frame_def] >>
+  `array_caller_frame caller cc cc /\ alloca_frame cenv es caller cc cenv es cc` by
+    (simp[alloca_frame_def] >> metis_tac[]) >>
+  mp_tac (Q.INST [`k` |-> `0`, `caller` |-> `caller`,
+    `old` |-> `cc`, `origin_es` |-> `es`, `cond_lbl` |-> `cond`,
+    `exit_lbl` |-> `exit`, `stmts_lbl` |-> `bod`, `incr_lbl` |-> `incr`,
+    `tenv` |-> `get_tenv cx`] dynarray_for_loop_counted) >>
+  impl_tac >- (gvs[DROP_0, AC ADD_ASSOC ADD_COMM] >>
+    rpt strip_tac >> simp[] >> metis_tac[]) >> simp[DROP_0] >> strip_tac >>
   irule gas_outcome_post_mono >>
   qpat_assum `gas_outcome _ _ _ _ _ _ _` (irule_at (Pos last)) >>
-  simp[] >> rpt strip_tac >> irule dynarray_frame_weaken >> metis_tac[]
+  simp[] >> rpt strip_tac
+  >- (irule dynarray_frame_weaken >> metis_tac[]) >>
+  irule alloca_frame_trans >> goal_assum (drule_at Any) >>
+  simp[] >> fs[array_caller_frame_def]
 QED
 
 Resume dynarray_code_loop_counted[callback]:
@@ -892,7 +933,7 @@ Finalise dynarray_code_loop_counted
 Theorem compile_for_dynarray_frag_zero[local]:
   !ctx func cx cenv lctx RetQ ty id et c n name arr_ptr arr_sz stmts tv vs es P.
   (!gs. eval_iterator cx (Array (Name (ArrayT et (Dynamic c)) name))
-          (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
+          (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
   LENGTH vs <= c /\ c <= n /\ c < dimword (:256) /\
   evaluate_type (get_tenv cx) et = SOME tv /\
   type_memory_bytes cenv et = type_memory_size tv /\
@@ -951,7 +992,7 @@ Proof
     dynarray_public_entry_ready) >>
   impl_tac >- (simp[] >> conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   `LENGTH vs <= n /\ LENGTH vs < dimword (:256)` by decide_tac >>
-  `gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx)
+  `gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx)
      (es with gas_obs := [])` by
     (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
      simp[gas_admissible_def, Once evaluate_def, lift_option_type_def,
@@ -975,14 +1016,16 @@ Proof
      simp[]) >>
   drule_all dynarray_code_loop_counted >> strip_tac >>
   drule_all gas_outcome_zero_prefix >> strip_tac >>
+  `LENGTH (MAP Value vs) <= n` by simp[] >>
   drule_all for_source_prefix_bounded >> strip_tac >>
-  irule array_outcome_stmt_post >> simp[] >> goal_assum (drule_at Any)
+  irule array_outcome_stmt_post >> gvs[alloca_frame_gas_obs] >>
+  goal_assum (drule_at Any)
 QED
 
 Theorem compile_for_dynarray_frag:
   !ctx func cx cenv lctx RetQ ty id et c n name arr_ptr arr_sz stmts tv vs es P.
   (!gs. eval_iterator cx (Array (Name (ArrayT et (Dynamic c)) name))
-          (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
+          (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
   LENGTH vs <= c /\ c <= n /\ c < dimword (:256) /\
   evaluate_type (get_tenv cx) et = SOME tv /\
   type_memory_bytes cenv et = type_memory_size tv /\
@@ -1028,7 +1071,7 @@ Proof
   irule (Q.SPEC `\ei. ?gs. P (ei with gas_obs := gs)`
            (Q.GEN `P` (SPEC_ALL compile_for_dynarray_frag_zero))) >>
   simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qexists `P` >> simp[] >> rpt conj_tac
+  qexists `P` >> simp[] >> qexists `vs` >> simp[] >> rpt conj_tac
   >- (rpt strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
       first_x_assum (qspecl_then [`st0`, `bc`, `sd`, `ex`, `inc`,
         `ei with gas_obs := g0`, `k`] mp_tac) >> simp[] >>

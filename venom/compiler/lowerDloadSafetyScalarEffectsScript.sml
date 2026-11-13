@@ -1,4 +1,5 @@
-(* Non-pointer pure arithmetic, separated from selected affine arithmetic. *)
+(* Non-pointer pure arithmetic with clean operands, separated from selected
+   affine arithmetic and the masked shift/selector-MUL case. *)
 Theory lowerDloadSafetyScalarEffects
 Ancestors
   lowerDloadSafetyPureSteps lowerDloadSafetyUpdates lowerDloadSafetyValues
@@ -11,7 +12,7 @@ Theorem ld_scalar_operands_equal[local]:
   tn.t_var = f.lf_tv /\ fn_ptr_ok P f.lf_fn /\ fn_shape_ok f.lf_fn /\
   MEM inst (fn_insts f.lf_fn) /\ taint_ok f.lf_fn tn inst f.lf_src /\
   MEM inst.inst_opcode
-    [MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
+    [Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
      ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET] ==>
   eval_operands inst.inst_operands f.lf_src =
   eval_operands inst.inst_operands f.lf_tgt
@@ -30,7 +31,7 @@ Theorem ld_scalar_vars[local]:
   eval_operands inst.inst_operands f.lf_src =
     eval_operands inst.inst_operands f.lf_tgt /\
   MEM inst.inst_opcode
-    [MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
+    [Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
      ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET] /\
   step_inst_base inst f.lf_tgt = OK ts ==>
   ?ss. step_inst_base inst f.lf_src = OK ss /\
@@ -52,7 +53,7 @@ QED
 
 Theorem ld_scalar_success[local]:
   MEM inst.inst_opcode
-    [MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
+    [Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
      ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET] /\
   step_inst_base inst s = OK s' ==>
   ?out x. inst.inst_outputs = [out] /\ s' = update_var out x s
@@ -67,7 +68,7 @@ QED
 
 Theorem ld_scalar_taint[local]:
   MEM inst.inst_opcode
-    [MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
+    [Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
      ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET;
      INITIAL_FMP; BUMP] /\ s'.vs_allocas = s.vs_allocas /\
   s'.vs_fmp = s.vs_fmp ==>
@@ -77,7 +78,8 @@ Proof
   strip_tac >>
   `inst.inst_opcode <> MLOAD /\ inst.inst_opcode <> ILOAD /\
    inst.inst_opcode <> SLOAD /\ inst.inst_opcode <> TLOAD /\
-   inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> SHL /\
+   inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> MUL /\
+   inst.inst_opcode <> SHL /\
    inst.inst_opcode <> SHR /\ inst.inst_opcode <> SAR /\
    inst.inst_opcode <> MSTORE /\ inst.inst_opcode <> ISTORE /\
    inst.inst_opcode <> MCOPY /\ inst.inst_opcode <> SSTORE /\
@@ -110,7 +112,7 @@ Theorem ld_scalar_pure_effect:
   tn.t_var = f.lf_tv /\ fn_ptr_ok P f.lf_fn /\ fn_shape_ok f.lf_fn /\
   MEM inst (fn_insts f.lf_fn) /\ taint_ok f.lf_fn tn inst f.lf_src /\
   MEM inst.inst_opcode
-    [MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
+    [Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
      ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET] /\
   step_inst_base inst f.lf_tgt = OK ts /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\

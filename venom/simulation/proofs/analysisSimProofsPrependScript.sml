@@ -2,12 +2,12 @@
  * Analysis-Driven Simulation — Proofs (Part 4: Prepend Correctness)
  *
  * Main theorem:
- *   df_analysis_pass_correct_prepend_proof
+ *   df_analysis_pass_correct_prepend
  *)
 
 Theory analysisSimProofsPrepend
 Ancestors
-  analysisSimProofsWiden analysisSimProofsSound analysisSimProofs analysisSimProofsBase analysisSimProofsCompare
+  venomExecProofs analysisSimProofsWiden analysisSimProofsSound analysisSimProofs analysisSimProofsBase analysisSimProofsCompare
   analysisSimDefs execEquivParamDefs dfAnalyzeProofs dfAnalyzeDefs
   dfAnalyzeWidenProofs dfAnalyzeWidenDefs
   passSimulationDefs passSimulationProofs execEquivParamProofs
@@ -67,38 +67,6 @@ Proof
   `i < LENGTH (TAKE (phi_prefix_length l) l)` by
     simp[LENGTH_TAKE_EQ, venomExecProofsTheory.phi_prefix_length_le] >>
   simp[listTheory.EL_APPEND_EQN, EL_TAKE]
-QED
-
-(* EL for the "prepend" region: phi_prefix_length l <= i < phi_prefix_length l + LENGTH p *)
-Triviality EL_take_drop_insert_mid[local]:
-  !l p i. EVERY (\i:instruction. i.inst_opcode <> PHI) p ==>
-    phi_prefix_length l <= i /\ i < phi_prefix_length l + LENGTH p ==>
-    EL i (TAKE (phi_prefix_length l) l ++ p ++ DROP (phi_prefix_length l) l) = EL (i - phi_prefix_length l) p
-Proof
-  rpt strip_tac >>
-  `LENGTH (TAKE (phi_prefix_length l) l) = phi_prefix_length l` by
-    simp[LENGTH_TAKE_EQ, venomExecProofsTheory.phi_prefix_length_le] >>
-  `i - phi_prefix_length l < LENGTH p` by decide_tac >>
-  simp[listTheory.EL_APPEND_EQN] >>
-  simp[EL_TAKE]
-QED
-
-(* EL for the "suffix" region: i >= phi_prefix_length l + LENGTH p *)
-Triviality EL_take_drop_insert_suffix[local]:
-  !l p i. EVERY (\i:instruction. i.inst_opcode <> PHI) p ==>
-    phi_prefix_length l + LENGTH p <= i /\ i < LENGTH l + LENGTH p ==>
-    EL i (TAKE (phi_prefix_length l) l ++ p ++ DROP (phi_prefix_length l) l) =
-    EL (i - phi_prefix_length l - LENGTH p) (DROP (phi_prefix_length l) l)
-Proof
-  rpt strip_tac >>
-  `LENGTH (TAKE (phi_prefix_length l) l) = phi_prefix_length l` by
-    simp[LENGTH_TAKE_EQ, venomExecProofsTheory.phi_prefix_length_le] >>
-  `LENGTH (TAKE (phi_prefix_length l) l ++ p) = phi_prefix_length l + LENGTH p` by simp[] >>
-  `i - (phi_prefix_length l + LENGTH p) < LENGTH (DROP (phi_prefix_length l) l)` by (
-    simp[LENGTH_DROP, venomExecProofsTheory.phi_prefix_length_le] >>
-    decide_tac) >>
-  simp[listTheory.EL_APPEND_EQN] >>
-  simp[EL_TAKE, EL_DROP]
 QED
 
 (* Boundary: EL in the prepend region of analysis_block_transform_prepend.
@@ -325,11 +293,11 @@ Proof
       `run_block fuel run_ctx bt_bb s2 =
          exec_block fuel run_ctx bt_bb
            (s_phi with vs_inst_idx := pplen)` by
-        metis_tac[eval_phis_OK_run_block_eq] >>
+        metis_tac[run_block_OK_eq_exec_block] >>
       `run_block fuel run_ctx btp_bb s2 =
          exec_block fuel run_ctx btp_bb
            (s_phi with vs_inst_idx := pplen)` by
-        metis_tac[eval_phis_OK_run_block_eq] >>
+        metis_tac[run_block_OK_eq_exec_block] >>
       qabbrev_tac `pfx = prepend bb.bb_label` >>
       `s_phi.vs_inst_idx = 0` by
         metis_tac[venomExecProofsTheory.eval_phis_preserves_inst_idx] >>
@@ -413,10 +381,10 @@ Proof
   >- (* eval_phis Error case *)
      (first_x_assum (X_CHOOSE_THEN ``e:string`` STRIP_ASSUME_TAC) >>
       `run_block fuel run_ctx bt_bb s2 = Error e` by
-        metis_tac[run_block_eval_phis_Error] >>
+        metis_tac[run_block_Error_eq] >>
       `eval_phis s2 btp_bb.bb_instructions = Error e` by fs[] >>
       `run_block fuel run_ctx btp_bb s2 = Error e` by
-        metis_tac[run_block_eval_phis_Error] >>
+        metis_tac[run_block_Error_eq] >>
       gvs[lift_result_def])
 QED
 
@@ -489,9 +457,9 @@ Proof
 QED
 
 (* Prepend-aware pass correctness.
-   Extends df_analysis_pass_correct_sound_proof for transforms that
+   Extends df_analysis_pass_correct_sound for transforms that
    add new instructions before each block. *)
-Theorem df_analysis_pass_correct_prepend_proof:
+Theorem df_analysis_pass_correct_prepend:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (bottom : 'a) join transfer edge_transfer ctx
@@ -777,7 +745,7 @@ Proof
        (fn th => assume_tac
          (MATCH_MP
            (Q.SPECL [`fuel`, `run_ctx`, `bb`, `s1`, `v1`]
-             analysisSimProofsTheory.run_block_OK_not_halted) th)) >>
+             venomExecProofsTheory.run_block_OK_not_halted) th)) >>
      qpat_x_assum
        `run_block fuel run_ctx
           (analysis_block_transform_prepend bottom result prepend f bb) s2 = OK v2`
@@ -785,7 +753,7 @@ Proof
          (MATCH_MP
            (Q.SPECL [`fuel`, `run_ctx`,
              `analysis_block_transform_prepend bottom result prepend f bb`,
-             `s2`, `v2`] analysisSimProofsTheory.run_block_OK_not_halted) th)) >>
+             `s2`, `v2`] venomExecProofsTheory.run_block_OK_not_halted) th)) >>
      simp[])) >>
   (ALL_TAC THEN_LT TRYALL
     (REWRITE_TAC [GSYM function_map_transform_def] >>

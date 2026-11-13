@@ -12,6 +12,7 @@
 Theory bodyMemAugAssignAttrStorage
 Ancestors
   supportedExprTraverse allocLimitsProps
+  bodySimStmtCases
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyMemAssignTopWord bodyDeclMemoryCounted
   bodyDeclMemoryCore bodyMemEmitOpFrame allocaFootprint instMemFrontier memSafeRun
@@ -897,22 +898,7 @@ Theorem body_augassign_attr_storage_mem:
 Proof
   rpt strip_tac >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
-  `!ts vis mut id ty init.
-     MEM (VariableDecl vis mut id ty init) ts /\
-     (mut = Storage \/ mut = Transient) ==>
-     find_var_decl_by_name id ts <> NONE` by
-    (Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >>
-     metis_tac[]) >>
-  `src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-   ?mut sid slot. MEM (VariableDecl Private mut id (StructT sid) slot) tops` by
-    (qpat_x_assum `supported_storage_field_write _ _ _` mp_tac >>
-     simp[supported_storage_field_write_def, supported_storage_fields_def] >>
-     Cases_on `supported_variable_decl tops (src, id)` >> simp[] >>
-     rename1 `SOME x` >> PairCases_on `x` >>
-     drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
-     Cases_on `x0` >> Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >>
-     simp[] >> metis_tac[]) >>
-  gvs[] >>
+  drule supported_storage_field_write_decl >> strip_tac >> gvs[] >>
   `get_module_code cx NONE = SOME tops /\ supported_program tops /\
    ALL_DISTINCT
      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
@@ -934,7 +920,8 @@ Proof
    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
    (bop = Exp ==> nonneg_int_literal e) /\
    (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
-    gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+    (gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+     metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
   gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
   >- (qpat_x_assum `env_consistent _ _ _`
         (strip_assume_tac o REWRITE_RULE [env_consistent_def,
@@ -973,7 +960,7 @@ Proof
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supportedExprTraverseTheory.supported_expr_exists_def,
          int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -987,7 +974,7 @@ Proof
   `!gs. expr_sim_mem ctx func cenv cx ty e (es with gas_obs := gs)` by
     (gen_tac >>
      qpat_x_assum `body_expr_mem_ok cx e`
-       (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
      disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `ty`,
        `es with gas_obs := gs`] mp_tac) >>
      simp[]) >>

@@ -53,7 +53,7 @@ Proof
   qmatch_asmsub_abbrev_tac `compile_alloc_buffer sz sa` >>
   gvs[] >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_sim_mem >>
-  simp[] >> disch_then drule >>
+  simp[] >> disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[] >>
@@ -96,13 +96,34 @@ Resume body_structlit_nowiden_mem[struct_final_post]:
      (StructV (ZIP (MAP FST kes,vs))) <= type_memory_size_list tvs` by
     (drule val_footprint_le >> simp[type_memory_size_def] >>
      `LENGTH (MAP FST kes) = LENGTH tvs` by
-       (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+       (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >>
+        imp_res_tac listTheory.LIST_REL_LENGTH >> fs[]) >>
      simp[struct_layout_size_zip]) >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
   `!nm lb len. local_region cenv ee.scopes t' nm lb len ==>
      b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
     (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
+  `~expr_has_effect (StructLit (StructT (src_id_opt,id)) (src_id_opt,id) kes) ==>
+     pure_frame cenv func es sa s0 t'` by
+    (rewrite_tac[expr_has_effect_thm] >> strip_tac >>
+     qpat_x_assum `EVERY _ _ ==> _` mp_tac >>
+     (impl_tac >- (qpat_x_assum `~EXISTS _ _` mp_tac >>
+        simp_tac (srw_ss()) [listTheory.EVERY_MAP, listTheory.NOT_EXISTS, combinTheory.o_DEF])) >>
+     strip_tac >>
+     qpat_assum `FLOOKUP t.vs_allocas _ = SOME (b,_)` (fn th =>
+       qpat_assum `!aid a. FLOOKUP t.vs_allocas aid = SOME a ==> _` (fn th2 =>
+         assume_tac (MATCH_MP th2 th))) >>
+     irule (Q.SPECL [`cenv`, `func`, `es`, `sa`, `sm`, `s0`, `s0`, `t'`]
+       aggregate_pure_frame_buffer) >>
+     qpat_assum `MEM (mk_inst sa.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
+     qpat_assum `FLOOKUP t'.vs_allocas _ = SOME (b,_)` (irule_at Any) >>
+     qexists_tac `sm` >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[] >> NO_TAC) >>
+     rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!p n. _ /\ (!i c sz. _) ==> _` irule >>
+     pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
+     strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
   conj_asm1_tac
   >- (irule buffer_loop_memory_vv_post >>
       simp[expr_type_def, is_word_type_def, contextTheory.mk_ptr_def, contextTheory.base_ptr_def,
@@ -112,6 +133,7 @@ Resume body_structlit_nowiden_mem[struct_final_post]:
       conj_tac >- first_assum ACCEPT_TAC >>
       conj_tac >- first_assum ACCEPT_TAC >>
       qpat_x_assum `!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ _ ==> _` mp_tac >>
+      qpat_x_assum `_ ==> pure_frame _ _ _ _ _ _` mp_tac >>
       POP_ASSUM_LIST (K ALL_TAC) >>
       metis_tac[arithmeticTheory.ADD_COMM]) >>
   irule aggregate_allocated_result_store_bound_mem >>
@@ -124,7 +146,8 @@ Resume body_structlit_nowiden_mem[struct_final_post]:
   qexistsl [`sa.cs_next_id`, `b`, `type_memory_size_list tvs`] >>
   simp[] >>
   `LENGTH (MAP FST kes) = LENGTH tvs` by
-    (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+    (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >>
+     imp_res_tac listTheory.LIST_REL_LENGTH >> fs[]) >>
   simp[type_memory_size_def, struct_layout_size_zip,
        venomStateTheory.eval_operand_def] >>
   metis_tac[]
@@ -156,6 +179,7 @@ Resume body_make_array_nowiden_mem[tuple]:
   rw[expr_vv_sim_mem_def] >>
   drule compile_tuple_literal_inv >> strip_tac >> gvs[] >>
   drule make_tuple_evaluated_layout >> strip_tac >> gvs[] >>
+  gvs[exprLoweringTheory.tuple_literal_types_def, listTheory.MAP_MAP_o] >>
   `expr_sim_inv cenv cx env st` by gvs[expr_body_pre_def] >>
   `!e s. MEM e es /\ expr_sim_inv cenv cx env s ==>
     expr_body_pre cenv cx env e s` by
@@ -174,15 +198,17 @@ Resume body_make_array_nowiden_mem[tuple]:
     (qpat_x_assum `ci_mono sa sm` mp_tac >>
      qpat_x_assum `ci_mono sm sb` mp_tac >> simp[ci_mono_def]) >>
   drule_all fn_has_code_split >> strip_tac >>
-  `SUM (MAP (type_memory_bytes cenv o expr_type) es) < dimword (:256)` by
-    (gvs[expr_body_pre_def, alloc_limits_expr_def] >>
-     simp[wordsTheory.dimword_def] >> decide_tac) >>
+  `SUM (MAP (type_memory_bytes cenv) tys) < 2 ** 64` by
+    gvs[expr_body_pre_def, alloc_limits_expr_def, type_alloc_ok_def,
+        type_memory_bytes_def, is_word_type_def] >>
+  `SUM (MAP (type_memory_bytes cenv) tys) < dimword (:256)` by
+    fs[wordsTheory.dimword_def] >>
   `type_memory_size_list tvs < dimword (:256)` by metis_tac[] >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   drule_all aggregate_buffer_alloc_counted_mem_any_block >> strip_tac >> gvs[] >>
-  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`)
-    bodyMemAggregateLoopsTheory.aggregate_make_tuple_sim_mem >>
-  disch_then drule >> disch_then drule >>
+  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)
+    bodyMemAggregateLoopsTheory.aggregate_make_tuple_fits_sim_mem >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   disch_then (qspecl_then [`ctx`,`tops`] mp_tac) >> simp[] >>
@@ -205,12 +231,12 @@ Resume body_make_array_nowiden_mem[tuple]:
 QED
 
 Resume body_make_array_nowiden_mem[tuple_final_post]:
-  `eval_expr cx (Builtin (TupleT (MAP expr_type es)) (MakeArray NONE n) es)
+  `eval_expr cx (Builtin (TupleT tys) (MakeArray NONE n) es)
     (st with gas_obs := gs) = (INL (Value (ArrayV (TupleV vs))),ee)` by
     (drule_all aggregate_eval_make_tuple >> simp[]) >>
   rpt (qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac) >>
   `expr_body_pre cenv cx env
-    (Builtin (TupleT (MAP expr_type es)) (MakeArray NONE n) es)
+    (Builtin (TupleT tys) (MakeArray NONE n) es)
     (st with gas_obs := gs)` by simp[] >>
   `val_wf (TupleTV tvs) (ArrayV (TupleV vs))` by
     (irule aggregate_materialised_child_wf >>
@@ -224,9 +250,29 @@ Resume body_make_array_nowiden_mem[tuple_final_post]:
   `!nm lb len. local_region cenv ee.scopes t' nm lb len ==>
      b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
     (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
+  `~expr_has_effect (Builtin (TupleT tys) (MakeArray NONE n) es) ==>
+     pure_frame cenv func st sa s0 t'` by
+    (rewrite_tac[expr_has_effect_thm] >> strip_tac >>
+     qpat_x_assum `EVERY _ _ ==> _` mp_tac >>
+     (impl_tac >- (qpat_x_assum `~EXISTS _ _` mp_tac >>
+        simp_tac (srw_ss()) [listTheory.EVERY_MAP, listTheory.NOT_EXISTS, combinTheory.o_DEF])) >>
+     strip_tac >>
+     qpat_assum `FLOOKUP t.vs_allocas _ = SOME (b,_)` (fn th =>
+       qpat_assum `!aid a. FLOOKUP t.vs_allocas aid = SOME a ==> _` (fn th2 =>
+         assume_tac (MATCH_MP th2 th))) >>
+     irule (Q.SPECL [`cenv`, `func`, `st`, `sa`, `sm`, `s0`, `s0`, `t'`]
+       aggregate_pure_frame_buffer) >>
+     qpat_assum `MEM (mk_inst sa.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
+     qpat_assum `FLOOKUP t'.vs_allocas _ = SOME (b,_)` (irule_at Any) >>
+     qexists_tac `sm` >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[] >> NO_TAC) >>
+     rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!p n. _ /\ (!i c sz. _) ==> _` irule >>
+     pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
+     strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
   conj_asm1_tac
   >- (irule (SRULE [expr_type_def] (Q.INST
-        [`e` |-> `Builtin (TupleT (MAP expr_type es)) (MakeArray NONE n) es`]
+        [`e` |-> `Builtin (TupleT tys) (MakeArray NONE n) es`]
         (Q.INST [`es` |-> `st`] buffer_loop_memory_vv_post))) >>
       simp[expr_type_def, is_word_type_def, contextTheory.mk_ptr_def, contextTheory.base_ptr_def,
         venomStateTheory.eval_operand_def, val_in_memory_def] >>
@@ -235,17 +281,18 @@ Resume body_make_array_nowiden_mem[tuple_final_post]:
       conj_tac >- first_assum ACCEPT_TAC >>
       conj_tac >- first_assum ACCEPT_TAC >>
       qpat_x_assum `!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ _ ==> _` mp_tac >>
+      qpat_x_assum `_ ==> pure_frame _ _ _ _ _ _` mp_tac >>
       POP_ASSUM_LIST (K ALL_TAC) >>
       metis_tac[arithmeticTheory.ADD_COMM]) >>
   simp[expr_type_def, exprLoweringTheory.lowered_value_type_def] >>
   irule (SRULE [expr_type_def, exprLoweringTheory.lowered_value_type_def]
-    (Q.INST [`e` |-> `Builtin (TupleT (MAP expr_type es)) (MakeArray NONE n) es`]
+    (Q.INST [`e` |-> `Builtin (TupleT tys) (MakeArray NONE n) es`]
       (Q.INST [`es` |-> `st`] aggregate_allocated_result_store_bound_mem))) >>
   simp[expr_type_def, exprLoweringTheory.lowered_value_type_def,
        contextTheory.base_ptr_def] >>
   conj_tac >- fs[stmt_state_rel_def] >>
   reverse conj_tac >-
-    (qexistsl [`cenv`, `ctx`, `func`, `n`, `s0`, `sa`, `sb`, `st`] >>
+    (qexistsl [`cenv`, `ctx`, `es`, `func`, `n`, `s0`, `sa`, `sb`, `st`] >>
      gvs[expr_type_def, contextTheory.base_ptr_def]) >>
   qexistsl [`sa.cs_next_id`, `b`, `type_memory_size_list tvs`] >>
   simp[type_memory_size_def, contextTheory.mk_ptr_def,
@@ -332,6 +379,26 @@ Resume body_make_array_nowiden_mem[array_final_post]:
   `!nm lb len. local_region cenv ee.scopes t' nm lb len ==>
      b + type_memory_bytes cenv (ArrayT x n) <= lb \/ lb + len <= b` by
     (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
+  `~expr_has_effect (Builtin (ArrayT x n) (MakeArray (SOME x) n) es) ==>
+     pure_frame cenv func st sa s0 t'` by
+    (rewrite_tac[expr_has_effect_thm] >> strip_tac >>
+     qpat_x_assum `EVERY _ _ ==> _` mp_tac >>
+     (impl_tac >- (qpat_x_assum `~EXISTS _ _` mp_tac >>
+        simp_tac (srw_ss()) [listTheory.EVERY_MAP, listTheory.NOT_EXISTS, combinTheory.o_DEF])) >>
+     strip_tac >>
+     qpat_assum `FLOOKUP t.vs_allocas _ = SOME (b,_)` (fn th =>
+       qpat_assum `!aid a. FLOOKUP t.vs_allocas aid = SOME a ==> _` (fn th2 =>
+         assume_tac (MATCH_MP th2 th))) >>
+     irule (Q.SPECL [`cenv`, `func`, `st`, `sa`, `sm`, `s0`, `s0`, `t'`]
+       aggregate_pure_frame_buffer) >>
+     qpat_assum `MEM (mk_inst sa.cs_next_id ALLOCA _ _) _` (irule_at Any) >>
+     qpat_assum `FLOOKUP t'.vs_allocas _ = SOME (b,_)` (irule_at Any) >>
+     qexists_tac `sm` >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[] >> NO_TAC) >>
+     rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!p n. _ /\ (!i c sz. _) ==> _` irule >>
+     pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
+     strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
   conj_asm1_tac
   >- (irule (SRULE [expr_type_def] (Q.INST
         [`e` |-> `Builtin (ArrayT x n) (MakeArray (SOME x) n) es`]

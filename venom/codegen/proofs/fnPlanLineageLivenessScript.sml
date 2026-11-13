@@ -59,7 +59,7 @@ Proof
   qpat_x_assum `lookup_block pred _ = _` mp_tac >>
   simp[venomInstTheory.lookup_block_def] >>
   strip_tac >> drule FIND_SOME_MEM >> strip_tac >>
-  drule_all cfgAnalysisPropsTheory.cfg_analyze_preserves_bb_succs >>
+  drule_all cfgCorrectnessProofTheory.cfg_analyze_preserves_bb_succs >>
   Cases_on `pred_bb.bb_instructions` >>
   gvs[venomInstTheory.bb_succs_def, venomInstTheory.get_successors_def,
       venomInstTheory.is_terminator_def, venomStateTheory.get_label_def,
@@ -79,12 +79,12 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `i = SUC j` >- gvs[] >>
   `i <= j` by decide_tac >>
   `~MEM v (live_vars_at (liveness_analyze fn) lbl j)` by
-    (drule livenessAnalysisPropsTheory.live_vars_at_transfer >>
+    (drule livenessProofsTheory.live_vars_at_transfer >>
      disch_then (qspecl_then [`lbl`, `bb`, `j`] mp_tac) >>
      simp[] >>
      `~MEM v (inst_uses (EL j bb.bb_instructions))` by
        (first_x_assum irule >> decide_tac) >>
-     simp[liveness_transfer_def, livenessProofsTheory.live_update_mem]) >>
+     simp[liveness_transfer_def, livenessTransferProofsTheory.live_update_mem]) >>
   first_x_assum irule >> simp[] >> rpt strip_tac >>
   first_x_assum irule >> decide_tac
 QED
@@ -160,7 +160,7 @@ Proof
   `?k. a <= k /\ k < b /\ MEM v (inst_defs (EL k bb.bb_instructions))` by
     (spose_not_then assume_tac >>
      `MEM v (live_vars_at (liveness_analyze fn) lbl a)` suffices_by simp[] >>
-     irule (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_propagate_range) >>
+     irule (SRULE [LET_THM] livenessProofsTheory.live_vars_at_propagate_range) >>
      simp[] >> qexists_tac `b` >> simp[] >>
      rpt strip_tac >> first_x_assum (qspec_then `k` mp_tac) >> simp[]) >>
   qexists_tac `LEAST k. a <= k /\ k < b /\ MEM v (inst_defs (EL k bb.bb_instructions))` >>
@@ -170,7 +170,7 @@ Proof
       ~MEM v (live_vars_at (liveness_analyze fn) lbl r)` by
     (rpt strip_tac >>
      `MEM v (live_vars_at (liveness_analyze fn) lbl a)` suffices_by simp[] >>
-     irule (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_propagate_range) >>
+     irule (SRULE [LET_THM] livenessProofsTheory.live_vars_at_propagate_range) >>
      simp[] >> qexists_tac `r` >> simp[] >>
      qx_gen_tac `t` >> strip_tac >>
      qpat_x_assum `!m. _` (qspec_then `t` mp_tac) >>
@@ -179,7 +179,7 @@ Proof
   >- (rpt strip_tac >>
       `MEM v (inst_uses (EL r bb.bb_instructions))` by
         simp[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
-      drule (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_uses) >>
+      drule (SRULE [LET_THM] livenessProofsTheory.live_vars_at_uses) >>
       disch_then (qspecl_then [`lbl`, `bb`, `r`, `v`] mp_tac) >>
       `r < LENGTH bb.bb_instructions` by decide_tac >>
       simp[] >> metis_tac[]) >>
@@ -226,7 +226,7 @@ Proof
   rpt strip_tac >>
   qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>
   `MEM v (live_vars_at (liveness_analyze fn) lbl 0)` by
-    (drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+    (drule livenessProofsTheory.live_vars_at_propagate_range >>
      disch_then (qspecl_then [`lbl`, `bb`, `0`,
        `LENGTH (collect_phis bb.bb_instructions)`, `v`] mp_tac) >>
      simp[] >> impl_tac >-
@@ -291,12 +291,12 @@ Proof
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
     metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre] >>
   `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
-    metis_tac[removeUnusedProofsTheory.wf_lookup_block] >>
+    metis_tac[venomExecProofsTheory.wf_lookup_block] >>
   qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>
   `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
     (qpat_assum `bb.bb_instructions = _`
        (mp_tac o Q.AP_TERM `LENGTH`) >> simp[listTheory.LENGTH_APPEND]) >>
-  irule (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_propagate_range) >>
+  irule (SRULE [LET_THM] livenessProofsTheory.live_vars_at_propagate_range) >>
   simp[] >> qexists_tac `LENGTH (collect_phis bb.bb_instructions)` >> simp[] >>
   rpt strip_tac >>
   `MEM (EL k' (collect_phis bb.bb_instructions))

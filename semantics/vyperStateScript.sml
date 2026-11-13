@@ -60,6 +60,7 @@ Datatype:
   | BreakException
   | ContinueException
   | ReturnException value
+  | HaltException
 End
 
 (* Machinery for managing variables (local, top-level, mutable, immutable), and
@@ -262,6 +263,28 @@ Definition finally_def:
   case f s of (INL x, s) => ignore_bind g (return x) s
      | (INR e, s) => ignore_bind g (raise e) s
 End
+
+(* Scope restoration belongs inside this action; a successful EVM halt skips
+   only the outer nonreentrant unlock. Other results retain normal cleanup. *)
+Definition finally_unless_halt_def:
+  finally_unless_halt f g s : α evaluation_result =
+  case f s of
+  | (INR HaltException, st) => (INR HaltException, st)
+  | (INL value, st) => ignore_bind g (return value) st
+  | (INR error, st) => ignore_bind g (raise error) st
+End
+
+Theorem finally_unless_halt_return:
+  finally_unless_halt f (return ()) = f
+Proof
+  simp[FUN_EQ_THM, finally_unless_halt_def] >> qx_gen_tac `st` >>
+  Cases_on `f st` >> rename1 `(answer,st')` >> Cases_on `answer` >>
+  simp[ignore_bind_def, bind_def, return_def] >>
+  rename1 `f st = (INR ex,st')` >>
+  qpat_x_assum `f st = (INR ex,st')` kall_tac >>
+  Cases_on `ex` >> simp[raise_def]
+QED
+
 
 Definition lift_option_def:
   lift_option x str =

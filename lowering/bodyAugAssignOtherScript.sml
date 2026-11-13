@@ -22,7 +22,7 @@ Ancestors
   vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperInterpreter
   vyperContext stmtSimAugAssignStorage stmtSimAugAssignPlace
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlaceStorage bodyAugPlaceTarget
-  bodyExprPreFacts bodySimExprCases
+  bodyExprPreFacts bodySimExprCases bodyImmutableAugAssignCompose
   supportedStmtTraverse vyperTypeCallGraph vyperState exprSimTopLevelProps
 
 Theorem supported_word_type_is_word:
@@ -115,31 +115,7 @@ Theorem immutable_deploy_augassign_case:
       (stmt_env cenv lctx ret_ty (AugAssign ty (TopLevelNameTarget nsid) bop e))
       (eval_stmt cx (AugAssign ty (TopLevelNameTarget nsid) bop e)) es
 Proof
-  cheat
-QED
-
-(* ADMITTED: x op= e at a storage place whose indices have effects, as
-   targetPlaceSimCases' pop_nested_storage_effectful_sim. *)
-Theorem augassign_place_effectful_index_case:
-  !ctx func cx lctx RetQ cenv ret_ty env env' tops bindings ty bt bop e es.
-    (!id. target_root bt <> NameTarget id) /\ ~supported_target_pure tops bt /\
-    ((?b fld. bt = AttributeTarget b fld) \/ (?b k. bt = SubscriptTarget b k)) /\
-    body_inv tops ctx cenv cx /\
-    supported_stmt tops bindings (AugAssign ty bt bop e) /\
-    type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
-    target_case F ctx func cenv cx bt /\
-    ~immutable_root cx bt /\ target_indices_pre cenv cx env bt /\
-    ((?s p s1 s2 cur s3 s4 ptv s5.
-        eval_target_place cx bt s = (INL p,s1) /\
-        read_place cx p s2 = (INL cur,s3) /\
-        place_type_value cx p s4 = (INL ptv,s5)) ==>
-     expr_sim_case F ctx func cenv cx e) /\
-    expr_body_pre cenv cx env e es ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AugAssign ty bt bop e))
-      (eval_stmt cx (AugAssign ty bt bop e)) es
-Proof
-  cheat
+  ACCEPT_TAC immutable_deploy_augassign_frag
 QED
 
 Theorem aug_storage_decl_some[local]:
@@ -161,7 +137,7 @@ Proof
   first_x_assum drule >> strip_tac >> simp[]
 QED
 
-Theorem augassign_rhs_pre[local]:
+Theorem augassign_rhs_pre:
   body_inv tops ctx cenv cx /\ supported_expr tops e /\
   expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
@@ -182,13 +158,14 @@ Proof
       listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
       DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
   qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
-    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+    SIMP_RULE std_ss [stmt_exprs_ok_flat, alloc_limits_stmt_def,
       alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
 
-  gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-      int_calls_stmt_def, AllCaseEqs()] >>
+  gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
+      allocLimitsTheory.alloc_limits_stmt_def, int_calls_stmt_def, AllCaseEqs()] >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   irule stmt_expr_body_pre >>
   fs[body_inv_def, gasContextTheory.cx_tops_def] >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right,
@@ -210,7 +187,7 @@ Proof
   metis_tac[body_expr_ok_case]
 QED
 
-Theorem augassign_toplevel_metadata[local]:
+Theorem augassign_toplevel_metadata:
   body_inv tops ctx cenv cx /\
   supported_aug_target tops bindings (TopLevelNameTarget (src,id)) /\
   expr_sim_inv cenv cx env es /\
@@ -251,7 +228,8 @@ Proof
    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
    (bop = Exp ==> nonneg_int_literal e) /\
    (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
-    gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+    (gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+     metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
   `FLOOKUP env.bare_global_assignable (NONE,id) = NONE` by
     (Cases_on `FLOOKUP env.bare_global_assignable (NONE,id)` >> simp[] >>
      drule_all aug_assignable_find_NONE >> strip_tac >> gvs[]) >>
@@ -280,7 +258,7 @@ Proof
             aug_place_supported_root_not_immutable]
 QED
 
-Theorem augassign_target_pre[local]:
+Theorem augassign_target_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty t bop e) /\
   ((?b fld. t = AttributeTarget b fld) \/ (?b k. t = SubscriptTarget b k)) /\
@@ -303,14 +281,15 @@ Proof
   `?pt. supported_target_info tops bindings t = SOME pt` by
     metis_tac[aug_place_supported_stmt_target_info] >>
   irule aug_place_target_indices_pre >>
-  gvs[type_stmt_def, well_typed_target_def, stmt_exprs_ok_def,
+  gvs[type_stmt_def, well_typed_target_def, stmt_exprs_ok_flat,
+      allocLimitsTheory.alloc_limits_stmt_def,
       supported_stmt_expr_exists_def, int_calls_stmt_def, AllCaseEqs()] >>
   fs[body_inv_def] >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
             optionTheory.IS_SOME_EXISTS]
 QED
 
-Theorem augassign_toplevel_success[local]:
+Theorem augassign_toplevel_success:
   body_inv tops ctx cenv cx /\
   supported_aug_target tops bindings (TopLevelNameTarget (src,id)) /\
   expr_sim_inv cenv cx env es /\
@@ -363,6 +342,7 @@ Proof
   `expr_sim_case F ctx func cenv cx e` by
     metis_tac[body_expr_ok_case] >>
   drule_all augassign_toplevel_metadata >> strip_tac >>
+  `augassign_operand_ok ty bop e` by gvs[type_stmt_def, AllCaseEqs()] >>
   irule compile_augassign_toplevel_case >>
   simp[] >> metis_tac[]
 QED
@@ -373,9 +353,8 @@ QED
    has no assignable type at runtime (augassign_immutable_runtime_untyped)
    and is immutable_deploy_augassign_case in the constructor; a field or
    element of a local (compile_augassign_place_memory_case); and a field or
-   element of a storage or transient variable, with pure indices
-   (compile_augassign_place_storage_case) or not
-   (augassign_place_effectful_index_case). *)
+   element of a storage or transient variable, any indices
+   (compile_augassign_place_storage_case). *)
 Theorem body_augassign_other_leaf:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     body_stmt_safe tops (AugAssign ty t bop e) /\
@@ -432,7 +411,5 @@ Proof
   `target_indices_pre cenv cx env bt` by metis_tac[augassign_target_pre] >>
   Cases_on `?id. target_root bt = NameTarget id`
   >- (irule compile_augassign_place_memory_case >> metis_tac[]) >>
-  Cases_on `supported_target_pure tops bt`
-  >- (irule compile_augassign_place_storage_case >> metis_tac[]) >>
-  irule augassign_place_effectful_index_case >> simp[] >> metis_tac[]))
+  irule compile_augassign_place_storage_case >> metis_tac[]))
 QED

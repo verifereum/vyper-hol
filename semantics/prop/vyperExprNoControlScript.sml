@@ -20,7 +20,8 @@ val _ = overload_on ("finally", ``vyperState$finally``);
 
 (* ===== Helper predicate ===== *)
 Definition no_control_exc_def:
-  no_control_exc exc ⇔ (∃str. exc = Error str) ∨ (∃str. exc = AssertException str)
+  no_control_exc exc ⇔ (∃str. exc = Error str) ∨
+    (∃str. exc = AssertException str) ∨ exc = HaltException
 End
 
 Theorem no_control_exc_Error:
@@ -91,14 +92,30 @@ Proof
   >> gvs[AllCaseEqs(), raise_def, return_def] >> res_tac
 QED
 
+Theorem finally_unless_halt_no_control:
+  ∀f g s exc s'.
+  finally_unless_halt f g s = (INR exc, s') ⇒
+  (∀exc0 s0. f s = (INR exc0, s0) ⇒ no_control_exc exc0) ⇒
+  (∀s0 exc0 s0'. g s0 = (INR exc0, s0') ⇒ no_control_exc exc0) ⇒
+  no_control_exc exc
+Proof
+  rpt gen_tac >> simp[finally_unless_halt_def, ignore_bind_def, bind_def,
+    prod_CASE_rator, sum_CASE_rator, raise_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), raise_def, return_def, no_control_exc_def] >>
+  res_tac >> gvs[]
+QED
+
 (* ===== Evaluator walk =====
    A goal  M s = (INR exc,s') ==> no_control_exc exc  is reduced through
-   M's combinators by bind_no_control and finally_no_control, and closed by a
+   M's combinators by bind_no_control, finally_no_control and
+   finally_unless_halt_no_control, and closed by a
    primitive's no_control lemma or an induction hypothesis. *)
 
 Theorem no_control_prims:
   (return v s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (raise (Error e) s = (INR exc,s') ⇒ no_control_exc exc) ∧
+  (raise HaltException s = (INR exc,s') ⇒ no_control_exc exc) ∧
+  (update_pending_deletions d s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (get_scopes s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (set_scopes sc s = (INR exc,s') ⇒ no_control_exc exc) ∧
   (get_accounts s = (INR exc,s') ⇒ no_control_exc exc) ∧
@@ -124,6 +141,7 @@ Proof
      get_storage_backend_def, set_storage_backend_def,
      set_address_immutables_def, push_function_def, pop_function_def,
      release_nonreentrant_lock_def, bind_def, adopt_call_outcome_def, UNCURRY,
+     update_pending_deletions_def,
      no_control_exc_def] >>
   imp_res_tac take_call_outcome_error >>
   imp_res_tac take_delegate_outcome_error >>
@@ -147,7 +165,8 @@ fun nc_rule th =
    that concludes  M s = (INR exc,s') ==> no_control_exc exc. *)
 fun nc_net () =
   let fun is_leaf th = is_imp (concl th) andalso is_nc (snd (dest_imp (concl th)))
-  in evalWalkLib.walk_net (map nc_rule [bind_no_control, finally_no_control])
+  in evalWalkLib.walk_net (map nc_rule [bind_no_control, finally_no_control,
+       finally_unless_halt_no_control])
        (map (fn th => (concl th, MATCH_ACCEPT_TAC th))
          (List.filter is_leaf (List.concat (map (map SPEC_ALL o CONJUNCTS o SPEC_ALL)
             (no_control_prims :: map snd (DB.thms "-")))))) end;
@@ -286,7 +305,7 @@ Theorem append_logs_no_control:
   ∀logs s exc s'.
   append_logs logs s = (INR exc, s') ⇒ no_control_exc exc
 Proof
-  simp[append_logs_def, return_def]
+  simp[append_logs_def, update_pending_deletions_def, return_def]
 QED
 
 Theorem write_storage_slot_no_control:
@@ -329,6 +348,22 @@ Theorem read_result_no_control:
   read_result cx pv st = (INR exc,st') ==> no_control_exc exc
 Proof
   Cases_on `pv` >> NC_DEF [read_result_def]
+QED
+
+Theorem array_iterator_results_no_control:
+  array_iterator_results cx ty res st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `res` >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
+       TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+            TRY (rename1 `ArrayTV etv bd` >> Cases_on `bd` >> Cases_on `tr`))) >>
+  simp[array_iterator_results_def, bind_def, ignore_bind_def,
+       result_array_length_def, get_storage_backend_def,
+       get_transient_storage_def, get_accounts_def, check_def, assert_def,
+       return_def, raise_def, lift_option_type_def, option_CASE_rator,
+       LET_THM, AllCaseEqs()] >>
+  rw[] >> gvs[no_control_exc_def] >>
+  metis_tac[read_result_no_control, no_control_exc_def]
 QED
 
 Theorem read_results_no_control:

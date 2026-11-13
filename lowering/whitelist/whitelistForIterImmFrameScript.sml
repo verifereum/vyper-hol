@@ -362,6 +362,7 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
   imp_res_tac lift_sum_state >> gvs[return_def] >>
+  imp_res_tac array_iterator_results_state >> gvs[] >>
   imp_res_tac typed_expr_immutable >> gvs[]
 QED
 
@@ -385,7 +386,7 @@ Theorem typed_guarded_assignment_immutable_mutual[local]:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
-  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
   (!(cx:evaluation_context) (e:expr). T) /\
   (!(cx:evaluation_context) (es:expr list). T) /\
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
@@ -568,6 +569,11 @@ Theorem eval_for_immutable_frame:
 Proof
   Induct_on `vs` >> simp[Once evaluate_def, return_def] >>
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `bind (read_result _ _) _ _ = _` mp_tac >>
+  simp[Once bind_def] >>
+  Cases_on `read_result cx h es` >> rename1 `read_result cx h es = (rr,es0)` >>
+  `es0 = es` by metis_tac[read_result_state] >> pop_assum SUBST_ALL_TAC >>
+  Cases_on `rr` >> simp[] >> strip_tac >> gvs[] >>
   qmatch_asmsub_abbrev_tac `finally action pop_scope` >>
   `!s r t. action s = (r,t) ==>
     lookup_immutable cx t src name = lookup_immutable cx s src name` by
@@ -1011,7 +1017,7 @@ Theorem immutable_array_body_observation:
 Proof
   rpt strip_tac >>
   drule_all coherent_immutable_array_target_type >> strip_tac >>
-  fs[iterator_unmodified_def, expr_place_def] >>
+  fs[iterator_unmodified_def, expr_places_def] >>
   metis_tac[typed_stmts_immutable_frame]
 QED
 

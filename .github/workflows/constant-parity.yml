@@ -1,0 +1,37 @@
+name: constant-parity
+
+# Opt-in: compares the frontend's compile-time constants with the compiler's
+# folded_value over the checked-in annotated-AST fixtures
+# (frontend/constant-evaluation.md). Run it from the Actions tab.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  constant-parity:
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 120
+    # The cache login is a secret of the bazel-cache environment, which every
+    # branch of this repository may deploy to.
+    environment: bazel-cache
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-holbuild-project
+
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
+
+      - name: Build schema-2 HOL toolchain
+        run: holbuild buildhol
+
+      - name: Compare constants with the compiler's folded values
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: holbuild --verbose -j"$(nproc)" build --skip-checkpoints frontendConstantParityTheory

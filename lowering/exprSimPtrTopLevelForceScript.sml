@@ -207,7 +207,8 @@ Proof
 QED
 
 Resume toplevel_storage_word_sim_ptr[load]:
-  drule vv_post_read_result >> disch_then (fn th => fs[th]) >>
+  drule_all vv_post_read_result >> strip_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (PlaceR _) _ _` kall_tac >> fs[] >>
   `(if tr then tload (n2w slot) s0 else sload (n2w slot) s0) =
     typed_val_to_w256 tvt v` by (irule toplevel_storage_word_at >> metis_tac[]) >>
   `step_inst_base
@@ -328,7 +329,8 @@ Proof
      simp[read_result_def, read_place_def, get_immutables_def,
        get_address_immutables_def, evaluate_subscripts_def, lift_sum_def,
        bind_def, return_def, lift_option_type_def]) >>
-  drule vv_post_read_result >> disch_then (fn th => fs[th]) >>
+  drule_all vv_post_read_result >> strip_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (PlaceR _) _ _` kall_tac >> fs[] >>
   drule_all toplevel_immutable_word_at >> strip_tac >> gvs[] >>
   `step_inst_base
     (mk_inst sa.cs_next_id DLOAD [Lit (n2w off)]

@@ -12,7 +12,7 @@ Ancestors
 Theorem compile_for_range_lit_frag_mem:
   !P d ctx func cx lctx RetQ cenv ty id fty a1 n1 a2 n2 bound stmts es tyv.
     evaluate_type (get_tenv cx) fty = SOME tyv /\ type_memory_size tyv = 32 /\
-    32 <= type_memory_bytes cenv fty /\
+    word_memory_type tyv /\ 32 <= type_memory_bytes cenv fty /\
     type_memory_bytes cenv fty < dimword (:256) /\
     n1 <= n2 /\ Num (n2 - n1) <= bound /\ Num (n2 - n1) < dimword (:256) /\
     cenv.ce_alloca_locals /\ lookup_scopes id es.scopes = NONE /\
@@ -49,7 +49,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `eval_stmt cx
     (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) bound stmts) =
-    eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))` by
+    eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)))` by
     (simp[FUN_EQ_THM, Once evaluate_def, eval_iterator_range_lit,
        bind_def, ignore_bind_def, lift_option_type_def, lift_option_def,
        return_def, check_def, assert_def, compatible_bound_def]) >>
@@ -131,7 +131,7 @@ Resume compile_for_range_lit_frag_mem[loop]:
     (rpt strip_tac >> first_x_assum irule >> simp[] >>
      qexistsl_tac [`sa`, `sa with cs_next_var := sa.cs_next_var + 1`] >> simp[]) >>
   `gas_outcome T (cx_tops cx) (ctx,func)
-     (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(0 + j))) (Num (n2-n1)))) (es,cc)
+     (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(0 + j)))) (Num (n2-n1)))) (es,cc)
      (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
        s.vs_inst_idx = 0 /\ ~s.vs_halted /\ stmt_state_rel ctx func cenv cx ee s /\
        return_buf_frame d cenv sa s /\ alloca_history func s /\

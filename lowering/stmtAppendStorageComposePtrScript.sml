@@ -1,7 +1,7 @@
 (* Expression/suffix composition for pointer-safe storage append. *)
 Theory stmtAppendStorageComposePtr
 Ancestors
-  appendStorageComposeFactsPtr appendStorageSourcePtr appendStorageSuccessPostPtr
+  appendStorageComposeFactsPtr appendStorageSuccessPostPtr
   bodyPtrDefs stmtFragPtr stmtAbortPtr gasSummaryComposePtr stmtSimForced
   stmtSimAppendStorageCompose exprSimProps exprOperandVar exprLoweringProps
   compileEnv loweringStateRelDefs loweringPosts stmtSimDefs stmtSimProps finite_map words
@@ -17,6 +17,7 @@ Theorem compile_append_storage_word_stmt_frag_ptr:
   FLOOKUP cenv.ce_module_vars nid =
     SOME (if tr then TransientLoc slot else StorageLoc slot) /\
   cenv.ce_module_var_type nid = SOME (ArrayT elem (Dynamic cap)) /\
+  cenv.ce_hashmap_info nid = NONE /\
   cenv.ce_module_dynarray_capacity nid = cap /\
   is_word_type elem /\ type_memory_bytes cenv elem = 32 /\
   is_word_type (expr_type e) /\ evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\

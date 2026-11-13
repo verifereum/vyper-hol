@@ -24,7 +24,9 @@ val _ = Parse.hide "body";
    frame_ret_ok_ptr, body_*_ptr_ok). Admitted until S1 proves its twin. *)
 Theorem body_assign_other_ptr:
   !d PG cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
-    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ptr_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_ptr_ok cx t) /\
     body_expr_ptr_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\

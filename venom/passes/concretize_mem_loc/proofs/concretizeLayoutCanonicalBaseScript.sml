@@ -732,9 +732,17 @@ Proof
      simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
      simp[] >> metis_tac[]) >>
   `j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode` by
-    (gvs[concretize_inst_with_positions_def, mk_assign_inst_def,
-         mk_nop_inst_def, is_terminator_def] >> rpt CASE_TAC >>
-     gvs[mk_assign_inst_def, mk_nop_inst_def, is_terminator_def]) >>
+    (qpat_x_assum `j = _` SUBST1_TAC >>
+     qpat_x_assum `i.inst_opcode <> INVOKE` mp_tac >>
+     qpat_x_assum `~is_terminator i.inst_opcode` mp_tac >>
+     rpt (pop_assum kall_tac) >> ntac 2 strip_tac >> conj_tac
+     >- (Cases_on `i.inst_opcode = ALLOCA` >>
+         fs[concretize_inst_with_positions_def] >>
+         Cases_on `i.inst_outputs` >> fs[] >>
+         Cases_on `t` >> fs[] >>
+         Cases_on `FLOOKUP positions (Allocation i.inst_id)` >>
+         fs[mk_assign_inst_def, mk_nop_inst_def]) >>
+     metis_tac[concretize_positions_nonterminator]) >>
   qexists `tpost` >> conj_tac >- metis_tac[] >>
   drule layout_canonical_ordinary_success >>
   disch_then (drule_at (Pat `layout_phase_ok_abort _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>

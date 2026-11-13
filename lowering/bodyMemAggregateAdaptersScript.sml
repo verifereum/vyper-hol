@@ -9,13 +9,14 @@ Ancestors
   exprSimDefs loweringPosts abiStaticAggregateProps exprBopSimProps
 
 Theorem aggregate_struct_fields_sim_mem:
-  !fields ce cx env ty off sa out sb es tvs func inst x b asz s0 ctx tops.
-  EVERY (\(name,e).
+  !fields tys ce cx env ty off sa out sb es tvs func inst x b asz s0 ctx tops.
+  LIST_REL (\t (name,e).
     ALOOKUP (get_struct_fields ce.ce_struct_fields
       (case ty of StructT nsid => nsid_to_string nsid | _ => "")) name =
-      SOME (expr_type e,type_memory_bytes ce (expr_type e))) fields /\
+      SOME (t,type_memory_bytes ce t)) tys fields /\
+  LIST_REL (\t e. arg_type_fits (expr_type e) t) tys (MAP SND fields) /\
   compile_struct_lit compile_expr ce ty fields (Var x) off sa = (out,sb) /\
-  OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type (MAP SND fields)) = SOME tvs /\
+  OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   expr_sim_inv ce cx env es /\
   (!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
@@ -58,7 +59,16 @@ Theorem aggregate_struct_fields_sim_mem:
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
       locals_kept ce es es' s0 r /\ alloca_history func r /\
-      s0.vs_alloca_next <= r.vs_alloca_next)
+      s0.vs_alloca_next <= r.vs_alloca_next /\
+      (~EXISTS expr_has_effect (MAP SND fields) ==>
+        (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             sa.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -66,24 +76,25 @@ Proof
   drule exprSimAggregateLayoutTheory.compile_struct_lit_as_tuple >>
   disch_then (qspecl_then [`compile_expr`, `Var x`, `off`] assume_tac) >>
   gvs[] >>
-  drule aggregate_make_tuple_sim_mem >>
-  disch_then drule >>
+  drule aggregate_make_tuple_fits_sim_mem >>
+  disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME (_,_)`)) >>
   disch_then (qspecl_then [`es`, `func`] mp_tac) >>
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >> simp[] >>
+  imp_res_tac listTheory.LIST_REL_LENGTH >>
   drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >> strip_tac >>
   irule struct_gas_outcome_post >>
   goal_assum (drule_at Any) >>
   BETA_TAC >> rpt strip_tac >> qexists_tac `vs` >> gvs[] >> simp[] >>
   conj_tac >- (irule struct_tuple_memory_post >> simp[]) >>
-  conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem aggregate_make_array_elems_sim_mem:
   !args ce cx env elem_ty tv header idx off sa out sb es func inst x b asz s0 ctx tops.
-  EVERY (\e. expr_type e = elem_ty) args /\
+  EVERY (\e. arg_type_fits (expr_type e) elem_ty) args /\
   evaluate_type (get_tenv cx) elem_ty = SOME tv /\
   type_memory_bytes ce elem_ty = type_memory_size tv /\
   off = (if header then 32 else 0) + idx * type_memory_size tv /\
@@ -131,20 +142,34 @@ Theorem aggregate_make_array_elems_sim_mem:
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
       locals_kept ce es es' s0 r /\ alloca_history func r /\
-      s0.vs_alloca_next <= r.vs_alloca_next)
+      s0.vs_alloca_next <= r.vs_alloca_next /\
+      (~EXISTS expr_has_effect args ==>
+        (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             sa.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule compile_make_array_elems_as_tuple >>
-  disch_then (qspecl_then [`header`, `compile_expr`, `ce`, `Var x`, `idx`] mp_tac) >>
+  mp_tac (Q.SPECL [`args`, `idx`] (Q.INST [`cfn` |-> `compile_expr`,
+    `buf` |-> `Var x`] compile_make_array_elems_as_tuple)) >>
   strip_tac >>
-  `OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) =
+  `OPT_MMAP (evaluate_type (get_tenv cx)) (REPLICATE (LENGTH args) elem_ty) =
      SOME (REPLICATE (LENGTH args) tv)` by
-    (irule exprSimAggregateEncodingTheory.OPT_MMAP_uniform_map >> metis_tac[]) >>
-  `compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb)` by
+    (Q.SPEC_TAC (`LENGTH args`, `n`) >> Induct >> gvs[rich_listTheory.REPLICATE]) >>
+  `LIST_REL (\t e. arg_type_fits (expr_type e) t)
+     (REPLICATE (LENGTH args) elem_ty) args` by
+    gvs[listTheory.LIST_REL_EL_EQN, rich_listTheory.EL_REPLICATE, listTheory.EVERY_EL] >>
+  `compile_make_tuple compile_expr ce args (REPLICATE (LENGTH args) elem_ty)
+     (Var x) off sa = (out,sb)` by
     (gvs[] >> metis_tac[]) >>
-  drule aggregate_make_tuple_sim_mem >> disch_then drule >>
+  drule aggregate_make_tuple_fits_sim_mem >> disch_then drule >>
+  disch_then drule >>
   disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME (_,_)`)) >>
@@ -164,13 +189,13 @@ Proof
       conj_tac
       >- (irule (iffLR exprSimAggregateEncodingTheory.tuple_in_memory_replicate_elems) >>
           metis_tac[]) >>
-      conj_tac >> first_assum ACCEPT_TAC) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   metis_tac[]
 QED
 
 Theorem aggregate_make_array_sim_mem:
   !args ce cx env elem_ty tv stride header sa out sb es func inst x b asz s0 ctx tops.
-  EVERY (\e. expr_type e = elem_ty) args /\
+  EVERY (\e. arg_type_fits (expr_type e) elem_ty) args /\
   evaluate_type (get_tenv cx) elem_ty = SOME tv /\
   stride = type_memory_size tv /\
   type_memory_bytes ce elem_ty = type_memory_size tv /\
@@ -219,7 +244,16 @@ Theorem aggregate_make_array_sim_mem:
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
       locals_kept ce es es' s0 r /\ alloca_history func r /\
-      s0.vs_alloca_next <= r.vs_alloca_next)
+      s0.vs_alloca_next <= r.vs_alloca_next /\
+      (~EXISTS expr_has_effect args ==>
+        (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             sa.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -236,8 +270,9 @@ Proof
   `ci_mono sa sm` by
     metis_tac[ci_mono_emit_void, pairTheory.SND] >>
   `ci_mono sm sb` by
-    (drule compile_make_array_elems_as_tuple >>
-     disch_then (qspecl_then [`T`, `compile_expr`, `ce`, `Var x`, `0`] mp_tac) >>
+    (mp_tac (Q.SPECL [`args`, `0`] (Q.INST [`header` |-> `T`,
+       `cfn` |-> `compile_expr`, `buf` |-> `Var x`]
+       compile_make_array_elems_as_tuple)) >>
      strip_tac >> gvs[] >>
      metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND]) >>
   `cs_extends sa sm /\ cs_extends sm sb` by gvs[ci_mono_def] >>
@@ -327,7 +362,8 @@ Resume aggregate_make_array_sim_mem[array_post_transport]:
   conj_tac >- suspend "inner_frame" >>
   conj_tac >- suspend "outer_frame" >>
   conj_tac >- suspend "locals" >>
-  gvs[Abbr `sh`, mstore_def]
+  conj_tac >- gvs[Abbr `sh`, mstore_def] >>
+  suspend "pure"
 QED
 
 Resume aggregate_make_array_sim_mem[header_word]:
@@ -384,6 +420,50 @@ Resume aggregate_make_array_sim_mem[header_boundary]:
   >- (rpt strip_tac >> first_x_assum drule_all >>
       simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   qexistsl_tac [`asz`, `inst`, `x`] >> simp[]
+QED
+
+Resume aggregate_make_array_sim_mem[pure]:
+  strip_tac >>
+  `!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+      b + asz <= lo \/ lo + sz <= b` by
+    (rpt strip_tac >>
+     `not_local_ptr ce es.scopes x` by simp[] >>
+     drule_all (SRULE [] (Q.INST [`off` |-> `0`, `n` |-> `asz`, `r` |-> `s0`]
+       aggregate_alloca_slice_excludes_local)) >> decide_tac) >>
+  qspecl_then [`ce`, `func`, `es`, `sa`, `s0`, `s0`, `sh`, `b`, `asz`, `b`, `32`]
+    mp_tac exprSimAggregateChildrenTheory.aggregate_pure_frame_store >>
+  (impl_tac >-
+    (conj_tac >- simp[] >>
+     conj_tac >- simp[Abbr `sh`, mstore_def] >>
+     conj_tac >- simp[] >>
+     conj_tac >- decide_tac >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     rpt strip_tac >> simp[Abbr `sh`] >>
+     qpat_x_assum `!p n. _ \/ _ ==> _` irule >> first_assum ACCEPT_TAC)) >>
+  strip_tac >>
+  qpat_x_assum `EVERY _ args ==> _` mp_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
+     lookup_var z sh = SOME w` by
+    simp[Abbr `sh`, mstore_def, lookup_var_def] >>
+  `sa.cs_next_id <= sm.cs_next_id` by
+    (qpat_x_assum `sm.cs_next_id = _` mp_tac >> rpt (pop_assum kall_tac) >>
+     decide_tac) >>
+  qpat_x_assum `sm.cs_next_id = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th])) >>
+  qspecl_then [`ce`, `func`, `es`, `es`, `sa`, `sm`, `s0`, `sh`, `t`, `b`, `asz`]
+    mp_tac exprSimAggregateChildrenTheory.aggregate_pure_frame_trans >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      TRY (rewrite_tac[] >> NO_TAC) >>
+      rpt strip_tac >>
+      qpat_x_assum `!p n. (n + p <= b \/ _) /\ _ ==> mem_bytes_at p n t.vs_memory = _`
+        irule >>
+      conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      TRY (qpat_x_assum `p + n <= b` mp_tac) >>
+      TRY (qpat_x_assum `b + asz <= p` mp_tac) >>
+      rpt (pop_assum kall_tac) >> decide_tac) >>
+  simp[]
 QED
 
 Finalise aggregate_make_array_sim_mem

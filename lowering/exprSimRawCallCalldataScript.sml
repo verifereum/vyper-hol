@@ -372,7 +372,7 @@ Theorem raw_call_oracle_result:
                     (call_outcome_return_data outcome))]))), es2))
 Proof
   rpt strip_tac >>
-  simp[eval_raw_call_def, frame_call_value_def, bind_def, ignore_bind_def,
+  simp[eval_raw_call_def, frame_call_value_def, update_pending_deletions_def, bind_def, ignore_bind_def,
        type_check_def, assert_def, vyperStateTheory.return_def, raise_def] >>
   Cases_on `flags.rcf_revert_on_failure` >>
   Cases_on `call_outcome_success outcome` >>
@@ -3481,7 +3481,7 @@ Proof
   gvs[AllCaseEqs()] >> drule raw_call_alloca_saved_fmp >> simp[]
 QED
 
-Theorem raw_call_alloc_buffer_run[local]:
+Theorem raw_call_alloc_buffer_run:
   !func cenv cx es sa sm buf sz s ctx saved.
   compile_alloc_buffer sz sa = (buf,sm) /\
   stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
@@ -4163,6 +4163,7 @@ Proof
 QED
 
 Theorem raw_call_value_vv_post[local]:
+  expr_has_effect e /\
   n < dimword (:256) /\ flags.rcf_max_outsize = n /\
   post_value_type cenv e = expr_type e /\
   expr_type e = raw_call_return_type flags /\
@@ -4214,6 +4215,7 @@ Proof
 QED
 
 Theorem raw_call_finish_vv_frag[local]:
+  expr_has_effect e /\
   compile_raw_call_finish aop dp dl gop vop call_ty n flags.rcf_revert_on_failure ov op sc = (result,se) /\
   emit_void SETFMP [dp] se = ((),sb) /\
   (call_ty = StaticCall \/ call_ty = RegularCall) /\
@@ -4327,6 +4329,7 @@ Resume raw_call_finish_vv_frag[suffix]:
   qpat_x_assum `~flags.rcf_revert_on_failure` mp_tac >>
   qpat_x_assum `n < dimword (:256)` mp_tac >>
   qpat_x_assum `t.vs_returndata = _` mp_tac >>
+  qpat_x_assum `expr_has_effect e` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
   suspend "suffix_value"
 QED
@@ -4489,7 +4492,8 @@ Proof
   qmatch_goalsub_abbrev_tac `expr_exit source_result` >>
   qexists_tac `Call (raw_call_return_type flags) (RawCallCalldataTarget flags) (addr::kws) NONE` >>
   qexists_tac `expr_exit source_result` >>
-  simp[Abbr `source_result`, expr_type_def, raw_call_return_type_def] >>
+  simp[Abbr `source_result`, expr_type_def, raw_call_return_type_def,
+       expr_has_effect_thm] >>
   Cases_on `flags.rcf_is_static` >> fs[expr_exit_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
@@ -4607,7 +4611,7 @@ Theorem calldata_raw_call_gas_obs:
     (SND (eval_raw_call cx flags target data amount gas st)).gas_obs = st.gas_obs
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[eval_raw_call_def, frame_call_value_def, bind_def, ignore_bind_def,
+  simp[eval_raw_call_def, frame_call_value_def, update_pending_deletions_def, bind_def, ignore_bind_def,
        type_check_def, assert_def, vyperStateTheory.return_def, raise_def] >>
   IF_CASES_TAC >> simp[raise_def] >>
   qmatch_goalsub_abbrev_tac `take_call_outcome target data vo` >>

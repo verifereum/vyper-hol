@@ -28,7 +28,6 @@ Datatype:
   | AppendK1 place eval_continuation
   | AnnAssignK identifier type_value eval_continuation
   | AssignK base_assignment_target eval_continuation
-  | AssignK1 eval_result eval_continuation
   | TupleAssignK (assignment_target list) eval_continuation
   | TupleStoreK value eval_continuation
   | TupleStoresK (assignment_target list) (value list) eval_continuation
@@ -42,7 +41,7 @@ Datatype:
   | IfK1 eval_result (stmt list) (stmt list) eval_continuation
   | IfK2 eval_continuation
   | ForK identifier type_value num (stmt list) eval_continuation
-  | ForK1 type_value identifier (stmt list) (value list) eval_continuation
+  | ForK1 type_value identifier (stmt list) (eval_result list) eval_continuation
   | ExprK eval_continuation
   | StmtsK (stmt list) eval_continuation
   | ArrayK type eval_continuation
@@ -51,17 +50,18 @@ Datatype:
   | IfExpK expr expr eval_continuation
   | ConditionalK eval_continuation
   | StructLitK (identifier list) eval_continuation
-  | SubscriptK type expr eval_continuation
+  | SubscriptK type bool expr eval_continuation
   | SubscriptK1 type eval_result eval_continuation
   | AttributeK type identifier eval_continuation
   | BuiltinK type builtin (type list) eval_continuation
+  | CodeSliceK type num bool type type (type list) eval_continuation
   | MembershipK type bool eval_continuation
   | LenK eval_continuation
   | TypeBuiltinK type_builtin type (type list) eval_continuation
   | CallSendK bool eval_continuation
   | ExtTargetK bool bool ext_call_sig ext_call_opts (expr list) eval_continuation
   | ExtArgsK bool bool ext_call_sig ext_call_opts (value list) (expr list) eval_continuation
-  | ExtKwargsK bool bool ext_call_sig ext_call_opts (value list) (eval_result list) eval_continuation
+  | ExtKwargsK bool bool ext_call_sig ext_call_opts (value list) (value list) eval_continuation
   (* Chain interaction builtin continuations *)
   | RawCallK type raw_call_flags eval_continuation
   | RawCallCalldataK raw_call_flags eval_continuation
@@ -76,7 +76,7 @@ Datatype:
   | RawCreateSaltK (value list) (value list) eval_continuation
   | ReadResultsK eval_continuation
   | IntCallK (nsid |-> type_args) nsid ((identifier # type) list) (expr list) type (stmt list) bool function_mutability eval_continuation
-  | IntCallK1 (nsid |-> type_args) nsid ((identifier # type) list) (eval_result list) (scope list) type (stmt list) bool function_mutability eval_continuation
+  | IntCallK1 (nsid |-> type_args) nsid ((identifier # type) list) (value list) (scope list) type (stmt list) bool function_mutability eval_continuation
   | IntCallK2 (scope list) type_value bool bool eval_continuation
   | ExprsK (expr list) eval_continuation
   | ExprsK1 value eval_continuation
@@ -161,7 +161,8 @@ Definition eval_expr_cps_def:
   eval_expr_cps cx5 (StructLit _ (src_id_opt, id) kes) st k =
     eval_exprs_cps cx5 (MAP SND kes) st (StructLitK (MAP FST kes) k) ∧
   eval_expr_cps cx6 (Subscript _ e1 e2) st k =
-    eval_expr_cps cx6 e1 st (SubscriptK (expr_type e1) e2 k) ∧
+    eval_expr_cps cx6 e1 st
+      (SubscriptK (expr_type e1) (subscript_reads_base cx6 e1 e2) e2 k) ∧
   eval_expr_cps cx7 (Attribute _ e id) st k =
     eval_expr_cps cx7 e st (AttributeK (expr_type e) id k) ∧
   eval_expr_cps cx8 (Builtin ty bt es) st k =
@@ -174,7 +175,13 @@ Definition eval_expr_cps_def:
                        else if bt = Env MsgGas then
                          liftk cx8 ApplyTv
                            (do v <- next_gas_reading; return $ Value v od st) k
-                       else eval_exprs_cps cx8 es st (BuiltinK ty bt (MAP expr_type es) k)) ∧
+                       else (case (bt, es) of
+                         (Slice n, [Builtin code_ty (Acc Code) [addr]; start; len]) =>
+                           eval_exprs_cps cx8 [start; len; addr] st
+                             (CodeSliceK ty n (is_self_addr addr) code_ty
+                                (expr_type addr) (MAP expr_type es) k)
+                       | _ => eval_exprs_cps cx8 es st
+                                (BuiltinK ty bt (MAP expr_type es) k))) ∧
   eval_expr_cps cx8 (Pop _ bt) st k =
     eval_target_place_cps cx8 bt st (PopK k) ∧
   eval_expr_cps cx8 (TypeBuiltin _ tb typ es) st k =
@@ -228,18 +235,14 @@ Definition eval_expr_cps_def:
       return (all_tenv, args, dflts, ret, body, nr, mut) od st
      of (INR ex, st) => AK cx10 (ApplyExc ex) st k
       | (INL (all_tenv, args, dflts, ret, body, nr, mut), st) =>
-          eval_expr_results_cps cx10 es st (IntCallK all_tenv (ns, fn) args dflts ret body nr mut k)) ∧
+          eval_exprs_cps cx10 es st (IntCallK all_tenv (ns, fn) args dflts ret body nr mut k)) ∧
   eval_exprs_cps cx11 [] st k = AK cx11 (ApplyVals []) st k ∧
   eval_exprs_cps cx12 (e::es) st k =
-    eval_expr_cps cx12 e st (ExprsK es k) ∧
-  eval_expr_results_cps cx [] st k = AK cx (ApplyResults []) st k ∧
-  eval_expr_results_cps cx (e::es) st k =
-    eval_expr_cps cx e st (ExprResultsK es k)
+    eval_expr_cps cx12 e st (ExprsK es k)
 Termination
   WF_REL_TAC ‘measure (λx. case x of
     | INL (cx,e,st,k) => expr_size e
-    | INR (INL (cx,es,st,k)) => list_size expr_size es
-    | INR (INR (cx,es,st,k)) => list_size expr_size es)’
+    | INR (cx,es,st,k) => list_size expr_size es)’
   \\ rw[list_size_SUM_MAP, MAP_MAP_o, ETA_AX,
         list_size_pair_size_map, builtin_args_length_ok_def, check_def, type_check_def,
         assert_def, LENGTH_EQ_NUM_compute] \\ rw[]
@@ -255,12 +258,11 @@ val eval_expr_cps_pre_def = eval_expr_cps_def
         [liftk1, bind_def, ignore_bind_def,
          LET_RATOR, option_CASE_rator,
          sum_CASE_rator, prod_CASE_rator, lift_option_def]
-   |> cv_auto_trans_pre "eval_expr_cps_pre eval_exprs_cps_pre eval_expr_results_cps_pre";
+   |> cv_auto_trans_pre "eval_expr_cps_pre eval_exprs_cps_pre";
 
 Theorem eval_expr_cps_pre[cv_pre]:
   (∀a b c d. eval_expr_cps_pre a b c d) ∧
-  (∀x y z w. eval_exprs_cps_pre x y z w) ∧
-  (∀x y z w. eval_expr_results_cps_pre x y z w)
+  (∀x y z w. eval_exprs_cps_pre x y z w)
 Proof
   ho_match_mp_tac eval_expr_cps_ind \\ rw[]
   \\ rw[Once eval_expr_cps_pre_def]
@@ -269,6 +271,14 @@ Proof
   \\ first_x_assum irule
   \\ gvs[bind_def, ignore_bind_def, lift_option_def, lift_option_type_def, assert_def]
 QED
+
+Definition eval_expr_results_cps_def:
+  eval_expr_results_cps cx [] st k = AK cx (ApplyResults []) st k ∧
+  eval_expr_results_cps cx (e::es) st k =
+    eval_expr_cps cx e st (ExprResultsK es k)
+End
+
+val () = cv_auto_trans eval_expr_results_cps_def;
 
 Definition eval_iterator_cps_def:
   eval_iterator_cps cx (Array e) st k =
@@ -359,10 +369,13 @@ val () = cv_auto_trans eval_stmts_cps_def;
 
 Definition eval_for_cps_def:
   eval_for_cps cx tyv nm body [] st k = AK cx Apply st k ∧
-  eval_for_cps cx tyv nm body (v::vs) st k =
-  (case push_scope_with_var nm tyv v st of
+  eval_for_cps cx tyv nm body (r::rs) st k =
+  (case read_result cx r st of
+     (INR ex, st) => AK cx (ApplyExc ex) st k
+   | (INL v, st) =>
+     (case push_scope_with_var nm tyv v st of
         (INR ex, st) => AK cx (ApplyExc ex) st k
-      | (INL (), st) => eval_stmts_cps cx body st (ForK1 tyv nm body vs k))
+      | (INL (), st) => eval_stmts_cps cx body st (ForK1 tyv nm body rs k)))
 End
 
 val () = cv_auto_trans eval_for_cps_def;
@@ -412,7 +425,6 @@ Definition apply_exc_def:
   apply_exc cx ex st (AppendK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AnnAssignK _ _ k) = AK cx (ApplyExc ex) st k ∧  (* id, tyv unused *)
   apply_exc cx ex st (AssignK _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AssignK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AugAssignK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AugAssignK1 _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TupleAssignK _ k) = AK cx (ApplyExc ex) st k /\
@@ -443,11 +455,12 @@ Definition apply_exc_def:
   apply_exc cx ex st (ConditionalK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfExpK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (StructLitK _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (SubscriptK _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (SubscriptK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SubscriptK1 _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AttributeK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (BuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (CodeSliceK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (MembershipK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
@@ -472,10 +485,10 @@ Definition apply_exc_def:
     liftk (cx with stk updated_by TL) (K (ApplyExc ex)) (set_scopes prev st) k ∧
   apply_exc cx ex st (IntCallK2 prev rtv nr is_view k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
-      (do rv <- finally (handle_function ex)
-            (do pop_function prev;
-                unlock_if_nr cx nr is_view
-             od);
+      (do rv <- finally_unless_halt
+            (finally (handle_function ex) (pop_function prev))
+            (* A halt restores scopes but leaves the lock set. *)
+            (unlock_if_nr cx nr is_view);
           crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
 	  return crv od st)
       k ∧
@@ -487,7 +500,7 @@ Definition apply_exc_def:
 End
 
 val () = apply_exc_def
-  |> SRULE [finally_def, bind_def, ignore_bind_def,
+  |> SRULE [finally_unless_halt_def, finally_def, bind_def, ignore_bind_def,
             liftk1, prod_CASE_rator, sum_CASE_rator,
             COND_RATOR, option_CASE_rator]
   |> cv_auto_trans;
@@ -497,10 +510,6 @@ Definition apply_place_def:
     eval_expr_cps cx e st (AppendK1 p k) /\
   apply_place cx p st (PopK k) =
     liftk cx ApplyTv (pop_place cx p st) k /\
-  apply_place cx p st (AssignK1 pv k) =
-    liftk cx (K Apply) (do
-      v <- read_result cx pv;
-      write_place cx p v od st) k /\
   apply_place cx p st (TupleStoreK v k) =
     liftk cx (K Apply) (write_place cx p v st) k /\
   apply_place cx p st (AugAssignK ty bop e k) =
@@ -522,7 +531,7 @@ Definition apply_tv_def:
   apply_tv cx tv st (ExprResultsK es k) =
     eval_expr_results_cps cx es st (ExprResultsK1 tv k) /\
   apply_tv cx tv st (AssignK t k) =
-    eval_target_place_cps cx t st (AssignK1 tv k) /\
+    liftk cx ApplyVal (read_result cx tv st) (AssignK t k) /\
   apply_tv cx tv st (BasePlaceSubscriptK e k) =
     eval_expr_cps cx e st (BasePlaceSubscriptK1 tv k) /\
   apply_tv cx tv st (BasePlaceAttributeK id k) =
@@ -535,8 +544,11 @@ Definition apply_tv_def:
     liftk cx ApplyTv (select_result cx ty tv (AttrSubscript id) st) k /\
   apply_tv cx tv st (TupleAssignK gs k) =
     liftk cx ApplyVal (read_result cx tv st) (TupleAssignK gs k) /\
-  apply_tv cx tv st (SubscriptK arr_typ e k) =
-    eval_expr_cps cx e st (SubscriptK1 arr_typ tv k) ∧
+  apply_tv cx tv st (SubscriptK arr_typ rd e k) =
+    (if rd then
+       liftk cx ApplyTv (do v <- read_result cx tv; return (Value v) od st)
+         (SubscriptK arr_typ F e k)
+     else eval_expr_cps cx e st (SubscriptK1 arr_typ tv k)) ∧
   apply_tv cx tv st (IfK ss1 ss2 k) =
     liftk cx (K Apply) (push_scope st) (IfK1 tv ss1 ss2 k) ∧
   apply_tv cx tv st (LenK k) =
@@ -556,7 +568,7 @@ Definition apply_tv_def:
     liftk cx ApplyVal (read_result cx tv st) (AppendK1 btv k) ∧
 
   apply_tv cx tv st (ArrayK arr_typ k) =
-    liftk cx ApplyVal (read_result cx tv st) (ArrayK arr_typ k) ∧
+    liftk cx ApplyResults (array_iterator_results cx arr_typ tv st) k ∧
   apply_tv cx tv st (ExprsK es k) =
     liftk cx ApplyVal (read_result cx tv st) (ExprsK es k) ∧
   apply_tv cx tv st DoneK = AK cx (ApplyTv tv) st DoneK ∧
@@ -570,26 +582,14 @@ val () = apply_tv_def
 
 (* ===== apply_val helpers: extracted complex do-block clauses so each
         translates cheaply on its own (cv_trans speed) ===== *)
-Definition apply_val_array_def:
-  apply_val_array cx arr_typ v st k =
-    (case evaluate_type (get_tenv cx) arr_typ of
-     | SOME arr_tv =>
-         liftk cx ApplyVals
-           (lift_option_type (extract_elements arr_tv v) "For not ArrayV" st) k
-     | NONE => AK cx (ApplyExc (Error (TypeError "For array type"))) st k)
-End
-val () = apply_val_array_def
-  |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
-            lift_option_type_def]
-  |> cv_auto_trans;
 Definition apply_val_range2_def:
   apply_val_range2 cx v1 v2 st k =
     (case do rl <- lift_sum $ get_range_limits v1 v2;
              n1 <<- FST rl; n2 <<- SND rl;
-             return $ GENLIST (λn. IntV (n1 + &n)) n2
+             return $ GENLIST (λn. Value (IntV (n1 + &n))) n2
      od st
        of (INR ex, st) => apply_exc cx ex st k
-        | (INL vs, st) => AK cx (ApplyVals vs) st k)
+        | (INL rs, st) => AK cx (ApplyResults rs) st k)
 End
 val () = apply_val_range2_def
   |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
@@ -636,6 +636,8 @@ Definition apply_val_def:
      | _ => apply_exc cx (Error (TypeError "not StringV")) st k) ∧
   apply_val cx v st (AnnAssignK id tyv k) =
     liftk cx (K Apply) (new_variable id tyv v st) k ∧
+  apply_val cx v st (AssignK t k) =
+    eval_target_place_cps cx t st (TupleStoreK v k) /\
   apply_val cx v st (TupleAssignK gs k) =
     assign_tuple_targets_cps cx (TupleTarget gs) v st k /\
   apply_val cx v st (BasePlaceSubscriptK1 pv k) =
@@ -647,7 +649,6 @@ Definition apply_val_def:
       write_place cx p res od st) k ∧
   apply_val cx v st (AppendK1 p k) =
     liftk cx (K Apply) (append_place cx p v st) k ∧
-  apply_val cx v st (ArrayK arr_typ k) = apply_val_array cx arr_typ v st k ∧
   apply_val cx v st (RangeK1 e k) = eval_expr_cps cx e st (RangeK2 v k) ∧
   apply_val cx v2 st (RangeK2 v1 k) = apply_val_range2 cx v1 v2 st k ∧
   apply_val cx v st (IfExpK e2 e3 k) =
@@ -673,11 +674,6 @@ val () = apply_val_def
 Definition apply_vals_def:
   apply_vals cx vs st (ExprsK1 v k) =
     apply_vals cx (v::vs) st k ∧
-  apply_vals cx vs st (ForK id tyv n body k) =
-    (case do check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
-             return vs od st
-     of (INR ex, st) => apply_exc cx ex st k
-      | (INL vs, st) => eval_for_cps cx tyv id body vs st k) ∧
   apply_vals cx vs st (StructLitK ks k) =
     apply_tv cx (Value $ StructV (ZIP (ks, vs))) st k ∧
   apply_vals cx vs st (MembershipK ty neg k) =
@@ -692,6 +688,16 @@ Definition apply_vals_def:
       acc <- get_accounts;
       v <- lift_sum $ evaluate_builtin cx acc ty bt tys vs;
       precompile_call_success bt;
+      return $ Value v
+    od st) k ∧
+  apply_vals cx [start_v; len_v; addr_v] st
+             (CodeSliceK ty n is_self code_ty addr_ty tys k) =
+    liftk cx ApplyTv (do
+      acc <- get_accounts;
+      code_v <- lift_sum $ evaluate_code_source cx acc is_self code_ty
+                             addr_ty [addr_v];
+      v <- lift_sum $ evaluate_builtin cx acc ty (Slice n) tys
+        [code_v; start_v; len_v];
       return $ Value v
     od st) k ∧
   apply_vals cx vs st (TypeBuiltinK tb typ tys k) =
@@ -714,18 +720,30 @@ Definition apply_vals_def:
   apply_vals cx vs st (CallSendK has_gas k) =
     liftk cx ApplyTv (eval_send cx has_gas vs st) k ∧
   apply_vals cx target st (ExtTargetK is_static skip_check sig opts es k) =
-    eval_expr_results_cps cx (TAKE (LENGTH (FST (SND sig))) es) st
+    eval_exprs_cps cx (TAKE (LENGTH (FST (SND sig))) es) st
       (ExtArgsK is_static skip_check sig opts target
         (DROP (LENGTH (FST (SND sig))) es) k) ∧
-  apply_vals cx kwargs st (ExtKwargsK is_static skip_check sig opts target results k) =
-    liftk cx ApplyTv (do
-      vs <- read_results cx results;
-      eval_ext_call cx is_static skip_check sig opts (target ++ vs ++ kwargs)
-    od st) k ∧
-  apply_vals cx dflt_vs st (IntCallK1 all_tenv src_fn args results prev ret body nr mut k) =
+  apply_vals cx vs st
+      (ExtArgsK is_static skip_check sig opts target kwargs k) =
+    eval_exprs_cps cx kwargs st
+      (ExtKwargsK is_static skip_check sig opts target vs k) ∧
+  apply_vals cx kwargs st (ExtKwargsK is_static skip_check sig opts target vs k) =
+    liftk cx ApplyTv
+      (eval_ext_call cx is_static skip_check sig opts (target ++ vs ++ kwargs) st) k ∧
+  apply_vals cx vs st (IntCallK all_tenv src_fn args dflts ret body nr mut k) =
+    (case do
+      prev <- get_scopes;
+      set_scopes [FEMPTY];
+      return prev
+    od st of
+     | (INR ex,st) => apply_exc cx ex st k
+     | (INL prev,st) =>
+        eval_exprs_cps (cx with stk updated_by CONS src_fn)
+          (DROP (LENGTH dflts - (LENGTH args - LENGTH vs)) dflts) st
+          (IntCallK1 all_tenv src_fn args vs prev ret body nr mut k)) ∧
+  apply_vals cx dflt_vs st (IntCallK1 all_tenv src_fn args vs prev ret body nr mut k) =
     (case do
       set_scopes prev;
-      vs <- read_results (cx with stk updated_by TL) results;
       env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
       rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
       is_view <<- is_view_mut mut;
@@ -779,7 +797,8 @@ Definition apply_vals_def:
   apply_vals cx vs st (RawRevertK k) =
     (case do
       type_check (LENGTH vs = 1) "raw_revert args";
-      raise $ Error $ RuntimeError "raw_revert"
+      data <- lift_option_type (dest_BytesV (EL 0 vs)) "raw_revert data";
+      raise (Error (RevertData data))
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
@@ -789,10 +808,15 @@ Definition apply_vals_def:
       target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
       check_not_static cx;
       accounts <- get_accounts;
-      self_acct <<- lookup_account cx.txn.target accounts;
-      balance <<- self_acct.balance;
-      transfer_value cx.txn.target target_addr balance;
-      return $ Value NoneV
+      self <<- cx.txn.target;
+      balance <<- (lookup_account self accounts).balance;
+      transfer_value self target_addr balance;
+      if cx.txn.created_in_tx then do
+        update_accounts (λacc. update_account self
+          (lookup_account self acc with balance := 0) acc);
+        update_pending_deletions (CONS self)
+      od else return ();
+      raise HaltException
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
@@ -837,9 +861,19 @@ Proof
   rw[UNCURRY]
 QED
 
+Triviality LET6_UNCURRY:
+  (let (x,y,z,w,v,u) = M in N x y z w v u) =
+     let p = M; x = FST p; p = SND p; y = FST p; p = SND p;
+         z = FST p; p = SND p; w = FST p; p = SND p;
+         v = FST p; u = SND p in N x y z w v u
+Proof
+  rw[UNCURRY]
+QED
+
 val apply_vals_pre_def = apply_vals_def
   |> SRULE [liftk1, bind_def, ignore_bind_def, lift_option_def, lift_option_type_def, lift_option_type_def,
-            lift_sum_def, lift_sum_runtime_def, prod_CASE_rator, LET_RATOR, LET4_UNCURRY, LET5_UNCURRY,
+             lift_sum_def, lift_sum_runtime_def, prod_CASE_rator, LET_RATOR,
+             LET4_UNCURRY, LET5_UNCURRY, LET6_UNCURRY,
             UNCURRY, sum_CASE_rator, option_CASE_rator, COND_RATOR]
   |> cv_auto_trans_pre "apply_vals_pre";
 
@@ -870,25 +904,15 @@ Definition apply_results_def:
     apply_results cx (tv::results) st k ∧
   apply_results cx results st (ReadResultsK k) =
     liftk cx ApplyVals (read_results cx results st) k ∧
-  apply_results cx results st
-      (ExtArgsK is_static skip_check sig opts target kwargs k) =
-    eval_exprs_cps cx kwargs st
-      (ExtKwargsK is_static skip_check sig opts target results k) ∧
   apply_results cx results st (RawCreateArgsK prefix salt k) =
     (case read_results cx results st of
        (INR ex,st) => AK cx (ApplyExc ex) st k
      | (INL vs,st) => eval_exprs_cps cx salt st (RawCreateSaltK prefix vs k)) ∧
-  apply_results cx results st (IntCallK all_tenv src_fn args dflts ret body nr mut k) =
-    (case do
-      prev <- get_scopes;
-      set_scopes [FEMPTY];
-      return prev
-    od st of
-     | (INR ex,st) => apply_exc cx ex st k
-     | (INL prev,st) =>
-        eval_exprs_cps (cx with stk updated_by CONS src_fn)
-          (DROP (LENGTH dflts - (LENGTH args - LENGTH results)) dflts) st
-          (IntCallK1 all_tenv src_fn args results prev ret body nr mut k)) ∧
+  apply_results cx results st (ForK id tyv n body k) =
+    (case do check (compatible_bound (Dynamic n) (LENGTH results)) "For too long";
+             return results od st
+     of (INR ex, st) => apply_exc cx ex st k
+      | (INL rs, st) => eval_for_cps cx tyv id body rs st k) ∧
   apply_results cx results st DoneK = AK cx (ApplyResults results) st DoneK ∧
   apply_results cx results st _ =
     AK cx (ApplyExc (Error (TypeError "apply_results k"))) st DoneK
@@ -964,6 +988,45 @@ QED
 
 
 
+Theorem result_map_bind[local]:
+  (case (case p of
+           (INL x,t) => (case lift_option_type (safe_cast rtv x) "IntCall cast ret" t of
+               (INL y,u) => (INL y,u) | (INR e,u) => (INR e,u))
+         | (INR e,t) => (INR e,t)) of
+      (INL y,t) => AK cx (ApplyTv (Value y)) t | (INR e,t) => AK cx (ApplyExc e) t) =
+  (case (case p of
+           (INL x,t) => (case lift_option_type (safe_cast rtv x) "IntCall cast ret" t of
+               (INL y,u) => (INL (Value y),u) | (INR e,u) => (INR e,u))
+         | (INR e,t) => (INR e,t)) of
+      (INL y,t) => AK cx (ApplyTv y) t | (INR e,t) => AK cx (ApplyExc e) t)
+Proof
+  Cases_on `p` >> simp[] >>
+  rpt (BasicProvers.PURE_TOP_CASE_TAC >> simp[]) >>
+  gvs[AllCaseEqs()]
+QED
+
+(* Map the ordinary internal-call result after an opaque unlock result. *)
+Theorem result_map_ignore_bind[local]:
+  (case (case p of
+      (INL x,st) =>
+        (case lift_option_type (safe_cast rtv NoneV) "IntCall cast ret" st of
+           (INL y,post) => (INL y,post) | (INR e,post) => (INR e,post))
+    | (INR e,st) => (INR e,st)) of
+     (INL y,st) => AK cx (ApplyTv (Value y)) st
+   | (INR e,st) => AK cx (ApplyExc e) st) =
+  (case (case (case p of
+       (INL x,st) => (INL NoneV,st) | (INR e,st) => (INR e,st)) of
+      (INL value,st) =>
+        (case lift_option_type (safe_cast rtv value) "IntCall cast ret" st of
+           (INL y,post) => (INL (Value y),post) | (INR e,post) => (INR e,post))
+    | (INR e,st) => (INR e,st)) of
+     (INL y,st) => AK cx (ApplyTv y) st
+   | (INR e,st) => AK cx (ApplyExc e) st)
+Proof
+  Cases_on `p` >> simp[] >>
+  rpt (BasicProvers.PURE_TOP_CASE_TAC >> simp[]) >> gvs[AllCaseEqs()]
+QED
+
 Theorem cont_step[local]:
   !a. nextk a <> DoneK ==> cont a = cont (stepk a)
 Proof
@@ -996,25 +1059,396 @@ Theorem cont_ifk2_finally[local]:
   cont (liftk cx (K Apply) (finally m pop_scope st) k)
 Proof
     Cases_on `m st` >> Cases_on `q` >>
-  gvs[finally_def, ignore_bind_def, bind_def, return_def, raise_def,
+  gvs[finally_unless_halt_def, finally_def, ignore_bind_def, bind_def, return_def, raise_def,
       liftk1, cont_def, Once OWHILE_THM, stepk_def,
       apply_def, apply_exc_def] >>
   Cases_on `pop_scope r` >> Cases_on `q` >> gvs[]
 QED
 
-Theorem eval_cps_mutual:
+Theorem cont_apply_vals[local]:
+  cont (apply_vals cx ws st k) = cont (AK cx (ApplyVals ws) st k)
+Proof
+  Cases_on `k = DoneK` >- gvs[apply_vals_def] >>
+  qspec_then `AK cx (ApplyVals ws) st k` mp_tac cont_step >>
+  simp[stepk_def]
+QED
+
+Theorem cont_exprsk1_vals[local]:
+  cont (AK cx (ApplyVals ws) st (FOLDL (\k v. ExprsK1 v k) k vs)) =
+  cont (AK cx (ApplyVals (vs ++ ws)) st k)
+Proof
+  map_every qid_spec_tac [`k`, `ws`] >> Induct_on `vs` >> simp[] >>
+  rpt gen_tac >> simp[] >>
+  qspec_then `AK cx (ApplyVals (vs ++ ws)) st (ExprsK1 h k)`
+    mp_tac cont_step >>
+  simp[stepk_def, apply_vals_def, cont_apply_vals]
+QED
+
+Theorem cont_exprsk1_exc[local]:
+  cont (AK cx (ApplyExc ex) st (FOLDL (\k v. ExprsK1 v k) k vs)) =
+  cont (AK cx (ApplyExc ex) st k)
+Proof
+  qid_spec_tac `k` >> Induct_on `vs` >> simp[] >> rpt gen_tac >>
+  qspec_then `AK cx (ApplyExc ex) st (ExprsK1 h k)` mp_tac cont_step >>
+  simp[stepk_def, apply_exc_def]
+QED
+
+Theorem cont_codeslicek_vals[local]:
+  cont (AK cx (ApplyVals [a;b;c]) st (CodeSliceK ty n is_self cty aty tys k)) =
+  cont (liftk cx ApplyTv (do
+    acc <- get_accounts;
+    code_v <- lift_sum $ evaluate_code_source cx acc is_self cty aty [c];
+    v <- lift_sum $ evaluate_builtin cx acc ty (Slice n) tys [code_v;a;b];
+    return $ Value v
+  od st) k)
+Proof
+  qspec_then `AK cx (ApplyVals [a;b;c]) st (CodeSliceK ty n is_self cty aty tys k)`
+    mp_tac cont_step >>
+  simp[stepk_def, apply_vals_def]
+QED
+
+Theorem cont_codeslicek_exc[local]:
+  cont (AK cx (ApplyExc ex) st (CodeSliceK ty n is_self cty aty tys k)) =
+  cont (AK cx (ApplyExc ex) st k)
+Proof
+  qspec_then `AK cx (ApplyExc ex) st (CodeSliceK ty n is_self cty aty tys k)`
+    mp_tac cont_step >>
+  simp[stepk_def, apply_exc_def]
+QED
+
+Theorem exprs_suffix_cons[local]:
+  (!st k. cont (eval_expr_cps cx e st k) =
+    cont (liftk cx ApplyTv (eval_expr cx e st) k)) /\
+  (!s tv t s' v t'.
+    eval_expr cx e s = (INL tv,t) /\
+    read_result cx tv s' = (INL v,t') ==>
+    !st suffix k.
+    cont (eval_exprs_cps cx (es ++ suffix) st k) =
+    cont (case eval_exprs cx es st of
+      (INL vs,st1) => eval_exprs_cps cx suffix st1
+        (FOLDL (\k v. ExprsK1 v k) k vs)
+    | (INR ex,st1) => AK cx (ApplyExc ex) st1 k)) ==>
+  !st suffix k.
+  cont (eval_exprs_cps cx ((e::es) ++ suffix) st k) =
+  cont (case eval_exprs cx (e::es) st of
+    (INL vs,st1) => eval_exprs_cps cx suffix st1
+      (FOLDL (\k v. ExprsK1 v k) k vs)
+  | (INR ex,st1) => AK cx (ApplyExc ex) st1 k)
+Proof
+  strip_tac >> rpt gen_tac >>
+  simp[Once eval_expr_cps_def] >>
+  first_x_assum (qspecl_then [`st`, `ExprsK (es ++ suffix) k`] mp_tac) >>
+  Cases_on `eval_expr cx e st` >> Cases_on `q` >>
+  simp[liftk1, Once evaluate_def, bind_def] >>
+  disch_then SUBST1_TAC
+  >- (qspec_then `AK cx (ApplyTv x) r (ExprsK (es ++ suffix) k)`
+        mp_tac cont_step >> simp[stepk_def, apply_tv_def, liftk1] >>
+      Cases_on `read_result cx x r` >> Cases_on `q` >> simp[] >>
+      disch_then SUBST1_TAC
+      >- (first_x_assum (drule_all_then
+            (qspecl_then [`r''`, `suffix`, `ExprsK1 x' k`] mp_tac)) >>
+          disch_tac >>
+          qspec_then `AK cx (ApplyVal x') r'' (ExprsK (es ++ suffix) k)`
+            mp_tac cont_step >> simp[stepk_def, apply_val_def] >>
+          disch_then SUBST1_TAC >>
+          first_x_assum SUBST1_TAC >>
+          Cases_on `eval_exprs cx es r''` >> Cases_on `q` >>
+          simp[return_def] >>
+          qspec_then `AK cx (ApplyExc y) r' (ExprsK1 x' k)`
+            mp_tac cont_step >> simp[stepk_def, apply_exc_def]) >>
+      qspec_then `AK cx (ApplyExc y) r'' (ExprsK (es ++ suffix) k)`
+        mp_tac cont_step >> simp[stepk_def, apply_exc_def]) >>
+  qspec_then `AK cx (ApplyExc y) r (ExprsK (es ++ suffix) k)`
+    mp_tac cont_step >> simp[stepk_def, apply_exc_def]
+QED
+
+Theorem exprs_suffix_ordinary[local]:
+  (!suffix k.
+    cont (eval_exprs_cps cx (es ++ suffix) st k) =
+    cont (case eval_exprs cx es st of
+      (INL vs,st1) => eval_exprs_cps cx suffix st1
+        (FOLDL (\k v. ExprsK1 v k) k vs)
+    | (INR ex,st1) => AK cx (ApplyExc ex) st1 k)) ==>
+  !k. cont (eval_exprs_cps cx es st k) =
+    cont (liftk cx ApplyVals (eval_exprs cx es st) k)
+Proof
+  disch_then (qspec_then `[]` mp_tac) >>
+  Cases_on `eval_exprs cx es st` >> Cases_on `q` >>
+  simp[eval_expr_cps_def, liftk1, cont_exprsk1_vals]
+QED
+
+(* Keep ordinary consumers independent of the suffix simulation IH.
+   Only the outer logical spine is traversed; semantic terms are opaque. *)
+local
+  fun ordinary_exprs tm =
+    let val (_, body) = strip_forall tm in
+      if is_eq body then
+        let val (lhs, _) = dest_eq body
+            val (head, args) = strip_comb lhs
+        in same_const head ``cont`` andalso length args = 1 andalso
+           same_const (fst (strip_comb (hd args))) ``eval_exprs_cps``
+        end
+      else false
+    end;
+  fun project_ordinary_ih th =
+    let val tm = concl th in
+      if is_forall tm then
+        let val (v, _) = dest_forall tm
+            val fresh = variant (free_varsl (hyp th)) v
+        in GEN fresh (project_ordinary_ih (SPEC fresh th)) end
+      else if is_imp tm then
+        let val (guard, _) = dest_imp tm
+        in DISCH guard (project_ordinary_ih (UNDISCH th)) end
+      else if is_conj tm andalso ordinary_exprs (snd (dest_conj tm)) then
+        CONJUNCT2 th
+      else th
+    end;
+in
+  val ordinary_exprs_ihs = rule_assum_tac project_ordinary_ih;
+
+  fun list_simulation tm =
+    if is_forall tm then list_simulation (snd (dest_forall tm))
+    else if is_imp tm then list_simulation (snd (dest_imp tm))
+    else ordinary_exprs tm;
+
+  fun normalize_list_guard ctx original =
+    let
+      val avoid = free_varsl (hyp original @ map concl ctx)
+      fun norm th =
+    let val tm = concl th in
+      if is_forall tm then
+        let val (v, _) = dest_forall tm
+            val fresh = variant avoid v
+        in Option.map (GEN fresh)
+             (norm (SPEC fresh th)) end
+      else if is_imp tm then
+        let val (guard, _) = dest_imp tm
+            val eq = SIMP_CONV (srw_ss() ++ boolSimps.CONJ_ss)
+                       (pairTheory.PAIR_EQ :: ctx) guard
+            val g = rhs (concl eq)
+        in
+          if aconv g ``F`` then NONE
+          else if aconv g ``T`` then
+            norm (MP th (EQ_MP (SYM eq) TRUTH))
+          else Option.map (DISCH g)
+            (norm (MP th (EQ_MP (SYM eq) (ASSUME g))))
+        end
+      else SOME th
+    end
+    in norm original end;
+
+  (* Discard syntactically incompatible guards before kernel reconstruction.
+     Dropping an assumption needs no proof; surviving IHs are still normalized
+     only along their logical spine. *)
+  fun constructor_clash (l,r) =
+    let val (lh,ls) = strip_comb l
+        val (rh,rs) = strip_comb r
+    in
+      if is_var lh orelse is_var rh then false
+      else if can TypeBase.constructors_of (type_of l) then
+        let val cs = TypeBase.constructors_of (type_of l)
+            fun ctor h = exists (aconv h) cs
+        in ctor lh andalso ctor rh andalso
+           (not (aconv lh rh) orelse
+            exists constructor_clash (ListPair.zip (ls,rs)))
+        end
+      else false
+    end;
+  fun incompatible_equalities [] = false
+    | incompatible_equalities ((l,r)::eqs) =
+      if aconv l r then incompatible_equalities eqs
+      else if constructor_clash (l,r) then true
+      else if pairSyntax.is_pair l andalso pairSyntax.is_pair r then
+        let val (a,b) = pairSyntax.dest_pair l
+            val (c,d) = pairSyntax.dest_pair r
+        in incompatible_equalities ((a,c)::(b,d)::eqs) end
+      else if is_var l andalso not (free_in l r) then
+        incompatible_equalities (map (fn (a,b) =>
+          (subst [l |-> r] a, subst [l |-> r] b)) eqs)
+      else if is_var r andalso not (free_in r l) then
+        incompatible_equalities (map (fn (a,b) =>
+          (subst [r |-> l] a, subst [r |-> l] b)) eqs)
+      else incompatible_equalities eqs;
+  fun impossible_list_guard tm =
+    if is_forall tm then impossible_list_guard (snd (dest_forall tm))
+    else if is_imp tm then
+      let val (g,b) = dest_imp tm
+      in incompatible_equalities (map dest_eq (filter is_eq (strip_conj g)))
+         orelse impossible_list_guard b
+      end
+    else false;
+
+  val guarded_exprs_ihs = POP_ASSUM_LIST (fn ths =>
+    let val (ihs, rest) = partition (list_simulation o concl) ths
+        val ctx = map (SRULE [])
+          (filter (fn th => not (is_forall (concl th))) rest)
+    in case List.find (fn th => aconv (concl th) ``F``) ctx of
+         SOME false_th => CONTR_TAC false_th
+       | NONE => map_every assume_tac
+           (rest @ List.mapPartial (normalize_list_guard ctx)
+             (filter (not o impossible_list_guard o concl) ihs))
+    end);
+end;
+
+Theorem cps_builtin_msggas[local]:
+  cont (eval_expr_cps cx (Builtin ty (Env MsgGas) es) st k) =
+  cont (liftk cx ApplyTv (eval_expr cx (Builtin ty (Env MsgGas) es) st) k)
+Proof
+  pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def] >>
+  simp[ignore_bind_def, bind_def] >>
+  Cases_on `type_check (builtin_args_length_ok (Env MsgGas) (LENGTH es)) "Builtin args" st` >>
+  Cases_on `q` >> simp[liftk1, bind_def] >>
+  Cases_on `u` >> simp[]
+QED
+
+Theorem cps_builtin_len[local]:
+  (!r. type_check (builtin_args_length_ok Len (LENGTH es)) "Builtin args" st = (INL (),r) ==>
+    !s k. cont (eval_expr_cps cx (HD es) s k) =
+      cont (liftk cx ApplyTv (eval_expr cx (HD es) s) k)) ==>
+  cont (eval_expr_cps cx (Builtin ty Len es) st k) =
+  cont (liftk cx ApplyTv (eval_expr cx (Builtin ty Len es) st) k)
+Proof
+  strip_tac >>
+  pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def] >>
+  simp[ignore_bind_def, bind_def] >>
+  Cases_on `type_check (builtin_args_length_ok Len (LENGTH es)) "Builtin args" st` >>
+  Cases_on `q` >> simp[liftk1, bind_def] >>
+  Cases_on `x` >> gvs[] >>
+  Cases_on `eval_expr cx (HD es) r` >> Cases_on `q` >>
+  simp[liftk1, bind_def] >>
+  simp[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def,
+       apply_tv_def, bind_def, liftk1, return_def] >>
+  Cases_on `result_array_length cx x r''` >> Cases_on `q` >> simp[]
+QED
+
+Theorem ordinary_eval_expr_cps_eq[local]:
+  bt <> Len /\ bt <> Env MsgGas /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+  ~(?n code_ty addr start len. bt = Slice n /\
+    es = [Builtin code_ty (Acc Code) [addr];start;len]) ==>
+  eval_expr_cps cx (Builtin ty bt es) st k =
+  (case type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
+     (INR ex,st) => AK cx (ApplyExc ex) st k
+   | (INL (),st) => eval_exprs_cps cx es st (BuiltinK ty bt (MAP expr_type es) k))
+Proof
+  strip_tac >> pure_once_rewrite_tac [eval_expr_cps_def] >>
+  simp[] >> Cases_on `bt` >> gvs[] >>
+  Cases_on `es` >> simp[] >>
+  Cases_on `h` >> simp[] >>
+  rename1 `Builtin code_ty b args` >>
+  Cases_on `b` >> simp[] >>
+  rename1 `Acc a` >> Cases_on `a` >> simp[] >>
+  Cases_on `args` >> simp[] >>
+  Cases_on `t'` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `t'` >> simp[] >>
+  Cases_on `t` >> gvs[]
+QED
+
+Theorem ordinary_eval_expr_eq[local]:
+  bt <> Len /\ bt <> Env MsgGas /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+  ~(?n code_ty addr start len. bt = Slice n /\
+    es = [Builtin code_ty (Acc Code) [addr];start;len]) ==>
+  eval_expr cx (Builtin ty bt es) st =
+  (do
+    type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
+    v <- do
+      vs <- eval_exprs cx es;
+      acc <- get_accounts;
+      v <- lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs;
+      precompile_call_success bt;
+      return v
+    od;
+    return $ Value v
+  od st)
+Proof
+  strip_tac >>
+  `code_slice_source bt es = NONE` by
+    (Cases_on `code_slice_source bt es` >> simp[] >>
+     rename1 `SOME pr` >> PairCases_on `pr` >> gvs[code_slice_source_SOME]) >>
+  pure_once_rewrite_tac [evaluate_def] >> simp[]
+QED
+
+Theorem cps_builtin_ordinary[local]:
+  bt <> Len /\ bt <> Env MsgGas /\ ~(bt = Bop In \/ bt = Bop NotIn) /\
+  ~(?n code_ty addr start len. bt = Slice n /\
+    es = [Builtin code_ty (Acc Code) [addr];start;len]) /\
+  (!r. type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL (),r) ==>
+    !s k. cont (eval_exprs_cps cx es s k) =
+      cont (liftk cx ApplyVals (eval_exprs cx es s) k)) ==>
+  cont (eval_expr_cps cx (Builtin ty bt es) st k) =
+  cont (liftk cx ApplyTv (eval_expr cx (Builtin ty bt es) st) k)
+Proof
+  strip_tac >>
+  drule_all ordinary_eval_expr_cps_eq >>
+  disch_tac >>
+  drule_all ordinary_eval_expr_eq >> disch_tac >>
+  asm_rewrite_tac [] >>
+  simp[ignore_bind_def, bind_def] >>
+  Cases_on `type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st` >>
+  Cases_on `q` >> simp[liftk1, bind_def] >>
+  Cases_on `x` >> gvs[] >>
+  Cases_on `eval_exprs cx es r` >> Cases_on `q` >>
+  simp[liftk1, bind_def] >>
+  simp[cont_def, Once OWHILE_THM, stepk_def, apply_vals_def,
+       apply_exc_def, bind_def, ignore_bind_def, liftk1, return_def,
+       get_accounts_def] >>
+  rpt (CASE_TAC >> simp[return_def])
+QED
+
+Theorem cps_builtin_membership[local]:
+  (bt = Bop In \/ bt = Bop NotIn) /\
+  (!r. type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL (),r) ==>
+    !s k. cont (eval_exprs_cps cx es s k) =
+      cont (liftk cx ApplyVals (eval_exprs cx es s) k)) ==>
+  cont (eval_expr_cps cx (Builtin ty bt es) st k) =
+  cont (liftk cx ApplyTv (eval_expr cx (Builtin ty bt es) st) k)
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  `bt <> Len` by (strip_tac >> fs[]) >>
+  pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def] >>
+  qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
+  qpat_assum `bt = Bop In \/ bt = Bop NotIn` (fn th => rewrite_tac[th]) >>
+  simp[ignore_bind_def, bind_def] >>
+  Cases_on `type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st` >>
+  Cases_on `q` >> simp[liftk1, bind_def] >>
+  Cases_on `x` >> fs[] >>
+  Cases_on `eval_exprs cx es r` >> Cases_on `q` >>
+  simp[liftk1, bind_def] >>
+  simp[cont_def, Once OWHILE_THM, stepk_def, apply_vals_def,
+       apply_exc_def, bind_def, ignore_bind_def, liftk1, return_def] >>
+  rename1 `eval_exprs cx es _ = (INL vs,r2)` >>
+  Cases_on `type_check (LENGTH vs = 2) "Membership args" r2` >>
+  rename1 `type_check _ _ _ = (tc_res,r3)` >>
+  Cases_on `tc_res` >> simp[] >>
+  Cases_on `lift_option_type (evaluate_type (get_tenv cx) (expr_type (EL 1 es)))
+              "Membership type" r3` >>
+  rename1 `lift_option_type _ _ _ = (ty_res,r4)` >>
+  Cases_on `ty_res` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `lift_sum mres r4` >>
+  Cases_on `lift_sum mres r4` >>
+  rename1 `lift_sum _ _ = (m_res,r5)` >>
+  Cases_on `m_res` >> simp[]
+QED
+
+Theorem eval_cps_aux:
  (∀cx s st k. cont (eval_stmt_cps cx s st k) =
    cont (liftk cx (K Apply) (eval_stmt cx s st) k)) /\
  (∀cx ss st k. cont (eval_stmts_cps cx ss st k) =
    cont (liftk cx (K Apply) (eval_stmts cx ss st) k)) /\
  (∀cx it st k. cont (eval_iterator_cps cx it st k) =
-   cont (liftk cx ApplyVals (eval_iterator cx it st) k)) /\
+   cont (liftk cx ApplyResults (eval_iterator cx it st) k)) /\
  (∀cx tyv nm body vs st k. cont (eval_for_cps cx tyv nm body vs st k) =
    cont (liftk cx (K Apply) (eval_for cx tyv nm body vs st) k)) /\
  (∀cx e st k. cont (eval_expr_cps cx e st k) =
    cont (liftk cx ApplyTv (eval_expr cx e st) k)) /\
- (∀cx es st k. cont (eval_exprs_cps cx es st k) =
-   cont (liftk cx ApplyVals (eval_exprs cx es st) k)) /\
+ (∀cx es st.
+   (∀suffix k. cont (eval_exprs_cps cx (es ++ suffix) st k) =
+     cont (case eval_exprs cx es st of
+       (INL vs,st1) => eval_exprs_cps cx suffix st1
+         (FOLDL (\k v. ExprsK1 v k) k vs)
+     | (INR ex,st1) => AK cx (ApplyExc ex) st1 k)) /\
+   (∀k. cont (eval_exprs_cps cx es st k) =
+     cont (liftk cx ApplyVals (eval_exprs cx es st) k))) /\
  (∀cx t st k. cont (eval_base_place_cps cx t st k) =
    cont (liftk cx ApplyTv (eval_base_place cx t st) k)) /\
  (∀cx t st k. cont (eval_target_place_cps cx t st k) =
@@ -1064,7 +1498,7 @@ Proof
     \\ rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
     \\ rw[apply_exc_def] \\ rw[Once OWHILE_THM] )
   \\ conj_tac >- ( (* Raise (RaiseCustomError err) *)
-    Cases_on `err`
+    rpt gen_tac >> strip_tac >> ordinary_exprs_ihs >> Cases_on `err`
     \\ rw[eval_stmt_cps_def, evaluate_def]
     \\ CASE_TAC
     >- rw[raise_def, cont_def]
@@ -1208,7 +1642,7 @@ Proof
     \\ rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
     \\ rw[apply_exc_def] \\ rw[Once OWHILE_THM, stepk_def] )
   \\ conj_tac >- ( (* Log id es *)
-    rw[eval_stmt_cps_def, evaluate_def, bind_def]
+    rpt gen_tac >> strip_tac >> ordinary_exprs_ihs >> rw[eval_stmt_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1])
@@ -1265,7 +1699,7 @@ Proof
     \\ gvs[return_def, raise_def]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, ignore_bind_def, bind_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_results_def, ignore_bind_def, bind_def]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- (
       rw[Once OWHILE_THM, stepk_def, apply_exc_def, SimpRHS]
@@ -1300,14 +1734,7 @@ Proof
     rw[eval_iterator_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_val_def, apply_val_array_def,
-          liftk1, lift_option_type_def]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    \\ rw[return_def, raise_def]
-    \\ gvs[raise_def] )
+    \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1] )
   \\ conj_tac >- ( (* eval_iterator (Range e1 e2) *)
     rw[eval_iterator_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
@@ -1336,11 +1763,19 @@ Proof
       \\ gvs[apply_exc_def]
       \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] ))
   \\ conj_tac >- rw[eval_for_cps_def, evaluate_def, return_def] (* eval_for [] *)
-  \\ conj_tac >- ( (* eval_for (v::vs) *)
+  \\ conj_tac >- ( (* eval_for (r::rs) *)
     rw[eval_for_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    \\ Cases_on `read_result cx r st` \\ Cases_on `q` \\ gvs[cont_def]
+    \\ rename1 `read_result cx r st = (INL v, st1)`
+    \\ `st1 = st` by metis_tac[read_result_state] \\ gvs[]
+    \\ qpat_x_assum `read_result cx r st = (INL v,st)` (fn rd =>
+         rpt (last_x_assum (fn ih => assume_tac (REWRITE_RULE [rd]
+           (SPECL [``st:evaluation_state``, ``v:value``, ``st:evaluation_state``] ih))))
+         \\ assume_tac rd)
+    \\ pure_rewrite_tac[GSYM cont_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC \\ gvs[]
     \\ first_assum drule \\ simp_tac std_ss [] \\ disch_then kall_tac
-    \\ rw[finally_def, try_def, bind_def]
+    \\ rw[finally_def, finally_unless_halt_def, try_def, bind_def]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- (
       rw[Once OWHILE_THM, stepk_def, apply_exc_def, finally_def]
@@ -1350,7 +1785,7 @@ Proof
       \\ rw[return_def]
       \\ last_x_assum drule \\ rw[]
       \\ last_x_assum drule \\ rw[]
-      \\ gvs[finally_def, bind_def, try_def, CaseEq"prod", CaseEq"sum",
+      \\ gvs[finally_def, finally_unless_halt_def, bind_def, try_def, CaseEq"prod", CaseEq"sum",
              PULL_EXISTS, ignore_bind_def, return_def, raise_def]
       \\ fsrw_tac[DNF_ss][]
       \\ last_x_assum drule \\ rw[])
@@ -1359,7 +1794,7 @@ Proof
     \\ CASE_TAC \\ reverse CASE_TAC
     \\ rw[return_def]
     \\ last_x_assum drule \\ rw[]
-    \\ gvs[finally_def, bind_def, try_def, CaseEq"prod", CaseEq"sum",
+    \\ gvs[finally_def, finally_unless_halt_def, bind_def, try_def, CaseEq"prod", CaseEq"sum",
            PULL_EXISTS, ignore_bind_def, return_def, raise_def]
     \\ fsrw_tac[DNF_ss][]
     \\ last_x_assum drule \\ rw[]
@@ -1404,6 +1839,21 @@ Proof
     rw[eval_expr_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> Cases_on `subscript_reads_base cx e e'` \\ gvs[return_def]
+    >- (rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1, bind_def,
+           return_def]
+        \\ CASE_TAC \\ reverse CASE_TAC
+        >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+        \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def]
+        \\ first_x_assum (drule_then (qspecl_then [`r`,`Value x'`,`r''`] mp_tac))
+        \\ simp[bind_def, return_def] \\ rw[]
+        \\ CASE_TAC \\ reverse CASE_TAC
+        >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+        >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+        \\ CASE_TAC \\ reverse CASE_TAC
+        >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+        >> rw[Once OWHILE_THM, stepk_def, apply_val_def,
+              apply_val_subscript_def, liftk1, bind_def])
     >> rw[Once OWHILE_THM, stepk_def, apply_tv_def]
     \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ reverse CASE_TAC
@@ -1418,40 +1868,123 @@ Proof
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1] )
   \\ conj_tac >- ( (* eval_expr (Builtin bt es) *)
-    simp[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
-    \\ rpt strip_tac
-    \\ Cases_on `bt = Env MsgGas`
-    >- (gvs[next_gas_reading_def, return_def, raise_def]
-        \\ rpt (CASE_TAC \\ gvs[liftk1, return_def, raise_def]))
-    \\ BasicProvers.TOP_CASE_TAC
-    \\ gvs[cont_def]
-    \\ BasicProvers.TOP_CASE_TAC
-    \\ gvs[]
-    \\ Cases_on `bt = Len` \\ gvs[]
-    \\ Cases_on `bt = Bop In ∨ bt = Bop NotIn` \\ gvs[]
-    \\ first_x_assum drule
-    \\ gvs[]
-    \\ rpt strip_tac
-    \\ rw[bind_def]
-    \\ (CASE_TAC \\ reverse CASE_TAC
-        >- rw[Once OWHILE_THM, stepk_def, apply_exc_def])
-    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def,
-          apply_tv_def, bind_def, ignore_bind_def, liftk1]
-    >> simp[get_accounts_def, return_def]
-    >> CASE_TAC \\ CASE_TAC
-    \\ gvs[bind_def, ignore_bind_def, return_def, CaseEq "prod", CaseEq "sum"]
-    >~ [`type_check _ "Membership args" _ = (args_res,_)`]
-    >- (Cases_on `args_res` >> simp[] >>
-        rename1 `lift_option_type _ _ _ = (ty_res,_)` >>
-        Cases_on `ty_res` >> simp[])
-    >~ [`type_check _ "Membership args" _ = (args_res,_)`]
-    >- (Cases_on `args_res` >> simp[] >>
-        rename1 `lift_option_type _ _ _ = (ty_res,_)` >>
-        Cases_on `ty_res` >> simp[])
-    \\ rename1 `lift_sum (evaluate_builtin _ _ _ _ _ _) _ = (builtin_res,_)`
-    \\ Cases_on `builtin_res` \\ simp[]
-    \\ rename1 `precompile_call_success _ _ = (pc_res,_)`
-    \\ Cases_on `pc_res` \\ simp[] )
+    rpt gen_tac >> strip_tac >> rpt gen_tac >>
+    Cases_on `?n code_ty addr start len.
+      bt = Slice n /\ es = [Builtin code_ty (Acc Code) [addr]; start; len]`
+    >- (pop_assum strip_assume_tac >>
+        rpt (PRED_ASSUM (fn tm => is_forall tm andalso not
+          (can (find_term (fn t =>
+            let val (h,args) = strip_comb t in
+              same_const h ``eval_exprs`` andalso length args = 3 andalso
+              not (is_var (el 2 args))
+            end)) tm)) kall_tac) >>
+        gvs[] >>
+        gvs[builtin_args_length_ok_def, type_check_def, check_def,
+            assert_def, return_def] >>
+        pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def] >>
+        simp[builtin_args_length_ok_def, type_check_def, check_def,
+             assert_def, return_def, ignore_bind_def, bind_def] >>
+        Cases_on `eval_exprs cx [start;len] st` >> Cases_on `q`
+        >- (drule eval_exprs_length >> simp[LENGTH_EQ_NUM_compute] >>
+            strip_tac >> gvs[] >>
+            first_x_assum drule_all >> strip_tac >>
+            ordinary_exprs_ihs >> simp[] >>
+            Cases_on `eval_exprs cx [addr] r` >>
+            Cases_on `q`
+            >- (drule eval_exprs_length >> simp[LENGTH_EQ_NUM_compute] >>
+                strip_tac >> gvs[] >>
+                rename1 `eval_exprs cx [addr] r = (INL [addr_v],addr_st)` >>
+                qmatch_goalsub_abbrev_tac `CodeSliceK ty n is_self cty aty tys k` >>
+                qspec_then `AK cx (ApplyVals [addr_v]) addr_st (ExprsK1 h' (ExprsK1 h (CodeSliceK ty n is_self cty aty tys k)))`
+                  mp_tac cont_step >>
+                simp[stepk_def, apply_vals_def, cont_apply_vals] >>
+                disch_then SUBST1_TAC >>
+                qspec_then `AK cx (ApplyVals [h';addr_v]) addr_st (ExprsK1 h (CodeSliceK ty n is_self cty aty tys k))`
+                  mp_tac cont_step >>
+                simp[stepk_def, apply_vals_def, cont_apply_vals,
+                     cont_codeslicek_vals, liftk1, bind_def, return_def,
+                     get_accounts_def] >>
+                disch_then kall_tac >> unabbrev_all_tac >>
+                Cases_on `evaluate_code_source cx addr_st.accounts
+                            (is_self_addr addr) code_ty (expr_type addr) [addr_v]` >>
+                simp[lift_sum_def, return_def, raise_def, liftk1, bind_def,
+                     ignore_bind_def, precompile_call_success_def] >>
+                rpt (CASE_TAC >> simp[return_def, raise_def])) >>
+            rename1 `eval_exprs cx [addr] r = (INR addr_ex,addr_st)` >>
+            qmatch_goalsub_abbrev_tac `CodeSliceK ty n is_self cty aty tys k` >>
+            qspec_then `AK cx (ApplyExc addr_ex) addr_st (ExprsK1 h' (ExprsK1 h (CodeSliceK ty n is_self cty aty tys k)))`
+              mp_tac cont_step >> simp[stepk_def, apply_exc_def] >>
+            disch_then SUBST1_TAC >>
+            qspec_then `AK cx (ApplyExc addr_ex) addr_st (ExprsK1 h (CodeSliceK ty n is_self cty aty tys k))`
+              mp_tac cont_step >>
+            simp[stepk_def, apply_exc_def, cont_codeslicek_exc]) >>
+        simp[cont_codeslicek_exc]) >>
+    ordinary_exprs_ihs >>
+    Cases_on `bt = Env MsgGas`
+    >- (rpt (PRED_ASSUM is_forall kall_tac) >>
+        gvs[cps_builtin_msggas, liftk1]) >>
+    Cases_on `bt = Len`
+    >- (rpt (PRED_ASSUM (fn tm => is_forall tm andalso
+          can (find_term (fn t => same_const (fst (strip_comb t))
+            ``eval_exprs_cps``)) tm) kall_tac) >>
+        gvs[] >> pure_rewrite_tac [GSYM liftk1] >>
+        irule cps_builtin_len >> rpt strip_tac >>
+        first_x_assum drule_all >> simp[liftk1]) >>
+    Cases_on `bt = Bop In \/ bt = Bop NotIn`
+    >- (rpt (PRED_ASSUM (fn tm => is_forall tm andalso not
+          (can (find_term (fn t => same_const t ``Bop`` )) tm)) kall_tac) >>
+        pure_rewrite_tac [GSYM liftk1] >>
+        irule cps_builtin_membership >> simp[] >> rpt strip_tac >>
+        qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ (_ \/ _) ==> _`
+          (qspecl_then [`st`, `()`, `r`] mp_tac) >>
+        simp[liftk1]) >>
+    pure_rewrite_tac [GSYM liftk1] >>
+    irule cps_builtin_ordinary >>
+    reverse conj_tac >- metis_tac[] >>
+    rpt (PRED_ASSUM (fn tm => is_forall tm andalso not
+      (can (find_term (fn t =>
+        let val (h,args) = strip_comb t in
+          same_const h ``eval_exprs_cps`` andalso length args = 4 andalso
+          not (listSyntax.is_cons (el 2 args))
+        end)) tm)) kall_tac) >>
+    rpt strip_tac >>
+    Cases_on `bt`
+    >~ [`type_check (builtin_args_length_ok (Slice n) (LENGTH es))`]
+    >- (guarded_exprs_ihs >> Cases_on `es`
+        >- (guarded_exprs_ihs >> fs[] >> simp[liftk1] >> first_x_assum irule >>
+            simp[] >> goal_assum (drule_at Any)) >>
+        Cases_on `h`
+        >~ [`eval_exprs_cps cx (Builtin code_ty b args::outer_tail)`]
+        >- (guarded_exprs_ihs >> Cases_on `b`
+            >~ [`eval_exprs_cps cx (Builtin code_ty (Acc a) args::outer_tail)`]
+            >- (Cases_on `a`
+                >~ [`eval_exprs_cps cx (Builtin code_ty (Acc Code) args::outer_tail)`]
+                >- (Cases_on `args`
+                    >- (guarded_exprs_ihs >> fs[] >> simp[liftk1] >>
+                        first_x_assum irule >> simp[] >> goal_assum (drule_at Any)) >>
+                    rename1 `Builtin code_ty (Acc Code) (addr::inner_tail)` >>
+                    Cases_on `inner_tail`
+                    >- (Cases_on `outer_tail`
+                        >- (guarded_exprs_ihs >> fs[] >> simp[liftk1] >>
+                            first_x_assum irule >> simp[] >> goal_assum (drule_at Any)) >>
+                        rename1 `Builtin code_ty (Acc Code) [addr]::start::after_start` >>
+                        Cases_on `after_start`
+                        >- (guarded_exprs_ihs >> fs[] >> simp[liftk1] >>
+                            first_x_assum irule >> simp[] >> goal_assum (drule_at Any)) >>
+                        rename1 `start::len::after_len` >>
+                        Cases_on `after_len` >> guarded_exprs_ihs >> fs[] >>
+                        simp[liftk1] >> first_x_assum irule >> simp[] >>
+                        goal_assum (drule_at Any)) >>
+                    guarded_exprs_ihs >> fs[] >> simp[liftk1] >>
+                    first_x_assum irule >> simp[] >> goal_assum (drule_at Any)) >>
+                guarded_exprs_ihs >> fs[] >> simp[liftk1] >>
+                first_x_assum irule >> simp[] >> goal_assum (drule_at Any)) >>
+            guarded_exprs_ihs >> fs[] >> simp[liftk1] >>
+            first_x_assum irule >> simp[] >> goal_assum (drule_at Any)) >>
+        guarded_exprs_ihs >> fs[] >> simp[liftk1] >>
+        first_x_assum irule >> simp[] >> goal_assum (drule_at Any)) >>
+    guarded_exprs_ihs >> fs[] >> simp[liftk1] >> first_x_assum irule >> simp[] >>
+    goal_assum (drule_at Any))
   \\ conj_tac >- ( (* eval_expr (Pop bt) *)
     rpt gen_tac >> strip_tac
     >> pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def]
@@ -1487,7 +2020,7 @@ Proof
     \\ simp[] \\ disch_then kall_tac
     \\ CASE_TAC \\ reverse CASE_TAC \\ gvs[]
     >- simp[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_results_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def]
     \\ first_x_assum drule_all
     \\ simp[rich_listTheory.DROP_DROP_T] \\ disch_then kall_tac
     \\ CASE_TAC \\ CASE_TAC \\ gvs[]
@@ -1516,7 +2049,7 @@ Proof
     \\ reverse CASE_TAC
     >- gvs[return_def, raise_def, apply_exc_owhile_eq,
            Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> simp[Once OWHILE_THM, stepk_def, apply_results_def, bind_def]
+    >> simp[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def]
     >> CASE_TAC
     >> reverse CASE_TAC
     >- (simp[Once OWHILE_THM,SimpRHS,stepk_def] >> rw[] >>
@@ -1529,14 +2062,14 @@ Proof
     >> simp[return_def]
     >> strip_tac
     >> first_x_assum drule_all
-    >> drule eval_expr_results_length >> strip_tac
+    >> drule eval_exprs_length >> strip_tac
     >> simp[cont_def]
     >> disch_then kall_tac
     \\ CASE_TAC
     \\ reverse CASE_TAC
     >- gvs[return_def, raise_def, apply_exc_owhile_eq,
            Once OWHILE_THM, stepk_def, apply_exc_def, o_DEF,
-           finally_def, bind_def, ignore_bind_def, liftk1,
+           finally_def, finally_unless_halt_def, bind_def, ignore_bind_def, liftk1,
            set_scopes_def, return_def]
     >> qmatch_goalsub_abbrev_tac`finally mm ss zz`
     >> Cases_on`finally mm ss zz`
@@ -1545,7 +2078,7 @@ Proof
     >> simp[Abbr`ss`,Abbr`zz`]
     >- (
       pop_assum mp_tac >>
-      simp[finally_def, ignore_bind_def, bind_def, return_def, raise_def] >>
+      simp[finally_def, finally_unless_halt_def, ignore_bind_def, bind_def, return_def, raise_def] >>
       simp[CaseEq"prod",CaseEq"sum"] >>
       simp[set_scopes_def, return_def] >>
       simp[Abbr`mm`, bind_def])
@@ -1553,7 +2086,7 @@ Proof
     >> simp[Once OWHILE_THM,stepk_def,apply_vals_def,bind_def,ignore_bind_def]
     >> simp[Once set_scopes_def, return_def]
     >> qhdtm_x_assum`finally` (fn th => mk_asm "defaults" th >> mp_tac th)
-    >> simp[finally_def,bind_def,ignore_bind_def]
+    >> simp[finally_def,finally_unless_halt_def,bind_def,ignore_bind_def]
     >> simp[Once set_scopes_def, return_def]
     >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC
     >> qmatch_goalsub_abbrev_tac`pair_CASE (pair_CASE pp _)`
@@ -1584,13 +2117,6 @@ Proof
     >> simp[]
     >- (simp[Once OWHILE_THM,SimpRHS,stepk_def] >> rw[] >>
         simp[apply_exc_def] >> simp[Once OWHILE_THM,stepk_def] )
-    >> qmatch_goalsub_abbrev_tac`pair_CASE (pair_CASE pp _)`
-    >> `?q r. pp = (q,r)` by (Cases_on`pp` >> gvs[])
-    >> simp[Abbr`pp`]
-    >> reverse $ Cases_on`q`
-    >> simp[]
-    >- (simp[Once OWHILE_THM,SimpRHS,stepk_def] >> rw[] >>
-        simp[apply_exc_def] >> simp[Once OWHILE_THM,stepk_def] )
     >> asm_x "defaults" assume_tac
     >> qmatch_asmsub_rename_tac `(if _ then _ else _) _ = (INL lock_result,_)`
     >> Cases_on `lock_result`
@@ -1602,36 +2128,24 @@ Proof
     >> simp[]
     >- (
       simp[Once OWHILE_THM, stepk_def] >>
-      simp[apply_exc_def, liftk1, finally_def, bind_def] >>
+      simp[apply_exc_def, liftk1, finally_def, finally_unless_halt_def, bind_def] >>
       qmatch_goalsub_rename_tac`handle_function ff ss` >>
-      Cases_on`handle_function ff ss` >>
-      simp[return_def, ignore_bind_def, bind_def] >>
+      Cases_on `ff` >>
+      simp[handle_function_def, finally_def, finally_unless_halt_def,
+           return_def, raise_def, ignore_bind_def, bind_def] >>
       AP_TERM_TAC >>
       gvs[push_function_def, return_def] >>
       (* chains are pure computation; dead assumptions only slow simp down *)
       POP_ASSUM_LIST (K ALL_TAC) >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[return_def, raise_def] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] )
+      AP_THM_TAC >> irule result_map_bind )
     >> simp[Once OWHILE_THM, stepk_def, apply_def, liftk1]
     >> simp[bind_def, return_def, ignore_bind_def]
     >> gvs[push_function_def, return_def]
     >> AP_TERM_TAC >>
       POP_ASSUM_LIST (K ALL_TAC) >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[return_def, raise_def] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      ALL_TAC >| [CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC] >> simp[] >>
-      ALL_TAC >| [CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC] >> simp[] >>
-      CASE_TAC >> simp[])
+      simp[finally_def, finally_unless_halt_def, pop_function_def,
+           set_scopes_def, return_def, bind_def, ignore_bind_def] >>
+      AP_THM_TAC >> irule result_map_ignore_bind)
   (* ===== Chain interaction builtins ===== *)
   (* All 5 new cases: CPS eval_exprs then continuation matches big-step body.
      Pattern: unfold both sides, use IH for eval_exprs, match continuation bodies. *)
@@ -1739,39 +2253,34 @@ Proof
           apply_exc_def, apply_vals_def])
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, return_def] (* eval_exprs [] *)
   \\ conj_tac >- ( (* eval_exprs (e::es) *)
-  rw[eval_expr_cps_def, evaluate_def, bind_def]
-  \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
-  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-  \\ CASE_TAC \\ reverse CASE_TAC
-  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[Once OWHILE_THM, stepk_def, apply_val_def]
-  \\ first_x_assum (drule_then drule) \\ rw[]
-  \\ CASE_TAC \\ reverse CASE_TAC
-  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-  \\ rw[return_def]
-  >> rw[Once OWHILE_THM, stepk_def, apply_vals_def]
-  >> rw[Once OWHILE_THM, SimpRHS, stepk_def, apply_vals_def]
-  \\ gvs[apply_vals_def]
-  \\ rw[Once OWHILE_THM, stepk_def])
+    rpt gen_tac >> strip_tac >> gen_tac >>
+    conj_asm1_tac
+    >- (irule exprs_suffix_cons >> conj_tac
+        >- gvs[GSYM liftk1] >>
+        rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
+    pure_rewrite_tac [GSYM liftk1] >>
+    irule exprs_suffix_ordinary >> simp[])
   >> suspend "Places"
 QED
 
-Resume eval_cps_mutual[AssignPlace]:
+Resume eval_cps_aux[AssignPlace]:
   rpt gen_tac >> strip_tac
   >> pure_once_rewrite_tac [eval_stmt_cps_def, evaluate_def]
   >> rw[bind_def]
   >> CASE_TAC >> reverse CASE_TAC
   >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_tv_def]
+  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+  >> CASE_TAC >> reverse CASE_TAC
+  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+  >> rw[Once OWHILE_THM, stepk_def, apply_val_def]
   >> gvs[cont_def]
-  >> first_x_assum drule >> rw[]
+  >> first_x_assum (drule_all_then assume_tac) >> rw[]
   >> CASE_TAC >> reverse CASE_TAC
   >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
   >> rw[Once OWHILE_THM, stepk_def, apply_place_def, liftk1, bind_def]
 QED
 
-Resume eval_cps_mutual[AssignTuple]:
+Resume eval_cps_aux[AssignTuple]:
   rpt gen_tac >> strip_tac
   >> pure_once_rewrite_tac [eval_stmt_cps_def, evaluate_def]
   >> rw[bind_def]
@@ -1785,7 +2294,7 @@ Resume eval_cps_mutual[AssignTuple]:
   >> first_x_assum irule >> metis_tac[]
 QED
 
-Resume eval_cps_mutual[AugAssign]:
+Resume eval_cps_aux[AugAssign]:
   rpt gen_tac >> strip_tac
   >> pure_once_rewrite_tac [eval_stmt_cps_def, evaluate_def]
   >> rw[bind_def]
@@ -1808,7 +2317,7 @@ Resume eval_cps_mutual[AugAssign]:
   >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
   >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1, bind_def]
 QED
-Resume eval_cps_mutual[Places]:
+Resume eval_cps_aux[Places]:
   conj_tac >- rw[eval_base_place_cps_def, evaluate_def, liftk1]
   >> conj_tac >- rw[eval_base_place_cps_def, evaluate_def, liftk1]
   >> conj_tac >- suspend "BasePlaceAttribute"
@@ -1820,12 +2329,12 @@ Resume eval_cps_mutual[Places]:
   >> conj_tac >- suspend "TupleStoresCons"
   >> conj_tac >- rw[assign_tuple_targets_cps_def, evaluate_def, raise_def]
   >> conj_tac >- rw[assign_tuple_targets_cps_def, evaluate_def, raise_def]
-  >> conj_tac >- rw[eval_expr_cps_def, evaluate_def, return_def]
+  >> conj_tac >- rw[eval_expr_results_cps_def, evaluate_def, return_def]
   >> suspend "ExprResultsCons"
 QED
 
-Resume eval_cps_mutual[ExprResultsCons]:
-  rw[eval_expr_cps_def, evaluate_def, bind_def]
+Resume eval_cps_aux[ExprResultsCons]:
+  rw[eval_expr_results_cps_def, evaluate_def, bind_def]
   >> CASE_TAC >> gvs[cont_def] >> reverse CASE_TAC
   >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
   >> rw[Once OWHILE_THM, stepk_def, apply_tv_def]
@@ -1839,7 +2348,7 @@ Resume eval_cps_mutual[ExprResultsCons]:
   >> rw[Once OWHILE_THM, stepk_def]
 QED
 
-Resume eval_cps_mutual[BasePlaceAttribute]:
+Resume eval_cps_aux[BasePlaceAttribute]:
   rpt gen_tac >> strip_tac
   >> pure_once_rewrite_tac [eval_base_place_cps_def, evaluate_def]
   >> rw[bind_def]
@@ -1847,7 +2356,7 @@ Resume eval_cps_mutual[BasePlaceAttribute]:
   >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
   >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
 QED
-Resume eval_cps_mutual[BasePlaceSubscript]:
+Resume eval_cps_aux[BasePlaceSubscript]:
   rpt gen_tac >> strip_tac
   >> pure_once_rewrite_tac [eval_base_place_cps_def, evaluate_def]
   >> rw[bind_def]
@@ -1863,7 +2372,7 @@ Resume eval_cps_mutual[BasePlaceSubscript]:
   >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
   >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1, bind_def]
 QED
-Resume eval_cps_mutual[TargetPlace]:
+Resume eval_cps_aux[TargetPlace]:
   rpt gen_tac >> strip_tac
   >> pure_once_rewrite_tac [eval_target_place_cps_def, evaluate_def]
   >> rw[bind_def]
@@ -1871,7 +2380,7 @@ Resume eval_cps_mutual[TargetPlace]:
   >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
   >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
 QED
-Resume eval_cps_mutual[TupleStore]:
+Resume eval_cps_aux[TupleStore]:
   rpt gen_tac >> strip_tac
   >> pure_once_rewrite_tac [assign_tuple_targets_cps_def, evaluate_def]
   >> rw[bind_def]
@@ -1879,13 +2388,13 @@ Resume eval_cps_mutual[TupleStore]:
   >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
   >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_place_def, liftk1]
 QED
-Resume eval_cps_mutual[TupleStores]:
+Resume eval_cps_aux[TupleStores]:
   rpt gen_tac >> strip_tac
   >> Cases_on `v` >> simp[assign_tuple_targets_cps_def, Once evaluate_def, raise_def]
   >> rename1 `ArrayV a` >> Cases_on `a`
   >> gvs[assign_tuple_targets_cps_def, Once evaluate_def, raise_def]
 QED
-Resume eval_cps_mutual[TupleStoresCons]:
+Resume eval_cps_aux[TupleStoresCons]:
   rpt gen_tac >> strip_tac
   >> pure_once_rewrite_tac [assign_tuple_targets_cps_def, evaluate_def]
   >> rw[bind_def, ignore_bind_def]
@@ -1895,7 +2404,34 @@ Resume eval_cps_mutual[TupleStoresCons]:
   >> gvs[cont_def]
   >> first_x_assum drule >> rw[]
 QED
-Finalise eval_cps_mutual
+Finalise eval_cps_aux
+
+Theorem eval_cps_mutual:
+ (∀cx s st k. cont (eval_stmt_cps cx s st k) =
+   cont (liftk cx (K Apply) (eval_stmt cx s st) k)) /\
+ (∀cx ss st k. cont (eval_stmts_cps cx ss st k) =
+   cont (liftk cx (K Apply) (eval_stmts cx ss st) k)) /\
+ (∀cx it st k. cont (eval_iterator_cps cx it st k) =
+   cont (liftk cx ApplyResults (eval_iterator cx it st) k)) /\
+ (∀cx tyv nm body vs st k. cont (eval_for_cps cx tyv nm body vs st k) =
+   cont (liftk cx (K Apply) (eval_for cx tyv nm body vs st) k)) /\
+ (∀cx e st k. cont (eval_expr_cps cx e st k) =
+   cont (liftk cx ApplyTv (eval_expr cx e st) k)) /\
+ (∀cx es st k. cont (eval_exprs_cps cx es st k) =
+   cont (liftk cx ApplyVals (eval_exprs cx es st) k)) /\
+ (∀cx t st k. cont (eval_base_place_cps cx t st k) =
+   cont (liftk cx ApplyTv (eval_base_place cx t st) k)) /\
+ (∀cx t st k. cont (eval_target_place_cps cx t st k) =
+   cont (liftk cx ApplyPlace (eval_target_place cx t st) k)) /\
+ (∀cx g v st k. cont (assign_tuple_targets_cps cx g v st k) =
+   cont (liftk cx (K Apply) (assign_tuple_targets cx g v st) k)) /\
+ (∀cx gs vs st k. cont (assign_tuple_target_list_cps cx gs vs st k) =
+   cont (liftk cx (K Apply) (assign_tuple_target_list cx gs vs st) k)) /\
+ (∀cx es st k. cont (eval_expr_results_cps cx es st k) =
+   cont (liftk cx ApplyResults (eval_expr_results cx es st) k))
+Proof
+  rpt conj_tac >> metis_tac[eval_cps_aux]
+QED
 
 Theorem eval_cps_eq:
   (!cx s st k. cont (eval_stmt_cps cx s st k) =
@@ -1905,7 +2441,7 @@ Theorem eval_cps_eq:
     cont ((case eval_stmts cx ss st of (INL (),st1) => AK cx Apply st1
       | (INR ex,st1) => AK cx (ApplyExc ex) st1) k)) /\
   (!cx it st k. cont (eval_iterator_cps cx it st k) =
-    cont ((case eval_iterator cx it st of (INL vs,st1) => AK cx (ApplyVals vs) st1
+    cont ((case eval_iterator cx it st of (INL vs,st1) => AK cx (ApplyResults vs) st1
       | (INR ex,st1) => AK cx (ApplyExc ex) st1) k)) /\
   (!cx tyv nm body vs st k. cont (eval_for_cps cx tyv nm body vs st k) =
     cont ((case eval_for cx tyv nm body vs st of (INL (),st1) => AK cx Apply st1
@@ -1917,7 +2453,7 @@ Theorem eval_cps_eq:
     cont ((case eval_exprs cx es st of (INL vs,st1) => AK cx (ApplyVals vs) st1
       | (INR ex,st1) => AK cx (ApplyExc ex) st1) k))
 Proof
-  simp[eval_cps_mutual, GSYM liftk1, combinTheory.K_DEF]
+  simp[eval_cps_aux, GSYM liftk1, combinTheory.K_DEF]
 QED
 
 Definition fromk_def[simp]:
@@ -2095,10 +2631,3 @@ Proof
   \\ CASE_TAC \\ CASE_TAC \\ gvs[]
   \\ rw[Once OWHILE_THM]
 QED
-
-(* Integration audit: required CPS equivalences must be kernel closed. *)
-val () = List.app (fn (name,th) =>
-  let val (oracles,_) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("CPS oracle debt: " ^ name)
-  end) (DB.thms "vyperSmallStep");

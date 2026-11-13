@@ -261,7 +261,7 @@ QED
 
 Finalise raw_call_tuple_build_no_restore_run
 
-Theorem raw_call_nonrevert_finish_code[local]:
+Theorem raw_call_nonrevert_finish_code:
   compile_raw_call_finish to_op dp dl gas val call_ty n F ov op sa = (result,sb) ==>
   ?ok sc. (case call_ty of
       DelegateCall => emit_op DELEGATECALL [gas;to_op;dp;dl;op;Lit (n2w n)]
@@ -285,7 +285,7 @@ Proof
   gvs[comp_ignore_bind_def, comp_bind_def, arithmeticTheory.ADD_ASSOC]
 QED
 
-Theorem raw_call_nonrevert_suffix_code[local]:
+Theorem raw_call_nonrevert_suffix_code:
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
           cmp <- emit_op LT [z;Lit (n2w n)];
@@ -343,7 +343,7 @@ Proof
   decide_tac
 QED
 
-Theorem raw_call_nonrevert_positive_run[local]:
+Theorem raw_call_nonrevert_positive_run:
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
           cmp <- emit_op LT [z;Lit (n2w n)];
@@ -518,7 +518,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem raw_call_values_outcome_bind[local]:
+Theorem raw_call_values_outcome_bind:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> value list evaluation_result) (es,s0) P E /\
   (!rr ee r. E rr ee r ==> ?exc. rr = INR exc /\ R (INR exc) ee r) /\
@@ -563,7 +563,7 @@ Proof
   fs[ignore_bind_def] >> goal_assum (drule_at Any)
 QED
 
-Theorem raw_call_value_outcome_bind[local]:
+Theorem raw_call_value_outcome_bind:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> value evaluation_result) (es,s0) P E /\
   (!rr ee r. E rr ee r ==> ?exc. rr = INR exc /\ R (INR exc) ee r) /\
@@ -608,7 +608,7 @@ Proof
   fs[ignore_bind_def] >> goal_assum (drule_at Any)
 QED
 
-Theorem raw_call_outcome_normal[local]:
+Theorem raw_call_outcome_normal:
   gas_outcome memory tops (ctx,func) a (es,s0) P E ==>
   gas_outcome memory tops (ctx,func) a (es,s0)
     (\res ee t. P res ee t /\ ~t.vs_halted) E
@@ -688,7 +688,7 @@ Proof
   simp[bind_assoc, bind_return]
 QED
 
-Theorem raw_call_eval_action[local]:
+Theorem raw_call_eval_action:
   eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt) =
     bind (bind (eval_expr cx a) (read_result cx)) (\av.
     bind (bind (eval_expr cx d) (read_result cx)) (\dv.
@@ -772,7 +772,7 @@ Proof
   Cases_on `flags.rcf_max_outsize = 0` >> gvs[]
 QED
 
-Theorem raw_call_kwargs_types[local]:
+Theorem raw_call_kwargs_types:
   raw_call_kws_ok flags es ==>
   EVERY (\k. k = EKValue \/ k = EKGas) flags.rcf_kws /\
   EVERY (\e. expr_type e = BaseT (UintT 256)) es
@@ -793,7 +793,7 @@ QED
 
 (* Only the keyword suffix is all-word. Its compiler is the standard ordered
    word-argument runner followed by selection of value= and gas=. *)
-Theorem raw_call_kwargs_word_args[local]:
+Theorem raw_call_kwargs_word_args:
   !ks es sa vo go d sb.
     EVERY (\k. k = EKValue \/ k = EKGas) ks /\
     LENGTH es = LENGTH ks /\
@@ -836,7 +836,7 @@ Proof
   strip_tac >> simp[Once evaluate_def, bind_def]
 QED
 
-Theorem raw_call_pre_operands[local]:
+Theorem raw_call_pre_operands:
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
   ?a d kws n. args = a::d::kws /\
     expr_type a = BaseT AddressT /\
@@ -853,7 +853,7 @@ Proof
   Cases_on `rest` >> gvs[]
 QED
 
-Theorem raw_call_pre_flags[local]:
+Theorem raw_call_pre_flags:
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
   ~flags.rcf_is_delegate /\
   flags.rcf_max_outsize < dimword (:256) /\
@@ -866,7 +866,7 @@ Proof
   strip_tac >> gvs[supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
 
-Theorem expr_body_pre_raw_call_arg[local]:
+Theorem expr_body_pre_raw_call_arg:
   !cenv cx env ann flags args dflt e es es'.
     expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\
     MEM e args /\ expr_sim_inv cenv cx env es' ==>
@@ -957,7 +957,7 @@ Proof
   fs[] >> decide_tac
 QED
 
-Theorem raw_call_outbuf_zero_run[local]:
+Theorem raw_call_outbuf_zero_run:
   compile_raw_call_outbuf 0 sa = ((ov,op),sb) /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func ==>
@@ -1021,7 +1021,7 @@ Proof
   strip_tac >> gvs[] >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem raw_call_outbuf_positive_id_growth[local]:
+Theorem raw_call_outbuf_positive_id_growth:
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) ==>
   sa.cs_next_id < sm.cs_next_id
 Proof
@@ -1133,7 +1133,7 @@ Proof
   rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
 QED
 
-Theorem raw_call_outbuf_positive_run[local]:
+Theorem raw_call_outbuf_positive_run:
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
   ((cap + 31) DIV 32) * 32 + 32 < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -1333,7 +1333,7 @@ Proof
   disch_then (qspecl_then [`b+32`, `LENGTH bs`] mp_tac) >> simp[]
 QED
 
-Theorem raw_call_kwargs_payload[local]:
+Theorem raw_call_kwargs_payload:
   expr_sim_inv cenv cx env es /\
   expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) sa sd es (BytesV bs) data s /\
   evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
@@ -1349,7 +1349,7 @@ Proof
   drule_all raw_call_frame_bytes >> simp[]
 QED
 
-Theorem raw_call_addr_data_post[local]:
+Theorem raw_call_addr_data_post:
   expr_post ctx func cenv cx d es1 s1 s2 ta es2 (BytesV bs) data td /\
   expr_type d = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type d) = SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -1797,7 +1797,7 @@ Proof
   simp[]
 QED
 
-Theorem raw_call_optional_gas_run[local]:
+Theorem raw_call_optional_gas_run:
   (case go of SOME g => (g,sa) | NONE => emit_op GAS [] sa) = (gas,sb) /\
   (!g. go = SOME g ==> ?w. eval_operand g s = SOME w) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
@@ -2040,7 +2040,7 @@ Resume raw_call_prefix_sim[kwargs_run]:
 QED
 
 *)
-Theorem raw_call_kwarg_mem[local]:
+Theorem raw_call_kwarg_mem:
   !ks (ops : operand list) g.
     ext_call_kwarg key ks ops = SOME g ==> MEM g ops
 Proof
@@ -2189,7 +2189,7 @@ QED
 Finalise raw_call_prefix_sim
 *)
 
-Theorem raw_call_data_slice_placement[local]:
+Theorem raw_call_data_slice_placement:
   expr_post ctx func cenv cx d esA s1 s2 tA esD (BytesV bs) data tD /\
   expr_type d = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type d) = SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -2679,7 +2679,7 @@ Theorem raw_call_emit_run:
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   Cases_on `static_call` >>
-  gvs[run_inst_seq_def, Once step_inst_base_def, mk_inst_def] >>
+  gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def] >>
   Cases_on `s.vs_call_ctx.cc_static` >> gvs[]
 QED
 
@@ -2854,7 +2854,7 @@ Proof
   goal_assum (drule_at (Pat `fn_has_code`)) >> simp[cs_extends_refl]
 QED
 
-Theorem raw_call_success_code[local]:
+Theorem raw_call_success_code:
   (do len <- emit_op RETURNDATASIZE [];
       cmp <- emit_op LT [len;Lit (n2w cap)];
       capped <- compile_select cmp len (Lit (n2w cap));
@@ -3029,7 +3029,7 @@ Definition raw_call_finish_view_def[local]:
              vs_current_bb := ""; vs_inst_idx := 0|>
 End
 
-Theorem raw_call_finish_view_control[local]:
+Theorem raw_call_finish_view_control:
   raw_call_finish_view (jump_to l s) = raw_call_finish_view s /\
   raw_call_finish_view (s with vs_inst_idx := k) = raw_call_finish_view s
 Proof
@@ -3197,7 +3197,7 @@ Proof
   fs[lookup_var_drop_fresh]
 QED
 
-Theorem raw_call_finish_state_rel_aged[local]:
+Theorem raw_call_finish_state_rel_aged:
   stmt_state_rel ctx func cenv cx es t /\ local_ptrs_reserved cenv sa /\
   (!a w. (!x. a = Var x ==> not_fresh_at sa x) /\
     eval_operand a t = SOME w ==> eval_operand a u = SOME w) /\
@@ -3224,7 +3224,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem raw_call_finish_frame_aged[local]:
+Theorem raw_call_finish_frame_aged:
   wb_frame cenv es es' st0 s0 t /\
   st0.cs_next_var <= sa.cs_next_var /\ local_ptrs_reserved cenv sa /\
   (!a w. (!x. a = Var x ==> not_fresh_at sa x) /\
@@ -3260,7 +3260,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem raw_call_success_run_aged[local]:
+Theorem raw_call_success_run_aged:
   (do len <- emit_op RETURNDATASIZE [];
       cmp <- emit_op LT [len;Lit (n2w cap)];
       capped <- compile_select cmp len (Lit (n2w cap));
@@ -3499,7 +3499,7 @@ Proof
             loweringHaltTheory.emit_inst_metadata, cs_extends_trans]
 QED
 
-Theorem raw_call_oracle_emit_run_aged[local]:
+Theorem raw_call_oracle_emit_run_aged:
   emit_op (if stat then STATICCALL else CALL)
     (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
      else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]) sa = (ok,sb) /\
@@ -3960,7 +3960,7 @@ Proof
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
-Theorem raw_call_oracle_frame[local]:
+Theorem raw_call_oracle_frame:
   wb_frame cenv es es' sa s0 s /\
   t.vs_vars = s.vs_vars /\ t.vs_allocas = s.vs_allocas /\
   t.vs_memory = (write_memory_with_expansion dst payload s).vs_memory /\
@@ -4310,7 +4310,8 @@ QED
 
 Finalise raw_call_allocated_tail_frag_aged
 
-Theorem raw_call_none_post[local]:
+Theorem raw_call_none_post:
+  expr_has_effect e /\
   expr_type e = NoneT /\ post_value_type cenv e = expr_type e /\
   stmt_state_rel ctx func cenv cx es' s /\
   wb_frame cenv es es' sa s0 s ==>
@@ -4324,7 +4325,8 @@ Proof
     val_in_memory_def, val_wf_def, val_footprint_def, type_memory_size_def]
 QED
 
-Theorem raw_call_bool_post[local]:
+Theorem raw_call_bool_post:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   expr_type e = BaseT BoolT /\
   stmt_state_rel ctx func cenv cx es' s /\
@@ -4337,7 +4339,8 @@ Proof
   gvs[expr_val_rel_def, is_word_type_def]
 QED
 
-Theorem raw_call_tuple_post[local]:
+Theorem raw_call_tuple_post:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   expr_type e = TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))] /\
   evaluate_type (get_tenv cx) (expr_type e) =
@@ -4367,6 +4370,7 @@ Proof
 QED
 
 Theorem raw_call_nonrevert_vv_path[local]:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
@@ -4415,7 +4419,8 @@ Proof
   qexists_tac `ti` >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem raw_call_bytes_post[local]:
+Theorem raw_call_bytes_post:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -4456,6 +4461,7 @@ Proof
 QED
 
 Theorem raw_call_outbuf_zero_tail_vv_path[local]:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   cap = 0 /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
@@ -4619,6 +4625,7 @@ Resume raw_call_outbuf_zero_tail_vv_path[finish]:
   qpat_x_assum `flags.rcf_max_outsize = 0` mp_tac >>
   qpat_x_assum `local_ptrs_reserved cenv sc` mp_tac >>
   qpat_x_assum `initial.cs_next_var <= sc.cs_next_var` mp_tac >>
+  qpat_x_assum `expr_has_effect e` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
   Cases_on `flags.rcf_revert_on_failure`
   >- suspend "revert_zero" >>
@@ -4646,6 +4653,7 @@ Resume raw_call_outbuf_zero_tail_vv_path[revert_zero]:
   disch_then (mp_then Any irule frag_path_conseq) >> simp[] >>
   rpt strip_tac >> gvs[] >>
   match_mp_tac raw_call_none_post >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- gvs[raw_call_return_type_def] >>
   conj_tac >- metis_tac[] >>
   conj_tac
@@ -4659,7 +4667,7 @@ QED
 
 Finalise raw_call_outbuf_zero_tail_vv_path
 
-Theorem raw_call_outbuf_allocation_site[local]:
+Theorem raw_call_outbuf_allocation_site:
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   fn_has_code sa sm func /\ local_ptrs_reserved cenv sa ==>
   ?alloc q. MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
@@ -4680,6 +4688,7 @@ Proof
 QED
 
 Theorem raw_call_outbuf_positive_tail_vv_path[local]:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
@@ -4939,7 +4948,11 @@ Resume raw_call_outbuf_positive_tail_vv_path[call_metadata]:
   >- (fs[] >> drule raw_call_finish_revert_compile >>
       simp[arithmeticTheory.GREATER_DEF] >> strip_tac >>
       rename1 `fresh_label "call_failed" ce = (fl,s2)` >>
-      `ce = sc` by (Cases_on `value_opt = NONE` >> gvs[]) >> gvs[] >>
+      `ce = sc` by
+        (POP_ASSUM_LIST (MAP_EVERY ASSUME_TAC o List.filter (fn th =>
+         List.exists (fn v => mem (fst (dest_var v)) ["ce", "sc", "value_opt"])
+           (free_vars (concl th)))) >>
+         Cases_on `value_opt = NONE` >> gvs[]) >> gvs[] >>
       rename1 `fresh_label "call_failed" sc = _` >>
       `ci_mono sc s2 /\ ci_mono s2 s3 /\ ci_mono s3 s4 /\
        ci_mono s4 s5 /\ ci_mono s5 s6 /\ ci_mono s6 s7 /\
@@ -4981,6 +4994,7 @@ Theorem raw_call_outbuf_tail_vv_path[local]:
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
   (0 < cap ==> 64 + ((cap + 31) DIV 32) * 32 < dimword (:256)) /\
   flags.rcf_max_outsize = cap /\ expr_type e = raw_call_return_type flags /\
+  expr_has_effect e /\
   (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) =
     SOME (if flags.rcf_revert_on_failure then BaseTV (BytesT (Dynamic cap))
       else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) /\
@@ -5005,6 +5019,7 @@ Proof
 QED
 
 Theorem raw_call_outbuf_tail_vv_frag[local]:
+  expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
   compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
@@ -5267,7 +5282,10 @@ Resume raw_call_outbuf_tail_vv_frag[positive_finish]:
           simp[Abbr `entry`, local_region_def, lookup_var_def] >>
       simp[Abbr `entry`] >>
       rpt conj_tac
-      >- (Cases_on `value_opt` >> gvs[])
+      >- (POP_ASSUM_LIST (MAP_EVERY ASSUME_TAC o List.filter (fn th =>
+            List.exists (fn v => mem (fst (dest_var v)) ["value_opt", "val_word"])
+              (free_vars (concl th)))) >>
+          Cases_on `value_opt` >> gvs[])
       >- (rpt strip_tac >>
           qpat_x_assum `!name b sz. local_region cenv es.scopes t name b sz ==> _ /\ _`
             drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
@@ -5366,12 +5384,16 @@ Theorem raw_call_keywords_post[local]:
     LIST_REL (\x v. eval_operand x s = SOME
       (typed_val_to_w256 (BaseTV (UintT 256)) v)) xs vs
 Proof
-  Induct >> rpt gen_tac >>
-  Cases_on `xs` >> Cases_on `vs` >>
-  simp[typed_args_post_def, vyperValueTheory.evaluate_type_def] >>
-  strip_tac >> gvs[vyperValueTheory.evaluate_type_def] >>
-  first_x_assum irule >> simp[typed_args_post_def] >>
-  goal_assum (drule_at Any) >> simp[]
+  simp[typed_args_post_def] >> rpt strip_tac >>
+  qpat_x_assum `LIST_REL _ _ _` mp_tac >>
+  qpat_x_assum `LENGTH ks = LENGTH vs` mp_tac >>
+  qpat_x_assum `EVERY _ ks` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  map_every qid_spec_tac [`xs`, `vs`, `ks`] >>
+  Induct >> rpt gen_tac >> Cases_on `xs` >> Cases_on `vs` >>
+  simp[vyperValueTheory.evaluate_type_def] >>
+  rpt strip_tac >> gvs[vyperValueTheory.evaluate_type_def] >>
+  first_x_assum irule >> simp[]
 QED
 
 Theorem raw_call_value_operand[local]:
@@ -5424,7 +5446,7 @@ Proof
   gvs[raw_call_value_def, ext_call_kwarg_not_mem]
 QED
 
-Theorem raw_call_prefix_source_ready[local]:
+Theorem raw_call_prefix_source_ready:
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
   bind (eval_expr cx a) (read_result cx) (es with gas_obs := gsA) = (INL av,esA) /\
   bind (eval_expr cx d) (read_result cx) (esA with gas_obs := gsD) =
@@ -5484,7 +5506,7 @@ Proof
   `MEM x xs` by metis_tac[raw_call_kwarg_mem] >> metis_tac[]
 QED
 
-Theorem raw_call_source_continuation[local]:
+Theorem raw_call_source_continuation:
   dest_AddressV av = SOME target /\ LENGTH kvs = LENGTH flags.rcf_kws /\
   raw_call_value flags.rcf_kws kvs = SOME amount ==>
   (do
@@ -5501,7 +5523,7 @@ Proof
     assert_def, lift_option_type_def, dest_BytesV_def, return_def]
 QED
 
-Theorem raw_call_source_tail[local]:
+Theorem raw_call_source_tail:
   ~cx.txn.is_static /\ ~flags.rcf_is_delegate /\
   (flags.rcf_is_static ==> amount = 0) /\ IS_SOME es.outcomes /\
   outcomes_accounts_typed es.outcomes /\
@@ -5713,7 +5735,7 @@ Resume raw_call_tail_outcome[lift]:
   qpat_assum `stmt_state_rel _ _ _ _ esK t` assume_tac >>
   rpt (goal_assum (drule_at (Pos hd))) >>
   qexistsl_tac [`Call (raw_call_return_type flags) (RawCallTarget flags) (a::d::kws) NONE`, `ann`] >>
-  simp[] >>
+  simp[expr_has_effect_thm] >>
   `es2 with gas_obs := [] = es2` by
     (Cases_on `es2` >> gvs[evaluation_state_fn_updates]) >>
   conj_tac >- (rpt strip_tac >> gvs[expr_exit_def]) >>
@@ -5722,7 +5744,7 @@ QED
 
 Finalise raw_call_tail_outcome
 
-Theorem compile_expr_raw_call[local]:
+Theorem compile_expr_raw_call:
   compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) dflt) sa =
     (vv,sb) ==>
   ?addr data len dp vo go ignored gas ov op result s1 s2 s3 s4 s5 s6 s7.

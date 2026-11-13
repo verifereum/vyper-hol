@@ -43,7 +43,7 @@ Theorem immutable_for_typing_ready[local]:
     off + type_memory_size (ArrayTV tv bd) < dimword (:256) /\
     (!gs. eval_iterator cx (Array (TopLevelName (ArrayT typ bd) (src,name)))
       (es with gas_obs := gs) =
-      (INL (array_elements (ArrayTV tv bd) av), es with gas_obs := gs)) /\
+      (INL (MAP Value (array_elements (ArrayTV tv bd) av)), es with gas_obs := gs)) /\
     FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE
 Proof
   strip_tac >>
@@ -163,7 +163,7 @@ Proof
 QED
 
 Theorem immutable_for_body_callback[local]:
-  body_for_ok cx tv id stmts vs /\ body_inv tops ctx cenv cx /\
+  body_for_ok cx tv id stmts (MAP Value vs) /\ body_inv tops ctx cenv cx /\
   supported_stmts tops bindings stmts /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
     (For id typ (Array (TopLevelName (ArrayT typ bd) (src,name))) n stmts) ==>
@@ -192,12 +192,14 @@ Proof
   strip_tac >>
   imp_res_tac body_stmt_safe_for_body >> rpt gen_tac >> strip_tac >>
   `vs <> []` by (Cases_on `vs` >> fs[]) >>
-  `body_stmts_ok cx stmts` by fs[body_for_ok_def] >>
+  `body_stmts_ok cx stmts` by
+    (fs[body_for_ok_def] >> Cases_on `vs` >>
+     gvs[read_result_def, return_def]) >>
   `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) stmts ==>
     occurs_abi_decode_target target tops` by fs[supported_stmt_expr_exists_def] >>
-  `EVERY (stmt_exprs_ok cenv) stmts` by
+  `stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) stmts` by
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-       stmts_exprs_ok_EVERY, alloc_limits_stmt_def, stmt_valued_return_def] >>
+       stmts_exprs_ok_thm, alloc_limits_stmt_def, stmt_valued_return_def] >>
   `call_evaluation_safe cx (int_calls_stmts stmts)` by
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
   irule array_body_fragment_callback >> metis_tac[]
@@ -270,12 +272,12 @@ Proof
   qmatch_asmsub_abbrev_tac `LENGTH vs <= bound_length bd` >>
   `LENGTH vs <= n` by decide_tac >>
   `eval_iterator cx (Array (TopLevelName (ArrayT typ bd) (cenv.ce_module,name)))
-      es = (INL vs,es)` by
+      es = (INL (MAP Value vs),es)` by
     (`es = es with gas_obs := es.gas_obs` by
        simp[vyperStateTheory.evaluation_state_component_equality] >>
      pop_assum SUBST1_TAC >>
      qpat_assum `!gs. eval_iterator _ _ _ = _` (fn th => rewrite_tac [th])) >>
-  `body_for_ok cx tv id stmts vs` by
+  `body_for_ok cx tv id stmts (MAP Value vs)` by
     (qpat_x_assum `!s1 vs t1 s2 t2. _` mp_tac >>
      simp[return_def, check_def, assert_def, compatible_bound_def] >>
      disch_then irule >> simp[] >> qexistsl_tac [`es`, `es`] >> simp[]) >>

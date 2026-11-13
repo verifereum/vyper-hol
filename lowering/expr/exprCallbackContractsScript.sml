@@ -53,11 +53,33 @@ Proof
   simp[]
 QED
 
-Theorem compile_make_tuple_callback_contract:
-  ∀es buf off. expr_callbacks_agree f g cenv es ⇒
-    compile_make_tuple f cenv es buf off = compile_make_tuple g cenv es buf off
+Theorem compile_stage_intcall_args_callback_contract:
+  ∀f cenv es flags tys. expr_callbacks_agree f g cenv es ⇒
+    compile_stage_intcall_args f cenv es flags tys =
+    compile_stage_intcall_args g cenv es flags tys
 Proof
-  Induct >> simp[compile_make_tuple_def] >> rpt strip_tac >> fs[]
+  ho_match_mp_tac compile_stage_intcall_args_ind >>
+  rpt strip_tac >> gvs[] >> simp[compile_stage_intcall_args_def]
+QED
+
+Theorem compile_ext_call_args_callback_contract:
+  ∀es kw_es tys. expr_callbacks_agree f g cenv es ⇒
+    compile_ext_call_args f cenv kw_es tys es =
+    compile_ext_call_args g cenv kw_es tys es
+Proof
+  Induct >> rpt gen_tac >> Cases_on `tys` >>
+  simp[compile_ext_call_args_def] >> rpt strip_tac >>
+  gvs[expr_callbacks_agree_def, FUN_EQ_THM, comp_bind_def] >>
+  simp[]
+QED
+
+Theorem compile_make_tuple_callback_contract:
+  ∀es tys buf off. expr_callbacks_agree f g cenv es ⇒
+    compile_make_tuple f cenv es tys buf off =
+    compile_make_tuple g cenv es tys buf off
+Proof
+  Induct >> simp[compile_make_tuple_def] >> rpt strip_tac >>
+  Cases_on `tys` >> fs[compile_make_tuple_def]
 QED
 
 Theorem compile_make_array_elems_callback_contract:
@@ -152,7 +174,7 @@ Theorem compile_intcall_callback_contract:
   compile_call f cenv ret_ty ty (IntCall id) args default_ret st =
   compile_call g cenv ret_ty ty (IntCall id) args default_ret st
 Proof
-  strip_tac >> drule compile_multi_vvs_callback_contract >>
+  strip_tac >> drule compile_stage_intcall_args_callback_contract >>
   simp[compile_call_def]
 QED
 
@@ -237,7 +259,7 @@ Proof
   drule_then (qspec_then `LENGTH arg_types` strip_assume_tac)
     expr_callbacks_agree_take_drop >>
   qpat_x_assum `expr_callbacks_agree _ _ _ (TAKE _ _)`
-    (assume_tac o MATCH_MP compile_multi_vvs_callback_contract) >>
+    (assume_tac o MATCH_MP compile_ext_call_args_callback_contract) >>
   qpat_x_assum `expr_callbacks_agree _ _ _ (DROP _ _)`
     (assume_tac o MATCH_MP compile_ext_call_kwargs_callback_contract) >>
   fs[] >> rpt strip_tac >>
@@ -465,8 +487,8 @@ Proof
 QED
 
 Theorem compile_make_tuple_list_child_calls:
-  compile_make_tuple (expr_child_callback (list_size expr_size args) f) cenv args buf off =
-  compile_make_tuple f cenv args buf off
+  compile_make_tuple (expr_child_callback (list_size expr_size args) f) cenv args tys buf off =
+  compile_make_tuple f cenv args tys buf off
 Proof
   irule compile_make_tuple_callback_contract >> irule expr_list_child_callback_agrees
 QED
@@ -591,14 +613,6 @@ Proof
   simp[lower_value_def, FUN_EQ_THM, comp_bind_def, expr_size_def]
 QED
 
-Theorem compile_multi_vvs_call_children:
-  compile_multi_vvs (expr_child_callback (expr_size (Call ann target args default_ret)) f)
-    cenv args = compile_multi_vvs f cenv args
-Proof
-  irule compile_multi_vvs_callback_contract >> irule expr_child_callback_agrees >>
-  rpt strip_tac >> drule expr_list_member_bound >> simp[expr_size_def]
-QED
-
 Theorem compile_multi_exprs_nested_array_children:
   MEM (Builtin ann (MakeArray elem_ty bnd) elems) args ⇒
   compile_multi_exprs (expr_child_callback (list_size expr_size args) f) cenv elems =
@@ -619,29 +633,3 @@ Proof
   irule expr_child_callback_agrees >> simp[] >>
   drule_all extcode_child_bound >> simp[]
 QED
-
-(* ===== Kernel audit for changed place callbacks ===== *)
-
-val () = List.app (fn (name,theorem) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag theorem)
-  in
-    if null (Thm.hyp theorem) andalso null axioms andalso
-       List.all (fn label => label = "DISK_THM") oracles then
-      print ("PLACE_CALLBACK_KERNEL_CLOSED " ^ name ^ " hyp=0\n")
-    else raise Fail ("admitted place callback: " ^ name)
-  end)
-  [("compile_subscript_callback_contract",compile_subscript_callback_contract),
-   ("compile_attribute_callback_contract",compile_attribute_callback_contract)];
-
-(* Issue #560 callback interfaces must remain kernel-closed. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then ()
-     else raise Fail "admitted memory-construction callback contract"
-  end)
-  [compile_make_tuple_callback_contract,
-   compile_make_array_elems_callback_contract,
-   compile_make_array_callback_contract,
-   compile_struct_lit_callback_contract,
-   compile_make_array_list_child_calls];

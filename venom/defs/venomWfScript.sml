@@ -463,6 +463,16 @@ Proof
   Cases_on `t` >> gvs[]
 QED
 
+(* inst_wf + inst_output = SOME out ⇒ inst_outputs = [out] *)
+Theorem inst_wf_outputs_some:
+  ∀inst out. inst_wf inst ∧ inst_output inst = SOME out ⇒
+    inst.inst_outputs = [out]
+Proof
+  rw[venomInstTheory.inst_output_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[]
+QED
+
 (* The function has an entry block (fn_blocks is non-empty). *)
 Definition fn_has_entry_def:
   fn_has_entry fn <=> fn.fn_blocks <> []
@@ -482,6 +492,21 @@ Definition bb_well_formed_def:
            (EL j bb.bb_instructions).inst_opcode = PHI ==>
            (EL i bb.bb_instructions).inst_opcode = PHI)
 End
+
+(* bb_well_formed is preserved by mapping an opcode-preserving function
+   over the instructions. *)
+Theorem bb_well_formed_map_opcode_preserving:
+  !f bb. (!inst. (f inst).inst_opcode = inst.inst_opcode) ==>
+    bb_well_formed bb ==>
+    bb_well_formed (bb with bb_instructions := MAP f bb.bb_instructions)
+Proof
+  rw[bb_well_formed_def] >>
+  `!n. n < LENGTH bb.bb_instructions ==>
+    (EL n (MAP f bb.bb_instructions)).inst_opcode =
+    (EL n bb.bb_instructions).inst_opcode` by
+    simp[listTheory.EL_MAP] >>
+  res_tac >> fs[listTheory.LAST_MAP]
+QED
 
 (* All pseudo instructions (PHI, PARAM) form a prefix of the block.
  * Matches Vyper compiler output where PHIs and PARAMs are always emitted

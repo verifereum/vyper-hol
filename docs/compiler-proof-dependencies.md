@@ -35,7 +35,7 @@ compile_vyper (K SOME) succeeds
 
 supported_program -> S2 raw source-unit shape -> S6 output shape
 call_state_rel + shared entry_venom_state -> L6/L7/L8 initial relations
-source typing/storage + valid ABI call + successful-outcome guards -> S1
+source typing/storage + valid ABI call + outcome guards -> S1
 
 non-exempt branch:
   S3 raw memory -> S4 forward O1 simulation
@@ -44,7 +44,7 @@ non-exempt branch:
   S7, using SAME Inv -> frame-aware EVM correspondence/resource alternatives
 
 clean generic e2e_vyper_to_evm (explicit stage premises, zero admission leaves)
-  -> vyper_call_correct (seven public premises; inherits exactly S1-S7)
+  -> vyper_call_correct (eight public premises; inherits exactly S1-S7)
 exempt branch: actual total run + exact decoder exemption, not invented safety
 ```
 
@@ -55,18 +55,19 @@ Memory/shape/policy/labels/initial state are **not extra public hypotheses**.
 
 ## All public hypotheses and producers
 
-The exact [seven-premise schema](compiler-proof-status-2026-10-09.md#public-runtime-theorem)
+The exact [eight-premise schema](compiler-proof-status-2026-10-09.md#public-runtime-theorem)
 is `e2eCorrectness.vyper_call_correct`.
 
 | Hypothesis | Class | Current producer / absence |
 |---|---|---|
 | compiler returns `(deploy_bc,runtime_bc)` | boundary | Caller supplies success; L1 extracts raw phases and exact assembled runtime bytes. No universal success producer. |
 | `supported_program tops` | computational boundary | Plain EVAL on concrete `tops`; exact whitelist on `tops` alone. No universal membership, typing or semantic correctness producer. |
+| `immutable_free_program tops` | computational boundary | Excludes runtime immutables from the current call theorem. |
 | `source_typing_ok tops am tx` | boundary + environmental | Checker artifact; partial `load_contract_establishes_checked_contract_runtime_ready`, `load_contract_establishes_machine_well_typed`, `checked_call_external_preserves_machine_well_typed`. No complete arbitrary-environment producer. |
 | `source_storage_ok tops am tx` | environmental/layout/hash guard | Conditional `eval_stmt_preserves_contract_storage_well_formed` family and `take_adopt_call_outcome_storage_suffix`. No complete deployment/transaction producer; Milestone 7. |
 | `call_state_rel tops runtime_bc am tx es` | environmental | No general producer or satisfiability theorem. L6/L8 **consume**, not produce, it; transaction corollary deferred to Milestone 7. |
 | `valid_vyper_call tops tx calldata ret` | environmental ABI/function boundary | No general producer. Exact External lookup/no fallback/no defaults, count, binding and encoded calldata supplied by caller. |
-| `call_outcomes_ok tops am tx (MAP SND (call_trace es))` | environmental successful-payload guard | **No current producer**, neither arbitrary EVM callee nor source-executed callee. Milestone 7. |
+| `call_outcomes_ok am tx (MAP SND (call_trace es))` | environmental outcome-payload guard | **No current producer**, neither arbitrary EVM callee nor source-executed callee. Milestone 7. |
 
 The [partial-producer detail](compiler-proof-status-2026-10-09.md#what-partial-producers-actually-establish)
 is part of this inventory: runtime readiness requires installed exact sources
@@ -75,8 +76,8 @@ constants setup; call machine preservation assumes `checked_external_call_inputs
 Storage preservation consumes runtime-storage consistency, protected-call,
 call-evaluation and oracle-storage premises. These are not universal producers.
 
-`call_outcomes_ok` quantifies **all successful records**, including static ones:
-`accounts_runtime_well_typed co_accounts` and `contract_storage_well_formed` on
+`call_outcomes_ok` quantifies **all records**, including failed and static ones:
+return-data length `<2**256`, `accounts_runtime_well_typed co_accounts` and `contract_storage_well_formed` on
 those accounts and `co_tStorage` in the actual source context. Account balance
 `<2**256` and code length `<=24576` guards do not imply storage validity.
 The evaluator checks account bounds on successful nonstatic adoption, not the
@@ -105,8 +106,9 @@ admissions. Generic composition and each L1–L13 have none. See [source owners 
 Pipeline result transport is success-observable preserving, forward and
 terminating; failed-run return bytes/general abort kind/requests may differ.
 Generated plan layout does not prove spill safety. Empty entry memory does not
-prove raw memory validity. Opaque GAS use/labels are supplied by output shape,
-not arbitrary label or caller-read gas oracles.
+prove raw memory validity. Return-address uses and labels are constrained by
+output shape. Source gas observations in the result relation
+remain existential and are not tied to EVM readings.
 
 ## Clean producers and composition
 
@@ -138,22 +140,25 @@ accounts, exact source installation/layouts, code/parse and message/transaction/
 block ties. `run_call` stops when our frame ends; parent return/revert/short
 output-copy behavior is specified by `frame_outcome`, not by a whole-transaction
 claim. Source oracle `SOME` and Venom/assembly calls take complete outcomes;
-computed value-zero precompiles1/2/6/7 consume none. No callee source correctness
-is presumed or proved.
+computed value-zero precompiles 1/2/6/7 consume the next outcome and use its
+success flag when the computed input is valid. No callee source correctness is
+presumed or proved.
 
-Success relates canonical returns/accounts/transient/logs and full request
-sequence. Requests are success-only; leftover outcomes are not final
+Success relates `tx_return_bytes`, accounts after EVM pending deletions,
+transient storage modulo dead target storage, logs and the filtered request
+sequence via `request_agree`. Requests are success-only; leftover outcomes are not final
 observations. Non-exempt source failure requires target failure, without
 revert-data/reason/general-kind equality. The sole exemption is exact
 `RuntimeError "abi_decode invalid"` with a dynamic target occurring in a function
 body (including a return rejection producing that same message); not arbitrary
 `ReturnReject`, static-only decoding or conversion failure.
 
-Resources are frame OutOfGas/StackOverflow or valid computed-precompile failure,
-not an existential gas threshold. Entry `cc_gas=0`; Venom GAS stays unchanged
-and opaque, CALL/STATICCALL oracle semantics ignore evaluated gas operands.
+The resource alternative is frame OutOfGas/StackOverflow, not an existential gas
+threshold. Entry `cc_gas=0`; Venom GAS consumes the frame's gas readings,
+returning zero on exhaustion.
 There is no static-entry/immutables/msg.gas/gas=/fallback guarantee or caller-read
-gas oracle. Combined environmental satisfiability and transaction/callee
+gas-reading correspondence; the result relation existentially chooses source
+gas observations without tying them to EVM readings. Combined environmental satisfiability and transaction/callee
 producers remain Milestone 7 work.
 
 ## Deployment, function simulation and retired contracts
@@ -161,8 +166,11 @@ producers remain Milestone 7 work.
 `e2eDeployCorrectness.e2e_deploy_correctness` is a meaningful **ADMITTED** single-frame
 creation statement (Milestone 6 item7), not the old proved `T` placeholder.
 It requires Call-free constructor bodies, canonical arguments, actual deployment
-typing/storage/pre-constant readiness and an uninstalled source target; success
-compares installed runtime bytes/accounts modulo target code/transient/logs.
+typing/storage/pre-constant readiness, an uninstalled source target and an empty
+target account in `es.originalAccounts`; success
+compares returned/installed `runtime_bc ++ section` satisfying `immutables_section_rel`,
+accounts modulo target code and dead storage, transient storage modulo dead
+target storage, and logs.
 `venomToAsmProps.gen_fn_simulation` is separately **ADMITTED**, Milestone 4.2,
 with internal-return/frame relations. Both are **off the runtime call path**.
 

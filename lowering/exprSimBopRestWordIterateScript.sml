@@ -47,7 +47,7 @@ Proof
        loweringPostsTheory.storage_holds_def, loweringPostsTheory.immutable_holds_def,
        venomStateTheory.contract_storage_def, venomStateTheory.contract_transient_def,
        venomStateTheory.jump_to_def, venomStateTheory.eval_operand_def,
-       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def]
+       loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def, loweringPostsTheory.pure_frame_def]
 QED
 
 (* Finite-search composition consumes the four local marked block contracts.

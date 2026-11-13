@@ -11,7 +11,8 @@ Proof
   strip_tac >>
   `step_inst_base di u = OK t` by
     gvs[step_inst_non_invoke] >>
-  drule_all step_inst_base_assign >> simp[]
+  qpat_x_assum `step_inst_base di u = OK t` mp_tac >>
+  simp[Once step_inst_base_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem le_step_assign_lookup:
