@@ -478,7 +478,6 @@ Resume ld_runner_exec_clause_fuel[halt]:
       drule_all ld_joint_unchanged_fetch >> strip_tac >>
       `exec_block fuel C' bb' t = Halt te` by simp[Once exec_block_def] >>
       gvs[Abbr `RR`]) >>
-  `taint_within D C vs` by fs[o1_src_inv_def] >>
   drule_all (SIMP_RULE bool_ss [PULL_EXISTS] (ld_whole ld_runner_halt_endpoint)) >>
   strip_tac >> gvs[Abbr `RR`]
 QED
@@ -508,7 +507,7 @@ Resume ld_runner_exec_clause_fuel[ret]:
   `MEM i (fn_insts fn)` by
     (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
   `~is_raw_fmp_opcode i.inst_opcode /\ no_dret fn` by
-    (fs[o1_src_inv_def, fmp_free_ctx_def, o1_ctx_shape_def, EVERY_MEM,
+    (fs[fmp_free_ctx_def, o1_ctx_shape_def, EVERY_MEM,
         o1_fn_shape_def, no_raw_fmp_ops_def] >> metis_tac[]) >>
   `i.inst_opcode = RET` by
     (drule step_inst_intret_opcodes >>
