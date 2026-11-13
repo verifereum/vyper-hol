@@ -15,24 +15,22 @@ Theorem intcall_inactive_copy_resources:
   sa.cs_next_var <= sb.cs_next_var ==>
   intcall_expr_res fp ce env es sb t
 Proof
-  (* Temporary stand-in: the proof below broke on the 0.5.0b1 lowering port;
-     named repair for the alan run. Original proof:
-    strip_tac >>
-    `typed_copy_effect fp.jc_ctx fp.jc_func sa sb s t b k` by
-      (irule typed_copy_effect_enlarge >> goal_assum (drule_at Any) >> simp[]) >>
-    `copy_static t = copy_static s` by
-      (drule typed_copy_effect_record >>
-       simp[venom_state_component_equality, copy_static_def]) >>
-    `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es t` by
-      (irule copy_buffer_state_rel_frame >>
-       qexistsl [`b`, `inst`, `s`, `sa`, `k`] >>
-       fs[intcall_expr_res_def, typed_copy_effect_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
-       metis_tac[arithmeticTheory.ADD_COMM]) >>
-    irule intcall_joint_res_copy >>
-    qexistsl [`dst`, `n`, `s`, `sa`] >> simp[] >>
-    fs[intcall_frame_ok_def, loweringStateRelDefsTheory.regions_disjoint_def] >> rpt strip_tac >>
-    qpat_x_assum `!a k. fp.jc_prot a k ==> a + k <= fp.jc_lo` drule >>
-    decide_tac
-  *)
-  cheat
+  strip_tac >>
+  `typed_copy_effect fp.jc_ctx fp.jc_func sa sb s t b k` by
+    (irule typed_copy_effect_enlarge >> goal_assum (drule_at Any) >> simp[]) >>
+  `copy_static t = copy_static s` by
+    (drule typed_copy_effect_record >>
+     simp[venom_state_component_equality, copy_static_def]) >>
+  `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es t` by
+    (irule copy_buffer_state_rel_frame >>
+     goal_assum (drule_at Any) >>
+     fs[intcall_expr_res_def, typed_copy_effect_def,
+        loweringStateRelDefsTheory.regions_disjoint_def] >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
+  irule intcall_joint_res_copy >> simp[] >>
+  qexistsl [`dst`, `n`, `s`, `sa`] >> simp[] >>
+  fs[intcall_frame_ok_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `!a k. fp.jc_prot a k ==> a + k <= fp.jc_lo` drule >>
+  decide_tac
 QED
