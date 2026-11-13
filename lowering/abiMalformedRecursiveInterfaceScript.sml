@@ -120,7 +120,9 @@ Theorem abi_malformed_resource_post_intro:
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s t
 Proof
   strip_tac >> match_mp_tac (GEN_ALL abi_malformed_resource_post_frame_intro) >>
-  qexists_tac `H` >> simp[] >> rpt strip_tac >>
+  qexists_tac `H` >> simp[] >> rpt strip_tac
+  >~ [`mem_bytes_at`]
+  >- (first_x_assum irule >> qexistsl_tac [`aid`, `cap`] >> simp[]) >>
   irule stmt_state_rel_fields_transport >>
   first_assum (irule_at Any) >> first_assum (irule_at Any) >> simp[]
 QED
