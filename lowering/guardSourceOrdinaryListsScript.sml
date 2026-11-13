@@ -2,6 +2,7 @@
 Theory guardSourceOrdinaryLists
 Ancestors
   list guardSourceOrdinarySchema vyperInterpreter vyperState vyperStorageFootprint
+  guardSourceOrdinaryConditionals guardSourceOrdinaryLoops
   vyperTypeSystem vyperTypeCallGraph vyperEvalMisc vyperStorageTrace
   vyperTypeStmtSoundness vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperEvalOutcomeSuffix vyperTypeEvalStoragePreservation vyperStatePreservation
@@ -273,3 +274,31 @@ Proof
     (qspecl_then [`initial_st`, `selected`, `env`, `st1`] mp_tac) >>
   disch_then (irule o cj 1) >> metis_tac[]
 QED
+
+(* Publication audit: every Lists-owned premise has exactly one checked export,
+ * and every export has exactly the generated schema statement. *)
+val lists_exports =
+  [("Stmts_nil", finite_prefix_Stmts_nil),
+   ("Stmts_cons", finite_prefix_Stmts_cons),
+   ("Exprs_nil", finite_prefix_Exprs_nil),
+   ("Exprs_cons", finite_prefix_Exprs_cons),
+   ("Results_nil", finite_prefix_Results_nil),
+   ("Results_cons", finite_prefix_Results_cons),
+   ("Iterator_Array", finite_prefix_Iterator_Array),
+   ("Iterator_Range", finite_prefix_Iterator_Range),
+   ("For_nil", finite_prefix_For_nil),
+   ("For", finite_prefix_For),
+   ("For_cons", finite_prefix_For_cons),
+   ("If", finite_prefix_If),
+   ("Expr_IfExp", finite_prefix_Expr_IfExp)];
+val lists_expected = List.filter
+  (fn (name,_) => guardSourceSchemaLib.owner name = "lists")
+  (guardSourceSchemaLib.manifest finite_prefix_evaluate_ind);
+val _ = if length lists_exports = length lists_expected andalso
+           length (mk_set (map #1 lists_exports)) = length lists_exports
+        then () else raise Fail "Lists branch coverage/uniqueness mismatch";
+val _ = List.app (fn (name,tm) =>
+  case List.find (fn (n,_) => n = name) lists_exports of
+    SOME (_,th) => if aconv (concl th) tm then ()
+                   else raise Fail ("Lists branch statement mismatch: " ^ name)
+  | NONE => raise Fail ("Missing Lists branch: " ^ name)) lists_expected;
