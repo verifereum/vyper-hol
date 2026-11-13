@@ -158,7 +158,15 @@ Proof
   qexists_tac `z` >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-(* The capacity premise concerns the lowered layout, never the annotation. *)
+(* The capacity premise concerns the lowered layout, never the annotation.
+   Caller interface: expr_vv_sim_mem supplies vv_store_bound at the annotation
+   and lowered types; aggregate_vv_memory_capacity extracts its lowered-size
+   bound, up to a zero-size disjunct. In the incompatible-call branch,
+   incompatible_return_layout_intcall gives strict widening, so
+   externalNormalizePremises.normalize_return_source_positive rules out zero.
+   This publication itself also permits zero-size layouts when the stated
+   capacity bound holds. compile_call_intcall_shape gives base_ptr for either
+   nonzero return convention, hence LocMemory (base_ptr_def). *)
 Theorem snapshot_lowered_located_mem:
   post_value_type ce e = lowered_value_type ce e /\
   ~is_word_type (lowered_value_type ce e) /\ p.ptr_location = LocMemory /\
