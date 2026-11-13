@@ -378,7 +378,7 @@ Proof
   metis_tac[abi_encode_exec_frame_trans]
 QED
 
-Theorem abi_encode_framed_emit_add_phase:
+Theorem abi_encode_framed_emit_add_phase_strong:
   emit_op ADD [left;right] st = (out,en) /\
   eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
   fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
@@ -388,7 +388,9 @@ Theorem abi_encode_framed_emit_add_phase:
     eval_operand out t = SOME (a+b) /\
     (!x. out = Var x ==> not_fresh_at en x) /\
     t.vs_labels = s.vs_labels /\
-    abi_encode_exec_frame func s t
+    abi_encode_exec_frame func s t /\
+    run_inst_seq (emitted_insts st en) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx)
 Proof
   strip_tac >> drule_all window_emit_add_pure >> strip_tac >>
   `EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode /\
@@ -401,10 +403,32 @@ Proof
      simp[mk_inst_def, is_terminator_def, is_alloca_op_def, is_ext_call_op_def]) >>
   `abi_encode_exec_frame func s t` by
     (drule_all abi_encode_framed_ordinary_pure_sequence >> simp[]) >>
+  `run_inst_seq (emitted_insts st en) s = OK t /\
+   t.vs_inst_idx = s.vs_inst_idx` by
+    fs[window_pure_seq_def, window_seq_def] >>
+  `(t with vs_inst_idx := s.vs_inst_idx) = t` by
+    (qpat_assum `t.vs_inst_idx = s.vs_inst_idx` (SUBST1_TAC o SYM) >> simp[]) >>
   qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
   (conj_tac >- metis_tac[window_pure_seq_phase]) >>
   simp_tac (srw_ss()) [eval_op_inst_idx] >> asm_rewrite_tac[] >>
   metis_tac[window_pure_seq_def, window_seq_labels]
+QED
+
+Theorem abi_encode_framed_emit_add_phase:
+  emit_op ADD [left;right] st = (out,en) /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. window_phase ctx func st en {} [] s t /\
+    eval_operand out t = SOME (a+b) /\
+    (!x. out = Var x ==> not_fresh_at en x) /\
+    t.vs_labels = s.vs_labels /\
+    abi_encode_exec_frame func s t
+Proof
+  rpt gen_tac >>
+  disch_then (mp_tac o MATCH_MP abi_encode_framed_emit_add_phase_strong) >>
+  metis_tac[]
 QED
 
 Theorem abi_encode_framed_store_eval[local]:
@@ -414,7 +438,7 @@ Proof
     mstore_def, write_memory_with_expansion_def]
 QED
 
-Theorem abi_encode_framed_child_suffix_steps:
+Theorem abi_encode_framed_child_suffix_steps_strong:
   abi_encode_child_suffix head dp offset len st = (out,en) /\
   fn_has_code st en func /\
   eval_operand head s = SOME (n2w h) /\ eval_operand offset s = SOME (n2w off) /\
@@ -433,7 +457,16 @@ Theorem abi_encode_framed_child_suffix_steps:
     t1.vs_memory = (mstore h (n2w off) s).vs_memory /\
     t3 = ((mstore slot (n2w (off+n)) t2) with vs_inst_idx := LENGTH en.cs_current_insts) /\
     out = len /\ eval_operand out t3 = SOME (n2w n) /\
-    abi_encode_exec_frame func s t3
+    abi_encode_exec_frame func s t3 /\
+    t1 = ((mstore h (n2w off) s) with vs_inst_idx := LENGTH a.cs_current_insts) /\
+    run_inst_seq (emitted_insts st a) s =
+      OK (t1 with vs_inst_idx := s.vs_inst_idx) /\
+    run_inst_seq (emitted_insts a b) t1 =
+      OK (t2 with vs_inst_idx := t1.vs_inst_idx) /\
+    run_inst_seq (emitted_insts b en) t2 =
+      OK (t3 with vs_inst_idx := t2.vs_inst_idx) /\
+    run_inst_seq (emitted_insts st en) s =
+      OK (t3 with vs_inst_idx := s.vs_inst_idx)
 Proof
   strip_tac >> drule_all window_child_suffix_context >> strip_tac >>
   qabbrev_tac `t1 = (mstore h (n2w off) s) with vs_inst_idx := LENGTH a.cs_current_insts` >>
@@ -450,8 +483,10 @@ Proof
     eval_operand next t2 = SOME (n2w (off+n)) /\
     (!x. next = Var x ==> not_fresh_at b x) /\
     t2.vs_labels = t1.vs_labels /\
-    abi_encode_exec_frame func t1 t2` by
-    (drule_all abi_encode_framed_emit_add_phase >> simp[word_add_n2w]) >>
+    abi_encode_exec_frame func t1 t2 /\
+    run_inst_seq (emitted_insts a b) t1 =
+      OK (t2 with vs_inst_idx := t1.vs_inst_idx)` by
+    (drule_all abi_encode_framed_emit_add_phase_strong >> simp[word_add_n2w]) >>
   `eval_operand dp t2 = SOME (n2w slot) /\ eval_operand len t2 = SOME (n2w n)` by
     (conj_tac >> irule window_phase_eval >> asm_rewrite_tac[] >>
      qexistsl_tac [`ctx`, `b`, `func`, `{}`, `[]`, `t1`, `a`] >>
@@ -479,9 +514,86 @@ Proof
   `abi_encode_exec_frame func s
     ((mstore slot (n2w (off+n)) t2) with vs_inst_idx := LENGTH en.cs_current_insts)` by
     (irule abi_encode_exec_frame_trans >> qexists_tac `t2` >> asm_rewrite_tac[]) >>
+  `run_inst_seq (emitted_insts st a) s =
+    OK (t1 with vs_inst_idx := s.vs_inst_idx)` by
+    (qpat_assum `emit_void MSTORE [head;offset] st = ((),a)`
+       (mp_then Any strip_assume_tac emitted_insts_emit_void) >>
+     `step_inst_base (mk_inst st.cs_next_id MSTORE [head;offset] []) s =
+       OK (mstore h (n2w off) s)` by
+       (mp_tac (Q.SPECL [`head`, `offset`, `n2w h`, `n2w off`,
+          `st.cs_next_id`, `s`] step_MSTORE) >> simp[w2n_n2w, LESS_MOD]) >>
+     asm_rewrite_tac[run_inst_seq_def] >>
+     simp[Abbr `t1`, mstore_def, write_memory_with_expansion_def] >>
+     qpat_assum `s.vs_inst_idx = LENGTH st.cs_current_insts`
+       (fn th => rewrite_tac[GSYM th]) >> simp_tac (srw_ss()) []) >>
+  `run_inst_seq (emitted_insts b en) t2 =
+    OK (((mstore slot (n2w (off+n)) t2)
+      with vs_inst_idx := LENGTH en.cs_current_insts)
+      with vs_inst_idx := t2.vs_inst_idx)` by
+    (qpat_assum `emit_void MSTORE [dp;next] b = ((),en)`
+       (mp_then Any strip_assume_tac emitted_insts_emit_void) >>
+     `step_inst_base (mk_inst b.cs_next_id MSTORE [dp;next] []) t2 =
+       OK (mstore slot (n2w (off+n)) t2)` by
+       (mp_tac (Q.SPECL [`dp`, `next`, `n2w slot`, `n2w (off+n)`,
+          `b.cs_next_id`, `t2`] step_MSTORE) >> simp[w2n_n2w, LESS_MOD]) >>
+     asm_rewrite_tac[run_inst_seq_def] >>
+     simp[mstore_def, write_memory_with_expansion_def] >>
+     qpat_assum `t2.vs_inst_idx = LENGTH b.cs_current_insts`
+       (fn th => rewrite_tac[GSYM th]) >> simp_tac (srw_ss()) []) >>
+  `inst_extends st a /\ inst_extends a b /\ inst_extends b en` by
+    metis_tac[inst_extends_emit_void, inst_extends_emit_op] >>
+  `emitted_insts st en =
+    emitted_insts st a ++ (emitted_insts a b ++ emitted_insts b en)` by
+    (irule EQ_TRANS >> qexists_tac `emitted_insts st a ++ emitted_insts a en` >>
+     conj_tac >- metis_tac[emitted_insts_append, inst_extends_def, inst_extends_trans] >>
+     metis_tac[emitted_insts_append, inst_extends_def]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts a b) /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts b en)` by
+    (qpat_assum `emit_op ADD [offset;len] a = (next,b)`
+       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     qpat_assum `emit_void MSTORE [dp;next] b = ((),en)`
+       (mp_then Any strip_assume_tac emitted_insts_emit_void) >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  `run_inst_seq (emitted_insts st en) s =
+    OK (((mstore slot (n2w (off+n)) t2)
+      with vs_inst_idx := LENGTH en.cs_current_insts)
+      with vs_inst_idx := s.vs_inst_idx)` by
+    (asm_rewrite_tac[] >>
+     qpat_assum `run_inst_seq (emitted_insts st a) s = _`
+       (fn th => rewrite_tac[MATCH_MP run_inst_seq_append th]) >>
+     simp[run_inst_seq_inst_idx, exec_result_map_def] >>
+     qpat_assum `run_inst_seq (emitted_insts a b) t1 = _`
+       (fn th => rewrite_tac[MATCH_MP run_inst_seq_append th]) >>
+     simp[run_inst_seq_inst_idx, exec_result_map_def]) >>
   qexistsl_tac [`a`, `b`, `t1`, `t2`,
     `(mstore slot (n2w (off+n)) t2) with vs_inst_idx := LENGTH en.cs_current_insts`] >>
   asm_rewrite_tac[] >> simp[abi_encode_framed_store_eval, Abbr `t1`]
+QED
+
+Theorem abi_encode_framed_child_suffix_steps:
+  abi_encode_child_suffix head dp offset len st = (out,en) /\
+  fn_has_code st en func /\
+  eval_operand head s = SOME (n2w h) /\ eval_operand offset s = SOME (n2w off) /\
+  eval_operand dp s = SOME (n2w slot) /\ eval_operand len s = SOME (n2w n) /\
+  (!x. dp = Var x \/ len = Var x ==> not_fresh_at st x) /\
+  FLOOKUP s.vs_allocas site = SOME (slot,32) /\
+  h < dimword (:256) /\ slot < dimword (:256) /\
+  alloca_inv s /\ alloca_room ctx func s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?a b t1 t2 t3.
+    window_phase ctx func st a {} [(h,32)] s t1 /\
+    window_phase ctx func a b {} [] t1 t2 /\
+    window_phase ctx func b en {site} [] t2 t3 /\
+    a.cs_next_var = st.cs_next_var /\ b.cs_next_var = a.cs_next_var+1 /\
+    t1.vs_memory = (mstore h (n2w off) s).vs_memory /\
+    t3 = ((mstore slot (n2w (off+n)) t2) with vs_inst_idx := LENGTH en.cs_current_insts) /\
+    out = len /\ eval_operand out t3 = SOME (n2w n) /\
+    abi_encode_exec_frame func s t3
+Proof
+  rpt gen_tac >>
+  disch_then (mp_tac o MATCH_MP abi_encode_framed_child_suffix_steps_strong) >>
+  metis_tac[]
 QED
 
 Theorem abi_encode_framed_pure_word[local]:
