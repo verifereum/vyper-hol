@@ -183,5 +183,42 @@ Theorem literal_bytelike_full_run:
         inst_seq_ptr (DF H) lo ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
         stmt_state_rel H ctx func cenv cx es u
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace)
+     es.storage_trace` by gvs[storage_trace_domain_def] >>
+  first_assum (drule_then strip_assume_tac) >>
+  `allocas_from lo s /\ lo <= s.vs_alloca_next` by
+    gvs[ghost_inv_at_def] >>
+  drule literal_ptr_bytelike_shape >> strip_tac >>
+  drule_all literal_bytelike_ptr_run >>
+  disch_then (qspecl_then [`tn`, `func`, `PG`, `G`, `DF (storage_trace_horizon es.storage_trace)`]
+    strip_assume_tac) >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ u` kall_tac >>
+  `p' = p` by metis_tac[operand_11] >>
+  qpat_x_assum `p' = p` SUBST_ALL_TAC >>
+  drule_all literal_full_prefix_exists >> strip_tac >>
+  drule_all literal_full_prefix_frame >> strip_tac >>
+  drule_all literal_full_payload_frame >> strip_tac >>
+  `b < dimword (:256) /\ b' < dimword (:256)` by decide_tac >>
+  `b' = b` by metis_tac[n2w_11, arithmeticTheory.LESS_MOD, optionTheory.SOME_11] >>
+  qpat_x_assum `b' = b` SUBST_ALL_TAC >>
+  qpat_x_assum `p = STRING _ _` kall_tac >>
+  qexistsl_tac [`u'`, `t`, `b`, `p`, `sh`, `G'`, `tn'`] >>
+  asm_simp_tac bool_ss [] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  gen_tac >> strip_tac >>
+  qpat_assum `emitted_insts sa sb = _`
+    (fn th => once_rewrite_tac[GSYM th]) >>
+  conj_tac
+  >- (irule (INST_TYPE [alpha |-> ``:256``] literal_full_ptr_transport) >>
+      asm_simp_tac (bool_ss ++ SFY_ss) [] >>
+      qexists_tac `DF (storage_trace_horizon es.storage_trace)` >>
+      qpat_x_assum `inst_seq_ptr _ 0 _ _ _ _ _ _ _ _ _` mp_tac >>
+      asm_simp_tac bool_ss []) >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+    (drule_then strip_assume_tac) >>
+  irule (cj 1 literal_full_prefix_frame) >>
+  asm_simp_tac (bool_ss ++ SFY_ss) []
 QED
