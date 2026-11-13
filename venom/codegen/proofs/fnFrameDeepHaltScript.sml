@@ -11,6 +11,7 @@
 
 Theory fnFrameDeepHalt
 Ancestors
+  planEmissionProps asmRunBounded arithmetic
   deepResidualBudget deepResidualSim fnPlanPrefix fnFrameTerminal genFrameSim frameRel contextCodegenRel
   codegenRel blockSimHelpers unitShapeDefs genBlockSim mixedPrefixSim
   stackPlanGen stackPlanTypes planExec asmSem venomExecSemantics venomState
@@ -55,6 +56,7 @@ Theorem frame_terminal_prefix_setup_marked:
   generate_inst_plan liveness dfg cfg fn inst nl halting term label ps = SOME (ops,final) /\
   asm_block_at prog st.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
   ?n mid name.
+    create_safe_prefix lo o2pc prog n st /\
     n + 1 <= LENGTH (execute_plan cp.cp_initial_fmp ops) /\
     asm_steps lo o2pc prog n st = AsmOK mid /\
     asm_block_at prog mid.as_pc [AsmOp name] /\
@@ -139,6 +141,12 @@ Resume frame_terminal_prefix_setup_marked[lift]:
     simp[asm_state_component_equality] >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops))`,
     `endpoint with as_stack := endpoint.as_stack ++ rest`, `name`] >>
+  conj_tac
+  >- (irule plan_admin_create_safe_prefix >>
+      `EVERY plan_admin_op (iops ++ rops)` by
+        (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+      qexistsl_tac [`cplan.cp_initial_fmp`, `iops ++ rops`] >>
+      gvs[execute_plan_append, asm_block_at_append, EVERY_APPEND]) >>
   conj_tac >- simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
   conj_tac >- gvs[] >>
   conj_tac
@@ -249,7 +257,8 @@ Theorem gen_inst_halt_frame_sim_deep:
       ?n as'.
         n <= LENGTH (execute_plan cp.cp_initial_fmp ops) /\
         asm_steps lo o2pc prog n as = AsmHalt as' /\
-        venom_asm_terminal_rel vs' as'
+        venom_asm_terminal_rel vs' as' /\
+        create_safe_prefix lo o2pc prog n as
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   gen_tac >> disch_tac >>
@@ -274,6 +283,11 @@ Resume gen_inst_halt_frame_sim_deep[stop]:
   `asm_block_at prog mid.as_pc [AsmOp "STOP"]` by metis_tac[] >>
   drule_all terminal_stop_step >>
   disch_then (qspecl_then [`lo`, `o2pc`] strip_assume_tac) >>
+  `create_safe_prefix lo o2pc prog (n + 1) as` by
+    (irule create_safe_prefix_compose >> conj_tac >- asm_rewrite_tac[] >>
+     qexists `mid` >> asm_rewrite_tac[] >>
+     rewrite_tac[ONE, ADD_CLAUSES, create_safe_prefix_suc] >>
+     gvs[asm_block_at_def, create_safe_def]) >>
   qexistsl_tac [`n + 1`, `st'`] >>
   conj_tac >- simp[] >> conj_tac
   >- (irule asm_steps_compose_halt >> qexists `mid` >> gvs[]) >>
@@ -296,6 +310,11 @@ Resume gen_inst_halt_frame_sim_deep[return]:
   drule_all context_source_payload_agree >> disch_tac >>
   drule_all terminal_return_payload_step >>
   disch_then (qspecl_then [`o2pc`, `lo`] strip_assume_tac) >>
+  `create_safe_prefix lo o2pc prog (n + 1) as` by
+    (irule create_safe_prefix_compose >> conj_tac >- asm_rewrite_tac[] >>
+     qexists `mid` >> asm_rewrite_tac[] >>
+     rewrite_tac[ONE, ADD_CLAUSES, create_safe_prefix_suc] >>
+     gvs[asm_block_at_def, create_safe_def]) >>
   qexistsl_tac [`n + 1`, `st'`] >>
   conj_tac >- simp[] >> conj_tac
   >- (irule asm_steps_compose_halt >> qexists `mid` >> gvs[]) >>
@@ -317,6 +336,11 @@ Resume gen_inst_halt_frame_sim_deep[selfdestruct]:
        ir_specific_operand_order_def, eval_operands_def]) >>
   drule_all terminal_selfdestruct_rel_step >>
   disch_then (qspecl_then [`o2pc`, `lo`] strip_assume_tac) >>
+  `create_safe_prefix lo o2pc prog (n + 1) as` by
+    (irule create_safe_prefix_compose >> conj_tac >- asm_rewrite_tac[] >>
+     qexists `mid` >> asm_rewrite_tac[] >>
+     rewrite_tac[ONE, ADD_CLAUSES, create_safe_prefix_suc] >>
+     gvs[asm_block_at_def, create_safe_def]) >>
   qexistsl_tac [`n + 1`, `st'`] >>
   conj_tac >- simp[] >> conj_tac
   >- (irule asm_steps_compose_halt >> qexists `mid` >> gvs[]) >>
