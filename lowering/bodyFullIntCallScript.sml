@@ -11,7 +11,7 @@ Theory bodyFullIntCall
 Ancestors
   bodyFullIntCallArgs bodyFullIntCallCallee bodyFullIntCallReturn
   bodyFullIntCallDefs bodyIntCallSeams bodyIntCallSource bodyFullPreds
-  bodySimFull gasOutcomeFull gasShadowState gasShadowCompile gasShadow
+  bodySim bodySimFull gasOutcomeFull gasShadowState gasShadowCompile gasShadow
   exprSimAccounts exprSimDefs exprSimHypsDefs exprLowering compileEnv
   bodyPtrDefs
   vyperInterpreter vyperState vyperAST list pair
@@ -66,7 +66,7 @@ Proof
 QED
 
 Theorem intcall_body_full_ih[local]:
-  !cx src_id_opt fn es ts mut nr args ret ss s1 vs t1 s3 u t3 penv rtv.
+  !cx src_id_opt fn es ts mut nr args ret ss s1 vs t1 penv rtv.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
          t'5' s'8' dflt_vs t'6' all_tenv s'9' env t'7' s'10' rtv
@@ -103,11 +103,14 @@ Theorem intcall_body_full_ih[local]:
     LENGTH es = LENGTH args /\ ~MEM (src_id_opt,fn) cx.stk /\
     eval_exprs cx es s1 = (INL vs,t1) /\
     bind_arguments (get_tenv cx) args vs = SOME penv /\
-    lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3) /\
+    (nr ==> IS_SOME cx.nonreentrant_slot) /\ ~cx.txn.is_static /\
     evaluate_type (get_tenv cx) ret = SOME rtv ==>
     body_stmts_full_ok (cx with stk updated_by CONS (src_id_opt,fn)) ss
 Proof
-  rpt strip_tac >> first_x_assum irule >>
+  rpt strip_tac >>
+  `?s3 u t3. lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)` by
+    (irule lock_if_nr_runs >> simp[]) >>
+  first_x_assum irule >>
   simp[type_check_def, assert_def, lift_option_type_def, return_def,
        get_scopes_def, finally_def, ignore_bind_def, bind_def,
        set_scopes_def, push_function_def, Once evaluate_def] >>
@@ -124,11 +127,11 @@ Theorem intcall_callee_premise[local]:
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,[],ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
-    (!s1 vs t1 s3 u t3 penv rtv.
+    (!s1 vs t1 penv rtv.
        ~MEM (NONE,name) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) /\
        bind_arguments (get_tenv cx) args vs = SOME penv /\
-       lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3) /\
+       (nr ==> IS_SOME cx.nonreentrant_slot) /\ ~cx.txn.is_static /\
        evaluate_type (get_tenv cx) ret = SOME rtv ==>
        body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -149,13 +152,13 @@ Theorem intcall_callee_premise[local]:
       gas_outcome_full
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
          MAP (op_prov G) arg_ops)
-        (cx_tops cx) cx st0 (intcall_callee_src cx name ss)
+        (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
         (es1, entered, FEMPTY, tn with t_var := FEMPTY)
         (\H res ee G' tn' t'. F)
         (\H res ee gt r.
-           intcall_callee_exit_full (DF, lo) H func cenv cx rtv nrc
+           intcall_callee_exit_full (DF, lo) H func cenv cx mut nr rtv nrc
              (if nrc = 0 /\ 0 < nrbs then SOME (HD argv) else NONE)
-             sa.cs_next_id t tn res ee gt r)
+             sa.cs_next_id sb.cs_next_id t tn res ee gt r)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `intcall_entry H tops ctx func cenv cx tenv name es sa sb vv s0 es0
@@ -163,8 +166,14 @@ Proof
     (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >>
      simp[intcall_entry_full_def]) >>
   drule intcall_entry_source >> strip_tac >>
+  `dflts = []` by gvs[] >> gvs[Once evaluate_def, return_def] >>
+  `~cx.txn.is_static` by
+    fs[intcall_entry_def, exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >>
+  `nr ==> IS_SOME cx.nonreentrant_slot` by
+    (strip_tac >> drule_all body_inv_nonreentrant_slot >> simp[]) >>
   `body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss` by
-    (qpat_x_assum `!s1 vs t1 s3 u t3 penv rtv. _` irule >> metis_tac[]) >>
+    metis_tac[] >>
   qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`func`,`tops`,`cenv`,`cx`,
                `tenv`,`name`,`es`,`st0`,`sa`,`sb`,`vv`,`s0`,`es0`,`G0`,`tn0`,
                `mut`,`nr`,`args`,`ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,
@@ -186,11 +195,11 @@ Theorem intcall_vv_full[local]:
       SOME (mut,nr,args,[],ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
-    (!s1 vs t1 s3 u t3 penv rtv.
+    (!s1 vs t1 penv rtv.
        ~MEM (NONE,name) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) /\
        bind_arguments (get_tenv cx) args vs = SOME penv /\
-       lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3) /\
+       (nr ==> IS_SOME cx.nonreentrant_slot) /\ ~cx.txn.is_static /\
        evaluate_type (get_tenv cx) ret = SOME rtv ==>
        body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -247,11 +256,11 @@ Theorem intcall_sim_full[local]:
       SOME (mut,nr,args,[],ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok cx es) /\
-    (!s1 vs t1 s3 u t3 penv rtv.
+    (!s1 vs t1 penv rtv.
        ~MEM (NONE,name) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) /\
        bind_arguments (get_tenv cx) args vs = SOME penv /\
-       lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3) /\
+       (nr ==> IS_SOME cx.nonreentrant_slot) /\ ~cx.txn.is_static /\
        evaluate_type (get_tenv cx) ret = SOME rtv ==>
        body_stmts_full_ok (cx with stk updated_by CONS (NONE,name)) ss) ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -380,11 +389,11 @@ Proof
   `~MEM (src_id_opt,fn) cx.stk ==> body_exprs_full_ok cx es` by
     (strip_tac >> drule intcall_results_full_ih >> disch_then drule_all >>
      simp[]) >>
-  `!s1 vs t1 s3 u t3 penv rtv.
+  `!s1 vs t1 penv rtv.
      ~MEM (src_id_opt,fn) cx.stk /\
      eval_exprs cx es s1 = (INL vs,t1) /\
      bind_arguments (get_tenv cx) args vs = SOME penv /\
-     lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3) /\
+     (nr ==> IS_SOME cx.nonreentrant_slot) /\ ~cx.txn.is_static /\
      evaluate_type (get_tenv cx) ret = SOME rtv ==>
      body_stmts_full_ok (cx with stk updated_by CONS (src_id_opt,fn)) ss` by
     (rpt strip_tac >> drule intcall_body_full_ih >> disch_then drule_all >>

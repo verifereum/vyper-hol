@@ -42,13 +42,18 @@ Definition intcall_entry_full_def:
          FLOOKUP G x = SOME (off,buf.buf_size) /\
          eval_operand p.ptr_operand t = SOME (n2w off) /\
          FLOOKUP t.vs_allocas aid = SOME (off,buf.buf_size) /\
-         sa.cs_next_id <= aid) /\
+         aid = sa.cs_next_id /\ aid < sb.cs_next_id /\
+         lo <= off /\ off + buf.buf_size <= t.vs_alloca_next) /\
     !bb inst lbl arg_ops argv.
       lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
       get_instruction bb t.vs_inst_idx = SOME inst /\
       decode_invoke inst = SOME (lbl,arg_ops) /\
       eval_operands arg_ops t = SOME argv ==>
       EVERY (\op. op_taint tn op = {}) arg_ops /\
+      (!b bsz. MEM (SOME (b,bsz)) (MAP (op_prov G) arg_ops) ==>
+         ?aid. FLOOKUP t.vs_allocas aid = SOME (b,bsz) /\
+           sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+           lo <= b /\ b + bsz <= t.vs_alloca_next) /\
       !callee setup use_trans nkeys imm_len lbl' ce params has_rb is_nr key
        trans view ctor imm_len' ss' rt.
         lookup_function lbl ctx.ctx_functions = SOME callee /\
@@ -64,13 +69,19 @@ Definition intcall_entry_full_def:
         (!i off sz.
            i < LENGTH params /\ ~SND (EL i params) /\
            FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc off sz) ==>
-           ?b bsz.
+           ?b bsz aid.
              op_prov G (EL ((if has_rb then 1 else 0) + i) arg_ops) =
                SOME (b,bsz) /\
+             FLOOKUP t.vs_allocas aid = SOME (b,bsz) /\
+             sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+             lo <= b /\ b + bsz <= t.vs_alloca_next /\
              b <= w2n (EL ((if has_rb then 1 else 0) + i) argv) /\
              w2n (EL ((if has_rb then 1 else 0) + i) argv) + sz <= b + bsz) /\
         (has_rb ==>
-         ?b bsz. op_prov G (HD arg_ops) = SOME (b,bsz) /\
+         ?b bsz aid. op_prov G (HD arg_ops) = SOME (b,bsz) /\
+           FLOOKUP t.vs_allocas aid = SOME (b,bsz) /\
+           aid = sa.cs_next_id /\ aid < sb.cs_next_id /\
+           lo <= b /\ b + bsz <= t.vs_alloca_next /\
            b <= w2n (HD argv) /\
            w2n (HD argv) + type_memory_size rtv <= b + bsz)
 End
@@ -80,23 +91,24 @@ End
    its storage, transient and immutables taint is in DF H's dead bytes, and
    the fixed region [0, lo) is tainted only where the immutables section
    is dead; it taints no byte below t's frontier outside the call's own
-   allocations (ids from n) that the caller's taint tn did not hold; and
+   allocations (ids in [n,m)) that the caller's taint tn did not hold; and
    the return buffer rb, if any, holds the returned value whatever its
    tainted bytes hold. *)
 Definition intcall_callee_exit_full_def:
-  intcall_callee_exit_full (DF, lo) H func cenv cx rtv rc
-      (rb:bytes32 option) (n:num) (t:venom_state) (tn:taint) res
+  intcall_callee_exit_full (DF, lo) H func cenv cx mut nr rtv rc
+      (rb:bytes32 option) (n:num) (m:num) (t:venom_state) (tn:taint) res
       (ee:evaluation_state) (gt : (string |-> num # num) # taint) r <=>
-    intcall_callee_exit H func cenv cx rtv rc rb n t res ee r /\
+    intcall_callee_exit H func cenv cx mut nr rtv rc rb n m t res ee r /\
     !v ir s'.
       res = INL v /\ r = IntRet ir s' ==>
-      storage_well_formed_on cx ee (FST H) /\
+      (?ee'. unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),ee') /\
+             storage_well_formed_on cx ee' (FST H)) /\
       stor_taint_ok_at (DF H) (SND gt) s' /\
       (!i. i < lo /\ i IN (SND gt).t_mem ==>
            imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo s'.vs_memory) i) /\
       (!i. i < t.vs_alloca_next /\ i IN (SND gt).t_mem /\
            (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
-                          n <= aid ==> i < off \/ off + asz <= i) ==>
+                          n <= aid /\ aid < m ==> i < off \/ off + asz <= i) ==>
            i IN tn.t_mem) /\
       (!p. rb = SOME p ==>
            !mem. mem_agree_outside (SND gt).t_mem s'.vs_memory mem ==>

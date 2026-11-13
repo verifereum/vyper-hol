@@ -60,13 +60,13 @@ Theorem intcall_return_full:
        gas_outcome_full
          (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
           MAP (op_prov G) arg_ops)
-         (cx_tops cx) cx st0 (intcall_callee_src cx name ss)
+         (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
          (es1, entered, FEMPTY, tn with t_var := FEMPTY)
          (\H res ee G' tn' t'. F)
          (\H res ee gt r.
-            intcall_callee_exit_full (DF, lo) H func cenv cx rtv rc
+            intcall_callee_exit_full (DF, lo) H func cenv cx mut nr rtv rc
               (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
-              sa.cs_next_id t tn res ee gt r)) ==>
+              sa.cs_next_id sm.cs_next_id t tn res ee gt r)) ==>
     (fn_has_code sa sm func /\
      fn_has_code shadow_sa shadow_sm shadow_func ==>
      gas_outcome_full

@@ -48,13 +48,13 @@ Theorem intcall_callee_full:
       gas_outcome_full
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, callee,
          MAP (op_prov G) arg_ops)
-        (cx_tops cx) cx st0 (intcall_callee_src cx name ss)
+        (cx_tops cx) cx st0 (intcall_callee_src cx name mut nr ss)
         (es1, entered, FEMPTY, tn with t_var := FEMPTY)
         (\H res ee G' tn' t'. F)
         (\H res ee gt r.
-           intcall_callee_exit_full (DF, lo) H func cenv cx rtv rc
+           intcall_callee_exit_full (DF, lo) H func cenv cx mut nr rtv rc
              (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
-             sa.cs_next_id t tn res ee gt r)
+             sa.cs_next_id sb.cs_next_id t tn res ee gt r)
 Proof
   cheat
 QED
