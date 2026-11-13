@@ -159,7 +159,7 @@ QED
 
 (* The witnesses do not depend on the horizon: one value and final state serve
    every horizon that relates the start state. *)
-Theorem body_name_wordtype_mem_prefix_all[local]:
+Theorem body_name_wordtype_mem_prefix_all:
   expr_sim_pre ce cx env (Name ann id) es /\ is_word_type ann /\
   lower_value compile_expr ce ty (Name ann id) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
