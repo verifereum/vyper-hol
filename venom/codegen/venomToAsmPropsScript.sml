@@ -38,6 +38,22 @@ Ancestors
    an Error, and the step is the entry block (fnEntryStep) or a later
    block (fnBlockStep), each given both theorems at the smaller fuel for
    the callees an INVOKE runs and for the rest of the run. *)
+Theorem gen_fn_sims_cost_all:
+  !fuel.
+    gen_fn_sim_cost_at
+      (SOME (\unit cp prog. fn_sim_budget unit.cu_context prog fuel)) fuel /\
+    gen_fn_frame_sim_cost_at
+      (SOME (\unit cp prog. fn_sim_budget unit.cu_context prog fuel)) fuel
+Proof
+  Induct
+  >- (simp[gen_fn_sim_cost_at_def, gen_fn_frame_sim_cost_at_def] >>
+      rpt strip_tac >> gvs[Once run_blocks_def]) >>
+  pop_assum strip_assume_tac >>
+  drule_all fn_entry_block_step_cost >> strip_tac >>
+  drule_all fn_block_frame_step_cost >>
+  gvs[fn_sim_budget_def]
+QED
+
 Theorem gen_fn_sims_all[local]:
   !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel
 Proof
