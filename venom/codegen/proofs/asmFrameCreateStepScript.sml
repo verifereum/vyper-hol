@@ -1031,7 +1031,7 @@ Theorem asm_frame_create_static_step_ok[local]:
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
   a.as_stack = value::off::sz::
     (case salt_opt of NONE => stk | SOME salt => salt::stk) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok prog data es0 a s /\ frame_last s
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\
@@ -1053,6 +1053,7 @@ Proof
          call_requests s = []` by
     (irule asm_step_fault_outcome >> simp[] >>
      qexistsl [`p`, `t`] >> gvs[vfm_abort_def]) >>
+  simp[] >>
   irule asm_frame_fault_step_ok >> goal_assum (drule_at Any) >>
   (reverse conj_tac >- (conj_tac >- simp[] >> qexistsl [`ex`, `r`, `u`] >> gvs[]) >>
    qexists `a with as_returndata := []` >>
@@ -1091,8 +1092,7 @@ Proof
         frame_next es es1 /\ asm_frame_rel prog data es0 as1 es1)` by
     (rpt gen_tac >> strip_tac >>
      Cases_on `c.msgParams.static`
-     >- (irule asm_frame_create_static_step_ok >>
-         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     >- (drule_all asm_frame_create_static_step_ok >> strip_tac >> simp[]) >>
      Cases_on `step_create (IS_SOME salt_opt) es` >>
      rename1 `step_create _ es = (res,mid)` >> Cases_on `res`
      >- (Cases_on `x` >>
