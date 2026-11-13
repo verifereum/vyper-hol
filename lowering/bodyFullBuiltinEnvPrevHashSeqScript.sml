@@ -7,7 +7,7 @@ Ancestors
   allocaHistoryFragment instMemFrontier memSafeRun loweringSlice contextCodegenRel codegenRel ptrSafeRun bodyPtrDefs
 
 Theorem env_prevhash_seq_ghosts:
- compile_env_var PrevHash sa = (op,sb) /\ fresh_vars_wrt sa s /\
+ compile_env_var PrevHash sa = (op,sb) /\
  run_inst_seq (emitted_insts sa sb) s = OK t /\
  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
