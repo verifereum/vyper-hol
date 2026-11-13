@@ -68,7 +68,7 @@ Proof
   irule straight_fresh_emit_void >> simp[fresh_write_op_def]
 QED
 
-Theorem abi_decode_range_mem_ok[local]:
+Theorem abi_decode_range_mem_ok:
   compile_abi_decode_range_check src e hi st = ((),st') ==>
   run_inst_seq_mem_ok (emitted_insts st st') s
 Proof

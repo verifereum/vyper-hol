@@ -1,13 +1,13 @@
 Theory abiDecodeMemCountGuard
 Ancestors
-  abiDecoderReentry appendStorageStageTransportPtr stmtReasonMemory
+  abiDecoderReentry entryDecoderSetupEndpoint
   abiDecoderGuards abiDecoderContract abiDecoderRange abiDecoderBytesPrefix
   emitHelperProps exprLoweringProps emitHelper compileEnv loweringStateRelDefs
   fragExec fragExecMem fragGasSeqMem fragGasSeqAbort bodyUnopFragMemory entrySinkExtraction
   allocaHistoryFragment entryDecoderHistoryFrame instMemFrontier allocaFootprint memSafeRun
   venomExecSemantics venomExecProofs venomInst venomState words arithmetic list rich_list
 
-Theorem abi_decode_mload_count_rejected[local]:
+Theorem abi_decode_mload_count_rejected:
   abi_decode_count_guard MLOAD src limit st = (count_op,st') /\
   eval_operand src s = SOME p /\ limit < dimword (:256) /\
   limit < w2n (abi_decode_load MLOAD p s) /\ fresh_vars_wrt st s ==>
@@ -36,7 +36,7 @@ Proof
   drule_all run_inst_seq_emit_extend >> simp[] >> metis_tac[]
 QED
 
-Theorem abi_decode_mload_count_mem_ok[local]:
+Theorem abi_decode_mload_count_mem_ok:
   abi_decode_count_guard MLOAD src limit st = (count_op,st') /\
   eval_operand src s = SOME p /\ w2n p + 32 <= s.vs_alloca_next ==>
   run_inst_seq_mem_ok (emitted_insts st st') s
@@ -58,7 +58,7 @@ Proof
   rpt conj_tac >> gen_tac >> irule below_frontier_no_ranges >> simp[]
 QED
 
-Theorem abi_decode_mload_count_opcodes[local]:
+Theorem abi_decode_mload_count_opcodes:
   abi_decode_count_guard MLOAD src limit st = (count_op,st') ==>
   EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
     ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode)
@@ -120,7 +120,7 @@ Resume abi_decode_mload_count_path_mem[accept]:
   drule_all entry_straight_line_alloca_history >> strip_tac >>
   drule_all abi_decode_nonallocating_sequence_frame >> strip_tac >>
   `!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s` by
-    (rpt strip_tac >> irule run_inst_seq_non_output_vars >>
+    (rpt strip_tac >> irule entry_sequence_nonoutput_lookup >>
      qexists_tac `emitted_insts st st'` >> simp[] >>
      qpat_x_assum `abi_decode_count_guard _ _ _ _ = _` mp_tac >>
      simp[abi_decode_count_guard_def, comp_bind_def, comp_ignore_bind_def,
@@ -129,7 +129,7 @@ Resume abi_decode_mload_count_path_mem[accept]:
      pure_rewrite_tac[GSYM APPEND_ASSOC] >>
      simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def] >>
      fs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL, LESS_EQ_ADD]) >>
-  `t.vs_labels = s.vs_labels` by metis_tac[run_inst_seq_data_section] >>
+  `t.vs_labels = s.vs_labels` by metis_tac[entry_sequence_nonterminator_labels] >>
   `!op. abi_decoder_operand_live st.cs_next_var op ==>
     eval_operand op t = eval_operand op s` by
     (Cases >> fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
