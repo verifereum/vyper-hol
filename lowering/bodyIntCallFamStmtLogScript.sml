@@ -37,8 +37,14 @@ Proof
   Cases_on `supported_event_fields fp.jc_tops n` >> gvs[] >>
   drule_all body_log_metadata >> strip_tac >>
   rename1 `supported_event_fields _ _ = SOME fields` >>
-  `LENGTH (MAP SND fields) = LENGTH es` by
-    metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
+  reverse (Cases_on `MAP expr_type es = MAP (SND o FST) fields`)
+  >- ((* HELD (train 17): widened Log arguments (event_arg_compatible
+         rather than equal types) need an intcall analogue of
+         whitelistLogWiden's body_log_widen_case. *)
+      cheat) >>
+  `LENGTH (MAP SND fields) = LENGTH es` by metis_tac[LENGTH_MAP] >>
+  qpat_assum `MAP expr_type es = _` (fn th => fs[GSYM th]) >>
+  `LENGTH (MAP SND fields) = LENGTH es` by simp[] >>
   `type_stmt env fp.jc_ret_ty (Log n es) = SOME env'` by
     fs[type_stmt_def, AllCaseEqs()] >>
   `well_typed_exprs env es` by fs[type_stmt_def, AllCaseEqs()] >>
@@ -46,6 +52,7 @@ Proof
   `EVERY (\e. is_bytestring_type (lowered_value_type ce e) <=>
               is_bytestring_type (expr_type e)) es` by
     metis_tac[supported_pure_exprs_bytestring_iff] >>
+  drule_all log_compile_structure >> strip_tac >>
   `EVERY (\e. expr_body_pre ce fp.jc_cx env e es') es` by
     (irule intcall_log_args_body_pre >>
      fs[intcall_joint_res_def, intcall_expr_res_def, supported_stmts_expr_exists_list] >>
@@ -56,9 +63,7 @@ Proof
   suspend "compose"
 QED
 
-(* HELD (train 15): log_eval_view port (train 17) *)
 Resume intcall_log_stmt_step[compose]:
-  (* original proof, kept while held:
   `~fp.jc_cx.txn.is_static` by
     fs[intcall_joint_res_def, intcall_expr_res_def, exprLoweringPropsTheory.stmt_state_rel_def,
        state_rel_def] >>
@@ -79,20 +84,22 @@ Resume intcall_log_stmt_step[compose]:
   qpat_assum `intcall_joint_res _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [intcall_joint_res_def]) >>
   drule_all intcall_compile_log_eval_all >> strip_tac >>
+  qpat_x_assum `xs = ZIP _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th]) >> assume_tac th) >>
   `sa.cs_next_var <= sm.cs_next_var` by
     metis_tac[stmtSimLogArgsGrowthTheory.compile_log_eval_all_grows] >>
   `EVERY supported_scalar_type (MAP SND xs)` by fs[] >>
   qpat_assum `MAP SND xs = _` (fn th => fs[GSYM th]) >>
   `LENGTH (MAP SND fields) = LENGTH xs` by simp[] >>
   drule_all intcall_log_counted_compose >> strip_tac >>
+  `EVERY (supported_scalar_type o SND) xs` by
+    fs[EVERY_MAP, combinTheory.o_DEF] >>
   `~block_is_terminated cs'` by metis_tac[log_stmt_open] >>
   `env' = env` by fs[type_stmt_def, AllCaseEqs()] >>
   irule gas_outcome_conseq >>
   goal_assum (drule_at Any) >> simp[] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   simp[stmt_lands_def, cenv_top_ext_refl]
-  *)
-  cheat
 QED
 
 Finalise intcall_log_stmt_step
