@@ -1,6 +1,7 @@
 (* Fixed-address creation-status boundaries for EVM execution. *)
 Theory evmCreationGuard
 Ancestors
+  vfmWfState
   vfmAccountDeletion vfmExecution vfmExecutionProp vfmState vfmContext
   vfmTypes vfmPreserves vfmRunCall vfmRunWithinFrame vfmAccountFrame
   vfmStepLength vfmSameFrame vfmStoragePredicates list combin finite_map pair arithmetic

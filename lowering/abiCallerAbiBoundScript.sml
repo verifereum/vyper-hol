@@ -63,7 +63,9 @@ Proof
   strip_tac >> drule abi_caller_abi_bound_members >>
   simp[abi_caller_abi_bound_def, is_abi_dynamic_def, abi_static_size_def,
     abi_size_bound_def, vyper_is_dynamic_def, vyper_abi_size_bound_def, is_dynamic_def] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[] >> strip_tac >> gvs[]
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[] >> strip_tac >> gvs[] >>
+  rpt strip_tac >> first_x_assum irule >> gvs[EVERY_MEM, EXISTS_MEM] >>
+  metis_tac[]
 QED
 
 Theorem abi_caller_abi_bound_struct:
@@ -78,7 +80,9 @@ Proof
   drule abi_caller_abi_bound_members >>
   simp[abi_caller_abi_bound_def, is_abi_dynamic_def, abi_static_size_def,
     abi_size_bound_def, vyper_is_dynamic_def, vyper_abi_size_bound_def, is_dynamic_def] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[] >> strip_tac >> gvs[]
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[] >> strip_tac >> gvs[] >>
+  rpt strip_tac >> first_x_assum irule >> gvs[EVERY_MEM, EXISTS_MEM] >>
+  metis_tac[]
 QED
 
 Theorem abi_caller_abi_bound_struct_children:

@@ -15,54 +15,55 @@
  *)
 Theory exprSimPtrProps
 Ancestors
-  bodyPtrDefs fragGasPathPtr exprSimStack exprSimDefs loweringPosts
+  wordLoadStorePtr bodyPtrDefs fragGasPathPtr exprSimStack exprSimDefs loweringPosts
   gasExemptCert exprLowering emitHelper compileEnv loweringStateRelDefs vyperInterpreter
   vyperState ptrDiscipline fragGasSeqPtr typedCopyPtr decoderGhostFramePtr
-  emitHelperProps fragExec exprLoweringProps venomInst venomState
+  emitHelperProps fragExec exprLoweringProps venomInst venomState gasStorage
 
 Theorem expr_stack_outcome_ptr:
   (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) /\
-  gas_outcome_ptr D tops (ctx,func) PG
+  gas_outcome_ptr D tops (ctx,func) PG cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
-    (\res ee G tn u. ?v. res = INL v /\
+    (\H res ee G tn u. ?v. res = INL v /\
       expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx ee G tn u /\
-      ptr_val_ok cx (expr_type e) v op G tn u /\
-      (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
+      ptr_val_ok cx (post_value_type cenv e) v op G tn u /\
+      (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
-    (\res ee gt r. expr_exit res r) ==>
-  gas_outcome_ptr D tops (ctx,func) PG (eval_expr cx e) (es,s0,G0,tn0)
-    (\res ee G tn u. ?tv. res = INL tv /\
+    (\H res ee gt r. expr_exit res r) ==>
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 (eval_expr cx e) (es,s0,G0,tn0)
+    (\H res ee G tn u. ?tv. res = INL tv /\
       vv_post H ctx func cenv cx e es sa sb s0 ee tv (StackValue ty op) u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx ee G tn u /\
-      ptr_vv_ok cx (expr_type e) tv (StackValue ty op) ee G tn u /\
-      (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
+      ptr_vv_ok cx (post_value_type cenv e) tv (StackValue ty op) ee G tn u /\
+      (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
-    (\res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r)
 Proof
   rewrite_tac[gas_outcome_ptr_def] >> rpt strip_tac >> qexists_tac `marks`
-  >- (disj1_tac >> fs[gas_summary_ptr_at_def]
-      >- (qexistsl_tac [`INL (Value v)`, `es_end`, `G`, `tn`, `OK u`] >>
-          simp[] >> conj_tac
-          >- (gen_tac >> drule eval_expr_force_value >>
-              disch_then (qspec_then `es with gas_obs :=
-                gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >>
-              simp[]) >>
-          gvs[vv_post_def, vv_holds_def, vv_at_def, vv_own_def, expr_post_def,
-              read_result_def, return_def, ptr_vv_ok_def] >>
-          first_assum ACCEPT_TAC) >>
+  >- (disj1_tac >> fs[gas_bad_storage_at_def] >> gen_tac >>
+      first_x_assum (qspec_then `tail` mp_tac) >>
+      Cases_on `bind (eval_expr cx e) (read_result cx)
+        (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail)` >>
+      drule eval_expr_force_value >> disch_then drule >> simp[])
+  >- (disj2_tac >> disj1_tac >> fs[gas_summary_ptr_at_def] >>
       qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
                     `es_end`, `G`, `tn`, `r`] >>
-      simp[expr_exit_success_map] >> gen_tac >>
-      drule eval_expr_force_value >>
-      disch_then (qspec_then `es with gas_obs :=
-        gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >>
-      simp[]) >>
-  disj2_tac >> drule eval_expr_force_ignore >>
+      conj_tac
+      >- (gen_tac >> drule eval_expr_force_value >>
+          disch_then (qspec_then `es with gas_obs :=
+            gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >>
+          simp[]) >>
+      rpt strip_tac >> first_x_assum drule >> strip_tac >> simp[]
+      >- (gvs[vv_post_def, vv_holds_def, vv_at_def, vv_own_def, expr_post_def,
+              read_result_def, return_def, ptr_vv_ok_def] >>
+          first_assum ACCEPT_TAC) >>
+      simp[expr_exit_success_map]) >>
+  disj2_tac >> disj2_tac >> drule eval_expr_force_ignore >>
   disch_then (fn th => fs[th]) >> metis_tac[]
 QED
 

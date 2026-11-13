@@ -7,7 +7,7 @@ Ancestors
   simplifyCfgBypassPrecondition simplifyCfgBypassClosure cfgTransform venomExecSemantics venomExecProofs
   venomExecProps venomInst venomState venomWf o1PassLift list
   simplifyCfgEndpoints simplifyCfgBypassRootedEntry simplifyCfgFixupStatic
-  passSimulationDefs
+  passSimulationDefs venomInstProps contextCodegenRel
 
 Theorem scfg_bypass_step_result:
   scfg_bypass_hyp fn a b fn' /\ fn_entry_state fn s0 /\
@@ -115,6 +115,87 @@ Resume scfg_bypass_exec_terminal_forward[halt]:
 QED
 Finalise scfg_bypass_exec_terminal_forward
 
+Theorem scfg_bypass_exec_terminal_forward_fuel:
+  !s. !C fn a b fn' s0 bb t k r.
+  scfg_bypass_hyp fn a b fn' /\ fn_entry_state fn s0 /\
+  MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
+  (!i. get_instruction bb s.vs_inst_idx = SOME i ==> frame_reach C fn s0 i s) /\
+  phi_prefix_length bb.bb_instructions <= s.vs_inst_idx /\
+  scfg_bypass_aligned a b s t /\ exec_block k C bb s = r /\
+  terminates r /\ (!v. r <> OK v) ==>
+  ?q. exec_block k C (scfg_bypass_block a b bb) t = q /\ scfg_result r q
+Proof
+  rpt gen_tac >> qid_spec_tac `t` >>
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  simp[Once exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[]
+  >- (strip_tac >> gvs[terminates_def]) >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME i` >>
+  `frame_reach C fn s0 i s` by metis_tac[] >>
+  `i.inst_opcode <> PHI` by
+    (`bb_well_formed bb` by
+       metis_tac[scfg_bypass_old_static, scfg_static_wf, wf_function_bb_well_formed] >>
+     `EVERY (\j. j.inst_opcode <> PHI)
+        (DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions)` by
+       (irule scfg_phi_suffix_nonphi >> fs[bb_well_formed_def]) >>
+     fs[EVERY_EL, get_instruction_def] >>
+     first_x_assum (qspec_then
+       `s.vs_inst_idx - phi_prefix_length bb.bb_instructions` mp_tac) >>
+     gvs[LENGTH_DROP, EL_DROP]) >>
+  drule_all scfg_bypass_step_result >>
+  disch_then (qspec_then `k` assume_tac) >>
+  `get_instruction (scfg_bypass_block a b bb) t.vs_inst_idx = SOME
+    (scfg_bypass_image a.bb_label b.bb_label (HD (bb_succs b)) s.vs_current_bb i)` by
+    (gvs[scfg_bypass_instruction] >>
+     gvs[scfg_bypass_aligned_def, scfg_ctrl_def]) >>
+  Cases_on `step_inst k C i s` >> simp[] >> strip_tac
+  >- suspend "ok_fuel" >>
+  qpat_x_assum `!y. _` kall_tac >>
+  qpat_x_assum `_ = r` (SUBST_ALL_TAC o SYM) >>
+  qmatch_asmsub_abbrev_tac `scfg_result _ (step_inst k C j t)` >>
+  Cases_on `step_inst k C j t` >> gvs[scfg_result_def] >>
+  once_rewrite_tac[exec_block_def] >>
+  simp[scfg_result_def]
+QED
+
+Resume scfg_bypass_exec_terminal_forward_fuel[ok_fuel]:
+  rename1 `step_inst k C i s = OK next` >>
+  Cases_on `is_terminator i.inst_opcode`
+  >- (Cases_on `next.vs_halted` >> gvs[] >>
+      qmatch_asmsub_abbrev_tac `scfg_result _ (step_inst k C j t)` >>
+      `is_terminator j.inst_opcode` by
+        (simp[Abbr `j`] >> metis_tac[scfg_bypass_image_opcode, is_terminator_def]) >>
+      `!u. scfg_payload next u ==> u.vs_halted` by
+        (simp[scfg_payload_def] >> rpt strip_tac >>
+         qpat_x_assum `u = _` (fn th => once_rewrite_tac[th]) >> simp[scfg_ctrl_def]) >>
+      Cases_on `step_inst k C j t` >> gvs[scfg_result_def] >>
+      once_rewrite_tac[exec_block_def] >> simp[scfg_result_def]) >>
+  gvs[] >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by fs[get_instruction_def, AllCaseEqs()] >>
+  `next.vs_current_bb = s.vs_current_bb` by metis_tac[step_preserves_control_flow] >>
+  `!j. get_instruction bb (SUC s.vs_inst_idx) = SOME j ==>
+    frame_reach C fn s0 j (next with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (rpt strip_tac >> irule (cj 2 frame_reach_rules) >> conj_tac
+     >- (simp[active_inst_def] >> qexists_tac `bb` >> gvs[get_instruction_def]) >>
+     qexistsl_tac [`k`, `i`] >> simp[]) >>
+  drule_all scfg_bypass_ordinary_advance >> strip_tac >>
+  first_x_assum (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  (impl_tac >- fs[]) >>
+  disch_then (qspec_then `next with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >> disch_then (qspec_then
+    `(scfg_ctrl s.vs_current_bb
+      (OPTION_MAP (\p. if p = b.bb_label then a.bb_label else p) s.vs_prev_bb)
+      s.vs_inst_idx next) with vs_inst_idx := SUC t.vs_inst_idx` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `s.vs_inst_idx = t.vs_inst_idx` by fs[scfg_bypass_aligned_def, scfg_ctrl_def] >>
+  `get_instruction (scfg_bypass_block a b bb) t.vs_inst_idx = SOME i` by
+    (irule scfg_bypass_instruction_ordinary >> metis_tac[]) >>
+  CONV_TAC (RAND_CONV (REWR_CONV exec_block_def)) >> gvs[]
+QED
+Finalise scfg_bypass_exec_terminal_forward_fuel
+
 Theorem scfg_bypass_exec_terminal_backward:
   scfg_bypass_hyp fn a b fn' /\ fn_entry_state fn s0 /\
   MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
@@ -207,6 +288,27 @@ Proof
      fs[scfg_bypass_aligned_def, scfg_ctrl_def]) >>
   drule_all scfg_enters_block_run_block >>
   disch_then (qspecl_then [`m`, `C`] assume_tac) >> metis_tac[]
+QED
+
+Theorem scfg_bypass_run_block_terminal_forward_fuel:
+  scfg_bypass_hyp fn a b fn' /\ fn_entry_state fn s0 /\
+  scfg_bprefix C fn s0 s /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  scfg_bypass_aligned a b s t /\ s.vs_inst_idx = 0 /\
+  run_block k C bb s = r /\ terminates r /\ (!v. r <> OK v) ==>
+  ?q. run_block k C (scfg_bypass_block a b bb) t = q /\ scfg_result r q
+Proof
+  strip_tac >>
+  `!e. r <> Error e` by (Cases_on `r` >> fs[terminates_def]) >>
+  drule_all scfg_run_block_entry >> strip_tac >>
+  drule_all scfg_bypass_rooted_entry_forward >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_member_label] >>
+  `phi_prefix_length bb.bb_instructions <= x.vs_inst_idx` by simp[] >>
+  drule_all scfg_bypass_exec_terminal_forward_fuel >> strip_tac >>
+  `lookup_block t.vs_current_bb fn'.fn_blocks = SOME (scfg_bypass_block a b bb)` by
+    (drule scfg_bypass_lookup_eq >> disch_then (qspec_then `s.vs_current_bb` mp_tac) >>
+     fs[scfg_bypass_aligned_def, scfg_ctrl_def]) >>
+  drule_all scfg_enters_block_run_block >>
+  disch_then (qspecl_then [`k`, `C`] assume_tac) >> metis_tac[]
 QED
 
 Theorem scfg_bypass_run_block_terminal_backward:

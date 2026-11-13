@@ -95,7 +95,8 @@ QED
 Theorem deployed_main_module_exact:
   source_deployment_rel tops am tx <=>
   ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
-  ALOOKUP am.exports tx.target = NONE /\ layouts_agree tops am tx
+  (ALOOKUP am.exports tx.target = NONE \/
+   ALOOKUP am.exports tx.target = SOME []) /\ layouts_agree tops am tx
 Proof
   simp[source_deployment_rel_def]
 QED
@@ -192,19 +193,27 @@ Proof
        vyperValueOperationTheory.safe_cast_def]
 QED
 
-(* Closed ambiguity check: PLAN's source lookup includes getters, but the
-   independent supported whitelist rejects public variables. Do not silently
-   strengthen the exact PLAN predicate with an extra MEM FunctionDecl guard. *)
-Theorem source_lookup_getter_outside_supported:
+(* The compiler packages the same getter that source lookup selects. *)
+Theorem source_lookup_getter_supported:
   let tops = [VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0)] in
     vyperInterpreter$lookup_function NONE "g" External tops =
       SOME (View,F,[],[],BaseT (UintT 256),
         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"g")))]) /\
-    ~supported_program tops
+    supported_program tops
 Proof
-  simp[vyperInterpreterTheory.lookup_function_def,
-       supported_program_def, supported_declaration_headers_def,
-       supported_public_variables_rejected]
+  simp_tac bool_ss [LET_THM] >> conj_tac >- EVAL_TAC >>
+  simp[supported_program_def, supported_declaration_headers_def,
+    supported_declaration_header_def, supported_declaration_body_def,
+    supportedNamesTheory.supported_declaration_names_def,
+    supportedNamesTheory.supported_function_names_def,
+    supportedNamesTheory.supported_event_names_def,
+    supportedNamesTheory.supported_function_header_names_def,
+    supportedNamesTheory.supported_selectors_distinct_def,
+    compileVyperTheory.classify_functions_def,
+    compileVyperTheory.classify_function_def,
+    compileVyperTheory.public_getters_def, compileVyperTheory.public_getter_def,
+    constSubstTheory.module_consts_env_def, constSubstTheory.subst_consts_fn_empty,
+    compileVyperTheory.build_selectors_def] >> EVAL_TAC
 QED
 
 (* ===== Canonical external ABI wrapping ===== *)

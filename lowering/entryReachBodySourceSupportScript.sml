@@ -27,7 +27,7 @@ Theorem entry_supported_nested_evaluated_aux[local]:
 Proof
   recInduct supported_nested_type_ind >> rpt strip_tac >>
   gvs[] >> Cases_on `supported_scalar_type ty`
-  >- metis_tac[entry_abi_support_rules] >>
+  >- metis_tac[entry_abi_support_rules, entry_abi_leaf_scalar] >>
   Cases_on `ty` >>
   qpat_x_assum `supported_nested_type _ _ _ _` mp_tac >>
   simp[Once supported_nested_type_def] >> strip_tac >>
