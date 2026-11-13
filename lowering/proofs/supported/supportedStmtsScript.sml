@@ -5,7 +5,7 @@
    supported_assert_reason, supported_raise_reason, supported_log. *)
 Theory supportedStmts
 Ancestors
-  vyperTypeContract vyperEventArgCompat
+  vyperTypeContract vyperEventArgCompat vyperExprEffects
   supportedStmtTraverse supportedExprs supportedExprForms supportedExprTraverse
   supportedTypes supportedDecls supportedTargets vyperTypeSystem exprLowering vyperAST list alist integer
 
@@ -81,9 +81,11 @@ Definition supported_append_target_def:
          SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
        (mut = Storage \/ mut = Transient) /\
        ~supported_full_word_type elem) /\
-  supported_append_target tops (NameTarget name) = F /\
-  supported_append_target tops (SubscriptTarget target key) = F /\
-  supported_append_target tops (AttributeTarget target fname) = F
+  supported_append_target tops (NameTarget name) = T /\
+  supported_append_target tops (SubscriptTarget target key) =
+    supported_target_pure tops (SubscriptTarget target key) /\
+  supported_append_target tops (AttributeTarget target fname) =
+    supported_target_pure tops target
 End
 
 Definition supported_string_reason_def:
@@ -189,7 +191,11 @@ Definition supported_stmt_def:
          (?vis mut dn slot.
            supported_variable_decl tops id =
              SOME (vis, mut, ArrayT (expr_type e) (Dynamic dn), SOME slot))
-     | _ => F) /\
+     | _ =>
+         supported_full_word_type (expr_type e) /\
+         ~supported_target_exists (\key. ~pure_expr key) target /\
+         ?dn. supported_target_info tops bindings target =
+           SOME (ValPT (ArrayT (expr_type e) (Dynamic dn)))) /\
   supported_stmt tops bindings (If c yes no) =
     (supported_pure_expr tops c /\ supported_stmts tops bindings yes /\
      supported_stmts tops bindings no) /\

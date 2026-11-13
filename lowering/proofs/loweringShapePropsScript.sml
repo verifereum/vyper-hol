@@ -14209,7 +14209,9 @@ Theorem supported_append_target_shape[local]:
   ~supported_target_exists expr_shape_root target
 Proof
   Cases_on `target` >>
-  simp[supportedStmtsTheory.supported_append_target_def, supported_expr_exists_def]
+  simp[supportedStmtsTheory.supported_append_target_def,
+       supported_target_pure_def, supported_expr_exists_def] >>
+  metis_tac[supported_target_pure_expr_exclusion, supported_pure_shape]
 QED
 
 Theorem supported_string_reason_shape[local]:
