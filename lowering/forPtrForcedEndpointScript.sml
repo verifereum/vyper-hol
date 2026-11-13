@@ -118,8 +118,8 @@ Proof
                   fragGasModeTheory.gas_marked_path_def]) >>
           simp[])
       >- (rpt strip_tac >>
-          irule for_forced_endpoint_error_cert >> goal_assum (drule_at Any)) >>
-      rpt strip_tac >> irule for_forced_endpoint_tail_cert >>
-      goal_assum (drule_at Any)) >>
+          irule gas_exempt_cert_error_value >> first_assum ACCEPT_TAC) >>
+      rpt strip_tac >> BETA_TAC >> irule gas_exempt_cert_bind_value >>
+      goal_assum (drule_at Any) >> fs[]) >>
   simp[]
 QED

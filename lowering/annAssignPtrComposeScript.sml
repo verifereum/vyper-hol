@@ -69,18 +69,17 @@ Proof
          disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_ptr_at_marked] >>
          qexistsl_tac [`INL ()`, `ff`, `Gf`, `tnf`, `OK u`] >>
          fs[gas_marked_exec_def])
-     >- (rpt strip_tac >> simp[ignore_bind_def, bind_assoc] >>
-         irule gas_exempt_cert_error_value >> simp[GSYM ignore_bind_def]) >>
-     rpt strip_tac >> simp[ignore_bind_def, bind_assoc] >>
+     >- (rpt strip_tac >>
+         irule gas_exempt_cert_error_value >> first_assum ACCEPT_TAC) >>
+     rpt strip_tac >> BETA_TAC >>
      irule gas_exempt_cert_bind_value >> goal_assum (drule_at Any) >>
-     simp[GSYM ignore_bind_def]) >>
+     fs[]) >>
  simp[]
 QED
 
 (* Only old-variable frames are rebased; memory ghosts remain at the endpoint. *)
 Theorem annassign_outcome_entry_prefix_ptr:
- (!H. valid_horizon cx st0 H es.storage_trace ==>
-   gas_path_ptr (D H) 0 ctx func PG G0 tn0 s0 n Ga tna (OK salloc)) /\
+ (!H. gas_path_ptr (D H) 0 ctx func PG G0 tn0 s0 n Ga tna (OK salloc)) /\
  (!x. not_fresh_at sa0 x ==> not_fresh_at sa x /\
     FLOOKUP Ga x = FLOOKUP G0 x /\
     op_taint tna (Var x) = op_taint tn0 (Var x)) /\
@@ -181,10 +180,10 @@ Proof
          disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_ptr_at_marked] >>
          qexistsl_tac [`INL ()`, `ff`, `Gf`, `tnf`, `OK u`] >>
          fs[gas_marked_exec_def])
-     >- (rpt strip_tac >> simp[ignore_bind_def, bind_assoc] >>
-         irule gas_exempt_cert_error_result >> simp[GSYM ignore_bind_def]) >>
-     rpt strip_tac >> simp[ignore_bind_def, bind_assoc] >>
+     >- (rpt strip_tac >>
+         irule gas_exempt_cert_error_result >> first_assum ACCEPT_TAC) >>
+     rpt strip_tac >> BETA_TAC >>
      irule gas_exempt_cert_bind_result >> goal_assum (drule_at Any) >>
-     simp[GSYM ignore_bind_def]) >>
+     fs[]) >>
  simp[]
 QED
