@@ -39,6 +39,31 @@ Proof
   Induct >> simp[FDOM_FUPDATE] >> metis_tac[]
 QED
 
+Theorem ricf_call_selected_event_allocas[local]:
+  ricf_located_event ctx0 fn log round b es prefix e current /\
+  ssa_form fn /\ fn_inst_wf fn /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) /\
+  ricf_full_alloca_copies fn /\ ricf_src_alloca fn ==>
+  e.rfe_index < LENGTH (EL b fn.fn_blocks).bb_instructions /\
+  (ricf_event_copy e (EL b fn.fn_blocks)).inst_opcode = MCOPY /\
+  ?dst sv sz da sa.
+    (ricf_event_copy e (EL b fn.fn_blocks)).inst_operands = [Var dst;Var sv;Lit sz] /\
+    ricf_event_source e current = Var sv /\
+    MEM da (fn_insts fn) /\ da.inst_opcode = ALLOCA /\
+    da.inst_outputs = [icf_assign_root (dfg_build_function fn) {} dst] /\
+    da.inst_operands = [Lit sz] /\
+    MEM sa (fn_insts fn) /\ sa.inst_opcode = ALLOCA /\
+    sa.inst_outputs = [sv] /\ sa.inst_operands = [Lit sz]
+Proof
+  strip_tac >> drule ricf_located_event_validation >> strip_tac >>
+  drule_all ricf_located_event_source_block >> strip_tac >>
+  `e.rfe_ctx.icf_dfg = dfg_build_function round` by fs[] >>
+  `MEM (EL b fn.fn_blocks) fn.fn_blocks` by simp[EL_MEM] >>
+  drule_all ricf_later_round_alloca_witnesses >> strip_tac >>
+  drule_all ricf_located_event_source_descriptor >> strip_tac >> gvs[] >>
+  metis_tac[ricf_call_event_source_root]
+QED
+
 (* A current support key which is actually passed identifies a selected copy
    in this call's block, and coverage supplies its live payload. *)
 Theorem ricf_call_passed_support_mapped:
@@ -228,6 +253,138 @@ Proof
   drule_all ricf_call_selected_argument_changed >> metis_tac[]
 QED
 
+Theorem ricf_call_selected_operand_values[local]:
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
+    n a U B HP H certificates E sites maps targets tn /\
+  ricf_copy_coverage ctx0 fn log a history s /\
+  ricf_certificate_coverage s history certificates /\
+  ricf_located_event ctx0 fn log round cb es prefix e current /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  ~ctx_has_dalloca C /\ ssa_form fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) /\
+  ricf_full_alloca_copies fn /\ ricf_src_alloca fn /\
+  occurrence_natural_geometry lo a U B stk s /\
+  cb < LENGTH fn.fn_blocks /\
+  s.vs_inst_idx < LENGTH (EL cb fn.fn_blocks).bb_instructions /\
+  inst = EL s.vs_inst_idx (EL cb fn.fn_blocks).bb_instructions /\
+  inst.inst_opcode = INVOKE /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME (EL cb fn.fn_blocks) /\
+  j < LENGTH inst.inst_operands /\
+  MEM (inst.inst_id,j) (MAP (\(ri,p). (ri.inst_id,p)) e.rfe_sites) /\
+  ps = MAP FST (FILTER (\entry.
+    SND entry = [] /\ s.vs_current_bb = (FST entry).rpe_block.bb_label /\
+    ricf_selected_position (FST entry).rpe_event
+      (FST entry).rpe_block s.vs_inst_idx) history) ==>
+  ?x y.
+    eval_operand (EL j inst.inst_operands) s = SOME x /\
+    eval_operand (ricf_event_source e current) t = SOME y /\
+    ricf_opaque_value_agree
+      (FOLDR (\q m.
+        m |+ ((q.rpe_db,q.rpe_size),(q.rpe_db,q.rpe_sb,q.rpe_size))) sites ps)
+      (op_prov G (EL j inst.inst_operands)) {} x y
+Proof
+  strip_tac >> drule_all ricf_call_selected_event_allocas >> strip_tac >>
+  `MEM ((EL s.vs_inst_idx (EL cb fn.fn_blocks).bb_instructions).inst_id,j)
+    (MAP (\(ri,p). (ri.inst_id,p)) e.rfe_sites)` by metis_tac[] >>
+  `?dv. EL j inst.inst_operands = Var dv /\
+    ircf_alias fn (icf_assign_root (dfg_build_function fn) {} dst) dv` by
+    (drule_all ricf_call_selected_operand_origin >> metis_tac[]) >>
+  `?ri. MEM (ri,j) e.rfe_sites /\ ri.inst_id = inst.inst_id` by
+    (fs[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+  `ricf_selected_position e (EL cb fn.fn_blocks) s.vs_inst_idx /\
+   e.rfe_index < s.vs_inst_idx` by
+    (mp_tac (SPEC_ALL ricf_call_located_same_block_selected |>
+       Q.INST [`original` |-> `fn`,`b` |-> `cb`,
+         `i` |-> `s.vs_inst_idx`,`p` |-> `j`]) >>
+     (impl_tac >- metis_tac[]) >> simp[]) >>
+  `e.rfe_index <= s.vs_inst_idx` by decide_tac >>
+  `MEM (Var dv) inst.inst_operands` by metis_tac[EL_MEM] >>
+  Cases_on `w2n sz = 0`
+  >- (drule_all ricf_call_zero_argument_values >> strip_tac >>
+      qexistsl_tac [`n2w db`,`y`] >> metis_tac[]) >>
+  `0 < w2n sz` by decide_tac >>
+  `EVERY (\p. MEM (p,[]) certificates) ps` by
+    metis_tac[ricf_call_selected_filter_certificates] >>
+  `?p ctxP logP.
+    MEM (p,[]) history /\ MEM (p,[]) certificates /\ p.rpe_event = e /\
+    p.rpe_fn = fn /\ p.rpe_block = EL cb fn.fn_blocks /\ p.rpe_owner = a /\
+    ricf_phase_entry vs C ctxP logP stk PG G tn fn s a U B (p,[]) /\
+    ircf_cross tn {(p.rpe_db,p.rpe_sb,p.rpe_size)} s t` by
+    (mp_tac (SPEC_ALL ricf_call_selected_phase |>
+       Q.INST [`b` |-> `cb`]) >>
+     (impl_tac >- metis_tac[lookup_block_label]) >> simp[]) >>
+  `MEM p ps` by
+    (fs[ricf_call_selected_filter_member] >> metis_tac[lookup_block_label]) >>
+  mp_tac (SPEC_ALL ricf_call_positive_payload_argument) >>
+  (impl_tac >- (fs[ricf_event_copy_def] >> metis_tac[])) >> strip_tac >>
+  qexistsl_tac [`n2w p.rpe_db`,`n2w p.rpe_sb`] >> metis_tac[]
+QED
+
+Theorem ricf_call_final_operand_values[local]:
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
+    n a U B HP H certificates E sites maps targets tn /\
+  ricf_history_certificates vs C log_of stk PG G tn fn inst s a U B
+    history certificates /\
+  ctx0 = icf_build_ctx (icf_fn_meta_of C) C.ctx_functions
+    (readonly_mem_analyze C) fn /\
+  ricf_logged_function_trace ctx0 fn (log_of fn) mid /\
+  ricf_copy_coverage ctx0 fn (log_of fn) a history s /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  ssa_form fn /\ wf_function fn /\ fn_inst_wf fn /\ fn_inst_ids_distinct fn /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) /\
+  ricf_full_alloca_copies fn /\ ricf_src_alloca fn /\
+  occurrence_syntax_origin fn a H /\
+  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_natural_geometry lo a U B stk s /\
+  cb < LENGTH fn.fn_blocks /\
+  s.vs_inst_idx < LENGTH (EL cb fn.fn_blocks).bb_instructions /\
+  inst = EL s.vs_inst_idx (EL cb fn.fn_blocks).bb_instructions /\
+  inst.inst_opcode = INVOKE /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME (EL cb fn.fn_blocks) /\
+  j < LENGTH inst.inst_operands /\
+  eval_operand (EL j inst.inst_operands) s = SOME x /\
+  ps = MAP FST (FILTER (\entry.
+    SND entry = [] /\ s.vs_current_bb = (FST entry).rpe_block.bb_label /\
+    ricf_selected_position (FST entry).rpe_event
+      (FST entry).rpe_block s.vs_inst_idx) history) ==>
+  ?y.
+    eval_operand
+      (EL j (EL s.vs_inst_idx (EL cb mid.fn_blocks).bb_instructions).inst_operands)
+      t = SOME y /\
+    ricf_opaque_value_agree
+      (FOLDR (\q m.
+        m |+ ((q.rpe_db,q.rpe_size),(q.rpe_db,q.rpe_sb,q.rpe_size))) sites ps)
+      (op_prov G (EL j inst.inst_operands)) {} x y
+Proof
+  strip_tac >>
+  `ricf_chosen_ledger vs C log_of stk PG G tn fn s a U B history /\
+   ricf_certificate_coverage s history certificates` by
+    fs[ricf_history_certificates_def] >>
+  `EVERY (\p. MEM (p,[]) history) ps` by
+    (drule ricf_call_selected_filter_guards >> simp[EVERY_MEM] >> metis_tac[]) >>
+  `active_inst fn inst s` by
+    (simp[active_inst_def] >> qexists_tac `EL cb fn.fn_blocks` >>
+     simp[EL_MEM] >> metis_tac[lookup_block_label]) >>
+  `MEM (EL j inst.inst_operands) inst.inst_operands` by simp[EL_MEM] >>
+  qpat_assum `ricf_logged_function_trace ctx0 fn (log_of fn) mid`
+    (mp_tac o MATCH_MP ricf_logged_function_operand_origin) >>
+  disch_then (qspecl_then [`cb`,`s.vs_inst_idx`,`j`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac
+  >- (`!p. MEM p ps ==>
+        op_prov G (EL j inst.inst_operands) <> SOME (p.rpe_db,p.rpe_size)` by
+        (mp_tac (SPEC_ALL ricf_call_unchanged_argument_no_payload |>
+           Q.INST [`i` |-> `s.vs_inst_idx`,`last` |-> `mid`]) >>
+         (impl_tac >- metis_tac[]) >> metis_tac[]) >>
+      drule_all ricf_call_unchanged_fold_argument_values >> metis_tac[]) >>
+  `MEM (inst.inst_id,j) (MAP (\(ri,p). (ri.inst_id,p)) e.rfe_sites)` by
+    metis_tac[] >>
+  drule_all ricf_call_selected_operand_values >> strip_tac >>
+  metis_tac[optionTheory.SOME_11]
+QED
+
 Theorem ricf_call_eval_operands_indexed[local]:
   !ops s args. eval_operands ops s = SOME args ==>
   LENGTH args = LENGTH ops /\
@@ -256,4 +413,70 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `!j. j < LENGTH ops ==> ?y. _` (qspec_then `j` mp_tac) >>
   simp[] >> strip_tac >> metis_tac[optionTheory.SOME_11]
+QED
+
+Theorem ricf_call_actual_argument_values:
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
+    n a U B HP H certificates E sites maps targets tn /\
+  ricf_history_certificates vs C log_of stk PG G tn fn inst s a U B
+    history certificates /\
+  ctx0 = icf_build_ctx (icf_fn_meta_of C) C.ctx_functions
+    (readonly_mem_analyze C) fn /\
+  ricf_logged_function_trace ctx0 fn (log_of fn) mid /\
+  ricf_copy_coverage ctx0 fn (log_of fn) a history s /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  ssa_form fn /\ wf_function fn /\ fn_inst_wf fn /\ fn_inst_ids_distinct fn /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) /\
+  ricf_full_alloca_copies fn /\ ricf_src_alloca fn /\
+  occurrence_syntax_origin fn a H /\
+  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  occurrence_natural_geometry lo a U B stk s /\
+  cb < LENGTH fn.fn_blocks /\
+  s.vs_inst_idx < LENGTH (EL cb fn.fn_blocks).bb_instructions /\
+  inst = EL s.vs_inst_idx (EL cb fn.fn_blocks).bb_instructions /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME (EL cb fn.fn_blocks) /\
+  eval_operands ops s = SOME args /\
+  ps = MAP FST (FILTER (\entry.
+    SND entry = [] /\ s.vs_current_bb = (FST entry).rpe_block.bb_label /\
+    ricf_selected_position (FST entry).rpe_event
+      (FST entry).rpe_block s.vs_inst_idx) history) ==>
+  ?ops' args'.
+    decode_invoke (EL s.vs_inst_idx (EL cb mid.fn_blocks).bb_instructions) =
+      SOME (nm,ops') /\
+    eval_operands ops' t = SOME args' /\
+    ricf_opaque_params_agree
+      (FOLDR (\q m.
+        m |+ ((q.rpe_db,q.rpe_size),(q.rpe_db,q.rpe_sb,q.rpe_size))) sites ps)
+      (MAP (op_prov G) ops) args args'
+Proof
+  strip_tac >>
+  `inst.inst_operands = Label nm::ops` by
+    fs[decode_invoke_def, AllCaseEqs()] >>
+  `?ops'.
+    decode_invoke (EL s.vs_inst_idx (EL cb mid.fn_blocks).bb_instructions) =
+      SOME (nm,ops') /\ LENGTH ops' = LENGTH ops` by
+    (mp_tac (SPEC_ALL ricf_execution_logged_invoke_shape |>
+       Q.INST [`b` |-> `cb`,`i` |-> `s.vs_inst_idx`,`args` |-> `ops`,
+         `log` |-> `log_of (fn:ir_function)`]) >>
+     (impl_tac >- metis_tac[]) >> metis_tac[]) >>
+  `(EL s.vs_inst_idx (EL cb mid.fn_blocks).bb_instructions).inst_operands =
+    Label nm::ops'` by fs[decode_invoke_def, AllCaseEqs()] >>
+  drule ricf_call_eval_operands_indexed >> strip_tac >>
+  `?args'. eval_operands ops' t = SOME args' /\
+    ricf_opaque_params_agree
+      (FOLDR (\q m.
+        m |+ ((q.rpe_db,q.rpe_size),(q.rpe_db,q.rpe_sb,q.rpe_size))) sites ps)
+      (MAP (op_prov G) ops) args args'` by
+    (mp_tac (SPEC_ALL ricf_call_argument_list |>
+       Q.INST [`callsites` |-> `FOLDR (\q m.
+         m |+ ((q.rpe_db,q.rpe_size),(q.rpe_db,q.rpe_sb,q.rpe_size))) sites ps`]) >>
+     (impl_tac >-
+       (simp[] >> rpt strip_tac >>
+        mp_tac (SPEC_ALL ricf_call_final_operand_values |>
+          Q.INST [`j` |-> `SUC j`,`x` |-> `EL j args`]) >>
+        (impl_tac >- (simp[] >> metis_tac[])) >> simp[])) >> simp[]) >>
+  qexistsl_tac [`ops'`,`args'`] >> simp[]
 QED
