@@ -1,7 +1,7 @@
 Theory guardReentryAccounts
 Ancestors
   evmCreationGuard vfmAccountFrame vfmRunCall vfmExecution vfmExecutionProp vfmState
-  vfmDecreasesGas pair list arithmetic
+  vfmDecreasesGas vfmWfState pair list arithmetic
 
 val guard_protected_rollbacks = ``\(base:execution_state) s.
   EVERY (\rb. !addr.
