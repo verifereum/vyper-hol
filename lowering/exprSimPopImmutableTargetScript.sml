@@ -498,7 +498,7 @@ Proof
   simp[venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem imm_readonly_opcode[local]:
+Theorem imm_readonly_opcode:
   !opc. fresh_write_op opc \/ opc = ILOAD ==>
     ~is_terminator opc /\ opc <> INVOKE /\ ~is_ext_call_op opc /\ opc <> GAS
 Proof
@@ -592,7 +592,7 @@ Proof
        freshWritesTheory.fresh_write_op_def, not_fresh_at_def]
 QED
 
-Theorem imm_array_ctor_none_code[local]:
+Theorem imm_array_ctor_none_code:
   !base_op idx dyn cnt ws esz sgn sa p sb.
     compile_array_subscript base_op idx dyn cnt ws esz sgn
       (compile_ptr_load T NONE LocCode) sa = (p,sb) ==>
@@ -618,7 +618,7 @@ Proof
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
-Theorem imm_array_ctor_code[local]:
+Theorem imm_array_ctor_code:
   !base idx dyn cnt ws esz sgn region sa p sb.
     compile_array_subscript base idx dyn cnt ws esz sgn
       (compile_ptr_load T (SOME region) LocCode) sa = (p,sb) ==>
@@ -656,7 +656,7 @@ Proof
   simp[immutable_operand_frame_def] >> metis_tac[]
 QED
 
-Theorem imm_array_ctor_run[local]:
+Theorem imm_array_ctor_run:
   !base idx dyn cnt ws esz sgn region sa p sb s b i len.
     compile_array_subscript base idx dyn cnt ws esz sgn
       (compile_ptr_load T (SOME region) LocCode) sa = (p,sb) /\
@@ -806,7 +806,7 @@ Proof
   goal_assum $ drule_at Any
 QED
 
-Theorem imm_array_ctor_none_run[local]:
+Theorem imm_array_ctor_none_run:
   !base_op idx dyn cnt ws esz sgn sa p sb s b i len.
     compile_array_subscript base_op idx dyn cnt ws esz sgn
       (compile_ptr_load T NONE LocCode) sa = (p,sb) /\
