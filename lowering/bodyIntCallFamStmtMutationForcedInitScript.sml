@@ -162,7 +162,7 @@ Resume intcall_annassign_forced_initializer_run[disjoint_application]:
   simp[] >>
   irule intcall_aggregate_initializer_run >>
   simp[] >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
     (irule_at Any) >> simp[] >>
   qpat_assum `expr_val_at _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qexistsl [`type_memory_size dtv`,

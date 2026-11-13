@@ -268,7 +268,7 @@ Resume intcall_annassign_stmt_step[bytes_metadata_join]:
   goal_assum (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `supported_stmt _ _ _`)) >>
   simp[] >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   qexistsl [`marks`,`tv'`] >> gvs[]
 QED
 
@@ -293,7 +293,7 @@ Resume intcall_annassign_stmt_step[copy_open]:
   `~block_is_terminated sB` by
     (drule_all exprOpenTerminalsTheory.unwrap_value_open >> simp[]) >>
   irule intcall_memory_copy_open >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   fs[bodySimTheory.body_inv_def]
 QED
 

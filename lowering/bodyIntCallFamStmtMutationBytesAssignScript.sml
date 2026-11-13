@@ -121,7 +121,7 @@ Theorem intcall_bytes_initializer_run:
     s.vs_alloca_next <= u.vs_alloca_next
 Proof
   strip_tac >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_assign_value_def] >>
   Cases_on `loc = SOME LocMemory`
   >- (simp[comp_bind_def,comp_ignore_bind_def,comp_return_def] >>

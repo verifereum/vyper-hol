@@ -125,7 +125,7 @@ Resume intcall_annassign_bytes_continuation[run]:
        (qexistsl [`w2n w`,`mk_inst st.cs_next_id ALLOCA
           [Lit (n2w (type_memory_bytes ce ty))] [p]`,`type_memory_size dtv`] >>
         simp[mk_inst_def] >> metis_tac[]) >>
-     goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
      simp[eval_operand_def] >>
      metis_tac[]) >>
   suspend "activation"

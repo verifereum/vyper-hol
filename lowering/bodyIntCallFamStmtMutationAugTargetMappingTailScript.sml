@@ -3,7 +3,7 @@ Theory bodyIntCallFamStmtMutationAugTargetMappingTail
 Ancestors
   bodyIntCallFamStmtMutationAugTargetMapping bodyIntCallFamStmtMutationBinop
   exprSimHash exprSimMapKey emitHelperProps exprLoweringProps compileEnv
-  emitHelper venomInst bodyIntCallJointContract venomState loweringShapeRules loweringStateRelDefs
+  emitHelper venomInst bodyIntCallJointContract venomState loweringShapeRules loweringStateRelDefs exprSimHashBoundary
 
 Theorem intcall_readonly_emit_run:
   intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\

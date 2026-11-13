@@ -124,7 +124,7 @@ Proof
     (drule lower_value_compile_expr_split >> strip_tac >>
      metis_tac[cs_extends_trans]) >>
   `cs_extends sB sf` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[stmtLoweringTheory.compile_assign_value_def] >>
      Cases_on `vv_location vv = SOME LocMemory` >>
      simp[compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def,
