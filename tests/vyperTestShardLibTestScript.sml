@@ -58,6 +58,11 @@ fun exercise_generator () = let
     contains "global range" d (String.concat
       [", ", Int.toString start, ", ", Int.toString count, ");"]);
     contains "JSON provenance dependency" d ".json.provenance";
+    List.app (contains "provenance input dependency" d)
+      ["../../VYPER_PIN", "../semantics-profile.json",
+       "../semantics-test-constraints.txt", "../semantics-build-constraints.txt",
+       "../../tools/vyper_test_exports.py", "../../tools/vyper_test_export_plugin.py",
+       "../../.github/actions/setup-vyper-test-exports/action.yml", "../vyper-regression"];
     contains "execution imports only its own definitions" t ("Ancestors " ^ part defs index ^ "\n");
     contains "complete runner" t ("run_tests_on_traces $ all_traces \"" ^ part defs index ^ "\"")
   end) [(0, 0, 100), (1, 100, 79)]

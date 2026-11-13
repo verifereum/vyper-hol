@@ -30,6 +30,9 @@ Proof
   `val_wf tout vout` by (irule convert_bytestring_wf >> metis_tac[]) >>
   `val_footprint tout vout <= capacity` by
     (drule_all convert_bytestring_memory >> strip_tac >> simp[]) >>
+  `storage_well_formed_on cx ee (FST H)` by
+    (qpat_x_assum `expr_post H ctx fn cenv cx e es ca sa s0 ee v (Var src) s` mp_tac >>
+     simp[loweringPostsTheory.expr_post_def]) >>
   `expr_post H ctx fn cenv cx (TypeBuiltin target Convert target [e]) ee sa sb s
     ee vout (Var dst) t` by
     (irule widen_copy_run_parent_post >>

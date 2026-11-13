@@ -33,9 +33,10 @@ Theorem registration_resource_decoder_run:
   FLOOKUP ce.ce_vars name = SOME loc /\ var_location_memory_size loc = SOME n /\
   compile_alloc_buffer n st = (buf,allocated) /\
   emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] allocated = (head,after_head) /\
-  (if dyn /\ ~prim then ?offset after_load.
+  (if dyn /\ ~prim then ?offset after_load after_src.
      emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
-     emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
+     emit_op ADD [Lit (n2w 4); offset] after_load = (src,after_src) /\
+     compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) after_src = ((),first)
    else src = head /\ first = after_head) /\
   compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) first = ((),last) /\
@@ -94,6 +95,13 @@ Proof
     (drule_all calldataRegistrationTheory.register_singleton_allocated_boundary >>
      strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE]) >>
   drule_all registration_literal_source_window >> strip_tac >>
+  `~((n2w sb:bytes32) <+ 4w)` by
+    (`sb < dimword (:256)` by decide_tac >> fs[WORD_LO, w2n_n2w]) >>
+  `dyn /\ ~prim ==> ~(n2w 4 + abi_decode_load CALLDATALOAD
+     (n2w 4 + n2w (off-4):bytes32) initial <+ 4w)` by
+    (qpat_x_assum `n2w sb = _` mp_tac >>
+     qpat_x_assum `~((n2w sb:bytes32) <+ 4w)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >> fs[] >> metis_tac[]) >>
   drule_all registration_allocation_address_run >> strip_tac >>
   `entry_scratch_ready ambient 0 (unit_alloca_budget ctx) v` by
     (irule registration_scratch_from_history >> simp[] >> qexistsl_tac [`fn`, `site`] >> simp[]) >>

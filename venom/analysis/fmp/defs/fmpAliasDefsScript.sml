@@ -3,7 +3,7 @@
  * assert an operational memory-safety invariant. *)
 Theory fmpAliasDefs
 Ancestors
-  fmpAnalysisDefs livenessDefs memLocDefs rich_list
+  fmpAnalysisDefs livenessDefs memLocDefs basePtrDefs rich_list
 
 (* Shared syntactic helpers live below reclaim transfer, so the indexed
  * production transfer can consume this theory without a dependency cycle. *)
@@ -12,43 +12,9 @@ Definition fmp_single_output_def:
     case inst.inst_outputs of [v] => SOME v | _ => NONE
 End
 
-Definition fmp_transparent_opcode_def:
-  fmp_transparent_opcode op <=>
-    op = ASSIGN \/ op = ADD \/ op = SUB \/ op = PHI
-End
-
 Definition fmp_inst_uses_any_def:
   fmp_inst_uses_any vars inst <=>
     EXISTS (\v. MEM v (inst_uses inst)) vars
-End
-
-Definition fmp_access_operands_def:
-  fmp_access_operands NONE = [] /\
-  fmp_access_operands (SOME a) =
-    [a.iao_ofst] ++ OPTION_TO_LIST a.iao_size ++
-    (if a.iao_max_size = a.iao_size then []
-     else OPTION_TO_LIST a.iao_max_size)
-End
-
-Definition fmp_safe_operands_def:
-  fmp_safe_operands inst =
-    fmp_access_operands (mem_read_ops inst) ++
-    fmp_access_operands (mem_write_ops inst)
-End
-
-Definition fmp_pointer_propagation_def:
-  fmp_pointer_propagation op <=>
-    fmp_transparent_opcode op \/ MEM op [BUMP; DALLOCA; ALLOCA]
-End
-
-(* Return occurrences, not a set: a safe address occurrence does not excuse
- * another occurrence used as a stored value. *)
-Definition fmp_escaping_operands_def:
-  fmp_escaping_operands inst =
-    if fmp_pointer_propagation inst.inst_opcode then [] else
-    FILTER (\v.
-      LENGTH (FILTER ($= (Var v)) (fmp_safe_operands inst)) <
-      LENGTH (FILTER ($= v) (inst_uses inst))) (inst_uses inst)
 End
 
 Definition fmp_capture_step_def:

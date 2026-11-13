@@ -38,6 +38,18 @@ Definition inst_seq_ptr_def:
      | _ => G' = G /\ tn' = tn)
 End
 
+(* The ghost where a run stops depends only on the run, not on the dead
+   mask the check uses. *)
+Theorem inst_seq_ptr_ghost_unique:
+  !is s G tn g1 t1 g2 t2.
+  inst_seq_ptr D1 lo ctx fn PG G tn is s g1 t1 /\
+  inst_seq_ptr D2 lo ctx fn PG G tn is s g2 t2 ==>
+  g1 = g2 /\ t1 = t2
+Proof
+  Induct >> simp[inst_seq_ptr_def] >> rpt gen_tac >>
+  Cases_on `step_inst_base h s` >> simp[] >> metis_tac[]
+QED
+
 Theorem gas_path_ptr_ok_suffix:
   gas_path_ptr D lo ctx fn PG G tn s n G' tn' (OK t) ==>
   t.vs_gas_readings = DROP n s.vs_gas_readings
@@ -173,6 +185,71 @@ Proof
       irule gas_path_ptr_step >> simp[] >> metis_tac[]) >>
   qexistsl_tac [`if h.inst_opcode = GAS then 1 else 0`, `t.vs_inst_idx`] >>
   simp[] >> irule gas_path_ptr_abort >> simp[] >> metis_tac[]
+QED
+
+(* The checks and the recorded origin use this same concrete step. *)
+Theorem straight_line_origin_ptr_edge:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  ptr_inst_ok D lo 0 ctx func G tn i s /\
+  step_inst_base i s = OK u ==>
+  gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn)
+    (if i.inst_opcode = GAS then [(func.fn_name, i.inst_id) IN explicit] else [])
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G i u, step_taint i s u tn)
+Proof
+  strip_tac >>
+  `step_inst 0 ctx i s = OK u` by simp[step_inst_non_invoke] >>
+  `~u.vs_halted` by metis_tac[step_preserves_halted] >>
+  PURE_REWRITE_TAC[gas_origin_ptr_edge_def] >> conj_tac
+  >- (rewrite_tac[gas_origin_edge_def] >> conj_tac >- simp[] >>
+      qexistsl_tac [`0`, `bb`, `i`, `OK u`] >>
+      Cases_on `i.inst_opcode = GAS` >>
+      simp[gas_events_step_def, mem_safe_step_non_invoke]) >>
+  drule_all straight_line_ptr_edge >>
+  Cases_on `i.inst_opcode = GAS` >> simp[]
+QED
+
+Theorem run_inst_seq_gas_origin_ptr_path:
+  !code s t G tn G' tn' ctx func bb.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+    run_inst_seq_mem_ok code s /\
+    inst_seq_ptr D lo ctx func PG G tn code s G' tn' /\
+    run_inst_seq code s = OK t ==>
+    gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn)
+      (MAP (\i. (func.fn_name, i.inst_id) IN explicit)
+        (FILTER (\i. i.inst_opcode = GAS) code))
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code), G', tn')
+Proof
+  Induct
+  >- (simp[run_inst_seq_def, inst_seq_ptr_def] >> rpt strip_tac >>
+      gvs[] >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  gvs[run_inst_seq_def, inst_seq_ptr_def, run_inst_seq_mem_ok_def] >>
+  rename1 `step_inst_base h s = OK u` >>
+  `step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
+  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+  first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+    `t with vs_inst_idx := SUC s.vs_inst_idx`, `step_prov PG G h u`,
+    `step_taint h s u tn`, `G'`, `tn'`, `ctx`, `func`, `bb`] mp_tac) >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def] >> strip_tac >>
+  `gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn)
+    (if h.inst_opcode = GAS then [(func.fn_name, h.inst_id) IN explicit] else [])
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G h u, step_taint h s u tn)` by
+    (irule straight_line_origin_ptr_edge >> simp[]) >>
+  drule (cj 2 gas_origin_ptr_path_rules) >> disch_then drule >>
+  Cases_on `h.inst_opcode = GAS` >> simp[ADD1]
 QED
 
 (* The checks and the recorded origin use this same concrete step. *)

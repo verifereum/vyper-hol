@@ -27,9 +27,7 @@ Theorem gas_outcome_full_force_value:
       R H res ee gt r)
 Proof
   strip_tac >>
-  irule (BETA_RULE (Q.ISPEC
-    `\res. case res of INL v => INL (Value v) | INR ex => INR ex`
-    (Q.GEN `f` gas_outcome_full_source_map))) >>
+  ho_match_mp_tac (GEN_ALL gas_outcome_full_source_map) >>
   qexists_tac `bind (eval_expr cx e) (read_result cx)` >> simp[] >>
   qx_gen_tac `st` >>
   Cases_on `bind (eval_expr cx e) (read_result cx) st` >>

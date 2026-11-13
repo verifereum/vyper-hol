@@ -132,8 +132,9 @@ Theorem compile_init_kwargs_bytes_probe:
       36 1 (Lit 999w) kwarg_probe_state)).cs_current_insts =
     [(ADD, [Lit 4w; Lit 32w]);
      (CALLDATALOAD, [Var "%0"]); (ADD, [Lit 4w; Var "%1"]);
-     (CALLDATALOAD, [Var "%2"]); (GT, [Var "%3"; Lit 10w]);
-     (ISZERO, [Var "%4"]); (ASSERT, [Var "%5"]);
+     (LT, [Var "%2"; Lit 4w]); (ISZERO, [Var "%3"]); (ASSERT, [Var "%4"]);
+     (CALLDATALOAD, [Var "%2"]); (GT, [Var "%5"; Lit 10w]);
+     (ISZERO, [Var "%6"]); (ASSERT, [Var "%7"]);
      (CALLDATACOPY, [Lit 128w; Var "%2"; Lit 64w])]
 Proof
   EVAL_TAC >> simp[]

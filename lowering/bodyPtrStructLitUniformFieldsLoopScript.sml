@@ -38,8 +38,13 @@ Theorem structlit_uniform_fields_loop_outcome_ptr:
     (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
 Proof
   rpt gen_tac >> strip_tac >>
+  `LIST_REL (\t (name,e). ALOOKUP (get_struct_fields ce.ce_struct_fields
+     (case sty of StructT nsid => nsid_to_string nsid | _ => "")) name =
+     SOME (t,type_memory_bytes ce t)) (MAP expr_type (MAP SND fields)) fields` by
+    (qpat_x_assum `EVERY _ fields` mp_tac >> rpt (pop_assum kall_tac) >>
+     Induct_on `fields` >> simp[pairTheory.FORALL_PROD]) >>
   drule compile_struct_lit_as_tuple >> strip_tac >>
-  `compile_make_tuple compile_expr ce (MAP SND fields) (Var root) off si = (out,sb)` by
+  `compile_make_tuple compile_expr ce (MAP SND fields) (MAP expr_type (MAP SND fields)) (Var root) off si = (out,sb)` by
     metis_tac[] >>
   drule_all structlit_uniform_tuple_loop_outcome_ptr >>
   disch_then (qspec_then `PG` strip_assume_tac) >> simp[] >>
