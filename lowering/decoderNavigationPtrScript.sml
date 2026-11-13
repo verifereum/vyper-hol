@@ -269,6 +269,95 @@ Proof
   simp[eval_operand_def, op_taint_def, op_prov_def] >> decide_tac
 QED
 
+Theorem scalar_binop_frag_ptr_origin_core[local]:
+  !cx ctx PG sa sb id opc f left right out s a b G tn R.
+    (opc = ADD /\ f = word_add \/ opc = MUL /\ f = word_mul) /\
+    sb.cs_current_bb = sa.cs_current_bb /\
+    sb.cs_current_insts = sa.cs_current_insts ++
+      [mk_inst id opc [left;right] [out]] /\
+    eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+    op_taint tn left = {} /\ op_taint tn right = {} /\
+    op_prov G left = NONE /\ op_prov G right = NONE ==>
+    ?H u.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g = G /\ z = tn /\ v = s)
+        (\g z v. g = H /\ z = u /\
+          v = (update_var out (f a b) s with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+      op_taint u (Var out) = {} /\ op_prov H (Var out) = NONE /\
+      u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+      (!q. q <> out ==> FLOOKUP H q = FLOOKUP G q /\
+        op_taint u (Var q) = op_taint tn (Var q)) /\
+      u.t_imm = tn.t_imm /\
+      (!D lower ctx' func.
+        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        s.vs_current_bb = sa.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+        (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+          (update_var out (f a b) s with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+        !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
+      (!D lower explicit ctx' func.
+        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+        gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+          (OK (update_var out (f a b) s with vs_inst_idx := LENGTH sb.cs_current_insts),H,u))
+Proof
+  rpt gen_tac >> strip_tac >> (
+  qabbrev_tac `t = update_var out (f a b) s` >>
+  qabbrev_tac `H = step_prov PG G (mk_inst id opc [left;right] [out]) t` >>
+  qabbrev_tac `u = step_taint (mk_inst id opc [left;right] [out]) s t tn` >>
+  `!D lower ctx' func.
+    fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+      (update_var out (f a b) s with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+    !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s` by
+    (rpt gen_tac >> strip_tac >>
+     `step_inst_base (mk_inst id opc [left;right] [out]) s = OK t` by
+       gvs[Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
+     `!fuel. ptr_inst_ok D lower fuel ctx' func G tn
+       (mk_inst id opc [left;right] [out]) s` by
+       (gen_tac >> irule setup_scalar_binop_safe >> simp[]) >>
+     irule setup_instruction_continuation >> simp[] >>
+     goal_assum (drule_at Any) >> qexistsl_tac [`sa`,`sb`] >>
+     gvs[Abbr `H`, Abbr `u`, Abbr `t`, mk_inst_def, update_var_def,
+       is_terminator_def]) >>
+  `!D lower explicit ctx' func.
+    fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u)` by
+   (rpt strip_tac >>
+    `step_inst_base (mk_inst id opc [left;right] [out]) s = OK t` by
+      gvs[Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
+    `ptr_inst_ok D lower 0 ctx' func G tn
+      (mk_inst id opc [left;right] [out]) s` by
+      (irule setup_scalar_binop_safe >> simp[]) >>
+    `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
+    qunabbrev_tac `H` >> qunabbrev_tac `u` >>
+    qpat_x_assum `LENGTH sb.cs_current_insts = SUC _` SUBST1_TAC >>
+    irule navigation_instruction_origin >>
+    simp[mk_inst_def, is_terminator_def, unitTransformDefsTheory.inst_mem_below_frontier_def,
+      memSafeRunTheory.inst_dload_in_section_def,
+      source_memory_read_ranges_def, source_memory_write_ranges_def] >>
+    qexistsl_tac [`sa`, `sb`] >> gvs[mk_inst_def]) >>
+  qexistsl_tac [`H`, `u`] >> simp[] >> conj_tac >-
+    (irule ptr_fragment_step >> simp[] >>
+     reverse conj_tac >- gvs[is_terminator_def] >>
+     rpt strip_tac >> gvs[] >> qexists_tac `t` >>
+     conj_tac >- gvs[Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
+     simp[Abbr `H`, Abbr `u`, Abbr `t`, update_var_def] >>
+     rpt strip_tac >> gvs[] >>
+     irule setup_scalar_binop_safe >> simp[allocas_from_def]) >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  `opc = ADD \/ opc = MUL` by metis_tac[] >>
+  drule_at (Pat `H = step_prov _ _ _ _`) setup_scalar_binop_ghost >>
+  disch_then (qspecl_then [`f a b`, `u`, `tn`, `s`] mp_tac) >>
+  asm_rewrite_tac [] >> strip_tac >> metis_tac[])
+QED
+
 Theorem scalar_binop_frag_ptr_core[local]:
   !cx ctx PG sa sb id opc f left right out s a b G tn R.
     (opc = ADD /\ f = word_add \/ opc = MUL /\ f = word_mul) /\
@@ -296,40 +385,10 @@ Theorem scalar_binop_frag_ptr_core[local]:
           (update_var out (f a b) s with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
-  rpt gen_tac >> strip_tac >> (
-  qabbrev_tac `t = update_var out (f a b) s` >>
-  qabbrev_tac `H = step_prov PG G (mk_inst id opc [left;right] [out]) t` >>
-  qabbrev_tac `u = step_taint (mk_inst id opc [left;right] [out]) s t tn` >>
-  `!D lower ctx' func.
-    fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
-    s.vs_current_bb = sa.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
-      (update_var out (f a b) s with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
-    !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s` by
-    (rpt gen_tac >> strip_tac >>
-     `step_inst_base (mk_inst id opc [left;right] [out]) s = OK t` by
-       gvs[Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
-     `!fuel. ptr_inst_ok D lower fuel ctx' func G tn
-       (mk_inst id opc [left;right] [out]) s` by
-       (gen_tac >> irule setup_scalar_binop_safe >> simp[]) >>
-     irule setup_instruction_continuation >> simp[] >>
-     goal_assum (drule_at Any) >> qexistsl_tac [`sa`,`sb`] >>
-     gvs[Abbr `H`, Abbr `u`, Abbr `t`, mk_inst_def, update_var_def,
-       is_terminator_def]) >>
-  qexistsl_tac [`H`, `u`] >> simp[] >> conj_tac >-
-    (irule ptr_fragment_step >> simp[] >>
-     reverse conj_tac >- gvs[is_terminator_def] >>
-     rpt strip_tac >> gvs[] >> qexists_tac `t` >>
-     conj_tac >- gvs[Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
-     simp[Abbr `H`, Abbr `u`, Abbr `t`, update_var_def] >>
-     rpt strip_tac >> gvs[] >>
-     irule setup_scalar_binop_safe >> simp[allocas_from_def]) >>
-  RULE_ASSUM_TAC (PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  `opc = ADD \/ opc = MUL` by metis_tac[] >>
-  drule_at (Pat `H = step_prov _ _ _ _`) setup_scalar_binop_ghost >>
-  disch_then (qspecl_then [`f a b`, `u`, `tn`, `s`] mp_tac) >>
-  asm_rewrite_tac [] >> strip_tac >> metis_tac[])
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all scalar_binop_frag_ptr_origin_core >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`] >> simp[]
 QED
 
 Theorem scalar_binop_frag_ptr[local]:
@@ -478,6 +537,57 @@ Proof
 QED
 
 
+Theorem emit_scalar_binop_endpoint_ptr_origin_core:
+  !opc left right sa out sb s t a b G tn cx ctx PG R.
+    (opc = ADD \/ opc = MUL) /\
+    emit_op opc [left;right] sa = (out,sb) /\
+    eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+    op_taint tn left = {} /\ op_taint tn right = {} /\
+    op_prov G left = NONE /\ op_prov G right = NONE /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    ?H u. op_taint u out = {} /\ op_prov H out = NONE /\
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g = G /\ z = tn /\ v = s)
+        (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+      t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+      u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+      (!q. not_fresh_at sa q ==> lookup_var q t = lookup_var q s /\
+        FLOOKUP H q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q)) /\
+      t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
+      (!D lower ctx' func.
+        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        s.vs_current_bb = sa.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+        (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+          (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+        !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
+      (!D lower explicit ctx' func.
+        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+        gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+          (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qabbrev_tac `x = "%" ++ toString sa.cs_next_var` >>
+  qabbrev_tac `f : 256 word -> 256 word -> 256 word = if opc = ADD then word_add else word_mul` >>
+  `opc = ADD /\ f = word_add \/ opc = MUL /\ f = word_mul` by
+    (gvs[Abbr `f`]) >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
+  `t = update_var x (f a b) s` by
+    gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
+  `!q. not_fresh_at sa q ==> q <> x` by
+    (simp[not_fresh_at_def, Abbr `x`] >> metis_tac[LESS_EQ_REFL]) >>
+  drule_at (Pat `sb.cs_current_insts = _`) scalar_binop_frag_ptr_origin_core >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `f`] mp_tac) >>
+  simp[] >> disch_then drule_all >>
+  disch_then (qspec_then `R` strip_assume_tac) >>
+  qexistsl_tac [`H`, `u`] >>
+  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
 Theorem emit_scalar_binop_endpoint_ptr_core:
   !opc left right sa out sb s t a b G tn cx ctx PG R.
     (opc = ADD \/ opc = MUL) /\
@@ -504,23 +614,9 @@ Theorem emit_scalar_binop_endpoint_ptr_core:
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  qabbrev_tac `x = "%" ++ toString sa.cs_next_var` >>
-  qabbrev_tac `f : 256 word -> 256 word -> 256 word = if opc = ADD then word_add else word_mul` >>
-  `opc = ADD /\ f = word_add \/ opc = MUL /\ f = word_mul` by
-    (gvs[Abbr `f`]) >>
-  `sb.cs_current_bb = sa.cs_current_bb` by
-    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
-  `t = update_var x (f a b) s` by
-    gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
-  `!q. not_fresh_at sa q ==> q <> x` by
-    (simp[not_fresh_at_def, Abbr `x`] >> metis_tac[LESS_EQ_REFL]) >>
-  drule_at (Pat `sb.cs_current_insts = _`) scalar_binop_frag_ptr_core >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `f`] mp_tac) >>
-  simp[] >> disch_then drule_all >>
-  disch_then (qspec_then `R` strip_assume_tac) >>
-  qexistsl_tac [`H`, `u`] >>
-  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> metis_tac[]
+  drule_all emit_scalar_binop_endpoint_ptr_origin_core >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`] >> simp[]
 QED
 
 Theorem emit_scalar_binop_endpoint_ptr:
@@ -782,6 +878,56 @@ QED
 
 Finalise calldata_ep_source_frag_ptr
 
+Theorem emit_ptr_offset_endpoint_ptr_origin_core:
+  !sa out sb root offset off s t a G tn total n cx ctx PG R.
+    emit_op ADD [Var root; offset] sa = (out,sb) /\
+    lookup_var root s = SOME a /\ ptr_covers G tn root s total /\
+    eval_operand offset s = SOME (n2w off) /\
+    op_taint tn offset = {} /\ op_prov G offset = NONE /\
+    off + n <= total /\ w2n a + off < dimword(:256) /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    ?H u q. out = Var q /\
+      lookup_var q t = SOME (n2w (w2n a + off)) /\
+      ptr_covers H u q (t with vs_inst_idx := SUC s.vs_inst_idx) n /\
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g = G /\ z = tn /\ v = s)
+        (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+      t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+      u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+        FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
+      (!D lower ctx' func.
+        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        s.vs_current_bb = sa.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+        (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+          (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+        !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
+      (!D lower explicit ctx' func.
+        fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+        ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+        s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+        gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+          (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u))
+Proof
+  rpt gen_tac >> strip_tac >> drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  qabbrev_tac `q = "%" ++ toString sa.cs_next_var` >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
+  `t = update_var q (a + n2w off) s` by
+    gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+      eval_operand_def] >>
+  `!x. not_fresh_at sa x ==> x <> q` by
+    (simp[not_fresh_at_def, Abbr `q`] >> metis_tac[LESS_EQ_REFL]) >>
+  rename1 `ptr_covers G tn root s cap` >>
+  `off + n <= cap /\ w2n a + off < dimword(:256)` by decide_tac >>
+  drule_all emitted_ptr_scalar_offset_frag_ptr_origin_core >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] mp_tac) >> strip_tac >>
+  qexistsl_tac [`Gf`,`tnf`] >>
+  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE, ptr_covers_def] >> metis_tac[]
+QED
+
 Theorem emit_ptr_offset_endpoint_ptr_core:
   !sa out sb root offset off s t a G tn total n cx ctx PG R.
     emit_op ADD [Var root; offset] sa = (out,sb) /\
@@ -809,21 +955,9 @@ Theorem emit_ptr_offset_endpoint_ptr_core:
           (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
-  rpt gen_tac >> strip_tac >> drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-  qabbrev_tac `q = "%" ++ toString sa.cs_next_var` >>
-  `sb.cs_current_bb = sa.cs_current_bb` by
-    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
-  `t = update_var q (a + n2w off) s` by
-    gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
-      eval_operand_def] >>
-  `!x. not_fresh_at sa x ==> x <> q` by
-    (simp[not_fresh_at_def, Abbr `q`] >> metis_tac[LESS_EQ_REFL]) >>
-  rename1 `ptr_covers G tn root s cap` >>
-  `off + n <= cap /\ w2n a + off < dimword(:256)` by decide_tac >>
-  drule_all emitted_ptr_scalar_offset_frag_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] mp_tac) >> strip_tac >>
-  qexistsl_tac [`Gf`,`tnf`] >>
-  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE, ptr_covers_def] >> metis_tac[]
+  rpt strip_tac >> drule_all emit_ptr_offset_endpoint_ptr_origin_core >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`u`,`q`] >> simp[]
 QED
 
 Theorem emit_ptr_offset_endpoint_ptr:
