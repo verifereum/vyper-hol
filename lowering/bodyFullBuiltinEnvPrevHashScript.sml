@@ -96,7 +96,7 @@ Proof
   conj_tac >- (fs[storage_well_formed_on_def] >> rpt gen_tac >> strip_tac >> qpat_x_assum `!b slot tv. MEM (b,slot,tv) (FST H) ==> _` drule >> Cases_on `b` >> simp[get_storage_def]) >>
   conj_tac >- metis_tac[] >>
   conj_tac >- (fs[ghost_inv_at_def] >> metis_tac[]) >>
-  simp[ghost_kept_at_def] >> FAIL_TAC "kept"
+  simp[ghost_kept_at_def]
 QED
 
 Theorem env_prevhash_sim_full:
