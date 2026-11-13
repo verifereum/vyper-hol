@@ -8,9 +8,12 @@
  *     compile_subscript_array_framed_base_case for a base the index's frame
  *     keeps (a runtime immutable, or a static array of no dynamic array in
  *     memory), and compile_subscript_array_place_base_case for the rest,
- *     split on subscript_overlap into two admitted leaves:
+ *     split on subscript_overlap into
  *     compile_subscript_array_copied_base_case (the base read and copied
- *     before the index) and compile_subscript_array_unframed_base_case.
+ *     before the index) and compile_subscript_array_unframed_base_case,
+ *     itself split on subscript_base_live_after into two admitted leaves:
+ *     compile_subscript_array_live_base_case and
+ *     compile_subscript_array_stale_base_case.
  *)
 
 Theory exprSimSubscriptArray
@@ -324,7 +327,65 @@ Proof
   cheat
 QED
 
-(* An array subscript whose index does not overlap its base, outside
+(* The base's source result still reads at the index's end: a local's
+   path, a storage place's slots (live and in range), or a runtime
+   immutable's path still evaluate there; a value needs the locals kept,
+   or a static array with no dynamic array inside it. *)
+Definition subscript_base_live_after_def:
+  (subscript_base_live_after cx (et:type) (bd:bound) (PlaceR (MemoryPlace id path)) t t' <=>
+     !entry. lookup_scopes id t'.scopes = SOME entry ==>
+             ?v. evaluate_subscripts entry.type entry.value path = INL v) /\
+  (subscript_base_live_after cx et bd (PlaceR (StoragePlace tr slot vt)) t t' <=>
+     storage_read_live cx tr (get_storage cx t' tr) slot vt /\
+     slots_in_range (get_storage cx t' tr) (w2n slot) vt) /\
+  (subscript_base_live_after cx et bd (PlaceR (ImmutablePlace src id path)) t t' <=>
+     !itv iv.
+       FLOOKUP (case ALOOKUP t'.immutables cx.txn.target of
+                  NONE => FEMPTY
+                | SOME imms => get_source_immutables src imms) id = SOME (itv, iv) ==>
+       ?v. evaluate_subscripts itv iv path = INL v) /\
+  (subscript_base_live_after cx et bd (HashMapRef _ _ _ _) t t' <=> T) /\
+  (subscript_base_live_after cx et bd (Value _) t t' <=>
+     t'.scopes = t.scopes \/
+     (?n. bd = Fixed n /\
+          !etv. evaluate_type (get_tenv cx) et = SOME etv ==> dynarray_free etv))
+End
+
+(* compile_subscript_array_unframed_base_case with the base live at the
+   index's end (subscript_base_live_after): vv_place_ptr ties the base's
+   pointer to its source place, and the live place reads the same value
+   after the index's fragment.  ADMITTED (cheat). *)
+Theorem compile_subscript_array_live_base_case:
+  !nocalls ctx func cenv cx ann obj idx et bd.
+    expr_vv_case nocalls ctx func cenv cx obj /\
+    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
+              expr_sim_case nocalls ctx func cenv cx idx) /\
+    expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
+    (~nocalls ==> post_value_type cenv obj = expr_type obj) /\
+    ~subscript_reads_base cx obj idx /\ ~copies_subscript_base cenv obj idx /\
+    ~((!t r t'. eval_expr cx idx t = (INL r, t') ==>
+                t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
+      (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
+      ((~cenv.ce_is_ctor /\
+        !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode) \/
+       ((?n. bd = Fixed n) /\
+        (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
+        !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocMemory))) /\
+    (!s env tv t gs ir t'.
+       expr_body_pre cenv cx env (Subscript ann obj idx) s /\
+       eval_expr cx obj s = (INL tv, t) /\
+       eval_expr cx idx (t with gas_obs := gs) = (INL ir, t') ==>
+       subscript_base_live_after cx et bd tv t t') ==>
+    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+Proof
+  cheat
+QED
+
+(* compile_subscript_array_unframed_base_case with the base not live at
+   the index's end: a popped local's snapshot, a dead storage slot, a
+   popped constructor immutable, or a value in a local's region holding a
+   dynamic array when the index pops a local.
+   An array subscript whose index does not overlap its base, outside
    compile_subscript_array_framed_base_case: a base in storage or
    transient storage, an immutable in the constructor, a dynamic array or one with a dynamic
    array inside it in memory, a base whose source result is a storage
@@ -364,6 +425,35 @@ QED
    PHI carries the arm's pointer).  With it, and the base live at the
    index's end, the rest goes through but for popped snapshots, dead
    storage slots and the constructor immutable above. *)
+Theorem compile_subscript_array_stale_base_case:
+  !nocalls ctx func cenv cx ann obj idx et bd.
+    expr_vv_case nocalls ctx func cenv cx obj /\
+    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
+              expr_sim_case nocalls ctx func cenv cx idx) /\
+    expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
+    (~nocalls ==> post_value_type cenv obj = expr_type obj) /\
+    ~subscript_reads_base cx obj idx /\ ~copies_subscript_base cenv obj idx /\
+    ~((!t r t'. eval_expr cx idx t = (INL r, t') ==>
+                t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
+      (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
+      ((~cenv.ce_is_ctor /\
+        !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode) \/
+       ((?n. bd = Fixed n) /\
+        (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
+        !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocMemory))) /\
+    ~(!s env tv t gs ir t'.
+       expr_body_pre cenv cx env (Subscript ann obj idx) s /\
+       eval_expr cx obj s = (INL tv, t) /\
+       eval_expr cx idx (t with gas_obs := gs) = (INL ir, t') ==>
+       subscript_base_live_after cx et bd tv t t') ==>
+    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+Proof
+  cheat
+QED
+
+(* An array subscript whose index does not overlap its base, outside
+   compile_subscript_array_framed_base_case, by whether the base is still
+   live at the index's end. *)
 Theorem compile_subscript_array_unframed_base_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
@@ -382,7 +472,18 @@ Theorem compile_subscript_array_unframed_base_case:
         !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocMemory))) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `(!s env tv t gs ir t'.
+               expr_body_pre cenv cx env (Subscript ann obj idx) s /\
+               eval_expr cx obj s = (INL tv, t) /\
+               eval_expr cx idx (t with gas_obs := gs) = (INL ir, t') ==>
+               subscript_base_live_after cx et bd tv t t')`
+  >- (qspecl_then [`nocalls`, `ctx`, `func`, `cenv`, `cx`, `ann`, `obj`, `idx`,
+                   `et`, `bd`] match_mp_tac compile_subscript_array_live_base_case >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qspecl_then [`nocalls`, `ctx`, `func`, `cenv`, `cx`, `ann`, `obj`, `idx`,
+               `et`, `bd`] match_mp_tac compile_subscript_array_stale_base_case >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Every other array subscript, by whether its index overlaps its base:
