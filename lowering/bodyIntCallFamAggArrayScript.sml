@@ -281,18 +281,19 @@ Proof
   >> suspend "cons"
 QED
 
-(* HELD (train 15): pure_frame sweep, retired by alan 451258 *)
+(* Empty elements compile and evaluate without a step. *)
 Resume intcall_array_elems_outcome[nil]:
-  (* original proof, kept while held:
   gvs[exprLoweringTheory.compile_make_array_elems_def, comp_return_def] >>
   irule intcall_gas_transparent_path_outcome >>
   qexistsl_tac [`es`, `OK t`, `INL []`] >>
-  simp[eval_exprs_nil, gas_marked_path_def, fragGasPathTheory.gas_path_rules] >>
-  gvs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def,
-      valueEncodingDefsTheory.val_in_memory_def] >>
-  metis_tac[fragGasPathTheory.gas_path_rules]
-  *)
-  cheat
+  simp[eval_exprs_nil, gas_marked_path_def, fragGasPathTheory.gas_path_rules,
+       valueEncodingDefsTheory.val_in_memory_def] >>
+  gvs[intcall_expr_cont_def, intcall_expr_res_def,
+      exprSimWordArgsTheory.stmt_state_rel_gas_obs,
+      exprSimHypsDefsTheory.expr_sim_inv_gas_obs,
+      loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
+  simp[fragGasPathTheory.gas_path_rules] >>
+  rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
 
 Resume intcall_array_elems_outcome[cons]:
