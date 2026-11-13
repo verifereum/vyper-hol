@@ -22,7 +22,7 @@ val _ = Parse.hide "body";
      ghost of sa's variables and the bytes vv_post keeps unchanged since
      s0, and t's allocations;
    - Return buffer: a located vv's pointer is an untainted variable whose
-     provenance is the call's own ALLOCA holding it;
+     provenance is the call's own ALLOCA of the buffer's size;
    - INVOKE: the operands are untainted; at the callee's package, its
      arguments are related whatever t's tainted bytes hold, and each
      memory parameter's pointer, and the return buffer's when it is
@@ -36,12 +36,13 @@ Definition intcall_entry_full_def:
     ghost_inv_at (DF H) lo d cenv cx (es1 with scopes := prev) G tn t /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
     ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn /\
-    (!ty p. vv = LocatedValue ty p ==>
-       ?x off asz aid.
+    (!ty p buf. vv = LocatedValue ty p /\ p.ptr_buf = SOME buf ==>
+       ?x off aid.
          p.ptr_operand = Var x /\ op_taint tn (Var x) = {} /\
-         FLOOKUP G x = SOME (off,asz) /\
+         FLOOKUP G x = SOME (off,buf.buf_size) /\
          eval_operand p.ptr_operand t = SOME (n2w off) /\
-         FLOOKUP t.vs_allocas aid = SOME (off,asz) /\ sa.cs_next_id <= aid) /\
+         FLOOKUP t.vs_allocas aid = SOME (off,buf.buf_size) /\
+         sa.cs_next_id <= aid) /\
     !bb inst lbl arg_ops argv.
       lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
       get_instruction bb t.vs_inst_idx = SOME inst /\
