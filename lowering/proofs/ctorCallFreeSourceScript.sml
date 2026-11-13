@@ -155,9 +155,9 @@ Proof
      simp[] >> irule (cj 2 supported_stmt_expr_exists_mono) >>
      first_assum (irule_at Any) >>
      rpt strip_tac >> gvs[expr_raw_shape_root_def, expr_call_root_def]) >>
-  drule check_contract_deploy_function_bd_MEM >> simp[] >>
+  drule check_contract_deploy_function_body_MEM >> simp[] >>
   disch_then drule >>
-  simp[check_function_bd_def, IS_SOME_EXISTS] >> strip_tac >>
+  simp[check_function_body_def, IS_SOME_EXISTS] >> strip_tac >>
   metis_tac[type_stmt_raw_shape]
 QED
 
