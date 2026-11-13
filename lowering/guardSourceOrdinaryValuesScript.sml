@@ -2,7 +2,7 @@
 Theory guardSourceOrdinaryValues
 Ancestors
   list guardSourceOrdinarySchema vyperInterpreter vyperState vyperStorageFootprint
-  vyperTypeSystem vyperTypeCallGraph vyperEvalMisc vyperStorageTrace
+  vyperTypeSystem vyperTypeCallGraph vyperEvalMisc vyperStorageTrace vyperTypeEvalSoundness
   vyperTypeStmtSoundness vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperEvalOutcomeSuffix vyperTypeEvalStoragePreservation vyperStatePreservation
 Libs
@@ -284,4 +284,55 @@ Proof
   disch_then (qspecl_then [`FST (eval_exprs cx es st)`, `s1`] mp_tac) >>
   rpt (qpat_x_assum `s1 = s1` kall_tac) >>
   (impl_tac >- (asm_rewrite_tac[APPEND] >> metis_tac[])) >> simp[]
+QED
+
+Theorem finite_prefix_RaiseCustomError:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "RaiseCustomError")
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Raise (RaiseCustomError err)))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_raise_reason_def] >> strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def, well_typed_custom_error_def] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  Cases_on `err` >>
+  Cases_on `get_module_code cx (FST p)`
+  >- gvs[Once evaluate_def, bind_def, lift_option_def, return_def, raise_def, valid_horizon_def] >>
+  rename1 `get_module_code cx (FST p) = SOME tops` >>
+  Cases_on `lookup_custom_error_args_in (SND p) tops`
+  >- gvs[Once evaluate_def, bind_def, lift_option_def, return_def, raise_def, valid_horizon_def] >>
+  rename1 `lookup_custom_error_args_in (SND p) tops = SOME params` >>
+  Cases_on `order_custom_error_args params (CustomError p l l0)`
+  >- gvs[Once evaluate_def, bind_def, lift_option_def, return_def, raise_def, valid_horizon_def] >>
+  rename1 `order_custom_error_args params (CustomError p positional kwargs) = SOME es` >>
+  first_x_assum (drule_at (Pat `order_custom_error_args _ _ = _`)) >>
+  simp[] >> strip_tac >>
+  `PERM (custom_error_exprs (CustomError p positional kwargs)) es` by
+    (drule vyperASTTheory.order_custom_error_args_perm >> simp[]) >>
+  `well_typed_exprs env es` by
+    (drule well_typed_exprs_perm >> disch_then (qspec_then `env` mp_tac) >>
+     simp[vyperASTTheory.custom_error_exprs_def]) >>
+  `call_evaluation_safe cx (int_calls_exprs es)` by
+    (drule call_evaluation_safe_exprs_perm >>
+     disch_then (qspec_then `cx` mp_tac) >> simp[]) >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, lift_option_def, return_def, raise_def] >>
+  Cases_on `eval_exprs cx es st` >> rename1 `eval_exprs cx es st = (er,s1)` >>
+  Cases_on `er` >> simp_tac(srw_ss())[] >> strip_tac >>
+  `st' = s1` by
+    (qpat_x_assum `!initial_st selected env st res st0. _` kall_tac >>
+     gvs[AllCaseEqs(), bind_def, return_def, raise_def] >>
+     Cases_on `build_custom_error_data (get_tenv cx) (SND p) (MAP SND params) x` >>
+     gvs[return_def, raise_def]) >>
+  pop_assum SUBST_ALL_TAC >>
+  qpat_x_assum `!initial_st selected env st res st0. _`
+    (qspecl_then [`initial_st`, `selected`, `env`, `st`] mp_tac) >>
+  disch_then (qspecl_then [`FST (eval_exprs cx es st)`, `s1`] mp_tac) >>
+  rpt (qpat_x_assum `s1 = s1` kall_tac) >>
+  (impl_tac >-
+    (asm_rewrite_tac[APPEND] >> conj_tac
+     >- (qexists `sfx` >> simp[]) >>
+     pure_rewrite_tac[APPEND] >>
+     qpat_x_assum `!pre rq co sfx. _` mp_tac >>
+     asm_rewrite_tac[] >> simp[APPEND])) >> simp[]
 QED
