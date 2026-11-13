@@ -10,6 +10,7 @@
 
 Theory asmFrameLocalStep
 Ancestors
+  vfmWfState
   asmFrameRel frameObsStep frameStep evmStepTransplant asmEvmStepStarve asmEvmGasStep
   evmStepSim asmDataSuffixProps codegenRel asmSem asmWf symbolResolve
   callTrace frameOutcome vfmExecution vfmExecutionProp list rich_list

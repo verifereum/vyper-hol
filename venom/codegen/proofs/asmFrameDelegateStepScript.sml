@@ -1,6 +1,7 @@
 (* Delegate calls use the frame's observed message-call outcomes. *)
 Theory asmFrameDelegateStep
 Ancestors
+  vfmWfState
   asmFrameRel asmFrameCallStep frameObsStep frameStep asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   evmCreationGuard frameCreationGuard vfmExecution vfmExecutionProp vfmRunCall vfmDomainCollection asmEncodeParse vfmOperation rich_list list regularMemorySim
