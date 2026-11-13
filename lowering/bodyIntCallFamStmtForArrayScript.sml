@@ -88,12 +88,12 @@ Resume intcall_stmts_producer_for_array[iterate]:
     (fs[well_typed_expr_def] >> strip_tac >> gvs[FLOOKUP_DEF]) >>
   `type_memory_bytes ce fty < 2 ** 64` by
     fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def] >>
-  `gas_admissible (eval_for fp.jc_cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx) es` by
+  `gas_admissible (eval_for fp.jc_cx tv id stmts vs) (stmt_res_ok lctx) es` by
     (irule intcall_array_for_admissible >>
      qhdtm_assum `gas_admissible` (irule_at Any) >> simp[]) >>
   `!gs. eval_stmt fp.jc_cx
     (For id fty (Array (Name (ArrayT fty (Fixed (LENGTH vs))) name)) (LENGTH vs) stmts)
-    (es with gas_obs := gs) = eval_for fp.jc_cx tv id stmts (MAP Value vs) (es with gas_obs := gs)` by
+    (es with gas_obs := gs) = eval_for fp.jc_cx tv id stmts vs (es with gas_obs := gs)` by
     (irule intcall_array_eval_for_source >> simp[]) >>
   suspend "apply"
 QED
@@ -101,7 +101,7 @@ Resume intcall_stmts_producer_for_array[apply]:
   drule array_for_code_condition >> strip_tac >>
   `!scs. not_local_ptr ce scs dv` by (fs[array_for_code_def] >> metis_tac[]) >>
   `gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
-    (eval_for fp.jc_cx tv id stmts (MAP Value (DROP 0 vs))) (es,cc)
+    (eval_for fp.jc_cx tv id stmts (DROP 0 vs)) (es,cc)
     (\res ee t. res = INL () /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
       ~t.vs_halted /\ intcall_joint_res fp ce env ee sa t /\
       (!x z. not_fresh_at sa x /\ lookup_var x cc = SOME z ==> lookup_var x t = SOME z) /\
