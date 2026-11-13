@@ -2,7 +2,7 @@ Theory extRetRawFramePtr
 Ancestors
   extRetRawStmtPtr typedCopyPtr compileEnv vyperTypeSystem vyperInterpreter
   vyperTyping exprSimHypsDefs vyperValue vyperTypeCallGraph exprSafeOperand
-  vyperTypeInvariants
+  vyperTypeInvariants externalReturnSelectedResources
 
 Theorem arg_type_fits_dynamic_bytes_source[local]:
   !t n. arg_type_fits t (BaseT (BytesT (Dynamic n))) ==>
@@ -18,6 +18,7 @@ Theorem external_return_raw_frame_stmt_frag_ptr:
   cenv.ce_return_pc = NONE /\ cenv.ce_raw_return /\
   cenv.ce_nonreentrant = (F,nkey,ut,iv) /\
   expr_sim_inv cenv cx env es /\
+  type_memory_bytes cenv (BaseT (BytesT (Dynamic n))) < dimword(:256) /\
   IS_SOME (type_stmt env (BaseT (BytesT (Dynamic n))) (Return (SOME e))) /\
   is_bytestring_type (lowered_value_type cenv e) /\
   call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
@@ -41,6 +42,12 @@ Proof
   `evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic k)))` by
     (fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def,
         well_formed_type_def, evaluate_type_def]) >>
+  `evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic n))) =
+     SOME (BaseTV (BytesT (Dynamic n)))` by
+    (gvs[type_stmt_return_some_iff, type_widens_to_def, well_formed_type_def,
+        expr_sim_inv_def, env_consistent_def, env_context_consistent_def,
+        evaluate_type_def]) >>
+  drule_all return_site_memory_size >> strip_tac >>
   irule external_return_raw_stmt_frag_ptr >>
   simp[is_word_type_def, is_bytestring_type_def] >>
   conj_tac >- fs[int_calls_stmt_def, int_calls_expr_def] >>
