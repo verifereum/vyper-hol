@@ -216,7 +216,8 @@ Proof
               simp[])
           >~ [`accounts_agree H _ _ _`]
           >- (`s'.vs_pending_deletions = s.vs_pending_deletions` by gvs[] >>
-              pop_assum SUBST1_TAC >>
+              pop_assum (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >>
+                                  PURE_REWRITE_TAC [th]) >>
               irule accounts_agree_dead_target_trans >>
               qexistsl [`D`, `process_deletions s.vs_pending_deletions
                  (update_account tx.target
@@ -226,14 +227,13 @@ Proof
               rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
               TRY (simp[Abbr `D`, deploy_dead_def, initial_evaluation_context_def] >>
                    NO_TAC) >>
-              irule accounts_agree_except_process_deletions >>
+              irule e2eCompositionTheory.accounts_agree_except_process_deletions >>
               irule accounts_agree_except_code_update >> first_assum ACCEPT_TAC)
           >~ [`transient_agree H _ _ _`]
           >- (irule transient_agree_dead_target_trans >>
               qexistsl [`D`, `s.vs_transient`] >>
               rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-              simp[Abbr `D`, deploy_dead_def, initial_evaluation_context_def])
-          >~ [`logs_correspond _ _ _ _ _`] >- gvs[] >>
+              simp[Abbr `D`, deploy_dead_def, initial_evaluation_context_def]) >>
           gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
           irule request_agree_dead_target_trans >>
           qexistsl [`D`, `EL n s.vs_requests`] >>
