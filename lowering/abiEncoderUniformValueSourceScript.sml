@@ -1,6 +1,7 @@
 (* Uniform source values: select witnesses before varying memory. *)
 Theory abiEncoderUniformValueSource
 Ancestors
+  abiEncoderUniformArrayConstructor
   abiEncoderUniformStaticSource abiEncoderUniformSourceMembers
   abiEncoderUniformSourceEncoding
   abiEncoderSourceProducer abiEncoderSourcePrimitive abiEncoderSourceTransport
@@ -147,45 +148,9 @@ Resume abi_encoder_uniform_value_source[cons]:
 QED
 
 Resume abi_encoder_uniform_value_source[dynarray]:
-  rpt strip_tac >>
-  `source_rep env ty ei ct` by (simp[source_rep_def] >> metis_tac[]) >>
-  drule_all source_rep_metadata >> strip_tac >>
-  qexists_tac `Array NONE ct` >>
-  simp[vyper_to_abi_type_def, is_dynamic_def, abi_member_head_size_def] >>
-  rpt strip_tac >>
-  `tv' = ArrayTV tv (Dynamic n)` by
-    gvs[Once evaluate_type_def, AllCaseEqs()] >> gvs[] >>
-  Cases_on `v` >> gvs[value_has_type_def] >>
-  rename1 `ArrayV arr` >> Cases_on `arr` >> gvs[value_has_type_def] >>
-  rename1 `val_in_memory _ (ArrayV (DynArrayV vs)) _ _` >>
-  drule_at (Pat `val_in_memory _ _ _ _`) abi_encoder_dynamic_source >>
-  simp[value_has_type_def, Once vyper_to_abi_def] >> strip_tac >>
-  qpat_x_assum `!t env' av'. _`
-    (qspecl_then [`ty`, `env`, `av`] mp_tac) >> simp[] >> strip_tac >> gvs[] >>
-  `!i. i < LENGTH vs ==> ?rv.
-    enc ct rv = enc (vyper_to_abi_type env ty) (EL i avs) /\
-    !mem. val_in_memory tv (EL i vs) (sb+32+i*type_memory_size tv) mem ==>
-      abi_encoder_open_input ei ct rv (sb+32+i*type_memory_size tv)
-        (type_memory_size tv) mem` by
-    (rpt strip_tac >> first_assum irule >> simp[] >>
-     qexists_tac `mem0` >> simp[arithmeticTheory.ADD_ASSOC]) >>
-  qpat_x_assum `!i. _ ==> ?rv. _` mp_tac >>
-  CONV_TAC (LAND_CONV (BINDER_CONV (HO_REWR_CONV (GSYM RIGHT_EXISTS_IMP_THM)))) >>
-  CONV_TAC (LAND_CONV (HO_REWR_CONV SKOLEM_THM)) >>
-  disch_then (qx_choose_then `f` assume_tac) >>
-  qexists_tac `ListV (GENLIST f (LENGTH vs))` >> conj_tac
-  >- (`enc (Array NONE ct) (ListV (GENLIST f (LENGTH vs))) =
-       enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
-        (irule abi_encoder_dynamic_array_encoding_cong >> simp[]) >>
-      gvs[Once enc_def]) >>
-  rpt strip_tac >>
-  drule_at (Pat `val_in_memory _ _ _ _`) abi_encoder_dynamic_source >>
-  simp[value_has_type_def, Once vyper_to_abi_def] >> strip_tac >>
-  qpat_x_assum `!t env' av'. _`
-    (qspecl_then [`ty`, `env`, `ListV avs`] mp_tac) >> simp[] >> strip_tac >> gvs[] >>
-  irule abiEncoderOpenInputTheory.open_array >> simp[abi_member_head_size_def] >>
-  gvs[Once evaluate_type_def, AllCaseEqs()] >> fs[type_slot_size_def] >>
-  `n <= n * type_slot_size tv` by (simp[arithmeticTheory.LE_MULT_LCANCEL]) >> decide_tac
+  rpt strip_tac >> qexists_tac `Array NONE ct` >>
+  drule_all abi_encoder_uniform_dynarray >>
+  simp[abi_member_head_size_def] >> metis_tac[]
 QED
 Resume abi_encoder_uniform_value_source[tuple]:
   rpt strip_tac >>
