@@ -329,6 +329,7 @@ Proof
       `FLOOKUP env.bare_globals (NONE,nid1) = SOME (ArrayT typ bd)` by
         (irule toplevel_find_NONE_bare_global >>
          fs[expr_sim_inv_def] >> metis_tac[]) >>
+      `IS_SOME (supported_immutable_type tops (NONE,nid1))` by simp[] >>
       irule body_for_immutable_array >> simp[] >> metis_tac[]) >>
   `~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid` by
