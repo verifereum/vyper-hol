@@ -252,3 +252,13 @@ Proof
   pairarg_tac >> gvs[] >>
   metis_tac[inline_frontier_rewrite_insts]
 QED
+
+Theorem inline_frontier_clone:
+  inline_frontier_function fn ==> inline_frontier_function (clone_function p fn)
+Proof
+  simp[inline_frontier_function_def, clone_function_def, EVERY_MAP,
+       clone_basic_block_def, clone_instruction_def,
+       inline_frontier_instruction_def, EVERY_MEM, MEM_MAP] >>
+  rpt strip_tac >> gvs[clone_basic_block_def, MEM_MAP, clone_instruction_def] >>
+  metis_tac[]
+QED
