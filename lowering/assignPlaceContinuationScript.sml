@@ -12,7 +12,7 @@ Ancestors
 Libs monadsyntax
 
 (* Collect the static supported-callee facts from each target index. *)
-Theorem target_indices_pre_static[local]:
+Theorem target_indices_pre_static:
   !bt. target_indices_pre cenv cx env bt /\ expr_sim_inv cenv cx env es ==>
   ~supported_target_exists expr_evm_run_root bt /\
   EVERY (\c. FST c = NONE /\

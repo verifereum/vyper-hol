@@ -30,6 +30,8 @@ Ancestors
   assignPlacePureFacts assignPlacePureCode assignPlaceEffectfulRhsResidue
   assignPlaceEmpty assignPlaceEmptyCompose assignPlaceContinuation
   assignPlaceCallerFacts assignPlaceGasCompose assignPlaceStoreReady
+  assignEffectfulIndexNonempty assignEffectfulIndexUnifiedStore
+  assignEffectfulIndexEmptyCase assignEffectfulIndexNonmutating
   bodySim supportedTargets supportedDecls
   placeStore targetPlaceSimCases targetPlaceSim targetPlaceSimDefs
   stmtSimDefs exprSimHypsDefs exprSimDefs typedCopyDomain loweringPosts
@@ -148,7 +150,37 @@ Theorem assign_place_effectful_index_case:
       (stmt_env cenv lctx ty (Assign (BaseTarget bt) e))
       (eval_stmt cx (Assign (BaseTarget bt) e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `has_length_word (expr_type e) /\ is_empty_value_expr e`
+  >- (irule assign_place_effectful_empty_case >> metis_tac[]) >>
+  Cases_on `expr_can_mutate cenv (target_to_expr bt)`
+  >- (drule_at (Pat `type_place_target _ _ = _`)
+        assign_place_mutating_nonempty_case_with_store >>
+      disch_then (drule_at (Pat `~supported_target_pure _ _`)) >>
+      disch_then (drule_at (Pat `expr_vv_sim _ _ _ _ _ _ _`)) >>
+      disch_then irule >>
+      conj_tac
+      >- (rpt gen_tac >>
+          MATCH_ACCEPT_TAC assign_effectful_snapshot_unified_store_ready) >>
+      simp[] >> metis_tac[]) >>
+  Cases_on `lowered_value_type cenv e = expr_type e \/
+    is_bytestring_type (expr_type e) /\
+    is_bytestring_type (lowered_value_type cenv e) /\
+    arg_type_fits (lowered_value_type cenv e) (expr_type e)`
+  >- (`cx_tops cx = tops /\ get_module_code cx NONE = SOME tops /\
+       cenv.ce_func_mutability = build_func_mutability tops` by
+        (fs[body_inv_def, cenv_module_pins_def] >>
+         metis_tac[gasContextTheory.cx_tops_module]) >>
+      `!vis mut nr rr fn args dflts ret body.
+         MEM (FunctionDecl vis mut nr rr fn args dflts ret body) tops ==>
+         function_mutability_ok [(NONE, tops)] vis mut nr dflts body` by
+        fs[body_inv_def] >>
+      `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+      `EVERY (\c. FST c = NONE) (int_calls_target bt)` by
+        (drule_all assignPlaceContinuationTheory.target_indices_pre_static >>
+         simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+      irule compile_assign_place_case >> simp[] >> metis_tac[]) >>
+  irule assign_place_nonmutating_widened_case >> metis_tac[]
 QED
 
 (* ADMITTED: an immutable written by the constructor (see the header).
