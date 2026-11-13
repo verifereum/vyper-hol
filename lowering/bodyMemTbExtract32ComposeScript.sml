@@ -28,7 +28,8 @@ QED
 
 Theorem extract32_off_operand[local]:
   expr_post H ctx func cenv cx off es sa sb s0 es' (IntV i) off_op t /\
-  expr_type off = BaseT (UintT k) /\ 0 <= i ==>
+  expr_type off = BaseT (UintT k) /\ 0 <= i /\
+  0 < k /\ k <= 256 /\ k MOD 8 = 0 ==>
   eval_operand off_op t = SOME (n2w (Num i))
 Proof
   strip_tac >>
@@ -296,6 +297,11 @@ Resume compile_extract32_sim_mem[stage2]:
     (qpat_assum `!H. valid_horizon cx st0 H ee2.storage_trace ==>
                      stmt_state_rel H ctx func cenv cx ee2 t2 /\ _`
        (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
+  `0 < k /\ k <= 256 /\ k MOD 8 = 0` by
+    (qpat_assum `expr_body_pre cenv cx env off _`
+       (mp_then Any mp_tac expr_body_pre_type_evaluates) >>
+     qpat_assum `expr_type off = _` (fn th => rewrite_tac[th]) >>
+     simp[evaluate_type_def]) >>
   `eval_operand off_op t2 = SOME (n2w (Num i))` by
     (drule_all extract32_off_operand >> simp[]) >>
   `b < dimword (:256)` by decide_tac >>
