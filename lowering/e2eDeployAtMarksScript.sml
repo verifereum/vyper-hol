@@ -172,7 +172,7 @@ Proof
               (load_contract (SOME vs.vs_outcomes)
                  (gas_explicit marks vs.vs_gas_readings ++ tail) am tx
                  [(NONE, tops)] [])`
-  >- (disj2_tac >> drule deploy_exempt_result_rel >> simp[]) >>
+  >- (disj2_tac >> irule deploy_exempt_result_rel >> first_assum ACCEPT_TAC) >>
   drule_all deploy_unit_run_entry >> strip_tac >>
   drule_all deploy_unit_shape_ok >> strip_tac >>
   drule o1_source_unit_ok_no_dalloca >> strip_tac >>
@@ -198,12 +198,22 @@ Proof
                 (deploy_entry_state prog cplan tops es))` by
     metis_tac[ctx_sim_def] >>
   qspecl_then [`H`, `tops`, `runtime_bc`, `am`, `tx`, `SOME vs.vs_outcomes`,
-               `gas_explicit marks vs.vs_gas_readings ++ tail`] mp_tac
+               `gas_explicit marks vs.vs_gas_readings ++ tail`,
+               `load_contract (SOME vs.vs_outcomes)
+                  (gas_explicit marks vs.vs_gas_readings ++ tail) am tx
+                  [(NONE, tops)] []`,
+               `run_context fuel dunit.cu_context vs`,
+               `run_context fuel' dout.po_unit.cu_context
+                  (deploy_entry_state prog cplan tops es)`] mp_tac
     deploy_venom_result_rel_dead >>
-  simp[] >> disch_then drule_all >> strip_tac >>
+  impl_tac >- fs[] >> strip_tac >>
   `(deploy_entry_state prog cplan tops es).vs_initial_fmp =
      n2w cplan.cp_initial_fmp` by
     simp[deploy_entry_state_def, entry_venom_state_def] >>
+  `o1PipelineCorrect$o1_pipeline rpolicy dunit = SOME dout /\
+   codegen_assembly rpolicy dout.po_unit = SOME prog /\
+   generate_context_plan dout.po_unit.cu_context = SOME cplan` by
+    fs[deploy_phases_def] >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
   qspecl_then [`fuel'`, `rpolicy`, `dout.po_unit`, `cplan`, `prog`, `Inv`,
@@ -265,5 +275,6 @@ Proof
   gvs[] >>
   drule_all deploy_entry_facts >> strip_tac >>
   qpat_x_assum `vs.vs_outcomes = _` (SUBST_ALL_TAC o SYM) >>
+  `~(?t. runtime_bc = 0xEFw :: t)` by fs[] >>
   drule_all deploy_correct_at_tail >> strip_tac >> fs[]
 QED
