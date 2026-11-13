@@ -6,7 +6,7 @@ Ancestors
   stmtLowering compileEnv words placeStore assignPlaceStaging
 
 Theorem assign_place_relayout_from_provenance:
-  compile_assign_value cenv dst LocMemory src F src_loc dty sty info bytes
+  compile_assign_value cenv dst LocMemory src F src_loc dty sty bytes
     sa = ((),sb) /\
   (src_loc = NONE \/ src_loc = SOME LocMemory) /\
   ~is_word_type sty /\ ~is_bytestring_type sty /\
@@ -58,6 +58,6 @@ Proof
     metis_tac[nonbytes_evaluated_val_footprint] >>
   gvs[] >> irule place_relayout_memory_run >> simp[] >>
   (conj_tac >- metis_tac[]) >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[] >> qexistsl_tac [`p`, `v`] >> simp[]
 QED

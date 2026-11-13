@@ -1,7 +1,7 @@
 Theory assignPlacePhysicalBytes
 Ancestors
   immutableDeployPhysicalSource assignPlaceBytesStore exprSimTypedAlloc
-  valueCopyBytes loweringPosts exprSimHyps
+  valueCopyBytes loweringPosts exprSimHyps placeRelayoutBounds
 Libs monadsyntax
 
 (* Original source evaluation supplies physical typing; the current rebased
@@ -12,9 +12,6 @@ Theorem assign_place_physical_bytes_storage:
   is_bytestring_type dty /\
   compile_assign_value cenv dst loc src (is_word_type dty) src_loc dty
     (lowered_value_type cenv e)
-    (case dty of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et + 31) DIV 32,
-             type_memory_bytes cenv et) | _ => NONE)
     (type_memory_bytes cenv dty) sa = ((),sb) /\
   expr_body_pre cenv cx env e es /\
   (do pv <- eval_expr cx e; read_result cx pv od) es = (INL v,er) /\
@@ -60,12 +57,15 @@ Proof
     (irule expr_val_at_bound >>
      goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
      simp[is_bytestring_word_type] >> goal_assum (drule_at Any) >> simp[]) >>
-  `(case dty of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et + 31) DIV 32,
-             type_memory_bytes cenv et) | _ => NONE) = NONE` by
-    (Cases_on `dty` >> gvs[compileEnvTheory.is_bytestring_type_def]) >>
+  `type_widens_to (get_tenv cx) (lowered_value_type cenv e) (expr_type e)` by
+    (irule immutable_rhs_physical_widens >> qexistsl_tac [`env`,`es`] >> simp[]) >>
+  `~is_word_type (expr_type e)` by
+    metis_tac[compileEnvTheory.type_widens_to_word, is_bytestring_word_type] >>
+  `type_memory_size stv < dimword (:256)` by
+    (qspecl_then [`cenv`,`cx`,`env`,`e`,`es`,`lowered_value_type cenv e`,`stv`]
+       mp_tac expr_body_pre_relayout_source_bound >> simp[] >> metis_tac[]) >>
   fs[] >> irule assign_place_bytes_storage_run >> simp[] >>
   (conj_tac >- metis_tac[]) >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[] >> metis_tac[]
 QED
