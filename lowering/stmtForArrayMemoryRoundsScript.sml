@@ -358,7 +358,8 @@ Theorem array_code_body_outcome_mem:
     gas_outcome T (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (ei,s_body)
       (array_body_post_mem d ctx func cx (InLoop exit incr) bc
         (FST (stmts_env bc (InLoop exit incr) ty stmts sb0)) sb0 sb1 s_body)
-      (\r ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) r rr) /\
+      (\r ee rr. (!tail. stmt_exit RetQ (ee with gas_obs := tail) r rr) /\
+                 halt_exit cx ee r rr) /\
     s_body.vs_allocas = s.vs_allocas /\ s_body.vs_alloca_next = s.vs_alloca_next /\
     (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>
       lookup_var x s_body = lookup_var x s)
@@ -578,7 +579,8 @@ Theorem array_one_round_mem:
       (~b ==> array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
         ainst cond caller orig (SUC k) ee t))
     (\res ee rr. ?e. res = INR e /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR e) rr)
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR e) rr) /\
+      halt_exit cx ee (INR e : unit + exception) rr)
 Proof
   strip_tac >>
   drule array_for_code_condition >> strip_tac >>
@@ -610,7 +612,8 @@ Proof
   ho_match_mp_tac (array_body_round_outcome_mem |> Q.INST
     [`B` |-> `array_body_post_mem d ctx func cx (InLoop exit incr) bc
        (FST (stmts_env bc (InLoop exit incr) ty stmts sb0)) sb0 sb1 s_body`,
-     `E` |-> `\r ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) r rr`]) >>
+     `E` |-> `\r ee rr. (!tail. stmt_exit RetQ (ee with gas_obs := tail) r rr) /\
+                         halt_exit cx ee r rr`]) >>
   simp[] >> conj_tac
   >- suspend "nonhalt" >>
   conj_tac >- suspend "scopes" >>
@@ -652,7 +655,7 @@ Resume array_one_round_mem[exit]:
   gvs[stmt_res_ok_def] >>
   gvs[stmt_exit_def, exprSimDefsTheory.expr_exit_def,
       evaluation_state_fn_updates] >>
-  Cases_on `rr` >> gvs[exprSimDefsTheory.expr_exit_def]
+  Cases_on `rr` >> gvs[exprSimDefsTheory.expr_exit_def, halt_exit_def]
 QED
 
 Finalise array_one_round_mem

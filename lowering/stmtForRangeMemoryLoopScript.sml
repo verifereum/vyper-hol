@@ -317,7 +317,7 @@ Proof
   `!x. not_fresh_at st x ==> x <> dv` by metis_tac[] >>
   drule_all for_body_outcome_mem >> strip_tac >>
   irule for_outcome_zero_prefix_mem >> qexists_tac `s2` >> simp[] >>
-  irule for_round_outcome_mem >> conj_tac >- first_assum ACCEPT_TAC >>
+  irule (SRULE [] for_round_outcome_mem) >> conj_tac >- first_assum ACCEPT_TAC >>
   qhdtm_x_assum `gas_outcome` (irule_at Any) >>
   rpt gen_tac >> strip_tac >> suspend "landing"
 QED

@@ -1,7 +1,7 @@
 (* Counted RHS composition for word storage Append. *)
 Theory bodyMemAppendCompose
 Ancestors
-  bodyMemAppendPath bodyMemAppendFacts stmtSimAppendStorageCompose
+  bodyMemAppendPath bodyMemAppendFacts stmtSimAppendStorageCompose evalNoHalt
   stmtSimForced exprSimMemDefs exprSimDefs stmtSimDefs stmtSimProps
   loweringPosts exprSimProps exprOperandVar exprLoweringProps emitHelperProps
   compileEnv loweringStateRelDefs exprLowering emitHelper freshWrites gasOutcome gasSummary fragGasMode
@@ -98,8 +98,11 @@ Proof
       pop_assum strip_assume_tac >>
       qexistsl_tac [`res`, `ee'`, `r`] >>
       conj_tac >- metis_tac[append_storage_place_gas_obs] >>
-      simp[] >> disj2_tac >> gen_tac >>
-      drule_all append_storage_place_exit_transport >> simp[]) >>
+      simp[] >> disj2_tac >> conj_tac
+      >- (gen_tac >> drule_all append_storage_place_exit_transport >> simp[]) >>
+      `res <> INR HaltException` by
+        (strip_tac >> fs[] >> metis_tac[evalNoHaltTheory.append_place_nh]) >>
+      gvs[halt_exit_def]) >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
   disch_then (qspecl_then [`sa`, `sB`, `op`, `s0`] mp_tac) >>

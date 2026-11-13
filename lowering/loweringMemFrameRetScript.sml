@@ -91,7 +91,8 @@ Theorem return_value_summary_mem[local]:
               mem_safe_run fuel ctx func t) ==>
   !Q. ?marks'. gas_summary_at T (ctx,func) marks'
     (eval_stmt cx (Return (SOME e))) (es,s0) Q
-    (\res ee r. !tail. stmt_exit (\v es r. T) (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit (\v es r. T) (ee with gas_obs := tail) res r) /\
+                halt_exit cx ee res r)
 Proof
   strip_tac >> gen_tac >> pure_rewrite_tac[eval_return_value_bind] >>
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
@@ -115,7 +116,7 @@ Proof
   `?ex. res = INR ex` by (Cases_on `res` >> gvs[expr_exit_def]) >> gvs[] >>
   qexists_tac `marks` >> qexistsl_tac [`INR ex`, `es_end`, `r`] >>
   conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  fs[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  fs[stmt_exit_def, halt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 
 Theorem return_value_counted_mem[local]:

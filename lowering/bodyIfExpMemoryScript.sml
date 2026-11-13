@@ -355,7 +355,7 @@ QED
 Theorem ifexp_condition_exit_mem[local]:
   gas_marked_exec T (ctx,func)
     (vyperState$bind (eval_expr cx c) (read_result cx))
-    (es,s0) marks res mid r /\ expr_exit res r ==>
+    (es,s0) marks res mid r /\ expr_exit res r /\ halt_exit cx mid res r ==>
   gas_outcome T tops (ctx,func) (eval_expr cx (IfExp t c a b)) (es,s0) Q
     (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof

@@ -419,7 +419,18 @@ Resume send_args_summary_mem[normal]:
               |> REWRITE_RULE [APPEND_NIL]) >>
        qexistsl_tac [`es_end`, `t`, `to_v :: amount_v :: gas_vs`] >>
        simp[gas_marked_exec_def] >> gvs[])) >>
-  gvs[]
+  `res <> INR HaltException` by
+    (strip_tac >>
+     qpat_x_assum `!tail. bind (eval_send _ _ _) _ _ = _`
+       (qspec_then `[]` mp_tac) >>
+     Cases_on `eval_send cx has_gas (to_v::amount_v::gas_vs)
+                 (es_end with gas_obs := [])` >>
+     rename1 `eval_send _ _ _ _ = (rr, st1)` >>
+     Cases_on `rr` >>
+     gvs[vyperStateTheory.bind_def, evalNoHaltTheory.eval_send_nh] >>
+     drule exprSimSendTheory.eval_send_value >> strip_tac >>
+     gvs[read_result_def, return_def]) >>
+  gvs[halt_exit_def]
 QED
 
 Finalise send_args_summary_mem

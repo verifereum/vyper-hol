@@ -303,7 +303,7 @@ Proof
   simp([pop_place_def, raise_def, storage_slot_nh, immutables_nh] @ nh_base)
 QED
 
-Theorem append_place_nh[local]:
+Theorem append_place_nh:
   !cx p v s s'. append_place cx p v s = (INR HaltException, s') ==> F
 Proof
   ho_match_mp_tac append_place_ind >> rpt gen_tac >>

@@ -2590,7 +2590,7 @@ QED
 
 (* The sha256 composition: the operand, then the digest's precompile call,
    whose outcome the source consumes. *)
-Theorem sha256_result_not_halt[local]:
+Theorem sha256_result_not_halt:
   (case builtin_result cx acc ann bt ts vs of
      INR exc => (INR exc, st)
    | INL w => (do precompile_call_success bt; return (Value w) od) st) =

@@ -352,7 +352,9 @@ Proof
   qexists `REPLICATE n F` >>
   rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
   qexistsl [`res`, `es2`, `r`] >>
-  simp[vyperASTTheory.expr_type_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  imp_res_tac exprSimHashTheory.sha256_result_not_halt >>
+  simp[vyperASTTheory.expr_type_def, halt_exit_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem compile_sha256_typed_vv_sim_mem:
