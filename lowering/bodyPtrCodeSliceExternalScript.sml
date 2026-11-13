@@ -27,10 +27,10 @@ Theorem code_slice_external_post_rebase:
   ghost_kept cenv ec sc G0 tn0 u G tn
 Proof
   strip_tac >> conj_tac
-  >- (irule exprSimSliceOrdinaryContinueTheory.slice_two_operand_post_rebase >>
-      qpat_assum `expr_post _ _ _ _ start _ _ _ _ _ _ _ _` (irule_at Any) >>
-      qpat_assum `expr_post _ _ _ _ len _ _ _ _ _ _ _ _` (irule_at Any) >>
-      simp[]) >>
+  >- (mp_tac (SPEC_ALL
+        exprSimSliceOrdinaryContinueTheory.slice_two_operand_post_rebase) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then ACCEPT_TAC) >>
   `wb_frame cenv ec e1 sc u t /\ wb_frame cenv e1 e2 sd t r` by
     metis_tac[expr_post_frame] >>
   `stmt_state_rel ctx func cenv cx e1 t` by metis_tac[expr_post_state] >>
@@ -224,6 +224,7 @@ Resume code_slice_external_vv_ptr[join]:
     `sz` |-> `type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))`,
     `es` |-> `raw' with gas_obs := []`, `s` |-> `t'`, `G0` |-> `G'`,
     `tn0` |-> `tn'`, `k` |-> `i'`,
+    `tys` |-> `[ct; BaseT (UintT 256); BaseT (UintT 256)]`,
     `result` |-> `Builtin (BaseT (BytesT (Dynamic n))) (Slice n)
       [Builtin ct (Acc Code) [a];start;len]`]
     external_code_continue_outcome_ptr) >>
@@ -245,9 +246,17 @@ Resume code_slice_external_vv_ptr[join]:
   `~expr_has_effect (Builtin (BaseT (BytesT (Dynamic n))) (Slice n)
       [Builtin ct (Acc Code) [a];start;len]) ==>
    ~expr_has_effect start /\ ~expr_has_effect len` by simp[] >>
-  drule_all (code_slice_external_post_rebase |> Q.INST
-    [`e1` |-> `raw with gas_obs := []`, `e2` |-> `raw' with gas_obs := []`]) >>
-  simp[contextTheory.mk_ptr_def]
+  qmatch_goalsub_abbrev_tac `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ /\ PB /\ _` >>
+  `PB` by simp[Abbr`PB`, contextTheory.mk_ptr_def] >>
+  pop_assum (fn th => REWRITE_TAC[th]) >>
+  irule code_slice_external_post_rebase >>
+  qpat_assum `expr_post _ _ _ _ len _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_post _ _ _ _ start _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `ghost_kept _ (raw with gas_obs := []) _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `ghost_kept _ (raw' with gas_obs := []) _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `vv_post _ _ _ _ _ (raw' with gas_obs := []) _ _ _ _ _ _ _`
+    (irule_at Any) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise code_slice_external_vv_ptr
