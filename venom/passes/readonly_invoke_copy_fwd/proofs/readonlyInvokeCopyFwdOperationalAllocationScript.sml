@@ -4,7 +4,7 @@ Ancestors
   readonlyInvokeCopyFwdOperationalMapOrigins readonlyInvokeCopyFwdGlobalSupport
   readonlyInvokeCopyFwdHistoryPhase readonlyInvokeCopyFwdOperationalSupport
   readonlyInvokeCopyFwdRel readonlyInvokeCopyFwdStepsCore ptrDiscipline taintAgree
-  occurrenceGeometry o1LowerDloadOccurrence finite_map list pred_set arithmetic
+  occurrenceGeometry o1LowerDloadOccurrence ptrPhiUpdate finite_map list pred_set arithmetic
 
 Theorem ricf_alloca_support_fresh:
   ricf_global_support_origins vs C ctx0 a fn U stk B E /\
