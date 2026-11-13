@@ -19,6 +19,7 @@ Ancestors
   ptrDiscipline codegenRel contextCodegenRel venomExecProofs
   exprLoweringProps instIdxIndep venomExecSemantics venomInstProofs
   venomInst venomState list rich_list arithmetic
+  fragGasOriginPtr fragGasOrigin fragGasSeqMem fragExecMem gasEvents memSafeRun
 
 (* The pointer check along a straight-line run from s with the ghost
    (G, tn): each instruction the run executes passes ptr_inst_ok in the
@@ -153,6 +154,39 @@ Proof
   simp[] >> Cases_on `h.inst_opcode = GAS` >> simp[ADD1]
 QED
 
+(* An aborting instruction ends the executed prefix: the instructions after
+   it are neither counted nor checked. *)
+Theorem run_inst_seq_abort_gas_path_ptr:
+  !code s t a G tn G' tn' ctx fn bb.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+    inst_seq_ptr D lo ctx fn PG G tn code s G' tn' /\
+    run_inst_seq code s = Abort a t ==>
+    ?n j. gas_path_ptr D lo ctx fn PG G tn s n G' tn'
+            (Abort a (t with vs_inst_idx := j))
+Proof
+  Induct >- simp[run_inst_seq_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  gvs[run_inst_seq_def, inst_seq_ptr_def]
+  >~ [`step_inst_base h s = OK u`]
+  >- (`step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
+      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+      `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+      first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+        `t with vs_inst_idx := SUC s.vs_inst_idx`, `a`, `step_prov PG G h u`,
+        `step_taint h s u tn`, `G'`, `tn'`, `ctx`, `fn`, `bb`] mp_tac) >>
+      simp[run_inst_seq_inst_idx, exec_result_map_def] >> strip_tac >>
+      qexistsl_tac [`(if h.inst_opcode = GAS then 1 else 0) + n`, `j`] >>
+      irule gas_path_ptr_step >> simp[] >> metis_tac[]) >>
+  qexistsl_tac [`if h.inst_opcode = GAS then 1 else 0`, `t.vs_inst_idx`] >>
+  simp[] >> irule gas_path_ptr_abort >> simp[] >> metis_tac[]
+QED
+
 (* The raw jump a break, continue or constructor return emits: a
    pointer-checked edge that keeps the ghost, above any bound lo the
    allocas respect. *)
@@ -269,100 +303,67 @@ Proof
   simp[run_from_def, Once exec_block_def]
 QED
 
-(* The abort cursor of a GAS-free run is fixed by the run alone, so one j
-   serves every dead mask D: each valid horizon reaches the same Abort. *)
-Theorem run_inst_seq_abort_zero_path_ptr_uniform:
-  !code s t a ctx fn bb.
-    ~s.vs_halted /\
-    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
-    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-               ~is_terminator i.inst_opcode) code /\
-    run_inst_seq code s = Abort a t ==>
-    ?j. !D lo PG G tn G' tn'.
-      inst_seq_ptr D lo ctx fn PG G tn code s G' tn' ==>
-      gas_path_ptr D lo ctx fn PG G tn s 0 G' tn'
-        (Abort a (t with vs_inst_idx := j))
+(* The checks and the recorded origin use this same concrete step. *)
+Theorem straight_line_origin_ptr_edge:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  ptr_inst_ok D lo 0 ctx func G tn i s /\
+  step_inst_base i s = OK u ==>
+  gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn)
+    (if i.inst_opcode = GAS then [(func.fn_name, i.inst_id) IN explicit] else [])
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G i u, step_taint i s u tn)
 Proof
-  Induct >- simp[run_inst_seq_def] >>
+  strip_tac >>
+  `step_inst 0 ctx i s = OK u` by simp[step_inst_non_invoke] >>
+  `~u.vs_halted` by metis_tac[step_preserves_halted] >>
+  PURE_REWRITE_TAC[gas_origin_ptr_edge_def] >> conj_tac
+  >- (rewrite_tac[gas_origin_edge_def] >> conj_tac >- simp[] >>
+      qexistsl_tac [`0`, `bb`, `i`, `OK u`] >>
+      Cases_on `i.inst_opcode = GAS` >>
+      simp[gas_events_step_def, mem_safe_step_non_invoke]) >>
+  drule_all straight_line_ptr_edge >>
+  Cases_on `i.inst_opcode = GAS` >> simp[]
+QED
+
+Theorem run_inst_seq_gas_origin_ptr_path:
+  !code s t G tn G' tn' ctx func bb.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+    run_inst_seq_mem_ok code s /\
+    inst_seq_ptr D lo ctx func PG G tn code s G' tn' /\
+    run_inst_seq code s = OK t ==>
+    gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn)
+      (MAP (\i. (func.fn_name, i.inst_id) IN explicit)
+        (FILTER (\i. i.inst_opcode = GAS) code))
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code), G', tn')
+Proof
+  Induct
+  >- (simp[run_inst_seq_def, inst_seq_ptr_def] >> rpt strip_tac >>
+      gvs[] >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
   rpt gen_tac >> strip_tac >>
   drule instruction_prefix_cursor >> strip_tac >>
   Cases_on `step_inst_base h s` >>
-  gvs[run_inst_seq_def]
-  >~ [`step_inst_base h s = OK u`]
-  >- (`step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
-      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
-        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
-      `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
-      first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
-        `t with vs_inst_idx := SUC s.vs_inst_idx`, `a`, `ctx`, `fn`, `bb`] mp_tac) >>
-      simp[run_inst_seq_inst_idx, exec_result_map_def] >> strip_tac >>
-      qexists_tac `j` >> rpt strip_tac >>
-      qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ (_::_) _ _ _` mp_tac >>
-      simp[inst_seq_ptr_def] >> strip_tac >>
-      first_x_assum drule >> strip_tac >>
-      drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`) gas_path_ptr_step >>
-      simp[]) >>
-  qexists_tac `t.vs_inst_idx` >> rpt strip_tac >>
-  qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ (_::_) _ _ _` mp_tac >>
-  simp[inst_seq_ptr_def] >> strip_tac >> gvs[] >>
-  drule_all gas_path_ptr_abort >> simp[]
-QED
-
-(* The executed GAS count and abort cursor depend only on the source run,
-   before any horizon chooses its pointer dead mask. *)
-Theorem run_inst_seq_gas_path_ptr_abort_uniform:
-  !code s t a ctx fn bb.
-    ~s.vs_halted /\
-    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
-    run_inst_seq code s = Abort a t ==>
-    ?n j. !D lo PG G tn G' tn'.
-      inst_seq_ptr D lo ctx fn PG G tn code s G' tn' ==>
-      gas_path_ptr D lo ctx fn PG G tn s n G' tn'
-        (Abort a (t with vs_inst_idx := j))
-Proof
-  Induct >- simp[run_inst_seq_def] >>
-  rpt gen_tac >> strip_tac >>
-  drule instruction_prefix_cursor >> strip_tac >>
-  Cases_on `step_inst_base h s` >>
-  gvs[run_inst_seq_def]
-  >~ [`step_inst_base h s = OK u`]
-  >- (`step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
-      `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
-        metis_tac[step_preserves_halted, step_preserves_control_flow] >>
-      `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
-      first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
-        `t with vs_inst_idx := SUC s.vs_inst_idx`, `a`, `ctx`, `fn`, `bb`] mp_tac) >>
-      simp[run_inst_seq_inst_idx, exec_result_map_def] >> strip_tac >>
-      qexistsl_tac [`(if h.inst_opcode = GAS then 1 else 0) + n`, `j`] >>
-      rpt strip_tac >>
-      qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ (_::_) _ _ _` mp_tac >>
-      simp[inst_seq_ptr_def] >> strip_tac >>
-      first_x_assum drule >> strip_tac >>
-      drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`) gas_path_ptr_step >>
-      simp[ADD_COMM]) >>
-  qexistsl_tac [`if h.inst_opcode = GAS then 1 else 0`, `t.vs_inst_idx`] >>
-  rpt strip_tac >>
-  qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ (_::_) _ _ _` mp_tac >>
-  simp[inst_seq_ptr_def] >> strip_tac >> gvs[] >>
-  irule gas_path_ptr_abort >> simp[] >> metis_tac[]
-QED
-
-(* An aborting instruction ends the executed prefix: the instructions after
-   it are neither counted nor checked. *)
-Theorem run_inst_seq_abort_gas_path_ptr:
-  !code s t a G tn G' tn' ctx fn bb.
-    ~s.vs_halted /\
-    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
-    inst_seq_ptr D lo ctx fn PG G tn code s G' tn' /\
-    run_inst_seq code s = Abort a t ==>
-    ?n j. gas_path_ptr D lo ctx fn PG G tn s n G' tn'
-            (Abort a (t with vs_inst_idx := j))
-Proof
-  rpt strip_tac >> drule_all run_inst_seq_gas_path_ptr_abort_uniform >>
-  strip_tac >> metis_tac[]
+  gvs[run_inst_seq_def, inst_seq_ptr_def, run_inst_seq_mem_ok_def] >>
+  rename1 `step_inst_base h s = OK u` >>
+  `step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
+  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+  first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+    `t with vs_inst_idx := SUC s.vs_inst_idx`, `step_prov PG G h u`,
+    `step_taint h s u tn`, `G'`, `tn'`, `ctx`, `func`, `bb`] mp_tac) >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def] >> strip_tac >>
+  `gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn)
+    (if h.inst_opcode = GAS then [(func.fn_name, h.inst_id) IN explicit] else [])
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G h u, step_taint h s u tn)` by
+    (irule straight_line_origin_ptr_edge >> simp[]) >>
+  drule (cj 2 gas_origin_ptr_path_rules) >> disch_then drule >>
+  Cases_on `h.inst_opcode = GAS` >> simp[ADD1]
 QED

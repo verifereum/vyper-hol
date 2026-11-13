@@ -321,7 +321,7 @@ Theorem materialize_rebase_post:
   vv_post H ctx func ce cx e es sa mid s0 es' tvv vv u /\
   expr_post H ctx func ce cx e es' (sa with cs_next_var := mid.cs_next_var)
     su u es' v src z /\
-  stmt_state_rel H ctx func ce cx es s0 /\
+  stmt_state_rel H0 ctx func ce cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   local_ptrs_reserved ce sa /\ sa.cs_next_var <= mid.cs_next_var ==>
   expr_post H ctx func ce cx e es sa su s0 es' v src z
@@ -528,7 +528,7 @@ Theorem compile_materialize_vv_owned_sim:
   compile_materialize_vv ce (lowered_value_type ce e) vv sm = (dst,sb) /\
   expr_body_pre ce cx env e es_pre /\
   vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
-  stmt_state_rel H ctx func ce cx es s0 /\
+  stmt_state_rel H0 ctx func ce cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -644,7 +644,7 @@ Theorem compile_materialize_vv_sim:
   compile_materialize_vv ce (lowered_value_type ce e) vv sm = (dst,sb) /\
   expr_body_pre ce cx env e es_pre /\
   vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
-  stmt_state_rel H ctx func ce cx es s0 /\
+  stmt_state_rel H0 ctx func ce cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
