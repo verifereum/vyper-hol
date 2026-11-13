@@ -318,7 +318,9 @@ Theorem body_scratch_prefix_run:
     w2n w + n <= t.vs_alloca_next /\
     s.vs_alloca_next <= t.vs_alloca_next /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
@@ -329,7 +331,9 @@ Proof
        venomMemDefsTheory.alloca_next_valid_def] >>
      strip_tac >> qpat_x_assum `!aid base sz. FLOOKUP a.vs_allocas aid = _ ==> _` drule >>
      asm_simp_tac (srw_ss()) []) >>
-  `s.vs_alloca_next <= a.vs_alloca_next /\ a.vs_labels = s.vs_labels` by
+  `s.vs_alloca_next <= a.vs_alloca_next /\ a.vs_labels = s.vs_labels /\
+   a.vs_accounts = s.vs_accounts /\ a.vs_transient = s.vs_transient /\
+   a.vs_requests = s.vs_requests /\ a.vs_call_ctx = s.vs_call_ctx` by
     (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >> strip_tac >>
      drule emitted_insts_emit_op >> strip_tac >>
      qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK a` mp_tac >>
@@ -348,7 +352,9 @@ Proof
     (irule body_scratch_copy_state >> simp[] >>
      goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >> metis_tac[]) >>
   `t.vs_vars = a.vs_vars /\ t.vs_allocas = a.vs_allocas /\
-   t.vs_alloca_next = a.vs_alloca_next` by
+   t.vs_alloca_next = a.vs_alloca_next /\
+   t.vs_accounts = a.vs_accounts /\ t.vs_transient = a.vs_transient /\
+   t.vs_requests = a.vs_requests /\ t.vs_call_ctx = a.vs_call_ctx` by
     (simp[Abbr `t`] >> Cases_on `n = 0` >>
      simp[mcopy_def, write_memory_with_expansion_def, LET_THM]) >>
   `run_inst_seq_mem_ok (emitted_insts sa sm) s` by
