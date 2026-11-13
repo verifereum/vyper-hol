@@ -316,3 +316,127 @@ Proof
   qexistsl_tac [`G'`, `tn'`] >>
   gvs[Abbr `u`, typed_array_loop_counter_def, jump_to_def]
 QED
+
+Theorem intcall_typed_array_entry_scalar[local]:
+  compiler_var_name vb 0 NOTIN R ==>
+  bop_scalar_seq R {Lit 0w}
+    (TAKE 1 (typed_array_loop_entry id vb cl))
+    {Var (compiler_var_name vb 0); Lit 0w}
+Proof
+  strip_tac >> simp[typed_array_loop_entry_def] >>
+  pure_once_rewrite_tac[bop_scalar_seq_def] >> disj1_tac >>
+  qexistsl_tac [`id`, `ASSIGN`, `[Lit 0w]`, `compiler_var_name vb 0`] >>
+  simp[bop_scalar_seq_def]
+QED
+
+Theorem intcall_typed_array_entry_counted:
+  !D ctx fn PG G tn s id vb cl bb R.
+  compiler_var_name vb 0 NOTIN R /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (typed_array_loop_entry id vb cl)
+    (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?H tf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tf
+      (OK (jump_to cl (update_var (compiler_var_name vb 0) 0w s))) /\
+    op_prov H (Var (compiler_var_name vb 0)) = NONE /\
+    op_taint tf (Var (compiler_var_name vb 0)) = {} /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!x. x IN R ==> FLOOKUP H x = FLOOKUP G x /\
+      FLOOKUP tf.t_var x = FLOOKUP tn.t_var x)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bop_scalar_seq R {Lit 0w}
+    (TAKE 1 (typed_array_loop_entry id vb cl))
+    {Var (compiler_var_name vb 0); Lit 0w}` by
+    (irule intcall_typed_array_entry_scalar >> simp[]) >>
+  `!op. op IN {Lit 0w} ==> op_prov G op = NONE /\ op_taint tn op = {}` by
+    simp[op_prov_def, op_taint_def] >>
+  `run_inst_seq (TAKE 1 (typed_array_loop_entry id vb cl)) s =
+    OK (update_var (compiler_var_name vb 0) 0w s)` by
+    simp[typed_array_loop_entry_def, run_inst_seq_def,
+      step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
+  `isPREFIX (TAKE 1 (typed_array_loop_entry id vb cl))
+    (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (irule isPREFIX_TRANS >> qexists_tac `typed_array_loop_entry id vb cl` >>
+     conj_tac >- simp[typed_array_loop_entry_def] >> simp[]) >>
+  drule_all bop_scalar_seq_path >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `OK u` >>
+  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb /\
+    u.vs_inst_idx = s.vs_inst_idx + 1` by
+    simp[Abbr `u`, typed_array_loop_entry_def, update_var_def] >>
+  `get_instruction bb u.vs_inst_idx = SOME (mk_inst (id+1) JMP [Label cl] [])` by
+    (qpat_x_assum `isPREFIX (typed_array_loop_entry _ _ _) _` mp_tac >>
+     pure_rewrite_tac[typed_array_loop_entry_def] >> strip_tac >>
+     dxrule instruction_prefix_cursor >> strip_tac >>
+     drule instruction_prefix_cursor >> simp[arithmeticTheory.ADD1]) >>
+  `gas_path_ptr D 0 ctx fn PG G' tn' u 0 G' tn' (OK (jump_to cl u))` by
+    (irule membership_jump_path >> simp[] >> metis_tac[]) >>
+  drule_all gas_path_ptr_then >> simp[] >> strip_tac >>
+  qexistsl_tac [`G'`, `tn'`] >>
+  gvs[Abbr `u`, typed_array_loop_entry_def, jump_to_def]
+QED
+
+Theorem intcall_typed_array_addresses_counted:
+  !D ctx fn PG G tn s id vb dst src ds ss cw da sa dp sp bb R.
+  compiler_var_name vb 3 NOTIN R /\ compiler_var_name vb 4 NOTIN R /\
+  compiler_var_name vb 5 NOTIN R /\ compiler_var_name vb 6 NOTIN R /\
+  src <> Var (compiler_var_name vb 3) /\ src <> Var (compiler_var_name vb 4) /\
+  dst <> Var (compiler_var_name vb 3) /\ dst <> Var (compiler_var_name vb 4) /\
+  dst <> Var (compiler_var_name vb 5) /\
+  op_prov G (Var (compiler_var_name vb 0)) = NONE /\
+  op_taint tn (Var (compiler_var_name vb 0)) = {} /\
+  eval_operand (Var (compiler_var_name vb 0)) s = SOME cw /\
+  eval_operand src s = SOME sa /\ eval_operand dst s = SOME da /\
+  op_prov G src = SOME sp /\ op_prov G dst = SOME dp /\
+  op_taint tn src = {} /\ op_taint tn dst = {} /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (typed_array_loop_addresses id vb dst src ds ss) bb.bb_instructions ==>
+  ?H tf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tf
+      (OK (update_var (compiler_var_name vb 6) (da + cw * n2w ds)
+        (update_var (compiler_var_name vb 5) (sa + cw * n2w ss)
+          (update_var (compiler_var_name vb 4) (cw * n2w ds)
+            (update_var (compiler_var_name vb 3) (cw * n2w ss) s)))
+        with vs_inst_idx := 4)) /\
+    op_prov H (Var (compiler_var_name vb 5)) = SOME sp /\
+    op_prov H (Var (compiler_var_name vb 6)) = SOME dp /\
+    op_taint tf (Var (compiler_var_name vb 5)) = {} /\
+    op_taint tf (Var (compiler_var_name vb 6)) = {} /\
+    tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!x. x IN R ==> FLOOKUP H x = FLOOKUP G x /\
+      FLOOKUP tf.t_var x = FLOOKUP tn.t_var x)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `protected = R UNION {x | src = Var x \/ dst = Var x}` >>
+  `compiler_var_name vb 3 NOTIN protected /\ compiler_var_name vb 4 NOTIN protected` by
+    simp[Abbr `protected`] >>
+  drule_all intcall_typed_array_offsets_counted >>
+  disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ H tf (OK u)` >>
+  `eval_operand src u = SOME sa /\ eval_operand dst u = SOME da /\
+   eval_operand (Var (compiler_var_name vb 3)) u = SOME (cw * n2w ss) /\
+   eval_operand (Var (compiler_var_name vb 4)) u = SOME (cw * n2w ds)` by
+    (simp[Abbr `u`, eval_operand_update_var_avoids] >>
+     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `op_prov H src = SOME sp /\ op_prov H dst = SOME dp /\
+   op_taint tf src = {} /\ op_taint tf dst = {}` by
+    (Cases_on `src` >> Cases_on `dst` >>
+     gvs[op_prov_def, op_taint_def, Abbr `protected`]) >>
+  `~u.vs_halted /\ u.vs_inst_idx = 2 /\
+    lookup_block u.vs_current_bb fn.fn_blocks = SOME bb` by
+    simp[Abbr `u`, update_var_def] >>
+  drule_all intcall_typed_array_address_suffix_counted >>
+  disch_then (qspecl_then [`D`, `PG`] assume_tac) >>
+  drule_all gas_path_ptr_then >> simp[] >> strip_tac >>
+  qexistsl_tac [`H |+ (compiler_var_name vb 5, sp) |+ (compiler_var_name vb 6, dp)`,
+    `tf with t_var := tf.t_var |+ (compiler_var_name vb 5, {}) |+
+      (compiler_var_name vb 6, {})`] >>
+  gvs[op_prov_def, op_taint_def, FLOOKUP_UPDATE, Abbr `u`, update_var_def,
+      Abbr `protected`] >>
+  rpt strip_tac >> simp[] >> metis_tac[]
+QED
