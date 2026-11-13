@@ -158,7 +158,8 @@ QED
 Resume dynamic_continuation_summary_mem[abort]:
   simp[gas_summary_at_def] >>
   qexistsl_tac [`convert_result cx (expr_type e1) ann v1`,`ee`,`out`] >>
-  simp[gas_marked_exec_def]
+  simp[gas_marked_exec_def] >> disj2_tac >>
+  simp[exprSimDefsTheory.halt_exit_def, exprSimConvertTheory.convert_result_not_halt]
 QED
 
 Finalise dynamic_continuation_summary_mem

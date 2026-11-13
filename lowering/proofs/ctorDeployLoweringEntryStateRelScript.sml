@@ -39,7 +39,7 @@ Theorem deploy_ctor_entry_ambient:
  vs.vs_accounts = accounts_after_transfer tx am.accounts /\
  vs.vs_transient = am.tStorage /\ vs.vs_logs = [] /\
  vs.vs_requests = [] /\ vs.vs_pending_deletions = am.pending_deletions /\
- call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
+ call_ctx_rel (tx with created_in_tx := T) vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
  ~vs.vs_call_ctx.cc_static /\ ~tx.is_static /\ am.logs = []
 Proof
  rpt gen_tac >>

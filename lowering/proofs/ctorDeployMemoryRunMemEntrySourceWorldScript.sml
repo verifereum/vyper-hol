@@ -59,7 +59,7 @@ QED
 
 Theorem ctor_source_entry_context:
   deploy_state_rel tops deploy_bc am tx es ==>
-  call_ctx_rel tx
+  call_ctx_rel (tx with created_in_tx := T)
     (deploy_entry_state prog cplan tops es).vs_call_ctx
     (deploy_entry_state prog cplan tops es).vs_tx_ctx
     (deploy_entry_state prog cplan tops es).vs_block_ctx /\
@@ -78,7 +78,7 @@ Theorem ctor_source_candidate_context:
   actual.vs_tx_ctx = vs.vs_tx_ctx /\
   actual.vs_block_ctx = vs.vs_block_ctx /\
   actual.vs_outcomes = vs.vs_outcomes ==>
-  call_ctx_rel tx actual.vs_call_ctx actual.vs_tx_ctx actual.vs_block_ctx /\
+  call_ctx_rel (tx with created_in_tx := T) actual.vs_call_ctx actual.vs_tx_ctx actual.vs_block_ctx /\
   ~actual.vs_call_ctx.cc_static /\ ~tx.is_static /\
   (es0 with outcomes := SOME vs.vs_outcomes).outcomes = SOME actual.vs_outcomes
 Proof

@@ -72,7 +72,9 @@ Resume compile_assign_local_memory_widen_stmt_frag_ptr[summary]:
       qpat_x_assum `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
       simp[gas_marked_exec_ptr_def] >> strip_tac >>
       simp[bind_def]) >>
-  disj2_tac >> simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[stmt_exit_ptr_def] >> conj_tac
+  >- metis_tac[expr_exit_INR_type] >>
+  qpat_x_assum `halt_exit _ _ _ _` mp_tac >> simp[]
 QED
 
 Resume compile_assign_local_memory_widen_stmt_frag_ptr[normal]:

@@ -224,7 +224,7 @@ Theorem ctor_task_actual_source_projections:
  actual.vs_accounts = accounts_after_transfer tx am.accounts /\
  actual.vs_transient = am.tStorage /\ actual.vs_call_ctx.cc_address = tx.target /\
  actual.vs_logs = [] /\ actual.vs_requests = [] /\ actual.vs_pending_deletions = [] /\
- call_ctx_rel tx actual.vs_call_ctx actual.vs_tx_ctx actual.vs_block_ctx /\
+ call_ctx_rel (tx with created_in_tx := T) actual.vs_call_ctx actual.vs_tx_ctx actual.vs_block_ctx /\
  ~actual.vs_call_ctx.cc_static /\ ~tx.is_static /\
  (es0 with outcomes := SOME vs.vs_outcomes).outcomes = SOME actual.vs_outcomes
 Proof
