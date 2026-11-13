@@ -45,7 +45,7 @@ Proof
         (Cases_on `place_type cenv e1`
          >- (drule_all_then assume_tac
                exprSimSubscriptMapTheory.expr_body_pre_map_subscript_base >>
-             drule_all_then assume_tac map_base_gated_premise >>
+             drule_then (drule_then assume_tac) map_base_gated_premise >>
              metis_tac[body_subscript_map_vv_mem]) >>
          rename1 `ValPT bt` >> Cases_on `bt <> expr_type e1`
          >- metis_tac[compile_subscript_mismatch_vv_sim_mem] >>
@@ -67,6 +67,6 @@ Proof
       goal_assum drule) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   drule_all_then assume_tac exprSimSubscriptMapTheory.expr_map_pre_subscript_base >>
-  drule_all_then assume_tac map_base_gated_premise >>
+  drule_then (drule_then assume_tac) map_base_gated_premise >>
   metis_tac[body_subscript_map_mem]
 QED
