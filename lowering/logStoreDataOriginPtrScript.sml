@@ -5,6 +5,8 @@
  *
  * TOP-LEVEL:
  *   compile_copy_memory_origin_ptr_path -- one MCOPY of a robust value
+ *   compile_store_memory_origin_ptr_path -- compile_store_memory of a
+ *     non-word value: bytestring, relayout or bulk copy
  *)
 Theory logStoreDataOriginPtr
 Ancestors
@@ -12,6 +14,8 @@ Ancestors
   typedCopyOriginPtrBase fragGasOriginPtr fragGasOriginPtrDead fragGasSeqPtr
   bodyPtrDefs ptrSafeRun ptrDiscipline typedMemoryCopy
   robustCopyTransportPtr valueEncoding valueEncodingDefs codegenRel
+  typedCopyOriginPtr layoutStoreProps memoryLayoutSource memoryLayoutRel
+  memoryValueEncoding exprSimProps
 
 (* compile_copy_memory copies n bytes holding a robust value to a disjoint
    destination; the copy holds the value robustly. *)
@@ -210,3 +214,102 @@ Resume compile_copy_memory_origin_ptr_path[access]:
 QED
 
 Finalise compile_copy_memory_origin_ptr_path
+
+(* A layout-preserving copy turns a robust source-typed value into a robust
+   destination-typed one. *)
+Theorem robust_val_in_memory_layout_rel[local]:
+  memory_layout_rel dtv stv /\ value_has_type stv v /\ value_has_type dtv v /\
+  (!mem. mem_agree_outside tn m0 mem ==> val_in_memory stv v a mem) ==>
+  !mem. mem_agree_outside tn m0 mem ==> val_in_memory dtv v a mem
+Proof
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  irule memory_value_rel_val_in_memory >> simp[] >>
+  irule memory_layout_rel_value >> goal_assum drule >>
+  irule val_in_memory_memory_value_rel >> simp[]
+QED
+
+(* compile_store_memory of a non-word value: the bytestring and relayout
+   branches are the typed copy; the bulk branch is one MCOPY. *)
+Theorem compile_store_memory_origin_ptr_path:
+  compile_store_memory cenv (Var xs) (Var xd) dty sty sa = ((),sb) /\
+  ~is_word_type dty /\ (is_bytestring_type dty ==> is_bytestring_type sty) /\
+  type_memory_bytes cenv dty = type_memory_size dtv /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+     ALL_DISTINCT (MAP FST fields) /\
+     EVERY (\(fname,fty,sz). !tv. evaluate_type tenv fty = SOME tv ==>
+       sz = type_memory_size tv) fields) /\
+  type_widens_to tenv sty dty /\
+  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+  value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+  not_fresh_at sa xs /\ not_fresh_at sa xd /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+         val_in_memory stv v (w2n sw) mem) /\
+  w2n sw + type_memory_size stv < dimword (:256) /\
+  w2n dw + type_memory_size dtv < dimword (:256) /\
+  (type_memory_size stv = 0 \/ w2n sw + type_memory_size stv <= s.vs_alloca_next) /\
+  (type_memory_size dtv = 0 \/ w2n dw + type_memory_size dtv <= s.vs_alloca_next) /\
+  (w2n sw + type_memory_size stv <= w2n dw \/
+   w2n dw + type_memory_size dtv <= w2n sw) /\
+  ptr_covers G tn xs s (type_memory_size stv) /\
+  ptr_covers G tn xd s (type_memory_size dtv) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)) /\
+    val_in_memory dtv v (w2n dw) t.vs_memory /\
+    typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw + type_memory_size dtv) ==>
+         (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+           val_in_memory dtv v (w2n dw) mem) /\
+    (!p. not_fresh_at sa p ==>
+       FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  Cases_on `is_bytestring_type dty \/ (dty <> sty /\ ~tuple_memory_layout_eq dty sty)`
+  >- (`compile_store_memory_typed cenv (Var xd) dty (Var xs) sty sa = ((),sb)` by
+        (Cases_on `is_bytestring_type dty`
+         >- (`is_bytestring_type sty` by res_tac >>
+             qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
+             asm_simp_tac (srw_ss()) [contextTheory.compile_store_memory_def] >>
+             strip_tac >>
+             asm_simp_tac (srw_ss()) [Once contextTheory.compile_store_memory_typed_def]) >>
+         qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
+         fs[contextTheory.compile_store_memory_def]) >>
+      drule compile_store_memory_typed_origin_ptr_path >>
+      disch_then irule >> simp[] >>
+      qexistsl_tac [`stv`, `tenv`] >> rpt conj_tac >>
+      TRY (first_assum ACCEPT_TAC) >> fs[] >> decide_tac) >>
+  `~is_bytestring_type dty` by metis_tac[] >>
+  `memory_layout_key dty = memory_layout_key sty` by
+    metis_tac[bulk_store_layout_keys] >>
+  `compile_copy_memory (Var xd) (Var xs) (type_memory_size dtv) sa = ((),sb)` by
+    (qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `type_memory_bytes _ _ = _` (SUBST1_TAC o SYM) >>
+     fs[contextTheory.compile_store_memory_def]) >>
+  `memory_layout_rel dtv stv` by
+    (irule memory_layout_key_evaluated >> metis_tac[]) >>
+  `type_memory_size stv = type_memory_size dtv` by fs[memory_layout_rel_def] >>
+  `val_footprint stv v <= type_memory_size dtv` by
+    (qpat_x_assum `type_memory_size stv = _` (SUBST1_TAC o SYM) >>
+     irule val_footprint_le >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `type_memory_size stv = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  mp_tac (Q.INST [`tv` |-> `stv`, `n` |-> `type_memory_size dtv`]
+            compile_copy_memory_origin_ptr_path) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >> qexistsl_tac [`t`, `Gf`, `tnf`] >> simp[] >>
+  `!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+     val_in_memory dtv v (w2n dw) mem` by
+    (match_mp_tac robust_val_in_memory_layout_rel >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[] >> first_x_assum irule >> simp[mem_agree_outside_def]
+QED
