@@ -2,7 +2,8 @@
    in exactly the residual case of
    exprSimSubscriptArrayTheory.compile_subscript_array_place_base_case
    (lowering/exprSimSubscriptArrayScript.sml), which is ADMITTED there,
-   including a base the index may overwrite (subscript_reads_base), read
+   including a base the index may overwrite (subscript_reads_base) or that
+   the lowering copies (copies_subscript_base), read
    before the index as Python does,
    because vv_post does not tie the base's pointer to its source place.
    Held: no run proves it; it is retired with that admission once a
@@ -18,7 +19,7 @@ Theorem intcall_subscript_array_place_base_held:
           intcall_map_producer fp e') /\
     e = Subscript ann obj idx /\
     expr_type obj = ArrayT et bd /\ place_type ce obj = ValPT (ArrayT et bd) /\
-    ~(~subscript_reads_base fp.jc_cx obj idx /\
+    ~(~subscript_reads_base fp.jc_cx obj idx /\ ~copies_subscript_base ce obj idx /\
       (!t r t'. eval_expr fp.jc_cx idx t = (INL r, t') ==>
                 t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
       (!s tr slot vt t.
@@ -59,6 +60,7 @@ Theorem intcall_subscript_array_place_base_held:
                 a + k < dimword (:256) /\
                 (fp.jc_lo <= a \/
                  ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
+           (~expr_has_effect (e) ==> pure_frame ce fp.jc_func es sa s u) /\
            intcall_expr_cont fp ce env es sa s ee sb u)
         (\res ee r. expr_exit res r)
 Proof
