@@ -102,7 +102,7 @@ QED
 val () = cv_auto_trans translate_base_target_def;
 
 Definition translate_target_list_def:
-  translate_target_list ctx tgts = MAP (λtgt. translate_target ctx tgt) tgts
+  translate_target_list ctx tgts = MAP (translate_target ctx) tgts
 End
 
 Theorem translate_target_list_compute:
@@ -133,7 +133,7 @@ val () = cv_auto_trans translate_iter_def;
    traversals follow the expression translation. *)
 Definition annotations_resolved_cv_def:
   annotations_resolved_cv nominal_index all_import_maps ctx anns =
-    EVERY (λann. annotation_resolved nominal_index all_import_maps ctx ann) anns
+    EVERY (annotation_resolved nominal_index all_import_maps ctx) anns
 End
 
 Theorem annotations_resolved_cv_compute:
@@ -158,7 +158,7 @@ val () = cv_auto_trans annotation_resolved_compute;
 
 Definition elaborate_annotations_cv_def:
   elaborate_annotations_cv nominal_index all_import_maps ctx anns =
-    MAP (λann. elaborate_annotation nominal_index all_import_maps ctx ann) anns
+    MAP (elaborate_annotation nominal_index all_import_maps ctx) anns
 End
 
 Theorem elaborate_annotations_cv_compute:

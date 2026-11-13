@@ -305,10 +305,10 @@ QED
 
 Theorem fuel_ok_compile_make_tuple:
   !cfn. (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>
-    !es cenv buf cur Wv E.
-      fuel_ok Wv {} E (compile_make_tuple cfn cenv es buf cur)
+    !es tys cenv buf cur Wv E.
+      fuel_ok Wv {} E (compile_make_tuple cfn cenv es tys buf cur)
 Proof
-  gen_tac >> strip_tac >> Induct >> rpt gen_tac >>
+  gen_tac >> strip_tac >> Induct >> rpt gen_tac >> Cases_on `tys` >>
   simp_tac std_ss [compile_make_tuple_def] >>
   FIRST [fa1 (base @ helpers)] >>
   FIRST [fa1 (base @ helpers)] >>
@@ -461,25 +461,45 @@ QED
 
 (* ===== Subscript, attribute, struct literals ===== *)
 
+Theorem fuel_ok_compile_snapshot_vv:
+  !cenv copy vv Wv E. fuel_ok Wv {} E (compile_snapshot_vv cenv copy vv)
+Proof
+  rpt gen_tac >> simp_tac std_ss [compile_snapshot_vv_def] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  simp[is_terminator_def]
+QED
+
 Theorem fuel_ok_compile_subscript:
   !cfn. (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>
     !cenv ret_ty ty base_e idx_e Wv E.
       fuel_ok Wv {} E (compile_subscript cfn cenv ret_ty ty base_e idx_e)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_subscript_def] >>
-  FIRST [fa1 (lv :: base @ helpers)] >>
-  FIRST [fa1 (lv :: base @ helpers)] >>
-  FIRST [fa1 (lv :: base @ helpers)] >>
-  FIRST [fa1 (lv :: base @ helpers)] >>
-  FIRST [fa1 (lv :: base @ helpers)] >>
-  FIRST [fa1 (lv :: base @ helpers)] >>
-  FIRST [fa1 (lv :: base @ helpers)] >>
-  FIRST [fa1 (lv :: base @ helpers)] >>
-  FIRST [fa1 (lv :: base @ helpers)] >>
-  FIRST [fa1 (lv :: base @ helpers)] >>
-  FIRST [fa1 (lv :: base @ helpers)] >>
-  FIRST [fa1 (lv :: base @ helpers)] >>
-  FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
+  FIRST [fa (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_attribute:
@@ -533,26 +553,6 @@ Theorem fuel_ok_compile_ifexp_arm:
     fuel_ok Wv {} E (compile_ifexp_arm cenv res_ty arm_ty vv)
 Proof
   rpt gen_tac >> simp_tac std_ss [compile_ifexp_arm_def] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  FIRST [fa (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
-  simp[is_terminator_def]
-QED
-
-Theorem fuel_ok_compile_snapshot_vv:
-  !cenv copy vv Wv E. fuel_ok Wv {} E (compile_snapshot_vv cenv copy vv)
-Proof
-  rpt gen_tac >> simp_tac std_ss [compile_snapshot_vv_def] >>
   FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
   FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
   FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
@@ -1003,7 +1003,21 @@ Proof
   FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
-val extl = [fuel_ok_compile_ext_call_kwargs, fuel_ok_compile_external_call_kwargs];
+Theorem fuel_ok_compile_ext_call_args[local]:
+  !cfn. (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>
+    !tys es cenv kw_es Wv E.
+      fuel_ok Wv {} E (compile_ext_call_args cfn cenv kw_es tys es)
+Proof
+  gen_tac >> strip_tac >> Induct >> rpt gen_tac
+  >- simp[compile_ext_call_args_def, fuel_ok_return] >>
+  Cases_on `es` >> simp_tac std_ss [compile_ext_call_args_def]
+  >- simp[fuel_ok_return] >>
+  FIRST [fa (lv :: fuel_ok_compile_snapshot_vv :: base @ helpers)] >>
+  simp[is_terminator_def]
+QED
+
+val extl = [fuel_ok_compile_ext_call_args, fuel_ok_compile_ext_call_kwargs,
+            fuel_ok_compile_external_call_kwargs];
 
 Theorem fuel_ok_compile_call_ext[local]:
   !cfn. (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>

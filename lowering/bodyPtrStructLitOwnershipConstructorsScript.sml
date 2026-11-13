@@ -21,7 +21,7 @@ Proof
   simp[SRULE [cenv_shape_ok_stable]
     (Q.INST [`R` |-> `\s. cenv_shape_ok s ce`] alloc_run_alloc_buffer_frame)] >>
   gen_tac >> simp[alloc_run_def, oneline as_ptr_val_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[alloc_run_def] >>~- ([`compile_make_tuple _ _ _ _ _ _ = _`],
+  rpt strip_tac >> gvs[alloc_run_def] >>~- ([`compile_make_tuple _ _ _ _ _ _ _ = _`],
     drule_all (SRULE [alloc_run_def, shape_stable_def]
       (Q.INST [`R` |-> `\s. T`] (SPEC_ALL alloc_run_compile_make_tuple_frame))) >> simp[]) >>
   drule_all (SRULE [alloc_run_def, shape_stable_def]

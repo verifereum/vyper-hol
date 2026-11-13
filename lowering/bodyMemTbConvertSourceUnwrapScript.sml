@@ -28,7 +28,9 @@ Proof
   strip_tac >>
   drule expr_body_pre_var_types_well_formed >> strip_tac >>
   `well_typed_expr env e /\
-   sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
+   sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
+   (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+      ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
     gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
         env_context_consistent_def] >>
   `lowered_value_type ce e = expr_type e \/
@@ -124,7 +126,9 @@ Proof
    type_memory_bytes cenv (expr_type e)` by
     (drule expr_body_pre_var_types_well_formed >> strip_tac >>
      `well_typed_expr env e /\
-      sfields_tenv_consistent cenv.ce_struct_fields env.type_defs` by
+      sfields_tenv_consistent cenv.ce_struct_fields env.type_defs /\
+      (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+         cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
        gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
            env_context_consistent_def] >>
      drule_all convert_plain_lowered_type_compatible >> strip_tac >>

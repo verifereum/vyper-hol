@@ -29,7 +29,8 @@ Theorem robust_memory_taint_dead:
     encode_value tv v = SOME writes /\
     w2n k + type_slot_size tv <= dimword (:256) /\
     (!m. mem_agree_outside ta mem m ==> val_in_memory tv v off m) /\
-    j < type_slot_size tv /\ b < 32 /\ off + 32*j + b IN ta ==>
+    j < type_slot_size tv /\ MEM j (MAP FST writes) /\
+    b < 32 /\ off + 32*j + b IN ta ==>
     dead_bytes (apply_writes k writes st) (w2n k) tv (w2n k+j) b
 Proof
   rpt strip_tac >> spose_not_then assume_tac >>
@@ -54,7 +55,8 @@ Theorem robust_memory_taint_dead_at_endpoint:
        EL c (word_to_bytes (lookup_storage (n2w i) final) T) =
        EL c (word_to_bytes (lookup_storage (n2w i)
          (apply_writes k writes st)) T)) /\
-    j < type_slot_size tv /\ b < 32 /\ off + 32*j + b IN ta ==>
+    j < type_slot_size tv /\ MEM j (MAP FST writes) /\
+    b < 32 /\ off + 32*j + b IN ta ==>
     dead_bytes final (w2n k) tv (w2n k+j) b
 Proof
   rpt strip_tac >>
@@ -95,7 +97,8 @@ Theorem robust_memory_storage_dead_at_endpoint:
        EL c (word_to_bytes (lookup_storage (n2w i) final) T) =
        EL c (word_to_bytes (lookup_storage (n2w i)
          (apply_writes k writes st)) T)) /\
-    j < type_slot_size tv /\ b < 32 /\ off + 32*j + b IN ta ==>
+    j < type_slot_size tv /\ MEM j (MAP FST writes) /\
+    b < 32 /\ off + 32*j + b IN ta ==>
     storage_dead H tr final (w2n k+j) b
 Proof
   rpt strip_tac >>
@@ -147,6 +150,7 @@ Theorem storage_copy_taint_at_endpoint:
     encode_value tv v = SOME writes /\
     w2n k + type_slot_size tv <= dimword (:256) /\
     count <= type_slot_size tv /\
+    (!i. i < type_slot_size tv ==> MEM i (MAP FST writes)) /\
     (!m. mem_agree_outside ta mem m ==> val_in_memory tv v off m) /\
     (!i c. w2n k <= i /\ i < w2n k + type_slot_size tv /\ c < 32 /\
        ~dead_bytes (apply_writes k writes st) (w2n k) tv i c ==>
@@ -176,6 +180,9 @@ Proof
       qexistsl_tac [`k`, `mid`, `n`, `st`, `subs`, `tv`] >>
       simp[]) >>
   `j < type_slot_size tv` by decide_tac >>
+  `MEM j (MAP FST writes)` by
+    (qpat_x_assum `!i. i < type_slot_size tv ==> MEM i (MAP FST writes)`
+       irule >> decide_tac) >>
   drule_all robust_memory_storage_dead_at_endpoint >> simp[]
 QED
 
