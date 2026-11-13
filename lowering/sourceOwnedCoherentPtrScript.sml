@@ -50,6 +50,8 @@ Theorem source_owned_coherent_decoder_ptr:
     r.vs_inst_idx = LENGTH middle.cs_current_insts ==>
     ?t H u fp.
       abi_decode_sim ctx fn r t /\
+      gas_path_mem ctx fn r 0 (OK t) /\
+      (!D explicit. gas_origin_ptr_path (D, lower, explicit, ctx, fn, PG) (r, G, tn) [] (OK t, H, u)) /\
       ~t.vs_halted /\ t.vs_current_bb = end_st.cs_current_bb /\
       t.vs_inst_idx = LENGTH end_st.cs_current_insts /\ fresh_vars_wrt limit t /\
       val_in_memory tv v e t.vs_memory /\

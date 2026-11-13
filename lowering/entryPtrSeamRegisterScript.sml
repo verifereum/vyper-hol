@@ -3429,6 +3429,10 @@ Theorem register_positional_args_ptr:
       ghost_inv NONE cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) es0
         G0 tn0 s0 /\
+      gas_path_mem unit.cu_context efn s1 0 (OK s0) /\
+      (!D explicit.
+         gas_origin_ptr_path (D, 0, explicit, unit.cu_context, efn, [])
+           (s1, G1, tn1) [] (OK s0, G0, tn0)) /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
       s0.vs_gas_readings = s1.vs_gas_readings /\
