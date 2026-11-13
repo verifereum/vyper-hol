@@ -34,7 +34,7 @@ Proof
   qexistsl_tac [`d`, `dst`, `type_memory_size tv`, `src`, `w`] >> simp[]
 QED
 
-Theorem snapshot_nonword_store_path_mem[local]:
+Theorem snapshot_nonword_store_path_mem:
   compile_store_memory ce src dst ty ty sa = ((),sb) /\
   ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   value_has_type tv v /\ val_wf tv v /\
