@@ -3,7 +3,7 @@ Ancestors concretizePtrRootCover concretizePtrFrameOrigins concretizePtrClosure
   concretizePtrRuntimeOrigins pointerClosure pointerConfinedDefs
   ptrDiscipline venomInst finite_map pred_set list
   concretizePtrAllocationOrigins venomMemProps venomExecSemantics
-  ptrDisciplineEmptyTaint venomState
+  ptrDisciplineEmptyTaint venomState ctxLookupAgreeHelpers
 
 Theorem ptr_frame_roots_extend:
   (!aid p. FLOOKUP A aid = SOME p ==> FLOOKUP B aid = SOME p) ==>
@@ -54,7 +54,12 @@ Theorem ptr_frame_current_table_step:
     (pointer_derived_vars fn (ptr_frame_site_roots dyn fn s'.vs_allocas PG site))
     (step_prov PG G inst s') site
 Proof
-  cheat
+  strip_tac >> irule ptr_frame_site_step >> simp[] >> rpt conj_tac >>
+  TRY (irule ptr_frame_support_extend >> goal_assum (drule_at Any) >>
+       metis_tac[ptr_step_allocas_extend] >> NO_TAC) >>
+  rpt strip_tac >>
+  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(), out_prov_def,
+      update_var_def, lookup_var_def]
 QED
 
 Theorem ptr_frame_current_table_entry:
@@ -77,6 +82,19 @@ Proof
   simp[merge_callee_state_allocas]
 QED
 
+Theorem ptr_frame_reachable_initial_fmp[local]:
+  !vs0 ctx stk PG G tn fn inst s.
+    frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+    s.vs_initial_fmp = vs0.vs_initial_fmp /\
+    EVERY (\f. f.cf_state.vs_initial_fmp = vs0.vs_initial_fmp) stk
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac >> rpt gen_tac >>
+  strip_tac >>
+  imp_res_tac enters_block_initial_fmp >> imp_res_tac step_inst_initial_fmp >>
+  imp_res_tac setup_callee_initial_fmp >> imp_res_tac bind_outputs_initial_fmp >>
+  gvs[]
+QED
+
 Theorem ptr_frame_table_support_invariant:
   !vs0 ctx stk PG G tn fn inst s.
     frame_reachable vs0 ctx stk PG G tn fn inst s ==>
@@ -89,7 +107,38 @@ Theorem ptr_frame_table_support_invariant:
         (ptr_frame_site_roots (dyn_floor ctx vs0) f.cf_fn f.cf_state.vs_allocas f.cf_params site))
       f.cf_prov site) stk
 Proof
-  cheat
+  ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac
+  >- (rpt strip_tac >> simp[ptr_site_supported_def] >> metis_tac[lookup_function_MEM])
+  >- (rpt gen_tac >> strip_tac >> strip_tac >>
+      qpat_x_assum `ptr_discipline _ _ _ ==> _` (drule_then strip_assume_tac) >>
+      `MEM inst (fn_insts fn)` by
+        (gvs[contextCodegenRelTheory.active_inst_def, fn_insts_def,
+          venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+         metis_tac[MEM_EL]) >>
+      `inst.inst_opcode = DALLOCA ==> dyn_floor ctx vs0 <= w2n s.vs_fmp` by
+        (strip_tac >>
+         `ctx_has_dalloca ctx` by
+           (simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
+         `allocas_below_fmp s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+         `s.vs_initial_fmp = vs0.vs_initial_fmp` by
+           metis_tac[ptr_frame_reachable_initial_fmp] >>
+         fs[dyn_floor_def, allocas_below_fmp_def] >> rfs[]) >>
+      simp[] >> gen_tac >> irule ptr_frame_current_table_step >>
+      fs[EVERY_MEM] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >> strip_tac >>
+      qpat_x_assum `ptr_discipline _ _ _ ==> _` (drule_then strip_assume_tac) >>
+      `~is_alloca_op inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+        (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def, is_alloca_op_def]) >>
+      `s'.vs_allocas = s.vs_allocas` by
+        metis_tac[step_inst_non_alloca_preserves_allocas] >>
+      simp[] >> gen_tac >> irule ptr_frame_current_table_entry >> simp[])
+  >- (rpt gen_tac >> strip_tac >> strip_tac >>
+      qpat_x_assum `ptr_discipline _ _ _ ==> _` (drule_then strip_assume_tac) >>
+      simp[ptr_site_supported_def] >> metis_tac[lookup_function_MEM])
+  >> rpt gen_tac >> strip_tac >> strip_tac >>
+  qpat_x_assum `ptr_discipline _ _ _ ==> _` (drule_then strip_assume_tac) >>
+  `s'.vs_allocas = f.cf_state.vs_allocas` by metis_tac[ptr_return_allocas] >>
+  fs[] >> metis_tac[ptr_site_support_restrict]
 QED
 
 Theorem ptr_frame_current_table_support:

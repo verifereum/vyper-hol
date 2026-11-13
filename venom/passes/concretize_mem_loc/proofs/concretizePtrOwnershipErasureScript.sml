@@ -238,7 +238,7 @@ Theorem ptr_params_erases_extend:
 Proof
   simp[ptr_params_erases_def, EVERY_MEM, LIST_REL_EL_EQN] >> strip_tac >>
   `!p. MEM p PT ==> !owner. p = SOME owner ==> owner IN FDOM births` by
-    (rpt strip_tac >> first_assum drule >> simp[]) >>
+    (rpt strip_tac >> gvs[] >> res_tac >> fs[]) >>
   `!p n. MEM p PT /\ ptr_owner_erases dyn births p n ==>
      ptr_owner_erases dyn births' p n /\
      (!owner. p = SOME owner ==> owner IN FDOM births')` by
