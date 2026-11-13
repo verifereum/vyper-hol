@@ -112,7 +112,7 @@ Proof
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (drule_then assume_tac) >>
-  drule_all slice_source_dynamic_capture_entry >> disch_then (qspec_then `st0` strip_assume_tac) >> fs[] >>
+  drule_all slice_source_dynamic_capture_entry >> disch_then (qspec_then `st0` strip_assume_tac) >>
   qpat_x_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qexistsl_tac [`cap`, `bs`, `p`, `u`] >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -170,7 +170,7 @@ Proof
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (drule_then assume_tac) >>
-  drule_all slice_source_fixed_capture_entry >> disch_then (qspec_then `st0` strip_assume_tac) >> fs[] >>
+  drule_all slice_source_fixed_capture_entry >> disch_then (qspec_then `st0` strip_assume_tac) >>
   qpat_x_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qexistsl_tac [`bs`, `u`, `p`] >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
