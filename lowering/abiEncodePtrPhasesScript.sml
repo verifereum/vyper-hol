@@ -96,7 +96,7 @@ Theorem abi_encode_framed_phases_ptr:
     (!i. p <= i /\ i < p + 32 + m + LENGTH (enc at av) ==> i NOTIN tn'.t_mem)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_encode_setup_ptr_entry >>
+  drule_all abi_encode_setup_ptr_entry_semantic >>
   disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
   rename1 `abi_builtin_encode_setup_frame _ _ _ _ _ initial prepared` >>
   `?body Hbody tbody.
@@ -151,7 +151,7 @@ Proof
   `abi_decoder_operand_live body_end.cs_next_var (Var x)` by metis_tac[] >>
   `mem_bytes_at (p+32) (m+LENGTH (enc at av)) body.vs_memory =
     mem_bytes_at (p+32) (m+LENGTH (enc at av)) body.vs_memory` by REFL_TAC >>
-  drule_all abi_encode_finish_ptr_from_body >>
+  drule_all abi_encode_finish_ptr_from_body_semantic >>
   disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
   qpat_assum `!D. gas_origin_ptr_path _ _ _ _`
     (qspec_then `cx_dead cx`
@@ -164,5 +164,100 @@ Proof
      qpat_assum `gas_path_ptr _ _ _ _ _ Hbody tbody body _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >>
      metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]) >>
-  cheat
+  `abi_encode_exec_frame func initial actual` by
+    (irule abi_encode_exec_frame_trans >> qexists `prepared` >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     irule abi_encode_exec_frame_trans >> qexists `body` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `abi_encoder_extend_sim ctx func initial actual` by
+    (irule abiEncoderExtendSimTheory.abi_encoder_extend_sim_trans >> qexists `prepared` >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     irule abiEncoderExtendSimTheory.abi_encoder_extend_sim_trans >> qexists `body` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  `abi_decode_sim ctx func initial actual` by
+    (irule abiDecoderLoopTheory.abi_decode_sim_trans >> qexists `prepared` >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     irule abiDecoderLoopTheory.abi_decode_sim_trans >> qexists `body` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  drule abi_encode_exec_frame_memory_length >> strip_tac >>
+  drule abi_builtin_encode_setup_shape >> strip_tac >>
+  drule abiEncoderCountersTheory.abi_encoder_counters >> strip_tac >>
+  `st.cs_next_var <= ready.cs_next_var /\ st.cs_next_var <= body_end.cs_next_var /\
+   st.cs_next_id <= ready.cs_next_id` by
+    (qpat_x_assum `ready.cs_next_var = _` mp_tac >>
+     qpat_x_assum `ready.cs_next_id = _` mp_tac >>
+     qpat_x_assum `ready.cs_next_var <= body_end.cs_next_var` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> Cases_on `method_id` >> simp[] >> decide_tac) >>
+  `d+LENGTH(enc at av) <= p+outsz` by
+    (qspec_then `maxlen+m` mp_tac abiBuiltinAllocationTheory.abi_builtin_word_size_capacity >>
+     qpat_x_assum `outsz = _` mp_tac >> qpat_x_assum `d = _` mp_tac >>
+     qpat_x_assum `LENGTH(enc at av) <= maxlen` mp_tac >> decide_tac) >>
+  `32+w <= outsz` by
+    (qspec_then `maxlen+m` mp_tac abiBuiltinAllocationTheory.abi_builtin_word_size_capacity >>
+     qpat_x_assum `outsz = _` mp_tac >> qpat_x_assum `m = _` mp_tac >>
+     qpat_x_assum `w = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `method_id` >> simp[] >> rpt strip_tac >>
+     Cases_on `word_size (maxlen+m)` >> gvs[] >> decide_tac) >>
+  `!id b sz. id IN window_alloca_sites func (frag_ids ready body_end) /\
+    FLOOKUP prepared.vs_allocas id = SOME(b,sz) ==>
+    venomMemDefs$regions_disjoint (p+32,m) (b,sz)` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `_ IN window_alloca_sites _ _` mp_tac >>
+     simp_tac (srw_ss()) [abiEncoderWindowContractTheory.window_alloca_sites_def] >>
+     strip_tac >>
+     qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _`
+       (strip_assume_tac o PURE_REWRITE_RULE [abiBuiltinEncodeSetupTheory.abi_builtin_encode_setup_frame_def]) >>
+     qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _`
+       (qspecl_then [`inst`,`b`,`sz`] mp_tac) >>
+     qpat_x_assum `FLOOKUP prepared.vs_allocas id = SOME(b,sz)` mp_tac >>
+     pure_asm_rewrite_tac[] >> simp_tac bool_ss [] >> metis_tac[]) >>
+  `ghost_inv rb cenv cx es H' tf' actual /\
+   ghost_kept cenv es st G tn initial H' tf' /\
+   (!i. p <= i /\ i < p+32+m+LENGTH(enc at av) ==> i NOTIN tf'.t_mem)` by
+    (irule abi_encode_phases_effects_transport >>
+     qpat_assum `window_strong_result _ _ _ _ _ _ _ _ prepared body` (irule_at Any) >>
+     qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ initial prepared` (irule_at Any) >>
+     qpat_assum `compile_abi_encode_to_buf _ _ _ _ = _` (irule_at Any) >>
+     qpat_assum `abi_builtin_encode_setup _ _ _ = _` (irule_at Any) >>
+     qexistsl [`tf`,`tbody`,`Hbody`,`H`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qpat_assum `abi_encode_exec_frame func prepared body` mp_tac >>
+     simp_tac (srw_ss()) [abi_encode_exec_frame_def]) >>
+  `mem_bytes_at (p+32) m body.vs_memory = mem_bytes_at (p+32) m prepared.vs_memory` by
+    (irule abiEncoderWindowContractTheory.window_alloca_growth_frame >>
+     conj_tac >-
+       (qpat_x_assum `d + LENGTH _ <= prepared.vs_alloca_next` mp_tac >>
+        qpat_x_assum `d = _` mp_tac >> decide_tac) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`window_alloca_sites func (frag_ids ready body_end)`, `[(d,LENGTH(enc at av))]`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp_tac (srw_ss()) [] >> first_assum ACCEPT_TAC) >>
+  `mem_bytes_at d (LENGTH (enc at av)) actual.vs_memory = enc at av` by
+    (qpat_assum `abi_decode_frame p 32 body actual`
+       (strip_assume_tac o PURE_REWRITE_RULE [abiDecoderContractTheory.abi_decode_frame_def]) >>
+     qpat_x_assum `!p' k. _` (qspecl_then [`d`, `LENGTH (enc at av)`] mp_tac) >>
+     (impl_tac >- (qpat_x_assum `d = _` mp_tac >> decide_tac)) >>
+     disch_then SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  `(case method_id of NONE => T | SOME mid =>
+      mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes mid)` by
+    (qpat_assum `abi_decode_frame p 32 body actual`
+       (strip_assume_tac o PURE_REWRITE_RULE [abiDecoderContractTheory.abi_decode_frame_def]) >>
+     `mem_bytes_at (p+32) m actual.vs_memory = mem_bytes_at (p+32) m body.vs_memory` by
+       (qpat_x_assum `!p' k. _` (qspecl_then [`p+32`, `m`] mp_tac) >>
+        simp_tac bool_ss [arithmeticTheory.LE_REFL]) >>
+     qpat_x_assum `mem_bytes_at (p+32) m body.vs_memory = _` mp_tac >>
+     qpat_x_assum `mem_bytes_at (p+32) m actual.vs_memory = _` mp_tac >>
+     qpat_x_assum `case method_id of NONE => T | SOME mid => _` mp_tac >>
+     qpat_x_assum `m = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `method_id` >> simp_tac (srw_ss()) [] >> metis_tac[]) >>
+  `actual.vs_labels = initial.vs_labels` by
+    (qpat_x_assum `actual.vs_labels = prepared.vs_labels` mp_tac >>
+     qpat_x_assum `prepared.vs_labels = initial.vs_labels` mp_tac >>
+     simp_tac (srw_ss()) []) >>
+  qexistsl [`prepared`,`body`,`actual`,`H'`,`tf'`,`x`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qpat_assum `FST ops = Var x` (fn th => rewrite_tac[th]) >>
+  first_assum ACCEPT_TAC
 QED
