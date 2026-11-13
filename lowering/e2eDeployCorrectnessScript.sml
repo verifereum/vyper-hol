@@ -6,7 +6,7 @@ Theory e2eDeployCorrectness
 Ancestors
   e2eDeployAtMarks e2eDeployDefs ctorDeployDefs
   ctorDeployInitcode ctorDeployEntry ctorDeployShape ctorDeployDefsReach
-  deployUnitExecution ctorDeployDead ctorDeployFrame
+  deployUnitExecution ctorDeployBodyJoint ctorDeployDead ctorDeployFrame
   compileVyper compilePhasesProps codegen e2eProducers e2eComposition
   o1PipelineCorrect o1PassContract codegenCorrectness passSimulationDefs
   lowerDloadDefs e2eEntry gasSummary asmOptimizer
@@ -115,7 +115,7 @@ Proof
                `dout`, `prog`, `cplan`, `am`, `tx`, `es`, `r`, `es'`] mp_tac
     deploy_pipeline_gas_link >>
   impl_tac
-  >- (fs[] >> rpt strip_tac >> irule PRODUCER_F >> metis_tac[]) >>
+  >- (fs[] >> rpt strip_tac >> irule deploy_unit_execution_correct_joint >> metis_tac[]) >>
   strip_tac >>
   qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `am`, `tx`, `es`,
                `r`, `es'`, `rpolicy`, `dunit`, `dout`, `prog`, `cplan`] mp_tac
