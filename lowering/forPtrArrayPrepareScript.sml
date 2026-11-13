@@ -313,7 +313,7 @@ Proof
 QED
 
 Theorem for_array_entry_address_inputs:
-  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+  array_entry_inputs ctx func cenv bc cx st0 es s id p sz dst ainst tv v et tenv sa sb0
     idx (Var bp) arr_base k stride ov ep j3 j4 bb st ==>
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx =
@@ -362,16 +362,30 @@ Proof
 QED
 
 Theorem for_array_entry_raw_ready:
-  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+  array_entry_inputs ctx func cenv bc cx st0 es s id p sz dst ainst tv v et tenv sa sb0
     idx saved_base arr_base k stride ov ep j3 j4 bb st /\
   run_inst_seq sb0.cs_current_insts s = OK t ==>
-  array_entry_ready ctx func bc cx es id tv v sb0 sa ov ep st s
+  array_entry_ready ctx func bc cx st0 es id tv v sb0 sa ov ep st s
     (t with vs_inst_idx := LENGTH sb0.cs_current_insts)
 Proof
   pure_rewrite_tac[array_entry_inputs_def] >> rpt strip_tac >>
+  rename1 `valid_horizon cx st0 H0 es.storage_trace` >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule_all array_for_body_entry_run >>
   disch_then (qspecl_then [`j3`, `j4`] strip_assume_tac) >>
   `t' = t` by metis_tac[exec_result_11] >>
+  `!HH. valid_horizon cx st0 HH es.storage_trace ==>
+    stmt_state_rel HH ctx func bc cx
+      (es with scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes) t` by
+    (qx_gen_tac `HH` >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+       (qspec_then `HH` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     drule_all (Q.SPEC `HH` array_for_body_entry_run) >>
+     disch_then (qspecl_then [`j3`, `j4`] strip_assume_tac) >> gvs[]) >>
   `gas_marked_path F ctx func s 0
      (OK (t with vs_inst_idx := LENGTH sb0.cs_current_insts))` by
     (`EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb0)` by
@@ -396,8 +410,9 @@ Proof
 QED
 
 Theorem for_array_entry_copy_checked:
-  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+  array_entry_inputs ctx func cenv bc cx st0 es s id p sz dst ainst tv v et tenv sa sb0
     idx (Var bp) arr_base k stride ov ep j3 j4 bb st /\
+  valid_horizon cx st0 H es.storage_trace /\
   ghost_inv H d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
   ptr_covers G tn bp s ((k+1)*stride) /\ ptr_covers G tn p s sz /\
   op_taint tn (Var idx) = {} /\
@@ -407,6 +422,8 @@ Theorem for_array_entry_copy_checked:
          cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==>
     not_fresh_at sa x /\ x <> ov /\ x <> ep) ==>
   ?GA tA sA gf tf sf.
+    GA = set_prov (DRESTRICT G (COMPL {ov})) [ep] (FLOOKUP G bp) /\
+    tA = tn with t_var := (tn.t_var |+ (ov,{})) |+ (ep,{}) /\
     sA = ((update_var ep (arr_base + n2w k * n2w stride)
       (update_var ov (n2w k * n2w stride) s)) with vs_inst_idx := 2) /\
     gas_path_ptr D 0 ctx func PG G tn s 0 GA tA (OK sA) /\
@@ -420,6 +437,9 @@ Theorem for_array_entry_copy_checked:
 Proof
   strip_tac >> drule for_array_entry_address_inputs >> strip_tac >>
   fs[array_entry_inputs_def] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qabbrev_tac `sA = (update_var ep (arr_base + n2w k * n2w stride)
     (update_var ov (n2w k * n2w stride) s)) with vs_inst_idx := 2` >>
   qabbrev_tac `GA = set_prov (DRESTRICT G (COMPL {ov})) [ep] (FLOOKUP G bp)` >>
@@ -453,8 +473,8 @@ Proof
     cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at sa x` by metis_tac[] >>
   drule_all for_array_element_install_checked >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qexistsl_tac [`GA`, `tA`, `gf`, `tf`, `sf`] >>
-  gvs[Abbr `sA`] >> metis_tac[]
+  qexistsl_tac [`gf`, `tf`, `sf`] >>
+  gvs[Abbr `sA`, Abbr `GA`, Abbr `tA`] >> metis_tac[]
 QED
 
 Theorem for_array_element_copy_straight:
@@ -477,12 +497,12 @@ Proof
 QED
 
 Theorem for_array_entry_copy_ready:
-  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+  array_entry_inputs ctx func cenv bc cx st0 es s id p sz dst ainst tv v et tenv sa sb0
     idx (Var bp) arr_base k stride ov ep j3 j4 bb st /\
   sA = ((update_var ep (arr_base + n2w k * n2w stride)
     (update_var ov (n2w k * n2w stride) s)) with vs_inst_idx := 2) /\
   run_inst_seq (emitted_insts sa sb0) sA = OK sf ==>
-  array_entry_ready ctx func bc cx es id tv v sb0 sa ov ep st s
+  array_entry_ready ctx func bc cx st0 es id tv v sb0 sa ov ep st s
     (sf with vs_inst_idx := LENGTH sb0.cs_current_insts)
 Proof
   strip_tac >>
@@ -491,6 +511,10 @@ Proof
     (strip_tac >> drule_all for_array_entry_raw_ready >>
      gvs[]) >>
   qhdtm_x_assum `array_entry_inputs` mp_tac >> pure_rewrite_tac[array_entry_inputs_def] >> strip_tac >>
+  rename1 `valid_horizon cx st0 H0 es.storage_trace` >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `H0` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule_all array_for_body_entry_run >>
   disch_then (qspecl_then [`j3`, `j4`] strip_assume_tac) >>
   drule_all array_address_prefix_run >>
@@ -510,7 +534,7 @@ Proof
 QED
 
 Theorem for_array_entry_copy_path_ptr:
-  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+  array_entry_inputs ctx func cenv bc cx st0 es s id p sz dst ainst tv v et tenv sa sb0
     idx (Var bp) arr_base k stride ov ep j3 j4 bb st /\
   sA = ((update_var ep (arr_base + n2w k * n2w stride)
     (update_var ov (n2w k * n2w stride) s)) with vs_inst_idx := 2) /\
@@ -540,8 +564,9 @@ Proof
 QED
 
 Theorem for_array_round_prepare_ptr:
-  array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
+  array_entry_inputs ctx func cenv bc cx st0 es s id p sz dst ainst tv v et tenv sa sb0
     idx (Var bp) arr_base k stride ov ep j3 j4 bb st /\
+  valid_horizon cx st0 H es.storage_trace /\
   ghost_inv H d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
   ptr_covers G tn bp s ((k+1)*stride) /\ ptr_covers G tn p s sz /\
   op_taint tn (Var idx) = {} /\
@@ -552,7 +577,7 @@ Theorem for_array_round_prepare_ptr:
     not_fresh_at sa x /\ x <> ov /\ x <> ep) ==>
   ?gf tf s2.
     gas_path_ptr D 0 ctx func PG G tn s 0 gf tf (OK s2) /\
-    array_entry_ready ctx func bc cx es id tv v sb0 sa ov ep st s s2 /\
+    array_entry_ready ctx func bc cx st0 es id tv v sb0 sa ov ep st s s2 /\
     ghost_inv H d bc cx (es with scopes := (FEMPTY |+ (id,
       <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes)
       gf tf s2 /\
