@@ -64,6 +64,7 @@ QED
 Definition p23_deploy_tx_def:
   p23_deploy_tx = empty_call_txn with
     <| target := 2w; sender := 1w; function_name := "__init__";
+       code := p23_deploy_bc;
        block_number := 1; block_hashes := [0w] |>
 End
 
@@ -84,6 +85,7 @@ Definition p23_call_tx_def:
   p23_call_tx = empty_call_txn with
     <| target := 2w; sender := 1w; function_name := "get";
        calldata := p23_get_calldata;
+       code := p23_runtime_bc ++ word_to_bytes (42w : bytes32) T;
        block_number := 1; block_hashes := [0w] |>
 End
 
@@ -417,6 +419,8 @@ End
 
 val p23_check_dep = EVAL ``check_contract T [] 2w [(NONE, p23_tops)]``;
 val p23_check_run = EVAL ``check_contract F [] 2w [(NONE, p23_tops)]``;
+val p23_deploy_code_length_eval = EVAL ``LENGTH p23_deploy_bc``;
+val p23_runtime_length_eval = EVAL ``LENGTH p23_runtime_bc``;
 val p23_initial_imms = EVAL
   ``initial_immutables (type_env_all_modules [(NONE,p23_tops)]) [(NONE,p23_tops)]``;
 
@@ -444,6 +448,7 @@ Proof
        vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,
        vfmStateTheory.empty_account_state_def,
        vyperTypeContractSoundnessTheory.call_tx_well_typed_def,
+       p23_deploy_code_length_eval,
        vyperTypeEntryReadinessTheory.checked_deployment_constants_ready_def] >>
   simp[p23_constants_eval_expanded,
        vyperTypeEntryReadinessTheory.deployment_constants_output_typed_def,
@@ -516,6 +521,7 @@ Proof
   simp[p23_tops_def, vyperTypeContractTheory.exports_ok_def,
        vyperTypeContractTheory.var_allocated_def,
        vyperTypeContractSoundnessTheory.call_tx_well_typed_def,
+       p23_runtime_length_eval,
        p23_get_calldata_def] >>
   simp[p23_exports_eval_expanded] >>
   conj_tac >- (simp[vyperTypeInitialStateTheory.immutables_ready_def,
@@ -577,7 +583,6 @@ val p23_committed_code_eval = EVAL
       (process_deletions p23_es_dep_post.rollback.toDelete
         p23_es_dep_post.rollback.accounts)).code =
       p23_runtime_bc ++ word_to_bytes (42w : bytes32) T``;
-val p23_runtime_length_eval = EVAL ``LENGTH p23_runtime_bc``;
 
 (* The call starts with no balance anywhere and no return data. *)
 Theorem p23_call_bounds[local]:
