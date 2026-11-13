@@ -7,7 +7,7 @@
      nested_copy_metadata_acyclic. *)
 Theory typedCopyMetadata
 Ancestors
-  typedCopyDomain compileVyper compileEnv supportedTypes supportedDecls
+  typedCopyDomain compileVyper compileEnv structLayoutProps supportedTypes supportedDecls
   vyperAST finite_map list pair combin arithmetic pred_set
 
 Definition shallow_copy_type_def:
@@ -114,6 +114,15 @@ Proof
   rpt (IF_CASES_TAC >> simp[]) >> metis_tac[]
 QED
 
+Theorem make_struct_fields_origin:
+  !tops name fields.
+    FLOOKUP (make_struct_fields_map tops) name = SOME fields ==>
+    ?args. MEM (StructDecl name args) tops /\ MAP (FST o SND) fields = MAP SND args
+Proof
+  rpt gen_tac >> simp[make_struct_fields_map_def] >>
+  rpt strip_tac >> drule built_struct_fields_origin >> simp[]
+QED
+
 (* This is a source-namespace premise, not an environment premise. A typed
    contract's distinct type-definition keys imply it (including all flags
    and interfaces); duplicate struct names are NOT assumed harmless. *)
@@ -159,7 +168,7 @@ Proof
   rename1 `MEM triple (get_struct_fields (make_struct_fields_map tops) name)` >>
   Cases_on `FLOOKUP (make_struct_fields_map tops) name` >>
   gvs[get_struct_fields_def] >>
-  fs[make_struct_fields_map_def] >> drule built_struct_fields_origin >>
+  drule make_struct_fields_origin >>
   strip_tac >> gvs[] >>
   fs[struct_args_unique_def] >>
   rename1 `MEM (StructDecl name found_args) tops` >>

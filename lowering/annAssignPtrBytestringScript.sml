@@ -103,7 +103,7 @@ Proof
   (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_MONO_ADD_EQ]) >>
  drule_all annassign_bytestring_copy_len_path_ptr >>
  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
- `((n2w len + 31w && i2w (-32)) + 32w : bytes32) = n2w n` by
+ `((n2w len + 31w && ~31w) + 32w : bytes32) = n2w n` by
   (once_rewrite_tac[GSYM wordsTheory.w2n_11] >>
    qspec_then `len` mp_tac bytestring_copy_len_word_exact >>
    simp[word_size_def, wordsTheory.w2n_n2w] >>

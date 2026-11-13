@@ -62,6 +62,14 @@ shape, scalar, fixed-bytes padding, and applicable Vyper bounds remain checked.
 Returndata is still capped at the expected type's ABI size bound before decoding.
 Canonical ABI encoding is unchanged.
 
+`==` and `!=` on `String` and dynamic `Bytes[N]` values compare their
+Keccak-256 digests, as compiled Vyper does; fixed-size `bytesM` values compare
+directly. Hashmap slots are Keccak-derived too. So two distinct values whose
+digests collide compare equal, or share a slot. The semantics does not assume
+that no such collision happens: a proof about a contract that relies on
+distinct bytestrings comparing unequal, or on distinct hashmap keys being
+separate, must establish that no collision occurs for the values in that run.
+
 The interpreter is written in a state-exception monad. Exceptions are used for semantic errors (e.g., looking up a variable that was not bound), legitimate runtime exceptions (e.g., failed assertions), and control flow for internal function calls and loops (`return`, `break`, `continue`).
 
 Termination is proved for the interpreter, validating Vyper's design as a total language (this does not rely on gas consumption, which is invisible at the Vyper source level). The termination argument uses the facts that internal function calls cannot recurse (even indirectly) and that all loops have an explicit (syntactic) bound.
@@ -120,7 +128,7 @@ This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.o
 
 The project is built with [`holbuild`](https://github.com/charles-cooper/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies, including the compatible [Verifereum](https://github.com/verifereum/verifereum) revision. Vyper functional tests are generated from the upstream commit pinned in [`VYPER_PIN`](VYPER_PIN). The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
 
-CI pins `holbuild-ref: v0.12.1` in `.github/actions/setup-holbuild-project/action.yml`, shared by its build and test jobs. Update that input to upgrade CI; `minimum_version` in `holproject.toml` is the compatibility floor.
+CI pins `holbuild-ref: v0.13.34` in `.github/actions/setup-holbuild-project/action.yml`, shared by its build and test jobs. Update that input to upgrade CI; `minimum_version` in `holproject.toml` is the compatibility floor.
 
 For a local build, install `holbuild` v0.12.0 or newer (`minimum_version` in `holproject.toml`) and run:
 
@@ -132,6 +140,62 @@ holbuild -j"$(nproc)" build
 `holbuild buildhol` builds and caches the HOL toolchain and project dependencies specified by `holproject.toml`.
 
 Release instructions, including the prebuilt holbuild archive artefact, are in [docs/release.md](docs/release.md).
+
+### Frontend CV translation and benchmark
+
+The test importer keeps `EVAL`, which was faster on all measured fixtures.
+The frontend is total, so `cv_eval` returns an unconditional translation
+equality for every annotated AST. The opt-in benchmark checks exact RHS parity:
+
+```bash
+holbuild -j1 build --force=theory --skip-checkpoints --no-cache jsonFrontendCVBenchmarkTheory
+```
+
+### Native JSON semantics runner
+
+The EmitML runner executes CV-translated Vyper semantics on exported JSON traces.
+With `holbuild` v0.12.0 or newer, MLton, and Python 3 on `PATH`:
+
+```bash
+./tools/demo_run_test.sh
+```
+
+The demo builds `tests/.emit/run-test` and compares exact native/HOL encoded
+inputs and results for all five fixture cases and a passing stdin trace.
+The fixture has three passing cases and two intentional failures (an output
+mismatch and an unexpected revert).
+Before writing parity expectations, the kernel smoke requires both prepared
+and replayed case names to equal the five expected names in order. Missing,
+extra, duplicate, or reordered cases therefore fail rather than allowing an
+empty or incomplete comparison to pass.
+
+Boundary regressions cover block-hash keys and ABI type dimensions beyond
+signed 32-bit range using arbitrary-precision integers. Byte decoding preserves
+the pinned importer's bounded, chunk-dependent handling of repeated lowercase
+`0x` prefixes rather than stripping them recursively; AST hex decoding retains
+its separate single-prefix rule.
+
+```bash
+# Build only; add --smoke for native/HOL parity checks:
+python3 tools/emit_run_test.py
+# Exporter JSON containing named tests and setup fixtures:
+tests/.emit/run-test tests/fixtures/run_test_json/basic.json
+# A deployment/call trace array from stdin:
+tests/.emit/run-test < traces.json
+```
+
+Each case produces one JSON line with `name`, `status`, and, on failure, `error`.
+Exit status is 0 when all cases pass, or 1 for a failed case or import error;
+import errors go to stderr. `{}` is rejected as containing no tests; `[]`
+executes an empty trace successfully. `--dump-input [export.json]` exposes
+diagnostic CV input/result encodings.
+
+Native execution is a trusted regression check, not a kernel proof.
+`vyperJsonReplayLib.replay_file` provides kernel-checked replay. The CV frontend
+translation has no preconditions, so the native executable runs the same
+translation for every input the JSON decoder accepts. CI builds the frontend,
+emitter, and kernel replay smoke theories; native MLton compilation is an
+explicit local step.
 
 ### Running the Vyper test suite
 
@@ -163,8 +227,10 @@ metadata disabled and decimals enabled by fixture pragmas. These profiles can
 evolve independently. At this pin NONE runs the O1 Venom passes but disables
 assembly optimisation; it is not `-O O1`. Both compile for Prague (the newest
 target the pin supports), whereas the HOL EVM semantics executes Osaka.
-Metadata need not match for behavioral replay. Bytecode parity is opt-in and
-is not implied by a passing semantics replay.
+Metadata need not match for behavioral replay. Bytecode parity (checked by
+`bytecode/native/`) is not implied by a passing semantics replay.
+The [getters and constants corpus](bytecode/getters-constants/README.md) records
+its focused parity checks and the remaining supported-header proof restrictions.
 
 Use Python 3.11.17 in an isolated environment, then run from this repository:
 
@@ -174,7 +240,7 @@ cd vyper-src
 git fetch --unshallow --tags
 git checkout --detach "$(tr -d '[:space:]' < ../VYPER_PIN)"
 git config core.abbrev 8
-SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0a4+9362e36b \
+SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0b1 \
   PIP_CONSTRAINT="../tests/semantics-test-constraints.txt ../tests/semantics-build-constraints.txt" \
   pip install . --group test
 cd ..
@@ -210,7 +276,7 @@ Then run individual generated test theories with `holbuild`, for example:
 holbuild -j"$(nproc)" build vyperTest_functional_builtins_codegen_test_abi_decodeTheory
 ```
 
-The CI workflow runs the generated tests in parallel groups; see `.github/workflows/holbuild.yml` for that full setup.
+The CI workflow runs the generated tests in parallel groups; see `.github/workflows/holbuild.yml` for that full setup. Large suites split trace definitions and execution into independent chunks of at most 100 selected tests and 262144 binary-payload hex characters; an oversized case gets its own chunk. Chunks retain the original suite ID and global test indices, validate selection counts and export provenance, and decode only their own traces and fixture dependencies. CI includes every generated chunk.
 
 Local semantic regressions live as behavior-named pytests in
 [`tests/vyper-regression`](tests/vyper-regression/README.md). The pinned export

@@ -150,7 +150,7 @@ Proof
   >- (rpt (pairarg_tac >> simp[]) >>
       Cases_on `b` >>
       TRY (rename1 `Builtin ann bi elems` >> Cases_on `bi`) >>
-      simp[oneline as_stack_val_def, AllCaseEqs()] >>
+      simp[oneline as_stack_val_def] >>
       rpt (pairarg_tac >> simp[]) >>
       rpt IF_CASES_TAC >> rpt (pairarg_tac >> simp[]) >>
       strip_tac >> gvs[AllCaseEqs()] >>
@@ -205,8 +205,6 @@ QED
 Theorem compile_dispatch_make_array_open:
   !cfn cenv rty ty elem bnd args sa vv sb.
     acyclic_struct_metadata cenv.ce_struct_fields /\
-    (case elem of NONE => T | SOME et =>
-       EVERY (\e. is_word_type et \/ is_bytestring_type et \/ et = expr_type e) args) /\
     compile_builtin_dispatch_body cfn cenv rty ty (MakeArray elem bnd) args sa = (vv,sb) ==>
     ~block_is_terminated sb
 Proof

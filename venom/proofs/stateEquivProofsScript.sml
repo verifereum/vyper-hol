@@ -194,6 +194,73 @@ Proof
   rw[eval_operand_def, state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
 
+Theorem eval_operands_state_equiv:
+  !ops s1 s2 vars.
+    state_equiv vars s1 s2 /\
+    (!x. MEM (Var x) ops ==> x NOTIN vars) ==>
+    eval_operands ops s1 = eval_operands ops s2
+Proof
+  Induct >> rw[eval_operands_def] >>
+  `eval_operands ops s1 = eval_operands ops s2` by
+    (first_x_assum irule >> gvs[] >> metis_tac[]) >>
+  `eval_operand h s1 = eval_operand h s2` by
+    (irule eval_operand_equiv >> qexists_tac `vars` >> simp[] >>
+     metis_tac[]) >>
+  gvs[]
+QED
+
+(* ==========================================================================
+   INVOKE Plumbing Preserves state_equiv
+   ========================================================================== *)
+
+Theorem foldl_update_var_state_equiv:
+  !pairs s1 s2 vars.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars
+      (FOLDL (\s' (out,val). update_var out val s') s1 pairs)
+      (FOLDL (\s' (out,val). update_var out val s') s2 pairs)
+Proof
+  Induct >> rw[] >>
+  PairCases_on `h` >> gvs[] >>
+  first_x_assum irule >>
+  gvs[state_equiv_def, execution_equiv_def, update_var_def,
+      lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rw[] >> gvs[]
+QED
+
+Theorem setup_callee_state_equiv:
+  !fn args s1 s2 vars.
+    state_equiv vars s1 s2 ==>
+    setup_callee fn args s1 = setup_callee fn args s2
+Proof
+  rw[venomExecSemanticsTheory.setup_callee_def] >>
+  gvs[state_equiv_def, execution_equiv_def] >>
+  rw[venom_state_component_equality]
+QED
+
+Theorem merge_callee_state_equiv:
+  !s1 s2 callee vars.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (merge_callee_state s1 callee)
+                     (merge_callee_state s2 callee)
+Proof
+  rw[state_equiv_def, execution_equiv_def,
+     venomExecSemanticsTheory.merge_callee_state_def] >>
+  gvs[lookup_var_def]
+QED
+
+Theorem adopt_return_fmp_state_equiv:
+  !vars ir s1 s2.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (adopt_return_fmp ir s1)
+                     (adopt_return_fmp ir s2)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ir.iret_adopt_fmp` >>
+  gvs[venomExecSemanticsTheory.adopt_return_fmp_def, state_equiv_def,
+      execution_equiv_def, lookup_var_def]
+QED
+
 (* ==========================================================================
    Mutations Preserve state_equiv
    ========================================================================== *)
@@ -335,7 +402,7 @@ QED
    TODO: Un-local these when a downstream consumer needs them.
    ========================================================================== *)
 
-Theorem update_var_execution_preserves[local]:
+Theorem update_var_execution_preserves:
   !vars x v s1 s2.
     execution_equiv vars s1 s2 ==>
     execution_equiv vars (update_var x v s1) (update_var x v s2)
@@ -343,102 +410,6 @@ Proof
   rpt gen_tac >>
   simp_tac memory_equiv_ss [] >> strip_tac >>
   asm_simp_tac memory_equiv_ss [update_var_def, FLOOKUP_UPDATE]
-QED
-
-Theorem mstore_execution_preserves[local]:
-  !vars addr val s1 s2.
-    execution_equiv vars s1 s2 ==>
-    execution_equiv vars (mstore addr val s1) (mstore addr val s2)
-Proof
-  rpt gen_tac >>
-  simp_tac memory_equiv_ss [] >> strip_tac >>
-  asm_simp_tac memory_equiv_ss [mstore_def]
-QED
-
-Theorem sstore_execution_preserves[local]:
-  !vars key val s1 s2.
-    execution_equiv vars s1 s2 ==>
-    execution_equiv vars (sstore key val s1) (sstore key val s2)
-Proof
-  rpt gen_tac >>
-  simp_tac memory_equiv_ss [] >> strip_tac >>
-  asm_simp_tac memory_equiv_ss [sstore_def]
-QED
-
-Theorem tstore_execution_preserves[local]:
-  !vars key val s1 s2.
-    execution_equiv vars s1 s2 ==>
-    execution_equiv vars (tstore key val s1) (tstore key val s2)
-Proof
-  rpt gen_tac >>
-  simp_tac memory_equiv_ss [] >> strip_tac >>
-  asm_simp_tac memory_equiv_ss [tstore_def]
-QED
-
-Theorem halt_state_execution_preserves[local]:
-  !vars s1 s2.
-    execution_equiv vars s1 s2 ==>
-    execution_equiv vars (halt_state s1) (halt_state s2)
-Proof
-  rpt gen_tac >>
-  simp_tac memory_equiv_ss [] >> strip_tac >>
-  asm_simp_tac memory_equiv_ss [halt_state_def]
-QED
-
-Theorem revert_state_execution_preserves[local]:
-  !vars s1 s2.
-    execution_equiv vars s1 s2 ==>
-    execution_equiv vars (revert_state s1) (revert_state s2)
-Proof
-  rpt gen_tac >>
-  simp_tac memory_equiv_ss [] >> strip_tac >>
-  asm_simp_tac memory_equiv_ss [revert_state_def]
-QED
-
-Theorem write_memory_with_expansion_execution_preserves[local]:
-  !vars offset bytes s1 s2.
-    execution_equiv vars s1 s2 ==>
-    execution_equiv vars
-      (write_memory_with_expansion offset bytes s1)
-      (write_memory_with_expansion offset bytes s2)
-Proof
-  rpt gen_tac >>
-  simp_tac memory_equiv_ss [] >> strip_tac >>
-  asm_simp_tac memory_equiv_ss [write_memory_with_expansion_def]
-QED
-
-Theorem mload_execution_same[local]:
-  !vars addr s1 s2.
-    execution_equiv vars s1 s2 ==>
-    mload addr s1 = mload addr s2
-Proof
-  rw[execution_equiv_def, mload_def]
-QED
-
-Theorem sload_execution_same[local]:
-  !vars key s1 s2.
-    execution_equiv vars s1 s2 ==>
-    sload key s1 = sload key s2
-Proof
-  rw[execution_equiv_def, sload_def, contract_storage_def]
-QED
-
-Theorem tload_execution_same[local]:
-  !vars key s1 s2.
-    execution_equiv vars s1 s2 ==>
-    tload key s1 = tload key s2
-Proof
-  rw[execution_equiv_def, tload_def, contract_transient_def]
-QED
-
-Theorem eval_operand_execution_equiv[local]:
-  !vars op s1 s2.
-    execution_equiv vars s1 s2 /\
-    (!x. op = Var x ==> x NOTIN vars) ==>
-    eval_operand op s1 = eval_operand op s2
-Proof
-  Cases_on `op` >>
-  rw[eval_operand_def, execution_equiv_def, lookup_var_def]
 QED
 
 

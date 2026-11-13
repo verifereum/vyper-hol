@@ -1,6 +1,7 @@
 (* Concrete checks of the compiler: allocation limits, bytestring
    conversions, the checker's conversion domain, concat buffers, shared callee memory, and a deployed
-   immutable read through the source semantics. *)
+   immutable read through the source semantics, and a memory struct field
+   named msg.data sliced by MCOPY. *)
 Theory compilerLoweringTest
 Ancestors
   evalCompilerSubsetState compileVyper vyperCompiler exprLowering context
@@ -10,7 +11,8 @@ Libs memoryStoreWitnessLib vyperCheckContractFrontendLib vyperCheckContractLib
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps
-  ["../bytecode/immutables/oracle", "../bytecode/conversions/checker-oracle"]
+  ["../bytecode/immutables/oracle", "../bytecode/conversions/checker-oracle",
+   "../bytecode/conversions/typecheck-rejected"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [fmap_to_alist_FEMPTY, i2w_pos, i2w_def])
@@ -51,6 +53,29 @@ Theorem allocation_limit_return_rejected:
     lower_vyper_runtime_unit allocation_limit_return_program rpolicy = NONE
 Proof
   gen_tac >> ACCEPT_TAC allocation_limit_return_eval
+QED
+
+(* Default arguments use grouped lowering, but must not bypass the same
+   return-buffer allocation limit as ordinary external entries. *)
+Definition allocation_limit_defaults_return_program_def:
+  allocation_limit_defaults_return_program =
+    [FunctionDecl External Nonpayable F F "f"
+       [("x", BaseT (BytesT (Dynamic 1))); ("n", BaseT (UintT 256))]
+       [Literal (BaseT (UintT 256)) (IntL 0)]
+       (BaseT (BytesT (Dynamic (2 ** 64))))
+       [Return (SOME (Name (BaseT (BytesT (Dynamic (2 ** 64)))) "x"))]]
+End
+
+val allocation_limit_defaults_return_eval =
+  EVAL ``lower_vyper_runtime_unit
+           allocation_limit_defaults_return_program rpolicy``
+
+Theorem allocation_limit_defaults_return_rejected:
+  !rpolicy.
+    lower_vyper_runtime_unit
+      allocation_limit_defaults_return_program rpolicy = NONE
+Proof
+  gen_tac >> ACCEPT_TAC allocation_limit_defaults_return_eval
 QED
 
 val allocation_limit_raise_eval =
@@ -416,8 +441,8 @@ QED
 (* The checker on Python's exported ASTs of conversions outside Vyper's input
    sets: it rejects those whose HOL lowering and source semantics disagree,
    and accepts those where they agree. *)
-fun check_conversion expected name = let
-  val path = "../bytecode/conversions/checker-oracle/" ^ name ^ ".json"
+fun check_conversion_in dir expected name = let
+  val path = "../bytecode/conversions/" ^ dir ^ "/" ^ name ^ ".json"
   val input = vyperCheckContractFrontendLib.prepare_check_input
     {in_deploy = false, address = ``0w : address``,
      annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast path,
@@ -435,10 +460,44 @@ fun check_conversion expected name = let
   end
 in List.app check [false, true] end
 
-val () = List.app (check_conversion false)
+val () = List.app (check_conversion_in "checker-oracle" true)
+  ["lit_300_to_u8", "lit_neg_to_u256", "lit_bys_narrow"]
+(* The pinned Vyper's type checker rejects these; their ASTs come from the
+   last pin that accepted them (see ../bytecode/conversions/README.md). *)
+val () = List.app (check_conversion_in "typecheck-rejected" false)
   ["u256_to_b4", "bys33_to_bool", "bys64_to_u256", "bys8_to_b4",
    "str8_to_b4", "u256_to_bys16", "b4_to_bys2",
    "b4_to_bys", "b4_to_str", "u256_to_bys"]
-val () = List.app (check_conversion true)
-  ["i8_to_addr", "i256_to_addr", "lit_300_to_u8", "lit_neg_to_u256",
-   "lit_bys_narrow"]
+val () = List.app (check_conversion_in "typecheck-rejected" true)
+  ["i8_to_addr", "i256_to_addr"]
+
+(* The HOL typed AST permits a struct variable named msg.  Its data field
+   is memory, even though its syntax also satisfies is_msg_data.  Real
+   transaction calldata uses the separate CalldataSlice constructor. *)
+Definition slice_struct_field_expr_def:
+  slice_struct_field_expr =
+    Builtin (BaseT (BytesT (Dynamic 40))) (Slice 40)
+      [Attribute (BaseT (BytesT (Dynamic 40)))
+         (Name (StructT (NONE, "S")) "msg") "data";
+       Literal (BaseT (UintT 256)) (IntL 0);
+       Literal (BaseT (UintT 256)) (IntL 1)]
+End
+
+Definition slice_struct_field_insts_def:
+  slice_struct_field_insts =
+    let cenv = build_compile_env
+      [StructDecl "S" [("data", BaseT (BytesT (Dynamic 40)))]]
+      External Pure "entry" [("msg", StructT (NONE, "S"))]
+      (BaseT (BytesT (Dynamic 40)))
+      [Return (SOME slice_struct_field_expr)] F in
+    (SND (compile_expr cenv (BaseT (BytesT (Dynamic 40)))
+      slice_struct_field_expr
+      (vyperCompiler$initial_compile_state "entry"))).cs_current_insts
+End
+
+Theorem slice_struct_field_copies_memory:
+  EXISTS (\i. i.inst_opcode = MCOPY) slice_struct_field_insts /\
+  ~EXISTS (\i. i.inst_opcode = CALLDATACOPY) slice_struct_field_insts
+Proof
+  EVAL_TAC
+QED

@@ -10,6 +10,7 @@
 
 Theory dftWf
 Ancestors
+  venomFnInstsProofs
   dftCompleteness dftStructural dftDefs venomWf
   dftTopoSort dftScheduleFixed dftIdempotent dftPipelineInvar
   allocaRemapSSA venomInst
@@ -132,30 +133,6 @@ Proof
   simp[MEM_MAP] >> qexists_tac `x` >> simp[]
 QED
 
-(* The children + DfsEmit pushed by processing a non-pseudo instruction
-   don't contain tid *)
-Triviality pushed_no_tid:
-  !bi order eda offspring_map top tid.
-    MEM top bi ==> ~is_pseudo top.inst_opcode ==>
-    top.inst_id <> tid ==>
-    eda_wf eda bi ==>
-    (!i. MEM i bi /\ ~is_pseudo i.inst_opcode ==>
-         ~MEM tid (MAP (\d. d.inst_id) (inst_all_deps bi order eda i))) ==>
-    let sorted = sort_children bi order eda offspring_map top
-                   (inst_all_deps bi order eda top) in
-    let inst' = if is_flippable top.inst_opcode /\
-                   sorted <> inst_all_deps bi order eda top
-                then flip_operands top else top in
-    id_not_in_stack tid
-      (MAP DfsProcess sorted ++ [DfsEmit inst'])
-Proof
-  rpt strip_tac >> simp[LET_THM, id_not_in_stack_def] >>
-  conj_tac
-  >- (drule children_no_tid >> rpt (disch_then drule) >>
-      strip_tac >> gvs[id_not_in_map_process])
-  >> (rw[] >> simp[])
-QED
-
 (* Invariant for the DFS FUNPOW. tid = (LAST bi).inst_id.
    Either:
    (A) DfsProcess with inst_id = tid is at stack bottom, not visited,
@@ -183,30 +160,6 @@ End
 (* Helper: when the stack top is processed (not the bottom item),
    the bottom item is preserved and new items above don't contain tid.
    This factors the common case analysis for Phases A, B, and C. *)
-
-(* dfs_step preserves bottom_inv — helper for pushed items *)
-Triviality pushed_stack_no_tid:
-  !bi order eda offspring_map top tid rest.
-    MEM top bi /\ ~is_pseudo top.inst_opcode /\
-    top.inst_id <> tid /\ eda_wf eda bi /\
-    (!i. MEM i bi /\ ~is_pseudo i.inst_opcode ==>
-         ~MEM tid (MAP (\d. d.inst_id) (inst_all_deps bi order eda i))) /\
-    id_not_in_stack tid rest ==>
-    id_not_in_stack tid
-      (MAP DfsProcess
-         (sort_children bi order eda offspring_map top
-            (inst_all_deps bi order eda top)) ++
-       [DfsEmit (if is_flippable top.inst_opcode /\
-          sort_children bi order eda offspring_map top
-            (inst_all_deps bi order eda top) <>
-          inst_all_deps bi order eda top
-        then flip_operands top else top)] ++ rest)
-Proof
-  rpt strip_tac >>
-  mp_tac (Q.SPECL [`bi`,`order`,`eda`,`offspring_map`,`top`,`tid`]
-            pushed_no_tid) >>
-  simp[LET_THM]
-QED
 
 (* dfs_step preserves bottom_inv when tid is not a dep target.
    Key: asm_rewrite_tac[dfs_step_def] resolves case on ds_stack
@@ -464,41 +417,11 @@ Finalise schedule_terminator_last
    Section 3: eda_topo_compatible for original blocks
    ================================================================ *)
 
-(* MEM in block implies MEM in fn_insts_blocks *)
-(* fn_inst_ids_distinct + same inst_id in two blocks ==> same block *)
-Triviality inst_in_unique_block:
-  !bbs bb1 bb2 id.
-    ALL_DISTINCT (FLAT (MAP (\bb. MAP (\i. i.inst_id)
-                                      bb.bb_instructions) bbs)) /\
-    MEM bb1 bbs /\ MEM bb2 bbs /\
-    MEM id (MAP (\i. i.inst_id) bb1.bb_instructions) /\
-    MEM id (MAP (\i. i.inst_id) bb2.bb_instructions) ==>
-    bb1 = bb2
-Proof
-  rpt strip_tac >>
-  qspecl_then [`bbs`,
-               `\bb. MAP (\i. i.inst_id) bb.bb_instructions`,
-               `bb1`, `bb2`, `id`]
-    mp_tac all_distinct_flat_map_unique >>
-  simp[]
-QED
-
-(* ALL_DISTINCT of FLAT (MAP f l) implies ALL_DISTINCT of f x for MEM x l *)
-Triviality all_distinct_flat_map_el:
-  !f l x. ALL_DISTINCT (FLAT (MAP f l)) /\ MEM x l ==>
-           ALL_DISTINCT (f x)
-Proof
-  gen_tac >> Induct >> simp[] >>
-  rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
-
 Theorem wf_fn_block_inst_ids_distinct:
   !fn bb. wf_function fn /\ MEM bb fn.fn_blocks ==>
     ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)
 Proof
-  rpt strip_tac >>
-  gvs[wf_function_def, fn_inst_ids_distinct_def] >>
-  drule_all all_distinct_flat_map_el >> simp[]
+  rw[wf_function_def] >> metis_tac[fn_inst_ids_block_distinct]
 QED
 
 (* wf_ssa orders ordinary uses within a block.  PHI operands are edge uses,
@@ -530,26 +453,15 @@ Proof
   `prod = def_inst` by metis_tac[ssa_unique_output] >>
   gvs[] >>
   (* Step 4: Same block: def_bb = bb *)
-  `def_bb = bb` by (
-    qspecl_then [`fn.fn_blocks`,
-                 `\bb. MAP (\i. i.inst_id) bb.bb_instructions`,
-                 `def_bb`, `bb`, `def_inst.inst_id`]
-      mp_tac all_distinct_flat_map_unique >>
-    impl_tac >- (
-      gvs[fn_inst_ids_distinct_def] >>
-      simp[MEM_MAP] >> metis_tac[]) >>
-    simp[]) >>
+  `def_bb = bb` by metis_tac[inst_in_unique_block] >>
   gvs[] >>
   (* Step 5: same-block ordering gives i < j' with EL j' bi = EL j bi *)
   first_x_assum (K ALL_TAC) >> (* drop dominance *)
   rename1 `i' < j'` >>
   (* j' = j since inst IDs distinct within block *)
   `j' = j` by (
-    `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by (
-      qspecl_then [`\bb. MAP (\i. i.inst_id) bb.bb_instructions`,
-                   `fn.fn_blocks`, `bb`]
-        mp_tac all_distinct_flat_map_el >>
-      gvs[fn_inst_ids_distinct_def]) >>
+    `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+      metis_tac[fn_inst_ids_block_distinct] >>
     `(EL j' bb.bb_instructions).inst_id =
      (EL j bb.bb_instructions).inst_id` by gvs[] >>
     `EL j' (MAP (\i. i.inst_id) bb.bb_instructions) =
@@ -1131,17 +1043,6 @@ Proof
   simp[]
 QED
 
-Triviality foldl_add_mem:
-  !prev init x.
-    MEM x (FOLDL (\ds (p:instruction). if MEM p ds then ds else p :: ds)
-             init prev) ==>
-    MEM x init \/ MEM x prev
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  Cases_on `MEM h init` >> gvs[] >>
-  first_x_assum drule >> strip_tac >> gvs[]
-QED
-
 (* FOLDL lemma for add_deps_from_barrier backward property *)
 Triviality add_deps_from_barrier_foldl_backward:
   !to_process prefix nps prev_insts acc.
@@ -1450,13 +1351,6 @@ QED
 Definition non_pseudo_defs_before_uses_def:
   non_pseudo_defs_before_uses = np_defs_before_uses
 End
-
-Triviality defs_before_implies_non_pseudo:
-  !insts. defs_before_uses insts ==> non_pseudo_defs_before_uses insts
-Proof
-  rw[non_pseudo_defs_before_uses_def, defs_before_uses_def,
-     np_defs_before_uses_def] >> metis_tac[]
-QED
 
 Triviality operand_dep_backward_weak:
   !bi inst dep v.

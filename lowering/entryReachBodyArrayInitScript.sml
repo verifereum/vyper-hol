@@ -13,11 +13,11 @@ Theorem entry_init_step_fields[local]:
   MEM i.inst_opcode [CALLDATALOAD; GT; ISZERO; ASSERT; MSTORE; ALLOCA] /\
   step_inst_base i s = OK t ==>
   (t.vs_accounts, t.vs_transient, t.vs_logs, t.vs_tx_ctx,
-   t.vs_block_ctx, t.vs_outcomes, t.vs_requests, t.vs_pending_deletions,
-   t.vs_gas_readings, t.vs_fmp, t.vs_halted) =
+   t.vs_block_ctx, t.vs_immutables, t.vs_outcomes, t.vs_requests,
+   t.vs_pending_deletions, t.vs_gas_readings, t.vs_fmp, t.vs_halted) =
   (s.vs_accounts, s.vs_transient, s.vs_logs, s.vs_tx_ctx,
-   s.vs_block_ctx, s.vs_outcomes, s.vs_requests, s.vs_pending_deletions,
-   s.vs_gas_readings, s.vs_fmp, s.vs_halted)
+   s.vs_block_ctx, s.vs_immutables, s.vs_outcomes, s.vs_requests,
+   s.vs_pending_deletions, s.vs_gas_readings, s.vs_fmp, s.vs_halted)
 Proof
   simp_tac bool_ss [MEM] >> strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
@@ -35,11 +35,11 @@ Theorem entry_init_sequence_fields[local]:
   EVERY (\i. MEM i.inst_opcode [CALLDATALOAD; GT; ISZERO; ASSERT; MSTORE; ALLOCA]) code /\
   run_inst_seq code s = OK t ==>
   (t.vs_accounts, t.vs_transient, t.vs_logs, t.vs_tx_ctx,
-   t.vs_block_ctx, t.vs_outcomes, t.vs_requests, t.vs_pending_deletions,
-   t.vs_gas_readings, t.vs_fmp, t.vs_halted) =
+   t.vs_block_ctx, t.vs_immutables, t.vs_outcomes, t.vs_requests,
+   t.vs_pending_deletions, t.vs_gas_readings, t.vs_fmp, t.vs_halted) =
   (s.vs_accounts, s.vs_transient, s.vs_logs, s.vs_tx_ctx,
-   s.vs_block_ctx, s.vs_outcomes, s.vs_requests, s.vs_pending_deletions,
-   s.vs_gas_readings, s.vs_fmp, s.vs_halted)
+   s.vs_block_ctx, s.vs_immutables, s.vs_outcomes, s.vs_requests,
+   s.vs_pending_deletions, s.vs_gas_readings, s.vs_fmp, s.vs_halted)
 Proof
   Induct >- simp[run_inst_seq_def] >> rpt gen_tac >>
   simp_tac (srw_ss()) [run_inst_seq_def, EVERY_DEF, AllCaseEqs(), Excl "MEM"] >> strip_tac >>
@@ -74,8 +74,8 @@ Theorem entry_array_init_sequence_fields:
   run_inst_seq (emitted_insts st loop_st) s = OK t ==>
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
   t.vs_logs = s.vs_logs /\ t.vs_tx_ctx = s.vs_tx_ctx /\
-  t.vs_block_ctx = s.vs_block_ctx /\ t.vs_outcomes = s.vs_outcomes /\
-  t.vs_requests = s.vs_requests /\
+  t.vs_block_ctx = s.vs_block_ctx /\ t.vs_immutables = s.vs_immutables /\
+  t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
   t.vs_pending_deletions = s.vs_pending_deletions /\
   t.vs_gas_readings = s.vs_gas_readings /\ t.vs_fmp = s.vs_fmp /\
   t.vs_halted = s.vs_halted
@@ -217,7 +217,8 @@ Theorem entry_array_init_accepted_live:
     t.vs_halted = initial.vs_halted /\
     t.vs_accounts = initial.vs_accounts /\ t.vs_transient = initial.vs_transient /\
     t.vs_logs = initial.vs_logs /\ t.vs_tx_ctx = initial.vs_tx_ctx /\
-    t.vs_block_ctx = initial.vs_block_ctx /\ t.vs_outcomes = initial.vs_outcomes /\
+    t.vs_block_ctx = initial.vs_block_ctx /\ t.vs_immutables = initial.vs_immutables /\
+    t.vs_outcomes = initial.vs_outcomes /\
     t.vs_requests = initial.vs_requests /\ t.vs_pending_deletions = initial.vs_pending_deletions /\
     t.vs_gas_readings = initial.vs_gas_readings /\ t.vs_fmp = initial.vs_fmp
 Proof

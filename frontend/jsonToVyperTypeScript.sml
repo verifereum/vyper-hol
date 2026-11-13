@@ -132,75 +132,6 @@ Definition resolve_qualified_annotation_def:
         | NONE => NONE
 End
 
-Definition annotation_resolved_def:
-  (annotation_resolved nominal_index all_import_maps ctx (JTA_Named name) =
-    if name = "bool" ∨ name = "address" ∨ name = "self" ∨
-       name = "decimal" ∨ name = "(void)"
-    then T
-    else IS_SOME (resolve_annotation_name nominal_index ctx name)) ∧
-  (annotation_resolved nominal_index all_import_maps ctx
-      (JTA_StaticArray ty _) =
-    annotation_resolved nominal_index all_import_maps ctx ty) ∧
-  (annotation_resolved nominal_index all_import_maps ctx
-      (JTA_DynArray ty _) =
-    annotation_resolved nominal_index all_import_maps ctx ty) ∧
-  (annotation_resolved nominal_index all_import_maps ctx
-      (JTA_Tuple tys) =
-    EVERY (annotation_resolved nominal_index all_import_maps ctx) tys) ∧
-  (annotation_resolved nominal_index all_import_maps ctx
-      (JTA_Qualified path name) =
-    if name = "__interface__"
-    then IS_SOME (resolve_qualified_type_path all_import_maps ctx path)
-    else IS_SOME (resolve_qualified_annotation nominal_index all_import_maps ctx path name)) ∧
-  (annotation_resolved nominal_index all_import_maps ctx _ = T)
-Termination
-  WF_REL_TAC `measure (λ(_,_,_,ann). json_type_annotation_size ann)` >> simp[]
-End
-
-(* Elaborate declaration annotations from syntax and the declaration index.
-   This function is used only after annotation_resolved has succeeded. *)
-Definition elaborate_annotation_def:
-  (elaborate_annotation nominal_index all_import_maps ctx
-      (JTA_Integer bits T) = BaseT (IntT bits)) ∧
-  (elaborate_annotation nominal_index all_import_maps ctx
-      (JTA_Integer bits F) = BaseT (UintT bits)) ∧
-  (elaborate_annotation nominal_index all_import_maps ctx
-      (JTA_BytesM m) = BaseT (BytesT (Fixed m))) ∧
-  (elaborate_annotation nominal_index all_import_maps ctx
-      (JTA_String n) = BaseT (StringT n)) ∧
-  (elaborate_annotation nominal_index all_import_maps ctx
-      (JTA_Bytes n) = BaseT (BytesT (Dynamic n))) ∧
-  (elaborate_annotation nominal_index all_import_maps ctx
-      (JTA_StaticArray ty len) =
-    ArrayT (elaborate_annotation nominal_index all_import_maps ctx ty)
-      (Fixed len)) ∧
-  (elaborate_annotation nominal_index all_import_maps ctx
-      (JTA_DynArray ty len) =
-    ArrayT (elaborate_annotation nominal_index all_import_maps ctx ty)
-      (Dynamic len)) ∧
-  (elaborate_annotation nominal_index all_import_maps ctx
-      (JTA_Tuple tys) =
-    TupleT (MAP (elaborate_annotation nominal_index all_import_maps ctx) tys)) ∧
-  (elaborate_annotation nominal_index all_import_maps ctx
-      (JTA_Named name) =
-    if name = "bool" then BaseT BoolT
-    else if name = "address" ∨ name = "self" then BaseT AddressT
-    else if name = "decimal" then BaseT DecimalT
-    else if name = "(void)" then NoneT
-    else case resolve_annotation_name nominal_index ctx name of
-         | SOME (kind, nsid) => nominal_type kind nsid
-         | NONE => NoneT) ∧
-  (elaborate_annotation nominal_index all_import_maps ctx
-      (JTA_Qualified path name) =
-    if name = "__interface__" then BaseT AddressT
-    else case resolve_qualified_annotation nominal_index all_import_maps ctx path name of
-         | SOME (kind, nsid) => nominal_type kind nsid
-         | NONE => NoneT) ∧
-  (elaborate_annotation nominal_index all_import_maps ctx JTA_None = NoneT)
-Termination
-  WF_REL_TAC `measure (λ(_,_,_,ann). json_type_annotation_size ann)` >> simp[]
-End
-
 Definition inferred_source_matches_def:
   inferred_source_matches ctx expected NONE = T ∧
   inferred_source_matches ctx expected (SOME src_id) =
@@ -255,17 +186,4 @@ Definition inferred_type_consistent_def:
   (inferred_type_consistent ctx _ _ = F)
 Termination
   WF_REL_TAC `measure (λ(_,_,inferred). json_type_size inferred)` >> simp[]
-End
-
-Definition declaration_type_valid_def:
-  declaration_type_valid nominal_index all_import_maps ctx inferred ann =
-    (annotation_resolved nominal_index all_import_maps ctx ann ∧
-     (ann = JTA_None ∨ inferred_type_consistent ctx
-       (elaborate_annotation nominal_index all_import_maps ctx ann) inferred))
-End
-
-Definition canonical_decl_type_def:
-  canonical_decl_type nominal_index all_import_maps ctx inferred ann =
-    if ann = JTA_None then translate_type ctx inferred
-    else elaborate_annotation nominal_index all_import_maps ctx ann
 End

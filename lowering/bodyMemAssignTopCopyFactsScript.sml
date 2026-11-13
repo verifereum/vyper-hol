@@ -55,7 +55,7 @@ Proof
      is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)` by
     fs[body_inv_def] >>
   irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def,
       int_calls_atarget_def, int_calls_expr_def] >>
   qexists_tac `[]` >> simp[]
@@ -147,28 +147,6 @@ Proof
   metis_tac[])
 QED
 
-Theorem topcopy_not_bytestring:
-  !tops t. supported_storage_type tops t ==> ~is_bytestring_type t
-Proof
-  Cases_on `t` >> simp[is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[is_bytestring_type_def, supported_storage_type_def,
-       Once supported_nested_type_def, supported_full_word_type_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[is_bytestring_type_def, supported_storage_type_def,
-       Once supported_nested_type_def, supported_full_word_type_def]
-QED
-
-Theorem topcopy_no_length_word:
-  !tops t. supported_storage_type tops t /\
-    (!elem n. t <> ArrayT elem (Dynamic n)) ==> ~has_length_word t
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule topcopy_not_bytestring >>
-  Cases_on `t` >> simp[has_length_word_def, is_bytestring_type_def] >>
-  Cases_on `b` >> gvs[has_length_word_def, is_bytestring_type_def]
-QED
-
 Theorem topcopy_scalar_fit_equal[local]:
   !tops fuel t u.
     supported_scalar_type t /\
@@ -242,7 +220,7 @@ Proof
       drule topcopy_not_bytestring >>
       gvs[vyperTypeSystemTheory.well_typed_builtin_app_def,
           is_bytestring_type_def])
-  >- (rpt gen_tac >> strip_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
       simp[expr_body_pre_def, well_typed_expr_def,
            type_builtin_result_ok_def, expr_type_def] >> strip_tac >>

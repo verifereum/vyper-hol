@@ -54,7 +54,6 @@ Definition body_inv_def:
        lookup_function callee_name ctx.ctx_functions = SOME callee ==>
        fn_has_retpc callee) /\
     (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
-    ~vs.vs_call_ctx.cc_static /\
     codegen_context_obligations Inv ctx cpl /\
     reachability_closed Inv ctx /\
     (!inst. active_inst fn inst vs ==> Inv ctx fn inst vs) /\

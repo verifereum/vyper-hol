@@ -3,6 +3,7 @@
 Theory bodyMemAssignAttrStorage
 Ancestors
   supportedExprTraverse allocLimits allocLimitsProps
+  bodySimStmtCases
   bodyMemoryPreds bodyMemAugAssignAttrStorage vyperInterpreter vyperState
   vyperStorageBackend loweringPosts exprSimProps compileEnv loweringStateRelDefs venomExecSemantics venomState
   exprSimMemUnwrap exprSimVVFrame bodyMemEmitOpFrame context emitHelperProps
@@ -40,8 +41,8 @@ Proof
      goal_assum (drule_at Any) >> simp[]) >>
   simp[Once evaluate_def, FUN_EQ_THM, bind_def] >> qx_gen_tac `st` >>
   Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
-  simp[write_place_def, bind_def] >>
-  Cases_on `read_result cx x' r` >> Cases_on `q` >> simp[]
+  Cases_on `read_result cx x' r` >> Cases_on `q` >>
+  simp[write_place_def, bind_def]
 QED
 
 Theorem vv_at_start_var_mem_src[local]:
@@ -51,7 +52,7 @@ Proof
   Cases_on `vv` >> simp[vv_at_def, expr_val_at_def]
 QED
 
-Theorem vv_post_rebase_mem_src[local]:
+Theorem vv_post_rebase_mem_src:
   vv_post ctx func ce cx e es sa sm s0 ee tv vv s ==>
   vv_post ctx func ce cx e ee (sa with cs_next_var := sm.cs_next_var)
     sm s ee tv vv s
@@ -59,7 +60,7 @@ Proof
   simp[vv_post_def, vv_at_start_var_mem_src, locals_kept_refl]
 QED
 
-Theorem expr_post_rebased_operand_mem_src[local]:
+Theorem expr_post_rebased_operand_mem_src:
   expr_post ctx func ce cx e ee (sa with cs_next_var := sm.cs_next_var)
     sb s ee v op u /\
   (?x. dst = Var x /\ not_fresh_at sm x) /\
@@ -113,7 +114,7 @@ Proof
   irule expr_post_rebased_operand_mem_src >> goal_assum (drule_at Any) >> gvs[]
 QED
 
-Theorem expr_post_rebased_compose_mem_src[local]:
+Theorem expr_post_rebased_compose_mem_src:
   vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
   local_ptrs_reserved ce sa /\ local_ptrs_rel func ce es.scopes s0 /\
   sa.cs_next_var <= sm.cs_next_var /\
@@ -136,6 +137,10 @@ Proof
      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[vv_post_def, expr_post_def] >> metis_tac[]) >>
+  `~expr_has_effect e ==> pure_frame ce func es sa s0 u` by
+    (strip_tac >> match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`ee`, `sa with cs_next_var := sm.cs_next_var`, `s`] >>
+     gvs[vv_post_def, expr_post_def]) >>
   gvs[vv_post_def, expr_post_def] >> rpt conj_tac
   >- (strip_tac >> irule expr_val_own_start_mono >>
       qexists_tac `sa with cs_next_var := sm.cs_next_var` >> simp[])
@@ -212,8 +217,11 @@ Proof
       simp[] >> simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj]) >>
   irule vv_store_bound_frame_mem_src >> goal_assum (drule_at Any) >>
   simp[] >> gvs[] >>
-  rw[] >> first_x_assum drule >>
-  simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
+  Cases_on `vv_operand vv` >> simp[eval_operand_def, lookup_var_update_var] >>
+  rw[] >> gvs[] >>
+  `not_fresh_at sm (STRING #"%" (toString sm.cs_next_var))` by gvs[] >>
+  pop_assum mp_tac >> simp[not_fresh_at_def] >>
+  qexists_tac `sm.cs_next_var` >> simp[]
 QED
 
 Theorem vv_post_add_read_mem_src[local]:
@@ -471,20 +479,7 @@ Theorem body_assign_attr_storage_mem:
 Proof
   Cases_on `nsid` >> rename1 `TopLevelNameTarget (src,id)` >> rpt strip_tac >>
   `supported_expr tops e` by gvs[supported_stmt_def, supported_assignment_def] >>
-  `!ts vis mut id ty init.
-     MEM (VariableDecl vis mut id ty init) ts /\
-     (mut = Storage \/ mut = Transient) ==>
-     find_var_decl_by_name id ts <> NONE` by
-    (Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >> metis_tac[]) >>
-  `src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-   ?mut sid slot. MEM (VariableDecl Private mut id (StructT sid) slot) tops` by
-    (qpat_x_assum `supported_storage_field_write _ _ _` mp_tac >>
-     simp[supported_storage_field_write_def, supported_storage_fields_def] >>
-     Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
-     rename1 `SOME x` >> PairCases_on `x` >>
-     drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
-     Cases_on `x0` >> Cases_on `x1` >> Cases_on `x2` >> Cases_on `x3` >>
-     simp[] >> metis_tac[]) >> gvs[] >>
+  drule supported_storage_field_write_decl >> strip_tac >> gvs[] >>
   `get_module_code cx NONE = SOME tops /\ supported_program tops /\
    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
    cenv.ce_hashmap_info = build_hashmap_info tops /\
@@ -536,7 +531,7 @@ Proof
   `well_typed_expr env e` by gvs[type_stmt_def, atarget_accepts_def] >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>

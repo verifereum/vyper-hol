@@ -53,6 +53,7 @@ Definition expr_map_sim_def:
              mem_bytes_at off sz t.vs_memory =
                mem_bytes_at off sz s0.vs_memory) /\
           locals_kept cenv es ee s0 t /\
+          (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
         (\res ee r. expr_exit res r)

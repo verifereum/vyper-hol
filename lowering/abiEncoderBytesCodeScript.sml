@@ -2,7 +2,7 @@
 Theory abiEncoderBytesCode
 Ancestors
   abiEncoder emitHelper context compileEnv abiDecoderContract
-  emitHelperProps exprLoweringProps venomInst words list rich_list arithmetic
+  emitHelperProps exprLoweringProps venomInst words list rich_list arithmetic abiBytestringCode
 Libs monadsyntax
 
 Definition abi_encode_round_def:
@@ -10,6 +10,15 @@ Definition abi_encode_round_def:
     do arg <- emit_op ADD [Lit 31w;len];
        emit_op AND
          [Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w;arg]
+    od
+End
+
+(* The suffix's ceil32, as Python emits it: and(add(len, 31), not 31). *)
+Definition abi_encode_ceil32_def:
+  abi_encode_ceil32 len =
+    do mask <- emit_op NOT [Lit 31w];
+       arg <- emit_op ADD [len;Lit 31w];
+       emit_op AND [arg;mask]
     od
 End
 
@@ -32,8 +41,8 @@ End
 
 Definition abi_encode_bytes_suffix_def:
   abi_encode_bytes_suffix len =
-    do rounded <- abi_encode_round len;
-       emit_op ADD [Lit 32w;rounded]
+    do rounded <- abi_encode_ceil32 len;
+       emit_op ADD [rounded;Lit 32w]
     od
 End
 
@@ -46,7 +55,8 @@ Theorem abi_encode_bytes_phases:
 Proof
   simp_tac bool_ss [FUN_EQ_THM, Once compile_abi_encode_child_def,
     abi_encode_bytes_prefix_def, abi_encode_bytes_copy_def, abi_encode_bytes_suffix_def,
-    abi_encode_round_def, comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
+    abi_encode_round_def, abi_encode_ceil32_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, LET_THM] >>
   rpt gen_tac >> rpt (pairarg_tac >> gvs[])
 QED
 
@@ -81,17 +91,15 @@ QED
 
 Theorem abi_encode_bytes_shape:
   compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') ==>
-  st'.cs_next_var = st.cs_next_var + 8 /\ st'.cs_next_id = st.cs_next_id + 10 /\
+  st'.cs_next_var = st.cs_next_var + 9 /\ st'.cs_next_id = st.cs_next_id + 11 /\
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\ inst_extends st st' /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode)
     (emitted_insts st st')
 Proof
-  simp[Once compile_abi_encode_child_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  simp[inst_extends_def, emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
-  simp[DROP_LENGTH_APPEND, IS_PREFIX_APPEND, is_terminator_def, is_alloca_op_def, mk_inst_def]
+  strip_tac >> drule compile_abi_bytestring_code >>
+  simp[same_blocks_def, inst_extends_def, IS_PREFIX_APPEND,
+    bytestring_encoder_insts_def, is_terminator_def, is_alloca_op_def, mk_inst_def]
 QED
 
 Theorem abi_encode_bytes_copy_shape:
@@ -108,10 +116,10 @@ QED
 
 Theorem abi_encode_bytes_suffix_shape:
   abi_encode_bytes_suffix len st = (out,st') ==>
-  st'.cs_next_var = st.cs_next_var + 3 /\ st'.cs_next_id = st.cs_next_id + 3 /\
+  st'.cs_next_var = st.cs_next_var + 4 /\ st'.cs_next_id = st.cs_next_id + 4 /\
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\ inst_extends st st'
 Proof
-  simp[abi_encode_bytes_suffix_def, abi_encode_round_def,
+  simp[abi_encode_bytes_suffix_def, abi_encode_ceil32_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def,
     emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>

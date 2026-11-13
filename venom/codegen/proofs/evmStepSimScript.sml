@@ -418,17 +418,17 @@ QED
 
 (* ===== Pre-proved byte-to-opname theorems ===== *)
 (* Each proves: wf_opname op /\ opcode op = [byte] ==> op = ConcreteOp
-   Proved once at file-load time via Cases_on op (84 constructors). *)
+   Derived at file-load time from opcode injectivity and concrete encodings. *)
 local
   val byte_opname_proof = fn (byte_tm, opn_tm) =>
     prove(mk_imp(mk_conj(``wf_opname (op:opname)``,
             mk_eq(``opcode (op:opname)``,
                   listSyntax.mk_list([byte_tm], ``:word8``))),
           mk_eq(``op:opname``, opn_tm)),
-      Cases_on `op` >> simp[opcode_def, wf_opname_def] >>
-      rpt strip_tac >>
-      gvs[wordsTheory.n2w_11, wordsTheory.dimword_8,
-          wordsTheory.word_add_n2w])
+      strip_tac >>
+      `wf_opname ^opn_tm /\ opcode ^opn_tm = [^byte_tm]` by
+        simp[opcode_def, wf_opname_def, wordsTheory.word_add_n2w] >>
+      metis_tac[opcode_wf_inj])
 in
   val byte_opname_thms = map byte_opname_proof [
     (* Arith *)
@@ -804,6 +804,16 @@ Triviality asm_evm_rel_callee:
   !prog as es ctxt rb.
     asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] ==>
     ctxt.msgParams.callee = as.as_call_ctx.cc_address
+Proof
+  rpt strip_tac >> gvs[asm_evm_rel_def]
+QED
+
+(* Rewrites the assembly's static check into the EVM's, so one case split
+   decides both. *)
+Theorem asm_evm_rel_static:
+  !prog as es ctxt rb rest.
+    asm_evm_rel prog as es /\ es.contexts = (ctxt, rb) :: rest ==>
+    (as.as_call_ctx.cc_static <=> ctxt.msgParams.static)
 Proof
   rpt strip_tac >> gvs[asm_evm_rel_def]
 QED
@@ -1494,6 +1504,7 @@ Proof
   (* === TSTORE === *)
   >- (
     identify_evm_op_tac >> gvs[] >>
+    drule_all asm_evm_rel_static >> strip_tac >>
     simp[asm_tstore_def, LET_THM] >>
     Cases_on `as.as_stack` >> gvs[] >>
     Cases_on `t` >> gvs[] >>
@@ -1659,6 +1670,7 @@ QED
 
 Resume asm_evm_step_memory_dispatch[sstore]:
   identify_evm_op_tac >> gvs[] >>
+  drule_all asm_evm_rel_static >> strip_tac >>
   simp[asm_sstore_def, LET_THM] >>
   Cases_on `as.as_stack` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
@@ -3431,6 +3443,7 @@ Proof
   simp[log_table_def] >>
   rpt (IF_CASES_TAC >> simp[]) >> strip_tac >> gvs[] >>
   identify_evm_op_tac >> gvs[] >>
+  drule_all asm_evm_rel_static >> strip_tac >>
   simp[asm_log_def, LET_THM] >>
   IF_CASES_TAC >> gvs[] >>
   ALL_TAC >| [suspend "log_0", suspend "log_1", suspend "log_2",

@@ -42,7 +42,7 @@
 
 Theory deadStoreElimProofs
 Ancestors
-  deadStoreElimComposition deadStoreElimCertificate decoratedExecution
+  venomFnInstsProofs deadStoreElimComposition deadStoreElimCertificate decoratedExecution
   deadStoreElimStructure deadStoreElimSafety deadStoreElimEquiv deadStoreElimFrame deadStoreElimDefs passSimulationProps basePtrProps passSharedProps While
   venomMemProps venomMemProofs memAliasDefs passSharedField cfgAnalysisProps
   stateEquiv stateEquivProps venomState venomInst venomInstProps
@@ -851,23 +851,6 @@ Proof
        FLOOKUP_EMPTY, pred_setTheory.NOT_IN_EMPTY]
 QED
 
-(* Helper: instruction in a block that is in fn.fn_blocks is in fn_insts fn *)
-Triviality fn_insts_blocks_MEM[local]:
-  !bbs bb inst.
-    MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def, listTheory.MEM_APPEND] >> metis_tac[]
-QED
-
-Triviality fn_insts_MEM[local]:
-  !fn bb inst.
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts fn)
-Proof
-  rw[fn_insts_def] >> irule fn_insts_blocks_MEM >> metis_tac[]
-QED
-
 (* When pointer_derived_vars is empty, alloca_safe_access is vacuously
    true (clause 2 quantifies over v IN pv which is empty).
    Clause 1 (off + asz <= LENGTH vs_memory) was removed from
@@ -901,7 +884,7 @@ Proof
   simp[cex2_alloca_roots_empty, step_preserves_safety_def] >>
   rpt gen_tac >> strip_tac >>
   `inst.inst_opcode = MSTORE \/ inst.inst_opcode = STOP` by
-    metis_tac[cex2_fn_only_mstore_and_stop, fn_insts_MEM] >>
+    metis_tac[cex2_fn_only_mstore_and_stop, MEM_fn_insts] >>
   (* STOP is a terminator, contradicting the hypothesis *)
   `inst.inst_opcode <> STOP` by (
     CCONTR_TAC >> `is_terminator STOP` by EVAL_TAC >> gvs[]) >>

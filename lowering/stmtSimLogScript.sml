@@ -80,6 +80,9 @@ Theorem compile_log_stmt_frag:
       SOME (h, tys, flags) /\
     MAP expr_type args = tys /\ LENGTH flags = LENGTH tys /\
     LENGTH (FILTER I flags) <= 3 /\ EVERY supported_scalar_type tys /\
+    ~exprs_can_mutate cenv args /\
+    EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+               is_bytestring_type (expr_type e)) args /\
     SUM (MAP (type_memory_bytes cenv) (log_non_indexed_types flags tys)) <
       dimword (:256) /\
     abi_size_bound cenv.ce_struct_fields

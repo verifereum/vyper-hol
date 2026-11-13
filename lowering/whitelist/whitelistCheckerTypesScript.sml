@@ -7,7 +7,9 @@
    a simulation case can split on it. *)
 Theory whitelistCheckerTypes
 Ancestors
-  supportedExprForms supportedTypes supportedStmts vyperTypeSystem vyperContext vyperValue
+  vyperTypeContract
+  supportedStmts supportedDecls supportedExprs whitelistCheckerDecls
+  supportedExprForms supportedTypes vyperTypeSystem vyperEventArgCompat vyperContext vyperValue
   vyperAST vyperMisc exprLowering placeTypingProps abiCallerStructSize
   alist finite_map list pred_set pair arithmetic
 
@@ -235,6 +237,17 @@ Proof
   simp[supported_copy_types_def]
 QED
 
+(* The copy-types conjunct of supported_stmt's AnnAssign clause: the checker
+   lets the right-hand side's type widen to the declared type. *)
+Theorem type_stmt_annassign_copy_types:
+  !env ret_ty id typ e env'.
+    type_stmt env ret_ty (AnnAssign id typ e) = SOME env' ==>
+    supported_copy_types typ (expr_type e) \/ arg_type_fits (expr_type e) typ
+Proof
+  rpt strip_tac >> gvs[type_stmt_def, AllCaseEqs(), type_widens_to_def] >>
+  metis_tac[supported_copy_types_refl]
+QED
+
 (* ===== Binary operators ===== *)
 
 Theorem int_literal_value_supported:
@@ -269,13 +282,14 @@ QED
 Theorem well_typed_binop_exp_supported:
   well_typed_binop ty (Exp) (expr_type a) (expr_type b) /\
   well_formed_type tenv (expr_type a) /\
-  builtin_operands_ok (Bop Exp) [a; b] ==>
+  builtin_operands_ok ty (Bop Exp) [a; b] ==>
   supported_binop Exp (expr_type a) (expr_type b)
     (supported_integer_literal a) (supported_nonnegative_literal b)
 Proof
   rw[well_typed_binop_def, builtin_operands_ok_def, supported_binop_def,
      int_literal_value_supported, nonneg_int_literal_supported] >>
-  metis_tac[well_formed_integer_type]
+  metis_tac[well_formed_integer_type, power_operands_ok_literal,
+            int_literal_value_supported, nonneg_int_literal_supported]
 QED
 
 (* Row 31. *)
@@ -293,7 +307,7 @@ QED
 Theorem well_typed_binop_shift_supported:
   well_typed_binop ty op (expr_type a) (expr_type b) /\
   well_formed_type tenv (expr_type a) /\ well_formed_type tenv (expr_type b) /\
-  builtin_operands_ok (Bop op) [a; b] /\ (op = ShL \/ op = ShR) ==>
+  builtin_operands_ok ty (Bop op) [a; b] /\ (op = ShL \/ op = ShR) ==>
   supported_binop op (expr_type a) (expr_type b) lb ne \/
   (supported_nonnegative_literal b /\ ~is_uint_type (expr_type b))
 Proof
@@ -365,55 +379,6 @@ Theorem well_typed_builtin_app_arity:
   | _ => T
 Proof
   Cases_on `blt` >> rw[well_typed_builtin_app_def] >> simp[]
-QED
-
-(* Row 42 (copies and shape): a literal is typed at a tuple of its element
-   types or at an array of their common type, so supported_literal_elements
-   reduces to the element-type parts. *)
-Theorem well_typed_make_array_literal_elements:
-  well_typed_builtin_app ty (MakeArray eo bd) (MAP expr_type es) ==>
-  (supported_literal_elements tops ty es <=>
-   supported_place_type tops ty /\
-   (!tys. ty = TupleT tys ==> supported_tuple_type ty))
-Proof
-  Cases_on `eo` >> rw[well_typed_builtin_app_def] >>
-  simp[supported_literal_elements_def]
-  >- (`LIST_REL supported_copy_types (MAP expr_type es) (MAP expr_type es)`
-        by (irule EVERY2_refl >> simp[supported_copy_types_refl]) >>
-      simp[])
-  >> gvs[EVERY_MAP, EVERY_MEM] >> eq_tac >> rw[] >> res_tac >>
-  gvs[supported_copy_types_refl]
-QED
-
-(* Row 43 (copies): a struct literal lists the declared fields in order at
-   their declared types, so supported_struct_elements reduces to the place
-   type.  Field names are distinct by check_contract_struct_fields_distinct
-   (with abi_caller_type_env_struct). *)
-Theorem well_typed_struct_lit_elements:
-  well_typed_expr env (StructLit ty nsid kes) /\
-  env.type_defs = type_env tops /\ ALL_DISTINCT (MAP FST kes) ==>
-  (supported_struct_elements tops ty kes <=> supported_place_type tops ty)
-Proof
-  rw[well_typed_expr_def] >>
-  `FLOOKUP (type_env tops) nsid = SOME (StructArgs args)` by fs[] >>
-  drule type_env_struct_fields >> strip_tac >>
-  `!n. n < LENGTH kes ==>
-       ALOOKUP args (FST (EL n kes)) = SOME (expr_type (SND (EL n kes)))`
-    by (rw[] >>
-        `LENGTH args = LENGTH kes` by metis_tac[LENGTH_MAP] >>
-        `ALL_DISTINCT (MAP FST args)` by metis_tac[] >>
-        `EL n (MAP FST kes) = EL n (MAP FST args) /\
-         EL n (MAP (expr_type o SND) kes) = EL n (MAP SND args)`
-          by metis_tac[] >>
-        gvs[EL_MAP] >> metis_tac[ALOOKUP_ALL_DISTINCT_EL]) >>
-  `EVERY (\(name,e). case ALOOKUP args name of
-                       SOME dst => supported_copy_types dst (expr_type e)
-                     | NONE => F) kes`
-    by (simp[EVERY_EL] >> rw[] >> first_x_assum drule >>
-        Cases_on `EL n kes` >> simp[supported_copy_types_refl]) >>
-  simp[supported_struct_elements_def] >>
-  qpat_x_assum `supported_struct_fields _ _ = _` (fn th => simp[th]) >>
-  qpat_x_assum `EVERY _ kes` (fn th => simp[th])
 QED
 
 (* Row 46. *)
@@ -567,7 +532,7 @@ Proof
   >- (Cases_on `expr_type e1` >> gvs[subscript_type_ok_def])
   >> Cases_on `vt` >> gvs[subscript_vtype_def]
   >> rename1 `Type t` >> Cases_on `t` >> gvs[subscript_vtype_def] >>
-  drule type_place_expr_annotation >> simp[]
+  drule vyperTypeSystemTheory.type_place_expr_annotation >> simp[]
 QED
 
 (* Row 92: .field is checked against the struct the checker resolved, which
@@ -581,6 +546,18 @@ Proof
        AllCaseEqs()] >>
   rw[] >> drule type_env_struct_fields >> rw[] >>
   drule ALOOKUP_MEM >> simp[MEM_MAP, EXISTS_PROD] >> metis_tac[]
+QED
+
+(* Pure arguments and scalar event headers retain their existing gates. *)
+Theorem type_stmt_log_supported:
+  check_contract F layouts addr [(NONE, tops)] = SOME art /\
+  env.event_fields = art.cta_event_fields /\
+  type_stmt env ret (Log id es) = SOME env' /\
+  supported_pure_exprs tops es ==>
+  supported_log tops id es
+Proof
+  strip_tac >> drule_all check_contract_log_event_fields >> strip_tac >>
+  gvs[type_stmt_def, supported_log_def, event_arg_compatible_alias_def, AllCaseEqs()]
 QED
 
 (* The target residual excludes locals, subscripts and attributes. Full-word
@@ -602,4 +579,33 @@ Proof
   gvs[type_stmt_def, supported_stmt_def, supported_append_target_def] >>
   rename1 `ArrayT elem bd` >> Cases_on `bd` >>
   gvs[type_stmt_def, supported_storage_dynamic_array_def] >> metis_tac[]
+QED
+
+(* ===== For iterators ===== *)
+
+(* An array For the checker accepts is a supported iterator given the
+   residual the checker doesn't decide: the AST bound equals the array's
+   bound (type_stmt doesn't relate them, #1202), a top-level iterable is an
+   immutable, and any other iterable passes the expression gate, has no
+   ternary, is not a place rooted at a top-level name, and an internal call
+   at its top has its callee's declared return type. *)
+Theorem type_stmt_for_array_supported_iterator:
+  type_stmt env ret_ty (For id typ (Array e) n ss) = SOME env' /\
+  (!bd. expr_type e = ArrayT typ bd ==> bound_length bd = n) /\
+  (!t nid. e = TopLevelName t nid ==>
+           IS_SOME (supported_immutable_type tops nid)) /\
+  ((!t v. e <> Name t v) /\ (!t nid. e <> TopLevelName t nid) ==>
+   supported_expr tops e /\
+   ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
+   (!tgt nid. loop_iterator_place e = SOME tgt ==>
+              FST (place_access tgt []) <> TopLevelNameTarget nid) /\
+   (!t fid args drv. e = Call t (IntCall fid) args drv ==>
+      ?m nr rr ps ds b.
+        supported_function_decl tops fid Internal = SOME (m,nr,rr,ps,ds,t,b))) ==>
+  supported_iterator tops typ (Array e) n
+Proof
+  simp[Once type_stmt_def, well_typed_iterator_def] >> rpt strip_tac >>
+  `bound_length bd = n` by res_tac >>
+  Cases_on `e` >> gvs[supported_iterator_def, expr_type_def] >>
+  rename1 `ArrayT typ bd` >> Cases_on `bd` >> gvs[]
 QED

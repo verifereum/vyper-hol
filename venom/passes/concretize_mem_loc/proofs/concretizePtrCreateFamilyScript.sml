@@ -3,6 +3,7 @@
  *)
 Theory concretizePtrCreateFamily
 Ancestors
+  memoryReadRel
   concretizePtrStorageReadProducer concretizePtrRequestHistory
   concretizePtrMloadRecovery concretizePtrPairedPrefix concretizePtrChronologicalHistory
   concretizePtrStructuralTranscript concretizePtrStructuralTrace concretizePtrDeletedGapHistory

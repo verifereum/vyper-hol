@@ -1,6 +1,6 @@
 Theory mem2varBlockSim
 Ancestors
-  mem2varBlockSimHelpers
+  venomFnInstsProofs mem2varBlockSimHelpers
   mem2varInvariant mem2varReach mem2varRevertForward
   ptrDiscipline unitTransformDefs contextCodegenRel
   fnBlockStepHelpers stepWriteFootprintForward
@@ -16,6 +16,7 @@ Ancestors
   pointerConfinedDefs memLocDefs
   venomEffects venomMemDefs venomMemProps venomMemProofs
   finite_map list rich_list pred_set pair
+  opcodeClass
 Libs
   HolKernel boolLib bossLib BasicProvers dep_rewrite markerLib mem2varFrameLib
 

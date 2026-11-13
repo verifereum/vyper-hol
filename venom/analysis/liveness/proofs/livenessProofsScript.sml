@@ -7,7 +7,7 @@ Libs
   livenessLocalProofsTheory livenessSoundProofsTheory
   livenessConvergenceProofsTheory cfgAnalysisPropsTheory
 
-Theorem live_vars_bounded_proof:
+Theorem live_vars_bounded:
   !fn lbl idx v.
     let st = liveness_analyze fn in
     MEM v (live_vars_at st lbl idx) ==> MEM v (fn_all_vars fn.fn_blocks)
@@ -193,13 +193,6 @@ Theorem current_wf_nonphi_after_collect:
     LENGTH (collect_phis xs) <= i
 Proof
   ACCEPT_TAC livenessTransferProofsTheory.current_wf_nonphi_after_collect
-QED
-
-Theorem live_update_mem:
-  MEM v (live_update defs uses live) <=>
-    (MEM v live /\ ~MEM v defs) \/ MEM v uses
-Proof
-  ACCEPT_TAC livenessTransferProofsTheory.live_update_mem
 QED
 
 val _ = List.app (fn (_,th) =>

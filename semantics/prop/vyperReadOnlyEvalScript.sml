@@ -145,7 +145,15 @@ Resume evaluate_read_only[assign]:
   rpt strip_tac >>
   gvs[Once stmt_mutability_ok_def, atarget_mutability_ok_def,
       write_mutability_ok_def, call_mutability_ok_def] >>
-  irule machine_frame_stmt_assign >> metis_tac[]
+  simp[Once evaluate_def] >>
+  match_mp_tac state_rel_frame_bind_guarded >>
+  conj_tac >- metis_tac[machine_frame_trans] >>
+  conj_tac >- metis_tac[] >> rpt strip_tac >> simp[] >>
+  match_mp_tac state_rel_frame_bind_guarded >>
+  conj_tac >- metis_tac[machine_frame_trans] >>
+  conj_tac >- simp[machine_frame_read_result] >> rpt strip_tac >> simp[] >>
+  ho_match_mp_tac machine_frame_local_place_effect >>
+  simp[machine_frame_write_memory_place] >> metis_tac[]
 QED
 
 Resume evaluate_read_only[append]:
@@ -234,7 +242,9 @@ QED
 Resume evaluate_read_only[expr_rawrevert]:
   rpt strip_tac >> gvs[Once expr_mutability_ok_def] >> simp[Once evaluate_def] >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
-  >- (rpt strip_tac >> irule machine_frame_sequence >> simp[machine_frame_primitives]) >>
+  >- (rpt strip_tac >> irule machine_frame_sequence >>
+      simp[machine_frame_primitives] >>
+      irule machine_frame_bind >> simp[machine_frame_primitives]) >>
   metis_tac[]
 QED
 
@@ -302,9 +312,8 @@ Resume evaluate_read_only[extcall_results]:
   simp[machine_frame_def] >> conj_tac
   >- (rpt strip_tac >> simp[] >> irule state_rel_frame_bind_guarded >>
       simp[machine_frame_def] >> conj_tac
-      >- (rpt strip_tac >> match_mp_tac machine_frame_bind >>
-          simp[machine_frame_read_results] >> gen_tac >>
-          simp[state_rel_frame_result] >> metis_tac[machine_frame_ext_call]) >> metis_tac[]) >>
+      >- (rpt strip_tac >> simp[state_rel_frame_result] >>
+          metis_tac[machine_frame_ext_call]) >> metis_tac[]) >>
   metis_tac[]
 QED
 
@@ -315,11 +324,7 @@ Resume evaluate_read_only[iterator_array]:
 QED
 
 Resume evaluate_read_only[iterator_array_value]:
-  rpt strip_tac >> irule state_rel_frame_bind_guarded >>
-  simp[machine_frame_def, machine_frame_read_result] >> rpt strip_tac >>
-  irule state_rel_frame_bind_guarded >> simp[machine_frame_def, machine_frame_primitives] >>
-  rpt strip_tac >> irule state_rel_frame_bind_guarded >>
-  simp[machine_frame_def, machine_frame_primitives]
+  rpt strip_tac >> simp[machine_frame_array_iterator_results]
 QED
 
 Resume evaluate_read_only[annassign]:
@@ -466,6 +471,13 @@ Resume evaluate_read_only[expr_subscript]:
 QED
 Resume evaluate_read_only[subscript_second_expr]:
   rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
+  conj_tac >- suspend "subscript_index" >>
+  Cases_on `subscript_reads_base cx e e'` >> simp[machine_frame_primitives] >>
+  irule machine_frame_bind >>
+  simp[machine_frame_read_result, machine_frame_primitives]
+QED
+Resume evaluate_read_only[subscript_index]:
+  rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
   conj_tac >- suspend "subscript_tail" >> metis_tac[]
 QED
 Resume evaluate_read_only[subscript_tail]:
@@ -504,7 +516,20 @@ Resume evaluate_read_only[builtin_other]:
   >- rpt (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
           simp[machine_frame_def, machine_frame_reads, machine_frame_primitives,
                machine_frame_precompile_call_success]) >>
-  gvs[SF ETA_ss] >> metis_tac[]
+  gvs[SF ETA_ss] >> Cases_on `code_slice_source bt es` >> simp[]
+  >- metis_tac[] >>
+  rename1 `_ = SOME p` >> PairCases_on `p` >> simp[] >>
+  `EVERY (expr_mutability_ok mods View) (TL es) /\ expr_mutability_ok mods View p1` by
+    (qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+     qpat_x_assum `EVERY _ es` mp_tac >> rpt (pop_assum kall_tac) >>
+     rw[code_slice_source_SOME] >> gvs[expr_mutability_ok_def]) >>
+  irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+       simp[machine_frame_def, machine_frame_reads, machine_frame_primitives,
+            machine_frame_precompile_call_success])
 QED
 
 Resume evaluate_read_only[expr_intcall]:
@@ -532,7 +557,7 @@ Resume evaluate_read_only[expr_intcall]:
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def, machine_frame_primitives] >>
   rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
   conj_tac >- suspend "intcall_after_args" >>
-  qpat_assum `!s t s3 ts t1 s4 tup t2 s5 t3. _ ==> !mods. _ ==> state_rel_frame _ (eval_expr_results cx es)`
+  qpat_assum `!s t s3 ts t1 s4 tup t2 s5 t3. _ ==> !mods. _ ==> state_rel_frame _ (eval_exprs cx es)`
     (drule o PURE_REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then drule >> disch_then drule >>
   simp[arithmeticTheory.ADD_COMM] >> disch_then drule >>
@@ -558,8 +583,6 @@ QED
 
 Resume evaluate_read_only[intcall_after_defaults]:
   rpt strip_tac >> BETA_TAC >>
-  irule state_rel_frame_bind_guarded >>
-  simp[machine_frame_def, machine_frame_read_results] >> rpt strip_tac >>
   ntac 2 (irule state_rel_frame_bind_guarded >>
           simp[machine_frame_def, machine_frame_primitives] >> rpt strip_tac) >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
@@ -573,12 +596,12 @@ Resume evaluate_read_only[intcall_after_lock]:
   rpt strip_tac >> BETA_TAC >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def, machine_frame_push_function] >>
   rpt strip_tac >>
-  qpat_assum `!s t s3 ts t1 s4 tup t2 s5 t3 s6 results t4 s7 prev t5 s8 dv t6 sr vs tr s9 env t7 s10 rtv t8 s11 t9 s12 cx1 t10. _ ==> !mods. _ ==> state_rel_frame _ (eval_stmts _ _)`
+  qpat_assum `!s t s3 ts t1 s4 tup t2 s5 t3 s6 vs t4 s7 prev t5 s8 dv t6 s9 env t7 s10 rtv t8 s11 t9 s12 cx1 t10. _ ==> !mods. _ ==> state_rel_frame _ (eval_stmts _ _)`
     (drule o PURE_REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then drule >> disch_then drule >> simp[arithmeticTheory.ADD_COMM] >>
   ntac 3 (disch_then drule) >> simp[ignore_bind_def] >>
   ntac 2 (disch_then drule) >> simp[] >>
-  ntac 4 (disch_then drule) >>
+  ntac 3 (disch_then drule) >>
   disch_then (qspec_then `mods` mp_tac) >>
   ntac 3 (qpat_x_assum `!s. _` kall_tac) >>
   impl_tac
@@ -595,11 +618,11 @@ Resume evaluate_read_only[intcall_after_lock]:
   conj_tac
   >- (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
       simp[machine_frame_def, machine_frame_primitives]) >>
+  simp[finally_unless_halt_return] >>
   irule state_rel_frame_finally >> simp[machine_frame_def] >> conj_tac
   >- (irule state_rel_frame_try >> simp[machine_frame_def, machine_frame_handlers] >>
       irule state_rel_frame_bind_guarded >> simp[machine_frame_def, machine_frame_primitives]) >>
-  irule state_rel_frame_bind_guarded >>
-  simp[machine_frame_def, machine_frame_pop_function, machine_frame_primitives]
+  simp[machine_frame_pop_function]
 QED
 
 Resume evaluate_read_only[assign_tuple]:

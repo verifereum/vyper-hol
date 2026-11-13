@@ -79,14 +79,14 @@ QED
 
 Theorem return_selected_frame_mode:
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sa) ==>
   cenv.ce_raw_return = rr /\
   cenv.ce_struct_fields = make_struct_fields_map tops /\
   cenv.ce_type_env = type_env tops /\
-  cenv.ce_nonreentrant = (F,nkey,F,mut = View) /\
+  cenv.ce_nonreentrant = (F,nkey,ut,mut = View) /\
   cenv.ce_is_external /\ ~cenv.ce_is_ctor /\
   cenv.ce_return_pc = NONE /\ cenv.ce_target = target /\
   rt = (if ret = NoneT then NONE else SOME ret)
@@ -98,19 +98,19 @@ QED
 
 Theorem return_selected_frame_encoding:
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sa) ==>
   cenv.ce_ret_enc_info =
     (if ret = NoneT then AbiPrimWord else
       (update_cenv_ret_abi
-        ((build_compile_env tops External mut fname args ret fbody F)
+        ((build_compile_env tops External mut fname args ret fbody ut)
           with ce_raw_return := rr) ret).ce_ret_enc_info) /\
   cenv.ce_max_return_size =
     (if ret = NoneT then 0 else
       (update_cenv_ret_abi
-        ((build_compile_env tops External mut fname args ret fbody F)
+        ((build_compile_env tops External mut fname args ret fbody ut)
           with ce_raw_return := rr) ret).ce_max_return_size)
 Proof
   strip_tac >> drule return_package_target_inversion >> strip_tac >>
@@ -120,7 +120,7 @@ QED
 
 Theorem return_selected_same_frame_mode:
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sa) /\
@@ -128,7 +128,7 @@ Theorem return_selected_same_frame_mode:
   cenv'.ce_raw_return = rr /\
   cenv'.ce_struct_fields = make_struct_fields_map tops /\
   cenv'.ce_type_env = type_env tops /\
-  cenv'.ce_nonreentrant = (F,nkey,F,mut = View) /\
+  cenv'.ce_nonreentrant = (F,nkey,ut,mut = View) /\
   cenv'.ce_is_external /\ ~cenv'.ce_is_ctor /\
   cenv'.ce_return_pc = NONE /\ cenv'.ce_target = target
 Proof
@@ -187,16 +187,6 @@ Proof
   drule_all return_fn_alloc_size >> simp[]
 QED
 
-Theorem return_supported_no_getters[local]:
-  supported_program tops ==>
-  (!nr mut ty slot. ~MEM (VariableDecl (Public nr) mut name ty slot) tops) /\
-  (!nr tr kt vt slot. ~MEM (HashMapDecl (Public nr) tr name kt vt slot) tops)
-Proof
-  strip_tac >> conj_tac >> rpt strip_tac >>
-  drule_all supported_program_declaration >>
-  simp[supported_declaration_header_def]
-QED
-
 Theorem return_selected_lookup_size:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\
@@ -205,16 +195,11 @@ Theorem return_selected_lookup_size:
   type_memory_bytes cenv ret < 2 ** 64
 Proof
   strip_tac >>
-  `(!nr mut ty slot. ~MEM (VariableDecl (Public nr) mut name ty slot) tops) /\
-   (!nr tr kt vt slot. ~MEM (HashMapDecl (Public nr) tr name kt vt slot) tops)` by
-    metis_tac[return_supported_no_getters] >>
-  Cases_on `name = "__default__"`
-  >- (gvs[] >> drule_all lookup_function_default >>
-      disch_then (qspec_then `NONE` mp_tac) >>
-      Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
-      Cases_on `r1` >> simp[] >> PairCases_on `x` >> simp[] >> strip_tac >> gvs[] >>
-      irule (SRULE [] return_runtime_function_size) >> metis_tac[]) >>
-  drule_all lookup_function_external_mem >> strip_tac >>
+  `module_consts_env tops [] = []` by
+    (irule supported_headers_module_consts_env >>
+     qexists_tac `tops` >>
+     gvs[supported_program_def, supported_declaration_headers_def]) >>
+  drule lookup_function_external_classified >> simp[] >> strip_tac >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
   irule (SRULE [] return_runtime_function_size) >> metis_tac[]
 QED
@@ -223,7 +208,7 @@ Theorem return_selected_package_size:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sa) ==>

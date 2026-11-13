@@ -142,12 +142,14 @@ QED
 
 Resume supported_pure_scopes_mutual[subscript1]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
 QED
 
 Resume supported_pure_scopes_mutual[subscript2]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
 QED
@@ -165,10 +167,15 @@ QED
 Resume supported_pure_scopes_mutual[builtin]:
   `blt <> Len` by
     (Cases_on `blt = Len` >> gvs[supported_builtin_form_def, AllCaseEqs()]) >>
+  `code_slice_source blt exprs = NONE` by
+    (Cases_on `code_slice_source blt exprs` >> simp[] >>
+     rename1 `SOME p` >> PairCases_on `p` >>
+     gvs[code_slice_source_SOME, supported_builtin_form_def]) >>
   Cases_on `blt = Env MsgGas` >>
   Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
-      ignore_bind_def, return_def, raise_def, AllCaseEqs(), get_accounts_def] >>
+      ignore_bind_def, return_def, raise_def, COND_RATOR, lift_option_type_def,
+      vfmTypesTheory.option_CASE_rator, AllCaseEqs(), get_accounts_def] >>
   imp_res_tac next_gas_reading_state >>
   imp_res_tac lift_option_type_state >>
   imp_res_tac lift_sum_state >>
@@ -226,6 +233,7 @@ Proof
        expr_internal_call_root_def] >> rpt strip_tac
   >>~- ([`eval_expr _ (Subscript _ _ _) _ = _`],
     gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+    gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
     imp_res_tac read_result_state >> imp_res_tac select_result_state >>
     imp_res_tac supported_pure_scopes_mutual >> gvs[] >> metis_tac[])
   >>~- ([`eval_expr _ (Attribute _ _ _) _ = _`],
@@ -243,7 +251,7 @@ Resume supported_effect_scopes_mutual[external]:
     (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_TAKE]) >>
   `!n. supported_pure_exprs tops (DROP n args)` by
     (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_DROP]) >>
-  `!n m. EVERY (supported_pure_expr tops) (TAKE n (DROP m args))` by
+  `!n m. supported_pure_exprs tops (TAKE n (DROP m args))` by
     (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_TAKE, EVERY_DROP]) >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac eval_ext_call_preserves_non_accounts >>
@@ -316,7 +324,7 @@ Theorem iterator_unmodified_rejects_element_write[local]:
     ~iterator_unmodified (Array (Name ty name))
       [Assign (BaseTarget (SubscriptTarget (NameTarget name) key)) rhs]
 Proof
-  simp[iterator_unmodified_def, expr_place_def, stmt_writes_ok_def,
+  simp[iterator_unmodified_def, expr_places_def, stmt_writes_ok_def,
        atarget_writes_ok_def, subscript_write_contains_name]
 QED
 
@@ -533,7 +541,7 @@ Theorem intcall_scopes_after_args[local]:
     lookup_callable_function cx.in_deploy fn ts = SOME tup /\
     LENGTH es <= LENGTH (FST (SND (SND tup))) /\
     LENGTH (FST (SND (SND tup))) <= LENGTH es + LENGTH (FST (SND (SND (SND tup)))) /\
-    eval_expr_results cx es st = (r1,s1) /\ st'.scopes = s1.scopes
+    eval_exprs cx es st = (r1,s1) /\ st'.scopes = s1.scopes
 Proof
   rpt gen_tac >>
   rewrite_tac[Once evaluate_def, ignore_bind_def] >>
@@ -544,6 +552,7 @@ Proof
       get_scopes_def, bind_def] >>
   imp_res_tac finally_set_scopes >> imp_res_tac read_results_state >>
   imp_res_tac (SRULE[ignore_bind_def] finally_conditional_lock_scopes) >>
+  imp_res_tac (SRULE[ignore_bind_def] finally_unless_halt_conditional_lock_scopes) >>
   gvs[lock_if_nr_def, push_function_def, ignore_bind_def, bind_def,
       return_def, raise_def, COND_RATOR, vyperMiscTheory.option_CASE_rator,
       AllCaseEqs()] >>
@@ -561,7 +570,7 @@ Theorem eval_observation_frame_pred[local]:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
-  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
   (!cx e. expr_writes_ok ok e /\ ~supported_expr_exists P e ==>
     !st res st'. eval_expr cx e st = (res,st') ==> obs cx st' = obs cx st) /\
   (!cx es. EVERY (expr_writes_ok ok) es /\ ~supported_exprs_exists P es ==>
@@ -613,7 +622,10 @@ Proof
    imp_res_tac eval_raw_call_preserves_non_accounts >>
    imp_res_tac push_log_scopes >> imp_res_tac push_log_immutables >>
    imp_res_tac transfer_value_scopes >> imp_res_tac transfer_value_immutables >>
-   gvs[get_accounts_def, return_def] >> res_tac >> gvs[])
+   gvs[get_accounts_def, COND_RATOR, update_accounts_def,
+       update_pending_deletions_def, bind_def, ignore_bind_def,
+       return_def, AllCaseEqs()] >>
+   imp_res_tac read_result_state >> gvs[] >> res_tac >> gvs[] >> metis_tac[])
 QED
 
 Resume eval_observation_frame_pred[TopLevelName]:
@@ -724,7 +736,7 @@ Resume eval_observation_frame_pred[Builtin]:
   rename1 `Builtin _ bt es` >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   Cases_on `bt = Len` >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-  Cases_on `bt = Env MsgGas` >>
+  Cases_on `bt = Env MsgGas` >> gvs[] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
        return_def, raise_def, type_check_def, assert_def] >>
   rpt strip_tac >>
@@ -734,7 +746,15 @@ Resume eval_observation_frame_pred[Builtin]:
   imp_res_tac result_array_length_state >> imp_res_tac lift_option_type_state >>
   imp_res_tac lift_sum_state >> imp_res_tac next_gas_reading_state >>
   imp_res_tac precompile_call_success_state >>
-  gvs[get_accounts_def, return_def] >> res_tac >> gvs[]
+  gvs[get_accounts_def, return_def] >> res_tac >> gvs[] >>
+  Cases_on `code_slice_source bt es`
+  >- (gvs[] >> res_tac >> gvs[]) >>
+  Cases_on `THE (code_slice_source bt es)` >> gvs[] >>
+  qpat_assum `code_slice_source _ _ = SOME _`
+    (mp_tac o REWRITE_RULE [code_slice_source_SOME]) >> strip_tac >>
+  gvs[expr_writes_ok_def, supported_expr_exists_def, SF ETA_ss,
+      bind_def, get_accounts_def, return_def, AllCaseEqs()] >>
+  imp_res_tac lift_sum_state >> gvs[] >> res_tac >> gvs[] >> metis_tac[]
 QED
 
 Finalise eval_observation_frame_pred
@@ -804,7 +824,7 @@ Theorem eval_name_projection_mutual:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
-  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
   (!cx e. expr_writes_ok (\w. FST (place_access w []) <> NameTarget name) e ==>
     !st res st'. eval_expr cx e st = (res,st') ==>
       MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes) /\
@@ -849,7 +869,9 @@ Proof
    imp_res_tac eval_raw_call_preserves_non_accounts >>
    imp_res_tac push_log_scopes >> imp_res_tac transfer_value_scopes >>
    imp_res_tac get_accounts_scopes >>
-   gvs[] >> res_tac >> gvs[])
+   gvs[COND_RATOR, update_accounts_def, update_pending_deletions_def,
+       bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
+   imp_res_tac read_result_state >> gvs[] >> res_tac >> gvs[] >> metis_tac[])
 QED
 
 Resume eval_name_projection_mutual[TopLevelName]:
@@ -931,7 +953,7 @@ Resume eval_name_projection_mutual[Builtin]:
   rename1 `Builtin _ bt es` >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   Cases_on `bt = Len` >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-  Cases_on `bt = Env MsgGas` >>
+  Cases_on `bt = Env MsgGas` >> gvs[] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
        return_def, raise_def, type_check_def, assert_def] >>
   rpt strip_tac >>
@@ -940,7 +962,15 @@ Resume eval_name_projection_mutual[Builtin]:
   imp_res_tac result_array_length_state >> imp_res_tac lift_option_type_state >>
   imp_res_tac lift_sum_state >> imp_res_tac next_gas_reading_state >>
   imp_res_tac get_accounts_scopes >> imp_res_tac precompile_call_success_state >>
-  gvs[] >> res_tac >> gvs[]
+  gvs[] >> res_tac >> gvs[] >>
+  Cases_on `code_slice_source bt es`
+  >- (gvs[] >> res_tac >> gvs[]) >>
+  Cases_on `THE (code_slice_source bt es)` >> gvs[] >>
+  qpat_assum `code_slice_source _ _ = SOME _`
+    (mp_tac o REWRITE_RULE [code_slice_source_SOME]) >> strip_tac >>
+  gvs[expr_writes_ok_def, SF ETA_ss,
+      bind_def, get_accounts_def, return_def, AllCaseEqs()] >>
+  imp_res_tac lift_sum_state >> gvs[] >> res_tac >> gvs[] >> metis_tac[]
 QED
 
 Finalise eval_name_projection_mutual
@@ -1170,7 +1200,7 @@ Theorem typed_guarded_assignment_projection_mutual[local]:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
-  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
   (!(cx:evaluation_context) (e:expr). T) /\
   (!(cx:evaluation_context) (es:expr list). T) /\
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
@@ -1308,6 +1338,12 @@ Theorem eval_for_projection_frame:
 Proof
   Induct_on `vs` >> simp[Once evaluate_def, return_def] >>
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `bind (read_result _ _) _ _ = _` mp_tac >>
+  simp[Once bind_def] >>
+  Cases_on `read_result cx h es` >> rename1 `read_result cx h es = (rr,es0)` >>
+  `es0 = es` by metis_tac[read_result_state] >> pop_assum SUBST_ALL_TAC >>
+  Cases_on `rr` >> simp[] >> TRY (strip_tac >> gvs[] >> NO_TAC) >>
+  strip_tac >>
   qmatch_asmsub_abbrev_tac `finally action pop_scope` >>
   qpat_x_assum `ignore_bind _ _ es = _` mp_tac >>
   pure_rewrite_tac [push_scope_with_var_def, ignore_bind_def, bind_def, return_def] >>
@@ -1359,6 +1395,7 @@ Proof
   qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
+  imp_res_tac array_iterator_results_state >>
   gvs[return_def] >> metis_tac[]
 QED
 
@@ -1380,14 +1417,21 @@ QED
 
 Theorem supported_iterator_scopes:
   !tops ty it n cx es res es'.
-    supported_iterator tops ty it n /\ eval_iterator cx it es = (res,es') ==>
+    supported_iterator tops ty it n /\
+    ~supported_iterator_exists expr_internal_call_root it /\
+    eval_iterator cx it es = (res,es') ==>
     es'.scopes = es.scopes
 Proof
   Cases_on `it` >> rpt gen_tac >> strip_tac
   >~ [`eval_iterator cx (Array arr) es = _`]
-  >- (drule supported_array_iterator_shape >> strip_tac >> gvs[] >>
-      irule array_iterator_scopes >> goal_assum (drule_at Any) >>
-      metis_tac[name_expr_scopes]) >>
+  >- (irule array_iterator_scopes >> goal_assum (drule_at Any) >>
+      Cases_on `arr`
+      >~ [`Name _ _`] >- metis_tac[name_expr_scopes]
+      >~ [`TopLevelName _ nid`]
+      >- (PairCases_on `nid` >> simp[Once evaluate_def] >>
+          metis_tac[lookup_global_scopes]) >>
+      gvs[supported_iterator_def, supportedStmtTraverseTheory.supported_iterator_exists_def] >>
+      metis_tac[supported_expr_scopes]) >>
   rename1 `eval_iterator cx (Range a b) es = _` >>
   irule range_iterator_scopes >> goal_assum (drule_at Any) >>
   Cases_on `a`
@@ -1620,7 +1664,8 @@ Proof
   qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac lift_sum_state >> gvs[return_def] >>
+  imp_res_tac lift_sum_state >> imp_res_tac array_iterator_results_state >>
+  gvs[return_def] >>
   imp_res_tac typed_expr_name_projection >> gvs[]
 QED
 
@@ -1913,7 +1958,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   rename1 `type_stmts env ret_ty stmts = SOME env'` >>
   `stmts_writes_ok (\w. ~place_contains w (NameTarget name)) stmts` by
-    gvs[iterator_unmodified_def, expr_place_def] >>
+    gvs[iterator_unmodified_def, expr_places_def] >>
   `MAP (\sc. FLOOKUP sc name) es'.scopes =
      MAP (\sc. FLOOKUP sc name) (TL es.scopes) /\
    SUC (LENGTH es'.scopes) = LENGTH es.scopes` by

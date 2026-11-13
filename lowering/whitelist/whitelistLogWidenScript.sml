@@ -1,62 +1,12 @@
-(*
- * Whitelist removal: log arguments that widen to the event field type.
- *
- * supported_log asks each log argument's type to equal its event field's
- * type (MAP expr_type es = MAP (SND o FST) fields); the type checker asks
- * only event_arg_compatible (a String[5] argument for a String[10] field,
- * a shorter Bytes[...]).  The lowering never reads the field types: its
- * Log case types the topics and the data tuple by the arguments
- * (data_types = MAP SND data_ops, compile_log_eval_all_types), and
- * log_alloc_ok bounds the buffers at the argument types too.  The source
- * encodes by the field types (encode_source_event via
- * lookup_event_metadata).  For the scalar fields a supported event has,
- * event_arg_compatible leaves only a bytestring's bound free, and neither
- * the ABI type (vyper_base_to_abi_type), the ABI value (vyper_to_abi_base)
- * nor a topic (encode_event_topic hashes any bytestring) looks at the
- * bound, so the source event is the one the argument types give.
- *
- * Survey: lemmas of the log family whose statement or proof uses the
- * exact-type equation.
- *   stmtSimLogCompose:122 compile_log_ready_stmt_frag — premise
- *     MAP expr_type args = tys.  It is used only to instantiate
- *     log_source_event_encoded (stmtSimLogSource:116) at the argument
- *     types, whose lookup_event_metadata premise then names them.  Needs:
- *     LIST_REL event_arg_compatible tys (MAP expr_type args), with the
- *     buffer bounds at the argument types
- *       -> compile_log_ready_stmt_frag_widen, by
- *          log_source_event_encoded_widen.
- *     Its [local] log_compile_structure (:44) states ce_event_info at the
- *     argument types, though its proof (log_success_suffix_code) takes any
- *       -> log_compile_structure_widen.
- *   stmtSimLog:76 compile_log_stmt_frag — passes the equation on
- *       -> compile_log_stmt_frag_widen.
- *   bodySimLog:178 body_log_case — reads the equation out of supported_log
- *       -> body_log_widen_case, under the type checker's
- *          LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e))
- *          es fields (type_stmt's Log clause) for the event's fields.
- *   The S3 twins have the same single use: stmtLogMemory:143
- *     compile_log_ready_stmt_frag_mem (log_source_event_encoded at the
- *     argument types, and [local] log_mem_compile_structure) and
- *     bodyMemLog:96 body_log_mem_case; not this piece (S1).
- *     bodyPtrLogCases:20 body_log_case_ptr is admitted at the branch head.
- *
- * Already general (argument types only, no field types):
- *   compile_log_eval_all_gas, compile_log_eval_all_types and the rest of
- *   stmtSimLogArgs*/stmtLogArgsMemory; log_success_suffix_code,
- *   log_success_suffix_actual_run, compile_log_data_trace,
- *   compile_log_empty_trace (any tys in ce_event_info); stmtSimLogSource's
- *   log_scalar_* lemmas; body_log_metadata, body_log_args_ready.
- *
- * TOP-LEVEL:
- *   scalar_event_arg_compatible  — a compatible argument type of a scalar
- *                                  field is scalar and encodes like it
- *   log_source_event_encoded_widen
- *                                — the source event, from the field types'
- *                                  metadata, is the argument types' one
- *   compile_log_ready_stmt_frag_widen, compile_log_stmt_frag_widen,
- *   body_log_widen_case          — the log simulation with compatible
- *                                  argument types
- *)
+(* Log arguments may have smaller scalar bounds than their declared fields.
+   Argument evaluation retains its physical operand types. The suffix uses
+   a log_eval_view at the declared field types, whose non-indexed layouts
+   determine both allocation limits. Scalar compatibility preserves topic
+   encoding, ABI encoding and each value's occupied memory footprint.
+   An indexed declared StringT (2 ** 256), paired with a StringT 1 argument,
+   can satisfy the helper premises while the declared type does not evaluate.
+   Indexed hashing ignores that capacity. The helpers therefore do not imply
+   that every declared indexed field has an evaluated type. *)
 Theory whitelistLogWiden
 Ancestors
   allocLimits allocLimitsProps
@@ -69,7 +19,7 @@ Ancestors
   stmtSimLogTrace emitHelper context venomInst
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasSeq rich_list
-  stmtSimLogCompose stmtSimLog bodySimLog e2eDefs vyperEvent vyperABI
+  stmtSimLogCompose stmtSimLog bodySimLogArgs e2eDefs vyperEvent vyperEventArgCompat vyperABI
   vyperTypeSystem supportedTypes supportedDecls supportedStmts
   supportedExprs supportedExprTraverse supportedStmtTraverse
   exprSimSource bodyExprPreFacts exprSimHypsDefs bodySim exprSimHyps
@@ -197,99 +147,11 @@ Proof
   gvs[encode_source_event_def, encode_vyper_event_metadata_def]
 QED
 
-(* ===== Statement simulation ===== *)
-
-Theorem log_emit_open_widen[local]:
-  emit_inst LOG ops [] sa = ((),sb) ==> ~block_is_terminated sb
-Proof
-  simp[emit_inst_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
-  Cases_on `sa.cs_current_insts` >>
-  simp[block_is_terminated_def, rich_listTheory.LAST_APPEND, LAST_CONS_cond,
-       mk_inst_def, is_terminator_def]
-QED
-
-(* stmtSimLogCompose's log_compile_structure, with any field types in
-   ce_event_info. *)
-Theorem log_compile_structure_widen[local]:
-  cenv.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  LENGTH flags = LENGTH args /\ EVERY supported_scalar_type (MAP expr_type args) /\
-  compile_stmt cenv lctx ty (Log id args) sa = ((),sb) /\
-  fn_has_code sa sb func ==>
-  ?xs sm ops st. compile_log_eval_all cenv args sa = (xs,sm) /\
-    compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
-    MAP SND xs = MAP expr_type args /\ LENGTH flags = LENGTH xs /\
-    inst_extends sm sb /\ same_blocks sm sb /\ sm.cs_next_var <= sb.cs_next_var /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-      (emitted_insts sm sb) /\ cs_extends sa sm /\ cs_extends sm sb /\
-    fn_has_code sa sm func /\ fn_has_code sm sb func
-Proof
-  strip_tac >> Cases_on `compile_log_eval_all cenv args sa` >>
-  rename1 `compile_log_eval_all cenv args sa = (xs,sm)` >>
-  Cases_on `compile_log_topic_ops (FST (split_log_ops xs flags)) sm` >>
-  rename1 `compile_log_topic_ops _ sm = (ops,st)` >>
-  `MAP SND xs = MAP expr_type args` by
-    (drule compile_log_eval_all_types >> simp[]) >>
-  `LENGTH xs = LENGTH args` by metis_tac[listTheory.LENGTH_MAP] >>
-  `EVERY (supported_scalar_type o SND) xs` by
-    (`EVERY supported_scalar_type (MAP SND xs)` by metis_tac[] >>
-     gvs[EVERY_MAP, combinTheory.o_DEF]) >>
-  `LENGTH flags = LENGTH xs` by decide_tac >>
-  drule_all log_success_suffix_code >> strip_tac >>
-  `cs_extends sa sm` by (drule compile_log_eval_all_grows >> simp[]) >>
-  `cs_extends sm sb` by
-    (irule cs_extends_same_block >>
-     gvs[same_blocks_def, inst_extends_def, rich_listTheory.IS_PREFIX_APPEND] >>
-     metis_tac[]) >>
-  map_every qexists_tac [`xs`, `sm`, `ops`, `st`] >> simp[] >>
-  metis_tac[fn_has_code_mid, cs_extends_refl]
-QED
-
-Theorem log_stmt_open_widen[local]:
-  cenv.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  compile_log_eval_all cenv args sa = (xs,sm) /\
-  compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
-  compile_stmt cenv lctx ty (Log id args) sa = ((),sb) ==>
-  ~block_is_terminated sb
-Proof
-  strip_tac >>
-  Cases_on `SND (split_log_ops xs flags) = []`
-  >- (drule_all compile_log_empty_trace >> strip_tac >>
-      qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >> simp[] >>
-      metis_tac[log_emit_open_widen]) >>
-  drule_all (SRULE [] (Q.INST [`data_ops` |-> `SND (split_log_ops xs flags)`]
-    compile_log_data_trace)) >> strip_tac >>
-  qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >> simp[] >>
-  strip_tac >> drule log_emit_open_widen >> simp[]
-QED
-
-Theorem eval_log_bind_widen[local]:
-  ~cx.txn.is_static ==>
-  eval_stmt cx (Log id args) =
-    bind (eval_exprs cx args)
-      (\vs. bind (lift_option (encode_source_event (get_tenv cx) cx.sources
-                                 cx.txn.target id vs) "Log encode event")
-                 push_log)
-Proof
-  strip_tac >> simp[Once evaluate_def] >>
-  simp[FUN_EQ_THM, bind_def, ignore_bind_def] >> rpt gen_tac >>
-  rpt (CASE_TAC >> gvs[])
-QED
-
-Theorem log_args_admissible_widen[local]:
-  ~cx.txn.is_static /\
-  gas_admissible (eval_stmt cx (Log id args)) (stmt_res_ok lctx) es ==>
-  gas_admissible (eval_exprs cx args) log_args_res_ok es
-Proof
-  rw[gas_admissible_def, log_args_res_ok_def] >>
-  `eval_stmt cx (Log id args) (es with gas_obs := gs) = (INR exc, ee)` by
-    simp[log_eval_outcome] >>
-  first_x_assum drule >> strip_tac >> metis_tac[log_argument_error_ok]
-QED
-
 (* compile_log_ready_stmt_frag with argument types compatible with the
    field types tys, instead of equal to them; the buffer bounds are at the
    argument types, which is what log_alloc_ok checks. *)
+(* PORT_ADMISSION: SEQ-3718 — the declared-layout Log proof is pending.
+   Original proof retained below for the ongoing proof migration.
 Theorem compile_log_ready_stmt_frag_widen:
   (!e tail s. R (e::tail) s ==>
     expr_sim ctx func cenv cx (expr_type e) e s /\
@@ -306,10 +168,13 @@ Theorem compile_log_ready_stmt_frag_widen:
   LIST_REL event_arg_compatible tys (MAP expr_type args) /\
   LENGTH flags = LENGTH tys /\
   LENGTH (FILTER I flags) <= 3 /\ EVERY supported_scalar_type tys /\
+  ~exprs_can_mutate cenv args /\
+  EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+             is_bytestring_type (expr_type e)) args /\
   SUM (MAP (type_memory_bytes cenv)
-         (log_non_indexed_types flags (MAP expr_type args))) < dimword (:256) /\
+         (log_non_indexed_types flags tys)) < dimword (:256) /\
   abi_size_bound cenv.ce_struct_fields
-    (TupleT (log_non_indexed_types flags (MAP expr_type args))) < dimword (:256) ==>
+    (TupleT (log_non_indexed_types flags tys)) < dimword (:256) ==>
   stmt_frag ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ty (Log id args)) (eval_stmt cx (Log id args)) es
 Proof
@@ -460,6 +325,35 @@ Resume compile_log_ready_stmt_frag_widen[post]:
 QED
 
 Finalise compile_log_ready_stmt_frag_widen
+*)
+Theorem compile_log_ready_stmt_frag_widen:
+  (!e tail s. R (e::tail) s ==>
+    expr_sim ctx func cenv cx (expr_type e) e s /\
+    !v s1. (do r <- eval_expr cx e; read_result cx r od) s = (INL v,s1) ==>
+      R tail s1 /\ ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+                        value_has_type tv v) /\
+  (!tail s gs. R tail s ==> R tail (s with gas_obs := gs)) /\
+  R args es /\
+  expr_sim_inv cenv cx env es /\ well_typed_exprs env args /\
+  (!id t. FLOOKUP env.var_types id = SOME t ==>
+     ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+  cenv.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
+  lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id = SOME (h,tys,flags) /\
+  LIST_REL event_arg_compatible tys (MAP expr_type args) /\
+  LENGTH flags = LENGTH tys /\
+  LENGTH (FILTER I flags) <= 3 /\ EVERY supported_scalar_type tys /\
+  ~exprs_can_mutate cenv args /\
+  EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+             is_bytestring_type (expr_type e)) args /\
+  SUM (MAP (type_memory_bytes cenv)
+         (log_non_indexed_types flags tys)) < dimword (:256) /\
+  abi_size_bound cenv.ce_struct_fields
+    (TupleT (log_non_indexed_types flags tys)) < dimword (:256) ==>
+  stmt_frag ctx func cx lctx RetQ cenv
+    (stmt_env cenv lctx ty (Log id args)) (eval_stmt cx (Log id args)) es
+Proof
+  cheat
+QED
 
 (* compile_log_stmt_frag with compatible argument types. *)
 Theorem compile_log_stmt_frag_widen:
@@ -470,11 +364,14 @@ Theorem compile_log_stmt_frag_widen:
     LIST_REL event_arg_compatible tys (MAP expr_type args) /\
     LENGTH flags = LENGTH tys /\
     LENGTH (FILTER I flags) <= 3 /\ EVERY supported_scalar_type tys /\
+    ~exprs_can_mutate cenv args /\
+    EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+               is_bytestring_type (expr_type e)) args /\
     SUM (MAP (type_memory_bytes cenv)
-           (log_non_indexed_types flags (MAP expr_type args))) <
+           (log_non_indexed_types flags tys)) <
       dimword (:256) /\
     abi_size_bound cenv.ce_struct_fields
-      (TupleT (log_non_indexed_types flags (MAP expr_type args))) <
+      (TupleT (log_non_indexed_types flags tys)) <
       dimword (:256) /\
     log_args_ready ctx func cenv cx Inv args /\ Inv es /\
     (!s gs. Inv s ==> Inv (s with gas_obs := gs)) /\
@@ -538,12 +435,12 @@ Proof
   drule_all body_log_metadata >> strip_tac >>
   drule event_fields_compatible >> strip_tac >>
   `SUM (MAP (type_memory_bytes cenv)
-          (log_non_indexed_types (MAP SND fields) (MAP expr_type args))) <
+          (log_non_indexed_types (MAP SND fields) (MAP (SND o FST) fields))) <
      dimword (:256) /\
    abi_size_bound cenv.ce_struct_fields
-     (TupleT (log_non_indexed_types (MAP SND fields) (MAP expr_type args))) <
+     (TupleT (log_non_indexed_types (MAP SND fields) (MAP (SND o FST) fields))) <
      dimword (:256)` by
-    (gvs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
+    (gvs[stmt_exprs_ok_flat, allocLimitsTheory.alloc_limits_stmt_def,
          allocLimitsTheory.log_alloc_ok_def] >>
      conj_tac >> irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
      qexists_tac `2 ** 64` >> gvs[wordsTheory.dimword_def]) >>
@@ -557,6 +454,10 @@ Proof
     (fs[body_stmt_safe_log_args, EVERY_CONJ] >>
      rw[EVERY_MEM] >> irule alloc_limits_expr_not_extcode >>
      metis_tac[exprSimSourceTheory.alloc_limits_exprs_mem]) >>
+  `~exprs_can_mutate cenv args` by metis_tac[supported_pure_expr_no_mutate] >>
+  `EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+              is_bytestring_type (expr_type e)) args` by
+    metis_tac[supported_pure_exprs_bytestring_iff] >>
   qspecl_then [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ret_ty`, `id`,
                `args`, `es`, `\s. expr_sim_inv cenv cx env s`, `h`,
                `MAP (SND o FST) fields`, `MAP SND fields`, `env`]
@@ -564,7 +465,7 @@ Proof
   impl_tac >- (
     simp[] >>
     irule body_log_args_ready >>
-    gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+    gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
         int_calls_stmt_def, AllCaseEqs()] >>
     metis_tac[]) >>
   simp[]

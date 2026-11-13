@@ -24,14 +24,15 @@ val R_tm = mk_var ("R", type_of ``machine_frame``);
 val eval_frame_net =
   let
     val rules = [state_rel_frame_bind_guarded, state_rel_frame_try,
-      state_rel_frame_finally]
+      state_rel_frame_finally, state_rel_frame_finally_unless_halt]
     val leaves = [machine_frame_primitives, machine_frame_read_result,
       machine_frame_read_results, machine_frame_reads, machine_frame_select_result,
       machine_frame_extend_place, machine_frame_get_place, machine_frame_read_place,
       machine_frame_place_type_value, machine_frame_new_variable,
       machine_frame_next_gas_reading, machine_frame_precompile_call_success,
       machine_frame_handlers, machine_frame_push_function,
-      machine_frame_pop_function, machine_frame_unchanged_reads]
+      machine_frame_pop_function, machine_frame_unchanged_reads,
+      machine_frame_array_iterator_results]
     fun leaf th = (subst [``machine_frame`` |-> R_tm] (concl th),
       MATCH_MP_TAC state_rel_frame_machine >> conj_tac >-
         first_assum ACCEPT_TAC >> MATCH_ACCEPT_TAC th)
@@ -66,7 +67,9 @@ Theorem eval_state_rel_frame:
   (!cx fl a d m g. state_rel_frame R (eval_raw_call cx fl a d m g)) /\
   (!cx k h r ts vs cs. state_rel_frame R (eval_create cx k h r ts vs cs)) /\
   (!a n v. state_rel_frame R (acquire_nonreentrant_lock a n v)) /\
-  (!a n. state_rel_frame R (release_nonreentrant_lock a n)) ==>
+  (!a n. state_rel_frame R (release_nonreentrant_lock a n)) /\
+  (!f. state_rel_frame R (update_accounts f)) /\
+  (!f. state_rel_frame R (update_pending_deletions f)) ==>
   (!cx s. state_rel_frame R (eval_stmt cx s)) /\
   (!cx ss. state_rel_frame R (eval_stmts cx ss)) /\
   (!cx it. state_rel_frame R (eval_iterator cx it)) /\
@@ -116,6 +119,8 @@ Proof
   >- EVAL_FRAME_CASE
   >- EVAL_FRAME_CASE
   >- EVAL_FRAME_CASE
+  (* Builtin In/NotIn: the membership branch's eval_exprs needs the
+     disjunct-guarded induction hypothesis; EVAL_FRAME_IH_TAC leaves it open. *)
   >- (EVAL_FRAME_CASE >> metis_tac[])
   >- EVAL_FRAME_CASE
   >- EVAL_FRAME_CASE

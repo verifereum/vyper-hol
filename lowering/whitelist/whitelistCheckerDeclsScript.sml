@@ -32,6 +32,7 @@
      type_stmts_int_calls_internal                   (L2: callee lookup) *)
 Theory whitelistCheckerDecls
 Ancestors
+  publicGetterProps
   list rich_list arithmetic finite_map pred_set pair option words
   vyperAST vyperValue vyperContext vyperInterpreter vyperTypeSystem
   vyperTypeContract vyperABIEntries
@@ -39,7 +40,7 @@ Ancestors
   vyperTypeEventLookup vyperTypeCallGraph vyperTypeInvariants
   supportedTypes supportedDecls supportedNames supportedExprForms
   supportedStmtTraverse compileVyper selectorDispatch contractABI
-  entryDispatchProps
+  entryDispatchProps vyperGetter constSubst sorting
 
 (* ===== The single-module namespace facts ===== *)
 
@@ -57,7 +58,7 @@ Proof
   rw[]
 QED
 
-Theorem check_contract_single_decl[local]:
+Theorem check_contract_single_decl:
   check_contract F layouts addr [(NONE, tops)] = SOME art /\ MEM tl tops ==>
   check_toplevel_decl [(NONE, tops)] art NONE tl
 Proof
@@ -309,29 +310,71 @@ Proof
   BasicProvers.every_case_tac >> rw[]
 QED
 
-Theorem build_selectors_sublist[local]:
-  !tops. sublist (MAP FST (build_selectors tenv (FST (classify_functions tops))))
-                 (abi_external_method_ids tenv tops)
+
+
+Theorem selector_ids_append[local]:
+  !fs gs. MAP FST (build_selectors tenv (fs ++ gs)) =
+    MAP FST (build_selectors tenv fs) ++ MAP FST (build_selectors tenv gs)
 Proof
-  Induct >- simp[classify_functions_def, build_selectors_def, sublist_nil] >>
-  rpt gen_tac >>
-  `abi_external_method_ids tenv (h::tops) =
-     MAP (\(name,tys). abi_method_id tenv name tys) (abi_decl_signatures h) ++
-     abi_external_method_ids tenv tops`
-    by simp[abi_external_method_ids_def, abi_external_signatures_def] >>
-  pop_assum SUBST1_TAC >>
-  simp[classify_functions_def, classify_function_fst] >>
-  fs[GSYM classify_functions_def] >>
-  Cases_on `h` >> simp[sublist_append_include] >>
-  rename1 `FunctionDecl fv` >> Cases_on `fv` >>
-  simp[sublist_append_include, abi_decl_signatures_def] >>
-  rw[sublist_append_include, abi_decl_signatures_def, build_selectors_def,
-     compute_selector_abi_method_id] >>
-  once_rewrite_tac[CONS_APPEND] >> irule sublist_append_pair >> simp[] >>
-  irule sublist_member_sing >>
-  simp[MEM_MAP, abi_function_signatures_def, PULL_EXISTS, EXISTS_PROD,
-       abi_entries_member] >>
-  qexists_tac `LENGTH l0` >> simp[TAKE_LENGTH_TOO_LONG]
+  Induct >> simp[build_selectors_def] >>
+  gen_tac >> PairCases_on `h` >> simp[build_selectors_def]
+QED
+
+Theorem selector_ids_subst[local]:
+  !fs env. MAP FST (build_selectors tenv (MAP (subst_consts_fn env) fs)) =
+    MAP FST (build_selectors tenv fs)
+Proof
+  Induct >> simp[build_selectors_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[subst_consts_fn_def, build_selectors_def]
+QED
+
+
+Theorem build_selectors_provenance[local]:
+  !tops. ?xs.
+    sublist xs (abi_external_method_ids tenv tops) /\
+    PERM (MAP FST (build_selectors tenv
+            (FST (FOLDR classify_function ([],[],NONE,NONE) tops))) ++
+          MAP FST (build_selectors tenv (public_getters tops))) xs
+Proof
+  Induct
+  >- simp[abi_external_method_ids_def, abi_external_signatures_def,
+          build_selectors_def, public_getters_def, sublist_nil] >>
+  simp[abi_external_method_ids_def, abi_external_signatures_def,
+       public_getters_def] >>
+  strip_tac >> gvs[abi_external_method_ids_def, abi_external_signatures_def] >>
+  Cases_on `h`
+  >- (qmatch_goalsub_rename_tac `FunctionDecl vis mut nr rr fname fargs dflts fret fbody` >>
+      Cases_on `vis` >>
+      simp[classify_function_fst, public_getter_def, abi_decl_signatures_def,
+           selector_ids_append, build_selectors_def]
+      >- (Cases_on `fname = "__default__"`
+          >- (gvs[] >> metis_tac[]) >>
+      simp[build_selectors_def, compute_selector_abi_method_id] >>
+      qexists_tac `abi_method_id tenv fname (MAP SND fargs) :: xs` >>
+      simp[] >>
+      `sublist [abi_method_id tenv fname (MAP SND fargs)]
+        (MAP (\(name,tys). abi_method_id tenv name tys)
+          (abi_function_signatures fname fargs dflts))` by
+        (irule sublist_member_sing >>
+         simp[abi_function_signatures_def, MAP_MAP_o, MEM_MAP] >>
+         qexists_tac `(fname,MAP SND fargs)` >> simp[] >>
+         qexists_tac `(fargs,LENGTH dflts)` >>
+         simp[abi_entries_member, TAKE_LENGTH_TOO_LONG]) >>
+      metis_tac[sublist_append_pair, APPEND]) >> metis_tac[]) >>
+  simp[classify_function_fst] >>
+  qmatch_goalsub_abbrev_tac `public_getter top` >>
+  (namedCases_on `public_getter top` ["", "gfn"]
+  >- (simp[selector_ids_append, build_selectors_def] >>
+      qexists_tac `xs` >> simp[] >>
+      metis_tac[sublist_append_include]) >>
+  PairCases_on `gfn` >>
+  drule public_getter_signature >> strip_tac >>
+  simp[selector_ids_append, build_selectors_def,
+       compute_selector_abi_method_id] >>
+  qexists_tac `abi_method_id tenv gfn3 (MAP SND gfn4) :: xs` >>
+  simp[PERM_FUN_APPEND_CONS] >>
+  simp[GSYM sublist_cons])
 QED
 
 Theorem check_contract_selectors_distinct:
@@ -339,8 +382,15 @@ Theorem check_contract_selectors_distinct:
   supported_selectors_distinct tops
 Proof
   strip_tac >> drule check_contract_single_namespaces >> strip_tac >>
-  simp[supported_selectors_distinct_def] >>
-  irule sublist_ALL_DISTINCT >> metis_tac[build_selectors_sublist]
+  qspec_then `tops` strip_assume_tac
+    (Q.INST [`tenv` |-> `type_env tops`]
+      (INST_TYPE [alpha |-> ``:expr``] build_selectors_provenance)) >>
+  simp[supported_selectors_distinct_def, classify_functions_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[selector_ids_subst, selector_ids_append] >>
+  drule_all sublist_ALL_DISTINCT >> strip_tac >>
+  drule sortingTheory.ALL_DISTINCT_PERM >> strip_tac >>
+  pop_assum (irule o iffRL) >> first_assum ACCEPT_TAC
 QED
 
 (* ===== S26: no local or loop variable rebinds an argument ===== *)
@@ -458,7 +508,11 @@ Proof
       supported_integer_type_def, supported_unsigned_type_def,
       supported_word_type_def] >>
   imp_res_tac assignable_int_width >> gvs[supported_int_width_def] >>
-  TRY (irule nonneg_int_literal_supported >> simp[])
+  TRY (irule nonneg_int_literal_supported >> simp[]) >>
+  gvs[augassign_operand_ok_def] >>
+  Cases_on `e` >> gvs[power_exponent_ok_def] >>
+  rename1 `Literal _ lit` >> Cases_on `lit` >>
+  gvs[power_exponent_ok_def, nonneg_int_literal_def, int_literal_value_def]
 QED
 
 Theorem type_place_target_attribute_subscript_base:

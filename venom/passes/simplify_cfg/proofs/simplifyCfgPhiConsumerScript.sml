@@ -4,7 +4,6 @@ Ancestors
   simplifyCfgPhiSemantics simplifyCfgDefs venomExecSemantics venomWf venomInst
   venomExecProofs venomWfProps cfgTransform analysisSimProofsBase list
 
-(* The equivalent inversion in concretizeMemLocProofs is local. *)
 Theorem scfg_resolve_phi_var:
   !ops p op. phi_well_formed ops /\ resolve_phi p ops = SOME op ==>
     ?v. op = Var v

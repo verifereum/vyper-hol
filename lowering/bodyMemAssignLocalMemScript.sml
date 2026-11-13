@@ -19,6 +19,7 @@ Ancestors
   valueCopyBytes valueTypingMemoryProps abiBuiltinAllocation exprSimBufferStore
   stmtLowering fragExec exprSimProps freshWrites fragGasPathMem exprOperandVar
   bodyDeclCopyMemory gasExemptCert exprSimSource gasOracleReplay
+  memoryValueEncoding
 Libs
   monadsyntax
 
@@ -67,7 +68,7 @@ Proof
       is_dynamic (vyper_to_abi_type (type_env tops) target)` by
     gvs[body_inv_def] >>
   irule stmt_expr_body_pre >>
-  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def,
       int_calls_atarget_def, int_calls_expr_def] >>
   qexists_tac `[]` >> simp[]
@@ -214,7 +215,7 @@ Theorem local_memory_write_frame:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!b n. b + n <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
       mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
-    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\ value_has_type entry.type v /\
     val_wf entry.type v /\ val_in_memory entry.type v (w2n w) t.vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
@@ -245,6 +246,8 @@ Proof
        (fs[regions_disjoint_def] >> decide_tac) >>
      qpat_x_assum `!b n. _ ==> mem_bytes_at b n t.vs_memory = _`
        (qspecl_then [`off`, `type_memory_size tv`] mp_tac) >> simp[]) >>
+  `memory_value_rel entry.type v (w2n w) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   irule stmt_state_rel_write_local >> simp[] >>
   qexistsl_tac [`s`, `w`] >>
   simp[] >> conj_tac
@@ -342,7 +345,7 @@ Theorem local_header_store_path_mem[local]:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ 32 <= type_memory_size entry.type /\
     val_wf entry.type v /\
-    val_in_memory entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
+    memory_value_rel entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
     ?t. stmt_state_rel ctx func cenv cx
           (es with scopes := pre ++
             (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
@@ -417,8 +420,9 @@ Proof
     (irule memory_length_word_layout >> simp[mstore_mem_word_at_same] >> metis_tac[]) >>
   `val_wf entry.type (default_value tyv) /\
    32 <= type_memory_size entry.type /\
-   val_in_memory entry.type (default_value tyv) (w2n w)
-     (mstore (w2n w) 0w s0).vs_memory` by simp[] >>
+   memory_value_rel entry.type (default_value tyv) (w2n w)
+     (mstore (w2n w) 0w s0).vs_memory` by
+    simp[CONJUNCT1 default_memory_layout] >>
   drule_all local_header_store_path_mem >> strip_tac >>
   `~block_is_terminated sb` by
     (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
@@ -445,7 +449,7 @@ QED
 
 Theorem local_memory_assign_staged_code[local]:
   compile_assign_value ce dst LocMemory src F (SOME LocMemory)
-    dty sty info bytes sa = ((),sb) /\ fn_has_code sa sb func /\
+    dty sty bytes sa = ((),sb) /\ fn_has_code sa sb func /\
   (dty = sty \/ is_bytestring_type dty) ==>
   ?buf sm sn.
     compile_alloc_buffer (type_memory_bytes ce sty) sa = (buf,sm) /\
@@ -461,7 +465,7 @@ Proof
      compile_copy_memory buf.buf_operand src (type_memory_bytes ce sty) sm =
        ((),sn) /\
      compile_store_memory ce buf.buf_operand dst dty sty sn = ((),sb)` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def,
           comp_return_def] >>
      rpt (pairarg_tac >> gvs[]) >> strip_tac >> metis_tac[pairTheory.PAIR]) >>
@@ -486,9 +490,9 @@ QED
 
 Theorem local_memory_assign_widen_body_path[local]:
   !ctx func cenv cx es s id p sz pre env entry rest v tyv ltv src ty lt sa sb
-   sw d info bytes.
+   sw d bytes.
     compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
-      ty lt info bytes sa = ((), sb) /\
+      ty lt bytes sa = ((), sb) /\
     (ty = lt \/ is_bytestring_type ty /\ is_bytestring_type lt) /\
     ~is_word_type ty /\
     (!x. src = Var x ==> not_fresh_at sa x) /\ not_fresh_at sa p /\
@@ -567,7 +571,7 @@ QED
 
 Theorem assign_local_memory_post_path_mem[local]:
   !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz pre env entry rest
-   v tyv etv ltv vtyp loc info bytes d.
+   v tyv etv ltv vtyp loc bytes d.
     expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
     expr_store_bound cx (expr_type e) v op s /\
     (loc = SOME LocMemory ==> !sw. eval_operand op s = SOME sw ==>
@@ -588,7 +592,7 @@ Theorem assign_local_memory_post_path_mem[local]:
     type_memory_size tyv + 64 < dimword (:256) /\
     type_memory_size ltv < dimword (:256) /\ 0 < type_memory_size etv /\
     compile_assign_value cenv (Var p) LocMemory op F loc vtyp
-      (lowered_value_type cenv e) info bytes sb = ((),sf) /\
+      (lowered_value_type cenv e) bytes sb = ((),sf) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     alloca_history func s /\ return_buf_frame d cenv sb s /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
@@ -643,12 +647,12 @@ Proof
   Cases_on `loc = SOME LocMemory`
   >- (qpat_x_assum `loc = SOME LocMemory` SUBST_ALL_TAC >>
       irule local_memory_assign_widen_body_path >> simp[] >>
-      goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
       simp[] >> conj_tac
       >- (qpat_x_assum `SOME LocMemory = SOME LocMemory ==> _` mp_tac >> simp[]) >>
       qpat_x_assum `(_ /\ _) \/ _` mp_tac >> metis_tac[]) >>
   `compile_store_memory cenv op (Var p) vtyp vtyp sb = ((),sf)` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_assign_value_def] >>
      metis_tac[compile_store_memory_bytestring_src]) >>
   irule local_memory_store_body_path >> simp[] >>
@@ -756,7 +760,7 @@ Resume compile_assign_local_memory_widen_stmt_frag_mem[normal]:
      drule gas_marked_path_exec >> strip_tac >>
      drule fragGasPathTheory.gas_path_normal >> simp[]) >>
   drule assign_local_memory_post_path_mem >>
-  disch_then (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[] >>
   disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
   simp[] >> disch_then (drule_at (Pat `return_buf_frame _ _ _ _`)) >>

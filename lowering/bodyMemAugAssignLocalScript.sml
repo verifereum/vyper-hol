@@ -728,7 +728,7 @@ Proof
      fs[body_inv_def]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supportedExprTraverseTheory.supported_expr_exists_def,
          int_calls_stmt_def, int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -741,7 +741,8 @@ Proof
      Cases_on `FLOOKUP env.var_types id` >>
      Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >>
-     Cases_on `asg` >> gvs[]) >>
+     Cases_on `asg` >> gvs[] >>
+     metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
   drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
   `body_expr_mem_ok cx e` by
     (first_x_assum irule >>
@@ -750,7 +751,7 @@ Proof
   conj_tac
   >- (gen_tac >>
       qpat_x_assum `body_expr_mem_ok cx e`
-        (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+        (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
       disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `ty`,
         `es with gas_obs := gs`] mp_tac) >>
       simp[]) >>

@@ -32,15 +32,6 @@ Proof
   EVERY_CASE_TAC >> gvs[LET_THM]
 QED
 
-Triviality funpow_visited_mono:
-  !n bi order eda om fl state id.
-    MEM id state.ds_visited ==>
-    MEM id (FUNPOW (dfs_step bi order eda om fl) n state).ds_visited
-Proof
-  Induct >> simp[FUNPOW] >> rpt strip_tac >>
-  first_x_assum irule >> irule dfs_step_visited_mono >> simp[]
-QED
-
 (* ===== dfs_step visits the top DfsProcess ===== *)
 
 Triviality dfs_step_visits_top_process:
@@ -57,20 +48,6 @@ QED
 
 (* ===== When visiting a non-pseudo, children are pushed ===== *)
 
-Triviality dfs_step_pushes_children:
-  !bi order eda om fl state inst rest.
-    state.ds_stack = DfsProcess inst :: rest /\
-    ~MEM inst.inst_id state.ds_visited /\
-    ~is_pseudo inst.inst_opcode ==>
-    !dep. MEM dep (inst_all_deps bi order eda inst) ==>
-          MEM (DfsProcess dep)
-            (dfs_step bi order eda om fl state).ds_stack
-Proof
-  rpt strip_tac >>
-  simp[dfs_step_def, LET_THM, MEM_APPEND, MEM_MAP] >>
-  disj1_tac >> metis_tac[sort_children_mem]
-QED
-
 (* ===== Count of unvisited non-pseudos ===== *)
 
 Definition unvisited_count_def:
@@ -78,12 +55,6 @@ Definition unvisited_count_def:
     LENGTH (FILTER (\i. ~is_pseudo i.inst_opcode /\
                         ~MEM i.inst_id visited) bi)
 End
-
-Triviality unvisited_count_le:
-  !bi visited. unvisited_count bi visited <= LENGTH bi
-Proof
-  rw[unvisited_count_def] >> irule LENGTH_FILTER_LEQ
-QED
 
 (* Monotonicity: more visited => smaller or equal count *)
 Triviality unvisited_count_mono:
@@ -96,40 +67,9 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-(* Adding an already-visited id doesn't change count *)
-Triviality unvisited_add_visited:
-  !bi visited id.
-    MEM id visited ==>
-    unvisited_count bi (id :: visited) = unvisited_count bi visited
-Proof
-  rw[unvisited_count_def] >>
-  AP_TERM_TAC >>
-  simp[FILTER_EQ] >> metis_tac[]
-QED
-
 (* Adding a new non-pseudo id decreases count by exactly 1.
    Why: ALL_DISTINCT ids means inst is the unique element with that id,
    so FILTER removes exactly one element. *)
-(* General list lemma: removing one unique-keyed element from FILTER
-   decreases length by exactly 1 *)
-Triviality filter_remove_unique_key:
-  !P f l x.
-    ALL_DISTINCT (MAP f l) /\ MEM x l /\ P x ==>
-    LENGTH (FILTER (\y. P y /\ f y <> f x) l) + 1 =
-    LENGTH (FILTER P l)
-Proof
-  Induct_on `l` >> simp[] >> rpt gen_tac >> strip_tac >>
-  gvs[ALL_DISTINCT_MAP]
-  (* x is the head *)
-  >- (simp[] >>
-      `FILTER (\y. P y /\ f y <> f h) l = FILTER P l` suffices_by simp[] >>
-      simp[FILTER_EQ] >> rpt strip_tac >>
-      gvs[MEM_MAP] >> metis_tac[])
-  (* x is in tail *)
-  >> `f h <> f x` by (gvs[MEM_MAP] >> metis_tac[]) >>
-  Cases_on `P h` >> simp[] >>
-  first_x_assum (qspecl_then [`P`, `f`, `x`] mp_tac) >> simp[]
-QED
 
 Triviality unvisited_add_new:
   !bi visited inst.
@@ -274,11 +214,6 @@ Finalise dfs_step_measure_dec
 
    We split into: step decreases when stack non-empty, and
    stack empty => measure = 0 (maintained as invariant). *)
-Triviality funpow_idle:
-  !n (f:'a -> 'a) s. f s = s ==> FUNPOW f n s = s
-Proof
-  Induct >> simp[FUNPOW]
-QED
 
 (* Measure 0 means stack empty and all non-pseudos visited *)
 Triviality measure_zero_imp_visited:
@@ -300,28 +235,6 @@ Triviality measure_zero_imp_stack_empty:
     dfs_measure bi state = 0 ==> state.ds_stack = []
 Proof
   rw[dfs_measure_def] >> Cases_on `state.ds_stack` >> gvs[]
-QED
-
-(* General abstract lemma: if f either decreases the measure or is idle,
-   and idle ⟹ measure=0, then after n ≥ measure(s) steps, measure=0.
-   Proof by complete induction on n. *)
-Triviality measure_decreases_to_zero:
-  !n (f:'a -> 'a) (m:'a -> num) s.
-    (!x. m x > 0 ==> m (f x) < m x) /\
-    (!x. m (f x) >= m x ==> f x = x) /\
-    m s <= n ==>
-    m (FUNPOW f n s) = 0
-Proof
-  completeInduct_on `n` >> rpt strip_tac >>
-  Cases_on `n`
-  >- (gvs[] >> Cases_on `m s` >> gvs[])
-  >> rename1 `SUC k` >>
-  Cases_on `m s = 0`
-  >- (`f s = s` by (first_x_assum (qspec_then `s` mp_tac) >> simp[]) >>
-      `FUNPOW f (SUC k) s = s` by (irule funpow_idle >> simp[]) >>
-      simp[])
-  >> `m (f s) < m s` by (first_x_assum match_mp_tac >> simp[]) >>
-  simp[FUNPOW]
 QED
 
 (* Key helper: non-entry non-pseudos are deps of something.

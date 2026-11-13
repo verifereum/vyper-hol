@@ -18,7 +18,7 @@ Proof
   rpt gen_tac >> strip_tac >> simp[Once body_stmt_mem_ok_def] >>
   rpt gen_tac >> strip_tac >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
-      stmt_exprs_ok_def, supported_stmt_expr_exists_def] >>
+      stmt_exprs_ok_flat, supported_stmt_expr_exists_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
@@ -27,7 +27,7 @@ Proof
   `expr_sim_mem ctx func cenv cx (expr_type e) e es /\
    expr_vv_sim_mem ctx func cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_mem_ok _ _`
-       (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
      disch_then irule >> metis_tac[]) >>
   irule compile_expr_stmt_frag_ok_mem >> simp[] >>
   rpt gen_tac >> strip_tac >> irule compile_expr_open_general >> metis_tac[]
@@ -53,7 +53,7 @@ Proof
       alloc_limits_expr_def]) >>
   imp_res_tac alloc_limits_expr_not_extcode >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
-      stmt_exprs_ok_def, supported_stmt_expr_exists_def] >>
+      stmt_exprs_ok_flat, supported_stmt_expr_exists_def] >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
@@ -63,7 +63,7 @@ Proof
   `expr_sim_mem ctx func cenv cx (expr_type e) e es /\
    expr_vv_sim_mem ctx func cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_mem_ok _ _`
-       (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
      disch_then irule >> metis_tac[]) >>
   irule compile_expr_stmt_frag_ok_mem >> simp[] >>
   rpt gen_tac >> strip_tac >>

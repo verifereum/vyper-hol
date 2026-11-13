@@ -32,7 +32,7 @@ Proof
   `!w. MEM (Var w) inst.inst_operands /\ FLOOKUP rv w = NONE ==>
        clean_scalar (retpc_var fn) rv tn w` by
     (rpt strip_tac >>
-     `~MEM inst.inst_opcode [ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by simp[] >>
+     `~MEM inst.inst_opcode [ASSIGN; PHI; RET; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by simp[] >>
      drule_all disciplined_clean_scalar >> simp[]) >>
   `!w. MEM (Var w) inst.inst_operands ==> ~retpc_var fn w` by
     (rpt strip_tac >> drule_all disciplined_retpc_operand_use >> gvs[]) >>

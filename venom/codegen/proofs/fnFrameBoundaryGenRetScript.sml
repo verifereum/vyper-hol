@@ -5,7 +5,7 @@ Ancestors
   fnFrameTerminalPrep preparedPrefixSim asmFrame strongPrefixSim prefixSim stackOpSim
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
-  venomWf venomEffects stackPlanOps asmIR frameViewFacts finite_map callLayoutDefs list rich_list reorderSim planWf stackModel
+  venomWf venomEffects stackPlanOps asmIR frameViewFacts finite_map callLayoutDefs list rich_list reorderSim planWf stackModel reduceDepthSim
 
 Theorem ret_plan_decompose:
   inst.inst_opcode = RET /\ inst_wf inst /\
