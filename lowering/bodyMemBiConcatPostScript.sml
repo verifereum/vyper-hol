@@ -52,7 +52,6 @@ Theorem concat_prefix_list_frame:
   wb_frame cenv es es' sa s0 u
 Proof
   strip_tac >> irule protected_allocation_frame_tail >> simp[] >>
-  conj_tac >- (qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]) >>
   qexistsl_tac [`\p n. (p+n <= B \/ B+bsz <= p) /\
                        (p+n <= w2n ow \/ w2n ow+64 <= p)`,
                 `ee`, `sc`, `t`] >>
