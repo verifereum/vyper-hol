@@ -258,8 +258,12 @@ Resume code_slice_self_vv_ptr[continuation]:
      drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
      metis_tac[]) >> gvs[] >>
   `LENGTH cx.txn.code < dimword (:256)` by
-    fs[expr_sim_inv_def, vyperTypeInvariantsTheory.context_well_typed_def,
-       wordsTheory.dimword_def] >>
+    (qpat_assum `expr_sim_inv cenv cx env es`
+       (strip_assume_tac o PURE_REWRITE_RULE [expr_sim_inv_def]) >>
+     qpat_assum `context_well_typed cx` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[vyperTypeInvariantsTheory.context_well_typed_def,
+          wordsTheory.dimword_def]) >>
   `local_ptrs_reserved cenv sn /\ fn_has_code sn sb func` by
     (conj_tac
      >- (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
