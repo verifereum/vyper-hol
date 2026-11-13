@@ -815,7 +815,7 @@ Finalise extcall_decoder_remaining_members
 
 
 (* One guarded traversal, shared by the concrete aggregate constructors. *)
-Theorem extcall_decoder_complex_members[local]:
+Theorem extcall_decoder_complex_members:
   let ao = \j. SUM (MAP abi_member_head_size
         (MAP (vyper_to_abi_type env) (TAKE j tys)));
       mo = \j. SUM (MAP (type_memory_bytes ce) (TAKE j tys));
@@ -1134,3 +1134,4 @@ Resume extcall_decoder_tuple_memory[tuple_reject]:
 QED
 
 Finalise extcall_decoder_tuple_memory
+
