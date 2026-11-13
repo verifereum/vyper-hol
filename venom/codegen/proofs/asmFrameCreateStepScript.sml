@@ -543,7 +543,9 @@ Theorem asm_frame_create_effects_step_ok:
     account_empty (lookup_account c.msgParams.callee t.originalAccounts)) /\
   (~a.as_call_ctx.cc_created_in_tx ==> account_already_created
     (lookup_account c.msgParams.callee t.rollback.accounts)) /\
-  run_call t = run_call s /\ wf_state t /\ t.txParams = s.txParams /\
+  run_call t = run_call s /\
+  RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t /\
+  wf_state t /\ t.txParams = s.txParams /\
   (?d. t.msdomain = Collect d) /\
   ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\ ct.pc = SUC c.pc /\
   ct.stack = result::stk /\ (result = 0w \/ result = w2w (address:address)) /\
@@ -559,6 +561,7 @@ Theorem asm_frame_create_effects_step_ok:
     (EL a.as_pc prog) a = AsmOK a1 /\ asm_frame_rel prog data es0 a1 t
 Proof
   strip_tac >>
+  drule_all asm_frame_rel_rtc_trans >> disch_tac >>
   `?a1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
     (EL a.as_pc prog) a = AsmOK a1 /\ asm_frame_rel prog data es0 a1 t`
     suffices_by
@@ -682,6 +685,8 @@ Proof
     (mp_tac (Q.INST [`d` |-> `LENGTH s.contexts`, `B` |-> `s.rollback`,
                     `s` |-> `s`, `t` |-> `t`, `x` |-> `()`]
        vfmRunCallTheory.step_continuing_collision_current) >> simp[]) >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t` by
+    (irule relationTheory.RTC_SINGLE >> simp[] >> metis_tac[]) >>
   `frame_next s t` by
     (simp[frame_next_def] >> metis_tac[]) >>
   `asm_frame_step_ok prog data es0 a s /\
@@ -754,6 +759,8 @@ Proof
        `t` |-> `t`, `self` |-> `c.msgParams.callee`,
        `created` |-> `a.as_call_ctx.cc_created_in_tx`]
        step_run_call_creation_guard) >> gvs[asm_frame_rel_def] >> metis_tac[]) >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t` by
+    (irule run_call_enter_return_rtc >> metis_tac[]) >>
   `frame_next s t` by
     (simp[frame_next_def] >> metis_tac[]) >>
   `asm_frame_step_ok prog data es0 a s /\
@@ -859,6 +866,9 @@ Proof
     (irule asm_create_step_terminal >> metis_tac[]) >>
   `!address. c.msgParams.outputTo <> Code address` by
     gvs[asm_evm_rel_def] >>
+  `frame_inst_raises s OutOfGas (if IS_SOME salt_opt then Create2 else Create)` by
+    (irule frame_inst_raises_next >> simp[] >>
+     Cases_on `salt_opt` >> gvs[step_inst_def] >> metis_tac[]) >>
   `frame_last s /\ ?r t. run_call s = SOME (r,t) /\ frame_resource_starved s r t /\
          call_requests s = []` by
     (Cases_on `rest`
@@ -871,8 +881,8 @@ Proof
          `call_trace s = []` by
            (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
          drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-         simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
-         qexistsl_tac [`OutOfGas`, `[]`, `[]`] >> simp[]) >>
+         simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises, frame_outcome_def, call_requests_def] >>
+         metis_tac[]) >>
      PairCases_on `h` >> rename1 `s.contexts = (c,rb)::(h0,h1)::saved` >>
      `?mr. c.msgParams.outputTo = Memory mr` by
        (Cases_on `c.msgParams.outputTo` >> gvs[] >>
@@ -892,7 +902,7 @@ Proof
      `call_trace s = []` by
        (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
      drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-     simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
+     simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises, frame_outcome_def, call_requests_def] >>
      metis_tac[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> simp[] >>

@@ -69,7 +69,7 @@ Theorem e2e_deploy_correctness_identity:
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
+      (creation_resource_starved es r es' \/
        ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
            if ALOOKUP am'.sources tx.target = NONE then
@@ -197,7 +197,7 @@ Theorem e2e_deploy_correctness_asm_opt:
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
+      (creation_resource_starved es r es' \/
        ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
            if ALOOKUP am'.sources tx.target = NONE then
@@ -381,7 +381,7 @@ Theorem e2e_deploy_correctness:
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
+      (creation_resource_starved es r es' \/
        ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
            if ALOOKUP am'.sources tx.target = NONE then
@@ -452,7 +452,7 @@ val _ =
       deploy_state_rel tops deploy_bc am tx es /\
       ~(?t. runtime_bc = 0xEFw :: t) ==>
       ?r es'. run_call es = SOME (r,es') /\
-        (frame_resource_starved es r es' \/
+        (creation_resource_starved es r es' \/
          ?gobs. deploy_result_rel tops runtime_bc tx es r es'
            (load_contract NONE gobs am tx [(NONE,tops)] []))``;
     val expanded = concl (REWRITE_RULE [deploy_result_rel_def] (ASSUME expected));
