@@ -727,8 +727,9 @@ Proof
              vyperStorageTheory.read_slot_def,
              vfmStateTheory.lookup_storage_def,
              vfmStateTheory.empty_storage_def]) >>
-     drule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >>
-     strip_tac >>
+     qpat_assum `evaluate_type _ (StructT _) = _`
+       (assume_tac o
+        MATCH_MP vyperTypeValuesTheory.evaluate_type_well_formed_type_value) >>
      `slots_in_range storage (w2n (n2w slot : bytes32)) (StructTV fs)` by
        (irule (cj 1 vyperLookupStorageTheory.slots_in_range_zero_reads) >>
         simp[]) >>
