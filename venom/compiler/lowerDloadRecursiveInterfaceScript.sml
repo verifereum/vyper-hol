@@ -3541,7 +3541,11 @@ Proof
   `ld_annotated_reachable vs0 CS (sf::astk) k FEMPTY
     (MAP (ld_op_prov AG) ops) FEMPTY (tn' with t_var := FEMPTY) child i' ss1` by
     (simp[Abbr `sf`] >> irule ld_annotated_reachable_call >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     conj_tac >-
+       (qpat_x_assum `CS.ctx_functions = pre' ++ child::post'` (SUBST1_TAC o SYM) >>
+        first_assum ACCEPT_TAC) >>
+     qpat_x_assum `ss1 = ss` SUBST_ALL_TAC >> conj_tac >> first_assum ACCEPT_TAC) >>
   `frame_reach CS fn s0 i s''` by
     (drule_all lowerDloadOperationalClosureTheory.ld_annotated_prefix_at_origin >> simp[]) >>
   `ld_stack_origin vs0 CS (MAP ld_erase_frame (sf::astk)) child ss` by

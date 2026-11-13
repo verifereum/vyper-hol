@@ -286,7 +286,7 @@ Proof
       venomInstTheory.fn_fmp_convention_eq_def]
 QED
 
-Theorem subst_label_map_blocks_opcode_every[local]:
+Theorem subst_label_map_blocks_opcode_every:
   EVERY (\inst. P inst.inst_opcode)
     (fn_insts_blocks (MAP (subst_label_map_block label_map) blocks)) <=>
   EVERY (\inst. P inst.inst_opcode) (fn_insts_blocks blocks)
