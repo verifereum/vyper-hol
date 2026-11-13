@@ -293,3 +293,77 @@ Proof
           unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
   metis_tac[]
 QED
+
+Theorem inline_frontier_call_site:
+  inline_frontier_function caller /\ inline_frontier_function callee ==>
+  inline_frontier_function (inline_call_site p ret caller callee lbl idx)
+Proof
+  strip_tac >> simp[inline_call_site_def] >>
+  Cases_on `lookup_block lbl caller.fn_blocks` >> simp[] >>
+  rename1 `lookup_block lbl caller.fn_blocks = SOME bb` >>
+  `EVERY inline_frontier_instruction bb.bb_instructions` by
+    (gvs[inline_frontier_function_def, EVERY_MEM] >> metis_tac[lookup_block_MEM]) >>
+  pairarg_tac >> simp[inline_frontier_function_def, EVERY_APPEND] >>
+  `inline_frontier_function (clone_function p callee)` by
+    metis_tac[inline_frontier_clone] >>
+  `EVERY (\b. EVERY inline_frontier_instruction b.bb_instructions) rewritten_blocks` by
+    metis_tac[inline_frontier_rewrite_blocks, inline_frontier_function_def] >>
+  `EVERY inline_frontier_instruction (TAKE idx bb.bb_instructions)` by
+    simp[rich_listTheory.EVERY_TAKE] >>
+  simp[] >> conj_tac
+  >- (simp[cfgTransformTheory.replace_block_def, EVERY_MAP, EVERY_MEM] >>
+      rpt strip_tac >> gvs[MEM_MAP] >>
+      Cases_on `bb''.bb_label = lbl` >>
+      gvs[inline_frontier_instruction_def, inline_frontier_function_def, EVERY_MEM] >>
+      metis_tac[]) >>
+  metis_tac[rich_listTheory.EVERY_DROP]
+QED
+
+Theorem inline_frontier_one_site:
+  inline_frontier_function caller /\ inline_frontier_function callee /\
+  inline_one_site caller callee ist = SOME (out,ist') ==>
+  inline_frontier_function out
+Proof
+  simp[inline_one_site_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >> strip_tac >> gvs[] >>
+  irule inline_frontier_renumber >>
+  metis_tac[inline_frontier_fix_phis, inline_frontier_call_site]
+QED
+
+Theorem inline_frontier_origin:
+  !C n fn. inliner_fn_origin C n fn ==> inline_frontier_function fn
+Proof
+  ho_match_mp_tac inliner_fn_origin_ind >> rpt conj_tac >> rpt strip_tac
+  >- (drule inline_frontier_input >>
+      simp[inline_frontier_context_def, EVERY_MEM])
+  >> metis_tac[inline_frontier_one_site]
+QED
+
+Theorem inline_frontier_annotated_origin:
+  inline_annotated_origin C n fn cert ==> inline_frontier_function fn
+Proof
+  metis_tac[functionInlinerEnvelopesTheory.inline_annotated_origin_erasure,
+            qualified_origin_erasure,
+            inline_frontier_origin]
+QED
+
+(* Actual child snapshots save the parent's current state, not its entry. *)
+Theorem inline_frontier_stack_child_entry:
+  inline_frontier_stack ((p,a,proute,psnap)::rest) frame /\
+  inline_original_child C fuel parent q call psnap.ils_state r child cr ==>
+  inline_frontier_stack
+    ((cp,child,route,
+      <|ils_state := child.ia_entry; ils_saved := psnap.ils_state;
+        ils_entry := child.ia_entry; ils_defined := {};
+        ils_opaque := retpc_var child.ia_function;
+        ils_protected := (psnap.ils_defined DIFF psnap.ils_opaque)
+                          DIFF set call.inst_outputs;
+        ils_parent_rename := proute.ir_rename|>)::
+     (p,a,proute,psnap)::rest) frame
+Proof
+  strip_tac >>
+  `child.ia_entry.vs_alloca_next = psnap.ils_state.vs_alloca_next` by
+    (fs[functionInlinerActivationTheory.inline_original_child_def] >> metis_tac[inline_frontier_setup]) >>
+  irule inline_frontier_stack_push >>
+  gvs[inline_frontier_stack_def]
+QED
