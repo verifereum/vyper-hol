@@ -94,9 +94,9 @@ Theorem package_fallback_fn_ok:
 Proof
   rpt gen_tac >> Cases_on `fb`
   >- simp[package_fallback_fn_def, set_fallback_package_target_def] >>
-  PairCases_on `x` >>
+  PairCases_on `x` >> Cases_on `x6 = NoneT` >>
   simp[package_fallback_fn_def, set_fallback_package_target_def,
-       update_cenv_nonreentrant_def] >>
+       update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
   rpt strip_tac >> gvs[cenv_ptrs_below_def, build_compile_env_ok]
 QED
 
