@@ -12,6 +12,9 @@ Theorem hash_alloca_counted_path:
   isPREFIX [mk_inst id ALLOCA [Lit (n2w m)] [q]]
     (DROP s.vs_inst_idx bb.bb_instructions) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w m)] [q]) s = OK t ==>
+  inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id ALLOCA [Lit (n2w m)] [q]] s
+    (step_prov PG G (mk_inst id ALLOCA [Lit (n2w m)] [q]) t)
+    (step_taint (mk_inst id ALLOCA [Lit (n2w m)] [q]) s t tn) /\
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (step_prov PG G (mk_inst id ALLOCA [Lit (n2w m)] [q]) t)
     (step_taint (mk_inst id ALLOCA [Lit (n2w m)] [q]) s t tn)
@@ -39,6 +42,9 @@ Theorem hash_literal_alloc_counted_path:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm) s
+    (step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w m)] [q]) t)
+    (step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w m)] [q]) s t tn) /\
   gas_path_ptr D 0 ctx fn PG G tn s 0
     (step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w m)] [q]) t)
     (step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w m)] [q]) s t tn)
@@ -50,6 +56,8 @@ Proof
     (drule compile_alloc_buffer_emission >> strip_tac >>
      drule emitted_insts_emit_inst >> simp[emitted_insts_def] >>
      strip_tac >> gvs[]) >>
-  gvs[run_inst_seq_def, AllCaseEqs()] >>
-  irule hash_alloca_counted_path >> simp[] >> qexists_tac `bb` >> simp[]
+  gvs[run_inst_seq_def, AllCaseEqs()]
+  >~ [`inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`]
+  >- (irule (cj 1 hash_alloca_counted_path) >> simp[] >> qexists_tac `bb` >> simp[]) >>
+  irule (cj 2 hash_alloca_counted_path) >> simp[] >> qexists_tac `bb` >> simp[]
 QED

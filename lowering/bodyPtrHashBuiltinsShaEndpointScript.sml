@@ -28,6 +28,7 @@ Theorem hash_bytes_prepare_endpoint:
   ?t a G1 tn1 p.
   a = t with vs_inst_idx := s.vs_inst_idx+2 /\
   run_inst_seq (emitted_insts sa sm) s = OK t /\
+  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm) s G1 tn1 /\
   gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK a) /\
   stmt_state_rel H ctx fn cenv cx es a /\ ghost_inv H d cenv cx es G1 tn1 a /\
   ghost_kept cenv es sa G tn s G1 tn1 /\ data_op = Var p /\

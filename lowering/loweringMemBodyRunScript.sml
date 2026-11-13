@@ -25,6 +25,7 @@ Ancestors
   bodyAbiDecodeTarget loweringMemEntryReach loweringMemFrameRet gasSummary
   bodyMemory loweringMemBodySourceGas
   gasOutcome gasExemptCert gasContext vyperTypeSelectedEntrySoundness externalBodyFrame
+  gasStorage vyperStorageTrace vyperStorageFootprint
 
 val _ = Parse.hide "body";
 
@@ -68,19 +69,34 @@ QED
 
 (* A counted memory summary makes the run memory-safe at every fuel, once
    every normal landing it can reach continues memory-safely: the marked
-   path is a gas_path_mem, which carries the check of each step. *)
+   path is a gas_path_mem, which carries the check of each step.  The
+   summary's posts are guarded by the horizon; the marks keep the source
+   run in the storage domain, which gives the horizon the landing needs. *)
 Theorem gas_summary_at_mem_safe_run:
-  !ctx func marks source es s0 Q R.
-    gas_summary_at T (ctx, func) marks source (es, s0) Q R /\
-    (!res ee t. Q res ee t ==>
+  !cx st0 ctx func marks source es s0 Q R.
+    gas_summary_at T (ctx, func) marks source (es, s0)
+      (\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
+         Q H res ee t)
+      (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+         R H res ee r) /\
+    ~gas_bad_storage_at cx st0 source es s0 marks /\
+    (!H res ee t. Q H res ee t ==>
        ?fuel. mem_safe_run fuel ctx func t /\
               (!e. run_from fuel ctx func t <> Error e)) ==>
     !fuel. mem_safe_run fuel ctx func s0
 Proof
   rpt gen_tac >> strip_tac >>
   fs[gas_summary_at_def, gas_marked_exec_def, gas_marked_path_def] >>
+  `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+    (`!tail. (es_end with gas_obs := tail).storage_trace =
+             es_end.storage_trace` by simp[] >>
+     metis_tac[gas_bad_storage_at_def,
+               vyperStorageFootprintTheory.storage_trace_domain_def,
+               pairTheory.SND]) >>
   drule gas_path_mem_exec >> strip_tac >> gvs[]
-  >- (first_x_assum drule >> strip_tac >>
+  >- (qpat_x_assum `!H res ee t. _ ==> ?fuel. _`
+        (qspecl_then [`H0`, `res`, `es_end with gas_obs := []`, `t`] mp_tac) >>
+      impl_tac >- metis_tac[] >> strip_tac >>
       rename1 `mem_safe_run f0 ctx func t` >>
       qpat_x_assum `!fuel. (!e. run_from _ _ _ _ <> _) ==> _`
         (qspec_then `f0` mp_tac) >>
@@ -95,16 +111,19 @@ QED
    memory-safe at every fuel.  The exempt branch of gas_outcome only
    knows a target prefix, so the caller rules it out. *)
 Theorem stmt_frag_mem_complete:
-  !d ctx func cx lctx RetQ cenv m source es sa sb s0 cenv'.
+  !d ctx func cx lctx RetQ cenv m source es st0 sa sb s0 cenv'.
     stmt_frag_mem d ctx func cx lctx RetQ cenv m source es /\
     m sa = (cenv', sb) /\ fn_has_code sa sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     ret_pc_ok cenv sa s0 /\ return_buf_frame d cenv sa s0 /\
     ~block_is_terminated sa /\
     gas_admissible source (stmt_res_ok lctx) es /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0 /\
+       storage_well_formed_on cx es (FST H)) /\ alloca_history func s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    (!marks. ~gas_bad_storage_at cx st0 source es s0 marks) /\
     (!marks err ee leaf finish.
        ~gas_exempt_cert T (cx_tops cx) (ctx, func)
           (ignore_bind source (return ())) (es, s0) marks (err, ee)
@@ -118,9 +137,11 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `stmt_frag_mem _ _ _ _ _ _ _ _ _ _`
     (mp_tac o SIMP_RULE std_ss [stmt_frag_mem_def]) >>
-  disch_then (qspecl_then [`sa`, `sb`, `s0`, `cenv'`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `sb`, `s0`, `cenv'`] mp_tac) >>
   simp[gas_outcome_def] >> strip_tac
+  >- metis_tac[]
   >- (drule_then irule gas_summary_at_mem_safe_run >>
+      conj_tac >- metis_tac[] >>
       simp[] >> metis_tac[]) >>
   metis_tac[]
 QED
@@ -234,6 +255,15 @@ Theorem lower_vyper_runtime_unit_body_mem:
       (initial_state am [env] with
          <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
       (INL (), es0) /\
+    (!marks. ?tail.
+       storage_trace_domain
+         (initial_evaluation_context am.sources am.layouts tx NONE) es0
+         (SND (eval_stmts
+                 (initial_evaluation_context am.sources am.layouts tx NONE)
+                 fbody
+                 (es0 with gas_obs :=
+                    gas_explicit marks vs.vs_gas_readings ++ tail))
+         ).storage_trace) /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
     fn_entry_label efn = SOME elbl ==>
     !fuel. mem_safe_blocks fuel unit.cu_context efn
@@ -252,20 +282,35 @@ Proof
   drule_all guarded_body_stmts_env >> strip_tac >>
   `stmt_frag_mem NONE unit.cu_context func
      (initial_evaluation_context am.sources am.layouts tx NONE) NoLoop
-     (\v es r. T) cenv (stmts_env cenv NoLoop ret fbody)
+     (\H v es r. T) cenv (stmts_env cenv NoLoop ret fbody)
      (eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE) fbody) es0` by
     (qspecl_then [`NONE`, `tops`, `bindings`, `unit.cu_context`, `func`, `cenv`,
                   `initial_evaluation_context am.sources am.layouts tx NONE`,
-                  `env_t`, `env'`, `ret`, `NoLoop`, `\v es r. T`, `fbody`, `es0`]
+                  `env_t`, `env'`, `ret`, `NoLoop`, `\H v es r. T`, `fbody`, `es0`]
        mp_tac body_stmts_sim_mem >>
      asm_rewrite_tac[] >>
      impl_tac >- (rpt strip_tac >> drule_all lookup_function_abi_decode_target_occurs >> simp[]) >>
      disch_then ACCEPT_TAC) >>
   `fn_has_code sa sb func /\ fn_has_code sb st' func` by
     (drule_all fn_has_code_split >> simp[]) >>
+  `!marks. ~gas_bad_storage_at
+      (initial_evaluation_context am.sources am.layouts tx NONE) es0
+      (eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
+         fbody) es0 s0 marks` by
+    (gen_tac >> simp[gas_bad_storage_at_def] >> metis_tac[]) >>
+  `!HH. valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
+          es0 HH es0.storage_trace ==>
+        stmt_state_rel HH unit.cu_context func cenv
+          (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+        storage_well_formed_on
+          (initial_evaluation_context am.sources am.layouts tx NONE) es0
+          (FST HH)` by
+    (qx_gen_tac `HH` >> strip_tac >> conj_tac
+     >- metis_tac[]
+     >- gs[vyperStorageFootprintTheory.valid_horizon_def]) >>
   qpat_x_assum `(!fuel. mem_safe_run _ _ _ _) ==> _` irule >>
   drule stmt_frag_mem_complete >>
-  disch_then (qspecl_then [`sa`, `sb`, `s0`, `cenv'`] mp_tac) >>
+  disch_then (qspecl_then [`es0`, `sa`, `sb`, `s0`, `cenv'`] mp_tac) >>
   impl_tac
   >- (simp[ret_pc_ok_def, return_buf_frame_def] >> rpt conj_tac
       >~ [`gas_admissible _ _ _`]

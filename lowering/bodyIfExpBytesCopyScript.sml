@@ -1,6 +1,7 @@
 (* Memory-checked zero-gas execution of the fitting bytestring copy suffix. *)
 Theory bodyIfExpBytesCopy
 Ancestors
+  bodyCopyMemoryBase
   exprSimMemUnwrap bodyCopyMemory valueCopy bodyIfExpArmMemory
 
 Theorem ifexp_bytes_copy_no_gas[local]:
