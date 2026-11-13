@@ -122,7 +122,8 @@ Proof
   strip_tac >> match_mp_tac (GEN_ALL abi_malformed_resource_post_frame_intro) >>
   qexists_tac `H` >> simp[] >> rpt strip_tac
   >- (irule stmt_state_rel_fields_transport >>
-      first_assum (irule_at Any) >> first_assum (irule_at Any) >> simp[]) >>
+      qpat_assum `stmt_state_rel H _ _ _ _ _ t` (irule_at Any) >>
+      qpat_assum `stmt_state_rel H' _ _ _ _ _ s` (irule_at Any) >> simp[]) >>
   first_x_assum irule >> qexistsl_tac [`aid`, `cap`] >> simp[]
 QED
 
