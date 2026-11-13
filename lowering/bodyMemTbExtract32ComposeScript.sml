@@ -207,13 +207,13 @@ Resume compile_extract32_sim_mem[stage1]:
   strip_tac >>
   irule gas_outcome_zero_prefix_mem >> qexists_tac `u` >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  match_mp_tac extract32_outcome_bind_marked >>
-  qexists_tac `\H n ee t.
+  match_mp_tac (Q.INST [`P` |-> `\H n ee t.
     expr_post H ctx func cenv cx off ee1 s2 s3 u ee n off_op t /\
     expr_store_bound cx (expr_type off) n off_op t /\
     t.vs_current_bb = s3.cs_current_bb /\
     t.vs_inst_idx = LENGTH s3.cs_current_insts /\
-    alloca_history func t /\ u.vs_alloca_next <= t.vs_alloca_next` >>
+    alloca_history func t /\ u.vs_alloca_next <= t.vs_alloca_next`]
+    (SPEC_ALL extract32_outcome_bind_marked)) >>
   conj_tac
   >- (`!(res:value + exception) r.
          (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r) <=>
