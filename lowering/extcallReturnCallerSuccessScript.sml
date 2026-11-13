@@ -113,9 +113,6 @@ Theorem return_allocated_counted_decode_paths:
     (type_to_abi_dec_info sf ce rt) st = ((),en) /\
   n = type_memory_bytes ce rt /\ cs_extends st en /\
   fn_has_code a en func /\ fn_inst_ids_distinct func /\
-  (en.cs_current_insts <> [] \/
-   !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   stmt_state_rel ctx func ce cx ee s /\ local_ptrs_reserved ce a /\
   n < dimword (:256) /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
@@ -214,9 +211,6 @@ Theorem return_allocated_counted_decode:
     (type_to_abi_dec_info sf ce rt) st = ((),en) /\
   n = type_memory_bytes ce rt /\ cs_extends st en /\
   fn_has_code a en func /\ fn_inst_ids_distinct func /\
-  (en.cs_current_insts <> [] \/
-   !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   stmt_state_rel ctx func ce cx ee s /\ local_ptrs_reserved ce a /\
   n < dimword (:256) /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\
@@ -302,9 +296,6 @@ Theorem return_actual_counted_success:
     (type_to_abi_dec_info sf ce
       (if needs_external_call_wrap ty then TupleT [ty] else ty)) st = ((),en) /\
   cs_extends st en /\ fn_has_code a en func /\ fn_inst_ids_distinct func /\
-  (en.cs_current_insts <> [] \/
-   !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   stmt_state_rel ctx func ce cx ee s /\ local_ptrs_reserved ce a /\
   wb_frame ce es ee sa s0 s /\ local_ptrs_reserved ce sa /\
   (!pa pk. prot pa pk ==>

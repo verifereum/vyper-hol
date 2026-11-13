@@ -2,7 +2,7 @@
 Theory extcallReturnCountedTransport
 Ancestors
   extcallReturnObserverIds extcallReturnObserverRun extcallReturnObserver
-  exprSimAbiGasBridge exprLoweringProps fragExec abiDecoderLoop compileEnv
+  exprSimAbiGasBridge exprSimAbiGasBridgeEdge exprLoweringProps fragExec abiDecoderLoop compileEnv
   venomExecSemantics venomExecProps venomInst venomInstProps unitShapeDefs list rich_list
   arithmetic finite_map pred_set
 
@@ -172,16 +172,13 @@ Theorem return_observer_counted_success_relabel:
   (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\
   (!t p. Q t ==> Q (t with vs_prev_bb := p)) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  (sb.cs_current_insts <> [] \/
-   !bb. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\ Q t /\ ~t.vs_halted /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  irule abi_decode_sim_gas_path_relabel >> simp[] >> qexists_tac `sa` >> simp[] >>
+  irule abi_decode_sim_gas_path_relabel_edge >> simp[] >> qexists_tac `sa` >> simp[] >>
   rpt strip_tac >> irule return_observer_relabel_success >> simp[] >>
   qexistsl_tac [`func`, `ids`, `sa`] >> simp[] >>
   qpat_x_assum `!L ids fn'. _` (qspec_then `L` ACCEPT_TAC)
@@ -235,16 +232,13 @@ Theorem return_observer_counted_abort_relabel:
   (!v t b p. R (IntRet v t) ==>
      R (IntRet v (t with <|vs_current_bb := b; vs_prev_bb := p|>))) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  (sb.cs_current_insts <> [] \/
-   !bb. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?r. gas_marked_path F ctx func s 0 r /\ exit_result r /\ R r
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   mp_tac (Q.SPEC `\t. F` (Q.SPEC `sb` (Q.SPEC `sa`
-    (Q.SPEC `ctx` frag_exec_gas_path_relabel)))) >>
+    (Q.SPEC `ctx` frag_exec_gas_path_relabel_edge)))) >>
   disch_then (qspecl_then [`R`, `func`, `s`] mp_tac) >> simp[] >>
   impl_tac >- (
     rpt strip_tac >> irule (SRULE [] return_observer_relabel_abort) >> simp[] >>
