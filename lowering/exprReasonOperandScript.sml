@@ -1218,7 +1218,7 @@ QED
 
 Finalise reason_compile_uniform
 
-Theorem compile_expr_reason_uniform[local]:
+Theorem compile_expr_reason_uniform:
   well_typed_expr env e /\
   (!id t. FLOOKUP env.var_types id = SOME t ==>
      ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) ==>
