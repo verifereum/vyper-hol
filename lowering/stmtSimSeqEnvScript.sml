@@ -4,7 +4,8 @@ Ancestors
   stmtSimDefs stmtSimProps loweringPosts gasOutcome gasSummary gasSummaryCompose
   gasContext gasExemptCert fragExec fragGasMode fragGasPath compileEnv loweringStateRelDefs loweringSlice
   stmtLowering exprLoweringProps localPtrsProps vyperInterpreter vyperState
-  vyperEvalPreservesScopes stmtLoweringMono list finite_map
+  vyperEvalPreservesScopes stmtLoweringMono gasStorage vyperStorageTrace
+  vyperStorageFootprint list finite_map
 
 Theorem gas_admissible_stmts_head:
   gas_admissible (eval_stmts cx (stmt::ss)) (stmt_res_ok lctx) es ==>
@@ -34,21 +35,22 @@ QED
    memory-safe sequencing (stmtSimSeqMem) composes, whose fragments make
    no claim about older allocations' bytes. *)
 Definition stmt_post_core_def:
-  stmt_post_core ctx func cx lctx cenv cenv' sa sb s0 res ee t <=>
+  stmt_post_core H ctx func cx lctx cenv cenv' sa sb s0 res ee t <=>
     ?cenv''.
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel ctx func cenv'' cx ee t /\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
 End
 
 Theorem stmt_post_core_normal_entry:
-  stmt_post_core ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
+  stmt_post_core H ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
   ret_pc_ok cenv sa s0 /\ sa.cs_next_var <= sm.cs_next_var ==>
   cenv_top_ext cenv c mid.scopes /\
-  stmt_state_rel ctx func c cx mid t /\ ~block_is_terminated sm /\
+  stmt_state_rel H ctx func c cx mid t /\ ~block_is_terminated sm /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ret_pc_ok c sm t
 Proof
@@ -59,20 +61,20 @@ QED
 
 Theorem stmt_post_core_exception_endpoint:
   res <> INL () /\
-  stmt_post_core ctx func cx lctx cenv c sa sm s0 res ee t ==>
-  stmt_post_core ctx func cx lctx cenv c' sa sb s0 res ee t
+  stmt_post_core H ctx func cx lctx cenv c sa sm s0 res ee t ==>
+  stmt_post_core H ctx func cx lctx cenv c' sa sb s0 res ee t
 Proof
   rw[stmt_post_core_def] >> qexists_tac `cenv''` >>
   gvs[stmt_lands_def] >> metis_tac[]
 QED
 
 Theorem stmt_post_core_sequence:
-  stmt_post_core ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
-  stmt_post_core ctx func cx lctx c c' sm sb t res ee u /\
+  stmt_post_core H ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
+  stmt_post_core H ctx func cx lctx c c' sm sb t res ee u /\
   sa.cs_next_var <= sm.cs_next_var /\
   (mid.scopes = [] <=> ee.scopes = []) /\
   MAP FDOM (TL mid.scopes) = MAP FDOM (TL ee.scopes) ==>
-  stmt_post_core ctx func cx lctx cenv c' sa sb s0 res ee u
+  stmt_post_core H ctx func cx lctx cenv c' sa sb s0 res ee u
 Proof
   rw[stmt_post_core_def] >> qexists_tac `cenv''` >> simp[] >>
   conj_tac >- (irule cenv_top_ext_trans >> metis_tac[]) >>
@@ -81,18 +83,18 @@ Proof
 QED
 
 Theorem stmt_post_core:
-  stmt_post ctx func cx lctx cenv c sa sb es s0 res ee t ==>
-  stmt_post_core ctx func cx lctx cenv c sa sb s0 res ee t
+  stmt_post H ctx func cx lctx cenv c sa sb es s0 res ee t ==>
+  stmt_post_core H ctx func cx lctx cenv c sa sb s0 res ee t
 Proof
   rw[stmt_post_def, stmt_post_core_def] >> qexists_tac `cenv''` >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem stmt_post_normal_entry:
-  stmt_post ctx func cx lctx cenv c sa sm es0 s0 (INL ()) mid t /\
+  stmt_post H ctx func cx lctx cenv c sa sm es0 s0 (INL ()) mid t /\
   ret_pc_ok cenv sa s0 /\ sa.cs_next_var <= sm.cs_next_var ==>
   cenv_top_ext cenv c mid.scopes /\
-  stmt_state_rel ctx func c cx mid t /\ ~block_is_terminated sm /\
+  stmt_state_rel H ctx func c cx mid t /\ ~block_is_terminated sm /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ret_pc_ok c sm t
 Proof
@@ -102,20 +104,20 @@ QED
 
 Theorem stmt_post_exception_endpoint:
   res <> INL () /\
-  stmt_post ctx func cx lctx cenv c sa sm es0 s0 res ee t ==>
-  stmt_post ctx func cx lctx cenv c' sa sb es0 s0 res ee t
+  stmt_post H ctx func cx lctx cenv c sa sm es0 s0 res ee t ==>
+  stmt_post H ctx func cx lctx cenv c' sa sb es0 s0 res ee t
 Proof
   rw[stmt_post_def] >> qexists_tac `cenv''` >>
   gvs[stmt_lands_def] >> metis_tac[]
 QED
 
 Theorem stmt_post_sequence:
-  stmt_post ctx func cx lctx cenv c sa sm es0 s0 (INL ()) mid t /\
-  stmt_post ctx func cx lctx c c' sm sb mid t res ee u /\
+  stmt_post H ctx func cx lctx cenv c sa sm es0 s0 (INL ()) mid t /\
+  stmt_post H ctx func cx lctx c c' sm sb mid t res ee u /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   (mid.scopes = [] <=> ee.scopes = []) /\
   MAP FDOM (TL mid.scopes) = MAP FDOM (TL ee.scopes) ==>
-  stmt_post ctx func cx lctx cenv c' sa sb es0 s0 res ee u
+  stmt_post H ctx func cx lctx cenv c' sa sb es0 s0 res ee u
 Proof
   rw[stmt_post_def] >> qexists_tac `cenv''` >> simp[] >>
   `alloca_frame cenv es0 sa s0 cenv'' ee u` by
@@ -180,11 +182,12 @@ Proof
     (irule gas_admissible_stmts_head >> qexists_tac `ss` >> simp[]) >>
   qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[stmt_frag_def, stmt_framed_frag_def] >>
-  disch_then (qspecl_then [`sa`, `sm`, `s0`, `c`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `s0`, `c`] mp_tac) >>
   simp[] >> strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  simp[gas_outcome_def] >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >>
   disch_then (qx_choose_then `left` strip_assume_tac)
+  >- suspend "bad"
   >- (gvs[gas_summary_at_def]
       >- (Cases_on `res = INL ()`
           >- (gvs[] >> suspend "normal") >>
@@ -193,8 +196,39 @@ Proof
   suspend "exempt"
 QED
 
+(* The head statement left the storage domain: the whole sequence is a
+   bad-storage run under the head's marks. *)
+val head_out_of_domain_tac =
+  qexists_tac `left` >> disj1_tac >>
+  simp[Once evaluate_def, ignore_bind_def] >>
+  irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+  simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
+  qpat_assum `gas_marked_exec _ _ (eval_stmt _ _) _ _ _ _ _` (irule_at Any) >>
+  simp[];
+
+Resume stmt_frag_cons_env[bad]:
+  qexists_tac `left` >> disj1_tac >>
+  simp[Once evaluate_def, ignore_bind_def] >>
+  irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+  simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
+QED
+
 Resume stmt_frag_cons_env[normal]:
-  drule_all stmt_post_normal_entry >> strip_tac >>
+  Cases_on `storage_trace_domain cx st0 es_end.storage_trace`
+  >- suspend "in_domain" >>
+  head_out_of_domain_tac
+QED
+
+Resume stmt_frag_cons_env[in_domain]:
+  `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `cenv_top_ext cenv c es_end.scopes /\ ~block_is_terminated sm /\
+   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ret_pc_ok c sm t` by
+    (qpat_assum `!H. _ ==> stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H0` mp_tac) >> impl_tac >- gs[] >> strip_tac >>
+     drule_all stmt_post_normal_entry >> simp[]) >>
   `!tail. eval_stmt cx stmt
       (es with gas_obs := gas_explicit left s0.vs_gas_readings ++ tail) =
       (INL (), es_end with gas_obs := tail)` by
@@ -208,11 +242,20 @@ Resume stmt_frag_cons_env[normal]:
     [`es_end with gas_obs := []`, `c`, `sa`, `sm`] mp_tac) >>
   (impl_tac >- (first_x_assum (qspec_then `[]` mp_tac) >> simp[])) >>
   simp[stmt_frag_def, stmt_framed_frag_def] >>
-  disch_then (qspecl_then [`sm`, `sb`, `t`, `cenv'`] mp_tac) >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  simp[gas_outcome_def] >>
+  disch_then (qspecl_then [`st0`, `sm`, `sb`, `t`, `cenv'`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> qx_gen_tac `HH` >> strip_tac >>
+      qpat_assum `!H. _ ==> stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (qspec_then `HH` mp_tac) >> impl_tac >- gs[] >> strip_tac >>
+      drule_all stmt_post_normal_entry >> strip_tac >>
+      qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [stmt_post_def]) >>
+      simp[]) >>
+  strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >>
   disch_then (qx_choose_then `right` strip_assume_tac)
+  >- suspend "tail_bad"
   >- (gvs[gas_summary_at_def]
       >- suspend "tail_normal" >> suspend "tail_exit") >>
   suspend "tail_exempt"
@@ -220,35 +263,62 @@ QED
 
 Resume stmt_frag_cons_env[exception]:
   Cases_on `res` >- (rename1 `INL u` >> Cases_on `u` >> gvs[]) >>
-  rename1 `INR exc` >> qexists_tac `left` >> disj1_tac >>
+  rename1 `INR exc` >> qexists_tac `left` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`INR exc`, `es_end`, `OK t`] >>
   conj_tac
   >- (simp[Once evaluate_def, ignore_bind_def] >>
       irule gas_marked_exec_bind_exception >> simp[]) >>
-  simp[] >> disj1_tac >> irule stmt_post_exception_endpoint >> metis_tac[]
+  simp[] >> disj1_tac >> qx_gen_tac `HH` >> strip_tac >>
+  qpat_x_assum `!H. _ ==> stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `HH` mp_tac) >> impl_tac >- gs[] >> strip_tac >>
+  irule stmt_post_exception_endpoint >> simp[] >>
+  first_assum (irule_at Any)
 QED
 Resume stmt_frag_cons_env[exit]:
   Cases_on `res`
   >- (rename1 `INL u` >> Cases_on `u` >>
-      metis_tac[stmt_exit_loop_ctl]) >>
-  rename1 `INR exc` >> qexists_tac `left` >> disj1_tac >>
+      Cases_on `storage_trace_domain cx st0 es_end.storage_trace`
+      >- (`?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+            metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+          qpat_x_assum `!H. valid_horizon _ _ H _ ==> !tail. _`
+            (qspec_then `H0` mp_tac) >> impl_tac >- gs[] >>
+          simp[stmt_exit_loop_ctl]) >>
+      head_out_of_domain_tac) >>
+  rename1 `INR exc` >> qexists_tac `left` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
   simp[Once evaluate_def, ignore_bind_def] >>
   irule gas_marked_exec_bind_exception >> simp[]
 QED
 Resume stmt_frag_cons_env[exempt]:
   rename1 `gas_exempt_cert _ _ _ _ _ _ (err, ee) (leaf, target)` >>
-  qexists_tac `left` >> disj2_tac >>
+  qexists_tac `left` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `target`] >>
   simp[Once evaluate_def, ignore_bind_def, vyperStateTheory.bind_assoc] >>
   irule (cj 3 gas_exempt_cert_rules) >> simp[ignore_bind_def]
 QED
-Resume stmt_frag_cons_env[tail_normal]:
+Resume stmt_frag_cons_env[tail_bad]:
   qexists_tac `left ++ right` >> disj1_tac >>
+  simp[Once evaluate_def, ignore_bind_def] >>
+  irule gasStorageTheory.gas_bad_storage_at_bind_right >>
+  qpat_assum `gas_marked_exec _ _ (eval_stmt _ _) _ _ _ _ _` (irule_at Any) >>
+  simp[]
+QED
+Resume stmt_frag_cons_env[tail_normal]:
+  qexists_tac `left ++ right` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`res`, `es_end'`, `OK t'`] >> conj_tac
   >- (simp[Once evaluate_def, ignore_bind_def] >>
       irule gas_marked_exec_bind_normal >> metis_tac[]) >>
-  simp[] >> disj1_tac >>
+  simp[] >> disj1_tac >> qx_gen_tac `HH` >> strip_tac >>
+  `valid_horizon cx st0 HH es_end.storage_trace` by
+    (qpat_assum `gas_marked_exec _ _ (eval_stmts _ _) _ _ _ _ _`
+       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                             gas_marked_exec_valid_prefix)) >>
+     impl_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+     disch_then (qspecl_then [`cx`, `st0`, `HH`] mp_tac) >> simp[]) >>
+  qpat_x_assum `!H. _ ==> stmt_post H _ _ _ _ cenv c _ _ _ _ _ _ _`
+    (qspec_then `HH` mp_tac) >> impl_tac >- gs[] >> strip_tac >>
+  qpat_x_assum `!H. _ ==> stmt_post H _ _ _ _ c cenv' _ _ _ _ _ _ _`
+    (qspec_then `HH` mp_tac) >> impl_tac >- gs[] >> strip_tac >>
   qpat_x_assum `gas_marked_exec _ _ (eval_stmts _ _) _ _ _ _ _` mp_tac >>
   simp[gas_marked_exec_def] >> strip_tac >>
   first_x_assum (qspec_then `[]` mp_tac) >> simp[] >>
@@ -258,14 +328,14 @@ Resume stmt_frag_cons_env[tail_normal]:
   gvs[preserves_scopes_dom_def]
 QED
 Resume stmt_frag_cons_env[tail_exit]:
-  qexists_tac `left ++ right` >> disj1_tac >>
+  qexists_tac `left ++ right` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`res`, `es_end'`, `r`] >> simp[] >>
   simp[Once evaluate_def, ignore_bind_def] >>
   irule gas_marked_exec_bind_normal >> metis_tac[]
 QED
 Resume stmt_frag_cons_env[tail_exempt]:
   rename1 `gas_exempt_cert _ _ _ _ _ _ (err, ee) (leaf, target)` >>
-  qexists_tac `left ++ right` >> disj2_tac >>
+  qexists_tac `left ++ right` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `target`] >>
   simp[Once evaluate_def, ignore_bind_def, vyperStateTheory.bind_assoc] >>
   irule (cj 2 gas_exempt_cert_rules) >>
@@ -273,4 +343,3 @@ Resume stmt_frag_cons_env[tail_exempt]:
   simp[GSYM ignore_bind_def]
 QED
 Finalise stmt_frag_cons_env
-

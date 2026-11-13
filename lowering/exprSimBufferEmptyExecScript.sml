@@ -142,7 +142,7 @@ Theorem compile_zero_words_run:
     compile_zero_words pop n sa = ((),sb) /\
     eval_operand pop s = SOME w /\
     (!p. pop = Var p ==> not_fresh_at sa p) /\
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     32*n <= sz /\ w2n w+sz < dimword (:256) /\
     (!name b len. local_region cenv es.scopes s name b len ==>
        w2n w+sz <= b \/ b+len <= w2n w) /\
@@ -152,7 +152,7 @@ Theorem compile_zero_words_run:
         | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
       regions_disjoint off (type_memory_size tv) (w2n w) (32*n)) ==>
     ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel ctx func cenv cx es t /\ eval_operand pop t = SOME w /\
+      stmt_state_rel H ctx func cenv cx es t /\ eval_operand pop t = SOME w /\
       mem_bytes_at (w2n w) (32*n) t.vs_memory = REPLICATE (32*n) 0w /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
@@ -197,7 +197,7 @@ Theorem empty_tail_run[local]:
      else compile_zero_words pop ((sz+31) DIV 32)) sa = ((),sb) /\
     eval_operand pop s = SOME w /\
     (!p. pop = Var p ==> not_fresh_at sa p) /\
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     w2n w+sz < dimword (:256) /\
     (if header then 32 <= sz else sz MOD 32 = 0) /\
     (!name b len. local_region cenv es.scopes s name b len ==>
@@ -208,7 +208,7 @@ Theorem empty_tail_run[local]:
         | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
       regions_disjoint off (type_memory_size tv) (w2n w) (if header then 32 else sz)) ==>
     ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel ctx func cenv cx es t /\ eval_operand pop t = SOME w /\
+      stmt_state_rel H ctx func cenv cx es t /\ eval_operand pop t = SOME w /\
       mem_bytes_at (w2n w) (if header then 32 else sz) t.vs_memory =
         REPLICATE (if header then 32 else sz) 0w /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -289,12 +289,12 @@ QED
 Theorem compile_builtin_empty_complex_run:
   !sz header sa sb buf func cenv cx es s ctx.
     compile_builtin_empty_complex sz header sa = (buf,sb) /\
-    fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
+    fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     sz < dimword (:256) /\
     (if header then 32 <= sz else sz MOD 32 = 0) ==>
     ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       w2n w+sz < dimword (:256) /\ sa.cs_next_id < sb.cs_next_id /\
@@ -339,7 +339,7 @@ Proof
         decide_tac) >>
     rpt strip_tac >>
     `regions_disjoint off (type_memory_size tv) (w2n w) sz` by
-      (qpat_x_assum `stmt_state_rel ctx _ _ _ _ t` mp_tac >>
+      (qpat_x_assum `stmt_state_rel H ctx _ _ _ _ t` mp_tac >>
        simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
        first_x_assum drule_all >> strip_tac >>
        qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>

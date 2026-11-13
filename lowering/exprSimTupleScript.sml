@@ -586,7 +586,7 @@ QED
    bytes, so its address does not wrap, and the base sits where vv_at says. *)
 Theorem tuple_elem_ptr[local]:
   !func cenv cx env es sa sn es1 tv bvv q w tys tvs vs k ctx.
-    stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+    stmt_state_rel H ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     eval_operand (vv_operand bvv) q = SOME w /\ vv_loc bvv = LocMemory /\
@@ -633,7 +633,7 @@ QED
 (* The element's placement in memory, from the base's. *)
 Theorem tuple_vv_at_elem[local]:
   !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' t ctx.
-    stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+    stmt_state_rel H ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     read_result cx tv' es1 = (INL (EL k vs), es1) /\
@@ -813,8 +813,8 @@ QED
 (* A tuple element of a value read live is read live. *)
 Theorem storage_read_live_tuple_elem[local]:
   !cx tr st w tvs i.
-    storage_read_live cx tr st w (TupleTV tvs) /\ i < LENGTH tvs ==>
-    storage_read_live cx tr st (w + n2w (tuple_prefix_slot_size i tvs))
+    storage_read_live H tr st w (TupleTV tvs) /\ i < LENGTH tvs ==>
+    storage_read_live H tr st (w + n2w (tuple_prefix_slot_size i tvs))
       (EL i tvs)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -843,7 +843,7 @@ QED
 (* The element's value_vv holds the element, from the base's. *)
 Theorem tuple_vv_holds_elem[local]:
   !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' ctx.
-    stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+    stmt_state_rel H ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
     vv_holds cenv cx (TupleT tys) tv bvv es1 q /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
@@ -896,7 +896,7 @@ QED
 (* The base's read, a tuple of the element types. *)
 Theorem tuple_base_read[local]:
   !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs ctx.
-    vv_post ctx func cenv cx obj es sa sb s0 es1 btv bvv s /\
+    vv_post H ctx func cenv cx obj es sa sb s0 es1 btv bvv s /\
     post_value_type cenv obj = TupleT tys /\
     expr_type obj = TupleT tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
@@ -921,7 +921,7 @@ QED
 (* The element's value_vv after the ADD, from the base's. *)
 Theorem tuple_vv_post[local]:
   !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv' ctx.
-    vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    vv_post H ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
     post_value_type cenv obj = TupleT tys /\
     expr_sim_inv cenv cx env es /\
     eval_operand (vv_operand bvv) q = SOME w /\
@@ -936,11 +936,11 @@ Theorem tuple_vv_post[local]:
     read_result cx tv' es1 = (INL (EL k vs), es1) /\
     (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
        ?path. path' = path ++ [ValueSubscript (IntV &k)] /\ tv = PlaceR (MemoryPlace id path)) ==>
-    vv_post ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
+    vv_post H ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _`
+  qpat_x_assum `vv_post H _ _ _ _ obj _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   rewrite_tac[vv_post_def] >> gvs[vyperASTTheory.expr_type_def] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
@@ -955,7 +955,7 @@ Proof
                   `EL k tys`, `ctx`] mp_tac tuple_vv_at_elem >>
      imp_res_tac values_have_types_length >> simp[]) >>
   simp[] >> rpt strip_tac >>
-  qpat_x_assum `~expr_has_effect obj ==> vv_storage_live _ _ _ _` mp_tac >>
+  qpat_x_assum `~expr_has_effect obj ==> vv_storage_live H _ _ _ _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by
     (drule opt_mmap_el >> disch_then (qspec_then `k` mp_tac) >>
@@ -1170,14 +1170,14 @@ Theorem tuple_summary_ok[local]:
     fn_has_code sm sb func /\
     gas_marked_exec F (ctx,func) (eval_expr cx obj) (es,s0) marks
       (INL btv) fe (OK t) /\
-    vv_post ctx func cenv cx obj es sa sm s0 (fe with gas_obs := []) btv bvv t /\
+    vv_post H ctx func cenv cx obj es sa sm s0 (fe with gas_obs := []) btv bvv t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     gas_summary_at F (ctx,func) marks
       (eval_expr cx (Subscript (EL k tys) obj (Literal ity (IntL (&k)))))
       (es,s0)
       (\res ee t. ?tv. res = INL tv /\
-         vv_post ctx func cenv cx
+         vv_post H ctx func cenv cx
            (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es sa sb s0
            ee tv (LocatedValue (EL k tys) (mk_ptr p (vv_loc bvv))) t /\
          t.vs_current_bb = sb.cs_current_bb /\

@@ -3865,7 +3865,7 @@ Theorem place_store_word_live_copy:
   EL b (word_to_bytes (typed_val_to_w256 dtv v) T)
 Proof
   strip_tac >>
-  drule_all stmtSimAssignStorageTheory.encode_value_word_typed >> strip_tac >>
+  drule_all stmtSimAssignStorageFactsTheory.encode_value_word_typed >> strip_tac >>
   `type_slot_size dtv = 1` by
     (Cases_on `dty` >>
      gvs[is_word_type_def, evaluate_type_def, vyperValueTheory.type_slot_size_def,

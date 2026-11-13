@@ -135,7 +135,7 @@ Resume pop_nested_local_sim[normal]:
   qpat_x_assum `target_root _ = _` kall_tac >>
   qpat_x_assum `type_place_target _ _ = _` kall_tac >>
   qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `target_post H _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `place_readable _ _ _` kall_tac >>
   qpat_x_assum `gas_admissible (eval_target_place _ _) _ _` kall_tac >>
   drule memory_pop_shape >> strip_tac >>

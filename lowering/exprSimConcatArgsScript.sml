@@ -64,17 +64,17 @@ QED
 (* The offset store and the step's fresh registers keep the relation. *)
 Theorem concat_offset_store_state_rel[local]:
   !ctx func cenv cx es s oinst o' w V n sx.
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sx /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sx /\
     (!z. not_fresh_at sx z ==> FLOOKUP V z = FLOOKUP s.vs_vars z) /\
     MEM oinst (fn_insts func) /\ oinst.inst_opcode = ALLOCA /\
     FLOOKUP s.vs_allocas oinst.inst_id = SOME (o',64) /\
     (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
        o' + 64 <= lb \/ lb + lsz <= o') ==>
-    stmt_state_rel ctx func cenv cx es
+    stmt_state_rel H ctx func cenv cx es
       (mstore o' w s with <|vs_vars := V; vs_inst_idx := n|>)
 Proof
   rpt strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (mstore o' w s)` by
+  `stmt_state_rel H ctx func cenv cx es (mstore o' w s)` by
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`o'`, `oinst`, `64`] >> simp[] >> first_assum ACCEPT_TAC) >>
   `mstore o' w s with <|vs_vars := V; vs_inst_idx := n|> =
@@ -97,7 +97,7 @@ Theorem concat_fixed_arm:
     fn_has_code sx s2 func /\ ~t.vs_halted /\
     t.vs_current_bb = sx.cs_current_bb /\
     t.vs_inst_idx = LENGTH sx.cs_current_insts /\
-    local_ptrs_reserved cenv sx /\ stmt_state_rel ctx func cenv cx es t /\
+    local_ptrs_reserved cenv sx /\ stmt_state_rel H ctx func cenv cx es t /\
     eval_operand data_ptr t = SOME (n2w (B + 32)) /\
     eval_operand off_ptr t = SOME ow /\
     eval_operand x t = SOME (word_of_bytes_be (PAD_RIGHT 0w 32 bs)) /\
@@ -115,7 +115,7 @@ Theorem concat_fixed_arm:
     mload (w2n ow) t = n2w k /\ LENGTH bs = m /\ m <= 32 /\
     32 + k + 32 <= bsz ==>
     ?t2. gas_path ctx func t 0 (OK t2) /\
-      stmt_state_rel ctx func cenv cx es t2 /\ ~t2.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es t2 /\ ~t2.vs_halted /\
       t2.vs_current_bb = s2.cs_current_bb /\
       t2.vs_inst_idx = LENGTH s2.cs_current_insts /\
       t2.vs_allocas = t.vs_allocas /\
@@ -149,7 +149,7 @@ Proof
      >- (irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
      irule mstore_mem_bytes_at_disjoint >> qunabbrev_tac `a` >> decide_tac) >>
   qexists_tac `t2` >> asm_rewrite_tac[] >>
-  `stmt_state_rel ctx func cenv cx es (mstore a wd t)` by
+  `stmt_state_rel H ctx func cenv cx es (mstore a wd t)` by
     (irule literal_mstore_state_rel >> conj_tac
      >- (qexistsl_tac [`B`, `binst`, `bsz`] >> simp[Abbr `a`] >> metis_tac[]) >>
      first_assum ACCEPT_TAC) >>
@@ -190,7 +190,7 @@ Theorem concat_bytes_arm:
     fn_has_code sx s2 func /\ ~t.vs_halted /\
     t.vs_current_bb = sx.cs_current_bb /\
     t.vs_inst_idx = LENGTH sx.cs_current_insts /\
-    local_ptrs_reserved cenv sx /\ stmt_state_rel ctx func cenv cx es t /\
+    local_ptrs_reserved cenv sx /\ stmt_state_rel H ctx func cenv cx es t /\
     eval_operand mem_ptr t = SOME sw /\
     eval_operand data_ptr t = SOME (n2w (B + 32)) /\
     eval_operand off_ptr t = SOME ow /\
@@ -210,7 +210,7 @@ Theorem concat_bytes_arm:
     (B + bsz <= w2n ow \/ w2n ow + 64 <= B) /\ B + bsz < dimword (:256) /\
     mload (w2n ow) t = n2w k /\ 32 + k + LENGTH bs <= bsz ==>
     ?t2. gas_path ctx func t 0 (OK t2) /\
-      stmt_state_rel ctx func cenv cx es t2 /\ ~t2.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es t2 /\ ~t2.vs_halted /\
       t2.vs_current_bb = s2.cs_current_bb /\
       t2.vs_inst_idx = LENGTH s2.cs_current_insts /\
       t2.vs_allocas = t.vs_allocas /\
@@ -242,7 +242,7 @@ Proof
     (qunabbrev_tac `t2` >> qunabbrev_tac `t1` >>
      qpat_x_assum `gas_path _ _ _ _ _` mp_tac >> asm_rewrite_tac[]) >>
   `B <= a /\ a + LENGTH bs <= B + bsz` by (qunabbrev_tac `a` >> decide_tac) >>
-  `stmt_state_rel ctx func cenv cx es t1` by
+  `stmt_state_rel H ctx func cenv cx es t1` by
     (qunabbrev_tac `t1` >>
      qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `t`, `binst`, `B`, `bsz`,
                   `a`, `w2n sw + 32`, `LENGTH bs`]
@@ -288,13 +288,13 @@ Proof
   first_x_assum irule >> asm_rewrite_tac[]
 QED
 
-(* Frame composition for one operand: the head's expr_post (s0 to t), the
+(* Frame composition for one operand: the head's expr_post H (s0 to t), the
    arm's store (t to t2) and the tail's frames (t2 to u) give the loop's
    frames from s0 to u. *)
 Theorem concat_args_glue:
   !ctx func cenv cx e es sa s1 s2 s0 es1 es2 v op t t2 u B bsz ow k bv bvs.
-    expr_post ctx func cenv cx e es sa s1 s0 es1 v op t /\
-    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    expr_post H ctx func cenv cx e es sa s1 s0 es1 v op t /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
     sa.cs_next_id <= s2.cs_next_id /\
@@ -335,7 +335,7 @@ Theorem concat_args_glue:
     locals_kept cenv es es2 s0 u
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `local_ptrs_rel func cenv es.scopes s0` by
     fs[stmt_state_rel_def, state_rel_def] >>
@@ -419,8 +419,8 @@ QED
    and written prefix, and the regions disjoint from the buffer stay so. *)
 Theorem concat_args_pre:
   !ctx func cenv cx e es sa s1 s0 es1 v op t B bsz ow k binst oinst dv ov.
-    expr_post ctx func cenv cx e es sa s1 s0 es1 v op t /\
-    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    expr_post H ctx func cenv cx e es sa s1 s0 es1 v op t /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     not_fresh_at sa dv /\ not_fresh_at sa ov /\
     lookup_var dv s0 = SOME (n2w (B + 32)) /\ lookup_var ov s0 = SOME ow /\
@@ -442,7 +442,7 @@ Theorem concat_args_pre:
     mem_bytes_at (B + 32) k t.vs_memory = mem_bytes_at (B + 32) k s0.vs_memory
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `local_ptrs_rel func cenv es.scopes s0` by
     fs[stmt_state_rel_def, state_rel_def] >>
@@ -489,7 +489,7 @@ QED
 Theorem concat_bytes_value:
   !ctx func cenv cx ty v op s sa sb es tv.
     expr_val_rel cx ty v op s /\ expr_val_at cenv cx ty sa sb es v op s /\
-    stmt_state_rel ctx func cenv cx es s /\ is_bytestring_type ty /\
+    stmt_state_rel H ctx func cenv cx es s /\ is_bytestring_type ty /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v ==>
     ?sw. eval_operand op s = SOME sw /\
       mload (w2n sw) s = n2w (LENGTH (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => [])) /\
@@ -606,11 +606,11 @@ Theorem concat_head_arm:
     (is_bytestring_type (expr_type e) \/
      ?m. expr_type e = BaseT (BytesT (Fixed m))) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
-    expr_post ctx func cenv cx e es sa s1 s0 es1 v op t /\
+    expr_post H ctx func cenv cx e es sa s1 s0 es1 v op t /\
     ~t.vs_halted /\ t.vs_current_bb = s1.cs_current_bb /\
     t.vs_inst_idx = LENGTH s1.cs_current_insts /\
     fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     not_fresh_at sa dv /\ not_fresh_at sa ov /\
     lookup_var dv s0 = SOME (n2w (B + 32)) /\ lookup_var ov s0 = SOME ow /\
@@ -636,7 +636,7 @@ Theorem concat_head_arm:
         (Var ov) s2 = ((), sb) /\
       ci_mono sa s1 /\ ci_mono s1 s2 /\ fn_has_code s2 sb func /\
       gas_path ctx func t 0 (OK t2) /\
-      stmt_state_rel ctx func cenv cx es1 t2 /\ ~t2.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es1 t2 /\ ~t2.vs_halted /\
       t2.vs_current_bb = s2.cs_current_bb /\
       t2.vs_inst_idx = LENGTH s2.cs_current_insts /\
       lookup_var dv t2 = SOME (n2w (B + 32)) /\ lookup_var ov t2 = SOME ow /\
@@ -668,14 +668,14 @@ Proof
      SUM (MAP concat_payload_capacity (MAP expr_type args))) <= bsz` by
     (qpat_x_assum `32 + P + SUM _ <= _` mp_tac >> simp[]) >>
   `32 + k <= bsz` by decide_tac >>
-  `expr_post ctx func cenv cx e es sa s1 s0 es1 v op t` by first_assum ACCEPT_TAC >>
+  `expr_post H ctx func cenv cx e es sa s1 s0 es1 v op t` by first_assum ACCEPT_TAC >>
   drule_all concat_args_pre >> strip_tac >>
   `post_value_type cenv e = expr_type e` by
     (qpat_x_assum `is_bytestring_type (expr_type e) \/ _` mp_tac >>
      qpat_x_assum `evaluate_type _ (expr_type e) = SOME _` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      gvs[evaluate_type_def, is_word_type_def]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qpat_x_assum `post_value_type cenv e = expr_type e`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
@@ -874,7 +874,7 @@ Theorem concat_args_sim:
     exprs_case nocalls ctx func cenv cx args /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
     lookup_var dv s0 = SOME (n2w (B + 32)) /\ lookup_var ov s0 = SOME ow /\
@@ -897,7 +897,7 @@ Theorem concat_args_sim:
       (\rr ee t. ?vs. rr = INL vs /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-         expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee t /\
+         expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee t /\
          LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                               value_has_type tv v) args vs /\
          mem_bytes_at (B + 32) (k + LENGTH (FLAT (MAP (\v. case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) vs))) t.vs_memory =
@@ -1109,7 +1109,7 @@ Resume concat_args_sim[post]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >- (qpat_x_assum `expr_sim_inv _ _ _ (es_end' with gas_obs := [])` mp_tac >>
       simp[])
-  >- (qpat_x_assum `stmt_state_rel _ _ _ _ (es_end' with gas_obs := []) tu` mp_tac >>
+  >- (qpat_x_assum `stmt_state_rel H _ _ _ _ (es_end' with gas_obs := []) tu` mp_tac >>
       simp[])
   >- (qexistsl_tac [`v`, `vs`] >> simp[])
   >- (rewrite_tac[listTheory.MAP, listTheory.FLAT] >> BETA_TAC >>

@@ -9,7 +9,7 @@ Ancestors
   loweringPosts exprLoweringProps exprSimAlloc context emitHelper list rich_list exprSimVVFrame fragExec entrySinkExtraction
 
 Theorem keccak_typed_suffix_mem_ok_open_free:
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -34,7 +34,7 @@ Proof
       >- (gvs[evaluate_type_def, value_has_type_def] >>
           drule_at (Pos hd) hash_fixed_post_view >>
           simp[value_has_type_def] >> strip_tac >>
-          `stmt_state_rel ctx func cenv cx es' s` by
+          `stmt_state_rel H ctx func cenv cx es' s` by
             fs[expr_post_def] >>
           `MEM (mk_inst sm.cs_next_id ALLOCA [Lit 32w]
             [STRING #"%" (toString sm.cs_next_var)]) (fn_insts func)` by
@@ -72,7 +72,7 @@ Proof
 QED
 
 Theorem keccak_typed_suffix_counted_open_free:
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -91,7 +91,7 @@ Theorem keccak_typed_suffix_counted_open_free:
   ?t r. gas_path_mem ctx func s 0 (OK t) /\
     builtin_result cx es'.accounts (BaseT (BytesT (Fixed 32)))
       Keccak256 [expr_type e] [v] = INL r /\
-    vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
+    vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
       es sa sb s0 es' (Value r) (StackValue (BaseT (BytesT (Fixed 32))) op) t /\
     alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\

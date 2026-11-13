@@ -87,12 +87,12 @@ Theorem external_frame_ret_value_normalized_run_mem:
        lower_value compile_expr cenv' ret e sa = (op, s1) /\
        fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv' sa /\ ~block_is_terminated sa /\
-       stmt_state_rel unit.cu_context func cenv'
+       stmt_state_rel H unit.cu_context func cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE) es s0 /\
        alloca_history func s0 /\ ~s0.vs_halted /\
        s0.vs_current_bb = sa.cs_current_bb /\
        s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-       expr_post unit.cu_context func cenv'
+       expr_post H unit.cu_context func cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE)
          e es sa s1 s0 ee v op t /\
        (?gs ee'.
@@ -115,7 +115,7 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all external_package_frame_exit >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `expr_post ctx func cenv' cx` >>
+  qmatch_asmsub_abbrev_tac `expr_post H ctx func cenv' cx` >>
   qpat_x_assum `?gs ee'. _` strip_assume_tac >>
   `post_value_type cenv' e = lowered_value_type cenv' e` by
     (`well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) ret` by
@@ -208,7 +208,7 @@ Resume external_frame_ret_value_normalized_run_mem[resources]:
   drule_all normalize_external_frame_resources >>
   simp[GSYM (markerTheory.Abbrev_def)] >> strip_tac >>
   qpat_assum `post_value_type cenv' e = _` (fn th =>
-    qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
       (strip_assume_tac o REWRITE_RULE [expr_post_def, th])) >>
   `sfields_tenv_consistent cenv'.ce_struct_fields (get_tenv cx) /\
    (!name fields. FLOOKUP cenv'.ce_struct_fields name = SOME fields ==>
@@ -225,7 +225,7 @@ Resume external_frame_ret_value_normalized_run_mem[resources]:
   disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand op t = _`)) >>
   disch_then (qspec_then `stv` mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[]) >>
@@ -317,7 +317,7 @@ Resume external_frame_ret_value_normalized_run_mem[sizes]:
   `!inst n base sz. MEM inst (fn_insts func) /\
       inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit n] /\
       FLOOKUP t.vs_allocas inst.inst_id = SOME (base,sz) ==> sz = w2n n` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ ee t` mp_tac >>
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ ee t` mp_tac >>
      rewrite_tac[stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `!pz zz. FLOOKUP t'.vs_allocas s3.cs_next_id = SOME (pz,zz) ==>
       zz = cenv'.ce_max_return_size` by

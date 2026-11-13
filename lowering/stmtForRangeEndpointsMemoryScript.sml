@@ -60,11 +60,11 @@ Theorem for_expr_endpoint_outcome_mem:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!v ee t.
-     expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+     expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
      expr_store_bound cx (expr_type e) v op t /\
      t.vs_current_bb = sb.cs_current_bb /\
      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -80,7 +80,7 @@ Theorem for_expr_endpoint_outcome_mem:
 Proof
   strip_tac >> irule for_endpoint_bind_outcome_mem >>
   conj_tac >- simp[] >> qexists_tac `\v ee t.
-    expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+    expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
