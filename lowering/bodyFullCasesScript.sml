@@ -80,14 +80,16 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.assert_bare_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_assert_reason_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_assert_reason_case_ptr_at (bodyPtrExitCases),
+   by its fragment in bodyFullAssertReason. *)
 Theorem body_assert_reason_case_full:
   !cx e se.
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_full_ok cx se) /\
     body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (Assert e (AssertReason se))
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  irule compile_assert_reason_frag_full >> metis_tac[]
 QED
 
 (* The joint twin of body_assert_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
@@ -424,7 +426,8 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_for_case_ptr_at (bodyPtrCtrlCases). *)
+(* The joint twin of body_for_case_ptr_at (bodyPtrCtrlCases),
+   by its fragment in bodyFullFor. *)
 Theorem body_for_case_full:
   !cx id typ it n body.
     (!tenv s'' tyv t s'3' vs t' s'4' x t''.
@@ -441,7 +444,8 @@ Theorem body_for_case_full:
        body_iterator_full_ok cx it) ==>
     body_stmt_full_ok cx (For id typ it n body)
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  irule compile_for_frag_full >> metis_tac[]
 QED
 
 (* The joint twin of body_if_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
@@ -540,11 +544,21 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_log_case_ptr_at (bodyPtrLogCases). *)
+(* The joint twin of body_log_case_ptr_at (bodyPtrLogCases),
+   by its scalar/aggregate leaves in bodyFullLog. *)
 Theorem body_log_case_full:
   !cx id es. body_exprs_full_ok cx es ==> body_stmt_full_ok cx (Log id es)
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  `supported_log tops id es` by
+    (qpat_assum `supported_stmt _ _ _`
+       (ACCEPT_TAC o SIMP_RULE bool_ss [supported_stmt_def])) >>
+  `?fields. supported_event_fields tops id = SOME fields` by
+    (qpat_x_assum `supported_log _ _ _` mp_tac >>
+     rewrite_tac[supported_log_def] >> CASE_TAC >> simp[]) >>
+  Cases_on `EVERY supported_scalar_type (MAP (SND o FST) fields)`
+  >- (irule compile_log_frag_full >> metis_tac[]) >>
+  irule body_log_aggregate_full >> metis_tac[]
 QED
 
 (* Pass, by stmtSimPass's joint fragment. *)
@@ -568,11 +582,13 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.raise_bare_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_raise_reason_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_raise_reason_case_ptr_at (bodyPtrExitCases),
+   by its fragment in bodyFullRaiseReason. *)
 Theorem body_raise_reason_case_full:
   !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Raise (RaiseReason e))
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  irule compile_raise_reason_frag_full >> metis_tac[]
 QED
 
 (* The joint twin of body_raise_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
