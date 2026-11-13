@@ -287,8 +287,8 @@ Proof
            disch_then (fn th => rewrite_tac[th]) >>
            irule gas_bad_storage_at_bind_left >>
            conj_tac
-           >- (drule_all_then ACCEPT_TAC gas_bad_storage_at_counted_prefix) >>
-           simp[storage_trace_frame_return])) >>
+           >- simp[storage_trace_frame_return] >>
+           drule_all_then ACCEPT_TAC gas_bad_storage_at_counted_prefix)) >>
       `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
          es_end.storage_trace` by
         (qpat_assum `storage_trace_domain _ _ _` mp_tac >>
