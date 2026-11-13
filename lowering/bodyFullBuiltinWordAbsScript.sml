@@ -105,16 +105,76 @@ Proof
 QED
 
 
-Theorem abs_suffix_ghost_success[local]:
+Theorem abs_suffix_success_full:
   compile_builtin_abs x sa = (op,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   op_prov G x = NONE /\ op_taint tn x = {} /\
   (!z. x = Var z ==> not_fresh_at sa z) /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
-  ?G' tn'. !D. inst_seq_ptr D lo ctx fn PG G tn
-    (emitted_insts sa sb) s G' tn'
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  local_ptrs_reserved cenv sa /\
+  (!v sz. cenv.ce_return_buf = SOME (PtrVar (Var v) sz) ==> not_fresh_at sa v) /\
+  (!v sz. cenv.ce_return_pc = SOME (PtrVar (Var v) sz) ==> not_fresh_at sa v) /\
+  es'.scopes = es.scopes /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv_at (DF H) lo d cenv cx es G tn s) ==>
+  ?z G' tn'.
+    z = (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
+    (!v. not_fresh_at sa v ==>
+      lookup_var v z = lookup_var v s /\ FLOOKUP G' v = FLOOKUP G v /\
+      op_taint tn' (Var v) = op_taint tn (Var v)) /\
+    op_prov G' op = NONE /\ op_taint tn' op = {} /\
+    z.vs_memory = s.vs_memory /\ z.vs_allocas = s.vs_allocas /\
+    z.vs_alloca_next = s.vs_alloca_next /\ z.vs_fmp = s.vs_fmp /\
+    z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx /\
+    z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+    z.vs_immutables = s.vs_immutables /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK z,G',tn') /\
+      ghost_inv_at (DF H) lo d cenv cx es' G' tn' z)
 Proof
-  strip_tac >> drule abs_inst_transition >> disch_tac >>
+  strip_tac >>
+  `?G' tn'.
+    (!v. not_fresh_at sa v ==>
+      lookup_var v t = lookup_var v s /\ FLOOKUP G' v = FLOOKUP G v /\
+      op_taint tn' (Var v) = op_taint tn (Var v)) /\
+    op_prov G' op = NONE /\ op_taint tn' op = {} /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_immutables = s.vs_immutables /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!D. inst_seq_ptr D lo ctx fn PG G tn
+      (emitted_insts sa sb) s G' tn')` by suspend "ghosts" >>
+  qexistsl_tac [`t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)`,
+                `G'`, `tn'`] >>
+  simp[lookup_var_def] >>
+  conj_tac >- metis_tac[lookup_var_def] >>
+  gen_tac >> strip_tac >> conj_tac
+  >- (drule abs_suffix_opcodes >> strip_tac >>
+      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+         (emitted_insts sa sb) /\
+       FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+        (`EVERY (\opc. opc <> INVOKE /\ ~is_terminator opc /\ opc <> GAS)
+           (MAP (\i. i.inst_opcode) (emitted_insts sa sb))` by
+           simp[is_terminator_def] >>
+         fs[EVERY_MAP, EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]) >>
+      `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+        metis_tac[abs_suffix_mem_ok] >>
+      `inst_seq_ptr (DF H) lo ctx fn PG G tn (emitted_insts sa sb) s G' tn'` by simp[] >>
+      drule_all run_inst_seq_gas_origin_ptr_path >> simp[]) >>
+  irule ghost_inv_at_exterior_frame >>
+  qexistsl_tac [`G`, `es`, `s`, `sa`, `tn`] >>
+  simp[lookup_var_def] >> metis_tac[lookup_var_def]
+QED
+
+Resume abs_suffix_success_full[ghosts]:
+  drule abs_inst_transition >> disch_tac >>
   qpat_x_assum `compile_builtin_abs _ _ = _` mp_tac >>
   simp[compile_builtin_abs_def, compile_select_def, comp_bind_def,
        comp_ignore_bind_def, emit_op_def, emit_void_def, fresh_var_def,
@@ -243,7 +303,25 @@ Proof
   disch_then (qspecl_then [`fn`, `PG`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `op_prov G9 (Var _)` >>
   qmatch_asmsub_abbrev_tac `op_taint tn9 (Var _)` >>
-  qexistsl_tac [`G9`, `tn9`] >> gen_tac >>
+  qpat_assum `!v. MEM v i8.inst_outputs ==> _`
+    (qspec_then `STRING #"%" (toString (sa.cs_next_var + 7))` mp_tac) >>
+  qpat_assum `Abbrev (i8 = _)`
+    (fn th => pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
+  simp[NoAsms] >> strip_tac >>
+  qexistsl_tac [`G9`, `tn9`] >>
+  conj_tac >-
+   (rpt strip_tac >>
+    `~MEM v i0.inst_outputs /\ ~MEM v i1.inst_outputs /\
+     ~MEM v i2.inst_outputs /\ ~MEM v i3.inst_outputs /\
+     ~MEM v i4.inst_outputs /\ ~MEM v i5.inst_outputs /\
+     ~MEM v i6.inst_outputs /\ ~MEM v i7.inst_outputs /\
+     ~MEM v i8.inst_outputs` by
+      (fs[loweringStateRelDefsTheory.not_fresh_at_def] >>
+       simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, Abbr `i4`,
+            Abbr `i5`, Abbr `i6`, Abbr `i7`, Abbr `i8`]) >>
+    qpat_x_assum `!tn' t' s' lo' i fn ctx' PG G'. _` kall_tac >>
+    metis_tac[]) >>
+  simp[] >> gen_tac >>
   pure_rewrite_tac [GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[Once inst_seq_ptr_def] >>
   qpat_assum `Abbrev (G1 = _)`
@@ -278,3 +356,5 @@ Proof
      (`Abbrev (G9 = _)`, `Abbrev (tn9 = _)`)] >>
   simp[inst_seq_ptr_def]
 QED
+
+Finalise abs_suffix_success_full
