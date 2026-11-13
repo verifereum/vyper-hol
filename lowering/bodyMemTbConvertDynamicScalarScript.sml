@@ -112,7 +112,7 @@ Theorem dynamic_continuation_summary_mem:
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next)
-    (\res fin out. expr_exit res out)
+    (\res fin out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   strip_tac >>
   `post_value_type cenv e1 = expr_type e1` by

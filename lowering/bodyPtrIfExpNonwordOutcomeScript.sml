@@ -33,7 +33,7 @@ Theorem ifexp_selected_nonword_outcome_ptr:
        ghost_kept ce es sa G0 tn0 s0 G tn /\
        u.vs_current_bb = sd.cs_current_bb /\
        u.vs_inst_idx = LENGTH sd.cs_current_insts)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `gas_admissible (eval_expr cx arm) expr_vv_res_ok es` by

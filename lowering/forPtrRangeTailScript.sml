@@ -53,7 +53,7 @@ Theorem for_checked_runtime_error_outcome:
     (Abort Revert_abort t) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (raise (Error (RuntimeError msg))) (es,s,G,tn) Post
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_ptr_def] >>
   qexists_tac `[]` >> disj1_tac >> rewrite_tac[gas_summary_ptr_at_def] >>

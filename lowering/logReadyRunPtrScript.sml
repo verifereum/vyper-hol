@@ -37,7 +37,7 @@ Theorem compile_log_eval_all_gas_ptr:
          LIST_REL (\e p. ~is_word_type (expr_type e) ==>
            ptr_buf_ok cenv e (FST p) G t) args xs /\
          ghost_kept cenv es sa G0 tn0 s0 G tn)
-      (\res ee gt r. expr_exit res r)
+      (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >> irule compile_log_eval_all_ptr >>
   simp[] >> rpt conj_tac

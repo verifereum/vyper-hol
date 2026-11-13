@@ -443,7 +443,7 @@ Theorem compile_slice_calldata_source_outcome:
       ghost_kept cenv es sa G tn s H tm /\
       zf.vs_current_bb = sb.cs_current_bb /\ zf.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ~zf.vs_halted)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> qpat_x_assum `bs = _` SUBST_ALL_TAC >>
   Cases_on `dimword (:256) <= a+n \/ LENGTH s.vs_call_ctx.cc_calldata < a+n`

@@ -115,7 +115,7 @@ Definition stmt_frag_keep_def:
       gas_outcome F (cx_tops cx) (ctx, func) source (es, s0)
         (\res ee t. stmt_post ctx func cx lctx cenv cenv' sa sb es s0 res ee t /\
                     Q t)
-        (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+        (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 End
 
 (* expr_vv_sim, whose post also has Qe of the compile states, the start
@@ -137,7 +137,7 @@ Definition expr_vv_sim_with_def:
           Qe sa sb s0 ee tv vv t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\res ee r. expr_exit res r)
+        (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 End
 
 (* Q survives any code that keeps the variables handed out before sb and

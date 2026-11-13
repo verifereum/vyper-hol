@@ -79,7 +79,7 @@ Theorem word_ptr_first_hit_expr_post_retained:
       ptr_val_ok cx (expr_type e) v op G tn t /\
       (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule word_ptr_first_hit_path >> strip_tac >>
   gvs[gas_summary_ptr_at_def] >>

@@ -166,7 +166,7 @@ Theorem converted_local_enriched_outcome:
         ptr_buf_ok cenv (TypeBuiltin (BaseT (UintT 256)) Convert
           (BaseT (UintT 256)) [Name (BaseT (UintT 256)) name]) op H t) /\
       ghost_kept cenv es sa G tn s H tm /\ op_prov H op = NONE)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all converted_local_enriched_path >>
   disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>

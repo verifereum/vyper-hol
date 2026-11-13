@@ -39,7 +39,7 @@ Theorem word_args_compose_sim_ptr:
          u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
          ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v op G' tn' u /\
          ghost_kept cenv es sa G0 tn0 s0 G' tn')
-      (\res fin gt r. expr_exit res r)) ==>
+      (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)) ==>
   expr_sim_ptr d ctx PG func cenv cx ty (Builtin ann bt args) es
 Proof
   strip_tac >>

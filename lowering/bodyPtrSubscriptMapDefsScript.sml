@@ -68,7 +68,7 @@ Definition expr_map_sim_ptr_at_def:
           ghost_inv_at D lo d cenv cx ee G tn t /\
           op_taint tn p.ptr_operand = {} /\
           ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 End
 
 Definition expr_map_sim_ptr_cx_dead:
@@ -119,7 +119,7 @@ Theorem expr_map_sim_ptr_def:
           ghost_inv d cenv cx ee G tn t /\
           op_taint tn p.ptr_operand = {} /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   simp[expr_map_sim_ptr_cx_dead, expr_map_sim_ptr_at_def, dead_lo_ok_def, ghost_inv_cx_dead,
        ghost_kept_zero, gas_outcome_ptr_zero] >>

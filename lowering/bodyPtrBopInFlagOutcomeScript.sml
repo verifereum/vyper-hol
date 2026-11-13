@@ -71,7 +71,7 @@ Theorem membership_flag_suffix_outcome_ptr:
         (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) ==>
   gas_outcome_ptr D tops (ctx,fn) PG
     (\st. (bop_result cx ann bop tys v1 v2 st, st)) (es,s,G,tn) Q
-    (\res fin ghost r. expr_exit res r)
+    (\res fin ghost r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'

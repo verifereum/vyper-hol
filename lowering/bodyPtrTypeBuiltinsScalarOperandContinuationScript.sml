@@ -36,7 +36,7 @@ Theorem scalar_convert_operand_continuation:
       (~is_word_type (post_value_type cenv (TypeBuiltin dst Convert dst [e])) ==>
         ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) out H u) /\
       ghost_kept cenv es ca G0 tn0 s0 H th)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >> drule_all scalar_source_body_word_types >> strip_tac >>
   drule_all expr_body_pre_word_value >> strip_tac >>

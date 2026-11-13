@@ -170,7 +170,7 @@ Theorem word_not_typed_ptr_outcome:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   drule_all word_not_typed_post >>

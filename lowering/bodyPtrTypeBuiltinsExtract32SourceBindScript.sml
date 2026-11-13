@@ -33,7 +33,7 @@ Theorem extract32_source_ptr_bind:
     ghost_kept cenv es sa G0 tn0 s0 G tn ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
       (next (BytesV bs)) (mid with gas_obs := [],t,G,tn) Q
-      (\res ee gt r. expr_exit res r)) /\
+      (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func)
       (ignore_bind (vyperState$bind (eval_expr cx src) (read_result cx)) (return ()))
@@ -54,7 +54,7 @@ Theorem extract32_source_ptr_bind:
       (es,s0) (left ++ right) (err,ee) (leaf,fstate)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (vyperState$bind (vyperState$bind (eval_expr cx src) (read_result cx)) next)
-    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r)
+    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `expr_body_pre cenv cx env src es` by

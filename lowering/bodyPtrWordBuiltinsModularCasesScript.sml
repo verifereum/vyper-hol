@@ -111,7 +111,7 @@ Theorem word_modular_typed_abort_outcome:
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome_ptr D tops (ctx,func) PG
     (\ee. (builtin_result cx ee.accounts ann (if is_mul then MulMod else AddMod) ts [v1;v2;v3],ee))
-    (es,s,G,tn) Q (\res fin gt r. expr_exit res r)
+    (es,s,G,tn) Q (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >>
   `straight_fresh ((if is_mul then compile_mulmod else compile_addmod) a b c)` by

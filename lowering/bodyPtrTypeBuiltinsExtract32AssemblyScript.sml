@@ -218,7 +218,7 @@ Theorem extract32_tail_outcome_of_runs_ptr:
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
     (vyperState$bind
       (lift_sum (evaluate_extract32 bs n bt)) (\v. return (Value v)))
-    (es,s,G,tn) Q (\res ee gt r. expr_exit res r)
+    (es,s,G,tn) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all extract32_tail_straight_noext >> strip_tac >>
   `same_blocks sa sb` by simp[same_blocks_def] >>

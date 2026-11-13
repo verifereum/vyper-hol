@@ -32,7 +32,7 @@ Theorem pop_storage_live_summary:
       ghost_inv d cenv cx ee Gf tnf u /\
       ptr_vv_ok cx ann v (LocatedValue ann (mk_ptr q (if tr then LocTransient else LocStorage)))
         ee Gf tnf u /\ ghost_kept cenv es sm G tn s Gf tnf)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule nested_pop_storage_target_metadata >> strip_tac >> gvs[] >>
   `~cx.txn.is_static /\ ~s.vs_call_ctx.cc_static /\

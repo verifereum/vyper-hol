@@ -116,7 +116,7 @@ Theorem local_name_enriched_outcome:
       ghost_inv d cenv cx ee H tm t /\ ptr_val_ok cx ann v op H tm t /\
       (~is_word_type ann ==> ptr_buf_ok cenv (Name ann name) op H t) /\
       ghost_kept cenv es sa G tn s H tm /\ op_prov H op = NONE)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all lower_value_name_word >> strip_tac >>
   `?out. op = Var out` by

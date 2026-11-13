@@ -56,7 +56,7 @@ Theorem extract32_callback_ptr_ready:
       ptr_vv_ok cx (post_value_type cenv (TypeBuiltin ann Extract32 typ [src;off]))
         (Value w) (StackValue ty op) ef K kn z /\
       ghost_kept cenv es sa G0 tn0 s0 K kn)
-    (\res ef gt r. expr_exit res r)
+    (\res ef gt r. expr_exit res r /\ halt_exit cx ef res r)
 Proof
   strip_tac >> drule_all extract32_stage_cuts >> strip_tac >>
   `?bt. typ = BaseT bt /\ extract32_result_base_ok bt /\ ann = typ` by

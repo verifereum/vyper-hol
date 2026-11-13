@@ -391,7 +391,7 @@ Theorem word_modular_abort_outcome:
   (!tail. source (es with gas_obs := tail) =
     (INR (Error (RuntimeError msg)), es with gas_obs := tail))) ==>
   gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn)
-    Q (\res fin gt r. expr_exit res r)
+    Q (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >> drule_all word_modular_counted_abort >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>

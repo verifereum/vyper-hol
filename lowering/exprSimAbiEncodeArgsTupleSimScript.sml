@@ -69,7 +69,7 @@ Theorem tuple_vv_judgment:
         vv_post (tuple_target_context name ctx) fn ce cx tuple_call es sa sb s ee tv vv t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> rpt gen_tac >>
   drule tuple_actual_call_compile >>
@@ -106,7 +106,7 @@ Theorem tuple_expr_judgment:
         expr_post (tuple_target_context name ctx) fn ce cx tuple_call es sa sb s ee v op t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> rpt gen_tac >>
   drule tuple_actual_call_compile >>
@@ -159,7 +159,7 @@ Theorem tuple_vv_judgment_in_context:
         vv_post ctx fn ce cx tuple_call es sa sb s ee tv vv t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> rpt gen_tac >>
   drule tuple_actual_call_compile >>
@@ -195,7 +195,7 @@ Theorem tuple_expr_judgment_in_context:
         expr_post ctx fn ce cx tuple_call es sa sb s ee v op t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> rpt gen_tac >>
   drule tuple_actual_call_compile >>

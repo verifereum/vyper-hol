@@ -193,7 +193,7 @@ Theorem bop_selected_hash_outcome_ptr_frame:
     wb_frame cenv es ee ca s t /\ ghost_kept cenv es ca G tn s H un /\
     (~expr_has_effect e ==> pure_frame cenv func es ca s t) ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
-      (next v) (ee,t,H,un) Q (\res ee gt r. expr_exit res r)) /\
+      (next v) (ee,t,H,un) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func)
       (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
@@ -214,7 +214,7 @@ Theorem bop_selected_hash_outcome_ptr_frame:
       (es,s) (left ++ right) (err,ee) (leaf,fstate)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (bind (bind (eval_expr cx e) (read_result cx)) next)
-    (es,s,G,tn) Q (\res ee gt r. expr_exit res r)
+    (es,s,G,tn) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `bytestring_literal_hash e`
@@ -292,7 +292,7 @@ Theorem bop_selected_hash_outcome_ptr:
     t.vs_inst_idx = LENGTH cz.cs_current_insts /\
     wb_frame cenv es ee ca s t /\ ghost_kept cenv es ca G tn s H un ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
-      (next v) (ee,t,H,un) Q (\res ee gt r. expr_exit res r)) /\
+      (next v) (ee,t,H,un) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func)
       (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
@@ -313,7 +313,7 @@ Theorem bop_selected_hash_outcome_ptr:
       (es,s) (left ++ right) (err,ee) (leaf,fstate)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (bind (bind (eval_expr cx e) (read_result cx)) next)
-    (es,s,G,tn) Q (\res ee gt r. expr_exit res r)
+    (es,s,G,tn) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   irule bop_selected_hash_outcome_ptr_frame >> simp[] >>

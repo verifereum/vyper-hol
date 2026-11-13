@@ -114,7 +114,7 @@ Proof
       vv_post ctx func ce cx h es sa sm s0 ee tv vv t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (fs[exprs_case_def, expr_vv_case_def] >>
      first_x_assum (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
      simp[expr_vv_sim_def] >> disch_then irule >> simp[] >>

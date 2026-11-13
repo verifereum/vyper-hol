@@ -125,7 +125,7 @@ Theorem assign_local_store_rhs_outcome:
     (stmt_res_ok lctx) es /\
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s0) Q
-    (\res ee r. expr_exit res r) /\
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!res ee t. Q res ee t ==> ?v. res = INL v) /\
   (!marks v ee t.
     gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
@@ -136,7 +136,7 @@ Theorem assign_local_store_rhs_outcome:
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
     (stmt_post ctx func cx lctx old c sa sf es s0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> rewrite_tac[gas_outcome_def] >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
@@ -265,7 +265,7 @@ Proof
     (\res ee t. ?v. res = INL v /\
       expr_post ctx func cenv cx e es sa sB s0 ee v op t /\
       t.vs_current_bb = sB.cs_current_bb /\ t.vs_inst_idx = LENGTH sB.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
      simp[expr_sim_def] >> disch_then irule >> gvs[]) >>
   irule assign_local_store_rhs_outcome >>

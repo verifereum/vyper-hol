@@ -68,7 +68,7 @@ Definition target_sim_ptr_def:
           ghost_inv d cenv cx ee G tn t /\
           target_ptr_ok cenv pv op G tn t /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 End
 
 (* New definition: exprSimPopNestedBase's pop_target_frag with the ghost. *)
@@ -99,7 +99,7 @@ Definition pop_target_frag_ptr_def:
           ghost_inv d cenv cx ee G tn t /\
           target_ptr_ok cenv (PlaceR p) r G tn t /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 End
 
 (* New definition: an index of a target rooted at the local id, once

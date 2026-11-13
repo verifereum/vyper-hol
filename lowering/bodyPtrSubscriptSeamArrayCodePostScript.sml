@@ -12,7 +12,7 @@ Theorem select_result_ptr_counted_summary:
   ((?t. outcome = OK t /\ Q res (es with gas_obs := []) G tn t) \/
    (exit_result outcome /\ expr_exit res outcome)) ==>
   gas_summary_ptr_at D (ctx,func) PG [] (select_result cx ty r sb) (es,s,G0,tn0)
-    Q (\res ee gt outcome. expr_exit res outcome)
+    Q (\res ee gt outcome. expr_exit res outcome /\ halt_exit cx ee res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   rewrite_tac[gas_summary_ptr_at_def] >>

@@ -143,7 +143,7 @@ Theorem bop_scalar_suffix_outcome_ptr:
         (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) ==>
   gas_outcome_ptr D tops (ctx,fn) PG
     (\st. (bop_result cx ann bop tys v1 v2 st, st)) (es,s,G,tn) Q
-    (\res fin ghost r. expr_exit res r)
+    (\res fin ghost r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `(?v t. _) \/ _` strip_assume_tac

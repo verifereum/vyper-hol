@@ -24,10 +24,10 @@ Theorem gas_outcome_ptr_get_place:
   gas_admissible (bind source get_place) target_place_res_ok es /\
   gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0)
     (\res ee G tn t. ?pv. res = INL pv /\ P pv ee G tn t)
-    (\res ee gt r. expr_exit res r) ==>
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r) ==>
   gas_outcome_ptr D tops (ctx,func) PG (bind source get_place) (es,s0,G0,tn0)
     (\res ee G tn t. ?p. res = INL p /\ P (PlaceR p) ee G tn t)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt strip_tac >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` mp_tac >>

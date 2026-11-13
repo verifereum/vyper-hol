@@ -11,7 +11,7 @@ Theorem abi_decode_child_exit_summary:
     (es,s0) marks (INR exc) ee r /\ exit_result r /\ expr_exit (INR exc) r ==>
   gas_summary_at F (ctx,func) marks
     (eval_expr cx (TypeBuiltin ty (AbiDecode unwrap) ty [e])) (es,s0) Q
-    (\res es1 r. expr_exit res r)
+    (\res es1 r. expr_exit res r /\ halt_exit cx es1 res r)
 Proof
   strip_tac >> rewrite_tac[abi_decode_singleton_source, gas_summary_at_def] >>
   qexistsl_tac [`INR exc`, `ee`, `r`] >> simp[] >>
@@ -71,7 +71,7 @@ Theorem abi_decode_normal_prefix_summary:
       vv_post ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
         es1 tv (LocatedValue ann (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts)
-    (\res es1 r. expr_exit res r)
+    (\res es1 r. expr_exit res r /\ halt_exit cx es1 res r)
 Proof
   strip_tac >>
   `expr_body_pre ce cx env e es` by

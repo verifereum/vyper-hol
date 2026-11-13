@@ -50,7 +50,7 @@ Theorem target_extension_outcome_ptr:
       gas_path_ptr D 0 ctx fn PG G tn s fuel H un
         (Abort Revert_abort (t with vs_inst_idx := pc)))) ==>
   gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn) Q
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac
   >- (simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
@@ -103,7 +103,7 @@ Theorem target_array_suffix_outcome_ptr:
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx ee H un t /\ target_ptr_ok cenv pv' rb H un t /\
       ghost_kept cenv es sa G0 tn0 s0 H un)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_tac >> irule target_extension_outcome_ptr >> conj_tac
   >- (rpt strip_tac >> irule target_array_extend_gas_tail_ptr >> metis_tac[]) >>

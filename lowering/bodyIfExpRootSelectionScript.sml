@@ -11,7 +11,7 @@ Theorem ifexp_condition_exit_mem:
     (vyperState$bind (eval_expr cx c) (read_result cx))
     (es,s0) marks res mid r /\ expr_exit res r ==>
   gas_outcome T tops (ctx,func) (eval_expr cx (IfExp t c a b)) (es,s0) Q
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   Cases_on `res` >> simp[] >> strip_tac >>
   simp[gas_outcome_def, gas_summary_at_def] >>
@@ -30,16 +30,16 @@ Theorem ifexp_root_condition_dispatch_mem:
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
   gas_outcome T tops (ctx,func)
     (bind (eval_expr cx c) (read_result cx)) (es,s0) P
-    (\res ee r. expr_exit res r) /\
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!res ee u. P res ee u ==> ?v. res = INL v) /\
   (!marks sel mid u.
     gas_marked_exec T (ctx,func) (bind (eval_expr cx c) (read_result cx))
       (es,s0) marks (INL (BoolV sel)) mid (OK u) /\
     P (INL (BoolV sel)) (mid with gas_obs := []) u ==>
     gas_outcome T tops (ctx,func) (eval_expr cx (IfExp t c a b)) (es,s0) Q
-      (\res ee r. expr_exit res r)) ==>
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)) ==>
   gas_outcome T tops (ctx,func) (eval_expr cx (IfExp t c a b)) (es,s0) Q
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac

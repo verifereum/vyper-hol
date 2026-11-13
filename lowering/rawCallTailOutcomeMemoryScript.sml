@@ -61,7 +61,7 @@ Theorem raw_call_tail_outcome_mem:
          else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)) u) /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all raw_call_prefix_source_ready >> strip_tac >>
   drule raw_call_pre_flags >> strip_tac >>

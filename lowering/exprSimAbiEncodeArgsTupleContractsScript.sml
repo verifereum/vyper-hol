@@ -37,7 +37,7 @@ Theorem tuple_joint_contracts:
           expr_post ctx func ce cx tuple_call es sa sb s0 ee v op t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\res ee r. expr_exit res r)) /\
+        (\res ee r. expr_exit res r /\ halt_exit cx ee res r)) /\
   (!env ty es. expr_body_pre ce cx env tuple_call es ==>
     !sa sb vv s0.
       compile_expr ce ty tuple_call sa = (vv,sb) /\
@@ -52,7 +52,7 @@ Theorem tuple_joint_contracts:
           vv_post ctx func ce cx tuple_call es sa sb s0 ee tv vv t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\res ee r. expr_exit res r))
+        (\res ee r. expr_exit res r /\ halt_exit cx ee res r))
 Proof
   simp[tuple_singleton_cases, expr_sim_def, expr_vv_sim_def]
 QED

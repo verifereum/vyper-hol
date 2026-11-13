@@ -29,7 +29,7 @@ QED
 
 Theorem len_summary_ptr_compose:
   gas_summary_ptr_at D (ctx,func) PG marks (eval_expr cx e)
-    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r) /\
+    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!res ee G tn t.
     gas_marked_exec_ptr D (ctx,func) PG (eval_expr cx e)
       (es,s0,G0,tn0) marks res ee G tn (OK t) /\
@@ -40,7 +40,7 @@ Theorem len_summary_ptr_compose:
       Q' (INL (Value (IntV (&n)))) (ee with gas_obs := []) G' tn' t') ==>
   gas_summary_ptr_at D (ctx,func) PG marks
     (eval_expr cx (Builtin ann Len [e])) (es,s0,G0,tn0) Q'
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rewrite_tac[gas_summary_ptr_at_marked] >> strip_tac >> gvs[]
   >- (first_x_assum drule_all >> strip_tac >> gvs[] >>
@@ -55,7 +55,7 @@ QED
 
 Theorem len_outcome_ptr_compose:
   gas_outcome_ptr D tops (ctx,func) PG (eval_expr cx e)
-    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r) /\
+    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!marks res ee G tn t.
     gas_marked_exec_ptr D (ctx,func) PG (eval_expr cx e)
       (es,s0,G0,tn0) marks res ee G tn (OK t) /\
@@ -66,7 +66,7 @@ Theorem len_outcome_ptr_compose:
       Q' (INL (Value (IntV (&n)))) (ee with gas_obs := []) G' tn' t') ==>
   gas_outcome_ptr D tops (ctx,func) PG
     (eval_expr cx (Builtin ann Len [e])) (es,s0,G0,tn0) Q'
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rewrite_tac[gas_outcome_ptr_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>

@@ -48,7 +48,7 @@ Theorem type_builtin_unary_vv_sim_ptr_origin:
         (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
           ptr_buf_ok cenv (TypeBuiltin ann tb typ [e]) p.ptr_operand G' t) /\
         ghost_kept cenv es sa G0 tn0 s0 G' tn')
-      (\res ef gt r. expr_exit res r)) \/
+      (\res ef gt r. expr_exit res r /\ halt_exit cx ef res r)) \/
     (?err. evaluate_type_builtin cx tb typ [expr_type e] [v] = INR err /\
       ?unwrap. tb = AbiDecode unwrap /\ err = RuntimeError "abi_decode invalid" /\
         ?target_ty. occurs_abi_decode_target target_ty (cx_tops cx) /\

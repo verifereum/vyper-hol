@@ -12,7 +12,7 @@ Ancestors
 Theorem ec_mem_outcome_then:
   gas_outcome T tops (ctx,func)
     (m : evaluation_state -> value evaluation_result) (es,s0)
-    (\res ee t. ?v. res = INL v /\ P v ee t) (\res ee r. expr_exit res r) /\
+    (\res ee t. ?v. res = INL v /\ P v ee t) (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
   (!exc ee r. expr_exit (INR exc : value + exception) r ==>
      R (INR exc) ee r) /\
   (!gs v ee t. m (es with gas_obs := gs) = (INL v, ee) /\ ee.gas_obs = [] /\

@@ -81,7 +81,7 @@ Theorem dynamic_read_convert_summary[local]:
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next)
-    (\res fin out. expr_exit res out)
+    (\res fin out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   strip_tac >>
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
@@ -151,7 +151,7 @@ Theorem dynamic_vv_convert_summary[local]:
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next)
-    (\res fin out. expr_exit res out)
+    (\res fin out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   strip_tac >>
   `post_value_type cenv e = expr_type e` by

@@ -64,7 +64,7 @@ Theorem named_root_index_execution:
         val_in_memory entry.type entry.value (w2n w) t.vs_memory /\
         (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
           val_in_memory entry.type entry.value (w2n w) mem)))
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all named_root_preparation >> strip_tac >>
   drule compile_name_value_ptr >>

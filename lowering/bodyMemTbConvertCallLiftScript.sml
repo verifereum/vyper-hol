@@ -131,7 +131,7 @@ Theorem call_bytestring_convert_outcome[local]:
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
       (?w. eval_operand op ss = SOME w /\
         w2n w + type_memory_bytes cenv ann <= ss.vs_alloca_next))
-    (\res fin out. expr_exit res out)
+    (\res fin out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   strip_tac >> drule expr_body_pre_convert >> strip_tac >> gvs[] >>
   `is_bytestring_type (expr_type (Call a (IntCall fid) args drv))` by

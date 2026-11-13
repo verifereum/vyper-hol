@@ -146,14 +146,14 @@ Resume concat_args_sim_mem[head_normal]:
 QED
 Resume concat_args_sim_mem[head_exit]:
   Cases_on `res`
-  >- (qpat_x_assum `(\res ee r. expr_exit res r) _ _ _` mp_tac >>
+  >- (qpat_x_assum `(\res ee r. expr_exit res r /\ halt_exit cx ee res r) _ _ _` mp_tac >>
       simp[expr_exit_def]) >>
   qexists_tac `marks` >> disj1_tac >> simp[gas_summary_at_def] >>
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
   disj2_tac >>
-  qpat_x_assum `(\res ee r. expr_exit res r) _ _ _` mp_tac >>
+  qpat_x_assum `(\res ee r. expr_exit res r /\ halt_exit cx ee res r) _ _ _` mp_tac >>
   qpat_x_assum `exit_result r` mp_tac >> simp[] >> rpt strip_tac >>
   qpat_x_assum `expr_exit _ r` mp_tac >>
   Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>

@@ -176,7 +176,7 @@ Theorem literal_typed_continuation_summary_mem[local]:
       expr_store_bound cx (BaseT BoolT) w op s /\
       s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func s /\ s.vs_alloca_next = t0.vs_alloca_next)
-    (\res fin r. expr_exit res r)
+    (\res fin r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `wb_frame _ _ (_ with gas_obs := _) _ _ _`

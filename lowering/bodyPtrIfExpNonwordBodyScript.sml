@@ -44,7 +44,7 @@ Theorem ifexp_selected_body_nonword_outcome_ptr:
       ghost_inv d cenv cx ee G tn z /\
       ghost_kept cenv (mid with gas_obs := []) se G1 tn1 v0 G tn /\
       z.vs_current_bb = sx.cs_current_bb /\ z.vs_inst_idx = LENGTH sx.cs_current_insts)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `body_expr_ptr_ok cx a /\ body_expr_ptr_ok cx b` by
@@ -111,7 +111,7 @@ Theorem ifexp_nonword_normal_continuation_ptr:
       ptr_buf_ok cenv (IfExp t c a b) (Var rv) G z /\
       ghost_inv d cenv cx ee G tn z /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
       z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `bind (eval_expr cx c) (read_result cx)

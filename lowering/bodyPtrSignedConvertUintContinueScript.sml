@@ -40,7 +40,7 @@ Theorem zero_scalar_continuation:
       ghost_inv d cenv cx fin H th ss /\
       ptr_val_ok cx typ v (Lit 0w) H th ss /\
       ghost_kept cenv es sa G0 tn0 s0 H th)
-    (\res fin gt out. expr_exit res out)
+    (\res fin gt out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   strip_tac >>
   `~is_bytestring_type typ` by
@@ -79,7 +79,7 @@ Theorem zero_uint_continuation:
       ghost_inv d cenv cx fin H th ss /\
       ptr_val_ok cx (BaseT (UintT b)) v (Lit 0w) H th ss /\
       ghost_kept cenv es sa G0 tn0 s0 H th)
-    (\res fin gt out. expr_exit res out)
+    (\res fin gt out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   strip_tac >> irule zero_scalar_continuation >>
   simp[is_bytestring_type_def, is_word_type_def] >> metis_tac[]

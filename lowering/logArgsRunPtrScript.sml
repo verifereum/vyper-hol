@@ -142,7 +142,7 @@ Theorem compile_log_eval_all_ptr_ind[local]:
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
       (eval_exprs cx args) (es,s0,G0,tn0)
       (log_eval_ptr_post d ctx func cenv cx es sa sb s0 G0 tn0 args xs)
-      (\res ee gt r. expr_exit res r)
+      (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >> Induct
   >- (rpt gen_tac >> strip_tac >> gvs[compile_log_eval_all_nil, ZIP_def] >>
@@ -311,7 +311,7 @@ Theorem compile_log_eval_all_ptr:
          LIST_REL (\e p. ~is_word_type (expr_type e) ==>
            ptr_buf_ok cenv e (FST p) G t) args xs /\
          ghost_kept cenv es sa G0 tn0 s0 G tn)
-      (\res ee gt r. expr_exit res r)
+      (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   irule gas_outcome_ptr_conseq >>
@@ -369,7 +369,7 @@ Theorem compile_log_eval_all_scopes_ptr:
            ptr_buf_ok cenv e (FST p) G t) args xs /\
          ghost_kept cenv es sa G0 tn0 s0 G tn /\
          MAP FDOM es.scopes = MAP FDOM ee.scopes)
-      (\res ee gt r. expr_exit res r)
+      (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   irule gas_outcome_ptr_conseq >>

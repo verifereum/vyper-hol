@@ -99,7 +99,7 @@ Theorem literal_typed_continuation_summary_ptr:
       ptr_val_ok cx (BaseT BoolT) w op G' tn' t /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res fin ghosts r. expr_exit res r)
+    (\res fin ghosts r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all literal_typed_scalar_path_arbitrary >>

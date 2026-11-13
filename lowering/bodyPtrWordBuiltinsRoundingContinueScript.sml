@@ -31,7 +31,7 @@ Theorem word_round_expr_outcome:
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   strip_tac >> Cases_on `v` >> gvs[value_has_type_def] >>
   `op_prov G x = NONE /\ op_taint tn x = {}` by

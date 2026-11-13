@@ -55,7 +55,7 @@ Theorem call_dynamic_vv_convert_summary:
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next)
-    (\res fin out. expr_exit res out)
+    (\res fin out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   strip_tac >> gvs[vyperASTTheory.expr_type_def] >>
   drule_all convert_call_marked_read_window >> strip_tac >> gvs[] >>
@@ -125,7 +125,7 @@ Theorem call_bytestring_vv_convert_summary:
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
       (?w. eval_operand op ss = SOME w /\
         w2n w + type_memory_bytes cenv ann <= ss.vs_alloca_next))
-    (\res fin out. expr_exit res out)
+    (\res fin out. expr_exit res out /\ halt_exit cx fin res out)
 Proof
   strip_tac >> gvs[vyperASTTheory.expr_type_def] >>
   drule_all convert_call_marked_read_window >> strip_tac >> gvs[] >>

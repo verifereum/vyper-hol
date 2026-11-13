@@ -557,7 +557,7 @@ Theorem counted_array_round_from_body:
     (OK s2) /\
   gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (entry,s2)
     (stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r) /\
   (!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
     stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
     ?sc rest. es2.scopes = sc :: rest /\
@@ -686,7 +686,7 @@ Theorem immutable_round_prepare:
     (OK s2) /\
   gas_outcome F (cx_tops cx) (ctx,func) source (ei,s2)
     (stmt_post ctx func cx lctx bc bc' sb0 sb1 ei s2)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   (conj_tac >- (irule push_scope_with_var_zero_exec >> simp[])) >>

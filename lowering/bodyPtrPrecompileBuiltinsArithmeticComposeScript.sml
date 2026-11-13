@@ -28,10 +28,10 @@ Theorem precompile_operand_bind_ptr:
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\ ee.gas_obs = [] /\ ~t.vs_halted /\
     (?ss tt. bind (eval_expr cx e) (read_result cx) ss = (INL v,tt)) ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,fn) PG (next v) (ee,t,G,tn)
-      Q (\res ee gt r. expr_exit res r)) ==>
+      Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,fn) PG
     (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s0,G0,tn0)
-    Q (\res ee gt r. expr_exit res r)
+    Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_tac >> strip_tac >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`

@@ -23,7 +23,7 @@ Theorem membership_mixed_source_adapter:
     es1.gas_obs = [] /\ ~s1.vs_halted /\ es2.gas_obs = [] /\ ~s2.vs_halted ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,fn) PG
       (bind (read_result cx tv) (\v2 st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st)))
-      (es2,s2,G2,tn2) Q (\res ee gt r. expr_exit res r)) /\
+      (es2,s2,G2,tn2) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)) /\
   (!marks err ee leaf sf.
     gas_exempt_cert F (cx_tops cx) (ctx,fn)
       (ignore_bind (bind (eval_expr cx e1) (read_result cx)) (return ()))
@@ -70,7 +70,7 @@ Theorem membership_mixed_source_adapter:
     (bind (bind (eval_expr cx e1) (read_result cx)) (\v1.
       bind (eval_expr cx e2) (\tv. bind (read_result cx tv)
         (\v2 st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st)))))
-    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r)
+    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt disch_tac >>
   drule_at_then (Pat `lower_value _ _ _ _ _ = _`)

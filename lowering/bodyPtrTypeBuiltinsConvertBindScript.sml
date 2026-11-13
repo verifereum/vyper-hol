@@ -43,7 +43,7 @@ Theorem convert_bind_expr_sim_ptr:
         (~is_word_type (post_value_type cenv (TypeBuiltin ann Convert dst [e])) ==>
           ptr_buf_ok cenv (TypeBuiltin ann Convert dst [e]) out H u) /\
         ghost_kept cenv es ca G0 tn0 s0 H th)
-      (\res fin gt r. expr_exit res r)) ==>
+      (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)) ==>
   expr_sim_ptr d ctx PG fn cenv cx ty (TypeBuiltin ann Convert dst [e]) es
 Proof
   strip_tac >> drule_all convert_operand_ptr_entry >>

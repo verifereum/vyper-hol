@@ -66,11 +66,11 @@ Theorem forced_endpoint_bind_outcome_ptr:
     gas_admissible (next v) (stmt_res_ok lctx) (mid with gas_obs := []) ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG (next v)
       (mid with gas_obs := [],t,G,tn) Post
-      (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)) ==>
+      (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (bind (bind (eval_expr cx e) (read_result cx)) next)
     (es,s0,G0,tn0) Post
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\res ee gt r. (!tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by

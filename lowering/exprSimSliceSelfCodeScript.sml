@@ -589,7 +589,7 @@ Theorem slice_code_continue_entry_seq[local]:
       vv_post ctx func cenv cx result es sa sb s ee tv
         (LocatedValue (expr_type result) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   drule_all slice_code_tail_control >> strip_tac >>

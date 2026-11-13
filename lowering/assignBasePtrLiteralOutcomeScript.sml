@@ -205,7 +205,7 @@ Theorem assign_base_ptr_one_byte_outcome:
         ghost_kept cenv es sa G tn s G' tn' /\
         ?a p. op = Var p /\ lookup_var p t = SOME a /\
           ptr_covers G' tn' p t 64 /\ w2n a + 64 < dimword (:256))
-      (\res ee gt r. expr_exit res r)
+      (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>

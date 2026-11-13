@@ -499,7 +499,7 @@ Theorem dynarray_round_body_prepare:
         :: es.scopes) (OK s2) /\
   gas_outcome F (cx_tops cx) (ctx,func) source (ei,s2)
     (stmt_post ctx func cx lctx bc bc' sb0 sb1 ei s2)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `gas_marked_path F ctx func cc 0 (OK s2)` by
@@ -741,7 +741,7 @@ Theorem dynarray_round_prepare:
       (OK s2) /\
     gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx stmts) (entry,s2)
       (stmt_post ctx func cx (InLoop exit_lbl incr_lbl) bc bc' sb0 sb1 entry s2)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+      (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r) /\
     alloca_frame cenv es caller cc bc entry s2
 Proof
   strip_tac >>

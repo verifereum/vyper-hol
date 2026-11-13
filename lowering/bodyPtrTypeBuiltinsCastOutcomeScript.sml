@@ -38,7 +38,7 @@ Theorem cast_convert_suffix_outcome_ptr:
       (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) ==>
   gas_outcome_ptr D tops (ctx,fn) PG
     (\st. (convert_result cx tsrc tdst v,st)) (es,s,G,tn) Q
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `is_bytestring_type tsrc /\ is_bytestring_type tdst` by

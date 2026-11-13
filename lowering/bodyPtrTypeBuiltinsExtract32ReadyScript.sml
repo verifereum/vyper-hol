@@ -52,7 +52,7 @@ Theorem extract32_tail_ptr_ready:
       ptr_vv_ok cx (post_value_type cenv (TypeBuiltin ann Extract32 (BaseT bt) [src;off]))
         (Value v) (StackValue ty op) ef H th t /\
       ghost_kept cenv es sa G0 tn0 s0 H th)
-    (\res ef gt r. expr_exit res r)
+    (\res ef gt r. expr_exit res r /\ halt_exit cx ef res r)
 Proof
   strip_tac >>
   drule_all extract32_tail_ready_certificate >>

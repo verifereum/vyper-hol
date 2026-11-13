@@ -40,11 +40,11 @@ Theorem tuple_place_head_gas_continuation_open:
     alloca_frame cenv es sp s0 cenv ff t /\
     (?ast ax ast'. assign_tuple_targets cx (BaseTarget bt) (EL i vs) ast = (INL ax,ast')) ==>
     gas_outcome F (cx_tops cx) (ctx,func) next (ff with gas_obs := [],t) Q
-      (\res ee r. expr_exit res r)) ==>
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (eval_target_place cx bt)
       (\p. ignore_bind (write_place cx p (EL i vs)) next)) (es,s0) Q
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[targetPlaceSimTheory.target_pre_def] >>
@@ -57,7 +57,7 @@ Proof
     (\res ee t. ?p. res = INL p /\
       target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r t /\
       t.vs_current_bb = sa.cs_current_bb /\ t.vs_inst_idx = LENGTH sa.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (irule target_place_sim >> simp[] >>
      fs[tuplePlaceHeadTheory.tuple_place_head_def] >> metis_tac[]) >>
   irule tuple_place_gas_outcome_bind_exec >>

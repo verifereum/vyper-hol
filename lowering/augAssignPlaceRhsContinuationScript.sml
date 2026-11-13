@@ -197,7 +197,7 @@ Theorem aug_place_rhs_operator_write_mem:
     (\res ff u. res = INL () /\
       stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry res ff u /\
       alloca_history func u /\ s_entry.vs_alloca_next <= u.vs_alloca_next)
-    (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
+    (\res ff r. (!tail. stmt_exit RetQ (ff with gas_obs := tail) res r) /\ halt_exit cx ff res r)
 Proof
   strip_tac >> irule aug_place_rhs_mem_continuation >>
   goal_assum (drule_at Any) >> simp[] >> conj_tac

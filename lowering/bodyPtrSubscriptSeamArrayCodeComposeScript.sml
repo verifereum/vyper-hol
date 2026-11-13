@@ -34,10 +34,10 @@ Theorem code_array_after_base_ptr:
      ghost_kept cenv (mid with gas_obs := []) sm G1 tn1 t Gi tni ==>
      gas_summary_ptr_at (cx_dead cx) (ctx,func) PG []
        (select_result cx (expr_type obj) captured (ValueSubscript v))
-       (raw with gas_obs := [],u,Gi,tni) Q (\res ee gt out. expr_exit res out)) ==>
+       (raw with gas_obs := [],u,Gi,tni) Q (\res ee gt out. expr_exit res out /\ halt_exit cx ee res out)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (Subscript ann obj idx)) (es,s0,G0,tn0)
-    Q (\res ee gt out. expr_exit res out)
+    Q (\res ee gt out. expr_exit res out /\ halt_exit cx ee res out)
 Proof
   strip_tac >> strip_tac >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`

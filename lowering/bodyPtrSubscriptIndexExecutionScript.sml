@@ -37,7 +37,7 @@ Theorem expr_sim_ptr_local_refresh:
           val_in_memory entry.type entry.value (w2n w) t.vs_memory /\
           (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
             val_in_memory entry.type entry.value (w2n w) mem))))
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   rpt strip_tac >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _` mp_tac >>

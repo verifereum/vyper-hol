@@ -41,7 +41,7 @@ Theorem cast_convert_operand_continuation:
       (~is_word_type (post_value_type cenv (TypeBuiltin target Convert target [e])) ==>
         ptr_buf_ok cenv (TypeBuiltin target Convert target [e]) out H u) /\
       ghost_kept cenv es ca G0 tn0 s0 H th)
-    (\res fin gt r. expr_exit res r)
+    (\res fin gt r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all convert_memory_operand_semantics >> strip_tac >>

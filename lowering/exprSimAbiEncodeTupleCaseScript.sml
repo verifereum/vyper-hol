@@ -148,7 +148,7 @@ Resume compile_abi_encode_tuple_vv_case[compose]:
         vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode ensure mid) target args)
           es sa final s0 ee tv (LocatedValue ann (mk_ptr out LocMemory)) t /\
         t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts)
-      (\res ee r. expr_exit res r)` by (rpt strip_tac >> suspend "success") >>
+      (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by (rpt strip_tac >> suspend "success") >>
   drule_all compile_abi_encode_args_case_gas_sim >>
   suspend "outcome"
 QED

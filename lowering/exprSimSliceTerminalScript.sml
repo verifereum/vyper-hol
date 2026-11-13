@@ -102,7 +102,7 @@ Theorem slice_data_bytes_outcome:
        vv_post ctx func cenv cx e es sa sb s ee tv
          (LocatedValue (expr_type e) (mk_ptr out LocMemory)) t /\
        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `EVERY (\inst. inst.inst_opcode <> INVOKE /\
@@ -196,7 +196,7 @@ Theorem slice_data_string_outcome:
        vv_post ctx func cenv cx e es sa sb s ee tv
          (LocatedValue (expr_type e) (mk_ptr out LocMemory)) t /\
        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `EVERY (\inst. inst.inst_opcode <> INVOKE /\

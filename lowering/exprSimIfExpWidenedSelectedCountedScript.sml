@@ -122,7 +122,7 @@ Theorem selected_ifexp_arm_outcome:
         (LocatedValue (expr_type e) (mk_ptr op LocMemory)) t) /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   `cs_extends sc sa /\ sc.cs_next_var <= sa.cs_next_var /\

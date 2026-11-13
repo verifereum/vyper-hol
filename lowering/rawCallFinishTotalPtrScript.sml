@@ -474,7 +474,7 @@ Theorem raw_call_scalar_finish_outcome:
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es ee protected s t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all raw_call_scalar_finish >>
   disch_then (qspecl_then [`e`, `PG`] strip_assume_tac) >>
@@ -538,7 +538,7 @@ Theorem raw_call_zero_reverting_finish_outcome:
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es ee protected s t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all raw_call_zero_reverting_finish >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
@@ -613,7 +613,7 @@ Theorem raw_call_positive_reverting_finish_outcome:
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es ee protected s t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all raw_call_positive_reverting_finish >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
@@ -696,7 +696,7 @@ Theorem raw_call_positive_nonreverting_finish_outcome:
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es ee protected s t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule_all raw_call_positive_nonreverting_finish >>
   disch_then (qspec_then `PG` strip_assume_tac) >>

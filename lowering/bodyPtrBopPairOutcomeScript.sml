@@ -73,7 +73,7 @@ Theorem bop_operand_outcome_ptr:
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
     P (INL v) ee /\ ee.gas_obs = [] /\ ~t.vs_halted ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
-      (next v) (ee,t,G,tn) Q (\res ee gt r. expr_exit res r)) /\
+      (next v) (ee,t,G,tn) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func)
       (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
@@ -94,7 +94,7 @@ Theorem bop_operand_outcome_ptr:
       (es,s0) (left ++ right) (err,ee) (leaf,fstate)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (bind (bind (eval_expr cx e) (read_result cx)) next)
-    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r)
+    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   irule gas_outcome_ptr_bind >> simp[] >>

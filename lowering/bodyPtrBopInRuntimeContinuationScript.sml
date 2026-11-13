@@ -57,7 +57,7 @@ Theorem membership_array_continuation_summary_ptr:
       ptr_val_ok cx (BaseT BoolT) (BoolV b) op G' tn' t /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res fin ghosts r. expr_exit res r)
+    (\res fin ghosts r. expr_exit res r /\ halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `ws = (case av of DynArrayV vs => MAP (typed_val_to_w256 tv) vs

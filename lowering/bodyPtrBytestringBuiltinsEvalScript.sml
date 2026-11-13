@@ -111,7 +111,7 @@ Theorem compile_unary_builtin_eval_vv_sim_ptr:
         (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
           ptr_buf_ok cenv (Builtin ann bt [e]) p.ptr_operand Gf u) /\
         ghost_kept cenv es sa G0 tn0 s0 Gf tnf)
-      (\res ef gt r. expr_exit res r)) ==>
+      (\res ef gt r. expr_exit res r /\ halt_exit cx ef res r)) ==>
   expr_vv_sim_ptr d ctx PG func cenv cx ty (Builtin ann bt [e]) es
 Proof
   strip_tac >> rewrite_tac[bodyPtrDefsTheory.expr_vv_sim_ptr_def] >>

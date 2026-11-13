@@ -25,7 +25,7 @@ Theorem widened_place_raw_rhs_outcome:
       vv_post ctx func cenv cx e es sa sv s0 ee (Value v) vv t /\
       t.vs_current_bb = sv.cs_current_bb /\
       t.vs_inst_idx = LENGTH sv.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!st pv ee. eval_expr cx e st = (INL pv,ee) ==> ?v. pv = Value v` by
@@ -121,7 +121,7 @@ Proof
       vv_post ctx func cenv cx e es sa sv s0 ee (Value v) vv t /\
       t.vs_current_bb = sv.cs_current_bb /\
       t.vs_inst_idx = LENGTH sv.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
     (irule widened_place_raw_rhs_outcome >> simp[] >> metis_tac[]) >>
   irule assign_place_raw_outcome >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >> simp[] >>

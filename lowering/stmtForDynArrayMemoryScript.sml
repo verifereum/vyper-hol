@@ -239,7 +239,7 @@ Resume compile_for_dynarray_frag_mem[public]:
     (irule array_round_outcome_prefix_mem >> goal_assum (drule_at Any) >> gvs[]) >>
   ` (\res ee rr. ?ex. res = INR ex /\
        !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr) =
-    (\res ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) res rr)` by
+    (\res ee rr. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res rr) /\ halt_exit cx ee res rr)` by
     (simp[FUN_EQ_THM] >> Cases_on `res` >>
      simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def]) >>
   gvs[] >>

@@ -88,7 +88,7 @@ Theorem pop_storage_empty_summary:
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} ==>
   gas_summary_ptr_at (cx_dead cx) (ctx,func) PG []
     (pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))))
-    (es,s,G,tn) Q (\res ee gt r. expr_exit res r)
+    (es,s,G,tn) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule nested_pop_suffix_shape >> strip_tac >> gvs[] >>
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\

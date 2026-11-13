@@ -73,7 +73,7 @@ Theorem normalized_arm_join_outcome[local]:
         (LocatedValue ann (mk_ptr op LocMemory)) u) /\
       u.vs_current_bb = sd.cs_current_bb /\
       u.vs_inst_idx = LENGTH sd.cs_current_insts)
-    (\res ee r. expr_exit res r) /\
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r) /\
   emit_inst ASSIGN [op] [rv] sd = ((),se) /\
   emit_inst JMP [Label xl] [] se = ((),sf) /\
   fn_has_code sd se func /\ fn_has_code se sf func /\
@@ -92,7 +92,7 @@ Theorem normalized_arm_join_outcome[local]:
          else LocatedValue ann (mk_ptr (Var rv) LocMemory)) u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = 0)
-    (\res ee r. expr_exit res r)
+    (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> irule outcome_zero_suffix >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>

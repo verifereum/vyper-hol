@@ -28,7 +28,7 @@ Theorem bop_word_pair_outcome_ptr:
     (\res ee G tn t. ?v. res = INL v /\
       bop_operand_post d ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
         es ca cz op t0 G0 tn0 v ee t G tn)
-    (\res ee gt r. expr_exit res r)
+    (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >> drule expr_body_pre_bop >> strip_tac >> irule (BETA_RULE (Q.INST [`next` |->
     `\v1 v2 st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st)`]

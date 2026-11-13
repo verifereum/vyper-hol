@@ -66,7 +66,7 @@ Theorem ifexp_condition_exit_ptr:
   gas_marked_exec_ptr D (ctx,fn) PG (bind (eval_expr cx c) (read_result cx))
     (es,s0,G0,tn0) marks res mid G tn r /\ expr_exit res r ==>
   gas_outcome_ptr D tops (ctx,fn) PG (eval_expr cx (IfExp t c a b))
-    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r)
+    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   Cases_on `res` >> simp[] >> strip_tac >>
   simp[gas_outcome_ptr_def, gas_summary_ptr_at_marked] >>
