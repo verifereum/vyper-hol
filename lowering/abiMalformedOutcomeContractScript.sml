@@ -11,10 +11,11 @@ Definition abi_malformed_constructor_outcome_def:
   abi_malformed_constructor_outcome env ty di ctx func cenv cx es st en
       base_op hi src dst outsz <=>
     fn_has_code st en func ==>
-    !B L xs p d dstid live ceiling incoming.
+    !B L xs p d dstid live ceiling incoming
+        (H:(bool # bytes32 # type_value) list # num list).
       en.cs_next_var <= ceiling.cs_next_var /\
       (case di of DecPrimWord clamp => p + 32 <= L | _ => T) /\
-      abi_malformed_entry ctx func cenv cx es st
+      abi_malformed_entry H ctx func cenv cx es st
         (abi_malformed_scratch_sites st en func) dstid live
         base_op hi src dst B L xs p d outsz incoming /\
       fresh_vars_wrt ceiling incoming /\
@@ -54,10 +55,11 @@ Definition abi_malformed_members_outcome_def:
       type_memory_size_list tvs < dimword (:256) /\
       vo + type_memory_size_list tvs <= outsz /\
       fn_inst_ids_distinct func /\ fn_has_code st en func ==>
-      !B L xs p d dstid live ceiling incoming.
+      !B L xs p d dstid live ceiling incoming
+        (H:(bool # bytes32 # type_value) list # num list).
         en.cs_next_var <= ceiling.cs_next_var /\
         p + ao + SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) <= L /\
-        abi_malformed_entry ctx func cenv cx es st
+        abi_malformed_entry H ctx func cenv cx es st
           (abi_malformed_scratch_sites st en func) dstid live
           base_op hi src dst B L xs p d outsz incoming /\
         fresh_vars_wrt ceiling incoming /\
@@ -84,7 +86,7 @@ Proof
   rewrite_tac [abi_malformed_constructor_def, abi_malformed_constructor_outcome_def] >>
   rpt strip_tac >> irule frag_outcome_apply >>
   simp[] >> qexists_tac `(\v. v = incoming /\
-    abi_malformed_entry ctx func cenv cx es st
+    abi_malformed_entry H ctx func cenv cx es st
       (abi_malformed_scratch_sites st en func) dstid live
       base_op hi src dst B L xs p d outsz v /\ fresh_vars_wrt ceiling v)` >>
   simp[] >> qexists_tac `st` >> simp[] >> first_x_assum irule >> simp[]
@@ -108,7 +110,7 @@ Proof
     abi_malformed_members_outcome_def] >> rpt strip_tac >>
   irule frag_outcome_apply >> simp[] >>
   qexists_tac `(\v. v = incoming /\
-    abi_malformed_entry ctx func cenv cx es st
+    abi_malformed_entry H ctx func cenv cx es st
       (abi_malformed_scratch_sites st en func) dstid live
       base_op hi src dst B L xs p d outsz v /\ fresh_vars_wrt ceiling v)` >>
   simp[] >> qexists_tac `st` >> simp[] >>
@@ -150,7 +152,7 @@ Theorem abi_malformed_constructor_outcome_continue:
     base_op hi src dst outsz /\ fn_has_code st en func /\
   en.cs_next_var <= ceiling.cs_next_var /\
   (case di of DecPrimWord clamp => p + 32 <= L | _ => T) /\
-  abi_malformed_entry ctx func cenv cx es st
+  abi_malformed_entry H ctx func cenv cx es st
     (abi_malformed_scratch_sites st en func) dstid live
     base_op hi src dst B L xs p d outsz incoming /\
   fresh_vars_wrt ceiling incoming /\

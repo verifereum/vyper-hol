@@ -16,12 +16,13 @@ Definition abi_malformed_members_contract_def:
       type_memory_size_list tvs < dimword (:256) /\
       vo + type_memory_size_list tvs <= outsz /\
       fn_inst_ids_distinct func /\ fn_has_code st en func ==>
-      !B L xs p d dstid live ceiling incoming.
+      !B L xs p d dstid live ceiling incoming
+        (H:(bool # bytes32 # type_value) list # num list).
         en.cs_next_var <= ceiling.cs_next_var /\
         p + ao + SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) <= L ==>
         frag_exec ctx st en
           (\v. v = incoming /\
-            abi_malformed_entry ctx func cenv cx es st
+            abi_malformed_entry H ctx func cenv cx es st
               (abi_malformed_scratch_sites st en func) dstid live
               base_op hi src dst B L xs p d outsz v /\
             fresh_vars_wrt ceiling v)

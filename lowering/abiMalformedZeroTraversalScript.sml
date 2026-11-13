@@ -6,7 +6,7 @@ Ancestors
   compileEnv venomState venomInst venomExecSemantics words list arithmetic
 
 Theorem abi_malformed_zero_traversal:
-  abi_malformed_entry ctx func cenv cx es start sites dstid live
+  abi_malformed_entry H ctx func cenv cx es start sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   eval_operand ip s = SOME (n2w slot) /\ mload slot s = 0w /\
   slot < dimword (:256) /\
@@ -33,13 +33,13 @@ Theorem abi_malformed_zero_traversal:
 Proof
   strip_tac >>
   `?h. abi_decode_sim ctx func s h /\
-    abi_malformed_traversal_inv ctx func cenv cx es env ty start limit_st
+    abi_malformed_traversal_inv H ctx func cenv cx es env ty start limit_st
       sites dstid live base_op hi src dst B L xs p d outsz ip slot inst q 0 s 0 h /\
     h.vs_current_bb = hdr /\ h.vs_inst_idx = 0 /\ ~h.vs_halted` by
     (irule abi_malformed_traversal_initial >> simp[] >>
      qexists_tac `entry_id` >> simp[]) >>
   irule abi_malformed_outcome_sim >> qexists_tac `h` >> simp[] >>
   irule abi_malformed_traversal_done >> simp[] >>
-  goal_assum (drule_at (Pat `abi_malformed_traversal_inv ctx func cenv cx es env ty start limit_st sites dstid live base_op hi src dst B L xs p d outsz ip slot inst q 0 s 0 h`)) >>
+  goal_assum (drule_at (Pat `abi_malformed_traversal_inv H ctx func cenv cx es env ty start limit_st sites dstid live base_op hi src dst B L xs p d outsz ip slot inst q 0 s 0 h`)) >>
   simp[] >> qexistsl_tac [`body_lbl`, `hid`] >> simp[]
 QED

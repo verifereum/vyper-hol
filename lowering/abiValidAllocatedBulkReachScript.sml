@@ -9,7 +9,7 @@ Ancestors
 Theorem abi_valid_allocated_bulk_reach:
   type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn)) =
     DecDynArray ei abi_sz mem_sz F maxn /\ ~dec_info_needs_clamp ei /\
-  abi_valid_allocated_entry ce env sf (ArrayT ty (Dynamic maxn))
+  abi_valid_allocated_entry H ce env sf (ArrayT ty (Dynamic maxn))
     (ArrayTV tv (Dynamic maxn)) v ctx func cenv cx es
     st en base_op hi src dst B L xs p d dstid live ceiling s ==>
   ?t. abi_valid_allocated_post (ArrayTV tv (Dynamic maxn)) v
@@ -60,6 +60,6 @@ Proof
   simp[abi_valid_allocated_post_def, fresh_vars_wrt_def,
     abi_malformed_resource_post_def, stmt_state_rel_inst_idx, eval_op_inst_idx,
     abi_valid_allocated_frame_def, abi_malformed_site_range_def] >>
-  qpat_x_assum `abi_valid_allocated_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `abi_valid_allocated_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   conj_tac >- fs[fresh_vars_wrt_def] >> first_assum ACCEPT_TAC
 QED

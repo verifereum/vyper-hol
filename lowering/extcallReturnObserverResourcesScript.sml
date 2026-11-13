@@ -55,7 +55,7 @@ Proof
 QED
 
 Theorem return_observer_input_ready:
-  abi_return_decode_ready ctx func ce cx es st sites dstid live base_op dst
+  abi_return_decode_ready H ctx func ce cx es st sites dstid live base_op dst
     B cap bs d n s /\
   fn_inst_ids_distinct func /\ fn_inst_ids_distinct obs /\
   (!i. i.inst_opcode = ALLOCA ==>
@@ -63,7 +63,7 @@ Theorem return_observer_input_ready:
   (!i. MEM i (fn_insts obs) ==> i.inst_opcode <> INVOKE) /\
   (!i. MEM i (fn_insts obs) /\ i.inst_opcode = DALLOCA ==>
     MEM i (fn_insts func)) ==>
-  abi_return_decode_ready (return_observer_context ctx obs) obs ce cx es st
+  abi_return_decode_ready H (return_observer_context ctx obs) obs ce cx es st
     sites dstid live base_op dst B cap bs d n s
 Proof
   strip_tac >>
@@ -75,7 +75,7 @@ Proof
 QED
 
 Theorem return_observer_input_entry:
-  abi_malformed_entry ctx func ce cx es st sites dstid live base_op hi src dst
+  abi_malformed_entry H ctx func ce cx es st sites dstid live base_op hi src dst
     B L xs p d n s /\
   fn_inst_ids_distinct func /\ fn_inst_ids_distinct obs /\
   (!i. i.inst_opcode = ALLOCA ==>
@@ -83,7 +83,7 @@ Theorem return_observer_input_entry:
   (!i. MEM i (fn_insts obs) ==> i.inst_opcode <> INVOKE) /\
   (!i. MEM i (fn_insts obs) /\ i.inst_opcode = DALLOCA ==>
     MEM i (fn_insts func)) ==>
-  abi_malformed_entry (return_observer_context ctx obs) obs ce cx es st
+  abi_malformed_entry H (return_observer_context ctx obs) obs ce cx es st
     sites dstid live base_op hi src dst B L xs p d n s
 Proof
   strip_tac >>
@@ -122,7 +122,7 @@ QED
 Theorem return_observer_output_resources:
   abi_malformed_resource_post (return_observer_context ctx obs) obs
     ce cx es next sites dstid s t /\
-  stmt_state_rel H ctx func ce cx es s /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ fn_inst_ids_distinct obs /\
   (!i. i.inst_opcode = ALLOCA ==>
     (MEM i (fn_insts obs) <=> MEM i (fn_insts func))) /\

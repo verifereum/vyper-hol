@@ -44,7 +44,7 @@ Theorem return_allocated_decode_ready:
   mem_bytes_at B (LENGTH (TAKE cap bs)) s.vs_memory = TAKE cap bs /\
   (!aid. aid IN sites ==> sm.cs_next_id <= aid) ==>
   ?r d. gas_marked_path F ctx func s 0 (OK r) /\
-    abi_return_decode_ready ctx func cenv cx es sm sites sa.cs_next_id live
+    abi_return_decode_ready H ctx func cenv cx es sm sites sa.cs_next_id live
       base_op buf.buf_operand B cap bs d n r /\
     (!x. not_fresh_at sa x ==> lookup_var x r = lookup_var x s) /\
     (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==>
@@ -137,9 +137,9 @@ Proof
 QED
 
 Theorem return_decode_ready_prune[local]:
-  abi_return_decode_ready ctx func cenv cx es a sites dstid live base_op dst
+  abi_return_decode_ready H ctx func cenv cx es a sites dstid live base_op dst
     B cap bs d n s ==>
-  abi_return_decode_ready ctx func cenv cx es a sites dstid live base_op dst
+  abi_return_decode_ready H ctx func cenv cx es a sites dstid live base_op dst
     B cap bs d n (drop_fresh a s)
 Proof
   strip_tac >> fs[abi_return_decode_ready_def] >>
@@ -161,10 +161,10 @@ Theorem return_decode_ready_entry:
   compile_return_value_decode lo cap a = (hi,b) /\
   lo < dimword (:256) /\ cap < dimword (:256) /\
   s.vs_returndata = bs /\ LENGTH bs < dimword (:256) /\ lo <= LENGTH bs /\
-  abi_return_decode_ready ctx func cenv cx es a sites dstid live base_op dst
+  abi_return_decode_ready H ctx func cenv cx es a sites dstid live base_op dst
     B cap bs d n s ==>
   ?u. run_inst_seq (emitted_insts a b) s = OK u /\
-    abi_malformed_entry ctx func cenv cx es b sites dstid live base_op hi
+    abi_malformed_entry H ctx func cenv cx es b sites dstid live base_op hi
       (Lit 0w) dst B (LENGTH (TAKE cap bs)) (TAKE cap bs) 0 d n
       (u with vs_inst_idx := LENGTH b.cs_current_insts) /\
     u = s with vs_vars := u.vs_vars /\

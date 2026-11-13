@@ -55,7 +55,7 @@ Proof
   simp_tac bool_ss [abi_valid_allocated_effect_def] >> strip_tac >>
   `alloca_inv t /\ s.vs_alloca_next <= t.vs_alloca_next /\
     t.vs_alloca_next <= u.vs_alloca_next` by
-    fs[abi_malformed_resource_post_def, stmt_state_rel_def] >>
+    (fs[abi_malformed_resource_post_def, stmt_state_rel_def] >> metis_tac[]) >>
   conj_tac >- metis_tac[abi_malformed_resource_trans] >>
   conj_tac >- (irule abi_valid_allocated_frame_trans >> qexists_tac `t` >> simp[]) >>
   rpt strip_tac >>
@@ -100,7 +100,7 @@ Proof
 QED
 
 Theorem abi_valid_allocated_effect_refl:
-  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s ==>
   abi_valid_allocated_effect ctx func cenv cx es next sites dstid d n s s
 Proof
   simp[abi_valid_allocated_effect_def, abi_malformed_resource_refl,
@@ -109,10 +109,10 @@ QED
 
 (* Code layout is a consumer premise, not part of the memory invariant. *)
 Definition abi_valid_allocated_array_inv_def:
-  abi_valid_allocated_array_inv ctx func cenv cx es start limit_st
+  abi_valid_allocated_array_inv H ctx func cenv cx es start limit_st
       sites dstid live base_op hi src dst B L xs p d outsz
       ip slot inst q hdr tv vs origin j u <=>
-    abi_malformed_entry ctx func cenv cx es start sites dstid live
+    abi_malformed_entry H ctx func cenv cx es start sites dstid live
       base_op hi src dst B L xs p d outsz u /\
     abi_valid_allocated_array_prefix tv vs j d u /\
     eval_operand ip u = SOME (n2w slot) /\ mload slot u = n2w j /\
@@ -128,7 +128,7 @@ Definition abi_valid_allocated_array_inv_def:
 End
 
 Theorem abi_valid_allocated_array_inv_complete:
-  abi_valid_allocated_array_inv ctx func cenv cx es start limit_st
+  abi_valid_allocated_array_inv H ctx func cenv cx es start limit_st
     sites dstid live base_op hi src dst B L xs p d outsz
     ip slot inst q hdr tv vs origin (LENGTH vs) u ==>
   val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d u.vs_memory

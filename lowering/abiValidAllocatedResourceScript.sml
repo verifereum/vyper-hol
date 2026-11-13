@@ -9,7 +9,7 @@ Ancestors
 
 (* Allocation-free decoder execution preserves the destination's resource frame. *)
 Theorem abi_valid_allocated_scratch_free_resource:
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
   fn_inst_ids_distinct func /\
   abi_malformed_destination func cenv es.scopes dstid d n s /\
   abi_decode_frame d n s t /\

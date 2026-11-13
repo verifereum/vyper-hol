@@ -14,7 +14,7 @@ Ancestors
 Theorem abi_valid_allocated_complex_guard:
   abi_decode_complex_head_guard src hi H st = ((),middle) /\
   fn_has_code st middle func /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry HZ ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d n s /\
   p + H <= L /\ middle.cs_next_var <= ceiling.cs_next_var /\
   fresh_vars_wrt ceiling s /\ ~s.vs_halted /\
@@ -62,7 +62,7 @@ Theorem abi_valid_allocated_complex_members_entry:
   compile_abi_decode_complex_elems dst src MLOAD base_op hi
     (abi_decoder_member_infos sf ce tys) 0 0 middle = ((),en) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
-  abi_malformed_entry ctx func cenv cx es st
+  abi_malformed_entry HZ ctx func cenv cx es st
     (abi_malformed_scratch_sites st en func) dstid live
     base_op hi src dst B L xs p d n s /\
   LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
@@ -79,7 +79,7 @@ Theorem abi_valid_allocated_complex_members_entry:
     t.vs_alloca_next = s.vs_alloca_next /\
     abi_malformed_resource_post ctx func cenv cx es st.cs_next_var
       (abi_malformed_scratch_sites st en func) dstid s t /\
-    abi_valid_allocated_members_entry ce env sf tys tvs vs ctx func cenv cx es
+    abi_valid_allocated_members_entry HZ ce env sf tys tvs vs ctx func cenv cx es
       middle en base_op hi src dst B L xs p d n 0 0 dstid live ceiling t
 Proof
   strip_tac >>
@@ -96,7 +96,7 @@ Proof
   `EVERY (abi_decoder_operand_live middle.cs_next_var) [base_op;hi;src;dst]` by
     (fs[abi_malformed_entry_def, EVERY_MEM] >> rpt strip_tac >>
      irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
-  `abi_malformed_entry ctx func cenv cx es middle
+  `abi_malformed_entry HZ ctx func cenv cx es middle
     (abi_malformed_scratch_sites middle en func) dstid live
     base_op hi src dst B L xs p d n t` by
     (drule_all abi_malformed_aggregate_reentry >> simp[]) >>
@@ -147,7 +147,7 @@ Theorem abi_valid_allocated_complex_members:
   compile_abi_decode_to_buf dst src MLOAD base_op hi
     (DecComplex dyn (abi_decoder_member_infos sf ce tys)) st = ((),en) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
-  abi_malformed_entry ctx func cenv cx es st
+  abi_malformed_entry H ctx func cenv cx es st
     (abi_malformed_scratch_sites st en func) dstid live
     base_op hi src dst B L xs p d (type_memory_size_list tvs) s /\
   LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\

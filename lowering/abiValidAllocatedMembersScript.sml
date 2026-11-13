@@ -12,21 +12,22 @@ Ancestors
 
 Definition abi_valid_allocated_type_contract_def:
   abi_valid_allocated_type_contract ce env sf ty tv <=>
-  !v ctx func cenv cx es st en base_op hi src dst B L xs p d dstid live ceiling s.
-    abi_valid_allocated_entry ce env sf ty tv v ctx func cenv cx es
+  !v ctx func cenv cx es st en base_op hi src dst B L xs p d dstid live ceiling s
+    (H:(bool # bytes32 # type_value) list # num list).
+    abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
       st en base_op hi src dst B L xs p d dstid live ceiling s ==>
     ?t. abi_valid_allocated_post tv v ctx func cenv cx es st en ceiling dstid
       d (type_memory_bytes ce ty) s t
 End
 
 Definition abi_valid_allocated_members_entry_def:
-  abi_valid_allocated_members_entry ce env sf tys tvs vs ctx func cenv cx es
+  abi_valid_allocated_members_entry H ce env sf tys tvs vs ctx func cenv cx es
       st en base_op hi src dst B L xs p d outsz ao vo dstid live ceiling s <=>
     LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
     compile_abi_decode_complex_elems dst src MLOAD base_op hi
       (abi_decoder_member_infos sf ce tys) ao vo st = ((),en) /\
     fn_has_code st en func /\ fn_inst_ids_distinct func /\
-    abi_malformed_entry ctx func cenv cx es st
+    abi_malformed_entry H ctx func cenv cx es st
       (abi_malformed_scratch_sites st en func) dstid live
       base_op hi src dst B L xs p d outsz s /\
     vo + type_memory_size_list tvs <= outsz /\
@@ -54,8 +55,9 @@ End
 
 Definition abi_valid_allocated_members_contract_def:
   abi_valid_allocated_members_contract ce env sf tys tvs <=>
-  !vs ctx func cenv cx es st en base_op hi src dst B L xs p d outsz ao vo dstid live ceiling s.
-    abi_valid_allocated_members_entry ce env sf tys tvs vs ctx func cenv cx es
+  !vs ctx func cenv cx es st en base_op hi src dst B L xs p d outsz ao vo dstid live ceiling s
+    (H:(bool # bytes32 # type_value) list # num list).
+    abi_valid_allocated_members_entry H ce env sf tys tvs vs ctx func cenv cx es
       st en base_op hi src dst B L xs p d outsz ao vo dstid live ceiling s ==>
     ?t. abi_valid_allocated_members_post tvs vs ctx func cenv cx es st en ceiling dstid
       (d+vo) (type_memory_size_list tvs) s t
@@ -114,7 +116,7 @@ QED
 
 Theorem abi_valid_allocated_empty_sequence:
   type_to_abi_dec_info sf ce ty = DecComplex dynamic [] /\
-  abi_valid_allocated_entry ce env sf ty tv v ctx func cenv cx es
+  abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
     st en base_op hi src dst B L xs p d dstid live ceiling s ==>
   ?t. run_inst_seq (emitted_insts st en) s = OK t /\
     fresh_vars_wrt ceiling t /\
@@ -159,7 +161,7 @@ QED
 
 Theorem abi_valid_allocated_empty_dynamic:
   type_to_abi_dec_info sf ce ty = DecComplex T [] /\
-  abi_valid_allocated_entry ce env sf ty tv v ctx func cenv cx es
+  abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
     st en base_op hi src dst B L xs p d dstid live ceiling s ==>
   ?t. abi_valid_allocated_post tv v ctx func cenv cx es st en ceiling dstid
     d (type_memory_bytes ce ty) s t

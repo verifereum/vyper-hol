@@ -27,7 +27,7 @@ QED
 
 Theorem abi_malformed_index_resource:
   abi_decode_index_init st = (ip,en) /\
-  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv st /\
   MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
@@ -71,7 +71,7 @@ QED
 
 Theorem abi_malformed_init_header_resource:
   abi_decode_array_header dst addr MLOAD st = (cnt,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   32 <= outsz /\ fn_inst_ids_distinct func /\
   eval_operand addr s = SOME a /\ fresh_vars_wrt st s ==>

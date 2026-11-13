@@ -13,7 +13,7 @@ Theorem abi_malformed_compiled_zero:
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) MLOAD base_op hi di middle = ((),end_st) /\
   abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),final) /\
   fn_has_code start final func /\
-  abi_malformed_entry ctx func cenv cx es start sites dstid live
+  abi_malformed_entry H ctx func cenv cx es start sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   eval_operand ip s = SOME (n2w slot) /\ mload slot s = 0w /\ slot < dimword (:256) /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
@@ -45,7 +45,7 @@ Proof
   `st.cs_next_var <= middle.cs_next_var` by
     (drule abi_decode_array_element_setup_operands >> simp[]) >>
   irule abi_malformed_zero_traversal >> simp[] >>
-  goal_assum (drule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >>
   qexistsl_tac [`st.cs_current_bb`, `start.cs_next_id`, `FST labels`,
     `start.cs_next_id+1`, `inst`, `ip`, `q`, `slot`] >>

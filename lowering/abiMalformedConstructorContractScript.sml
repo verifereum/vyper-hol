@@ -18,12 +18,13 @@ Definition abi_malformed_constructor_def:
   abi_malformed_constructor env ty di ctx func cenv cx es st en
       base_op hi src dst outsz <=>
     fn_has_code st en func ==>
-    !B L xs p d dstid live ceiling incoming.
+    !B L xs p d dstid live ceiling incoming
+        (H:(bool # bytes32 # type_value) list # num list).
       en.cs_next_var <= ceiling.cs_next_var /\
       (case di of DecPrimWord clamp => p + 32 <= L | _ => T) ==>
       frag_exec ctx st en
         (\v. v = incoming /\
-          abi_malformed_entry ctx func cenv cx es st
+          abi_malformed_entry H ctx func cenv cx es st
             (abi_malformed_scratch_sites st en func) dstid live
             base_op hi src dst B L xs p d outsz v /\
           fresh_vars_wrt ceiling v)
@@ -39,7 +40,7 @@ End
 (* Exact single-store boundary used by primitive constructors.  The register
    assignment is a proof description of real execution, not a runtime prune. *)
 Theorem abi_malformed_destination_store_resource:
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   32 <= outsz /\ fn_inst_ids_distinct func /\
   (!x. not_fresh_at st x ==> FLOOKUP vars x = FLOOKUP s.vs_vars x) ==>
@@ -202,7 +203,7 @@ QED
 Theorem abi_malformed_primitive_run_resource:
   compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),en) /\
   abi_decode_source_opcode opc /\ fn_inst_ids_distinct func /\ 32 <= outsz /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   run_inst_seq (emitted_insts st en) s = OK t ==>
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
@@ -243,7 +244,7 @@ Theorem abi_malformed_primitive_reflected_run:
   (?av. has_type (vyper_to_abi_type env ty) av) /\
   fn_inst_ids_distinct func /\ 32 <= outsz /\ p + 32 <= L /\
   en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry HZ ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s ==>
   (?t. run_inst_seq (emitted_insts st en) s = Abort Revert_abort t) \/
   (?t. run_inst_seq (emitted_insts st en) s = OK t /\
@@ -252,7 +253,7 @@ Theorem abi_malformed_primitive_reflected_run:
     fresh_vars_wrt ceiling t)
 Proof
   strip_tac >>
-  `abi_malformed_entry ctx func cenv cx es st sites dstid live
+  `abi_malformed_entry HZ ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz
       (abi_decoder_prune_vars st.cs_next_var s)` by
     (irule abi_malformed_entry_prune >> simp[]) >>
@@ -301,7 +302,7 @@ Theorem abi_malformed_primitive_reflected_fragment:
   en.cs_next_var <= ceiling.cs_next_var ==>
   frag_exec ctx st en
     (\v. v = incoming /\
-      abi_malformed_entry ctx func cenv cx es st sites dstid live
+      abi_malformed_entry H ctx func cenv cx es st sites dstid live
         base_op hi src dst B L xs p d outsz v /\ fresh_vars_wrt ceiling v)
     (\u. abi_malformed_reflected_post env ty (TAKE 32 (DROP p xs))
       ctx func cenv cx es st.cs_next_var sites dstid incoming u /\
@@ -366,7 +367,7 @@ Theorem abi_malformed_read_sequence_resource:
                abi_decode_source_opcode i.inst_opcode) /\
              EVERY (\x. ~not_fresh_at st x) i.inst_outputs) is /\
   run_inst_seq is s = OK t /\
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st ==>
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\ local_ptrs_reserved cenv st ==>
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
   strip_tac >> drule_all abi_malformed_read_sequence_frame >> strip_tac >>
@@ -385,7 +386,7 @@ QED
 Theorem abi_malformed_empty_reflected_run:
   compile_abi_decode_to_buf dst src MLOAD base_op hi (DecComplex dynamic []) st = ((),en) /\
   en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry HZ ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s ==>
   (?t. run_inst_seq (emitted_insts st en) s = Abort Revert_abort t) \/
   (?t. run_inst_seq (emitted_insts st en) s = OK t /\ p <= L /\

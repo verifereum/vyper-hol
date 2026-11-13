@@ -14,7 +14,7 @@ Theorem abi_malformed_aggregate_guard_run:
   abi_decode_complex_head_guard src hi H st = ((),en) /\
   H < dimword (:256) /\
   en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry HZ ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s ==>
   (?t. run_inst_seq (emitted_insts st en) s = Abort Revert_abort t) \/
   (?t. run_inst_seq (emitted_insts st en) s = OK t /\ p+H <= L /\
@@ -60,7 +60,7 @@ Theorem abi_malformed_aggregate_guard_fragment:
   abi_decode_complex_head_guard src hi H st = ((),en) /\
   H < dimword (:256) /\
   en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling incoming /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry HZ ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz incoming ==>
   frag_exec ctx st en (\s. s = incoming)
     (\t. p+H <= L /\
@@ -92,7 +92,7 @@ Theorem abi_malformed_aggregate_fragment:
   SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) < dimword (:256) /\
   fn_inst_ids_distinct func /\ fn_has_code st en func /\
   en.cs_next_var <= ceiling.cs_next_var /\
-  abi_malformed_entry ctx func cenv cx es st
+  abi_malformed_entry HZ ctx func cenv cx es st
     (abi_malformed_scratch_sites st en func) dstid live
     base_op hi src dst B L xs p d outsz incoming /\ fresh_vars_wrt ceiling incoming ==>
   frag_exec ctx st en (\s. s = incoming)
@@ -127,7 +127,7 @@ Proof
   `abi_malformed_scratch_sites mid en func SUBSET
      abi_malformed_scratch_sites st en func` by
     (irule abi_malformed_scratch_sites_nested >> simp[]) >>
-  `abi_malformed_entry ctx func cenv cx es mid
+  `abi_malformed_entry HZ ctx func cenv cx es mid
      (abi_malformed_scratch_sites mid en func) dstid live
      base_op hi src dst B L xs p d outsz t` by
     (irule abi_malformed_aggregate_reentry >> conj_tac

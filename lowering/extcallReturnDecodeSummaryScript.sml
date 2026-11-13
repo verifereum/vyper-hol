@@ -15,7 +15,7 @@ Theorem return_capped_allocated_success:
   compile_abi_decode_to_buf dst (Lit 0w) MLOAD base_op hi
     (type_to_abi_dec_info sf ce rt) st = ((),en) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
-  abi_malformed_entry ctx func cenv cx es st
+  abi_malformed_entry H ctx func cenv cx es st
     (abi_malformed_scratch_sites st en func) dstid live base_op hi
     (Lit 0w) dst B (LENGTH (TAKE cap bs)) (TAKE cap bs) 0 d
     (type_memory_bytes ce rt) s /\

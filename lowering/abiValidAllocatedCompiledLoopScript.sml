@@ -29,7 +29,7 @@ Theorem abi_valid_allocated_compiled_loop:
     (abi_decode_members (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
       (DROP (p+32) xs) (DROP (p+32) xs)) = SOME vs /\
   (!k. k < LENGTH vs ==> d+32+k*type_memory_size tv+type_memory_bytes ce ty <= d+outsz) /\
-  abi_valid_allocated_array_inv ctx func cenv cx es start ceiling
+  abi_valid_allocated_array_inv H ctx func cenv cx es start ceiling
     (abi_malformed_scratch_sites start outer_end func) dstid live base_op hi src dst
     B L xs p d outsz ip slot inst q
     (fresh_label_output "dec_dyn_hdr" loop_st.cs_next_label) tv vs origin 0 s ==>

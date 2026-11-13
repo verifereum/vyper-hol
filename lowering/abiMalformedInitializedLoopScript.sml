@@ -16,7 +16,7 @@ Theorem abi_malformed_initialized_loop_outcome:
   abi_decode_array_loop_init dst src MLOAD base_op hi maxn abi_sz st = ((ip,cnt),loop_st) /\
   compile_abi_decode_dyn_loop dst src MLOAD base_op hi di abi_sz mem_sz ip cnt loop_st = ((),en) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
-  abi_malformed_entry ctx func cenv cx es st
+  abi_malformed_entry H ctx func cenv cx es st
     (abi_malformed_scratch_sites st en func) dstid live
     base_op hi src dst B L xs p d outsz incoming /\
   fresh_vars_wrt ceiling incoming /\ en.cs_next_var <= ceiling.cs_next_var /\
@@ -93,7 +93,7 @@ Proof
   disch_then (qspecl_then [`incoming`, `func`] mp_tac) >> simp[] >> strip_tac >>
   irule frag_outcome_compose >> goal_assum (drule_at Any) >> simp[] >>
   rpt strip_tac >>
-  `abi_malformed_entry ctx func cenv cx es loop_st
+  `abi_malformed_entry H ctx func cenv cx es loop_st
      (abi_malformed_scratch_sites st en func) dstid live
      base_op hi src dst B L xs p d outsz t` by
     (`local_ptrs_reserved cenv loop_st` by
@@ -129,7 +129,7 @@ Proof
         `inst` |-> `mk_inst header_st.cs_next_id ALLOCA [Lit 32w]
           [STRING #"%" (toString header_st.cs_next_var)]`,
         `n` |-> `abi_head_word (DROP p xs)`]) >>
-  disch_then (drule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[GSYM mk_inst_def] >>
   disch_then (qspecl_then [`ty`, `slot`, `header_st`, `env`, `childsz`, `ceiling`] mp_tac) >>
   fs[mk_inst_def, GSYM abi_member_head_size_def] >>
@@ -152,7 +152,7 @@ Resume abi_malformed_initialized_loop_outcome[zero]:
   disch_then (drule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `abi_decode_loop_suffix _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `abi_malformed_entry _ _ _ _ _ loop_st _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_malformed_entry _ _ _ _ _ _ loop_st _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts func)`)) >>
   simp[mk_inst_def] >>
   disch_then (qspecl_then [`ty`, `env`, `ceiling`] mp_tac) >>

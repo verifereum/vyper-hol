@@ -18,7 +18,7 @@ Ancestors
 
 Theorem abi_valid_allocated_array_init_fresh_run:
   abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = (setup,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   fn_inst_ids_distinct func /\ fresh_vars_wrt st s /\
   maxn < dimword (:256) /\ 32 <= outsz /\
@@ -48,7 +48,7 @@ Proof
   disch_then (qspecl_then [`s`, `p`, `n`, `B`] mp_tac) >>
   (impl_tac >- (simp[] >> disj2_tac >> qexists_tac `L` >> simp[] >> gvs[MULT_COMM])) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st guard_st) s = OK guarded` >>
-  `abi_malformed_entry ctx func cenv cx es guard_st sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es guard_st sites dstid live
     base_op hi src dst B L xs p d outsz guarded` by
     (drule_all abi_malformed_dynarray_prefix_entry >> simp[]) >>
   drule_all abi_malformed_init_header_resource >> strip_tac >>
@@ -79,7 +79,7 @@ QED
 
 Theorem abi_valid_allocated_array_init_run:
   abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = (setup,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling s /\
   en.cs_next_var <= ceiling.cs_next_var /\
@@ -105,7 +105,7 @@ QED
 (* Total resource interface, with the abort case eliminated by valid bounds. *)
 Theorem abi_valid_allocated_array_init_resources:
   abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = (setup,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling s /\
   en.cs_next_var <= ceiling.cs_next_var /\
@@ -146,7 +146,7 @@ QED
 
 Theorem abi_valid_allocated_index_effect:
   abi_decode_index_init st = (ip,en) /\
-  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv st /\ st.cs_next_id IN sites /\
   MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
@@ -199,7 +199,7 @@ QED
 
 Theorem abi_valid_allocated_array_header_effect:
   abi_decode_array_header dst addr MLOAD st = (cnt,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   32 <= outsz /\ fn_inst_ids_distinct func /\
   eval_operand addr s = SOME a /\ fresh_vars_wrt st s ==>
@@ -231,7 +231,7 @@ QED
 Theorem abi_valid_allocated_array_guard_effect:
   abi_decode_dynarray_position_prefix src MLOAD base_op hi maxn stride st = (addr,en) /\
   run_inst_seq (emitted_insts st en) s = OK t /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s ==>
   abi_valid_allocated_effect ctx func cenv cx es st.cs_next_var
     sites dstid d outsz s t
@@ -255,7 +255,7 @@ QED
 
 Theorem abi_valid_allocated_array_init_fresh_effect:
   abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = (setup,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   fn_inst_ids_distinct func /\ fresh_vars_wrt st s /\
   maxn < dimword (:256) /\ 32 <= outsz /\
@@ -292,7 +292,7 @@ Proof
   disch_then (qspecl_then [`s`, `p`, `n`, `B`] mp_tac) >>
   (impl_tac >- (simp[] >> disj2_tac >> qexists_tac `L` >> simp[] >> gvs[MULT_COMM])) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st guard_st) s = OK guarded` >>
-  `abi_malformed_entry ctx func cenv cx es guard_st sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es guard_st sites dstid live
     base_op hi src dst B L xs p d outsz guarded` by
     (drule_all abi_malformed_dynarray_prefix_entry >> simp[]) >>
   drule_all abi_valid_allocated_array_header_effect >> strip_tac >>
@@ -381,7 +381,7 @@ Finalise abi_valid_allocated_array_init_fresh_effect
 
 Theorem abi_valid_allocated_array_init_effect:
   abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = (setup,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling s /\
   en.cs_next_var <= ceiling.cs_next_var /\
@@ -437,7 +437,7 @@ QED
 
 Theorem abi_valid_allocated_array_init_fragment:
   abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = (setup,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz incoming /\
   fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling incoming /\
   en.cs_next_var <= ceiling.cs_next_var /\
@@ -468,7 +468,7 @@ QED
 
 Theorem abi_valid_allocated_array_init_reach:
   abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = ((ip,cnt),en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz incoming /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling incoming /\
   en.cs_next_var <= ceiling.cs_next_var /\
@@ -484,7 +484,7 @@ Theorem abi_valid_allocated_array_init_reach:
     abi_decode_sim ctx func incoming t /\
     ~t.vs_halted /\ t.vs_current_bb = en.cs_current_bb /\
     t.vs_inst_idx = LENGTH en.cs_current_insts /\
-    abi_malformed_entry ctx func cenv cx es st sites dstid live
+    abi_malformed_entry H ctx func cenv cx es st sites dstid live
       base_op hi src dst B L xs p d outsz t /\
     abi_valid_allocated_array_prefix tv vs 0 d t /\
     abi_valid_allocated_effect ctx func cenv cx es st.cs_next_var
@@ -511,7 +511,7 @@ QED
 Theorem abi_valid_allocated_array_init_loop_entry:
   abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = ((ip,cnt),loop_st) /\
   compile_abi_decode_dyn_loop dst src MLOAD base_op hi di stride memsz ip cnt loop_st = ((),en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz incoming /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling incoming /\
   en.cs_next_var <= ceiling.cs_next_var /\
@@ -526,7 +526,7 @@ Theorem abi_valid_allocated_array_init_loop_entry:
   ?u slot.
     abi_decode_sim ctx func incoming u /\
     eval_operand cnt u = SOME (n2w (LENGTH vs)) /\
-    abi_valid_allocated_array_inv ctx func cenv cx es st ceiling
+    abi_valid_allocated_array_inv H ctx func cenv cx es st ceiling
       sites dstid live base_op hi src dst B L xs p d outsz
       ip slot (mk_inst (loop_st.cs_next_id-2) ALLOCA [Lit 32w]
         [STRING #"%" (toString (loop_st.cs_next_var-1))])

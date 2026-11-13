@@ -15,7 +15,7 @@ Ancestors
 
 Theorem abi_valid_allocated_bytes_input:
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
-  abi_valid_allocated_entry ce env sf ty tv v ctx func cenv cx es
+  abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
     st en base_op hi src dst B L xs p d dstid live ceiling s ==>
   ?at payload.
     abi_decoder_valid_bytes_pre n at (DROP p xs) payload st src dst MLOAD
@@ -74,7 +74,7 @@ QED
 
 Theorem abi_valid_allocated_bytes_reach:
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
-  abi_valid_allocated_entry ce env sf ty tv v ctx func cenv cx es
+  abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
     st en base_op hi src dst B L xs p d dstid live ceiling s ==>
   ?t. abi_valid_allocated_post tv v ctx func cenv cx es st en ceiling dstid
       d (type_memory_bytes ce ty) s t /\
@@ -125,13 +125,13 @@ Proof
   simp[abi_valid_allocated_post_def, fresh_vars_wrt_def,
     abi_malformed_resource_post_def, stmt_state_rel_inst_idx, eval_op_inst_idx,
     abi_valid_allocated_frame_def, abi_malformed_site_range_def] >>
-  qpat_x_assum `abi_valid_allocated_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `abi_valid_allocated_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   conj_tac >- fs[fresh_vars_wrt_def] >> first_assum ACCEPT_TAC
 QED
 
 Theorem abi_valid_allocated_primitive_input:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
-  abi_valid_allocated_entry ce env sf ty tv v ctx func cenv cx es
+  abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
     st en base_op hi src dst B L xs p d dstid live ceiling s ==>
   type_memory_bytes ce ty = 32 /\
   mem_bytes_at (B+p) 32 s.vs_memory =
@@ -169,7 +169,7 @@ QED
 
 Theorem abi_valid_allocated_primitive_reach:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
-  abi_valid_allocated_entry ce env sf ty tv v ctx func cenv cx es
+  abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
     st en base_op hi src dst B L xs p d dstid live ceiling s ==>
   ?t. abi_valid_allocated_post tv v ctx func cenv cx es st en ceiling dstid
       d (type_memory_bytes ce ty) s t /\
@@ -223,6 +223,6 @@ Proof
   simp[abi_valid_allocated_post_def, fresh_vars_wrt_def,
     abi_malformed_resource_post_def, stmt_state_rel_inst_idx, eval_op_inst_idx,
     abi_valid_allocated_frame_def, abi_malformed_site_range_def] >>
-  qpat_x_assum `abi_valid_allocated_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `abi_valid_allocated_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   conj_tac >- fs[fresh_vars_wrt_def] >> first_assum ACCEPT_TAC
 QED

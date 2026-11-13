@@ -28,9 +28,9 @@ Proof
 QED
 
 Theorem return_reject_entry_control[local]:
-  abi_malformed_entry ctx func ce cx es st sites dstid live
+  abi_malformed_entry H ctx func ce cx es st sites dstid live
     base_op hi src dst B len xs p d n s ==>
-  abi_malformed_entry ctx func ce cx es (start_relabel L ids st)
+  abi_malformed_entry H ctx func ce cx es (start_relabel L ids st)
     sites dstid live base_op hi src dst B len xs p d n
     (s with vs_current_bb := L)
 Proof
@@ -73,7 +73,7 @@ Theorem return_capped_observer_reject:
     MEM i (fn_insts func)) /\
   (case type_to_abi_dec_info sf ce rt of
      DecPrimWord clamp => 32 <= LENGTH (TAKE cap bs) | _ => T) /\
-  abi_malformed_entry ctx func cenv cx es st
+  abi_malformed_entry H ctx func cenv cx es st
     (abi_malformed_scratch_sites st en func) dstid live base_op hi
     (Lit 0w) dst B (LENGTH (TAKE cap bs)) (TAKE cap bs) 0 d
     (type_memory_bytes ce rt) s /\
@@ -103,7 +103,7 @@ Proof
   qexists_tac `ty` >>
   first_assum (irule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   asm_rewrite_tac[] >>
-  first_assum (irule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`err`, `ceiling`] >>
   gvs[start_relabel_def]
 QED
@@ -124,7 +124,7 @@ Theorem return_capped_counted_reject:
     (type_to_abi_dec_info sf ce rt) st = ((),en) /\
   (case type_to_abi_dec_info sf ce rt of
      DecPrimWord clamp => 32 <= LENGTH (TAKE cap bs) | _ => T) /\
-  abi_malformed_entry ctx func cenv cx es st
+  abi_malformed_entry H ctx func cenv cx es st
     (abi_malformed_scratch_sites st en func) dstid live base_op hi
     (Lit 0w) dst B (LENGTH (TAKE cap bs)) (TAKE cap bs) 0 d
     (type_memory_bytes ce rt) s /\
@@ -148,7 +148,7 @@ Proof
       `?fuel u. run_from fuel (return_observer_context ctx fn') fn'
          (s with vs_current_bb := st.cs_current_bb) = Abort Revert_abort u` by
         (irule return_capped_observer_reject >>
-         first_assum (irule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+         first_assum (irule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
          first_assum (irule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
          first_assum (irule_at (Pat `fn_has_code _ _ _`)) >>
          simp[] >> metis_tac[]) >>
@@ -165,7 +165,7 @@ Proof
   `?fuel u. run_from fuel (return_observer_context ctx fn') fn'
      (s with vs_current_bb := L) = Abort Revert_abort u` by
     (irule return_capped_observer_reject >>
-     first_assum (irule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      first_assum (irule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
      first_assum (irule_at (Pat `fn_has_code _ _ _`)) >>
      simp[] >> metis_tac[]) >>

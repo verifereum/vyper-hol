@@ -10,9 +10,9 @@ Ancestors
   abiDecodeRanges abiDecoderWordTyped contractABI vyperABI valueEncoding valueEncodingDefs words list rich_list arithmetic
 
 Theorem abi_malformed_entry_restrict_sites[local]:
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d n s /\ child_sites SUBSET sites ==>
-  abi_malformed_entry ctx func cenv cx es st child_sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st child_sites dstid live
     base_op hi src dst B L xs p d n s
 Proof
   simp_tac bool_ss [abi_malformed_entry_def] >>
@@ -24,7 +24,7 @@ Theorem abi_malformed_constructor_continue[local]:
     base_op hi src dst outsz /\ fn_has_code st mid func /\
   mid.cs_next_var <= ceiling.cs_next_var /\
   (case di of DecPrimWord clamp => p+32 <= L | _ => T) /\
-  abi_malformed_entry ctx func cenv cx es st
+  abi_malformed_entry H ctx func cenv cx es st
     (abi_malformed_scratch_sites st mid func) dstid live
     base_op hi src dst B L xs p d outsz incoming /\
   fresh_vars_wrt ceiling incoming /\ cs_extends st mid /\ cs_extends mid en /\
@@ -47,7 +47,7 @@ Proof
        fresh_vars_wrt ceiling u`, `mid`] >> simp[] >>
   irule frag_exec_pre_exit >>
   qexistsl_tac [`\v. v = incoming /\
-    abi_malformed_entry ctx func cenv cx es st
+    abi_malformed_entry H ctx func cenv cx es st
       (abi_malformed_scratch_sites st mid func) dstid live
       base_op hi src dst B L xs p d outsz v /\ fresh_vars_wrt ceiling v`,
     `\r. ?v. r = Abort Revert_abort v`] >> simp[] >>
@@ -65,7 +65,7 @@ Theorem abi_malformed_members_finish[local]:
   fn_inst_ids_distinct func /\ fn_has_code st en func /\
   en.cs_next_var <= ceiling.cs_next_var /\
   p+ao+SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) <= L /\
-  abi_malformed_entry ctx func cenv cx es st
+  abi_malformed_entry H ctx func cenv cx es st
     (abi_malformed_scratch_sites st en func) dstid live
     base_op hi src dst B L xs p d outsz incoming /\ fresh_vars_wrt ceiling incoming /\
   (!u. vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys)
@@ -79,7 +79,7 @@ Theorem abi_malformed_members_finish[local]:
 Proof
   strip_tac >> irule frag_exec_conseq >>
   qexistsl_tac [`\s. s = incoming /\
-    abi_malformed_entry ctx func cenv cx es st
+    abi_malformed_entry H ctx func cenv cx es st
       (abi_malformed_scratch_sites st en func) dstid live
       base_op hi src dst B L xs p d outsz s /\ fresh_vars_wrt ceiling s`,
     `\u. vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys)
@@ -137,7 +137,7 @@ Proof
   `abi_malformed_scratch_sites middle end_st func SUBSET
      abi_malformed_scratch_sites st en func` by
     (irule abi_malformed_scratch_sites_nested >> decide_tac) >>
-  `abi_malformed_entry ctx func cenv cx es middle
+  `abi_malformed_entry H ctx func cenv cx es middle
      (abi_malformed_scratch_sites middle end_st func) dstid live
      base_op hi (FST ops) (SND ops) B L xs
      (p + if dec_info_needs_offset (type_to_abi_dec_info sf ce ty)
@@ -167,7 +167,7 @@ Proof
   `local_ptrs_reserved cenv end_st` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `st` >>
      fs[abi_malformed_entry_def] >> decide_tac) >>
-  `abi_malformed_entry ctx func cenv cx es end_st
+  `abi_malformed_entry H ctx func cenv cx es end_st
      (abi_malformed_scratch_sites end_st en func) dstid live
      base_op hi src dst B L xs p d outsz t'` by
     (irule abi_malformed_aggregate_reentry >> simp[] >>

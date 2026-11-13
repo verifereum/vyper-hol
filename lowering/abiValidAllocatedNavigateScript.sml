@@ -11,7 +11,7 @@ Theorem abi_valid_allocated_member_navigate:
   abi_decoder_coherent ce env sf ty tv /\
   abi_decode_member_setup dst src MLOAD base_op hi
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   LENGTH xs = L /\
   p+ao+abi_member_head_size (vyper_to_abi_type env ty) <= L /\
@@ -20,7 +20,7 @@ Theorem abi_valid_allocated_member_navigate:
   vo+type_memory_bytes ce ty <= outsz /\
   en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s ==>
   ?t. run_inst_seq (emitted_insts st en) s = OK t /\
-    abi_malformed_entry ctx func cenv cx es en sites dstid live
+    abi_malformed_entry H ctx func cenv cx es en sites dstid live
       base_op hi (FST ops) (SND ops) B L xs
       (p + if dec_info_needs_offset (type_to_abi_dec_info sf ce ty)
            then abi_head_word (DROP (p+ao) xs) else ao)

@@ -12,7 +12,7 @@ Ancestors
   words list rich_list arithmetic pred_set abiDecodeRanges abiValidMembers
 
 Theorem abi_valid_allocated_members_head_entry:
-  abi_valid_allocated_members_entry ce env sf (ty::tys) (tv::tvs) vs
+  abi_valid_allocated_members_entry H ce env sf (ty::tys) (tv::tvs) vs
     ctx func cenv cx es st en base_op hi src dst B L xs p d outsz ao vo dstid live ceiling s /\
   abi_decode_member_setup dst src MLOAD base_op hi
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
@@ -29,7 +29,7 @@ Theorem abi_valid_allocated_members_head_entry:
     abi_decode_sim ctx func s t /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     t.vs_alloca_next = s.vs_alloca_next /\
-    abi_valid_allocated_entry ce env sf ty tv v ctx func cenv cx es middle end_st
+    abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es middle end_st
       base_op hi (FST ops) (SND ops) B L xs
       (p + if dec_info_needs_offset (type_to_abi_dec_info sf ce ty)
            then abi_head_word (DROP (p+ao) xs) else ao)
@@ -67,7 +67,7 @@ Proof
     (emitted_insts st middle)` by fs[EVERY_MEM] >>
   drule_all abi_decoder_run_sequence_reach >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  qmatch_asmsub_abbrev_tac `abi_malformed_entry ctx func cenv cx es middle _ _ _ _ _ _ _ _ _ _ q _ _ t` >>
+  qmatch_asmsub_abbrev_tac `abi_malformed_entry H ctx func cenv cx es middle _ _ _ _ _ _ _ _ _ _ q _ _ t` >>
   `q <= L /\ vyper_decode_valid_enc (vyper_to_abi_type env ty) (DROP q xs) /\
    (is_dynamic (vyper_to_abi_type env ty) \/ q + static_length (vyper_to_abi_type env ty) <= L) /\
    dec (vyper_to_abi_type env ty)
@@ -97,7 +97,7 @@ Proof
 QED
 
 Theorem abi_valid_allocated_members_tail_entry:
-  abi_valid_allocated_members_entry ce env sf (ty::tys) (tv::tvs) (v::rest)
+  abi_valid_allocated_members_entry H ce env sf (ty::tys) (tv::tvs) (v::rest)
     ctx func cenv cx es st en base_op hi src dst B L xs p d outsz ao vo dstid live ceiling s /\
   abi_decode_member_setup dst src MLOAD base_op hi
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
@@ -111,7 +111,7 @@ Theorem abi_valid_allocated_members_tail_entry:
     (abi_malformed_scratch_sites st en func) dstid s u /\
   abi_valid_allocated_post tv v ctx func cenv cx es middle end_st ceiling dstid
     (d+vo) (type_memory_bytes ce ty) u t ==>
-  abi_valid_allocated_members_entry ce env sf tys tvs rest
+  abi_valid_allocated_members_entry H ce env sf tys tvs rest
     ctx func cenv cx es end_st en base_op hi src dst B L xs p d outsz
     (ao + abi_embedded_static_size ce.ce_struct_fields ty)
     (vo + type_memory_bytes ce ty) dstid live ceiling t
@@ -139,7 +139,7 @@ Proof
   `local_ptrs_reserved cenv end_st` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `st` >>
      fs[abi_malformed_entry_def] >> decide_tac) >>
-  `abi_malformed_entry ctx func cenv cx es end_st
+  `abi_malformed_entry H ctx func cenv cx es end_st
     (abi_malformed_scratch_sites end_st en func) dstid live
     base_op hi src dst B L xs p d outsz t` by
     (irule abi_malformed_aggregate_reentry >>

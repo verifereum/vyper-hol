@@ -12,7 +12,7 @@ Ancestors
 
 Theorem abi_valid_allocated_static_window:
   ~is_dynamic (vyper_to_abi_type env ty) /\
-  abi_valid_allocated_entry ce env sf ty tv v ctx func cenv cx es
+  abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
     st en base_op hi src dst B L xs p d dstid live ceiling s ==>
   mem_bytes_at (B+p) (static_length (vyper_to_abi_type env ty)) s.vs_memory =
     enc (vyper_to_abi_type env ty) (dec (vyper_to_abi_type env ty) (DROP p xs))
@@ -48,7 +48,7 @@ QED
 
 Theorem abi_valid_allocated_bulk_window:
   ~is_dynamic (vyper_to_abi_type env ty) /\
-  abi_valid_allocated_entry ce env sf (ArrayT ty (Dynamic maxn))
+  abi_valid_allocated_entry H ce env sf (ArrayT ty (Dynamic maxn))
     (ArrayTV tv (Dynamic maxn)) v ctx func cenv cx es
     st en base_op hi src dst B L xs p d dstid live ceiling s ==>
   let at = Array NONE (vyper_to_abi_type env ty) in
@@ -90,7 +90,7 @@ QED
 Theorem abi_valid_allocated_bulk_sequence:
   type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn)) =
     DecDynArray ei abi_sz mem_sz F maxn /\ ~dec_info_needs_clamp ei /\
-  abi_valid_allocated_entry ce env sf (ArrayT ty (Dynamic maxn))
+  abi_valid_allocated_entry H ce env sf (ArrayT ty (Dynamic maxn))
     (ArrayTV tv (Dynamic maxn)) v ctx func cenv cx es
     st en base_op hi src dst B L xs p d dstid live ceiling s ==>
   ?actual. run_inst_seq (emitted_insts st en) s = OK actual /\

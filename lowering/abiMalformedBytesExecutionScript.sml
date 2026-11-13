@@ -70,7 +70,7 @@ QED
 Theorem abi_malformed_bytes_prefix_resource:
   abi_decode_bytes_position_prefix src MLOAD base_op hi n st = ((addr,cnt),en) /\
   run_inst_seq (emitted_insts st en) s = OK t /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s ==>
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
@@ -135,7 +135,7 @@ Theorem abi_malformed_bytes_prefix_reflected_total:
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
   type_memory_bytes ce ty <= outsz /\ fresh_vars_wrt st s /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s ==>
   (?t. run_inst_seq (emitted_insts st en) s = Abort Revert_abort t) \/
   (?c t. c <= n /\ p+32+c <= L /\
@@ -172,7 +172,7 @@ QED
 
 Theorem abi_malformed_bytes_runtime_tail_resource:
   abi_decode_bytes_runtime_tail dst addr cnt st = ((),en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   eval_operand addr s = SOME (n2w a) /\ eval_operand cnt s = SOME (n2w c) /\
   c+31 < dimword (:256) /\ 32+c < dimword (:256) /\
@@ -203,7 +203,7 @@ QED
 
 Theorem abi_malformed_bytes_fixed_tail_resource:
   emit_void MCOPY [dst; src; Lit (n2w ncopy)] st = ((),en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   ncopy <= outsz /\ fresh_vars_wrt st s /\ fn_inst_ids_distinct func ==>
   ?t. run_inst_seq (emitted_insts st en) s = OK t /\ fresh_vars_wrt en t /\
@@ -224,9 +224,9 @@ QED
 Theorem abi_malformed_bytes_prefix_entry:
   abi_decode_bytes_position_prefix src MLOAD base_op hi n st = ((addr,cnt),en) /\
   run_inst_seq (emitted_insts st en) s = OK t /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s ==>
-  abi_malformed_entry ctx func cenv cx es en sites dstid live
+  abi_malformed_entry H ctx func cenv cx es en sites dstid live
     base_op hi src dst B L xs p d outsz t
 Proof
   strip_tac >> drule_all abi_malformed_bytes_prefix_resource >> strip_tac >>
@@ -250,7 +250,7 @@ Theorem abi_malformed_bytes_fresh_total:
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
   type_memory_bytes ce ty <= outsz /\ fresh_vars_wrt st s /\ fn_inst_ids_distinct func /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s ==>
   (?t. run_inst_seq (emitted_insts st en) s = Abort Revert_abort t) \/
   (?t. run_inst_seq (emitted_insts st en) s = OK t /\ fresh_vars_wrt en t /\
@@ -267,7 +267,7 @@ Proof
   drule_all abi_malformed_bytes_prefix_reflected_total >> strip_tac
   >- suspend "abort" >>
   rename1 `run_inst_seq (emitted_insts st mid) s = OK s1` >>
-  `abi_malformed_entry ctx func cenv cx es mid sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es mid sites dstid live
      base_op hi src dst B L xs p d outsz s1` by
     (drule_all abi_malformed_bytes_prefix_entry >> simp[]) >>
   drule_all abi_decode_bytes_position_prefix_shape >> strip_tac >>
@@ -345,7 +345,7 @@ Theorem abi_malformed_bytes_reflected_run:
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
   type_memory_bytes ce ty <= outsz /\ fn_inst_ids_distinct func /\
   en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s ==>
   (?t. run_inst_seq (emitted_insts st en) s = Abort Revert_abort t) \/
   (?t. run_inst_seq (emitted_insts st en) s = OK t /\ fresh_vars_wrt ceiling t /\

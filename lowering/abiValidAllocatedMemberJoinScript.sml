@@ -10,7 +10,7 @@ Ancestors
   vyperTypeABI exprSimDefs exprLoweringProps words list rich_list arithmetic pred_set
 
 Theorem abi_valid_allocated_members_cons_post:
-  abi_valid_allocated_members_entry ce env sf (ty::tys) (tv::tvs) (v::vs)
+  abi_valid_allocated_members_entry H ce env sf (ty::tys) (tv::tvs) (v::vs)
     ctx func cenv cx es st en base_op hi src dst B L xs p d outsz ao vo dstid live ceiling s /\
   abi_decode_member_setup dst src MLOAD base_op hi
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\

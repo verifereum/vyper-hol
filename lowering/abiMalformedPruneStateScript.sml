@@ -68,3 +68,18 @@ Proof
   qexists_tac `st` >> simp[abi_decoder_prune_vars_def] >>
   gvs[abi_decoder_prune_vars_def]
 QED
+
+Theorem abi_malformed_unprune_state:
+  stmt_state_rel H ctx func cenv cx es (abi_decoder_prune_vars st.cs_next_var s) /\
+  local_ptrs_reserved cenv st ==>
+  stmt_state_rel H ctx func cenv cx es s
+Proof
+  strip_tac >>
+  drule_then (drule_then (qspec_then `s.vs_vars` mp_tac))
+    abi_malformed_vars_restore_state >>
+  impl_tac
+  >- simp[not_fresh_at_def, lookup_var_def, abi_decoder_prune_vars_def,
+          FLOOKUP_DRESTRICT, abi_decoder_older_vars_def] >>
+  `s with vs_vars := s.vs_vars = s` by simp[venom_state_component_equality] >>
+  simp[]
+QED

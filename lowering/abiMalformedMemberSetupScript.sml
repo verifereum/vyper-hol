@@ -29,7 +29,7 @@ QED
 Theorem abi_malformed_member_setup_resource:
   abi_decode_member_setup dst src MLOAD base_op hi dyn ao vo st = (ops,en) /\
   run_inst_seq (emitted_insts st en) s = OK t /\
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st ==>
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\ local_ptrs_reserved cenv st ==>
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
   strip_tac >>
@@ -109,13 +109,13 @@ QED
 
 Theorem abi_malformed_member_setup_entry:
   abi_decode_member_setup dst src MLOAD base_op hi dyn ao vo st = (ops,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   run_inst_seq (emitted_insts st en) s = OK t /\
   eval_operand (FST ops) t = SOME (n2w child_pos) /\
   eval_operand (SND ops) t = SOME (n2w (d + vo)) /\
   child_pos < dimword (:256) /\ vo + childsz <= outsz ==>
-  abi_malformed_entry ctx func cenv cx es en sites dstid live
+  abi_malformed_entry H ctx func cenv cx es en sites dstid live
     base_op hi (FST ops) (SND ops) B L xs child_pos (d + vo) childsz t /\
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
@@ -144,13 +144,13 @@ QED
    decoded value or well-formedness of the selected payload is assumed. *)
 Theorem abi_malformed_member_setup_observed:
   abi_decode_member_setup dst src MLOAD base_op hi dyn ao vo st = (ops,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   p + ao + (if dyn then 32 else 0) <= L /\ vo + childsz <= outsz /\
   en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s ==>
   (?t. run_inst_seq (emitted_insts st en) s = Abort Revert_abort t) \/
   ?t. run_inst_seq (emitted_insts st en) s = OK t /\
-    abi_malformed_entry ctx func cenv cx es en sites dstid live
+    abi_malformed_entry H ctx func cenv cx es en sites dstid live
       base_op hi (FST ops) (SND ops) B L xs
       (p + if dyn then abi_head_word (DROP (p+ao) xs) else ao)
       (d+vo) childsz t /\
@@ -177,15 +177,15 @@ Proof
   >- (disj1_tac >> metis_tac[]) >>
   disj2_tac >> goal_assum (drule_at Any) >> simp[] >>
   drule abi_malformed_member_setup_entry >>
-  disch_then (drule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then irule >> simp[] >>
   Cases_on `dyn` >> fs[] >> decide_tac
 QED
 
 Theorem abi_malformed_entry_inst_idx:
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz (t with vs_inst_idx := n) <=>
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz t
 Proof
   simp[abi_malformed_entry_def, abi_malformed_allocated_window_def,
@@ -208,9 +208,9 @@ Theorem abi_malformed_member_setup_fragment:
   en.cs_next_var <= ceiling.cs_next_var ==>
   frag_exec ctx st en
     (\v. v = incoming /\
-      abi_malformed_entry ctx func cenv cx es st sites dstid live
+      abi_malformed_entry H ctx func cenv cx es st sites dstid live
         base_op hi src dst B L xs p d outsz v /\ fresh_vars_wrt ceiling v)
-    (\u. abi_malformed_entry ctx func cenv cx es en sites dstid live
+    (\u. abi_malformed_entry H ctx func cenv cx es en sites dstid live
       base_op hi (FST ops) (SND ops) B L xs
       (p + if dyn then abi_head_word (DROP (p+ao) xs) else ao)
       (d+vo) childsz u /\
@@ -234,12 +234,12 @@ QED
 (* A completed child returns to the aggregate's original operands, not the
    temporary child pointers. The allocation authority remains unchanged. *)
 Theorem abi_malformed_aggregate_reentry:
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t /\
   st.cs_next_var <= en.cs_next_var /\ local_ptrs_reserved cenv en /\
   tail_sites SUBSET sites ==>
-  abi_malformed_entry ctx func cenv cx es en tail_sites dstid live
+  abi_malformed_entry H ctx func cenv cx es en tail_sites dstid live
     base_op hi src dst B L xs p d outsz t
 Proof
   strip_tac >>

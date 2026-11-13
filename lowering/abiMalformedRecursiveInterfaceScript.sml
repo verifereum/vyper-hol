@@ -27,7 +27,11 @@ End
 
 Definition abi_malformed_resource_post_def:
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s t <=>
-    stmt_state_rel H ctx func cenv cx es t /\
+    (?H0:(bool # bytes32 # type_value) list # num list.
+       stmt_state_rel H0 ctx func cenv cx es t) /\
+    (!H:(bool # bytes32 # type_value) list # num list.
+       stmt_state_rel H ctx func cenv cx es s ==>
+         stmt_state_rel H ctx func cenv cx es t) /\
     s.vs_alloca_next <= t.vs_alloca_next /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -71,10 +75,10 @@ Proof
 QED
 
 Theorem abi_malformed_resource_refl:
-  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s ==>
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s s
 Proof
-  simp[abi_malformed_resource_post_def]
+  simp[abi_malformed_resource_post_def] >> metis_tac[]
 QED
 
 Theorem abi_malformed_resource_weaken:
@@ -83,6 +87,7 @@ Theorem abi_malformed_resource_weaken:
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s t
 Proof
   rw[abi_malformed_resource_post_def]
+  >- metis_tac[]
   >- (first_x_assum irule >> qexistsl_tac [`aid`, `cap`] >>
       fs[SUBSET_DEF] >> metis_tac[]) >>
   first_x_assum irule >> simp[] >>
@@ -95,6 +100,7 @@ Theorem abi_malformed_resource_trans:
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s u
 Proof
   rw[abi_malformed_resource_post_def]
+  >- metis_tac[]
   >- (qpat_assum `!aid B cap L. _ ==> mem_bytes_at B L t.vs_memory = _`
         (qspecl_then [`aid`, `B`, `cap`, `L`] mp_tac) >>
       simp[] >> strip_tac >>
@@ -123,12 +129,14 @@ Theorem abi_malformed_resource_prune:
     (abi_decoder_prune_vars st.cs_next_var t)
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es
-     (abi_decoder_prune_vars st.cs_next_var t)` by
-    (irule abi_malformed_prune_state >>
-     fs[abi_malformed_resource_post_def]) >>
-  simp[abi_malformed_resource_post_def, abi_decoder_prune_vars_def] >>
-  fs[abi_malformed_resource_post_def] >> conj_tac
+  simp[Once abi_malformed_resource_post_def] >> rpt conj_tac
+  >- (fs[abi_malformed_resource_post_def] >>
+      irule_at Any abi_malformed_prune_state >> metis_tac[])
+  >- (rpt strip_tac >> fs[abi_malformed_resource_post_def] >>
+      irule abi_malformed_prune_state >> simp[] >>
+      first_x_assum irule >> irule abi_malformed_unprune_state >> metis_tac[]) >>
+  simp[abi_decoder_prune_vars_def] >>
+  fs[abi_malformed_resource_post_def]
   >- (rpt strip_tac >> first_x_assum irule >>
       qexistsl_tac [`aid`, `cap`] >> simp[]) >>
   rpt strip_tac >>
@@ -190,12 +198,16 @@ Proof
     (drule abi_decoder_vars_extend_restore >>
      disch_then (mp_tac o AP_TERM ``\v:venom_state. v with vs_vars := u.vs_vars``) >>
      simp[]) >>
-  `stmt_state_rel H ctx func cenv cx es u` by
-    (qpat_x_assum `u = _` SUBST1_TAC >>
+  `!H. stmt_state_rel H ctx func cenv cx es t ==>
+       stmt_state_rel H ctx func cenv cx es u` by
+    (rpt strip_tac >> qpat_x_assum `u = _` SUBST1_TAC >>
      irule abi_malformed_reserved_vars_state >>
-     reverse conj_tac >- fs[abi_malformed_resource_post_def] >>
+     reverse conj_tac >- simp[] >>
      qexists_tac `st` >> fs[lookup_var_def]) >>
-  fs[abi_malformed_resource_post_def] >> conj_tac
+  simp[Once abi_malformed_resource_post_def] >> rpt conj_tac
+  >- (fs[abi_malformed_resource_post_def] >> metis_tac[])
+  >- (fs[abi_malformed_resource_post_def] >> metis_tac[]) >>
+  fs[abi_malformed_resource_post_def]
   >- (rpt strip_tac >> first_x_assum irule >>
       qexistsl_tac [`aid`, `cap`] >> simp[]) >>
   rpt strip_tac >> irule abi_decoder_vars_extend_eval >> qexistsl_tac [`extras`, `t`] >>
@@ -203,7 +215,8 @@ Proof
 QED
 
 Definition abi_malformed_entry_def:
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry (H:(bool # bytes32 # type_value) list # num list)
+      ctx func cenv cx es st sites dstid live
       base_op hi src dst B L xs p d n s <=>
     stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
     abi_malformed_allocated_window live B L xs s /\
@@ -228,7 +241,7 @@ End
 (* Child navigation supplies the new pointer operands, not a decoded value.
    A dynamic pointer may be outside L; the child's real guard must reject it. *)
 Theorem abi_malformed_child_entry:
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d n s /\
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t /\
   child_sites SUBSET sites /\ local_ptrs_reserved cenv child /\
@@ -238,7 +251,7 @@ Theorem abi_malformed_child_entry:
   eval_operand child_dst t = SOME (n2w cd) /\
   EVERY (abi_decoder_operand_live child.cs_next_var)
     [base_op;hi;child_src;child_dst] ==>
-  abi_malformed_entry ctx func cenv cx es child child_sites dstid live
+  abi_malformed_entry H ctx func cenv cx es child child_sites dstid live
     base_op hi child_src child_dst B L xs child_pos cd cn t
 Proof
   strip_tac >>
@@ -286,9 +299,9 @@ Proof
 QED
 
 Theorem abi_malformed_entry_prune:
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d n s ==>
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d n
     (abi_decoder_prune_vars st.cs_next_var s)
 Proof

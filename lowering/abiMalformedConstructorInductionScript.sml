@@ -31,7 +31,7 @@ Theorem abi_malformed_constructor_traversal_child:
     (case di of DecPrimWord clamp => cp+32 <= L | _ => T) ==>
     frag_exec ctx child child_end
       (\v. v = incoming /\
-        abi_malformed_entry ctx func cenv cx es child child_sites dstid live
+        abi_malformed_entry H ctx func cenv cx es child child_sites dstid live
           base_op hi src dst B L xs cp cd childsz v /\
         fresh_vars_wrt ceiling v)
       (\u. abi_malformed_reflected_post env ty

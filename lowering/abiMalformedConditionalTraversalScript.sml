@@ -15,7 +15,7 @@ Ancestors
   venomState venomExecSemantics finite_map pred_set words list arithmetic
 
 Theorem abi_malformed_conditional_traversal_iteration:
-  abi_malformed_traversal_inv ctx func cenv cx es env ty start limit_st
+  abi_malformed_traversal_inv H ctx func cenv cx es env ty start limit_st
     sites dstid live base_op hi src dst B L xs p d outsz ip slot inst q n origin j s /\
   j < n /\ n = abi_head_word (DROP p xs) /\ p+32 <= L /\
   p+32+n*abi_sz <= L /\
@@ -51,7 +51,7 @@ Theorem abi_malformed_conditional_traversal_iteration:
     (case di of DecPrimWord clamp => cp+32 <= L | _ => T) ==>
     frag_exec ctx child child_end
       (\v. v = incoming /\
-        abi_malformed_entry ctx func cenv cx es child child_sites dstid live
+        abi_malformed_entry H ctx func cenv cx es child child_sites dstid live
           base_op hi (FST (SND ops)) (SND (SND ops)) B L xs cp cd childsz v /\
         fresh_vars_wrt ceiling v)
       (\u. abi_malformed_reflected_post env ty
@@ -60,12 +60,12 @@ Theorem abi_malformed_conditional_traversal_iteration:
         fresh_vars_wrt ceiling u)
       (\r. ?v. r = Abort Revert_abort v)) ==>
   frag_outcome ctx func s header
-    (abi_malformed_traversal_inv ctx func cenv cx es env ty start limit_st
+    (abi_malformed_traversal_inv H ctx func cenv cx es env ty start limit_st
       sites dstid live base_op hi src dst B L xs p d outsz ip slot inst q n origin (SUC j))
     (\r. ?v. r = Abort Revert_abort v)
 Proof
   strip_tac >>
-  `abi_malformed_entry ctx func cenv cx es start sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es start sites dstid live
       base_op hi src dst B L xs p d outsz s /\
    eval_operand ip s = SOME (n2w slot) /\ mload slot s = n2w j /\
    slot < dimword (:256) /\ fresh_vars_wrt limit_st s` by
@@ -95,7 +95,7 @@ Proof
   `local_ptrs_reserved cenv setup /\ local_ptrs_reserved cenv child` by
     (conj_tac >> irule local_ptrs_reserved_next_var >>
      qexists_tac `start` >> simp[] >> decide_tac) >>
-  `abi_malformed_entry ctx func cenv cx es setup sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es setup sites dstid live
       base_op hi src dst B L xs p d outsz h /\
    eval_operand ip h = SOME (n2w slot)` by
     (`live NOTIN sites /\ live <> dstid /\
@@ -112,7 +112,7 @@ Proof
      fs[EVERY_DEF]) >>
   qabbrev_tac `off = if dec_info_needs_offset di then
     abi_head_word (DROP (p+32+j*abi_sz) xs) else j*abi_sz` >>
-  qabbrev_tac `P = \u. abi_malformed_entry ctx func cenv cx es child sites dstid live
+  qabbrev_tac `P = \u. abi_malformed_entry H ctx func cenv cx es child sites dstid live
       base_op hi (FST (SND ops)) (SND (SND ops)) B L xs
       (p+32+off) (d+32+j*mem_sz) childsz u /\
     abi_malformed_resource_post ctx func cenv cx es setup.cs_next_var sites dstid h u /\
@@ -141,7 +141,7 @@ Proof
      irule abi_malformed_setup_child >> simp_tac bool_ss [] >>
      conj_tac >- simp[] >>
      goal_assum (drule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`)) >>
-     goal_assum (drule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
      qexistsl_tac [`childsz`, `j`, `limit_st`] >>
      simp[w2n_n2w] >>
@@ -167,7 +167,7 @@ Proof
   irule abi_malformed_outcome_sim >> qexists_tac `h` >> simp[] >>
   irule frag_outcome_compose >> qexistsl_tac [`P`, `child`] >> simp[] >>
   qx_gen_tac `t` >> strip_tac >>
-  `abi_malformed_entry ctx func cenv cx es child child_sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es child child_sites dstid live
       base_op hi (FST (SND ops)) (SND (SND ops)) B L xs
       (p+32+off) (d+32+j*mem_sz) childsz t /\
    fresh_vars_wrt limit_st t` by
@@ -183,7 +183,7 @@ Proof
   irule abi_malformed_traversal_child_backedge >>
   simp[] >>
   qexists_tac `\v. v = t` >> simp[] >>
-  goal_assum (drule_at (Pat `abi_malformed_traversal_inv ctx func cenv cx es env ty start limit_st sites dstid live base_op hi src dst B L xs p d outsz ip slot inst q (abi_head_word (DROP p xs)) origin j s`)) >>
+  goal_assum (drule_at (Pat `abi_malformed_traversal_inv H ctx func cenv cx es env ty start limit_st sites dstid live base_op hi src dst B L xs p d outsz ip slot inst q (abi_head_word (DROP p xs)) origin j s`)) >>
   goal_assum (drule_at (Pat `bb.bb_instructions = _`)) >> simp[] >>
   qexists_tac `child` >> simp[] >>
   irule frag_exec_conseq >>
@@ -212,7 +212,7 @@ QED
 
 (* Complete traversal reuses the unchanged finite-outcome machinery. *)
 Theorem abi_malformed_conditional_traversal:
-  abi_malformed_entry ctx func cenv cx es start sites dstid live
+  abi_malformed_entry H ctx func cenv cx es start sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   eval_operand ip s = SOME (n2w slot) /\ mload slot s = 0w /\
   slot < dimword (:256) /\
@@ -257,7 +257,7 @@ Theorem abi_malformed_conditional_traversal:
     (case di of DecPrimWord clamp => cp+32 <= L | _ => T) ==>
     frag_exec ctx child child_end
       (\v. v = incoming /\
-        abi_malformed_entry ctx func cenv cx es child child_sites dstid live
+        abi_malformed_entry H ctx func cenv cx es child child_sites dstid live
           base_op hi (FST (SND ops)) (SND (SND ops)) B L xs cp cd childsz v /\
         fresh_vars_wrt ceiling v)
       (\u. abi_malformed_reflected_post env ty
@@ -273,7 +273,7 @@ Theorem abi_malformed_conditional_traversal:
 Proof
   strip_tac >>
   `?h. abi_decode_sim ctx func s h /\
-    abi_malformed_traversal_inv ctx func cenv cx es env ty start limit_st
+    abi_malformed_traversal_inv H ctx func cenv cx es env ty start limit_st
       sites dstid live base_op hi src dst B L xs p d outsz ip slot inst q n s 0 h /\
     h.vs_current_bb = hdr /\ h.vs_inst_idx = 0 /\ ~h.vs_halted` by
     (irule abi_malformed_traversal_initial >> simp[] >>
@@ -281,7 +281,7 @@ Proof
   irule abi_malformed_outcome_sim >> qexists_tac `h` >> simp[] >>
   irule abi_malformed_finite_outcome >> conj_tac >- simp[] >>
   qexistsl_tac [`header`,
-    `abi_malformed_traversal_inv ctx func cenv cx es env ty start limit_st
+    `abi_malformed_traversal_inv H ctx func cenv cx es env ty start limit_st
       sites dstid live base_op hi src dst B L xs p d outsz ip slot inst q n s`,
     `0`, `n`] >>
   simp[] >>
@@ -290,7 +290,7 @@ Proof
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
       irule abi_malformed_conditional_traversal_iteration >>
-      goal_assum (drule_at (Pat `abi_malformed_traversal_inv ctx func cenv cx es env ty start limit_st sites dstid live base_op hi src dst B L xs p d outsz ip slot inst q (abi_head_word (DROP p xs)) s k u`)) >>
+      goal_assum (drule_at (Pat `abi_malformed_traversal_inv H ctx func cenv cx es env ty start limit_st sites dstid live base_op hi src dst B L xs p d outsz ip slot inst q (abi_head_word (DROP p xs)) s k u`)) >>
       simp[] >>
       goal_assum (drule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`)) >>
       goal_assum (drule_at (Pat `bb.bb_instructions = _`)) >>
@@ -301,6 +301,6 @@ Proof
       qpat_x_assum `!j. j < _ ==> _` (qspec_then `k` mp_tac) >> simp[]) >>
   qx_gen_tac `last` >> strip_tac >>
   irule abi_malformed_traversal_done >> simp[] >>
-  goal_assum (drule_at (Pat `abi_malformed_traversal_inv ctx func cenv cx es env ty start limit_st sites dstid live base_op hi src dst B L xs p d outsz ip slot inst q (abi_head_word (DROP p xs)) s (abi_head_word (DROP p xs)) last`)) >>
+  goal_assum (drule_at (Pat `abi_malformed_traversal_inv H ctx func cenv cx es env ty start limit_st sites dstid live base_op hi src dst B L xs p d outsz ip slot inst q (abi_head_word (DROP p xs)) s (abi_head_word (DROP p xs)) last`)) >>
   simp[] >> qexistsl_tac [`body_lbl`, `hid`] >> simp[]
 QED

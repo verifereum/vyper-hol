@@ -329,7 +329,7 @@ QED
 
 Theorem abi_malformed_bulk_body_resource:
   abi_decode_bulk_body dst src addr MLOAD base_op mem_sz st = ((),en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   eval_operand addr s = SOME a /\ mload (w2n a) s = n2w n /\
   B+p+32 < dimword (:256) /\ d+32 < dimword (:256) /\
@@ -349,7 +349,7 @@ Proof
     (irule (SRULE [] (Q.INST [`vars` |-> `s.vs_vars`]
        abi_malformed_destination_store_resource)) >> simp[] >>
      goal_assum (drule_at Any) >> simp[]) >>
-  `abi_malformed_entry ctx func cenv cx es st sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz (mstore d (n2w n) s)` by
     (irule abi_malformed_child_entry >>
      `p < dimword (:256) /\ d+outsz < dimword (:256) /\

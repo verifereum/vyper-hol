@@ -13,7 +13,7 @@ Ancestors
   rich_list finite_map pred_set words list arithmetic
 
 Theorem abi_malformed_destination_copy_resource:
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   d <= at /\ at+n <= d+outsz /\ fn_inst_ids_distinct func ==>
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s
@@ -90,7 +90,7 @@ Theorem abi_malformed_bytestring_reentry:
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
   type_memory_bytes ce ty <= outsz /\ base_op <> Lit 0w /\
   en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s ==>
   (?t. run_inst_seq (emitted_insts st en) s = Abort Revert_abort t) \/
   (vyper_decode_valid_enc (vyper_to_abi_type env ty) (DROP p xs) /\
@@ -142,7 +142,7 @@ Proof
 QED
 
 Theorem abi_malformed_bytes_store_copy_resource:
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   d <= at /\ at+32 <= d+outsz /\ ncopy <= outsz /\
   fn_inst_ids_distinct func ==>
@@ -154,7 +154,7 @@ Proof
   `abi_malformed_destination func cenv es.scopes dstid at 32 s` by
     (irule abi_malformed_destination_subrange >>
      qexistsl_tac [`d`, `outsz`] >> fs[abi_malformed_entry_def]) >>
-  `abi_malformed_entry ctx func cenv cx es st sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src (Lit (n2w at)) B L xs p at 32 s` by
     (fs[abi_malformed_entry_def, eval_operand_def,
         abi_decoder_operand_live_def, abi_decoder_older_vars_def] >> decide_tac) >>
@@ -163,7 +163,7 @@ Proof
     (irule (SRULE [] (Q.INST [`vars` |-> `s.vs_vars`]
        abi_malformed_destination_store_resource)) >> simp[] >>
      goal_assum (drule_at Any) >> simp[]) >>
-  `abi_malformed_entry ctx func cenv cx es st sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz (mstore at 0w s)` by
     (irule abi_malformed_child_entry >>
      `p < dimword (:256) /\ d+outsz < dimword (:256) /\

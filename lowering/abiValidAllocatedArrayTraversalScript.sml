@@ -12,7 +12,7 @@ Ancestors
   vyperABI contractABI finite_map pred_set words list arithmetic
 
 Theorem abi_valid_allocated_array_exit:
-  abi_valid_allocated_array_inv ctx func cenv cx es start ceiling
+  abi_valid_allocated_array_inv H ctx func cenv cx es start ceiling
     sites dstid live base_op hi src dst B L xs p d outsz
     ip slot inst q hdr tv vs origin (LENGTH vs) s /\
   lookup_block hdr func.fn_blocks = SOME
@@ -29,7 +29,7 @@ Theorem abi_valid_allocated_array_exit:
         sites dstid d outsz origin u /\ fresh_vars_wrt ceiling u) (K F)
 Proof
   strip_tac >>
-  `abi_malformed_entry ctx func cenv cx es start sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es start sites dstid live
      base_op hi src dst B L xs p d outsz s /\
    eval_operand ip s = SOME (n2w slot) /\ mload slot s = n2w (LENGTH vs) /\
    slot < dimword (:256) /\ fresh_vars_wrt ceiling s /\ ~s.vs_halted /\
@@ -108,13 +108,13 @@ Theorem abi_valid_allocated_array_traversal:
   ip <> Var (STRING #"%" (toString next)) /\
   start.cs_next_var <= next /\ next < ceiling.cs_next_var /\
   (!k childpos cd incoming. k < LENGTH vs /\
-    abi_valid_allocated_entry ce env sf ty tv (EL k vs) ctx func cenv cx es
+    abi_valid_allocated_entry H ce env sf ty tv (EL k vs) ctx func cenv cx es
       child child_end base_op hi (FST (SND ops)) (SND (SND ops))
       B L xs childpos cd dstid live ceiling incoming ==>
     ?u. abi_valid_allocated_post tv (EL k vs) ctx func cenv cx es
       child child_end ceiling dstid cd childsz incoming u) ==>
   !j s. j <= LENGTH vs /\
-  abi_valid_allocated_array_inv ctx func cenv cx es start ceiling
+  abi_valid_allocated_array_inv H ctx func cenv cx es start ceiling
     sites dstid live base_op hi src dst B L xs p d outsz
     ip slot inst q hdr tv vs origin j s ==>
   frag_outcome ctx func s final
@@ -129,7 +129,7 @@ Proof
       simp[] >> qexistsl_tac [`body_lbl`, `first`, `hid`] >> simp[]) >>
   `j < LENGTH vs` by decide_tac >>
   `frag_outcome ctx func s header
-    (abi_valid_allocated_array_inv ctx func cenv cx es start ceiling
+    (abi_valid_allocated_array_inv H ctx func cenv cx es start ceiling
       sites dstid live base_op hi src dst B L xs p d outsz
       ip slot inst q hdr tv vs origin (SUC j)) (K F)` by
     (irule abi_valid_allocated_array_iteration >>

@@ -13,13 +13,13 @@ Definition abi_valid_allocated_frame_def:
 End
 
 Definition abi_valid_allocated_entry_def:
-  abi_valid_allocated_entry ce env sf ty tv v ctx func cenv cx es
+  abi_valid_allocated_entry H ce env sf ty tv v ctx func cenv cx es
       st en base_op hi src dst B L xs p d dstid live ceiling s <=>
     abi_decoder_coherent ce env sf ty tv /\
     compile_abi_decode_to_buf dst src MLOAD base_op hi
       (type_to_abi_dec_info sf ce ty) st = ((),en) /\
     fn_has_code st en func /\ fn_inst_ids_distinct func /\
-    abi_malformed_entry ctx func cenv cx es st
+    abi_malformed_entry H ctx func cenv cx es st
       (abi_malformed_scratch_sites st en func) dstid live
       base_op hi src dst B L xs p d (type_memory_bytes ce ty) s /\
     p <= L /\

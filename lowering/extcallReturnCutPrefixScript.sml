@@ -82,7 +82,7 @@ Theorem return_cut_prefix_resources:
   abi_decode_sim ctx' (frag_observer sa sb obs id) s t /\
   abi_malformed_resource_post (return_observer_context ctx obs) obs
     ce cx es next sites dstid s t /\
-  stmt_state_rel H ctx func ce cx es s /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ fn_inst_ids_distinct obs /\
   (!i. i.inst_opcode = ALLOCA ==>
     (MEM i (fn_insts obs) <=> MEM i (fn_insts func))) ==>

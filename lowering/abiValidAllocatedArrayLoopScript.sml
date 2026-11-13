@@ -11,7 +11,7 @@ Ancestors
   valueEncodingProps valueEncoding venomExecSemantics finite_map pred_set words list arithmetic
 
 Theorem abi_valid_allocated_backedge_effect:
-  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv st /\ st.cs_next_var <= first /\ first <= next /\
   next < ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -55,7 +55,7 @@ QED
 
 (* Reassemble the loop invariant after an independently framed phase. *)
 Theorem abi_valid_allocated_array_inv_resume:
-  abi_valid_allocated_array_inv ctx func cenv cx es start ceiling
+  abi_valid_allocated_array_inv H ctx func cenv cx es start ceiling
     sites dstid live base_op hi src dst B L xs p d outsz
     ip slot inst q hdr tv vs origin j s /\
   abi_valid_allocated_effect ctx func cenv cx es start.cs_next_var
@@ -64,7 +64,7 @@ Theorem abi_valid_allocated_array_inv_resume:
   eval_operand ip u = SOME (n2w slot) /\ mload slot u = n2w k /\
   fresh_vars_wrt ceiling u /\ ~u.vs_halted /\
   u.vs_current_bb = hdr /\ u.vs_inst_idx = 0 ==>
-  abi_valid_allocated_array_inv ctx func cenv cx es start ceiling
+  abi_valid_allocated_array_inv H ctx func cenv cx es start ceiling
     sites dstid live base_op hi src dst B L xs p d outsz
     ip slot inst q hdr tv vs origin k u
 Proof
@@ -74,7 +74,7 @@ Proof
       [abi_valid_allocated_array_inv_def]) >>
   `abi_malformed_resource_post ctx func cenv cx es start.cs_next_var
      sites dstid s u` by fs[abi_valid_allocated_effect_def] >>
-  `abi_malformed_entry ctx func cenv cx es start sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es start sites dstid live
     base_op hi src dst B L xs p d outsz u` by
     (irule abi_malformed_aggregate_reentry >> simp[] >>
      fs[abi_malformed_entry_def] >> goal_assum (drule_at Any) >> simp[]) >>
@@ -86,7 +86,7 @@ Proof
 QED
 
 Theorem abi_valid_allocated_array_backedge_advance:
-  abi_valid_allocated_array_inv ctx func cenv cx es start ceiling
+  abi_valid_allocated_array_inv H ctx func cenv cx es start ceiling
     sites dstid live base_op hi src dst B L xs p d outsz
     ip slot inst q hdr tv vs origin j s /\
   abi_valid_allocated_effect ctx func cenv cx es start.cs_next_var
@@ -97,7 +97,7 @@ Theorem abi_valid_allocated_array_backedge_advance:
   eval_operand ip u = SOME (n2w slot) /\
   ip <> Var (STRING #"%" (toString next)) /\
   start.cs_next_var <= next /\ next < ceiling.cs_next_var ==>
-  abi_valid_allocated_array_inv ctx func cenv cx es start ceiling
+  abi_valid_allocated_array_inv H ctx func cenv cx es start ceiling
     sites dstid live base_op hi src dst B L xs p d outsz
     ip slot inst q hdr tv vs origin (SUC j)
     (jump_to hdr (mstore slot (n2w (SUC j))
@@ -148,7 +148,7 @@ QED
 Theorem abi_valid_allocated_dynamic_setup:
   abi_decode_array_element_setup ip src dst MLOAD base_op hi di asz msz st = (ops,en) /\
   dec_info_needs_offset di /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   eval_operand ip s = SOME ipw /\ mload (w2n ipw) s = n2w j /\
   abi_decoder_operand_live st.cs_next_var ip /\
@@ -157,7 +157,7 @@ Theorem abi_valid_allocated_dynamic_setup:
   d+32+j*msz+childsz <= d+outsz /\
   en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s ==>
   ?t. run_inst_seq (emitted_insts st en) s = OK t /\
-    abi_malformed_entry ctx func cenv cx es en sites dstid live
+    abi_malformed_entry H ctx func cenv cx es en sites dstid live
       base_op hi (FST (SND ops)) (SND (SND ops)) B L xs
       (p+32+off) (d+32+j*msz) childsz t /\
     abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t /\
@@ -209,7 +209,7 @@ Theorem abi_valid_allocated_position_header_effect:
   abi_decode_position_loop_ready hdr ip src MLOAD base_op B p iw n j s /\
   src <> Var (STRING #"%" (toString first)) /\
   base_op <> Var (STRING #"%" (toString first)) /\ n < dimword (:256) /\
-  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
   st.cs_next_var <= first /\
   first + 4 + abi_decode_position_header_delta base_op <= ceiling.cs_next_var /\
   fresh_vars_wrt ceiling s ==>

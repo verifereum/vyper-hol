@@ -44,7 +44,7 @@ Theorem abi_return_bounded_decode_reject:
   type_memory_bytes ce rt <= outsz /\
   en.cs_next_var <= ceiling.cs_next_var /\
   (case di of DecPrimWord clamp => 32 <= LENGTH (TAKE cap bs) | _ => T) /\
-  abi_malformed_entry ctx func cenv cx es st
+  abi_malformed_entry H ctx func cenv cx es st
     (abi_malformed_scratch_sites st en func) dstid live
     base_op hi (Lit 0w) dst B (LENGTH (TAKE cap bs)) (TAKE cap bs) 0 d outsz incoming /\
   fresh_vars_wrt ceiling incoming /\

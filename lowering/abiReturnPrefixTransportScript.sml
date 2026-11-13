@@ -7,7 +7,8 @@ Ancestors
   compileEnv loweringStateRelDefs venomExecSemantics venomState venomInst finite_map words list rich_list
 
 Definition abi_return_decode_ready_def:
-  abi_return_decode_ready ctx func cenv cx es a sites dstid live base_op dst
+  abi_return_decode_ready (H:(bool # bytes32 # type_value) list # num list)
+      ctx func cenv cx es a sites dstid live base_op dst
       B cap bs d n s <=>
     stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv a /\
     abi_malformed_allocated_window live B (LENGTH (TAKE cap bs)) (TAKE cap bs) s /\
@@ -69,10 +70,10 @@ Theorem abi_return_prefix_transport:
   compile_return_value_decode lo cap a = (hi,b) /\ fresh_vars_wrt a s /\
   lo < dimword (:256) /\ cap < dimword (:256) /\ s.vs_returndata = bs /\
   LENGTH bs < dimword (:256) /\ lo <= LENGTH bs /\
-  abi_return_decode_ready ctx func cenv cx es a sites dstid live base_op dst
+  abi_return_decode_ready H ctx func cenv cx es a sites dstid live base_op dst
     B cap bs d n s ==>
   ?u. run_inst_seq (emitted_insts a b) s = OK u /\ fresh_vars_wrt b u /\
-    abi_malformed_entry ctx func cenv cx es b sites dstid live base_op hi
+    abi_malformed_entry H ctx func cenv cx es b sites dstid live base_op hi
       (Lit 0w) dst B (LENGTH (TAKE cap bs)) (TAKE cap bs) 0 d n
       (u with vs_inst_idx := LENGTH b.cs_current_insts) /\
     (?vars. u = s with vs_vars := vars)

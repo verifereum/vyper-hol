@@ -16,7 +16,7 @@ Ancestors
 
 Theorem abi_malformed_init_fresh_total:
   abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = (setup,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   fn_inst_ids_distinct func /\ fresh_vars_wrt st s /\
   maxn < dimword (:256) /\ maxn*stride < dimword (:256) /\ 32 <= outsz /\
@@ -50,7 +50,7 @@ Proof
       irule run_inst_seq_abort_extends >> qexists_tac `guard_st` >>
       simp[] >> irule inst_extends_trans >> qexists_tac `header_st` >> simp[]) >>
   rename1 `run_inst_seq (emitted_insts st guard_st) s = OK guarded` >>
-  `abi_malformed_entry ctx func cenv cx es guard_st sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es guard_st sites dstid live
     base_op hi src dst B L xs p d outsz guarded` by
     (drule_all abi_malformed_dynarray_prefix_entry >> simp[]) >>
   drule_all abi_malformed_init_header_resource >> strip_tac >>
@@ -140,7 +140,7 @@ QED
 
 Theorem abi_malformed_init_total:
   abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = (setup,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz s /\
   fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling s /\
   en.cs_next_var <= ceiling.cs_next_var /\
@@ -216,7 +216,7 @@ QED
 
 Theorem abi_malformed_init_fragment:
   abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = (setup,en) /\
-  abi_malformed_entry ctx func cenv cx es st sites dstid live
+  abi_malformed_entry H ctx func cenv cx es st sites dstid live
     base_op hi src dst B L xs p d outsz incoming /\
   fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling incoming /\
   en.cs_next_var <= ceiling.cs_next_var /\

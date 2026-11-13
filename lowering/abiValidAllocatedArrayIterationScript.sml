@@ -14,7 +14,7 @@ Ancestors
   valueEncoding valueEncodingProps vyperABI contractABI finite_map pred_set words list arithmetic
 
 Theorem abi_valid_allocated_array_iteration:
-  abi_valid_allocated_array_inv ctx func cenv cx es start ceiling
+  abi_valid_allocated_array_inv H ctx func cenv cx es start ceiling
     sites dstid live base_op hi src dst B L xs p d outsz
     ip slot inst q hdr tv vs origin j s /\
   j < LENGTH vs /\ EVERY (val_wf tv) vs /\ LENGTH vs < dimword (:256) /\
@@ -60,18 +60,18 @@ Theorem abi_valid_allocated_array_iteration:
   ip <> Var (STRING #"%" (toString next)) /\
   start.cs_next_var <= next /\ next < ceiling.cs_next_var /\
   (!childpos cd incoming.
-    abi_valid_allocated_entry ce env sf ty tv (EL j vs) ctx func cenv cx es
+    abi_valid_allocated_entry H ce env sf ty tv (EL j vs) ctx func cenv cx es
       child child_end base_op hi (FST (SND ops)) (SND (SND ops))
       B L xs childpos cd dstid live ceiling incoming ==>
     ?u. abi_valid_allocated_post tv (EL j vs) ctx func cenv cx es
       child child_end ceiling dstid cd childsz incoming u) ==>
   frag_outcome ctx func s header
-    (abi_valid_allocated_array_inv ctx func cenv cx es start ceiling
+    (abi_valid_allocated_array_inv H ctx func cenv cx es start ceiling
       sites dstid live base_op hi src dst B L xs p d outsz
       ip slot inst q hdr tv vs origin (SUC j)) (K F)
 Proof
   strip_tac >>
-  `abi_malformed_entry ctx func cenv cx es start sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es start sites dstid live
      base_op hi src dst B L xs p d outsz s /\
    eval_operand ip s = SOME (n2w slot) /\ mload slot s = n2w j /\
    slot < dimword (:256) /\ fresh_vars_wrt ceiling s /\ ~s.vs_halted /\
@@ -117,10 +117,10 @@ Resume abi_valid_allocated_array_iteration[body]:
     fs[abi_valid_allocated_effect_def] >>
   `local_ptrs_reserved cenv setup` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `start` >> simp[]) >>
-  `abi_malformed_entry ctx func cenv cx es setup sites dstid live
+  `abi_malformed_entry H ctx func cenv cx es setup sites dstid live
     base_op hi src dst B L xs p d outsz h` by
     (irule abi_malformed_aggregate_reentry >>
-     qpat_assum `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `abi_malformed_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
      simp[]) >>
   `eval_operand ip h = SOME (n2w slot) /\ mload slot h = n2w j` by
     (fs[abi_valid_allocated_effect_def, abi_malformed_resource_post_def, mload_def] >> metis_tac[]) >>
@@ -133,7 +133,7 @@ Resume abi_valid_allocated_array_iteration[body]:
     (qunabbrev_tac `childpos` >>
      metis_tac[abi_valid_allocated_array_child_position]) >>
   `?a. run_inst_seq (emitted_insts setup child) h = OK a /\
-    abi_malformed_entry ctx func cenv cx es child sites dstid live
+    abi_malformed_entry H ctx func cenv cx es child sites dstid live
       base_op hi (FST (SND ops)) (SND (SND ops)) B L xs
       childpos (d+32+j*mem_sz) childsz a /\
     abi_malformed_resource_post ctx func cenv cx es setup.cs_next_var sites dstid h a /\
@@ -179,7 +179,7 @@ Resume abi_valid_allocated_array_iteration[body]:
        (irule local_ptrs_reserved_next_var >> qexists_tac `setup` >> simp[]) >>
      qexists_tac `a` >> simp[] >>
      irule abi_malformed_child_entry >>
-     qpat_assum `abi_malformed_entry _ _ _ _ _ setup _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `abi_malformed_entry _ _ _ _ _ _ setup _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
      qhdtm_assum `abi_malformed_resource_post` (irule_at Any) >>
      `d+outsz < dimword (:256)` by
        fs[abi_malformed_entry_def, abi_malformed_destination_def] >>
@@ -210,14 +210,14 @@ Resume abi_valid_allocated_array_iteration[child]:
   `~a.vs_halted` by
     (drule_all abi_malformed_setup_frame >> strip_tac >>
      qpat_x_assum `a = _ with vs_vars := _` (mp_tac o AP_TERM ``\s. s.vs_halted``) >> simp[]) >>
-  `abi_valid_allocated_entry ce env sf ty tv (EL j vs) ctx func cenv cx es
+  `abi_valid_allocated_entry H ce env sf ty tv (EL j vs) ctx func cenv cx es
      child child_end base_op hi (FST (SND ops)) (SND (SND ops))
      B L xs childpos (d+32+j*mem_sz) dstid live ceiling b` by
     (simp[abi_valid_allocated_entry_def] >>
      conj_tac
      >- (fs[abi_malformed_entry_def, SUBSET_DEF] >> metis_tac[]) >>
      reverse conj_tac >- fs[fresh_vars_wrt_def] >>
-     qpat_x_assum `abi_malformed_entry _ _ _ _ _ child _ _ _ _ _ _ _ _ _ _ _ _ _ a` mp_tac >>
+     qpat_x_assum `abi_malformed_entry _ _ _ _ _ _ child _ _ _ _ _ _ _ _ _ _ _ _ _ a` mp_tac >>
      simp[abi_malformed_entry_def, abi_malformed_allocated_window_def,
           abi_malformed_destination_def, stmt_state_rel_inst_idx, eval_operand_def] >>
      strip_tac >> fs[SUBSET_DEF] >> metis_tac[]) >>
@@ -235,7 +235,7 @@ Resume abi_valid_allocated_array_iteration[child]:
      qpat_x_assum `mem_sz = _` SUBST_ALL_TAC >>
      qhdtm_assum `abi_valid_allocated_frame` (irule_at Any) >>
      `alloca_inv b` by fs[abi_valid_allocated_entry_def, abi_malformed_entry_def, stmt_state_rel_def] >>
-     qpat_assum `abi_malformed_entry _ _ _ _ _ start _ _ _ _ _ _ _ _ _ _ _ _ _ s` mp_tac >>
+     qpat_assum `abi_malformed_entry _ _ _ _ _ _ start _ _ _ _ _ _ _ _ _ _ _ _ _ s` mp_tac >>
      pure_rewrite_tac[abi_malformed_entry_def, abi_malformed_destination_def] >> strip_tac >>
      goal_assum (drule_at Any) >> simp[] >> fs[SUBSET_DEF] >>
      qexistsl_tac [`sz`, `dstid`] >> simp[] >> metis_tac[]) >>
