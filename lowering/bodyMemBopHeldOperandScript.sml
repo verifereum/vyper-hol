@@ -10,6 +10,7 @@ Ancestors
   exprBopSimProps bodyMemBiKeccakBounds vyperTyping
   vyperEvalExprPreservesScopesDom venomExecSemantics venomInst
   emitHelperProps valueEncoding fragExecMem instMemFrontier venomMemDefs
+  gasStorage vyperStorageFootprint vyperStorageTrace
   fragGasSeqMem allocaHistoryFragment
 Libs
   pairLib
@@ -262,7 +263,7 @@ Resume held_digest_operand_outcome[runtime_normal]:
      (es_end with gas_obs := []) t` by
     (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_tac o REWRITE_RULE [expr_post_def]) >> simp[]) >>
-  drule_at (Pos hd) held_hash_counted_nofresh >>
+  drule_at (Pos hd) (INST_TYPE [alpha |-> ``:256``] held_hash_counted_nofresh) >>
   disch_then (drule_at (Pat `mem_bytes_at _ _ _ = _`)) >>
   simp[] >> disch_then drule_all >> strip_tac >>
   `!z. not_fresh_at sa z ==> not_fresh_at sm z` by
@@ -287,11 +288,18 @@ Resume held_digest_operand_outcome[runtime_normal]:
        simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
        simp[] >> metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES])) >>
   disj1_tac >> simp[] >> gen_tac >> strip_tac >>
-  qexists_tac `bs` >>
   qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==>
      stmt_state_rel H _ _ _ _ _ t /\ _` (drule_then strip_assume_tac) >>
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
+    simp[stmt_state_rel_gas_obs] >>
   `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t'` by
-    metis_tac[stmt_state_rel_fields_transport] >>
+    (mp_tac (Q.INST [`H0` |-> `storage_trace_horizon es_end.storage_trace`,
+                     `es` |-> `es_end with gas_obs := []`,
+                     `u` |-> `t'`, `s` |-> `t`]
+               (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+                  stmt_state_rel_fields_transport)) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then ACCEPT_TAC) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]
 QED
 
