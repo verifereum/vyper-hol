@@ -267,6 +267,11 @@ Proof
   `~is_bytestring_type typ` by
     (Cases_on `ann = typ` >- gvs[] >>
      metis_tac[normalize_return_source_kinds]) >>
+  `lowered_value_type cenv e <> typ` by
+    (strip_tac >>
+     `ann = typ` by
+       metis_tac[assignRelayoutCallerTheory.type_widens_to_antisym] >>
+     gvs[]) >>
   `0 < type_memory_size ltv` by
     (irule externalNormalizePremisesTheory.normalize_return_source_positive >>
      qexistsl_tac [`typ`,`lowered_value_type cenv e`,`get_tenv cx`] >>
