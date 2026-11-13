@@ -269,8 +269,14 @@ Theorem literal_array_loop_outcome_ptr:
     (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
 Proof
   strip_tac >>
-  drule compile_make_array_elems_as_tuple >>
-  disch_then (qspecl_then [`header`, `compile_expr`, `ce`, `Var root`, `idx`] assume_tac) >>
+  `MAP expr_type args = REPLICATE (LENGTH args) elem_ty` by
+    (qpat_x_assum `EVERY _ args` mp_tac >> rpt (pop_assum kall_tac) >>
+     Induct_on `args` >> simp[]) >>
+  `compile_make_array_elems compile_expr ce args elem_ty
+     (type_memory_bytes ce elem_ty) header (Var root) idx =
+   compile_make_tuple compile_expr ce args (REPLICATE (LENGTH args) elem_ty)
+     (Var root) ((if header then 32 else 0) + idx * type_memory_bytes ce elem_ty)` by
+    simp[compile_make_array_elems_as_tuple] >>
   irule literal_tuple_loop_outcome_ptr >>
   simp[] >> conj_tac >- metis_tac[OPT_MMAP_uniform_map] >>
   conj_tac
