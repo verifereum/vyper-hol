@@ -5,10 +5,7 @@
    and bodyAugAssignOther's immutable_deploy_augassign_case. *)
 Theory bodyMemImmutableDeploy
 Ancestors
-  bodyMemoryPreds targetPlaceSim immutableWordReadMemory immutablePathReplace
-  immutableWriteReplay immutableWordStoreFrame immutableWordStoreMemory
-  immutableAugAssignContinuation bodyAugPlaceTarget immutableAugAssignRootEntry
-  immutableAugAssignRootWrite immutableAugAssignScalarAssembly
+  bodyMemoryPreds targetPlaceSim bodyAugPlaceTarget immutableAugAssignScalarAssembly
 
 (* RESIDUAL (held): as its S1 twin immutable_deploy_assign_case, which is
    admitted on this base. *)
@@ -61,8 +58,7 @@ Proof
   cheat
 QED
 
-(* RESIDUAL (held): as its S1 twin immutable_deploy_augassign_case, which is
-   admitted on this base. *)
+(* Constructor augmented assignment through the counted scalar assembly. *)
 Theorem body_augassign_immutable_deploy_mem:
   !cx ty t bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
@@ -72,6 +68,7 @@ Theorem body_augassign_immutable_deploy_mem:
        body_expr_mem_ok cx e) /\
     body_base_target_mem_ok cx t /\
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings (AugAssign ty t bop e) /\
+    body_stmt_safe tops (AugAssign ty t bop e) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (AugAssign ty t bop e) ==>
        occurs_abi_decode_target target tops) /\
