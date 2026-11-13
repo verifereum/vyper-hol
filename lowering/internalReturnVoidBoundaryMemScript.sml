@@ -38,7 +38,7 @@ Proof
   gvs[] >> drule_all compile_internal_void_return_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   goal_assum (drule_at Any) >> simp[intret_q_def] >>
-  qexists_tac `s0` >>
+  qexistsl_tac [`s0`, `(return_unlock_state cenv s0).vs_inst_idx`] >>
   simp[result_rel_def, intret_vals_match_def] >>
   conj_tac
   >- simp[return_unlock_state_def] >>
