@@ -2,7 +2,7 @@
 Theory sourceOwnedArrayConstructorPtr
 Ancestors
   sourceOwnedArrayLoopPtr decoderArrayInitPtr physicalArrayInitSequence abiEncoderSequence
-  venomInstProofs venomExecProofs instMemFrontier ghostPcTransportPtr instIdxIndep wordLoadStorePtr decoderGhostFramePtr fragGasOriginPtr fragGasPathPtr entryDispatchPtr codegenRel contextCodegenRel fragGasSeqPtr fragGasSeqMem fragExecMem stmtForRangeMemoryParts calldataDynInit calldataBytesLeaf
+  venomInstProofs venomExecProofs ptrSafetyTransport fragExecPtr instMemFrontier ghostPcTransportPtr instIdxIndep wordLoadStorePtr decoderGhostFramePtr fragGasOriginPtr fragGasPathPtr entryDispatchPtr codegenRel contextCodegenRel fragGasSeqPtr fragGasSeqMem fragExecMem stmtForRangeMemoryParts calldataDynInit calldataBytesLeaf
   decoderCalldataShell abiDecoderRange abiDecoderBytesBound abiEncoder sourceEncodingWindows sourceEncodingLayout abiDecoderCoherence
   ctorAbiActualArrayRun entrySinkExtraction fragExec
   abiDecoderRecursiveArray abiDecoderLoop abiDecoderArraySetupCode abiDecoderLoopRegisters
@@ -88,6 +88,16 @@ Proof
 QED
 
 Theorem constructor_array_header_origin_ptr[local]:
+  (!code s t G tn G' tn' ctx fn bb D lo PG.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+    inst_seq_ptr D lo ctx fn PG G tn code s G' tn' /\
+    run_inst_seq code s = OK t ==>
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn'
+         (t with vs_inst_idx := s.vs_inst_idx + LENGTH code)) ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)) /\
   abi_decode_array_header (Var root) src CALLDATALOAD sa = (cnt,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
   lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
@@ -98,8 +108,11 @@ Theorem constructor_array_header_origin_ptr[local]:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?H u.
-    (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
+    ((!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
       (s,G,tn) [] (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u)) /\
+     (!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H u
+       (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+       !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s)) /\ 
     ptr_covers H u root t totalbytes /\
     op_taint u cnt = {} /\ op_prov H cnt = NONE /\
     u.t_mem = tn.t_mem DIFF {x | d <= x /\ x < d+32} /\
@@ -206,26 +219,89 @@ Resume constructor_array_header_origin_ptr[joint]:
     (b with vs_inst_idx := SUC s.vs_inst_idx,H,u0) []
     (OK (t with vs_inst_idx := SUC (SUC s.vs_inst_idx)),H,u)` by
     (rpt gen_tac >> suspend "store_path") >>
-  rpt gen_tac >>
-  qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _`
-    (qspecl_then [`D`,`explicit`] mp_tac) >>
-  disch_then (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
-  disch_then (qspecl_then [`b with vs_inst_idx := SUC s.vs_inst_idx`,
-    `H`,`u0`,`[]`,`OK (t with vs_inst_idx := SUC (SUC s.vs_inst_idx))`,`H`,`u`] mp_tac) >>
-  simp[ADD1]
+  conj_tac >-
+   (rpt gen_tac >>
+    qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _`
+      (qspecl_then [`D`,`explicit`] mp_tac) >>
+    disch_then (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
+    disch_then (qspecl_then [`b with vs_inst_idx := SUC s.vs_inst_idx`,
+      `H`,`u0`,`[]`,`OK (t with vs_inst_idx := SUC (SUC s.vs_inst_idx))`,`H`,`u`] mp_tac) >>
+    simp[ADD1]) >>
+  `!D. inst_seq_ptr D lower ctx fn PG G tn [i0;i1] s H u` by
+    (gen_tac >> suspend "certificate") >>
+  suspend "continuation"
 QED
 
 Resume constructor_array_header_origin_ptr[store_safe]:
   simp[ptr_safe_step_def, Abbr `i1`, mk_inst_def] >>
   irule ptr_inst_ok_lower_bound_transport >>
-  (conj_tac >- gvs[allocas_from_def, update_var_def]) >>
-  qexists `0:num` >> simp[] >>
+  (conj_tac >- (gvs[allocas_from_def, update_var_def] >> metis_tac[])) >>
+  qexists `0:num` >> simp[GSYM mk_inst_def] >>
   irule ptr_inst_ok_mstore >>
   gvs[ptr_covers_def, lookup_var_def]
 QED
 
 Resume constructor_array_header_origin_ptr[store_path]:
-  FAIL_TAC "store_path"
+  `b.vs_inst_idx = s.vs_inst_idx /\ b.vs_current_bb = s.vs_current_bb /\
+   ~b.vs_halted` by simp[update_var_def] >>
+  `step_inst_base i1 (b with vs_inst_idx := SUC s.vs_inst_idx) =
+     OK (t with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[step_inst_inst_idx_indep, Abbr `i1`, mk_inst_def, is_terminator_def,
+      exec_result_map_def] >>
+  `step_prov PG H i1 (t with vs_inst_idx := SUC s.vs_inst_idx) = H /\
+   step_taint i1 (b with vs_inst_idx := SUC s.vs_inst_idx)
+     (t with vs_inst_idx := SUC s.vs_inst_idx) u0 = u` by
+    simp[step_prov_inst_idx, step_taint_inst_idx, Abbr `u`] >>
+  `gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
+    (b with vs_inst_idx := SUC s.vs_inst_idx,H,u0) []
+    (OK ((t with vs_inst_idx := SUC s.vs_inst_idx) with
+       vs_inst_idx := SUC (b with vs_inst_idx := SUC s.vs_inst_idx).vs_inst_idx),
+     step_prov PG H i1 (t with vs_inst_idx := SUC s.vs_inst_idx),
+     step_taint i1 (b with vs_inst_idx := SUC s.vs_inst_idx)
+       (t with vs_inst_idx := SUC s.vs_inst_idx) u0)` suffices_by simp[] >>
+  irule constructor_header_step >>
+  simp[] >>
+  simp[Abbr `i1`, mk_inst_def, is_terminator_def,
+    memSafeRunTheory.inst_dload_in_section_other] >>
+  conj_tac >- (qexists `bb` >> gvs[mk_inst_def]) >>
+  simp[GSYM mk_inst_def, below_frontier_MSTORE] >>
+  qpat_x_assum `b = update_var _ _ _` (SUBST1_TAC o SYM) >>
+  simp[eval_operand_def] >> rpt strip_tac >> gvs[w2n_n2w, update_var_def]
+QED
+
+Resume constructor_array_header_origin_ptr[certificate]:
+  `ptr_inst_ok D lower 0 ctx fn G tn i0 s /\
+   ptr_inst_ok D lower 0 ctx fn H u0 i1
+     (b with vs_inst_idx := SUC s.vs_inst_idx)` by
+    metis_tac[ptr_safe_step_def] >>
+  `step_inst_base i1 (b with vs_inst_idx := SUC s.vs_inst_idx) =
+    OK (t with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[step_inst_inst_idx_indep, Abbr `i1`, mk_inst_def,
+      is_terminator_def, exec_result_map_def] >>
+  simp[inst_seq_ptr_def, GSYM markerTheory.Abbrev_def,
+    step_prov_inst_idx, step_taint_inst_idx] >>
+  simp[Abbr `H`, Abbr `u0`, Abbr `u`] >> gvs[]
+QED
+
+Resume constructor_array_header_origin_ptr[continuation]:
+  `isPREFIX [i0;i1] (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (qpat_assum `fn_has_code _ _ _` mp_tac >>
+     simp_tac bool_ss [fn_has_code_def] >> strip_tac >>
+     `bb' = bb` by metis_tac[optionTheory.SOME_11] >>
+     qpat_x_assum `isPREFIX _ _` mp_tac >>
+     simp_tac bool_ss [IS_PREFIX_APPEND] >> strip_tac >>
+     gvs[Abbr `i1`, DROP_LENGTH_APPEND] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+     qexists `l` >> simp[]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    [i0;i1]` by simp[Abbr `i0`, Abbr `i1`, mk_inst_def, is_terminator_def] >>
+  gen_tac >> strip_tac >>
+  `inst_seq_ptr D lower ctx fn PG G tn [i0;i1] s H u` by simp[] >>
+  qpat_x_assum `!code s t G tn G' tn' ctx fn bb D lo PG. _`
+    (drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspec_then `t` mp_tac) >>
+  simp[GSYM markerTheory.Abbrev_def] >>
+  gvs[]
 QED
 
 Finalise constructor_array_header_origin_ptr
