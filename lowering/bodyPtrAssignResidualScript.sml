@@ -18,6 +18,7 @@ Ancestors
   vyperTypeSystem list finite_map bodyPtrAssignSnapshot bodyPtrAssignPlaceCoverage
   bodyPtrAssignStatic aggregateNormalizePtr supportedTargetLocalLive
   storeSlotsPtrBase placeMemoryGhostPtr bodyPtrAssignMemorySnapshot bodyPtrAssignBytesSnapshot
+  bodyPtrAssignBytesLiveSnapshot bodyPtrAssignTargetReady
 
 val _ = Parse.hide "body";
 

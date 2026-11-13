@@ -10,7 +10,7 @@ Ancestors
   ghostPcTransportPtr allocationPtr ptrDiscipline bodyPtrDefs
   venomState venomInst venomExecSemantics words finite_map arithmetic list rich_list
 
-Theorem aggregate_normalize_alloc_ptr[local]:
+Theorem aggregate_normalize_alloc_ptr:
   !ctx fn cenv cx es sa sm buf n s G tn d D PG sty stv v src sw va vb.
   compile_alloc_buffer n sa = (buf,sm) /\ fn_has_code sa sm fn /\
   stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
