@@ -23,7 +23,7 @@ Ancestors
   supportedNames supportedProgramProps loweringShapeDefs unitShapeDefs venomExecProofs list
   entryValueRevertPtr entryDispatchPtr sourceEntryCode selectedBodyCode
   rawEntryCode entryCheckIntervals sourceEntrySelection actualRegistrationCode
-  entryLocals actualEntryAllocationFrame
+  entryLocals actualEntryAllocationFrame runtimeBodyStartDefs
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
   venomState compileEnv loweringStateRelDefs e2eDefs supportedProgram compileVyper fragExec
@@ -96,6 +96,9 @@ Theorem external_entry_reaches_registration_ptr:
             tx.function_name, args, [], ret, fbody)) =
         (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
          rt) /\
+      runtime_selected_body_start tops rpolicy
+        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
+         rt) st /\
       compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
       compile_guarded_body cenv F nkey ut' iv fbody rt sa = ((), st') /\
       fn_has_code st sa efn /\ fn_has_code sa st' efn /\
