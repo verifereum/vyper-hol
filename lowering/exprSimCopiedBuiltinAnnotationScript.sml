@@ -25,3 +25,11 @@ Proof
   Cases_on `method_id_literal (HD args)` >>
   simp[ptr_result_type, literal_result_type, stack_result_type]
 QED
+
+Theorem compile_expr_array_result_type:
+  expr_type e = ArrayT et bd /\ post_value_type ce e = expr_type e /\
+  compile_expr ce ty e sa = (vv,sb) ==> vv_type vv = ArrayT et bd
+Proof
+  mp_tac compile_expr_array_result_type_from_builtin >>
+  simp[builtin_result_type] >> metis_tac[]
+QED
