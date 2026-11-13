@@ -24,33 +24,6 @@ Proof
   rw[ghost_kept_def, SUBSET_DEF] >> metis_tac[]
 QED
 
-Theorem ghost_inv_at_register_transport:
-  ghost_inv_at D lo d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
-  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
-          not_fresh_at sa x) /\
-  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
-          not_fresh_at sa x) /\
-  (!x. not_fresh_at sa x ==>
-       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
-       op_taint tn' (Var x) = op_taint tn (Var x)) /\
-  t.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem /\
-  t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
-  t.vs_transient = s.vs_transient /\ t.vs_immutables = s.vs_immutables /\
-  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-  tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
-  tn'.t_imm = tn.t_imm ==>
-  ghost_inv_at D lo d cenv cx es G' tn' t
-Proof
-  simp[ghost_inv_at_def, local_ptrs_reserved_def, stor_taint_ok_at_def,
-       allocas_from_def] >> rpt strip_tac
-  >- (gvs[ptr_covers_def] >> metis_tac[])
-  >- metis_tac[]
-  >- (Cases_on `d` >- gvs[return_buf_ptr_def] >>
-      PairCases_on `x` >> gvs[return_buf_ptr_def, ptr_covers_def] >>
-      metis_tac[])
-  >> metis_tac[]
-QED
-
 Theorem ghost_inv_register_transport:
   ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
