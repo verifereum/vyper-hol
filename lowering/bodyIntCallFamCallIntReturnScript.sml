@@ -392,7 +392,7 @@ QED
 
 Theorem intcall_nested_return:
   !fp ce env ann name es dflt ty sa sb vv s0 es0 mut args ret ss rr
-   prev penv rtv es1 t rc rbs pvs.
+   prev penv rtv es1 t retc rbs pvs.
     intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
     expr_body_pre ce fp.jc_cx env (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     supportedExprs$supported_expr fp.jc_tops (Call ann (IntCall (NONE,name)) es dflt) /\
@@ -406,7 +406,7 @@ Theorem intcall_nested_return:
       sa sb vv s0 es0 (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
     intcall_expr_res fp ce env (es1 with scopes := prev) sa t /\
     s0.vs_alloca_next <= t.vs_alloca_next /\
-    ce.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    ce.ce_func_info (nsid_to_string (NONE,name)) = (retc,rbs,pvs) /\
     (!callee entered bb inst lbl arg_ops argv.
        gas_invoke_entry (fp.jc_ctx,fp.jc_func) t callee entered /\
        lookup_block t.vs_current_bb fp.jc_func.fn_blocks = SOME bb /\
@@ -415,8 +415,8 @@ Theorem intcall_nested_return:
        eval_operands arg_ops t = SOME argv ==>
        gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,callee)
          (intcall_callee_src fp.jc_cx name mut F ss) (es1,entered) (\res ee r. F)
-         (intcall_callee_exit fp.jc_func ce fp.jc_cx mut F rtv rc
-            (if rc = 0 /\
+         (intcall_callee_exit fp.jc_func ce fp.jc_cx mut F rtv retc
+            (if retc = 0 /\
                 ce.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
              then SOME (HD argv) else NONE)
             sa.cs_next_id sb.cs_next_id t)) ==>

@@ -19,7 +19,7 @@ Libs
 (* Held: seam 3 for a nonreentrant callee, at any annotation. *)
 Theorem intcall_seam3_nonreentrant:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
-   mut args ret ss rr prev penv rtv es1 t rc rbs pvs.
+   mut args ret ss rr prev penv rtv es1 t retc rbs pvs.
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
@@ -31,7 +31,7 @@ Theorem intcall_seam3_nonreentrant:
     local_ptrs_reserved cenv sa /\
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
       (mut,T,args,ret,ss,rr) prev penv rtv es1 t /\
-    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (retc,rbs,pvs) /\
     (!callee entered bb inst lbl arg_ops argv.
        gas_invoke_entry (ctx,func) t callee entered /\
        lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
@@ -40,8 +40,8 @@ Theorem intcall_seam3_nonreentrant:
        eval_operands arg_ops t = SOME argv ==>
        gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut T ss)
          (es1,entered) (\res ee r. F)
-         (intcall_callee_exit func cenv cx mut T rtv rc
-            (if rc = 0 /\
+         (intcall_callee_exit func cenv cx mut T rtv retc
+            (if retc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)
             sa.cs_next_id sb.cs_next_id t)) ==>
@@ -65,7 +65,7 @@ QED
 (* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem intcall_return_restore_F:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
-   mut args ret ss rr prev penv rtv es1 t rc rbs pvs.
+   mut args ret ss rr prev penv rtv es1 t retc rbs pvs.
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
@@ -77,7 +77,7 @@ Theorem intcall_return_restore_F:
     local_ptrs_reserved cenv sa /\
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
       (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
-    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (retc,rbs,pvs) /\
     cenv.ce_func_return_type (nsid_to_string (NONE,name)) = ann /\
     (!callee entered bb inst lbl arg_ops argv.
        gas_invoke_entry (ctx,func) t callee entered /\
@@ -87,8 +87,8 @@ Theorem intcall_return_restore_F:
        eval_operands arg_ops t = SOME argv ==>
        gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut F ss)
          (es1,entered) (\res ee r. F)
-         (intcall_callee_exit func cenv cx mut F rtv rc
-            (if rc = 0 /\
+         (intcall_callee_exit func cenv cx mut F rtv retc
+            (if retc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)
             sa.cs_next_id sb.cs_next_id t)) ==>
@@ -109,7 +109,7 @@ Proof
      simp[post_value_type_def, lowered_value_type_def, expr_type_def]) >>
   `ret = ann` by (drule_all body_internal_decl_return_type >> simp[]) >>
   qpat_x_assum `ret = ann` SUBST_ALL_TAC >>
-  `rc' = returns_stack_count
+  `retc' = returns_stack_count
     (\n. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields n)) ann` by
     (drule_all body_internal_decl_return_count >> simp[]) >>
   `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
@@ -131,10 +131,10 @@ Proof
     fs[intcall_entry_def, stmt_state_rel_def] >>
   qpat_assum `intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[intcall_entry_def] >> strip_tac >>
-  qpat_assum `cenv.ce_func_info _ = (rc'',rbs',pvs')` mp_tac >>
-  qpat_assum `cenv.ce_func_info _ = (rc',rbs,pvs)` (fn th => rewrite_tac[th]) >>
+  qpat_assum `cenv.ce_func_info _ = (retc'',rbs',pvs')` mp_tac >>
+  qpat_assum `cenv.ce_func_info _ = (retc',rbs,pvs)` (fn th => rewrite_tac[th]) >>
   simp[NoAsms] >> strip_tac >>
-  qpat_x_assum `rc' = rc''` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `retc' = retc''` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `rbs = rbs'` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `pvs = pvs'` (SUBST_ALL_TAC o SYM) >>
   qpat_assum `cenv.ce_func_return_type _ = ann` SUBST_ALL_TAC >>
@@ -149,8 +149,8 @@ Proof
     pure_once_rewrite_tac[GSYM intcall_callee_src_F] >> simp[]) >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `gas_invoke_entry _ _ _ _`)) >>
-  qexists_tac `\v ee ir cs. intcall_callee_exit func cenv cx mut F rtv rc'
-    (if rc' = 0 /\ ann <> NoneT then SOME (HD argv) else NONE)
+  qexists_tac `\v ee ir cs. intcall_callee_exit func cenv cx mut F rtv retc'
+    (if retc' = 0 /\ ann <> NoneT then SOME (HD argv) else NONE)
     sa.cs_next_id sb.cs_next_id t (INL v) ee (IntRet ir cs)` >>
   reverse conj_tac >-
     (simp[NoAsms, intcall_callee_exit_F] >>
@@ -178,9 +178,9 @@ Proof
   goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
-  qexistsl_tac [`arg_ops`,`ann`,`lbl`,`rc'`,`rc'`,`rbs`,`rbs`,`rtv`,`HD argv`] >>
+  qexistsl_tac [`arg_ops`,`ann`,`lbl`,`retc'`,`retc'`,`rbs`,`rbs`,`rtv`,`HD argv`] >>
   asm_rewrite_tac[] >> simp[NoAsms, expr_type_def] >>
-  qpat_assum `rc' = returns_stack_count _ _` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_assum `retc' = returns_stack_count _ _` (fn th => rewrite_tac[GSYM th]) >>
   asm_rewrite_tac[]
   *)
   cheat
@@ -189,7 +189,7 @@ QED
 
 Theorem intcall_return_restore:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
-   mut nr args ret ss rr prev penv rtv es1 t rc rbs pvs.
+   mut nr args ret ss rr prev penv rtv es1 t retc rbs pvs.
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
@@ -201,7 +201,7 @@ Theorem intcall_return_restore:
     local_ptrs_reserved cenv sa /\
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
       (mut,nr,args,ret,ss,rr) prev penv rtv es1 t /\
-    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (retc,rbs,pvs) /\
     cenv.ce_func_return_type (nsid_to_string (NONE,name)) = ann /\
     (!callee entered bb inst lbl arg_ops argv.
        gas_invoke_entry (ctx,func) t callee entered /\
@@ -211,8 +211,8 @@ Theorem intcall_return_restore:
        eval_operands arg_ops t = SOME argv ==>
        gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut nr ss)
          (es1,entered) (\res ee r. F)
-         (intcall_callee_exit func cenv cx mut nr rtv rc
-            (if rc = 0 /\
+         (intcall_callee_exit func cenv cx mut nr rtv retc
+            (if retc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)
             sa.cs_next_id sb.cs_next_id t)) ==>
@@ -268,7 +268,7 @@ QED
 (* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem intcall_return_widened_F:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
-   mut args ret ss rr prev penv rtv es1 t rc rbs pvs.
+   mut args ret ss rr prev penv rtv es1 t retc rbs pvs.
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
@@ -280,7 +280,7 @@ Theorem intcall_return_widened_F:
     local_ptrs_reserved cenv sa /\
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
       (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
-    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (retc,rbs,pvs) /\
     cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> ann /\
     (!callee entered bb inst lbl arg_ops argv.
        gas_invoke_entry (ctx,func) t callee entered /\
@@ -290,8 +290,8 @@ Theorem intcall_return_widened_F:
        eval_operands arg_ops t = SOME argv ==>
        gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut F ss)
          (es1,entered) (\res ee r. F)
-         (intcall_callee_exit func cenv cx mut F rtv rc
-            (if rc = 0 /\
+         (intcall_callee_exit func cenv cx mut F rtv retc
+            (if retc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)
             sa.cs_next_id sb.cs_next_id t)) ==>
@@ -310,7 +310,7 @@ Proof
   `ret <> ann` by metis_tac[] >>
   drule_all widened_return_classification >> strip_tac >>
   `ret <> NoneT` by (strip_tac >> gvs[]) >>
-  `rc' = returns_stack_count
+  `retc' = returns_stack_count
     (\n. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields n)) ret` by
     (drule_all body_internal_decl_return_count >> simp[]) >>
   `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
@@ -331,10 +331,10 @@ Proof
     fs[intcall_entry_def, stmt_state_rel_def] >>
   qpat_assum `intcall_entry _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[intcall_entry_def] >> strip_tac >>
-  qpat_assum `cenv.ce_func_info _ = (rc'',rbs',pvs')` mp_tac >>
-  qpat_assum `cenv.ce_func_info _ = (rc',rbs,pvs)` (fn th => rewrite_tac[th]) >>
+  qpat_assum `cenv.ce_func_info _ = (retc'',rbs',pvs')` mp_tac >>
+  qpat_assum `cenv.ce_func_info _ = (retc',rbs,pvs)` (fn th => rewrite_tac[th]) >>
   simp[NoAsms] >> strip_tac >>
-  qpat_x_assum `rc' = rc''` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `retc' = retc''` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `rbs = rbs'` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `pvs = pvs'` (SUBST_ALL_TAC o SYM) >>
   qpat_assum `cenv.ce_func_return_type _ = ret` SUBST_ALL_TAC >>
@@ -348,8 +348,8 @@ Proof
     pure_once_rewrite_tac[GSYM intcall_callee_src_F] >> simp[]) >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `gas_invoke_entry _ _ _ _`)) >>
-  qexists_tac `\v ee ir cs. intcall_callee_exit func cenv cx mut F rtv rc'
-    (if rc' = 0 /\ ret <> NoneT then SOME (HD argv) else NONE)
+  qexists_tac `\v ee ir cs. intcall_callee_exit func cenv cx mut F rtv retc'
+    (if retc' = 0 /\ ret <> NoneT then SOME (HD argv) else NONE)
     sa.cs_next_id sb.cs_next_id t (INL v) ee (IntRet ir cs)` >>
   reverse conj_tac >-
     (simp[NoAsms, intcall_callee_exit_F] >>
@@ -383,7 +383,7 @@ Proof
       (!id lb lsz. local_region cenv prev out id lb lsz ==>
         off + buf.buf_size <= lb \/ lb + lsz <= off))` by
     (qpat_assum `ret <> NoneT` (fn th =>
-       irule (Q.INST [`cty` |-> `ret`] (Q.SPEC `rc'` physical_source_return_dispatch)
+       irule (Q.INST [`cty` |-> `ret`] (Q.SPEC `retc'` physical_source_return_dispatch)
          |> SIMP_RULE (srw_ss()) [th])) >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      TRY (qexists_tac `es1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -391,15 +391,15 @@ Proof
      goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
-     qexistsl_tac [`lbl`,`rbs`,`rc'`,`HD argv`] >>
+     qexistsl_tac [`lbl`,`rbs`,`retc'`,`HD argv`] >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-     >- (qpat_x_assum `0 < rc' \/ ret <> NoneT ==> _` mp_tac >>
+     >- (qpat_x_assum `0 < retc' \/ ret <> NoneT ==> _` mp_tac >>
          qpat_assum `ret <> NoneT` (fn th => simp[NoAsms, th]) >>
          POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
          goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
          goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
          metis_tac[])
-     >- (qpat_assum `rc' = returns_stack_count _ _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+     >- (qpat_assum `retc' = returns_stack_count _ _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
      simp[]) >>
   pop_assum strip_assume_tac >>
   qexistsl_tac [`k`,`out`] >>
@@ -434,7 +434,7 @@ QED
 
 Theorem intcall_return_widened:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
-   mut nr args ret ss rr prev penv rtv es1 t rc rbs pvs.
+   mut nr args ret ss rr prev penv rtv es1 t retc rbs pvs.
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
@@ -446,7 +446,7 @@ Theorem intcall_return_widened:
     local_ptrs_reserved cenv sa /\
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
       (mut,nr,args,ret,ss,rr) prev penv rtv es1 t /\
-    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    cenv.ce_func_info (nsid_to_string (NONE,name)) = (retc,rbs,pvs) /\
     cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> ann /\
     (!callee entered bb inst lbl arg_ops argv.
        gas_invoke_entry (ctx,func) t callee entered /\
@@ -456,8 +456,8 @@ Theorem intcall_return_widened:
        eval_operands arg_ops t = SOME argv ==>
        gas_outcome F (cx_tops cx) (ctx,callee) (intcall_callee_src cx name mut nr ss)
          (es1,entered) (\res ee r. F)
-         (intcall_callee_exit func cenv cx mut nr rtv rc
-            (if rc = 0 /\
+         (intcall_callee_exit func cenv cx mut nr rtv retc
+            (if retc = 0 /\
                cenv.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
             then SOME (HD argv) else NONE)
             sa.cs_next_id sb.cs_next_id t)) ==>
