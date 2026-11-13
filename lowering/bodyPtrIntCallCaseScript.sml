@@ -14,7 +14,7 @@ Ancestors
   bodyPtrIntCallEntryContracts bodyPtrIntCallMargin
   bodyPtrIntCallRunConfinement bodyPtrIntCallStaticArrayCopy
   bodyPtrIntCallWordStore bodyPtrIntCallPrologue bodyPtrIntCallScratch
-  bodyPtrIntCallArgumentLayout
+  bodyPtrIntCallArgumentLayout bodyPtrIntCallReturnWiden
   vyperState vyperContext vyperTypeCallGraph list
 
 val _ = Parse.hide "body";
