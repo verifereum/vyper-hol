@@ -10,7 +10,7 @@ Ancestors
   bodyPtrDefs loweringStateRelDefs typedMemoryCopy venomMemDefs
   venomState valueEncoding valueEncodingDefs finite_map arithmetic words list
 
-Theorem owned_scalar_local_tuple_store_ptr:
+Theorem scalar_local_saved_window_store_ptr:
   body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
   well_typed_target env (NameTarget id) dty /\
   runtime_place_writable cx es (MemoryPlace id []) /\
@@ -33,8 +33,8 @@ Theorem owned_scalar_local_tuple_store_ptr:
   (is_word_type sty ==> sw = typed_val_to_w256 stv v) /\
   (~is_word_type sty ==> ptr_covers G tn src s (type_memory_size stv) /\
     own_base <= w2n sw /\ w2n sw+type_memory_size stv <= own_base+own_size) /\
-  FLOOKUP s.vs_allocas aid = SOME (own_base,own_size) /\ aid < sa.cs_next_id /\
-  (!name b sz. local_region cenv es.scopes s name b sz ==>
+  own_base+own_size < dimword (:256) /\
+  (!b sz. local_region cenv es.scopes s id b sz ==>
     own_base+own_size <= b \/ b+sz <= own_base) ==>
   ?fin Hf tf t.
     write_place cx (MemoryPlace id []) v es = (INL (),fin) /\
@@ -44,7 +44,7 @@ Theorem owned_scalar_local_tuple_store_ptr:
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> lookup_var x t = SOME w) /\
     (!x. not_fresh_at sa x ==> FLOOKUP Hf x = FLOOKUP G x /\
       op_taint tf (Var x) = op_taint tn (Var x)) /\
-    FLOOKUP t.vs_allocas aid = SOME (own_base,own_size) /\
+    t.vs_allocas = s.vs_allocas /\
     (!i. own_base <= i /\ i < own_base+own_size ==>
       mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
       (i IN tf.t_mem ==> i IN tn.t_mem)) /\
@@ -92,7 +92,7 @@ Proof
    suspend "memory")
 QED
 
-Resume owned_scalar_local_tuple_store_ptr[word]:
+Resume scalar_local_saved_window_store_ptr[word]:
   markerLib.RESUME_TAC >>
   `supported_word_type sty` by
     (fs[supported_scalar_type_def] >>
@@ -120,16 +120,13 @@ Resume owned_scalar_local_tuple_store_ptr[word]:
   metis_tac[]
 QED
 
-Resume owned_scalar_local_tuple_store_ptr[memory]:
+Resume scalar_local_saved_window_store_ptr[memory]:
   markerLib.RESUME_TAC >>
   `compile_store_memory cenv (Var src) (Var p) dty sty sa = ((),sb)` by fs[] >>
   `own_base <= w2n sw /\ w2n sw+type_memory_size stv <= own_base+own_size` by
     metis_tac[] >>
   `w2n sw+type_memory_size stv < dimword (:256)` by
-    (`alloca_inv s /\ alloca_room ctx func s` by fs[stmt_state_rel_def] >>
-     `own_base+own_size <= s.vs_alloca_next` by
-       metis_tac[alloca_inv_def,alloca_next_valid_def] >>
-     drule alloca_room_next_lt >> decide_tac) >>
+    decide_tac >>
   `w2n dw+type_memory_size dtv <= w2n sw \/
     w2n sw+type_memory_size stv <= w2n dw` by decide_tac >>
   `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
@@ -167,4 +164,58 @@ Resume owned_scalar_local_tuple_store_ptr[memory]:
   metis_tac[]
 QED
 
-Finalise owned_scalar_local_tuple_store_ptr
+Finalise scalar_local_saved_window_store_ptr
+
+Theorem owned_scalar_local_tuple_store_ptr:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  well_typed_target env (NameTarget id) dty /\
+  runtime_place_writable cx es (MemoryPlace id []) /\
+  supported_scalar_type sty /\ supported_scalar_type dty /\ arg_type_fits sty dty /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+  type_memory_bytes cenv sty = type_memory_size stv /\
+  type_memory_bytes cenv dty = type_memory_size dtv /\
+  compile_tuple_store_all cenv [sty] [BaseTarget (NameTarget id)] [Var src] sa = ((),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  ret_pc_ok cenv sa s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ptr_val_ok cx sty v (Var src) G tn s /\ not_fresh_at sa src /\
+  lookup_var src s = SOME sw /\
+  (is_word_type sty ==> sw = typed_val_to_w256 stv v) /\
+  (~is_word_type sty ==> ptr_covers G tn src s (type_memory_size stv) /\
+    own_base <= w2n sw /\ w2n sw+type_memory_size stv <= own_base+own_size) /\
+  FLOOKUP s.vs_allocas aid = SOME (own_base,own_size) /\ aid < sa.cs_next_id /\
+  (!name b sz. local_region cenv es.scopes s name b sz ==>
+    own_base+own_size <= b \/ b+sz <= own_base) ==>
+  ?fin Hf tf t.
+    write_place cx (MemoryPlace id []) v es = (INL (),fin) /\
+    stmt_state_rel ctx func cenv cx fin t /\ ghost_inv d cenv cx fin Hf tf t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> lookup_var x t = SOME w) /\
+    (!x. not_fresh_at sa x ==> FLOOKUP Hf x = FLOOKUP G x /\
+      op_taint tf (Var x) = op_taint tn (Var x)) /\
+    FLOOKUP t.vs_allocas aid = SOME (own_base,own_size) /\
+    (!i. own_base <= i /\ i < own_base+own_size ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tf.t_mem ==> i IN tn.t_mem)) /\
+    gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 Hf tf (OK t)
+
+
+Proof
+  strip_tac >>
+  `own_base+own_size < dimword (:256)` by
+    (`alloca_inv s /\ alloca_room ctx func s` by fs[stmt_state_rel_def] >>
+     `own_base+own_size <= s.vs_alloca_next` by
+       metis_tac[alloca_inv_def,alloca_next_valid_def] >>
+     drule alloca_room_next_lt >> decide_tac) >>
+  mp_tac (Q.INST [`PG` |-> `PG`] (SPEC_ALL scalar_local_saved_window_store_ptr)) >>
+  (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >>
+  disch_then (qx_choosel_then [`fin`,`Hf`,`tf`,`t`] strip_assume_tac) >>
+  qexistsl_tac [`fin`,`Hf`,`tf`,`t`] >> asm_rewrite_tac[]
+QED
