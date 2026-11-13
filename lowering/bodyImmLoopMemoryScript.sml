@@ -206,6 +206,7 @@ Resume immutable_code_loop_outcome_mem[join]:
       ret_pc_ok bc sb0 s_body /\ gas_marked_path T ctx func live 0 (OK s_body) /\
       s_body.vs_allocas = live.vs_allocas /\ s_body.vs_alloca_next = live.vs_alloca_next /\
       alloca_history func s_body /\ return_buf_frame d bc sb0 s_body /\
+      ret_buf_frontier d bc s_body /\
       (!x. not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep ==>
         lookup_var x s_body = lookup_var x live)` by suspend "entry" >>
   `!k ei. k < LENGTH vs /\ P ei /\ lookup_scopes id ei.scopes = NONE ==>
@@ -344,7 +345,33 @@ Resume immutable_code_loop_outcome_mem[entry]:
   disch_then (drule_at (Pat `return_buf_frame d cenv sa live`)) >>
   disch_then (drule_at (Pat `lookup_block sb0.cs_current_bb _ = _`)) >>
   disch_then (drule_all o SRULE []) >>
-  strip_tac >> goal_assum (drule_at Any) >>
+  strip_tac >>
+  rename1 `gas_marked_path T ctx func live 0 (OK s_body)` >>
+  `!x w. not_fresh_at st1 x /\ lookup_var x live = SOME w ==>
+    lookup_var x s_body = SOME w` by
+    (rpt strip_tac >>
+     `not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep` by metis_tac[] >>
+     metis_tac[]) >>
+  `!lo. alloca_prefix lo live ==> alloca_prefix lo s_body` by
+    (qpat_x_assum `s_body.vs_allocas = live.vs_allocas` mp_tac >>
+     qpat_x_assum `s_body.vs_alloca_next = live.vs_alloca_next` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[alloca_prefix_def] >> metis_tac[]) >>
+  `!n q z. FLOOKUP bc.ce_vars n <> FLOOKUP cenv.ce_vars n /\
+     FLOOKUP bc.ce_vars n = SOME (PtrVar (Var q) z) ==>
+     ?aid w z'. lookup_var q s_body = SOME w /\
+                FLOOKUP s_body.vs_allocas aid = SOME (w2n w,z')` by
+    (rpt strip_tac >> `n = id` by metis_tac[] >>
+     qpat_x_assum `n = id` mp_tac >>
+     qpat_x_assum `FLOOKUP bc.ce_vars n = SOME (PtrVar (Var q) z)` mp_tac >>
+     qpat_x_assum `FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) _)` mp_tac >>
+     qpat_x_assum `lookup_var p s_body = SOME dst` mp_tac >>
+     qpat_x_assum `FLOOKUP s_body.vs_allocas _ = SOME (w2n dst,_)` mp_tac >>
+     qpat_x_assum `p = STRING _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  `ret_buf_frontier d bc s_body` by
+    (irule ret_buf_frontier_post >> qexistsl_tac [`cenv`, `live`, `st1`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  goal_assum (drule_at Any) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 Resume immutable_code_loop_outcome_mem[callbacks]:
