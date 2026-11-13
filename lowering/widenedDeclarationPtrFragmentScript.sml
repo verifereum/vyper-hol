@@ -1,7 +1,7 @@
 (* Counted pointer fragment for nonempty memory declarations. *)
 Theory widenedDeclarationPtrFragment
 Ancestors
- widenedDeclarationPtrOutcome widenedAssignPtrContinuation widenedAssignPtrRhsInput
+ widenedDeclarationPtrOutcome widenedAssignPtrContinuation widenedAssignPtrRhsInput exprOpenTerminals
  bodySim exprSimHypsDefs
  annAssignPtrMemoryLayout annAssignPtrMemoryCont annAssignPtrWord
  annAssignPtrSetup annAssignPtrCompose annAssignPtrFacts
@@ -12,18 +12,25 @@ Ancestors
  vyperTypeArgFits valueCopyBytes list finite_map
 Libs monadsyntax
 
+Theorem post_value_type_lowered_cong[local]:
+  lowered_value_type c e = lowered_value_type cenv e ==>
+  post_value_type c e = post_value_type cenv e
+Proof
+  Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- gvs[post_value_type_def] >>
+  metis_tac[post_value_type_not_int_call]
+QED
+
 Theorem widened_declaration_stmt_frag_ptr:
- !d ctx PG func cx lctx RetQ cenv ty id vtyp e ann es etv tyv ltv.
+ !d ctx PG func cx lctx RetQ cenv ty id vtyp e es etv tyv ltv.
  cenv.ce_alloca_locals /\
  ~is_word_type vtyp /\ ~(has_length_word vtyp /\ is_empty_value_expr e) /\
  lookup_scopes id es.scopes = NONE /\
  (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
- supported_expr tops e /\ e = Call ann (IntCall fid) args drv /\
+ supported_expr tops e /\ ~is_bytestring_type vtyp /\ ~is_word_type (expr_type e) /\
+ post_value_type cenv e = lowered_value_type cenv e /\
+ ~is_word_type (lowered_value_type cenv e) /\
  type_widens_to (get_tenv cx) (lowered_value_type cenv e) vtyp /\
- ~is_bytestring_type vtyp /\
- ~(lowered_value_type cenv e = expr_type e \/
-  is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type cenv e) /\
-  arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
  evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
  evaluate_type (get_tenv cx) vtyp = SOME tyv /\
  evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME ltv /\
@@ -83,11 +90,9 @@ Proof
 
  qpat_x_assum `!st0 c st1. _` kall_tac >>
  qpat_x_assum `!sa sb op. _` kall_tac >>
- `post_value_type c e = lowered_value_type c e /\
-  ~is_word_type (post_value_type c e) /\ ~is_word_type (expr_type e)` by
-   (qpat_assum `e = Call _ _ _ _` SUBST_ALL_TAC >>
-    drule retained_intcall_physical_layout >>
-    fs[expr_type_def] >> metis_tac[]) >>
+ `post_value_type c e = lowered_value_type c e` by
+   metis_tac[post_value_type_lowered_cong] >>
+ `~is_word_type (post_value_type c e)` by metis_tac[] >>
  `gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
    (vyperState$bind (eval_expr cx e) (read_result cx)) (es,s1,G1,tn1)
    (\res ee G tn t. ?v. res = INL v /\
@@ -132,20 +137,16 @@ Proof
  qpat_x_assum `s1 = _` kall_tac >>
  qpat_x_assum `G1 = _` kall_tac >>
  qpat_x_assum `tn1 = _` kall_tac >>
- `0 < type_memory_bytes c (lowered_value_type c e) /\
-  ?rp. vv = LocatedValue (c.ce_func_return_type (nsid_to_string fid)) rp /\
-    rp.ptr_location = LocMemory` by
-   (qpat_assum `e = Call _ _ _ _` SUBST_ALL_TAC >>
-    irule widened_assign_retained_call_memory >> metis_tac[expr_type_def]) >>
- `vv_location vv = SOME LocMemory` by simp[vv_location_def] >>
+ `~block_is_terminated sA` by
+   (qpat_assum `emit_inst ALLOCA _ _ st = _`
+      (mp_then Any mp_tac emit_inst_nonterminator_open) >>
+    simp[is_terminator_def]) >>
  `sa.cs_next_var <= sA.cs_next_var /\ ai.inst_id < sA.cs_next_id` by
    (drule_all declare_local_ptr >> strip_tac >>
     gvs[emit_inst_def, comp_bind_def, fresh_id_def, emit_def,
       comp_return_def, Abbr `ai`, mk_inst_def]) >>
  `ai.inst_id = st.cs_next_id` by simp[Abbr `ai`, mk_inst_def] >>
- qpat_assum `e = Call _ _ _ _` SUBST_ALL_TAC >>
  mp_tac (Q.INST [`old` |-> `cenv`,`typ` |-> `vtyp`,
-   `e` |-> `Call ann (IntCall fid) args drv`,
    `sa0` |-> `sa`,`sa` |-> `sA`,`sb` |-> `sB`,`fr` |-> `sa`,
    `sf` |-> `sb`,
    `bytes` |-> `type_memory_bytes c vtyp`,
@@ -156,3 +157,4 @@ Proof
  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
    fs[expr_type_def] >> metis_tac[])) >> simp[]
 QED
+
