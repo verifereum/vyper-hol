@@ -1482,3 +1482,52 @@ Proof
 QED
 
 Finalise window_child_prefix_joint
+
+Theorem window_child_suffix_joint:
+  abi_encode_child_suffix (Var head) (Var dp) offset len st = (out,en) /\
+  fn_has_code st en func /\
+  eval_operand (Var head) s = SOME (n2w h) /\
+  eval_operand (Var dp) s = SOME (n2w slot) /\
+  eval_operand offset s = SOME (n2w off) /\
+  eval_operand len s = SOME (n2w n) /\
+  (!x. Var head = Var x \/ Var dp = Var x \/ offset = Var x \/
+    len = Var x ==> not_fresh_at st x) /\
+  ptr_covers G tn head s 32 /\ ptr_covers G tn dp s 32 /\
+  op_taint tn offset = {} /\ op_taint tn len = {} /\
+  FLOOKUP s.vs_allocas site = SOME (slot,32) /\
+  h + 32 <= s.vs_alloca_next /\
+  slot + 32 <= s.vs_alloca_next /\
+  venomMemDefs$regions_disjoint (h,32) (slot,32) /\
+  alloca_inv s /\ alloca_room ctx func s /\
+  ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t G' tn'.
+    run_inst_seq (emitted_insts st en) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    window_phase ctx func st en {site} [(h,32)] s t /\
+    abi_encode_exec_frame func s t /\
+    out = len /\ eval_operand out t = SOME (n2w n) /\
+    (!x. out = Var x ==> not_fresh_at en x) /\
+    op_taint tn' out = {} /\
+    t.vs_memory =
+      (mstore slot (n2w (off+n)) (mstore h (n2w off) s)).vs_memory /\
+    mem_word_at h t.vs_memory = n2w off /\
+    mem_word_at slot t.vs_memory = n2w (off+n) /\
+    FLOOKUP t.vs_allocas site = SOME (slot,32) /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    (!x. not_fresh_at st x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem DIFF
+      ({i | h <= i /\ i < h + 32} UNION
+       {i | slot <= i /\ i < slot + 32}) /\
+    tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')
+Proof
+  cheat
+QED
