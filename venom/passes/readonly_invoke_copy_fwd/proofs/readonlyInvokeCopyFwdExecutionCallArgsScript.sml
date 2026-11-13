@@ -469,7 +469,7 @@ Proof
   fs[icf_collect_aliases_ircf_alias, EXTENSION] >> metis_tac[]
 QED
 
-Theorem ricf_call_event_source_root[local]:
+Theorem ricf_call_event_source_root:
   ricf_event_ok e bb /\ ricf_event_roots e bb = SOME (dr,Var sv,sz) ==>
   ricf_event_source e bb = Var sv
 Proof
