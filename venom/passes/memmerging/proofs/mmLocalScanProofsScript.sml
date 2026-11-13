@@ -6570,8 +6570,8 @@ QED
 
 Theorem mm_local_hazards_partition[local]:
   MEM h ss.ss_copies ==>
-  MEM h (flush_hazards Mem2Mem ss c).ss_copies \/
-  MEM h (flush_hazards Mem2Mem ss c).ss_flushed
+  MEM h (flush_hazards mode ss c).ss_copies \/
+  MEM h (flush_hazards mode ss c).ss_flushed
 Proof
   simp[flush_hazards_def, mode_allows_overlap_def] >>
   rpt IF_CASES_TAC >>
@@ -6605,6 +6605,40 @@ Proof
   `0 < LENGTH bs` by (Cases_on `bs` >> gvs[]) >> decide_tac
 QED
 
+Theorem mm_local_prefix_future_survivor[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  bb.bb_instructions = pre ++ i::post /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) mode) empty_scan_state pre /\
+  hs = flush_hazards mode (invalidate_loads ss iv) c /\
+  (scan_inst (dfg_build_function fn0) mode ss i).ss_flushed = hs.ss_flushed /\
+  MEM w pre /\ w.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  MEM h ss.ss_copies /\ MEM w.inst_id h.cg_inst_ids /\
+  MEM g (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  MEM w.inst_id g.cg_inst_ids /\ rep_of_group bb.bb_instructions g = SOME (r,g) /\
+  ~MEM r (MAP (\i. i.inst_id) pre) ==>
+  MEM h hs.ss_copies
+Proof
+  strip_tac >>
+  `MEM h hs.ss_copies \/ MEM h hs.ss_flushed` by
+    (gvs[] >> irule mm_local_hazards_partition >> simp[invalidate_loads_def]) >>
+  spose_not_then assume_tac >> fs[] >>
+  `MEM h (scan_block (dfg_build_function fn0) mode bb).ss_flushed` by
+    (qspecl_then [`post`, `scan_inst (dfg_build_function fn0) mode ss i`]
+       strip_assume_tac (Q.INST [`dfg` |-> `dfg_build_function fn0`]
+         mm_local_fold_flushed_extension) >>
+     gvs[scan_block_def, FOLDL_APPEND, hard_barrier_def, MEM_APPEND]) >>
+  `h = g` by
+    (irule mm_local_prefix_write_group_owner >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[MEM_APPEND]) >>
+  `MEM r h.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  `MEM r (MAP (\i. i.inst_id) pre)` by
+    (irule mm_local_prefix_fragment_ids_before_cut >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[APPEND_ASSOC]) >>
+  metis_tac[]
+QED
+
 Theorem mm_local_prefix_future_hazard[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -6621,23 +6655,7 @@ Theorem mm_local_prefix_future_hazard[local]:
   MEM h hs.ss_copies /\ ~copy_overwrites h (copy_src_interval c)
 Proof
   strip_tac >>
-  `MEM h hs.ss_copies \/ MEM h hs.ss_flushed` by
-    (gvs[] >> irule mm_local_hazards_partition >> simp[invalidate_loads_def]) >>
-  `MEM h hs.ss_copies` by
-    (spose_not_then assume_tac >> fs[] >>
-     `MEM h (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by
-       (qspecl_then [`post`, `scan_inst (dfg_build_function fn0) Mem2Mem ss i`]
-          strip_assume_tac (Q.INST [`dfg` |-> `dfg_build_function fn0`,
-            `mode` |-> `Mem2Mem`] mm_local_fold_flushed_extension) >>
-        gvs[scan_block_def, FOLDL_APPEND, hard_barrier_def, MEM_APPEND]) >>
-     `h = g` by
-       (irule mm_local_prefix_write_group_owner >>
-        goal_assum (drule_at Any) >> simp[] >> metis_tac[MEM_APPEND]) >>
-     `MEM r h.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
-     `MEM r (MAP (\i. i.inst_id) pre)` by
-       (irule mm_local_prefix_fragment_ids_before_cut >>
-        goal_assum (drule_at Any) >> simp[] >> metis_tac[APPEND_ASSOC]) >>
-     metis_tac[]) >>
+  `MEM h hs.ss_copies` by (irule mm_local_prefix_future_survivor >> metis_tac[]) >>
   simp[] >> gvs[] >> metis_tac[mm_local_hazards_source_exclusion]
 QED
 
