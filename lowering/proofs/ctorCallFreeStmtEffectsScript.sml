@@ -7,6 +7,55 @@ Ancestors
   ctorCallFreeABIEncode
   supportedExprTraverse supportedStmtTraverse e2eDeployDefs loweringShapeProps
 
+Theorem call_free_custom_error_store_args[local]:
+  (!ce ty e st.
+    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_shape_root e ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+      (state_insts (SND (compile_expr ce ty e st)))) ==>
+  !es tys ce dst off st.
+  EVERY ($~ o supported_expr_exists constructor_call_root) es /\
+  EVERY ($~ o supported_expr_exists expr_shape_root) es ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    (state_insts (SND (compile_custom_error_store_args ce es tys dst off st)))
+Proof
+  strip_tac >> Induct >> Cases_on `tys` >>
+  simp[compile_custom_error_store_args_def, every_state_insts_return] >>
+  rpt gen_tac >> strip_tac >> qid_spec_tac `st` >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[COND_RATOR, COND_RAND, every_state_insts_return,
+      call_free_emit_op, call_free_unwrap_value, call_free_store_memory])])
+QED
+
+Theorem call_free_revert_with_custom_error[local]:
+  (!ce ty e st.
+    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_shape_root e ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+      (state_insts (SND (compile_expr ce ty e st)))) ==>
+  !ce err st.
+  EVERY ($~ o supported_expr_exists constructor_call_root) (custom_error_exprs err) /\
+  EVERY ($~ o supported_expr_exists expr_shape_root) (custom_error_exprs err) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    (state_insts (SND (compile_revert_with_custom_error ce err st)))
+Proof
+  strip_tac >> drule call_free_custom_error_store_args >> strip_tac >>
+  gen_tac >> Cases >> rename1 `CustomError id pos kws` >> rpt gen_tac >>
+  strip_tac >> qid_spec_tac `st` >>
+  simp[compile_revert_with_custom_error_def] >>
+  Cases_on `ce.ce_error_info (nsid_to_string id)` >> simp[call_free_emit_inst] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac, IF_CASES_TAC,
+    gen_tac, CHANGED_TAC (simp[every_state_insts_return,
+      call_free_emit_inst, call_free_emit_void, call_free_emit_op,
+      call_free_alloc_buffer, cj 2 call_free_abi_encode])])
+QED
+
 Theorem call_free_stmt_assert:
   (!ce ty e st.
     ~supported_expr_exists constructor_call_root e /\
@@ -22,6 +71,7 @@ Theorem call_free_stmt_assert:
     (state_insts (SND (compile_stmt ce lc ty (Assert e ar) st)))
 Proof
   strip_tac >> drule call_free_reason_message >> disch_then assume_tac >>
+  drule call_free_revert_with_custom_error >> disch_then assume_tac >>
   rpt gen_tac >> Cases_on `ar` >>
   simp[supported_stmt_expr_exists_def, supported_assert_exists_def] >> strip_tac >>
   simp[Once compile_stmt_def, call_free_emit_inst] >>
@@ -49,6 +99,7 @@ Theorem call_free_stmt_raise:
     (state_insts (SND (compile_stmt ce lc ty (Raise rr) st)))
 Proof
   strip_tac >> drule call_free_reason_message >> disch_then assume_tac >>
+  drule call_free_revert_with_custom_error >> disch_then assume_tac >>
   rpt gen_tac >> Cases_on `rr` >>
   simp[supported_stmt_expr_exists_def, supported_raise_exists_def] >> strip_tac >>
   simp[Once compile_stmt_def, call_free_emit_inst] >>
