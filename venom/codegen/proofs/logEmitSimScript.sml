@@ -103,6 +103,32 @@ Proof
   simp[LET_THM, ADD_COMM, REVERSE_APPEND] >> rw[]
 QED
 
+(* A LOG that steps OK ran in a non-static frame. *)
+Theorem step_inst_log_not_static:
+  inst.inst_opcode = LOG /\
+  inst.inst_operands = Lit tc :: REVERSE (off_op :: sz_op :: topic_ops) /\
+  eval_operand off_op vs = SOME off /\
+  eval_operand sz_op vs = SOME sz /\
+  eval_operands topic_ops vs = SOME topics /\
+  step_inst fuel ctx inst vs = OK vs' ==>
+  ~vs.vs_call_ctx.cc_static
+Proof
+  rpt strip_tac >>
+  `IS_SOME (eval_operands inst.inst_operands vs)` by
+    (`IS_SOME (eval_operands topic_ops vs)` by simp[] >>
+     gvs[venomStateTheory.eval_operands_IS_SOME_EVERY, EVERY_REVERSE,
+         venomStateTheory.eval_operand_def]) >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[step_inst_non_invoke] >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_assum `inst.inst_opcode = LOG`
+    (fn th => PURE_REWRITE_TAC[th]) >>
+  qpat_x_assum `IS_SOME _`
+    (fn th => PURE_REWRITE_TAC[EQT_INTRO th, AND_CLAUSES]) >>
+  qpat_x_assum `vs.vs_call_ctx.cc_static` (fn th => PURE_REWRITE_TAC[EQT_INTRO th]) >>
+  simp[]
+QED
+
 Theorem source_memory_read_ranges_log:
   inst.inst_opcode = LOG /\
   inst.inst_operands = Lit tc :: REVERSE (off_op :: sz_op :: topic_ops) /\
@@ -177,7 +203,8 @@ Theorem asm_log_venom_asm_rel:
     st.as_stack = off :: sz :: (topics ++ rest) /\
     (!i. w2n off <= i /\ i < w2n off + w2n sz ==>
          ~(ps.ps_alloc.sa_spill_base <= i /\
-           i < ps.ps_alloc.sa_next_offset)) ==>
+           i < ps.ps_alloc.sa_next_offset)) /\
+    ~vs.vs_call_ctx.cc_static ==>
     ?st'. asm_log (LENGTH topics) st = AsmOK st' /\
       venom_asm_rel lo
         (ps with ps_stack := stack_pop (LENGTH topics + 2) ps.ps_stack)
@@ -212,6 +239,7 @@ Proof
       (if w2n sz = 0 then st.as_memory else
         asm_expand_memory (w2n off + w2n sz) st.as_memory)` by
     (irule log_memory_relations >> fs[venom_asm_rel_def]) >>
+  `~st.as_call_ctx.cc_static` by fs[venom_asm_rel_def] >>
   simp[asm_log_def, LET_THM, DROP_APPEND] >>
   fs[venom_asm_rel_def] >>
   simp[asm_next_def, venom_asm_rel_def, TAKE_APPEND]
@@ -263,6 +291,8 @@ Proof
          data := TAKE (w2n sz)
            (DROP (w2n off) vs.vs_memory ++ REPLICATE (w2n sz) 0w)|>]` by
     (drule_all step_inst_log >> asm_simp_tac (srw_ss()) []) >>
+  `~vs.vs_call_ctx.cc_static` by
+    (irule step_inst_log_not_static >> metis_tac[]) >>
   mp_tac (Q.ISPECL [`lo:(string,num) fmap`,`ps:plan_state`,
     `vs:venom_state`,`st:asm_state`,`off:bytes32`,`sz:bytes32`,
     `topics:bytes32 list`,`rest:bytes32 list`] asm_log_venom_asm_rel) >>

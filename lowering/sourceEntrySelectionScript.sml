@@ -15,14 +15,6 @@ Theorem source_valid_linear_dispatch_target:
 Proof
   strip_tac >>
   gvs[valid_vyper_call_def] >> gen_tac >>
-  `!nr' mut' typ x.
-     ~MEM (VariableDecl (Public nr') mut' tx.function_name typ x) tops` by
-    (rpt strip_tac >> drule_all supported_program_declaration >>
-     simp[supported_declaration_header_def]) >>
-  `!nr' b kt vt x.
-     ~MEM (HashMapDecl (Public nr') b tx.function_name kt vt x) tops` by
-    (rpt strip_tac >> drule_all supported_program_declaration >>
-     simp[supported_declaration_header_def]) >>
   `ALL_DISTINCT (MAP FST (build_selectors (type_env tops)
       (FST (classify_functions tops))))` by
     fs[supported_program_def, supported_declaration_names_def,

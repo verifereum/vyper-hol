@@ -1,12 +1,14 @@
 (* Creation-frame boundary: a run of the root-shadowed frame related to the
  * deployment unit's result gives the real creation frame's result
  * (shadow_root_run_halt/_exception and deploy_frame_complete).
- * TOP-LEVEL: deploy_venom_frame (a piece of e2e_deploy_correctness; admitted until proved).
+ * TOP-LEVEL: deploy_venom_frame (a piece of e2e_deploy_correctness; admitted until proved),
+ * deploy_frame_gas_sufficient (S7g-d, a piece of e2e_deploy_gas_sufficient; a planned admission).
  *)
 Theory ctorDeployFrame
 Ancestors
   ctorDeployDefs deployFrameReplay codegenCorrectness e2eDeployFrame
   frameOutcome vfmRunCall vfmState passSimulationDefs e2eDeployDefs
+  frameGas venomRunBounded
 
 (* Single-frame outcomes depend on the start state only through its one
    context's logs and the transaction parameters. *)
@@ -87,6 +89,22 @@ Proof
   gvs[frame_outcome_def, shadow_root_def, shadow_root_contexts_def]
 QED
 
+(* A pending deletion erases any earlier update of the deleted account. *)
+Theorem process_deletions_update_mem[local]:
+  !dels accs a x.
+    MEM a dels ==>
+    process_deletions dels (update_account a x accs) =
+    process_deletions dels accs
+Proof
+  Induct >> fs[vfmExecutionTheory.process_deletions_def, update_account_def] >>
+  rpt gen_tac >> Cases_on `h = a` >> fs[combinTheory.UPDATE_EQ] >>
+  strip_tac >>
+  `(h =+ empty_account_state) ((a =+ x) accs) =
+   (a =+ x) ((h =+ empty_account_state) accs)` by
+    (irule combinTheory.UPDATE_COMMUTES >> simp[]) >>
+  simp[]
+QED
+
 Theorem deploy_venom_frame:
   !tops runtime_bc deploy_bc am tx es src res.
     deploy_state_rel tops deploy_bc am tx es /\
@@ -113,7 +131,29 @@ Proof
   >~ [`Halt ss`]
   >- (drule_all deploy_frame_halt_mid >> strip_tac >>
       Cases_on `src`
-      >- (PairCases_on `x` >> gvs[deploy_venom_result_rel_def] >>
+      >- (PairCases_on `x` >>
+          Cases_on `ALOOKUP x0.sources tx.target = NONE`
+          >- (gvs[deploy_venom_result_rel_def] >>
+              qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
+                deploy_frame_complete >>
+              impl_tac >- simp[] >>
+              strip_tac >> gvs[]
+              >- (disj1_tac >> irule frame_resource_starved_single_transfer >>
+                  metis_tac[]) >>
+              disj2_tac >> simp[deploy_result_rel_def] >>
+              qexists_tac `ss.vs_logs` >>
+              simp[lookup_account_def, update_account_def,
+                   combinTheory.APPLY_UPDATE_THM] >>
+              conj_tac
+              >- (irule frame_outcome_single_transfer_none >> metis_tac[]) >>
+              `process_deletions ss.vs_pending_deletions
+                 (update_account tx.target
+                    (lookup_account tx.target ss.vs_accounts with code := [])
+                    ss.vs_accounts) =
+               process_deletions ss.vs_pending_deletions ss.vs_accounts` by
+                (irule process_deletions_update_mem >> simp[]) >>
+              fs[update_account_def, lookup_account_def]) >>
+          gvs[deploy_venom_result_rel_def] >>
           qspecl_then [`mid`,`ctxt`,`rb`,`tx.target`] mp_tac
             deploy_frame_complete >>
           impl_tac >- (Cases_on `runtime_bc` >> gvs[]) >>
@@ -139,4 +179,47 @@ Proof
       gvs[deploy_venom_result_rel_def, deploy_result_rel_def] >>
       metis_tac[]) >>
   drule deploy_venom_result_rel_terminates >> simp[terminates_def]
+QED
+
+(* PLANNED ADMISSION S7g-d, sufficient gas for deployment: the deploy-side
+   counterpart of codegen_gas_sufficient together with deploy_venom_frame.
+   Given the constructor unit's resource bound, some gas g, independent of
+   the creation frame, is enough: with g' >= g more gas, the creation frame
+   ends in OutOfGas only when the code it deposits, runtime_bc and the
+   immutables section, is longer than max_code_size, which handle_create
+   rejects with OutOfGas at any gas.  No RETURNDATACOPY exemption: the
+   constructor makes no calls.  The last premise says what the constructor
+   returns, so the deposit's length is LENGTH runtime_bc + imm_len tops.
+   Proof idea: S7g's per-instruction argument on the root-shadowed frame
+   codegen runs (shadow_root), with no RETURNDATACOPY run, plus the
+   deposit, which costs at most code_deposit_cost * max_code_size. *)
+Theorem deploy_frame_gas_sufficient:
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan fuel M.
+    deploy_phases policy tops (deploy_bc, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    unit_shape_ok dout.po_unit /\
+    constructor_call_free tops
+    ==>
+    ?g. !g' am tx es Inv.
+      g <= g' /\
+      deploy_state_rel tops deploy_bc am tx (add_frame_gas g' es) /\
+      LENGTH (FST (HD (add_frame_gas g' es).contexts)).msgParams.code
+        <= dimword(:256) DIV 2 /\
+      codegen_context_obligations Inv dout.po_unit.cu_context cplan /\
+      codegen_reachability_package Inv dout.po_unit.cu_context
+        (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
+      venom_run_bounded fuel M dout.po_unit.cu_context
+        (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
+      (?src vfuel.
+         ~deploy_source_exempt tops src /\
+         deploy_venom_result_rel tops runtime_bc tx src
+           (run_context vfuel dout.po_unit.cu_context
+              (deploy_entry_state prog cplan tops (add_frame_gas g' es))))
+      ==>
+      ?r es'.
+        run_call (add_frame_gas g' es) = SOME (r, es') /\
+        (r = INR (SOME OutOfGas) ==>
+         max_code_size < LENGTH runtime_bc + imm_len tops)
+Proof
+  cheat
 QED

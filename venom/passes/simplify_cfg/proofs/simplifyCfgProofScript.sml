@@ -63,3 +63,37 @@ Proof
   simp[scfg_static_def, fn_shape_ok_scfg_shape, simplify_cfg_fn_def,
        simplify_cfg_fn_with_labels_def]
 QED
+
+(* The final join supplies these elementary interfaces independently. *)
+Theorem simplify_cfg_fn_bisim_fuel_from_steps:
+  (!fn. wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn ==>
+    fn_bisim_fuel I fn (fix_all_phis (remove_unreachable_blocks fn))) /\
+  (!fn a b. scfg_chain_hyp fn a b ==>
+    fn_bisim_fuel I fn (scfg_chain fn a b)) /\
+  (!fn a b fn'. scfg_bypass_hyp fn a b fn' ==>
+    fn_bisim_fuel I fn fn') ==>
+  !fn. wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\
+    first_block_no_preds fn /\ simplify_cfg_fn_ok fn ==>
+    fn_bisim_fuel I fn (simplify_cfg_fn fn)
+Proof
+  strip_tac >>
+  `!n fn. scfg_static fn ==>
+    fn_bisim_fuel I fn (FST (simplify_cfg_iter_with_labels n fn))` by
+    metis_tac[scfg_iter_fuel_from_steps] >>
+  rpt strip_tac >>
+  first_x_assum (qspecl_then [`LENGTH fn.fn_blocks`, `fn`] mp_tac) >>
+  simp[scfg_static_def, fn_shape_ok_scfg_shape, simplify_cfg_fn_def,
+       simplify_cfg_fn_with_labels_def]
+QED
+
+(* The elementary forward simulations all retain the source fuel. *)
+Theorem simplify_cfg_fn_correct_fuel:
+  wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
+  simplify_cfg_fn_ok fn ==>
+  fn_bisim_fuel I fn (simplify_cfg_fn fn)
+Proof
+  strip_tac >> irule simplify_cfg_fn_bisim_fuel_from_steps >>
+  metis_tac[simplifyCfgCleanupTheory.scfg_cleanup_fn_bisim_fuel,
+            simplifyCfgMergeGlobalRunsTheory.scfg_chain_fn_bisim_fuel,
+            simplifyCfgBypassSemanticsTheory.scfg_bypass_fn_bisim_fuel]
+QED
