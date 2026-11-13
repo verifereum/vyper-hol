@@ -67,13 +67,15 @@ fun alpha_tyvars th =
     INST_TYPE ((tv |-> alpha) :: map (fn v => v |-> gen_tyvar ()) others) th
   end;
 
-(* Drops the facts about the trace's own horizon once the goal is about an
-   arbitrary valid one, so they don't weigh on the simplifier. *)
+(* Drops the facts about the trace's own horizon, except that it is valid,
+   so they don't weigh on the simplifier in the per-horizon goals. *)
 val drop_horizon0_tac =
   rpt (first_x_assum (fn th =>
     if can (find_term (fn t => is_const t andalso
                           fst (dest_const t) = "storage_trace_horizon"))
-           (concl th)
+           (concl th) andalso
+       not (#1 (dest_const (#1 (strip_comb (concl th)))) = "valid_horizon"
+            handle HOL_ERR _ => false)
     then ALL_TAC else NO_TAC));
 
 (* Closes a per-horizon goal of the capture wrappers from the matching
