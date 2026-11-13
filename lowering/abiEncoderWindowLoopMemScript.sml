@@ -1,6 +1,7 @@
 (* Cursor-bounded, same-witness memory-safe array control loops. *)
 Theory abiEncoderWindowLoopMem
 Ancestors
+  exprSimAbiEncodeExecFrame exprSimAbiEncodeFramedArrayControl
   abiEncoderWindowControlMem windowTransitionMem abiEncoderWindowArrayLoop
   abiEncoderWindowArrayInvariant abiEncoderWindow abiEncoderWindowContract
   venomMemDefs valueEncodingProps contractABI fragGasPathMem words arithmetic
@@ -122,11 +123,16 @@ Theorem window_array_header_step_counted_mem:
       (abi_encode_array_header_state iv cmp done j (LENGTH avs) s)) /\
   mem_cont_sim ctx func s
     (jump_to (if j < LENGTH avs then body_lbl else exit_lbl)
+      (abi_encode_array_header_state iv cmp done j (LENGTH avs) s)) /\ abi_encode_exec_frame func s (jump_to (if j < LENGTH avs then body_lbl else exit_lbl)
       (abi_encode_array_header_state iv cmp done j (LENGTH avs) s)) /\
   gas_path_mem ctx func s 0
     (OK (jump_to (if j < LENGTH avs then body_lbl else exit_lbl)
-      (abi_encode_array_header_state iv cmp done j (LENGTH avs) s)))
+      (abi_encode_array_header_state iv cmp done j (LENGTH avs) s))) /\
+  abi_encode_exec_frame func s
+    (jump_to (if j < LENGTH avs then body_lbl else exit_lbl)
+      (abi_encode_array_header_state iv cmp done j (LENGTH avs) s))
 Proof
+  simp_tac bool_ss [abi_encode_framed_array_header, AND_CLAUSES] >>
   strip_tac >> drule_all window_array_header_step_mem >> strip_tac >>
   asm_rewrite_tac[] >>
   `alloca_inv s /\ alloca_room ctx func s /\
@@ -146,7 +152,7 @@ Proof
    w2n (n2w islot : bytes32) = islot` by
     (full_simp_tac bool_ss [window_array_cursor_def] >>
      asm_simp_tac (srw_ss()) [GSYM mem_word_at_eq_mload, w2n_n2w]) >>
-  irule array_header_counted_mem >> metis_tac[]
+  irule (cj 1 array_header_counted_mem) >> metis_tac[]
 QED
 
 Theorem window_array_control_loop_counted_mem:
@@ -164,11 +170,11 @@ Theorem window_array_control_loop_counted_mem:
     window_array_inv ctx func owner ids ei asz msz active ty avs src dst
       ip isite islot dp dsite dslot count_op body_lbl sb cap d k u ==>
     ?v path_count. window_array_transition ctx func owner ids outs u v /\
-      mem_cont_sim ctx func u v /\ gas_path_mem ctx func u path_count (OK v) /\
+      mem_cont_sim ctx func u v /\ abi_encode_exec_frame func u v /\ gas_path_mem ctx func u path_count (OK v) /\
       window_array_inv ctx func owner ids ei asz msz active ty avs src dst
         ip isite islot dp dsite dslot count_op hdr sb cap d (SUC k) v) ==>
   ?t path_count. window_array_transition ctx func owner ids outs s t /\
-    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s path_count (OK t) /\
+    mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s path_count (OK t) /\
     window_array_inv ctx func owner ids ei asz msz active ty avs src dst
       ip isite islot dp dsite dslot count_op exit_lbl sb cap d (LENGTH avs) t
 Proof
@@ -184,7 +190,8 @@ Proof
       disch_then (qspec_then `outs` strip_assume_tac) >>
       first_x_assum drule_all >> strip_tac >>
       `?total_count. gas_path_mem ctx func u total_count (OK v)` by
-        metis_tac[gas_path_mem_then] >>
+        metis_tac[abi_encode_exec_frame_trans, gas_path_mem_then] >>
+      `abi_encode_exec_frame func u v` by metis_tac[abi_encode_exec_frame_trans] >>
       qexistsl_tac [`v`,`total_count`] >> asm_rewrite_tac[] >>
       metis_tac[window_array_transition_trans_mem]) >>
   rpt gen_tac >> strip_tac >>

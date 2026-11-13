@@ -1,6 +1,7 @@
 (* Same-witness memory safety for complex encoder cursor phases. *)
 Theory abiEncoderWindowComplexMem
 Ancestors
+  exprSimAbiEncodeExecFrame
   abiEncoderWindowComplex abiEncoderWindowMembersMem abiEncoderWindowStructuralMembers
   abiEncoderWindowMembers abiEncoderWindowContract abiEncoderWindowPhase
   abiEncoderWindow abiEncoderInput abiEncoderRegisteredEffect windowPhaseMem memContinuation
@@ -20,7 +21,7 @@ Theorem window_complex_allocate_cursor_counted_mem:
     abi_encoder_window_pre ctx func mid en dst src (AbiComplex infos) at
       (ListV avs) sb cap d t /\
     window_member_cursor infos dp st.cs_next_id slot sb cap d
-      (LENGTH (enc at (ListV avs))) mid t /\ mem_cont_sim ctx func s t /\
+      (LENGTH (enc at (ListV avs))) mid t /\ mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >>
@@ -88,7 +89,7 @@ Theorem window_complex_initialize_store_counted_mem:
     window_member_cursor infos dp site slot sb cap d
       (LENGTH (enc at (ListV avs))) ready u /\
     mem_word_at slot u.vs_memory = n2w (window_member_head_size infos) /\
-    mem_cont_sim ctx func s u /\
+    mem_cont_sim ctx func s u /\ abi_encode_exec_frame func s u /\
     gas_path_mem ctx func s path_count (OK u)
 Proof
   strip_tac >>
@@ -165,7 +166,7 @@ Theorem window_complex_initialize_phase_counted_mem:
       (LENGTH (enc at (ListV avs))) ready u /\
     mem_word_at slot u.vs_memory = n2w (window_member_head_size infos) /\
     st.cs_next_id IN window_alloca_sites func (frag_ids st en) /\
-    mem_cont_sim ctx func s u /\
+    mem_cont_sim ctx func s u /\ abi_encode_exec_frame func s u /\
     gas_path_mem ctx func s path_count (OK u)
 Proof
   strip_tac >>
@@ -206,12 +207,13 @@ Proof
   drule_all window_complex_allocate_cursor_counted_mem >> strip_tac >>
   drule_all window_complex_initialize_store_counted_mem >> strip_tac >>
   `?total_count. gas_path_mem ctx func s total_count (OK u)` by
-    metis_tac[gas_path_mem_then] >>
+    metis_tac[abi_encode_exec_frame_trans, gas_path_mem_then] >>
+  `abi_encode_exec_frame func s u` by metis_tac[abi_encode_exec_frame_trans] >>
   qexistsl_tac [`u`, `slot`, `total_count`] >> asm_rewrite_tac[] >> conj_tac
   >- (irule window_phase_chain >>
       qexistsl_tac [`{st.cs_next_id}`, `[]`, `mid`, `{st.cs_next_id}`, `[]`, `t`] >>
       simp[] >> metis_tac[ci_mono_def]) >>
-  metis_tac[mem_cont_sim_trans]
+  metis_tac[abi_encode_exec_frame_trans, mem_cont_sim_trans]
 QED
 
 Theorem window_complex_initialize_phase_mem:
@@ -250,7 +252,7 @@ Theorem window_complex_initialize_phase_sizes_counted_mem:
     st.cs_next_id IN window_alloca_sites func (frag_ids st en) /\
     (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
          !i b sz. i IN R /\ FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
-    mem_cont_sim ctx func s u /\
+    mem_cont_sim ctx func s u /\ abi_encode_exec_frame func s u /\
     gas_path_mem ctx func s path_count (OK u)
 Proof
   strip_tac >> drule_all window_complex_initialize_phase_counted_mem >> strip_tac >>
@@ -331,7 +333,7 @@ QED
 
 Theorem window_complex_finish_load_counted_mem:
   window_phase ctx func st load ids [(d,LENGTH (enc at av))] s u /\
-  mem_cont_sim ctx func s u /\ gas_path_mem ctx func s prefix_count (OK u) /\
+  mem_cont_sim ctx func s u /\ abi_encode_exec_frame func s u /\ gas_path_mem ctx func s prefix_count (OK u) /\
   ids SUBSET window_alloca_sites func (frag_ids st en) /\
   st.cs_next_var <= load.cs_next_var /\
   mem_bytes_at d (LENGTH (enc at av)) u.vs_memory = enc at av /\
@@ -341,7 +343,7 @@ Theorem window_complex_finish_load_counted_mem:
   emit_op MLOAD [dp] load = (out,en) /\ fn_has_code load en func /\
   (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
     FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
-  ?t path_count. window_strong_result ctx func st en out at av d s t /\ mem_cont_sim ctx func s t /\
+  ?t path_count. window_strong_result ctx func st en out at av d s t /\ mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >>
@@ -366,12 +368,13 @@ Proof
      qexistsl_tac [`ids`, `[(d,LENGTH (enc at av))]`, `load`, `{}`, `[]`, `u`] >>
      asm_rewrite_tac[EVERY_DEF, EMPTY_SUBSET]) >>
   `?total_count. gas_path_mem ctx func s total_count (OK t)` by
-    metis_tac[gas_path_mem_then] >>
+    metis_tac[abi_encode_exec_frame_trans, gas_path_mem_then] >>
+  `abi_encode_exec_frame func s t` by metis_tac[abi_encode_exec_frame_trans] >>
   qexistsl_tac [`t`, `total_count`] >> asm_rewrite_tac[] >> conj_tac
   >- (irule window_complex_phase_result >> asm_rewrite_tac[] >>
       qpat_x_assum `mem_word_at slot _ = _` mp_tac >>
       asm_rewrite_tac[mem_word_at_eq_mload] >> disch_then SUBST1_TAC >> REFL_TAC) >>
-  metis_tac[mem_cont_sim_trans]
+  metis_tac[abi_encode_exec_frame_trans, mem_cont_sim_trans]
 QED
 
 Theorem window_complex_pre_prefix[local]:
@@ -441,11 +444,11 @@ QED
 
 Theorem window_complex_dynamic_finish_counted_mem[local]:
   window_phase ctx func st ready {st.cs_next_id} [] s u /\
-  mem_cont_sim ctx func s u /\ gas_path_mem ctx func s init_count (OK u) /\
+  mem_cont_sim ctx func s u /\ abi_encode_exec_frame func s u /\ gas_path_mem ctx func s init_count (OK u) /\
   window_phase ctx func ready load
     (window_alloca_sites func (frag_ids ready load) UNION {st.cs_next_id})
     [(d,LENGTH (enc at (ListV avs)))] u t /\
-  mem_cont_sim ctx func u t /\ gas_path_mem ctx func u members_count (OK t) /\
+  mem_cont_sim ctx func u t /\ abi_encode_exec_frame func u t /\ gas_path_mem ctx func u members_count (OK t) /\
   window_member_cursor infos dp st.cs_next_id slot sb cap d
     (LENGTH (enc at (ListV avs))) ready u /\
   EXISTS (\(_,_,_,dyn). dyn) infos /\
@@ -457,7 +460,7 @@ Theorem window_complex_dynamic_finish_counted_mem[local]:
   (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
     FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
   ?v path_count. window_strong_result ctx func st en out at (ListV avs) d s v /\
-      mem_cont_sim ctx func s v /\ gas_path_mem ctx func s path_count (OK v)
+      mem_cont_sim ctx func s v /\ abi_encode_exec_frame func s v /\ gas_path_mem ctx func s path_count (OK v)
 Proof
   strip_tac >>
   `ready.cs_next_var <= load.cs_next_var /\ ready.cs_next_id <= load.cs_next_id /\
@@ -482,9 +485,10 @@ Proof
        `window_alloca_sites func (frag_ids ready load) UNION {st.cs_next_id}`,
        `[(d,LENGTH (enc at (ListV avs)))]`, `u`] >>
      asm_rewrite_tac[] >> simp[EVERY_DEF, UNION_SUBSET, INSERT_SUBSET]) >>
-  `mem_cont_sim ctx func s t` by metis_tac[mem_cont_sim_trans] >>
+  `mem_cont_sim ctx func s t` by metis_tac[abi_encode_exec_frame_trans, mem_cont_sim_trans] >>
   `gas_path_mem ctx func s (init_count + members_count) (OK t)` by
-    metis_tac[gas_path_mem_then] >>
+    metis_tac[abi_encode_exec_frame_trans, gas_path_mem_then] >>
+  `abi_encode_exec_frame func s t` by metis_tac[abi_encode_exec_frame_trans] >>
   irule window_complex_finish_load_counted_mem >>
   qpat_assum `gas_path_mem ctx func s (init_count + members_count) (OK t)`
     (irule_at Any) >> goal_assum (drule_at Any) >>
@@ -630,12 +634,12 @@ Theorem window_complex_strong_contract_counted_mem:
     !dst src st out st' ctx func s at av sb cap d.
     compile_abi_encode_to_buf dst src ei st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
-    ?t path_count. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t /\
+    ?t path_count. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
       gas_path_mem ctx func s path_count (OK t)) ==>
   !dst src st out st' ctx func s at av sb cap d.
     compile_abi_encode_to_buf dst src (AbiComplex infos) st = (out,st') /\
     abi_encoder_window_pre ctx func st st' dst src (AbiComplex infos) at av sb cap d s ==>
-    ?t path_count. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t /\
+    ?t path_count. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
       gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
@@ -664,7 +668,7 @@ Resume window_complex_strong_contract_counted_mem[empty]:
   `~s.vs_halted` by (qpat_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[abi_encoder_window_pre_def] >> strip_tac >> asm_rewrite_tac[]) >>
   qexistsl_tac [`s`, `0`] >>
-  asm_simp_tac bool_ss [mem_cont_sim_refl, cj 1 gas_path_mem_rules, AND_CLAUSES] >>
+  asm_simp_tac bool_ss [mem_cont_sim_refl, abi_encode_exec_frame_refl, cj 1 gas_path_mem_rules, AND_CLAUSES] >>
   irule window_complex_phase_result >>
   asm_rewrite_tac[] >> simp_tac (srw_ss()) [NoAsms, LENGTH, mem_bytes_at_def, eval_operand_def] >>
   metis_tac[window_pre_sites, window_phase_refl, abi_encoder_window_pre_def]

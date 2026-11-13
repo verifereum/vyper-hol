@@ -1,6 +1,7 @@
 (* Bounded same-endpoint memory companions for finite array body phases. *)
 Theory abiEncoderWindowArrayBodyMem
 Ancestors
+  exprSimAbiEncodeExecFrame exprSimAbiEncodeFramedArrayBody
   abiEncoderWindowArrayBody abiEncoderWindowArrayCursorMem windowPhaseMem
   windowSequenceMem allocaFootprint instMemFrontier abiEncoderArrayTail
   abiEncoderArrayCode abiEncoderArrayBodyCode abiDecoderDynamicLoopSetup
@@ -43,7 +44,7 @@ Theorem window_array_tail_phase_counted_mem:
     eval_operand (FST ops) t = SOME (n2w off) /\
     eval_operand (SND ops) t = SOME (n2w (d+off)) /\
     (!x. FST ops = Var x \/ SND ops = Var x ==> not_fresh_at en x) /\
-    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s path_count (OK t)
+    mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >> drule_all window_array_tail_pure >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts st en) s` by
@@ -54,6 +55,9 @@ Proof
      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en)))
      (OK (t with vs_inst_idx := LENGTH en.cs_current_insts))` by
     metis_tac[window_seq_counted_mem, window_pure_seq_def] >>
+  `abi_encode_exec_frame func s t` by
+    (irule abi_encode_framed_ordinary_pure_sequence >>
+     goal_assum (drule_at Any) >> metis_tac[abi_encode_framed_array_tail_opcodes]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH en.cs_current_insts`, `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en))`] >>
   (conj_tac >- metis_tac[window_pure_seq_phase]) >>
   simp_tac (srw_ss()) [eval_op_inst_idx] >> asm_rewrite_tac[]
@@ -127,7 +131,7 @@ Theorem window_array_addresses_phase_counted_mem:
     eval_operand (SND (SND coords)) t = SOME (n2w (d+32+j*asz)) /\
     (!x. FST (FST coords) = Var x \/ SND (FST coords) = Var x \/
          FST (SND coords) = Var x \/ SND (SND coords) = Var x ==> not_fresh_at en x) /\
-    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s path_count (OK t)
+    mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >> drule_all window_array_addresses_pure >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts st en) s` by
@@ -138,6 +142,9 @@ Proof
      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en)))
      (OK (t with vs_inst_idx := LENGTH en.cs_current_insts))` by
     metis_tac[window_seq_counted_mem, window_pure_seq_def] >>
+  `abi_encode_exec_frame func s t` by
+    (irule abi_encode_framed_ordinary_pure_sequence >>
+     goal_assum (drule_at Any) >> metis_tac[abi_encode_framed_array_addresses_opcodes]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH en.cs_current_insts`, `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en))`] >>
   (conj_tac >- metis_tac[window_pure_seq_phase]) >>
   simp_tac (srw_ss()) [eval_op_inst_idx] >> asm_rewrite_tac[]
@@ -176,7 +183,7 @@ Theorem window_array_suffix_prefix_counted_mem[local]:
   h < dimword (:256) /\ h+32 <= s.vs_alloca_next /\
   alloca_inv s /\ alloca_room ctx func s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t path_count. window_phase ctx func st b {} [(h,32)] s t /\ mem_cont_sim ctx func s t /\
+  ?t path_count. window_phase ctx func st b {} [(h,32)] s t /\ mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     eval_operand next t = SOME (n2w (off+n)) /\
     eval_operand dp t = SOME (n2w slot) /\ eval_operand len t = SOME (n2w n) /\
     mem_word_at h t.vs_memory = n2w off /\
@@ -204,7 +211,8 @@ Proof
      drule abiEncoderInputFrameTheory.abi_encoder_window_word >>
      disch_then (qspec_then `0` mp_tac) >> simp[Abbr `u`, mstore_mem_word_at_same]) >>
   `?total_count. gas_path_mem ctx func s total_count (OK t)` by
-    (fs[Abbr `u`] >> metis_tac[gas_path_mem_then]) >>
+    (fs[Abbr `u`] >> metis_tac[abi_encode_exec_frame_trans, gas_path_mem_then]) >>
+  `abi_encode_exec_frame func s t` by metis_tac[abi_encode_exec_frame_trans] >>
   qexistsl_tac [`t`,`total_count`] >> simp[GSYM word_add_n2w] >> irule window_phase_chain_mem >>
   qexistsl_tac [`{}`, `[(h,32)]`, `a`, `{}`, `[]`, `u`] >> simp[]
 QED
@@ -228,7 +236,7 @@ Theorem window_array_suffix_run_counted_mem:
     FLOOKUP t.vs_allocas site = SOME (slot,32) /\
     eval_operand out t = SOME (n2w n) /\
     t.vs_current_bb = en.cs_current_bb /\
-    t.vs_inst_idx = LENGTH en.cs_current_insts /\ mem_cont_sim ctx func s t /\
+    t.vs_inst_idx = LENGTH en.cs_current_insts /\ mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s path_count (OK t)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -253,7 +261,8 @@ Proof
     simp[Abbr `u`, mstore_def, write_memory_with_expansion_def] >>
   `window_sizes32 {site} u` by simp[window_sizes32_def] >>
   `?total_count. gas_path_mem ctx func s total_count (OK u)` by
-    (fs[Abbr `u`] >> metis_tac[gas_path_mem_then]) >>
+    (fs[Abbr `u`] >> metis_tac[abi_encode_exec_frame_trans, gas_path_mem_then]) >>
+  `abi_encode_exec_frame func s u` by metis_tac[abi_encode_exec_frame_trans] >>
   qexistsl_tac [`u`,`total_count`] >> asm_rewrite_tac[] >> rpt conj_tac
   >- metis_tac[window_array_phase_sizes_transition]
   >- (simp[Abbr `u`] >> metis_tac[mstore_mem_word_at_disjoint])

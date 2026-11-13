@@ -1,6 +1,7 @@
 (* Exact-endpoint safety companions for primitive window phases. *)
 Theory windowPhaseMem
 Ancestors
+  exprSimAbiEncodeExecFrame exprSimAbiEncodeFramedArrayBody exprSimAbiEncodeFramedBuiltin
   abiEncoderWindowPhase windowSequenceMem allocaFootprint instMemFrontier
   abiEncoderWindowCursor abiEncoderWindowSequence abiEncoderWindowContract
   abiEncoderWindowLeaves emitHelperProps emitHelper compileEnv
@@ -24,7 +25,7 @@ Theorem window_emit_add_phase_counted_mem:
   ?t count. window_phase ctx func st en {} [] s t /\
     eval_operand out t = SOME (a+b) /\
     (!x. out = Var x ==> not_fresh_at en x) /\ t.vs_labels = s.vs_labels /\
-    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s count (OK t)
+    mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s count (OK t)
 Proof
   strip_tac >> drule_all window_emit_add_pure >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts st en) s` by
@@ -35,6 +36,11 @@ Proof
      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en)))
      (OK (t with vs_inst_idx := LENGTH en.cs_current_insts))` by
     metis_tac[window_seq_counted_mem, window_pure_seq_def] >>
+  `abi_encode_exec_frame func s t` by
+    (irule abi_encode_framed_ordinary_pure_sequence >>
+     goal_assum (drule_at Any) >>
+     drule emitted_insts_emit_op >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def, is_ext_call_op_def]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH en.cs_current_insts`, `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en))`] >>
   (conj_tac >- metis_tac[window_pure_seq_phase]) >>
   simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
@@ -70,7 +76,7 @@ Theorem window_emit_alloca32_phase_counted_mem:
     (!x. out = Var x ==> not_fresh_at en x) /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
     b+32 <= t.vs_alloca_next /\ t.vs_memory = s.vs_memory /\
-    t.vs_labels = s.vs_labels /\ mem_cont_sim ctx func s t /\
+    t.vs_labels = s.vs_labels /\ mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\
     gas_path_mem ctx func s count (OK t)
 Proof
   strip_tac >> drule_all window_emit_alloca32_sequence >> strip_tac >>
@@ -82,6 +88,10 @@ Proof
      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en)))
      (OK (t with vs_inst_idx := LENGTH en.cs_current_insts))` by
     metis_tac[window_seq_counted_mem, window_pure_seq_def] >>
+  `abi_encode_exec_frame func s t` by
+    (`run_inst_seq (emitted_insts st en) s = OK t` by fs[window_seq_def] >>
+     irule abi_encode_setup_sequence_frame >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> drule emitted_insts_emit_op >> simp[mk_inst_def]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH en.cs_current_insts`, `b`, `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en))`] >>
   (conj_tac >- metis_tac[window_seq_phase]) >>
   simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
@@ -117,7 +127,7 @@ Theorem window_cursor_load_phase_counted_mem:
   ?t count. window_phase ctx func st en {} [] s t /\
     eval_operand out t = SOME (mload b s) /\
     (!x. out = Var x ==> not_fresh_at en x) /\ t.vs_labels = s.vs_labels /\
-    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s count (OK t)
+    mem_cont_sim ctx func s t /\ abi_encode_exec_frame func s t /\ gas_path_mem ctx func s count (OK t)
 Proof
   strip_tac >> drule_all window_cursor_load_sequence >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts st en) s` by
@@ -128,6 +138,11 @@ Proof
      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en)))
      (OK (t with vs_inst_idx := LENGTH en.cs_current_insts))` by
     metis_tac[window_seq_counted_mem, window_pure_seq_def] >>
+  `abi_encode_exec_frame func s t` by
+    (irule abi_encode_framed_ordinary_pure_sequence >>
+     goal_assum (drule_at Any) >>
+     drule emitted_insts_emit_op >>
+     simp[mk_inst_def, is_terminator_def, is_alloca_op_def, is_ext_call_op_def]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH en.cs_current_insts`, `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en))`] >>
   (conj_tac >- metis_tac[window_pure_seq_phase]) >>
   simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
@@ -162,7 +177,7 @@ Theorem window_store_phase_counted_mem:
   ?count. window_phase ctx func st en ids outs s
     ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\
   mem_cont_sim ctx func s
-    ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\
+    ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\ abi_encode_exec_frame func s ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\
   gas_path_mem ctx func s count
     (OK ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts))
 Proof
@@ -214,7 +229,7 @@ Theorem window_cursor_store_phase_counted_mem:
   ?count. window_phase ctx func st en {id} [] s
     ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\
   mem_cont_sim ctx func s
-    ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\
+    ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\ abi_encode_exec_frame func s ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\
   gas_path_mem ctx func s count
     (OK ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts))
 Proof
@@ -248,7 +263,7 @@ Theorem window_output_store_phase_counted_mem:
   ?count. window_phase ctx func st en {} [(b,32)] s
     ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\
   mem_cont_sim ctx func s
-    ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\
+    ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\ abi_encode_exec_frame func s ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts) /\
   gas_path_mem ctx func s count
     (OK ((mstore b w s) with vs_inst_idx := LENGTH en.cs_current_insts))
 Proof
