@@ -34,10 +34,10 @@ Theorem call_free_tuple_store_all:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_get_target_ptr compile_expr ce bt st)))) /\
-  (!dst loc value prim sl dt sy da sz st.
+  (!dst loc value prim sl dt sy sz st.
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
-      (state_insts (SND (compile_assign_value ce dst loc value prim sl dt sy da sz st)))) /\
+      (state_insts (SND (compile_assign_value ce dst loc value prim sl dt sy sz st)))) /\
   (!dst value loc st.
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)

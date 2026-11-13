@@ -148,10 +148,10 @@ Theorem call_free_slice_adhoc:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_slice_code start len out_size st)))) /\
-  (!addr start len out_buf out_data st.
+  (!addr start len out_size st.
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
-      (state_insts (SND (compile_slice_extcode addr start len out_buf out_data st))))
+      (state_insts (SND (compile_slice_extcode addr start len out_size st))))
 Proof
   rpt conj_tac >> rpt gen_tac >> qid_spec_tac `st` >>
   simp[compile_slice_calldata_def, compile_slice_code_def, compile_slice_extcode_def] >>

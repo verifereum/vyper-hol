@@ -63,7 +63,8 @@ Proof
   qid_spec_tac `st` >>
   rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[call_free_emit_op, call_free_abi_decode_opcode])])
+    gen_tac, CHANGED_TAC (simp[call_free_emit_op, call_free_abi_decode_opcode,
+      compile_abi_arg_ptr_guard_def, every_state_insts_return])])
 QED
 
 Theorem call_free_register_constructor_args[local]:

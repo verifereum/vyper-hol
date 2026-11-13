@@ -198,10 +198,11 @@ local
     rename1 `compile_alloc_buffer sz st = (buf,st1)` >>
     `EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st1)` by
       metis_tac[pairTheory.SND] >>
-    Cases_on `as_ptr_val ret_ty LocMemory (compile_make_tuple cfn cenv args buf.buf_operand 0 st1)` >>
+    qmatch_goalsub_abbrev_tac `compile_make_tuple cfn cenv args mtys buf.buf_operand 0 st1` >>
+    Cases_on `as_ptr_val ret_ty LocMemory (compile_make_tuple cfn cenv args mtys buf.buf_operand 0 st1)` >>
     drule as_ptr_val_result >> strip_tac >>
-    qpat_x_assum `!buf st. _ ==> EVERY _ (state_insts (SND (compile_make_tuple cfn cenv args buf 0 st)))`
-      (qspecl_then [`buf.buf_operand`, `st1`] mp_tac) >> gvs[]) >>
+    qpat_x_assum `!tys buf st. _ ==> EVERY _ (state_insts (SND (compile_make_tuple cfn cenv args tys buf 0 st)))`
+      (qspecl_then [`mtys`, `buf.buf_operand`, `st1`] mp_tac) >> gvs[]) >>
   simp[compile_builtin_dispatch_body_def] >> rpt strip_tac >>
   pairarg_tac >> simp[] >>
   rename1 `compile_alloc_buffer sz st = (buf,st1)` >>
@@ -303,7 +304,6 @@ local
       (state_insts (SND (lower_value cfn cenv ety c s)))` by (
     qpat_assum `!e ety. MEM e _ ==> _` (qspec_then `c` mp_tac) >> simp[NoAsms, MEM]) >>
   simp[compile_builtin_dispatch_body_def] >> rpt strip_tac >>
-  Cases_on `is_msg_data a` >> simp[] >- branch "slice_short" >>
   Cases_on `is_self_code a` >> simp[] >- branch "slice_short" >>
   Cases_on `is_extcode a` >> simp[] >- branch "slice_ext" >>
   pairarg_tac >> simp[] >>
@@ -325,7 +325,6 @@ local
       (state_insts (SND (lower_value cfn cenv ety (extcode_addr_expr a) s)))` by (
     qpat_assum `!e ety. MEM e _ /\ is_extcode e ==> _` (qspec_then `a` mp_tac) >> simp[NoAsms, MEM] >> simp[]) >>
   ntac 3 (pairarg_tac >> simp[]) >>
-  pairarg_tac >> simp[] >>
   qmatch_goalsub_abbrev_tac `as_ptr_val ret_ty LocMemory result` >>
   Cases_on `as_ptr_val ret_ty LocMemory result` >>
   drule as_ptr_val_result >> strip_tac >> gvs[] >>
@@ -420,8 +419,8 @@ Theorem call_free_builtin_dispatch_body:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_slice_calldata a b sz st)))) /\
   (!a b sz st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_slice_code a b sz st)))) /\
-  (!a b c d e st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_slice_extcode a b c d e st)))) /\
+  (!a b c d st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_slice_extcode a b c d st)))) /\
   (!v st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_bytestring_src v st)))) /\
   (!sz st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
@@ -452,8 +451,8 @@ Theorem call_free_builtin_dispatch_body:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_acc cfn cenv e item st)))) /\
   (!dp infos off st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_concat cfn cenv args dp infos off st)))) /\
-  (!buf st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_make_tuple cfn cenv args buf 0 st)))) /\
+  (!tys buf st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_make_tuple cfn cenv args tys buf 0 st)))) /\
   (!ety sz lw buf st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_make_array cfn cenv args ety sz lw buf st)))) ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>

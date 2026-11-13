@@ -108,25 +108,41 @@ Proof
       call_free_word_copy_loop_base, every_state_insts_return])])
 QED
 
-Theorem call_free_dynarray_to_storage[local]:
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
-    (state_insts (SND (compile_dynarray_to_storage src dst ew em trans st)))
+Theorem call_free_store_slots:
+  (!cenv src slot ty transient st.
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+      (state_insts (SND (compile_store_slots cenv src slot ty transient st)))) /\
+  (!cenv src slot members mem_off slot_off transient st.
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+      (state_insts (SND (compile_store_slots_members cenv src slot members
+                           mem_off slot_off transient st)))) /\
+  (!cenv src slot elem count_op transient st.
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+      (state_insts (SND (compile_copy_elements_to_slots cenv src slot elem
+                           count_op transient st))))
 Proof
-  Cases_on `ew = 1` >> Cases_on `trans` >> qid_spec_tac `st` >>
-  simp[compile_dynarray_to_storage_def] >>
+  ho_match_mp_tac compile_store_slots_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> simp[Once compile_store_slots_def] >>
   rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
-    gen_tac, CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
-      call_free_emit_inst, every_state_insts_fresh_label,
-      every_state_insts_fresh_var, every_state_insts_new_block,
-      call_free_word_copy_loop])])
+    IF_CASES_TAC, CASE_TAC, gen_tac,
+    CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
+      call_free_emit_inst, every_state_insts_return,
+      every_state_insts_fresh_label, every_state_insts_fresh_var,
+      every_state_insts_new_block, call_free_lit_byte_offset,
+      compile_bytestring_word_count_def, compile_word_copy_loop_op_def,
+      call_free_word_copy_loop_base, compile_memory_to_storage_def,
+      compile_memory_to_transient_def, call_free_word_copy_loop])]) >>
+  gvs[]
 QED
 
 Theorem call_free_assign_value:
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
-    (state_insts (SND (compile_assign_value ce dst loc value prim src_loc dty sty da_info sz st)))
+    (state_insts (SND (compile_assign_value ce dst loc value prim src_loc dty sty sz st)))
 Proof
   Cases_on `loc` >> simp[compile_assign_value_def,
     compile_memory_to_storage_def, compile_memory_to_transient_def] >>
@@ -138,7 +154,7 @@ Proof
     CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
       call_free_emit_inst, every_state_insts_return, call_free_alloc_buffer,
       call_free_copy_memory, call_free_store_memory, cj 1 call_free_typed_copy,
-      call_free_word_copy_loop, call_free_dynarray_to_storage,
+      call_free_word_copy_loop, cj 1 call_free_store_slots,
       call_free_imm_store_word, call_free_imm_store_words,
       call_free_store_immutable_bytestring])])
 QED

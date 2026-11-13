@@ -62,12 +62,14 @@ Theorem call_free_make_tuple:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (cfn cenv ty e st)))) ==>
-  !buf off st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  !tys buf off st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
-      (state_insts (SND (compile_make_tuple cfn cenv es buf off st)))
+      (state_insts (SND (compile_make_tuple cfn cenv es tys buf off st)))
 Proof
   rpt disch_tac >> Induct >- simp[compile_make_tuple_def, every_state_insts_return] >>
-  rpt gen_tac >> strip_tac >> gvs[] >> rpt gen_tac >> qid_spec_tac `st` >>
+  rpt gen_tac >> strip_tac >> gvs[] >> Cases
+  >- simp[compile_make_tuple_def, every_state_insts_return] >>
+  rpt gen_tac >> qid_spec_tac `st` >>
   simp[compile_make_tuple_def] >>
   rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
@@ -230,6 +232,8 @@ Theorem every_state_insts_subscript:
     EVERY P (state_insts (SND (lower_value cfn cenv ety idx_e st)))) /\
   (!st. EVERY P (state_insts st) ==>
     EVERY P (state_insts (SND (cfn cenv ty base_e st)))) /\
+  (!vv st. EVERY P (state_insts st) ==>
+    EVERY P (state_insts (SND (compile_snapshot_vv cenv T vv st)))) /\
   (!v st. EVERY P (state_insts st) ==>
     EVERY P (state_insts (SND (compile_keccak256_key v F st)))) /\
   (!v k st. EVERY P (state_insts st) ==>
@@ -244,6 +248,8 @@ Theorem every_state_insts_subscript:
 Proof
   strip_tac >> simp[compile_subscript_def] >>
   ho_match_mp_tac every_state_insts_bind >> conj_tac >- simp[] >>
+  gen_tac >> ho_match_mp_tac every_state_insts_bind >> conj_tac
+  >- (rw[] >> gvs[every_state_insts_return]) >>
   gen_tac >> reverse (Cases_on `place_type cenv base_e`) >> simp[]
   >- (rename1 `ValPT bty` >> Cases_on `bty` >> simp[] >>
       rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,

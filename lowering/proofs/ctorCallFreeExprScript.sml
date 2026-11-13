@@ -136,7 +136,7 @@ Proof
     first_assum irule >> simp[]) >>
   conj_tac >- (rpt gen_tac >> disch_then SUBST_ALL_TAC >> strip_tac >>
     irule every_state_insts_subscript >>
-    gvs[supported_expr_exists_def, call_free_keccak256_key,
+    gvs[supported_expr_exists_def, call_free_keccak256_key, call_free_snapshot_vv,
       call_free_mapping_subscript, call_free_alloc_buffer,
       call_free_tuple_subscript, call_free_array_subscript, call_free_ptr_load] >>
     simp[every_state_insts_lower_value, call_free_unwrap_value]) >>

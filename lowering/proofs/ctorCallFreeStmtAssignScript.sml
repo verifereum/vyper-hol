@@ -6,18 +6,6 @@ Ancestors
   ctorCallFreeStmtStorage ctorCallFreeStmtTargets supportedExprTraverse
   supportedStmtTraverse e2eDeployDefs loweringShapeProps
 
-Theorem call_free_snapshot_vv[local]:
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
-    (state_insts (SND (compile_snapshot_vv ce copy vv st)))
-Proof
-  qid_spec_tac `st` >> simp[compile_snapshot_vv_def] >>
-  rpt (FIRST [IF_CASES_TAC >> qid_spec_tac `st`,
-    ho_match_mp_tac every_state_insts_bind >> conj_tac, gen_tac,
-    CHANGED_TAC (simp[call_free_unwrap_value, call_free_materialize_vv,
-      every_state_insts_return])])
-QED
-
 Theorem call_free_dynarray_append[local]:
   load_op <> RETURNDATACOPY /\ load_op <> INVOKE /\
   store_op <> RETURNDATACOPY /\ store_op <> INVOKE ==>
@@ -30,7 +18,8 @@ Proof
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     gen_tac, IF_CASES_TAC >> qid_spec_tac `st`,
     CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
-      call_free_store_memory, call_free_word_copy_loop, every_state_insts_return])])
+      call_free_store_memory, call_free_word_copy_loop, every_state_insts_return,
+      cj 1 call_free_store_slots])])
 QED
 
 Theorem call_free_tuple_unpack_from_expr[local]:
