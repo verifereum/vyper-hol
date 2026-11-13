@@ -159,7 +159,7 @@ Proof
     metis_tac[body_expr_ptr_ok_def] >>
   Cases_on `is_abi_dynamic cenv.ce_struct_fields (expr_type e)` >|
     [irule compile_assign_storage_sparse_stmt_frag_ptr,
-     irule compile_assign_storage_copy_stmt_frag_ptr] >>
+     irule compile_assign_storage_copy_stmt_frag_ptr] >> (
   simp[] >> reverse conj_tac >- metis_tac[] >>
   qexistsl_tac [`id`, `n2w off`, `NONE`, `tr`] >>
   simp[] >> conj_tac
@@ -171,6 +171,6 @@ Proof
   conj_tac >- metis_tac[evaluate_type_well_formed_type_value] >>
   conj_tac >- metis_tac[eval_assign_toplevel_action] >>
   conj_tac >- simp[declared_storage_region_def] >>
-  strip_tac >> irule toplevel_storage_ce_vars >> metis_tac[])
+  strip_tac >> irule toplevel_storage_ce_vars >> metis_tac[]))
 
 QED
