@@ -291,7 +291,7 @@ Proof
       stmt_state_rel H ctx func cenv cx es s ==>
       stmt_state_rel H ctx func cenv cx es t)` by
     (fs[abi_malformed_resource_post_def] >> metis_tac[]) >>
-  fs[abi_malformed_resource_post_def] >> conj_tac
+  fs[abi_malformed_resource_post_def] >> conj_tac >- metis_tac[] >> conj_tac
   >- (rpt strip_tac >> first_x_assum irule >>
       qexistsl_tac [`aid`, `cap`] >> simp[]) >>
   rpt strip_tac >>
