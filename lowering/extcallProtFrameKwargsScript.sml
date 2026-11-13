@@ -154,7 +154,7 @@ Resume extcall_protframe_kwarg_retained_cps[raw_landing]:
    vv_post ctx func cenv cx e (es with gas_obs := []) sa sm s0
      (mid with gas_obs := []) r vv t /\
    extrequest_read_frame cx (es with gas_obs := []) (mid with gas_obs := []) /\
-   wb_frame cenv es ee sa s0 t /\
+   wb_frame cenv es mid sa s0 t /\
    extrequest_strong_capture ctx func cenv cx e r vv (mid with gas_obs := []) sm t /\
    extrequest_strong_captures ctx func cenv cx old_es old_rs old_vvs
      (mid with gas_obs := []) sm t` by
