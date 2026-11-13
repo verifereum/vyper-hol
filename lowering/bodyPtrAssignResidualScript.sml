@@ -13,6 +13,7 @@
  *)
 Theory bodyPtrAssignResidual
 Ancestors
+  supportedTargetSimPtr allocaPtrValueFrame assignTuplePtrOutcome tupleWidenedReadTyped
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps supportedStmts supportedDecls
   stmtLowering exprLowering compileEnv vyperAST vyperInterpreter vyperState
   vyperTypeSystem list finite_map
