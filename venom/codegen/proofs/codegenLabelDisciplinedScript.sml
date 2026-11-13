@@ -234,7 +234,7 @@ Theorem initial_ctx_codegen_asm_entry_rel:
     initial_ctx_rel cp prog ctx vs es ==>
     codegen_asm_entry_rel cp prog vs (entry_asm_state vs es)
 Proof
-  rw[initial_ctx_rel_def] >>
+  rw[initial_ctx_rel_def, initial_ctx_rel_tail_def] >>
   gvs[initial_state_rel_def, initial_codegen_state_rel_def,
       stack_params_rel_def, msg_ctx_rel_def] >>
   simp[codegen_asm_entry_rel_def, entry_asm_state_def,

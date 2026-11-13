@@ -6,7 +6,7 @@ Ancestors
   callTrace frameOutcome vfmExecution vfmExecutionProp vfmOperation asmEncodeParse
 
 Theorem frame_selfdestruct_singleton[local]:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a es /\
   a.as_pc < LENGTH prog /\ EL a.as_pc prog = AsmOp "SELFDESTRUCT" /\
   (a.as_call_ctx.cc_created_in_tx =
    account_empty (lookup_account (FST (HD es.contexts)).msgParams.callee
@@ -84,9 +84,9 @@ Proof
 QED
 
 Theorem asm_frame_selfdestruct_step:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
   as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp "SELFDESTRUCT" ==>
-  asm_frame_step_ok prog data es0 as es
+  asm_frame_step_ok gas_tail prog data es0 as es
 Proof
   strip_tac >>
   `as.as_call_ctx.cc_created_in_tx =
@@ -122,10 +122,12 @@ Proof
       metis_tac[frame_starved_lift]) >>
   drule frame_terminal_lift >> disch_then drule >>
   simp[vfm_abort_def] >> strip_tac >>
-  `as.as_requests = call_requests es0` by gvs[asm_frame_rel_def] >>
+  `as.as_requests = call_requests es0 /\
+   as.as_gas_readings = gas_readings es ++ gas_tail` by gvs[asm_frame_rel_def] >>
   simp[asm_frame_step_ok_def, asm_step_def, asm_step_op_def] >>
   disj2_tac >>
-  `a1.as_requests = as.as_requests` by gvs[asm_selfdestruct_def] >>
+  `a1.as_requests = as.as_requests /\
+   a1.as_gas_readings = as.as_gas_readings` by gvs[asm_selfdestruct_def] >>
   simp[asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
        asm_step_memory_def, asm_step_control_def, asm_step_extcall_def] >>
   gvs[]

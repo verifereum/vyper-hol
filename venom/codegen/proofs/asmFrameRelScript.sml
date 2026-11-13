@@ -35,7 +35,7 @@ End
    readings the assembly has left are the ones the rest of es's run
    observes, while its requests so far and the rest's make es0's. *)
 Definition asm_frame_rel_def:
-  asm_frame_rel prog data es0 as es <=>
+  asm_frame_rel gas_tail prog data es0 as es <=>
     ?c0 c rb rest.
       es0.contexts = (c0, rb) :: rest /\ es.contexts = (c, rb) :: rest /\
       c0.logs = [] /\ c.msgParams = c0.msgParams /\ ~c0.msgParams.static /\
@@ -48,7 +48,7 @@ Definition asm_frame_rel_def:
       (?d. es.msdomain = Collect d) /\
       asm_evm_rel (prog ++ [AsmDataItem data]) as es /\
       as.as_outcomes = MAP SND (call_trace es) /\
-      as.as_gas_readings = gas_readings es /\
+      as.as_gas_readings = gas_readings es ++ gas_tail /\
       as.as_requests ++ call_requests es = call_requests es0
 End
 
@@ -58,26 +58,29 @@ End
    clauses; a reverting or faulting step makes no more requests), or the step continues and the relation holds again at a
    state the frame's run passes through. *)
 Definition asm_frame_step_ok_def:
-  asm_frame_step_ok prog data es0 as es <=>
+  asm_frame_step_ok gas_tail prog data es0 as es <=>
     (?r es'. run_call es = SOME (r, es') /\ frame_resource_starved es0 r es' /\
              call_requests es = []) \/
     case asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
                   (EL as.as_pc prog) as of
       AsmOK as1 =>
-        ?es1. run_call es1 = run_call es /\ asm_frame_rel prog data es0 as1 es1
+        ?es1. run_call es1 = run_call es /\ asm_frame_rel gas_tail prog data es0 as1 es1
     | AsmHalt as1 =>
         ?r es'. run_call es = SOME (r, es') /\
           frame_outcome es0 r es' NONE as1.as_returndata as1.as_logs /\
           es'.rollback.accounts = as1.as_accounts /\
           es'.rollback.toDelete = as1.as_pending_deletions /\
           es'.rollback.tStorage = as1.as_transient /\
-          as1.as_requests = call_requests es0
+          as1.as_requests = call_requests es0 /\
+          as1.as_gas_readings = gas_tail
     | AsmRevert as1 =>
         ?r es'. run_call es = SOME (r, es') /\
+          as1.as_gas_readings = gas_tail /\
           (?lgs. frame_outcome es0 r es' (SOME Reverted) as1.as_returndata lgs) /\
           call_requests es = []
     | AsmFault as1 =>
         ?r es'. run_call es = SOME (r, es') /\
+          as1.as_gas_readings = gas_tail /\
           (?exc lgs. exc <> Reverted /\ frame_outcome es0 r es' (SOME exc) [] lgs) /\
           call_requests es = []
     | AsmError _ => T
@@ -108,13 +111,13 @@ QED
 
 (* The frame starts in the relation with its own entry assembly state. *)
 Theorem asm_frame_rel_entry:
-  initial_ctx_rel cplan prog ctx vs es /\
+  initial_ctx_rel_tail gas_tail cplan prog ctx vs es /\
   (vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
     (lookup_account (FST (HD es.contexts)).msgParams.callee
       es.rollback.accounts)) ==>
-  asm_frame_rel prog vs.vs_data_section es (entry_asm_state vs es) es
+  asm_frame_rel gas_tail prog vs.vs_data_section es (entry_asm_state vs es) es
 Proof
-  rw[initial_ctx_rel_def, initial_state_rel_def, asm_frame_rel_def,
+  rw[codegenEntryRelTheory.initial_ctx_rel_tail_def, initial_state_rel_def, asm_frame_rel_def,
      asm_evm_rel_def, entry_asm_state_def, msg_ctx_rel_def, tx_ctx_rel_def,
      block_ctx_rel_def, blockhash_rel_def, data_suffix_assemble] >>
   gvs[asm_pc_to_offset_def, CONJ_ASSOC]
