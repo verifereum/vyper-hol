@@ -694,9 +694,9 @@ Proof
    eval_operand (FST rb) s = SOME slot /\
    (!x. FST rb = Var x ==> not_fresh_at sn x) /\
    FST (SND rb) = SOME (slot_loc tr) /\ SND (SND rb) = SOME (MapPT kt vt)` by
-    (qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[target_post_def, wb_frame_def, place_ptr_rel_def,
-          value_type_place_def] >> metis_tac[]) >>
+    (qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [target_post_def]) >>
+     gvs[wb_frame_def, place_ptr_rel_def, value_type_place_def]) >>
   qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     kall_tac >>
@@ -743,9 +743,9 @@ Proof
    (!x. FST rb = Var x ==> not_fresh_at sn x) /\
    FST (SND rb) = SOME (slot_loc tr) /\
    SND (SND rb) = SOME (MapPT (expr_type e) vt)` by
-    (qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[target_post_def, wb_frame_def, place_ptr_rel_def,
-          value_type_place_def] >> metis_tac[]) >>
+    (qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [target_post_def]) >>
+     gvs[wb_frame_def, place_ptr_rel_def, value_type_place_def]) >>
   qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     kall_tac >>

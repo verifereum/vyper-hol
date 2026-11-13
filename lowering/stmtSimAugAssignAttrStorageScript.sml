@@ -35,6 +35,7 @@
 
 Theory stmtSimAugAssignAttrStorage
 Ancestors
+  stmtSimAssignStorageFacts
   exprBopSimDefs
   exprSimFieldLayout
   exprSimSource
