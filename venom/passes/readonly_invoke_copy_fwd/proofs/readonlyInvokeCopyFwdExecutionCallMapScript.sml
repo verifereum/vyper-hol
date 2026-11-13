@@ -267,3 +267,35 @@ Proof
   qexists_tac `y` >> simp[] >>
   irule ricf_call_opaque_value_same_lookup >> metis_tac[]
 QED
+
+Theorem ricf_call_payload_fold_no_hit[local]:
+  !ps sites id.
+  (!q. MEM q ps ==> (q.rpe_db,q.rpe_size) <> id) ==>
+  FLOOKUP (FOLDR (\q m.
+    m |+ ((q.rpe_db,q.rpe_size),(q.rpe_db,q.rpe_sb,q.rpe_size))) sites ps) id =
+  FLOOKUP sites id
+Proof
+  Induct >> simp[FOLDR, FLOOKUP_UPDATE] >> metis_tac[MEM]
+QED
+
+Theorem ricf_call_unchanged_fold_argument_values:
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
+    n a U B HP H ledger E sites maps targets tn /\
+  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  inst.inst_opcode = INVOKE /\ MEM op inst.inst_operands /\
+  eval_operand op s = SOME x /\
+  (!q. MEM q ps ==> op_prov G op <> SOME (q.rpe_db,q.rpe_size)) ==>
+  ?y. eval_operand op t = SOME y /\
+    ricf_opaque_value_agree
+      (FOLDR (\q m.
+        m |+ ((q.rpe_db,q.rpe_size),(q.rpe_db,q.rpe_sb,q.rpe_size))) sites ps)
+      (op_prov G op) {} x y
+Proof
+  strip_tac >>
+  mp_tac (SPEC_ALL ricf_call_unchanged_argument_values |>
+    Q.INST [`callsites` |-> `FOLDR (\q m.
+      m |+ ((q.rpe_db,q.rpe_size),(q.rpe_db,q.rpe_sb,q.rpe_size))) sites ps`]) >>
+  (impl_tac >-
+    (simp[] >> rpt strip_tac >>
+     irule ricf_call_payload_fold_no_hit >> metis_tac[])) >> simp[]
+QED
