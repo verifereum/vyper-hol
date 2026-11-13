@@ -186,7 +186,11 @@ Resume ptr_paired_current_static_bound[descriptor_bound]:
   `MEM (w2n x,len) (source_memory_read_ranges a.po_inst a.po_state ++
      source_memory_write_ranges a.po_inst a.po_state)` by
     (simp[MEM_APPEND] >> metis_tac[]) >>
-  drule_all ptr_frame_dyn_range_in_fmp_region >> strip_tac >> fs[]
+  drule_all ptr_frame_dyn_range_in_fmp_region >> strip_tac >- simp[] >>
+  rpt disj2_tac >>
+  qpat_x_assum `a.po_state.vs_initial_fmp = _` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `a.po_state.vs_fmp = _` (SUBST_ALL_TAC o SYM) >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise ptr_paired_current_static_bound
