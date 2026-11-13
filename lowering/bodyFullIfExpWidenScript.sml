@@ -1276,5 +1276,51 @@ Proof
   asm "copy" (drule_at (Pat `compile_store_bytestring _ _ _ = _`)) >>
   disch_then (qspecl_then [`lo`, `explicit`, `ctx`, `func`, `PG`, `Gu`, `tu`, `su`, `sw`, `w`, `len`, `n`, `copybb`] mp_tac) >>
   impl_tac >- simp[] >>
-  strip_tac >> FAIL_TAC "endpoint"
+  strip_tac >>
+  map_every (fn s => asm_x s kall_tac) ["unwrap", "edge", "alloc_ghost", "alloc_kept", "copy"] >>
+  `local_ptrs_reserved cenv sn` by
+    (irule local_ptrs_reserved_next_var >> qexists `sm` >> simp[]) >>
+  `!name b k. local_region cenv ee.scopes su name b k ==>
+      b+k <= w2n w \/ w2n w+type_memory_bytes cenv t <= b` by
+    (map_every qx_gen_tac [`name`, `lb`, `k`] >> strip_tac >>
+     `local_region cenv ee.scopes q name lb k` by
+       (qpat_x_assum `local_region cenv ee.scopes su name lb k` mp_tac >>
+        qpat_x_assum `!x. not_fresh_at salloc x ==> _` mp_tac >>
+        `local_ptrs_reserved cenv salloc` by
+          (irule local_ptrs_reserved_next_var >> qexists `sm` >> simp[]) >>
+        pop_assum mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+        simp[local_region_def, local_ptrs_reserved_def] >> metis_tac[]) >>
+     `local_region cenv ee.scopes az name lb k` by fs[Abbr `q`, local_region_def, lookup_var_def] >>
+     qpat_x_assum `!name b len. local_region _ _ az _ _ _ ==> _` drule >>
+     simp[regions_disjoint_def] >> decide_tac) >>
+  `cenv.ce_is_ctor ==> !name itv iv off.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_bytes cenv t)` by
+    (qpat_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ su` mp_tac >>
+     qpat_assum `FLOOKUP su.vs_allocas sm.cs_next_id = _` mp_tac >>
+     qpat_assum `MEM (mk_inst _ _ _ _) (fn_insts func)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[expr_post_def, stmt_state_rel_def, immutable_alloca_sep_def, mk_inst_def] >>
+     rpt strip_tac >>
+     qpat_x_assum `cenv.ce_is_ctor ==> _` mp_tac >>
+     simp[] >> disch_then drule >> disch_then drule >> strip_tac >>
+     qpat_x_assum `!inst b sz. MEM inst (fn_insts func) /\ _ ==> _` irule >>
+     goal_assum (drule_at Any) >> simp[mk_inst_def]) >>
+  `!name lb k. local_region cenv es1.scopes u name lb k ==>
+      local_region cenv ee.scopes su name lb k` by
+    (rpt strip_tac >> irule local_region_frame_fwd >>
+     qexistsl [`u`, `sa`, `es1.scopes`] >> simp[] >>
+     qpat_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ su` mp_tac >>
+     simp[expr_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  `!old off k. FLOOKUP u.vs_allocas old = SOME (off,k) /\ old < sa.cs_next_id ==>
+      w2n w+type_memory_bytes cenv t <= off \/ off+k <= w2n w` by
+    (rpt strip_tac >>
+     `FLOOKUP z.vs_allocas old = SOME (off,k)` by
+       (qpat_x_assum `!H. valid_horizon _ _ _ _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ z /\ _` drule >>
+        simp[vv_post_def] >> metis_tac[]) >>
+     qpat_x_assum `!aid b len. aid < sm.cs_next_id /\ _ ==> _` drule >>
+     simp[] >> impl_tac >- decide_tac >> simp[regions_disjoint_def] >> decide_tac) >>
+  FAIL_TAC "apply endpoint"
 QED
