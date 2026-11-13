@@ -140,7 +140,7 @@ Proof
        w2n w + 32 <= FST x \/ FST x + 32 <= w2n w` by
     (gen_tac >> strip_tac >> PairCases_on `x` >>
      `x1 = 64 + Z` by
-       (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0`, `64 + Z`,
+       (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0`, `64 + Z`,
                      `["%" ++ toString v0]`] mp_tac state_rel_site_size >>
         impl_tac >- simp[] >> disch_then drule >> simp[]) >>
      fs[]
@@ -186,22 +186,22 @@ Proof
       >- first_assum ACCEPT_TAC
       >- first_assum ACCEPT_TAC
       >- (gen_tac >> strip_tac >> conj_tac
-          >- (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0`,
+          >- (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0`,
                 `64 + Z`, `["%" ++ toString v0]`] mp_tac state_rel_site_size >>
               impl_tac >- simp[] >> disch_then drule >> simp[]) >>
           metis_tac[])
-      >- (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
+      >- (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
             `Z`, `["%" ++ toString (v0 + 2)]`] mp_tac state_rel_site_size >>
           impl_tac >- simp[] >> simp[])
       >- (gen_tac >> strip_tac >>
           `SND x = 32` by
-            (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 4 + 6`,
+            (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 4 + 6`,
                `32`, `["%" ++ toString (v0 + 3 + 5)]`] mp_tac
                state_rel_site_size >>
              impl_tac >- simp[] >> disch_then drule >> simp[]) >>
           simp[] >> gen_tac >> strip_tac >>
           `SND y = Z` by
-            (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
+            (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
                           `Z`, `["%" ++ toString (v0 + 2)]`] mp_tac
                state_rel_site_size >>
              impl_tac >- simp[] >> disch_then drule >> simp[]) >>
