@@ -22,7 +22,7 @@ Proof
 QED
 
 Theorem load_contract_singleton_tenv:
-  load_contract NONE gobs am tx [(NONE,tops)] [] = INL (am',rqs) /\
+  load_contract orc gobs am tx [(NONE,tops)] [] = INL (am',rqs) /\
   supported_program tops /\ supported_program_deploy tops ==>
   get_tenv (initial_evaluation_context am'.sources am'.layouts tx NONE) =
     type_env tops
@@ -34,9 +34,9 @@ Proof
 QED
 
 Theorem load_contract_immutables_typed:
-  !tops am tx gobs am' rqs pre vis name ty slot post tv v.
+  !tops am tx orc gobs am' rqs pre vis name ty slot post tv v.
     deploy_source_ok tops am tx /\
-    load_contract NONE gobs am tx [(NONE, tops)] [] = INL (am', rqs) /\
+    load_contract orc gobs am tx [(NONE, tops)] [] = INL (am', rqs) /\
     tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
     FLOOKUP (get_source_immutables NONE (account_immutables am' tx.target))
       name = SOME (tv,v) ==>
@@ -61,7 +61,7 @@ Proof
     (initial_evaluation_context am'.sources am'.layouts tx NONE)
     am'.immutables` by
     (irule load_contract_establishes_immutables_ready >>
-     qexistsl [`am`, `tx`, `[]`, `gobs`, `[(NONE,tops)]`, `NONE`, `rqs`] >>
+     qexistsl [`am`, `tx`, `[]`, `gobs`, `[(NONE,tops)]`, `orc`, `rqs`] >>
      gvs[]) >>
   drule_all load_contract_singleton_tenv >> strip_tac >>
   qpat_x_assum `immutables_ready _ _ _ _` mp_tac >>
