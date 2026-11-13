@@ -9,6 +9,9 @@ Theory bodyFullExtCallReturn
 Ancestors
   bodyFullPreds bodySimFull gasOutcomeFull exprSimExtCallCase bodyPtrDefs
   ptrDiscipline gasShadow exprSimHypsDefs exprLowering
+  extcallReturnCallerReject extcallReturnDefaultDecode
+  extcallReturnDefaultResources extcallReturnDefaultOwnership
+  extcallReturnDefaultIntervals extcallReturnDefaultStore
   vyperInterpreter vyperAST list
 
 val _ = Parse.hide "body";
