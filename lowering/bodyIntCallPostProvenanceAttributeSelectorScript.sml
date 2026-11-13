@@ -6,6 +6,7 @@ Ancestors
   loweringPosts context exprSimDefs exprSimCopy loweringStateRelDefs
   exprSimVVFrame exprOperandVar emitHelper emitHelperProps compileEnv
   venomState venomInst finite_map freshWrites ASCIInumbers
+  bodyPtrAttributeSource
 
 (* Only metadata is needed: memory may change provided ownership and the
    operand and local pointer registers are retained. *)
