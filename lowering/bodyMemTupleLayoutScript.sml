@@ -31,14 +31,12 @@ Proof
     metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND] >>
   `cs_extends sa sm /\ cs_extends sm sb` by gvs[ci_mono_def] >>
   drule_all fn_has_code_split >> strip_tac >>
-  `SUM (MAP (\a. type_memory_bytes ce a) tys) < 2 ** 64` by
+  `SUM (MAP (type_memory_bytes ce) tys) < 2 ** 64` by
     gvs[expr_body_pre_def, alloc_limits_expr_def, type_alloc_ok_def,
         compileEnvTheory.type_memory_bytes_def,
         compileEnvTheory.is_word_type_def] >>
   `SUM (MAP (type_memory_bytes ce) tys) < dimword (:256)` by
-    (`(\a. type_memory_bytes ce a) = type_memory_bytes ce` by
-       simp[FUN_EQ_THM] >>
-     fs[wordsTheory.dimword_def]) >>
+    fs[wordsTheory.dimword_def] >>
   `type_memory_size_list tvs < dimword (:256)` by metis_tac[] >>
   drule_all buffer_alloc_code >> strip_tac >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
