@@ -165,18 +165,26 @@ Proof
         (fs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split]) >>
       qexists_tac `sm` >> simp[] >>
       drule_all intcall_stage_word_arg_outcome >> disch_tac >>
-      irule gas_outcome_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
-      rpt gen_tac >> strip_tac >> gvs[] >>
-      qexistsl_tac [`v`, `typed_val_to_w256 dtv v`] >> simp[]) >>
+      irule gas_outcome_exec_conseq >> goal_assum (drule_at Any) >>
+      conj_tac
+      >- (rpt gen_tac >> BETA_TAC >>
+          disch_then (CONJUNCTS_THEN2 kall_tac
+            (qx_choosel_then [`head_v`, `head_w`] strip_assume_tac)) >>
+          qexists_tac `head_v` >> fs[]) >> simp[]) >>
   drule intcall_stage_memory_parts >> strip_tac >> gvs[] >>
   drule_all intcall_stage_memory_code >> strip_tac >>
   `ci_mono sa s4` by metis_tac[ci_mono_trans] >>
   qexists_tac `s4` >> simp[] >>
+  `compile_alloc_buffer (MAX 32 (type_memory_bytes ce ty)) s1 = (buf,s2)` by fs[] >>
   drule_all intcall_stage_memory_arg_outcome >> disch_tac >>
-  irule gas_outcome_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  qexistsl_tac [`v`, `w`] >> simp[] >>
-  qexistsl_tac [`s1.cs_next_id`, `MAX 32 (type_memory_size dtv)`] >> simp[]
+  irule gas_outcome_exec_conseq >> goal_assum (drule_at Any) >>
+  conj_tac
+  >- (rpt gen_tac >> BETA_TAC >>
+      disch_then (CONJUNCTS_THEN2 kall_tac
+        (qx_choosel_then [`head_v`, `head_w`] strip_assume_tac)) >>
+      qexistsl_tac [`head_v`, `head_w`] >> simp[] >>
+      qexistsl_tac [`s1.cs_next_id`, `MAX 32 (type_memory_size dtv)`] >>
+      fs[] >> first_assum ACCEPT_TAC) >> simp[]
 QED
 
 (* RESTATED (train 17): 0.5.0b1 per-argument staging.  Replaces the batch
@@ -234,8 +242,10 @@ Proof
            Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.return_def,
            fragGasModeTheory.gas_marked_path_def,
            fragGasPathTheory.gas_path_rules] >>
-      simp[intcall_expr_cont_def, loweringPostsTheory.locals_kept_def,
-           loweringPostsTheory.popped_kept_def]) >>
+      fs[intcall_expr_cont_def, intcall_expr_res_def,
+           loweringPostsTheory.locals_kept_def,
+           loweringPostsTheory.popped_kept_def] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "cons"
 QED
 
@@ -244,6 +254,10 @@ Resume intcall_stage_args_outcome[cons]:
   rename1 `compile_stage_intcall_args compile_expr ce (e::args) flags tys sa` >>
   namedCases_on `flags` ["", "flag tailflags"] >> gvs[] >>
   namedCases_on `tys` ["", "ty tailtys"] >> gvs[] >>
+  `intcall_expr_producer fp e /\
+   supportedExprs$supported_expr fp.jc_tops e /\
+   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e)` by
+    metis_tac[] >>
   `expr_body_pre ce fp.jc_cx env e es` by
     (fs[intcall_expr_res_def] >> metis_tac[]) >>
   `(flag ==> is_word_type ty) /\
@@ -263,23 +277,26 @@ Resume intcall_stage_args_outcome[cons]:
 QED
 
 Resume intcall_stage_args_outcome[tail]:
-  rpt gen_tac >> strip_tac >> gvs[] >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >> gvs[] >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
-  rename1 `intcall_expr_cont fp ce env es sa t (mid with gas_obs := []) sm u` >>
+  rename1 `intcall_expr_cont fp ce env es sa t mid sm u` >>
   `intcall_expr_res fp ce env (mid with gas_obs := []) sm u /\
    ~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
    u.vs_inst_idx = LENGTH sm.cs_current_insts` by
     fs[intcall_expr_cont_def] >>
+  `!i. i < LENGTH args ==>
+     (EL i tailflags ==> is_word_type (EL i tailtys)) /\
+     type_widens_to (get_tenv fp.jc_cx) (expr_type (EL i args)) (EL i tailtys) /\
+     ?dtv. evaluate_type (get_tenv fp.jc_cx) (EL i tailtys) = SOME dtv /\
+       type_memory_bytes ce (EL i tailtys) = type_memory_size dtv /\
+       MAX 32 (type_memory_size dtv) + 64 < dimword (:256)` by
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `!i. i < SUC (LENGTH args) ==> _`
+       (qspec_then `SUC i` mp_tac) >> simp[]) >>
   qpat_assum `!flags tys ce env sa ops sb es fp t. _`
     (qspecl_then [`tailflags`, `tailtys`, `ce`, `env`, `sm`, `rest`,
        `sb`, `mid with gas_obs := []`, `fp`, `u`] mp_tac) >>
-  (impl_tac
-   >- (simp[] >> rpt conj_tac
-       >~ [`!i. i < _ ==> _`] >-
-         (gen_tac >> strip_tac >>
-          qpat_x_assum `!i. i < SUC (LENGTH args) ==> _`
-            (qspec_then `SUC i` mp_tac) >> simp[]) >>
-       metis_tac[listTheory.MEM])) >>
+  (impl_tac >- (simp[] >> metis_tac[listTheory.MEM])) >>
   disch_tac >>
   irule gas_outcome_marked_return_map >> goal_assum (drule_at Any) >>
   reverse conj_tac
@@ -288,17 +305,19 @@ Resume intcall_stage_args_outcome[tail]:
 QED
 
 Resume intcall_stage_args_outcome[posts]:
-  rpt gen_tac >> strip_tac >> gvs[] >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >> gvs[] >>
   rename1 `gas_marked_exec _ _ (eval_exprs fp.jc_cx args)
-    (mid with gas_obs := [],u) marks (INL vs) fin (OK q)` >>
+    (mid with gas_obs := [],u) tailmarks (INL vs) fin (OK q)` >>
   `eval_operand hop q = SOME w` by
     (irule (Q.INST [`memory` |-> `F`, `ctx` |-> `fp.jc_ctx`,
        `func` |-> `fp.jc_func`, `s` |-> `u`, `cs` |-> `sm`,
-       `n` |-> `LENGTH marks`]
+       `n` |-> `LENGTH (tailmarks:bool list)`]
        (SPEC_ALL stmtSimAugAssignPlaceMemoryTheory.aug_place_saved_operand)) >>
-     fs[gasSummaryTheory.gas_marked_exec_def, intcall_expr_cont_def]) >>
+     fs[gasSummaryTheory.gas_marked_exec_def, intcall_expr_cont_def] >>
+     qexistsl_tac [`fp`, `sm`, `tailmarks`, `u`] >> asm_rewrite_tac[]) >>
   `intcall_expr_cont fp ce env es sa t (fin with gas_obs := []) sb q` by
     (irule bodyIntCallFamStmtLogArgsFrameTheory.intcall_expr_cont_trans >>
+     conj_tac >- simp[] >>
      qexistsl_tac [`mid with gas_obs := []`, `sm`, `u`] >>
      fs[ci_mono_def]) >>
   `MAP FDOM es.scopes = MAP FDOM (fin with gas_obs := []).scopes` by
@@ -307,6 +326,7 @@ Resume intcall_stage_args_outcome[posts]:
 QED
 
 Resume intcall_stage_args_outcome[certificates]:
+  qpat_x_assum `!flags tys ce env sa ops sb es fp t. _` kall_tac >>
   `~flag ==> !i tv' w'.
     i < LENGTH args /\ ~EL i tailflags /\
     evaluate_type (get_tenv fp.jc_cx) (EL i tailtys) = SOME tv' /\
@@ -326,29 +346,59 @@ Resume intcall_stage_args_outcome[certificates]:
        `sm` |-> `sm`, `sb` |-> `sb`, `cx` |-> `fp.jc_cx`,
        `ty` |-> `EL i tailtys`, `v` |-> `EL i vs`, `op` |-> `EL i rest`]
        (SPEC_ALL intcall_stage_head_tail_disjoint))) >> simp[] >>
+     qexistsl_tac [`aid`, `fp`, `i`, `len`, `rest`, `sb`, `sm`,
+       `tailtys`, `q`, `vs`] >> simp[] >>
      qpat_x_assum `!i. i < _ ==> ?tv w.
        evaluate_type _ (EL i tailtys) = SOME tv /\ _`
        (qspec_then `i` mp_tac) >> fs[listTheory.EL_TAKE]) >>
   `^completed fp.jc_cx sa sb ty flag v hop q` by
-    (Cases_on `flag` >> gvs[]
-     >- (irule (BETA_RULE (Q.INST [`sm` |-> `sm`, `s` |-> `u`]
+    (Cases_on `flag`
+     >- (mp_tac (BETA_RULE (Q.INST [`fp` |-> `fp`, `sa` |-> `sa`,
+           `sm` |-> `sm`, `sn` |-> `sb`, `ty` |-> `ty`, `v` |-> `v`,
+           `op` |-> `hop`, `s` |-> `u`, `u` |-> `q`]
            (SPEC_ALL intcall_stage_completed_word_transport))) >>
-         simp[ci_mono_def] >> qexistsl_tac [`dtv`, `w`] >> simp[]) >>
+         impl_tac
+         >- (fs[ci_mono_def] >> qexistsl_tac [`dtv`, `w`] >> simp[]) >>
+         simp[]) >>
+     qpat_x_assum `if F then _ else _`
+       (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
      rename1 `FLOOKUP u.vs_allocas aid = SOME (w2n w,len)` >>
-     irule (BETA_RULE (Q.INST [`sm` |-> `sm`, `s` |-> `u`,
+     mp_tac (BETA_RULE (Q.INST [`fp` |-> `fp`, `sa` |-> `sa`,
+       `sm` |-> `sm`, `sn` |-> `sb`, `s` |-> `u`, `u` |-> `q`,
+       `ty` |-> `ty`, `v` |-> `v`, `op` |-> `hop`,
        `tv` |-> `dtv`, `w` |-> `w`, `aid` |-> `aid`, `len` |-> `len`,
        `es` |-> `mid with gas_obs := []`, `ee` |-> `fin with gas_obs := []`,
        `ce` |-> `ce`, `env` |-> `env`]
-       (SPEC_ALL intcall_stage_completed_memory_transport))) >> fs[ci_mono_def]) >>
+       (SPEC_ALL intcall_stage_completed_memory_transport))) >>
+     impl_tac
+     >- (qpat_assum `ci_mono sm sb`
+           (strip_assume_tac o REWRITE_RULE [ci_mono_def]) >>
+         simp[arithmeticTheory.ADD_COMM] >> rpt gen_tac >> strip_tac >>
+         qpat_x_assum `!name a k. local_region ce mid.scopes u name a k ==> _`
+           drule >> simp[]) >> simp[]) >>
   `^completed_prefix fp.jc_cx sa sb tailtys
     (TAKE (LENGTH args) tailflags) vs rest q` by
-    (BETA_TAC >> fs[] >> rpt strip_tac >>
-     irule (BETA_RULE (Q.INST [`sm` |-> `sm`]
-       (SPEC_ALL intcall_stage_completed_start_mono))) >> fs[ci_mono_def]) >>
+    (BETA_TAC >> simp[] >> rpt gen_tac >> strip_tac >>
+     mp_tac (BETA_RULE (Q.INST [`cx` |-> `fp.jc_cx`, `sa` |-> `sa`,
+       `sm` |-> `sm`, `sb` |-> `sb`, `ty` |-> `EL i tailtys`,
+       `flag` |-> `EL i (TAKE (LENGTH (args:expr list)) tailflags)`,
+       `v` |-> `EL i vs`, `op` |-> `EL i rest`, `u` |-> `q`]
+       (SPEC_ALL intcall_stage_completed_start_mono))) >>
+     impl_tac
+     >- (conj_tac
+         >- (qpat_x_assum `!i. i < _ ==> ?tv w.
+               evaluate_type _ (EL i tailtys) = SOME tv /\ _`
+               (qspec_then `i` mp_tac) >> simp[]) >> fs[ci_mono_def]) >>
+     simp[]) >>
   `^completed_prefix fp.jc_cx sa sb (ty::tailtys)
     (TAKE (SUC (LENGTH args)) (flag::tailflags)) (v::vs) (hop::rest) q` by
-    (BETA_TAC >> fs[] >> Cases >> simp[]) >>
-  qexists_tac `v::vs` >> simp[] >>
+    (BETA_TAC >> fs[] >> Cases >> simp[]
+     >- (Cases_on `flag` >> gvs[] >>
+         rename1 `FLOOKUP q.vs_allocas head_aid = SOME (w2n w,head_len)` >>
+         qexistsl_tac [`head_aid`,`head_len`] >> simp[]) >>
+     strip_tac >>
+     qpat_x_assum `!i. i < LENGTH tailtys ==> _` drule >> simp[]) >>
+  fs[] >>
   rpt gen_tac >> strip_tac >> Cases_on `i` >> Cases_on `j` >> gvs[]
   >- metis_tac[]
   >- metis_tac[intCallCalleeTheory.regions_disjoint_sym] >>
