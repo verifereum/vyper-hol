@@ -3,6 +3,7 @@ Theory guardSourceOrdinaryValues
 Ancestors
   list guardSourceOrdinarySchema vyperInterpreter vyperState vyperStorageFootprint
   vyperTypeSystem vyperTypeCallGraph vyperEvalMisc vyperStorageTrace vyperTypeEvalSoundness
+  vyperPlaceFrames
   vyperTypeStmtSoundness vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperEvalOutcomeSuffix vyperTypeEvalStoragePreservation vyperStatePreservation
 Libs
@@ -335,4 +336,17 @@ Proof
      pure_rewrite_tac[APPEND] >>
      qpat_x_assum `!pre rq co sfx. _` mp_tac >>
      asm_rewrite_tac[] >> simp[APPEND])) >> simp[]
+QED
+
+Theorem finite_prefix_TargetPlace:
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "TargetPlace")
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  fs[well_typed_target_def] >>
+  qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac get_place_state >> BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `!initial_st selected env st res st0. _`
+    (qspecl_then [`initial_st`, `selected`] mp_tac) >>
+  disch_then irule >> metis_tac[]
 QED
