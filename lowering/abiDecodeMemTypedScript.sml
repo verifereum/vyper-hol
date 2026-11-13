@@ -3,13 +3,15 @@ Theory abiDecodeMemTyped
 Ancestors
   abiDecoderCoherence abiDecoderFrame abiDecoderFrameCompose
   exprSimAbiDecodePrimitiveOwned exprSimAbiDecodeMemberExecute
+  abiDecodeMemPrimitive abiDecodeMemPrimitiveReentry abiDecodeMemBytesReentry
+  abiDecodeMemStaticFrame actualDecoderSites abiDecoderScalarOutcome abiDecoderReentryPointer
   extcallDecoderStaticSuffix abiCanonicalHeadSize
   abiDecoderMemberFrames abiDecoderSiteEffect allocaHistoryFragment
   abiDecoderTypedContract abiDecoderContract localPtrsProps
   allocationGrowth exprLoweringProps emitHelperProps loweringStateRelDefs compileEnv instIdxIndep
   valueEncodingDefs valueEncoding vyperTypeSystem vyperTypeABI vyperTyping
   vyperABI contractABI venomExecSemantics venomState fragGasPathMem fragGasMode
-  fragGasSeqMem bodyUnopFragMemory fragExec finite_map alist list rich_list words arithmetic
+  fragGasSeqMem bodyUnopFragMemory fragExec finite_map alist pred_set list rich_list words arithmetic
 
 (* Shared statement syntax only; these quotations add no HOL constants.
    Free parameters: ctx func limit B P H snap keep_word. *)
@@ -240,17 +242,14 @@ QED
 Finalise abi_decode_typed_finite_success
 
 Theorem abi_decode_typed_finite_reject[local]:
-  let entry = ^typed_decoder_entry;
-      good = ^typed_decoder_good;
-      result = ^typed_decoder_result in
+  let entry = ^typed_decoder_entry in
   entry ce env sf ty tv dst src st fin s sb d /\ inst_extends st fin /\
   fin.cs_current_bb = st.cs_current_bb /\
   EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
     ~is_terminator i.inst_opcode) (emitted_insts st fin) /\
   run_inst_seq_mem_ok (emitted_insts st fin) s /\
-  run_inst_seq (emitted_insts st fin) s = Abort Revert_abort t /\
-  ~(?v. good env ty tv sb v) ==>
-  result ce env ty tv st fin s sb d
+  run_inst_seq (emitted_insts st fin) s = Abort Revert_abort t ==>
+  ?u. gas_marked_path T ctx func s 0 (Abort Revert_abort u)
 Proof
   rpt BasicProvers.LET_ELIM_TAC >>
   qpat_x_assum `entry ce env sf ty tv _ _ _ _ _ _ _` mp_tac >>
@@ -267,5 +266,124 @@ Proof
      rpt strip_tac >> gvs[] >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]) >>
   drule_all run_inst_seq_abort_zero_path_mem >> strip_tac >>
-  simp[Abbr `result`, markerTheory.Abbrev_def] >> disj2_tac >> metis_tac[]
+  metis_tac[]
 QED
+
+Theorem abi_decode_typed_effect_frame[local]:
+  decode_site_effect ctx func next {a | d <= a /\ a < d+n} s t ==>
+  decode_static_frame s t /\ abi_decode_frame d n s t
+Proof
+  rw[decode_site_effect_def, abi_decode_frame_def, decode_memory_frame_def,
+     decode_static_frame_def, venom_state_component_equality] >>
+  first_x_assum irule >> rw[IN_GSPEC] >> decide_tac
+QED
+
+Theorem abi_decode_typed_scalar_memory:
+  ^typed_decoder_entry ce env sf ty tv dst src st fin s sb d /\
+  type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==>
+  ^typed_decoder_result ce env ty tv st fin s sb d
+Proof
+  simp_tac bool_ss [LET_THM] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `compile_abi_decode_to_buf dst src MLOAD base_op hi
+    (DecPrimWord clamp) st = ((),fin)` by metis_tac[] >>
+  drule_all abi_decode_scalar_source_shape >> strip_tac >>
+  `sb+32 <= H` by metis_tac[] >>
+  `decode_site_resources ctx func s` by
+    (simp_tac bool_ss [decode_site_resources_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `?oid root sz. _`
+    (qx_choosel_then [`outid`,`outbase`,`outsize`] strip_assume_tac) >>
+  `outbase+outsize <= s.vs_alloca_next` by
+    (drule_all decode_site_resources_alloca_below >> simp[]) >>
+  `d+32 <= s.vs_alloca_next /\ d+32 < dimword(:256) /\
+   B+sb < dimword(:256) /\ B+sb+32 <= s.vs_alloca_next /\
+   B+H < dimword(:256)` by decide_tac >>
+  qpat_assum `EVERY (abi_decoder_operand_live _) _`
+    (map_every assume_tac o CONJUNCTS o REWRITE_RULE [EVERY_DEF]) >>
+  `run_inst_seq_mem_ok (emitted_insts st fin) s` by
+    (mp_tac (Q.INST [`st` |-> `st`, `en` |-> `fin`,
+      `dst` |-> `dst`, `src` |-> `src`, `bop` |-> `base_op`,
+      `hi` |-> `hi`, `clamp` |-> `clamp`, `s` |-> `s`,
+      `p` |-> `sb`, `B` |-> `B`, `d` |-> `d`,
+      `limit_st` |-> `limit`] abi_decode_primitive_reentry_sequence_mem) >>
+     simp[EVERY_DEF, ADD_ASSOC]) >>
+  drule abi_decode_primitive_shape >> strip_tac >>
+  `inst_extends st fin` by simp[inst_extends_def] >>
+  drule_all abi_decoder_primitive_clamp_wf >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [LET_THM] abi_decode_typed_scalar_view) >> strip_tac >>
+  suspend "outcomes"
+QED
+
+Resume abi_decode_typed_scalar_memory[outcomes]:
+  markerLib.RESUME_TAC >>
+  mp_tac (Q.INST [`st` |-> `st`, `st'` |-> `fin`, `s` |-> `s`,
+    `dst` |-> `dst`, `src` |-> `src`, `base_op` |-> `base_op`,
+    `hi` |-> `hi`, `clamp` |-> `clamp`, `pos` |-> `sb`,
+    `B` |-> `B`, `d` |-> `d`, `H` |-> `H`, `limit_st` |-> `limit`,
+    `ce` |-> `ce`, `env` |-> `env`, `sf` |-> `sf`, `ty` |-> `ty`,
+    `tv` |-> `tv`, `ctx` |-> `ctx`, `func` |-> `func`,
+    `next` |-> `st.cs_next_var`,
+    `writes` |-> `{a | d <= a /\ a < d+32}`,
+    `bs` |-> `mem_bytes_at (B+sb) 32 s.vs_memory`] abi_decode_scalar_source_reentry) >>
+  (impl_tac >- asm_simp_tac (srw_ss()) []) >>
+  disch_then (DISJ_CASES_THEN2
+    (fn th => strip_assume_tac th >> suspend "success")
+    (fn th => strip_assume_tac th >> suspend "reject"))
+QED
+
+Resume abi_decode_typed_scalar_memory[success]:
+  markerLib.RESUME_TAC >>
+  drule_all abi_decode_typed_effect_frame >> strip_tac >>
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+    eval_operand op t = eval_operand op s` by
+    (mp_tac (Q.INST [`dst` |-> `dst`, `src` |-> `src`,
+      `bop` |-> `base_op`, `hi` |-> `hi`, `clamp` |-> `clamp`,
+      `st` |-> `st`, `en` |-> `fin`, `s` |-> `s`, `t` |-> `t`]
+      abi_decode_primitive_live_frame) >> simp[]) >>
+  `^typed_decoder_good env ty tv sb v` by
+    (simp_tac bool_ss [LET_THM] >>
+     qpat_assum `!v. _ <=> abi_decode_source_accepts _ _ _ v`
+       (mp_tac o Q.SPEC `v`) >> simp[]) >>
+  qpat_x_assum `(^typed_decoder_good) env ty tv sb v`
+    (map_every assume_tac o CONJUNCTS o SIMP_RULE bool_ss [LET_THM]) >>
+  mp_tac (Q.INST [`ce` |-> `ce`, `env` |-> `env`, `sf` |-> `sf`,
+    `ty` |-> `ty`, `tv` |-> `tv`, `dst` |-> `dst`, `src` |-> `src`,
+    `st` |-> `st`, `fin` |-> `fin`, `s` |-> `s`, `t` |-> `t`,
+    `sb` |-> `sb`, `d` |-> `d`, `v` |-> `v`,
+    `base_op` |-> `base_op`, `hi` |-> `hi`, `ctx` |-> `ctx`,
+    `func` |-> `func`, `limit` |-> `limit`, `B` |-> `B`, `P` |-> `P`,
+    `H` |-> `H`, `snap` |-> `snap`, `keep_word` |-> `keep_word`]
+    (SIMP_RULE bool_ss [LET_THM] abi_decode_typed_finite_success)) >>
+  (impl_tac >- (asm_simp_tac (srw_ss()) [] >> metis_tac[])) >>
+  simp[] >> strip_tac >>
+  qpat_assum `gas_path_mem ctx func s 0 (OK _)`
+    (fn th => exists_tac (rand (rand (concl th)))) >>
+  qexists_tac `v` >> simp[] >>
+  rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
+  qmatch_assum_rename_tac `abi_decode_footprint_frame ((d,32)::actual_fp) s _` >>
+  qexists_tac `actual_fp` >> conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume abi_decode_typed_scalar_memory[reject]:
+  markerLib.RESUME_TAC >>
+  `~(?v. ^typed_decoder_good env ty tv sb v)` by
+    (simp_tac bool_ss [LET_THM] >> metis_tac[]) >>
+  mp_tac (Q.INST [`ce` |-> `ce`, `env` |-> `env`, `sf` |-> `sf`,
+    `ty` |-> `ty`, `tv` |-> `tv`, `dst` |-> `dst`, `src` |-> `src`,
+    `st` |-> `st`, `fin` |-> `fin`, `s` |-> `s`, `t` |-> `t`,
+    `sb` |-> `sb`, `d` |-> `d`,
+    `base_op` |-> `base_op`, `hi` |-> `hi`, `ctx` |-> `ctx`,
+    `func` |-> `func`, `limit` |-> `limit`, `B` |-> `B`, `P` |-> `P`,
+    `H` |-> `H`, `snap` |-> `snap`, `keep_word` |-> `keep_word`]
+    (SIMP_RULE bool_ss [LET_THM] abi_decode_typed_finite_reject)) >>
+  (impl_tac >- (asm_simp_tac bool_ss [LET_THM] >> metis_tac[])) >>
+  disch_then (qx_choose_then `bad_state` assume_tac) >>
+  disj2_tac >> qexists_tac `bad_state` >> conj_tac
+  >- first_assum ACCEPT_TAC >>
+  simp_tac bool_ss [LET_THM] >> metis_tac[]
+QED
+
+Finalise abi_decode_typed_scalar_memory
