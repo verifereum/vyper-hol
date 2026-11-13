@@ -1,7 +1,7 @@
 (* Dynamic pointer control uses the saved length register, not a fixed bound. *)
 Theory forPtrDynArrayLoop
 Ancestors forPtrArrayAssemble forPtrRounds whitelistForIterDynLoop
-  forPtrDynArrayPrepare forPtrDynArrayFinish
+  forPtrDynArrayPrepare forPtrDynArrayFinish forPtrRangeCallback list fragGasPathPtr
   forPtrControl forPtrRangeTerminal forPtrArrayInvariant bodyPtrDefs
   venomState venomInst ptrDiscipline finite_map fragExec
   forPtrRangePrepare stmtSimForArrayLoop ghostPcTransportPtr stmtSimProps
@@ -133,3 +133,134 @@ Proof
   conj_tac >> rpt strip_tac >> `x <> dv` by metis_tac[] >>
   simp[] >> metis_tac[]
 QED
+
+(* Lift the finite installation frame to the registers used by the round. *)
+Theorem for_dynarray_prepared_control_ptr[local]:
+  dynarray_for_code func cenv bc ty stmts id et tv stride (Var bp)
+    p sz ainst idx dv ov tot ep nv lv cond exit bod incr
+    j1 j2 j3 j4 j5 i1 i2 i3 sa sb0 sb1 sj /\
+  for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+    bod st s0 G0 tn0 d name snapshot k es G tn s /\
+  st.cs_next_var <= sa.cs_next_var /\
+  (!x. not_fresh_at st x ==> x <> ov /\ x <> tot /\ x <> ep) /\
+  (!x z. cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x) /\
+  s2.vs_allocas = s.vs_allocas /\
+  (!x. not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep ==>
+    lookup_var x s2 = lookup_var x s /\ FLOOKUP gf x = FLOOKUP G x /\
+    op_taint tf (Var x) = op_taint tn (Var x)) ==>
+  ptr_covers gf tf bp s2 (LENGTH vs * type_memory_size tv) /\
+  lookup_var idx s2 = SOME (n2w k) /\ lookup_var bp s2 = SOME arr_base /\
+  lookup_var p s2 = SOME dst /\ FLOOKUP gf idx = NONE /\
+  op_taint tf (Var idx) = {} /\
+  FLOOKUP s2.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\
+  ret_pc_ok cenv st s2 /\
+  (!x v. not_fresh_at st x /\ lookup_var x s0 = SOME v ==>
+    lookup_var x s2 = SOME v) /\
+  (!x. not_fresh_at st x ==> FLOOKUP gf x = FLOOKUP G0 x /\
+    op_taint tf (Var x) = op_taint tn0 (Var x))
+Proof
+  strip_tac >>
+  `not_fresh_at sa idx /\ not_fresh_at sa bp /\ not_fresh_at sa p /\
+   idx <> ov /\ idx <> tot /\ idx <> ep /\
+   bp <> ov /\ bp <> tot /\ bp <> ep /\
+   p <> ov /\ p <> tot /\ p <> ep` by
+    fs[dynarray_for_code_def, ALL_DISTINCT] >>
+  `!x. not_fresh_at st x ==> not_fresh_at sa x` by
+    (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `st` >> simp[]) >>
+  `lookup_var idx s2 = lookup_var idx s /\
+   lookup_var bp s2 = lookup_var bp s /\ lookup_var p s2 = lookup_var p s /\
+   FLOOKUP gf idx = FLOOKUP G idx /\ op_taint tf (Var idx) = op_taint tn (Var idx) /\
+   FLOOKUP gf bp = FLOOKUP G bp /\ op_taint tf (Var bp) = op_taint tn (Var bp)` by
+    metis_tac[] >>
+  qhdtm_assum `for_array_inv_ptr`
+    (strip_assume_tac o PURE_REWRITE_RULE [for_array_inv_ptr_def, array_loop_inv_def]) >>
+  `ptr_covers gf tf bp s2 (LENGTH vs * type_memory_size tv)` by
+    (fs[ptr_covers_def]) >>
+  fs[eval_operand_def]
+  >- (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`, `s`, `st`] >> simp[] >>
+      rpt strip_tac >> metis_tac[]) >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem for_dynarray_round_start_ptr[local]:
+  dynarray_for_code func cenv bc ty stmts id et tv stride (Var bp)
+    p sz ainst idx dv ov tot ep nv lv cond exit bod incr
+    j1 j2 j3 j4 j5 i1 i2 i3 sa sb0 sb1 sj /\
+  for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+    cond st s0 G0 tn0 d name snapshot k es G tn s /\
+  lookup_var lv s = SOME (n2w (LENGTH vs)) /\
+  FLOOKUP G lv = NONE /\ op_taint tn (Var lv) = {} /\
+  LENGTH vs < dimword (:256) /\ k < LENGTH vs /\
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  value_has_type tv (EL k vs) /\ val_wf tv (EL k vs) /\
+  (!es' H un u.
+    for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+      bod st s0 G0 tn0 d name snapshot k es' H un u ==>
+    ptr_covers H un bp u (32+(k+1)*stride) /\
+    (!m. mem_agree_outside un.t_mem u.vs_memory m ==>
+      val_in_memory tv (EL k vs) (w2n arr_base+32+k*stride) m)) /\
+  w2n arr_base+32+k*stride < dimword (:256) /\
+  st.cs_next_var <= sa.cs_next_var /\
+  not_local_ptr bc (FEMPTY :: es.scopes) p /\ ~ctx_has_dalloca ctx /\
+  lookup_block bod func.fn_blocks = SOME bb /\
+  isPREFIX sb0.cs_current_insts bb.bb_instructions /\
+  (!x. not_fresh_at st x ==> x <> dv /\ x <> ov /\ x <> tot /\ x <> ep) /\
+  (!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) \/
+    cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x) /\
+  not_fresh_at sa lv ==>
+  ?gf tf s2.
+    gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 gf tf (OK s2) /\
+    stmt_state_rel ctx func bc cx
+      (es with scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes) s2 /\
+    ghost_inv d bc cx
+      (es with scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes) gf tf s2 /\
+    ~s2.vs_halted /\ s2.vs_current_bb = bod /\
+    s2.vs_inst_idx = LENGTH sb0.cs_current_insts /\
+    ptr_covers gf tf p s2 sz /\
+    ptr_covers gf tf bp s2 (LENGTH vs * type_memory_size tv) /\
+    lookup_var idx s2 = SOME (n2w k) /\ lookup_var bp s2 = SOME arr_base /\
+    lookup_var p s2 = SOME dst /\ FLOOKUP gf idx = NONE /\ op_taint tf (Var idx) = {} /\
+    FLOOKUP s2.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\
+    lookup_var lv s2 = SOME (n2w (LENGTH vs)) /\
+    FLOOKUP gf lv = NONE /\ op_taint tf (Var lv) = {} /\
+    ret_pc_ok cenv st s2 /\
+    (!x v. not_fresh_at st x /\ lookup_var x s0 = SOME v ==> lookup_var x s2 = SOME v) /\
+    (!x. not_fresh_at st x ==> FLOOKUP gf x = FLOOKUP G0 x /\
+      op_taint tf (Var x) = op_taint tn0 (Var x))
+Proof
+  strip_tac >>
+  `not_local_ptr cenv es.scopes dv /\ idx <> dv /\ p <> dv /\ bp <> dv /\ lv <> dv /\
+   lv <> ov /\ lv <> tot /\ lv <> ep` by fs[dynarray_for_code_def, ALL_DISTINCT] >>
+  `!x. not_fresh_at st x ==> not_fresh_at sa x` by
+    (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `st` >> simp[]) >>
+  `lookup_block cond func.fn_blocks = SOME <|bb_label := cond;
+    bb_instructions := [mk_inst j1 EQ [Var idx; Var lv] [dv];
+      mk_inst j2 JNZ [Var dv; Label exit; Label bod] []]|>` by fs[dynarray_for_code_def] >>
+  `(!x. not_fresh_at st x ==> x <> dv) /\
+   (!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) \/
+     cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x)` by metis_tac[] >>
+  drule_all for_dynarray_unequal_header_ptr >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ G tn s 0 Gh th (OK sh)` >>
+  `ptr_covers Gh th bp sh (32+(k+1)*stride) /\
+   (!m. mem_agree_outside th.t_mem sh.vs_memory m ==>
+     val_in_memory tv (EL k vs) (w2n arr_base+32+k*stride) m)` by metis_tac[] >>
+  `!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) \/
+    cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==>
+    not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep` by metis_tac[] >>
+  drule_all for_dynarray_round_entry_ptr >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  suspend "frame"
+QED
+Resume for_dynarray_round_start_ptr[frame]:
+  `(!x. not_fresh_at st x ==> x <> ov /\ x <> tot /\ x <> ep) /\
+   (!x z. cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x)` by
+    metis_tac[] >>
+  drule_all for_dynarray_prepared_control_ptr >> strip_tac >>
+  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 gf tf (OK s2)` by
+    (drule_all gas_path_ptr_then >> simp[]) >>
+  qexistsl_tac [`gf`, `tf`, `s2`] >> simp[]
+QED
+Finalise for_dynarray_round_start_ptr
