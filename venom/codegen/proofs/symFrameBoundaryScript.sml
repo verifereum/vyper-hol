@@ -446,7 +446,13 @@ Theorem sym_restore_offset_steps:
       out.sym_mem_labels = ss.sym_mem_labels /\
       out.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
-  rpt strip_tac >> metis_tac[sym_pushed_mload, sym_push_offset_then]
+  rpt strip_tac >>
+  qspecl_then [`p`, `env`, `ss`, `off`, `sv`] mp_tac sym_pushed_mload >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`out`, `sv'`] >> simp[] >>
+  qspecl_then [`p`, `env`, `ss`, `off`, `AsmOp "MLOAD"`] mp_tac
+    sym_push_offset_then >>
+  simp[]
 QED
 
 Theorem sym_spill_offsets_cons_result:

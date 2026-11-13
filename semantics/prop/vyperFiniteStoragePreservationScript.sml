@@ -125,7 +125,7 @@ Proof
   Cases_on `st` >> simp[push_scope_def, return_def, evaluation_state_fn_updates]
 QED
 
-Theorem storage_observations_ok_root[local]:
+Theorem storage_observations_ok_root:
   storage_observations_ok cx H observations /\
   MEM (StorageRoot b offset tv) observations ==>
   MEM (b,n2w offset,tv) (FST H)
@@ -378,7 +378,7 @@ Proof
   gvs[] >> simp[word_add_def, w2n_n2w, arithmeticTheory.MOD_LESS]
 QED
 
-Theorem write_place_preserves_storage_well_formed_on[local]:
+Theorem write_place_preserves_storage_well_formed_on:
   regions_consistent (FST H) /\ storage_well_formed_on cx st (FST H) /\
   storage_observations_ok cx H observations /\
   (!b slot leaf. p = StoragePlace b slot leaf ==>
@@ -519,7 +519,7 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem eval_raw_call_preserves_storage_well_formed_on[local]:
+Theorem eval_raw_call_preserves_storage_well_formed_on:
   storage_well_formed_on cx st (FST H) /\
   storage_observations_ok cx H st'.storage_trace /\
   eval_raw_call cx flags target calldata amount gas st = (res,st') ==>
@@ -568,7 +568,7 @@ Proof
    goal_assum (drule_at Any) >> simp[])
 QED
 
-Theorem eval_send_preserves_storage_well_formed_on[local]:
+Theorem eval_send_preserves_storage_well_formed_on:
   storage_well_formed_on cx st (FST H) /\
   storage_observations_ok cx H st'.storage_trace /\
   eval_send cx has_gas vs st = (res,st') ==>
@@ -3156,7 +3156,10 @@ Resume eval_storage_well_formed_on_mutual[Expr_Call_ExtCall]:
       qpat_x_assum `!s target t nargs. eval_exprs _ _ _ = _ /\ _ ==> _`
         (drule o SIMP_RULE (srw_ss()) []) >>
       strip_tac >> first_x_assum drule_all >> simp[]) >>
-  strip_tac >> gvs[] >> first_x_assum drule_all >> simp[]
+  strip_tac >>
+  qpat_x_assum `INR _ = res` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `target_st = st'` (SUBST_ALL_TAC o SYM) >>
+  first_x_assum drule_all >> simp[]
 QED
 
 Resume eval_storage_well_formed_on_mutual[Expr_Call_CreateTarget]:

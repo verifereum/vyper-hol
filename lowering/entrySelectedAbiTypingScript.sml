@@ -26,7 +26,8 @@ Theorem selected_call_abi_values_typed:
   valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
     SOME (mut,F,args,[],ret,fbody) /\
-  bind_arguments (type_env tops) args tx.args = SOME env ==>
+  bind_arguments (type_env tops) args tx.args = SOME env /\
+  EVERY (abi_decode_bytes_widths (type_env tops)) (MAP SND args) ==>
   ?avs.
     vyper_to_abi_list (type_env tops) (MAP SND args) tx.args = SOME avs /\
     has_types (vyper_to_abi_types (type_env tops) (MAP SND args)) avs /\
@@ -41,7 +42,6 @@ Proof
   strip_tac >> drule_all selected_call_encoding_cap >> strip_tac >>
   drule_all selected_call_source_values >> strip_tac >>
   drule_all selected_call_parameter_tuple_cardinality >> strip_tac >>
-  drule_all selected_external_parameter_abi_widths >> strip_tac >>
   qexists `avs` >> simp[] >> irule source_list_conversion_typed >>
   goal_assum (drule_at Any) >> simp[] >> qexists `tx.args` >> simp[]
 QED
