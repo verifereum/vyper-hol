@@ -80,7 +80,7 @@ QED
 Theorem return_observer_complete_state_rel:
   (!i. MEM i (fn_insts obs) /\ i.inst_opcode = ALLOCA ==>
        MEM i (fn_insts func)) ==>
-  (state_rel (return_observer_complete func obs keep) cenv cx es s <=>
+  (state_rel H (return_observer_complete func obs keep) cenv cx es s <=>
    state_rel H func cenv cx es s)
 Proof
   strip_tac >> drule return_observer_complete_local_ptrs >>
@@ -237,7 +237,7 @@ Theorem return_observer_complete_stmt_state_rel:
        (FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts func)) /\
   (!i. MEM i (fn_insts obs) ==>
        i.inst_opcode <> INVOKE /\ i.inst_opcode <> DALLOCA) ==>
-  stmt_state_rel
+  stmt_state_rel H
     (return_observer_context ctx (return_observer_complete func obs keep))
     (return_observer_complete func obs keep) cenv cx es s
 Proof

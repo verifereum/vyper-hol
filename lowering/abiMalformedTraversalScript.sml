@@ -39,7 +39,12 @@ Proof
        (fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def] >>
         metis_tac[LESS_EQ_TRANS]) >>
      qpat_x_assum `!op. _ ==> _` drule >> simp[eval_operand_def, lookup_var_def]) >>
-  match_mp_tac (GEN_ALL abi_malformed_resource_post_intro) >> qexists_tac `H` >> simp[stmt_state_rel_jump_to] >>
+  conj_tac
+  >- (match_mp_tac (GEN_ALL abi_malformed_resource_post_intro) >>
+      qexists_tac `H` >> simp[stmt_state_rel_jump_to] >>
+      Cases_on `base_op = Lit 0w` >>
+      fs[Abbr `h`, abi_decode_position_header_state_def, update_var_def, jump_to_def,
+         eval_operand_def, lookup_var_def]) >>
   Cases_on `base_op = Lit 0w` >>
   fs[Abbr `h`, abi_decode_position_header_state_def, update_var_def, jump_to_def,
      eval_operand_def, lookup_var_def]

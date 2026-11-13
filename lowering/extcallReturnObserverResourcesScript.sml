@@ -44,7 +44,7 @@ Theorem return_observer_input_state:
   (!i. MEM i (fn_insts obs) ==> i.inst_opcode <> INVOKE) /\
   (!i. MEM i (fn_insts obs) /\ i.inst_opcode = DALLOCA ==>
     MEM i (fn_insts func)) ==>
-  stmt_state_rel (return_observer_context ctx obs) obs ce cx es s
+  stmt_state_rel H (return_observer_context ctx obs) obs ce cx es s
 Proof
   strip_tac >> drule_all return_observer_alloca_charge >> strip_tac >>
   drule return_observer_alloca_structure >> strip_tac >>
@@ -67,7 +67,7 @@ Theorem return_observer_input_ready:
     sites dstid live base_op dst B cap bs d n s
 Proof
   strip_tac >>
-  `stmt_state_rel (return_observer_context ctx obs) obs ce cx es s` by
+  `stmt_state_rel H (return_observer_context ctx obs) obs ce cx es s` by
     (irule return_observer_input_state >>
      fs[abi_return_decode_ready_def] >> metis_tac[]) >>
   drule return_observer_alloca_structure >> strip_tac >>
@@ -87,7 +87,7 @@ Theorem return_observer_input_entry:
     sites dstid live base_op hi src dst B L xs p d n s
 Proof
   strip_tac >>
-  `stmt_state_rel (return_observer_context ctx obs) obs ce cx es s` by
+  `stmt_state_rel H (return_observer_context ctx obs) obs ce cx es s` by
     (irule return_observer_input_state >>
      fs[abi_malformed_entry_def] >> metis_tac[]) >>
   drule return_observer_alloca_structure >> strip_tac >>
@@ -97,7 +97,7 @@ QED
 (* A call-free context cannot recover the caller's call-closure reserves.
    The original initial bounds and the execution charge are retained. *)
 Theorem return_observer_output_state:
-  stmt_state_rel (return_observer_context ctx obs) obs ce cx es t /\
+  stmt_state_rel H (return_observer_context ctx obs) obs ce cx es t /\
   stmt_state_rel H ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ fn_inst_ids_distinct obs /\
   (!i. i.inst_opcode = ALLOCA ==>
@@ -122,7 +122,9 @@ QED
 Theorem return_observer_output_resources:
   abi_malformed_resource_post (return_observer_context ctx obs) obs
     ce cx es next sites dstid s t /\
-  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
+    (return_observer_context ctx obs) obs ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ fn_inst_ids_distinct obs /\
   (!i. i.inst_opcode = ALLOCA ==>
     (MEM i (fn_insts obs) <=> MEM i (fn_insts func))) /\
@@ -130,8 +132,24 @@ Theorem return_observer_output_resources:
   abi_malformed_resource_post ctx func ce cx es next sites dstid s t
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func ce cx es t` by
-    (irule return_observer_output_state >>
-     fs[abi_malformed_resource_post_def] >> metis_tac[]) >>
-  fs[abi_malformed_resource_post_def] >> metis_tac[]
+  drule return_observer_alloca_structure >> strip_tac >>
+  `!H':(bool # bytes32 # type_value) list # num list.
+     stmt_state_rel H' ctx func ce cx es s ==>
+     stmt_state_rel H' ctx func ce cx es t` by
+    (rpt strip_tac >>
+     `stmt_state_rel H' (return_observer_context ctx obs) obs ce cx es s` by
+       fs[stmt_state_rel_def] >>
+     `stmt_state_rel H' (return_observer_context ctx obs) obs ce cx es t` by
+       (qpat_x_assum `abi_malformed_resource_post _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+        simp[abi_malformed_resource_post_def] >> rpt strip_tac >>
+        first_x_assum irule >> simp[]) >>
+     qpat_x_assum `stmt_state_rel H' (return_observer_context _ _) _ _ _ _ t`
+       (mp_then (Pos hd) irule return_observer_output_state) >>
+     metis_tac[]) >>
+  first_assum (qspec_then `H` mp_tac) >> impl_tac >- simp[] >> strip_tac >>
+  qpat_x_assum `abi_malformed_resource_post _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_malformed_resource_post_def]) >>
+  rewrite_tac[abi_malformed_resource_post_def] >> rpt conj_tac
+  >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+  first_assum ACCEPT_TAC
 QED

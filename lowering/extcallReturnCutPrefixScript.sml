@@ -83,6 +83,7 @@ Theorem return_cut_prefix_resources:
   abi_malformed_resource_post (return_observer_context ctx obs) obs
     ce cx es next sites dstid s t /\
   stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s /\
+  stmt_state_rel H (return_observer_context ctx obs) obs ce cx es s /\
   fn_inst_ids_distinct func /\ fn_inst_ids_distinct obs /\
   (!i. i.inst_opcode = ALLOCA ==>
     (MEM i (fn_insts obs) <=> MEM i (fn_insts func))) ==>
@@ -109,10 +110,12 @@ Proof
   `abi_malformed_resource_post (return_observer_context ctx obs) obs
      ce cx es next sites dstid s u` by
     (drule stop_view_fields >> strip_tac >>
-     fs[abi_malformed_resource_post_def] >>
-     conj_tac >-
+     `!H:(bool # bytes32 # type_value) list # num list.
+        stmt_state_rel H (return_observer_context ctx obs) obs ce cx es u <=>
+        stmt_state_rel H (return_observer_context ctx obs) obs ce cx es t` by
        (drule_all stop_view_recover >> disch_then SUBST1_TAC >>
         simp[hash_returndata_state_rel]) >>
+     fs[abi_malformed_resource_post_def] >>
      metis_tac[stop_view_operand]) >>
   qexists_tac `u` >>
   fs[frag_observer_cut_def] >>
