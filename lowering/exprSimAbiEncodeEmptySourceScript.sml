@@ -63,7 +63,7 @@ Proof
 QED
 
 Theorem abi_encode_nonword_zero_window_shape:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   ~is_word_type (post_value_type ce e) /\
   abi_enc_plan (get_tenv cx) (post_value_type ce e) ei /\
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
@@ -158,7 +158,7 @@ Proof
 QED
 
 Theorem abi_encode_nonword_zero_plan:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   ~is_word_type (post_value_type ce e) /\
   abi_enc_plan (get_tenv cx) (post_value_type ce e) ei /\
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
