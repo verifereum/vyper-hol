@@ -100,6 +100,29 @@ Proof
   rw[ctx_abort_rq_def] >> metis_tac[request_prefix_rel_refl]
 QED
 
+(* A terminating raw run has a matching lowered request prefix on either
+   exit path; ctx_sim supplies the halt case and ctx_abort_rq the abort. *)
+Theorem ctx_sim_abort_request_prefix:
+  ctx_sim D C C' si so /\ ctx_abort_rq D C C' si so /\
+  (run_context fuel C si = Halt ss \/
+   ?a. run_context fuel C si = Abort a ss) ==>
+  ?fuel' ts.
+    (run_context fuel' C' so = Halt ts \/
+     ?a. run_context fuel' C' so = Abort a ts) /\
+    request_prefix_rel D ss.vs_requests ts.vs_requests
+Proof
+  strip_tac
+  >- (fs[ctx_sim_def] >>
+      first_x_assum (qspec_then `fuel` mp_tac) >>
+      simp[terminates_def] >> strip_tac >>
+      Cases_on `run_context fuel' C' so` >>
+      gvs[dead_result_rel_def] >>
+      rename1 `run_context matched_fuel C' so = Halt matched_state` >>
+      qexistsl_tac [`matched_fuel`, `matched_state`] >>
+      simp[LIST_REL_imp_request_prefix_rel]) >>
+  fs[ctx_abort_rq_def] >> metis_tac[]
+QED
+
 Theorem ctx_abort_rq_trans:
   dead_wf D /\ ctx_abort_rq D C1 C2 s1 s2 /\ ctx_abort_rq D C2 C3 s2 s3 ==>
   ctx_abort_rq D C1 C3 s1 s3

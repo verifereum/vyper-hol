@@ -16,6 +16,7 @@ Ancestors
   vfmAccountFrame vfmExecution callTraceFrame unitTransformDefs ptrDiscipline
   unitMemInv lowerDloadDefs vyperCallStorageFootprint e2eProducers e2eEntry o1PipelineCorrect o1PassContract o1RequestRuns
   o1PipelineRequests e2eComposition loweringShapeSource immutableCodeLayout staticLayoutDefs
+  guardRequestAlignment loweringDloadHeadroom guardStorageTransport
 
 (* The call theorem's premises other than its storage guards, for one call
    frame es of the compiled contract.  Re-entries meet the same premises. *)
