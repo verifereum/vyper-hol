@@ -233,10 +233,16 @@ Theorem blocks_store[local]:
   mem_blocks_ok m ⇒
   mem_blocks_ok (m |++ GENLIST (λj. (a + j, (l, d, j))) 32)
 Proof
-  rw[mem_blocks_ok_def, mstore_labels_lookup] >>
+  simp[mem_blocks_ok_def, mstore_labels_lookup] >> strip_tac >>
   `∀k l d j. FLOOKUP m k = SOME (l, d, j) ⇒ j < 32` by metis_tac[] >>
-  Cases_on `a ≤ k1 ∧ k1 < a + 32` >> Cases_on `a ≤ k2 ∧ k2 < a + 32` >>
-  gvs[] >> rpt strip_tac >> res_tac >> gvs[]
+  rpt gen_tac >> strip_tac >>
+  Cases_on `a ≤ k1 ∧ k1 < a + 32` >> Cases_on `a ≤ k2 ∧ k2 < a + 32` >|
+  [qpat_x_assum `∀k1 k2 l1 d1 j1 l2 d2 j2. _` kall_tac >> gvs[],
+   qpat_x_assum `∀k1 k2 l1 d1 j1 l2 d2 j2. _` kall_tac >> gvs[] >>
+   rpt strip_tac >> res_tac >> gvs[],
+   qpat_x_assum `∀k1 k2 l1 d1 j1 l2 d2 j2. _` kall_tac >> gvs[] >>
+   rpt strip_tac >> res_tac >> gvs[],
+   qpat_x_assum `∀k1 k2 l1 d1 j1 l2 d2 j2. _` irule >> gvs[]]
 QED
 
 Theorem ml_rel_store_comm[local] =

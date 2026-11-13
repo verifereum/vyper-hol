@@ -49,7 +49,7 @@ Proof
   gvs[] >> drule aug_place_memory_write_gas_obs >> simp[]
 QED
 
-Theorem aug_place_rhs_typed_memory_source[local]:
+Theorem aug_place_rhs_typed_memory_source:
   expr_body_pre cenv cx env e st /\
   type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
   type_bits ty MOD 8 = 0 /\ evaluate_type (get_tenv cx) ty = SOME dtv /\
