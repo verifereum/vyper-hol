@@ -134,10 +134,14 @@ QED
 
 Resume compile_assert_reason_frag_general_ptr[true]:
   gvs[] >> qexists `marks` >> disj1_tac >>
-  `stmt_post H ctx fn cx lctx cenv cenv sa sb s0 (INL ())
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. vyperState$bind _ _ (es with gas_obs := _) = _`
+       (mp_tac o MATCH_MP eval_read_preserves_scopes_dom o Q.SPEC `[]`) >>
+     simp[]) >>
+  `stmt_post H ctx fn cx lctx cenv cenv sa sb es s0 (INL ())
      (es_end with gas_obs := []) (jump_to sb.cs_current_bb t)` by
     (irule assert_success_post >> simp[] >>
-     qexistsl [`e`,`es`,`op`,`s1`] >> simp[]) >>
+     qexistsl [`e`,`op`,`s1`] >> simp[]) >>
   qexistsl [`INL ()`,`es_end`,`G`,`tn`,`OK (jump_to sb.cs_current_bb t)`] >>
   conj_tac >- (gen_tac >> simp[eval_assert_reason_bind, Once bind_def, return_def]) >>
   conj_tac >- metis_tac[gas_path_ptr_then, ADD_CLAUSES] >>

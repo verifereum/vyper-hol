@@ -5,6 +5,7 @@
    bytes, as the local's type lays out in a word) is below the frontier. *)
 Theory bodyMemAssignLocalWord
 Ancestors
+  supportedExprTraverse allocLimits allocLimitsProps
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyDeclMemoryCounted bodyDeclMemoryCore
   allocaFootprint exprSimMemDefs exprSimSource bodyExprPreFacts
@@ -201,6 +202,7 @@ Finalise assign_local_word_frag_mem
 
 Theorem body_assign_local_word_mem:
   !cx id e ty d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (Assign (BaseTarget (NameTarget id)) e) /\
     body_expr_mem_ok cx e /\
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings
       (Assign (BaseTarget (NameTarget id)) e) /\
@@ -227,7 +229,19 @@ Proof
      Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >>
      Cases_on `asg` >> gvs[] >> metis_tac[type_widens_to_word]) >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>

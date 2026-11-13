@@ -2,7 +2,7 @@
    absence of an earlier endpoint. It is only a graph witness, not a new
    simulation judgment: semantic/source retention is a separate obligation. *)
 Theory bodyPtrWordBuiltinsFirstHit
-Ancestors fragGasPathPtr bodyPtrDefs arithmetic
+Ancestors fragGasPathPtr bodyPtrDefs vyperStorageFootprint arithmetic
 
 Inductive word_ptr_first_hit:
   (!E D lo ctx fn PG G tn s.
@@ -54,24 +54,25 @@ QED
 (* Equality of the explicit source observations and of the full endpoint
    configuration is sufficient. PC equality alone supplies neither. *)
 Theorem word_ptr_first_hit_expr_post_retained:
-  word_ptr_first_hit
-    (\t. t.vs_current_bb = sb.cs_current_bb /\
-         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    D 0 ctx func PG G0 tn0 s0 (LENGTH short) HG un t /\
   t = u /\ HG = G /\ un = tn /\
   gas_explicit short s0.vs_gas_readings =
     gas_explicit marks s0.vs_gas_readings /\
   (!tail. bind (eval_expr cx e) (read_result cx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
      (INL v, ee with gas_obs := tail)) /\
-  expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op u /\
-  ghost_inv H d cenv cx (ee with gas_obs := []) G tn u /\
-  ptr_val_ok cx (expr_type e) v op G tn u /\
-  (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
-  ghost_kept cenv es sa G0 tn0 s0 G tn ==>
-  gas_summary_ptr_at D (ctx, func) PG short
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    word_ptr_first_hit
+      (\t. t.vs_current_bb = sb.cs_current_bb /\
+           t.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (D H) 0 ctx func PG G0 tn0 s0 (LENGTH short) HG un t /\
+    expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op u /\
+    ghost_inv H d cenv cx (ee with gas_obs := []) G tn u /\
+    ptr_val_ok cx (expr_type e) v op G tn u /\
+    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
+    ghost_kept cenv es sa G0 tn0 s0 G tn) ==>
+  gas_summary_ptr_at D (ctx, func) PG cx st0 short
     (bind (eval_expr cx e) (read_result cx)) (es, s0, G0, tn0)
-    (\res ee G tn t. ?v. res = INL v /\
+    (\H res ee G tn t. ?v. res = INL v /\
       expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -79,11 +80,10 @@ Theorem word_ptr_first_hit_expr_post_retained:
       ptr_val_ok cx (expr_type e) v op G tn t /\
       (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
-    (\res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r)
 Proof
-  strip_tac >> drule word_ptr_first_hit_path >> strip_tac >>
-  gvs[gas_summary_ptr_at_def] >>
+  strip_tac >> gvs[gas_summary_ptr_at_def] >>
   qexistsl [`INL v`, `ee`, `G`, `tn`, `OK t`] >> simp[] >>
-  metis_tac[]
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  drule word_ptr_first_hit_path >> strip_tac >> gvs[]
 QED
-
