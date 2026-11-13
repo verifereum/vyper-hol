@@ -1104,6 +1104,22 @@ Resume dload_normal_copied_safety[taint]:
      `v IN (set (fn_ir_vars f) DIFF {v | retpc_var f v})` by
        (simp[] >> metis_tac[lowerDloadPtrStaticTheory.fn_ir_vars_operand]) >>
      fs[dload_vars_match_def] >> metis_tac[]) >>
+  `!b. i.inst_opcode = MUL /\ MEM b i.inst_operands /\
+       op_taint tn b = {} ==> eval_operand b s = eval_operand b t` by
+    (rpt strip_tac >>
+     `opaque_use_ok f` by fs[o1_fn_shape_def, fn_shape_ok_def] >>
+     `!v. MEM (Var v) i.inst_operands ==>
+        v IN (set (fn_ir_vars f) DIFF {v | retpc_var f v})` by
+       (rpt strip_tac >> irule dload_original_nonopaque_operands >>
+        simp[] >> qexists `i` >> simp[MEM]) >>
+     `op_prov G b = NONE` by
+       (irule lowerDloadPtrScalarTheory.scalar_operand_no_prov >>
+        simp[MEM] >> metis_tac[]) >>
+     `eval_operand b s = NONE <=> eval_operand b t = NONE` by
+       (irule dload_matched_operand_defined >> metis_tac[]) >>
+     `!v. b = Var v ==>
+        v IN (set (fn_ir_vars f) DIFF {v | retpc_var f v})` by metis_tac[] >>
+     drule_all scalar_operand_equal >> simp[]) >>
   simp[taint_ok_def] >> conj_tac
   >- (rpt strip_tac >>
       `op_taint tn op <> {}` by metis_tac[] >>

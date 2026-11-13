@@ -9,7 +9,9 @@ Ancestors
 
 Theorem aggregate_make_array_elems_body_sim_mem:
   !args ce cx env elem_ty tv header idx off sa out sb es func inst x b asz s0 ctx tops.
-  EVERY (\e. expr_type e = elem_ty) args /\
+  EVERY (\e. arg_type_fits (expr_type e) elem_ty) args /\
+  EVERY (\e. elem_ty = expr_type e \/
+    is_bytestring_type elem_ty /\ is_bytestring_type (expr_type e)) args /\
   evaluate_type (get_tenv cx) elem_ty = SOME tv /\
   type_memory_bytes ce elem_ty = type_memory_size tv /\
   off = (if header then 32 else 0) + idx * type_memory_size tv /\
@@ -69,15 +71,24 @@ Theorem aggregate_make_array_elems_body_sim_mem:
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule compile_make_array_elems_as_tuple >>
-  disch_then (qspecl_then [`header`, `compile_expr`, `ce`, `Var x`, `idx`] mp_tac) >>
+  mp_tac (Q.SPECL [`args`, `idx`] (Q.INST [`cfn` |-> `compile_expr`,
+    `buf` |-> `Var x`] compile_make_array_elems_as_tuple)) >>
   strip_tac >>
-  `OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) =
+  `OPT_MMAP (evaluate_type (get_tenv cx)) (REPLICATE (LENGTH args) elem_ty) =
      SOME (REPLICATE (LENGTH args) tv)` by
-    (irule exprSimAggregateEncodingTheory.OPT_MMAP_uniform_map >> metis_tac[]) >>
-  `compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb)` by
+    (Q.SPEC_TAC (`LENGTH args`, `n`) >> Induct >> gvs[rich_listTheory.REPLICATE]) >>
+  `LIST_REL (\t e. arg_type_fits (expr_type e) t)
+     (REPLICATE (LENGTH args) elem_ty) args` by
+    gvs[listTheory.LIST_REL_EL_EQN, rich_listTheory.EL_REPLICATE, listTheory.EVERY_EL] >>
+  `LIST_REL (\t e. t = expr_type e \/
+     is_bytestring_type t /\ is_bytestring_type (expr_type e))
+     (REPLICATE (LENGTH args) elem_ty) args` by
+    gvs[listTheory.LIST_REL_EL_EQN, rich_listTheory.EL_REPLICATE, listTheory.EVERY_EL] >>
+  `compile_make_tuple compile_expr ce args (REPLICATE (LENGTH args) elem_ty)
+     (Var x) off sa = (out,sb)` by
     (gvs[] >> metis_tac[]) >>
   drule aggregate_make_tuple_body_sim_mem >> disch_then drule >>
+  disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _ = SOME (_,_)`)) >>
@@ -253,7 +264,9 @@ QED
 
 Theorem aggregate_make_array_body_sim_mem:
   !args ce cx env elem_ty tv stride header sa out sb es func inst x b asz s0 ctx tops.
-  EVERY (\e. expr_type e = elem_ty) args /\
+  EVERY (\e. arg_type_fits (expr_type e) elem_ty) args /\
+  EVERY (\e. elem_ty = expr_type e \/
+    is_bytestring_type elem_ty /\ is_bytestring_type (expr_type e)) args /\
   evaluate_type (get_tenv cx) elem_ty = SOME tv /\
   stride = type_memory_size tv /\
   type_memory_bytes ce elem_ty = type_memory_size tv /\
@@ -324,8 +337,9 @@ Proof
   rename1 `emit_void MSTORE _ sa = (u,sm)` >> Cases_on `u` >> gvs[] >>
   `ci_mono sa sm` by metis_tac[ci_mono_emit_void, pairTheory.SND] >>
   `ci_mono sm sb` by
-    (drule compile_make_array_elems_as_tuple >>
-     disch_then (qspecl_then [`T`, `compile_expr`, `ce`, `Var x`, `0`] mp_tac) >>
+    (mp_tac (Q.SPECL [`args`, `0`] (Q.INST [`header` |-> `T`,
+       `cfn` |-> `compile_expr`, `buf` |-> `Var x`]
+       compile_make_array_elems_as_tuple)) >>
      strip_tac >> gvs[] >>
      metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND]) >>
   `cs_extends sa sm /\ cs_extends sm sb` by gvs[ci_mono_def] >>

@@ -11,8 +11,8 @@ Theorem aggregate_tuple_cons_order_mem[local]:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   emit_op ADD [Var x; Lit (n2w off)] sm = (dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
-  compile_store_memory ce op dst (expr_type e) (lowered_value_type ce e) su = ((),ss) /\
-  compile_make_tuple compile_expr ce args (Var x) tailoff ss = (out,sb) /\
+  compile_store_memory ce op dst dty (lowered_value_type ce e) su = ((),ss) /\
+  compile_make_tuple compile_expr ce args tys (Var x) tailoff ss = (out,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   not_fresh_at sa x /\ aid < sa.cs_next_id ==>
   ci_mono sa sm /\ ci_mono sm ss /\ ci_mono sa ss /\ ci_mono ss sb /\
@@ -41,7 +41,7 @@ Proof
 QED
 
 Theorem aggregate_tuple_tail_entry_mem[local]:
-  OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type (e::args)) = SOME (htv::tvs) /\
+  OPT_MMAP (evaluate_type (get_tenv cx)) (dty::tys) = SOME (htv::tvs) /\
   (!a st. MEM a (e::args) /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env a st) /\
   expr_body_pre ce cx env e es /\ body_inv tops ctx ce cx /\
@@ -65,7 +65,7 @@ Theorem aggregate_tuple_tail_entry_mem[local]:
     [] (INL v) es1 (OK q) /\
   stmt_state_rel ctx func ce cx es1 q /\ alloca_history func q /\
   q.vs_current_bb = ss.cs_current_bb /\ q.vs_inst_idx = LENGTH ss.cs_current_insts ==>
-  OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
+  OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   expr_sim_inv ce cx env es1 /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
@@ -106,7 +106,10 @@ Theorem aggregate_tuple_head_tail_mem[local]:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   emit_op ADD [Var x; Lit (n2w off)] sm = (dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
-  compile_store_memory ce op dst (expr_type e) (lowered_value_type ce e) su = ((),ss) /\
+  compile_store_memory ce op dst dty (lowered_value_type ce e) su = ((),ss) /\
+  arg_type_fits (expr_type e) dty /\
+  (dty = expr_type e \/
+   is_bytestring_type dty /\ is_bytestring_type (expr_type e)) /\
   ci_mono sa sm /\ ci_mono sa ss /\ local_ptrs_reserved ce sa /\ fn_has_code sm ss func /\
   fn_has_code ss sb func /\ local_ptrs_reserved ce ss /\
   fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
@@ -115,8 +118,8 @@ Theorem aggregate_tuple_head_tail_mem[local]:
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   stmt_state_rel ctx func ce cx es s0 /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME htv /\
-  OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type (e::args)) = SOME (htv::tvs) /\
+  evaluate_type (get_tenv cx) dty = SOME htv /\
+  OPT_MMAP (evaluate_type (get_tenv cx)) (dty::tys) = SOME (htv::tvs) /\
   (!a st. MEM a (e::args) /\ expr_sim_inv ce cx env st ==> expr_body_pre ce cx env a st) /\
   off + type_memory_size_list (htv::tvs) <= asz /\ b+asz < dimword (:256) /\
   (ce.ce_is_ctor ==> !name itv iv io.
@@ -157,7 +160,7 @@ Theorem aggregate_tuple_head_tail_mem[local]:
     expr_sim_inv ce cx env es1 /\ body_exprs_mem_ok cx args /\
     value_has_type htv v /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     mem_bytes_at b asz t1.vs_memory = mem_bytes_at b asz s0.vs_memory /\
-    OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
+    OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
     (!a st. MEM a args /\ expr_sim_inv ce cx env st ==> expr_body_pre ce cx env a st) /\
     body_inv tops ctx ce cx /\ fn_has_code ss sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved ce ss /\ MEM inst (fn_insts func) /\
@@ -171,7 +174,7 @@ Theorem aggregate_tuple_head_tail_mem[local]:
       regions_disjoint io (type_memory_size itv) (b+(off+type_memory_size htv))
         (type_memory_size_list tvs)) /\ ~q.vs_halted
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `off + type_memory_size htv <= asz` by (fs[type_memory_size_def] >> decide_tac) >>
   `ce.ce_is_ctor ==> !name itv iv io.
     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
@@ -188,9 +191,11 @@ Proof
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
   disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `arg_type_fits _ _`)) >>
+  disch_then (drule_at (Pat `_ = expr_type _ \/ _`)) >>
   disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
-  disch_then (qspec_then `args` mp_tac) >>
+  disch_then (mp_tac o SPEC_ALL) >>
   (impl_tac >- (simp[] >> asm_rewrite_tac[])) >> strip_tac >>
   `not_fresh_at ss x /\ inst.inst_id < ss.cs_next_id` by
     (fs[ci_mono_def] >> metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
@@ -201,7 +206,8 @@ Proof
   disch_then (drule_at (Pat `fn_has_code ss sb _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ es1`)) >>
   disch_then (drule_at (Pat `inst.inst_outputs = _`)) >>
-  disch_then (qspecl_then [`tvs`, `off`, `htv`, `args`] mp_tac) >>
+  disch_then (drule_at (Pat `OPT_MMAP _ _ = _`)) >>
+  disch_then (mp_tac o SPEC_ALL) >>
   (impl_tac >- (simp[] >> asm_rewrite_tac[])) >> strip_tac >>
   qexistsl_tac [`v`, `q`] >> asm_rewrite_tac[]
 QED
@@ -355,9 +361,12 @@ Proof
 QED
 
 Theorem aggregate_tuple_success_continuation_mem[local]:
-  (!ce cx env off sa out sb es tvs func inst x b asz s0 ctx tops.
-    compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb) /\
-    OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
+  (!tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx tops.
+    compile_make_tuple compile_expr ce args tys (Var x) off sa = (out,sb) /\
+    LIST_REL (\t e. arg_type_fits (expr_type e) t) tys args /\
+    LIST_REL (\t e. t = expr_type e \/
+      is_bytestring_type t /\ is_bytestring_type (expr_type e)) tys args /\
+    OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
     expr_sim_inv ce cx env es /\
     (!e st. MEM e args /\ expr_sim_inv ce cx env st ==> expr_body_pre ce cx env e st) /\
     body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
@@ -406,8 +415,14 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
   compile_expr ce (expr_type h) h sa = (vv,sm) /\
   emit_op ADD [Var x; Lit (n2w off)] sm = (dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
-  compile_store_memory ce op dst (expr_type h) (lowered_value_type ce h) su = ((),ss) /\
-  compile_make_tuple compile_expr ce args (Var x) (off + type_memory_bytes ce (expr_type h)) ss = (Var x,sb) /\
+  compile_store_memory ce op dst dty (lowered_value_type ce h) su = ((),ss) /\
+  compile_make_tuple compile_expr ce args dtys (Var x) (off + type_memory_bytes ce dty) ss = (Var x,sb) /\
+  arg_type_fits (expr_type h) dty /\
+  (dty = expr_type h \/
+   is_bytestring_type dty /\ is_bytestring_type (expr_type h)) /\
+  LIST_REL (\t e. arg_type_fits (expr_type e) t) dtys args /\
+  LIST_REL (\t e. t = expr_type e \/
+    is_bytestring_type t /\ is_bytestring_type (expr_type e)) dtys args /\
   ci_mono sa sm /\ ci_mono sa ss /\ local_ptrs_reserved ce sa /\ fn_has_code sm ss func /\
   fn_has_code ss sb func /\ local_ptrs_reserved ce sm /\ local_ptrs_reserved ce ss /\
   fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
@@ -416,15 +431,15 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   stmt_state_rel ctx func ce cx es s0 /\
-  evaluate_type (get_tenv cx) (expr_type h) = SOME h' /\
-  OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type (h::args)) = SOME (h'::t) /\
+  evaluate_type (get_tenv cx) dty = SOME htv /\
+  OPT_MMAP (evaluate_type (get_tenv cx)) (dty::dtys) = SOME (htv::ttvs) /\
   (!a st. MEM a (h::args) /\ expr_sim_inv ce cx env st ==> expr_body_pre ce cx env a st) /\
-  off + type_memory_size_list (h'::t) <= asz /\ b+asz < dimword (:256) /\
+  off + type_memory_size_list (htv::ttvs) <= asz /\ b+asz < dimword (:256) /\
   (ce.ce_is_ctor ==> !name itv iv io.
     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
-    regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size_list (h'::t))) /\
+    regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size_list (htv::ttvs))) /\
   gas_marked_exec T (ctx,func) (eval_expr cx h) (es,s0)
     marks (INL tv) es1 (OK t1) /\ es1.gas_obs = [] /\
   vv_post ctx func ce cx h es sa sm s0 es1 tv vv t1 /\
@@ -437,11 +452,11 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
     (\res es2 r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es2 /\
       stmt_state_rel ctx func ce cx es2 r /\
-      tuple_in_memory vs (h'::t) (b+off) r.vs_memory /\
+      tuple_in_memory vs (htv::ttvs) (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z r = SOME w) /\
       (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==> FLOOKUP r.vs_allocas aid = SOME a) /\
       (!p n. b <= p /\ p+n <= b+asz /\
-        (p+n <= b+off \/ b+off+type_memory_size_list (h'::t) <= p) ==>
+        (p+n <= b+off \/ b+off+type_memory_size_list (htv::ttvs) <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
       (!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
         aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
@@ -459,7 +474,7 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_at (Pat `compile_expr _ _ _ _ = _`) aggregate_tuple_head_tail_mem >>
   disch_then (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
@@ -468,10 +483,13 @@ Proof
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
   disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `arg_type_fits _ _`)) >>
+  disch_then (drule_at (Pat `_ = expr_type _ \/ _`)) >>
   disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP s0.vs_allocas _ = _`)) >>
-  disch_then (qspec_then `t` mp_tac) >>
+  disch_then (drule_at (Pat `OPT_MMAP _ _ = _`)) >>
+  disch_then (mp_tac o SPEC_ALL) >>
   (impl_tac >- (simp[] >> asm_rewrite_tac[])) >> strip_tac >>
   `!name lo sz. local_region ce es.scopes s0 name lo sz ==>
     b+asz <= lo \/ lo+sz <= b` by
@@ -496,11 +514,11 @@ Proof
      qpat_x_assum `~expr_has_effect h /\ MAP FDOM _ = _ /\ _ ==> _` mp_tac >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then ACCEPT_TAC) >>
-  `type_memory_bytes ce (expr_type h) = type_memory_size h'` by
+  `type_memory_bytes ce dty = type_memory_size htv` by
     metis_tac[expr_sim_inv_memory_size] >>
   fs[] >>
-  qpat_x_assum `!ce cx env off sa out sb es tvs func inst x b asz s0 ctx tops. _`
-    (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`)) >>
+  qpat_x_assum `!tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx tops. _`
+    (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ es1 q`)) >>
   disch_then (drule_at (Pat `body_inv _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP q.vs_allocas _ = _`)) >>
@@ -519,9 +537,12 @@ Proof
 QED
 
 Theorem aggregate_make_tuple_body_sim_mem:
-  !args ce cx env off sa out sb es tvs func inst x b asz s0 ctx tops.
-  compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb) /\
-  OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
+  !args tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx tops.
+  compile_make_tuple compile_expr ce args tys (Var x) off sa = (out,sb) /\
+  LIST_REL (\t e. arg_type_fits (expr_type e) t) tys args /\
+  LIST_REL (\t e. t = expr_type e \/
+    is_bytestring_type t /\ is_bytestring_type (expr_type e)) tys args /\
+  OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   expr_sim_inv ce cx env es /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==> expr_body_pre ce cx env e st) /\
   body_inv tops ctx ce cx /\ body_exprs_mem_ok cx args /\
@@ -570,14 +591,18 @@ Proof
   Induct_on `args`
   >- (rpt gen_tac >> strip_tac >> gvs[compile_make_tuple_def, comp_return_def] >>
       irule aggregate_tuple_nil_outcome_mem >> simp[valueEncodingDefsTheory.val_in_memory_def, stmt_state_rel_gas_obs]) >>
-  rpt gen_tac >> strip_tac >>
-  `out = Var x` by metis_tac[compiler_make_tuple_result] >> gvs[] >>
+  pop_assum (fn ih =>
+    rpt gen_tac >> strip_tac >>
+    Cases_on `tys` >- fs[] >> gns[] >>
+    `out = Var x` by metis_tac[compiler_make_tuple_result] >>
+    gnvs[] >> assume_tac ih) >>
+  rename1 `compile_make_tuple compile_expr ce (h::args) (dty::dtys) _ _ _ = _` >>
   `expr_body_pre ce cx env h es` by metis_tac[listTheory.MEM] >>
-  drule aggregate_mem_tuple_cons_compile >> strip_tac >>
+  drule exprSimAggregateLoopsTheory.compile_make_tuple_cons >> strip_tac >>
   rename1 `compile_expr ce (expr_type h) h sa = (vv,sm)` >>
   rename1 `emit_op ADD [Var x; Lit (n2w off)] sm = (dst,sn)` >>
   rename1 `unwrap_value ce vv sn = (op,su)` >>
-  rename1 `compile_store_memory ce op dst (expr_type h) (lowered_value_type ce h) su = ((),ss)` >>
+  rename1 `compile_store_memory ce op dst dty (lowered_value_type ce h) su = ((),ss)` >>
   drule_all aggregate_tuple_cons_order_mem >> strip_tac >>
   drule_all aggregate_tuple_child_outcome_mem >> strip_tac >>
   rewrite_tac[aggregate_tuple_eval_cons] >>
@@ -589,15 +614,21 @@ Proof
     (Q.GEN `P` aggregate_tuple_bind_outcome_any)) >>
   conj_tac
   >- (irule aggregate_tuple_gas_outcome_mono >> goal_assum (drule_at Any) >>
-      simp[] >> rpt strip_tac >> Cases_on `res` >> gvs[exprSimDefsTheory.expr_exit_def]) >>
+      simp[] >> rpt strip_tac >> Cases_on `res` >>
+      qpat_x_assum `expr_exit _ _` mp_tac >> simp[exprSimDefsTheory.expr_exit_def]) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   rename1 `gas_marked_exec T _ (eval_expr cx h) _ marks (INL tv) es1 (OK t1)` >>
+  qpat_x_assum `arg_type_fits _ _ /\ _`
+    (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  qpat_x_assum `(_ \/ _) /\ LIST_REL _ _ _`
+    (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  qpat_x_assum `?v. evaluate_type _ _ = _ /\ _` strip_assume_tac >>
+  gnvs[] >>
+  rename1 `evaluate_type (get_tenv cx) dty = SOME htv` >>
+  rename1 `OPT_MMAP (evaluate_type (get_tenv cx)) dtys = SOME ttvs` >>
   fs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
-  irule (SRULE [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+  mp_tac (SRULE [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
     aggregate_tuple_success_continuation_mem) >>
-  simp[] >> asm_rewrite_tac[] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- (qexists `marks` >> first_assum ACCEPT_TAC) >>
-  goal_assum (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`)) >>
-  simp[] >> asm_rewrite_tac[] >> qexists_tac `inst` >> simp[]
+  (impl_tac >- (simp[] >> asm_rewrite_tac[] >> metis_tac[])) >>
+  disch_then MATCH_ACCEPT_TAC
 QED

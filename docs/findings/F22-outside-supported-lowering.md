@@ -54,7 +54,7 @@ regressions. No named original fixture exercises these excluded mismatches.
 
 | PLAN F22 category | Current behavior or remaining difference | Current whitelist owner |
 |---|---|---|
-| Call argument reads | interpreter captures internal argument locations before defaults and reads them afterward; external positional reads follow keyword evaluation, matching the staged lowering phases | `supported_pure_expr` still required for all call operands |
+| Call argument reads | interpreter and lowering read each internal- and external-call argument as soon as it is evaluated, before later arguments, defaults and keyword operands | `supported_pure_expr` still required for all call operands |
 | `x += e` | source and lowering resolve and read the target before evaluating the RHS, then compute and write | `supported_target`, `supported_expr` RHS; root effects admitted |
 | `a[i] = e` check order | source and lowering capture the RHS before resolving/checking the target, then read the RHS and store; flat tuple writes resolve/store targets in order | `supported_assignment`, `supported_expr` key/RHS; flat tuple targets admitted, nested tuples excluded |
 | Storage struct non-first read | concrete22/11 example above | `supported_storage_field_read` |

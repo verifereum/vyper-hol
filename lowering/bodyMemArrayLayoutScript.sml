@@ -15,7 +15,7 @@ Theorem array_body_allocation_layout:
       (case bnd of Dynamic _ => T | _ => F) ba.buf_operand sm = (u,sb) /\
     evaluate_type (get_tenv cx) et = SOME tv /\
     evaluate_type (get_tenv cx) ann = SOME (ArrayTV tv bnd) /\
-    EVERY (\e. expr_type e = et) args /\
+    EVERY (\e. arg_type_fits (expr_type e) et) args /\
     type_memory_bytes ce et = type_memory_size tv /\
     (if (case bnd of Dynamic _ => T | _ => F) then 32 else 0) +
       LENGTH args * type_memory_size tv <= type_memory_bytes ce ann /\

@@ -2,6 +2,7 @@
    creator nonce update on failure and the created address on success. *)
 Theory asmFrameCreateStep
 Ancestors
+  vfmWfState
   asmFrameRel asmFrameCallStep frameObsStep asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp frameCreationGuard
@@ -647,7 +648,7 @@ Proof
   `step s = (INL (),t)` by (irule asm_create_step_success >> metis_tac[]) >>
   `wf_state t /\ (?dt. t.msdomain = Collect dt) /\ t.txParams = s.txParams` by
     (rpt conj_tac
-     >- (drule_all vfmRunCallTheory.step_preserves_wf_state >> simp[])
+     >- (drule_all vfmWfStateTheory.step_preserves_wf_state >> simp[])
      >- (drule_at (Pat `step _ = _`) vfmDomainCollectionTheory.step_preserves_collect >> simp[]) >>
      qspec_then `s` mp_tac vfmTxParamsTheory.step_preserves_txParams >> simp[]) >>
   `observable_call c` by (Cases_on `salt_opt` >> gvs[observable_call_def]) >>
@@ -704,7 +705,7 @@ Proof
   `step s = (INL (),v)` by (irule asm_create_step_success >> metis_tac[]) >>
   `wf_state v /\ (?dv. v.msdomain = Collect dv) /\ v.txParams = s.txParams` by
     (rpt conj_tac
-     >- (drule_all vfmRunCallTheory.step_preserves_wf_state >> simp[])
+     >- (drule_all vfmWfStateTheory.step_preserves_wf_state >> simp[])
      >- (drule_at (Pat `step _ = _`) vfmDomainCollectionTheory.step_preserves_collect >> simp[]) >>
      qspec_then `s` mp_tac vfmTxParamsTheory.step_preserves_txParams >> simp[]) >>
   `observable_call c` by (Cases_on `salt_opt` >> gvs[observable_call_def]) >>
@@ -795,7 +796,8 @@ Theorem asm_frame_create_failure_starved:
     (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
   s.contexts = (c,rb)::rest /\
   step_create (IS_SOME salt_opt) s = (INR e,u) ==>
-  ?r t. run_call s = SOME (r,t) /\ frame_resource_starved es0 r t
+  ?r t. run_call s = SOME (r,t) /\ frame_resource_starved es0 r t /\
+        call_requests s = []
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -829,14 +831,17 @@ Proof
     (irule asm_create_step_terminal >> metis_tac[]) >>
   `!address. c.msgParams.outputTo <> Code address` by
     gvs[asm_evm_rel_def] >>
-  `?r t. run_call s = SOME (r,t) /\ frame_resource_starved s r t` by
+  `?r t. run_call s = SOME (r,t) /\ frame_resource_starved s r t /\
+         call_requests s = []` by
     (Cases_on `rest`
      >- (drule_all asm_handle_step_oog_singleton >> disch_tac >>
          `step s = (INR (SOME OutOfGas), u with contexts :=
            [(p with <|gasUsed := p.msgParams.gasLimit; returnData := []|>,rb)])` by
            metis_tac[] >>
+         `call_trace s = []` by
+           (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
          drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-         simp[frame_resource_starved_def, frame_outcome_def] >>
+         simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
          qexistsl_tac [`OutOfGas`, `[]`, `[]`] >> simp[]) >>
      PairCases_on `h` >> rename1 `s.contexts = (c,rb)::(h0,h1)::saved` >>
      `?mr. c.msgParams.outputTo = Memory mr` by
@@ -852,8 +857,11 @@ Proof
        (h0 with <|pc := SUC h0.pc; stack := 0w::h0.stack; returnData := [];
          memory := buffer_write mr.offset [] h0.memory|>,h1)::saved; rollback := rb|>)` by
        simp[vfmExecutionTheory.vfm_abort_def] >>
+     `call_trace s = []` by
+       (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
      drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-     simp[frame_resource_starved_def, frame_outcome_def] >> metis_tac[]) >>
+     simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
+     metis_tac[]) >>
   goal_assum (drule_at Any) >> simp[] >>
   qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
   simp[asm_frame_rel_def] >> strip_tac >>

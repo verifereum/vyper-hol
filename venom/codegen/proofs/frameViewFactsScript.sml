@@ -56,6 +56,28 @@ Proof
   irule copy_phi_var_assign >> metis_tac[]
 QED
 
+(* Shape-level direction for PHI copies; independent of SSA uniqueness. *)
+Theorem phi_retpc_output_input:
+  retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
+  MEM out inst.inst_outputs /\ MEM (Var src) inst.inst_operands /\
+  retpc_var fn out ==> retpc_var fn src
+Proof
+  strip_tac >>
+  qpat_x_assum `retpc_shape_ok fn`
+    (mp_tac o cj 3 o REWRITE_RULE [retpc_shape_ok_def]) >>
+  disch_then drule_all >> simp[]
+QED
+
+Theorem phi_output_retpc:
+  retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
+  MEM out inst.inst_outputs /\ MEM (Var src) inst.inst_operands ==>
+  (retpc_var fn out <=> retpc_var fn src)
+Proof
+  strip_tac >> eq_tac
+  >- metis_tac[phi_retpc_output_input] >>
+  simp[retpc_var_def] >> metis_tac[copy_phi_var_phi]
+QED
+
 Theorem assign_nonvar_output_not_retpc:
   ssa_form fn /\ MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
   inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
