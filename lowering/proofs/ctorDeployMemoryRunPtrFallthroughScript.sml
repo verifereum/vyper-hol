@@ -63,8 +63,8 @@ QED
 
 Theorem deploy_ptr_inv_jump_to:
   !tops runtime_bc am tx imm G tn s lbl.
-    deploy_ptr_inv tops runtime_bc am tx imm G tn (jump_to lbl s) <=>
-    deploy_ptr_inv tops runtime_bc am tx imm G tn s
+    deploy_ptr_inv HS tops runtime_bc am tx imm G tn (jump_to lbl s) <=>
+    deploy_ptr_inv HS tops runtime_bc am tx imm G tn s
 Proof
   simp[deploy_ptr_inv_def, jump_to_def, allocas_from_def]
 QED
@@ -83,14 +83,14 @@ Theorem deploy_ctor_fallthrough_ptr:
        cenv.ce_imm_alloca = SOME imm /\
        !x. imm = Var x ==> not_fresh_at st_epilogue x) /\
     ~ctx_has_dalloca dunit.cu_context /\
-    stmt_state_rel dunit.cu_context func cenv'
+    stmt_state_rel H dunit.cu_context func cenv'
       (deploy_evaluation_context tops am tx) ee t /\ ~t.vs_halted /\
     ~block_is_terminated sb /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    deploy_ptr_inv tops runtime_bc am tx imm G tn t ==>
+    deploy_ptr_inv HS tops runtime_bc am tx imm G tn t ==>
     ?fuel final.
       run_from fuel dunit.cu_context func t = Halt final /\
-      ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops) fuel
+      ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops) fuel
         dunit.cu_context func [] G tn t
 Proof
   rpt gen_tac >> simp[deploy_ctor_code_def] >> strip_tac >>
@@ -126,7 +126,7 @@ Proof
       >- (simp[mk_inst_def, is_terminator_def] >>
           asm_simp_tac (srw_ss()) [opcode_eq ``JMP``]) >>
       simp[]) >>
-  qspecl_then [`deploy_dead tops runtime_bc am tx`, `imm_len tops`, `fuel`,
+  qspecl_then [`deploy_dead HS tops runtime_bc am tx`, `imm_len tops`, `fuel`,
                `dunit.cu_context`, `func`, `[]`, `G`, `tn`, `t`, `bb`,
                `mk_inst sb.cs_next_id JMP [Label exit_lbl] []`, `exit_lbl`,
                `bb'`] mp_tac ptr_safe_run_jmp >>

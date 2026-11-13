@@ -9,7 +9,7 @@ Ancestors bodyPtrWordBuiltinsModularCases bodyPtrWordBuiltinsRoundingContinue
 Theorem word_pow_expr_outcome:
   ann = BaseT (UintT 256) /\ compile_pow_mod256 a b sm = (op,sb) /\
   value_has_type (BaseTV (UintT 256)) v1 /\ value_has_type (BaseTV (UintT 256)) v2 /\
-  wb_args_post ctx func cenv cx es sa s0 ee [a;b] [v1;v2] t0 /\
+  wb_args_post H ctx func cenv cx es sa s0 ee [a;b] [v1;v2] t0 /\
   (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t0) /\
   (!z. a = Var z ==> not_fresh_at sm z) /\ (!z. b = Var z ==> not_fresh_at sm z) /\
   op_taint tn a = {} /\ op_taint tn b = {} /\ fn_has_code sm sb func /\
@@ -51,7 +51,7 @@ Theorem word_modular_expr_outcome:
   (if is_mul then compile_mulmod else compile_addmod) a b c sm = (op,sb) /\
   value_has_type (BaseTV (UintT 256)) v1 /\ value_has_type (BaseTV (UintT 256)) v2 /\
   value_has_type (BaseTV (UintT 256)) v3 /\
-  wb_args_post ctx func cenv cx es sa s0 ee [a;b;c] [v1;v2;v3] t0 /\
+  wb_args_post H ctx func cenv cx es sa s0 ee [a;b;c] [v1;v2;v3] t0 /\
   (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t0) /\
   (!z. a = Var z ==> not_fresh_at sm z) /\ (!z. b = Var z ==> not_fresh_at sm z) /\
   (!z. c = Var z ==> not_fresh_at sm z) /\
@@ -94,8 +94,8 @@ QED
 
 Theorem word_uint_args_post:
   EVERY (\e. expr_type e = BaseT (UintT 256)) args /\
-  typed_args_post ctx func cenv cx es sa s0 ee args xs vs t ==>
-  wb_args_post ctx func cenv cx es sa s0 ee xs vs t
+  typed_args_post H ctx func cenv cx es sa s0 ee args xs vs t ==>
+  wb_args_post H ctx func cenv cx es sa s0 ee xs vs t
 Proof
   simp[typed_args_post_def, wb_args_post_def] >> strip_tac >> simp[] >>
   qpat_x_assum `LIST_REL _ _ _` mp_tac >>
