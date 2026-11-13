@@ -372,31 +372,6 @@ Proof
   simp[emitted_insts_def, listTheory.DROP_APPEND]
 QED
 
-Theorem prefix_boolword_clamp_frames:
-  let s1 = update_var y (word_lsr w 1) s;
-      s2 = update_var z (bool_to_word (word_lsr w 1 = 0w)) s1;
-      i = mk_inst iid SHR [Lit 1w;Var v] [y];
-      j = mk_inst (iid+1) ISZERO [Var y] [z];
-      tn1 = step_taint i s s1 tn;
-      tn2 = step_taint j s1 s2 tn1;
-      G2 = DRESTRICT (DRESTRICT G (COMPL {y})) (COMPL {z})
-  in
-    s2.vs_memory = s.vs_memory /\ s2.vs_data_section = s.vs_data_section /\
-    s2.vs_allocas = s.vs_allocas /\ s2.vs_alloca_next = s.vs_alloca_next /\
-    (!a. a <> y /\ a <> z ==>
-      eval_operand (Var a) s2 = eval_operand (Var a) s /\
-      op_taint tn2 (Var a) = op_taint tn (Var a) /\
-      FLOOKUP G2 a = FLOOKUP G a)
-Proof
-  simp[] >> conj_tac
-  >- simp[update_var_def] >>
-  conj_tac >- simp[update_var_def] >>
-  conj_tac >- simp[update_var_def] >>
-  conj_tac >- simp[update_var_def] >>
-  rpt strip_tac >>
-  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
-       prefix_guard_taint_other, FLOOKUP_DRESTRICT]
-QED
 
 Theorem prefix_boolword_pure_taint_frame:
   opc IN {MLOAD; DLOAD; LT; SHR; ISZERO} /\

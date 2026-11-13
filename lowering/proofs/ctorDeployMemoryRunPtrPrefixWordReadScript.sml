@@ -67,24 +67,6 @@ Proof
   simp[pred_setTheory.EXTENSION, SF CONJ_ss, FAPPLY_FUPDATE_THM]
 QED
 
-Theorem prefix_mload_prov_frame:
-  FLOOKUP (DRESTRICT G (COMPL {x})) x = NONE /\
-  (!y. y <> x ==> FLOOKUP (DRESTRICT G (COMPL {x})) y = FLOOKUP G y)
-Proof
-  simp[FLOOKUP_DRESTRICT]
-QED
 
-Theorem prefix_mload_endpoint_frame:
-  eval_operand addr s = SOME w ==>
-  let t = update_var x (mload (w2n w) s) s in
-    eval_operand (Var x) t = SOME (mload (w2n w) s) /\
-    t.vs_memory = s.vs_memory /\ t.vs_data_section = s.vs_data_section /\
-    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    (allocas_from lo t <=> allocas_from lo s) /\
-    (allocas_below_fmp t <=> allocas_below_fmp s)
-Proof
-  simp[update_var_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
-       allocas_from_def, allocas_below_fmp_def]
-QED
 
 val _ = export_theory();
