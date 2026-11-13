@@ -324,20 +324,6 @@ Proof
   simp[runtime_consistent_def] >> rpt strip_tac >>
   drule_all (cj 1 (SPEC_ALL (cj 6 eval_scc_type_sound_mutual))) >> simp[]
 QED
-Theorem eval_exprs_success_runtime_typed_from_eval[local]:
-  eval_exprs cx es st = (INL vs,st') /\
-  well_typed_exprs env es /\
-  runtime_consistent env cx st /\
-  functions_well_typed cx /\
-  call_evaluation_safe cx (int_calls_exprs es) ==>
-  exprs_runtime_typed env es vs
-Proof
-  rpt strip_tac >>
-  mp_tac (Q.INST [`env` |-> `env`, `es` |-> `es`, `cx` |-> `cx`,
-                  `st` |-> `st`, `vs` |-> `vs`, `st'` |-> `st'`]
-            eval_exprs_success_runtime_typed) >>
-  (impl_tac >- simp[]) >> simp[]
-QED
 Theorem eval_expr_success_result_typed[local]:
   well_typed_expr env e /\
   runtime_consistent env cx st /\
@@ -360,19 +346,6 @@ Proof
   simp[runtime_consistent_def] >>
   rpt strip_tac >>
   drule_all (cj 1 (SPEC_ALL (cj 6 eval_scc_type_sound_mutual))) >> simp[]
-QED
-Theorem eval_exprs_preserves_runtime_consistent_from_eval[local]:
-  eval_exprs cx es st = (res,st') /\
-  well_typed_exprs env es /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\
-  call_evaluation_safe cx (int_calls_exprs es) ==>
-  runtime_consistent env cx st'
-Proof
-  rpt strip_tac >>
-  mp_tac (Q.INST [`env` |-> `env`, `es` |-> `es`, `cx` |-> `cx`,
-                  `st` |-> `st`, `res` |-> `res`, `st'` |-> `st'`]
-            eval_exprs_preserves_runtime_consistent) >>
-  simp[]
 QED
 Theorem eval_expr_results_preserves_runtime_consistent_from_eval[local]:
   eval_expr_results cx es st = (res,st') /\
@@ -3752,9 +3725,11 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
       (mk_asm "lookup_ok") >>
     asm "runtime0" assume_tac >>
     `runtime_consistent env cx args_st` by (
-      drule_all eval_exprs_preserves_runtime_consistent_from_eval >> simp[]) >>
+      drule_at (Pat `eval_exprs _ _ _ = _`) eval_exprs_preserves_runtime_consistent >>
+      disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
     `exprs_runtime_typed env es actual_vs` by (
-      drule_all eval_exprs_success_runtime_typed_from_eval >> simp[]) >>
+      drule_at (Pat `eval_exprs _ _ _ = _`) eval_exprs_success_runtime_typed >>
+      disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
     `env_consistent env cx args_st` by
       qpat_assum `runtime_consistent env cx args_st` (fn th =>
         ACCEPT_TAC (cj 1 (REWRITE_RULE [runtime_consistent_def] th))) >>
