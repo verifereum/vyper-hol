@@ -67,6 +67,7 @@ Theorem bop_operand_outcome_ptr:
     bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (rr,ee)
     ==> P rr ee) /\
   (!v ee G tn t.
+    (?H. valid_horizon cx st0 H ee.storage_trace) /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
     expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
     t.vs_current_bb = sb.cs_current_bb /\
@@ -123,9 +124,11 @@ Proof
       `~t.vs_halted` by
         (fs[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
          metis_tac[fragGasPathTheory.gas_path_normal]) >>
-      qpat_x_assum `!v ee G tn t. _` irule >> simp[] >>
-      rpt strip_tac >>
-      qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _` drule >> simp[])
+      qpat_x_assum `!v ee G tn t. _` irule >> simp[] >> conj_tac
+      >- (qx_gen_tac `H2` >> strip_tac >>
+          qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _`
+            (qspec_then `H2` mp_tac) >> simp[]) >>
+      metis_tac[])
   >- metis_tac[] >>
   metis_tac[]
 QED
