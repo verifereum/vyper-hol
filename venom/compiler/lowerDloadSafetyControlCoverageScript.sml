@@ -5,79 +5,7 @@ Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyKernel lowerDloadSafetyAdvance ptrDiscipline o1PassContract
   unitShapeDefs venomExecProofs venomState venomInst finite_map list pred_set
 
-(* The ghost relation between a selected erasure Ke and the live
-   provenance G: G agrees wherever Ke is defined, and holds nothing or a
-   dynamic site elsewhere. A write and a PHI entry keep it. *)
-Theorem ld_ghost_rel_set_prov[local]:
-  (!v x. FLOOKUP Ke v = SOME x ==> FLOOKUP G v = SOME x) /\
-  (!v. FLOOKUP Ke v = NONE ==>
-     FLOOKUP G v = NONE \/
-     ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) /\
-  (!x. po = SOME x ==> po' = SOME x) /\
-  (po = NONE ==>
-     po' = NONE \/ ?b z. po' = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) ==>
-  (!v x. FLOOKUP (set_prov Ke outs po) v = SOME x ==>
-     FLOOKUP (set_prov G outs po') v = SOME x) /\
-  (!v. FLOOKUP (set_prov Ke outs po) v = NONE ==>
-     FLOOKUP (set_prov G outs po') v = NONE \/
-     ?b z. FLOOKUP (set_prov G outs po') v = SOME (b,z) /\ fl <= b /\
-           b + z < dimword (:256))
-Proof
-  strip_tac >>
-  Cases_on `outs`
-  >- (simp[set_prov_def, FLOOKUP_DRESTRICT] >> metis_tac[]) >>
-  Cases_on `t`
-  >- (Cases_on `po` >> Cases_on `po'` >>
-      gvs[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-      rw[] >> gvs[] >> metis_tac[]) >>
-  Cases_on `po` >> Cases_on `po'` >>
-  gvs[set_prov_def, FLOOKUP_DRESTRICT] >> rw[] >> gvs[] >> metis_tac[]
-QED
-
-Theorem ld_ghost_rel_phi_prov[local]:
-  (!v x. FLOOKUP Ke v = SOME x ==> FLOOKUP G v = SOME x) /\
-  (!v. FLOOKUP Ke v = NONE ==>
-     FLOOKUP G v = NONE \/
-     ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) ==>
-  (!x. phi_prov prev Ke inst = SOME x ==> phi_prov prev G inst = SOME x) /\
-  (phi_prov prev Ke inst = NONE ==>
-     phi_prov prev G inst = NONE \/
-     ?b z. phi_prov prev G inst = SOME (b,z) /\ fl <= b /\
-           b + z < dimword (:256))
-Proof
-  strip_tac >> simp[phi_prov_def] >>
-  Cases_on `prev` >> simp[] >> rename1 `resolve_phi lbl _` >>
-  Cases_on `resolve_phi lbl inst.inst_operands` >> simp[] >>
-  rename1 `op_prov Ke op` >> Cases_on `op` >> simp[op_prov_def] >>
-  metis_tac[]
-QED
-
-Theorem ld_ghost_rel_phis[local]:
-  (!v x. FLOOKUP Ke v = SOME x ==> FLOOKUP G v = SOME x) /\
-  (!v. FLOOKUP Ke v = NONE ==>
-     FLOOKUP G v = NONE \/
-     ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) ==>
-  !insts.
-    (!v x. FLOOKUP (phis_prov prev Ke insts) v = SOME x ==>
-       FLOOKUP (phis_prov prev G insts) v = SOME x) /\
-    (!v. FLOOKUP (phis_prov prev Ke insts) v = NONE ==>
-       FLOOKUP (phis_prov prev G insts) v = NONE \/
-       ?b z. FLOOKUP (phis_prov prev G insts) v = SOME (b,z) /\ fl <= b /\
-             b + z < dimword (:256))
-Proof
-  strip_tac >> Induct >- (simp[phis_prov_def] >> metis_tac[]) >>
-  gen_tac >> pop_assum strip_assume_tac >>
-  `(!x. phi_prov prev Ke h = SOME x ==> phi_prov prev G h = SOME x) /\
-   (phi_prov prev Ke h = NONE ==>
-      phi_prov prev G h = NONE \/
-      ?b z. phi_prov prev G h = SOME (b,z) /\ fl <= b /\
-            b + z < dimword (:256))` by
-    (irule ld_ghost_rel_phi_prov >> conj_tac >> first_assum ACCEPT_TAC) >>
-  rewrite_tac[phis_prov_def] >>
-  Cases_on `h.inst_opcode = PHI` >> asm_rewrite_tac[] >>
-  irule ld_ghost_rel_set_prov >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
+(* A block entry moves the ghosts as it moves their selected erasure. *)
 Theorem ld_ghost_ok_entry_prov[local]:
   ld_ghost_ok fl A H G /\
   entry_prov fn s (ld_erase A o_f H) = ld_erase A o_f H' ==>
@@ -85,8 +13,7 @@ Theorem ld_ghost_ok_entry_prov[local]:
 Proof
   rewrite_tac[ld_ghost_ok_erased] >> strip_tac >>
   qpat_x_assum `entry_prov _ _ _ = _` (fn th => rewrite_tac[GSYM th]) >>
-  simp[entry_prov_def] >> CASE_TAC >- metis_tac[] >>
-  irule ld_ghost_rel_phis >> metis_tac[]
+  irule o1LowerDloadGhostTheory.ld_ghost_entry_prov >> metis_tac[]
 QED
 
 Theorem ld_sync_control_entry:

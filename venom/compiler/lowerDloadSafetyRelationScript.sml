@@ -164,14 +164,7 @@ Theorem ld_ghost_ok_set_prov[local]:
   ld_ghost_ok fl A' H' (set_prov G outs po')
 Proof
   rewrite_tac[ld_ghost_ok_erased] >> strip_tac >> asm_rewrite_tac[] >>
-  Cases_on `outs`
-  >- (simp[set_prov_def, FLOOKUP_DRESTRICT] >> metis_tac[]) >>
-  Cases_on `t`
-  >- (Cases_on `po` >> Cases_on `po'` >>
-      gvs[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
-      rw[] >> gvs[] >> metis_tac[]) >>
-  Cases_on `po` >> Cases_on `po'` >>
-  gvs[set_prov_def, FLOOKUP_DRESTRICT] >> rw[] >> gvs[] >> metis_tac[]
+  irule ld_ghost_set_prov >> metis_tac[]
 QED
 
 (* Opcodes whose output provenance reads neither the ghosts nor the
