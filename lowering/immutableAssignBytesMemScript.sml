@@ -1,32 +1,9 @@
-(* Counted bytestring writes into the constructor immutable region. *)
+(* The existing SOME-base endpoint follows from the counted optional path. *)
 Theory immutableAssignBytesMem
-Ancestors
-  immutableLoopStoreMem immutableCopyExecution immutableConstructorRelation immutableDeployAssignBytes
-  valueCopyBytes valueCopy exprSimBufferStore stmtLowering context compileEnv
-  loweringSlice valueEncodingProps venomState loweringStateRelDefs
-
-Theorem bytestring_counted_footprint[local]:
-  is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv /\
-  immutable_value_admissible tv v /\ val_in_memory tv v p s.vs_memory /\
-  mload p s = n2w len /\ len < dimword (:256) /\
-  type_memory_size tv < dimword (:256) ==>
-  val_footprint tv v <= 32 * (1 + word_size len)
-Proof
-  strip_tac >>
-  `val_wf tv v` by metis_tac[immutable_admissible_val_wf] >>
-  drule_all bytestring_type_value >> strip_tac >>
-  Cases_on `v` >>
-  gvs[immutableEncodingTheory.immutable_value_admissible_def,
-      valueEncodingDefsTheory.val_wf_def,
-      valueEncodingDefsTheory.val_in_memory_def,
-      loweringPostsTheory.val_footprint_def,
-      mem_word_at_eq_mload] >>
-  simp[arithmeticTheory.LEFT_ADD_DISTRIB] >>
-  metis_tac[valueTypingMemoryPropsTheory.word_size_capacity]
-QED
+Ancestors immutableAssignBytesPathMem
 
 Theorem immutable_assign_bytes_mem_endpoint:
-  compile_assign_value ce dst LocCode src F sl dty sty di memsz sm = ((),sb) /\
+  compile_assign_value ce dst LocCode src F sl dty sty memsz sm = ((),sb) /\
   is_bytestring_type dty /\ is_bytestring_type sty /\
   ce.ce_imm_alloca = SOME region /\ fn_has_code sm sb func /\
   eval_operand region s = SOME 0w /\ eval_operand dst s = SOME b /\
@@ -39,7 +16,7 @@ Theorem immutable_assign_bytes_mem_endpoint:
   w2n a + 32 * (1 + word_size len) < dimword (:256) /\
   w2n b + type_memory_size dtv < dimword (:256) /\
   regions_disjoint (w2n b) (type_memory_size dtv)
-    (w2n a) (32 * (1 + word_size len)) /\
+    (w2n a) (val_footprint dtv v) /\
   (!x. src = Var x \/ dst = Var x \/ region = Var x ==> not_fresh_at sm x) /\
   (!j. j < 1 + word_size len ==>
     w2n (a+n2w (32*j)) + 32 <= s.vs_alloca_next /\
@@ -61,37 +38,8 @@ Theorem immutable_assign_bytes_mem_endpoint:
     t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
-  `compile_store_immutable_bytestring (SOME region) src dst sm = ((),sb)` by
-    (fs[compile_assign_value_def, is_bytestring_word_type,
-        comp_bind_def, comp_return_def]) >>
-  drule_all compile_store_immutable_bytestring_mem_path >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
-  suspend "contents"
+  mp_tac (Q.INST [`imm` |-> `SOME region`]
+    (SPEC_ALL immutable_assign_bytes_mem_path_endpoint)) >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
+  strip_tac >> qexists_tac `t` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-Resume immutable_assign_bytes_mem_endpoint[contents]:
-  `val_wf dtv v` by metis_tac[immutable_admissible_val_wf] >>
-  `t.vs_memory = (mcopy (w2n b) (w2n a) (32*(1+word_size len)) s).vs_memory` by
-    (qpat_x_assum `(t with <|vs_vars := _; vs_current_bb := _;
-       vs_prev_bb := _; vs_inst_idx := _|>) = _`
-       (mp_tac o AP_TERM ``\z:venom_state. z.vs_memory``) >>
-     simp[] >> disch_then kall_tac >>
-     qspecl_then [`1+word_size len`, `w2n a`, `w2n b`, `0`, `s`]
-       mp_tac (Q.INST [`store` |-> `T`, `ctor` |-> `T`]
-         immutable_memory_transfers_snapshot) >>
-     simp[regions_disjoint_def] >>
-     impl_tac >- (gvs[regions_disjoint_def] >> decide_tac) >>
-     simp[]) >>
-  `len < dimword (:256) /\ type_memory_size dtv < dimword (:256)` by decide_tac >>
-  `val_footprint dtv v <= 32*(1+word_size len)` by
-    (irule bytestring_counted_footprint >> metis_tac[]) >>
-  `val_in_memory dtv v (w2n b) t.vs_memory` by
-    (simp[] >> irule mcopy_val_in_memory >> simp[]) >>
-  qexists_tac `t` >> simp[] >>
-  conj_tac >-
-    (irule immutable_memory_bytes >>
-     simp[] >> irule mcopy_val_in_memory >> simp[]) >>
-  rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >> decide_tac
-QED
-
-Finalise immutable_assign_bytes_mem_endpoint
