@@ -61,7 +61,7 @@ Proof
   irule literal_clean_ptr_mem_ok >> simp[] >>
   `b < dimword (:256)` by decide_tac >>
   `word_size (LENGTH str) <= word_size ml` by
-    metis_tac[exprSimHypsTheory.word_size_monotone] >>
+    metis_tac[exprSimPropsTheory.word_size_monotone] >>
   simp[wordsTheory.w2n_n2w, evaluate_type_def] >> rpt strip_tac >>
   gvs[] >> decide_tac
 QED
@@ -100,7 +100,7 @@ Theorem reason_literal_memory_vv_frame_post:
 Proof
   strip_tac >>
   `word_size (LENGTH str) <= word_size ml` by
-    metis_tac[exprSimHypsTheory.word_size_monotone] >>
+    metis_tac[exprSimPropsTheory.word_size_monotone] >>
   `eval_operand buf.buf_operand t = SOME (n2w b)` by
     simp[eval_operand_def] >>
   drule_at (Pat `eval_operand _ _ = _`)
@@ -158,7 +158,7 @@ Proof
   drule_all reason_literal_string_representation >> strip_tac >>
   `b < dimword (:256)` by decide_tac >>
   `word_size (LENGTH str) <= word_size ml` by
-    metis_tac[exprSimHypsTheory.word_size_monotone] >>
+    metis_tac[exprSimPropsTheory.word_size_monotone] >>
   qexistsl_tac [`t`, `p`, `G'`, `tn'`] >> asm_rewrite_tac[] >>
   conj_tac >- suspend "post" >> suspend "ptr"
 QED

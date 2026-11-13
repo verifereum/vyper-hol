@@ -2975,7 +2975,7 @@ Proof
   Cases_on `v` >>
   gvs[value_has_type_def, type_slot_size_def, encode_value_def,
       encode_dyn_bytes_slots_def] >>
-  metis_tac[exprSimHypsTheory.word_size_monotone]
+  metis_tac[exprSimPropsTheory.word_size_monotone]
 QED
 
 (* place_store_slots_suffix_run for a bytestring laid out at its source

@@ -41,7 +41,7 @@ Proof
   `!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem` by
     metis_tac[robust_val_in_memory_prim_clean] >>
   drule_all compile_store_word_framed_frag_ptr >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[] >>
   conj_tac >- suspend "destination" >>
   rpt strip_tac >> irule robust_val_in_memory_exterior_frame >>
@@ -101,6 +101,6 @@ Theorem compile_store_word_robust_frag_ptr:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all compile_store_word_robust_framed_frag_ptr >>
-  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`, `cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
 QED
