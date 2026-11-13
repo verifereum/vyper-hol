@@ -169,7 +169,7 @@ Resume compile_extract32_sim_mem[stage1]:
      simp[evaluate_type_def]) >>
   `evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
      SOME (BaseTV (BytesT (Dynamic cap)))` by
-    (asm_simp_tac (srw_ss()) [evaluate_type_def]) >>
+    (simp[evaluate_type_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `evaluate_type (get_tenv cx) (expr_type src) =
      SOME (BaseTV (BytesT (Dynamic cap)))` by simp[] >>
   `!x. src_op = Var x ==> not_fresh_at s1 x` by
