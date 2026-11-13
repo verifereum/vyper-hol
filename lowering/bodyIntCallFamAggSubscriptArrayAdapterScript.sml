@@ -81,6 +81,7 @@ Theorem intcall_array_producer_suffix:
     (LocatedValue (ArrayT et bd) p) t /\
   (~expr_has_effect obj ==>
     vv_storage_live fp.jc_cx (LocatedValue (ArrayT et bd) p) mid t) /\
+  (~expr_has_effect obj ==> pure_frame ce fp.jc_func es sa s t) /\
   (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
   (p.ptr_location = LocMemory ==>
     !tv'. evaluate_type (get_tenv fp.jc_cx) (ArrayT et bd) = SOME tv' ==>
@@ -121,6 +122,7 @@ Theorem intcall_array_producer_suffix:
            a <= w2n w /\ w2n w + type_memory_size tv' <= a + k /\
            a + k < dimword (:256) /\
            (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
+      (~expr_has_effect (Subscript et obj idx) ==> pure_frame ce fp.jc_func es sa s q) /\
       intcall_expr_cont fp ce env es sa s ee sd q)
     (\res ee out. expr_exit res out)
 Proof
