@@ -679,7 +679,7 @@ Proof
      irule vyperStorageFootprintTheory.contained_write_preserves_storage_well_formed_on >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> simp[] >>
-     qexistsl [`ee`, `n2w slot + n2w off`, `ftv`, `w`] >> simp[] >>
+     qexistsl [`ee`, `w`, `n2w slot + n2w off`, `ftv`] >> simp[] >>
      decide_tac) >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl,
        stmt_state_rel_inst_idx] >>

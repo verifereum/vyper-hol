@@ -167,7 +167,7 @@ Proof
   rewrite_tac[gas_outcome_def, gas_summary_at_def] >> BETA_TAC >> strip_tac
   >- (qexists `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
   >- (qexists `marks` >> disj2_tac >> disj1_tac >> gvs[] >>
-      qexistsl [`res`, `es_end`, `OK t'`] >> simp[] >>
+      qexistsl [`res`, `es_end`, `OK t'`] >> simp[] >> disj1_tac >>
       rpt strip_tac >>
       qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
         (drule_then strip_assume_tac) >> gvs[] >>
