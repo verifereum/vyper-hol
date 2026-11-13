@@ -255,41 +255,6 @@ Proof
   simp[dest_ArrayV_def, lift_option_type_def, return_def, bind_def]
 QED
 
-(* The data read and the log push after the topics add only storage
-   observations, so a horizon valid at their end is valid at their start. *)
-Theorem raw_log_tail_trace_frame:
-  (!cx data vs.
-     storage_trace_frame
-       (do dv <- bind (eval_expr cx data) (read_result cx);
-           bs <- lift_option_type (dest_BytesV dv) "raw_log data";
-           type_check (LENGTH vs <= 4) "raw_log too many topics";
-           push_log (encode_raw_event_values cx.txn.target vs bs);
-           return NoneV
-        od)) /\
-  (!cx dv vs.
-     storage_trace_frame
-       (do bs <- lift_option_type (dest_BytesV dv) "raw_log data";
-           type_check (LENGTH vs <= 4) "raw_log too many topics";
-           push_log (encode_raw_event_values cx.txn.target vs bs);
-           return NoneV
-        od))
-Proof
-  conj_tac
-  >- (rpt gen_tac >> irule storage_trace_frame_bind_all >> conj_tac
-      >- (irule storage_trace_frame_bind_all >>
-          simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
-      gen_tac >> irule storage_trace_frame_bind_all >>
-      simp[storage_trace_frame_lifts] >> gen_tac >>
-      irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
-      irule storage_trace_frame_ignore_bind >>
-      simp[storage_trace_frame_state_updates, storage_trace_frame_return]) >>
-  rpt gen_tac >> irule storage_trace_frame_bind_all >>
-  simp[storage_trace_frame_lifts] >> gen_tac >>
-  irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
-  irule storage_trace_frame_ignore_bind >>
-  simp[storage_trace_frame_state_updates, storage_trace_frame_return]
-QED
-
 Theorem raw_log_dynamic_data_view:
   expr_post H ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
@@ -439,9 +404,6 @@ Theorem raw_log_dynamic_tail_core:
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
-  storage_well_formed_on cx
-    (es with logs := es.logs ++
-      [encode_raw_event_values cx.txn.target vals bs]) (FST H) /\
   post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   frag_exec ctx sm sb ($= s)
     (expr_post H ctx func cenv cx e es0 sa sb s0
@@ -568,11 +530,7 @@ Theorem raw_log_fixed_tail_core:
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint (w2n p) 32 b sz) /\
   (!n b sz. local_region cenv es.scopes s n b sz ==>
-     regions_disjoint (w2n p) 32 b sz) /\
-  storage_well_formed_on cx
-    (es with logs := es.logs ++
-      [encode_raw_event_values cx.txn.target vals bs]) (FST H) /\
-  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
+     regions_disjoint (w2n p) 32 b sz) /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   frag_exec ctx sm sb ($= s)
     (expr_post H ctx func cenv cx e es0 sa sb s0
       (es with logs := es.logs ++
@@ -617,4 +575,37 @@ Proof
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
   irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `t`] >>
   simp[lookup_var_def]
+QED
+
+Theorem raw_log_tail_trace_frame:
+  (!cx data vs.
+     storage_trace_frame
+       (do dv <- bind (eval_expr cx data) (read_result cx);
+           bs <- lift_option_type (dest_BytesV dv) "raw_log data";
+           type_check (LENGTH vs <= 4) "raw_log too many topics";
+           push_log (encode_raw_event_values cx.txn.target vs bs);
+           return NoneV
+        od)) /\
+  (!cx dv vs.
+     storage_trace_frame
+       (do bs <- lift_option_type (dest_BytesV dv) "raw_log data";
+           type_check (LENGTH vs <= 4) "raw_log too many topics";
+           push_log (encode_raw_event_values cx.txn.target vs bs);
+           return NoneV
+        od))
+Proof
+  conj_tac
+  >- (rpt gen_tac >> irule storage_trace_frame_bind_all >> conj_tac
+      >- (irule storage_trace_frame_bind_all >>
+          simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+      gen_tac >> irule storage_trace_frame_bind_all >>
+      simp[storage_trace_frame_lifts] >> gen_tac >>
+      irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+      irule storage_trace_frame_ignore_bind >>
+      simp[storage_trace_frame_state_updates, storage_trace_frame_return]) >>
+  rpt gen_tac >> irule storage_trace_frame_bind_all >>
+  simp[storage_trace_frame_lifts] >> gen_tac >>
+  irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+  irule storage_trace_frame_ignore_bind >>
+  simp[storage_trace_frame_state_updates, storage_trace_frame_return]
 QED

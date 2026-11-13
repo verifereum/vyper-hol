@@ -9,7 +9,6 @@
 Theory placeStoreStorage
 Ancestors
   stmtSimDefs exprSimHypsDefs typedCopyDomain vyperStoragePlaceProvenance
-  vyperStoragePlaceObserved
   loweringPosts fragGasMode accountsRelProps copyExecution stmtSimStoreCopy placeStoreCopyChunk placeStoreCopyPath
   stmtLowering exprLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValue vyperTypeSystem
@@ -335,8 +334,8 @@ QED
 Finalise place_store_dead_subregion_frame
 
 Theorem place_store_storage_dead_subregion_frame:
-  !H tr rootk root path delta leaf st st' j b.
-    MEM (tr,rootk,root) (FST H) /\
+  !cx tr mid name subs rootk root path delta leaf st st' j b.
+    declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
     storage_subregion root path delta leaf /\
     0 < type_slot_size leaf /\
     (!q. ~(w2n rootk + delta <= w2n q /\
@@ -344,13 +343,12 @@ Theorem place_store_storage_dead_subregion_frame:
          lookup_storage q st' = lookup_storage q st) /\
     ~(w2n rootk + delta <= j /\
       j < w2n rootk + delta + type_slot_size leaf) /\
-    storage_dead H tr st j b ==>
-    storage_dead H tr st' j b
+    storage_dead cx tr st j b ==>
+    storage_dead cx tr st' j b
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `storage_dead _ _ _ _ _` mp_tac >>
-  simp_tac (srw_ss()) [storage_dead_def] >>
-  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  simp_tac (srw_ss()) [storage_dead_def] >> strip_tac >>
   `dead_bytes st' (w2n slot) tv j b` suffices_by
     (rpt strip_tac >> simp_tac (srw_ss()) [storage_dead_def] >>
      goal_assum (drule_at (Pat `dead_bytes _ _ _ _ _`)) >>
@@ -363,29 +361,26 @@ Proof
        qexists_tac `st` >> gvs[AC ADD_ASSOC ADD_COMM] >> metis_tac[])) >>
   `ranges_disjoint (w2n slot) (type_slot_size tv)
        (w2n rootk) (type_slot_size root)` by
-    (qpat_x_assum `!slot' tv'. _ ==> ranges_disjoint _ _ _ _` irule >>
-     gvs[] >> metis_tac[]) >>
+    (first_x_assum irule >> conj_tac
+     >- (goal_assum (drule_at Any)) >> gvs[] >> metis_tac[]) >>
   drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
   `dead_bytes st' (w2n slot) tv j b = dead_bytes st (w2n slot) tv j b` by
     (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
-     qpat_x_assum `!q. _ ==> lookup_storage q st' = lookup_storage q st` irule >>
+     first_x_assum irule >>
      `i < dimword (:256)` by (fs[wordsTheory.dimword_def] >> decide_tac) >>
-     asm_simp_tac std_ss [wordsTheory.w2n_n2w] >>
-     qpat_x_assum `ranges_disjoint _ _ (w2n rootk) _` mp_tac >>
-     simp_tac std_ss [vyperStorageFrameTheory.ranges_disjoint_def] >>
-     decide_tac) >>
+     simp[wordsTheory.w2n_n2w] >>
+     gvs[vyperStorageFrameTheory.ranges_disjoint_def] >> decide_tac) >>
   asm_rewrite_tac[]
 QED
 
 Theorem place_store_subregion_agree:
-  !H tr rootk root path delta leaf k st1 st2 st1' st2'.
-    MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
-    storage_locks_separated (FST H) (SND H) /\
+  !cx tr mid name subs rootk root path delta leaf k st1 st2 st1' st2'.
+    declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
     storage_subregion root path delta leaf /\
     w2n k = w2n rootk + delta /\ 0 < type_slot_size leaf /\
     w2n rootk + type_slot_size root <= dimword (:256) /\
-    (!k' tv'.
-       MEM (tr,k',tv') (FST H) /\
+    (!mid' name' subs' k' tv'.
+       declared_storage_region cx mid' name' subs' = SOME (tr,k',tv') /\
        (k',tv') <> (rootk,root) ==>
        ranges_disjoint (w2n rootk) (type_slot_size root)
                        (w2n k') (type_slot_size tv')) /\
@@ -396,12 +391,12 @@ Theorem place_store_subregion_agree:
        ~dead_bytes st1' (w2n k) leaf (w2n k+i) b ==>
        EL b (word_to_bytes (lookup_storage (k+n2w i) st1') T) =
        EL b (word_to_bytes (lookup_storage (k+n2w i) st2') T)) /\
-    storage_agree (storage_dead H tr st1) st1 st2 ==>
-    storage_agree (storage_dead H tr st1') st1' st2'
+    storage_agree (storage_dead cx tr st1) st1 st2 ==>
+    storage_agree (storage_dead cx tr st1') st1' st2'
 Proof
   rpt gen_tac >> strip_tac >>
   simp_tac (srw_ss()) [storage_agree_def] >> rpt gen_tac >> strip_tac >>
-  rename1 `~storage_dead H tr st1' (w2n q) b` >>
+  rename1 `~storage_dead cx tr st1' (w2n q) b` >>
   Cases_on `w2n k <= w2n q /\ w2n q < w2n k + type_slot_size leaf`
   >- suspend "inside"
   >> suspend "outside"
@@ -415,17 +410,9 @@ Resume place_store_subregion_agree[inside]:
        (drule place_store_dead_subregion >>
         disch_then (qspec_then `w2n rootk` mp_tac) >>
         asm_rewrite_tac[] >> metis_tac[]) >>
-     drule (cj 1 dead_bytes_range) >> strip_tac >>
-     `tr ==> ~MEM (w2n q) (SND H)` by
-       (Cases_on `tr` >> simp[] >> strip_tac >>
-        qpat_x_assum `storage_locks_separated _ _`
-          (mp_tac o REWRITE_RULE [vyperStorageFootprintTheory.storage_locks_separated_def]) >>
-        disch_then (drule_then drule) >>
-        simp[vyperStorageFrameTheory.ranges_disjoint_def]) >>
      qpat_x_assum `~storage_dead _ _ _ _ _` mp_tac >>
      simp_tac (srw_ss()) [storage_dead_def] >>
-     conj_tac >- metis_tac[] >>
-     qexistsl_tac [`rootk`, `root`] >>
+     qexistsl_tac [`mid`, `name`, `subs`, `rootk`, `root`] >>
      simp[wordsTheory.dimword_def] >> rpt strip_tac >> first_x_assum irule >> simp[] >>
      metis_tac[]) >>
   `k + n2w (w2n q - w2n k) = q` by
@@ -438,12 +425,12 @@ Resume place_store_subregion_agree[inside]:
   simp[] >> gvs[ADD_COMM]
 QED
 Resume place_store_subregion_agree[outside]:
-  `~storage_dead H tr st1 (w2n q) b` by
+  `~storage_dead cx tr st1 (w2n q) b` by
     (strip_tac >>
-     `storage_dead H tr st1' (w2n q) b` suffices_by metis_tac[] >>
+     `storage_dead cx tr st1' (w2n q) b` suffices_by metis_tac[] >>
      irule place_store_storage_dead_subregion_frame >>
      goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `MEM (_,_,_) (FST _)`)) >>
+     goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
      qexists_tac `st1` >> simp[] >> metis_tac[]) >>
   qpat_x_assum `storage_agree _ _ _` mp_tac >>
   simp_tac (srw_ss()) [storage_agree_def] >>
@@ -662,14 +649,13 @@ Proof
 QED
 
 Theorem place_store_encoded_copy_agree:
-  !H tr rootk root path delta tv base writes v n read_word st1 st2.
-    MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
-    storage_locks_separated (FST H) (SND H) /\
+  !cx tr mid name subs rootk root path delta tv base writes v n read_word st1 st2.
+    declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
     storage_subregion root path delta tv /\
     base = w2n rootk + delta /\ 0 < type_slot_size tv /\
     w2n rootk + type_slot_size root <= dimword (:256) /\
-    (!k' tv'.
-       MEM (tr,k',tv') (FST H) /\
+    (!mid' name' subs' k' tv'.
+       declared_storage_region cx mid' name' subs' = SOME (tr,k',tv') /\
        (k',tv') <> (rootk,root) ==>
        ranges_disjoint (w2n rootk) (type_slot_size root)
                        (w2n k') (type_slot_size tv')) /\
@@ -682,8 +668,8 @@ Theorem place_store_encoded_copy_agree:
        EL b (word_to_bytes (lookup_storage (n2w (base+i))
          (apply_writes (n2w base) writes st1)) T) =
        EL b (word_to_bytes (read_word i) T)) /\
-    storage_agree (storage_dead H tr st1) st1 st2 ==>
-    storage_agree (storage_dead H tr (apply_writes (n2w base) writes st1))
+    storage_agree (storage_dead cx tr st1) st1 st2 ==>
+    storage_agree (storage_dead cx tr (apply_writes (n2w base) writes st1))
       (apply_writes (n2w base) writes st1)
       (FOLDL (\st i. update_storage (n2w (base+i)) (read_word i) st)
         st2 (COUNT_LIST n))
@@ -692,12 +678,11 @@ Proof
   rename1 `apply_writes (n2w start) writes st1` >>
   `start < dimword (:256)` by decide_tac >>
   irule place_store_subregion_agree >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `MEM (_,_,_) (FST _)`)) >>
+  goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
   qexists_tac `(n2w start):bytes32` >>
   goal_assum (drule_at (Pat `storage_agree _ _ _`)) >>
+  goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
   `w2n ((n2w start):bytes32) = start` by simp[wordsTheory.w2n_n2w] >>
   qpat_x_assum `start = _` (mk_asm "origin") >>
   simp[wordsTheory.w2n_n2w, GSYM wordsTheory.word_add_n2w] >>
@@ -759,13 +744,13 @@ Finalise place_store_encoded_copy_agree
 Theorem place_store_alloc_buffer_path:
   !func cenv cx es sa sm buf sz s ctx.
     compile_alloc_buffer sz sa = (buf,sm) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
     fn_has_code sa sm func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t w. gas_marked_path F ctx func s 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\
@@ -3340,12 +3325,12 @@ Theorem place_store_normalize_path:
     w2n sw + type_memory_size stv <= s.vs_alloca_next /\
     (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ sa.cs_next_id <= aid ==>
       w2n sw + type_memory_size stv <= b \/ b + sz <= w2n sw) /\
-    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     fn_has_code sa sm func /\ fn_has_code sm sc func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t dw. gas_marked_path F ctx func s 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME dw /\
       val_in_memory dtv v (w2n dw) t.vs_memory /\
       w2n dw + type_memory_size dtv < dimword (:256) /\
@@ -3396,7 +3381,7 @@ Proof
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _;
        vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|> = u` mp_tac >>
      simp[venom_state_component_equality]) >>
-  `stmt_state_rel H ctx func cenv cx es t` by suspend "state" >>
+  `stmt_state_rel ctx func cenv cx es t` by suspend "state" >>
   qexistsl_tac [`t`, `w`] >> asm_rewrite_tac[] >>
   suspend "post"
 QED
@@ -3429,23 +3414,23 @@ Finalise place_store_normalize_path
 Theorem place_store_storage_destination:
   (loc = LocStorage \/ loc = LocTransient) /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
-  storage_place_observed H p ==>
-  ?tr dtv root tv path delta.
+  storage_place_region cx p ==>
+  ?tr dtv mid var_name keys root tv path delta.
     p = StoragePlace tr w dtv /\ loc = slot_loc tr /\
     evaluate_type (get_tenv cx) dty = SOME dtv /\
-    MEM (tr,root,tv) (FST H) /\
+    declared_storage_region cx mid var_name keys = SOME (tr,root,tv) /\
     storage_subregion tv path delta dtv /\ w = root + n2w delta
 Proof
   strip_tac >> Cases_on `p` >>
-  gvs[place_ptr_rel_def, storage_place_observed_def] >>
+  gvs[place_ptr_rel_def, vyperStoragePlaceProvenanceTheory.storage_place_region_def] >>
   metis_tac[]
 QED
 
 Theorem place_store_storage_replace:
   !ctx func cenv cx es s tr stor mt.
-    stmt_state_rel H ctx func cenv cx es s /\
-    storage_agree (storage_dead H tr stor) stor mt ==>
-    stmt_state_rel H ctx func cenv cx (set_storage cx es tr stor)
+    stmt_state_rel ctx func cenv cx es s /\
+    storage_agree (storage_dead cx tr stor) stor mt ==>
+    stmt_state_rel ctx func cenv cx (set_storage cx es tr stor)
       (if tr then s with vs_transient :=
          (s.vs_call_ctx.cc_address =+ mt) s.vs_transient
        else s with vs_accounts :=
@@ -3502,15 +3487,27 @@ Proof
 QED
 
 Theorem place_store_root_layout:
-  regions_consistent (FST H) /\ MEM (tr,rootk,root) (FST H) ==>
+  expr_sim_inv cenv cx env ee /\
+  declared_storage_region cx mid name subs = SOME (tr,rootk,root) ==>
   w2n rootk + type_slot_size root <= dimword (:256) /\
-  (!k' tv'.
-    MEM (tr,k',tv') (FST H) /\
+  (!mid' name' subs' k' tv'.
+    declared_storage_region cx mid' name' subs' = SOME (tr,k',tv') /\
     (k',tv') <> (rootk,root) ==>
     ranges_disjoint (w2n rootk) (type_slot_size root)
                     (w2n k') (type_slot_size tv'))
 Proof
-  simp[vyperStorageFootprintTheory.regions_consistent_def] >> metis_tac[]
+  strip_tac >>
+  `storage_layout_safe cx` by
+    (qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+     simp[expr_sim_inv_def]) >>
+  conj_tac
+  >- (drule_all vyperStorageLayoutSafetyTheory.storage_layout_safe_region_nonoverflow >>
+      simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `(mid,name,subs) <> (mid',name',subs')` by
+    (strip_tac >> gvs[]) >>
+  drule_all vyperStorageLayoutSafetyTheory.storage_layout_safe_region_separation >>
+  simp[]
 QED
 
 Theorem place_store_update_identity:
@@ -3521,12 +3518,11 @@ Proof
 QED
 
 Theorem place_store_encoded_leaf_state:
-  !H cenv cx env ee ctx func s tr rootk root path delta tv
+  !cenv cx env ee ctx func s mid name subs tr rootk root path delta tv
    start writes v n rd.
   expr_sim_inv cenv cx env ee /\
-  stmt_state_rel H ctx func cenv cx ee s /\
-  MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
-  storage_locks_separated (FST H) (SND H) /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
   storage_subregion root path delta tv /\
   start = w2n rootk + delta /\ 0 < type_slot_size tv /\
   encode_value tv v = SOME writes /\ value_has_type tv v /\
@@ -3538,16 +3534,16 @@ Theorem place_store_encoded_leaf_state:
     EL b (word_to_bytes (lookup_storage (n2w (start+i))
       (apply_writes (n2w start) writes (get_storage cx ee tr))) T) =
     EL b (word_to_bytes (rd i) T)) ==>
-  stmt_state_rel H ctx func cenv cx
+  stmt_state_rel ctx func cenv cx
     (set_storage cx ee tr (apply_writes (n2w start) writes (get_storage cx ee tr)))
     (FOLDL (\t i. (if tr then tstore else sstore)
        (n2w (start+i)) (rd i) t) s (COUNT_LIST n))
 Proof
   rpt gen_tac >> strip_tac >>
-  `storage_agree (storage_dead H tr (get_storage cx ee tr))
+  `storage_agree (storage_dead cx tr (get_storage cx ee tr))
     (get_storage cx ee tr)
     (if tr then contract_transient s else contract_storage s)` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
      Cases_on `tr` >>
      simp[stmt_state_rel_def, state_rel_def, accounts_rel_def,
           accounts_agree_def, transient_agree_def,
@@ -3557,16 +3553,14 @@ Proof
           call_ctx_rel_def] >> metis_tac[]) >>
   drule_all place_store_root_layout >> strip_tac >>
   `storage_agree
-    (storage_dead H tr (apply_writes (n2w start) writes (get_storage cx ee tr)))
+    (storage_dead cx tr (apply_writes (n2w start) writes (get_storage cx ee tr)))
     (apply_writes (n2w start) writes (get_storage cx ee tr))
     (FOLDL (\st i. update_storage (n2w (start+i)) (rd i) st)
       (if tr then contract_transient s else contract_storage s) (COUNT_LIST n))` by
     (irule place_store_encoded_copy_agree >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- simp[] >>
      goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `MEM (_,_,_) (FST _)`)) >>
+     goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
      gvs[] >> metis_tac[]) >>
   `!is s. FOLDL (\t i. (if tr then tstore else sstore)
         (n2w (start+i)) (rd i) t) s is =
@@ -3713,9 +3707,9 @@ QED
 (* The allocation-limit check bounds the natural size, before n2w. *)
 (* Restore execution cursor fields after reasoning about a normalized suffix. *)
 Theorem place_store_stmt_cursor:
-  stmt_state_rel H ctx func cenv cx es
+  stmt_state_rel ctx func cenv cx es
     (s with <|vs_current_bb := bb; vs_prev_bb := prev; vs_inst_idx := idx|>) <=>
-  stmt_state_rel H ctx func cenv cx es s
+  stmt_state_rel ctx func cenv cx es s
 Proof
   `fmp_room ctx func
     (s with <|vs_current_bb := bb; vs_prev_bb := prev; vs_inst_idx := idx|>) <=>
@@ -3734,21 +3728,21 @@ Proof
 QED
 
 Theorem place_store_normalized_stmt_state:
-  stmt_state_rel H ctx func cenv cx es (store_copy_normalize s t) /\
+  stmt_state_rel ctx func cenv cx es (store_copy_normalize s t) /\
   local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>
-  stmt_state_rel H ctx func cenv cx es t
+  stmt_state_rel ctx func cenv cx es t
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es (t with vs_vars := s.vs_vars)` by
+  `stmt_state_rel ctx func cenv cx es (t with vs_vars := s.vs_vars)` by
     (`store_copy_normalize s t =
        (t with vs_vars := s.vs_vars) with
          <|vs_current_bb := s.vs_current_bb; vs_prev_bb := s.vs_prev_bb;
            vs_inst_idx := s.vs_inst_idx|>` by
        simp[store_copy_normalize_def] >>
-     qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
      asm_rewrite_tac[place_store_stmt_cursor]) >>
-  `stmt_state_rel H ctx func cenv cx es
+  `stmt_state_rel ctx func cenv cx es
      ((t with vs_vars := s.vs_vars) with vs_vars := t.vs_vars)` suffices_by
     simp[] >>
   irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >>
@@ -3794,9 +3788,8 @@ Theorem place_store_memory_leaf_run:
   eval_operand src s = SOME sw /\ eval_operand dst s = SOME (n2w start) /\
   n < dimword (:256) /\ w2n sw + 32*n < dimword (:256) /\
   local_ptrs_reserved cenv sa /\
-  expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
-  MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
-  storage_locks_separated (FST H) (SND H) /\
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee s /\
+  declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
   storage_subregion root path delta tv /\ start = w2n rootk + delta /\
   0 < type_slot_size tv /\ encode_value tv v = SOME writes /\ value_has_type tv v /\
   start + type_slot_size tv <= dimword (:256) /\ n <= type_slot_size tv /\
@@ -3808,7 +3801,7 @@ Theorem place_store_memory_leaf_run:
       (apply_writes (n2w start) writes (get_storage cx ee tr))) T) =
     EL b (word_to_bytes (mload (w2n sw + 32*i) s) T)) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx
+      stmt_state_rel ctx func cenv cx
         (set_storage cx ee tr (apply_writes (n2w start) writes (get_storage cx ee tr))) t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
@@ -3826,7 +3819,7 @@ Proof
   goal_assum (drule_at (Pat `local_ptrs_reserved _ _`)) >>
   qexists_tac `s` >> simp[] >>
   qpat_x_assum `store_copy_normalize _ _ = _` SUBST1_TAC >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ (FOLDL _ _ _)` mp_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ (FOLDL _ _ _)` mp_tac >>
   qpat_x_assum `start = _` (fn th => pure_rewrite_tac[th]) >>
   simp_tac bool_ss [GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n,
     AC wordsTheory.WORD_ADD_ASSOC wordsTheory.WORD_ADD_COMM,
@@ -3835,7 +3828,7 @@ QED
 
 Theorem place_store_storage_write_inv:
   write_place cx (StoragePlace tr k tv) v ee = (INL (),ff) /\
-  stmt_state_rel H ctx func cenv cx ee s ==>
+  stmt_state_rel ctx func cenv cx ee s ==>
   ?writes. encode_value tv v = SOME writes /\
     ff = set_storage cx ee tr (apply_writes k writes (get_storage cx ee tr)) /\
     ~s.vs_call_ctx.cc_static
@@ -3848,7 +3841,7 @@ QED
 
 Theorem place_store_storage_leaf_bounds:
   expr_sim_inv cenv cx env ee /\
-  MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
+  declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
   storage_subregion root path delta tv /\ 0 < type_slot_size tv ==>
   w2n rootk + delta + type_slot_size tv <= dimword (:256) /\
   w2n (rootk + n2w delta) = w2n rootk + delta
@@ -3990,9 +3983,8 @@ Theorem place_store_typed_memory_suffix_run:
   eval_operand src s = SOME sw /\ eval_operand dst s = SOME (n2w start) /\
   w2n sw + type_memory_size tv < dimword (:256) /\
   local_ptrs_reserved cenv sa /\
-  expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
-  MEM (tr,rootk,root) (FST H) /\ regions_consistent (FST H) /\
-  storage_locks_separated (FST H) (SND H) /\
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee s /\
+  declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
   storage_subregion root path delta tv /\ start = w2n rootk + delta /\
   0 < type_slot_size tv /\ encode_value tv v = SOME writes /\ value_has_type tv v /\
   start + type_slot_size tv <= dimword (:256) /\
@@ -4002,7 +3994,7 @@ Theorem place_store_typed_memory_suffix_run:
        start tv (start+i) b ==>
      MEM i (MAP FST writes)) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel H ctx func cenv cx
+    stmt_state_rel ctx func cenv cx
       (set_storage cx ee tr (apply_writes (n2w start) writes (get_storage cx ee tr))) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\ ~t.vs_halted /\
@@ -4045,20 +4037,16 @@ Resume place_store_typed_memory_suffix_run[load]:
     metis_tac[fragExecTheory.fn_has_code_split] >>
   drule_all place_store_load_emit_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  `stmt_state_rel H ctx func cenv cx
+  `stmt_state_rel ctx func cenv cx
     (set_storage cx ee tr (apply_writes (n2w start) writes (get_storage cx ee tr)))
     (FOLDL (\u i. (if tr then tstore else sstore)
       (n2w (start+i)) (mload (w2n sw) s) u) s (COUNT_LIST 1))` by
-    (qspecl_then [`H`, `cenv`, `cx`, `env`, `ee`, `ctx`, `func`, `s`, `tr`,
-                  `rootk`, `root`, `path`, `delta`, `tv`, `start`, `writes`,
-                  `v`, `1`, `\i. mload (w2n (sw:bytes32)) s`]
-       mp_tac place_store_encoded_leaf_state >>
-     impl_tac
-     >- (fs[] >> rpt strip_tac >>
-         qpat_x_assum `!b. _ ==> EL b (word_to_bytes _ T) = _`
-           (qspec_then `b` mp_tac) >>
-         gvs[]) >>
-     simp_tac std_ss []) >>
+    (irule (BETA_RULE (Q.INST [`rd` |-> `\i. mload (w2n (sw:bytes32)) s`]
+      (SPEC_ALL place_store_encoded_leaf_state))) >>
+     conj_tac >- metis_tac[] >> reverse conj_tac >- simp[] >>
+     goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
+     simp[] >> qexists_tac `v` >> simp[] >> metis_tac[]) >>
   qexists_tac `t` >> simp[] >>
   irule place_store_normalized_stmt_state >>
   goal_assum (drule_at Any) >> simp[] >>
