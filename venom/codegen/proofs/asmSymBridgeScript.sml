@@ -155,7 +155,7 @@ Proof
   gvs[AllCaseEqs()] >> decide_tac
 QED
 
-Theorem cleared_labels_lookup[local]:
+Theorem cleared_labels_lookup:
   FLOOKUP (mem_labels_clear labs P) i =
     if P i then NONE else FLOOKUP labs i
 Proof
@@ -2075,7 +2075,7 @@ Proof
   simp[LIST_REL_EL_EQN, sval_conc_def]
 QED
 
-Theorem sym_run_SUC[local]:
+Theorem sym_run_SUC:
   sym_run p env (SUC fuel) ss =
   if ss.sym_base.as_pc ≥ LENGTH p then SymError "pc out of bounds"
   else

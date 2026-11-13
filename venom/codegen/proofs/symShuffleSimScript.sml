@@ -11,15 +11,6 @@ Ancestors
   contextCodegenRel asmSymSem asmSem stackPlanTypes list arithmetic
 
 (* Successful symbolic runs compose without inspecting intermediate states. *)
-Theorem sym_steps_single:
-  asm_block_at p ss.sym_base.as_pc [inst] ==>
-  sym_steps p env 1 ss = sym_step p env inst ss
-Proof
-  simp[stackOpSimTheory.asm_block_at_cons] >> strip_tac >>
-  simp[Once asmSpliceTheory.sym_steps_compute] >>
-  Cases_on `sym_step p env inst ss` >> simp[asmSpliceTheory.sym_steps_def]
-QED
-
 Theorem sym_steps_pop:
   asm_block_at p ss.sym_base.as_pc [AsmOp "POP"] /\
   ss.sym_stack = v :: stk ==>
@@ -168,28 +159,6 @@ Proof
       rich_listTheory.REPLICATE, stackOpSimTheory.asm_block_at_cons]
 QED
 
-(* Label-word observation depends only on its own bytes. *)
-Theorem mem_label_at_locality:
-  (!b. in_mem_range off 32 b ==> FLOOKUP labs' b = FLOOKUP labs b) ==>
-  mem_label_at labs' off = mem_label_at labs off
-Proof
-  strip_tac >>
-  `!i. i < 32 ==> FLOOKUP labs' (off + i) = FLOOKUP labs (off + i)` by
-    simp[in_mem_range_def] >>
-  `FLOOKUP labs' off = FLOOKUP labs off` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  simp[mem_label_at_def, EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
-QED
-
-Theorem mem_sval_at_locality:
-  (!b. in_mem_range off 32 b ==> FLOOKUP labs' b = FLOOKUP labs b) ==>
-  (mem_sval_at labs' off sv <=> mem_sval_at labs off sv)
-Proof
-  strip_tac >> Cases_on `sv`
-  >- (simp[mem_sval_at_def] >> metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]) >>
-  drule mem_label_at_locality >> simp[mem_sval_at_def]
-QED
-
 Theorem mem_labels_frame_domain:
   (!b. ~P b ==> FLOOKUP labs' b = FLOOKUP labs b) /\
   (!b. b IN FDOM labs ==> C b) /\
@@ -227,17 +196,6 @@ Proof
        asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
        asmSemTheory.asm_step_memory_def, asm_mstore_def, sym_lift_def,
        asm_next_def]
-QED
-
-Theorem mem_sval_val_no_label:
-  mem_sval_at labs off (Val w) ==>
-  mem_label_at labs off = NONE /\ ~mem_labels_hit labs (in_mem_range off 32)
-Proof
-  simp[mem_sval_at_def, mem_labels_hit_def] >> strip_tac >>
-  `FLOOKUP labs off = NONE` by
-    (simp[finite_mapTheory.FLOOKUP_DEF] >>
-     first_x_assum irule >> simp[in_mem_range_def]) >>
-  simp[mem_label_at_def] >> metis_tac[]
 QED
 
 Theorem sym_mload_label_effect:
@@ -295,7 +253,7 @@ Theorem sym_mstore_val:
              FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   strip_tac >> drule sym_mstore_val_effect >> strip_tac >>
-  qexists_tac `ss'` >> simp[mem_sval_at_clear, mem_labels_clear_lookup]
+  qexists_tac `ss'` >> simp[mem_sval_at_clear, asmSymBridgeTheory.cleared_labels_lookup]
 QED
 
 Theorem sym_steps_mstore:
@@ -685,7 +643,7 @@ Proof
   rpt strip_tac >>
   `!b. in_mem_range off' 32 b ==> FLOOKUP labs' b = FLOOKUP labs b` by
     (rpt strip_tac >> first_x_assum irule >> gvs[in_mem_range_def]) >>
-  drule mem_sval_at_locality >> simp[]
+  drule mem_sval_at_cong >> simp[]
 QED
 
 Theorem sym_spilled_store_kinds:
@@ -867,3 +825,27 @@ Resume sym_prefix_ops_sim[cons]:
 QED
 
 Finalise sym_prefix_ops_sim
+
+Theorem sym_pop_numeric:
+  !n ps p env cp fn ret srest initial_fmp R ss.
+    n <= LENGTH ps.ps_stack /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp [SOPop n]) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp [SOPop n])) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest
+        (ps with ps_stack := stack_pop n ps.ps_stack) out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc +
+        LENGTH (execute_plan initial_fmp [SOPop n]) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt strip_tac >>
+  `ps with ps_stack := stack_pop n ps.ps_stack =
+     apply_prefix_ops initial_fmp FEMPTY [SOPop n] ps` by
+    simp[mixedPrefixSimTheory.apply_prefix_ops_def,
+      mixedPrefixSimTheory.apply_prefix_op_def, strongPrefixSimTheory.apply_simple_op_def,
+      stackModelTheory.stack_pop_def] >>
+  pop_assum SUBST1_TAC >> irule sym_prefix_ops_sim >>
+  simp[prefixExecTheory.prefix_wf_def, prefixExecTheory.stack_op_wf_def,
+    mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def,
+    prefixSimTheory.is_prefix_op_def]
+QED

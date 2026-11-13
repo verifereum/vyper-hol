@@ -39,15 +39,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem operand_equiv_op_kind:
-  dfg = dfg_build_function fn /\ ssa_form fn /\ fn_shape_ok fn /\
-  operand_equiv dfg x y ==>
-  (op_kind_ok fn ret x sv <=> op_kind_ok fn ret y sv)
-Proof
-  simp[operand_equiv_def] >>
-  metis_tac[op_kind_ok_normalize_operand]
-QED
-
 Theorem stack_poke_op_kind_equiv:
   d < LENGTH xs /\
   (!sv. op_kind_ok fn ret (stack_peek d xs) sv <=>
@@ -69,7 +60,7 @@ Theorem stack_exchange_op_kind_equiv:
                        op_kind_ok fn ret y sv)
     xs (stack_poke f op (stack_poke d (stack_peek f xs) xs))
 Proof
-  strip_tac >> drule_all operand_equiv_op_kind >> strip_tac >>
+  strip_tac >> drule_all symPlannerBaseTheory.op_kind_ok_operand_equiv >> strip_tac >>
   rw[listTheory.LIST_REL_EL_EQN, stackModelTheory.stack_poke_def,
      listTheory.EL_LUPDATE] >>
   gvs[stackModelTheory.stack_peek_def] >> metis_tac[]
@@ -139,24 +130,6 @@ Proof
   rw[sym_frame_inv_def, sym_kinds_ok_def,
      fnPlanPrefixTheory.release_dead_spills_stack] >>
   metis_tac[fnFrameStepsRevertForwardTheory.rf_release_spill_lookup]
-QED
-
-(* Reassemble the frame boundary after a region-local symbolic segment. *)
-Theorem sym_frame_inv_region_transfer:
-  !p env ctx cp fn ret srest labs0 ps cs ss r cs' ss' ps'.
-  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
-  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
-  asm_sym_rel p env cs' ss' /\
-  sym_kinds_ok cp fn ret srest ps' ss' /\
-  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
-       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
-  sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss'
-Proof
-  rw[sym_frame_inv_def] >>
-  `~(r.sr_spill_base <= b /\ b < r.sr_spill_end)` by
-    (strip_tac >> fs[closure_spill_byte_def] >>
-     metis_tac[fcgDefsTheory.fcg_path_def, relationTheory.RTC_REFL]) >>
-  metis_tac[]
 QED
 
 (* The symbolic prefix and the concrete endpoint share an explicit count. *)
@@ -531,21 +504,6 @@ Proof
   gvs[mem_label_at_def, listTheory.EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
 QED
 
-Theorem mem_sval_at_local_cong:
-  (!b. in_mem_range off 32 b ==> FLOOKUP labs' b = FLOOKUP labs b) ==>
-  (mem_sval_at labs' off sv <=> mem_sval_at labs off sv)
-Proof
-  strip_tac >>
-  `!b. in_mem_range off 32 b ==> (b IN FDOM labs' <=> b IN FDOM labs)` by
-    metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
-  `FLOOKUP labs' off = FLOOKUP labs off` by
-    (first_x_assum irule >> simp[in_mem_range_def]) >>
-  Cases_on `sv` >>
-  simp[mem_sval_at_def, mem_label_at_def, listTheory.EVERY_MEM,
-       rich_listTheory.MEM_COUNT_LIST] >>
-  gvs[in_mem_range_def]
-QED
-
 Theorem sym_mstore_word_cell:
   ss.sym_stack = Val off :: Val w :: tail ==>
   ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = tail /\
@@ -595,7 +553,7 @@ Theorem scratch_store_preserves_disjoint_cell:
   (!b. ~in_mem_range off 32 b ==> FLOOKUP labs' b = FLOOKUP labs b) ==>
   mem_sval_at labs' cell sv
 Proof
-  metis_tac[mem_sval_at_local_cong]
+  metis_tac[mem_sval_at_cong]
 QED
 
 Theorem sym_mload_word_cell:
@@ -621,17 +579,6 @@ Proof
   simp[asm_op_mem_writes_def, mem_labels_clear_def,
        GSYM pred_setTheory.IN_UNIV, finite_mapTheory.DRESTRICT_UNIV] >>
   simp[finite_mapTheory.fmap_eq_flookup, finite_mapTheory.FLOOKUP_DRESTRICT]
-QED
-
-Theorem sym_push_scratch_address:
-  off < dimword(:256) ==>
-  sym_step p env (AsmPush (encode_num_bytes off)) ss =
-    SymOK (ss with <|sym_base := asm_next (ss.sym_base with as_stack := []);
-                    sym_stack := Val (n2w off) :: ss.sym_stack|>)
-Proof
-  simp[sym_step_def, sym_lift_def, asm_step_def,
-       doSwapSimTheory.raw_spill_push_encode_num_roundtrip, asm_next_def] >>
-  simp[sym_state_component_equality]
 QED
 
 Theorem sym_scratch_store_step:
@@ -680,7 +627,7 @@ Proof
       wordsTheory.w2n_n2w] >>
   rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   gvs[stackOpSimTheory.asm_block_at_cons] >>
-  simp[sym_push_scratch_address, asm_next_def] >>
+  simp[sym_scratch_push, asm_next_def] >>
   gvs[sym_step_def, sym_step_op_def]
 QED
 
@@ -738,7 +685,7 @@ Proof
   gvs[execute_plan_def, exec_stack_op_def, Abbr `pushed`, asm_next_def] >>
   rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   gvs[stackOpSimTheory.asm_block_at_cons] >>
-  simp[sym_push_scratch_address, asm_next_def] >>
+  simp[sym_scratch_push, asm_next_def] >>
   gvs[sym_step_def, sym_step_op_def]
 QED
 Theorem sym_scratch_spill_sim:
@@ -839,7 +786,7 @@ Theorem scratch_disjoint_bulk_cell:
 Proof
   strip_tac >>
   `!b. in_mem_range h 32 b ==> FLOOKUP labs' b = FLOOKUP labs b`
-    suffices_by metis_tac[mem_sval_at_local_cong] >> rpt strip_tac >>
+    suffices_by metis_tac[mem_sval_at_cong] >> rpt strip_tac >>
   first_x_assum irule >>
   fs[listTheory.EVERY_MEM, in_mem_range_def] >> rpt strip_tac >>
   first_x_assum drule >> decide_tac
@@ -1036,15 +983,6 @@ Proof
 QED
 
 
-Theorem list_rel_index_schedule:
-  !R xs ys ids. LIST_REL R xs ys /\ EVERY (\i. i < LENGTH xs) ids ==>
-    LIST_REL R (MAP (\i. EL i xs) ids) (MAP (\i. EL i ys) ids)
-Proof
-  rpt strip_tac >>
-  fs[listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL] >>
-  simp[listTheory.LIST_REL_EL_EQN, listTheory.EL_MAP]
-QED
-
 Theorem list_rel_reversed_index_schedule:
   LIST_REL R (REVERSE items) vals /\ LENGTH items = d + 1 /\ 0 < d /\
   ids = [d] ++ GENLIST (\i. i + 1) (d - 1) ++ [0] /\
@@ -1059,7 +997,7 @@ Proof
      irule doSwapSimTheory.reverse_desired_values >> simp[]) >>
   qpat_x_assum `REVERSE (MAP _ _) = _`
     (fn th => pure_rewrite_tac[th]) >>
-  irule list_rel_index_schedule >> gvs[]
+  irule LIST_REL_select_indices >> gvs[]
 QED
 
 Theorem do_swap_deep_symbolic_resources:
@@ -2097,17 +2035,6 @@ Proof
       sym_set_stack_def, asm_next_def, sym_jumpi_def, sym_jump_def]
 QED
 
-Theorem sym_kinds_ok_push:
-  !cp fn ret srest ps ss op sv base'.
-  sym_kinds_ok cp fn ret srest ps ss /\ op_kind_ok fn ret op sv ==>
-  sym_kinds_ok cp fn ret srest
-    (ps with ps_stack := SNOC op ps.ps_stack)
-    (ss with <|sym_base := base'; sym_stack := sv :: ss.sym_stack|>)
-Proof
-  rw[sym_kinds_ok_def] >>
-  qexists_tac `sv :: top` >> simp[]
-QED
-
 Theorem sym_kinds_ok_pop:
   !cp fn ret srest ps ss op sv stk base'.
   sym_kinds_ok cp fn ret srest
@@ -2202,7 +2129,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule sym_gas_steps >> disch_then (qspec_then `env` assume_tac) >>
   goal_assum (drule_at Any) >> simp[] >>
-  irule sym_kinds_ok_push >> simp[]
+  irule symShuffleSimTheory.sym_kinds_ok_push >> simp[]
 QED
 
 Theorem sym_gas_emit_frame_sim:
