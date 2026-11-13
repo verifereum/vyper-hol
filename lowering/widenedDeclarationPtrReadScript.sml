@@ -94,7 +94,7 @@ Proof
  `~is_word_type (post_value_type c e) /\
   post_value_type c e = lowered_value_type c e` by
    (qpat_assum `e = Call _ _ _ _` SUBST_ALL_TAC >>
-    drule retained_intcall_physical_layout >> simp[] >> metis_tac[]) >>
+    drule retained_intcall_physical_layout >> fs[expr_type_def] >> metis_tac[]) >>
  drule_all retained_rhs_physical_input_ptr >> strip_tac >- fs[] >>
  rename1 `evaluate_type (get_tenv cx) (post_value_type c e) = SOME physical_tv` >>
  rename1 `op = Var src` >> rename1 `eval_operand op s = SOME sw` >>

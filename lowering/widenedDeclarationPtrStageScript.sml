@@ -19,7 +19,7 @@ Theorem widened_declaration_staged_store_ptr:
       sz = type_memory_size tv) fields) /\
   type_widens_to (get_tenv cx) sty dty /\
   ~is_word_type sty /\ ~is_word_type dty /\
-  ~is_bytestring_type dty /\ dty <> sty /\
+  ~is_bytestring_type dty /\
   evaluate_type (get_tenv cx) sty = SOME stv /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
   type_memory_bytes ce dty = type_memory_size dtv /\
