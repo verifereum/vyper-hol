@@ -40,7 +40,7 @@ Ancestors
   extRetSingletonCapacityPtr extRetSourceAllocationPtr extRetCapacityAuditPtr
   extRetCapacityFramePtr extRetWidenedPtr extRetSingletonWordCapacityPtr extRetSingletonStmtPtr
   extRetFrameFactsPtr extRetNoneFramePtr extRetWordFramePtr extRetRawFramePtr
-  externalReturnSelectedResources
+  externalReturnSelectedResources externalReturnPackage
   extRetSignatureFramePtr extRetLoweredBytesFramePtr extRetSingletonFramePtr returnMetadataPtr extRetReturnMetadataPtr vyperTypeCallGraph
 
 val _ = Parse.hide "body";
@@ -104,7 +104,10 @@ Proof
       drule_all source_typing_raw_return_type >> strip_tac >>
       qpat_x_assum `ret = BaseT _` SUBST_ALL_TAC >>
       `type_memory_bytes cenv' (BaseT (BytesT (Dynamic n))) < dimword(:256)` by
-        (drule_all return_selected_consumer_resources >> simp[]) >>
+        (`ut' = T` by
+           (drule return_package_target_inversion >> strip_tac >>
+            drule return_package_metadata >> simp[]) >>
+         gvs[] >> drule_all return_selected_consumer_resources >> simp[]) >>
       irule external_return_raw_frame_stmt_frag_ptr >> simp[] >>
       reverse conj_tac >- (qexists_tac `env'` >> simp[]) >>
       drule typed_dynamic_bytes_return_source >> strip_tac >>
