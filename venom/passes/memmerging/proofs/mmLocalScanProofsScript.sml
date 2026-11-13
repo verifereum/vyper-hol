@@ -21212,6 +21212,186 @@ Proof
   asm_rewrite_tac[]
 QED
 
+Theorem mm_local_same_block_static[local]:
+  state_equiv excluded s t /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+  (!v. MEM (Var v) inst.inst_operands ==> v NOTIN excluded) /\
+  static_mem_ok eom ctx fn inst s ==>
+  static_mem_ok eom ctx fn' inst t
+Proof
+  strip_tac >>
+  `s.vs_inst_idx = t.vs_inst_idx /\
+   s.vs_call_entry_fmp = t.vs_call_entry_fmp` by
+    fs[state_equiv_def, execution_equiv_def,
+       stateFrameTheory.execution_frame_def] >>
+  `inst_mem_ranges inst s = inst_mem_ranges inst t` by
+    (irule o1ContractCfgNormTheory.supply_inst_mem_ranges_cong >> simp[] >>
+     rpt strip_tac >> Cases_on `op` >>
+     gvs[venomStateTheory.eval_operand_def, state_equiv_def,
+         execution_equiv_def] >> metis_tac[]) >>
+  `in_revert_forward fn s <=> in_revert_forward fn' t` by
+    (gvs[contextCodegenRelTheory.in_revert_forward_def] >> metis_tac[]) >>
+  gvs[unitMemInvTheory.static_mem_ok_def]
+QED
+
+Theorem mm_local_same_block_exec_result[local]:
+  !fuel ctx excluded bb s t.
+    state_equiv excluded s t /\
+    (!inst. MEM inst bb.bb_instructions ==>
+      !v. MEM (Var v) inst.inst_operands ==> v NOTIN excluded) ==>
+    result_equiv excluded (exec_block fuel ctx bb s) (exec_block fuel ctx bb t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  pop_assum mp_tac >> pop_assum mp_tac >>
+  MAP_EVERY qid_spec_tac [`t`,`s`,`bb`,`ctx`,`fuel`] >>
+  ho_match_mp_tac (cj 2 venomExecSemanticsTheory.run_defs_ind) >>
+  qexists_tac `\fuel ctx inst s. T` >>
+  qexists_tac `\fuel ctx fn s. T` >> rw[] >>
+  simp[Once venomExecSemanticsTheory.exec_block_def] >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [venomExecSemanticsTheory.exec_block_def])) >>
+  `s.vs_inst_idx = t.vs_inst_idx` by
+    fs[state_equiv_def, execution_equiv_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >>
+  gvs[result_equiv_def, revert_equiv_def] >>
+  rename1 `get_instruction bb _ = SOME inst` >>
+  `!v. MEM (Var v) inst.inst_operands ==> v NOTIN excluded` by
+    (gvs[venomInstTheory.get_instruction_def] >> metis_tac[EL_MEM]) >>
+  `result_equiv excluded (step_inst fuel ctx inst s) (step_inst fuel ctx inst t)` by
+    (Cases_on `is_terminator inst.inst_opcode`
+     >- (`inst.inst_opcode <> INVOKE` by
+           (Cases_on `inst.inst_opcode` >> gvs[venomInstTheory.is_terminator_def]) >>
+         simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+         irule execEquivProofsTheory.step_inst_result_equiv >> metis_tac[]) >>
+     irule removeUnusedProofsTheory.step_inst_result_equiv_full >> metis_tac[]) >>
+  Cases_on `step_inst fuel ctx inst s` >> Cases_on `step_inst fuel ctx inst t` >>
+  gvs[result_equiv_def, revert_equiv_def] >>
+  rename1 `step_inst fuel ctx inst s = OK u` >>
+  rename1 `step_inst fuel ctx inst t = OK v` >>
+  Cases_on `is_terminator inst.inst_opcode` >> gvs[]
+  >- (`u.vs_halted = v.vs_halted` by fs[state_equiv_def, execution_equiv_def] >>
+      Cases_on `u.vs_halted` >> gvs[result_equiv_def, revert_equiv_def] >>
+      fs[state_equiv_def]) >>
+  first_x_assum irule >> simp[] >>
+  fs[state_equiv_def, execution_equiv_def] >>
+  simp[venomStateTheory.lookup_var_def] >> metis_tac[venomStateTheory.lookup_var_def]
+QED
+
+Theorem mm_local_same_block_trace[local]:
+  !s t.
+    state_equiv excluded s t /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+    (!inst v. MEM inst bb.bb_instructions /\
+       MEM (Var v) inst.inst_operands ==> v NOTIN excluded) /\
+    EVERY (\((p,d',id),f,i,u). p = [] ==> static_mem_ok eom ctx f i u)
+      (trace_block [] d fuel ctx fn bb s) ==>
+    EVERY (\((p,d',id),f,i,u). p = [] ==> static_mem_ok eom ctx f i u)
+      (trace_block [] d fuel ctx fn' bb t)
+Proof
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  `s.vs_inst_idx = t.vs_inst_idx` by fs[state_equiv_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx`
+  >- (`get_instruction bb t.vs_inst_idx = NONE` by metis_tac[] >>
+      PURE_ONCE_REWRITE_TAC [cj 2 dftGasFromListTraceDefsTheory.trace_defs] >>
+      asm_rewrite_tac[] >>
+      simp[optionTheory.option_case_def, listTheory.EVERY_DEF]) >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  `!v. MEM (Var v) inst.inst_operands ==> v NOTIN excluded` by
+    (gvs[venomInstTheory.get_instruction_def] >> metis_tac[EL_MEM]) >>
+  `reachability_closed (\ctx fn inst s. T) ctx` by
+    simp[contextCodegenRelTheory.reachability_closed_def,
+         contextCodegenRelTheory.fn_entry_inv_def] >>
+  drule_all mm_local_trace_visit_root_every >>
+  disch_then (fn th => qpat_x_assum `EVERY _ _` (mp_tac o REWRITE_RULE [th])) >>
+  strip_tac >>
+  `get_instruction bb t.vs_inst_idx = SOME inst` by metis_tac[] >>
+  drule_all (Q.INST [`s` |-> `t`, `fn` |-> `fn'`] mm_local_trace_visit_root_every) >>
+  disch_then (fn th => rewrite_tac[th]) >> conj_tac
+  >- (irule mm_local_same_block_static >> metis_tac[]) >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (Cases_on `step_inst fuel ctx inst t` >> simp[]) >>
+  `result_equiv excluded (step_inst fuel ctx inst s) (step_inst fuel ctx inst t)` by
+    (irule removeUnusedProofsTheory.step_inst_result_equiv_full >> metis_tac[]) >>
+  Cases_on `step_inst fuel ctx inst s` >> Cases_on `step_inst fuel ctx inst t` >>
+  gvs[result_equiv_def] >>
+  rename1 `step_inst fuel ctx inst s = OK u` >>
+  rename1 `step_inst fuel ctx inst t = OK v` >>
+  `u.vs_current_bb = s.vs_current_bb /\ v.vs_current_bb = t.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  first_x_assum (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  (impl_tac >- (gvs[venomInstTheory.get_instruction_def] >> decide_tac)) >>
+  disch_then (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >>
+  disch_then (qspec_then `v with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >> disch_then irule >> simp[] >>
+  fs[state_equiv_def, execution_equiv_def] >>
+  simp[venomStateTheory.lookup_var_def] >> metis_tac[venomStateTheory.lookup_var_def]
+QED
+
+Theorem mm_local_same_run_block_correct[local]:
+  state_equiv excluded (s with vs_inst_idx := 0) (t with vs_inst_idx := 0) /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+  (!inst v. MEM inst bb.bb_instructions /\
+    MEM (Var v) inst.inst_operands ==> v NOTIN excluded) /\
+  EVERY (\((p,d',id),f,i,u). p = [] ==> static_mem_ok eom ctx f i u)
+    (trace_blocks [] d (SUC fuel) ctx fn s) ==>
+  lift_result
+    (\u v. state_equiv excluded (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+    (execution_equiv excluded) revert_equiv
+    (run_block fuel ctx bb s) (run_block fuel ctx bb t) /\
+  EVERY (\((p,d',id),f,i,u). p = [] ==> static_mem_ok eom ctx f i u)
+    (case eval_phis t bb.bb_instructions of
+      OK tp => trace_block [] (SUC d) fuel ctx fn' bb
+        (tp with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+    | _ => [])
+Proof
+  strip_tac >>
+  `EVERY (\inst. inst.inst_opcode = PHI ==>
+    !v. MEM (Var v) inst.inst_operands ==> v NOTIN excluded) bb.bb_instructions` by
+    (simp[EVERY_MEM] >> metis_tac[]) >>
+  qspecl_then [`s`,`bb.bb_instructions`] strip_assume_tac
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs
+  >- (rename1 `eval_phis s bb.bb_instructions = OK sp` >>
+      `?tp. eval_phis t bb.bb_instructions = OK tp /\
+        state_equiv excluded
+          (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+          (tp with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
+        (irule mm_local_phi_entry_pair >> metis_tac[]) >>
+      `result_equiv excluded (run_block fuel ctx bb s) (run_block fuel ctx bb t)` by
+        (simp[venomExecSemanticsTheory.run_block_def] >>
+         irule mm_local_same_block_exec_result >> metis_tac[]) >>
+      conj_tac
+      >- (Cases_on `run_block fuel ctx bb s` >> Cases_on `run_block fuel ctx bb t` >>
+          gvs[result_equiv_def, lift_result_def, state_equiv_def,
+              execution_equiv_def, revert_equiv_def,
+              stateFrameTheory.execution_frame_def, venomStateTheory.lookup_var_def]) >>
+      simp[] >>
+      mp_tac (Q.INST [`p` |-> `[]`]
+        dftGasFromListTraceDefsTheory.trace_blocks_enter) >>
+      (impl_tac >- asm_rewrite_tac[]) >>
+      disch_then (fn th =>
+        qpat_x_assum `EVERY _ (trace_blocks _ _ _ _ _ _)`
+          (mp_tac o REWRITE_RULE [th])) >>
+      simp[EVERY_APPEND] >> strip_tac >>
+      `sp.vs_current_bb = s.vs_current_bb /\ tp.vs_current_bb = t.vs_current_bb` by
+        metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
+      mp_tac (Q.SPECL
+        [`sp with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+         `tp with vs_inst_idx := phi_prefix_length bb.bb_instructions`]
+        (Q.INST [`d` |-> `SUC d`] mm_local_same_block_trace)) >>
+      (impl_tac >- (asm_rewrite_tac[] >> simp[])) >> simp[]) >>
+  qspecl_then [`t`,`bb.bb_instructions`] strip_assume_tac
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs
+  >- (`state_equiv excluded (t with vs_inst_idx := 0) (s with vs_inst_idx := 0)` by
+        metis_tac[stateEquivProofsTheory.state_equiv_sym] >>
+      `?sp. eval_phis s bb.bb_instructions = OK sp` by
+        metis_tac[mm_local_phi_entry_pair] >> gvs[]) >>
+  simp[venomExecSemanticsTheory.run_block_def, lift_result_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
