@@ -14,6 +14,9 @@ Ancestors
   ctorDeployMemoryRunPtrMono exprOperandVar exprSimVVFrame exprSimProps
   venomExecSemantics loweringStateRelDefs finite_map robustCopyTransportPtr
   exprSimUnwrap loweringHalt context exprSimAlloc
+  exprSimIfExpWidenedPosts valueCopy
+  representationCleanPtr valueCopyBytes valueTypingMemoryProps vfmConstants
+  vyperTyping valueEncoding venomMemProofs valueEncodingDefs valueEncodingProps exprSimHyps
 
 (* Conditional ghost boundary for the actual copy endpoint.  The window
    premises are the bytewise consequences of the copy's memory/taint equations;
@@ -112,6 +115,181 @@ Resume ifexp_widen_copy_ghost_finish[kept]:
 QED
 
 Finalise ifexp_widen_copy_ghost_finish
+
+(* Fixed-endpoint semantic half of the copy boundary.  The ordinary copy
+   execution is used only to recover state frames at the supplied endpoint. *)
+Theorem ifexp_widen_copy_endpoint_posts:
+  compile_ifexp_arm ce t lt vv sm = (dst,sb) /\
+  compile_store_bytestring src dst sn = ((),sb) /\
+  run_inst_seq (emitted_insts sn sb) s = OK sf /\
+  q = sf with vs_inst_idx := idx /\
+  expr_type e = t /\ post_value_type ce e = t /\
+  expr_post H ctx func ce cx e es origin sn s0 ee v src s /\
+  read_result cx raw ee = (INL v,ee) /\
+  is_bytestring_type t /\ ~is_word_type t /\
+  evaluate_type (get_tenv cx) t = SOME tv /\ value_has_type tv v /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  val_in_memory tv v (w2n sw) s.vs_memory /\
+  mem_word_at (w2n sw) s.vs_memory = n2w len /\
+  val_store_size tv v = 32 + 32 * word_size len /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sn x) /\
+  type_memory_size tv < dimword (:256) /\ type_memory_size tv <= N /\
+  FLOOKUP s.vs_allocas aid = SOME (w2n dw,N) /\
+  w2n dw + N <= s.vs_alloca_next /\
+  local_ptrs_reserved ce sn /\
+  (!name b sz. local_region ce ee.scopes s name b sz ==>
+    b+sz <= w2n dw \/ w2n dw+N <= b) /\
+  (ce.ce_is_ctor ==> !name itv iv off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) (w2n dw) N) /\
+  (!name b sz. local_region ce es.scopes s0 name b sz ==>
+    local_region ce ee.scopes s name b sz) /\
+  (!old off len. FLOOKUP s0.vs_allocas old = SOME (off,len) /\
+    old < origin.cs_next_id ==> w2n dw+N <= off \/ off+len <= w2n dw) /\
+  origin.cs_next_var <= sn.cs_next_var /\
+  origin.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = aid /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) ==>
+  expr_post H ctx func ce cx (IfExp t c a b) es origin sb s0 ee v dst q /\
+  vv_at ce cx t origin sb ee raw (LocatedValue t (mk_ptr dst LocMemory)) q /\
+  expr_store_bound cx t v dst q /\
+  (!rt w. evaluate_type (get_tenv cx) t = SOME rt /\ eval_operand dst q = SOME w ==>
+    type_memory_size rt = 0 \/ w2n w + type_memory_size rt <= q.vs_alloca_next) /\
+  (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+  (!off len. off+len <= w2n dw \/ w2n dw+N <= off ==>
+    mem_bytes_at off len q.vs_memory = mem_bytes_at off len s.vs_memory)
+Proof
+  strip_tac >>
+  `stmt_state_rel H ctx func ce cx ee s` by fs[expr_post_def] >>
+  `val_wf tv v` by metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  `32 + 32 * word_size len <= type_memory_size tv` by metis_tac[val_store_size_le] >>
+  `32 + 32 * word_size len < dimword (:256)` by decide_tac >>
+  drule store_bytestring_run_exact >>
+  disch_then (qspecl_then [`s`, `sw`, `dw`, `len`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  qpat_x_assum `run_inst_seq _ _ = OK t'` mp_tac >>
+  simp[] >> disch_then SUBST_ALL_TAC >>
+  rename1 `q = sf with vs_inst_idx := idx` >>
+  `sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
+   sf.vs_labels = s.vs_labels` by
+    (qpat_x_assum `sf with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `!off k. off+k <= w2n dw \/ w2n dw+N <= off ==>
+     mem_bytes_at off k sf.vs_memory = mem_bytes_at off k s.vs_memory` by
+    (rpt strip_tac >> simp[] >> irule mem_bytes_at_mcopy_disjoint >> decide_tac) >>
+  `LENGTH s.vs_memory <= LENGTH sf.vs_memory` by
+    simp[mcopy_def, immutableMemoryFrameTheory.immutable_write_memory_capacity,
+         arithmeticTheory.MAX_DEF] >>
+  `val_in_memory tv v (w2n dw) sf.vs_memory` by suspend "encoding" >>
+  `stmt_state_rel H ctx func ce cx ee sf` by suspend "state" >>
+  `eval_operand dst sf = SOME dw` by
+    (Cases_on `dst` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `!name lb sz. local_region ce ee.scopes sf name lb sz ==>
+     local_region ce ee.scopes s name lb sz` by
+    (rpt strip_tac >> irule local_region_frame >>
+     conj_tac >- (qexists_tac `func` >> fs[stmt_state_rel_def, state_rel_def]) >>
+     qexistsl [`sn`, `ee.scopes`, `sf`] >> simp[]) >>
+  conj_tac >- suspend "post" >>
+  conj_tac >- suspend "vv_at" >>
+  conj_tac >- suspend "store" >>
+  simp[] >> rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+Resume ifexp_widen_copy_endpoint_posts[encoding]:
+  irule exprSimMemoryTransportTheory.val_in_memory_relocate_footprint >>
+  conj_tac >- simp[] >>
+  qexistsl [`s.vs_memory`, `w2n sw`] >> simp[] >>
+  sym_tac >>
+  `val_footprint tv v <= 32 + 32 * word_size len` by
+    metis_tac[val_footprint_le_store_size] >>
+  irule listTheory.LIST_EQ >> simp[] >> rpt strip_tac >>
+  simp[valueEncodingProofsTheory.EL_mem_bytes_at,
+       GSYM allocaRemapDefsTheory.mem_byte_at_def] >>
+  pure_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule (SRULE [LET_THM] copyFwdEquivTheory.mcopy_establishes_equiv) >> decide_tac
+QED
+
+Resume ifexp_widen_copy_endpoint_posts[state]:
+  irule exprSimLiteralBufferTheory.literal_state_memory_frame >>
+  qexists_tac `s` >> simp[] >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!name b sz. local_region _ _ _ _ _ _ ==> _` drule >>
+    strip_tac >> irule mem_bytes_at_mcopy_disjoint >> decide_tac) >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `local_ptrs_reserved ce sn` mp_tac >>
+    simp[local_ptrs_reserved_def] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `local_ptrs_reserved ce sn` mp_tac >>
+    simp[local_ptrs_reserved_def] >> metis_tac[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `ce.ce_is_ctor ==> _` drule >>
+  disch_then drule >> strip_tac >>
+  irule mem_bytes_at_mcopy_disjoint >> gvs[regions_disjoint_def] >> decide_tac
+QED
+
+Resume ifexp_widen_copy_endpoint_posts[post]:
+  drule allocated_result_expr_post_frame >> disch_then irule >>
+  simp[expr_type_def, expr_val_rel_def, stmt_state_rel_inst_idx] >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!name lb sz. local_region _ _ sf _ _ _ ==> _` irule >>
+    fs[local_region_def, lookup_var_def]) >>
+  conj_tac >- (simp[lookup_var_def] >> rpt strip_tac >>
+    `not_fresh_at sn x` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+    qpat_x_assum `!x. not_fresh_at sn x ==> _` drule >> simp[lookup_var_def]) >>
+  reverse conj_tac >- (qpat_x_assum `val_in_memory tv v (w2n dw) sf.vs_memory` mp_tac >> simp[]) >>
+  qexistsl [`N`, `w2n dw`, `inst`] >> simp[] >>
+  `val_footprint tv v <= type_memory_size tv` by metis_tac[val_footprint_le] >>
+  conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
+  conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
+  conj_tac >- (rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >> decide_tac) >>
+  decide_tac
+QED
+
+Resume ifexp_widen_copy_endpoint_posts[vv_at]:
+  simp[vv_at_def, mk_ptr_def] >> rpt strip_tac >>
+  disj1_tac >> qexistsl [`aid`, `w2n dw`, `N`] >>
+  simp[] >> conj_tac >- metis_tac[val_footprint_le, arithmeticTheory.LESS_EQ_TRANS] >>
+  rpt strip_tac >>
+  `local_region ce ee.scopes sf n lb lsz` by fs[local_region_def, lookup_var_def] >>
+  `local_region ce ee.scopes s n lb lsz` by metis_tac[] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Resume ifexp_widen_copy_endpoint_posts[store]:
+  simp[expr_store_bound_def] >> rpt strip_tac >> gvs[]
+QED
+
+Finalise ifexp_widen_copy_endpoint_posts
+
+Theorem ifexp_widen_copy_endpoint_windows:
+  compile_ifexp_arm ce t lt vv sm = (op,sb) /\
+  s'.vs_memory = (mcopy dst src n s).vs_memory /\
+  tf.t_mem = (tn.t_mem DIFF {i | dst <= i /\ i < dst+n}) UNION
+             {dst+i | i < n /\ src+i IN tn.t_mem} /\
+  lo <= dst ==>
+  mem_bytes_at dst n s'.vs_memory = mem_bytes_at src n s.vs_memory /\
+  (!i. i < n ==> (dst+i IN tf.t_mem <=> src+i IN tn.t_mem)) /\
+  (!i. i NOTIN {j | dst <= j /\ j < dst+n} ==>
+    mem_bytes_at i 1 s'.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+    (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+  (!i. i < lo ==> i NOTIN {j | dst <= j /\ j < dst+n}) /\
+  mem_bytes_at 0 lo s'.vs_memory = mem_bytes_at 0 lo s.vs_memory
+Proof
+  strip_tac >>
+  conj_tac >- simp[valueEncodingPropsTheory.mcopy_mem_bytes_at_same] >>
+  conj_tac >- (simp[] >> rpt strip_tac >> simp[pred_setTheory.IN_UNION,
+    pred_setTheory.IN_DIFF, pred_setTheory.GSPECIFICATION] >> metis_tac[]) >>
+  conj_tac >- (gen_tac >> disch_tac >> conj_tac
+    >- (simp[] >> irule mem_bytes_at_mcopy_disjoint >> fs[])
+    >> simp[pred_setTheory.IN_UNION, pred_setTheory.IN_DIFF,
+            pred_setTheory.GSPECIFICATION] >>
+       fs[] >> eq_tac >- (strip_tac >> gvs[] >> decide_tac) >> simp[]) >>
+  conj_tac >- simp[] >>
+  simp[] >> irule mem_bytes_at_mcopy_disjoint >> simp[]
+QED
 
 Theorem ifexp_widen_empty_dead_path:
   compile_ifexp_arm cenv t sty vv sm = (op,sb) /\
@@ -445,6 +623,51 @@ Proof
   Cases_on `vv_operand vv` >>
   simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, op_prov_def, op_taint_def] >>
   metis_tac[]
+QED
+
+Theorem ifexp_widen_source_resources:
+  compile_ifexp_arm cenv dstty armty vv sm = (op,sb) /\
+  is_bytestring_type t /\ ~is_word_type t /\
+  evaluate_type (get_tenv cx) t = SOME rt /\
+  value_has_type rt v /\ type_memory_size rt < 2**64 /\
+  ptr_val_ok cx t v src G tn s /\ eval_operand src s = SOME a ==>
+  ?x len n.
+    src = Var x /\ lookup_var x s = SOME a /\
+    n = 32 + 32*((len+31) DIV 32) /\ n = val_store_size rt v /\
+    val_footprint rt v <= n /\ n <= type_memory_size rt /\
+    len+31 < dimword(:256) /\ n < dimword(:256) /\
+    mload (w2n a) s = n2w len /\ ptr_covers G tn x s n /\
+    (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem)
+Proof
+  strip_tac >>
+  `(?k. rt = BaseTV (BytesT (Dynamic k))) \/
+   (?k. rt = BaseTV (StringT k))` by metis_tac[bytestring_type_value] >>
+  `op_taint tn src = {}` by fs[ptr_val_ok_def] >>
+  `(!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+       val_in_memory rt v (w2n a) mem) /\
+   (val_footprint rt v <> 0 ==> ?x b sz. src = Var x /\
+       FLOOKUP G x = SOME (b,sz) /\ b <= w2n a /\
+       w2n a + val_store_size rt v <= b+sz)` by
+    (fs[ptr_val_ok_def, ptr_mem_ok_def] >> metis_tac[]) >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  rename1 `LENGTH payload <= k` >>
+  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      mem_word_at (w2n a) mem = n2w (LENGTH payload)` by
+    (rpt strip_tac >> first_x_assum drule >> simp[val_in_memory_def]) >>
+  `!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem` by
+    (drule robust_mem_word_at_clean >> simp[]) >>
+  `mload (w2n a) s = n2w (LENGTH payload)` by
+    (qpat_x_assum `!mem. _ ==> mem_word_at _ _ = _`
+       (qspec_then `s.vs_memory` mp_tac) >>
+     simp[mem_agree_outside_def, mem_word_at_eq_mload]) >>
+  gvs[val_footprint_def, val_store_size_def] >>
+  qexists `LENGTH payload` >>
+  `32 * word_size (LENGTH payload) + 32 <= 32 * word_size k + 32` by
+    (imp_res_tac word_size_monotone >> decide_tac) >>
+  `LENGTH payload <= 32 * word_size (LENGTH payload)` by
+    simp[word_size_capacity] >>
+  gvs[type_memory_size_def, ptr_covers_def, eval_operand_def,
+      word_size_def, wordsTheory.dimword_def]
 QED
 
 Theorem ifexp_widen_arm_step_full:
