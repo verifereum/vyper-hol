@@ -85,8 +85,9 @@ Proof
   gvs[] >> goal_assum (drule_at Any) >>
   simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
        op_taint_def, venom_state_component_equality] >>
-  conj_tac
-  >- simp[op_prov_def] >>
+  rpt conj_tac >>
+  TRY (simp[op_prov_def, venomStateTheory.eval_operand_def, lookup_var_def,
+            FLOOKUP_UPDATE, ASCIInumbersTheory.toString_11] >> NO_TAC) >>
   rpt strip_tac >>
   `x <> STRING #"%" (toString sa.cs_next_var) /\
    x <> STRING #"%" (toString (sa.cs_next_var+1)) /\
