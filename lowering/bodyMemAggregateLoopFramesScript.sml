@@ -40,11 +40,11 @@ Proof
 QED
 
 Theorem aggregate_cons_exterior_frame_mem:
-  vv_post ctx func ce cx e es sa sm s0 es1 tv vv t1 /\
+  vv_post H ctx func ce cx e es sa sm s0 es1 tv vv t1 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-  stmt_state_rel ctx func ce cx es s0 /\
-  stmt_state_rel ctx func ce cx es1 t1 /\
-  stmt_state_rel ctx func ce cx es1 q /\
+  stmt_state_rel H ctx func ce cx es s0 /\
+  stmt_state_rel H ctx func ce cx es1 t1 /\
+  stmt_state_rel H ctx func ce cx es1 q /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= ss.cs_next_id /\
   (!z a. not_fresh_at sm z /\ lookup_var z t1 = SOME a ==> lookup_var z q = SOME a) /\

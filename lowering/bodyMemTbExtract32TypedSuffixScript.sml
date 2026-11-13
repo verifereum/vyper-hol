@@ -12,7 +12,7 @@ Theorem extract32_source_bytes_kept:
     SOME (BaseTV (BytesT (Dynamic cap))) /\
   eval_operand src s = SOME w /\
   val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) (w2n w) s.vs_memory /\
-  expr_post ctx func cenv cx off es sm sb s es' v op t ==>
+  expr_post H ctx func cenv cx off es sm sb s es' v op t ==>
   val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) (w2n w) t.vs_memory
 Proof
   strip_tac >>

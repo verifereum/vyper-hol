@@ -26,7 +26,7 @@ QED
 Theorem array_header_path_mem[local]:
   emit_void MSTORE [Var x; Lit (n2w len)] sa = ((),sm) /\
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel H ctx func ce cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   lookup_var x s0 = SOME (n2w b) /\
@@ -50,7 +50,7 @@ QED
 Theorem array_header_mem_entry:
   emit_void MSTORE [Var x; Lit (n2w len)] sa = ((),sm) /\
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func ce cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel H ctx func ce cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   local_ptrs_reserved ce sa /\ not_fresh_at sa x /\
@@ -66,7 +66,7 @@ Theorem array_header_mem_entry:
     regions_disjoint io (type_memory_size tv) b 32) /\
   sh = (mstore b (n2w len) s0 with vs_inst_idx := SUC s0.vs_inst_idx) ==>
   gas_marked_path T ctx func s0 0 (OK sh) /\ alloca_history func sh /\
-  stmt_state_rel ctx func ce cx es sh /\ locals_kept ce es es s0 sh /\
+  stmt_state_rel H ctx func ce cx es sh /\ locals_kept ce es es s0 sh /\
   ~sh.vs_halted /\ sh.vs_current_bb = sm.cs_current_bb /\
   sh.vs_inst_idx = LENGTH sm.cs_current_insts /\
   lookup_var x sh = SOME (n2w b) /\
@@ -84,7 +84,7 @@ Proof
   disch_then (qspecl_then [`x`, `ce`] strip_assume_tac) >>
   drule_all array_header_store_boundary >>
   disch_then (qspec_then `n2w len` strip_assume_tac) >>
-  `stmt_state_rel ctx func ce cx es sh` by simp[stmt_state_rel_inst_idx] >>
+  `stmt_state_rel H ctx func ce cx es sh` by simp[stmt_state_rel_inst_idx] >>
   `locals_kept ce es es s0 sh` by
     (irule exprSimPropsTheory.locals_kept_mem_tail >>
      qpat_assum `locals_kept _ _ _ _ _` (irule_at Any) >> gvs[mstore_def]) >>

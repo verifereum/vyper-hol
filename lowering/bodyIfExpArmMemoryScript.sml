@@ -10,7 +10,8 @@ Theorem vv_post_allocated_memory_read_intro[local]:
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v (w2n w) s.vs_memory /\
-  stmt_state_rel ctx func cenv cx es' s /\
+  stmt_state_rel H ctx func cenv cx es' s /\
+  storage_well_formed_on cx es' (FST H) /\
   p.ptr_location = LocMemory /\ eval_operand p.ptr_operand s = SOME w /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
@@ -19,10 +20,14 @@ Theorem vv_post_allocated_memory_read_intro[local]:
      b + sz <= lb \/ lb + lsz <= b) /\
   wb_frame cenv es es' sa s0 s /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' raw
+  vv_post H ctx func cenv cx e es sa sb s0 es' raw
     (LocatedValue (expr_type e) p) s
 Proof
-  strip_tac >> irule vv_post_frame_intro >>
+  strip_tac >>
+  `~expr_has_effect e ==>
+     vv_storage_live H cx (LocatedValue (expr_type e) p) es' s` by
+    simp[vv_storage_live_def] >>
+  irule vv_post_frame_intro >>
   simp[loweringPostsTheory.vv_holds_def, loweringPostsTheory.vv_at_def] >>
   disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
   first_assum ACCEPT_TAC
@@ -35,7 +40,8 @@ Theorem ifexp_copy_endpoint:
   read_result cx raw ee = (INL v,ee) /\
   val_wf tvt v /\ val_in_memory tvt v src s.vs_memory /\
   val_footprint tvt v <= len /\ len <= sz /\
-  stmt_state_rel ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx ee s /\
+  storage_well_formed_on cx ee (FST H) /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [p] /\ not_local_ptr cenv ee.scopes p /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
@@ -48,18 +54,18 @@ Theorem ifexp_copy_endpoint:
   w2n w + sz <= (mcopy (w2n w) src len s).vs_alloca_next /\
   val_store_size tvt v <= sz /\
   (!ltv. evaluate_type (get_tenv cx) lt = SOME ltv ==> type_memory_size ltv <= sz) ==>
-  vv_post ctx func cenv cx e es sa sb s0 ee raw
+  vv_post H ctx func cenv cx e es sa sb s0 ee raw
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) (mcopy (w2n w) src len s) /\
-  expr_post ctx func cenv cx e es sa sb s0 ee v op (mcopy (w2n w) src len s) /\
+  expr_post H ctx func cenv cx e es sa sb s0 ee v op (mcopy (w2n w) src len s) /\
   vv_store_bound cx (expr_type e) lt ee raw
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) (mcopy (w2n w) src len s)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx ee (mcopy (w2n w) src len s)` by
+  `stmt_state_rel H ctx func cenv cx ee (mcopy (w2n w) src len s)` by
     (irule stmt_state_rel_mcopy_alloca >> metis_tac[]) >>
   `val_in_memory tvt v (w2n w) (mcopy (w2n w) src len s).vs_memory` by
     (irule mcopy_val_in_memory >> metis_tac[]) >>
-  `vv_post ctx func cenv cx e es sa sb s0 ee raw
+  `vv_post H ctx func cenv cx e es sa sb s0 ee raw
      (LocatedValue (expr_type e) (mk_ptr op LocMemory)) (mcopy (w2n w) src len s)` by
     (irule vv_post_allocated_memory_read_intro >>
      simp[contextTheory.mk_ptr_def] >>

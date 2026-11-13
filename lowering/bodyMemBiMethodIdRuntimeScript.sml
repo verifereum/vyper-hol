@@ -8,6 +8,7 @@ Ancestors
   bodyLiteralBufferMemory valueEncoding valueEncodingDefs vyperTypeBytesCrypto vfmConstants list
   exprLowering compileEnv vyperAST vyperInterpreter vyperState
   vyperValue vyperTyping loweringPosts context exprSimDefs exprSimHypsDefs vyperTypeSystem builtinHashing vyperContext
+  gasStorage vyperStorageTrace vyperStorageFootprint
 
 Theorem method_id_runtime_vv_sim_mem:
   expr_body_pre cenv cx env (Builtin ann MethodId [e]) es /\
@@ -49,15 +50,30 @@ Proof
     metis_tac[expr_body_pre_gas_admissible] >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
-  disch_then (qspecl_then [`sa`, `sm`, `x`, `s0`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `x`, `s0`] mp_tac) >>
+  (impl_tac >- (asm_simp_tac (srw_ss()) [] >> metis_tac[])) >> strip_tac >>
   asm_rewrite_tac[] >>
   irule gas_outcome_bind_value >>
   goal_assum (drule_at Any) >>
   reverse conj_tac
-  >- (rpt strip_tac >> Cases_on `res` >> gvs[expr_exit_def] >>
-      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
+  >- (conj_tac
+      >- (rpt strip_tac >> Cases_on `res` >> gvs[expr_exit_def] >>
+          metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      gen_tac >> simp[vyperStorageTraceTheory.storage_trace_frame_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `?v. res = INL v` by
+    (first_x_assum (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> metis_tac[]) >>
+  qexists_tac `v` >> simp[] >>
+  qpat_x_assum `res = INL v` SUBST_ALL_TAC >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+     expr_post H ctx func cenv cx e es sa sm s0 (mid with gas_obs := []) v x t /\
+     expr_store_bound cx (expr_type e) v x t` by
+    (rpt strip_tac >> first_x_assum drule >> simp[]) >>
   `bind (eval_expr cx e) (read_result cx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
        (INL v, mid with gas_obs := [])` by
@@ -74,9 +90,42 @@ Proof
   `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
     (drule (CONV_RULE (DEPTH_CONV ETA_CONV)
       exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom) >> simp[]) >>
-  drule method_id_runtime_typed_post_run_mem_any_block >>
-  disch_then (qspecl_then [`sb`, `op`, `fixed`, `bty`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+     ?t2 r2. run_inst_seq (emitted_insts sm sb) t = OK t2 /\
+       run_inst_seq_mem_ok (emitted_insts sm sb) t /\
+       t.vs_alloca_next <= t2.vs_alloca_next /\
+       builtin_result cx mid.accounts
+         (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)))
+         MethodId [expr_type e] [v] = INL r2 /\
+       vv_post H ctx func cenv cx
+         (Builtin (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))) MethodId [e])
+         es sa sb s0 (mid with gas_obs := []) (Value r2)
+         (if fixed then StackValue (BaseT (BytesT (Fixed 4))) op else
+          LocatedValue (BaseT (BytesT (Dynamic 4)))
+            <|ptr_location := LocMemory; ptr_operand := op|>) t2 /\
+       vv_store_bound cx
+         (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)))
+         (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)))
+         (mid with gas_obs := []) (Value r2)
+         (if fixed then StackValue (BaseT (BytesT (Fixed 4))) op else
+          LocatedValue (BaseT (BytesT (Dynamic 4)))
+            <|ptr_location := LocMemory; ptr_operand := op|>) t2` by
+    (rpt strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     drule method_id_runtime_typed_post_run_mem_any_block >>
+     disch_then (qspecl_then [`sb`, `op`, `fixed`, `bty`] mp_tac) >>
+     (impl_tac >- (asm_simp_tac (srw_ss()) [] >> metis_tac[])) >>
+     strip_tac >> asm_simp_tac (srw_ss()) [] >> metis_tac[]) >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> ?t2 r2. _`
+    (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >> rename1 `run_inst_seq _ t = OK t'` >>
+  rename1 `builtin_result _ _ _ _ _ = INL r` >>
+  `expr_post H0 ctx func cenv cx e es sa sm s0 (mid with gas_obs := []) v x t` by
+    (first_x_assum (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
@@ -95,14 +144,20 @@ Proof
      simp[] >> fs[same_blocks_def] >> metis_tac[]) >>
   rewrite_tac[gas_outcome_def] >>
   qexists_tac `REPLICATE (LENGTH (FILTER (\i. i.inst_opcode = GAS)
-    (emitted_insts sm sb))) F` >> disj1_tac >>
+    (emitted_insts sm sb))) F` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
-  qexistsl_tac [`INL (Value r)`, `mid`,
+  qexistsl_tac [`INL (Value r)`, `mid with gas_obs := []`,
     `OK (t' with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   simp[gas_marked_exec_def] >>
   `t'.vs_current_bb = sb.cs_current_bb` by
     (drule_all run_inst_seq_preserves_entry_control >> fs[same_blocks_def]) >>
-  `vv_post H ctx func cenv cx
+  disj1_tac >> qx_gen_tac `H2` >> strip_tac >>
+  first_assum (qspec_then `H2` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >>
+  `t2 = t' /\ r2 = r` by gvs[] >>
+  qpat_x_assum `t2 = t'` SUBST_ALL_TAC >> qpat_x_assum `r2 = r` SUBST_ALL_TAC >>
+  `vv_post H2 ctx func cenv cx
     (Builtin (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))) MethodId [e])
     es sa sb s0 (mid with gas_obs := []) (Value r)
     (if fixed then StackValue (BaseT (BytesT (Fixed 4))) op else

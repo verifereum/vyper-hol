@@ -32,6 +32,6 @@ Proof
   ho_match_mp_tac gas_outcome_ptr_get_place >> simp[] >>
   qpat_x_assum `target_sim_ptr _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[target_sim_ptr_def] >>
-  disch_then (qspecl_then [`Type ty`, `sa`, `sb`, `r`, `s0`, `G0`, `tn0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `Type ty`, `sa`, `sb`, `r`, `s0`, `G0`, `tn0`] mp_tac) >>
   simp[]
 QED

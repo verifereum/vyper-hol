@@ -86,7 +86,7 @@ Theorem lower_typed_args_sim_ptr:
     gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (eval_exprs cx args) (es,s0,G0,tn0)
       (\rr ee G tn t. ?vs. rr = INL vs /\
-        typed_args_post_ptr d ctx func cenv cx es sa s0 G0 tn0 ee args xs vs G tn t /\
+        typed_args_post_ptr H d ctx func cenv cx es sa s0 G0 tn0 ee args xs vs G tn t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\rr ee ghosts r. wb_args_exit rr r)

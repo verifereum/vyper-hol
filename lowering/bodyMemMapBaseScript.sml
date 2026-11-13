@@ -3,6 +3,7 @@
    clause, and nothing else names a mapping. *)
 Theory bodyMemMapBase
 Ancestors
+  gasStorage vyperStorageTrace vyperStorageFootprint
   bodyMemoryPreds bodySim exprSimMapMemDefs exprSimSubscriptMap exprSimMapDefs
   fragGasMode fragGasPathMem gasSummary gasOutcome exprSimHypsDefs
   exprLoweringProps loweringStateRelDefs loweringPosts exprLowering context
@@ -41,6 +42,13 @@ Proof
     (irule lookup_global_mapping_region >> qexistsl [`src`, `es`, `es`, `id`] >>
      simp[]) >>
   rw[expr_map_sim_mem_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
     gvs[stmt_state_rel_def, state_rel_def] >>
   fs[] >>
@@ -56,11 +64,19 @@ Proof
   qexistsl [`INL (HashMapRef tr (n2w slot) kt vt)`, `es`, `OK s0`] >>
   conj_tac >- (irule toplevel_mapping_marked_exec_mem >> simp[]) >>
   disj1_tac >> simp_tac std_ss [] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  qexists `s0` >> simp_tac std_ss [] >>
+  gen_tac >> strip_tac >>
+  `valid_horizon cx st0 H es.storage_trace` by fs[] >>
+  `stmt_state_rel H ctx func cenv cx es s0 /\
+   storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp_tac std_ss (#rewrs (TypeBase.simpls_of ``:venom_state``))) >>
-  qexists `s0` >> simp_tac std_ss [] >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   qexistsl [`tr`, `n2w slot`, `kt`, `vt`] >>
   simp[slot_loc_def, mk_ptr_def, eval_operand_def, locals_kept_def]
 QED

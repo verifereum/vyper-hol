@@ -156,4 +156,4 @@ QED
    then ghost_inv_local_ptr recovers robust source bytes from callback
    ghost_inv. The old-variable frame alone does not give this memory fact.
    There is no ghost_kept conclusion in stmt_frag_ptr. No counted element
-   copy or full loop ghost_inv establishment is claimed by this theory. *)
+   copy or full loop ghost_inv H establishment is claimed by this theory. *)
