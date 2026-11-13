@@ -96,7 +96,9 @@ Theorem abi_malformed_resource_post_frame_intro:
      eval_operand op t = SOME w) ==>
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s t
 Proof
-  rw[abi_malformed_resource_post_def] >> metis_tac[]
+  strip_tac >> rewrite_tac[abi_malformed_resource_post_def] >>
+  conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* A decoder step keeps the four fields that carry the storage horizon, so
@@ -117,8 +119,9 @@ Theorem abi_malformed_resource_post_intro:
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s t
 Proof
   strip_tac >> irule abi_malformed_resource_post_frame_intro >>
-  qexists_tac `H` >> simp[] >>
-  metis_tac[stmt_state_rel_fields_transport]
+  qexists_tac `H` >> simp[] >> rpt strip_tac >>
+  irule stmt_state_rel_fields_transport >>
+  first_assum (irule_at Any) >> first_assum (irule_at Any) >> simp[]
 QED
 
 Theorem abi_malformed_resource_weaken:
