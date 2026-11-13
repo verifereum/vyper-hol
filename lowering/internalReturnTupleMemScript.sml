@@ -282,7 +282,7 @@ Proof
      qexists_tac `get_tenv cx` >> simp[]) >>
   `LENGTH tys = LENGTH tvs /\ LENGTH tvs = LENGTH vs` by
     metis_tac[listTheory.LIST_REL_LENGTH, abi_values_have_types] >>
-  simp[intret_q_def] >>
+  irule intret_q_intro >> simp[] >>
   qexists_tac `s with <|vs_vars := vars;
     vs_inst_idx := idx - LENGTH (return_unlock_insts cenv sa.cs_next_id)|>` >>
   simp[return_unlock_load_frame, loweringStateRelDefsTheory.result_rel_def,
