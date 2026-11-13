@@ -569,7 +569,7 @@ Proof
   `well_typed_expr env idx /\
    (well_typed_expr env be_expr \/ ?vt. type_place_expr env be_expr = SOME vt)` by
     (qpat_x_assum `!initial_st selected env st res st0. _` kall_tac >>
-     qpat_x_assum `!s pv t. _` kall_tac >>
+     qpat_x_assum `!s pv t s1 pv1 t1. eval_expr cx be_expr s = _ /\ _ ==> _` kall_tac >>
      qpat_x_assum `_ \/ _` mp_tac >>
      simp_tac(srw_ss())[well_typed_expr_def, AllCaseEqs()] >> metis_tac[]) >>
   (qpat_x_assum `eval_expr cx (Subscript ty be_expr idx) st = (res,st')` mp_tac >>
@@ -577,13 +577,31 @@ Proof
    Cases_on `eval_expr cx be_expr st` >> rename1 `eval_expr cx be_expr st = (br,st1)` >>
    reverse (Cases_on `br`) >> simp_tac(srw_ss())[return_def, raise_def]
    >- (strip_tac >> BasicProvers.VAR_EQ_TAC >>
-       qpat_x_assum `!s pv t. eval_expr cx be_expr s = (INL pv,t) ==> _` kall_tac >>
+       qpat_x_assum `!s pv t s1 pv1 t1. eval_expr cx be_expr s = _ /\ _ ==> _` kall_tac >>
        qpat_x_assum `!initial_st selected env st res st0. _`
          (qspecl_then [`initial_st`, `selected`, `env`, `st`, `res`, `st'`] mp_tac) >>
        (impl_tac >- (asm_rewrite_tac[APPEND] >> metis_tac[])) >> metis_tac[]) >>
+   rename1 `eval_expr cx be_expr st = (INL base_tv,st1)` >>
+   Cases_on `(if subscript_reads_base cx be_expr idx then
+                bind (read_result cx base_tv) (\v. return (Value v))
+              else return base_tv) st1` >>
+   rename1 `_ st1 = (early_res,early_st)` >>
+   `early_st = st1` by
+     (qpat_assum `_ st1 = (early_res,early_st)` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `subscript_reads_base cx be_expr idx` >>
+      simp[bind_def, return_def, AllCaseEqs()] >> rpt strip_tac >>
+      imp_res_tac read_result_state >> gvs[]) >>
+   qpat_x_assum `early_st = st1` SUBST_ALL_TAC >>
+   reverse (Cases_on `early_res`) >> simp_tac(srw_ss())[]
+   >- (strip_tac >>
+       qpat_x_assum `!s pv t s1 pv1 t1. eval_expr cx be_expr s = _ /\ _ ==> _` kall_tac >>
+       qpat_x_assum `!initial_st selected env st res st0. _`
+         (qspecl_then [`initial_st`, `selected`, `env`, `st`, `INL base_tv`, `st1`] mp_tac) >>
+       (impl_tac >- (asm_rewrite_tac[APPEND] >> metis_tac[])) >> metis_tac[]) >>
+   rename1 `_ st1 = (INL early_tv,st1)` >>
    Cases_on `eval_expr cx idx st1` >> rename1 `eval_expr cx idx st1 = (ir,st2)` >>
-   qpat_x_assum `!s pv t. eval_expr cx be_expr s = (INL pv,t) ==> _`
-     (qspecl_then [`st`, `x`, `st1`] mp_tac) >>
+   qpat_x_assum `!s pv t s1 pv1 t1. eval_expr cx be_expr s = _ /\ _ ==> _`
+     (qspecl_then [`st`, `base_tv`, `st1`, `st1`, `early_tv`, `st1`] mp_tac) >>
    asm_rewrite_tac[] >> strip_tac >> strip_tac >>
    `?suffix. st'.storage_trace = st2.storage_trace ++ suffix` by
      (ntac 2 (qpat_x_assum `!initial_st selected env st res st0. _` kall_tac) >>
@@ -596,7 +614,7 @@ Proof
    `storage_well_formed_on cx st1 (FST H) /\
     storage_observations_ok cx H st1.storage_trace` by
      (qpat_x_assum `!initial_st selected env st res st0. _ ==> (well_typed_expr env be_expr ==> _) /\ _`
-       (qspecl_then [`initial_st`, `selected`, `env`, `st`, `INL x`, `st1`] mp_tac) >>
+       (qspecl_then [`initial_st`, `selected`, `env`, `st`, `INL base_tv`, `st1`] mp_tac) >>
       (impl_tac >- (asm_rewrite_tac[APPEND] >> metis_tac[APPEND_ASSOC])) >> metis_tac[]) >>
    `runtime_consistent env cx st1` by
      (ntac 2 (qpat_x_assum `!initial_st selected env st res st0. _` kall_tac) >>
@@ -697,11 +715,16 @@ Resume finite_prefix_Expr_Builtin[gas]:
 QED
 
 Resume finite_prefix_Expr_Builtin[args]:
+  Cases_on `code_slice_source bt es`
+  >- (qpat_x_assum `!s x t v c a. _ /\ _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _` kall_tac >>
+  qpat_x_assum `!s x t v c a s3 tv t'. _ ==> _` kall_tac >>
+  asm_rewrite_tac[optionTheory.option_case_def] >>
   Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   asm_rewrite_tac[bind_def, ignore_bind_def, return_def, raise_def,
-    assert_def, type_check_def, get_accounts_def, lift_sum_def] >>
+    assert_def, type_check_def, get_accounts_def, lift_sum_def,
+    optionTheory.option_case_def] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
   rpt (qpat_x_assum `!s'' x t. _`
@@ -721,7 +744,88 @@ Resume finite_prefix_Expr_Builtin[args]:
     (qspecl_then [`initial_st`, `selected`, `env`, `st`, `args_res`, `args_st`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >> strip_tac >>
   (conj_tac >- (irule (iffRL storage_well_formed_on_backends) >>
-    qexists `args_st` >> simp[]) >> simp[])
+    qexists `args_st` >> simp[]) >> simp[]) ) >>
+  suspend "code_slice"
+QED
+
+Resume finite_prefix_Expr_Builtin[code_slice]:
+  PairCases_on `x` >> rename1 `code_slice_source bt es = SOME (code_ty,addr)` >>
+  `~(bt = Bop In \/ bt = Bop NotIn)` by
+    (drule (iffLR code_slice_source_SOME) >> strip_tac >> simp[]) >>
+  drule_all code_slice_operand_typing >> strip_tac >>
+  drule_all code_slice_operand_call_safe >> strip_tac >>
+  qpat_x_assum `!s x t v c a. _ /\ _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _`
+    (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`] mp_tac) >>
+  (impl_tac >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
+                gvs[type_check_def, assert_def, return_def])) >> strip_tac >>
+  asm_rewrite_tac[bind_def, ignore_bind_def, return_def, raise_def,
+    assert_def, type_check_def, get_accounts_def, lift_sum_def,
+    optionTheory.option_case_def] >>
+  Cases_on `eval_exprs cx (TL es) st` >>
+  rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
+  reverse (Cases_on `tail_res`) >> simp_tac(srw_ss())[]
+  >- (strip_tac >>
+      `st' = tail_st` by
+        (qpat_x_assum `(case _ of _ => _ | _ => _) = (res,st')` mp_tac >>
+         asm_rewrite_tac[bind_def, raise_def, return_def] >> simp[]) >>
+      qpat_x_assum `st' = tail_st` SUBST_ALL_TAC >>
+      qpat_x_assum `!initial_st selected env st res st0. well_typed_exprs env (TL es) /\ _ ==> _`
+        (qspecl_then [`initial_st`,`selected`,`env`,`st`,`INR y`,`tail_st`] mp_tac) >>
+      (impl_tac >- (rpt conj_tac >> (fn g =>
+        if is_exists (snd g) then
+          (qexists_tac `sfx` >> asm_rewrite_tac[]) g
+        else first_assum ACCEPT_TAC g))) >> simp[]) >>
+  rename1 `eval_exprs cx (TL es) st = (INL tail_vs,tail_st)` >>
+  qpat_x_assum `!s x t v c a s3 tv t'. _ ==> _`
+    (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`,`st`,
+                  `tail_vs`,`tail_st`] mp_tac) >>
+  (impl_tac >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
+                gvs[type_check_def, assert_def, return_def])) >> strip_tac >>
+  Cases_on `eval_exprs cx [addr] tail_st` >>
+  rename1 `eval_exprs cx [addr] tail_st = (addr_res,addr_st)` >>
+  strip_tac >>
+  `st'.accounts = addr_st.accounts /\ st'.tStorage = addr_st.tStorage /\
+   st'.storage_trace = addr_st.storage_trace` by
+    (qpat_x_assum `(case _ of _ => _ | _ => _) = (res,st')` mp_tac >>
+     asm_simp_tac(srw_ss())[bind_def, raise_def, return_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Cases_on `addr_res` >>
+     simp_tac(srw_ss())[AllCaseEqs(), bind_def, ignore_bind_def,
+       get_accounts_def, lift_sum_def, return_def, raise_def,
+       vyperMiscTheory.sum_CASE_rator] >> rpt strip_tac >> gvs[] >>
+     imp_res_tac precompile_call_success_state >> gvs[]) >>
+  `?delta. addr_st.storage_trace = tail_st.storage_trace ++ delta` by
+    metis_tac[storage_trace_frame_prefix, cj 6 evaluate_storage_trace_frame] >>
+  `storage_well_formed_on cx tail_st (FST H) /\
+   storage_observations_ok cx H tail_st.storage_trace` by
+    (qpat_x_assum `!initial_st selected env st res st0. well_typed_exprs env (TL es) /\ _ ==> _`
+      (qspecl_then [`initial_st`,`selected`,`env`,`st`,`INL tail_vs`,`tail_st`] mp_tac) >>
+     (impl_tac >- (rpt conj_tac >> (fn g =>
+       if is_exists (snd g) then
+         (qexists_tac `delta ++ sfx` >> asm_rewrite_tac[listTheory.APPEND_ASSOC]) g
+       else first_assum ACCEPT_TAC g))) >> simp[]) >>
+  `runtime_consistent env cx tail_st` by
+    metis_tac[eval_exprs_preserves_runtime_consistent] >>
+  `IS_SOME tail_st.outcomes` by
+    (qpat_assum `eval_exprs cx (TL es) st = _`
+       (mp_then Any mp_tac (cj 6 eval_outcome_suffix_mutual)) >>
+     disch_then (mp_tac o MATCH_MP outcome_suffix_modes) >>
+     Cases_on `st.outcomes` >> Cases_on `tail_st.outcomes` >> simp[] >> metis_tac[]) >>
+  `valid_horizon cx initial_st H tail_st.storage_trace` by
+    (qpat_x_assum `valid_horizon cx initial_st H st.storage_trace` mp_tac >>
+     pure_rewrite_tac[valid_horizon_def] >> strip_tac >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `storage_well_formed_on cx addr_st (FST H) /\
+   storage_observations_ok cx H addr_st.storage_trace` by
+    (qpat_x_assum `!initial_st selected env st res st0. well_typed_exprs env [addr] /\ _ ==> _`
+      (qspecl_then [`initial_st`,`selected`,`env`,`tail_st`,`addr_res`,`addr_st`] mp_tac) >>
+     (impl_tac >- (rpt conj_tac >> (fn g =>
+        if is_exists (snd g) then
+          (qexists_tac `sfx` >> asm_rewrite_tac[]) g
+        else first_assum ACCEPT_TAC g))) >> simp[]) >>
+  conj_tac >- metis_tac[storage_well_formed_on_backends] >>
+  qpat_assum `st'.storage_trace = addr_st.storage_trace`
+    (fn th => PURE_REWRITE_TAC [th]) >> first_assum ACCEPT_TAC
 QED
 
 Finalise finite_prefix_Expr_Builtin
