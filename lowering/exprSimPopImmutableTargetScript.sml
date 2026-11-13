@@ -224,7 +224,7 @@ Proof
   fs[expr_post_def]
 QED
 
-Theorem imm_target_root_assignable[local]:
+Theorem imm_target_root_assignable:
   !env cx es cenv src id ty.
     expr_sim_inv cenv cx env es /\
     type_place_target env (TopLevelNameTarget (src,id)) = SOME (Type ty) /\
@@ -245,7 +245,7 @@ Proof
   gvs[well_typed_expr_def]
 QED
 
-Theorem imm_target_root_layout[local]:
+Theorem imm_target_root_layout:
   !env cx es cenv src id ty.
     expr_sim_inv cenv cx env es /\
     FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==>
@@ -1023,7 +1023,7 @@ Proof
   simp[evaluate_subscripts_def]
 QED
 
-Theorem imm_attr_place_step[local]:
+Theorem imm_attr_place_step:
   !cenv cx env es pv w sid fld fty res ee.
     expr_sim_inv cenv cx env es /\
     imm_place_at cenv cx es pv w (StructT sid) /\
@@ -1055,7 +1055,7 @@ Proof
   REFL_TAC
 QED
 
-Theorem imm_attr_source_tail[local]:
+Theorem imm_attr_source_tail:
   !cenv cx es pv w ty fld res ee.
     imm_place_at cenv cx es pv w ty /\
     extend_place cx pv (AttrSubscript fld) es = (res,ee) /\
@@ -1074,7 +1074,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem imm_target_post_add[local]:
+Theorem imm_target_post_add:
   !ctx func cenv cx es sa sm sb s0 ee pv ty rb s dst w0 off pv' ty'.
     imm_target_post ctx func cenv cx es sa sm s0 ee pv ty rb s /\
     local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -1109,7 +1109,7 @@ Proof
   simp[update_var_def] >> metis_tac[]
 QED
 
-Theorem imm_target_post_inst_idx[local,simp]:
+Theorem imm_target_post_inst_idx[simp]:
   !ctx func cenv cx es sa sb s0 ee pv ty r s n.
     imm_target_post ctx func cenv cx es sa sb s0 ee pv ty r
       (s with vs_inst_idx := n) <=>
