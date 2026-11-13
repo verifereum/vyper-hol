@@ -48,7 +48,8 @@ Theorem builtin_value_source_no_halt[local]:
     res <> INR HaltException
 Proof
   rpt gen_tac >> BETA_TAC >>
-  Cases_on `builtin_result cx st.accounts ann bt ts vs` >> simp[]
+  Cases_on `builtin_result cx st.accounts ann bt ts vs` >> rw[] >>
+  strip_tac >> gvs[exprSimWordArgsTheory.builtin_result_not_halt]
 QED
 
 Theorem hash_compile_typed_unary_builtin_vv_sim_ptr:
