@@ -6,13 +6,13 @@ Ancestors
 (* Allocation boundary: code membership is discharged from the compilation
    interval rather than exposed to materialization's semantic consumer. *)
 Theorem materialize_alloc_run:
-  !ctx func ce cx es sa sm buf ty s.
+  !H ctx func ce cx es sa sm buf ty s.
     compile_alloc_buffer (type_memory_bytes ce ty) sa = (buf,sm) /\
-    fn_has_code sa sm func /\ stmt_state_rel ctx func ce cx es s /\
+    fn_has_code sa sm func /\ stmt_state_rel H ctx func ce cx es s /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
     type_memory_bytes ce ty < dimword (:256) ==>
     ?u w. run_inst_seq (emitted_insts sa sm) s = OK u /\
-      stmt_state_rel ctx func ce cx es u /\
+      stmt_state_rel H ctx func ce cx es u /\
       eval_operand buf.buf_operand u = SOME w /\
       FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_bytes ce ty) /\
       w2n w + type_memory_bytes ce ty < dimword (:256) /\
