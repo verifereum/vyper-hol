@@ -293,7 +293,8 @@ Resume ptr_mstore_write_producer[classified]:
      >- (qexists_tac `a.po_fn` >> simp[]) >>
      conj_tac >- (qexistsl [`C'`, `rpolicy`] >> fs[]) >>
      rpt (goal_assum (drule_at Any)) >> simp[])
-  >- (fs[Abbr `ops`] >> suspend "fixed") >>
+  >- (qpat_x_assum `w2n addr + 32 <= lo \/ _` (assume_tac o REWRITE_RULE [DISJ_EQ_IMP]) >>
+      fs[Abbr `ops`] >> suspend "fixed") >>
   fs[Abbr `ops`] >> suspend "owned"
 QED
 
