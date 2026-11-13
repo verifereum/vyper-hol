@@ -11,7 +11,7 @@ Ancestors
   bodyFullExprGeneric bodyFullShared bodyFullPreds bodySimFull
   gasOutcomeFullCompose gasOutcomeFull fragGasSeqPtr fragGasEmitCtrl
   gasShadowCompile gasShadowState gasShadow
-  exprSendPtr bodyMemSend exprSimSend exprSimHypsDefs bodySim
+  exprSendPtr exprSimSend exprSimHypsDefs bodySim
   exprLowering vyperAST vyperInterpreter list
 
 val _ = Parse.hide "body";

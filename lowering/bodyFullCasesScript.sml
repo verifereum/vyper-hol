@@ -12,6 +12,7 @@ Ancestors
   bodyFullAppend annAssignPtrFacts bodyFullIfExp
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullCtrlCases
+  bodyFullRawCall
   gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
@@ -591,13 +592,13 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_raw_call_case_ptr_at (bodyPtrCallCases). *)
+(* The raw-call leaf shares one source, memory and pointer witness. *)
 Theorem body_raw_call_case_full:
   !cx ty flags es v18.
     body_exprs_full_ok cx es ==>
     body_expr_full_ok cx (Call ty (RawCallTarget flags) es v18)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullRawCallTheory.raw_call_expr_full_ok
 QED
 
 (* Admitted: the joint twin of body_raw_log_case_ptr_at (bodyPtrCallCases). *)
