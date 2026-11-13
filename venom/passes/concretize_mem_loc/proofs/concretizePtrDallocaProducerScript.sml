@@ -187,7 +187,7 @@ Proof
        ptr_tagged_step_def, step_writes_def,
        source_memory_write_ranges_def, fixed_source_write_range_def, range_bytes_def] >>
   (reverse conj_tac >- fs[Abbr `post`, update_var_def] >>
-   qexistsl_tac [`0`, `post`] >> fs[Abbr `post`, update_var_def])
+   qexistsl_tac [`0`, `post`] >> fs[Abbr `post`, update_var_def] >> rfs[])
 QED
 
 Resume ptr_paired_prefix_dalloca[operands]:
