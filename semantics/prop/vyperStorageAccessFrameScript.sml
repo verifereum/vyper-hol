@@ -2033,8 +2033,8 @@ Resume evaluate_finite_frame[intcall]:
     (irule call_evaluation_safe_mono >> goal_assum (drule_at Any) >>
      simp[int_calls_expr_def]) >>
   gvs[accesses_expr_def, int_calls_expr_def, risky_call_target_def] >>
-  Cases_on `eval_expr_results cx es r` >>
-  rename1 `eval_expr_results cx es r = (args_res,args_st)` >>
+  Cases_on `eval_exprs cx es r` >>
+  rename1 `eval_exprs cx es r = (args_res,args_st)` >>
   `^frame cx A r args_st` by
     (BETA_TAC >> rewrite_tac [GSYM AND_IMP_INTRO] >>
      asm "arguments_frame" irule >>
@@ -2049,9 +2049,9 @@ Resume evaluate_finite_frame[intcall]:
   asm_x "arguments_frame" kall_tac >>
   reverse (Cases_on `args_res`) >> simp[]
   >- (strip_tac >> gvs[] >> asm "args_prefix" (ACCEPT_TAC o BETA_RULE)) >>
-  rename1 `eval_expr_results cx es r = (INL results,args_st)` >>
+  rename1 `eval_exprs cx es r = (INL results,args_st)` >>
   qspecl_then [`cx`,`es`] (drule_all o CONJUNCT1)
-    (cj 11 eval_scc_type_sound_results_mutual) >> strip_tac >>
+    (cj 6 eval_scc_type_sound_results_mutual) >> strip_tac >>
   qpat_assum `lift_option_type (get_module_code cx src_id_opt) _ _ = _`
     (strip_assume_tac o SRULE [lift_option_type_def, option_CASE_rator, AllCaseEqs(), return_def, raise_def]) >>
   qpat_assum `lift_option_type (lookup_callable_function cx.in_deploy fn _) _ _ = _`
@@ -2151,10 +2151,6 @@ Resume evaluate_finite_frame[intcall]:
   drule_all (CONJUNCT1 (SPEC_ALL (cj 6 eval_scc_type_sound_results_mutual))) >>
   strip_tac >>
   BasicProvers.TOP_CASE_TAC >>
-  imp_res_tac read_results_state >> BasicProvers.VAR_EQ_TAC >>
-  reverse BasicProvers.TOP_CASE_TAC
-  >- (strip_tac >> gnvs[] >> asm "call_prefix" (ACCEPT_TAC o BETA_RULE)) >>
-  BasicProvers.TOP_CASE_TAC >>
   imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
   reverse BasicProvers.TOP_CASE_TAC
   >- (strip_tac >> gnvs[] >> asm "call_prefix" (ACCEPT_TAC o BETA_RULE)) >>
@@ -2230,7 +2226,6 @@ Resume evaluate_finite_frame[intcall]:
       (set_scopes args_st.scopes) args_st =
       (INL dflt_vals,dst with scopes := args_st.scopes)` by
     simp[finally_def, ignore_bind_def, bind_def, set_scopes_def, return_def] >>
-  disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   disch_then (drule o REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
   `lift_option_type (evaluate_type (get_tenv cx) fret)
@@ -2787,7 +2782,7 @@ QED
 Resume evaluate_finite_frame[expr_subscript]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `^callable_closed cx A R` (mk_asm "closure") >>
-  qpat_x_assum `!s tv t. _ ==> _` (mk_asm "index_ih") >>
+  qpat_x_assum `!s tv t s1 tv1 t1. eval_expr _ _ _ = _ /\ _ ==> _` (mk_asm "index_ih") >>
   qpat_x_assum `!A R env st res st'. _` (mk_asm "base_ih") >>
   gvs[Once vyperTypeSystemTheory.well_typed_expr_def] >>
   gvs[accesses_expr_def, int_calls_expr_def] >>
@@ -2807,9 +2802,22 @@ Resume evaluate_finite_frame[expr_subscript]:
   simp[Once evaluate_def, bind_def] >>
   reverse (Cases_on `r1`) >> simp[]
   >- (strip_tac >> gvs[] >> asm "prefix" (ACCEPT_TAC o SRULE [])) >>
-  strip_tac >>
   rename1 `eval_expr cx e st = (INL pv,s1)` >>
-  asm_x "index_ih" (qspecl_then [`st`,`pv`,`s1`] mp_tac) >>
+  Cases_on `(if subscript_reads_base cx e e' then
+    bind (read_result cx pv) (\v. return (Value v))
+    else return pv) s1` >>
+  rename1 `_ s1 = (early_res,early_st)` >>
+  `early_st = s1` by
+    (qpat_assum `_ s1 = (early_res,early_st)` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `subscript_reads_base cx e e'` >>
+     simp[bind_def, return_def, AllCaseEqs()] >> rpt strip_tac >>
+     imp_res_tac read_result_state >> gvs[]) >>
+  qpat_x_assum `early_st = s1` SUBST_ALL_TAC >>
+  reverse (Cases_on `early_res`) >> simp[]
+  >- (strip_tac >> gvs[] >> asm "prefix" (ACCEPT_TAC o SRULE [])) >>
+  rename1 `_ s1 = (INL early_tv,s1)` >>
+  strip_tac >>
+  asm_x "index_ih" (qspecl_then [`st`,`pv`,`s1`,`s1`,`early_tv`,`s1`] mp_tac) >>
   simp[] >> disch_then (mk_asm "index_ih") >>
   qspecl_then [`cx`,`e`] (drule_all o CONJUNCT1)
     (cj 5 eval_scc_type_sound_results_mutual) >> strip_tac >> gvs[] >>
