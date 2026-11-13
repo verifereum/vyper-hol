@@ -33,7 +33,8 @@ Theorem word_not_typed_suffix[local]:
     cenv.ce_flag_n_members (nsid_to_string nsid) = m) /\
   (if ann = BaseT BoolT then emit_op ISZERO [x]
    else compile_invert x ann cenv) sa = (op,sb) /\
-  fn_has_code sa sb func /\ ~s.vs_halted /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand x s = SOME (typed_val_to_w256 tv v) /\
@@ -44,9 +45,13 @@ Theorem word_not_typed_suffix[local]:
   (!y sz. cenv.ce_return_pc = SOME (PtrVar (Var y) sz) ==>
     not_fresh_at sa y) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s /\
     ghost_inv_at (DF H) lo d cenv cx es G tn s) ==>
   ?v' t G' tn'.
     unop_result cx ann Not tys v es = INL v' /\
+    alloca_history func t /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx es t) /\
     (!H. valid_horizon cx st0 H es.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
         (s,G,tn) [] (OK t,G',tn')) /\
@@ -146,6 +151,21 @@ Proof
        ptrDisciplineTheory.range_bytes_def, ptrDisciplineTheory.store_taint_def,
        ptrDisciplineTheory.imm_taint_def, ptrDisciplineTheory.adopt_reset_def] >>
      simp[ptrDisciplineTheory.taint_component_equality]) >>
+  `alloca_history func z` by
+    (`~is_terminator inst.inst_opcode` by
+       (qpat_x_assum `k = ISZERO \/ _` strip_assume_tac >>
+        simp[Abbr `inst`, mk_inst_def, is_terminator_def]) >>
+     `step_inst_base inst s = OK u` by simp[Abbr `inst`, Abbr `u`] >>
+     `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+     drule_all allocaHistoryTheory.alloca_history_base_step >>
+     simp[Abbr `z`]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es z` by
+    (rpt strip_tac >> simp[Abbr `z`, Abbr `u`,
+       exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
+     irule exprLoweringPropsTheory.stmt_state_rel_update_var >>
+     simp[Abbr `out`] >> irule exprLoweringPropsTheory.local_ptrs_reserved_fresh >>
+     qexists_tac `sa` >> simp[]) >>
   qexistsl_tac [`v'`, `z`, `step_prov PG G inst u`,
     `step_taint inst s u tn`] >> simp[] >>
   conj_tac
@@ -178,4 +198,40 @@ Proof
   `y <> out` by gvs[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `out`] >>
   simp[FLOOKUP_UPDATE, GSYM ptrDisciplineTheory.op_taint_def] >>
   irule step_prov_other_output >> simp[Abbr `inst`, mk_inst_def]
+QED
+
+Theorem word_not_sim_full:
+  !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
+    (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
+       (~is_word_type (expr_type e) ==>
+        !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =
+                SOME tvt ==> type_memory_size tvt = 0) /\
+       expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+         cenv cx ty e es /\
+       (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\
+       (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
+       expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+         cenv cx ty e es) /\
+    bt = Not /\
+    (builtin_args_length_ok bt (LENGTH args) ==> body_exprs_full_ok cx args) /\
+    body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (Builtin a bt args) es ==>
+    expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin a bt args) es /\
+    expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Builtin a bt args) es
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule word_not_pre >>
+  disch_then (qx_choose_then `e` (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `args = [e]` SUBST_ALL_TAC >>
+  qpat_x_assum `a = expr_type e` SUBST_ALL_TAC >>
+  `body_exprs_full_ok cx [e]` by
+    (first_x_assum irule >> simp[builtin_args_length_ok_def]) >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (expr_type e) e es` by
+    (qpat_x_assum `body_exprs_full_ok cx [e]` mp_tac >>
+     simp[body_exprs_full_ok_def] >>
+     simp[Once body_expr_full_ok_def] >> metis_tac[]) >>
+  FAIL_TAC "Not consumer: child judgment ready"
 QED
