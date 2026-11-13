@@ -8,7 +8,8 @@ Ancestors bodyMemAssignTopCopyFacts assignBasePtrStorageTypes assignBasePtrStora
   exprSimDefs fragExec exprLoweringProps vyperState assignBasePtrStorageDirect
   exprOperandVar venomState vyperTyping vyperStorageBackend
   assignBasePtrStorageExtent assignBasePtrStorageLoop exprSimHyps valueEncodingProps
-  list exprOpenTerminals exprOpenPrimitives emitHelperProps venomInst bodySimStmtCases exprSimSource
+  list exprOpenTerminals exprOpenPrimitives emitHelperProps venomInst bodySimStmtCases exprSimSource abiTypeBoundProps
+  vyperStorageCoverage
 Libs monadsyntax
 
 Theorem assign_base_storage_code_parts:
@@ -172,7 +173,7 @@ Resume compile_assign_storage_copy_eq_frag_ptr[operand]:
   `~t.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   `expr_val_at cenv cx (expr_type e) sa sB (es_end with gas_obs := [])
      v (Var root) t` by
-    (qpat_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
      qpat_assum `post_value_type cenv e = _`
        (fn th => rewrite_tac[expr_post_def, th]) >>
      rpt strip_tac >> first_assum ACCEPT_TAC) >>
@@ -181,12 +182,12 @@ QED
 Resume compile_assign_storage_copy_eq_frag_ptr[counted]:
   qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by simp[] >>
+  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by simp[] >>
   `compile_assign_value cenv (Lit k) (if tr then LocTransient else LocStorage)
      (Var root) F (vv_location vv) (expr_type e) (lowered_value_type cenv e)
      (type_memory_bytes cenv (expr_type e)) sB = ((),sb)` by metis_tac[] >>
   drule_all assign_base_storage_typed_counted >>
-  disch_then (qspecl_then [`cx_dead H cx`, `PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`cx_dead cx`, `PG`] strip_assume_tac) >>
   suspend "post"
 QED
 
@@ -203,24 +204,30 @@ Resume compile_assign_storage_copy_eq_frag_ptr[post]:
     (drule_all assign_base_storage_rhs_bound >> strip_tac >>
      drule_all expr_body_pre_copy_ok >> strip_tac >>
      gvs[type_memory_size_slots] >> decide_tac) >>
-  `stmt_state_rel H ctx func cenv cx ee model` by
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    fs[expr_sim_inv_def] >>
+  `~vyper_is_dynamic (get_tenv cx) (expr_type e)` by
+    (drule_all abi_props_vyper_typed >> simp[]) >>
+  `!i. i < type_slot_size tv ==> MEM i (MAP FST writes)` by
+    (rpt strip_tac >> irule encode_value_live_written >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx ee model` by
     (simp[Abbr `model`] >> irule assign_base_store_prefix_state_region >>
      simp[] >> metis_tac[]) >>
   `local_ptrs_reserved cenv sB` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
      simp[] >> drule (cj 2 compile_expr_grows) >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx ee u` by
+  `stmt_state_rel ctx func cenv cx ee u` by
     (irule assign_base_store_endpoint_state >>
      qexistsl_tac [`model`, `sB`] >> asm_rewrite_tac[] >>
      simp[Abbr `model`, assign_base_storage_model_lookup]) >>
   `!m. mem_agree_outside tn.t_mem t.vs_memory m ==>
      val_in_memory tv v (w2n b) m` by
     (fs[ptr_val_ok_def, ptr_mem_ok_def] >> metis_tac[]) >>
-  `stor_taint_ok H cx tf u` by
+  `stor_taint_ok cx tf u` by
     (irule assign_base_store_stor_taint_ok >>
      goal_assum (drule_at (Pat `assign_base_store_frame _ _ _ _ _ _ _ _`)) >>
      simp[] >>
-     `stor_taint_ok H cx tn t /\ t.vs_call_ctx.cc_address = cx.txn.target` by
+     `stor_taint_ok cx tn t /\ t.vs_call_ctx.cc_address = cx.txn.target` by
        fs[ghost_inv_def, stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
      metis_tac[]) >>
   suspend "ghost"

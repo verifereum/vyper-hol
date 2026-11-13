@@ -2,18 +2,17 @@
 Theory assignBasePtrSourceBound
 Ancestors bodyPtrDefs loweringPosts exprLoweringProps compileEnv loweringStateRelDefs exprLowering
   valueEncoding valueEncodingDefs venomState ptrDiscipline words finite_map vyperTyping vyperValue valueEncodingProofs exprSimProps vyperAST vyperState vyperContext accountsRelProps
-  fcgDefs relation venomMemDefs pred_set venomInst list vyperStorageFootprint
+  fcgDefs relation venomMemDefs pred_set venomInst list
 
 (* Identity framing isolates the substantive placement and state relation
    obligations; no execution claim is made here. *)
 Theorem assign_base_ptr_identity_post:
   !ctx func cenv cx e es sa sb s v op.
-    stmt_state_rel H ctx func cenv cx es s /\
-    storage_well_formed_on cx es (FST H) /\
+    stmt_state_rel ctx func cenv cx es s /\
     post_value_type cenv e = expr_type e /\
     expr_val_rel cx (expr_type e) v op s /\
     expr_val_at cenv cx (expr_type e) sa sb es v op s ==>
-    expr_post H ctx func cenv cx e es sa sb s es v op s
+    expr_post ctx func cenv cx e es sa sb s es v op s
 Proof
   simp[expr_post_def]
 QED
@@ -71,14 +70,13 @@ QED
    at the indicated address remains to be checked. *)
 Theorem assign_base_ptr_source_bound_conditional:
   !ctx func cenv cx es s.
-    stmt_state_rel H ctx func cenv cx es s /\
-    storage_well_formed_on cx es (FST H) /\
+    stmt_state_rel ctx func cenv cx es s /\
     lookup_var "p" s = SOME (n2w (dimword(:256)-64)) /\
     mem_word_at (dimword(:256)-64) s.vs_memory = 0w /\
     FLOOKUP s.vs_allocas 0 = SOME (dimword(:256)-64,32) /\
     (!n b sz. ~local_region cenv es.scopes s n b sz) ==>
     ?e sa sb G tn v op w off tv.
-      expr_post H ctx func cenv cx e es sa sb s es v op s /\
+      expr_post ctx func cenv cx e es sa sb s es v op s /\
       ptr_val_ok cx (expr_type e) v op G tn s /\
       ptr_buf_ok cenv e op G s /\
       evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -118,8 +116,9 @@ Theorem assign_base_ptr_empty_state_rel:
     es.outcomes = SOME s.vs_outcomes /\
     s.vs_accounts = es.accounts /\ s.vs_transient = es.tStorage /\
     call_ctx_rel cx.txn s.vs_call_ctx s.vs_tx_ctx s.vs_block_ctx /\
-    ~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static ==>
-    state_rel H func cenv cx es s
+    ~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static /\
+    s.vs_code = cx.txn.code ==>
+    state_rel func cenv cx es s
 Proof
   rpt strip_tac >>
   simp[state_rel_def, local_ptrs_rel_def, local_region_def,
@@ -127,7 +126,7 @@ Proof
        immutables_rel_def, logs_rel_def, accounts_rel_def,
        get_module_code_def] >>
   `s.vs_call_ctx.cc_address = cx.txn.target` by gvs[call_ctx_rel_def] >>
-  `accounts_rel H cx es s` by simp[accounts_rel_def] >>
+  `accounts_rel cx es s` by simp[accounts_rel_def] >>
   drule_all accounts_rel_storage_transient >> simp[]
 QED
 
@@ -155,7 +154,7 @@ QED
 Theorem assign_base_ptr_ordinary_state_exists:
   !func mem vars allocas frontier.
     ?cenv cx es s.
-      state_rel H func cenv cx es s /\
+      state_rel func cenv cx es s /\
       ~cenv.ce_is_ctor /\ cenv.ce_imm_alloca = NONE /\ es.scopes = [] /\
       s.vs_memory = mem /\ s.vs_vars = vars /\
       s.vs_allocas = allocas /\ s.vs_alloca_next = frontier
@@ -176,7 +175,8 @@ Proof
                 vs_alloca_next := frontier; vs_accounts := (ARB:evaluation_state).accounts;
                 vs_transient := (ARB:evaluation_state).tStorage; vs_logs := []; vs_requests := [];
                 vs_pending_deletions := []; vs_outcomes := [];
-                vs_call_ctx := cc; vs_tx_ctx := tc; vs_block_ctx := bc|>`] >>
+                vs_call_ctx := cc; vs_tx_ctx := tc; vs_block_ctx := bc;
+                vs_code := tx.code|>`] >>
   simp[] >> irule assign_base_ptr_empty_state_rel >>
   gvs[Abbr `tx`, call_ctx_rel_def]
 QED
@@ -209,12 +209,12 @@ QED
 
 Theorem assign_base_ptr_empty_stmt_state:
   !ctx func cenv cx es s.
-    state_rel H func cenv cx es s /\
+    state_rel func cenv cx es s /\
     func.fn_blocks = [] /\ ctx.ctx_functions = [func] /\
     ~cenv.ce_is_ctor /\ cenv.ce_imm_alloca = NONE /\
     s.vs_allocas = FEMPTY |+ (0,(dimword(:256)-64,32)) /\
     s.vs_alloca_next = dimword(:256)-32 ==>
-    stmt_state_rel H ctx func cenv cx es s
+    stmt_state_rel ctx func cenv cx es s
 Proof
   rpt strip_tac >>
   `alloca_room ctx func s /\ fmp_room ctx func s` by
@@ -227,7 +227,7 @@ QED
 
 Theorem assign_base_ptr_source_bound_state_exists:
   ?ctx func cenv cx es s.
-    stmt_state_rel H ctx func cenv cx es s /\
+    stmt_state_rel ctx func cenv cx es s /\
     lookup_var "p" s = SOME (n2w (dimword(:256)-64)) /\
     mem_word_at (dimword(:256)-64) s.vs_memory = 0w /\
     FLOOKUP s.vs_allocas 0 = SOME (dimword(:256)-64,32) /\
@@ -247,8 +247,8 @@ QED
 (* The full exported expression post does not entail whole-buffer no-wrap.
    This remains an interface counterexample, not a statement execution. *)
 Theorem assign_base_ptr_source_bound_counterexample:
-  ?H ctx func cenv cx es s e sa sb G tn v op w off tv.
-    expr_post H ctx func cenv cx e es sa sb s es v op s /\
+  ?ctx func cenv cx es s e sa sb G tn v op w off tv.
+    expr_post ctx func cenv cx e es sa sb s es v op s /\
     ptr_val_ok cx (expr_type e) v op G tn s /\
     ptr_buf_ok cenv e op G s /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -256,9 +256,7 @@ Theorem assign_base_ptr_source_bound_counterexample:
     off < type_memory_bytes cenv (lowered_value_type cenv e) /\
     ~(w2n w + off < dimword(:256))
 Proof
-  strip_assume_tac (Q.SPEC `([],[])`
-    (GEN_ALL assign_base_ptr_source_bound_state_exists)) >>
-  drule assign_base_ptr_source_bound_conditional >>
-  impl_tac >- fs[storage_well_formed_on_def] >>
-  strip_tac >> qexists_tac `([],[])` >> metis_tac[]
+  strip_assume_tac assign_base_ptr_source_bound_state_exists >>
+  drule_all assign_base_ptr_source_bound_conditional >>
+  metis_tac[]
 QED

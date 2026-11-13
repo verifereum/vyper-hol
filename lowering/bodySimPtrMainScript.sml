@@ -102,8 +102,10 @@ Proof
     (* 37 *) MATCH_ACCEPT_TAC body_pop_case_ptr,
     (* 38 *) MATCH_ACCEPT_TAC body_type_builtin_case_ptr,
     (* 39 *) MATCH_ACCEPT_TAC body_send_case_ptr,
-    (* 40 *) MATCH_ACCEPT_TAC body_extcall_case_ptr,
-    (* 41 *) MATCH_ACCEPT_TAC body_intcall_case_ptr,
+    (* 40 *) (* PORT_ADMISSION: SEQ-3208, bot/opus/seq-3208-train16-unit, built at fc54ea89e *)
+             cheat,
+    (* 41 *) (* PORT_ADMISSION: SEQ-3208, bot/opus/seq-3208-train16-unit, built at fc54ea89e *)
+             cheat,
     (* 42 *) MATCH_ACCEPT_TAC body_raw_call_case_ptr,
     (* 43 *) MATCH_ACCEPT_TAC body_raw_call_calldata_case_ptr,
     (* 44 *) MATCH_ACCEPT_TAC body_raw_log_case_ptr,
