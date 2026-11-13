@@ -190,3 +190,30 @@ Proof
   simp[] >> rpt strip_tac >> gvs[] >>
   drule val_store_size_le >> decide_tac
 QED
+
+(* vv_post moves from one horizon to another at a state whose four
+   storage-relevant fields match one related at the new horizon: only
+   stmt_state_rel, storage_well_formed_on and the storage liveness of
+   the value depend on the horizon. *)
+Theorem vv_post_fields_transport:
+  !(H0:(bool # bytes32 # type_value) list # num list)
+   (H:(bool # bytes32 # type_value) list # num list)
+   ctx func cenv cx e es sa sb s0 es' tv vv u s.
+  vv_post H0 ctx func cenv cx e es sa sb s0 es' tv vv u /\
+  stmt_state_rel H ctx func cenv cx es' s /\
+  storage_well_formed_on cx es' (FST H) /\
+  u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+  u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx /\
+  (~expr_has_effect e ==> vv_storage_live H cx vv es' u) ==>
+  vv_post H ctx func cenv cx e es sa sb s0 es' tv vv u
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+  `stmt_state_rel H ctx func cenv cx es' u` by
+    metis_tac[INST_TYPE [alpha |-> ``:256``]
+      exprLoweringPropsTheory.stmt_state_rel_fields_transport] >>
+  rewrite_tac[vv_post_def] >> rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  strip_tac >> res_tac
+QED
