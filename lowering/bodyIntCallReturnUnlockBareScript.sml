@@ -90,7 +90,8 @@ Proof
   fs[intcall_joint_res_def, intcall_expr_res_def, intcall_frame_ok_def,
      returns_stack_count_def, vyperValueTheory.evaluate_type_def,
      eval_operand_return_unlock] >>
-  simp[intret_q_def] >> qexists_tac `s` >>
+  irule intret_q_intro >>
+  qexistsl_tac [`<|iret_values := []; iret_adopt_fmp := NONE|>`, `s`] >>
   simp[result_rel_def, intret_vals_match_def, state_rel_gas_obs] >>
   irule constructor_exit_state_rel >> qexists_tac `ce` >>
   fs[stmt_state_rel_def, state_rel_gas_obs]
