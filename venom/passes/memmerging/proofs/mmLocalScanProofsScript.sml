@@ -20259,6 +20259,45 @@ Proof
   Cases_on `j = r` >> gvs[MEM_APPEND, MEM_FILTER, MEM_COUNT_LIST]
 QED
 
+Theorem mm_local_calldata_due_captures_some[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) CalldataMerge bb).ss_flushed /\
+  r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r) /\
+  mm_local_history is H (SUC r) ==>
+  !j. MEM j (due ++ [r]) ==> IS_SOME (mm_local_calldata_capture is H (SUC r) j)
+Proof
+  strip_tac >>
+  `due = FILTER (\j. j < r /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    MEM (EL j is).inst_id g.cg_inst_ids) (COUNT_LIST r)` by
+    (irule mm_local_canonical_due_group >> metis_tac[]) >>
+  qpat_x_assum `due = FILTER (\j. mm_local_rep_index _ _ j = _) _` kall_tac >>
+  drule_all mm_local_canonical_rep_write >> strip_tac >>
+  `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  gen_tac >> strip_tac >>
+  `j < SUC r /\ j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+    (Cases_on `j = r` >> gvs[MEM_APPEND, MEM_FILTER, MEM_COUNT_LIST] >> decide_tac) >>
+  `MEM g (scan_block (dfg_build_function fn0) CalldataMerge bb).ss_flushed` by metis_tac[] >>
+  drule_all (REWRITE_RULE [mode_copy_opcode_def]
+    (Q.INST [`mode` |-> `CalldataMerge`] mm_local_final_write_birth)) >> strip_tac
+  >- simp[mm_local_calldata_capture_def, venomStateTheory.eval_operand_def] >>
+  `step_inst_base (EL j is) (H j) = OK (H (SUC j))` by
+    metis_tac[mm_local_history_def] >>
+  Cases_on `lookup_var v (H j)`
+  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      simp[venomExecSemanticsTheory.step_inst_base_def,
+        venomExecSemanticsTheory.exec_write2_def, venomStateTheory.eval_operand_def]) >>
+  simp[mm_local_calldata_capture_def, mm_local_write_capture_def,
+    venomStateTheory.eval_operand_def]
+QED
+
 Theorem mm_local_payload_due_extent[local]:
   mm_local_group_coverage is n cap g /\
   mm_local_group_endpoint is n cap g /\
