@@ -3217,6 +3217,15 @@ Proof
   simp[vyperContextTheory.builtin_args_length_ok_def] >>
   conj_tac
   >- (rpt strip_tac >>
+      gvs[compile_uint2str_singleton] >> pairarg_tac >> gvs[] >> metis_tac[]) >>
+  conj_tac
+  >- (  rpt strip_tac >> simp[cs_appends_def] >> rpt strip_tac >>
+  Cases_on `compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm` >>
+  gvs[exprLoweringTheory.as_ptr_val_def] >>
+  irule (SRULE [cs_appends_def] uint2str_suffix_appends) >>
+  goal_assum (drule_at Any))
+  >>
+  (rpt strip_tac >>
       qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
       qmatch_asmsub_rename_tac `bind _ _ (es with gas_obs := gs0) = (INL v0, es1)` >>
       `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
@@ -3257,13 +3266,5 @@ Proof
             (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
              strip_tac >> gvs[vv_storage_live_def]) >>
           simp[])
-      >- (qexistsl_tac [`m`, `r`] >> simp[])) >>
-  conj_tac
-  >- (rpt strip_tac >>
-      gvs[compile_uint2str_singleton] >> pairarg_tac >> gvs[] >> metis_tac[]) >>
-  rpt strip_tac >> simp[cs_appends_def] >> rpt strip_tac >>
-  Cases_on `compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm` >>
-  gvs[exprLoweringTheory.as_ptr_val_def] >>
-  irule (SRULE [cs_appends_def] uint2str_suffix_appends) >>
-  goal_assum (drule_at Any)
+      >- (qexistsl_tac [`m`, `r`] >> simp[]))
 QED
