@@ -20,6 +20,7 @@ Theorem gas_outcome_ptr_bind_all:
   (!v. storage_trace_frame (next v)) /\
   (!left v mid t G tn.
      gas_marked_exec F (ctx, func) source (es, s0) left (INL v) mid (OK t) /\
+     (?H. valid_horizon cx st0 H mid.storage_trace) /\
      (!H. valid_horizon cx st0 H mid.storage_trace ==>
           gas_path_ptr (D H) 0 ctx func PG G0 tn0 s0 (LENGTH left) G tn
             (OK t) /\
@@ -75,11 +76,15 @@ Proof
             >- (qpat_x_assum `!left v mid t G tn. _`
                   (qspecl_then [`marks`, `v`, `es_end`, `t`, `G`, `tn`]
                      mp_tac) >>
-                impl_tac >> simp[] >> gen_tac >> strip_tac >>
-                qpat_x_assum
-                  `!H. valid_horizon cx st0 H es_end.storage_trace ==> _`
-                  (drule_then strip_assume_tac) >>
-                gvs[exit_result_def]) >>
+                impl_tac >- (
+                  conj_tac >- simp[] >>
+                  conj_tac >- (qexists_tac `H` >> simp[]) >>
+                  gen_tac >> strip_tac >>
+                  qpat_x_assum
+                    `!H. valid_horizon cx st0 H es_end.storage_trace ==> _`
+                    (drule_then strip_assume_tac) >>
+                  gvs[exit_result_def]) >>
+                simp[]) >>
             rpt strip_tac >>
             qpat_x_assum `!left v mid t right err ee leaf fstate. _`
               (qspecl_then [`marks`, `v`, `es_end`, `t`, `right`,

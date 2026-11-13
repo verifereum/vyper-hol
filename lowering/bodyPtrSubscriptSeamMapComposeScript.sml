@@ -14,6 +14,7 @@ Theorem gas_outcome_bind_result_exec_ptr:
   (!v. storage_trace_frame (k v)) /\
   (!marks v mid G tn t.
     gas_marked_exec F (ctx,func) a (es,s0) marks (INL v) mid (OK t) /\
+    (?H. valid_horizon cx st0 H mid.storage_trace) /\
     (!H. valid_horizon cx st0 H mid.storage_trace ==>
          gas_path_ptr (D H) 0 ctx func PG G0 tn0 s0 (LENGTH marks) G tn
            (OK t) /\
@@ -53,6 +54,7 @@ Theorem gas_outcome_result_cases_ptr:
   (!v. storage_trace_frame (k v)) /\
   (!marks v mid G tn t.
     gas_marked_exec F (ctx,func) a (es,s0) marks (INL v) mid (OK t) /\
+    (?H. valid_horizon cx st0 H mid.storage_trace) /\
     (!H. valid_horizon cx st0 H mid.storage_trace ==>
          gas_path_ptr (D H) 0 ctx func PG G0 tn0 s0 (LENGTH marks) G tn
            (OK t) /\
@@ -80,6 +82,7 @@ Proof
           conj_tac
           >- (simp[gas_marked_exec_def, gas_marked_path_def] >>
               metis_tac[gas_path_ptr_erase]) >>
+          conj_tac >- (qexists_tac `H` >> simp[]) >>
           gen_tac >> strip_tac >>
           qpat_x_assum
             `!H. valid_horizon cx st0 H es_end.storage_trace ==> _`
