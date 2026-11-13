@@ -26,7 +26,7 @@ Ancestors
   loweringPosts vyperInterpreter vyperAST vyperTypeCallGraph vyperTypeSystem
   vyperTypeContract bodyCustomErrorRaise bodyCustomErrorAssert stmtSimCustomErrorPath
   bodyCustomErrorMemRaise bodyCustomErrorMemAssert stmtSimCustomErrorMemPath
-  bodyCustomErrorPtrRows stmtSimCustomErrorPtrTailEmpty
+  bodyCustomErrorPtrRows stmtSimCustomErrorPtrStore stmtSimCustomErrorPtrTailEmpty
 
 val _ = Parse.hide "body";
 
