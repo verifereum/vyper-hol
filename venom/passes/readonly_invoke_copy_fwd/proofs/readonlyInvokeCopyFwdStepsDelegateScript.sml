@@ -2,6 +2,7 @@ Theory readonlyInvokeCopyFwdStepsDelegate
 Ancestors
   readonlyInvokeCopyFwdStepsCore readonlyInvokeCopyFwdStepsMemory
   readonlyInvokeCopyFwdStepsEffects readonlyInvokeCopyFwdStepsExternalErrors
+  readonlyInvokeCopyFwdStepsExternalOracle venomCallOracleDefs
   readonlyInvokeCopyFwdRel readonlyInvokeCopyFwdValues o1LowerDloadShared
   o1LowerDloadConcreteExternal o1LowerDloadJointRelation
   taintAgree venomState venomExecSemantics ptrDiscipline
@@ -181,24 +182,43 @@ Proof
    s.vs_pending_deletions = t.vs_pending_deletions` by
     (irule ricf_frame_concrete_inputs >>
      fs[ricf_cert_core_def, ricf_live_boundary_core_def] >> metis_tac[]) >>
-  drule_all (ld_exec_delegatecall_transport |>
-    INST_TYPE [``:'h`` |-> ``:'f``] |> Q.INST [`ro'` |-> `ro`]) >>
-  strip_tac >> gvs[] >>
-  qmatch_asmsub_abbrev_tac `exec_delegatecall inst t gas addr ao' az ro rz = OK (update_var out w u)` >>
-  qexistsl [`w`, `r`, `u`] >>
-  simp[] >>
-  `ricf_cert_core D ids stk PG (ricf_effective_prov fn r H)
-    (ricf_effective_taint fn r (un with t_mem :=
-      un.t_mem DIFF {i | w2n ro <= i /\ i < w2n ro + LENGTH (TAKE (w2n rz) r.vs_returndata)}))
-    fn sites maps targets H (un with t_mem :=
-      un.t_mem DIFF {i | w2n ro <= i /\ i < w2n ro + LENGTH (TAKE (w2n rz) r.vs_returndata)})
-    cur curs r u` by
-    (unabbrev_all_tac >>
-     drule_at (Pat `extract_venom_result _ _ _ _ _ = _`) ricf_cert_extract_concrete >>
-     disch_then (irule o SIMP_RULE (srw_ss()) [venom_state_fupdcanon]) >>
-     reverse conj_tac >- (simp[] >> metis_tac[]) >>
+  `s.vs_call_ctx = t.vs_call_ctx` by fs[ld_joint_local_fields_def] >>
+  `LENGTH maps = LENGTH stk` by
+    fs[ricf_cert_core_def, ricf_live_boundary_core_def, ricf_live_stack_agree_def] >>
+  qabbrev_tac `rq = venom_call_request s addr 0w ao az F with cr_kind := DelegateMessageCall` >>
+  `venom_call_request t addr 0w ao' az F with cr_kind := DelegateMessageCall = rq` by
+    simp[Abbr`rq`, venom_call_request_def] >>
+  Cases_on `consume_call_outcome rq (w2n ro) (w2n rz) s` >>
+  rename1 `consume_call_outcome rq (w2n ro) (w2n rz) s = (w,r)` >>
+  Cases_on `consume_call_outcome rq (w2n ro) (w2n rz) t` >>
+  rename1 `consume_call_outcome rq (w2n ro) (w2n rz) t = (z,u)` >>
+  `s1 = update_var out w r` by
+    gvs[exec_delegatecall_def, LET_THM, Abbr`rq`, Excl "consume_call_outcome_eq"] >>
+  `!gam. MEM gam (MAP ricf_site_triples maps) ==>
+    ?j. j < LENGTH stk /\ gam = ricf_site_triples (EL j maps)` by
+    (simp[MEM_MAP, MEM_EL] >> metis_tac[]) >>
+  `w = z /\ ricf_cert_core D ids stk PG
+    (ricf_effective_prov fn r H)
+    (ricf_effective_taint fn r (ricf_call_taint un rq s r (w2n ro) (w2n rz))) fn
+    sites maps targets H (ricf_call_taint un rq s r (w2n ro) (w2n rz)) cur curs r u` by
+    (irule ricf_cert_consume_call >>
+     qpat_assum `ricf_cert_core _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `consume_call_outcome _ _ _ t = _` (irule_at Any) >>
+     simp[Abbr`rq`, venom_call_request_def, request_agree_except_def,
+       accounts_agree_except_def, transient_agree_except_def,
+       storage_agree_except_def, word_agree_except_def, Excl "consume_call_outcome_eq"] >>
+     rpt strip_tac >>
      `LENGTH (TAKE (w2n rz) r.vs_returndata) <= w2n rz` by simp[LENGTH_TAKE_EQ] >>
      metis_tac[ricf_interval_shorten, arithmeticTheory.ADD_COMM]) >>
+  `ricf_call_taint un rq s r (w2n ro) (w2n rz) = un with t_mem :=
+    un.t_mem DIFF {i | w2n ro <= i /\ i < w2n ro + LENGTH (TAKE (w2n rz) r.vs_returndata)}` by
+    simp[ricf_call_taint_def, taint_component_equality] >>
+  qpat_x_assum `ricf_call_taint _ _ _ _ _ _ = _` SUBST_ALL_TAC >>
+  qpat_x_assum `w = z` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
+  qexistsl [`w`, `r`, `u`,
+    `un.t_mem DIFF {i | w2n ro <= i /\ i < w2n ro + LENGTH (TAKE (w2n rz) r.vs_returndata)}`] >>
+  simp[exec_delegatecall_def, LET_THM, Abbr`rq`, Excl "consume_call_outcome_eq"] >>
   irule ricf_cert_bind >>
   simp[ricf_effective_prov_def, ricf_effective_taint_def] >>
   goal_assum (drule_at Any) >>
