@@ -2,6 +2,7 @@
 Theory fullStoreDense
 Ancestors
   fragGasCopyLoop fragGasOriginPtrDead fragGasSeqPtr
+  placeStoreCopyPath bodyMemAssignTopCopyPaths
   wordLoadStorePtr assignBasePtrWordStore stmtSimStoreCopy decoderGhostFramePtr
   context emitHelper emitHelperProps compileEnv codegenRel contextCodegenRel
   unitTransformDefs exprLoweringProps exprSimPtrTopLevelStorageCopy loweringStateRelDefs
@@ -155,4 +156,100 @@ Proof
     FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, toplevel_copy_source_taint_def,
     op_taint_def, EVAL ``COUNT_LIST 1``] >>
   fs[WORD_ADD_0, WORD_MULT_CLAUSES, venom_state_component_equality]
+QED
+
+Theorem dense_loop_compiled_origin_ptr:
+  compile_word_copy_loop (Var x) dst n LocMemory loc F sa = (u,sb) /\
+  fn_has_code sa sb func /\ (loc = LocStorage \/ loc = LocTransient) /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_call_ctx.cc_static /\
+  not_fresh_at sa x /\ (!y. dst = Var y ==> not_fresh_at sa y) /\
+  lookup_var x s = SOME b /\ ptr_covers G tn x s (32*n) /\
+  eval_operand dst s = SOME k /\ op_taint tn dst = {} /\
+  n < dimword(:256) /\ w2n b + 32*n < dimword(:256) /\
+  w2n b + 32*n <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tnf)) /\
+    store_copy_frame sa loc b k s n t /\ ~t.vs_halted /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+
+    (!y. not_fresh_at sa y ==> FLOOKUP Gf y = FLOOKUP G y /\
+                               op_taint tnf (Var y) = op_taint tn (Var y)) /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
+    (if loc = LocStorage then tnf.t_trans = tn.t_trans else tnf.t_stor = tn.t_stor) /\
+    toplevel_copy_source_taint loc tnf SUBSET
+      (toplevel_copy_source_taint loc tn DIFF {(k + n2w i, j) | (i,j) | i < n}) UNION
+      {(k + n2w i, j) | (i,j) | i < n /\ j < 32 /\ w2n b + 32*i + j IN tn.t_mem}
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all memory_copy_loop_origin_ptr >>
+  disch_then (qspecl_then
+    [`explicit`, `PG`,
+     `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`]
+     strip_assume_tac) >>
+  qexistsl_tac [`t`,`Gf`,`tnf`] >> simp[] >>
+  metis_tac[gas_origin_ptr_path_from_no_dead,
+    place_store_copy_frame_observations, topcopy_frame_frontier]
+QED
+
+Theorem dense_store_slots_origin_ptr:
+  ~is_abi_dynamic cenv.ce_struct_fields ty /\
+  compile_store_slots cenv (Var x) dst ty tr sa = (u,sb) /\
+  fn_has_code sa sb func /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_call_ctx.cc_static /\
+  not_fresh_at sa x /\ (!y. dst = Var y ==> not_fresh_at sa y) /\
+  lookup_var x s = SOME b /\
+  ptr_covers G tn x s (32*(type_memory_bytes cenv ty DIV 32)) /\
+  eval_operand dst s = SOME k /\ op_taint tn dst = {} /\
+  type_memory_bytes cenv ty DIV 32 < dimword(:256) /\
+  w2n b + 32*(type_memory_bytes cenv ty DIV 32) < dimword(:256) /\
+  w2n b + 32*(type_memory_bytes cenv ty DIV 32) <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tnf)) /\
+    store_copy_frame sa (if tr then LocTransient else LocStorage) b k s
+      (type_memory_bytes cenv ty DIV 32) t /\ ~t.vs_halted /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!y. not_fresh_at sa y ==> FLOOKUP Gf y = FLOOKUP G y /\
+                               op_taint tnf (Var y) = op_taint tn (Var y)) /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
+    (if tr then tnf.t_stor = tn.t_stor else tnf.t_trans = tn.t_trans) /\
+    toplevel_copy_source_taint (if tr then LocTransient else LocStorage) tnf SUBSET
+      (toplevel_copy_source_taint (if tr then LocTransient else LocStorage) tn DIFF
+        {(k + n2w i, j) | (i,j) | i < type_memory_bytes cenv ty DIV 32}) UNION
+      {(k + n2w i, j) | (i,j) | i < type_memory_bytes cenv ty DIV 32 /\ j < 32 /\
+        w2n b + 32*i + j IN tn.t_mem}
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_store_slots _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_slots_def] >>
+  Cases_on `type_memory_bytes cenv ty DIV 32 = 1`
+  >- (simp[] >> strip_tac >> fs[] >>
+      drule_all dense_single_compiled_origin_ptr >>
+      disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+      qexistsl_tac [`t`,`Gf`,`tnf`] >> simp[] >>
+      simp[key_update_def, mem_word_taint_def, SUBSET_DEF, IN_UNION,
+        IN_DIFF, PULL_EXISTS, WORD_ADD_0] >> rpt strip_tac >> gvs[])
+  >> Cases_on `tr` >>
+  simp[compile_memory_to_storage_def, compile_memory_to_transient_def,
+       comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `type_memory_bytes cenv ty DIV 32 < dimword(:256)` by decide_tac
+  >~ [`store_copy_frame _ LocTransient _ _ _ _ _`]
+  >- (drule_all (SRULE [] (Q.INST [`loc` |-> `LocTransient`]
+        dense_loop_compiled_origin_ptr)) >>
+      disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+      qexistsl_tac [`t`,`Gf`,`tnf`] >> gvs[]) >>
+  drule_all (SRULE [] (Q.INST [`loc` |-> `LocStorage`]
+    dense_loop_compiled_origin_ptr)) >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`t`,`Gf`,`tnf`] >> gvs[]
 QED
