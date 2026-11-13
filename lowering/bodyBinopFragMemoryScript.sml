@@ -321,7 +321,7 @@ Proof
      simp[]) >>
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-  qpat_x_assum `binop_frag_mem _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `binop_frag_mem _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [binop_frag_mem_def]) >>
   disch_then (qspecl_then [`st0`, `s2`, `sb`, `x`, `y`, `op`, `u`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
