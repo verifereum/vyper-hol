@@ -96,7 +96,7 @@ Proof
   gvs[Abbr `out`, same_blocks_def, update_var_def]
 QED
 
-Theorem body_name_wordtype_post[local]:
+Theorem body_name_wordtype_post:
   emit_op MLOAD [Var p] sa = (Var out,sb) /\
   local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s0 /\
   storage_well_formed_on cx es (FST H) /\
