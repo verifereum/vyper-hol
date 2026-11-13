@@ -17,7 +17,7 @@ Theorem ptr_paired_ret_scalar_operands:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
@@ -50,8 +50,6 @@ Proof
     (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn` by
     (rpt strip_tac >> irule ptr_source_tagged_var_support >>
      rpt (goal_assum (drule_at Any))) >>
@@ -103,7 +101,7 @@ Theorem ptr_paired_ret_execution_back:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
@@ -202,7 +200,7 @@ Theorem ptr_paired_ret_restored_vars:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
@@ -260,8 +258,6 @@ Proof
     (fs[ptr_paired_samples_def, ptr_sample_list_def, EVERY_MEM] >> metis_tac[EL_MEM]) >>
   `EL (LENGTH h - 1) H = (tokens,registry,births,PT,TG,saved,entries)` by
     (Cases_on `H` >> gvs[LAST_EL, arithmeticTheory.PRE_SUB1]) >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `!key site. FLOOKUP snap2 key = SOME site ==> FLOOKUP births key = SOME site` by
     (rpt strip_tac >>
      `q <= LENGTH h - 1 /\ LENGTH h - 1 < LENGTH h` by decide_tac >>
@@ -386,7 +382,7 @@ Theorem ptr_paired_ret_successor:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
@@ -604,7 +600,7 @@ Theorem ptr_paired_ret_successor_births:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
@@ -651,8 +647,6 @@ Proof
   drule ptr_structural_trace_ownership >> strip_tac >>
   drule ptr_source_ownership_caches >> strip_tac >>
   drule ptr_tagged_chrono_step_projection >> strip_tac >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `!key site. FLOOKUP births key = SOME site ==> FLOOKUP B' key = SOME site` by
     (`ptr_activation_tokens h a b tokens = TL tokens` by
        (Cases_on `a.po_stack` >>

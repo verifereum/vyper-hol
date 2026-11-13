@@ -258,10 +258,11 @@ Theorem ptr_create_family_input_bytes[local]:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   MEM a.po_inst.inst_opcode [DELEGATECALL; CREATE; CREATE2] /\
   ~in_revert_forward a.po_fn a.po_state /\
   mem_read_ops a.po_inst = SOME ops /\ inst_read_op a.po_inst = SOME ops.iao_ofst /\
@@ -422,10 +423,11 @@ Theorem ptr_create_family_delegate_endpoint_execution[local]:
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   a.po_inst.inst_opcode = DELEGATECALL /\ ptr_use_ok P pv a.po_inst /\
   (!v tag. FLOOKUP TG v = SOME tag ==> v IN pv) /\
   EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands /\
@@ -489,10 +491,11 @@ Theorem ptr_create_family_endpoint_execution[local]:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   MEM a.po_inst.inst_opcode [CREATE; CREATE2] /\
   ptr_use_ok P pv a.po_inst /\
   (!v tag. FLOOKUP TG v = SOME tag ==> v IN pv) /\
@@ -570,10 +573,11 @@ Theorem ptr_paired_prefix_create_successor[local]:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   MEM a.po_inst.inst_opcode [CREATE; CREATE2] /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   ptr_chrono_step C' at zt ==>
@@ -627,8 +631,6 @@ Proof
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
         EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn` by
     (rpt strip_tac >> irule ptr_source_tagged_var_support >>
      rpt (goal_assum (drule_at Any))) >>
@@ -703,10 +705,11 @@ Theorem ptr_create_family_delegate_structural_successor[local]:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   a.po_inst.inst_opcode = DELEGATECALL /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   ptr_chrono_step C' at zt ==>
@@ -766,8 +769,6 @@ Proof
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
         EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn` by
     (rpt strip_tac >> irule ptr_source_tagged_var_support >>
      rpt (goal_assum (drule_at Any))) >>
@@ -1126,10 +1127,11 @@ Theorem ptr_paired_prefix_delegate_successor[local]:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   a.po_inst.inst_opcode = DELEGATECALL /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   ptr_chrono_step C' at zt ==>
@@ -1187,10 +1189,11 @@ Theorem ptr_paired_create_prefix_normalize:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
   EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
     first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\

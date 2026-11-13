@@ -166,7 +166,6 @@ Theorem ptr_extcodecopy_prefix_execution[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\ ptr_discipline lo C vs /\
-  ~ctx_has_dalloca C /\
   a.po_inst.inst_opcode = EXTCODECOPY /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   ptr_chrono_step C' at zt ==>
@@ -244,8 +243,6 @@ Resume ptr_extcodecopy_prefix_execution[operands]:
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
         EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn` by
     (rpt strip_tac >> irule ptr_source_tagged_var_support >>
      rpt (goal_assum (drule_at Any))) >>
@@ -261,7 +258,7 @@ Theorem ptr_extcodecopy_transcript_successor[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\ ptr_discipline lo C vs /\
-  ~ctx_has_dalloca C /\ a.po_inst.inst_opcode = EXTCODECOPY /\
+  a.po_inst.inst_opcode = EXTCODECOPY /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   ptr_chrono_step C' at zt ==>
   ?z bytes (dst:256 word) (dt:256 word) (sz:256 word).
@@ -514,7 +511,7 @@ Theorem ptr_extcodecopy_prefix_step[local]:
     (o1_walk_view rpolicy 2) C C' /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY (\f. ALL_DISTINCT (fn_labels f) /\
     (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
@@ -621,7 +618,7 @@ Theorem ptr_paired_extcodecopy_prefix_normalize:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\

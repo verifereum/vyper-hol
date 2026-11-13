@@ -330,11 +330,7 @@ Theorem ptr_source_ownership_erasure_invariant[local]:
   (ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
     ptr_params_erases (dyn_floor C vs0) births PT a.po_params /\
     ptr_ledger_erases (dyn_floor C vs0) births TG a.po_prov /\
-    ptr_saved_erases (dyn_floor C vs0) births saved a.po_stack) /\
-  (~ctx_has_dalloca C /\ ptr_discipline lo C vs0 ==>
-    !dyn. ptr_params_erases dyn births PT a.po_params /\
-      ptr_ledger_erases dyn births TG a.po_prov /\
-      ptr_saved_erases dyn births saved a.po_stack)
+    ptr_saved_erases (dyn_floor C vs0) births saved a.po_stack)
 Proof
   ho_match_mp_tac ptr_source_ownership_ind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> conj_tac
@@ -365,45 +361,18 @@ Proof
        metis_tac[ptr_source_ownership_caches] >>
      drule_all ptr_source_birth_caches_active_lookup >>
      simp[ptr_activation_tokens_def]) >>
-  conj_tac
-  >- (strip_tac >>
-      qpat_x_assum `ptr_discipline _ _ _ /\ EVERY _ _ ==> _` mp_tac >>
-      impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-      `ptr_params_erases (dyn_floor C vs0) births' PT a.po_params /\
-       ptr_ledger_erases (dyn_floor C vs0) births' TG a.po_prov /\
-       ptr_saved_erases (dyn_floor C vs0) births' saved a.po_stack` by
-        metis_tac[ptr_params_erases_extend, ptr_ledger_erases_extend,
-          ptr_saved_erases_extend] >>
-      drule_all ptr_reachable_step_premises >> strip_tac >>
-      drule ptr_tagged_chrono_step_erasure >>
-      disch_then (qspecl_then [`dyn_floor C vs0`, `births'`] mp_tac) >>
-      impl_tac >- (rpt conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> fs[]) >>
-      simp[]) >>
-  strip_tac >> gen_tac >>
-  qpat_x_assum `~ctx_has_dalloca _ /\ ptr_discipline _ _ _ ==> _` mp_tac >>
+  strip_tac >>
+  qpat_x_assum `ptr_discipline _ _ _ /\ EVERY _ _ ==> _` mp_tac >>
   impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  `ptr_params_erases dyn births' PT a.po_params /\
-   ptr_ledger_erases dyn births' TG a.po_prov /\
-   ptr_saved_erases dyn births' saved a.po_stack` by
+  `ptr_params_erases (dyn_floor C vs0) births' PT a.po_params /\
+   ptr_ledger_erases (dyn_floor C vs0) births' TG a.po_prov /\
+   ptr_saved_erases (dyn_floor C vs0) births' saved a.po_stack` by
     metis_tac[ptr_params_erases_extend, ptr_ledger_erases_extend,
       ptr_saved_erases_extend] >>
-  `!u. FLOOKUP a.po_prov u <> NONE ==> FLOOKUP TG u <> NONE` by
-    (`!dyn. ptr_ledger_erases dyn births TG a.po_prov` by metis_tac[] >>
-     fs[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_every_dyn] >>
-     rpt strip_tac >> Cases_on `FLOOKUP TG u` >> gvs[]) >>
-  `a.po_inst.inst_opcode <> DALLOCA` by
-    (drule_all frameAllocationOwnershipTheory.frame_reachable_functions_member >> strip_tac >>
-     `active_inst a.po_fn a.po_inst a.po_state` by
-       (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
-        simp[Once frame_reachable_cases] >> metis_tac[]) >>
-     `MEM a.po_inst (fn_insts a.po_fn)` by
-       (gvs[contextCodegenRelTheory.active_inst_def, fn_insts_def,
-          venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
-        metis_tac[MEM_EL]) >>
-     fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
+  drule_all ptr_reachable_step_premises >> strip_tac >>
   drule ptr_tagged_chrono_step_erasure >>
-  disch_then (qspecl_then [`dyn`, `births'`] mp_tac) >>
-  impl_tac >- (rpt conj_tac >- (disj2_tac >> first_assum ACCEPT_TAC) >> fs[]) >>
+  disch_then (qspecl_then [`dyn_floor C vs0`, `births'`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> fs[]) >>
   simp[]
 QED
 
@@ -419,16 +388,6 @@ Theorem ptr_source_ownership_prov_erases:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
   ptr_discipline lo C vs0 /\ EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions ==>
   ptr_ledger_erases (dyn_floor C vs0) births TG a.po_prov
-Proof
-  metis_tac[ptr_source_ownership_erasure_invariant]
-QED
-
-(* Bridge for consumers that still assume no DALLOCA: no untagged variable
-   carries a site. Delete once they handle the DALLOCA case. *)
-Theorem ptr_source_ownership_static_prov_erases:
-  ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  ~ctx_has_dalloca C /\ ptr_discipline lo C vs0 ==>
-  !dyn. ptr_ledger_erases dyn births TG a.po_prov
 Proof
   metis_tac[ptr_source_ownership_erasure_invariant]
 QED

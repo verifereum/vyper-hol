@@ -32,7 +32,7 @@ Theorem ptr_paired_ret_prefix_immediate:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
@@ -106,8 +106,6 @@ Resume ptr_paired_ret_prefix_immediate[alignment]:
   `snap3 = PTc /\ snap4 = TGc` by
     fs[ptr_paired_saved_tags_def] >>
   `q < LENGTH h` by (fs[ptr_paired_samples_def, ptr_sample_list_def, EVERY_EL] >> metis_tac[]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `!key site. FLOOKUP snap2 key = SOME site ==> FLOOKUP B' key = SOME site` by
     (rpt strip_tac >>
      qpat_assum `ptr_structural_transcript _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _`

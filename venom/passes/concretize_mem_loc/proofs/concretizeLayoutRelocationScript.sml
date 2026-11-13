@@ -84,8 +84,15 @@ Proof
      qexists_tac `a` >> simp[] >> qexists_tac `n` >>
      gvs[joint_observed_read_def]) >>
   Cases_on `d' = d /\ aid' = aid`
-  >- (gvs[] >> Cases_on `EL n (q0::qs)` >>
-      gvs[activation_cache_def] >> decide_tac) >>
+  >- (gvs[] >>
+      `!c. activation_cache c d owner aid (b,sz) /\
+           activation_cache c d owner' aid (b',sz') ==>
+           owner' = owner /\ b' = b /\ sz' = sz` by
+        (rpt (pop_assum kall_tac) >> Cases >>
+         simp[activation_cache_def] >> rpt strip_tac >> gvs[]) >>
+      first_x_assum (qspec_then `EL n (q0::qs)` mp_tac) >>
+      impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+      strip_tac >> gvs[] >> decide_tac) >>
   suspend "distinct"
 
 QED
