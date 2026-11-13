@@ -441,7 +441,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem snapshot_gas_allocas[local]:
+Theorem snapshot_gas_allocas:
   !ctx fn s n r. gas_path ctx fn s n r ==>
     !t aid b len. r = OK t /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
       FLOOKUP t.vs_allocas aid = SOME (b,len)

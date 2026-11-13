@@ -43,7 +43,7 @@ Theorem snapshot_changed_type_location:
   vv_location vv = NONE \/ vv_location vv = SOME LocMemory
 Proof
   Cases_on `e` >>
-  simp[oneline lowered_value_type_def, post_value_type_def, expr_type_def] >>
+  simp[lowered_value_type_def, post_value_type_def, expr_type_def] >>
   rpt strip_tac
   >- (qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
       simp[Once compile_expr_def, compile_expr_body_def, expr_type_def] >>
@@ -54,13 +54,13 @@ Proof
 QED
 
 Resume snapshot_changed_type_location[builtin]:
-  Cases_on `b` >> gvs[] >>
+  Cases_on `b` >> gvs[lowered_value_type_def, expr_type_def] >>
   drule concat_compile_shape >> strip_tac >>
   gvs[vv_location_def, base_ptr_def]
 QED
 
 Resume snapshot_changed_type_location[typebuiltin]:
-  Cases_on `t0` >> gvs[] >>
+  Cases_on `t0` >> gvs[lowered_value_type_def, expr_type_def] >>
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   simp[Once compile_expr_raw_def, compile_expr_body_def, expr_type_def,
        expr_size_def] >>
@@ -71,7 +71,7 @@ Resume snapshot_changed_type_location[typebuiltin]:
 QED
 
 Resume snapshot_changed_type_location[call]:
-  Cases_on `c` >> gvs[expr_type_def] >>
+  Cases_on `c` >> gvs[lowered_value_type_def, post_value_type_def, expr_type_def] >>
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   simp[Once compile_expr_def, compile_expr_body_def, expr_type_def,
        compile_call_def] >>
