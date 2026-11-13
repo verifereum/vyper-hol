@@ -452,7 +452,7 @@ Proof
    (gvs[] >> simp[]) >>
  drule_all build_maps_variable >> strip_tac >>
  gvs[] >>
- pure_rewrite_tac [imm_len_def, GSYM listTheory.APPEND_ASSOC,
+ pure_rewrite_tac [immSectionDeadTheory.imm_len_def, GSYM listTheory.APPEND_ASSOC,
    listTheory.APPEND] >>
  irule (PURE_REWRITE_RULE [arithmeticTheory.ADD_CLAUSES]
    (Q.INST [`off` |-> `0`] immutable_declaration_interval_bound))
