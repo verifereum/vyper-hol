@@ -1603,6 +1603,7 @@ Proof
   `val_in_memory tv2 v' (w2n p) s.vs_memory` by metis_tac[] >>
   `val_footprint tv2 v' <= type_memory_bytes cenv (lowered_value_type cenv e1)` by simp[] >>
   `post_value_type cenv e = expr_type e` by simp[] >>
+  `storage_well_formed_on cx es1 (FST H)` by fs[expr_post_def] >>
   drule_all convert_widen_copy_owned >> strip_tac >>
   qexistsl_tac [`t`, `v'`] >> simp[] >>
   qpat_assum `expr_post H _ _ _ _ e1 _ _ _ _ _ _ _ _`

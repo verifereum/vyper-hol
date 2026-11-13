@@ -98,7 +98,7 @@ Proof
   qexistsl_tac [`INL []`, `es`, `OK s`] >>
   simp[gas_marked_exec_def, exprSimWordArgsTheory.eval_exprs_nil,
        gas_marked_path_def] >>
-  Cases_on `memory` >> simp[cj 1 gas_path_rules, cj 1 gas_path_mem_rules]
+  Cases_on `memory` >> simp[cj 1 gas_path_rules, cj 1 fragGasPathMemTheory.gas_path_mem_rules]
 QED
 
 Theorem aggregate_tuple_child_outcome[local]:
