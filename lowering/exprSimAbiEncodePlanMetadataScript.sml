@@ -2,7 +2,7 @@
 Theory exprSimAbiEncodePlanMetadata
 Ancestors
   exprSimAbiEncodeSourceMetadata abiEncodeEndpointMetadata
-  retAbiPlanProps abiDecodeRanges exprSimHypsDefs compileEnv
+  abiTypeBoundProps retAbiPlanProps abiDecodeRanges exprSimHypsDefs compileEnv
 
 Theorem abi_encode_translated_dynamic:
   evaluate_type E ty = SOME tv /\ sfields_tenv_consistent sf E ==>

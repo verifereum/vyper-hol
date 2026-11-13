@@ -8,7 +8,7 @@ Ancestors
   supportedStmts supportedStmtTraverse compileVyper vyperTypeCallGraph vyperTypeCallStackSoundness
   vyperAST vyperInterpreter vyperState vyperValue vyperValueOperation vyperTypeSystem
   vyperTypeInvariants vyperTypeValues targetPlaceSim exprSimTopLevelProps bodyStorageMetadata
-  vyperTypeEnv valueEncoding valueEncodingProps valueEncodingTyping exprSimAggregateEncoding
+  vyperTypeEnv memoryValueEncoding valueEncoding valueEncodingProps valueEncodingTyping exprSimAggregateEncoding
   venomState arithmetic
 Libs
   monadsyntax
@@ -22,11 +22,11 @@ Theorem eval_iterator_dynamic_name:
     evaluate_type (get_tenv cx) (ArrayT ty (Dynamic c)) =
       SOME (ArrayTV elem_tv (Dynamic c)) ==>
     eval_iterator cx (Array (Name (ArrayT ty (Dynamic c)) name)) es =
-      (INL vs, es)
+      (INL (MAP Value vs), es)
 Proof
   rpt strip_tac >>
   simp[Once evaluate_def] >> simp[Once evaluate_def] >>
-  simp[read_result_def, read_place_def,
+  simp[array_iterator_results_def, read_result_def, read_place_def,
        read_memory_path_def, evaluate_subscripts_def, get_scopes_def,
        type_check_def, vyperStateTheory.assert_def, lift_option_type_def,
        lift_sum_def, ignore_bind_def, vyperStateTheory.bind_def,
@@ -51,6 +51,7 @@ Theorem dynarray_snapshot_memory:
   lookup_scopes name ei.scopes = SOME entry /\
   entry.type = ArrayTV tv (Dynamic c) /\
   entry.value = ArrayV (DynArrayV vs) /\ LENGTH vs <= c /\
+  value_has_type entry.type entry.value /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var dp) sz) /\
   stmt_state_rel ctx func cenv cx ei s ==>
   ?base. eval_operand (Var dp) s = SOME base /\
@@ -69,6 +70,8 @@ Proof
   first_x_assum drule_all >> strip_tac >>
   rename1 `lookup_var dp s = SOME w0` >>
   qexists_tac `w0` >> simp[eval_operand_def] >>
+  `val_in_memory (ArrayTV tv (Dynamic c)) (ArrayV (DynArrayV vs))
+     (w2n w0) s.vs_memory` by metis_tac[memory_value_rel_val_in_memory] >>
   gvs[val_in_memory_dynarray, GSYM mem_word_at_eq_mload] >>
   rpt strip_tac
   >- (drule_all elems_in_memory_EL >> simp[]) >>
@@ -99,7 +102,7 @@ Theorem dynarray_name_source_ready:
     c < dimword (:256) /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var dp) sz) /\
     (!gs. eval_iterator cx (Array (Name (ArrayT typ (Dynamic c)) name))
-            (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
+            (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
     FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE
 Proof
   strip_tac >>
@@ -134,7 +137,7 @@ Proof
   `?dp sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var dp) sz)` by
     (fs[expr_sim_inv_def] >> metis_tac[]) >>
   `!gs. eval_iterator cx (Array (Name (ArrayT typ (Dynamic c)) name))
-          (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)` by
+          (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)` by
     (gen_tac >> irule eval_iterator_dynamic_name >>
      conj_tac >- (qexists_tac `tv` >> gvs[]) >>
      qexists_tac `entry` >> simp[]) >>
