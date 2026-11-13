@@ -186,7 +186,7 @@ Theorem aggregate_body_head_continuation_mem:
     q.vs_accounts = t1.vs_accounts /\ q.vs_transient = t1.vs_transient /\
     q.vs_requests = t1.vs_requests /\ q.vs_call_ctx = t1.vs_call_ctx
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `es1 with gas_obs := [] = es1` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   drule_all aggregate_tuple_marked_child_declared_source_any >>

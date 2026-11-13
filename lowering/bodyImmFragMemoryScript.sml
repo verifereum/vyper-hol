@@ -145,7 +145,7 @@ Proof
      irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
   `lookup_scopes id (es with gas_obs := []).scopes = NONE` by simp[] >>
   `LENGTH vs <= n` by decide_tac >>
-  `gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx)
+  `gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx)
      (es with gas_obs := [])` by
     (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
      simp[gas_admissible_def, Once evaluate_def, lift_option_type_def,

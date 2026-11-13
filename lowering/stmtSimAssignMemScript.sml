@@ -433,9 +433,6 @@ val local_memory_store_horizon_same = local_memory_store_horizon_path
   |> SPEC_ALL |> Q.INST [`sty` |-> `ty`, `stv` |-> `tyv`]
   |> GEN_ALL |> PURE_REWRITE_RULE [REFL_CLAUSE, OR_CLAUSES, AND_CLAUSES];
 
-val alloc_copy_horizon_path =
-  SIMP_RULE bool_ss [PULL_EXISTS] alloc_copy_memory_framed_path;
-
 (* Rewrite a gas_bad_storage_at goal on the assignment statement to one on
    its bind form, as stmtSimAssignCompose does. *)
 val assign_bad_storage_tac =
@@ -505,7 +502,7 @@ Proof
         metis_tac[val_footprint_le] >>
       `s.vs_current_bb = sx.cs_current_bb /\
        s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-      drule_all alloc_copy_horizon_path >>
+      drule_all alloc_copy_memory_framed_bounded_path >>
       disch_then (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
       `stmt_state_rel H0 ctx func cenv cx es u` by metis_tac[] >>
       `alloca_frame cenv es sa s cenv es u` by
@@ -609,7 +606,7 @@ Resume local_memory_assign_widen_path[staged]:
   `src <> Var tmp` by metis_tac[] >>
   `s.vs_current_bb = sx.cs_current_bb /\
    s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-  drule_all alloc_copy_horizon_path >>
+  drule_all alloc_copy_memory_framed_bounded_path >>
   disch_then (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
   `stmt_state_rel H0 ctx func cenv cx es u` by metis_tac[] >>
   `alloca_frame cenv es sa s cenv es u` by
