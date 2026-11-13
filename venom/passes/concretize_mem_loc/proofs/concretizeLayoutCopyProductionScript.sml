@@ -112,34 +112,25 @@ Proof
   `post = mcopy (w2n dst) (w2n src) (w2n sz) s` by
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_ordinary, step_inst_def, step_inst_base_def] >> metis_tac[]) >>
-  `SND o_f rv = G` by
-    (qpat_x_assum `resolved_complete _ _` mp_tac >>
-     fs[resolved_complete_def]) >>
   `eval_operand opn t = SOME sz` by suspend "size" >>
   Cases_on `w2n sz = 0` >- suspend "zero" >>
-  `~(dyn_floor C s <= w2n dst)` by
-    fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
-  (qpat_assum `~(dyn_floor C s <= w2n dst)` (fn nd =>
-    Q.SUBGOAL_THEN `?dstT. eval_operand opd t = SOME dstT /\
+  (Q.SUBGOAL_THEN `?dstT. eval_operand opd t = SOME dstT /\
       (((w2n dst+w2n sz <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
        (?d owner aid b len.
          activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
            d owner aid (b,len) /\ lo <= b /\ b <= w2n dst /\
          w2n dst+w2n sz <= b+len /\
          w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))`
-      (strip_assume_tac o REWRITE_RULE [nd]))
+      (qx_choose_then `dstT` (CONJUNCTS_THEN2 assume_tac assume_tac))
    >- suspend "destination") >>
-  `~(dyn_floor C s <= w2n src)` by
-    fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
-  (qpat_assum `~(dyn_floor C s <= w2n src)` (fn nd =>
-    Q.SUBGOAL_THEN `?srcT. eval_operand ops t = SOME srcT /\
+  (Q.SUBGOAL_THEN `?srcT. eval_operand ops t = SOME srcT /\
       (((w2n src+w2n sz <= lo \/ dyn_floor C s <= w2n src) /\ w2n srcT = w2n src) \/
        (?d owner aid b len.
          activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
            d owner aid (b,len) /\ lo <= b /\ b <= w2n src /\
          w2n src+w2n sz <= b+len /\
          w2n srcT = concretize_positions C' owner aid + (w2n src-b)))`
-      (strip_assume_tac o REWRITE_RULE [nd]))
+      (qx_choose_then `srcT` (CONJUNCTS_THEN2 assume_tac assume_tac))
    >- suspend "source") >>
   qexistsl_tac [`dstT`, `srcT`] >>
   `step_inst_base inst t = OK (mcopy (w2n dstT) (w2n srcT) (w2n sz) t)` by
@@ -225,9 +216,8 @@ Resume concretize_mcopy_execution_geometry[size]:
            fn_insts_blocks_MEM, EVERY_MEM] >> metis_tac[]) >>
      drule_all ptr_frame_current_static >> strip_tac >>
      qexists_tac `Q` >> conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
-     `!v e. FLOOKUP rv v = SOME e ==> FLOOKUP G v = SOME (SND e)` by
-       (qpat_x_assum `SND o_f rv = G` (fn th => rewrite_tac[GSYM th]) >>
-        simp[FLOOKUP_o_f]) >>
+     drule resolved_config_current >> simp[] >> strip_tac >>
+     drule resolved_frame_erasure >> strip_tac >>
      metis_tac[resolved_static_support]) >>
   `!v. opn = Var v ==> FLOOKUP rv v = NONE` by
     (metis_tac[mcopy_size_origin_free]) >>

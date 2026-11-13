@@ -170,16 +170,13 @@ Proof
          metis_tac[operand_domain_agreement, optionTheory.NOT_SOME_NONE]) >>
       qexists_tac `dstT` >> simp[] >> rpt strip_tac >>
       irule joint_relocation_demand_retained >> simp[range_bytes_def] >> metis_tac[]) >>
-  `~(dyn_floor C s <= w2n dst)` by
-    fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
-  (qpat_assum `~(dyn_floor C s <= w2n dst)` (fn nd =>
-    Q.SUBGOAL_THEN `?dstT. eval_operand opd t = SOME dstT /\
+  (Q.SUBGOAL_THEN `?dstT. eval_operand opd t = SOME dstT /\
       (((w2n dst+cap <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
        (?d owner aid b sz.
          activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
            d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\ w2n dst+cap <= b+sz /\
          w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))`
-      (strip_assume_tac o REWRITE_RULE [nd]))
+      (qx_choose_then `dstT` (CONJUNCTS_THEN2 assume_tac assume_tac))
    >- (irule concretize_memory_access_geometry >> simp[] >>
      conj_tac >- (qexists_tac `access` >> simp[]) >>
      conj_tac >- metis_tac[] >>

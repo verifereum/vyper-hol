@@ -154,9 +154,6 @@ Proof
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
-  `SND o_f rv = G` by
-    (qpat_x_assum `resolved_complete _ _` mp_tac >>
-     fs[resolved_complete_def]) >>
   `~in_revert_forward fn s` by fs[joint_read_exempt_def] >>
   `post = mstore (w2n dst) value s` by
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
@@ -167,17 +164,14 @@ Proof
   pop_assum strip_assume_tac >>
   `?valueT. eval_operand opv t = SOME valueT` by suspend "value" >>
   pop_assum strip_assume_tac >>
-  `~(dyn_floor C s <= w2n dst)` by
-    fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
-  qpat_assum `~(dyn_floor C s <= w2n dst)` (fn nd =>
-    Q.SUBGOAL_THEN `?dstT. eval_operand opd t = SOME dstT /\
+  Q.SUBGOAL_THEN `?dstT. eval_operand opd t = SOME dstT /\
       (((w2n dst+32 <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
        (?d owner aid b sz.
          activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
            d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
          w2n dst+32 <= b+sz /\
          w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))`
-      (strip_assume_tac o REWRITE_RULE [nd]))
+      (qx_choose_then `dstT` (CONJUNCTS_THEN2 assume_tac assume_tac))
   >- suspend "address" >>
   `(!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
       w2n dst <= a /\ a < w2n dst+32 ==>
@@ -199,9 +193,8 @@ Resume concretize_mstore_execution_geometry[support]:
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM, EVERY_MEM] >> metis_tac[]) >>
   drule_all ptr_frame_current_static >> strip_tac >>
   qexists_tac `Q` >> conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
-  `!v e. FLOOKUP rv v = SOME e ==> FLOOKUP G v = SOME (SND e)` by
-    (qpat_x_assum `SND o_f rv = G` (fn th => rewrite_tac[GSYM th]) >>
-     simp[FLOOKUP_o_f]) >>
+  drule resolved_config_current >> simp[] >> strip_tac >>
+  drule resolved_frame_erasure >> strip_tac >>
   metis_tac[resolved_static_support]
 QED
 Resume concretize_mstore_execution_geometry[value]:
@@ -238,7 +231,12 @@ Resume concretize_mstore_execution_geometry[memory]:
       a IN joint_writes (EL c (q0::qs)) (EL c es) /\
       relocation_pair lo (concretize_positions C') (EL c (q0::qs)) a z /\
       a-w2n dst = z-w2n dstT)` by
-    (irule joint_store_write_correspondence >> asm_rewrite_tac[] >> metis_tac[]) >>
+    (`!i. i < 32 ==> relocation_pair lo (concretize_positions C')
+        (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
+       (rpt strip_tac >> `c <= LENGTH es` by decide_tac >>
+        irule (Q.INST [`len:num` |-> `32`] access_geometry_relocation_pairs) >>
+        metis_tac[]) >>
+     irule joint_store_write_correspondence >> asm_rewrite_tac[] >> metis_tac[]) >>
   `joint_writes (EL c (q0::qs)) (EL c es) =
     range_bytes [(w2n dst,32)] /\ step_writes inst t t = [(w2n dstT,32)]` by
     (`step_writes inst s post = [(w2n dst,32)] /\
