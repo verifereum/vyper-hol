@@ -1049,7 +1049,7 @@ Proof
   `(rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr))` by
     (Cases_on `rest` >> simp[] >> Cases_on `c.msgParams.outputTo` >>
      gvs[asm_evm_rel_def] >> fs[wf_state_def, outputTo_consistent_stack_def]) >>
-  `?r u. run_call s = SOME (r,u) /\ frame_outcome s r u (SOME ex) [] [] /\
+  `frame_last s /\ ?r u. run_call s = SOME (r,u) /\ frame_outcome s r u (SOME ex) [] [] /\
          call_requests s = []` by
     (irule asm_step_fault_outcome >> simp[] >>
      qexistsl [`p`, `t`] >> gvs[vfm_abort_def]) >>

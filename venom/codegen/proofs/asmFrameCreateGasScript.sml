@@ -1,7 +1,7 @@
 (* Gas reserve for creation, charged once by step_create. *)
 Theory asmFrameCreateGas
 Ancestors
-  asmFrameCreateStep asmRunBounded asmCallGasArithmetic asmFrameLocalStep
+  asmFrameCreateStep asmFrameCreateStatic asmRunBounded asmCallGasArithmetic asmFrameLocalStep
   vfmRunCall vfmDomainCollection frameStep asmFrameRel codegenRel vfmExecution
   vfmExecutionProp asmSem list vfmConstants
 
@@ -37,7 +37,6 @@ Proof
   qpat_assum `asm_frame_rel _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [asm_frame_rel_def]) >>
   `c.stack = a.as_stack` by gvs[asm_evm_rel_def] >>
-  `~c.msgParams.static` by metis_tac[] >>
   `next_opcode (FST (HD es.contexts)) = SOME
      (if EL a.as_pc prog = AsmOp "CREATE" then Create else Create2)` by
     (irule asm_frame_create_decode >> simp[] >>
@@ -79,6 +78,9 @@ Resume asm_frame_create_gas[raw]:
         (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
       `50000 + 8 * H + memory_cost H <= c.msgParams.gasLimit - c.gasUsed` by
         fs[frame_gas_left_def] >>
+      Cases_on `c.msgParams.static`
+      >- (drule_all asm_create_static_budget >> strip_tac >>
+          gvs[frame_gas_left_def]) >>
       drule_all asm_create_raw_budget >> strip_tac >>
       gvs[frame_gas_left_def]) >>
   drule_all asm_create_underflow >> strip_tac >>
@@ -106,6 +108,14 @@ Resume asm_frame_create_gas[handled]:
     fs[frame_gas_left_def] >>
   Cases_on `step_create two es` >>
   rename1 `step_create two es = (res,mid)` >>
+  Cases_on `c.msgParams.static`
+  >- (drule_all asm_create_static_budget >> strip_tac >>
+      `step es = handle_step (SOME WriteInStaticContext) mid` by
+        (irule asm_create_step_terminal >> metis_tac[]) >>
+      `handle_step (SOME WriteInStaticContext) mid = (INL (),v)` by
+        metis_tac[] >>
+      `mid.contexts <> []` by simp[] >>
+      drule_all handle_step_inl_pops >> gvs[] >> decide_tac) >>
   drule_all asm_create_raw_budget >>
   strip_tac >>
   `res = INL ()` by
