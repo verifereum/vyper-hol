@@ -248,7 +248,8 @@ Proof
   `o1_run_contract rpolicy D k` by
     (irule o1_run_contracts_same_gas >> simp[o1_fn_passes_el]) >>
   fs[o1_run_contract_def, o1_stage_contract_def] >>
-  first_x_assum (qspecl_then [`C`, `C'`, `vs`] mp_tac) >> simp[]
+  first_x_assum (qspecl_then [`C`, `C'`, `vs`] mp_tac) >> simp[] >>
+  metis_tac[ctx_sim_fuel_imp_ctx_sim]
 QED
 
 val make_ssa_tac =
