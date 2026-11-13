@@ -118,11 +118,12 @@ Proof
     (pop_assum (fn th => rewrite_tac [th]) >>
      BasicProvers.every_case_tac >> simp[]) >>
   `ptr_safe_step D lo n ctx fn [] G1 tn1 i1 t1` by
-    (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+    (simp[ptr_safe_step_def, ptr_inst_ok_def] >>
+     simp[access_ok_def, taint_ok_def,
           allocas_from_def, source_memory_read_ranges_def,
           source_memory_write_ranges_def, sized_source_write_range_def,
-          mem_write_ops_def, mem_read_ops_def, eval_operand_def, op_taint_def,
-          Abbr `G1`, Abbr `tn1`, finite_mapTheory.FLOOKUP_UPDATE,
+          mem_write_ops_def, mem_read_ops_def, eval_operand_def, op_taint_def] >>
+     simp[Abbr `G1`, Abbr `tn1`, finite_mapTheory.FLOOKUP_UPDATE,
           finite_mapTheory.FLOOKUP_DEF] >>
      rw[] >~ [`Lit szword`] >- (Cases_on `op` >> gvs[]) >>
      gvs[entry_taint_def]) >>

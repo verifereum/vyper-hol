@@ -252,7 +252,8 @@ QED
 Theorem body_calldatalen_mem_case:
   !cx ann args. body_expr_mem_ok cx (Builtin ann CalldataLen args)
 Proof
-  rpt gen_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >>
   rpt gen_tac >> strip_tac >>
   metis_tac[compile_calldatasize_body_sim_mem,
             compile_calldatasize_body_vv_sim_mem]

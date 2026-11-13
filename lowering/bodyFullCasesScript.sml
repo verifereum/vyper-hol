@@ -8,7 +8,7 @@
  *)
 Theory bodyFullCases
 Ancestors
-  bodyFullPreds bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
+  bodyFullPreds bodyFullRawRevert gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
   bodyMemBiEnvMsgGas exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
@@ -507,12 +507,20 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_raw_revert_case_ptr_at (bodyPtrCallCases). *)
+(* RawRevert, by raw_revert_expr_full_ok; its lower_value shadow-compile
+ * premise is gas_shadow_compile_expr lifted by gas_shadow_compiles_lower_value. *)
 Theorem body_raw_revert_case_full:
   !cx v22 es v23.
     body_exprs_full_ok cx es ==> body_expr_full_ok cx (Call v22 RawRevert es v23)
 Proof
-  cheat
+  rpt strip_tac >>
+  `!cenv ty e. gas_shadow_compiles (lower_value compile_expr cenv ty e)
+     (lower_value compile_expr cenv ty (gas_shadow_expr e))`
+    by (rpt gen_tac >>
+        irule (gas_shadow_compiles_lower_value
+               |> INST [``sh:bool`` |-> ``T``] |> REWRITE_RULE []) >>
+        MATCH_ACCEPT_TAC (CONJUNCT1 gas_shadow_compile_expr)) >>
+  irule raw_revert_expr_full_ok >> asm_rewrite_tac[]
 QED
 
 (* Return e, by the frame's own joint Return fragment and e's case. *)
@@ -527,7 +535,7 @@ Proof
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def,
          body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -545,13 +553,16 @@ Proof
   simp[same_frame_refl]
 QED
 
-(* Admitted: the joint twin of body_selfdestruct_case_ptr_at (bodyPtrCallCases). *)
+(* Vacuous: expr_body_pre excludes selfdestruct (expr_evm_run_root). *)
 Theorem body_selfdestruct_case_full:
   !cx v24 es v25.
     body_exprs_full_ok cx es ==>
     body_expr_full_ok cx (Call v24 SelfDestructTarget es v25)
 Proof
-  cheat
+  rw[body_expr_full_ok_def] >>
+  gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
 
 (* Admitted: the joint twin of body_send_case_ptr_at (bodyPtrCallCases). *)

@@ -31,7 +31,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore allocLimitsProps
   stmtSimDecl stmtSimDeclCompose stmtSimDeclPath stmtSimDeclSource
   gasSummary gasContext
   fragGasSeq fragGasPath fragGasMode
@@ -65,7 +65,7 @@ Proof
       ho_match_mp_tac type_memory_bytes_ind >>
       rw[type_memory_bytes_def] >>
       AP_TERM_TAC >> irule MAP_CONG >> simp[]) >>
-  gen_tac >> gvs[oneline lowered_value_type_def]
+  rpt strip_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >> simp[]
 QED
 
 Theorem compile_assign_memory_appends:
@@ -709,7 +709,7 @@ Proof
       `src <> Var tmp /\ p <> tmp` by metis_tac[] >>
       `s.vs_current_bb = sx.cs_current_bb /\
        s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-      drule_all (SIMP_RULE bool_ss [PULL_EXISTS] alloc_copy_memory_framed_path) >>
+      drule_all (SIMP_RULE bool_ss [PULL_EXISTS] alloc_copy_memory_framed_bounded_path) >>
       disch_then
         (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
       qpat_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ _ u`
@@ -836,13 +836,14 @@ Proof
     (qx_gen_tac `HH` >> strip_tac >>
      qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `HH` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >>
-     simp[expr_post_def]) >>
+     disch_then (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [expr_post_def])) >>
   qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (qspec_then `H0` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   drule_then (drule_then assume_tac) compile_lower_value_var >>
-  qpat_x_assum `expr_post H0 ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_post_def] >> strip_tac >>
-  qpat_x_assum `post_value_type cenv e = expr_type e` kall_tac >>
+  qpat_x_assum `expr_post H0 ctx _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  qpat_x_assum `post_value_type cenv e = expr_type e`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   `val_wf tyv v` by simp[value_has_type_memory_wf] >>
   `~is_word_type (expr_type e)` by
     metis_tac[is_bytestring_word_type] >>
@@ -1056,13 +1057,18 @@ Proof
     (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
      drule eval_read_preserves_scopes_dom >> simp[]) >>
   `alloca_frame c es sa salloc c (ee with gas_obs := []) s` by
-    (irule expr_post_alloca_frame >> metis_tac[]) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] expr_post_alloca_frame) >> rpt conj_tac
+     >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`H0`, `ctx`, `cx`, `e`, `func`, `op`, `sb`, `v`] >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `venomMemDefs$allocas_non_overlapping s /\ lookup_var p s = SOME w /\
    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
    (!aid b. FLOOKUP salloc.vs_allocas aid = SOME b ==>
             FLOOKUP s.vs_allocas aid = SOME b)` by
-    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_post_def, stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+    (qpat_assum `!H. valid_horizon _ _ H (ee with gas_obs := []).storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     REWRITE_TAC [expr_post_def, stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
      metis_tac[]) >>
   `sa.cs_next_id <= sb.cs_next_id /\ sa.cs_next_var <= sb.cs_next_var` by
     metis_tac[cj 2 compile_expr_grows] >>
@@ -1111,7 +1117,8 @@ Proof
        (qpat_assum `!H. valid_horizon _ _ H (ee with gas_obs := []).storage_trace ==>
                         expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
           (qspec_then `HH` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >>
-        simp[expr_post_def]) >>
+        disch_then (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o
+                    REWRITE_RULE [expr_post_def])) >>
      `(ee with gas_obs := []).accounts = ee.accounts /\
       (ee with gas_obs := []).tStorage = ee.tStorage` by simp[] >>
      metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
@@ -1195,7 +1202,7 @@ Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
-  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  >- (rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
       irule gasStorageTheory.gas_bad_storage_at_initial >>
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by
