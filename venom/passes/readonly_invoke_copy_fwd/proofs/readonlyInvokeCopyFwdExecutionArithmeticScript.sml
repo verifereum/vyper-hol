@@ -1,6 +1,7 @@
 Theory readonlyInvokeCopyFwdExecutionArithmetic
 Ancestors
   readonlyInvokeCopyFwdExecutionLocal readonlyInvokeCopyFwdExecution
+  readonlyInvokeCopyFwdOpaque frameViewFacts frameRel unitShapeDefs
   readonlyInvokeCopyFwdHeterogeneousLedger readonlyInvokeCopyFwdValues
   readonlyInvokeCopyFwdRel readonlyInvokeCopyFwdOperationalSupport
   o1LowerDloadJointArithmetic o1LowerDloadPtrDiscipline o1LowerDloadGhost
@@ -10,15 +11,16 @@ Ancestors
   codegenRel contextCodegenRel finite_map list pred_set words
 
 Theorem ricf_execution_arithmetic_operands[local]:
-  ricf_execution_invariant vs C ctx0 log D stk PG G tn fn inst s t
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets tn /\
+  ssa_form fn /\ opaque_use_ok fn /\
   ptr_discipline lo C vs /\ active_inst fn inst s /\
   MEM inst.inst_opcode [ADD;SUB] /\ inst.inst_operands = [op1;op2] ==>
   (op_prov G op1 = NONE \/ op_prov G op2 = NONE) /\
   (inst.inst_opcode = SUB ==> op_prov G op2 = NONE) /\
   (!op x. MEM op inst.inst_operands /\ eval_operand op s = SOME x ==>
     ?y. eval_operand op t = SOME y /\
-      ricf_value_agree sites (op_prov G op) {} x y)
+      ricf_opaque_value_agree sites (op_prov G op) {} x y)
 Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
@@ -44,10 +46,14 @@ Proof
   `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
   `op_taint tn op = {}` by
     (fs[MEM] >> gvs[taint_ok_def] >> metis_tac[]) >>
-  `ricf_frame_agree D (ircf_dead (ricf_original_copy_ids C) s stk) sites
+  `!name. op = Var name ==> ~retpc_var fn name` by
+    (rpt gen_tac >> strip_tac >> irule ordinary_operand_not_retpc >> simp[] >>
+     qexists_tac `inst` >> fs[MEM] >>
+     metis_tac[active_inst_mem_fn_insts]) >>
+  `ricf_opaque_frame_agree fn D (ircf_dead (ricf_original_copy_ids C) s stk) sites
     (ricf_complete_params PG s.vs_params) G tn s t` by
     fs[ricf_execution_invariant_def] >>
-  drule_all ricf_frame_agree_operand >> gvs[]
+  drule_all ricf_opaque_frame_operand >> gvs[]
 QED
 
 Theorem ricf_arithmetic_values[local]:
@@ -71,16 +77,35 @@ Proof
 
 QED
 
+Theorem ricf_arithmetic_opaque_values[local]:
+  ricf_opaque_value_agree sites p {} x1 y1 /\
+  ricf_opaque_value_agree sites q {} x2 y2 /\
+  (p = NONE \/ q = NONE) /\
+  (is_sub ==> q = NONE) ==>
+  ricf_opaque_value_agree sites (case p of NONE => q | SOME id => p) {}
+    (if is_sub then x1-x2 else x1+x2)
+    (if is_sub then y1-y2 else y1+y2)
+Proof
+  disch_tac >>
+  `ricf_is_zero_prov (case p of NONE => q | SOME id => p) \/
+   (~ricf_is_zero_prov p /\ ~ricf_is_zero_prov q)` by
+    (Cases_on `p` >> Cases_on `q` >> fs[ricf_is_zero_prov_def] >> metis_tac[]) >>
+  Cases_on `ricf_is_zero_prov (case p of NONE => q | SOME id => p)`
+  >- simp[ricf_opaque_value_agree_def] >>
+  fs[ricf_opaque_value_agree_def] >> mp_tac ricf_arithmetic_values >> simp[]
+QED
+
 Theorem ricf_execution_arithmetic_next:
-  ricf_execution_invariant vs C ctx0 log D stk PG G tn fn inst s t
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets tn /\
+  ssa_form fn /\ opaque_use_ok fn /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   ptr_discipline lo C vs /\ active_inst fn inst s /\
   MEM inst.inst_opcode [ADD;SUB] /\
   step_inst fuel C inst s = OK u /\
   active_inst fn next (u with vs_inst_idx := SUC s.vs_inst_idx) ==>
   ?v. step_inst fuel Ct inst t = OK v /\
-    ricf_execution_invariant vs C ctx0 log D stk PG (step_prov PG G inst u)
+    ricf_execution_invariant vs C D stk PG (step_prov PG G inst u)
       (step_taint inst s u tn) fn next
       (u with vs_inst_idx := SUC s.vs_inst_idx)
       (v with vs_inst_idx := SUC s.vs_inst_idx)
@@ -96,30 +121,33 @@ Proof
     (qpat_x_assum `step_inst fuel C inst s = OK u` mp_tac >> fs[MEM] >>
      gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
          exec_pure2_def, AllCaseEqs()] >> metis_tac[]) >>
+  `~retpc_var fn out` by
+    (irule noncopy_output_not_retpc >> simp[] >> qexists_tac `inst` >>
+     fs[MEM] >> metis_tac[active_inst_mem_fn_insts]) >>
   `(op_prov G op1 = NONE \/ op_prov G op2 = NONE) /\
    (inst.inst_opcode = SUB ==> op_prov G op2 = NONE) /\
    (!op x. MEM op inst.inst_operands /\ eval_operand op s = SOME x ==>
     ?y. eval_operand op t = SOME y /\
-      ricf_value_agree sites (op_prov G op) {} x y)` by
+      ricf_opaque_value_agree sites (op_prov G op) {} x y)` by
     metis_tac[ricf_execution_arithmetic_operands] >>
   `?y1. eval_operand op1 t = SOME y1 /\
-    ricf_value_agree sites (op_prov G op1) {} x1 y1` by metis_tac[MEM] >>
+    ricf_opaque_value_agree sites (op_prov G op1) {} x1 y1` by metis_tac[MEM] >>
   `?y2. eval_operand op2 t = SOME y2 /\
-    ricf_value_agree sites (op_prov G op2) {} x2 y2` by metis_tac[MEM] >>
+    ricf_opaque_value_agree sites (op_prov G op2) {} x2 y2` by metis_tac[MEM] >>
   qabbrev_tac `value = if inst.inst_opcode = SUB then x1-x2 else x1+x2` >>
   qabbrev_tac `value' = if inst.inst_opcode = SUB then y1-y2 else y1+y2` >>
   `step_inst fuel Ct inst t = OK (update_var out value' t)` by
     (fs[MEM] >> gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
       exec_pure2_def, Abbr `value'`]) >>
   qexists_tac `update_var out value' t` >> simp[] >>
-  `ricf_value_agree sites (first_prov G inst.inst_operands) {} value value'` by
+  `ricf_opaque_value_agree sites (first_prov G inst.inst_operands) {} value value'` by
     (`first_prov G inst.inst_operands =
       (case op_prov G op1 of NONE => op_prov G op2 | SOME id => op_prov G op1)` by
        (Cases_on `op_prov G op1` >> Cases_on `op_prov G op2` >>
         gvs[first_prov_def]) >>
      pop_assum SUBST1_TAC >>
      simp_tac pure_ss [Abbr `value`, Abbr `value'`] >>
-     irule ricf_arithmetic_values >> metis_tac[]) >>
+     irule ricf_arithmetic_opaque_values >> metis_tac[]) >>
   gvs[] >>
   `step_prov PG G inst (update_var out value s) =
      set_prov G [out] (first_prov G inst.inst_operands) /\
