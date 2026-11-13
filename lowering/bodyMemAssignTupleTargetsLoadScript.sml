@@ -152,7 +152,9 @@ Theorem compile_tuple_load_all_typed_path_mem:
       (!i. i < LENGTH tys ==> ?v. eval_operand (EL i elems) t = SOME v /\
         if is_word_type (EL i tys) then
           v = typed_val_to_w256 (EL i tvs) (EL i vals)
-        else w2n v = w2n w + SUM (MAP type_memory_size (TAKE i tvs)))
+        else w2n v = w2n w + SUM (MAP type_memory_size (TAKE i tvs))) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all compile_tuple_load_all_typed_mem_ok >> strip_tac >>
@@ -215,7 +217,9 @@ Theorem optional_tuple_stage_path_mem:
         w2n w + type_memory_size_list tvs <= b + sz /\
         b + sz <= t.vs_alloca_next /\
         ((?aid. FLOOKUP t.vs_allocas aid = SOME (b,sz)) \/
-         (?name. local_region cenv es.scopes t name b sz)))
+         (?name. local_region cenv es.scopes t name b sz))) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all expr_tuple_memory_owned >>

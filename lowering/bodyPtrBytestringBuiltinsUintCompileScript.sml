@@ -77,7 +77,7 @@ Resume compile_uint2str_counted_ptr[post]:
     (qpat_x_assum `!out. u2s_safe _ _ _ _ _ _ _ _ _ _ _ out ==> _`
        (qspec_then `t` mp_tac) >> simp[]) >>
   `inst.inst_id = sa.cs_next_id` by simp[mk_inst_def] >>
-  `u2s_safe ctx fn cenv cx es a ba.buf_operand b (sz+n) inst sr t` by metis_tac[] >>
+  `u2s_safe H ctx fn cenv cx es a ba.buf_operand b (sz+n) inst sr t` by metis_tac[] >>
   drule_all u2s_result_vv_post >> simp[]
 QED
 

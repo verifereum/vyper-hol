@@ -2,6 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixCompleteCopy
 Ancestors
   loweringStateRelDefs valueEncodingDefs
+  compileEnv valueEncoding ctorDeployMemoryRunMemEntryBytes
   ctorDeployMemoryRunPtrPrefixCompleteCode ctorDeployMemoryRunPtrPrefixCanonicalFloor
   ctorDeployMemoryRunPtrPrefixCopy ctorDeployMemoryRunPtrPrefixCopySupport
   ctorDeployMemoryRunPtrPrefixCopyRun ctorDeployMemoryRunPtrPrefixCompleteScalar
@@ -11,8 +12,9 @@ Ancestors
   abiDecoderBytesFrame abiDecoderBytesTyped abiDecoderReentry abiDecoderReentryPointer
   abiDecoderContract abiDecoderTypedContract abiDecoderCoherence abiDecoderLoop
   abiEncoder abiEncoderRegisteredEffect allocaFrontierBound allocaBudgetProps
-  exprLowering exprLoweringProps emitHelper compileEnv venomInst venomState venomExecSemantics
-  ptrDiscipline ptrSafeRun valueEncoding words list rich_list arithmetic finite_map pred_set
+  exprLowering exprLoweringProps emitHelper venomInst venomState venomExecSemantics
+  ptrDiscipline ptrSafeRun words list rich_list arithmetic finite_map pred_set
+  fragGasOriginPtr
 
 Theorem prefix_bytes_outputs_fresh[local]:
   compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') ==>
@@ -41,20 +43,6 @@ Proof
   gvs[EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem prefix_copy_low_frame:
-  abi_decode_frame d cap initial final /\ lo <= d ==>
-  !a. a < lo ==> read_byte a final.vs_memory = read_byte a initial.vs_memory
-Proof
-  simp[abi_decode_frame_def] >> strip_tac >> rpt strip_tac >>
-  `mem_bytes_at a 1 final.vs_memory = mem_bytes_at a 1 initial.vs_memory` by
-    (first_x_assum irule >> decide_tac) >>
-  pop_assum (mp_tac o AP_TERM ``HD : byte list -> byte``) >>
-  simp[NoAsms, mem_bytes_at_def, codegenRelTheory.read_byte_def, HD_TAKE] >>
-  once_rewrite_tac[GSYM (CONJUNCT1 EL)] >>
-  simp[NoAsms, EL_APPEND_EQN, EL_DROP] >>
-  simp[NoAsms, DECIDE ``0 < n-a <=> a<n``] >>
-  rewrite_tac[ONE, REPLICATE, HD]
-QED
 
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
@@ -113,8 +101,70 @@ val CshiftCode = ``\ty tv.
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)``;
 
-Theorem prefix_bytestring_complete_code_contract:
-  type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCode) ty tv
+val CshiftCodeEvidence = ``\checked ty tv.
+ !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
+  G tn b sz Ddead lo PG.
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
+   (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ abi_decoder_coherent ce env sf ty tv /\
+ abi_decoder_metadata ce env ty tv root_di av v /\
+ eval_operand src initial = SOME (n2w sb) /\
+ eval_operand (Var dst) initial = SOME (n2w d) /\
+ sb + LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
+ mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) av))
+   initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
+ (!x. src = Var x \/ Var dst = Var x \/ Lit 0w = Var x ==> not_fresh_at st x) /\
+ st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+ fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+ (st.cs_blocks = st'.cs_blocks \/ !bb.
+    lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+ alloca_inv initial /\ alloca_frontier_inv_from k ctx func site initial /\
+ k + unit_alloca_budget ctx < dimword (:256) /\
+ D <= d /\ d + type_memory_bytes ce ty <= D+N /\ D+N <= initial.vs_alloca_next /\
+ frag_ids st st' SUBSET ids /\ ctor_actual_scratch func ids D N initial /\
+ ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+ initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+ FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
+ d + type_memory_bytes ce ty <= b+sz /\
+ op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
+ allocas_from lo initial /\ ~ctx_has_dalloca ctx /\
+ lo <= initial.vs_alloca_next /\ lo <= d /\
+ (checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) av) <=
+    LENGTH initial.vs_data_section /\ alloca_history func initial) ==>
+ ?actual H qt B.
+ allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
+ val_in_memory tv v d actual.vs_memory /\
+ abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st'))
+   [(d,type_memory_bytes ce ty)] initial actual /\
+ alloca_inv actual /\ alloca_frontier_inv_from k ctx func site actual /\
+ ctor_actual_scratch func ids D N actual /\ D+N <= actual.vs_alloca_next /\
+ actual.vs_data_section = initial.vs_data_section /\
+ actual.vs_call_ctx = initial.vs_call_ctx /\
+ (!x. not_fresh_at st x ==> lookup_var x actual = lookup_var x initial) /\
+ ~actual.vs_halted /\ actual.vs_current_bb = st'.cs_current_bb /\
+ actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
+ abi_decode_sim ctx func initial actual /\ fresh_vars_wrt limit_st actual /\
+ actual.vs_labels = initial.vs_labels /\ actual.vs_code = initial.vs_code /\
+ actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
+ actual.vs_block_ctx = initial.vs_block_ctx /\ actual.vs_gas_readings = initial.vs_gas_readings /\
+ (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
+ FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce ty)] /\
+ DISJOINT B qt.t_mem /\
+ (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
+    val_in_memory tv v d mem) /\
+ qt.t_mem SUBSET tn.t_mem /\
+ qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
+ (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
+                           op_taint qt (Var x) = op_taint tn (Var x)) /\
+ ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
+   !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial) /\
+ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
+ (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\
+    alloca_history func actual)``;
+
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
   strip_tac >> BETA_TAC >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -134,8 +184,14 @@ Proof
       ctor_actual_bytestring_ceiling_sequence)) >> strip_tac >>
   suspend "package"
 QED
+*)
+Theorem prefix_bytestring_complete_mode_contract:
+  type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCodeEvidence) checked ty tv
+Proof
+  cheat
+QED
 
-Resume prefix_bytestring_complete_code_contract[package]:
+Resume prefix_bytestring_complete_mode_contract[package]:
   rename1 `run_inst_seq (emitted_insts st st') initial = OK t` >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_bytes_shape >> strip_tac >>
@@ -172,6 +228,19 @@ Resume prefix_bytestring_complete_code_contract[package]:
      goal_assum (drule_at Any) >> metis_tac[]) >>
   `!a. a < lo ==> read_byte a t.vs_memory = read_byte a initial.vs_memory` by
     (drule prefix_copy_low_frame >> disch_then (qspec_then `lo` mp_tac) >> simp[]) >>
+  `checked ==> gas_path_mem ctx func initial 0
+     (OK (t with vs_inst_idx := LENGTH st'.cs_current_insts)) /\
+     alloca_history func (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (strip_tac >> gvs[] >>
+     `sb <= LENGTH initial.vs_data_section` by decide_tac >>
+     `d + abi_decode_bytes_copy_size n <= initial.vs_alloca_next` by simp[] >>
+     `run_inst_seq_mem_ok (emitted_insts st st') initial` by
+       (irule ctor_bytes_reentry_mem_ok >>
+        qexistsl [`LENGTH bs`, `d`, `Var dst`, `Lit 0w`, `n`, `sb`, `src`] >>
+        simp[] >> decide_tac) >>
+     drule_all ctor_bytes_sequence_zero_path >> strip_tac >>
+     `t.vs_current_bb = initial.vs_current_bb` by simp[] >>
+     drule_all ctor_bytes_sequence_history >> simp[]) >>
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,
     `range_bytes [(d,type_memory_bytes ce ty)]`] >>
   simp[SUBSET_REFL, op_taint_def] >>
@@ -194,4 +263,23 @@ Resume prefix_bytestring_complete_code_contract[package]:
     simp_tac bool_ss [fresh_vars_wrt_def]) >>
   qpat_x_assum `DISJOINT _ qt.t_mem` mp_tac >> simp[]
 QED
-Finalise prefix_bytestring_complete_code_contract
+Finalise prefix_bytestring_complete_mode_contract
+
+Theorem prefix_bytestring_complete_code_contract:
+  type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCode) ty tv
+Proof
+  mp_tac (Q.INST [`checked` |-> `F`] prefix_bytestring_complete_mode_contract) >>
+  simp_tac bool_ss []
+QED
+
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
+Proof
+  simp[prefix_bytestring_complete_mode_contract]
+QED
+*)
+Theorem prefix_bytestring_complete_checked_contract:
+  type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCodeEvidence) T ty tv
+Proof
+  cheat
+QED

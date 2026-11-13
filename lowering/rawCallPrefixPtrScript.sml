@@ -334,7 +334,7 @@ Theorem raw_call_operands_sim_ptr:
       rr = INL (av::BytesV bs::kvs) /\ value_has_type (BaseTV AddressT) av /\
       expr_post H ctx func cenv cx a es sa s1 s0 ea av addr ta /\
       expr_post H ctx func cenv cx d ea s1 s2 ta ed (BytesV bs) data tb /\
-      typed_args_post ctx func cenv cx ed sm th ee kws xs kvs t /\
+      typed_args_post H ctx func cenv cx ed sm th ee kws xs kvs t /\
       vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
       EVERY (\op. op_taint tn op = {}) xs /\
@@ -400,14 +400,14 @@ QED
 
 Resume raw_call_operands_sim_ptr[head_cert]:
   POP_ASSUM_LIST (K all_tac) >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  rewrite_tac[operandOutcomePtrTheory.ignore_map_return] >>
+  rewrite_tac[gasOutcomeMapPtrTheory.ignore_bind_map_return] >>
   rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_values >>
   goal_assum (drule_at Any)
 QED
 
 Resume raw_call_operands_sim_ptr[tail_cert]:
   POP_ASSUM_LIST (K all_tac) >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  rewrite_tac[operandOutcomePtrTheory.ignore_map_return] >>
+  rewrite_tac[gasOutcomeMapPtrTheory.ignore_bind_map_return] >>
   rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_values >>
   goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)
 QED
@@ -457,7 +457,7 @@ Resume raw_call_operands_sim_ptr[keyword_map]:
     rawCallKeywordPrefixPtrTheory.raw_call_kwargs_sim_ptr) >>
   disch_then (qspec_then `PG` assume_tac) >>
   irule (BETA_RULE (Q.ISPEC `\kvs. av::BytesV bs::kvs`
-    (Q.GEN `f` (SPEC_ALL operandOutcomePtrTheory.gas_outcome_ptr_map_return)))) >>
+    (Q.GEN `f` (SPEC_ALL gasOutcomeMapPtrTheory.gas_outcome_ptr_map_return)))) >>
   goal_assum (drule_at Any) >> conj_tac
   >- (rpt gen_tac >> strip_tac >> gvs[] >>
       `wb_frame cenv es ee' sa s0 t'` by
@@ -505,7 +505,7 @@ Proof
 QED
 
 Theorem typed_args_post_operands_evaluate:
-  typed_args_post ctx func cenv cx es sa s0 ee args xs vs t ==>
+  typed_args_post H ctx func cenv cx es sa s0 ee args xs vs t ==>
   EVERY (\op. ?w. eval_operand op t = SOME w) xs
 Proof
   simp[exprSimPrecompilesTheory.typed_args_post_def,
@@ -538,7 +538,7 @@ Theorem raw_call_prefix_sim_ptr:
       rr = INL (av::BytesV bs::kvs) /\ value_has_type (BaseTV AddressT) av /\
       expr_post H ctx func cenv cx a es sa s1 s0 ea av addr ta /\
       expr_post H ctx func cenv cx d ea s1 s2 ta ed (BytesV bs) data tb /\
-      typed_args_post ctx func cenv cx ed sm th ee kws xs kvs t /\
+      typed_args_post H ctx func cenv cx ed sm th ee kws xs kvs t /\
       vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
       EVERY (\op. op_taint tn op = {}) xs /\

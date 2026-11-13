@@ -22,6 +22,7 @@ Theorem hash_fixed_sha256_ptr_post:
   s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
   ?t Gf tf.
     run_inst_seq (emitted_insts sm sb) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sm sb) s Gf tf /\
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
       (OK (t with vs_inst_idx := s.vs_inst_idx+7)) /\
     vv_post H ctx fn cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
@@ -96,6 +97,7 @@ Theorem hash_dynamic_sha256_ptr_post:
   s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
   ?t Gf tf.
     run_inst_seq (emitted_insts sm sb) s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sm sb) s Gf tf /\
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
       (OK (t with vs_inst_idx := s.vs_inst_idx+7)) /\
     vv_post H ctx fn cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
@@ -133,7 +135,9 @@ Theorem hash_fixed_sha256_ptr_abort:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
-  ?t j Gf tf. gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
+  ?t j Gf tf.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sm sb) s Gf tf /\
+    gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
     (Abort Revert_abort (t with vs_inst_idx := j))
 Proof
   strip_tac >> drule_all hash_fixed_post_view >> strip_tac >>
@@ -162,7 +166,9 @@ Theorem hash_dynamic_sha256_ptr_abort:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
-  ?t j Gf tf. gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
+  ?t j Gf tf.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sm sb) s Gf tf /\
+    gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
     (Abort Revert_abort (t with vs_inst_idx := j))
 Proof
   strip_tac >> hash_dynamic_sha256_input_tac all_tac >>
