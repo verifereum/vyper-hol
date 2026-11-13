@@ -1,6 +1,14 @@
 Theory o1LabelFlowMiddleOperandOwners
 Ancestors
-  o1MakeSsaOwnership o1MakeSsaPrefixNames makeSsaDefs list alist pair
+  o1MakeSsaOwnership makeSsaDefs list alist pair
+
+Triviality current_operand_var_at:
+  !ops j x. j < LENGTH ops /\ EL j ops = Var x ==>
+    EL j (rename_current_operands rs ops) = Var (latest_current_name rs x)
+Proof
+  Induct >> simp[] >> Cases_on `h` >> Cases_on `j` >>
+  simp[rename_current_operands_def] >> metis_tac[]
+QED
 
 Theorem current_fixed_owner_latest:
   current_name_owner V H u /\ current_stack_owner V H (SND rs) /\
@@ -77,7 +85,7 @@ Proof
   simp[rename_current_inst_def] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   qexists `latest_current_name rs v` >> conj_tac
-  >- metis_tac[o1MakeSsaPrefixNamesTheory.current_operand_var_at] >>
+  >- metis_tac[current_operand_var_at] >>
   metis_tac[current_fixed_owner_latest]
 QED
 
