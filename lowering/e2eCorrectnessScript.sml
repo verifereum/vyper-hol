@@ -18,7 +18,7 @@ Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
-  loweringCalldataCorrect callPremiseDispatch
+  loweringCalldataCorrect loweringCalldataRevert callPremiseDispatch
   loweringShapeProps loweringShapeSource vfmExecution
   passSimulationDefs
   codegenCorrectness immutableCodeLayout asmOptimizer
