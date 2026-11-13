@@ -55,6 +55,7 @@ Proof
   simp[lower_value_def, compile_expr_def, comp_bind_def, comp_return_def,
        unwrap_value_def] >> strip_tac >> gvs[] >>
   irule gas_outcome_full_pure >>
+  reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`, `es`,
     `INL (FlagV (2 ** cenv.ce_flag_member_id (nsid_to_string (nsid0,nsid1)) mid))`,
     `s0`, `tn0`] >>
@@ -98,10 +99,10 @@ Proof
   qpat_x_assum `compile_expr _ _ _ sa = _` mp_tac >>
   simp[compile_expr_def, comp_return_def] >> strip_tac >> gvs[] >>
   irule gas_outcome_full_pure >>
+  reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`, `es`,
     `INL (Value (FlagV (2 ** cenv.ce_flag_member_id (nsid_to_string (nsid0,nsid1)) mid)))`,
     `s0`, `tn0`] >>
-  conj_tac >- simp[] >>
   conj_tac >- simp[Once evaluate_def, lookup_flag_mem_def, return_def] >>
   simp[] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
   simp[gas_origin_ptr_path_rules, vv_store_bound_def, contextTheory.vv_location_def,
