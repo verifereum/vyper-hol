@@ -87,7 +87,7 @@ Proof
   simp[store_copy_frame_def, store_copy_normalize_def, jump_to_def, lookup_var_def]
 QED
 
-Theorem place_store_prefix_fields[local]:
+Theorem place_store_prefix_fields:
   (store_copy_prefix loc b k s0 i).vs_memory = s0.vs_memory /\
   (store_copy_prefix loc b k s0 i).vs_labels = s0.vs_labels /\
   (store_copy_prefix loc b k s0 i).vs_call_ctx = s0.vs_call_ctx /\
