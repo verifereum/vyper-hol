@@ -1040,3 +1040,68 @@ Proof
   gvs[] >>
   metis_tac[venomExecProofsTheory.eval_phis_preserves_halted]
 QED
+
+(* Root prefixes evolve the current locals without changing the activation's
+   immutable entry, saved state, or physical anchor. *)
+Theorem inline_root_same_state_storage[local]:
+  inline_annotated_origin C n root cert /\
+  a.ia_function = inline_entry_function cert /\
+  a.ia_entry.vs_labels = FEMPTY /\
+  inline_caller_bookkeeping a.ia_entry s /\
+  s.vs_fmp = a.ia_entry.vs_fmp ==>
+  inline_live_stack C cert root
+    [(inline_entry_address cert,a,inline_route_identity a.ia_id,
+      <|ils_state := s; ils_saved := a.ia_entry; ils_entry := a.ia_entry;
+        ils_defined := {x | MEM x (cfgTransform$fn_all_vars a.ia_function) /\
+                           IS_SOME (lookup_var x s)};
+        ils_opaque := retpc_var a.ia_function; ils_protected := {};
+        ils_parent_rename := I|>)]
+    <|ipf_state := s; ipf_anchor := a.ia_entry|>
+Proof
+  strip_tac >>
+  `inline_namespace_leaf_at cert (inline_entry_address cert) I a.ia_function` by
+    metis_tac[functionInlinerOccurrencesTheory.inline_entry_leaf] >>
+  simp[functionInlinerLiveInvariantTheory.inline_live_stack_def,
+       functionInlinerOperationalCutsTheory.inline_owner_storage_def,
+       functionInlinerStackSupportsTheory.inline_address_stack_def,
+       functionInlinerStackSupportsTheory.inline_address_entry_def,
+       functionInlinerStackSupportsTheory.inline_address_links_def,
+       functionInlinerStackSupportsTheory.inline_erase_addresses_def,
+       functionInlinerCutsTheory.inline_suspended_observations_def,
+       functionInlinerCutsTheory.inline_tracked_snapshot_def,
+       inline_snapshot_data_def, inline_route_identity_def,
+       functionInlinerParameterSavedReadsTheory.inline_parameter_saved_reads_def,
+       pred_setTheory.SUBSET_DEF] >>
+  gvs[functionInlinerSimulationTheory.inline_caller_bookkeeping_def] >>
+  metis_tac[functionInlinerParameterAncestryTheory.inline_parameter_ancestry_rules]
+QED
+
+Theorem inline_root_parameter_step[local]:
+  is_param_opcode inst.inst_opcode /\ step_inst fuel C inst s = OK t ==>
+  step_inst tfuel Tctx inst s = OK t /\
+  inline_caller_bookkeeping s (t with vs_inst_idx := i) /\
+  (t with vs_inst_idx := i).vs_fmp = s.vs_fmp
+Proof
+  strip_tac >> gvs[venomInstTheory.is_param_opcode_iff] >>
+  gvs[step_inst_def, step_inst_base_opcode_eqs, AllCaseEqs(),
+      venomStateTheory.update_var_def,
+      functionInlinerSimulationTheory.inline_caller_bookkeeping_def]
+QED
+
+Theorem inline_root_parameter_trace[local]:
+  (!k. k < N ==> ?inst t.
+    is_param_opcode inst.inst_opcode /\
+    step_inst fuel C inst (ss k) = OK t /\
+    ss (SUC k) = t with vs_inst_idx := SUC (ss k).vs_inst_idx) ==>
+  !k. k <= N ==>
+    inline_caller_bookkeeping (ss 0) (ss k) /\
+    (ss k).vs_fmp = (ss 0).vs_fmp
+Proof
+  strip_tac >> Induct >- simp[] >> strip_tac >>
+  `k < N /\ k <= N` by decide_tac >>
+  first_x_assum drule >> strip_tac >>
+  qpat_x_assum `!k. k < N ==> _` (qspec_then `k` mp_tac) >>
+  simp[] >> strip_tac >>
+  drule_all inline_root_parameter_step >> strip_tac >>
+  gvs[functionInlinerSimulationTheory.inline_caller_bookkeeping_def]
+QED
