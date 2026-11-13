@@ -130,7 +130,14 @@ Resume ifexp_copy_post_transport[post]:
         (irule freshWritesTheory.not_fresh_at_mono >>
          qexists_tac `origin` >> simp[]) >>
       metis_tac[]) >>
-  gvs[]
+  gvs[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >>
+  `pure_frame cenv func es origin s0 q <=> pure_frame cenv func es origin s0 m` by
+    (irule loweringPostsTheory.pure_frame_state_cong >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  qpat_x_assum `_ ==> pure_frame _ _ _ _ _ m` irule >>
+  first_assum ACCEPT_TAC
 QED
 
 Finalise ifexp_copy_post_transport

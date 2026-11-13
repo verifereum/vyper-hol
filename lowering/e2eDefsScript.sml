@@ -1,12 +1,13 @@
 (* PLAN 5.5 boundary, not a compiler correctness certificate.
  * TOP-LEVEL: layouts_agree, source_deployment_rel, source_typing_ok,
- * source_storage_ok, call_outcomes_ok, tx_block_fields_rel,
+ * source_storage_ok, call_outcomes_storage_ok, tx_block_fields_rel,
  * tx_env_ok (defined in compileEnv, as part of call_ctx_rel),
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
  * call_external_transaction_pending_deletions,
  * load_contract_pending_deletions, valid_vyper_call, compiled_event_info,
  * return_bytes, tx_return_bytes,
  * unspecified_behaviour_exempt, source_exempt, call_result_rel, logs_correspond.
+ * Transaction boundary (Milestone 7 lifecycle): next_source_machine.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
  * DAG: source/typing/storage + supported syntax + frame/trace -> e2eDefs;
@@ -14,7 +15,8 @@
  *)
 Theory e2eDefs
 Ancestors
-  vfmExecution vfmExecutionProp vfmState
+  vfmExecution vfmExecutionProp vfmState vfmRunCall
+  vfmTotalBalance vfmReturndataBound vfmWfState
   frameOutcome callTrace
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
@@ -27,12 +29,12 @@ Definition layouts_agree_def:
   layouts_agree tops am tx <=>
     let (sl, tl) = (case ALOOKUP am.layouts tx.target of
                       SOME p => p | NONE => ([], [])) in
-      (!vis id ty n. MEM (VariableDecl vis Storage id ty (SOME n)) tops ==>
-                     ALOOKUP sl (NONE, id) = SOME n) /\
-      (!vis id ty n. MEM (VariableDecl vis Transient id ty (SOME n)) tops ==>
-                     ALOOKUP tl (NONE, id) = SOME n) /\
-      (!vis tr id kt vt n. MEM (HashMapDecl vis tr id kt vt (SOME n)) tops ==>
-                           ALOOKUP (if tr then tl else sl) (NONE, id) = SOME n) /\
+      (!vis id ty slot_opt. MEM (VariableDecl vis Storage id ty slot_opt) tops ==>
+                            ALOOKUP sl (NONE, id) = slot_opt) /\
+      (!vis id ty slot_opt. MEM (VariableDecl vis Transient id ty slot_opt) tops ==>
+                            ALOOKUP tl (NONE, id) = slot_opt) /\
+      (!vis tr id kt vt slot_opt. MEM (HashMapDecl vis tr id kt vt slot_opt) tops ==>
+                                  ALOOKUP (if tr then tl else sl) (NONE, id) = slot_opt) /\
       (* The pinned frontend reserves this slot when a guard is present.
          Ordinary contracts need not have a transient layout at all. *)
       (!vis mut rr name args dflts ret body.
@@ -63,10 +65,14 @@ Proof
   metis_tac[layouts_agree_nonreentrant_slot]
 QED
 
+(* The target has no exports, or an empty export entry: load_contract
+   installs SOME [] for a contract without exported module functions, and
+   both make call_external use the main module. *)
 Definition source_deployment_rel_def:
   source_deployment_rel tops am tx <=>
     ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
-    ALOOKUP am.exports tx.target = NONE /\
+    (ALOOKUP am.exports tx.target = NONE \/
+     ALOOKUP am.exports tx.target = SOME []) /\
     layouts_agree tops am tx
 End
 
@@ -96,6 +102,21 @@ Definition source_storage_ok_def:
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
       contract_storage_well_formed cx (initial_state am []) /\
       storage_layout_safe cx
+End
+
+(* What the call theorem asks of the oracle outcomes: every one leaves the
+   declared storage and transient regions decoding.  call_outcomes_ok adds
+   the outcome bounds the proof uses (return data shorter than 2 ** 256
+   bytes, runtime well-typed accounts); call_state_rel_call_outcomes_ok
+   derives them for the outcomes of the real run from call_state_rel. *)
+Definition call_outcomes_storage_ok_def:
+  call_outcomes_storage_ok am tx os <=>
+    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
+      EVERY (\outcome.
+               contract_storage_well_formed cx
+                 (initial_state (am with <| accounts := outcome.co_accounts;
+                                            tStorage := outcome.co_tStorage |>) []))
+            os
 End
 
 Definition call_outcomes_ok_def:
@@ -168,6 +189,7 @@ Definition call_state_rel_def:
       LENGTH ctxt.msgParams.code <= 24576 /\
       ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
       ctxt.returnData = [] /\ buffer_to_list ctxt.memory = [] /\
+      balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es /\
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.toDelete = am.pending_deletions /\
@@ -176,8 +198,118 @@ Definition call_state_rel_def:
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
       buffer_to_list ctxt.msgParams.data = tx.calldata /\
+      ctxt.msgParams.code = tx.code /\
       tx_block_fields_rel tx es.txParams /\
       source_deployment_rel tops am tx
+End
+
+(* ===== Outcome bounds of the real run ===== *)
+
+(* Every outcome call_trace records is outcome_of a state the run reaches:
+   the return data of its top frame and its live accounts.  wf_state bounds
+   every account's code (wf_accounts), balance_bounded every account map's
+   total balance, returndata_bounded every frame's return data, and a step
+   keeps all three. *)
+Theorem outcome_of_bounded[local]:
+  wf_state s /\ balance_bounded (2 ** 256 - 1) s /\ returndata_bounded s ==>
+  LENGTH (outcome_of k s n m).co_returnData < dimword(:256) /\
+  accounts_runtime_well_typed (outcome_of k s n m).co_accounts
+Proof
+  strip_tac >>
+  simp[outcome_of_def, accounts_runtime_well_typed_def,
+       account_runtime_well_typed_def] >> conj_tac
+  >- (CONV_TAC (DEPTH_CONV wordsLib.SIZES_CONV) >>
+      Cases_on `s.contexts` >> gvs[wf_state_def, returndata_bounded_def])
+  >> gen_tac >> conj_tac
+  >- (drule balance_bounded_rollback >> strip_tac >>
+      irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+      qexists_tac `total_balance s.rollback.accounts` >>
+      simp[lookup_balance_le_total_balance] >>
+      pop_assum mp_tac >> simp[])
+  >> `wf_accounts s.rollback.accounts` by fs[wf_state_def, all_accounts_def] >>
+  fs[wf_accounts_def, wf_account_state_def, lookup_account_def] >>
+  first_x_assum (qspec_then `addr` mp_tac) >> simp[]
+QED
+
+Theorem step_outcome_invariant[local]:
+  wf_state s /\ balance_bounded (2 ** 256 - 1) s /\ returndata_bounded s /\
+  step s = (r, s') ==>
+  wf_state s' /\ balance_bounded (2 ** 256 - 1) s' /\ returndata_bounded s'
+Proof
+  strip_tac >>
+  drule step_preserves_wf_state >> drule step_returndata_bounded >>
+  fs[balance_bounded_def] >> drule_all step_total_balance_bounded >>
+  fs[]
+QED
+
+Theorem frame_obs_tr_every_outcome:
+  !d obs s r s'.
+    (!t. Inv t ==> Inv (SND (step t))) /\
+    (!t k n m. Inv t ==> Q (outcome_of k t n m)) /\
+    Inv s' /\ EVERY Q (MAP SND obs.entries) ==>
+    EVERY Q (MAP SND (frame_obs_tr d obs s (r,s')).entries)
+Proof
+  recInduct frame_obs_tr_ind >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `EVERY Q (MAP SND (observe d s (r,s') obs).entries)` by
+    (simp[observe_def] >> rw[] >> BasicProvers.every_case_tac >>
+     gvs[listTheory.EVERY_APPEND]) >>
+  `Inv (SND (step s'))` by (first_assum irule >> fs[]) >>
+  simp[Once frame_obs_tr_def] >>
+  IF_CASES_TAC >- fs[] >>
+  first_x_assum (qspec_then `observe d s (r,s') obs` mp_tac) >>
+  fs[] >> Cases_on `step s'` >> fs[]
+QED
+
+Theorem call_trace_outcomes_bounded:
+  wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es ==>
+  EVERY (\co. LENGTH co.co_returnData < dimword(:256) /\
+              accounts_runtime_well_typed co.co_accounts)
+    (MAP SND (call_trace es))
+Proof
+  strip_tac >> REWRITE_TAC[call_trace_def, frame_obs_def] >>
+  Cases_on `step es` >>
+  drule_all step_outcome_invariant >> strip_tac >>
+  irule frame_obs_tr_every_outcome >>
+  reverse conj_tac >- simp[] >>
+  qexists_tac `\t. wf_state t /\ balance_bounded (2 ** 256 - 1) t /\
+                   returndata_bounded t` >>
+  BETA_TAC >>
+  conj_tac >- asm_rewrite_tac[] >>
+  conj_tac >- (rpt strip_tac >> drule_all outcome_of_bounded >> simp[]) >>
+  rpt strip_tac >> Cases_on `step t` >>
+  drule_all step_outcome_invariant >> simp[]
+QED
+
+Theorem call_state_rel_call_outcomes_ok:
+  call_state_rel tops runtime_bc am tx es /\
+  call_outcomes_storage_ok am tx (MAP SND (call_trace es)) ==>
+  call_outcomes_ok am tx (MAP SND (call_trace es))
+Proof
+  strip_tac >>
+  `wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
+    fs[call_state_rel_def] >>
+  drule_all call_trace_outcomes_bounded >>
+  qpat_x_assum `call_outcomes_storage_ok _ _ _` mp_tac >>
+  simp[call_outcomes_ok_def, call_outcomes_storage_ok_def, listTheory.EVERY_MEM] >>
+  rpt strip_tac >> res_tac
+QED
+
+(* The source machine the next transaction starts from, after a transaction
+   or deployment whose frame succeeded (r = INR NONE) in EVM state es' with
+   source machine am': it adopts the EVM's committed accounts (pending
+   deletions processed, the target's installed code included), and starts the
+   transaction with empty transient storage, no logs and no pending deletions.
+   After a failed top-level frame es'.rollback still holds the frame's writes
+   (the transaction's accounting discards them), so the next transaction
+   starts from the pre-transaction machine instead. *)
+Definition next_source_machine_def:
+  next_source_machine (am' : abstract_machine) es' =
+    am' with <| accounts := process_deletions es'.rollback.toDelete
+                              es'.rollback.accounts;
+                tStorage := empty_transient_storage;
+                logs := [];
+                pending_deletions := [] |>
 End
 
 (* call_state_rel's am.pending_deletions = [] holds of every machine that

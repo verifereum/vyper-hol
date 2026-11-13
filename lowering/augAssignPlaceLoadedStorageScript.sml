@@ -36,7 +36,8 @@ Theorem aug_place_storage_loaded:
       lookup_var z u = SOME v) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
       FLOOKUP u.vs_allocas aid = SOME b) /\
-    u.vs_alloca_next = t.vs_alloca_next /\
+    u.vs_alloca_next = t.vs_alloca_next /\ u.vs_memory = t.vs_memory /\
+    (!z. not_fresh_at sp z ==> lookup_var z u = lookup_var z t) /\
     (!z. FST r = Var z ==> not_fresh_at sl z) /\
     (?out. cur = Var out /\ not_fresh_at sl out)
 Proof

@@ -306,7 +306,20 @@ Proof
     (strip_assume_tac o PURE_REWRITE_RULE [canonical_members_frame_def]) >>
   `entry_source_probe_cursor ce env sf fulltys fulltvs fullavs fullvs sb d
      (pre++[ty]) tys next endpoint` by
-    (irule source_member_cursor_advance >> goal_assum (drule_at Any) >> metis_tac[SUBSET_DEF]) >>
+    (`oid NOTIN window_alloca_sites fn (abi_decoder_ids middle.cs_next_id next.cs_next_id)` by
+       (strip_tac >> qpat_x_assum `oid NOTIN sites` mp_tac >> simp_tac bool_ss [] >>
+        qpat_assum `window_alloca_sites fn
+                      (abi_decoder_ids middle.cs_next_id next.cs_next_id) SUBSET sites`
+          (irule o PURE_REWRITE_RULE [SUBSET_DEF]) >>
+        first_assum ACCEPT_TAC) >>
+     `entry_owned_region oid root extent d (SUM (MAP (type_memory_bytes ce) fulltys)) s` by
+       (qpat_assum `outsz = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+        first_assum ACCEPT_TAC) >>
+     irule source_member_cursor_advance >>
+     qhdtm_assum `array_child_result` (irule_at Any) >>
+     qpat_assum `entry_source_members _ _ _ (_::_) _ _ _` (irule_at Any) >>
+     qpat_assum `entry_source_members _ _ _ pre _ _ _` (irule_at Any) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `endpoint` >> (conj_tac >- first_assum ACCEPT_TAC) >>
   irule entry_members_resource_advance >>
   qhdtm_assum `canonical_members_frame` (irule_at Any) >>

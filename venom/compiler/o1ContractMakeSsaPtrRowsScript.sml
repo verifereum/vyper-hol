@@ -7,12 +7,16 @@ Theory o1ContractMakeSsaPtrRows
 Ancestors
   o1FrameLockstep ptrDiscipline contextCodegenRel codegenRel
   makeSsaDefs makeSsaCurrentOrigin o1PassContract venomWf
-
+ loweringStateRelDefs
 Theorem lockstep_taint_operands[local]:
   inst_pair sg inst inst' /\ state_rel sg s s' /\
   ghost_rel sg G tn G' tn' /\ taint_ok fn tn inst s ==>
   !op. MEM op inst'.inst_operands /\ op_taint tn' op <> {} ==>
     inst'.inst_opcode = ASSIGN \/
+    (inst'.inst_opcode = MUL /\
+     ?b. (inst'.inst_operands = [op; b] \/
+          inst'.inst_operands = [b; op]) /\ op_taint tn' b = {} /\
+         (eval_operand b s' = SOME 0w \/ eval_operand b s' = SOME 1w)) \/
     ((inst'.inst_opcode = SHL \/ inst'.inst_opcode = SHR \/
       inst'.inst_opcode = SAR) /\
      ?n. inst'.inst_operands = [n; op] /\ op_taint tn' n = {}) \/
@@ -28,7 +32,7 @@ Proof
   qpat_x_assum `taint_ok _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [taint_ok_def]) >>
   first_x_assum drule >> simp[] >> strip_tac >>
-  gvs[inst_pair_def, listTheory.LIST_REL_CONS1]
+  gvs[inst_pair_def, listTheory.LIST_REL_CONS1] >> metis_tac[]
 QED
 
 Theorem lockstep_access_comparison[local]:
@@ -139,7 +143,7 @@ Proof
   `inst'.inst_opcode = inst.inst_opcode` by gvs[inst_pair_def] >>
   drule_all inst_pair_ops >> strip_tac >>
   `s'.vs_call_entry_fmp = s.vs_call_entry_fmp` by
-    metis_tac[state_rel_def, execution_frame_fields] >>
+    metis_tac[o1FrameLockstepTheory.state_rel_def, execution_frame_fields] >>
   drule_all write_ranges_pair >> strip_tac >>
   drule_all read_ranges_pair >> strip_tac >>
   drule inst_pair_write_offset >> strip_tac >>

@@ -44,6 +44,7 @@ Theorem abi_decode_mem_array_body:
     alloca_inv u /\ alloca_room ctx fn u /\ alloca_history fn u /\ ~u.vs_halted /\
     u.vs_current_bb = middle.cs_current_bb /\ u.vs_inst_idx = LENGTH middle.cs_current_insts /\
     B+H <= u.vs_alloca_next /\ e+msz <= u.vs_alloca_next /\
+    d+32 <= e /\ e+msz <= d+sz /\
     eval_operand (FST (SND ops)) u = SOME c /\
     eval_operand (SND (SND ops)) u = SOME (n2w e) /\
     eval_operand base_op u = SOME (n2w B) /\ eval_operand hi_op u = SOME (n2w H) /\
@@ -109,7 +110,8 @@ Resume abi_decode_mem_array_body[accepted]:
     abi_decoder_operand_live st.cs_next_var op` by
     metis_tac[abi_decoder_operand_live_mono] >>
   `alloca_inv u /\ alloca_room ctx fn u /\ B+H <= u.vs_alloca_next /\
-   d+32+j*msz+msz <= u.vs_alloca_next` by suspend "resources" >>
+   d+32+j*msz+msz <= u.vs_alloca_next /\
+   d+32 <= d+32+j*msz /\ d+32+j*msz+msz <= d+sz` by suspend "resources" >>
   `w2n (if dec_info_needs_offset di then
       n2w (sb+32)+abi_decode_load MLOAD ((n2w B:bytes32)+n2w (sb+32+j*asz)) b
       else n2w (sb+32+j*asz):bytes32) + asz <= H` by suspend "child_bound" >>

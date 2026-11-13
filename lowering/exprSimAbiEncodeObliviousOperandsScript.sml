@@ -248,6 +248,10 @@ Proof
       >> irule enc_operand_bind_nonlabel >> simp[enc_operand_emit_op] >> rpt strip_tac
       >> irule enc_operand_action_ignore_bind >> simp[enc_operand_emit_void]
       >> irule enc_operand_bind_nonlabel >> simp[enc_operand_emit_op] >> rpt strip_tac
+      >> irule enc_operand_action_ignore_bind >> simp[enc_operand_emit_void]
+      >> irule enc_operand_bind_nonlabel >> simp[enc_operand_emit_op] >> rpt strip_tac
+      >> irule enc_operand_bind_nonlabel >> simp[enc_operand_emit_op] >> rpt strip_tac
+      >> irule enc_operand_bind_nonlabel >> simp[enc_operand_emit_op] >> rpt strip_tac
       >> simp[enc_operand_bind_nonlabel, enc_operand_action_ignore_bind,
               enc_operand_emit_op, enc_operand_emit_void])
   >- simp[enc_operand_action_ignore_bind, enc_operand_emit_void, enc_operand_action_return]
