@@ -86,14 +86,27 @@ Proof
 QED
 
 Theorem constructor_count_guard_origin_ptr[local]:
+  (!D lo PG code s t G tn G' tn' ctx fn bb.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+    inst_seq_ptr D lo ctx fn PG G tn code s G' tn' /\
+    run_inst_seq code s = OK t ==>
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn'
+       (t with vs_inst_idx := s.vs_inst_idx + LENGTH code)) ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)) ==>
   abi_decode_count_guard CALLDATALOAD src maxn sa = (cnt,sb) /\
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\ allocas_from lower s /\
   ~ctx_has_dalloca ctx /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?H u. (!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
+  ?H u. ((!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
     (s,G,tn) [] (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u)) /\
+    (!D. (!fuel. ptr_safe_run D lower fuel ctx fn PG H u
+      (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s)) /\
     op_taint u cnt = {} /\ op_prov H cnt = NONE /\
     (?vars. t = s with vs_vars := vars) /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
@@ -101,7 +114,7 @@ Theorem constructor_count_guard_origin_ptr[local]:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
       FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >> drule constructor_count_guard_layout >> strip_tac >>
+  disch_tac >> strip_tac >> drule constructor_count_guard_layout >> strip_tac >>
   qabbrev_tac `v0 = "%" ++ toString sa.cs_next_var` >>
   qabbrev_tac `v1 = "%" ++ toString (sa.cs_next_var + 1)` >>
   qabbrev_tac `v2 = "%" ++ toString (sa.cs_next_var + 2)` >>
@@ -234,9 +247,17 @@ Resume constructor_count_guard_origin_ptr[guard_path]:
        access_ok_def, taint_ok_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def, op_taint_def] >>
      rpt strip_tac >> Cases_on `op` >> gvs[]) >>
-  rpt gen_tac >>
-  qspecl_then [`[i0;i1;i2;i3]`,`s`,`t`] mp_tac constructor_guard_run_joint >>
-  simp[] >> disch_then irule >>
+  conj_tac
+  >- (rpt gen_tac >>
+      qspecl_then [`[i0;i1;i2;i3]`,`s`,`t`] mp_tac constructor_guard_run_joint >>
+      simp[] >> disch_then irule >>
+      gvs[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`,
+        mk_inst_def, is_terminator_def, rich_listTheory.DROP_APPEND1]) >>
+  gen_tac >>
+  qpat_x_assum `!D lo PG code s t G tn G' tn' ctx fn bb. _`
+    (qspecl_then [`D`,`lower`,`PG`,`[i0;i1;i2;i3]`,`s`,`t`,
+      `G`,`tn`,`H`,`u`,`ctx`,`fn`,`bb`] mp_tac) >>
+  simp[] >>
   gvs[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`,
     mk_inst_def, is_terminator_def, rich_listTheory.DROP_APPEND1]
 QED
