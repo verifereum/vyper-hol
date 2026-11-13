@@ -31,37 +31,6 @@ Proof
   metis_tac[safe_cast_some_eq, safe_cast_result_well_typed]
 QED
 
-(* The constructor classify_functions picks is the first Deploy function;
-   when it has the name looked up, lookup_function returns it, and with no
-   Deploy function lookup_function returns the empty default constructor. *)
-Theorem classify_functions_ctor_lookup:
-  !tops src name.
-    case SND (SND (SND (classify_functions tops))) of
-      NONE =>
-        vyperInterpreter$lookup_function src name Deploy tops =
-          SOME (Payable, F, [], [], NoneT, [])
-    | SOME (fmut, fnr, frr, fname, fargs, fdflts, fret, fbody) =>
-        fname = name ==>
-        vyperInterpreter$lookup_function src name Deploy tops =
-          SOME (fmut, fnr, fargs, fdflts, fret, fbody)
-Proof
-  Induct >- simp[classify_functions_def, vyperInterpreterTheory.lookup_function_def] >>
-  rpt gen_tac >>
-  first_x_assum (qspecl_then [`src`, `name`] mp_tac) >>
-  simp[classify_functions_def] >>
-  `?a b c d. FOLDR classify_function ([],[],NONE,NONE) tops = (a,b,c,d)` by
-    metis_tac[pairTheory.ABS_PAIR_THM] >>
-  simp[] >> strip_tac >>
-  Cases_on `h` >>
-  simp[classify_function_def, vyperInterpreterTheory.lookup_function_def]
-  >~ [`VariableDecl vd`]
-  >- (Cases_on `vd` >> simp[vyperInterpreterTheory.lookup_function_def])
-  >~ [`HashMapDecl hd`]
-  >- (Cases_on `hd` >> simp[vyperInterpreterTheory.lookup_function_def]) >>
-  qmatch_goalsub_rename_tac `case vv of External => _ | Internal => _ | Deploy => _` >>
-  Cases_on `vv` >> rw[]
-QED
-
 (* The constructor's appended arguments are below 2 ** 128 bytes. *)
 Theorem constructor_args_size_bounded:
   !policy tops deploy_bc runtime_bc arts am tx bs.

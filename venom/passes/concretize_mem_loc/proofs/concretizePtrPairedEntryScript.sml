@@ -2,7 +2,7 @@ Theory concretizePtrPairedEntry
 Ancestors
   concretizePtrPairedFields concretizePtrLedgerAlignment
   concretizePtrPairedPrefixProbe concretizePtrMixedPhi
-  concretizeStepStructure concretizeStepShape concretizeStepCallChecks
+  concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape venomExecProofs venomExecSemantics venomWf
   concretizePtrPrefixLedger analysisSimProofsBase
   frameHistoryInstructions frameCfgBoundary contextCodegenRel passSimulationDefs

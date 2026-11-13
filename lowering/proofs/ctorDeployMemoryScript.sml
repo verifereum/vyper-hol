@@ -5,8 +5,8 @@
 Theory ctorDeployMemory
 Ancestors
   ctorDeployDefs o1PassContract gasSummary unitTransformDefs ptrDiscipline
-  ctorDeployMemoryFrontier ctorDeployMemoryRunMem ctorDeployMemoryRunPtr
-  ctorDeployImmBudget
+  ctorDeployMemoryFrontier loweredUnitMemoryFrontier ctorDeployMemoryRunMem ctorDeployMemoryRunPtr
+  ctorDeployImmBudget ctorDeployShape o1PipelineCorrect
 
 Theorem deploy_unit_memory_ok:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.

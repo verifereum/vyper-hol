@@ -18,8 +18,10 @@ Theorem body_ifexp_widened_call_arm_mem:
     !tops ctx func cenv env ty es.
       body_inv tops ctx cenv cx /\
       expr_body_pre cenv cx env (IfExp v5 e1 e2 e3) es /\
-      (?e. (e = e2 \/ e = e3) /\ int_calls_expr e <> [] /\
-           ~same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) ==>
+      (?e. (e = e2 \/ e = e3) /\
+           ~((int_calls_expr e = [] \/
+              same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+             post_value_type cenv e = expr_type e)) ==>
       expr_sim_mem ctx func cenv cx ty (IfExp v5 e1 e2 e3) es /\
       expr_vv_sim_mem ctx func cenv cx ty (IfExp v5 e1 e2 e3) es
 Proof
