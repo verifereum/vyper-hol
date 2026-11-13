@@ -21,8 +21,10 @@ Proof
   simp[gas_shadow_compiles_bind, gas_shadow_compiles_return] >>
   rename1 `SOME loc` >>
   Cases_on `var_location_decode_operand loc` >> Cases_on `opc = CALLDATALOAD` >>
-  simp[comp_ignore_bind_def, gas_shadow_compiles_bind, compile_abi_arg_ptr_guard_def,
-       gas_shadow_compiles_return, gas_shadow_compiles_emit_op,
+  simp[comp_ignore_bind_def, compile_abi_arg_ptr_guard_def,
+       gas_shadow_compiles_return] >>
+  rpt (ho_match_mp_tac gas_shadow_compiles_bind >> rpt strip_tac) >>
+  simp[gas_shadow_compiles_return, gas_shadow_compiles_emit_op,
        gas_shadow_compiles_emit_void, gas_shadow_compiles_abi_decode_to_buf]
 QED
 
@@ -83,9 +85,10 @@ Proof
       >- simp[gas_shadow_compiles_emit_op] >> gen_tac >>
       ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
       >- (IF_CASES_TAC >>
-          simp[gas_shadow_compiles_bind, gas_shadow_compiles_emit_op,
-               gas_shadow_compiles_return, gas_shadow_compiles_emit_void,
-               compile_abi_arg_ptr_guard_def, comp_ignore_bind_def]) >> gen_tac >>
+          simp[compile_abi_arg_ptr_guard_def, comp_ignore_bind_def] >>
+          rpt (ho_match_mp_tac gas_shadow_compiles_bind >> rpt strip_tac) >>
+          simp[gas_shadow_compiles_emit_op, gas_shadow_compiles_return,
+               gas_shadow_compiles_emit_void]) >> gen_tac >>
       simp[gas_shadow_compiles_bind, gas_shadow_compiles_abi_decode_to_buf]) >>
   simp[comp_ignore_bind_def] >>
   ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
