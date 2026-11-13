@@ -246,8 +246,8 @@ Proof
      storage_well_formed_on cx (mid with gas_obs := []) (FST H)` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       drule >>
-     simp[loweringPostsTheory.expr_post_def]) >>
+       (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
+     asm_rewrite_tac[]) >>
   `~t.vs_halted` by metis_tac[slice_marked_read_ok_not_halted] >>
   irule slice_read_outcome_bind >> simp[] >>
   qexistsl_tac [`cenv`, `lop`, `sd`, `se`, `ty`] >> gvs[] >>
@@ -363,8 +363,8 @@ Proof
      stmt_state_rel H ctx func cenv cx e2 r /\ storage_well_formed_on cx e2 (FST H)` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H e2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-       drule >>
-     simp[loweringPostsTheory.expr_post_def]) >>
+       (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
+     asm_rewrite_tac[]) >>
   `eval_operand sl r = SOME (n2w (LENGTH bs)) /\
    eval_operand data r = SOME (n2w src_base)` by
     (qpat_assum `expr_post _ _ _ _ _ start _ _ _ _ _ _ _ _`
@@ -486,8 +486,8 @@ Proof
      stmt_state_rel H ctx func cenv cx e2 r /\ storage_well_formed_on cx e2 (FST H)` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H e2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-       drule >>
-     simp[loweringPostsTheory.expr_post_def]) >>
+       (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
+     asm_rewrite_tac[]) >>
   `eval_operand sl r = SOME (n2w (LENGTH text)) /\
    eval_operand data r = SOME (n2w src_base)` by
     (qpat_assum `expr_post _ _ _ _ _ start _ _ _ _ _ _ _ _`
@@ -606,8 +606,8 @@ Proof
      storage_well_formed_on cx (mid with gas_obs := []) (FST H)` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       drule >>
-     simp[loweringPostsTheory.expr_post_def]) >>
+       (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
+     asm_rewrite_tac[]) >>
   `~t.vs_halted` by metis_tac[slice_marked_read_ok_not_halted] >>
   irule slice_read_outcome_bind >> simp[] >>
   qexistsl_tac [`cenv`, `lop`, `sd`, `se`, `ty`] >> gvs[] >>
@@ -726,8 +726,8 @@ Proof
      stmt_state_rel H ctx func cenv cx e2 r /\ storage_well_formed_on cx e2 (FST H)` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H e2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-       drule >>
-     simp[loweringPostsTheory.expr_post_def]) >>
+       (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
+     asm_rewrite_tac[]) >>
   `eval_operand sl r = SOME (n2w (LENGTH bs)) /\
    eval_operand data r = SOME (n2w src_base)` by
     (qpat_assum `expr_post _ _ _ _ _ start _ _ _ _ _ _ _ _`
@@ -852,8 +852,8 @@ Proof
      stmt_state_rel H ctx func cenv cx e2 r /\ storage_well_formed_on cx e2 (FST H)` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H e2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
-       drule >>
-     simp[loweringPostsTheory.expr_post_def]) >>
+       (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
+     asm_rewrite_tac[]) >>
   `eval_operand sl r = SOME (n2w (LENGTH text)) /\
    eval_operand data r = SOME (n2w src_base)` by
     (qpat_assum `expr_post _ _ _ _ _ start _ _ _ _ _ _ _ _`

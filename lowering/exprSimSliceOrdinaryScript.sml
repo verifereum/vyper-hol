@@ -106,8 +106,8 @@ Proof
   strip_tac >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      storage_well_formed_on cx ee (FST H)` by
-    (rpt strip_tac >> first_x_assum drule >>
-     simp[loweringPostsTheory.expr_post_def]) >>
+    (rpt strip_tac >> first_x_assum (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
+     asm_rewrite_tac[]) >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -164,8 +164,8 @@ Proof
   strip_tac >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      storage_well_formed_on cx ee (FST H)` by
-    (rpt strip_tac >> first_x_assum drule >>
-     simp[loweringPostsTheory.expr_post_def]) >>
+    (rpt strip_tac >> first_x_assum (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
+     asm_rewrite_tac[]) >>
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`

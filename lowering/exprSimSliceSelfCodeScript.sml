@@ -828,7 +828,7 @@ Proof
      storage_well_formed_on cx (mid with gas_obs := []) (FST H)` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
-                   expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+                   expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
      simp[]) >>
   `~t.vs_halted` by metis_tac[slice_marked_read_ok_not_halted] >>
@@ -870,7 +870,7 @@ Proof
      storage_well_formed_on cx (mid' with gas_obs := []) (FST H)` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H mid'.storage_trace ==>
-                   expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+                   expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
      simp[]) >>
   `LENGTH cx.txn.code < dimword (:256)` by
@@ -932,14 +932,14 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _ /\ _`
     (drule_then strip_assume_tac) >>
   qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==>
-    expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (drule_then assume_tac) >>
+    expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (drule_then assume_tac) >>
   qpat_assum `!H. valid_horizon _ _ H mid'.storage_trace ==>
-    expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (drule_then assume_tac) >>
+    expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (drule_then assume_tac) >>
   irule (slice_two_operand_post_rebase |> SPEC_ALL |> Q.INST
     [`sd` |-> `st1`, `se` |-> `st2`,
      `e1` |-> `mid with gas_obs := []`, `e2` |-> `mid' with gas_obs := []`]) >>
-  qpat_assum `expr_post H _ _ _ _ start _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `expr_post H _ _ _ _ len _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_post H _ _ _ _ start _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_post H _ _ _ _ len _ _ _ _ _ _ _ _` (irule_at Any) >>
   fs[ci_mono_def] >> metis_tac[]
 QED
 

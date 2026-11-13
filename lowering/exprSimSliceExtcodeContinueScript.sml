@@ -659,10 +659,10 @@ Proof
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      stmt_state_rel H ctx func cenv cx ee t /\ storage_well_formed_on cx ee (FST H)` by
     (rpt strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (drule_then (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def])) >>
      simp[]) >>
-  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
   impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   strip_tac >>
