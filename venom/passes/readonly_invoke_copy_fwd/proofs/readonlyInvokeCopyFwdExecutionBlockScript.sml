@@ -3,6 +3,7 @@ Ancestors
   readonlyInvokeCopyFwdExecution readonlyInvokeCopyFwdOperationalEntry
   readonlyInvokeCopyFwdHistoryInheritedLifecycle
   readonlyInvokeCopyFwdHeterogeneousLedger readonlyInvokeCopyFwdHistoryPhase
+  readonlyInvokeCopyFwdHeterogeneousMapOrigins
   readonlyInvokeCopyFwdHistoryOrigin readonlyInvokeCopyFwdProtection
   readonlyInvokeCopyFwdOperationalSupport o1LowerDloadOccurrence
   readonlyInvokeCopyFwdRel readonlyInvokeCopyFwdCalls
@@ -74,13 +75,13 @@ Proof
 QED
 
 Theorem ricf_execution_jump_block:
-  ricf_execution_invariant vs C ctx0 log D stk PG G tn fn inst s t
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets rt /\
   inst.inst_opcode = JMP /\ inst.inst_operands = [Label lbl] /\
   active_inst fn inst s /\ step_inst fuel C inst s = OK u /\ ~u.vs_halted /\
   enters_block fn u s1 /\ active_inst fn next s1 ==>
   ?v t1. step_inst fuel Ct inst t = OK v /\ enters_block fn v t1 /\
-    ricf_execution_invariant vs C ctx0 log D stk PG (entry_prov fn u G)
+    ricf_execution_invariant vs C D stk PG (entry_prov fn u G)
       (entry_taint_vars fn u tn) fn next s1 t1
       n a U B HP (entry_prov fn u H)
       (FILTER (\entry. SND entry <> []) ledger) E sites maps targets
@@ -93,9 +94,12 @@ Proof
       (entry_taint_vars fn u tn) fn next s1 n a U B HP (entry_prov fn u H)
       (FILTER (\entry. SND entry <> []) ledger)` by
     (irule ricf_heterogeneous_source_ledger_block >> metis_tac[]) >>
-  `ricf_map_origins vs C ctx0 log stk PG (entry_prov fn u G)
+  `ricf_heterogeneous_map_origins vs C stk PG (entry_prov fn u G)
       (entry_taint_vars fn u tn) fn next s1 U B sites` by
-    (irule ricf_execution_map_origins_block >> metis_tac[]) >>
+    (irule ricf_heterogeneous_map_origins_block >> metis_tac[]) >>
+  `ricf_heterogeneous_saved_map_origins vs C stk PG (entry_prov fn u G)
+      (entry_taint_vars fn u tn) fn next s1 U B maps` by
+    (irule ricf_heterogeneous_saved_map_origins_block >> metis_tac[]) >>
   drule_all ricf_execution_jump_live >>
   disch_then (qspec_then `lbl` strip_assume_tac) >>
   `enters_block fn (jump_to lbl s) s1` by metis_tac[] >>

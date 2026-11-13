@@ -3,13 +3,14 @@ Ancestors
   readonlyInvokeCopyFwdExecution readonlyInvokeCopyFwdValues readonlyInvokeCopyFwdCalls
   readonlyInvokeCopyFwdSteps readonlyInvokeCopyFwdOperationalGuards
   readonlyInvokeCopyFwdGlobalSupport readonlyInvokeCopyFwdHeterogeneousLedger
+  readonlyInvokeCopyFwdHeterogeneousSupport readonlyInvokeCopyFwdHeterogeneousMapOrigins
   readonlyInvokeCopyFwdOperationalMapOrigins readonlyInvokeCopyFwdRel
   readonlyInvokeCopyFwdOperationalSupport readonlyInvokeCopyFwdHistoryPhase
   internalReturnCopyFwdSim o1LowerDloadShared o1LowerDloadOccurrence
   taintAgree ptrDiscipline venomExecSemantics venomState venomInst finite_map list pred_set
 
 Theorem ricf_execution_bind_next:
-  ricf_execution_invariant vs C ctx0 log D stk PG G tn fn inst s t
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets rt /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   active_inst fn inst s /\ ~is_terminator inst.inst_opcode /\
@@ -22,7 +23,7 @@ Theorem ricf_execution_bind_next:
   step_taint inst s (update_var out x s) rt =
     (rt with t_var := set_var_taint rt.t_var [out] m) /\
   occurrence_sites_step a B inst (update_var out x s) = B ==>
-  ricf_execution_invariant vs C ctx0 log D stk PG
+  ricf_execution_invariant vs C D stk PG
     (step_prov PG G inst (update_var out x s))
     (step_taint inst s (update_var out x s) tn) fn next
     ((update_var out x s) with vs_inst_idx := SUC s.vs_inst_idx)
@@ -40,12 +41,17 @@ Proof
     n a U (occurrence_sites_step a B inst (update_var out x s)) HP
     (occurrence_step a HP H inst (update_var out x s)) ledger` by
     (irule ricf_heterogeneous_source_ledger_actual_next >> metis_tac[]) >>
-  `ricf_map_origins vs C ctx0 log stk PG
+  `ricf_heterogeneous_map_origins vs C stk PG
     (step_prov PG G inst (update_var out x s))
     (step_taint inst s (update_var out x s) tn) fn next
     ((update_var out x s) with vs_inst_idx := SUC s.vs_inst_idx)
-    U B sites` by (irule ricf_map_origins_next >> metis_tac[]) >>
-  `ricf_global_support_origins vs C ctx0 a fn U stk B E` by
+    U B sites` by (irule ricf_heterogeneous_map_origins_next >> metis_tac[]) >>
+  `ricf_heterogeneous_saved_map_origins vs C stk PG
+    (step_prov PG G inst (update_var out x s))
+    (step_taint inst s (update_var out x s) tn) fn next
+    ((update_var out x s) with vs_inst_idx := SUC s.vs_inst_idx)
+    U B maps` by (irule ricf_heterogeneous_saved_map_origins_next >> metis_tac[]) >>
+  `ricf_heterogeneous_support_origins vs C a fn U stk B E` by
     metis_tac[] >>
   simp[Once ircf_dead_def, update_var_def] >>
   conj_tac >-
@@ -66,7 +72,7 @@ Proof
 QED
 
 Theorem ricf_execution_param_next:
-  ricf_execution_invariant vs C ctx0 log D stk PG G tn fn inst s t
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets rt /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   active_inst fn inst s /\ inst.inst_opcode = PARAM /\
@@ -74,7 +80,7 @@ Theorem ricf_execution_param_next:
   step_inst fuel C inst s = OK u /\
   active_inst fn next (u with vs_inst_idx := SUC s.vs_inst_idx) ==>
   ?v. step_inst fuel Ct inst t = OK v /\
-    ricf_execution_invariant vs C ctx0 log D stk PG (step_prov PG G inst u)
+    ricf_execution_invariant vs C D stk PG (step_prov PG G inst u)
       (step_taint inst s u tn) fn next
       (u with vs_inst_idx := SUC s.vs_inst_idx)
       (v with vs_inst_idx := SUC s.vs_inst_idx)
@@ -112,14 +118,14 @@ Proof
 QED
 
 Theorem ricf_execution_nop_next:
-  ricf_execution_invariant vs C ctx0 log D stk PG G tn fn inst s t
+  ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets rt /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   active_inst fn inst s /\ inst.inst_opcode = NOP /\ inst.inst_outputs = [] /\
   step_inst fuel C inst s = OK u /\
   active_inst fn next (u with vs_inst_idx := SUC s.vs_inst_idx) ==>
   ?v. step_inst fuel Ct inst t = OK v /\
-    ricf_execution_invariant vs C ctx0 log D stk PG (step_prov PG G inst u)
+    ricf_execution_invariant vs C D stk PG (step_prov PG G inst u)
       (step_taint inst s u tn) fn next
       (u with vs_inst_idx := SUC s.vs_inst_idx)
       (v with vs_inst_idx := SUC s.vs_inst_idx)
@@ -136,9 +142,12 @@ Proof
     n a U (occurrence_sites_step a B inst u) HP
     (occurrence_step a HP H inst u) ledger` by
     (irule ricf_heterogeneous_source_ledger_actual_next >> metis_tac[]) >>
-  `ricf_map_origins vs C ctx0 log stk PG (step_prov PG G inst u)
+  `ricf_heterogeneous_map_origins vs C stk PG (step_prov PG G inst u)
     (step_taint inst s u tn) fn next (u with vs_inst_idx := SUC s.vs_inst_idx)
-    U B sites` by (irule ricf_map_origins_next >> metis_tac[]) >>
+    U B sites` by (irule ricf_heterogeneous_map_origins_next >> metis_tac[]) >>
+  `ricf_heterogeneous_saved_map_origins vs C stk PG (step_prov PG G inst u)
+    (step_taint inst s u tn) fn next (u with vs_inst_idx := SUC s.vs_inst_idx)
+    U B maps` by (irule ricf_heterogeneous_saved_map_origins_next >> metis_tac[]) >>
   `written_taint rt inst s = {} /\ written_taint tn inst s = {}` by
     (simp[written_taint_def] >> rpt CASE_TAC >> simp[]) >>
   qexists_tac `t` >> simp[step_inst_def, step_inst_base_opcode_eqs] >>

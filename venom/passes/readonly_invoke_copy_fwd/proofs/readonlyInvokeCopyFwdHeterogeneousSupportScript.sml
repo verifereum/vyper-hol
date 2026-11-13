@@ -62,6 +62,19 @@ Proof
   metis_tac[ricf_global_support_call]
 QED
 
+Theorem ricf_heterogeneous_support_actual_next:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  ricf_heterogeneous_support_origins vs C a fn U stk B E /\
+  step_inst fuel C inst s = OK s' ==>
+  ricf_heterogeneous_support_origins vs C a fn U stk
+    (occurrence_sites_step a B inst s') E
+Proof
+  strip_tac >> drule occ_frame_reachable_annotation >> strip_tac >>
+  fs[occurrence_annotation_ok_def] >>
+  metis_tac[ricf_heterogeneous_support_next]
+QED
+
 Theorem ricf_heterogeneous_support_return:
   ricf_heterogeneous_support_origins vs C a fn (u::U) (f::stk) B E ==>
   ricf_heterogeneous_support_origins vs C u.of_owner f.cf_fn U stk
