@@ -550,7 +550,7 @@ Theorem intcall_scopes_after_args[local]:
     lookup_callable_function cx.in_deploy fn ts = SOME tup /\
     LENGTH es <= LENGTH (FST (SND (SND tup))) /\
     LENGTH (FST (SND (SND tup))) <= LENGTH es + LENGTH (FST (SND (SND (SND tup)))) /\
-    eval_expr_results cx es st = (r1,s1) /\ st'.scopes = s1.scopes
+    eval_exprs cx es st = (r1,s1) /\ st'.scopes = s1.scopes
 Proof
   rpt gen_tac >>
   rewrite_tac[Once evaluate_def, ignore_bind_def] >>
@@ -633,7 +633,8 @@ Proof
    imp_res_tac transfer_value_scopes >> imp_res_tac transfer_value_immutables >>
    gvs[get_accounts_def, COND_RATOR, update_accounts_def,
        update_pending_deletions_def, bind_def, ignore_bind_def,
-       return_def, AllCaseEqs()] >> res_tac >> gvs[])
+       return_def, AllCaseEqs()] >>
+   imp_res_tac read_result_state >> gvs[] >> res_tac >> gvs[] >> metis_tac[])
 QED
 
 Resume eval_observation_frame_pred[TopLevelName]:
@@ -744,7 +745,7 @@ Resume eval_observation_frame_pred[Builtin]:
   rename1 `Builtin _ bt es` >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   Cases_on `bt = Len` >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-  Cases_on `bt = Env MsgGas` >>
+  Cases_on `bt = Env MsgGas` >> gvs[] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
        return_def, raise_def, type_check_def, assert_def] >>
   rpt strip_tac >>
@@ -754,7 +755,15 @@ Resume eval_observation_frame_pred[Builtin]:
   imp_res_tac result_array_length_state >> imp_res_tac lift_option_type_state >>
   imp_res_tac lift_sum_state >> imp_res_tac next_gas_reading_state >>
   imp_res_tac precompile_call_success_state >>
-  gvs[get_accounts_def, return_def] >> res_tac >> gvs[]
+  gvs[get_accounts_def, return_def] >> res_tac >> gvs[] >>
+  Cases_on `code_slice_source bt es`
+  >- (gvs[] >> res_tac >> gvs[]) >>
+  Cases_on `THE (code_slice_source bt es)` >> gvs[] >>
+  qpat_assum `code_slice_source _ _ = SOME _`
+    (mp_tac o REWRITE_RULE [code_slice_source_SOME]) >> strip_tac >>
+  gvs[expr_writes_ok_def, supported_expr_exists_def, SF ETA_ss,
+      bind_def, get_accounts_def, return_def, AllCaseEqs()] >>
+  imp_res_tac lift_sum_state >> gvs[] >> res_tac >> gvs[] >> metis_tac[]
 QED
 
 Finalise eval_observation_frame_pred
@@ -870,7 +879,8 @@ Proof
    imp_res_tac push_log_scopes >> imp_res_tac transfer_value_scopes >>
    imp_res_tac get_accounts_scopes >>
    gvs[COND_RATOR, update_accounts_def, update_pending_deletions_def,
-       bind_def, ignore_bind_def, return_def, AllCaseEqs()] >> res_tac >> gvs[])
+       bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
+   imp_res_tac read_result_state >> gvs[] >> res_tac >> gvs[] >> metis_tac[])
 QED
 
 Resume eval_name_projection_mutual[TopLevelName]:
@@ -952,7 +962,7 @@ Resume eval_name_projection_mutual[Builtin]:
   rename1 `Builtin _ bt es` >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   Cases_on `bt = Len` >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-  Cases_on `bt = Env MsgGas` >>
+  Cases_on `bt = Env MsgGas` >> gvs[] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
        return_def, raise_def, type_check_def, assert_def] >>
   rpt strip_tac >>
@@ -961,7 +971,15 @@ Resume eval_name_projection_mutual[Builtin]:
   imp_res_tac result_array_length_state >> imp_res_tac lift_option_type_state >>
   imp_res_tac lift_sum_state >> imp_res_tac next_gas_reading_state >>
   imp_res_tac get_accounts_scopes >> imp_res_tac precompile_call_success_state >>
-  gvs[] >> res_tac >> gvs[]
+  gvs[] >> res_tac >> gvs[] >>
+  Cases_on `code_slice_source bt es`
+  >- (gvs[] >> res_tac >> gvs[]) >>
+  Cases_on `THE (code_slice_source bt es)` >> gvs[] >>
+  qpat_assum `code_slice_source _ _ = SOME _`
+    (mp_tac o REWRITE_RULE [code_slice_source_SOME]) >> strip_tac >>
+  gvs[expr_writes_ok_def, SF ETA_ss,
+      bind_def, get_accounts_def, return_def, AllCaseEqs()] >>
+  imp_res_tac lift_sum_state >> gvs[] >> res_tac >> gvs[] >> metis_tac[]
 QED
 
 Finalise eval_name_projection_mutual
