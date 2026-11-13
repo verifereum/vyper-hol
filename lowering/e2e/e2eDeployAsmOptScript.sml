@@ -15,8 +15,8 @@
  * TOP-LEVEL: compile_vyper_deploy_phases_asm_opt,
  * compile_vyper_deploy_nonempty_asm_opt, opt_deploy_entry_state,
  * opt_deploy_frame (deploy_unit_outcomes_free is in deployOutcomesFreeUnit),
- * opt_deploy_codegen_asm_entry_rel, opt_deploy_asm_frame_rel,
- * lower_vyper_deploy_unit_sym_src_ok.
+ * opt_deploy_codegen_asm_entry_rel, opt_deploy_asm_frame_rel.
+ * lower_vyper_deploy_unit_sym_src_ok is in deploySymSrcUnit.
  *)
 Theory e2eDeployAsmOpt
 Ancestors
@@ -26,7 +26,7 @@ Ancestors
   asmOptimizer contextRawReachable asmDataSuffixProps contextPlanLayoutProps
   loweringStateRelDefs vyperArith frameRel codegenRel callTrace
   ctorDeployLowering ctorDeployMemory ctorDeployDload memSafeRun frameObsStep
-  deployOutcomesFreeUnit asmOptNonemptyFinalizer
+  deployOutcomesFreeUnit asmOptNonemptyFinalizer deploySymSrcUnit
 
 (* L1 of the deployment for the optimizer: the deploy code is the optimized
    assembly of the deployment unit's generated assembly. *)
@@ -196,26 +196,4 @@ Proof
        asm_pc_to_offset_zero, entry_venom_state_frame_fields] >>
   gvs[entry_venom_state_def, venomStateTheory.init_venom_state_def, wordsTheory.w2n_n2w, listTheory.DROP_APPEND] >>
   rewrite_tac[GSYM CONJ_ASSOC]
-QED
-
-(* The deployment unit's source-side static facts: no CODESIZE, CODECOPY
-   only from runtime_begin, no code_end label yet, a byte-only data segment,
-   and runtime_begin among its headers. *)
-Theorem lower_vyper_deploy_unit_sym_src_ok:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan.
-  deploy_phases policy tops (deploy_bc, runtime_bc)
-    (rpolicy, dunit, dout, prog, cplan) /\
-  supported_program tops /\ supported_program_deploy tops /\
-  ~program_reads_self_code tops ==>
-  label_flow_ok dunit.cu_context /\
-  (!fn inst. MEM fn dunit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-             ~MEM (Label "code_end") inst.inst_operands) /\
-  EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
-                    ds.ds_items) dunit.cu_data_segment /\
-  ((?fn inst. MEM fn dunit.cu_context.ctx_functions /\
-              MEM inst (fn_insts fn) /\
-              MEM (Label "runtime_begin") inst.inst_operands) ==>
-   EXISTS (\ds. ds.ds_label = "runtime_begin") dunit.cu_data_segment)
-Proof
-  cheat
 QED

@@ -12,6 +12,7 @@ Ancestors
   o1PipelineCorrect o1PassContract codegenCorrectness passSimulationDefs
   lowerDloadDefs e2eEntry gasSummary asmOptimizer
   codegenAsmOpt e2eAsmOpt e2eDeployAsmOpt deployOutcomesFreeUnit
+  deploySymSrcUnit
 
 (* A successful compilation exposes the deployment unit's phases. *)
 Theorem compile_vyper_deploy_phases:
