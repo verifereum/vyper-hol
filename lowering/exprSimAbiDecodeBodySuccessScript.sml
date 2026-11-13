@@ -44,7 +44,7 @@ QED
 
 Theorem abi_decode_body_caller_success:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
-  expr_post ctx func ce cx e es sa start s0 es1 (BytesV bs) data s /\
+  expr_post H ctx func ce cx e es sa start s0 es1 (BytesV bs) data s /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\ local_ptrs_reserved ce sa /\
   lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
   evaluate_type (get_tenv cx) ty = SOME tv /\

@@ -119,14 +119,14 @@ Theorem abi_decode_success_stmt_state_rel:
     (type_memory_bytes ce ty) start = (out,final) /\
   local_ptrs_reserved ce start /\
   (!i. MEM i (frag_code start final) ==> MEM i (fn_insts func)) /\
-  fn_inst_ids_distinct func /\ stmt_state_rel ctx func ce cx es s /\
+  fn_inst_ids_distinct func /\ stmt_state_rel H ctx func ce cx es s /\
   abi_decode_immutable_success ce (get_tenv cx) ty tv bs out d start final ctx func cx es s t ==>
-  stmt_state_rel ctx func ce cx es t
+  stmt_state_rel H ctx func ce cx es t
 Proof
   strip_tac >>
   `abi_decode_success_closed ce (get_tenv cx) ty tv bs out d start final ctx func s t` by
     fs[abi_decode_immutable_success_def] >>
-  `state_rel func ce cx es s /\ alloca_inv s /\
+  `state_rel H func ce cx es s /\ alloca_inv s /\
    immutable_alloca_sep func ce cx es s /\ immutable_base_zero ce s` by
     fs[stmt_state_rel_def] >>
   `local_ptrs_rel func ce es.scopes s /\
@@ -143,7 +143,7 @@ Proof
      metis_tac[abi_decode_success_local_region]) >>
   `immutable_base_zero ce t` by metis_tac[abi_decode_success_immutable_base_zero] >>
   drule abi_decode_closed_effect >> strip_tac >> gvs[] >>
-  `state_rel func ce cx es (u with <|vs_returndata := rd; vs_prev_bb := prev|>)` by
+  `state_rel H func ce cx es (u with <|vs_returndata := rd; vs_prev_bb := prev|>)` by
     (irule state_rel_frame >> simp[] >> qexistsl_tac [`es`, `s`] >> simp[] >>
      fs[decode_site_effect_def, decode_static_frame_def] >>
      rpt conj_tac >> qpat_x_assum `u = _` (fn th => simp[Once th])) >>

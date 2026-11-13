@@ -37,7 +37,7 @@ QED
 
 (* The source is below the frontier and misses every pre-existing decoder site. *)
 Theorem abi_decode_caller_source[local]:
-  expr_post ctx func ce cx e es st st2 s0 es1 (BytesV bs) data s2 /\
+  expr_post H ctx func ce cx e es st st2 s0 es1 (BytesV bs) data s2 /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic n))) /\
   ~is_word_type (expr_type e) /\
   lower_abi_decode data info mn mx outsz st2 = (out,final) /\
@@ -51,7 +51,7 @@ Theorem abi_decode_caller_source[local]:
           abi_footprint_disjoint (p+32) (LENGTH bs) [(b,sz)])
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func ce cx es1 s2` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func ce cx es1 s2` by fs[expr_post_def] >>
   `alloca_inv s2 /\ local_ptrs_rel func ce es1.scopes s2` by
     fs[stmt_state_rel_def, state_rel_def] >>
   drule_all abi_decode_bytes_post_footprint >> strip_tac >>
@@ -71,7 +71,7 @@ Proof
 QED
 
 Theorem abi_decode_caller_resources:
-  expr_post ctx func ce cx e es st st2 s0 es1 (BytesV bs) data s2 /\
+  expr_post H ctx func ce cx e es st st2 s0 es1 (BytesV bs) data s2 /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (BytesT (Dynamic n))) /\
   ~is_word_type (expr_type e) /\
@@ -94,7 +94,7 @@ Proof
   `cs_extends st2 final` by metis_tac[lower_abi_decode_frag_facts] >>
   `!i. MEM i (frag_code st2 final) ==> MEM i (fn_insts func)` by
     metis_tac[abi_decode_resources_code_member] >>
-  `stmt_state_rel ctx func ce cx es1 s2` by fs[loweringPostsTheory.expr_post_def] >>
+  `stmt_state_rel H ctx func ce cx es1 s2` by fs[loweringPostsTheory.expr_post_def] >>
   `decode_site_resources ctx func s2` by metis_tac[stmt_state_rel_decode_site_resources] >>
   `alloca_inv s2 /\ local_ptrs_rel func ce es1.scopes s2` by
     fs[stmt_state_rel_def, state_rel_def] >>

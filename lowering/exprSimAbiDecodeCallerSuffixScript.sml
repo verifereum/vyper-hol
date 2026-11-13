@@ -12,7 +12,7 @@ Ancestors
 Theorem abi_decode_caller_suffix_summary:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\
-  expr_post ctx func ce cx e es sa start s0 (ee with gas_obs := []) (BytesV bs) data s /\
+  expr_post H ctx func ce cx e es sa start s0 (ee with gas_obs := []) (BytesV bs) data s /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\ local_ptrs_reserved ce sa /\
   lower_value compile_expr ce (expr_type e) e sa = (data,start) /\
   lower_abi_decode data

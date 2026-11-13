@@ -62,7 +62,7 @@ Theorem abi_decode_normal_prefix_summary:
   fn_has_code start final func /\ fn_inst_ids_distinct func /\
   gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
     (es,s0) marks (INL v) ee (OK s) /\
-  expr_post ctx func ce cx e es sa start s0 (ee with gas_obs := []) v data s /\
+  expr_post H ctx func ce cx e es sa start s0 (ee with gas_obs := []) v data s /\
   ~s.vs_halted /\ s.vs_current_bb = start.cs_current_bb /\
   s.vs_inst_idx = LENGTH start.cs_current_insts ==>
   gas_summary_at F (ctx,func) marks
