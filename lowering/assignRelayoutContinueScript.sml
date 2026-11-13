@@ -70,14 +70,21 @@ Proof
       w2n dw + type_memory_size dtv < dimword (:256) /\
       (w2n sw + type_memory_size stv <= w2n dw \/
        w2n dw + type_memory_size dtv <= w2n sw)` by
-    (irule expr_post_live_destination_source >> simp[] >>
-     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     simp[] >> metis_tac[]) >>
+    (qspecl_then [`H0`, `ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `sb`, `s0`,
+                  `es1`, `v`, `op`, `s`, `sty`, `stv`, `id`, `entry`, `p`, `cap`,
+                  `dw`, `type_memory_size dtv`]
+       mp_tac (INST_TYPE [alpha |-> ``:256``] expr_post_live_destination_source) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   `!H. valid_horizon cx st0 H es1.storage_trace ==>
      stmt_state_rel H ctx func cenv cx es1 s` by
-    (rpt strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       drule >> simp[expr_post_def]) >>
+    (qx_gen_tac `HH` >> strip_tac >>
+     `expr_post HH ctx func cenv cx e es sa sb s0 es1 v op s` by
+       (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+          (qspec_then `HH` mp_tac) >>
+        impl_tac >- first_assum ACCEPT_TAC >>
+        disch_then ACCEPT_TAC) >>
+     fs[expr_post_def]) >>
   `stmt_state_rel H0 ctx func cenv cx es1 s` by metis_tac[] >>
   `not_fresh_at sb p` by metis_tac[local_ptrs_reserved_def] >>
   `MAP FDOM (pre ++
@@ -97,10 +104,11 @@ Resume assign_relayout_store_post_path[direct]:
     gvs[compile_assign_value_def] >>
   `?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
        typed_copy_effect ctx func sb sf s t (w2n dw) (type_memory_size dtv)` by
-    (irule (Q.SPECL [`cenv`, `get_tenv cx`, `Var p`, `dty`, `op`, `sty`, `dtv`,
+    (qspecl_then [`cenv`, `get_tenv cx`, `Var p`, `dty`, `op`, `sty`, `dtv`,
        `stv`, `v`, `sb`, `sf`, `ctx`, `func`, `s`, `dw`, `sw`]
-       compile_store_memory_relayout_effect) >>
-     simp[eval_operand_def] >> metis_tac[]) >>
+       mp_tac annassignRelayoutBoundsTheory.compile_store_memory_relayout_effect >>
+     impl_tac >- (rpt conj_tac >> simp[eval_operand_def] >> metis_tac[]) >>
+     disch_then ACCEPT_TAC) >>
   `!H. valid_horizon cx st0 H es1.storage_trace ==>
      stmt_state_rel H ctx func cenv cx
        (es1 with scopes := pre ++
@@ -115,9 +123,10 @@ Resume assign_relayout_store_post_path[direct]:
   `!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s` by
     metis_tac[typed_copy_effect_lookup] >>
   qexists_tac `t` >> simp[] >>
-  irule alloca_frame_local_store >>
+  irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_local_store) >>
   simp[] >>
-  (conj_tac >- metis_tac[]) >>
+  (reverse conj_tac
+   >- (qexistsl_tac [`H0`, `ctx`, `cx`, `func`] >> first_assum ACCEPT_TAC)) >>
   qexistsl_tac [`w2n dw`, `es1`, `id`, `type_memory_size dtv`, `s`, `cap`] >>
   `alloca_frame cenv es1 sb s cenv es1 s` by
     (irule alloca_frame_same >> simp[]) >>
@@ -160,7 +169,7 @@ Resume assign_relayout_store_post_path[staged]:
     (simp[local_region_def] >> metis_tac[]) >>
   `w2n uw + type_memory_bytes cenv sty <= w2n dw \/
    w2n dw + cap <= w2n uw` by
-    (irule alloca_clear_of_locals >>
+    (irule (INST_TYPE [alpha |-> ``:256``] alloca_clear_of_locals) >>
      goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
      qexistsl_tac [`mk_inst sx.cs_next_id ALLOCA
@@ -186,10 +195,11 @@ Resume assign_relayout_store_post_path[staged]:
     (irule not_fresh_at_mono >> qexists_tac `sb` >> simp[]) >>
   `?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
        typed_copy_effect ctx func ss sf u t (w2n dw) (type_memory_size dtv)` by
-    (irule (Q.SPECL [`cenv`, `get_tenv cx`, `Var p`, `dty`, `Var q`, `sty`, `dtv`,
+    (qspecl_then [`cenv`, `get_tenv cx`, `Var p`, `dty`, `Var q`, `sty`, `dtv`,
        `stv`, `v`, `ss`, `sf`, `ctx`, `func`, `u`, `dw`, `uw`]
-       compile_store_memory_relayout_effect) >>
-     simp[eval_operand_def] >> metis_tac[]) >>
+       mp_tac annassignRelayoutBoundsTheory.compile_store_memory_relayout_effect >>
+     impl_tac >- (rpt conj_tac >> simp[eval_operand_def] >> metis_tac[]) >>
+     disch_then ACCEPT_TAC) >>
   `!H. valid_horizon cx st0 H es1.storage_trace ==>
      stmt_state_rel H ctx func cenv cx
        (es1 with scopes := pre ++
@@ -227,7 +237,7 @@ Resume assign_relayout_store_post_path[staged]:
   `alloca_frame cenv es1 sb s cenv
     (es1 with scopes := pre ++
       (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) t` by
-    (irule alloca_frame_local_store >>
+    (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_local_store) >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
      (conj_tac >- metis_tac[]) >>
      qexists_tac `w2n dw` >>
