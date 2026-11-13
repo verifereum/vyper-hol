@@ -19,6 +19,13 @@ Ancestors
   bodyPtrAugAssignNarrow bodyPtrAugAssignLocal bodyPtrAugAssignPureStorage
   supportedTargetLocalLive bodyAugAssignOther bodyAugPlaceTarget
   exprSimHypsDefs exprSimDefs vyperTypeInvariants
+  widenedDeclarationPtrFragment widenedAssignPtrPreparation widenedAssignPtrRhsInput
+  assignRelayoutCaller
+  widenedAssignPtrFragment assignBasePtrLocalBodyFacts stmtSimAugAssign
+  annAssignPtrFacts annAssignPtrWord bodySimDeclCases bodyExprPreFacts
+  memoryLocalRhsProps exprSimSource
+  vyperTypeExprSoundness vyperTyping exprLoweringProps
+  allocLimits stmtSimDefs valueEncoding externalNormalizePremises
 
 val _ = Parse.hide "body";
 
@@ -96,7 +103,13 @@ Theorem body_assign_widened_aggregate_call_ptr:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all assign_base_local_rhs_pre >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
+  `type_memory_bytes cenv ty < 2 ** 64` by metis_tac[locals_alloc_ok_def] >>
+  drule_all widened_assignment_internal_call >> strip_tac >>
+  fs[] >> irule widened_assignment_fragment_ptr >> simp[] >> metis_tac[]
 QED
 
 (* RESIDUAL: the pointer twin of S1's bodySimStmtCases$body_assign_tuple_other, stated as S1
@@ -247,7 +260,71 @@ Theorem body_annassign_widened_aggregate_call_ptr:
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `FLOOKUP cenv.ce_vars id = NONE` by
+    (irule declared_name_unbound >> metis_tac[]) >>
+  `well_typed_expr env e /\ assignable_type env.type_defs typ /\
+   type_widens_to env.type_defs (expr_type e) typ /\
+   id NOTIN FDOM env.var_types` by gvs[type_stmt_def, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
+    metis_tac[assignable_type_well_formed, well_formed_type_def,
+              optionTheory.IS_SOME_EXISTS] >>
+  `body_expr_ptr_ok cx e` by (drule_all annassign_ih_ptr >> simp[]) >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
+  `body_stmt_safe tops (AnnAssign id typ e)` by
+    metis_tac[supported_stmt_body_safe] >>
+  `expr_body_pre cenv cx env e es` by
+    (drule_all annassign_rhs_pre_ptr >> simp[]) >>
+  `?etv. evaluate_type (get_tenv cx) (expr_type e) = SOME etv` by
+    metis_tac[expr_body_pre_type_evaluates, optionTheory.IS_SOME_EXISTS] >>
+  drule_all assign_relayout_source_classify >> strip_tac >>
+  drule_all widened_assignment_internal_call >> strip_tac >>
+  `cenv.ce_alloca_locals` by fs[body_inv_def] >>
+  `lookup_scopes id es.scopes = NONE` by
+    (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+     gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     res_tac >> gvs[FLOOKUP_DEF]) >>
+  `type_memory_bytes cenv typ = type_memory_size tyv` by
+    metis_tac[expr_sim_inv_memory_size] >>
+  `type_memory_bytes cenv typ < 2 ** 64` by
+    gvs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  `type_memory_size tyv + 64 < dimword (:256)` by
+    metis_tac[allocation_limit_word_room] >>
+  `post_value_type cenv e = lowered_value_type cenv e /\
+   ?ltv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME ltv /\
+     type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size ltv /\
+     type_memory_size ltv < 2 ** 64` by
+    (qpat_assum `e = Call _ _ _ _` SUBST_ALL_TAC >>
+     drule retained_intcall_physical_layout >> fs[expr_type_def] >> metis_tac[]) >>
+  `0 < type_memory_size ltv` by
+    (irule externalNormalizePremisesTheory.normalize_return_source_positive >>
+     qexistsl_tac [`typ`,`lowered_value_type cenv e`,`get_tenv cx`] >>
+     fs[expr_type_def]) >>
+  `type_memory_size ltv < dimword (:256)` by
+    (gvs[wordsTheory.dimword_def] >> decide_tac) >>
+  `supported_program tops /\
+   cenv.ce_func_return_type = build_func_return_type tops /\
+   get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+  mp_tac (Q.INST [`vtyp` |-> `typ`,`ty` |-> `ret_ty`]
+    (SPEC_ALL widened_declaration_stmt_frag_ptr)) >>
+  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >>~- ([`value_has_type _ _`],
+    rpt gen_tac >> strip_tac >>
+    `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+    `value_runtime_typed env typ v /\
+     value_runtime_typed env (expr_type e) v /\
+     value_runtime_typed env (lowered_value_type cenv e) v` by
+      metis_tac[memory_rhs_read_destination_typed, memory_rhs_read_annotation_typed,
+                memory_rhs_read_lowered_typed] >>
+    gvs[value_runtime_typed_def,expr_type_def])
+  >>~- ([`expr_sim_ptr _ _ _ _ _ _ _ _ _`],
+    rpt gen_tac >> strip_tac >> rpt conj_tac
+    >- (drule_all annassign_declared_expr_sim_ptr >> simp[])
+    >- metis_tac[compile_expr_grows]
+    >> drule_all annassign_declared_rhs_pre_ptr >> simp[]) >>
+  gvs[expr_type_def,is_empty_value_expr_def])) >> simp[]
 QED
 
 (* RESIDUAL: the pointer twin of S1's bodySimDeclCases$body_annassign_widened_aggregate:
