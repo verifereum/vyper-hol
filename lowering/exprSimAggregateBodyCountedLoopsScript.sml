@@ -37,9 +37,7 @@ Theorem aggregate_struct_fields_body_sim:
   (!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
   exprs_case F ctx func ce cx (MAP SND fields) /\
-  (!e. MEM e (MAP SND fields) /\ int_calls_expr e <> [] /\
-    lowered_value_type ce e <> expr_type e ==>
-    acyclic_struct_metadata ce.ce_struct_fields) /\
+  acyclic_struct_metadata ce.ce_struct_fields /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
