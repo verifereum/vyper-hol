@@ -1054,6 +1054,10 @@ Resume compile_augassign_attr_storage_case[store]:
        ftv bop fv v` >> gvs[]) >>
   qpat_x_assum `INL result = _` kall_tac >>
   `well_formed_type (get_tenv cx) ty` by simp[well_formed_type_def] >>
+  `expr_body_pre cenv cx env e
+     (es with storage_trace :=
+        es.storage_trace ++ [StorageRoot tr slot (StructTV fs)])` by
+    simp[] >>
   drule_all augassign_attr_binop_ready >>
   disch_then (qspecl_then [`func`, `es_end with gas_obs := []`, `ctx`]
     strip_assume_tac) >>
