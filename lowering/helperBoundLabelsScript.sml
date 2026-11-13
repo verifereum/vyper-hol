@@ -1015,12 +1015,13 @@ QED
 Theorem bound_labels_slice_extcode:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_slice_extcode addr start_op length_op out_buf out_data s))))
+    (SND (compile_slice_extcode addr start_op length_op out_size s))))
 Proof
   strip_tac >> simp[compile_slice_extcode_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_assert_slice_bounds, comp_return_def]),
-    gen_tac, strip_tac, irule bound_labels_bind,
+    bound_labels_slice_out_buf, bound_labels_assert_slice_bounds,
+    comp_return_def]),
+    gen_tac, strip_tac, split_pair_case_tac, pairarg_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac])
 QED
 

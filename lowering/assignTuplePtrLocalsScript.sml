@@ -181,6 +181,9 @@ Resume compile_assign_tuple_locals_memory_stmt_frag_ptr[suffix]:
   `(es_end with gas_obs := []).gas_obs = []` by simp[] >>
   `MAP (BaseTarget o NameTarget) ids <> [] /\
     LENGTH (MAP (BaseTarget o NameTarget) ids) = LENGTH tys` by simp[] >>
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) = _`
+       (mp_tac o MATCH_MP stmtSimDefsTheory.eval_read_preserves_scopes_dom) >> simp[]) >>
   drule_at (Pat `compile_tuple_store_all _ _ _ _ _ = _`) assign_tuple_locals_suffix_ptr >>
   disch_then (drule_at (Pat `compile_tuple_load_all _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `(if _ then _ else _) _ = _`)) >>
