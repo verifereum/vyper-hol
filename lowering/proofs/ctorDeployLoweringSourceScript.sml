@@ -1222,8 +1222,8 @@ Proof
   `fn1 = F` by (Cases_on `fn1` >> fs[] >> metis_tac[]) >>
   `~supported_stmts_expr_exists constructor_call_root fn5` by metis_tac[] >>
   gvs[] >>
-  drule call_external_function_trace_call_free >>
-  disch_then (qspec_then `orc` (fn th => once_rewrite_tac[th])) >>
+  drule_then (qspec_then `orc` (fn th => once_rewrite_tac[th]))
+    call_external_function_trace_call_free >>
   simp[]
 QED
 
