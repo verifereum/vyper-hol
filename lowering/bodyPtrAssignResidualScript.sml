@@ -18,7 +18,7 @@ Ancestors
   vyperTypeSystem list finite_map
   widenedDeclarationPtrFragment widenedAssignPtrPreparation widenedAssignPtrRhsInput
   assignRelayoutCaller
-  widenedAssignPtrFragment assignBasePtrLocalBodyFacts
+  widenedAssignPtrFragment assignBasePtrLocalBodyFacts stmtSimAugAssign
   annAssignPtrFacts annAssignPtrWord bodySimDeclCases bodyExprPreFacts
   memoryLocalRhsProps exprSimSource exprSimHypsDefs
   vyperTypeExprSoundness vyperTyping vyperTypeInvariants exprLoweringProps
@@ -262,7 +262,7 @@ Proof
      qexistsl_tac [`typ`,`lowered_value_type cenv e`,`get_tenv cx`] >>
      fs[expr_type_def]) >>
   `type_memory_size ltv < dimword (:256)` by
-    (fs[wordsTheory.dimword_def] >> decide_tac) >>
+    (gvs[wordsTheory.dimword_def] >> decide_tac) >>
   `supported_program tops /\
    cenv.ce_func_return_type = build_func_return_type tops /\
    get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
