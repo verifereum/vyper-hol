@@ -142,7 +142,7 @@ Proof
   irule abi_malformed_resource_register_update >>
   conj_tac >- fs[abi_malformed_entry_def] >>
   qexists_tac `s` >> simp[lookup_var_def] >>
-  irule abi_malformed_resource_refl >> fs[abi_malformed_entry_def]
+  irule abi_malformed_resource_refl >> fs[abi_malformed_entry_def] >> metis_tac[]
 QED
 
 Theorem abi_malformed_dynarray_prefix_entry:

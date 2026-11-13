@@ -160,7 +160,8 @@ Proof
     metis_tac[abi_malformed_prune_state] >>
   once_rewrite_tac[abi_malformed_resource_post_def] >> rpt conj_tac
   >- (fs[abi_malformed_resource_post_def] >> metis_tac[])
-  >- (fs[abi_malformed_resource_post_def] >> metis_tac[])
+  >- (fs[abi_malformed_resource_post_def] >> rpt strip_tac >>
+      first_x_assum irule >> first_x_assum irule >> simp[])
   >- fs[abi_malformed_resource_post_def, abi_decoder_prune_vars_def]
   >- fs[abi_malformed_resource_post_def, abi_decoder_prune_vars_def]
   >- (fs[abi_malformed_resource_post_def, abi_decoder_prune_vars_def] >>

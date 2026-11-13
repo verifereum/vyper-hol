@@ -46,7 +46,7 @@ Proof
   irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
   simp[Once vyper_decode_valid_enc_def, abi_decode_members_def,
     abi_vyper_admissible_list_nil] >>
-  irule abi_malformed_resource_refl >> fs[abi_malformed_entry_def]
+  irule abi_malformed_resource_refl >> fs[abi_malformed_entry_def] >> metis_tac[]
 QED
 
 (* Reflection composes at the same arbitrary head offset as the compiler.

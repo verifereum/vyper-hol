@@ -76,7 +76,7 @@ Proof
   simp[abi_valid_allocated_members_post_def, val_in_memory_def,
     abi_decode_sim_refl, abi_valid_allocated_frame_refl,
     abi_malformed_resource_refl] >>
-  fs[abi_malformed_entry_def] >> irule abi_malformed_resource_refl >> simp[]
+  fs[abi_malformed_entry_def] >> irule abi_malformed_resource_refl >> metis_tac[]
 QED
 
 (* Definition probe: a dynamic empty fixed array has no source byte bound.
