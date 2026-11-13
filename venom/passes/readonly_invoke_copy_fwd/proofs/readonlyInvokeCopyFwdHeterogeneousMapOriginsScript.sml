@@ -109,7 +109,7 @@ Proof
   irule ricf_aligned_origin_block >> metis_tac[]
 QED
 
-Theorem ricf_aligned_origin_sites_step[local]:
+Theorem ricf_aligned_origin_sites_step:
   ricf_aligned_origin_at vs C ctxP logP stk PG G tn fn inst s U B
     key tr p pre anchor tail atn /\
   occurrence_allocas_ok B a s0 /\ alloc_inst.inst_opcode = ALLOCA /\
@@ -199,7 +199,7 @@ Proof
   irule ricf_aligned_origin_call >> metis_tac[]
 QED
 
-Theorem ricf_aligned_origin_restrict_owner[local]:
+Theorem ricf_aligned_origin_restrict_owner:
   ricf_aligned_origin_at vs C ctxP logP stk PG G tn fn inst s U B
     key tr p pre anchor tail atn /\ p.rpe_owner <> a ==>
   ricf_aligned_origin_at vs C ctxP logP stk PG G tn fn inst s U
@@ -208,7 +208,7 @@ Proof
   simp[ricf_aligned_origin_at_def, FLOOKUP_DRESTRICT] >> metis_tac[]
 QED
 
-Theorem ricf_aligned_origin_owner_old[local]:
+Theorem ricf_aligned_origin_owner_old:
   ricf_aligned_origin_at vs C ctxP logP stk PG G tn fn inst s U B
     key tr p pre anchor tail atn /\
   ALL_DISTINCT (a::MAP (\u. u.of_owner) U) ==>

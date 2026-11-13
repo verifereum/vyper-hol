@@ -491,7 +491,7 @@ QED
 
 (* Recorded sites come from the fixed DFG, not from a recomputation on the
    current block.  This is the missing link between event and round histories. *)
-Theorem ricf_sites_fold_origin[local]:
+Theorem ricf_sites_fold_origin:
   !uses acc sites.
     FOLDL (\acc (v,inst,pos).
       case acc of NONE => NONE | SOME xs =>
