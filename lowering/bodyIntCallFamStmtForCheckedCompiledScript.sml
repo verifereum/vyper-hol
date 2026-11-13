@@ -80,6 +80,8 @@ Proof
      gvs[vyperTypeSystemTheory.is_int_type_def, is_word_type_def]) >>
   `type_memory_bytes ce fty = 32 /\ type_memory_size tyv = 32` by
     (drule_all word_type_sizes >> disch_then (qspec_then `ce` mp_tac) >> simp[]) >>
+  `word_memory_type tyv` by
+    (drule_all loweringSliceTheory.evaluate_word_memory_type >> simp[]) >>
   `local_ptrs_reserved bc sb0` by
     (irule local_ptrs_reserved_next_var >>
      qexists_tac `st with cs_next_var := st.cs_next_var + 1` >> simp[] >>

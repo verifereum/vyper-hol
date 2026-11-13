@@ -484,7 +484,8 @@ Theorem intcall_immutable_holds_frame:
   immutable_holds ce cx ty r w ee u
 Proof
   simp[loweringPostsTheory.immutable_holds_def] >> strip_tac >>
-  qexistsl [`name`, `off`, `itv`, `iv`, `k`, `tvt`, `v`] >> simp[]
+  qexistsl [`name`, `off`, `itv`, `iv`, `k`, `tvt`, `v`] >> simp[] >>
+  metis_tac[]
 QED
 
 Theorem intcall_pure_child_immutable_holds:

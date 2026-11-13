@@ -35,10 +35,10 @@ Proof
   simp[listTheory.EL_MAP]
 QED
 
-(* Source selection already exports exact actual/declaration type equality.
-   Combine it with the metadata flags at the same selected declaration. *)
-(* RESTATED (train 17): under 0.5.0b1 an argument's type only widens to its
-   parameter type, so the flags give wordness of the declared type. *)
+(* The calling-convention flags at the selected declaration.  The supplied
+   arguments may be fewer than the declared parameters (omitted defaults are
+   appended) and only widen to them, so the flags speak about the declared
+   parameter types. *)
 Theorem intcall_argument_flags:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (Call ann (IntCall (src,name)) es dflt) st /\
@@ -46,9 +46,9 @@ Theorem intcall_argument_flags:
   lookup_callable_function cx.in_deploy name ts =
     SOME (mut,nr,args,dflts,ret,ss) /\
   ce.ce_func_info (nsid_to_string (src,name)) = (nret,rb,pvs) ==>
-  LIST_REL (type_widens_to env.type_defs) (MAP expr_type es) (MAP SND args) /\
-  LENGTH pvs = LENGTH es /\
-  (!i. i < LENGTH es /\ EL i pvs ==> is_word_type (SND (EL i args)))
+  LENGTH es <= LENGTH args /\
+  LENGTH pvs = LENGTH args /\
+  (!i. i < LENGTH args /\ EL i pvs ==> is_word_type (SND (EL i args)))
 Proof
   strip_tac >> drule_all body_intcall_source_selection >>
   strip_tac >> gvs[] >>
