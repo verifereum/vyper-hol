@@ -129,7 +129,7 @@ Proof
   simp[w2n_n2w] >> decide_tac
 QED
 
-Theorem abi_decode_bulk_body_mem_ok[local]:
+Theorem abi_decode_bulk_body_mem_ok:
   abi_decode_bulk_body dst pos addr MLOAD base_op msz st = ((),st') /\
   base_op <> Lit 0w /\
   eval_operand pos s = SOME (n2w p) /\ eval_operand base_op s = SOME (n2w b) /\
