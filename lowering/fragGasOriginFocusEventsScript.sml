@@ -162,7 +162,7 @@ Proof
 QED
 
 (* Helper: the run past an edge's jump or block entry, with its fuel. *)
-Theorem gas_origin_edge_events_next[local]:
+Theorem gas_origin_edge_events_next:
   gas_origin_edge memory explicit ctx func s left (OK t) /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bt /\
   MAP (\key. key IN explicit)
@@ -270,7 +270,7 @@ Resume gas_origin_edge_events_next[jump]:
   qexistsl_tac [`SUC n`, `extra`] >> fs[MAP_APPEND]
 QED
 
-Finalise gas_origin_edge_events_next
+Finalise gas_origin_edge_events_next[local]
 
 (* Helper: an edge's marks, then any prefix of the run after it. *)
 Theorem gas_origin_edge_events_prefix[local]:
