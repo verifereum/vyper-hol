@@ -1,14 +1,17 @@
 (* Counted paths for aggregate storage Append. *)
 Theory bodyMemAppendAggregatePath
 Ancestors
-  bodyMemAssignTopCopyPaths placeStoreCopyPath bodyMemAppendFacts
+  bodyMemAssignTopCopyPaths placeStoreCopyPath
   exprLowering emitHelper emitHelperProps compileEnv
   fragGasMode fragGasPathMem fragExecMem venomState venomInst venomExecSemantics
   words list rich_list pair fragExec exprSimStorageCopy stmtSimAppendStorage
   stmtSimAppendStorageCompose
   loweringStateRelDefs stateFrame exprLoweringProps varsExt freshWrites
-  appendStorageStageTransportPtr bodyDeclMemoryCounted instMemFrontier memSafeRun
+  bodyUnopFragMemory instMemFrontier memSafeRun
   allocaFootprint fragGasSeqMem
+  placeStoreSlots stmtSimStoreCopy typedMemoryCopy typedCopyDomain context
+  valueEncoding valueEncodingDefs valueEncodingProps valueEncodingTyping
+  vyperValue vyperTyping vyperTypeDefaults vyperTypeValues vyperTypeABI vyperStorage arithmetic
 
 Theorem append_sparse_header_load_mem[local]:
   emit_op MLOAD [arg] sa = (op,sb) /\ fn_has_code sa sb func /\
@@ -369,7 +372,7 @@ Proof
   gvs[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem append_sparse_runtime_loop_checked[local]:
+Theorem append_sparse_runtime_loop_checked:
   (loc = LocStorage \/ loc = LocTransient) /\
   compile_word_copy_loop_op src dst cop LocMemory loc F sa = (u,sb) /\
   fn_has_code sa sb func /\ n < dimword (:256) /\
@@ -495,7 +498,7 @@ Resume append_sparse_runtime_loop_checked[entry]:
   qexists_tac `jump_to hdr r` >> simp[]
 QED
 
-Finalise append_sparse_runtime_loop_checked
+Finalise append_sparse_runtime_loop_checked[local]
 
 Theorem append_sparse_runtime_bulk_path_mem[local]:
   compile_word_copy_loop_op src dst cop LocMemory
@@ -537,29 +540,7 @@ Proof
   Cases_on `tr` >> simp[w2n_n2w, arithmeticTheory.LESS_MOD] >> gvs[]
 QED
 
-Theorem append_sparse_bytes_footprint[local]:
-  (tv = BaseTV (BytesT (Dynamic cap)) \/ tv = BaseTV (StringT cap)) /\
-  value_has_type tv v /\ val_in_memory tv v off mem /\
-  off + type_memory_size tv < dimword (:256) /\
-  encode_value tv v = SOME writes ==>
-  ?len. mem_word_at off mem = n2w len /\
-    (!j. MEM j (MAP FST writes) <=> j < 1 + vfmConstants$word_size len) /\
-    32 * (1 + vfmConstants$word_size len) <= type_memory_size tv /\
-    len + 63 < dimword (:256) /\
-    1 + vfmConstants$word_size len < dimword (:256)
-Proof
-  strip_tac >> Cases_on `v` >>
-  gvs[vyperTypingTheory.value_has_type_def, valueEncodingDefsTheory.val_in_memory_def,
-      valueEncodingTheory.type_memory_size_def, vyperStorageTheory.encode_value_def] >>
-  drule vyperEncodeDecodeTheory.encode_dyn_bytes_slots_keys >> strip_tac >>
-  gvs[] >> rename1 `mem_word_at off mem = n2w len` >>
-  qexists_tac `len` >> simp[] >>
-  fs[vfmConstantsTheory.word_size_def] >>
-  qspec_then `len + 31` mp_tac (SRULE [] (Q.SPEC `32` arithmeticTheory.DIVISION)) >>
-  qspec_then `cap + 31` mp_tac (SRULE [] (Q.SPEC `32` arithmeticTheory.DIVISION)) >>
-  simp[] >> rpt strip_tac >> rpt conj_tac >>
-  fs[wordsTheory.dimword_def] >> intLib.ARITH_TAC
-QED
+
 
 Theorem append_sparse_bytes_checked[local]:
   is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\
@@ -591,7 +572,7 @@ Proof
      gvs[is_bytestring_type_def, vyperValueTheory.evaluate_type_def] >>
      rename1 `BytesT bound` >> Cases_on `bound` >>
      gvs[is_bytestring_type_def, vyperValueTheory.evaluate_type_def]) >>
-  drule_at (Pat `val_in_memory _ _ _ _`) append_sparse_bytes_footprint >>
+  drule_at (Pat `val_in_memory _ _ _ _`) placeStoreSlotsTheory.store_slots_bytes_footprint >>
   disch_then (qspecl_then [`writes`, `cap`] mp_tac) >>
   simp[] >> strip_tac >>
   `is_abi_dynamic cenv.ce_struct_fields ty` by
@@ -621,6 +602,7 @@ Proof
     metis_tac[ci_mono_compile_word_copy_loop_op, pairTheory.SND] >>
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     (fs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split]) >>
+  rename1 `mem_word_at (w2n sw) s.vs_memory = n2w len` >>
   `mload (w2n sw) s = n2w len` by metis_tac[GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
   `w2n sw + 32 <= s.vs_alloca_next` by decide_tac >>
   `len + 63 < dimword (:256)` by fs[dimword_def] >>
@@ -754,19 +736,7 @@ Proof
   disch_then (qspec_then `ctx` mp_tac) >> simp[]
 QED
 
-Theorem append_sparse_lit_offset_fresh[local]:
-  !ptr0 off sa op sb.
-  compile_lit_byte_offset ptr0 off sa = (op,sb) /\
-  (!x. ptr0 = Var x ==> not_fresh_at sa x) ==>
-  !x. op = Var x ==> not_fresh_at sb x
-Proof
-  rpt gen_tac >> Cases_on `off = 0`
-  >- (simp[contextTheory.compile_lit_byte_offset_def, comp_return_def] >> metis_tac[]) >>
-  Cases_on `ptr0`
-  >- (simp[contextTheory.compile_lit_byte_offset_def, comp_return_def] >> rpt strip_tac >> gvs[]) >>
-  simp[contextTheory.compile_lit_byte_offset_def] >> rpt strip_tac >>
-  drule typedMemoryCopyTheory.typed_copy_emit_op_fresh >> simp[]
-QED
+
 
 (* Source-level notation only: no new HOL constant or definition. *)
 val append_sparse_entry = ``\cenv ctx ty tv v.
@@ -865,7 +835,7 @@ Proof
  `(!x. slot = Var x ==> not_fresh_at a x) /\
   (!x. ms = Var x ==> not_fresh_at a x) /\
   (!x. ms = Var x \/ ds = Var x ==> not_fresh_at b x)` by
-   metis_tac[append_sparse_lit_offset_fresh,
+   metis_tac[placeStoreSlotsTheory.store_slots_lit_offset_fresh,
              typedMemoryCopyTheory.typed_copy_operand_fresh_mono] >>
  qpat_assum `compile_lit_byte_offset src _ _ = _` mp_tac >>
  disch_then (mp_then Any mp_tac append_sparse_lit_offset_checked) >>
@@ -923,24 +893,7 @@ Proof
  simp[placeStoreSlotsTheory.store_slots_normalize_fold]
 QED
 
-Theorem append_sparse_fold_compose[local]:
- u.vs_memory = s.vs_memory /\
- store_copy_normalize s u =
-   FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
-     (mload (w2n sw + 32*j) s) q) s hs /\
- store_copy_normalize u t =
-   FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
-     (mload (w2n sw + 32*j) u) q) u ts ==>
- store_copy_normalize s t =
-   FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
-     (mload (w2n sw + 32*j) s) q) s (hs ++ ts)
-Proof
- strip_tac >>
- qpat_x_assum `store_copy_normalize u t = _`
-   (mp_tac o AP_TERM ``store_copy_normalize s``) >>
- simp[placeStoreSlotsTheory.store_slots_normalize_fold, FOLDL_APPEND, mload_def] >>
- simp[stmtSimStoreCopyTheory.store_copy_normalize_def]
-QED
+
 
 Theorem append_sparse_members_checked[local]:
  !members tvs vs cenv ctx mo so src slot tr sa sb func s sw dw.
@@ -1066,7 +1019,7 @@ Proof
  `store_copy_normalize s t =
    FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
      (mload (w2n sw + 32*j) s) q) s (MAP ((+) so) hs ++ ts)` by
-   (irule append_sparse_fold_compose >> qexists_tac `u` >> simp[] >>
+   (irule placeStoreSlotsTheory.store_slots_fold_compose >> qexists_tac `u` >> simp[] >>
     qpat_x_assum `store_copy_normalize u t = _` mp_tac >>
     simp[NoAsms, arithmeticTheory.ADD_COMM]) >>
  `gas_marked_path T ctx func s 0 (OK t)` by
@@ -1086,6 +1039,1115 @@ Proof
  metis_tac[arithmeticTheory.ADD_COMM]
 
 QED
+
+Theorem append_sparse_elements_init_checked[local]:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  DROP s.vs_inst_idx bb.bb_instructions =
+    [mk_inst id1 ASSIGN [Lit 0w] [cv]; mk_inst id2 JMP [Label hdr] []] ==>
+  gas_marked_path T ctx func s 0
+    (OK (jump_to hdr ((update_var cv 0w s) with
+      vs_inst_idx := SUC s.vs_inst_idx)))
+Proof
+  strip_tac >>
+  `run_inst_seq [mk_inst id1 ASSIGN [Lit 0w] [cv]] s =
+     OK (update_var cv 0w s)` by
+    simp[run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``ASSIGN``,
+         mk_inst_def, eval_operand_lit] >>
+  `isPREFIX [mk_inst id1 ASSIGN [Lit 0w] [cv]]
+     (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  `run_inst_seq_mem_ok [mk_inst id1 ASSIGN [Lit 0w] [cv]] s` by
+    (simp[fragExecMemTheory.run_inst_seq_mem_ok_last] >>
+     irule instMemFrontierTheory.below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  drule_at (Pat `run_inst_seq _ _ = _`) topcopy_seq_path >>
+  disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+  simp[mk_inst_def, is_terminator_def] >> strip_tac >>
+  `get_instruction bb (SUC s.vs_inst_idx) =
+     SOME (mk_inst id2 JMP [Label hdr] [])` by
+    (qspecl_then [`bb`, `s.vs_inst_idx`,
+       `[mk_inst id1 ASSIGN [Lit 0w] [cv]]`] mp_tac
+       fragBlockPathTheory.get_instruction_suffix_last >>
+     simp[arithmeticTheory.ADD1]) >>
+  `gas_marked_path T ctx func
+     ((update_var cv 0w s) with vs_inst_idx := SUC s.vs_inst_idx) 0
+     (OK (jump_to hdr ((update_var cv 0w s) with
+       vs_inst_idx := SUC s.vs_inst_idx)))` by
+    (irule topcopy_jump_path >>
+     conj_tac >- simp[update_var_def] >>
+     qexistsl_tac [`bb`, `mk_inst id2 JMP [Label hdr] []`] >>
+     simp[update_var_def, mk_inst_def,
+       stepInstBaseLib.simp_opcode_clause ``JMP``, eval_operand_def]) >>
+  metis_tac[gas_marked_path_then, arithmeticTheory.ADD_0, arithmeticTheory.ADD1]
+QED
+
+Theorem append_sparse_prefix_jump_checked[local]:
+  ~s.vs_halted /\ ~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  DROP s.vs_inst_idx bb.bb_instructions = prefix ++ [term] /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) prefix /\
+  EVERY (\i. i.inst_opcode <> GAS) prefix /\
+  run_inst_seq_mem_ok prefix s /\ run_inst_seq prefix s = OK u /\
+  k = s.vs_inst_idx + LENGTH prefix /\
+  (term.inst_opcode = JMP \/ term.inst_opcode = JNZ) /\
+  step_inst_base term (u with vs_inst_idx := k) =
+    OK (jump_to lbl (u with vs_inst_idx := k)) ==>
+  gas_marked_path T ctx func s 0
+    (OK (jump_to lbl (u with vs_inst_idx := k)))
+Proof
+  strip_tac >> gvs[] >>
+  `isPREFIX prefix (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  drule_all topcopy_seq_path >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  `get_instruction bb (s.vs_inst_idx + LENGTH prefix) = SOME term` by
+    (irule fragBlockPathTheory.get_instruction_suffix_last >> simp[]) >>
+  `gas_marked_path T ctx func
+    (u with vs_inst_idx := s.vs_inst_idx + LENGTH prefix) 0
+    (OK (jump_to lbl (u with vs_inst_idx := s.vs_inst_idx + LENGTH prefix)))` by
+    (irule topcopy_jump_path >> conj_tac >- simp[] >>
+     qexistsl_tac [`bb`, `term`] >> gvs[arithmeticTheory.ADD_COMM]) >>
+  gvs[arithmeticTheory.ADD_COMM] >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+  qexists_tac `u with vs_inst_idx := LENGTH prefix + s.vs_inst_idx` >> simp[]
+QED
+
+Theorem append_sparse_elements_condition_checked[local]:
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  bb.bb_instructions =
+    [mk_inst id1 LT [Var cv;cnt] [lv];
+     mk_inst id2 ISZERO [Var lv] [dv];
+     mk_inst id3 JNZ [Var dv;Label exit;Label blabel] []] /\
+  eval_operand (Var cv) s = SOME (n2w i) /\
+  eval_operand cnt s = SOME (n2w N) /\ i <= N /\ N < dimword (:256) ==>
+  gas_marked_path T ctx func s 0
+    (OK (jump_to (if i < N then blabel else exit)
+      ((update_var dv (bool_to_word (~(i < N)))
+        (update_var lv (bool_to_word (i < N)) s)) with vs_inst_idx := 2)))
+Proof
+  strip_tac >>
+  irule append_sparse_prefix_jump_checked >> simp[] >>
+  simp[mk_inst_def, is_terminator_def] >>
+  reverse conj_tac
+  >- (reverse conj_tac
+      >- (irule fragExecMemTheory.run_inst_seq_mem_ok_every >> simp[] >>
+          rpt strip_tac >>
+          irule instMemFrontierTheory.below_frontier_no_ranges >> simp[]) >>
+      Cases_on `i < N` >>
+      simp[stepInstBaseLib.simp_opcode_clause ``JNZ``, bool_to_word_def,
+           eval_operand_def, lookup_var_update_var]) >>
+  simp[run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``LT``,
+       stepInstBaseLib.simp_opcode_clause ``ISZERO``,
+       stepInstBaseLib.simp_opcode_clause ``JNZ``,
+       exec_pure2_def, exec_pure1_def, eval_operand_def, lookup_var_update_var] >>
+  `i < dimword (:256)` by decide_tac >>
+  gvs[eval_operand_def] >>
+  Cases_on `i < N` >> simp[bool_to_word_def, wordsTheory.w2n_n2w,
+    arithmeticTheory.LESS_MOD, lookup_var_update_var]
+QED
+
+Theorem append_sparse_elements_backedge_checked[local]:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  DROP s.vs_inst_idx bb.bb_instructions =
+    [mk_inst id1 ADD [Var cv;Lit 1w] [iv];
+     mk_inst id2 ASSIGN [Var iv] [cv]; mk_inst id3 JMP [Label hdr] []] /\
+  lookup_var cv s = SOME (n2w i) /\ SUC i < dimword (:256) ==>
+  gas_marked_path T ctx func s 0
+    (OK (jump_to hdr
+      ((update_var cv (n2w (SUC i)) (update_var iv (n2w (SUC i)) s)) with
+        vs_inst_idx := s.vs_inst_idx + 2)))
+Proof
+  strip_tac >>
+  irule append_sparse_prefix_jump_checked >> simp[] >>
+  simp[mk_inst_def, is_terminator_def] >>
+  reverse conj_tac
+  >- (reverse conj_tac
+      >- (irule fragExecMemTheory.run_inst_seq_mem_ok_every >> simp[] >>
+          rpt strip_tac >>
+          irule instMemFrontierTheory.below_frontier_no_ranges >> simp[]) >>
+      simp[stepInstBaseLib.simp_opcode_clause ``JMP``, eval_operand_def]) >>
+  simp[run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``ADD``,
+       stepInstBaseLib.simp_opcode_clause ``ASSIGN``,
+       exec_pure2_def, eval_operand_def, lookup_var_update_var,
+       wordsTheory.word_add_n2w, arithmeticTheory.ADD1]
+QED
+
+Theorem append_sparse_elements_addresses_checked[local]:
+  (do so <- emit_op MUL [Var counter; Lit (n2w ss)];
+      sp <- emit_op ADD [src; so];
+      doff <- emit_op MUL [Var counter; Lit (n2w ds)];
+      dp <- emit_op ADD [dst; doff]; comp_return (sp,dp)
+   od) sa = ((sp,dp),sb) /\
+  not_fresh_at sa counter /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  lookup_var counter s = SOME (n2w i) /\ fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. gas_marked_path T ctx func s 0 (OK u) /\
+      eval_operand sp u = SOME (sw + n2w (i * ss)) /\
+      eval_operand dp u = SOME (dw + n2w (i * ds)) /\
+      (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+      ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  drule_all placeStoreSlotsTheory.store_slots_addresses_sequence >> strip_tac >>
+  `EVERY (\j. j.inst_opcode = MUL \/ j.inst_opcode = ADD)
+    (emitted_insts sa sb)` by
+    (qpat_assum `_ sa = ((sp,dp),sb)` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[comp_bind_def, comp_return_def, emit_op_def, fresh_var_def,
+       emit_inst_def, fresh_id_def, emit_def, comp_ignore_bind_def] >> strip_tac >>
+     gvs[] >>
+     simp[emitted_insts_def, APPEND_ASSOC, mk_inst_def, DROP_LENGTH_APPEND] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[DROP_LENGTH_APPEND, mk_inst_def]) >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+    (irule run_inst_seq_mem_ok_every >> fs[EVERY_MEM] >> rpt strip_tac >>
+     rename1 `MEM inst (emitted_insts sa sb)` >>
+     `inst.inst_opcode = MUL \/ inst.inst_opcode = ADD` by metis_tac[] >>
+     Cases_on `inst.inst_opcode = MUL` >> fs[] >>
+     simp[inst_dload_in_section_def] >>
+     irule instMemFrontierTheory.below_frontier_no_ranges >> simp[]) >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (fs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
+     qexists_tac `l` >> simp[DROP_APPEND, arithmeticTheory.SUB_PLUS]) >>
+  drule_all topcopy_seq_path >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  gvs[eval_operand_def, lookup_var_def, same_blocks_def] >>
+  qpat_x_assum `u with vs_vars := _ = s` mp_tac >>
+  simp[venom_state_component_equality] >> strip_tac >>
+  simp[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem append_sparse_loop_init_checked[local]:
+  !cenv src slot elem cnt tr sa sb func hdr body exit cv lv dv iv bs sc sd sp dp
+   s ctx etv el sw dw.
+  store_slots_loop_code cenv src slot elem cnt tr sa sb func
+    (hdr,body,exit,cv,lv,dv,iv,bs,sc,sd,sp,dp) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. gas_marked_path T ctx func s 0 (OK u) /\
+    store_slots_prefix sa etv el tr sw dw s 0 [] u /\
+    u.vs_alloca_next = s.vs_alloca_next /\
+    lookup_var cv u = SOME 0w /\ u.vs_current_bb = hdr /\ u.vs_inst_idx = 0
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[placeStoreSlotsTheory.store_slots_loop_code_def] >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME ibb /\
+   DROP s.vs_inst_idx ibb.bb_instructions =
+     [mk_inst id1 ASSIGN [Lit 0w] [cv]; mk_inst id2 JMP [Label hdr] []]` by simp[] >>
+  drule_all append_sparse_elements_init_checked >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  qexists_tac `jump_to hdr ((update_var cv 0w s) with
+    vs_inst_idx := SUC s.vs_inst_idx)` >>
+  conj_tac >- simp[] >>
+  reverse conj_tac
+  >- simp[jump_to_def, lookup_var_def, update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >>
+  irule placeStoreSlotsTheory.store_slots_prefix_init_control >>
+  simp[placeStoreSlotsTheory.store_slots_prefix_empty] >> metis_tac[]
+QED
+
+Theorem append_sparse_loop_exit_checked[local]:
+  !cenv src slot elem cnt tr sa sb func hdr body exit cv lv dv iv bs sc sd sp dp
+   s ctx etv el sw dw N ks u.
+  store_slots_loop_code cenv src slot elem cnt tr sa sb func
+    (hdr,body,exit,cv,lv,dv,iv,bs,sc,sd,sp,dp) /\
+  store_slots_prefix sa etv el tr sw dw s N ks u /\
+  u.vs_alloca_next = s.vs_alloca_next /\
+  (!x. cnt = Var x ==> not_fresh_at sa x) /\
+  eval_operand cnt s = SOME (n2w N) /\ N < dimword (:256) /\
+  lookup_var cv u = SOME (n2w N) /\ u.vs_current_bb = hdr /\ u.vs_inst_idx = 0 ==>
+  ?t. gas_marked_path T ctx func u 0 (OK t) /\
+    store_slots_prefix sa etv el tr sw dw s N ks t /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[placeStoreSlotsTheory.store_slots_loop_code_def] >>
+  `~u.vs_halted /\ eval_operand cnt u = SOME (n2w N)` by
+    (fs[placeStoreSlotsTheory.store_slots_prefix_def] >> Cases_on `cnt` >>
+     gvs[eval_operand_def] >> metis_tac[]) >>
+  `lookup_block u.vs_current_bb func.fn_blocks = SOME hbb /\
+   eval_operand (Var cv) u = SOME (n2w N)` by simp[eval_operand_def] >>
+  `N <= N` by simp[] >>
+  `N < dimword (:256)` by fs[dimword_def] >>
+  drule_all append_sparse_elements_condition_checked >> simp[] >> strip_tac >>
+  qexists_tac `jump_to exit ((update_var dv (bool_to_word T)
+    (update_var lv (bool_to_word F) u)) with vs_inst_idx := 2)` >>
+  conj_tac >- simp[] >>
+  reverse conj_tac
+  >- simp[jump_to_def, update_var_def] >>
+  irule placeStoreSlotsTheory.store_slots_prefix_control >> simp[] >> metis_tac[]
+QED
+
+Theorem append_sparse_loop_round_checked:
+  !cenv src slot elem cnt tr sa sb func hdr body exit cv lv dv iv bs sc sd sp dp
+   s ctx etv el sw dw N i ks u.
+  store_slots_loop_code cenv src slot elem cnt tr sa sb func
+    (hdr,body,exit,cv,lv,dv,iv,bs,sc,sd,sp,dp) /\
+  type_memory_bytes cenv elem = type_memory_size etv /\
+  (!r. r < N ==> (^append_sparse_entry) cenv ctx elem etv (el r) /\
+    IS_SOME (encode_value etv (el r)) /\
+    val_in_memory etv (el r) (w2n sw + r * type_memory_size etv) s.vs_memory) /\
+  (!x. src = Var x \/ slot = Var x \/ cnt = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+  eval_operand cnt s = SOME (n2w N) /\ N < dimword (:256) /\
+  w2n sw + N * type_memory_size etv < dimword (:256) /\
+  w2n sw + N * type_memory_size etv <= s.vs_alloca_next /\
+  w2n dw + N * type_slot_size etv <= dimword (:256) /\
+  fn_inst_ids_distinct func /\ ~s.vs_call_ctx.cc_static /\
+  i < N /\ store_slots_prefix sa etv el tr sw dw s i ks u /\
+  u.vs_alloca_next = s.vs_alloca_next /\
+  lookup_var cv u = SOME (n2w i) /\ u.vs_current_bb = hdr /\ u.vs_inst_idx = 0 ==>
+  ?v ks'. gas_marked_path T ctx func u 0 (OK v) /\
+    store_slots_prefix sa etv el tr sw dw s (SUC i) ks' v /\
+    v.vs_alloca_next = s.vs_alloca_next /\
+    lookup_var cv v = SOME (n2w (SUC i)) /\ v.vs_current_bb = hdr /\ v.vs_inst_idx = 0
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[placeStoreSlotsTheory.store_slots_loop_code_def] >>
+  `~u.vs_halted /\ eval_operand cnt u = SOME (n2w N) /\
+   eval_operand src u = SOME sw /\ eval_operand slot u = SOME dw` by
+    (fs[placeStoreSlotsTheory.store_slots_prefix_def] >>
+     conj_tac >- (Cases_on `cnt` >> fs[eval_operand_def] >> metis_tac[]) >>
+     conj_tac >- (Cases_on `src` >> fs[eval_operand_def] >> metis_tac[]) >>
+     Cases_on `slot` >> fs[eval_operand_def] >> metis_tac[]) >>
+  `lookup_block u.vs_current_bb func.fn_blocks = SOME hbb /\
+   eval_operand (Var cv) u = SOME (n2w i) /\ i <= N` by
+    (simp[eval_operand_def] >> decide_tac) >>
+  `N < dimword (:256)` by fs[dimword_def] >>
+  drule_all append_sparse_elements_condition_checked >> simp[] >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_marked_path T ctx func u 0 (OK hu)` >>
+  `store_slots_prefix sa etv el tr sw dw s i ks hu` by
+    (simp[Abbr `hu`] >>
+     irule placeStoreSlotsTheory.store_slots_prefix_control >> simp[] >> metis_tac[]) >>
+  `hu.vs_alloca_next = s.vs_alloca_next` by
+    simp[Abbr `hu`, jump_to_def, update_var_def] >>
+  suspend "body"
+QED
+
+Resume append_sparse_loop_round_checked[body]:
+  `lookup_var cv hu = SOME (n2w i) /\ ~hu.vs_halted /\
+   hu.vs_current_bb = bs.cs_current_bb /\
+   hu.vs_inst_idx = LENGTH bs.cs_current_insts` by
+    (simp[Abbr `hu`, jump_to_def, lookup_var_def, update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >> fs[lookup_var_def]) >>
+  `eval_operand src hu = SOME sw /\ eval_operand slot hu = SOME dw` by
+    (fs[placeStoreSlotsTheory.store_slots_prefix_def] >>
+     conj_tac >- (Cases_on `src` >> fs[eval_operand_def] >> metis_tac[]) >>
+     Cases_on `slot` >> fs[eval_operand_def] >> metis_tac[]) >>
+  `(!x. src = Var x ==> not_fresh_at bs x) /\
+   (!x. slot = Var x ==> not_fresh_at bs x)` by
+    (fs[ci_mono_def] >> metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+  drule_all append_sparse_elements_addresses_checked >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `gas_marked_path T ctx func hu 0 (OK a)` >>
+  `a.vs_memory = hu.vs_memory /\ a.vs_call_ctx = hu.vs_call_ctx /\
+   a.vs_allocas = hu.vs_allocas /\ a.vs_labels = hu.vs_labels /\
+   a.vs_alloca_next = hu.vs_alloca_next /\
+   store_copy_normalize s a = store_copy_normalize s hu` by
+    (qpat_x_assum `a with <|vs_vars := _; vs_inst_idx := _|> = hu` mp_tac >>
+     simp[venom_state_component_equality,
+          stmtSimStoreCopyTheory.store_copy_normalize_def] >> metis_tac[]) >>
+  `store_slots_prefix sa etv el tr sw dw s i ks a` by
+    (irule placeStoreSlotsTheory.store_slots_prefix_transfer >> simp[] >>
+     qexists_tac `hu` >> simp[] >> fs[ci_mono_def] >>
+     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+  `a.vs_memory = s.vs_memory /\ ~a.vs_call_ctx.cc_static /\
+   a.vs_alloca_next = s.vs_alloca_next /\
+   store_copy_normalize s a =
+    FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
+      (mload (w2n sw + 32*j) s) q) s ks` by
+    fs[placeStoreSlotsTheory.store_slots_prefix_def] >>
+  `type_memory_size etv DIV 32 = type_slot_size etv` by
+    simp[valueEncodingPropsTheory.type_memory_size_slots] >>
+  `eval_operand dp a = SOME (dw + n2w (i * type_slot_size etv))` by fs[] >>
+  qpat_x_assum `!r. r < N ==> _` (qspec_then `i` mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `encode_value etv (el i)` >> fs[] >>
+  rename1 `encode_value etv (el i) = SOME writes` >>
+  suspend "child"
+QED
+
+Resume append_sparse_loop_round_checked[child]:
+  `w2n sw + i * type_memory_size etv < dimword (:256) /\
+   w2n (n2w (w2n sw + i * type_memory_size etv) : bytes32) =
+     w2n sw + i * type_memory_size etv /\
+   w2n (n2w (w2n sw + i * type_memory_size etv) : bytes32) +
+     type_memory_size etv < dimword (:256) /\
+   w2n (dw + n2w (i * type_slot_size etv)) +
+     type_slot_size etv <= dimword (:256)` by
+    (mp_tac (Q.INST [`i` |-> `i`, `N` |-> `N`, `tv` |-> `etv`,
+       `sw` |-> `sw:bytes32`, `dw` |-> `dw:bytes32`]
+       placeStoreSlotsTheory.store_slots_element_bounds) >>
+     impl_tac >- fs[dimword_def] >>
+     disch_then strip_assume_tac >> asm_rewrite_tac[]) >>
+  `i * type_memory_size etv + type_memory_size etv <=
+     N * type_memory_size etv` by
+    (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+  `w2n (n2w (w2n sw + i * type_memory_size etv) : bytes32) +
+     type_memory_size etv <= a.vs_alloca_next` by decide_tac >>
+  `sw + n2w (i * type_memory_size etv) =
+   n2w (w2n sw + i * type_memory_size etv)` by
+    simp[GSYM wordsTheory.word_add_n2w] >>
+  qpat_x_assum `!src' slot' tr' sa' sb' func' s' sw' dw'. _`
+    (qspecl_then [`sp`, `dp`, `tr`, `sc`, `sd`, `func`, `a`,
+      `n2w (w2n sw + i * type_memory_size etv)`,
+      `dw + n2w (i * type_slot_size etv)`] mp_tac) >>
+  (impl_tac >- (gvs[dimword_def] >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choose_then `t` (qx_choose_then `js` strip_assume_tac)) >>
+  `store_copy_normalize s t =
+    FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
+      (mload (w2n sw + 32*j) s) q)
+      s (ks ++ MAP (\j. i * type_slot_size etv + j) js)` by
+    (mp_tac (Q.INST [`js` |-> `js`, `sw` |-> `sw:bytes32`, `tv` |-> `etv`]
+       (INST_TYPE [``:'a`` |-> ``:256``]
+         placeStoreSlotsTheory.store_slots_compose_fold)) >> simp[]) >>
+  suspend "backedge"
+QED
+
+Resume append_sparse_loop_round_checked[backedge]:
+  `store_slots_prefix sa etv el tr sw dw s (SUC i)
+     (ks ++ MAP (\j. i * type_slot_size etv + j) js) t` by
+    (pure_rewrite_tac[placeStoreSlotsTheory.store_slots_prefix_def] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac
+     >- (irule placeStoreSlotsTheory.store_slots_prefix_members_step >>
+         fs[placeStoreSlotsTheory.store_slots_prefix_def] >> metis_tac[]) >>
+     fs[placeStoreSlotsTheory.store_slots_prefix_def, ci_mono_def] >>
+     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+  `t.vs_alloca_next = s.vs_alloca_next` by simp[] >>
+  `lookup_var cv t = SOME (n2w i)` by metis_tac[] >>
+  `SUC i < dimword (:256)` by (fs[dimword_def] >> decide_tac) >>
+  `lookup_block t.vs_current_bb func.fn_blocks = SOME tbb /\
+   DROP t.vs_inst_idx tbb.bb_instructions =
+     [mk_inst tid1 ADD [Var cv; Lit 1w] [iv];
+      mk_inst tid2 ASSIGN [Var iv] [cv]; mk_inst tid3 JMP [Label hdr] []]` by simp[] >>
+  drule_all append_sparse_elements_backedge_checked >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_marked_path T ctx func t 0 (OK v)` >>
+  qexistsl_tac [`v`, `ks ++ MAP (\j. i * type_slot_size etv + j) js`] >>
+  reverse conj_tac
+  >- (conj_tac
+      >- (qunabbrev_tac `v` >>
+          irule placeStoreSlotsTheory.store_slots_prefix_control >>
+          metis_tac[]) >>
+      simp[Abbr `v`, jump_to_def, lookup_var_def, update_var_def,
+           finite_mapTheory.FLOOKUP_UPDATE]) >>
+  irule (SRULE []
+    (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+  qexists_tac `hu` >> conj_tac >- first_assum ACCEPT_TAC >>
+  irule (SRULE []
+    (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+  qexists_tac `a` >> conj_tac >- first_assum ACCEPT_TAC >>
+  irule (SRULE []
+    (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+  qexists_tac `t` >> conj_tac >> first_assum ACCEPT_TAC
+QED
+Finalise append_sparse_loop_round_checked[local]
+
+Theorem append_sparse_elements_checked[local]:
+  !cenv ctx elem etv el N src slot cnt tr sa sb func s sw dw.
+    compile_copy_elements_to_slots cenv src slot elem cnt tr sa = ((),sb) /\
+    type_memory_bytes cenv elem = type_memory_size etv /\
+    (!i. i < N ==>
+       (^append_sparse_entry) cenv ctx elem etv (el i) /\
+       IS_SOME (encode_value etv (el i)) /\
+       val_in_memory etv (el i) (w2n sw + i * type_memory_size etv)
+         s.vs_memory) /\
+    (!x. src = Var x \/ slot = Var x \/ cnt = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+    eval_operand cnt s = SOME (n2w N) /\ N < dimword (:256) /\
+    w2n sw + N * type_memory_size etv < dimword (:256) /\
+    w2n sw + N * type_memory_size etv <= s.vs_alloca_next /\
+    w2n dw + N * type_slot_size etv <= dimword (:256) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    ~s.vs_call_ctx.cc_static ==>
+    ?t ks.
+      gas_marked_path T ctx func s 0 (OK t) /\
+      store_copy_normalize s t =
+        FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
+                 (mload (w2n sw + 32 * j) s) q) s ks /\
+      (!k. MEM k ks <=>
+         ?i writes j. i < N /\ encode_value etv (el i) = SOME writes /\
+           MEM j (MAP FST writes) /\ k = i * type_slot_size etv + j) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
+      t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+      t.vs_alloca_next = s.vs_alloca_next /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all placeStoreSlotsTheory.store_slots_loop_code >> strip_tac >>
+  PairCases_on `layout` >>
+  `!i. i <= N ==> ?u ks.
+    gas_marked_path T ctx func s 0 (OK u) /\
+    store_slots_prefix sa etv el tr sw dw s i ks u /\
+    u.vs_alloca_next = s.vs_alloca_next /\
+    lookup_var layout3 u = SOME (n2w i) /\
+    u.vs_current_bb = layout0 /\ u.vs_inst_idx = 0` by
+    (Induct_on `i`
+     >- (strip_tac >> drule_all append_sparse_loop_init_checked >>
+         disch_then (qspecl_then [`ctx`,`etv`,`el`,`sw`,`dw`] strip_assume_tac) >>
+         qexistsl_tac [`u`,`[]`] >> fs[]) >>
+     strip_tac >> `i <= N /\ i < N` by decide_tac >>
+     first_x_assum drule >> strip_tac >>
+     drule_all append_sparse_loop_round_checked >> strip_tac >>
+     qexistsl_tac [`v`,`ks'`] >> simp[] >>
+     irule (SRULE []
+       (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+     qexists_tac `u` >> simp[]) >>
+  first_x_assum (qspec_then `N` mp_tac) >> simp[] >> strip_tac >>
+  `!x. cnt = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+  drule_all append_sparse_loop_exit_checked >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexistsl_tac [`t`,`ks`] >>
+  conj_tac
+  >- (irule (SRULE []
+        (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+      qexists_tac `u` >> simp[]) >>
+  fs[placeStoreSlotsTheory.store_slots_prefix_def]
+QED
+
+Theorem append_sparse_dyn_prefix_checked:
+  emit_op MLOAD [src] sa = (cnt,s1) /\
+  emit_op ADD [src; Lit 32w] s1 = (data,s2) /\
+  emit_op ADD [slot; Lit 1w] s2 = (dst,sc) /\
+  fn_has_code sa sc func /\ fn_inst_ids_distinct func /\
+  (!x. src = Var x \/ slot = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand slot s = SOME dw /\
+  w2n sw + 32 <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?p. gas_marked_path T ctx func s 0 (OK p) /\
+    store_copy_normalize s p = s /\
+    eval_operand cnt p = SOME (mload (w2n sw) s) /\
+    eval_operand data p = SOME (sw + 32w) /\
+    eval_operand dst p = SOME (dw + 1w) /\
+    eval_operand slot p = SOME dw /\
+    (!x. not_fresh_at sa x ==> lookup_var x p = lookup_var x s) /\
+    p.vs_allocas = s.vs_allocas /\ p.vs_memory = s.vs_memory /\
+    p.vs_labels = s.vs_labels /\ p.vs_call_ctx = s.vs_call_ctx /\
+    p.vs_alloca_next = s.vs_alloca_next /\
+    ~p.vs_halted /\ p.vs_current_bb = sc.cs_current_bb /\
+    p.vs_inst_idx = LENGTH sc.cs_current_insts
+Proof
+  strip_tac >> imp_res_tac typed_copy_emit_op_mono >>
+  `cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 sc` by
+    gvs[ci_mono_def] >>
+  `cs_extends s1 sc` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 s2 func /\
+   fn_has_code s2 sc func` by metis_tac[fn_has_code_split] >>
+  drule_all append_sparse_header_load_mem >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  qabbrev_tac `q1 = (update_var (STRING #"%" (toString sa.cs_next_var))
+    (mload (w2n sw) s) s) with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `gas_marked_path T ctx func s 0 (OK q1)` by
+    simp[gas_marked_path_def, Abbr `q1`] >>
+  `cnt = Var (STRING #"%" (toString sa.cs_next_var)) /\
+   s1.cs_current_bb = sa.cs_current_bb /\
+   LENGTH s1.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by
+    gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+        comp_ignore_bind_def, comp_return_def, emit_def] >>
+  `!x. not_fresh_at sa x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
+    (rpt strip_tac >> gvs[not_fresh_at_def]) >>
+  `(!x. not_fresh_at sa x ==> lookup_var x q1 = lookup_var x s) /\
+   eval_operand cnt q1 = SOME (mload (w2n sw) s) /\
+   ~q1.vs_halted /\ q1.vs_current_bb = s1.cs_current_bb /\
+   q1.vs_inst_idx = LENGTH s1.cs_current_insts` by
+    simp[Abbr `q1`, eval_operand_def, lookup_var_update_var, update_var_def,
+         lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  `q1.vs_labels = s.vs_labels` by simp[Abbr `q1`, update_var_def] >>
+  `eval_operand src q1 = SOME sw /\ eval_operand slot q1 = SOME dw` by
+    (Cases_on `src` >> Cases_on `slot` >>
+     gvs[eval_operand_def] >> metis_tac[]) >>
+  `compile_with_byte_offset src 32 s1 = (data,s2)` by
+    simp[contextTheory.compile_with_byte_offset_def] >>
+  suspend "offsets"
+QED
+
+Resume append_sparse_dyn_prefix_checked[offsets]:
+  qpat_assum `compile_with_byte_offset src _ _ = _` mp_tac >>
+  disch_then (mp_then Any mp_tac append_sparse_offset_checked) >>
+  disch_then (qspecl_then [`sw`, `q1`, `func`, `ctx`] mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `q2` strip_assume_tac) >>
+  `q2.vs_labels = q1.vs_labels` by
+    (qpat_x_assum `q2 with <|vs_vars := _; vs_inst_idx := _|> = q1` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `(!x. slot = Var x ==> not_fresh_at s1 x) /\
+   (!x. cnt = Var x ==> not_fresh_at s1 x) /\
+   (!x. cnt = Var x \/ data = Var x \/ slot = Var x ==> not_fresh_at s2 x)` by
+    (imp_res_tac typed_copy_emit_op_fresh >>
+     fs[ci_mono_def] >> metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+  `eval_operand slot q2 = SOME dw /\
+   eval_operand cnt q2 = SOME (mload (w2n sw) s)` by
+    (Cases_on `slot` >> Cases_on `cnt` >>
+     gvs[eval_operand_def] >> metis_tac[]) >>
+  `compile_with_byte_offset slot 1 s2 = (dst,sc)` by
+    simp[contextTheory.compile_with_byte_offset_def] >>
+  qpat_assum `compile_with_byte_offset slot _ _ = _` mp_tac >>
+  disch_then (mp_then Any mp_tac append_sparse_offset_checked) >>
+  disch_then (qspecl_then [`dw`, `q2`, `func`, `ctx`] mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `p` strip_assume_tac) >>
+  `p.vs_labels = q2.vs_labels` by
+    (qpat_x_assum `p with <|vs_vars := _; vs_inst_idx := _|> = q2` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `eval_operand cnt p = SOME (mload (w2n sw) s) /\
+   eval_operand data p = SOME (sw + 32w) /\ eval_operand slot p = SOME dw` by
+    (Cases_on `cnt` >> Cases_on `data` >> Cases_on `slot` >>
+     gvs[eval_operand_def] >> metis_tac[]) >>
+  suspend "finish"
+QED
+
+Resume append_sparse_dyn_prefix_checked[finish]:
+  `store_copy_normalize s q1 = s` by
+    simp[Abbr `q1`, store_copy_normalize_def, update_var_def,
+         venom_state_component_equality] >>
+  `store_copy_normalize q1 q2 = q1 /\ store_copy_normalize q2 p = q2` by
+    metis_tac[append_sparse_normalize_pure] >>
+  `store_copy_normalize s p = s` by
+    metis_tac[placeStoreSlotsTheory.store_slots_normalize_compose] >>
+  `!x. not_fresh_at sa x ==> not_fresh_at s1 x /\ not_fresh_at s2 x` by
+    metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh] >>
+  qexists_tac `p` >> asm_rewrite_tac[] >>
+  conj_tac
+  >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+      qexists_tac `q1` >> conj_tac >- first_assum ACCEPT_TAC >>
+      irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+      qexists_tac `q2` >> simp[]) >>
+  qpat_x_assum `q2 with <|vs_vars := _; vs_inst_idx := _|> = q1` mp_tac >>
+  qpat_x_assum `p with <|vs_vars := _; vs_inst_idx := _|> = q2` mp_tac >>
+  simp[venom_state_component_equality, Abbr `q1`, update_var_def] >>
+  rpt strip_tac >> simp[] >> metis_tac[]
+QED
+Finalise append_sparse_dyn_prefix_checked[local]
+
+
+Theorem append_sparse_dynarray_checked:
+  !cenv tenv ctx elem n tv v.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    evaluate_type tenv (ArrayT elem (Dynamic n)) = SOME tv /\
+    value_has_type tv v /\
+    (!cty ctv cv.
+       type_rank cenv.ce_struct_fields cty <
+         type_rank cenv.ce_struct_fields (ArrayT elem (Dynamic n)) /\
+       evaluate_type tenv cty = SOME ctv /\ value_has_type ctv cv ==>
+       (^append_sparse_entry) cenv ctx cty ctv cv) ==>
+    (^append_sparse_entry) cenv ctx (ArrayT elem (Dynamic n)) tv v
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  rename1 `evaluate_type tenv elem = SOME etv` >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  rename1 `value_has_type (ArrayTV etv (Dynamic n)) (ArrayV av)` >>
+  Cases_on `av` >> gvs[value_has_type_def] >>
+  rename1 `all_have_type etv l` >>
+  simp_tac std_ss [] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_store_slots _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_slots_def, is_abi_dynamic_def,
+       is_bytestring_type_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, AllCaseEqs()] >>
+  ntac 4 (pairarg_tac >> simp[]) >> strip_tac >>
+  rename1 `emit_op MLOAD [src] sa = (cnt,s1)` >>
+  rename1 `emit_op ADD [src; Lit 32w] s1 = (data,s2)` >>
+  rename1 `emit_op ADD [slot; Lit 1w] s2 = (dst,sc)` >>
+  rename1 `emit_void (if tr then TSTORE else SSTORE) [slot; cnt] se = ((),sb)` >>
+  rename1 `compile_copy_elements_to_slots cenv data dst elem cnt tr sc = (unit,se)` >>
+  Cases_on `unit` >>
+  imp_res_tac typed_copy_emit_op_mono >>
+  `ci_mono sc se` by
+    (mp_tac (cj 3 stmtLoweringMonoTheory.ci_mono_compile_store_slots) >>
+     disch_then (qspecl_then [`cenv`,`data`,`dst`,`elem`,`cnt`,`tr`,`sc`] mp_tac) >>
+     simp[]) >>
+  `ci_mono se sb` by
+    (mp_tac (Q.SPECL [`if tr then TSTORE else SSTORE`,`[slot; cnt]`,`se`]
+      ci_mono_emit_void) >> simp[]) >>
+  `cs_extends sa sc /\ cs_extends sc se /\ cs_extends se sb` by
+    (gvs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `fn_has_code sa sc func /\ fn_has_code sc se func /\ fn_has_code se sb func` by
+    metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans] >>
+  `w2n sw + 32 <= s.vs_alloca_next` by
+    (fs[type_memory_size_def] >> decide_tac) >>
+  drule_all append_sparse_dyn_prefix_checked >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `gas_marked_path T ctx func s 0 (OK p)` >>
+  suspend "elements"
+QED
+
+Resume append_sparse_dynarray_checked[elements]:
+  `type_memory_bytes cenv elem = type_memory_size etv` by
+    (irule typed_copy_memory_size >> goal_assum (drule_at Any) >>
+     metis_tac[]) >>
+  `mload (w2n sw) s = n2w (LENGTH l) /\
+   elems_in_memory l (w2n sw + 32) etv s.vs_memory` by
+    gvs[val_in_memory_dynarray, mem_word_at_eq_mload] >>
+  `!i. i < LENGTH l ==> (^append_sparse_entry) cenv ctx elem etv (EL i l) /\
+      IS_SOME (encode_value etv (EL i l)) /\
+      val_in_memory etv (EL i l) (w2n sw + 32 + i * type_memory_size etv)
+        p.vs_memory` by
+    (gen_tac >> strip_tac >> conj_tac
+     >- (qpat_x_assum `!cty ctv cv. _ ==> _`
+           (qspecl_then [`elem`, `etv`, `EL i l`] mp_tac) >>
+         impl_tac >- (simp[type_rank_def] >>
+           gvs[all_have_type_EVERY, EVERY_EL]) >>
+         simp[dimword_def]) >>
+     conj_tac
+     >- (irule placeStoreSlotsTheory.store_slots_dyn_element_encoded >>
+         gvs[Once encode_value_def, AllCaseEqs()] >> metis_tac[]) >>
+     drule_all exprSimAggregateEncodingTheory.elems_in_memory_EL >>
+     metis_tac[ADD_ASSOC]) >>
+  qpat_x_assum `!cty ctv cv. _ ==> _` kall_tac >>
+  `LENGTH l * type_slot_size etv <= n * type_slot_size etv` by
+    simp[] >>
+  `LENGTH l <= LENGTH l * type_slot_size etv` by
+    simp[] >>
+  `w2n sw + 32 + LENGTH l * type_memory_size etv < dimword (:256) /\
+   w2n dw + 1 + LENGTH l * type_slot_size etv <= dimword (:256) /\
+   LENGTH l < dimword (:256) /\ w2n sw + 32 < dimword (:256)` by
+    (qpat_x_assum `type_memory_size _ + w2n sw < _` mp_tac >>
+     qpat_x_assum `type_slot_size _ + w2n dw <= _` mp_tac >>
+     pure_rewrite_tac[type_memory_size_slots, type_slot_size_def, LEFT_ADD_DISTRIB, MULT_ASSOC] >>
+     rpt strip_tac >> simp_tac (srw_ss()) [dimword_def] >> decide_tac) >>
+  `w2n sw + 32 + LENGTH l * type_memory_size etv <= p.vs_alloca_next` by
+    (irule arithmeticTheory.LESS_EQ_TRANS >>
+     qexists_tac `w2n sw + 32 + n * type_memory_size etv` >>
+     conj_tac >- simp[] >> fs[type_memory_size_def]) >>
+  `0 < n * type_slot_size etv` by simp[] >>
+  `w2n dw + 1 < dimword (:256)` by
+    (qpat_x_assum `type_slot_size _ + w2n dw <= _` mp_tac >>
+     pure_rewrite_tac[type_slot_size_def] >>
+     simp_tac (srw_ss()) [dimword_def] >> decide_tac) >>
+  `w2n (sw + 32w) = w2n sw + 32 /\ w2n (dw + 1w) = w2n dw + 1` by
+    (gvs[wordsTheory.word_add_def, wordsTheory.dimword_def]) >>
+  `!x. data = Var x \/ dst = Var x \/ cnt = Var x \/ slot = Var x ==>
+       not_fresh_at sc x` by
+    metis_tac[placeStoreSlotsTheory.store_slots_dyn_prefix_fresh] >>
+  mp_tac (Q.INST [`el` |-> `\i. EL i (l:value list)`, `N` |-> `LENGTH (l:value list)`,
+                  `s` |-> `p`, `sw` |-> `sw + 32w`, `dw` |-> `dw + 1w`,
+                  `src` |-> `data`, `slot` |-> `dst`,
+                  `sa` |-> `sc`, `sb` |-> `se`]
+    (SPEC_ALL append_sparse_elements_checked)) >>
+  (impl_tac >-
+    (asm_rewrite_tac[] >> BETA_TAC >> conj_tac
+     >- (qx_gen_tac `i` >> strip_tac >>
+         qpat_x_assum `!i. i < LENGTH l ==> _` (qspec_then `i` mp_tac) >>
+         simp[dimword_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
+     conj_tac
+     >- (qx_gen_tac `x` >> strip_tac >>
+         qpat_x_assum `!x. data = Var x \/ dst = Var x \/ cnt = Var x \/ slot = Var x ==> _`
+           (qspec_then `x` mp_tac) >> simp[]) >>
+     fs[])) >>
+  disch_then (qx_choosel_then [`u`, `ks`] strip_assume_tac) >>
+  qpat_x_assum `!i. i < LENGTH l ==> _` kall_tac >>
+  suspend "header"
+QED
+
+Resume append_sparse_dynarray_checked[header]:
+  rename1 `gas_marked_path T ctx func p 0 (OK u)` >>
+  `eval_operand slot u = SOME dw /\
+   eval_operand cnt u = SOME (mload (w2n sw) s)` by
+    (conj_tac
+     >- (Cases_on `slot` >> gvs[eval_operand_def] >> metis_tac[]) >>
+     Cases_on `cnt` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `~u.vs_call_ctx.cc_static` by metis_tac[] >>
+  drule_all append_sparse_slot_store_mem >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  qabbrev_tac `t = ((if tr then tstore else sstore) dw
+    (mload (w2n sw) s) u) with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  `gas_marked_path T ctx func u 0 (OK t)` by
+    (simp[gas_marked_path_def, Abbr `t`]) >>
+  suspend "finish"
+QED
+
+Resume append_sparse_dynarray_checked[finish]:
+  `store_copy_normalize u t =
+    (if tr then tstore else sstore) dw (mload (w2n sw) s) u` by
+    (Cases_on `tr` >>
+     simp[Abbr `t`, store_copy_normalize_def, sstore_def, tstore_def,
+          venom_state_component_equality]) >>
+  `store_copy_normalize s t =
+    FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
+      (mload (w2n sw + 32*j) s) q) s (MAP SUC ks ++ [0])` by
+    (irule placeStoreSlotsTheory.store_slots_dyn_fold_header >> goal_assum (drule_at Any) >>
+     metis_tac[]) >>
+  qexistsl_tac [`t`, `MAP SUC ks ++ [0]`] >>
+  conj_tac
+  >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+      qexists_tac `p` >> conj_tac >- first_assum ACCEPT_TAC >>
+      irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
+      qexists_tac `u` >> simp[]) >>
+  conj_tac >- (qpat_x_assum `store_copy_normalize s t = _` mp_tac >>
+                 simp[Once ADD_COMM]) >>
+  conj_tac >- suspend "support" >>
+  suspend "frame"
+QED
+
+Resume append_sparse_dynarray_checked[support]:
+  drule placeStoreSlotsTheory.store_slots_dynarray_encoding_support >> strip_tac >>
+  simp[MEM_APPEND, MEM_MAP] >>
+  qpat_x_assum `!k. MEM k ks <=> _` mp_tac >>
+  BETA_TAC >> rpt strip_tac >>
+  eq_tac >> strip_tac >> gvs[] >>
+  metis_tac[ADD1, ADD_ASSOC]
+QED
+
+Resume append_sparse_dynarray_checked[frame]:
+  `!x. not_fresh_at sa x ==> not_fresh_at sc x` by
+    (gvs[ci_mono_def, not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by
+    metis_tac[] >>
+  `!x. not_fresh_at sa x ==> FLOOKUP u.vs_vars x = FLOOKUP s.vs_vars x` by
+    qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s`
+      (ACCEPT_TAC o PURE_REWRITE_RULE [lookup_var_def]) >>
+  `se.cs_current_bb = sb.cs_current_bb` by
+    (imp_res_tac exprLoweringPropsTheory.emit_void_same_blocks >> fs[same_blocks_def]) >>
+  Cases_on `tr` >>
+  simp[Abbr `t`, sstore_def, tstore_def, lookup_var_def]
+QED
+
+Finalise append_sparse_dynarray_checked[local]
+
+
+Theorem append_sparse_sarray_checked[local]:
+  !cenv tenv ctx elem n tv v.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    is_abi_dynamic cenv.ce_struct_fields (ArrayT elem (Fixed n)) /\
+    evaluate_type tenv (ArrayT elem (Fixed n)) = SOME tv /\
+    value_has_type tv v /\
+    (!cty ctv cv.
+       type_rank cenv.ce_struct_fields cty <
+         type_rank cenv.ce_struct_fields (ArrayT elem (Fixed n)) /\
+       evaluate_type tenv cty = SOME ctv /\ value_has_type ctv cv ==>
+       (^append_sparse_entry) cenv ctx cty ctv cv) ==>
+    (^append_sparse_entry) cenv ctx (ArrayT elem (Fixed n)) tv v
+Proof
+  rpt strip_tac >>
+  `n < dimword (:256)` by metis_tac[placeStoreSlotsTheory.store_slots_fixed_count_bound] >>
+  qpat_x_assum `evaluate_type tenv (ArrayT elem (Fixed n)) = SOME tv` mp_tac >>
+  simp[Once evaluate_type_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rename1 `evaluate_type tenv elem = SOME etv` >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  rename1 `value_has_type (ArrayTV etv (Fixed n)) (ArrayV av)` >>
+  Cases_on `av` >> gvs[value_has_type_def] >>
+  rename1 `sparse_has_type etv n sparse` >>
+  simp_tac std_ss [] >> rpt strip_tac >>
+  `type_memory_bytes cenv elem = type_memory_size etv` by
+    (irule typed_copy_memory_size >> qexists_tac `tenv` >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `compile_store_slots _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_slots_def, is_abi_dynamic_def, is_bytestring_type_def] >>
+  strip_tac >>
+  `!i. i < n ==>
+     value_has_type etv (case ALOOKUP sparse i of NONE => default_value etv | SOME v => v)` by
+    (rpt strip_tac >> Cases_on `ALOOKUP sparse i` >>
+     simp[default_value_well_typed] >>
+     metis_tac[valueEncodingProofsTheory.sparse_has_type_lookup]) >>
+  `!i. i < n ==>
+     val_in_memory etv (case ALOOKUP sparse i of NONE => default_value etv | SOME v => v)
+       (w2n sw + i * type_memory_size etv) s.vs_memory` by
+    (gvs[val_in_memory_sarray] >> rpt strip_tac >>
+     Cases_on `ALOOKUP sparse i` >> simp[] >>
+     metis_tac[valueEncodingProofsTheory.kvs_in_memory_lookup]) >>
+  drule append_sparse_elements_checked >>
+  disch_then (qspecl_then [`ctx`, `etv`,
+    `\i. case ALOOKUP sparse i of NONE => default_value etv | SOME v => v`,
+    `n`, `func`, `s`, `sw`, `dw`] mp_tac) >>
+  (impl_tac >-
+    (simp[eval_operand_def] >> rpt conj_tac
+     >- (gen_tac >> disch_tac >> simp[] >> conj_tac
+         >- (qpat_x_assum `!cty ctv cv. _ ==> _`
+               (qspecl_then [`elem`, `etv`,
+                 `case ALOOKUP sparse i of NONE => default_value etv | SOME v => v`] mp_tac) >>
+             impl_tac >- (simp[type_rank_def] >> metis_tac[]) >>
+             simp[dimword_def])
+         >> metis_tac[value_has_type_equiv])
+     >> gvs[type_memory_size_def, type_slot_size_def])) >>
+  disch_then (qx_choosel_then [`t`, `ks`] strip_assume_tac) >>
+  qexistsl_tac [`t`, `ks`] >> simp[] >>
+  mp_tac (Q.INST [`tv` |-> `etv`] placeStoreSlotsTheory.store_slots_sarray_support) >>
+  simp[value_has_type_def, ADD_COMM]
+QED
+
+
+Theorem append_sparse_tuple_checked[local]:
+  !cenv tenv ctx tys tv v.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    is_abi_dynamic cenv.ce_struct_fields (TupleT tys) /\
+    evaluate_type tenv (TupleT tys) = SOME tv /\ value_has_type tv v /\
+    (!cty ctv cv.
+       type_rank cenv.ce_struct_fields cty <
+         type_rank cenv.ce_struct_fields (TupleT tys) /\
+       evaluate_type tenv cty = SOME ctv /\ value_has_type ctv cv ==>
+       (^append_sparse_entry) cenv ctx cty ctv cv) ==>
+    (^append_sparse_entry) cenv ctx (TupleT tys) tv v
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  rename1 `value_has_type (TupleTV tvs) (ArrayV av)` >>
+  Cases_on `av` >> gvs[value_has_type_def] >>
+  rename1 `values_have_types tvs vs` >>
+  `LENGTH vs = LENGTH tvs` by metis_tac[values_have_types_length] >>
+  `LIST_REL (\(ty,sz) (tv,v). sz = type_memory_size tv /\
+       (^append_sparse_entry) cenv ctx ty tv v /\ IS_SOME (encode_value tv v))
+       (MAP (\ty. (ty,type_memory_bytes cenv ty)) tys) (ZIP (tvs,vs))` by
+    (gvs[values_have_types_LIST_REL, LIST_REL_EL_EQN] >>
+     simp[LIST_REL_EL_EQN, EL_MAP, EL_ZIP] >> qx_gen_tac `idx` >> strip_tac >>
+     rename1 `idx < LENGTH tvs` >>
+     `evaluate_type tenv (EL idx tys) = SOME (EL idx tvs)` by metis_tac[] >>
+     `value_has_type (EL idx tvs) (EL idx vs)` by metis_tac[] >>
+     rpt conj_tac
+     >- (irule typed_copy_memory_size >> qexists_tac `tenv` >> simp[] >> metis_tac[])
+     >- (qpat_x_assum `!cty ctv cv. _ ==> _`
+           (qspecl_then [`EL idx tys`, `EL idx tvs`, `EL idx vs`] mp_tac) >>
+         impl_tac >- (simp[] >> irule member_rank_lt_tuple >> simp[EL_MEM]) >>
+         simp[dimword_def]) >>
+     metis_tac[value_has_type_equiv]) >>
+  qpat_x_assum `!cty ctv cv. _ ==> _` kall_tac >>
+  simp_tac std_ss [] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_store_slots _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_slots_def, is_bytestring_type_def] >> strip_tac >>
+  fs[val_in_memory_def, type_memory_size_def, type_slot_size_def, encode_value_def] >>
+  drule append_sparse_members_checked >>
+  disch_then (qspecl_then [`tvs`, `vs`, `ctx`, `func`, `s`, `sw`, `dw`] mp_tac) >>
+  simp[] >> (impl_tac >- metis_tac[]) >>
+  disch_then (qx_choosel_then [`t`, `ks`] strip_assume_tac) >>
+  qexistsl_tac [`t`, `ks`] >> simp[] >>
+  drule_all placeStoreSlotsTheory.store_slots_tuple_support >> simp[]
+QED
+
+
+Theorem append_sparse_fields_align_checked[local]:
+  !fields tvs vs.
+    OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs /\
+    values_have_types tvs vs /\
+    EVERY (\(fname,fty,sz). !tv.
+      evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields /\
+    (!fname ty sz tv v. MEM (fname,ty,sz) fields /\
+      evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
+      (^append_sparse_entry) cenv ctx ty tv v) ==>
+    LIST_REL (\(ty,sz) (tv,v). sz = type_memory_size tv /\
+      (^append_sparse_entry) cenv ctx ty tv v /\ IS_SOME (encode_value tv v))
+      (MAP SND fields) (ZIP (tvs,vs))
+Proof
+  qabbrev_tac `E = ^append_sparse_entry` >>
+  Induct
+  >- (simp[] >> rpt strip_tac >> Cases_on `vs` >>
+      gvs[value_has_type_def]) >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[AllCaseEqs()] >> rpt strip_tac >>
+  Cases_on `vs` >> gvs[value_has_type_def] >>
+  simp[] >> conj_tac
+  >- metis_tac[value_has_type_equiv] >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem append_sparse_struct_align_checked[local]:
+  !cenv tenv ctx nsid tv v.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    evaluate_type tenv (StructT nsid) = SOME tv /\ value_has_type tv v /\
+    (!cty ctv cv. type_rank cenv.ce_struct_fields cty <
+       type_rank cenv.ce_struct_fields (StructT nsid) /\
+       evaluate_type tenv cty = SOME ctv /\ value_has_type ctv cv ==>
+       (^append_sparse_entry) cenv ctx cty ctv cv) ==>
+    ?fields tvs vals.
+      FLOOKUP cenv.ce_struct_fields (nsid_to_string nsid) = SOME fields /\
+      tv = StructTV (ZIP (MAP FST fields,tvs)) /\ v = StructV vals /\
+      LENGTH fields = LENGTH tvs /\ LENGTH vals = LENGTH tvs /\
+      LIST_REL (\(ty,sz) (tv,v). sz = type_memory_size tv /\
+        (^append_sparse_entry) cenv ctx ty tv v /\ IS_SOME (encode_value tv v))
+        (MAP SND fields) (ZIP (tvs,MAP SND vals))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  rename1 `FLOOKUP tenv nsid = SOME (StructArgs args)` >>
+  `?fields. FLOOKUP cenv.ce_struct_fields (nsid_to_string nsid) = SOME fields /\
+     MAP FST fields = MAP FST args /\ MAP (FST o SND) fields = MAP SND args` by
+    (fs[sfields_tenv_consistent_def] >> metis_tac[]) >>
+  `evaluate_types tenv (MAP SND args) [] = SOME tvs` by
+    metis_tac[cj 2 vyperTypeExprSoundnessTheory.evaluate_type_mono] >>
+  `LENGTH (MAP FST args) = LENGTH tvs` by
+    (gvs[evaluate_types_OPT_MMAP] >>
+     drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  rename1 `struct_has_type _ vals` >>
+  `fields_val_wf vals (ZIP (MAP FST args,tvs))` by
+    metis_tac[cj 5 valueEncodingTypingTheory.value_has_type_val_wf] >>
+  `values_have_types tvs (MAP SND vals) /\ LENGTH vals = LENGTH tvs` by
+    metis_tac[placeStoreStorageTheory.place_store_struct_tuple_values, listTheory.LENGTH_MAP] >>
+  qexists_tac `tvs` >> simp[] >>
+  conj_tac >- metis_tac[listTheory.LENGTH_MAP] >>
+  `OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs` by
+    gvs[evaluate_types_OPT_MMAP] >>
+  `EVERY (\(fname,fty,sz). !tv.
+    evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields` by
+    metis_tac[] >>
+  `!fname ty sz ftv fv. MEM (fname,ty,sz) fields /\
+    evaluate_type tenv ty = SOME ftv /\ value_has_type ftv fv ==>
+    (^append_sparse_entry) cenv ctx ty ftv fv` by
+    (map_every qx_gen_tac [`fname`, `ty`, `sz`, `ftv`, `fv`] >> strip_tac >>
+      qpat_x_assum `!cty ctv cv. _ ==> _`
+        (qspecl_then [`ty`, `ftv`, `fv`] mp_tac) >>
+      impl_tac
+      >- (simp[] >> once_rewrite_tac[type_rank_nsid] >>
+          irule member_rank_lt_struct >> simp[get_struct_fields_def] >> metis_tac[]) >>
+      simp[dimword_def]) >>
+  mp_tac (Q.SPECL [`fields`, `tvs`, `MAP SND (vals:(string # value) list)`]
+    (Q.INST [`tenv` |-> `tenv`, `cenv` |-> `cenv`, `ctx` |-> `ctx`]
+      (INST_TYPE [``:'a`` |-> ``:string``] append_sparse_fields_align_checked))) >>
+  impl_tac >- asm_rewrite_tac[] >> simp[dimword_def]
+QED
+
+Theorem append_sparse_struct_checked[local]:
+  !cenv tenv ctx nsid tv v.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    is_abi_dynamic cenv.ce_struct_fields (StructT nsid) /\
+    evaluate_type tenv (StructT nsid) = SOME tv /\ value_has_type tv v /\
+    (!cty ctv cv.
+       type_rank cenv.ce_struct_fields cty <
+         type_rank cenv.ce_struct_fields (StructT nsid) /\
+       evaluate_type tenv cty = SOME ctv /\ value_has_type ctv cv ==>
+       (^append_sparse_entry) cenv ctx cty ctv cv) ==>
+    (^append_sparse_entry) cenv ctx (StructT nsid) tv v
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    EVERY (\(fname,fty,sz). !tv.
+      evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields` by
+    metis_tac[] >>
+  drule_all append_sparse_struct_align_checked >> strip_tac >> gvs[] >>
+  simp_tac std_ss [] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_store_slots _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_slots_def, is_bytestring_type_def,
+       get_struct_fields_def] >> strip_tac >>
+  fs[valueEncodingDefsTheory.val_in_memory_def,
+     valueEncodingProofsTheory.fields_in_memory_tuple, listTheory.MAP_ZIP,
+     valueEncodingTheory.type_memory_size_def,
+     valueEncodingTypingTheory.type_memory_size_fields_zip,
+     type_slot_size_def, vyperStorageRegionWriteTheory.type_slot_size_fields_list] >>
+  `LENGTH (MAP FST fields) = LENGTH tvs` by simp[] >>
+  fs[listTheory.MAP_ZIP, valueEncodingTypingTheory.type_memory_size_fields_zip] >>
+  drule append_sparse_members_checked >>
+  disch_then (qspecl_then [`tvs`, `MAP SND (vals:(string # value) list)`, `ctx`] mp_tac) >>
+  simp[] >> disch_then (qspecl_then [`func`, `s`, `sw`, `dw`] mp_tac) >>
+  simp[] >> (impl_tac >- (rpt strip_tac >> first_x_assum irule >> simp[])) >>
+  disch_then (qx_choosel_then [`t`, `ks`] strip_assume_tac) >>
+  qexistsl_tac [`t`, `ks`] >> simp[] >>
+  `!i. i < LENGTH tvs ==>
+    SND (EL i (ZIP (MAP FST fields,tvs))) = EL i tvs /\
+    SND (EL i vals) = EL i (MAP SND vals)` by
+    (rpt strip_tac >> simp[listTheory.EL_ZIP, listTheory.EL_MAP]) >>
+  fs[encode_value_def] >> drule placeStoreSlotsTheory.store_slots_struct_support >>
+  simp[listTheory.MAP_ZIP] >>
+  disch_then (fn th => assume_tac th) >>
+  gen_tac >> first_x_assum (qspec_then `j` mp_tac) >>
+  simp[SF CONJ_ss]
+QED
+
+
+
+Theorem append_sparse_rank_checked:
+  !n cenv tenv ctx ty tv v.
+    type_rank cenv.ce_struct_fields ty = n /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
+    (^append_sparse_entry) cenv ctx ty tv v
+Proof
+  completeInduct_on `n` >> rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `is_abi_dynamic cenv.ce_struct_fields ty`
+  >- suspend "dynamic" >>
+  simp_tac std_ss [] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!m. m < _ ==> _` kall_tac >>
+  mp_tac (Q.INST [`tenv` |-> `tenv`] append_sparse_static_checked) >>
+  impl_tac >- (fs[dimword_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`t`, `ks`] strip_assume_tac) >>
+  qexistsl_tac [`t`, `ks`] >> fs[dimword_def]
+QED
+Resume append_sparse_rank_checked[dynamic]:
+  `!cty ctv cv.
+     type_rank cenv.ce_struct_fields cty < type_rank cenv.ce_struct_fields ty /\
+     evaluate_type tenv cty = SOME ctv /\ value_has_type ctv cv ==>
+     (^append_sparse_entry) cenv ctx cty ctv cv` by
+    (rpt strip_tac >>
+     last_x_assum (qspec_then `type_rank cenv.ce_struct_fields cty` mp_tac) >>
+     simp[] >>
+     disch_then (qspecl_then [`cenv`, `tenv`, `ctx`, `cty`, `ctv`, `cv`] mp_tac) >>
+     impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     simp[dimword_def]) >>
+  qpat_x_assum `!m. m < _ ==> _` kall_tac >>
+  Cases_on `is_bytestring_type ty`
+  >- (simp_tac std_ss [] >> rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!cty ctv cv. _ ==> _` kall_tac >>
+      mp_tac (Q.INST [`tenv` |-> `tenv`] append_sparse_bytes_checked) >>
+      impl_tac >- (fs[dimword_def] >> first_assum ACCEPT_TAC) >>
+      disch_then (qx_choosel_then [`t`, `ks`] strip_assume_tac) >>
+      qexistsl_tac [`t`, `ks`] >> fs[dimword_def]) >>
+  Cases_on `ty`
+  >~ [`ArrayT elem bd`]
+  >- (Cases_on `bd`
+      >- (mp_tac (Q.SPECL [`cenv`, `tenv`, `ctx`, `elem`, `n`, `tv`, `v`]
+            append_sparse_sarray_checked) >>
+          impl_tac >- (asm_rewrite_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+          simp[dimword_def]) >>
+      mp_tac (Q.SPECL [`cenv`, `tenv`, `ctx`, `elem`, `n`, `tv`, `v`]
+        append_sparse_dynarray_checked) >>
+      impl_tac >- (asm_rewrite_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      simp[dimword_def])
+  >~ [`TupleT tys`]
+  >- (mp_tac (Q.SPECL [`cenv`, `tenv`, `ctx`, `tys`, `tv`, `v`]
+        append_sparse_tuple_checked) >>
+      impl_tac >- (asm_rewrite_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      simp[dimword_def])
+  >~ [`StructT nsid`]
+  >- (mp_tac (Q.SPECL [`cenv`, `tenv`, `ctx`, `nsid`, `tv`, `v`]
+        append_sparse_struct_checked) >>
+      impl_tac >- (asm_rewrite_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      simp[dimword_def])
+  >~ [`BaseT bt`]
+  >- (Cases_on `bt` >> gvs[is_abi_dynamic_def, is_bytestring_type_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      gvs[is_abi_dynamic_def, is_bytestring_type_def]) >>
+  gvs[is_abi_dynamic_def]
+QED
+Finalise append_sparse_rank_checked[local]
 
 Theorem append_storage_aggregate_address_run:
   emit_op ADD [bop; Lit 1w] st3 = (dop,st4) /\
@@ -1219,8 +2281,14 @@ Proof
     (qpat_x_assum `vars_ext_result _ _` mp_tac >> asm_rewrite_tac [] >>
      Cases_on `run_inst_seq (emitted_insts sa s6) s` >> simp[vars_ext_result_def]) >>
   qexists_tac `u` >> asm_rewrite_tac [] >>
-  conj_tac >- metis_tac[vars_ext_eval_operand] >>
-  conj_tac >- metis_tac[vars_ext_eval_operand] >>
+  conj_tac >- (qpat_x_assum `vars_ext t u` mp_tac >>
+      simp_tac bool_ss [varsExtTheory.vars_ext_def] >> strip_tac >>
+      qpat_x_assum `u = _` (fn th => once_rewrite_tac [th]) >>
+      metis_tac[varsExtTheory.eval_operand_vars_ext, optionTheory.NOT_NONE_SOME]) >>
+  conj_tac >- (qpat_x_assum `vars_ext t u` mp_tac >>
+      simp_tac bool_ss [varsExtTheory.vars_ext_def] >> strip_tac >>
+      qpat_x_assum `u = _` (fn th => once_rewrite_tac [th]) >>
+      metis_tac[varsExtTheory.eval_operand_vars_ext, optionTheory.NOT_NONE_SOME]) >>
   conj_tac
   >- (`state_frame u = state_frame t` by
         (qpat_x_assum `vars_ext t u` mp_tac >>
@@ -1232,7 +2300,10 @@ Proof
   `eval_operand (Var x) (drop_fresh sa s) = SOME a` by
     simp[eval_operand_def, lookup_var_drop_fresh] >>
   `eval_operand (Var x) t = SOME a` by metis_tac[] >>
-  `eval_operand (Var x) u = SOME a` by metis_tac[vars_ext_eval_operand] >>
+  `eval_operand (Var x) u = SOME a` by (qpat_x_assum `vars_ext t u` mp_tac >>
+      simp_tac bool_ss [varsExtTheory.vars_ext_def] >> strip_tac >>
+      qpat_x_assum `u = _` (fn th => once_rewrite_tac [th]) >>
+      metis_tac[varsExtTheory.eval_operand_vars_ext, optionTheory.NOT_NONE_SOME]) >>
   fs[eval_operand_def]
 QED
 
@@ -1271,7 +2342,18 @@ Proof
      disch_then strip_assume_tac >>
      simp[below_frontier_no_ranges, inst_dload_in_section_def]) >>
   `gas_path_mem ctx func s 0 (OK (u with vs_inst_idx := LENGTH s6.cs_current_insts))` by
-    (irule body_decl_zero_gas_path >> simp[] >> qexists_tac `sa` >> simp[]) >>
+    (`(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa s6 ++ rest) /\
+      s.vs_inst_idx + LENGTH (emitted_insts sa s6) = LENGTH s6.cs_current_insts` by
+       (gvs[fn_has_code_def, IS_PREFIX_APPEND, same_blocks_def] >>
+        simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]) >>
+     `isPREFIX (emitted_insts sa s6) (DROP s.vs_inst_idx bb.bb_instructions)` by
+       simp[IS_PREFIX_APPEND] >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+       (emitted_insts sa s6) /\
+      EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa s6)` by fs[EVERY_MEM] >>
+     drule_all topcopy_seq_path >>
+     disch_then (qspec_then `ctx` mp_tac) >> simp[gas_marked_path_def]) >>
   qexists_tac `u with vs_inst_idx := LENGTH s6.cs_current_insts` >>
   gvs[gas_marked_path_def, same_blocks_def, state_frame_def,
       eval_operand_def, lookup_var_def]
@@ -1391,113 +2473,23 @@ Proof
      simp[] >> strip_tac >>
      gvs[below_frontier_no_ranges, inst_dload_in_section_def]) >>
   `gas_path_mem ctx func s 0 (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
-    (irule body_decl_zero_gas_path >> simp[] >> qexists_tac `sa` >> simp[]) >>
+    (`(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+        DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest) /\
+      s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
+       (gvs[fn_has_code_def, IS_PREFIX_APPEND, same_blocks_def] >>
+        simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]) >>
+     `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+       simp[IS_PREFIX_APPEND] >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+       (emitted_insts sa sb) /\
+      EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)` by fs[EVERY_MEM] >>
+     drule_all topcopy_seq_path >>
+     disch_then (qspec_then `ctx` mp_tac) >> simp[gas_marked_path_def]) >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   Cases_on `tr` >>
   gvs[gas_marked_path_def, same_blocks_def, state_frame_def,
       sstore_def, tstore_def, lookup_var_def]
 QED
-
-Theorem append_storage_aggregate_success_path:
-  compile_dynarray_append cenv bop vop 1 n dt vt cap F
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
-  (!x. bop = Var x \/ vop = Var x ==> not_fresh_at sa x) /\
-  eval_operand bop s = SOME slot /\ eval_operand vop s = SOME b /\
-  cap < dimword (:256) /\ n < dimword (:256) /\
-  w2n b + 32*n <= s.vs_alloca_next /\
-  len = w2n (if tr then tload slot s else sload slot s) /\ len < cap /\
-  fn_has_code sa sf func /\ ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t. gas_marked_path T ctx func s 0 (OK t) /\
-    store_copy_normalize s t =
-      (if tr then tstore else sstore) slot (n2w len+1w)
-        (store_copy_prefix (if tr then LocTransient else LocStorage)
-          b (slot+1w+n2w len*n2w n) s n) /\
-    (!x a. not_fresh_at sa x /\ lookup_var x s = SOME a ==> lookup_var x t = SOME a) /\
-    t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-    ~t.vs_halted
-Proof
-  strip_tac >> drule (iffLR append_storage_copy_suffix_parts) >>
-  disch_then (qx_choosel_then
-    [`len'`, `valid`, `data`, `offset`, `dst`, `fresh`, `u`,
-     `s1`, `s2`, `s3`, `s4`, `s5`, `s6`, `s7`, `s8`] strip_assume_tac) >>
-  drule_all append_storage_aggregate_code_bounds >> strip_tac >>
-  `!x. bop = Var x ==> not_fresh_at sa x` by metis_tac[] >>
-  drule_all append_storage_aggregate_prefix_path >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
-  rename1 `gas_marked_path T ctx func s 0 (OK r)` >>
-  `r.vs_alloca_next = s.vs_alloca_next /\ r.vs_call_ctx = s.vs_call_ctx` by
-    fs[state_frame_def] >>
-  `eval_operand bop r = SOME slot /\ eval_operand vop r = SOME b` by
-    (Cases_on `bop` >> Cases_on `vop` >>
-     gvs[eval_operand_def, state_frame_def] >> metis_tac[]) >>
-  `!x. vop = Var x \/ dst = Var x ==> not_fresh_at s6 x` by metis_tac[] >>
-  `?q. gas_marked_path T ctx func r 0 (OK q) /\
-    store_copy_frame s6 (if tr then LocTransient else LocStorage)
-      b (slot+1w+n2w len*n2w n) r n q /\ ~q.vs_halted /\
-    q.vs_current_bb = s7.cs_current_bb /\ q.vs_inst_idx = LENGTH s7.cs_current_insts` by
-    (irule topcopy_compile_loop_path >> simp[] >>
-     reverse conj_tac >- (Cases_on `tr` >> simp[]) >>
-     qexistsl_tac [`dst`, `vop`, `u`] >> asm_rewrite_tac [] >> simp[]) >>
-  `eval_operand bop q = SOME slot /\ eval_operand len' q = SOME (n2w len)` by
-    (conj_tac >> irule topcopy_frame_operand >> metis_tac[]) >>
-  `!x. bop = Var x ==> not_fresh_at s7 x` by metis_tac[] >>
-  `~q.vs_call_ctx.cc_static` by metis_tac[topcopy_frame_call_ctx] >>
-  drule_all append_storage_aggregate_header_path >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
-  suspend "post"
-QED
-
-Resume append_storage_aggregate_success_path[post]:
-  qexists_tac `t` >> conj_tac
-  >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
-      qexists_tac `r` >> simp[] >>
-      irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
-      qexists_tac `q` >> simp[]) >>
-  reverse conj_tac
-  >- (simp[] >> rpt strip_tac >>
-      qpat_x_assum `store_copy_frame _ _ _ _ _ _ _` mp_tac >>
-      simp[stmtSimStoreCopyTheory.store_copy_frame_def] >> metis_tac[]) >>
-  suspend "normalize"
-QED
-
-Resume append_storage_aggregate_success_path[normalize]:
-  `r.vs_memory = s.vs_memory /\ store_copy_normalize s r = s` by
-    (qpat_x_assum `state_frame r = _` mp_tac >>
-     simp[state_frame_def, stmtSimStoreCopyTheory.store_copy_normalize_def] >>
-     rpt strip_tac >> simp[venom_state_component_equality]) >>
-  `!i. store_copy_normalize s
-       (store_copy_prefix (if tr then LocTransient else LocStorage)
-          b (slot+1w+n2w len*n2w n) r i) =
-       store_copy_prefix (if tr then LocTransient else LocStorage)
-          b (slot+1w+n2w len*n2w n) s i` by
-    (Cases_on `tr` >> simp[] >> Induct >>
-     simp[topcopy_prefix_suc,
-       SRULE [] (Q.INST [`loc` |-> `LocStorage`] topcopy_normalize_store),
-       SRULE [] (Q.INST [`loc` |-> `LocTransient`] topcopy_normalize_store),
-       mload_def]) >>
-  `store_copy_normalize s q =
-    store_copy_prefix (if tr then LocTransient else LocStorage)
-      b (slot+1w+n2w len*n2w n) s n` by
-    (qpat_x_assum `store_copy_frame _ _ _ _ _ _ _` mp_tac >>
-     simp[stmtSimStoreCopyTheory.store_copy_frame_def] >> strip_tac >>
-     qpat_x_assum `store_copy_normalize r q = _`
-       (mp_tac o Q.AP_TERM `store_copy_normalize s`) >>
-     first_x_assum (qspec_then `n` mp_tac) >>
-     simp[stmtSimStoreCopyTheory.store_copy_normalize_def] >>
-     metis_tac[]) >>
-  qpat_x_assum `state_frame t = _`
-    (mp_tac o Q.AP_TERM `store_copy_normalize s`) >>
-  simp[state_frame_def, stmtSimStoreCopyTheory.store_copy_normalize_def] >>
-  strip_tac >> asm_rewrite_tac [] >>
-  Cases_on `tr` >>
-  qpat_x_assum `store_copy_normalize s q = _` mp_tac >>
-  simp[stmtSimStoreCopyTheory.store_copy_normalize_def, venom_state_component_equality,
-       sstore_def, tstore_def] >> rpt strip_tac >> simp[]
-QED
-
-Finalise append_storage_aggregate_success_path
-
 
 Theorem append_storage_aggregate_abort_path:
   compile_dynarray_append cenv bop vop 1 n dt vt cap F
@@ -1513,7 +2505,16 @@ Proof
   disch_then (qx_choosel_then
     [`len'`, `valid`, `data`, `offset`, `dst`, `fresh`, `u`,
      `s1`, `s2`, `s3`, `s4`, `s5`, `s6`, `s7`, `s8`] strip_assume_tac) >>
-  drule_all append_storage_aggregate_code_bounds >> strip_tac >>
+  `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\
+   ci_mono s3 s4 /\ ci_mono s4 s5 /\ ci_mono s5 s6 /\
+   ci_mono s6 s7 /\ ci_mono s7 s8 /\ ci_mono s8 sf` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_emit_op,
+      exprLoweringPropsTheory.ci_mono_emit_void,
+      cj 1 stmtLoweringMonoTheory.ci_mono_compile_store_slots, pairTheory.SND] >>
+  `cs_extends sa s6 /\ cs_extends s6 sf` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `fn_has_code sa s6 func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
   drule_all append_storage_aggregate_prefix_layout >> strip_tac >>
   `fresh_vars_wrt sa (drop_fresh sa s)` by simp[fresh_vars_wrt_drop_fresh] >>
   `eval_operand bop (drop_fresh sa s) = SOME slot` by simp[eval_operand_drop_fresh] >>
@@ -1574,45 +2575,143 @@ Finalise append_storage_aggregate_abort_path
 
 
 Theorem append_storage_aggregate_suffix_mem:
-  compile_dynarray_append cenv bop vop 1 n dt vt cap F
+  compile_dynarray_append cenv bop vop 1 stride dt vt cap F
     (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
+  fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
+  cap < dimword (:256) /\ stride < dimword (:256) /\
+  evaluate_type tenv dt = SOME tv /\ value_has_type tv v /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv.
+      evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+  val_in_memory tv v (w2n b) s.vs_memory /\ encode_value tv v = SOME writes /\
+  w2n b + type_memory_size tv < dimword (:256) /\
+  w2n b + type_memory_size tv <= s.vs_alloca_next /\
+  len = w2n (if tr then tload slot s else sload slot s) /\
+  (len < cap ==> w2n (slot+1w+n2w len*n2w stride) +
+     type_slot_size tv <= dimword (:256)) /\
+  eval_operand bop s = SOME slot /\ eval_operand vop s = SOME b /\
   (!x. bop = Var x \/ vop = Var x ==> not_fresh_at sa x) /\
-  eval_operand bop s = SOME slot /\ cap < dimword (:256) /\
-  fn_has_code sa sf func /\ ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  (cap <= w2n (if tr then tload slot s else sload slot s) ==>
-    ?a t. gas_marked_path T ctx func s 0 (Abort a t)) /\
-  (!b len. eval_operand vop s = SOME b /\ n < dimword (:256) /\
-    w2n b + 32*n <= s.vs_alloca_next /\
-    len = w2n (if tr then tload slot s else sload slot s) /\ len < cap ==>
-    ?t. gas_marked_path T ctx func s 0 (OK t) /\
-      store_copy_normalize s t =
-        (if tr then tstore else sstore) slot (n2w len+1w)
-          (store_copy_prefix (if tr then LocTransient else LocStorage)
-            b (slot+1w+n2w len*n2w n) s n) /\
-      (!x a. not_fresh_at sa x /\ lookup_var x s = SOME a ==> lookup_var x t = SOME a) /\
-      t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-      ~t.vs_halted /\ t.vs_memory = s.vs_memory /\
-      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next)
+  ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  (cap <= len ==> ?a t. gas_marked_path T ctx func s 0 (Abort a t)) /\
+  (len < cap ==> ?t ks. gas_marked_path T ctx func s 0 (OK t) /\
+    store_copy_normalize s t =
+      (if tr then tstore else sstore) slot (n2w len+1w)
+        (FOLDL (\q j. (if tr then tstore else sstore)
+          (slot+1w+n2w len*n2w stride+n2w j)
+          (mload (w2n b+32*j) s) q) s ks) /\
+    (!j. MEM j ks <=> MEM j (MAP FST writes)) /\
+    (!x a. not_fresh_at sa x /\ lookup_var x s = SOME a ==>
+      lookup_var x t = SOME a) /\
+    t.vs_current_bb = sf.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sf.cs_current_insts /\ ~t.vs_halted /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_alloca_next = s.vs_alloca_next)
 Proof
   strip_tac >> conj_tac
   >- (strip_tac >>
       `!x. bop = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+      `cap <= w2n (if tr then tload slot s else sload slot s)` by metis_tac[] >>
       drule_all append_storage_aggregate_abort_path >>
       disch_then (qspec_then `ctx` mp_tac) >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
-  drule_all append_storage_aggregate_success_path >>
+  strip_tac >>
+  drule (iffLR append_storage_copy_suffix_parts) >>
+  disch_then (qx_choosel_then [`lop`, `valid`, `dop`, `off`, `pop`, `nop`, `u`,
+    `s1`, `s2`, `s3`, `s4`, `s5`, `s6`, `s7`, `s8`] strip_assume_tac) >>
+  `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 s3 /\
+   ci_mono s3 s4 /\ ci_mono s4 s5 /\ ci_mono s5 s6 /\
+   ci_mono s6 s7 /\ ci_mono s7 s8 /\ ci_mono s8 sf` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_emit_op,
+      exprLoweringPropsTheory.ci_mono_emit_void,
+      cj 1 stmtLoweringMonoTheory.ci_mono_compile_store_slots, pairTheory.SND] >>
+  `cs_extends sa s6 /\ cs_extends s6 s7 /\ cs_extends s7 sf` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `fn_has_code sa s6 func /\ fn_has_code s6 s7 func /\
+   fn_has_code s7 sf func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  drule_all append_storage_aggregate_prefix_layout >> strip_tac >>
+  `!x. bop = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+  drule_all append_storage_aggregate_prefix_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  qexists_tac `t` >> asm_rewrite_tac [] >>
-  `!i. (store_copy_prefix (if tr then LocTransient else LocStorage)
-           b (slot+1w+n2w len*n2w n) s i).vs_memory = s.vs_memory /\
-         (store_copy_prefix (if tr then LocTransient else LocStorage)
-           b (slot+1w+n2w len*n2w n) s i).vs_allocas = s.vs_allocas /\
-         (store_copy_prefix (if tr then LocTransient else LocStorage)
-           b (slot+1w+n2w len*n2w n) s i).vs_alloca_next = s.vs_alloca_next` by
-    (Cases_on `tr` >> Induct >> gvs[topcopy_prefix_suc, sstore_def, tstore_def]) >>
-  qpat_x_assum `store_copy_normalize s t = _`
-    (mp_tac o Q.AP_TERM `\q. (q.vs_memory,q.vs_allocas,q.vs_alloca_next)`) >>
-  Cases_on `tr` >>
-  gvs[stmtSimStoreCopyTheory.store_copy_normalize_def, sstore_def, tstore_def]
+  rename1 `gas_marked_path T ctx func s 0 (OK pre)` >>
+  `pre.vs_memory = s.vs_memory /\ pre.vs_allocas = s.vs_allocas /\
+   pre.vs_labels = s.vs_labels /\ pre.vs_call_ctx = s.vs_call_ctx /\
+   pre.vs_alloca_next = s.vs_alloca_next /\ store_copy_normalize s pre = s` by
+    (qpat_x_assum `state_frame pre = _` mp_tac >>
+     simp[stateFrameTheory.state_frame_def,
+       stmtSimStoreCopyTheory.store_copy_normalize_def,
+       venom_state_component_equality]) >>
+  `eval_operand vop pre = SOME b` by
+    (Cases_on `vop` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `!x. vop = Var x \/ pop = Var x ==> not_fresh_at s6 x` by
+    metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh] >>
+  `(^append_sparse_entry) cenv ctx dt tv v` by
+    (irule append_sparse_rank_checked >> metis_tac[]) >>
+  drule append_sparse_entry_run >>
+  disch_then (qspecl_then [`vop`, `pop`, `tr`, `s6`, `s7`, `func`,
+    `pre`, `b`, `slot+1w+n2w len*n2w stride`, `writes`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  disch_then (qx_choosel_then [`copied`, `ks`] strip_assume_tac) >>
+  qpat_x_assum `(^append_sparse_entry) cenv ctx dt tv v` kall_tac >>
+  `!x. bop = Var x \/ lop = Var x ==> not_fresh_at s7 x` by
+    metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh] >>
+  `eval_operand bop pre = SOME slot` by
+    (Cases_on `bop` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `!x. bop = Var x \/ lop = Var x ==> not_fresh_at s6 x` by metis_tac[] >>
+  `eval_operand bop copied = SOME slot /\
+   eval_operand lop copied = SOME (n2w len)` by
+    (qpat_assum `eval_operand bop pre = SOME slot` mp_tac >>
+     qpat_assum `eval_operand lop pre = SOME (n2w len)` mp_tac >>
+     qpat_assum `!x. bop = Var x \/ lop = Var x ==> not_fresh_at s6 x` mp_tac >>
+     qpat_assum `!x. not_fresh_at s6 x ==> lookup_var x copied = lookup_var x pre` mp_tac >>
+     qpat_assum `copied.vs_labels = pre.vs_labels` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     Cases_on `bop` >> Cases_on `lop` >>
+     gvs[eval_operand_def] >> metis_tac[]) >>
+  `!x. bop = Var x ==> not_fresh_at s7 x` by metis_tac[] >>
+  `~copied.vs_call_ctx.cc_static` by metis_tac[] >>
+  drule_all append_storage_aggregate_header_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `gas_marked_path T ctx func copied 0 (OK fin)` >>
+  `store_copy_normalize s copied =
+    FOLDL (\q j. (if tr then tstore else sstore)
+      (slot+1w+n2w len*n2w stride+n2w j)
+      (mload (w2n b+32*j) s) q) s ks` by
+    (qpat_x_assum `store_copy_normalize pre copied = _`
+       (mp_tac o Q.AP_TERM `store_copy_normalize s`) >>
+     simp[placeStoreSlotsTheory.store_slots_normalize_fold,
+       stmtSimStoreCopyTheory.store_copy_normalize_def, mload_def]) >>
+  `store_copy_normalize s fin =
+    (if tr then tstore else sstore) slot (n2w len+1w)
+      (store_copy_normalize s copied)` by
+    (qpat_x_assum `state_frame fin = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `tr` >>
+     simp[stateFrameTheory.state_frame_def,
+       stmtSimStoreCopyTheory.store_copy_normalize_def,
+       sstore_def, tstore_def, venom_state_component_equality] >>
+     rpt strip_tac >> gvs[]) >>
+  `fin.vs_memory = s.vs_memory /\ fin.vs_allocas = s.vs_allocas /\
+   fin.vs_labels = s.vs_labels /\ fin.vs_call_ctx = s.vs_call_ctx /\
+   fin.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_x_assum `state_frame fin = _` mp_tac >>
+     Cases_on `tr` >>
+     simp[stateFrameTheory.state_frame_def, sstore_def, tstore_def,
+       venom_state_component_equality] >> metis_tac[]) >>
+  qexistsl_tac [`fin`, `ks`] >> simp[] >> conj_tac
+  >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
+        gas_marked_path_then)) >>
+      qexists_tac `pre` >> simp[] >>
+      irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
+        gas_marked_path_then)) >>
+      qexists_tac `copied` >> simp[]) >>
+  rpt strip_tac >>
+  `not_fresh_at s6 x /\ not_fresh_at s7 x` by
+    (fs[ci_mono_def, not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  metis_tac[]
 QED
