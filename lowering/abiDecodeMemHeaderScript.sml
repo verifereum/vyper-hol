@@ -1,11 +1,12 @@
 (* Memory safety of the ABI builtin's length load and pure guards. *)
 Theory abiDecodeMemHeader
 Ancestors
+  exprSimAbiDecodeBuiltinSetup abiDecoderSiteEffect
   abiBuiltinDecodeHeader abiBuiltinDecodeSetup abiBuiltinPrefix
   abiBuiltinLengthGuard abiBuiltinBoundTests abiBuiltinAllocation abiDecoderContract
   abiBuiltinSetupReach entryDecoderHistoryFrame entrySinkExtraction context
   abiDecoderLoop loweringStateRelDefs
-  fragGasSeqMem fragGasPathMem allocaHistoryFragment
+  fragExec fragGasSeqMem fragGasPathMem allocaHistoryFragment
   fragExecMem freshWrites instMemFrontier bodyUnopFragMemory memSafeRun
   emitHelperProps exprLoweringProps compileEnv emitHelper
   venomExecSemantics venomState venomInst words list rich_list arithmetic
@@ -109,7 +110,9 @@ Theorem abi_decode_setup_path_mem:
     abi_builtin_allocation_frame st.cs_next_var
       (abi_builtin_decode_output_site st min_size max_size) outsz s t /\
     t.vs_current_bb = ready.cs_current_bb /\
-    t.vs_inst_idx = LENGTH ready.cs_current_insts /\ ~t.vs_halted
+    t.vs_inst_idx = LENGTH ready.cs_current_insts /\ ~t.vs_halted /\
+    (decode_site_resources ctx func s ==>
+      decode_site_resources ctx func t /\ decode_static_frame s t)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_builtin_decode_setup_execute >> strip_tac >>
@@ -120,6 +123,14 @@ Proof
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
    isPREFIX (emitted_insts st ready) (DROP s.vs_inst_idx bb.bb_instructions)` by
     simp[IS_PREFIX_APPEND] >>
+  `!i. MEM i (emitted_insts st ready) /\ i.inst_opcode = ALLOCA ==>
+    MEM i (fn_insts func)` by
+    (rpt strip_tac >> irule lookup_block_fn_insts >>
+     goal_assum (drule_at Any) >>
+     metis_tac[MEM_APPEND, MEM_DROP_IMP]) >>
+  `decode_site_resources ctx func s ==>
+    decode_site_resources ctx func u /\ decode_static_frame s u` by
+    (strip_tac >> drule_all abi_decode_builtin_setup_static >> simp[]) >>
   drule_all run_inst_seq_gas_path_mem >>
   disch_then (qspec_then `ctx` assume_tac) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st ready)` by
@@ -130,5 +141,7 @@ Proof
     (gvs[IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND]) >>
   drule abi_decode_setup_no_gas >> strip_tac >>
   qexists_tac `u with vs_inst_idx := LENGTH ready.cs_current_insts` >>
-  gvs[eval_operand_inst_idx, fresh_vars_wrt_def, abi_builtin_allocation_frame_def]
+  gvs[eval_operand_inst_idx, fresh_vars_wrt_def, abi_builtin_allocation_frame_def] >>
+  strip_tac >> first_x_assum drule >>
+  simp[decode_static_frame_def, venom_state_component_equality]
 QED
