@@ -227,8 +227,9 @@ Resume ifexp_copy_body_first_four[after_read]:
   `eval_operand dst r1 = SOME d /\
    eval_operand (Var (slot_copy_var cs 0)) r1 = SOME q /\
    op_taint tn1 (Var (slot_copy_var cs 0)) = {}` by
-    (simp[Abbr `r1`, slot_copy_var_distinct] >>
-     metis_tac[slot_copy_var_distinct, DECIDE ``0 <> 2 /\ 0 <> 3``]) >>
+    (simp[Abbr `r1`, slot_copy_var_distinct] >> Cases_on `dst` >>
+     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+         slot_copy_var_distinct]) >>
   `?u G2 tn2.
     run_inst_seq (TAKE 2 (DROP 2 (slot_copy_body_insts cs src dst load))) r1 = OK u /\
     inst_seq_ptr D 0 ctx fn PG G1 tn1

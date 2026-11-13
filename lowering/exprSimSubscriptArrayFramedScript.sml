@@ -187,7 +187,8 @@ QED
 (* Expose the two child intervals and the bounds/element tail once. *)
 Theorem compile_expr_array_subscript:
   compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
-  place_type cenv obj = ValPT (ArrayT et bd) ==>
+  place_type cenv obj = ValPT (ArrayT et bd) /\
+  ~copies_subscript_base cenv obj idx ==>
   ?bvv st1 iop st2 dst loc.
     compile_expr cenv ty obj st = (bvv, st1) /\
     lower_value compile_expr cenv ty idx st1 = (iop, st2) /\
@@ -202,12 +203,13 @@ Theorem compile_expr_array_subscript:
     vv = LocatedValue ann (mk_ptr dst loc)
 Proof
   strip_tac >>
-  qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
-  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
-       compile_subscript_def, lower_value_def,
-       exprCallBoundsTheory.expr_child_callback_def,
-       comp_bind_def, comp_return_def,
-       vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def] >>
+  qpat_x_assum `~copies_subscript_base _ _ _` (fn th =>
+    qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
+    simp[th, Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+         compile_subscript_def, lower_value_def,
+         exprCallBoundsTheory.expr_child_callback_def,
+         comp_bind_def, comp_return_def,
+         vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def]) >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
 QED
