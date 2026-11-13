@@ -139,9 +139,9 @@ Theorem immutable_code_loop_outcome_mem:
       p dst (type_memory_bytes cenv et)
       (mk_inst st1.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv et))] [p])
       cond st1 u k es s /\
-    gas_admissible (eval_for cx tv id stmts (DROP k vs)) ok es ==>
+    gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) ok es ==>
     gas_outcome T (cx_tops cx) (ctx,func)
-      (eval_for cx tv id stmts (DROP k vs)) (es,s)
+      (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s)
       (\res ee t. res = INL () /\ array_round_done d ctx func cenv cx st1 u exit ee t)
       (\res ee rr. ?ex. res = INR ex /\
         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)

@@ -66,7 +66,8 @@ Theorem selected_external_owned_descriptor_values:
   set_external_package_target target
     (package_external_fn tops use_trans nkey_map
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
-    (lbl,ce,specs,min_cds,payable,nr',nk,ut,iv,stmts,rt) ==>
+    (lbl,ce,specs,min_cds,payable,nr',nk,ut,iv,stmts,rt) /\
+  EVERY (abi_decode_bytes_widths (type_env tops)) (MAP SND args) ==>
   ?values.
     LIST_REL (\(name,ty) (ty',tv,v,at,av).
       ty' = ty /\ evaluate_type (type_env tops) ty = SOME tv) args values /\
