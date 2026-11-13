@@ -8,24 +8,6 @@ Ancestors
   finite_map pred_set list words arithmetic pair venomWf
   lowerDloadSafetyAssemblyPremises lowerDloadSafetyWriteAssembly
 
-Theorem ld_alloc_target_frontier:
-  ld_global lo A frames /\ FDOM A = ld_slots A frames /\
-  EVERY (ld_maps A) frames /\ FLOOKUP A k = SOME (b,c,n) ==>
-  c+n <= (HD frames).lf_tgt.vs_alloca_next
-Proof
-  strip_tac >> drule_all ld_slot_source_site >> strip_tac >>
-  `ld_maps A (EL j frames)` by gvs[EVERY_EL] >>
-  `FLOOKUP (EL j frames).lf_src.vs_allocas aid = SOME (b,n)` by
-    gvs[ld_sites_def] >>
-  `FLOOKUP (EL j frames).lf_tgt.vs_allocas aid = SOME (c,n)` by
-    (gvs[ld_maps_def] >>
-     qpat_x_assum `!aid b n. FLOOKUP _ aid = SOME (b,n) ==> ?c. _ /\ _`
-       drule >> strip_tac >> gvs[]) >>
-  `(j,aid,c,n) IN ld_sites frames F` by
-    (simp[ld_sites_def] >> metis_tac[]) >>
-  drule_all ld_global_bounds >> simp[]
-QED
-
 Theorem ld_oracle_call_range_transport:
   MEM (getops,ranges)
     [(mem_read_ops,source_memory_read_ranges);
@@ -128,7 +110,7 @@ Proof
   `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
     metis_tac[ld_sync_slots, ld_sync_maps] >>
   `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz <= t.vs_alloca_next` by
-    (rpt strip_tac >> drule_all ld_alloc_target_frontier >>
+    (rpt strip_tac >> drule_all ld_alloc_frontiers >>
      drule ld_sync_active >> simp[]) >>
   `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
     metis_tac[LESS_EQ_LESS_TRANS] >>
