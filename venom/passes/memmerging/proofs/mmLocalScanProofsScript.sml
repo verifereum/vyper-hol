@@ -21504,6 +21504,76 @@ Proof
   asm_rewrite_tac[LENGTH_APPEND, arithmeticTheory.ADD_ASSOC]
 QED
 
+Theorem mm_local_mode_stopping_unchanged[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ n < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) mode is gs /\
+  rs = rep_map_of_groups is gs /\
+  deleted = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  (is_terminator (EL n is).inst_opcode \/
+    ~(?u. step_inst fuel ctx (EL n is) s = OK u)) /\
+  ~(?err. step_inst fuel ctx (EL n is) s = Error err) ==>
+  (!es. apply_groups_inst_supply mode ns rs es (EL n is) = ([EL n is],es)) /\
+  (!v. MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `(EL n is).inst_opcode <> MSTORE /\
+   (EL n is).inst_opcode <> mode_copy_opcode mode /\
+   (EL n is).inst_opcode <> mode_load_opcode mode` by
+    (Cases_on `is_terminator (EL n is).inst_opcode`
+     >- (Cases_on `mode` >>
+         gvs[mode_copy_opcode_def, mode_load_opcode_def] >>
+         metis_tac[venomInstTheory.is_terminator_def]) >>
+     Cases_on `(EL n is).inst_opcode = INVOKE`
+     >- (Cases_on `mode` >> gvs[mode_copy_opcode_def, mode_load_opcode_def]) >>
+     Cases_on `step_inst fuel ctx (EL n is) s` >> gvs[]
+     >- (drule opcodeClassTheory.step_inst_halt_opcodes >> strip_tac >>
+         Cases_on `mode` >> gvs[mode_copy_opcode_def, mode_load_opcode_def])
+     >- (drule opcodeClassTheory.step_inst_abort_opcodes >> strip_tac >>
+         Cases_on `mode` >> gvs[mode_copy_opcode_def, mode_load_opcode_def])
+     >- (gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+         drule opcodeClassTheory.step_inst_base_intret_opcodes >> strip_tac >>
+         Cases_on `mode` >> gvs[mode_copy_opcode_def, mode_load_opcode_def])) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `!es. apply_groups_inst_supply mode ns rs es (EL n is) = ([EL n is],es)` by
+    (gvs[] >> irule mm_local_prefix_nonselected_unchanged >> simp[EL_MEM] >> metis_tac[]) >>
+  conj_tac >- asm_rewrite_tac[] >> qx_gen_tac `v` >> disch_tac >>
+  irule (cj 3 mm_local_retained_operand_protected) >>
+  gvs[] >> metis_tac[EL_MEM, venomWfPropsTheory.operand_var_in_inst_uses]
+QED
+
+Theorem mm_local_mode_terminal_pending_empty[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  n < LENGTH is /\ SUC n = LENGTH is /\
+  is_terminator (EL n is).inst_opcode ==>
+  mm_local_pending_indices is gs n = []
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `MEM (EL n is) bb.bb_instructions` by metis_tac[EL_MEM] >>
+  `(EL n is).inst_opcode <> MSTORE /\
+   (EL n is).inst_opcode <> mode_copy_opcode mode /\
+   (EL n is).inst_opcode <> mode_load_opcode mode` by
+    (Cases_on `mode` >> gvs[mode_copy_opcode_def, mode_load_opcode_def] >>
+     metis_tac[venomInstTheory.is_terminator_def]) >>
+  `!g. MEM g gs ==> ~MEM (EL n is).inst_id g.cg_inst_ids` by
+    metis_tac[mm_local_prefix_nonselected_group_absent] >>
+  `!j. ~MEM j (mm_local_pending_indices is gs n)` suffices_by
+    (Cases_on `mm_local_pending_indices is gs n` >> simp[] >> metis_tac[]) >>
+  qx_gen_tac `j` >> rewrite_tac[mm_local_pending_indices_mem] >> strip_tac >>
+  `r = n` by decide_tac >> metis_tac[mm_local_rep_member]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
