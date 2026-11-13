@@ -238,3 +238,144 @@ Proof
     emitted_insts_def, mk_inst_def, is_terminator_def] >>
   gvs[listTheory.DROP_APPEND1]
 QED
+
+Theorem typed_store_word_mem_path:
+  is_word_type dty /\ type_widens_to tenv sty dty /\
+  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+  value_has_type stv v /\ val_in_memory stv v (w2n sw) s.vs_memory /\
+  compile_store_memory_typed ce dst dty src sty sa = ((),sb) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+  w2n dw + type_memory_size dtv <= s.vs_alloca_next /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. mem_cont_sim ctx fn s t /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    val_in_memory dtv v (w2n dw) t.vs_memory /\
+    (!p k. p+k <= w2n dw \/ w2n dw+type_memory_size dtv <= p ==>
+      mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
+      vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    gas_marked_path T ctx fn s 0 (OK t)
+Proof
+  strip_tac >>
+  `sty = dty` by metis_tac[typedMemoryCopyTheory.typed_copy_word_widening] >>
+  gvs[] >>
+  `type_memory_size dtv = 32` by metis_tac[stmtSimReturnTheory.word_type_sizes] >>
+  `!x. dst = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+  drule_all typed_memory_word_sequence >> strip_tac >>
+  fs[same_blocks_def] >>
+  drule_all normalize_word_window_mem_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  gvs[venom_state_component_equality, lookup_var_def, arithmeticTheory.ADD_COMM] >>
+  rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
+
+Theorem typed_store_bytestring_mem_path:
+  is_bytestring_type dty /\ type_widens_to tenv sty dty /\
+  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+  value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+  val_in_memory stv v (w2n sw) s.vs_memory /\
+  compile_store_memory_typed ce dst dty src sty sa = ((),sb) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+  w2n dw + type_memory_size dtv <= s.vs_alloca_next /\
+  w2n dw + type_memory_size dtv < dimword(:256) /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. mem_cont_sim ctx fn s t /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    val_in_memory dtv v (w2n dw) t.vs_memory /\
+    (!p k. p+k <= w2n dw \/ w2n dw+type_memory_size dtv <= p ==>
+      mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
+      vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    gas_marked_path T ctx fn s 0 (OK t)
+Proof
+  strip_tac >>
+  `is_bytestring_type sty` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_bytestring_source] >>
+  `val_in_memory dtv v (w2n sw) s.vs_memory` by
+    metis_tac[valueCopyBytesTheory.bytestring_val_in_memory_transfer] >>
+  `val_store_size stv v = val_store_size dtv v` by
+    metis_tac[valueCopyBytesTheory.bytestring_val_store_size_eq] >>
+  `val_store_size stv v <= type_memory_size stv /\
+   val_store_size dtv v <= type_memory_size dtv /\
+   val_footprint dtv v <= val_store_size dtv v` by
+    metis_tac[val_store_size_le,val_footprint_le_store_size] >>
+  drule_all exprSimBufferStoreTheory.buffer_typed_bytestring_header >> strip_tac >>
+  `32 + 32 * word_size len < dimword(:256) /\
+   w2n sw + (32 + 32 * word_size len) <= s.vs_alloca_next /\
+   w2n dw + (32 + 32 * word_size len) <= s.vs_alloca_next /\
+   val_footprint dtv v <= 32 + 32 * word_size len` by decide_tac >>
+  `compile_store_bytestring src dst sa = ((),sb)` by
+    gvs[typedCopyAgreementTheory.compile_store_memory_typed_bytes] >>
+  drule_all normalize_bytestring_window_mem_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule exprSimBufferStoreTheory.buffer_store_bytestring_shape >> strip_tac >>
+  fs[same_blocks_def] >>
+  qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  gvs[venom_state_component_equality,lookup_var_def] >>
+  rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
+
+Theorem normalize_bulk_copy_mem_path:
+  emit_void MCOPY [dst; src; Lit (n2w (type_memory_size tv))] sa = ((),sb) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  val_in_memory tv v (w2n sw) s.vs_memory /\ val_wf tv v /\
+  w2n sw + type_memory_size tv <= s.vs_alloca_next /\
+  w2n dw + type_memory_size tv <= s.vs_alloca_next /\
+  type_memory_size tv < dimword(:256) /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. mem_cont_sim ctx fn s t /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    val_in_memory tv v (w2n dw) t.vs_memory /\
+    (!p k. p+k <= w2n dw \/ w2n dw+type_memory_size tv <= p ==>
+      mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
+      vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    gas_marked_path T ctx fn s 0 (OK t)
+Proof
+  strip_tac >>
+  drule_all normalize_mcopy_window_mem_path >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  drule_all valueCopyTheory.emit_mcopy_run >> strip_tac >>
+  `mem_cont_sim ctx fn s ((mcopy (w2n dw) (w2n sw) (type_memory_size tv) s)
+      with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (irule typed_bytes_child_seq_cont >> simp[] >> qexists_tac `sa` >>
+     fs[same_blocks_def, IS_PREFIX_APPEND] >>
+     drule allocaFootprintTheory.emit_mcopy_mem_ok >>
+     disch_then (drule_at (Pat `eval_operand dst _ = _`)) >>
+     disch_then (drule_at (Pat `eval_operand src _ = _`)) >>
+     simp[eval_operand_def]) >>
+  `val_in_memory tv v (w2n dw)
+      (mcopy (w2n dw) (w2n sw) (type_memory_size tv) s).vs_memory` by
+    (irule valueCopyTheory.mcopy_val_in_memory >> simp[] >>
+     metis_tac[val_footprint_le]) >>
+  `typed_copy_state_frame sa (w2n dw) (type_memory_size tv) s
+    ((mcopy (w2n dw) (w2n sw) (type_memory_size tv) s)
+      with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    simp[typedMemoryCopyTheory.typed_copy_mcopy_state_frame] >>
+  qexists_tac `(mcopy (w2n dw) (w2n sw) (type_memory_size tv) s)
+    with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  gvs[typedMemoryCopyTheory.typed_copy_state_frame_def,
+    typedMemoryCopyTheory.typed_copy_frame_def, same_blocks_def,
+    venomExecSemanticsTheory.mcopy_def, venomStateTheory.write_memory_with_expansion_def,
+    lookup_var_def] >> metis_tac[arithmeticTheory.ADD_COMM]
+QED
