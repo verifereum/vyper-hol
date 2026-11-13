@@ -19850,6 +19850,89 @@ Proof
   simp[]
 QED
 
+Definition mm_local_calldata_capture_def:
+  mm_local_calldata_capture is H n j =
+    if j < n /\ j < LENGTH is then
+      if (EL j is).inst_opcode = CALLDATACOPY then
+        (case (EL j is).inst_operands of
+           [a;b;c] =>
+             (case (eval_operand a (H j), eval_operand b (H j),
+                    eval_operand c (H j)) of
+                (SOME dst,SOME src,SOME len) =>
+                  SOME (w2n dst, TAKE (w2n len)
+                    (DROP (w2n src) (H j).vs_call_ctx.cc_calldata ++
+                     REPLICATE (w2n len) 0w))
+              | _ => NONE)
+         | _ => NONE)
+      else if (EL j is).inst_opcode = MSTORE then
+        mm_local_write_capture is H n j
+      else NONE
+    else NONE
+End
+
+Theorem mm_local_calldata_capture_past[local]:
+  j < n /\ n <= m ==>
+  mm_local_calldata_capture is H n j = mm_local_calldata_capture is H m j
+Proof
+  simp[mm_local_calldata_capture_def, mm_local_write_capture_def]
+QED
+
+Theorem mm_local_calldata_capture_future[local]:
+  n <= j ==> mm_local_calldata_capture is H n j = NONE
+Proof
+  simp[mm_local_calldata_capture_def]
+QED
+
+Theorem mm_local_calldata_capture_sound[local]:
+  mm_local_history is H n /\
+  mm_local_calldata_capture is H n j = SOME (d,bs) ==>
+  (H (SUC j)).vs_memory = (write_memory_with_expansion d bs (H j)).vs_memory
+Proof
+  simp[mm_local_calldata_capture_def] >>
+  rpt IF_CASES_TAC >> gvs[AllCaseEqs()] >> strip_tac
+  >- (`step_inst_base (EL j is) (H j) = OK (H (SUC j))` by
+        metis_tac[mm_local_history_def] >>
+      gvs[venomExecSemanticsTheory.step_inst_base_def]) >>
+  metis_tac[mm_local_write_capture_sound]
+QED
+
+Definition mm_local_payload_cut_def:
+  mm_local_payload_cut cap is gs H n excluded pc t <=>
+    t.vs_inst_idx = pc /\
+    mm_local_nonmemory_frame (H n) = mm_local_nonmemory_frame t /\
+    (!v. v NOTIN excluded ==> lookup_var v (H n) = lookup_var v t) /\
+    mm_local_pending cap (mm_local_pending_indices is gs n) (H n) t
+End
+
+Theorem mm_local_payload_cut_init[local]:
+  mm_local_payload_cut cap is gs H 0 excluded pc
+    ((H 0) with vs_inst_idx := pc)
+Proof
+  simp[mm_local_payload_cut_def, mm_local_pending_indices_endpoints,
+    mm_local_pending_empty, venomStateTheory.lookup_var_def]
+QED
+
+Theorem mm_local_payload_cut_end[local]:
+  mm_local_payload_cut cap is gs H (LENGTH is) excluded pc t ==>
+  state_equiv excluded ((H (LENGTH is)) with vs_inst_idx := pc) t
+Proof
+  simp[mm_local_payload_cut_def, mm_local_pending_indices_endpoints,
+    mm_local_pending_empty] >> strip_tac >>
+  gvs[state_equiv_frame, mm_local_nonmemory_frame_def,
+    stateFrameTheory.state_frame_def, venomStateTheory.lookup_var_def,
+    venomStateTheory.venom_state_component_equality]
+QED
+
+Theorem mm_local_calldata_bytes[local]:
+  mm_local_bytes (\a. if a < LENGTH cd then EL a cd else 0w) src len =
+  TAKE len (DROP src cd ++ REPLICATE len 0w)
+Proof
+  irule LIST_EQ >> simp[mm_local_bytes_def,
+    copyFwdEquivTheory.mcopy_data_length] >> rpt strip_tac >>
+  simp[copyFwdEquivTheory.take_drop_replicate_el,
+    allocaRemapDefsTheory.mem_byte_at_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
