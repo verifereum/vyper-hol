@@ -268,10 +268,11 @@ Proof
   `lo <= pa+k` by (drule_all ptr_demand_interval_reserved_prefix >> simp[]) >>
   `k < sz` by fs[ptr_demand_interval_def] >>
   `eval_operand sizeop tgt = SOME z /\ eval_operand ops.iao_ofst tgt = SOME x` by
-    gvs[ptr_lookup_transport_some, ptr_value_transport_scalar_empty] >>
+    gvs[concretizePtrValueTransportTheory.ptr_lookup_transport_some,
+        concretizePtrValueTransportTheory.ptr_value_transport_scalar_empty] >>
   `!q. q IN range_bytes (step_writes inst tgt postt) ==>
      w2n x <= q /\ q < w2n x + w2n z` by
-    (irule ptr_step_write_max_containment >> metis_tac[]) >>
+    (irule concretizePtrWriteClassificationTheory.ptr_step_write_max_containment >> metis_tac[]) >>
   strip_tac >> first_x_assum drule >> decide_tac
 QED
 
