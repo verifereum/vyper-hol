@@ -113,7 +113,7 @@ Theorem o1_stage_contract_gas_all_dead[local]:
 Proof
   rw[o1_stage_contract_gas_def, dead_wf_def] >>
   first_x_assum drule_all >> strip_tac >>
-  qexists_tac `vs` >> metis_tac[ctx_sim_empty]
+  qexists_tac `vs` >> metis_tac[ctx_sim_empty, ctx_sim_fuel_imp_ctx_sim]
 QED
 
 (* ===== Simulations compose ===== *)
@@ -277,7 +277,8 @@ Proof
       simp[o1_run_contract_gas_def, o1_inv_def] >> metis_tac[]) >>
   qexists_tac `vo` >> simp[gas_variant_refl] >>
   `!D. o1_run_contract rp D k` by metis_tac[o1_run_contracts_same] >>
-  gvs[o1_run_contract_def, o1_stage_contract_def] >> metis_tac[]
+  gvs[o1_run_contract_def, o1_stage_contract_def] >>
+  metis_tac[ctx_sim_fuel_imp_ctx_sim]
 QED
 
 (* ===== Source shape ===== *)
@@ -860,7 +861,7 @@ Proof
   simp[] >> disch_then (qx_choose_then `vs` strip_assume_tac) >>
   qexists_tac `vs` >> simp[] >> rpt strip_tac >>
   `o1_run_state_ok vs` by metis_tac[gas_variant_run_state_ok] >>
-  `ctx_sim D unit.cu_context pre.cu_context vs vs /\
+  `ctx_sim_fuel I D unit.cu_context pre.cu_context vs vs /\
    o1_walk_src_inv D pre.cu_context vs` by metis_tac[] >>
   `(!fuel vs. run_context fuel pre.cu_context vs =
       run_context fuel (prune_unit_fcg_unreachable pre
@@ -875,10 +876,10 @@ Proof
      rewrite_tac[o1_walk_src_inv_def] >> strip_tac >> conj_tac
      >- (irule o1_src_inv_prune >> metis_tac[])
      >> conj_tac >> irule o1_prune_every >> first_assum ACCEPT_TAC) >>
-  `ctx_sim D unit.cu_context
+  `ctx_sim_fuel I D unit.cu_context
       (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context vs vs` by
     (irule ctx_sim_run_context_eq >> qexists_tac `pre.cu_context` >> simp[]) >>
-  metis_tac[ctx_sim_trans]
+  metis_tac[ctx_sim_trans, ctx_sim_fuel_imp_ctx_sim]
 QED
 
 (* ===== The pipeline ===== *)
