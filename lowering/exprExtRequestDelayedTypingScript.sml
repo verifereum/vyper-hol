@@ -25,9 +25,7 @@ Proof
   conj_tac
   >- (irule memory_rhs_read_annotation_typed >> metis_tac[]) >>
   irule memory_rhs_read_lowered_typed_unwidened >>
-  conj_tac
-  >- metis_tac[extrequest_effect_free_not_call] >>
-  metis_tac[]
+  qexistsl [`cx`,`es`,`mid`] >> simp[ETA_THM]
 QED
 
 Theorem extrequest_delayed_results_typed:
