@@ -6,15 +6,16 @@ Ancestors
 Libs
   monadsyntax
 
+(* RESTATED (train 17): 0.5.0b1 reads each positional argument as it is
+   evaluated (eval_exprs), before the keyword arguments run. *)
 Theorem extrequest_source_stages:
   eval_expr cx
     (Call ann (ExtCall stat skip (fname,ats,rt) opts) (addr::rest) dflt) =
   bind (bind (eval_expr cx addr) (read_result cx)) (\target.
-    bind (eval_expr_results cx (TAKE (LENGTH ats) rest)) (\rs.
+    bind (eval_exprs cx (TAKE (LENGTH ats) rest)) (\vs.
       bind (eval_exprs cx (DROP (LENGTH ats) rest)) (\kwargs.
-        bind (read_results cx rs) (\vs.
-          eval_ext_call cx stat skip (fname,ats,rt) opts
-            (target::(vs ++ kwargs))))))
+        eval_ext_call cx stat skip (fname,ats,rt) opts
+          (target::(vs ++ kwargs)))))
 Proof
   simp[Once evaluate_def] >>
   simp[Once evaluate_def, bind_assoc, bind_return] >>
