@@ -12,7 +12,7 @@ Ancestors
   concretizePtrRequestHistory concretizeStepStructure concretizePtrStructuralTrace
   concretizePtrOwnerPath concretizePtrLifetime concretizePtrOperationalOpcodes
   venomExecSemantics venomWf venomInst unitShapeDefs o1PassContract contextCodegenRel
-  opcodeClass list finite_map option arithmetic
+  venomState memLocDefs opcodeClass list finite_map option arithmetic
 
 (* Source-directed extraction: unlike the historical reverse interface this
    boundary requires no target write coverage. *)
@@ -331,6 +331,17 @@ Proof
   strip_tac >> drule_all ptr_dalloca_writer_forward >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
+Theorem ptr_dalloca_writer_descriptor_cases[local]:
+  mem_write_ops inst = SOME ops /\ ops.iao_max_size = SOME sizeop ==>
+  (MEM inst.inst_opcode [MSTORE;ISTORE] ==> sizeop = Lit 32w) /\
+  (inst.inst_opcode = MCOPY ==>
+    ?dst src n. inst.inst_operands = [dst;src;n] /\
+      ops.iao_ofst = dst /\ sizeop = n)
+Proof
+  strip_tac >> conj_tac >> strip_tac >>
+  gvs[mem_write_ops_def, AllCaseEqs()] >> metis_tac[]
+QED
+
 (* Descriptor-level offsets are shared by every writer. Stores specialize
    their size to 32; copies use exactly the same evaluated size in both runs. *)
 Theorem ptr_dalloca_writer_offsets:
@@ -356,9 +367,17 @@ Theorem ptr_dalloca_writer_offsets:
     eval_operand sizeop (EL w h).po_state = SOME z /\
     eval_operand ops.iao_ofst (EL q ht).po_state = SOME xt /\
     eval_operand sizeop (EL q ht).po_state = SOME z /\
-    b+k = w2n x+off /\ pa+k = w2n xt+off /\ off < w2n z
+    b+k = w2n x+off /\ pa+k = w2n xt+off /\ off < w2n z /\
+    (MEM (EL w h).po_inst.inst_opcode [MSTORE;ISTORE] ==> off < 32) /\
+    ((EL w h).po_inst.inst_opcode = MCOPY ==>
+      ?dst src n. (EL w h).po_inst.inst_operands = [dst;src;n] /\
+        ops.iao_ofst = dst /\ sizeop = n)
 Proof
-  strip_tac >> drule_all ptr_dalloca_writer_forward >> strip_tac >> gvs[] >> metis_tac[]
+  strip_tac >> drule_all ptr_dalloca_writer_forward >> strip_tac >>
+  drule_all ptr_dalloca_writer_descriptor_cases >> strip_tac >>
+  `MEM (EL w h).po_inst.inst_opcode [MSTORE;ISTORE] ==> off < 32` by
+    (strip_tac >> gvs[eval_operand_def, wordsTheory.dimword_def, venomLayoutTheory.dimindex_256]) >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]
 QED
 
 (* An observation after an ordinary instruction contains the incremented
