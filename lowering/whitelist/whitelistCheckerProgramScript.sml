@@ -64,9 +64,6 @@ Proof
   >- metis_tac[check_contract_function_names_distinct]
   >- metis_tac[check_contract_event_names_distinct]
   >- (Cases >> simp[supported_function_header_names_def] >> strip_tac >>
-      conj_tac
-      >- (strip_tac >> gvs[] >>
-          metis_tac[check_contract_fallback_no_arguments]) >>
       drule_all check_contract_function_header_bindings >> simp[])
   >- metis_tac[check_contract_selectors_distinct]
 QED

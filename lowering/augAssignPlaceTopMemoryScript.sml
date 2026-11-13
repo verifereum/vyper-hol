@@ -12,6 +12,7 @@ Theorem aug_place_toplevel_mem:
   body_inv tops ctx cenv cx /\
   supported_aug_target tops bindings (TopLevelNameTarget (src,id)) /\
   supported_stmt tops bindings (AugAssign ty (TopLevelNameTarget (src,id)) bop e) /\
+  body_stmt_safe tops (AugAssign ty (TopLevelNameTarget (src,id)) bop e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
     (AugAssign ty (TopLevelNameTarget (src,id)) bop e) ==>
     occurs_abi_decode_target target tops) /\

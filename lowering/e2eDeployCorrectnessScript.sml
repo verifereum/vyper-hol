@@ -206,6 +206,18 @@ Theorem e2e_deploy_correctness_asm_opt:
       (frame_resource_starved es r es' \/
        ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
+           if ALOOKUP am'.sources tx.target = NONE then
+             let cx = initial_evaluation_context
+                        ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE in
+             ?lgs.
+               frame_outcome es r es' NONE [] lgs /\
+               (lookup_account tx.target es'.rollback.accounts).code = [] /\
+               accounts_agree cx am'.accounts
+                 (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+               transient_agree cx am'.tStorage es'.rollback.tStorage /\
+               logs_correspond (compiled_event_info tops) (type_env tops)
+                 tx.target am'.logs lgs
+           else
            let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
             ?section lgs.
               immutables_section_rel tops (account_immutables am' tx.target) section /\
@@ -257,6 +269,18 @@ Theorem e2e_deploy_correctness:
       (frame_resource_starved es r es' \/
        ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
+           if ALOOKUP am'.sources tx.target = NONE then
+             let cx = initial_evaluation_context
+                        ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE in
+             ?lgs.
+               frame_outcome es r es' NONE [] lgs /\
+               (lookup_account tx.target es'.rollback.accounts).code = [] /\
+               accounts_agree cx am'.accounts
+                 (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+               transient_agree cx am'.tStorage es'.rollback.tStorage /\
+               logs_correspond (compiled_event_info tops) (type_env tops)
+                 tx.target am'.logs lgs
+           else
            let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
             ?section lgs.
               immutables_section_rel tops (account_immutables am' tx.target) section /\
