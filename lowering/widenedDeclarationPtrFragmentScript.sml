@@ -87,7 +87,7 @@ Proof
   ~is_word_type (post_value_type c e) /\ ~is_word_type (expr_type e)` by
    (qpat_assum `e = Call _ _ _ _` SUBST_ALL_TAC >>
     drule retained_intcall_physical_layout >>
-    simp[expr_type_def] >> metis_tac[]) >>
+    fs[expr_type_def] >> metis_tac[]) >>
  `gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
    (vyperState$bind (eval_expr cx e) (read_result cx)) (es,s1,G1,tn1)
    (\res ee G tn t. ?v. res = INL v /\
