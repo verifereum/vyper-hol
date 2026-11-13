@@ -330,7 +330,9 @@ Resume concat_args_sim_mem[tail_normal]:
       (!name lo sz. local_region cenv (es_end with gas_obs := []).scopes t2 name lo sz ==>
                     p + n <= lo \/ lo + sz <= p) ==>
       mem_bytes_at p n tu.vs_memory = mem_bytes_at p n t2.vs_memory` by
-    (simp[] >> metis_tac[]) >>
+    (qpat_x_assum `!aid p n. FLOOKUP t2.vs_allocas aid = SOME (p,n) /\ _ ==>
+                     mem_bytes_at p n tu.vs_memory = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[]) >>
   drule_all (INST_TYPE [alpha |-> ``:256``] concat_args_glue) >> strip_tac >>
   suspend "post"
 QED
