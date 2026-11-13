@@ -252,7 +252,66 @@ Resume len_full_suffix_ctor[direct]:
 QED
 
 Resume len_full_suffix_ctor[base]:
-  FAIL_TAC "base program"
+  rename1 `cenv.ce_imm_alloca = SOME ib` >>
+  `eval_operand ib t = SOME 0w` by
+    gvs[stmt_state_rel_def, immutable_base_zero_def] >>
+  `op_taint tn ib = {} /\ op_prov G ib = NONE` by
+    (`ghost_inv_at (DF (storage_trace_horizon ee.storage_trace)) lo d cenv cx ee G tn t` by
+       metis_tac[] >>
+     Cases_on `ib` >> gvs[op_taint_def, op_prov_def, ghost_inv_at_def]) >>
+  gvs[emitHelperTheory.emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+      comp_ignore_bind_def, comp_return_def, emit_def] >>
+  qabbrev_tac `out1 = STRING #"%" (toString sm.cs_next_var)` >>
+  qabbrev_tac `out2 = STRING #"%" (toString (sm.cs_next_var + 1))` >>
+  qabbrev_tac `i1 = mk_inst sm.cs_next_id ADD [vv_operand vv; ib] [out1]` >>
+  qabbrev_tac `i2 = mk_inst (sm.cs_next_id + 1) ILOAD [Var out1] [out2]` >>
+  drule fragExecTheory.fn_has_code_same_block >>
+  disch_then (qspec_then `[i1;i2]` mp_tac) >>
+  (impl_tac >- simp[APPEND_ASSOC]) >> strip_tac >>
+  `get_instruction bb (LENGTH sm.cs_current_insts) = SOME i1 /\
+   get_instruction bb (LENGTH sm.cs_current_insts + 1) = SOME i2` by
+    (first_assum (qspec_then `0` mp_tac) >>
+     first_x_assum (qspec_then `1` mp_tac) >> simp[]) >>
+  qabbrev_tac `u1 = update_var out1 w t` >>
+  qabbrev_tac `s1 = u1 with vs_inst_idx := SUC t.vs_inst_idx` >>
+  qabbrev_tac `u2 = update_var out2 (n2w n) s1` >>
+  qabbrev_tac `G1 = step_prov PG G i1 u1` >>
+  qabbrev_tac `tn1 = step_taint i1 t u1 tn` >>
+  qexistsl [`u2 with vs_inst_idx := SUC s1.vs_inst_idx`,
+            `step_prov PG G1 i2 u2`, `step_taint i2 s1 u2 tn1`] >>
+  qx_gen_tac `H` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  `lo <= t.vs_alloca_next /\ allocas_from lo t` by gvs[ghost_inv_at_def] >>
+  `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (t,G,tn) []
+      (OK s1,G1,tn1)` by
+    (simp[Abbr `s1`, Abbr `G1`, Abbr `tn1`] >>
+     mp_tac (Q.INST [`i` |-> `i1`, `u` |-> `u1`, `s` |-> `t`,
+                     `D` |-> `DF (H : (bool # bytes32 # type_value) list # num list)`]
+                    straight_line_origin_ptr_edge) >>
+     simp[Abbr `i1`, Abbr `u1`, venomInstTheory.mk_inst_def,
+          venomInstTheory.is_terminator_def] >>
+     (impl_tac >- simp[unitTransformDefsTheory.inst_mem_below_frontier_def,
+       memSafeRunTheory.inst_dload_in_section_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       memLocDefsTheory.mem_read_ops_def,
+       venomExecSemanticsTheory.step_inst_non_invoke,
+       venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomExecSemanticsTheory.exec_pure2_def, update_var_def,
+       wordsTheory.WORD_ADD_0] >> metis_tac[]) >> simp[]) >>
+  `eval_operand (Var out1) s1 = SOME w` by
+    simp[Abbr `s1`, Abbr `u1`, update_var_def, eval_operand_def,
+         lookup_var_def, FLOOKUP_UPDATE] >>
+  `op_taint tn1 (Var out1) = {} /\ op_prov G1 (Var out1) = NONE` by
+    simp[Abbr `tn1`, Abbr `G1`, Abbr `i1`, venomInstTheory.mk_inst_def,
+         step_taint_def, set_var_taint_def, out_taint_def,
+         step_prov_def, set_prov_def, out_prov_def, op_taint_def,
+         op_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  `mload (w2n w) s1 = n2w n` by
+    gvs[Abbr `s1`, Abbr `u1`, update_var_def,
+        builtinPropsTheory.ptr_load_val_def, mload_def] >>
+  FAIL_TAC "second edge"
 QED
 
 Finalise len_full_suffix_ctor
