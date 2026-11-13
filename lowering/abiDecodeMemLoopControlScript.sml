@@ -34,11 +34,14 @@ Proof
        word_add_n2w, AllCaseEqs(), toString_11] >>
   gvs[eval_operand_def, GSYM word_add_n2w] >>
   qpat_x_assum `_ + 32 <= _` mp_tac >>
-  once_rewrite_tac[GSYM arithmeticTheory.MOD_PLUS] >> simp[]
+  once_rewrite_tac[GSYM arithmeticTheory.MOD_PLUS] >>
+  simp[lookup_var_update_var, toString_11]
 QED
 
 Theorem abi_decode_position_header_path_mem:
-  abi_decode_position_loop_cfg fn hdr body_lbl exit_lbl id ip src MLOAD base_op first /\
+  lookup_block hdr fn.fn_blocks = SOME
+    <|bb_label := hdr; bb_instructions :=
+      abi_decode_position_header_insts id ip src MLOAD base_op first body_lbl exit_lbl|> /\
   abi_decode_position_loop_ready hdr ip src MLOAD base_op B sb p ncount i s /\
   src <> Var (STRING #"%" (toString first)) /\
   base_op <> Var (STRING #"%" (toString first)) /\
@@ -49,7 +52,7 @@ Theorem abi_decode_position_header_path_mem:
       (abi_decode_position_header_state base_op first B sb i ncount s)))
 Proof
   strip_tac >>
-  fs[abi_decode_position_loop_cfg_def, abi_decode_position_loop_ready_def] >>
+  fs[abi_decode_position_loop_ready_def] >>
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_position_header_prefix >> strip_tac >>
   `run_inst_seq_mem_ok (TAKE (4+abi_decode_position_header_delta base_op)
