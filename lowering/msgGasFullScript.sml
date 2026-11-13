@@ -11,7 +11,7 @@ Ancestors
   venomExecSemantics venomInst venomState memSafeRun context
   codegenRel contextCodegenRel unitTransformDefs loweringStateRelDefs
   vyperTypeSystem vyperAST
-  vyperInterpreter vyperState finite_map pred_set list
+  vyperInterpreter vyperState pred_set list
 
 (* The checked GAS step and its ghosts, fixed before any horizon: the
    endpoint, provenance and taint do not depend on the dead mask. *)
