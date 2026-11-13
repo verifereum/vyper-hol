@@ -48,7 +48,7 @@ Theorem ptr_paired_owned_read_recovery:
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   FLOOKUP positions (Allocation aid) = SOME (pa,sz) ==>
   read_byte (b+k) endpoint.po_state.vs_memory =
     read_byte (pa+k) at.po_state.vs_memory \/
@@ -295,7 +295,8 @@ Theorem ptr_paired_actual_protected_write_exclusion:
   EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\ FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
   SUC w < LENGTH h /\
   b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
     (EL (SUC w) h).po_state) /\ b+k NOTIN (EL (SUC w) h).po_taint.t_mem /\

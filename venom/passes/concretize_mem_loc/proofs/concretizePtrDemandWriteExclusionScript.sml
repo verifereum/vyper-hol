@@ -261,16 +261,18 @@ Theorem ptr_demand_fixed_write_exclusion[local]:
   eval_operand ops.iao_ofst src = SOME x /\ eval_operand sizeop src = SOME z /\
   op_prov TGj ops.iao_ofst = NONE /\ op_taint tn ops.iao_ofst = {} /\
   op_prov TGj sizeop = NONE /\ op_taint tn sizeop = {} /\
-  w2n x + w2n z <= lo ==>
+  (w2n x + w2n z <= lo \/ pa + sz <= w2n x) ==>
   pa+k NOTIN range_bytes (step_writes inst tgt postt)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `lo <= pa+k` by (drule_all ptr_demand_interval_reserved_prefix >> simp[]) >>
-  `!q. q IN range_bytes (step_writes inst tgt postt) ==> q < lo` by
-    (gen_tac >> strip_tac >>
-     irule (INST_TYPE [alpha |-> ``:num``] ptr_write_transport_fixed_containment) >>
-     rpt (goal_assum (drule_at Any)) >> asm_rewrite_tac[]) >>
-  first_x_assum (qspec_then `pa+k` mp_tac) >> simp[]
+  `k < sz` by fs[ptr_demand_interval_def] >>
+  `eval_operand sizeop tgt = SOME z /\ eval_operand ops.iao_ofst tgt = SOME x` by
+    gvs[ptr_lookup_transport_some, ptr_value_transport_scalar_empty] >>
+  `!q. q IN range_bytes (step_writes inst tgt postt) ==>
+     w2n x <= q /\ q < w2n x + w2n z` by
+    (irule ptr_step_write_max_containment >> metis_tac[]) >>
+  strip_tac >> first_x_assum drule >> decide_tac
 QED
 
 Theorem ptr_demand_interval_snapshot[local]:
@@ -735,8 +737,10 @@ Theorem ptr_demand_ordinary_write_exclusion:
   (MEM (EL j h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
     LENGTH posts.vs_returndata = LENGTH postt.vs_returndata) /\
   b+k NOTIN range_bytes (step_writes (EL j h).po_inst src posts) /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   ((op_prov TGj ops.iao_ofst = NONE /\
-    op_taint (EL j h).po_taint ops.iao_ofst = {} /\ w2n x + w2n z <= lo) \/
+    op_taint (EL j h).po_taint ops.iao_ofst = {} /\
+    (w2n x + w2n z <= lo \/ dyn_floor C vs <= w2n x)) \/
    (?dv tokB bid db sb pb.
      ops.iao_ofst = Var dv /\ FLOOKUP TGj dv = SOME (tokB,bid) /\
      FLOOKUP (EL j h).po_prov dv = SOME (db,sb) /\
@@ -746,7 +750,17 @@ Theorem ptr_demand_ordinary_write_exclusion:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `_ \/ _` strip_assume_tac
-  >- (drule_all ptr_demand_fixed_write_exclusion >> simp[]) >>
+  >- (`w2n x + w2n z <= lo \/ pa + sz <= w2n x` by fs[] >>
+      drule_all ptr_demand_fixed_write_exclusion >> simp[])
+  >- (`pa + sz <= w2n x` by
+        (`pa + sz <= eom` by
+           (fs[ptr_demand_interval_def] >>
+            drule_all concretizePtrStageBoundsTheory.ptr_stage_placements_endpoint_bound >>
+            simp[]) >>
+         `w2n x < dimword (:256)` by simp[wordsTheory.w2n_lt] >>
+         Cases_on `ctx_has_dalloca C` >> fs[dyn_floor_def] >> decide_tac) >>
+      `w2n x + w2n z <= lo \/ pa + sz <= w2n x` by fs[] >>
+      drule_all ptr_demand_fixed_write_exclusion >> simp[]) >>
   drule_all ptr_demand_interval_snapshot >> strip_tac >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
    ptr_discipline lo C vs`
