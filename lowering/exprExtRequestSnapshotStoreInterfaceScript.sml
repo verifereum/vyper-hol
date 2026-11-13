@@ -86,5 +86,12 @@ Definition extrequest_snapshot_store_contract_def:
       (!aid p k. aid < sm.cs_next_id /\ aid <> live /\
          FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
          mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory) /\
-      extrequest_history_frame ce cx ee sm s ee sb q
+      (!name b len. local_region ce ee.scopes s name b len ==>
+         mem_bytes_at b len q.vs_memory = mem_bytes_at b len s.vs_memory) /\
+      (ce.ce_is_ctor ==> !name itv iv io.
+         FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+         FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+           | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+         mem_bytes_at io (type_memory_size itv) q.vs_memory =
+         mem_bytes_at io (type_memory_size itv) s.vs_memory)
 End
