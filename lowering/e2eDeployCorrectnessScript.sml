@@ -4,7 +4,7 @@
  * owns its own file. *)
 Theory e2eDeployCorrectness
 Ancestors
-  e2eDeployDefs ctorDeployDefs
+  e2eDeployAtMarks e2eDeployDefs ctorDeployDefs
   ctorDeployInitcode ctorDeployEntry ctorDeployShape ctorDeployDefsReach
   ctorDeployLowering ctorDeployMemory ctorDeployDload ctorDeployDead
   ctorDeployFrame
@@ -26,13 +26,6 @@ Proof
   qpat_x_assum `codegen_assembly rpolicy deploy_out.po_unit = SOME _`
     (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
   goal_assum $ drule_at Any >> gvs[]
-QED
-
-Theorem gas_variant_code_layout_valid:
-  gas_variant si so /\ code_layout_valid so ==> code_layout_valid si
-Proof
-  rw[gas_variant_def] >> qpat_x_assum `so = _` SUBST_ALL_TAC >>
-  fs[code_layout_valid_def]
 QED
 
 (* The -O none case of e2e_deploy_correctness: PLAN 5.11, D28, section 9.
