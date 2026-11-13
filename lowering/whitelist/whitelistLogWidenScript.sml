@@ -450,6 +450,7 @@ Theorem body_log_widen_case:
     body_exprs_ok cx args /\ body_inv tops ctx cenv cx /\
     supported_pure_exprs tops args /\
     supported_event_fields tops id = SOME fields /\
+    EVERY supported_scalar_type (MAP (SND o FST) fields) /\
     LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) args fields /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Log id args) ==>
