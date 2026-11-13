@@ -267,6 +267,7 @@ Theorem concretize_create_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -292,7 +293,6 @@ Theorem concretize_create_local_complete:
       (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       concretize_local_obs post tpost /\
     concretize_supplement D (step_taint inst s post tn) post tpost /\
-    step_prov PG G inst post = SND o_f (origin_set rv inst.inst_outputs NONE) /\
     relocation_taint_le (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
     relocation_env post tpost /\ relocation_reader_context post tpost
@@ -339,7 +339,6 @@ Proof
   drule_all (SRULE [MEM] concretize_create_local_execution) >> strip_tac >>
   qexists_tac `post'` >> asm_rewrite_tac[] >>
   (conj_tac >- suspend "target") >>
-  (conj_tac >- suspend "ghosts") >>
   (conj_tac >- suspend "taint") >>
   suspend "environment")
 QED
@@ -367,16 +366,6 @@ Resume concretize_create_local_complete[environment]:
   markerLib.RESUME_TAC >> (drule create_execution_fields >> strip_tac >>
   rev_drule create_execution_fields >> strip_tac >>
   fs[relocation_env_def, relocation_reader_context_def])
-QED
-Resume concretize_create_local_complete[ghosts]:
-  markerLib.RESUME_TAC >> (
-  `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >>
-     metis_tac[resolved_frame_erasure]) >>
-  rev_drule create_execution_fields >> strip_tac >>
-  qpat_x_assum `SND o_f rv = G` (fn th => rewrite_tac[GSYM th]) >>
-  asm_rewrite_tac[] >>
-  irule (cj 1 create_ghosts) >> simp[MEM] >> metis_tac[])
 QED
 Resume concretize_create_local_complete[taint]:
   markerLib.RESUME_TAC >> (

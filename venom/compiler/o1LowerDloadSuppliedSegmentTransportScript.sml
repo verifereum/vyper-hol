@@ -35,6 +35,27 @@ Proof
   metis_tac[]
 QED
 
+(* A clean write at or above the dynamic floor, at the same address on
+   both sides. *)
+Theorem ld_memory_agree_write_dyn_clean[local]:
+  ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
+  ld_dyn_floor_ok fl lo sites X /\ fl <= p ==>
+  ld_memory_agree sites lo (mask DIFF {i | p<=i /\ i<p+LENGTH xs})
+    (write_memory_with_expansion p xs s).vs_memory
+    (write_memory_with_expansion p xs t).vs_memory
+Proof
+  strip_tac >>
+  `ld_memory_agree sites lo
+     ((mask DIFF {i | p<=i /\ i<p+LENGTH xs}) UNION
+       {p+k | k<LENGTH xs /\ k IN {}})
+     (write_memory_with_expansion p xs s).vs_memory
+     (write_memory_with_expansion p xs t).vs_memory` by
+    (irule ld_memory_agree_write_dyn >> simp[] >> metis_tac[]) >>
+  `{p+k | k<LENGTH xs /\ k IN {}} = {}` by simp[EXTENSION] >>
+  pop_assum (fn eq => qpat_x_assum `ld_memory_agree _ _ (_ UNION _) _ _`
+    (ACCEPT_TAC o REWRITE_RULE [eq, UNION_EMPTY]))
+QED
+
 Theorem ld_joint_supply_dloadbytes_transport:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
@@ -97,12 +118,42 @@ Proof
           write_memory_with_expansion_def, FLOOKUP_DEF] >>
      simp[EXTENSION] >> metis_tac[]) >>
   asm_rewrite_tac[] >>
+  `ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory tmp.vs_memory /\
+   ld_dyn_floor_ok (dyn_floor C vs) lo sites X` by
+    (fs[ld_joint_boundary_def] >> metis_tac[]) >>
   Cases_on `w2n z = 0`
   >- (`bs = []` by metis_tac[LENGTH_NIL] >>
-      simp[] >> irule ld_memory_agree_empty_write >> simp[]) >>
+      simp[] >> conj_tac
+      >- (irule ld_memory_agree_empty_write >> simp[]) >>
+      qpat_x_assum `ld_dyn_agree _ _ _ tmp.vs_memory` mp_tac >>
+      simp[ptrDisciplineTheory.ld_dyn_agree_def,
+           regularCallEmitSimTheory.read_byte_write_memory_with_expansion] >>
+      rpt strip_tac >> first_x_assum irule >> fs[]) >>
   qpat_assum `LENGTH bs = _` (fn th => rewrite_tac[GSYM th]) >>
-  drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
-  disch_then irule >> simp[] >> metis_tac[w2n_11]
+  `(w2n p = w2n q /\ w2n p + LENGTH bs <= lo) \/
+   (w2n p = w2n q /\ dyn_floor C vs <= w2n p) \/
+   (?id b c k j. FLOOKUP sites id = SOME (b,c,k) /\ j + LENGTH bs <= k /\
+     w2n p = b+j /\ w2n q = c+j)` by metis_tac[]
+  >- (qpat_x_assum `w2n p = w2n q` (fn th => rewrite_tac[GSYM th]) >>
+      conj_tac
+      >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
+          disch_then irule >> metis_tac[]) >>
+      irule ld_dyn_agree_clean_write_same >> metis_tac[])
+  >- (qpat_x_assum `w2n p = w2n q` (fn th => rewrite_tac[GSYM th]) >>
+      conj_tac
+      >- (drule_at (Pat `ld_dyn_floor_ok _ _ _ _`) ld_memory_agree_write_dyn_clean >>
+          disch_then irule >> rpt conj_tac >>
+          FIRST [first_assum ACCEPT_TAC,
+                 qpat_x_assum `tmp.vs_memory = _` (fn th => rewrite_tac[th]) >>
+                 first_assum ACCEPT_TAC]) >>
+      irule ld_dyn_agree_clean_write_same >> metis_tac[]) >>
+  `w2n p + LENGTH bs <= dyn_floor C vs /\ w2n q + LENGTH bs <= dyn_floor C vs` by
+    (qpat_x_assum `ld_dyn_floor_ok _ _ _ _` mp_tac >>
+     simp[ld_dyn_floor_ok_def] >> strip_tac >> res_tac >> decide_tac) >>
+  conj_tac
+  >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
+      disch_then irule >> metis_tac[]) >>
+  irule ld_dyn_agree_clean_write_below >> metis_tac[]
 QED
 
 Theorem ld_joint_supply_dload_transport:
@@ -119,7 +170,7 @@ Theorem ld_joint_supply_dload_transport:
   w2n x + (LENGTH t.vs_code - LENGTH t.vs_data_section) < dimword(:256) /\
   ((FLOOKUP t.vs_allocas (EL 0 es).inst_id = NONE /\ b = t.vs_alloca_next) \/
    FLOOKUP t.vs_allocas (EL 0 es).inst_id = SOME (b,32)) /\
-  b+32 < dimword(:256) /\
+  b+32 < dimword(:256) /\ b+32 <= dyn_floor C vs /\
   ld_joint_geometry sites X1 lo owners /\
   FLOOKUP X1 key = SOME ((EL 0 es).inst_id,b) ==>
   let t1 = update_var av (n2w b)
@@ -179,7 +230,20 @@ Proof
   asm_rewrite_tac[] >>
   `ld_memory_agree sites lo tn.t_mem s.vs_memory tmp.vs_memory` by
     (simp[Abbr `tmp`, update_var_def] >> fs[ld_joint_boundary_def]) >>
-  drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_scratch_write >>
-  disch_then irule >> simp[Abbr `bs`, LENGTH_TAKE_EQ] >>
-  metis_tac[])
+  conj_tac
+  >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_scratch_write >>
+      disch_then irule >> simp[Abbr `bs`, LENGTH_TAKE_EQ] >>
+      metis_tac[]) >>
+  (* the scratch slot lies below the dynamic floor *)
+  `LENGTH bs = 32` by simp[Abbr `bs`, LENGTH_TAKE_EQ] >>
+  `ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory tmp.vs_memory` by
+    (simp[Abbr `tmp`, update_var_def] >> fs[ld_joint_boundary_def]) >>
+  `addr + 32 <= dyn_floor C vs` by fs[markerTheory.Abbrev_def] >>
+  qpat_x_assum `ld_dyn_agree _ _ _ tmp.vs_memory` mp_tac >>
+  simp[ptrDisciplineTheory.ld_dyn_agree_def,
+       regularCallEmitSimTheory.read_byte_write_memory_with_expansion, update_var_def] >>
+  rpt strip_tac >>
+  `~(addr <= i /\ i < addr + LENGTH bs)` by decide_tac >>
+  first_x_assum (qspec_then `i` mp_tac) >>
+  FIRST [asm_simp_tac (srw_ss()) [] >> NO_TAC, fs[]])
 QED

@@ -103,7 +103,7 @@ Theorem layout_stage_source_decoration:
   joint_initial vs0 C q0 /\ decoration_entry fn p q0 /\
   ALL_DISTINCT (fn_labels fn) /\
   EVERY (\f. ALL_DISTINCT (fn_labels f)) C.ctx_functions /\
-  ~ctx_has_dalloca C ==>
+  ptr_discipline lo C vs0 ==>
   ?path qe d ass.
     decorated_run C fn s r q0 0 path qe d /\
     selected_segment C q0 path 0 q0 path qe /\

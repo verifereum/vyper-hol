@@ -8,6 +8,7 @@ Theorem ld_sync_memory_write_advance:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\ f.lf_src = s /\ f.lf_tgt = t /\ f.lf_fn = fn /\
   ptr_discipline lo C vs0 /\ fn_shape_ok fn /\ fn_inst_wf fn /\
+  o1_ctx_shape C /\ mem_inv dload_headroom_ok C vs0 /\
   s.vs_labels = t.vs_labels /\ ~in_revert_forward fn s /\
   t.vs_alloca_next < dimword(:256) /\
   MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY] /\

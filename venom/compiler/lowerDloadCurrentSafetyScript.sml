@@ -78,7 +78,7 @@ Proof
   `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
     metis_tac[ld_sync_slots, ld_sync_maps] >>
   `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz <= t.vs_alloca_next` by
-    (rpt strip_tac >> drule_all ld_alloc_target_frontier >>
+    (rpt strip_tac >> drule_all lowerDloadSafetyAllocBoundsTheory.ld_alloc_frontiers >>
      drule ld_sync_active >> simp[]) >>
   drule ld_sync_active >> simp[] >> strip_tac >>
   drule ld_sync_ghosts >> simp[] >> strip_tac >>
@@ -199,7 +199,7 @@ Resume ld_sync_dloadbytes_prefix_raw[copy]:
   `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
     metis_tac[ld_sync_slots, ld_sync_maps] >>
   `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz <= t0.vs_alloca_next` by
-    (rpt strip_tac >> drule_all ld_alloc_target_frontier >>
+    (rpt strip_tac >> drule_all lowerDloadSafetyAllocBoundsTheory.ld_alloc_frontiers >>
      drule ld_sync_active >> simp[]) >>
   simp[raw_mem_ok_def, inst_mem_ok_in_fn_def, dalloca_no_wrap_def] >> disj1_tac >>
   simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
@@ -221,8 +221,23 @@ Resume ld_sync_dloadbytes_prefix_raw[copy]:
      irule ld_dloadbytes_source_operands >> metis_tac[]) >>
   drule_all ld_sync_dloadbytes_destination_cases >> strip_tac >>
   gvs[] >>
-  qpat_x_assum `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz <= t0.vs_alloca_next` drule >>
-  strip_tac >> disj2_tac >> decide_tac
+  FIRST [
+    qpat_x_assum `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz <= t0.vs_alloca_next`
+      drule >>
+    strip_tac >> disj2_tac >> decide_tac,
+    (* same address above the dynamic floor: the source's own raw check *)
+    `raw_mem_ok C fn inst s` by (irule ld_sync_source_mem_inv >> metis_tac[]) >>
+    drule ld_sync_active >> simp[] >> strip_tac >>
+    `ld_nonghost tn f.lf_src f.lf_tgt` by fs[ld_sync_def] >>
+    `f.lf_src.vs_alloca_next <= f.lf_tgt.vs_alloca_next` by
+      (drule ld_sync_frontier >> simp[]) >>
+    `MEM (w2n dw, w2n nw) (source_memory_write_ranges inst s)` by
+      simp[source_memory_write_ranges_def, sized_source_write_range_def] >>
+    `w2n nw = 0 \/ w2n dw + w2n nw <= t0.vs_alloca_next \/
+     w2n t0.vs_initial_fmp <= w2n dw /\ w2n dw + w2n nw <= w2n t0.vs_fmp` by
+      (irule ld_source_range_frontier >>
+       fs[raw_mem_ok_def, ld_nonghost_def] >> metis_tac[]) >>
+    FIRST [decide_tac, fs[] >> decide_tac, gvs[] >> decide_tac]]
 QED
 Finalise ld_sync_dloadbytes_prefix_raw
 

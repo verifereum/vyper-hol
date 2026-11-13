@@ -5,9 +5,9 @@ Ancestors
   ptrDiscipline list finite_map
 
 Theorem ptr_paired_write_owner_relocation:
-  ptr_paired_write_owner lo positions (reloc:num -> num) xs
+  ptr_paired_write_owner dyn lo positions (reloc:num -> num) xs
     (tokens,registry,births,PT,TG,saved,entries) /\
-  x IN xs /\ lo <= x /\
+  x IN xs /\ lo <= x /\ x < dyn /\
   ptr_birth_slices post tokens births /\
   LENGTH tokens = SUC (LENGTH post.po_stack) /\
   ptr_active_alloc_geometry
@@ -19,7 +19,7 @@ Theorem ptr_paired_write_owner_relocation:
   reloc x = pa + (x-b)
 Proof
   strip_tac >> drule_all ptr_paired_write_owner_byte >> strip_tac
-  >- decide_tac >>
+  >- decide_tac >> TRY (decide_tac >> NO_TAC) >>
   rename1 `MEM token tokens` >>
   gvs[MEM_EL] >>
   `LENGTH post.po_stack - n <= LENGTH post.po_stack /\
@@ -38,15 +38,21 @@ Proof
 QED
 
 Theorem ptr_paired_write_owner_fixed:
-  ptr_paired_write_owner lo positions (reloc:num -> num) xs
+  ptr_paired_write_owner dyn lo positions (reloc:num -> num) xs
     (tokens,registry,births,PT,TG,saved,entries) /\
-  x IN xs /\ x < lo /\ ptr_birth_slices post tokens births /\
+  x IN xs /\
+  (x < lo \/
+   (dyn <= x /\ !d aid b0 sz. d <= LENGTH post.po_stack /\
+      FLOOKUP (ptr_owner_view d post).cf_state.vs_allocas aid = SOME (b0,sz) ==>
+      b0 + sz <= dyn)) /\
+  ptr_birth_slices post tokens births /\
   LENGTH tokens = SUC (LENGTH post.po_stack) /\
   (!d. d <= LENGTH post.po_stack ==>
     allocas_from lo (ptr_owner_view d post).cf_state) ==>
   reloc x = x
 Proof
   strip_tac >> drule_all ptr_paired_write_owner_byte >> strip_tac >>
+  TRY (fs[] >> NO_TAC) >> TRY (decide_tac >> NO_TAC) >>
   rename1 `FLOOKUP births (token,aid) = SOME (b0,sz)` >>
   gvs[MEM_EL] >>
   `LENGTH post.po_stack - n <= LENGTH post.po_stack /\
@@ -56,8 +62,9 @@ Proof
     (qpat_x_assum `ptr_birth_slices _ _ _` mp_tac >>
      simp[ptr_birth_slices_def] >>
      disch_then (qspecl_then [`LENGTH post.po_stack - n`,`aid`] mp_tac) >>
-     simp[]) >>
-  first_x_assum (qspec_then `LENGTH post.po_stack - n` mp_tac) >>
-  simp[allocas_from_def] >>
-  disch_then drule >> decide_tac
+     simp[])
+  >- (first_x_assum (qspec_then `LENGTH post.po_stack - n` mp_tac) >>
+      simp[allocas_from_def] >> disch_then drule >> decide_tac) >>
+  first_x_assum (qspecl_then [`LENGTH post.po_stack - n`,`aid`,`b0`,`sz`] mp_tac) >>
+  (impl_tac >- fs[]) >> decide_tac
 QED

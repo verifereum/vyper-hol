@@ -3,6 +3,8 @@ Ancestors concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
   concretizeLayoutLocalAffine concretizeLayoutSupplement concretizeLayoutReaderContext
   frameRelocationScalarSteps frameResolvedOrigins frameOriginUpdates frameResolvedTrace
   venomExecSemantics venomState venomInst ptrDiscipline list
+  frameJointTrace frameJointTransition frameOriginHistory frameOriginReachable
+  concretizePtrParamSupport concretizeAnalysisAffine
 
 Theorem layout_affine_trace_step:
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
@@ -34,6 +36,23 @@ Proof
    EL g.lop_cursor (q0::qs) = g.lop_config /\
    resolved_config_ok g.lop_config g.lop_ids g.lop_anns` by
     fs[layout_ordinary_trace_def] >>
+  `joint_config_reachable vs0 C g.lop_config` by
+    (fs[layout_ordinary_trace_def] >>
+     `LENGTH es = LENGTH qs` by metis_tac[joint_trace_def, joint_chain_length] >>
+     drule joint_trace_prefix_reachable >> pure_rewrite_tac[EVERY_EL] >>
+     disch_then (qspec_then `g.lop_cursor` mp_tac) >> simp[]) >>
+  `frame_reachable vs0 C stk PG G tn fn inst s` by
+    (gvs[joint_config_reachable_def] >>
+     metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
+  `!u p. FLOOKUP om u = SOME p ==> u IN fn_pv P fn` by
+    (drule_all ptr_frame_current_static >> strip_tac >>
+     `origin_erase om = G` by
+       (qpat_x_assum `resolved_config_ok _ _ _` mp_tac >> simp[] >>
+        disch_then (mp_tac o MATCH_MP resolved_config_current) >>
+        simp[resolved_frame_ok_def]) >>
+     gvs[] >> qpat_x_assum `ptr_static_support _ _ _` mp_tac >>
+     simp[ptr_static_support_def, frameOriginUpdatesTheory.origin_erase_lookup] >>
+     metis_tac[]) >>
   qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_ordinary_state_def] >> strip_tac >> gvs[] >> fs[ETA_AX] >>
   drule_at (Pat `local_rel _ _ _ _ _ _ _`)
@@ -71,7 +90,12 @@ Proof
          gvs[origin_out_def, origin_first_def, resolved_out_def, update_var_def] >> metis_tac[]) >>
      PairCases_on `x` >>
      gvs[origin_out_def, origin_first_def, resolved_out_def, update_var_def] >>
-     disch_then kall_tac >> strip_tac >> gvs[]) >>
+     strip_tac >> strip_tac >> gvs[] >>
+     Cases_on `resolve_tag (resolved_cache birth s.vs_allocas) rp x0 (x1,x2)` >>
+     simp[] >> Cases_on `origin_op om b` >> gvs[] >>
+     `F` suffices_by simp[] >>
+     gvs[frameOriginUpdatesTheory.origin_op_some] >>
+     metis_tac[fn_ptr_ok_add_exclusion, fn_ptr_ok_sub_exclusion]) >>
   `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> DALLOCA /\
    ~is_terminator inst.inst_opcode` by (gvs[] >> simp[is_terminator_def]) >>
   `step_inst fuel C inst s = OK post` by simp[step_inst_non_invoke] >>

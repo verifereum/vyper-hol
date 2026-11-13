@@ -12,27 +12,10 @@ Proof
   Induct >> Cases >> simp[listTheory.APPEND, listTheory.TAKE_def, listTheory.DROP_def]
 QED
 
-Theorem ptr_history_no_dalloca[local]:
-  ptr_chrono_history vs C h endpoint /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions ==>
-  !k. k < LENGTH h ==> (EL k h).po_inst.inst_opcode <> DALLOCA
-Proof
-  strip_tac >> drule ptr_chrono_history_reachable >>
-  simp[EVERY_EL] >> strip_tac >> rpt strip_tac >>
-  `ptr_observation_reachable vs C (EL k h)` by metis_tac[] >>
-  fs[ptr_observation_reachable_def] >>
-  drule_all ptr_frame_table_support_invariant >> strip_tac >>
-  drule ptr_owner_frame_active >> strip_tac >>
-  `MEM (EL k h).po_inst (fn_insts (EL k h).po_fn)` by
-    (gvs[active_inst_def, fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
-     metis_tac[MEM_EL]) >>
-  fs[EVERY_MEM] >> metis_tac[]
-QED
-
 Theorem ptr_endpoint_protected_history:
   ptr_chrono_history vs C h endpoint /\ vs.vs_allocas = FEMPTY /\
   o1_ctx_shape C /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
+  ptr_discipline lo C vs /\
   EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY ssa_form C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -46,18 +29,18 @@ Theorem ptr_endpoint_protected_history:
   FLOOKUP endpoint.po_prov v = SOME (b,sz) /\
   bp = bp_analyze_fuel (concretize_memloc_fuel (ptr_owner_view d endpoint).cf_fn)
     (cfg_analyze (ptr_owner_view d endpoint).cf_fn) (ptr_owner_view d endpoint).cf_fn ==>
-  ?w. w + 1 < LENGTH h /\ ptr_chrono_write C x (EL w h) /\
+  (?w. w + 1 < LENGTH h /\ ptr_chrono_write C x (EL w h) /\
     (!k. w <= k /\ k < LENGTH h ==>
       d <= LENGTH (EL k h).po_stack /\
       FLOOKUP (ptr_owner_view d (EL k h)).cf_state.vs_allocas aid = SOME (b,sz) /\
       ~in_revert_forward (EL k h).po_fn (EL k h).po_state) /\
     (!k. w < k /\ k + 1 < LENGTH h ==> ~ptr_chrono_write C x (EL k h)) /\
     ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
-    ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst
+    ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst) \/
+  dyn_floor C vs <= x
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `!k. k < LENGTH h ==> (EL k h).po_inst.inst_opcode <> DALLOCA` by
-    metis_tac[ptr_history_no_dalloca] >>
+  Cases_on `dyn_floor C vs <= x` >- simp[] >> disj1_tac >>
   drule ptr_chrono_history_end >> strip_tac >>
   `PRE (LENGTH h) < LENGTH h /\ EL (PRE (LENGTH h)) h = endpoint` by
     (Cases_on `h` >> gvs[LAST_EL]) >>
@@ -103,23 +86,34 @@ Proof
     (bp_analyze_fuel (concretize_memloc_fuel (ptr_owner_view d endpoint).cf_fn)
       (cfg_analyze (ptr_owner_view d endpoint).cf_fn) (ptr_owner_view d endpoint).cf_fn)
     mems (ptr_owner_view d endpoint).cf_inst` by
-    (irule ptr_owner_selected_read_seed >> simp[] >> metis_tac[]) >>
+    (irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
+     qexists `dyn_floor C vs <= b` >> conj_tac
+     >- (qpat_x_assum `b <= x` mp_tac >>
+         qpat_x_assum `~(dyn_floor C vs <= x)` mp_tac >>
+         rpt (pop_assum kall_tac) >> decide_tac) >>
+     irule ptr_owner_selected_read_seed >> simp[] >> metis_tac[]) >>
   qexists `w` >> simp[] >>
   qpat_x_assum `(ptr_owner_view d (EL w h)).cf_fn = _` (fn th =>
     once_rewrite_tac[GSYM th]) >>
-  irule ptr_owner_write_byte_seed >>
-  simp[] >> conj_tac
-  >- metis_tac[] >>
-  qexistsl_tac [`lo`,`x`] >> simp[] >>
-  qpat_x_assum `ptr_chrono_write C x (EL w h)` mp_tac >>
-  simp[ptr_chrono_write_def] >> strip_tac >>
-  first_x_assum irule >> simp[MEM_EL] >> qexists `w` >> simp[]
+  irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
+  qexists `dyn_floor C vs <= x` >> conj_tac >- simp[] >>
+  irule ptr_owner_write_byte_seed >> simp[] >> rpt conj_tac >>
+  TRY (qexistsl_tac [`C`,`P`,`lo`] >> simp[] >> rpt conj_tac) >>
+  TRY (fs[ptr_chrono_write_def] >> NO_TAC) >>
+  TRY (drule (REWRITE_RULE [pred_setTheory.SUBSET_DEF] ptr_step_writes_subset) >>
+       simp[] >> NO_TAC) >>
+  TRY (first_x_assum irule >> simp[MEM_EL] >> qexists `w` >> simp[] >> NO_TAC) >>
+  TRY (qexists_tac `P` >> fs[] >> NO_TAC) >>
+  TRY (qexists_tac `lo` >> fs[] >>
+       qpat_x_assum `!obs. MEM obs h ==> _` irule >>
+       simp[MEM_EL] >> qexists `w` >> simp[] >> NO_TAC) >>
+  metis_tac[]
 QED
 
 Theorem ptr_endpoint_actual_protected_history:
   ptr_chrono_history vs C h endpoint /\ vs.vs_allocas = FEMPTY /\
   o1_ctx_shape C /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
+  ptr_discipline lo C vs /\
   EVERY wf_function C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   EVERY ssa_form C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -133,7 +127,7 @@ Theorem ptr_endpoint_actual_protected_history:
   FLOOKUP endpoint.po_prov v = SOME (b,sz) /\
   bp = bp_analyze_fuel (concretize_memloc_fuel (ptr_owner_view d endpoint).cf_fn)
     (cfg_analyze (ptr_owner_view d endpoint).cf_fn) (ptr_owner_view d endpoint).cf_fn ==>
-  ?w. w + 1 < LENGTH h /\
+  (?w. w + 1 < LENGTH h /\
     x IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
                                   (EL (SUC w) h).po_state) /\
     x NOTIN (EL (SUC w) h).po_taint.t_mem /\
@@ -145,11 +139,11 @@ Theorem ptr_endpoint_actual_protected_history:
       x NOTIN range_bytes (step_writes (EL k h).po_inst (EL k h).po_state
                                        (EL (SUC k) h).po_state)) /\
     ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
-    ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst
+    ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst) \/
+  dyn_floor C vs <= x
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `!k. k < LENGTH h ==> (EL k h).po_inst.inst_opcode <> DALLOCA` by
-    metis_tac[ptr_history_no_dalloca] >>
+  Cases_on `dyn_floor C vs <= x` >- simp[] >> disj1_tac >>
   drule_all ptr_endpoint_owned_actual_initializer >> strip_tac >>
   drule ptr_chrono_history_end >> strip_tac >>
   `PRE (LENGTH h) < LENGTH h /\ EL (PRE (LENGTH h)) h = endpoint` by
@@ -168,13 +162,26 @@ Proof
     (bp_analyze_fuel (concretize_memloc_fuel (ptr_owner_view d endpoint).cf_fn)
       (cfg_analyze (ptr_owner_view d endpoint).cf_fn) (ptr_owner_view d endpoint).cf_fn)
     mems (ptr_owner_view d endpoint).cf_inst` by
-    (irule ptr_owner_selected_read_seed >> simp[] >> metis_tac[]) >>
+    (irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
+     qexists `dyn_floor C vs <= b` >> conj_tac
+     >- (qpat_x_assum `b <= x` mp_tac >>
+         qpat_x_assum `~(dyn_floor C vs <= x)` mp_tac >>
+         rpt (pop_assum kall_tac) >> decide_tac) >>
+     irule ptr_owner_selected_read_seed >> simp[] >> metis_tac[]) >>
   qexists `w` >> simp[arithmeticTheory.ADD1] >>
   qpat_x_assum `(ptr_owner_view d (EL w h)).cf_fn = _` (fn th =>
     once_rewrite_tac[GSYM th]) >>
-  irule ptr_owner_write_byte_seed >> simp[] >> conj_tac
-  >- metis_tac[] >>
-  qexistsl [`lo`,`x`] >> simp[] >> reverse conj_tac
-  >- (first_x_assum irule >> simp[MEM_EL] >> qexists `w` >> simp[]) >>
-  drule (REWRITE_RULE [pred_setTheory.SUBSET_DEF] ptr_step_writes_subset) >> simp[]
+  irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
+  qexists `dyn_floor C vs <= x` >> conj_tac >- simp[] >>
+  irule ptr_owner_write_byte_seed >> simp[] >> rpt conj_tac >>
+  TRY (qexistsl_tac [`C`,`P`,`lo`] >> simp[] >> rpt conj_tac) >>
+  TRY (fs[ptr_chrono_write_def] >> NO_TAC) >>
+  TRY (drule (REWRITE_RULE [pred_setTheory.SUBSET_DEF] ptr_step_writes_subset) >>
+       simp[] >> NO_TAC) >>
+  TRY (first_x_assum irule >> simp[MEM_EL] >> qexists `w` >> simp[] >> NO_TAC) >>
+  TRY (qexists_tac `P` >> fs[] >> NO_TAC) >>
+  TRY (qexists_tac `lo` >> fs[] >>
+       qpat_x_assum `!obs. MEM obs h ==> _` irule >>
+       simp[MEM_EL] >> qexists `w` >> simp[] >> NO_TAC) >>
+  metis_tac[]
 QED

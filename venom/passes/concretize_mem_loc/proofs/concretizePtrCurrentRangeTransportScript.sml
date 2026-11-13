@@ -195,7 +195,7 @@ QED
 Theorem ptr_current_range_transport:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
   opaque_use_ok fn /\ label_positions_ok inst /\
-  ptr_ledger_erases births TG G /\ FDOM G SUBSET fn_pv P fn /\
+  ptr_ledger_erases dyn births TG G /\ FDOM G SUBSET fn_pv P fn /\
   ptr_mixed_vars births positions TG tn fn ft src tgt /\
   src.vs_labels = tgt.vs_labels /\ taint_ok fn tn inst src /\
   ((mops = mem_read_ops inst /\

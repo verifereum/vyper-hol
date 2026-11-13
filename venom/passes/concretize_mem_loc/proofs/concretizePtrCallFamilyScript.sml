@@ -506,7 +506,7 @@ Proof
     (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `k <= w2n n` by simp[] >>
   `?rho. (!j. j < k ==> rho (w2n x + j) = w2n y + j) /\
-    concretizePtrPairedFields$ptr_paired_write_owner lo positions rho
+    !dyn. concretizePtrPairedFields$ptr_paired_write_owner dyn lo positions rho
       (range_bytes (step_writes a.po_inst a.po_state post))
       (tokens,registry,births,PT,TG',saved,entries)` by
     (qexists_tac `\q. w2n y + (q - w2n x)` >> conj_tac
@@ -518,11 +518,11 @@ Proof
          gns[arithmeticTheory.MIN_DEF] >> decide_tac) >>
      `MEM token tokens` by (drule_all ptr_source_ownership_live_prov >> simp[]) >>
      simp[concretizePtrPairedFieldsTheory.ptr_paired_write_owner_def] >>
-     rpt strip_tac >> disj2_tac >>
+     rpt strip_tac >> disj2_tac >> disj1_tac >>
      qexistsl_tac [`token`,`aid`,`b`,`sz`,`pa`,`q - b`] >>
      Cases_on `w2n n < LENGTH post.vs_returndata` >>
      gns[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-  rename1 `concretizePtrPairedFields$ptr_paired_write_owner lo positions reloc _ _` >>
+  rename1 `!dyn. concretizePtrPairedFields$ptr_paired_write_owner dyn lo positions reloc _ _` >>
   `ptr_ledger_write_pair C C' reloc a z at zt` by
     (simp[ptr_ledger_write_pair_def] >>
      conj_tac >- metis_tac[ptr_tagged_chrono_step_projection] >>

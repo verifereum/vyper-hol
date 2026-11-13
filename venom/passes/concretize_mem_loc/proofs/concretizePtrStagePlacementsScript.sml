@@ -61,7 +61,7 @@ Theorem ptr_stage_placements_live_owner:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   FLOOKUP TG v = SOME (token,aid) /\
@@ -77,8 +77,10 @@ Theorem ptr_stage_placements_live_owner:
     FLOOKUP positions (Allocation aid) = SOME (p,sz)
 Proof
   strip_tac >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_def,
+       venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[]) >>
   drule_all ptr_source_ownership_live_cache >> strip_tac >>
   `ptr_ledger_source_activations vs C h a tokens registry` by
     metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_activations] >>

@@ -223,7 +223,10 @@ QED
 Theorem ld_public_copy_effect:
   (xs = [] \/ (ro = rt /\ ro+LENGTH xs <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     ro = b+delta /\ rt = c+delta /\ delta+LENGTH xs <= sz)) /\
+     ro = b+delta /\ rt = c+delta /\ delta+LENGTH xs <= sz) \/
+   (ro = rt /\ fl <= ro)) /\
+  lo <= fl /\ (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> u+z <= fl /\ v+z <= fl) /\
+  ld_dyn_agree fl tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory /\
   ld_vars P A f /\ tn.t_var = f.lf_tv /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\ ld_nonghost tn f.lf_src f.lf_tgt /\
   ld_global lo A frames /\ FDOM A = ld_slots A frames /\
@@ -240,6 +243,7 @@ Theorem ld_public_copy_effect:
     ld_memory lo A (step_taint inst f.lf_src ss tn) ss ts /\
     ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
     step_prov PG (ld_erase A o_f f.lf_H) inst ss = ld_erase A o_f H' /\
+    ld_dyn_agree fl (step_taint inst f.lf_src ss tn).t_mem ss.vs_memory ts.vs_memory /\
     (!a. a IN FRANGE H' ==> a IN FDOM A) /\
     ss.vs_allocas = f.lf_src.vs_allocas /\ ts.vs_allocas = f.lf_tgt.vs_allocas /\
     ss.vs_alloca_next = f.lf_src.vs_alloca_next /\ ts.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
@@ -260,11 +264,38 @@ Proof
       metis_tac[ld_alloc_separate]) >>
   conj_tac >- gvs[ld_nonghost_def, write_memory_with_expansion_def, write_memory_def] >>
   conj_tac >- (fs[MEM] >> simp[step_prov_def, set_prov_def, DRESTRICT_UNIV]) >>
+  conj_tac >-
+    (simp[] >> ONCE_REWRITE_TAC[arithmeticTheory.ADD_COMM] >>
+     irule ld_dyn_agree_write_classified >> rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+            qexistsl_tac [`A`,`lo`] >> rpt conj_tac >>
+            FIRST [first_assum ACCEPT_TAC, metis_tac[]]]) >>
   simp[write_memory_with_expansion_def, write_memory_def]
 QED
 
-(* TEMPORARILY CHEATED - P4d: dynamic-region memory case (DALLOCA pointers are
-   in G but not in H, so access_ok no longer reaches the erased sites).
+Theorem ld_sync_public_copy_effect:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  mem_inv dload_headroom_ok C vs0 /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  ~in_revert_forward fn s /\ t.vs_alloca_next < dimword(:256) /\
+  MEM inst.inst_opcode [CODECOPY;CALLDATACOPY;RETURNDATACOPY;EXTCODECOPY] /\
+  step_inst fuel C' inst t = OK ts ==>
+  ?ss H'. step_inst fuel C inst s = OK ss /\
+    ld_vars P A (f with <|lf_src := ss; lf_tgt := ts; lf_H := H';
+      lf_tv := (step_taint inst s ss tn).t_var|>) /\
+    ld_memory lo A (step_taint inst s ss tn) ss ts /\
+    ld_nonghost (step_taint inst s ss tn) ss ts /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H)
+      inst ss = ld_erase A o_f H' /\
+    ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
+      ss.vs_memory ts.vs_memory /\
+    (!a. a IN FRANGE H' ==> a IN FDOM A) /\
+    ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
+    ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
+    ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
+    ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb /\
+    ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `fn_shape_ok fn /\ fn_inst_wf fn` by
@@ -289,6 +320,14 @@ Proof
      strip_tac >> metis_tac[]) >>
   `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
     (drule ld_alloc_target_no_wrap >> simp[] >> metis_tac[]) >>
+  `lo <= dyn_floor C vs0 /\
+   !a u v z. FLOOKUP A a = SOME (u,v,z) ==>
+     u+z <= dyn_floor C vs0 /\ v+z <= dyn_floor C vs0` by
+    (`EVERY (ld_maps A) (f::fs)` by
+       FIRST [first_assum ACCEPT_TAC, rewrite_tac[listTheory.EVERY_DEF] >>
+              conj_tac >> first_assum ACCEPT_TAC] >>
+     drule_all ld_sync_dyn_floor >> metis_tac[]) >>
+  drule ld_sync_dyn_agree >> strip_tac >>
   `inst.inst_opcode <> INVOKE` by (fs[MEM] >> gvs[]) >>
   gvs[step_inst_non_invoke, Excl "MEM"] >>
   qpat_assum `f.lf_tv = tn.t_var` (assume_tac o SYM) >>
@@ -304,54 +343,30 @@ Proof
      Cases_on `inst.inst_outputs` >> gvs[]) >>
   (Q.SUBGOAL_THEN `xs = [] \/ (w2n x = w2n y /\ w2n x+LENGTH xs <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     w2n x=b+delta /\ w2n y=c+delta /\ delta+LENGTH xs <= sz)` ASSUME_TAC >-
-    (Cases_on `xs = []` >- simp[] >>
+     w2n x=b+delta /\ w2n y=c+delta /\ delta+LENGTH xs <= sz) \/
+   (w2n x = w2n y /\ dyn_floor C vs0 <= w2n x)` ASSUME_TAC >-
+    (Cases_on `xs = []` >- (disj1_tac >> first_assum ACCEPT_TAC) >>
      `0 < LENGTH xs` by (Cases_on `xs` >> gvs[]) >>
      `MEM (w2n x,LENGTH xs) (source_memory_write_ranges inst f.lf_src)` by simp[] >>
      `(op_prov f.lf_H ops.iao_ofst = NONE ==> x = y) /\
       (!k. op_prov f.lf_H ops.iao_ofst = SOME k ==> ld_wordrel A (SOME k) x y)` by simp[] >>
-     drule_all ld_write_access_classified >> simp[] >> metis_tac[])) >>
+     drule_all (Q.INST [`n` |-> `LENGTH xs`] (cj 2 ld_access_dyn_cases)) >>
+     strip_tac
+     >- (qpat_x_assum `y = x` SUBST_ALL_TAC >> disj2_tac >> disj1_tac >>
+         rpt conj_tac >> FIRST [REFL_TAC, first_assum ACCEPT_TAC])
+     >- (disj2_tac >> disj2_tac >> disj1_tac >> metis_tac[]) >>
+     qpat_x_assum `y = x` SUBST_ALL_TAC >> rpt disj2_tac >>
+     rpt conj_tac >> FIRST [REFL_TAC, first_assum ACCEPT_TAC])) >>
   `EVERY (ld_maps A) (f::fs)` by simp[] >>
   `2 < LENGTH inst.inst_operands` by simp[] >>
+  `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by
+    (qpat_assum `FDOM A = _` (fn th => rewrite_tac[th]) >>
+     first_assum ACCEPT_TAC) >>
   qpat_assum `FDOM A = ld_slots A (f::fs)`
     (fn th => pure_rewrite_tac[GSYM th]) >>
-  irule ld_public_copy_effect >>
-  (conj_tac >- simp[]) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  (conj_tac >-
-    (qexistsl [`w2n x`, `w2n y`, `xs`] >>
-     rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  (conj_tac >-
-    (qexists `f::fs` >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  drule_all (Q.INST [`ro` |-> `w2n x`, `rt` |-> `w2n y`, `frames` |-> `f::fs`]
+           ld_public_copy_effect) >>
+  disch_then MATCH_ACCEPT_TAC
 QED
-*)
-Theorem ld_sync_public_copy_effect:
-  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
-  EVERY (fn_ptr_ok P) C.ctx_functions /\
-  ~in_revert_forward fn s /\ t.vs_alloca_next < dimword(:256) /\
-  MEM inst.inst_opcode [CODECOPY;CALLDATACOPY;RETURNDATACOPY;EXTCODECOPY] /\
-  step_inst fuel C' inst t = OK ts ==>
-  ?ss H'. step_inst fuel C inst s = OK ss /\
-    ld_vars P A (f with <|lf_src := ss; lf_tgt := ts; lf_H := H';
-      lf_tv := (step_taint inst s ss tn).t_var|>) /\
-    ld_memory lo A (step_taint inst s ss tn) ss ts /\
-    ld_nonghost (step_taint inst s ss tn) ss ts /\
-    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H)
-      inst ss = ld_erase A o_f H' /\
-    ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
-      ss.vs_memory ts.vs_memory /\
-    (!a. a IN FRANGE H' ==> a IN FDOM A) /\
-    ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
-    ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
-    ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
-    ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb /\
-    ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
-Proof
-  cheat
-QED
+
 

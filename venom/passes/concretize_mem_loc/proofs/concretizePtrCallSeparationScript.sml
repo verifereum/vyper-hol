@@ -9,7 +9,7 @@ Theorem ptr_output_suspended_descendant_separation:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   ptr_chrono_history vs C h endpoint /\ t < LENGTH h /\
   stk = (EL t h).po_stack /\ n < LENGTH stk /\ k <= n /\
