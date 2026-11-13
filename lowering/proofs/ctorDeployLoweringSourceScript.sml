@@ -1219,7 +1219,7 @@ Proof
   `fn3 = []` by
     (drule_all vyperTypeDeploymentMachineTheory.check_contract_constructor_no_defaults >>
      simp[]) >>
-  `fn1 = F` by (`~fn1` by metis_tac[] >> simp[]) >>
+  `fn1 = F` by (Cases_on `fn1` >> fs[] >> metis_tac[]) >>
   `~supported_stmts_expr_exists constructor_call_root fn5` by metis_tac[] >>
   gvs[] >>
   drule call_external_function_trace_call_free >>
