@@ -149,8 +149,8 @@ Proof
      Cases_on `x` >>
      gvs[ptrDisciplineTheory.op_taint_def, finite_mapTheory.FLOOKUP_UPDATE] >>
      metis_tac[]) >>
-  `!D. ptr_inst_ok D lo 0 ctx func G tn1 i1 s1` by
-    (gen_tac >>
+  `!D G0. ptr_inst_ok D lo 0 ctx func G0 tn1 i1 s1` by
+    (rpt gen_tac >>
      simp[ptrSafeRunTheory.ptr_inst_ok_def, Abbr `i1`,
           ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
           codegenRelTheory.source_memory_write_ranges_def,
@@ -164,5 +164,123 @@ Proof
           ptrDisciplineTheory.allocas_below_fmp_def] >>
      gvs[ptrDisciplineTheory.allocas_from_def,
          ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
-  FAIL_TAC "abs abort five scalar steps"
+  qabbrev_tac `tn2 = step_taint i1 s1 s2 tn1` >>
+  `op_taint tn2 x = {} /\
+   op_taint tn2 (Var (STRING #"%" (toString sa.cs_next_var))) = {} /\
+   op_taint tn2 (Var (STRING #"%" (toString (sa.cs_next_var + 1)))) = {}` by
+    (simp[Abbr `tn2`, ptrDisciplineTheory.op_taint_def,
+          ptrDisciplineTheory.step_taint_def,
+          ptrDisciplineTheory.set_var_taint_def,
+          ptrDisciplineTheory.out_taint_def, Abbr `i1`, eval_operand_lit,
+          finite_mapTheory.FLOOKUP_UPDATE] >>
+     Cases_on `x` >>
+     gvs[ptrDisciplineTheory.op_taint_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+     metis_tac[]) >>
+  qabbrev_tac `G1 = step_prov PG G i0 s1` >>
+  qabbrev_tac `G2 = step_prov PG G1 i1 s2` >>
+  `op_prov G1 x = NONE /\
+   op_prov G1 (Var (STRING #"%" (toString sa.cs_next_var))) = NONE` by
+    (simp[Abbr `G1`, ptrDisciplineTheory.step_prov_def,
+          ptrDisciplineTheory.out_prov_def, ptrDisciplineTheory.first_prov_def,
+          ptrDisciplineTheory.set_prov_def, Abbr `i0`,
+          ptrDisciplineTheory.op_prov_def, finite_mapTheory.FLOOKUP_DRESTRICT] >>
+     Cases_on `x` >> gvs[ptrDisciplineTheory.op_prov_def]) >>
+  `op_prov G2 x = NONE /\
+   op_prov G2 (Var (STRING #"%" (toString sa.cs_next_var))) = NONE` by
+    (simp[Abbr `G2`, ptrDisciplineTheory.step_prov_def,
+          ptrDisciplineTheory.out_prov_def, ptrDisciplineTheory.set_prov_def,
+          Abbr `i1`, ptrDisciplineTheory.op_prov_def,
+          finite_mapTheory.FLOOKUP_DRESTRICT] >>
+     Cases_on `x` >> gvs[ptrDisciplineTheory.op_prov_def]) >>
+  `(!v. x = Var v ==> v NOTIN FDOM G2) /\
+   STRING #"%" (toString sa.cs_next_var) NOTIN FDOM G2` by
+    (Cases_on `x` >> gvs[ptrDisciplineTheory.op_prov_def,
+         finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]) >>
+  `!D. ptr_inst_ok D lo 0 ctx func G2 tn2 i2 s2` by
+    (gen_tac >>
+     simp[ptrSafeRunTheory.ptr_inst_ok_def, Abbr `i2`,
+          ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
+          codegenRelTheory.source_memory_write_ranges_def,
+          contextCodegenRelTheory.source_memory_read_ranges_def,
+          venomExecSemanticsTheory.step_inst_non_invoke] >>
+     conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+     conj_tac >- (gen_tac >> Cases_on `op = x` >> simp[] >>
+       Cases_on `op = Var (STRING #"%" (toString sa.cs_next_var))` >> gvs[]) >>
+     simp[Abbr `s3`, Abbr `s2`, Abbr `s1`, venomStateTheory.update_var_def,
+          ptrDisciplineTheory.allocas_from_def,
+          ptrDisciplineTheory.allocas_below_fmp_def] >>
+     gvs[ptrDisciplineTheory.allocas_from_def,
+         ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
+  qabbrev_tac `tn3 = step_taint i2 s2 s3 tn2` >>
+  `op_taint tn3 (Var (STRING #"%" (toString (sa.cs_next_var + 1)))) = {} /\
+   op_taint tn3 (Var (STRING #"%" (toString (sa.cs_next_var + 2)))) = {}` by
+    (gvs[ptrDisciplineTheory.op_taint_def] >>
+     simp[Abbr `tn3`, ptrDisciplineTheory.op_taint_def,
+         ptrDisciplineTheory.step_taint_def, ptrDisciplineTheory.set_var_taint_def,
+         ptrDisciplineTheory.out_taint_def, Abbr `i2`,
+         finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `!D G0. ptr_inst_ok D lo 0 ctx func G0 tn3 i3 s3` by
+    (rpt gen_tac >>
+     simp[ptrSafeRunTheory.ptr_inst_ok_def, Abbr `i3`,
+          ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
+          codegenRelTheory.source_memory_write_ranges_def,
+          contextCodegenRelTheory.source_memory_read_ranges_def,
+          venomExecSemanticsTheory.step_inst_non_invoke] >>
+     conj_tac >- (gen_tac >>
+       Cases_on `op = Var (STRING #"%" (toString (sa.cs_next_var + 1)))` >> simp[] >>
+       Cases_on `op = Var (STRING #"%" (toString (sa.cs_next_var + 2)))` >> gvs[]) >>
+     simp[Abbr `s4`, Abbr `s3`, Abbr `s2`, Abbr `s1`, venomStateTheory.update_var_def,
+          ptrDisciplineTheory.allocas_from_def, ptrDisciplineTheory.allocas_below_fmp_def] >>
+     gvs[ptrDisciplineTheory.allocas_from_def,
+         ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
+  qabbrev_tac `tn4 = step_taint i3 s3 s4 tn3` >>
+  `op_taint tn4 (Var (STRING #"%" (toString (sa.cs_next_var + 3)))) = {}` by
+    simp[Abbr `tn4`, ptrDisciplineTheory.op_taint_def,
+         ptrDisciplineTheory.step_taint_def, ptrDisciplineTheory.set_var_taint_def,
+         ptrDisciplineTheory.out_taint_def, Abbr `i3`,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `!D G0. ptr_inst_ok D lo 0 ctx func G0 tn4 i4 s4` by
+    (rpt gen_tac >>
+     simp[ptrSafeRunTheory.ptr_inst_ok_def, Abbr `i4`,
+          ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
+          codegenRelTheory.source_memory_write_ranges_def,
+          contextCodegenRelTheory.source_memory_read_ranges_def,
+          venomExecSemanticsTheory.step_inst_non_invoke] >>
+     simp[Abbr `s5`, Abbr `s4`, Abbr `s3`, Abbr `s2`, Abbr `s1`, venomStateTheory.update_var_def,
+          ptrDisciplineTheory.allocas_from_def, ptrDisciplineTheory.allocas_below_fmp_def] >>
+     gvs[ptrDisciplineTheory.allocas_from_def,
+         ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
+  qabbrev_tac `tn5 = step_taint i4 s4 s5 tn4` >>
+  `op_taint tn5 (Var (STRING #"%" (toString (sa.cs_next_var + 4)))) = {}` by
+    simp[Abbr `tn5`, ptrDisciplineTheory.op_taint_def,
+         ptrDisciplineTheory.step_taint_def, ptrDisciplineTheory.set_var_taint_def,
+         ptrDisciplineTheory.out_taint_def, Abbr `i4`,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `!D G0. ptr_inst_ok D lo 0 ctx func G0 tn5 i5 s5` by
+    (rpt gen_tac >>
+     simp[ptrSafeRunTheory.ptr_inst_ok_def, Abbr `i5`,
+          ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
+          codegenRelTheory.source_memory_write_ranges_def,
+          contextCodegenRelTheory.source_memory_read_ranges_def,
+          venomExecSemanticsTheory.step_inst_non_invoke] >>
+     simp[Abbr `s5`, Abbr `s4`, Abbr `s3`, Abbr `s2`, Abbr `s1`,
+          venomStateTheory.update_var_def, venomStateTheory.revert_state_def,
+          venomStateTheory.set_returndata_def,
+          ptrDisciplineTheory.allocas_from_def, ptrDisciplineTheory.allocas_below_fmp_def] >>
+     gvs[ptrDisciplineTheory.allocas_from_def,
+         ptrDisciplineTheory.allocas_below_fmp_def] >> metis_tac[]) >>
+  qabbrev_tac `G3 = step_prov PG G2 i2 s3` >>
+  qabbrev_tac `G4 = step_prov PG G3 i3 s4` >>
+  qabbrev_tac `G5 = step_prov PG G4 i4 s5` >>
+  `i0.inst_opcode = SUB /\ i1.inst_opcode = SLT /\
+   i2.inst_opcode = EQ /\ i3.inst_opcode = AND /\ i4.inst_opcode = ISZERO` by
+    simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, Abbr `i4`] >>
+  `!D. inst_seq_ptr D lo ctx func PG G tn [i0;i1;i2;i3;i4] s G5 tn5` by
+    (gen_tac >> gvs[Abbr `G1`, Abbr `G2`, Abbr `G3`,
+        Abbr `G4`, Abbr `G5`, Abbr `tn1`, Abbr `tn2`, Abbr `tn3`,
+        Abbr `tn4`, Abbr `tn5`] >>
+     simp[inst_seq_ptr_def, instIdxIndepTheory.step_inst_inst_idx_indep,
+          instIdxIndepTheory.exec_result_map_def, is_terminator_def] >>
+     FAIL_TAC "prefix cursor checks") >>
+  FAIL_TAC "abs abort prefix path"
 QED
