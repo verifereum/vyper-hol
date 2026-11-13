@@ -338,6 +338,21 @@ Proof
   metis_tac[]
 QED
 
+Theorem abi_decode_struct_tuple_source:
+  FLOOKUP env nsid = SOME (StructArgs args) ==>
+  (abi_decode_source_accepts env (StructT nsid) bs v <=>
+    ?vs. abi_decode_source_accepts (env \\ nsid) (TupleT (MAP SND args)) bs
+      (ArrayV (TupleV vs)) /\
+      v = StructV (ZIP (MAP FST args,vs)))
+Proof
+  strip_tac >>
+  asm_simp_tac bool_ss [abi_decode_source_accepts_def, vyper_to_abi_type_def] >>
+  simp_tac bool_ss [dec_def, abi_decode_members_value, REVERSE_DEF, APPEND] >>
+  asm_simp_tac (srw_ss()) [abi_to_vyper_def, AllCaseEqs()] >>
+  asm_simp_tac (srw_ss()) [abi_decode_members_value, REVERSE_DEF, APPEND,
+    abi_to_vyper_def, AllCaseEqs(), Excl "dec_def"] >> metis_tac[]
+QED
+
 Theorem abi_decode_tuple_rows_raw_accept:
   abi_tuple_rows_schema ce env rows /\
   tys = MAP (\(ei,ty,tv,asz,msz). ty) rows /\
