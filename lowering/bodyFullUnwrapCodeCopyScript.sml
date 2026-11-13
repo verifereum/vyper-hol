@@ -606,5 +606,7 @@ Theorem unwrap_code_copy_origin_ptr:
     wb_frame cenv ee ee sb s z /\
     ghost_kept_at lo cenv ee sb G tn s G' tn'
 Proof
-  cheat
+  strip_tac >> Cases_on `cenv.ce_is_ctor`
+  >- (drule_all unwrap_code_copy_ctor_origin_ptr >> simp[]) >>
+  drule_all unwrap_code_copy_runtime_origin_ptr >> simp[]
 QED
