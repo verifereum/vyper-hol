@@ -2,7 +2,22 @@
 Theory fragGasPathFrameMem
 Ancestors
   execMemoryLength fragGasPathMem allocaHistory venomExecProofs venomExecSemantics
-  venomState fragExec arithmetic
+  venomState venomMemProofs localPtrsProps fragExec arithmetic
+
+Theorem path_mem_edge_alloca_inv[local]:
+  gas_path_mem_edge ctx fn s n (OK t) /\ alloca_inv s ==> alloca_inv t
+Proof
+  rw[gas_path_mem_edge_def] >> gvs[exit_result_def] >>
+  imp_res_tac alloca_inv_step_inst_proof >>
+  imp_res_tac eval_phis_preserves_alloca_fields >>
+  gvs[alloca_inv_set_inst_idx]
+  >- (irule alloca_inv_set_inst_idx >> irule alloca_inv_fields >>
+      qexists_tac `t'` >> simp[])
+  >- metis_tac[exit_result_def]
+  >- (irule alloca_inv_set_inst_idx >> irule alloca_inv_fields >>
+      qexists_tac `t'` >> simp[]) >>
+  metis_tac[exit_result_def]
+QED
 
 Theorem path_mem_edge_history[local]:
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\
@@ -19,6 +34,21 @@ Proof
       simp[] >> drule_all alloca_history_step >> simp[])
   >- metis_tac[alloca_history_step]
   >> metis_tac[exit_result_def]
+QED
+
+Theorem gas_path_mem_allocation_state:
+  !ctx fn s n r. gas_path_mem ctx fn s n r ==>
+  !t. r = OK t /\ fn_inst_ids_distinct fn /\
+    alloca_history fn s /\ alloca_inv s ==>
+    alloca_history fn t /\ alloca_inv t
+Proof
+  ho_match_mp_tac gas_path_mem_ind >> rpt conj_tac
+  >- simp[]
+  >- (rpt strip_tac >> gvs[] >>
+      imp_res_tac path_mem_edge_alloca_inv >>
+      imp_res_tac path_mem_edge_history >>
+      fs[]) >>
+  simp[exit_result_def] >> metis_tac[exit_result_def]
 QED
 
 Theorem gas_path_mem_zero_history:
