@@ -908,7 +908,35 @@ Resume aggregate_make_tuple_flat_sim[rest]:
 QED
 
 Resume aggregate_make_tuple_flat_sim[tuple_join]:
+  (* Drop the hypotheses the joins below never use (consumed by the head
+     and tail steps); gnvs over all of them was near the 2.5 s step limit. *)
+  MAP_EVERY (fn q => rpt (qpat_x_assum q kall_tac))
+    [`gas_outcome _ _ _ _ _ _ _`, `gas_marked_exec _ _ _ _ _ _ _ _`,
+     `gas_marked_path _ _ _ _ _ _`, `eval_expr _ _ _ = _`,
+     `compile_make_tuple _ _ _ _ _ _ _ = _`, `compile_expr _ _ _ _ = _`,
+     `compile_store_memory _ _ _ _ _ _ = _`, `emit_op _ _ _ = _`,
+     `unwrap_value _ _ _ = _`, `emitted_insts _ _ = _`,
+     `exprs_case _ _ _ _ _ _`, `expr_body_pre _ _ _ _ _`,
+     `!e st. (e = h \/ MEM e args) /\ _ ==> _`, `_ /\ LIST_REL _ tys' args`,
+     `~nocalls ==> !e. _`, `nocalls ==> int_calls_expr _ = _`,
+     `well_typed_expr _ _`,
+     `post_value_type _ _ = _`, `eval_result_typed _ _ _`,
+     `!v. read_result _ _ _ = _ ==> _`, `read_result _ _ _ = _`,
+     `OPT_MMAP _ _ = _`, `ce.ce_is_ctor ==> _`,
+     `!name itv iv io. ce.ce_is_ctor /\ _ ==> _`] >>
+  (* Keep the conditional memory-frame facts out of gnvs's assumption
+     passes, where each would rewrite every other assumption. *)
+  MAP_EVERY (fn q => qpat_x_assum q mp_tac)
+    [`!a k. _ ==>
+        mem_bytes_at a k t2.vs_memory = mem_bytes_at a k u.vs_memory`,
+     `!aid c sz a k. _ ==>
+        mem_bytes_at a k t2.vs_memory = mem_bytes_at a k t1.vs_memory`,
+     `!p n. b <= p /\ _ ==> _`,
+     `!aid p n. _ ==>
+        mem_bytes_at p n s.vs_memory = mem_bytes_at p n t2.vs_memory`,
+     `EVERY _ args ==> _`] >>
   gnvs[] >>
+  rpt (disch_then assume_tac) >>
   qpat_x_assum `q.vs_memory = t1.vs_memory` (fn th =>
     RULE_ASSUM_TAC (REWRITE_RULE [GSYM th]) >> assume_tac th) >>
   qpat_x_assum `q.vs_allocas = t1.vs_allocas` (fn th =>
