@@ -14,7 +14,7 @@ Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
   stmtSimLogArgsRun stmtSimLogArgsGrowth stmtSimLogSuffix stmtSimLogSource
   exprSimWordArgs stmtSimLogSuffixActual stmtSimLogSuffixFrame
-  stmtSimLogSuffixCode stmtSimLogArgs freshWrites
+  stmtSimLogSuffixCode stmtSimLogArgs freshWrites logComposeFacts
   compileEnv loweringStateRelDefs stmtLowering fragExec loweringSlice exprLoweringProps
   emitHelperProps vyperInterpreter vyperState vyperTyping list
   stmtSimLogTrace emitHelper context venomInst
@@ -135,16 +135,6 @@ QED
 
 (* ===== Statement simulation ===== *)
 
-Theorem log_emit_open_widen[local]:
-  emit_inst LOG ops [] sa = ((),sb) ==> ~block_is_terminated sb
-Proof
-  simp[emit_inst_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
-  Cases_on `sa.cs_current_insts` >>
-  simp[block_is_terminated_def, rich_listTheory.LAST_APPEND, LAST_CONS_cond,
-       mk_inst_def, is_terminator_def]
-QED
-
 (* stmtSimLogCompose's log_compile_structure, with any field types in
    ce_event_info. *)
 Theorem log_compile_structure_widen[local]:
@@ -168,30 +158,6 @@ Proof
   logWidenTacticsLib.declared_structure
 QED
 
-
-Theorem eval_log_bind_widen[local]:
-  ~cx.txn.is_static ==>
-  eval_stmt cx (Log id args) =
-    bind (eval_exprs cx args)
-      (\vs. bind (lift_option (encode_source_event (get_tenv cx) cx.sources
-                                 cx.txn.target id vs) "Log encode event")
-                 push_log)
-Proof
-  strip_tac >> simp[Once evaluate_def] >>
-  simp[FUN_EQ_THM, bind_def, ignore_bind_def] >> rpt gen_tac >>
-  rpt (CASE_TAC >> gvs[])
-QED
-
-Theorem log_args_admissible_widen[local]:
-  ~cx.txn.is_static /\
-  gas_admissible (eval_stmt cx (Log id args)) (stmt_res_ok lctx) es ==>
-  gas_admissible (eval_exprs cx args) log_args_res_ok es
-Proof
-  rw[gas_admissible_def, log_args_res_ok_def] >>
-  `eval_stmt cx (Log id args) (es with gas_obs := gs) = (INR exc, ee)` by
-    simp[log_eval_outcome] >>
-  first_x_assum drule >> strip_tac >> metis_tac[log_argument_error_ok]
-QED
 
 (* compile_log_ready_stmt_frag with argument types compatible with the
    field types tys, instead of equal to them; the buffer bounds are at the
@@ -241,13 +207,14 @@ Proof
   drule_all log_compile_structure_widen >> strip_tac >>
   qabbrev_tac `axs = ZIP (MAP FST ys,MAP expr_type args)` >>
   `gas_admissible (eval_exprs cx args) log_args_res_ok es` by
-    metis_tac[log_args_admissible_widen] >>
+    (simp[log_args_res_ok_def] >>
+     irule log_arguments_admissible >> simp[]) >>
   qspecl_then [`args`, `ctx`, `func`, `cenv`, `cx`, `R`, `es`, `sa`, `axs`, `sm`,
                `s0`, `env`, `env`, `es`, `ys`] mp_tac compile_log_eval_all_gas >>
   impl_tac
   >- (RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> simp[Abbr `axs`] >>
       first_assum ACCEPT_TAC) >>
-  qpat_assum `~cx.txn.is_static` (rewrite_tac o single o MATCH_MP eval_log_bind_widen) >>
+  qpat_assum `~cx.txn.is_static` (rewrite_tac o single o MATCH_MP eval_log_nonstatic_bind) >>
   simp[gas_outcome_def] >> strip_tac
   >- suspend "args_summary" >>
   qexists_tac `marks` >> disj2_tac >>
