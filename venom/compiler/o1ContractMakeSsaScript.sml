@@ -83,23 +83,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem make_ssa_stage_sim:
-  ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
-  o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
-  vs.vs_vars = FEMPTY /\ ~vs.vs_halted ==> ctx_sim D C C' vs vs
-Proof
-  strip_tac >>
-  `ctx_bisim C C'` by metis_tac[make_ssa_stage_bisim] >>
-  `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >>
-  irule ctx_bisim_ctx_sim >> simp[] >>
-  rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >>
-  `MEM fn C.ctx_functions /\ fn.fn_name = name` by
-    metis_tac[lookup_function_MEM,
-              ctxLookupAgreeHelpersTheory.lookup_function_selected_name] >>
-  gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM,
-      entry_fn_no_return_def] >> metis_tac[]
-QED
-
 (* MakeSSA keeps the fuel: each function's output finishes on its
    input's fuel, lifted through calls by fn_bisim_fuel_run_context. *)
 Theorem make_ssa_stage_sim_fuel:
