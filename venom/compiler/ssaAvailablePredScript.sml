@@ -2,7 +2,7 @@
 Theory ssaAvailablePred
 Ancestors
   venomWf venomWfProps venomExecProofs venomInst list
-  codegenReadyCompute dominatorAnalysisProps
+  codegenReadyCompute dominatorProofs
 
 Definition dom_pred_def:
   dom_pred fn lbl P <=>
