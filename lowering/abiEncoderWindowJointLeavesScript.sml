@@ -24,6 +24,8 @@ Theorem window_word_joint_path:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?G' tn'.
+    op_taint tn'
+      (Var (STRING #"%" (toString st.cs_next_var))) = {} /\
     tn'.t_mem = tn.t_mem DIFF {i | d <= i /\ i < d + 32} /\
     (!x. not_fresh_at st x ==> FLOOKUP G' x = FLOOKUP G x /\
        op_taint tn' (Var x) = op_taint tn (Var x)) /\
@@ -70,6 +72,7 @@ Proof
      qpat_assum `lookup_var dst s1 = _` (mp_then Any mp_tac mstore_ghost_frame) >>
      simp[] >> metis_tac[]) >>
   qexistsl_tac [`G2`, `tn2`] >>
+  conj_tac >- fs[op_taint_def, Abbr `tmp`] >>
   conj_tac >- simp[] >>
   conj_tac >-
     (rpt strip_tac >> `tmp <> x` by metis_tac[] >>
