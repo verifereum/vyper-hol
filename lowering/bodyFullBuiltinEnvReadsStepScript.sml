@@ -107,10 +107,13 @@ Proof
           FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >> metis_tac[]) >>
   reverse (rpt conj_tac)
   >- (irule ghost_inv_at_exterior_frame >>
-      qexistsl_tac [`s0`, `tn0`, `G0`, `es`, `sa`] >>
+      qexistsl_tac [`G0`, `es`, `s0`, `sa`, `tn0`] >>
       simp[Abbr `u`, update_var_def] >>
       simp[Abbr `inst`, Abbr `opc`, mk_inst_def, step_taint_def,
-           mem_taint_def, store_taint_def, adopt_reset_def, imm_taint_def]) >>
+           mem_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
+           new_site_bytes_def, step_writes_def, written_taint_def, range_bytes_def,
+           codegenRelTheory.source_memory_write_ranges_def,
+           FLOOKUP_DEF, pred_setTheory.EXTENSION] >> metis_tac[]) >>
   simp[Abbr `u`, Abbr `out`, update_var_def, eval_operand_def,
        lookup_var_def, FLOOKUP_UPDATE, Abbr `inst`, Abbr `opc`, mk_inst_def,
        step_prov_def, out_prov_def, set_prov_def, op_prov_def,
