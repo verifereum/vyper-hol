@@ -25,7 +25,7 @@
 Theory fragFuelExprHelpers
 Ancestors
   fragFuel fragFuelContextBase fragFuelContext compileEnv emitHelper context
-  venomInst exprLowering fragFuelLoopArrayMembership
+  venomInst exprLowering fragFuelLoopArrayMembership fragFuelLoopDynStorage
 Libs
   fragFuelLib
 
@@ -107,17 +107,6 @@ QED
 
 (* ===== Memory-address helpers and list membership ===== *)
 
-Theorem emit_op_var:
-  !opc ops st x st'.
-    emit_op opc ops st = (x, st') ==>
-    !y. x = Var y ==> var_below st'.cs_next_var y
-Proof
-  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[] >> simp[var_below_def] >> rpt strip_tac >>
-  fs[ASCIInumbersTheory.toString_inj]
-QED
-
 Theorem compile_ptr_load_var:
   !c i loc op st x st'.
     compile_ptr_load c i loc op st = (x, st') ==>
@@ -128,14 +117,6 @@ Proof
   rpt gen_tac >> TRY (Cases_on `c`) >> TRY (Cases_on `i`) >>
   simp_tac (srw_ss()) [] >> rpt strip_tac >>
   TRY (gvs[comp_bind_def] >> rpt (pairarg_tac >> gvs[])) >> metis_tac[emit_op_var]
-QED
-
-Theorem emit_op_not_label:
-  !opc ops st x st'. emit_op opc ops st = (x, st') ==> !l. x <> Label l
-Proof
-  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[]
 QED
 
 Theorem compile_ptr_load_not_label:
@@ -295,10 +276,15 @@ Proof
 QED
 
 Theorem fuel_ok_compile_stage_intcall_args:
-  !cenv vals flags tys Wv E.
-    fuel_ok Wv {} E (compile_stage_intcall_args cenv vals flags tys)
+  !cfn. (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>
+    !cenv vals flags tys Wv E.
+      fuel_ok Wv {} E (compile_stage_intcall_args cfn cenv vals flags tys)
 Proof
-  ho_match_mp_tac compile_stage_intcall_args_ind >> rpt strip_tac >>
+  `!cfn cenv vals flags tys.
+     (!c t e Wv E. fuel_ok Wv {} E (cfn c t e)) ==>
+     !Wv E. fuel_ok Wv {} E (compile_stage_intcall_args cfn cenv vals flags tys)`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac compile_stage_intcall_args_ind >> rpt strip_tac >> gvs[] >>
   simp_tac (srw_ss()) [Once compile_stage_intcall_args_def, LET_THM] >>
   ft [fuel_ok_unwrap_value, fuel_ok_compile_alloc_buffer,
       fuel_ok_context_storage, fuel_ok_compile_store_memory]
@@ -333,7 +319,8 @@ Theorem fuel_ok_compile_dynarray_append:
       (compile_dynarray_append cenv base v ws es dt st cap prim lo so)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_dynarray_append_def, LET_THM] >>
-  ft [fuel_ok_compile_store_memory, CONJUNCT2 fuel_ok_compile_word_copy_loop]
+  ft [fuel_ok_compile_store_memory, CONJUNCT2 fuel_ok_compile_word_copy_loop,
+      fuel_ok_compile_store_slots]
 QED
 
 (* The loop leaf needs the length operand allocated before it. *)

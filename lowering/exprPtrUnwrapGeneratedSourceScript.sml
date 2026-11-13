@@ -52,7 +52,8 @@ Proof
      gvs[] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                       combinTheory.K_THM, opcode_case_def] >>
      simp[exec_read1_def, slot_copy_word_def, update_var_def, sload_def,
-          tload_def, contract_storage_def, contract_transient_def]) >>
+          tload_def, contract_storage_def, contract_transient_def,
+          eval_operand_def, lookup_var_def, FLOOKUP_UPDATE]) >>
   gvs[] >> simp[inst_seq_ptr_def]
 QED
 

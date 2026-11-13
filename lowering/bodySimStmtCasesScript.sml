@@ -1578,6 +1578,7 @@ Theorem body_assign_widened_aggregate_call:
    ty.
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
+    body_stmt_safe tops (Assign (BaseTarget (NameTarget id)) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
                 (Assign (BaseTarget (NameTarget id)) e) ==>
               occurs_abi_decode_target target tops) /\
@@ -1614,7 +1615,7 @@ Proof
     fs[body_inv_def, expr_sim_inv_def] >>
   `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by
     (Cases_on `e` >>
-     gvs[is_empty_value_expr_def, oneline exprLoweringTheory.lowered_value_type_def, expr_type_def]) >>
+     gvs[is_empty_value_expr_def, exprLoweringTheory.lowered_value_type_def, expr_type_def]) >>
   `expr_sim ctx func cenv cx (expr_type e) e es` by metis_tac[body_expr_ok_def] >>
   irule compile_assign_local_relayout_stmt_frag >>
   goal_assum (drule_at Any) >> simp[] >>
@@ -2208,6 +2209,7 @@ Theorem body_assign_tuple_other:
        body_tuple_target_ok cx (TupleTarget gs) v) /\ body_expr_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    body_stmt_safe tops (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
@@ -2259,6 +2261,7 @@ Theorem body_assign_tuple_widened_call[local]:
        body_tuple_target_ok cx (TupleTarget gs) v) /\
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    body_stmt_safe tops (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (Assign (TupleTarget gs) e) ==>
        occurs_abi_decode_target target tops) /\
