@@ -21457,6 +21457,53 @@ Proof
   (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >> simp[]
 QED
 
+Theorem mm_local_safe_flatmap_interval[local]:
+  !m n es t out es' pre.
+  n + m <= LENGTH is /\
+  (!j pref sj tj chunk sj'. n <= j /\ j < n + m /\
+    mm_flat_map_supply f supply (TAKE j is) = (pref,sj) /\
+    Inv j (LENGTH pref) sj tj /\ f sj (EL j is) = (chunk,sj') ==>
+    ?tj'. mm_local_safe_exec_prefix P fuel ctx chunk tj tj' /\
+      Inv (SUC j) (LENGTH pref + LENGTH chunk) sj' tj') /\
+  mm_flat_map_supply f supply (TAKE n is) = (pre,es) /\
+  Inv n (LENGTH pre) es t /\
+  mm_flat_map_supply f es (TAKE m (DROP n is)) = (out,es') ==>
+  ?t'. mm_local_safe_exec_prefix P fuel ctx out t t' /\
+    Inv (n + m) (LENGTH pre + LENGTH out) es' t'
+Proof
+  Induct_on `m`
+  >- (simp[mm_flat_map_supply_def, mm_local_safe_exec_prefix_def] >>
+      rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  `n < LENGTH is` by decide_tac >>
+  `TAKE (SUC m) (DROP n is) = EL n is :: TAKE m (DROP (SUC n) is)` by
+    simp[rich_listTheory.DROP_CONS_EL] >>
+  Cases_on `f es (EL n is)` >> rename1 `f es (EL n is) = (chunk,es1)` >>
+  Cases_on `mm_flat_map_supply f es1 (TAKE m (DROP (SUC n) is))` >>
+  rename1 `mm_flat_map_supply f es1 _ = (tail,es2)` >>
+  `out = chunk ++ tail /\ es' = es2` by gvs[mm_flat_map_supply_def] >>
+  `?t1. mm_local_safe_exec_prefix P fuel ctx chunk t t1 /\
+    Inv (SUC n) (LENGTH pre + LENGTH chunk) es1 t1` by
+    (qpat_x_assum `!j pref sj tj chunk sj'. _`
+      (qspecl_then [`n`,`pre`,`es`,`t`,`chunk`,`es1`] mp_tac) >> simp[]) >>
+  `mm_flat_map_supply f supply (TAKE (SUC n) is) = (pre ++ chunk,es1)` by
+    (`TAKE (SUC n) is = TAKE n is ++ [EL n is]` by
+       simp[rich_listTheory.TAKE_SUC_BY_TAKE, listTheory.SNOC_APPEND] >>
+     qpat_assum `TAKE (SUC n) is = _` (fn th => once_rewrite_tac[th]) >>
+     irule mm_local_flat_map_supply_append >> qexists_tac `es` >>
+     simp[mm_flat_map_supply_def]) >>
+  qpat_x_assum `!n es t out es' pre. _`
+    (qspecl_then [`SUC n`,`es1`,`t1`,`tail`,`es2`,`pre ++ chunk`] mp_tac) >>
+  (impl_tac >- (gvs[arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_COMM] >>
+    rpt strip_tac >> metis_tac[])) >>
+  strip_tac >> qexists_tac `t'` >> conj_tac
+  >- (asm_rewrite_tac[] >> rewrite_tac[mm_local_safe_exec_prefix_append] >>
+      qexists_tac `t1` >> simp[]) >>
+  `n + SUC m = SUC n + m` by decide_tac >>
+  qpat_x_assum `Inv (SUC n + m) _ _ _` mp_tac >>
+  asm_rewrite_tac[LENGTH_APPEND, arithmeticTheory.ADD_ASSOC]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
