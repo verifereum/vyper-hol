@@ -1,9 +1,9 @@
 (* Empty-path immutable augmented-assignment entry interfaces. *)
 Theory immutableAugAssignRootEntry
 Ancestors
-  bodyAugAssignOther bodyAugPlaceTarget immutableWordReadMemory
+  bodyAugAssignOther bodyAugPlaceTarget bodyImmutableAugAssignFacts
   immutableAugAssignRootPrefix
-  exprSimPopImmutableTarget augAssignPlaceCompileMemory immutableAugAssignRootSource
+  augAssignPlaceCompileMemory bodyStorageMetadata vyperTypeEnv
   supportedStmts supportedExprForms supportedTypes vyperTypeSystem vyperTypeInvariants
 
 Theorem immutable_augassign_root_metadata:
@@ -27,33 +27,39 @@ Theorem immutable_augassign_root_metadata:
     (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
 Proof
   strip_tac >>
-  `type_place_target env (TopLevelNameTarget (src,id)) = SOME (Type ty) /\
-   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
-   augassign_operand_ok ty bop e` by
-    gvs[type_stmt_def, well_typed_target_def, AllCaseEqs()] >>
-  `!ts. get_module_code cx src = SOME ts ==> find_var_decl_by_name id ts = NONE` by
-    gvs[targetPlaceSimTheory.immutable_root_def, targetPlaceSimTheory.target_root_def] >>
-  drule_all imm_target_root_assignable >> strip_tac >>
-  drule_all imm_target_root_layout >> strip_tac >>
-  `cx.in_deploy /\ cenv.ce_is_ctor /\
-   cenv.ce_module_var_type (src,id) = SOME ty` by
-    (conj_asm1_tac
-     >- (spose_not_then assume_tac >>
-         fs[exprSimHypsDefsTheory.expr_sim_inv_def, env_consistent_def,
-            env_context_consistent_def, bare_global_assignable_complete_def] >>
-         gvs[]) >>
-     gvs[exprSimHypsDefsTheory.expr_sim_inv_def,
-         exprSimHypsDefsTheory.bare_globals_layout_def,
-         env_consistent_def, env_context_consistent_def] >>
-     qpat_x_assum `!src id ty. FLOOKUP env.bare_global_assignable _ = _ ==> ?ts. _`
-       drule >> strip_tac >>
-     qpat_x_assum `!src id ty. FLOOKUP env.bare_globals _ = _ ==>
-                              cenv.ce_module_var_type _ = _` drule >> simp[] >>
-     metis_tac[exprSimHypsDefsTheory.expr_sim_inv_def,
-       env_consistent_def, env_context_consistent_def,
-       bare_global_assignable_complete_def, exprSimHypsDefsTheory.bare_globals_layout_def]) >>
-  drule stmtSimAugAssignTheory.augassign_operand_ok_operands >> simp[] >>
-  metis_tac[]
+  drule stmtSimAugAssignPlaceTheory.aug_place_typing >> strip_tac >>
+  `get_module_code cx NONE = SOME tops` by fs[bodySimTheory.body_inv_def] >>
+  `?ts. get_module_code cx src = SOME ts /\
+        find_var_decl_by_name id ts = NONE` by
+    gvs[targetPlaceSimTheory.immutable_root_def,
+        targetPlaceSimTheory.target_root_def] >>
+  `~supported_aug_target tops bindings (TopLevelNameTarget (src,id))` by
+    (spose_not_then assume_tac >>
+     drule supported_aug_toplevel_decl >> strip_tac >> gvs[] >>
+     metis_tac[aug_storage_decl_some]) >>
+  `~supported_scalar_target tops (src,id)` by
+    (spose_not_then assume_tac >>
+     qpat_x_assum `supported_scalar_target _ _` mp_tac >>
+     simp[supported_scalar_target_def] >>
+     Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
+     rename1 `_ = SOME decl` >> PairCases_on `decl` >>
+     Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
+     simp[] >> strip_tac >>
+     drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
+     metis_tac[aug_storage_decl_some]) >>
+  `?ity. supported_immutable_type tops (src,id) = SOME ity` by
+    fs[supported_stmt_def, supported_target_def, optionTheory.IS_SOME_EXISTS] >>
+  `cx.in_deploy` by
+    (spose_not_then assume_tac >>
+     `env_context_consistent env cx` by
+       fs[exprSimHypsDefsTheory.expr_sim_inv_def, env_consistent_def] >>
+     drule_all augassign_immutable_runtime_untyped >> gvs[]) >>
+  drule_all immutable_augassign_metadata >> strip_tac >> gvs[] >>
+  drule_all immutable_augassign_entry >> strip_tac >>
+  `FLOOKUP env.bare_global_assignable (cenv.ce_module,id) = SOME ity` by
+    (Cases_on `FLOOKUP env.bare_global_assignable (cenv.ce_module,id)` >>
+     gvs[type_place_target_TopLevelNameTarget]) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem immutable_augassign_root_entry:
@@ -97,14 +103,19 @@ Theorem immutable_augassign_root_entry:
     u.vs_inst_idx = LENGTH s1.cs_current_insts /\ (!l. cur <> Label l)
 Proof
   strip_tac >> drule_all immutable_augassign_root_metadata >> strip_tac >>
-  `is_word_type ty` by
-    (irule supported_binop_word_type >>
-     fs[supported_stmt_def] >> metis_tac[]) >>
-  drule_all immutable_augassign_root_source >> strip_tac >>
-  `imm_place_at cenv cx es (PlaceR (ImmutablePlace src id [])) (n2w off) ty` by
-    (simp[imm_place_at_def, loweringPostsTheory.mem_path_offset_def,
-          vyperStateTheory.evaluate_subscripts_def] >> metis_tac[]) >>
-  drule_all immutable_place_word_read >> strip_tac >> gvs[] >>
+  drule stmtSimAugAssignPlaceTheory.aug_place_typing >> strip_tac >>
+  `is_word_type ty` by metis_tac[exprSimSourceTheory.word_value_type_word] >>
+  `FLOOKUP env.bare_globals (src,id) = SOME ty` by
+    (fs[exprSimHypsDefsTheory.expr_sim_inv_def, env_consistent_def,
+        env_context_consistent_def] >> metis_tac[]) >>
+  drule_all immutable_augassign_entry >> strip_tac >> gvs[] >>
+  drule_all immutable_augassign_source_prefix >> strip_tac >>
+  drule_all immutable_augassign_load >> strip_tac >>
+  `type_memory_size tv = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
+  `off + type_memory_size tv <= s.vs_alloca_next` by
+    (fs[exprLoweringPropsTheory.stmt_state_rel_def,
+        exprLoweringPropsTheory.immutable_alloca_sep_def] >>
+     first_x_assum drule_all >> simp[]) >>
   drule_all immutable_augassign_root_compilation >> strip_tac >> gvs[] >>
   drule immutable_augassign_root_prefix_mem >>
   simp[] >> disch_then drule_all >> strip_tac >>

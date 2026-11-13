@@ -1,7 +1,7 @@
 (* Compilation and safe load prefix for a constructor immutable scalar. *)
 Theory immutableAugAssignRootPrefix
 Ancestors
-  augAssignPlaceCompileMemory immutableWordReadMemory immutableWordStoreFrame
+  augAssignPlaceCompileMemory
   bodyDeclMemoryCounted allocaFootprint emitHelperProps exprLoweringProps
   exprLowering compileEnv venomState venomInst fragGasMode venomExecSemantics
   loweringStateRelDefs
