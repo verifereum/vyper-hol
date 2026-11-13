@@ -687,14 +687,18 @@ Proof
      `alloca_frame cenv ee (sa with cs_next_var := sn.cs_next_var) q cenv ee u` by
        (qpat_x_assum `expr_post H0 _ _ _ _ _ ee (sa with cs_next_var := sn.cs_next_var) _ q ee _ _ u`
           (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO] expr_post_alloca_frame)) >>
-        simp[] >> qpat_x_assum `vv_post H0 _ _ _ _ _ es sa sn s0 ee tv vv q` mp_tac >>
-        simp[vv_post_def]) >>
+        simp[] >>
+        qpat_assum `vv_post H0 _ _ _ _ _ es sa sn s0 ee tv vv q`
+          (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+        first_assum ACCEPT_TAC) >>
      qpat_assum `alloca_frame cenv es sa s0 cenv ee q` (fn th1 =>
        qpat_assum `alloca_frame cenv ee _ q cenv ee u` (fn th2 =>
          irule (MATCH_MP (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
            alloca_frame_trans) th1) th2))) >>
-     simp[] >> qpat_x_assum `vv_post H0 _ _ _ _ _ es sa sn s0 ee tv vv q` mp_tac >>
-     simp[vv_post_def]) >>
+     simp[] >>
+     qpat_assum `vv_post H0 _ _ _ _ _ es sa sn s0 ee tv vv q`
+       (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+     first_assum ACCEPT_TAC) >>
   qexistsl_tac [`v`, `u`] >> asm_rewrite_tac[] >>
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
   simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
@@ -974,7 +978,8 @@ Proof
   `stmt_state_rel H0 ctx func cenv cx ee t` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H0` mp_tac) >>
      impl_tac >- first_assum ACCEPT_TAC >> strip_tac) >>
-  drule_at (Pat `emit_void _ _ _ = _`) assign_attr_local_store_marked_path >>
+  drule_at (Pat `emit_void _ _ _ = _`)
+    (INST_TYPE [alpha |-> ``:256``] assign_attr_local_store_marked_path) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `fields_layout _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = _`)) >>
@@ -1005,7 +1010,9 @@ Proof
   qexistsl_tac [`ee with scopes := pre ++
     (env1 |+ (id,entry with <|value := StructV (AFUPDKEY fld (K v) vals);
       popped := []|>)) :: rest`, `t'`] >>
-  conj_tac >- simp[gas_marked_exec_def] >>
+  conj_tac >-
+    (simp[gas_marked_exec_def] >>
+     qpat_x_assum `gas_marked_path F ctx func t 0 (OK t')` mp_tac >> simp[]) >>
   qx_gen_tac `H` >> simp_tac (srw_ss()) [] >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx ee t /\
    storage_well_formed_on cx ee (FST H)` by
@@ -1172,7 +1179,7 @@ Proof
           `t.vs_current_bb = sm.cs_current_bb /\
            t.vs_inst_idx = LENGTH sm.cs_current_insts` by metis_tac[] >>
           qspecl_then [`ctx`, `func`, `cenv`, `cx`, `st0`, `lctx`, `env`, `id`,
-            `fld`, `sid`, `fty`, `fsz`, `e`, `es`, `sa`, `sm`, `sn`, `su`, `sf`,
+            `fld`, `sid`, `expr_type e`, `fsz`, `e`, `es`, `sa`, `sm`, `sn`, `su`, `sf`,
             `vv`, `dst`, `op`, `p`, `sz`, `s0`, `marks`, `tv`, `es_end`, `t`]
             mp_tac assign_attr_local_normal_continuation >>
           impl_tac >- (simp[] >> metis_tac[]) >>
