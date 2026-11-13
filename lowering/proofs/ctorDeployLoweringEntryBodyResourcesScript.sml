@@ -586,7 +586,8 @@ Proof
  rpt gen_tac >> strip_tac >>
  drule_all deploy_ctor_entry_registered_map_bounds >>
  disch_then (qspec_then `T` strip_assume_tac) >> fs[] >>
- `deploy_typing_ok tops am tx /\ supported_program tops` by fs[deploy_source_ok_def] >>
+ `deploy_typing_ok tops am tx /\ supported_program tops /\
+  supported_program_deploy tops` by fs[deploy_source_ok_def] >>
  drule gas_variant_deploy_entry_memory >> strip_tac >>
  `!id b sz. local_region cenv es0.scopes actual id b sz ==> imm_len tops <= b` by
    (rpt strip_tac >>
