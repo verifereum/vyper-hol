@@ -67,6 +67,33 @@ Proof
   gvs[] >> simp[Once compile_stmt_def, comp_bind_def, comp_return_def]
 QED
 
+Theorem compile_log_data_trace_declared:
+  cenv.ce_event_info (nsid_to_string id) = SOME (h,dtys,flags) /\
+  compile_log_eval_all cenv args sa = (ys,sm) /\
+  compile_log_topic_ops (FST (split_log_ops ys flags)) sm = (topics,st) /\
+  SND (split_log_ops ys flags) = data_ops /\ data_ops <> [] ==>
+  (compile_stmt cenv lctx ty (Log id args) sa = ((),sb) <=>
+   ?src s1 s2 dst s3 len s4.
+     compile_alloc_buffer
+       (MAX 32 (SUM (MAP (type_memory_bytes cenv)
+         (log_non_indexed_types flags dtys)))) st = (src,s1) /\
+     compile_log_store_data cenv data_ops (log_non_indexed_types flags dtys)
+       src.buf_operand 0 s1 = ((),s2) /\
+     compile_alloc_buffer
+       (MAX 32 (abi_size_bound cenv.ce_struct_fields
+         (TupleT (log_non_indexed_types flags dtys)))) s2 = (dst,s3) /\
+     compile_abi_encode_to_buf dst.buf_operand src.buf_operand
+       (type_to_abi_enc_info cenv.ce_struct_fields cenv
+         (TupleT (log_non_indexed_types flags dtys))) s3 = (len,s4) /\
+     emit_inst LOG
+       (Lit (n2w (LENGTH (Lit (n2w h)::topics))) ::
+         REVERSE (Lit (n2w h)::topics) ++ [len;dst.buf_operand]) [] s4 = ((),sb))
+Proof
+  strip_tac >>
+  simp[Once compile_stmt_def, NULL_EQ, comp_bind_def, comp_return_def,
+       comp_ignore_bind_def] >> rpt (pairarg_tac >> gvs[])
+QED
+
 Theorem compile_log_data_trace:
   cenv.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
   log_eval_view cenv args sa xs sm /\
