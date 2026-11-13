@@ -1132,7 +1132,9 @@ Resume compile_augassign_attr_storage_case[store]:
     (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
        augassign_attr_pre_store_frame >>
      disch_then irule >> simp[] >> metis_tac[]) >>
-  `alloca_frame cenv es sa s0 cenv es_end u` by fs[alloca_frame_def] >>
+  `alloca_frame cenv es sa s0 cenv es_end u` by
+    (qpat_x_assum `alloca_frame _ _ _ _ _ _ _` mp_tac >>
+     simp[alloca_frame_def]) >>
   qspecl_then [`H2`, `ctx`, `func`, `cx`, `lctx`, `cenv`, `tr`, `dst`,
     `res_op`, `s3`, `sb`, `u`, `es_end with gas_obs := []`, `slot`, `fs`,
     `fld`, `off`, `ftv`, `result`, `sa`, `s0`, `es`]
