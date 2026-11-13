@@ -29,6 +29,8 @@ Theorem extract32_prepare_ptr_counted:
     LENGTH bs < dimword (:256) /\ p+32+LENGTH bs < dimword (:256) /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    run_inst_seq (emitted_insts sm sb) s = OK (u with vs_inst_idx := s.vs_inst_idx) /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sm sb) s HG th /\
     gas_path_ptr D 0 ctx func PG G tn s 0 HG th (OK u) /\
     gas_marked_exec_ptr D (ctx,func) PG (return (BytesV bs))
       (ee,s,G,tn) [] (INL (BytesV bs)) ee HG th (OK u) /\

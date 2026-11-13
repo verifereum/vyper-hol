@@ -26,6 +26,8 @@ Theorem extract32_source_prefix_counted:
     ptr_mem_ok cx ty (BytesV bs) (Var src) HG th t /\
     lookup_var src t = SOME a /\ op_taint th (Var src) = {} /\
     not_fresh_at sc src /\ not_fresh_at sc len /\ not_fresh_at sc data /\
+    run_inst_seq (emitted_insts sb sc) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sb sc) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th (OK t) /\
     lookup_var len t = SOME (mload (w2n a) s) /\
     op_taint th (Var len) = {} /\ op_prov HG (Var len) = NONE /\
