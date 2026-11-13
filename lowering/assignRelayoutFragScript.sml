@@ -122,7 +122,7 @@ Proof
     `s0`, `s`, `sa`, `sb`, `sf`, `op`, `id`, `p`, `cap`, `dw`, `v`, `stv`,
     `dtv`, `sty`, `dty`, `pre`, `env`, `entry`, `rest`, `loc`, `bytes`, `st0`]
     mp_tac (INST_TYPE [alpha |-> ``:256``] assign_relayout_store_post_path) >>
-  impl_tac >- asm_rewrite_tac [] >>
+  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
   qexistsl_tac [`ee with scopes :=
     pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest`, `t`] >>
@@ -140,7 +140,11 @@ Proof
      (FST HH)` by
     (`storage_well_formed_on cx (ee with gas_obs := []) (FST HH)` by
        (qpat_x_assum `expr_post HH _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-        simp[expr_post_def]) >>
+        pure_rewrite_tac[expr_post_def] >>
+        disch_then (map_every assume_tac o CONJUNCTS) >>
+        first_assum ACCEPT_TAC) >>
+     `!b. get_storage cx (ee with gas_obs := []) b = get_storage cx ee b` by
+       (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
      fs[vyperStorageFootprintTheory.storage_well_formed_on_def,
         vyperStorageBackendTheory.get_storage_scopes]) >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
@@ -165,7 +169,7 @@ Proof
   qexistsl_tac [`cenv`, `ee`, `s`, `sb`] >> simp[] >>
   conj_tac >-
     (qpat_x_assum `alloca_frame cenv es sa s0 cenv _ s` mp_tac >> simp[]) >>
-  qpat_x_assum `alloca_frame cenv ee sb s cenv _ t` mp_tac >>
+  qpat_x_assum `alloca_frame cenv _ sb s cenv _ t` mp_tac >>
   qmatch_goalsub_abbrev_tac `ee with scopes := scs` >>
   `ee with <|scopes := scs; gas_obs := []|> =
    (ee with scopes := scs) with gas_obs := []` by
@@ -379,5 +383,5 @@ Proof
   irule assign_relayout_normal_continuation >>
   qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` (irule_at Any) >>
-  simp[] >> metis_tac[]
+  simp[] >> qexists_tac `H` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
