@@ -504,7 +504,7 @@ Proof
        `DISJOINT {a | slot <= a /\ a < slot+32} tn.t_mem`,`u.t_mem = tn.t_mem`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[DISJOINT_DEF, EXTENSION] >> metis_tac[LESS_TRANS]) >>
   drule_all source_array_setup_origin_ptr >>
-  disch_then (qspecl_then [`ARB`,`ctx`,`PG`,`\g r. F`] strip_assume_tac) >>
+  disch_then (qspecl_then [`ARB`,`ctx`,`PG`,`\g r. F`,`ARB`] strip_assume_tac) >>
   rename1 `SND (SND ops) = Var child` >>
   rename1 `op_taint u' (FST ops) = {}` >>
   qabbrev_tac `r = t' with vs_inst_idx := LENGTH middle.cs_current_insts` >>
