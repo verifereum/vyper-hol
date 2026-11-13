@@ -225,3 +225,17 @@ Proof
     supported_hashmap_decl_def, supported_function_decl_def,
     supported_event_fields_def]
 QED
+
+Theorem supported_hashmap_decl_header:
+  !ds id vis tr kt vt slot.
+    EVERY (supported_declaration_header tops) ds /\
+    supported_hashmap_decl ds id = SOME (vis,tr,kt,vt,slot) ==>
+    supported_hashmap_key_type kt /\ supported_hashmap_value tops vt /\ IS_SOME slot
+Proof
+  Induct >- simp[supported_hashmap_decl_def] >>
+  rpt gen_tac >> Cases_on `id` >> Cases_on `h` >>
+  simp[supported_hashmap_decl_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs(), supported_declaration_header_def,
+      optionTheory.option_case_compute] >>
+  metis_tac[]
+QED
