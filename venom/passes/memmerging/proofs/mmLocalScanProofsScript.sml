@@ -21034,6 +21034,50 @@ Proof
   metis_tac[stateEquivProofsTheory.execution_equiv_subset, pred_setTheory.SUBSET_UNIV]
 QED
 
+Theorem mm_local_eval_phis_idx[local]:
+  !insts s n.
+    eval_phis (s with vs_inst_idx := n) insts =
+    instIdxIndep$exec_result_map (\u. u with vs_inst_idx := n)
+      (eval_phis s insts)
+Proof
+  Induct >> rpt gen_tac >>
+  simp[venomExecSemanticsTheory.eval_phis_def,
+       instIdxIndepTheory.exec_result_map_def] >>
+  `eval_one_phi (s with vs_inst_idx := n) h = eval_one_phi s h` by
+    simp[venomExecSemanticsTheory.eval_one_phi_def,
+         instIdxIndepTheory.eval_op_inst_idx] >>
+  simp[] >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  Cases_on `eval_one_phi s h` >> simp[instIdxIndepTheory.exec_result_map_def] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `eval_phis s insts` >>
+  simp[instIdxIndepTheory.exec_result_map_def, venomStateTheory.update_var_def]
+QED
+
+Theorem mm_local_phi_entry_pair[local]:
+  state_equiv excluded (s with vs_inst_idx := 0) (t with vs_inst_idx := 0) /\
+  EVERY (\inst. inst.inst_opcode = PHI ==>
+    !v. MEM (Var v) inst.inst_operands ==> v NOTIN excluded) insts /\
+  eval_phis s insts = OK sp ==>
+  ?tp. eval_phis t insts = OK tp /\
+    state_equiv excluded (sp with vs_inst_idx := h) (tp with vs_inst_idx := h)
+Proof
+  strip_tac >>
+  `eval_phis (s with vs_inst_idx := 0) insts = OK (sp with vs_inst_idx := 0)` by
+    simp[mm_local_eval_phis_idx, instIdxIndepTheory.exec_result_map_def] >>
+  `?u. eval_phis (t with vs_inst_idx := 0) insts = OK u /\
+       state_equiv excluded (sp with vs_inst_idx := 0) u` by
+    metis_tac[venomExecProofsTheory.eval_phis_state_equiv] >>
+  qspecl_then [`t`,`insts`] strip_assume_tac
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs
+  >- (rename1 `eval_phis t insts = OK tp` >>
+      qexists_tac `tp` >> simp[] >>
+      `u = tp with vs_inst_idx := 0` by
+        fs[mm_local_eval_phis_idx, instIdxIndepTheory.exec_result_map_def] >>
+      gvs[state_equiv_def, execution_equiv_def,
+          stateFrameTheory.execution_frame_def, venomStateTheory.lookup_var_def]) >>
+  gvs[mm_local_eval_phis_idx, instIdxIndepTheory.exec_result_map_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
