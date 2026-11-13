@@ -2,7 +2,7 @@
 Theory sourceOwnedArrayConstructorPtr
 Ancestors
   sourceOwnedArrayLoopPtr decoderArrayInitPtr physicalArrayInitSequence abiEncoderSequence
-  fragGasSeqMem fragExecMem stmtForRangeMemoryParts calldataDynInit calldataBytesLeaf
+  fragGasOriginPtr fragGasPathPtr entryDispatchPtr codegenRel contextCodegenRel fragGasSeqPtr fragGasSeqMem fragExecMem stmtForRangeMemoryParts calldataDynInit calldataBytesLeaf
   decoderCalldataShell abiDecoderRange abiDecoderBytesBound abiEncoder sourceEncodingWindows sourceEncodingLayout abiDecoderCoherence
   ctorAbiActualArrayRun entrySinkExtraction fragExec
   abiDecoderRecursiveArray abiDecoderLoop abiDecoderArraySetupCode abiDecoderLoopRegisters
@@ -16,6 +16,41 @@ Ancestors
   emitHelperProps emitHelper exprLowering exprLoweringProps abiDecoderContract
   rich_list context compileEnv loweringStateRelDefs venomState venomInst
   venomExecSemantics venomMemDefs venomMemProofs valueEncoding valueEncodingDefs valueEncodingProofs venomWf finite_map words list arithmetic
+
+Theorem constructor_jump_origin_ptr[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) /\
+  ~s.vs_halted /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (jump_to lbl s),G,tn)
+Proof
+  strip_tac >>
+  `ptr_safe_step D lo 0 ctx fn PG G tn
+     (mk_inst id JMP [Label lbl] []) s` by
+    simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+      mk_inst_def, step_inst_non_invoke, step_inst_base_def, jump_to_def,
+      source_memory_write_ranges_def, source_memory_read_ranges_def, op_taint_def] >>
+  `gas_path_ptr_edge D lo ctx fn PG G tn s 0 G tn
+     (OK (jump_to lbl s))` by
+    (simp[gas_path_ptr_edge_def] >> qexists `0:num` >>
+     simp[step_inst_non_invoke, mk_inst_def, gasCountTheory.gas_count_step_def,
+       step_inst_base_opcode_eqs, is_terminator_def] >> metis_tac[]) >>
+  `gas_path_mem_edge ctx fn s 0 (OK (jump_to lbl s))` by
+    (simp[fragGasPathMemTheory.gas_path_mem_edge_def] >> qexists `0:num` >>
+     simp[step_inst_non_invoke, mk_inst_def, gasCountTheory.gas_count_step_def,
+       step_inst_base_opcode_eqs, is_terminator_def] >>
+     conj_tac >- (disj2_tac >>
+       simp[memSafeRunTheory.mem_safe_step_def, memSafeRunTheory.inst_dload_in_section_def] >>
+       irule instMemFrontierTheory.below_frontier_no_ranges >> simp[GSYM mk_inst_def]) >>
+     metis_tac[]) >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+     (OK (jump_to lbl s),G,tn)` by
+    (simp[gas_origin_ptr_edge_def] >>
+     metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
+  `~(jump_to lbl s).vs_halted` by simp[jump_to_def] >>
+  metis_tac[gas_origin_ptr_path_rules, APPEND]
+QED
 
 (* Initialization writes only its own registers, so freshness at the eventual
    decoder limit is preserved, not merely freshness at the initializer limit. *)
@@ -1423,6 +1458,24 @@ Resume source_owned_nonbulk_array_ptr[constructor_safety]:
        simp[mk_inst_def, is_terminator_def, step_inst_base_def] >>
      drule_all typedCopyArrayPtrTheory.ptr_safe_run_jump_no_phi >>
      disch_then (qspecl_then [`n`,`D`,`lower`,`ctx`,`PG`,`H`,`u`] mp_tac) >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
+     (init,H,u) [] (OK h,H,u)` by
+    (rpt gen_tac >>
+     qpat_assum `Abbrev (h = _)` mp_tac >>
+     qpat_assum `lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME bb` mp_tac >>
+     qpat_assum `bb.bb_instructions = loop_st.cs_current_insts ++ _` mp_tac >>
+     qpat_assum `init.vs_current_bb = loop_st.cs_current_bb` mp_tac >>
+     qpat_assum `init.vs_inst_idx = LENGTH loop_st.cs_current_insts` mp_tac >>
+     qpat_assum `~init.vs_halted` mp_tac >>
+     qpat_assum `allocas_from lower h` mp_tac >>
+     qpat_assum `~ctx_has_dalloca ctx` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac bool_ss [markerTheory.Abbrev_def] >> rpt strip_tac >>
+     irule constructor_jump_origin_ptr >>
+     gvs[allocas_from_def, jump_to_def] >>
+     reverse conj_tac >- metis_tac[] >>
+     qexists `loop_st.cs_next_id` >>
+     simp[get_instruction_def, EL_APPEND_EQN]) >>
   suspend "constructor_final_safety"
 QED
 
