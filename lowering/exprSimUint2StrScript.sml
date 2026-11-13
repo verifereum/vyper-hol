@@ -1574,7 +1574,7 @@ Proof
    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `emitted_insts _ _ = _`
        (fn h => qpat_x_assum `run_inst_seq _ _ = OK t` (mp_tac o REWRITE_RULE [h])) >>
-     simp[run_inst_seq_def, Once venomExecSemanticsTheory.step_inst_base_def,
+     simp[exprLoweringPropsTheory.run_inst_seq_def, Once venomExecSemanticsTheory.step_inst_base_def,
           venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def,
           venomStateTheory.eval_operand_def] >>
      Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >>
