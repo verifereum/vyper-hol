@@ -1,7 +1,7 @@
 (* Proof-only typing and layout boundaries for aggregate storage assignment. *)
 Theory bodyMemAssignTopCopyFacts
 Ancestors
-  bodyMemAssignTopWord bodySimStmtCases exprSimHyps
+  bodyMemAssignTopCopyIndex bodyMemAssignTopWord bodySimStmtCases exprSimHyps
   vyperTypeEnv vyperStorageLayoutSafety supportedProgram
   supportedTypes supportedExprs supportedStmts supportedStmtTraverse
   bodySim bodyExprPreFacts exprSimHypsDefs stmtSimDefs bodyStorageMetadata
@@ -131,28 +131,6 @@ Proof
   qpat_x_assum `IS_SOME (evaluate_type _ _)`
     (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
   metis_tac[])
-QED
-
-Theorem topcopy_not_bytestring:
-  !tops t. supported_storage_type tops t ==> ~is_bytestring_type t
-Proof
-  Cases_on `t` >> simp[is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[is_bytestring_type_def, supported_storage_type_def,
-       Once supported_nested_type_def, supported_full_word_type_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[is_bytestring_type_def, supported_storage_type_def,
-       Once supported_nested_type_def, supported_full_word_type_def]
-QED
-
-Theorem topcopy_no_length_word:
-  !tops t. supported_storage_type tops t /\
-    (!elem n. t <> ArrayT elem (Dynamic n)) ==> ~has_length_word t
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule topcopy_not_bytestring >>
-  Cases_on `t` >> simp[has_length_word_def, is_bytestring_type_def] >>
-  Cases_on `b` >> gvs[has_length_word_def, is_bytestring_type_def]
 QED
 
 Theorem topcopy_scalar_fit_equal[local]:
@@ -324,18 +302,4 @@ Theorem topcopy_source_bound:
 Proof
   strip_tac >> drule_all topcopy_val_store_size >> disch_tac >>
   gvs[expr_store_bound_def]
-QED
-
-Theorem topcopy_index_bound:
-  w2n b + 32*n <= s.vs_alloca_next /\ i < n ==>
-  w2n (b + n2w i * 32w : 256 word) + 32 <= s.vs_alloca_next
-Proof
-  strip_tac >>
-  `b + n2w i * 32w = n2w (w2n b + 32*i)` by
-    simp[GSYM word_add_n2w, GSYM word_mul_n2w, arithmeticTheory.MULT_COMM,
-         WORD_MULT_COMM] >>
-  asm_rewrite_tac[] >>
-  `w2n (n2w (w2n b + 32*i) : 256 word) <= w2n b + 32*i` by
-    simp[w2n_n2w, arithmeticTheory.MOD_LESS_EQ] >>
-  decide_tac
 QED

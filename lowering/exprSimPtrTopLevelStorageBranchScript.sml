@@ -1,6 +1,7 @@
 (* Source and compiler premises for the storage aggregate pointer branch. *)
 Theory exprSimPtrTopLevelStorageBranch
 Ancestors
+  sourceUnitExecution
   exprSimPtrTopLevelStorageSemantic exprSimPtrTopLevelStorageFrame
   exprSimTopLevelStorage exprSimUnwrapProps exprSimPtrTopLevelStorageAlloc
   vyperTypeGlobalLookupSoundness vyperStorageLayoutSafety
@@ -17,13 +18,13 @@ Theorem toplevel_storage_branch_source:
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME tv /\
   read_storage_slot cx tr (n2w slot) tv es = (INL v,es) /\
-  stmt_state_rel ctx fn cenv cx es s ==>
+  stmt_state_rel H ctx fn cenv cx es s ==>
   typ = ann /\
   evaluate_type (get_tenv cx) ann = SOME tv /\
   slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tv /\
-  (!st. storage_read_live cx tr st (n2w slot) tv) /\
+  (!st. storage_read_live H tr st (n2w slot) tv) /\
   w2n ((n2w slot):bytes32) + type_slot_size tv <= dimword (:256) /\
-  vv_post ctx fn cenv cx (TopLevelName ann (src,id)) es sa sa s
+  vv_post H ctx fn cenv cx (TopLevelName ann (src,id)) es sa sa s
     (es with gas_obs := []) (Value v)
     (LocatedValue ann (mk_ptr (Lit (n2w slot))
       (if tr then LocTransient else LocStorage))) s
@@ -40,7 +41,7 @@ Proof
   `storage_layout_safe cx` by fs[expr_sim_pre_def, expr_sim_inv_def] >>
   `w2n ((n2w slot):bytes32) + type_slot_size tv <= dimword (:256)` by
     (drule_all storage_layout_safe_region_nonoverflow >> simp[]) >>
-  `!st. storage_read_live cx tr st (n2w slot) tv` by
+  `!st. storage_read_live H tr st (n2w slot) tv` by
     (gen_tac >> irule declared_storage_region_read_live >>
      qexistsl [`src`, `id`, `[]`] >> simp[declared_storage_region_def]) >>
   gvs[] >>
@@ -63,7 +64,7 @@ Theorem toplevel_storage_branch_compile:
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME tv /\
   read_storage_slot cx tr (n2w slot) tv es = (INL v,es) /\
-  stmt_state_rel ctx fn cenv cx es s /\ ~is_word_type ann /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ~is_word_type ann /\
   lower_value compile_expr cenv ty (TopLevelName ann (src,id)) sa = (op,sb) ==>
   compile_ensure_in_memory (Lit (n2w slot))
     (if tr then LocTransient else LocStorage)
@@ -90,10 +91,10 @@ Proof
 QED
 
 Theorem toplevel_storage_backend_taint_dead:
-  stor_taint_ok cx tn s ==>
+  stor_taint_ok H cx tn s ==>
   !tr k j. (k,j) IN toplevel_copy_source_taint
     (if tr then LocTransient else LocStorage) tn ==>
-    storage_dead cx tr
+    storage_dead H tr
       (if tr then contract_transient s else contract_storage s) (w2n k) j
 Proof
   strip_tac >> Cases >> rpt gen_tac >> strip_tac >>
@@ -105,8 +106,8 @@ Proof
 QED
 
 Theorem toplevel_storage_branch_taint_live:
-  ghost_inv d cenv cx es G tn s /\
-  (!st. storage_read_live cx tr st a tv) /\
+  ghost_inv H d cenv cx es G tn s /\
+  (!st. storage_read_live H tr st a tv) /\
   w2n a + type_slot_size tv <= dimword (:256) ==>
   !i j. i < type_slot_size tv /\ j < 32 /\
     (a+n2w i,j) IN toplevel_copy_source_taint
@@ -115,7 +116,7 @@ Theorem toplevel_storage_branch_taint_live:
       (w2n a) tv (w2n a+i) j
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
-  `stor_taint_ok cx tn s` by fs[ghost_inv_def] >>
+  `stor_taint_ok H cx tn s` by fs[ghost_inv_def] >>
   drule toplevel_storage_backend_taint_dead >>
   disch_then (qspecl_then [`tr`, `a+n2w i`, `j`] mp_tac) >> simp[] >>
   `w2n (a+n2w i) = w2n a+i` by
@@ -160,8 +161,8 @@ Proof
 QED
 
 Theorem toplevel_storage_copy_robust_contents:
-  stor_taint_ok cx tn u /\
-  (!st. storage_read_live cx tr st a tv) /\
+  stor_taint_ok H cx tn u /\
+  (!st. storage_read_live H tr st a tv) /\
   well_formed_type_value tv /\ slots_in_range st (w2n a) tv /\
   decode_value st (w2n a) tv = SOME v /\
   storage_range_agree st
@@ -212,7 +213,7 @@ QED
 
 
 Theorem toplevel_local_footprint_forward[local]:
-  stmt_state_rel ctx fn cenv cx es s ==>
+  stmt_state_rel H ctx fn cenv cx es s ==>
   (!name b sz i. local_region cenv es.scopes s name b sz /\
     b <= i /\ i < b+sz ==> i NOTIN writes) ==>
   !name entry p sz w.
@@ -256,8 +257,8 @@ Proof
     |> Q.INST [`e` |-> `TopLevelName ann (src,id)`,
                `loc` |-> `if tr then LocTransient else LocStorage`]
     |> SRULE [expr_type_def, toplevel_backend_location]) >> simp[] >> disch_then drule_all >>
-    disch_then (qspecl_then [`tn0`, `PG`, `G0`, `cx_dead cx`] strip_assume_tac) >>
-    `stor_taint_ok cx tn0 u` by
+    disch_then (qspecl_then [`tn0`, `PG`, `G0`, `cx_dead H cx`] strip_assume_tac) >>
+    `stor_taint_ok H cx tn0 u` by
       (fs[ghost_inv_def, stor_taint_ok_def]) >>
     `storage_holds cx tr ann (Value v) (n2w slot) (es with gas_obs := []) u` by
       gvs[storage_holds_def, contract_transient_def, contract_storage_def] >>
@@ -299,11 +300,11 @@ Proof
       (fs[SUBSET_DEF, toplevel_copy_taint_bound_def, toplevel_copy_region_def,
           toplevel_copy_translated_taint_def] >> rpt strip_tac >>
        first_x_assum drule >> simp[] >> rpt strip_tac >> gvs[] >> decide_tac) >>
-    qpat_assum `stmt_state_rel _ _ _ _ es s0`
+    qpat_assum `stmt_state_rel _ _ _ _ _ es s0`
       (mp_then Any mp_tac toplevel_local_footprint_forward) >>
     disch_then (qspec_then `toplevel_copy_region (w2n w) (type_slot_size tv)` mp_tac) >>
     simp[] >> disch_then assume_tac >> fs[] >>
-    `ghost_inv d cenv cx (es with gas_obs := []) Gf tnf t` by
+    `ghost_inv H d cenv cx (es with gas_obs := []) Gf tnf t` by
       (irule toplevel_ghost_inv_memory_frame >>
        qexistsl_tac [`G0`, `es`, `s0`, `sa`, `tn0`,
          `toplevel_copy_region (w2n w) (type_slot_size tv)`] >>

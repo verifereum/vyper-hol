@@ -21,8 +21,8 @@ QED
 
 Theorem toplevel_word_key_taint:
   !cx tr tn s w t tv.
-    stor_taint_ok cx tn s /\
-    storage_read_live cx tr
+    stor_taint_ok H cx tn s /\
+    storage_read_live H tr
       (if tr then s.vs_transient s.vs_call_ctx.cc_address
        else (s.vs_accounts s.vs_call_ctx.cc_address).storage) w tv /\
     is_word_type t /\ evaluate_type (get_tenv cx) t = SOME tv ==>
@@ -115,7 +115,7 @@ Proof
 QED
 
 Theorem toplevel_load_ghost_post:
-  ghost_inv d cenv cx es G0 tn0 s0 /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G0 tn0 s0 /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==> x <> out) /\
@@ -125,7 +125,7 @@ Theorem toplevel_load_ghost_post:
   tn.t_trans = tn0.t_trans /\ tn.t_imm = tn0.t_imm /\
   es'.scopes = es.scopes /\
   u = (update_var out w s0 with vs_inst_idx := SUC s0.vs_inst_idx) ==>
-  ghost_inv d cenv cx es' G tn u /\
+  ghost_inv H d cenv cx es' G tn u /\
   ghost_kept cenv es sa G0 tn0 s0 G tn
 Proof
   strip_tac >> conj_tac
@@ -138,7 +138,7 @@ Proof
 QED
 
 Theorem toplevel_storage_word_at:
-  vv_post ctx func cenv cx e es sa sm s0 ee (Value v)
+  vv_post H ctx func cenv cx e es sa sm s0 ee (Value v)
     (LocatedValue ann (mk_ptr (Lit w) (if tr then LocTransient else LocStorage))) s /\
   is_word_type ann /\ evaluate_type (get_tenv cx) ann = SOME tv ==>
   (if tr then tload w s else sload w s) = typed_val_to_w256 tv v
@@ -166,7 +166,7 @@ Proof
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
     gvs[stmt_state_rel_def, state_rel_def] >>
   drule_all toplevel_storage_ce_vars >> strip_tac >>
-  `!st. storage_read_live cx tr st (n2w slot) tvt` by
+  `!st. storage_read_live H tr st (n2w slot) tvt` by
     (gen_tac >> irule declared_storage_region_read_live >>
      qexistsl [`src`, `id`, `[]`] >> simp[declared_storage_region_def]) >>
   `compile_expr cenv ty (TopLevelName ann (src,id)) sa =
@@ -186,7 +186,7 @@ Proof
      `declared_storage_region cx src id [] = SOME (tr,n2w slot,tvt)` by
        simp[declared_storage_region_def] >>
      drule_all storage_layout_safe_region_nonoverflow >> simp[]) >>
-  `vv_post ctx func cenv cx (TopLevelName ann (src,id)) es sa sa s0
+  `vv_post H ctx func cenv cx (TopLevelName ann (src,id)) es sa sa s0
      (es with gas_obs := []) (PlaceR (StoragePlace tr (n2w slot) tvt))
      (LocatedValue ann (mk_ptr (Lit (n2w slot))
        (if tr then LocTransient else LocStorage))) s0` by
@@ -208,7 +208,7 @@ QED
 
 Resume toplevel_storage_word_sim_ptr[load]:
   drule_all vv_post_read_result >> strip_tac >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (PlaceR _) _ _` kall_tac >> fs[] >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ (PlaceR _) _ _` kall_tac >> fs[] >>
   `(if tr then tload (n2w slot) s0 else sload (n2w slot) s0) =
     typed_val_to_w256 tvt v` by (irule toplevel_storage_word_at >> metis_tac[]) >>
   `step_inst_base
@@ -226,7 +226,7 @@ Resume toplevel_storage_word_sim_ptr[load]:
     MEM (if tr then TLOAD else SLOAD) [SLOAD;TLOAD;DLOAD]` by
     (Cases_on `tr` >> simp[op_taint_def]) >>
   drule_all toplevel_emit_load_path >>
-  disch_then (qspecl_then [`G0`, `cx_dead cx`, `PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`G0`, `cx_dead H cx`, `PG`] strip_assume_tac) >>
   qabbrev_tac `u = update_var out (typed_val_to_w256 tvt v) s0
     with vs_inst_idx := SUC s0.vs_inst_idx` >>
   map_every (fn q => qpat_x_assum q kall_tac)
@@ -252,24 +252,24 @@ Resume toplevel_storage_word_sim_ptr[post]:
      simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
        fresh_id_def, emit_def, comp_return_def] >> strip_tac >>
      gvs[Abbr `u`, update_var_def]) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) u` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) u` by
     (simp[Abbr `u`] >>
      `not_local_ptr cenv (es with gas_obs := []).scopes out` by
        (simp[] >> qpat_assum `out = _` SUBST1_TAC >>
         irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
-     `stmt_state_rel ctx func cenv cx (es with gas_obs := [])
+     `stmt_state_rel H ctx func cenv cx (es with gas_obs := [])
         (s0 with vs_inst_idx := SUC s0.vs_inst_idx)` by
        (drule msg_gas_state_frame >>
         disch_then (qspecl_then [`s0.vs_gas_readings`, `SUC s0.vs_inst_idx`, `[]`] mp_tac) >>
         simp[]) >>
      drule_all stmt_state_rel_update_var >> simp[update_var_def]) >>
-  `expr_post ctx func cenv cx (TopLevelName ann (src,id)) es sa sb s0
+  `expr_post H ctx func cenv cx (TopLevelName ann (src,id)) es sa sb s0
     (es with gas_obs := []) v op u` by
     (drule expr_post_of_vv_post_load >> disch_then irule >>
      simp[expr_type_def] >>
      gvs[Abbr `u`, eval_operand_def, lookup_var_def, update_var_def,
          finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
-  `ghost_inv d cenv cx (es with gas_obs := []) G' tn' u /\
+  `ghost_inv H d cenv cx (es with gas_obs := []) G' tn' u /\
    ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
     (irule toplevel_load_ghost_post >> simp[Abbr `u`] >> metis_tac[]) >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
@@ -281,7 +281,7 @@ QED
 Finalise toplevel_storage_word_sim_ptr
 
 Theorem toplevel_immutable_word_at:
-  vv_post ctx func cenv cx e es sa sm s0 ee (Value v)
+  vv_post H ctx func cenv cx e es sa sm s0 ee (Value v)
     (LocatedValue ann (mk_ptr (Lit w) LocCode)) s /\
   ~cenv.ce_is_ctor /\ is_word_type ann ==>
   ?tv. evaluate_type (get_tenv cx) ann = SOME tv /\
@@ -312,7 +312,7 @@ Proof
      qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
      simp[lower_value_def, comp_bind_def, unwrap_value_def, mk_ptr_def,
           compile_ptr_load_def, compile_imm_load_word_def]) >>
-  `vv_post ctx func cenv cx (TopLevelName ann (src,id)) es sa sa s0
+  `vv_post H ctx func cenv cx (TopLevelName ann (src,id)) es sa sa s0
      (es with gas_obs := []) (PlaceR (ImmutablePlace src id []))
      (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode)) s0` by
     (irule toplevel_immutable_post >> simp[] >> metis_tac[]) >>
@@ -330,7 +330,7 @@ Proof
        get_address_immutables_def, evaluate_subscripts_def, lift_sum_def,
        bind_def, return_def, lift_option_type_def]) >>
   drule_all vv_post_read_result >> strip_tac >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (PlaceR _) _ _` kall_tac >> fs[] >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ (PlaceR _) _ _` kall_tac >> fs[] >>
   drule_all toplevel_immutable_word_at >> strip_tac >> gvs[] >>
   `step_inst_base
     (mk_inst sa.cs_next_id DLOAD [Lit (n2w off)]
@@ -341,7 +341,7 @@ Proof
   `op_taint tn0 (Lit (n2w off)) = {} /\
     MEM DLOAD [SLOAD;TLOAD;DLOAD]` by simp[op_taint_def] >>
   drule_all toplevel_emit_load_path >>
-  disch_then (qspecl_then [`G0`, `cx_dead cx`, `PG`] strip_assume_tac) >>
+  disch_then (qspecl_then [`G0`, `cx_dead H cx`, `PG`] strip_assume_tac) >>
   qabbrev_tac `u = update_var out (typed_val_to_w256 tv v) s0
     with vs_inst_idx := SUC s0.vs_inst_idx` >>
   map_every (fn q => qpat_x_assum q kall_tac)
@@ -362,24 +362,24 @@ Resume toplevel_immutable_word_sim_ptr[post]:
      simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
        fresh_id_def, emit_def, comp_return_def] >> strip_tac >>
      gvs[Abbr `u`, update_var_def]) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) u` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) u` by
     (simp[Abbr `u`] >>
      `not_local_ptr cenv (es with gas_obs := []).scopes out` by
        (simp[] >> qpat_assum `out = _` SUBST1_TAC >>
         irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
-     `stmt_state_rel ctx func cenv cx (es with gas_obs := [])
+     `stmt_state_rel H ctx func cenv cx (es with gas_obs := [])
         (s0 with vs_inst_idx := SUC s0.vs_inst_idx)` by
        (drule msg_gas_state_frame >>
         disch_then (qspecl_then [`s0.vs_gas_readings`, `SUC s0.vs_inst_idx`, `[]`] mp_tac) >>
         simp[]) >>
      drule_all stmt_state_rel_update_var >> simp[update_var_def]) >>
-  `expr_post ctx func cenv cx (TopLevelName ann (cenv.ce_module,id)) es sa sb s0
+  `expr_post H ctx func cenv cx (TopLevelName ann (cenv.ce_module,id)) es sa sb s0
     (es with gas_obs := []) v op u` by
     (drule expr_post_of_vv_post_load >> disch_then irule >>
      simp[expr_type_def] >>
      gvs[Abbr `u`, eval_operand_def, lookup_var_def, update_var_def,
          finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
-  `ghost_inv d cenv cx (es with gas_obs := []) G' tn' u /\
+  `ghost_inv H d cenv cx (es with gas_obs := []) G' tn' u /\
    ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
     (irule toplevel_load_ghost_post >> simp[Abbr `u`] >> metis_tac[]) >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>

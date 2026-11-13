@@ -33,7 +33,7 @@ Theorem log_success_suffix_actual_run:
   log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
@@ -46,7 +46,7 @@ Theorem log_success_suffix_actual_run:
   vyper_to_abi_list (get_tenv cx) (log_non_indexed_types flags (MAP SND xs))
     (log_non_indexed_values flags vs) = SOME avs ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
-    stmt_state_rel ctx func ce cx
+    stmt_state_rel H ctx func ce cx
       (es with logs := es.logs ++ [<|logger := w2w cx.txn.target;
         topics := n2w h::topics; data := enc (Tuple (vyper_to_abi_types (get_tenv cx)
           (log_non_indexed_types flags (MAP SND xs)))) (ListV avs) |>]) t /\
