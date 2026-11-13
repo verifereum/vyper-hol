@@ -189,7 +189,8 @@ Proof
      qpat_x_assum `resolved_annotation_edge _ _ _ (SOME _) _ _ _ _ _` mp_tac >>
      simp[resolved_annotation_edge_def] >> strip_tac >>
      drule_at (Pat `resolved_annotation_update _ _ _ _ _`)
-       resolved_annotation_complete >> gvs[]) >>
+       resolved_annotation_complete >> gvs[] >>
+     disch_then irule >> metis_tac[]) >>
   gvs[layout_ordinary_trace_def]
 QED
 
