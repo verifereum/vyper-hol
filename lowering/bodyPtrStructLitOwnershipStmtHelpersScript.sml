@@ -453,5 +453,5 @@ Proof
       simp[comp_return_def, alloc_run_def, alloc_frame_refl]) >>
   IF_CASES_TAC
   >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_imm_store_words] >>
-  MATCH_ACCEPT_TAC (SRULE [SF ETA_ss] (CONJUNCT1 alloc_run_compile_store_slots))
+  simp[SF ETA_ss, SRULE [SF ETA_ss] (CONJUNCT1 alloc_run_compile_store_slots)]
 QED
