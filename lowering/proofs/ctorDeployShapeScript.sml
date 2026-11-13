@@ -51,8 +51,9 @@ Proof
   drule supported_function_body_shape >> strip_tac >>
   gvs[package_constructor_def, set_constructor_package_target_def,
       update_cenv_nonreentrant_def, build_compile_env_non_internal_no_return_pc] >>
-  simp[cenv_static_ok_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  qspecl_then [`tops`, `Deploy`, `cf0`, `cf3`, `cf4`, `cf6`, `body'`, `trans`]
+    mp_tac build_compile_env_static >>
+  simp[cenv_static_ok_def] >> rpt strip_tac >> res_tac
 QED
 
 Theorem package_internal_fn_ctor_shape_ok:
@@ -73,10 +74,12 @@ Proof
   `Internal <> Deploy` by simp[] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
+  qspecl_then [`tops`, `Internal`, `src0`, `src3`, `src4`, `src6`, `rawbody`,
+               `use_trans`] mp_tac build_compile_env_static >>
   simp[package_internal_fn_def, set_internal_package_target_def,
        update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
        cenv_static_ok_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  rpt strip_tac >> res_tac >> fs[]
 QED
 
 (* ===== The lowered unit ===== *)
