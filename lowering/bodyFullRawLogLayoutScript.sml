@@ -84,14 +84,72 @@ Resume raw_log_full_layout_shadow[fixed]:
     (lower_value compile_expr cenv (expr_type data) data)
     (lower_value compile_expr cenv (expr_type data) (gas_shadow_expr data))` by metis_tac[] >>
   assume_tac (Q.SPEC `32` gas_shadow_compiles_alloc_buffer) >>
-  fs[] >> drule_all raw_log_fixed_continuation_shadow >> strip_tac >>
+  drule_at (Pat `compile_alloc_buffer 32 _ = _`)
+    (REWRITE_RULE [listTheory.APPEND] raw_log_fixed_continuation_shadow) >>
+  disch_then (drule_at (Pat `emit_void MSTORE _ _ = _`)) >>
+  disch_then (drule_at (Pat `emit_inst LOG _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `gas_shadow_state _ _`)) >>
+  disch_then (qspecl_then [`data`,`cenv`] mp_tac) >>
+  simp[] >> strip_tac >>
   qpat_x_assum `lower_value _ _ _ (gas_shadow_expr (Call _ _ _ _)) _ = _` mp_tac >>
   simp[gas_shadow_expr_def, gas_shadow_builtin_def, Once lower_value_def,
     comp_bind_def, compile_call_def, raw_log_topic_exprs_def,
     unwrap_value_def, comp_return_def] >> strip_tac >> gvs[] >>
-  FAIL_TAC "fixed mono"
+  `ci_mono sa s1 /\ ci_mono shadow_sa ss1` by
+    (metis_tac[ci_mono_compile_multi_exprs, compile_expr_ci_mono, pairTheory.SND]) >>
+  `ci_mono s1 s2 /\ ci_mono ss1 shadow_sa'` by
+    (metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND]) >>
+  `ci_mono s2 s3 /\ ci_mono shadow_sa' shadow_sb'` by
+    (metis_tac[ci_mono_lower_value_cfn, compile_expr_ci_mono, pairTheory.SND]) >>
+  `ci_mono s3 s4 /\ ci_mono shadow_sb' shadow_sc` by
+    (metis_tac[ci_mono_emit_void, pairTheory.SND]) >>
+  `ci_mono s4 cs' /\ ci_mono shadow_sc shadow_sb` by
+    (metis_tac[ci_mono_emit_inst, pairTheory.SND]) >>
+  `ci_mono s3 cs' /\ ci_mono shadow_sb' shadow_sb` by metis_tac[ci_mono_trans] >>
+  qexistsl_tac [`s2`,`shadow_sa'`,`value`,`s3`,`shadow_sb'`] >>
+  fs[emitHelperTheory.emit_inst_def, GSYM emitHelperTheory.emit_void_def] >>
+  rpt conj_tac >> irule fn_has_code_mid >>
+  metis_tac[ci_mono_def, ci_mono_trans, ci_mono_refl]
 QED
 Resume raw_log_full_layout_shadow[dynamic]:
-  cheat
+  qpat_x_assum `compile_call _ _ _ _ RawLog _ _ _ = _` mp_tac >>
+  simp[compile_call_def, raw_log_topic_exprs_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  gvs[unwrap_value_def, comp_return_def] >>
+  qpat_x_assum `lower_value _ _ _ (gas_shadow_expr (Call _ _ _ _)) _ = _` mp_tac >>
+  simp[gas_shadow_expr_def, gas_shadow_builtin_def, Once lower_value_def,
+    comp_bind_def, compile_call_def, raw_log_topic_exprs_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  gvs[unwrap_value_def, comp_return_def] >>
+  qpat_assum `!ce xs. gas_shadow_compiles _ _`
+    (qspecl_then [`cenv`,`topics`] (mp_tac o REWRITE_RULE [gas_shadow_compiles_def])) >>
+  disch_then (qspecl_then [`sa`,`shadow_sa`] mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+  qpat_assum `!ce tt e. gas_shadow_compiles _ _`
+    (qspecl_then [`cenv`,`expr_type data`,`data`]
+      (mp_tac o REWRITE_RULE [gas_shadow_compiles_def])) >>
+  disch_then (qspecl_then [`st1`,`st1'`] mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+  mp_tac (Q.INST [`opc` |-> `MLOAD`, `opc'` |-> `MLOAD`, `ops` |-> `[data']`]
+    gas_shadow_compiles_emit_op) >>
+  simp[gas_shadow_compiles_def] >>
+  disch_then (qspecl_then [`st2`,`st2'`] mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+  mp_tac (Q.INST [`opc` |-> `ADD`, `opc'` |-> `ADD`, `ops` |-> `[data';Lit 32w]`]
+    gas_shadow_compiles_emit_op) >>
+  simp[gas_shadow_compiles_def] >>
+  disch_then (qspecl_then [`st3`,`st3'`] mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+  `ci_mono sa st1 /\ ci_mono shadow_sa st1'` by
+    (metis_tac[ci_mono_compile_multi_exprs, compile_expr_ci_mono, pairTheory.SND]) >>
+  `ci_mono st1 st2 /\ ci_mono st1' st2'` by
+    (metis_tac[ci_mono_lower_value_cfn, compile_expr_ci_mono, pairTheory.SND]) >>
+  `ci_mono st2 st3 /\ ci_mono st2' st3'` by
+    (metis_tac[ci_mono_emit_op, pairTheory.SND]) >>
+  `ci_mono st3 st4 /\ ci_mono st3' st4'` by
+    (metis_tac[ci_mono_emit_op, pairTheory.SND]) >>
+  `ci_mono st4 cs' /\ ci_mono st4' cs''` by
+    (metis_tac[ci_mono_emit_inst, pairTheory.SND]) >>
+  `ci_mono st2 cs' /\ ci_mono st2' cs''` by metis_tac[ci_mono_trans] >>
+  qexistsl_tac [`st1`,`st1'`,`data'`,`st2`,`st2'`] >>
+  simp[ci_mono_refl] >>
+  rpt conj_tac >> irule fn_has_code_mid >>
+  metis_tac[ci_mono_def, ci_mono_trans, ci_mono_refl]
 QED
 Finalise raw_log_full_layout_shadow
