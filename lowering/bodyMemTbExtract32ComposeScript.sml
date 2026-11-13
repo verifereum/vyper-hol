@@ -82,7 +82,7 @@ Proof
      rpt strip_tac >> imp_res_tac emitted_insts_emit_op >> gvs[]) >>
   `(!l. len <> Label l) /\ (!l. data <> Label l)` by
     (qpat_assum `len = Var _` mp_tac >> qpat_assum `data = Var _` mp_tac >>
-     rpt strip_tac >> simp[]) >>
+     rpt strip_tac >> gvs[]) >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ src _`
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
   disch_then (qspecl_then [`st0`, `sa`, `s1`, `src_op`, `s0`] mp_tac) >>
