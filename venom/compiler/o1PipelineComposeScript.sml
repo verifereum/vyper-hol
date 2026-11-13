@@ -574,7 +574,7 @@ Proof
   pop_assum SUBST1_TAC >>
   irule guarded_ctx_sim_trans >> simp[] >>
   qexistsl_tac [`stage n`, `Inv n`] >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >> simp[]
+  rpt strip_tac >> fs[] >> first_x_assum irule >> simp[]
 QED
 
 (* The walk passes from FmpLowering on keep the static layout. *)
