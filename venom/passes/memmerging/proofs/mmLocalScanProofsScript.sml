@@ -19818,6 +19818,20 @@ Proof
   asm_rewrite_tac[]
 QED
 
+Theorem mm_local_calldata_bulk_step[local]:
+  i.inst_opcode = CALLDATACOPY /\
+  i.inst_operands = [Lit dst; Lit src; Lit len] ==>
+  step_inst fuel ctx i t =
+    OK (write_memory_with_expansion (w2n dst)
+      (TAKE (w2n len) (DROP (w2n src) t.vs_call_ctx.cc_calldata ++
+        REPLICATE (w2n len) 0w)) t)
+Proof
+  strip_tac >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomStateTheory.eval_operand_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
