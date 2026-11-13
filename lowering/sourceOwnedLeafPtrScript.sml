@@ -170,6 +170,9 @@ Proof
     gvs[Abbr `inst`, run_inst_seq_def, AllCaseEqs()] >>
   `MEM ISZERO [SIGNEXTEND; SHR; SHL; EQ; ISZERO; ASSERT] /\
    EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) [op]` by simp[] >>
+  `?vars. t = s with vs_vars := vars` by
+    (qpat_assum `step_inst_base inst s = OK t` mp_tac >>
+     simp[Abbr `inst`] >> metis_tac[clamp_scalar_state_frame, MEM]) >>
   qexistsl_tac [`step_prov PG G inst t`, `step_taint inst s t tn`] >>
   conj_tac >-
     (rpt gen_tac >> strip_tac >>
@@ -178,8 +181,7 @@ Proof
         irule (cj 1 (SRULE [ptr_safe_step_def] clamp_scalar_step_safe)) >>
         simp[step_inst_non_invoke, mk_inst_def] >>
         qexists_tac `t` >> gvs[step_inst_non_invoke, mk_inst_def] >>
-        metis_tac[clamp_scalar_state_frame, venom_state_accfupds,
-          venom_state_accessors]) >>
+        simp[]) >>
      `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
      qpat_assum `LENGTH sb.cs_current_insts = _` (fn th => rewrite_tac [th]) >>
      irule source_bulk_instruction_origin >> goal_assum (drule_at Any) >>
@@ -195,14 +197,64 @@ Proof
   simp[Abbr `inst`] >>
   qpat_x_assum `step_inst_base _ _ = _` (assume_tac o SRULE []) >>
   qpat_x_assum `!x. not_fresh_at sa x ==> _` (assume_tac o SRULE []) >>
-  drule_all clamp_scalar_state_frame >> strip_tac >>
-  drule_all clamp_scalar_taint_frame >> strip_tac >> simp[] >>
-  conj_tac >- metis_tac[] >> gen_tac >> disch_tac >>
+  drule_all clamp_scalar_taint_frame >>
+  disch_then (qspec_then `tn` strip_assume_tac) >>
+  gvs[] >>
+  conj_tac >- (qexists_tac `vars` >> simp[]) >>
+  gen_tac >> disch_tac >>
   `x <> "%" ++ toString sa.cs_next_var` by (simp[] >> metis_tac[]) >>
-  conj_tac >- metis_tac[clamp_scalar_lookup_frame, MEM] >>
   qpat_x_assum `x <> _` (assume_tac o SRULE []) >>
+  conj_tac >-
+    (irule clamp_scalar_lookup_frame >> goal_assum (drule_at Any) >> simp[]) >>
   simp[mk_inst_def, step_prov_other_output, step_taint_other_output]
 QED
+Theorem source_bulk_assert_origin[local]:
+  emit_void ASSERT [op] sa = ((),sb) /\
+  op_taint tn op = {} /\ op_prov G op = NONE /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  t = s /\
+  (!D lower explicit ctx func.
+    fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
+      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),G,tn))
+Proof
+  strip_tac >>
+  `t = s` by (drule_all emit_assert_endpoint_ptr_core >> metis_tac[]) >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (drule emit_void_same_blocks >> simp[same_blocks_def]) >>
+  qabbrev_tac `inst = mk_inst sa.cs_next_id ASSERT [op] []` >>
+  `step_inst_base inst s = OK s` by
+    gvs[Abbr `inst`, run_inst_seq_def, AllCaseEqs()] >>
+  simp[NoAsms] >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  `ptr_inst_ok D lower 0 ctx func G tn inst s` by
+    (simp[Abbr `inst`] >>
+     irule (cj 1 (SRULE [ptr_safe_step_def] clamp_scalar_step_safe)) >>
+     simp[step_inst_non_invoke, mk_inst_def] >> qexists_tac `s` >>
+     gvs[step_inst_non_invoke, mk_inst_def]) >>
+  `step_prov PG G inst s = G /\ step_taint inst s s tn = tn` by
+    simp[Abbr `inst`, mk_inst_def, step_prov_def, set_prov_def,
+      step_taint_def, set_var_taint_def, mem_taint_def, new_site_bytes_def,
+      step_writes_def, written_taint_def, store_taint_def, imm_taint_def,
+      adopt_reset_def, source_memory_write_ranges_def, range_bytes_def,
+      DRESTRICT_UNIV, FLOOKUP_DEF, taint_component_equality,
+      pred_setTheory.EXTENSION, SF CONJ_ss] >>
+  `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
+  qpat_assum `LENGTH sb.cs_current_insts = _` (fn th => rewrite_tac [th]) >>
+  qpat_x_assum `t = s` SUBST_ALL_TAC >>
+  `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS /\
+   ~is_terminator inst.inst_opcode /\ inst_mem_below_frontier inst s /\
+   inst_dload_in_section inst s` by
+    simp[Abbr `inst`, mk_inst_def, is_terminator_def,
+      inst_mem_below_frontier_def, inst_dload_in_section_def,
+      source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+  drule_all source_bulk_instruction_origin >>
+  disch_then (qspecl_then [`explicit`,`PG`] mp_tac) >> simp[]
+QED
+
 
 Theorem source_owned_primitive_decoder_ptr:
   abi_decoder_coherent ce env sf ty tv /\
