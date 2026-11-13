@@ -33,7 +33,7 @@ Ancestors
   exprSimAlloc gasOutcome gasSummary gasSummaryCompose gasContext
   fragGasMode fragGasPath fragGasSeq stmtSimDeclPath stmtSimDeclCompose
   abiStaticAggregateProps venomState exprSimUnwrap
-  exprSimBufferStore valueCopyBytes freshWrites
+  exprSimBufferStore valueCopyBytes freshWrites exprSimAggregateNestedStore
 
 
 Theorem aggregate_alloca_slice_excludes_local:
@@ -473,6 +473,92 @@ Proof
   first_assum MATCH_ACCEPT_TAC
 QED
 
+(* aggregate_tuple_store_compatible_marked, or, at a nested member type
+   with acyclic struct metadata, exprSimAggregateNestedStore's typed or
+   layout-equal store. *)
+Theorem aggregate_tuple_store_member_marked[local]:
+  post_value_type ce e = expr_type e /\
+  compile_store_memory ce op (Var x) dty (expr_type e) su = ((),sb) /\
+  arg_type_fits (expr_type e) dty /\
+  (dty = expr_type e \/ is_bytestring_type dty /\ is_bytestring_type (expr_type e) \/
+   acyclic_struct_metadata ce.ce_struct_fields) /\
+  expr_body_pre ce cx env e es0 /\
+  (do res <- eval_expr cx e; read_result cx res od) es0 = (INL v,es') /\
+  FLOOKUP r.vs_allocas did = SOME (bb,kk) /\ did < sa.cs_next_id /\
+  bb <= w2n w /\ w2n w + type_memory_size dtv <= bb+kk /\
+  w2n w + type_memory_size dtv < dimword (:256) /\
+  fn_inst_ids_distinct func /\
+  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+    su r es' v op s /\
+  not_fresh_at sm x /\ lookup_var x r = SOME w /\
+  sm.cs_next_var <= su.cs_next_var /\
+  (!z. op = Var z ==> not_fresh_at su z) /\
+  local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  value_has_type dtv v /\ val_wf dtv v /\
+  type_memory_bytes ce dty = type_memory_size dtv /\
+  type_memory_size dtv < dimword (:256) /\
+  stmt_state_rel ctx func ce cx es' r /\
+  (!n b k. local_region ce es'.scopes r n b k ==>
+    b + k <= w2n w \/ w2n w + type_memory_size dtv <= b) /\
+  (ce.ce_is_ctor ==> !name itv iv off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size dtv)) /\
+  fn_has_code su sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = su.cs_current_bb /\
+  s.vs_inst_idx = LENGTH su.cs_current_insts ==>
+  ?q. (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+      FLOOKUP q.vs_allocas aid = SOME b) /\
+    (!a k. a + k <= w2n w \/ w2n w + type_memory_size dtv <= a ==>
+      mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
+    gas_marked_path F ctx func s 0 (OK q) /\
+    ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    val_in_memory dtv v (w2n w) q.vs_memory /\
+    stmt_state_rel ctx func ce cx es' q /\
+    (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
+      lookup_var z q = SOME a) /\
+    (!aid b. FLOOKUP r.vs_allocas aid = SOME b ==>
+      FLOOKUP q.vs_allocas aid = SOME b) /\
+    (!aid off sz a k.
+      FLOOKUP r.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+      (!n b len. local_region ce es'.scopes r n b len ==>
+        off + sz <= b \/ b + len <= off) /\
+      off <= a /\ a + k <= off + sz /\
+      (a + k <= w2n w \/ w2n w + type_memory_size dtv <= a) ==>
+      mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
+    locals_kept ce es' es' r q
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `dty = expr_type e \/
+    is_bytestring_type dty /\ is_bytestring_type (expr_type e)`
+  >- (mp_tac (SPEC_ALL aggregate_tuple_store_compatible_marked) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      simp[]) >>
+  pop_assum (strip_assume_tac o SRULE [DE_MORGAN_THM]) >>
+  `acyclic_struct_metadata ce.ce_struct_fields` by fs[] >>
+  `~is_bytestring_type dty` by
+    metis_tac[compileEnvTheory.arg_type_fits_bytestring_source] >>
+  `type_widens_to (get_tenv cx) (expr_type e) dty` by
+    simp[vyperTypeSystemTheory.type_widens_to_def,
+         vyperTypeSystemTheory.well_formed_type_def] >>
+  `~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e)` by
+    metis_tac[typedMemoryCopyTheory.return_source_word_widens_eq,
+              typedMemoryCopyTheory.type_widens_from_bytestring] >>
+  `lowered_value_type ce e = expr_type e` by
+    metis_tac[aggregate_nested_lowered_post, expr_body_pre_def] >>
+  `compile_store_memory ce op (Var x) dty (lowered_value_type ce e) su =
+     ((),sb)` by asm_rewrite_tac[] >>
+  mp_tac (Q.INST [`tv` |-> `dtv:type_value`, `es` |-> `es0:evaluation_state`,
+                  `b` |-> `bb:num`, `k` |-> `kk:num`]
+            (SPEC_ALL aggregate_store_nested_path)) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >> qexists_tac `q` >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem aggregate_tuple_exec_end_gas_obs[local]:
   gas_marked_exec memory (ctx,func) source start marks res
     (ee with gas_obs := gs) r =
@@ -612,17 +698,33 @@ Proof
   gvs[vv_post_def]
 QED
 
+Theorem arg_type_fits_bytestring_target[local]:
+  !t u. arg_type_fits t u /\ is_bytestring_type t ==> is_bytestring_type u
+Proof
+  rpt strip_tac >> Cases_on `t` >> gvs[is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_bytestring_type_def] >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> gvs[is_bytestring_type_def]) >>
+  Cases_on `u` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `BaseT bu` >> Cases_on `bu` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  TRY (rename1 `BytesT bud` >> Cases_on `bud` >>
+       gvs[arg_type_fits_def, is_bytestring_type_def])
+QED
+
 (* aggregate_make_tuple_sim at the tuple's declared member types tys
    (tuple_literal_types; a struct's field types, an array's element type),
    each of which its element fits (arg_type_fits).  A flat member is its
    element's own type, or a String or Bytes of another bound, which the
-   store copies as bytes (compile_store_memory_compatible_run). *)
-Theorem aggregate_make_tuple_flat_sim:
+   store copies as bytes (compile_store_memory_compatible_run); any other
+   member is stored by a typed or layout-equal copy
+   (aggregate_store_nested_path), which needs acyclic struct metadata. *)
+Theorem aggregate_make_tuple_member_sim:
   !args tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx nocalls.
   compile_make_tuple compile_expr ce args tys (Var x) off sa = (out,sb) /\
   LIST_REL (\t e. arg_type_fits (expr_type e) t) tys args /\
   LIST_REL (\t e. t = expr_type e \/
-    is_bytestring_type t /\ is_bytestring_type (expr_type e)) tys args /\
+    is_bytestring_type t /\ is_bytestring_type (expr_type e) \/
+    acyclic_struct_metadata ce.ce_struct_fields) tys args /\
   OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   expr_sim_inv ce cx env es /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
@@ -705,9 +807,10 @@ Proof
   rename1 `unwrap_value ce vv sn = (op,su)` >>
   rename1 `compile_store_memory ce op dst mty _ su = ((),ss)` >>
   `compile_store_memory ce op dst mty (expr_type h) su = ((),ss)` by
-    (Cases_on `mty = expr_type h`
-     >- (gvs[] >> metis_tac[aggregate_elem_lowered_type,
-            aggregate_store_lowered_elem, listTheory.MEM]) >>
+    (`lowered_value_type ce h = expr_type h \/ is_bytestring_type (expr_type h)` by
+       (irule aggregate_elem_lowered_type >> metis_tac[listTheory.MEM]) >>
+     gvs[] >>
+     `is_bytestring_type mty` by metis_tac[arg_type_fits_bytestring_target] >>
      metis_tac[valueCopyBytesTheory.compile_store_memory_bytestring_src]) >>
   qpat_x_assum `compile_store_memory ce op dst mty (lowered_value_type ce h) su = _` kall_tac >>
   `ci_mono sa sm` by metis_tac[compile_expr_ci_mono, pairTheory.SND] >>
@@ -735,7 +838,7 @@ Proof
   suspend "child_success"
 QED
 
-Resume aggregate_make_tuple_flat_sim[child_success]:
+Resume aggregate_make_tuple_member_sim[child_success]:
   `es1 with gas_obs := [] = es1` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   `~t1.vs_halted` by
@@ -770,7 +873,7 @@ Resume aggregate_make_tuple_flat_sim[child_success]:
   suspend "child_steps"
 QED
 
-Resume aggregate_make_tuple_flat_sim[child_steps]:
+Resume aggregate_make_tuple_member_sim[child_steps]:
   `cs_extends sa sn /\ cs_extends sn su /\ cs_extends su sb /\
    cs_extends sm sn /\ cs_extends su ss /\ cs_extends ss sb` by
     (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
@@ -822,7 +925,7 @@ Resume aggregate_make_tuple_flat_sim[child_steps]:
   suspend "unwrap_store"
 QED
 
-Resume aggregate_make_tuple_flat_sim[unwrap_store]:
+Resume aggregate_make_tuple_member_sim[unwrap_store]:
   `type_memory_bytes ce (expr_type h) = type_memory_size stv` by
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   `~is_word_type (expr_type h) ==> type_memory_size stv < 2 ** 64` by
@@ -865,7 +968,7 @@ Resume aggregate_make_tuple_flat_sim[unwrap_store]:
   suspend "rest"
 QED
 
-Resume aggregate_make_tuple_flat_sim[rest]:
+Resume aggregate_make_tuple_member_sim[rest]:
   `gas_marked_exec F (ctx,func) (read_result cx tv) (es1,t1) [] (INL v) es1 (OK t2)` by
     (qpat_x_assum `gas_marked_exec F _ (read_result _ _) _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def] >> strip_tac >>
@@ -907,7 +1010,7 @@ Resume aggregate_make_tuple_flat_sim[rest]:
   suspend "tuple_join"
 QED
 
-Resume aggregate_make_tuple_flat_sim[tuple_join]:
+Resume aggregate_make_tuple_member_sim[tuple_join]:
   gnvs[] >>
   qpat_x_assum `q.vs_memory = t1.vs_memory` (fn th =>
     RULE_ASSUM_TAC (REWRITE_RULE [GSYM th]) >> assume_tac th) >>
@@ -923,7 +1026,7 @@ Resume aggregate_make_tuple_flat_sim[tuple_join]:
   >> suspend "pure_join"
 QED
 
-Resume aggregate_make_tuple_flat_sim[head_encoding]:
+Resume aggregate_make_tuple_member_sim[head_encoding]:
   pure_once_rewrite_tac[val_in_memory_def] >>
   simp_tac std_ss [listTheory.list_case_def, LET_THM] >> conj_tac
   >- (irule (cj 1 val_in_memory_mem_agree_proof) >> simp[] >>
@@ -936,7 +1039,7 @@ Resume aggregate_make_tuple_flat_sim[head_encoding]:
   simp_tac bool_ss []
 QED
 
-Resume aggregate_make_tuple_flat_sim[vars_join]:
+Resume aggregate_make_tuple_member_sim[vars_join]:
   rpt strip_tac >>
   `not_fresh_at sn z /\ not_fresh_at ss z` by
     (conj_tac >> irule freshWritesTheory.not_fresh_at_mono >>
@@ -945,13 +1048,13 @@ Resume aggregate_make_tuple_flat_sim[vars_join]:
   simp_tac std_ss [vv_post_def] >> strip_tac >> metis_tac[]
 QED
 
-Resume aggregate_make_tuple_flat_sim[allocas_join]:
+Resume aggregate_make_tuple_member_sim[allocas_join]:
   rpt strip_tac >>
   qpat_x_assum `vv_post ctx func ce cx h es sa sn s0 es1 tv vv q` mp_tac >>
   simp_tac std_ss [vv_post_def] >> strip_tac >> metis_tac[]
 QED
 
-Resume aggregate_make_tuple_flat_sim[slice_join]:
+Resume aggregate_make_tuple_member_sim[slice_join]:
   rpt strip_tac >>
   `!name lo sz. local_region ce es.scopes s0 name lo sz ==>
       b + asz <= lo \/ lo + sz <= b` by
@@ -990,7 +1093,7 @@ Resume aggregate_make_tuple_flat_sim[slice_join]:
   metis_tac[]
 QED
 
-Resume aggregate_make_tuple_flat_sim[exterior_join]:
+Resume aggregate_make_tuple_member_sim[exterior_join]:
   rpt strip_tac >>
   `!name lo sz. local_region ce es1.scopes q name lo sz ==>
       p + n <= lo \/ lo + sz <= p` by
@@ -1043,7 +1146,7 @@ Resume aggregate_make_tuple_flat_sim[exterior_join]:
      fs[ci_mono_def] >> decide_tac) >> asm_rewrite_tac[]
 QED
 
-Resume aggregate_make_tuple_flat_sim[locals_join]:
+Resume aggregate_make_tuple_member_sim[locals_join]:
   `locals_kept ce es1 es' q s` by
     (irule locals_kept_trans >> qexistsl_tac [`es1`, `sn`, `t2`] >>
      asm_rewrite_tac[]) >>
@@ -1052,7 +1155,7 @@ Resume aggregate_make_tuple_flat_sim[locals_join]:
   simp_tac std_ss [vv_post_def] >> strip_tac >> simp[]
 QED
 
-Resume aggregate_make_tuple_flat_sim[pure_join]:
+Resume aggregate_make_tuple_member_sim[pure_join]:
   strip_tac >>
   `~expr_has_effect h /\ ~EXISTS expr_has_effect args` by
     (rpt (qpat_x_assum `~EXISTS _ _` mp_tac) >>
@@ -1117,7 +1220,7 @@ Resume aggregate_make_tuple_flat_sim[pure_join]:
   rpt conj_tac >> first_assum (ACCEPT_TAC o SRULE [arithmeticTheory.ADD_COMM])
 QED
 
-Finalise aggregate_make_tuple_flat_sim
+Finalise aggregate_make_tuple_member_sim
 
 (* The equal-type case of aggregate_make_tuple_flat_sim. *)
 Theorem aggregate_make_tuple_sim:
