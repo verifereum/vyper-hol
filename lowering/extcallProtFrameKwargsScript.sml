@@ -266,8 +266,8 @@ Resume extcall_protframe_kwarg_retained_cps[unwrap_post]:
      `post_value_type cenv e = expr_type e` by
        (qpat_assum `is_word_type (expr_type e)` mp_tac >>
         rpt (pop_assum kall_tac) >>
-        Cases_on `e` >> simp[expr_type_def] >>
-        rename1 `Call _ ct _ _` >> Cases_on `ct` >> simp[expr_type_def]) >>
+        Cases_on `e` >> simp[vyperASTTheory.expr_type_def] >>
+        rename1 `Call _ ct _ _` >> Cases_on `ct` >> simp[vyperASTTheory.expr_type_def]) >>
      `tag = expr_type e` by
        (qpat_assum `vv_post _ _ _ _ e _ _ _ _ _ _ (LocatedValue tag p) _` mp_tac >>
         qpat_assum `p.ptr_location <> LocMemory` mp_tac >>
