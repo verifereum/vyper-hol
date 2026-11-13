@@ -170,7 +170,7 @@ QED
    frame starves (it makes no request from the starving step on; the
    assembly goes on alone). *)
 Theorem asm_frame_run_requests:
-  !n prog data es0 a es a1.
+  !n gas_tail prog data es0 a es a1.
     asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a es /\
     (asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
        prog n a = AsmHalt a1 \/
@@ -224,12 +224,15 @@ Proof
   (Q.SUBGOAL_THEN `vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
      (lookup_account (FST (HD es.contexts)).msgParams.callee
        es.rollback.accounts)` assume_tac
-   >- (gvs[initial_ctx_rel_def] >> metis_tac[])) >>
+   >- (gvs[initial_ctx_rel_def, codegenEntryRelTheory.initial_ctx_rel_tail_def] >>
+       metis_tac[])) >>
+  `initial_ctx_rel_tail [] cp prog unit.cu_context vs es` by
+    fs[initial_ctx_rel_def] >>
   drule_all asm_frame_rel_entry >> strip_tac >>
   drule_all codegen_entry_asm_sim >>
   disch_then (qspec_then `fuel` strip_assume_tac) >>
   gvs[] >> res_tac >> gvs[venom_asm_terminal_rel_def] >>
-  qspecl_then [`n`, `prog`, `vs.vs_data_section`, `es`, `entry_asm_state vs es`,
+  qspecl_then [`n`, `[]`, `prog`, `vs.vs_data_section`, `es`, `entry_asm_state vs es`,
                `es`, `as'`] mp_tac asm_frame_run_requests >>
   simp[]
 QED
