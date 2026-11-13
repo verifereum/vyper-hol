@@ -6,6 +6,7 @@ Ancestors
   exprSimWordArgs exprSimProps exprSimMemDefs exprLoweringProps
   bodyPtrSignedConvertSourceFrame bodyFullUnwrapRun allocaHistoryFragment
   loweringSlice valueEncoding vyperAST compileEnv loweringPosts
+  bodyFullGhostFrame bodyPtrDefs exprSimBopInLiteralWord
   list finite_map venomState venomInst venomExecSemantics
 
 (* The scalar suffix fixes its value and ghost endpoints before the dead
@@ -183,4 +184,51 @@ Proof
       gvs[bool_to_word_def, expr_has_effect_thm, EVERY_MEM, EXISTS_MEM]) >>
   simp[expr_store_bound_word, is_word_type_def] >>
   gvs[same_blocks_def, venom_state_component_equality]
+QED
+
+Theorem bop_in_literal_suffix_ghost:
+  (bop = In \/ bop = NotIn) /\
+  (if bop = In then compile_list_membership_in needle xs
+   else compile_list_membership_notin needle xs) sm = (op,sb) /\
+  sa.cs_next_var <= sm.cs_next_var /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  ghost_inv_at D lo d cenv cx (ee with gas_obs := []) G tn s /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+  run_inst_seq (emitted_insts sm sb) s = OK u /\
+  (u with vs_vars := s.vs_vars) = s /\
+  (tn' with t_var := tn.t_var) = tn /\
+  (!p. not_fresh_at sm p ==> FLOOKUP G' p = FLOOKUP G p /\
+       op_taint tn' (Var p) = op_taint tn (Var p)) /\
+  op_prov G' op = NONE /\ op_taint tn' op = {} /\
+  z = (u with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)) ==>
+  ghost_inv_at D lo d cenv cx (ee with gas_obs := []) G' tn' z /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn' /\
+  ptr_val_ok cx (BaseT BoolT)
+    (BoolV (if bop = In then MEM v vs else ~MEM v vs)) op G' tn' z
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `writes_fresh sm (emitted_insts sm sb)` by
+    (Cases_on `bop = In` >> gvs[] >>
+     metis_tac[literal_membership_straight, straight_fresh_def]) >>
+  drule_all run_inst_seq_writes_fresh >> strip_tac >>
+  `!p. not_fresh_at sa p ==> not_fresh_at sm p` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `!p. not_fresh_at sa p ==>
+     lookup_var p z = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
+     op_taint tn' (Var p) = op_taint tn (Var p)` by
+    (rpt strip_tac >> gvs[lookup_var_def] >> metis_tac[]) >>
+  `tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+   tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm` by
+    (qpat_x_assum `tn' with t_var := _ = tn` mp_tac >>
+     Cases_on `tn'` >> Cases_on `tn` >>
+     simp[ptrDisciplineTheory.recordtype_taint_seldef_t_var_fupd_def]) >>
+  conj_tac
+  >- (irule ghost_inv_at_exterior_frame >>
+      qexistsl_tac [`G`,`ee with gas_obs := []`,`s`,`sa`,`tn`] >>
+      gvs[venom_state_component_equality]) >>
+  conj_tac
+  >- (irule ghost_kept_at_clean_suffix >> qexistsl_tac [`G`,`tn`] >>
+      gvs[] >> metis_tac[pred_setTheory.SUBSET_REFL]) >>
+  simp[ptr_val_ok_def, is_word_type_def]
 QED
