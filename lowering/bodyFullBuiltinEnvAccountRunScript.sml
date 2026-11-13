@@ -24,7 +24,7 @@ Theorem account_suffix_full_run:
  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
  eval_operand x s = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) /\
- op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+ op_taint tn x = {} /\ op_prov G x = NONE /\ ~ctx_has_dalloca ctx /\
  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s /\
  (!H. valid_horizon cx st0 H ee.storage_trace ==>
@@ -42,6 +42,7 @@ Theorem account_suffix_full_run:
  FLOOKUP G' p = FLOOKUP G p /\ op_taint tn' (Var p) = op_taint tn (Var p)) /\
  (!tv. evaluate_type (get_tenv cx) (account_item_type item) = SOME tv ==>
  eval_operand op t = SOME (typed_val_to_w256 tv v)) /\
+ op_taint tn' op = {} /\ op_prov G' op = NONE /\
  (!H. valid_horizon cx st0 H ee.storage_trace ==>
  gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn') /\
  stmt_state_rel H ctx func cenv cx ee t /\ storage_well_formed_on cx ee (FST H) /\

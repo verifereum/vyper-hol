@@ -31,7 +31,7 @@ Theorem account_emit_full_run:
  tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
  (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
    FLOOKUP G' p = FLOOKUP G p /\ op_taint tn' (Var p) = op_taint tn (Var p)) /\
- eval_operand op t = SOME w /\ op_taint tn' op = {} /\
+ eval_operand op t = SOME w /\ op_taint tn' op = {} /\ op_prov G' op = NONE /\
  (!H. valid_horizon cx st0 H ee.storage_trace ==>
  gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G',tn') /\
  stmt_state_rel H ctx func cenv cx ee t /\ storage_well_formed_on cx ee (FST H) /\
@@ -91,6 +91,10 @@ Proof
     simp[Abbr `inst`, step_taint_def, op_taint_def, set_var_taint_def,
       mk_inst_def, FLOOKUP_UPDATE, out_taint_def] >>
     rpt (BasicProvers.TOP_CASE_TAC >> fs[])) >>
+ `op_prov (step_prov PG G inst u) (Var dst) = NONE` by
+   (irule step_prov_out_none >>
+    qpat_x_assum `MEM opc _` mp_tac >> simp[] >> strip_tac >>
+    simp[Abbr `inst`, mk_inst_def, out_prov_def]) >>
  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb /\
   u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
   u.vs_alloca_next = s.vs_alloca_next /\ eval_operand op u = SOME w` by
