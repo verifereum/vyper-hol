@@ -101,7 +101,8 @@ Proof
    t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
    t.vs_pending_deletions = s.vs_pending_deletions /\
    t.vs_immutables = s.vs_immutables /\
-   t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels` by
+   t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels /\
+   t.vs_code = s.vs_code` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
   `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by

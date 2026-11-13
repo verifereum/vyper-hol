@@ -51,8 +51,8 @@ Theorem hash_compile_typed_unary_builtin_vv_sim_ptr:
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts /\
     ghost_inv d cenv cx ee G tn s /\
-    ptr_val_ok cx (expr_type e) v x G tn s /\
-    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G s) /\
+    ptr_val_ok cx (post_value_type cenv e) v x G tn s /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e x G s) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
     local_ptrs_rel func cenv es.scopes s0 ==>
     ?marks. gas_summary_ptr_at (cx_dead cx) (ctx,func) PG marks

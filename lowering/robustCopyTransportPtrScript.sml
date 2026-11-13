@@ -83,3 +83,23 @@ Proof
   `mem_bytes_at (p+j) 1 mem' = mem_bytes_at (p+j) 1 mem` by metis_tac[] >>
   pop_assum mp_tac >> simp[LIST_EQ_REWRITE, EL_mem_bytes_at]
 QED
+
+(* A later child may clean more bytes; robustness needs only monotone taint,
+   not equality of the old and new taint on the preserved value window. *)
+Theorem calldata_member_robust_window_frame:
+  val_wf tv v /\
+  mem_bytes_at p (val_footprint tv v) newmem =
+    mem_bytes_at p (val_footprint tv v) oldmem /\
+  newtaint SUBSET oldtaint /\
+  (!mem. mem_agree_outside oldtaint oldmem mem ==> val_in_memory tv v p mem) ==>
+  !mem. mem_agree_outside newtaint newmem mem ==> val_in_memory tv v p mem
+Proof
+  strip_tac >>
+  `!mem. mem_agree_outside oldtaint newmem mem ==> val_in_memory tv v p mem` by
+    (rpt strip_tac >> irule robust_val_in_memory_copy_transport >> simp[] >>
+     qexistsl_tac [`oldmem`, `newmem`, `val_footprint tv v`, `p`, `oldtaint`, `oldtaint`] >> simp[]) >>
+  rpt strip_tac >> first_x_assum irule >>
+  qpat_x_assum `mem_agree_outside _ _ _` mp_tac >>
+  qpat_x_assum `newtaint SUBSET oldtaint` mp_tac >>
+  simp[mem_agree_outside_def, pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
