@@ -1062,7 +1062,25 @@ Proof
     (qpat_x_assum `alloca_frame cenv origin_es caller old cenv es next` mp_tac >>
      simp[alloca_frame_def]) >>
   qexists_tac `next` >> fs[] >>
-  fs[array_caller_frame_def] >> metis_tac[]
+  fs[array_caller_frame_def] >>
+  `next.vs_current_bb = exit_lbl /\ next.vs_inst_idx = 0 /\ ~next.vs_halted` by
+    (qpat_x_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ exit_lbl _ _ es next`
+       mp_tac >>
+     rewrite_tac[array_loop_inv_def] >> strip_tac >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >>
+  `x <> dv` by
+    (strip_tac >> BasicProvers.VAR_EQ_TAC >>
+     qpat_x_assum `~not_fresh_at _ _` (fn th => first_assum (ACCEPT_TAC o MP th))) >>
+  qpat_x_assum `!x. x <> dv ==> lookup_var x next = lookup_var x s`
+    (qspec_then `x` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (fn th1 =>
+    qpat_x_assum `!x w. not_fresh_at caller x /\ lookup_var x old = SOME w ==>
+                        lookup_var x s = SOME w` (qspecl_then [`x`, `w`] mp_tac) >>
+    impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+    disch_then (fn th2 => rewrite_tac [th1, th2]))
 QED
 
 Theorem dynarray_for_loop_counted:
@@ -1159,7 +1177,8 @@ QED
 Resume dynarray_for_loop_counted[last]:
   rpt gen_tac >> simp[Abbr `Inv`, Abbr `Done`] >> strip_tac >>
   `array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
-     ainst cond_lbl st (LENGTH vs) ei s /\ array_caller_frame caller old s` by
+     ainst cond_lbl st (LENGTH vs) ei s /\ array_caller_frame caller old s /\
+   alloca_frame cenv origin_es caller old cenv ei s` by
     metis_tac[] >>
   `!x. not_fresh_at caller x ==> x <> dv` by metis_tac[] >>
   `lookup_var lv s = SOME (n2w (LENGTH vs))` by
@@ -1176,7 +1195,8 @@ Resume dynarray_for_loop_counted[round]:
       fs[vyperStorageFootprintTheory.storage_trace_domain_def,
          array_round_storage_frame]) >>
   `array_loop_inv ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz
-     ainst cond_lbl st j ei s /\ array_caller_frame caller old s` by
+     ainst cond_lbl st j ei s /\ array_caller_frame caller old s /\
+   alloca_frame cenv origin_es caller old cenv ei s` by
     (fs[Abbr `Inv`] >> metis_tac[]) >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> Inv _ _ _ _` kall_tac >>
   `P ei /\ lookup_scopes id ei.scopes = NONE` by fs[array_loop_inv_def] >>
