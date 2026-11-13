@@ -94,22 +94,35 @@ Proof
        `gas_explicit marks s0.vs_gas_readings ++ []`] >> simp[]) >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  `?dw. lookup_var p s = SOME dw` by
-    (qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_post_def, stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-     metis_tac[]) >>
+  `local_ptrs_rel func cenv (ee with gas_obs := []).scopes s` by
+    (qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE
+         [expr_post_def, stmt_state_rel_def, state_rel_def]) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_x_assum `local_ptrs_rel func cenv _ s`
+    (mp_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
+  disch_then (qspecl_then [`id`, `entry`, `p`, `cap`] mp_tac o CONJUNCT1) >>
+  impl_tac >- (simp[] >> asm_rewrite_tac []) >>
+  disch_then (qx_choose_then `dw` strip_assume_tac) >>
   `type_memory_size dtv <= cap` by
-    (qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_post_def, stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-     metis_tac[]) >>
+    (qpat_assum `entry.type = dtv` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
   `MAP FDOM (ee with gas_obs := []).scopes = MAP FDOM es.scopes` by
     (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
      disch_then (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
   `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) s` by
-    (irule expr_post_alloca_frame >> metis_tac[]) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] expr_post_alloca_frame) >>
+     asm_rewrite_tac [] >>
+     qexistsl_tac [`H0`, `ctx`, `cx`, `e`, `func`, `op`, `sb`, `v`] >>
+     asm_rewrite_tac []) >>
   `find_containing_scope id (ee with gas_obs := []).scopes =
      SOME (pre,env,entry,rest)` by simp[] >>
-  drule_all (SRULE [PULL_EXISTS] assign_relayout_store_post_path) >>
+  `?H. valid_horizon cx st0 H (ee with gas_obs := []).storage_trace` by
+    (qexists_tac `H0` >> first_assum ACCEPT_TAC) >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `ee with gas_obs := []`,
+    `s0`, `s`, `sa`, `sb`, `sf`, `op`, `id`, `p`, `cap`, `dw`, `v`, `stv`,
+    `dtv`, `sty`, `dty`, `pre`, `env`, `entry`, `rest`, `loc`, `bytes`, `st0`]
+    mp_tac (INST_TYPE [alpha |-> ``:256``] assign_relayout_store_post_path) >>
+  impl_tac >- asm_rewrite_tac [] >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
   qexistsl_tac [`ee with scopes :=
     pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest`, `t`] >>
