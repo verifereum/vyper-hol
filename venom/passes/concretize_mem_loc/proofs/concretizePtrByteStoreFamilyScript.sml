@@ -18,7 +18,7 @@ Ancestors
   concretizePtrHistoricalWriteClassification concretizePtrTaggedSupport
   concretizePtrEventEmbedding concretizePtrBytes concretizePtrComparisonTransport
   concretizePtrOrdinaryNext concretizePtrPairedPrefixProbe
-  concretizePtrOperationalOpcodes
+  concretizePtrOperationalOpcodes frameResolvedTrace
 
 Theorem ptr_byte_store_mstore8_operands_untainted:
   taint_ok fn tn inst s /\ inst.inst_opcode = MSTORE8 ==>
@@ -226,7 +226,7 @@ Theorem ptr_byte_store_transcript_successor:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
@@ -362,7 +362,7 @@ Theorem ptr_byte_store_write_producer:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
@@ -412,8 +412,9 @@ Resume ptr_byte_store_write_producer[setup]:
   `EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def,
         EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `dyn_floor C a.po_state = dyn_floor C vs` by
+    (drule frameResolvedTraceTheory.frame_reachable_initial_fmp >>
+     simp[dyn_floor_def]) >>
   `!x. x IN FDOM TG ==> x IN fn_pv P a.po_fn` by
     (rpt strip_tac >>
      `?tag. FLOOKUP TG x = SOME tag` by metis_tac[FLOOKUP_DEF] >>
@@ -476,16 +477,24 @@ Resume ptr_byte_store_write_producer[classify]:
      drule ptr_chrono_history_end >> strip_tac >>
      qpat_x_assum `LAST h = a` mp_tac >> simp[LAST_EL, PRE_SUB1]) >>
   `len <> 0` by simp[Abbr `len`] >>
-  `(op_prov TG ops.iao_ofst = NONE /\
-    op_taint (EL (LENGTH h - 1) h).po_taint ops.iao_ofst = {} /\ w2n addr + len <= lo) \/
+  Q.SUBGOAL_THEN `(op_prov TG ops.iao_ofst = NONE /\
+    op_taint (EL (LENGTH h - 1) h).po_taint ops.iao_ofst = {} /\
+    (w2n addr + len <= lo \/ dyn_floor C vs <= w2n addr)) \/
    (?dv token bid db sb pb. ops.iao_ofst = Var dv /\ FLOOKUP TG dv = SOME (token,bid) /\
     FLOOKUP (EL (LENGTH h - 1) h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\ db <= w2n addr /\
-    w2n addr + len <= db+sb /\ pb+sb < dimword(:256))` by
-    (irule ptr_historical_write_classification_static >> simp[Abbr `ops`] >>
+    w2n addr + len <= db+sb /\ pb+sb < dimword(:256))`
+    (DISJ_CASES_THEN2 (MAP_EVERY assume_tac o CONJUNCTS) strip_assume_tac)
+  >- (irule ptr_historical_write_classification >> simp[Abbr `ops`] >>
+     conj_tac >- (qexists_tac `names` >> first_assum ACCEPT_TAC) >>
      conj_tac >- (qexists_tac `a.po_fn` >> simp[]) >>
+     conj_tac >- (qexistsl [`C'`, `rpolicy`] >> fs[]) >>
      rpt (goal_assum (drule_at Any)) >> simp[Abbr `len`])
-  >- suspend "fixed" >> suspend "owned")
+  >- (`!x. w2n addr <= x /\ x < w2n addr + len ==> x < lo \/ dyn_floor C vs <= x` by
+        (rpt strip_tac >> decide_tac) >>
+      qpat_x_assum `w2n addr + len <= lo \/ _` kall_tac >>
+      suspend "fixed") >>
+  suspend "owned")
 QED
 
 Resume ptr_byte_store_write_producer[nonrevert]:
@@ -504,7 +513,6 @@ QED
 Resume ptr_byte_store_write_producer[fixed]:
   markerLib.RESUME_TAC >> (
   fs[Abbr `ops`, Abbr `len`] >>
-  qpat_x_assum `w2n addr + _ <= lo` mp_tac >> simp[] >> strip_tac >>
   drule ptr_structural_trace_embedding >> strip_tac >>
   drule ptr_structural_trace_target >> strip_tac >>
   drule ptr_chrono_history_end >> strip_tac >>
@@ -518,10 +526,13 @@ Resume ptr_byte_store_write_producer[fixed]:
   >- (simp[step_writes_def, source_memory_write_ranges_def,
         fixed_source_write_range_def, range_bytes_def, pred_setTheory.EXTENSION] >>
       qexists_tac `w2n addr` >> simp[]) >>
-  reverse conj_tac
-  >- (simp[ptr_paired_write_owner_def, step_writes_def,
-        source_memory_write_ranges_def, fixed_source_write_range_def, range_bytes_def] >>
-      rpt strip_tac >> disj1_tac >> decide_tac) >>
+  rpt conj_tac >>
+  TRY (qmatch_rename_tac `ptr_paired_write_owner _ _ _ _ _ _` >>
+       simp[ptr_paired_write_owner_def, step_writes_def,
+         source_memory_write_ranges_def, fixed_source_write_range_def, range_bytes_def] >>
+       rpt strip_tac >>
+       `x < lo \/ dyn_floor C vs <= x` by (first_x_assum irule >> fs[]) >> fs[] >>
+       NO_TAC) >>
   qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
   once_rewrite_tac[ptr_chrono_step_cases] >>
   simp[ptr_observe_def, ptr_observation_component_equality, is_terminator_def] >>
@@ -606,9 +617,9 @@ Resume ptr_byte_store_write_producer[mstore8_owned]:
   `MEM token tokens` by
     (drule_all ptr_source_ownership_live_prov >> simp[]) >>
   `FLOOKUP births (token,bid) = SOME (db,sb)` by
-    (drule_all ptr_source_ownership_static_prov_erases >>
-     simp[ptr_ledger_erases_every_dyn] >> strip_tac >>
-     first_x_assum (qspec_then `dv` mp_tac) >> gvs[]) >>
+    (drule_all ptr_source_ownership_prov_erases >>
+     simp[ptr_ledger_erases_def, ptr_owner_erases_def] >>
+     disch_then (qspec_then `dv` mp_tac o CONJUNCT1) >> gvs[]) >>
   drule ptr_structural_trace_embedding >> strip_tac >>
   drule ptr_structural_trace_target >> strip_tac >>
   drule ptr_chrono_history_end >> strip_tac >>
@@ -679,7 +690,7 @@ Theorem ptr_paired_prefix_byte_store:
   o1_ctx_shape C /\ o1_run_state_ok vs /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
@@ -763,8 +774,6 @@ Resume ptr_paired_prefix_byte_store[sample]:
   `EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def,
         EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `!x. x IN FDOM TG ==> x IN fn_pv P a.po_fn` by
     (rpt strip_tac >>
      `?tag. FLOOKUP TG x = SOME tag` by metis_tac[FLOOKUP_DEF] >>
@@ -892,7 +901,7 @@ Theorem ptr_paired_byte_store_prefix_normalize:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\

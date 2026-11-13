@@ -6,6 +6,7 @@ Ancestors concretizePtrComparisonTransport concretizePtrValueTransport pair conc
   concretizePtrStagePlacements concretizePtrAllocationOwnership
   concretizePtrActivationChronology concretizePtrActivationBirths
   concretizePtrChronologicalHistory concretizePtrPrefixLedger concretizePtrOwnerPath concretizePtrOwnerSeeds
+  concretizePtrOwnerFloor venomWf
   o1PassContract unitTransformDefs mem2varBlockSimHelpers ptrDiscipline venomExecSemantics venomState venomInst
   words arithmetic list rich_list finite_map pred_set
 
@@ -14,7 +15,7 @@ Theorem ptr_comparison_common_position[local]:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   FLOOKUP TG u = SOME (tu,iu) /\ FLOOKUP TG v = SOME (tv,iv) /\
@@ -25,8 +26,6 @@ Theorem ptr_comparison_common_position[local]:
 Proof
   strip_tac >> Cases_on `sz = 0`
   >- (gvs[] >> metis_tac[ptr_stage_live_zero_position]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `ptr_ledger_source_activations vs C h a tokens registry` by
     metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_activations] >>
   `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
@@ -50,12 +49,16 @@ Proof
   metis_tac[]
 QED
 
+(* The two compared variables share one positive-size site (access_ok).  A
+   tagged one's site is a static allocation below the dynamic floor; an
+   untagged one's is in the dynamic region above it, so both are tagged
+   (relocated by the same position) or both untagged (unchanged). *)
 Theorem ptr_comparison_lookup_values[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   ptr_value_transport births positions (FLOOKUP TG u) {} x x' /\
@@ -70,25 +73,67 @@ Theorem ptr_comparison_lookup_values[local]:
   (w2n x' > w2n y' <=> w2n x > w2n y)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all ptr_source_ownership_static_prov_erases >>
-  simp[ptr_ledger_erases_every_dyn] >> strip_tac >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_def,
+       venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[]) >>
+  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
   Cases_on `u IN FDOM a.po_prov \/ v IN FDOM a.po_prov`
-  >- (qsuff_tac `?b sz. FLOOKUP a.po_prov u = SOME (b,sz) /\
-          FLOOKUP a.po_prov v = SOME (b,sz) /\
-          b <= w2n x /\ w2n x <= b + sz /\ b <= w2n y /\ w2n y <= b + sz`
-      >- (strip_tac >>
-          `?tu iu tv iv. FLOOKUP TG u = SOME (tu,iu) /\ FLOOKUP TG v = SOME (tv,iv)` by
-            (fs[ptr_ledger_erases_def, AllCaseEqs()] >> metis_tac[pair_CASES]) >>
-          `?p. FLOOKUP positions (Allocation iu) = SOME (p,sz) /\
-               FLOOKUP positions (Allocation iv) = SOME (p,sz)` by
-            (irule ptr_comparison_common_position >>
-             rpt (goal_assum (drule_at Any)) >> simp[]) >>
-          gvs[ptr_value_transport_def, ptr_ledger_erases_def] >>
-          metis_tac[ptr_comparison_eq_transport, ptr_comparison_lt_transport,
-                    ptr_comparison_gt_transport]) >>
-      fs[access_ok_def] >> metis_tac[]) >>
-  `FLOOKUP TG u = NONE /\ FLOOKUP TG v = NONE` by
-    (fs[ptr_ledger_erases_def, FLOOKUP_DEF, AllCaseEqs()] >> metis_tac[]) >>
+  >- (`?b sz. FLOOKUP a.po_prov u = SOME (b,sz) /\
+          FLOOKUP a.po_prov v = SOME (b,sz) /\ 0 < sz /\
+          b <= w2n x /\ w2n x <= b + sz /\ b <= w2n y /\ w2n y <= b + sz` by
+        (fs[access_ok_def] >> metis_tac[]) >>
+      `!w tag. FLOOKUP TG w = SOME tag /\ FLOOKUP a.po_prov w = SOME (b,sz) /\
+         ctx_has_dalloca C ==> b + sz <= dyn_floor C vs` by
+        (rpt strip_tac >> PairCases_on `tag` >>
+         drule_all ptr_stage_placements_live_owner >> strip_tac >>
+         `ptr_observation_reachable vs C a` by
+           metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_activations,
+             ptr_source_activations_sound, ptr_chrono_history_reachable] >>
+         drule_all ptr_reachable_owner_below_initial_fmp >> simp[dyn_floor_def]) >>
+      `w2n x < dimword (:256)` by simp[w2n_lt] >>
+      `!w. FLOOKUP TG w = NONE /\ FLOOKUP a.po_prov w = SOME (b,sz) ==>
+         dyn_floor C vs <= b` by
+        (rpt strip_tac >>
+         qpat_x_assum `ptr_ledger_erases _ _ _ _` mp_tac >>
+         simp[ptr_ledger_erases_def] >> strip_tac >>
+         qpat_x_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `w` mp_tac) >>
+         simp[ptr_owner_erases_def]) >>
+      Cases_on `FLOOKUP TG u` >> Cases_on `FLOOKUP TG v`
+      >- gvs[ptr_value_transport_scalar_empty]
+      >- (`ctx_has_dalloca C ==> b + sz <= dyn_floor C vs` by metis_tac[] >>
+          `dyn_floor C vs <= b` by metis_tac[] >>
+          Cases_on `ctx_has_dalloca C` >> fs[dyn_floor_def])
+      >- (`ctx_has_dalloca C ==> b + sz <= dyn_floor C vs` by metis_tac[] >>
+          `dyn_floor C vs <= b` by metis_tac[] >>
+          Cases_on `ctx_has_dalloca C` >> fs[dyn_floor_def]) >>
+      rename1 `FLOOKUP TG u = SOME tgu` >> rename1 `FLOOKUP TG v = SOME tgv` >>
+      PairCases_on `tgu` >> PairCases_on `tgv` >>
+      `FLOOKUP births (tgu0,tgu1) = SOME (b,sz) /\
+       FLOOKUP births (tgv0,tgv1) = SOME (b,sz)` by
+        (qpat_x_assum `ptr_ledger_erases _ _ _ _` mp_tac >>
+         simp[ptr_ledger_erases_def] >> strip_tac >>
+         qpat_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `u` mp_tac) >>
+         qpat_x_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `v` mp_tac) >>
+         simp[ptr_owner_erases_def] >> rpt strip_tac >> simp[]) >>
+      `?p. FLOOKUP positions (Allocation tgu1) = SOME (p,sz) /\
+           FLOOKUP positions (Allocation tgv1) = SOME (p,sz)` by
+        (irule ptr_comparison_common_position >>
+         rpt (goal_assum (drule_at Any)) >> simp[]) >>
+      gvs[ptr_value_transport_def] >>
+      metis_tac[ptr_comparison_eq_transport, ptr_comparison_lt_transport,
+                ptr_comparison_gt_transport]) >>
+  `!w. w NOTIN FDOM a.po_prov ==> FLOOKUP TG w = NONE` by
+    (rpt strip_tac >>
+     `FLOOKUP a.po_prov w = NONE` by fs[FLOOKUP_DEF] >>
+     qpat_x_assum `ptr_ledger_erases _ _ _ _` mp_tac >>
+     simp[ptr_ledger_erases_def] >> strip_tac >>
+     Cases_on `FLOOKUP TG w` >> simp[] >>
+     rename1 `FLOOKUP TG w = SOME owner` >>
+     `owner IN FDOM births` by metis_tac[] >>
+     qpat_x_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `w` mp_tac) >>
+     simp[ptr_owner_erases_def] >> fs[FLOOKUP_DEF]) >>
+  `FLOOKUP TG u = NONE /\ FLOOKUP TG v = NONE` by (fs[] >> metis_tac[]) >>
   gvs[ptr_value_transport_scalar_empty]
 QED
 
@@ -97,7 +142,7 @@ Theorem ptr_comparison_values[local]:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   ptr_vars_transport births positions TG a.po_taint a.po_state t /\
@@ -141,7 +186,7 @@ Theorem ptr_comparison_transport:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   ptr_vars_transport births positions TG a.po_taint a.po_state t /\
@@ -227,7 +272,7 @@ Theorem ptr_mixed_comparison_values[local]:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   ptr_mixed_vars births positions TG a.po_taint a.po_fn g a.po_state t /\
@@ -278,7 +323,7 @@ Theorem ptr_mixed_comparison_execution:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
   ptr_stage_placements C' positions /\
   ptr_mixed_vars births positions TG a.po_taint a.po_fn g a.po_state t /\
