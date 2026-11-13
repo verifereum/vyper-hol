@@ -10,7 +10,9 @@
  * loads every element (from a staged copy when e is a memory view with an
  * aggregate element), then for each ti computes its pointer
  * (compile_get_target_ptr, simulated by targetPlaceSim's target_sim) and
- * stores the element there (placeStore).  The elements are loaded at the
+ * stores the element there (placeStore).  A target's indices may have
+ * effects (an internal call): target evaluation keeps the scopes, so a
+ * staged or borrowed RHS copy survives it.  The elements are loaded at the
  * RHS's lowered type (an internal call's declared return type, which the
  * call site may annotate with a wider type), and each store converts from
  * that layout to its target's.
@@ -44,10 +46,16 @@ Theorem compile_assign_tuple_places_stmt_frag:
     (!i. i < LENGTH tys /\ ~is_word_type (EL i tys) ==>
       type_memory_size (EL i tvs) + 64 < dimword (:256) /\
       type_memory_size (EL i ltvs) + 64 < dimword (:256)) /\
-    EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target_pure tops bt /\
-                    target_case F ctx func cenv cx bt /\
-                    ~immutable_root cx bt /\ target_indices_pre cenv cx env bt)
+    EVERY (\g. ?bt. g = BaseTarget bt /\
+                    EVERY (supported_expr tops) (target_indices bt) /\
+                    (body_base_target_ok cx bt ==>
+                     target_case F ctx func cenv cx bt) /\
+                    ~immutable_root cx bt /\ target_indices_pre cenv cx env bt /\
+                    call_evaluation_safe cx (int_calls_target bt))
       gs /\
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_ok cx (TupleTarget gs) v) /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_inv cenv cx env es /\
     expr_body_pre cenv cx env e es /\
@@ -94,7 +102,14 @@ Proof
       [`es` |-> `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
        `ee` |-> `mid with gas_obs := []`] tuple_place_root_rhs_ready) >>
      simp[] >> metis_tac[]) >> gvs[] >>
-  drule_all tuple_place_root_static_ready >> strip_tac >>
+  `type_alloc_ok cenv (TupleT tys)` by
+    (fs[expr_body_pre_def] >> drule exprSimHypsTheory.alloc_limits_expr_type_alloc_ok >> simp[]) >>
+  `body_tuple_targets_ok cx gs vs` by
+    (qpat_x_assum `bind (eval_expr _ _) _ _ = _` mp_tac >>
+     simp[vyperStateTheory.bind_def, AllCaseEqs()] >> strip_tac >>
+     `body_tuple_target_ok cx (TupleTarget gs) (ArrayV (TupleV vs))` by
+       metis_tac[] >>
+     fs[bodySimTheory.body_tuple_target_ok_def]) >>
   drule_all tuple_place_root_layout_ready >> strip_tac >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>

@@ -9,7 +9,7 @@
 
 Theory targetPlaceLive
 Ancestors
-  compileEnv loweringStateRelDefs accountsRelProps exprSimPopStorage
+  compileEnv loweringStateRelDefs accountsRelProps exprSimPopStorage allocLimits allocLimitsProps
   vyperAST vyperValue vyperState vyperInterpreter vyperLookupStorage
   vyperPlaceFrames vyperPureExpr vyperStatePreservation
   vyperStorageLayoutSafety vyperStoragePlaceRegion vyperStoragePlaceProvenance
@@ -22,6 +22,17 @@ Definition target_indices_def:
   target_indices (AttributeTarget t fld) = target_indices t /\
   target_indices (SubscriptTarget t e) = target_indices t ++ [e]
 End
+
+Theorem alloc_limits_target_indices_not_extcode:
+  alloc_limits_target cenv t ==>
+  EVERY (\e. ~is_extcode e) (target_indices t)
+Proof
+  `(!e:expr. T) /\ (!t. alloc_limits_target cenv t ==>
+      EVERY (\e. ~is_extcode e) (target_indices t))` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[target_indices_def, alloc_limits_expr_def] >>
+  metis_tac[alloc_limits_expr_not_extcode]
+QED
 
 Theorem nested_pop_lookup_frame:
   off + sz <= dimword (:256) /\
@@ -214,7 +225,6 @@ Proof
       gvs[Once dead_bytes_def] >>
       rename1 `a < n'` >> pure_once_rewrite_tac[loweringStateRelDefsTheory.dead_bytes_def] >>
       qexists `a` >> simp[] >>
-      Cases_on `a < w2n (lookup_storage (n2w off) st)` >> gvs[] >>
       Cases_on `a = Num i`
       >- (gvs[] >> first_x_assum irule >>
           goal_assum (drule_at Any) >> simp[] >> conj_tac
@@ -360,10 +370,8 @@ Proof
   gvs[Once dead_bytes_def] >>
   `w2n w + (i * type_slot_size elem + 1) <= j /\
    j < w2n w + ((i + 1) * type_slot_size elem + 1)` by
-    (Cases_on `i < w2n (lookup_storage w st)` >> gvs[]
-     >- (drule (cj 1 accountsRelPropsTheory.dead_bytes_range) >>
-         simp[arithmeticTheory.RIGHT_ADD_DISTRIB] >> decide_tac) >>
-     gvs[arithmeticTheory.MULT_COMM]) >>
+    (drule (cj 1 accountsRelPropsTheory.dead_bytes_range) >>
+     simp[arithmeticTheory.RIGHT_ADD_DISTRIB] >> decide_tac) >>
   `i = k` suffices_by (strip_tac >> gvs[]) >>
   Cases_on `i < k`
   >- (`(i + 1) * type_slot_size elem <= k * type_slot_size elem` by

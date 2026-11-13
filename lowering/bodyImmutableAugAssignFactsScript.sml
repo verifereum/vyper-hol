@@ -106,12 +106,9 @@ Theorem immutable_augassign_load:
   mload off ss = typed_val_to_w256 tv v
 Proof
   strip_tac >>
-  `val_in_memory tv v off ss.vs_memory` by
-    (fs[stmt_state_rel_def, state_rel_def, immutables_rel_def] >> metis_tac[]) >>
   `immutable_holds cenv cx ty (Value v) (n2w off) es ss` by
     (simp[immutable_holds_def, read_result_def, return_def] >>
-     qexistsl_tac [`id`, `off`, `tv`, `v`, `0`] >> simp[] >>
-     `off < dimword (:256)` by decide_tac >> simp[]) >>
+     qexistsl_tac [`id`, `off`, `tv`, `v`, `0`] >> simp[sub_layout_def]) >>
   drule_all immutable_holds_iload >> strip_tac >> gvs[] >>
   `off < dimword (:256)` by decide_tac >>
   gvs[wordsTheory.w2n_n2w]

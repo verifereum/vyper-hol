@@ -53,7 +53,7 @@ Proof
 QED
 
 Theorem immutable_assign_loccode_open:
-  compile_assign_value ce dst LocCode src prim loc dt st da bytes sa = ((),sb) ==>
+  compile_assign_value ce dst LocCode src prim loc dt st bytes sa = ((),sb) ==>
   ~block_is_terminated sb
 Proof
   simp[compile_assign_value_def, LET_THM, immutable_comp_bind_cases] >>
