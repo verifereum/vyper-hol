@@ -49,7 +49,7 @@ Theorem lower_typed_args_cons_tail_ptr:
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG (eval_exprs cx args)
     (es1,t,G1,tn1)
     (\rr ee G tn u. ?vs. rr = INL vs /\
-       typed_args_post_ptr d ctx func cenv cx es1 s1 t G1 tn1 ee
+       typed_args_post_ptr H d ctx func cenv cx es1 s1 t G1 tn1 ee
          args xs vs G tn u /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -57,7 +57,7 @@ Theorem lower_typed_args_cons_tail_ptr:
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
     (do vs <- eval_exprs cx args; return (v::vs) od) (es1,t,G1,tn1)
     (\rr ee G tn u. ?vs. rr = INL vs /\
-       typed_args_post_ptr d ctx func cenv cx es sa s0 G0 tn0 ee
+       typed_args_post_ptr H d ctx func cenv cx es sa s0 G0 tn0 ee
          (e::args) (x::xs) vs G tn u /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)

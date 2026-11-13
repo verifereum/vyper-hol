@@ -7,7 +7,7 @@ Ancestors
 
 Theorem raw_call_keywords_post:
   !ks xs vs.
-    typed_args_post ctx func cenv cx es sa s0 es' ks xs vs s /\
+    typed_args_post H ctx func cenv cx es sa s0 es' ks xs vs s /\
     EVERY (\e. expr_type e = BaseT (UintT 256)) ks ==>
     LIST_REL (\x v. eval_operand x s = SOME
       (typed_val_to_w256 (BaseTV (UintT 256)) v)) xs vs
@@ -65,7 +65,7 @@ Theorem raw_call_keywords_decode:
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
   expr_sim_inv cenv cx env es2 /\
   eval_exprs cx kws es2 = (INL kvs,es') /\
-  typed_args_post ctx func cenv cx es0 sa s0 es' kws xs kvs s ==>
+  typed_args_post H ctx func cenv cx es0 sa s0 es' kws xs kvs s ==>
   ?amount. raw_call_value flags.rcf_kws kvs = SOME amount /\
     eval_operand (case ext_call_kwarg EKValue flags.rcf_kws xs of
       NONE => Lit 0w | SOME x => x) s = SOME (n2w amount) /\
@@ -187,7 +187,7 @@ QED
 Theorem raw_call_prefix_amount:
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
   eval_exprs cx (a::d::kws) es = (INL (av::BytesV bs::kvs),ee) /\
-  typed_args_post ctx func cenv cx ed sm th ee kws xs kvs s ==>
+  typed_args_post H ctx func cenv cx ed sm th ee kws xs kvs s ==>
   ?amount. raw_call_value flags.rcf_kws kvs = SOME amount /\
     eval_operand (case ext_call_kwarg EKValue flags.rcf_kws xs of
       NONE => Lit 0w | SOME x => x) s = SOME (n2w amount) /\

@@ -11,7 +11,7 @@ Ancestors
   exprBopLowering loweringSlice localPtrsProps
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState valueEncoding venomExecSemantics venomInst
-  venomState vyperValue exprSimWordBuiltins
+  venomState vyperValue exprSimWordBuiltins vyperStorageFootprint
   words integer_word vfmExecution builtinMath builtinMisc builtinSimple vyperContext builtinProps
 Libs
   pairLib
@@ -25,18 +25,23 @@ Theorem word_builtin_mem_success:
        LIST_REL (\x v. eval_operand x ss = SOME (val_to_w256 v)) xs vs ==>
        ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
              eval_operand op ss' = SOME (val_to_w256 v)) ==>
-    !sa sb xs op s0.
+    !st0 sa sb xs op s0.
       code xs sa = (op, sb) /\ expr_res_ok res /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel H ctx func cenv cx es0 s0 /\ alloca_history func s0 /\
+      (!H. valid_horizon cx st0 H es0.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es0 s0 /\
+         storage_well_formed_on cx es0 (FST H)) /\
+      (?H. valid_horizon cx st0 H es0.storage_trace) /\ alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs vs /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\ res = INL v /\ word_value v /\
-                stmt_state_rel H ctx func cenv cx es0 s /\
+                (!H. valid_horizon cx st0 H es0.storage_trace ==>
+                  stmt_state_rel H ctx func cenv cx es0 s /\
+                  storage_well_formed_on cx es0 (FST H)) /\
                 eval_operand op s = SOME (val_to_w256 v) /\
                 (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                        lookup_var z s = SOME w) /\
@@ -49,6 +54,8 @@ Theorem word_builtin_mem_success:
          (exit_result r /\ expr_exit res r))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx es0 s0` by metis_tac[] >>
   `fresh_vars_wrt sa (drop_fresh sa s0)` by
     simp[fresh_vars_wrt_drop_fresh] >>
   `LIST_REL (\x v. eval_operand x (drop_fresh sa s0) = SOME (val_to_w256 v)) xs vs` by
@@ -85,6 +92,12 @@ Proof
   (impl_tac >- simp[]) >> strip_tac >>
   `target.vs_alloca_next = s0.vs_alloca_next` by
     (qpat_x_assum `target = _` (fn th => once_rewrite_tac [th]) >> simp[]) >>
+  `!H. valid_horizon cx st0 H es0.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es0
+         (target with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> _ /\ _` (drule_then strip_assume_tac) >>
+     drule_all straight_fresh_run_post >> simp[]) >>
   qexists_tac `OK (target with vs_inst_idx := LENGTH sb.cs_current_insts)` >>
   gvs[gas_marked_path_def] >> metis_tac[]
 QED
@@ -97,18 +110,23 @@ Theorem word_builtin_mem_revert:
        code xs sa = (op, sb) /\ fresh_vars_wrt sa ss /\
        LIST_REL (\x v. eval_operand x ss = SOME (val_to_w256 v)) xs vs ==>
        ?ss'. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort ss') ==>
-    !sa sb xs op s0.
+    !st0 sa sb xs op s0.
       code xs sa = (op, sb) /\ expr_res_ok res /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel H ctx func cenv cx es0 s0 /\ alloca_history func s0 /\
+      (!H. valid_horizon cx st0 H es0.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es0 s0 /\
+         storage_well_formed_on cx es0 (FST H)) /\
+      (?H. valid_horizon cx st0 H es0.storage_trace) /\ alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs vs /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\ res = INL v /\ word_value v /\
-                stmt_state_rel H ctx func cenv cx es0 s /\
+                (!H. valid_horizon cx st0 H es0.storage_trace ==>
+                  stmt_state_rel H ctx func cenv cx es0 s /\
+                  storage_well_formed_on cx es0 (FST H)) /\
                 eval_operand op s = SOME (val_to_w256 v) /\
                 (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                        lookup_var z s = SOME w) /\
@@ -121,6 +139,8 @@ Theorem word_builtin_mem_revert:
          (exit_result r /\ expr_exit res r))
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx es0 s0` by metis_tac[] >>
   `fresh_vars_wrt sa (drop_fresh sa s0)` by
     simp[fresh_vars_wrt_drop_fresh] >>
   `LIST_REL (\x v. eval_operand x (drop_fresh sa s0) = SOME (val_to_w256 v)) xs vs` by
@@ -154,14 +174,17 @@ QED
 
 Theorem compile_pow_mod256_word_frag_mem:
   !ctx func cenv cx es ann ts (a:bytes32) (b:bytes32).
-    !sa sb xs op s0.
+    !st0 sa sb xs op s0.
       compile_pow_mod256 (EL 0 xs) (EL 1 xs) sa = (op, sb) /\
       expr_res_ok (builtin_result cx es.accounts ann PowMod256 ts
         [IntV (&w2n a); IntV (&w2n b)]) /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s0 /\
+         storage_well_formed_on cx es (FST H)) /\
+      (?H. valid_horizon cx st0 H es.storage_trace) /\ alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs
         [IntV (&w2n a); IntV (&w2n b)] /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
@@ -170,7 +193,9 @@ Theorem compile_pow_mod256_word_frag_mem:
         ((?s v. r = OK s /\
                 builtin_result cx es.accounts ann PowMod256 ts
                   [IntV (&w2n a); IntV (&w2n b)] = INL v /\ word_value v /\
-                stmt_state_rel H ctx func cenv cx es s /\
+                (!H. valid_horizon cx st0 H es.storage_trace ==>
+                  stmt_state_rel H ctx func cenv cx es s /\
+                  storage_well_formed_on cx es (FST H)) /\
                 eval_operand op s = SOME (val_to_w256 v) /\
                 (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                        lookup_var z s = SOME w) /\
@@ -196,20 +221,25 @@ Theorem compile_pow_mod256_typed_frag_mem:
   !ctx func cenv cx es ann ts v1 v2.
     value_has_type (BaseTV (UintT 256)) v1 /\
     value_has_type (BaseTV (UintT 256)) v2 ==>
-    !sa sb xs op s0.
+    !st0 sa sb xs op s0.
       compile_pow_mod256 (EL 0 xs) (EL 1 xs) sa = (op, sb) /\
       expr_res_ok (builtin_result cx es.accounts ann PowMod256 ts [v1; v2]) /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s0 /\
+         storage_well_formed_on cx es (FST H)) /\
+      (?H. valid_horizon cx st0 H es.storage_trace) /\ alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs [v1; v2] /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\
                 builtin_result cx es.accounts ann PowMod256 ts [v1; v2] = INL v /\
-                word_value v /\ stmt_state_rel H ctx func cenv cx es s /\
+                word_value v /\ (!H. valid_horizon cx st0 H es.storage_trace ==>
+                  stmt_state_rel H ctx func cenv cx es s /\
+                  storage_well_formed_on cx es (FST H)) /\
                 eval_operand op s = SOME (val_to_w256 v) /\
                 (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                        lookup_var z s = SOME w) /\
@@ -233,14 +263,17 @@ QED
 
 Theorem compile_modular_word_frag_mem:
   !is_mul ctx func cenv cx es ann ts (a:bytes32) (b:bytes32) (c:bytes32).
-    !sa sb xs op s0.
+    !st0 sa sb xs op s0.
       (if is_mul then compile_mulmod else compile_addmod)
         (EL 0 xs) (EL 1 xs) (EL 2 xs) sa = (op,sb) /\
       expr_res_ok (builtin_result cx es.accounts ann (if is_mul then MulMod else AddMod) ts
         [IntV (&w2n a); IntV (&w2n b); IntV (&w2n c)]) /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
+      local_ptrs_reserved cenv sa /\ (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s0 /\
+         storage_well_formed_on cx es (FST H)) /\
+      (?H. valid_horizon cx st0 H es.storage_trace) /\
       alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs
         [IntV (&w2n a); IntV (&w2n b); IntV (&w2n c)] /\
@@ -250,7 +283,9 @@ Theorem compile_modular_word_frag_mem:
         ((?s v. r = OK s /\
           builtin_result cx es.accounts ann (if is_mul then MulMod else AddMod) ts
             [IntV (&w2n a); IntV (&w2n b); IntV (&w2n c)] = INL v /\
-          word_value v /\ stmt_state_rel H ctx func cenv cx es s /\
+          word_value v /\ (!H. valid_horizon cx st0 H es.storage_trace ==>
+                  stmt_state_rel H ctx func cenv cx es s /\
+                  storage_well_formed_on cx es (FST H)) /\
           eval_operand op s = SOME (val_to_w256 v) /\
           (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
@@ -286,13 +321,16 @@ Theorem compile_modular_typed_frag_mem:
     value_has_type (BaseTV (UintT 256)) v1 /\
     value_has_type (BaseTV (UintT 256)) v2 /\
     value_has_type (BaseTV (UintT 256)) v3 ==>
-    !sa sb xs op s0.
+    !st0 sa sb xs op s0.
       (if is_mul then compile_mulmod else compile_addmod)
         (EL 0 xs) (EL 1 xs) (EL 2 xs) sa = (op,sb) /\
       expr_res_ok (builtin_result cx es.accounts ann (if is_mul then MulMod else AddMod) ts [v1;v2;v3]) /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
+      local_ptrs_reserved cenv sa /\ (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s0 /\
+         storage_well_formed_on cx es (FST H)) /\
+      (?H. valid_horizon cx st0 H es.storage_trace) /\
       alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs [v1;v2;v3] /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
@@ -300,7 +338,9 @@ Theorem compile_modular_typed_frag_mem:
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\
           builtin_result cx es.accounts ann (if is_mul then MulMod else AddMod) ts [v1;v2;v3] = INL v /\
-          word_value v /\ stmt_state_rel H ctx func cenv cx es s /\
+          word_value v /\ (!H. valid_horizon cx st0 H es.storage_trace ==>
+                  stmt_state_rel H ctx func cenv cx es s /\
+                  storage_well_formed_on cx es (FST H)) /\
           eval_operand op s = SOME (val_to_w256 v) /\
           (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
@@ -324,19 +364,24 @@ QED
 Theorem compile_floor_word_frag_mem:
   !ctx func cenv cx es ann ts i.
     within_int_bound (Signed 168) i ==>
-    !sa sb xs op s0.
+    !st0 sa sb xs op s0.
       compile_floor (EL 0 xs) 10000000000 sa = (op,sb) /\
       expr_res_ok (builtin_result cx es.accounts ann Floor ts [DecimalV i]) /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
+      local_ptrs_reserved cenv sa /\ (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s0 /\
+         storage_well_formed_on cx es (FST H)) /\
+      (?H. valid_horizon cx st0 H es.storage_trace) /\
       alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs [DecimalV i] /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\ builtin_result cx es.accounts ann Floor ts [DecimalV i] = INL v /\
-          word_value v /\ stmt_state_rel H ctx func cenv cx es s /\
+          word_value v /\ (!H. valid_horizon cx st0 H es.storage_trace ==>
+                  stmt_state_rel H ctx func cenv cx es s /\
+                  storage_well_formed_on cx es (FST H)) /\
           eval_operand op s = SOME (val_to_w256 v) /\
           (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
@@ -356,12 +401,15 @@ QED
 
 Theorem compile_as_wei_value_word_frag_mem:
   !ctx func cenv cx es ann ts d (a:bytes32).
-    !sa sb xs op s0.
+    !st0 sa sb xs op s0.
       compile_as_wei_value_int (EL 0 xs) (denomination_multiplier d) F sa = (op,sb) /\
       expr_res_ok (builtin_result cx es.accounts ann (AsWeiValue d) ts [IntV (&w2n a)]) /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
+      local_ptrs_reserved cenv sa /\ (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s0 /\
+         storage_well_formed_on cx es (FST H)) /\
+      (?H. valid_horizon cx st0 H es.storage_trace) /\
       alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs [IntV (&w2n a)] /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
@@ -369,7 +417,9 @@ Theorem compile_as_wei_value_word_frag_mem:
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\
           builtin_result cx es.accounts ann (AsWeiValue d) ts [IntV (&w2n a)] = INL v /\
-          word_value v /\ stmt_state_rel H ctx func cenv cx es s /\
+          word_value v /\ (!H. valid_horizon cx st0 H es.storage_trace ==>
+                  stmt_state_rel H ctx func cenv cx es s /\
+                  storage_well_formed_on cx es (FST H)) /\
           eval_operand op s = SOME (val_to_w256 v) /\
           (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\

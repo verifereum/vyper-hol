@@ -676,10 +676,10 @@ QED
 
 (* A zero-observation target prefix does not change the source observations. *)
 Theorem gas_marked_exec_zero_prefix:
-  gas_marked_path F ctx func s0 0 (OK t) /\
-  gas_marked_exec F (ctx,func) source (es with gas_obs := [],t)
+  gas_marked_path memory ctx func s0 0 (OK t) /\
+  gas_marked_exec memory (ctx,func) source (es with gas_obs := [],t)
     marks res ee r ==>
-  gas_marked_exec F (ctx,func) source (es,s0) marks res ee r
+  gas_marked_exec memory (ctx,func) source (es,s0) marks res ee r
 Proof
   strip_tac >>
   `gas_explicit marks s0.vs_gas_readings =
@@ -790,9 +790,9 @@ QED
 
 (* A bad storage trace at the end of e (run after the zero-mark load of x)
    stays bad through the operator and the memory write. *)
-Theorem augassign_rhs_bad_storage:
+Theorem augassign_rhs_bad_storage_any:
   lookup_scopes id es.scopes = SOME entry /\
-  gas_marked_path F ctx func s0 0 (OK t) /\
+  gas_marked_path memory ctx func s0 0 (OK t) /\
   gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
     (es with gas_obs := []) t marks ==>
   gas_bad_storage_at cx st0 (eval_stmt cx (AugAssign ty (NameTarget id) bop e))
@@ -821,6 +821,18 @@ Proof
      (es with gas_obs := gas_explicit marks t.vs_gas_readings ++ tail).scopes =
    SOME entry` by simp[] >>
   drule eval_augassign_local_forced >> simp[]
+QED
+
+(* The non-memory instance. *)
+Theorem augassign_rhs_bad_storage:
+  lookup_scopes id es.scopes = SOME entry /\
+  gas_marked_path F ctx func s0 0 (OK t) /\
+  gas_bad_storage_at cx st0 (bind (eval_expr cx e) (read_result cx))
+    (es with gas_obs := []) t marks ==>
+  gas_bad_storage_at cx st0 (eval_stmt cx (AugAssign ty (NameTarget id) bop e))
+    es s0 marks
+Proof
+  metis_tac[augassign_rhs_bad_storage_any]
 QED
 
 (* A live-local store: the counted instruction and the complete statement post.

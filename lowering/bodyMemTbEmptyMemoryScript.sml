@@ -10,6 +10,7 @@ Ancestors
   vyperAST venomState gasContext exprSimHyps allocLimits words
   context valueEncodingProofs arithmetic exprSimVVFrame venomMemDefs
   gasOutcome venomInstProofs venomExecSemantics list fragGasMode exprSimMemUnwrap
+  gasStorage vyperStorageTrace vyperStorageFootprint
 
 Theorem memory_value_post_gas_obs:
   p.ptr_location = LocMemory /\
@@ -34,6 +35,20 @@ Proof
   simp[vv_store_bound_def, read_result_def, return_def]
 QED
 
+(* The run result of the empty buffer is one state, so the relation at any
+   other horizon follows from the relation of the start state there. *)
+Theorem empty_state_rel_any_horizon[local]:
+  compile_builtin_empty_complex sz header sa = (buf,sb) /\
+  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  sz < dimword (:256) /\
+  (if header then 32 <= sz else sz MOD 32 = 0) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  stmt_state_rel H ctx func cenv cx es t
+Proof
+  strip_tac >> drule_all compile_builtin_empty_complex_run >> strip_tac >> gvs[]
+QED
+
 Theorem empty_memory_vv_sim[local]:
   ~is_word_type typ /\
   expr_body_pre cenv cx env (TypeBuiltin ann Empty typ args) es ==>
@@ -44,6 +59,15 @@ Proof
     gvs[expr_body_pre_def, well_typed_expr_def, type_builtin_result_ok_def,
         well_typed_type_builtin_args_def] >>
   gvs[] >> rename1 `~is_word_type typ` >> rw[expr_vv_sim_mem_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  pop_assum (qx_choose_then `H0` assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
   Cases_on `evaluate_type (get_tenv cx) typ`
   >- (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
       simp[gas_admissible_def, Once evaluate_def, bind_def, ignore_bind_def,
@@ -69,9 +93,19 @@ Proof
   drule_all compile_builtin_empty_complex_run >> strip_tac >>
   drule_all compile_empty_buffer_mem_path >> strip_tac >>
   drule_all empty_type_default_memory >> strip_tac >>
-  `vv_post H ctx func cenv cx (TypeBuiltin typ Empty typ []) es sa sb s0 es
-     (Value (default_value tv)) (LocatedValue typ (base_ptr buf)) t` by
-    (irule (SRULE [expr_type_def]
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     vv_post H ctx func cenv cx (TypeBuiltin typ Empty typ []) es sa sb s0 es
+       (Value (default_value tv)) (LocatedValue typ (base_ptr buf)) t` by
+    (rpt strip_tac >>
+     rpt (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac) >>
+     qpat_assum `!H'. valid_horizon _ _ H' es.storage_trace ==>
+                   stmt_state_rel H' _ _ _ _ _ _ /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es t` by
+       (drule_all empty_state_rel_any_horizon >> strip_tac >>
+        first_assum ACCEPT_TAC) >>
+     irule (SRULE [expr_type_def]
       (Q.INST [`e` |-> `TypeBuiltin typ Empty typ []`] (SPEC_ALL buffer_memory_vv_post))) >>
      simp[expr_type_def, base_ptr_def, val_wf_default_value_proof] >>
      conj_tac
@@ -99,6 +133,10 @@ Proof
      first_x_assum drule >> simp[]) >>
   `type_memory_bytes cenv typ = type_memory_size tv` by
     metis_tac[expr_sim_inv_memory_size] >>
+  `vv_post H0 ctx func cenv cx (TypeBuiltin typ Empty typ []) es sa sb s0 es
+     (Value (default_value tv)) (LocatedValue typ (base_ptr buf)) t` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (drule_then ACCEPT_TAC)) >>
   `vv_store_bound cx typ typ es (Value (default_value tv))
       (LocatedValue typ (base_ptr buf))
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
@@ -115,20 +153,36 @@ Proof
      qexists_tac `emitted_insts sa sb` >> simp[] >> rpt strip_tac >>
      fs[EVERY_MEM] >>
      metis_tac[step_preserves_control_flow, step_inst_non_invoke]) >>
-  simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     vv_post H ctx func cenv cx (TypeBuiltin typ Empty typ []) es sa sb s0
+       (es with gas_obs := []) (Value (default_value tv))
+       (LocatedValue typ (base_ptr buf)) t` by
+    (rpt strip_tac >>
+     rpt (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac) >>
+     qpat_assum `!H'. valid_horizon _ _ H' es.storage_trace ==>
+                   vv_post H' _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     qpat_assum `!H'. valid_horizon _ _ H' es.storage_trace ==>
+                   stmt_state_rel H' _ _ _ _ _ _ /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es t` by
+       (drule_all empty_state_rel_any_horizon >> strip_tac >>
+        first_assum ACCEPT_TAC) >>
+     `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
+       (drule msg_gas_state_frame >>
+        disch_then (qspecl_then [`t.vs_gas_readings`, `t.vs_inst_idx`, `[]`] mp_tac) >>
+        simp[NoAsms]) >>
+     irule memory_value_post_gas_obs >>
+     simp[base_ptr_def] >> goal_assum (drule_at Any) >> simp[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INL (Value (default_value tv))`, `es`,
     `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   conj_tac >- simp[gas_marked_exec_def, gas_marked_path_def] >>
   simp[expr_type_def, lowered_value_type_def] >>
-  conj_tac
-  >- (`stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
-        (drule msg_gas_state_frame >>
-         disch_then (qspecl_then [`t.vs_gas_readings`, `t.vs_inst_idx`, `[]`] mp_tac) >>
-         simp[NoAsms]) >>
-      irule memory_value_post_gas_obs >>
-      simp[base_ptr_def] >> goal_assum (drule_at Any) >> simp[]) >>
-  simp[value_store_bound_gas_obs]
+  rpt strip_tac >> simp[value_store_bound_gas_obs]
 QED
 
 Theorem body_type_builtin_empty_memory_mem_case:

@@ -34,7 +34,7 @@ QED
 
 Theorem concat_prefix_list_frame:
   wb_frame cenv es ee sa s0 t /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_id <= sc.cs_next_id /\ sa.cs_next_var <= sc.cs_next_var /\
   (!z w. not_fresh_at sc z /\ lookup_var z t = SOME w ==>
@@ -52,7 +52,7 @@ Theorem concat_prefix_list_frame:
   wb_frame cenv es es' sa s0 u
 Proof
   strip_tac >> irule protected_allocation_frame_tail >> simp[] >>
-  conj_tac >- (qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
+  conj_tac >- (qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]) >>
   qexistsl_tac [`\p n. (p+n <= B \/ B+bsz <= p) /\
                        (p+n <= w2n ow \/ w2n ow+64 <= p)`,
                 `ee`, `sc`, `t`] >>
@@ -112,7 +112,7 @@ Proof
 QED
 
 Theorem concat_suffix_state[local]:
-  stmt_state_rel ctx func cenv cx ee t /\
+  stmt_state_rel H ctx func cenv cx ee t /\
   local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> x <> fresh) /\
   not_local_ptr cenv ee.scopes fresh /\
@@ -120,7 +120,7 @@ Theorem concat_suffix_state[local]:
   FLOOKUP t.vs_allocas inst.inst_id = SOME (B,bsz) /\ 32 <= bsz /\
   (!name p n. local_region cenv ee.scopes t name p n ==>
      B+bsz <= p \/ p+n <= B) ==>
-  stmt_state_rel ctx func cenv cx ee
+  stmt_state_rel H ctx func cenv cx ee
     (mstore B w (update_var fresh w t))
 Proof
   strip_tac >> simp[stmt_state_rel_inst_idx] >>
@@ -153,7 +153,8 @@ Theorem concat_suffix_post:
   lookup_var bv t = SOME (n2w B) /\ bv <> fresh /\
   wb_frame cenv es ee sa s0 t /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
-  stmt_state_rel ctx func cenv cx ee t /\
+  stmt_state_rel H ctx func cenv cx ee t /\
+  storage_well_formed_on cx ee (FST H) /\
   local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (!x. not_fresh_at sa x ==> x <> fresh) /\
   not_local_ptr cenv ee.scopes fresh /\
@@ -166,13 +167,13 @@ Theorem concat_suffix_post:
      B+bsz <= p \/ p+n <= B) ==>
   let u = (mstore B (mload (w2n ow) t)
              (update_var fresh (mload (w2n ow) t) t)) with vs_inst_idx := k in
-  vv_post ctx func cenv cx e es sa sb s0 ee (Value v)
+  vv_post H ctx func cenv cx e es sa sb s0 ee (Value v)
     (LocatedValue (expr_type e) (mk_ptr (Var bv) LocMemory)) u /\
   vv_store_bound cx (expr_type e) lt ee (Value v)
     (LocatedValue (expr_type e) (mk_ptr (Var bv) LocMemory)) u
 Proof
   strip_tac >> simp[LET_THM] >>
-  qmatch_goalsub_abbrev_tac `vv_post _ _ _ _ _ _ _ _ _ _ _ _ u` >>
+  qmatch_goalsub_abbrev_tac `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ u` >>
   `32 <= bsz` by decide_tac >>
   `wb_frame cenv es ee sa s0 u` by
     (simp[Abbr `u`] >> irule concat_suffix_frame >>
@@ -180,7 +181,7 @@ Proof
      rpt strip_tac >>
      qpat_x_assum `!name p n. local_region _ _ _ _ _ _ ==> _` drule >>
      decide_tac) >>
-  `stmt_state_rel ctx func cenv cx ee u` by
+  `stmt_state_rel H ctx func cenv cx ee u` by
     (simp[Abbr `u`] >> irule concat_suffix_state >> simp[] >>
      conj_tac
      >- (qexistsl_tac [`bsz`, `inst`] >> asm_rewrite_tac[] >>
