@@ -331,7 +331,8 @@ Resume compile_internal_return_memory_frag[fragments]:
     (irule emit_ret_pc_frag >> qexists_tac `rpc` >> simp[] >>
      simp[intret_mem_q_def, intret_q_def, result_rel_def,
           intret_vals_match_def] >>
-     conj_tac >- (qexists_tac `pre` >> fs[stmt_state_rel_def]) >>
+     conj_tac >- (qexistsl_tac [`pre`, `(return_unlock_state cenv pre).vs_inst_idx`] >>
+                  fs[stmt_state_rel_def]) >>
      simp[Abbr `pre`]) >>
   `frag_exec ctx sa sb (\s. s = s0) (\s. F)
      (intret_mem_q func cenv cx tv bw v (es with scopes := []))` by
