@@ -382,3 +382,116 @@ Proof
     (drule_all assign_base_store_root_transport >> simp[]) >>
   qexistsl_tac [`gf`, `tf`, `u`] >> metis_tac[]
 QED
+
+Theorem store_slots_operand_transport:
+  u.vs_labels = s.vs_labels /\
+  (!x. op = Var x ==> lookup_var x u = lookup_var x s /\
+    FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) ==>
+  eval_operand op u = eval_operand op s /\
+  op_prov H op = op_prov G op /\ op_taint tf op = op_taint tn op
+Proof
+  Cases_on `op` >> simp[eval_operand_def, op_prov_def, op_taint_def]
+QED
+
+Theorem store_slots_word_copy_loop_remaining[local]:
+  !count remaining i s G tn.
+    i+remaining = n /\ n < dimword (:256) /\ 32*n <= capacity /\
+    w2n a+32*(n-1) < dimword (:256) /\ ~ctx_has_dalloca ctx /\
+    ~s0.vs_call_ctx.cc_static /\
+    lookup_block hdr fn.fn_blocks = SOME hb /\
+    lookup_block bodylbl fn.fn_blocks = SOME bb /\
+    get_instruction hb 0 = SOME (mk_inst hid EQ [Var ctr;count] [done]) /\
+    get_instruction hb 1 = SOME (mk_inst (hid+1) JNZ [Var done;Label exit;Label bodylbl] []) /\
+    get_instruction bb 0 = SOME (mk_inst bid MUL [Var ctr;Lit 32w] [mv]) /\
+    get_instruction bb 1 = SOME (mk_inst (bid+1) ADD [Var root;Var mv] [sv]) /\
+    get_instruction bb 2 = SOME (mk_inst (bid+2) MLOAD [Var sv] [vv]) /\
+    get_instruction bb 3 = SOME (mk_inst (bid+3) ADD [slot;Var ctr] [dv]) /\
+    get_instruction bb 4 = SOME (mk_inst (bid+4) (if tr then TSTORE else SSTORE) [Var dv;Var vv] []) /\
+    get_instruction bb 5 = SOME (mk_inst (bid+5) ADD [Var ctr;Lit 1w] [nv]) /\
+    get_instruction bb 6 = SOME (mk_inst (bid+6) ASSIGN [Var nv] [ctr]) /\
+    get_instruction bb 7 = SOME (mk_inst (bid+7) JMP [Label hdr] []) /\
+    ALL_DISTINCT [root;ctr;done;mv;sv;vv;dv;nv] /\
+    (!x. slot = Var x \/ count = Var x ==> ~MEM x [ctr;done;mv;sv;vv;dv;nv]) /\
+    eval_operand slot s = SOME k /\ op_taint tn slot = {} /\
+    eval_operand count s = SOME (n2w n) /\ op_taint tn count = {} /\ op_prov G count = NONE /\
+    execution_frame s = execution_frame (store_copy_prefix (if tr then LocTransient else LocStorage) a k s0 i) /\
+    assign_base_store_frame (if tr then LocTransient else LocStorage) a k s0 tn0 i s tn /\
+    ptr_covers G tn root s capacity /\ lookup_var root s = SOME a /\
+    lookup_var ctr s = SOME (n2w i) /\ FLOOKUP G ctr = NONE /\ op_taint tn (Var ctr) = {} /\
+    s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+    ?Gf tf u.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
+      execution_frame u = execution_frame (store_copy_prefix (if tr then LocTransient else LocStorage) a k s0 n) /\
+      assign_base_store_frame (if tr then LocTransient else LocStorage) a k s0 tn0 n u tf /\
+      ptr_covers Gf tf root u capacity /\ lookup_var root u = SOME a /\
+      lookup_var ctr u = SOME (n2w n) /\ FLOOKUP Gf ctr = NONE /\ op_taint tf (Var ctr) = {} /\
+      u.vs_current_bb = exit /\ u.vs_inst_idx = 0 /\ ~u.vs_halted /\
+      (!x. ~MEM x [ctr;done;mv;sv;vv;dv;nv] ==> lookup_var x u = lookup_var x s /\
+        FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  qx_gen_tac `cnt` >> Induct_on `remaining` >> rpt gen_tac >> strip_tac >>
+  `ctr <> done /\ root <> done /\ i<=n /\
+   lookup_block s.vs_current_bb fn.fn_blocks = SOME hb /\
+   get_instruction hb s.vs_inst_idx = SOME (mk_inst hid EQ [Var ctr;cnt] [done]) /\
+   get_instruction hb (SUC s.vs_inst_idx) = SOME (mk_inst (hid+1) JNZ [Var done;Label exit;Label bodylbl] [])` by
+    (gvs[ALL_DISTINCT] >> decide_tac) >>
+  drule_all store_slots_word_copy_header_frame >>
+  disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g1` (qx_choose_then `t1`
+    (qx_choose_then `s1` strip_assume_tac)))
+  >- (qexistsl_tac [`g1`, `t1`, `s1`] >> gvs[] >> metis_tac[]) >>
+  `eval_operand slot s1 = SOME k /\ op_taint t1 slot = {} /\
+   eval_operand cnt s1 = SOME (n2w n) /\ op_taint t1 cnt = {} /\ op_prov g1 cnt = NONE` by
+    (qpat_x_assum `!i s G tn. _` kall_tac >>
+     Cases_on `slot` >> Cases_on `cnt` >>
+     gvs[eval_operand_def, op_taint_def, op_prov_def, execution_frame_def] >> metis_tac[MEM]) >>
+  `i<n /\ ~s1.vs_call_ctx.cc_static /\ ALL_DISTINCT [root;ctr;mv;sv;vv;dv;nv] /\
+   (!x. slot = Var x ==> ~MEM x [mv;sv;vv])` by
+    (gvs[assign_base_store_frame_def, ALL_DISTINCT] >> metis_tac[MEM, LESS_ADD_SUC]) >>
+  `lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s1.vs_inst_idx = SOME (mk_inst bid MUL [Var ctr;Lit 32w] [mv]) /\
+   get_instruction bb (SUC s1.vs_inst_idx) = SOME (mk_inst (bid+1) ADD [Var root;Var mv] [sv]) /\
+   get_instruction bb (s1.vs_inst_idx+2) = SOME (mk_inst (bid+2) MLOAD [Var sv] [vv]) /\
+   get_instruction bb (s1.vs_inst_idx+3) = SOME (mk_inst (bid+3) ADD [slot;Var ctr] [dv]) /\
+   get_instruction bb (s1.vs_inst_idx+4) = SOME (mk_inst (bid+4) (if tr then TSTORE else SSTORE) [Var dv;Var vv] []) /\
+   get_instruction bb (s1.vs_inst_idx+5) = SOME (mk_inst (bid+5) ADD [Var ctr;Lit 1w] [nv]) /\
+   get_instruction bb (s1.vs_inst_idx+6) = SOME (mk_inst (bid+6) ASSIGN [Var nv] [ctr]) /\
+   get_instruction bb (s1.vs_inst_idx+7) = SOME (mk_inst (bid+7) JMP [Label hdr] [])` by simp[] >>
+  drule_all store_slots_word_copy_body_frame >>
+  disch_then (qspecl_then [`D`, `PG`] mp_tac) >>
+  disch_then (qx_choose_then `g2` (qx_choose_then `t2`
+    (qx_choose_then `s2` strip_assume_tac))) >>
+  `eval_operand slot s2 = SOME k /\ op_taint t2 slot = {} /\
+   eval_operand cnt s2 = SOME (n2w n) /\ op_taint t2 cnt = {} /\ op_prov g2 cnt = NONE` by
+    (suspend "body_operand_transport") >>
+  `SUC i+remaining=n` by decide_tac >>
+  first_x_assum (qspecl_then [`SUC i`, `s2`, `g2`, `t2`] mp_tac) >>
+  asm_rewrite_tac[] >>
+  disch_then (qx_choose_then `gf` (qx_choose_then `tf`
+    (qx_choose_then `u` strip_assume_tac))) >>
+  qexistsl_tac [`gf`, `tf`, `u`] >> conj_tac >-
+    (qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn s _ _ _ _`
+      (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[] >>
+     disch_then (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[]) >>
+  asm_rewrite_tac[] >> simp[] >> metis_tac[]
+QED
+
+Resume store_slots_word_copy_loop_remaining[body_operand_transport]:
+  qpat_x_assum `!i s G tn. _` kall_tac >>
+     `s2.vs_labels = s1.vs_labels` by
+       (qpat_x_assum `execution_frame s2 = _`
+          mp_tac >>
+        qpat_x_assum `execution_frame s1 = _`
+          mp_tac >>
+        simp[execution_frame_def, assign_base_store_prefix_suc, sstore_def, tstore_def] >>
+        rpt strip_tac >> asm_rewrite_tac[] >> Cases_on `tr` >> simp[sstore_def, tstore_def]) >>
+     `eval_operand slot s2 = eval_operand slot s1 /\
+      op_prov g2 slot = op_prov g1 slot /\ op_taint t2 slot = op_taint t1 slot` by
+       (irule store_slots_operand_transport >> simp[] >> metis_tac[MEM]) >>
+     `eval_operand cnt s2 = eval_operand cnt s1 /\
+      op_prov g2 cnt = op_prov g1 cnt /\ op_taint t2 cnt = op_taint t1 cnt` by
+       (irule store_slots_operand_transport >> simp[] >> metis_tac[MEM]) >>
+     simp[]
+QED
+
+Finalise store_slots_word_copy_loop_remaining
