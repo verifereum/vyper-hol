@@ -27,7 +27,7 @@ Proof
   gvs[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
-Theorem extcall_encoded_calldata_suffix_mem:
+Theorem extcall_encoded_calldata_suffix_resources_mem:
   compile_abi_encode_to_buf dst argbuf ei se = (encoded,sen) /\
   abi_encoder_window_pre ctx func se sen dst argbuf ei at av tb cap (b+32) s /\
   emit_op ADD [encoded; Lit 4w] sen = (call_len,slen) /\
@@ -42,6 +42,7 @@ Theorem extcall_encoded_calldata_suffix_mem:
   ?encoded_state t path_count.
     window_strong_result ctx func se sen encoded at av (b+32) s encoded_state /\
     abi_encode_exec_frame func s encoded_state /\ abi_encode_exec_frame func s t /\
+    window_phase ctx func sen sp {} [] encoded_state t /\
     window_phase ctx func se sp (window_alloca_sites func (frag_ids se sen))
       [(b+32,LENGTH (enc at av))] s t /\
     gas_path_mem ctx func s path_count (OK t) /\ mem_cont_sim ctx func s t /\
@@ -92,7 +93,7 @@ Proof
   suspend "join"
 QED
 
-Resume extcall_encoded_calldata_suffix_mem[join]:
+Resume extcall_encoded_calldata_suffix_resources_mem[join]:
   `window_phase ctx func sen sp {} [] encoded_state t` by
     (irule window_phase_chain >>
      qexistsl_tac [`{}`, `[]`, `slen`, `{}`, `[]`, `u`] >> simp[]) >>
@@ -127,7 +128,7 @@ Resume extcall_encoded_calldata_suffix_mem[join]:
   suspend "bytes"
 QED
 
-Resume extcall_encoded_calldata_suffix_mem[bytes]:
+Resume extcall_encoded_calldata_suffix_resources_mem[bytes]:
   `read_memory (b+28) 4 t = DROP 28 (word_to_bytes (n2w method_id : bytes32) T)` by
     (qspecl_then [`b`, `32`, `28`, `4`, `t`] mp_tac read_memory_subwindow >>
      simp[read_memory_eq_mem_bytes_at, byteTheory.LENGTH_word_to_bytes]) >>
@@ -142,4 +143,37 @@ Resume extcall_encoded_calldata_suffix_mem[bytes]:
   simp[word_add_n2w]
 QED
 
-Finalise extcall_encoded_calldata_suffix_mem
+Finalise extcall_encoded_calldata_suffix_resources_mem
+
+
+Theorem extcall_encoded_calldata_suffix_mem:
+  compile_abi_encode_to_buf dst argbuf ei se = (encoded,sen) /\
+  abi_encoder_window_pre ctx func se sen dst argbuf ei at av tb cap (b+32) s /\
+  emit_op ADD [encoded; Lit 4w] sen = (call_len,slen) /\
+  emit_op ADD [buf; Lit 28w] slen = (call_offset,sp) /\
+  fn_has_code sen slen func /\ fn_has_code slen sp func /\
+  eval_operand buf s = SOME (n2w b) /\
+  (!x. buf = Var x ==> not_fresh_at se x) /\
+  FLOOKUP s.vs_allocas buf_id = SOME (b,MAX args_size ret_size+32) /\
+  buf_id < se.cs_next_id /\ LENGTH (enc at av) <= args_size /\
+  mem_bytes_at b 32 s.vs_memory = word_to_bytes (n2w method_id : bytes32) T /\
+  alloca_history func s ==>
+  ?encoded_state t path_count.
+    window_strong_result ctx func se sen encoded at av (b+32) s encoded_state /\
+    abi_encode_exec_frame func s encoded_state /\ abi_encode_exec_frame func s t /\
+    window_phase ctx func se sp (window_alloca_sites func (frag_ids se sen))
+      [(b+32,LENGTH (enc at av))] s t /\
+    gas_path_mem ctx func s path_count (OK t) /\ mem_cont_sim ctx func s t /\
+    alloca_history func t /\
+    eval_operand buf t = SOME (n2w b) /\
+    eval_operand call_offset t = SOME (n2w (b+28)) /\
+    eval_operand call_len t = SOME (n2w (LENGTH (enc at av)+4)) /\
+    FLOOKUP t.vs_allocas buf_id = SOME (b,MAX args_size ret_size+32) /\
+    read_memory (b+28) (4+LENGTH (enc at av)) t =
+      DROP 28 (word_to_bytes (n2w method_id : bytes32) T) ++ enc at av /\
+    (b+28)+(4+LENGTH (enc at av)) <= t.vs_alloca_next /\
+    b+28 < dimword (:256) /\ LENGTH (enc at av)+4 < dimword (:256)
+Proof
+  strip_tac >> drule_all extcall_encoded_calldata_suffix_resources_mem >>
+  strip_tac >> qexistsl_tac [`encoded_state`, `t`, `path_count`] >> simp[]
+QED
