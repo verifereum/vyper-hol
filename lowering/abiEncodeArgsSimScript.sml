@@ -347,7 +347,7 @@ Proof
   simp[] >> rpt strip_tac >> irule expr_val_at_start_mono >> metis_tac[]
 QED
 
-Theorem abi_args_word_fits_eq[local]:
+Theorem abi_args_word_fits_eq:
   !src dst. arg_type_fits src dst /\ is_word_type dst ==> src = dst
 Proof
   Cases >> Cases >>
