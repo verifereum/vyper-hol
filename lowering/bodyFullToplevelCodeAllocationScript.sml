@@ -57,7 +57,7 @@ Proof
   gvs[]
 QED
 
-Theorem toplevel_code_allocation_frontier[local]:
+Theorem toplevel_code_allocation_frontier:
   compile_expr cenv ty (TopLevelName ann nsid) sx = (vv,sm) /\
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
   stmt_state_rel H ctx func cenv cx es s /\
