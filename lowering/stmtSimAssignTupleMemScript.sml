@@ -113,19 +113,29 @@ Proof
      metis_tac[cs_extends_trans]) >>
   irule forced_then_stmt_outcome >>
   qexistsl [
-    `\v ee t. expr_post H ctx func cenv cx e es sa su s0 ee v op t /\
-              t.vs_current_bb = su.cs_current_bb /\
-              t.vs_inst_idx = LENGTH su.cs_current_insts`,
+    `\H v ee t. expr_post H ctx func cenv cx e es sa su s0 ee v op t /\
+                t.vs_current_bb = su.cs_current_bb /\
+                t.vs_inst_idx = LENGTH su.cs_current_insts`,
     `e`, `assign_tuple_targets cx (TupleTarget (MAP (BaseTarget o NameTarget) ids))`] >>
-  reverse conj_tac
-  >- (conj_tac >- simp[eval_assign_tuple_action] >>
-      qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+  rpt conj_tac
+  >~ [`eval_stmt _ _ = _`] >- simp[eval_assign_tuple_action]
+  >~ [`storage_trace_frame _`]
+  >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
+  >~ [`gas_outcome _ _ _ _ _ _ _ _ _`]
+  >- (qpat_x_assum `expr_sim _ _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-      disch_then (qspecl_then [`sa`, `su`, `op`, `s0`] mp_tac) >>
+      disch_then (qspecl_then [`st0`, `sa`, `su`, `op`, `s0`] mp_tac) >>
       (impl_tac >- (fs[] >> metis_tac[forced_then_admissible, eval_assign_tuple_action])) >>
       simp[]) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >>
+  `(!H. valid_horizon cx st0 H ee.storage_trace ==>
+        expr_post H ctx func cenv cx e es sa su s0 ee v op t) /\
+   t.vs_current_bb = su.cs_current_bb /\
+   t.vs_inst_idx = LENGTH su.cs_current_insts` by metis_tac[] >>
+  qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `expr_post H0 ctx func cenv cx e es sa su s0 ee v op t` by
+    (qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` irule >> simp[]) >>
   suspend "success"
 QED
 
@@ -176,6 +186,12 @@ Resume compile_assign_tuple_locals_memory_stmt_frag[suffix]:
     metis_tac[post_value_type_lowered] >>
   `expr_val_rel cx (TupleT tys) (ArrayV (TupleV vs)) op t /\
    expr_val_at cenv cx (TupleT tys) sa su ee (ArrayV (TupleV vs)) op t` by gvs[] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx ee t` by
+    (rpt strip_tac >>
+     qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H` mp_tac) >>
+     simp[expr_post_def]) >>
   drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) assign_tuple_locals_memory_suffix_path) >> strip_tac >>
   `sa.cs_next_id <= su.cs_next_id` by
     (qspecl_then [`cenv`, `TupleT tys`, `e`, `sa`] mp_tac
@@ -190,8 +206,28 @@ Resume compile_assign_tuple_locals_memory_stmt_frag[post]:
   qexistsl [`INL ()`, `ee'`, `OK t'`] >>
   conj_tac >- (drule assign_tuple_locals_gas >> simp[]) >>
   asm_rewrite_tac [] >> disj1_tac >>
+  qexists `t'` >> simp_tac (srw_ss()) [] >>
+  qx_gen_tac `H'` >> strip_tac >>
+  `valid_horizon cx st0 H' ee.storage_trace` by
+    (irule vyperStorageFootprintTheory.valid_horizon_frame >>
+     qpat_assum `assign_tuple_targets _ _ _ ee = _` (irule_at Any) >>
+     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `stmt_state_rel H' ctx func cenv cx ee' t'` by
+    (qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ ee' t'` irule >> simp[]) >>
+  `storage_well_formed_on cx ee (FST H')` by
+    (qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H'` mp_tac) >>
+     simp[expr_post_def]) >>
+  `ee'.accounts = ee.accounts /\ ee'.tStorage = ee.tStorage` by
+    (drule tupleLocalStorePropsTheory.assign_tuple_target_list_locals_backends >>
+     simp[]) >>
+  `storage_well_formed_on cx (ee' with gas_obs := []) (FST H')` by
+    (mp_tac (Q.INST [`st'` |-> `ee' with gas_obs := []`, `st` |-> `ee`,
+                     `regions` |-> `FST H'`]
+               vyperStorageFootprintTheory.storage_well_formed_on_backends) >>
+     simp[]) >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
-  `stmt_state_rel H ctx func cenv cx (ee' with gas_obs := []) t'` by
+  `stmt_state_rel H' ctx func cenv cx (ee' with gas_obs := []) t'` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ ee' t'` mp_tac >>
      rpt (pop_assum kall_tac) >>
      mp_tac (Q.INST [`es` |-> `ee'`, `s` |-> `t'`,

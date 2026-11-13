@@ -16,7 +16,7 @@ Theorem aggregate_typed_store_renamed_body_run:
   acyclic_struct_metadata ce.ce_struct_fields /\
   ~is_word_type (post_value_type ce e) /\
   ~is_bytestring_type (post_value_type ce e) /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
   not_fresh_at sm x /\ lookup_var x r = SOME w /\
   sm.cs_next_var <= su.cs_next_var /\
@@ -24,7 +24,7 @@ Theorem aggregate_typed_store_renamed_body_run:
   local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\ val_wf tv v /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   FLOOKUP r.vs_allocas did = SOME (b,k) /\ did < sa.cs_next_id /\
   b <= w2n w /\ w2n w + type_memory_size tv <= b+k /\
   w2n w + type_memory_size tv < dimword (:256) /\
@@ -39,7 +39,7 @@ Theorem aggregate_typed_store_renamed_body_run:
   !L ids fn'. LENGTH ids = LENGTH su.cs_current_insts /\
     fn_has_code (start_relabel L ids su) (start_swap su L ids sb) fn' ==>
   ?q. val_in_memory tv v (w2n w) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
@@ -109,8 +109,8 @@ Proof
 QED
 
 Theorem aggregate_stmt_state_rel_prev_bb:
-  stmt_state_rel ctx func ce cx es (s with vs_prev_bb := p) <=>
-  stmt_state_rel ctx func ce cx es s
+  stmt_state_rel H ctx func ce cx es (s with vs_prev_bb := p) <=>
+  stmt_state_rel H ctx func ce cx es s
 Proof
   simp[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
        local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
@@ -129,7 +129,7 @@ Theorem aggregate_store_body_typed_counted:
   acyclic_struct_metadata ce.ce_struct_fields /\
   ~is_word_type (post_value_type ce e) /\
   ~is_bytestring_type (post_value_type ce e) /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
   not_fresh_at sm x /\ lookup_var x r = SOME w /\
   sm.cs_next_var <= su.cs_next_var /\
@@ -137,7 +137,7 @@ Theorem aggregate_store_body_typed_counted:
   local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\ val_wf tv v /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   FLOOKUP r.vs_allocas did = SOME (b,k) /\ did < sa.cs_next_id /\
   b <= w2n w /\ w2n w + type_memory_size tv <= b+k /\
   w2n w + type_memory_size tv < dimword (:256) /\
@@ -152,7 +152,7 @@ Theorem aggregate_store_body_typed_counted:
   s.vs_current_bb = su.cs_current_bb /\ s.vs_inst_idx = LENGTH su.cs_current_insts ==>
   ?q. gas_marked_path F ctx fn s 0 (OK q) /\
     (val_in_memory tv v (w2n w) q.vs_memory /\
-     stmt_state_rel ctx func ce cx es' q /\
+     stmt_state_rel H ctx func ce cx es' q /\
      (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
      (!aid a. FLOOKUP r.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
      (!aid off sz a len.

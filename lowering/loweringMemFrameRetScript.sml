@@ -18,6 +18,7 @@ Ancestors
   externalReturnFrameMem runFromGasPathMem gasOutcome gasSummary
   gasSummaryCompose gasContext fragGasMode fragGasPath fragGasPathMem
   exprSimMemDefs stmtSimReturn stmtSimProps stmtLoweringMono
+  gasStorage vyperStorageTrace vyperStorageFootprint
 
 val _ = Parse.hide "body";
 
@@ -26,7 +27,7 @@ val _ = Parse.hide "body";
 (* A return sequence that exits memory-safely from its start is a counted
    memory path; its steps read no source GAS observation. *)
 Theorem return_none_counted_mem[local]:
-  (!sa sb s0 cenv''.
+  (!(H : (bool # bytes32 # type_value) list # num list) sa sb s0 cenv''.
      stmt_env cenv lctx ty (Return NONE) sa = (cenv'', sb) /\
      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
      local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
@@ -35,16 +36,23 @@ Theorem return_none_counted_mem[local]:
      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
      ?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
               mem_safe_run fuel ctx func s0) ==>
-  stmt_frag_mem d ctx func cx lctx (\v es r. T) cenv
+  stmt_frag_mem d ctx func cx lctx (\H v es r. T) cenv
     (stmt_env cenv lctx ty (Return NONE)) (eval_stmt cx (Return NONE)) es
 Proof
   rw[stmt_frag_mem_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   first_x_assum (drule_at (Pat `stmt_env _ _ _ _ _ = _`)) >>
-  disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
+  disch_then (qspecl_then [`H0`, `s0`] mp_tac) >> simp[] >> strip_tac >>
   qspecl_then [`fuel`, `ctx`, `func`, `s0`, `run_from fuel ctx func s0`]
     mp_tac run_from_gas_path_mem >> simp[] >> strip_tac >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `REPLICATE n F` >>
-  disj1_tac >>
+  disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def, gas_marked_exec_def, gas_marked_path_def] >>
   qexistsl_tac [`INR (ReturnException NoneV)`, `es`, `run_from fuel ctx func s0`] >>
   simp[Once evaluate_def, raise_def, stmt_exit_def]
@@ -69,18 +77,36 @@ Proof
   simp[]
 QED
 
+Theorem return_value_source_frame[local]:
+  storage_trace_frame (bind (eval_expr cx e) (read_result cx))
+Proof
+  irule storage_trace_frame_bind_all >>
+  simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       storage_trace_frame_read_result]
+QED
+
+(* The value ran out of the storage domain: so does the whole return. *)
+val ret_bad_tac =
+  qexists_tac `marks` >> disj1_tac >>
+  irule gasStorageTheory.gas_bad_storage_at_bind_left >> conj_tac
+  >- (irule gasStorageTheory.gas_bad_storage_at_counted_prefix >> metis_tac[])
+  >- simp[vyperStorageTraceTheory.storage_trace_frame_raise];
+
 (* The value's summary, then the run-level rest of the sequence. *)
 Theorem return_value_summary_mem[local]:
   gas_summary_at T (ctx,func) marks
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
-    (\res ee t. ?v. res = INL v /\
+    (\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
+       ?v. res = INL v /\
        expr_post H ctx func cenv cx e es sa s1 s0 ee v op t /\
        expr_store_bound cx (expr_type e) v op t /\
        t.vs_current_bb = s1.cs_current_bb /\
        t.vs_inst_idx = LENGTH s1.cs_current_insts /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. expr_exit res r) /\
-  (!ee v t.
+    (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+       expr_exit res r) /\
+  (!(H : (bool # bytes32 # type_value) list # num list) ee v t.
+     valid_horizon cx st0 H es.storage_trace /\
      expr_post H ctx func cenv cx e es sa s1 s0 ee v op t /\
      expr_store_bound cx (expr_type e) v op t /\
      (?gs ee'. bind (eval_expr cx e) (read_result cx)
@@ -90,33 +116,58 @@ Theorem return_value_summary_mem[local]:
      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\ ~t.vs_halted ==>
      ?fuel r. run_from fuel ctx func t = r /\ exit_result r /\
               mem_safe_run fuel ctx func t) ==>
-  !Q. ?marks'. gas_summary_at T (ctx,func) marks'
-    (eval_stmt cx (Return (SOME e))) (es,s0) Q
-    (\res ee r. !tail. stmt_exit (\v es r. T) (ee with gas_obs := tail) res r)
+  !Q. ?marks'.
+    gas_bad_storage_at cx st0 (eval_stmt cx (Return (SOME e))) es s0 marks' \/
+    gas_summary_at T (ctx,func) marks'
+      (eval_stmt cx (Return (SOME e))) (es,s0) Q
+      (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+         !tail. stmt_exit (\v es r. T) (ee with gas_obs := tail) res r)
 Proof
   strip_tac >> gen_tac >> pure_rewrite_tac[eval_return_value_bind] >>
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
   simp[gas_summary_at_def] >> strip_tac
-  >- (gvs[] >>
-      `~t.vs_halted` by
-        (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-         simp[gas_marked_exec_def] >>
-         metis_tac[gas_marked_path_exec, gas_path_normal]) >>
-      drule marked_exec_source_eq >> strip_tac >>
-      first_x_assum (drule_all o Ho_Rewrite.PURE_REWRITE_RULE [PULL_EXISTS]) >>
-      strip_tac >>
-      qspecl_then [`fuel`, `ctx`, `func`, `t`, `run_from fuel ctx func t`]
-        mp_tac run_from_gas_path_mem >> simp[] >> strip_tac >>
-      qexists_tac `marks ++ REPLICATE n F` >>
-      qexistsl_tac [`INR (ReturnException v)`, `es_end`,
-                    `run_from fuel ctx func t`] >>
-      simp[stmt_exit_def] >>
-      irule gas_marked_exec_bind_normal >>
-      qexistsl_tac [`es_end`, `t`, `v`] >> simp[return_value_raise_exec]) >>
-  `?ex. res = INR ex` by (Cases_on `res` >> gvs[expr_exit_def]) >> gvs[] >>
-  qexists_tac `marks` >> qexistsl_tac [`INR ex`, `es_end`, `r`] >>
-  conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+  >- (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`
+      >- (`?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+            metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+          qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+            (qspec_then `H0` mp_tac) >>
+          impl_tac >- gs[] >> strip_tac >> gvs[] >>
+          `valid_horizon cx st0 H0 es.storage_trace` by
+            (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+               (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                                     gas_marked_exec_valid_prefix)) >>
+             impl_tac >- simp[return_value_source_frame] >>
+             disch_then (qspecl_then [`cx`, `st0`, `H0`] mp_tac) >> simp[]) >>
+          `~t.vs_halted` by
+            (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+             simp[gas_marked_exec_def] >>
+             metis_tac[gas_marked_path_exec, gas_path_normal]) >>
+          drule marked_exec_source_eq >> strip_tac >>
+          first_x_assum (drule_all o Ho_Rewrite.PURE_REWRITE_RULE [PULL_EXISTS]) >>
+          strip_tac >>
+          qspecl_then [`fuel`, `ctx`, `func`, `t`, `run_from fuel ctx func t`]
+            mp_tac run_from_gas_path_mem >> simp[] >> strip_tac >>
+          qexists_tac `marks ++ REPLICATE n F` >> disj2_tac >>
+          qexistsl_tac [`INR (ReturnException v)`, `es_end`,
+                        `run_from fuel ctx func t`] >>
+          simp[stmt_exit_def] >>
+          irule gas_marked_exec_bind_normal >>
+          qexistsl_tac [`es_end`, `t`, `v`] >> simp[return_value_raise_exec]) >>
+      ret_bad_tac)
+  >- (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`
+      >- (`?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+            metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+          `?ex. res = INR ex` by
+            (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+               (qspec_then `H0` mp_tac) >>
+             impl_tac >- gs[] >> strip_tac >>
+             Cases_on `res` >> gvs[expr_exit_def]) >>
+          gvs[] >>
+          qexists_tac `marks` >> disj2_tac >>
+          qexistsl_tac [`INR ex`, `es_end`, `r`] >>
+          conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+          simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+      ret_bad_tac)
 QED
 
 Theorem return_value_counted_mem[local]:
@@ -125,7 +176,8 @@ Theorem return_value_counted_mem[local]:
   (!sa sb cenv'' op s1.
      stmt_env cenv lctx ty (Return (SOME e)) sa = (cenv'', sb) /\
      lower_value compile_expr cenv ty e sa = (op, s1) ==> cs_extends s1 sb) /\
-  (!sa sb cenv'' s0 op s1 ee v t.
+  (!(H : (bool # bytes32 # type_value) list # num list)
+    sa sb cenv'' s0 op s1 ee v t.
      stmt_env cenv lctx ty (Return (SOME e)) sa = (cenv'', sb) /\
      lower_value compile_expr cenv ty e sa = (op, s1) /\
      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -145,7 +197,7 @@ Theorem return_value_counted_mem[local]:
      ~t.vs_halted ==>
      ?fuel r. run_from fuel ctx func t = r /\ exit_result r /\
               mem_safe_run fuel ctx func t) ==>
-  stmt_frag_mem d ctx func cx lctx (\v es r. T) cenv
+  stmt_frag_mem d ctx func cx lctx (\H v es r. T) cenv
     (stmt_env cenv lctx ty (Return (SOME e))) (eval_stmt cx (Return (SOME e))) es
 Proof
   strip_tac >> simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
@@ -158,20 +210,26 @@ Proof
   drule (GEN_ALL return_forced_admissible) >> strip_tac >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
-  disch_then (qspecl_then [`sa`, `s1`, `op`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `s1`, `op`, `s0`] mp_tac) >>
   impl_tac >- fs[] >>
   simp[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      pure_rewrite_tac[eval_return_value_bind] >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >> conj_tac
+      >- first_assum ACCEPT_TAC
+      >- simp[vyperStorageTraceTheory.storage_trace_frame_raise])
   >- (drule return_value_summary_mem >> impl_tac
-      >- (map_every qx_gen_tac [`ee`, `v`, `t`] >> strip_tac >>
-          qpat_x_assum `!sa sb cenv'' s0 op s1 ee v t. _`
-            (qspecl_then [`sa`, `sb`, `cenv'`, `s0`, `op`, `s1`, `ee`, `v`, `t`] mp_tac) >>
+      >- (map_every qx_gen_tac [`HH`, `ee`, `v`, `t`] >> strip_tac >>
+          `stmt_state_rel HH ctx func cenv cx es s0` by metis_tac[] >>
+          qpat_x_assum `!H sa sb cenv'' s0 op s1 ee v t. _`
+            (qspecl_then [`HH`, `sa`, `sb`, `cenv'`, `s0`, `op`, `s1`, `ee`, `v`, `t`] mp_tac) >>
           asm_rewrite_tac[] >>
           impl_tac >- (qexistsl [`gs`, `ee'`] >> first_assum ACCEPT_TAC) >>
           disch_then ACCEPT_TAC) >>
       strip_tac >>
       qpat_x_assum `!Q. _` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
   drule (GEN_ALL return_forced_exempt) >> strip_tac >>
-  qexists_tac `marks` >> disj2_tac >> goal_assum (drule_at Any)
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >> goal_assum (drule_at Any)
 QED
 
 (* ===== The frame's returns (#640) ===== *)
@@ -204,7 +262,7 @@ Theorem external_frame_ret_ok_mem:
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
     frame_ret_ok_mem NONE unit.cu_context func
       (initial_evaluation_context am.sources am.layouts tx NONE)
-      (\v es r. T) cenv ret
+      (\H v es r. T) cenv ret
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vs`, `mut`,
@@ -216,9 +274,9 @@ Proof
   map_every qx_gen_tac [`cenv'`, `env'`, `lctx`, `eo`, `es`] >> strip_tac >>
   Cases_on `eo`
   >- (irule return_none_counted_mem >>
-      map_every qx_gen_tac [`sa'`, `sb`, `s0`, `cenv''`] >> strip_tac >>
-      qpat_x_assum `!cenv' env lctx es sa sb cenv'' s0. _`
-        (qspecl_then [`cenv'`, `env'`, `lctx`, `es`, `sa'`, `sb`, `cenv''`, `s0`] mp_tac) >>
+      map_every qx_gen_tac [`H`, `sa'`, `sb`, `s0`, `cenv''`] >> strip_tac >>
+      qpat_x_assum `!H cenv' env lctx es sa sb cenv'' s0. _`
+        (qspecl_then [`H`, `cenv'`, `env'`, `lctx`, `es`, `sa'`, `sb`, `cenv''`, `s0`] mp_tac) >>
       asm_rewrite_tac[]) >>
   rename1 `Return (SOME e)` >> match_mp_tac return_value_counted_mem >>
   rpt conj_tac
@@ -227,10 +285,10 @@ Proof
       qpat_x_assum `!cenv' lctx e sa sb cenv'' op s1. _`
         (qspecl_then [`cenv'`, `lctx`, `e`, `sa'`, `sb`, `cenv''`, `op`, `s1`] mp_tac) >>
       asm_rewrite_tac[])
-  >> map_every qx_gen_tac [`sa'`, `sb`, `cenv''`, `s0`, `op`, `s1`, `ee`, `v`, `t`] >>
+  >> map_every qx_gen_tac [`H`, `sa'`, `sb`, `cenv''`, `s0`, `op`, `s1`, `ee`, `v`, `t`] >>
      strip_tac >>
-     qpat_x_assum `!cenv' env lctx e es sa sb cenv'' s0 op s1 ee v t. _`
-       (qspecl_then [`cenv'`, `env'`, `lctx`, `e`, `es`, `sa'`, `sb`, `cenv''`,
+     qpat_x_assum `!H cenv' env lctx e es sa sb cenv'' s0 op s1 ee v t. _`
+       (qspecl_then [`H`, `cenv'`, `env'`, `lctx`, `e`, `es`, `sa'`, `sb`, `cenv''`,
                      `s0`, `op`, `s1`, `ee`, `v`, `t`] mp_tac) >>
      asm_rewrite_tac[] >>
      impl_tac >- (qexistsl [`gs`, `ee'`] >> first_assum ACCEPT_TAC) >>

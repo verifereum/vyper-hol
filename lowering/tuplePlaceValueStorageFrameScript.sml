@@ -7,8 +7,23 @@ Ancestors
   compileEnv loweringStateRelDefs vyperInterpreter vyperState vyperValue vyperTypeSystem
   fragGasPath fragGasMode arithmetic exprLoweringProps stmtSimStoreCopy
 
+(* Every observed horizon puts the written leaf inside one of its regions,
+   at the slot the store runs on. *)
+Theorem tuple_place_storage_leaf_horizon:
+  storage_place_observed H (StoragePlace tr w dtv) /\
+  expr_sim_inv cenv cx env ee /\ regions_consistent (FST H) /\
+  0 < type_slot_size dtv ==>
+  ?rootk root path delta.
+    MEM (tr,rootk,root) (FST H) /\ storage_subregion root path delta dtv /\
+    w2n w = w2n rootk + delta
+Proof
+  rw[vyperStoragePlaceObservedTheory.storage_place_observed_def] >>
+  drule_all place_store_storage_leaf_bounds >> strip_tac >>
+  metis_tac[]
+QED
+
 Theorem tuple_place_value_storage_run_frame:
-  !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
+  !H0 ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
     compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty (type_memory_bytes cenv dty) sa = ((),sb) /\
     eval_operand dst_op s = SOME w /\
@@ -27,7 +42,9 @@ Theorem tuple_place_value_storage_run_frame:
        w2n w + type_memory_size dtv <= w2n sw \/ sw = w /\ stv = dtv) /\
     expr_sim_inv cenv cx env ee /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
-    local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
+    local_ptrs_reserved cenv sa /\
+    storage_place_observed H0 p /\ regions_consistent (FST H0) /\
+    storage_locks_separated (FST H0) (SND H0) /\
     (!id path entry t0. p = MemoryPlace id path /\
        lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
@@ -40,12 +57,14 @@ Theorem tuple_place_value_storage_run_frame:
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==> 0 < type_slot_size dtv) /\
     (dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
        type_alloc_ok cenv dty) /\
-    stmt_state_rel ctx func cenv cx ee s /\ write_place cx p v ee = (INL (),ff) /\
+    stmt_state_rel H0 ctx func cenv cx ee s /\ write_place cx p v ee = (INL (),ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      stmt_state_rel ctx func cenv cx ff t /\
+      (!H. stmt_state_rel H ctx func cenv cx ee s /\ storage_place_observed H p /\
+           regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) ==>
+           stmt_state_rel H ctx func cenv cx ff t) /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -75,30 +94,16 @@ Resume tuple_place_value_storage_run_frame[word]:
   `eval_operand op s = SOME (typed_val_to_w256 dtv v)` by fs[expr_val_rel_def] >>
   drule_all place_store_emit_slot_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  `n2w (w2n root+delta) = root+n2w delta` by
-    simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
-  `stmt_state_rel ctx func cenv cx
-    (set_storage cx ee tr (apply_writes (n2w (w2n root+delta)) writes
-      (get_storage cx ee tr)))
-    (FOLDL (\u i. (if tr then tstore else sstore)
-       (n2w (w2n root+delta+i)) (typed_val_to_w256 dtv v) u) s (COUNT_LIST 1))` by
-    (irule (BETA_RULE (Q.INST [`rd` |-> `\i. typed_val_to_w256 dtv v`]
-       (SPEC_ALL place_store_encoded_leaf_state))) >>
-     conj_tac >- metis_tac[] >> reverse conj_tac >- simp[] >>
-     goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
-     goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
-     simp[] >> rpt strip_tac >> drule_all place_store_word_live_copy >>
-     disch_then (qspecl_then [`get_storage cx ee tr`, `root+n2w delta`, `b`] mp_tac) >>
-     simp[AC ADD_ASSOC ADD_COMM]) >>
   qmatch_asmsub_abbrev_tac `gas_marked_path F ctx func s 0 (OK t)` >>
   `t.vs_memory = s.vs_memory` by
     (unabbrev_all_tac >> Cases_on `tr` >> simp[tstore_def, sstore_def]) >>
   qexists_tac `t` >> simp[] >> reverse conj_tac
   >- (unabbrev_all_tac >> Cases_on `tr` >> simp[tstore_def, sstore_def, lookup_var_def]) >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ (FOLDL _ _ _)` mp_tac >>
-  `COUNT_LIST 1 = [0]` by EVAL_TAC >> simp[] >> unabbrev_all_tac >>
-  simp[stmt_state_rel_inst_idx, GSYM wordsTheory.word_add_n2w,
-       wordsTheory.n2w_w2n, wordsTheory.WORD_ADD_COMM]
+  rpt strip_tac >>
+  qpat_x_assum `stmt_state_rel H0 _ _ _ _ ee s` kall_tac >>
+  qpat_x_assum `storage_place_observed H0 _` kall_tac >>
+  drule_all place_store_word_backend_state >>
+  unabbrev_all_tac >> Cases_on `tr` >> simp[stmt_state_rel_inst_idx]
 QED
 
 Resume tuple_place_value_storage_run_frame[equal]:
@@ -109,14 +114,18 @@ Resume tuple_place_value_storage_run_frame[equal]:
   `w2n w + type_memory_size dtv < dimword (:256)` by
     (first_x_assum (qspec_then `w` mp_tac) >> simp[] >> strip_tac >>
      fs[] >> decide_tac) >>
-  `n2w (w2n root+delta) = root+n2w delta` by
-    simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
   qspecl_then [`cenv`, `op`, `dst_op`, `dty`, `tr`, `sa`, `sb`, `dtv`, `func`, `s`,
-      `w`, `w2n root + delta`, `ctx`, `cx`, `env`, `ee`, `mid`, `var_name`, `keys`,
-      `root`, `tv`, `path`, `delta`, `writes`, `v`] mp_tac
-    place_store_slots_suffix_run >>
+      `w`, `w2n (root + n2w delta)`, `ctx`, `cx`, `env`, `ee`, `writes`, `v`] mp_tac
+    place_store_slots_suffix_run_horizons >>
   (impl_tac >- (fs[] >> metis_tac[])) >>
-  strip_tac >> qexists_tac `t` >> gvs[]
+  strip_tac >> qexists_tac `t` >> gvs[] >> rpt conj_tac
+  >~ [`stmt_state_rel _ _ _ _ _ (set_storage _ _ _ _) _`] >-
+  (rpt strip_tac >>
+  `?rk rt pth dl. MEM (tr,rk,rt) (FST H) /\ storage_subregion rt pth dl dtv /\
+     w2n (root + n2w delta) = w2n rk + dl` by
+    (irule tuple_place_storage_leaf_horizon >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `!H rootk root path delta. _ ==> _` irule >> simp[] >>
+  metis_tac[])
 QED
 
 Resume tuple_place_value_storage_run_frame[bytes]:
@@ -135,14 +144,19 @@ Resume tuple_place_value_storage_run_frame[bytes]:
     (qpat_assum `~is_word_type sty ==> _` mp_tac >>
      impl_tac >- simp[] >>
      disch_then drule >> strip_tac >> decide_tac) >>
-  `n2w (w2n root+delta) = root+n2w delta` by
-    simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
   qspecl_then [`cenv`, `op`, `dst_op`, `dty`, `sty`, `tr`, `sa`, `sb`, `stv`,
-      `dtv`, `func`, `s`, `w`, `w2n root + delta`, `ctx`, `cx`, `env`, `ee`,
-      `mid`, `var_name`, `keys`, `root`, `tv`, `path`, `delta`, `writes`, `v`]
-    mp_tac place_store_slots_bytes_run >>
+      `dtv`, `func`, `s`, `w`, `w2n (root + n2w delta)`, `ctx`, `cx`, `env`, `ee`,
+      `writes`, `v`]
+    mp_tac place_store_slots_bytes_run_horizons >>
   (impl_tac >- (fs[] >> metis_tac[])) >>
-  strip_tac >> qexists_tac `t` >> gvs[]
+  strip_tac >> qexists_tac `t` >> gvs[] >> rpt conj_tac
+  >~ [`stmt_state_rel _ _ _ _ _ (set_storage _ _ _ _) _`] >-
+  (rpt strip_tac >>
+  `?rk rt pth dl. MEM (tr,rk,rt) (FST H) /\ storage_subregion rt pth dl dtv /\
+     w2n (root + n2w delta) = w2n rk + dl` by
+    (irule tuple_place_storage_leaf_horizon >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `!H rootk root path delta. _ ==> _` irule >> simp[] >>
+  metis_tac[])
 QED
 
 Resume tuple_place_value_storage_run_frame[normalize]:
@@ -196,7 +210,7 @@ Resume tuple_place_value_storage_run_frame[normalize]:
      simp[arithmeticTheory.ADD_COMM]) >>
   drule_at (Pat `compile_alloc_buffer _ _ = _`) tuple_place_normalize_frame >>
   disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
-  disch_then (qspecl_then [`cx`, `ctx`, `func`, `ee`, `stv`, `v`, `sw`, `s`] mp_tac) >>
+  disch_then (qspecl_then [`H0`, `cx`, `ctx`, `func`, `ee`, `stv`, `v`, `sw`, `s`] mp_tac) >>
   (impl_tac >- (simp[arithmeticTheory.ADD_COMM] >> metis_tac[])) >>
   disch_then (qx_choose_then `u` (qx_choose_then `dw`
     (map_every assume_tac o CONJUNCTS))) >>
@@ -204,6 +218,7 @@ Resume tuple_place_value_storage_run_frame[normalize]:
 QED
 
 Resume tuple_place_value_storage_run_frame[normalize_suffix]:
+  `stmt_state_rel H0 ctx func cenv cx ee u` by metis_tac[] >>
   `sa.cs_next_var <= sm.cs_next_var` by
     (qspec_then `type_memory_size dtv` (qspec_then `sa` mp_tac)
        exprLoweringPropsTheory.ci_mono_compile_alloc_buffer >> simp[ci_mono_def]) >>
@@ -225,33 +240,44 @@ Resume tuple_place_value_storage_run_frame[normalize_suffix]:
   `eval_operand dst_op u = SOME (root+n2w delta)` by
     (Cases_on `dst_op` >> gvs[eval_operand_def] >> metis_tac[]) >>
   `~u.vs_call_ctx.cc_static` by
-    (drule_at (Pat `stmt_state_rel _ _ _ _ _ u`) place_store_storage_write_inv >>
+    (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ u`) place_store_storage_write_inv >>
      disch_then drule >> simp[]) >>
   `type_memory_size dtv = 32 * type_slot_size dtv` by
     simp[valueEncodingPropsTheory.type_memory_size_slots] >>
   `well_formed_type_value dtv` by
     metis_tac[cj 1 vyperTypingTheory.evaluate_type_well_formed] >>
-  `n2w (w2n root+delta) = root+n2w delta` by
-    simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
   `?t. gas_marked_path F ctx func u 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx
-      (set_storage cx ee tr (apply_writes (n2w (w2n root+delta)) writes
-        (get_storage cx ee tr))) t /\
+    (!H. stmt_state_rel H ctx func cenv cx ee u /\
+         storage_place_observed H (StoragePlace tr (root + n2w delta) dtv) /\
+         regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) ==>
+         stmt_state_rel H ctx func cenv cx
+           (set_storage cx ee tr (apply_writes (root + n2w delta) writes
+             (get_storage cx ee tr))) t) /\
     (!x. not_fresh_at sc x ==> lookup_var x t = lookup_var x u) /\
     t.vs_allocas = u.vs_allocas /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     t.vs_memory = u.vs_memory` by
     (qspecl_then [`cenv`, `a.buf_operand`, `dst_op`, `dty`, `tr`, `sc`, `sb`, `dtv`,
-      `func`, `u`, `dw`, `w2n root + delta`, `ctx`, `cx`, `env`, `ee`, `mid`,
-      `var_name`, `keys`, `root`, `tv`, `path`, `delta`, `writes`, `v`] mp_tac
-       place_store_slots_suffix_run >>
+      `func`, `u`, `dw`, `w2n (root + n2w delta)`, `ctx`, `cx`, `env`, `ee`,
+      `writes`, `v`] mp_tac
+       place_store_slots_suffix_run_horizons >>
      (impl_tac >- (fs[] >> metis_tac[])) >>
-     disch_then (qx_choose_then `t` strip_assume_tac) >>
-     qexists_tac `t` >> simp[]) >>
+     disch_then (qx_choose_then `t`
+       (strip_assume_tac o SRULE [wordsTheory.n2w_w2n])) >>
+     qexists_tac `t` >> rpt conj_tac
+     >~ [`stmt_state_rel _ _ _ _ _ (set_storage _ _ _ _) _`] >-
+    (rpt strip_tac >>
+    `?rk rt pth dl. MEM (tr,rk,rt) (FST H) /\ storage_subregion rt pth dl dtv /\
+       w2n (root + n2w delta) = w2n rk + dl` by
+      (irule tuple_place_storage_leaf_horizon >> simp[] >> metis_tac[]) >>
+    qpat_x_assum `!H rootk root path delta. _ ==> _` irule >> simp[] >>
+    metis_tac[]) >>
+     fs[]) >>
   qexists_tac `t` >> conj_tac
   >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
        gas_marked_path_then)) >> goal_assum (drule_at Any) >> simp[]) >>
-  gvs[] >> conj_tac
+  gvs[] >> rpt conj_tac
+  >~ [`lookup_var _ t = _`]
   >- (rpt strip_tac >>
       `not_fresh_at sc x` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
       qpat_x_assum `!x. not_fresh_at sc x ==> _` drule >>

@@ -478,7 +478,7 @@ Proof
   qexistsl_tac [`B`, `bsz`] >> asm_rewrite_tac[] >> decide_tac
 QED
 
-Theorem concat_fixed_value:
+Theorem concat_fixed_value[local]:
   !cx m v op s tv.
     expr_val_rel cx (BaseT (BytesT (Fixed m))) v op s /\
     evaluate_type (get_tenv cx) (BaseT (BytesT (Fixed m))) = SOME tv /\
@@ -493,7 +493,7 @@ Proof
   gvs[expr_val_rel_def, is_word_type_def, typed_val_to_w256_def, evaluate_type_def]
 QED
 
-Theorem concat_bytes_value:
+Theorem concat_bytes_value[local]:
   !ctx func cenv cx ty v op s sa sb es tv.
     expr_val_rel cx ty v op s /\ expr_val_at cenv cx ty sa sb es v op s /\
     stmt_state_rel H ctx func cenv cx es s /\ is_bytestring_type ty /\
@@ -527,7 +527,7 @@ Proof
   res_tac >> decide_tac
 QED
 
-Theorem concat_head_typed:
+Theorem concat_head_typed[local]:
   !cenv cx env e es v es'.
     expr_body_pre cenv cx env e es /\
     bind (eval_expr cx e) (read_result cx) es = (INL v, es') ==>
@@ -559,7 +559,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem concat_fixed_step_mono:
+Theorem concat_fixed_step_mono[local]:
   !data_ptr off_ptr x m s1 s2.
     (do offset_op <- emit_op MLOAD [off_ptr];
         dst <- emit_op ADD [data_ptr; offset_op];
@@ -577,7 +577,7 @@ Proof
   simp[ci_mono_emit_op, ci_mono_emit_void]
 QED
 
-Theorem concat_bytes_step_mono:
+Theorem concat_bytes_step_mono[local]:
   !mem_ptr data_ptr off_ptr s1 s2.
     (do arg_len <- emit_op MLOAD [mem_ptr];
         arg_data <- emit_op ADD [mem_ptr; Lit 32w];
@@ -825,7 +825,7 @@ QED
 
 Finalise concat_head_arm
 
-Theorem concat_cons_mono:
+Theorem concat_cons_mono[local]:
   !cenv e args dv ov sa sb op s1.
     compile_concat compile_expr cenv (e::args) (Var dv) (MAP (\e. let ety = expr_type e in
                 if is_bytestring_type ety then (T, 0:num)
