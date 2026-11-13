@@ -6813,6 +6813,86 @@ Proof
   gvs[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only]
 QED
 
+(* Cancel the same prescribed prefix, rather than choosing a new replay core.
+   The two replay equations are projections of the guarded prefix interface. *)
+Theorem source_cut_invoke_prescribed_replay[local]:
+  !fuel C x pre s b u pg gs.
+    x.inst_opcode = INVOKE /\
+    EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+    (!r. FOLDR (dft_exec_cons fuel C) OK pre
+      (s with vs_gas_readings := pg ++ gs ++ r) =
+      OK (b with vs_gas_readings := gs ++ r)) /\
+    (!r. FOLDR (dft_exec_cons fuel C) OK (pre ++ [x])
+      (s with vs_gas_readings := pg ++ gs ++ r) =
+      OK (u with vs_gas_readings := r)) ==>
+    !r. step_inst fuel C x (b with vs_gas_readings := gs ++ r) =
+      OK (u with <|vs_gas_readings := r; vs_inst_idx := b.vs_inst_idx|>)
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  qpat_x_assum `!r. FOLDR _ _ (pre ++ [x]) _ = _`
+    (qspec_then `r` mp_tac) >>
+  pure_rewrite_tac[FOLDR_APPEND] >>
+  simp[Once dftRunRelTheory.dft_exec_prefix_continue] >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+       venomInstTheory.is_terminator_def] >>
+  Cases_on `step_inst fuel C x (b with vs_gas_readings := gs ++ r)` >>
+  simp[] >> strip_tac >>
+  `v.vs_inst_idx = b.vs_inst_idx` by
+    (drule venomExecSemanticsTheory.step_inst_preserves_inst_idx >>
+     simp[venomInstTheory.is_terminator_def]) >>
+  qpat_x_assum `v with vs_inst_idx := _ = _` mp_tac >>
+  simp[venom_state_component_equality]
+QED
+
+(* The recursive prefix replays its prescribed filling with the pending GAS
+   reading in the tail.  This exposes the very same post-INVOKE endpoint. *)
+Theorem pending_gas_invoke_prescribed_success[local]:
+  !fuel C x y out w a b u gs tail.
+    x.inst_opcode = INVOKE /\ y.inst_opcode = GAS /\
+    y.inst_outputs = [out] /\
+    ~MEM (Var out) x.inst_operands /\ ~MEM out x.inst_outputs /\
+    a.vs_gas_readings = gs ++ w::tail /\
+    b = (update_var out w (a with vs_gas_readings := gs ++ tail) with
+      vs_inst_idx := SUC a.vs_inst_idx) /\
+    (!r. step_inst fuel C x (b with vs_gas_readings := gs ++ r) =
+      OK (u with vs_gas_readings := r)) ==>
+    ?p. step_inst fuel C x a = OK p /\
+      p.vs_gas_readings = w::tail /\
+      FOLDR (dft_exec_cons fuel C) OK [y]
+        (p with vs_inst_idx := SUC a.vs_inst_idx) =
+        OK (u with <|vs_gas_readings := tail;
+                     vs_inst_idx := SUC (SUC a.vs_inst_idx)|>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `b with vs_gas_readings := gs ++ w::tail =
+    (update_var out w a with vs_inst_idx := SUC a.vs_inst_idx)` by
+    (simp[update_var_def] >>
+     qpat_x_assum `a.vs_gas_readings = _` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  qpat_x_assum `!r. step_inst _ _ _ _ = _` (qspec_then `w::tail` mp_tac) >>
+  simp[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
+  `step_inst fuel C x (update_var out w a) =
+    (case step_inst fuel C x a of
+       OK p => OK (update_var out w p)
+     | Halt p => Halt p | Abort z p => Abort z p
+     | IntRet ir p => IntRet ir p | Error e => Error e)` by
+    (irule dftCommutationTheory.step_inst_invoke_frame >> simp[]) >>
+  Cases_on `step_inst fuel C x a` >> simp[] >> strip_tac >>
+  rename1 `step_inst fuel C x a = OK p` >>
+  `p.vs_gas_readings = w::tail` by
+    (qpat_x_assum `update_var out w p with vs_inst_idx := _ = _` mp_tac >>
+     simp[update_var_def, venom_state_component_equality]) >>
+  simp[] >>
+  `!st. step_inst fuel C y st = OK (update_var out
+    (case st.vs_gas_readings of [] => 0w | h::tl => h)
+    (st with vs_gas_readings := DROP 1 st.vs_gas_readings))` by
+    (gen_tac >> irule dftBlockSimTheory.step_inst_gas_single >> simp[]) >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+       venomInstTheory.is_terminator_def] >>
+  qpat_x_assum `update_var out w p with vs_inst_idx := _ = _` mp_tac >>
+  simp[update_var_def, venom_state_component_equality]
+QED
+
 (* Fixed fillings are reordered only at the concrete pending-head seam. *)
 Theorem source_cut_prefix_splice[local]:
   !fuel C owner label pre gss ess gh eh tail s y h v.
