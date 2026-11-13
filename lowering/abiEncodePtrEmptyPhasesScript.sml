@@ -188,13 +188,21 @@ Resume abi_encode_empty_phases_ptr[ghost_inputs]:
      simp[regions_disjoint_def] >> decide_tac) >>
   `actual.vs_accounts = prepared.vs_accounts /\ actual.vs_transient = prepared.vs_transient /\
    actual.vs_call_ctx = prepared.vs_call_ctx` by
-    (qpat_assum `abi_encoder_registered_effect {} [(p,32)] t actual` mp_tac >>
-     qpat_assum `abi_encode_exec_frame func prepared t` mp_tac >>
-     qpat_assum `abi_encode_exec_frame func t actual` mp_tac >>
-     qpat_assum `window_strong_result _ _ _ _ _ _ _ _ prepared t` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[window_strong_result_def, abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def,
-       abi_encode_exec_frame_def] >> metis_tac[]) >>
+    (`t.vs_accounts = prepared.vs_accounts /\
+      t.vs_transient = prepared.vs_transient` by
+       (drule window_strong_result_effect >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp_tac bool_ss [abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def]) >>
+     `actual.vs_accounts = t.vs_accounts /\ actual.vs_transient = t.vs_transient` by
+       (qpat_assum `abi_encoder_registered_effect {} [(p,32)] t actual` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp_tac bool_ss [abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def]) >>
+     `actual.vs_call_ctx = prepared.vs_call_ctx` by
+       (qpat_assum `abi_encode_exec_frame func prepared t` mp_tac >>
+        qpat_assum `abi_encode_exec_frame func t actual` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp_tac bool_ss [abi_encode_exec_frame_def] >> metis_tac[]) >>
+     metis_tac[]) >>
   `!z v. not_fresh_at st z /\ lookup_var z prepared = SOME v ==>
       lookup_var z actual = SOME v` by
     (rpt strip_tac >>
