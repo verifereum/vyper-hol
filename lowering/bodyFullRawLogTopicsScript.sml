@@ -80,10 +80,16 @@ Proof
      (Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
        (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics) es` by
     (drule expr_body_pre_raw_log_arg >> disch_then irule >> simp[]) >>
-  `LENGTH topics <= n` by
+  `well_typed_expr env
+     (Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
+       (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics)` by
     (qpat_x_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` mp_tac >>
-     simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
-          compatible_bound_def, builtin_args_length_ok_def]) >>
+     pure_rewrite_tac [expr_body_pre_def] >> metis_tac[]) >>
+  `LENGTH topics <= n` by
+    (qpat_x_assum `well_typed_expr _ (Builtin _ _ _)` mp_tac >>
+     pure_rewrite_tac [well_typed_expr_def] >>
+     simp[well_typed_builtin_app_def, compatible_bound_def,
+          builtin_args_length_ok_def]) >>
   `body_exprs_full_ok cx topics` by
     (irule body_make_array_children_full_ok >>
      qexistsl_tac [`ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n)`,
