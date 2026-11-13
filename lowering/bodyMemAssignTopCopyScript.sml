@@ -10,6 +10,7 @@ Ancestors
 
 Theorem body_assign_toplevel_copy_mem:
   !cx nsid e mut ty slot d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
     body_expr_mem_ok cx e /\
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings
       (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\

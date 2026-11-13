@@ -8,7 +8,7 @@ Theory o1ContractMakeSsaStep
 Ancestors
   o1PassContract makeSsaDefs venomPassSchedule irSupply
   o1MakeSsaRows o1MakeSsaStructuralShape o1MakeSsaRetpcShape
-  o1MakeSsaOpaqueShape o1MakeSsaCalls venomPassDispatcher
+  o1MakeSsaOpaqueShape o1MakeSsaCallAssembly o1MakeSsaCallCleanup venomPassDispatcher
   venomFnScheduleRunnerProps fmpStepBridge unitShapeDefs venomWf venomInst
   o1ContractMakeSsaPtrOk o1MakeSsaFormats o1MakeSsaCfg makeSsaCurrentProps
   venomFnScheduleRunner
@@ -32,7 +32,6 @@ Proof
   >- metis_tac[make_ssa_current_fn_retpc_shape_ok]
   >- metis_tac[make_ssa_current_fn_reserved_labels]
   >- metis_tac[make_ssa_current_fn_instruction_shapes]
-  >- metis_tac[make_ssa_current_fn_call_checks_ok]
   >- metis_tac[make_ssa_current_fn_first_block_no_preds]
   >- metis_tac[make_ssa_current_fn_first_block_no_phi]
   >- metis_tac[make_ssa_current_fn_invoke_ok]

@@ -9,7 +9,7 @@
 
 Theory targetPlaceLive
 Ancestors
-  compileEnv loweringStateRelDefs accountsRelProps exprSimPopStorage
+  compileEnv loweringStateRelDefs accountsRelProps exprSimPopStorage allocLimits allocLimitsProps
   vyperAST vyperValue vyperState vyperInterpreter vyperLookupStorage
   vyperPlaceFrames vyperPureExpr vyperStatePreservation
   vyperStorageLayoutSafety vyperStoragePlaceRegion vyperStoragePlaceProvenance
@@ -22,6 +22,17 @@ Definition target_indices_def:
   target_indices (AttributeTarget t fld) = target_indices t /\
   target_indices (SubscriptTarget t e) = target_indices t ++ [e]
 End
+
+Theorem alloc_limits_target_indices_not_extcode:
+  alloc_limits_target cenv t ==>
+  EVERY (\e. ~is_extcode e) (target_indices t)
+Proof
+  `(!e:expr. T) /\ (!t. alloc_limits_target cenv t ==>
+      EVERY (\e. ~is_extcode e) (target_indices t))` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[target_indices_def, alloc_limits_expr_def] >>
+  metis_tac[alloc_limits_expr_not_extcode]
+QED
 
 Theorem nested_pop_lookup_frame:
   off + sz <= dimword (:256) /\
