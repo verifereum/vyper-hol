@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimArraySource
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopTargetDefs exprSimSubscriptArraySource exprSimProps
   stmtSimAugAssignPlace vyperPlaceStatePreservation vyperPlaceResultTyping vyperState
   loweringPosts compileEnv words finite_map list exprSimArith arithmeticProps

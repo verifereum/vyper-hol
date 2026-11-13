@@ -27,7 +27,7 @@ Theorem pop_target_frag_ptr_of_sim:
     target_sim_ptr d ctx PG func cenv cx env bt es ==>
     pop_target_frag_ptr d ctx PG func cenv cx env bt es
 Proof
-  rw[pop_target_frag_ptr_def, eval_target_place_as_bind] >>
+  rw[pop_target_frag_ptr_def, eval_target_place_bind] >>
   drule get_place_base_admissible >> strip_tac >>
   ho_match_mp_tac gas_outcome_ptr_get_place >> simp[] >>
   qpat_x_assum `target_sim_ptr _ _ _ _ _ _ _ _ _` mp_tac >>

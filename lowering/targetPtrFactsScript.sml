@@ -1,6 +1,7 @@
-Theory bodyPtrPopTargetSimAttributeSource
+Theory targetPtrFacts
 Ancestors
-  bodyPtrPopTargetDefs targetPlaceSimCasesBase stmtSimAssignAttr
+  bodyFullTargetDefs
+  targetPlaceSimCasesBase stmtSimAssignAttr
   stmtSimAssignAttrStorage exprSimAttributeFields exprSimFieldLayout
   exprSimHypsDefs loweringPosts compileEnv vyperInterpreter vyperState
   vyperPlaceTyping vyperPlaceResultTyping vyperTypeSystem vyperValue
@@ -87,3 +88,16 @@ Resume target_field_source_ptr[memory]:
 QED
 
 Finalise target_field_source_ptr
+
+(* Spatial extent is deliberately not asserted: a target pointer may denote
+   a zero-sized child.  This transport only preserves its provenance class. *)
+Theorem target_ptr_ok_operand_transport:
+  target_ptr_ok cenv pv rb G tn s /\
+  op_taint tn' (FST r) = {} /\
+  op_prov G' (FST r) = op_prov G (FST rb) /\
+  (!id p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ==>
+              FLOOKUP G' p = FLOOKUP G p) ==>
+  target_ptr_ok cenv pv r G' tn' t
+Proof
+  simp[target_ptr_ok_def] >> metis_tac[]
+QED

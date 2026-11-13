@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimDynamicMemory
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopTargetSimArrayContinue bodyPtrPopTargetSimArraySource
   bodyPtrPopTargetSimArrayCase bodyPtrPopTargetDefs
   typedCopyLayoutPtr valueEncodingProps bodyPtrDefs

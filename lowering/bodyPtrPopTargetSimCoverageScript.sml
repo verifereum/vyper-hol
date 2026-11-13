@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimCoverage
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopTargetSimCurrentLocal assignBasePtrOffset assignBasePtrLocalSource
   bodyPtrDefs bodyPtrPopTargetDefs ptrDiscipline compileEnv loweringStateRelDefs
   loweringPosts exprSimProps exprSimHypsDefs vyperTypeInvariants

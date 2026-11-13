@@ -1,5 +1,6 @@
 Theory bodyPtrPopStoragePureCompose
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopStoragePureSummary bodyPtrPopTargetDefs bodyPtrPreds bodySim
   exprSimHypsDefs exprSimPopNestedBase targetPlaceLive vyperPureExpr
   vyperInterpreter vyperState vyperAST gasSummaryComposePtr gasExemptCert

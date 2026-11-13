@@ -25,43 +25,6 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* Small source-side facts, restated here so this theory doesn't pull in the
-   own-marks pointer theories that first proved them. *)
-Theorem eval_target_place_as_bind[local]:
-  eval_target_place cx bt = bind (eval_base_place cx bt) get_place
-Proof
-  simp[Once evaluate_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC
-QED
-
-Theorem get_place_base_admissible[local]:
-  gas_admissible (bind source get_place) target_place_res_ok es ==>
-  gas_admissible source target_res_ok es
-Proof
-  rewrite_tac[gas_admissible_def] >> rpt strip_tac >>
-  first_x_assum (qspec_then `gs` mp_tac) >>
-  Cases_on `res` >> simp[bind_def, target_res_ok_def] >>
-  simp[target_place_res_ok_def]
-QED
-
-Theorem target_base_memory_root_ptr[local]:
-  !bt cx s id path st.
-    eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id path)),st) ==>
-    target_root bt = NameTarget id
-Proof
-  `(!e:expr. T) /\ (!bt. !cx s id path st.
-    eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id path)),st) ==>
-    target_root bt = NameTarget id)` suffices_by simp[] >>
-  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
-  simp[] >> rpt conj_tac >> rpt gen_tac
-  >- simp[Once evaluate_def, bind_def, get_scopes_def, ignore_bind_def,
-          type_check_def, assert_def, return_def, raise_def, AllCaseEqs(), target_root_def]
-  >- (PairCases_on `p` >> simp[Once evaluate_def] >> metis_tac[lookup_global_not_memory]) >>
-  rpt strip_tac >> qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >> drule extend_place_memory_origin >> strip_tac >> gvs[] >>
-  simp[target_root_def] >> metis_tac[]
-QED
-
 (* The element suffix exists for both kinds of subscriptable base; any
    other base has no subscript type. *)
 Theorem subscript_tail_full_ok[local]:
@@ -123,7 +86,7 @@ Proof
   drule_all body_target_sim_full >>
   disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `shadow_ctx`, `func`,
                            `shadow_func`] assume_tac) >>
-  simp[target_place_sim_full_def, eval_target_place_as_bind] >>
+  simp[target_place_sim_full_def, eval_target_place_bind] >>
   rpt gen_tac >> strip_tac >>
   drule get_place_base_admissible >> strip_tac >>
   qpat_x_assum `target_sim_full _ _ _ _ _ _`
@@ -198,15 +161,9 @@ QED
 Resume body_target_place_sim_full[live]:
   `target_root bt = NameTarget id` by
     metis_tac[target_base_memory_root_ptr] >>
-  `?entry. lookup_scopes id mid.scopes = SOME entry` by
-    (Cases_on `lookup_scopes id mid.scopes` >> simp[] >>
-     ((qpat_x_assum `option_CASE NONE _ _ _ = _` mp_tac >> simp[raise_def])
-      ORELSE fs[raise_def])) >>
-  qexists_tac `entry` >> simp[] >>
-  irule local_target_live >>
-  qexistsl_tac [`cenv`, `env`, `id`,
-                `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
-                `mid`, `Type ty`] >>
-  simp[eval_target_place_as_bind, bind_def, get_place_def, return_def] >>
-  fs[target_pre_def, expr_sim_inv_def]
+  `target_pre cenv cx env bt
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
+    fs[target_pre_def] >>
+  drule_all local_base_place_live >> strip_tac >> gvs[] >>
+  metis_tac[]
 QED

@@ -22,7 +22,7 @@ Ancestors
 Definition subscript_tail_full_def:
   subscript_tail_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env bt e es <=>
-    !st0 vt bvt sa sm sn sb rb iop r s0 G0 tn0 pv v
+    !st0 vt bvt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
      mid1 t1 G1 tn1 mid2 t2 G2 tn2.
       type_place_target env bt = SOME bvt /\
       type_place_target env (SubscriptTarget bt e) = SOME vt /\
@@ -39,6 +39,14 @@ Definition subscript_tail_full_def:
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       expr_sim_inv cenv cx env mid1 /\ mid1.gas_obs = [] /\
+      eval_base_place cx bt (es with gas_obs := base_gas) =
+        (INL pv, mid1) /\
+      bind (eval_expr cx e) (read_result cx)
+        (mid1 with gas_obs := index_gas) = (INL v, mid2) /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H) /\
+        ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\
       gas_admissible (extend_place cx pv (ValueSubscript v))
         target_res_ok mid2 /\
       storage_trace_domain cx st0 mid2.storage_trace /\ mid2.gas_obs = [] /\
@@ -366,6 +374,8 @@ Resume target_subscript_sim_full[tail]:
     (mp_tac o REWRITE_RULE [subscript_tail_full_def]) >>
   disch_then (qspecl_then [`st0`, `vt`, `bvt`, `sa`, `sm`, `sn`, `sb`, `rb`,
                            `iop`, `r`, `s0`, `G0`, `tn0`, `pv`, `v`,
+                           `gas_explicit marks s0.vs_gas_readings`,
+                           `gas_explicit marks2 t1.vs_gas_readings`,
                            `mid1`, `t1`, `G1`, `tn1`, `mid2`, `t2`, `G2`,
                            `tn2`] mp_tac) >>
   qunabbrev_tac `childR` >> disch_then irule >> simp[] >> rpt conj_tac

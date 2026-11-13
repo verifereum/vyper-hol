@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimPost
 Ancestors
+  targetPtrFacts
   bodyPtrPopTargetDefs bodyPtrPopTargetSimAttributeAdd exprSimWordArgs assignTuplePtrLoadStep
   appendStorageGhostPtr bodyPtrEnvBuiltinsGhostCompose wordArgsPtr
   targetPlaceSimCasesBase stateFrame exprSimProps compileEnv loweringStateRelDefs venomState

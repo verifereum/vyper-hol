@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimArraySuffix
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopTargetSimFixedMemory bodyPtrPopTargetSimFixedSlot
   bodyPtrPopTargetSimDynamicMemory bodyPtrPopTargetSimDynamicSlot
   bodyPtrPopTargetSimArrayGas bodyPtrPopTargetSimIndexSource

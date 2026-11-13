@@ -3,13 +3,13 @@
 Theory bodyFullTargetAttribute
 Ancestors
   bodyFullTargetDefs gasOutcomeFullCompose gasOutcomeFull fragGasOriginPtr
-  bodyFullUnwrapRun bodyPtrPopTargetSimAttributeSource
-  bodyPtrPopTargetSimAttributeAdd bodyPtrAttributeAdd
+  bodyFullUnwrapRun targetPtrFacts
+  bodyPtrAttributeAdd
   targetPlaceSimCasesBase targetPlaceSim targetPlaceSimDefs
   gasShadowCompile gasShadowCompileHelpers gasShadow gasExemptCert
   stmtLoweringMono exprLoweringProps emitHelperProps
   exprPtrUnwrapScalarEdges fragGasSeqPtr fragExecMem fragExec
-  bodyPtrPopTargetDefs bodyPtrDefs loweringPosts exprSimHypsDefs
+  bodyPtrDefs loweringPosts exprSimHypsDefs
   compileEnv exprLowering ptrDiscipline vyperStorageTrace loweringStateRelDefs
   exprSimDefs emitHelper gasContext bodyFullShared vyperTypeSystem
   vyperTypeInvariants

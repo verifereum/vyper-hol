@@ -1,5 +1,6 @@
 Theory bodyPtrPopTargetSimFixedSlot
 Ancestors
+  bodyFullTargetDefs
   bodyPtrPopTargetSimArrayContinue bodyPtrPopTargetSimArraySource
   bodyPtrPopTargetSimArrayCase bodyPtrPopTargetDefs exprSimCopy
   exprLowering loweringPosts compileEnv words list

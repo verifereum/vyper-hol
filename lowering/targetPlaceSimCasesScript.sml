@@ -92,10 +92,20 @@ Definition target_place_res_ok_def:
 End
 
 (* eval_target_place reads the base's place. *)
-Theorem eval_target_place_bind[local]:
+Theorem eval_target_place_bind:
   eval_target_place cx bt = bind (eval_base_place cx bt) get_place
 Proof
   simp[Once evaluate_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC
+QED
+
+Theorem get_place_base_admissible:
+  gas_admissible (bind source get_place) target_place_res_ok es ==>
+  gas_admissible source target_res_ok es
+Proof
+  rewrite_tac[gas_admissible_def] >> rpt strip_tac >>
+  first_x_assum (qspec_then `gs` mp_tac) >>
+  Cases_on `res` >> simp[bind_def, target_res_ok_def] >>
+  simp[target_place_res_ok_def]
 QED
 
 (* The judgment for eval_target_place: a target typed by a value type
