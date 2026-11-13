@@ -105,6 +105,7 @@ Theorem ctor_task_landing_state_rel:
    (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,st_epilogue,st_final,func) /\
  local_ptrs_rel func cenv es0.scopes actual /\
  (!p. p < imm_len tops ==> mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 []) /\
+ actual.vs_code = (deploy_evaluation_context tops am tx).txn.code /\
  actual.vs_accounts = accounts_after_transfer tx am.accounts /\
  actual.vs_transient = am.tStorage /\ actual.vs_call_ctx.cc_address = tx.target /\
  actual.vs_logs = [] /\ actual.vs_requests = [] /\ actual.vs_pending_deletions = [] /\
