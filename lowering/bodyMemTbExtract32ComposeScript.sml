@@ -164,7 +164,7 @@ Resume compile_extract32_sim_mem[stage1]:
   `cap < dimword (:256) /\
    type_slot_size (BaseTV (BytesT (Dynamic cap))) <= dimword (:256)` by
     (qpat_assum `expr_body_pre cenv cx env src _`
-       (mp_then Any mp_tac expr_body_pre_type_evaluates) >>
+       (mp_then Any mp_tac exprSimHypsTheory.expr_body_pre_type_evaluates) >>
      qpat_assum `expr_type src = _` (fn th => rewrite_tac[th]) >>
      simp[evaluate_type_def]) >>
   `evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
@@ -306,7 +306,7 @@ Resume compile_extract32_sim_mem[stage2]:
        (drule_then strip_assume_tac) >> first_assum ACCEPT_TAC) >>
   `0 < k /\ k <= 256 /\ k MOD 8 = 0` by
     (qpat_assum `expr_body_pre cenv cx env off _`
-       (mp_then Any mp_tac expr_body_pre_type_evaluates) >>
+       (mp_then Any mp_tac exprSimHypsTheory.expr_body_pre_type_evaluates) >>
      qpat_assum `expr_type off = _` (fn th => rewrite_tac[th]) >>
      simp[evaluate_type_def]) >>
   `eval_operand off_op t2 = SOME (n2w (Num i))` by
