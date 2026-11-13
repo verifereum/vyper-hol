@@ -1118,12 +1118,28 @@ Theorem log_inst_ok_sim_marked_count:
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops)) /\
-        n = LENGTH (execute_plan initial_fmp ops)
+        n = LENGTH (execute_plan initial_fmp ops) /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
   qpat_x_assum `lo = _` kall_tac >> qpat_x_assum `o2pc = _` kall_tac >>
   drule_all step_inst_log_ok >> strip_tac >>
   drule_all log_inst_plan_decompose >> strip_tac >>
+  `EVERY plan_admin_op (input_ops ++ reorder_ops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `!n. n <= LENGTH (execute_plan initial_fmp ops) ==>
+       create_safe_prefix lo o2pc prog n as` by
+    (rpt strip_tac >> irule asm_block_create_safe_prefix >>
+     goal_assum (drule_at Any) >> simp[] >>
+     simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
+     conj_tac >-
+       (drule plan_admin_execute_safe >>
+        disch_then (qspec_then `initial_fmp` mp_tac) >>
+        simp[execute_plan_append, execute_plan_def]) >>
+     `w2n tc <= 4` by fs[] >>
+     `w2n tc = 0 \/ w2n tc = 1 \/ w2n tc = 2 \/ w2n tc = 3 \/ w2n tc = 4`
+       by decide_tac >>
+     gvs[] >> EVAL_TAC >> simp[]) >>
   `compute_operands inst = rest` by simp[compute_operands_def] >>
   `asm_block_at prog as.as_pc
      (execute_plan initial_fmp (input_ops ++ reorder_ops))` by
@@ -1209,7 +1225,8 @@ Theorem log_inst_ok_sim_marked:
       ?n as'. asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
-          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
+          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops)) /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
   drule_all log_inst_ok_sim_marked_count >> metis_tac[]
@@ -2799,7 +2816,8 @@ Theorem istore_inst_ok_sim_marked_count:
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops)) /\
-        n = LENGTH (execute_plan initial_fmp ops)
+        n = LENGTH (execute_plan initial_fmp ops) /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
   qpat_x_assum `lo = _` kall_tac >> qpat_x_assum `o2pc = _` kall_tac >>
@@ -2825,6 +2843,17 @@ Proof
   qpat_x_assum `inst.inst_opcode = ISTORE` (fn th =>
     RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
   RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [ir_specific_operand_order_def]) >>
+  `EVERY plan_admin_op (input_ops ++ reorder_ops)` by
+    (simp[EVERY_APPEND] >> metis_tac[emit_input_plan_admin, reorder_plan_admin]) >>
+  `!n. n <= LENGTH (execute_plan initial_fmp
+          (input_ops ++ reorder_ops ++ [SOEmit "SWAP1"; SOEmit "MSTORE"])) ==>
+       create_safe_prefix lo o2pc prog n as` by
+    (rpt strip_tac >> irule asm_block_create_safe_prefix >>
+     goal_assum (drule_at Any) >> simp[] >>
+     simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
+     drule plan_admin_execute_safe >>
+     disch_then (qspec_then `initial_fmp` mp_tac) >>
+     simp[execute_plan_append, execute_plan_def, create_safe_def]) >>
   `asm_block_at prog as.as_pc
      (execute_plan initial_fmp (input_ops ++ reorder_ops))` by
     (qpat_x_assum `asm_block_at prog as.as_pc (execute_plan initial_fmp _)` mp_tac >>
@@ -2976,7 +3005,9 @@ Proof
   asm_rewrite_tac[] >>
   simp_tac std_ss[Abbr `as2`, execute_plan_append, execute_plan_def,
     exec_stack_op_def, MAP, FLAT, LENGTH, APPEND, MAP_APPEND, FLAT_APPEND,
-    LENGTH_APPEND, AC ADD_ASSOC ADD_COMM] >> simp[])
+    LENGTH_APPEND, AC ADD_ASSOC ADD_COMM] >> simp[] >>
+  strip_tac >> first_x_assum irule >>
+  simp[execute_plan_append, execute_plan_def, exec_stack_op_def])
 QED
 
 Theorem istore_inst_ok_sim_marked:
@@ -3028,7 +3059,8 @@ Theorem istore_inst_ok_sim_marked:
       ?n as'. asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
-          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
+          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops)) /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
   drule_all istore_inst_ok_sim_marked_count >> metis_tac[]
@@ -3468,7 +3500,7 @@ Proof
   Cases_on `inst.inst_opcode = ASSIGN`
   >- (ok_case_lemma_tac assign_inst_ok_sim_marked_count >> simp[] >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = LOG`
-  >- (ok_case_lemma_tac log_inst_ok_sim_marked_count >> simp[]) >>
+  >- (ok_case_lemma_tac log_inst_ok_sim_marked_count >> simp[] >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = ASSERT`
   >- (ok_case_lemma_tac assert_inst_ok_sim_marked_count >> simp[]) >>
   Cases_on `inst.inst_opcode = ASSERT_UNREACHABLE`
@@ -3480,7 +3512,7 @@ Proof
   Cases_on `inst.inst_opcode = BUMP`
   >- (ok_case_lemma_tac bump_inst_ok_sim_marked_count >> simp[]) >>
   Cases_on `inst.inst_opcode = ISTORE`
-  >- (ok_case_lemma_tac istore_inst_ok_sim_marked_count >> simp[]) >>
+  >- (ok_case_lemma_tac istore_inst_ok_sim_marked_count >> simp[] >> metis_tac[]) >>
   `inst.inst_opcode <> OFFSET` by
     (gvs[fn_shape_ok_def, EVERY_MEM] >>
      first_x_assum drule >> simp[inst_shape_ok_def]) >>
