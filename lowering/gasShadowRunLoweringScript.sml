@@ -1,8 +1,28 @@
 Theory gasShadowRunLowering
 Ancestors
   gasShadowUnitGuards gasShadowUnitExtract gasShadowUnit gasShadowRuntime
-  gasShadowState gasShadowModuleDefs vyperCompiler moduleLowering compileEnv
+  gasShadowState gasShadowModuleDefs vyperCompiler moduleLowering compileVyper compileEnv
   list pair
+
+
+(* The compiler shadow is fixed by the source and policy, before any
+   execution state is supplied. This is the ordinary runtime lowering
+   spine with its packaged bodies replaced by their GAS shadows. *)
+Definition runtime_gas_shadow_unit_def:
+  runtime_gas_shadow_unit tops rpolicy =
+    let (exts,ints,fb,ctor) = classify_functions tops in
+    let selectors = build_selectors (type_env tops) exts in
+    let packs = MAP (set_external_package_target rpolicy.rpol_target o
+      package_external_fn tops T (K global_nonreentrant_slot)) exts in
+    let ips = MAP (set_internal_package_target rpolicy.rpol_target o
+      package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints in
+    let fall = set_fallback_package_target rpolicy.rpol_target
+      (package_fallback_fn tops T (K global_nonreentrant_slot) fb) in
+    run_lowering selectors (MAP gas_shadow_external_package packs)
+      (MAP gas_shadow_internal_package ips)
+      (OPTION_MAP gas_shadow_fallback_package fall) rpolicy 0 0
+      ([] : dense_bucket list) (build_dense_entry_info selectors packs) "__entry"
+End
 
 Theorem gas_shadow_run_lowering:
   !sels exts ints fb rp buckets metadata dense info entry.
@@ -35,6 +55,36 @@ Proof
       by metis_tac[gas_shadow_lowering_context_ok] >>
     simp[] >> IF_CASES_TAC >> simp[gas_shadow_unit_def]) >>
   simp[run_lowering_def]
+QED
+
+
+Theorem runtime_gas_shadow_unit_exists:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  classify_functions tops = (exts,ints,fb,ctor) /\
+  ~EXISTS external_has_defaults exts ==>
+  ?shadow_unit.
+    runtime_gas_shadow_unit tops rpolicy = SOME shadow_unit /\
+    gas_shadow_unit unit shadow_unit
+Proof
+  strip_tac >>
+  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+  simp[lower_vyper_runtime_unit_def] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac
+    `run_lowering sels packs ips fall rpolicy 0 0 [] info "__entry"` >>
+  `OPTREL gas_shadow_unit (SOME unit)
+    (run_lowering sels (MAP gas_shadow_external_package packs)
+      (MAP gas_shadow_internal_package ips)
+      (OPTION_MAP gas_shadow_fallback_package fall) rpolicy 0 0 [] info "__entry")` by
+    (qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = SOME unit`
+       (SUBST1_TAC o SYM) >> irule gas_shadow_run_lowering) >>
+  Cases_on `run_lowering sels (MAP gas_shadow_external_package packs)
+      (MAP gas_shadow_internal_package ips)
+      (OPTION_MAP gas_shadow_fallback_package fall) rpolicy 0 0 [] info "__entry"` >>
+  gvs[optionTheory.OPTREL_def] >>
+  rename1 `gas_shadow_unit unit shadow_unit` >>
+  qexists_tac `shadow_unit` >>
+  gvs[runtime_gas_shadow_unit_def, Abbr `sels`, Abbr `packs`, Abbr `ips`,
+      Abbr `fall`, Abbr `info`]
 QED
 
 Theorem gas_shadow_run_grouped_lowering:
