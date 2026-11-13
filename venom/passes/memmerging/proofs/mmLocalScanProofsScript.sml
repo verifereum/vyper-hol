@@ -21078,6 +21078,140 @@ Proof
   gvs[mm_local_eval_phis_idx, instIdxIndepTheory.exec_result_map_def]
 QED
 
+Theorem mm_local_zero_run_block_pair[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  bb = EL index fn0.fn_blocks /\ dfg = dfg_build_function fn0 /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  h = phi_prefix_length is /\
+  f = apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+    (rep_map_of_groups is gs) /\
+  transform_block_memzero_supply dfg supply bb = (bb',supply') /\
+  fn' = fn0 with fn_blocks := LUPDATE bb' index fn0.fn_blocks /\
+  state_equiv excluded (s with vs_inst_idx := 0) (t0 with vs_inst_idx := 0) /\
+  s.vs_current_bb = bb.bb_label /\
+  lookup_block s.vs_current_bb fn0.fn_blocks = SOME bb /\
+  (!v. v NOTIN excluded ==> MEM v supply.irs_used_vars) /\
+  (!i v. MEM i is /\ MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  eom < dimword (:256) /\
+  EVERY (\((p,d',id),fn,i,t). p = [] ==> static_mem_ok eom ctx fn i t)
+    (trace_blocks [] d (SUC fuel) ctx fn0 s) /\
+  ~(?err. run_block fuel ctx bb s = Error err) /\
+  (!sp n H. eval_phis s is = OK sp /\
+    h <= n /\ n < LENGTH is /\ H h = sp with vs_inst_idx := h /\
+    (!q. h <= q /\ q <= n ==> (H q).vs_inst_idx = q) /\
+    (!q. h <= q /\ q < n ==>
+      ~is_terminator (EL q is).inst_opcode /\
+      ?u. step_inst fuel ctx (EL q is) (H q) = OK u /\
+        H (SUC q) = u with vs_inst_idx := SUC q) /\
+    (!q. h <= q /\ q <= n ==> static_mem_ok eom ctx fn0 (EL q is) (H q)) /\
+    (is_terminator (EL n is).inst_opcode \/
+      ~(?u. step_inst fuel ctx (EL n is) (H n) = OK u)) /\
+    exec_block fuel ctx bb (sp with vs_inst_idx := h) =
+      dft_exec_suffix fuel ctx [EL n is] (H n) ==>
+    (!j. h <= j /\ j <= n ==>
+      LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256)) /\
+    (!j dst v len. h <= j /\ j < n /\
+      is_calldatasize_copy dfg (EL j is) /\
+      (EL j is).inst_operands = [Lit dst; Var v; Lit len] ==>
+      lookup_var v (H j) = SOME (n2w (LENGTH (H j).vs_call_ctx.cc_calldata)) /\
+      LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256))) ==>
+  lift_result
+    (\u v. state_equiv excluded (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+    (execution_equiv excluded) revert_equiv
+    (run_block fuel ctx bb s) (run_block fuel ctx bb' t0) /\
+  EVERY (\((p,d',id),fn,i,t). p = [] ==> static_mem_ok eom ctx fn i t)
+    (case eval_phis t0 bb'.bb_instructions of
+       OK sp' => trace_block [] (SUC d) fuel ctx fn' bb'
+         (sp' with vs_inst_idx := phi_prefix_length bb'.bb_instructions)
+     | _ => [])
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `bb_well_formed bb` by
+    (gvs[venomWfTheory.wf_function_def, EVERY_MEM] >> metis_tac[EL_MEM]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    (asm_rewrite_tac[] >> irule mm_local_prefix_wf_id_distinct >>
+     qexistsl [`fn0`,`index`,`0`,`supply`,`supply`] >>
+     simp[mm_local_prefix_zero] >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> PHI) (DROP h is)` by
+    (asm_rewrite_tac[] >> irule simplifyCfgFixupStaticTheory.scfg_phi_suffix_nonphi >>
+     gvs[venomWfTheory.bb_well_formed_def]) >>
+  `mm_flat_map_supply f supply (TAKE h is) = (TAKE h is,supply)` by
+    (gvs[] >> irule mm_local_zero_phi_emission >>
+     simp[EVERY_MEM] >> gen_tac >> disch_tac >> conj_tac
+     >- (drule MEM_TAKE >> simp[]) >>
+     qspec_then `(EL index fn0.fn_blocks).bb_instructions` mp_tac
+       analysisSimProofsBaseTheory.phi_prefix_all_phi >>
+     simp[EVERY_MEM] >> disch_then drule >> simp[]) >>
+  Cases_on `mm_flat_map_supply f supply (DROP h is)` >>
+  rename1 `mm_flat_map_supply f supply (DROP h is) = (out,es)` >>
+  `EVERY (\i. i.inst_opcode <> PHI) out` by
+    (simp[EVERY_MEM] >> rpt strip_tac >>
+     `MEM i (DROP h is)` by
+       (irule (Q.ISPECL [`f:ir_supply -> instruction -> instruction list # ir_supply`,
+         `\i:instruction. i.inst_opcode = PHI`]
+         mmSupplyWfProofsTheory.mm_flat_map_supply_origin) >>
+        metis_tac[mmSupplyWfProofsTheory.apply_memzero_inst_supply_phi_origin]) >>
+     gvs[EVERY_MEM]) >>
+  `bb'.bb_instructions = TAKE h is ++ out` by
+    (drule_all mm_local_flat_map_supply_append >>
+     simp[TAKE_DROP] >> strip_tac >>
+     qpat_x_assum `transform_block_memzero_supply _ _ _ = _` mp_tac >>
+     simp[transform_block_memzero_supply_def, AllCaseEqs()] >> strip_tac >> gvs[]) >>
+  `phi_prefix_length bb'.bb_instructions = h /\
+    (!u. eval_phis u bb'.bb_instructions = eval_phis u is)` by
+    (gvs[] >> metis_tac[dftIndexedExecTheory.dft_phi_prefix_append,
+      dftIndexedExecTheory.dft_eval_phis_append,
+      analysisSimProofsBaseTheory.phi_prefix_all_phi, TAKE_DROP]) >>
+  irule mm_local_run_block_pair >>
+  asm_rewrite_tac[] >>
+  qx_gen_tac `sp` >> strip_tac >>
+  `eval_phis s is = OK sp` by metis_tac[] >>
+  `?tp. eval_phis t0 is = OK tp /\
+    state_equiv excluded (sp with vs_inst_idx := h) (tp with vs_inst_idx := h)` by
+    (irule mm_local_phi_entry_pair >> conj_tac
+     >- (simp[EVERY_MEM] >> metis_tac[]) >>
+     qexists_tac `s` >> asm_rewrite_tac[]) >>
+  qexists_tac `tp` >> conj_tac >- metis_tac[] >>
+  `sp.vs_current_bb = bb.bb_label` by
+    metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
+  `eval_phis s bb.bb_instructions = OK sp` by metis_tac[] >>
+  drule_all dftGasFromListTraceDefsTheory.trace_blocks_enter >>
+  disch_then (fn th => fs[th, EVERY_APPEND]) >>
+  `~(?err. exec_block fuel ctx bb (sp with vs_inst_idx := h) = Error err)` by
+    (qpat_x_assum `!err. run_block_entry _ _ _ _ <> Error err` mp_tac >>
+     simp[venomExecSemanticsTheory.run_block_def] >> metis_tac[]) >>
+  mp_tac (Q.INST [`s` |-> `sp with vs_inst_idx := h`,
+    `t0` |-> `tp with vs_inst_idx := h`, `d` |-> `SUC d`]
+    mm_local_zero_post_phi_result) >>
+  impl_tac >- (
+    qpat_x_assum `h = _` SUBST_ALL_TAC >>
+    qpat_x_assum `is = _` SUBST_ALL_TAC >>
+    qpat_x_assum `bb = _` SUBST_ALL_TAC >>
+    qpat_x_assum `dfg = _` SUBST_ALL_TAC >>
+    asm_simp_tac (srw_ss()) [] >>
+    qpat_assum `s.vs_current_bb = _` (fn th => rewrite_tac[GSYM th]) >>
+    asm_rewrite_tac[] >> metis_tac[]) >>
+  disch_tac >>
+  mp_tac (Q.INST [`s` |-> `sp with vs_inst_idx := h`,
+    `t0` |-> `tp with vs_inst_idx := h`, `d` |-> `SUC d`]
+    mm_local_zero_post_phi_trace) >>
+  impl_tac >- (
+    qpat_x_assum `h = _` SUBST_ALL_TAC >>
+    qpat_x_assum `is = _` SUBST_ALL_TAC >>
+    qpat_x_assum `bb = _` SUBST_ALL_TAC >>
+    qpat_x_assum `dfg = _` SUBST_ALL_TAC >>
+    asm_simp_tac (srw_ss()) [] >>
+    qpat_assum `s.vs_current_bb = _` (fn th => rewrite_tac[GSYM th]) >>
+    asm_rewrite_tac[] >> metis_tac[]) >>
+  strip_tac >>
+  qpat_x_assum `h = _` SUBST_ALL_TAC >>
+  qpat_x_assum `is = _` SUBST_ALL_TAC >>
+  qpat_x_assum `bb = _` SUBST_ALL_TAC >>
+  qpat_x_assum `fn' = _` SUBST_ALL_TAC >>
+  asm_rewrite_tac[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
