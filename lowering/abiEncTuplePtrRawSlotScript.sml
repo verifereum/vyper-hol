@@ -1,7 +1,8 @@
 Theory abiEncTuplePtrRawSlot
 Ancestors
   abiTupleEncodeSlot abiDecodePtrBytesTail bodyPtrAttributeAdd
-  rawCallHeaderFramePtr assignBasePtrMcopyGhost
+  rawCallHeaderFramePtr assignBasePtrMcopyGhost assignBasePtrCopyPath
+  exprLowering venomMemProofs abiDecoderContract context valueEncodingProps
   bodyPtrEnvBuiltinsSelectorBuffer bodyPtrStructLitFieldStore
   ghostPcTransportPtr ptrCoverage bodyPtrDefs compileEnv emitHelper emitHelperProps
   loweringStateRelDefs venomState venomInst venomExecSemantics
@@ -81,4 +82,69 @@ Proof
   simp[] >> rpt strip_tac >>
   irule (attribute_ptr_covers_update
     |> SRULE [ghostPcTransportPtrTheory.ptr_covers_inst_idx]) >> simp[] >> metis_tac[]
+QED
+
+(* Physical MCOPY boundary; no logical-value or clean-padding premise. *)
+Theorem abi_tuple_slot_copy_resources_ptr:
+  0 < n /\ n < dimword(:256) /\
+  compile_copy_memory (Var dst) (Var src) n sa = ((),sb) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  lookup_var dst s = SOME b /\ lookup_var src s = SOME a /\
+  ptr_covers G tn dst s n /\ ptr_covers G tn src s n /\
+  local_ptrs_rel func cenv es.scopes s /\ ghost_inv rb cenv cx es G tn s /\
+  (!name base sz. local_region cenv es.scopes s name base sz ==>
+    regions_disjoint (w2n b) n base sz) /\
+  (!aid base sz. FLOOKUP s.vs_allocas aid = SOME (base,sz) /\
+    aid < fr.cs_next_id /\
+    (!name p k. local_region cenv es.scopes s name p k ==>
+      base+sz <= p \/ p+k <= base) ==>
+    regions_disjoint (w2n b) n base sz) ==>
+  ?tf t.
+    gas_path_ptr D 0 ctx func PG G tn s 0 G tf (OK t) /\
+    t = (mcopy (w2n b) (w2n a) n s with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    ghost_inv rb cenv cx es G tf t /\ ghost_kept cenv es fr G tn s G tf /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!x. lookup_var x t = lookup_var x s) /\
+    (!x k. ptr_covers G tf x t k <=> ptr_covers G tn x s k) /\
+    tf.t_var = tn.t_var /\ tf.t_stor = tn.t_stor /\
+    tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    tf.t_mem = (tn.t_mem DIFF {j | w2n b <= j /\ j < w2n b+n}) UNION
+      {w2n b+j | j < n /\ w2n a+j IN tn.t_mem} /\
+    mem_bytes_at (w2n b) n t.vs_memory = mem_bytes_at (w2n a) n s.vs_memory /\
+    abi_decode_frame (w2n b) n s t
+Proof
+  strip_tac >>
+  drule_all assign_base_copy_memory_path_ptr >>
+  disch_then (qspecl_then [`D`,`PG`] assume_tac) >>
+  drule_all assign_base_mcopy_nat_ghost_inv >>
+  disch_then (qspecl_then [`PG`,`sa.cs_next_id`] assume_tac) >>
+  drule_all assign_base_mcopy_nat_ghost_kept >>
+  disch_then (qspecl_then [`PG`,`G`,`tn`,`sa.cs_next_id`] assume_tac) >>
+  `eval_operand (Var dst) s = SOME b /\
+   eval_operand (Var src) s = SOME a /\
+   eval_operand (Lit (n2w n)) s = SOME (n2w n)` by simp[eval_operand_def] >>
+  mp_tac (mcopy_operand_ghost_frame |> SPEC_ALL
+    |> Q.INST [`dst` |-> `dst_op`, `src` |-> `src_op`, `n` |-> `nw`]
+    |> Q.INST [`dst_op` |-> `Var dst`, `src_op` |-> `Var src`,
+      `count_op` |-> `Lit (n2w n)`, `nw` |-> `n2w n:bytes32`,
+      `id` |-> `sa.cs_next_id`]) >>
+  simp[eval_operand_def, w2n_n2w] >> strip_tac >>
+  gvs[w2n_n2w] >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx func PG G tn s 0 G tf (OK t)` >>
+  qexists_tac `tf` >> simp[] >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (Cases_on `n` >> gvs[compile_copy_memory_def, emit_void_def, comp_bind_def,
+      comp_ignore_bind_def, fresh_id_def, emit_def, comp_return_def]) >>
+  `abi_decode_frame (w2n b) n s t` by
+    (simp[Abbr `t`, abi_decode_frame_def] >>
+     metis_tac[mcopy_mem_bytes_at_disjoint, ADD_COMM]) >>
+  `mem_bytes_at (w2n b) n (mcopy (w2n b) (w2n a) n s).vs_memory =
+   mem_bytes_at (w2n a) n s.vs_memory` by simp[mcopy_mem_bytes_at_same] >>
+  simp[Abbr `t`, mcopy_def, write_memory_with_expansion_def,
+    lookup_var_def, ptr_covers_def, op_taint_def] >>
+  simp[Abbr `tf`, step_taint_def, mk_inst_def, imm_taint_def]
 QED
