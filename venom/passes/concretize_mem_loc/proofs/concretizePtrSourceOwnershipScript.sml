@@ -251,7 +251,7 @@ Proof
   >- (simp[] >> irule ptr_tagged_step_projection >> fs[] >>
       rpt strip_tac >>
       gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(),
-          update_var_def, lookup_var_def, FLOOKUP_UPDATE])
+          venomStateTheory.update_var_def, venomStateTheory.lookup_var_def, FLOOKUP_UPDATE])
   >- (simp[] >> irule ptr_owner_entry_projection >> simp[])
   >- (`ptr_ledger_erases dyn births FEMPTY FEMPTY` by
         simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >>
@@ -308,10 +308,10 @@ Proof
       `inst_wf inst` by (fs[EVERY_MEM] >> metis_tac[]) >>
       `affine_pointer_ops fn (ptr_roots P fn)` by fs[EVERY_MEM, fn_ptr_ok_def] >>
       Cases_on `inst.inst_opcode = ASSIGN`
-      >- (`?x. inst.inst_operands = [x]` by gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+      >- (`?x. inst.inst_operands = [x]` by gvs[venomWfTheory.inst_wf_def, LENGTH_EQ_NUM_compute] >>
           gvs[]) >>
-      `?x y. inst.inst_operands = [x; y]` by gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
-      fs[affine_pointer_ops_def, LET_THM, GSYM fn_pv_def] >>
+      `?x y. inst.inst_operands = [x; y]` by gvs[venomWfTheory.inst_wf_def, LENGTH_EQ_NUM_compute] >>
+      fs[pointerConfinedDefsTheory.affine_pointer_ops_def, LET_THM, GSYM fn_pv_def] >>
       first_x_assum (qspecl_then [`bb`, `inst`, `x`, `y`] mp_tac) >>
       gvs[] >> rpt strip_tac >> gvs[]) >>
   strip_tac >>
