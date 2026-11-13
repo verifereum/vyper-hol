@@ -111,7 +111,7 @@ Theorem immutable_code_loop_outcome_mem:
       (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
       ((r = INL () \/ r = INR ContinueException) ==>
         P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
-  (!H ce srcop dstop bytes ety cs ct tyv cxx cxxctx fn ee ss vv aa bb dd.
+  (!(H:(bool # bytes32 # type_value) list # num list) ce srcop dstop bytes ety cs ct tyv cxx cxxctx fn ee ss vv aa bb dd.
     compile_iter_elem_copy ce srcop dstop bytes LocCode F ety ety cs = ((),ct) /\
     bytes = type_memory_size tyv /\ 0 < bytes /\
     evaluate_type (get_tenv cxx) ety = SOME tyv /\

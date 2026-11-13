@@ -1,7 +1,7 @@
 (* Memory-safe initialization for immutable array iteration. *)
 Theory bodyImmEntryMemory
 Ancestors
-  whitelistForIterImmFrag stmtForArrayMemoryEntry
+  whitelistForIterImmFrag stmtForArrayMemoryEntry loweringSlice
   exprSimBopRestWordTail exprSimBopRestWordLoadSafety
   bodyMemoryDefs allocaHistory fragGasSeqMem fragGasMode fragExecMem
   memSafeRun instMemFrontier gasCount venomExecProps venomInstProofs
@@ -378,15 +378,17 @@ Proof
      storage_well_formed_on cx es (FST H')` by
     (rpt strip_tac
      >- (`stmt_state_rel H' ctx func cenv cx es s` by metis_tac[] >>
-         irule stmt_state_rel_fields_transport >> qexists_tac `H` >>
-         rpt conj_tac >> first_assum ACCEPT_TAC)
+         irule (INST_TYPE [alpha |-> ``:256``] stmt_state_rel_fields_transport) >>
+         conj_tac
+         >- (qexists_tac `s` >> rpt conj_tac >> first_assum ACCEPT_TAC)
+         >- (qexists_tac `H` >> first_assum ACCEPT_TAC))
      >- metis_tac[]) >>
   `ret_pc_ok cenv sb u` by
     (fs[ret_pc_ok_def, not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
   `lookup_block u.vs_current_bb func.fn_blocks =
     SOME <|bb_label := lbl; bb_instructions :=
       sb.cs_current_insts ++ [ainst; mk_inst j JMP [Label entry] []]|>` by simp[] >>
-  drule_all (SRULE [PULL_EXISTS] immutable_allocate_initialize_mem) >>
+  drule_all (SIMP_RULE pure_ss [PULL_EXISTS] immutable_allocate_initialize_mem) >>
   disch_then (qspec_then `off` strip_assume_tac) >>
   `array_loop_inv ctx func cenv cx st0 P vs id idx (Lit (n2w off)) (n2w off)
       p dst sz ainst cond_lbl sa 0 es cc` by
@@ -483,7 +485,7 @@ Theorem immutable_array_entry_run_mem:
   (!region. cenv.ce_is_ctor /\ cenv.ce_imm_alloca = SOME region ==>
     eval_operand region s = SOME 0w /\ copy_old_operand sa region /\
     (!x. region = Var x ==> x <> ov /\ x <> tot /\ x <> ep)) /\
-  (!H ce srcop dstop bytes ty cs ct tyv cxx cxxctx fn ee ss vv aa bb dd.
+  (!(H:(bool # bytes32 # type_value) list # num list) ce srcop dstop bytes ty cs ct tyv cxx cxxctx fn ee ss vv aa bb dd.
     compile_iter_elem_copy ce srcop dstop bytes LocCode F ty ty cs = ((),ct) /\
     bytes = type_memory_size tyv /\ 0 < bytes /\
     evaluate_type (get_tenv cxx) ty = SOME tyv /\
