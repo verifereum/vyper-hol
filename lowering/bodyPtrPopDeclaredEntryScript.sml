@@ -42,9 +42,9 @@ Proof
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def, ghost_inv_def] >>
   Cases_on `tr` >> gvs[]
   >- (irule pop_region_taint_transient_entry >>
-      qexists_tac `H` >> simp[] >>
+      simp[] >> qexists_tac `H` >> simp[] >>
       irule observed_storage_region_read_live >> simp[]) >>
   irule pop_region_taint_storage_entry >>
-  qexists_tac `H` >> simp[] >>
+  simp[] >> qexists_tac `H` >> simp[] >>
   irule observed_storage_region_read_live >> simp[]
 QED

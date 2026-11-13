@@ -53,7 +53,8 @@ Resume array_index_summary_compose_ptr[live]:
   `gas_summary_ptr_at D (ctx,func) PG cx st0 marks (bind (b : evaluation_state -> 'b evaluation_result) ((k : 'a -> 'b -> evaluation_state -> 'c evaluation_result) captured))
      (mid with gas_obs := [],t,G1,tn1) Q R` suffices_by
     (strip_tac >> irule gas_summary_ptr_at_bind_normal >>
-     first_assum (irule_at (Pos hd)) >> BETA_TAC >> asm_rewrite_tac[]) >>
+     qexistsl_tac [`G1`, `mid`, `t`, `tn1`, `captured`] >> BETA_TAC >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   first_assum drule >> strip_tac >> gvs[]
   >- suspend "normal" >>
   mp_tac (Q.INST [`fin` |-> `es_end`, `es` |-> `mid with gas_obs := []`,
