@@ -64,7 +64,8 @@ Theorem deploy_ptr_entry_normalized:
         phi_prefix_length bb.bb_instructions = 0)
 Proof
   strip_tac >>
-  `supported_program tops` by fs[deploy_source_ok_def] >>
+  `supported_program tops /\ supported_program_deploy tops` by
+    fs[deploy_source_ok_def] >>
   drule_all deploy_ctor_lookup_unique >> strip_tac >> gvs[] >>
   drule_all deploy_prefix_ctor_entry_label >> strip_tac >> gvs[] >>
   drule_all deploy_prefix_no_dalloca >> strip_tac >>
