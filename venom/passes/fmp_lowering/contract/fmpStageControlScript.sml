@@ -155,7 +155,7 @@ Proof
   gvs[fmp_reclaim_step_def, fmp_pop_at_def, fmp_pop_target_def]
 QED
 
-Theorem fmp_control_width_one[local]:
+Theorem fmp_control_width_one:
   (!j. j < n ==> ~((lbl,j) IN FDOM plan) /\
     (EL j xs).inst_opcode <> DALLOCA) ==>
   SUM (GENLIST (\j. (if (lbl,j) IN FDOM plan then 1 else 0) +
@@ -170,7 +170,7 @@ Proof
   gvs[]
 QED
 
-Theorem fmp_control_unlowered_no_raw[local]:
+Theorem fmp_control_unlowered_no_raw:
   fmp_stage_lowered infos ctx runner fn fn' /\
   ~(fn.fn_fmp_signature = NONE /\
     ?info. FLOOKUP infos fn.fn_name = SOME info /\

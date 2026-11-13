@@ -31,10 +31,11 @@ QED
 
 Theorem fmp_run_operand_defined[local]:
   fmp_env_rel sm fn live G tv s t /\ s.vs_labels = t.vs_labels /\
-  eval_operand op s = SOME x ==> ?y. eval_operand op t = SOME y
+  IS_SOME (eval_operand op s) ==> IS_SOME (eval_operand op t)
 Proof
-  Cases_on `op` >>
-  simp[eval_operand_def, lookup_var_def, fmp_env_rel_def] >> metis_tac[]
+  strip_tac >> Cases_on `op` >>
+  gvs[eval_operand_def, lookup_var_def, fmp_env_rel_def] >>
+  metis_tac[optionTheory.IS_SOME_EXISTS]
 QED
 
 Theorem fmp_run_ret_front_operand[local]:
@@ -63,27 +64,6 @@ Proof
   simp[fcpTheory.CART_EQ]
 QED
 
-Theorem fmp_run_eval_front_transfer[local]:
-  !ops xs s t.
-  eval_operands ops s = SOME xs /\
-  (!op x. MEM op ops /\ eval_operand op s = SOME x ==>
-     ?y. eval_operand op t = SOME y) /\
-  (!op x. MEM op (FRONT ops) /\ eval_operand op s = SOME x ==>
-     eval_operand op t = SOME x) ==>
-  ?ys. eval_operands ops t = SOME ys /\ LENGTH ys = LENGTH xs /\
-       FRONT ys = FRONT xs
-Proof
-  Induct >> simp[eval_operands_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `ops`
-  >- (gvs[eval_operands_def, AllCaseEqs()] >> metis_tac[]) >>
-  gvs[eval_operands_def, AllCaseEqs()] >>
-  first_x_assum (qspecl_then [`v'::vs'`, `s`, `t`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >>
-  strip_tac >> qexists `v::ys` >>
-  `eval_operand h t = SOME v` by metis_tac[] >>
-  gvs[eval_operands_def]
-QED
-
 (* Why: fmp_stage_result's RET case.  RET returns its front operands,
    which carry no provenance (no pointer reaches RET: ptr_use_static_ok)
    and no taint (taint_ok) and aren't the return pc (opaque_use_ok), so
@@ -99,22 +79,30 @@ Theorem fmp_stage_ret_step:
        jr.iret_values = ir.iret_values /\ jr.iret_adopt_fmp = NONE
 Proof
   strip_tac >>
+  `step_inst_base inst s = IntRet ir s1` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >> gvs[step_inst_non_invoke]) >>
+  `?vals. eval_operands inst.inst_operands s = SOME vals /\ vals <> []` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[step_inst_base_def] >>
+     Cases_on `eval_operands inst.inst_operands s` >> simp[] >>
+     rename1 `SOME vals` >> Cases_on `vals` >> simp[]) >>
+  `inst.inst_operands <> []` by (strip_tac >> gvs[eval_operands_def]) >>
+  `!op. MEM op inst.inst_operands ==> IS_SOME (eval_operand op s)` by
+    (`IS_SOME (eval_operands inst.inst_operands s)` by simp[] >>
+     fs[eval_operands_IS_SOME_EVERY, EVERY_MEM]) >>
   `fmp_env_rel sm fn
      (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
      G tn.t_var s t /\ s.vs_labels = t.vs_labels` by
     (gvs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
-  `!op x. MEM op inst.inst_operands /\ eval_operand op s = SOME x ==>
-     ?y. eval_operand op t = SOME y` by
+  `!op. MEM op inst.inst_operands ==>
+     (IS_SOME (eval_operand op s) <=> IS_SOME (eval_operand op t))` by
     metis_tac[fmp_run_operand_defined] >>
-  `inst.inst_operands <> []` by
-    (strip_tac >> gvs[step_inst_non_invoke, step_inst_base_def, eval_operands_def]) >>
-  `!op x. MEM op (FRONT inst.inst_operands) /\
-     eval_operand op s = SOME x ==> eval_operand op t = SOME x` by
-    metis_tac[fmp_run_ret_front_operand] >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  drule_all fmp_run_eval_front_transfer >> strip_tac >>
-  qexists `<|iret_values := FRONT ys; iret_adopt_fmp := NONE|>` >>
-  Cases_on `ys` >> gvs[step_inst_non_invoke, step_inst_base_def]
+  `!op. MEM op (FRONT inst.inst_operands) ==>
+     eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >>
+     `IS_SOME (eval_operand op s)` by metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL] >>
+     Cases_on `eval_operand op s` >> gvs[] >>
+     metis_tac[fmp_run_ret_front_operand]) >>
+  drule_all o1LowerDloadOpaqueTheory.ret_front_transfer >> strip_tac >>
+  gvs[] >> qexists `jr` >> gvs[step_inst_non_invoke]
 QED

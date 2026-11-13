@@ -4,7 +4,7 @@ Ancestors
   fmpStageFmpStepsRestoreIdle fmpAnalysisProps fmpLowerProps fmpLowerDefs
   fmpAnalysisDefs fmpReclaimDefs fmpStepLayout finite_map list venomInst
 
-Theorem fmp_restore_dalloca_needs[local]:
+Theorem fmp_scan_dalloca_needs:
   MEM inst insts /\ inst.inst_opcode = DALLOCA ==>
   (fmp_scan_insts insts).fi_needs_fmp
 Proof
@@ -26,7 +26,7 @@ Proof
      gvs[fmp_stage_plan_def, FLOOKUP_DEF]) >>
   drule_all analyze_fmp_reclaims_output >> strip_tac >>
   `(fmp_direct_info fn).fi_needs_fmp` by
-    (simp[fmp_direct_info_def] >> metis_tac[fmp_restore_dalloca_needs]) >>
+    (simp[fmp_direct_info_def] >> metis_tac[fmp_scan_dalloca_needs]) >>
   fs[fmp_stage_lowered_def] >>
   gvs[fmp_lower_function_with_info_def, AllCaseEqs()] >>
   `MEM fn ctx.ctx_functions` by

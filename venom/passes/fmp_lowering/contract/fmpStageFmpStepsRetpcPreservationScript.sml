@@ -37,14 +37,3 @@ Proof
        imm_taint_def, eval_operand_def, FLOOKUP_DEF, taint_component_equality] >>
   SET_TAC[]
 QED
-
-Theorem fmp_retpc_env_write:
-  fmp_env_rel sm fn live G tv s t /\ retpc_var fn pc ==>
-  fmp_env_rel sm fn live (DRESTRICT G (COMPL {pc}))
-    (set_var_taint tv [pc] {}) (update_var pc x s) (update_var pc y t)
-Proof
-  simp[fmp_env_rel_def, update_var_def, FLOOKUP_UPDATE,
-       set_var_taint_def, FLOOKUP_DRESTRICT, op_taint_def] >>
-  rpt strip_tac >> Cases_on `v = pc` >> gvs[] >>
-  first_x_assum drule >> strip_tac >> qexists_tac `y'` >> simp[]
-QED

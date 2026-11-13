@@ -1,6 +1,7 @@
 Theory fmpStageFmpStepsDallocaExec
 Ancestors
-  fmpStageRel fmpStageOpBase fmpStageReclaimSound fmpStageControl
+  fmpStageFmpStepsLive fmpStageFmpStepsInvokePosition
+  fmpStageFmpStepsRestorePosition fmpStageRel fmpStageOpBase fmpStageReclaimSound fmpStageControl
   fmpStageFmpStepsDallocaCode
   fmpLowerSequenceExec ptrStaticDiscipline unitMemInv frameViewFacts
   venomExecSemantics venomState words list finite_map passSimulationDefs
@@ -66,15 +67,6 @@ Proof
   metis_tac[frameRelocationGuardedValuesTheory.word_agree_except_empty]
 QED
 
-Theorem fmp_dalloca_scan_needs[local]:
-  !insts. MEM inst insts /\ inst.inst_opcode = DALLOCA ==>
-  (fmp_scan_insts insts).fi_needs_fmp
-Proof
-  Induct >> simp[fmpAnalysisDefsTheory.fmp_scan_insts_def,
-    fmpAnalysisDefsTheory.fmp_info_join_def,
-    fmpAnalysisDefsTheory.fmp_opcode_needs_fmp_def] >> metis_tac[]
-QED
-
 Theorem fmp_dalloca_lowered_needs:
   fmp_stage_lowered infos ctx runner fn fn' /\
   fn.fn_fmp_signature = NONE /\ MEM inst (fn_insts fn) /\
@@ -94,7 +86,7 @@ Proof
       metis_tac[fmpAnalysisDefsTheory.fmp_info_valid_def] >>
   drule fmpAnalysisPropsTheory.fmp_join_target_info_needs_iff >>
   simp[fmpAnalysisDefsTheory.fmp_direct_info_def] >>
-  metis_tac[fmp_dalloca_scan_needs]
+  metis_tac[fmp_scan_dalloca_needs]
 QED
 
 Theorem fmp_dalloca_root_exists:
@@ -112,39 +104,6 @@ Proof
   simp[fmp_stage_root_def] >> Cases_on `fn_is_context_entry ctx fn` >> simp[]
 QED
 
-Theorem fmp_dalloca_past_root:
-  fmp_stage_lowered infos ctx runner fn fn' /\
-  fmp_stage_root infos ctx fn = SOME (rl,rp) /\
-  lookup_block rl fn.fn_blocks = SOME bb /\
-  idx < LENGTH bb.bb_instructions /\
-  (EL idx bb.bb_instructions).inst_opcode = DALLOCA ==>
-  rp <= idx
-Proof
-  strip_tac >>
-  gvs[fmp_stage_root_def, AllCaseEqs()] >>
-  drule fmpStepLayoutTheory.split_fmp_entry_reconstruct >> strip_tac >>
-  drule fmpStepLayoutTheory.split_fmp_entry_parameter_prefix >> strip_tac >>
-  gvs[venomInstTheory.lookup_block_def, listTheory.FIND_thm] >>
-  `~fn_is_context_entry ctx fn ==> retpc <> NONE` by
-    (gvs[fmp_stage_lowered_def,
-         fmpLowerDefsTheory.fmp_lower_function_with_info_def,
-         fmpLowerDefsTheory.fmp_make_root_layout_def, AllCaseEqs()] >>
-     Cases_on `retpc` >> gvs[]) >>
-  `LENGTH (users ++ option_CASE retpc [] (\i. [i])) <= idx` suffices_by
-    (Cases_on `retpc` >> gvs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
-  CCONTR_TAC >>
-  `idx < LENGTH (users ++ option_CASE retpc [] (\i. [i]))` by decide_tac >>
-  gvs[EL_APPEND_EQN, EVERY_EL] >>
-  (Cases_on `idx < LENGTH users`
-  >- (gvs[] >>
-      qpat_x_assum `!n. n < LENGTH users ==> _`
-        (qspec_then `idx` mp_tac) >> simp[]) >>
-  gvs[] >>
-  `idx - LENGTH users < LENGTH (option_CASE retpc [] (\i. [i]))` by decide_tac >>
-  qpat_x_assum `!n. n < LENGTH (option_CASE retpc [] (\i. [i])) ==> _`
-    (qspec_then `idx - LENGTH users` mp_tac) >> simp[])
-QED
-
 Theorem fmp_dalloca_not_before_root:
   fmp_stage_lowered infos ctx runner fn fn' /\
   fmp_stage_root infos ctx fn = SOME (rl,rp) /\
@@ -154,7 +113,9 @@ Theorem fmp_dalloca_not_before_root:
   ~(s.vs_current_bb = rl /\ s.vs_inst_idx < rp)
 Proof
   strip_tac >> Cases_on `s.vs_current_bb = rl` >> gvs[] >>
-  drule_all fmp_dalloca_past_root >> simp[]
+  `~MEM (EL s.vs_inst_idx bb.bb_instructions).inst_opcode
+     [PARAM; RETPC_PARAM; FMP_PARAM]` by gvs[] >>
+  drule_all fmp_stage_past_root >> simp[]
 QED
 
 Theorem fmp_dalloca_frame_witness:
@@ -241,16 +202,6 @@ Proof
   Cases_on `lbl = rl` >> gvs[]
 QED
 
-Theorem fmp_dalloca_runner_fresh:
-  fmp_stage_lowered infos ctx runner fn fn' ==> ~MEM runner (fn_ir_vars fn)
-Proof
-  strip_tac >> gvs[fmp_stage_lowered_def] >>
-  Cases_on `fresh_ir_var sp` >> gvs[] >>
-  drule irSupplyTheory.fresh_ir_var_contract >>
-  gvs[venomFnScheduleRunnerTheory.ir_supply_covers_fn_def,
-      venomFnScheduleRunnerTheory.list_subset_def, EVERY_MEM] >> metis_tac[]
-QED
-
 Theorem fmp_dalloca_execution_from_suffix:
   (!inst size_op out runner sp vars restores (lbl:string) idx plan infos ctx insts code leftover sp'.
     inst.inst_opcode = DALLOCA /\ inst.inst_operands = [size_op] /\
@@ -312,7 +263,7 @@ Proof
   drule_all fmp_dalloca_frame_witness >> strip_tac >>
   `eval_operand size_op t = SOME sz` by
     (irule fmp_dalloca_size_agree >> metis_tac[MEM]) >>
-  `~MEM runner (fn_ir_vars fn)` by metis_tac[fmp_dalloca_runner_fresh] >>
+  `~MEM runner (fn_ir_vars fn)` by metis_tac[fmp_stage_runner_fresh] >>
   `MEM out (fn_ir_vars fn)` by
     (simp[fmpStepSupplyTheory.fn_ir_vars_member] >>
      qexistsl [`bb`, `inst`] >> simp[MEM_EL] >> metis_tac[]) >>

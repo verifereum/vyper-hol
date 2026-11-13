@@ -1,6 +1,6 @@
 Theory fmpStageFmpStepsCallAssemble
 Ancestors
-  fmpStageFmpStepsCallArgs fmpStageFmpStepsCallEntry fmpStageFmpStepsCallPush
+  fmpStageRunnerFacts fmpStageFmpStepsCallArgs fmpStageFmpStepsCallEntry fmpStageFmpStepsCallPush
   fmpStageCallArity fmpStageOpBase fmpAnalysisProps
   fmpStageRel o1PassContract venomExecSemantics venomInst venomState list finite_map
   fnFrameBoundaryGenRet arithmetic
@@ -64,7 +64,8 @@ Proof
     (imp_res_tac lookup_function_MEM >>
      fs[fmp_stage_ctx_def, o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >>
      metis_tac[]) >>
-  drule_all fmp_call_lowered_shape >> strip_tac >>
+  drule_all fmp_stage_lowered_shape >> strip_tac >>
+  qpat_x_assum `first_block_no_phi _ ==> _` drule >> strip_tac >>
   `LENGTH args = LENGTH (fn_user_param_insts callee)` by
     metis_tac[fmp_stage_invoke_arity] >>
   `callee.fn_name = nm` by metis_tac[lookup_function_name] >>

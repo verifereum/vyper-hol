@@ -1,84 +1,17 @@
+(*
+ * The saved caller frames across a restore: a restore drops only sites at
+ * or above the current frame's base, which no saved frame points into.
+ *
+ * TOP-LEVEL:
+ *   fmp_saved_source_bounds    - saved frames point below the frame base
+ *   fmp_caller_lookup_restrict - a cut keeps the sites below the base
+ *   fmp_restore_saved_rel      - the saved frames under a restore's cut
+ *   fmp_restore_params_rel     - the parameters under a restore's cut
+ *)
 Theory fmpStageFmpStepsLedgerSaved
 Ancestors
+  fmpStageFmpStepsLedgerRestrict fmpStageFmpStepsRetSource
   fmpStageRel fmpStageReclaimSound ptrDiscipline finite_map list pred_set
-
-Theorem fmp_frame_rel_restrict:
-  fmp_frame_rel sm fmp0 raw0 eb elo top restored fn fn' PG G tv s t /\
-  sm' = DRESTRICT sm keys /\
-  fmp_env_rel sm' fn
-    (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
-    G tv s t /\ fmp_params_rel sm' PG s t ==>
-  fmp_frame_rel sm' fmp0 raw0 eb elo top restored fn fn' PG G tv s t
-Proof
-  simp[fmp_frame_rel_def] >> rpt strip_tac >>
-  qexistsl [`infos`, `ctx`, `runner`] >> simp[] >>
-  conj_tac
-  >- (rpt strip_tac >> gvs[FLOOKUP_DRESTRICT] >> metis_tac[]) >>
-  Cases_on `fmp_stage_root infos ctx fn` >> gvs[] >>
-  PairCases_on `x` >> gvs[] >>
-  conj_tac
-  >- (gvs[fmp_frame_covers_def, FLOOKUP_DRESTRICT] >> metis_tac[]) >>
-  IF_CASES_TAC >> gvs[] >> qexists `regions` >> simp[] >>
-  gvs[fmp_ledger_link_def, FLOOKUP_DRESTRICT] >> metis_tac[]
-QED
-
-Theorem fmp_saved_reachable:
-  !vs C stk PG G tn fn inst s.
-    frame_reachable vs C stk PG G tn fn inst s ==>
-    !pre f rest. stk = pre ++ f::rest ==>
-      (?un. frame_reachable vs C rest f.cf_params f.cf_prov
-        un f.cf_fn f.cf_inst f.cf_state /\ un.t_var = f.cf_tvar) /\
-      active_inst f.cf_fn f.cf_inst f.cf_state
-Proof
-  ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac
-  >- simp[]
-  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> metis_tac[])
-  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> metis_tac[])
-  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-      Cases_on `pre` >> gvs[] >> metis_tac[])
-  >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  first_x_assum (qspecl_then [`f::pre`, `f'`, `rest`] mp_tac) >>
-  simp[]
-QED
-
-Theorem fmp_frame_rel_restrict_provenance:
-  fmp_frame_rel sm fmp0 raw0 eb elo top restored fn fn' PG G tv s t /\
-  sm' = DRESTRICT sm keys /\
-  (!v b z. FLOOKUP G v = SOME (b,z) /\ 0 < z ==>
-     FLOOKUP sm' (b,z) = FLOOKUP sm (b,z)) /\
-  (!b z. MEM (SOME (b,z)) PG /\ 0 < z ==>
-     FLOOKUP sm' (b,z) = FLOOKUP sm (b,z)) ==>
-  fmp_frame_rel sm' fmp0 raw0 eb elo top restored fn fn' PG G tv s t
-Proof
-  rpt strip_tac >>
-  `fmp_env_rel sm fn
-     (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
-     G tv s t /\ fmp_params_rel sm PG s t` by
-    (fs[fmp_frame_rel_def] >> metis_tac[]) >>
-  irule fmp_frame_rel_restrict >>
-  reverse conj_tac
-  >- (reverse conj_tac >- metis_tac[] >>
-      fs[fmp_env_rel_def] >> rpt strip_tac >>
-      first_x_assum drule >> strip_tac >> qexists `y` >> simp[] >>
-      strip_tac >>
-      Cases_on `FLOOKUP G v` >>
-      gvs[fmp_value_rel_def, o1LowerDloadRelocationKernelTheory.ld_value_agree_def] >>
-      PairCases_on `x'` >> Cases_on `x'1 = 0` >> gvs[] >>
-      `FLOOKUP (DRESTRICT sm keys) (x'0,x'1) = FLOOKUP sm (x'0,x'1)` by
-        metis_tac[arithmeticTheory.NOT_ZERO_LT_ZERO] >>
-      gvs[FLOOKUP_fmp_ld_sites]) >>
-  fs[fmp_params_rel_def] >> rpt strip_tac >>
-  first_x_assum drule >>
-  Cases_on `k < LENGTH PG` >> simp[]
-  >- (Cases_on `EL k PG` >>
-      gvs[fmp_value_rel_def, o1LowerDloadRelocationKernelTheory.ld_value_agree_def] >>
-      PairCases_on `x` >> Cases_on `x1 = 0` >> gvs[] >>
-      `MEM (SOME (x0,x1)) PG` by metis_tac[MEM_EL] >>
-      `FLOOKUP (DRESTRICT sm keys) (x0,x1) = FLOOKUP sm (x0,x1)` by
-        metis_tac[arithmeticTheory.NOT_ZERO_LT_ZERO] >>
-      simp[FLOOKUP_fmp_ld_sites]) >>
-  simp[fmp_value_rel_def, o1LowerDloadRelocationKernelTheory.ld_value_agree_def]
-QED
 
 Theorem fmp_saved_source_bounds:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -91,41 +24,29 @@ Theorem fmp_saved_source_bounds:
 Proof
   strip_tac >> qx_gen_tac `f` >> strip_tac >>
   Cases_on `stk` >- fs[] >>
-  `(?un. frame_reachable vs C t h.cf_params h.cf_prov un
-      h.cf_fn h.cf_inst h.cf_state /\ un.t_var = h.cf_tvar) /\
-    active_inst h.cf_fn h.cf_inst h.cf_state` by
-    (drule fmp_saved_reachable >>
+  `?tn0. tn0.t_var = h.cf_tvar /\
+     frame_reachable vs C t h.cf_params h.cf_prov tn0
+       h.cf_fn h.cf_inst h.cf_state /\
+     active_inst h.cf_fn h.cf_inst h.cf_state /\
+     h.cf_inst.inst_opcode = INVOKE` by
+    (drule fmp_stage_saved_source >>
      disch_then (qspecl_then [`[]`, `h`, `t`] mp_tac) >> simp[]) >>
   drule_all fmp_stage_frame_sites >> strip_tac >>
   `?pre rest. h::t = pre ++ f::rest` by metis_tac[MEM_SPLIT] >>
-  `(?un. frame_reachable vs C rest f.cf_params f.cf_prov un
-      f.cf_fn f.cf_inst f.cf_state /\ un.t_var = f.cf_tvar) /\
-    active_inst f.cf_fn f.cf_inst f.cf_state` by
+  `?tn1. tn1.t_var = f.cf_tvar /\
+     frame_reachable vs C rest f.cf_params f.cf_prov tn1
+       f.cf_fn f.cf_inst f.cf_state /\
+     active_inst f.cf_fn f.cf_inst f.cf_state /\
+     f.cf_inst.inst_opcode = INVOKE` by
     (qpat_assum `frame_reachable vs C (h::t) _ _ _ _ _ _`
-       (mp_tac o MATCH_MP fmp_saved_reachable) >>
-     disch_then (qspecl_then [`pre`, `f`, `rest`] mp_tac) >> simp[]) >>
+       (mp_tac o MATCH_MP fmp_stage_saved_source) >>
+     disch_then (qspecl_then [`pre`, `f`, `rest`] mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
   `w2n f.cf_state.vs_fmp <= w2n h.cf_state.vs_fmp` by
     (fs[EVERY_MEM] >> Cases_on `f = h` >> gvs[]) >>
   drule_all fmp_stage_frame_sites >> strip_tac >>
   fs[fmp_frame_base_def, EVERY_MEM] >>
   metis_tac[MEM_EL, arithmeticTheory.LESS_EQ_TRANS]
-QED
-
-Theorem fmp_saved_rel_restrict_provenance:
-  !stk ts.
-    fmp_saved_rel C' sm fmp0 raw0 stk ts /\ sm' = DRESTRICT sm keys /\
-    (!f v b z. MEM f stk /\ FLOOKUP f.cf_prov v = SOME (b,z) /\ 0 < z ==>
-      FLOOKUP sm' (b,z) = FLOOKUP sm (b,z)) /\
-    (!f b z. MEM f stk /\ MEM (SOME (b,z)) f.cf_params /\ 0 < z ==>
-      FLOOKUP sm' (b,z) = FLOOKUP sm (b,z)) ==>
-    fmp_saved_rel C' sm' fmp0 raw0 stk ts
-Proof
-  Induct >> Cases_on `ts` >> simp[fmp_saved_rel_def] >>
-  rpt strip_tac >> PairCases_on `h` >> gvs[fmp_saved_rel_def] >>
-  conj_tac
-  >- (irule fmp_frame_rel_restrict_provenance >>
-      rpt conj_tac >> metis_tac[]) >>
-  first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
 Theorem fmp_caller_lookup_restrict:
@@ -162,12 +83,12 @@ Proof
   `!b z c id. FLOOKUP sm (b,z) = SOME (c,id) /\
     b < fmp_frame_base (w2n fmp) stk ==> c + z <= fmp_frame_lo fmp0 ts` by
     (fs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
-  irule fmp_saved_rel_restrict_provenance >>
-  qexistsl [`{key | key IN FDOM sm /\ FST (sm ' key) < cut}`, `sm`] >>
-  simp[] >> rpt conj_tac
-  >- (rpt strip_tac >> irule fmp_caller_lookup_restrict >> metis_tac[])
-  >- (rpt strip_tac >> irule fmp_caller_lookup_restrict >> metis_tac[]) >>
-  fs[fmp_stage_rel_def] >> metis_tac[]
+  `!f k b z. MEM f stk /\ k < LENGTH f.cf_params /\
+     EL k f.cf_params = SOME (b,z) /\ 0 < z ==>
+     b + z <= fmp_frame_base (w2n fmp) stk` by metis_tac[MEM_EL] >>
+  `fmp_saved_rel C' sm fmp0 (w2n fmp) stk ts` by fs[fmp_stage_rel_def] >>
+  irule fmp_saved_rel_drestrict >> simp[] >> rpt strip_tac >>
+  irule fmp_caller_lookup_restrict >> metis_tac[]
 QED
 
 Theorem fmp_restore_params_rel:
@@ -188,15 +109,6 @@ Proof
       FLOOKUP sm (b,z)` by
     (rpt strip_tac >> irule fmp_caller_lookup_restrict >>
      fs[EVERY_MEM] >> metis_tac[]) >>
-  fs[fmp_params_rel_def] >> rpt strip_tac >>
-  first_x_assum drule >> Cases_on `k < LENGTH PG` >> simp[]
-  >- (Cases_on `EL k PG` >>
-      gvs[fmp_value_rel_def, o1LowerDloadRelocationKernelTheory.ld_value_agree_def] >>
-      PairCases_on `x` >> Cases_on `x1 = 0` >> gvs[] >>
-      `MEM (SOME (x0,x1)) PG` by metis_tac[MEM_EL] >>
-      `FLOOKUP (DRESTRICT sm {key | key IN FDOM sm /\ FST (sm ' key) < cut})
-        (x0,x1) = FLOOKUP sm (x0,x1)` by
-        metis_tac[arithmeticTheory.NOT_ZERO_LT_ZERO] >>
-      simp[FLOOKUP_fmp_ld_sites]) >>
-  simp[fmp_value_rel_def, o1LowerDloadRelocationKernelTheory.ld_value_agree_def]
+  irule fmp_params_rel_transport >> qexists `sm` >>
+  rpt conj_tac >> rpt strip_tac >> metis_tac[MEM_EL]
 QED

@@ -29,7 +29,8 @@ Ancestors
   fmpStageFmpStepsRestoreBounds fmpStageFmpStepsRestorePosition
   fmpStageFmpStepsEntryLayout fmpStageFmpStepsEntryInitialization
   fmpStageFmpStepsRetCaller fmpStageFmpStepsRetExec
-  fmpStageFmpStepsRetRestrict fmpStageFmpStepsRetSource
+  fmpStageFmpStepsLedgerRestrict fmpStageFmpStepsRetSource
+  fmpStageFmpStepsLive
   venomInstProofs1
   ptrStaticDiscipline o1PassContract
   ptrDiscipline venomExecSemantics venomState venomInst finite_map words
@@ -53,36 +54,6 @@ Proof
   PairCases_on `h` >> simp[fmp_saved_rel_def, fmp_frame_lo_def] >>
   rpt strip_tac >> first_x_assum drule >>
   gvs[fmp_frame_rel_def] >> decide_tac
-QED
-
-Theorem fmp_restore_live_ir[local]:
-  MEM v (live_vars_at (liveness_analyze fn) lbl idx) ==>
-  MEM v (fn_ir_vars fn)
-Proof
-  strip_tac >>
-  qspecl_then [`fn`, `lbl`, `idx`, `v`] mp_tac livenessProofsTheory.live_vars_bounded >>
-  simp[livenessDefsTheory.fn_all_vars_def, irSupplyTheory.fn_ir_vars_def,
-    irSupplyTheory.block_ir_vars_def, irSupplyTheory.inst_ir_vars_def,
-    inst_defs_def, MEM_FLAT, MEM_MAP] >>
-  strip_tac >> gvs[MEM_FLAT, MEM_MAP, irSupplyTheory.inst_ir_vars_def,
-                   MEM_APPEND] >>
-  (qexists `FLAT (MAP inst_ir_vars bb.bb_instructions)` >>
-   (conj_tac >- metis_tac[]) >>
-   simp[MEM_FLAT, MEM_MAP] >> qexists `inst_ir_vars inst` >>
-   simp[irSupplyTheory.inst_ir_vars_def] >> metis_tac[])
-QED
-
-Theorem fmp_restore_runner_dead[local]:
-  fmp_stage_lowered infos ctx runner fn fn' ==>
-  ~MEM runner (live_vars_at (liveness_analyze fn) lbl idx)
-Proof
-  rw[fmp_stage_lowered_def] >>
-  Cases_on `fresh_ir_var sp` >> gvs[] >>
-  drule (cj 1 irSupplyTheory.fresh_ir_var_contract) >> strip_tac >>
-  gvs[venomFnScheduleRunnerTheory.ir_supply_covers_fn_def,
-      venomFnScheduleRunnerTheory.list_subset_def] >>
-  strip_tac >> drule fmp_restore_live_ir >> strip_tac >> fs[EVERY_MEM] >>
-  qpat_x_assum `!x. MEM x (fn_ir_vars fn) ==> _` drule >> simp[]
 QED
 
 Theorem fmp_stage_restore:
@@ -249,7 +220,7 @@ Resume fmp_stage_restore[frame]:
   `fmp_env_rel sm' fn
     (live_vars_at (liveness_analyze fn) t.vs_current_bb s.vs_inst_idx) G tn.t_var s t1` by
     (simp[Abbr `t1`] >> irule fmp_restore_env_update_dead >>
-     simp[] >> metis_tac[fmp_restore_runner_dead]) >>
+     simp[] >> metis_tac[fmp_stage_runner_not_live]) >>
   suspend "cutfields"
 QED
 
@@ -310,7 +281,7 @@ Resume fmp_stage_restore[joint]:
     (simp[NoAsms, Abbr `sm'`] >> irule fmp_restore_saved_rel >> metis_tac[]) >>
   `ld_memory_agree (fmp_ld_sites sm') eom tn.t_mem s.vs_memory t.vs_memory` by
     (simp[NoAsms, Abbr `sm'`] >>
-     irule fmpStageFmpStepsLedgerRestrictTheory.fmp_memory_agree_restrict >>
+     irule fmp_memory_agree_drestrict >>
      first_assum MATCH_ACCEPT_TAC) >>
   qexistsl [`1`, `t1`, `cut`] >>
   qpat_x_assum `Abbrev (ps = _)` kall_tac >>
@@ -434,13 +405,12 @@ Proof
      LENGTH users < LENGTH t.vs_params /\
      EL (LENGTH users) t.vs_params = n2w lo` by
     (strip_tac >> gvs[] >> fs[]) >>
-  `wf_function fn /\ fn_inst_wf fn /\ all_reachable fn /\ fn_defs_reach_uses fn` by
+  `wf_function fn /\ all_reachable fn` by
     fs[o1_fn_shape_def, make_ssa_input_ok_def] >>
   `retpc_var fn pc` by
     (simp[retpc_var_def] >> irule copy_phi_var_seed >>
      qexists_tac `inst` >> gvs[]) >>
-  `fmp_stage_root infos ctx fn <> NONE ==>
-    (!i. MEM i (fn_insts fn) ==> ~MEM runner i.inst_outputs) /\ pc <> runner` by
+  `fmp_stage_root infos ctx fn <> NONE ==> pc <> runner` by
     (strip_tac >> drule_all fmp_stage_witness_pin >> strip_tac >>
      gvs[] >> first_x_assum (qspec_then `inst` mp_tac) >> simp[]) >>
   `fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
@@ -538,11 +508,11 @@ Theorem fmp_return_saved_restrict[local]:
   fmp_saved_rel C' (DRESTRICT sm {key | FST key < cut}) fmp0 raw0 stk ts
 Proof
   strip_tac >> irule fmp_saved_rel_drestrict >> simp[] >> conj_tac
-  >- (rpt strip_tac >>
+  >- (rpt strip_tac >> `b < cut` suffices_by simp[FLOOKUP_DRESTRICT] >>
       `?pre rest. stk = pre ++ f::rest` by metis_tac[MEM_SPLIT] >>
       gvs[] >> drule_all fmp_stage_saved_facts >> strip_tac >>
       gvs[EVERY_MEM] >> res_tac >> decide_tac) >>
-  rpt strip_tac >>
+  rpt strip_tac >> `b < cut` suffices_by simp[FLOOKUP_DRESTRICT] >>
   `?pre rest. stk = pre ++ f::rest` by metis_tac[MEM_SPLIT] >>
   gvs[] >> drule_all fmp_stage_saved_facts >> strip_tac >>
   fs[EVERY_EL] >> first_x_assum (qspec_then `k` mp_tac) >>

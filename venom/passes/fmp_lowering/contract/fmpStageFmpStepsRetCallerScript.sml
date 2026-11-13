@@ -1,6 +1,6 @@
 Theory fmpStageFmpStepsRetCaller
 Ancestors
-  fmpStageControl fmpStageOpBase fmpStageReclaimSound fmpStageRel
+  fmpStageOpFrame fmpStageControl fmpStageOpBase fmpStageReclaimSound fmpStageRel
   fmpLowerReclaimPlan fmpLedgerProps livenessProofs ptrDiscipline
   o1PassContract venomExecSemantics venomState venomInst rich_list
   fmpStageFmpStepsRetInvokeCode fmpStageFmpStepsRetBind
@@ -23,21 +23,6 @@ Proof
   simp[] >> rw[] >> fs[arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem fmp_return_reachable_dfs[local]:
-  EVERY wf_function C.ctx_functions /\
-  frame_reachable vs C stk PG G tn fn inst s ==>
-  MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
-Proof
-  strip_tac >> drule_all frame_reachable_cfg_histories >> strip_tac >>
-  drule frame_history_cfg_invariant >> simp[] >> strip_tac >>
-  `wf_function fn` by gvs[EVERY_MEM] >>
-  gvs[frame_history_cfg_def] >>
-  irule fn_reachable_in_cfg_dfs_pre >> simp[] >>
-  irule scfg_path_member_reachable >>
-  qexists_tac `history_visits h` >>
-  simp[] >> metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]
-QED
-
 Theorem fmp_return_caller_source_facts[local]:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s ==>
@@ -53,7 +38,7 @@ Proof
   `EVERY wf_function C.ctx_functions` by
     gvs[fmp_stage_ctx_def, o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   `MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[fmp_return_reachable_dfs] >>
+    metis_tac[frame_reachable_dfs] >>
   `wf_function fn /\ ALL_DISTINCT inst.inst_outputs` by
     (conj_tac >- gvs[o1_fn_shape_def] >>
      irule all_distinct_flat_map_member >>

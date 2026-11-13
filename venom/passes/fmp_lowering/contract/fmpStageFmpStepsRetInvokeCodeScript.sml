@@ -2,7 +2,7 @@ Theory fmpStageFmpStepsRetInvokeCode
 Ancestors
   fmpStageControl fmpStageOpBase fmpStageRel fmpLowerDefs
   o1PassContract contextCodegenRel venomExecSemantics venomInst
-  fmpStageFmpStepsRetInvokePosition fmpStageFmpStepsRetInvokeObserved
+  fmpStageFmpStepsInvokePosition fmpStageFmpStepsRetInvokeObserved
   fmpStageFmpStepsRetInvokeOrigin concretizeAnalysisMetadataOwnership
   concretizeStageLookup fmpStepBridge fmpStepSupply irSupply venomWf
   venomFnScheduleRunner list
@@ -19,6 +19,58 @@ Proof
   rpt strip_tac >> gvs[] >>
   `INVOKE <> RETPC_PARAM` by simp[] >>
   metis_tac[fmp_stage_root_crossing]
+QED
+
+Theorem fmp_return_lowered_at[local]:
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = INVOKE ==>
+  ?bb' j. lookup_block lbl fn'.fn_blocks = SOME bb' /\
+    j.inst_opcode = INVOKE /\ j.inst_id = (EL i bb.bb_instructions).inst_id /\
+    fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+      lbl bb.bb_instructions i +
+      (if (lbl,i) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0)
+      < LENGTH bb'.bb_instructions /\
+    EL (fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+      lbl bb.bb_instructions i +
+      (if (lbl,i) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0))
+      bb'.bb_instructions = j
+Proof
+  strip_tac >> drule_all fmp_stage_invoke_at >> strip_tac >>
+  qexists `bb'` >> simp[] >>
+  imp_res_tac fmp_lower_invoke_inst >> gvs[]
+QED
+
+Theorem fmp_return_saved_invoke_position[local]:
+  fmp_frame_rel sm fmp0 raw0 eb elo lo T fn fn' PG G tv s t /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  active_inst fn inst s /\ inst.inst_opcode = INVOKE ==>
+  ?j. active_inst fn' j t /\ MEM j (fn_insts fn') /\
+      j.inst_opcode = INVOKE /\ j.inst_id = inst.inst_id
+Proof
+  strip_tac >>
+  `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    s.vs_inst_idx < LENGTH bb.bb_instructions /\
+    EL s.vs_inst_idx bb.bb_instructions = inst` by
+    (gvs[contextCodegenRelTheory.active_inst_def] >>
+     metis_tac[venomExecPropsTheory.MEM_lookup_block]) >>
+  gvs[fmp_frame_rel_def] >>
+  drule_all fmp_return_lowered_at >> strip_tac >>
+  qexists `j` >> simp[] >>
+  `MEM bb' fn'.fn_blocks /\ bb'.bb_label = s.vs_current_bb` by
+    (fs[lookup_block_def] >> conj_tac
+     >- (irule FIND_MEM >> goal_assum (drule_at Any)) >>
+     qpat_assum `FIND _ fn'.fn_blocks = SOME bb'`
+       (mp_then Any mp_tac FIND_P) >> simp[]) >>
+  conj_tac
+  >- (simp[contextCodegenRelTheory.active_inst_def] >>
+      qexists `bb'` >>
+      qpat_x_assum `_ + _ < LENGTH bb'.bb_instructions` mp_tac >>
+      once_rewrite_tac[arithmeticTheory.ADD_COMM] >> strip_tac >>
+      qpat_x_assum `EL (_ + _) bb'.bb_instructions = j` mp_tac >>
+      once_rewrite_tac[arithmeticTheory.ADD_COMM] >> strip_tac >> simp[]) >>
+  simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+  qexists `bb'` >> simp[] >> metis_tac[EL_MEM]
 QED
 
 Theorem fmp_return_saved_invoke_code:
@@ -131,14 +183,6 @@ Theorem fmp_return_saved_invoke_nonclearing:
   ~fmp_clears_marks infos inst
 Proof
   strip_tac >>
-  `fn.fn_fmp_signature = NONE /\
-   ?info. FLOOKUP infos fn.fn_name = SOME info /\
-     (info.fi_needs_fmp \/ info.fi_publishes_fmp)` by
-    (gvs[fmp_stage_root_def, AllCaseEqs()] >>
-     Cases_on `FLOOKUP infos fn.fn_name` >> gvs[]) >>
-  drule fmp_return_lowered_full_at_cert >>
-  disch_then (qspecl_then [`lbl`,`idx`,`bb`] mp_tac) >>
-  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   `fn_labels fn' = fn_labels fn` by
     (qpat_x_assum `fmp_stage_lowered _ _ _ _ _` mp_tac >>
      simp[fmp_stage_lowered_def, fmp_lower_function_with_info_def, AllCaseEqs()] >>
@@ -146,6 +190,7 @@ Proof
      gvs[fmp_seal_def, fn_labels_def] >>
      drule fmpStepLayoutTheory.fmp_install_root_preserves_labels >>
      drule fmpStepLayoutTheory.fmp_lower_blocks_preserves_labels >> simp[]) >>
+  gvs[] >> drule_all fmp_stage_invoke_at >> strip_tac >- gvs[] >>
   gvs[active_inst_def] >> rename1 `MEM active_bb fn'.fn_blocks` >>
   `lookup_block t.vs_current_bb fn'.fn_blocks = SOME active_bb` by
     (irule venomExecPropsTheory.MEM_lookup_block >>

@@ -4,7 +4,6 @@ Ancestors
   venomExecProofs o1LowerDloadShared o1LowerDloadRelocationKernel
   fmpStageRel ptrDiscipline venomState venomInst codegenRel
   contextCodegenRel venomWf cfgDefs livenessDefs
-  makeSsaCurrentDemandDominance
   finite_map list pred_set
 
 Theorem fmp_retpc_prov:
@@ -109,48 +108,10 @@ Proof
   metis_tac[fmp_retpc_live_next]
 QED
 
-(* These projection boundaries allow any local-variable and index writes,
-   including the optional runner write, without duplicating cases. *)
-Theorem fmp_retpc_params_write:
-  fmp_params_rel sm PG
-    (s with <|vs_vars := sv; vs_inst_idx := si|>)
-    (t with <|vs_vars := tv; vs_inst_idx := ti|>) = fmp_params_rel sm PG s t
-Proof
-  simp[fmp_params_rel_def]
-QED
-
 Theorem fmp_retpc_shared_write:
   ld_shared_agree D A (tn with t_var := vars)
     (s with <|vs_vars := sv; vs_inst_idx := si|>)
     (t with <|vs_vars := tv; vs_inst_idx := ti|>) = ld_shared_agree D A tn s t
 Proof
   simp[ld_shared_agree_def]
-QED
-
-Theorem fmp_retpc_memory_write:
-  ld_memory_agree sites eom (tn with t_var := vars).t_mem
-    (s with <|vs_vars := sv; vs_inst_idx := si|>).vs_memory
-    (t with <|vs_vars := tv; vs_inst_idx := ti|>).vs_memory =
-  ld_memory_agree sites eom tn.t_mem s.vs_memory t.vs_memory
-Proof
-  simp[]
-QED
-
-(* An output-fresh runner cannot be demanded at a reachable post-PHI
-   position. This is stronger than freshness in the source environment,
-   which need not hold for dead bindings. *)
-Theorem fmp_retpc_fresh_runner_not_live:
-  wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
-  fn_reachable fn lbl /\ lookup_block lbl fn.fn_blocks = SOME bb /\
-  LENGTH (collect_phis bb.bb_instructions) <= i /\
-  i <= LENGTH bb.bb_instructions /\
-  (!inst. MEM inst (fn_insts fn) ==> ~MEM runner inst.inst_outputs) ==>
-  ~MEM runner (live_vars_at (liveness_analyze fn) lbl i)
-Proof
-  strip_tac >> strip_tac >>
-  drule_all current_live_post_phi_available >> strip_tac >>
-  drule_all current_available_definition >> strip_tac >>
-  `MEM di (fn_insts fn)` by
-    (simp[fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[]) >>
-  metis_tac[]
 QED

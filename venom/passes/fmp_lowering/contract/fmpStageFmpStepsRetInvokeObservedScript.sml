@@ -1,29 +1,8 @@
 Theory fmpStageFmpStepsRetInvokeObserved
 Ancestors
-  fmpStageRel fmpStepBridge concretizeStageLookup fmpLowerProps
+  fmpStageFmpStepsCallAbi fmpStageRel fmpStepBridge concretizeStageLookup fmpLowerProps
   fmpAnalysisProps venomPassDispatcher venomPassSchedule o1PassContract
   venomInst fmpAnalysisDefs fmpLowerDefs list
-
-Theorem fmp_return_nonfmp_step_signature:
-  fn_pass_step rp pass observed s g out /\
-  fn_pass_tag pass <> VP_FmpLowering ==>
-  out.fpo_function.fn_fmp_signature = g.fn_fmp_signature
-Proof
-  strip_tac >>
-  gvs[fn_pass_step_def, fn_pass_effects_hold_def, fn_abi_effect_holds_def] >>
-  Cases_on `fn_pass_tag pass` >>
-  gvs[fn_pass_abi_effect_def, fn_fmp_convention_eq_def]
-QED
-
-Theorem fmp_return_nonfmp_steps_signature:
-  !passes g h. fn_steps rp passes g h /\
-  EVERY (\p. fn_pass_tag p <> VP_FmpLowering) passes ==>
-  h.fn_fmp_signature = g.fn_fmp_signature
-Proof
-  Induct >> simp[fn_steps_def] >> rpt strip_tac >>
-  drule_all fmp_return_nonfmp_step_signature >> strip_tac >>
-  first_x_assum drule >> simp[]
-QED
 
 Theorem fmp_return_scan_nonpublishing:
   !insts. EVERY (\i. pre_fmp_opcode i.inst_opcode) insts ==>
@@ -91,9 +70,5 @@ Proof
      dst.fn_fmp_signature = SOME sig /\ ~sig.fms_publishes` by
     (irule fmp_return_stage_callee_signature >>
      gvs[fmp_stage_ctx_def] >> metis_tac[]) >>
-  qpat_x_assum `o1_walk_view rp 3 C' fn observed` mp_tac >>
-  simp[o1_walk_view_def, walk_view_def] >>
-  disch_then drule_all >> strip_tac >> gvs[] >>
-  drule fmp_return_nonfmp_steps_signature >>
-  simp[o1_fn_passes_def, fn_pass_tag_def] >> metis_tac[]
+  drule_all fmp_call_walk_signature >> strip_tac >> gvs[]
 QED

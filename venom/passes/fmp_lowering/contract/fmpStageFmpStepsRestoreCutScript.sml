@@ -65,13 +65,3 @@ Proof
   gvs[FLOOKUP_DRESTRICT, FLOOKUP_DEF]
 QED
 
-Theorem fmp_restore_env_update:
-  fmp_env_rel sm fn live G tv s t /\
-  ~ (runner IN FDOM s.vs_vars) ==>
-  fmp_env_rel sm fn live G tv s
-    ((update_var runner value t) with vs_inst_idx := idx)
-Proof
-  rw[fmp_env_rel_def, venomStateTheory.update_var_def] >>
-  `v <> runner` by (strip_tac >> gvs[FLOOKUP_DEF]) >>
-  first_x_assum drule >> strip_tac >> qexists `y` >> simp[FLOOKUP_UPDATE]
-QED
