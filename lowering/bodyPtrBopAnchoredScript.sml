@@ -5,7 +5,8 @@ Ancestors bodyPtrBopScalarOutcome
    inferable before matching the generic continuation conclusion. *)
 Theorem bop_scalar_suffix_outcome_ptr_anchored:
   compile_binop bop x y ty bl el sa = (op,sb) ==>
-  ghost_inv H d cenv cx es G tn s ==>
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G tn s) ==>
   well_typed_binop ann bop t1 t2 ==>
   bop <> In /\ bop <> NotIn /\
   op_prov G x = NONE /\ op_taint tn x = {} /\
@@ -21,18 +22,19 @@ Theorem bop_scalar_suffix_outcome_ptr_anchored:
       eval_operand op t = SOME (val_to_w256 v)) \/
    (?m t. bop_result cx ann bop tys v1 v2 es = INR (Error (RuntimeError m)) /\
       run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t)) /\
-  (!v t G' tn'. bop_result cx ann bop tys v1 v2 es = INL v /\ word_value v /\
+  (!H v t G' tn'. valid_horizon cx st0 H es.storage_trace /\
+      bop_result cx ann bop tys v1 v2 es = INL v /\ word_value v /\
       run_inst_seq (emitted_insts sa sb) s = OK t /\
       eval_operand op t = SOME (val_to_w256 v) /\
       op_prov G' op = NONE /\ op_taint tn' op = {} /\
       ghost_inv H d cenv cx (es with gas_obs := []) G' tn'
         (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
       ghost_kept cenv es sa G tn s G' tn' ==>
-      Q (INL v) (es with gas_obs := []) G' tn'
+      Q H (INL v) (es with gas_obs := []) G' tn'
         (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) ==>
-  gas_outcome_ptr D tops (ctx,fn) PG
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0
     (\st. (bop_result cx ann bop tys v1 v2 st,st)) (es,s,G,tn) Q
-    (\res fin ghost r. expr_exit res r)
+    (\H res fin ghost r. expr_exit res r)
 Proof
   ntac 3 strip_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all bop_scalar_suffix_outcome_ptr >> simp[]

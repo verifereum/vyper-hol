@@ -28,9 +28,9 @@ Proof
 QED
 
 Theorem bop_pair_ghost_kept_suffix:
-  bop_operand_post d ctx func cenv cx e1 es ca c1 x t0 G0 tn0
+  bop_operand_post H d ctx func cenv cx e1 es ca c1 x t0 G0 tn0
     v1 es1 t1 G1 tn1 /\
-  bop_operand_post d ctx func cenv cx e2 es1 c1 c2 y t1 G1 tn1
+  bop_operand_post H d ctx func cenv cx e2 es1 c1 c2 y t1 G1 tn1
     v2 es2 t2 G2 tn2 /\
   stmt_state_rel H ctx func cenv cx es t0 /\
   local_ptrs_reserved cenv ca /\ local_ptrs_reserved cenv c1 /\
@@ -51,11 +51,12 @@ Proof
 QED
 
 Theorem bop_scalar_parent_success:
-  bop_operand_entry d ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
+  bop_operand_entry d ctx func cenv cx st0 (Builtin ann (Bop bop) [e1;e2])
     es ca cz op t0 G0 tn0 /\
-  bop_operand_post d ctx func cenv cx e1 es ca c1 x t0 G0 tn0
+  valid_horizon cx st0 H es.storage_trace /\
+  bop_operand_post H d ctx func cenv cx e1 es ca c1 x t0 G0 tn0
     v1 es1 t1 G1 tn1 /\
-  bop_operand_post d ctx func cenv cx e2 es1 c1 c2 y t1 G1 tn1
+  bop_operand_post H d ctx func cenv cx e2 es1 c1 c2 y t1 G1 tn1
     v2 es2 t2 G2 tn2 /\
   bop_scalar_seq {z | not_fresh_at c2 z} A code B /\
   run_inst_seq code t2 = OK t /\
@@ -71,7 +72,7 @@ Theorem bop_scalar_parent_success:
   op_prov G op = NONE /\ op_taint tn op = {} /\
   ghost_inv H d cenv cx (es2 with gas_obs := []) G tn (t with vs_inst_idx := j) /\
   ghost_kept cenv es2 c2 G2 tn2 t2 G tn ==>
-  bop_operand_post d ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
+  bop_operand_post H d ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
     es ca cz op t0 G0 tn0 v (es2 with gas_obs := [])
     (t with vs_inst_idx := j) G tn
 Proof
@@ -81,8 +82,7 @@ Proof
     metis_tac[bop_operand_entry_def, bop_operand_post_def, expr_post_state] >>
   drule_all bop_scalar_runtime_post >> disch_then (qspec_then `j` strip_assume_tac) >>
   `ghost_kept cenv es ca G0 tn0 t0 G tn` by
-    (irule bop_pair_ghost_kept_suffix >> goal_assum (drule_at Any) >> simp[] >>
-     metis_tac[]) >>
+    (drule_all bop_pair_ghost_kept_suffix >> simp[]) >>
   `expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
       es ca cz t0 es2 v op (t with vs_inst_idx := j)` by
     (irule expr_post_bop >> simp[] >>
