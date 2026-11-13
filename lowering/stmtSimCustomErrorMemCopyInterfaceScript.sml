@@ -267,9 +267,10 @@ Proof
   disch_then (qspec_then `ctx` mp_tac) >> simp[gas_marked_path_def]
 QED
 
-Theorem typed_copy_control_emit_op_checked:
+Theorem typed_copy_emit_op_checked:
   emit_op opc args a = (op,b) /\
-  (opc = ADD \/ opc = MUL \/ opc = LT \/ opc = ISZERO) /\
+  opc <> GAS /\ opc <> INVOKE /\ ~is_terminator opc /\
+  run_inst_seq_mem_ok (emitted_insts a b) s /\
   (!out. step_inst_base (mk_inst a.cs_next_id opc args [out]) s =
          OK (update_var out w s)) /\
   fn_has_code a b func /\ fn_inst_ids_distinct func /\
@@ -290,10 +291,6 @@ Proof
     (qpat_x_assum `!out. step_inst_base _ s = _`
        (qspec_then `STRING #"%" (toString a.cs_next_var)` mp_tac) >>
      simp[mk_inst_def, run_inst_seq_def]) >>
-  `run_inst_seq_mem_ok (emitted_insts a b) s` by
-    (irule run_inst_seq_mem_ok_every >>
-     gvs[inst_mem_below_frontier_def, source_memory_read_ranges_def,
-         source_memory_write_ranges_def, inst_dload_in_section_def, mk_inst_def]) >>
   `gas_path_mem ctx func s 0
        (OK ((update_var (STRING #"%" (toString a.cs_next_var)) w s)
              with vs_inst_idx := LENGTH b.cs_current_insts)) /\
@@ -312,6 +309,30 @@ Proof
   `x <> STRING #"%" (toString a.cs_next_var)` by
     (gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL]) >>
   simp[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem typed_copy_control_emit_op_checked:
+  emit_op opc args a = (op,b) /\
+  (opc = ADD \/ opc = MUL \/ opc = LT \/ opc = GT \/ opc = ISZERO) /\
+  (!out. step_inst_base (mk_inst a.cs_next_id opc args [out]) s =
+         OK (update_var out w s)) /\
+  fn_has_code a b func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      eval_operand op t = SOME w /\ t.vs_memory = s.vs_memory /\
+      typed_copy_state_frame a off len s t /\
+      ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+      t.vs_inst_idx = LENGTH b.cs_current_insts /\
+      alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >> irule typed_copy_emit_op_checked >> simp[] >>
+  (conj_tac
+   >- (qexistsl_tac [`args`, `opc`] >> gvs[is_terminator_def]) >>
+   irule emit_op_mem_ok >> goal_assum (drule_at Any) >>
+  gvs[inst_mem_below_frontier_def, source_memory_read_ranges_def,
+      source_memory_write_ranges_def, inst_dload_in_section_def, mk_inst_def])
 QED
 
 Theorem typed_copy_assign_checked:
@@ -378,8 +399,8 @@ QED
 
 Theorem typed_copy_two_ops_checked:
   emit_op opc1 args1 a = (op1,b) /\ emit_op opc2 args2 b = (op2,c) /\
-  (opc1 = ADD \/ opc1 = MUL \/ opc1 = LT \/ opc1 = ISZERO) /\
-  (opc2 = ADD \/ opc2 = MUL \/ opc2 = LT \/ opc2 = ISZERO) /\
+  (opc1 = ADD \/ opc1 = MUL \/ opc1 = LT \/ opc1 = GT \/ opc1 = ISZERO) /\
+  (opc2 = ADD \/ opc2 = MUL \/ opc2 = LT \/ opc2 = GT \/ opc2 = ISZERO) /\
   (!out. step_inst_base (mk_inst a.cs_next_id opc1 args1 [out]) s =
          OK (update_var out w1 s)) /\
   (!t out. eval_operand op1 t = SOME w1 /\
