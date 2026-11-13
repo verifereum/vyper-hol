@@ -1754,8 +1754,10 @@ Proof
   drule_all store_slots_member_offset_run >>
   disch_then (qx_choose_then `u` (qx_choose_then `hs` strip_assume_tac)) >>
   `eval_operand src u = SOME sw /\ eval_operand slot u = SOME dw` by
-    (conj_tac >> Cases_on `src` >> Cases_on `slot` >>
-     gvs[eval_operand_def] >> metis_tac[]) >>
+    (qpat_x_assum `eval_operand src s = _` mp_tac >>
+     qpat_x_assum `eval_operand slot s = _` mp_tac >>
+     Cases_on `src` >> Cases_on `slot` >> simp[eval_operand_def] >>
+     metis_tac[]) >>
   `!x. src = Var x \/ slot = Var x ==> not_fresh_at sc x` by
     (fs[ci_mono_def, not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
   qpat_x_assum `!tvs vs cenv ctx so src slot tr sa sb func s sw dw. _`
