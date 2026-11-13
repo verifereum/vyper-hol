@@ -56,7 +56,7 @@ Theorem intcall_array_producer_round:
   FLOOKUP env.var_types name = SOME (ArrayT elem bound) /\ name <> id /\
   iterator_unmodified (Array (Name aty name)) stmts /\
   ~supported_stmts_expr_exists expr_internal_call_root stmts /\
-  gas_admissible (eval_for fp.jc_cx tv id stmts (DROP k vs)) (stmt_res_ok lctx) es ==>
+  gas_admissible (eval_for fp.jc_cx tv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
     (ignore_bind (push_scope_with_var id tv (EL k vs))
       (finally (try (ignore_bind (eval_stmts fp.jc_cx stmts) (return F))

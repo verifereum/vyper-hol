@@ -125,14 +125,10 @@ Proof
   `lbl' = lbl` by metis_tac[] >>
   `fn_directly_calls ctx func.fn_name lbl' /\
    lookup_function lbl' ctx.ctx_functions = SOME callee` by metis_tac[] >>
-  (* the packaging ignores the defaults; restate it at the declared ones *)
-  `set_internal_package_target caller.ce_target
-     (package_internal_fn tops use_trans nkeys caller.ce_is_ctor imm_len'
-       (mut,F,rr,name,args,dflts,ret,ss)) =
-   (lbl',ce,params,has_rb,is_nr,key,trans,view,ctor,imm_len'',ss',rt)` by
-    (qpat_assum `set_internal_package_target _ _ = _` (SUBST1_TAC o SYM) >>
-     rewrite_tac[package_internal_fn_def]) >>
-  drule_all body_internal_package_room >> strip_tac >>
+  qpat_x_assum `set_internal_package_target _ _ = _`
+    (assume_tac o REWRITE_RULE [package_internal_fn_def]) >>
+  drule_all (REWRITE_RULE [package_internal_fn_def]
+    body_internal_package_room) >> strip_tac >>
   `!i. i < LENGTH D ==>
     (\(ty,tv,v,flag,op). flag = SND (EL i params) /\
       ?off. FLOOKUP ce.ce_vars (FST (EL i params)) =
