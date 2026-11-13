@@ -178,7 +178,8 @@ fun field_check mode vis ty mutation =
        modules = ``[(NONE,[StructDecl "Record" [("flag",^bool_ty)];
          StructDecl "ArrayRecord" [("items",^array_ty)];
          VariableDecl Private Immutable "a" ^ty NONE;
-         FunctionDecl ^vis Nonpayable F F "test" [] [] NoneT
+         FunctionDecl ^vis Nonpayable F F
+           ^(if aconv vis ``Deploy`` then ``"__init__"`` else ``"test"``) [] [] NoneT
            ^(if aconv vis ``Deploy`` then ``[^(initialize ty); ^mutation]``
              else ``[^mutation]``)])]
          : (num option # toplevel list) list``});
