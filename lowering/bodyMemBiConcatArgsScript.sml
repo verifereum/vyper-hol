@@ -96,9 +96,10 @@ Proof
            eval_exprs_nil, gas_marked_path_def] >>
       qexistsl_tac [`INL []`, `es`, `OK s0`] >>
       simp[cj 1 gas_path_mem_rules] >> rpt strip_tac >>
+      disj1_tac >> gen_tac >> strip_tac >>
       qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> _ /\ _`
         (drule_then strip_assume_tac) >>
-      simp[locals_kept_refl]) >>
+      gvs[storage_well_formed_on_def]) >>
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   rename1 `body_exprs_mem_ok cx (e::args)` >>
   qpat_x_assum `body_exprs_mem_ok _ (_::_)`
