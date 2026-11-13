@@ -11,8 +11,9 @@ Theorem bytes_encoder_suffix_ghosts:
   ~ctx_has_dalloca ctx /\ allocas_from lo a /\
   run_inst_seq (DROP 7 (bytestring_encoder_insts id N dst src)) a = OK b ==>
   ?H tm.
-    (!D. inst_seq_ptr D lo ctx func PG G tn
-      (DROP 7 (bytestring_encoder_insts id N dst src)) a H tm) /\
+    (!D k. inst_seq_ptr D lo ctx func PG G tn
+      (DROP 7 (bytestring_encoder_insts id N dst src))
+      (a with vs_inst_idx := k) H tm) /\
     op_taint tm (Var (EL 8 N)) = {} /\
     tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
@@ -104,13 +105,14 @@ Proof
   `~is_terminator i0.inst_opcode /\ ~is_terminator i1.inst_opcode /\
    ~is_terminator i2.inst_opcode /\ ~is_terminator i3.inst_opcode` by
     simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, mk_inst_def, is_terminator_def] >>
-  `!D. ptr_inst_ok D lo 0 ctx func G tn i0 a` by
+  `!D k. ptr_inst_ok D lo 0 ctx func G tn i0 (a with vs_inst_idx := k)` by
     (simp[Abbr `i0`, ptr_inst_ok_def, step_inst_non_invoke,
+       step_inst_inst_idx_indep, exec_result_map_def, allocas_from_def,
        access_ok_def, taint_ok_def, mk_inst_def, op_taint_def,
        codegenRelTheory.source_memory_write_ranges_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
        memLocDefsTheory.mem_write_ops_def, memLocDefsTheory.mem_read_ops_def,
-       Abbr `a1`, update_var_def]) >>
+       Abbr `a1`, update_var_def] >> gvs[allocas_from_def] >> metis_tac[]) >>
   `!D k. ptr_inst_ok D lo 0 ctx func G1 tn1 i1 (a1 with vs_inst_idx := k) /\
     ptr_inst_ok D lo 0 ctx func G2 tn2 i2 (a2 with vs_inst_idx := k) /\
     ptr_inst_ok D lo 0 ctx func G3 tn3 i3 (a3 with vs_inst_idx := k)` by
