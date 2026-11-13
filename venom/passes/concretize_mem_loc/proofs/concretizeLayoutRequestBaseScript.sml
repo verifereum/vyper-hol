@@ -1,10 +1,10 @@
 Theory concretizeLayoutRequestBase
-Ancestors concretizeLayoutRequestRelations concretizeLayoutCanonicalBaseCertificate
+Ancestors concretizeLayoutCutSafe concretizeLayoutRequestRelations concretizeLayoutCanonicalBaseCertificate
   concretizeLayoutCanonicalBaseExternal concretizeLayoutCanonicalBase
   concretizeLayoutCanonicalDriver concretizeLayoutPhaseOrigin
   concretizeMemLocDefs concretizeStepStructure oracleExecProps
   concretizeLayoutPhaseCorridor frameRankedTerminalCorridor
-  frameSelectedSimulation frameFiniteExecution venomExecSemantics ptrDiscipline list
+  frameGasEvents frameSelectedSimulation frameFiniteExecution venomExecSemantics ptrDiscipline list
 
 (* The paired instruction is identical in a corridor, including its opcode. *)
 Theorem layout_canonical_corridor_instructions:
@@ -116,8 +116,13 @@ Theorem layout_request_base_certificate:
     (layout_request_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_request_OS D lo vs0 C C' q0 path es qs ass qend)
 Proof
-  strip_tac >> match_mp_tac layout_request_base_lift >> conj_tac
-  >- (drule_all layout_canonical_base_certificate >> simp[]) >>
+  strip_tac >>
+  `layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend` by
+    simp[layout_cut_safe_whole_run] >>
+  match_mp_tac layout_request_base_lift >> conj_tac
+  >- (drule_all layout_canonical_base_certificate >>
+      simp[selected_base_certificate_def, selected_step_match_def, events_OS_def] >>
+      metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   `layout_request_state D s t` by metis_tac[layout_request_ES_requests] >>
   `layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend q n i s j t` by
