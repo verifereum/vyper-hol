@@ -1090,6 +1090,7 @@ Theorem deploy_frame_package_body_inv:
    (cf : function_mutability # bool # bool # string # (string # type) list #
          expr list # type # stmt list) cenv args rest art exts ints fb.
     supported_program tops /\
+    supported_program_deploy tops /\
     check_contract T am.layouts tx.target [(NONE,tops)] = SOME art /\
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
     classify_functions tops = (exts,ints,fb,SOME cf) /\

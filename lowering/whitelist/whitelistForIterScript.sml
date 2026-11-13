@@ -98,8 +98,8 @@ Theorem dynarray_for_source_ready[local]:
     c < dimword (:256) /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var dp) sz) /\
     (!gs. eval_iterator cx (Array (Name (ArrayT typ (Dynamic c)) name))
-            (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
-    body_for_ok cx tv id stmts vs /\
+            (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
+    body_for_ok cx tv id stmts (MAP Value vs) /\
     FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE
 Proof
   strip_tac >>
@@ -108,13 +108,13 @@ Proof
   rename1 `evaluate_type (get_tenv cx) typ = SOME tv` >>
   rename1 `FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var dp) sz)` >>
   `eval_iterator cx (Array (Name (ArrayT typ (Dynamic c)) name)) es =
-     (INL vs, es)` by
+     (INL (MAP Value vs), es)` by
     (`es = es with gas_obs := es.gas_obs` by
        simp[vyperStateTheory.evaluation_state_component_equality] >>
      pop_assum SUBST1_TAC >>
      qpat_assum `!gs. eval_iterator _ _ _ = _` (fn th => rewrite_tac [th])) >>
   `LENGTH vs <= n` by decide_tac >>
-  `body_for_ok cx tv id stmts vs` by
+  `body_for_ok cx tv id stmts (MAP Value vs)` by
     (qpat_x_assum `!tenv s tyv t s3 vs t3 s4 x t4. _` mp_tac >>
      simp[lift_option_type_def, return_def, check_def, assert_def,
           compatible_bound_def] >> disch_then irule >> simp[] >>
@@ -199,7 +199,8 @@ Proof
   >- (rpt strip_tac >> irule dynarray_snapshot_memory >> metis_tac[])
   >- (rpt strip_tac >>
       `body_stmts_ok cx stmts` by
-        (fs[body_for_ok_def] >> Cases_on `vs` >> fs[]) >>
+        (fs[body_for_ok_def] >> Cases_on `vs` >>
+         gvs[read_result_def, return_def]) >>
       irule array_body_fragment_callback >>
       metis_tac[dynarray_elements_typed]) >>
   rpt gen_tac >> strip_tac >>
@@ -219,10 +220,10 @@ QED
 (* ADMITTED (out-of-packet key, allowed by the plan session): a For over a
    memory iterable, an array that is not rooted at a top-level name, has no
    ternary in it (#1254) and whose lowered value has the annotated type (no
-   widened internal call, #767): a temporary or a projection of a local.  compile_for_mem_frag
-   proves the loop against a keep hook; discharging it needs stmt_post's
-   alloca_frame (temporaries) and vv_at's local_place_at (places), which this
-   base doesn't have yet. *)
+   widened internal call, #767): a temporary or a projection of a local. The unused keep-hook compilation
+   bridge was deleted; the real proof must also derive the iterator's source
+   place classification, alongside stmt_post's alloca_frame and vv_at's
+   local_place_at. *)
 Theorem body_for_memory_iterable:
   !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
    es.

@@ -46,7 +46,12 @@ QED
 
 Theorem body_subscript_case_ptr:
   !cx v8 e1 e2.
-    (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ptr_ok cx e2) /\
+    (!s'' res t s3 res' t'.
+       eval_expr cx e1 s'' = (INL res,t) /\
+       (if subscript_reads_base cx e1 e2 then
+          bind (read_result cx res) (\v. return (Value v))
+        else return res) s3 = (INL res',t') ==>
+       body_expr_ptr_ok cx e2) /\
     body_expr_ptr_ok cx e1 ==>
     body_expr_ptr_ok cx (Subscript v8 e1 e2)
 Proof
@@ -96,7 +101,7 @@ Proof
      fs[]) >>
   Cases_on `bt = Len \/ bt = CalldataLen \/ (?i. bt = Env i) \/ (?i. bt = Acc i) \/
              bt = BlockHash \/ bt = BlobHash \/ bt = MethodId`
-  >- (irule env_builtin_expr_ptr_ok >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  >- (irule env_builtin_expr_ptr_ok >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
   Cases_on `?bop. bt = Bop bop`
   >- (gvs[] >> Cases_on `bop = In \/ bop = NotIn`
       >- (irule bop_in_expr_ptr_ok >> gvs[]) >>

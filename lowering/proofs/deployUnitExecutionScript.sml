@@ -5,7 +5,8 @@
  *)
 Theory deployUnitExecution
 Ancestors
-  sourceUnitExecution ctorDeployDefs e2eDeployDefs
+  sourceUnitExecution ctorDeployDefs e2eDeployDefs fragGasOriginPtr
+  vyperStorageFootprint
 
 (* At gas marks marks: either the constructor run's finite storage guard
    fails for every continuation of the selected readings, or the run's
@@ -23,20 +24,34 @@ Definition deploy_unit_execution_correct_at_def:
       gas_shadow_function func shadow_func /\
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
-      ((!tail. ~deploy_storage_ok tops am tx vs.vs_outcomes
-                  (gas_explicit marks vs.vs_gas_readings ++ tail)) \/
+      (((!tail. ~deploy_storage_ok tops am tx vs.vs_outcomes
+                   (gas_explicit marks vs.vs_gas_readings ++ tail)) /\
+        ?(H : (bool # bytes32 # type_value) list # num list)
+           leaf leaf_pg leaf_g leaf_tn finish.
+          gas_origin_ptr_focus
+            (deploy_dead H tops runtime_bc am tx,
+             imm_len tops, gas_explicit_sites unit.cu_context shadow_ctx,
+             unit.cu_context, func, [])
+            ((vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
+                         vs_inst_idx := 0 |>), FEMPTY, entry_taint)
+            marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
        ?src obs.
          (!tail. load_contract_trace (SOME vs.vs_outcomes)
             (gas_explicit marks vs.vs_gas_readings ++ tail) am tx
             [(NONE, tops)] [] = (src, obs)) /\
          ((deploy_source_exempt tops src /\
-           ?leaf finish.
-             gas_origin_focus T
-               (gas_explicit_sites unit.cu_context shadow_ctx)
-               (unit.cu_context, func)
-               (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
-                           vs_inst_idx := 0 |>) marks (leaf, finish)) \/
+           ?(H : (bool # bytes32 # type_value) list # num list)
+              leaf leaf_pg leaf_g leaf_tn finish.
+             gas_origin_ptr_focus
+               (deploy_dead H tops runtime_bc am tx,
+                imm_len tops, gas_explicit_sites unit.cu_context shadow_ctx,
+                unit.cu_context, func, [])
+               ((vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
+                            vs_inst_idx := 0 |>), FEMPTY, entry_taint)
+               marks (leaf, leaf_pg, leaf_g, leaf_tn, finish)) \/
           (?r. exit_result r /\
+             storage_trace_domain (deploy_evaluation_context tops am tx)
+               (initial_state am []) obs /\
              gas_origin_path T
                (gas_explicit_sites unit.cu_context shadow_ctx)
                unit.cu_context func
