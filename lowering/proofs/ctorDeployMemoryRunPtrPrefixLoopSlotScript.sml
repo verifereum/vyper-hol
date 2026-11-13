@@ -252,8 +252,11 @@ Resume prefix_loop_index_slot_pair[forward]:
        (step_taint (mk_inst aid ALLOCA [Lit 32w] [ip]) s a tn)`]
     prefix_loop_step_seq_facts) >>
   asm_rewrite_tac[] >> strip_tac >>
-  rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
-  simp[inst_seq_ptr_def, mstore_idx, ghostPcTransportPtrTheory.step_taint_inst_idx_left,
+  rule_assum_tac (SIMP_RULE (srw_ss()) [mstore_idx,
+    ghostPcTransportPtrTheory.step_taint_inst_idx_left,
+    ghostPcTransportPtrTheory.step_taint_inst_idx_right]) >>
+  simp[inst_seq_ptr_def, arithmeticTheory.ADD1, mstore_idx,
+    ghostPcTransportPtrTheory.step_taint_inst_idx_left,
     ghostPcTransportPtrTheory.step_taint_inst_idx_right]
 QED
 
