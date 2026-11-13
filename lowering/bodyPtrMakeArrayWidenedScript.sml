@@ -13,6 +13,7 @@
  *)
 Theory bodyPtrMakeArrayWidened
 Ancestors
+  aggregateStorePtr
   exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph list
 
