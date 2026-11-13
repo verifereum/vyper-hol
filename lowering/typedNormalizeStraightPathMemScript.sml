@@ -211,3 +211,30 @@ Proof
     venom_state_component_equality, gas_marked_path_def,
     fragGasPathMemTheory.gas_path_mem_rules]
 QED
+
+Theorem normalize_mcopy_window_mem_path:
+  emit_void MCOPY [dst; src; Lit (n2w n)] sa = ((),sb) /\
+  eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
+  n < dimword (:256) /\
+  w2n a + n <= s.vs_alloca_next /\ w2n d + n <= s.vs_alloca_next /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_marked_path T ctx fn s 0
+    (OK ((mcopy (w2n d) (w2n a) n s)
+      with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  strip_tac >> drule_all valueCopyTheory.emit_mcopy_run >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+    (drule allocaFootprintTheory.emit_mcopy_mem_ok >>
+     disch_then (drule_at (Pat `eval_operand dst _ = _`)) >>
+     disch_then (drule_at (Pat `eval_operand src _ = _`)) >>
+     disch_then irule >> simp[eval_operand_def]) >>
+  irule typed_normalize_straight_mem_path >> simp[] >>
+  qexistsl_tac [`emitted_insts sa sb`, `sa`] >>
+  fs[same_blocks_def, emitHelperTheory.emit_void_def,
+    compileEnvTheory.fresh_id_def, compileEnvTheory.comp_bind_def,
+    compileEnvTheory.emit_def, compileEnvTheory.comp_return_def,
+    emitted_insts_def, mk_inst_def, is_terminator_def] >>
+  gvs[listTheory.DROP_APPEND1]
+QED
