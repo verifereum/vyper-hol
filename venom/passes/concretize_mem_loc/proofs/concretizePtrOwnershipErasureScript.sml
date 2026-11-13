@@ -58,24 +58,28 @@ QED
    differ. *)
 Theorem ptr_owner_first_projection:
   !ops. ptr_ledger_erases dyn births tagged numerical /\
-    (!u1 u2. MEM (Var u1) ops /\ MEM (Var u2) ops /\
-       FLOOKUP numerical u1 <> NONE /\ FLOOKUP tagged u2 <> NONE ==> u1 = u2) ==>
+    ((!u1 u2. MEM (Var u1) ops /\ MEM (Var u2) ops /\
+       FLOOKUP numerical u1 <> NONE /\ FLOOKUP tagged u2 <> NONE ==> u1 = u2) \/
+     (!u. FLOOKUP numerical u <> NONE ==> FLOOKUP tagged u <> NONE)) ==>
     ptr_owner_erases dyn births (first_prov tagged ops) (first_prov numerical ops) /\
     (!owner. first_prov tagged ops = SOME owner ==> owner IN FDOM births)
 Proof
   Induct >- simp[first_prov_def, ptr_owner_erases_def] >>
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
   drule ptr_owner_op_projection >> disch_then (qspec_then `h` strip_assume_tac) >>
   Cases_on `op_prov numerical h`
   >- (`op_prov tagged h = NONE` by metis_tac[ptr_owner_op_untagged] >>
-      simp[first_prov_def] >> first_x_assum irule >> metis_tac[]) >>
+      simp[first_prov_def] >> first_x_assum irule >> fs[] >> metis_tac[MEM]) >>
   Cases_on `op_prov tagged h` >> gvs[first_prov_def] >>
   `?u. h = Var u` by (Cases_on `h` >> gvs[op_prov_def]) >>
   gvs[op_prov_def] >>
   `EVERY (\op. op_prov tagged op = NONE) ops` by
     (simp[EVERY_MEM] >> Cases >> simp[op_prov_def] >> strip_tac >>
      spose_not_then assume_tac >>
-     `u = s` by (first_x_assum irule >> simp[]) >> gvs[]) >>
+     qpat_x_assum `_ \/ _` strip_assume_tac
+     >- (`u = s` by (first_x_assum irule >> simp[]) >> gvs[]) >>
+     qpat_x_assum `!u. FLOOKUP numerical u <> NONE ==> _` (qspec_then `u` mp_tac) >>
+     simp[]) >>
   `first_prov tagged ops = NONE` by metis_tac[ptr_first_prov_untagged] >>
   simp[]
 QED
@@ -166,9 +170,10 @@ Theorem ptr_owner_out_projection[local]:
   ptr_ledger_erases dyn births tagged numerical /\
   ptr_params_erases dyn births PT PG /\
   inst.inst_opcode <> ALLOCA /\ inst.inst_opcode <> DALLOCA /\
-  (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN ==>
+  ((inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN ==>
     !u1 u2. MEM (Var u1) inst.inst_operands /\ MEM (Var u2) inst.inst_operands /\
-      FLOOKUP numerical u1 <> NONE /\ FLOOKUP tagged u2 <> NONE ==> u1 = u2) ==>
+      FLOOKUP numerical u1 <> NONE /\ FLOOKUP tagged u2 <> NONE ==> u1 = u2) \/
+   (!u. FLOOKUP numerical u <> NONE ==> FLOOKUP tagged u <> NONE)) ==>
   ptr_owner_erases dyn births (out_prov PT tagged inst s') (out_prov PG numerical inst s') /\
   (!owner. out_prov PT tagged inst s' = SOME owner ==> owner IN FDOM births)
 Proof
@@ -195,9 +200,10 @@ Theorem ptr_owner_step_projection:
   ptr_ledger_erases dyn births tagged numerical /\
   ptr_params_erases dyn births PT PG /\
   inst.inst_opcode <> ALLOCA /\ inst.inst_opcode <> DALLOCA /\
-  (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN ==>
+  ((inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN ==>
     !u1 u2. MEM (Var u1) inst.inst_operands /\ MEM (Var u2) inst.inst_operands /\
-      FLOOKUP numerical u1 <> NONE /\ FLOOKUP tagged u2 <> NONE ==> u1 = u2) ==>
+      FLOOKUP numerical u1 <> NONE /\ FLOOKUP tagged u2 <> NONE ==> u1 = u2) \/
+   (!u. FLOOKUP numerical u <> NONE ==> FLOOKUP tagged u <> NONE)) ==>
   ptr_ledger_erases dyn births (step_prov PT tagged inst s') (step_prov PG numerical inst s')
 Proof
   strip_tac >> drule_all ptr_owner_out_projection >>

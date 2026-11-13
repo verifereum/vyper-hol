@@ -164,9 +164,10 @@ QED
 Theorem ptr_tagged_step_projection[local]:
   ptr_ledger_erases dyn births TG G /\ ptr_params_erases dyn births PT PG /\
   (!aid. FLOOKUP births (token,aid) = FLOOKUP s.vs_allocas aid) /\
-  (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN ==>
+  ((inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN ==>
     !u1 u2. MEM (Var u1) inst.inst_operands /\ MEM (Var u2) inst.inst_operands /\
-      FLOOKUP G u1 <> NONE /\ FLOOKUP TG u2 <> NONE ==> u1 = u2) /\
+      FLOOKUP G u1 <> NONE /\ FLOOKUP TG u2 <> NONE ==> u1 = u2) \/
+   (!u. FLOOKUP G u <> NONE ==> FLOOKUP TG u <> NONE)) /\
   (inst.inst_opcode = DALLOCA ==>
     !out b. inst.inst_outputs = [out] /\ lookup_var out s = SOME b ==> dyn <= w2n b) ==>
   ptr_ledger_erases dyn births (ptr_tagged_step token PT TG inst s) (step_prov PG G inst s)
@@ -229,10 +230,11 @@ Theorem ptr_tagged_chrono_step_erasure[local]:
   !C token a b PT TG saved PT' TG' saved'.
   ptr_tagged_chrono_step C token a b PT TG saved PT' TG' saved' ==>
   !dyn births.
-  (a.po_inst.inst_opcode = ADD \/ a.po_inst.inst_opcode = SUB \/
-   a.po_inst.inst_opcode = ASSIGN ==>
+  ((a.po_inst.inst_opcode = ADD \/ a.po_inst.inst_opcode = SUB \/
+    a.po_inst.inst_opcode = ASSIGN ==>
     !u1 u2. MEM (Var u1) a.po_inst.inst_operands /\ MEM (Var u2) a.po_inst.inst_operands /\
-      FLOOKUP a.po_prov u1 <> NONE /\ FLOOKUP TG u2 <> NONE ==> u1 = u2) /\
+      FLOOKUP a.po_prov u1 <> NONE /\ FLOOKUP TG u2 <> NONE ==> u1 = u2) \/
+   (!u. FLOOKUP a.po_prov u <> NONE ==> FLOOKUP TG u <> NONE)) /\
   (a.po_inst.inst_opcode = DALLOCA ==> dyn <= w2n a.po_state.vs_fmp) /\
   ptr_params_erases dyn births PT a.po_params /\
   ptr_ledger_erases dyn births TG a.po_prov /\
@@ -243,7 +245,18 @@ Theorem ptr_tagged_chrono_step_erasure[local]:
   ptr_ledger_erases dyn births TG' b.po_prov /\
   ptr_saved_erases dyn births saved' b.po_stack
 Proof
-  cheat
+  ho_match_mp_tac ptr_tagged_chrono_step_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[ptr_observe_def] >> strip_tac
+  >- (simp[] >> irule ptr_tagged_step_projection >> fs[] >>
+      rpt strip_tac >>
+      gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(),
+          update_var_def, lookup_var_def, FLOOKUP_UPDATE])
+  >- (simp[] >> irule ptr_owner_entry_projection >> simp[])
+  >- (`ptr_ledger_erases dyn births FEMPTY FEMPTY` by
+        simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >>
+      simp[ptr_saved_erases_cons] >> irule ptr_owner_call_params >> simp[]) >>
+  gvs[ptr_saved_erases_cons] >> irule ptr_owner_restrict_projection >> simp[]
 QED
 
 Theorem ptr_chrono_singleton_empty[local]:
@@ -265,7 +278,9 @@ Theorem ptr_source_ownership_erasure_invariant[local]:
     ptr_ledger_erases (dyn_floor C vs0) births TG a.po_prov /\
     ptr_saved_erases (dyn_floor C vs0) births saved a.po_stack) /\
   (~ctx_has_dalloca C /\ ptr_discipline lo C vs0 ==>
-    !dyn. ptr_ledger_erases dyn births TG a.po_prov)
+    !dyn. ptr_params_erases dyn births PT a.po_params /\
+      ptr_ledger_erases dyn births TG a.po_prov /\
+      ptr_saved_erases dyn births saved a.po_stack)
 Proof
   cheat
 QED
