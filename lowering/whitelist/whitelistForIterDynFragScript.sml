@@ -706,7 +706,8 @@ Proof
     (irule stmt_state_rel_update_var >> simp[]) >>
   drule_all array_alloca_frame >> strip_tac >>
   `alloca_frame cenv es st s0 cenv es cc` by
-    (irule alloca_frame_of_mem_frame >> goal_assum (drule_at Any) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_of_mem_frame) >>
+     goal_assum (drule_at Any) >>
      gvs[ALL_DISTINCT] >>
      simp[jump_to_def, update_var_def] >>
      reverse conj_tac >- metis_tac[] >>
@@ -1029,7 +1030,9 @@ Proof
      irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
   `lookup_scopes id (es with gas_obs := []).scopes = NONE` by simp[] >>
   `type_memory_bytes cenv et + 64 < dimword (:256)` by simp[] >>
-  drule_all dynarray_public_entry_ready >> strip_tac >>
+  mp_tac (Q.INST [`es` |-> `es with gas_obs := []`, `st'` |-> `cs'`]
+    dynarray_public_entry_ready) >>
+  impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   `LENGTH vs <= n /\ LENGTH vs < dimword (:256)` by decide_tac >>
   `gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx)
      (es with gas_obs := [])` by
