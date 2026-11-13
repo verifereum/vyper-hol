@@ -89,13 +89,16 @@ Proof
   Cases_on `r.contexts` >> simp[]
 QED
 
+(* Source stages use the unoptimized layout's transaction code; the real
+   creation frame still executes the optimized deployment bytecode. *)
 Theorem opt_deploy_frame:
   !policy tops prog prog' runtime_bc rpolicy dunit dout cplan am tx es.
   deploy_phases policy tops (assemble prog, runtime_bc)
     (rpolicy, dunit, dout, prog, cplan) /\
   asm_opt_finalizer rpolicy prog = SOME prog' /\
   deploy_state_rel tops (assemble prog') am tx es ==>
-  ?es_p. deploy_state_rel tops (assemble prog) am tx es_p /\
+  ?es_p. deploy_state_rel tops (assemble prog) am
+           (tx with code := (opt_deploy_entry_state prog prog' cplan tops es).vs_code) es_p /\
          gas_variant
            (opt_deploy_entry_state prog prog' cplan tops es with
               vs_outcomes := [])
@@ -115,14 +118,23 @@ Proof
   conj_tac
   >- (qexistsl_tac [`ctxt_p`, `rb`, `args_bytes`] >>
       qpat_x_assum `call_trace _ = []` (fn th => REWRITE_TAC [th]) >>
-      gvs[Abbr`ctxt_p`, vfmExecutionPropTheory.wf_state_def,
+      gvs[Abbr`ctxt_p`, opt_deploy_entry_state_def, opt_entry_state_def,
+          entry_venom_state_def, rich_listTheory.DROP_LENGTH_APPEND] >>
+      gvs[vfmExecutionPropTheory.wf_state_def,
           vfmExecutionPropTheory.wf_context_def,
           vfmExecutionPropTheory.all_accounts_def,
           vfmExecutionPropTheory.stack_room_ok_def,
           vfmExecutionPropTheory.gas_stack_ok_def,
           vfmExecutionPropTheory.outputTo_consistent_stack_def,
           vfmExecutionPropTheory.outputTo_consistent_ctx_def,
-          e2eDefsTheory.call_outcomes_ok_def]) >>
+          e2eDefsTheory.call_outcomes_ok_def,
+          opt_deploy_entry_state_def, opt_entry_state_def,
+          entry_venom_state_def, rich_listTheory.DROP_LENGTH_APPEND,
+          constructor_args_encode_def, e2eDefsTheory.value_transfer_ok_def,
+          e2eDefsTheory.accounts_after_transfer_def, e2eDefsTheory.tx_block_fields_rel_def,
+          e2eDefsTheory.call_outcomes_storage_ok_def, e2eDefsTheory.layouts_agree_def] >>
+      gvs[tx_env_ok_def, vfmTotalBalanceTheory.balance_bounded_def,
+          vfmExecutionPropTheory.all_accounts_def]) >>
   simp[gas_variant_def, opt_deploy_entry_state_def, deploy_entry_state_def,
        opt_entry_state_def, e2eEntryTheory.entry_venom_state_def] >>
   qpat_x_assum `call_trace _ = []` (fn th => REWRITE_TAC [th]) >>
