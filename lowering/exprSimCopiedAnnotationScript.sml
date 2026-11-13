@@ -51,3 +51,51 @@ Proof
   Cases_on `p` >> simp[as_ptr_val_def, vv_type_def]
 QED
 
+
+Theorem addmod_names_result_type[local]:
+  vv_type (FST (compile_addmod_names ce rt aty a bty b mty m st)) = rt
+Proof
+  simp[compile_addmod_names_def] >> rpt (pairarg_tac >> gvs[]) >>
+  simp[stack_result_type]
+QED
+
+Theorem mulmod_names_result_type[local]:
+  vv_type (FST (compile_mulmod_names ce rt aty a bty b mty m st)) = rt
+Proof
+  simp[compile_mulmod_names_def] >> rpt (pairarg_tac >> gvs[]) >>
+  simp[stack_result_type]
+QED
+
+Theorem powmod_names_result_type[local]:
+  vv_type (FST (compile_powmod256_names ce rt aty a bty b st)) = rt
+Proof
+  simp[compile_powmod256_names_def] >> rpt (pairarg_tac >> gvs[]) >>
+  simp[stack_result_type]
+QED
+
+Theorem type_builtin_result_type[local]:
+  vv_type (FST (compile_type_builtin_dispatch_body cfn ce rt ty tb dest args st)) = rt
+Proof
+  Cases_on `tb` >> simp[compile_type_builtin_dispatch_body_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[stack_result_type, ptr_result_type, vv_type_def] >>
+  rpt (IF_CASES_TAC >> simp[stack_result_type, ptr_result_type, vv_type_def]) >>
+  Cases_on `dest` >> simp[stack_result_type]
+QED
+
+Theorem call_result_type[local]:
+  vv_type (FST (compile_call cfn ce rt ty tgt args drv st)) =
+    (case tgt of IntCall fid => ce.ce_func_return_type (nsid_to_string fid)
+               | _ => rt)
+Proof
+  Cases_on `tgt` >> TRY (PairCases_on `p`) >> simp[compile_call_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt (IF_CASES_TAC >> simp[vv_type_def, stack_result_type]) >>
+  TRY (Cases_on `return_buf` >> simp[vv_type_def] >>
+       rpt (pairarg_tac >> gvs[]) >> simp[vv_type_def] >> NO_TAC) >>
+  Cases_on `args` >> simp[] >> rpt (pairarg_tac >> gvs[]) >>
+  simp[vv_type_def] >> rpt (IF_CASES_TAC >> simp[vv_type_def]) >>
+  TRY (Cases_on `t`) >> simp[] >> rpt (pairarg_tac >> gvs[]) >>
+  simp[vv_type_def] >> rpt (IF_CASES_TAC >> simp[vv_type_def]) >>
+  TRY (Cases_on `t'`) >> simp[vv_type_def, stack_result_type]
+QED
