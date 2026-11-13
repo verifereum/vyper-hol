@@ -360,8 +360,10 @@ Resume compile_extract32_sim_mem[stage2]:
     (simp[expr_has_effect_thm] >> rpt strip_tac >>
      drule_all extract32_operands_pure_frame >> simp[]) >>
   `well_formed_type (get_tenv cx) (BaseT bt)` by
-    (qpat_assum `expr_body_pre cenv cx env (TypeBuiltin _ _ _ _) es` mp_tac >>
-     simp[expr_body_pre_def, well_typed_expr_def]) >>
+    (`env.type_defs = get_tenv cx` by
+       fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+          env_context_consistent_def] >>
+     fs[expr_body_pre_def, well_typed_expr_def]) >>
   `alloca_room ctx func t2` by
     (qpat_x_assum `stmt_state_rel H1 ctx func cenv cx ee2 t2` mp_tac >>
      simp[stmt_state_rel_def]) >>
