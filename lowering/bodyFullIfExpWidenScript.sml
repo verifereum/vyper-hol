@@ -6,7 +6,7 @@
    they land. *)
 Theory bodyFullIfExpWiden
 Ancestors
-  vyperStorageFootprint bodySimFull fragGasOriginPtr exprSimIfExp exprSimDefs exprSimMemDefs
+  vyperStorageFootprint bodySimFull fragGasOriginPtrExec fragGasOriginPtr exprSimIfExp exprSimDefs exprSimMemDefs
   bodyPtrDefs loweringPosts exprLowering exprLoweringProps fragExec
   emitHelper compileEnv allocaHistory stmtSimDefs vyperAST
   vyperInterpreter vyperState venomState fragGasSeqPtr fragGasEmitCtrl
@@ -1262,13 +1262,19 @@ Proof
      simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
      simp[listTheory.DROP_APPEND]) >>
   pop_assum strip_assume_tac >>
+  rename1 `isPREFIX (emitted_insts sn sb) (DROP su.vs_inst_idx copybb.bb_instructions)` >>
   `allocas_from lo su /\ lo <= su.vs_alloca_next /\ ~su.vs_halted` by
     (qpat_assum `!H. valid_horizon _ _ _ _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
        (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
-     simp[expr_post_def, stmt_state_rel_def, ghost_inv_at_def] >>
-     rpt strip_tac >> simp[]) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     conj_tac >- fs[ghost_inv_at_def] >>
+     conj_tac >- fs[ghost_inv_at_def] >>
+     qpat_x_assum `gas_origin_ptr_path _ _ _ (OK su,Gu,tu)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     drule gas_origin_ptr_path_exec >> simp[exit_result_def]) >>
+  `compile_store_bytestring (Var x) (Var p) sn = ((),sb)` by fs[] >>
   asm "copy" (drule_at (Pat `compile_store_bytestring _ _ _ = _`)) >>
-  disch_then (qspecl_then [`lo`, `explicit`, `ctx`, `func`, `PG`, `Gu`, `tu`, `su`, `sw`, `w`, `len`, `n`, `bb`] mp_tac) >>
+  disch_then (qspecl_then [`lo`, `explicit`, `ctx`, `func`, `PG`, `Gu`, `tu`, `su`, `sw`, `w`, `len`, `n`, `copybb`] mp_tac) >>
   impl_tac >- simp[] >>
   strip_tac >> FAIL_TAC "endpoint"
 QED
