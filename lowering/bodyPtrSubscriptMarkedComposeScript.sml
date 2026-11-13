@@ -7,11 +7,12 @@ Ancestors
 (* The index run's summary, whichever way it ends, gives the composed run's:
    bad storage when no horizon is valid at its end, else a summary. *)
 Theorem array_index_summary_compose_ptr[local]:
-  gas_marked_exec F (ctx,func) a (es,s0) left (INL captured) mid (OK t) /\
+  gas_marked_exec F (ctx,func) (a : evaluation_state -> 'a evaluation_result)
+    (es,s0) left (INL captured) mid (OK t) /\
   (!H. valid_horizon cx st0 H mid.storage_trace ==>
        gas_path_ptr (D H) 0 ctx func PG G0 tn0 s0 (LENGTH left) G1 tn1
          (OK t)) /\
-  storage_trace_frame b /\ (!v. storage_trace_frame (k captured v)) /\
+  storage_trace_frame (b : evaluation_state -> 'b evaluation_result) /\ (!v. storage_trace_frame ((k : 'a -> 'b -> evaluation_state -> 'c evaluation_result) captured v)) /\
   gas_summary_ptr_at D (ctx,func) PG cx st0 marks b
     (mid with gas_obs := [],t,G1,tn1)
     (\H res ee G tn u. ?v. res = INL v /\ V H v ee G tn u)
@@ -47,15 +48,12 @@ Resume array_index_summary_compose_ptr[live]:
     (first_assum drule >> metis_tac[gas_path_ptr_erase]) >>
   `gas_marked_exec F (ctx,func) b (mid with gas_obs := [],t) marks res
      es_end r` by simp[gas_marked_exec_def, gas_marked_path_def] >>
-  `storage_trace_frame (bind b (k captured))` by
+  `storage_trace_frame (bind (b : evaluation_state -> 'b evaluation_result) ((k : 'a -> 'b -> evaluation_state -> 'c evaluation_result) captured))` by
     (irule storage_trace_frame_bind_all >> simp[]) >>
-  `gas_summary_ptr_at D (ctx,func) PG cx st0 marks (bind b (k captured))
+  `gas_summary_ptr_at D (ctx,func) PG cx st0 marks (bind (b : evaluation_state -> 'b evaluation_result) ((k : 'a -> 'b -> evaluation_state -> 'c evaluation_result) captured))
      (mid with gas_obs := [],t,G1,tn1) Q R` suffices_by
-    (strip_tac >>
-     mp_tac (Q.INST [`source` |-> `a`, `next` |-> `\r. bind b (k r)`,
-                     `v` |-> `captured`, `right` |-> `marks`]
-               gas_summary_ptr_at_bind_normal) >>
-     simp[]) >>
+    (strip_tac >> irule gas_summary_ptr_at_bind_normal >>
+     first_assum (irule_at (Pos hd)) >> BETA_TAC >> asm_rewrite_tac[]) >>
   first_assum drule >> strip_tac >> gvs[]
   >- suspend "normal" >>
   mp_tac (Q.INST [`fin` |-> `es_end`, `es` |-> `mid with gas_obs := []`,

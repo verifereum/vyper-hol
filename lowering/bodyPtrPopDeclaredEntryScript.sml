@@ -30,7 +30,7 @@ Proof
 QED
 
 Theorem pop_declared_region_taint:
-  MEM (tr,w,tv) (FST H) /\
+  MEM (tr,w : bytes32,tv) (FST H) /\
   stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s ==>
   pop_region_taint_ok
     (if tr then s.vs_transient s.vs_call_ctx.cc_address
