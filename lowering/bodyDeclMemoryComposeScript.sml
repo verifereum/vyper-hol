@@ -49,7 +49,8 @@ Proof
     (drule gas_marked_path_ok_suffix >> simp[]) >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[gas_outcome_def] >> strip_tac >> qexists_tac `marks`
-  >- (disj1_tac >> fs[gas_bad_storage_at_def])
+  >- (disj1_tac >> fs[gas_bad_storage_at_def] >> gen_tac >>
+      first_x_assum (qspec_then `tail` mp_tac) >> asm_rewrite_tac[])
   >- (disj2_tac >> disj1_tac >> fs[gas_summary_at_def] >>
       qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
       metis_tac[gas_marked_exec_zero_prefix_mem]) >>
