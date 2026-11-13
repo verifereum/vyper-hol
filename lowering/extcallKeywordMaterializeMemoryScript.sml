@@ -1,10 +1,10 @@
 (* A nonword default's immediate source read and concrete materializer. *)
 Theory extcallKeywordMaterializeMemory
 Ancestors
-  extcallMaterializeMemory extcallLoweredCaptureMemory
+  extcallMaterializeMemory extcallLoweredCaptureMemory extcallEagerOperandsMemory
   exprSimMemDefs stmtReasonVvMemory exprSimUnwrapProps exprSimMemorySource
   exprSimProps loweringPosts exprSimHypsDefs exprSimDefs exprLowering
-  valueTypingMemoryProps gasSummary fragGasMode vyperState compileEnv
+  valueTypingMemoryProps gasSummary fragGasMode fragGasPathMem vyperState compileEnv
 
 Theorem extcall_vv_bound_lowered_value[local]:
   vv_store_bound cx ty lt ee raw vv s /\ ~is_word_type ty /\
@@ -19,6 +19,54 @@ Proof
   `type_memory_size tv = 0 \/
    w2n w + type_memory_size tv <= s.vs_alloca_next` by metis_tac[] >>
   decide_tac
+QED
+
+(* The no-copy positional snapshot reads the source now and keeps its
+   representation for the remaining pure operand fragments. *)
+Theorem extcall_nonword_eager_read_mem:
+  compile_snapshot_vv ce F
+    (ext_call_arg_value (lowered_value_type ce e) vv) sm = (saved,sb) /\
+  expr_body_pre ce cx env e es /\ ~expr_has_effect e /\
+  post_value_type ce e = expr_type e /\
+  ~is_word_type (expr_type e) /\ ~is_word_type (lowered_value_type ce e) /\
+  ~s.vs_halted /\
+  vv_post ctx func ce cx e es sa sm s0 ee raw vv s /\
+  vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee raw vv s /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME ptv /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME ltv /\
+  (!v. read_result cx raw ee = (INL v,ee) ==> value_has_type ltv v) /\
+  (!tag p. vv = LocatedValue tag p /\ p.ptr_location <> LocMemory ==>
+     tag = lowered_value_type ce e) ==>
+  ?v. sb = sm /\ saved = ext_call_arg_value (lowered_value_type ce e) vv /\
+    gas_marked_exec T (ctx,func) (read_result cx raw)
+      (ee,s) [] (INL v) ee (OK s) /\
+    vv_holds ce cx (lowered_value_type ce e) (Value v) saved ee s /\
+    vv_store_bound cx (lowered_value_type ce e) (lowered_value_type ce e)
+      ee (Value v) saved s /\ vv_storage_live cx saved ee s
+Proof
+  strip_tac >>
+  `sb = sm /\ saved = ext_call_arg_value (lowered_value_type ce e) vv` by
+    metis_tac[extcall_nonword_snapshot_no_copy,pairTheory.PAIR_EQ] >>
+  drule vv_post_read_ok >> strip_tac >>
+  `value_has_type ltv v /\ val_wf ltv v` by
+    metis_tac[value_has_type_memory_wf] >>
+  drule_all vv_post_read_result >> strip_tac >>
+  `vv_holds ce cx (post_value_type ce e) (Value v) vv ee s /\
+   vv_storage_live cx vv ee s` by gvs[vv_post_def] >>
+  `!tag p. vv = LocatedValue tag p /\ p.ptr_location <> LocMemory ==>
+    post_value_type ce e = lowered_value_type ce e` by
+    (rpt strip_tac >> gvs[vv_holds_def] >> metis_tac[]) >>
+  `evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv /\
+   ~is_word_type (post_value_type ce e)` by simp[] >>
+  `vv_holds ce cx (lowered_value_type ce e) (Value v) vv ee s` by
+    (drule_all extcall_nonword_lowered_holds >> simp[]) >>
+  `vv_store_bound cx (lowered_value_type ce e) (lowered_value_type ce e)
+    ee (Value v) vv s` by
+    (drule_all extcall_vv_bound_lowered_value >> simp[]) >>
+  drule_all extcall_arg_value_capture >> strip_tac >>
+  qexists_tac `v` >> simp[] >>
+  simp[gas_marked_exec_def,gas_marked_path_def,cj 1 gas_path_mem_rules] >>
+  drule read_result_gas_obs >> simp[]
 QED
 
 Theorem extcall_default_keyword_read_mem:
