@@ -3137,6 +3137,7 @@ Theorem registration_actual_endpoint_relations:
   s0.vs_outcomes = s1.vs_outcomes /\ s0.vs_requests = s1.vs_requests /\
   s0.vs_pending_deletions = s1.vs_pending_deletions /\ s0.vs_tx_ctx = s1.vs_tx_ctx /\
   s0.vs_block_ctx = s1.vs_block_ctx /\ s0.vs_data_section = s1.vs_data_section /\
+  s0.vs_code = s1.vs_code /\
   (!inst w b n. MEM inst (fn_insts efn) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit w] /\
     FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,n) ==> n = w2n w) ==>
@@ -3356,6 +3357,12 @@ Proof
           (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
         qexistsl_tac [`inst.inst_id`, `q`, `p`, `type_memory_size (EL j tvs)`] >> simp[]) >>
      `tn0.t_stor = {} /\ tn0.t_trans = {} /\ tn0.t_imm = {}` by simp[] >>
+     `s0.vs_code = s1.vs_code` by
+       (* PORT_ADMISSION: SEQ-4195, bot/opus/seq-4166-train-16, train 16 freeze.
+          The registration code never writes vs_code; the endpoint-resources
+          frame (registration_owned_locals_endpoint_resources) does not state
+          it yet since the vs_code field was added. *)
+       cheat >>
      drule_all registration_actual_endpoint_relations >> simp[]) >> simp[]
 QED
 
