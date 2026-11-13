@@ -13,6 +13,8 @@ Ancestors
   calldataExactStatic calldataExactBulkPack calldataSourceDecisions
   vyperValue valueEncodingProps
   abiDecoderCoherence abiDecoderFrame exprLowering vyperTyping valueEncodingDefs compileEnv
+  calldataExactMembers calldataExactDyn calldataRecursiveProducers
+  abiDecoderAppend abiDecoderMemberInfos
 
 Theorem calldata_bulk_live_frag_mem_mod_guard:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -489,5 +491,46 @@ Theorem calldata_exact_owned_run:
     (!q k. MEM (q,k) sc ==> ?id. st.cs_next_id <= id /\ id < final.cs_next_id /\
       FLOOKUP v.vs_allocas id = SOME (q,k))
 Proof
+  ho_match_mp_tac calldata_coherent_induction >>
+  conj_tac >- suspend "base" >>
+  conj_tac >- suspend "flag" >>
+  conj_tac >- suspend "array" >>
+  conj_tac >- suspend "tuple" >>
+  suspend "struct"
+QED
+
+Resume calldata_exact_owned_run[base]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `abi_decoder_coherent ce env sf (BaseT bt) (BaseTV bt)` by
+    (irule (cj 1 abi_decoder_coherent_rules) >> asm_rewrite_tac[]) >>
+  Cases_on `is_word_type (BaseT bt)`
+  >- (drule_all calldata_exact_word_owned_run >> disch_then ACCEPT_TAC) >>
+  `is_bytestring_type (BaseT bt)` by
+    (qpat_x_assum `~is_word_type _` mp_tac >>
+     qpat_x_assum `abi_decoder_scalar_valid _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `bt` >> simp[is_word_type_def, is_bytestring_type_def] >>
+     Cases_on `b` >> simp[abi_decoder_scalar_valid_def, is_word_type_def, is_bytestring_type_def]) >>
+  drule_all calldata_exact_bytestring_owned_run >> disch_then ACCEPT_TAC
+QED
+
+Resume calldata_exact_owned_run[flag]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `abi_decoder_coherent ce env sf (FlagT nsid) (FlagTV n)` by
+    (irule (cj 2 abi_decoder_coherent_rules) >> asm_rewrite_tac[]) >>
+  `is_word_type (FlagT nsid)` by simp[is_word_type_def] >>
+  drule_all calldata_exact_word_owned_run >> disch_then ACCEPT_TAC
+QED
+
+Resume calldata_exact_owned_run[array]:
   cheat
 QED
+Resume calldata_exact_owned_run[tuple]:
+  cheat
+QED
+Resume calldata_exact_owned_run[struct]:
+  cheat
+QED
+Finalise calldata_exact_owned_run
