@@ -375,16 +375,39 @@ Resume extcall_materialize_vv_mem[registered]:
     (qpat_x_assum `!a k. _ ==> mem_bytes_at a k z'.vs_memory = _`
        (qspecl_then [`off`, `len`] irule) >> simp[]) >>
   `mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory` by
-    (qpat_x_assum `!aid b sz off len. _ ==> mem_bytes_at off len z.vs_memory = _`
+    (`aid < sm.cs_next_id` by decide_tac >>
+     `FLOOKUP u.vs_allocas aid = SOME (b,sz)` by metis_tac[] >>
+     qpat_x_assum `!aid b sz off len. _ ==> mem_bytes_at off len z.vs_memory = _`
        (qspecl_then [`aid`, `b`, `sz`, `off`, `len`] irule) >>
-     qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
-     conj_tac >- decide_tac >> metis_tac[]) >>
+     qexistsl_tac [`aid`, `b`, `sz`] >> simp[]) >>
   simp[]
 QED
 Resume extcall_materialize_vv_mem[locals]:
-  FAIL_TAC "inspect"
+  map_every qx_gen_tac [`name`, `b`, `sz`, `off`, `len`] >> strip_tac >>
+  `local_region ce es.scopes u name b sz` by metis_tac[] >>
+  `regions_disjoint (w2n w) (type_memory_size tv) b sz` by metis_tac[] >>
+  `off + len <= w2n w \/ w2n w + type_memory_size tv <= off` by
+    (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `mem_bytes_at off len z'.vs_memory = mem_bytes_at off len z.vs_memory` by
+    (qpat_x_assum `!a k. _ ==> mem_bytes_at a k z'.vs_memory = _`
+       (qspecl_then [`off`, `len`] irule) >> simp[]) >>
+  `mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory` by
+    (qpat_x_assum `!name b sz off len. _ ==> mem_bytes_at off len z.vs_memory = _`
+       (qspecl_then [`name`, `b`, `sz`, `off`, `len`] mp_tac) >> simp[]) >>
+  simp[]
 QED
 Resume extcall_materialize_vv_mem[immutables]:
-  FAIL_TAC "inspect"
+  map_every qx_gen_tac [`name`, `io`, `itv`, `iv`, `off`, `len`] >> strip_tac >>
+  `regions_disjoint io (type_memory_size itv) (w2n w) (type_memory_size tv)` by
+    metis_tac[] >>
+  `off + len <= w2n w \/ w2n w + type_memory_size tv <= off` by
+    (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `mem_bytes_at off len z'.vs_memory = mem_bytes_at off len z.vs_memory` by
+    (qpat_x_assum `!a k. _ ==> mem_bytes_at a k z'.vs_memory = _`
+       (qspecl_then [`off`, `len`] irule) >> simp[]) >>
+  `mem_bytes_at off len z.vs_memory = mem_bytes_at off len u.vs_memory` by
+    (qpat_x_assum `!name io itv iv off len. _ ==> mem_bytes_at off len z.vs_memory = _`
+       (qspecl_then [`name`, `io`, `itv`, `iv`, `off`, `len`] mp_tac) >> simp[]) >>
+  simp[]
 QED
 Finalise extcall_materialize_vv_mem
