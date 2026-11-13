@@ -3220,7 +3220,7 @@ Proof
       gvs[compile_uint2str_singleton] >> pairarg_tac >> gvs[] >> metis_tac[]) >>
   conj_tac
   >-   (rpt strip_tac >>
-      qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+      qmatch_asmsub_rename_tac `valid_horizon cx st0 H0 es'.storage_trace` >>
       qmatch_asmsub_rename_tac `bind _ _ (es with gas_obs := gs0) = (INL v0, es1)` >>
       `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
         simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
