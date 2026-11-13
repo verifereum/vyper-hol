@@ -14,7 +14,7 @@ Ancestors
   finite_map  allocLimits bodySim exprSimHyps
   vyperTypeSystem vyperTypeInvariants memoryLocalRhsProps
   supportedStmtTraverse supportedExprTraverse vyperTypeCallGraph
-  vyperTypeCallStackSoundness vyperInterpreter vyperState
+  vyperTypeCallStackSoundness vyperInterpreter vyperState vyperStorageFootprint
 
 Theorem body_decl_zero_gas_path:
   fn_has_code sa sb func /\ same_blocks sa sb /\
@@ -65,6 +65,8 @@ Theorem annassign_setup_body_gas_path_mem:
     not_local_ptr c es.scopes p /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx /\
     ?w. lookup_var p t = SOME w /\
       FLOOKUP t.vs_allocas st.cs_next_id = SOME (w2n w,type_memory_bytes ce ty) /\
       w2n w + type_memory_bytes ce ty <= t.vs_alloca_next
@@ -93,7 +95,9 @@ Proof
   `alloca_history func (t with vs_inst_idx := LENGTH sA.cs_current_insts)` by
     (irule body_store_memory_history >> simp[same_blocks_def, is_terminator_def] >>
      qexistsl_tac [`s`, `sa`] >> simp[is_terminator_def] >> fs[stmt_state_rel_def, same_blocks_def]) >>
-  `t.vs_halted = s.vs_halted /\ t.vs_current_bb = s.vs_current_bb` by
+  `t.vs_halted = s.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
+   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `exec_alloca A s _ = OK t` mp_tac >>
      simp[exec_alloca_def, AllCaseEqs()] >> rpt strip_tac >>
      gvs[update_var_def]) >>
@@ -202,7 +206,9 @@ Theorem annassign_memory_store_body_path:
       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       return_buf_frame d cenv sb t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
@@ -215,7 +221,9 @@ Proof
     (irule body_stmt_state_rel_declare_store_frame >> simp[] >>
      qexistsl_tac [`inst`, `s`, `sa`, `w`] >> gs[] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
+  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality] >> metis_tac[]) >>
   `return_buf_frame d cenv sb t` by
@@ -270,6 +278,8 @@ Theorem compile_scratch_prefix_body_path:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                FLOOKUP t.vs_allocas aid = SOME b) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx /\
       val_wf tv v /\ ?w. eval_operand buf.buf_operand t = SOME w /\
         val_in_memory tv v (w2n w) t.vs_memory /\
         w2n w + n <= t.vs_alloca_next
@@ -347,7 +357,9 @@ Theorem annassign_memory_assign_body_path:
       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       return_buf_frame d cenv sb t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >> drule_all assign_memory_body_code >> strip_tac >>
   `cs_extends sa sn` by metis_tac[cs_extends_trans] >>
@@ -420,7 +432,9 @@ Theorem annassign_name_rhs_body_path:
       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       return_buf_frame d cenv sb t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all bodyNameMemoryFactsTheory.body_name_source_region >> strip_tac >>
@@ -433,4 +447,27 @@ Proof
   simp[eval_operand_def] >>
   qexists_tac `inst` >> simp[] >>
   fs[local_ptrs_reserved_def] >> metis_tac[]
+QED
+
+(* One endpoint serves every valid horizon of a trace.  The relation at the
+   endpoint t, known at one horizon H0, holds at any horizon H at which some
+   state u with the same accounts, transient storage, requests and call
+   context is related: the horizon-dependent part of the relation reads only
+   those fields.  u is what a single-horizon lemma gives at H. *)
+Theorem stmt_state_rel_lift_family:
+  !cx st0 tr ctx func cenv es s t H0.
+    (!H. valid_horizon cx st0 H tr ==>
+         ?u. stmt_state_rel H ctx func cenv cx es u /\
+             u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+             u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx) /\
+    stmt_state_rel H0 ctx func cenv cx es t /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx ==>
+    !H. valid_horizon cx st0 H tr ==> stmt_state_rel H ctx func cenv cx es t
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?u. _`
+    (qspec_then `H` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  metis_tac[exprLoweringPropsTheory.stmt_state_rel_fields_transport]
 QED

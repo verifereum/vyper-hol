@@ -2,7 +2,7 @@
 Theory bodyMemTbExtract32WordSuffix
 Ancestors
   bodyMemTbExtract32SuffixPost exprSimMemoryStack exprSimDefs exprSimMemDefs
-  loweringPosts compileEnv exprLowering vyperAST vyperInterpreter
+  exprSimUnwrap vyperStorageFootprint loweringPosts compileEnv exprLowering vyperAST vyperInterpreter
 
 Theorem extract32_word_suffix_success:
   compile_extract32_load l d off ca = (raw,cm) /\
@@ -10,7 +10,11 @@ Theorem extract32_word_suffix_success:
   fn_has_code ca cb func /\ fn_inst_ids_distinct func /\
   s.vs_current_bb = ca.cs_current_bb /\
   s.vs_inst_idx = LENGTH ca.cs_current_insts /\ alloca_history func s /\
-  stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es es' c0 s0 s /\
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es' s /\
+     storage_well_formed_on cx es' (FST H)) /\
+  (?H. valid_horizon cx st0 H es'.storage_trace) /\
+  wb_frame cenv es es' c0 s0 s /\
   (~expr_has_effect (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;ofs]) ==>
    pure_frame cenv func es c0 s0 s) /\
   local_ptrs_reserved cenv ca /\ c0.cs_next_var <= ca.cs_next_var /\
@@ -28,9 +32,10 @@ Theorem extract32_word_suffix_success:
   ?u. gas_path_mem ctx func s
         (LENGTH (FILTER (\i. i.inst_opcode = GAS)
           (emitted_insts ca cm ++ emitted_insts cm cb))) (OK u) /\
-    expr_post ctx func cenv cx
-      (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;ofs])
-      es c0 cb s0 es' v op u /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+       expr_post H ctx func cenv cx
+         (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;ofs])
+         es c0 cb s0 es' v op u) /\
     expr_store_bound cx (BaseT bt) v op u /\
     alloca_history func u /\ ~u.vs_halted /\
     u.vs_current_bb = cb.cs_current_bb /\
@@ -38,17 +43,26 @@ Theorem extract32_word_suffix_success:
     s.vs_alloca_next <= u.vs_alloca_next
 Proof
   strip_tac >>
+  `?H. valid_horizon cx st0 H es'.storage_trace` by metis_tac[] >>
   qpat_x_assum `~expr_has_effect _ ==> _` (assume_tac o SRULE []) >>
   drule_all (SRULE [] (Q.INST
     [`code` |-> `emitted_insts sa sc ++ emitted_insts sc sb`,
      `e` |-> `TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;ofs]`]
     extract32_suffix_success_entry) |> SRULE [expr_type_def]) >>
   disch_then (qspec_then `BaseT bt` strip_assume_tac) >>
-  qexists_tac `u` >> simp[] >>
-  fs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-     expr_store_bound_def, vv_store_bound_def, expr_type_def,
-     vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
-  metis_tac[]
+  qexists_tac `u` >> rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- (qx_gen_tac `H1` >> strip_tac >>
+      qpat_x_assum `!H. valid_horizon cx st0 H es'.storage_trace ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (qspec_then `H1` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >>
+      strip_tac >> drule expr_post_of_vv_post_stack >> simp[])
+  >- simp[expr_store_bound_def]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
 QED
 
 Theorem extract32_word_suffix_revert:

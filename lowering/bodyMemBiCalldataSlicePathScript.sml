@@ -12,6 +12,7 @@ Ancestors
   exprSimMemDefs instMemFrontier vyperInterpreter exprLowering valueCopy
   venomMemDefs bodyUnopFragMemory fragGasSeqMem fragGasMode
   allocaHistoryFragment rich_list
+  vyperStorageTrace vyperStorageFootprint
 
 (* Original: exprSimCalldataSlice.slice_calldata_vv_post [local]. *)
 Theorem slice_calldata_vv_capacity:
@@ -48,8 +49,27 @@ Proof
   simp[emitted_insts_def, DROP_APPEND1, mk_inst_def]
 QED
 
+(* The run result is one state, so the relation at any horizon follows from
+   the relation of the start state there. *)
+Theorem slice_state_rel_any_horizon[local]:
+  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa = (ptr,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
+  context_well_typed cx /\ 0 < n /\ n < dimword (:256) /\ a < dimword (:256) /\
+  32 + 32 * word_size n < 2 ** 64 /\
+  eval_operand op s = SOME (n2w a) /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\
+  ~(dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  stmt_state_rel H ctx func cenv cx es t
+Proof
+  strip_tac >> drule_all slice_calldata_run >>
+  qpat_x_assum `~(_ \/ _)` (fn th => simp[th]) >>
+  strip_tac >> gvs[]
+QED
+
 Theorem slice_calldata_path_mem:
-  !ctx func cenv cx e es sa sb op p n a s0 bres.
+  !ctx func cenv cx e es sa sb op p n a s0 bres st0 tr.
   compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa =
     (p.ptr_operand,sb) /\ p.ptr_location = LocMemory /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\
@@ -60,14 +80,17 @@ Theorem slice_calldata_path_mem:
   (!x. op = Var x ==> not_fresh_at sa x) /\
   bres = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
            INL v => INL v | INR err => INR (Error err)) /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ eval_operand op s0 = SOME (n2w a) /\
+  (!H. valid_horizon cx st0 H tr ==> stmt_state_rel H ctx func cenv cx es s0) /\
+  (?H. valid_horizon cx st0 H tr) /\ eval_operand op s0 = SOME (n2w a) /\
   alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?m r. gas_marked_path T ctx func s0 m r /\
     ((?u. r = OK u /\
-          (?rv. bres = INL rv /\ vv_post H ctx func cenv cx e es sa sb s0 es
-             (Value rv) (LocatedValue (expr_type e) p) u /\
+          (?rv. bres = INL rv /\
+             (!H. valid_horizon cx st0 H tr ==>
+                vv_post H ctx func cenv cx e es sa sb s0 es
+                  (Value rv) (LocatedValue (expr_type e) p) u) /\
              vv_store_bound cx (expr_type e) (expr_type e) es (Value rv)
                (LocatedValue (expr_type e) p) u) /\
           alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
@@ -76,6 +99,10 @@ Theorem slice_calldata_path_mem:
      (exit_result r /\ expr_exit bres r))
 Proof
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _`
+    (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   drule slice_calldata_shape >> strip_tac >>
   `?bb rest. lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
      DROP s0.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest` by
@@ -137,24 +164,46 @@ Resume slice_calldata_path_mem[success]:
      `step_inst 0 ctx i ss1 = OK ss2` by simp[step_inst_non_invoke] >>
      drule venomInstProofsTheory.step_preserves_control_flow >> simp[]) >>
   `a+n <= LENGTH cx.txn.calldata` by decide_tac >>
-  `!j. vv_post H ctx func cenv cx e es sa sb s0 es
+  `~(dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n)` by
+    (simp[wordsTheory.dimword_def] >> decide_tac) >>
+  `!H. valid_horizon cx st0 H tr ==> !j.
+     vv_post H ctx func cenv cx e es sa sb s0 es
      (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
      (LocatedValue (expr_type e) p) (t with vs_inst_idx := j)` by
-    (irule slice_calldata_vv_post >> simp[] >>
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es t` by
+       (rpt (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac) >>
+        drule_all slice_state_rel_any_horizon >> strip_tac >>
+        first_assum ACCEPT_TAC) >>
+     irule slice_calldata_vv_post >> simp[] >>
      conj_tac >- first_assum ACCEPT_TAC >>
      qexists_tac `sa.cs_next_id + 7` >>
      conj_tac >- simp[] >> conj_tac >- simp[] >>
      conj_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+  `(!H. valid_horizon cx st0 H tr ==>
+     vv_post H ctx func cenv cx e es sa sb s0 es
+     (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
+     (LocatedValue (expr_type e) p)
+     (t with vs_inst_idx := s0.vs_inst_idx + LENGTH (emitted_insts sa sb))) <=> T` by
+    (REWRITE_TAC[EQ_CLAUSES] >> rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> !j. _`
+       (drule_then (qspec_then `s0.vs_inst_idx + LENGTH (emitted_insts sa sb)`
+                      ACCEPT_TAC))) >>
   qexistsl_tac [`k`, `OK (t with vs_inst_idx := s0.vs_inst_idx +
                                   LENGTH (emitted_insts sa sb))`] >>
   simp[] >> disj1_tac >>
   simp[same_blocks_def, evaluate_calldata_slice_uint] >>
   qpat_x_assum `expr_type e = _` (assume_tac o GSYM) >>
   asm_rewrite_tac[] >>
-  `vv_post H ctx func cenv cx e es sa sb s0 es
+  `vv_post H0 ctx func cenv cx e es sa sb s0 es
      (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
      (LocatedValue (expr_type e) p) t` by
-    (first_x_assum (qspec_then `t.vs_inst_idx` mp_tac) >>
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> !j. _` (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (qspec_then `t.vs_inst_idx` mp_tac) >>
      simp[venom_state_component_equality]) >>
   simp[] >> reverse conj_tac
   >- (reverse conj_tac >- fs[same_blocks_def] >>

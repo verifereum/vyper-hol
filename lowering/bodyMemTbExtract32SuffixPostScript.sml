@@ -8,9 +8,9 @@ Ancestors
   bodyMemTbExtract32Readonly
 
 Theorem extract32_operands_frame:
-  expr_post ctx func cenv cx src es sa s1 s0 es1 v1 src_op s /\
-  expr_post ctx func cenv cx off es1 s2 s3 u es2 v2 off_op t /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  expr_post H ctx func cenv cx src es sa s1 s0 es1 v1 src_op s /\
+  expr_post H ctx func cenv cx off es1 s2 s3 u es2 v2 off_op t /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   ci_mono sa s1 /\ ci_mono s1 s2 /\
   (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
@@ -31,9 +31,9 @@ Proof
 QED
 
 Theorem extract32_operands_pure_frame:
-  expr_post ctx func cenv cx src es sa s1 s0 es1 v1 src_op s /\
-  expr_post ctx func cenv cx off es1 s2 s3 u es2 v2 off_op t /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  expr_post H ctx func cenv cx src es sa s1 s0 es1 v1 src_op s /\
+  expr_post H ctx func cenv cx off es1 s2 s3 u es2 v2 off_op t /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   ci_mono sa s1 /\ ci_mono s1 s2 /\
   (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
@@ -59,14 +59,15 @@ Proof
 QED
 
 Theorem extract32_suffix_word_post:
-  stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es es' sa s0 s /\
+  stmt_state_rel H ctx func cenv cx es' s /\
+  storage_well_formed_on cx es' (FST H) /\ wb_frame cenv es es' sa s0 s /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   t = s with vs_vars := t.vs_vars /\
   (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
   eval_operand op t = SOME (typed_val_to_w256 (BaseTV bt) v) /\
   expr_type e = BaseT bt /\ is_word_type (BaseT bt) ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' (Value v) (StackValue (BaseT bt) op)
+  vv_post H ctx func cenv cx e es sa sb s0 es' (Value v) (StackValue (BaseT bt) op)
     (t with vs_inst_idx := n) /\
   vv_store_bound cx (BaseT bt) lt es' (Value v) (StackValue (BaseT bt) op)
     (t with vs_inst_idx := n)
@@ -74,7 +75,7 @@ Proof
   strip_tac >>
   `(t with vs_vars := s.vs_vars) = s` by
     (qpat_x_assum `t = s with vs_vars := _` SUBST1_TAC >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es' (t with vs_inst_idx := n)` by
+  `stmt_state_rel H ctx func cenv cx es' (t with vs_inst_idx := n)` by
     (irule extract32_snapshot_entry_frame >> goal_assum (drule_at Any) >>
      qexists_tac `sm` >> simp[]) >>
   `wb_frame cenv es es' sa s0 (t with vs_inst_idx := n)` by
@@ -157,7 +158,11 @@ Theorem extract32_suffix_success_entry:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s /\
-  stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es es' s0c s0 s /\
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es' s /\
+     storage_well_formed_on cx es' (FST H)) /\
+  (?H. valid_horizon cx st0 H es'.storage_trace) /\
+  wb_frame cenv es es' s0c s0 s /\
   (~expr_has_effect e ==> pure_frame cenv func es s0c s0 s) /\
   local_ptrs_reserved cenv sa /\ s0c.cs_next_var <= sa.cs_next_var /\
   expr_type e = BaseT bt /\ is_word_type (BaseT bt) /\
@@ -172,8 +177,9 @@ Theorem extract32_suffix_success_entry:
   extract32_result_base_ok bt /\ well_formed_type tenv (BaseT bt) /\
   evaluate_extract32 bs n bt = INL v /\ ~s.vs_halted ==>
   ?u. gas_path_mem ctx func s (LENGTH (FILTER (\i. i.inst_opcode = GAS) code)) (OK u) /\
-    vv_post ctx func cenv cx e es s0c sb s0 es' (Value v)
-      (StackValue (BaseT bt) op) u /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+       vv_post H ctx func cenv cx e es s0c sb s0 es' (Value v)
+         (StackValue (BaseT bt) op) u) /\
     vv_store_bound cx (BaseT bt) lt es' (Value v) (StackValue (BaseT bt) op) u /\
     alloca_history func u /\ ~u.vs_halted /\
     u.vs_current_bb = sb.cs_current_bb /\
@@ -186,13 +192,29 @@ Proof
   drule_all extract32_suffix_success_separated_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `DROP s.vs_inst_idx bb.bb_instructions = code ++ rest` by simp[] >>
-  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `alloca_inv s` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+     qpat_x_assum `stmt_state_rel _ ctx func cenv cx es' s`
+       (strip_assume_tac o REWRITE_RULE [stmt_state_rel_def]) >>
+     first_assum ACCEPT_TAC) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) code` by
     (drule_all extract32_suffix_output_range >> strip_tac >>
      fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
      res_tac >> gvs[venomInstTheory.is_terminator_def]) >>
   drule_all alloca_history_run_inst_seq >> strip_tac >>
-  drule_all extract32_suffix_word_post >> strip_tac >>
+  `!H. valid_horizon cx st0 H es'.storage_trace ==>
+       vv_post H ctx func cenv cx e es s0c sb s0 es' (Value v)
+         (StackValue (BaseT bt) op) (t with vs_inst_idx := s.vs_inst_idx + LENGTH code)` by
+    (qx_gen_tac `H1` >> strip_tac >>
+     qpat_x_assum `!H. valid_horizon cx st0 H es'.storage_trace ==>
+                       stmt_state_rel H ctx func cenv cx es' s /\
+                       storage_well_formed_on cx es' (FST H)`
+       (qspec_then `H1` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     drule_all extract32_suffix_word_post >> strip_tac >> metis_tac[]) >>
+  `vv_store_bound cx (BaseT bt) lt es' (Value v) (StackValue (BaseT bt) op)
+     (t with vs_inst_idx := s.vs_inst_idx + LENGTH code)` by
+    metis_tac[vv_store_bound_stack_word] >>
   qexists_tac `t with vs_inst_idx := s.vs_inst_idx + LENGTH code` >>
   gvs[] >> qpat_x_assum `t = s with vs_vars := _` SUBST1_TAC >>
   fs[eval_operand_def, fresh_vars_wrt_def]
