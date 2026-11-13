@@ -22183,6 +22183,97 @@ Proof
 QED
 
 
+Theorem mm_local_payload_due_extent[local]:
+  mm_local_group_coverage is n cap g /\
+  mm_local_group_endpoint is n cap g /\
+  ws = MAP (THE o cap) js /\
+  (!j. MEM j js ==> IS_SOME (cap j)) /\
+  (!j d bs. (MEM j js /\ cap j = SOME (d,bs)) <=>
+    (j < n /\ j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+     cap j = SOME (d,bs))) ==>
+  (!a. (g.cg_dst <= a /\ a < g.cg_dst + g.cg_length) <=>
+    ?d bs. MEM (d,bs) ws /\ d <= a /\ a < d + LENGTH bs) /\
+  (!d bs. MEM (d,bs) ws ==> d + LENGTH bs <= g.cg_dst + g.cg_length) /\
+  MAX_LIST (MAP (\(d,bs). d + LENGTH bs) ws) = g.cg_dst + g.cg_length
+Proof
+  strip_tac >>
+  `!d bs. MEM (d,bs) ws <=> ?j. MEM j js /\ cap j = SOME (d,bs)` by
+    (gvs[MEM_MAP] >> rpt gen_tac >> eq_tac
+     >- (strip_tac >> rename1 `MEM j js` >>
+         `IS_SOME (cap j)` by metis_tac[] >>
+         Cases_on `cap j` >> gvs[] >> metis_tac[]) >>
+     strip_tac >> qexists `j` >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `ws = _` kall_tac >>
+  fs[mm_local_group_coverage_def, mm_local_group_endpoint_def] >>
+  conj_tac >- metis_tac[] >>
+  irule mm_local_write_log_endpoint >> metis_tac[]
+QED
+
+Theorem mm_local_payload_due_realize[local]:
+  mm_local_group_captures is cap B g /\
+  mm_local_group_coverage is n cap g /\
+  mm_local_group_endpoint is n cap g /\
+  ws = MAP (THE o cap) js /\
+  (!j. MEM j js ==> IS_SOME (cap j)) /\
+  (!j d bs. (MEM j js /\ cap j = SOME (d,bs)) <=>
+    (j < n /\ j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+     cap j = SOME (d,bs))) ==>
+  FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws =
+    write_memory_with_expansion g.cg_dst (mm_local_bytes B g.cg_src g.cg_length) v
+Proof
+  strip_tac >>
+  drule_all mm_local_payload_due_extent >> strip_tac >>
+  irule mm_local_write_log_realize >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `?j. MEM j js /\ cap j = SOME (d,bs)` by
+    (gvs[MEM_MAP] >> rename1 `MEM j js` >>
+     `IS_SOME (cap j)` by metis_tac[] >>
+     Cases_on `cap j` >> gvs[] >> metis_tac[]) >>
+  fs[mm_local_group_captures_def] >> metis_tac[]
+QED
+
+Theorem mm_local_payload_representative_discharge[local]:
+  mm_local_pending cap js s t /\ cap r = SOME (d,bs) /\
+  survivors = FILTER (\j. ~P j) js /\
+  (!pre j mid k post a cs b ds.
+    js = pre ++ [j] ++ mid ++ [k] ++ post /\ ~P j /\ P k /\
+    cap j = SOME (a,cs) /\ cap k = SOME (b,ds) ==>
+    mm_local_write_compatible a cs b ds) /\
+  (!j a cs. MEM j survivors /\ cap j = SOME (a,cs) ==>
+    mm_local_write_compatible a cs d bs) /\
+  (!v. FOLDL (\st (a,cs). write_memory_with_expansion a cs st) v
+    (MAP (THE o cap) (FILTER P js ++ [r])) =
+    write_memory_with_expansion dst merged v) /\
+  s'.vs_memory = (write_memory_with_expansion d bs s).vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion dst merged t).vs_memory ==>
+  mm_local_pending cap survivors s' t'
+Proof
+  strip_tac >>
+  `EVERY (\j. IS_SOME (cap j)) js` by
+    (gvs[mm_local_pending_def] >> metis_tac[mm_local_capture_log_canonical]) >>
+  `!Q. LIST_REL (\j w. cap j = SOME w) (FILTER Q js)
+      (MAP (THE o cap) (FILTER Q js))` by
+    (gen_tac >> simp[LIST_REL_MAP2] >> irule EVERY2_refl >>
+     simp[EVERY_MEM, MEM_FILTER] >> qx_gen_tac `j` >> strip_tac >>
+     `IS_SOME (cap j)` by gvs[EVERY_MEM] >>
+     Cases_on `cap j` >> gvs[]) >>
+  qpat_x_assum `survivors = _` SUBST_ALL_TAC >>
+  irule mm_local_pending_compatible_discharge_filter >>
+  conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+  qexistsl [`d`,`dst`,`merged`,
+    `MAP (THE o cap) (FILTER P js)`,`bs`,
+    `MAP (THE o cap) (FILTER (\j. ~P j) js)`,`s`,`t`] >>
+  simp[] >> conj_tac
+  >- (gen_tac >>
+      qpat_x_assum `!v. FOLDL _ _ _ = _` (qspec_then `v` mp_tac) >>
+      simp[MAP_APPEND, FOLDL_APPEND]) >>
+  simp[EVERY_MAP, EVERY_MEM] >> qx_gen_tac `j` >> strip_tac >>
+  `IS_SOME (cap j)` by gvs[EVERY_MEM, MEM_FILTER] >>
+  Cases_on `cap j` >> gvs[] >> PairCases_on `x` >>
+  gvs[] >> metis_tac[]
+QED
+
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
