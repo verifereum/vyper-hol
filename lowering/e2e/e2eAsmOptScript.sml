@@ -225,9 +225,7 @@ Proof
          mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
            out.po_unit.cu_context vs` by
     (fs[o1_lowered_inv_def, mem_inv_raw_reachable] >>
-     rpt strip_tac >> first_x_assum drule >>
-     drule ctxLookupAgreeTheory.raw_reachable_initial_fmp >>
-     simp[lowered_mem_fact_def]) >>
+     rpt strip_tac >> first_x_assum drule >> simp[static_mem_ok_lowered]) >>
   gvs[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
   metis_tac[mem_inv_codegen_obligations, step_write_footprint_holds]
 QED
