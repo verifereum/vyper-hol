@@ -7,9 +7,14 @@
 Theory bodyMemIntCallReturnDirect
 Ancestors
   bodyMemoryDefs intCallReturnMem stmtSimReturn compileEnv valueEncoding
-  compileVyper
+  compileVyper internalReturnSummaryMem internalReturnVoidBoundaryMem
+  internalReturnBufferBoundaryMem
+  internalReturnWordBoundaryMem internalReturnTupleBoundaryMem
+  exprLoweringProps stmtSimDefs fragExec stmtLoweringMono
+  returnValueTyped vyperTypeSystem vyperTypeInvariants exprSimHypsDefs
+  externalReturnPrefix valueCopyBytes
 
-(* ADMITTED (leaf): the internal twin of loweringMemFrameRet's
+(* The internal twin of loweringMemFrameRet's
    external_frame_ret_ok_mem's direct returns.  The compile env returns
    internally (RET to the return PC), with the stack-return count of the
    declared return type, and has a return buffer exactly when that count
@@ -62,5 +67,33 @@ Theorem internal_return_direct_mem:
          | SOME (bw,cap) => intret_mem_q func cenv cx ret_tv bw)
       cenv' (stmt_env cenv' lctx ret_ty (Return eo)) (eval_stmt cx (Return eo)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `eo`
+  >- (`ret_ty = NoneT` by gvs[type_stmt_def, AllCaseEqs()] >>
+      `rb = NONE` by (Cases_on `rb` >> gvs[]) >> gvs[] >>
+      irule internal_return_none_summary_mem >>
+      simp[intret_q_gas_obs] >>
+      reverse conj_tac >- (rw[intret_q_def] >> simp[exit_result_def]) >>
+      rpt strip_tac >> irule internal_return_void_boundary_mem >> metis_tac[]) >>
+  rename1 `Return (SOME e)` >>
+  irule internal_return_value_counted_mem >>
+  simp[] >> conj_tac >- metis_tac[return_value_code_prefix] >>
+  reverse conj_tac
+  >- (Cases_on `rb`
+      >- (simp[intret_q_gas_obs] >> rw[intret_q_def] >> simp[exit_result_def]) >>
+      PairCases_on `x` >> simp[intret_mem_q_gas_obs] >>
+      rw[intret_mem_q_def, intret_q_def] >> simp[exit_result_def]) >>
+  rpt gen_tac >> strip_tac >>
+  drule_all internal_return_buffer_value_types >> strip_tac >>
+  `ret_ty <> NoneT` by fs[type_stmt_def, AllCaseEqs()] >>
+  Cases_on `rb`
+  >- (Cases_on `is_word_type ret_ty`
+      >- (fs[] >> irule internal_return_word_boundary_mem >> metis_tac[]) >>
+      fs[] >> `0 < cenv.ce_returns_count` by decide_tac >>
+      irule internal_return_tuple_boundary_mem >> metis_tac[]) >>
+  PairCases_on `x` >> fs[] >>
+  `~is_word_type ret_ty` by
+    (spose_not_then assume_tac >> Cases_on `ret_ty` >>
+     fs[returns_stack_count_def, is_word_type_def]) >>
+  irule internal_return_buffer_boundary_mem >> simp[] >> metis_tac[]
 QED

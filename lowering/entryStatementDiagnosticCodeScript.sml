@@ -31,21 +31,22 @@ Proof
   irule entry_code_bind >> reverse conj_tac
   >- (irule entry_code_lower_value >> metis_tac[]) >>
   rpt gen_tac >> BETA_TAC >>
+  irule entry_code_bind >> reverse conj_tac
+  >- rw[compile_log_save_arg_def, entry_code_return, entry_code_materialize_vv] >>
+  rpt gen_tac >> BETA_TAC >>
   irule entry_code_bind >> reverse conj_tac >- (first_x_assum irule >> metis_tac[]) >>
   simp[entry_code_return]
 QED
 
 Theorem entry_code_log_store_data:
-  !ops offset. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_log_store_data ce ops buf offset)
+  !ce ops tys buf offset. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_log_store_data ce ops tys buf offset)
 Proof
-  Induct >> simp[compile_log_store_data_def, entry_code_return,
-                 comp_ignore_bind_def] >> rpt gen_tac >>
-  irule entry_code_bind >> reverse conj_tac >- simp[entry_code_emit_op] >>
-  rpt gen_tac >> BETA_TAC >>
-  irule entry_code_bind >> reverse conj_tac
-  >- (rpt IF_CASES_TAC >> simp[entry_code_emit_void, entry_code_store_bytestring]) >>
-  simp[]
+  ho_match_mp_tac compile_log_store_data_ind >>
+  rw[compile_log_store_data_def, entry_code_return, entry_code_emit_void,
+     comp_ignore_bind_def] >>
+  irule entry_code_bind >> simp[entry_code_emit_op] >> rpt gen_tac >>
+  irule entry_code_bind >> gvs[entry_code_store_memory]
 QED
 
 Theorem entry_code_revert_with_reason:

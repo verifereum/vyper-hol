@@ -10,12 +10,16 @@ Theorem compile_subscript_array_place_base_mem_case:
   !ctx func cenv cx ann obj idx et bd.
     (!env ty es. expr_body_pre cenv cx env obj es ==>
                  expr_vv_sim_mem ctx func cenv cx ty obj es) /\
-    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              !env ty es. expr_body_pre cenv cx env idx es ==>
-                          expr_sim_mem ctx func cenv cx ty idx es) /\
+    (!s tv t s' tv' t'. eval_expr cx obj s = (INL tv, t) /\
+       (if subscript_reads_base cx obj idx
+        then bind (read_result cx tv) (\v. return (Value v))
+        else return tv) s' = (INL tv', t') ==>
+       !env ty es. expr_body_pre cenv cx env idx es ==>
+                   expr_sim_mem ctx func cenv cx ty idx es) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     post_value_type cenv obj = expr_type obj /\
-    ~((!t r t'. eval_expr cx idx t = (INL r, t') ==>
+    ~(~subscript_reads_base cx obj idx /\ ~copies_subscript_base cenv obj idx /\
+      (!t r t'. eval_expr cx idx t = (INL r, t') ==>
                 t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
       (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
       ((~cenv.ce_is_ctor /\

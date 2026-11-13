@@ -13,6 +13,6 @@ Proof
   gvs[Once well_typed_expr_def]
   >- (drule_all place_type_well_typed_on_defined >> simp[]) >>
   drule_all place_type_checked_place_on_defined >> strip_tac >>
-  drule type_place_expr_vtype_annotation >>
+  drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
   Cases_on `vt` >> gvs[value_type_place_def, vtype_annotation_ok_def]
 QED

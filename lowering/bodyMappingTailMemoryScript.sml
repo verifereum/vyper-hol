@@ -22,7 +22,7 @@ Proof
   strip_tac >>
   Cases_on `eval_operand base_op s` >-
     simp[run_inst_seq_mem_ok_cons, below_frontier_MSTORE,
-      step_inst_base_def, mk_inst_def, exec_write2_def] >>
+      step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def] >>
   rename1 `eval_operand base_op s = SOME w` >>
   `step_inst_base (mk_inst a MSTORE [Var x; base_op] []) s =
      OK (mstore p w s)` by
@@ -193,7 +193,7 @@ Proof
   imp_res_tac venomMemPropsTheory.step_inst_base_preserves_alloca_next >>
   gvs[mk_inst_def] >>
   qpat_x_assum `step_inst_base _ s = OK _` mp_tac >>
-  simp[step_inst_base_def] >>
+  simp[step_inst_base_opcode_eqs] >>
   strip_tac >> drule venomMemPropsTheory.exec_alloca_alloca_next_mono >> simp[]
 QED
 

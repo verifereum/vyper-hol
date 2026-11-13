@@ -79,9 +79,7 @@ Proof
      simp[vars_pc_only_def] >> strip_tac >>
      pop_assum (mp_tac o Q.AP_TERM `\s. s.vs_alloca_next`) >> simp[]) >>
   simp[alloca_inv_empty_proof] >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >> strip_tac >>
-  drule run_lowering_entry >> strip_tac >> gvs[] >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >> gvs[] >>
   irule validated_entry_alloca_frontier_inv >> simp[] >> metis_tac[]
 QED
 
@@ -92,9 +90,8 @@ Theorem runtime_entry_allocation_code_resources:
   ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts func))
 Proof
   strip_tac >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  conj_tac >- (drule run_lowering_alloca_budget >> simp[]) >>
-  drule run_lowering_context_ok >> strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  conj_tac >- (drule lowering_context_ok_alloca_budget >> simp[]) >>
   drule lowering_context_ok_static_integrity >> strip_tac >>
   irule ctx_inst_ids_distinct_fn >> simp[] >>
   metis_tac[lookup_function_MEM]

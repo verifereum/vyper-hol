@@ -1,28 +1,29 @@
 Theory entryRuntimeBodyCode
 Ancestors
   entryCodePredicate entryContextCodePredicate entryModuleScaffoldCode
-  moduleLowering compileEnv
+  entryReturnCode moduleLowering compileEnv
 
 Theorem entry_code_guarded_body:
   (!ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (compile_stmts ce lc rt fbody)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_guarded_body ce F key trans view fbody ret)
+    (compile_guarded_body ce nr key trans view fbody ret)
 Proof
-  strip_tac >> simp[compile_guarded_body_def, comp_ignore_bind_def] >>
+  strip_tac >> Cases_on `nr` >>
+  simp[compile_guarded_body_def, comp_ignore_bind_def] >>
   rpt (irule entry_code_bind >> reverse conj_tac
-    >- simp[entry_code_return, entry_code_get] >>
+    >- simp[entry_code_return, entry_code_get, entry_code_nonreentrant_lock] >>
     rpt gen_tac >> BETA_TAC) >>
   IF_CASES_TAC >> simp[entry_code_return] >>
   Cases_on `ret` >> irule entry_code_bind >>
-  simp[entry_code_return, entry_code_emit_inst]
+  simp[entry_code_return, entry_code_emit_inst, entry_code_nonreentrant_unlock]
 QED
 
 Theorem entry_code_external_function_body:
   (!ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (compile_stmts ce lc rt fbody)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_external_function_body ce args F key trans view fbody ret)
+    (compile_external_function_body ce args nr key trans view fbody ret)
 Proof
   strip_tac >> simp[compile_external_function_body_def] >>
   irule entry_code_bind >>
@@ -33,7 +34,7 @@ Theorem entry_code_fallback_body:
   (!ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (compile_stmts ce lc rt fbody)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_fallback_body ce payable F key trans view fbody ret)
+    (compile_fallback_body ce payable nr key trans view fbody ret)
 Proof
   strip_tac >> simp[compile_fallback_body_def, comp_ignore_bind_def] >>
   irule entry_code_bind >> reverse conj_tac
@@ -48,10 +49,11 @@ Theorem entry_code_internal_function:
   (!ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (compile_stmts ce lc rt fbody)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_internal_function ce params has_buf F key trans view F 0
+    (compile_internal_function ce params has_buf nr key trans view F 0
       fbody ret)
 Proof
-  strip_tac >> simp[compile_internal_function_def, comp_ignore_bind_def] >>
+  strip_tac >> Cases_on `nr` >>
+  simp[compile_internal_function_def, comp_ignore_bind_def] >> (
   irule entry_code_bind >> reverse conj_tac
   >- (IF_CASES_TAC >> simp[entry_code_return] >>
       irule entry_code_bind >> simp[entry_code_emit_op, entry_code_return]) >>
@@ -66,12 +68,14 @@ Proof
       irule entry_code_bind >> simp[entry_code_alloc_buffer, entry_code_return]) >>
   rpt gen_tac >> BETA_TAC >>
   rpt (irule entry_code_bind >> reverse conj_tac
-    >- simp[entry_code_return, entry_code_get] >> rpt gen_tac >> BETA_TAC) >>
+    >- simp[entry_code_return, entry_code_get, entry_code_nonreentrant_lock] >>
+    rpt gen_tac >> BETA_TAC) >>
   irule entry_code_bind >> reverse conj_tac
   >- (IF_CASES_TAC >> simp[entry_code_return] >>
       Cases_on `ret` >> irule entry_code_bind >>
-      simp[entry_code_return, entry_code_emit_inst]) >>
-  simp[entry_code_return]
+      simp[entry_code_return, entry_code_emit_inst,
+           entry_code_nonreentrant_unlock]) >>
+  simp[entry_code_return])
 QED
 
 Theorem entry_code_external_fn_bodies:

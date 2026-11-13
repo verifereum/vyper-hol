@@ -5,6 +5,7 @@ Ancestors
   exprLoweringProps loweringPosts fragGasMode compileEnv
 
 Theorem convert_dynamic_counted_cont_mem:
+  (~expr_has_effect e ==> ~expr_has_effect e1) /\
   ((expr_type e1 = BaseT (BytesT (Dynamic i))) \/
     expr_type e1 = BaseT (StringT i)) /\
   ((expr_type e = BaseT (BytesT (Dynamic n))) \/

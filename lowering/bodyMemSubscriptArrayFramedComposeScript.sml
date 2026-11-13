@@ -74,7 +74,8 @@ Theorem compile_subscript_array_framed_base_mem_case_from_suffix:
                           expr_sim_mem ctx func cenv cx ty idx es) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     post_value_type cenv obj = expr_type obj /\
-    ((!t r t'. eval_expr cx idx t = (INL r, t') ==>
+    (~subscript_reads_base cx obj idx /\ ~copies_subscript_base cenv obj idx /\
+      (!t r t'. eval_expr cx idx t = (INL r, t') ==>
                 t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
       (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
       ((~cenv.ce_is_ctor /\
@@ -116,7 +117,8 @@ Proof
     (mp_tac o REWRITE_RULE [expr_vv_sim_mem_def]) >>
   disch_then (qspecl_then [`sa`,`sm`,`bvv`,`s0`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  pure_once_rewrite_tac[eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
   irule gas_outcome_bind_result_exec >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
   simp[] >> conj_tac
@@ -145,7 +147,8 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[base_normal]:
     metis_tac[fn_has_code_split] >>
   `gas_admissible (bind (eval_expr cx idx) (read_result cx)) expr_res_ok
      (mid with gas_obs := [])` by
-    (irule subscript_result_index_admissible >>
+    (qpat_assum `~subscript_reads_base _ _ _`
+       (irule o MATCH_MP subscript_result_index_admissible) >>
      goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
      qexists_tac `expr_vv_res_ok` >> simp[subscript_result_predicates_exceptions] >>
      qexists_tac `ann` >> simp[]) >>

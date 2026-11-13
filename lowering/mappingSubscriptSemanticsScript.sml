@@ -77,5 +77,8 @@ Proof
      simp[] >> strip_tac >>
      first_x_assum (qspec_then `HashMapT kt vt` mp_tac) >>
      simp[eval_result_typed_def]) >>
+  qpat_assum `type_place_expr _ obj = _`
+    (strip_assume_tac o Q.SPECL [`cenv`, `idx`, `cx`] o
+     MATCH_MP map_base_no_overlap) >>
   drule_all subscript_result_index_admissible >> gvs[] >> metis_tac[]
 QED
