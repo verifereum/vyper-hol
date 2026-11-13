@@ -3,6 +3,7 @@ Theory bodyIntCallFamAggStructCode
 Ancestors
   bodyIntCallFamAggStructFields exprLoweringProps fragExec compileEnv pair
   exprSimHyps exprSimHypsDefs exprSimAggregateChildren vyperTypeInvariants
+  bodyIntCallFamStmtReturnTypes typedCopyCompatibility vyperTypeSystem exprSimSource
 
 Theorem compile_struct_lit_cons_code:
   ALOOKUP (get_struct_fields ce.ce_struct_fields
@@ -32,21 +33,30 @@ Proof
   metis_tac[fn_has_code_split, cs_extends_trans]
 QED
 
-(* The destination is the source annotation, not the possibly smaller
-   lowered representation.  Only the store compiler is normalized. *)
+(* The destination is the declared field type, which the source type fits;
+   only the store compiler is normalized. *)
 Theorem struct_child_store_types:
-  expr_body_pre ce cx env e es ==>
-  type_widens_to env.type_defs (expr_type e) (expr_type e) /\
-  type_widens_to (get_tenv cx) (post_value_type ce e) (expr_type e) /\
+  expr_body_pre ce cx env e es /\ arg_type_fits (expr_type e) dty /\
+  evaluate_type (get_tenv cx) dty = SOME dtv ==>
+  type_widens_to env.type_defs (expr_type e) dty /\
+  type_widens_to (get_tenv cx) (post_value_type ce e) dty /\
   (?tv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv) /\
-  compile_store_memory ce src dst (expr_type e) (lowered_value_type ce e) =
-  compile_store_memory ce src dst (expr_type e) (post_value_type ce e)
+  compile_store_memory ce src dst dty (lowered_value_type ce e) =
+  compile_store_memory ce src dst dty (post_value_type ce e)
 Proof
   strip_tac >>
-  `env.type_defs = get_tenv cx` by
+  `env.type_defs = get_tenv cx /\ well_typed_expr env e /\
+   sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
     fs[expr_body_pre_def, expr_sim_inv_def,
        env_consistent_def, env_context_consistent_def] >>
-  metis_tac[vyperTypeArgFitsTheory.type_widens_to_refl,
-    post_value_type_widens, post_type_evaluates,
-    compile_store_memory_post_type, expr_body_pre_def]
+  `type_widens_to env.type_defs (expr_type e) dty` by
+    fs[type_widens_to_def, well_formed_type_def] >>
+  `type_widens_to env.type_defs (post_value_type ce e) (expr_type e)` by
+    metis_tac[post_value_type_widens, expr_body_pre_def] >>
+  rpt conj_tac
+  >- simp[]
+  >- metis_tac[typedCopyCompatibilityTheory.type_widens_to_trans]
+  >- metis_tac[post_type_evaluates] >>
+  drule expr_body_pre_var_types_well_formed >> strip_tac >>
+  drule_all return_store_post_type >> simp[]
 QED

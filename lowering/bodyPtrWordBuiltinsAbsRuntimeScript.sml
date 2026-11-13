@@ -237,6 +237,7 @@ Proof
        vyperTypingTheory.value_has_type_def,
        vyperTypingTheory.well_formed_type_value_def,
        vyperValueTheory.within_int_bound_def, AllCaseEqs()] >>
+  conj_tac >- EVAL_TAC >>
   qexists_tac `[]` >>
   simp[vyperTypeCallGraphSoundnessTheory.call_edge_rel_def,
        vyperInterpreterTheory.lookup_function_def,

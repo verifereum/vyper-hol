@@ -73,7 +73,7 @@ Proof
   `step_inst_base (mk_inst (cs.cs_next_id+7) ADD
      [Var root;Var (slot_copy_var cs 4)] [slot_copy_var cs 5]) w =
      OK (update_var (slot_copy_var cs 5) (a+n2w off) w)` by
-    (gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
+    (gvs[lookup_var_def] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
                   eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst (cs.cs_next_id+6) MUL
      [Var (slot_copy_var cs 0);Lit 32w] [slot_copy_var cs 4]) s` by
@@ -125,7 +125,7 @@ Theorem copy_generated_destination_execution:
   OK (update_var (slot_copy_var cs 5) (a+n2w off)
         (update_var (slot_copy_var cs 4) (n2w off) s))
 Proof
-  strip_tac >>
+  strip_tac >> gvs[lookup_var_def] >>
   simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        eval_operand_def] >>
   simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,

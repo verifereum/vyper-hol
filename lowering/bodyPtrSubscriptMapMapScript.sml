@@ -52,7 +52,9 @@ Proof
      simp[vyperTypeInvariantsTheory.eval_result_typed_def]) >>
   `gas_admissible (bind (eval_expr cx idx) (read_result cx)) expr_res_ok
      (mid with gas_obs := [])` by
-    (irule exprSimSubscriptMapTheory.subscript_map_index_admissible >>
+    (`~subscript_reads_base cx obj idx` by
+       metis_tac[exprSimSubscriptMapTheory.map_base_no_overlap] >>
+     irule exprSimSubscriptMapTheory.subscript_map_index_admissible >>
      metis_tac[]) >>
   gvs[] >> metis_tac[]
 QED
@@ -89,6 +91,8 @@ Proof
      Cases_on `vt` >>
      simp[vyperTypeSystemTheory.subscript_vtype_def, AllCaseEqs()]) >>
   gvs[] >>
+  `~copies_subscript_base cenv e1 e2 /\ ~subscript_reads_base cx e1 e2` by
+    metis_tac[exprSimSubscriptMapTheory.map_base_no_overlap] >>
   rewrite_tac[expr_map_sim_ptr_def] >> rpt gen_tac >> strip_tac >>
   drule_all exprSimMapKeyTheory.compile_expr_mapping_subscript_parts >>
   strip_tac >> rename1 `compile_mapping_subscript _ hashed sp = (outop,sb)` >>
@@ -115,7 +119,8 @@ Proof
   rewrite_tac[expr_map_sim_ptr_def] >>
   disch_then (qspecl_then [`sa`, `sm`, `bvv`, `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  rewrite_tac[exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th => rewrite_tac[
+    MATCH_MP exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind th]) >>
   disch_then (mp_then Any irule
     bodyPtrSubscriptSeamMapComposeTheory.gas_outcome_result_cases_ptr) >>
   reverse conj_tac
