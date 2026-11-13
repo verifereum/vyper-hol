@@ -371,7 +371,7 @@ Resume held_bytestring_compare_sim_mem[third]:
      mp_tac (Q.SPECL [`H`, `ctx`, `func`, `cenv`, `cx`, `bop`, `e1`, `e2`,
         `es`, `mid`, `mid' with gas_obs := []`, `sa`, `s1`, `s2`, `sb`, `s0`,
         `t`, `t'`, `u`, `op`, `(if bop = Eq then (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) = word_of_bytes_be (Keccak_256_w64 bs2)
-      else (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) <> word_of_bytes_be (Keccak_256_w64 bs2))`] held_digest_compare_post) >>
+      else (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) <> word_of_bytes_be (Keccak_256_w64 bs2))`] (INST_TYPE [alpha |-> ``:256``] held_digest_compare_post)) >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then ACCEPT_TAC) >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
