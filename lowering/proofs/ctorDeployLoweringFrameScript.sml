@@ -1116,6 +1116,10 @@ Theorem deploy_frame_package_body_inv:
     body_inv tops dunit.cu_context cenv (deploy_evaluation_context tops am tx)
 Proof
   rpt gen_tac >> strip_tac >>
+  `!v0 m0 n0 r0 f0 a0 d0 t0 b0.
+     MEM (FunctionDecl v0 m0 n0 r0 f0 a0 d0 t0 b0) tops ==>
+     function_mutability_ok [(NONE, tops)] v0 m0 n0 d0 b0` by
+    metis_tac[bodySimTheory.check_contract_function_mutability_ok] >>
   `acyclic_struct_metadata (make_struct_fields_map tops)` by
     metis_tac[supported_checked_struct_metadata_acyclic] >>
   `ALL_DISTINCT

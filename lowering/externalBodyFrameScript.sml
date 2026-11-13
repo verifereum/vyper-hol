@@ -952,6 +952,11 @@ Theorem external_package_body_inv:
   cenv.ce_return_pc = NONE
 Proof
   strip_tac >>
+  `!v0 m0 n0 r0 f0 a0 d0 t0 b0.
+     MEM (FunctionDecl v0 m0 n0 r0 f0 a0 d0 t0 b0) tops ==>
+     function_mutability_ok [(NONE, tops)] v0 m0 n0 d0 b0` by
+    (gvs[source_typing_ok_def] >>
+     metis_tac[bodySimTheory.check_contract_function_mutability_ok]) >>
   `acyclic_struct_metadata (make_struct_fields_map tops)` by
     (gvs[source_typing_ok_def] >>
      drule_all supported_checked_struct_metadata_acyclic >> simp[]) >>

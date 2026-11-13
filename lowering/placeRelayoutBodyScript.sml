@@ -6,6 +6,7 @@ Ancestors
   exprSimDefs exprSimHypsDefs loweringPosts stmtSimDefs compileEnv
   targetPlaceSimCases gasSummary gasSummaryCompose exprSimSubscriptMap
   placeRelayoutOpen exprOpenMain supportedExprs supportedTargets
+  assignPlacePureFacts
 
 Theorem widened_place_raw_rhs_outcome:
   expr_body_pre cenv cx env e es /\
@@ -41,35 +42,6 @@ Proof
   (impl_tac >- (rpt strip_tac >> gvs[] >> metis_tac[])) >> strip_tac >>
   irule gas_outcome_conseq >> goal_assum (drule_at Any) >> simp[] >>
   metis_tac[]
-QED
-
-(* A pure target has no call or pop, so Assign stores without snapshotting
-   the RHS first. *)
-Theorem expr_can_mutate_not_pure[local]:
-  (!cenv e. expr_can_mutate cenv e ==>
-     !tops. ~supported_pure_expr tops e /\ ~supported_place_expr tops e) /\
-  (!cenv es. exprs_can_mutate cenv es ==> !tops. ~supported_pure_exprs tops es) /\
-  (!cenv oe. opt_expr_can_mutate cenv oe ==> T) /\
-  (!cenv kes. named_exprs_can_mutate cenv kes ==>
-     !tops. ~supported_pure_fields tops kes)
-Proof
-  ho_match_mp_tac exprLoweringTheory.expr_can_mutate_ind >>
-  rw[exprLoweringTheory.expr_can_mutate_def, supported_pure_expr_def] >>
-  metis_tac[]
-QED
-
-Theorem supported_target_pure_not_mutate:
-  !tops bt cenv.
-    supported_target_pure tops bt ==> ~expr_can_mutate cenv (target_to_expr bt)
-Proof
-  gen_tac >>
-  `(!e:expr. T) /\
-   !bt cenv. supported_target_pure tops bt ==>
-             ~expr_can_mutate cenv (target_to_expr bt)` suffices_by simp[] >>
-  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
-  rw[supported_target_pure_def, stmtLoweringTheory.target_to_expr_def,
-     exprLoweringTheory.expr_can_mutate_def] >>
-  metis_tac[expr_can_mutate_not_pure]
 QED
 
 Theorem body_assign_nonimmutable_widened_place:
