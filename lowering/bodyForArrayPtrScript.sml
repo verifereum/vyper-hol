@@ -21,6 +21,10 @@ Theorem body_for_array_widened_ptr:
      eval_iterator cx (Array e) s3 = (INL vs,t') /\
      check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s4 = (INL x,t'') ==>
      body_for_ptr_ok cx tyv id body vs) /\
+  (!tenv s'' tyv t.
+     tenv = get_tenv cx /\
+     lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' = (INL tyv,t) ==>
+     body_iterator_ptr_ok cx (Array e)) /\
   (!m arr. e <> Name (ArrayT typ (Fixed m)) arr) ==>
   body_stmt_ptr_ok cx (For id typ (Array e) n body)
 Proof
@@ -33,7 +37,11 @@ Theorem body_for_array_ptr:
      lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' = (INL tyv,t) /\
      eval_iterator cx (Array e) s3 = (INL vs,t') /\
      check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s4 = (INL x,t'') ==>
-     body_for_ptr_ok cx tyv id body vs) ==>
+     body_for_ptr_ok cx tyv id body vs) /\
+  (!tenv s'' tyv t.
+     tenv = get_tenv cx /\
+     lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' = (INL tyv,t) ==>
+     body_iterator_ptr_ok cx (Array e)) ==>
   body_stmt_ptr_ok cx (For id typ (Array e) n body)
 Proof
   strip_tac >>
@@ -71,6 +79,7 @@ Proof
          first_x_assum irule >> Cases_on `vs` >> gvs[read_result_def, return_def]) >>
       suspend "fragment")
   >> irule body_for_array_widened_ptr >> rpt conj_tac
+  >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
   >> fs[]
 QED
