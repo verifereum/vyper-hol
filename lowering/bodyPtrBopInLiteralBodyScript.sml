@@ -112,7 +112,8 @@ Resume literal_expr_sim_ptr[exit]:
   qexists_tac `marks` >> disj1_tac >>
   irule gas_summary_ptr_at_bind_exception >>
   goal_assum (drule_at (Pat `exit_result _`)) >>
-  simp[gas_marked_exec_ptr_def] >> metis_tac[]
+  simp[gas_marked_exec_ptr_def] >>
+  qexistsl_tac [`G`, `y`, `es_end`, `tn`] >> asm_simp_tac (srw_ss()) []
 QED
 Resume literal_expr_sim_ptr[exempt]:
   qexists_tac `marks` >> disj2_tac >>

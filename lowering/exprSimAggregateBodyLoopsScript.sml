@@ -715,6 +715,8 @@ Resume aggregate_body_make_array_sim[dynamic]:
      first_x_assum drule_all >> simp[regions_disjoint_def] >> decide_tac)) >>
   strip_tac >> simp[] >>
   irule gas_outcome_zero_prefix >> qexists_tac `s1` >> simp[] >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+    (assume_tac o CONV_RULE (DEPTH_CONV ETA_CONV)) >>
   irule gas_outcome_post_mono >> goal_assum (drule_at Any) >>
   rpt gen_tac >> strip_tac >> gvs[Abbr `Q`, SF CONJ_ss] >>
   conj_tac

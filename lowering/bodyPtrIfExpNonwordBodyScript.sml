@@ -180,7 +180,7 @@ Proof
   disch_then (strip_assume_tac o REWRITE_RULE
     [gas_outcome_ptr_def, gas_summary_ptr_at_marked])
   >- (gnvs[] >> suspend "normal")
-  >- (irule ifexp_condition_exit_ptr >> metis_tac[]) >>
+  >- (irule ifexp_condition_exit_ptr >> fs[] >> metis_tac[]) >>
   irule ifexp_condition_exempt_ptr >> metis_tac[]
 QED
 
