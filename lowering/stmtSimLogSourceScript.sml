@@ -3,7 +3,7 @@ Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
    supportedTypes e2eDefs vyperTyping vyperValue vyperABI
   vyperEventArgCompat vyperEvent valueEncoding vyperInterpreter vyperState vyperExprNoControl
-  vyperTypeABI
+  vyperTypeABI vyperEventCompatibility vyperTypeContract
 
 (* Source-only scalar conversion boundary. No compiler execution is unfolded. *)
 Theorem log_scalar_abi_exists:
@@ -175,6 +175,73 @@ Proof
        loweringStateRelDefsTheory.log_non_indexed_values_def, Once vyper_to_abi_def]
      >- (drule_all log_scalar_topic_exists >> strip_tac >> simp[]) >>
      drule_all (cj 1 vyper_to_abi_total) >> strip_tac >> simp[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  `LENGTH flags = LENGTH vals` by metis_tac[listTheory.LIST_REL_LENGTH] >>
+  drule_all non_indexed_event_args_exists >> strip_tac >>
+  simp[encode_source_event_def, encode_vyper_event_metadata_def] >> metis_tac[]
+QED
+
+(* Indexed hashing does not evaluate the declared capacity. *)
+Theorem log_compatible_source_event_encoded:
+  lookup_event_metadata tenv sources target id = SOME (h,dtys,flags) /\
+  LENGTH flags = LENGTH dtys /\
+  LIST_REL event_arg_compatible dtys ltys /\
+  EVERY (\(ty,indexed). indexed ==> supported_scalar_type ty) (ZIP (dtys,flags)) /\
+  LIST_REL (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\ value_has_type tv v) ltys vals /\
+  LIST_REL (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\ value_has_type tv v)
+    (log_non_indexed_types flags dtys) (log_non_indexed_values flags vals) ==>
+  ?topics avs.
+    encode_indexed_event_topics flags ltys vals = SOME topics /\
+    vyper_to_abi_list tenv (log_non_indexed_types flags dtys)
+      (log_non_indexed_values flags vals) = SOME avs /\
+    encode_source_event tenv sources target id vals =
+      SOME <|logger := target; topics := n2w h::topics;
+        data := enc (Tuple (vyper_to_abi_types tenv (log_non_indexed_types flags dtys))) (ListV avs)|>
+Proof
+  strip_tac >>
+  `!flags dtys ltys vals.
+    LENGTH flags = LENGTH dtys /\ LIST_REL event_arg_compatible dtys ltys /\
+    EVERY (\(ty,indexed). indexed ==> supported_scalar_type ty) (ZIP (dtys,flags)) /\
+    LIST_REL (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\ value_has_type tv v) ltys vals /\
+    LIST_REL (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\ value_has_type tv v)
+      (log_non_indexed_types flags dtys) (log_non_indexed_values flags vals) ==>
+    ?topics avs.
+      encode_indexed_event_topics flags ltys vals = SOME topics /\
+      encode_indexed_event_topics flags dtys vals = SOME topics /\
+      vyper_to_abi_list tenv (log_non_indexed_types flags dtys)
+        (log_non_indexed_values flags vals) = SOME avs` by
+    (rpt (pop_assum kall_tac) >> Induct
+     >- (Cases_on `dtys` >> Cases_on `ltys` >> Cases_on `vals` >>
+         simp[encode_indexed_event_topics_def, compileEnvTheory.log_non_indexed_types_def,
+           loweringStateRelDefsTheory.log_non_indexed_values_def, Once vyper_to_abi_def]) >>
+     rpt gen_tac >> Cases_on `dtys` >> Cases_on `ltys` >> Cases_on `vals` >> simp[] >>
+     rename1 `encode_indexed_event_topics (flag::flags) (lty::ltys) (v::vals)` >>
+     rename1 `event_arg_compatible dty lty` >>
+     Cases_on `flag` >>
+     simp[compileEnvTheory.log_non_indexed_types_def,
+       loweringStateRelDefsTheory.log_non_indexed_values_def] >> rpt strip_tac >>
+     first_x_assum drule_all >> strip_tac >>
+     simp[encode_indexed_event_topics_def, compileEnvTheory.log_non_indexed_types_def,
+       loweringStateRelDefsTheory.log_non_indexed_values_def, Once vyper_to_abi_def]
+     >- (`supported_scalar_type lty` by
+           (Cases_on `dty` >> Cases_on `lty` >>
+            gvs[supported_scalar_type_def, supported_word_type_def,
+              supported_string_type_def, event_arg_compatible_def] >>
+            rename1 `event_arg_compatible (BaseT db) (BaseT ab)` >>
+            Cases_on `db` >> Cases_on `ab` >>
+            gvs[supported_scalar_type_def, supported_word_type_def,
+              supported_string_type_def, event_arg_compatible_def] >>
+            rename1 `event_arg_compatible (BaseT (BytesT fb)) (BaseT (BytesT ab))` >>
+            Cases_on `fb` >> Cases_on `ab` >>
+            gvs[supported_scalar_type_def, supported_word_type_def,
+              supported_string_type_def, event_arg_compatible_def]) >>
+         `event_indexable_type dty` by
+           (Cases_on `dty` >> gvs[supported_scalar_type_def,
+             supported_word_type_def, supported_string_type_def, event_indexable_type_def]) >>
+         drule_all event_arg_compatible_topic >> strip_tac >>
+         drule_all log_scalar_topic_exists >> strip_tac >> simp[]) >>
+     `?av. vyper_to_abi tenv dty v = SOME av` by
+       metis_tac[cj 1 vyper_to_abi_total] >> simp[]) >>
   first_x_assum drule_all >> strip_tac >>
   `LENGTH flags = LENGTH vals` by metis_tac[listTheory.LIST_REL_LENGTH] >>
   drule_all non_indexed_event_args_exists >> strip_tac >>
