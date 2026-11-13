@@ -49,6 +49,11 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_body_pre ce fp.jc_cx env idx (mid with gas_obs := [])` by
     (drule_all mapping_subscript_marked_index_pre >> simp[]) >>
+  `~subscript_reads_base fp.jc_cx obj idx` by
+    (`expr_map_pre ce fp.jc_cx env obj es` by
+       metis_tac[expr_body_pre_map_subscript_base, expr_map_pre_subscript_base] >>
+     drule_all expr_map_pre_checked_type >> strip_tac >>
+     drule map_base_no_overlap >> simp[]) >>
   `gas_admissible (bind (eval_expr fp.jc_cx idx) (read_result fp.jc_cx))
      expr_res_ok (mid with gas_obs := [])` by
     (irule subscript_result_index_admissible >>
