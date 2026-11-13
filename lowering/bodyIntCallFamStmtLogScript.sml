@@ -13,7 +13,7 @@ Ancestors
   supportedStmtTraverse vyperTypeSystem vyperInterpreter vyperState
   exprSimHypsDefs gasOutcome gasContext stmtSimLogCompose freshWrites list
   vyperTypeCallGraph vyperTypeCallStackSoundness bodyExprPreFacts allocLimits
-  supportedExprTraverse exprSimSubscriptMap
+  supportedExprTraverse exprSimSubscriptMap bodySimLogArgs
 
 Theorem intcall_log_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\

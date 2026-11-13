@@ -10,7 +10,7 @@ Theorem staged_arg_old_allocation_disjoint:
   alloca_inv t /\ rid < a.cs_next_id /\
   FLOOKUP t.vs_allocas rid = SOME (rb,cap) /\
   eval_operand op t = SOME w /\ rsz <= cap ==>
-  compileEnv$regions_disjoint rb rsz (w2n w) (type_memory_size tv)
+  loweringStateRelDefs$regions_disjoint rb rsz (w2n w) (type_memory_size tv)
 Proof
   simp[staged_arg_def] >> strip_tac >>
   `rid <> aid` by decide_tac >>
@@ -76,7 +76,7 @@ Theorem intcall_stage_return_endpoint:
     s.vs_alloca_next + rsz <= t.vs_alloca_next /\
     (!ty tv v op w. MEM (ty,tv,v,F,op) D /\
        eval_operand op t = SOME w ==>
-       compileEnv$regions_disjoint s.vs_alloca_next rsz
+       loweringStateRelDefs$regions_disjoint s.vs_alloca_next rsz
          (w2n w) (type_memory_size tv))
 Proof
   strip_tac >>
