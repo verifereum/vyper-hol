@@ -9,6 +9,7 @@ Ancestors
   exprSimMemorySource exprSimDefs loweringPosts freshWrites
   vyperState vyperInterpreter compileEnv list exprLowering
   exprExtRequestHistory gasSummary stmtSimDeclGas fragExec exprSimHypsDefs
+  exprExtRequestReadProbe
 
 Theorem extrequest_snapshot_positional_cps:
   !xs es sa sb vvs s0 k old_cells.
@@ -116,17 +117,36 @@ Proof
      metis_tac[exprSimSourceTheory.expr_body_pre_eval]) >>
   `gas_admissible (bind (eval_exprs cx xs) (\vs. k (v::vs))) expr_vv_res_ok ee` by
     (drule_all extrequest_snapshot_source_tail_admissible >> simp[]) >>
+  `EVERY (extrequest_snapshot_cell ctx func ce cx ee sn u) old_cells` by
+    (fs[EVERY_MEM] >> rpt strip_tac >>
+     `extrequest_snapshot_cell ctx func ce cx (es with gas_obs := []) sa s0 e` by
+       metis_tac[] >>
+     irule extrequest_snapshot_cell_history >>
+     qpat_assum `extrequest_snapshot_cell _ _ _ _ (es with gas_obs := []) _ _ e`
+       (irule_at Any) >>
+     simp[] >> metis_tac[stmt_state_rel_gas_obs]) >>
   first_x_assum irule >> simp[] >>
   qpat_assum `compile_ext_call_args _ _ _ _ _ _ = _` (irule_at Any) >>
   qexists `old_cells ++ [(head_sv,lowered_value_type ce h,tv,v)]` >>
   simp[] >>
-  reverse conj_tac
-  >- (fs[EVERY_MEM] >> rpt strip_tac >>
-      irule extrequest_snapshot_cell_history >>
-      qexistsl [`es with gas_obs := []`, `sa`, `s0`] >>
-      simp[] >> metis_tac[stmt_state_rel_gas_obs]) >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   rpt gen_tac >> strip_tac >>
-  FAIL_TAC "final continuation"
+  rename1 `wb_frame ce ee ef sn u q` >>
+  `wb_frame ce es ef sa s0 q` by
+    (irule wb_frame_trans >>
+     qpat_assum `stmt_state_rel ctx func ce cx es s0` (irule_at Any) >>
+     qpat_assum `wb_frame ce es ee sa s0 u` (irule_at Any) >>
+     qpat_assum `wb_frame ce ee ef sn u q` (irule_at Any) >> simp[] >>
+     fs[extrequest_history_frame_def, extrequest_read_frame_def, ci_mono_def]) >>
+  `extrequest_history_frame ce cx (es with gas_obs := []) sa s0 ef sb q` by
+    (irule extrequest_history_frame_trans >>
+     qpat_assum `extrequest_history_frame _ _ _ sa s0 ee sn u` (irule_at Any) >>
+     simp[] >> metis_tac[stmt_state_rel_gas_obs]) >>
+  `?total. !tail. eval_exprs cx (h::xs) (es with gas_obs := total ++ tail) =
+      (INL (v::MAP (\(vv,ty,tv,v). v) cells),ef with gas_obs := tail)` by
+    (drule_all extrequest_kwargs_counted_cons >> metis_tac[]) >>
+  qpat_x_assum `!ee u cells. _`
+    (qspecl_then [`ef`, `q`, `(head_sv,lowered_value_type ce h,tv,v)::cells`] mp_tac) >>
+  simp[] >> disch_then irule >> metis_tac[]
 QED
