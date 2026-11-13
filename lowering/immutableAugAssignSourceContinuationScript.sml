@@ -1,8 +1,8 @@
 (* Source replay and current immutable readiness for the scalar continuation. *)
 Theory immutableAugAssignSourceContinuation
 Ancestors
-  immutableAugAssignRootSource augAssignPlaceSourceMemory
-  exprSimPopImmutableTarget augAssignPlaceSourcePrefix
+  bodyImmutableAugAssignFacts bodyImmutableAugAssignExec augAssignPlaceSourceMemory
+  augAssignPlaceSourcePrefix vyperTypeEnv vyperTypeInvariants vyperTypeValues
   stmtSimAugAssignPlaceMemory stmtSimAugAssign gasContext vyperInterpreter
   loweringPosts vyperState
 
@@ -17,10 +17,8 @@ Theorem immutable_augassign_root_replay:
     place_type_value cx (ImmutablePlace src id []) (es with gas_obs := gs) =
          (INL tv,es with gas_obs := gs)
 Proof
-  strip_tac >> gen_tac >>
-  mp_tac (immutable_augassign_root_source |> SPEC_ALL |>
-    Q.INST [`es` |-> `es with gas_obs := gs`] |> GEN_ALL) >>
-  simp[] >> metis_tac[]
+  strip_tac >> Cases_on `ALOOKUP es.immutables cx.txn.target` >> gvs[] >>
+  drule_all immutable_augassign_prefix_obs >> simp[]
 QED
 
 Theorem immutable_augassign_current_root:
@@ -31,12 +29,12 @@ Theorem immutable_augassign_current_root:
     FLOOKUP (get_source_immutables src imms) id = SOME (tv,a) /\
     value_has_type tv a /\ well_formed_type_value tv
 Proof
-  strip_tac >> drule_all imm_target_root_layout >> strip_tac >> gvs[] >>
-  `value_has_type tv iv /\ well_formed_type_value tv` by
-    (irule imm_place_at_value_type >> goal_assum (drule_at Any) >>
-     qexistsl [`cenv`, `env`, `0`, `[]`] >>
-     simp[mem_path_offset_def, evaluate_subscripts_def] >> metis_tac[]) >>
-  Cases_on `ALOOKUP ee.immutables cx.txn.target` >> gvs[] >> metis_tac[]
+  strip_tac >>
+  `FLOOKUP env.bare_globals (src,id) = SOME ty` by
+    (fs[exprSimHypsDefsTheory.expr_sim_inv_def, env_consistent_def,
+        env_context_consistent_def] >> metis_tac[]) >>
+  drule_all immutable_augassign_entry >> strip_tac >> gvs[] >>
+  metis_tac[evaluate_type_well_formed_type_value]
 QED
 
 Theorem immutable_augassign_source_replay:
@@ -45,17 +43,17 @@ Theorem immutable_augassign_source_replay:
     NONE => FEMPTY | SOME imms => get_source_immutables src imms) id = SOME (tv,iv) ==>
   !gs. eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e)
     (es with gas_obs := gs) =
-    bind (bind (eval_expr cx e) (read_result cx))
-      (\rhs. bind (lift_sum (evaluate_binop
+    vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
+      (\rhs. vyperState$bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop iv rhs)) (write_place cx (ImmutablePlace src id [])))
       (es with gas_obs := gs)
 Proof
   strip_tac >> drule_all immutable_augassign_root_replay >> strip_tac >>
-  gen_tac >> simp[Once evaluate_def, bind_def] >>
-  Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
-  Cases_on `q` >> simp[] >>
-  Cases_on `read_result cx x r` >> Cases_on `q` >> simp[]
+  gen_tac >>
+  qpat_x_assum `!gs. eval_target_place _ _ _ = _ /\ _`
+    (qspec_then `gs` strip_assume_tac) >>
+  drule_all immutable_augassign_forced >> simp[ignore_bind_def, bind_assoc, SF ETA_ss]
 QED
 
 Theorem immutable_augassign_rhs_source:
@@ -64,12 +62,12 @@ Theorem immutable_augassign_rhs_source:
   type_bits ty MOD 8 = 0 /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   value_has_type tv cur /\ word_value cur /\
   gas_admissible
-    (bind (bind (eval_expr cx e) (read_result cx))
-      (\rhs. bind (lift_sum (evaluate_binop
+    (vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
+      (\rhs. vyperState$bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur rhs)) (write_place cx (ImmutablePlace src id []))))
     (stmt_res_ok lctx) es /\
-  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL rhs,ee) ==>
+  vyperState$bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL rhs,ee) ==>
   word_value rhs /\ expr_sim_inv cenv cx env ee /\
   binop_frag_val_mem ctx func cenv cx bop ty ty NONE
     (if bop = Exp then expr_int_literal e else NONE) [ty;expr_type e] cur rhs ee /\
@@ -79,7 +77,7 @@ Theorem immutable_augassign_rhs_source:
 Proof
   strip_tac >> drule_all aug_place_rhs_typed_memory_source >> strip_tac >>
   drule stmtSimAugAssignPlaceTheory.aug_place_typing >> strip_tac >> simp[] >>
-  qmatch_asmsub_abbrev_tac `gas_admissible (bind a k) _ es` >>
+  qmatch_asmsub_abbrev_tac `gas_admissible (vyperState$bind a k) _ es` >>
   Cases_on `k rhs ee` >> rename1 `k rhs ee = (res,ff)` >>
   `stmt_res_ok lctx res` by
     (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
