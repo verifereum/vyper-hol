@@ -118,14 +118,14 @@ QED
    initial_fmp <= fmp: outside a revert-forwarding window the paired
    source supplies it, inside one the step into the window keeps it. *)
 Theorem ptr_coverage_history_fmp[local]:
-  !vs0 ctx ht at. ptr_chrono_history vs0 ctx ht at ==>
+  !vs0 ctx h a. ptr_chrono_history vs0 ctx h a ==>
     EVERY (\g. ALL_DISTINCT (fn_labels g)) ctx.ctx_functions /\
     (!ht at. ptr_chrono_history vs0 ctx ht at ==>
        w2n at.po_state.vs_initial_fmp <= w2n at.po_state.vs_fmp \/
        ?bb i j. lookup_block at.po_state.vs_current_bb at.po_fn.fn_blocks = SOME bb /\
          revert_forward_pair bb i j /\
          i < at.po_state.vs_inst_idx /\ at.po_state.vs_inst_idx <= j) ==>
-    w2n at.po_state.vs_initial_fmp <= w2n at.po_state.vs_fmp
+    w2n a.po_state.vs_initial_fmp <= w2n a.po_state.vs_fmp
 Proof
   ho_match_mp_tac ptr_chrono_history_strongind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> strip_tac >>
@@ -139,6 +139,8 @@ Proof
       `ALL_DISTINCT (fn_labels fn)` by fs[EVERY_MEM] >>
       drule_all enters_block_before_revert_window >> decide_tac) >>
   rpt gen_tac >> strip_tac >> strip_tac >>
+  rename1 `ptr_chrono_step ctx a b` >>
+  rename1 `ptr_chrono_history vs0 ctx h a` >>
   `w2n a.po_state.vs_initial_fmp <= w2n a.po_state.vs_fmp` by
     (first_x_assum irule >> metis_tac[]) >>
   `ptr_chrono_history vs0 ctx (h ++ [b]) b` by
