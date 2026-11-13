@@ -10,7 +10,7 @@ Ancestors
   list vyperTypeCallGraph loweringPosts exprOperandVar
   exprSimAbiEncodeOblivious vyperTypeInvariants vyperEvalExprPreservesScopesDom
 
-Theorem compile_abi_encode_word_shape[local]:
+Theorem compile_abi_encode_word_shape:
   is_word_type (expr_type e) ==>
   compile_expr ce cty (TypeBuiltin ann (AbiEncode F mid) ty [e]) sa =
     let (op,sm) = lower_value compile_expr ce (expr_type e) e sa in
