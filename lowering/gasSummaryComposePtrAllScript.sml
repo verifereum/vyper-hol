@@ -7,6 +7,7 @@
  *)
 Theory gasSummaryComposePtrAll
 Ancestors
+  fragGasMode
   gasSummaryComposePtr fragGasPathPtr gasStorage gasSummary gasExemptCert
   fragExec vyperStorageTrace vyperState vyperInterpreter
 
