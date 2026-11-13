@@ -288,11 +288,10 @@ Resume held_digest_operand_outcome[runtime_normal]:
        simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
        simp[] >> metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES])) >>
   disj1_tac >> simp[] >> gen_tac >> strip_tac >>
-  qexists_tac `bs` >>
   qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==>
      stmt_state_rel H _ _ _ _ _ t /\ _` (drule_then strip_assume_tac) >>
   `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t'` by
-    metis_tac[stmt_state_rel_fields_transport] >>
+    metis_tac[INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``] stmt_state_rel_fields_transport] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]
 QED
 

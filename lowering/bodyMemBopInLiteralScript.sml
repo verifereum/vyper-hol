@@ -220,8 +220,8 @@ Proof
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s` by
     (mp_tac (Q.INST [`u` |-> `s`, `s` |-> `t0`, `es` |-> `ee with gas_obs := []`]
-               (INST_TYPE [alpha |-> ``:256``] stmt_state_rel_fields_transport)) >>
-     (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC))) >>
+               (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``] stmt_state_rel_fields_transport)) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then ACCEPT_TAC) >>
   qexists_tac `BoolV (if bop = In then MEM v vs else ~MEM v vs)` >>
   rpt conj_tac

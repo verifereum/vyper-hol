@@ -365,7 +365,7 @@ Resume held_bytestring_compare_sim_mem[third]:
      `stmt_state_rel H ctx func cenv cx (mid' with gas_obs := []) u` by
        (mp_tac (Q.INST [`H0` |-> `H1`, `es` |-> `mid' with gas_obs := []`,
                         `s` |-> `t'`]
-                       (INST_TYPE [alpha |-> ``:256``] stmt_state_rel_fields_transport)) >>
+                       (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``] stmt_state_rel_fields_transport)) >>
         (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
         disch_then ACCEPT_TAC) >>
      mp_tac (Q.SPECL [`H`, `ctx`, `func`, `cenv`, `cx`, `bop`, `e1`, `e2`,
