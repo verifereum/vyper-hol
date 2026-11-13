@@ -7570,13 +7570,13 @@ Theorem mm_local_inst_birth_every[local]:
       P <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
         cg_inst_ids := inst.inst_id ::
           (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id]) |>) /\
-  (inst.inst_opcode = MCOPY ==>
+  (inst.inst_opcode = mode_copy_opcode mode ==>
     !dst src len. inst.inst_operands = [Lit dst; Lit src; Lit len] ==>
       P <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
         cg_inst_ids := [inst.inst_id] |>) ==>
-  mm_local_scan_every P (scan_inst dfg Mem2Mem ss inst)
+  mm_local_scan_every P (scan_inst dfg mode ss inst)
 Proof
-  strip_tac >> simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  strip_tac >> simp[scan_inst_def] >>
   IF_CASES_TAC >- (irule mm_local_load_every >> simp[]) >>
   IF_CASES_TAC >- (irule mm_local_store_birth_every >> metis_tac[]) >>
   IF_CASES_TAC >- (irule mm_local_bulk_birth_every >> metis_tac[]) >>
@@ -7584,27 +7584,27 @@ Proof
 QED
 
 Definition mm_local_id_birth_def:
-  mm_local_id_birth dfg is id <=> ?p. p < LENGTH is /\
-    ((?dst src len. (EL p is).inst_opcode = MCOPY /\
+  mm_local_id_birth dfg mode is id <=> ?p. p < LENGTH is /\
+    ((?dst src len. (EL p is).inst_opcode = mode_copy_opcode mode /\
        (EL p is).inst_operands = [Lit dst; Lit src; Lit len] /\ id = (EL p is).inst_id) \/
      (?dst v src. (EL p is).inst_opcode = MSTORE /\
        (EL p is).inst_operands = [Lit dst; Var v] /\
-       FLOOKUP (FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE p is)).ss_loads v = SOME src /\
+       FLOOKUP (FOLDL (scan_inst dfg mode) empty_scan_state (TAKE p is)).ss_loads v = SOME src /\
        (id = (EL p is).inst_id \/ ?li. dfg_get_def dfg v = SOME li /\ id = li.inst_id)))
 End
 
 Theorem mm_local_birth_merge[local]:
-  (!id. MEM id a.cg_inst_ids ==> mm_local_id_birth dfg is id) /\
-  (!id. MEM id b.cg_inst_ids ==> mm_local_id_birth dfg is id) ==>
-  !id. MEM id (copy_merge a b).cg_inst_ids ==> mm_local_id_birth dfg is id
+  (!id. MEM id a.cg_inst_ids ==> mm_local_id_birth dfg mode is id) /\
+  (!id. MEM id b.cg_inst_ids ==> mm_local_id_birth dfg mode is id) ==>
+  !id. MEM id (copy_merge a b).cg_inst_ids ==> mm_local_id_birth dfg mode is id
 Proof
   simp[copy_merge_def, MEM_APPEND] >> metis_tac[]
 QED
 
 Theorem mm_local_scan_births[local]:
   !t. t <= LENGTH is ==>
-    mm_local_scan_every (\g. !id. MEM id g.cg_inst_ids ==> mm_local_id_birth dfg is id)
-      (FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE t is))
+    mm_local_scan_every (\g. !id. MEM id g.cg_inst_ids ==> mm_local_id_birth dfg mode is id)
+      (FOLDL (scan_inst dfg mode) empty_scan_state (TAKE t is))
 Proof
   Induct >- simp[mm_local_scan_every_def, empty_scan_state_def] >>
   strip_tac >>
@@ -7621,29 +7621,29 @@ Theorem mm_local_final_write_birth[local]:
   wf_ssa fn0 /\ wf_function fn0 /\ ir_supply_covers_fn supply fn0 /\
   index < LENGTH fn0.fn_blocks /\ k <= 4 /\
   mm_local_prefix fn0 supply index k = (bb,sk) /\ is = bb.bb_instructions /\
-  j < LENGTH is /\ MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  j < LENGTH is /\ MEM g (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
   MEM (EL j is).inst_id g.cg_inst_ids /\
   (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} ==>
-  (?dst src len. (EL j is).inst_opcode = MCOPY /\
+  (?dst src len. (EL j is).inst_opcode = mode_copy_opcode mode /\
     (EL j is).inst_operands = [Lit dst; Lit src; Lit len]) \/
   (?dst v src. (EL j is).inst_opcode = MSTORE /\
     (EL j is).inst_operands = [Lit dst; Var v] /\
-    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode)
       empty_scan_state (TAKE j is)).ss_loads v = SOME src)
 Proof
   strip_tac >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
     metis_tac[mm_local_prefix_wf_id_distinct] >>
   `mm_local_scan_every
-    (\g. !id. MEM id g.cg_inst_ids ==> mm_local_id_birth (dfg_build_function fn0) is id)
-    (scan_block (dfg_build_function fn0) Mem2Mem bb)` by
+    (\g. !id. MEM id g.cg_inst_ids ==> mm_local_id_birth (dfg_build_function fn0) mode is id)
+    (scan_block (dfg_build_function fn0) mode bb)` by
     (simp[scan_block_def] >> irule mm_local_barrier_every >>
      mp_tac (Q.SPEC `LENGTH (bb.bb_instructions)`
        (Q.INST [`dfg` |-> `dfg_build_function fn0`, `is` |-> `bb.bb_instructions`]
          mm_local_scan_births)) >> simp[]) >>
-  `mm_local_id_birth (dfg_build_function fn0) is (EL j is).inst_id` by
+  `mm_local_id_birth (dfg_build_function fn0) mode is (EL j is).inst_id` by
     (gnvs[mm_local_scan_every_def, EVERY_MEM] >> metis_tac[]) >>
-  qpat_x_assum `mm_local_id_birth _ _ _`
+  qpat_x_assum `mm_local_id_birth _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [mm_local_id_birth_def])
   >- (`p = j` by metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx] >>
       metis_tac[])
@@ -7658,7 +7658,7 @@ Proof
   qpat_x_assum `_ IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` mp_tac >>
   `q = EL j is` by metis_tac[] >>
   qpat_x_assum `q.inst_opcode = _` mp_tac >>
-  simp[mode_load_opcode_def]
+  Cases_on `mode` >> simp[mode_load_opcode_def]
 QED
 
 Theorem mm_local_canonical_pending_copy_owner[local]:
@@ -7676,7 +7676,7 @@ Proof
     (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
   `j < LENGTH is` by decide_tac >>
   `MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
-  drule_all mm_local_final_write_birth >> strip_tac
+  drule_all (REWRITE_RULE [mode_copy_opcode_def] (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)) >> strip_tac
   >- (drule_all mm_local_indexed_bulk_owner >> metis_tac[]) >>
   drule_all (REWRITE_RULE [] (Q.INST [`s0` |->
     `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is)`]
@@ -7700,7 +7700,7 @@ Proof
     (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
   `j < LENGTH is` by decide_tac >>
   `MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
-  drule_all mm_local_final_write_birth >> strip_tac
+  drule_all (REWRITE_RULE [mode_copy_opcode_def] (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)) >> strip_tac
   >- (drule_all mm_local_indexed_bulk_owner >> strip_tac >>
       qexists `h` >>
       gvs[mm_local_write_capture_def, venomStateTheory.eval_operand_def,
@@ -7731,7 +7731,7 @@ Proof
     (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
   `j < LENGTH is` by decide_tac >>
   `MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
-  drule_all mm_local_final_write_birth >> strip_tac
+  drule_all (REWRITE_RULE [mode_copy_opcode_def] (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)) >> strip_tac
   >- (drule_all mm_local_indexed_bulk_history_owner >> simp[]) >>
   drule_all (REWRITE_RULE [] (Q.INST [`s0` |->
     `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is)`]
@@ -8194,7 +8194,7 @@ Proof
   `MEM (EL n is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
   `MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
   `n < SUC n` by simp[] >>
-  drule_all mm_local_final_write_birth >> strip_tac
+  drule_all (REWRITE_RULE [mode_copy_opcode_def] (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)) >> strip_tac
   >- (drule_all mm_local_write_capture_copy >> strip_tac >>
       drule_all mm_local_write_capture_sound >> strip_tac >>
       qexistsl [`w2n dst`, `read_memory (w2n src) (w2n len) (H n)`] >> gvs[]) >>
@@ -10822,7 +10822,8 @@ Proof
   strip_tac >> Induct >- simp[mm_local_scan_every_def, empty_scan_state_def] >>
   strip_tac >> `t < LENGTH is /\ t <= LENGTH is` by decide_tac >>
   simp[rich_listTheory.TAKE_SUC, FOLDL_APPEND] >>
-  irule mm_local_inst_birth_every >>
+  irule (REWRITE_RULE [mode_copy_opcode_def]
+    (Q.INST [`mode` |-> `Mem2Mem`] mm_local_inst_birth_every)) >>
   conj_tac >- metis_tac[mm_local_group_endpoint_merge] >>
   simp[] >> reverse conj_tac
   >- (rpt strip_tac >> gvs[] >>
@@ -10894,7 +10895,7 @@ Proof
         (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
         (gvs[MEM_APPEND, MEM_FILTER, MEM_COUNT_LIST] >> decide_tac) >>
       `MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
-      drule_all mm_local_final_write_birth >> strip_tac >>
+      drule_all (REWRITE_RULE [mode_copy_opcode_def] (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)) >> strip_tac >>
       gvs[mm_local_write_footprint_def]) >>
   strip_tac >>
   `j <= r` by metis_tac[mm_local_rep_position_max] >>
@@ -12426,7 +12427,7 @@ Proof
              cg_inst_ids := [(EL j is).inst_id] ++
                (case dfg_get_def (dfg_build_function fn0) vj of
                   NONE => [] | SOME li => [li.inst_id])|>))` by
-    (drule_all mm_local_final_write_birth >> gvs[] >> metis_tac[]) >>
+    (drule_all (REWRITE_RULE [mode_copy_opcode_def] (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)) >> gvs[] >> metis_tac[]) >>
   `mm_local_copy_ancestor c g` by
     (irule mm_local_final_birth_ancestor >> goal_assum (drule_at Any) >> metis_tac[]) >>
   qexists `c` >> gvs[mm_local_copy_ancestor_def] >> decide_tac
@@ -12982,14 +12983,14 @@ Proof
       (EL j is).inst_operands = [Lit dst; Var v] /\
       FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
         empty_scan_state (TAKE j is)).ss_loads v = SOME src))` by
-    metis_tac[mm_local_final_write_birth] >>
+    metis_tac[REWRITE_RULE [mode_copy_opcode_def] (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)] >>
   `((?dst src len. (EL l is).inst_opcode = MCOPY /\
       (EL l is).inst_operands = [Lit dst; Lit src; Lit len]) \/
     (?dst v src. (EL l is).inst_opcode = MSTORE /\
       (EL l is).inst_operands = [Lit dst; Var v] /\
       FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
         empty_scan_state (TAKE l is)).ss_loads v = SOME src))` by
-    metis_tac[mm_local_final_write_birth] >>
+    metis_tac[REWRITE_RULE [mode_copy_opcode_def] (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)] >>
   drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_indexed_selected_captures_compatible_interval >>
   disch_then (drule_at (Pat `rep_of_group _ _ = _`)) >>
   simp[] >> disch_then irule >> gvs[] >>
@@ -13068,7 +13069,7 @@ Proof
       (EL j is).inst_operands = [Lit dst; Var v] /\
       FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
         empty_scan_state (TAKE j is)).ss_loads v = SOME src))` by
-    metis_tac[mm_local_final_write_birth] >>
+    metis_tac[REWRITE_RULE [mode_copy_opcode_def] (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)] >>
   qabbrev_tac `ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
     empty_scan_state (TAKE l is)` >>
   `?A. MEM A ss.ss_copies /\ MEM (EL j is).inst_id A.cg_inst_ids` by
@@ -14142,7 +14143,7 @@ Proof
             (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
           `b < LENGTH is` by decide_tac >>
           `MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed` by metis_tac[] >>
-          drule_all mm_local_final_write_birth >> strip_tac >> gvs[] >>
+          drule_all (REWRITE_RULE [mode_copy_opcode_def] (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)) >> strip_tac >> gvs[] >>
           drule_at (Pat `step_inst _ _ _ _ = _`) mm_local_interval_runtime_capture >>
           disch_then (qspec_then `N` mp_tac) >> simp[]) >>
       `MEM b (mm_local_pending_indices is gs q)` by
@@ -14376,7 +14377,9 @@ Proof
     metis_tac[mm_local_canonical_rep_write] >>
   `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
   `(EL r is).inst_opcode = MSTORE \/ (EL r is).inst_opcode = MCOPY` by
-    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_final_write_birth >>
+    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)
+       (REWRITE_RULE [mode_copy_opcode_def]
+         (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)) >>
      disch_then (qspec_then `r` mp_tac) >> gvs[] >> metis_tac[]) >>
   `?d bs. cap r = SOME (d,bs) /\
     (H (SUC r)).vs_memory = (write_memory_with_expansion d bs (H r)).vs_memory` by
@@ -15865,7 +15868,9 @@ Resume mm_local_runtime_representative_operand_frame[retained]:
   `?dst w src. (EL r is).inst_operands = [Lit dst; Var w] /\
     FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem)
       empty_scan_state (TAKE r is)).ss_loads w = SOME src` by
-    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_final_write_birth >>
+    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)
+       (REWRITE_RULE [mode_copy_opcode_def]
+         (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)) >>
      disch_then (qspecl_then [`r`,`is`,`g`] mp_tac) >>
      simp[] >> impl_tac >- gvs[] >> metis_tac[]) >>
   `g.cg_dst = w2n dst /\ lookup_var w (H r) = SOME (mload g.cg_src t)` by
@@ -15915,7 +15920,9 @@ Resume mm_local_runtime_representative_operand_frame[renew]:
     metis_tac[mm_local_canonical_rep_write] >>
   `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
   `(EL r is).inst_opcode = MSTORE \/ (EL r is).inst_opcode = MCOPY` by
-    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`) mm_local_final_write_birth >>
+    (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)
+       (REWRITE_RULE [mode_copy_opcode_def]
+         (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)) >>
      disch_then (qspec_then `r` mp_tac) >> gvs[] >> metis_tac[]) >>
   `?d bs. cap r = SOME (d,bs) /\
     (H (SUC r)).vs_memory = (write_memory_with_expansion d bs (H r)).vs_memory` by
@@ -16092,7 +16099,7 @@ Proof
     (`(EL r is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
        (irule mm_local_canonical_rep_write >> metis_tac[]) >>
      `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
-     metis_tac[mm_local_final_write_birth]) >>
+     metis_tac[REWRITE_RULE [mode_copy_opcode_def] (Q.INST [`mode` |-> `Mem2Mem`] mm_local_final_write_birth)]) >>
   `?z. step_inst fuel ctx (EL r is) (H r) = OK z /\
     H (SUC r) = z with vs_inst_idx := SUC (H r).vs_inst_idx` by metis_tac[arithmeticTheory.LESS_EQ_REFL] >>
   `mm_local_nonmemory_frame (H (SUC r)) = mm_local_nonmemory_frame (H r) /\
