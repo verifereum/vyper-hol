@@ -6684,6 +6684,144 @@ Proof
   metis_tac[]
 QED
 
+Theorem invoke_nongas_adjacent_packet[local]:
+  !m es unused fuel C C' x y s a t.
+  let K = (\unused t.
+    PERM (MAP THE (FILTER IS_SOME m) ++ unused) t.vs_gas_readings /\
+    (!u. (step_inst fuel C' y t = OK u \/
+          (?ir. step_inst fuel C' y t = IntRet ir u)) ==>
+      EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+    !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+      (?extra. es = gas_events_step fuel C t.vs_current_bb y
+         (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+      ((?n. terminates (step_inst n C y (t with vs_gas_readings := gs ++ tail))) ==>
+        terminates (step_inst fuel C y (t with vs_gas_readings := gs ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (step_inst fuel C y (t with vs_gas_readings := gs ++ tail)))
+          (restore_result [] (step_inst fuel C' y t)) /\
+        (((?v. step_inst fuel C' y t = OK v) \/
+          (?ir v. step_inst fuel C' y t = IntRet ir v)) ==>
+          gas_events_step fuel C t.vs_current_bb y
+            (t with vs_gas_readings := gs ++ tail) = es /\
+          residual_result tail (step_inst fuel C' y t)
+            (step_inst fuel C y (t with vs_gas_readings := gs ++ tail)))));
+      R = (\xs st. FOLDR (dft_exec_cons fuel C') OK xs st)
+  in
+    x.inst_opcode <> GAS /\ y.inst_opcode = INVOKE /\
+    dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+    step_inst fuel C' x s = OK a /\
+    t = a with vs_inst_idx := SUC s.vs_inst_idx /\
+    LENGTH m = LENGTH es /\ K unused t ==>
+    K unused s /\
+    (!u. step_inst fuel C' y t = OK u ==>
+      ?v. step_inst fuel C' y s = OK v /\
+        v.vs_gas_readings = u.vs_gas_readings /\
+        R [x;y] s = OK (u with vs_inst_idx := SUC (SUC s.vs_inst_idx)) /\
+        R [y;x] s = OK (u with vs_inst_idx := SUC (SUC s.vs_inst_idx))) /\
+    (!z. step_inst fuel C' y t = z /\
+      ((?u. z = Halt u) \/ (?err u. z = Abort err u) \/ (?e. z = Error e)) ==>
+      step_inst fuel C' y s = z /\ R [x;y] s = z /\ R [y;x] s = z) /\
+    (!z gs tail. step_inst fuel C' y t = z /\
+      ((?u. z = Halt u) \/ (?err u. z = Abort err u) \/ (?e. z = Error e)) /\
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+      (?extra. es = gas_events_block fuel C s.vs_current_bb
+        <|bb_label := s.vs_current_bb; bb_instructions :=
+          REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ [y;x]|>
+        (s with vs_gas_readings := gs ++ tail) ++ extra) /\
+      ((?n. terminates (FOLDR (dft_exec_cons n C) OK [y;x]
+          (s with vs_gas_readings := gs ++ tail))) ==>
+        terminates (FOLDR (dft_exec_cons fuel C) OK [y;x]
+          (s with vs_gas_readings := gs ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (FOLDR (dft_exec_cons fuel C) OK [y;x]
+            (s with vs_gas_readings := gs ++ tail)))
+          (restore_result [] z)) /\
+      (~?v. FOLDR (dft_exec_cons fuel C) OK [y]
+        (s with vs_gas_readings := gs ++ tail) = OK v))
+Proof
+  rpt gen_tac >> rpt BasicProvers.LET_ELIM_TAC >>
+  drule_all invoke_partner_concrete_updates >>
+  disch_then (qx_choose_then `us` strip_assume_tac) >>
+  `EVERY (\q. ~MEM (Var (FST q)) y.inst_operands /\
+                ~MEM (FST q) y.inst_outputs) us` by
+    (drule dft_swap_output_frame >> strip_tac >>
+     gvs[EVERY_MEM] >> metis_tac[]) >>
+  `!st j. K' unused (st with vs_inst_idx := j) <=> K' unused st` by
+    (rpt gen_tac >> simp[Abbr `K'`] >>
+     mp_tac invoke_fixed_segment_inst_idx >>
+     disch_then (qspecl_then [`m`, `es`, `unused`, `fuel`, `C`, `C'`, `y`] mp_tac) >>
+     simp[LET_THM]) >>
+  `!st. K' unused (FOLDL (\st q. update_var (FST q) (SND q) st) st us) <=> K' unused st` by
+    (gen_tac >> simp[Abbr `K'`] >>
+     mp_tac invoke_fixed_segment_updates >>
+     disch_then (qspecl_then [`m`, `es`, `unused`, `fuel`, `C`, `C'`, `y`] mp_tac) >>
+     simp[LET_THM]) >>
+  `K' unused s` by
+    (qpat_x_assum `K' unused t` mp_tac >> simp[] >> gvs[]) >>
+  `step_inst fuel C' y a =
+    (case step_inst fuel C' y s of
+       OK v => OK (FOLDL (\st q. update_var (FST q) (SND q) st) v us)
+     | Halt v => Halt v | Abort err v => Abort err v
+     | IntRet ir v => IntRet ir v | Error e => Error e)` by
+    (drule_all invoke_updates_concrete_frame >>
+     disch_then (qspecl_then [`fuel`, `C'`, `s`] mp_tac) >> gvs[]) >>
+  `~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode` by
+    gvs[dft_gas_swap_pair_def] >>
+  qpat_x_assum `t = _` SUBST_ALL_TAC >>
+  gvs[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
+  Cases_on `step_inst fuel C' y s` >>
+  gvs[Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def,
+      analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
+  IF (qpat_assum `LIST_REL _ m gs` (K all_tac))
+    (qpat_x_assum `!st j. _` kall_tac >>
+     qpat_x_assum `!st. K' unused _ <=> _` kall_tac >>
+     qpat_x_assum `K' unused s` mp_tac >>
+     simp[Abbr `K'`] >> strip_tac >>
+     qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
+       (qspecl_then [`gs`, `tail`] mp_tac) >> simp[] >> strip_tac >>
+     `~?v. step_inst fuel C y (s with vs_gas_readings := gs ++ tail) = OK v` by
+       (strip_tac >>
+        `?n. terminates (step_inst n C y (s with vs_gas_readings := gs ++ tail))` by
+          (qexists_tac `fuel` >> simp[passSimulationDefsTheory.terminates_def]) >>
+        qpat_x_assum `(?n. terminates (step_inst n C y _)) ==> _` mp_tac >>
+        (impl_tac >- metis_tac[]) >> gvs[restore_result_def, dft_res_rel_def]) >>
+     `!n. terminates (FOLDR (dft_exec_cons n C) OK [y;x]
+           (s with vs_gas_readings := gs ++ tail)) ==>
+         terminates (step_inst n C y (s with vs_gas_readings := gs ++ tail))` by
+       (qx_gen_tac `nexec` >> simp[dftIndexedExecTheory.dft_exec_cons_def] >>
+        Cases_on `step_inst nexec C y (s with vs_gas_readings := gs ++ tail)` >>
+        simp[passSimulationDefsTheory.terminates_def]) >>
+     Cases_on `step_inst fuel C y (s with vs_gas_readings := gs ++ tail)` >>
+     gvs[dftIndexedExecTheory.dft_exec_cons_def, Once gas_events_block_def,
+         venomInstTheory.get_instruction_def, EL_APPEND_EQN,
+         passSimulationDefsTheory.terminates_def] >> metis_tac[])
+    all_tac >>
+  `dft_gas_swap_pair y x` by metis_tac[dft_gas_swap_pair_sym] >>
+  `dftGasInvCallPartner$inv_partner_inputs x s v` by
+    (irule invoke_return_partner_inputs >> metis_tac[]) >>
+  mp_tac (Q.GEN `u` (Q.INST [`pg` |-> `[]`, `rs` |-> `s.vs_gas_readings`,
+             `rt` |-> `v.vs_gas_readings`, `t` |-> `v`, `C` |-> `C'`, `D` |-> `C'`]
+      invoke_partner_step_portable)) >>
+  simp[] >>
+  pure_rewrite_tac[GSYM pairTheory.LAMBDA_PROD] >> strip_tac >>
+  `EVERY (\q. ~MEM (Var (FST q)) y.inst_operands /\
+                ~MEM (FST q) y.inst_outputs) pairs` by
+    (qpat_assum `dft_gas_swap_pair x y`
+       (mp_tac o MATCH_MP dft_swap_output_frame) >> strip_tac >>
+     simp[EVERY_MEM] >> rpt strip_tac >>
+     `MEM (FST q) x.inst_outputs` by metis_tac[MEM_MAP] >> metis_tac[]) >>
+  `step_inst fuel C' y (FOLDL (\st q. update_var (FST q) (SND q) st) s pairs) =
+    OK (FOLDL (\st q. update_var (FST q) (SND q) st) v pairs)` by
+    (drule_all invoke_updates_concrete_frame >>
+     disch_then (qspecl_then [`fuel`, `C'`, `s`] mp_tac) >> simp[]) >>
+  `FOLDL (\st q. update_var (FST q) (SND q) st) v pairs =
+   FOLDL (\st q. update_var (FST q) (SND q) st) v us` by (gvs[pairTheory.LAMBDA_PROD] >> metis_tac[]) >>
+  `x.inst_opcode <> INVOKE` by metis_tac[dftGasInvCallPartnerTheory.inv_call_partner_class] >>
+  gvs[pairTheory.LAMBDA_PROD] >>
+  simp[analysisSimProofsBaseTheory.step_inst_idx_indep,
+       instIdxIndepTheory.exec_result_map_def,
+       gasOracleReplayTheory.gas_fold_updates_readings]
+QED
 (* Insert the selected target occurrence into the recursive source order. *)
 Theorem occurrence_extract_packets[local]:
   !rho k a as.
