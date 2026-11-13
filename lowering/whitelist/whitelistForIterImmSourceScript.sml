@@ -16,11 +16,11 @@ Theorem eval_iterator_immutable_array:
   evaluate_type (get_tenv cx) (ArrayT typ bd) = SOME atv ==>
   !gs. eval_iterator cx (Array (TopLevelName (ArrayT typ bd) (src,name)))
          (es with gas_obs := gs) =
-       (INL (array_elements atv av), es with gas_obs := gs)
+       (INL (MAP Value (array_elements atv av)), es with gas_obs := gs)
 Proof
   strip_tac >> gen_tac >>
   simp[Once evaluate_def] >> simp[Once evaluate_def] >>
-  simp[lookup_global_def, read_result_def, read_place_def,
+  simp[array_iterator_results_def, lookup_global_def, read_result_def, read_place_def,
        get_immutables_def, get_address_immutables_def,
        evaluate_subscripts_def, lift_option_type_def, lift_sum_def,
        bind_def, return_def, expr_type_def, extract_elements_def]
@@ -41,7 +41,7 @@ Theorem immutable_array_source_ready:
     off + type_memory_size atv < dimword (:256) /\
     (!gs. eval_iterator cx (Array (TopLevelName (ArrayT typ bd) (src,name)))
             (es with gas_obs := gs) =
-          (INL (array_elements atv av), es with gas_obs := gs))
+          (INL (MAP Value (array_elements atv av)), es with gas_obs := gs))
 Proof
   strip_tac >>
   `env_consistent env cx es /\ state_well_typed es` by fs[expr_sim_inv_def] >>
