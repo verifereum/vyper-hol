@@ -158,9 +158,7 @@ val protected_frame_net =
   in evalWalkLib.walk_net
     (map SPEC_ALL [state_rel_frame_bind_guarded, state_rel_frame_try,
       state_rel_frame_finally, state_rel_frame_finally_unless_halt])
-    ((``!s t u. ^protected_relation s t /\ ^protected_relation t u ==>
-         ^protected_relation s u``, metis_tac[]) ::
-     map leaf (List.concat (map (CONJUNCTS o SPEC_ALL) leaves))) end;
+    (map leaf (List.concat (map (CONJUNCTS o SPEC_ALL) leaves))) end;
 val protected_frame_result = BETA_RULE
   (ISPEC protected_relation (Q.GEN `R` state_rel_frame_result));
 val PROTECTED_GUARDS =
@@ -181,7 +179,8 @@ val PROTECTED_FORWARD_IH =
 val PROTECTED_STEP = evalWalkLib.STEP
   {net = protected_frame_net, at = RAND_CONV,
    unfolds = [switch_BoolV_def, ignore_bind_def],
-   intros = [CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac,
+   intros = [evalWalkLib.TRANSITIVITY_TAC protected_relation,
+     CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac,
      conj_tac, CONV_TAC (RAND_CONV ETA_CONV)],
    fallbacks = [PROTECTED_IH, evalWalkLib.NORMALISE_IH_TAC PROTECTED_IH,
      first_assum (fn th => irule th >> rpt conj_tac >>
@@ -337,7 +336,11 @@ Proof
   >~ [`eval_expr cx (Builtin _ _ _)`]
   >- (PROTECTED_CASE
       >- (gvs[type_check_def, assert_def, check_def, return_def, raise_def] >>
-          Cases_on `es` >> fs[builtin_args_length_ok_def] >> metis_tac[]) >> metis_tac[])
+          Cases_on `es` >> fs[builtin_args_length_ok_def] >> metis_tac[]) >>
+      gvs[type_check_def, assert_def, check_def, return_def, raise_def,
+          code_slice_source_SOME, expr_writes_ok_def, EVERY_MEM,
+          DISJ_IMP_THM, FORALL_AND_THM, AllCaseEqs()] >>
+      PROTECTED_GUARDS >> fs[] >> PROTECTED_IH)
   >~ [`eval_stmts cx []`] >- (PROTECTED_CASE >> metis_tac[])
   >~ [`eval_stmts cx (_::_)`] >- (PROTECTED_CASE >> metis_tac[])
   >~ [`eval_exprs cx []`] >- (PROTECTED_CASE >> metis_tac[])

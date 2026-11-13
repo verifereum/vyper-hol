@@ -162,7 +162,7 @@ Resume slots_in_range_live_agree[struct]:
   disch_then irule >> conj_tac
   >- (simp[pairTheory.setSND_def] >> rpt strip_tac >>
       rename1 `MEM p fields` >> first_x_assum irule >> conj_tac
-      >- (qexists_tac `p` >> simp[]) >>
+      >- simp[] >>
       goal_assum (drule_at Any) >> simp[]) >>
   qexists_tac `s1` >> simp[] >> rpt strip_tac >> first_x_assum irule >>
   simp[] >> strip_tac >> drule (cj 1 dead_bytes_range) >> decide_tac

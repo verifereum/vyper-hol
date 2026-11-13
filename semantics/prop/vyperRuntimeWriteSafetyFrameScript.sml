@@ -51,7 +51,8 @@ val IMMS_IH_TAC =
      lock_if_nr_def, unlock_if_nr_def]};
 fun IMMS_STEP_WITH extra = evalWalkLib.STEP {net = imms_frame_net, at = RAND_CONV,
   unfolds = [switch_BoolV_def, ignore_bind_def],
-  intros = extra @ [CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac, conj_tac,
+  intros = [evalWalkLib.TRANSITIVITY_TAC imms_relation] @ extra @
+    [CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac, conj_tac,
     CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
       (List.filter (is_eq o concl) (map (BETA_RULE o ASSUME) asl)) (asl,w))],
@@ -206,7 +207,11 @@ Proof
   >- (IMMS_CASE
       >- (gvs[type_check_def, assert_def, check_def, return_def, raise_def] >>
           Cases_on `es` >> fs[builtin_args_length_ok_def] >>
-          metis_tac[]) >> metis_tac[])
+          metis_tac[]) >>
+      gvs[type_check_def, assert_def, check_def, return_def, raise_def,
+          code_slice_source_SOME, expr_writes_ok_def, EVERY_MEM,
+          DISJ_IMP_THM, FORALL_AND_THM, AllCaseEqs()] >>
+      IMMS_FORWARD_IH_TAC)
   >~ [`eval_stmts cx []`] >- IMMS_CASE
   >~ [`eval_stmts cx (_::_)`] >- IMMS_CASE
   >~ [`eval_iterator cx (Array _)`] >- (fs[] >> IMMS_CASE)
