@@ -7,6 +7,7 @@
  *   compile_copy_memory_origin_ptr_path -- one MCOPY of a robust value
  *   compile_store_memory_origin_ptr_path -- compile_store_memory of a
  *     non-word value: bytestring, relayout or bulk copy
+ *   compile_store_memory_word_origin_ptr_path -- its word branch, one MSTORE
  *)
 Theory logStoreDataOriginPtr
 Ancestors
@@ -15,7 +16,8 @@ Ancestors
   bodyPtrDefs ptrSafeRun ptrDiscipline typedMemoryCopy
   robustCopyTransportPtr valueEncoding valueEncodingDefs codegenRel
   typedCopyOriginPtr layoutStoreProps memoryLayoutSource memoryLayoutRel
-  memoryValueEncoding exprSimProps
+  memoryValueEncoding exprSimProps typedCopyOriginPtrDynArray
+  bodyPtrBopInMachineMemory memoryValueFrame
 
 (* compile_copy_memory copies n bytes holding a robust value to a disjoint
    destination; the copy holds the value robustly. *)
@@ -313,3 +315,126 @@ Proof
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   simp[] >> first_x_assum irule >> simp[mem_agree_outside_def]
 QED
+
+(* compile_store_memory of a word: one MSTORE of a clean operand. *)
+Theorem compile_store_memory_word_origin_ptr_path:
+  compile_store_memory cenv src (Var xd) dty sty sa = ((),sb) /\
+  is_word_type dty /\ evaluate_type tenv dty = SOME dtv /\ value_has_type dtv v /\
+  eval_operand src s = SOME (typed_val_to_w256 dtv v) /\ op_taint tn src = {} /\
+  lookup_var xd s = SOME dw /\ w2n dw + 32 < dimword (:256) /\
+  w2n dw + 32 <= s.vs_alloca_next /\ ptr_covers G tn xd s 32 /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf)) /\
+    val_in_memory dtv v (w2n dw) t.vs_memory /\
+    typed_copy_state_frame sa (w2n dw) 32 s t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw + 32) ==> (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+           val_in_memory dtv v (w2n dw) mem) /\
+    (!p. FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  qabbrev_tac `inst = mk_inst sa.cs_next_id MSTORE [Var xd; src] []` >>
+  qabbrev_tac `w = typed_val_to_w256 dtv v` >>
+  qabbrev_tac `r = mstore (w2n dw) w s` >>
+  `emit_inst MSTORE [Var xd; src] [] sa = ((),sb)` by
+    (qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
+     simp[contextTheory.compile_store_memory_def, emitHelperTheory.emit_void_def,
+          emitHelperTheory.emit_inst_def]) >>
+  `step_inst_base inst s = OK r` by
+    simp[Abbr `inst`, Abbr `r`, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+         venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_write2_def,
+         venomStateTheory.eval_operand_def] >>
+  `ptr_inst_ok
+      <| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+         d_ret := K {} |> lo 0 ctx func G tn inst s` by suspend "pointer" >>
+  `inst_mem_below_frontier inst s /\ inst_dload_in_section inst s` by
+    (simp[Abbr `inst`, unitTransformDefsTheory.inst_mem_below_frontier_def,
+          memSafeRunTheory.inst_dload_in_section_def, venomInstTheory.mk_inst_def,
+          contextCodegenRelTheory.source_memory_read_ranges_def,
+          source_memory_write_ranges_def, fixed_source_write_range_def,
+          venomStateTheory.eval_operand_def]) >>
+  mp_tac (Q.INST [`opc` |-> `MSTORE`, `args` |-> `[Var xd; src]`, `outs` |-> `[]`,
+                  `u` |-> `r`,
+                  `D` |-> `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+                              d_ret := K {} |>`]
+            typed_copy_emit_inst_origin_ptr_path) >>
+  impl_tac
+  >- (gvs[Abbr `inst`, venomInstTheory.is_terminator_def]) >>
+  strip_tac >>
+  drule emitHelperPropsTheory.emit_inst_extends >> strip_tac >>
+  qabbrev_tac `tf = step_taint inst s r tn` >>
+  `step_prov PG G inst r = G /\ tf.t_var = tn.t_var /\
+   tf.t_imm = tn.t_imm /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+   tf.t_mem = tn.t_mem DIFF {i | w2n dw <= i /\ i < w2n dw + 32}` by
+    suspend "ghost" >>
+  qexistsl_tac [`r with vs_inst_idx := SUC s.vs_inst_idx`, `G`, `tf`] >>
+  conj_tac
+  >- (gen_tac >> irule gas_origin_ptr_path_from_no_dead >> gvs[Abbr `inst`]) >>
+  suspend "post"
+QED
+
+Resume compile_store_memory_word_origin_ptr_path[pointer]:
+  `step_inst 0 ctx inst s = OK r` by
+    (qpat_x_assum `step_inst_base inst s = _` (SUBST1_TAC o SYM) >>
+     simp[venomExecSemanticsTheory.step_inst_non_invoke, Abbr `inst`,
+          venomInstTheory.mk_inst_def]) >>
+  `r.vs_requests = s.vs_requests` by
+    simp[Abbr `r`, venomStateTheory.mstore_def,
+         venomStateTheory.write_memory_with_expansion_def] >>
+  gvs[ptr_covers_def] >>
+  simp[ptr_inst_ok_def] >> rpt conj_tac
+  >- (simp[Abbr `inst`, access_ok_def, venomInstTheory.mk_inst_def,
+           source_memory_write_ranges_def, fixed_source_write_range_def,
+           contextCodegenRelTheory.source_memory_read_ranges_def,
+           venomStateTheory.eval_operand_def,
+           memLocDefsTheory.mem_write_ops_def, memLocDefsTheory.mem_read_ops_def] >>
+      rpt strip_tac >> gvs[] >> metis_tac[])
+  >- (simp[Abbr `inst`, taint_ok_def, venomInstTheory.mk_inst_def,
+           contextCodegenRelTheory.source_memory_read_ranges_def] >>
+      rpt strip_tac >> gvs[op_taint_def])
+QED
+
+Resume compile_store_memory_word_origin_ptr_path[ghost]:
+  simp[Abbr `tf`, Abbr `inst`, Abbr `r`,
+       step_prov_def, set_prov_def, out_prov_def, step_taint_def,
+       venomInstTheory.mk_inst_def, set_var_taint_def,
+       finite_mapTheory.DRESTRICT_UNIV, store_taint_def, adopt_reset_def,
+       mem_taint_def, imm_taint_def, step_writes_def, source_memory_write_ranges_def,
+       fixed_source_write_range_def, written_taint_def, range_bytes_def,
+       new_site_bytes_def, venomStateTheory.mstore_def,
+       venomStateTheory.write_memory_with_expansion_def,
+       venomStateTheory.eval_operand_def, finite_mapTheory.FLOOKUP_DEF,
+       pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Resume compile_store_memory_word_origin_ptr_path[post]:
+  `!mem. mem_word_at (w2n dw) mem = w ==> val_in_memory dtv v (w2n dw) mem` by
+    (rpt strip_tac >> drule_all exprSimPropsTheory.val_in_memory_word >>
+     strip_tac >> simp[Abbr `w`]) >>
+  `mem_word_at (w2n dw) r.vs_memory = w` by
+    simp[Abbr `r`, valueEncodingPropsTheory.mstore_mem_word_at_same] >>
+  `~r.vs_halted /\ r.vs_current_bb = s.vs_current_bb` by
+    simp[Abbr `r`, venomStateTheory.mstore_def,
+         venomStateTheory.write_memory_with_expansion_def] >>
+  simp[] >> rpt conj_tac
+  >~ [`typed_copy_state_frame`] >- simp[Abbr `r`, typed_copy_mstore_state_frame]
+  >~ [`mem_agree_outside`]
+  >- (rpt strip_tac >>
+      `mem_bytes_at (w2n dw) 32 r.vs_memory = mem_bytes_at (w2n dw) 32 mem` by
+        (irule mem_agree_outside_window >>
+         qexists_tac `tn.t_mem DIFF {i | w2n dw <= i /\ i < w2n dw + 32}` >>
+         simp[]) >>
+      qpat_x_assum `!mem. _ ==> val_in_memory _ _ _ mem` irule >>
+      metis_tac[memoryValueFrameTheory.memory_word_agree,
+                arithmeticTheory.LESS_EQ_REFL]) >>
+  rpt strip_tac >> gvs[op_taint_def]
+QED
+
+Finalise compile_store_memory_word_origin_ptr_path
