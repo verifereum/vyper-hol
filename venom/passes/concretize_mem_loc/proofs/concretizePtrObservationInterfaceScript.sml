@@ -319,8 +319,9 @@ Resume ptr_paired_terminal_static_bound[terminal_operands]:
   `mem_read_ops a.po_inst = SOME
     <|iao_ofst := addr; iao_size := SOME lenop; iao_max_size := SOME lenop|>` by
     simp[mem_read_ops_def] >>
-  `!w:word256. ~(dyn_floor C vs <= w2n w)` by
-    fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
+  `!w:256 word. ~(dyn_floor C vs <= w2n w)` by
+    (gen_tac >> qpat_assum `~ctx_has_dalloca C` (fn th => rewrite_tac[th,
+       dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt])) >>
   drule_at (Pat `mem_read_ops _ = _`) ptr_paired_read_range_static_bound >>
   disch_then (drule_all o SRULE []) >>
   qpat_x_assum `!w. ~(dyn_floor _ _ <= _)` (fn th => simp[th])
