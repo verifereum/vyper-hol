@@ -183,7 +183,7 @@ QED
    identifies the original function of a historical destination. *)
 Theorem ricf_global_source_support_separation:
   ricf_located_event ctx0 fn log round b es prefix e current /\
-  ricf_global_support_origins vs C ctx0 a fn U stk B E /\
+  ricf_global_support_origins vs C ctxP a fn U stk B E /\
   occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
   EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
   EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
