@@ -1006,6 +1006,7 @@ Theorem buffer_loop_memory_vv_post:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v b r.vs_memory /\
   val_footprint tv v <= sz /\ stmt_state_rel H ctx func ce cx es' r /\
+  storage_well_formed_on cx es' (FST H) /\
   p.ptr_location = LocMemory /\
   eval_operand p.ptr_operand r = SOME (n2w b) /\
   ci_mono sa sm /\ ci_mono sm sb /\ sa.cs_next_id < sm.cs_next_id /\
