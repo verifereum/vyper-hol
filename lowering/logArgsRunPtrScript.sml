@@ -78,7 +78,7 @@ Definition log_eval_ptr_post_def:
                              value_has_type tv v) (MAP expr_type args) vs /\
        EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sb z) /\
                   (!lab. FST p <> Label lab)) xs /\
-       ghost_inv d cenv cx ee G tn t /\
+       ghost_inv H d cenv cx ee G tn t /\
        LIST_REL (\p v. ptr_val_ok cx (SND p) v (FST p) G tn t) xs vs /\
        LIST_REL (\e p. ~is_word_type (expr_type e) ==>
          ptr_buf_ok cenv e (FST p) G t) args xs /\
@@ -87,7 +87,7 @@ Definition log_eval_ptr_post_def:
 End
 
 Theorem log_eval_ptr_post_cons:
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -95,7 +95,7 @@ Theorem log_eval_ptr_post_cons:
   (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) /\
   expr_sim_inv cenv cx env0 es0 /\ expr_type e = BaseT bt /\
   post_value_type cenv e = expr_type e /\
-  expr_post ctx func cenv cx e es sa sm s0 es1 v x t /\
+  expr_post H ctx func cenv cx e es sa sm s0 es1 v x t /\
   ptr_val_ok cx (expr_type e) v x G1 tn1 t /\
   (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G1 t) /\
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
@@ -136,10 +136,10 @@ Theorem compile_log_eval_all_ptr_ind[local]:
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     well_typed_exprs env args /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv d cenv cx es G0 tn0 s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (eval_exprs cx args) (es,s0,G0,tn0)
       (log_eval_ptr_post d ctx func cenv cx es sa sb s0 G0 tn0 args xs)
       (\res ee gt r. expr_exit res r)
@@ -226,7 +226,7 @@ Resume compile_log_eval_all_ptr_ind[head_value]:
      (\r. !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception))
      (es_end with gas_obs := [])` by
     (irule log_tail_admissible >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
     metis_tac[expr_post_state] >>
   `MAP FDOM es.scopes = MAP FDOM es_end.scopes` by
     (`(do r <- eval_expr cx e; read_result cx r od)
@@ -293,10 +293,10 @@ Theorem compile_log_eval_all_ptr:
     expr_sim_inv cenv cx env0 es0 /\ well_typed_exprs env args /\
     (!id t. FLOOKUP env.var_types id = SOME t ==>
        ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv d cenv cx es G0 tn0 s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (eval_exprs cx args) (es,s0,G0,tn0)
       (\res ee G tn t. ?vs. res = INL vs /\
          log_args_post ctx func cenv cx es sa sb s0 ee xs vs t /\
@@ -306,7 +306,7 @@ Theorem compile_log_eval_all_ptr:
                                value_has_type tv v) (MAP expr_type args) vs /\
          EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sb z) /\
                     (!lab. FST p <> Label lab)) xs /\
-         ghost_inv d cenv cx ee G tn t /\
+         ghost_inv H d cenv cx ee G tn t /\
          LIST_REL (\p v. ptr_val_ok cx (SND p) v (FST p) G tn t) xs vs /\
          LIST_REL (\e p. ~is_word_type (expr_type e) ==>
            ptr_buf_ok cenv e (FST p) G t) args xs /\
@@ -350,10 +350,10 @@ Theorem compile_log_eval_all_scopes_ptr:
     expr_sim_inv cenv cx env0 es0 /\ well_typed_exprs env args /\
     (!id t. FLOOKUP env.var_types id = SOME t ==>
        ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv d cenv cx es G0 tn0 s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (eval_exprs cx args) (es,s0,G0,tn0)
       (\res ee G tn t. ?vs. res = INL vs /\
          log_args_post ctx func cenv cx es sa sb s0 ee xs vs t /\
@@ -363,7 +363,7 @@ Theorem compile_log_eval_all_scopes_ptr:
                                value_has_type tv v) (MAP expr_type args) vs /\
          EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sb z) /\
                     (!lab. FST p <> Label lab)) xs /\
-         ghost_inv d cenv cx ee G tn t /\
+         ghost_inv H d cenv cx ee G tn t /\
          LIST_REL (\p v. ptr_val_ok cx (SND p) v (FST p) G tn t) xs vs /\
          LIST_REL (\e p. ~is_word_type (expr_type e) ==>
            ptr_buf_ok cenv e (FST p) G t) args xs /\

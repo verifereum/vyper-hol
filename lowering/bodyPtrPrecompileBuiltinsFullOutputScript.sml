@@ -28,7 +28,7 @@ Theorem computed_suffix_full_output:
   tn2 = step_taint (EL 1 (emitted_insts sm sl)) u v
     (step_taint (EL 0 (emitted_insts sm sl)) s u tn) /\
   ptr_covers G tn dst s (w2n outsz) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
   local_ptrs_reserved cenv sm /\ sf.cs_next_var <= sm.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
@@ -38,7 +38,7 @@ Theorem computed_suffix_full_output:
   q.vs_memory = (write_memory_with_expansion (w2n wo) (TAKE (w2n outsz) data) s).vs_memory /\
   ptr_covers G2 tn2 dst q (w2n outsz) /\
   (!i. w2n wo <= i /\ i < w2n wo + w2n outsz ==> i NOTIN tn2.t_mem) /\
-  ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G2 tn2 q /\
+  ghost_inv H d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G2 tn2 q /\
   ghost_kept cenv es sf G tn s G2 tn2
 Proof
   strip_tac >>
@@ -101,7 +101,7 @@ Resume computed_suffix_full_output[frame]:
      lookup_var p v = lookup_var p s` by
     (rpt strip_tac >> `not_fresh_at sm p` by
       (gvs[local_ptrs_reserved_def] >> metis_tac[]) >> metis_tac[]) >>
-  `ghost_inv d cenv cx es G2 tn2 v` by
+  `ghost_inv H d cenv cx es G2 tn2 v` by
     (irule fresh_scratch_ghost_frame >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      qexists `fn` >> simp[IN_DIFF] >> first_assum ACCEPT_TAC) >>
@@ -109,8 +109,8 @@ Resume computed_suffix_full_output[frame]:
     (irule ghost_kept_memory_subset >> simp[] >> rpt strip_tac >>
      `not_fresh_at sm x` by
        (irule not_fresh_at_mono >> goal_assum drule >> simp[]) >> metis_tac[]) >>
-  `ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G2 tn2 v` by
-    (`ghost_inv d cenv cx es G2 tn2 v` suffices_by
+  `ghost_inv H d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G2 tn2 v` by
+    (`ghost_inv H d cenv cx es G2 tn2 v` suffices_by
        (simp[NoAsms, ghost_inv_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
      first_assum ACCEPT_TAC) >>
   gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
@@ -134,7 +134,7 @@ Theorem computed_full_output_paths:
     (s.vs_transient s.vs_call_ctx.cc_address) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sl) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
   local_ptrs_reserved cenv sm /\ sf.cs_next_var <= sm.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
@@ -152,7 +152,7 @@ Theorem computed_full_output_paths:
         q.vs_memory = (write_memory_with_expansion (w2n wo) (TAKE (w2n outsz) data) s).vs_memory /\
         ptr_covers G2 tn2 dst q (w2n outsz) /\
         (!i. w2n wo <= i /\ i < w2n wo + w2n outsz ==> i NOTIN tn2.t_mem) /\
-        ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G2 tn2 q /\
+        ghost_inv H d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G2 tn2 q /\
         ghost_kept cenv es sf G tn s G2 tn2) /\
     ((precompile_result (venom_call_request s target 0w wi insz T).cr_target
         (venom_call_request s target 0w wi insz T).cr_data = SOME NONE \/

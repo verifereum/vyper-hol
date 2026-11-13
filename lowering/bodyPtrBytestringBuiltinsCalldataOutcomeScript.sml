@@ -52,7 +52,7 @@ QED
    runtime word; no independent existential execution is introduced. *)
 Theorem calldata_slice_operand_endpoint:
   expr_body_pre cenv cx env e es /\ expr_type e = BaseT (UintT 256) /\
-  expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
+  expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\
   (?marks ee0. ee = ee0 with gas_obs := [] /\
     !tail. vyperState$bind (eval_expr cx e) (read_result cx)
       (es with gas_obs := gas_explicit marks readings ++ tail) =
@@ -75,7 +75,7 @@ QED
 (* Reused allocation sites introduce no new bytes; a genuinely new site starts
    at the frontier.  Both cases are needed for loop/re-entry executions. *)
 Theorem alloca_new_bytes_above_frontier:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w N)] [out]) (fn_insts fn) /\
   N < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w N)] [out]) s = OK u /\
@@ -93,7 +93,7 @@ Proof
 QED
 
 Theorem alloca_new_bytes_protected_regions:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w N)] [out]) (fn_insts fn) /\
   N < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w N)] [out]) s = OK u ==>
@@ -115,14 +115,14 @@ Proof
 QED
 
 Theorem alloca_slice_suffix_ghost_kept:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w N)] [out]) (fn_insts fn) /\
   N < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w N)] [out]) s = OK u /\
-  (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+  (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
     op_taint tm (Var x) = op_taint tn (Var x)) /\
   tm.t_mem SUBSET (tn.t_mem UNION new_site_bytes s u) ==>
-  ghost_kept cenv es sa G tn s H tm
+  ghost_kept cenv es sa G tn s HG tm
 Proof
   strip_tac >> drule_all alloca_new_bytes_protected_regions >> strip_tac >>
   irule external_slice_allocated_ghost_kept >>
@@ -131,7 +131,7 @@ Proof
 QED
 
 Theorem alloca_slice_suffix_ghost_inv:
-  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   MEM (mk_inst id ALLOCA [Lit (n2w N)] [out]) (fn_insts fn) /\
   N < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w N)] [out]) s = OK u /\
@@ -139,7 +139,7 @@ Theorem alloca_slice_suffix_ghost_inv:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> lookup_var x z = SOME w) /\
-  (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+  (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
     op_taint tm (Var x) = op_taint tn (Var x)) /\
   (!name b len. local_region cenv es.scopes s name b len ==>
     mem_bytes_at b len z.vs_memory = mem_bytes_at b len s.vs_memory) /\
@@ -147,12 +147,12 @@ Theorem alloca_slice_suffix_ghost_inv:
   tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
   z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
   z.vs_call_ctx = s.vs_call_ctx ==>
-  ghost_inv d cenv cx es H tm z
+  ghost_inv H d cenv cx es HG tm z
 Proof
   strip_tac >> drule_all alloca_new_bytes_protected_regions >> strip_tac >>
   `local_ptrs_rel fn cenv es.scopes s` by
     fs[stmt_state_rel_def, state_rel_def] >>
-  `stor_taint_ok cx tm z` by fs[ghost_inv_def, stor_taint_ok_def] >>
+  `stor_taint_ok H cx tm z` by fs[ghost_inv_def, stor_taint_ok_def] >>
   `!name b len. local_region cenv es.scopes s name b len ==>
     mem_bytes_at b len z.vs_memory = mem_bytes_at b len s.vs_memory /\
     (!i. b <= i /\ i < b + len /\ i IN tm.t_mem ==> i IN tn.t_mem)` by
@@ -251,7 +251,7 @@ Proof
   `val_footprint (BaseTV (BytesT (Dynamic bound)))
     (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) <= N` by
     (simp[val_footprint_def] >> decide_tac) >>
-  qexistsl_tac [`zf`,`H`,`tm`] >>
+  qexistsl_tac [`zf`,`HG`,`tm`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
   >- (irule vv_post_allocated_memory_intro >> simp[] >>
@@ -265,7 +265,7 @@ QED
 (* PORT_ADMISSION: SEQ-3208, bot/opus/seq-3208-t16-cdslice, built at fc54ea89e *)
 Theorem compile_slice_calldata_success_posts:
   compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
   32 + n <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
   a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
@@ -276,7 +276,7 @@ Theorem compile_slice_calldata_success_posts:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   op_prov G start = NONE /\ op_taint tn start = {} /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   post_value_type cenv e = expr_type e /\
@@ -286,16 +286,16 @@ Theorem compile_slice_calldata_success_posts:
     (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) /\
   type_memory_size (BaseTV (BytesT (Dynamic bound))) <= N /\
   type_memory_bytes cenv (lowered_value_type cenv e) <= N ==>
-  ?zf H tm.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK zf) /\
-    vv_post ctx fn cenv cx e es sa sb s es
+  ?zf HG tm.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK zf) /\
+    vv_post H ctx fn cenv cx e es sa sb s es
       (Value (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))))
       (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) zf /\
     ptr_vv_ok cx (expr_type e)
       (Value (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))))
-      (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) es H tm zf /\
-    ptr_buf_ok cenv e out H zf /\ ghost_inv d cenv cx es H tm zf /\
-    ghost_kept cenv es sa G tn s H tm /\
+      (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) es HG tm zf /\
+    ptr_buf_ok cenv e out HG zf /\ ghost_inv H d cenv cx es HG tm zf /\
+    ghost_kept cenv es sa G tn s HG tm /\
     zf.vs_current_bb = sb.cs_current_bb /\ zf.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~zf.vs_halted
 Proof
@@ -304,7 +304,7 @@ QED
 
 Theorem compile_slice_calldata_revert:
   compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
   32 <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
   a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
@@ -315,9 +315,9 @@ Theorem compile_slice_calldata_revert:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   op_prov G start = NONE /\ op_taint tn start = {} ==>
-  ?zf H tm.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (Abort Revert_abort zf) /\
-    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+  ?zf HG tm.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (Abort Revert_abort zf) /\
+    (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x)) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
 Proof
@@ -389,9 +389,9 @@ Proof
 QED
 
 Theorem memory_vv_post_end_gas_obs[local]:
-  vv_post ctx fn cenv cx e es sa sb s0 (ee with gas_obs := gs) (Value v)
+  vv_post H ctx fn cenv cx e es sa sb s0 (ee with gas_obs := gs) (Value v)
     (LocatedValue ty <|ptr_operand := op; ptr_location := LocMemory|>) s <=>
-  vv_post ctx fn cenv cx e es sa sb s0 ee (Value v)
+  vv_post H ctx fn cenv cx e es sa sb s0 ee (Value v)
     (LocatedValue ty <|ptr_operand := op; ptr_location := LocMemory|>) s
 Proof
   simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def, read_result_def,
@@ -410,7 +410,7 @@ QED
 
 Theorem compile_slice_calldata_source_outcome:
   compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
   0 < n /\ 32 + n <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
   a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
@@ -420,7 +420,7 @@ Theorem compile_slice_calldata_source_outcome:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   op_prov G start = NONE /\ op_taint tn start = {} /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   post_value_type cenv e = expr_type e /\
@@ -434,13 +434,13 @@ Theorem compile_slice_calldata_source_outcome:
     ((case evaluate_calldata_slice bs (IntV &a) n of
       INL v => INL (Value v) | INR err => INR (Error err)), es with gas_obs := tail)) ==>
   gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn)
-    (\res ee H tm zf. ?v. res = INL (Value v) /\
-      vv_post ctx fn cenv cx e es sa sb s ee (Value v)
+    (\res ee HG tm zf. ?v. res = INL (Value v) /\
+      vv_post H ctx fn cenv cx e es sa sb s ee (Value v)
         (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) zf /\
       ptr_vv_ok cx (expr_type e) (Value v)
-        (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) ee H tm zf /\
-      ptr_buf_ok cenv e out H zf /\ ghost_inv d cenv cx ee H tm zf /\
-      ghost_kept cenv es sa G tn s H tm /\
+        (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) ee HG tm zf /\
+      ptr_buf_ok cenv e out HG zf /\ ghost_inv H d cenv cx ee HG tm zf /\
+      ghost_kept cenv es sa G tn s HG tm /\
       zf.vs_current_bb = sb.cs_current_bb /\ zf.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ~zf.vs_halted)
     (\res ee gt r. expr_exit res r)
@@ -460,7 +460,7 @@ Resume compile_slice_calldata_source_outcome[bad]:
   simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
   qexistsl_tac [`case evaluate_calldata_slice s.vs_call_ctx.cc_calldata (IntV &a) n of
-    INL v => INL (Value v) | INR err => INR (Error err)`,`es`,`H`,`tm`,
+    INL v => INL (Value v) | INR err => INR (Error err)`,`es`,`HG`,`tm`,
     `Abort Revert_abort zf`] >>
   simp[] >> Cases_on `dimword (:256) <= a+n` >>
   fs[calldata_slice_uint_source, expr_exit_def, exit_result_def]
@@ -470,7 +470,7 @@ Resume compile_slice_calldata_source_outcome[good]:
   simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL (Value (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))))`,
-    `es`,`H`,`tm`,`OK zf`] >>
+    `es`,`HG`,`tm`,`OK zf`] >>
   simp[calldata_slice_uint_source, memory_vv_post_end_gas_obs,
     memory_ptr_vv_end_gas_obs, ghost_inv_def] >> fs[ghost_inv_def] >>
   first_assum ACCEPT_TAC

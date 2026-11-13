@@ -23,7 +23,7 @@ Theorem selector_suffix_counted:
           mk_inst il MSTORE [Var p; Lit 4w] [];
           mk_inst ip ADD [Var p; Lit 32w] [q];
           mk_inst iw MSTORE [Var q; value] []] /\
-  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_inst_ids_distinct fn /\
   MEM (mk_inst ia ALLOCA [Lit 64w] [p]) (fn_insts fn) /\
   ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
@@ -38,7 +38,7 @@ Theorem selector_suffix_counted:
   isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
   t' = t with vs_inst_idx := s.vs_inst_idx + LENGTH code ==>
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t') /\
-    ghost_inv d cenv cx es G' tn' t' /\
+    ghost_inv H d cenv cx es G' tn' t' /\
     ghost_kept cenv es sa G tn s G' tn' /\
     ptr_val_ok cx (BaseT (BytesT (Dynamic 4))) (BytesV bs) (Var p) G' tn' t' /\
     ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic 4))) MethodId args) (Var p) G' t'

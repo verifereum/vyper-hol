@@ -10,12 +10,12 @@ Theorem u2s_cond_mem_transition[local]:
   lookup_block (u2s_label a 1) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 1; bb_instructions := u2s_cond a|> /\
   s.vs_current_bb = u2s_label a 1 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx fn cenv cx es a buf b sz inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s /\
   u2s_digits a b n X x str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) ==>
   ?t. gas_path_mem ctx fn s 0 (OK t) /\
       alloca_history fn t /\ t.vs_alloca_next = s.vs_alloca_next /\
-      u2s_safe ctx fn cenv cx es a buf b sz inst s0 t /\
+      u2s_safe H ctx fn cenv cx es a buf b sz inst s0 t /\
       u2s_digits a b n X x str t /\
       t.vs_current_bb = u2s_label a (if x = 0 then 4 else 2) /\
       t.vs_inst_idx = 0 /\ ~t.vs_halted
@@ -39,7 +39,7 @@ Proof
   `lookup_block s.vs_current_bb fn.fn_blocks =
     SOME <|bb_label := u2s_label a 1; bb_instructions := u2s_cond a|>` by simp[] >>
   drule_all u2s_cond_memory_path >> strip_tac >>
-  `u2s_safe ctx fn cenv cx es a buf b sz inst s0 v` by
+  `u2s_safe H ctx fn cenv cx es a buf b sz inst s0 v` by
     (simp[Abbr `v`] >> irule u2s_safe_update >> metis_tac[]) >>
   `u2s_digits a b n X x str v` by
     simp[Abbr `v`, u2s_digits_update] >>
@@ -48,7 +48,7 @@ Proof
 QED
 
 Theorem u2s_store_bound[local]:
-  u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
   i <= n /\ 32 <= sz /\ b+(sz+n) < dimword (:256) ==>
   w2n ((n2w b : bytes32)+n2w n-n2w i)+32 <= s.vs_alloca_next
 Proof
@@ -66,14 +66,14 @@ Theorem u2s_body_mem_transition[local]:
   lookup_block (u2s_label a 2) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 2; bb_instructions := u2s_body a buf n|> /\
   s.vs_current_bb = u2s_label a 2 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
   u2s_digits a b n X x str s /\ 0 < x /\ LENGTH str < n /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   32 <= sz /\ b+(sz+n) < dimword (:256) ==>
   ?t. gas_path_mem ctx fn s 0 (OK t) /\
       alloca_history fn t /\ t.vs_alloca_next = s.vs_alloca_next /\
-      u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
+      u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
       u2s_digits a b n X (x DIV 10) (CHR (48+x MOD 10)::str) t /\
       t.vs_current_bb = u2s_label a 1 /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
 Proof
@@ -103,14 +103,14 @@ Theorem u2s_final_mem_exit[local]:
   lookup_block (u2s_label a 4) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 4; bb_instructions := u2s_final a buf n|> /\
   s.vs_current_bb = u2s_label a 4 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
   u2s_digits a b n X 0 str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   32 <= sz /\ b+(sz+n) < dimword (:256) ==>
   ?t. gas_path_mem ctx fn s 0 (OK t) /\
       alloca_history fn t /\ t.vs_alloca_next = s.vs_alloca_next /\
-      u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
+      u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH str)) /\
       val_in_memory ty (StringV str) (b+n-LENGTH str) t.vs_memory /\
       b+n-LENGTH str+sz <= t.vs_alloca_next /\
@@ -144,14 +144,14 @@ Theorem u2s_loop_mem_path[local]:
   (!bb. MEM bb (u2s_blocks a op buf n) ==>
         lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
   s.vs_current_bb = u2s_label a 1 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
   u2s_digits a b n X x str s /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   X < dimword (:256) /\ 78 <= n /\ 32 <= sz /\ b+(sz+n) < dimword (:256) ==>
   ?t. gas_path_mem ctx fn s 0 (OK t) /\
       alloca_history fn t /\ t.vs_alloca_next = s.vs_alloca_next /\
-      u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
+      u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
         (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
@@ -205,13 +205,13 @@ Theorem u2s_zero_mem_exit[local]:
   lookup_block (u2s_label a 3) fn.fn_blocks =
     SOME <|bb_label := u2s_label a 3; bb_instructions := u2s_zero a buf n|> /\
   s.vs_current_bb = u2s_label a 3 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   1 <= n /\ 32 <= sz /\ b+(sz+n) < dimword (:256) ==>
   ?t. gas_path_mem ctx fn s 0 (OK t) /\
       alloca_history fn t /\ t.vs_alloca_next = s.vs_alloca_next /\
-      u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
+      u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-1)) /\
       val_in_memory ty (StringV "0") (b+n-1) t.vs_memory /\
       b+n-1+sz <= t.vs_alloca_next /\
@@ -243,7 +243,7 @@ Theorem u2s_check_mem_exit[local]:
   (!bb. MEM bb (u2s_blocks a op buf n) ==>
         lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
   s.vs_current_bb = u2s_label a 0 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
   lookup_var (u2s_var a 0) s = SOME (n2w X) /\
   lookup_var (u2s_var a 1) s = SOME 0w /\ local_ptrs_reserved cenv a /\
   (?p. buf = Var p /\ not_fresh_at a p) /\
@@ -251,7 +251,7 @@ Theorem u2s_check_mem_exit[local]:
   X < dimword (:256) /\ 78 <= n /\ 32 <= sz /\ b+(sz+n) < dimword (:256) ==>
   ?t. gas_path_mem ctx fn s 0 (OK t) /\
       alloca_history fn t /\ t.vs_alloca_next = s.vs_alloca_next /\
-      u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
+      u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
         (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
@@ -278,7 +278,7 @@ Proof
     simp[Abbr `v`, update_var_def] >>
   drule_all u2s_check_memory_path >> strip_tac >>
   qabbrev_tac `s1 = jump_to (u2s_label a (if X = 0 then 3 else 1)) v` >>
-  `u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 s1` by
+  `u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 s1` by
     (simp[Abbr `s1`] >> irule u2s_safe_jump >> simp[Abbr `v`] >>
      irule u2s_safe_update >> gvs[]) >>
   `alloca_inv s1` by
@@ -324,14 +324,14 @@ Theorem u2s_setup_mem_exit:
   s.vs_inst_idx = LENGTH pre /\ ~s.vs_halted /\
   (!blk. MEM blk (u2s_blocks a op buf n) ==>
          lookup_block blk.bb_label fn.fn_blocks = SOME blk) /\
-  u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
+  u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 s /\
   eval_operand op s = SOME (n2w X) /\ eval_operand buf s = SOME (n2w b) /\
   local_ptrs_reserved cenv a /\ (?p. buf = Var p /\ not_fresh_at a p) /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   X < dimword (:256) /\ 78 <= n /\ 32 <= sz /\ b+(sz+n) < dimword (:256) ==>
   ?t. gas_path_mem ctx fn s 0 (OK t) /\
       alloca_history fn t /\ t.vs_alloca_next = s.vs_alloca_next /\
-      u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
+      u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 t /\
       eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
       val_in_memory ty (StringV (num_to_dec_string X))
         (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
@@ -348,11 +348,11 @@ Proof
    v.vs_current_bb = s.vs_current_bb /\ ~v.vs_halted` by
     (mp_tac (Q.INST [`t` |-> `v`, `p` |-> `n2w b`, `w` |-> `n2w X`] u2s_setup_values) >>
      simp[Abbr `v`]) >>
-  `u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 v` by
+  `u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 v` by
     (simp[Abbr `v`] >> irule u2s_setup_safe >> gvs[]) >>
   drule_all u2s_setup_memory_path >> strip_tac >>
   qabbrev_tac `s1 = jump_to (u2s_label a 0) v` >>
-  `u2s_safe ctx fn cenv cx es a buf b (sz+n) inst s0 s1` by
+  `u2s_safe H ctx fn cenv cx es a buf b (sz+n) inst s0 s1` by
     (simp[Abbr `s1`] >> irule u2s_safe_jump >> gvs[]) >>
   `alloca_inv s1` by
     (irule rest_word_state_alloca_inv >> fs[u2s_safe_def] >> metis_tac[]) >>

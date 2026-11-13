@@ -46,15 +46,15 @@ QED
 Resume empty_memory_vv_sim_ptr[run]:
   drule_all empty_type_buffer_size >> strip_tac >>
   drule_all compile_builtin_empty_complex_run >> strip_tac >>
-  `?p w H th. buf.buf_operand = Var p /\ lookup_var p t = SOME w /\
-    gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 H th
+  `?p w HG th. buf.buf_operand = Var p /\ lookup_var p t = SOME w /\
+    gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 HG th
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-    ptr_covers H th p t (type_memory_bytes cenv typ) /\
+    ptr_covers HG th p t (type_memory_bytes cenv typ) /\
     (!a. w2n w <= a /\ a < w2n w +
       (if is_bytestring_type typ \/
         (case typ of ArrayT _ (Dynamic _) => T | _ => F)
        then 32 else type_memory_bytes cenv typ) ==> a NOTIN th.t_mem) /\
-    ghost_inv d cenv cx es H th t /\ ghost_kept cenv es sa G0 tn0 s0 H th` by
+    ghost_inv H d cenv cx es HG th t /\ ghost_kept cenv es sa G0 tn0 s0 HG th` by
     (irule empty_buffer_framed_path >> simp[] >>
      goal_assum (drule_at Any) >> simp[]) >>
   suspend "post"
@@ -62,17 +62,17 @@ QED
 Resume empty_memory_vv_sim_ptr[post]:
   `w' = w` by gvs[eval_operand_def] >> gvs[] >>
   drule_all empty_type_default_memory >> strip_tac >>
-  `vv_post ctx func cenv cx (TypeBuiltin typ Empty typ []) es sa sb s0 es
+  `vv_post H ctx func cenv cx (TypeBuiltin typ Empty typ []) es sa sb s0 es
      (Value (default_value tv)) (LocatedValue typ (base_ptr buf)) t` by
     suspend "semantic" >>
   `ptr_vv_ok cx typ (Value (default_value tv))
-      (LocatedValue typ (base_ptr buf)) es H th t /\
-    ptr_buf_ok cenv (TypeBuiltin typ Empty typ []) buf.buf_operand H t` by
+      (LocatedValue typ (base_ptr buf)) es HG th t /\
+    ptr_buf_ok cenv (TypeBuiltin typ Empty typ []) buf.buf_operand HG t` by
     suspend "pointer" >>
   `t.vs_current_bb = sb.cs_current_bb` by suspend "bb" >>
   simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INL (Value (default_value tv))`, `es`, `H`, `th`,
+  qexistsl_tac [`INL (Value (default_value tv))`, `es`, `HG`, `th`,
     `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   simp[expr_type_def, base_ptr_def] >>
   suspend "transport"
@@ -105,8 +105,8 @@ QED
 Resume empty_memory_vv_sim_ptr[pointer]:
   `ptr_vv_ok cx typ (Value (default_value tv))
     (LocatedValue typ (base_ptr <|buf_operand := Var p;
-      buf_size := type_memory_bytes cenv typ|>)) es H th t /\
-    ptr_buf_ok cenv (TypeBuiltin typ Empty typ []) (Var p) H t` by
+      buf_size := type_memory_bytes cenv typ|>)) es HG th t /\
+    ptr_buf_ok cenv (TypeBuiltin typ Empty typ []) (Var p) HG t` by
     (irule empty_memory_pointer_post >> simp[] >> metis_tac[]) >>
   gvs[base_ptr_def, ptr_vv_ok_def]
 QED

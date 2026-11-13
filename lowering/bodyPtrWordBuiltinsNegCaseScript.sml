@@ -27,7 +27,7 @@ Theorem word_neg_typed_post:
   is_numeric_type ann /\ ~is_uint_type ann /\ ann = expr_type e /\
   evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
   compile_neg x ann s1 = (op,sb) /\
-  expr_post ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+  expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
   eval_operand x t0 = SOME (typed_val_to_w256 tv v) /\
   (!z. x = Var z ==> not_fresh_at s1 z) /\
   fn_has_code s1 sb func /\ local_ptrs_reserved cenv s1 /\
@@ -37,7 +37,7 @@ Theorem word_neg_typed_post:
   w2i (FST (type_bounds ann)) < w2i (typed_val_to_w256 tv v) ==>
   ?v' t. unop_result cx ann Neg [expr_type e] v ee = INL v' /\
     run_inst_seq (emitted_insts s1 sb) t0 = OK t /\
-    expr_post ctx func cenv cx (Builtin ann Neg [e]) es sa sb s0 ee v' op
+    expr_post H ctx func cenv cx (Builtin ann Neg [e]) es sa sb s0 ee v' op
       (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     t.vs_current_bb = sb.cs_current_bb
 Proof
@@ -47,7 +47,7 @@ Proof
      POP_ASSUM_LIST (K all_tac) >>
      Cases_on `ann` >> simp[is_numeric_type_def, is_word_type_def] >>
      rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def]) >>
-  `stmt_state_rel ctx func cenv cx ee t0` by gvs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee t0` by gvs[expr_post_def] >>
   `straight_fresh (compile_neg x ann)` by metis_tac[straight_fresh_neg, ETA_AX] >>
   drule_all neg_typed_source >> disch_then (qspec_then `ee` mp_tac) >>
   simp[] >> strip_tac >>
@@ -72,25 +72,25 @@ Theorem word_neg_normal_ptr_outcome:
   is_numeric_type ann /\ ~is_uint_type ann /\ ann = expr_type e /\
   evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
   compile_neg x ann s1 = (op,sb) /\
-  expr_post ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+  expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
   eval_operand x t0 = SOME (typed_val_to_w256 tv v) /\
   (!z. x = Var z ==> not_fresh_at s1 z) /\ fn_has_code s1 sb func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
   ~ctx_has_dalloca ctx /\ ~t0.vs_halted /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\
-  sa.cs_next_var <= s1.cs_next_var /\ ghost_inv d cenv cx ee G tn t0 /\
+  sa.cs_next_var <= s1.cs_next_var /\ ghost_inv H d cenv cx ee G tn t0 /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ ptr_val_ok cx ann v x G tn t0 /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   w2i (FST (type_bounds ann)) < w2i (typed_val_to_w256 tv v) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (\vs. (unop_result cx ann Neg [expr_type e] v vs,vs)) (ee,t0,G,tn)
     (\res fin G' tn' u. ?v'. res = INL v' /\
-      expr_post ctx func cenv cx (Builtin ann Neg [e]) es sa sb s0 fin v' op u /\
+      expr_post H ctx func cenv cx (Builtin ann Neg [e]) es sa sb s0 fin v' op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
+      ghost_inv H d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
     (\res fin gt r. expr_exit res r)
 Proof
@@ -104,7 +104,7 @@ Proof
   `op_taint tn x = {} /\ op_prov G x = NONE` by gvs[ptr_val_ok_def] >>
   `allocas_from 0 t0` by simp[allocas_from_def] >>
   drule_all word_neg_emitted_checked >>
-  disch_then (qspecl_then [`func`, `PG`, `G`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`func`, `PG`, `G`, `cx_dead H cx`] strip_assume_tac) >>
   drule_all word_neg_compiled_normal_post >> strip_tac >>
   drule_all word_neg_code_prefix >> strip_tac >>
   drule word_neg_emitted_shape >> strip_tac >>
@@ -118,7 +118,7 @@ Proof
   simp[ghost_inv_gas_obs, word_interval_ghost_inv_index, ptr_val_ok_def] >>
   conj_tac >- metis_tac[] >>
   conj_tac
-  >- (qpat_x_assum `expr_post _ _ _ _ (Builtin _ _ _) _ _ _ _ _ _ _ _` mp_tac >>
+  >- (qpat_x_assum `expr_post _ _ _ _ _ (Builtin _ _ _) _ _ _ _ _ _ _ _` mp_tac >>
       simp[expr_post_def, expr_val_at_def, stmt_state_rel_gas_obs,
            loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
       metis_tac[]) >>
@@ -156,7 +156,7 @@ Theorem word_neg_overflow_ptr_outcome:
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\
   ~(w2i (FST (type_bounds ann)) < w2i (typed_val_to_w256 tv v)) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (\vs. (unop_result cx ann Neg [expr_type e] v vs,vs)) (ee,t0,G,tn)
     Q (\res fin gt r. expr_exit res r)
 Proof
@@ -165,7 +165,7 @@ Proof
   drule_all word_neg_actual_abort >> strip_tac >>
   `allocas_from 0 t0` by simp[allocas_from_def] >>
   drule_all word_neg_emitted_checked >>
-  disch_then (qspecl_then [`func`, `PG`, `G`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`func`, `PG`, `G`, `cx_dead H cx`] strip_assume_tac) >>
   drule_all word_neg_code_prefix >> strip_tac >>
   drule word_neg_emitted_shape >> strip_tac >>
   drule_all run_inst_seq_abort_gas_path_ptr >> strip_tac >>
@@ -181,24 +181,24 @@ Theorem word_neg_typed_ptr_outcome:
   is_numeric_type ann /\ ~is_uint_type ann /\ ann = expr_type e /\
   evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
   compile_neg x ann s1 = (op,sb) /\
-  expr_post ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+  expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
   eval_operand x t0 = SOME (typed_val_to_w256 tv v) /\
   (!z. x = Var z ==> not_fresh_at s1 z) /\ fn_has_code s1 sb func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
   ~ctx_has_dalloca ctx /\ ~t0.vs_halted /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\
-  sa.cs_next_var <= s1.cs_next_var /\ ghost_inv d cenv cx ee G tn t0 /\
+  sa.cs_next_var <= s1.cs_next_var /\ ghost_inv H d cenv cx ee G tn t0 /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ ptr_val_ok cx ann v x G tn t0 /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (\vs. (unop_result cx ann Neg [expr_type e] v vs,vs)) (ee,t0,G,tn)
     (\res fin G' tn' u. ?v'. res = INL v' /\
-      expr_post ctx func cenv cx (Builtin ann Neg [e]) es sa sb s0 fin v' op u /\
+      expr_post H ctx func cenv cx (Builtin ann Neg [e]) es sa sb s0 fin v' op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
+      ghost_inv H d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
     (\res fin gt r. expr_exit res r)
 Proof

@@ -12,9 +12,9 @@ Theorem ifexp_raw_marked_word_unwrap:
   compile_expr cenv ty e sa = (vv,sm) /\ unwrap_value cenv vv sm = (op,sb) /\
   gas_marked_exec_ptr D (ctx,fn) PG (eval_expr cx e) (es,s0,G0,tn0)
     marks (INL raw) ee G tn (OK s) /\
-  vv_post ctx fn cenv cx e es sa sm s0 (ee with gas_obs := []) raw vv s /\
+  vv_post H ctx fn cenv cx e es sa sm s0 (ee with gas_obs := []) raw vv s /\
   ptr_vv_ok cx (expr_type e) raw vv (ee with gas_obs := []) G tn s /\
-  ghost_inv d cenv cx (ee with gas_obs := []) G tn s /\
+  ghost_inv H d cenv cx (ee with gas_obs := []) G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -25,9 +25,9 @@ Theorem ifexp_raw_marked_word_unwrap:
   ?v u G1 tn1.
     read_result cx raw (ee with gas_obs := []) = (INL v,ee with gas_obs := []) /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK u) /\
-    expr_post ctx fn cenv cx e es sa sb s0 (ee with gas_obs := []) v op u /\
+    expr_post H ctx fn cenv cx e es sa sb s0 (ee with gas_obs := []) v op u /\
     ptr_val_ok cx (expr_type e) v op G1 tn1 u /\
-    ghost_inv d cenv cx (ee with gas_obs := []) G1 tn1 u /\
+    ghost_inv H d cenv cx (ee with gas_obs := []) G1 tn1 u /\
     ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts

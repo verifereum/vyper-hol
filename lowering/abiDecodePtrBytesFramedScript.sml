@@ -27,8 +27,8 @@ Theorem abi_decode_bytes_success_framed:
   w2n b+h < dimword(:256) /\
   (w2n b+h <= w2n d \/ w2n d+cap <= w2n b) /\
   run_inst_seq (emitted_insts sa sb) s = OK u /\
-  ghost_inv ret cenv cx es G tn s /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H ret cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!name a k. local_region cenv es.scopes s name a k ==>
@@ -38,15 +38,15 @@ Theorem abi_decode_bytes_success_framed:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
     regions_disjoint off (type_memory_size tv) (w2n d) cap) ==>
-  ?H tf. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
-    ghost_inv ret cenv cx es H tf u /\ stmt_state_rel ctx func cenv cx es u /\
+  ?HG tf. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG tf /\
+    ghost_inv H ret cenv cx es HG tf u /\ stmt_state_rel H ctx func cenv cx es u /\
     mload (w2n d) u = mload (w2n b+p) s /\
     fresh_vars_wrt sb u /\
-    abi_decode_ptr_window H tf u src b h /\
-    abi_decode_ptr_window H tf u dst d
+    abi_decode_ptr_window HG tf u src b h /\
+    abi_decode_ptr_window HG tf u dst d
       (32+contractABI$ceil32 (w2n (mload (w2n b+p) s))) /\
     (!x. not_fresh_at sa x ==>
-      lookup_var x u = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+      lookup_var x u = lookup_var x s /\ FLOOKUP HG x = FLOOKUP G x /\
       op_taint tf (Var x) = op_taint tn (Var x)) /\
     (!i. ~(w2n d <= i /\ i < w2n d+cap) ==>
       mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory /\
@@ -56,7 +56,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_decode_bytes_member_success_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  rename1 `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf` >>
+  rename1 `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG tf` >>
   drule_all abi_decode_bytes_runtime_frame >> strip_tac >>
   suspend "capacity"
 QED
@@ -95,12 +95,12 @@ Resume abi_decode_bytes_success_framed[ghost]:
    u.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `(u with <|vs_vars := _; vs_memory := _|>) = s` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[venom_state_component_equality]) >>
-  `stor_taint_ok cx tf u` by
+  `stor_taint_ok H cx tf u` by
     (irule copy_stor_taint_frame >> qexistsl [`s`, `tn`] >>
      fs[ghost_inv_def]) >>
-  `ghost_inv ret cenv cx es H tf u` by
+  `ghost_inv H ret cenv cx es HG tf u` by
     (irule hash_ghost_inv_exterior_frame >> (conj_tac >- simp[]) >>
-     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
      qexistsl [`ctx`, `func`, `sa`, `{i | w2n d <= i /\ i < w2n d+cap}`] >>
      simp[] >> rpt gen_tac >> strip_tac >>
      qpat_x_assum `!name a k. local_region _ _ _ name a k ==> _` drule >> decide_tac) >>
@@ -115,11 +115,11 @@ Resume abi_decode_bytes_success_framed[state]:
      `~(w2n d <= i /\ i < w2n d+cap)` by decide_tac >>
      qpat_x_assum `!i. ~(w2n d <= i /\ i < w2n d+cap) ==> _`
        (qspec_then `i` mp_tac) >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es u` by
+  `stmt_state_rel H ctx func cenv cx es u` by
     (irule buffer_store_state_frame >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ s`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ s`)) >>
      qexistsl [`w2n d`, `cap`, `sa`] >> simp[] >> metis_tac[ADD_COMM]) >>
-  qexistsl [`H`, `tf`] >> simp[]
+  qexistsl [`HG`, `tf`] >> simp[]
 QED
 
 Finalise abi_decode_bytes_success_framed

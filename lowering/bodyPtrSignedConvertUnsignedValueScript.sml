@@ -45,23 +45,23 @@ Theorem unsigned_loader_from_bytes_value:
   LENGTH bs <= 32 /\ 64 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   w2n a+32 < dimword(:256) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
   s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  ?H th.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  ?HG th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx+6)) /\
-    op_prov H out = NONE /\ op_taint th out = {} /\
-    op_prov H bits = NONE /\ op_taint th bits = {} /\
+    op_prov HG out = NONE /\ op_taint th out = {} /\
+    op_prov HG bits = NONE /\ op_taint th bits = {} /\
     eval_operand bits t = SOME (n2w (8*(32-LENGTH bs))) /\
-    ghost_inv d cenv cx es H th (t with vs_inst_idx := s.vs_inst_idx+6) /\
-    ghost_kept cenv es0 s0a G0 tn0 s0 H th /\
+    ghost_inv H d cenv cx es HG th (t with vs_inst_idx := s.vs_inst_idx+6) /\
+    ghost_kept cenv es0 s0a G0 tn0 s0 HG th /\
     (t with vs_inst_idx := s.vs_inst_idx+6) =
       s with <|vs_vars := t.vs_vars; vs_inst_idx := s.vs_inst_idx+6|> /\
     (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
+      FLOOKUP HG p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >> drule_all unsigned_bytes_value_source_facts >> strip_tac >>
   drule_all unsigned_loader_counted_ghost_frame >> simp[]
@@ -102,23 +102,23 @@ Theorem unsigned_loader_from_string_value:
   LENGTH str <= 32 /\ 64 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   w2n a+32 < dimword(:256) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
   s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  ?H th.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  ?HG th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx+6)) /\
-    op_prov H out = NONE /\ op_taint th out = {} /\
-    op_prov H bits = NONE /\ op_taint th bits = {} /\
+    op_prov HG out = NONE /\ op_taint th out = {} /\
+    op_prov HG bits = NONE /\ op_taint th bits = {} /\
     eval_operand bits t = SOME (n2w (8*(32-LENGTH str))) /\
-    ghost_inv d cenv cx es H th (t with vs_inst_idx := s.vs_inst_idx+6) /\
-    ghost_kept cenv es0 s0a G0 tn0 s0 H th /\
+    ghost_inv H d cenv cx es HG th (t with vs_inst_idx := s.vs_inst_idx+6) /\
+    ghost_kept cenv es0 s0a G0 tn0 s0 HG th /\
     (t with vs_inst_idx := s.vs_inst_idx+6) =
       s with <|vs_vars := t.vs_vars; vs_inst_idx := s.vs_inst_idx+6|> /\
     (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
+      FLOOKUP HG p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >> drule_all unsigned_string_value_source_facts >> strip_tac >>
   drule_all unsigned_loader_counted_ghost_frame >> simp[]

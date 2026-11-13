@@ -20,7 +20,7 @@ Theorem literal_bytes_store_counted:
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   not_fresh_at sa src /\ not_fresh_at sa dst /\
   ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
-  stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  stmt_state_rel H ctx func ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   ghost_kept ce es fr G0 tn0 s0 G tn /\ local_ptrs_reserved ce sa /\
   (!p. not_fresh_at fr p ==> not_fresh_at sa p) /\
   (!p k. ce.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
@@ -32,13 +32,13 @@ Theorem literal_bytes_store_counted:
     ~(w2n b <= i /\ i < w2n b+n)) /\
   (!name p k i. local_region ce es.scopes s0 name p k /\
     p <= i /\ i < p+k ==> ~(w2n b <= i /\ i < w2n b+n)) ==>
-  ?H tf sf.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tf (OK sf) /\
+  ?HG tf sf.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
-    ghost_inv d ce cx es H tf sf /\ ghost_kept ce es fr G0 tn0 s0 H tf /\
+    ghost_inv H d ce cx es HG tf sf /\ ghost_kept ce es fr G0 tn0 s0 HG tf /\
     (!p k. not_fresh_at sa p /\ ptr_covers G tn p s k ==>
-       ptr_covers H tf p sf k) /\
+       ptr_covers HG tf p sf k) /\
     (!i. ~(w2n b <= i /\ i < w2n b+n) ==>
       mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
       (i IN tf.t_mem <=> i IN tn.t_mem)) /\
@@ -48,8 +48,8 @@ Theorem literal_bytes_store_counted:
       vs_inst_idx := s.vs_inst_idx|>) = s /\
     sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
     (!x. not_fresh_at sa x ==> lookup_var x sf = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x) /\
-    (~ce.ce_is_ctor ==> stmt_state_rel ctx func ce cx es sf)
+      FLOOKUP HG x = FLOOKUP G x) /\
+    (~ce.ce_is_ctor ==> stmt_state_rel H ctx func ce cx es sf)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `compile_store_bytestring (Var src) (Var dst) sa = ((),sb)` by
@@ -62,7 +62,7 @@ Proof
     metis_tac[robust_bytestring_source_live] >>
   drule_all annassign_bytestring_copy_robust_ptr >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
-  `ghost_inv d ce cx es Gf tnf sf` by
+  `ghost_inv H d ce cx es Gf tnf sf` by
     (irule annassign_ghost_vars_exterior_ptr >>
      qexistsl [`G`, `ctx`, `func`, `s`, `tn`,
                `{i | w2n b <= i /\ i < w2n b+n}`] >>
@@ -71,7 +71,7 @@ Proof
     (irule annassign_ghost_kept_vars_exterior_ptr >>
      qexistsl [`G`, `tn`, `{i | w2n b <= i /\ i < w2n b+n}`] >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
-  `~ce.ce_is_ctor ==> stmt_state_rel ctx func ce cx es sf` by
+  `~ce.ce_is_ctor ==> stmt_state_rel H ctx func ce cx es sf` by
     (strip_tac >> irule literal_store_runtime_frame >> simp[] >>
      qexistsl [`w2n b`, `n`, `s`, `sa`] >> simp[mcopy_memory_length] >>
      conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
