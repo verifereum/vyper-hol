@@ -1,7 +1,7 @@
 (* Checked explicit external-entry finite-prefix preservation. *)
 Theory guardSourceExternal
 Ancestors
-  guardSourceExternalPrimitives guardSourceExecution vyperCallStorageFootprint
+  guardSourceExternalPrimitives guardSourceExecution guardSourceGetter vyperCallStorageFootprint
   vyperInterpreter vyperState vyperStorageFootprint vyperStorageTrace
   vyperFiniteStoragePreservation vyperTypeExprSoundness vyperTypeExternalDefaults
   vyperTypeContractSoundness vyperTypeEvalStoragePreservation vyperEvalOutcomeSuffix
@@ -302,4 +302,64 @@ Proof
     (drule_all explicit_entry_finite_prefix >> simp[]) >>
   qpat_assum `cx = _` (fn th => PURE_REWRITE_TAC [GSYM th]) >>
   first_assum ACCEPT_TAC
+QED
+
+Theorem call_external_trace_storage_finite_prefix:
+  source_typing_ok tops am tx /\
+  regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
+  storage_well_formed_on cx (initial_state am []) (FST H) /\
+  cx = initial_evaluation_context am.sources am.layouts tx NONE /\
+  call_external_trace (SOME os) gs am tx = (res,am',rqs,obs) /\
+  EVERY (\r. MEM r (FST H)) (storage_trace_regions obs) /\
+  EVERY (\l. MEM l (SND H)) (storage_trace_locks obs) /\ storage_roots_fit obs /\
+  (!pre rq co sfx.
+    obs = pre ++ StorageOutcome rq co :: sfx /\
+    valid_horizon cx (initial_state am []) H pre /\
+    storage_well_formed_on cx
+      (empty_state with <|accounts := rq.cr_accounts; tStorage := rq.cr_tStorage|>) (FST H) ==>
+    storage_well_formed_on cx
+      (empty_state with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>) (FST H)) ==>
+  storage_observations_ok cx H obs
+Proof
+  strip_tac >>
+  `!c. storage_observations_ok c H []` by
+    simp[storage_observations_ok_def, storage_trace_regions_def, storage_trace_locks_def,
+         storage_roots_fit_def, storage_trace_backends_well_formed_def] >>
+  qpat_x_assum `source_typing_ok tops am tx`
+    (strip_assume_tac o REWRITE_RULE [source_typing_ok_def]) >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)]` by
+    gvs[checked_contract_runtime_ready_def] >>
+  qpat_x_assum `call_external_trace _ _ _ _ = _` mp_tac >>
+  simp[Once call_external_trace_def] >> gvs[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  `ALOOKUP [(NONE,tops)] (find_function_module am tx.target tx.function_name) = SOME ts` by
+    gvs[vyperContextTheory.get_self_code_def, vyperContextTheory.get_module_code_def,
+        initial_evaluation_context_def] >>
+  `find_function_module am tx.target tx.function_name = NONE /\ ts = tops` by
+    (Cases_on `find_function_module am tx.target tx.function_name` >> gvs[]) >>
+  gvs[] >>
+  `(?raw. MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body') tops) \/
+   (?decl. MEM decl tops /\ is_public_getter_decl tx.function_name decl /\
+     external_getter_tuple (find_function_module am tx.target tx.function_name) decl =
+       SOME (mut,nr,args,dflts,ret,body'))` by
+    (irule lookup_exported_function_checked_cases_current >>
+     qexistsl_tac [`am`,`art`,`[(NONE,tops)]`] >>
+     asm_rewrite_tac [GSYM vyperContextTheory.get_self_code_def]) >>
+  `ALOOKUP [(NONE,tops)] (find_function_module am tx.target tx.function_name) = SOME tops` by
+    asm_simp_tac (srw_ss()) [] >>
+  `module_allocated am.layouts tx.target (find_function_module am tx.target tx.function_name) tops` by
+    (drule_all checked_contract_runtime_ready_module_allocated >> simp[]) >>
+  qpat_assum `find_function_module am tx.target tx.function_name = NONE`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+  qpat_assum `!pre rq co sfx. _`
+    (assume_tac o PURE_REWRITE_RULE [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]) >>
+  (fn (asl,w) =>
+    let val explicit = List.exists
+      (can (find_term (same_const ``FunctionDecl``))) asl
+        val selected_entry = SIMP_RULE (srw_ss()) []
+          (Q.INST [`src` |-> `NONE`, `mods` |-> `[(NONE,tops)]`, `ts` |-> `tops`,
+             `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`,
+             `am` |-> `am`, `tx` |-> `tx`]
+            (SPEC_ALL (if explicit then selected_explicit_finite_prefix
+                       else selected_getter_finite_prefix)))
+    in (drule_all selected_entry >> simp[]) (asl,w) end)
 QED
