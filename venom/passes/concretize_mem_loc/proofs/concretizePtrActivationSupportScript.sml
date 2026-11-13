@@ -54,10 +54,12 @@ Theorem ptr_frame_current_table_step:
     (pointer_derived_vars fn (ptr_frame_site_roots dyn fn s'.vs_allocas PG site))
     (step_prov PG G inst s') site
 Proof
-  strip_tac >> irule ptr_frame_site_step >> simp[] >> rpt conj_tac >>
-  TRY (irule ptr_frame_support_extend >> goal_assum (drule_at Any) >>
-       metis_tac[ptr_step_allocas_extend] >> NO_TAC) >>
-  rpt strip_tac >>
+  strip_tac >>
+  `ptr_site_supported
+     (pointer_derived_vars fn (ptr_frame_site_roots dyn fn s'.vs_allocas PG site)) G site` by
+    (irule ptr_frame_support_extend >> goal_assum (drule_at Any) >>
+     metis_tac[ptr_step_allocas_extend]) >>
+  irule ptr_frame_site_step >> simp[] >> rpt strip_tac >>
   gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(), out_prov_def,
       update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
