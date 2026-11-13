@@ -589,9 +589,9 @@ Resume dload_normal_safety[early_clean]:
   `gas_cut cut vs s` by
     metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
   `taint_ok f tn i s` by
-    (qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
-     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
-     strip_tac >> first_x_assum drule_all >> simp[]) >>
+    (qpat_x_assum `ptr_discipline_upto _ _ _ _` mp_tac >>
+     simp[ptr_discipline_upto_def] >> strip_tac >>
+     first_x_assum drule_all >> simp[]) >>
   drule_all dload_offset_clean >> strip_tac >>
   drule dload_boundary_vars >> strip_tac >>
   Cases_on `off` >> gvs[op_taint_def] >>
