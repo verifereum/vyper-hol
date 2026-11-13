@@ -125,12 +125,13 @@ Proof
   ho_match_mp_tac vyperTypeContractTheory.loop_iterator_place_ind >>
   rpt strip_tac >>
   simp[gas_shadow_expr_def, vyperTypeContractTheory.loop_iterator_place_def,
-       vyperTypeSystemTheory.place_access_def, OPTION_MAP_COMPOSE,
+       vyperTypeSystemTheory.place_access_def, optionTheory.OPTION_MAP_COMPOSE,
        combinTheory.o_DEF]
 QED
 
 Theorem shadow_iterator_support[local]:
-  (!tops e. supported_pure_expr tops e ==> supported_pure_expr tops (gas_shadow_expr e)) /  (!tops e. supported_expr tops e ==> supported_expr tops (gas_shadow_expr e)) ==>
+  (!tops e. supported_pure_expr tops e ==> supported_pure_expr tops (gas_shadow_expr e)) /\
+  (!tops e. supported_expr tops e ==> supported_expr tops (gas_shadow_expr e)) ==>
   !iter tops ty n. supported_iterator tops ty iter n ==>
     supported_iterator tops ty (gas_shadow_iterator iter) n
 Proof
@@ -205,11 +206,13 @@ Proof
       Cases_on `supported_target_info tops bindings target` >> gvs[] >>
       Cases_on `x` >> gvs[] >> drule shadow_target_info >> disch_then drule >> simp[])
   >- (Cases_on `e` >> gvs[gas_shadow_expr_def, supported_nonnegative_literal_def])
-  >- (Cases_on `target` >> gvs[supported_append_target_def, gas_shadow_expr_def]) >>
+  >- (Cases_on `target` >> gvs[supported_append_target_def, gas_shadow_expr_def])
+  >- (Cases_on `target` >> gvs[gas_shadow_expr_def]) >>
   gvs[supported_log_def, supported_pure_exprs_every, EVERY_MAP, MAP_MAP_o, o_DEF] >>
   conj_tac
   >- (irule listTheory.EVERY_MONOTONIC >> goal_assum (drule_at Any) >> simp[]) >>
-  gvs[SF ETA_ss]
+  Cases_on `supported_event_fields tops id` >>
+  gvs[listTheory.LIST_REL_MAP1, combinTheory.o_DEF, SF ETA_ss]
 QED
 
 Theorem gas_shadow_supported_stmts_from_expr:
