@@ -75,7 +75,7 @@ Theorem e2e_deploy_correctness_identity:
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
+      (creation_resource_starved es r es' \/
        deploy_call_result_rel tops runtime_bc am tx es r es')
 Proof
   rpt strip_tac >>
@@ -163,7 +163,7 @@ Theorem e2e_deploy_correctness_asm_opt:
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
+      (creation_resource_starved es r es' \/
        deploy_call_result_rel tops runtime_bc am tx es r es')
 Proof
   cheat
@@ -185,7 +185,7 @@ Theorem e2e_deploy_correctness:
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
+      (creation_resource_starved es r es' \/
        deploy_call_result_rel tops runtime_bc am tx es r es')
 Proof
   rpt gen_tac >> strip_tac >>
@@ -215,7 +215,7 @@ val _ =
       deploy_state_rel tops deploy_bc am tx es /\
       ~(?t. runtime_bc = 0xEFw :: t) ==>
       ?r es'. run_call es = SOME (r,es') /\
-        (frame_resource_starved es r es' \/
+        (creation_resource_starved es r es' \/
          deploy_call_result_rel tops runtime_bc am tx es r es')``;
     val expanded = concl (ASSUME expected);
   in
