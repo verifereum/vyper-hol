@@ -12,7 +12,7 @@ Ancestors
   bodyIntCallPostProvenanceFootprint
   bodyIntCallPostProvenanceTypedCases
   bodyIntCallPostProvenanceOrdinary
-  bodyIntCallPostProvenanceArmIdentity
+  bodyIntCallPostProvenanceArmIdentity bodyIntCallPostProvenanceArmCopy
   bodyIntCallPostProvenanceStruct
   bodyIntCallPostProvenanceMakeArray
 
