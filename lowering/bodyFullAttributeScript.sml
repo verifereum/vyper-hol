@@ -297,5 +297,26 @@ Finalise attribute_vv_sim_full
 Theorem attribute_expr_full_ok:
   !cx v9 e id. body_expr_full_ok cx e ==> body_expr_full_ok cx (Attribute v9 e id)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
+  drule attr_pre_base >> strip_tac >>
+  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx ty e es` by
+    (gvs[body_expr_full_ok_def] >> metis_tac[]) >>
+  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx ty (Attribute v9 e id) es` by
+    (irule attribute_vv_sim_full >> metis_tac[]) >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  irule expr_sim_full_of_vv >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all exprSimHypsTheory.expr_body_pre_copy_ok >> simp[]) >>
+  qpat_assum `expr_body_pre _ _ _ (Attribute _ _ _) _`
+    (mp_tac o MATCH_MP expr_body_pre_type_evaluates) >>
+  simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  qexists_tac `x` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env (Attribute v9 e id)
+     (es with gas_obs := gs)` by simp[] >>
+  drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >>
+  strip_tac >> gvs[] >> metis_tac[]
 QED
