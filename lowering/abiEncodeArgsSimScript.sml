@@ -9,6 +9,7 @@ Ancestors
 Definition abi_args_post_def:
   abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa sb s0 es' args ops vs s <=>
     stmt_state_rel H ctx func ce cx es' s /\
+    storage_well_formed_on cx es' (FST H) /\
     LENGTH args = LENGTH vs /\
     LIST_REL (\op ev.
       expr_val_rel cx (lowered_value_type ce (FST ev)) (SND ev) op s /\
@@ -41,7 +42,7 @@ End
 Theorem abi_args_post_nil:
   abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa sb s0 es' [] ops vs s <=>
     ops = [] /\ vs = [] /\ stmt_state_rel H ctx func ce cx es' s /\
-    wb_frame ce es es' sa s0 s
+    storage_well_formed_on cx es' (FST H) /\ wb_frame ce es es' sa s0 s
 Proof
   Cases_on `vs` >> simp[abi_args_post_def] >> metis_tac[]
 QED
@@ -264,10 +265,12 @@ Proof
 QED
 
 Theorem abi_args_nil_sim:
+  storage_well_formed_on cx es (FST (H:(bool # bytes32 # type_value) list # num list)) ==>
   frag_exec ctx sa sa (\s. s = s0 /\ stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s)
     (\s. abi_args_post H ctx func ce cx es sa sa s0 es [] [] [] s)
     (wb_args_exit (INL []))
 Proof
+  strip_tac >>
   irule fragExecTheory.frag_exec_refl >> simp[abi_args_post_def, wb_frame_def] >>
   rpt strip_tac >> gvs[]
 QED
