@@ -120,6 +120,8 @@ Proof
   `return_buf_frame d bc sb0 t` by
     (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `s`, `caller`] >>
      simp[] >> metis_tac[LESS_EQ_TRANS]) >>
+  `!lo. alloca_prefix lo s ==> alloca_prefix lo t` by
+    (rpt strip_tac >> fs[alloca_prefix_def] >> metis_tac[]) >>
   `array_round_frame d func cenv caller orig t` by
     (irule array_round_frame_transport >> simp[] >> qexists_tac `s` >>
      fs[array_round_inv_def]) >>
@@ -136,11 +138,34 @@ Proof
      fs[dynarray_for_code_def, compile_stmts_env]) >>
   `fn_inst_ids_distinct func /\ s.vs_current_bb = sb0.cs_current_bb` by
     fs[dynarray_for_code_def, array_loop_inv_def] >>
+  `ret_buf_frontier d cenv s /\ local_ptrs_reserved cenv caller` by
+    fs[array_round_inv_def, array_round_frame_def] >>
+  `not_fresh_at sa p /\ p <> ov /\ p <> tot /\ p <> ep /\
+   FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+   (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n)` by
+    (fs[dynarray_for_code_def, ALL_DISTINCT] >> metis_tac[]) >>
+  `lookup_var p t = SOME dst /\
+   FLOOKUP t.vs_allocas ainst.inst_id = SOME (w2n dst,sz)` by
+    (fs[array_loop_inv_def] >> metis_tac[]) >>
+  `!n q z. FLOOKUP bc.ce_vars n <> FLOOKUP cenv.ce_vars n /\
+     FLOOKUP bc.ce_vars n = SOME (PtrVar (Var q) z) ==>
+     ?aid w z'. lookup_var q t = SOME w /\
+                FLOOKUP t.vs_allocas aid = SOME (w2n w,z')` by
+    (rpt strip_tac >> `n = id` by metis_tac[] >> gvs[] >> metis_tac[]) >>
+  `ret_buf_frontier d bc t` by
+    (irule ret_buf_frontier_post >> qexistsl_tac [`cenv`, `s`, `caller`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `t` >> simp[] >>
   qhdtm_x_assum `stmt_frag_mem` mp_tac >> rewrite_tac[stmt_frag_mem_def] >>
   disch_then (qspecl_then [`sb0`, `sb1`, `t`,
     `FST (stmts_env bc (InLoop exit incr) ty stmts sb0)`] mp_tac) >>
-  simp[GSYM array_body_post_mem_def, SF ETA_ss]
+  impl_tac >- simp[] >>
+  qpat_assum `ei = _` (fn eq => disch_then (assume_tac o REWRITE_RULE [eq] o
+    BETA_RULE o MATCH_MP gas_outcome_alloca_prefix)) >>
+  irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+  first_x_assum (irule_at Any) >>
+  BETA_TAC >> rpt strip_tac >> simp[array_body_post_mem_def] >>
+  qexists_tac `cenv''` >> fs[]
 QED
 
 (* Both live and final conditions preserve the old-register/allocation frame. *)
@@ -170,7 +195,7 @@ Proof
   qmatch_asmsub_abbrev_tac `gas_path_mem ctx func s 0 (OK t)` >>
   qexists_tac `t` >> simp[gas_marked_path_def, array_round_inv_def] >>
   irule array_round_frame_transport >> simp[] >> qexists_tac `s` >>
-  fs[array_round_inv_def] >> rpt strip_tac >>
+  fs[array_round_inv_def, alloca_prefix_def] >> rpt strip_tac >>
   fs[Abbr `t`, jump_to_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   metis_tac[]
 QED
@@ -225,7 +250,10 @@ Proof
        (fs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS, LESS_EQ_TRANS]) >>
      metis_tac[]) >>
   `array_round_frame d func cenv caller orig t` by
-    (irule array_round_frame_transport >> simp[] >> qexists_tac `s_body` >> simp[]) >>
+    (irule array_round_frame_transport >> simp[] >> qexists_tac `s_body` >> simp[] >>
+     qhdtm_assum `array_body_post_mem`
+       (strip_assume_tac o REWRITE_RULE [array_body_post_mem_def]) >>
+     first_assum ACCEPT_TAC) >>
   Cases_on `r = INR BreakException`
   >- (qexistsl_tac [`T`, `t`] >> simp[gas_marked_path_def] >> conj_tac
       >- (irule (cj 1 gas_path_mem_rules) >> simp[]) >>
