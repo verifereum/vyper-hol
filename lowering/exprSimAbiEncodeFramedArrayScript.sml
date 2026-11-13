@@ -882,6 +882,30 @@ Proof
   simp_tac bool_ss [window_array_root_def] >> metis_tac[]
 QED
 
+Theorem abi_encode_framed_array_root_tail_init_sequence:
+  window_array_root ctx func st ids ei asz msz active ty avs src dst sb cap d s /\
+  abi_encode_array_tail_init count_op asz st = (dp,en) /\
+  st.cs_next_id IN ids /\
+  MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
+  fn_has_code st en func /\
+  eval_operand count_op s = SOME (n2w (LENGTH avs)) /\
+  (!x. count_op = Var x ==> not_fresh_at st x) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t b.
+    run_inst_seq (emitted_insts st en) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    window_phase ctx func st en {st.cs_next_id} [] s t /\
+    window_array_transition ctx func st {st.cs_next_id} [] s t /\
+    window_array_root ctx func st ids ei asz msz active ty avs src dst sb cap d t /\
+    window_array_cursor T en dp st.cs_next_id b
+      (LENGTH avs * abi_member_head_size ty) sb cap d
+      (LENGTH (enc (Array NONE ty) (ListV avs))) t /\ abi_encode_exec_frame func s t
+Proof
+  cheat
+QED
+
 Theorem abi_encode_framed_array_root_tail_init_run:
   window_array_root ctx func st ids ei asz msz active ty avs src dst sb cap d s /\
   abi_encode_array_tail_init count_op asz st = (dp,en) /\
