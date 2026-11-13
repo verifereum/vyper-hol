@@ -2,7 +2,9 @@
    subscript. *)
 Theory bodyMemSubscript
 Ancestors
-  bodyMemoryPreds bodyMemMapBase
+  bodyMemoryPreds bodyMemSubscriptArray bodyMemSubscriptTuple
+  bodyMemSubscriptMismatch bodySubscriptMappingMemory bodyExprForceMemory
+  bodySimExprCases exprSimPlaces exprLowering compileEnv
 
 Theorem body_subscript_mem_case:
   !cx v8 e1 e2.
@@ -15,5 +17,30 @@ Theorem body_subscript_mem_case:
     body_expr_mem_ok cx e1 ==>
     body_expr_mem_ok cx (Subscript v8 e1 e2)
 Proof
-  cheat
+  rpt strip_tac >> simp[Once body_expr_mem_ok_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule expr_body_pre_subscript_base_type >> strip_tac >>
+      `expr_vv_sim_mem ctx func cenv cx ty (Subscript v8 e1 e2) es` by
+        (Cases_on `place_type cenv e1`
+         >- metis_tac[body_subscript_map_vv_mem] >>
+         rename1 `ValPT bt` >> Cases_on `bt <> expr_type e1`
+         >- metis_tac[compile_subscript_mismatch_vv_sim_mem] >>
+         gvs[] >> drule_all subscript_base_array_or_tuple >> strip_tac
+         >- metis_tac[body_subscript_array_vv_mem] >>
+         metis_tac[body_subscript_tuple_vv_mem]) >>
+      simp[] >> irule body_expr_sim_mem_of_vv_sim_mem >>
+      simp[] >> conj_tac
+      >- (rpt gen_tac >> strip_tac >>
+          qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
+          Cases_on `place_type cenv e1`
+          >- (simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+                   compile_subscript_def, comp_bind_def, comp_return_def] >>
+              rpt (pairarg_tac >> gvs[])) >>
+          rename1 `place_type cenv e1 = ValPT bt` >> Cases_on `bt` >>
+          simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+               compile_subscript_def, comp_bind_def, comp_return_def] >>
+          rpt (pairarg_tac >> gvs[])) >>
+      goal_assum drule) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  metis_tac[body_subscript_map_mem]
 QED
