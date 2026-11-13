@@ -52,7 +52,8 @@ Theorem ptr_paired_current_static_bound:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ mem_inv dload_headroom_ok C vs /\
+  EVERY ssa_form C.ctx_functions /\
+  (ctx_has_dalloca C ==> mem_inv dload_headroom_ok C vs) /\
   ctx_inst_ids_distinct C /\ (?names. callee_first names C.ctx_functions) /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom Ct = SOME eom /\
@@ -181,6 +182,15 @@ Resume ptr_paired_current_static_bound[descriptor_bound]:
   disch_then (DISJ_CASES_THEN2 (fn th => simp[th])
     (DISJ_CASES_THEN2 (fn th => simp[th]) strip_assume_tac)) >>
   gvs[] >>
+  `ctx_has_dalloca C` by
+    (spose_not_then assume_tac >>
+     `w2n x < dimword(:256)` by rewrite_tac[wordsTheory.w2n_lt] >>
+     `dimword(:256) <= w2n x` by
+       (qpat_x_assum `dyn_floor C vs <= w2n x` mp_tac >>
+        qpat_assum `~ctx_has_dalloca C` (fn th => rewrite_tac[th, dyn_floor_def])) >>
+     `F` suffices_by rewrite_tac[] >> decide_tac) >>
+  `mem_inv dload_headroom_ok C vs` by
+    (qpat_x_assum `ctx_has_dalloca C ==> _` irule >> first_assum ACCEPT_TAC) >>
   `EVERY wf_function C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]) >>
   `MEM (w2n x,len) (source_memory_read_ranges a.po_inst a.po_state ++
