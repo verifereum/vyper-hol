@@ -414,7 +414,7 @@ QED
    DynArray[String[40],2] slot, say).  compile_store_memory_typed stores it
    and emits INVALID unless acyclic_struct_metadata holds, hence that
    premise; exprSimAggregateLoops' aggregate_make_tuple_nested_sim is the
-   S1 twin. *)
+   S1 twin.  Removal: SEQ-3845, with the S1 twin and the S3 _mem twin. *)
 Theorem aggregate_body_make_tuple_nested_sim:
   !args tys ce cx env off sa out sb es tvs func inst x b asz s0 ctx.
   compile_make_tuple compile_expr ce args tys (Var x) off sa = (out,sb) /\
