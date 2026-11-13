@@ -5,6 +5,7 @@
 Theory registrationGuardPtr
 Ancestors
   fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem instMemFrontier
+  unitTransformDefs memSafeRun venomInstProofs
   calldataClampPtr calldataRegistrationExec moduleLowering abiDecoderLoopRegisters
   emitHelperProps
   abiDecoderClamp abiEncoder compileEnv loweringStateRelDefs emitHelper exprLoweringProps
@@ -192,6 +193,7 @@ Proof
   `opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc` by
     fs[MEM, is_terminator_def] >>
   `step_inst 0 ctx ins s = OK t` by simp[Abbr `ins`,step_inst_non_invoke] >>
+  `step_inst_base (mk_inst id opc ops outs) s = OK t` by fs[Abbr `ins`] >>
   `t.vs_requests = s.vs_requests` by
     (drule_all guard_scalar_state_frame >> strip_tac >> simp[]) >>
   `step_inst_base ins (s with vs_inst_idx := n) = OK (t with vs_inst_idx := n)` by
@@ -201,8 +203,7 @@ Proof
   `ptr_inst_ok D lo 0 ctx fn G tn ins (s with vs_inst_idx := n)` by
     (`ptr_safe_step D lo 0 ctx fn PG G tn ins (s with vs_inst_idx := n)` by
        (simp[Abbr `ins`] >> irule guard_scalar_step_safe >>
-        goal_assum $ drule_at (Pat `step_inst`) >>
-        simp[allocas_from_def]) >> fs[ptr_safe_step_def]) >>
+        fs[allocas_from_def] >> metis_tac[]) >> fs[ptr_safe_step_def]) >>
   `inst_mem_below_frontier ins (s with vs_inst_idx := n) /\
    inst_dload_in_section ins (s with vs_inst_idx := n)` by
     (fs[MEM] >> simp[Abbr `ins`,inst_mem_below_frontier_def,
@@ -212,6 +213,8 @@ Proof
    lookup_block (s with vs_inst_idx := n).vs_current_bb fn.fn_blocks = SOME bb /\
    get_instruction bb (s with vs_inst_idx := n).vs_inst_idx = SOME ins` by
     simp[Abbr `ins`] >>
+  `ins.inst_opcode <> INVOKE /\ ins.inst_opcode <> GAS /\
+   ~is_terminator ins.inst_opcode` by simp[Abbr `ins`,mk_inst_def] >>
   `gas_path_mem_edge ctx fn (s with vs_inst_idx := n) 0
     (OK (t with vs_inst_idx := SUC n))` by
     (drule_all fragGasSeqMemTheory.straight_line_mem_edge >>
@@ -330,23 +333,35 @@ Resume registration_ptr_guard_origin_frame[ghosts]:
        (s with vs_inst_idx := LENGTH sa.cs_current_insts,G,tn) []
        (OK (s1 with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)),G1,tn1)` by
        (simp[Abbr `G1`,Abbr `tn1`,Abbr `i0`] >> irule guard_scalar_indexed_origin >>
-        goal_assum $ drule_at Any >> simp[Abbr `i0`,op_taint_def,op_prov_def]) >>
+        goal_assum $ drule_at Any >> simp[op_taint_def,op_prov_def] >>
+        qexists_tac `bb` >> simp[]) >>
      `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
        (s1 with vs_inst_idx := LENGTH sa.cs_current_insts + 1,G1,tn1) []
        (OK (s2 with vs_inst_idx := SUC (LENGTH sa.cs_current_insts + 1)),G2,tn2)` by
        (simp[Abbr `G2`,Abbr `tn2`,Abbr `i1`] >> irule guard_scalar_indexed_origin >>
-        goal_assum $ drule_at Any >> simp[Abbr `i1`,Abbr `s1`,update_var_def,allocas_from_def]) >>
+        goal_assum $ drule_at Any >> fs[Abbr `s1`,update_var_def,allocas_from_def] >>
+        metis_tac[]) >>
      `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
        (s2 with vs_inst_idx := LENGTH sa.cs_current_insts + 2,G2,tn2) []
        (OK (s2 with vs_inst_idx := SUC (LENGTH sa.cs_current_insts + 2)),G3,tn3)` by
        (simp[Abbr `G3`,Abbr `tn3`,Abbr `i2`] >> irule guard_scalar_indexed_origin >>
         goal_assum $ drule_at Any >>
-        simp[Abbr `i2`,Abbr `s2`,Abbr `s1`,update_var_def,allocas_from_def]) >>
+        fs[Abbr `s2`,Abbr `s1`,update_var_def,allocas_from_def] >> metis_tac[]) >>
      `LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts + 3` by simp[] >>
+     `s with <|vs_vars := s2.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|> =
+      s2 with vs_inst_idx := LENGTH sb.cs_current_insts` by
+       (qpat_assum `s with vs_vars := s2.vs_vars = s2`
+          (fn th => mp_tac (AP_TERM
+            ``\z:venom_state. z with vs_inst_idx := LENGTH sb.cs_current_insts`` th)) >>
+        simp[]) >>
+     `s with vs_inst_idx := LENGTH sa.cs_current_insts = s` by
+       (qpat_assum `s.vs_inst_idx = LENGTH sa.cs_current_insts`
+          (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+     asm_rewrite_tac[] >>
      qpat_assum `gas_origin_ptr_path _ (_,G,tn) _ _` mp_tac >>
      qpat_assum `gas_origin_ptr_path _ (_,G1,tn1) _ _` mp_tac >>
      qpat_assum `gas_origin_ptr_path _ (_,G2,tn2) _ _` mp_tac >>
-     qpat_assum `s.vs_inst_idx = _` mp_tac >>
+     qpat_assum `s with vs_inst_idx := LENGTH sa.cs_current_insts = s` mp_tac >>
      qpat_assum `LENGTH sb.cs_current_insts = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      gvs[arithmeticTheory.ADD1] >>
