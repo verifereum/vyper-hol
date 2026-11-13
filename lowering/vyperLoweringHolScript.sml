@@ -44,6 +44,9 @@ Ancestors
   vyperLoweringCorrect
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
   loweringMemCorrect
+  (* S3 pointer leaves kept in the build until their owner rules on them *)
+  bodyStmtsSimPtr extEntryReachesBodyPtr extEntryValueRevertPtr
+  extFrameRetOkPtr
   asmSymBridge
   asmDataEnv
   asmOptFinalizerCorrect
