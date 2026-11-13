@@ -25,6 +25,7 @@ Ancestors
   contextRawReachable codegenEncodingWf spillWordBounds symbolResolve asmWf
   memSafeRun lowerDloadDefs
   frameRel codegenRel
+  runtimeSymSrcInstructions runtimeSymSrcData runtimeSymSrcFlow
 
 (* L1 for the optimizer: the runtime is the optimized assembly of the O1
    output's generated assembly. *)
@@ -311,5 +312,13 @@ Theorem lower_vyper_runtime_unit_sym_src_ok:
               MEM (Label "runtime_begin") inst.inst_operands) ==>
    EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (irule label_flow_ok_seed_free >>
+      metis_tac[runtime_sym_runtime_no_code_end,
+                runtime_sym_runtime_no_codesize,
+                runtime_sym_runtime_codecopy_source]) >>
+  conj_tac >- metis_tac[runtime_sym_runtime_no_code_end] >>
+  conj_tac >- metis_tac[lower_vyper_runtime_unit_data_bytes] >>
+  metis_tac[runtime_sym_runtime_no_runtime_begin]
 QED
