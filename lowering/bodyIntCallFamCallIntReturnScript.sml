@@ -68,8 +68,8 @@ Theorem intcall_nested_return_enriched:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   expr_body_pre ce fp.jc_cx env (Call ann (IntCall (NONE,name)) es dflt) es0 /\
   lookup_callable_function fp.jc_cx.in_deploy name fp.jc_tops =
-    SOME (mut,F,args,[],ret,ss) /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) fp.jc_tops /\
+    SOME (mut,F,args,dflts,ret,ss) /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) fp.jc_tops /\
   compile_expr ce ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sb) /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   intcall_expr_res fp ce env es0 sa s0 /\
@@ -84,8 +84,8 @@ Theorem intcall_nested_return_enriched:
      get_instruction bb t.vs_inst_idx = SOME inst /\
      decode_invoke inst = SOME (lbl,arg_ops) /\ eval_operands arg_ops t = SOME argv ==>
      gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,callee)
-       (intcall_callee_src fp.jc_cx name ss) (es1,entered) (\res ee r. F)
-       (intcall_callee_exit fp.jc_func ce fp.jc_cx rtv rcn
+       (intcall_callee_src fp.jc_cx name mut F ss) (es1,entered) (\res ee r. F)
+       (intcall_callee_exit fp.jc_func ce fp.jc_cx mut F rtv rcn
          (if rcn = 0 /\ ce.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
           then SOME (HD argv) else NONE) sa.cs_next_id sb.cs_next_id t)) ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
@@ -133,16 +133,16 @@ Proof
   qpat_x_assum `rbs = rbs'` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `pvs = pvs'` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `!callee entered bb inst lbl arg_ops argv. _` drule_all >> strip_tac >>
-  rewrite_tac[intcall_rest_F] >> pure_once_rewrite_tac[GSYM intcall_callee_src_def] >>
+  rewrite_tac[intcall_rest_F] >> pure_once_rewrite_tac[GSYM intcall_callee_src_F] >>
   irule invoke_cleanup_outcome >>
   conj_tac >- (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
-    rewrite_tac[intcall_rest_F] >> pure_once_rewrite_tac[GSYM intcall_callee_src_def] >> simp[]) >>
+    rewrite_tac[intcall_rest_F] >> pure_once_rewrite_tac[GSYM intcall_callee_src_F] >> simp[]) >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `gas_invoke_entry _ _ _ _`)) >>
-  qexists `\v ee ir cs. intcall_callee_exit fp.jc_func ce fp.jc_cx rtv rcn
+  qexists `\v ee ir cs. intcall_callee_exit fp.jc_func ce fp.jc_cx mut F rtv rcn
     (if rcn = 0 /\ ret <> NoneT then SOME (HD argv) else NONE)
     sa.cs_next_id sb.cs_next_id t (INL v) ee (IntRet ir cs)` >>
-  reverse conj_tac >- metis_tac[intcall_callee_exit_def] >>
+  reverse conj_tac >- metis_tac[intcall_callee_exit_F] >>
   rpt strip_tac >> suspend "physical"
 QED
 
@@ -159,13 +159,13 @@ Resume intcall_nested_return_enriched[physical]:
         first_assum ACCEPT_TAC) >>
      irule marked_body_immutable_alloca_sep >> goal_assum (drule_at Any) >>
      qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-     rewrite_tac[intcall_callee_src_def] >> strip_tac >> goal_assum (drule_at Any)) >>
+     rewrite_tac[intcall_callee_src_F] >> strip_tac >> goal_assum (drule_at Any)) >>
   `gas_path fp.jc_ctx callee entered (LENGTH marks) (IntRet ir cs)` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      rewrite_tac[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
      first_assum ACCEPT_TAC) >>
   qpat_x_assum `(\v ee ir cs. _) _ _ _ _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) [intcall_callee_exit_def, expr_exit_def]) >>
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [intcall_callee_exit_F, expr_exit_def]) >>
   `local_ptrs_reserved ce sa /\ allocas_above fp.jc_lo t /\
     (!a k. fp.jc_prot a k ==> a + k <= fp.jc_lo)` by
     (qpat_assum `intcall_expr_res _ _ _ _ _ t` mp_tac >>
@@ -256,7 +256,7 @@ Resume intcall_nested_return_enriched[post]:
         simp[NoAsms, vyperTypeInvariantsTheory.env_context_consistent_def]) >>
      qpat_x_assum `type_widens_to _ _ _` mp_tac >>
      qpat_x_assum `env.type_defs = _` mp_tac >>
-     qpat_x_assum `lookup_callable_function _ _ _ = SOME (mut,F,args,[],ret,ss)` mp_tac >>
+     qpat_x_assum `lookup_callable_function _ _ _ = SOME (mut,F,args,dflts,ret,ss)` mp_tac >>
      qpat_x_assum `lookup_callable_function _ _ _ = SOME _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[]) >>
   qpat_x_assum `(_ /\ _ /\ _ /\ _) \/ _` strip_assume_tac
@@ -392,13 +392,13 @@ QED
 
 Theorem intcall_nested_return:
   !fp ce env ann name es dflt ty sa sb vv s0 es0 mut args ret ss rr
-   prev penv rtv es1 t rc rbs pvs.
+   prev penv rtv es1 t retc rbs pvs.
     intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
     expr_body_pre ce fp.jc_cx env (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     supportedExprs$supported_expr fp.jc_tops (Call ann (IntCall (NONE,name)) es dflt) /\
     lookup_callable_function fp.jc_cx.in_deploy name fp.jc_tops =
-      SOME (mut,F,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut F rr name args [] ret ss) fp.jc_tops /\
+      SOME (mut,F,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut F rr name args dflts ret ss) fp.jc_tops /\
     compile_expr ce ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sb) /\
     fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
     intcall_expr_res fp ce env es0 sa s0 /\
@@ -406,7 +406,7 @@ Theorem intcall_nested_return:
       sa sb vv s0 es0 (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
     intcall_expr_res fp ce env (es1 with scopes := prev) sa t /\
     s0.vs_alloca_next <= t.vs_alloca_next /\
-    ce.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    ce.ce_func_info (nsid_to_string (NONE,name)) = (retc,rbs,pvs) /\
     (!callee entered bb inst lbl arg_ops argv.
        gas_invoke_entry (fp.jc_ctx,fp.jc_func) t callee entered /\
        lookup_block t.vs_current_bb fp.jc_func.fn_blocks = SOME bb /\
@@ -414,9 +414,9 @@ Theorem intcall_nested_return:
        decode_invoke inst = SOME (lbl,arg_ops) /\
        eval_operands arg_ops t = SOME argv ==>
        gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,callee)
-         (intcall_callee_src fp.jc_cx name ss) (es1,entered) (\res ee r. F)
-         (intcall_callee_exit fp.jc_func ce fp.jc_cx rtv rc
-            (if rc = 0 /\
+         (intcall_callee_src fp.jc_cx name mut F ss) (es1,entered) (\res ee r. F)
+         (intcall_callee_exit fp.jc_func ce fp.jc_cx mut F rtv retc
+            (if retc = 0 /\
                 ce.ce_func_return_type (nsid_to_string (NONE,name)) <> NoneT
              then SOME (HD argv) else NONE)
             sa.cs_next_id sb.cs_next_id t)) ==>

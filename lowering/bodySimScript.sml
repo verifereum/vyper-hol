@@ -73,7 +73,9 @@ End
    function ids, parameter types and calling conventions (so compile_call
    gives an internal call the label package_internal_fn gave the callee:
    compile_call_intcall_label) and return types (the type compile_call
-   gives an internal call's result), the program's events, and its locals in
+   gives an internal call's result), and the program's defaults for every
+   function not on the call stack (compile_call compiles a callee's
+   omitted defaults without the callee's own), the program's events, and its locals in
    allocas, as build_compile_env makes every body's, and the source finds
    its functions in tops.  tops's module variables have distinct names, as
    the type checker gives (source_typing_ok_vtype_keys_distinct), and cenv
@@ -96,6 +98,7 @@ Definition body_inv_def:
         else lower_vyper_runtime_unit tops rpolicy = SOME unit) /\
        ctx = unit.cu_context /\ cenv.ce_target = rpolicy.rpol_target) /\
     get_module_code cx NONE = SOME tops /\
+    (cx.in_deploy ==> supported_program_deploy tops) /\
     (cx.in_deploy ==> IS_SOME (SND (SND (SND (classify_functions tops))))) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
               is_dynamic (vyper_to_abi_type (type_env tops) target)) /\
@@ -104,6 +107,9 @@ Definition body_inv_def:
     cenv.ce_func_info =
       build_func_info (get_struct_fields (make_struct_fields_map tops)) tops /\
     cenv.ce_func_return_type = build_func_return_type tops /\
+    (!fn. ~MEM (NONE,fn) cx.stk ==>
+          ALOOKUP cenv.ce_func_defaults fn =
+          ALOOKUP (build_func_defaults tops) fn) /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
     cenv.ce_struct_fields = make_struct_fields_map tops /\
@@ -116,7 +122,10 @@ Definition body_inv_def:
     (!id. cenv.ce_module_var_type (NONE, id) =
           build_var_type_map tops (NONE, id)) /\
     cenv_module_pins tops cenv /\
-    (!src ts. get_module_code cx src = SOME ts ==> src = NONE)
+    (!src ts. get_module_code cx src = SOME ts ==> src = NONE) /\
+    (!vis mut rr name args dflts ret ss.
+       MEM (FunctionDecl vis mut T rr name args dflts ret ss) tops ==>
+       cx.nonreentrant_slot = SOME global_nonreentrant_slot)
 End
 
 Theorem cenv_module_pins_immutable_section_layout:
@@ -132,6 +141,15 @@ Theorem body_inv_immutable_section_layout:
 Proof
   rw[body_inv_def] >> irule cenv_module_pins_immutable_section_layout >>
   simp[]
+QED
+
+(* A nonreentrant function of the module has the lock's slot set. *)
+Theorem body_inv_nonreentrant_slot:
+  body_inv tops ctx cenv cx /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\ nr ==>
+  cx.nonreentrant_slot = SOME global_nonreentrant_slot
+Proof
+  rw[body_inv_def] >> res_tac
 QED
 
 (* The compile env's modules are the source's, the main module alone, whose

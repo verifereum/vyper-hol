@@ -6,8 +6,9 @@ Ancestors
 
 (* L-call (C1.3.15): calls (internal, external, send) and pops, given the
    smaller expressions' producers and, by call-graph descent
-   (callable_graph_descent), the statement producer of every frame whose
-   owner has fewer call descendants under the same edges. *)
+   (callable_graph_descent), the producers of every frame whose
+   owner has fewer call descendants under the same edges (an omitted
+   default is evaluated at its callee's frame). *)
 Theorem intcall_effect_producer_step:
   (!e'. expr_size e' < expr_size e ==>
         intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
@@ -17,6 +18,12 @@ Theorem intcall_effect_producer_step:
      CARD {z | TC (call_edge_rel fp.jc_edges) fp'.jc_owner z} <
      CARD {z | TC (call_edge_rel fp.jc_edges) fp.jc_owner z} ==>
      intcall_stmts_producer fp' ss) /\
+  (!fp' e'.
+     fp'.jc_edges = fp.jc_edges /\
+     CARD {z | TC (call_edge_rel fp.jc_edges) fp'.jc_owner z} <
+     CARD {z | TC (call_edge_rel fp.jc_edges) fp.jc_owner z} ==>
+     intcall_expr_producer fp' e' /\ intcall_forced_producer fp' e' /\
+     intcall_map_producer fp' e') /\
   ((?a tgt args dflt. e = Call a tgt args dflt) \/ (?a tgt. e = Pop a tgt)) ==>
   intcall_expr_producer fp e /\ intcall_map_producer fp e
 Proof

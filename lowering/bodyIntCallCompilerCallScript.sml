@@ -21,6 +21,9 @@ Proof
   rename1 `(_, finfo)` >> PairCases_on `finfo` >>
   simp[compile_call_def, comp_ignore_bind_def] >>
   irule intcall_interval_pair_bind_floor >> simp[intcall_interval_multi_vvs_floor] >>
+  rpt strip_tac >>
+  (* the callee's omitted defaults, compiled after the supplied args *)
+  irule intcall_interval_pair_bind_floor >> simp[intcall_interval_multi_vvs_floor] >>
   rpt strip_tac >> rpt IF_CASES_TAC >> simp[] >>
   rpt (ho_match_mp_tac intcall_interval_pair_bind_floor >>
        simp[intcall_interval_alloc_buffer, intcall_interval_stage_intcall_args,

@@ -84,12 +84,12 @@ QED
 
 Theorem run_deploy_lowering_internal_lookup:
   !has rp bytes imm args data_size ints ce stmts pay nr key trans entry unit
-   name has_rb rc.
+   name has_rb retc.
   run_deploy_lowering has rp bytes imm args data_size ints ce stmts pay nr key trans
     entry = SOME unit /\
-  MEM (name,has_rb,rc) (internal_fn_descriptors ints) ==>
+  MEM (name,has_rb,retc) (internal_fn_descriptors ints) ==>
   ?fbs. lookup_function name unit.cu_context.ctx_functions =
-          SOME (mk_internal_function name fbs has_rb rc) /\
+          SOME (mk_internal_function name fbs has_rb retc) /\
         fbs <> [] /\ (HD fbs).bb_label = name
 Proof
   rpt gen_tac >>
@@ -120,6 +120,7 @@ Theorem lower_vyper_deploy_unit_internal_lookup:
   !tops rp bytes unit mut nr rr name args dflts ret stmts.
     lower_vyper_deploy_unit tops rp bytes = SOME unit /\
     IS_SOME (SND (SND (SND (classify_functions tops)))) /\
+    module_consts_env tops [] = [] /\
     MEM (FunctionDecl Internal mut nr rr name args dflts ret stmts) tops ==>
     ?fbs.
       lookup_function
@@ -142,7 +143,8 @@ Proof
   Cases_on `ctor` >> simp[lower_vyper_deploy_unit_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   `MEM (mut,nr,rr,name,args,dflts,ret,stmts) ints` by
-    metis_tac[MEM_classify_internal, FST, SND] >>
+    (`ints = FST (SND (classify_functions tops))` by simp[] >>
+     pop_assum SUBST1_TAC >> simp[MEM_classify_internal]) >>
   `MEM (source_internal_fn_descriptor tops T
           (mut,nr,rr,name,args,dflts,ret,stmts))
     (internal_fn_descriptors

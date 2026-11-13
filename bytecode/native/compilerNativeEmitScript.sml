@@ -30,6 +30,7 @@ val () = holbuild_extra_deps
    "../external-calls/oracle",
    "../for-iterables/oracle",
    "../immutables/oracle",
+   "../internal-defaults/oracle",
    "../internal-frames/oracle",
    "../internal-labels/oracle",
    "../memory-stores/oracle",
@@ -199,6 +200,9 @@ val suite_fixtures = [
     "i09_immut_widen_bytes",
     "p23_imm_uint256", "p24_imm_uint8", "p25_imm_address",
     "p29b_imm_multi_nostr", "p59_imm_with_runtime_internal"]),
+  ("internal-defaults", [
+    "d01_int_default_word", "d02_int_default_partial", "d03_int_default_env",
+    "d04_int_default_string", "d05_int_default_nested"]),
   ("internal-frames", [
     "p01_int_local_word", "p02_int_local_string", "p03_int_local_array",
     "p04_int_local_struct", "p06_int_for_range", "p09_int_chain",
@@ -426,7 +430,9 @@ val code_equations = map (fn th => (key (fst (strip_comb (lhs (hd (code_eqs th))
        listTheory.LENGTH_EQ_NUM_compute] >> metis_tac[]),
   (* CV projections, used by the to_ functions that decode the JSON frontend's
      output; cv_compute evaluates them, so they are not in EVAL's compset. *)
-  cvTheory.cv_fst_def, cvTheory.cv_snd_def];
+  cvTheory.cv_fst_def, cvTheory.cv_snd_def,
+  (* Binary-digit compset rules use HOL's internal numeral constructors. *)
+  numposrepTheory.l2n_def];
 (* Proved rewrites applied to every right-hand side: they turn set
    inclusions over finite collections and bounded quantifiers into the list
    and finite-map functions that native code computes. *)
@@ -451,13 +457,17 @@ val code_rewrites = [
   prove (``(s:effects) = empty_effects <=> effects_to_list s = []``,
     rw[dftDefsTheory.effects_to_list_def, venomEffectsTheory.empty_effects_def,
        pred_setTheory.EXTENSION, listTheory.FILTER_EQ_NIL, EQ_IMP_THM] >>
-    Cases_on `x` >> fs[]),
-  (* to_word is width-polymorphic; inlined, its n2w gets each caller's width.
-     The applied form comes first so applied occurrences leave no redex. *)
-  cv_typeTheory.to_word_def,
-  let val (n, eq) = dest_forall (concl cv_typeTheory.to_word_def)
-  in TRANS (GSYM (ETA_CONV (mk_abs (n, lhs eq))))
-       (ABS n (SPEC n cv_typeTheory.to_word_def)) end];
+    Cases_on `x` >> fs[])] @
+  (* Inline width-polymorphic wrappers at the caller's concrete word type.
+     Include their function forms for partially applied occurrences. *)
+  List.concat (map (fn th => let
+    val eq = SPEC_ALL th
+    val (_, args) = strip_comb (lhs (concl eq))
+    val abstracted = List.foldr (fn (v, th) => ABS v th) eq args
+    val eta = QCONV (DEPTH_CONV ETA_CONV) (lhs (concl abstracted))
+  in [th, TRANS (GSYM eta) abstracted] end)
+    [cv_typeTheory.to_word_def, sha2Theory.rotr_def, wordsTheory.l2w_def,
+     wordsTheory.word_from_bin_list_def]);
 fun rewrite_rhs eq = let val r = rhs eq
   in mk_eq (lhs eq, rhs (concl (QCONV (Ho_Rewrite.PURE_REWRITE_CONV code_rewrites) r))) end;
 fun def_rules k = map rewrite_rhs (case Lib.assoc1 k code_equations of
