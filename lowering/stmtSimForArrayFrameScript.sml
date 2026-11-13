@@ -8,10 +8,11 @@ Ancestors
 
 (* select_result, extend_place and lookup_global record a storage
    observation, so their end state is the start state with a longer
-   storage_trace; turn each such equation into one on scopes. *)
+   storage_trace; project each equation onto scopes and immutables. *)
 val trace_scopes_tac =
   rpt (qpat_x_assum `_ = _ with storage_trace := _`
-         (assume_tac o AP_TERM ``evaluation_state_scopes``)) >> gvs[];
+         (assume_tac o AP_TERM
+           ``\s:evaluation_state. (s.scopes,s.immutables)``)) >> gvs[];
 
 Theorem scope_projection_lookup:
   !a b name.
@@ -634,21 +635,22 @@ Proof
    gvs[get_accounts_def, COND_RATOR, update_accounts_def,
        update_pending_deletions_def, bind_def, ignore_bind_def,
        return_def, AllCaseEqs()] >>
-   imp_res_tac read_result_state >> gvs[] >> res_tac >> gvs[] >> metis_tac[])
+   imp_res_tac read_result_state >> trace_scopes_tac >>
+   res_tac >> gvs[] >> metis_tac[])
 QED
 
 Resume eval_observation_frame_pred[TopLevelName]:
   qpat_x_assum `_ \/ !e. _` kall_tac >>
   qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
   rename1 `TopLevelName _ nsid` >> PairCases_on `nsid` >>
-  gvs[Once evaluate_def] >> imp_res_tac lookup_global_state >> simp[]
+  gvs[Once evaluate_def] >> imp_res_tac lookup_global_state >> trace_scopes_tac
 QED
 
 Resume eval_observation_frame_pred[TopLevelNameTarget]:
   qpat_x_assum `_ \/ !e. _` kall_tac >>
   qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
   rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
-  gvs[Once evaluate_def] >> imp_res_tac lookup_global_state >> simp[]
+  gvs[Once evaluate_def] >> imp_res_tac lookup_global_state >> trace_scopes_tac
 QED
 
 Resume eval_observation_frame_pred[StructLit]:
@@ -880,7 +882,8 @@ Proof
    imp_res_tac get_accounts_scopes >>
    gvs[COND_RATOR, update_accounts_def, update_pending_deletions_def,
        bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
-   imp_res_tac read_result_state >> gvs[] >> res_tac >> gvs[] >> metis_tac[])
+   imp_res_tac read_result_state >> trace_scopes_tac >>
+   res_tac >> gvs[] >> metis_tac[])
 QED
 
 Resume eval_name_projection_mutual[TopLevelName]:
