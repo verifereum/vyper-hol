@@ -8,21 +8,66 @@ Ancestors
   list fragExec compileEnv
   gasStorage vyperStorageTrace vyperStorageFootprint
 
+(* An exiting counted path's result is its run's: so two exiting counted
+   paths from one state end in the same result. *)
+Theorem gas_path_mem_exit_run[local]:
+  gas_path_mem ctx func s n r /\ exit_result r ==>
+  ?fuel. run_from fuel ctx func s = r
+Proof
+  strip_tac >> drule gas_path_mem_exec >> strip_tac >>
+  TRY (gvs[exit_result_def] >> NO_TAC) >> metis_tac[]
+QED
+
+Theorem gas_path_mem_exit_unique[local]:
+  gas_path_mem ctx func s n r /\ gas_path_mem ctx func s n' r' /\
+  exit_result r /\ exit_result r' ==> r' = r
+Proof
+  strip_tac >>
+  `?f. run_from f ctx func s = r` by metis_tac[gas_path_mem_exit_run] >>
+  `?f'. run_from f' ctx func s = r'` by metis_tac[gas_path_mem_exit_run] >>
+  `run_from (f + f') ctx func s = r` by
+    (irule gas_run_from_fuel_mono >>
+     conj_tac >- metis_tac[exit_result_not_error] >>
+     qexists_tac `f` >> simp[]) >>
+  `run_from (f + f') ctx func s = r'` by
+    (irule gas_run_from_fuel_mono >>
+     conj_tac >- metis_tac[exit_result_not_error] >>
+     qexists_tac `f'` >> simp[]) >>
+  metis_tac[]
+QED
+
+(* Per-horizon exiting paths from one state give one path for every
+   horizon. *)
+Theorem path_uniform_retq[local]:
+  !Q V H0 ctx func t.
+    (!H r. Q H r ==> exit_result r) /\ V H0 /\
+    (!H. V H ==> ?n r. gas_path_mem ctx func t n r /\ Q H r) ==>
+    ?n r. gas_path_mem ctx func t n r /\ !H. V H ==> Q H r
+Proof
+  rpt strip_tac >>
+  qpat_assum `!H. V H ==> _` (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  qexistsl_tac [`n`, `r`] >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!H. V H ==> _` (qspec_then `H` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `r' = r` suffices_by (strip_tac >> gvs[]) >>
+  irule gas_path_mem_exit_unique >> metis_tac[]
+QED
+
 Theorem internal_return_none_summary_mem:
   (!H v ee r. RetQ H v ee r ==> exit_result r) /\
   (!H v ee gs r. RetQ H v (ee with gas_obs := gs) r = RetQ H v ee r) /\
-  (!st0 sa sb s0 cenv''.
+  (!H st0 sa sb s0 cenv''.
+     valid_horizon cx st0 H es.storage_trace /\
      stmt_env cenv lctx ty (Return NONE) sa = (cenv'', sb) /\
      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
      local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
      ~block_is_terminated sa /\ return_buf_frame d cenv sa s0 /\
-     (!H. valid_horizon cx st0 H es.storage_trace ==>
-          stmt_state_rel H ctx func cenv cx es s0) /\
+     stmt_state_rel H ctx func cenv cx es s0 /\
      alloca_history func s0 /\
      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
      ?n r. gas_path_mem ctx func s0 n r /\
-       !H. valid_horizon cx st0 H es.storage_trace ==>
            RetQ H NoneV (es with scopes := []) r) ==>
   stmt_frag_mem d ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ty (Return NONE)) (eval_stmt cx (Return NONE)) es
@@ -34,9 +79,16 @@ Proof
       simp[evaluate_storage_trace_frame]) >>
   `?H0. valid_horizon cx st0 H0 es.storage_trace` by
     metis_tac[storage_trace_domain_def] >>
-  first_x_assum (drule_at (Pat `stmt_env _ _ _ _ _ = _`)) >>
-  disch_then (qspecl_then [`st0`, `s0`] mp_tac) >>
-  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
+  qspecl_then [`\H r. RetQ H NoneV (es with scopes := []) r`,
+               `\H. valid_horizon cx st0 H es.storage_trace`, `H0`,
+               `ctx`, `func`, `s0`] mp_tac path_uniform_retq >>
+  BETA_TAC >> impl_tac
+  >- (conj_tac >- metis_tac[] >> conj_tac >- first_assum ACCEPT_TAC >>
+      rpt strip_tac >>
+      qpat_x_assum `!H st0 sa sb s0 cenv''. _`
+        (qspecl_then [`H`, `st0`, `sa`, `sb`, `s0`, `cenv'`] mp_tac) >>
+      impl_tac >- (simp[] >> metis_tac[]) >> disch_then ACCEPT_TAC) >>
+  strip_tac >>
   `exit_result r` by metis_tac[] >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `REPLICATE n F` >>
   disj2_tac >> disj1_tac >>
@@ -65,13 +117,11 @@ Theorem internal_return_summary_bind_mem[local]:
   (!H res ee t. P H res ee t ==> ?v. res = INL v) /\
   (!H v ee r. RetQ H v ee r ==> exit_result r) /\
   (!H v ee gs r. RetQ H v (ee with gas_obs := gs) r = RetQ H v ee r) /\
-  (!ee v t.
-     (!H. valid_horizon cx st0 H ee.storage_trace ==> P H (INL v) ee t) /\
-     (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H ee v t.
+     valid_horizon cx st0 H ee.storage_trace /\ P H (INL v) ee t /\
      (?gs. source (es with gas_obs := gs) = (INL v, ee with gas_obs := [])) /\
      ~t.vs_halted ==>
      ?n r. gas_path_mem ctx func t n r /\
-       !H. valid_horizon cx st0 H ee.storage_trace ==>
            RetQ H v (ee with scopes := []) r) ==>
   !Q. ?marks'.
     gas_bad_storage_at cx st0
@@ -102,9 +152,15 @@ Proof
                   (INL v, es_end with gas_obs := [])` by
             (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
              simp[gas_marked_exec_def] >> metis_tac[]) >>
-          qpat_x_assum `!ee v t. _`
-            (qspecl_then [`es_end with gas_obs := []`, `v`, `t`] mp_tac) >>
-          simp[] >> impl_tac >- metis_tac[] >>
+          qspecl_then
+            [`\H r. RetQ H v ((es_end with gas_obs := []) with scopes := []) r`,
+             `\H. valid_horizon cx st0 H es_end.storage_trace`, `H0`,
+             `ctx`, `func`, `t`] mp_tac path_uniform_retq >>
+          BETA_TAC >> impl_tac
+          >- (conj_tac >- metis_tac[] >> conj_tac >- first_assum ACCEPT_TAC >>
+              rpt strip_tac >>
+              qpat_x_assum `!H ee v t. _ ==> ?n r. _` irule >>
+              simp[] >> metis_tac[]) >>
           strip_tac >> qexists_tac `marks ++ REPLICATE n F` >> disj2_tac >>
           qexistsl_tac [`INR (ReturnException v)`, `es_end`, `r`] >>
           `exit_result r` by metis_tac[] >>
@@ -150,19 +206,19 @@ Theorem internal_return_value_counted_mem:
   (!sa sb cenv'' op s1.
      stmt_env cenv lctx ty (Return (SOME e)) sa = (cenv'', sb) /\
      lower_value compile_expr cenv ty e sa = (op, s1) ==> cs_extends s1 sb) /\
-  (!st0 sa sb cenv'' s0 op s1 ee v t.
+  (!H st0 sa sb cenv'' s0 op s1 ee v t.
+     valid_horizon cx st0 H ee.storage_trace /\
      stmt_env cenv lctx ty (Return (SOME e)) sa = (cenv'', sb) /\
      lower_value compile_expr cenv ty e sa = (op, s1) /\
      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
      local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
      ~block_is_terminated sa /\ return_buf_frame d cenv sa s0 /\
-     (!H. valid_horizon cx st0 H es.storage_trace ==>
-          stmt_state_rel H ctx func cenv cx es s0) /\
+     (!H'. valid_horizon cx st0 H' es.storage_trace ==>
+           stmt_state_rel H' ctx func cenv cx es s0) /\
      alloca_history func s0 /\
      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-     (!H. valid_horizon cx st0 H ee.storage_trace ==>
-          expr_post H ctx func cenv cx e es sa s1 s0 ee v op t) /\
+     expr_post H ctx func cenv cx e es sa s1 s0 ee v op t /\
      expr_store_bound cx (expr_type e) v op t /\
      (?gs. bind (eval_expr cx e) (read_result cx)
                  (es with gas_obs := gs) = (INL v, ee with gas_obs := [])) /\
@@ -171,7 +227,6 @@ Theorem internal_return_value_counted_mem:
      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
      ~t.vs_halted /\ return_buf_frame d cenv s1 t ==>
      ?n r. gas_path_mem ctx func t n r /\
-       !H. valid_horizon cx st0 H ee.storage_trace ==>
            RetQ H v (ee with scopes := []) r) ==>
   stmt_frag_mem d ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ty (Return (SOME e))) (eval_stmt cx (Return (SOME e))) es
@@ -203,27 +258,15 @@ Proof
       impl_tac >- first_assum ACCEPT_TAC >>
       impl_tac >- first_assum ACCEPT_TAC >>
       impl_tac
-      >- (rpt gen_tac >> BETA_TAC >> rpt strip_tac >>
-          `?vv. INL v = INL vv /\
-                expr_post H ctx func cenv cx e es sa s1 s0 ee vv op t /\
-                expr_store_bound cx (expr_type e) vv op t /\
-                t.vs_current_bb = s1.cs_current_bb /\
-                t.vs_inst_idx = LENGTH s1.cs_current_insts /\
-                alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next`
-            by (qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> ?v'. _`
-                  drule >> simp[]) >>
-          gvs[] >>
+      >- (rpt gen_tac >> BETA_TAC >> rpt strip_tac >> gvs[] >>
           `return_buf_frame d cenv s1 t` by
             (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `s0`, `sa`] >>
-             qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
-               (qspec_then `H` mp_tac) >>
-             impl_tac >- first_assum ACCEPT_TAC >>
+             qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
              rewrite_tac[expr_post_def] >> strip_tac >> simp[]) >>
-          first_x_assum irule >> simp[] >>
-          rpt conj_tac >> TRY (metis_tac[] >> NO_TAC) >>
-          rpt strip_tac >>
-          qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
-            (qspec_then `H'` mp_tac) >> simp[] >> strip_tac >> gvs[]) >>
+          qpat_x_assum `!H st0 sa sb cenv'' s0 op s1 ee v t. _`
+            (qspecl_then [`H`, `st0`, `sa`, `sb`, `cenv'`, `s0`, `op`, `s1`,
+                          `ee`, `v`, `t`] mp_tac) >>
+          impl_tac >- (simp[] >> metis_tac[]) >> disch_then ACCEPT_TAC) >>
       strip_tac >> asm_rewrite_tac[] >>
       qmatch_goalsub_abbrev_tac `gas_summary_at T _ _ _ _ QQ _ \/ _` >>
       qpat_x_assum `!Q. _` (fn th =>
