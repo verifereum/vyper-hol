@@ -191,7 +191,7 @@ Proof
   `?a t. step_inst_base (mk_inst sa.cs_next_id opc ops []) s0 = Abort a t /\
          expr_exit (INR (AssertException msg) : unit + exception) (Abort a t)` by
     (gvs[expr_exit_def] >> metis_tac[step_revert_zero, step_invalid]) >>
-  irule gas_outcome_full_exit >>
+  irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`, `es`, `Abort a t`, `INR (AssertException msg)`, `tn0`] >>
   simp[exit_result_def] >> qx_gen_tac `H` >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
@@ -410,7 +410,7 @@ Resume compile_assert_frag_full[false]:
      simp[] >> strip_tac >>
      drule gas_origin_ptr_path_append >> simp[] >>
      disch_then drule >> simp[]) >>
-  irule gas_outcome_full_exit >>
+  irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G1`, `mid`, `Abort a u`, `INR (AssertException msg)`,
     `tn1`] >>
   simp[raise_def, exit_result_def, stmt_exit_ptr_def]
