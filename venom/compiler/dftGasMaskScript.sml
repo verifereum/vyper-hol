@@ -4823,6 +4823,147 @@ Proof
   gvs[stateEquivTheory.lift_result_def] >> metis_tac[]
 QED
 
+Theorem noninvoke_adjacent_packets_twogas[local]:
+  !fuel C owner x y s mx my ex ey.
+  let R = \n xs st. FOLDR (dft_exec_cons n C) OK xs st;
+      E = \xs st. gas_events_block fuel C owner
+        <|bb_label := st.vs_current_bb; bb_instructions :=
+          REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> st
+  in
+  dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y /\
+  x.inst_opcode <> INVOKE /\ y.inst_opcode <> INVOKE /\
+  x.inst_opcode = GAS /\ y.inst_opcode = GAS /\
+  ~s.vs_call_ctx.cc_static /\
+  (!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
+  (y.inst_opcode <> CODECOPY ==>
+    !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels) /\
+  ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
+    write_effects x.inst_opcode = empty_effects) /\
+  terminates (R fuel [x;y] s) /\
+  LENGTH (E [x;y] s) <= LENGTH s.vs_gas_readings /\
+  (if x.inst_opcode = GAS then
+    mx = [SOME (HD s.vs_gas_readings)] /\ ex = [(owner,x.inst_id)]
+   else mx = [] /\ ex = []) /\
+  (y.inst_opcode <> GAS ==> my = [] /\ ey = []) /\
+  (y.inst_opcode = GAS ==>
+    ((!v. R fuel [x] s = OK v ==>
+       my = [SOME (HD v.vs_gas_readings)] /\ ey = [(owner,y.inst_id)]) /\
+     (~(?v. R fuel [x] s = OK v) ==> my = [] /\ ey = []))) ==>
+  let px = mx; qx = ex;
+      py = if y.inst_opcode = GAS /\ ~(?v. R fuel [x] s = OK v)
+           then [NONE : bytes32 option] else my;
+      qy = if y.inst_opcode = GAS /\ ~(?v. R fuel [x] s = OK v)
+           then [(owner,y.inst_id)] else ey;
+      M = [py;px]; ES = [qy;qx];
+      unused = DROP (LENGTH (E [x;y] s)) s.vs_gas_readings
+  in
+  LIST_REL (\m es. LENGTH m = LENGTH es) M ES /\
+  PERM (MAP THE (FILTER IS_SOME (FLAT M)) ++ unused) s.vs_gas_readings /\
+  (!u. R fuel [x;y] s = OK u ==>
+    EVERY IS_SOME (FLAT M) /\ unused = u.vs_gas_readings) /\
+  !gy gx tail.
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) py gy /\
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) px gx ==>
+    (?extra. qy ++ qx = E [y;x]
+      (s with vs_gas_readings := gy ++ gx ++ tail) ++ extra) /\
+    ((?j. terminates (R j [y;x]
+      (s with vs_gas_readings := gy ++ gx ++ tail))) ==>
+      terminates (R fuel [y;x]
+        (s with vs_gas_readings := gy ++ gx ++ tail)) /\
+      dft_res_rel
+        (restore_result [] (R fuel [y;x]
+          (s with vs_gas_readings := gy ++ gx ++ tail)))
+        (restore_result [] (R fuel [x;y] s))) /\
+    (!u. R fuel [x;y] s = OK u ==>
+      R fuel [y;x] (s with vs_gas_readings := gy ++ gx ++ tail) =
+        OK (u with vs_gas_readings := tail) /\
+      E [y;x] (s with vs_gas_readings := gy ++ gx ++ tail) = qy ++ qx) /\
+    (!k v. k <= 2 /\ R fuel (TAKE k [y;x])
+      (s with vs_gas_readings := gy ++ gx ++ tail) = OK v ==>
+      E (TAKE k [y;x]) (s with vs_gas_readings := gy ++ gx ++ tail) =
+        FLAT (TAKE k ES) /\
+      v.vs_gas_readings = FLAT (DROP k [gy;gx]) ++ tail) /\
+    (~(?u. R fuel [x;y] s = OK u) ==>
+      ~(?v. R fuel [y;x]
+        (s with vs_gas_readings := gy ++ gx ++ tail) = OK v))
+Proof
+  rpt gen_tac >> simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
+  `?p. x.inst_outputs = [p]` by
+    (qpat_x_assum `inst_wf x` mp_tac >>
+     simp[venomWfTheory.inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+  `?q. y.inst_outputs = [q]` by
+    (qpat_x_assum `inst_wf y` mp_tac >>
+     simp[venomWfTheory.inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+  `p <> q` by
+    (qpat_x_assum `dft_gas_swap_pair x y` mp_tac >>
+     simp[dft_gas_swap_pair_def, venomInstTheory.inst_defs_def]) >>
+  `!st. step_inst fuel C x st = OK (update_var p
+    (case st.vs_gas_readings of [] => 0w | h::tl => h)
+    (st with vs_gas_readings := DROP 1 st.vs_gas_readings))` by
+    (gen_tac >> irule dftBlockSimTheory.step_inst_gas_single >> simp[]) >>
+  `!st. step_inst fuel C y st = OK (update_var q
+    (case st.vs_gas_readings of [] => 0w | h::tl => h)
+    (st with vs_gas_readings := DROP 1 st.vs_gas_readings))` by
+    (gen_tac >> irule dftBlockSimTheory.step_inst_gas_single >> simp[]) >>
+  `!xs st. EVERY (\i. i = x \/ i = y) xs ==>
+    gas_events_block fuel C owner
+      <|bb_label := st.vs_current_bb; bb_instructions :=
+        REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> st =
+    MAP (\i. (owner,i.inst_id)) xs` by
+    (rpt strip_tac >>
+     `?u. FOLDR (dft_exec_cons fuel C) OK xs st = OK u` by
+       (qid_spec_tac `st` >> Induct_on `xs` >> simp[] >>
+        gvs[EVERY_DEF] >> rpt strip_tac >>
+        simp[dftIndexedExecTheory.dft_exec_cons_def,
+          venomInstTheory.is_terminator_def]) >>
+     drule_at (Pos last) noninvoke_prefix_events_exact >>
+     disch_then (qspecl_then [`owner`, `st.vs_current_bb`, `[]`] mp_tac) >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) xs /\
+      FILTER (\i. i.inst_opcode = GAS) xs = xs` by
+       (fs[EVERY_MEM] >> simp[FILTER_EQ_ID, EVERY_MEM] >>
+        conj_tac >> rpt strip_tac >>
+        qpat_x_assum `!i. MEM i xs ==> _` drule >>
+        strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
+     `gas_events_block fuel C owner
+       <|bb_label := st.vs_current_bb; bb_instructions :=
+         REPLICATE u.vs_inst_idx (mk_inst 0 STOP [] [])|> u = []` by
+       simp[Once gas_events_block_def, venomInstTheory.get_instruction_def] >>
+     simp[]) >>
+  `gas_events_block fuel C owner
+    <|bb_label := s.vs_current_bb; bb_instructions :=
+      REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ [x;y]|> s =
+      [(owner,x.inst_id);(owner,y.inst_id)]` by
+    (qpat_x_assum `!xs st. _` (qspecl_then [`[x;y]`, `s`] mp_tac) >> simp[]) >>
+  Cases_on `s.vs_gas_readings` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  gvs[dftIndexedExecTheory.dft_exec_cons_def,
+      venomInstTheory.is_terminator_def] >>
+  conj_tac >- simp[sortingTheory.PERM_SWAP_AT_FRONT] >>
+  gen_tac >>
+  `gas_events_block fuel C owner
+    <|bb_label := s.vs_current_bb; bb_instructions :=
+      REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ [y;x]|>
+    (s with vs_gas_readings := h'::h::tail) =
+      [(owner,y.inst_id);(owner,x.inst_id)]` by
+    (qpat_x_assum `!xs st. _` (qspecl_then
+      [`[y;x]`, `s with vs_gas_readings := h'::h::tail`] mp_tac) >> simp[]) >>
+  simp[update_var_def, finite_mapTheory.FUPDATE_COMMUTES,
+    passSimulationDefsTheory.terminates_def, restore_result_def,
+    dft_res_rel_def] >>
+  rpt gen_tac >>
+  qpat_x_assum `!xs st. _` (qspecl_then
+    [`TAKE k [y;x]`, `s with vs_gas_readings := h'::h::tail`] mp_tac) >>
+  Cases_on `k` >> simp[] >-
+    (rpt strip_tac >> gvs[]) >>
+  Cases_on `n` >> simp[] >-
+    (simp[dftIndexedExecTheory.dft_exec_cons_def,
+       venomInstTheory.is_terminator_def] >> rpt strip_tac >> gvs[]) >>
+  Cases_on `n'` >> simp[] >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+    venomInstTheory.is_terminator_def, update_var_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem prefix_extract_mask[local]:
   !fuel C C'.
   let CalleeIH = (!fn fn' t.
