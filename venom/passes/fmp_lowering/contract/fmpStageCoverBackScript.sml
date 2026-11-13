@@ -66,9 +66,10 @@ Proof
          lookup_function name C.ctx_functions = SOME callee ==>
          LENGTH (fn_user_param_insts callee) <= LENGTH args` by
         (rpt strip_tac >>
-         `MEM caller C.ctx_functions /\ MEM inv (fn_insts caller)` by
+         rename1 `iv.inst_operands = Label name::args` >>
+         `MEM caller C.ctx_functions /\ MEM iv (fn_insts caller)` by
            metis_tac[fmp_stage_frame_facts] >>
-         `decode_invoke inv = SOME (name,args)` by simp[decode_invoke_def] >>
+         `decode_invoke iv = SOME (name,args)` by simp[decode_invoke_def] >>
          `LENGTH args = LENGTH (fn_user_param_insts callee)` by
            metis_tac[fmp_stage_invoke_arity] >>
          simp[]) >>
