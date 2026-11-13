@@ -326,7 +326,12 @@ Proof
   strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
-      disj1_tac >> suspend "array_post_transport") >>
+      disj1_tac >> suspend "array_post_transport")
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
+      disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+      qpat_x_assum `(\res es' exit. _) _ _ _` mp_tac >>
+      qunabbrev_tac `exitrel` >> simp[]) >>
   metis_tac[]
 QED
 
