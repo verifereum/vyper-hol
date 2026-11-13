@@ -1,6 +1,7 @@
 (* The joint typed memory copy of a static array. *)
 Theory typedCopyOriginPtrSArray
 Ancestors
+  vyperValue vyperTypeSystem vyperTyping arithmetic compileEnv
   typedCopyOriginPtrBase placeTypedCopyRecursivePath fragGasOriginPtr fragGasSeqPtr
   bodyPtrDefs ptrSafeRun ptrDiscipline typedMemoryCopy
   robustCopyTransportPtr exprLowering valueEncoding valueEncodingDefs codegenRel
@@ -333,5 +334,56 @@ Theorem typed_copy_origin_ptr_sarray_entry:
       typed_copy_origin_ptr_entry cenv ctx cd cs cdt cst cv) ==>
     typed_copy_origin_ptr_entry cenv ctx (ArrayT de (Fixed cap)) sty dtv stv v
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all typed_copy_array_source >> strip_tac >> gvs[] >>
+  `sb = Fixed cap` by
+    (drule typed_copy_array_widening >> strip_tac >> gvs[]) >> gvs[] >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  `type_widens_to tenv se de` by
+    (qpat_x_assum `type_widens_to _ _ _` mp_tac >>
+     simp[type_widens_to_def, arg_type_fits_def, well_formed_type_def,
+          evaluate_type_def] >> metis_tac[]) >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def] >>
+  `cap < dimword (:256)` by
+    (qpat_x_assum `type_slot_size (ArrayTV tv' (Fixed cap)) < _` mp_tac >>
+     simp[type_slot_size_def] >>
+     `cap <= cap * type_slot_size tv'` by
+       (Cases_on `type_slot_size tv'` >> gvs[MULT_CLAUSES]) >> decide_tac) >>
+  `type_memory_bytes cenv de = type_memory_size tv' /\
+   type_memory_bytes cenv se = type_memory_size tv` by
+    (conj_tac >> irule typed_copy_memory_size >>
+     qexists_tac `tenv` >> simp[] >> metis_tac[]) >>
+  `default_value tv = default_value tv'` by
+    metis_tac[typed_copy_default_widening] >>
+  `!i. i < cap ==> typed_copy_origin_ptr_entry cenv ctx de se tv' tv
+      (case ALOOKUP l i of NONE => default_value tv | SOME v => v)` by
+    (rpt strip_tac >> first_x_assum irule >>
+     simp[Once typedCopyDomainTheory.type_rank_def] >>
+     `val_wf tv (case ALOOKUP l i of NONE => default_value tv | SOME v => v)` by
+       (irule typed_copy_sparse_lookup_wf >> qexists_tac `cap` >> fs[val_wf_def]) >>
+     `val_wf tv' (case ALOOKUP l i of NONE => default_value tv | SOME v => v)` by
+       (asm_rewrite_tac[] >> irule typed_copy_sparse_lookup_wf >>
+        qexists_tac `cap` >> fs[val_wf_def]) >>
+     Cases_on `ALOOKUP l i` >> gvs[]
+     >- metis_tac[default_value_well_typed,
+                 cj 1 vyperTypingTheory.evaluate_type_well_formed] >>
+     metis_tac[valueEncodingProofsTheory.sparse_has_type_lookup]) >>
+  pure_rewrite_tac[typed_copy_origin_ptr_entry_def] >> rpt gen_tac >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `compile_copy_sarray_typed cenv (Var xd) de (Var xs) se cap sa = ((),sb)` by
+    (qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+     simp[Once contextTheory.compile_store_memory_typed_def, is_word_type_def,
+          is_bytestring_type_def]) >>
+  pure_rewrite_tac[type_memory_size_def] >>
+  rule_assum_tac (PURE_REWRITE_RULE [type_memory_size_def]) >>
+  Cases_on `type_memory_size tv' = type_memory_size tv /\
+            ~is_abi_dynamic cenv.ce_struct_fields de`
+  >- (irule typed_copy_origin_ptr_sarray_fast_path >> simp[] >>
+      goal_assum (drule_at (Pat `compile_copy_sarray_typed _ _ _ _ _ _ _ = _`)) >>
+      qexistsl_tac [`tv`, `sw`, `tenv`] >> gvs[type_memory_size_def]) >>
+  irule typed_copy_origin_ptr_sarray_slow_path >> simp[] >>
+  (conj_tac >- gvs[value_has_type_def]) >>
+  goal_assum (drule_at (Pat `compile_copy_sarray_typed _ _ _ _ _ _ _ = _`)) >>
+  qexistsl_tac [`tv`, `sw`, `tenv`] >> gvs[type_memory_size_def, value_has_type_def]
 QED
