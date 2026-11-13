@@ -3,7 +3,7 @@ Theory intCallReturnDirectBranchesMem
 Ancestors
   fragExecMem intCallReturnMem stmtSimReturnWiden bodyDeclMemoryCore
   bodyMemAggregateStore valueCopyBytes valueCopy stmtLowering typedMemoryCopy
-  typedCopyDomain vyperTypeSystem
+  typedCopyDomain vyperTypeSystem stmtLoweringMono internalReturnBufferValue internalReturnBufferSafety
   intCallResult stmtSimReturn loweringSlice vyperState vyperTyping instIdxIndep
   emitHelper emitHelperProps compileEnv exprLowering exprLoweringProps
   fragExec memSafeRun instMemFrontier venomMemDefs venomExecSemantics
@@ -111,7 +111,7 @@ Theorem compile_internal_return_equal_mem:
               w2n sw + type_memory_size tv <= s.vs_alloca_next) /\
            ?pc. eval_operand rpc s = SOME pc)
       (\s. F)
-      (intret_mem_q func cenv cx tv bw v (es with scopes := []))
+      (intret_mem_q_raw func cenv cx tv bw v (es with scopes := []))
 Proof
   rpt gen_tac >> strip_tac >>
   reverse (Cases_on `?s0. stmt_state_rel ctx func cenv cx (es with scopes := []) s0 /\
@@ -142,7 +142,7 @@ Proof
   >- suspend "store" >>
   irule emit_ret_pc_frag_mem >> qexists_tac `rpc` >> simp[] >>
   rpt strip_tac >>
-  gvs[intret_mem_q_def, intret_q_def, result_rel_def,
+  gvs[intret_mem_q_raw_def, result_rel_def,
       intret_vals_match_def, stmt_state_rel_def]
 QED
 
@@ -249,7 +249,7 @@ Theorem compile_internal_return_direct_or_bytes_mem:
                   w2n bw + type_memory_size dtv <= w2n sw)) /\
            ?pc. eval_operand rpc s = SOME pc)
       (\s. F)
-      (intret_mem_q func cenv cx dtv bw v (es with scopes := []))
+      (intret_mem_q_raw func cenv cx dtv bw v (es with scopes := []))
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `sty = ty`
   >- (gvs[] >>
@@ -269,4 +269,78 @@ Proof
   rpt strip_tac >> simp[]
   >- (irule return_bytestring_expr_rel >> metis_tac[]) >>
   irule return_bytestring_store_bound >> metis_tac[]
+QED
+
+Theorem compile_internal_return_compatible_epilogue_mem:
+  !ctx func cenv cx es ty sty dtv stv v val_op rpc elem_types buf_op sa su sb bw.
+    compile_return_unlock cenv sa = ((),su) /\
+    cenv.ce_returns_count = 0 /\ ~is_word_type ty /\
+    (sty = ty \/ is_bytestring_type sty /\ is_bytestring_type ty) /\
+    compile_internal_return cenv (SOME val_op) rpc 0 ty sty elem_types
+      (SOME buf_op) su = ((),sb) /\
+    (!x. val_op = Var x ==> not_fresh_at sa x) /\
+    (!x. buf_op = Var x ==> not_fresh_at sa x) /\
+    (!x. rpc = Var x ==> not_fresh_at sa x) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sa x) /\
+    evaluate_type (get_tenv cx) sty = SOME stv /\
+    evaluate_type (get_tenv cx) ty = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\
+    val_wf stv v /\ val_wf dtv v /\
+    type_memory_bytes cenv ty = type_memory_size dtv /\
+    w2n bw + type_memory_size dtv + 64 < dimword (:256) /\
+    (cenv.ce_is_ctor ==> !name itv iv off.
+       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+         SOME (ImmutableLoc off) /\
+       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+         | SOME imms => get_source_immutables cenv.ce_module imms) name =
+         SOME (itv,iv) ==>
+       regions_disjoint off (type_memory_size itv) (w2n bw)
+         (type_memory_size dtv)) ==>
+    frag_exec_mem ctx sa sb
+      (\s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
+           expr_val_rel cx sty v val_op s /\
+           eval_operand buf_op s = SOME bw /\
+           w2n bw + type_memory_size dtv <= s.vs_alloca_next /\
+           expr_store_bound cx sty v val_op s /\
+           ?pc. eval_operand rpc s = SOME pc)
+      (\s. F)
+      (intret_mem_q func cenv cx dtv bw v (es with scopes := []))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~is_word_type sty` by
+    metis_tac[is_bytestring_word_type] >>
+  `cs_extends sa su` by metis_tac[compile_return_unlock_shape] >>
+  `cs_extends su sb` by
+    metis_tac[cj 1 ci_mono_return_helpers, ci_mono_def, pairTheory.SND] >>
+  mp_tac (Q.SPECL [`ctx`, `func`, `cenv`, `cx`, `es`, `ty`, `sty`,
+    `dtv`, `stv`, `v`, `val_op`, `rpc`, `elem_types`, `buf_op`,
+    `sa`, `su`, `sb`, `bw`] compile_internal_return_buffer_value_frag) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  rewrite_tac[frag_exec_mem_def] >> BETA_TAC >> rpt gen_tac >> strip_tac >>
+  `fn_has_code sa su fn /\ fn_has_code su sb fn` by metis_tac[fn_has_code_split] >>
+  `?sw. eval_operand val_op s = SOME sw /\
+    val_in_memory stv v (w2n sw) s.vs_memory` by
+    (qpat_x_assum `expr_val_rel cx sty v val_op s`
+       (strip_assume_tac o REWRITE_RULE [expr_val_rel_def]) >>
+     rename1 `eval_operand val_op s = SOME sw0` >>
+     qexists_tac `sw0` >> simp[] >>
+     qpat_x_assum `!tv. evaluate_type _ _ = SOME tv ==> _`
+       (qspec_then `stv` mp_tac) >> simp[]) >>
+  Q.SUBGOAL_THEN
+    `val_store_size stv v = 0 \/
+     w2n sw + val_store_size stv v <= s.vs_alloca_next` assume_tac
+  >- (qpat_x_assum `expr_store_bound cx sty v val_op s` mp_tac >>
+      rewrite_tac[expr_store_bound_def] >>
+      disch_then (qspecl_then [`stv`, `sw`] mp_tac) >> simp[]) >>
+  `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `type_memory_size dtv + 64 < dimword (:256)` by decide_tac >>
+  `!fuel. mem_safe_run fuel ctx fn s` by
+    (irule compile_internal_return_buffer_mem_safe >> simp[] >>
+     goal_assum (drule_at (Pat `compile_return_unlock _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_internal_return _ _ _ _ _ _ _ _ _ = _`)) >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >> simp[frag_exec_def] >>
+  disch_then (qspec_then `fn` mp_tac) >> disch_then (qspec_then `s` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexistsl_tac [`fuel`, `r`] >> simp[]
 QED
