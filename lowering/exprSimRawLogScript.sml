@@ -274,20 +274,10 @@ Theorem raw_log_tail_trace_frame:
            return NoneV
         od))
 Proof
-  conj_tac
-  >- (rpt gen_tac >> irule storage_trace_frame_bind_all >> conj_tac
-      >- (irule storage_trace_frame_bind_all >>
-          simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
-      gen_tac >> irule storage_trace_frame_bind_all >>
-      simp[storage_trace_frame_lifts] >> gen_tac >>
-      irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
-      irule storage_trace_frame_ignore_bind >>
-      simp[storage_trace_frame_state_updates, storage_trace_frame_return]) >>
-  rpt gen_tac >> irule storage_trace_frame_bind_all >>
-  simp[storage_trace_frame_lifts] >> gen_tac >>
-  irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
-  irule storage_trace_frame_ignore_bind >>
-  simp[storage_trace_frame_state_updates, storage_trace_frame_return]
+  simp[storage_trace_frame_bind_all, storage_trace_frame_ignore_bind,
+    evaluate_storage_trace_frame, storage_trace_frame_read_result,
+    storage_trace_frame_lifts, storage_trace_frame_checks,
+    storage_trace_frame_state_updates, storage_trace_frame_return]
 QED
 
 Theorem raw_log_dynamic_data_view:
