@@ -269,10 +269,10 @@ Theorem augassign_attr_rhs_exception_exec:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
   ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
-  gas_marked_path F ctx func s0 0 (OK t) /\
-  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+  gas_marked_path memory ctx func s0 0 (OK t) /\
+  gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
     (es with gas_obs := [],t) marks (INR ex) ee r ==>
-  gas_marked_exec F (ctx,func)
+  gas_marked_exec memory (ctx,func)
     (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
     (es,s0) marks (INR ex) ee r
 Proof
@@ -285,15 +285,15 @@ Theorem augassign_attr_rhs_normal_exec:
   lookup_scopes id es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
   ALOOKUP fs fld = SOME ftv /\ ALOOKUP vals fld = SOME fv /\
-  gas_marked_path F ctx func s0 0 (OK t) /\
-  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+  gas_marked_path memory ctx func s0 0 (OK t) /\
+  gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
     (es with gas_obs := [],t) marks (INL v) ee (OK u) /\
-  gas_marked_exec F (ctx,func)
+  gas_marked_exec memory (ctx,func)
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       ftv bop fv v)) (write_place cx (MemoryPlace id [AttrSubscript fld])))
     (ee with gas_obs := [],u) [] res fin r ==>
-  gas_marked_exec F (ctx,func)
+  gas_marked_exec memory (ctx,func)
     (eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
     (es,s0) marks res fin r
 Proof
@@ -1063,10 +1063,10 @@ QED
 
 Theorem augassign_attr_store_continuation_exec:
   br = INL w /\
-  gas_marked_exec F (ctx,func)
+  gas_marked_exec memory (ctx,func)
     (write_place cx (MemoryPlace id [AttrSubscript fld]) w)
     (ee with gas_obs := [],u) [] res fin r ==>
-  gas_marked_exec F (ctx,func)
+  gas_marked_exec memory (ctx,func)
     (bind (lift_sum br) (write_place cx (MemoryPlace id [AttrSubscript fld])))
     (ee with gas_obs := [],u) [] res fin r
 Proof
@@ -1074,8 +1074,8 @@ Proof
 QED
 
 Theorem augassign_attr_error_continuation_exec:
-  br = INR err /\ gas_marked_path F ctx func u 0 r ==>
-  gas_marked_exec F (ctx,func)
+  br = INR err /\ gas_marked_path memory ctx func u 0 r ==>
+  gas_marked_exec memory (ctx,func)
     (bind (lift_sum br) (write_place cx (MemoryPlace id [AttrSubscript fld])))
     (ee with gas_obs := [],u) [] (INR (Error err)) (ee with gas_obs := []) r
 Proof

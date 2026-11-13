@@ -84,7 +84,7 @@ Proof
 QED
 
 
-Theorem alookup_zip_field[local]:
+Theorem alookup_zip_field:
   !fields tvs f fld fty fsz.
     OPT_MMAP f (MAP (FST o SND) fields) = SOME tvs /\
     ALOOKUP fields fld = SOME (fty, fsz) ==>

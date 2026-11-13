@@ -513,11 +513,11 @@ Theorem augassign_toplevel_rhs_exception_exec:
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME tvt /\
   read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
-  gas_marked_path F ctx func s0 0 (OK t) /\
-  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+  gas_marked_path memory ctx func s0 0 (OK t) /\
+  gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
     ((es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) with gas_obs := [],t)
     marks (INR ex) ee r ==>
-  gas_marked_exec F (ctx,func)
+  gas_marked_exec memory (ctx,func)
     (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
     (es,s0) marks (INR ex) ee r
 Proof
@@ -533,16 +533,16 @@ Theorem augassign_toplevel_rhs_normal_exec:
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME tvt /\
   read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
-  gas_marked_path F ctx func s0 0 (OK t) /\
-  gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
+  gas_marked_path memory ctx func s0 0 (OK t) /\
+  gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
     ((es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) with gas_obs := [],t)
     marks (INL v) ee (OK u) /\
-  gas_marked_exec F (ctx,func)
+  gas_marked_exec memory (ctx,func)
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
       tvt bop v0 v)) (write_storage_slot cx tr (n2w slot) tvt))
     (ee with gas_obs := [],u) [] res fin r ==>
-  gas_marked_exec F (ctx,func)
+  gas_marked_exec memory (ctx,func)
     (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
     (es,s0) marks res fin r
 Proof
@@ -568,8 +568,8 @@ Proof
 QED
 Theorem augassign_storage_continuation_exec:
   bind (lift_sum br) (write_storage_slot cx tr slot tvt) ee = (res,fin) /\
-  gas_marked_path F ctx func u 0 r ==>
-  gas_marked_exec F (ctx,func)
+  gas_marked_path memory ctx func u 0 r ==>
+  gas_marked_exec memory (ctx,func)
     (bind (lift_sum br) (write_storage_slot cx tr slot tvt))
     (ee,u) [] res fin r
 Proof

@@ -59,7 +59,7 @@ Libs
 
 (* ===== The source ===== *)
 
-Theorem alookup_fields_args[local]:
+Theorem alookup_fields_args:
   !fields args fld fty.
     MAP FST fields = MAP FST args /\ MAP (FST o SND) fields = MAP SND args /\
     ALOOKUP args fld = SOME fty ==>
@@ -843,7 +843,7 @@ val assign_attr_bad_storage_tac =
   irule gasStorageTheory.gas_bad_storage_at_bind_left >>
   simp[vyperStorageTraceTheory.storage_trace_frame_read_result];
 
-Theorem assign_attr_local_marked_exec[local]:
+Theorem assign_attr_local_marked_exec:
   gas_admissible
     (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
     (stmt_res_ok lctx) es /\
@@ -875,7 +875,7 @@ Proof
   qpat_x_assum `!name entry p sz. _` drule_all >> metis_tac[]
 QED
 
-Theorem assign_attr_local_normal_source[local]:
+Theorem assign_attr_local_normal_source:
   gas_admissible
     (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
     (stmt_res_ok lctx) es /\
