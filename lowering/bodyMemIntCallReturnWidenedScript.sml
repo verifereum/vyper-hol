@@ -51,9 +51,9 @@ Theorem internal_return_widened_mem:
               (expr_type e = ret_ty \/ is_word_type ret_ty \/
                is_bytestring_type ret_ty)) ==>
     stmt_frag_mem rb ctx func cx lctx
-        (case rb of
-           NONE => intret_q func cenv cx ret_tv
-         | SOME (bw,cap) => intret_mem_q func cenv cx ret_tv bw)
+        (\H. case rb of
+              NONE => intret_q H func cenv cx ret_tv
+            | SOME (bw,cap) => intret_mem_q H func cenv cx ret_tv bw)
       cenv' (stmt_env cenv' lctx ret_ty (Return eo)) (eval_stmt cx (Return eo)) es
 Proof
   cheat

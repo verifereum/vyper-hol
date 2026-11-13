@@ -50,9 +50,9 @@ Theorem compile_internal_void_return_intret_mem:
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   eval_operand rpc s = SOME pc /\
-  stmt_state_rel ctx func cenv cx (es with scopes := []) s ==>
+  stmt_state_rel H ctx func cenv cx (es with scopes := []) s ==>
   ?n r. gas_path_mem ctx func s n r /\
-    intret_q func cenv cx tv NoneV (es with scopes := []) r
+    intret_q H func cenv cx tv NoneV (es with scopes := []) r
 Proof
   strip_tac >>
   `~s.vs_call_ctx.cc_static` by

@@ -9,8 +9,8 @@
 Theory bodyFullCases
 Ancestors
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
-  bodyFullAssertReason bodyFullPreds bodyFullRawRevert gasShadowCompile
-  bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
+  bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullCtrlCases
+  gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
   msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
@@ -52,11 +52,11 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_assert_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_assert_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
 Theorem body_assert_case_full:
   !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Assert e AssertBare)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.assert_bare_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of body_assert_reason_case_ptr_at (bodyPtrExitCases). *)
@@ -69,12 +69,12 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_assert_unreachable_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_assert_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
 Theorem body_assert_unreachable_case_full:
   !cx e.
     body_expr_full_ok cx e ==> body_stmt_full_ok cx (Assert e AssertUnreachable)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.assert_unreachable_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of body_assign_case_ptr_at (bodyPtrAssignCases). *)
@@ -119,11 +119,11 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_break_case_ptr_at (bodyPtrCtrlCases). *)
+(* The joint twin of body_break_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_break_case_full:
   !cx. body_stmt_full_ok cx Break
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.break_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of bodyPtrEnvBuiltins's env_builtin_expr_ptr_ok, without Env MsgGas. *)
@@ -260,11 +260,11 @@ Proof
      precompile_builtin_expr_full_ok])
 QED
 
-(* Admitted: the joint twin of body_continue_case_ptr_at (bodyPtrCtrlCases). *)
+(* The joint twin of body_continue_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_continue_case_full:
   !cx. body_stmt_full_ok cx Continue
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.continue_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of body_create_case_ptr_at (bodyPtrCallCases). *)
@@ -299,11 +299,11 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_expr_stmt_case_ptr_at (bodyPtrCtrlCases). *)
+(* The joint twin of body_expr_stmt_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_expr_stmt_case_full:
   !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Expr e)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.expr_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of body_extcall_case_ptr_at (bodyPtrCallCases). *)
@@ -345,7 +345,7 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_if_case_ptr_at (bodyPtrCtrlCases). *)
+(* The joint twin of body_if_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_if_case_full:
   !cx e ss1 ss2.
     (!s'' tv t s'3' x t'.
@@ -356,7 +356,7 @@ Theorem body_if_case_full:
        body_stmts_full_ok cx ss2) /\ body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (If e ss1 ss2)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.if_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of body_ifexp_case_ptr_at (bodyPtrExprCases). *)
@@ -462,11 +462,11 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_raise_bare_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_raise_bare_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
 Theorem body_raise_bare_case_full:
   !cx. body_stmt_full_ok cx (Raise RaiseBare)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.raise_bare_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of body_raise_reason_case_ptr_at (bodyPtrExitCases). *)
@@ -476,11 +476,11 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_raise_unreachable_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_raise_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
 Theorem body_raise_unreachable_case_full:
   !cx. body_stmt_full_ok cx (Raise RaiseUnreachable)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.raise_unreachable_stmt_full_ok
 QED
 
 (* Admitted: the joint twin of body_raw_call_calldata_case_ptr_at (bodyPtrCallCases). *)
@@ -579,14 +579,14 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_stmts_cons_case_ptr_at (bodyPtrCtrlCases). *)
+(* The joint twin of body_stmts_cons_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
 Theorem body_stmts_cons_case_full:
   !cx s ss.
     (!s'' x t. eval_stmt cx s s'' = (INL x,t) ==> body_stmts_full_ok cx ss) /\
     body_stmt_full_ok cx s ==>
     body_stmts_full_ok cx (s::ss)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullCtrlCasesTheory.stmts_cons_full_ok
 QED
 
 (* The empty list, by stmtSimZero's joint fragment. *)

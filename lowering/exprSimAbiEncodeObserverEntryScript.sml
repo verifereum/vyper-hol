@@ -5,9 +5,9 @@ Ancestors
   list words
 
 Theorem abi_encode_nonword_observer_entry:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   local_ptrs_reserved ce sa ==>
-  stmt_state_rel ctx func ce cx es' (s with vs_current_bb := L) /\
+  stmt_state_rel H ctx func ce cx es' (s with vs_current_bb := L) /\
   local_ptrs_reserved ce (start_relabel L ids sa)
 Proof
   simp[expr_post_def, abi_encode_stmt_rel_current_bb,
