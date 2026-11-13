@@ -1193,5 +1193,495 @@ Theorem typed_copy_origin_ptr_index_loop:
     (!p. not_fresh_at sa p ==>
        FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  cheat
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `cs_extends init st0 /\ cs_extends st0 st1 /\
+   cs_extends stj st2 /\ cs_extends ste st3` by
+    metis_tac[cs_extends_emit_inst] >>
+  `cs_extends st1 sth /\ cs_extends st2 stb /\ cs_extends st3 stx` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_new_block,
+      exprLoweringPropsTheory.ci_mono_def, pairTheory.SND] >>
+  `cs_extends stb stx /\ cs_extends stj stx` by
+    metis_tac[compileEnvTheory.cs_extends_trans] >>
+  `cs_extends sa init /\ cs_extends sa st0 /\ cs_extends sa sth /\
+   cs_extends sa stb` by gvs[exprLoweringPropsTheory.ci_mono_def] >>
+  `cs_extends stb b1 /\ cs_extends b1 b2 /\ cs_extends b2 b3 /\
+   cs_extends b3 b4 /\ cs_extends b4 b5 /\ cs_extends b5 b6 /\
+   cs_extends b6 ste` by
+    metis_tac[typed_copy_emit_op_mono, exprLoweringPropsTheory.ci_mono_def,
+      exprLoweringPropsTheory.ci_mono_typed_memory_family, pairTheory.SND,
+      cs_extends_emit_inst] >>
+  `fn_has_code init st1 func /\ fn_has_code sth st2 func /\
+   fn_has_code stb b4 func /\ fn_has_code b4 b5 func /\
+   fn_has_code b5 st3 func` by
+    (rpt conj_tac >> irule fn_has_code_mid >>
+     (conj_tac >- metis_tac[compileEnvTheory.cs_extends_trans]) >>
+     qexistsl_tac [`stx`, `sa`] >> simp[] >>
+     metis_tac[compileEnvTheory.cs_extends_trans,
+       exprLoweringPropsTheory.ci_mono_def]) >>
+  `sth.cs_current_bb = hdr /\ sth.cs_current_insts = [] /\
+   stb.cs_current_bb = blabel /\ stb.cs_current_insts = [] /\
+   stx.cs_current_bb = exit /\ stx.cs_current_insts = []` by
+    gvs[compileEnvTheory.new_block_def] >>
+  suspend "init"
 QED
+
+Resume typed_copy_origin_ptr_index_loop[init]:
+  `s.vs_current_bb = init.cs_current_bb /\
+   s.vs_inst_idx = LENGTH init.cs_current_insts` by simp[] >>
+  `!p. not_fresh_at sa p ==> p <> counter` by metis_tac[] >>
+  drule_all typed_copy_origin_ptr_counter_init_path >>
+  disch_then (qspecl_then [`tn`,`explicit`,`PG`,`G`,
+    `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`]
+    strip_assume_tac) >>
+  rename1 `gas_origin_ptr_path _ (s,G,tn) [] (OK q0,G0,tn0)` >>
+  qabbrev_tac `H = \k q Gq tq.
+    k <= N /\ ~q.vs_halted /\ q.vs_current_bb = hdr /\ q.vs_inst_idx = 0 /\
+    lookup_var counter q = SOME (n2w k) /\ FLOOKUP Gq counter = NONE /\
+    op_taint tq (Var counter) = {} /\
+    typed_copy_state_frame sa (w2n dw) (k * type_memory_size dtv) s q /\
+    allocas_from lo q /\ q.vs_alloca_next = s.vs_alloca_next /\
+    tq.t_imm = tn.t_imm /\ tq.t_stor = tn.t_stor /\ tq.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      FLOOKUP Gq p = FLOOKUP G p /\ op_taint tq (Var p) = op_taint tn (Var p)) /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw + k * type_memory_size dtv) ==>
+      (i IN tq.t_mem <=> i IN tn.t_mem)) /\
+    (!i mem. i < N /\ mem_agree_outside tq.t_mem q.vs_memory mem ==>
+      val_in_memory stv (f i) (w2n sw + i * type_memory_size stv) mem) /\
+    (!i mem. i < k /\ mem_agree_outside tq.t_mem q.vs_memory mem ==>
+      val_in_memory dtv (f i) (w2n dw + i * type_memory_size dtv) mem)` >>
+  `typed_copy_state_frame sa (w2n dw) 0 s q0` by
+    (qpat_assum `q0 = _` (fn th => rewrite_tac[th]) >>
+     simp[typed_copy_state_frame_def, jump_to_def, update_var_def,
+       venom_state_component_equality] >>
+     rpt strip_tac >>
+     `x <> counter` by metis_tac[] >>
+     simp[lookup_var_def, FLOOKUP_UPDATE]) >>
+  `q0.vs_alloca_next = s.vs_alloca_next /\ allocas_from lo q0 /\
+   tn0.t_mem = tn.t_mem /\ tn0.t_imm = tn.t_imm /\
+   tn0.t_stor = tn.t_stor /\ tn0.t_trans = tn.t_trans` by
+    (qpat_assum `q0 = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `tn0 = _` (fn th => rewrite_tac[th]) >>
+     simp[jump_to_def, update_var_def, allocas_from_def] >>
+     qpat_x_assum `allocas_from lo s` mp_tac >>
+     simp[allocas_from_def]) >>
+  `H 0 q0 G0 tn0` by
+    (qpat_x_assum `q0 = _` kall_tac >>
+     qpat_x_assum `G0 = _` kall_tac >>
+     qpat_x_assum `tn0 = _` kall_tac >>
+     simp[Abbr `H`] >> rpt strip_tac >> metis_tac[]) >>
+  suspend "iteration"
+QED
+
+Resume typed_copy_origin_ptr_index_loop[iteration]:
+  qabbrev_tac `R = \t Gf tnf.
+    (!i. i < N ==> val_in_memory dtv (f i)
+      (w2n dw + i * type_memory_size dtv) t.vs_memory) /\
+    typed_copy_state_frame sa (w2n dw) (N * type_memory_size dtv) s t /\
+    ~t.vs_halted /\ t.vs_current_bb = stx.cs_current_bb /\
+    t.vs_inst_idx = LENGTH stx.cs_current_insts /\
+    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw + N * type_memory_size dtv) ==>
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!i mem. i < N /\ mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+      val_in_memory dtv (f i) (w2n dw + i * type_memory_size dtv) mem) /\
+    (!p. not_fresh_at sa p ==>
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))` >>
+  `?t Gf tnf. gas_origin_ptr_path
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+          d_ret := K {} |>,lo,explicit,ctx,func,PG)
+      (q0,G0,tn0) [] (OK t,Gf,tnf) /\ R t Gf tnf` by
+    (irule typed_copy_origin_ptr_counted_path >>
+     qexistsl_tac [`H`,`N`,`0`] >> simp[] >> suspend "steps") >>
+  qexistsl_tac [`t`,`Gf`,`tnf`] >>
+  reverse conj_tac >- simp[] >>
+  qpat_assum `gas_origin_ptr_path _ (s,G,tn) [] (OK q0,G0,tn0)`
+    (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+  disch_then (qspecl_then [`q0`,`G0`,`tn0`,`[]`,`OK t`,`Gf`,`tnf`] mp_tac) >>
+  simp[]
+QED
+
+Resume typed_copy_origin_ptr_index_loop[steps]:
+  conj_tac >- suspend "successor" >>
+  map_every qx_gen_tac [`q`,`Gq`,`tq`] >>
+  disch_tac >>
+  qpat_x_assum `H N q Gq tq` mp_tac >>
+  simp[Abbr `H`] >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `!p. not_fresh_at sa p ==> lookup_var p q = lookup_var p s` by
+    metis_tac[typed_copy_state_frame_def] >>
+  `eval_operand length q = SOME (n2w N) /\
+   op_prov Gq length = NONE /\ op_taint tq length = {}` by
+    (Cases_on `length`
+     >- (qpat_x_assum `eval_operand (Lit _) s = _` mp_tac >>
+         simp[eval_operand_def, op_prov_def, op_taint_def])
+     >- (rename1 `Var v` >>
+         qpat_assum `!x. Var v = Var x ==> _` (qspec_then `v` mp_tac) >>
+         simp[] >> strip_tac >>
+         `lookup_var v q = lookup_var v s /\
+          FLOOKUP Gq v = FLOOKUP G v /\
+          op_taint tq (Var v) = op_taint tn (Var v)` by metis_tac[] >>
+         qpat_x_assum `eval_operand (Var v) s = _` mp_tac >>
+         simp[eval_operand_def, op_prov_def]) >>
+     `q.vs_labels = s.vs_labels` by
+       (qpat_x_assum `typed_copy_state_frame sa _ _ s q` mp_tac >>
+        simp[typed_copy_state_frame_def, venom_state_component_equality]) >>
+     qpat_x_assum `eval_operand (Label _) s = _` mp_tac >>
+     simp[eval_operand_def, op_prov_def, op_taint_def]) >>
+  `q.vs_current_bb = sth.cs_current_bb /\
+   q.vs_inst_idx = LENGTH sth.cs_current_insts` by simp[] >>
+  `N <= N` by simp[] >>
+  drule_all typed_copy_origin_ptr_header_branch_path >>
+  disch_then (qspecl_then [`explicit`,`PG`,
+    `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`]
+    strip_assume_tac) >>
+  suspend "exit"
+QED
+
+Resume typed_copy_origin_ptr_index_loop[exit]:
+  `x = STRING #"%" (toString sth.cs_next_var) /\
+   y = STRING #"%" (toString h1.cs_next_var) /\
+   h1.cs_next_var = sth.cs_next_var + 1` by
+    (qpat_assum `emit_op LT _ sth = _`
+       (mp_then Any mp_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+     qpat_assum `emit_op ISZERO _ h1 = _`
+       (mp_then Any mp_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+     simp[]) >>
+  `!p. not_fresh_at sa p ==> p <> x /\ p <> y` by
+    (qpat_x_assum `ci_mono sa sth` mp_tac >>
+     simp[exprLoweringPropsTheory.ci_mono_def,
+       loweringStateRelDefsTheory.not_fresh_at_def] >>
+     rpt strip_tac >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+       arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.LESS_EQ_ADD]) >>
+  `typed_copy_state_frame sa (w2n dw) (N * type_memory_size dtv) s t` by
+    (qpat_assum `t = _` (fn th => rewrite_tac[th]) >>
+     qpat_x_assum `typed_copy_state_frame sa _ _ s q` mp_tac >>
+     qpat_x_assum `!p. not_fresh_at sa p ==> p <> x /\ p <> y` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[typed_copy_state_frame_def, jump_to_def, update_var_def,
+       venom_state_component_equality] >>
+     rpt strip_tac >>
+     `x' <> x /\ x' <> y` by metis_tac[] >>
+     fs[lookup_var_def, FLOOKUP_UPDATE]) >>
+  qexistsl_tac [`t`,`Gf`,`tnf`] >>
+  conj_tac >- simp[] >>
+  qpat_x_assum `t = _` kall_tac >>
+  qpat_x_assum `Gf = _` kall_tac >>
+  qpat_x_assum `tnf = _` kall_tac >>
+  simp[Abbr `R`] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!i mem. i < N /\ _ ==> val_in_memory dtv _ _ _`
+        (qspecl_then [`i`,`q.vs_memory`] mp_tac) >>
+      simp[mem_agree_outside_def]) >>
+  metis_tac[]
+QED
+
+Resume typed_copy_origin_ptr_index_loop[successor]:
+  map_every qx_gen_tac [`j`,`q`,`Gq`,`tq`] >>
+  strip_tac >>
+  qpat_x_assum `H j q Gq tq` mp_tac >>
+  simp[Abbr `H`] >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `!p. not_fresh_at sa p ==> lookup_var p q = lookup_var p s` by
+    metis_tac[typed_copy_state_frame_def] >>
+  `eval_operand length q = SOME (n2w N) /\
+   op_prov Gq length = NONE /\ op_taint tq length = {}` by
+    (Cases_on `length`
+     >- (qpat_x_assum `eval_operand (Lit _) s = _` mp_tac >>
+         simp[eval_operand_def, op_prov_def, op_taint_def])
+     >- (rename1 `Var v` >>
+         qpat_assum `!x. Var v = Var x ==> _` (qspec_then `v` mp_tac) >>
+         simp[] >> strip_tac >>
+         `lookup_var v q = lookup_var v s /\
+          FLOOKUP Gq v = FLOOKUP G v /\
+          op_taint tq (Var v) = op_taint tn (Var v)` by metis_tac[] >>
+         qpat_x_assum `eval_operand (Var v) s = _` mp_tac >>
+         simp[eval_operand_def, op_prov_def]) >>
+     `q.vs_labels = s.vs_labels` by
+       (qpat_x_assum `typed_copy_state_frame sa _ _ s q` mp_tac >>
+        simp[typed_copy_state_frame_def, venom_state_component_equality]) >>
+     qpat_x_assum `eval_operand (Label _) s = _` mp_tac >>
+     simp[eval_operand_def, op_prov_def, op_taint_def]) >>
+  `q.vs_current_bb = sth.cs_current_bb /\
+   q.vs_inst_idx = LENGTH sth.cs_current_insts` by simp[] >>
+  `j <= N` by decide_tac >>
+  drule_all typed_copy_origin_ptr_header_branch_path >>
+  disch_then (qspecl_then [`explicit`,`PG`,
+    `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`]
+    strip_assume_tac) >>
+  suspend "body"
+QED
+
+Resume typed_copy_origin_ptr_index_loop[body]:
+  `x = STRING #"%" (toString sth.cs_next_var) /\
+   y = STRING #"%" (toString h1.cs_next_var) /\
+   h1.cs_next_var = sth.cs_next_var + 1` by
+    (qpat_assum `emit_op LT _ sth = _`
+       (mp_then Any mp_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+     qpat_assum `emit_op ISZERO _ h1 = _`
+       (mp_then Any mp_tac emitHelperPropsTheory.emitted_insts_emit_op) >>
+     simp[]) >>
+  `!p. not_fresh_at sth p ==> p <> x /\ p <> y` by
+    (simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
+     rpt strip_tac >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+       arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.LESS_EQ_ADD]) >>
+  `!p. not_fresh_at sa p ==> not_fresh_at sth p /\ not_fresh_at stb p` by
+    (qpat_x_assum `ci_mono sa sth` mp_tac >>
+     qpat_x_assum `ci_mono sa stb` mp_tac >>
+     simp[exprLoweringPropsTheory.ci_mono_def,
+       loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[]) >>
+  `!p. not_fresh_at sa p ==>
+    lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+    op_taint tnf (Var p) = op_taint tn (Var p)` by metis_tac[] >>
+  `lookup_var counter t = SOME (n2w j) /\ FLOOKUP Gf counter = NONE /\
+   op_taint tnf (Var counter) = {}` by metis_tac[] >>
+  `ptr_covers Gf tnf xs t (N * type_memory_size stv) /\
+   ptr_covers Gf tnf xd t (N * type_memory_size dtv)` by
+    (qpat_x_assum `ptr_covers G tn xs s _` mp_tac >>
+     qpat_x_assum `ptr_covers G tn xd s _` mp_tac >>
+     qpat_x_assum `!p. not_fresh_at sa p ==> lookup_var p t = _ /\ _` mp_tac >>
+     qpat_x_assum `not_fresh_at sa xs` mp_tac >>
+     qpat_x_assum `not_fresh_at sa xd` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[bodyPtrDefsTheory.ptr_covers_def] >> metis_tac[]) >>
+  `allocas_from lo t` by
+    (qpat_assum `t = _` (fn th => rewrite_tac[th]) >>
+     qpat_x_assum `allocas_from lo q` mp_tac >>
+     simp[allocas_from_def, jump_to_def, update_var_def]) >>
+  `lookup_var xs t = SOME sw /\ lookup_var xd t = SOME dw /\
+   not_fresh_at stb xs /\ not_fresh_at stb xd /\
+   t.vs_current_bb = stb.cs_current_bb /\
+   t.vs_inst_idx = LENGTH stb.cs_current_insts` by
+    (simp[] >> metis_tac[]) >>
+  drule_all typed_copy_origin_ptr_index_addresses_path >>
+  disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`,
+    `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`]
+    strip_assume_tac) >>
+  suspend "child"
+QED
+
+Resume typed_copy_origin_ptr_index_loop[child]:
+  `j * type_memory_size stv + type_memory_size stv <= N * type_memory_size stv /\
+   j * type_memory_size dtv + type_memory_size dtv <= N * type_memory_size dtv` by
+    (`SUC j <= N` by decide_tac >>
+     qpat_x_assum `SUC j <= N` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[arithmeticTheory.LE_MULT_RCANCEL,
+       arithmeticTheory.MULT_CLAUSES, arithmeticTheory.ADD_COMM]) >>
+  `w2n sw + j * type_memory_size stv < dimword(:256) /\
+   w2n dw + j * type_memory_size dtv < dimword(:256)` by decide_tac >>
+  `w2n (n2w (w2n sw + j * type_memory_size stv):256 word) =
+      w2n sw + j * type_memory_size stv /\
+   w2n (n2w (w2n dw + j * type_memory_size dtv):256 word) =
+      w2n dw + j * type_memory_size dtv` by simp[wordsTheory.w2n_n2w] >>
+  Q.SUBGOAL_THEN `w2n sw + j * type_memory_size stv + type_memory_size stv < dimword(:256) /\
+   w2n dw + j * type_memory_size dtv + type_memory_size dtv < dimword(:256) /\
+   (type_memory_size stv = 0 \/
+    w2n sw + j * type_memory_size stv + type_memory_size stv <= t'.vs_alloca_next) /\
+   (type_memory_size dtv = 0 \/
+    w2n dw + j * type_memory_size dtv + type_memory_size dtv <= t'.vs_alloca_next) /\
+   (w2n sw + j * type_memory_size stv + type_memory_size stv <=
+       w2n dw + j * type_memory_size dtv \/
+    w2n dw + j * type_memory_size dtv + type_memory_size dtv <=
+       w2n sw + j * type_memory_size stv)` assume_tac
+    >- (rpt conj_tac >> decide_tac) >>
+  `typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv (f j)` by simp[] >>
+  `compile_store_memory_typed cenv (Var vdp) dty (Var vsp) sty b4 = ((),b5)` by
+    gvs[] >>
+  `!mem. mem_agree_outside tnf'.t_mem t'.vs_memory mem ==>
+    val_in_memory stv (f j) (w2n (n2w (w2n sw + j * type_memory_size stv):256 word)) mem` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!i mem. i < N /\ mem_agree_outside tq.t_mem _ _ ==> val_in_memory stv _ _ _`
+       (qspecl_then [`j`,`mem`] mp_tac) >>
+     `mem_agree_outside tq.t_mem q.vs_memory mem` by
+       (qpat_assum `mem_agree_outside tnf'.t_mem t'.vs_memory mem` mp_tac >>
+        qpat_assum `tnf'.t_mem = tnf.t_mem` mp_tac >>
+        qpat_assum `tnf.t_mem = tq.t_mem` mp_tac >>
+        qpat_assum `t'.vs_memory = t.vs_memory` mp_tac >>
+        qpat_assum `t.vs_memory = q.vs_memory` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+     qpat_assum `w2n (n2w (w2n sw + j * type_memory_size stv):256 word) = _` mp_tac >>
+     qpat_assum `j < N` mp_tac >>
+     qpat_assum `mem_agree_outside tq.t_mem q.vs_memory mem` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  `allocas_from lo t' /\ lo <= t'.vs_alloca_next` by
+    (qpat_x_assum `typed_copy_state_frame stb 0 0 t t'` mp_tac >>
+     qpat_x_assum `allocas_from lo t` mp_tac >>
+     `lo <= t.vs_alloca_next` by decide_tac >>
+     pop_assum mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+     simp[typed_copy_state_frame_def, venom_state_component_equality,
+       allocas_from_def] >> metis_tac[]) >>
+  qpat_x_assum `sp = Var vsp` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  qpat_x_assum `dp = Var vdp` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  qpat_assum `typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv (f j)`
+    (mp_then Any mp_tac typed_copy_origin_ptr_entry_run) >>
+  disch_then drule >>
+  disch_then (drule_at (Pat `lookup_var vsp _ = _`)) >>
+  disch_then (drule_at (Pat `lookup_var vdp _ = _`)) >>
+  disch_then (drule_at (Pat `ptr_covers _ _ vsp _ _`)) >>
+  disch_then (qspecl_then [`lo`,`func`,`explicit`,`PG`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  strip_tac >> suspend "copied"
+QED
+
+Resume typed_copy_origin_ptr_index_loop[copied]:
+  qpat_assum `w2n (n2w (w2n dw + j * type_memory_size dtv):256 word) = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  `ci_mono stb b1 /\ ci_mono b1 b2 /\ ci_mono b2 b3 /\ ci_mono b3 b4` by
+    (rpt conj_tac >> irule typed_copy_emit_op_mono >>
+     goal_assum (drule_at Any)) >>
+  `ci_mono stb b4 /\ ci_mono sa b4` by
+    (qpat_assum `ci_mono stb b1` mp_tac >>
+     qpat_assum `ci_mono b1 b2` mp_tac >>
+     qpat_assum `ci_mono b2 b3` mp_tac >>
+     qpat_assum `ci_mono b3 b4` mp_tac >>
+     qpat_assum `ci_mono sa stb` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[exprLoweringPropsTheory.ci_mono_trans]) >>
+  `ci_mono b4 b5` by
+    (qpat_assum `compile_store_memory_typed _ _ _ _ _ b4 = _` mp_tac >>
+     mp_tac (cj 1 exprLoweringPropsTheory.ci_mono_typed_memory_family) >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[pairTheory.SND]) >>
+  `not_fresh_at b4 counter /\ not_fresh_at b5 counter` by
+    (qpat_assum `ci_mono stb b4` mp_tac >>
+     qpat_assum `ci_mono b4 b5` mp_tac >>
+     qpat_assum `not_fresh_at stb counter` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh]) >>
+  `lookup_var counter t'' = SOME (n2w j) /\ FLOOKUP Gf'' counter = NONE /\
+   op_taint tnf'' (Var counter) = {}` by
+    (qpat_assum `typed_copy_state_frame b4 _ _ t' t''` mp_tac >>
+     qpat_assum `!p. not_fresh_at b4 p ==> _` (qspec_then `counter` mp_tac) >>
+     `lookup_var counter t' = SOME (n2w j) /\ FLOOKUP Gf' counter = NONE /\
+      op_taint tnf' (Var counter) = {}` by simp[] >>
+     qpat_assum `lookup_var counter t' = SOME (n2w j)` mp_tac >>
+     qpat_assum `FLOOKUP Gf' counter = NONE` mp_tac >>
+     qpat_assum `op_taint tnf' (Var counter) = {}` mp_tac >>
+     qpat_assum `not_fresh_at b4 counter` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[typed_copy_state_frame_def] >> metis_tac[]) >>
+  `allocas_from lo t''` by
+    (qpat_assum `typed_copy_state_frame b4 _ _ t' t''` mp_tac >>
+     qpat_assum `allocas_from lo t'` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[typed_copy_state_frame_def, venom_state_component_equality,
+       allocas_from_def] >> metis_tac[]) >>
+  drule_all typed_copy_origin_ptr_counter_backedge_path >>
+  disch_then (qspecl_then [`explicit`,`PG`,
+    `<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {} |>`]
+    strip_assume_tac) >>
+  suspend "backedge"
+
+QED
+
+Resume typed_copy_origin_ptr_index_loop[backedge]:
+  qmatch_asmsub_rename_tac `inc = Var out` >>
+  qmatch_asmsub_rename_tac `gas_origin_ptr_path _ (t'',Gf'',tnf'') [] (OK r,Gr,tr)` >>
+  `typed_copy_state_frame sa (w2n dw + j * type_memory_size dtv)
+     (type_memory_size dtv) t' t''` by
+    (irule typed_copy_state_frame_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  `typed_copy_state_frame sa 0 0 q t` by
+    (qpat_assum `t = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `!p. not_fresh_at sa p ==> not_fresh_at sth p /\ _` mp_tac >>
+     qpat_assum `!p. not_fresh_at sth p ==> p <> x /\ p <> y` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[typed_copy_state_frame_def, jump_to_def, update_var_def,
+       venom_state_component_equality] >> rpt strip_tac >>
+     `x' <> x /\ x' <> y` by metis_tac[] >>
+     simp[lookup_var_def, FLOOKUP_UPDATE]) >>
+  `typed_copy_state_frame sa 0 0 t t'` by
+    (irule typed_copy_state_frame_mono >> qexists_tac `stb` >> simp[]) >>
+  `typed_copy_state_frame sa 0 0 q t'` by
+    (irule typed_copy_state_frame_trans >> qexists_tac `t` >> simp[]) >>
+  `typed_copy_state_frame sa (w2n dw + j * type_memory_size dtv)
+     (type_memory_size dtv) q t''` by
+    (irule typed_copy_state_frame_trans >> qexists_tac `t'` >> simp[] >>
+     qpat_assum `typed_copy_state_frame sa 0 0 q t'` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[typed_copy_state_frame_def, typed_copy_frame_def]) >>
+  `!i. ~(w2n dw + j * type_memory_size dtv <= i /\
+          i < w2n dw + j * type_memory_size dtv + type_memory_size dtv) ==>
+    (i IN tnf''.t_mem <=> i IN tq.t_mem)` by
+    (qpat_assum `!i. ~(_ <= i /\ i < _) ==> (i IN tnf''.t_mem <=> _)` mp_tac >>
+     qpat_assum `tnf'.t_mem = tnf.t_mem` mp_tac >>
+     qpat_assum `tnf.t_mem = tq.t_mem` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  qpat_assum `typed_copy_state_frame sa (w2n dw + j * type_memory_size dtv)
+    (type_memory_size dtv) q t''`
+    (mp_then (Pat `typed_copy_state_frame _ _ _ _ _`) mp_tac
+      typed_copy_origin_ptr_index_robust_step) >>
+  disch_then (qspecl_then [`tnf''.t_mem`,`tq.t_mem`,`stv`] mp_tac) >>
+  disch_then (qspecl_then [`w2n sw`,`f`,`N`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qpat_assum `typed_copy_state_frame sa (w2n dw + j * type_memory_size dtv)
+    (type_memory_size dtv) q t''`
+    (mp_then (Pat `typed_copy_state_frame _ (_ + _) _ _ _`) mp_tac
+      typed_copy_origin_ptr_index_prefix_frame_step) >>
+  disch_then (qspecl_then [`tnf''.t_mem`,`tq.t_mem`,`tn.t_mem`,`s`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt strip_tac >>
+    first_x_assum irule >> simp[])) >> strip_tac >>
+  suspend "transport"
+QED
+
+Resume typed_copy_origin_ptr_index_loop[transport]:
+  `ci_mono sa b5` by
+    (qpat_assum `ci_mono sa b4` mp_tac >>
+     qpat_assum `ci_mono b4 b5` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[exprLoweringPropsTheory.ci_mono_trans]) >>
+  `out = STRING #"%" (toString b5.cs_next_var)` by
+    (qpat_assum `emit_op ADD _ b5 = _`
+      (mp_then Any mp_tac emitHelperPropsTheory.emitted_insts_emit_op) >> simp[]) >>
+  `!p. not_fresh_at sa p ==> p <> counter /\ p <> out` by
+    (qpat_assum `!p. not_fresh_at sa p ==> p <> counter` mp_tac >>
+     qpat_assum `ci_mono sa b5` mp_tac >>
+     qpat_assum `out = _` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+     simp[exprLoweringPropsTheory.ci_mono_def,
+       loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+       arithmeticTheory.LESS_EQ_REFL]) >>
+  `typed_copy_state_frame sa (w2n dw) (SUC j * type_memory_size dtv) t'' r` by
+    (qpat_assum `r = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `!p. not_fresh_at sa p ==> p <> counter /\ p <> out` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[typed_copy_state_frame_def, jump_to_def, update_var_def,
+       venom_state_component_equality] >> rpt strip_tac >>
+     `x <> counter /\ x <> out` by metis_tac[] >>
+     simp[lookup_var_def, FLOOKUP_UPDATE]) >>
+  `typed_copy_state_frame sa (w2n dw) (SUC j * type_memory_size dtv) s r` by
+    (irule typed_copy_state_frame_trans >> qexists_tac `t''` >> simp[]) >>
+  `allocas_from lo r /\ r.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_assum `typed_copy_state_frame sa _ _ s r` mp_tac >>
+     qpat_assum `allocas_from lo s` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+     simp[typed_copy_state_frame_def, venom_state_component_equality,
+       allocas_from_def] >> metis_tac[]) >>
+  `tr.t_mem = tnf''.t_mem /\ tr.t_imm = tnf''.t_imm /\
+   tr.t_stor = tnf''.t_stor /\ tr.t_trans = tnf''.t_trans` by
+    (qpat_assum `tr = _` mp_tac >> POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  `!p. not_fresh_at sa p ==> not_fresh_at b4 p` by
+    (qpat_assum `ci_mono sa b4` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh]) >>
+  `!p. not_fresh_at sa p ==>
+     FLOOKUP Gr p = FLOOKUP G p /\ op_taint tr (Var p) = op_taint tn (Var p)` by
+    (qpat_assum `!p. not_fresh_at sa p ==> not_fresh_at b4 p` mp_tac >>
+     qpat_assum `!p. not_fresh_at sa p ==> not_fresh_at sth p /\ _` mp_tac >>
+     qpat_assum `!p. not_fresh_at sa p ==> p <> counter /\ p <> out` mp_tac >>
+     qpat_assum `!p. p <> counter /\ p <> out ==> _` mp_tac >>
+     qpat_assum `!p. not_fresh_at b4 p ==> _` mp_tac >>
+     qpat_assum `!p. not_fresh_at stb p ==> _` mp_tac >>
+     qpat_assum `!p. not_fresh_at sa p ==> lookup_var p t = _ /\ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  suspend "compose"
+QED
+
+Resume typed_copy_origin_ptr_index_loop[compose]:
+  qexistsl_tac [`r`,`Gr`,`tr`] >>
+  reverse conj_tac
+  >- (qpat_x_assum `r = _` kall_tac >>
+      qpat_x_assum `Gr = _` kall_tac >> qpat_x_assum `tr = _` kall_tac >>
+      simp[arithmeticTheory.ADD1]) >>
+  qpat_assum `gas_origin_ptr_path _ (q,Gq,tq) [] (OK t,Gf,tnf)` mp_tac >>
+  qpat_assum `gas_origin_ptr_path _ (t,Gf,tnf) [] (OK t',Gf',tnf')` mp_tac >>
+  qpat_assum `gas_origin_ptr_path _ (t',Gf',tnf') [] (OK t'',Gf'',tnf'')` mp_tac >>
+  qpat_assum `gas_origin_ptr_path _ (t'',Gf'',tnf'') [] (OK r,Gr,tr)` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  metis_tac[gas_origin_ptr_path_append, listTheory.APPEND_NIL]
+QED
+
+Finalise typed_copy_origin_ptr_index_loop
