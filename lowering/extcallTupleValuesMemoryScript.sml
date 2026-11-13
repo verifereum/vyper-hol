@@ -142,7 +142,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem captured_cell_frame[local]:
+Theorem captured_cell_frame:
   vv_holds ce cx ty (Value v) vv es s /\
   vv_at ce cx ty sa sb es (Value v) vv s /\
   vv_store_bound cx ty ty es (Value v) vv s /\ vv_storage_live cx vv es s /\
