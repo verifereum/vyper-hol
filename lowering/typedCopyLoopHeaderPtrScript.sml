@@ -73,11 +73,15 @@ Theorem typed_copy_loop_arith_ghost_clean:
     step_taint (mk_inst id opc ops [out]) s s' tn =
       (tn with t_var := tn.t_var |+ (out,{}))
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
   `out_taint tn (mk_inst id opc ops [out]) s = {}` by
     (gvs[] >>
-     (simp[ptrDisciplineTheory.out_taint_def, mk_inst_def] >>
-      rpt (BasicProvers.TOP_CASE_TAC >> gvs[]))) >>
+     (Cases_on `ops` >> gvs[ptrDisciplineTheory.out_taint_def, mk_inst_def] >>
+      Cases_on `t`
+      >- (simp[ptrDisciplineTheory.out_taint_def, mk_inst_def] >>
+          Cases_on `eval_operand h s` >> simp[]) >>
+      Cases_on `t'` >> gvs[ptrDisciplineTheory.out_taint_def, mk_inst_def] >>
+      Cases_on `eval_operand h s` >> simp[])) >>
   qspecl_then [`PG`, `G`, `tn`, `s`, `id`, `opc`, `ops`, `out`, `s'`]
     mp_tac typed_copy_loop_arith_ghost >> simp[]
 QED

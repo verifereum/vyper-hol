@@ -91,27 +91,6 @@ Proof
   Induct >> simp[flag_path_def]
 QED
 
-Theorem mssa_calls_flagged_ids:
-  !insts.
-  calls_flagged bbs (MAP (\i. i with inst_id := f i) insts) =
-  calls_flagged bbs insts
-Proof
-  Induct >> simp[calls_flagged_def, mssa_flag_path_ids]
-QED
-
-Theorem mssa_calls_flagged_environment:
-  !insts.
-  LENGTH bbs = LENGTH bbs' /\
-  (!n l. revert_path bbs n l = revert_path bbs' n l) ==>
-  calls_flagged bbs insts = calls_flagged bbs' insts
-Proof
-  Induct >- simp[calls_flagged_def] >>
-  rpt strip_tac >> simp[calls_flagged_def] >>
-  Cases_on `h.inst_outputs` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  `flag_path bbs [h'] insts = flag_path bbs' [h'] insts` by
-    (irule mssa_flag_path_environment >> simp[]) >> simp[]
-QED
 
 Theorem mssa_flag_path_reassign_ids:
   !insts ids vs. LENGTH insts <= LENGTH ids ==>
@@ -121,14 +100,6 @@ Proof
   Cases_on `ids` >> simp[reassign_current_inst_ids_def, flag_path_def]
 QED
 
-Theorem mssa_calls_flagged_reassign_ids:
-  !insts ids. LENGTH insts <= LENGTH ids ==>
-  calls_flagged bbs (reassign_current_inst_ids ids insts) = calls_flagged bbs insts
-Proof
-  Induct >- (Cases_on `ids` >> simp[reassign_current_inst_ids_def, calls_flagged_def]) >>
-  Cases_on `ids` >> simp[reassign_current_inst_ids_def, calls_flagged_def,
-                        mssa_flag_path_reassign_ids]
-QED
 
 Theorem mssa_flag_path_ids_environment:
   flag_path (MAP (\bb. bb with bb_instructions :=
@@ -136,12 +107,4 @@ Theorem mssa_flag_path_ids_environment:
   flag_path bbs vs insts
 Proof
   irule mssa_flag_path_environment >> simp[mssa_revert_path_ids]
-QED
-
-Theorem mssa_calls_flagged_ids_environment:
-  calls_flagged (MAP (\bb. bb with bb_instructions :=
-    MAP (\i. i with inst_id := f i) bb.bb_instructions) bbs) insts =
-  calls_flagged bbs insts
-Proof
-  irule mssa_calls_flagged_environment >> simp[mssa_revert_path_ids]
 QED

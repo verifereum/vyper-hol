@@ -15,7 +15,6 @@ Proof
   >- (gvs[] >> drule_all ifexp_internal_call_lowered_typed >> simp[]) >>
   `value_runtime_typed env (lowered_value_type ce e) v` by
     (irule memory_rhs_read_lowered_typed_unwidened >>
-     conj_tac >- metis_tac[] >>
      qexistsl [`cx`, `es`, `er`] >> simp[bind_def]) >>
   `expr_sim_inv ce cx env es` by gvs[expr_body_pre_def] >>
   drule_all memory_rhs_runtime_layout >> metis_tac[]

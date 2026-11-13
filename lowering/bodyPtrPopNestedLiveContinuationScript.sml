@@ -13,6 +13,10 @@ Ancestors
   exprSimHypsDefs emitHelperProps vyperEvalExprPreservesScopesDom
   vyperInterpreter vyperAST vyperTypeSystem loweringPosts valueEncoding valueEncodingDefs
 
+(* The posts here keep the source state as `tend with gas_obs := []`;
+   stripping gas_obs only inside target_post would split it from ghost_inv. *)
+val _ = temp_delsimps ["tuple_place_target_post_gas_obs"];
+
 Theorem pop_empty_memory_marked_ptr:
   find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
   entry.assignable /\

@@ -3,7 +3,7 @@
 Theory bodyMemBiKeccakOpenFree
 Ancestors
   bodyMemBiKeccakCompose bodyMemBiKeccakScratch bodyMemBiKeccakSuffix bodyMemBiKeccakBounds
-  allocaFootprint abiBuiltinAllocation venomMemDefs venomInst finite_map words exprSimHash exprOperandVar
+  allocaFootprint abiBuiltinAllocation venomMemDefs venomInst venomExecSemantics venomState finite_map words exprSimHash exprOperandVar
   exprSimMemDefs exprSimProps fragGasSeqMem allocaHistoryFragment
   vyperTyping vyperValue builtinHashing vyperTypeSystem compileEnv
   loweringPosts exprLoweringProps exprSimAlloc context emitHelper list rich_list exprSimVVFrame fragExec entrySinkExtraction
@@ -71,6 +71,56 @@ Proof
   qexistsl_tac [`b`, `LENGTH s'`, `op`, `x`] >> simp[]
 QED
 
+Theorem keccak_ops_step_fields[local]:
+  MEM i.inst_opcode [ALLOCA; MSTORE; MLOAD; SHA3; ADD] /\
+  step_inst_base i s = OK t ==>
+  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+  t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[] >> strip_tac >>
+  gvs[step_inst_base_opcode_eqs] >>
+  gvs[exec_alloca_def, exec_pure2_def, exec_read1_def, exec_write2_def,
+      AllCaseEqs()] >>
+  simp[mload_def, mstore_def, update_var_def,
+       write_memory_with_expansion_def, LET_THM]
+QED
+
+Theorem keccak_ops_run_fields[local]:
+  !code s t.
+    EVERY (\i. MEM i.inst_opcode [ALLOCA; MSTORE; MLOAD; SHA3; ADD]) code /\
+    run_inst_seq code s = OK t ==>
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
+Proof
+  Induct >- simp[run_inst_seq_def] >>
+  rpt gen_tac >> simp[run_inst_seq_def] >> strip_tac >>
+  Cases_on `step_inst_base h s` >> gvs[] >>
+  rename1 `step_inst_base h s = OK mid` >>
+  drule_all keccak_ops_step_fields >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >> simp[]
+QED
+
+Theorem keccak_typed_suffix_ops[local]:
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  (if is_bytestring_type (expr_type e) then compile_keccak256_bytes x sm
+   else case expr_type e of
+     BaseT (BytesT (Fixed m)) => compile_keccak256_bytesm x m sm
+   | _ => compile_keccak256_word x sm) = (op,sb) ==>
+  EVERY (\i. MEM i.inst_opcode [ALLOCA; MSTORE; MLOAD; SHA3; ADD])
+    (emitted_insts sm sb)
+Proof
+  strip_tac >> Cases_on `bty` >>
+  gvs[is_bytes_or_string_type_def, is_bytestring_type_def] >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd` >>
+       gvs[is_bytestring_type_def]) >>
+  gvs[compile_keccak256_bytes_def, compile_keccak256_bytesm_def,
+      compile_keccak256_word_def,
+      compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, emit_op_def, emit_void_def, fresh_id_def,
+      fresh_var_def, emit_def] >>
+  simp[emitted_insts_def, DROP_APPEND, mk_inst_def]
+QED
+
 Theorem keccak_typed_suffix_counted_open_free:
   expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
@@ -88,7 +138,9 @@ Theorem keccak_typed_suffix_counted_open_free:
   alloca_history func s /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?t r. gas_path_mem ctx func s 0 (OK t) /\
+  ?t. (t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+       t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx) /\
+   ?r. gas_path_mem ctx func s 0 (OK t) /\
     builtin_result cx es'.accounts (BaseT (BytesT (Fixed 32)))
       Keccak256 [expr_type e] [v] = INL r /\
     vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
@@ -102,6 +154,11 @@ Proof
   drule_all keccak_typed_suffix_mem_ok_open_free >> strip_tac >>
   drule_all keccak_typed_suffix_shape >> strip_tac >>
   drule_all keccak_typed_suffix_no_gas >> strip_tac >>
+  drule_all keccak_typed_suffix_ops >> strip_tac >>
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    (irule keccak_ops_run_fields >> qexists_tac `emitted_insts sm sb` >>
+     simp[]) >>
   `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
       DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sm sb ++ rest) /\
     s.vs_inst_idx + LENGTH (emitted_insts sm sb) = LENGTH sb.cs_current_insts` by
@@ -115,6 +172,7 @@ Proof
     fs[EVERY_MEM] >>
   drule_all alloca_history_run_inst_seq >> simp[] >> strip_tac >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  conj_tac >- asm_simp_tac (srw_ss()) [] >>
   drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
   fs[same_blocks_def] >>
   `!a. x = Var a ==> not_fresh_at sm a` by

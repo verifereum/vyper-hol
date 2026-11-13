@@ -229,6 +229,8 @@ assembly optimisation; it is not `-O O1`. Both compile for Prague (the newest
 target the pin supports), whereas the HOL EVM semantics executes Osaka.
 Metadata need not match for behavioral replay. Bytecode parity (checked by
 `bytecode/native/`) is not implied by a passing semantics replay.
+The [getters and constants corpus](bytecode/getters-constants/README.md) records
+its focused parity checks and the remaining supported-header proof restrictions.
 
 Use Python 3.11.17 in an isolated environment, then run from this repository:
 

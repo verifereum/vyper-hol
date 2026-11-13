@@ -24,8 +24,9 @@ Proof
      (update_var out (slot_copy_word load s key) s) =
      OK (mstore (w2n addr) (slot_copy_word load s key)
        (update_var out (slot_copy_word load s key) s))` by
-    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def,
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def,
          lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+    gvs[lookup_var_def]) >>
   gvs[] >> simp[run_inst_seq_def]
 QED
 

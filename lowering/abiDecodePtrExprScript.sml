@@ -1,7 +1,7 @@
 (* Expression-level composition for the memory ABI decoder. *)
 Theory abiDecodePtrExpr
 Ancestors
-  abiDecodePtrOutcome abiDecodePtrTarget abiDecodePtrSupportedTarget
+  abiDecodePtrOutcome abiDecodePtrTarget
   bodyPtrHashBuiltinsUnary bodyPtrHashBuiltinsSuffix bodyPtrDefs
   exprSimHash exprSimSource exprSimDefs fragGasPathPtr gasOutcome vyperABI
   exprSimExtract32Source exprSimHyps exprSimHypsDefs vyperTypeBuiltins vyperTypeSystem

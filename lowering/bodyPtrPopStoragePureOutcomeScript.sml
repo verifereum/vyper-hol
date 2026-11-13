@@ -117,21 +117,6 @@ Proof
        check_def, assert_def, return_def, raise_def, get_storage_gas_obs]
 QED
 
-Theorem pop_storage_positive_source:
-  len = w2n (lookup_storage slot (get_storage cx es tr)) /\ 0 < len /\
-  ~cx.txn.is_static ==>
-  pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) es =
-    (INL (PlaceR (StoragePlace tr
-       (slot + n2w (1 + (len - 1) * type_slot_size tv)) tv)),
-     set_storage cx es tr
-       (apply_writes slot [(0,n2w (len - 1))] (get_storage cx es tr)))
-Proof
-  strip_tac >>
-  simp[pop_place_def, get_storage_backend_eq, bind_def, ignore_bind_def,
-       check_def, assert_def, return_def, raise_def, write_storage_slot_eq,
-       encode_value_def, encode_base_to_slot_def, integer_wordTheory.i2w_def]
-QED
-
 Theorem pop_storage_positive_vv_post:
   target_post H ctx func cenv cx es0 sa sm s0 es
     (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic cap))))

@@ -9,7 +9,7 @@ Proof
 QED
 
 Theorem u2s_safe_halted:
-  u2s_safe ctx fn cenv cx es a buf b sz inst sr s ==>
+  u2s_safe H ctx fn cenv cx es a buf b sz inst sr s ==>
   s.vs_halted = sr.vs_halted
 Proof
   rewrite_tac[u2s_safe_def] >> strip_tac >>

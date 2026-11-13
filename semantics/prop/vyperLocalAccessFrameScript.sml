@@ -231,6 +231,8 @@ Resume evaluate_unwritten_local[struct]:
 QED
 Resume evaluate_unwritten_local[subscript]:
   rpt strip_tac >> gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  Cases_on `subscript_reads_base cx e e'` >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   trace_scopes_tac >> metis_tac[]
 QED
@@ -241,20 +243,42 @@ QED
 Resume evaluate_unwritten_local[builtin]:
   rpt gen_tac >> strip_tac >>
   Cases_on `builtin_args_length_ok bt (LENGTH es)`
-  >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
-      Cases_on `bt = Env MsgGas` >>
-      Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-      Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
-      gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-          assert_def, return_def, raise_def, lift_option_type_def, AllCaseEqs()] >>
-      imp_res_tac result_array_length_state >>
-      imp_res_tac next_gas_reading_state >>
-      imp_res_tac precompile_call_success_state >>
-      imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >> gvs[] >>
-      Cases_on `es` >>
-      gvs[builtin_args_length_ok_def, accesses_expr_def] >> metis_tac[]) >>
+  >- (rpt gen_tac >> strip_tac >> suspend "builtin_ok") >>
   simp[Once evaluate_def, type_check_def, assert_def, bind_def,
        ignore_bind_def, raise_def]
+QED
+Resume evaluate_unwritten_local[builtin_ok]:
+  gvs[type_check_def, assert_def, return_def] >>
+  qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def] >>
+  Cases_on `bt = Len` >> simp[]
+  >- (simp[bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+      imp_res_tac result_array_length_state >> gvs[] >>
+      Cases_on `es` >> gvs[builtin_args_length_ok_def, accesses_expr_def] >>
+      metis_tac[]) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >> simp[]
+  >- (Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
+      simp[lift_option_type_def, type_check_def, assert_def, bind_def,
+           ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+      imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]) >>
+  Cases_on `bt = Env MsgGas` >> simp[]
+  >- (simp[bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+      imp_res_tac next_gas_reading_state >> gvs[]) >>
+  Cases_on `code_slice_source bt es`
+  >- (simp[bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+      imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >>
+      imp_res_tac precompile_call_success_state >> gvs[] >> metis_tac[]) >>
+  rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
+  `~MEM (WriteAcc (LocalRef id)) (accesses_exprs (TL es)) /\
+   ~MEM (WriteAcc (LocalRef id)) (accesses_expr p1)` by
+    (qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+     qpat_x_assum `~MEM _ (accesses_exprs es)` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     rw[code_slice_source_SOME] >> gvs[accesses_expr_def]) >>
+  simp[bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >>
+  imp_res_tac precompile_call_success_state >> gvs[] >> metis_tac[]
 QED
 Resume evaluate_unwritten_local[pop]:
   rpt strip_tac >> qpat_x_assum `eval_expr _ (Pop _ _) _ = _` mp_tac >>

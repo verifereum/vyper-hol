@@ -14,7 +14,7 @@ QED
 
 Theorem ptr_livesets_insts_preserves[local]:
   !ls addrs. FLOOKUP ls a = SOME addrs /\ MEM p addrs ==>
-  ?addrs'. FLOOKUP (ml_livesets_insts label la us ls insts) a = SOME addrs' /\
+  ?addrs'. FLOOKUP (ml_livesets_insts esc label la us ls insts) a = SOME addrs' /\
             MEM p addrs'
 Proof
   Induct_on `insts` >> simp[ml_livesets_insts_def] >>
@@ -26,8 +26,8 @@ QED
 
 Theorem ptr_livesets_insts_covers[local]:
   !ls. MEM (idx,inst) insts /\
-  MEM a (sinter alloc_to (ml_lookup la (label,idx)) (ml_lookup us (label,idx))) ==>
-  ?addrs. FLOOKUP (ml_livesets_insts label la us ls insts) a = SOME addrs /\
+  MEM a (sinter alloc_to (smerge alloc_to esc (ml_lookup la (label,idx))) (ml_lookup us (label,idx))) ==>
+  ?addrs. FLOOKUP (ml_livesets_insts esc label la us ls insts) a = SOME addrs /\
           MEM (label,idx) addrs
 Proof
   Induct_on `insts` >> simp[ml_livesets_insts_def] >>
@@ -42,7 +42,7 @@ QED
 Theorem ptr_livesets_blocks_preserves[local]:
   !ls addrs. FLOOKUP ls a = SOME addrs /\ MEM p addrs ==>
   ?addrs'. FLOOKUP
-    (FOLDL (\m bb. ml_livesets_insts bb.bb_label la us m
+    (FOLDL (\m bb. ml_livesets_insts esc bb.bb_label la us m
       (MAPi (\i inst. (i,inst)) bb.bb_instructions)) ls blocks) a = SOME addrs' /\
     MEM p addrs'
 Proof
@@ -53,10 +53,10 @@ QED
 Theorem ptr_livesets_blocks_covers[local]:
   !ls. MEM bb blocks /\
   MEM (idx,inst) (MAPi (\i inst. (i,inst)) bb.bb_instructions) /\
-  MEM a (sinter alloc_to (ml_lookup la (bb.bb_label,idx))
+  MEM a (sinter alloc_to (smerge alloc_to esc (ml_lookup la (bb.bb_label,idx)))
                          (ml_lookup us (bb.bb_label,idx))) ==>
   ?addrs. FLOOKUP
-    (FOLDL (\m bb. ml_livesets_insts bb.bb_label la us m
+    (FOLDL (\m bb. ml_livesets_insts esc bb.bb_label la us m
       (MAPi (\i inst. (i,inst)) bb.bb_instructions)) ls blocks) a = SOME addrs /\
     MEM (bb.bb_label,idx) addrs
 Proof
@@ -68,9 +68,9 @@ QED
 Theorem ptr_compute_livesets_covers:
   MEM bb fn.fn_blocks /\
   MEM (idx,inst) (MAPi (\i inst. (i,inst)) bb.bb_instructions) /\
-  MEM a (sinter alloc_to (ml_lookup la (bb.bb_label,idx))
+  MEM a (sinter alloc_to (smerge alloc_to esc (ml_lookup la (bb.bb_label,idx)))
                          (ml_lookup us (bb.bb_label,idx))) ==>
-  ?addrs. FLOOKUP (ml_compute_livesets la us fn) a = SOME addrs /\
+  ?addrs. FLOOKUP (ml_compute_livesets esc la us fn) a = SOME addrs /\
           MEM (bb.bb_label,idx) addrs
 Proof
   rewrite_tac[ml_compute_livesets_def] >> rpt strip_tac >>
@@ -79,10 +79,10 @@ QED
 
 Theorem ptr_compute_livesets_index:
   MEM bb fn.fn_blocks /\ i < LENGTH bb.bb_instructions /\
-  MEM a (sinter alloc_to (ml_lookup la (bb.bb_label,i))
+  MEM a (sinter alloc_to (smerge alloc_to esc (ml_lookup la (bb.bb_label,i)))
                          (ml_lookup us (bb.bb_label,i))) ==>
   MEM (bb.bb_label,i)
-    (case FLOOKUP (ml_compute_livesets la us fn) a of NONE => [] | SOME xs => xs)
+    (case FLOOKUP (ml_compute_livesets esc la us fn) a of NONE => [] | SOME xs => xs)
 Proof
   rpt strip_tac >>
   `MEM (i,EL i bb.bb_instructions)
@@ -93,13 +93,13 @@ QED
 
 Theorem ptr_marked_intersection:
   MEM bb fn.fn_blocks /\ i < LENGTH bb.bb_instructions /\
-  MEM a (sinter alloc_to (ml_lookup la (bb.bb_label,i))
+  MEM a (sinter alloc_to (smerge alloc_to esc (ml_lookup la (bb.bb_label,i)))
                          (ml_lookup us (bb.bb_label,i))) ==>
-  ?addrs. FLOOKUP (ml_mark_stores_live bpr fn (ml_compute_livesets la us fn)) a
+  ?addrs. FLOOKUP (ml_mark_stores_live bpr fn (ml_compute_livesets esc la us fn)) a
           = SOME addrs /\ MEM (bb.bb_label,i) addrs
 Proof
   strip_tac >> drule_all ptr_compute_livesets_index >>
-  Cases_on `FLOOKUP (ml_compute_livesets la us fn) a` >> simp[] >>
+  Cases_on `FLOOKUP (ml_compute_livesets esc la us fn) a` >> simp[] >>
   strip_tac >> irule ptr_mark_stores_preserves >>
   goal_assum (drule_at Any) >> simp[]
 QED

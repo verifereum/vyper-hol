@@ -77,7 +77,8 @@ Proof
   gvs[AllCaseEqs()] >>
   `MIN (w2n (read_slot st off)) n = w2n (read_slot st off)` by
     (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-  gvs[] >> drule_all dyn_slots_in_range_index >>
+  gvs[] >> drule dyn_slots_in_range_index >>
+  disch_then (qspec_then `i` mp_tac) >> impl_tac >- decide_tac >>
   `off + 1 + i * type_slot_size tv = off + (i * type_slot_size tv + 1)` by
     decide_tac >> simp[]
 QED

@@ -313,7 +313,7 @@ Proof
 QED
 
 Theorem u2s_zero_prefix_invariant_ptr:
-  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr s /\
+  u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
   u2s_ptr_state d cenv cx es a G0 tn0 s0 p b sz n i G tn s /\
   not_fresh_at a p /\ local_ptrs_reserved cenv a /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
@@ -327,7 +327,7 @@ Theorem u2s_zero_prefix_invariant_ptr:
   s.vs_current_bb = u2s_label a 3 /\ s.vs_inst_idx = 0 ==>
   ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     u2s_ptr_state d cenv cx es a G0 tn0 s0 p b sz n i G' tn' t /\
-    u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr t /\
+    u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr t /\
     tn'.t_mem = tn.t_mem DIFF {j | b+n <= j /\ j < b+n+32} /\
     t = (mstore (b+n) 48w (update_var (u2s_var a 11) (n2w (b+n)) s)
       with vs_inst_idx := 2)
@@ -335,7 +335,7 @@ Proof
   strip_tac >> drule_all u2s_zero_address_invariant_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ ga ta (OK addr)` >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr addr` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr addr` by
     (simp[Abbr `addr`] >> irule u2s_safe_index >> irule u2s_safe_update >> simp[]) >>
   drule u2s_safe_store_frame >> strip_tac >>
   `lookup_var (u2s_var a 11) addr = SOME (n2w (b+n)) /\
@@ -344,7 +344,7 @@ Proof
   drule_all u2s_zero_digit_invariant_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ ga ta addr _ _ ts (OK stored)` >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr stored` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr stored` by
     (simp[Abbr `stored`] >> irule u2s_safe_index >>
      irule u2s_safe_mstore >> simp[]) >>
   qexistsl_tac [`ga`, `ts`, `stored`] >> simp[Abbr `ts`, Abbr `ta`] >>
@@ -357,7 +357,7 @@ Proof
 QED
 
 Theorem u2s_zero_suffix_invariant_ptr:
-  u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr s /\
+  u2s_safe H ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr s /\
   u2s_ptr_state d cenv cx es a G0 tn0 s0 p b (buf_size+n) n i G tn s /\
   not_fresh_at a p /\ local_ptrs_reserved cenv a /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
@@ -383,7 +383,7 @@ Proof
     u2s_zero_header_address_invariant_ptr)) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ ga ta (OK addr)` >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr addr` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr addr` by
     (simp[Abbr `addr`] >> irule u2s_safe_index >>
      ntac 2 (irule u2s_safe_update >> simp[])) >>
   drule u2s_safe_store_frame >> strip_tac >>

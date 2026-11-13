@@ -1825,7 +1825,8 @@ Proof
    s.vs_block_ctx = caller.vs_block_ctx /\ s.vs_logs = caller.vs_logs /\
    s.vs_outcomes = caller.vs_outcomes /\ s.vs_requests = caller.vs_requests /\
    s.vs_pending_deletions = caller.vs_pending_deletions /\
-   s.vs_immutables = caller.vs_immutables /\ s.vs_data_section = caller.vs_data_section` by
+   s.vs_immutables = caller.vs_immutables /\ s.vs_data_section = caller.vs_data_section /\
+   s.vs_code = caller.vs_code` by
     (fs[mat_frame_def, setup_callee_def, AllCaseEqs()] >>
      qpat_x_assum `s = _` SUBST1_TAC >> gvs[]) >>
   `local_ptrs_rel func (cenv2 with ce_alloca_locals := T) [env] s` by
@@ -2038,7 +2039,7 @@ QED
 (* A step of an instruction of func other than an INVOKE keeps the room in
    func's frame: a fresh ALLOCA moves its size from the pending sizes to
    the frontier, and nothing else moves either. *)
-Theorem step_inst_base_alloca_room[local]:
+Theorem step_inst_base_alloca_room:
   !func inst s s' ctx.
     step_inst_base inst s = OK s' /\ MEM inst (fn_insts func) /\
     inst.inst_opcode <> INVOKE /\ alloca_room ctx func s ==>
@@ -2063,7 +2064,7 @@ Proof
             step_inst_base_preserves_alloca_next]
 QED
 
-Theorem run_inst_seq_alloca_room[local]:
+Theorem run_inst_seq_alloca_room:
   !is func s t ctx.
     run_inst_seq is s = OK t /\
     EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE) is /\

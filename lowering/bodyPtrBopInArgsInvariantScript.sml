@@ -28,7 +28,7 @@ Theorem membership_lower_typed_args_sim_inv:
     gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
       (eval_exprs cx args) (es,s0,G0,tn0)
       (\rr ee G tn t. ?vs. rr = INL vs /\
-        typed_args_post_ptr d ctx fn cenv cx es sa s0 G0 tn0 ee args xs vs G tn t /\
+        typed_args_post_ptr H d ctx fn cenv cx es sa s0 G0 tn0 ee args xs vs G tn t /\
         EVERY (\op. op_prov G op = NONE) xs /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)

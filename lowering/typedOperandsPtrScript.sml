@@ -57,7 +57,7 @@ QED
 
 Theorem typed_args_post_cons_ptr:
   expr_post H ctx func cenv cx e es sa s1 s0 es1 v x t /\
-  typed_args_post ctx func cenv cx es1 s1 t es' args xs vs u /\
+  typed_args_post H ctx func cenv cx es1 s1 t es' args xs vs u /\
   stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
@@ -67,7 +67,7 @@ Theorem typed_args_post_cons_ptr:
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
   ghost_kept cenv es1 s1 G1 tn1 t G2 tn2 /\
   op_taint tn1 x = {} /\ EVERY (\z. op_taint tn2 z = {}) xs ==>
-  typed_args_post ctx func cenv cx es sa s0 es' (e::args) (x::xs) (v::vs) u /\
+  typed_args_post H ctx func cenv cx es sa s0 es' (e::args) (x::xs) (v::vs) u /\
   EVERY (\z. op_taint tn2 z = {}) (x::xs) /\
   ghost_kept cenv es sa G0 tn0 s0 G2 tn2
 Proof
@@ -90,7 +90,7 @@ Theorem lower_typed_args_nil_sim_ptr:
   gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
     (eval_exprs cx []) (es, s0, G0, tn0)
     (\rr ee G tn t. ?vs. rr = INL vs /\
-       typed_args_post ctx func cenv cx es sa s0 ee [] [] vs t /\
+       typed_args_post H ctx func cenv cx es sa s0 ee [] [] vs t /\
        MAP FDOM es.scopes = MAP FDOM ee.scopes /\
        t.vs_current_bb = sa.cs_current_bb /\
        t.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -203,7 +203,7 @@ Theorem lower_typed_args_sim_ptr:
     gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (eval_exprs cx args) (es,s0,G0,tn0)
       (\rr ee G tn t. ?vs. rr = INL vs /\
-        typed_args_post ctx func cenv cx es sa s0 ee args xs vs t /\
+        typed_args_post H ctx func cenv cx es sa s0 ee args xs vs t /\
         MAP FDOM es.scopes = MAP FDOM ee.scopes /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
