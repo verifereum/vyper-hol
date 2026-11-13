@@ -1,6 +1,8 @@
 (* Initialize an ABI scratch cursor on one execution before choosing dead masks. *)
 Theory abiEncoderWindowJointPhases
 Ancestors
+  abiEncoderWindowJointLeaves abiEncoderWindowArrayEntry
+  abiEncoderWindowArrayInvariant exprSimAbiEncodeFramedArray
   exprSimAbiEncodeFramedBuiltin exprSimAbiEncodeExecFrame
   abiEncoderWindowCursor abiEncoderWindowPhase abiEncoderWindowSequence
   allocationPtr wordLoadStorePtr fragExecPtr fragGasSeqPtr ptrSafetyTransport
@@ -347,3 +349,47 @@ QED
 
 Finalise window_cursor_init_joint
 
+
+Theorem window_array_root_prefix_joint:
+  window_array_root ctx func st ids ei asz msz active ty avs
+    src dst sb cap d s /\
+  abi_encode_array_prefix src dst st = ((pp,count_op),en) /\
+  st.cs_next_id IN ids /\
+  fn_has_code st en func /\
+  (?p. src = Var p /\ ptr_covers G tn p s 32) /\
+  (?p. dst = Var p /\ ptr_covers G tn p s 32) /\
+  (!i. sb <= i /\ i < sb + 32 ==> i NOTIN tn.t_mem) /\
+  ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t b p G' tn'.
+    window_phase ctx func st en {st.cs_next_id} [(d,32)] s t /\
+    window_array_transition ctx func st
+      {st.cs_next_id} [(d,32)] s t /\
+    window_array_root ctx func st ids ei asz msz active ty avs
+      src dst sb cap d t /\
+    abi_encoder_array_prefix ty avs 0 d t.vs_memory /\
+    window_array_cursor T en pp st.cs_next_id b 0 sb cap d
+      (LENGTH (enc (Array NONE ty) (ListV avs))) t /\
+    abi_encode_exec_frame func s t /\
+    pp = Var p /\ ptr_covers G' tn' p t 32 /\
+    eval_operand count_op t = SOME (n2w (LENGTH avs)) /\
+    (!x. count_op = Var x ==> not_fresh_at en x) /\
+    op_taint tn' count_op = {} /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    tn'.t_mem =
+      tn.t_mem DIFF
+        ({i | b <= i /\ i < b + 32} UNION
+         {i | d <= i /\ i < d + 32}) /\
+    (!x. not_fresh_at st x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')
+Proof
+  cheat
+QED
