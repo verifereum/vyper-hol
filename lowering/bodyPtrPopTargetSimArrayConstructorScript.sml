@@ -15,10 +15,6 @@ Theorem target_array_sim_ptr:
   body_inv tops ctx cenv cx /\
   body_base_target_ptr_ok cx (SubscriptTarget bt e) /\
   target_pre cenv cx env (SubscriptTarget bt e) es /\
-  (!id. target_root bt = NameTarget id ==>
-        local_target_live cx id (SubscriptTarget bt e)) /\
-  (!src id. target_root bt = TopLevelNameTarget (src,id) ==>
-        EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
   type_place_target env bt = SOME (Type (ArrayT et bd)) /\
   target_sim_ptr d ctx PG func cenv cx env bt es ==>
   target_sim_ptr d ctx PG func cenv cx env (SubscriptTarget bt e) es
