@@ -5,6 +5,7 @@ Ancestors
   accountsRelProps vyperStorageFrame compileEnv loweringStateRelDefs
   vyperValue vyperStorageBackend vyperStorage words vfmState venomState
    exprLoweringProps varsExt stateFrame finite_map storageCopyLive
+  vyperStorageFootprint
 
 Theorem append_dead_bytes_word[local]:
   type_slot_size tv = 1 ==> ~dead_bytes st bs tv j b
@@ -288,7 +289,7 @@ Proof
 QED
 
 Theorem append_storage_copy_dead_mono[local]:
-  declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
   w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) /\
   len = w2n (lookup_storage slot st) /\ len < cap /\
   len+1 < dimword (:256) /\
@@ -299,18 +300,20 @@ Theorem append_storage_copy_dead_mono[local]:
        lookup_storage (n2w x) st' = lookup_storage (n2w x) st) /\
   ~(w2n slot+1+len*type_slot_size tv <= j /\
     j < w2n slot+1+len*type_slot_size tv+type_slot_size tv) /\
-  storage_dead cx tr st j b ==>
-  storage_dead cx tr st' j b
+  storage_dead H tr st j b ==>
+  storage_dead H tr st' j b
 Proof
   strip_tac >>
-  qpat_x_assum `storage_dead _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [storage_dead_def]) >>
-  rename1 `dead_bytes st (w2n other) otv j b` >>
+  qpat_x_assum `storage_dead _ _ _ _ _` mp_tac >>
   pure_rewrite_tac [storage_dead_def] >>
-  qexistsl_tac [`mid'`, `n'`, `subs`, `other`, `otv`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (qx_choose_then `other` (qx_choose_then `otv` strip_assume_tac))) >>
+  pure_rewrite_tac [storage_dead_def] >>
+  conj_tac >- asm_rewrite_tac [] >>
+  qexistsl_tac [`other`, `otv`] >>
+  conj_tac >- asm_rewrite_tac [] >>
+  conj_tac >- asm_rewrite_tac [] >>
+  conj_tac >- asm_rewrite_tac [] >>
   Cases_on `(other,otv) = (slot,ArrayTV tv (Dynamic cap))`
   >- (qpat_x_assum `(other,otv) = _`
         (fn th => map_every SUBST_ALL_TAC (CONJUNCTS (REWRITE_RULE [pairTheory.PAIR_EQ] th))) >>
@@ -320,8 +323,10 @@ Proof
       rpt strip_tac >> simp[] >> gvs[]) >>
   `ranges_disjoint (w2n other) (type_slot_size otv)
       (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))` by
-    (qpat_x_assum `!mid' n' subs' slot' tv'. _` irule >>
-     conj_tac >- metis_tac[] >> qexistsl_tac [`mid`, `n`, `[]`] >> simp[]) >>
+    (qpat_x_assum `!slot' tv'. _`
+       (qspecl_then [`slot`, `ArrayTV tv (Dynamic cap)`] mp_tac) >>
+     impl_tac >- (asm_rewrite_tac [] >> strip_tac >> gvs[]) >>
+     simp[]) >>
   `len*type_slot_size tv + type_slot_size tv <= cap*type_slot_size tv` by
     (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
   `dead_bytes st' (w2n other) otv j b <=> dead_bytes st (w2n other) otv j b`
@@ -373,11 +378,12 @@ Proof
 QED
 
 Theorem append_storage_agree_copy:
-  !cx mid n tr slot tv cap len k v writes off mem st mt.
-    declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
+  !H tr slot tv cap len k v writes off mem st mt.
+    MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
+    storage_locks_separated (FST H) (SND H) /\
     w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) /\
-    (!mid' n' subs' slot' tv'.
-      declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
+    (!slot' tv'.
+      MEM (tr,slot',tv') (FST H) /\
       (slot',tv') <> (slot,ArrayTV tv (Dynamic cap)) ==>
       ranges_disjoint (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))
         (w2n slot') (type_slot_size tv')) /\
@@ -388,9 +394,9 @@ Theorem append_storage_agree_copy:
     (!i b. i < type_slot_size tv /\ b < 32 /\
       ~dead_bytes (apply_writes k writes st) (w2n k) tv (w2n k+i) b ==>
       MEM i (MAP FST writes)) /\
-    storage_agree (storage_dead cx tr st) st mt ==>
+    storage_agree (storage_dead H tr st) st mt ==>
     storage_agree
-      (storage_dead cx tr (update_storage slot (n2w (len+1)) (apply_writes k writes st)))
+      (storage_dead H tr (update_storage slot (n2w (len+1)) (apply_writes k writes st)))
       (update_storage slot (n2w (len+1)) (apply_writes k writes st))
       (update_storage slot (n2w (len+1))
         (FOLDL (\t i. update_storage (k+n2w i) (mem_word_at (off+32*i) mem) t)
@@ -400,7 +406,7 @@ Proof
   `w2n k = w2n slot+1+len*type_slot_size tv /\
    w2n k+type_slot_size tv <= dimword (:256) /\ len+1 < dimword (:256)` by
     (qpat_x_assum `k = _` SUBST1_TAC >> drule_all append_copy_layout >> simp[]) >>
-  qmatch_goalsub_abbrev_tac `storage_dead cx tr st'` >>
+  qmatch_goalsub_abbrev_tac `storage_dead H tr st'` >>
   `lookup_storage slot st' = n2w (len+1)` by
     simp[Abbr `st'`, lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM] >>
   `!x. x < dimword (:256) /\ x <> w2n slot /\
@@ -409,7 +415,7 @@ Proof
     (rpt strip_tac >> simp_tac bool_ss [Abbr `st'`] >>
      irule append_copy_source_outside >> metis_tac[]) >>
   pure_rewrite_tac [storage_agree_def] >> rpt gen_tac >> strip_tac >>
-  rename1 `~storage_dead cx tr st' (w2n q) b` >>
+  rename1 `~storage_dead H tr st' (w2n q) b` >>
   Cases_on `q = slot`
   >- gvs[lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM] >>
   `w2n q <> w2n slot` by metis_tac[w2n_11] >>
@@ -427,10 +433,19 @@ Proof
   >- suspend "child" >> suspend "outside"
 QED
 Resume append_storage_agree_copy[child]:
+  `len*type_slot_size tv + type_slot_size tv <= cap*type_slot_size tv` by
+    (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+  `~tr \/ ~MEM (w2n q) (SND H)` by
+    (Cases_on `tr` >> asm_rewrite_tac [] >> strip_tac >>
+     qpat_x_assum `storage_locks_separated _ _` mp_tac >>
+     simp[storage_locks_separated_def] >>
+     qexistsl_tac [`slot`, `ArrayTV tv (Dynamic cap)`, `w2n q`] >>
+     fs[ranges_disjoint_def, type_slot_size_def]) >>
   `~dead_bytes st' (w2n slot) (ArrayTV tv (Dynamic cap)) (w2n q) b` by
     (strip_tac >> qpat_x_assum `~storage_dead _ _ _ _ _` mp_tac >>
      simp_tac bool_ss [storage_dead_def] >>
-     qexistsl_tac [`mid`, `n`, `[]`, `slot`, `ArrayTV tv (Dynamic cap)`] >>
+     conj_tac >- metis_tac[] >>
+     qexistsl_tac [`slot`, `ArrayTV tv (Dynamic cap)`] >>
      asm_rewrite_tac[]) >>
   `~dead_bytes st' (w2n k) tv (w2n q) b` by
     (strip_tac >>
@@ -463,9 +478,9 @@ Resume append_storage_agree_copy[child]:
   drule_all encode_value_memory_live >> simp[]
 QED
 Resume append_storage_agree_copy[outside]:
-  `~storage_dead cx tr st (w2n q) b` by
+  `~storage_dead H tr st (w2n q) b` by
     (strip_tac >>
-     `storage_dead cx tr st' (w2n q) b` suffices_by metis_tac[] >>
+     `storage_dead H tr st' (w2n q) b` suffices_by metis_tac[] >>
      irule append_storage_copy_dead_mono >>
      metis_tac[]) >>
   `lookup_storage q st' = lookup_storage q st` by
