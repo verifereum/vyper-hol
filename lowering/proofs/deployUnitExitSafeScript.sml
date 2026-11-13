@@ -4,7 +4,9 @@
  * (ctorDeployMemoryFrontier's lowered_unit_raw_memory_ok_from,
  * lowered_unit_dload_offset_ok, lowered_unit_dload_headroom_ok_from and
  * lowered_unit_ptr_taint), and the unit's result at the observed horizon:
- * the deployment twin of sourceUnitExitSafe.
+ * the deployment twin of sourceUnitExitSafe.  The certificate fixes the
+ * source run at every tail of gas readings past the marked ones, so the
+ * facts hold at each such filling.
  *
  * At the certificate's own fixed marks, the storage guard rules out its
  * bad-storage arm and ~deploy_source_exempt its exempt arm.  On the exit
@@ -24,14 +26,14 @@ Ancestors
   fragExec memSafeRun entryDispatchMem acceptedContextPhi
 
 Theorem deploy_unit_exit_safe_runs:
-  !marks tops runtime_bc am tx unit vs.
+  !marks tops runtime_bc am tx unit vs tail.
     deploy_unit_execution_correct_at marks tops runtime_bc am tx unit vs /\
     lowering_context_ok unit.cu_context /\ ~ctx_has_dalloca unit.cu_context /\
     deploy_storage_ok tops am tx vs.vs_outcomes
-      (gas_explicit marks vs.vs_gas_readings) /\
+      (gas_explicit marks vs.vs_gas_readings ++ tail) /\
     ~deploy_source_exempt tops
       (load_contract (SOME vs.vs_outcomes)
-         (gas_explicit marks vs.vs_gas_readings) am tx [(NONE, tops)] [])
+         (gas_explicit marks vs.vs_gas_readings ++ tail) am tx [(NONE, tops)] [])
     ==>
     ?func fuel.
       lookup_function "__deploy" unit.cu_context.ctx_functions = SOME func /\
@@ -43,7 +45,7 @@ Theorem deploy_unit_exit_safe_runs:
          (deploy_dead
             (storage_trace_horizon
                (deploy_storage_trace (SOME vs.vs_outcomes)
-                  (gas_explicit marks vs.vs_gas_readings) am tx tops))
+                  (gas_explicit marks vs.vs_gas_readings ++ tail) am tx tops))
             tops runtime_bc am tx)
          (imm_len tops) fuel unit.cu_context func [] FEMPTY entry_taint
          (vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
@@ -51,24 +53,24 @@ Theorem deploy_unit_exit_safe_runs:
       deploy_venom_result_rel
         (storage_trace_horizon
            (deploy_storage_trace (SOME vs.vs_outcomes)
-              (gas_explicit marks vs.vs_gas_readings) am tx tops))
+              (gas_explicit marks vs.vs_gas_readings ++ tail) am tx tops))
         tops runtime_bc tx
         (load_contract (SOME vs.vs_outcomes)
-           (gas_explicit marks vs.vs_gas_readings) am tx [(NONE, tops)] [])
+           (gas_explicit marks vs.vs_gas_readings ++ tail) am tx [(NONE, tops)] [])
         (run_context fuel unit.cu_context vs)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `deploy_unit_execution_correct_at _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [deploy_unit_execution_correct_at_def])
-  >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >> gvs[])
+  >- (qpat_x_assum `!tail. ~_` (qspec_then `tail` mp_tac) >> gvs[])
   >- (qpat_x_assum `!tail. load_contract_trace _ _ _ _ _ _ = _`
-        (qspec_then `[]` assume_tac) >> gvs[load_contract_def]) >>
+        (qspec_then `tail` assume_tac) >> gvs[load_contract_def]) >>
   qpat_x_assum `!tail. load_contract_trace _ _ _ _ _ _ = _`
-    (qspec_then `[]` assume_tac) >> fs[] >>
-  `load_contract (SOME vs.vs_outcomes) (gas_explicit marks vs.vs_gas_readings)
+    (qspec_then `tail` assume_tac) >> fs[] >>
+  `load_contract (SOME vs.vs_outcomes) (gas_explicit marks vs.vs_gas_readings ++ tail)
      am tx [(NONE, tops)] [] = src /\
    deploy_storage_trace (SOME vs.vs_outcomes)
-     (gas_explicit marks vs.vs_gas_readings) am tx tops = obs` by
+     (gas_explicit marks vs.vs_gas_readings ++ tail) am tx tops = obs` by
     simp[load_contract_def, deploy_storage_trace_def] >>
   ntac 2 (pop_assum SUBST1_TAC) >>
   qabbrev_tac `s0 = vs with <| vs_prev_bb := NONE; vs_current_bb := "__deploy";
