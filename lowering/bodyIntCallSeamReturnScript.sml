@@ -4,6 +4,7 @@
 
 Theory bodyIntCallSeamReturn
 Ancestors
+  bodyIntCallNrCompiler
   bodyIntCallNrCleanup bodyIntCallNrCleanupCert bodyIntCallNrGuardCert bodyIntCallSeamDefs
   bodyIntCallJointContract
   bodyIntCallSource bodyIntCallWidenedPost bodyIntCallWidenedEndpoint
