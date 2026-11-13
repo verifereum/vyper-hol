@@ -8,7 +8,7 @@ Ancestors
   compileEnv loweringStateRelDefs exprLoweringProps fragExec fragExecMem venomState venomExecSemantics venomInst
   words list rich_list pred_set finite_map instIdxIndep memSafeRun
   abiEncoderWindowChild abiEncoderWindowArrayInvariant abiEncoderRegisteredEffect
-  valueEncoding valueEncodingProps venomMemDefs windowTransitionMem memContinuation
+  valueEncoding valueEncodingProps venomMemDefs windowTransitionMem memContinuation fragGasPathMem
   abiEncoderWindowContract abiEncoderInputFrame
 
 Theorem window_array_tail_seq_mem[local]:
@@ -30,6 +30,35 @@ Proof
   irule below_frontier_no_ranges >> simp[mk_inst_def]
 QED
 
+Theorem window_array_tail_phase_counted_mem:
+  abi_encode_array_tail data_op dp st = (ops,en) /\
+  eval_operand dp s = SOME (n2w slot) /\ slot < dimword (:256) /\
+  slot+32 <= s.vs_alloca_next /\
+  mload slot s = n2w off /\ eval_operand data_op s = SOME (n2w d) /\
+  (!x. data_op = Var x ==> not_fresh_at st x) /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t path_count. window_phase ctx func st en {} [] s t /\
+    eval_operand (FST ops) t = SOME (n2w off) /\
+    eval_operand (SND ops) t = SOME (n2w (d+off)) /\
+    (!x. FST ops = Var x \/ SND ops = Var x ==> not_fresh_at en x) /\
+    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s path_count (OK t)
+Proof
+  strip_tac >> drule_all window_array_tail_pure >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts st en) s` by
+    (drule_all window_array_tail_seq_mem >> simp[]) >>
+  `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    metis_tac[window_seq_mem_cont, window_pure_seq_def] >>
+  `gas_path_mem ctx func s
+     (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en)))
+     (OK (t with vs_inst_idx := LENGTH en.cs_current_insts))` by
+    metis_tac[window_seq_counted_mem, window_pure_seq_def] >>
+  qexistsl_tac [`t with vs_inst_idx := LENGTH en.cs_current_insts`, `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en))`] >>
+  (conj_tac >- metis_tac[window_pure_seq_phase]) >>
+  simp_tac (srw_ss()) [eval_op_inst_idx] >> asm_rewrite_tac[]
+QED
+
 Theorem window_array_tail_phase_mem:
   abi_encode_array_tail data_op dp st = (ops,en) /\
   eval_operand dp s = SOME (n2w slot) /\ slot < dimword (:256) /\
@@ -45,14 +74,8 @@ Theorem window_array_tail_phase_mem:
     (!x. FST ops = Var x \/ SND ops = Var x ==> not_fresh_at en x) /\
     mem_cont_sim ctx func s t
 Proof
-  strip_tac >> drule_all window_array_tail_pure >> strip_tac >>
-  `run_inst_seq_mem_ok (emitted_insts st en) s` by
-    (drule_all window_array_tail_seq_mem >> simp[]) >>
-  `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    metis_tac[window_seq_mem_cont, window_pure_seq_def] >>
-  qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
-  (conj_tac >- metis_tac[window_pure_seq_phase]) >>
-  simp_tac (srw_ss()) [eval_op_inst_idx] >> asm_rewrite_tac[]
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all window_array_tail_phase_counted_mem >> metis_tac[]
 QED
 
 Theorem window_array_load_arithmetic_mem[local]:
@@ -87,6 +110,39 @@ Proof
   qexists_tac `slot` >> simp[]
 QED
 
+Theorem window_array_addresses_phase_counted_mem:
+  abi_encode_array_addresses ip src dst asz msz st = (coords,en) /\
+  eval_operand ip s = SOME (n2w slot) /\ slot < dimword (:256) /\
+  slot+32 <= s.vs_alloca_next /\
+  mload slot s = n2w j /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand dst s = SOME (n2w d) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t path_count. window_phase ctx func st en {} [] s t /\
+    eval_operand (FST (FST coords)) t = SOME (n2w j) /\
+    eval_operand (SND (FST coords)) t = SOME (n2w (sb+32+j*msz)) /\
+    eval_operand (FST (SND coords)) t = SOME (n2w (d+32)) /\
+    eval_operand (SND (SND coords)) t = SOME (n2w (d+32+j*asz)) /\
+    (!x. FST (FST coords) = Var x \/ SND (FST coords) = Var x \/
+         FST (SND coords) = Var x \/ SND (SND coords) = Var x ==> not_fresh_at en x) /\
+    mem_cont_sim ctx func s t /\ gas_path_mem ctx func s path_count (OK t)
+Proof
+  strip_tac >> drule_all window_array_addresses_pure >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts st en) s` by
+    (drule_all window_array_addresses_seq_mem >> simp[]) >>
+  `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    metis_tac[window_seq_mem_cont, window_pure_seq_def] >>
+  `gas_path_mem ctx func s
+     (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en)))
+     (OK (t with vs_inst_idx := LENGTH en.cs_current_insts))` by
+    metis_tac[window_seq_counted_mem, window_pure_seq_def] >>
+  qexistsl_tac [`t with vs_inst_idx := LENGTH en.cs_current_insts`, `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st en))`] >>
+  (conj_tac >- metis_tac[window_pure_seq_phase]) >>
+  simp_tac (srw_ss()) [eval_op_inst_idx] >> asm_rewrite_tac[]
+QED
+
 Theorem window_array_addresses_phase_mem:
   abi_encode_array_addresses ip src dst asz msz st = (coords,en) /\
   eval_operand ip s = SOME (n2w slot) /\ slot < dimword (:256) /\
@@ -106,17 +162,11 @@ Theorem window_array_addresses_phase_mem:
          FST (SND coords) = Var x \/ SND (SND coords) = Var x ==> not_fresh_at en x) /\
     mem_cont_sim ctx func s t
 Proof
-  strip_tac >> drule_all window_array_addresses_pure >> strip_tac >>
-  `run_inst_seq_mem_ok (emitted_insts st en) s` by
-    (drule_all window_array_addresses_seq_mem >> simp[]) >>
-  `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    metis_tac[window_seq_mem_cont, window_pure_seq_def] >>
-  qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
-  (conj_tac >- metis_tac[window_pure_seq_phase]) >>
-  simp_tac (srw_ss()) [eval_op_inst_idx] >> asm_rewrite_tac[]
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all window_array_addresses_phase_counted_mem >> metis_tac[]
 QED
 
-Theorem window_array_suffix_prefix_mem[local]:
+Theorem window_array_suffix_prefix_counted_mem[local]:
   emit_void MSTORE [head;offset] st = ((),a) /\
   emit_op ADD [offset;len] a = (next,b) /\ a.cs_next_var = st.cs_next_var /\
   fn_has_code st a func /\ fn_has_code a b func /\
@@ -126,13 +176,14 @@ Theorem window_array_suffix_prefix_mem[local]:
   h < dimword (:256) /\ h+32 <= s.vs_alloca_next /\
   alloca_inv s /\ alloca_room ctx func s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t. window_phase ctx func st b {} [(h,32)] s t /\ mem_cont_sim ctx func s t /\
+  ?t path_count. window_phase ctx func st b {} [(h,32)] s t /\ mem_cont_sim ctx func s t /\
     eval_operand next t = SOME (n2w (off+n)) /\
     eval_operand dp t = SOME (n2w slot) /\ eval_operand len t = SOME (n2w n) /\
-    mem_word_at h t.vs_memory = n2w off
+    mem_word_at h t.vs_memory = n2w off /\
+    gas_path_mem ctx func s path_count (OK t)
 Proof
   strip_tac >>
-  drule_all window_output_store_phase_mem >> strip_tac >>
+  drule_all window_output_store_phase_counted_mem >> strip_tac >>
   qabbrev_tac `u = (mstore h (n2w off) s) with vs_inst_idx := LENGTH a.cs_current_insts` >>
   `eval_operand offset u = SOME (n2w off) /\ eval_operand dp u = SOME (n2w slot) /\
    eval_operand len u = SOME (n2w n)` by
@@ -142,7 +193,7 @@ Proof
   `alloca_inv u /\ alloca_room ctx func u /\ ~u.vs_halted /\
    u.vs_current_bb = a.cs_current_bb /\ u.vs_inst_idx = LENGTH a.cs_current_insts` by
     metis_tac[window_phase_resources, window_phase_control] >>
-  drule_all window_emit_add_phase_mem >> strip_tac >>
+  drule_all window_emit_add_phase_counted_mem >> strip_tac >>
   `eval_operand dp t = SOME (n2w slot) /\ eval_operand len t = SOME (n2w n)` by
     (conj_tac >> irule window_phase_eval >>
      goal_assum (drule_at Any) >> simp[] >> fs[not_fresh_at_def] >> metis_tac[]) >>
@@ -152,8 +203,64 @@ Proof
         simp[] >> metis_tac[window_phase_effect]) >>
      drule abiEncoderInputFrameTheory.abi_encoder_window_word >>
      disch_then (qspec_then `0` mp_tac) >> simp[Abbr `u`, mstore_mem_word_at_same]) >>
-  qexists_tac `t` >> simp[GSYM word_add_n2w] >> irule window_phase_chain_mem >>
+  `?total_count. gas_path_mem ctx func s total_count (OK t)` by
+    (fs[Abbr `u`] >> metis_tac[gas_path_mem_then]) >>
+  qexistsl_tac [`t`,`total_count`] >> simp[GSYM word_add_n2w] >> irule window_phase_chain_mem >>
   qexistsl_tac [`{}`, `[(h,32)]`, `a`, `{}`, `[]`, `u`] >> simp[]
+QED
+
+
+Theorem window_array_suffix_run_counted_mem:
+  abi_encode_child_suffix head dp offset len st = (out,en) /\
+  fn_has_code st en func /\
+  eval_operand head s = SOME (n2w h) /\ eval_operand offset s = SOME (n2w off) /\
+  eval_operand dp s = SOME (n2w slot) /\ eval_operand len s = SOME (n2w n) /\
+  (!x. dp = Var x \/ len = Var x ==> not_fresh_at st x) /\
+  FLOOKUP s.vs_allocas site = SOME (slot,32) /\
+  h < dimword (:256) /\ slot < dimword (:256) /\
+  h+32 <= s.vs_alloca_next /\ (h+32 <= slot \/ slot+32 <= h) /\
+  alloca_inv s /\ alloca_room ctx func s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t path_count. window_array_transition ctx func st {site} [(h,32)] s t /\
+    mem_word_at h t.vs_memory = n2w off /\
+    mem_word_at slot t.vs_memory = n2w (off+n) /\
+    FLOOKUP t.vs_allocas site = SOME (slot,32) /\
+    eval_operand out t = SOME (n2w n) /\
+    t.vs_current_bb = en.cs_current_bb /\
+    t.vs_inst_idx = LENGTH en.cs_current_insts /\ mem_cont_sim ctx func s t /\
+    gas_path_mem ctx func s path_count (OK t)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all window_child_suffix_context >> strip_tac >>
+  qpat_x_assum `out = len` SUBST_ALL_TAC >>
+  drule_all window_array_suffix_prefix_counted_mem >> strip_tac >>
+  `alloca_inv t /\ alloca_room ctx func t /\ ~t.vs_halted /\
+   t.vs_current_bb = b.cs_current_bb /\ t.vs_inst_idx = LENGTH b.cs_current_insts` by
+    metis_tac[window_phase_resources, window_phase_control] >>
+  `FLOOKUP t.vs_allocas site = SOME (slot,32)` by
+    (irule abi_encoder_registered_effect_allocated >>
+     qexistsl_tac [`{}`, `[(h,32)]`, `s`] >> simp[] >> metis_tac[window_phase_effect]) >>
+  `slot+32 <= t.vs_alloca_next` by
+    (irule alloca_region_below_frontier >> fs[alloca_inv_def] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  drule_all window_cursor_store_phase_counted_mem >> strip_tac >>
+  qabbrev_tac `u = (mstore slot (n2w (off+n)) t) with vs_inst_idx := LENGTH en.cs_current_insts` >>
+  `window_phase ctx func st en {site} [(h,32)] s u /\ mem_cont_sim ctx func s u` by
+    (irule window_phase_chain_mem >>
+     qexistsl_tac [`{}`, `[(h,32)]`, `b`, `{site}`, `[]`, `t`] >> simp[]) >>
+  `FLOOKUP u.vs_allocas site = SOME (slot,32)` by
+    simp[Abbr `u`, mstore_def, write_memory_with_expansion_def] >>
+  `window_sizes32 {site} u` by simp[window_sizes32_def] >>
+  `?total_count. gas_path_mem ctx func s total_count (OK u)` by
+    (fs[Abbr `u`] >> metis_tac[gas_path_mem_then]) >>
+  qexistsl_tac [`u`,`total_count`] >> asm_rewrite_tac[] >> rpt conj_tac
+  >- metis_tac[window_array_phase_sizes_transition]
+  >- (simp[Abbr `u`] >> metis_tac[mstore_mem_word_at_disjoint])
+  >- simp[Abbr `u`, mstore_mem_word_at_same]
+  >- (Cases_on `len` >> fs[Abbr `u`, eval_operand_def, lookup_var_def,
+        mstore_def, write_memory_with_expansion_def]) >>
+  metis_tac[window_phase_control]
 QED
 
 Theorem window_array_suffix_run_mem:
@@ -177,31 +284,5 @@ Theorem window_array_suffix_run_mem:
     t.vs_inst_idx = LENGTH en.cs_current_insts /\ mem_cont_sim ctx func s t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all window_child_suffix_context >> strip_tac >>
-  qpat_x_assum `out = len` SUBST_ALL_TAC >>
-  drule_all window_array_suffix_prefix_mem >> strip_tac >>
-  `alloca_inv t /\ alloca_room ctx func t /\ ~t.vs_halted /\
-   t.vs_current_bb = b.cs_current_bb /\ t.vs_inst_idx = LENGTH b.cs_current_insts` by
-    metis_tac[window_phase_resources, window_phase_control] >>
-  `FLOOKUP t.vs_allocas site = SOME (slot,32)` by
-    (irule abi_encoder_registered_effect_allocated >>
-     qexistsl_tac [`{}`, `[(h,32)]`, `s`] >> simp[] >> metis_tac[window_phase_effect]) >>
-  `slot+32 <= t.vs_alloca_next` by
-    (irule alloca_region_below_frontier >> fs[alloca_inv_def] >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  drule_all window_cursor_store_phase_mem >> strip_tac >>
-  qabbrev_tac `u = (mstore slot (n2w (off+n)) t) with vs_inst_idx := LENGTH en.cs_current_insts` >>
-  `window_phase ctx func st en {site} [(h,32)] s u /\ mem_cont_sim ctx func s u` by
-    (irule window_phase_chain_mem >>
-     qexistsl_tac [`{}`, `[(h,32)]`, `b`, `{site}`, `[]`, `t`] >> simp[]) >>
-  `FLOOKUP u.vs_allocas site = SOME (slot,32)` by
-    simp[Abbr `u`, mstore_def, write_memory_with_expansion_def] >>
-  `window_sizes32 {site} u` by simp[window_sizes32_def] >>
-  qexists_tac `u` >> asm_rewrite_tac[] >> rpt conj_tac
-  >- metis_tac[window_array_phase_sizes_transition]
-  >- (simp[Abbr `u`] >> metis_tac[mstore_mem_word_at_disjoint])
-  >- simp[Abbr `u`, mstore_mem_word_at_same]
-  >- (Cases_on `len` >> fs[Abbr `u`, eval_operand_def, lookup_var_def,
-        mstore_def, write_memory_with_expansion_def]) >>
-  metis_tac[window_phase_control]
+  drule_all window_array_suffix_run_counted_mem >> metis_tac[]
 QED

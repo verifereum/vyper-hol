@@ -7,7 +7,7 @@ Ancestors
   abiEncoderWindowArrayBody abiEncoderWindowArrayLayout
   abiEncoderArrayHeader abiEncoderArrayRound abiEncoderWindowContract
   compileEnv loweringStateRelDefs freshWrites venomState venomMemDefs valueEncoding valueEncodingDefs valueEncodingProps
-  venomExecSemantics venomInst words finite_map pred_set list arithmetic
+  venomExecSemantics venomInst words finite_map pred_set list arithmetic fragGasPathMem
 
 Theorem window_array_round_backedge_code:
   abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
@@ -67,6 +67,88 @@ Proof
   simp[]
 QED
 
+Theorem window_array_round_backedge_counted_mem:
+  abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
+  window_array_cursor T owner ip isite islot k sb cap d n u /\
+  eval_operand (Var (STRING #"%" (toString body_st.cs_next_var))) u = SOME (n2w k) /\
+  k < ncount /\ ncount < dimword (:256) /\
+  ~u.vs_halted /\ u.vs_current_bb = body_end.cs_current_bb /\
+  u.vs_inst_idx = LENGTH body_end.cs_current_insts /\
+  alloca_inv u /\ alloca_room ctx func u ==>
+  window_array_transition ctx func owner {isite} [] u
+    (jump_to (FST labels) (mstore islot (n2w (SUC k))
+      (update_var (STRING #"%" (toString body_end.cs_next_var)) (n2w (SUC k)) u))) /\
+  mem_cont_sim ctx func u
+    (jump_to (FST labels) (mstore islot (n2w (SUC k))
+      (update_var (STRING #"%" (toString body_end.cs_next_var)) (n2w (SUC k)) u))) /\
+  gas_path_mem ctx func u 0 (OK (jump_to (FST labels) (mstore islot (n2w (SUC k))
+      (update_var (STRING #"%" (toString body_end.cs_next_var)) (n2w (SUC k)) u))))
+Proof
+  strip_tac >> drule_all window_array_round_backedge_mem >> strip_tac >>
+  asm_rewrite_tac[] >>
+  `!x. ip = Var x ==> not_fresh_at owner x` by fs[window_array_cursor_def] >>
+  drule_all window_array_round_backedge_code >> strip_tac >>
+  `islot+32 <= u.vs_alloca_next` by metis_tac[window_array_cursor_frontier] >>
+  `eval_operand ip u = SOME (n2w islot) /\ islot < dimword (:256)` by
+    fs[window_array_cursor_def] >>
+  `lookup_block u.vs_current_bb func.fn_blocks = SOME
+    <|bb_label := body_end.cs_current_bb; bb_instructions := body_end.cs_current_insts ++
+      abi_decode_backedge_insts body_end.cs_next_id (STRING #"%" (toString body_st.cs_next_var))
+        (STRING #"%" (toString body_end.cs_next_var)) ip (FST labels)|>` by
+    fs[abi_encoder_array_loop_code_def] >>
+  mp_tac (Q.INST [`ctx` |-> `ctx`, `func` |-> `func`, `s` |-> `u`,
+    `bb` |-> `<|bb_label := body_end.cs_current_bb; bb_instructions :=
+      body_end.cs_current_insts ++ abi_decode_backedge_insts body_end.cs_next_id
+        (STRING #"%" (toString body_st.cs_next_var))
+        (STRING #"%" (toString body_end.cs_next_var)) ip
+        (FST (labels : string # string # string))|>`,
+    `prefix` |-> `body_end.cs_current_insts`, `id` |-> `body_end.cs_next_id`,
+    `iv` |-> `STRING #"%" (toString body_st.cs_next_var)`,
+    `nv` |-> `STRING #"%" (toString body_end.cs_next_var)`, `ip` |-> `ip`,
+    `hdr` |-> `FST (labels : string # string # string)`, `i` |-> `k`, `ncount` |-> `ncount`,
+    `p` |-> `(n2w islot : bytes32)`] array_backedge_counted_mem) >> simp[]
+QED
+
+Theorem window_array_round_finish_counted_mem:
+  abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
+  window_array_root ctx func owner ids ei asz msz active ty avs src dst sb cap d u /\
+  abi_encoder_array_prefix ty avs (SUC k) d u.vs_memory /\
+  window_array_cursor T owner ip isite islot k sb cap d
+    (LENGTH (enc (Array NONE ty) (ListV avs))) u /\
+  window_array_cursor active owner dp dsite dslot
+    (LENGTH avs * abi_member_head_size ty +
+      SUM (MAP (abi_member_tail_size ty) (TAKE (SUC k) avs))) sb cap d
+    (LENGTH (enc (Array NONE ty) (ListV avs))) u /\
+  (!x. count_op = Var x ==> not_fresh_at owner x) /\
+  eval_operand count_op u = SOME (n2w (LENGTH avs)) /\
+  eval_operand (Var (STRING #"%" (toString body_st.cs_next_var))) u = SOME (n2w k) /\
+  k < LENGTH avs /\ isite IN ids /\ (active ==> dsite <> isite) /\
+  ~u.vs_halted /\ u.vs_current_bb = body_end.cs_current_bb /\
+  u.vs_inst_idx = LENGTH body_end.cs_current_insts ==>
+  ?t. window_array_transition ctx func owner ids
+      [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] u t /\
+    mem_cont_sim ctx func u t /\
+    window_array_inv ctx func owner ids ei asz msz active ty avs src dst
+      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t /\
+    gas_path_mem ctx func u 0 (OK t)
+Proof
+  strip_tac >>
+  `alloca_inv u /\ alloca_room ctx func u /\ LENGTH avs < dimword (:256)` by
+    (fs[window_array_root_def, abiEncoderWindowTheory.abi_encoder_window_array_iff,
+      contractABITheory.valid_length_def]) >>
+  drule_all window_array_round_backedge_counted_mem >> strip_tac >>
+  `!x. ip = Var x ==> not_fresh_at owner x` by fs[window_array_cursor_def] >>
+  drule_all window_array_round_backedge_code >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `mem_cont_sim ctx func u t` >>
+  `window_array_inv ctx func owner ids ei asz msz active ty avs src dst
+    ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t` by
+    (simp_tac bool_ss [Abbr `t`] >> irule window_array_backedge_inv >>
+     asm_rewrite_tac[]) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  irule window_array_transition_region >>
+  qexistsl_tac [`{isite}`, `[]`] >> asm_rewrite_tac[] >> simp[]
+QED
+
 Theorem window_array_round_finish_mem:
   abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
   window_array_root ctx func owner ids ei asz msz active ty avs src dst sb cap d u /\
@@ -89,21 +171,8 @@ Theorem window_array_round_finish_mem:
     window_array_inv ctx func owner ids ei asz msz active ty avs src dst
       ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t
 Proof
-  strip_tac >>
-  `alloca_inv u /\ alloca_room ctx func u /\ LENGTH avs < dimword (:256)` by
-    (fs[window_array_root_def, abiEncoderWindowTheory.abi_encoder_window_array_iff,
-      contractABITheory.valid_length_def]) >>
-  drule_all window_array_round_backedge_mem >> strip_tac >>
-  `!x. ip = Var x ==> not_fresh_at owner x` by fs[window_array_cursor_def] >>
-  drule_all window_array_round_backedge_code >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `mem_cont_sim ctx func u t` >>
-  `window_array_inv ctx func owner ids ei asz msz active ty avs src dst
-    ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t` by
-    (simp_tac bool_ss [Abbr `t`] >> irule window_array_backedge_inv >>
-     asm_rewrite_tac[]) >>
-  qexists_tac `t` >> asm_rewrite_tac[] >>
-  irule window_array_transition_region >>
-  qexistsl_tac [`{isite}`, `[]`] >> asm_rewrite_tac[] >> simp[]
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all window_array_round_finish_counted_mem >> metis_tac[]
 QED
 
 Theorem window_array_round_output_frame:
@@ -226,6 +295,86 @@ Proof
   qexists_tac `t` >> asm_rewrite_tac[] >> metis_tac[window_array_transition_trans_mem]
 QED
 
+Theorem window_array_static_round_counted_mem:
+  abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
+  abi_encode_array_static_body ip src dst ei asz msz body_st = (idx,body_end) /\
+  (!dst src st out st' ctx func s at av sb cap d.
+    compile_abi_encode_to_buf dst src ei st = (out,st') /\
+    abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
+    ?t child_count. window_strong_result ctx func st st' out at av d s t /\
+      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
+  window_alloca_sites func (frag_ids body_st body_end) SUBSET ids /\
+  isite IN ids /\ isite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
+  k < LENGTH avs /\
+  window_array_inv ctx func owner ids ei asz msz F ty avs src dst
+    ip isite islot dp dsite dslot count_op (FST (SND labels)) sb cap d k s ==>
+  ?t path_count. window_array_transition ctx func owner ids
+      [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t /\
+    mem_cont_sim ctx func s t /\
+    window_array_inv ctx func owner ids ei asz msz F ty avs src dst
+      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t /\
+    gas_path_mem ctx func s path_count (OK t)
+Proof
+  strip_tac >>
+  `!x. not_fresh_at owner x ==> not_fresh_at body_st x` by
+    (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `owner` >>
+     fs[abi_encoder_array_loop_code_def]) >>
+  `window_array_root ctx func owner ids ei asz msz F ty avs src dst sb cap d s /\
+   abi_encoder_array_prefix ty avs k d s.vs_memory /\
+   window_array_cursor T owner ip isite islot k sb cap d
+     (LENGTH (enc (Array NONE ty) (ListV avs))) s /\ alloca_inv s /\
+   (!x. count_op = Var x ==> not_fresh_at owner x) /\
+   eval_operand count_op s = SOME (n2w (LENGTH avs)) /\
+   ~s.vs_halted /\ s.vs_current_bb = body_st.cs_current_bb /\
+   s.vs_inst_idx = LENGTH body_st.cs_current_insts` by
+    (full_simp_tac bool_ss [window_array_inv_def, abi_encoder_array_loop_code_def] >>
+     simp_tac bool_ss [LENGTH] >>
+     qpat_x_assum `window_array_root _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [window_array_root_def] >> strip_tac >> asm_rewrite_tac[]) >>
+  `window_array_root ctx func body_st ids ei asz msz F ty avs src dst sb cap d s` by
+    (irule window_array_root_owner_mono >> metis_tac[]) >>
+  `eval_operand ip s = SOME (n2w islot) /\ islot < dimword (:256) /\
+   mload islot s = n2w k /\ fn_has_code body_st body_end func` by
+    fs[window_array_cursor_def, abi_encoder_array_loop_code_def, mload_def, mem_word_at_def] >>
+  `islot+32 <= s.vs_alloca_next` by metis_tac[window_array_cursor_frontier] >>
+  drule_all window_array_static_body_run_counted_mem >> strip_tac >>
+  rename1 `mem_cont_sim ctx func s u` >>
+  `window_array_transition ctx func owner
+    (window_alloca_sites func (frag_ids body_st body_end))
+    [(d+32+k*asz,LENGTH (enc ty (EL k avs)))] s u` by
+    (irule window_array_transition_owner_weaken >> metis_tac[]) >>
+  suspend "finish"
+QED
+
+Resume window_array_static_round_counted_mem[finish]:
+  drule_all window_array_static_round_geometry >> strip_tac >>
+  `window_array_root ctx func owner ids ei asz msz F ty avs src dst sb cap d u /\
+   window_array_cursor T owner ip isite islot k sb cap d (LENGTH (enc (Array NONE ty) (ListV avs))) u /\
+   window_array_transition ctx func owner ids [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s u` by
+    (irule window_array_round_output_frame >> asm_rewrite_tac[] >>
+     qexistsl_tac [`window_alloca_sites func (frag_ids body_st body_end)`,
+       `[(d+32+k*asz,LENGTH (enc ty (EL k avs)))]`] >>
+     asm_rewrite_tac[] >> simp_tac bool_ss [EVERY_DEF, pairTheory.pair_case_thm] >>
+     CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >> asm_rewrite_tac[]) >>
+  `eval_operand count_op u = SOME (n2w (LENGTH avs))` by
+    (irule window_array_transition_eval >> metis_tac[]) >>
+  drule abi_encode_array_static_body_index >> disch_tac >>
+  `?t. window_array_transition ctx func owner ids
+    [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] u t /\ mem_cont_sim ctx func u t /\
+    window_array_inv ctx func owner ids ei asz msz F ty avs src dst
+      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t /\
+    gas_path_mem ctx func u 0 (OK t)` by
+    (irule window_array_round_finish_counted_mem >>
+     qpat_assum `abi_encoder_array_loop_code _ _ _ _ _ _ _ _` (irule_at Any) >>
+     asm_rewrite_tac[window_array_cursor_def] >>
+     metis_tac[window_array_transition_def]) >>
+  `?total_count. gas_path_mem ctx func s total_count (OK t)` by
+    metis_tac[gas_path_mem_then] >>
+  qexistsl_tac [`t`,`total_count`] >> asm_rewrite_tac[] >> metis_tac[window_array_transition_trans_mem]
+QED
+
+Finalise window_array_static_round_counted_mem
+
 Theorem window_array_dynamic_offset_advance:
   is_dynamic ty /\ k < LENGTH avs /\
   off = LENGTH avs * abi_member_head_size ty +
@@ -342,6 +491,64 @@ Proof
   qexists_tac `t` >> asm_rewrite_tac[] >> metis_tac[window_array_transition_trans_mem]
 QED
 
+Theorem window_array_dynamic_round_complete_counted_mem:
+  abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
+  abi_encode_array_dynamic_body ip dp src dst ei asz msz body_st = (idx,body_end) /\
+  window_array_inv ctx func owner ids ei asz msz T ty avs src dst
+    ip isite islot dp dsite dslot count_op (FST (SND labels)) sb cap d k s /\
+  window_alloca_sites func (frag_ids body_st body_end) SUBSET ids /\
+  isite IN ids /\ isite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
+  dsite IN ids /\ dsite <> isite /\ k < LENGTH avs /\
+  off = LENGTH avs * abi_member_head_size ty + SUM (MAP (abi_member_tail_size ty) (TAKE k avs)) /\
+  window_array_transition ctx func body_st
+    (window_alloca_sites func (frag_ids body_st body_end) UNION {dsite})
+    [(d+32+k*abi_member_head_size ty,32);(d+32+off,LENGTH (enc ty (EL k avs)))] s u /\
+  abi_encoder_array_prefix ty avs (SUC k) d u.vs_memory /\
+  mem_word_at dslot u.vs_memory = n2w (off+LENGTH (enc ty (EL k avs))) /\
+  eval_operand idx u = SOME (n2w k) /\ u.vs_current_bb = body_end.cs_current_bb /\
+  u.vs_inst_idx = LENGTH body_end.cs_current_insts /\ mem_cont_sim ctx func s u /\ gas_path_mem ctx func s prefix_count (OK u) ==>
+  ?t path_count. window_array_transition ctx func owner ids
+      [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t /\
+    mem_cont_sim ctx func s t /\
+    window_array_inv ctx func owner ids ei asz msz T ty avs src dst
+      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t /\
+    gas_path_mem ctx func s path_count (OK t)
+Proof
+  strip_tac >>
+  `!x. not_fresh_at owner x ==> not_fresh_at body_st x` by
+    (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `owner` >>
+     fs[abi_encoder_array_loop_code_def]) >>
+  `window_array_transition ctx func owner
+    (window_alloca_sites func (frag_ids body_st body_end) UNION {dsite})
+    [(d+32+k*abi_member_head_size ty,32);(d+32+off,LENGTH (enc ty (EL k avs)))] s u` by
+    (irule window_array_transition_owner_weaken >> metis_tac[]) >>
+  `window_array_root ctx func owner ids ei asz msz T ty avs src dst sb cap d s /\
+   abi_encoder_array_prefix ty avs k d s.vs_memory /\
+   window_array_cursor T owner ip isite islot k sb cap d
+     (LENGTH (enc (Array NONE ty) (ListV avs))) s /\
+   window_array_cursor T owner dp dsite dslot off sb cap d
+     (LENGTH (enc (Array NONE ty) (ListV avs))) s /\
+   (!x. count_op = Var x ==> not_fresh_at owner x) /\
+   eval_operand count_op s = SOME (n2w (LENGTH avs))` by
+    (full_simp_tac bool_ss [window_array_inv_def] >> asm_rewrite_tac[]) >>
+  `isite <> dsite` by metis_tac[] >>
+  drule_all window_array_dynamic_round_frame >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `eval_operand count_op u = SOME (n2w (LENGTH avs))` by
+    (irule window_array_transition_eval >> metis_tac[]) >>
+  drule abi_encode_array_dynamic_body_index >> disch_tac >>
+  `?t. window_array_transition ctx func owner ids
+    [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] u t /\ mem_cont_sim ctx func u t /\
+    window_array_inv ctx func owner ids ei asz msz T ty avs src dst
+      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t /\
+    gas_path_mem ctx func u 0 (OK t)` by
+    (irule window_array_round_finish_counted_mem >>
+     qpat_assum `abi_encoder_array_loop_code _ _ _ _ _ _ _ _` (irule_at Any) >>
+     asm_rewrite_tac[] >> metis_tac[window_array_transition_def]) >>
+  `?total_count. gas_path_mem ctx func s total_count (OK t)` by
+    metis_tac[gas_path_mem_then] >>
+  qexistsl_tac [`t`,`total_count`] >> asm_rewrite_tac[] >> metis_tac[window_array_transition_trans_mem]
+QED
+
 Theorem window_array_dynamic_round_mem:
   abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
   abi_encode_array_dynamic_body ip dp src dst ei asz msz body_st = (idx,body_end) /\
@@ -392,6 +599,64 @@ Proof
     SUM (MAP (abi_member_tail_size ty) (TAKE k avs))` by simp[Abbr `off`] >>
   drule_all window_array_dynamic_body_run_mem >> strip_tac >>
   irule window_array_dynamic_round_complete_mem >>
+  qpat_assum `window_array_transition _ _ body_st _ _ s _` (irule_at Any) >>
+  qpat_assum `abi_encoder_array_loop_code _ _ _ _ _ _ _ _` (irule_at Any) >>
+  asm_rewrite_tac[] >> qexists_tac `idx` >> asm_rewrite_tac[]
+QED
+
+Theorem window_array_dynamic_round_counted_mem:
+  abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
+  abi_encode_array_dynamic_body ip dp src dst ei asz msz body_st = (idx,body_end) /\
+  (!dst src st out st' ctx func s at av sb cap d.
+    compile_abi_encode_to_buf dst src ei st = (out,st') /\
+    abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s ==>
+    ?t child_count. window_strong_result ctx func st st' out at av d s t /\
+      mem_cont_sim ctx func s t /\ gas_path_mem ctx func s child_count (OK t)) /\
+  window_alloca_sites func (frag_ids body_st body_end) SUBSET ids /\
+  isite IN ids /\ isite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
+  dsite IN ids /\ dsite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
+  dsite <> isite /\ k < LENGTH avs /\
+  window_array_inv ctx func owner ids ei asz msz T ty avs src dst
+    ip isite islot dp dsite dslot count_op (FST (SND labels)) sb cap d k s ==>
+  ?t path_count. window_array_transition ctx func owner ids
+      [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t /\
+    mem_cont_sim ctx func s t /\
+    window_array_inv ctx func owner ids ei asz msz T ty avs src dst
+      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t /\
+    gas_path_mem ctx func s path_count (OK t)
+Proof
+  strip_tac >>
+  `!x. not_fresh_at owner x ==> not_fresh_at body_st x` by
+    (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `owner` >>
+     fs[abi_encoder_array_loop_code_def]) >>
+  qabbrev_tac `off = LENGTH avs * abi_member_head_size ty +
+    SUM (MAP (abi_member_tail_size ty) (TAKE k avs))` >>
+  `window_array_root ctx func owner ids ei asz msz T ty avs src dst sb cap d s /\
+   abi_encoder_array_prefix ty avs k d s.vs_memory /\
+   window_array_cursor T owner ip isite islot k sb cap d
+     (LENGTH (enc (Array NONE ty) (ListV avs))) s /\
+   window_array_cursor T owner dp dsite dslot off sb cap d
+     (LENGTH (enc (Array NONE ty) (ListV avs))) s /\ alloca_inv s /\
+   ~s.vs_halted /\ s.vs_current_bb = body_st.cs_current_bb /\
+   s.vs_inst_idx = LENGTH body_st.cs_current_insts` by
+    (full_simp_tac bool_ss [window_array_inv_def, abi_encoder_array_loop_code_def, Abbr `off`] >>
+     simp_tac bool_ss [LENGTH] >>
+     qpat_x_assum `window_array_root _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [window_array_root_def] >> strip_tac >> asm_rewrite_tac[]) >>
+  `window_array_root ctx func body_st ids ei asz msz T ty avs src dst sb cap d s /\
+   window_array_cursor T body_st dp dsite dslot off sb cap d
+     (LENGTH (enc (Array NONE ty) (ListV avs))) s` by
+    (conj_tac >- (irule window_array_root_owner_mono >> metis_tac[]) >>
+     irule window_array_cursor_owner_mono >> metis_tac[]) >>
+  `eval_operand ip s = SOME (n2w islot) /\ islot < dimword (:256) /\
+   mload islot s = n2w k /\ fn_has_code body_st body_end func` by
+    fs[window_array_cursor_def, abi_encoder_array_loop_code_def, mload_def, mem_word_at_def] >>
+  `islot+32 <= s.vs_alloca_next` by metis_tac[window_array_cursor_frontier] >>
+  `off = LENGTH avs * abi_member_head_size ty +
+    SUM (MAP (abi_member_tail_size ty) (TAKE k avs))` by simp[Abbr `off`] >>
+  drule_all window_array_dynamic_body_run_counted_mem >> strip_tac >>
+  irule window_array_dynamic_round_complete_counted_mem >>
+  qpat_assum `gas_path_mem ctx func s _ (OK _)` (irule_at Any) >>
   qpat_assum `window_array_transition _ _ body_st _ _ s _` (irule_at Any) >>
   qpat_assum `abi_encoder_array_loop_code _ _ _ _ _ _ _ _` (irule_at Any) >>
   asm_rewrite_tac[] >> qexists_tac `idx` >> asm_rewrite_tac[]
