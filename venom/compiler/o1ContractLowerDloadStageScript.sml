@@ -154,8 +154,8 @@ Proof
   qpat_x_assum `mem_inv raw_mem_ok C' vs` mp_tac >>
   rewrite_tac[mem_inv_raw_reachable] >> strip_tac >>
   conj_tac >- metis_tac[] >>
-  rpt strip_tac >>
-  `raw_mem_ok C' fn inst s` by res_tac >>
+  rpt strip_tac >> rename1 `raw_reachable vs C' g inst s` >>
+  `raw_mem_ok C' g inst s` by res_tac >>
   pure_rewrite_tac[dload_headroom_ok_def, GSYM ctx_has_dalloca_def] >>
   qpat_x_assum `ctx_dload_count C' = 0` (fn th => rewrite_tac[th]) >>
   simp_tac (srw_ss()) [] >>
