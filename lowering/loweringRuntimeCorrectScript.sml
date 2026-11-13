@@ -24,6 +24,7 @@
  * TOP-LEVEL:
  *   lower_vyper_runtime_unit_correct -- S1
  *   lower_vyper_runtime_unit_body_joint -- S1 when the value moves
+ *   lower_vyper_runtime_unit_run_bounded -- S1b (sufficient gas)
  *)
 
 Theory loweringRuntimeCorrect
@@ -37,7 +38,8 @@ Ancestors
   bodyAbiDecodeTarget rawReturnHeader loweringHalt gasContext bodyPtrDefs
   gasOutcomeFull fragGasOriginPtr loweringPosts stmtSimDefs exprSimDefs
   exprLoweringProps vyperStorageTrace vyperStorageBackend vyperCall
-  fragExec moduleLowering
+  fragExec moduleLowering fragGasOrigin fragFuelUnit passSimulationDefs
+  acceptedContextPhi vyperLoweringCorrect
 
 val _ = Parse.hide "body";
 
@@ -591,4 +593,70 @@ Proof
       qexists_tac `marks` >>
       qexistsl_tac [`shadow_ctx`, `func`, `shadow_func`] >> simp[]) >>
   irule external_entry_value_revert >> metis_tac[]
+QED
+
+(* S1b, sufficient gas.  The lowered run ends within a fuel that does not
+   depend on the entry state, in particular not on the external-call
+   outcomes.  Every function of the unit is fuel-stable once its callees
+   are (fragFuelUnit), so from some fuel G on every run of the unit gives
+   the same result, and a run that ends at any fuel ends at G.  S1 says the
+   run ends at some fuel: the storage guards rule out its bad-storage arm,
+   the non-exemption premise its exempt arm, and its path arm ends in an
+   exit. *)
+Theorem lower_vyper_runtime_unit_run_bounded:
+  !tops rpolicy unit am tx ret.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx
+    ==>
+    ?fuel. !vs.
+      valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+      initial_venom_state_rel tops am tx vs /\
+      outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+      (!marks.
+         source_storage_ok am tx vs.vs_outcomes
+           (gas_explicit marks vs.vs_gas_readings) /\
+         call_outcomes_storage_ok am tx vs.vs_outcomes
+           (gas_explicit marks vs.vs_gas_readings)) /\
+      (!marks. ~source_exempt tops
+         (call_external (SOME vs.vs_outcomes)
+            (gas_explicit marks vs.vs_gas_readings) am tx))
+      ==>
+      terminates (run_context fuel unit.cu_context vs)
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  qspecl_then [`tops`, `rpolicy`, `unit`] mp_tac
+    lower_vyper_runtime_unit_fns_stable >>
+  impl_tac >- simp[] >> strip_tac >>
+  drule_all run_context_terminates_uniform >> strip_tac >>
+  qexists_tac `G` >> rpt strip_tac >> first_x_assum irule >>
+  qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vs`] mp_tac
+    lower_vyper_runtime_unit_correct >>
+  impl_tac >- simp[] >>
+  simp[source_unit_execution_correct_def,
+       source_unit_execution_correct_at_def] >>
+  strip_tac
+  >- (qpat_x_assum `!tail. ~_` (qspec_then `[]` mp_tac) >> simp[])
+  >- (qpat_x_assum `!tail. call_external_trace _ _ _ _ = _`
+        (qspec_then `[]` assume_tac) >> fs[] >>
+      drule call_external_trace_result >> strip_tac >>
+      qpat_x_assum `!marks. ~source_exempt _ _` (qspec_then `marks` mp_tac) >>
+      simp[]) >>
+  drule_all gas_origin_path_events >> strip_tac >>
+  qpat_x_assum `lookup_block _ func.fn_blocks = SOME bb`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `phi_prefix_length bb.bb_instructions = 0`
+    by metis_tac[lower_vyper_runtime_unit_block_phi, entry_runtime_no_dalloca] >>
+  qexists_tac `SUC fuel` >>
+  qspecl_then [`SUC fuel`, `unit.cu_context`, `vs`, `"__entry"`, `func`,
+               `"__entry"`] mp_tac run_context_run_blocks >>
+  impl_tac >- simp[] >> disch_then SUBST1_TAC >>
+  qspecl_then [`fuel`, `unit.cu_context`, `func`,
+               `vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
+                           vs_inst_idx := 0 |>`, `bb`] mp_tac
+    run_blocks_run_from_no_phi >>
+  impl_tac >- simp[] >> simp[] >> disch_then kall_tac >>
+  Cases_on `r` >> gvs[exit_result_def, terminates_def]
 QED
