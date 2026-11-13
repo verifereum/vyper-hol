@@ -190,5 +190,5 @@ Proof
   irule (cj 2 subst_consts_stmt_shape) >> simp[] >>
   rpt strip_tac >>
   drule checked_module_consts_env_replacement_shape >> simp[] >>
-  disch_then drule >> simp[]
+  qexistsl [`r`, `id`] >> simp[]
 QED
