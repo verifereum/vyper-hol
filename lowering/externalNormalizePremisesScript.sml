@@ -20,7 +20,7 @@ Proof
 QED
 
 Theorem normalize_source_window:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa sb es v op s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
   ~is_word_type ty /\ ~is_bytestring_type ty ==>
@@ -39,7 +39,7 @@ QED
    The source address is kept as a natural number here; operand transport is
    supplied separately by allocation's existing register-frame boundary. *)
 Theorem normalize_site_windows:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at cenv cx ty sa sb es v src s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
   ~is_word_type ty /\ ~is_bytestring_type ty /\
@@ -141,7 +141,7 @@ QED
 
 Theorem normalize_return_alloc_windows:
   compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sb /\
   expr_val_at cenv cx sty sa sb es v src s /\
   type_widens_to (get_tenv cx) sty dty /\
@@ -189,7 +189,7 @@ Proof
   irule normalize_site_windows >>
   goal_assum (drule_at Any) >> simp[venomInstTheory.mk_inst_def] >>
   goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`cx`,`sa`,`sb`,`src`,`sty`,`v`] >> simp[]
+  qexistsl_tac [`H`,`cx`,`sa`,`sb`,`src`,`sty`,`v`] >> simp[]
 QED
 
 Theorem normalize_return_destination_positive:
@@ -225,7 +225,7 @@ QED
 Theorem normalize_return_typed_windows:
   compile_alloc_buffer (type_memory_bytes cenv dty) sb = (buf,sc) /\
   fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
   expr_val_at cenv cx sty sa sb es v src s /\ expr_val_rel cx sty v src s /\
   type_widens_to (get_tenv cx) sty dty /\ sty <> dty /\
   ~is_word_type dty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) /\

@@ -20,7 +20,7 @@ Ancestors
   vyperLookup vyperTypeCallGraph supportedExprForms stmtSimAssignAttr
   exprSimSource exprSimHypsDefs gasContext vyperPlaceResultTyping
   gasStorage gasOutcome vyperStorageTrace vyperStorageFootprint
-  stmtSimAugAssignAttrStorage allocaFootprint instMemFrontier memSafeRun
+  augAssignStorageFieldSource allocaFootprint instMemFrontier memSafeRun
   bodyDeclMemoryCounted bodyDeclMemoryCore
 Libs
   monadsyntax
@@ -607,7 +607,7 @@ Resume compile_assign_attr_storage_mem[store]:
      es' with storage_trace :=
        es'.storage_trace ++ [StorageRoot tr slot (StructTV fs)])` by
     (gen_tac >>
-     irule (cj 1 stmtSimAugAssignAttrStorageTheory.eval_target_place_attr_toplevel_field) >>
+     irule (cj 1 augAssignStorageFieldSourceTheory.eval_target_place_attr_toplevel_field) >>
      goal_assum (drule_at Any) >> simp[]) >>
   `!tail. bind (eval_target_place cx
               (AttributeTarget (TopLevelNameTarget (src,id)) fld))
