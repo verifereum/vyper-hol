@@ -3,6 +3,11 @@
    (copied in bulk).  Neither allocates scratch. *)
 Theory sourceOwnedLeafPtr
 Ancestors
+  abiDecoderArrayHeader compileEnv exprLoweringProps emitHelperProps fragExec
+  decoderNavigationPtr instIdxIndep venomInst venomExecSemantics
+  fragExecPtr decoderArraySetupPtr decoderSetupStepPtr wordLoadStorePtr fragGasOriginPtr fragGasSeqPtr fragGasSeqMem
+  memSafeRun ghostPcTransportPtr fragGasOrigin instMemFrontier ptrSafetyTransport decoderGhostFramePtr words finite_map pred_set
+  ptrSafeRun ptrDiscipline codegenRel contextCodegenRel
   sourcePrimitiveGasMem sourceBulkGasMem
   sourceOwnedArrayLoopPtr sourcePrimitiveReentryPtr abiDecoderSequenceReach
   decoderPrimitiveObservations decoderWorldFramePtr
@@ -12,6 +17,225 @@ Ancestors
   abiDecoderCoherence sourceBytesRepresentation calldataDecodePtr abiDecoderReentry
   venomState abiDecoderBytes calldataDynOwned abiDecoderFrameCompose
   allocaFrontierBound allocaBudgetProps venomMemDefs ptrDiscipline bodyPtrDefs arithmetic
+
+Theorem source_bulk_header_origin[local]:
+  abi_decode_array_header (Var root) src CALLDATALOAD sa = (cnt,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  ptr_covers G tn root s capacity /\ 32 <= capacity /\ not_fresh_at sa root /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} ==>
+  ?H u.
+    ptr_covers H u root t capacity /\ op_taint u cnt = {} /\ op_prov H cnt = NONE /\
+    eval_operand cnt t = SOME (abi_decode_load CALLDATALOAD a s) /\
+    (!op. abi_decoder_operand_live sa.cs_next_var op ==> eval_operand op t = eval_operand op s) /\
+    u.t_mem = tn.t_mem DIFF {x | d <= x /\ x < d+32} /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_halted = s.vs_halted /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+      s.vs_current_bb = sa.cs_current_bb /\
+      (!fuel. ptr_safe_run D lower fuel ctx func PG H u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx func PG G tn
+        (s with vs_inst_idx := LENGTH sa.cs_current_insts)) /\
+    (!D lower explicit ctx func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+      s.vs_current_bb = sa.cs_current_bb /\ d + 32 <= s.vs_alloca_next ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx,func,PG)
+        (s with vs_inst_idx := LENGTH sa.cs_current_insts,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u))
+Proof
+  strip_tac >>
+  `eval_operand (Var root) s = SOME (n2w d) /\
+   abi_decoder_operand_live sa.cs_next_var (Var root)` by
+    simp[eval_operand_def, calldata_operand_live_not_fresh] >>
+  drule_all calldata_array_header_repeat_sequence >> strip_tac >>
+  qpat_x_assum `abi_decode_array_header _ _ _ _ = _` mp_tac >>
+  simp[abi_decode_array_header_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def] >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  strip_tac >> gvs[] >>
+  rename1 `emit_op CALLDATALOAD [src] sa = (cnt,sm)` >>
+  rename1 `emit_void MSTORE [Var root; cnt] sm = ((),sb)` >>
+  `inst_extends sa sm /\ inst_extends sm sb` by
+    metis_tac[inst_extends_emit_op, inst_extends_emit_void] >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (fs[inst_extends_def] >> metis_tac[emitted_insts_append]) >>
+  qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >>
+  pure_asm_rewrite_tac [] >>
+  disch_then (mp_then Any strip_assume_tac run_inst_seq_append_ok) >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK s1` >>
+  `run_inst_seq (emitted_insts sa sm)
+    (s with vs_inst_idx := LENGTH sa.cs_current_insts) =
+    OK (s1 with vs_inst_idx := LENGTH sa.cs_current_insts)` by
+    (drule emit_op_run_pc >> simp[is_terminator_def] >>
+     disch_then (qspecl_then [`s`,`LENGTH sa.cs_current_insts`] mp_tac) >>
+     simp[exec_result_map_def]) >>
+  `eval_operand src (s with vs_inst_idx := LENGTH sa.cs_current_insts) = SOME a` by simp[] >>
+  drule_all (Q.INST [`s` |-> `s with vs_inst_idx := LENGTH sa.cs_current_insts`,
+    `t` |-> `s1 with vs_inst_idx := LENGTH sa.cs_current_insts`]
+    (SPEC_ALL emit_calldata_load_endpoint_ptr_origin_core)) >>
+  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`,`G`] strip_assume_tac) >>
+  gvs[lookup_var_def] >>
+  suspend "finish"
+QED
+
+Resume source_bulk_header_origin[finish]:
+  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac) >>
+  `lookup_var root s1 = SOME (n2w d) /\ ptr_covers H u root s1 capacity` by
+    (conj_tac >- metis_tac[lookup_var_def] >>
+     irule ptr_covers_frame >> metis_tac[lookup_var_def]) >>
+  `ptr_covers H u root s1 32` by
+    (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  `?w. eval_operand cnt s1 = SOME w` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sm sb) _ = _` mp_tac >>
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_write2_def, eval_operand_def, AllCaseEqs()] >> metis_tac[]) >>
+  `t = mstore d w s1` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sm sb) _ = _` mp_tac >>
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_write2_def, eval_operand_def, w2n_n2w] >>
+     Cases_on `cnt` >> fs[eval_operand_def]) >>
+  `w2n (n2w d : bytes32) = d` by simp[] >>
+  drule_all mstore_ghost_frame >> disch_then (qspecl_then [`PG`,`H`] strip_assume_tac) >>
+  qabbrev_tac `u2 = step_taint (mk_inst sm.cs_next_id MSTORE [Var root;cnt] []) s1 t u` >>
+  `u2.t_var = u.t_var /\ u2.t_stor = tn.t_stor /\ u2.t_trans = tn.t_trans /\
+    u2.t_mem = tn.t_mem DIFF {x | d <= x /\ x < d+32}` by
+    (simp[Abbr `u2`] >> metis_tac[]) >>
+  `step_prov PG H (mk_inst sm.cs_next_id MSTORE [Var root;cnt] []) t = H` by metis_tac[] >>
+  qpat_x_assum `!id. _` kall_tac >>
+  `u2.t_imm = tn.t_imm` by
+    simp[Abbr `u2`, step_taint_def, mk_inst_def, set_var_taint_def, imm_taint_def] >>
+  `!op. op_taint u2 op = op_taint u op` by (Cases >> simp[op_taint_def]) >>
+  `!x. lookup_var x t = lookup_var x s1` by
+    simp[mstore_def, write_memory_with_expansion_def, lookup_var_def] >>
+  `ptr_covers H u2 root t capacity` by (irule ptr_covers_frame >> metis_tac[]) >>
+  qexistsl_tac [`H`,`u2`] >> simp[] >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK s1` mp_tac >>
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_read1_def, AllCaseEqs()] >> strip_tac >>
+     gvs[update_var_def, mstore_def, write_memory_with_expansion_def]) >>
+  simp[] >>
+  conj_tac >- metis_tac[lookup_var_def] >>
+  conj_tac >- suspend "backward" >>
+  suspend "joint"
+QED
+
+Resume source_bulk_header_origin[backward]:
+  rpt gen_tac >> strip_tac >>
+  `same_blocks sa sm /\ same_blocks sm sb` by
+    metis_tac[emit_op_same_blocks, emit_void_same_blocks] >>
+  `cs_extends sa sm /\ cs_extends sm sb` by
+    (conj_tac >> irule cs_extends_same_block >> fs[inst_extends_def, same_blocks_def] >> metis_tac[]) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `sm.cs_current_bb = sa.cs_current_bb /\ sb.cs_current_bb = sm.cs_current_bb` by fs[same_blocks_def] >>
+  `s1.vs_current_bb = s.vs_current_bb /\ s1.vs_halted = s.vs_halted /\
+    s1.vs_alloca_next = s.vs_alloca_next` by
+    gvs[mstore_def, write_memory_with_expansion_def] >>
+  `!fuel. ptr_safe_run D lower fuel ctx func PG H u
+     (s1 with vs_inst_idx := LENGTH sm.cs_current_insts)` suffices_by
+    (strip_tac >> first_x_assum (qspecl_then [`D`,`lower`,`ctx`,`func`] mp_tac) >> simp[]) >>
+  `!fuel. ptr_inst_ok D lower fuel ctx func H u
+    (mk_inst sm.cs_next_id MSTORE [Var root;cnt] [])
+    (s1 with vs_inst_idx := LENGTH sm.cs_current_insts)` by
+    (gen_tac >> irule ptr_inst_ok_lower_bound_transport >>
+     conj_tac >- (gvs[allocas_from_def] >> metis_tac[]) >>
+     qexists_tac `0` >> simp[] >> irule ptr_inst_ok_mstore >> simp[] >>
+     gvs[ptr_covers_def, lookup_var_def]) >>
+  irule setup_instruction_continuation >>
+  qexistsl_tac [`H`, `mk_inst sm.cs_next_id MSTORE [Var root;cnt] []`,
+    `sm`, `sb`, `t with vs_inst_idx := LENGTH sm.cs_current_insts`, `u2`] >>
+  simp[mk_inst_def, is_terminator_def, same_blocks_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
+    eval_operand_def, mstore_def, write_memory_with_expansion_def] >>
+  Cases_on `cnt` >> gvs[eval_operand_def, lookup_var_def, mstore_def,
+    write_memory_with_expansion_def, w2n_n2w, Abbr `u2`]
+QED
+
+Resume source_bulk_header_origin[joint]:
+  rpt gen_tac >> strip_tac >>
+  `same_blocks sa sm /\ same_blocks sm sb` by
+    metis_tac[emit_op_same_blocks, emit_void_same_blocks] >>
+  `cs_extends sa sm /\ cs_extends sm sb` by
+    (conj_tac >> irule cs_extends_same_block >> fs[inst_extends_def, same_blocks_def] >> metis_tac[]) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `sm.cs_current_bb = sa.cs_current_bb /\ sb.cs_current_bb = sm.cs_current_bb` by fs[same_blocks_def] >>
+  `s1.vs_current_bb = s.vs_current_bb /\ s1.vs_halted = s.vs_halted /\
+    s1.vs_alloca_next = s.vs_alloca_next` by
+    gvs[mstore_def, write_memory_with_expansion_def] >>
+  `ptr_inst_ok D lower 0 ctx func H u
+    (mk_inst sm.cs_next_id MSTORE [Var root;cnt] [])
+    (s1 with vs_inst_idx := LENGTH sm.cs_current_insts)` by
+    (irule ptr_inst_ok_lower_bound_transport >>
+     conj_tac >- (gvs[allocas_from_def] >> metis_tac[]) >>
+     qexists_tac `0` >> simp[] >> irule ptr_inst_ok_mstore >> simp[] >>
+     gvs[ptr_covers_def, lookup_var_def]) >>
+  `?bb. lookup_block s1.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb (LENGTH sm.cs_current_insts) =
+      SOME (mk_inst sm.cs_next_id MSTORE [Var root;cnt] [])` by
+    (`?bb. lookup_block sm.cs_current_bb func.fn_blocks = SOME bb /\
+      !k. k < LENGTH [mk_inst sm.cs_next_id MSTORE [Var root;cnt] []] ==>
+      get_instruction bb (LENGTH sm.cs_current_insts + k) =
+        SOME (EL k [mk_inst sm.cs_next_id MSTORE [Var root;cnt] []])` by
+       (irule fn_has_code_same_block >> qexists_tac `sb` >> simp[]) >>
+     qexists_tac `bb` >> gvs[] >> first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `step_inst_base (mk_inst sm.cs_next_id MSTORE [Var root;cnt] [])
+    (s1 with vs_inst_idx := LENGTH sm.cs_current_insts) =
+    OK (t with vs_inst_idx := LENGTH sm.cs_current_insts)` by
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
+      eval_operand_def, lookup_var_def, w2n_n2w] >>
+     Cases_on `cnt` >> gvs[eval_operand_def, lookup_var_def,
+      mstore_def, write_memory_with_expansion_def]) >>
+  `inst_mem_below_frontier (mk_inst sm.cs_next_id MSTORE [Var root;cnt] [])
+    (s1 with vs_inst_idx := LENGTH sm.cs_current_insts)` by
+    (simp[below_frontier_MSTORE, eval_operand_def, lookup_var_def] >>
+     gvs[lookup_var_def]) >>
+  suspend "edges"
+QED
+
+Resume source_bulk_header_origin[edges]:
+  `gas_path_mem_edge ctx func
+    (s1 with vs_inst_idx := LENGTH sm.cs_current_insts) 0
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (mp_tac (Q.INST [`s` |-> `s1 with vs_inst_idx := LENGTH sm.cs_current_insts`,
+      `u` |-> `t with vs_inst_idx := LENGTH sm.cs_current_insts`,
+      `i` |-> `mk_inst sm.cs_next_id MSTORE [Var root;cnt] []`]
+      straight_line_mem_edge) >>
+     simp[mk_inst_def, is_terminator_def, inst_dload_in_section_def] >> gvs[ADD1]) >>
+  `gas_path_ptr_edge D lower ctx func PG H u
+    (s1 with vs_inst_idx := LENGTH sm.cs_current_insts) 0 H u2
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (mp_tac (Q.INST [`lo` |-> `lower`, `fn` |-> `func`, `G` |-> `H`, `tn` |-> `u`]
+      (Q.INST [`s` |-> `s1 with vs_inst_idx := LENGTH sm.cs_current_insts`,
+        `u` |-> `t with vs_inst_idx := LENGTH sm.cs_current_insts`,
+        `i` |-> `mk_inst sm.cs_next_id MSTORE [Var root;cnt] []`]
+        straight_line_ptr_edge)) >>
+     simp[mk_inst_def, is_terminator_def, Abbr `u2`] >> gvs[ADD1]) >>
+  `gas_origin_ptr_edge (D,lower,explicit,ctx,func,PG)
+    (s1 with vs_inst_idx := LENGTH sm.cs_current_insts,H,u) []
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u2)` by
+    (simp[gas_origin_ptr_edge_def] >> gvs[gas_path_mem_edge_zero_origin]) >>
+  `gas_origin_ptr_path (D,lower,explicit,ctx,func,PG)
+    (s1 with vs_inst_idx := LENGTH sm.cs_current_insts,H,u) []
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u2)` by
+    (irule (SRULE [] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
+       (SPEC_ALL (cj 2 gas_origin_ptr_path_rules)))) >>
+     qexistsl_tac [`H`,`t with vs_inst_idx := LENGTH sb.cs_current_insts`,`u2`] >>
+     simp[] >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[]) >>
+  qpat_x_assum `!D lower explicit ctx' func. _` (qspecl_then
+    [`D`,`lower`,`explicit`,`ctx`,`func`] mp_tac) >> simp[] >>
+  disch_then (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+  disch_then (qspecl_then [`s1 with vs_inst_idx := LENGTH sm.cs_current_insts`,
+    `H`,`u`,`[]`,`OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`,`H`,`u2`] mp_tac) >>
+  simp[]
+QED
+
+Finalise source_bulk_header_origin
 
 Theorem source_owned_primitive_decoder_ptr:
   abi_decoder_coherent ce env sf ty tv /\
