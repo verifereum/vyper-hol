@@ -651,7 +651,7 @@ Proof
    max_live_eom (stage 6) = max_live_eom (stage 9) /\
    max_live_eom (stage 7) = max_live_eom (stage 9) /\
    max_live_eom (stage 8) = max_live_eom (stage 9)` by
-    (qpat_x_assum `!j. _`
+    (qpat_x_assum `!j. j + 3 <= _ ==> _`
        (fn th => map_every (fn n => mp_tac (Q.SPEC n th))
                    [`0`, `1`, `2`, `3`, `4`, `5`, `6`]) >>
      simp[]) >>
