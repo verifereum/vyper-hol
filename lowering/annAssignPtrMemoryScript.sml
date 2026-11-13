@@ -140,7 +140,7 @@ Resume compile_annassign_memory_widen_stmt_frag_ptr[continue]:
  conj_tac >- metis_tac[] >>
  conj_tac >- metis_tac[] >>
  goal_assum (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >> simp[] >>
- goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+ goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
  simp[] >> qexists `ai` >> simp[] >>
  conj_tac
  >- (rpt gen_tac >> strip_tac >>

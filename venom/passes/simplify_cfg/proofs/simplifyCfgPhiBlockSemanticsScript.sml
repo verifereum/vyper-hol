@@ -320,6 +320,37 @@ Proof
     rich_listTheory.FILTER_MAP, combinTheory.o_DEF]
 QED
 
+Theorem scfg_fix_phis_interval_non_invoke:
+  bb.bb_instructions = ps ++ tail /\
+  EVERY (\i. i.inst_opcode = PHI) ps /\
+  EVERY (\i. i.inst_opcode <> PHI) tail /\
+  rs = FILTER (\i. (fix_phi_inst actual_preds i).inst_opcode = PHI) ps /\
+  cs = FILTER (\i. (fix_phi_inst actual_preds i).inst_opcode <> PHI) ps ==>
+  !j i. LENGTH rs <= j /\ j < LENGTH rs + LENGTH cs /\
+    get_instruction (fix_phis_in_block actual_preds bb) j = SOME i ==>
+    i.inst_opcode <> INVOKE
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all scfg_fix_phis_partition_instructions >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `j - LENGTH rs < LENGTH cs` by decide_tac >>
+  `i = EL (j - LENGTH rs) (MAP (fix_phi_inst actual_preds) cs)` by
+    gvs[get_instruction_def, rich_listTheory.EL_APPEND] >>
+  `MEM (EL (j - LENGTH rs) cs) ps` by
+    (qpat_x_assum `cs = _` SUBST_ALL_TAC >>
+     metis_tac[MEM_EL, MEM_FILTER]) >>
+  ` (EL (j - LENGTH rs) cs).inst_opcode = PHI` by
+    gvs[EVERY_MEM] >>
+  qpat_x_assum `i = _` SUBST1_TAC >>
+  simp[EL_MAP] >>
+  qmatch_goalsub_abbrev_tac `fix_phi_inst actual_preds inst` >>
+  `inst.inst_opcode = PHI` by metis_tac[Abbr `inst`] >>
+  simp[fix_phi_inst_def] >>
+  namedCases_on `filter_phi_ops actual_preds inst.inst_operands` ["", "h ops"] >>
+  simp[] >> namedCases_on `ops` ["", "h2 rest"] >>
+  simp[] >> Cases_on `rest` >> simp[]
+QED
+
 Theorem scfg_covered_snapshot_conditions:
   MEM p actual_preds /\ s.vs_prev_bb = SOME p /\
   EVERY (\i. i.inst_opcode = PHI /\ phi_well_formed i.inst_operands /\

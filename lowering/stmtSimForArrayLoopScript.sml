@@ -363,7 +363,7 @@ Proof
   gvs[n2w_11]
 QED
 
-Theorem array_ret_pc_update[local]:
+Theorem array_ret_pc_update:
   ret_pc_ok cenv st s ==> ret_pc_ok cenv st (update_var v w s)
 Proof
   rw[ret_pc_ok_def] >> first_x_assum drule >> strip_tac >> simp[] >>
@@ -1331,7 +1331,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem array_body_continue_iteration_framed[local]:
+Theorem array_body_continue_iteration_framed:
   !ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz ainst st k es s
    r sb sj exit_lbl incr_lbl cond_lbl nv i1 i2 i3.
   stmt_lands (InLoop exit_lbl incr_lbl) sb r s /\
@@ -1722,7 +1722,7 @@ QED
 
 (* The handler and the scope pop record no storage event, so a body whose
    storage trace left the domain leaves the whole cleanup outside it. *)
-Theorem array_body_cleanup_bad[local]:
+Theorem array_body_cleanup_bad:
   gas_bad_storage_at cx st0 src es s marks ==>
   gas_bad_storage_at cx st0
     (finally (try (do src; return F od) handle_loop_exception) pop_scope)
@@ -1943,7 +1943,7 @@ Proof
   fs[array_caller_frame_def] >> metis_tac[]
 QED
 
-Theorem array_round_storage_frame[local]:
+Theorem array_round_storage_frame:
   storage_trace_frame
     (do push_scope_with_var id tv v;
         finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)

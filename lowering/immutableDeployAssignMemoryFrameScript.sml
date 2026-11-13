@@ -24,7 +24,7 @@ Proof
     FLOOKUP (get_source_immutables ce.ce_module mods) id = SOME (tv,old)` by
     (drule_all immutable_assign_source_lookup >> simp[]) >>
   `bare_globals_layout ce.ce_is_ctor ce.ce_module_var_type ce.ce_module_vars
-     cx env.bare_globals env.bare_global_assignable /\
+     ce.ce_modules cx env.bare_globals env.bare_global_assignable /\
    env_immutables_consistent env cx es /\ state_well_typed es` by
     fs[expr_sim_inv_def, env_consistent_def] >>
   qpat_x_assum `expr_sim_inv _ _ _ _` kall_tac >>
