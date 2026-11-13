@@ -10,6 +10,7 @@ Ancestors
   immutableBytestringFootprint typedCopyAgreement valueTypingMemoryProps
   allocaFootprint placeTypedCopyPath unitTransformDefs contextCodegenRel
   venomInst codegenRel memSafeRun loweringStateRelDefs arithmetic
+  emitHelper rich_list fragExec venomMemDefs
 
 Definition typed_copy_checked_entry_def:
   typed_copy_checked_entry cenv ctx dty sty dtv stv v <=>
@@ -311,4 +312,148 @@ Proof
   `x <> STRING #"%" (toString a.cs_next_var)` by
     (gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL]) >>
   simp[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem typed_copy_assign_checked:
+  emit_inst ASSIGN [op] [counter] a = ((),b) /\
+  eval_operand op s = SOME w /\ fn_has_code a b func /\
+  fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      lookup_var counter t = SOME w /\ t.vs_memory = s.vs_memory /\
+      (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+      (!x. x <> counter ==> lookup_var x t = lookup_var x s) /\
+      ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+      t.vs_inst_idx = LENGTH b.cs_current_insts /\
+      alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >>
+  `same_blocks a b /\
+   b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
+   emitted_insts a b = [mk_inst a.cs_next_id ASSIGN [op] [counter]]` by
+    (qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
+     simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+     strip_tac >> gvs[same_blocks_def, emitted_insts_def, DROP_LENGTH_APPEND]) >>
+  `run_inst_seq (emitted_insts a b) s = OK (update_var counter w s)` by
+    simp[run_inst_seq_def, step_inst_base_def, mk_inst_def] >>
+  `run_inst_seq_mem_ok (emitted_insts a b) s` by
+    (irule run_inst_seq_mem_ok_every >>
+     simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
+          source_memory_write_ranges_def, inst_dload_in_section_def, mk_inst_def]) >>
+  `gas_path_mem ctx func s 0
+       (OK ((update_var counter w s) with vs_inst_idx := LENGTH b.cs_current_insts)) /\
+   alloca_history func ((update_var counter w s) with vs_inst_idx := LENGTH b.cs_current_insts) /\
+   ~(update_var counter w s).vs_halted /\
+   (update_var counter w s).vs_current_bb = b.cs_current_bb` by
+    (irule straight_path_mem >> simp[] >> qexists_tac `a` >>
+     gvs[mk_inst_def, is_terminator_def]) >>
+  qexists_tac `(update_var counter w s) with vs_inst_idx := LENGTH b.cs_current_insts` >>
+  simp[lookup_var_update_var, update_var_def, lookup_var_def,
+       venom_state_component_equality, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gvs[same_blocks_def]
+QED
+
+Theorem typed_copy_counter_init_checked:
+  emit_inst ASSIGN [Lit 0w] [counter] a = ((),b) /\
+  (!x. not_fresh_at a x ==> x <> counter) /\
+  fn_has_code a b func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      lookup_var counter t = SOME 0w /\ t.vs_memory = s.vs_memory /\
+      typed_copy_state_frame a off len s t /\
+      ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+      t.vs_inst_idx = LENGTH b.cs_current_insts /\
+      alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >>
+  `eval_operand (Lit 0w) s = SOME 0w` by simp[eval_operand_def] >>
+  drule_all typed_copy_assign_checked >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t` >> simp[typed_copy_state_frame_def, typed_copy_frame_def] >>
+  gvs[venom_state_component_equality] >> metis_tac[]
+QED
+
+Theorem typed_copy_two_ops_checked:
+  emit_op opc1 args1 a = (op1,b) /\ emit_op opc2 args2 b = (op2,c) /\
+  (opc1 = ADD \/ opc1 = MUL \/ opc1 = LT \/ opc1 = ISZERO) /\
+  (opc2 = ADD \/ opc2 = MUL \/ opc2 = LT \/ opc2 = ISZERO) /\
+  (!out. step_inst_base (mk_inst a.cs_next_id opc1 args1 [out]) s =
+         OK (update_var out w1 s)) /\
+  (!t out. eval_operand op1 t = SOME w1 /\
+     t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t ==>
+     step_inst_base (mk_inst b.cs_next_id opc2 args2 [out]) t =
+     OK (update_var out w2 t)) /\
+  fn_has_code a c func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      eval_operand op1 t = SOME w1 /\ eval_operand op2 t = SOME w2 /\
+      t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t /\
+      ~t.vs_halted /\ t.vs_current_bb = c.cs_current_bb /\
+      t.vs_inst_idx = LENGTH c.cs_current_insts /\
+      alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >>
+  `ci_mono a b /\ ci_mono b c` by metis_tac[typed_copy_emit_op_mono] >>
+  `cs_extends a b /\ cs_extends b c` by gvs[ci_mono_def] >>
+  `fn_has_code a b func /\ fn_has_code b c func` by metis_tac[fn_has_code_split] >>
+  qpat_assum `emit_op opc1 _ _ = _`
+    (mp_then Any mp_tac typed_copy_control_emit_op_checked) >>
+  disch_then (qspecl_then [`w1`, `s`, `off`, `len`, `func`, `ctx`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `alloca_inv t` by
+    (gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
+         typed_copy_state_frame_def, venom_state_component_equality] >> metis_tac[]) >>
+  qpat_assum `emit_op opc2 _ _ = _`
+    (mp_then Any mp_tac typed_copy_control_emit_op_checked) >>
+  disch_then (qspecl_then [`w2`, `t`, `off`, `len`, `func`, `ctx`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `eval_operand op1 t' = SOME w1` by
+    metis_tac[typed_copy_state_frame_operand, typed_copy_emit_op_fresh] >>
+  `typed_copy_state_frame a off len s t'` by
+    (irule typed_copy_state_frame_trans >> qexists_tac `t` >> simp[] >>
+     irule typed_copy_state_frame_mono >> qexists_tac `b` >> simp[]) >>
+  qpat_assum `gas_path_mem ctx func s 0 (OK t)`
+    (mp_then Any mp_tac gas_path_mem_then) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  qexists_tac `t'` >> simp[]
+QED
+
+Theorem typed_copy_header_checked:
+  emit_op LT [Var counter; length] a = (lt,b) /\
+  emit_op ISZERO [lt] b = (done,c) /\
+  not_fresh_at a counter /\ lookup_var counter s = SOME (n2w k) /\
+  eval_operand length s = SOME (n2w N) /\ k <= N /\ N < dimword (:256) /\
+  fn_has_code a c func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      eval_operand done t = SOME (if k < N then 0w else 1w) /\
+      t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t /\
+      ~t.vs_halted /\ t.vs_current_bb = c.cs_current_bb /\
+      t.vs_inst_idx = LENGTH c.cs_current_insts /\
+      alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >>
+  `k < dimword (:256)` by decide_tac >>
+  `?t. gas_path_mem ctx func s 0 (OK t) /\
+       eval_operand lt t = SOME (bool_to_word (k < N)) /\
+       eval_operand done t = SOME (bool_to_word (bool_to_word (k < N) = 0w)) /\
+       t.vs_memory = s.vs_memory /\ typed_copy_state_frame a off len s t /\
+       ~t.vs_halted /\ t.vs_current_bb = c.cs_current_bb /\
+       t.vs_inst_idx = LENGTH c.cs_current_insts /\
+       alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next` by
+    (irule typed_copy_two_ops_checked >> simp[] >>
+     qexistsl_tac [`[Var counter; length]`, `[lt]`, `b`, `LT`, `ISZERO`] >>
+     simp[] >> conj_tac
+     >- simp[step_inst_base_def, mk_inst_def, exec_pure2_def,
+             eval_operand_def, w2n_n2w, LESS_MOD] >>
+     rpt strip_tac >>
+     simp[step_inst_base_def, mk_inst_def, exec_pure1_def]) >>
+  qexists_tac `t` >> Cases_on `k < N` >> gvs[bool_to_word_def]
 QED
