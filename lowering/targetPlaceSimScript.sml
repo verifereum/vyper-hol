@@ -53,7 +53,7 @@ Ancestors
   loweringPosts
   list rich_list finite_map pair
   fragExec  exprSimHyps exprSimAttributeFields
-  exprLowering exprLoweringProps compileEnv
+  exprLowering exprLoweringProps compileEnv loweringStateRelDefs
   valueEncoding vyperAST vyperInterpreter vyperState vyperValue
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants vyperPlaceResultTyping
   venomState venomInst
@@ -95,6 +95,17 @@ Definition target_root_def:
   target_root (SubscriptTarget t e) = target_root t
 End
 
+(* The type checker's access root of a place (vyperTypeSystem) is its root. *)
+Theorem place_access_root:
+  !tgt attrs. FST (place_access tgt attrs) = target_root tgt
+Proof
+  `(!e:expr. T) /\
+   !tgt attrs. FST (place_access tgt attrs) = target_root tgt`
+    suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[vyperTypeSystemTheory.place_access_def, target_root_def]
+QED
+
 (* The target is inside an immutable or a constant: a module name with no
    storage declaration. *)
 Definition immutable_root_def:
@@ -105,14 +116,15 @@ Definition immutable_root_def:
 End
 
 (* Every index of the target meets expr_body_pre wherever expr_sim_inv
-   holds: the static part of expr_body_pre. *)
+   holds, the static part of expr_body_pre, and no subscript of it is a
+   rejected overlap (target_subscript_overlap). *)
 Definition target_indices_pre_def:
   target_indices_pre cenv cx env (NameTarget id) = T /\
   target_indices_pre cenv cx env (TopLevelNameTarget nsid) = T /\
   target_indices_pre cenv cx env (AttributeTarget t fld) =
     target_indices_pre cenv cx env t /\
   target_indices_pre cenv cx env (SubscriptTarget t e) =
-    (target_indices_pre cenv cx env t /\
+    (target_indices_pre cenv cx env t /\ ~target_subscript_overlap cenv t e /\
      !es. expr_sim_inv cenv cx env es ==> expr_body_pre cenv cx env e es)
 End
 

@@ -1,10 +1,10 @@
 # Slice buffer witnesses (#561, a07-06)
 
-Exact bytecode comparisons for `slice`, checked by
-the native runner (`../native/README.md`):
-`./native/bytecode_parity_native.exe . slice-buffers` from `bytecode/`. The lowering sizes slice output buffers as Python's
+Exact bytecode comparisons for `slice`, checked in
+`eval/evalCompilerSliceBuffersScript.sml` (part of the default lowering
+rollup). The lowering sizes slice output buffers as Python's
 `new_temporary_value(out_t)` (`32 + ceil32(maxlen)`) and allocates the
-`msg.data`/`.code` output buffer before the size opcode and bounds check.
+`msg.data`/`.code` output buffer after the size opcode and bounds check.
 
 | Source | Checks |
 |---|---|

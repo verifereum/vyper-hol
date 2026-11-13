@@ -28,7 +28,7 @@ Proof
           >- (gen_tac >> drule eval_expr_force_value >>
               disch_then (qspec_then `es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >> simp[]) >>
           gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-              read_result_def, return_def] >> first_assum ACCEPT_TAC) >>
+              read_result_def, return_def, vv_own_def] >> first_assum ACCEPT_TAC) >>
       qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
                    `es_end`, `G`, `tn`, `r`] >>
       simp[expr_exit_success_map] >> gen_tac >>
@@ -55,8 +55,8 @@ Proof
   simp[expr_sim_ptr_def] >> disch_then drule_all >> disch_tac >>
   drule_all (BETA_RULE (Q.INST [`H` |-> `\v ee G tn u.
     ghost_inv d cenv cx ee G tn u /\
-    ptr_val_ok cx (expr_type e) v op G tn u /\
-    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
+    ptr_val_ok cx (post_value_type cenv e) v op G tn u /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn`] expr_stack_outcome_ptr)) >>
   disch_then (qspec_then `t` assume_tac) >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>

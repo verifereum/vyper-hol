@@ -1,6 +1,6 @@
 Theory placeMemoryProtectedFrame
 Ancestors
-  placeMemoryCopyEffect exprSimAlloc exprLoweringProps compileEnv
+  valueEncodingDefs placeMemoryCopyEffect exprSimAlloc exprLoweringProps compileEnv loweringStateRelDefs
   venomInst finite_map
 
 (* A protected slice survives both writes, relative to the allocation-only
@@ -36,7 +36,7 @@ Proof
   strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
   qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
   simp[immutable_alloca_sep_def] >>
-  disch_then (qspecl_then [`name`, `tv`, `v`, `off`] mp_tac) >>
+  disch_then (qspecl_then [`name`, `tv`, `v`, `off`] mp_tac o CONJUNCT2) >>
   simp[] >> strip_tac >>
   gvs[regions_disjoint_def] >>
   first_x_assum drule >> simp[mk_inst_def]

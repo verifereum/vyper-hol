@@ -93,6 +93,7 @@ Definition supported_nested_type_def:
         else case supported_struct_fields tops id of
            NONE => F
          | SOME fields =>
+             ~NULL fields /\
              EVERY (supported_nested_type leaf (fuel - 1) tops o SND) fields)
     | _ => F
 Termination
@@ -118,7 +119,8 @@ Definition supported_value_type_def:
     | ArrayT elem (Dynamic n) => supported_word_type elem
     | StructT id =>
         (case supported_struct_fields tops id of
-           SOME fields => EVERY (supported_word_type o SND) fields
+           SOME fields =>
+             ~NULL fields /\ EVERY (supported_word_type o SND) fields
          | NONE => F)
     | _ => F
 End

@@ -6,7 +6,7 @@ Theory bodyMemToplevel
 Ancestors
   bodyMemoryPreds bodyExprForceMemory bodyToplevelMemory exprSimTopLevelProps
   exprSimHyps exprSimSource exprSimMemDefs exprSimDefs exprLowering
-  exprSimHypsDefs vyperTypeCallGraph exprLoweringProps compileEnv context vyperAST
+  exprSimHypsDefs vyperTypeCallGraph exprLoweringProps compileEnv loweringStateRelDefs context vyperAST
   vyperInterpreter vyperTypeGlobalLookupSoundness
 
 Theorem toplevel_compile_not_stack[local]:
@@ -48,7 +48,8 @@ QED
 Theorem body_toplevel_mem_ok:
   !cx ann src id. body_expr_mem_ok cx (TopLevelName ann (src,id))
 Proof
-  rpt gen_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >>
   rpt gen_tac >> strip_tac >>
   `expr_sim_pre cenv cx env (TopLevelName ann (src,id)) es` by
     simp[expr_sim_pre_body, int_calls_expr_def] >>

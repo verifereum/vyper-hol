@@ -93,23 +93,20 @@ End
 
 (* ===== Parameter / Return Rewriting ===== *)
 
-(* Rotate INVOKE operands for PARAM binding.
-   Python: ops = call_site.operands[1:] + [call_site.operands[0]]
-   Moves the callee label (return PC) to the end so PARAM indices
-   match argument positions. *)
+(* Bind arguments followed by a dummy return PC, matching upstream #5254.
+   Inlined returns jump directly to the continuation, so the return-PC
+   parameter needs no code address. *)
 Definition rotate_invoke_ops_def:
   rotate_invoke_ops [] = [] ∧
-  rotate_invoke_ops (first::rest) = rest ++ [first]
+  rotate_invoke_ops (first::rest) = rest ++ [Lit 0w]
 End
 
 (* Rewrite a single instruction in a cloned block.
    Returns (replacement instructions, updated param_idx).
    Matches Python _inline_call_site:
    param-class (PARAM, FMP_PARAM, RETPC_PARAM) → ASSIGN from the rotated
-     INVOKE operand at param_idx. The last one gets a Label operand (return
-     PC). Python assigns it because labels are addresses at runtime; the
-     correctness proof must show this assign is dead (its output is unused
-     once RET becomes JMP).
+     INVOKE operand at param_idx. The return-PC parameter gets zero; its
+     output is unused once RET becomes JMP.
    RET / RETFMP → assign return values to INVOKE outputs, then JMP to the
      return block.
    Others → unchanged. *)

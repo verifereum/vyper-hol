@@ -8,11 +8,12 @@
 
 Theory analysisSimProofsCompare
 Ancestors
-  analysisSimProofsBase
+  venomExecProofs analysisSimProofsBase runInstsProps
   analysisSimDefs execEquivParamDefs
   passSimulationDefs passSimulationProofs execEquivParamProofs
   execEquivParamBase stateEquiv venomExecSemantics venomInst instIdxIndep
   venomState list finite_map pred_set
+  passTransform
 
 (* Shared simplification theorems for expanding Abbrev'd blocks
    WITHOUT triggering srw_ss() loops on FLAT/MAPi terms.
@@ -28,76 +29,6 @@ Triviality vsr_R_ok_halted:
   valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> (s1.vs_halted <=> s2.vs_halted)
 Proof
   rw[valid_state_rel_def]
-QED
-
-Triviality is_terminator_not_INVOKE:
-  is_terminator op ==> op <> INVOKE
-Proof
-  Cases_on `op` >> simp[is_terminator_def]
-QED
-
-(* Helper: terminator halted_wrap preserves lift_result through idx change *)
-Triviality terminator_halted_wrap_lift:
-  !R_ok R_term inst1 inst2 s1 s2 fuel ctx.
-    valid_state_rel R_ok R_term /\
-    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
-    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
-    is_terminator inst1.inst_opcode /\
-    is_terminator inst2.inst_opcode /\
-    lift_result R_ok R_term R_term
-      (step_inst fuel ctx inst1 (s1 with vs_inst_idx := 0))
-      (step_inst fuel ctx inst2 (s2 with vs_inst_idx := 0))
-  ==>
-    lift_result R_ok R_term R_term
-      (case step_inst fuel ctx inst1 s1 of
-         OK s'' => if s''.vs_halted then Halt s'' else OK s''
-       | Halt s' => Halt s' | Abort a' s' => Abort a' s'
-       | IntRet rv ss => IntRet rv ss | Error e => Error e)
-      (case step_inst fuel ctx inst2 s2 of
-         OK s'' => if s''.vs_halted then Halt s'' else OK s''
-       | Halt s' => Halt s' | Abort a' s' => Abort a' s'
-       | IntRet rv ss => IntRet rv ss | Error e => Error e)
-Proof
-  rpt strip_tac >>
-  (* Chain: halted_wrap(inst1@s1) -> halted_wrap(inst1@s1_0) ->
-            halted_wrap(inst2@s2_0) -> halted_wrap(inst2@s2) *)
-  irule lift_result_trans_proof >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexists_tac `case step_inst fuel ctx inst2 (s2 with vs_inst_idx := 0) of
-    OK s'' => if s''.vs_halted then Halt s'' else OK s''
-  | Halt s' => Halt s' | Abort a' s' => Abort a' s'
-  | IntRet rv ss => IntRet rv ss | Error e => Error e` >>
-  conj_tac
-  >- (
-    irule lift_result_trans_proof >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    qexists_tac `case step_inst fuel ctx inst1 (s1 with vs_inst_idx := 0) of
-      OK s'' => if s''.vs_halted then Halt s'' else OK s''
-    | Halt s' => Halt s' | Abort a' s' => Abort a' s'
-    | IntRet rv ss => IntRet rv ss | Error e => Error e` >>
-    conj_tac
-    >- (irule terminator_exec_block_step_lift >> simp[])
-    >>
-    (* halted_wrap preserves lift_result *)
-    `inst1.inst_opcode <> INVOKE` by metis_tac[is_terminator_not_INVOKE] >>
-    `inst2.inst_opcode <> INVOKE` by metis_tac[is_terminator_not_INVOKE] >>
-    fs[step_inst_non_invoke] >>
-    Cases_on `step_inst_base inst1 (s1 with vs_inst_idx := 0)` >>
-    Cases_on `step_inst_base inst2 (s2 with vs_inst_idx := 0)` >>
-    gvs[lift_result_def]
-    >- (
-      rename1 `R_ok v1 v2` >>
-      `v1.vs_halted <=> v2.vs_halted` by metis_tac[vsr_R_ok_halted] >>
-      simp[] >>
-      Cases_on `v1.vs_halted` >> gvs[lift_result_def] >>
-      metis_tac[vsr_R_ok_R_term])
-    >> TRY (irule R_term_idx_change_both >> metis_tac[]))
-  >>
-  irule terminator_exec_block_step_lift_rev >> simp[]
 QED
 
 (* ===== Terminator case helper ===== *)
@@ -135,8 +66,8 @@ Triviality abc_terminator_case:
 Proof
   rpt gen_tac >> DISCH_TAC >>
   pop_assum (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
-  `inst1.inst_opcode <> INVOKE` by metis_tac[is_terminator_not_INVOKE] >>
-  `inst2.inst_opcode <> INVOKE` by metis_tac[is_terminator_not_INVOKE] >>
+  `inst1.inst_opcode <> INVOKE` by metis_tac[is_terminator_not_invoke] >>
+  `inst2.inst_opcode <> INVOKE` by metis_tac[is_terminator_not_invoke] >>
   (* Split error/non-error without pattern matching *)
   Cases_on `?e. step_inst fuel ctx inst1 s2_0 = Error e`
   >- (
@@ -358,28 +289,6 @@ fun collapse_all_idx (asl, g) =
          >> collapse_all_idx) (asl, g)
   end;
 
-(* Error in run_insts prefix → Error in exec_block *)
-Triviality exec_block_prefix_error:
-  !R_ok R_term prefix fuel ctx bb s j e.
-    valid_state_rel R_ok R_term /\
-    j + LENGTH prefix <= LENGTH bb.bb_instructions /\
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
-      prefix /\
-    (!k. k < LENGTH prefix ==> EL (j + k) bb.bb_instructions = EL k prefix) /\
-    run_insts fuel ctx prefix s = Error e
-  ==>
-    ?e'. exec_block fuel ctx bb (s with vs_inst_idx := j) = Error e'
-Proof
-  rpt strip_tac >>
-  `~(?s'. run_insts fuel ctx prefix s = OK s')` by
-    (pop_assum SUBST_ALL_TAC >> simp_tac (srw_ss()) []) >>
-  drule exec_block_prefix_fail_lift >>
-  disch_then (qspecl_then [`prefix`, `fuel`, `ctx`, `bb`, `s`, `j`] mp_tac) >>
-  simp[] >> strip_tac >>
-  drule_all lift_result_error_left >>
-  simp[]
-QED
-
 (* ===== Normal case helper ===== *)
 Triviality abc_normal_case:
   !(R_ok : venom_state -> venom_state -> bool)
@@ -461,11 +370,12 @@ Proof
       (run_insts _ _ f1_group _)` mp_tac >>
     qpat_assum `_ = Error e` (fn th => REWRITE_TAC[th]) >>
     strip_tac >> drule lift_result_error_left >> strip_tac >>
-    qspecl_then [`R_ok`, `R_term`, `f1_group`, `fuel`, `ctx`, `bb1`,
+    qspecl_then [`f1_group`, `fuel`, `ctx`, `bb1`,
       `s1 with vs_inst_idx := 0`, `j1`, `e'`] mp_tac exec_block_prefix_error >>
     qpat_assum `bb1.bb_instructions = _` (fn th => REWRITE_TAC[th]) >>
     REWRITE_TAC abbrev_expand_thms >> collapse_all_idx >>
-    disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC)
+    impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    strip_tac >> qexists_tac `e'` >> first_assum ACCEPT_TAC)
   (* Case 2: f1 on s2 does NOT error — so we have lift_result f1→f2 *)
   \\ `lift_result R_ok R_term R_term
        (run_insts fuel ctx f1_group (s2 with vs_inst_idx := 0))
@@ -1373,15 +1283,6 @@ QED
 
 (* ===== Compare variant: two transforms at function level ===== *)
 
-Triviality run_block_OK_inst_idx_0[local]:
-  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
-Proof
-  rpt strip_tac >>
-  qspecl_then [`s`, `bb.bb_instructions`] mp_tac eval_phis_ok_or_error_defs >> strip_tac >>
-  fs[run_block_def] >>
-  drule venomExecProofsTheory.exec_block_OK_inst_idx_0 >> simp[]
-QED
-
 Triviality block_sim_function_compare_ind_step:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) bt1 bt2 fn fuel.
@@ -1448,8 +1349,10 @@ Proof
     qexists_tac `run_block fuel ctx (bt1 bb) s2` >>
     conj_tac >> first_assum ACCEPT_TAC) >>
   Cases_on `run_block fuel ctx (bt1 bb) s1` >>
+  fs[lift_result_def] >>
   Cases_on `run_block fuel ctx (bt2 bb) s2` >>
-  gvs[lift_result_def]
+  fs[lift_result_def] >>
+  simp[lift_result_def]
   >>
   rename1 `R_ok v1 v2` >>
   Cases_on `v1.vs_halted`
@@ -1534,95 +1437,6 @@ QED
 (* ===== Local copies of eval_phis_flat_mapi and phi_prefix_length_flat_mapi ===== *)
 (* The Base script versions are [local] and not visible here. *)
 
-Triviality phi_prefix_length_flat_mapi_local[local]:
-  !f l.
-    (!idx inst. idx < LENGTH l /\ EL idx l = inst /\ inst.inst_opcode = PHI ==>
-       f idx inst = [inst]) /\
-    (!idx inst. idx < LENGTH l /\ EL idx l = inst /\ inst.inst_opcode <> PHI ==>
-       EVERY (\i. i.inst_opcode <> PHI) (f idx inst)) /\
-    (!i j. i < j /\ j < LENGTH l /\ (EL j l).inst_opcode = PHI ==>
-       (EL i l).inst_opcode = PHI) ==>
-    phi_prefix_length (FLAT (MAPi f l)) = phi_prefix_length l
-Proof
-  Induct_on `l` >- simp[phi_prefix_length_def] >>
-  rpt gen_tac >> strip_tac >>
-  simp[indexedListsTheory.MAPi_def, phi_prefix_length_def] >>
-  Cases_on `h.inst_opcode = PHI`
-  >- (
-    `f 0 h = [h]` by (first_x_assum (qspecl_then [`0`, `h`] mp_tac) >> simp[]) >>
-    simp[phi_prefix_length_def] >>
-    qpat_x_assum `!f. _ ==> phi_prefix_length (FLAT (MAPi f l)) = phi_prefix_length l`
-      ho_match_mp_tac >>
-    simp[combinTheory.o_DEF] >>
-    match_mp_tac phi_prefix_shift_cond3 >>
-    qexists `h` >>
-    rpt gen_tac >> strip_tac >>
-    first_x_assum irule >> simp[] >>
-    qexists `j` >> simp[] >>
-    `LENGTH (h::l) = SUC (LENGTH l)` by simp[] >>
-    decide_tac) >>
-  `phi_prefix_length l = 0` by metis_tac[phi_prefix_length_head_not_phi] >>
-  `EVERY (\i. i.inst_opcode <> PHI) (f 0 h)` by (
-    first_x_assum (qspecl_then [`0`, `h`] mp_tac) >> simp[]) >>
-  Cases_on `f 0 h`
-  >- (
-    qpat_x_assum `phi_prefix_length l = 0` (fn th => simp[GSYM th]) >>
-    qpat_x_assum `EVERY (\i. i.inst_opcode <> PHI) ([] :instruction list)` kall_tac >>
-    qpat_x_assum `!f. _ ==> phi_prefix_length (FLAT (MAPi f l)) = phi_prefix_length l`
-      ho_match_mp_tac >>
-    simp[combinTheory.o_DEF] >>
-    match_mp_tac phi_prefix_shift_cond3 >>
-    qexists `h` >>
-    rpt gen_tac >> strip_tac >>
-    first_x_assum irule >> simp[] >>
-    qexists `j` >> simp[] >>
-    `LENGTH (h::l) = SUC (LENGTH l)` by simp[] >>
-    decide_tac) >>
-  gvs[EVERY_DEF, APPEND, phi_prefix_length_def]
-QED
-
-Triviality phi_prefix_length_zero_eval_phis_ok_local[local]:
-  !l s. phi_prefix_length l = 0 ==> eval_phis s l = OK s
-Proof
-  Cases_on `l` >- simp[eval_phis_def] >>
-  Cases_on `h.inst_opcode = PHI` >> simp[eval_phis_def, phi_prefix_length_def]
-QED
-
-Triviality eval_phis_flat_mapi_local[local]:
-  !f s l.
-    (!idx inst. idx < LENGTH l /\ EL idx l = inst /\ inst.inst_opcode = PHI ==>
-       f idx inst = [inst]) /\
-    (!idx inst. idx < LENGTH l /\ EL idx l = inst /\ inst.inst_opcode <> PHI ==>
-       EVERY (\i. i.inst_opcode <> PHI) (f idx inst)) /\
-    (!i j. i < j /\ j < LENGTH l /\ (EL j l).inst_opcode = PHI ==>
-       (EL i l).inst_opcode = PHI) ==>
-    eval_phis s (FLAT (MAPi f l)) = eval_phis s l
-Proof
-  Induct_on `l` >- simp[eval_phis_def] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `h.inst_opcode = PHI`
-  >- (
-    `f 0 h = [h]` by (first_x_assum (qspecl_then [`0`, `h`] mp_tac) >> simp[]) >>
-    `eval_phis s (FLAT (MAPi (f o SUC) l)) = eval_phis s l` by (
-      qpat_x_assum `!f s. _ ==> eval_phis s (FLAT (MAPi f l)) = eval_phis s l`
-        ho_match_mp_tac >>
-      simp[combinTheory.o_DEF] >>
-      match_mp_tac phi_prefix_shift_cond3 >> qexists `h` >>
-      rpt gen_tac >> strip_tac >>
-      first_x_assum irule >> simp[] >>
-      qexists `j` >> simp[] >>
-      `LENGTH (h::l) = SUC (LENGTH l)` by simp[] >> decide_tac) >>
-    simp[indexedListsTheory.MAPi_def, eval_phis_def])
-  >- (
-    `phi_prefix_length (FLAT (MAPi f (h::l))) = 0` by (
-      irule EQ_TRANS >>
-      qexists_tac `phi_prefix_length (h::l)` >> conj_tac
-      >- (irule (Q.SPECL [`f`, `h::l`] phi_prefix_length_flat_mapi_local) >>
-          rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC)
-      >- simp[phi_prefix_length_def]) >>
-    simp[phi_prefix_length_zero_eval_phis_ok_local, eval_phis_def])
-QED
-
 (* ===== Boundary lemma: bridge run_block -> exec_block ===== *)
 (* Key insight: bb1/bb2 are variables, so ONCE_REWRITE_TAC[run_block_def]
    cannot expand analysis_block_transform_def. This prevents the goal from
@@ -1653,19 +1467,6 @@ QED
 
 (* Also handle the Error case: if eval_phis returns Error on both sides,
    both run_block calls return Error with the same message *)
-
-Triviality run_block_entry_compare_error:
-  !bb1 bb2 s fuel ctx e.
-    eval_phis s bb1.bb_instructions = Error e /\
-    eval_phis s bb2.bb_instructions = Error e
-    ==>
-    (?e'. run_block fuel ctx bb1 s = Error e') /\
-    (?e'. run_block fuel ctx bb2 s = Error e')
-Proof
-  rpt strip_tac >>
-  ONCE_REWRITE_TAC[run_block_def] >>
-  simp[AllCaseEqs()]
-QED
 
 (* ===== analysis_run_block_compare ===== *)
 

@@ -1,6 +1,6 @@
 Theory regularCallEmitSim
 Ancestors
-  regularMemorySim venomExecSemantics venomCallOracleDefs codegenRel asmSem
+  memoryReadRel regularMemorySim venomExecSemantics venomCallOracleDefs codegenRel asmSem
   stackPlanGen contextCodegenRel venomInst asmIR
   list rich_list arithmetic venomState strongPrefixSim spillSim emitSim stackModel instSimHelpers planSpillBounds
 
@@ -28,15 +28,6 @@ Proof
   strip_tac >> drule related_tx_params >>
   gvs[venom_asm_rel_def, make_asm_delegatecall_state_def,
       make_venom_delegatecall_state_def]
-QED
-
-Theorem related_create_state:
-  venom_asm_rel lo ps vs st ==>
-  make_asm_create_state st target gas value data =
-  make_venom_create_state vs target gas value data
-Proof
-  strip_tac >> drule related_tx_params >>
-  gvs[venom_asm_rel_def, make_asm_create_state_def, make_venom_create_state_def]
 QED
 
 Theorem related_call_input_bytes:
@@ -331,6 +322,7 @@ Theorem ext_call_emit_venom_asm_rel:
   EVERY (\op. case op of Var x => x <> out | _ => T) ps.ps_stack /\
   (!op. op IN FDOM ps.ps_spilled ==>
     case op of Var x => x <> out | _ => T) /\
+  ~(vs.vs_call_ctx.cc_static /\ value <> 0w) /\
   exec_ext_call inst vs gas addr value ao az ro rs static = OK vs' ==>
   ?ab. (if with_value then asm_exec_call static st
         else asm_exec_staticcall st) = AsmOK ab /\
@@ -351,8 +343,10 @@ Proof
   drule_all consume_call_outcome_venom_asm_rel >>
   disch_then (qspecl_then [`w2n ao`, `w2n az`, `stk`] strip_assume_tac) >>
   qpat_x_assum `consume_call_outcome _ _ _ _ = _` kall_tac >>
+  `st.as_call_ctx = vs.vs_call_ctx` by fs[venom_asm_rel_def] >>
   qexists_tac `ab` >> conj_tac
-  >- (Cases_on `with_value` >> gvs[asm_exec_call_def, asm_exec_staticcall_def]) >>
+  >- (Cases_on `with_value` >> Cases_on `vs.vs_call_ctx.cc_static` >>
+      gvs[asm_exec_call_def, asm_exec_staticcall_def]) >>
   simp[] >>
   `(if with_value then 7 else 6) <= LENGTH ps.ps_stack` by
     (Cases_on `with_value` >> fs[venom_asm_rel_def, plan_stack_rel_def]) >>
@@ -381,24 +375,20 @@ Theorem delegatecall_emit_venom_asm_rel:
       vs' ab
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `read_memory (w2n ao) (w2n az) vs =
-    TAKE (w2n az) (DROP (w2n ao)
-      (asm_expand_memory (w2n ao + w2n az) st.as_memory))` by
-    (irule related_call_input_bytes >> qexistsl_tac [`lo`, `ps`] >> simp[]) >>
-  `st.as_accounts = vs.vs_accounts /\ st.as_call_ctx = vs.vs_call_ctx` by
-    fs[venom_asm_rel_def] >>
-  drule related_delegatecall_state >> strip_tac >>
   qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac std_ss [exec_delegatecall_def, LET_THM] >>
-  simp_tac (srw_ss()) [AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `_ = (_, _)` SUBST_ALL_TAC >>
-  drule_all extract_result_venom_asm_rel >> strip_tac >> gnvs[] >>
-  `6 <= LENGTH ps.ps_stack` by
-    fs[venom_asm_rel_def, plan_stack_rel_def] >>
-  qexists_tac `asm_next (ab with as_stack := output :: stk)` >>
-  conj_tac
-  >- simp[asm_exec_delegatecall_def, LET_THM] >>
-  simp[asm_next_def] >>
+  simp_tac std_ss [exec_delegatecall_def, LET_THM] >> pairarg_tac >>
+  pure_asm_rewrite_tac[] >> strip_tac >>
+  rename1 `consume_call_outcome _ _ _ _ = (output, vb)` >>
+  `asm_call_request st addr 0w (w2n ao) (w2n az) F =
+   venom_call_request vs addr 0w ao az F` by
+    (irule related_call_request >> qexistsl_tac [`lo`, `ps`] >> simp[]) >>
+  drule_all consume_call_outcome_venom_asm_rel >>
+  disch_then (qspecl_then [`w2n ao`, `w2n az`, `stk`] strip_assume_tac) >>
+  qpat_x_assum `consume_call_outcome _ _ _ _ = _` kall_tac >>
+  qexists_tac `ab` >> conj_tac
+  >- gvs[asm_exec_delegatecall_def] >>
+  simp[] >>
+  `6 <= LENGTH ps.ps_stack` by fs[venom_asm_rel_def, plan_stack_rel_def] >>
   drule emit_output_venom_asm_rel >>
   disch_then (qspecl_then [`output`, `out`, `6`] mp_tac) >>
   gvs[asm_next_def, venom_asm_rel_def, update_var_def]
@@ -415,6 +405,7 @@ Theorem create_emit_venom_asm_rel:
   EVERY (\op. case op of Var x => x <> out | _ => T) ps.ps_stack /\
   (!op. op IN FDOM ps.ps_spilled ==>
     case op of Var x => x <> out | _ => T) /\
+  ~vs.vs_call_ctx.cc_static /\
   exec_create inst vs value off sz salt_opt = OK vs' ==>
   ?ab. (case salt_opt of NONE => asm_exec_create st
         | SOME salt => asm_exec_create2 st) = AsmOK ab /\
@@ -437,6 +428,7 @@ Proof
   drule_all consume_create_outcome_venom_asm_rel >>
   disch_then (qspecl_then [`w2n off`, `w2n sz`, `stk`] strip_assume_tac) >>
   qpat_x_assum `consume_create_outcome _ _ = _` kall_tac >>
+  `st.as_call_ctx = vs.vs_call_ctx` by fs[venom_asm_rel_def] >>
   qexists_tac `ab` >> conj_tac
   >- (Cases_on `salt_opt` >> gvs[asm_exec_create_def, asm_exec_create2_def]) >>
   simp[] >>
@@ -472,8 +464,10 @@ Theorem call_arranged_emit_sim:
       vs' ab
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  (* keep the step for the static check below *)
+  qpat_assum `inst.inst_opcode = CALL` (fn opc =>
+    qpat_assum `step_inst _ _ _ _ = _` (mp_tac o SIMP_RULE (srw_ss())
+      [opc, step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()])) >>
   strip_tac >>
   gnvs[compute_operands_def, python_stack_operands_def,
        ir_specific_operand_order_def] >>
@@ -481,6 +475,10 @@ Proof
   rename1 `inst.inst_operands = [gop; aop; vop; iop; izop; rop; rzop]` >>
   `eval_operands [gop; aop; vop; iop; izop; rop; rzop] vs =
     SOME [gas; addr; value; ao; az; ro; rs]` by simp[eval_operands_def] >>
+  `~(vs.vs_call_ctx.cc_static /\ value <> 0w)` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     Cases_on `vs.vs_call_ctx.cc_static` >> Cases_on `value = 0w` >>
+     simp[step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
   drule_at (Pat `eval_operands _ _ = _`) arranged_eval_operands_stack >>
   disch_then (qspecl_then [`st`, `residual`, `ps`, `lo`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >>
@@ -501,7 +499,7 @@ Proof
   (conj_tac >- simp[]) >>
   (conj_tac >- (qexists_tac `sb` >> simp[])) >>
   simp[] >> goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`inst`, `vs`] >> fs[]
+  qexistsl_tac [`inst`, `vs`] >> gvs[]
 QED
 
 Theorem external_arranged_emit_sim:
@@ -619,8 +617,9 @@ Resume external_arranged_emit_sim[delegatecall]:
   qexistsl_tac [`inst`, `vs`] >> fs[]
 QED
 Resume external_arranged_emit_sim[create]:
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  qpat_assum `inst.inst_opcode = CREATE` (fn opc =>
+    qpat_assum `step_inst _ _ _ _ = _` (mp_tac o SIMP_RULE (srw_ss())
+      [opc, step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()])) >>
   strip_tac >>
   gnvs[compute_operands_def, python_stack_operands_def,
        ir_specific_operand_order_def, venom_to_evm_name_def] >>
@@ -631,6 +630,10 @@ Resume external_arranged_emit_sim[create]:
        simp[eval_operands_def] >> NO_TAC) >>
   `eval_operands [vop; oop; sop] vs = SOME [value; off; sz]` by
     simp[eval_operands_def] >>
+  `~vs.vs_call_ctx.cc_static` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     Cases_on `vs.vs_call_ctx.cc_static` >>
+     simp[step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
   drule_at (Pat `eval_operands _ _ = _`) arranged_eval_operands_stack >>
   disch_then (qspecl_then [`st`, `residual`, `ps`, `lo`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >>
@@ -651,8 +654,9 @@ Resume external_arranged_emit_sim[create]:
   qexistsl_tac [`inst`, `vs`] >> fs[]
 QED
 Resume external_arranged_emit_sim[create2]:
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  qpat_assum `inst.inst_opcode = CREATE2` (fn opc =>
+    qpat_assum `step_inst _ _ _ _ = _` (mp_tac o SIMP_RULE (srw_ss())
+      [opc, step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()])) >>
   strip_tac >>
   gnvs[compute_operands_def, python_stack_operands_def,
        ir_specific_operand_order_def, venom_to_evm_name_def] >>
@@ -663,6 +667,10 @@ Resume external_arranged_emit_sim[create2]:
        simp[eval_operands_def] >> NO_TAC) >>
   `eval_operands [vop; oop; sop; salt_op] vs = SOME [value; off; sz; salt]` by
     simp[eval_operands_def] >>
+  `~vs.vs_call_ctx.cc_static` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     Cases_on `vs.vs_call_ctx.cc_static` >>
+     simp[step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
   drule_at (Pat `eval_operands _ _ = _`) arranged_eval_operands_stack >>
   disch_then (qspecl_then [`st`, `residual`, `ps`, `lo`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >>

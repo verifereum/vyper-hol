@@ -19,7 +19,7 @@
 Theory internalReturnCopyFwdPlan
 Ancestors
   internalReturnCopyFwdDefs invokeCopyFwdCommonDefs dfgDefs passSharedDefs
-  venomWf venomInst list pred_set dfgAnalysisProps While venomWfProps
+  venomWf venomInst list pred_set dfgAnalysisProps While venomWfProps venomInstIdsProps
   o1LowerDloadClosure readonlyMemoryArgsProps
 
 (* v is x, or the output of an ASSIGN of an alias of x *)
@@ -59,7 +59,7 @@ Proof
   gvs[] >> drule dfg_build_function_uses_sound >>
   strip_tac >> irule ircf_alias_assign >>
   qexistsl_tac [`inst`, `v`] >>
-  gvs[dfg_operand_vars_eq, MEM_operand_vars_eq_Var]
+  gvs[MEM_operand_vars_eq_Var]
 QED
 
 Theorem ircf_collect_aliases_fixpoint:
@@ -85,7 +85,7 @@ Proof
   ho_match_mp_tac ircf_alias_ind >> rpt strip_tac >> gvs[] >>
   `MEM inst (dfg_get_uses (dfg_build_function fn) v)` by
     (irule dfg_build_function_uses_complete >>
-     simp[dfg_operand_vars_eq, MEM_operand_vars_eq_Var]) >>
+     simp[MEM_operand_vars_eq_Var]) >>
   metis_tac[icf_aliases_step_mem]
 QED
 
@@ -115,7 +115,7 @@ Proof
   rpt gen_tac >> eq_tac
   >- (rpt strip_tac >> drule dfg_build_function_uses_sound >> simp[]) >>
   rpt strip_tac >> simp[] >> irule dfg_build_function_uses_complete >>
-  simp[dfg_operand_vars_eq, MEM_operand_vars_eq_Var] >>
+  simp[MEM_operand_vars_eq_Var] >>
   metis_tac[EL_MEM]
 QED
 
@@ -1120,7 +1120,7 @@ Proof
        (simp[venomInstTheory.fn_insts_def] >>
         metis_tac[unitShapeDefsTheory.MEM_fn_insts_blocks, EL_MEM]) >>
      `EL i bb.bb_instructions = EL k bb.bb_instructions` by
-       metis_tac[venomWfPropsTheory.fn_inst_ids_distinct_inj] >>
+       metis_tac[venomInstIdsPropsTheory.fn_inst_ids_distinct_inj] >>
      `i = k` by
        (irule venomExecProofsTheory.inst_ids_el_eq >>
         qexistsl_tac [`bb`, `fn`] >> simp[]) >> metis_tac[]) >>
@@ -1167,7 +1167,7 @@ Proof
   `(EL i bb.bb_instructions).inst_id <> (EL k bb.bb_instructions).inst_id` by
     (strip_tac >>
      `EL i bb.bb_instructions = EL k bb.bb_instructions` by
-       metis_tac[venomWfPropsTheory.fn_inst_ids_distinct_inj] >> gvs[]) >>
+       metis_tac[venomInstIdsPropsTheory.fn_inst_ids_distinct_inj] >> gvs[]) >>
   `MEM (EL i bb.bb_instructions) bb.bb_instructions /\
    MEM (EL k bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
   drule_all ircf_copy_roots_no_write_use >> simp[]
@@ -1313,7 +1313,7 @@ Proof
   `inst.inst_id <> (EL k bb.bb_instructions).inst_id` by
     (strip_tac >>
      `inst = EL k bb.bb_instructions` by
-       metis_tac[venomWfPropsTheory.fn_inst_ids_distinct_inj] >>
+       metis_tac[venomInstIdsPropsTheory.fn_inst_ids_distinct_inj] >>
      `i = k` by metis_tac[venomExecProofsTheory.inst_ids_el_eq] >> gvs[]) >>
   fs[ircf_fwd_ok_def] >> metis_tac[EL_MEM]
 QED

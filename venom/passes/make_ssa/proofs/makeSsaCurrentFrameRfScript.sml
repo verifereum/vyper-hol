@@ -3,11 +3,11 @@
  * output frame that touches memory away from a revert-forward copy
  * corresponds to one of the input frame that is not at a revert-forward
  * copy either.  o1PassLift needs it, beside frame_sim, to carry memory
- * facts that exempt revert forwarding (raw_mem_ok, lowered_mem_fact).
+ * facts that exempt revert forwarding (raw_mem_ok, static_mem_ok).
  *)
 Theory makeSsaCurrentFrameRf
 Ancestors
-  o1PassLift makeSsaCurrentDefs venomWf cfgWf venomInst irSupply
+  o1PassLift makeSsaDefs venomWf cfgWf venomInst irSupply
   unitShapeDefs o1PassContract o1FrameLockstep makeSsaCurrentLockstep
   makeSsaCurrentLockstepRf makeSsaCurrentRevertForward
 

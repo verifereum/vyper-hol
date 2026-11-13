@@ -3,7 +3,7 @@ Theory exprSimMemoryRead
 Ancestors
   exprSimMemorySource exprSimMemoryPath exprSimUnwrapProps exprSimProps
   exprLoweringProps loweringPosts gasSummary fragGasMode fragGasPath
-  valueEncodingProps venomState compileEnv vyperState
+  valueEncodingProps venomState compileEnv vyperState valueCopyBytes
 
 Theorem unwrap_memory_marked_read:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
@@ -20,13 +20,14 @@ Theorem unwrap_memory_marked_read:
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
-  `t = expr_type e /\ ?w v. eval_operand p.ptr_operand s = SOME w /\
+  `(is_word_type t ==> t = post_value_type cenv e) /\
+   ?w v. eval_operand p.ptr_operand s = SOME w /\
      read_result cx tv ee = (INL v,ee) /\
-     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+     (!tvt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tvt ==>
        val_in_memory tvt v (w2n w) s.vs_memory /\
-       (is_word_type (expr_type e) ==>
+       (is_word_type (post_value_type cenv e) ==>
         mem_word_at (w2n w) s.vs_memory = typed_val_to_w256 tvt v))` by
-    gvs[vv_post_def, vv_holds_def] >>
+    gvs[vv_post_def, vv_holds_def, is_bytestring_word_type] >>
   `vv_post ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s` by
     metis_tac[vv_post_read_result] >>
   `!u. gas_marked_path F ctx func s 0 (OK u) ==>
@@ -47,7 +48,7 @@ Proof
       qexistsl_tac [`v`, `u`] >> conj_tac
       >- (first_x_assum irule >>
           drule_all emit_mload_marked_path >> simp[Abbr `u`]) >>
-      simp[] >> irule expr_post_of_vv_post_load >>
+      simp[] >> irule expr_post_of_vv_post_load_physical >>
       goal_assum (drule_at Any) >> simp[] >>
       conj_tac
       >- (rpt strip_tac >> fs[GSYM mem_word_at_eq_mload]) >>
@@ -57,11 +58,10 @@ Proof
           `stmt_state_rel ctx func cenv cx ee s` by fs[vv_post_def] >>
           simp[] >> irule local_ptrs_reserved_fresh >>
           qexists_tac `sm` >> simp[]) >>
-      qexistsl_tac [`p`, `s`, `sm`, `expr_type e`] >> simp[]) >>
+      qexistsl_tac [`p`, `s`, `sm`, `post_value_type cenv e`] >> simp[]) >>
   gvs[unwrap_memory_compile, comp_return_def] >>
   qexistsl_tac [`v`, `s`] >> simp[] >> conj_tac
   >- (first_x_assum irule >> simp[gas_marked_path_def] >>
       irule (cj 1 gas_path_rules) >> simp[]) >>
-  irule expr_post_of_vv_post_memory >> goal_assum drule >> simp[] >>
-  qexists_tac `expr_type e` >> simp[]
+  irule expr_post_of_vv_post_memory >> simp[] >> qexists_tac `t` >> simp[]
 QED

@@ -4,7 +4,7 @@
 Theory stmtReasonLitMemory
 Ancestors
   stmtReasonMemory fragExecMem instMemFrontier exprLowering context
-  emitHelper emitHelperProps exprLoweringProps compileEnv freshWrites
+  emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs freshWrites
   venomMemDefs venomMemProps venomExecSemantics venomState venomInst
   words arithmetic list rich_list finite_map
 Libs

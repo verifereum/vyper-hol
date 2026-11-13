@@ -1,10 +1,11 @@
 Theory makeSsaCurrentLastSite
 Ancestors
+  livenessTransferProofs
   makeSsaCurrentGraphCut makeSsaCurrentLiveTransport makeSsaCurrentFrontier
-  makeSsaCurrentTokens dominatorAnalysisProps
-  makeSsaCurrentAnalysis makeSsaCurrentSelectedLive makeSsaCurrentDefs
+  makeSsaCurrentTokens dominatorProofs
+  makeSsaCurrentAnalysis makeSsaCurrentSelectedLive makeSsaDefs
   venomInst venomWf venomExecProps cfgAnalysisProps dominatorDefs
-  list rich_list alist arithmetic makeSsaCurrentDemandDominance dominatorProofs cfgDefs relation
+  list rich_list alist arithmetic makeSsaCurrentDemandDominance dominatorProofs cfgDefs relation cfgCorrectnessProof
 
 Definition current_changing_site_def:
   current_changing_site fn ins v l <=> ins v l \/

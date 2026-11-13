@@ -21,7 +21,7 @@
 
 Theory literalsCodesizeDefs
 Ancestors
-  passSimulationDefs passSharedDefs
+  passTransform passSharedDefs
 
 (* ===== Push size helper ===== *)
 

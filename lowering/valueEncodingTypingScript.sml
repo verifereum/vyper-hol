@@ -1,7 +1,7 @@
 (* Source value typing supplies the bounds required by memory relocation. *)
 Theory valueEncodingTyping
 Ancestors
-  valueEncoding vyperTyping contractABI vfmConstants arithmetic list rich_list
+  valueEncoding valueEncodingDefs vyperTyping contractABI vfmConstants arithmetic list rich_list
 
 Theorem typed_payload_fits_memory[local]:
   k <= n ==> k + 32 <= 32 + 32 * word_size n

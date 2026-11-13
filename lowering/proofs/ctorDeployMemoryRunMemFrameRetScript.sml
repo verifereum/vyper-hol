@@ -12,7 +12,7 @@ Ancestors
   immutableDeployExecution allocaSiteResource venomExecSemantics venomState
   venomMemDefs words arithmetic finite_map exprLoweringProps moduleLowering venomInst
   fragExecMem memSafeRun fragGasPathMem fragExec gasCount instIdxIndep
-  list rich_list entrySinkExtraction compileEnv loweringHalt ctorReturnFrame bodySim unitTransformDefs stmtSimDefs stmtSimProps
+  list rich_list entrySinkExtraction compileEnv loweringStateRelDefs loweringHalt ctorReturnFrame bodySim unitTransformDefs stmtSimDefs stmtSimProps
   stmtLowering gasOutcome gasSummary fragGasMode loweringPosts vyperInterpreter
 
 Theorem constructor_mem_seq_split:
@@ -143,7 +143,7 @@ Theorem constructor_exit_zero_path_mem:
 Proof
   strip_tac >>
   `nr ==> ut` by simp[] >>
-  drule_all constructor_exit_code_mem >> strip_tac >>
+  drule_all ctorReturnFrameTheory.constructor_exit_code >> strip_tac >>
   drule optional_unlock_code >> simp[] >> strip_tac >>
   `body_cenv.ce_is_ctor /\
    (cap <> 0 ==> body_cenv.ce_imm_alloca = SOME imm /\
@@ -169,10 +169,10 @@ Proof
        run_inst_seq_mem_ok [mk_inst st_exit.cs_next_id TSTORE
           [Lit (n2w nkey); Lit 0w] []] s` by
         (simp[run_inst_seq_def, run_inst_seq_mem_ok_def, mk_inst_def,
-          step_inst_base_def, eval_operand_def, Abbr `u`,
-          inst_mem_below_frontier_def, inst_dload_in_section_def,
-          exec_write2_def, contextCodegenRelTheory.source_memory_read_ranges_def,
-          codegenRelTheory.source_memory_write_ranges_def] ) >>
+              inst_mem_below_frontier_def, inst_dload_in_section_def,
+              contextCodegenRelTheory.source_memory_read_ranges_def,
+              codegenRelTheory.source_memory_write_ranges_def] >>
+         simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def, Abbr `u`, exec_write2_def]) >>
       `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
         [mk_inst st_exit.cs_next_id TSTORE [Lit (n2w nkey); Lit 0w] []]` by
         simp[mk_inst_def, is_terminator_def] >>

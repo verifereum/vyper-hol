@@ -10,13 +10,13 @@ Ancestors
 Theorem abi_decoder_wrapped_bulk_from_state:
   type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn)) =
     DecDynArray ei abi_sz mem_sz F maxn /\ ~dec_info_needs_clamp ei /\
-  compile_abi_decode_to_buf dst src opc hi
+  compile_abi_decode_to_buf dst src opc base_op hi
     (DecComplex T [(DecDynArray ei abi_sz mem_sz F maxn,32,outsz)]) st = ((),st') /\
   abi_decoder_recursive_pre ce env sf (TupleT [ArrayT ty (Dynamic maxn)])
     (TupleTV [ArrayTV tv (Dynamic maxn)])
     (DecComplex T [(DecDynArray ei abi_sz mem_sz F maxn,32,outsz)])
     (ListV [ListV avs]) (ArrayV (TupleV [ArrayV (DynArrayV vs)]))
-    st last src dst opc hi sb d b cap initial ==>
+    st last src dst opc base_op hi B sb d b cap initial ==>
   frag_exec ctx st st' (\s. s = initial)
     (abi_decoder_post (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs))
        st' d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial) (K F)
@@ -27,10 +27,10 @@ Proof
       `tv` |-> `ArrayTV tv (Dynamic maxn)`, `av` |-> `ListV avs`,
       `v` |-> `ArrayV (DynArrayV vs)`, `mem_sz` |-> `outsz`]
       abi_decoder_offset_singleton_fragment)) >>
-  qexistsl_tac [`avs`, `dst`, `env`, `hi`, `last`, `opc`, `outsz`, `sb`, `sf`, `src`] >>
+  qexistsl_tac [`B`, `avs`, `base_op`, `dst`, `env`, `hi`, `last`, `opc`, `outsz`, `sb`, `sf`, `src`] >>
   asm_simp_tac (srw_ss()) [vyper_to_abi_type_def, is_dynamic_def, dec_info_needs_offset_def] >>
   rpt strip_tac >>
-  `compile_abi_decode_to_buf child_dst child_src opc hi
+  `compile_abi_decode_to_buf child_dst child_src opc base_op hi
      (DecDynArray ei abi_sz mem_sz F maxn) middle = ((),st')` by
     (irule abi_decoder_offset_singleton_child_compile >>
      conj_tac >- simp[dec_info_needs_offset_def] >>

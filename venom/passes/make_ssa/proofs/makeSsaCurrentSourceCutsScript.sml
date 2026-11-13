@@ -1,10 +1,11 @@
 Theory makeSsaCurrentSourceCuts
 Ancestors
   list rich_list makeSsaCurrentTreeTrace makeSsaCurrentRenameTrace
-  makeSsaCurrentFinalBlock makeSsaCurrentCleanupShape makeSsaCurrentDefs
+  makeSsaCurrentFinalBlock makeSsaCurrentCleanupShape makeSsaDefs
   makeSsaCurrentAnalysis makeSsaCurrentTokens cfgHelpers venomWf venomInst
-  makeSsaCurrentTreePaths makeSsaCurrentInduct cfgTransformProps makeSsaHelper
+  makeSsaCurrentTreePaths makeSsaCurrentInduct cfgTransformProps
   makeSsaCurrentPlacementCut
+  venomExecProofs
 
 Theorem current_local_trace_lengths:
   !aa xs s rs H E ys s' rs' H' E'.

@@ -17,7 +17,7 @@
 
 Theory planWf
 Ancestors
-  prefixExec prefixSim stackPlanOps stackPlanGen stackModel stackPlanTypes codegenRel asmIR list rich_list arithmetic pair option
+  venomExecProofs prefixExec prefixSim stackPlanOps stackPlanGen stackModel stackPlanTypes codegenRel asmIR list rich_list arithmetic pair option
 Libs
   BasicProvers
 
@@ -128,24 +128,9 @@ QED
 
 (* ===== stack_find / stack_get_depth bounds ===== *)
 
-Theorem stack_find_bound:
-  !p xs d. stack_find p xs = SOME d ==> d < LENGTH xs
-Proof
-  Induct_on `xs` >> simp[stack_find_def] >>
-  rpt gen_tac >> IF_CASES_TAC >> simp[] >>
-  Cases_on `stack_find p xs` >> simp[] >>
-  strip_tac >> gvs[] >> res_tac >> simp[]
-QED
-
-Theorem stack_get_depth_bound:
-  !op stk d.
-    stack_get_depth op stk = SOME d ==> d < LENGTH stk
-Proof
-  rpt strip_tac >>
-  fs[stack_get_depth_def] >>
-  imp_res_tac stack_find_bound >>
-  fs[LENGTH_REVERSE]
-QED
+(* Kept under this theory's name for the compiler-proof integration branch. *)
+Theorem stack_find_bound = stackModelTheory.stack_find_bound
+Theorem stack_get_depth_bound = stackModelTheory.stack_get_depth_bound
 
 (* ===== Bulk spill/restore prefix_wf ===== *)
 
@@ -425,6 +410,65 @@ QED
 
 (* ----- do_dup: wf + len ----- *)
 
+Theorem dup_restore_ops_wf[local]:
+  !idxs lo n offs single.
+    0 < n ==>
+    prefix_wf lo n
+      (FLAT (MAP (\i. [SORestore (EL i offs)] ++
+        if single then [] else [SOSwap 1]) idxs)) /\
+    prefix_end_len lo n
+      (FLAT (MAP (\i. [SORestore (EL i offs)] ++
+        if single then [] else [SOSwap 1]) idxs)) = n + LENGTH idxs
+Proof
+  rpt gen_tac >> Cases_on `single` >> qid_spec_tac `n` >>
+  Induct_on `idxs` >> simp[] >> gen_tac >> strip_tac >>
+  strip_tac >>
+  `0 < n + 1 /\ 1 < n + 1` by decide_tac >>
+  first_x_assum (qspec_then `n + 1` (fn ih =>
+    qpat_assum `0 < n + 1` (strip_assume_tac o SRULE [] o MATCH_MP ih))) >>
+  simp_tac std_ss [Once prefix_wf_def, Once prefix_end_len_def,
+                  stack_op_wf_def, LET_THM, pairTheory.pair_case_thm] >>
+  asm_rewrite_tac [] >>
+  simp_tac std_ss [Once prefix_wf_def, Once prefix_end_len_def,
+                  stack_op_wf_def, LET_THM, pairTheory.pair_case_thm] >>
+  asm_rewrite_tac [] >> decide_tac
+QED
+
+Theorem deep_dup_prefix_wf[local]:
+  !offs idxs lo n k.
+    LENGTH offs = k /\ LENGTH idxs = k /\ 0 < k /\ k + 16 <= n ==>
+    prefix_wf lo n (MAP SOSpill offs ++ [SODup 16] ++
+      FLAT (MAP (\i. [SORestore (EL i offs)] ++
+        if k <= 16 then [] else [SOSwap 1]) idxs) ++
+      if k <= 16 then [SOSwap k] else []) /\
+    prefix_end_len lo n (MAP SOSpill offs ++ [SODup 16] ++
+      FLAT (MAP (\i. [SORestore (EL i offs)] ++
+        if k <= 16 then [] else [SOSwap 1]) idxs) ++
+      if k <= 16 then [SOSwap k] else []) = n + 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  `k <= n /\ 16 <= n - k /\ n - k + 1 + k = n + 1 /\ k < n + 1`
+    by decide_tac >>
+  `prefix_wf lo n (MAP SOSpill offs) /\
+   prefix_end_len lo n (MAP SOSpill offs) = n - k` by
+    (mp_tac (Q.SPECL [`offs`,`lo`,`n`] prefix_wf_spills) >> simp[]) >>
+  qabbrev_tac `remaining = n - k` >>
+  qabbrev_tac `restores = FLAT (MAP (\i. [SORestore (EL i offs)] ++
+    if k <= 16 then [] else [SOSwap 1]) idxs)` >>
+  `prefix_wf lo (remaining + 1) restores /\
+   prefix_end_len lo (remaining + 1) restores = n + 1` by
+    (mp_tac (Q.SPECL [`idxs`,`lo`,`remaining + 1`,`offs`,`(k:num) <= 16`]
+       dup_restore_ops_wf) >> simp[Abbr `restores`]) >>
+  rewrite_tac [GSYM APPEND_ASSOC] >>
+  conj_tac
+  >- (irule prefix_wf_append >> conj_tac >- simp[] >>
+      simp[prefix_wf_def, stack_op_wf_def] >>
+      irule prefix_wf_append >> simp[] >>
+      Cases_on `k <= 16` >> simp[prefix_wf_def, stack_op_wf_def]) >>
+  simp[prefix_end_len_append, prefix_end_len_def, stack_op_wf_def] >>
+  Cases_on `k <= 16` >> simp[prefix_end_len_def, stack_op_wf_def]
+QED
+
 Theorem prefix_wf_append_iff[local]:
   !xs ys lo n.
     prefix_wf lo n (xs ++ ys) <=>
@@ -474,8 +518,11 @@ Proof
     simp[do_dup_def, stack_dup_length] >>
     simp[prefix_wf_def, prefix_end_len_def, stack_op_wf_def]
   ) >>
-  simp[do_dup_def] >>
-  qabbrev_tac `items = REVERSE (top_n (dist - 15) ps.ps_stack)` >>
+  (* The prefix spill leaves at least sixteen reachable stack items. *)
+  `0 < dist - 15 /\ dist - 15 + 16 <= LENGTH ps.ps_stack /\
+   dist - 15 <= LENGTH ps.ps_stack` by decide_tac >>
+  simp[do_dup_def, top_n_def] >>
+  qabbrev_tac `items = TAKE (dist - 15) (REVERSE ps.ps_stack)` >>
   qabbrev_tac `fres = FOLDL
     (\(ops,offs,al) (item:operand).
       (\(off,al'). (ops ++ [SOSpill off], SNOC off offs, al'))
@@ -486,16 +533,11 @@ Proof
        (strip_assume_tac o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
      drule (SIMP_RULE bool_ss [LET_THM] spill_foldl_form_nil) >> simp[]) >>
   `LENGTH items = dist - 15` by
-    (simp[Abbr `items`, top_n_def, LENGTH_TAKE] >> decide_tac) >>
-  `LENGTH fres1 <= LENGTH ps.ps_stack` by decide_tac >>
-  drule_then (qspec_then `lo` strip_assume_tac) prefix_wf_spills >>
-  gvs[] >>
-  Cases_on `dist <= 31` >>
-  simp[prefix_wf_append_iff, prefix_end_len_append, MAP_APPEND,
-       flat_map_singleton, prefix_wf_indexed_restores,
-       prefix_wf_indexed_restore_swaps,
-       prefix_wf_def, prefix_end_len_def, stack_op_wf_def,
-       stack_dup_def, MAP_MAP_o, combinTheory.o_DEF]
+    simp[Abbr `items`, LENGTH_TAKE_EQ] >>
+  gvs[stack_dup_def] >>
+  mp_tac (Q.SPECL [`fres1`,`dup_restore_indices (dist - 15)`,`lo`,
+    `LENGTH ps.ps_stack`,`dist - 15`] deep_dup_prefix_wf) >>
+  simp[dup_restore_indices_length]
 QED
 
 (* ----- Composition helper ----- *)
@@ -631,15 +673,6 @@ QED
 
 (* ===== reduce_depth_plan: iterated spills ===== *)
 
-(* FIND P l = SOME x implies MEM x l *)
-Theorem find_mem[local]:
-  !P l x. FIND P l = SOME x ==> MEM x l
-Proof
-  Induct_on `l` >> simp[FIND_thm] >>
-  rpt gen_tac >> IF_CASES_TAC >> simp[] >>
-  metis_tac[]
-QED
-
 (* select_spill_candidate returns a value ≤ 16 and < LENGTH stk *)
 Theorem select_spill_candidate_bound:
   !stk forbidden target_dist target_len cand.
@@ -649,7 +682,7 @@ Theorem select_spill_candidate_bound:
 Proof
   rpt gen_tac >> rpt disch_tac >>
   fs[select_spill_candidate_def, LET_THM] >>
-  imp_res_tac find_mem >>
+  imp_res_tac FIND_MEM >>
   fs[MEM_GENLIST] >>
   qpat_x_assum `FIND _ _ = _` kall_tac >>
   qabbrev_tac `mx = MIN 16 (MIN (target_dist - 1) (LENGTH stk - 1))` >>
@@ -789,7 +822,7 @@ Proof
 QED
 
 (* do_spill_at_length: exact length change *)
-Theorem do_spill_at_length_exact[local]:
+Theorem do_spill_at_length_exact:
   !cand ps. 1 <= LENGTH ps.ps_stack ==>
     LENGTH (SND (do_spill_at cand ps)).ps_stack = LENGTH ps.ps_stack - 1
 Proof
@@ -815,7 +848,7 @@ Theorem select_spill_candidate_lt_dist[local]:
 Proof
   rpt gen_tac >> rpt disch_tac >>
   fs[select_spill_candidate_def, LET_THM] >>
-  imp_res_tac find_mem >>
+  imp_res_tac FIND_MEM >>
   fs[MEM_GENLIST] >>
   qabbrev_tac `mx = MIN 16 (MIN (target_dist - 1) (LENGTH stk - 1))` >>
   `mx <= target_dist - 1` by
@@ -1452,16 +1485,7 @@ QED
    but these should be derivable from generate_regular_inst_plan's structure
    (it's only called for non-INVOKE opcodes in generate_inst_plan). *)
 
-Theorem generate_emit_ops_some[local,simp]:
-  !inst ltc ps name.
-    venom_to_evm_name inst.inst_opcode = SOME name ==>
-    generate_emit_ops inst ltc ps = ([SOEmit name], ps)
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode = INITIAL_FMP` >> gvs[venom_to_evm_name_def] >>
-  Cases_on `inst.inst_opcode = BUMP` >> gvs[venom_to_evm_name_def] >>
-  simp[generate_emit_ops_def, LET_THM]
-QED
+val _ = augment_srw_ss [rewrites [generate_emit_ops_some]];
 
 (* regular_plan_prefix_wf_gen below supersedes the old regular_plan_prefix_wf.
    It proves both prefix_wf and EVERY is_prefix_op for the general

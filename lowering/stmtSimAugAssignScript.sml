@@ -38,7 +38,7 @@ Ancestors
   exprSimOperators exprSimLeaves loweringSlice  stmtSimDecl
   stmtSimDeclStore stmtSimAssignStore stmtSimDeclPath stmtSimDeclCompose exprOpenPrimitives
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
-  exprLoweringProps compileEnv valueEncoding
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperTypeSystem vyperTyping vyperTypeEnv
   vyperTypeInvariants vyperTypeBuiltins vyperTypeStatePreservation vyperTypeCallGraph vyperLookup vyperAST
@@ -97,11 +97,10 @@ Proof
   simp[lift_sum_def, return_def, raise_def]
 QED
 
-(* The operator's type argument matters only for in and not in on an
-   array. *)
+(* Membership and bytes equality inspect the type argument. *)
 Theorem evaluate_binop_tv:
   !u tv tv' bop v1 v2.
-    bop <> In /\ bop <> NotIn ==>
+    bop <> In /\ bop <> NotIn /\ bop <> Eq /\ bop <> NotEq ==>
     evaluate_binop u tv bop v1 v2 = evaluate_binop u tv' bop v1 v2
 Proof
   rpt strip_tac >> Cases_on `bop` >> gvs[] >>
@@ -298,13 +297,20 @@ Proof
   Cases_on `bop` >> rw[well_typed_binop_def, word_value_type_def] >> gvs[]
 QED
 
+Theorem word_value_not_bytes:
+  !v. word_value v ==> !bs. v <> BytesV bs
+Proof
+  simp[word_value_def] >> rpt strip_tac >> gvs[]
+QED
+
 (* The source's operator on x's value and e's is the operator of the
    expression x op e annotated with x's type: the builtin reads its type
    argument from e's type, x op= e from x's place, and neither matters
-   but for in and not in. *)
+   for non-membership operators on word values. *)
 Theorem bop_result_augassign:
   !cx ty bop t2 v1 v2 es tv.
-    bop <> In /\ bop <> NotIn ==>
+    bop <> In /\ bop <> NotIn /\
+    ((bop = Eq \/ bop = NotEq) ==> !bs. v1 <> BytesV bs) ==>
     bop_result cx ty bop [ty; t2] v1 v2 es =
     case evaluate_binop
            (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
@@ -313,7 +319,81 @@ Theorem bop_result_augassign:
     | INR err => INR (Error err)
 Proof
   rpt strip_tac >> simp[bop_result_def, evaluate_builtin_def] >>
+  Cases_on `bop = Eq \/ bop = NotEq`
+  >- (gvs[] >> Cases_on `v1` >> gvs[] >>
+      simp[evaluate_binop_def]) >>
   metis_tac[evaluate_binop_tv]
+QED
+
+Theorem bop_result_augassign_res_ok:
+  bop <> In /\ bop <> NotIn ==>
+  (expr_res_ok (bop_result cx ty bop [ty; t2] v1 v2 es) <=>
+   expr_res_ok
+     (case evaluate_binop
+       (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+       tv bop v1 v2 of
+       INL v => INL v | INR err => INR (Error err)))
+Proof
+  strip_tac >>
+  Cases_on `bop = Eq \/ bop = NotEq`
+  >- (gvs[bop_result_def, evaluate_builtin_def] >>
+      Cases_on `v1` >> Cases_on `v2` >>
+      FIRST_PROVE [simp[evaluate_binop_def, binop_negate_def, expr_res_ok_def]]) >>
+  `bop_result cx ty bop [ty; t2] v1 v2 es =
+   case evaluate_binop
+     (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+     tv bop v1 v2 of
+     INL v => INL v | INR err => INR (Error err)` by
+    (irule bop_result_augassign >> simp[]) >>
+  simp[]
+QED
+
+Theorem bop_result_augassign_success:
+  bop <> In /\ bop <> NotIn /\
+  bop_result cx ty bop [ty; t2] v1 v2 es = INL w ==>
+  ?v. evaluate_binop
+    (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+    tv bop v1 v2 = INL v
+Proof
+  strip_tac >>
+  Cases_on `bop = Eq \/ bop = NotEq`
+  >- (gvs[bop_result_def, evaluate_builtin_def] >>
+      Cases_on `v1` >> Cases_on `v2` >>
+      gvs[evaluate_binop_def, binop_negate_def]) >>
+  `bop_result cx ty bop [ty; t2] v1 v2 es =
+   case evaluate_binop
+     (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
+     tv bop v1 v2 of
+     INL v => INL v | INR err => INR (Error err)` by
+    (irule bop_result_augassign >> simp[]) >>
+  gvs[AllCaseEqs()]
+QED
+
+Theorem write_place_short_memory_result:
+  !path cx id v st w.
+  path = [] \/ (?fld. path = [AttrSubscript fld]) ==>
+  FST (write_place cx (MemoryPlace id path) v st) =
+  FST (write_place cx (MemoryPlace id path) w st)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[write_place_def, bind_def, ignore_bind_def, get_scopes_def,
+       lift_option_type_def, type_check_def, assert_def, lift_sum_def,
+       set_scopes_def, return_def, raise_def] >>
+  Cases_on `find_containing_scope id st.scopes` >>
+  simp[return_def, raise_def] >>
+  rename1 `SOME q` >> PairCases_on `q` >> Cases_on `q2.assignable` >>
+  simp[assert_def, ignore_bind_def, bind_def, return_def, raise_def,
+       set_scopes_def] >>
+  Cases_on `path = []`
+  >- gvs[replace_memory_entry_def, evaluate_subscripts_def,
+         assign_subscripts_def, return_def, raise_def] >>
+  `?fld. path = [AttrSubscript fld]` by metis_tac[] >> gvs[] >>
+  Cases_on `q2.value` >>
+  simp[replace_memory_entry_def, evaluate_subscripts_def,
+       assign_subscripts_def, return_def, raise_def] >>
+  rename1 `q2.value = StructV fields` >> Cases_on `ALOOKUP fields fld` >>
+  simp[replace_memory_entry_def, evaluate_subscripts_def,
+       assign_subscripts_def, return_def, raise_def]
 QED
 
 (* ===== x op= e is x = x op e ===== *)
@@ -323,7 +403,8 @@ QED
 Theorem eval_augassign_local_bop:
   !cx ty id bop e es res es' entry.
     eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
-    lookup_scopes id es.scopes = SOME entry /\ bop <> In /\ bop <> NotIn ==>
+    lookup_scopes id es.scopes = SOME entry /\ bop <> In /\ bop <> NotIn /\
+    ((bop = Eq \/ bop = NotEq) ==> !bs. entry.value <> BytesV bs) ==>
     ?r es1.
       (do tv <- eval_expr cx (Builtin ty (Bop bop) [Name ty id; e]);
           read_result cx tv od) es = (r, es1) /\
@@ -345,7 +426,7 @@ Proof
                  entry.type bop entry.value w of
             INL v => INL v
           | INR err => INR (Error err)` by
-    (rpt gen_tac >> irule bop_result_augassign >> simp[]) >>
+    (rpt gen_tac >> irule bop_result_augassign >> metis_tac[]) >>
   gvs[vyperASTTheory.expr_type_def] >>
   Cases_on `evaluate_binop
               (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
@@ -387,6 +468,31 @@ Proof
   rw[type_bits_def, well_formed_type_def, vyperValueTheory.evaluate_type_def]
 QED
 
+(* The checked augmented operand satisfies the ordinary builtin gate too. *)
+Theorem augassign_builtin_operands:
+  augassign_operand_ok ty bop e ==>
+  builtin_operands_ok ty (Bop bop) [lhs; e]
+Proof
+  Cases_on `bop` >>
+  simp[augassign_operand_ok_def, builtin_operands_ok_def,
+       power_operands_ok_def, int_literal_value_def] >>
+  Cases_on `e` >> simp[power_exponent_ok_def] >>
+  rename1 `Literal ann lit` >> Cases_on `lit` >> simp[power_exponent_ok_def]
+QED
+
+(* The checked augmented operand gives the exponent and shift-amount facts
+   the field-target statement lemmas take. *)
+Theorem augassign_operand_ok_operands:
+  augassign_operand_ok ty bop e ==>
+  (bop = Exp ==> nonneg_int_literal e) /\
+  (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
+Proof
+  Cases_on `bop` >> simp[augassign_operand_ok_def] >>
+  Cases_on `e` >> simp[power_exponent_ok_def] >>
+  rename1 `Literal _ lit` >> Cases_on `lit` >>
+  simp[power_exponent_ok_def, nonneg_int_literal_def, int_literal_value_def]
+QED
+
 
 (* ===== The statement ===== *)
 
@@ -416,12 +522,12 @@ Theorem augassign_binop_admissible:
   expr_res_ok (bop_result cx ty bop [ty; expr_type e] entry.value v ee)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty; expr_type e] entry.value v ee =
-   case evaluate_binop
+  `expr_res_ok (bop_result cx ty bop [ty; expr_type e] entry.value v ee) <=>
+   expr_res_ok (case evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      entry.type bop entry.value v of
-       INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+       INL w => INL w | INR err => INR (Error err))` by
+    (irule bop_result_augassign_res_ok >> simp[]) >>
   pop_assum SUBST1_TAC >>
   Cases_on `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
@@ -463,24 +569,23 @@ Theorem augassign_write_admissible:
   !m. res <> INR (Error (TypeError m))
 Proof
   strip_tac >>
-  `evaluate_binop
+  `?actual. evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-     entry.type bop entry.value v = INL w` by
-    (`bop_result cx ty bop [ty; expr_type e] entry.value v ee =
-       case evaluate_binop
-         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-         entry.type bop entry.value v of
-         INL x => INL x | INR err => INR (Error err)` by
-       (irule bop_result_augassign >> simp[]) >>
-     gvs[AllCaseEqs()]) >>
+     entry.type bop entry.value v = INL actual` by
+    metis_tac[bop_result_augassign_success] >>
+  Cases_on `write_place cx (MemoryPlace id []) actual ee` >>
+  rename1 `_ = (actual_res, actual_fin)` >>
   `eval_stmt cx (AugAssign ty (NameTarget id) bop e)
-     (es with gas_obs := gs) = (res, fin)` by
+     (es with gas_obs := gs) = (actual_res, actual_fin)` by
     (`lookup_scopes id (es with gas_obs := gs).scopes = SOME entry` by simp[] >>
      drule_all augassign_rhs_normal >>
      disch_then (qspecl_then [`ty`, `bop`] mp_tac) >>
      simp[lift_sum_def, bind_def, return_def]) >>
-  `stmt_res_ok lctx res` by metis_tac[gas_admissible_result] >>
-  fs[stmt_res_ok_def, expr_res_ok_def]
+  `stmt_res_ok lctx actual_res` by metis_tac[gas_admissible_result] >>
+  `res = actual_res` by
+    (qspecl_then [`[]`, `cx`, `id`, `w`, `ee`, `actual`]
+       mp_tac write_place_short_memory_result >> simp[]) >>
+  gvs[stmt_res_ok_def, expr_res_ok_def]
 QED
 
 Theorem augassign_binop_ready:
@@ -523,7 +628,8 @@ Proof
          (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
          entry.type bop entry.value v of
            INL w => INL w | INR err => INR (Error err)` by
-        (irule bop_result_augassign >> simp[]) >>
+        (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
       pop_assum SUBST1_TAC >>
       simp[AllCaseEqs()] >> strip_tac >>
       irule well_typed_binop_success_type >>
@@ -538,13 +644,23 @@ QED
 
 Theorem stmt_post_expr_entry_frame:
   expr_post ctx func cenv cx e es sa sm s0 em v op t /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM em.scopes = MAP FDOM es.scopes /\
+  sa.cs_next_id <= sm.cs_next_id /\
   sa.cs_next_var <= sm.cs_next_var /\
-  stmt_post ctx func cx lctx old c sm sf t res ee last ==>
-  stmt_post ctx func cx lctx old c sa sf s0 res ee last
+  stmt_post ctx func cx lctx cenv c sm sf em t res ee last ==>
+  stmt_post ctx func cx lctx cenv c sa sf es s0 res ee last
 Proof
-  strip_tac >> irule stmt_post_entry_frame >>
-  qexistsl_tac [`t`, `sm`] >> fs[expr_post_def] >>
-  metis_tac[freshWritesTheory.not_fresh_at_mono]
+  strip_tac >>
+  `alloca_frame cenv es sa s0 cenv em t` by
+    (irule alloca_frame_of_mem_frame >> fs[expr_post_def] >> metis_tac[]) >>
+  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+         not_fresh_at sm x /\ lookup_var x t = SOME w` by
+    (fs[expr_post_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP t.vs_allocas aid = SOME b` by fs[expr_post_def] >>
+  irule stmt_post_entry_frame >> qexistsl_tac [`em`, `t`, `sm`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem gas_marked_exec_observation:
@@ -664,7 +780,7 @@ QED
 (* A live-local store: the counted instruction and the complete statement post.
    Prefix frames are relative to the original statement entry. *)
 Theorem local_word_store_post_path:
-  !ctx func cenv cx lctx es s id p sz w v etv res es' op st sf sa s0.
+  !ctx func cenv cx lctx es s id p sz w v etv res es' op st sf sa s0 es0.
     emit_void MSTORE [Var p; op] st = ((), sf) /\
     fn_has_code st sf func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
@@ -680,10 +796,14 @@ Theorem local_word_store_post_path:
     (!x wd. not_fresh_at sa x /\ lookup_var x s0 = SOME wd ==>
             lookup_var x s = SOME wd) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-             FLOOKUP s.vs_allocas aid = SOME b) ==>
+             FLOOKUP s.vs_allocas aid = SOME b) /\
+    alloca_frame cenv es0 sa s0 cenv es s /\
+    stmt_state_rel ctx func cenv cx es0 s0 /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es0.scopes ==>
     ?t. res = INL () /\
         gas_marked_path F ctx func s 0 (OK t) /\
-        stmt_post ctx func cx lctx cenv cenv sa sf s0 res es' t
+        stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 res es' t
 Proof
   rpt strip_tac >>
   drule_all write_place_local >> strip_tac >> gvs[] >>
@@ -698,12 +818,43 @@ Proof
         comp_ignore_bind_def, comp_return_def, emit_def] >>
   `~block_is_terminated sf` by
     (drule emit_void_terminated >> simp[is_terminator_def]) >>
+  `local_ptrs_rel func cenv es.scopes s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `32 <= sz` by
+    (qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
+     rewrite_tac[local_ptrs_rel_def] >> strip_tac >>
+     qpat_x_assum `!name entry p sz. lookup_scopes _ _ = _ /\ _ ==> _`
+       (qspecl_then [`id`, `entry`, `p`, `sz`] mp_tac) >>
+     simp[] >> strip_tac >> fs[store_lays_out_def]) >>
+  `local_region cenv es.scopes s id (w2n w) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `alloca_frame cenv es0 sa s0 cenv
+     (es with scopes := pre ++
+       (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
+     (mstore (w2n w) (typed_val_to_w256 etv v) s with
+       vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule alloca_frame_local_store >>
+     simp[] >>
+     conj_tac >- metis_tac[] >>
+     qexistsl [`w2n w`, `es`, `id`, `32`, `s`, `sz`] >>
+     `!q ix. lookup_var q (mstore (w2n w) (typed_val_to_w256 etv v) s with
+          vs_inst_idx := ix) = lookup_var q s` by
+       simp[lookup_var_def, mstore_def, LET_THM] >>
+     fs[] >>
+     conj_tac
+     >- (rpt strip_tac >>
+         irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> decide_tac) >>
+     drule vyperLookupTheory.find_containing_scope_structure >>
+     simp[finite_mapTheory.FLOOKUP_DEF] >> strip_tac >>
+     gvs[pred_setTheory.ABSORPTION_RWT]) >>
   qexists_tac `mstore (w2n w) (typed_val_to_w256 etv v) s with
                 vs_inst_idx := SUC s.vs_inst_idx` >>
   simp[stmt_post_def, stmt_lands_def] >>
   simp[cenv_top_ext_refl, stmt_state_rel_inst_idx, mstore_def, LET_THM,
        lookup_var_def] >>
-  gvs[lookup_var_def]
+  gvs[lookup_var_def] >>
+  qpat_x_assum `alloca_frame _ _ _ _ _ _ (_ with vs_inst_idx := _)` mp_tac >>
+  simp[mstore_def, LET_THM]
 QED
 
 (* x op= e on a word local x, for every outcome, given e's expr_sim_case
@@ -786,7 +937,7 @@ Proof
     gvs[] >>
   `store_lays_out entry1.type entry1.type v` by
     (irule store_lays_out_word_value >>
-     metis_tac[word_value_type_memory_size]) >>
+     metis_tac[word_value_type_memory_size, evaluate_word_memory_type]) >>
   drule_all assign_local_store_run >>
   strip_tac >>
   disj1_tac >> qexists_tac `t` >>
@@ -943,7 +1094,8 @@ Resume compile_augassign_local_case[operator_normal]:
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      entry.type bop entry.value v = INL result` by gvs[AllCaseEqs()] >>
@@ -970,27 +1122,42 @@ Resume compile_augassign_local_case[write_safe]:
     (drule_all augassign_current_store_layout >> simp[]) >>
   `eval_operand res_op s = SOME (typed_val_to_w256 entry.type result)` by
     simp[exprSimPropsTheory.typed_val_to_w256_word_value] >>
+  `local_ptrs_reserved cenv s3` by
+    metis_tac[local_ptrs_reserved_next_var] >>
   `?last. (INL () : unit + exception) = INL () /\
      gas_marked_path F ctx func s 0 (OK last) /\
-     stmt_post ctx func cx lctx cenv cenv s3 sb s (INL ()) fin last` by
+     stmt_post ctx func cx lctx cenv cenv s3 sb (ee with gas_obs := []) s (INL ()) fin last` by
     (match_mp_tac local_word_store_post_path >> simp[] >>
-     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+     rpt (goal_assum (drule_at Any)) >> simp[alloca_frame_same] >>
+     fs[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def]) >>
   suspend "store_post"
 QED
 
 Resume compile_augassign_local_case[store_post]:
-  `stmt_post ctx func cx lctx cenv cenv s2 sb u (INL ()) fin last` by
-    (irule stmt_post_entry_frame >> qexistsl_tac [`s`, `s3`] >> simp[] >>
+  `alloca_frame cenv (ee with gas_obs := []) s2 u cenv
+      (ee with gas_obs := []) s` by
+    (irule alloca_frame_of_mem_frame >> simp[] >>
+     metis_tac[]) >>
+  `stmt_post ctx func cx lctx cenv cenv s2 sb (ee with gas_obs := []) u (INL ()) fin last` by
+    (irule stmt_post_entry_frame >> qexistsl_tac [`ee with gas_obs := []`, `s`, `s3`] >> simp[] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  `stmt_post ctx func cx lctx cenv cenv s1 sb t (INL ()) fin last` by
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) t` by
+    (fs[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >>
+     metis_tac[]) >>
+  `stmt_post ctx func cx lctx cenv cenv s1 sb (es with gas_obs := []) t (INL ()) fin last` by
     (irule stmt_post_expr_entry_frame >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  `stmt_post ctx func cx lctx cenv cenv sa sb s0 (INL ()) fin last` by
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`e`, `ee with gas_obs := []`, `rhs_op`, `s2`, `u`, `v`] >>
+     simp[]) >>
+  `stmt_post ctx func cx lctx cenv cenv sa sb es s0 (INL ()) fin last` by
     (irule stmt_post_expr_entry_frame >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >>
-     drule emitted_insts_emit_op >> simp[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl [`Name ty id`, `es with gas_obs := []`, `Var out`, `s1`, `t`, `entry.value`] >>
+     simp[] >> drule emitted_insts_emit_op >> simp[]) >>
   `gas_marked_path F ctx func u 0 (OK last)` by
     (drule_all gas_marked_path_then >> simp[]) >>
   qexistsl_tac [`INL ()`, `fin`, `OK last`] >> simp[] >>
@@ -1012,7 +1179,8 @@ Resume compile_augassign_local_case[operator_exit]:
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   Cases_on `evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v`
@@ -1034,18 +1202,15 @@ Finalise compile_augassign_local_case
 Theorem compile_augassign_local_stmt_frag:
   !ctx func cx lctx RetQ cenv ty0 env ty id bop e es.
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
-    FLOOKUP env.var_types id = SOME ty /\
-    (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
+    FLOOKUP env.var_types id = SOME ty /\ augassign_operand_ok ty bop e /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e))
       (eval_stmt cx (AugAssign ty (NameTarget id) bop e)) es
 Proof
-  rpt strip_tac >> irule compile_augassign_local_case >>
-  fs[expr_sim_pre_body, expr_sim_ok_case, DISJ_IMP_THM] >>
-  conj_tac >- (qexists_tac `env` >> simp[]) >>
-  qexists_tac `T` >> simp[]
+  rpt strip_tac >> drule augassign_operand_ok_operands >> strip_tac >>
+  fs[expr_sim_pre_body, expr_sim_ok_case] >>
+  irule (Q.SPEC `T` compile_augassign_local_case) >> simp[] >> metis_tac[]
 QED
 
 (* Integrity gate: the source and code sides and the store carry no

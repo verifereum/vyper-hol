@@ -14,8 +14,8 @@
 Theory o1MakeSsaRows
 Ancestors
   o1MakeSsaFormats o1MakeSsaFrontier o1MakeSsaCfg o1PassContract
-  makeSsaCurrentDefs makeSsaCurrentProps makeSsaCurrentInputOk
-  makeSsaCurrentNonDegenerate makeSsaCurrentWfSsa makeSsaDefs
+  makeSsaDefs makeSsaCurrentProps makeSsaCurrentInputOk
+  makeSsaCurrentNonDegenerate makeSsaCurrentWfSsa
   venomPassDispatcher venomPassSchedule venomFnScheduleRunnerProps
   fmpStepBridge unitShapeDefs simplifyCfgStruct simplifyCfgDefs venomWf
   venomInst callLayoutDefs list o1ContractMakeSsaSrcOpcodes

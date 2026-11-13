@@ -37,7 +37,7 @@ Theorem dynarray_in_memory_robust_element:
 Proof
   rpt strip_tac >>
   `elems_in_memory vs (addr + 32) tv m` by
-    (first_x_assum drule >> simp[valueEncodingTheory.val_in_memory_def]) >>
+    (first_x_assum drule >> simp[valueEncodingDefsTheory.val_in_memory_def]) >>
   drule_all elems_in_memory_EL >> simp[]
 QED
 
@@ -54,7 +54,7 @@ Proof
   rpt strip_tac >>
   `val_in_memory (ArrayTV tv (Fixed cap))
      (ArrayV (SArrayV kvs)) addr m` by metis_tac[] >>
-  gvs[valueEncodingTheory.val_in_memory_def] >>
+  gvs[valueEncodingDefsTheory.val_in_memory_def] >>
   Cases_on `ALOOKUP kvs i` >> gvs[] >>
   metis_tac[kvs_in_memory_lookup]
 QED
@@ -91,7 +91,7 @@ Theorem dynarray_in_memory_robust_length:
     !m. mem_agree_outside tn.t_mem mem m ==>
         mem_word_at addr m = n2w (LENGTH vs)
 Proof
-  simp[valueEncodingTheory.val_in_memory_def]
+  simp[valueEncodingDefsTheory.val_in_memory_def]
 QED
 
 Theorem dynarray_live_child_footprint:
@@ -127,4 +127,39 @@ Proof
   CONV_TAC (RAND_CONV (RAND_CONV (SIMP_CONV (srw_ss())
     [loweringPostsTheory.val_footprint_def, valueEncodingTheory.type_memory_size_def]))) >>
   decide_tac
+QED
+
+Theorem store_size_in_slot:
+  !tv v off bound.
+    val_wf tv v /\ off + type_memory_size tv <= bound ==>
+    off + val_store_size tv v <= bound
+Proof
+  rpt strip_tac >> drule exprSimPropsTheory.val_store_size_le >> decide_tac
+QED
+
+Theorem tuple_child_store_size_contained:
+  !tvs vs i.
+    values_have_types tvs vs /\ i < LENGTH tvs ==>
+    SUM (MAP type_memory_size (TAKE i tvs)) +
+      val_store_size (EL i tvs) (EL i vs) <= SUM (MAP type_memory_size tvs)
+Proof
+  Induct >> Cases_on `vs` >> simp[vyperTypingTheory.value_has_type_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `i` >> gvs[]
+  >- (drule value_has_type_memory_wf >> strip_tac >>
+      drule exprSimPropsTheory.val_store_size_le >> decide_tac) >>
+  first_x_assum drule_all >> decide_tac
+QED
+
+Theorem array_child_store_size_contained:
+  !tv v i cap prefix.
+    value_has_type tv v /\ i < cap ==>
+    prefix + i * type_memory_size tv + val_store_size tv v <=
+      prefix + cap * type_memory_size tv
+Proof
+  rpt strip_tac >> irule store_size_in_slot >>
+  reverse conj_tac >- metis_tac[value_has_type_memory_wf] >>
+  `SUC i * type_memory_size tv <= cap * type_memory_size tv` by
+    (irule LESS_MONO_MULT >> decide_tac) >>
+  qpat_x_assum `SUC i * _ <= _` mp_tac >>
+  pure_rewrite_tac[MULT_CLAUSES] >> decide_tac
 QED

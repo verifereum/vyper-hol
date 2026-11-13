@@ -22,7 +22,7 @@ val _ = Parse.hide "cp";
 
 (* The first region's code opens the program: codegen_assembly emits the
    regions in order, with nothing before them. *)
-Theorem codegen_assembly_first_region[local]:
+Theorem codegen_assembly_first_region:
   generate_context_plan unit.cu_context = SOME cp /\
   codegen_assembly rpolicy unit = SOME prog /\
   cp.cp_regions = r :: rs ==>
@@ -120,7 +120,7 @@ QED
 
 (* gen_fn_simulation's INVOKE premise: a reachable caller never calls the
    entry, and every other function takes a return PC. *)
-Theorem codegen_invoke_targets_retpc[local]:
+Theorem codegen_invoke_targets_retpc:
   unit_shape_ok unit /\ codegen_context_obligations Inv unit.cu_context cp ==>
   !f inst callee_name args callee.
     MEM f unit.cu_context.ctx_functions /\
@@ -155,7 +155,7 @@ QED
 
 (* The entry function has no return instruction: entry_fn_no_ret rules out
    RET, and codegen readiness the raw FMP returns. *)
-Theorem entry_no_ret_opcodes[local]:
+Theorem entry_no_ret_opcodes:
   entry_fn_no_ret func /\ codegen_ready_fn func ==>
   EVERY (\inst. ~MEM inst.inst_opcode [RET; RETFMP; DRET]) (fn_insts func)
 Proof
@@ -257,8 +257,6 @@ Proof
   `!l. FLOOKUP vs.vs_labels l =
        OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)`
     by gvs[initial_ctx_rel_def] >>
-  `~vs.vs_call_ctx.cc_static`
-    by gvs[initial_ctx_rel_def, initial_state_rel_def, msg_ctx_rel_def] >>
   `asm_block_at prog 0 (execute_plan cp.cp_initial_fmp r.sr_plan)`
     by metis_tac[codegen_assembly_first_region] >>
   `fn_entry_state_rel cp fe

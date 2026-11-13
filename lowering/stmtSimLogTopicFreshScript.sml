@@ -2,7 +2,7 @@
 Theory stmtSimLogTopicFresh
 Ancestors
   stmtSimLogTopics freshWrites exprLoweringProps emitHelper emitHelperProps
-  context stmtLowering compileEnv venomExecSemantics venomInst venomState
+  context stmtLowering compileEnv loweringStateRelDefs venomExecSemantics venomInst venomState
   words list rich_list arithmetic finite_map ASCIInumbers
 
 Theorem log_topic_outputs[local]:

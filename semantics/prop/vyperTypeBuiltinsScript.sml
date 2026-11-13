@@ -10,7 +10,7 @@ Ancestors
   vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeBytesCrypto vyperTypeDefaults vyperTypeConversions vyperTypeABI vyperEvalBinop
   vyperDecimalBounds
-  vyperAssignPreservesType bn254 vfmExecution
+  vyperAssignPreservesType bn254 vfmExecution vyperTypeArgFits
 Libs
   wordsLib
   intLib fcpLib
@@ -1180,7 +1180,7 @@ QED
 (* Boundary lemma: evaluate_slice on BytesV + IntV indices never produces TypeError.
    Concrete constructor args avoid case-explosion in consumer proofs.
    Proved at implementation level; consumers use irule without expanding evaluate_slice_def. *)
-Theorem evaluate_slice_BytesV_no_type_error[local]:
+Theorem evaluate_slice_BytesV_no_type_error:
   !bs i j n msg.
     0 ≤ i ∧ 0 ≤ j ==>
     evaluate_slice (BytesV bs) (IntV i) (IntV j) n ≠ INR (TypeError msg)
@@ -1188,6 +1188,15 @@ Proof
   rw[evaluate_slice_def, LET_THM] >>
   Cases_on `Num i + Num j ≤ LENGTH bs` >> gvs[] >>
   Cases_on `compatible_bound (Dynamic n) (Num j)` >> gvs[]
+QED
+
+Theorem evaluate_slice_BytesV_success_type:
+  !bs sv lv n v.
+    evaluate_slice (BytesV bs) sv lv n = INL v ==>
+    ?out. v = BytesV out /\ LENGTH out <= n
+Proof
+  rw[evaluate_slice_def, LET_THM, compatible_bound_def, AllCaseEqs(),
+     LENGTH_TAKE]
 QED
 
 (* Boundary lemma: evaluate_slice on StringV + IntV indices never produces TypeError. *)
@@ -1379,13 +1388,26 @@ QED
 Theorem LIST_REL_every_same_type_EVERY_vht[local]:
   !vs arg_tys elem_ty tenv elem_tv.
     LIST_REL (λv t. ∃tyv. evaluate_type tenv t = SOME tyv ∧ value_has_type tyv v) vs arg_tys ∧
-    EVERY ($= elem_ty) arg_tys ∧
+    EVERY (λt. arg_type_fits t elem_ty) arg_tys ∧
     evaluate_type tenv elem_ty = SOME elem_tv ⇒
     EVERY (value_has_type elem_tv) vs
 Proof
-  Induct >> rw[LIST_REL_CONS1] >> gvs[] >>
-  first_x_assum (qspecl_then [`t'`, `elem_ty`, `tenv`, `elem_tv`] mp_tac) >>
-  simp[]
+  Induct >> rw[LIST_REL_CONS1] >> gvs[]
+  >- metis_tac[arg_type_fits_value_has_type] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem LIST_REL_arg_types_fit_vht[local]:
+  !vs ts tys tus tenv.
+    LIST_REL (λv t. ∃tyv. evaluate_type tenv t = SOME tyv ∧ value_has_type tyv v) vs ts ∧
+    arg_types_fit ts tys ∧
+    LIST_REL (λty tv. evaluate_type tenv ty = SOME tv) tys tus ⇒
+    LIST_REL value_has_type tus vs
+Proof
+  Induct >> Cases_on `ts` >> Cases_on `tys` >> rw[arg_type_fits_def] >>
+  gvs[LIST_REL_CONS1]
+  >- metis_tac[arg_type_fits_value_has_type] >>
+  first_x_assum irule >> metis_tac[]
 QED
 
 Theorem SORTED_MAP_FST_enumerate_static_array[local]:
@@ -1414,7 +1436,7 @@ Proof
   Cases_on `o'` >> gvs[well_typed_builtin_app_def, evaluate_builtin_def]
   >- (drule evaluate_type_TupleT_cases >> strip_tac >> gvs[value_has_type_def] >>
       simp[values_have_types_LIST_REL] >>
-      gvs[LIST_REL_EL_EQN, EL_MAP, EVERY_EL]) >>
+      irule LIST_REL_arg_types_fit_vht >> metis_tac[]) >>
   drule evaluate_type_ArrayT_SOME >> strip_tac >> gvs[] >>
   Cases_on `bd` >> gvs[make_array_value_def, value_has_type_def]
   >- (conj_tac >- (irule SORTED_MAP_FST_enumerate_static_array >> simp[]) >>
@@ -2438,6 +2460,40 @@ Proof
   gvs[evaluate_builtin_def, LENGTH_TAKE, LENGTH_Keccak_256_w64]
 QED
 
+
+Theorem typed_membership_success:
+  well_typed_builtin_app ty bt [t1;t2] /\
+  (bt = Bop In \/ bt = Bop NotIn) /\
+  evaluate_type tenv t1 = SOME tv1 /\
+  evaluate_type tenv t2 = SOME tv2 /\
+  value_has_type tv1 v1 /\ value_has_type tv2 v2 ==>
+  ty = BaseT BoolT /\
+  ?b. evaluate_membership tv2 (bt = Bop NotIn) v1 v2 = INL (BoolV b)
+Proof
+  strip_tac >>
+  gvs[well_typed_builtin_app_def, well_typed_binop_def] >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  simp[evaluate_membership_flag, evaluate_binop_def, binop_negate_def] >>
+  drule vht_ArrayTV_exists >> strip_tac >>
+  simp[evaluate_membership_array]
+QED
+
+Theorem well_typed_membership_dispatch:
+  well_typed_builtin_app ty bt ts /\ (bt = Bop In \/ bt = Bop NotIn) /\
+  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs /\
+  LIST_REL value_has_type tvs vs ==>
+  ty = BaseT BoolT /\ LENGTH vs = 2 /\
+  ?ht b. evaluate_type (get_tenv cx) (EL 1 ts) = SOME ht /\
+    evaluate_membership ht (bt = Bop NotIn) (EL 0 vs) (EL 1 vs) = INL (BoolV b)
+Proof
+  strip_tac >>
+  `LENGTH ts = 2` by
+    (drule well_typed_builtin_app_length >>
+     gvs[builtin_args_length_ok_def]) >>
+  gvs[LENGTH_EQ_NUM_compute] >>
+  Cases_on `tvs` >> gvs[] >>
+  drule typed_membership_success >> simp[] >> metis_tac[]
+QED
 
 Theorem well_typed_builtin_app_no_type_error:
   well_typed_builtin_app ty blt ts ∧ blt ≠ Len ∧

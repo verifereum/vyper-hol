@@ -15,6 +15,6 @@ Proof
     (qpat_x_assum `!e. run_from fuel ctx fn s <> Error e`
        (qspec_then `"phi outside prefix"` mp_tac) >>
      simp[run_from_def, Once exec_block_def, get_instruction_def,
-          step_inst_non_invoke, Once step_inst_base_def]) >>
+          step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
   simp[phi_prefix_length_def]
 QED

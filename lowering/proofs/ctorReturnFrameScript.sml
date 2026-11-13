@@ -1,7 +1,7 @@
 Theory ctorReturnFrame
 Ancestors
   bodySim stmtSimReturn immutableDeployExecution nonreentrantSource loweringHalt
-  moduleLowering stmtLowering stmtSimDefs stmtSimProps exprLoweringProps fragExec compileEnv
+  moduleLowering stmtLowering stmtSimDefs stmtSimProps exprLoweringProps fragExec compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperContext vyperStorageLayoutSafety
   venomExecSemantics venomState venomInst
 
@@ -74,7 +74,7 @@ Proof
   simp[]
 QED
 
-Theorem constructor_exit_code[local]:
+Theorem constructor_exit_code:
   (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
     st_exit = ((), st_epilogue) /\
   (nr ==> ut) /\ st_exit.cs_current_insts = [] /\

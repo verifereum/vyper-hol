@@ -1,11 +1,11 @@
 Theory abiDecoderReentryPointer
 Ancestors
   abiDecoderReentry abiDecoderVarSequence abiDecoderVarExtend abiDecoderTypedContract
-  abiDecoderFrame abiDecoderContract emitHelperProps exprLoweringProps compileEnv valueEncoding
+  abiDecoderFrame abiDecoderContract emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs valueEncoding
   venomState venomExecProps arithmetic finite_map abiDecoderPrimitiveCaller
   abiDecoderClampedWord abiDecoderClamp abiDecoderCoherence abiEncoder emitHelper
   venomExecSemantics venomInst fragExec instIdxIndep words list rich_list abiDecoderBytesFrame
-  abiDecoderBytestring abiDecoderBytesTyped abiDecoderString exprLowering vyperABI vyperTyping
+  abiDecoderBytestringCases abiDecoderBytesTyped abiDecoderString exprLowering vyperABI vyperTyping
   vyperValue contractABI abiDecoderMemberBound abiDecoderReservation abiDecoderArrayBound
   abiDecoderArrayPtr
 
@@ -84,13 +84,13 @@ QED
 (* Primitive child decoders may run repeatedly with stale local bindings.
    Their frame excludes scratch slots and their allocator state is unchanged. *)
 Theorem abi_decoder_word_reentry_code:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') /\
   abi_decode_source_opcode opc ==>
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st st')
 Proof
-  Cases_on `clamp` >>
+  Cases_on `base_op = Lit 0w` >> Cases_on `clamp` >>
   FIRST [rename1 `IntClamp bits signed` >> Cases_on `signed`, all_tac] >>
-  simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_static_def,
        compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
        compile_abi_bytes_clamp_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
@@ -102,9 +102,9 @@ Proof
 QED
 
 Theorem abi_decoder_typed_word_sequence_frame:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-    st last src dst opc hi sb d b cap s ==>
+    st last src dst opc base_op hi src_base sb d b cap s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_post tv v st' d 32 b cap s t /\ abi_decode_frame d 32 s t /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
@@ -113,17 +113,18 @@ Proof
   drule abi_decoder_primitive_source >> strip_tac >>
   drule_all abi_decoder_primitive_clamp >> strip_tac >>
   `abi_decode_source_opcode opc /\ eval_operand src s = SOME (n2w sb) /\
+   eval_operand base_op s = SOME (n2w src_base) /\
    eval_operand dst s = SOME (n2w d) /\ fresh_vars_wrt st s /\ d < dimword (:256)` by
-    (qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac [abi_decoder_recursive_pre_def, abi_decoder_pre_def,
        abi_decoder_ranges_def] >> rpt strip_tac >> asm_simp_tac bool_ss [] >> decide_tac) >>
   drule_all abi_decoder_clamped_word_copied_window >> strip_tac >> gvs[]
 QED
 
 Theorem abi_decoder_primitive_reentry_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-    st last src dst opc hi sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
+    st last src dst opc base_op hi src_base sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   ?actual. run_inst_seq (emitted_insts st st') initial = OK actual /\
     val_in_memory tv v d actual.vs_memory /\ fresh_vars_wrt limit_st actual /\
@@ -148,9 +149,9 @@ Proof
 QED
 
 Theorem abi_decoder_primitive_reentry_from_state:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-    st last src dst opc hi sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
+    st last src dst opc base_op hi src_base sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   frag_exec ctx st st' (\s. s = initial)
     (\actual. val_in_memory tv v d actual.vs_memory /\ fresh_vars_wrt limit_st actual /\
@@ -175,34 +176,37 @@ QED
 
 (* Bytestring children execute with stale local SSA bindings under enclosing freshness. *)
 Theorem abi_decoder_typed_bytestring_sequence_frame:
-  compile_abi_decode_to_buf dst src opc hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecBytestring n) st = ((),st') /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_recursive_pre ce env sf ty tv (DecBytestring n) av v
-    st last src dst opc hi sb d b cap s ==>
+    st last src dst opc base_op hi src_base sb d b cap s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_post tv v st' d (type_memory_bytes ce ty) b cap s t /\
     abi_decode_frame d (type_memory_bytes ce ty) s t /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
 Proof
-  strip_tac >>
-  qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE [abi_decoder_recursive_pre_def]) >>
   drule abi_decoder_bytestring_cases >> disch_then (qspec_then `n` mp_tac) >>
   asm_simp_tac bool_ss [] >> strip_tac >> gvs[Excl "enc_def"] >>
-  qpat_assum `abi_decoder_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE [abi_decoder_pre_def]) >>
   Cases_on `av` >>
   gvs[abi_decoder_metadata_def, vyper_to_abi_type_def, vyper_base_to_abi_type_def,
     has_type_def, abi_to_vyper_def, AllCaseEqs(), Excl "enc_def"] >>
-  fs[type_to_abi_dec_info_def] >>
-  FIRST [drule_all abi_decoder_typed_bytes_sequence_frame >>
-      simp[GSYM (cj 1 abi_decoder_bytes_copy_size)],
-    drule_all abi_decoder_typed_string_sequence_frame >> simp[]]
+  fs[type_to_abi_dec_info_def]
+  >>~- ([`abi_decoder_post (BaseTV (BytesT (Dynamic n))) _ _ _ _ _ _ _ _`],
+    rewrite_tac[GSYM (cj 1 abi_decoder_bytes_copy_size)] >>
+    irule abi_decoder_typed_bytes_sequence_frame >> simp[] >> metis_tac[]) >>
+  irule abi_decoder_typed_string_sequence_frame >> simp[] >> metis_tac[]
 QED
 
 Theorem abi_decoder_bytestring_reentry_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecBytestring n) st = ((),st') /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_recursive_pre ce env sf ty tv (DecBytestring n) av v
-    st last src dst opc hi sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
+    st last src dst opc base_op hi src_base sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   ?actual. run_inst_seq (emitted_insts st st') initial = OK actual /\
     val_in_memory tv v d actual.vs_memory /\ fresh_vars_wrt limit_st actual /\
@@ -212,7 +216,8 @@ Theorem abi_decoder_bytestring_reentry_sequence:
     actual.vs_allocas = initial.vs_allocas /\ actual.vs_alloca_next = initial.vs_alloca_next /\
     actual.vs_halted = initial.vs_halted
 Proof
-  strip_tac >> drule_all abi_decoder_typed_bytestring_sequence_frame >> strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_decoder_typed_bytestring_sequence_frame >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st st')
     (abi_decoder_prune_vars st.cs_next_var initial) = OK clean` >>
   `abi_decode_source_opcode opc` by
@@ -226,9 +231,10 @@ Proof
 QED
 
 Theorem abi_decoder_bytestring_reentry_from_state:
-  compile_abi_decode_to_buf dst src opc hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecBytestring n) st = ((),st') /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_recursive_pre ce env sf ty tv (DecBytestring n) av v
-    st last src dst opc hi sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
+    st last src dst opc base_op hi src_base sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   frag_exec ctx st st' (\s. s = initial)
     (\actual. val_in_memory tv v d actual.vs_memory /\ fresh_vars_wrt limit_st actual /\
@@ -238,7 +244,7 @@ Theorem abi_decoder_bytestring_reentry_from_state:
       actual.vs_allocas = initial.vs_allocas /\ actual.vs_alloca_next = initial.vs_alloca_next /\
       actual.vs_halted = initial.vs_halted) (K F)
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `abi_decode_source_opcode opc` by
     fs[abi_decoder_recursive_pre_def, abi_decoder_pre_def, abi_decoder_ranges_def, Excl "enc_def"] >>
   drule_all abi_decoder_bytes_shape >> strip_tac >>
@@ -304,13 +310,13 @@ QED
    TOP-LEVEL: abi_decoder_member_pointer_reentry.
    Helpers: opcode certificate and fresh-state sequence execution. *)
 Theorem abi_decoder_member_pointer_code:
-  compile_getelemptr_abi src dyn off opc hi st = (member_op,st') /\
+  compile_getelemptr_abi src dyn off opc base_op hi st = (member_op,st') /\
   abi_decode_source_opcode opc ==>
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st st')
 Proof
   strip_tac >> Cases_on `dyn` >> gvs[abi_decode_source_opcode_def] >>
-  Cases_on `hi = Lit 0w` >>
-  gvs[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
+  Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >>
+  gvs[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
       fresh_id_def, emit_def, emitted_insts_def] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
@@ -318,24 +324,25 @@ Proof
 QED
 
 Theorem abi_decoder_member_pointer_counters:
-  compile_getelemptr_abi src dyn off opc hi st = (member_op,st') ==>
-  st'.cs_next_var = st.cs_next_var + (if dyn then if hi = Lit 0w then 3 else 5 else 1) /\
+  compile_getelemptr_abi src dyn off opc base_op hi st = (member_op,st') ==>
+  st'.cs_next_var = st.cs_next_var + (if dyn then (if hi = Lit 0w then 3 else 5) +
+    (if base_op = Lit 0w then 0 else 1) else 1) /\
   abi_decoder_operand_live st'.cs_next_var member_op
 Proof
   Cases_on `dyn` >> Cases_on `hi = Lit 0w` >>
-  simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
-  imp_res_tac abi_decoder_operand_live_emit >> gvs[] >>
-  FIRST [first_assum ACCEPT_TAC,
-    irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var + 3` >>
-    conj_tac >- decide_tac >> first_assum ACCEPT_TAC]
+  Cases_on `base_op = Lit 0w` >>
+  gvs[compile_getelemptr_abi_def, compile_abi_dec_addr_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
+  rpt strip_tac >> simp[] >> decide_tac
 QED
 
 Theorem abi_decoder_member_pointer_sequence:
-  compile_getelemptr_abi src dyn off opc hi st = (member_op,st') /\
+  compile_getelemptr_abi src dyn off opc base_op hi st = (member_op,st') /\
   abi_decode_source_opcode opc /\ eval_operand src s = SOME (n2w sb) /\
-  (dyn ==> abi_decode_load opc (n2w (sb + off) : bytes32) s = n2w payload_off /\
+  (dyn ==> eval_operand base_op s = SOME (n2w src_base) /\
+    abi_decode_load opc (n2w (src_base + (sb + off)) : bytes32) s = n2w payload_off /\
     sb + payload_off < dimword (:256)) /\ fresh_vars_wrt st s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     eval_operand member_op t = SOME (n2w (sb + if dyn then payload_off else off)) /\
@@ -344,17 +351,19 @@ Theorem abi_decoder_member_pointer_sequence:
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_data_section = s.vs_data_section /\ inst_extends st st'
 Proof
-  Cases_on `dyn` >> simp_tac bool_ss [] >> strip_tac >>
-  FIRST [drule_all abi_decode_static_member_pointer >> simp[],
-    drule_all abi_decode_dynamic_member_pointer >> simp[]]
+  Cases_on `dyn` >> simp_tac bool_ss [] >> strip_tac
+  >- (drule_all abi_decode_dynamic_member_pointer >> simp[]) >>
+  drule_all abi_decode_static_member_pointer >> simp[]
 QED
 
 Theorem abi_decoder_member_pointer_reentry:
-  compile_getelemptr_abi src dyn off opc hi st = (member_op,st') /\
+  compile_getelemptr_abi src dyn off opc base_op hi st = (member_op,st') /\
   abi_decode_source_opcode opc /\ eval_operand src initial = SOME (n2w sb) /\
-  (dyn ==> abi_decode_load opc (n2w (sb + off) : bytes32) initial = n2w payload_off /\
+  (dyn ==> eval_operand base_op initial = SOME (n2w src_base) /\
+    abi_decode_load opc (n2w (src_base + (sb + off)) : bytes32) initial = n2w payload_off /\
     sb + payload_off < dimword (:256)) /\
   abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   ?actual. run_inst_seq (emitted_insts st st') initial = OK actual /\
     eval_operand member_op actual = SOME (n2w (sb + if dyn then payload_off else off)) /\
@@ -369,10 +378,12 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `eval_operand src (abi_decoder_prune_vars st.cs_next_var initial) = SOME (n2w sb)`
     by asm_simp_tac bool_ss [abi_decoder_prune_eval] >>
-  `dyn ==> abi_decode_load opc (n2w (sb + off) : bytes32)
+  `dyn ==> eval_operand base_op (abi_decoder_prune_vars st.cs_next_var initial) = SOME (n2w src_base) /\
+    abi_decode_load opc (n2w (src_base + (sb + off)) : bytes32)
       (abi_decoder_prune_vars st.cs_next_var initial) = n2w payload_off /\
     sb + payload_off < dimword (:256)` by
-    fs[abi_decode_load_def, abi_decode_source_def, abi_decoder_prune_vars_def, mload_def] >>
+    (asm_simp_tac bool_ss [abi_decoder_prune_eval] >>
+     fs[abi_decode_load_def, abi_decode_source_def, abi_decoder_prune_vars_def, mload_def]) >>
   `fresh_vars_wrt st (abi_decoder_prune_vars st.cs_next_var initial)`
     by irule abi_decoder_prune_fresh >>
   mp_tac (Q.INST [`s` |-> `abi_decoder_prune_vars st.cs_next_var initial`]
@@ -394,26 +405,29 @@ QED
 (* Dynamic-element navigation is safe on every iteration, including guarded
    memory sources. Only temporaries allocated by this prefix are overwritten. *)
 Theorem abi_decoder_array_pointer_code:
-  compile_abi_decode_dyn_elem_ptr opc elem_src src_data hi abi_sz st = (child_op,st') /\
+  compile_abi_decode_dyn_elem_ptr opc base_op elem_src src_data hi abi_sz st = (child_op,st') /\
   abi_decode_source_opcode opc ==>
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\
     ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode) (emitted_insts st st')
 Proof
-  Cases_on `hi = Lit 0w` >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
-       fresh_id_def, emit_def, emitted_insts_def] >>
+  Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >>
+  gvs[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
+      compile_abi_decode_range_check_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      emit_op_def, emit_void_def, fresh_var_def,
+      fresh_id_def, emit_def, emitted_insts_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
   gvs[DROP_LENGTH_APPEND, abi_decoder_reentry_opcode_def, mk_inst_def,
       abi_decode_source_opcode_def, is_terminator_def, is_alloca_op_def]
 QED
 
 Theorem abi_decoder_array_pointer_sequence:
-  compile_abi_decode_dyn_elem_ptr opc elem_src src_data hi abi_sz st = (child_op,st') /\
-  abi_decode_source_opcode opc /\ eval_operand elem_src s = SOME p /\
+  compile_abi_decode_dyn_elem_ptr opc base_op elem_src src_data hi abi_sz st = (child_op,st') /\
+  abi_decode_source_opcode opc /\ eval_operand elem_src s = SOME (n2w pos) /\
+  eval_operand base_op s = SOME (n2w B) /\
   eval_operand src_data s = SOME (n2w data_base) /\
-  abi_decode_load opc (p:bytes32) s = n2w child_off /\
+  abi_decode_load opc (n2w (B + pos):bytes32) s = n2w child_off /\
   (hi = Lit 0w \/ ?hb. eval_operand hi s = SOME (n2w hb) /\
     data_base + child_off + abi_sz <= hb /\ hb < dimword (:256)) /\
   fresh_vars_wrt st s ==>
@@ -424,18 +438,20 @@ Theorem abi_decoder_array_pointer_sequence:
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_data_section = s.vs_data_section /\ inst_extends st st'
 Proof
-  Cases_on `hi = Lit 0w` >> asm_simp_tac bool_ss [] >> strip_tac >>
-  FIRST [drule_all abi_decode_array_pointer_sentinel >> simp[],
-         drule_all abi_decode_bounded_array_pointer >> simp[]]
+  Cases_on `hi = Lit 0w` >> asm_simp_tac bool_ss [] >> strip_tac
+  >- (drule_all abi_decode_array_pointer_sentinel >> simp[]) >>
+  drule_all abi_decode_bounded_array_pointer >> simp[]
 QED
 
 Theorem abi_decoder_array_pointer_reentry:
-  compile_abi_decode_dyn_elem_ptr opc elem_src src_data hi abi_sz st = (child_op,st') /\
-  abi_decode_source_opcode opc /\ eval_operand elem_src initial = SOME p /\
+  compile_abi_decode_dyn_elem_ptr opc base_op elem_src src_data hi abi_sz st = (child_op,st') /\
+  abi_decode_source_opcode opc /\ eval_operand elem_src initial = SOME (n2w pos) /\
+  eval_operand base_op initial = SOME (n2w B) /\
   eval_operand src_data initial = SOME (n2w data_base) /\
-  abi_decode_load opc (p:bytes32) initial = n2w child_off /\
+  abi_decode_load opc (n2w (B + pos):bytes32) initial = n2w child_off /\
   (hi = Lit 0w \/ ?hb. eval_operand hi initial = SOME (n2w hb) /\
     data_base + child_off + abi_sz <= hb /\ hb < dimword (:256)) /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var elem_src /\
   abi_decoder_operand_live st.cs_next_var src_data /\
   abi_decoder_operand_live st.cs_next_var hi /\
@@ -451,10 +467,11 @@ Theorem abi_decoder_array_pointer_reentry:
     actual.vs_halted = initial.vs_halted /\ inst_extends st st'
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `eval_operand elem_src (abi_decoder_prune_vars st.cs_next_var initial) = SOME p /\
+  `eval_operand elem_src (abi_decoder_prune_vars st.cs_next_var initial) = SOME (n2w pos) /\
+   eval_operand base_op (abi_decoder_prune_vars st.cs_next_var initial) = SOME (n2w B) /\
    eval_operand src_data (abi_decoder_prune_vars st.cs_next_var initial) = SOME (n2w data_base)`
     by asm_simp_tac bool_ss [abi_decoder_prune_eval] >>
-  `abi_decode_load opc (p:bytes32) (abi_decoder_prune_vars st.cs_next_var initial) = n2w child_off`
+  `abi_decode_load opc (n2w (B + pos):bytes32) (abi_decoder_prune_vars st.cs_next_var initial) = n2w child_off`
     by fs[abi_decode_load_def, abi_decode_source_def, abi_decoder_prune_vars_def, mload_def] >>
   `fresh_vars_wrt st (abi_decoder_prune_vars st.cs_next_var initial)`
     by irule abi_decoder_prune_fresh >>

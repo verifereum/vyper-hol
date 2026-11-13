@@ -2935,7 +2935,7 @@ Proof
   rpt gen_tac >>
   simp[removeUnusedDefsTheory.remove_unused_single_pass_def,
        passSharedDefsTheory.clear_nops_function_def,
-       passSimulationDefsTheory.function_map_transform_def,
+       passTransformTheory.function_map_transform_def,
        listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
   irule passSimulationPropsTheory.lookup_block_map >>
   simp[passSharedDefsTheory.clear_nops_block_def, remove_unused_block_label]

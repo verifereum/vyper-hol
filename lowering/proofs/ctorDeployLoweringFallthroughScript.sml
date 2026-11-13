@@ -45,5 +45,5 @@ Proof
   qexistsl_tac [`fuel`, `mk_inst sb.cs_next_id JMP [Label exit_lbl] []`,
                 `exit_lbl`, `sb`] >>
   rpt (first_assum (irule_at Any)) >>
-  simp[mk_inst_def, is_terminator_def, Once step_inst_base_def]
+  simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs]
 QED

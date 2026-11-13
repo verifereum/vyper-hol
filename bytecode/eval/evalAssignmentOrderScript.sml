@@ -2,9 +2,10 @@
    supported-program boundaries, exact bytecode parity and interpreter results. *)
 Theory evalAssignmentOrder
 Ancestors
-  vyperInterpreter vyperTypeSystem jsonToVyper jsonConstEval
+  vyperInterpreter vyperTypeSystem jsonToVyper
   compileVyper concretizeMemLocDefs supportedProgram supportedStmts
   vyperSmallStep vyperStorageBackend finite_map While alist byte integer_word option
+  codegenReadyCompute
 Libs
   vyperCheckContractFrontendLib evalCompilerBytecodeLib finite_mapLib
   computeLib wordsLib cv_transLib
@@ -12,11 +13,11 @@ Libs
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps
   ["../assignment-order/oracle", "../assignment-order/sources",
-   "../assignment-order/fixtures.txt"]
+   "../assignment-order/fixtures.txt", "../assignment-order/codegen-rejected"]
 val () = computeLib.upd_compset add_finite_map_compset
 
-fun define_source_fixture name = let
-  val path = "../assignment-order/oracle/" ^ name ^ ".json"
+fun define_source_fixture_in dir name = let
+  val path = "../assignment-order/" ^ dir ^ "/" ^ name ^ ".json"
   val ast = JSONDecode.decodeFile jsonASTLib.annotated_ast path
   val layout = JSONDecode.decodeFile jsonASTLib.storage_layout path
   val checked = vyperCheckContractFrontendLib.check_contract_result
@@ -49,7 +50,10 @@ val fixture_names =
   |> String.tokens (fn c => c = #"\n" orelse c = #"\r")
   |> List.map evalCompilerBytecodeLib.strip_comment
   |> List.filter (fn name => name <> "");
-val () = List.app define_source_fixture fixture_names;
+val () = List.app (define_source_fixture_in "oracle") fixture_names;
+(* Python rejects these in codegen; their interpreter regressions stay. *)
+val () = List.app (define_source_fixture_in "codegen-rejected")
+  ["aug_storage_shrink", "aug_memory_shrink", "aug_memory_shrink_append"];
 
 Definition assignment_empty_state_def:
   assignment_empty_state = empty_state with scopes := [FEMPTY]
@@ -73,7 +77,28 @@ in () end;
 val () = List.app check_compiler_fixture
   ["c08_storage_arr_assign_computed_rhs", "c09_storage_map_assign_computed_rhs",
    "g6_write_order_side", "x04_assign_sideeffect_order",
-   "s11_storage_map_assign_extcall_rhs", "g19_aug_rhs_modifies_target"];
+   "g19_aug_rhs_modifies_target"];
+
+(* Bounded return decoding deliberately differs from VYPER_PIN
+   (vyperlang/vyper#5333): the fixture compiles, but not to the pinned bytes. *)
+fun check_decoder_divergence_fixture name = let
+  val program = prim_mk_const
+    {Thy = "evalAssignmentOrder", Name = name ^ "_source_program"}
+  val expected = evalCompilerBytecodeLib.read_hex_bytes_from
+    ("../assignment-order/oracle/" ^ name ^ ".hex")
+  val compiled = EVAL
+    ``compile_vyper (K SOME) (o1_policy all_capabilities) ^program``
+  fun on_compiled tm =
+    EQT_ELIM ((DEPTH_CONV (REWR_CONV compiled) THENC EVAL) tm)
+  val _ = save_thm (name ^ "_supported",
+    EQT_ELIM (EVAL ``supported_program ^program``))
+  val _ = save_thm (name ^ "_compiles", on_compiled
+    ``IS_SOME (compile_vyper (K SOME) (o1_policy all_capabilities) ^program)``)
+  val _ = save_thm (name ^ "_differs_from_pinned_decoder", on_compiled
+    ``compile_vyper (K SOME) (o1_policy all_capabilities) ^program <> SOME ^expected``)
+in () end;
+
+val () = check_decoder_divergence_fixture "s11_storage_map_assign_extcall_rhs";
 
 Theorem flat_tuple_assignment_supported:
   supported_stmt []
@@ -83,41 +108,6 @@ Theorem flat_tuple_assignment_supported:
       (Name (TupleT [BaseT (UintT 256); BaseT (UintT 256)]) "pair"))
 Proof
   EVAL_TAC
-QED
-
-Theorem nested_tuple_lowering_remains_excluded:
-  ~supported_stmt tops bindings
-    (Assign (TupleTarget [TupleTarget targets]) rhs)
-Proof
-  simp[supported_stmt_def, supported_assignment_def]
-QED
-
-Theorem nested_pop_key_rejected[local]:
-  ~supported_expr tops
-    (Builtin ty (Bop Add) (Pop pty target :: rest))
-Proof
-  simp[supportedExprsTheory.supported_expr_def,
-       supportedExprsTheory.supported_pure_expr_def,
-       supportedExprsTheory.supported_effect_expr_def]
-QED
-
-Theorem nested_pop_assignment_rejected[local]:
-  ~supported_stmt tops bindings
-    (Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget id)
-      (Builtin ty (Bop Add) (Pop pty target :: rest)))) rhs)
-Proof
-  simp[supported_stmt_def, supported_assignment_def, supported_target_def,
-       supportedTargetsTheory.supported_target_info_def, nested_pop_key_rejected]
-QED
-
-Theorem nested_pop_compiler_form_remains_excluded:
-  ~supported_program assign_nested_popped_read_source_program
-Proof
-  strip_tac >> drule supported_program_declaration >>
-  disch_then (qspec_then `EL 1 assign_nested_popped_read_source_program` mp_tac) >>
-  simp[DB.fetch "evalAssignmentOrder" "assign_nested_popped_read_source_program_def",
-       supported_declaration_body_def, supported_function_body_def,
-       supported_stmts_list, nested_pop_assignment_rejected]
 QED
 
 Theorem assignment_cont_pre[cv_pre]:
@@ -158,12 +148,12 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem assignment_storage_read_is_delayed:
+Theorem assignment_storage_read_precedes_target_effects:
   let (res,st) = assignment_run assign_delayed_storage_read_source_context
         assign_delayed_storage_read_source_program assignment_empty_state in
   res = INL () /\ assignment_slot assign_delayed_storage_read_source_context st 0w = 1w /\
   assignment_slot assign_delayed_storage_read_source_context st
-    92458281274488595289803937127152923398167637295201432141969818930235769911599w = 1w
+    92458281274488595289803937127152923398167637295201432141969818930235769911599w = 0w
 Proof
   CONV_TAC cv_eval
 QED
@@ -176,14 +166,16 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem assignment_nested_pop_reads_updated_snapshot:
+Theorem assignment_nested_pop_reads_prior_snapshot:
   let (res,st) = assignment_run assign_nested_popped_read_source_context
         assign_nested_popped_read_source_program assignment_empty_state in
   res = INL () /\
   assignment_slot assign_nested_popped_read_source_context st
-    24465873643947496235832446106509767096567058095563226156125564318740882468607w = 1w /\
+    24465873643947496235832446106509767096567058095563226156125564318740882468607w = 2w /\
   assignment_slot assign_nested_popped_read_source_context st
-    24465873643947496235832446106509767096567058095563226156125564318740882468608w = 1w
+    24465873643947496235832446106509767096567058095563226156125564318740882468608w = 1w /\
+  assignment_slot assign_nested_popped_read_source_context st
+    24465873643947496235832446106509767096567058095563226156125564318740882468609w = 2w
 Proof
   CONV_TAC cv_eval
 QED

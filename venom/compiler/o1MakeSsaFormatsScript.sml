@@ -1,6 +1,6 @@
 Theory o1MakeSsaFormats
 Ancestors
-  o1MakeSsaFrontier o1MakeSsaCfg makeSsaCurrentDefs unitShapeDefs
+  o1MakeSsaFrontier o1MakeSsaCfg makeSsaDefs unitShapeDefs
   venomInst stackPlanTypes list o1ContractSueStep simplifyCfgStruct
   cfgNormSupplySim venomWf fmpStepChunk fmpStepList o1PassContract makeSsaCurrentCfg o1ContractMakeSsaSrcOpcodes makeSsaCurrentNonDegShape makeSsaRfPipeline
 

@@ -5,7 +5,7 @@ Theory bodyMemPopToplevel
 Ancestors
   bodyMemoryPreds bodyExprForceMemory bodyMemPopToplevelSim exprSimPopStorage
   exprSimDefs exprSimHyps exprSimHypsDefs exprSimMemDefs exprLowering exprSimSource
-  exprLoweringProps compileEnv context vyperInterpreter vyperTypeEnv
+  exprLoweringProps compileEnv loweringStateRelDefs context vyperInterpreter vyperTypeEnv
   vyperTypeInvariants vyperTyping vyperTypeSystem
 
 Theorem pop_toplevel_has_decl[local]:
@@ -64,7 +64,8 @@ Theorem body_pop_toplevel_mem:
   !cx ann nid. body_expr_mem_ok cx (Pop ann (TopLevelNameTarget nid))
 Proof
   rpt gen_tac >> PairCases_on `nid` >>
-  pure_rewrite_tac[body_expr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
+  (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >> rpt gen_tac >> strip_tac >>
   `expr_sim_pre cenv cx env (Pop ann (TopLevelNameTarget (nid0,nid1))) es` by
     simp[expr_sim_pre_body, vyperTypeCallGraphTheory.int_calls_expr_def] >>
   `expr_vv_sim_mem ctx func cenv cx ty (Pop ann (TopLevelNameTarget (nid0,nid1))) es` by

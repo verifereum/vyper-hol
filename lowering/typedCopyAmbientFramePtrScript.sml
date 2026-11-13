@@ -1,6 +1,6 @@
 (* Complete ambient projections on the concrete copy-prefix witnesses. *)
 Theory typedCopyAmbientFramePtr
-Ancestors typedCopyPtr typedCopyLoopHeaderPtr
+Ancestors typedCopyAmbientEffectsPtr typedCopyPtr typedCopyLoopHeaderPtr
 
 Theorem emit_copy_len_binop_ambient_frag_ptr:
   !opc f G cx ctx PG R sa sb left right out tn s a b.
@@ -22,7 +22,30 @@ Theorem emit_copy_len_binop_ambient_frag_ptr:
         FLOOKUP Gf p = FLOOKUP G p /\
         op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  typedCopyAmbientLib.emit_binop (copy_len_binop_frag_ptr, copy_len_binop_ghost_frame)
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all emit_copy_len_binop_effects_frag_ptr >>
+  metis_tac[]
+QED
+
+Theorem emit_copy_len_not_ambient_frag_ptr:
+  !G cx ctx PG R sa sb x out tn s a.
+    emit_op NOT [x] sa = (Var out,sb) /\
+    eval_operand x s = SOME a /\ op_taint tn x = {} ==>
+    ?Gf tnf sf.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g t v. g = G /\ t = tn /\ v = s)
+        (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
+      lookup_var out sf = SOME (~a) /\ op_taint tnf (Var out) = {} /\
+      sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
+      sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\
+        FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  typedCopyAmbientLib.emit_not (copy_len_not_frag_ptr, copy_len_not_ghost_frame)
 QED
 
 Theorem emit_mload_clean_ambient_frag_ptr:
@@ -45,7 +68,8 @@ Theorem emit_mload_clean_ambient_frag_ptr:
         FLOOKUP Gf p = FLOOKUP G p /\
         op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  typedCopyAmbientLib.emit_mload (mload_frag_ptr, mload_ghost_clean)
+  rpt strip_tac >> drule_all emit_mload_clean_effects_frag_ptr >>
+  metis_tac[]
 QED
 
 Theorem compile_bytestring_copy_len_ambient_frag_ptr:
@@ -58,7 +82,7 @@ Theorem compile_bytestring_copy_len_ambient_frag_ptr:
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       eval_operand count_op sf =
-        SOME ((mload (w2n a) s + 31w && i2w (-32)) + 32w) /\
+        SOME ((mload (w2n a) s + 31w && ~31w) + 32w) /\
       op_taint tnf count_op = {} /\
       sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
       tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
@@ -69,9 +93,8 @@ Theorem compile_bytestring_copy_len_ambient_frag_ptr:
         FLOOKUP Gf p = FLOOKUP G p /\
         op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  typedCopyAmbientLib.copy_len
-    (emit_mload_clean_ambient_frag_ptr, emit_copy_len_binop_ambient_frag_ptr,
-     compileEnvTheory.cs_extends_trans)
+  rpt strip_tac >> drule_all compile_bytestring_copy_len_effects_frag_ptr >>
+  metis_tac[]
 QED
 
 Theorem compile_store_bytestring_ambient_frag_ptr:
@@ -102,10 +125,8 @@ Theorem compile_store_bytestring_ambient_frag_ptr:
         FLOOKUP Gf p = FLOOKUP G p /\
         op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  typedCopyAmbientLib.store_bytestring
-    (compile_bytestring_copy_len_ambient_frag_ptr, mcopy_operand_frag_ptr,
-     mcopy_operand_ghost_frame, exprSimBufferStoreTheory.buffer_round_size,
-     exprSimBufferStoreTheory.buffer_mcopy_exterior)
+  rpt strip_tac >> drule_all compile_store_bytestring_effects_frag_ptr >>
+  metis_tac[]
 QED
 
 Theorem typed_copy_loop_address_ambient_frag_ptr:

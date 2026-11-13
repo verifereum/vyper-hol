@@ -39,8 +39,8 @@ Proof
   `eval_stmts cx ss es1 = (res, es')` by
     (qpat_x_assum `eval_stmts _ (_::_) _ = _` mp_tac >>
      simp[Once evaluate_def, bind_def, ignore_bind_def]) >>
-  `stmt_exprs_ok c = stmt_exprs_ok cenv` by
-    metis_tac[stmt_exprs_ok_same_frame] >>
+  `stmts_exprs_ok c = stmts_exprs_ok (decl_var_type cenv s)` by
+    metis_tac[stmt_env_stmts_exprs_ok] >>
   `expr_sim_inv c cx env1 es1` by
     (irule expr_sim_inv_stmt >> fs[body_inv_def] >>
      metis_tac[call_evaluation_safe_append_left]) >>
@@ -60,7 +60,7 @@ Theorem body_stmts_cons_mem_case:
     (!s0 x t. eval_stmt cx s s0 = (INL x,t) ==> body_stmts_mem_ok cx ss) /\
     body_stmt_mem_ok cx s ==> body_stmts_mem_ok cx (s::ss)
 Proof
-  rpt gen_tac >> strip_tac >> simp[Once body_stmts_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >> simp[Once body_stmts_mem_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >>
   rpt gen_tac >> strip_tac >>
   gvs[supported_stmt_def, type_stmt_def, AllCaseEqs(), int_calls_stmt_def,
       supported_stmt_expr_exists_def] >>
@@ -68,13 +68,13 @@ Proof
   irule stmt_frag_cons_env_mem >>
   simp[cj 1 compile_stmt_cs_mono, stmts_env_cs_mono] >> reverse conj_tac
   >- (rpt strip_tac >>
-      qpat_x_assum `body_stmt_mem_ok _ _` (irule o REWRITE_RULE [body_stmt_mem_ok_def]) >>
+      qpat_x_assum `body_stmt_mem_ok _ _` (irule o REWRITE_RULE [body_stmt_mem_ok_def, body_stmt_safe_def, body_stmts_safe_iff]) >>
       metis_tac[call_evaluation_safe_append_left]) >>
   rpt strip_tac >>
   rename1 `stmt_env cenv lctx ret_ty s sa = (c, sm)` >>
   `same_frame cenv c` by metis_tac[cenv_top_ext_same_frame] >>
-  `stmt_exprs_ok c = stmt_exprs_ok cenv` by
-    metis_tac[stmt_exprs_ok_same_frame] >>
+  `stmts_exprs_ok c = stmts_exprs_ok (decl_var_type cenv s)` by
+    metis_tac[stmt_env_stmts_exprs_ok] >>
   `expr_sim_inv c cx env1 es1` by
     (irule expr_sim_inv_stmt >> fs[body_inv_def] >>
      metis_tac[expr_sim_inv_gas_obs, call_evaluation_safe_append_left]) >>
@@ -84,7 +84,7 @@ Proof
   `frame_ret_ok_mem d ctx func cx RetQ c ret_ty` by
     metis_tac[frame_ret_ok_mem_same_frame] >>
   qpat_x_assum `!s0 t. _ ==> body_stmts_mem_ok _ _` drule >>
-  simp[body_stmts_mem_ok_def] >> disch_then irule >>
+  simp[body_stmts_mem_ok_def, body_stmt_safe_def, body_stmts_safe_iff] >> disch_then irule >>
   metis_tac[call_evaluation_safe_append_right]
 QED
 

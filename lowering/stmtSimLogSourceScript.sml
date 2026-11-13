@@ -105,11 +105,11 @@ Proof
   Induct_on `flags`
   >- (Cases_on `tys` >> Cases_on `vals` >>
       simp[compileEnvTheory.log_non_indexed_types_def,
-           compileEnvTheory.log_non_indexed_values_def]) >>
+           loweringStateRelDefsTheory.log_non_indexed_values_def]) >>
   rpt gen_tac >> Cases_on `tys` >> Cases_on `vals` >> simp[] >>
   Cases_on `h` >>
   simp[compileEnvTheory.log_non_indexed_types_def,
-       compileEnvTheory.log_non_indexed_values_def] >>
+       loweringStateRelDefsTheory.log_non_indexed_values_def] >>
   metis_tac[]
 QED
 
@@ -183,10 +183,10 @@ Proof
   Induct_on `flags`
   >- (Cases_on `tys` >> Cases_on `vals` >>
       simp[compileEnvTheory.log_non_indexed_types_def,
-           compileEnvTheory.log_non_indexed_values_def]) >>
+           loweringStateRelDefsTheory.log_non_indexed_values_def]) >>
   rpt gen_tac >> Cases_on `tys` >> Cases_on `vals` >> simp[] >>
   Cases_on `h` >>
   simp[compileEnvTheory.log_non_indexed_types_def,
-       compileEnvTheory.log_non_indexed_values_def] >>
+       loweringStateRelDefsTheory.log_non_indexed_values_def] >>
   metis_tac[]
 QED

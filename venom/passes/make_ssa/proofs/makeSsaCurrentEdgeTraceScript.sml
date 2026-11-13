@@ -1,7 +1,8 @@
 Theory makeSsaCurrentEdgeTrace
 Ancestors
-  makeSsaCurrentDefs makeSsaCurrentProps makeSsaHelper cfgTransform cfgTransformProps venomInst
+  makeSsaDefs makeSsaCurrentProps cfgTransform cfgTransformProps venomInst
   list rich_list pair
+  venomExecProofs
 
 (* Positions refer to the immutable original predecessor/owner pair list. *)
 Definition current_phi_slots_def:

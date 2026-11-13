@@ -44,9 +44,12 @@ Theorem compile_store_bytestring_robust_ambient_frag_ptr:
         !m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
           val_in_memory ft fv p m)
 Proof
-  typedCopyRobustLib.robust
+  typedCopyRobustLib.intro >>
+  typedCopyRobustLib.execute
     (compile_store_bytestring_ambient_frag_ptr,
-     robust_representation_exterior_frame, clean_copied_window,
-     (`stor_taint_ok cx tn s ==> stor_taint_ok cx tnf sf` by
-       simp[bodyPtrDefsTheory.stor_taint_ok_def]))
+     robust_representation_exterior_frame) >>
+  `stor_taint_ok cx tn s ==> stor_taint_ok cx tnf sf` by
+    simp[bodyPtrDefsTheory.stor_taint_ok_def] >>
+  typedCopyRobustLib.witness >>
+  typedCopyRobustLib.conclude clean_copied_window
 QED

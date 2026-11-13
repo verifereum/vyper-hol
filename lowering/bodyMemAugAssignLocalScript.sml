@@ -14,6 +14,7 @@
    flag where S1's fix it to F. *)
 Theory bodyMemAugAssignLocal
 Ancestors
+  supportedExprTraverse allocLimitsProps
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyMemAssignLocalWord bodyNameWordMemory
   bodyBinopFamiliesMemory bodyBinopFragMemory
@@ -29,7 +30,7 @@ Ancestors
   stmtSimDeclStore stmtSimAssignStore stmtSimDeclPath stmtSimDeclCompose
   exprOpenPrimitives exprOperandVar
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
-  exprLoweringProps compileEnv valueEncoding
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding
   supportedStmtTraverse supportedStmts supportedExprs
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperTypeSystem vyperTyping vyperTypeEnv
@@ -163,12 +164,12 @@ Theorem augassign_binop_admissible_mem_src[local]:
   expr_res_ok (bop_result cx ty bop [ty; expr_type e] entry.value v ee)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty; expr_type e] entry.value v ee =
-   case evaluate_binop
+  `expr_res_ok (bop_result cx ty bop [ty; expr_type e] entry.value v ee) <=>
+   expr_res_ok (case evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      entry.type bop entry.value v of
-       INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+       INL w => INL w | INR err => INR (Error err))` by
+    (irule bop_result_augassign_res_ok >> simp[]) >>
   pop_assum SUBST1_TAC >>
   Cases_on `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
@@ -195,24 +196,23 @@ Theorem augassign_write_admissible_mem_src[local]:
   !m. res <> INR (Error (TypeError m))
 Proof
   strip_tac >>
-  `evaluate_binop
+  `?actual. evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-     entry.type bop entry.value v = INL w` by
-    (`bop_result cx ty bop [ty; expr_type e] entry.value v ee =
-       case evaluate_binop
-         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
-         entry.type bop entry.value v of
-         INL x => INL x | INR err => INR (Error err)` by
-       (irule bop_result_augassign >> simp[]) >>
-     gvs[AllCaseEqs()]) >>
+     entry.type bop entry.value v = INL actual` by
+    metis_tac[bop_result_augassign_success] >>
+  Cases_on `write_place cx (MemoryPlace id []) actual ee` >>
+  rename1 `_ = (actual_res, actual_fin)` >>
   `eval_stmt cx (AugAssign ty (NameTarget id) bop e)
-     (es with gas_obs := gs) = (res, fin)` by
+     (es with gas_obs := gs) = (actual_res, actual_fin)` by
     (`lookup_scopes id (es with gas_obs := gs).scopes = SOME entry` by simp[] >>
      drule_all augassign_rhs_normal_mem_src >>
      disch_then (qspecl_then [`ty`, `bop`] mp_tac) >>
      simp[lift_sum_def, bind_def, return_def]) >>
-  `stmt_res_ok lctx res` by metis_tac[gas_admissible_result] >>
-  fs[stmt_res_ok_def, expr_res_ok_def]
+  `stmt_res_ok lctx actual_res` by metis_tac[gas_admissible_result] >>
+  `res = actual_res` by
+    (qspecl_then [`[]`, `cx`, `id`, `w`, `ee`, `actual`]
+       mp_tac write_place_short_memory_result >> simp[]) >>
+  gvs[stmt_res_ok_def, expr_res_ok_def]
 QED
 
 (* S1 stmtSimAugAssign's gas_marked_exec_zero_prefix, at either memory
@@ -559,7 +559,8 @@ Resume compile_augassign_local_mem[operator_normal]:
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      entry.type bop entry.value v = INL result` by gvs[AllCaseEqs()] >>
@@ -659,7 +660,8 @@ Resume compile_augassign_local_mem[operator_exit]:
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   Cases_on `evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        entry.type bop entry.value v`
@@ -679,6 +681,7 @@ Finalise compile_augassign_local_mem
 
 Theorem body_augassign_local_mem:
   !cx ty id bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (AugAssign ty (NameTarget id) bop e) /\
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx (NameTarget id) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
@@ -702,7 +705,19 @@ Theorem body_augassign_local_mem:
 Proof
   rpt strip_tac >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops /\
@@ -713,7 +728,7 @@ Proof
      fs[body_inv_def]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supportedExprTraverseTheory.supported_expr_exists_def,
          int_calls_stmt_def, int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -726,7 +741,8 @@ Proof
      Cases_on `FLOOKUP env.var_types id` >>
      Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
      rename1 `FLOOKUP env.var_assignable id = SOME asg` >>
-     Cases_on `asg` >> gvs[]) >>
+     Cases_on `asg` >> gvs[] >>
+     metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
   drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
   `body_expr_mem_ok cx e` by
     (first_x_assum irule >>
@@ -735,7 +751,7 @@ Proof
   conj_tac
   >- (gen_tac >>
       qpat_x_assum `body_expr_mem_ok cx e`
-        (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+        (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
       disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `ty`,
         `es with gas_obs := gs`] mp_tac) >>
       simp[]) >>

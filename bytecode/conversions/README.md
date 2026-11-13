@@ -6,11 +6,14 @@ and runtime bytecode in `oracle/`. The native runner checks that the HOL checker
 accepts each source in both modes and that each complete bytecode pair equals
 the HOL compiler's output (`../native/README.md`).
 
-`checker-sources/` and `checker-oracle/` retain the 15 codegen-rejected controls:
-the ten conversions outside Vyper's input sets or inconsistent in width must
-fail the HOL checker, while the five conversions where HOL lowering and source
-semantics agree stay accepted.
-`compilerLoweringTestTheory` (`tests/`) checks these verdicts in both modes.
+`checker-sources/` and `checker-oracle/` retain the three codegen-rejected
+literal controls, which the HOL checker accepts. `typecheck-rejected/` holds 12
+controls that the pinned Vyper's type checker rejects (`_convert_rules.py`), so
+their annotated AST/layout JSON comes from Vyper `9362e36b`, the last pin that
+accepted them: the ten conversions outside Vyper's input sets or inconsistent in
+width must fail the HOL checker, while the two conversions where HOL lowering
+and source semantics agree are still accepted by it. `compilerLoweringTestTheory`
+(`tests/`) checks these verdicts on the exported ASTs in both modes.
 
 CI reproduces both sets of independent inputs
 with pinned Vyper, experimental codegen, Prague, `-O none`, and no metadata.

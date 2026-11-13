@@ -30,12 +30,12 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_subwindow_ranges:
-  abi_scratch_decoder_ranges opc hi src dst sb len d outsz first last b cap s /\
+  abi_scratch_decoder_ranges opc base_op hi src dst B sb len d outsz first last b cap s /\
   sb <= childsb /\ childsb + childlen <= sb + len /\
   d <= childd /\ childd + childsz <= d + outsz /\
   eval_operand childsrc s = SOME (n2w childsb) /\
   eval_operand childdst s = SOME (n2w childd) ==>
-  abi_scratch_decoder_ranges opc hi childsrc childdst childsb childlen childd childsz
+  abi_scratch_decoder_ranges opc base_op hi childsrc childdst B childsb childlen childd childsz
     first last b cap s
 Proof
   simp_tac bool_ss [abi_scratch_decoder_ranges_def] >>
@@ -50,11 +50,12 @@ Proof
       qpat_x_assum `hi = Lit 0w \/ _` mp_tac >> asm_simp_tac bool_ss [] >>
       disch_then (qx_choose_then `h` (MAP_EVERY assume_tac o CONJUNCTS)) >>
       qexists_tac `h` >> asm_simp_tac bool_ss [] >> decide_tac) >>
-  SUBGOAL_THEN ``opc = MLOAD ==> abi_footprint_disjoint childsb childlen
+  SUBGOAL_THEN ``opc = MLOAD ==> abi_footprint_disjoint (B + childsb) childlen
     ((childd,childsz)::abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)`` assume_tac
   >- (strip_tac >> qpat_x_assum `opc = MLOAD ==> _` (fn th => drule_all th) >>
       disch_then assume_tac >>
-      mp_tac (Q.INST [`fp` |-> `abi_decoder_child_scratch (abi_decoder_ids first last) b cap s`]
-        abi_scratch_disjoint_windows) >> asm_simp_tac bool_ss []) >>
+      irule abi_scratch_disjoint_windows >>
+      qexistsl_tac [`d`, `len`, `outsz`, `B + sb`] >>
+      asm_simp_tac bool_ss [] >> decide_tac) >>
   asm_simp_tac bool_ss [] >> decide_tac
 QED

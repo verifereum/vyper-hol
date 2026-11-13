@@ -19,10 +19,10 @@ Proof
 QED
 
 Theorem abi_decode_singleton_bytes_members[local]:
-  compile_abi_decode_complex_elems dst src opc hi [(DecBytestring n,abi_sz,mem_sz)] 0 0 =
-    do child_src <- compile_getelemptr_abi src T 0 opc hi;
+  compile_abi_decode_complex_elems dst src opc base_op hi [(DecBytestring n,abi_sz,mem_sz)] 0 0 =
+    do child_src <- compile_getelemptr_abi src T 0 opc base_op hi;
        child_dst <- emit_op ADD [dst; Lit 0w];
-       compile_abi_decode_to_buf child_dst child_src opc hi (DecBytestring n)
+       compile_abi_decode_to_buf child_dst child_src opc base_op hi (DecBytestring n)
     od
 Proof
   CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [compile_abi_decode_to_buf_def])) >>
@@ -32,9 +32,9 @@ Proof
 QED
 
 Theorem abi_decode_wrapped_bytes_phases:
-  compile_abi_decode_to_buf dst src opc hi (DecComplex T [(DecBytestring n,32,mem_sz)]) =
-    do child_ops <- abi_decode_singleton_setup dst src opc hi;
-       compile_abi_decode_to_buf (SND child_ops) (FST child_ops) opc hi (DecBytestring n)
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex T [(DecBytestring n,32,mem_sz)]) =
+    do child_ops <- abi_decode_singleton_setup dst src opc base_op hi;
+       compile_abi_decode_to_buf (SND child_ops) (FST child_ops) opc base_op hi (DecBytestring n)
     od
 Proof
   CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [compile_abi_decode_to_buf_def])) >>
@@ -53,38 +53,37 @@ Theorem abi_decoder_wrapped_bytes_setup_pre:
   abi_decoder_pre ce env (TupleT [BaseT (BytesT (Dynamic n))])
     (TupleTV [BaseTV (BytesT (Dynamic n))]) di
     (ListV [contractABI$BytesV bs]) (ArrayV (TupleV [vyperValue$BytesV bs]))
-    st last src dst MLOAD hi sb d b cap s ==>
-  abi_decode_singleton_setup_pre st src dst MLOAD hi sb d s
+    st last src dst MLOAD base_op hi src_base sb d b cap s ==>
+  abi_decode_singleton_setup_pre st src dst MLOAD base_op hi src_base sb d s
 Proof
   strip_tac >>
   `has_types [Bytes NONE] [contractABI$BytesV bs]` by
     fs[abi_decoder_pre_def, abi_decoder_metadata_def, has_type_def, Excl "enc_def"] >>
-  qpat_x_assum `abi_decoder_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qhdtm_x_assum `abi_decoder_pre` mp_tac >>
   pure_rewrite_tac[abi_decoder_pre_def, abi_decoder_ranges_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [vyper_to_abi_type_def, vyper_base_to_abi_type_def]) >>
   mp_tac (Q.INST [`pre` |-> `[]`, `pvs` |-> `[]`, `post` |-> `[]`, `rest` |-> `[]`,
-    `ty` |-> `Bytes NONE`, `v` |-> `contractABI$BytesV bs`, `opc` |-> `MLOAD`]
+    `ty` |-> `Bytes NONE`, `v` |-> `contractABI$BytesV bs`, `opc` |-> `MLOAD`, `sb` |-> `src_base + sb`]
     canonical_member_offset_load) >>
   impl_tac >- simp[Excl "enc_def"] >> simp[head_lengths_def] >> strip_tac >>
   `32 <= LENGTH (enc (Tuple [Bytes NONE]) (ListV [contractABI$BytesV bs]))` by
     simp[abi_decoder_singleton_bytes_encoding, LENGTH_word_to_bytes, Excl "enc_def"] >>
   gvs[abi_decode_singleton_setup_pre_def, abi_decode_source_opcode_def, Excl "enc_def"] >>
-  rpt strip_tac >> TRY decide_tac >>
   disj2_tac >> rename1 `eval_operand hi s = SOME (n2w hb)` >>
   qexists_tac `hb` >> simp[] >> decide_tac
 QED
 
 Theorem abi_decoder_wrapped_bytes_setup:
-  abi_decode_singleton_setup dst src MLOAD hi st = ((child_src,child_dst),st') /\
+  abi_decode_singleton_setup dst src MLOAD base_op hi st = ((child_src,child_dst),st') /\
   abi_decoder_pre ce env (TupleT [BaseT (BytesT (Dynamic n))])
     (TupleTV [BaseTV (BytesT (Dynamic n))]) di
     (ListV [contractABI$BytesV bs]) (ArrayV (TupleV [vyperValue$BytesV bs]))
-    st last src dst MLOAD hi sb d b cap s ==>
+    st last src dst MLOAD base_op hi src_base sb d b cap s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_pre ce env (BaseT (BytesT (Dynamic n))) (BaseTV (BytesT (Dynamic n)))
       (DecBytestring n) (contractABI$BytesV bs) (vyperValue$BytesV bs)
-      st' last child_src child_dst MLOAD hi (sb + 32) d b cap t /\
+      st' last child_src child_dst MLOAD base_op hi src_base (sb + 32) d b cap t /\
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_data_section = s.vs_data_section /\ inst_extends st st'
@@ -102,7 +101,7 @@ Proof
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [type_to_abi_dec_info_def]) >>
   `abi_decoder_pre ce env (BaseT (BytesT (Dynamic n))) (BaseTV (BytesT (Dynamic n)))
      (DecBytestring n) (contractABI$BytesV bs) (vyperValue$BytesV bs)
-     st' last child_src child_dst MLOAD hi (sb + 32) d b cap t` by
+     st' last child_src child_dst MLOAD base_op hi src_base (sb + 32) d b cap t` by
     (drule_all abi_decoder_pre_destination_value >> simp[]) >>
   qexists_tac `t` >> simp[]
 QED

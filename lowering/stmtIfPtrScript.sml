@@ -6,7 +6,7 @@ Ancestors
   gasContext gasCount fragGasPath fragGasMode
   list rich_list finite_map pred_set fragExec localPtrsProps loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding vyperInterpreter vyperState vyperValue
+  compileEnv loweringStateRelDefs valueEncoding vyperInterpreter vyperState vyperValue
   venomExecSemantics venomExecProofs venomInst venomState
 
 Theorem if_ptr_condition_bool:

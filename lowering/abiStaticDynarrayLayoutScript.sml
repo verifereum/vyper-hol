@@ -1,6 +1,6 @@
 Theory abiStaticDynarrayLayout
 Ancestors
-  abiStaticAggregateProps valueEncoding vyperABI vyperTyping contractABI list
+  abiStaticAggregateProps valueEncoding valueEncodingDefs vyperABI vyperTyping contractABI list
   abiStaticSparseProps abiStaticLayoutProps compileEnv rich_list valueEncodingTyping
   valueEncodingProps valueEncodingProofs vyperABIRoundtrip vyperTypeDefaults
   abiDecoderTypedContract arithmetic

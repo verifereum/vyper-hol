@@ -1,7 +1,7 @@
 Theory placeMemoryTypedForward
 Ancestors
   placeMemoryArrayForward placeMemoryFieldsForward placeMemoryTypedPrimitive
-  typedCopyDomain compileEnv vyperTypeSystem vyperValue vyperTyping valueEncoding
+  typedCopyDomain compileEnv vyperTypeSystem vyperValue vyperTyping valueEncoding valueEncodingDefs
   placeMemoryChildForward placeMemoryCopyEffect placeMemoryTypedBase context
   vyperTypeValues placeMemoryDynarrayForward
 

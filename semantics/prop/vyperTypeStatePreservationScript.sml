@@ -167,7 +167,6 @@ Proof
   rpt strip_tac >> gvs[]
   >- (metis_tac[decode_dyn_bytes_length])
   >- (metis_tac[decode_dyn_bytes_length])
-  >- (first_x_assum irule >> gvs[EVERY_MEM])
   >- simp[enumerate_static_array_sorted]
   >- (qpat_x_assum `decode_static_array _ _ _ _ = _`
         (ASSUME_TAC o MATCH_MP decode_static_array_length) >>

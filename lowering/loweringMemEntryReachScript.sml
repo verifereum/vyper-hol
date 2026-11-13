@@ -5,25 +5,22 @@
  *)
 Theory loweringMemEntryReach
 Ancestors
-  stmtSimDefs
+  stmtSimDefs entryOwnedBodyState
   loweringPosts
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps valueEncodingProofs vyperInterpreter vyperContext
   venomExecSemantics venomState compileEnv e2eDefs supportedProgram
   compileVyper unitTransformDefs fragExec loweringHalt venomInst venomWf
   contextCodegenRel memSafeRun allocaFrontierBound o1PassContract ptrDiscipline
-  vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
-  entryHaltMem loweringPtrCorrect bodySim bodySimMain moduleLowering
+  vyperLoweringCorrect fragExecMem bodyMemoryDefs
+  entryHaltMem bodySim bodySimMain moduleLowering
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
 
 val _ = Parse.hide "body";
 
-(* ADMITTED (#639): external_entry_reaches_body, with the body's frame
-   free of a caller return buffer, and with a memory-safe run from the
-   body's start making the run from __entry memory-safe: the selector
-   dispatch and the entry checks touch no memory, and the argument decode
-   writes only the parameters' buffers (entryHaltMem's
-   entry_decode_arg_mem_ok). *)
+(* The source-selected owned endpoint supplies the body's initial frame
+   and the memory-safe continuation through dispatch, entry checks and
+   positional argument decoding, including dynamic ABI arguments. *)
 Theorem external_entry_reaches_body_mem:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -48,7 +45,7 @@ Theorem external_entry_reaches_body_mem:
     ?lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' func
      s0.
       set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops F (assign_nkeys tops 0)
+        (package_external_fn tops T (K global_nonreentrant_slot)
            (mut, F, lookup_raw_return_or_F (NONE : num option)
                        tx.function_name External tops,
             tx.function_name, args, [], ret, fbody)) =
@@ -70,5 +67,11 @@ Theorem external_entry_reaches_body_mem:
                 (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
                             vs_inst_idx := 0 |>))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all source_selected_owned_body_state >>
+  disch_then (qspec_then `ARB : instruction` strip_assume_tac) >>
+  qexistsl_tac [`lbl`, `ce`, `pa`, `mc`, `pay`, `key`, `tr`, `view`, `rt`,
+    `sk`, `cer`, `registered`, `completed`, `efn`, `out`] >> simp[] >>
+  qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+  simp[package_external_fn_def]
 QED

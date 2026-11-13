@@ -40,6 +40,11 @@
  * runs are matched; gas_variant is the hook the oracle instantiates,
  * equality until then.
  *
+ * The stage part fixes the output's fuel as a function of the input's
+ * (ctx_sim_fuel, pass_fuel): every pass but CFGNormalization keeps it, and
+ * CFGNormalization's split blocks multiply it by at most cfg_norm_fuel, so
+ * the pipeline's output fuel bound is a function of the input's alone.
+ *
  * The eleven contract theorems, one planned admission per pass run, are in
  * o1ContractTheorems.
  *)
@@ -50,7 +55,7 @@ Ancestors
   venomExecSemantics venomInst irSupply contextCodegenRel stackPlanGen
   lowerDloadDefs ptrDiscipline staticLayoutDefs venomState stateEquiv
   passSimulationDefs vfmState extCallOracle finite_map cfgWf dretDesugarDefs
-  fcgDefs list
+  fcgDefs list rich_list
 
 (* ===== Equivalence up to dead bytes ===== *)
 
@@ -94,6 +99,20 @@ Proof
   first_x_assum (qspec_then `a` strip_assume_tac) >>
   gvs[vfmStateTheory.account_state_component_equality] >>
   metis_tac[storage_agree_except_trans]
+QED
+
+(* Deleting the same accounts on both sides keeps them equal up to dead
+   bytes: a deleted account is empty on both. *)
+Theorem accounts_agree_except_process_deletions:
+  !ds a1 a2. accounts_agree_except D a1 a2 ==>
+    accounts_agree_except D (vfmExecution$process_deletions ds a1)
+      (vfmExecution$process_deletions ds a2)
+Proof
+  Induct >> simp[vfmExecutionTheory.process_deletions_def] >>
+  rpt strip_tac >> first_x_assum irule >>
+  gvs[accounts_agree_except_def, vfmStateTheory.update_account_def,
+      combinTheory.APPLY_UPDATE_THM] >>
+  rw[] >> simp[storage_agree_except_def, word_agree_except_def]
 QED
 
 Theorem transient_agree_except_trans:
@@ -147,6 +166,60 @@ Definition ctx_sim_def:
     !fuel. terminates (run_context fuel ctx s) ==>
       ?fuel'. dead_result_rel D (run_context fuel ctx s)
                                 (run_context fuel' ctx' s')
+End
+
+(* ctx_sim with the output fuel a fixed function f of the input fuel. *)
+Definition ctx_sim_fuel_def:
+  ctx_sim_fuel f D ctx ctx' s s' <=>
+    !fuel. terminates (run_context fuel ctx s) ==>
+      dead_result_rel D (run_context fuel ctx s) (run_context (f fuel) ctx' s')
+End
+
+Theorem ctx_sim_fuel_imp_ctx_sim:
+  ctx_sim_fuel f D ctx ctx' s s' ==> ctx_sim D ctx ctx' s s'
+Proof
+  rw[ctx_sim_fuel_def, ctx_sim_def] >> metis_tac[]
+QED
+
+Theorem ctx_sim_fuel_trans:
+  dead_wf D /\ ctx_sim_fuel f D C1 C2 s1 s2 /\
+  ctx_sim_fuel g D C2 C3 s2 s3 ==>
+  ctx_sim_fuel (g o f) D C1 C3 s1 s3
+Proof
+  rw[ctx_sim_fuel_def] >> first_x_assum drule >> strip_tac >>
+  `terminates (run_context (f fuel) C2 s2)` by
+    metis_tac[dead_result_rel_terminates] >>
+  first_x_assum drule >> strip_tac >>
+  metis_tac[dead_result_rel_trans]
+QED
+
+(* A per-function fuel map f lifted through calls: a callee runs on the
+   fuel its caller has left, so n units of caller fuel become
+   lift_fuel f n (o1PassLift's fn_bisim_fuel_run_context). *)
+Definition lift_fuel_def:
+  lift_fuel f 0 = 0 /\
+  lift_fuel f (SUC n) = f (SUC (lift_fuel f n))
+End
+
+Theorem lift_fuel_I:
+  lift_fuel I = I
+Proof
+  simp[FUN_EQ_THM] >> Induct >> simp[lift_fuel_def]
+QED
+
+(* CFGNormalization's fuel map on its output C': each split block at most
+   doubles a function's fuel, and a function gains at most as many blocks
+   as the largest function of C' has. *)
+Definition cfg_norm_fuel_def:
+  cfg_norm_fuel C' =
+    lift_fuel (\n. 2 ** MAX_LIST (MAP (\fn. LENGTH fn.fn_blocks)
+                                    C'.ctx_functions) * n)
+End
+
+(* The output fuel map of one pass run, on its output context C'. *)
+Definition pass_fuel_def:
+  pass_fuel pass C' =
+    if pass = CFP_Simple VP_CFGNormalization then cfg_norm_fuel C' else I
 End
 
 Theorem ctx_transform_correct_ctx_sim:
@@ -559,14 +632,6 @@ Definition o1_run_state_ok_def:
     code_layout_valid vs /\ ~vs.vs_call_ctx.cc_static
 End
 
-(* The lowered-phase fact with the frame pointer read off the state: the
-   semantics never writes vs_initial_fmp, so this is lowered_mem_ok at the
-   initial state's fmp along every run. *)
-Definition lowered_mem_fact_def:
-  lowered_mem_fact eom ctx fn inst s <=>
-    lowered_mem_ok eom (w2n s.vs_initial_fmp) ctx fn inst s
-End
-
 (* The stage contract of one pass run, between consecutive stage contexts
    C and C' and one initial state: every terminating run of C is matched
    by a run of C' up to a well-formed set D of dead bytes, and the stage
@@ -578,7 +643,7 @@ Definition o1_stage_contract_def:
     !C C' vs.
       ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\ dead_wf D /\
       o1_ctx_shape C /\ o1_run_state_ok vs /\ I C vs ==>
-      ctx_sim D C C' vs vs /\ I' C' vs
+      ctx_sim_fuel (pass_fuel pass C') D C C' vs vs /\ I' C' vs
 End
 
 (* Choose the input oracle before testing its invariant. Reachability-based
@@ -590,7 +655,8 @@ Definition o1_stage_contract_gas_def:
       ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\ dead_wf D /\
       o1_ctx_shape C /\ o1_run_state_ok vs' ==>
       ?vs. gas_variant vs vs' /\
-           (I C vs ==> ctx_sim D C C' vs vs' /\ I' C' vs')
+           (I C vs ==> ctx_sim_fuel (pass_fuel pass C') D C C' vs vs' /\
+                       I' C' vs')
 End
 
 Theorem gas_variant_run_state_ok:
@@ -692,10 +758,11 @@ Definition o1_static_inv_def:
     fmp_free_ctx C
 End
 
-(* After FmpLowering: static, or dynamic at or above the initial fmp. *)
+(* After FmpLowering: still static.  The source has no FMP operation and
+   FmpLowering only seals, so no access reaches the dynamic area. *)
 Definition o1_lowered_inv_def:
   o1_lowered_inv C vs <=>
-    ?eom. max_live_eom C = SOME eom /\ mem_inv (lowered_mem_fact eom) C vs
+    ?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs
 End
 
 (* Rows 5 to 8 (SimplifyCFG's, SUE's, DFT's and the next run's input) add

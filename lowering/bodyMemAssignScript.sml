@@ -10,7 +10,9 @@ Ancestors
 
 Theorem body_assign_mem_case:
   !cx t e.
-    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_mem_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_mem_ok cx t) /\
     body_expr_mem_ok cx e ==>
     body_stmt_mem_ok cx (Assign (BaseTarget t) e)
 Proof
@@ -44,7 +46,8 @@ Proof
               supported_variable_decl tops nsid =
                 SOME (Private, mut, ty, SOME slot) /\
               (mut = Storage \/ mut = Transient) /\
-              ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+              ~is_word_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
+              (!elem n. ty <> ArrayT elem (Dynamic n)) /\
               0 < type_memory_bytes cenv ty /\ expr_type e = ty`
   >- (pop_assum (REPEAT_TCL CHOOSE_THEN (MAP_EVERY assume_tac o CONJUNCTS)) >>
       qpat_x_assum `t = _` SUBST_ALL_TAC >>

@@ -38,7 +38,7 @@ Theorem body_oracle_storage_mutual:
     type_stmt env ret_ty s = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root s /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt s) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt s) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -47,7 +47,7 @@ Theorem body_oracle_storage_mutual:
     type_stmts env ret_ty ss = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmts_expr_exists expr_evm_run_root ss /\
-    EVERY (\c. FST c = NONE) (int_calls_stmts ss) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -56,25 +56,25 @@ Theorem body_oracle_storage_mutual:
     well_typed_iterator env ty it /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_iterator_exists expr_evm_run_root it /\
-    EVERY (\c. FST c = NONE) (int_calls_iterator it) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator it) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_iterator it) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_iterator cx it st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!cx tyv id body vs. !tops env ret_ty ty env_after st res st'.
     evaluate_type env.type_defs ty = SOME tyv /\
-    EVERY (value_has_type tyv) vs /\ id NOTIN FDOM env.var_types /\
+    EVERY (iterator_result_typed tyv) vs /\ id NOTIN FDOM env.var_types /\
     type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmts_expr_exists expr_evm_run_root body /\
-    EVERY (\c. FST c = NONE) (int_calls_stmts body) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts body) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts body) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_for cx tyv id body vs st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!cx e. !tops env st res st'.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
-    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -85,7 +85,7 @@ Theorem body_oracle_storage_mutual:
     well_typed_exprs env es /\ supported_program tops /\
     get_module_code cx NONE = SOME tops /\
     ~supported_exprs_exists expr_evm_run_root es /\
-    EVERY (\c. FST c = NONE) (int_calls_exprs es) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_exprs es) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -94,7 +94,7 @@ Theorem body_oracle_storage_mutual:
     type_place_target env bt = SOME vt /\ supported_program tops /\
     get_module_code cx NONE = SOME tops /\
     ~supported_target_exists expr_evm_run_root bt /\
-    EVERY (\c. FST c = NONE) (int_calls_target bt) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_target bt) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_target bt) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -103,7 +103,7 @@ Theorem body_oracle_storage_mutual:
     well_typed_target env tgt ty /\ supported_program tops /\
     get_module_code cx NONE = SOME tops /\
     ~supported_target_exists expr_evm_run_root tgt /\
-    EVERY (\c. FST c = NONE) (int_calls_target tgt) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_target tgt) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_target tgt) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -112,7 +112,7 @@ Theorem body_oracle_storage_mutual:
     well_typed_atarget env tgt ty /\ value_runtime_typed env ty v /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignment_exists expr_evm_run_root tgt /\
-    EVERY (\c. FST c = NONE) (int_calls_atarget tgt) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget tgt) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget tgt) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -122,7 +122,7 @@ Theorem body_oracle_storage_mutual:
     LIST_REL (value_runtime_typed env) tys vs /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignments_exists expr_evm_run_root tgts /\
-    EVERY (\c. FST c = NONE) (int_calls_atargets tgts) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_atargets tgts) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets tgts) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -131,13 +131,18 @@ Theorem body_oracle_storage_mutual:
     well_typed_exprs env es /\ supported_program tops /\
     get_module_code cx NONE = SOME tops /\
     ~supported_exprs_exists expr_evm_run_root es /\
-    EVERY (\c. FST c = NONE) (int_calls_exprs es) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_exprs es) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr_results cx es st = (res,st') ==> contract_storage_well_formed cx st')
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >> rpt gen_tac
+  (* simp over all 63 induction goals is one timed step; split it in
+     three, rightmost first so the earlier goal indices stay put. *)
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac
+  >>> SPLIT_LT 42 (ALL_LT, ALLGOALS (simp[]))
+  >>> SPLIT_LT 21 (ALL_LT, SPLIT_LT 21 (ALLGOALS (simp[]), ALL_LT))
+  >>> SPLIT_LT 21 (ALLGOALS (simp[]), ALL_LT) >> rpt gen_tac
   >~ [`Call ty (IntCall (src_id_opt,fn)) es kw`] >- suspend "intcall_start"
   >~ [`eval_iterator cx (Array e)`] >-
     (strip_tac >> match_mp_tac body_array_iterator_consumer >>
@@ -240,6 +245,7 @@ Proof
   >~ [`eval_target_place _ _`] >- suspend "target_place"
   >~ [`eval_base_place _ (AttributeTarget _ _)`] >- suspend "attribute_target" >>
   all_tac
+  >~ [`eval_expr _ (Builtin _ _ _)`] >- suspend "builtin_expr"
   >~ [`eval_expr_results _ (_::_)`] >- suspend "results_cons"
   >~ [`eval_exprs _ (_::_)`] >- suspend "exprs_cons"
   >~ [`eval_base_place _ (SubscriptTarget _ _)`] >- suspend "subscript_target"
@@ -249,7 +255,6 @@ Proof
   >~ [`eval_expr _ (TypeBuiltin _ _ _ _)`] >- suspend "type_builtin"
   >~ [`eval_expr _ (Subscript _ _ _)`] >- suspend "subscript_expr" >>
   all_tac
-  >~ [`eval_expr _ (Builtin _ _ _)`] >- suspend "builtin_expr"
   >~ [`eval_expr _ (Call _ (Send _) _ _)`] >- suspend "send_expr" >>
   suspend "ext_call"
 QED
@@ -275,9 +280,9 @@ Resume body_oracle_storage_mutual[ext_call]:
    ~supported_exprs_exists expr_evm_run_root (DROP (1 + LENGTH sig1) es)` by
     (gvs[exprOracleStorageInterfacesTheory.supported_exprs_exists_not_every] >>
      metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP]) >>
-  `EVERY (\c. FST c = NONE) (int_calls_exprs (TAKE 1 es)) /\
-   EVERY (\c. FST c = NONE) (int_calls_exprs (TAKE (LENGTH sig1) (DROP 1 es))) /\
-   EVERY (\c. FST c = NONE) (int_calls_exprs (DROP (1 + LENGTH sig1) es))` by
+  `EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs (TAKE 1 es)) /\
+   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs (TAKE (LENGTH sig1) (DROP 1 es))) /\
+   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs (DROP (1 + LENGTH sig1) es))` by
     metis_tac[body_exprs_main_calls_every, rich_listTheory.EVERY_TAKE,
               rich_listTheory.EVERY_DROP] >>
   `call_evaluation_safe cx (int_calls_exprs (TAKE 1 es)) /\
@@ -313,7 +318,9 @@ Resume body_oracle_storage_mutual[builtin_expr]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[expr_has_evm_run_def, supported_expr_exists_def, int_calls_expr_def] >>
   reverse conj_tac
-  >- (rpt strip_tac >> gvs[Once well_typed_expr_def]) >>
+  >- (rpt strip_tac >>
+      qpat_x_assum `type_place_expr _ (Builtin _ _ _) = SOME _` mp_tac >>
+      simp[Once well_typed_expr_def]) >>
   strip_tac >>
   qpat_assum `well_typed_expr env (Builtin ty bt es)`
     (strip_assume_tac o SRULE [Once well_typed_expr_def]) >>
@@ -342,22 +349,105 @@ Resume body_oracle_storage_mutual[builtin_args]:
   reverse conj_tac
   >- (conj_tac
       >- (rpt strip_tac >>
-          qpat_x_assum `!s'' t. _ /\ bt <> Len /\ _ ==> _`
+          Cases_on `bt = Bop In \/ bt = Bop NotIn`
+          >- (qpat_x_assum `!s'' t. _ /\ bt <> Len /\ (bt = Bop In \/ bt = Bop NotIn) ==> _`
+                (qspecl_then [`st`,`st`] mp_tac) >>
+              simp[type_check_def, assert_def, return_def] >> metis_tac[]) >>
+          qpat_x_assum `!s'' t. _ /\ bt <> Len /\ _ /\ bt <> Env MsgGas /\ _ ==> _`
             (qspecl_then [`st`,`st`] mp_tac) >>
-          simp[type_check_def, assert_def, return_def] >> metis_tac[]) >>
+          gvs[type_check_def, assert_def, return_def] >> metis_tac[]) >>
+      conj_tac
+      >- suspend "builtin_slice_addr" >>
+      conj_tac
+      >- suspend "builtin_slice_tail" >>
       metis_tac[runtime_storage_consistent_storage]) >>
   rpt strip_tac >>
   `es <> []` by
     (Cases_on `es` >> gvs[well_typed_builtin_app_def]) >>
   `well_typed_expr env (HD es) /\
    ~supported_expr_exists expr_evm_run_root (HD es) /\
-   EVERY (\c. FST c = NONE) (int_calls_expr (HD es)) /\
+   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr (HD es)) /\
    call_evaluation_safe cx (int_calls_expr (HD es))` by
     (Cases_on `es` >> gvs[well_typed_expr_def, supported_expr_exists_def,
        int_calls_expr_def] >> metis_tac[call_evaluation_safe_append_left]) >>
   qpat_x_assum `!s'' t. _ /\ bt = Len ==> _`
     (qspecl_then [`st`,`st`] mp_tac) >>
   simp[type_check_def, assert_def, return_def] >> metis_tac[]
+QED
+
+Resume body_oracle_storage_mutual[builtin_slice_tail]:
+  rpt strip_tac >>
+  rename1 `code_slice_source bt es = SOME (ct,ca)` >>
+  drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_typing >>
+  strip_tac >>
+  drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_call_safe >>
+  simp[int_calls_expr_def] >> strip_tac >>
+  `~supported_exprs_exists expr_evm_run_root (TL es) /\
+   ~supported_expr_exists expr_evm_run_root ca /\
+   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+     (int_calls_exprs (TL es)) /\
+   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+     (int_calls_expr ca)` by (
+    qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+    qpat_x_assum `~supported_exprs_exists _ es` mp_tac >>
+    qpat_x_assum `EVERY _ (int_calls_exprs es)` mp_tac >>
+    rpt (pop_assum kall_tac) >> rw[code_slice_source_SOME] >>
+    gvs[supported_expr_exists_def, int_calls_expr_def,
+        expr_evm_run_root_def]) >>
+  `contract_storage_well_formed cx st` by
+    metis_tac[runtime_storage_consistent_storage] >>
+  qpat_assum `!s'' t c a. _ /\ _ /\ _ /\ _ /\ code_slice_source bt es = SOME _ ==> _`
+    (qspecl_then [`st`,`st`,`ct`,`ca`] mp_tac) >>
+  (impl_tac >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
+                gvs[code_slice_source_SOME, type_check_def, assert_def,
+                    return_def])) >>
+  disch_then irule >> rpt (qpat_x_assum `!x. _` kall_tac) >> metis_tac[]
+QED
+
+Resume body_oracle_storage_mutual[builtin_slice_addr]:
+  rpt strip_tac >>
+  rename1 `code_slice_source bt es = SOME (ct,ca)` >>
+  drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_typing >>
+  strip_tac >>
+  drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_call_safe >>
+  simp[int_calls_expr_def] >> strip_tac >>
+  `~supported_exprs_exists expr_evm_run_root (TL es) /\
+   ~supported_expr_exists expr_evm_run_root ca /\
+   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+     (int_calls_exprs (TL es)) /\
+   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+     (int_calls_expr ca)` by (
+    qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+    qpat_x_assum `~supported_exprs_exists _ es` mp_tac >>
+    qpat_x_assum `EVERY _ (int_calls_exprs es)` mp_tac >>
+    rpt (pop_assum kall_tac) >> rw[code_slice_source_SOME] >>
+    gvs[supported_expr_exists_def, int_calls_expr_def,
+        expr_evm_run_root_def]) >>
+  `contract_storage_well_formed cx st` by
+    metis_tac[runtime_storage_consistent_storage] >>
+  `contract_storage_well_formed cx s1` by (
+    qpat_assum `!s'' t c a. _ /\ _ /\ _ /\ _ /\ code_slice_source bt es = SOME _ ==> _`
+      (qspecl_then [`st`,`st`,`ct`,`ca`] mp_tac) >>
+    (impl_tac >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
+                  gvs[code_slice_source_SOME, type_check_def, assert_def,
+                      return_def])) >>
+    disch_then irule >> rpt (qpat_x_assum `!x. _` kall_tac) >> metis_tac[]) >>
+  `runtime_consistent env cx s1` by
+    metis_tac[eval_exprs_preserves_runtime_consistent,
+              runtime_storage_consistent_runtime] >>
+  `runtime_storage_consistent env cx s1` by
+    metis_tac[runtime_storage_consistent_intro,
+              runtime_storage_consistent_layout] >>
+  `IS_SOME s1.outcomes /\ oracle_storage_ok cx s1` by
+    (rpt (qpat_x_assum `!x. _` kall_tac) >>
+     metis_tac[exprOracleStorageInterfacesTheory.oracle_storage_entry_suffix,
+               cj 6 eval_outcome_suffix_mutual]) >>
+  qpat_x_assum `!s'' t c a s3 tv t'. _ ==> _`
+    (qspecl_then [`st`,`st`,`ct`,`ca`,`st`,`tvs`,`s1`] mp_tac) >>
+  (impl_tac >- (rpt (qpat_x_assum `!x. _` kall_tac) >>
+                gvs[code_slice_source_SOME, type_check_def, assert_def,
+                    return_def])) >>
+  disch_then irule >> rpt (qpat_x_assum `!x. _` kall_tac) >> metis_tac[]
 QED
 
 Resume body_oracle_storage_mutual[subscript_expr]:
@@ -599,8 +689,8 @@ Resume body_oracle_storage_mutual[for_cons]:
       rename1 `push_scope_with_var _ _ _ _ = (INL x,_)` >> Cases_on `x` >>
       gvs[] >> first_assum match_mp_tac >> rpt (goal_assum (drule_at Any))) >>
   rpt gen_tac >> strip_tac >>
-  rename1 `push_scope_with_var _ _ _ _ = (INL x,_)` >> Cases_on `x` >>
-  first_assum drule >> simp[]
+  qpat_x_assum `!s v t s3 t'. read_result _ _ _ = _ /\ push_scope_with_var _ _ _ _ = _ ==> _`
+    (drule_then drule) >> simp[]
 QED
 
 Resume body_oracle_storage_mutual[assign_base]:
@@ -741,8 +831,8 @@ Resume body_oracle_storage_mutual[intcall_live]:
   drule_all eval_expr_intcall_empty_defaults >>
   disch_then (fn th => qpat_x_assum `eval_expr _ _ _ = _` (mp_tac o REWRITE_RULE [th])) >>
   simp_tac bool_ss [bind_def, ignore_bind_def] >>
-  Cases_on `eval_expr_results cx es st` >>
-  rename1 `eval_expr_results cx es st = (args_res,args_st)` >>
+  Cases_on `eval_exprs cx es st` >>
+  rename1 `eval_exprs cx es st = (args_res,args_st)` >>
   `call_evaluation_safe cx (int_calls_exprs es)` by
     (irule call_evaluation_safe_mono >>
      qexists_tac `(NONE,fn)::int_calls_exprs es` >> simp[]) >>
@@ -751,42 +841,34 @@ Resume body_oracle_storage_mutual[intcall_live]:
   `contract_storage_well_formed cx args_st` by
     (qpat_x_assum `!env st res st'. well_typed_exprs _ _ /\ _ ==> _` drule_all >>
      simp[]) >>
-  Cases_on `args_res` >>
-  gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"]
-  >- suspend "intcall_args_success" >>
-  rpt strip_tac >> gvs[]
+  Cases_on `args_res`
+  >- (gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"] >>
+      suspend "intcall_args_success") >>
+  (simp_tac (srw_ss()) [] >> rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    first_assum ACCEPT_TAC)
 QED
 
 Resume body_oracle_storage_mutual[intcall_args_success]:
-  rename1 `eval_expr_results cx es st = (INL actual_results,args_st)` >>
+  rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
   `runtime_consistent env cx st` by
     metis_tac[runtime_storage_consistent_runtime] >>
   `runtime_consistent env cx args_st` by
-    (fs[runtime_consistent_def] >>
-     drule_all (cj 1 (SPEC_ALL (cj 11 vyperTypeEvalSoundnessTheory.eval_scc_type_sound_results_mutual))) >> simp[]) >>
-  `expr_results_typed (env,cx,args_st) es actual_results` by
+    metis_tac[eval_exprs_preserves_runtime_consistent] >>
+  `exprs_runtime_typed env es vs` by
     (qpat_assum `runtime_consistent env cx st`
        (strip_assume_tac o SRULE [runtime_consistent_def]) >>
-     drule_all (cj 1 (SPEC_ALL (cj 11 vyperTypeEvalSoundnessTheory.eval_scc_type_sound_results_mutual))) >> simp[]) >>
+     drule_all (cj 1 (SPEC_ALL (cj 6 vyperTypeEvalSoundnessTheory.eval_scc_type_sound_mutual))) >> simp[]) >>
   `runtime_storage_consistent env cx args_st /\
    IS_SOME args_st.outcomes /\ oracle_storage_ok cx args_st` by
     (irule body_oracle_storage_entry_transfer >> simp[] >>
      qexists_tac `st` >> simp[] >>
-     drule eval_expr_results_outcome_suffix >> simp[]) >>
+     drule (cj 6 eval_outcome_suffix_mutual) >> simp[]) >>
   qpat_x_assum `!env0 s0 r0 s1. well_typed_exprs _ _ /\ _ ==> _` kall_tac >>
   simp_tac bool_ss [get_scopes_def, return_def] >>
-  Cases_on `read_results cx actual_results args_st` >>
-  rename1 `read_results cx actual_results args_st = (read_res,read_st)` >>
-  drule read_results_state >> strip_tac >>
-  gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"] >>
-  Cases_on `read_res` >>
-  gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"]
-  >- suspend "intcall_read_success" >>
-  rpt strip_tac >> gvs[]
+  suspend "intcall_read_success"
 QED
 
 Resume body_oracle_storage_mutual[intcall_read_success]:
-  rename1 `read_results cx actual_results args_st = (INL vs,args_st)` >>
   Cases_on `bind_arguments (get_tenv cx) args vs`
   >- (simp[lift_option_type_def, raise_def] >> rpt strip_tac >> gvs[]) >>
   rename1 `bind_arguments (get_tenv cx) args vs = SOME call_env` >>
@@ -819,7 +901,7 @@ Resume body_oracle_storage_mutual[intcall_lock_success]:
   (`push_function (NONE,fn) call_env cx lock_st =
       (INL (cx with stk updated_by CONS (NONE,fn)), lock_st with scopes := [call_env])` by
       simp[push_function_def, return_def] >>
-   qpat_x_assum `!s0 results t0 prev s1 dflt_vs t1 s2 vs t2 s3 ce t3 s4 rtv t4 s5 t5 s6 cxf t6. _`
+   qpat_x_assum `!s0 vs t0 prev s1 dflt_vs t1 s3 ce t3 s4 rtv t4 s5 t5 s6 cxf t6. _`
       (assume_tac o SIMP_RULE bool_ss [GSYM is_view_mut_def, GSYM lock_if_nr_def]) >>
    drule body_intcall_guard_apply >> disch_then assume_tac >>
    drule_all body_intcall_runtime_frame >> strip_tac >>
@@ -838,8 +920,11 @@ Resume body_oracle_storage_mutual[intcall_lock_success]:
       `get_module_code (cx with stk updated_by CONS (NONE,fn)) NONE = SOME tops` by
         (qpat_x_assum `get_module_code cx NONE = _` mp_tac >>
          simp[vyperContextTheory.get_module_code_def]) >>
-      gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"] >>
-      qpat_x_assum `!vs st results lock_st cxf call_env body_st args_st tops env ret_ty env' st' res st''. (_ /\ _) /\ type_stmts _ _ _ = _ /\ _ ==> _` irule >>
+      (* set the IH aside: as a gvs rewrite it made this step slow *)
+      qpat_x_assum `!s0 vs t0 prev s1 dflt_vs t1 s3 ce t3 s4 rtv t4 s5 t5 s6 cxf t6. _`
+        (fn ih => gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def",
+                      Excl "lift_option_type_def"] >> assume_tac ih) >>
+      qpat_x_assum `!vs st lock_st cxf call_env body_st args_st tops env ret_ty env' st' res st''. (_ /\ _) /\ type_stmts _ _ _ = _ /\ _ ==> _` irule >>
       simp[Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
       conj_tac
       >- (rpt (goal_assum (drule_at Any)) >>
@@ -863,7 +948,7 @@ Resume body_oracle_storage_mutual[intcall_return]:
         vyperStorageBackendTheory.get_storage_def]) >>
    simp_tac (srw_ss()) [Once push_function_def, return_def,
      Excl "unlock_if_nr_def", Excl "lock_if_nr_def", Excl "lift_option_type_def"] >> strip_tac >>
-   irule (SIMP_RULE bool_ss [bind_def, return_def] body_intcall_return_storage) >>
+   irule (SIMP_RULE bool_ss [bind_def, return_def] body_intcall_actual_return_storage) >>
    goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
    simp_tac bool_ss [GSYM ignore_bind_def] >>
    qpat_x_assum `(case _ of _ => _ | _ => _) = (res,st')`
@@ -880,7 +965,7 @@ Theorem eval_expr_body_oracle_storage:
     runtime_storage_consistent env cx st /\
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\
-    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr cx e st = (res, st') ==>
     contract_storage_well_formed cx st'

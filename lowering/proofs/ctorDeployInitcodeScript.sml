@@ -1,9 +1,6 @@
 (* Initcode size bounds for codegen_correct's initial_ctx_rel.
- * TOP-LEVEL: deploy_initcode_bounded (LENGTH code <= 24576; admitted, and
- * false in general: deploy_state_rel bounds neither deploy_bc nor the
- * appended constructor arguments), deploy_initcode_half_bounded (its
- * replacement, LENGTH code <= dimword(:256) DIV 2, which codegen's
- * consumers need).
+ * TOP-LEVEL: deploy_initcode_half_bounded (LENGTH code <= dimword(:256)
+ * DIV 2, which code_layout_valid needs).
  * Helpers: bind_arguments_values_typed, classify_functions_ctor_lookup,
  * constructor_args_size_bounded.
  * The code is deploy_bc ++ args_bytes (deploy_state_rel). deploy_bc is below
@@ -19,17 +16,6 @@ Ancestors
   vyperTypeContractStaticMaps loweringHalt vyperInterpreter vyperABI
   e2eDeployDefs vyperTypeContract option
 
-Theorem deploy_initcode_bounded:
-  !policy tops deploy_bc runtime_bc arts am tx es.
-    deploy_phases policy tops (deploy_bc, runtime_bc) arts /\
-    deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es
-    ==>
-    LENGTH (FST (HD es.contexts)).msgParams.code <= 24576
-Proof
-  cheat
-QED
-
 (* Arguments bind_arguments accepts are typed by their parameters' types. *)
 Theorem bind_arguments_values_typed:
   !tenv params vs scope.
@@ -43,37 +29,6 @@ Proof
   gvs[AllCaseEqs()] >>
   qexists_tac `tv :: tvs` >> simp[value_has_type_def] >>
   metis_tac[safe_cast_some_eq, safe_cast_result_well_typed]
-QED
-
-(* The constructor classify_functions picks is the first Deploy function;
-   when it has the name looked up, lookup_function returns it, and with no
-   Deploy function lookup_function returns the empty default constructor. *)
-Theorem classify_functions_ctor_lookup:
-  !tops src name.
-    case SND (SND (SND (classify_functions tops))) of
-      NONE =>
-        vyperInterpreter$lookup_function src name Deploy tops =
-          SOME (Payable, F, [], [], NoneT, [])
-    | SOME (fmut, fnr, frr, fname, fargs, fdflts, fret, fbody) =>
-        fname = name ==>
-        vyperInterpreter$lookup_function src name Deploy tops =
-          SOME (fmut, fnr, fargs, fdflts, fret, fbody)
-Proof
-  Induct >- simp[classify_functions_def, vyperInterpreterTheory.lookup_function_def] >>
-  rpt gen_tac >>
-  first_x_assum (qspecl_then [`src`, `name`] mp_tac) >>
-  simp[classify_functions_def] >>
-  `?a b c d. FOLDR classify_function ([],[],NONE,NONE) tops = (a,b,c,d)` by
-    metis_tac[pairTheory.ABS_PAIR_THM] >>
-  simp[] >> strip_tac >>
-  Cases_on `h` >>
-  simp[classify_function_def, vyperInterpreterTheory.lookup_function_def]
-  >~ [`VariableDecl vd`]
-  >- (Cases_on `vd` >> simp[vyperInterpreterTheory.lookup_function_def])
-  >~ [`HashMapDecl hd`]
-  >- (Cases_on `hd` >> simp[vyperInterpreterTheory.lookup_function_def]) >>
-  qmatch_goalsub_rename_tac `case vv of External => _ | Internal => _ | Deploy => _` >>
-  Cases_on `vv` >> rw[]
 QED
 
 (* The constructor's appended arguments are below 2 ** 128 bytes. *)
@@ -127,7 +82,7 @@ Theorem deploy_initcode_half_bounded:
     LENGTH (FST (HD es.contexts)).msgParams.code <= dimword(:256) DIV 2
 Proof
   rpt strip_tac >>
-  drule deploy_bc_size_bounded >> strip_tac >>
+  drule_all deploy_bc_size_bounded >> strip_tac >>
   gvs[deploy_state_rel_def] >>
   drule_all constructor_args_size_bounded >>
   simp[wordsTheory.dimword_def]

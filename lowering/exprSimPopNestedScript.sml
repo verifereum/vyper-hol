@@ -7,26 +7,22 @@
  * compile_dynarray_pop at that pointer.  The case lemmas take the target's
  * fragment judgment (pop_target_frag, which targetPlaceSimCases'
  * target_place_sim gives from target_sim) and split on the target's root.
- * pop_target_frag, the helpers and pop_nested_storage_pure_sim are in
+ * pop_target_frag, the helpers and pop_nested_storage_sim are in
  * exprSimPopNestedBase; each other lemma is in its own theory, named
- * after it (exprSimPopNestedStorageEffectful, exprSimPopNestedImmutableDeploy,
- * exprSimPopNestedLocal, exprSimPopNestedTargetFrag,
+ * after it (exprSimPopNestedLocal, exprSimPopNestedTargetFrag,
  * bodyPopNestedTargetFrag):
  *
- *   pop_nested_storage_pure_sim — a storage or transient root with pure
- *                             indices: the header load and store and the
+ *   pop_nested_storage_sim  — a storage or transient root, any indices:
+ *                             the header load and store and the
  *                             element's slots, as exprSimPopStorage's
  *                             compile_pop_storage_sim has them at a
  *                             declared variable's slot.
- *   pop_nested_storage_effectful_sim — RESIDUAL: a storage root with an
- *                             index that pops or calls, which can leave
- *                             the target's header dead.
  *   pop_nested_immutable_runtime_sim — an immutable or constant root at
  *                             runtime: such a target does not type
  *                             (bare_global_assignable is empty at runtime).
- *   pop_nested_immutable_deploy_sim — RESIDUAL: an immutable root in the
- *                             constructor, which Python accepts for a
- *                             member of a complex immutable.
+ *   pop_immutable_root_rejected — an immutable root: alloc_limits_expr
+ *                             rejects the pop (target_in_immutables, Venom's
+ *                             "Cannot load from location: immutables").
  *   pop_nested_local_sim    — RESIDUAL: a memory local root, whose
  *                             nested length word locals_kept does not
  *                             exempt yet.
@@ -37,31 +33,19 @@
 
 Theory exprSimPopNested
 Ancestors
-  exprSimPopNestedBase exprSimPopNestedStorageEffectful
-  exprSimPopNestedImmutableDeploy exprSimPopNestedLocal
+  exprSimPopNestedBase
+  exprSimPopNestedLocal popTargetPre
   exprSimPopNestedTargetFrag bodyPopNestedTargetFrag
   loweringPosts bodySim exprSimHypsDefs
   list fragExec exprSimDefs exprSimProps exprSimHyps exprSimPop exprSimPopStorage
   targetPlaceSim targetPlaceSimCases vyperTypeEnv vyperTypeInvariants
+  vyperTypeAssignContext
   exprLowering vyperAST vyperInterpreter vyperState vyperContext
   vyperTypeSystem vyperTypeCallGraph vyperCompiler stmtLowering
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
   exprLoweringProps compileEnv finite_map vyperPureExpr
   vyperStoragePlaceRegion vyperStoragePlaceProvenance
   vyperPlaceFrames vyperStatePreservation
-
-Theorem pop_nested_storage_sim:
-  !ctx func cenv cx env ann bt ty es src id ts d.
-    pop_target_frag ctx func cenv cx env bt es /\
-    expr_body_pre cenv cx env (Pop ann bt) es /\
-    target_root bt = TopLevelNameTarget (src,id) /\
-    get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = SOME d ==>
-    expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
-Proof
-  rpt strip_tac >> Cases_on `EVERY pure_expr (target_indices bt)`
-  >- (irule pop_nested_storage_pure_sim >> metis_tac[]) >>
-  irule pop_nested_storage_effectful_sim >> metis_tac[]
-QED
 
 Theorem no_storage_root_untyped_runtime[local]:
   !env cx src id.
@@ -77,19 +61,6 @@ Proof
   Cases_on `x` >> gvs[] >>
   first_x_assum drule >> strip_tac >>
   res_tac >> gvs[]
-QED
-
-Theorem target_root_untyped[local]:
-  !env bt. type_place_target env (target_root bt) = NONE ==>
-    type_place_target env bt = NONE
-Proof
-  gen_tac >> measureInduct_on `base_assignment_target_size bt` >>
-  Cases_on `bt` >> simp[target_root_def] >> rpt strip_tac >>
-  first_x_assum (drule_at Any) >> simp[] >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `type_place_target env tgt` >>
-  Cases_on `type_place_target env tgt` >> simp[] >>
-  gvs[Abbr `tgt`, type_place_target_AttributeTarget,
-      type_place_target_SubscriptTarget]
 QED
 
 (* An immutable or constant root at runtime: bare_global_assignable is
@@ -163,14 +134,6 @@ QED
 Theorem pop_nested_sim:
   !ctx func cenv cx env ann bt ty es.
     (~immutable_root cx bt ==> pop_target_frag ctx func cenv cx env bt es) /\
-    (immutable_root cx bt ==>
-     ?nocalls. target_idx_case nocalls ctx func cenv cx bt /\
-               (nocalls ==> int_calls_target bt = [])) /\
-    (immutable_root cx bt /\ cx.in_deploy ==>
-     cenv.ce_is_ctor /\
-     !src id ty0. target_root bt = TopLevelNameTarget (src,id) /\
-                  FLOOKUP env.bare_global_assignable (src,id) = SOME ty0 ==>
-                  cenv.ce_module_var_type (src,id) = SOME ty0) /\
     expr_body_pre cenv cx env (Pop ann bt) es ==>
     expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
 Proof
@@ -188,10 +151,6 @@ Proof
   Cases_on `cx.in_deploy`
   >- (Cases_on `get_module_code cx src`
       >- (irule pop_nested_no_module_sim >> metis_tac[]) >>
-      `immutable_root cx bt` by (simp[immutable_root_def] >> metis_tac[]) >>
-      gvs[] >> irule pop_nested_immutable_deploy_sim >>
-      rpt conj_tac
-      >- gvs[] >- gvs[] >- (qexistsl [`env`,`id`,`src`] >> gvs[]) >>
-      metis_tac[]) >>
+      metis_tac[pop_immutable_root_rejected]) >>
   irule pop_nested_immutable_runtime_sim >> metis_tac[]
 QED

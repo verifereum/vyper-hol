@@ -10,6 +10,7 @@
    memory flag where S1's fix it to F. *)
 Theory bodyMemAugAssignTopWord
 Ancestors
+  supportedExprTraverse allocLimitsProps
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyMemAssignTopWord bodyDeclMemoryCounted
   bodyDeclMemoryCore allocaFootprint instMemFrontier memSafeRun
@@ -25,7 +26,7 @@ Ancestors
   allocLimits fragExec fragExecMem localPtrsProps freshWrites
   exprOpenPrimitives exprOperandVar
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
-  exprLoweringProps compileEnv valueEncoding
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding
   supportedStmtTraverse supportedStmts supportedExprs supportedTypes
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperTypeSystem vyperTyping
@@ -174,11 +175,11 @@ Theorem augassign_toplevel_binop_admissible_mem_src[local]:
   expr_res_ok (bop_result cx ty bop [ty; expr_type e] v0 v ee)
 Proof
   strip_tac >>
-  `bop_result cx ty bop [ty; expr_type e] v0 v ee =
-   case evaluate_binop
+  `expr_res_ok (bop_result cx ty bop [ty; expr_type e] v0 v ee) <=>
+   expr_res_ok (case evaluate_binop
      (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
-     tvt bop v0 v of INL w => INL w | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+     tvt bop v0 v of INL w => INL w | INR err => INR (Error err))` by
+    (irule bop_result_augassign_res_ok >> simp[]) >>
   pop_assum SUBST1_TAC >>
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
@@ -432,8 +433,9 @@ Proof
   qabbrev_tac `w = if tr then tload slot s0 else sload slot s0` >>
   `run_inst_seq (emitted_insts sa sb) s0 = OK (update_var out w s0)` by
     (Cases_on `tr` >>
-     simp[Abbr `w`, Abbr `out`, run_inst_seq_def, step_inst_base_def,
-          mk_inst_def, exec_read1_def, eval_operand_def]) >>
+     FIRST [simp[Abbr `w`, Abbr `out`, run_inst_seq_def,
+                 step_inst_base_opcode_eqs,
+                 mk_inst_def, exec_read1_def, eval_operand_def]]) >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s0` by
     (drule emit_op_mem_ok >> disch_then irule >> Cases_on `tr` >>
      simp[below_frontier_no_ranges, mk_inst_def]) >>
@@ -458,11 +460,10 @@ Proof
      qexists_tac `sa` >> simp[]) >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es (update_var out w s0)` by
+    (irule stmt_state_rel_update_var >> simp[]) >>
   qexists_tac `update_var out w s0 with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  simp[gas_marked_path_def, stmt_state_rel_inst_idx] >>
-  conj_tac >- gvs[update_var_def, eval_operand_def, lookup_var_def,
-                  FLOOKUP_UPDATE] >>
-  conj_tac >- (irule stmt_state_rel_update_var >> simp[]) >>
+  simp[gas_marked_path_def, stmt_state_rel_inst_idx, eval_operand_def] >>
   gvs[update_var_def] >>
   simp[Abbr `out`, lookup_var_def, FLOOKUP_UPDATE] >>
   rw[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
@@ -471,7 +472,7 @@ QED
 
 (* ===== The statement ===== *)
 
-Theorem compile_augassign_toplevel_mem[local]:
+Theorem compile_augassign_toplevel_mem:
   !d ctx func cx lctx RetQ cenv ty0 env ty src id bop e es
    ts tr id_str slot tvt vtyp.
     (!gs. expr_sim_mem ctx func cenv cx ty e (es with gas_obs := gs)) /\
@@ -627,7 +628,8 @@ Resume compile_augassign_toplevel_mem[operator_normal]:
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        tvt bop v0 v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   `evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      tvt bop v0 v = INL result` by gvs[AllCaseEqs()] >>
@@ -729,7 +731,8 @@ Resume compile_augassign_toplevel_mem[operator_exit]:
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        tvt bop v0 v of
        INL x => INL x | INR err => INR (Error err)` by
-    (irule bop_result_augassign >> simp[]) >>
+    (irule bop_result_augassign >>
+     metis_tac[word_value_not_bytes, word_value_type_typed]) >>
   Cases_on `evaluate_binop
        (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
        tvt bop v0 v`
@@ -750,6 +753,7 @@ Finalise compile_augassign_toplevel_mem
 
 Theorem body_augassign_toplevel_word_mem:
   !cx ty src id bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (AugAssign ty (TopLevelNameTarget (src,id)) bop e) /\
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx (TopLevelNameTarget (src, id)) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
@@ -805,7 +809,8 @@ Proof
    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
    (bop = Exp ==> nonneg_int_literal e) /\
    (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
-    gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+    (gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+     metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
   gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
   >- (qpat_x_assum `env_consistent _ _ _`
         (strip_assume_tac o REWRITE_RULE [env_consistent_def,
@@ -818,11 +823,23 @@ Proof
   gvs[optionTheory.IS_SOME_EXISTS] >>
   rename1 `lookup_var_slot_from_layout _ _ _ _ = SOME slot'` >>
   rename1 `evaluate_type _ ty = SOME tvt` >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supportedExprTraverseTheory.supported_expr_exists_def,
          int_calls_stmt_def, int_calls_expr_def, body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>
@@ -836,7 +853,7 @@ Proof
   conj_tac
   >- (gen_tac >>
       qpat_x_assum `body_expr_mem_ok cx e`
-        (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+        (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
       disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `ty`,
         `es with gas_obs := gs`] mp_tac) >>
       simp[]) >>

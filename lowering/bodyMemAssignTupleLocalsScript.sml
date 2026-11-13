@@ -4,6 +4,7 @@
 Theory bodyMemAssignTupleLocals
 Ancestors
   bodyMemoryPreds bodyMemAssignTupleLocalsPrep bodyMemAssignTupleLocalsOutcome
+  bodySimStmtCases
   bodySim bodyExprPreFacts vyperTypeSystem vyperTypeInvariants
   exprSimHyps exprSimHypsDefs exprSimDefs valueEncoding finite_map list
   valueTypingMemoryProps vyperTypeValues vyperTyping vyperTypeDefaults
@@ -24,23 +25,9 @@ Proof
   qexists_tac `es with gas_obs := gs` >> fs[]
 QED
 
-(* S1 bodySimStmtCases.body_inv_mcopy [local]. *)
-Theorem body_inv_mcopy[local]:
-  !tops ctx cenv cx. body_inv tops ctx cenv cx ==> cenv.ce_target CapMcopy
-Proof
-  rw[body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[]
-  >- (gvs[lower_vyper_deploy_unit_def, AllCaseEqs()] >>
-      rpt (pairarg_tac >> gvs[]) >>
-      gvs[vyperCompilerTheory.run_deploy_lowering_def, AllCaseEqs(),
-          vyperCompilerTheory.lowering_policy_ok_def]) >>
-  gvs[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[vyperCompilerTheory.run_lowering_def, AllCaseEqs(),
-      vyperCompilerTheory.lowering_policy_ok_def]
-QED
-
 Theorem body_assign_tuple_locals_mem:
   !cx ids e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) /\
     body_expr_mem_ok cx e /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) /\

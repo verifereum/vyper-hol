@@ -1,7 +1,7 @@
 (* Judgment-independent extract32 window and conversion facts. *)
 Theory exprSimExtract32Value
 Ancestors
-  valueEncoding valueEncodingProofs vyperInterpreter vyperContext vyperValue vyperTypeSystem
+  valueEncoding valueEncodingDefs valueEncodingProofs vyperInterpreter vyperContext vyperValue vyperTypeSystem
   arithmeticProps compileEnv vyperValueOperation byte words integer_word integer list rich_list
 Libs
   wordsLib intLib

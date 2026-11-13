@@ -1,7 +1,7 @@
 (* Indexed source conversion and memory boundaries for uniform representatives. *)
 Theory abiEncoderSourceTransport
 Ancestors
-  valueEncoding valueEncodingProofs vyperABI vyperABIRoundtrip vyperValue vyperTyping
+  valueEncoding valueEncodingDefs valueEncodingProofs vyperABI vyperABIRoundtrip vyperValue vyperTyping
   vyperTypeValues vyperTypeDefaults vyperValueOperation vyperMisc list rich_list arithmetic
 
 Theorem abi_encoder_same_conversion:
@@ -113,8 +113,7 @@ Theorem abi_encoder_sparse_source:
       (EL i (array_elements (ArrayTV tv (Fixed n)) (SArrayV kvs))) = SOME (EL i avs)
 Proof
   strip_tac >> drule_all abi_encoder_sparse_conversion >> strip_tac >>
-  drule evaluate_type_well_formed_type_value >>
-  disch_then (assume_tac o MATCH_MP default_value_well_typed) >>
+  assume_tac (Q.SPEC `tv` default_value_well_typed) >>
   simp[] >> rpt strip_tac
   >- (gvs[array_elements_def] >> Cases_on `ALOOKUP kvs i` >> gvs[] >>
       gvs[value_has_type_def] >>

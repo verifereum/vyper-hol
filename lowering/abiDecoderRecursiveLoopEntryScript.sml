@@ -7,7 +7,7 @@ Ancestors
   abiDecoderEffect abiDecoderDynamicLoopSetup abiDecoderLoopRegisters
   abiDecoderAllocation abiDecoderContract abiDecoderCorrect abiDecoderLoop abiDecoderReentry
   abiDecoderExecution abiDecoderTypedContract
-  fragExec compileEnv emitHelperProps emitHelper valueEncoding
+  fragExec compileEnv loweringStateRelDefs emitHelperProps emitHelper valueEncoding
   venomState venomExecSemantics venomInst words list arithmetic
 
 Theorem abi_decoder_completed_loop_entry:
@@ -23,9 +23,9 @@ Proof
 QED
 
 Theorem abi_decoder_loop_phase_entry:
-  abi_decode_loop_prefix ip src opc start = (labels,st) /\
-  abi_decode_array_element_setup ip src dst opc hi di asz msz st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi di middle = ((),end_st) /\
+  abi_decode_loop_prefix ip src opc base_op start = (labels,st) /\
+  abi_decode_array_element_setup ip src dst opc base_op hi di asz msz st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi di middle = ((),end_st) /\
   abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),final) /\
   abi_decode_source_opcode opc /\ fn_has_code start final func ==>
   lookup_block start.cs_current_bb func.fn_blocks = SOME
@@ -43,7 +43,7 @@ Proof
 QED
 
 Theorem abi_decoder_recursive_entry_code:
-  compile_abi_decode_dyn_loop dst src opc hi di asz msz ip cnt start = ((),final) /\
+  compile_abi_decode_dyn_loop dst src opc base_op hi di asz msz ip cnt start = ((),final) /\
   fn_has_code start final func /\ abi_decode_source_opcode opc ==>
   ?bb hdr_bb. lookup_block start.cs_current_bb func.fn_blocks = SOME bb /\
     bb.bb_instructions = start.cs_current_insts ++ [mk_inst start.cs_next_id JMP
@@ -54,9 +54,11 @@ Proof
   strip_tac >> drule abi_decode_dyn_loop_trace >> strip_tac >>
   drule_all abi_decoder_loop_phase_entry >> strip_tac >>
   drule_all abi_decoder_loop_phase_lookups >> strip_tac >>
-  qpat_x_assum `abi_decode_loop_prefix _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_loop_prefix _ _ _ _ _ = _` mp_tac >>
   simp_tac bool_ss [abi_decode_loop_prefix_shape] >> strip_tac >>
-  gvs[abi_decode_header_insts_def, phi_prefix_length_def, mk_inst_def]
+  Cases_on `base_op = Lit 0w` >>
+  gvs[abi_decode_position_header_insts_def, abi_decode_header_insts_def,
+    phi_prefix_length_def, mk_inst_def]
 QED
 
 Theorem abi_decoder_effect_jump:
@@ -71,16 +73,17 @@ Proof
 QED
 
 Theorem abi_decoder_recursive_loop_from_state:
-  compile_abi_decode_dyn_loop dst src opc hi_op (type_to_abi_dec_info sf ce ty)
+  compile_abi_decode_dyn_loop dst src opc base_op hi_op (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
     ip cnt start = ((),final) /\ fn_has_code start final func /\
   (!bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
   first <= lo /\ lo <= site /\ site < start.cs_next_id /\ final.cs_next_id <= hi /\ hi <= last /\
   next <= start.cs_next_var /\ final.cs_next_var <= limit_st.cs_next_var /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc hi_op ip src dst
-    sb d slot b cap next initial /\ abi_decoder_correct ce env sf ty tv /\
-  abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs sb d 0 initial /\
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs opc base_op hi_op ip src dst
+    B sb d slot b cap next initial /\ abi_decoder_correct ce env sf ty tv /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs (B + sb) d 0 initial /\
   fresh_vars_wrt limit_st initial /\ abi_decoder_budget first last b cap initial /\
   FLOOKUP initial.vs_allocas site = SOME (slot,32) /\ mload slot initial = 0w /\
   ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
@@ -101,7 +104,7 @@ Proof
   `abi_decode_sim ctx func initial h` by
     (simp_tac bool_ss [Abbr`h`] >> irule abi_decoder_loop_entry_sim >>
      asm_simp_tac bool_ss [] >> metis_tac[]) >>
-  `abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  `abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B + sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial
     (fresh_label_output "dec_dyn_hdr" start.cs_next_label) 0 h` by

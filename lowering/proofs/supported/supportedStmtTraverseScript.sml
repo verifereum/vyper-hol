@@ -8,7 +8,8 @@
    supported_type_namespace, supported_types_namespace, expr_nonmain_type_root. *)
 Theory supportedStmtTraverse
 Ancestors
-  supportedExprTraverse supportedTypes vyperAST list pair
+  supportedExprTraverse supportedTypes supportedDecls vyperTypeCallGraph
+  vyperAST list pair
 
 (* The global main-module rule also covers identifiers in type annotations.
    This is ONLY a namespace traversal, not value/storage type admission. *)
@@ -105,6 +106,52 @@ Termination
   simp[stmt_size_def, list_size_def]
 End
 
+(* Safety facts used by the body simulations independently of the gate. *)
+Definition body_stmt_safe_def:
+  body_stmt_safe tops s <=>
+    ~supported_stmt_expr_exists expr_evm_run_root s /\
+    ~supported_stmt_expr_exists call_operands_effect_root s /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal))
+      (int_calls_stmt s)
+End
+
+Definition body_stmts_safe_def:
+  body_stmts_safe tops ss <=> EVERY (body_stmt_safe tops) ss
+End
+
+Theorem body_stmts_safe_iff:
+  body_stmts_safe tops ss <=>
+    ~supported_stmts_expr_exists expr_evm_run_root ss /\
+    ~supported_stmts_expr_exists call_operands_effect_root ss /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal))
+      (int_calls_stmts ss)
+Proof
+  Induct_on `ss` >>
+  gvs[body_stmts_safe_def, body_stmt_safe_def,
+      supported_stmt_expr_exists_def, int_calls_stmt_def] >>
+  metis_tac[]
+QED
+
+Theorem body_stmt_safe_log_args:
+  body_stmt_safe tops (Log id es) <=>
+  EVERY (\e. body_stmt_safe tops (Expr e)) es
+Proof
+  Induct_on `es` >>
+  fs[body_stmt_safe_def, supported_stmt_expr_exists_def,
+       supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def,
+       EVERY_APPEND, EVERY_CONJ] >> metis_tac[]
+QED
+
+Theorem body_stmt_safe_for_body:
+  body_stmt_safe tops (For id typ it n stmts) ==>
+  body_stmts_safe tops stmts
+Proof
+  rw[body_stmt_safe_def, body_stmts_safe_iff,
+     supported_stmt_expr_exists_def, int_calls_stmt_def]
+QED
+
 (* keep duplicates, all branches and nesting, and their declared types;
    locals=T collects AnnAssign, locals=F collects For. *)
 Definition supported_stmt_bindings_def:
@@ -189,4 +236,50 @@ Theorem supported_internal_stmts_shape_list:
   supported_internal_stmts_shape ss <=> EVERY supported_internal_stmt_shape ss
 Proof
   Induct_on `ss` >> simp[supported_internal_stmt_shape_def]
+QED
+
+Theorem supported_assignment_exists_disj:
+  (!p t q. supported_assignment_exists (\x. p x \/ q x) t =
+    (supported_assignment_exists p t \/ supported_assignment_exists q t)) /\
+  (!p ts q. supported_assignments_exists (\x. p x \/ q x) ts =
+    (supported_assignments_exists p ts \/ supported_assignments_exists q ts))
+Proof
+  ho_match_mp_tac supported_assignment_exists_ind >>
+  simp[supported_assignment_exists_def, supported_expr_exists_disj] >> metis_tac[]
+QED
+
+Theorem supported_iterator_exists_disj:
+  !p it q. supported_iterator_exists (\x. p x \/ q x) it =
+    (supported_iterator_exists p it \/ supported_iterator_exists q it)
+Proof
+  Cases_on `it` >> simp[supported_iterator_exists_def,
+    supported_expr_exists_disj] >> metis_tac[]
+QED
+
+Theorem supported_assert_exists_disj:
+  !p r q. supported_assert_exists (\x. p x \/ q x) r =
+    (supported_assert_exists p r \/ supported_assert_exists q r)
+Proof
+  Cases_on `r` >> simp[supported_assert_exists_def,
+    supported_expr_exists_disj, EXISTS_MEM] >> metis_tac[]
+QED
+
+Theorem supported_raise_exists_disj:
+  !p r q. supported_raise_exists (\x. p x \/ q x) r =
+    (supported_raise_exists p r \/ supported_raise_exists q r)
+Proof
+  Cases_on `r` >> simp[supported_raise_exists_def,
+    supported_expr_exists_disj, EXISTS_MEM] >> metis_tac[]
+QED
+
+Theorem supported_stmt_expr_exists_disj:
+  (!p s q. supported_stmt_expr_exists (\x. p x \/ q x) s =
+    (supported_stmt_expr_exists p s \/ supported_stmt_expr_exists q s)) /\
+  (!p ss q. supported_stmts_expr_exists (\x. p x \/ q x) ss =
+    (supported_stmts_expr_exists p ss \/ supported_stmts_expr_exists q ss))
+Proof
+  ho_match_mp_tac supported_stmt_expr_exists_ind >>
+  simp[supported_stmt_expr_exists_def, supported_expr_exists_disj,
+       supported_assignment_exists_disj, supported_iterator_exists_disj,
+       supported_assert_exists_disj, supported_raise_exists_disj] >> metis_tac[]
 QED

@@ -2,8 +2,8 @@
 Theory exprSimBopRestWordLoads
 Ancestors
   exprSimBopRestWordLoadPath exprSimBopRestWordIndex exprSimAggregateEncoding valueEncodingProps vyperTyping
-  compileEnv loweringPosts exprSimUnwrap exprLoweringProps venomMemDefs
-  valueEncodingProofs valueEncoding vyperValueOperation vyperValue list alist
+  compileEnv loweringStateRelDefs loweringPosts exprSimUnwrap exprLoweringProps venomMemDefs
+  valueEncodingProofs valueEncoding valueEncodingDefs vyperValueOperation vyperValue list alist
 
 Theorem rest_word_array_memory_index:
   value_has_type (ArrayTV et bd) (ArrayV av) /\
@@ -66,8 +66,8 @@ QED
 Theorem rest_word_vv_memory_bound:
   vv_post ctx func cenv cx e es sa sb s0 es' (Value (ArrayV av)) vv s /\
   (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
-  expr_type e = ArrayT et bd /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  post_value_type cenv e = ArrayT et bd /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv /\
   eval_operand (vv_operand vv) s = SOME w ==>
   w2n w + type_memory_size tv < dimword (:256) /\
   (0 < type_memory_size tv ==>
@@ -225,8 +225,8 @@ QED
 Theorem rest_word_vv_memory_offset:
   vv_post ctx func cenv cx e es sa sb s0 es' (Value (ArrayV av)) vv s /\
   (vv_location vv = NONE \/ vv_location vv = SOME LocMemory) /\
-  expr_type e = ArrayT ty bd /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV et bd) /\
+  post_value_type cenv e = ArrayT ty bd /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME (ArrayTV et bd) /\
   eval_operand (vv_operand vv) s = SOME w /\
   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
   value_has_type (ArrayTV et bd) (ArrayV av) /\

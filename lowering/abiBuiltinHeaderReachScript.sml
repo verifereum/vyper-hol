@@ -4,7 +4,7 @@
 Theory abiBuiltinHeaderReach
 Ancestors
   abiBuiltinDecodeHeader abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderReentry
-  abiDecoderContract abiDecoderLoop fragExec instIdxIndep compileEnv emitHelperProps
+  abiDecoderContract abiDecoderLoop fragExec instIdxIndep compileEnv loweringStateRelDefs emitHelperProps
   venomExecSemantics venomState venomInst words list
 
 Theorem abi_builtin_decode_header_from_state:

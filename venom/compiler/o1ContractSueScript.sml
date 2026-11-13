@@ -834,6 +834,22 @@ Proof
       passSimulationDefsTheory.terminates_def]
 QED
 
+
+(* The forward half at the input's fuel. *)
+Theorem sue_expand_function_supply_fn_bisim_fuel:
+  wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\
+  EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  sue_expand_function_supply s fn = (fn',s') ==>
+  fn_bisim_fuel I fn fn'
+Proof
+  strip_tac >> drule sue_expand_function_supply_identity >> strip_tac >>
+  simp[fn_bisim_fuel_def] >> rpt strip_tac >>
+  match_mp_tac (Q.INST [`P` |-> `set (fn_ir_vars fn)`] sue_run_result_frame) >>
+  simp[] >>
+  irule sue_run_blocks_supply_entry >> metis_tac[]
+QED
+
 (* Every state a frame of the expanded function reaches corresponds to one
    the original reaches: an inserted ASSIGN touches no memory, and every
    original instruction keeps its memory ranges and INVOKE arguments. *)
@@ -928,6 +944,35 @@ Proof
       entry_fn_no_return_def] >> metis_tac[]
 QED
 
+(* SUE keeps the fuel: each function's output finishes on its input's
+   fuel, lifted through calls by fn_bisim_fuel_run_context. *)
+Theorem sue_stage_sim_fuel:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) view C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY (o1_fn_row 6) C.ctx_functions /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted ==> ctx_sim_fuel I D C C' vs vs
+Proof
+  strip_tac >>
+  `LIST_REL (fn_bisim_fuel I) C.ctx_functions C'.ctx_functions` by
+    (drule sue_stage_functions >> strip_tac >>
+     gvs[listTheory.LIST_REL_EL_EQN] >> rpt strip_tac >>
+     first_x_assum drule >> strip_tac >>
+     irule sue_expand_function_supply_fn_bisim_fuel >>
+     gvs[o1_ctx_shape_def, o1_fn_shape_def, o1_fn_row_def,
+         listTheory.EVERY_EL] >> metis_tac[]) >>
+  `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >>
+  `!fuel v t. run_context fuel C vs <> IntRet v t` by
+    (rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >>
+     `MEM fn C.ctx_functions /\ fn.fn_name = name` by
+       metis_tac[venomInstTheory.lookup_function_MEM,
+                 ctxLookupAgreeHelpersTheory.lookup_function_selected_name] >>
+     gvs[o1_ctx_shape_def, o1_fn_shape_def, listTheory.EVERY_MEM,
+         entry_fn_no_return_def] >> metis_tac[]) >>
+  rw[ctx_sim_fuel_def] >>
+  mp_tac (Q.INST [`fm` |-> `I`] fn_bisim_fuel_run_context) >>
+  simp[lift_fuel_I]
+QED
+
 Theorem sue_stage_max_live_eom:
   ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) view C C' ==>
   max_live_eom C' = max_live_eom C
@@ -942,13 +987,13 @@ Theorem sue_stage_mem_inv:
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
   EVERY (o1_fn_row 6) C.ctx_functions /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
-  mem_inv (lowered_mem_fact eom) C vs ==>
-  mem_inv (lowered_mem_fact eom) C' vs
+  mem_inv (static_mem_ok eom) C vs ==>
+  mem_inv (static_mem_ok eom) C' vs
 Proof
   strip_tac >>
   `ctx_bisim C C'` by (irule sue_stage_bisim >> metis_tac[]) >>
   drule sue_stage_functions >> strip_tac >>
-  irule frame_sim_rf_mem_inv >> simp[mem_corr_closed_rf_lowered_mem_fact] >>
+  irule frame_sim_rf_mem_inv >> simp[mem_corr_closed_rf_static_mem_ok] >>
   qexists_tac `C` >> simp[] >>
   gvs[listTheory.LIST_REL_EL_EQN] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >>
@@ -981,10 +1026,11 @@ Theorem sue_stage_walk:
   o1_run_contract rpolicy D 6
 Proof
   simp[o1_run_contract_def, venomPassScheduleTheory.o1_fn_passes_def,
-       o1_stage_contract_def, o1_inv_def] >> rpt gen_tac >> strip_tac >>
+       o1_stage_contract_def, o1_inv_def, pass_fuel_def] >>
+  rpt gen_tac >> strip_tac >>
   gvs[o1_pre_def, o1_ssa_inv_def, o1_lowered_inv_def,
       o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
-  conj_tac >- (irule sue_stage_sim >> metis_tac[]) >>
+  conj_tac >- (irule sue_stage_sim_fuel >> metis_tac[]) >>
   `EVERY wf_ssa C'.ctx_functions` by (irule sue_stage_wf_ssa >> metis_tac[]) >>
   simp[] >> qexists_tac `eom` >>
   conj_tac >- metis_tac[sue_stage_max_live_eom] >>

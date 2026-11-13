@@ -30,33 +30,20 @@ End
 
 (* ===== Facts from the codegen preconditions ===== *)
 
-Theorem codegen_ready_fn_inst[local]:
-  !fn inst.
-    codegen_ready_fn fn /\ MEM inst (fn_insts fn) ==> codegen_ready_inst inst
-Proof
-  simp[stackPlanGenTheory.codegen_ready_fn_def, venomInstTheory.fn_insts_def] >>
-  rpt strip_tac >>
-  qpat_x_assum `EVERY _ fn.fn_blocks` mp_tac >>
-  qpat_x_assum `MEM _ _` mp_tac >>
-  qspec_tac (`fn.fn_blocks`, `bbs`) >>
-  Induct >> simp[venomInstTheory.fn_insts_blocks_def] >>
-  rpt strip_tac >> gvs[listTheory.EVERY_MEM]
-QED
-
 (* DUP and SWAP reach 16 slots. *)
-Theorem body_operands_le_16[local]:
+Theorem body_operands_le_16:
   !fn inst.
     codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
     inst.inst_opcode <> PHI ==>
     LENGTH (compute_operands inst) <= 16
 Proof
   rpt strip_tac >>
-  `codegen_ready_inst inst` by metis_tac[codegen_ready_fn_inst] >>
+  `codegen_ready_inst inst` by metis_tac[fnFrameDeepAbortTheory.codegen_ready_fn_inst] >>
   gvs[stackPlanGenTheory.codegen_ready_inst_def]
 QED
 
 (* The EVM has LOG0 to LOG4. *)
-Theorem body_log_topics[local]:
+Theorem body_log_topics:
   !fn inst.
     codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
     inst.inst_opcode <> PHI ==>
@@ -64,13 +51,13 @@ Theorem body_log_topics[local]:
      case inst.inst_operands of Lit tc :: _ => w2n tc <= 4 | _ => F)
 Proof
   rpt strip_tac >>
-  `codegen_ready_inst inst` by metis_tac[codegen_ready_fn_inst] >>
+  `codegen_ready_inst inst` by metis_tac[fnFrameDeepAbortTheory.codegen_ready_fn_inst] >>
   gvs[stackPlanGenTheory.codegen_ready_inst_def]
 QED
 
 (* A revert forwarding's code neither spills nor restores:
    block_plan_state_static's last conjunct. *)
-Theorem body_revert_no_spill[local]:
+Theorem body_revert_no_spill:
   !liveness dfg cfg ch growth spill_base lbl_ctr fn fn_ops ps_end lbl bb
    ps_l ps_dfs ps_dfs_after h promised block_ops ps_after k ps inst next_live
    next_is_term.
@@ -114,7 +101,7 @@ Proof
     (MATCH_MP (SPEC_ALL block_plan_state_static) th))))
 QED
 
-Theorem log_case_topics[local]:
+Theorem log_case_topics:
   !ops. (case ops of Lit tc :: _ => w2n tc <= 4 | _ => F) ==>
         ?tc args. ops = Lit tc :: args /\ w2n tc <= 4
 Proof
@@ -123,7 +110,7 @@ QED
 
 (* ===== block_rest, one instruction at a time ===== *)
 
-Theorem block_rest_advance[local]:
+Theorem block_rest_advance:
   get_instruction bb vs.vs_inst_idx = SOME inst /\
   step_inst fuel ctx inst vs = OK vs1 /\ ~is_terminator inst.inst_opcode ==>
   block_rest fuel ctx fn bb vs =
@@ -134,7 +121,7 @@ Proof
   simp[]
 QED
 
-Theorem block_rest_jump[local]:
+Theorem block_rest_jump:
   get_instruction bb vs.vs_inst_idx = SOME inst /\
   step_inst fuel ctx inst vs = OK vs1 /\ is_terminator inst.inst_opcode /\
   ~vs1.vs_halted ==>
@@ -145,7 +132,7 @@ Proof
   simp[]
 QED
 
-Theorem block_rest_other[local]:
+Theorem block_rest_other:
   get_instruction bb vs.vs_inst_idx = SOME inst /\
   step_inst fuel ctx inst vs = res /\ (!s. res <> OK s) ==>
   block_rest fuel ctx fn bb vs = res
@@ -155,7 +142,7 @@ Proof
   Cases_on `res` >> gvs[] >> metis_tac[]
 QED
 
-Theorem block_rest_error[local]:
+Theorem block_rest_error:
   exec_block fuel ctx bb vs = Error e ==>
   block_rest fuel ctx fn bb vs = Error e
 Proof
@@ -234,7 +221,7 @@ Proof
         mp_tac body_revert_no_spill >>
       impl_tac
       >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY REFL_TAC >>
-          metis_tac[body_ready_fn_no_marker]) >>
+          metis_tac[codegen_ready_fn_no_marker]) >>
       disch_then (qspec_then `j` mp_tac) >>
       impl_tac >- first_assum ACCEPT_TAC >>
       disch_then (qspecl_then [`rest_ops`, `ps_after`] mp_tac) >>
@@ -422,7 +409,6 @@ Theorem block_body_frame_sim:
        lookup_function callee_name ctx.ctx_functions = SOME callee ==>
        fn_has_retpc callee) /\
     (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
-    ~vs.vs_call_ctx.cc_static /\
     codegen_context_obligations Inv ctx cp /\
     reachability_closed Inv ctx /\
     (!inst. active_inst fn inst vs ==> Inv ctx fn inst vs) /\
@@ -450,6 +436,13 @@ Theorem block_body_frame_sim:
       (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
       SOME (block_ops, ps_after) /\
     ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+    ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+    (?prefixL prefixD core.
+       ps_after.ps_stack = prefixL ++ core /\
+       ps_dfs_after.ps_stack = prefixD ++ core /\
+       (!v. MEM v (live_vars_at liveness bb.bb_label
+                     (LENGTH bb.bb_instructions)) ==>
+          ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)) /\
     block_plan_state liveness dfg cfg fn bb
       (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
       k ps /\
@@ -491,6 +484,14 @@ Theorem block_body_frame_sim:
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `generate_context_plan _ = SOME cpl` >>
+  Q.SUBGOAL_THEN `?prefixL prefixD core.
+     ps_after.ps_stack = prefixL ++ core /\
+     ps_dfs_after.ps_stack = prefixD ++ core /\
+     (!v. MEM v (live_vars_at liveness bb.bb_label
+                   (LENGTH bb.bb_instructions)) ==>
+        ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` ASSUME_TAC
+  >- (qexistsl_tac [`prefixL`, `prefixD`, `core`] >> rpt conj_tac >>
+      first_assum ACCEPT_TAC) >>
   `body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
       growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
       block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv

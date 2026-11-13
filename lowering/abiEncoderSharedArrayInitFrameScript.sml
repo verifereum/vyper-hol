@@ -4,11 +4,11 @@ Ancestors
   abiEncoderArrayBodyCode abiEncoderInput abiDecoderFootprint abiDecoderContract
   abiDecoderReentry abiCanonicalWindows abiDecodeRanges abiCanonicalHeadSize
   abiEncoderSharedMembersCorrect abiEncoderArrayPrefix abiEncoderTuple abiEncoderMemory
-  valueEncoding contractABI venomState venomMemDefs list rich_list arithmetic words
+  valueEncoding valueEncodingDefs contractABI venomState venomMemDefs list rich_list arithmetic words
   abiEncoderArrayParent abiDecoderArrayHeader abiDecoderArrayLoopInit abiDecoderGuards
   abiEncoderMemberPhaseRaw abiEncoderMemberPhaseEffect abiEncoderRegisteredEffect
   abiEncoderExtendSim abiScratchLeafEffect abiScratchEffect abiDecoderAllocation abiDecoderFrame
-  abiDecoderFrameCompose abiDecoderDynamicLoopSetup exprLoweringProps compileEnv emitHelper
+  abiDecoderFrameCompose abiDecoderDynamicLoopSetup exprLoweringProps compileEnv loweringStateRelDefs emitHelper
   emitHelperProps venomInst venomExecSemantics instIdxIndep valueEncodingProps abiScratchSubset
   pred_set
 
@@ -174,6 +174,8 @@ Proof
   strip_tac >> drule_all abi_encoder_array_count_raw_transport >> strip_tac >>
   `ready.vs_accounts = initial.vs_accounts /\ ready.vs_transient = initial.vs_transient /\
    ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests /\
+   ready.vs_tx_ctx = initial.vs_tx_ctx /\ ready.vs_block_ctx = initial.vs_block_ctx /\
+   ready.vs_immutables = initial.vs_immutables /\ ready.vs_outcomes = initial.vs_outcomes /\
    ready.vs_pending_deletions = initial.vs_pending_deletions` by
     (irule abi_encoder_member_phase_globals >> goal_assum (drule_at Any) >>
      drule abi_encoder_array_count_opcodes >> simp[]) >>

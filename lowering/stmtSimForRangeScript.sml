@@ -35,7 +35,7 @@ Ancestors
   fragExec localPtrsProps  loweringSlice freshWrites
   vyperEvalExprPreservesScopesDom
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding
+  compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState vyperValue vyperTyping vyperEvalPreservesScopes
   vyperExprNoControl vyperValueOperation
   gasOutcome gasContext gasExemptCert gasSummary gasSummaryCompose stmtSimForRounds vyperArith
@@ -72,7 +72,7 @@ Theorem eval_iterator_range_forced[local]:
     do v1 <- (do raw <- eval_expr cx e1; read_result cx raw od);
        v2 <- (do raw <- eval_expr cx e2; read_result cx raw od);
        rl <- lift_sum (get_range_limits v1 v2);
-       return (GENLIST (\j. IntV (FST rl + &j)) (SND rl))
+       return (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl))
     od
 Proof
   rpt gen_tac >> simp[Once evaluate_def, FUN_EQ_THM, bind_def] >>
@@ -97,7 +97,7 @@ Theorem eval_stmt_for_range_forced[local]:
      rl <- lift_sum (get_range_limits v1 v2);
      check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
      eval_for cx tyv id body
-       (GENLIST (\j. IntV (FST rl + &j)) (SND rl))
+       (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl))
   od
 Proof
   rpt gen_tac >> strip_tac >> pure_once_rewrite_tac[Once evaluate_def] >>
@@ -175,11 +175,11 @@ Theorem checked_range_tail[local]:
   (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
       check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
       eval_for cx tyv id body
-        (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od) =
+        (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)) od) =
   if n1 <= n2 then
     if Num (n2 - n1) <= bound then
       eval_for cx tyv id body
-        (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))
+        (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)))
     else raise (Error (RuntimeError "For too long"))
   else raise (Error (RuntimeError "no range"))
 Proof
@@ -201,7 +201,7 @@ Definition range_outcome_def:
     (n1 <= n2 /\ bound < Num (n2 - n1) /\
      res = INR (Error (RuntimeError "For too long")) /\ es' = es2) \/
     (n1 <= n2 /\ Num (n2 - n1) <= bound /\
-     eval_for cx tyv id body (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))
+     eval_for cx tyv id body (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)))
        es2 = (res, es'))
 End
 
@@ -797,6 +797,7 @@ Theorem for_range_checked_parts:
       sb0.cs_current_insts =
         [mk_inst (st.cs_next_id + 14) MSTORE [Var p; Var cv] []] /\
       sb0.cs_next_var = st.cs_next_var + 9 /\ cs_extends st sb0 /\
+      st.cs_next_id <= sb0.cs_next_id /\
       compile_stmts bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = ((), sb1) /\
       fn_has_code sb0 sb1 func /\
       lookup_block st.cs_current_bb func.fn_blocks =
@@ -909,6 +910,7 @@ Proof
   >- simp[Abbr `sb0`]
   >- simp[Abbr `sb0`]
   >- first_assum ACCEPT_TAC
+  >- simp[Abbr `sb0`]
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
   >- (qpat_assum `!l b. MEM b _ /\ _ ==> _` irule >>
@@ -1040,7 +1042,7 @@ Theorem range_expr_post_int_operand[local]:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
   eval_operand op s = SOME (i2w n)
 Proof
-  rw[expr_post_def] >> drule_all range_expr_val_rel_int_operand >> simp[]
+  rw[expr_post_def] >> gvs[] >> drule_all range_expr_val_rel_int_operand >> simp[]
 QED
 
 Theorem forced_endpoint_bind_outcome[local]:
@@ -1166,15 +1168,15 @@ Theorem for_range_checked_tail_outcome[local]:
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for cx tyv id stmts
-          (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
+          (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)) od)
     (stmt_res_ok lctx) es ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for cx tyv id stmts
-          (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od)
+          (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)) od)
     (es,t0)
-    (stmt_post ctx func cx lctx cenv cenv st sf t0)
+    (stmt_post ctx func cx lctx cenv cenv st sf es t0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >>
@@ -1341,6 +1343,12 @@ Resume for_range_checked_tail_outcome[loop_code]:
      irule declare_local_reserved >> metis_tac[]) >>
   `type_memory_size tyv = 32` by
     (drule_all is_int_type_memory_size >> simp[]) >>
+  `word_memory_type tyv` by
+    (qpat_x_assum `is_int_type fty` mp_tac >>
+     qpat_x_assum `evaluate_type _ fty = SOME tyv` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     `is_word_type fty` by (fs[is_int_type_cases] >> gvs[is_word_type_def]) >>
+     drule_all loweringSliceTheory.evaluate_word_memory_type >> simp[]) >>
   `(!scs. not_local_ptr cenv scs cv) /\ (!scs. not_local_ptr cenv scs dv) /\
    (!scs. not_local_ptr cenv scs nv)` by
     (rpt conj_tac >> gen_tac >>
@@ -1398,7 +1406,7 @@ Resume for_range_checked_tail_outcome[loop_normal]:
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[gas_summary_at_def] >> strip_tac >>
   `gas_marked_exec F (ctx,func)
-     (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1))))
+     (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2-n1))))
      (es,t0) marks res es_end r` by
     (irule gas_marked_exec_zero_prefix >> goal_assum (drule_at Any) >> simp[]) >>
   qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
@@ -1414,12 +1422,27 @@ QED
 
 Resume for_range_checked_tail_outcome[loop_frames]:
   conj_tac >- simp[block_is_terminated_def] >>
-  rpt strip_tac >>
-  qpat_x_assum `!a b. FLOOKUP t0.vs_allocas a = SOME b ==> _`
-    (drule_then assume_tac) >>
-  qpat_x_assum `!a b. FLOOKUP _ a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b`
-    irule >>
-  simp[jump_to_def]
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a b. FLOOKUP t0.vs_allocas a = SOME b ==> _`
+        (drule_then assume_tac) >>
+      qpat_x_assum `!a b. FLOOKUP _ a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b`
+        irule >>
+      simp[Abbr `cc`, jump_to_def]) >>
+  `alloca_frame cenv es st t0 cenv es cc` by
+    (irule alloca_frame_of_mem_frame >>
+     simp[] >>
+     reverse conj_tac >- metis_tac[] >>
+     `sA.vs_memory = t0.vs_memory` by
+       metis_tac[stmtSimDeclPathTheory.exec_alloca_memory] >>
+     simp[Abbr `cc`, jump_to_def]) >>
+  irule alloca_frame_trans >>
+  qexistsl_tac [`cenv`, `es`, `cc`, `st`] >>
+  simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> simp[Abbr `cc`, jump_to_def] >> metis_tac[]) >>
+  qpat_x_assum `!frame_start. _` (qspec_then `st` mp_tac) >>
+  simp[alloca_frame_def]
 QED
 
 Resume for_range_checked_tail_outcome[bad_bound]:
@@ -1580,7 +1603,7 @@ Resume compile_for_range_checked_frag_active[endpoints]:
       rl <- lift_sum (get_range_limits v1 v2);
       check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
       eval_for cx tyv id stmts
-        (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od` by
+        (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)) od` by
     (irule eval_stmt_for_range_forced >> simp[]) >>
   qpat_x_assum `gas_admissible _ _ _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
@@ -1674,7 +1697,7 @@ Resume compile_for_range_checked_frag_active[tail_apply]:
   qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ source _ _ _` >>
   `gas_outcome F (cx_tops cx) (ctx,func) source
     (mid' with gas_obs := [],t')
-    (stmt_post ctx func cx lctx cenv cenv s2 sb t')
+    (stmt_post ctx func cx lctx cenv cenv s2 sb (mid' with gas_obs := []) t')
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
     (simp[Abbr `source`] >> irule for_range_checked_tail_outcome >>
      simp[] >> qexistsl_tac [`P`, `fty`, `op1`, `op2`, `ty`] >>
@@ -1707,7 +1730,26 @@ Resume compile_for_range_checked_frag_active[tail_transport]:
   fs[gas_summary_at_def]
   >- (qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
       disj1_tac >>
-      irule stmt_post_entry_frame >> qexistsl_tac [`t'`, `s2`] >>
+      `alloca_frame cenv es sa s0 cenv mid t` by
+        (mp_tac (Q.INST [`e` |-> `e1`, `ee` |-> `mid`, `sb` |-> `s1`,
+                         `v` |-> `IntV n1`, `op` |-> `op1`] expr_post_alloca_frame) >>
+         impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
+      `alloca_frame cenv mid s1 t cenv (mid' with gas_obs := []) t'` by
+        (mp_tac (Q.INST [`e` |-> `e2`, `es` |-> `mid with gas_obs := []`,
+                         `sa` |-> `s1`, `sb` |-> `s2`, `s0` |-> `t`, `ee` |-> `mid'`,
+                         `t` |-> `t'`, `v` |-> `IntV n2`, `op` |-> `op2`]
+                   expr_post_alloca_frame) >>
+         impl_tac >- (simp[] >> metis_tac[]) >> simp[alloca_frame_def]) >>
+      `alloca_frame cenv es sa s0 cenv (mid' with gas_obs := []) t'` by
+        (qpat_assum `alloca_frame cenv es sa s0 cenv mid t` (fn th1 =>
+           qpat_assum `alloca_frame cenv mid s1 t _ _ _` (fn th2 =>
+             mp_tac (MATCH_MP (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+               alloca_frame_trans) th1) th2))) >>
+         impl_tac >- decide_tac >>
+         impl_tac >- fs[expr_post_def] >> simp[]) >>
+      `sa.cs_next_id <= s2.cs_next_id` by decide_tac >>
+      irule stmt_post_entry_frame >>
+      qexistsl_tac [`mid' with gas_obs := []`, `t'`, `s2`] >>
       fs[expr_post_def] >> rpt strip_tac >>
       `not_fresh_at s1 x` by
         (fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>

@@ -92,13 +92,19 @@ Proof
   metis_tac[cs_appends_def, cj 2 cs_appends_emit_helpers]
 QED
 
+Theorem registration_guard_extends[local]:
+  compile_abi_arg_ptr_guard opc actual parent st = (v,st') ==> cs_extends st st'
+Proof
+  metis_tac[cs_appends_def, cs_appends_abi_arg_ptr_guard]
+QED
+
 Theorem decode_singleton_aggregate_boundary:
   compile_decode_args cenv [(name,F,dyn,sz,info)] off CALLDATALOAD (Lit 0w) base_adj st =
     ((),stf) /\
   FLOOKUP cenv.ce_vars name = SOME loc /\
   var_location_decode_operand loc = SOME dst ==>
   ?src first.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),stf) /\
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),stf) /\
     cs_extends st first
 Proof
   strip_tac >>
@@ -109,6 +115,7 @@ Proof
   rpt (pairarg_tac >> fs[]) >> strip_tac >> gvs[] >>
   goal_assum $ drule_at Any >>
   imp_res_tac registration_emit_op_extends >>
+  imp_res_tac registration_guard_extends >>
   metis_tac[cs_extends_trans]
 QED
 
@@ -119,7 +126,7 @@ Theorem register_singleton_aggregate_boundary:
   var_location_memory_size loc = SOME mem_size ==>
   ?buf allocated src first.
     compile_alloc_buffer mem_size st = (buf,allocated) /\
-    compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w) (Lit 0w)
       info first = ((),stf) /\
     cs_extends st first
 Proof
@@ -142,7 +149,7 @@ Theorem register_selected_aggregate_decoder:
     ?loc mem_size. FLOOKUP ce.ce_vars name = SOME loc /\
       var_location_memory_size loc = SOME mem_size) ==>
   ?dst src first last.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),last) /\
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last) /\
     cs_extends st first /\ cs_extends last stf
 Proof
   strip_tac >> drule register_selected_arg_boundaries >> strip_tac >>
@@ -316,7 +323,7 @@ Theorem external_selected_aggregate_boundary:
     ?loc mem_size. FLOOKUP ce.ce_vars name = SOME loc /\
       var_location_memory_size loc = SOME mem_size) ==>
   ?dst src first last.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),last) /\
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last) /\
     cs_extends st first /\ cs_extends last stf
 Proof
   strip_tac >> drule_all external_selected_registration_boundary >> strip_tac >>
@@ -375,10 +382,12 @@ Theorem runtime_selected_aggregate_packaged:
     compile_register_positional_args cenv ap 4 start = (ce,before) ==>
     ?loc mem_size. FLOOKUP ce.ce_vars name = SOME loc /\
       var_location_memory_size loc = SOME mem_size) ==>
-  ?dst src first last fn.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),last) /\
+  ?dst src first last fn entry_end.
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last) /\
     MEM fn unit.cu_context.ctx_functions /\ fn_has_code first last fn /\
-    !inst. abi_decoder_code_member inst last ==> MEM inst (fn_insts fn)
+    cs_extends last entry_end /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks entry_end)) /\
+    (!inst. abi_decoder_code_member inst last ==> MEM inst (fn_insts fn))
 Proof
   strip_tac >>
   `shape_state (initial_compile_state "__entry")` by
@@ -397,7 +406,8 @@ Proof
   drule cs_extends_abi_decode >> strip_tac >>
   `cs_extends last entry_end` by metis_tac[cs_extends_trans] >>
   goal_assum $ drule_at Any >> goal_assum $ drule_at Any >>
-  conj_tac
+  qexists_tac `mk_raw_function "__entry" (all_blocks entry_end)` >>
+  simp[] >> conj_tac
   >- (irule external_decoder_fn_has_code >>
       goal_assum $ drule_at Any >> simp[] >>
       metis_tac[cs_extends_trans]) >>

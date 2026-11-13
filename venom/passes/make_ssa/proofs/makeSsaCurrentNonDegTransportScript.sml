@@ -3,7 +3,7 @@ Ancestors
   makeSsaCurrentNonDegPlacement makeSsaCurrentNonDegDefault
   makeSsaCurrentNonDegTokenSources makeSsaCurrentPlacement makeSsaCurrentPlacementCut
   makeSsaCurrentTokenGraph makeSsaCurrentLastSite makeSsaCurrentTokens
-  makeSsaCurrentAnalysis makeSsaCurrentFrontier makeSsaCurrentDefs
+  makeSsaCurrentAnalysis makeSsaCurrentFrontier makeSsaDefs
   makeSsaCurrentWfSsa makeSsaCurrentPathBridge makeSsaCurrentCertificate
   makeSsaCurrentEdgeTrace makeSsaCurrentAllocation
   makeSsaCurrentLiveTransport livenessDefs o1PassContract

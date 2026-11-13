@@ -56,8 +56,11 @@
 
 Theory accountsRelProps
 Ancestors
-  compileEnv vyperState vyperCallOutcome extCallOracle vyperStoragePlaceRegion
-  venomState venomCallOracleDefs vfmExecution vfmState
+  compileEnv loweringStateRelDefs vyperState vyperCallOutcome extCallOracle vyperStoragePlaceRegion
+  vyperPlaceStoragePreservation
+  venomState venomCallOracleDefs vfmExecution vfmState vyperStorageLayoutSafety
+Libs
+  markerLib
 
 (* ===== Reflexivity ===== *)
 
@@ -124,12 +127,13 @@ QED
 
 (* ===== Frames ===== *)
 
-(* accounts_rel reads only the accounts and transient storage of both sides. *)
+(* accounts_rel reads only the accounts, transient storage, and vs_code. *)
 Theorem accounts_rel_frame:
   !cx es es' s s'.
     es'.accounts = es.accounts /\ es'.tStorage = es.tStorage /\
     es'.pending_deletions = es.pending_deletions /\
-    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient ==>
+    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
+    s'.vs_code = s.vs_code ==>
     (accounts_rel cx es' s' <=> accounts_rel cx es s)
 Proof
   simp[accounts_rel_def]
@@ -164,7 +168,8 @@ Theorem accounts_rel_set_storage:
       (cx.txn.target =+
          (lookup_account cx.txn.target s.vs_accounts with storage := stor'))
         s.vs_accounts /\
-    s'.vs_transient = s.vs_transient ==>
+    s'.vs_transient = s.vs_transient /\
+    s'.vs_code = s.vs_code ==>
     accounts_rel cx es' s'
 Proof
   rpt strip_tac >>
@@ -183,7 +188,8 @@ Theorem accounts_rel_set_transient:
     set_storage_backend cx T stor es = (INL (), es') /\
     storage_agree (storage_dead cx T stor) stor stor' /\
     s'.vs_accounts = s.vs_accounts /\
-    s'.vs_transient = (cx.txn.target =+ stor') s.vs_transient ==>
+    s'.vs_transient = (cx.txn.target =+ stor') s.vs_transient /\
+    s'.vs_code = s.vs_code ==>
     accounts_rel cx es' s'
 Proof
   rw[set_storage_backend_def, vyperStateTheory.update_transient_def,
@@ -319,7 +325,8 @@ Theorem accounts_rel_adopt_call_outcome:
       FST (adopt_outcome rq' outcome' (s.vs_accounts, s.vs_transient, logs)) /\
     s'.vs_transient =
       FST (SND (adopt_outcome rq' outcome'
-                  (s.vs_accounts, s.vs_transient, logs))) ==>
+                  (s.vs_accounts, s.vs_transient, logs))) /\
+    s'.vs_code = s.vs_code ==>
     accounts_rel cx es' s'
 Proof
   rw[adopt_call_outcome_equation] >>
@@ -403,7 +410,7 @@ Proof
          disch_then (qspecl_then [`type_slot_size tv`, `bs`] mp_tac) >>
          decide_tac) >>
       metis_tac[]) >>
-  `!i. i < n /\ i < w2n (lookup_storage (n2w bs) st) ==>
+  `!i. i < n ==>
        (dead_bytes st' (bs + (i * type_slot_size tv + 1)) tv j b <=>
         dead_bytes st (bs + (i * type_slot_size tv + 1)) tv j b)` by
     (rpt strip_tac >> first_x_assum irule >> simp[] >>
@@ -507,12 +514,10 @@ Proof
   gvs[]
 QED
 
-(* A dead byte of a DynArray in the slots of an element below its length is
-   that element's. *)
+(* A dead byte of a DynArray within a capacity element is that element's. *)
 Theorem dyn_array_elem_dead:
   !st bs tv n i x c.
     dead_bytes st bs (ArrayTV tv (Dynamic n)) x c /\ i < n /\
-    i < w2n (lookup_storage (n2w bs) st) /\
     bs + 1 + i * type_slot_size tv <= x /\
     x < bs + 1 + i * type_slot_size tv + type_slot_size tv ==>
     dead_bytes st (bs + 1 + i * type_slot_size tv) tv x c
@@ -520,13 +525,7 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `dead_bytes _ _ (ArrayTV _ _) _ _` mp_tac >>
   simp[Once dead_bytes_def] >> strip_tac >> rename1 `i2 < n` >>
-  Cases_on `i2 < w2n (lookup_storage (n2w bs) st)` >>
-  fs[arithmeticTheory.RIGHT_ADD_DISTRIB]
-  >- (drule (cj 1 dead_bytes_range) >> strip_tac >>
-      `i2 = i` by
-        (qspecl_then [`bs + 1`, `i2`, `i`, `type_slot_size tv`, `x`] mp_tac
-           element_slots_same >> impl_tac >- decide_tac >> simp[]) >>
-      gvs[]) >>
+  drule (cj 1 dead_bytes_range) >> strip_tac >>
   `i2 = i` by
     (qspecl_then [`bs + 1`, `i2`, `i`, `type_slot_size tv`, `x`] mp_tac
        element_slots_same >> impl_tac >- decide_tac >> simp[]) >>
@@ -606,11 +605,8 @@ Proof
       PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >> decide_tac)
   >~ [`dead_bytes _ _ (ArrayTV _ (Dynamic _))`]
   >- (rename1 `dead_bytes _ bs (ArrayTV tv (Dynamic n)) j b` >>
-      drule dead_bytes_head_eq >>
-      impl_tac >- simp[vyperValueTheory.type_slot_size_def] >>
-      disch_then (fn th => ONCE_REWRITE_TAC [dead_bytes_def] >>
-                           REWRITE_TAC [th]) >>
-      `!i. i < n /\ i < w2n (lookup_storage (n2w bs) st) ==>
+      ONCE_REWRITE_TAC [dead_bytes_def] >>
+      `!i. i < n ==>
            (dead_bytes st' (bs + 1 + i * type_slot_size tv) tv j b <=>
             dead_bytes st (bs + 1 + i * type_slot_size tv) tv j b)`
         suffices_by metis_tac[] >>
@@ -728,6 +724,49 @@ Proof
      asm_simp_tac pure_ss [wordsTheory.w2n_n2w,
                           arithmeticTheory.LESS_MOD] >> simp[]) >>
   simp[lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem nonreentrant_slot_read_live:
+  nonreentrant_slot_separated cx /\ cx.nonreentrant_slot = SOME key ==>
+  storage_read_live cx T st (n2w key) (BaseTV (UintT 256))
+Proof
+  strip_tac >> gvs[nonreentrant_slot_separated_def] >>
+  `key < dimword (:256)` by decide_tac >>
+  simp[storage_read_live_def, wordsTheory.w2n_n2w,
+       arithmeticTheory.LESS_MOD, vyperValueTheory.type_slot_size_def] >>
+  rpt strip_tac >> gvs[storage_dead_def] >>
+  qpat_x_assum `!mid n subs slot tv. _ ==> ranges_disjoint key 1 _ _`
+    (qspecl_then [`mid`, `n`, `subs`, `slot`, `tv`] mp_tac) >>
+  simp[] >>
+  drule (cj 1 dead_bytes_range) >>
+  simp[vyperStorageFrameTheory.ranges_disjoint_def] >>
+  rpt strip_tac >> decide_tac
+QED
+
+Theorem nonreentrant_slot_dead_preserved:
+  nonreentrant_slot_separated cx /\ cx.nonreentrant_slot = SOME key /\
+  storage_dead cx T st j b ==>
+  storage_dead cx T (update_storage (n2w key) value st) j b
+Proof
+  strip_tac >> gvs[nonreentrant_slot_separated_def] >>
+  `key < dimword (:256)` by decide_tac >>
+  qpat_x_assum `storage_dead _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_dead_def] >> strip_tac >>
+  rename1 `dead_bytes st (w2n slot) tv j b` >>
+  `ranges_disjoint (w2n slot) (type_slot_size tv) (w2n (n2w key:bytes32)) 1` by
+    (qpat_x_assum `!mid n subs slot tv. _ ==> ranges_disjoint key 1 _ _`
+       (qspecl_then [`mid`, `n`, `subs`, `slot`, `tv`] mp_tac) >>
+     simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
+          vyperStorageFrameTheory.ranges_disjoint_def] >>
+     decide_tac) >>
+  `dead_bytes (update_storage (n2w key) value st) (w2n slot) tv j b <=>
+   dead_bytes st (w2n slot) tv j b` by
+    (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
+     irule disjoint_word_update_lookup >>
+     qexistsl_tac [`w2n slot`, `type_slot_size tv`] >> simp[]) >>
+  qexistsl_tac [`mid`, `n`, `subs`, `slot`, `tv`] >>
+  gvs[pairTheory.PAIR_EQ] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
 Theorem update_storage_lookup_other[local]:
@@ -897,20 +936,7 @@ Proof
   >- metis_tac[dyn_bytes_dead_update_zero]
   >- metis_tac[dyn_bytes_dead_update_zero]
   >- (qexists_tac `i` >> simp[])
-  >- (qexists_tac `i` >> simp[] >>
-      rename1 `lookup_storage (n2w start) st` >>
-      Cases_on `k = n2w start`
-      >- (gvs[lookup_storage_def, update_storage_def,
-              combinTheory.APPLY_UPDATE_THM] >>
-          qpat_x_assum `if _ then _ else _` mp_tac >>
-          IF_CASES_TAC >> simp[] >> strip_tac >>
-          drule (cj 1 dead_bytes_range) >>
-          simp[arithmeticTheory.LEFT_ADD_DISTRIB,
-               arithmeticTheory.RIGHT_ADD_DISTRIB]) >>
-      qpat_x_assum `if _ then _ else _` mp_tac >>
-      IF_CASES_TAC >> strip_tac >>
-      gvs[lookup_storage_def, update_storage_def,
-          combinTheory.APPLY_UPDATE_THM])
+  >- (qexists_tac `i` >> simp[])
   >> metis_tac[]
 QED
 
@@ -958,7 +984,7 @@ Proof
 QED
 
 (* A field of a value read live is read live. *)
-Theorem dead_bytes_fields_selected[local]:
+Theorem dead_bytes_fields_selected:
   !fs id foff ftv st base j b.
     struct_field_slot fs id = SOME (foff,ftv) /\
     dead_bytes_fields st base fs j b /\
@@ -984,6 +1010,156 @@ Proof
   first_x_assum drule >>
   disch_then (qspecl_then [`st`, `bs + type_slot_size fty`, `j`, `b`] mp_tac) >>
   impl_tac >- (simp[] >> decide_tac) >> simp[]
+QED
+
+Theorem dead_bytes_array_selected:
+  !n raw base tv j b i. (?h:num. h < n /\ dead_bytes raw ((base:num) + h * type_slot_size tv) tv j b) /\
+  base + i * type_slot_size tv <= j /\
+  j < base + i * type_slot_size tv + type_slot_size tv ==>
+  dead_bytes raw (base + i * type_slot_size tv) tv j b
+Proof
+  rpt gen_tac >> strip_tac >>
+  `h = i` suffices_by (strip_tac >> gvs[]) >>
+  drule (cj 1 dead_bytes_range) >> strip_tac >>
+  Cases_on `h < i`
+  >- (`h * type_slot_size tv + type_slot_size tv <= i * type_slot_size tv` by
+        (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+      decide_tac) >>
+  Cases_on `i < h`
+  >- (`i * type_slot_size tv + type_slot_size tv <= h * type_slot_size tv` by
+        (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+      decide_tac) >> decide_tac
+QED
+
+Theorem dead_bytes_list_el:
+  !tvs k st base j b.
+    dead_bytes_list st base tvs j b /\ k < LENGTH tvs /\
+    base + tuple_prefix_slot_size k tvs <= j /\
+    j < base + tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) ==>
+    dead_bytes st (base + tuple_prefix_slot_size k tvs) (EL k tvs) j b
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `dead_bytes_list _ _ _ _ _` mp_tac >>
+  simp[Once dead_bytes_def] >> strip_tac >>
+  Cases_on `k` >> gvs[tuple_prefix_slot_size_def] >>
+  imp_res_tac (cj 1 dead_bytes_range) >>
+  imp_res_tac (cj 2 dead_bytes_range) >> gvs[] >>
+  first_x_assum drule >> disch_then (qspec_then `n` mp_tac) >>
+  impl_tac >- decide_tac >> rewrite_tac[arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem storage_subregion_dead_bytes:
+  !root path delta leaf. storage_subregion root path delta leaf ==>
+    !raw off j b. off + delta <= j /\
+      j < off + delta + type_slot_size leaf /\ dead_bytes raw off root j b ==>
+      dead_bytes raw (off + delta) leaf j b
+Proof
+  ho_match_mp_tac storage_subregion_ind >> rpt conj_tac >>
+  rpt gen_tac >> rpt strip_tac >>
+  qpat_x_assum `storage_subregion _ _ _ _` mp_tac >>
+  simp_tac (srw_ss()) [Once storage_subregion_def] >> strip_tac >>
+  rpt BasicProvers.VAR_EQ_TAC >> asm_rewrite_tac [] >>
+  FIRST [rename1 `dead_bytes _ _ (ArrayTV _ (Fixed _)) _ _` >> suspend "Fixed",
+         rename1 `dead_bytes _ _ (ArrayTV _ (Dynamic _)) _ _` >> suspend "Dynamic",
+         rename1 `dead_bytes _ _ (StructTV _) _ _` >> suspend "Struct",
+         rename1 `dead_bytes _ _ (TupleTV _) _ _` >> suspend "Tuple"]
+QED
+
+Resume storage_subregion_dead_bytes[Fixed]:
+  RESUME_TAC >>
+  drule storage_subregion_bounds >> strip_tac >>
+  `dead_bytes raw (off + Num i * type_slot_size root) root j b` by
+    (irule dead_bytes_array_selected >>
+     conj_tac >- (qexists_tac `n` >>
+                  qpat_x_assum `dead_bytes _ _ (ArrayTV _ _) _ _` mp_tac >>
+                  simp[Once dead_bytes_def]) >> decide_tac) >>
+  qpat_x_assum `!delta. storage_subregion _ _ _ _ ==> _`
+    (drule_then mp_tac) >>
+  disch_then (qspec_then `raw` mp_tac) >>
+  disch_then (qspec_then `off + Num i * type_slot_size root` mp_tac) >>
+  disch_then (qspecl_then [`j`,`b`] mp_tac) >>
+  asm_simp_tac bool_ss [arithmeticTheory.ADD_ASSOC] >>
+  disch_then irule >> decide_tac
+QED
+Resume storage_subregion_dead_bytes[Dynamic]:
+  RESUME_TAC >>
+  drule storage_subregion_bounds >> strip_tac >>
+  `dead_bytes raw (off + 1 + Num i * type_slot_size root) root j b` by
+    (irule dead_bytes_array_selected >>
+     conj_tac >- (qexists_tac `n` >>
+                  qpat_x_assum `dead_bytes _ _ (ArrayTV _ _) _ _` mp_tac >>
+                  simp[Once dead_bytes_def]) >> decide_tac) >>
+  qpat_x_assum `!delta. storage_subregion _ _ _ _ ==> _`
+    (drule_then mp_tac) >>
+  disch_then (qspec_then `raw` mp_tac) >>
+  disch_then (qspec_then `off + 1 + Num i * type_slot_size root` mp_tac) >>
+  disch_then (qspecl_then [`j`,`b`] mp_tac) >>
+  asm_simp_tac bool_ss [arithmeticTheory.ADD_ASSOC] >>
+  disch_then irule >> decide_tac
+QED
+Resume storage_subregion_dead_bytes[Struct]:
+  RESUME_TAC >>
+  drule storage_subregion_bounds >> strip_tac >>
+  `dead_bytes raw (off + delta') elem j b` by
+    (irule dead_bytes_fields_selected >>
+     reverse (conj_tac) >- (conj_tac >- decide_tac >>
+       qexistsl_tac [`fields`,`id`] >>
+       asm_simp_tac bool_ss [GSYM dead_bytes_def]) >> decide_tac) >>
+  qpat_x_assum `!root delta. storage_subregion _ _ _ _ ==> _`
+    (drule_then mp_tac) >>
+  disch_then (qspec_then `raw` mp_tac) >>
+  disch_then (qspec_then `off + delta'` mp_tac) >>
+  disch_then (qspecl_then [`j`,`b`] mp_tac) >>
+  asm_simp_tac bool_ss [arithmeticTheory.ADD_ASSOC] >>
+  disch_then irule >> decide_tac
+QED
+Resume storage_subregion_dead_bytes[Tuple]:
+  RESUME_TAC >>
+  drule storage_subregion_bounds >> strip_tac >>
+  gvs[listTheory.oEL_EQ_EL] >>
+  `dead_bytes raw (off + tuple_prefix_slot_size (Num i) types) (EL (Num i) types) j b` by
+    (irule dead_bytes_list_el >>
+     asm_simp_tac bool_ss [GSYM dead_bytes_def] >> decide_tac) >>
+  qpat_x_assum `!root delta. storage_subregion _ _ _ _ ==> _`
+    (drule_then mp_tac) >>
+  disch_then (qspec_then `raw` mp_tac) >>
+  disch_then (qspec_then `off + tuple_prefix_slot_size (Num i) types` mp_tac) >>
+  disch_then (qspecl_then [`j`,`b`] mp_tac) >>
+  asm_simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  disch_then irule >> decide_tac
+QED
+Finalise storage_subregion_dead_bytes
+
+Theorem storage_subregion_read_live:
+  storage_subregion root path delta leaf /\
+  w2n slot = w2n root_slot + delta /\
+  w2n root_slot + type_slot_size root <= dimword(:256) /\
+  storage_read_live cx tr raw root_slot root ==>
+  storage_read_live cx tr raw slot leaf
+Proof
+  strip_tac >> drule storage_subregion_bounds >> strip_tac >>
+  fs[storage_read_live_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >>
+  `dead_bytes raw (w2n root_slot) root j b` by
+    (first_x_assum drule >> strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  once_rewrite_tac [arithmeticTheory.ADD_COMM] >>
+  irule storage_subregion_dead_bytes >>
+  conj_tac >- decide_tac >> conj_tac >- decide_tac >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem storage_place_region_read_live:
+  storage_layout_safe cx /\
+  storage_place_region cx (StoragePlace tr slot leaf) /\
+  0 < type_slot_size leaf ==>
+  storage_read_live cx tr raw slot leaf
+Proof
+  strip_tac >> drule_all storage_place_region_numeric >> strip_tac >>
+  drule declared_storage_region_read_live >>
+  disch_then (qspec_then `raw` assume_tac) >>
+  irule storage_subregion_read_live >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem storage_read_live_field:

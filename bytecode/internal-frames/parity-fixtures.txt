@@ -10,6 +10,5 @@ p39_int_local_clobber
 p40_int_for_clobber
 p41_int_local_and_call
 p47_len_of_string_call
-p74_int_ext_call
 p76_int_assert_raise
 p92_int_revert_branch

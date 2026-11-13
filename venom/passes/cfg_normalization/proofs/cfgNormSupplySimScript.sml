@@ -277,115 +277,6 @@ Proof
   Cases_on `a = target.bb_label` >> gvs[] >> metis_tac[]
 QED
 
-Theorem exec_block_outputs_in_fdom_from_prefix:
-  exec_block fuel ctx bb st = OK st' /\
-  bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
-  (!j w. j < st.vs_inst_idx /\ j < LENGTH bb.bb_instructions /\
-         MEM w (EL j bb.bb_instructions).inst_outputs ==>
-         w IN FDOM st.vs_vars) /\
-  idx < LENGTH bb.bb_instructions /\
-  ~is_terminator (EL idx bb.bb_instructions).inst_opcode /\
-  MEM v (EL idx bb.bb_instructions).inst_outputs ==>
-  v IN FDOM st'.vs_vars
-Proof
-  rpt strip_tac >> Cases_on `idx < st.vs_inst_idx`
-  >- (`v IN FDOM st.vs_vars` by metis_tac[] >>
-      drule exec_block_fdom_mono >>
-      simp[pred_setTheory.SUBSET_DEF]) >>
-  irule exec_block_output_in_fdom_aux >>
-  qexistsl [`bb`, `ctx`, `fuel`, `idx`,
-            `LENGTH bb.bb_instructions - st.vs_inst_idx`, `st`] >> simp[]
-QED
-
-Theorem strict_dom_vars_defined_preserved_from_prefix:
-  wf_function f /\ MEM bb f.fn_blocks /\
-  bb.bb_label = st.vs_current_bb /\
-  exec_block fuel ctx bb st = OK st' /\
-  st.vs_inst_idx <= LENGTH bb.bb_instructions /\
-  strict_dom_vars_defined f st /\ fn_reachable f st.vs_current_bb /\
-  EVERY inst_wf bb.bb_instructions /\
-  (!j w. j < st.vs_inst_idx /\ j < LENGTH bb.bb_instructions /\
-         MEM w (EL j bb.bb_instructions).inst_outputs ==>
-         w IN FDOM st.vs_vars) ==>
-  strict_dom_vars_defined f st'
-Proof
-  rpt strip_tac >>
-  `bb_well_formed bb` by gvs[wf_function_def] >>
-  simp[strict_dom_vars_defined_def] >> rpt strip_tac >>
-  Cases_on `d_bb.bb_label = st.vs_current_bb`
-  >- (`d_bb = bb` by
-        metis_tac[venomExecProofsTheory.same_label_same_block] >> gvs[] >>
-      `?idx. idx < LENGTH bb.bb_instructions /\
-             EL idx bb.bb_instructions = d_inst` by
-        metis_tac[listTheory.MEM_EL] >>
-      `~is_terminator d_inst.inst_opcode` by
-        (strip_tac >>
-         `d_inst.inst_outputs = []` by
-           metis_tac[venomExecProofsTheory.terminator_no_outputs,
-                     listTheory.EVERY_MEM] >> gvs[]) >>
-      irule exec_block_outputs_in_fdom_from_prefix >>
-      qexistsl [`bb`, `ctx`, `fuel`, `idx`, `st`] >> simp[] >>
-      metis_tac[]) >>
-  `MEM st'.vs_current_bb (bb_succs bb)` by
-    (irule exec_block_current_bb_in_succs >>
-     conj_tac
-     >- (gvs[bb_well_formed_def] >> rpt strip_tac >>
-         `i < LENGTH bb.bb_instructions` by decide_tac >>
-         `i = PRE (LENGTH bb.bb_instructions)` by metis_tac[] >>
-         decide_tac) >>
-     `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
-     simp[] >> qexistsl [`ctx`, `fuel`, `st`] >> simp[]) >>
-  `fn_cfg_edge f st.vs_current_bb st'.vs_current_bb` by
-    (simp[fn_cfg_edge_def] >> metis_tac[]) >>
-  `fn_dominates f d_bb.bb_label st.vs_current_bb` by
-    metis_tac[venomExecProofsTheory.fn_dominates_predecessor] >>
-  `v IN FDOM st.vs_vars` by
-    (gvs[strict_dom_vars_defined_def] >> metis_tac[]) >>
-  drule exec_block_fdom_mono >> simp[pred_setTheory.SUBSET_DEF]
-QED
-
-Theorem strict_dom_vars_defined_eval_phis:
-  strict_dom_vars_defined f st /\ eval_phis st insts = OK st' ==>
-  strict_dom_vars_defined f st'
-Proof
-  rpt strip_tac >>
-  `st'.vs_current_bb = st.vs_current_bb` by
-    metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
-  drule venomExecProofsTheory.eval_phis_vars_grow >>
-  gvs[strict_dom_vars_defined_def, pred_setTheory.SUBSET_DEF] >> metis_tac[]
-QED
-
-Theorem strict_dom_vars_defined_inst_idx[simp]:
-  strict_dom_vars_defined f (st with vs_inst_idx := idx) <=>
-  strict_dom_vars_defined f st
-Proof
-  simp[strict_dom_vars_defined_def]
-QED
-
-Theorem strict_dom_vars_defined_run_block_entry:
-  wf_function f /\ MEM bb f.fn_blocks /\
-  bb.bb_label = st.vs_current_bb /\
-  run_block_entry fuel ctx bb st = OK st' /\
-  strict_dom_vars_defined f st /\ fn_reachable f st.vs_current_bb /\
-  EVERY inst_wf bb.bb_instructions ==>
-  strict_dom_vars_defined f st'
-Proof
-  rpt strip_tac >>
-  mp_tac (Q.SPECL [`st`, `bb.bb_instructions`]
-    venomExecSemanticsTheory.eval_phis_ok_or_error_defs) >> strip_tac >>
-  gvs[venomExecSemanticsTheory.run_block_def] >>
-  rename1 `eval_phis st bb.bb_instructions = OK st_phi` >>
-  irule strict_dom_vars_defined_preserved_from_prefix >> simp[] >>
-  qexistsl [`bb`, `ctx`, `fuel`,
-            `st_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`] >>
-  simp[venomExecProofsTheory.phi_prefix_length_le] >>
-  `st_phi.vs_current_bb = st.vs_current_bb` by
-    metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >>
-      drule_all venomExecProofsTheory.eval_phis_outputs_in_fdom_idx >> simp[]) >>
-  drule_all strict_dom_vars_defined_eval_phis >> simp[]
-QED
 
 Theorem def_available_at_exec_block_endpoint:
   wf_function f /\ MEM bb f.fn_blocks /\
@@ -4644,6 +4535,122 @@ Resume supply_run_blocks_forward[continue]:
 QED
 
 Finalise supply_run_blocks_forward
+
+(* The image block run on more fuel gives the same result as the source
+   block on less, since a terminating block run is fuel-monotone. *)
+Theorem supply_ready_run_block_fuel:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  EVERY label_positions_ok (fn_insts fn) /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\ 1 < num_succs pred /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  supply_ready fn pred target split repls u v /\
+  lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+  (!e. run_block_entry k ctx bb u <> Error e) ==>
+  !j. k <= j ==>
+    lift_result (supply_entry_pair fn s pred target split repls)
+      (supply_state_agree fn) (supply_state_agree fn)
+      (run_block_entry k ctx bb u)
+      (run_block_entry j ctx (supply_block_image pred target split repls bb) v)
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  drule_all supply_ready_run_block >>
+  disch_then (qspecl_then [`k`, `ctx`] assume_tac) >>
+  `!e. run_block_entry k ctx (supply_block_image pred target split repls bb) v <>
+       Error e` by
+    (rpt strip_tac >> gvs[] >>
+     Cases_on `run_block_entry k ctx bb u` >>
+     gvs[stateEquivTheory.lift_result_def]) >>
+  `run_block_entry j ctx (supply_block_image pred target split repls bb) v =
+   run_block_entry k ctx (supply_block_image pred target split repls bb) v` by
+    (irule venomExecProofsTheory.run_block_fuel_mono >> simp[] >>
+     qexists_tac `k` >> simp[]) >>
+  simp[]
+QED
+
+(* One split at most doubles the fuel: from a ready pair the split function
+   needs 2 * n, from a pending pair (target state at the split block) one
+   step more. *)
+Theorem supply_run_blocks_forward_fuel:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  EVERY label_positions_ok (fn_insts fn) /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\ 1 < num_succs pred /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') ==>
+  !n u v. terminates (run_blocks n ctx fn u) ==>
+    (supply_ready fn pred target split repls u v ==>
+       frame_result_rel (run_blocks n ctx fn u) (run_blocks (2 * n) ctx fn' v)) /\
+    (supply_pending fn s pred target split u v ==>
+       frame_result_rel (run_blocks n ctx fn u)
+         (run_blocks (2 * n + 1) ctx fn' v))
+Proof
+  strip_tac >> completeInduct_on `n` >> rpt gen_tac >> strip_tac >>
+  `!v. supply_ready fn pred target split repls u v ==>
+     frame_result_rel (run_blocks n ctx fn u) (run_blocks (2 * n) ctx fn' v)` by
+    suspend "ready" >>
+  simp[] >> strip_tac >>
+  drule_all supply_pending_contract >>
+  disch_then (qspecl_then [`2 * n`, `ctx`] strip_assume_tac) >>
+  drule_all supply_pending_split_lookup >> strip_tac >>
+  `~m.vs_halted` by gvs[supply_ready_def] >>
+  `2 * n + 1 = SUC (2 * n)` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  simp[Once venomExecSemanticsTheory.run_blocks_unfold] >>
+  gvs[venomExecSemanticsTheory.run_block_entry_def]
+QED
+
+Resume supply_run_blocks_forward_fuel[ready]:
+  rpt strip_tac >> Cases_on `n`
+  >- gvs[Once venomExecSemanticsTheory.run_blocks_def,
+         passSimulationDefsTheory.terminates_def] >>
+  rename1 `SUC k` >>
+  Cases_on `lookup_block u.vs_current_bb fn.fn_blocks`
+  >- gvs[venomExecSemanticsTheory.run_blocks_unfold,
+         passSimulationDefsTheory.terminates_def] >>
+  rename1 `lookup_block u.vs_current_bb fn.fn_blocks = SOME bb` >>
+  drule_all supply_ready_image_lookup >> strip_tac >>
+  `!e. run_block_entry k ctx bb u <> Error e` by
+    (rpt strip_tac >>
+     gvs[venomExecSemanticsTheory.run_blocks_unfold,
+         passSimulationDefsTheory.terminates_def]) >>
+  `lift_result (supply_entry_pair fn s pred target split repls)
+     (supply_state_agree fn) (supply_state_agree fn)
+     (run_block_entry k ctx bb u)
+     (run_block_entry (2 * k + 1) ctx
+        (supply_block_image pred target split repls bb) v)` by
+    (mp_tac supply_ready_run_block_fuel >> simp[] >>
+     disch_then (qspec_then `2 * k + 1` mp_tac) >> simp[]) >>
+  pop_assum mp_tac >>
+  `2 * SUC k = SUC (2 * k + 1)` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  Cases_on `run_block_entry k ctx bb u` >>
+  Cases_on `run_block_entry (2 * k + 1) ctx
+              (supply_block_image pred target split repls bb) v` >>
+  simp[stateEquivTheory.lift_result_def] >> rpt strip_tac >>
+  gvs[venomExecSemanticsTheory.run_blocks_unfold,
+      passSimulationDefsTheory.terminates_def]
+  >- suspend "continue" >>
+  simp[o1PassLiftTheory.frame_result_rel_def] >>
+  gvs[supply_state_agree_def]
+QED
+
+Resume supply_run_blocks_forward_fuel[continue]:
+  rename1 `supply_entry_pair fn s pred target split repls u1 v1` >>
+  `~u1.vs_halted /\ ~v1.vs_halted` by
+    gvs[supply_entry_pair_def, supply_ready_def, supply_pending_def] >>
+  gvs[] >>
+  first_x_assum (qspec_then `k` mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`u1`, `v1`] mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `supply_entry_pair _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [supply_entry_pair_def]) >> gvs[] >>
+  `run_blocks (2 * k + 1) ctx fn' v1 = run_blocks (2 * k) ctx fn' v1` by
+    (irule o1PassLiftTheory.run_blocks_terminates_mono >> simp[] >>
+     metis_tac[o1PassLiftTheory.frame_result_rel_terminates]) >>
+  simp[]
+QED
+
+Finalise supply_run_blocks_forward_fuel
 
 Theorem supply_entry_defined_lookup:
   wf_function fn /\ supply_entry_defined fn u ==>
