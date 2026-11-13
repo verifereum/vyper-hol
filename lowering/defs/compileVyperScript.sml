@@ -1134,8 +1134,8 @@ End
 
 (* Python allocates the return buffer each time it lowers a valued return
    of an external function that is neither @raw_return nor a word type.
-   Python does the same for a valued return in __default__; the fallback
-   isn't checked here, since its compile env keeps no ABI return encoding.
+   Python does the same for a valued return in __default__, which the
+   runtime unit checks with this predicate too.
    Mirrors Python: vyper/codegen_venom/stmt.py:_lower_external_return. *)
 Definition external_return_buffer_ok_def:
   external_return_buffer_ok
@@ -1269,9 +1269,11 @@ Definition package_fallback_fn_def:
   package_fallback_fn tops use_trans nkey_map NONE = NONE ∧
   package_fallback_fn tops use_trans nkey_map
     (SOME (mut, nr, rr, fname, fargs, _, ret, body)) =
-    let cenv = (build_compile_env tops
-                  External mut fname fargs ret body use_trans)
-                 with ce_raw_return := rr in
+    let cenv0 = (build_compile_env tops
+                   External mut fname fargs ret body use_trans)
+                  with ce_raw_return := rr in
+    let cenv = if ret ≠ NoneT then update_cenv_ret_abi cenv0 ret
+               else cenv0 in
     let nkey = nkey_map fname in
     let is_payable = (mut = Payable) in
     let is_view = (mut = View) in
@@ -1428,7 +1430,7 @@ Proof
   >- simp[set_fallback_package_target_def, package_fallback_fn_def]
   >> Cases_on `x` >> PairCases_on `r` >>
   simp[set_fallback_package_target_def, package_fallback_fn_def] >>
-  irule compile_env_target_update_id >> simp[]
+  irule compile_env_target_update_id >> IF_CASES_TAC >> simp[]
 QED
 
 Theorem set_constructor_package_target_all_capabilities[simp]:
@@ -1557,6 +1559,11 @@ Definition lower_vyper_runtime_unit_def:
     if compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
          tops < 0x6000 ∧
        EVERY external_return_buffer_ok external_fns ∧
+       OPTION_ALL (λ(cenv,pay,nr,nkey,ut,iv,body,ret_opt).
+                     external_return_buffer_ok
+                       ("", cenv, ([] : num list), 0, pay, nr, nkey, ut, iv, body,
+                        ret_opt))
+         fallback_fn ∧
        EVERY (fn_allocs_ok tops)
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
     then
@@ -1603,6 +1610,11 @@ Theorem lower_vyper_runtime_unit_no_external_defaults:
     if compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
          tops < 0x6000 ∧
        EVERY external_return_buffer_ok external_fns ∧
+       OPTION_ALL (λ(cenv,pay,nr,nkey,ut,iv,body,ret_opt).
+                     external_return_buffer_ok
+                       ("", cenv, ([] : num list), 0, pay, nr, nkey, ut, iv, body,
+                        ret_opt))
+         fallback_fn ∧
        EVERY (fn_allocs_ok tops)
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
     then
