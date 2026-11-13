@@ -11,7 +11,36 @@ Theorem ptr_param_root_cover:
     (?bid. FLOOKUP A bid = SOME site /\ r IN ptr_bp_alloc_roots fn bid) \/
     r IN (ptr_roots P fn DIFF alloca_roots fn)
 Proof
-  cheat
+  strip_tac >> gen_tac >> simp[ptr_frame_site_roots_def] >>
+  disch_then (qx_choose_then `i` strip_assume_tac) >>
+  `inst_wf i` by fs[EVERY_MEM] >>
+  `inst_output i = SOME r` by
+    (gvs[inst_wf_def] >> Cases_on `i.inst_outputs` >>
+     gvs[inst_output_def] >> Cases_on `t` >> gvs[]) >>
+  gvs[]
+  >- (disj1_tac >> qexists `i.inst_id` >>
+      simp[ptr_bp_alloc_roots_def] >> metis_tac[])
+  >- (disj2_tac >> simp[IN_DIFF] >> conj_tac
+      >- (simp[ptr_roots_def] >> disj2_tac >>
+          qexistsl [`i`, `idx`] >> fs[ptr_params_ok_def] >> metis_tac[]) >>
+      simp[alloca_roots_def] >> rpt strip_tac >>
+  rename1 `j.inst_opcode = ALLOCA` >>
+  `MEM r j.inst_outputs` by
+    (Cases_on `j.inst_outputs` >> gvs[inst_output_def] >>
+     Cases_on `t` >> gvs[]) >>
+  `i <> j` by (strip_tac >> gvs[]) >>
+  fs[ssa_form_def] >>
+  metis_tac[distinct_flat_map_members_disjoint]) >>
+  disj2_tac >> simp[IN_DIFF] >> conj_tac
+  >- (simp[ptr_roots_def] >> metis_tac[]) >>
+  simp[alloca_roots_def] >> rpt strip_tac >>
+  rename1 `j.inst_opcode = ALLOCA` >>
+  `MEM r j.inst_outputs` by
+    (Cases_on `j.inst_outputs` >> gvs[inst_output_def] >>
+     Cases_on `t` >> gvs[]) >>
+  `i <> j` by (strip_tac >> gvs[]) >>
+  fs[ssa_form_def] >>
+  metis_tac[distinct_flat_map_members_disjoint]
 QED
 
 Theorem ptr_frame_current_root_cover:

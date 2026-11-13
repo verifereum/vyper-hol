@@ -236,7 +236,20 @@ Theorem ptr_params_erases_extend:
   (!owner site. FLOOKUP births owner = SOME site ==> FLOOKUP births' owner = SOME site) ==>
   ptr_params_erases dyn births' PT PG
 Proof
-  cheat
+  simp[ptr_params_erases_def, EVERY_MEM, LIST_REL_EL_EQN] >> strip_tac >>
+  `!p. MEM p PT ==> !owner. p = SOME owner ==> owner IN FDOM births` by
+    (rpt strip_tac >> first_assum drule >> simp[]) >>
+  `!p n. MEM p PT /\ ptr_owner_erases dyn births p n ==>
+     ptr_owner_erases dyn births' p n /\
+     (!owner. p = SOME owner ==> owner IN FDOM births')` by
+    (rpt gen_tac >> strip_tac >> irule ptr_owner_erases_extend >> metis_tac[]) >>
+  rw[]
+  >- metis_tac[MEM_EL] >>
+  Cases_on `p` >> simp[] >>
+  `x IN FDOM births` by metis_tac[] >>
+  `?site. FLOOKUP births x = SOME site` by
+    metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >>
+  metis_tac[FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]
 QED
 
 Theorem ptr_owner_alloca_insert:
