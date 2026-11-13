@@ -275,14 +275,18 @@ Theorem raw_call_calldata_original_input_test:
        else ArrayV (TupleV [BoolV success;
          BytesV (TAKE flags.rcf_max_outsize retdata)]))),
      st with <|accounts := accounts'; tStorage := transient'; logs := st.logs ++ logs';
-               pending_deletions := deletions ++ st.pending_deletions|>)
+               pending_deletions := deletions ++ st.pending_deletions;
+               storage_trace := st.storage_trace ++
+                 (if success /\ ~flags.rcf_is_static
+                  then [StorageBackend accounts' transient'] else [])|>)
 Proof
   rpt strip_tac >>
   Cases_on `flags.rcf_revert_on_failure` >> Cases_on `success` >>
-  Cases_on `flags.rcf_max_outsize = 0` >> Cases_on `cx.txn.is_static` >>
+  Cases_on `flags.rcf_max_outsize = 0` >> Cases_on `cx.txn.is_static` >> Cases_on `flags.rcf_is_static` >>
   gvs[eval_raw_call_def, frame_call_value_def, COND_RATOR, bind_def, ignore_bind_def, type_check_def, check_def,
        assert_def, get_accounts_def, get_transient_storage_def, lift_option_def,
        update_accounts_def, update_transient_def, append_logs_def,
+       record_storage_backend_def, record_storage_event_def,
        update_pending_deletions_def, return_def, raise_def,
        evaluation_state_component_equality]
 QED

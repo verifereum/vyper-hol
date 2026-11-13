@@ -19,7 +19,7 @@ Theorem extend_place_memory_local:
   extend_place cx (PlaceR (MemoryPlace id path)) sb st = (INL r,st') ==>
   ?path'. r = PlaceR (MemoryPlace id path')
 Proof
-  simp[extend_place_def, bind_def, ignore_bind_def, extend_memory_place_def,
+  simp[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def, extend_memory_place_def,
        return_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 

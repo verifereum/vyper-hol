@@ -37,7 +37,7 @@ Ancestors
   vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
   vyperTypeExternalCallMachine vyperTypeExternalDefaults vyperTypeInvariants vyperTypeBindArguments
   vyperTypeStmtSoundness vyperTypeStmtResult vyperTypeEvalSoundness
-  vyperExprNoControl
+  vyperExprNoControl vyperStorageTrace
 
 val _ = Parse.hide "body";
 
@@ -68,44 +68,55 @@ Theorem constructor_call_observed[local]:
    | (INL v,am',rqs) => INL (SOME v,am',rqs))
 Proof
   strip_tac >>
-  simp[call_external_function_def, call_constructor_body_def] >>
-  Cases_on `send_call_value mut cx
-    (initial_state am_c [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
-  Cases_on `q` >>
-  simp[call_external_body_def, bind_def, ignore_bind_def, set_scopes_def, return_def] >>
-  TRY (rename1 `send_call_value _ _ _ = (INR exc,_)` >>
-       drule send_call_value_error >> strip_tac >> gvs[] >> NO_TAC) >>
-  qabbrev_tac `lock_action = if nr then
-    case cx.nonreentrant_slot of
-      NONE => raise (Error (TypeError "nonreentrant slot missing"))
-    | SOME slot =>
-        bind (acquire_nonreentrant_lock cx.txn.target slot
-                ((mut = View \/ mut = Pure) \/ cx.txn.is_static))
-             (\x. if mut = View \/ mut = Pure then return () else check_not_static cx)
-    else return ()` >>
-  Cases_on `lock_action (r with scopes := [scope])` >>
-  Cases_on `q` >> simp[] >>
-  TRY (rename1 `eval_stmts cx body st` >>
-       Cases_on `eval_stmts cx body st` >> Cases_on `q` >> simp[]) >>
-  qabbrev_tac `unlock_action = if nr /\ mut <> View /\ mut <> Pure then
-    case cx.nonreentrant_slot of NONE => return ()
-    | SOME slot => release_nonreentrant_lock cx.txn.target slot
-    else return ()` >>
-  `!s res s'. unlock_action s = (res,s') ==> res = INL ()` by
-    (simp[Abbr `unlock_action`] >> rpt gen_tac >> strip_tac >>
-     drule (release_action_result |> SPEC_ALL |>
-       Q.INST [`is_view` |-> `mut = View \/ mut = Pure`] |> SRULE []) >>
-     simp[]) >>
-  TRY (rename1 `eval_stmts _ _ _ = (INR exc,_)` >>
-       Cases_on `exc` >> simp[]) >>
-  TRY (rename1 `lock_action _ = (INR exc,_)` >>
-       Cases_on `exc` >> simp[]) >>
-  TRY (rename1 `send_call_value _ _ _ = (INR exc,_)` >>
-       Cases_on `exc` >> simp[]) >>
-  TRY (qmatch_goalsub_rename_tac `unlock_action final_st` >>
-       Cases_on `unlock_action final_st` >> Cases_on `q` >> simp[] >>
-       res_tac >> gvs[]) >>
-  rpt (CASE_TAC >> simp[])
+  Cases_on `evaluate_module_constants_trace cx am0 cx.txn.target (constants_order mods)` >>
+  gvs[evaluate_all_constants_def, evaluate_module_constants_def] >>
+  rename1 `evaluate_module_constants_trace _ _ _ _ = (SOME am_c, observations)` >>
+  qabbrev_tac `st0 = initial_state am_c [FEMPTY] with
+    <|outcomes := orc; requests := []; gas_obs := gobs|>` >>
+  Cases_on `send_call_value mut cx st0` >>
+  rename1 `send_call_value mut cx st0 = (sr,st1)` >>
+  `send_call_value mut cx (st0 with storage_trace := observations) =
+    (sr,st1 with storage_trace := observations ++ st1.storage_trace)` by
+    (mp_tac send_call_value_storage_trace_frame >>
+     rewrite_tac[storage_trace_frame_action] >>
+     disch_then (qspecl_then [`st0`,`observations`] mp_tac) >>
+     simp[Abbr `st0`, initial_state_def]) >>
+  fs[Abbr `st0`] >>
+  simp[call_external_function_def, call_external_function_trace_def,
+       call_constructor_body_def] >>
+  Cases_on `sr` >> simp[Once bind_def, Once ignore_bind_def]
+  >- (qabbrev_tac `entry = ignore_bind (set_scopes [scope])
+        (ignore_bind (lock_if_nr cx nr (is_view_mut mut)) (eval_stmts cx body))` >>
+      `storage_trace_frame entry` by
+        (qunabbrev_tac `entry` >> irule storage_trace_frame_ignore_bind >>
+         conj_tac >- MATCH_ACCEPT_TAC (cj 6 storage_trace_frame_state_updates) >>
+         irule storage_trace_frame_ignore_bind >>
+         conj_tac >- MATCH_ACCEPT_TAC (cj 1 storage_trace_frame_optional_locks) >>
+         MATCH_ACCEPT_TAC (cj 2 evaluate_storage_trace_frame)) >>
+      Cases_on `entry st1` >> rename1 `entry st1 = (br,bst)` >>
+      drule_all storage_trace_frame_result >>
+      disch_then (qspec_then `observations` assume_tac) >>
+      simp[Once bind_def, Once ignore_bind_def, eval_external_defaults_nil] >>
+      simp[call_external_body_def] >>
+      pure_rewrite_tac[GSYM ignore_bind_def] >>
+      `storage_trace_frame (unlock_if_nr cx nr (is_view_mut mut))` by
+        MATCH_ACCEPT_TAC (cj 2 storage_trace_frame_optional_locks) >>
+      Cases_on `unlock_if_nr cx nr (is_view_mut mut) bst` >>
+      rename1 `unlock_if_nr _ _ _ bst = (ur,ust)` >>
+      drule_all storage_trace_frame_result >>
+      disch_then (qspec_then `observations` assume_tac) >>
+      `ur = INL ()` by
+        (drule (release_action_result |> REWRITE_RULE [GSYM unlock_if_nr_def]) >> simp[]) >>
+      fs[Abbr `entry`, lock_if_nr_def, unlock_if_nr_def] >>
+      namedCases_on `br` ["ok", "exc"] >>
+      simp[abstract_machine_from_state_storage_trace] >>
+      Cases_on `exc` >>
+      simp[abstract_machine_from_state_storage_trace] >>
+      Cases_on `evaluate_type (type_env_all_modules mods) ret` >> simp[] >>
+      rename1 `evaluate_type _ ret = SOME tv` >>
+      Cases_on `safe_cast tv v` >> simp[]) >>
+  drule send_call_value_error >> strip_tac >> gvs[] >>
+  simp[Once bind_def, Once ignore_bind_def]
 QED
 
 (* ===== Setup steps ===== *)
@@ -188,11 +199,13 @@ Proof
     (qpat_x_assum `evaluate_all_constants _ _ tx.target _ = _` mp_tac >> simp[]) >>
   drule_all constructor_call_observed >>
   disch_then (qspecl_then [`ts`,`ret`,`orc`,`nr`,`mut`,`gobs`,`body`] mp_tac) >>
-  simp[load_contract_def] >>
+  simp[load_contract_def, load_contract_trace_def] >>
   qpat_x_assum `cx = _` (fn th => rewrite_tac[GSYM th]) >>
   qmatch_goalsub_abbrev_tac `call_external_function _ _ am_i _ _ _ _ _ _ _ _ _ _` >>
-  Cases_on `call_external_function orc gobs am_i cx nr mut ts mods args [] tx.args body ret` >>
-  rename1 `_ = (res1,p1)` >> PairCases_on `p1` >>
+  Cases_on `call_external_function_trace orc gobs am_i cx nr mut ts mods args [] tx.args body ret` >>
+  rename1 `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = (res1,p1)` >>
+  PairCases_on `p1` >>
+  fs[call_external_function_def] >>
   Cases_on `call_constructor_body orc gobs am_c cx nr mut (type_env_all_modules mods)
               scope body ret` >>
   rename1 `call_constructor_body _ _ _ _ _ _ _ _ _ _ = (res2,p2)` >> PairCases_on `p2` >>

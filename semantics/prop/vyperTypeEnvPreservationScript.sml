@@ -371,6 +371,10 @@ Proof
   `!bs s res t. k bs s = (res,t) ==>
       (env_consistent env cx s ==> env_consistent env cx t)` by metis_tac[] >>
   `!s. env_consistent env cx s ==> env_consistent env cx s` by simp[] >>
+  `!s t observations.
+     (env_consistent env cx s ==> env_consistent env cx t) ==>
+     (env_consistent env cx s ==>
+      env_consistent env cx (t with storage_trace := observations))` by simp[] >>
   `!s os rqs. env_consistent env cx s ==>
      env_consistent env cx (s with <|outcomes := os; requests := rqs|>)` by
     simp_tac (srw_ss()) [env_consistent_outcome_updates] >>

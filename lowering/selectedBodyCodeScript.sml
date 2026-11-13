@@ -2,8 +2,9 @@
 Theory selectedBodyCode
 Ancestors actualRegistrationCode moduleLowering compileEnv
   loweringShapeDefs loweringShapeRules loweringShapeProps fragExec list
-  sourceEntryCode runtimeExternalPackageCode compileVyper vyperInterpreter supportedProgramProps
-  entryDispatchProps rawEntryCode entryCheckIntervals sourceEntrySelection
+  sourceEntryCode compileVyper vyperInterpreter supportedProgramProps
+  entryDispatchProps constSubst rawEntryCode entryCheckIntervals sourceEntrySelection
+  runtimeExternalPackageCode
   supportedProgram supportedDecls loweringShapeSource compileEnv supportedNames
   vyperCompiler actualDecoderPackaging
 
@@ -39,35 +40,25 @@ Proof
 QED
 
 Theorem external_lookup_raw_package_member:
-  !tops src name mut nr args dflts ret body.
-    vyperInterpreter$lookup_function src name External tops =
-      SOME (mut,nr,args,dflts,ret,body) /\ name <> "__default__" /\
-    (!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops) /\
-    (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops) ==>
-    MEM (mut,nr,lookup_raw_return_or_F src name External tops,
-         name,args,dflts,ret,body) (FST (classify_functions tops))
+  supported_declaration_headers tops /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
+  vyperInterpreter$lookup_function NONE name External tops =
+    SOME (mut,nr,args,dflts,ret,stmts) /\ name <> "__default__" ==>
+  MEM (mut,nr,lookup_raw_return_or_F (NONE:num option) name External tops,
+       name,args,dflts,ret,stmts) (FST (classify_functions tops))
 Proof
-  Induct >- simp[vyperInterpreterTheory.lookup_function_def] >>
-  rpt gen_tac >> strip_tac >> fs[classify_functions_def] >>
-  `?a1 a2 a3 a4. FOLDR classify_function ([],[],NONE,NONE) tops =
-                 (a1,a2,a3,a4)` by metis_tac[pairTheory.ABS_PAIR_THM] >>
-  fs[] >> Cases_on `h` >>
-  TRY (qmatch_goalsub_rename_tac `FunctionDecl vis _ _ _ _ _ _ _ _` >>
-       Cases_on `vis`) >>
-  TRY (qmatch_goalsub_rename_tac `VariableDecl vis _ _ _ _` >>
-       Cases_on `vis`) >>
-  TRY (qmatch_goalsub_rename_tac `HashMapDecl vis _ _ _ _ _` >>
-       Cases_on `vis`) >>
-  gvs[vyperInterpreterTheory.lookup_function_def, classify_function_def,
-      lookup_raw_return_or_F_def, lookup_raw_return_def] >>
-  rw[] >> gvs[] >>
-  TRY (qpat_x_assum `(if _ then _ else _) = _` mp_tac >> rw[]) >>
-  metis_tac[]
+  strip_tac >>
+  `module_consts_env tops [] = []` by
+    (irule supported_headers_module_consts_env >>
+     qexists_tac `tops` >>
+     fs[supported_declaration_headers_def]) >>
+  drule_all lookup_function_external_raw_member >> simp[subst_consts_fn_empty]
 QED
 
 Theorem source_selected_body_code:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ name <> "__default__" /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
   vyperInterpreter$lookup_function NONE name External tops =
     SOME (mut,F,args,[],ret,fbody) /\
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
@@ -83,12 +74,7 @@ Theorem source_selected_body_code:
     fn_has_code sa st' efn /\ shape_state sa /\ cs_extends sa st'
 Proof
   strip_tac >>
-  `!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops` by
-    (rpt strip_tac >> drule_all supported_program_declaration >>
-     simp[supported_declaration_header_def]) >>
-  `!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops` by
-    (rpt strip_tac >> drule_all supported_program_declaration >>
-     simp[supported_declaration_header_def]) >>
+  `supported_declaration_headers tops` by fs[supported_program_def] >>
   drule_all external_lookup_raw_package_member >> strip_tac >>
   drule_all source_runtime_external_packages >> strip_tac >>
   `MEM (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt)

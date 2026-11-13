@@ -16,7 +16,8 @@
 
 Theory bodySimIfExpWidened
 Ancestors
-  exprSimSource
+  exprSimSource exprSimIfExpWidenedRoot exprSimUnwrap loweringPosts
+  entryDecodeStaticProps abiBuiltinEncodeWord
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
   exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
@@ -44,6 +45,41 @@ Theorem body_ifexp_widened_call_arm:
       expr_sim ctx func cenv cx ty (IfExp v5 e1 e2 e3) es /\
       expr_vv_sim ctx func cenv cx ty (IfExp v5 e1 e2 e3) es
 Proof
-  cheat
+  rpt strip_tac >>
+  drule expr_body_pre_ifexp >> strip_tac >>
+  `expr_vv_sim ctx func cenv cx ty (IfExp v5 e1 e2 e3) es` by
+    (irule widened_ifexp_vv_sim >> simp[] >>
+     conj_tac >-
+       (qexists_tac `env` >> rpt gen_tac >> disch_tac >>
+        `expr_sim_inv cenv cx env ee` by
+          (irule (cj 1 exprSimSourceTheory.expr_body_pre_eval) >>
+           qexistsl_tac [`e1`, `es with gas_obs := gs`, `INL v`] >>
+           fs[vyperStateTheory.bind_def]) >>
+        qpat_x_assum `vyperState$bind _ _ _ = _` mp_tac >>
+        simp[vyperStateTheory.bind_def, AllCaseEqs()] >> strip_tac >>
+        rpt strip_tac >> gvs[] >>
+        metis_tac[body_expr_ok_def]) >>
+     conj_tac >-
+       (qpat_x_assum `expr_body_pre _ _ _ e1 es` mp_tac >>
+        simp[NoAsms, expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+     conj_tac >-
+       (gen_tac >> disch_tac >> Cases_on `is_word_type v5`
+        >- (`type_memory_size tv = 32` by metis_tac[word_type_memory_size] >>
+            `type_memory_bytes cenv v5 = 32` by
+              metis_tac[abi_builtin_encode_word_info] >>
+            simp[wordsTheory.dimword_def]) >>
+        qpat_x_assum `expr_body_pre _ _ _ e1 es` kall_tac >>
+        drule expr_body_pre_copy_ok >>
+        disch_then (qspec_then `tv` mp_tac) >>
+        simp[expr_type_def, wordsTheory.dimword_def] >> decide_tac) >>
+     conj_tac >- fs[body_inv_def] >>
+     conj_tac >-
+       (qpat_x_assum `expr_body_pre _ _ _ e1 es` mp_tac >>
+        simp[NoAsms, expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+     metis_tac[body_expr_ok_def]) >>
+  simp[] >> irule expr_sim_of_vv_sim >>
+  simp[post_value_type_def] >>
+  qpat_x_assum `expr_body_pre _ _ _ e1 es` kall_tac >>
+  drule expr_body_pre_copy_ok >> simp[]
 QED
 

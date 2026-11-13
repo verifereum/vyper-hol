@@ -40,6 +40,12 @@ Proof
   rpt gen_tac \\ Cases_on `b` \\ simp[get_storage_def]
 QED
 
+Theorem get_storage_storage_trace[simp]:
+  get_storage cx (st with storage_trace := observations) b = get_storage cx st b
+Proof
+  Cases_on `b` >> simp[get_storage_def]
+QED
+
 Theorem set_storage_scopes[simp]:
   ∀cx st b s'. (set_storage cx st b s').scopes = st.scopes
 Proof
@@ -121,6 +127,25 @@ Proof
   rpt gen_tac >> Cases_on `is_t` >>
   simp[get_storage_backend_def, bind_def,
        get_transient_storage_def, get_accounts_def, return_def]
+QED
+
+Theorem get_storage_backend_storage_trace[simp]:
+  get_storage_backend cx b (st with storage_trace := observations) =
+    (FST (get_storage_backend cx b st), st with storage_trace := observations)
+Proof
+  Cases_on `b` >>
+  simp[get_storage_backend_def, bind_def, get_transient_storage_def,
+       get_accounts_def, return_def]
+QED
+
+Theorem set_storage_backend_storage_trace[simp]:
+  set_storage_backend cx b storage (st with storage_trace := observations) =
+    (FST (set_storage_backend cx b storage st),
+     SND (set_storage_backend cx b storage st) with storage_trace := observations)
+Proof
+  Cases_on `b` >>
+  simp[set_storage_backend_def, bind_def, get_accounts_def, update_accounts_def,
+       update_transient_def, return_def, evaluation_state_fupdcanon]
 QED
 
 Theorem get_after_set_storage_backend:

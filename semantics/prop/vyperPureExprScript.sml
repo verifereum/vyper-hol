@@ -3,10 +3,9 @@ Ancestors
   vyperExprEffects vyperMisc vyperContext vyperState vyperStorageBackend
   vyperInterpreter vyperLookup vyperStatePreservation vyperPlaceFrames
 
-(* Pure expressions: expressions that do not modify state.  msg.gas is not
-   pure: it consumes a gas reading; nor are the precompile builtins, which
-   consume a call outcome.  The shared syntax definition spells the
-   precompiles out; restate that through precompile_builtin. *)
+(* Pure expressions preserve runtime state while storage observations grow.
+   msg.gas consumes a gas reading, and precompiles consume a call outcome.
+   The shared syntax definition spells precompiles out; restate that here. *)
 Theorem precompile_builtin_exclusion[local]:
   !bt P. bt <> Sha256 /\ bt <> ECRecover /\ bt <> ECAdd /\ bt <> ECMul /\ P <=>
          ~precompile_builtin bt /\ P
@@ -25,8 +24,8 @@ local
   val p1 = ``\(cx:evaluation_context) (ss:stmt list). T``
   val p2 = ``\(cx:evaluation_context) (it:iterator). T``
   val p3 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T``
-  val p4 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> pure_expr e ==> st = st'``
-  val p5 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> EVERY pure_expr es ==> st = st'``
+  val p4 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> pure_expr e ==> st' = st with storage_trace := st'.storage_trace``
+  val p5 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> EVERY pure_expr es ==> st' = st with storage_trace := st'.storage_trace``
   val p6 = ``\(cx:evaluation_context) (t:base_assignment_target). T``
   val p7 = p6
   val p8 = ``\(cx:evaluation_context) (g:assignment_target) (v:value). T``
@@ -38,9 +37,20 @@ in
       (SPECL [p0,p1,p2,p3,p4,p5,p6,p7,p8,p9,p10] evaluate_ind)
 end
 
+Theorem trace_state_trans[local]:
+  (b = a with storage_trace := b.storage_trace) /\
+  (c = b with storage_trace := c.storage_trace) ==>
+  c = a with storage_trace := c.storage_trace
+Proof
+  strip_tac >>
+  qpat_x_assum `c = _` mp_tac >>
+  qpat_x_assum `b = _` (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+
 Theorem canonical_observations_state[local]:
   (read_result cx r st = (v,st') ==> st' = st) /\
-  (select_result cx ty r sb st = (w,st') ==> st' = st) /\
+  (select_result cx ty r sb st = (w,st') ==>
+     st' = st with storage_trace := st'.storage_trace) /\
   (conditional_result cx r st = (x,st') ==> st' = st) /\
   (result_array_length cx r st = (n,st') ==> st' = st)
 Proof
@@ -56,7 +66,7 @@ Theorem case_Name[local]:
   ∀cx ty id.
     (∀st res st'.
        eval_expr cx (Name ty id) st = (res, st') ⇒
-       st = st')
+       st' = st with storage_trace := st'.storage_trace)
 Proof
   simp[evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
        type_check_def, assert_def, return_def] >>
@@ -69,7 +79,7 @@ Theorem case_TopLevelName[local]:
   ∀cx ty src_id_opt id.
     (∀st res st'.
        eval_expr cx (TopLevelName ty (src_id_opt, id)) st = (res, st') ⇒
-       st = st')
+       st' = st with storage_trace := st'.storage_trace)
 Proof
   rpt strip_tac >> fs[evaluate_def] >> drule lookup_global_state >> simp[]
 QED
@@ -78,7 +88,7 @@ Theorem case_FlagMember[local]:
   ∀cx ty nsid mid.
     (∀st res st'.
        eval_expr cx (FlagMember ty nsid mid) st = (res, st') ⇒
-       st = st')
+       st' = st with storage_trace := st'.storage_trace)
 Proof
   rpt strip_tac >> fs[evaluate_def] >> drule lookup_flag_mem_state >> simp[]
 QED
@@ -88,30 +98,31 @@ Theorem case_IfExp[local]:
     (∀s'' tv1 t.
        eval_expr cx e1 s'' = (INL tv1, t) ⇒
        ∀st res st'.
-         eval_expr cx e2 st = (res, st') ⇒ pure_expr e2 ⇒ st = st') ∧
+         eval_expr cx e2 st = (res, st') ⇒ pure_expr e2 ⇒ st' = st with storage_trace := st'.storage_trace) ∧
     (∀s'' tv1 t.
        eval_expr cx e1 s'' = (INL tv1, t) ⇒
        ∀st res st'.
-         eval_expr cx e3 st = (res, st') ⇒ pure_expr e3 ⇒ st = st') ∧
+         eval_expr cx e3 st = (res, st') ⇒ pure_expr e3 ⇒ st' = st with storage_trace := st'.storage_trace) ∧
     (∀st res st'.
-       eval_expr cx e1 st = (res, st') ⇒ pure_expr e1 ⇒ st = st') ⇒
+       eval_expr cx e1 st = (res, st') ⇒ pure_expr e1 ⇒ st' = st with storage_trace := st'.storage_trace) ⇒
     (∀st res st'.
        eval_expr cx (IfExp ty e1 e2 e3) st = (res, st') ⇒
-       pure_expr (IfExp ty e1 e2 e3) ⇒ st = st')
+       pure_expr (IfExp ty e1 e2 e3) ⇒ st' = st with storage_trace := st'.storage_trace)
 Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), switch_BoolV_def,
       pure_expr_def, raise_def] >>
   imp_res_tac read_result_state >>
   imp_res_tac conditional_result_state >> gvs[] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[raise_def]) >> metis_tac[]
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[raise_def]) >>
+  metis_tac[trace_state_trans]
 QED
 
 Theorem case_Literal[local]:
   ∀cx ty l.
     (∀st res st'.
        eval_expr cx (Literal ty l) st = (res, st') ⇒
-       st = st')
+       st' = st with storage_trace := st'.storage_trace)
 Proof
   rpt strip_tac >> fs[evaluate_def, return_def]
 QED
@@ -127,10 +138,10 @@ Theorem case_StructLit[local]:
   ∀cx ty src kes.
     (∀st res st'.
        eval_exprs cx (MAP SND kes) st = (res, st') ⇒
-       EVERY pure_expr (MAP SND kes) ⇒ st = st') ⇒
+       EVERY pure_expr (MAP SND kes) ⇒ st' = st with storage_trace := st'.storage_trace) ⇒
     (∀st res st'.
        eval_expr cx (StructLit ty src kes) st = (res, st') ⇒
-       pure_expr (StructLit ty src kes) ⇒ st = st')
+       pure_expr (StructLit ty src kes) ⇒ st' = st with storage_trace := st'.storage_trace)
 Proof
   rpt strip_tac >> PairCases_on `src` >>
   fs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, return_def] >> gvs[] >>
@@ -140,85 +151,121 @@ QED
 
 Theorem case_Subscript[local]:
   ∀cx ty e1 e2.
-    (∀s'' tv1 t.
-       eval_expr cx e1 s'' = (INL tv1, t) ⇒
+    (∀s'' tv1 t s''' tv1' t'.
+       eval_expr cx e1 s'' = (INL tv1, t) ∧
+       (if subscript_reads_base cx e1 e2 then
+          do v <- read_result cx tv1; return (Value v) od
+        else return tv1) s''' = (INL tv1', t') ⇒
        ∀st res st'.
-         eval_expr cx e2 st = (res, st') ⇒ pure_expr e2 ⇒ st = st') ∧
+         eval_expr cx e2 st = (res, st') ⇒ pure_expr e2 ⇒ st' = st with storage_trace := st'.storage_trace) ∧
     (∀st res st'.
-       eval_expr cx e1 st = (res, st') ⇒ pure_expr e1 ⇒ st = st') ⇒
+       eval_expr cx e1 st = (res, st') ⇒ pure_expr e1 ⇒ st' = st with storage_trace := st'.storage_trace) ⇒
     (∀st res st'.
        eval_expr cx (Subscript ty e1 e2) st = (res, st') ⇒
-       pure_expr (Subscript ty e1 e2) ⇒ st = st')
+       pure_expr (Subscript ty e1 e2) ⇒ st' = st with storage_trace := st'.storage_trace)
 Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
+  rpt (qpat_x_assum `!s res t s' res' t'. _` drule_all >> strip_tac) >>
+  Cases_on `subscript_reads_base cx e1 e2` >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >> gvs[] >> metis_tac[trace_state_trans]
 QED
 
 Theorem case_Attribute[local]:
   ∀cx ty e id.
     (∀st res st'.
-       eval_expr cx e st = (res, st') ⇒ pure_expr e ⇒ st = st') ⇒
+       eval_expr cx e st = (res, st') ⇒ pure_expr e ⇒ st' = st with storage_trace := st'.storage_trace) ⇒
     (∀st res st'.
        eval_expr cx (Attribute ty e id) st = (res, st') ⇒
-       pure_expr (Attribute ty e id) ⇒ st = st')
+       pure_expr (Attribute ty e id) ⇒ st' = st with storage_trace := st'.storage_trace)
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >> gvs[] >> metis_tac[trace_state_trans]
 QED
 
+(* The Builtin hypothesis of expr_state_ind_principle, selected by its
+   conclusion so it tracks the evaluator's induction hypotheses. *)
+val builtin_state_case = let
+  fun spine tm =
+    if is_forall tm then spine (snd (dest_forall tm))
+    else if is_imp tm then
+      let val (a,b) = dest_imp tm in
+        if is_comb a andalso same_const (fst (strip_comb a)) ``pure_expr``
+        then SOME a else spine b
+      end
+    else NONE
+  fun is_builtin tm =
+    case spine tm of
+      NONE => false
+    | SOME p => same_const (fst (strip_comb (rand p))) ``Builtin``
+  val cases = strip_conj (fst (dest_imp (concl expr_state_ind_principle)))
+in
+  case List.filter is_builtin cases of [tm] => tm
+  | _ => raise Fail "expected unique Builtin preservation case"
+end;
+
 Theorem case_Builtin[local]:
-  ∀cx ty bt es.
-    (∀s'' x t.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
-       bt ≠ Len ∧ bt ≠ Env MsgGas ⇒
-       ∀st res st'.
-         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ∧
-    (∀s'' x t.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
-       bt = Len ⇒
-       ∀st res st'.
-         eval_expr cx (HD es) st = (res, st') ⇒ pure_expr (HD es) ⇒ st = st') ⇒
-    (∀st res st'.
-       eval_expr cx (Builtin ty bt es) st = (res, st') ⇒
-       pure_expr (Builtin ty bt es) ⇒ st = st')
+  ^builtin_state_case
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `bt = Len`
-  >- (rpt strip_tac >>
-      gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
-          type_check_def, assert_def, return_def, raise_def,
-          precompile_call_success_def, precompile_builtin_def, AllCaseEqs()] >>
-      gvs[bind_def, return_def, raise_def, AllCaseEqs()] >>
+  >- (rpt strip_tac >> gvs[pure_expr_def] >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def,
+           type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+      strip_tac >> gvs[return_def] >>
       imp_res_tac result_array_length_state >> gvs[] >>
       `pure_expr (HD es)` by
         (Cases_on `es` >> gvs[builtin_args_length_ok_def]) >>
-      metis_tac[type_check_def, assert_def, return_def]) >>
-  rpt strip_tac >>
-  gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
-      type_check_def, assert_def, return_def, raise_def,
-      get_accounts_def, lift_sum_def, precompile_call_success_def,
-      AllCaseEqs()] >>
-  gvs[get_accounts_def, ETA_THM, return_def, raise_def,
-      sum_CASE_rator, AllCaseEqs()] >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-  gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
-      lift_option_type_def, lift_option_def, get_accounts_def,
-      AllCaseEqs()] >>
-  gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
-  Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
-  gvs[return_def, raise_def, sum_CASE_rator, AllCaseEqs()] >>
-  qpat_x_assum `sum_CASE _ _ _ _ = _` mp_tac >>
-  qmatch_goalsub_abbrev_tac `sum_CASE ans` >>
-  Cases_on `ans` >> gvs[return_def, raise_def] >> metis_tac[]
+      fs[type_check_def, assert_def, return_def] >> metis_tac[]) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn`
+  >- (
+      rpt strip_tac >>
+      (* the code-slice and ordinary IHs don't apply to membership *)
+      rpt (qpat_x_assum `!s'' x t v. _` kall_tac) >>
+      qpat_x_assum `!s'' x t. _ /\ _ /\ ~(_ \/ _) /\ _ ==> _` kall_tac >>
+      gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
+          type_check_def, assert_def, return_def, raise_def,
+          get_accounts_def, lift_sum_def, precompile_call_success_def,
+          AllCaseEqs()] >>
+      gvs[get_accounts_def, ETA_THM, return_def, raise_def,
+          sum_CASE_rator, AllCaseEqs()] >>
+      gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
+          lift_option_type_def, lift_option_def, get_accounts_def,
+          AllCaseEqs()] >>
+      gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
+      Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
+      gvs[return_def, raise_def, sum_CASE_rator, AllCaseEqs()] >>
+      qpat_x_assum `sum_CASE _ _ _ _ = _` mp_tac >>
+      qmatch_goalsub_abbrev_tac `sum_CASE ans` >>
+      Cases_on `ans` >> gvs[return_def, raise_def] >> metis_tac[])
+  >> rpt strip_tac >> fs[pure_expr_def] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >>
+  Cases_on `builtin_args_length_ok bt (LENGTH es)` >>
+  fs[type_check_def, assert_def, return_def, raise_def, ignore_bind_def,
+     bind_def] >>
+  simp[AllCaseEqs(), return_def] >> strip_tac >> gvs[return_def] >>
+  imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >> gvs[]
+  >>~- ([`option_CASE (code_slice_source _ _) _ _ _ = _`],
+        drule_at (Pos last) builtin_operands_preserve >>
+        disch_then (qspec_then
+          `\a b. b = a with storage_trace := b.storage_trace` mp_tac) >>
+        simp[] >>
+        impl_tac
+        >- (rw[] >>
+            gvs[code_slice_source_SOME, pure_expr_def, precompile_builtin_def] >>
+            metis_tac[trace_state_trans]) >>
+        gvs[])
 QED
 
 Theorem case_Pop[local]:
   ∀cx ty bt.
     (∀st res st'.
        eval_expr cx (Pop ty bt) st = (res, st') ⇒
-       pure_expr (Pop ty bt) ⇒ st = st')
+       pure_expr (Pop ty bt) ⇒ st' = st with storage_trace := st'.storage_trace)
 Proof
   rw[pure_expr_def]
 QED
@@ -228,10 +275,10 @@ Theorem case_TypeBuiltin[local]:
     (∀s'' x t.
        type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args" s'' = (INL x, t) ⇒
        ∀st res st'.
-         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ⇒
+         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st' = st with storage_trace := st'.storage_trace) ⇒
     (∀st res st'.
        eval_expr cx (TypeBuiltin ty tb typ es) st = (res, st') ⇒
-       pure_expr (TypeBuiltin ty tb typ es) ⇒ st = st')
+       pure_expr (TypeBuiltin ty tb typ es) ⇒ st' = st with storage_trace := st'.storage_trace)
 Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
@@ -244,7 +291,7 @@ QED
 Theorem case_Call[local]:
   ∀cx ty c es drv st res st'.
     eval_expr cx (Call ty c es drv) st = (res, st') ⇒
-    pure_expr (Call ty c es drv) ⇒ st = st'
+    pure_expr (Call ty c es drv) ⇒ st' = st with storage_trace := st'.storage_trace
 Proof
   rw[pure_expr_def]
 QED
@@ -253,7 +300,7 @@ Theorem case_eval_exprs_nil[local]:
   ∀cx.
     (∀st res st'.
        eval_exprs cx [] st = (res, st') ⇒
-       st = st')
+       st' = st with storage_trace := st'.storage_trace)
 Proof
   simp[evaluate_def, return_def]
 QED
@@ -263,16 +310,16 @@ Theorem case_eval_exprs_cons[local]:
     (∀s'' tv t s'3' v t'.
        eval_expr cx e s'' = (INL tv, t) ∧ read_result cx tv s'3' = (INL v, t') ⇒
        ∀st res st'.
-         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ∧
+         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st' = st with storage_trace := st'.storage_trace) ∧
     (∀st res st'.
-       eval_expr cx e st = (res, st') ⇒ pure_expr e ⇒ st = st') ⇒
+       eval_expr cx e st = (res, st') ⇒ pure_expr e ⇒ st' = st with storage_trace := st'.storage_trace) ⇒
     (∀st res st'.
        eval_exprs cx (e::es) st = (res, st') ⇒
-       EVERY pure_expr (e::es) ⇒ st = st')
+       EVERY pure_expr (e::es) ⇒ st' = st with storage_trace := st'.storage_trace)
 Proof
   rpt strip_tac >> gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
   imp_res_tac read_result_state >> gvs[] >>
-  metis_tac[]
+  metis_tac[trace_state_trans]
 QED
 
 (* ------------------------------------------------------------------------
@@ -289,9 +336,9 @@ QED
 (* Main mutual induction. *)
 Theorem expr_state_mutual[local]:
   (∀cx e st res st'.
-     eval_expr cx e st = (res, st') ⇒ pure_expr e ⇒ st = st') ∧
+     eval_expr cx e st = (res, st') ⇒ pure_expr e ⇒ st' = st with storage_trace := st'.storage_trace) ∧
   (∀cx es st res st'.
-     eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st')
+     eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st' = st with storage_trace := st'.storage_trace)
 Proof
   let
     fun spine tm ants =
@@ -365,7 +412,7 @@ Finalise expr_state_mutual
 Theorem eval_expr_preserves_state:
   ∀cx e st res st'.
     pure_expr e ∧ eval_expr cx e st = (res, st') ⇒
-    st = st'
+    st' = st with storage_trace := st'.storage_trace
 Proof
   metis_tac[expr_state_mutual]
 QED
@@ -373,7 +420,7 @@ QED
 Theorem eval_exprs_preserves_state:
   ∀cx es st res st'.
     EVERY pure_expr es ∧ eval_exprs cx es st = (res, st') ⇒
-    st = st'
+    st' = st with storage_trace := st'.storage_trace
 Proof
   metis_tac[expr_state_mutual]
 QED

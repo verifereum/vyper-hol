@@ -172,6 +172,34 @@ Proof
   drule_all ld_call_consume_reset_maps >> simp[]
 QED
 
+(* DELEGATECALL consumes the same oracle as CALL but never resets masks:
+   adopted accounts are the outcome's on both sides. *)
+Theorem ld_delegate_consume_tainted_shared:
+  i.inst_opcode = DELEGATECALL /\ ld_shared_state tn un s t /\
+  rq.cr_kind = rt.cr_kind /\ rq.cr_value = rt.cr_value /\
+  rq.cr_target = rt.cr_target /\ rq.cr_data = rt.cr_data /\
+  rq.cr_static = rt.cr_static /\
+  rq.cr_accounts = s.vs_accounts /\ rq.cr_tStorage = s.vs_transient /\
+  rt.cr_accounts = t.vs_accounts /\ rt.cr_tStorage = t.vs_transient /\
+  consume_call_outcome rq roS rs s = (wS,s') /\
+  consume_call_outcome rt roT rs t = (wT,t') ==>
+  ld_shared_state (step_taint i s s' tn) (step_taint i t t' un) s' t'
+Proof
+  strip_tac >>
+  drule ld_shared_state_environment >> strip_tac >>
+  `ld_shared_state tn un s' t'` by
+    (drule_all ld_call_consume_shared >> simp[Excl "consume_call_outcome_eq"]) >>
+  `s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static` by simp[] >>
+  `(~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
+     s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) <=>
+   (~t.vs_call_ctx.cc_static /\ t'.vs_requests <> t.vs_requests /\
+     t'.vs_outcomes <> t.vs_outcomes /\ (HD t.vs_outcomes).co_success)` by
+    (drule_all ld_call_consume_adoption_test >> simp[Excl "consume_call_outcome_eq"]) >>
+  irule ld_external_shared_taint >>
+  goal_assum (drule_at (Pat `ld_shared_state _ _ s' t'`)) >>
+  simp[MEM]
+QED
+
 (* The CREATE variants never reset masks; the single generic mask boundary
    therefore applies without an adoption-test premise at their consumer. *)
 Theorem ld_create_consume_tainted_shared:
@@ -234,29 +262,6 @@ Theorem ld_delegate_extract_tainted_shared:
 Proof
   strip_tac >> drule_all ld_extract_result_shared >> strip_tac >>
   gvs[ld_shared_state_def, step_taint_def, adopt_reset_def,
-       store_taint_def, imm_taint_def]
-QED
-
-(* An oracle DELEGATECALL keeps the masks: neither adoption reset nor any
-   store taint applies to it. *)
-Theorem ld_delegate_consume_tainted_shared:
-  i.inst_opcode = DELEGATECALL /\ ld_shared_state tn un s t /\
-  rq.cr_kind = rt.cr_kind /\ rq.cr_value = rt.cr_value /\
-  rq.cr_target = rt.cr_target /\ rq.cr_data = rt.cr_data /\
-  rq.cr_static = rt.cr_static /\
-  rq.cr_accounts = s.vs_accounts /\ rq.cr_tStorage = s.vs_transient /\
-  rt.cr_accounts = t.vs_accounts /\ rt.cr_tStorage = t.vs_transient /\
-  consume_call_outcome rq roS rs s = (wS,s') /\
-  consume_call_outcome rt roT rs t = (wT,t') ==>
-  ld_shared_state (step_taint i s s' tn) (step_taint i t t' un) s' t'
-Proof
-  strip_tac >>
-  `ld_shared_state tn un s' t'` by
-    (drule_all ld_call_consume_shared >> simp[Excl "consume_call_outcome_eq"]) >>
-  qpat_x_assum `ld_shared_state tn un s' t'` mp_tac >>
-  qpat_x_assum `i.inst_opcode = DELEGATECALL` mp_tac >>
-  rpt (pop_assum kall_tac) >>
-  simp[ld_shared_state_def, step_taint_def, adopt_reset_def,
        store_taint_def, imm_taint_def]
 QED
 

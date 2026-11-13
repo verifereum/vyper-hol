@@ -71,7 +71,8 @@ Theorem word_abs_runtime_cenv_eval:
     ce_flag_member_id := K (K 0); ce_flag_n_members := K 0;
     ce_var_type := (\n. if "x" = n then SOME (BaseT (IntT 256)) else NONE);
     ce_module_var_type := K NONE; ce_hashmap_info := K NONE;
-    ce_event_info := K NONE; ce_type_env := FEMPTY; ce_returns_count := 0;
+    ce_event_info := K NONE;
+    ce_error_info := (\name. NONE); ce_type_env := FEMPTY; ce_returns_count := 0;
     ce_return_buf := NONE; ce_return_pc := NONE; ce_ctor_exit_label := NONE;
     ce_is_external := T; ce_ret_enc_info := AbiPrimWord;
     ce_ret_dec_info := DecPrimWord NoClamp; ce_max_return_size := 0;
@@ -236,6 +237,7 @@ Proof
        vyperTypingTheory.value_has_type_def,
        vyperTypingTheory.well_formed_type_value_def,
        vyperValueTheory.within_int_bound_def, AllCaseEqs()] >>
+  conj_tac >- EVAL_TAC >>
   qexists_tac `[]` >>
   simp[vyperTypeCallGraphSoundnessTheory.call_edge_rel_def,
        vyperInterpreterTheory.lookup_function_def,
@@ -312,6 +314,11 @@ Proof
   simp[]
 QED
 
+fun word_abs_runtime_code_conv tm =
+  computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``,
+     ``fn_has_code``] tm
+
 Theorem word_abs_runtime_code:
   fn_has_code word_abs_runtime_sa word_abs_runtime_sb word_abs_runtime_func /\
   fn_inst_ids_distinct word_abs_runtime_func
@@ -325,15 +332,18 @@ Proof
     [``package_external_fn``, ``run_lowering``, ``build_selectors``,
      ``package_fallback_fn``, ``fn_allocs_ok``, ``word_abs_runtime_expr``,
      ``fn_has_code``]) >>
+  simp[constSubstTheory.subst_consts_expr_empty] >>
   pure_rewrite_tac [set_external_package_target_all,
     set_fallback_package_target_all, GSYM word_abs_runtime_tops_def,
     GSYM word_abs_runtime_source_def, word_abs_runtime_package,
     word_abs_runtime_allocs, word_abs_runtime_fallback,
     word_abs_runtime_posargs, word_abs_runtime_mincds] >>
   simp[external_return_buffer_ok_def] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``,
-     ``fn_has_code``]) >>
+  CONV_TAC (LAND_CONV
+    (RATOR_CONV (RATOR_CONV (RAND_CONV word_abs_runtime_code_conv)))) >>
+  CONV_TAC (LAND_CONV (RATOR_CONV (RAND_CONV word_abs_runtime_code_conv))) >>
+  CONV_TAC (LAND_CONV (RAND_CONV word_abs_runtime_code_conv)) >>
+  CONV_TAC (RAND_CONV word_abs_runtime_code_conv) >>
   simp[listTheory.INDEX_FIND_def] >>
   CONV_TAC (computeLib.RESTR_EVAL_CONV
     [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``,

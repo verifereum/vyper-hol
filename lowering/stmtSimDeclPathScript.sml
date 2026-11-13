@@ -172,6 +172,7 @@ Theorem annassign_word_store_path:
         ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
         t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. lookup_var x t = lookup_var x s) /\
+        t.vs_memory = (mstore (w2n w) wd s).vs_memory /\
         (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
                      FLOOKUP t.vs_allocas aid = SOME entry) /\
         gas_marked_path F ctx func s 0 (OK t)
@@ -213,6 +214,8 @@ Theorem annassign_word_store_post_path:
         t.vs_inst_idx = LENGTH sf.cs_current_insts /\
         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
                lookup_var x t = SOME u) /\
+        (!x. lookup_var x t = lookup_var x s) /\
+        t.vs_memory = (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory /\
         (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                      FLOOKUP t.vs_allocas aid = SOME entry) /\
         gas_marked_path F ctx func s 0 (OK t)

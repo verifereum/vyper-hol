@@ -65,7 +65,7 @@ Definition external_getter_tuple_def:
   external_getter_tuple _ _ = NONE
 End
 
-Theorem lookup_function_External_cases[local]:
+Theorem lookup_function_External_cases:
   lookup_function src fn External ts = SOME (mut,nr,args,dflts,ret,body) ==>
   (?raw. MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts) \/
   (?decl. MEM decl ts /\ is_public_getter_decl fn decl /\
@@ -137,7 +137,7 @@ Proof
      metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
   drule_all module_allocated_VariableDecl_slots >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, initial_state_def, initial_evaluation_context_def] >>
   Cases_on `mut` >> gvs[check_toplevel_decl_def, assignable_type_def,
                         well_formed_type_def]
@@ -185,7 +185,7 @@ Proof
       drule assignable_type_well_formed >> simp[well_formed_type_def] >>
       strip_tac >> gvs[IS_SOME_EXISTS] >>
       Cases_on `x'` >> simp[return_def, bind_def, vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
-      gvs[AllCaseEqs(), bind_def, return_def] >> rpt strip_tac >> gvs[] >>
+      gvs[AllCaseEqs(), ignore_bind_def, record_storage_event_def, bind_def, return_def] >> rpt strip_tac >> gvs[] >>
       imp_res_tac vyperTypeExprSoundnessTheory.read_storage_slot_error >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
   `find_var_decl_by_name fn ts =
      SOME (StorageVarDecl F typ,fn)` by
@@ -197,7 +197,7 @@ Proof
   drule assignable_type_well_formed >> simp[well_formed_type_def] >>
   strip_tac >> gvs[IS_SOME_EXISTS] >>
   Cases_on `x'` >> simp[return_def, bind_def, vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
-  gvs[AllCaseEqs(), bind_def, return_def] >> rpt strip_tac >> gvs[] >>
+  gvs[AllCaseEqs(), ignore_bind_def, record_storage_event_def, bind_def, return_def] >> rpt strip_tac >> gvs[] >>
   imp_res_tac vyperTypeExprSoundnessTheory.read_storage_slot_error >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
 QED
 
@@ -243,7 +243,7 @@ Proof
      metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
   drule_all module_allocated_VariableDecl_slots >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, initial_state_def, initial_evaluation_context_def] >>
   Cases_on `mut` >> gvs[check_toplevel_decl_def, assignable_type_def,
                         well_formed_type_def]
@@ -348,7 +348,7 @@ Proof
        metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
     drule_all module_allocated_VariableDecl_slots >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-    simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+    simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
          return_def, raise_def, initial_evaluation_context_def] >>
     Cases_on `mut` >> gvs[check_toplevel_decl_def, assignable_type_def,
                           well_formed_type_def]
@@ -396,7 +396,7 @@ Proof
         drule assignable_type_well_formed >> simp[well_formed_type_def] >>
         strip_tac >> gvs[IS_SOME_EXISTS] >>
         Cases_on `x'` >> simp[return_def, bind_def, vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
-        gvs[AllCaseEqs(), bind_def, return_def] >> rpt strip_tac >> gvs[] >>
+        gvs[AllCaseEqs(), ignore_bind_def, record_storage_event_def, bind_def, return_def] >> rpt strip_tac >> gvs[] >>
         imp_res_tac vyperTypeExprSoundnessTheory.read_storage_slot_error >>
         gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
     `find_var_decl_by_name fn ts =
@@ -409,7 +409,7 @@ Proof
     drule assignable_type_well_formed >> simp[well_formed_type_def] >>
     strip_tac >> gvs[IS_SOME_EXISTS] >>
     Cases_on `x'` >> simp[return_def, bind_def, vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
-    gvs[AllCaseEqs(), bind_def, return_def] >> rpt strip_tac >> gvs[] >>
+    gvs[AllCaseEqs(), ignore_bind_def, record_storage_event_def, bind_def, return_def] >> rpt strip_tac >> gvs[] >>
     imp_res_tac vyperTypeExprSoundnessTheory.read_storage_slot_error >>
     gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
   `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
@@ -424,7 +424,7 @@ Proof
      metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
   drule_all module_allocated_VariableDecl_slots >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, initial_evaluation_context_def] >>
   Cases_on `mut` >> gvs[check_toplevel_decl_def, assignable_type_def,
                         well_formed_type_def]
@@ -553,7 +553,7 @@ Proof
     metis_tac[check_contract_toplevel_decl_MEM] >>
   drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, get_module_code_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, get_module_code_def,
        initial_evaluation_context_def, bind_def, lift_option_type_def,
        return_def, raise_def, lookup_var_slot_from_layout_def,
        lookup_var_slot_in_layouts_def] >>
@@ -584,7 +584,7 @@ Proof
     metis_tac[check_contract_toplevel_decl_MEM] >>
   drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, get_module_code_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, get_module_code_def,
        initial_evaluation_context_def, bind_def, lift_option_type_def,
        return_def, raise_def, lookup_var_slot_from_layout_def,
        lookup_var_slot_in_layouts_def,
@@ -616,7 +616,7 @@ Proof
     metis_tac[check_contract_toplevel_decl_MEM] >>
   drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, get_module_code_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, get_module_code_def,
        initial_evaluation_context_def, bind_def, lift_option_type_def,
        return_def, raise_def, lookup_var_slot_from_layout_def,
        lookup_var_slot_in_layouts_def] >>
@@ -968,7 +968,7 @@ Proof
   metis_tac[build_getter_args_no_current_name, PAIR]
 QED
 
-Theorem build_getter_ret_checked[local]:
+Theorem build_getter_ret_checked:
   !e kt vt n args ret exp tenv.
     build_getter e kt vt n = (args,ret,exp) /\
     check_value_type tenv vt ==>
@@ -986,7 +986,7 @@ Proof
       assignable_type_def, well_formed_type_def]
 QED
 
-Theorem check_value_type_ArrayT_type[local]:
+Theorem check_value_type_ArrayT_type:
   is_ArrayT typ /\
   check_value_type tenv (Type typ) ==>
   check_value_type tenv (Type (ArrayT_type typ))
@@ -994,6 +994,26 @@ Proof
   Cases_on `typ` >>
   gvs[is_ArrayT_def, ArrayT_type_def, check_value_type_def,
       assignable_type_def, well_formed_type_def]
+QED
+
+Theorem build_getter_args_assignable:
+  !e kt vt n args ret exp tenv.
+    build_getter e kt vt n = (args,ret,exp) /\
+    assignable_type tenv kt /\ check_value_type tenv vt ==>
+    EVERY (assignable_type tenv o SND) args
+Proof
+  recInduct build_getter_ind >> rpt strip_tac >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >> rw[] >> gvs[]
+  >~ [`check_value_type tenv (Type typ)`]
+  >- (first_x_assum irule >>
+      Cases_on `typ` >>
+      gvs[is_ArrayT_def, ArrayT_type_def, check_value_type_def,
+          assignable_type_def, well_formed_type_def, evaluate_type_def]) >>
+  first_x_assum irule >> gvs[check_value_type_def] >>
+  Cases_on `typ` >> gvs[hashmap_key_type_def, assignable_type_def]
 QED
 
 Theorem function_entry_env_args_lookup_package[local]:
@@ -1157,6 +1177,45 @@ Proof
   simp[function_entry_env_def, artifact_env_def,
        FOLDL_extend_local_args_static, well_typed_expr_def,
        subscript_vtype_def, vtype_annotation_ok_def]
+QED
+
+Theorem checked_public_getter_params_ok:
+  check_contract F
+    (layouts:(address # (storage_layout # storage_layout)) list)
+    (addr:160 word) mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\ module_allocated layouts addr src ts /\
+  MEM decl ts /\ is_public_getter_decl fn decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) ==>
+  params_ok (type_env_all_modules mods) args
+Proof
+  strip_tac >>
+  drule_all checked_public_getter_body_typing_package >> strip_tac >>
+  simp[params_ok_def] >>
+  `check_toplevel_decl mods art src decl` by
+    metis_tac[check_contract_toplevel_decl_MEM] >>
+  Cases_on `decl` >>
+  gvs[is_public_getter_decl_def, external_getter_tuple_def]
+  >~ [`check_toplevel_decl _ _ _ (VariableDecl vis vmut id typ slot)`]
+  >- (Cases_on `vis` >> gvs[external_getter_tuple_def] >>
+      Cases_on `is_ArrayT typ` >> gvs[getter_def] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      `check_value_type (type_env_all_modules mods)
+         (Type (ArrayT_type typ))` by
+        (irule check_value_type_ArrayT_type >> simp[] >>
+         Cases_on `vmut` >> gvs[check_toplevel_decl_def, check_value_type_def]) >>
+      `assignable_type (type_env_all_modules mods) (BaseT (UintT 256))` by
+        simp[assignable_type_def, well_formed_type_def, evaluate_type_def] >>
+      drule_all build_getter_args_assignable >>
+      simp[combinTheory.o_DEF, pairTheory.LAMBDA_PROD]) >>
+  rename1 `check_toplevel_decl _ _ _ (HashMapDecl vis tr id kt vt slot)` >>
+  Cases_on `vis` >> gvs[external_getter_tuple_def, getter_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  `assignable_type (type_env_all_modules mods) kt /\
+   check_value_type (type_env_all_modules mods) vt` by
+    (gvs[check_toplevel_decl_def] >>
+     Cases_on `kt` >> gvs[hashmap_key_type_def, assignable_type_def]) >>
+  drule_all build_getter_args_assignable >>
+      simp[combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
 QED
 
 val () = export_theory();

@@ -1,5 +1,6 @@
 Theory vyperSemanticsHol
 Ancestors
+  vyperFiniteStoragePreservation
   vyperLogPreservation
   vyperEvalPureExpr
   vyperTypeSoundness

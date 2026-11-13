@@ -209,8 +209,9 @@ Proof
   drule_all window_bytes_mem_checks >> strip_tac >>
   drule_all window_bytes_sequence >> strip_tac >>
   rename1 `window_seq st st' s actual` >>
-  drule_all window_seq_mem_cont >>
-  disch_then (qspec_then `ctx` assume_tac) >>
+  `mem_cont_sim ctx func s
+     (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (drule_all window_seq_mem_cont >> simp[]) >>
   `sb + cap <= d \/ d + LENGTH (enc at (BytesV bs)) <= sb` by
     (qpat_x_assum `venomMemDefs$regions_disjoint _ _` mp_tac >>
      pure_asm_rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>

@@ -18,7 +18,7 @@
  *)
 Theory entryPtrSeamPrefix
 Ancestors
-  arithmetic fragGasOriginPtr fragGasPathMem selectedEntryPrefixCode entryChecksPassPtr entryPrefixPtr sourceValueRejection
+  arithmetic fragGasOriginPtr fragGasPathMem entryStateRel selectedEntryPrefixCode entryChecksPassPtr entryPrefixPtr sourceValueRejection
   entryChecksProps loweringShapeProps loweringShapeSource o1PipelineCorrect
   supportedNames supportedProgramProps loweringShapeDefs unitShapeDefs venomExecProofs list
   entryValueRevertPtr entryDispatchPtr sourceEntryCode selectedBodyCode
@@ -157,6 +157,8 @@ Proof
     ("fn_" ++ tx.function_name,pkg1,pkg2,pkg3,mut = Payable,F,pkg6,pkg7,pkg8,fbody,pkg10)` by
     (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
      simp[package_external_fn_def]) >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
   drule_all source_selected_entry_prefix_structure >> strip_tac >>
   suspend "dispatch"
 QED

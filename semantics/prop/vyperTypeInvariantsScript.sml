@@ -299,6 +299,20 @@ Definition env_consistent_def:
     env_immutables_consistent env cx st
 End
 
+(* Ghost observations are outside the typing/scopes/immutable invariants. *)
+Theorem storage_trace_type_invariants[simp]:
+  (state_well_typed (st with storage_trace := observations) <=> state_well_typed st) /\
+  (env_scopes_consistent env cx (st with storage_trace := observations) <=>
+   env_scopes_consistent env cx st) /\
+  (env_immutables_consistent env cx (st with storage_trace := observations) <=>
+   env_immutables_consistent env cx st) /\
+  (env_consistent env cx (st with storage_trace := observations) <=>
+   env_consistent env cx st)
+Proof
+  simp[state_well_typed_def, env_scopes_consistent_def,
+       env_immutables_consistent_def, env_consistent_def]
+QED
+
 (* Gas readings are outside the typing/scopes/immutable invariants. *)
 Theorem gas_obs_type_invariants[simp]:
   (state_well_typed (st with gas_obs := g) <=> state_well_typed st) /\
@@ -409,6 +423,7 @@ End
 Definition context_well_typed_def:
   context_well_typed cx <=>
     LENGTH cx.txn.calldata < 2 ** 256 /\
+    LENGTH cx.txn.code < 2 ** 256 /\
     cx.txn.value < 2 ** 256 /\
     cx.txn.time_stamp < 2 ** 256 /\
     cx.txn.block_number < 2 ** 256 /\

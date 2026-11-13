@@ -66,6 +66,7 @@ Theorem create_tail_preserves_scopes:
    | SOME (code_opt, accounts', tStorage', logs', revertData, pending') =>
        do x <- update_accounts (K accounts');
           x <- update_transient (K tStorage');
+          x <- record_storage_backend;
           x <- update_pending_deletions (K pending');
           case code_opt of
           | SOME _ => do x <- append_logs logs'; return (Value (AddressV new_addr)) od
@@ -80,11 +81,13 @@ Proof
           create_soft_failure_def, return_def, raise_def] >>
       rpt strip_tac >> gvs[evaluation_state_accfupds]) >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, record_storage_backend_def, record_storage_event_def,
+      update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs(), evaluation_state_accfupds] >>
   PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, record_storage_backend_def, record_storage_event_def,
+      update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[evaluation_state_accounts_tStorage_acc,
                        evaluation_state_accfupds]
@@ -100,6 +103,7 @@ Theorem create_tail_log_extends:
    | SOME (code_opt, accounts', tStorage', logs', revertData, pending') =>
        do x <- update_accounts (K accounts');
           x <- update_transient (K tStorage');
+          x <- record_storage_backend;
           x <- update_pending_deletions (K pending');
           case code_opt of
           | SOME _ => do x <- append_logs logs'; return (Value (AddressV new_addr)) od
@@ -115,12 +119,14 @@ Proof
       rpt strip_tac >>
       gvs[evaluation_state_accfupds, rich_listTheory.IS_PREFIX_REFL]) >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, record_storage_backend_def, record_storage_event_def,
+      update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs(), evaluation_state_accfupds,
       rich_listTheory.IS_PREFIX_REFL, rich_listTheory.IS_PREFIX_APPEND] >>
   PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, record_storage_backend_def, record_storage_event_def,
+      update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
   gvs[evaluation_state_accounts_tStorage_acc, evaluation_state_accfupds,
@@ -138,6 +144,7 @@ Theorem create_tail_exception_is_error:
    | SOME (code_opt, accounts', tStorage', logs', revertData, pending') =>
        do x <- update_accounts (K accounts');
           x <- update_transient (K tStorage');
+          x <- record_storage_backend;
           x <- update_pending_deletions (K pending');
           case code_opt of
           | SOME _ => do x <- append_logs logs'; return (Value (AddressV new_addr)) od
@@ -152,11 +159,13 @@ Proof
           create_soft_failure_def, return_def, raise_def] >>
       rpt strip_tac >> gvs[]) >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, record_storage_backend_def, record_storage_event_def,
+      update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs()] >>
   PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, record_storage_backend_def, record_storage_event_def,
+      update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
@@ -334,6 +343,7 @@ Theorem create_tail_no_type_error:
    | SOME (code_opt, accounts', tStorage', logs', revertData, pending') =>
        do x <- update_accounts (K accounts');
           x <- update_transient (K tStorage');
+          x <- record_storage_backend;
           x <- update_pending_deletions (K pending');
           case code_opt of
           | SOME _ => do x <- append_logs logs'; return (Value (AddressV new_addr)) od
@@ -348,11 +358,13 @@ Proof
           create_soft_failure_def, return_def, raise_def] >>
       rpt strip_tac >> gvs[]) >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, record_storage_backend_def, record_storage_event_def,
+      update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs()] >>
   PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, record_storage_backend_def, record_storage_event_def,
+      update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED

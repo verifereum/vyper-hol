@@ -237,6 +237,12 @@ QED
 Theorem structlit_callee_insts[local] =
   EVAL ``(SND (structlit_callee_compiled F)).cs_current_insts``
 
+(* The prefix states the intermediate certificates compare, each run once. *)
+Theorem structlit_callee_states[local] =
+  LIST_CONJ (map (fn n =>
+    EVAL ``structlit_callee_state F ^(numSyntax.term_of_int n)``)
+    [3,4,5,6,7,8,9])
+
 Theorem structlit_callee_store_to_copy_steps:
   !n k. MEM n [2;3;4;5;6;7;8;9] ==>
     step_inst_base (EL n (SND (structlit_callee_compiled F)).cs_current_insts)
@@ -255,7 +261,7 @@ Theorem structlit_callee_intermediate_memory_fields:
       (structlit_callee_state F n).vs_fmp
 Proof
   simp[] >> rpt strip_tac >> gvs[] >>
-  rewrite_tac[structlit_callee_state_def, structlit_callee_insts] >> EVAL_TAC
+  rewrite_tac[structlit_callee_states] >> EVAL_TAC
 QED
 
 Theorem structlit_callee_intermediate_writes:

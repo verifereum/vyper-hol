@@ -54,15 +54,17 @@ QED
 Theorem current_storage_read_result_typed:
   contract_storage_well_formed cx st /\
   storage_var_info cx mid n = SOME (b,off,tv) ==>
-  ?ref v. lookup_global cx mid n st = (INL ref,st) /\
+  ?ref v observations. lookup_global cx mid n st =
+          (INL ref,st with storage_trace := observations) /\
           read_result cx ref st = (INL v,st) /\
           value_has_type tv v
 Proof
   rpt strip_tac >>
   drule_all current_storage_read_typed >> strip_tac >>
   drule storage_var_info_components >> strip_tac >>
-  qexistsl [`PlaceR (StoragePlace b (n2w off) tv)`, `v`] >>
-  simp[lookup_global_def, read_result_def, read_place_def, bind_def,
+  qexistsl [`PlaceR (StoragePlace b (n2w off) tv)`, `v`,
+            `st.storage_trace ++ [StorageRoot b off tv]`] >>
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, read_result_def, read_place_def, bind_def,
        lift_option_type_def, return_def, raise_def, var_decl_info_CASE_rator]
 QED
 
@@ -211,12 +213,9 @@ Proof
       `slots_in_range (get_storage cx s'' b)
          (w2n base' + 1 + Num idx * type_slot_size tv) tv` by
         (irule dyn_slots_in_range_index >>
-         qexists `w2n (read_slot (get_storage cx s'' b) (w2n base'))` >>
+         qexists `n` >>
          gvs[slots_in_range_def, vyperStorageTheory.read_slot_def] >>
-         `MIN (w2n (lookup_storage base' (get_storage cx s'' b))) n =
-          w2n (lookup_storage base' (get_storage cx s'' b))` by
-           (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-         gvs[]) >>
+         decide_tac) >>
       `base' + n2w (1 + Num idx * type_slot_size tv) =
        base' + n2w (Num idx * type_slot_size tv + 1)` by
         (AP_TERM_TAC >> AP_TERM_TAC >>
