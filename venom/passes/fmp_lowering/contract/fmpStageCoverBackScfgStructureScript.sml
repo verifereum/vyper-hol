@@ -43,7 +43,7 @@ Proof
       fn_labels_def, EVERY_MEM, MEM_MAP] >> metis_tac[]
 QED
 
-Theorem scfg_mssa_first_block_no_phi:
+Theorem scfg_mssa_first_block_no_phi[local]:
   ALL_DISTINCT (fn_labels fn) /\ first_block_no_preds fn /\
   first_block_no_phi fn /\ make_ssa_current_fn s fn = (fn',s') ==>
   first_block_no_phi fn'

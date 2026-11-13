@@ -69,8 +69,10 @@ Proof
   drule split_fmp_entry_user_insts >> strip_tac >>
   drule split_fmp_entry_users >> strip_tac >>
   drule_all fmp_make_root_layout_prefix >> strip_tac >> gvs[] >>
-  drule_all fmp_lower_blocks_checked_entry_prefix >> strip_tac >> gvs[] >>
-  `entry.bb_instructions = fn_user_param_insts fn ++ OPTION_TO_LIST pc ++ tail'` by
+  drule_all fmp_lower_blocks_checked_entry_prefix >>
+  disch_then (qx_choosel_then [`entry`, `rest`, `ltail`] strip_assume_tac) >>
+  gvs[] >>
+  `entry.bb_instructions = fn_user_param_insts fn ++ OPTION_TO_LIST pc ++ ltail` by
     (Cases_on `pc` >> gvs[OPTION_TO_LIST_def]) >>
   drule_all fmp_install_root_exact_prefix >> strip_tac >> gvs[] >>
   simp[fn_user_param_insts_def, fn_entry_insts_def, entry_block_def,

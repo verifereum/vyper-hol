@@ -144,10 +144,12 @@ Proof
   `IS_SOME (eval_operands ops s)` by
     (simp[eval_operands_IS_SOME_EVERY, EVERY_MEM] >> rpt strip_tac >>
      Cases_on `op` >> simp[eval_operand_def]
-     >- (`MEM (Var s') ivk.inst_operands /\ ivk.inst_opcode <> PHI` by simp[] >>
+     >- (rename1 `MEM (Var v) ops` >>
+         `MEM (Var v) ivk.inst_operands /\ ivk.inst_opcode <> PHI` by simp[] >>
          drule_all fmp_stage_src_defined >> simp[]) >>
+     rename1 `MEM (Label l) ops` >>
      qpat_x_assum `EVERY (\op. ~is_label_operand op) ops` mp_tac >>
-     simp[EVERY_MEM] >> disch_then (qspec_then `Label s'` mp_tac) >>
+     simp[EVERY_MEM] >> disch_then (qspec_then `Label l` mp_tac) >>
      simp[stackPlanTypesTheory.is_label_operand_def]) >>
   Cases_on `eval_operands ops s` >> gvs[] >>
   `wf_function callee /\ first_block_no_phi callee` by

@@ -30,18 +30,23 @@ Theorem fmp_cov_call_point:
           cf_prov := G'; cf_tvar := tn'.t_var |> :: stk')
 Proof
   rpt strip_tac >>
-  drule_all fmp_stage_back_call >> strip_tac >>
+  drule_all fmp_stage_back_call >>
+  disch_then (qx_choosel_then
+    [`snm`, `sops`, `callee`, `sargs`, `scs`, `s1`, `inst`]
+    strip_assume_tac) >>
   drule_all (SRULE [] (Q.INST
     [`fmp0` |-> `w2n vs'.vs_initial_fmp`, `raw0` |-> `w2n fmp`,
-     `ivk'` |-> `ti`] fmp_stage_invoke_call)) >> strip_tac >>
+     `ivk'` |-> `ti`] fmp_stage_invoke_call)) >>
+  disch_then (qx_choosel_then [`tops`, `tcallee`, `targs`, `tcs`, `t2`]
+    strip_assume_tac) >>
   gvs[] >>
-  `t1' = t1` by
+  `t2 = t1` by
     (gvs[enters_block_def] >> metis_tac[]) >>
   gvs[] >>
   `frame_reachable vs C
      (<| cf_fn := fn; cf_inst := ivk; cf_state := s; cf_params := PG;
          cf_prov := G; cf_tvar := tn.t_var |> :: stk)
-     (MAP (op_prov G) ops') FEMPTY (tn with t_var := FEMPTY) callee inst s1` by
+     (MAP (op_prov G) sops) FEMPTY (tn with t_var := FEMPTY) callee inst s1` by
     (irule frame_reachable_call >> metis_tac[]) >>
   `~s1.vs_halted` by
     (`vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
@@ -57,7 +62,7 @@ Proof
   qexistsl
     [`<| cf_fn := fn; cf_inst := ivk; cf_state := s; cf_params := PG;
          cf_prov := G; cf_tvar := tn.t_var |> :: stk`,
-     `MAP (op_prov G) ops'`, `FEMPTY`, `tn with t_var := FEMPTY`,
+     `MAP (op_prov G) sops`, `FEMPTY`, `tn with t_var := FEMPTY`,
      `callee`, `inst`, `s1`] >>
   simp[fmp_cov_stack_def]
 QED

@@ -1,7 +1,7 @@
 (* Predicate-parametric assembly of the inserted-index classification. *)
 Theory fmpStageCoverMemAssemble
 Ancestors
-  fmpStageCoverMemWalk fmpStageControl fmpStageControlLayout
+  fmpStageCoverMemWalk fmpStageCoverMemRoot fmpStageControl fmpStageControlLayout
   fmpStageControlWalk fmpStageRel fmpStepLayout fmpLowerDefs
   fmpLowerProps fmpReclaimDefs fmpWfDefs venomInst venomWf
   list rich_list finite_map
@@ -138,16 +138,6 @@ Proof
 QED
 
 Theorem fmp_cover_inserted_from_root:
-  (!func users oldpc suffix cx inf run supply n root newpc supply' entry rest tail out supply''.
-    split_fmp_entry func = SOME (FmpEntryLayout users oldpc suffix) /\
-    fmp_make_root_layout cx func inf run supply = SOME (FmpRootLayout n root newpc supply') /\
-    entry.bb_instructions = users ++ OPTION_TO_LIST oldpc ++ tail /\
-    fmp_install_root cx func (FmpRootLayout n root newpc supply') (entry::rest) = SOME (out,supply'') /\
-    P INITIAL_FMP /\ P FMP_PARAM /\ P RETPC_PARAM /\
-    EVERY (\x. P x.inst_opcode) (OPTION_TO_LIST oldpc) ==>
-    ?middle. out = (entry with bb_instructions := users ++ middle ++ tail)::rest /\
-      LENGTH middle = LENGTH (OPTION_TO_LIST oldpc) + LENGTH (OPTION_TO_LIST root) /\
-      EVERY (\x. P x.inst_opcode) middle) /\
   EVERY P [ASSIGN; ADD; NOT; AND; BUMP; INITIAL_FMP; FMP_PARAM; RETPC_PARAM] /\
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\ MEM fn C.ctx_functions /\
   lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
@@ -176,7 +166,9 @@ Proof
       drule split_fmp_entry_reconstruct >> strip_tac >>
       drule_all fmp_control_root_layout >> strip_tac >>
       drule_all fmp_control_checked_walk >> strip_tac >>
-      drule_all fmp_lower_blocks_checked_entry_prefix >> strip_tac >>
+      drule_all fmp_lower_blocks_checked_entry_prefix >>
+      disch_then (qx_choosel_then [`lentry`, `lrest`, `tail`]
+        strip_assume_tac) >>
       drule fmp_lower_blocks_preserves_labels >> simp[] >> strip_tac >>
       drule fmp_cover_walk_interval >>
       disch_then (qspec_then `fmp_stage_plan infos ctx fn` mp_tac) >>
@@ -197,15 +189,15 @@ Proof
       `bb = entry` by
         (qpat_x_assum `lookup_block lbl fn.fn_blocks = SOME bb` mp_tac >>
          simp[lookup_block_def, FIND_thm]) >>
-      `code = entry'.bb_instructions` by
-        (qpat_x_assum `lookup_block bb.bb_label (entry'::rest') = _` mp_tac >>
+      `code = lentry.bb_instructions` by
+        (qpat_x_assum `lookup_block bb.bb_label (lentry::lrest) = _` mp_tac >>
          simp[lookup_block_def, FIND_thm, basic_block_accfupds] >>
          strip_tac >>
-         qpat_x_assum `entry' = _` SUBST_ALL_TAC >>
+         qpat_x_assum `lentry = _` SUBST_ALL_TAC >>
          fs[basic_block_accfupds]) >>
       Cases_on `root = NONE`
       >- (`newpc = oldpc` by metis_tac[] >>
-          `fn'.fn_blocks = entry'::rest'` by
+          `fn'.fn_blocks = lentry::lrest` by
             (irule fmp_control_install_no_root >>
              qexistsl_tac [`ctx`, `fn`, `oldpc`, `s2`, `s2`, `tail`, `users`] >>
              Cases_on `oldpc` >> fs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
@@ -214,19 +206,18 @@ Proof
             (Cases_on `idx = 0` >> gvs[fmp_stage_tidx_def]) >>
           asm "raw" (qspecl_then [`idx`, `i`, `P`] mp_tac) >>
           simp[] >> (impl_tac >- fs[]) >> strip_tac >>
-          qexists_tac `entry'` >>
+          qexists_tac `lentry` >>
           simp[lookup_block_def, FIND_thm]) >>
-      `entry'.bb_instructions = users ++ OPTION_TO_LIST oldpc ++ tail` by
+      `lentry.bb_instructions = users ++ OPTION_TO_LIST oldpc ++ tail` by
         (Cases_on `oldpc` >> fs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
       `fmp_install_root ctx fn (FmpRootLayout (LENGTH users) root newpc s1)
-        (entry'::rest') = SOME (fn'.fn_blocks,s1)` by
+        (lentry::lrest) = SOME (fn'.fn_blocks,s1)` by
         (drule_all fmp_install_root_exact_prefix >>
          strip_tac >> fs[]) >>
       `EVERY (\x. P x.inst_opcode) (OPTION_TO_LIST oldpc)` by
         (Cases_on `oldpc` >> simp[callLayoutDefsTheory.OPTION_TO_LIST_def] >>
          drule split_fmp_entry_retpc_opcode >> simp[]) >>
-      qpat_x_assum `!func users oldpc suffix cx inf run supply n root newpc supply' entry rest tail out supply''. _`
-        (drule_at (Pos hd)) >>
+      drule_at (Pos hd) fmp_cover_root_middle >>
       disch_then drule >> simp[] >> disch_then drule >>
       simp[] >> strip_tac >>
       first_x_assum drule >> strip_tac >>
@@ -247,7 +238,7 @@ Proof
         (Cases_on `root` >> fs[callLayoutDefsTheory.OPTION_TO_LIST_def]) >>
       `i < LENGTH (users ++ middle ++ tail) /\
        P (EL i (users ++ middle ++ tail)).inst_opcode` suffices_by
-        (strip_tac >> qexists_tac `entry' with bb_instructions := users ++ middle ++ tail` >>
+        (strip_tac >> qexists_tac `lentry with bb_instructions := users ++ middle ++ tail` >>
          gvs[lookup_block_def, FIND_thm, basic_block_accfupds]) >>
       irule fmp_cover_root_splice >> conj_tac >- (first_assum ACCEPT_TAC) >>
       qexistsl_tac [`idx`, `lbl`, `OPTION_TO_LIST oldpc`,

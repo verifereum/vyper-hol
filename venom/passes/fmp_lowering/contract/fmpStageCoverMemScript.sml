@@ -134,8 +134,6 @@ Theorem fmp_stage_inserted_at:
     fmp_inserted_op (EL i bb'.bb_instructions).inst_opcode
 Proof
   strip_tac >> irule fmp_cover_inserted_from_root >>
-  conj_tac >- (rpt gen_tac >> strip_tac >>
-    irule fmp_cover_root_middle >> metis_tac[]) >>
   simp[fmp_inserted_op_def] >>
   goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >>
