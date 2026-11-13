@@ -80,7 +80,7 @@ Proof
   fs[DISJ_IMP_THM, FORALL_AND_THM] >>
   simp[compile_multi_exprs_def, outcomes_free_return] >>
   rpt (FIRST [CHANGED_TAC (simp[outcomes_free_return,
-      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_lower_value]),
+      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_lower_value_opcodes]),
     gen_tac, strip_tac, irule outcomes_free_bind, conj_tac,
     first_assum irule]) >> simp[]
 QED
@@ -140,7 +140,7 @@ Proof
   Cases_on `infos` >> simp[compile_concat_def, outcomes_free_return] >>
   PairCases_on `h'` >> simp[compile_concat_def] >>
   rpt (FIRST [CHANGED_TAC (simp[outcomes_free_emit_ops,
-      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_lower_value]),
+      SRULE [DISJ_IMP_THM, FORALL_AND_THM] outcomes_free_lower_value_opcodes]),
     gen_tac, strip_tac, irule outcomes_free_bind,
     irule outcomes_free_ignore_bind, conj_tac, IF_CASES_TAC, first_assum irule]) >>
   simp[]
@@ -163,7 +163,7 @@ Proof
     gen_tac, strip_tac]) >>
   `EVERY (\i. P i.inst_opcode)
      (state_insts (SND (lower_value f ce (BaseT AddressT) e s)))` by
-    (irule outcomes_free_lower_value >> simp[DISJ_IMP_THM, FORALL_AND_THM]) >>
+    (irule outcomes_free_lower_value_opcodes >> simp[DISJ_IMP_THM, FORALL_AND_THM]) >>
   gvs[outcomes_free_emit_ops] >>
   rpt (pairarg_tac >> gvs[outcomes_free_emit_ops]) >>
   metis_tac[outcomes_free_emit_ops, SND]

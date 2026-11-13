@@ -1,6 +1,6 @@
 Theory runtimeSymSrcOrdinaryPackages
 Ancestors
-  runtimeSymSrcPackageTransport runtimeSymSrcModuleArgs runtimeSymSrcModuleBodies
+  runtimeSymSrcPackageTransport runtimeSymSrcModuleArgs runtimeSymSrcModuleBodies runtimeSymSrcModuleDispatch
   runtimeSymSrcInternalFunction runtimeSymSrcFunctionLists
   runtimeSymSrcInterfaces runtimeSymSrcEmissionProbe
   compileVyper moduleLowering compileEnv loweringShapeDefs list

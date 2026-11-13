@@ -74,18 +74,6 @@ Proof
   simp[is_label_operand_def]
 QED
 
-Theorem runtime_sym_entry_checks:
-  EVERY runtime_sym_inst (state_insts s) /\
-  compile_entry_checks min_cds payable s = (u,s') ==>
-  EVERY runtime_sym_inst (state_insts s')
-Proof
-  Cases_on `payable` >> Cases_on `min_cds > 4` >>
-  simp[compile_entry_checks_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
-       emit_def] >> strip_tac >> gvs[] >>
-  gvs[state_insts_def, all_blocks_def, MAP_APPEND, FLAT_APPEND, EVERY_APPEND,
-      runtime_sym_inst_def, mk_inst_def]
-QED
 
 Theorem runtime_sym_bind:
   (!s v s'. EVERY runtime_sym_inst (state_insts s) /\ f s = (v,s') ==>

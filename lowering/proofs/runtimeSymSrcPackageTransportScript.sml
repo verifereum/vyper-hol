@@ -1,6 +1,6 @@
 Theory runtimeSymSrcPackageTransport
 Ancestors
-  runtimeSymSrcRuntimePackaging supportedProgram e2eProducers list
+  runtimeSymSrcRuntimePackaging runtimeSymSrcEmission supportedProgram e2eProducers list
   supportedExprTraverse exprOracleStorageInterfaces runtimeSymSrcInterfaces
   compileVyper compileEnv loweringShapeProps pair
 
@@ -113,11 +113,6 @@ Proof
        external_prefix_label_def]
 QED
 
-Theorem runtime_sym_internal_label:
-  runtime_sym_label (internal_fn_label id name tys ctor)
-Proof
-  simp[runtime_sym_label_def, internal_fn_label_def]
-QED
 
 Theorem runtime_sym_external_package_fields:
   set_external_package_target target

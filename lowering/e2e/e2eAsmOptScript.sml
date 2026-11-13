@@ -26,7 +26,7 @@ Ancestors
   memSafeRun lowerDloadDefs
   frameRel codegenRel asmOptNonemptyFinalizer o1SymStaticData o1SymStaticPipeline
   venomPipelineDriverProps venomCompilerWf venomWf o1LabelFlowCompose
-  runtimeSymSrcInstructions runtimeSymSrcData runtimeSymSrcFlow
+  runtimeSymSrcInstructions runtimeSymSrcData o1LabelFlowSourceBoundary
 
 (* L1 for the optimizer: the runtime is the optimized assembly of the O1
    output's generated assembly. *)
@@ -325,9 +325,11 @@ Theorem lower_vyper_runtime_unit_sym_src_ok:
 Proof
   rpt gen_tac >> strip_tac >>
   conj_tac
-  >- (irule label_flow_ok_seed_free >>
-      metis_tac[runtime_sym_runtime_no_code_end,
-                runtime_sym_runtime_no_codesize,
+  >- (`!f i. MEM f unit.cu_context.ctx_functions /\ MEM i (fn_insts f) ==>
+             ~MEM (Label "code_end") i.inst_operands` by
+        metis_tac[runtime_sym_runtime_no_code_end] >>
+      drule label_flow_ok_seed_free >> disch_then (fn th => simp[th]) >>
+      metis_tac[runtime_sym_runtime_no_codesize,
                 runtime_sym_runtime_codecopy_source]) >>
   conj_tac >- metis_tac[runtime_sym_runtime_no_code_end] >>
   conj_tac >- metis_tac[lower_vyper_runtime_unit_data_bytes] >>

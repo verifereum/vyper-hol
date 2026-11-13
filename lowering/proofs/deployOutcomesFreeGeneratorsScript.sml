@@ -182,7 +182,7 @@ Proof
   simp[outcomes_free_return, outcomes_free_ensure_memory]
 QED
 
-Theorem outcomes_free_lower_value:
+Theorem outcomes_free_lower_value_opcodes:
   (!opc. MEM opc [ALLOCA; ADD; MUL; ASSIGN; JMP; EQ; JNZ; ILOAD; DLOAD;
     MLOAD; SLOAD; TLOAD; CALLDATALOAD; ISTORE; INVALID; MSTORE; SSTORE;
     TSTORE; CALLDATACOPY] ==> P opc) /\

@@ -1,6 +1,6 @@
 Theory deployOutcomesFreeFrames
 Ancestors
-  ptrDiscipline venomState venomExecSemantics codegenRel contextCodegenRel ctxLookupAgreeHelpers
+  ptrDiscipline deployOutcomesFreeStep venomState venomExecSemantics codegenRel contextCodegenRel ctxLookupAgreeHelpers
 
 Theorem outcomes_operand[simp]:
   eval_operand op (s with vs_outcomes := os) = eval_operand op s /\
@@ -62,11 +62,6 @@ Proof
        active_inst_def, allocas_from_def, allocas_below_fmp_def]
 QED
 
-Theorem outcomes_active_inst[simp]:
-  active_inst fn inst (s with vs_outcomes := os) = active_inst fn inst s
-Proof
-  simp[active_inst_def]
-QED
 
 Theorem outcomes_frames_entry_only:
   !vs ctx stk PG G tn fn inst s.
