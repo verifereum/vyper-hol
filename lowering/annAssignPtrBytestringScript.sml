@@ -1,6 +1,7 @@
 (* Counted dynamic copy after the clean bytestring length prefix. *)
 Theory annAssignPtrBytestring
 Ancestors
+  fragExecPtr
  annAssignPtrLength annAssignPtrCopy annAssignPtrSetup typedCopyPtr
  fragGasPathPtr bodyPtrDefs ptrDiscipline venomInst venomInstProofs
  venomExecSemantics venomState venomMemDefs venomMemProofs

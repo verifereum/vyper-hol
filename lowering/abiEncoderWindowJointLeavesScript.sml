@@ -1,5 +1,5 @@
 Theory abiEncoderWindowJointLeaves
-Ancestors
+Ancestors fragExecPtr
   exprSimAbiEncodeExecFrame abiEncoderWindowLeaves abiEncoderWindow
   valueEncodingProofs exprLoweringProps abiEncoderExtendSim
   abiEncoderRegisteredEffect abiEncoderWrites abiEncoderInputFrame

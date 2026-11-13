@@ -1,6 +1,6 @@
 (* Complete ambient projections on the concrete copy-prefix witnesses. *)
 Theory typedCopyAmbientFramePtr
-Ancestors
+Ancestors fragExecPtr
   wordLoadStorePtr typedCopyPtr typedCopyLoopHeaderPtr
 
 Theorem emit_copy_len_binop_ambient_frag_ptr:

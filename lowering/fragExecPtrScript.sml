@@ -185,6 +185,33 @@ Proof
   first_x_assum irule >> decide_tac
 QED
 
+Theorem mcopy_operand_ghost_frame:
+  !PG G tn s id dst src count_op a b n.
+    eval_operand dst s = SOME b /\ eval_operand src s = SOME a /\
+    eval_operand count_op s = SOME n ==>
+    step_prov PG G (mk_inst id MCOPY [dst;src;count_op] [])
+      (mcopy (w2n b) (w2n a) (w2n n) s) = G /\
+    (step_taint (mk_inst id MCOPY [dst;src;count_op] []) s
+      (mcopy (w2n b) (w2n a) (w2n n) s) tn).t_var = tn.t_var /\
+    (step_taint (mk_inst id MCOPY [dst;src;count_op] []) s
+      (mcopy (w2n b) (w2n a) (w2n n) s) tn).t_stor = tn.t_stor /\
+    (step_taint (mk_inst id MCOPY [dst;src;count_op] []) s
+      (mcopy (w2n b) (w2n a) (w2n n) s) tn).t_trans = tn.t_trans /\
+    (step_taint (mk_inst id MCOPY [dst;src;count_op] []) s
+      (mcopy (w2n b) (w2n a) (w2n n) s) tn).t_mem =
+      (tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b + w2n n}) UNION
+      {w2n b + i | i < w2n n /\ w2n a + i IN tn.t_mem}
+Proof
+  rpt strip_tac >>
+  simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
+       mk_inst_def, set_var_taint_def, finite_mapTheory.DRESTRICT_UNIV,
+       store_taint_def, adopt_reset_def, mem_taint_def, step_writes_def,
+       source_memory_write_ranges_def, fixed_source_write_range_def,
+       sized_source_write_range_def, written_taint_def, range_bytes_def,
+       new_site_bytes_def, mcopy_def, write_memory_with_expansion_def,
+       FLOOKUP_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
 Theorem ptr_safe_run_copy_return:
   !cx ctx fn PG G tn s bb id dst src n fuel.
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
