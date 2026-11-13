@@ -167,3 +167,13 @@ val _ = if type_of ``
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory ft fv p m) ==>
     !m. mem_agree_outside un.t_mem z.vs_memory m ==> val_in_memory ft fv p m)
 `` = bool then () else raise Fail "suffix interface is not boolean";
+
+Theorem intcall_stage_source_shape:
+  compile_expr cenv (expr_type e) e sa = (vv,a) ==>
+  (!t p. vv = LocatedValue t p /\ p.ptr_location <> LocMemory ==>
+    lowered_value_type cenv e = expr_type e)
+Proof
+  rpt strip_tac >> gvs[] >>
+  irule compile_nonmemory_lowered_value_type >>
+  goal_assum (drule_at Any) >> metis_tac[]
+QED
