@@ -18927,6 +18927,105 @@ Proof
   metis_tac[]
 QED
 
+Theorem mm_local_zero_retained_static[local]:
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  index < LENGTH fn.fn_blocks /\ bb = EL index fn.fn_blocks /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  f = apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+    (rep_map_of_groups is gs) /\
+  EVERY (\i. inst_wf i /\
+    !v. MEM (Var v) i.inst_operands ==> v IN P) is /\
+  (!v. v IN P ==> MEM v supply.irs_used_vars) /\
+  mm_flat_map_supply f supply (TAKE n is) = (pre,sn) /\
+  transform_block_memzero_supply dfg supply bb = (bb',supply') /\
+  fn' = fn with fn_blocks := LUPDATE bb' index fn.fn_blocks /\
+  (H n).vs_current_bb = bb.bb_label /\ (H n).vs_inst_idx = n /\
+  mm_local_zero_cut dfg is gs H n excluded (LENGTH pre) t /\
+  (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
+  static_mem_ok eom ctx fn i (H n) ==>
+  static_mem_ok eom ctx fn' i t
+Proof
+  strip_tac >> irule mm_local_zero_retained_static_if_forward >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at (Pat `mm_local_zero_cut _ _ _ _ _ _ _ _`)) >> simp[] >>
+  `t.vs_current_bb = bb.bb_label /\ t.vs_inst_idx = LENGTH pre` by
+    (qpat_assum `mm_local_zero_cut _ _ _ _ _ _ _ _` mp_tac >>
+     simp[NoAsms, mm_local_zero_cut_def, mm_local_nonmemory_frame_def] >>
+     metis_tac[]) >>
+  strip_tac >> gvs[] >> irule mm_local_zero_in_revert_forward_transport >>
+  goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+Theorem mm_local_zero_actual_safe_interval[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  bb = EL index fn0.fn_blocks /\ dfg = dfg_build_function fn0 /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  f = apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+    (rep_map_of_groups is gs) /\
+  transform_block_memzero_supply dfg supply bb = (bb',sk') /\
+  fn' = fn0 with fn_blocks := LUPDATE bb' index fn0.fn_blocks /\
+  h = phi_prefix_length is /\ h <= n /\ n + m <= LENGTH is /\
+  lookup_block bb.bb_label fn0.fn_blocks = SOME bb /\ eom < dimword (:256) /\
+  (!j. h <= j /\ j < n + m ==>
+    (H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn0 (EL j is) (H j) /\
+    ~is_terminator (EL j is).inst_opcode /\
+    (!v. MEM (Var v) (EL j is).inst_operands ==> v NOTIN excluded) /\
+    ?u. step_inst fuel ctx (EL j is) (H j) = OK u /\
+      H (SUC j) = u with vs_inst_idx := SUC j) /\
+  (!j dst v len. h <= j /\ j < n + m /\
+    is_calldatasize_copy dfg (EL j is) /\
+    (EL j is).inst_operands = [Lit dst; Var v; Lit len] ==>
+    lookup_var v (H j) = SOME (n2w (LENGTH (H j).vs_call_ctx.cc_calldata)) /\
+    LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256)) /\
+  (!j. n <= j /\ j <= n + m ==>
+    LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256)) /\
+  mm_flat_map_supply f supply (TAKE n is) = (pre,es) /\ pc = LENGTH pre /\
+  mm_local_zero_cut dfg is gs H n excluded pc t /\
+  (!v. v NOTIN excluded ==> MEM v es.irs_used_vars) /\
+  mm_flat_map_supply f es (TAKE m (DROP n is)) = (out,es') ==>
+  ?t'. mm_local_safe_exec_prefix (static_mem_ok eom ctx fn') fuel ctx out t t' /\
+    mm_local_zero_cut dfg is gs H (n + m) excluded (pc + LENGTH out) t'
+Proof
+  strip_tac >> irule mm_local_zero_actual_safe_interval_if_forward >>
+  goal_assum (drule_at (Pat `mm_local_zero_cut _ _ _ _ _ _ _ _`)) >>
+  rpt (conj_tac >- first_assum MATCH_ACCEPT_TAC) >>
+  goal_assum (drule_at (Pat `wf_ssa _`)) >>
+  goal_assum (drule_at (Pat `transform_block_memzero_supply _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `mm_flat_map_supply _ _ (TAKE _ _) = _`)) >>
+  simp[] >> qexistsl [`fn0`,`index`] >> simp[] >>
+  reverse conj_tac >- (gvs[] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `!j. h <= j /\ j < n + m ==>
+    (H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j` by metis_tac[] >>
+  `tj.vs_current_bb = bb.bb_label /\ tj.vs_inst_idx = LENGTH pref` by
+    (qpat_assum `mm_local_zero_cut _ _ _ _ _ _ _ tj` mp_tac >>
+     simp[NoAsms, mm_local_zero_cut_def, mm_local_nonmemory_frame_def] >>
+     strip_tac >> gvs[] >> metis_tac[]) >>
+  strip_tac >> gvs[] >> irule mm_local_zero_in_revert_forward_transport >>
+  (conj_tac >- gvs[wf_function_def, venomInstTheory.fn_labels_def]) >> (conj_tac >- simp[]) >>
+  goal_assum (drule_at (Pat `transform_block_memzero_supply _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `mm_flat_map_supply _ _ _ = _`)) >>
+  simp[] >> qexistsl [`set supply.irs_used_vars`,`H j`] >> simp[] >>
+  simp[EVERY_MEM] >> qx_gen_tac `i` >> disch_tac >> conj_tac
+  >- (gvs[fn_inst_wf_compute, EVERY_MEM] >> metis_tac[EL_MEM]) >>
+  rpt strip_tac >>
+  `MEM (EL index fn0.fn_blocks) fn0.fn_blocks` by simp[EL_MEM] >>
+  gvs[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_vars_def,
+      irSupplyTheory.block_ir_vars_def, irSupplyTheory.inst_ir_vars_def,
+      list_subset_def, EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+  qpat_x_assum `!x. (?l. _) ==> MEM x supply.irs_used_vars` irule >>
+  qexists `FLAT (MAP inst_ir_vars (EL index fn0.fn_blocks).bb_instructions)` >>
+  conj_tac >- (qexists `EL index fn0.fn_blocks` >> simp[]) >>
+  simp[MEM_FLAT, MEM_MAP] >> qexists `inst_ir_vars i` >> conj_tac
+  >- (qexists `i` >> simp[]) >>
+  simp[irSupplyTheory.inst_ir_vars_def, venomInstTheory.inst_uses_def] >>
+  metis_tac[passSharedDefsTheory.MEM_operand_vars_eq_Var]
+QED
+
 Theorem mm_local_zero_noninvoke_stop[local]:
   mm_local_zero_cut dfg is gs H n excluded pc t /\
   (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
