@@ -50,7 +50,9 @@ Proof
          rename1 `ValPT bt` >> Cases_on `bt <> expr_type e1`
          >- metis_tac[compile_subscript_mismatch_vv_sim_mem] >>
          gvs[] >> drule_all subscript_base_array_or_tuple >> strip_tac
-         >- metis_tac[body_subscript_array_vv_mem] >>
+         >- (qpat_x_assum `place_type _ e1 = _` mp_tac >>
+             qpat_assum `expr_type e1 = _` (fn th => rewrite_tac[th]) >>
+             strip_tac >> drule_all body_subscript_array_vv_mem >> simp[]) >>
          metis_tac[body_subscript_tuple_vv_mem]) >>
       simp[] >> irule body_expr_sim_mem_of_vv_sim_mem >>
       simp[] >> conj_tac
