@@ -13,7 +13,7 @@ Ancestors
   vyperTypeEnv vyperTypeSystem vyperTypeInvariants valueEncoding valueEncodingProofs valueEncodingProps
   list rich_list finite_map words arithmetic
 
-Theorem body_wordtype_name_region[local]:
+Theorem body_wordtype_name_region:
   expr_sim_pre ce cx env (Name ann id) es /\ is_word_type ann /\
   stmt_state_rel H ctx func ce cx es s ==>
   ?entry p sz w.
@@ -31,7 +31,7 @@ Proof
   qexistsl [`entry`, `p`, `sz`, `w`] >> simp[]
 QED
 
-Theorem body_wordtype_name_MLOAD_frontier[local]:
+Theorem body_wordtype_name_MLOAD_frontier:
   expr_sim_pre ce cx env (Name ann id) es /\ is_word_type ann /\
   stmt_state_rel H ctx func ce cx es s /\
   FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) ==>
@@ -42,7 +42,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[n2w_w2n]
 QED
 
-Theorem body_name_wordtype_counted[local]:
+Theorem body_name_wordtype_counted:
   expr_sim_pre ce cx env (Name ann id) es /\ is_word_type ann /\
   lower_value compile_expr ce ty (Name ann id) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -96,7 +96,7 @@ Proof
   gvs[Abbr `out`, same_blocks_def, update_var_def]
 QED
 
-Theorem body_name_wordtype_post[local]:
+Theorem body_name_wordtype_post:
   emit_op MLOAD [Var p] sa = (Var out,sb) /\
   local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s0 /\
   storage_well_formed_on cx es (FST H) /\
@@ -131,7 +131,7 @@ Proof
     (strip_tac >> gvs[not_fresh_at_def]) >> simp[]
 QED
 
-Theorem body_name_wordtype_mem_prefix[local]:
+Theorem body_name_wordtype_mem_prefix:
   expr_sim_pre ce cx env (Name ann id) es /\ is_word_type ann /\
   lower_value compile_expr ce ty (Name ann id) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
