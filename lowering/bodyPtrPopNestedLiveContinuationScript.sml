@@ -66,7 +66,7 @@ Theorem pop_empty_memory_continuation:
     gas_marked_exec_ptr D (ctx,func) PG
       (bind (eval_target_place cx bt) (pop_place cx))
       (es,s0,G0,tn0) marks res fin H tf rr /\
-    exit_result rr /\ expr_exit res rr
+    exit_result rr /\ expr_exit res rr /\ halt_exit cx fin res rr
 Proof
   strip_tac >> drule_all pop_memory_suffix_empty_path >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -234,7 +234,7 @@ Theorem pop_normal_target_continuation:
       (!t' ptr. vv = LocatedValue t' ptr /\ ptr.ptr_location = LocMemory ==>
         ptr_buf_ok cenv (Pop ann bt) ptr.ptr_operand H t) /\
       ghost_kept cenv es sa G0 tn0 s0 H tf) \/
-     (exit_result rr /\ expr_exit res rr))
+     (exit_result rr /\ expr_exit res rr /\ halt_exit cx fin res rr))
 Proof
   strip_tac >>
   `place_readable cx (tend with gas_obs := []) (PlaceR p)` by fs[target_post_def] >>

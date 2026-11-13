@@ -62,8 +62,9 @@ Proof
   >- (rpt gen_tac >> strip_tac >> Cases_on `res`
       >- fs[expr_exit_def] >>
       rename1 `expr_exit (INR ex) rr` >> qexists_tac `ex` >>
-      simp[stmt_exit_def] >>
-      metis_tac[stmtSimPropsTheory.expr_exit_INR_type])) >>
+      simp[stmt_exit_def] >> conj_tac
+      >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+      qpat_x_assum `halt_exit _ _ _ _` mp_tac >> simp[])) >>
   qexistsl_tac [`cenv`, `env`, `r`, `sa`, `s0'`, `ty`] >> simp[] >>
   rpt gen_tac >> strip_tac >>
   qpat_assum `!tail. eval_target_place _ _ _ = _`
@@ -137,8 +138,9 @@ Proof
   >- (rpt gen_tac >> strip_tac >> Cases_on `res`
       >- fs[expr_exit_def] >>
       rename1 `expr_exit (INR ex) rr` >> qexists_tac `ex` >>
-      simp[stmt_exit_def] >>
-      metis_tac[stmtSimPropsTheory.expr_exit_INR_type])) >>
+      simp[stmt_exit_def] >> conj_tac
+      >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+      qpat_x_assum `halt_exit _ _ _ _` mp_tac >> simp[])) >>
   qexistsl_tac [`cenv`, `env`, `r`, `sa`, `s0'`, `ty`] >> simp[] >>
   rpt gen_tac >> strip_tac >>
   qpat_assum `!tail. eval_target_place _ _ _ = _`

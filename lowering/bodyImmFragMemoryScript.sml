@@ -175,7 +175,7 @@ Resume compile_for_immutable_frag_mem_from_outcome[post]:
   qpat_assum `gas_outcome T _ _ (eval_stmt _ _) _ Q R` (irule_at Any) >>
   conj_tac
   >- (rpt gen_tac >> simp[Abbr `R`] >> rpt (pop_assum kall_tac) >>
-      strip_tac >> gvs[halt_exit_def]) >>
+      strip_tac >> gvs[exprSimDefsTheory.halt_exit_def]) >>
   rpt gen_tac >> BETA_TAC >> simp[Abbr `Q`] >> strip_tac >>
   simp[stmt_lands_def, block_is_terminated_def, cenv_top_ext_refl] >>
   qpat_x_assum `array_caller_frame _ _ _` mp_tac >>

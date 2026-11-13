@@ -130,12 +130,15 @@ Proof
     `?ex. res = INR ex` by
       (qpat_x_assum `expr_exit _ _` mp_tac >>
        Cases_on `res` >> simp[expr_exit_def]) >>
-    qexists_tac `ex` >> asm_rewrite_tac[] >> gen_tac >>
-    pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
-    qpat_x_assum `res = INR ex` SUBST_ALL_TAC >>
-    qpat_x_assum `expr_exit _ _` mp_tac >>
-    rpt (pop_assum kall_tac) >>
-    simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
+    qexists_tac `ex` >> asm_rewrite_tac[] >> conj_tac
+    >- (gen_tac >>
+        pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
+        qpat_x_assum `res = INR ex` SUBST_ALL_TAC >>
+        qpat_x_assum `expr_exit _ _` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
+    qpat_x_assum `halt_exit _ _ _ _` mp_tac >> asm_rewrite_tac[] >>
+    simp[exprSimDefsTheory.halt_exit_def]) >>
   reverse conj_tac >- (rpt strip_tac >> qexists_tac `v` >> asm_rewrite_tac[]) >>
   rpt strip_tac >>
   `!tail. eval_expr cx e
@@ -177,12 +180,15 @@ Proof
       `?ex. res = INR ex` by
         (qpat_x_assum `expr_exit _ _` mp_tac >>
          Cases_on `res` >> simp[expr_exit_def]) >>
-      qexists_tac `ex` >> asm_rewrite_tac[] >> gen_tac >>
-      pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
-      qpat_x_assum `res = INR ex` SUBST_ALL_TAC >>
-      qpat_x_assum `expr_exit _ _` mp_tac >>
-      rpt (pop_assum kall_tac) >>
-      simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      qexists_tac `ex` >> asm_rewrite_tac[] >> conj_tac
+      >- (gen_tac >>
+          pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
+          qpat_x_assum `res = INR ex` SUBST_ALL_TAC >>
+          qpat_x_assum `expr_exit _ _` mp_tac >>
+          rpt (pop_assum kall_tac) >>
+          simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
+      qpat_x_assum `halt_exit _ _ _ _` mp_tac >> asm_rewrite_tac[] >>
+      simp[exprSimDefsTheory.halt_exit_def]) >>
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qexists_tac `p` >> simp[] >>
   `!tail. eval_target_place cx bt
