@@ -864,7 +864,7 @@ Proof
   strip_tac >>
   drule_all supported_external_allocs_ok >> strip_tac >>
   drule_at (Pat `MEM (FunctionDecl _ _ _ _ _ _ _ _ _) _`)
-    supported_program_function >> strip_tac >>
+    supported_program_function >> simp[] >> strip_tac >>
   drule_all external_body_support_bounds_from_allocs >> simp[]
 QED
 
