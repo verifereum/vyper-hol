@@ -49,6 +49,7 @@ Ancestors
   fragExec exprSimHash exprSimWordBuiltins
   exprLowering exprSimHyps exprSimPrecompiles exprSimOperands
   exprSimAttributeFields
+  gasStorage gasExemptCert vyperStorageTrace vyperStorageFootprint
   exprSimLiteralBuffer
   exprSimCalldataSlice entryDecodeStaticProps
   builtinMisc venomInst exprLoweringProps venomExecSemantics
@@ -2146,61 +2147,97 @@ QED
 
 (* A value step followed by a continuation whose outcome is counted from
    every normal endpoint of the step. *)
-Theorem ec_outcome_then[local]:
-  gas_outcome F tops (ctx,func)
-    (m : evaluation_state -> value evaluation_result) (es,s0)
-    (\res ee t. ?v. res = INL v /\ P v ee t) (\res ee r. expr_exit res r) /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==>
-     R (INR exc) ee r) /\
-  (!gs v ee t. m (es with gas_obs := gs) = (INL v, ee) /\ ee.gas_obs = [] /\
-     P v ee t /\ ~t.vs_halted ==>
-     gas_outcome F tops (ctx,func) (k v) (ee,t) Q R) ==>
-  gas_outcome F tops (ctx,func) (bind m k) (es,s0) Q R
+Theorem ec_exec_end_gas_obs[local]:
+  gas_marked_exec memory (ctx,func) source start marks res
+    (ee with gas_obs := gs) r =
+  gas_marked_exec memory (ctx,func) source start marks res ee r
 Proof
-  rewrite_tac[gas_outcome_def] >> strip_tac
+  PairCases_on `start` >> simp[gas_marked_exec_def]
+QED
+
+Theorem ec_outcome_then[local]:
+  gas_outcome F tops (ctx,func) cx st0
+    (m : evaluation_state -> value evaluation_result) (es,s0)
+    (\H res ee t. ?v. res = INL v /\ P H v ee t)
+    (\H res ee r. expr_exit res r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r ==>
+     R H (INR exc) ee r) /\
+  (!v. storage_trace_frame (k v)) /\
+  (!marks v ee t.
+     gas_marked_exec F (ctx,func) m (es,s0) marks (INL v) ee (OK t) /\
+     ee.gas_obs = [] /\ ~t.vs_halted /\
+     (!H. valid_horizon cx st0 H ee.storage_trace ==> P H v ee t) ==>
+     gas_outcome F tops (ctx,func) cx st0 (k v) (ee,t) Q R) ==>
+  gas_outcome F tops (ctx,func) cx st0 (bind m k) (es,s0) Q R
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ m _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+      irule gas_bad_storage_at_bind_left >> simp[])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
-      gvs[]
-      >- (`m (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-             (INL v, es_end with gas_obs := [])` by
-            (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
-               (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
-             strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-          `~t.vs_halted` by
-            metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-          qpat_x_assum `!gs v ee t. _`
-            (qspecl_then [`gas_explicit marks s0.vs_gas_readings`, `v`,
-                          `es_end with gas_obs := []`, `t`] mp_tac) >>
-          (impl_tac >- simp[]) >>
-          disch_then (qx_choose_then `right` strip_assume_tac)
-          >- (qexists_tac `marks ++ right` >> disj1_tac >>
-              qpat_x_assum `gas_summary_at F _ right _ _ _ _`
-                (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
-              disch_then (qx_choosel_then [`fres`, `fin`, `fr`]
-                (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
-              drule_all gas_marked_exec_bind_normal >> strip_tac >>
-              rewrite_tac[gas_summary_at_def] >>
-              qexistsl_tac [`fres`, `fin`, `fr`] >> asm_rewrite_tac[]) >>
-          qexists_tac `marks ++ right` >> disj2_tac >>
-          `ignore_bind (bind m k) (return ()) =
-           bind m (\v. ignore_bind (k v) (return ()))` by
-            simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc] >>
-          pop_assum SUBST1_TAC >>
-          irule_at Any gas_exempt_cert_bind_value >>
-          first_assum (irule_at Any) >> BETA_TAC >>
-          first_assum (irule_at Any)) >>
-      Cases_on `res` >> gvs[] >>
-      rename1 `expr_exit (INR exc) r` >>
-      qexists_tac `marks` >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
-      qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
-      irule gas_marked_exec_bind_exception >> simp[]) >>
-  qexists_tac `marks` >> disj2_tac >>
-  `ignore_bind (bind m k) (return ()) =
-   bind m (\v. ignore_bind (k v) (return ()))` by
-    simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc] >>
-  pop_assum SUBST1_TAC >>
-  metis_tac[gas_exempt_cert_error_value]
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+           irule gas_bad_storage_at_bind_left >> simp[] >>
+           irule gas_bad_storage_at_counted_prefix >>
+           qexistsl_tac [`ctx`, `es_end`, `func`, `F`, `r`, `res`] >>
+           simp[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def]
+      >- suspend "normal"
+      >> suspend "exit") >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >>
+  disj2_tac >> disj2_tac >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule_at Any gas_exempt_cert_error_value >>
+  simp[GSYM ignore_bind_def] >> metis_tac[]
 QED
+
+Resume ec_outcome_then[normal]:
+  qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `?v. res = INL v` by
+    (first_assum (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> metis_tac[]) >>
+  gvs[] >>
+  `~t.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  qpat_x_assum `!marks v ee t. _`
+    (qspecl_then [`marks`, `v`, `es_end with gas_obs := []`, `t`] mp_tac) >>
+  (impl_tac >- simp[ec_exec_end_gas_obs]) >> strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ (k v) _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
+      disj1_tac >> irule gas_bad_storage_at_bind_right >> simp[] >>
+      metis_tac[])
+  >- (qpat_x_assum `gas_summary_at _ _ _ (k _) _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
+      disj2_tac >> disj1_tac >> simp[gas_summary_at_def] >>
+      qexistsl_tac [`res`, `es_end'`, `r`] >> simp[] >>
+      (conj_tac
+       >- (irule gas_marked_exec_bind_normal >> goal_assum (drule_at Any) >>
+           gvs[])) >>
+      fs[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
+  disj2_tac >> disj2_tac >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule_at Any gas_exempt_cert_bind_value >>
+  simp[GSYM ignore_bind_def] >> metis_tac[]
+QED
+
+Resume ec_outcome_then[exit]:
+  qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o BETA_RULE) >>
+  first_assum (drule_then assume_tac o SIMP_RULE (srw_ss()) []) >>
+  Cases_on `res` >> fs[] >>
+  rename1 `expr_exit (INR exc) r` >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >>
+  disj2_tac >> disj1_tac >> simp[gas_summary_at_def] >>
+  qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
+  irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC
+QED
+
+Finalise ec_outcome_then
 
 Theorem ec_eval_bind:
   (bt = ECAdd \/ bt = ECMul) ==>
@@ -2233,6 +2270,20 @@ Theorem ec_source_tail_gas_obs:
 Proof
   rpt strip_tac >> gvs[ec_source_tail_cases, AllCaseEqs()] >>
   simp[vyperStateTheory.evaluation_state_component_equality]
+QED
+
+Theorem ec_source_tail_storage_frame[local]:
+  storage_trace_frame (ec_source_tail cx ann bt tys vs)
+Proof
+  `!v. storage_trace_frame
+         (do precompile_call_success bt; return (Value v) od)` by
+    (gen_tac >> irule storage_trace_frame_ignore_bind >>
+     simp[storage_trace_frame_precompile_call_success,
+          storage_trace_frame_return]) >>
+  rewrite_tac[storage_trace_frame_def] >> rpt gen_tac >>
+  rewrite_tac[ec_source_tail_def] >> simp[] >>
+  Cases_on `exprSimWordArgs$builtin_result cx st.accounts ann bt tys vs` >>
+  simp[] >> fs[storage_trace_frame_def]
 QED
 
 Theorem ec_source_tail_scopes[local]:
@@ -2325,16 +2376,50 @@ Proof
   `!l. p <> Label l` by gvs[safe_operand_def] >>
   qpat_assum `bt = ECAdd \/ bt = ECMul`
     (fn th => rewrite_tac[MATCH_MP ec_eval_bind th]) >>
-  irule ec_outcome_then >>
-  conj_tac >- (BETA_TAC >> metis_tac[ec_expr_exit_INR_cast]) >>
-  qexists_tac `\v1 ee t. expr_post H ctx func cenv cx a es sa s1 s0 ee v1 p t /\
+  `!v1 v2. storage_trace_frame
+      (ec_source_tail cx ann bt [expr_type a; expr_type b] [v1;v2])` by
+    simp[ec_source_tail_storage_frame] >>
+  `storage_trace_frame (bind (eval_expr cx b) (read_result cx))` by
+    (match_mp_tac storage_trace_frame_bind_all >>
+     simp[storage_trace_frame_read_result, evaluate_storage_trace_frame]) >>
+  match_mp_tac (Q.SPEC `\H v1 ee t.
+     expr_post H ctx func cenv cx a es sa s1 s0 ee v1 p t /\
      t.vs_current_bb = s1.cs_current_bb /\
-     t.vs_inst_idx = LENGTH s1.cs_current_insts` >>
-  BETA_TAC >> reverse conj_tac
+     t.vs_inst_idx = LENGTH s1.cs_current_insts`
+     (Q.GEN `P` ec_outcome_then)) >>
+  BETA_TAC >> rpt conj_tac
   >- (irule exprSimWordArgsTheory.expr_sim_apply >>
       simp[] >> conj_tac >- metis_tac[expr_body_pre_gas_admissible] >>
-      qexists_tac `expr_type a` >> simp[]) >>
-  qx_genl_tac [`gs1`, `v1`, `es1`, `t`] >> strip_tac >>
+      qexists_tac `expr_type a` >> simp[])
+  >- metis_tac[ec_expr_exit_INR_cast]
+  >- (gen_tac >> match_mp_tac storage_trace_frame_bind_all >> simp[]) >>
+  qx_genl_tac [`m1`, `v1`, `es1`, `t`] >> strip_tac >>
+  `es1 with gas_obs := [] = es1` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  `?gs1. bind (eval_expr cx a) (read_result cx) (es with gas_obs := gs1) =
+         (INL v1, es1)` by
+    (qexists_tac `gas_explicit m1 s0.vs_gas_readings` >>
+     qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `!H. valid_horizon cx st0 H es1.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
+    (`?obs. es1.storage_trace = es.storage_trace ++ obs` by
+       (qpat_assum `bind (eval_expr cx a) _ _ = _`
+          (mp_then (Pos last) mp_tac storage_trace_frame_prefix) >>
+        simp[storage_trace_frame_read_result, evaluate_storage_trace_frame,
+             storage_trace_frame_bind_all]) >>
+     simp[valid_horizon_def]) >>
+  reverse (Cases_on `storage_trace_domain cx st0 es1.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >> asm_rewrite_tac[] >>
+      match_mp_tac storage_trace_frame_bind_all >> asm_rewrite_tac[] >>
+      BETA_TAC >> asm_rewrite_tac[]) >>
+  `?H1. valid_horizon cx st0 H1 es1.storage_trace` by
+    (qexists_tac `storage_trace_horizon es1.storage_trace` >>
+     fs[storage_trace_domain_def]) >>
+  `t.vs_current_bb = s1.cs_current_bb /\
+   t.vs_inst_idx = LENGTH s1.cs_current_insts` by metis_tac[] >>
   qspecl_then [`cenv`, `cx`, `env`, `a`, `es with gas_obs := gs1`, `INL v1`, `es1`]
     mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_eval) >>
   (impl_tac >- simp[]) >> strip_tac >>
@@ -2351,30 +2436,64 @@ Proof
        (qpat_x_assum `bind (eval_expr cx a) _ _ = _` mp_tac >>
         simp[vyperStateTheory.bind_def, AllCaseEqs()] >> metis_tac[]) >>
      gvs[expr_sim_case_def] >> metis_tac[]) >>
-  `stmt_state_rel H ctx func cenv cx es1 t` by
-    metis_tac[exprSimWordArgsTheory.expr_post_state] >>
+  `!H. valid_horizon cx st0 H es1.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es1 t /\
+       storage_well_formed_on cx es1 (FST H)` by
+    (rpt strip_tac >> res_tac >> fs[expr_post_def]) >>
   `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
     (qpat_assum `bind (eval_expr cx a) _ _ = _`
        (mp_then Any mp_tac
          (CONV_RULE (DEPTH_CONV ETA_CONV)
             exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom)) >>
      simp[]) >>
-  irule ec_outcome_then >>
-  conj_tac >- (BETA_TAC >> metis_tac[ec_expr_exit_INR_cast]) >>
-  qexists_tac `\v2 ee u. expr_post H ctx func cenv cx b es1 s1 sm t ee v2 q u /\
+  match_mp_tac (Q.SPEC `\H v2 ee u.
+     expr_post H ctx func cenv cx b es1 s1 sm t ee v2 q u /\
      u.vs_current_bb = sm.cs_current_bb /\
-     u.vs_inst_idx = LENGTH sm.cs_current_insts` >>
-  BETA_TAC >> reverse conj_tac
+     u.vs_inst_idx = LENGTH sm.cs_current_insts`
+     (Q.GEN `P` ec_outcome_then)) >>
+  BETA_TAC >> rpt conj_tac
   >- (irule exprSimWordArgsTheory.expr_sim_apply >>
       simp[] >> conj_tac >- metis_tac[expr_body_pre_gas_admissible] >>
-      qexists_tac `expr_type b` >> simp[]) >>
-  qx_genl_tac [`gs2`, `v2`, `es2`, `u`] >> strip_tac >>
+      qexists_tac `expr_type b` >> simp[])
+  >- metis_tac[ec_expr_exit_INR_cast]
+  >- simp[] >>
+  qx_genl_tac [`m2`, `v2`, `es2`, `u`] >> strip_tac >>
+  `es2 with gas_obs := [] = es2` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  `?gs2. bind (eval_expr cx b) (read_result cx) (es1 with gas_obs := gs2) =
+         (INL v2, es2)` by
+    (qexists_tac `gas_explicit m2 t.vs_gas_readings` >>
+     qpat_assum `gas_marked_exec _ _ (bind (eval_expr cx b) _) _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `!H. valid_horizon cx st0 H es2.storage_trace ==>
+       valid_horizon cx st0 H es1.storage_trace` by
+    (`?obs. es2.storage_trace = es1.storage_trace ++ obs` by
+       (qpat_assum `bind (eval_expr cx b) _ _ = _`
+          (mp_then (Pos last) mp_tac storage_trace_frame_prefix) >>
+        simp[]) >>
+     simp[valid_horizon_def]) >>
+  reverse (Cases_on `storage_trace_domain cx st0 es2.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >> asm_rewrite_tac[]) >>
+  `?H. valid_horizon cx st0 H es2.storage_trace` by
+    (qexists_tac `storage_trace_horizon es2.storage_trace` >>
+     fs[storage_trace_domain_def]) >>
+  `!H. valid_horizon cx st0 H es2.storage_trace ==>
+       expr_post H ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
+       expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
+       stmt_state_rel H ctx func cenv cx es2 u` by
+    (rpt strip_tac >> metis_tac[exprSimWordArgsTheory.expr_post_state]) >>
+  `expr_post H ctx func cenv cx a es sa s1 s0 es1 v1 p t /\
+   expr_post H ctx func cenv cx b es1 s1 sm t es2 v2 q u /\
+   stmt_state_rel H ctx func cenv cx es2 u /\
+   u.vs_current_bb = sm.cs_current_bb /\
+   u.vs_inst_idx = LENGTH sm.cs_current_insts` by metis_tac[] >>
+  `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
   qspecl_then [`cenv`, `cx`, `env`, `b`, `es1 with gas_obs := gs2`, `INL v2`, `es2`]
     mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_eval) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `expr_result_typed env b (Value v2)` by simp[] >>
-  `stmt_state_rel H ctx func cenv cx es2 u` by
-    metis_tac[exprSimWordArgsTheory.expr_post_state] >>
   `MAP FDOM es1.scopes = MAP FDOM es2.scopes` by
     (qpat_assum `bind (eval_expr cx b) _ _ = _`
        (mp_then Any mp_tac
@@ -2393,11 +2512,19 @@ Proof
                          freshWritesTheory.not_fresh_at_mono]) >>
   Cases_on `ec_source_tail cx ann bt [expr_type a; expr_type b] [v1; v2] es2` >>
   rename1 `_ = (res, es')` >>
+  `!H. valid_horizon cx st0 H es'.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
+    (`?obs. es'.storage_trace = es2.storage_trace ++ obs` by
+       (qpat_assum `ec_source_tail _ _ _ _ _ es2 = _`
+          (mp_then (Pos last) mp_tac storage_trace_frame_prefix) >>
+        simp[]) >>
+     `!H. valid_horizon cx st0 H es'.storage_trace ==>
+          valid_horizon cx st0 H es2.storage_trace` by
+       simp[valid_horizon_def] >>
+     metis_tac[]) >>
   qpat_x_assum `!es1 es2 v1 v2 t u res es'. _`
     (qspecl_then [`es1`, `es2`, `v1`, `v2`, `t`, `u`, `res`, `es'`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  `es2 with gas_obs := [] = es2` by
-    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `!g. ec_source_tail cx ann bt [expr_type a; expr_type b] [v1; v2]
          (es2 with gas_obs := g) = (res, es' with gas_obs := g)` by
     metis_tac[ec_source_tail_gas_obs] >>
@@ -2424,16 +2551,20 @@ Proof
      (es2,u) (REPLICATE n F) res es' r` by
     (irule gas_marked_exec_no_source_read >> conj_tac >>
      first_assum ACCEPT_TAC) >>
-  rewrite_tac[gas_outcome_def] >> qexists_tac `REPLICATE n F` >> disj1_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `REPLICATE n F` >>
+  disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`res`, `es'`, `r`] >>
-  qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` (fn th => rewrite_tac[th]) >>
+  qpat_assum `gas_marked_exec _ _ (ec_source_tail _ _ _ _ _) _ _ _ _ _`
+    (fn th => rewrite_tac[th]) >>
   BETA_TAC >>
   qpat_x_assum `es' with gas_obs := [] = es'` SUBST1_TAC >>
   FIRST [disj2_tac >> simp[] >> NO_TAC,
-         disj1_tac >> simp[] >>
+         disj1_tac >> simp[] >> rpt strip_tac >>
+         rename1 `valid_horizon cx st0 H' es'.storage_trace` >>
+         `stmt_state_rel H' ctx func cenv cx es s0` by metis_tac[] >>
          irule exprSimCalldataSliceTheory.vv_post_prefix_frame >>
-         first_assum (irule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+         first_assum (irule_at (Pat `vv_post H' _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
          simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]]
 QED
 
