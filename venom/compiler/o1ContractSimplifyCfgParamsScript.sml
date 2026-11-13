@@ -5,6 +5,7 @@
  *
  * TOP-LEVEL:
  *   simplify_cfg_fn_param_prefix
+ *   simplify_cfg_fn_user_param_count
  *)
 Theory o1ContractSimplifyCfgParams
 Ancestors
@@ -436,6 +437,272 @@ Proof
   Cases_on `q.fn_blocks = f.fn_blocks` >- gvs[] >>
   Cases_on `simplify_cfg_iter_with_labels n q` >> simp[] >>
   first_x_assum (qspec_then `q` mp_tac) >> gvs[]
+QED
+
+(* Entry-label-indexed count, independent of the position of other blocks. *)
+val entry_param_count = ``\e k f.
+  EVERY (\bb. bb.bb_label = e ==>
+    LENGTH (FILTER (\i. i.inst_opcode = PARAM) bb.bb_instructions) = k)
+    f.fn_blocks``;
+
+Theorem scfg_param_count_map[local]:
+  (!i. MEM i xs ==> ((h i).inst_opcode = PARAM <=> i.inst_opcode = PARAM)) ==>
+  LENGTH (FILTER (\i. i.inst_opcode = PARAM) (MAP h xs)) =
+  LENGTH (FILTER (\i. i.inst_opcode = PARAM) xs)
+Proof
+  strip_tac >> simp[FILTER_MAP] >> AP_TERM_TAC >>
+  irule (iffRL FILTER_EQ) >> simp[]
+QED
+
+Theorem scfg_merge_param_count[local]:
+  bb_well_formed a /\ no_param_insts b.bb_instructions ==>
+  LENGTH (FILTER (\i. i.inst_opcode = PARAM) (merge_blocks a b).bb_instructions) =
+  LENGTH (FILTER (\i. i.inst_opcode = PARAM) a.bb_instructions)
+Proof
+  strip_tac >>
+  `FILTER (\i. i.inst_opcode = PARAM) b.bb_instructions = []` by
+    metis_tac[no_param_insts_queries] >>
+  `a.bb_instructions <> [] /\
+   (LAST a.bb_instructions).inst_opcode <> PARAM` by
+    (gvs[bb_well_formed_def] >> strip_tac >> gvs[is_terminator_def]) >>
+  simp[merge_blocks_def] >>
+  qpat_x_assum `_ <> PARAM` mp_tac >>
+  qpat_x_assum `a.bb_instructions <> []` mp_tac >>
+  qspec_tac (`a.bb_instructions`, `xs`) >>
+  Induct using SNOC_INDUCT >> simp[FRONT_SNOC, FILTER_SNOC, FILTER_APPEND]
+QED
+
+Theorem scfg_remove_unreachable_count[local]:
+  ^entry_param_count e k f ==>
+  ^entry_param_count e k (remove_unreachable_blocks f)
+Proof
+  BETA_TAC >> simp[remove_unreachable_blocks_def] >>
+  Cases_on `fn_entry_label f` >>
+  simp[EVERY_MEM, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem scfg_fix_all_phis_count[local]:
+  ^param_layout e f /\ ^entry_param_count e k f ==>
+  ^entry_param_count e k (fix_all_phis f)
+Proof
+  BETA_TAC >> simp[fix_all_phis_def, EVERY_MAP, EVERY_MEM, MEM_MAP, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[] >> rename1 `MEM original f.fn_blocks` >>
+  `no_phis original` by
+    (gvs[no_phis_def, EVERY_MEM, fix_phis_in_block_def] >> metis_tac[]) >>
+  drule scfg_fix_phis_no_phis >> strip_tac >> gvs[]
+QED
+
+Theorem scfg_subst_labels_count[local]:
+  ^entry_param_count e k f ==>
+  ^entry_param_count e k (subst_block_labels_fn lm f)
+Proof
+  BETA_TAC >> simp[subst_block_labels_fn_def, EVERY_MAP, EVERY_MEM,
+                  subst_block_labels_block_def, MEM_MAP, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[subst_block_labels_block_def] >>
+  rename1 `MEM original f.fn_blocks` >>
+  irule EQ_TRANS >>
+  qexists_tac `LENGTH (FILTER (\i. i.inst_opcode = PARAM) original.bb_instructions)` >>
+  reverse conj_tac >- metis_tac[] >>
+  irule scfg_param_count_map >>
+  simp[subst_block_labels_inst_def, subst_label_map_inst_def] >>
+  rpt strip_tac >> Cases_on `is_block_label_opcode i.inst_opcode` >> simp[]
+QED
+
+Theorem scfg_update_succ_count[local]:
+  EVERY (\bb. bb.bb_label = e ==>
+    LENGTH (FILTER (\i. i.inst_opcode = PARAM) bb.bb_instructions) = k) bbs ==>
+  EVERY (\bb. bb.bb_label = e ==>
+    LENGTH (FILTER (\i. i.inst_opcode = PARAM) bb.bb_instructions) = k)
+    (update_succ_phi_labels old new bbs succs)
+Proof
+  strip_tac >> irule scfg_update_succ_block_predicate >>
+  reverse conj_tac >- (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >> simp[] >> strip_tac >>
+  irule EQ_TRANS >>
+  qexists_tac `LENGTH (FILTER (\i. i.inst_opcode = PARAM) bb.bb_instructions)` >>
+  reverse conj_tac >- metis_tac[] >>
+  irule scfg_param_count_map >> rpt strip_tac >>
+  Cases_on `i.inst_opcode = PHI` >> simp[subst_label_inst_def]
+QED
+
+Theorem scfg_chain_merge_count[local]:
+  ^collapse_shape e f /\ ^param_layout e f /\ ^entry_param_count e k f /\
+  lookup_block lbl f.fn_blocks = SOME a /\
+  lookup_block next f.fn_blocks = SOME b /\ can_merge_blocks f a b ==>
+  ^entry_param_count e k (f with fn_blocks := update_succ_phi_labels next lbl
+    (replace_block lbl (merge_blocks a b) (remove_block next f.fn_blocks))
+    (bb_succs (merge_blocks a b)))
+Proof
+  strip_tac >>
+  `a.bb_label = lbl /\ b.bb_label = next /\
+   MEM a f.fn_blocks /\ MEM b f.fn_blocks` by
+    metis_tac[lookup_block_member_label] >>
+  `b.bb_label <> e` by
+    (gvs[] >> drule_all can_merge_blocks_not_entry >> simp[]) >>
+  BETA_TAC >> simp[] >> irule scfg_update_succ_count >>
+  irule replace_block_every >> reverse conj_tac
+  >- (irule remove_block_every >> gvs[]) >>
+  simp[merge_blocks_def] >> strip_tac >>
+  `bb_well_formed a /\ no_param_insts b.bb_instructions` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all scfg_merge_param_count >>
+  simp[merge_blocks_def] >> strip_tac >> gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem scfg_bypass_count[local]:
+  ^entry_param_count e k f /\
+  lookup_block a.bb_label f.fn_blocks = SOME a /\
+  do_merge_jump f a b lm = SOME (g,lm') ==>
+  ^entry_param_count e k g
+Proof
+  BETA_TAC >> strip_tac >>
+  `!i. ((update_phi_bypass a.bb_label b.bb_label i).inst_opcode = PARAM <=>
+         i.inst_opcode = PARAM)` by rw[update_phi_bypass_def] >>
+  `!l1 l2 i. ((if ~is_terminator i.inst_opcode then i else
+       canon_jnz_inst (subst_label_inst l1 l2 i)).inst_opcode = PARAM <=>
+       i.inst_opcode = PARAM)` by
+    (rpt gen_tac >> Cases_on `is_terminator i.inst_opcode` >> simp[] >>
+     simp[canon_jnz_inst_def, subst_label_inst_def] >>
+     BasicProvers.every_case_tac >> rw[] >> gvs[is_terminator_def]) >>
+  qpat_x_assum `do_merge_jump _ _ _ _ = _` mp_tac >>
+  simp[do_merge_jump_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  `MEM a f.fn_blocks /\ MEM target f.fn_blocks` by
+    metis_tac[lookup_block_member_label] >>
+  irule replace_block_every >> conj_tac
+  >- (Cases_on `target_lbl = a.bb_label` >> simp[MAP_MAP_o] >> strip_tac >>
+      irule EQ_TRANS >>
+      qexists_tac `LENGTH (FILTER (\i. i.inst_opcode = PARAM) a.bb_instructions)` >>
+      reverse conj_tac >- (gvs[EVERY_MEM]) >>
+      gvs[scfg_param_count_map, EVERY_MEM]) >>
+  irule replace_block_every >> conj_tac
+  >- (simp[scfg_param_count_map] >> gvs[EVERY_MEM]) >>
+  irule remove_block_every >> simp[]
+QED
+
+Theorem scfg_collapse_count[local]:
+  !f lm vis lbl.
+  ^collapse_shape e f /\ ^param_layout e f /\ ^entry_param_count e k f ==>
+  ^entry_param_count e k (FST (collapse_dfs f lm vis lbl))
+Proof
+  mp_tac (Q.INST [`Q` |-> `\f. ^collapse_shape e f /\
+    ^param_layout e f /\ ^entry_param_count e k f`]
+    collapse_dfs_preserves_predicate) >>
+  reverse impl_tac
+  >- (strip_tac >> rpt gen_tac >> strip_tac >>
+      first_x_assum (qspecl_then [`f`, `lm`, `vis`, `lbl`] mp_tac) >> simp[]) >>
+  conj_tac >> rpt gen_tac >> BETA_TAC >> strip_tac
+  >- (drule_all (BETA_RULE do_merge_jump_collapse_shape) >> strip_tac >>
+      drule_all (BETA_RULE scfg_bypass_layout) >> strip_tac >>
+      drule_all (BETA_RULE scfg_bypass_count) >> strip_tac >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_all (BETA_RULE chain_merge_collapse_shape) >> strip_tac >>
+  drule_all (BETA_RULE scfg_chain_merge_layout) >> strip_tac >>
+  drule_all (BETA_RULE scfg_chain_merge_count) >> strip_tac >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem scfg_round_count[local]:
+  ^structural_shape e f /\ ^param_layout e f /\ ^entry_param_count e k f ==>
+  ^entry_param_count e k (FST (simplify_cfg_round_with_labels f))
+Proof
+  strip_tac >>
+  `^structural_shape e (remove_unreachable_blocks f)` by
+    (irule remove_unreachable_blocks_structural_shape >> simp[]) >>
+  `^collapse_shape e (fix_all_phis (remove_unreachable_blocks f))` by
+    (irule fix_all_phis_collapse_shape >> simp[]) >>
+  `^param_layout e (remove_unreachable_blocks f)` by
+    (irule scfg_remove_unreachable_layout >> simp[]) >>
+  `^param_layout e (fix_all_phis (remove_unreachable_blocks f))` by
+    (irule scfg_fix_all_phis_layout >> simp[]) >>
+  `^entry_param_count e k (fix_all_phis (remove_unreachable_blocks f))` by
+    (irule scfg_fix_all_phis_count >> simp[] >>
+     irule (BETA_RULE scfg_remove_unreachable_count) >> gvs[]) >>
+  Cases_on `fn_entry_label f`
+  >- gvs[simplify_cfg_round_with_labels_def] >>
+  Cases_on `collapse_dfs (fix_all_phis (remove_unreachable_blocks f)) [] [] x` >>
+  PairCases_on `r` >>
+  `^entry_param_count e k q /\ ^param_layout e q` by
+    (`q = FST (collapse_dfs (fix_all_phis (remove_unreachable_blocks f))
+        [] [] x)` by simp[] >>
+     pop_assum SUBST1_TAC >> conj_tac
+     >- (irule scfg_collapse_count >> simp[]) >>
+     irule scfg_collapse_layout >> simp[]) >>
+  `^entry_param_count e k (if r0 = [] then q else subst_block_labels_fn r0 q) /\
+   ^param_layout e (if r0 = [] then q else subst_block_labels_fn r0 q)` by
+    (Cases_on `r0 = []` >> simp[] >>
+     metis_tac[scfg_subst_labels_count, scfg_subst_labels_layout]) >>
+  `^entry_param_count e k (fix_all_phis (remove_unreachable_blocks
+     (if r0 = [] then q else subst_block_labels_fn r0 q)))` by
+    (irule scfg_fix_all_phis_count >> conj_tac
+     >- (irule scfg_remove_unreachable_count >> simp[]) >>
+     irule scfg_remove_unreachable_layout >> simp[]) >>
+  gvs[simplify_cfg_round_with_labels_def]
+QED
+
+Theorem scfg_iter_count[local]:
+  !n f. ^iteration_shape e f /\ ^param_layout e f /\ ^entry_param_count e k f ==>
+  ^entry_param_count e k (FST (simplify_cfg_iter_with_labels n f))
+Proof
+  Induct_on `n` >- simp[simplify_cfg_iter_with_labels_def] >>
+  rpt gen_tac >> strip_tac >>
+  `^structural_shape e f` by gvs[] >>
+  `^iteration_shape e (FST (simplify_cfg_round_with_labels f))` by
+    (drule simplify_cfg_round_collapse_shape >> strip_tac >>
+     drule simplify_cfg_round_label_refs_ok >> strip_tac >> gvs[]) >>
+  `^param_layout e (FST (simplify_cfg_round_with_labels f))` by
+    (irule scfg_round_layout >> simp[]) >>
+  `^entry_param_count e k (FST (simplify_cfg_round_with_labels f))` by
+    (irule scfg_round_count >> simp[]) >>
+  pure_once_rewrite_tac[simplify_cfg_iter_with_labels_def] >>
+  Cases_on `simplify_cfg_round_with_labels f` >> simp[] >>
+  Cases_on `q.fn_blocks = f.fn_blocks` >- gvs[] >>
+  Cases_on `simplify_cfg_iter_with_labels n q` >> simp[] >>
+  first_x_assum (qspec_then `q` mp_tac) >> gvs[]
+QED
+
+(* The merge drops a's terminator (not PARAM) and adds b's instructions, which
+   carry no PARAM (b is not the entry); jump threading and label
+   substitution change operands and terminators only. *)
+Theorem simplify_cfg_fn_user_param_count:
+  o1_fn_shape C fn /\ fn_pseudos_prefix fn /\
+  EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks) ==>
+  LENGTH (fn_user_param_insts (simplify_cfg_fn fn)) =
+    LENGTH (fn_user_param_insts fn)
+Proof
+  strip_tac >>
+  `^iteration_shape (HD fn.fn_blocks).bb_label fn` by
+    (BETA_TAC >>
+     gvs[o1_fn_shape_def, wf_function_def, fn_has_entry_def,
+         fn_inst_wf_def, fn_shape_ok_def, inst_shape_ok_def,
+         first_block_no_phi_def, EVERY_MEM, fn_insts_def,
+         fn_insts_blocks_MEM] >> metis_tac[]) >>
+  `first_block_no_phi fn` by gvs[o1_fn_shape_def] >>
+  mp_tac (Q.INST [`e` |-> `(HD fn.fn_blocks).bb_label`]
+    scfg_entry_layout_iff) >>
+  impl_tac >- gvs[] >> strip_tac >>
+  `^param_layout (HD fn.fn_blocks).bb_label fn` by (BETA_TAC >> gvs[]) >>
+  `^entry_param_count (HD fn.fn_blocks).bb_label
+     (LENGTH (fn_user_param_insts fn)) fn` by
+    (BETA_TAC >>
+     `fn.fn_blocks <> [] /\ ALL_DISTINCT (fn_labels fn)` by gvs[] >>
+     Cases_on `fn.fn_blocks` >>
+     gvs[fn_labels_def, fn_user_param_insts_def, fn_entry_insts_def,
+         entry_block_def, EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+  `^iteration_shape (HD fn.fn_blocks).bb_label
+     (FST (simplify_cfg_iter_with_labels (LENGTH fn.fn_blocks) fn))` by
+    (irule simplify_cfg_iter_structural_shape >> simp[]) >>
+  `^entry_param_count (HD fn.fn_blocks).bb_label
+     (LENGTH (fn_user_param_insts fn))
+     (FST (simplify_cfg_iter_with_labels (LENGTH fn.fn_blocks) fn))` by
+    (irule scfg_iter_count >> simp[]) >>
+  simp[simplify_cfg_fn_def, simplify_cfg_fn_with_labels_def] >>
+  qabbrev_tac `g = FST (simplify_cfg_iter_with_labels (LENGTH fn.fn_blocks) fn)` >>
+  `g.fn_blocks <> [] /\
+   (HD g.fn_blocks).bb_label = (HD fn.fn_blocks).bb_label` by gvs[] >>
+  gvs[EVERY_MEM] >>
+  `MEM (HD g.fn_blocks) g.fn_blocks` by (Cases_on `g.fn_blocks` >> gvs[]) >>
+  simp[fn_user_param_insts_def, fn_entry_insts_def, entry_block_def, NULL_EQ] >>
+  metis_tac[]
 QED
 
 Theorem simplify_cfg_fn_param_prefix:

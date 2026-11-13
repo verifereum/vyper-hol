@@ -55,7 +55,7 @@ Ancestors
   venomExecSemantics venomInst irSupply contextCodegenRel stackPlanGen
   lowerDloadDefs ptrDiscipline ptrStaticDiscipline staticLayoutDefs venomState stateEquiv
   passSimulationDefs vfmState extCallOracle finite_map cfgWf dretDesugarDefs
-  fcgDefs list rich_list
+  fcgDefs callLayoutDefs list rich_list
 
 (* ===== Equivalence up to dead bytes ===== *)
 
@@ -286,18 +286,33 @@ Definition fn_steps_def:
       fn_steps rpolicy passes out.fpo_function fn')
 End
 
-(* ===== Stage contexts ===== *)
-
-(* The observed unit's callees of fn are finished: each is reached from
-   its form in the output context C' by the passes still to come. *)
-Definition walk_view_def:
-  walk_view rpolicy later C' fn observed <=>
-    !name g'.
-      MEM name (fn_invoke_targets fn) /\
-      lookup_function name C'.ctx_functions = SOME g' ==>
-      ?g. lookup_function name observed.cu_context.ctx_functions = SOME g /\
-          fn_steps rpolicy later g' g
+(* The same, from the k-th run on, with R m of the m-th function along
+   the way, the last included. *)
+Definition fn_steps_from_def:
+  (fn_steps_from R rpolicy k [] fn fn' <=> fn' = fn /\ R k fn) /\
+  (fn_steps_from R rpolicy k (pass::passes) fn fn' <=>
+    R k fn /\
+    ?observed s out.
+      fn_pass_step rpolicy pass observed s fn out /\
+      fn_steps_from R rpolicy (SUC k) passes out.fpo_function fn')
 End
+
+Theorem fn_steps_from_fn_steps:
+  !passes k fn fn'.
+    fn_steps_from R rpolicy k passes fn fn' ==> fn_steps rpolicy passes fn fn'
+Proof
+  Induct >> simp[fn_steps_from_def, fn_steps_def] >> metis_tac[]
+QED
+
+Theorem fn_steps_from_mono:
+  !passes k fn fn'.
+    (!m h. R m h ==> R' m h) /\ fn_steps_from R rpolicy k passes fn fn' ==>
+    fn_steps_from R' rpolicy k passes fn fn'
+Proof
+  Induct >> simp[fn_steps_from_def] >> metis_tac[]
+QED
+
+(* ===== Stage contexts ===== *)
 
 (* C' is C with every function taken through pass by one step, each on an
    observed unit with C's entry, reservations and function names, related
@@ -445,6 +460,43 @@ Definition o1_fn_shape_def:
     (ctx.ctx_entry <> SOME fn.fn_name ==>
        EVERY (\inst. ~MEM inst.inst_opcode [STOP; RETURN]) (fn_insts fn))
 End
+
+(* Passes that keep the entry block's opcodes keep the user PARAM count. *)
+Theorem fn_user_param_count_entry_ops:
+  fn.fn_blocks <> [] /\ fn'.fn_blocks <> [] /\
+  MAP (\i. i.inst_opcode) (HD fn'.fn_blocks).bb_instructions =
+    MAP (\i. i.inst_opcode) (HD fn.fn_blocks).bb_instructions ==>
+  LENGTH (fn_user_param_insts fn') = LENGTH (fn_user_param_insts fn)
+Proof
+  rw[fn_user_param_insts_def, fn_entry_insts_def, entry_block_def, NULL_EQ] >>
+  `!l. LENGTH (FILTER (\i. i.inst_opcode = PARAM) l) =
+       LENGTH (FILTER (\op. op = PARAM) (MAP (\i. i.inst_opcode) l))` by
+    (Induct >> rw[]) >>
+  simp[]
+QED
+
+(* The observed unit's callees of fn are finished: each is reached from
+   its form in the output context C', at row k, by the passes still to
+   come, through functions with the shape facts of C' and rows R. *)
+Definition walk_view_def:
+  walk_view R rpolicy k later C' fn observed <=>
+    !name g'.
+      MEM name (fn_invoke_targets fn) /\
+      lookup_function name C'.ctx_functions = SOME g' ==>
+      ?g. lookup_function name observed.cu_context.ctx_functions = SOME g /\
+          fn_steps_from (\m h. o1_fn_shape C' h /\ R m h) rpolicy k later g' g
+End
+
+Theorem walk_view_fn_steps:
+  walk_view R rpolicy k later C' fn observed /\
+  MEM name (fn_invoke_targets fn) /\
+  lookup_function name C'.ctx_functions = SOME g' ==>
+  ?g. lookup_function name observed.cu_context.ctx_functions = SOME g /\
+      fn_steps rpolicy later g' g
+Proof
+  rw[walk_view_def] >> first_x_assum drule_all >>
+  metis_tac[fn_steps_from_fn_steps]
+QED
 
 (* Instruction ids are distinct across the context, as Python's global
    counter makes them: ConcretizeMemLoc keys imported callee allocations
@@ -864,7 +916,8 @@ End
 (* The view of the k-th walk pass: callees are observed after the passes
    that follow it. *)
 Definition o1_walk_view_def:
-  o1_walk_view rpolicy k = walk_view rpolicy (DROP (SUC k) o1_fn_passes)
+  o1_walk_view rpolicy k =
+    walk_view o1_fn_row rpolicy (SUC k) (DROP (SUC k) o1_fn_passes)
 End
 
 (* The stage contract of the k-th run of the walk. *)
