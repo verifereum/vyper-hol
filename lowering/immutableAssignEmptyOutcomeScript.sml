@@ -1,20 +1,21 @@
 (* Source and memory outcome of an empty deploy-time immutable assignment. *)
 Theory immutableAssignEmptyOutcome
 Ancestors
-  immutableAssignEmpty immutableAssignEmptyEndpointMem immutableAssignCode immutableAssignState immutableAssignAdmissibility
+  immutableAssignEmpty immutableAssignEmptyEndpointMem immutableAssignCode
   bodyMemoryPreds bodyAssignPlace memoryLocalRhsProps exprSimHypsDefs
   stmtSimDefs stmtLowering compileEnv loweringPosts
   vyperTypeInvariants vyperInterpreter vyperState
-  immutableAssignStoreMem abiEncoderWindowSequence windowSequenceMem
-  fragGasSeqMem fragGasMode allocaHistoryFragment bodyMemoryDefs
+  immutableAssignStoreMem immutableStoreOptionPathMem immutableStoreOptionMem
+  fragGasSeqMem fragGasMode bodyMemoryDefs
   instMemFrontier memSafeRun emitHelperProps emitHelper
   venomExecSemantics venomState venomInst valueEncodingProps
   loweringStateRelDefs finite_map list rich_list arithmetic words
-  typedNormalizeStraightPathMem localPtrsProps allocaHistory valueEncodingProofs
+  bodyDeclMemoryCounted localPtrsProps allocaHistory valueEncodingProofs vyperTypeValues
   context exprLoweringProps fragExecMem immutableRelation
   gasOutcome gasSummary fragExec
-  immutableDeployAssignBytes stmtSimProps
-  immutableAssignSource immutableWordPathMem immutableAssignSeparation
+  immutableDeployAssignBytes immutableDeployAssignAdmissible stmtSimProps
+  bodyImmutableAugAssignStore
+  immutableAssignSource bodyMemAggregatePath fragGasPathFrameMem
   placeStore bodyImmutableAssignFacts
 Libs monadsyntax
 
@@ -88,12 +89,7 @@ QED
 
 Resume immutable_assign_empty_stmt_mem[endpoint]:
   `immutable_value_admissible tv (default_value tv)` by
-    (drule_all memory_rhs_empty_read_destination >>
-     disch_then (qspec_then `es` mp_tac) >>
-     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
-     drule read_result_state >> strip_tac >> gvs[] >>
-     irule immutable_assignment_rhs_admissible >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+    metis_tac[default_immutable_admissible,evaluate_type_well_formed_type_value] >>
   `val_in_memory tv (default_value tv) off (mstore off 0w s0).vs_memory /\
    32 <= type_memory_size tv` by
     (irule place_store_empty_representation >>
@@ -102,17 +98,25 @@ Resume immutable_assign_empty_stmt_mem[endpoint]:
    immutable_base_zero ce s0` by fs[stmt_state_rel_def] >>
   drule_all immutable_assignment_destination >> strip_tac >>
   `off < dimword (:256) /\ off+32 <= s0.vs_alloca_next` by decide_tac >>
-  `eval_operand (Lit (0w:bytes32)) s0 = SOME 0w /\
-   (!x. Lit (0w:bytes32) = Var x ==> not_fresh_at sa x)` by simp[eval_operand_def] >>
-  drule_all immutable_word_store_window >>
+  mp_tac (Q.INST [`imm` |-> `ce.ce_imm_alloca`, `dst` |-> `Lit (n2w off)`,
+    `value` |-> `Lit 0w`, `a` |-> `n2w off`, `v` |-> `0w`, `s` |-> `s0`]
+    (SPEC_ALL immutable_store_option_path_mem)) >>
+  (impl_tac >- (simp[eval_operand_def] >> fs[immutable_base_zero_def])) >>
+  simp[] >>
   disch_then (qx_choose_then `u` (map_every assume_tac o CONJUNCTS)) >>
-  `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s0` by
-    fs[window_seq_def] >>
+  drule immutable_store_option_code >> strip_tac >>
+  `~block_is_terminated sb` by
+    (Cases_on `ce.ce_imm_alloca` >>
+     qpat_x_assum `compile_imm_store_word _ _ _ _ = _` mp_tac >>
+     simp[compile_imm_store_word_def,emit_op_def,emit_void_def,fresh_id_def,
+       fresh_var_def,emit_def,comp_bind_def,comp_ignore_bind_def,comp_return_def] >>
+     strip_tac >> gvs[block_is_terminated_def,LAST_APPEND,mk_inst_def,is_terminator_def] >>
+     Cases_on `sa.cs_current_insts` >> simp[LAST_CONS_cond,LAST_APPEND,mk_inst_def,is_terminator_def]) >>
   `!q k. q+k <= off \/ off+32 <= q ==>
      mem_bytes_at q k u.vs_memory = mem_bytes_at q k s0.vs_memory` by
     (rpt strip_tac >> simp[] >>
      irule mstore_mem_bytes_at_disjoint >> simp[]) >>
-  qpat_x_assum `u with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = s0`
+  qpat_x_assum `_ = s0`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [venom_state_component_equality]) >>
   qabbrev_tac `ee = es with immutables :=
     (cx.txn.target,set_source_immutables ce.ce_module
@@ -127,64 +131,28 @@ Resume immutable_assign_empty_stmt_mem[state]:
 QED
 
 Resume immutable_assign_empty_stmt_mem[reconstruction]:
-  `immutable_value_bytes_rel tv (default_value tv)
-     (mem_bytes_at off (type_memory_size tv) u.vs_memory)` by
-    (irule immutable_memory_bytes >> gvs[]) >>
-  `!name tv0 v0 off0. name <> id /\
-    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off0) /\
-    FLOOKUP (get_source_immutables ce.ce_module imms) name = SOME (tv0,v0) ==>
-    mem_bytes_at off0 (type_memory_size tv0) u.vs_memory =
-    mem_bytes_at off0 (type_memory_size tv0) s0.vs_memory` by
-    (mp_tac (Q.INST [`s` |-> `s0`, `t` |-> `u`, `n` |-> `32`]
-       (SPEC_ALL immutable_assignment_other_regions)) >>
-     impl_tac >- (simp[] >> rpt strip_tac >>
-       qpat_x_assum `!q k. _ \/ _ ==> _`
-         (qspecl_then [`q`, `k`] mp_tac) >> simp[ADD_COMM]) >> simp[]) >>
-  `!name b sz. local_region ce es.scopes s0 name b sz ==>
-     mem_bytes_at b sz s0.vs_memory = mem_bytes_at b sz u.vs_memory` by
-    (mp_tac (Q.INST [`s` |-> `s0`, `t` |-> `u`, `n` |-> `32`]
-       (SPEC_ALL immutable_assignment_local_regions)) >>
-     impl_tac >- (simp[] >> rpt strip_tac >>
-       qpat_x_assum `!q k. _ \/ _ ==> _`
-         (qspecl_then [`q`, `k`] mp_tac) >> simp[ADD_COMM]) >> simp[]) >>
-  `!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
-     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
-     lookup_var p u = lookup_var p s0` by
-    (rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  `!p. ce.ce_imm_alloca = SOME (Var p) ==> lookup_var p u = lookup_var p s0` by
-    (rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  suspend "state_fields"
-QED
-
-Resume immutable_assign_empty_stmt_mem[state_fields]:
-  `alloca_inv u` by (irule alloca_inv_fields >> qexists_tac `s0` >> simp[]) >>
-  `alloca_room ctx func u` by
-    (irule alloca_room_fields >> qexists_tac `s0` >> simp[]) >>
-  `fmp_room ctx func u` by
-    (irule fmp_room_fields >> qexists_tac `s0` >> simp[]) >>
-  mp_tac (Q.INST [`es` |-> `es`, `s` |-> `s0`, `es'` |-> `ee`, `t` |-> `u`,
-    `id` |-> `id`, `ty` |-> `ity`, `tv` |-> `tv`, `off` |-> `off`,
-    `imms` |-> `imms`, `v` |-> `default_value tv`]
-    (SPEC_ALL immutable_assign_stmt_state_rel)) >>
-  impl_tac >- (gvs[Abbr `ee`] >> rpt strip_tac >> gvs[] >> metis_tac[]) >> simp[]
+  `write_place cx (ImmutablePlace ce.ce_module id []) (default_value tv) es =
+     (INL (),ee)` by
+    (Cases_on `ALOOKUP es.immutables cx.txn.target`
+     >- gvs[get_source_immutables_def] >>
+     gvs[] >>
+     drule_all immutable_augassign_write_source >>
+     disch_then (qspec_then `default_value tv` mp_tac) >>
+     simp[Abbr `ee`,update_immutable_def]) >>
+  mp_tac (Q.INST [`s` |-> `s0`, `q` |-> `u`, `ty` |-> `ity`]
+    (SPEC_ALL immutable_assign_empty_store_restore)) >>
+  impl_tac >- (simp[venom_state_component_equality] >> metis_tac[]) >> simp[]
 QED
 
 Resume immutable_assign_empty_stmt_mem[outcome]:
-  qpat_x_assum `window_seq sa sb s0 u`
-    (strip_assume_tac o REWRITE_RULE [window_seq_def,inst_extends_def]) >>
-  `gas_marked_path T ctx func s0 0
+  `gas_path_mem ctx func s0 0
      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts))` by
-    (drule_all typed_normalize_straight_mem_path >>
-     disch_then (qspec_then `ctx` ACCEPT_TAC)) >>
-  `?bb rest. lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
-     DROP s0.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest` by
-    (fs[fn_has_code_def,IS_PREFIX_APPEND] >> gvs[] >>
-     qexists_tac `l` >> simp[DROP_APPEND,SUB_PLUS]) >>
-  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
-    (fs[EVERY_MEM] >> metis_tac[]) >>
+    fs[gas_marked_path_def] >>
   `alloca_history func (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
-    (drule_all alloca_history_run_inst_seq >>
-     gvs[LENGTH_APPEND]) >>
+    (mp_tac (Q.INST [`fn` |-> `func`, `s` |-> `s0`,
+       `t` |-> `u with vs_inst_idx := LENGTH sb.cs_current_insts`]
+       (SPEC_ALL gas_path_mem_zero_history)) >>
+     impl_tac >- (simp[] >> metis_tac[aggregate_mem_path_alloca_inv]) >> simp[]) >>
   `!tail. eval_stmt cx
     (Assign (BaseTarget (TopLevelNameTarget (ce.ce_module,id))) e)
       (es with gas_obs := tail) = (INL (),ee with gas_obs := tail)` by
@@ -202,7 +170,7 @@ Resume immutable_assign_empty_stmt_mem[outcome]:
        `s'` |-> `u with vs_inst_idx := LENGTH sb.cs_current_insts`]
        (SPEC_ALL return_buf_frame_frame)) >>
      simp[lookup_var_def] >> fs[lookup_var_def] >> metis_tac[]) >>
-  gvs[lookup_var_def,LENGTH_APPEND] >> metis_tac[]
+  gvs[lookup_var_def,LENGTH_APPEND,same_blocks_def] >> metis_tac[]
 QED
 
 Finalise immutable_assign_empty_stmt_mem

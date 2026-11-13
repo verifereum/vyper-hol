@@ -4,7 +4,7 @@ Ancestors
   immutableAssignStoreMem bodyImmutableAssignFacts immutableDeployAssignBytes
   placeStore memoryLocalRhsProps stmtLowering compileEnv context emitHelper
   venomExecSemantics loweringStateRelDefs venomState valueEncodingProps finite_map
-  vyperTyping
+  vyperTyping vyperTypeValues
 
 Theorem immutable_assign_empty_mem_endpoint:
   compile_store_at_loc (SOME region) dst (Lit 0w) (SOME LocCode) sm = ((),sb) /\
@@ -46,7 +46,8 @@ Proof
      simp[istore_def, mstore_mem_word_at_same] >> metis_tac[]) >>
   `immutable_value_bytes_rel tv (default_value tv)
      (mem_bytes_at off (type_memory_size tv) (istore off 0w s).vs_memory)` by
-    (irule immutable_memory_bytes >> simp[]) >>
+    (irule immutable_memory_bytes >> simp[] >>
+     metis_tac[evaluate_type_well_formed_type_value]) >>
   `!q k. q+k <= off \/ off+32 <= q ==>
      mem_bytes_at q k (mstore off 0w s).vs_memory = mem_bytes_at q k s.vs_memory` by
     metis_tac[valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint] >>
