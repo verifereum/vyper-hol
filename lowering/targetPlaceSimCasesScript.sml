@@ -37,7 +37,7 @@ Ancestors
   targetSubscriptCase targetPlaceSimCasesBase targetPlaceLive
   exprSimFieldLayout
   exprSimSource
-  targetPlaceSimDefs gasContext gasOutcome gasSummary gasExemptCert
+  targetPlaceSimDefs gasContext gasOutcome gasSummary gasExemptCert gasStorage
   stmtSimProps
   exprSimProps
   exprSimHypsDefs
@@ -101,22 +101,25 @@ QED
 (* The judgment for eval_target_place: a target typed by a value type
    evaluates to a place, at the pointer. *)
 Theorem target_place_sim:
-  !ctx func cenv cx env bt es ty sa sb r s0.
+  !ctx func cenv cx env bt es st0 ty sa sb r s0.
     target_sim ctx func cenv cx env bt es /\
     type_place_target env bt = SOME (Type ty) /\
     compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx es s0 /\
+      storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome F (cx_tops cx) (ctx, func) (eval_target_place cx bt) (es, s0)
-      (\res ee t. ?p. res = INL p /\
-        target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty) r t /\
+    gas_outcome F (cx_tops cx) (ctx, func) cx st0 (eval_target_place cx bt)
+      (es, s0)
+      (\H res ee t. ?p. res = INL p /\
+        target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty) r t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)
+      (\H res ee r. expr_exit res r)
 Proof
   rpt strip_tac >>
   qpat_x_assum `gas_admissible _ _ _`
@@ -130,17 +133,19 @@ Proof
     simp[target_place_res_ok_def]) >>
   qpat_x_assum `target_sim _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [target_sim_def]) >>
-  disch_then (qspecl_then [`Type ty`, `sa`, `sb`, `r`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `Type ty`, `sa`, `sb`, `r`, `s0`] mp_tac) >>
   impl_tac >- simp[] >>
   rewrite_tac[gas_outcome_def] >>
   disch_then (qx_choose_then `marks` strip_assume_tac) >>
   qexists_tac `marks`
-  >- (disj1_tac >>
+  >- (disj1_tac >> irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_get_place])
+  >- (disj2_tac >> disj1_tac >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
       simp[gas_summary_at_def, gas_marked_exec_def] >>
       disch_then (qx_choosel_then [`res`, `fin`, `rr`] strip_assume_tac) >>
-      Cases_on `res` >> gvs[expr_exit_def]
-      >- (rename1 `target_post _ _ _ _ _ _ _ _ _ pv` >>
+      Cases_on `res`
+      >- (rename1 `INL pv` >>
           `?p. pv = PlaceR p` by (
             qpat_x_assum `gas_admissible _ target_place_res_ok _` mp_tac >>
             rewrite_tac[gas_admissible_def] >>
@@ -150,11 +155,12 @@ Proof
             simp[bind_def] >> strip_tac >>
             Cases_on `pv` >>
             simp[get_place_def, raise_def, target_place_res_ok_def]) >>
-          gvs[] >> qexistsl_tac [`INL p`, `fin`, `OK t`] >>
-          simp[bind_def, get_place_def, return_def]) >>
-      rename1 `expr_exit (INR exc) rr` >>
+          gvs[] >> qexistsl_tac [`INL p`, `fin`, `rr`] >>
+          gvs[bind_def, get_place_def, return_def, expr_exit_def] >>
+          metis_tac[]) >>
+      rename1 `INR exc` >>
       qexistsl_tac [`INR exc`, `fin`, `rr`] >> simp[bind_def] >>
       metis_tac[expr_exit_INR_type]) >>
-  disj2_tac >> rewrite_tac[ignore_bind_def, bind_assoc] >>
+  disj2_tac >> disj2_tac >> rewrite_tac[ignore_bind_def, bind_assoc] >>
   first_assum (irule_at Any o MATCH_MP gas_exempt_cert_error_result)
 QED

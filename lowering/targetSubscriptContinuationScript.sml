@@ -13,7 +13,7 @@ Theorem target_subscript_dynamic_key_view:
   hashmap_key_type (expr_type e) /\ is_bytestring_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv key /\
-  expr_post ctx func cenv cx e es sa sm s0 es' key op s ==>
+  expr_post H ctx func cenv cx e es sa sm s0 es' key op s ==>
   ?b bs. eval_operand op s = SOME (n2w b) /\
     mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
     mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
@@ -40,8 +40,9 @@ Theorem target_subscript_storage_base_view:
   EVERY pure_expr (target_indices bt) /\
   eval_base_place cx bt es =
     (INL (PlaceR (StoragePlace tr slot tv)),mid) /\
+  valid_horizon cx st0 H mid.storage_trace /\
   get_storage_backend cx tr es = (INL raw,es) ==>
-  storage_read_live cx tr raw slot tv /\
+  storage_read_live H tr raw slot tv /\
   w2n slot + type_slot_size tv <= dimword(:256)
 Proof
   strip_tac >>
@@ -180,7 +181,7 @@ QED
 
 
 Theorem target_subscript_memory_compile:
-  target_post ctx func cenv cx es0 sa sn s0 es
+  target_post H ctx func cenv cx es0 sa sn s0 es
     (PlaceR (MemoryPlace id path))
     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
   target_subscript_suffix cenv e rb ix sn = (op,sb) ==>
@@ -201,7 +202,7 @@ Proof
 QED
 
 Theorem target_subscript_memory_normal:
-  target_post ctx func cenv cx es0 sa sn s0 es
+  target_post H ctx func cenv cx es0 sa sn s0 es
     (PlaceR (MemoryPlace id path))
     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
   expr_sim_inv cenv cx env es /\
@@ -221,7 +222,7 @@ Theorem target_subscript_memory_normal:
   extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript (IntV i)) es =
     (INL pv',es') ==>
   ?u. gas_marked_path F ctx func s 0 (OK u) /\
-    target_post ctx func cenv cx es0 sa sb s0 es' pv' (Type ety) op u /\
+    target_post H ctx func cenv cx es0 sa sb s0 es' pv' (Type ety) op u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -230,7 +231,7 @@ Proof
 QED
 
 Theorem target_subscript_memory_error:
-  target_post ctx func cenv cx es0 sa sn s0 es
+  target_post H ctx func cenv cx es0 sa sn s0 es
     (PlaceR (MemoryPlace id path))
     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
   expr_sim_inv cenv cx env es /\
@@ -257,7 +258,7 @@ Proof
 QED
 
 Theorem target_subscript_storage_compile:
-  target_post ctx func cenv cx es0 sa sn s0 es
+  target_post H ctx func cenv cx es0 sa sn s0 es
     (PlaceR (StoragePlace tr slot (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))))
     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
   expr_sim_inv cenv cx env es /\
@@ -283,12 +284,12 @@ Proof
 QED
 
 Theorem target_subscript_storage_normal:
-  target_post ctx func cenv cx es0 sa sn s0 es
+  target_post H ctx func cenv cx es0 sa sn s0 es
     (PlaceR (StoragePlace tr slot (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))))
     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
   expr_sim_inv cenv cx env es /\
   (dyn ==> w2n (lookup_storage slot (get_storage cx es tr)) <= cnt) /\
-  storage_read_live cx tr (get_storage cx es tr) slot
+  storage_read_live H tr (get_storage cx es tr) slot
     (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
   w2n slot + type_slot_size (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) <= dimword(:256) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\
@@ -304,7 +305,7 @@ Theorem target_subscript_storage_normal:
     (PlaceR (StoragePlace tr slot (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))))
     (ValueSubscript (IntV i)) es = (INL pv',es') ==>
   ?u. gas_marked_path F ctx func s 0 (OK u) /\
-    target_post ctx func cenv cx es0 sa sb s0 es' pv' (Type ety) op u /\
+    target_post H ctx func cenv cx es0 sa sb s0 es' pv' (Type ety) op u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -313,12 +314,12 @@ Proof
 QED
 
 Theorem target_subscript_storage_error:
-  target_post ctx func cenv cx es0 sa sn s0 es
+  target_post H ctx func cenv cx es0 sa sn s0 es
     (PlaceR (StoragePlace tr slot (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))))
     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
   expr_sim_inv cenv cx env es /\
   (dyn ==> w2n (lookup_storage slot (get_storage cx es tr)) <= cnt) /\
-  storage_read_live cx tr (get_storage cx es tr) slot
+  storage_read_live H tr (get_storage cx es tr) slot
     (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
   w2n slot + type_slot_size (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) <= dimword(:256) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\
@@ -338,7 +339,7 @@ Proof
 QED
 
 Theorem target_subscript_mapping_scalar_normal:
-  target_post ctx func cenv cx es0 sa sn s0 es (HashMapRef tr slot kt vt)
+  target_post H ctx func cenv cx es0 sa sn s0 es (HashMapRef tr slot kt vt)
     (HashMapT kt vt) rb s /\
   ~is_bytestring_type kt /\ eval_operand ix s = SOME (encode_hashmap_key kt key) /\
   target_subscript_suffix cenv e rb ix sn = (op,sb) /\
@@ -351,12 +352,13 @@ Theorem target_subscript_mapping_scalar_normal:
   s.vs_inst_idx = LENGTH sn.cs_current_insts /\
   extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript key) es = (INL pv',es') ==>
   ?u. gas_marked_path F ctx func s 0 (OK u) /\
-    target_post ctx func cenv cx es0 sa sb s0 es' pv' vt op u /\
+    target_post H ctx func cenv cx es0 sa sb s0 es' pv' vt op u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
+  `stmt_state_rel H ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H) /\
+   wb_frame cenv es0 es sa s0 s /\
    eval_operand (FST rb) s = SOME slot /\
    (!x. FST rb = Var x ==> not_fresh_at sn x) /\
    FST (SND rb) = SOME (slot_loc tr) /\ SND (SND rb) = SOME (MapPT kt vt)` by
@@ -369,11 +371,11 @@ Proof
 QED
 
 Theorem target_subscript_mapping_dynamic_normal:
-  target_post ctx func cenv cx es0 sa sn s0 es (HashMapRef tr slot kt vt)
+  target_post H ctx func cenv cx es0 sa sn s0 es (HashMapRef tr slot kt vt)
     (HashMapT kt vt) rb s /\
   expr_type e = kt /\ hashmap_key_type kt /\ is_bytestring_type kt /\
   evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv key /\
-  expr_post ctx func cenv cx e ee sm sn t es key ix s /\
+  expr_post H ctx func cenv cx e ee sm sn t es key ix s /\
   target_subscript_suffix cenv e rb ix sn = (op,sb) /\
   fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sn /\ local_ptrs_reserved cenv sa /\
@@ -384,13 +386,14 @@ Theorem target_subscript_mapping_dynamic_normal:
   s.vs_inst_idx = LENGTH sn.cs_current_insts /\
   extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript key) es = (INL pv',es') ==>
   ?u. gas_marked_path F ctx func s 0 (OK u) /\
-    target_post ctx func cenv cx es0 sa sb s0 es' pv' vt op u /\
+    target_post H ctx func cenv cx es0 sa sb s0 es' pv' vt op u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >> gvs[] >>
   drule_all target_subscript_dynamic_key_view >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
+  `stmt_state_rel H ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H) /\
+   wb_frame cenv es0 es sa s0 s /\
    eval_operand (FST rb) s = SOME slot /\
    (!x. FST rb = Var x ==> not_fresh_at sn x) /\
    FST (SND rb) = SOME (slot_loc tr) /\ SND (SND rb) = SOME (MapPT (expr_type e) vt)` by
@@ -411,7 +414,7 @@ QED
 Theorem target_subscript_int_index_view:
   is_int_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv key /\
-  expr_post ctx func cenv cx e ee sm sn t es key ix s ==>
+  expr_post H ctx func cenv cx e ee sm sn t es key ix s ==>
   ?i. key = IntV i /\ eval_operand ix s = SOME (i2w i)
 Proof
   strip_tac >> drule_all int_type_value >> strip_tac >>
@@ -420,7 +423,7 @@ Proof
      Cases_on `expr_type e` >> gvs[is_int_type_def] >>
      rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_int_type_def, is_word_type_def]) >>
   `expr_val_rel cx (expr_type e) key ix s` by fs[expr_post_def] >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   gvs[] >> Cases_on `expr_type e` >> gvs[is_int_type_def] >>
   rename1 `expr_type e = BaseT bt` >> Cases_on `bt` >>
   gvs[is_int_type_def, evaluate_type_def, expr_val_rel_def,
@@ -430,7 +433,7 @@ QED
 Theorem target_subscript_scalar_key_view:
   hashmap_key_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv key /\
-  expr_post ctx func cenv cx e ee sm sn t es key ix s ==>
+  expr_post H ctx func cenv cx e ee sm sn t es key ix s ==>
   eval_operand ix s = SOME (encode_hashmap_key (expr_type e) key)
 Proof
   strip_tac >>
@@ -450,14 +453,14 @@ QED
 Theorem target_subscript_typed_normal:
   subscript_vtype bvt (expr_type e) = SOME vt /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\ value_has_type itv key /\
-  target_post ctx func cenv cx es0 sa sn s0 es pv bvt rb s /\
-  expr_post ctx func cenv cx e ee sm sn t es key ix s /\
+  target_post H ctx func cenv cx es0 sa sn s0 es pv bvt rb s /\
+  expr_post H ctx func cenv cx e ee sm sn t es key ix s /\
   expr_sim_inv cenv cx env es /\
   (!id path. pv = PlaceR (MemoryPlace id path) ==>
     ?entry av. lookup_scopes id es.scopes = SOME entry /\
       evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) /\
   (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
-    storage_read_live cx tr (get_storage cx es tr) slot tv /\
+    storage_read_live H tr (get_storage cx es tr) slot tv /\
     w2n slot + type_slot_size tv <= dimword(:256) /\
     (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
        w2n (lookup_storage slot (get_storage cx es tr)) <= cnt)) /\
@@ -473,7 +476,7 @@ Theorem target_subscript_typed_normal:
   (!x. FST op = Var x ==> not_fresh_at sb x) /\
   extend_place cx pv (ValueSubscript key) es = (INL pv',es') ==>
   ?u. gas_marked_path F ctx func s 0 (OK u) /\
-    target_post ctx func cenv cx es0 sa sb s0 es' pv' vt op u /\
+    target_post H ctx func cenv cx es0 sa sb s0 es' pv' vt op u /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -505,7 +508,7 @@ Proof
   gvs[place_ptr_rel_def, subscript_vtype_def, AllCaseEqs()] >>
   Cases_on `is_bytestring_type (expr_type e)`
   >- (drule target_subscript_mapping_dynamic_normal >> simp[] >>
-      disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       simp[] >> disch_then drule_all >> simp[]) >>
   drule_all target_subscript_scalar_key_view >> strip_tac >>
   drule_all target_subscript_mapping_scalar_normal >> simp[]
@@ -515,14 +518,14 @@ Theorem target_subscript_typed_error:
   subscript_vtype bvt (expr_type e) = SOME vt /\
   well_formed_vtype (get_tenv cx) vt /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\ value_has_type itv key /\
-  target_post ctx func cenv cx es0 sa sn s0 es pv bvt rb s /\
-  expr_post ctx func cenv cx e ee sm sn t es key ix s /\
+  target_post H ctx func cenv cx es0 sa sn s0 es pv bvt rb s /\
+  expr_post H ctx func cenv cx e ee sm sn t es key ix s /\
   expr_sim_inv cenv cx env es /\
   (!id path. pv = PlaceR (MemoryPlace id path) ==>
     ?entry av. lookup_scopes id es.scopes = SOME entry /\
       evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) /\
   (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
-    storage_read_live cx tr (get_storage cx es tr) slot tv /\
+    storage_read_live H tr (get_storage cx es tr) slot tv /\
     w2n slot + type_slot_size tv <= dimword(:256) /\
     (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
        w2n (lookup_storage slot (get_storage cx es tr)) <= cnt)) /\
@@ -571,4 +574,264 @@ Proof
       raise_def, AllCaseEqs()] >>
   rename1 `IS_SOME (evaluate_type _ ty)` >>
   Cases_on `evaluate_type (get_tenv cx) ty` >> gvs[return_def]
+QED
+
+(* ===== One endpoint for every horizon =====
+   The typed continuation's summary fixes the Venom endpoint before it
+   quantifies the horizon; these lifts take it at one valid horizon H0 from
+   the *_horizons lifts of the suffix lemmas. *)
+
+Theorem target_subscript_memory_normal_horizons[local]:
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+     target_post H ctx func cenv cx es0 sa sn s0 es
+       (PlaceR (MemoryPlace id path))
+       (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s) /\
+  valid_horizon cx st0 H0 es'.storage_trace /\
+  expr_sim_inv cenv cx env es /\
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
+  evaluate_type (get_tenv cx) (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)) =
+    SOME (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\
+  value_has_type itv (IntV i) /\ eval_operand ix s = SOME (i2w i) /\
+  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
+  fn_has_code sn sb func /\ local_ptrs_reserved cenv sn /\
+  sa.cs_next_var <= sn.cs_next_var /\ ~s.vs_halted /\
+  s.vs_current_bb = sn.cs_current_bb /\ s.vs_inst_idx = LENGTH sn.cs_current_insts /\
+  (!x. ix = Var x ==> not_fresh_at sn x) /\
+  (!l. ix <> Label l) /\ (!l. FST rb <> Label l) /\
+  (!x. FST op = Var x ==> not_fresh_at sb x) /\
+  extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript (IntV i)) es =
+    (INL pv',es') ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+       target_post H ctx func cenv cx es0 sa sb s0 es' pv' (Type ety) op u) /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `target_post H0 ctx func cenv cx es0 sa sn s0 es
+     (PlaceR (MemoryPlace id path))
+     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s` by simp[] >>
+  drule_all target_subscript_memory_compile >> strip_tac >>
+  qpat_x_assum `op = _` SUBST_ALL_TAC >> fs[] >>
+  drule_all target_memory_array_suffix_horizons >> strip_tac >>
+  qexists_tac `u` >> simp[]
+QED
+
+Theorem target_subscript_storage_normal_horizons[local]:
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+     target_post H ctx func cenv cx es0 sa sn s0 es
+       (PlaceR (StoragePlace tr slot (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))))
+       (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s) /\
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+     storage_read_live H tr (get_storage cx es tr) slot
+       (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))) /\
+  valid_horizon cx st0 H0 es'.storage_trace /\
+  expr_sim_inv cenv cx env es /\
+  (dyn ==> w2n (lookup_storage slot (get_storage cx es tr)) <= cnt) /\
+  w2n slot + type_slot_size (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt)) <= dimword(:256) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\
+  value_has_type itv (IntV i) /\ eval_operand ix s = SOME (i2w i) /\
+  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
+  fn_has_code sn sb func /\ local_ptrs_reserved cenv sn /\
+  sa.cs_next_var <= sn.cs_next_var /\ ~s.vs_halted /\
+  s.vs_current_bb = sn.cs_current_bb /\ s.vs_inst_idx = LENGTH sn.cs_current_insts /\
+  (!x. ix = Var x ==> not_fresh_at sn x) /\
+  (!l. ix <> Label l) /\ (!l. FST rb <> Label l) /\
+  (!x. FST op = Var x ==> not_fresh_at sb x) /\
+  extend_place cx
+    (PlaceR (StoragePlace tr slot (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))))
+    (ValueSubscript (IntV i)) es = (INL pv',es') ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+       target_post H ctx func cenv cx es0 sa sb s0 es' pv' (Type ety) op u) /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `target_post H0 ctx func cenv cx es0 sa sn s0 es
+     (PlaceR (StoragePlace tr slot (ArrayTV etv (if dyn then Dynamic cnt else Fixed cnt))))
+     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s` by simp[] >>
+  drule_all target_subscript_storage_compile >> strip_tac >>
+  qpat_x_assum `op = _` SUBST_ALL_TAC >> fs[] >>
+  drule_all target_storage_array_suffix_horizons >> strip_tac >>
+  qexists_tac `u` >> simp[]
+QED
+
+Theorem target_subscript_mapping_scalar_normal_horizons[local]:
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+     target_post H ctx func cenv cx es0 sa sn s0 es (HashMapRef tr slot kt vt)
+       (HashMapT kt vt) rb s) /\
+  valid_horizon cx st0 H0 es'.storage_trace /\
+  ~is_bytestring_type kt /\ eval_operand ix s = SOME (encode_hashmap_key kt key) /\
+  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
+  fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sn /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  (!x. ix = Var x ==> not_fresh_at sn x) /\
+  ~s.vs_halted /\ s.vs_current_bb = sn.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sn.cs_current_insts /\
+  extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript key) es = (INL pv',es') ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+       target_post H ctx func cenv cx es0 sa sb s0 es' pv' vt op u) /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `!H. valid_horizon cx st0 H es'.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s /\
+     storage_well_formed_on cx es (FST H)` by
+    (rpt strip_tac >> first_x_assum drule >> simp[target_post_def]) >>
+  `target_post H0 ctx func cenv cx es0 sa sn s0 es (HashMapRef tr slot kt vt)
+     (HashMapT kt vt) rb s` by simp[] >>
+  `wb_frame cenv es0 es sa s0 s /\
+   eval_operand (FST rb) s = SOME slot /\
+   (!x. FST rb = Var x ==> not_fresh_at sn x) /\
+   FST (SND rb) = SOME (slot_loc tr) /\ SND (SND rb) = SOME (MapPT kt vt)` by
+    (qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[target_post_def, wb_frame_def, place_ptr_rel_def,
+          value_type_place_def] >> metis_tac[]) >>
+  qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    kall_tac >>
+  PairCases_on `rb` >> gvs[] >>
+  qpat_x_assum `target_subscript_suffix _ _ _ _ _ = _` mp_tac >>
+  simp[target_subscript_suffix_mapping, comp_return_def] >> strip_tac >> gvs[] >>
+  drule_all target_mapping_counted_suffix_horizons >> strip_tac >>
+  qexists_tac `t` >> simp[]
+QED
+
+Theorem target_subscript_mapping_dynamic_normal_horizons[local]:
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+     target_post H ctx func cenv cx es0 sa sn s0 es (HashMapRef tr slot kt vt)
+       (HashMapT kt vt) rb s) /\
+  valid_horizon cx st0 H0 es'.storage_trace /\
+  expr_type e = kt /\ hashmap_key_type kt /\ is_bytestring_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv key /\
+  expr_post H0 ctx func cenv cx e ee sm sn t es key ix s /\
+  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
+  fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sn /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  (!x. ix = Var x ==> not_fresh_at sn x) /\
+  ~s.vs_halted /\ s.vs_current_bb = sn.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sn.cs_current_insts /\
+  extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript key) es = (INL pv',es') ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+       target_post H ctx func cenv cx es0 sa sb s0 es' pv' vt op u) /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> gvs[] >>
+  drule_all target_subscript_dynamic_key_view >> strip_tac >>
+  `!H. valid_horizon cx st0 H es'.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s /\
+     storage_well_formed_on cx es (FST H)` by
+    (rpt strip_tac >> first_x_assum drule >> simp[target_post_def]) >>
+  `target_post H0 ctx func cenv cx es0 sa sn s0 es (HashMapRef tr slot (expr_type e) vt)
+     (HashMapT (expr_type e) vt) rb s` by simp[] >>
+  `wb_frame cenv es0 es sa s0 s /\
+   eval_operand (FST rb) s = SOME slot /\
+   (!x. FST rb = Var x ==> not_fresh_at sn x) /\
+   FST (SND rb) = SOME (slot_loc tr) /\
+   SND (SND rb) = SOME (MapPT (expr_type e) vt)` by
+    (qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[target_post_def, wb_frame_def, place_ptr_rel_def,
+          value_type_place_def] >> metis_tac[]) >>
+  qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    kall_tac >>
+  PairCases_on `rb` >> gvs[] >>
+  qpat_x_assum `target_subscript_suffix _ _ _ _ _ = _` mp_tac >>
+  simp[target_subscript_suffix_mapping] >> strip_tac >> gvs[] >>
+  `ci_mono sn sh /\ ci_mono sh sb` by
+    (mp_tac (Q.SPECL [`ix`,`F`,`sn`] ci_mono_compile_keccak256_key) >>
+     mp_tac (Q.SPECL [`rb0`,`hashed`,`sh`] ci_mono_compile_mapping_subscript) >>
+     simp[]) >>
+  `fn_has_code sn sh func /\ fn_has_code sh sb func` by
+    (irule fn_has_code_split >> gvs[ci_mono_def]) >>
+  drule_all target_mapping_dynamic_counted_suffix_horizons >> strip_tac >>
+  qexists_tac `t'` >> simp[]
+QED
+
+Theorem target_subscript_typed_normal_horizons:
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+     target_post H ctx func cenv cx es0 sa sn s0 es pv bvt rb s) /\
+  (!H tr slot tv. valid_horizon cx st0 H es'.storage_trace /\
+     pv = PlaceR (StoragePlace tr slot tv) ==>
+     storage_read_live H tr (get_storage cx es tr) slot tv) /\
+  valid_horizon cx st0 H0 es'.storage_trace /\
+  expr_post H0 ctx func cenv cx e ee sm sn t es key ix s /\
+  subscript_vtype bvt (expr_type e) = SOME vt /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\ value_has_type itv key /\
+  expr_sim_inv cenv cx env es /\
+  (!id path. pv = PlaceR (MemoryPlace id path) ==>
+    ?entry av. lookup_scopes id es.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) /\
+  (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
+    w2n slot + type_slot_size tv <= dimword(:256) /\
+    (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
+       w2n (lookup_storage slot (get_storage cx es tr)) <= cnt)) /\
+  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
+  fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sn /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  ~s.vs_halted /\ s.vs_current_bb = sn.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sn.cs_current_insts /\
+  (!x. ix = Var x ==> not_fresh_at sn x) /\
+  (!l. ix <> Label l) /\ (!l. FST rb <> Label l) /\
+  (!x. FST op = Var x ==> not_fresh_at sb x) /\
+  extend_place cx pv (ValueSubscript key) es = (INL pv',es') ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+       target_post H ctx func cenv cx es0 sa sb s0 es' pv' vt op u) /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `target_post H0 ctx func cenv cx es0 sa sn s0 es pv bvt rb s` by simp[] >>
+  `?w. place_ptr_rel cenv cx s pv w (FST (SND rb)) bvt` by
+    (fs[target_post_def] >> metis_tac[]) >>
+  qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  Cases_on `pv`
+  >- gvs[place_ptr_rel_def]
+  >- (rename1 `PlaceR pl` >> Cases_on `pl`
+      >- (gvs[place_ptr_rel_def] >>
+          rename1 `subscript_vtype (Type aty) _ = _` >> Cases_on `aty` >>
+          gvs[subscript_vtype_def, AllCaseEqs()] >>
+          rename1 `evaluate_type _ (ArrayT ety bd) = _` >> Cases_on `bd` >>
+          gvs[evaluate_type_def, AllCaseEqs()] >>
+          drule_all target_subscript_int_index_view >> strip_tac >> gvs[]
+          >- (drule (SRULE [] (Q.INST [`dyn` |-> `F`]
+                target_subscript_storage_normal_horizons)) >>
+              simp[] >> disch_then drule_all >> simp[]) >>
+          drule (SRULE [] (Q.INST [`dyn` |-> `T`]
+            target_subscript_storage_normal_horizons)) >>
+          simp[] >> disch_then drule_all >> simp[])
+      >- (gvs[place_ptr_rel_def] >>
+          rename1 `subscript_vtype (Type aty) _ = _` >> Cases_on `aty` >>
+          gvs[subscript_vtype_def, AllCaseEqs()] >>
+          rename1 `evaluate_type _ (ArrayT ety bd) = _` >> Cases_on `bd` >>
+          gvs[evaluate_type_def, AllCaseEqs()] >>
+          drule_all target_subscript_int_index_view >> strip_tac >> gvs[]
+          >- (drule (SRULE [] (Q.INST [`dyn` |-> `F`]
+                target_subscript_memory_normal_horizons)) >>
+              simp[evaluate_type_def] >> disch_then drule_all >> simp[]) >>
+          drule (SRULE [] (Q.INST [`dyn` |-> `T`]
+            target_subscript_memory_normal_horizons)) >>
+          simp[evaluate_type_def] >> disch_then drule_all >> simp[]) >>
+      gvs[place_ptr_rel_def]) >>
+  gvs[place_ptr_rel_def, subscript_vtype_def, AllCaseEqs()] >>
+  Cases_on `is_bytestring_type (expr_type e)`
+  >- (drule target_subscript_mapping_dynamic_normal_horizons >> simp[] >>
+      disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      simp[] >> disch_then drule_all >> simp[]) >>
+  drule_all target_subscript_scalar_key_view >> strip_tac >>
+  drule_all target_subscript_mapping_scalar_normal_horizons >> simp[]
 QED

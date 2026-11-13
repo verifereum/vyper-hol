@@ -9,7 +9,7 @@ Ancestors
 Theorem target_mapping_extend_place:
   extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript kv) es =
     (INL pv, es') ==>
-  es' = es /\
+  es' = es with storage_trace := es'.storage_trace /\
   place_ptr_rel cenv cx s pv (hashmap_slot slot (encode_hashmap_key kt kv))
     (SOME (slot_loc tr)) vt /\
   place_readable cx es' pv
@@ -17,11 +17,13 @@ Proof
   Cases_on `vt`
   >- (rename1 `Type typ` >>
       Cases_on `evaluate_type (get_tenv cx) typ` >>
-      simp[extend_place_def, lift_option_type_def, bind_def,
-           return_def, raise_def, place_ptr_rel_def, place_readable_def] >>
+      simp[extend_place_def, lift_option_type_def, bind_def, ignore_bind_def,
+           record_storage_event_def, return_def, raise_def,
+           place_ptr_rel_def, place_readable_def] >>
       rpt strip_tac >> gvs[place_ptr_rel_def, place_readable_def]) >>
   simp[extend_place_nested_mapping] >> rpt strip_tac >>
-  gvs[place_ptr_rel_def, place_readable_def]
+  gvs[place_ptr_rel_def, place_readable_def,
+      evaluation_state_component_equality]
 QED
 
 Theorem target_SHA3_bytes_path:
@@ -44,7 +46,7 @@ Proof
 QED
 
 Theorem target_scratch_store_frame:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
   b <= a /\ a + 32 <= b + sz /\
@@ -53,7 +55,7 @@ Theorem target_scratch_store_frame:
      regions_disjoint b sz off len) /\
   (!name off len. local_region cenv es.scopes s name off len ==>
      regions_disjoint b sz off len) ==>
-  stmt_state_rel ctx func cenv cx es (mstore a w s) /\
+  stmt_state_rel H ctx func cenv cx es (mstore a w s) /\
   wb_frame cenv es es sa s (mstore a w s)
 Proof
   strip_tac >> conj_tac
@@ -157,18 +159,18 @@ Proof
 QED
 
 Theorem target_mapping_scratch_preserve[local]:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (a,64) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      regions_disjoint a 64 b sz) ==>
-  stmt_state_rel ctx func cenv cx es (mstore (a+32) kw (mstore a slot s)) /\
+  stmt_state_rel H ctx func cenv cx es (mstore (a+32) kw (mstore a slot s)) /\
   (!b sz. regions_disjoint a 64 b sz ==>
     mem_bytes_at b sz (mstore (a+32) kw (mstore a slot s)).vs_memory =
       mem_bytes_at b sz s.vs_memory)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (mstore a slot s)` by
+  `stmt_state_rel H ctx func cenv cx es (mstore a slot s)` by
     (irule literal_mstore_state_rel >>
      reverse conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl_tac [`a`, `inst`, `64`] >> simp[] >>
@@ -189,13 +191,13 @@ QED
 Theorem target_mapping_run:
   compile_mapping_subscript bop key sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\
   (!x. key = Var x ==> not_fresh_at sa x) /\
   eval_operand bop s = SOME slot /\ eval_operand key s = SOME kw ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
       eval_operand op t = SOME (hashmap_slot slot kw) /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
          FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -261,7 +263,7 @@ Proof
   qpat_x_assum `emit_op ADD _ sc = _` kall_tac >>
   qpat_x_assum `emit_void MSTORE _ sd = _` kall_tac >>
   qpat_x_assum `emit_op SHA3 _ se = _` kall_tac >>
-  `stmt_state_rel ctx func cenv cx es (t' with vs_vars := t.vs_vars)` by
+  `stmt_state_rel H ctx func cenv cx es (t' with vs_vars := t.vs_vars)` by
     (asm_rewrite_tac[] >> irule (cj 1 target_mapping_scratch_preserve) >>
      conj_tac >- first_assum ACCEPT_TAC >>
      reverse conj_tac >- first_assum ACCEPT_TAC >>
@@ -455,23 +457,30 @@ QED
 Theorem target_mapping_post:
   extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript key) es' =
     (INL pv, es'') /\
-  stmt_state_rel ctx func cenv cx es'' t /\
+  stmt_state_rel H ctx func cenv cx es' t /\
+  storage_well_formed_on cx es' (FST H) /\
   eval_operand op t = SOME (hashmap_slot slot (encode_hashmap_key kt key)) /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
-  wb_frame cenv es es'' sa s0 t ==>
-  target_post ctx func cenv cx es sa sb s0 es'' pv vt
+  wb_frame cenv es es' sa s0 t ==>
+  target_post H ctx func cenv cx es sa sb s0 es'' pv vt
     (op,SOME (slot_loc tr),SOME (value_type_place vt)) t
 Proof
-  strip_tac >> simp[target_post_def] >>
-  gvs[wb_frame_def] >>
-  metis_tac[target_mapping_extend_place]
+  strip_tac >>
+  drule target_mapping_extend_place >> strip_tac >>
+  `storage_well_formed_on cx (es' with storage_trace := es''.storage_trace)
+     (FST H) <=> storage_well_formed_on cx es' (FST H)` by
+    (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+     simp[]) >>
+  simp[target_post_def] >>
+  qpat_assum `es'' = _` (fn th => once_rewrite_tac[th]) >>
+  gvs[wb_frame_def, locals_kept_def] >> metis_tac[]
 QED
 
 (* Counted scratch suffix, retaining the frame of the whole target. *)
 Theorem target_mapping_counted_suffix:
   compile_mapping_subscript bop keyop sm = (op,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es' s /\
+  stmt_state_rel H ctx func cenv cx es' s /\ storage_well_formed_on cx es' (FST H) /\
   local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
@@ -487,12 +496,11 @@ Theorem target_mapping_counted_suffix:
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    target_post ctx func cenv cx es sa sb s0 es'' pv vt
+    target_post H ctx func cenv cx es sa sb s0 es'' pv vt
       (op,SOME (slot_loc tr),SOME (value_type_place vt)) t
 Proof
   strip_tac >> drule_all target_mapping_run >> strip_tac >>
   drule_all target_mapping_run_path >> strip_tac >>
-  `es'' = es'` by metis_tac[target_mapping_extend_place] >> gvs[] >>
   `wb_frame cenv es es' sa s0 t` by
     (irule wb_frame_allocating_tail >> conj_tac >- simp[] >>
      qexistsl_tac [`s`, `es'.scopes`, `sm`] >> simp[] >>
@@ -510,20 +518,20 @@ Theorem target_keccak_key_counted_prefix:
   mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
   mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
   b+32 < dimword(:256) /\ LENGTH bs < dimword(:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     eval_operand op t = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s
 Proof
   strip_tac >> drule_all compile_keccak256_key_run >> strip_tac >>
   drule_all target_keccak_key_run_path >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (`t = (t with vs_vars := s.vs_vars) with vs_vars := t.vs_vars` by simp[] >>
      pop_assum SUBST1_TAC >> irule stmt_state_rel_vars_frame >>
      simp[] >> gvs[local_ptrs_reserved_def, lookup_var_def] >> metis_tac[]) >>
@@ -539,7 +547,7 @@ Theorem target_mapping_dynamic_counted_suffix:
   compile_keccak256_key keyop F sc = (hashop,sm) /\
   compile_mapping_subscript bop hashop sm = (op,sb) /\
   fn_has_code sc sm func /\ fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es' s /\
+  stmt_state_rel H ctx func cenv cx es' s /\ storage_well_formed_on cx es' (FST H) /\
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\ wb_frame cenv es es' sa s0 s /\
@@ -557,7 +565,7 @@ Theorem target_mapping_dynamic_counted_suffix:
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    target_post ctx func cenv cx es sa sb s0 es'' pv vt
+    target_post H ctx func cenv cx es sa sb s0 es'' pv vt
       (op,SOME (slot_loc tr),SOME (value_type_place vt)) t
 Proof
   strip_tac >> drule_all target_keccak_key_counted_prefix >>
@@ -586,4 +594,200 @@ Proof
   qexists_tac `t` >> simp[] >>
   `gas_marked_path F ctx func s (0+0) (OK t)` by
     (irule gas_marked_path_then >> qexists_tac `u` >> simp[]) >> gvs[]
+QED
+
+(* Run-exposing twins of the counted suffixes: the endpoint is the run of the
+   emitted code, so every horizon gets the same endpoint (the _horizons lifts
+   below). *)
+Theorem target_mapping_counted_suffix_run[local]:
+  compile_mapping_subscript bop keyop sm = (op,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es' s /\ storage_well_formed_on cx es' (FST H) /\
+  local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  wb_frame cenv es es' sa s0 s /\
+  (!x. bop = Var x ==> not_fresh_at sm x) /\
+  (!x. keyop = Var x ==> not_fresh_at sm x) /\
+  eval_operand bop s = SOME slot /\
+  eval_operand keyop s = SOME (encode_hashmap_key kt key) /\
+  extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript key) es' =
+    (INL pv, es'') /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?rt. run_inst_seq (emitted_insts sm sb) s = OK rt /\
+    gas_marked_path F ctx func s 0
+      (OK (rt with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    ~rt.vs_halted /\ rt.vs_current_bb = sb.cs_current_bb /\
+    target_post H ctx func cenv cx es sa sb s0 es'' pv vt
+      (op,SOME (slot_loc tr),SOME (value_type_place vt))
+      (rt with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  strip_tac >> drule_all target_mapping_run >> strip_tac >>
+  drule_all target_mapping_run_path >> strip_tac >>
+  `wb_frame cenv es es' sa s0 t` by
+    (irule wb_frame_allocating_tail >> conj_tac >- simp[] >>
+     qexistsl_tac [`s`, `es'.scopes`, `sm`] >> simp[] >>
+     metis_tac[]) >>
+  qexists_tac `t` >> simp[] >> irule target_mapping_post >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[target_mapping_suffix_shape]
+QED
+
+Theorem target_mapping_counted_suffix_horizons:
+  (!H. valid_horizon cx st0 H es''.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es' s /\
+     storage_well_formed_on cx es' (FST H)) /\
+  valid_horizon cx st0 H0 es''.storage_trace /\
+  compile_mapping_subscript bop keyop sm = (op,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  wb_frame cenv es es' sa s0 s /\
+  (!x. bop = Var x ==> not_fresh_at sm x) /\
+  (!x. keyop = Var x ==> not_fresh_at sm x) /\
+  eval_operand bop s = SOME slot /\
+  eval_operand keyop s = SOME (encode_hashmap_key kt key) /\
+  extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript key) es' =
+    (INL pv, es'') /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    !H. valid_horizon cx st0 H es''.storage_trace ==>
+      target_post H ctx func cenv cx es sa sb s0 es'' pv vt
+        (op,SOME (slot_loc tr),SOME (value_type_place vt)) t
+Proof
+  strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  drule_all target_mapping_counted_suffix_run >> strip_tac >>
+  qexists_tac `rt with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `storage_well_formed_on _ _ (FST H0)` kall_tac >>
+  qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  drule_all target_mapping_counted_suffix_run >> strip_tac >> gvs[]
+QED
+
+Theorem target_mapping_dynamic_counted_suffix_run[local]:
+  compile_keccak256_key keyop F sc = (hashop,sm) /\
+  compile_mapping_subscript bop hashop sm = (op,sb) /\
+  fn_has_code sc sm func /\ fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es' s /\ storage_well_formed_on cx es' (FST H) /\
+  local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\ wb_frame cenv es es' sa s0 s /\
+  (!x. bop = Var x ==> not_fresh_at sc x) /\
+  (!x. keyop = Var x ==> not_fresh_at sc x) /\
+  eval_operand bop s = SOME slot /\ eval_operand keyop s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
+  b+32 < dimword(:256) /\ LENGTH bs < dimword(:256) /\
+  encode_hashmap_key kt key = word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs) /\
+  extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript key) es' =
+    (INL pv, es'') /\
+  ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  ?r1 rt. run_inst_seq (emitted_insts sc sm) s = OK r1 /\
+    run_inst_seq (emitted_insts sm sb)
+      (r1 with vs_inst_idx := LENGTH sm.cs_current_insts) = OK rt /\
+    gas_marked_path F ctx func s 0
+      (OK (rt with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    ~rt.vs_halted /\ rt.vs_current_bb = sb.cs_current_bb /\
+    target_post H ctx func cenv cx es sa sb s0 es'' pv vt
+      (op,SOME (slot_loc tr),SOME (value_type_place vt))
+      (rt with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  strip_tac >> drule_all compile_keccak256_key_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sc sm) s = OK r1` >>
+  drule_all target_keccak_key_run_path >> strip_tac >>
+  qabbrev_tac `u = r1 with vs_inst_idx := LENGTH sm.cs_current_insts` >>
+  `stmt_state_rel H ctx func cenv cx es' r1` by
+    (`r1 = (r1 with vs_vars := s.vs_vars) with vs_vars := r1.vs_vars` by simp[] >>
+     pop_assum SUBST1_TAC >> irule stmt_state_rel_vars_frame >>
+     simp[] >> gvs[local_ptrs_reserved_def, lookup_var_def] >> metis_tac[]) >>
+  `stmt_state_rel H ctx func cenv cx es' u` by
+    simp[Abbr `u`, stmt_state_rel_inst_idx] >>
+  `u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|> = s` by
+    (qunabbrev_tac `u` >>
+     qpat_assum `r1 with vs_vars := _ = s`
+       (mp_tac o AP_TERM ``\z:venom_state. z with vs_inst_idx := s.vs_inst_idx``) >>
+     simp[]) >>
+  `!x. not_fresh_at sc x ==> lookup_var x u = lookup_var x s` by
+    (simp[Abbr `u`] >> gvs[lookup_var_def] >> metis_tac[]) >>
+  `eval_operand hashop u = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs))` by
+    simp[Abbr `u`, eval_operand_def] >>
+  `~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
+   u.vs_inst_idx = LENGTH sm.cs_current_insts` by simp[Abbr `u`] >>
+  qpat_x_assum `Abbrev (u = _)` (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  drule target_keccak_key_suffix_shape >> strip_tac >>
+  `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
+   u.vs_labels = s.vs_labels` by
+    (qpat_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s`
+      (fn th => map_every (mp_tac o C AP_TERM th)
+        [``\z:venom_state. z.vs_memory``, ``\z:venom_state. z.vs_allocas``,
+         ``\z:venom_state. z.vs_labels``]) >> simp[]) >>
+  `eval_operand bop u = SOME slot` by
+    (Cases_on `bop` >> gvs[eval_operand_def]) >>
+  `wb_frame cenv es es' sa s0 u` by
+    (irule wb_frame_allocating_tail >> conj_tac >- simp[] >>
+     qexistsl_tac [`s`, `es'.scopes`, `sc`] >> simp[] >> metis_tac[]) >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `!x. bop = Var x ==> not_fresh_at sm x` by
+    (gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by decide_tac >>
+  `eval_operand hashop u = SOME (encode_hashmap_key kt key)` by simp[] >>
+  qpat_x_assum `EVERY _ (emitted_insts sc sm)` kall_tac >>
+  qpat_x_assum `sm.cs_current_insts = _` kall_tac >>
+  drule_all target_mapping_counted_suffix_run >> strip_tac >>
+  qexistsl_tac [`r1`, `rt`] >> gvs[] >>
+  `gas_marked_path F ctx func s (0+0)
+     (OK (rt with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (irule gas_marked_path_then >>
+     qexists_tac `r1 with vs_inst_idx := LENGTH sm.cs_current_insts` >>
+     simp[]) >> gvs[]
+QED
+
+Theorem target_mapping_dynamic_counted_suffix_horizons:
+  (!H. valid_horizon cx st0 H es''.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es' s /\
+     storage_well_formed_on cx es' (FST H)) /\
+  valid_horizon cx st0 H0 es''.storage_trace /\
+  compile_keccak256_key keyop F sc = (hashop,sm) /\
+  compile_mapping_subscript bop hashop sm = (op,sb) /\
+  fn_has_code sc sm func /\ fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\ wb_frame cenv es es' sa s0 s /\
+  (!x. bop = Var x ==> not_fresh_at sc x) /\
+  (!x. keyop = Var x ==> not_fresh_at sc x) /\
+  eval_operand bop s = SOME slot /\ eval_operand keyop s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
+  b+32 < dimword(:256) /\ LENGTH bs < dimword(:256) /\
+  encode_hashmap_key kt key = word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs) /\
+  extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript key) es' =
+    (INL pv, es'') /\
+  ~s.vs_halted /\ s.vs_current_bb = sc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    !H. valid_horizon cx st0 H es''.storage_trace ==>
+      target_post H ctx func cenv cx es sa sb s0 es'' pv vt
+        (op,SOME (slot_loc tr),SOME (value_type_place vt)) t
+Proof
+  strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  drule_all target_mapping_dynamic_counted_suffix_run >> strip_tac >>
+  qexists_tac `rt with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `storage_well_formed_on _ _ (FST H0)` kall_tac >>
+  qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  drule_all target_mapping_dynamic_counted_suffix_run >> strip_tac >> gvs[]
 QED
