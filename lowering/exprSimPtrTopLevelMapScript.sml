@@ -44,7 +44,7 @@ Proof
         (if tr then LocTransient else LocStorage)),sa)` by
     (Cases_on `tr` >> gvs[compile_expr_def, vyperASTTheory.expr_type_def]) >>
   gvs[] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp_tac std_ss (#rewrs (TypeBase.simpls_of ``:venom_state``))) >>

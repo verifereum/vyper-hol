@@ -204,7 +204,7 @@ Resume subscript_map_map_ptr[selection]:
   `!z. p.ptr_operand = Var z ==> not_fresh_at sn z` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   gvs[] >> drule_all bodyPtrSubscriptSeamMapTailTheory.mapping_index_tail_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`]
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`]
     (qx_choosel_then [`uf`, `Gu`, `tnu`] strip_assume_tac)) >>
   `wb_frame cenv (mid with gas_obs := []) (fin with gas_obs := []) sm t it` by
     (gvs[loweringPostsTheory.expr_post_def, loweringPostsTheory.wb_frame_def] >>

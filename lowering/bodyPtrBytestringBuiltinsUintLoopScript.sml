@@ -11,7 +11,7 @@ Theorem u2s_loop_invariant_ptr:
   (!bb. MEM bb (u2s_blocks a op (Var p) n) ==>
         lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
   s.vs_current_bb = u2s_label a 1 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr s /\
+  u2s_safe H ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr s /\
   u2s_digits a b n X x str s /\
   u2s_ptr_state d cenv cx es a G0 tn0 s0 p b (buf_size+n) n (LENGTH str) G tn s /\
   not_fresh_at a p /\ local_ptrs_reserved cenv a /\
@@ -24,7 +24,7 @@ Theorem u2s_loop_invariant_ptr:
   LENGTH (num_to_dec_string X)+32 <= type_memory_size (BaseTV (StringT cap)) /\
   ~ctx_has_dalloca ctx ==>
   ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr t /\
+    u2s_safe H ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr t /\
     ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es a G0 tn0 s0 G' tn' /\
     ptr_covers G' tn' (u2s_var a 2) t buf_size /\
     lookup_var (u2s_var a 2) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
@@ -103,7 +103,7 @@ Theorem u2s_check_exit_invariant_ptr:
   (!bb. MEM bb (u2s_blocks a op (Var p) n) ==>
         lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
   s.vs_current_bb = u2s_label a 0 /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr s /\
+  u2s_safe H ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr s /\
   lookup_var (u2s_var a 0) s = SOME (n2w X) /\
   lookup_var (u2s_var a 1) s = SOME 0w /\
   u2s_ptr_state d cenv cx es a G0 tn0 s0 p b (buf_size+n) n 0 G tn s /\
@@ -117,7 +117,7 @@ Theorem u2s_check_exit_invariant_ptr:
   LENGTH (num_to_dec_string X)+32 <= type_memory_size (BaseTV (StringT cap)) /\
   ~ctx_has_dalloca ctx ==>
   ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr t /\
+    u2s_safe H ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr t /\
     ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es a G0 tn0 s0 G' tn' /\
     ptr_covers G' tn' (u2s_var a 2) t buf_size /\
     lookup_var (u2s_var a 2) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\

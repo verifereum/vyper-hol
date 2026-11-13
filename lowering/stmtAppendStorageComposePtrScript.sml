@@ -111,7 +111,7 @@ Resume compile_append_storage_word_stmt_frag_ptr[operand]:
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `stmt_state_rel _ _ _ _ es s0` kall_tac >>
   qpat_x_assum `ghost_inv _ _ _ es _ _ _` kall_tac >>
-  `stor_taint_ok cx tn t` by metis_tac[ghost_inv_def] >>
+  `stor_taint_ok H cx tn t` by metis_tac[ghost_inv_def] >>
   `t.vs_call_ctx.cc_address = cx.txn.target` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `key_taint (if tr then tn.t_trans else tn.t_stor) slot = {}` by
@@ -147,7 +147,7 @@ Resume compile_append_storage_word_stmt_frag_ptr[full]:
   `cenv.ce_module_dynarray_capacity nid <=
     w2n (if tr then tload slot t else sload slot t)` by decide_tac >>
   drule_all append_storage_word_abort_path_ptr >>
-  disch_then (qspecl_then [`PG`, `G`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `G`, `cx_dead H cx`] strip_assume_tac) >>
   `res1 = INR (Error (RuntimeError "append full storage array"))` by
     (`cenv.ce_module_dynarray_capacity nid <= w2n
        (lookup_storage slot (get_storage cx (es_end with gas_obs := []) tr))`
@@ -168,7 +168,7 @@ Resume compile_append_storage_word_stmt_frag_ptr[stored]:
   qmatch_asmsub_abbrev_tac `len < cenv.ce_module_dynarray_capacity nid` >>
   `len = w2n (if tr then tload slot t else sload slot t)` by simp[Abbr `len`] >>
   drule_all append_storage_word_success_path_ptr >>
-  disch_then (qspecl_then [`PG`, `G`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `G`, `cx_dead H cx`] strip_assume_tac) >>
   rename1 `state_frame u = _` >>
   `len = w2n (lookup_storage slot
     (get_storage cx (es_end with gas_obs := []) tr))` by metis_tac[] >>
@@ -206,7 +206,7 @@ Resume compile_append_storage_word_stmt_frag_ptr[stored_finish]:
      Cases_on `tr` >> simp[venomInstTheory.is_terminator_def]) >>
   simp[stmt_lands_def, stmt_state_rel_inst_idx, cenv_top_ext_refl] >>
   conj_tac
-  >- (qpat_x_assum `ghost_inv d cenv cx ee1 G' tn' u` mp_tac >>
+  >- (qpat_x_assum `ghost_inv H d cenv cx ee1 G' tn' u` mp_tac >>
       rpt (pop_assum kall_tac) >>
       `u with vs_inst_idx := LENGTH sb.cs_current_insts =
        u with <|vs_prev_bb := u.vs_prev_bb;
