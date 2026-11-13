@@ -150,19 +150,21 @@ Resume aggregate_store_nested_path[typed]:
      first_assum (ACCEPT_TAC o SRULE [arithmeticTheory.ADD_COMM])) >>
   `compile_store_memory_typed ce (Var x) dty op
      (post_value_type ce e) su = ((),sb)` by
-    fs[compile_store_memory_def] >>
+    (qpat_x_assum `_ su = ((),sb)` mp_tac >>
+     asm_simp_tac bool_ss [compile_store_memory_def]) >>
   `sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
    (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
      ALL_DISTINCT (MAP FST fields) /\
      EVERY (\(fname,fty,sz). !tv.
        evaluate_type (get_tenv cx) fty = SOME tv ==>
        sz = type_memory_size tv) fields)` by
-    gvs[expr_sim_inv_def] >>
+    (fs[expr_body_pre_def, expr_sim_inv_def] >>
+     rpt strip_tac >> first_x_assum drule >> simp[]) >>
   drule compile_store_memory_typed_forward_run >>
   disch_then (drule_at (Pat `type_widens_to _ _ dty`)) >>
   disch_then (drule_at (Pat `evaluate_type _ dty = _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ s.vs_memory`)) >>
-  disch_then (qspecl_then [`ctx`, `func`, `w`] mp_tac) >>
+  disch_then (qspecl_then [`tv`, `ctx`, `func`, `w`] mp_tac) >>
   (impl_tac
    >- (simp[venomStateTheory.eval_operand_def, arithmeticTheory.ADD_COMM] >>
        first_assum ACCEPT_TAC)) >>
@@ -188,10 +190,11 @@ Resume aggregate_store_nested_path[same_layout]:
   (* The post type itself, or a tuple of equal member layouts: a bulk copy
      of dty's bytes, which reads back at dty. *)
   `compile_store_memory ce op (Var x) dty dty su = ((),sb)` by
-    (qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `_ su = ((),sb)` mp_tac >>
+     simp_tac bool_ss [compile_store_memory_def] >>
      qpat_x_assum `_ \/ _` strip_assume_tac >>
-     gvs[compile_store_memory_def]) >>
-  `type_memory_size tv = type_memory_size stv` by
+     asm_simp_tac bool_ss []) >>
+  `type_memory_size stv = type_memory_size tv` by
     (qpat_x_assum `_ \/ _` strip_assume_tac >- gvs[] >>
      drule tuple_memory_layout_eq_bytes >>
      disch_then (qspec_then `ce` mp_tac) >>
@@ -214,7 +217,7 @@ Resume aggregate_store_nested_path[same_layout]:
   `type_memory_size etv < 2 ** 64` by
     metis_tac[expr_body_pre_copy_ok] >>
   `type_memory_size tv + 64 < dimword (:256)` by
-    (simp[wordsTheory.dimword_def] >> decide_tac) >>
+    (fs[wordsTheory.dimword_def] >> decide_tac) >>
   drule compile_store_memory_same_type_size_forward >>
   disch_then (drule_at (Pat `evaluate_type _ _ = SOME tv`)) >>
   disch_then (drule_at (Pat `eval_operand op s = SOME sw`)) >>
