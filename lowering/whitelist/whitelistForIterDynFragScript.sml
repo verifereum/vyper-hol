@@ -642,7 +642,7 @@ Proof
       `FLOOKUP sl.vs_allocas aid = SOME b` by
         simp[Abbr `sl`, update_var_def] >>
       metis_tac[])
-  >> drule_all gas_marked_path_then >> simp[]
+  >> (drule_all gas_marked_path_then >> simp[])
 QED
 
 Theorem dynarray_loop_initialize:
@@ -683,11 +683,20 @@ Theorem dynarray_loop_initialize:
     alloca_frame cenv es st s0 cenv es cc
 Proof
   strip_tac >> drule_all dynarray_loop_initialize_explicit >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es
+     (update_var lv (n2w (LENGTH vs)) s0)` by
+    (irule stmt_state_rel_update_var >> simp[]) >>
   drule_all array_alloca_frame >> strip_tac >>
-  `cc.vs_memory = s0.vs_memory` by gvs[jump_to_def, update_var_def] >>
-  qexistsl_tac [`dst`, `cc`] >> simp[] >>
-  irule alloca_frame_of_mem_frame >> goal_assum (drule_at Any) >> simp[] >>
-  fs[array_caller_frame_def] >> metis_tac[]
+  `alloca_frame cenv es st s0 cenv es cc` by
+    (irule alloca_frame_of_mem_frame >> goal_assum (drule_at Any) >>
+     gvs[ALL_DISTINCT] >>
+     simp[jump_to_def, update_var_def] >>
+     reverse conj_tac >- metis_tac[] >>
+     rpt strip_tac >>
+     `x <> lv /\ x <> p /\ x <> idx /\ x <> g /\ x <> vld` by metis_tac[] >>
+     qpat_x_assum `!x. x <> p ==> _` (qspec_then `x` mp_tac) >>
+     gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  metis_tac[]
 QED
 
 (* The source loads the iterable and checks its length before the loop. *)
@@ -901,7 +910,7 @@ Proof
     `exit_lbl` |-> `exit`, `stmts_lbl` |-> `bod`, `incr_lbl` |-> `incr`,
     `tenv` |-> `get_tenv cx`] dynarray_for_loop_counted) >>
   impl_tac >- (gvs[DROP_0, AC ADD_ASSOC ADD_COMM] >>
-    rpt strip_tac >> metis_tac[]) >> simp[DROP_0] >> strip_tac >>
+    rpt strip_tac >> simp[] >> metis_tac[]) >> simp[DROP_0] >> strip_tac >>
   irule gas_outcome_post_mono >>
   qpat_assum `gas_outcome _ _ _ _ _ _ _` (irule_at (Pos last)) >>
   simp[] >> rpt strip_tac
