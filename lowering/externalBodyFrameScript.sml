@@ -34,7 +34,7 @@ Theorem collect_locals_supported_bindings_mem:
 Proof
   recInduct collect_locals_ind >>
   simp[collect_locals_def, supported_stmt_bindings_def] >>
-  rpt strip_tac >> metis_tac[]
+  rpt strip_tac >> FIRST_PROVE [metis_tac[]]
 QED
 
 Theorem supported_function_arg_not_collect_locals:
@@ -389,14 +389,14 @@ Theorem external_body_support_bounds_from_allocs[local]:
   type_stmts env ret ss = SOME env' /\
   (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
    return_buffer_ok cenv) ==>
-  locals_alloc_ok cenv env /\ EVERY (stmt_exprs_ok cenv) ss /\
+  locals_alloc_ok cenv env /\ stmts_exprs_ok cenv ss /\
   ?bindings. supported_stmts tops bindings ss
 Proof
   disch_then strip_assume_tac >>
   drule_all fn_allocs_ok_body >> strip_tac >>
   `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss` by
     (drule_all typed_parameter_body_excludes_bad_widths >> simp[]) >>
-  `EVERY (stmt_exprs_ok cenv) ss` by
+  `stmts_exprs_ok cenv ss` by
     (irule stmt_exprs_ok_from_traversal_bounds >> simp[]) >>
   conj_tac
   >- (simp[locals_alloc_ok_def] >> rpt strip_tac >>
@@ -427,7 +427,7 @@ Proof
   strip_tac >>
   drule_all supported_external_allocs_ok >> strip_tac >>
   drule_at (Pat `MEM (FunctionDecl _ _ _ _ _ _ _ _ _) _`)
-    supported_program_function >> strip_tac >>
+    supported_program_function >> simp[] >> strip_tac >>
   drule_all external_body_support_bounds_from_allocs >> simp[]
 QED
 
@@ -526,6 +526,12 @@ Proof
   gvs[set_external_package_target_def, package_external_fn_def] >>
   Cases_on `ret = NoneT` >>
   gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
+  `!vis mut rr name args dflts ret ss.
+     MEM (FunctionDecl vis mut T rr name args dflts ret ss) tops ==>
+     lookup_nonreentrant_slot am.layouts tx.target =
+       SOME global_nonreentrant_slot` by
+    (rpt strip_tac >> irule layouts_agree_nonreentrant_slot >>
+     fs[source_deployment_rel_def] >> metis_tac[]) >>
   simp[body_inv_def, cenv_module_pins_def, build_compile_env_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[source_deployment_rel_def, get_module_code_def,

@@ -49,38 +49,29 @@ Proof
     (drule (iffLR MEM_classify_internal) >> strip_tac >>
      drule supported_program_runtime_bodies_shape_ok >>
      simp[runtime_bodies_shape_ok_def] >> strip_tac >>
-     first_x_assum drule >> simp[]) >>
+     first_x_assum (qspecl_then [`src0`,`src1`,`src2`,`src3`,`src4`,
+       `src5`,`src6`,`src7`] mp_tac) >> simp[]) >>
   simp[package_internal_fn_def, set_internal_package_target_def,
     update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
     cenv_static_ok_def] >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
 Theorem structlit_constructor_package_environment:
   !tops tr nk target src.
+  supported_program tops ==>
   (\(ce,args,pay,nr,key,t,body,rt).
     cenv_static_ok ce /\ ce.ce_return_pc = NONE /\ ce.ce_alloca_locals)
     (set_constructor_package_target target (package_constructor tops tr nk src))
 Proof
-  rpt gen_tac >> PairCases_on `src` >>
+  rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   simp[set_constructor_package_target_def, package_constructor_def,
     update_cenv_nonreentrant_def, cenv_static_ok_def,
     build_compile_env_alloca_locals, build_compile_env_deploy_no_internal_return] >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
-Theorem structlit_constructor_package_body:
-  !tops tr nk target mut nr rr name args defaults ret body.
-  supported_program tops /\
-  SND (SND (SND (classify_functions tops))) =
-    SOME (mut,nr,rr,name,args,defaults,ret,body) ==>
-  (\(ce,a,p,n,k,t,stmts,r).
-    ~supported_stmts_expr_exists expr_shape_root stmts)
-    (set_constructor_package_target target
-      (package_constructor tops tr nk (mut,nr,rr,name,args,defaults,ret,body)))
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[set_constructor_package_target_def, package_constructor_def] >>
-  drule structlit_classify_constructor_source >> strip_tac >>
-  drule_all structlit_supported_function_body >> simp[]
-QED

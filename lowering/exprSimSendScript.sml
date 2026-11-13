@@ -63,10 +63,11 @@ Proof
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
        expr_type_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  irule compile_call_callback_contract >>
-  irule expr_child_callback_agrees >>
-  rpt strip_tac >> drule call_callback_child_bound >>
-  simp[expr_size_def]
+  irule compile_call_callback_contract >> rpt strip_tac >>
+  irule expr_child_callback_agrees >> rpt strip_tac
+  >- (drule omitted_default_bound >> simp[]) >>
+  drule call_callback_child_bound >>
+  disch_then (qspecl_then [`target`, `ann`] mp_tac) >> simp[]
 QED
 
 Theorem compile_expr_send_stack:

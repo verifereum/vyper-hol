@@ -43,16 +43,6 @@ Proof
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
-Theorem emit_op_var[local]:
-  !opc ops st x st'. emit_op opc ops st = (x, st') ==>
-    !y. x = Var y ==> var_below st'.cs_next_var y
-Proof
-  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[] >> simp[var_below_def] >> rpt strip_tac >>
-  fs[ASCIInumbersTheory.toString_inj]
-QED
-
 Theorem compile_alloc_buffer_var[local]:
   !n st a st'. compile_alloc_buffer n st = (a, st') ==>
     !y. a.buf_operand = Var y ==> var_below st'.cs_next_var y

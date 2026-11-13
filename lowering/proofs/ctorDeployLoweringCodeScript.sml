@@ -19,8 +19,10 @@ Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   `~supported_stmts_expr_exists expr_shape_root src7` by
     (gs[runtime_bodies_shape_ok_def] >> metis_tac[]) >>
-  qspecl_then [`tops`, `Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
-    (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
+  drule_then (qspecl_then [`Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
+    (strip_assume_tac o SRULE [cenv_static_ok_def])) build_compile_env_static >>
   simp[package_internal_fn_def, set_internal_package_target_def,
     update_cenv_nonreentrant_def, internal_fn_shape_ok_def, cenv_static_ok_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
@@ -53,11 +55,14 @@ Proof
          supportedDeclsTheory.supported_declaration_headers_def,
          supportedDeclsTheory.supported_headers_module_consts_env] >>
      gvs[constSubstTheory.subst_consts_fn_empty]) >>
-  `supported_program_deploy tops` by fs[deploy_source_ok_def] >>
+  `supported_program tops /\ supported_program_deploy tops` by
+    fs[deploy_source_ok_def] >>
   drule_all supported_program_deploy_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
-  qspecl_then [`tops`, `Deploy`, `cf0`, `cf3`, `cf4`, `cf6`, `cf7`, `T`]
-    (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
+  drule_then (qspecl_then [`Deploy`, `cf0`, `cf3`, `cf4`, `cf6`, `cf7`, `T`]
+    (strip_assume_tac o SRULE [cenv_static_ok_def])) build_compile_env_static >>
   gvs[package_constructor_def, set_constructor_package_target_def,
     update_cenv_nonreentrant_def] >>
   simp[deploy_build_env_no_return_pc, cenv_static_ok_def] >>

@@ -242,8 +242,12 @@ Proof
   `~EXISTS external_has_defaults exts` by
     (drule supported_program_no_external_defaults >> simp[]) >>
   pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supported_headers_module_consts_env, supported_program_def,
+              supported_declaration_headers_def] >>
   `MEM (mut,nr,rr,name,args,dflts,ret,ss) ints` by
-    metis_tac[MEM_classify_internal, pairTheory.FST, pairTheory.SND] >>
+    (`ints = FST (SND (classify_functions tops))` by simp[] >>
+     pop_assum SUBST1_TAC >> simp[MEM_classify_internal]) >>
   `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
     (build_selectors (type_env tops) exts)` by
     rewrite_tac[build_selectors_fn_labels] >>

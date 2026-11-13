@@ -37,6 +37,7 @@ Theorem intcall_subscript_array_outcome:
           a <= w2n w /\ w2n w + type_memory_size tv' <= a + k /\
           a + k < dimword (:256) /\
           (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
+      (~expr_has_effect (Subscript ann obj idx) ==> pure_frame ce fp.jc_func es sa s u) /\
       intcall_expr_cont fp ce env es sa s ee sb u)
     (\res ee r. expr_exit res r)
 Proof
@@ -47,7 +48,8 @@ Proof
     (irule supported_array_subscript_base_type >> metis_tac[]) >>
   `supported_expr fp.jc_tops obj` by
     (irule supported_subscript_value_base >> metis_tac[]) >>
-  Cases_on `(!t r t'. eval_expr fp.jc_cx idx t = (INL r,t') ==>
+  Cases_on `~subscript_reads_base fp.jc_cx obj idx /\ ~copies_subscript_base ce obj idx /\
+    (!t r t'. eval_expr fp.jc_cx idx t = (INL r,t') ==>
       t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
     (!s tr slot vt t. eval_expr fp.jc_cx obj s <>
       (INL (PlaceR (StoragePlace tr slot vt)),t)) /\

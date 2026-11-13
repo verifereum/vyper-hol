@@ -4,12 +4,12 @@ Ancestors
   bodyIntCallFamAggStructFields exprSimAggregateSource exprSimSource
   vyperState gasSummary
 
-Theorem gas_marked_materialised_child_wf:
+Theorem gas_marked_materialised_child_typed:
   expr_body_pre ce cx env e es /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   gas_marked_exec memory (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s) marks (INL v) mid r
-  ==> val_wf tv v
+  ==> value_has_type tv v
 Proof
   rewrite_tac[gas_marked_exec_def] >> strip_tac >>
   qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >>
@@ -19,6 +19,6 @@ Proof
   rename1 `eval_expr _ _ _ = (res,ee)` >>
   Cases_on `res` >> simp[] >> strip_tac >>
   drule read_result_state >> strip_tac >> gvs[] >>
-  irule aggregate_materialised_child_wf >>
+  irule aggregate_materialised_child_typed >>
   metis_tac[expr_body_pre_gas_obs]
 QED

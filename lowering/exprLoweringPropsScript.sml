@@ -4323,6 +4323,17 @@ Proof
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
+(* An internal call stages its supplied arguments, then its omitted
+   defaults, each from the state the previous step left. *)
+Theorem ci_mono_compile_stage_intcall_args_after[local]:
+  ∀cfn cenv es flags tys sa sb.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ∧
+    ci_mono sa sb ⇒
+    ci_mono sa (SND (compile_stage_intcall_args cfn cenv es flags tys sb))
+Proof
+  metis_tac[ci_mono_trans, ci_mono_compile_stage_intcall_args]
+QED
+
 Theorem ci_mono_compile_call[local]:
   ∀ cfn cenv ret_ty ty target args default_ret sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
@@ -4358,7 +4369,8 @@ rpt (CHANGED_TAC (
   (irule ci_mono_trans >>
    irule_at (Pos last) ci_mono_compile_alloc_buffer)
 )) >>
-rpt strip_tac >> simp[ci_mono_compile_alloc_buffer, ci_mono_refl])
+rpt strip_tac >> TRY (irule ci_mono_compile_stage_intcall_args_after) >>
+simp[ci_mono_compile_alloc_buffer, ci_mono_refl])
   >- ( (* ExtCall *)
     rename1 `ExtCall _ _ signature _` >> PairCases_on `signature` >>
     Cases_on `args`
@@ -4436,7 +4448,7 @@ Proof
 QED
 
 Theorem ci_mono_expr_child_callback:
-  (∀ce ty e st. expr_size e < bound ⇒
+  (∀ce ty e st. expr_size e + cenv_defaults_size ce < bound ⇒
     ci_mono st (SND (f ce ty e st))) ⇒
   (∀ce ty e st.
     ci_mono st (SND (expr_child_callback bound f ce ty e st)))
@@ -4446,7 +4458,7 @@ Proof
 QED
 
 Theorem ci_mono_builtin_child_callback[local]:
-  (∀ce ret_ty ty bi args st. list_size expr_size args < bound ⇒
+  (∀ce ret_ty ty bi args st. list_size expr_size args + cenv_defaults_size ce < bound ⇒
     ci_mono st (SND (f ce ret_ty ty bi args st))) ⇒
   (∀ce ret_ty ty bi args st.
     ci_mono st (SND (builtin_child_callback bound f ce ret_ty ty bi args st)))
@@ -4456,7 +4468,7 @@ Proof
 QED
 
 Theorem ci_mono_type_child_callback[local]:
-  (∀ce vv_ty ty tb ret_ty args st. list_size expr_size args < bound ⇒
+  (∀ce vv_ty ty tb ret_ty args st. list_size expr_size args + cenv_defaults_size ce < bound ⇒
     ci_mono st (SND (f ce vv_ty ty tb ret_ty args st))) ⇒
   (∀ce vv_ty ty tb ret_ty args st.
     ci_mono st (SND (type_child_callback bound f ce vv_ty ty tb ret_ty args st)))

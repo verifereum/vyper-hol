@@ -900,9 +900,9 @@ QED
 
 
 Theorem bound_labels_intcall[local]:
-  (!ty e t. MEM e args /\
+  (!c ty e t.
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
-    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn c ty e t))))) /\
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
@@ -916,6 +916,10 @@ Proof
       irule pair_let_snd_preserves >>
       simp[bound_labels_alloc_buffer]) >>
   rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_stage_intcall_args >> simp[]) >>
+  rpt strip_tac >> simp[] >>
+  (* the callee's omitted defaults, staged after the supplied args *)
   irule pair_let_snd_preserves >> reverse conj_tac
   >- (irule bound_labels_stage_intcall_args >> simp[]) >>
   rpt strip_tac >> simp[] >> IF_CASES_TAC >> CASE_TAC >> simp[] >>
@@ -1278,6 +1282,9 @@ Proof
 QED
 
 Theorem bound_labels_call:
+  (!c ty e t.
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn c ty e t))))) /\
   (!ty e t. MEM e args /\
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
@@ -1513,7 +1520,7 @@ Proof
 QED
 
 Theorem bound_labels_expr_child_callback[local]:
-  (!ce ty e s. expr_size e < bound ==>
+  (!ce ty e s. expr_size e + cenv_defaults_size ce < bound ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce ty e s))))) ==>
   !ce ty e s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
@@ -1525,7 +1532,7 @@ Proof
 QED
 
 Theorem bound_labels_builtin_child_callback[local]:
-  (!ce rt ty bi args s. list_size expr_size args < bound ==>
+  (!ce rt ty bi args s. list_size expr_size args + cenv_defaults_size ce < bound ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce rt ty bi args s))))) ==>
   !ce rt ty bi args s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
@@ -1537,7 +1544,7 @@ Proof
 QED
 
 Theorem bound_labels_type_child_callback[local]:
-  (!ce vt ty tb rt args s. list_size expr_size args < bound ==>
+  (!ce vt ty tb rt args s. list_size expr_size args + cenv_defaults_size ce < bound ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce vt ty tb rt args s))))) ==>
   !ce vt ty tb rt args s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>

@@ -1089,6 +1089,10 @@ Resume extcall_call_step[call_success]:
      >- metis_tac[exprSafeOperandTheory.safe_operand_mono]
      >- metis_tac[exprSafeOperandTheory.safe_operand_mono]
      >- metis_tac[exprSafeOperandTheory.safe_operand_mono]
+     >- (qpat_x_assum `LENGTH oc.co_returnData < _` mp_tac >>
+         simp[wordsTheory.dimword_def])
+     >- (qpat_x_assum `cap + w2n ro < _` mp_tac >>
+         simp[wordsTheory.dimword_def])
      >- (qexistsl [`live`, `buf_size`] >> simp[] >> decide_tac) >>
      metis_tac[]) >>
   `gas_path ctx func t (n + (n' + n'')) (OK (jump_to sr.cs_current_bb u'))` by
@@ -1600,9 +1604,9 @@ Resume extcall_return_default[default_bytes]:
   qpat_x_assum `wb_frame cenv es ee sa s0 checked` mp_tac >>
   simp[wb_frame_def, extCallSeamFinishTheory.extcall_jump_fields,
        exprLoweringPropsTheory.stmt_state_rel_jump_to,
-       locals_kept_def, local_region_def, venomStateTheory.jump_to_def,
-       venomStateTheory.lookup_var_def] >> strip_tac >> simp[] >>
-  conj_tac >> first_assum ACCEPT_TAC
+       locals_kept_def, popped_kept_def, local_region_def,
+       venomStateTheory.jump_to_def, venomStateTheory.lookup_var_def] >>
+  strip_tac >> simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise extcall_return_default
 
