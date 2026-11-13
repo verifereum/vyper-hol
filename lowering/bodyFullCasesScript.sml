@@ -8,7 +8,7 @@
  *)
 Theory bodyFullCases
 Ancestors
-  bodyFullPreds bodyFullRawRevert gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
+  bodyFullPreds bodyFullRawRevert bodyFullExtCall gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
   msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
@@ -304,7 +304,7 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_extcall_case_ptr_at (bodyPtrCallCases). *)
+(* ExtCall, by extcall_expr_full_ok (bodyFullExtCall). *)
 Theorem body_extcall_case_full:
   !cx v14 is_static skip_check sig opts es v15.
     (!s'' target t nargs s'3' results t'.
@@ -320,7 +320,7 @@ Theorem body_extcall_case_full:
     body_expr_full_ok cx
       (Call v14 (ExtCall is_static skip_check sig opts) es v15)
 Proof
-  cheat
+  ACCEPT_TAC extcall_expr_full_ok
 QED
 
 (* Admitted: the joint twin of body_for_case_ptr_at (bodyPtrCtrlCases). *)
