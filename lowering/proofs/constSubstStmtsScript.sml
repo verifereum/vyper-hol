@@ -699,6 +699,19 @@ Proof
   Cases_on `read_result cx x r` >> Cases_on `q` >> simp[]
 QED
 
+Theorem subscript_reads_base_stk[local]:
+  subscript_reads_base (cx with stk := s) = subscript_reads_base cx
+Proof
+  simp[FUN_EQ_THM, subscript_reads_base_def]
+QED
+
+Theorem constant_builtin_code_slice_source[local]:
+  constant_builtin bt ==> code_slice_source bt es = NONE
+Proof
+  Cases_on `code_slice_source bt es` >> simp[] >> rename1 `SOME p` >>
+  PairCases_on `p` >> gvs[code_slice_source_SOME, constant_builtin_def]
+QED
+
 Theorem constant_expr_eval_stk:
   !mods e. constant_expr mods e ==>
     !st. eval_expr (cx with stk := s) e st = eval_expr cx e st
@@ -713,12 +726,13 @@ Proof
         (irule eval_exprs_stk_from_elements >> gvs[EVERY_MEM]) >>
       simp[])
   >~ [`ValueSubscript`]
-  >- gvs[bind_def, read_result_stk, select_result_stk]
+  >- gvs[bind_def, read_result_stk, select_result_stk, subscript_reads_base_stk]
   >~ [`AttrSubscript`]
   >- gvs[bind_def, select_result_stk]
   >~ [`builtin_args_length_ok`]
   >- (`!st. eval_exprs (cx with stk := s) es st = eval_exprs cx es st` by
         (irule eval_exprs_stk_from_elements >> gvs[EVERY_MEM]) >>
+      drule_then (qspec_then `es` assume_tac) constant_builtin_code_slice_source >>
       Cases_on `bt = Len`
       >- (Cases_on `es` >>
           gvs[builtin_args_length_ok_def, type_check_def, assert_def,
