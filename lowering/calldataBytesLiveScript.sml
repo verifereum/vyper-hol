@@ -186,6 +186,49 @@ Proof
   drule_all calldata_count_guard_rejected_live >> gvs[]
 QED
 
+Theorem calldata_bytes_live_frag_mem_guard:
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring maxn) st = ((),st') /\
+  eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  d + abi_decode_bytes_copy_size maxn < dimword (:256) /\
+  d + abi_decode_bytes_copy_size maxn <= initial.vs_alloca_next /\
+  maxn < dimword (:256) ==>
+  frag_exec_mem ctx st st' (\s. s = initial)
+    (\t. w2n (abi_decode_load CALLDATALOAD p initial) <= maxn /\
+      mem_word_at d t.vs_memory = abi_decode_load CALLDATALOAD p initial /\
+      mem_bytes_at d (abi_decode_bytes_copy_size maxn) t.vs_memory =
+        mem_bytes_at (w2n p) (abi_decode_bytes_copy_size maxn) initial.vs_call_ctx.cc_calldata /\
+      abi_decode_frame d (abi_decode_bytes_copy_size maxn) initial t /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op initial) /\
+      t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next)
+    (\r. maxn < w2n (abi_decode_load CALLDATALOAD p initial) /\
+      ?t. r = Abort Revert_abort t /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op initial) /\
+      t.vs_memory = initial.vs_memory /\ t.vs_call_ctx = initial.vs_call_ctx /\
+      t.vs_data_section = initial.vs_data_section /\
+      t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next)
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_bytes_shape >> strip_tac >>
+  drule calldata_bytes_opcodes >> strip_tac >>
+  irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
+  >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+      ho_match_mp_tac (GEN_ALL calldata_bytes_prefix_live) >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  Cases_on `w2n (abi_decode_load CALLDATALOAD p initial) <= maxn`
+  >- (drule_all calldata_bytes_accepted_live >> strip_tac >>
+      disj1_tac >> qexists_tac `t` >>
+      gvs[abi_decode_frame_def, instIdxIndepTheory.eval_op_inst_idx] >> metis_tac[]) >>
+  `maxn < w2n (abi_decode_load CALLDATALOAD p initial)` by decide_tac >>
+  drule_all calldata_bytes_rejected_live >> strip_tac >>
+  disj2_tac >> qexists_tac `t` >>
+  simp[instIdxIndepTheory.eval_op_inst_idx]
+QED
+
 Theorem calldata_bytes_live_frag_mem:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring maxn) st = ((),st') /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
@@ -210,22 +253,14 @@ Theorem calldata_bytes_live_frag_mem:
       t.vs_data_section = initial.vs_data_section /\
       t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next)
 Proof
-  strip_tac >>
-  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decoder_bytes_shape >> strip_tac >>
-  drule calldata_bytes_opcodes >> strip_tac >>
-  irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
-  >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
-      ho_match_mp_tac (GEN_ALL calldata_bytes_prefix_live) >>
-      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  Cases_on `w2n (abi_decode_load CALLDATALOAD p initial) <= maxn`
-  >- (drule_all calldata_bytes_accepted_live >> strip_tac >>
-      disj1_tac >> qexists_tac `t` >>
-      gvs[abi_decode_frame_def, instIdxIndepTheory.eval_op_inst_idx] >> metis_tac[]) >>
-  `maxn < w2n (abi_decode_load CALLDATALOAD p initial)` by decide_tac >>
-  drule_all calldata_bytes_rejected_live >> strip_tac >>
-  disj2_tac >> qexists_tac `t` >>
-  simp[instIdxIndepTheory.eval_op_inst_idx]
+  strip_tac >> drule_all calldata_bytes_live_frag_mem_guard >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  simp_tac bool_ss [fragExecMemTheory.frag_exec_mem_def] >>
+  disch_tac >> gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac
+  >- (disj1_tac >> qexists_tac `t` >> asm_rewrite_tac[]) >>
+  disj2_tac >> qexists_tac `fuel` >> asm_rewrite_tac[] >>
+  qexists_tac `t` >> asm_rewrite_tac[]
 QED
 
 Theorem calldata_count_guard_rejected_live_mod:

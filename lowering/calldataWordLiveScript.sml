@@ -355,7 +355,7 @@ Proof
   metis_tac[abi_decoder_operand_live_emit, abi_decoder_operand_live_mono]
 QED
 
-Theorem calldata_word_live_frag_mem:
+Theorem calldata_word_live_frag_mem_guard:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
   d < dimword (:256) /\ d + 32 <= initial.vs_alloca_next /\
@@ -368,7 +368,8 @@ Theorem calldata_word_live_frag_mem:
       (!op. abi_decoder_operand_live st.cs_next_var op ==>
         eval_operand op t = eval_operand op initial) /\
       t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next)
-    (\r. ?z. r = Abort Revert_abort z)
+    (\r. ~abi_clamp_ok clamp (abi_decode_load CALLDATALOAD p initial) /\
+      ?z. r = Abort Revert_abort z)
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
@@ -387,4 +388,26 @@ Proof
   drule_all calldata_word_rejected_live >> strip_tac >>
   disj2_tac >> qexists_tac `t` >>
   simp[instIdxIndepTheory.eval_op_inst_idx]
+QED
+
+Theorem calldata_word_live_frag_mem:
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
+  eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
+  d < dimword (:256) /\ d + 32 <= initial.vs_alloca_next /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var src ==>
+  frag_exec_mem ctx st last (\s. s = initial)
+    (\t. abi_clamp_ok clamp (abi_decode_load CALLDATALOAD p initial) /\
+      mem_word_at d t.vs_memory = abi_decode_load CALLDATALOAD p initial /\
+      abi_decode_frame d 32 initial t /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op initial) /\
+      t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next)
+    (\r. ?z. r = Abort Revert_abort z)
+Proof
+  strip_tac >> drule_all calldata_word_live_frag_mem_guard >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  drule fragExecMemTheory.frag_exec_mem_pre_exit >>
+  disch_then (qspecl_then [`\s. s = initial`, `\r. ?z. r = Abort Revert_abort z`] mp_tac) >>
+  simp[]
 QED

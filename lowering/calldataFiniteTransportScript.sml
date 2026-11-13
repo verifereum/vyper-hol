@@ -3,6 +3,25 @@ Theory calldataFiniteTransport
 Ancestors
   fragExecMem allocaFrontierBound venomMemDefs
 
+Theorem calldata_finite_fragment_run_guard:
+  frag_exec_mem ctx st last (\s. s = initial) Q
+    (\r. R /\ ?z. r = Abort Revert_abort z) /\
+  fn_has_code st last fn /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  (R /\ ?fuel z. run_from fuel ctx fn initial = Abort Revert_abort z /\
+    mem_safe_run fuel ctx fn initial) \/
+  ?t. Q t /\ ~t.vs_halted /\ t.vs_current_bb = last.cs_current_bb /\
+    t.vs_inst_idx = LENGTH last.cs_current_insts /\
+    (!fuel r. run_from fuel ctx fn t = r /\ (!err. r <> Error err) ==>
+      ?fuel'. run_from fuel' ctx fn initial = r /\
+        (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn initial))
+Proof
+  simp_tac bool_ss [frag_exec_mem_def] >> strip_tac >>
+  first_x_assum (qspec_then `fn` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem calldata_finite_fragment_run:
   frag_exec_mem ctx st last (\s. s = initial) Q
     (\r. ?z. r = Abort Revert_abort z) /\
@@ -17,9 +36,8 @@ Theorem calldata_finite_fragment_run:
       ?fuel'. run_from fuel' ctx fn initial = r /\
         (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn initial))
 Proof
-  simp_tac bool_ss [frag_exec_mem_def] >> strip_tac >>
-  first_x_assum (qspec_then `fn` mp_tac) >>
-  simp[] >> metis_tac[]
+  mp_tac (Q.INST [`R` |-> `T`] calldata_finite_fragment_run_guard) >>
+  simp[]
 QED
 
 Theorem calldata_alloca_inv_fields:

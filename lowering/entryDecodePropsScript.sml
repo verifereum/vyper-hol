@@ -388,12 +388,13 @@ QED
    One hypothesis ties the compiler's view to the source: a flag's member
    count in the compile env is the source's (the same clause exprSimHyps
    uses). *)
-Theorem word_arg_clamp_ok:
+Theorem word_arg_clamp_ok_selected:
   !tenv sfields cenv ty tv v.
     is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
     value_has_type tv v /\
-    (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
-              cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
+    (!nsid. ty = FlagT nsid ==> ?m.
+       FLOOKUP tenv nsid = SOME (FlagArgs m) /\
+       cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
     abi_clamp_ok
       (case type_to_abi_dec_info sfields cenv ty of
          DecPrimWord c => c
@@ -421,8 +422,25 @@ Proof
         (`~(i < 0)` by intLib.ARITH_TAC >>
          simp[integer_wordTheory.i2w_def]) >>
       qspecl_then [`n`, `Num i`] mp_tac n2w_lsr_clamp_ok >> simp[]) >>
-  first_x_assum drule >> strip_tac >>
-  qspecl_then [`m`, `n`] mp_tac n2w_lsr_clamp_ok >> simp[]
+  qspecl_then [`cenv.ce_flag_n_members (nsid_to_string p)`, `n`]
+    mp_tac n2w_lsr_clamp_ok >> simp[]
+QED
+
+Theorem word_arg_clamp_ok:
+  !tenv sfields cenv ty tv v.
+    is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
+    value_has_type tv v /\
+    (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
+              cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
+    abi_clamp_ok
+      (case type_to_abi_dec_info sfields cenv ty of
+         DecPrimWord c => c
+       | _ => NoClamp)
+      (typed_val_to_w256 tv v)
+Proof
+  rpt strip_tac >> irule word_arg_clamp_ok_selected >> simp[] >>
+  qexists_tac `tenv` >> simp[] >> rpt strip_tac >>
+  gvs[evaluate_type_def, AllCaseEqs()] >> metis_tac[]
 QED
 
 (* Inverse primitives use the actual accepted word, not a source encoding. *)
