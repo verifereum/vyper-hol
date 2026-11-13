@@ -8,7 +8,7 @@ Ancestors
   list rich_list arithmetic revertReasonPrefixFramePtr loweringStateRelDefs
   abiEncodePtrInputTransport abiEncodeWindowBuiltin bodyPtrBopEntry
   exprSimAbiEncodeFramedBuiltin abiBuiltinEncodeCorrect abiBuiltinEncodeSetup
-  abiDecoderReentry
+  abiDecoderReentry abiEncoderExtendSim
 
 Theorem setup_add_continuation[local]:
   IS_SOME (lookup_var src s) /\ IS_SOME (FLOOKUP G src) /\
@@ -320,6 +320,192 @@ Proof
       simp[DROP_LENGTH_APPEND, mk_inst_def]
 QED
 
+Theorem abi_encode_setup_ptr_entry_semantic:
+  abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
+  fn_has_code st ready func /\
+  m = (case method_id of NONE => 0 | SOME mid => 4) /\
+  w = (case method_id of NONE => 0 | SOME mid => 32) /\
+  d = p+32+m /\ outsz = 32+32*word_size (maxlen+m) /\
+  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
+  outsz < dimword (:256) /\
+  (method_id <> NONE ==> p+32 < dimword (:256)) /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  (!mem. mem_agree_outside tn.t_mem initial.vs_memory mem ==>
+     abi_encoder_window_input ei at av sb cap mem) /\
+  eval_operand src initial = SOME (n2w sb) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  alloca_inv (abi_builtin_allocate_state st.cs_next_id outsz initial) /\
+  alloca_room ctx func (abi_builtin_allocate_state st.cs_next_id outsz initial) /\
+  sb+cap <= (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_alloca_next /\
+  d+LENGTH (enc at av) <= (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_alloca_next /\
+  (sb+cap <= p+32 \/ p+32+w <= sb) /\
+  LENGTH (enc at av) <= maxlen /\ ~ctx_has_dalloca ctx /\
+  op_taint tn src = {} /\
+  (0 < cap ==> ?x. src = Var x /\ ptr_covers G tn x initial cap) /\
+  (0 < cap ==> sb+cap <= initial.vs_alloca_next) ==>
+  ?prepared H tf x.
+    eval_operand (FST ops) prepared = SOME (n2w p) /\
+    eval_operand (SND ops) prepared = SOME (n2w d) /\
+    eval_operand src prepared = SOME (n2w sb) /\
+    abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id outsz p w initial prepared /\
+    (case method_id of NONE => T | SOME mid =>
+      mem_bytes_at (p+32) 4 prepared.vs_memory = abi_builtin_encode_method_bytes mid) /\
+    gas_path_ptr D 0 ctx func PG G tn initial 0 H tf (OK prepared) /\
+    FST ops = Var x /\ ptr_covers H tf x prepared outsz /\
+    op_taint tf src = {} /\ op_taint tf (SND ops) = {} /\
+    (0 < cap ==> ?y. src = Var y /\ ptr_covers H tf y prepared cap) /\
+    (0 < LENGTH (enc at av) ==> ?y. SND ops = Var y /\
+      ptr_covers H tf y prepared (LENGTH (enc at av))) /\
+    (!mem. mem_agree_outside tf.t_mem prepared.vs_memory mem ==>
+      abi_encoder_window_input ei at av sb cap mem) /\
+    alloca_inv prepared /\ alloca_room ctx func prepared /\
+    sb+cap <= prepared.vs_alloca_next /\
+    d+LENGTH (enc at av) <= prepared.vs_alloca_next /\
+    ~prepared.vs_halted /\ prepared.vs_current_bb = ready.cs_current_bb /\
+    prepared.vs_inst_idx = LENGTH ready.cs_current_insts /\
+    prepared.vs_labels = initial.vs_labels /\
+    prepared.vs_accounts = initial.vs_accounts /\ prepared.vs_transient = initial.vs_transient /\
+    prepared.vs_logs = initial.vs_logs /\ prepared.vs_requests = initial.vs_requests /\
+    prepared.vs_pending_deletions = initial.vs_pending_deletions /\
+    abi_decode_sim ctx func initial prepared /\
+    (!y. not_fresh_at st y ==> FLOOKUP H y = FLOOKUP G y /\
+      op_taint tf (Var y) = op_taint tn (Var y)) /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    tf.t_mem =
+      (if FLOOKUP initial.vs_allocas st.cs_next_id = NONE then
+         tn.t_mem UNION {i | p <= i /\ i < p+outsz}
+       else tn.t_mem) DIFF
+      (case method_id of NONE => {} | SOME mid => {i | p+32 <= i /\ i < p+64}) /\
+    abi_encode_exec_frame func initial prepared /\
+    abi_encoder_extend_sim ctx func initial prepared
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `FLOOKUP (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_allocas
+     st.cs_next_id = SOME (p,outsz)` by
+    (irule abi_builtin_allocate_state_row >> simp[]) >>
+  `p+outsz < dimword (:256)` by
+    (drule alloca_room_next_lt >> strip_tac >>
+     qpat_x_assum `alloca_inv _` (mp_tac o REWRITE_RULE
+       [venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def]) >>
+     disch_then (strip_assume_tac) >>
+     qpat_x_assum `!aid base sz. _` (qspecl_then [`st.cs_next_id`, `p`, `outsz`] mp_tac) >>
+     simp[] >> strip_tac >> gvs[] >> decide_tac) >>
+  `abi_encoder_window_input ei at av sb cap initial.vs_memory` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  drule_all abi_encode_window_setup_concrete >>
+  disch_then (qspec_then `ctx` mp_tac) >> simp_tac bool_ss [LET_THM] >> strip_tac >>
+  `?H tf x.
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st ready) initial H tf /\
+    FST ops = Var x /\ ptr_covers H tf x raw outsz /\
+    op_taint tf (SND ops) = {} /\
+    (0 < LENGTH (enc at av) ==> ?y. SND ops = Var y /\
+      ptr_covers H tf y raw (LENGTH (enc at av))) /\
+    tf.t_mem =
+      (if FLOOKUP initial.vs_allocas st.cs_next_id = NONE then
+        tn.t_mem UNION {i | p <= i /\ i < p+outsz} else tn.t_mem) DIFF
+      (case method_id of NONE => {} | SOME mid => {i | p+32 <= i /\ i < p+64})` by
+    (irule abi_encode_setup_ptr_sequence_mem >> metis_tac[]) >>
+  drule_all abi_encode_setup_ptr_ghost_frame >> strip_tac >>
+  `EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;MSTORE]) (emitted_insts st ready)` by
+    (qpat_x_assum `abi_builtin_encode_setup _ _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `method_id` >>
+     simp[abi_builtin_encode_setup_def, abi_builtin_encode_method_id_def,
+       compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+       fresh_id_def, emit_def] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+     simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[DROP_LENGTH_APPEND, mk_inst_def]) >>
+  `abi_encode_exec_frame func initial raw` by
+    (drule_all abi_encode_setup_sequence_frame >> simp[]) >>
+  drule abi_builtin_encode_setup_shape >> strip_tac >>
+  `abi_encoder_extend_sim ctx func initial
+     (raw with vs_inst_idx := LENGTH ready.cs_current_insts)` by
+    (irule abi_encoder_run_sequence_extend_sim >> metis_tac[]) >>
+  qabbrev_tac `prepared = raw with vs_inst_idx := LENGTH ready.cs_current_insts` >>
+  `eval_operand src prepared = SOME (n2w sb)` by
+    metis_tac[abi_builtin_encode_setup_frame_def] >>
+  `(!y. src = Var y ==> not_fresh_at st y)` by
+    (rpt strip_tac >> fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+      not_fresh_at_def]) >>
+  qexistsl [`prepared`, `H`, `tf`, `x`] >>
+  simp[ptr_covers_def, lookup_var_def, Abbr `prepared`] >>
+  rpt conj_tac
+  >- suspend "entry_path"
+  >- suspend "entry_source_taint"
+  >- suspend "entry_source_cover"
+  >- suspend "entry_dest_cover"
+  >- suspend "entry_robust"
+  >- suspend "entry_alloca_inv"
+  >- suspend "entry_alloca_room"
+  >> (drule abi_window_setup_frontier >> strip_tac >> gvs[])
+QED
+
+Resume abi_encode_setup_ptr_entry_semantic[entry_path]:
+  drule abi_builtin_encode_setup_shape >> strip_tac >>
+  `?bb. lookup_block initial.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts st ready) (DROP initial.vs_inst_idx bb.bb_instructions)` by
+    (irule bop_suffix_placement >> qexistsl [`st`, `ready`] >>
+     simp[same_blocks_def, inst_extends_def] >> metis_tac[inst_extends_def]) >>
+  `initial.vs_inst_idx + LENGTH (emitted_insts st ready) = LENGTH ready.cs_current_insts` by
+    (fs[inst_extends_def] >> simp[]) >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts st ready) = []` by
+    (qpat_x_assum `abi_builtin_encode_setup _ _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `method_id` >>
+     simp[abi_builtin_encode_setup_def, abi_builtin_encode_method_id_def,
+       compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+       fresh_id_def, emit_def] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+     simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     simp[DROP_LENGTH_APPEND, mk_inst_def]) >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[]
+QED
+
+Resume abi_encode_setup_ptr_entry_semantic[entry_source_taint]:
+  Cases_on `src` >> fs[op_taint_def] >> metis_tac[op_taint_def]
+QED
+
+Resume abi_encode_setup_ptr_entry_semantic[entry_source_cover]:
+  rpt strip_tac >>
+  qpat_x_assum `0 < cap ==> ?y. _` drule >> strip_tac >>
+  gvs[ptr_covers_def, lookup_var_def, eval_operand_def] >> metis_tac[]
+QED
+
+Resume abi_encode_setup_ptr_entry_semantic[entry_dest_cover]:
+  rpt strip_tac >>
+  qpat_x_assum `0 < LENGTH (enc at av) ==> _` drule >> strip_tac >>
+  fs[ptr_covers_def, lookup_var_def] >> metis_tac[]
+QED
+
+Resume abi_encode_setup_ptr_entry_semantic[entry_robust]:
+  match_mp_tac (Q.INST [`old_t` |-> `tn.t_mem`,
+    `old_mem` |-> `initial.vs_memory`] abi_encode_robust_window_transport) >>
+  conj_tac >- metis_tac[] >>
+  gen_tac >> disch_then strip_assume_tac >> conj_tac
+  >- (Cases_on `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` >>
+      fs[] >> simp[] >>
+      `0 < cap` by decide_tac >>
+      `sb+cap <= p` by decide_tac >>
+      Cases_on `method_id` >> fs[] >> simp[] >> decide_tac) >>
+  qpat_x_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` mp_tac >>
+  simp[abi_builtin_encode_setup_frame_def, abiDecoderContractTheory.abi_decode_frame_def] >>
+  strip_tac >> first_x_assum irule >> decide_tac
+QED
+
+Resume abi_encode_setup_ptr_entry_semantic[entry_alloca_inv]:
+  drule abi_window_setup_alloca_inv >> simp[]
+QED
+
+Resume abi_encode_setup_ptr_entry_semantic[entry_alloca_room]:
+  drule abi_window_setup_room >> strip_tac >> gvs[]
+QED
+
+Finalise abi_encode_setup_ptr_entry_semantic
+
+(* Compatibility projection: the execution is shared with the enriched entry. *)
 Theorem abi_encode_setup_ptr_entry:
   abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
   fn_has_code st ready func /\
@@ -380,109 +566,7 @@ Theorem abi_encode_setup_ptr_entry:
       (case method_id of NONE => {} | SOME mid => {i | p+32 <= i /\ i < p+64})
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `FLOOKUP (abi_builtin_allocate_state st.cs_next_id outsz initial).vs_allocas
-     st.cs_next_id = SOME (p,outsz)` by
-    (irule abi_builtin_allocate_state_row >> simp[]) >>
-  `p+outsz < dimword (:256)` by
-    (drule alloca_room_next_lt >> strip_tac >>
-     qpat_x_assum `alloca_inv _` (mp_tac o REWRITE_RULE
-       [venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def]) >>
-     disch_then (strip_assume_tac) >>
-     qpat_x_assum `!aid base sz. _` (qspecl_then [`st.cs_next_id`, `p`, `outsz`] mp_tac) >>
-     simp[] >> strip_tac >> gvs[] >> decide_tac) >>
-  `abi_encoder_window_input ei at av sb cap initial.vs_memory` by
-    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
-  drule_all abi_encode_window_setup_concrete >>
-  disch_then (qspec_then `ctx` mp_tac) >> simp_tac bool_ss [LET_THM] >> strip_tac >>
-  `?H tf x.
-    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st ready) initial H tf /\
-    FST ops = Var x /\ ptr_covers H tf x raw outsz /\
-    op_taint tf (SND ops) = {} /\
-    (0 < LENGTH (enc at av) ==> ?y. SND ops = Var y /\
-      ptr_covers H tf y raw (LENGTH (enc at av))) /\
-    tf.t_mem =
-      (if FLOOKUP initial.vs_allocas st.cs_next_id = NONE then
-        tn.t_mem UNION {i | p <= i /\ i < p+outsz} else tn.t_mem) DIFF
-      (case method_id of NONE => {} | SOME mid => {i | p+32 <= i /\ i < p+64})` by
-    (irule abi_encode_setup_ptr_sequence_mem >> metis_tac[]) >>
-  drule_all abi_encode_setup_ptr_ghost_frame >> strip_tac >>
-  qabbrev_tac `prepared = raw with vs_inst_idx := LENGTH ready.cs_current_insts` >>
-  `eval_operand src prepared = SOME (n2w sb)` by
-    metis_tac[abi_builtin_encode_setup_frame_def] >>
-  `(!y. src = Var y ==> not_fresh_at st y)` by
-    (rpt strip_tac >> fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
-      not_fresh_at_def]) >>
-  qexistsl [`prepared`, `H`, `tf`, `x`] >>
-  simp[ptr_covers_def, lookup_var_def, Abbr `prepared`] >>
-  rpt conj_tac
-  >- suspend "entry_path"
-  >- suspend "entry_source_taint"
-  >- suspend "entry_source_cover"
-  >- suspend "entry_dest_cover"
-  >- suspend "entry_robust"
-  >- suspend "entry_alloca_inv"
-  >- suspend "entry_alloca_room"
-  >> (drule abi_window_setup_frontier >> strip_tac >> gvs[])
+  drule_all abi_encode_setup_ptr_entry_semantic >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl [`prepared`, `H`, `tf`, `x`] >> simp[]
 QED
-
-Resume abi_encode_setup_ptr_entry[entry_path]:
-  drule abi_builtin_encode_setup_shape >> strip_tac >>
-  `?bb. lookup_block initial.vs_current_bb func.fn_blocks = SOME bb /\
-    isPREFIX (emitted_insts st ready) (DROP initial.vs_inst_idx bb.bb_instructions)` by
-    (irule bop_suffix_placement >> qexistsl [`st`, `ready`] >>
-     simp[same_blocks_def, inst_extends_def] >> metis_tac[inst_extends_def]) >>
-  `initial.vs_inst_idx + LENGTH (emitted_insts st ready) = LENGTH ready.cs_current_insts` by
-    (fs[inst_extends_def] >> simp[]) >>
-  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts st ready) = []` by
-    (qpat_x_assum `abi_builtin_encode_setup _ _ _ = _` mp_tac >>
-     rpt (pop_assum kall_tac) >> Cases_on `method_id` >>
-     simp[abi_builtin_encode_setup_def, abi_builtin_encode_method_id_def,
-       compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
-       fresh_id_def, emit_def] >>
-     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-     simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
-     simp[DROP_LENGTH_APPEND, mk_inst_def]) >>
-  drule_all run_inst_seq_gas_path_ptr >> simp[]
-QED
-
-Resume abi_encode_setup_ptr_entry[entry_source_taint]:
-  Cases_on `src` >> fs[op_taint_def] >> metis_tac[op_taint_def]
-QED
-
-Resume abi_encode_setup_ptr_entry[entry_source_cover]:
-  rpt strip_tac >>
-  qpat_x_assum `0 < cap ==> ?y. _` drule >> strip_tac >>
-  gvs[ptr_covers_def, lookup_var_def, eval_operand_def] >> metis_tac[]
-QED
-
-Resume abi_encode_setup_ptr_entry[entry_dest_cover]:
-  rpt strip_tac >>
-  qpat_x_assum `0 < LENGTH (enc at av) ==> _` drule >> strip_tac >>
-  fs[ptr_covers_def, lookup_var_def] >> metis_tac[]
-QED
-
-Resume abi_encode_setup_ptr_entry[entry_robust]:
-  match_mp_tac (Q.INST [`old_t` |-> `tn.t_mem`,
-    `old_mem` |-> `initial.vs_memory`] abi_encode_robust_window_transport) >>
-  conj_tac >- metis_tac[] >>
-  gen_tac >> disch_then strip_assume_tac >> conj_tac
-  >- (Cases_on `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` >>
-      fs[] >> simp[] >>
-      `0 < cap` by decide_tac >>
-      `sb+cap <= p` by decide_tac >>
-      Cases_on `method_id` >> fs[] >> simp[] >> decide_tac) >>
-  qpat_x_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` mp_tac >>
-  simp[abi_builtin_encode_setup_frame_def, abiDecoderContractTheory.abi_decode_frame_def] >>
-  strip_tac >> first_x_assum irule >> decide_tac
-QED
-
-Resume abi_encode_setup_ptr_entry[entry_alloca_inv]:
-  drule abi_window_setup_alloca_inv >> simp[]
-QED
-
-Resume abi_encode_setup_ptr_entry[entry_alloca_room]:
-  drule abi_window_setup_room >> strip_tac >> gvs[]
-QED
-
-Finalise abi_encode_setup_ptr_entry
