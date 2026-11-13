@@ -64,6 +64,8 @@ Proof
   >- (disj1_tac >> first_assum ACCEPT_TAC)
   >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`, `es_end`, `r`] >>
       drule_then (drule_then assume_tac) stmtSimPropsTheory.gas_marked_exec_valid_prefix >>
+      fs[] >> metis_tac[])
+  >- (disj2_tac >> disj1_tac >> qexistsl_tac [`res`, `es_end`, `r`] >>
       fs[] >> metis_tac[]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
