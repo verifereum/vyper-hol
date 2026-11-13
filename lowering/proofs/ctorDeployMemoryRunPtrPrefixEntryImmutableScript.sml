@@ -9,7 +9,7 @@ Ancestors
   immutableRelation valueEncoding valueEncodingProps valueEncodingProofs
   vyperValue vyperTypeInitialState vyperTypeContractStaticMaps
   vyperTypeConstantCells abiCallerBuiltinInput entryStateRel
-  rich_list list finite_map compileEnv loweringSlice
+  rich_list list finite_map compileEnv loweringSlice immSectionDead
 
 Theorem prefix_entry_zero_word_bytes[local]:
   word_to_bytes (0w:bytes32) T = REPLICATE 32 (0w:word8)
