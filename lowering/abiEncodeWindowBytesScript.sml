@@ -25,7 +25,8 @@ Theorem abi_encode_address_prefix_mem[local]:
     (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t) /\ eval_operand buf t = SOME (n2w p) /\
     eval_operand data t = SOME (n2w (p+32+(case mid of NONE => 0 | SOME _ => 4))) /\
     (case mid of NONE => T | SOME m =>
-      mem_bytes_at (p+32) 4 t.vs_memory = abi_builtin_encode_method_bytes m)
+      mem_bytes_at (p+32) 4 t.vs_memory = abi_builtin_encode_method_bytes m) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   strip_tac >>
   `fn_has_code st en func /\ fn_has_code en ready func /\
@@ -36,7 +37,7 @@ Proof
      drule_all fn_has_code_split >> simp[]) >>
   `eval_operand (Lit (n2w (32+(case mid of NONE => 0 | SOME _ => 4)))) s =
     SOME (n2w (32+(case mid of NONE => 0 | SOME _ => 4)))` by simp[eval_operand_def] >>
-  drule_all window_emit_add_phase_mem_conditional_frame >> strip_tac >>
+  drule_all window_emit_add_phase_mem_conditional_frame_memory >> strip_tac >>
   rename1 `window_phase ctx func st en {} [] s addressed` >>
   `eval_operand buf addressed = SOME (n2w p)` by metis_tac[window_phase_operand] >>
   `(!x. buf = Var x ==> not_fresh_at en x)` by metis_tac[not_fresh_at_mono] >>
@@ -46,7 +47,7 @@ Proof
    (IS_SOME mid ==> p+64 <= addressed.vs_alloca_next)` by
     (fs[window_phase_def, window_alloca_growth_def] >> strip_tac >>
      `p+64 <= s.vs_alloca_next` by metis_tac[] >> decide_tac) >>
-  drule_all abi_encode_method_id_window_mem >> strip_tac >>
+  drule_all abi_encode_method_id_window_mem_growth >> strip_tac >>
   qexists_tac `t` >> conj_tac
   >- (irule window_phase_chain >> qexistsl_tac [`{}`, `[]`, `en`, `{}`,
        `case mid of NONE => [] | SOME _ => [(p+32,32)]`, `addressed`] >> simp[]) >>
@@ -55,10 +56,10 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- ( `eval_operand data t = SOME (n2w p + n2w (32+(case mid of NONE => 0 | SOME _ => 4)))` by
     metis_tac[window_phase_operand] >> metis_tac[word_add_n2w, ADD_ASSOC]) >>
-  first_assum ACCEPT_TAC
+  asm_rewrite_tac[] >> metis_tac[]
 QED
 
-Theorem abi_encode_setup_window_bytes:
+Theorem abi_encode_setup_window_bytes_growth:
   abi_builtin_encode_setup mid maxlen st = (ops,ready) /\
   fn_has_code st ready func /\ alloca_room ctx func s /\ alloca_inv s /\
   32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4)) < dimword (:256) /\
@@ -80,7 +81,8 @@ Theorem abi_encode_setup_window_bytes:
      FLOOKUP s.vs_allocas st.cs_next_id =
        SOME (p,32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4)))) /\
     (case mid of NONE => T | SOME m =>
-      mem_bytes_at (p+32) 4 t.vs_memory = abi_builtin_encode_method_bytes m)
+      mem_bytes_at (p+32) 4 t.vs_memory = abi_builtin_encode_method_bytes m) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   strip_tac >> drule abi_builtin_encode_setup_trace >> strip_tac >>
   drule_all abi_encode_setup_parts >> strip_tac >>
@@ -111,7 +113,35 @@ Proof
   `allocated_s.vs_alloca_next <= t.vs_alloca_next` by
     metis_tac[window_phase_resources, window_alloca_growth_def] >>
   conj_tac >- decide_tac >> conj_tac >- decide_tac >>
-  conj_tac >> first_assum ACCEPT_TAC
+  asm_rewrite_tac[] >> metis_tac[]
+QED
+
+Theorem abi_encode_setup_window_bytes:
+  abi_builtin_encode_setup mid maxlen st = (ops,ready) /\
+  fn_has_code st ready func /\ alloca_room ctx func s /\ alloca_inv s /\
+  32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4)) < dimword (:256) /\
+  (!b sz. FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,sz) ==>
+    sz = 32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4))) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t p. window_phase ctx func st ready {st.cs_next_id}
+      (case mid of NONE => [] | SOME _ => [(p+32,32)]) s t /\
+    mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t) /\
+    eval_operand (FST ops) t = SOME (n2w p) /\
+    eval_operand (SND ops) t = SOME (n2w (p+32+(case mid of NONE => 0 | SOME _ => 4))) /\
+    FLOOKUP t.vs_allocas st.cs_next_id =
+      SOME (p,32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4))) /\
+    p+32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4)) <= t.vs_alloca_next /\
+    p+32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4)) < dimword (:256) /\
+    ((FLOOKUP s.vs_allocas st.cs_next_id = NONE /\ p = s.vs_alloca_next) \/
+     FLOOKUP s.vs_allocas st.cs_next_id =
+       SOME (p,32+32*word_size (maxlen+(case mid of NONE => 0 | SOME _ => 4)))) /\
+    (case mid of NONE => T | SOME m =>
+      mem_bytes_at (p+32) 4 t.vs_memory = abi_builtin_encode_method_bytes m)
+Proof
+  strip_tac >> drule_all abi_encode_setup_window_bytes_growth >>
+  strip_tac >> qexistsl [`t`, `p`] >> asm_rewrite_tac[]
 QED
 
 Theorem abi_encode_selector_window_frame:
@@ -161,9 +191,10 @@ Theorem abi_encode_finish_bytes_memory[local]:
     (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t) /\ eval_operand buf t = SOME (n2w p) /\
     FLOOKUP t.vs_allocas site = SOME (p,n) /\
     mem_bytes_at (p+32) (LENGTH bytes) t.vs_memory = bytes /\
-    val_in_memory (BaseTV (BytesT (Dynamic bound))) (vyperValue$BytesV bytes) p t.vs_memory
+    val_in_memory (BaseTV (BytesT (Dynamic bound))) (vyperValue$BytesV bytes) p t.vs_memory /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
-  strip_tac >> drule_all abi_encode_finish_window_mem >> strip_tac >>
+  strip_tac >> drule_all abi_encode_finish_window_mem_growth >> strip_tac >>
   `abi_encoder_registered_effect {} [(p,32)] s t` by metis_tac[window_phase_effect] >>
   `mem_bytes_at (p+32) (LENGTH bytes) t.vs_memory =
      mem_bytes_at (p+32) (LENGTH bytes) s.vs_memory` by
@@ -172,6 +203,42 @@ Proof
   qexists_tac `t` >> asm_rewrite_tac[] >> conj_tac
   >- metis_tac[abi_encoder_registered_effect_allocated] >>
   simp[val_in_memory_def, mem_word_at_eq_mload, word_add_n2w]
+QED
+
+Theorem abi_encode_finish_window_bytes_growth:
+  abi_builtin_encode_finish buf len (case mid of NONE => 0 | SOME _ => 4) st = ((),en) /\
+  fn_has_code st en func /\ eval_operand buf s = SOME (n2w p) /\
+  eval_operand len s = SOME (n2w (LENGTH (enc at av))) /\
+  (!x. buf = Var x ==> not_fresh_at st x) /\
+  p < dimword (:256) /\ p+32 <= s.vs_alloca_next /\
+  alloca_inv s /\ alloca_room ctx func s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  FLOOKUP s.vs_allocas site = SOME (p,n) /\ LENGTH (enc at av) <= maxlen /\
+  (case mid of NONE => T | SOME m =>
+    mem_bytes_at (p+32) 4 s.vs_memory = abi_builtin_encode_method_bytes m) /\
+  mem_bytes_at (p+32+(case mid of NONE => 0 | SOME _ => 4))
+    (LENGTH (enc at av)) s.vs_memory = enc at av ==>
+  ?t. window_phase ctx func st en {} [(p,32)] s t /\
+    mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t) /\ eval_operand buf t = SOME (n2w p) /\
+    FLOOKUP t.vs_allocas site = SOME (p,n) /\
+    mem_bytes_at (p+32)
+      (LENGTH (case mid of NONE => enc at av | SOME m => abi_builtin_encode_method_bytes m ++ enc at av))
+      t.vs_memory = (case mid of NONE => enc at av | SOME m => abi_builtin_encode_method_bytes m ++ enc at av) /\
+    val_in_memory (BaseTV (BytesT (Dynamic (maxlen+(case mid of NONE => 0 | SOME _ => 4)))))
+      (vyperValue$BytesV (case mid of NONE => enc at av | SOME m => abi_builtin_encode_method_bytes m ++ enc at av))
+      p t.vs_memory /\ LENGTH s.vs_memory <= LENGTH t.vs_memory
+Proof
+  Cases_on `mid` >> simp_tac (srw_ss()) [] >> strip_tac
+  >- (irule abi_encode_finish_bytes_memory >> goal_assum (drule_at Any) >> simp[] >>
+      qexistsl_tac [`0`, `len`, `LENGTH (enc at av)`] >> simp[]) >>
+  `mem_bytes_at (p+32) (LENGTH (abi_builtin_encode_method_bytes x ++ enc at av))
+     s.vs_memory = abi_builtin_encode_method_bytes x ++ enc at av` by
+    (simp_tac (srw_ss()) [LENGTH_APPEND, abi_builtin_encode_method_bytes_length] >>
+     once_rewrite_tac[abi_encoder_mem_split] >> asm_rewrite_tac[]) >>
+  `LENGTH (abi_builtin_encode_method_bytes x ++ enc at av) = LENGTH (enc at av)+4` by simp[] >>
+  drule_all (Q.INST [`bytes` |-> `abi_builtin_encode_method_bytes x ++ enc at av`,
+    `bound` |-> `maxlen+4:num`] abi_encode_finish_bytes_memory) >> simp[]
 QED
 
 Theorem abi_encode_finish_window_bytes:
@@ -198,14 +265,6 @@ Theorem abi_encode_finish_window_bytes:
       (vyperValue$BytesV (case mid of NONE => enc at av | SOME m => abi_builtin_encode_method_bytes m ++ enc at av))
       p t.vs_memory
 Proof
-  Cases_on `mid` >> simp_tac (srw_ss()) [] >> strip_tac
-  >- (irule abi_encode_finish_bytes_memory >> goal_assum (drule_at Any) >> simp[] >>
-      qexistsl_tac [`0`, `len`, `LENGTH (enc at av)`] >> simp[]) >>
-  `mem_bytes_at (p+32) (LENGTH (abi_builtin_encode_method_bytes x ++ enc at av))
-     s.vs_memory = abi_builtin_encode_method_bytes x ++ enc at av` by
-    (simp_tac (srw_ss()) [LENGTH_APPEND, abi_builtin_encode_method_bytes_length] >>
-     once_rewrite_tac[abi_encoder_mem_split] >> asm_rewrite_tac[]) >>
-  `LENGTH (abi_builtin_encode_method_bytes x ++ enc at av) = LENGTH (enc at av)+4` by simp[] >>
-  drule_all (Q.INST [`bytes` |-> `abi_builtin_encode_method_bytes x ++ enc at av`,
-    `bound` |-> `maxlen+4:num`] abi_encode_finish_bytes_memory) >> simp[]
+  strip_tac >> drule_all abi_encode_finish_window_bytes_growth >>
+  strip_tac >> qexists `t` >> asm_rewrite_tac[]
 QED

@@ -15,6 +15,31 @@ Proof
   simp[] >> irule below_frontier_no_ranges >> gvs[mk_inst_def]
 QED
 
+Theorem window_emit_add_phase_mem_memory:
+  emit_op ADD [lhs;rhs] st = (out,en) /\
+  eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. window_phase ctx func st en {} [] s t /\
+    eval_operand out t = SOME (a+b) /\
+    (!x. out = Var x ==> not_fresh_at en x) /\ t.vs_labels = s.vs_labels /\
+    mem_cont_sim ctx func s t /\ t.vs_memory = s.vs_memory
+Proof
+  strip_tac >> drule_all window_emit_add_pure >> strip_tac >>
+  `t.vs_memory = s.vs_memory` by fs[window_pure_seq_def] >>
+  `run_inst_seq_mem_ok (emitted_insts st en) s` by
+    metis_tac[window_emit_no_ranges_mem] >>
+  `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
+    metis_tac[window_seq_mem_cont, window_pure_seq_def] >>
+  qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
+  (conj_tac >- metis_tac[window_pure_seq_phase]) >>
+  simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
+  `t.vs_labels = s.vs_labels` by
+    metis_tac[window_pure_seq_def, window_seq_labels] >>
+  Cases_on `out` >> fs[eval_operand_def, lookup_var_def]
+QED
+
 Theorem window_emit_add_phase_mem:
   emit_op ADD [lhs;rhs] st = (out,en) /\
   eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b /\
@@ -26,17 +51,8 @@ Theorem window_emit_add_phase_mem:
     (!x. out = Var x ==> not_fresh_at en x) /\ t.vs_labels = s.vs_labels /\
     mem_cont_sim ctx func s t
 Proof
-  strip_tac >> drule_all window_emit_add_pure >> strip_tac >>
-  `run_inst_seq_mem_ok (emitted_insts st en) s` by
-    metis_tac[window_emit_no_ranges_mem] >>
-  `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
-    metis_tac[window_seq_mem_cont, window_pure_seq_def] >>
-  qexists_tac `t with vs_inst_idx := LENGTH en.cs_current_insts` >>
-  (conj_tac >- metis_tac[window_pure_seq_phase]) >>
-  simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
-  `t.vs_labels = s.vs_labels` by
-    metis_tac[window_pure_seq_def, window_seq_labels] >>
-  Cases_on `out` >> fs[eval_operand_def, lookup_var_def]
+  strip_tac >> drule_all window_emit_add_phase_mem_memory >>
+  strip_tac >> qexists `t` >> asm_rewrite_tac[]
 QED
 
 Theorem window_emit_alloca32_phase_mem:

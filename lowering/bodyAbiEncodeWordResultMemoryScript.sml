@@ -1,7 +1,7 @@
 (* Re-establish body state at the actual singleton word staging endpoint. *)
 Theory bodyAbiEncodeWordResultMemory
 Ancestors
-  bodyAbiEncodeWordMemory bodyAbiEncodeResultMemory abiEncoderWindowContract
+  bodyAbiEncodeWordMemory bodyAbiEncodeResultMemory abiEncoderWindowContract abiEncodeWordWindowGrowth
   abiEncoderWindowPhase abiEncoderWindowMemFrame abiEncoderRegisteredEffect
   abiBuiltinEncodeWord abiEncoderWindowChild abiEncoderWindow fragExec
   abiCallerLocalScratch exprSimAlloc loweringHalt emitHelperProps localPtrsProps exprSimProps exprLoweringProps compileEnv loweringPosts

@@ -20,7 +20,7 @@ Proof
   simp[] >> drule emitted_insts_emit_op >> simp[mk_inst_def] >> gvs[]
 QED
 
-Theorem window_emit_add_phase_mem_frame:
+Theorem window_emit_add_phase_mem_frame_memory:
   emit_op ADD [lhs;rhs] st = (out,en) /\
   eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b /\
   fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
@@ -29,9 +29,11 @@ Theorem window_emit_add_phase_mem_frame:
   ?t. window_phase ctx func st en {} [] s t /\
     eval_operand out t = SOME (a+b) /\
     (!x. out = Var x ==> not_fresh_at en x) /\ t.vs_labels = s.vs_labels /\
-    mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t
+    mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t /\
+    t.vs_memory = s.vs_memory
 Proof
   strip_tac >> drule_all window_emit_add_pure >> strip_tac >>
+  `t.vs_memory = s.vs_memory` by fs[window_pure_seq_def] >>
   `window_seq st en s t` by fs[window_pure_seq_def] >>
   `window_mem_frame ctx func s (t with vs_inst_idx := LENGTH en.cs_current_insts)` by
     (irule window_emit_op_seq_frame >> goal_assum (drule_at Any) >>
@@ -46,6 +48,21 @@ Proof
   simp_tac (srw_ss()) [eval_operand_def, lookup_var_def] >>
   `t.vs_labels = s.vs_labels` by metis_tac[window_seq_labels] >>
   Cases_on `out` >> fs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem window_emit_add_phase_mem_frame:
+  emit_op ADD [lhs;rhs] st = (out,en) /\
+  eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\ fn_inst_ids_distinct func ==>
+  ?t. window_phase ctx func st en {} [] s t /\
+    eval_operand out t = SOME (a+b) /\
+    (!x. out = Var x ==> not_fresh_at en x) /\ t.vs_labels = s.vs_labels /\
+    mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t
+Proof
+  strip_tac >> drule_all window_emit_add_phase_mem_frame_memory >>
+  strip_tac >> qexists `t` >> asm_rewrite_tac[]
 QED
 
 Theorem window_cursor_load_phase_mem_frame:
@@ -175,6 +192,24 @@ Proof
   irule abi_encoder_output_store >> simp[]
 QED
 
+Theorem window_emit_add_phase_mem_conditional_frame_memory:
+  emit_op ADD [lhs;rhs] st = (out,en) /\
+  eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b /\
+  fn_has_code st en func /\ alloca_inv s /\ alloca_room ctx func s /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. window_phase ctx func st en {} [] s t /\
+    eval_operand out t = SOME (a+b) /\
+    (!x. out = Var x ==> not_fresh_at en x) /\ t.vs_labels = s.vs_labels /\
+    mem_cont_sim ctx func s t /\
+    (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t) /\
+    t.vs_memory = s.vs_memory
+Proof
+  strip_tac >> Cases_on `fn_inst_ids_distinct func`
+  >- (drule_all window_emit_add_phase_mem_frame_memory >> metis_tac[]) >>
+  drule_all window_emit_add_phase_mem_memory >> metis_tac[]
+QED
+
 Theorem window_emit_add_phase_mem_conditional_frame:
   emit_op ADD [lhs;rhs] st = (out,en) /\
   eval_operand lhs s = SOME a /\ eval_operand rhs s = SOME b /\
@@ -187,9 +222,8 @@ Theorem window_emit_add_phase_mem_conditional_frame:
     mem_cont_sim ctx func s t /\
     (fn_inst_ids_distinct func ==> window_mem_frame ctx func s t)
 Proof
-  strip_tac >> Cases_on `fn_inst_ids_distinct func`
-  >- (drule_all window_emit_add_phase_mem_frame >> metis_tac[]) >>
-  drule_all window_emit_add_phase_mem >> metis_tac[]
+  strip_tac >> drule_all window_emit_add_phase_mem_conditional_frame_memory >>
+  strip_tac >> qexists `t` >> asm_rewrite_tac[]
 QED
 
 Theorem window_cursor_load_phase_mem_conditional_frame:
