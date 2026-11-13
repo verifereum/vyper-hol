@@ -40,7 +40,9 @@ Proof
   `run_inst_seq (emitted_insts sa sb) s =
      OK (istore (w2n b) v
        (update_var (STRING #"%" (toString sa.cs_next_var)) b s))` by
-    (irule (SRULE [] compile_imm_store_word_execution) >> metis_tac[]) >>
+    (irule (SRULE [] compile_imm_store_word_execution) >>
+     qexistsl_tac [`dst`, `region`, `value`] >>
+     fs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb` by
     (qpat_x_assum `compile_imm_store_word _ _ _ _ = _` mp_tac >>
      simp[compile_imm_store_word_def, emit_op_def, emit_void_def,
