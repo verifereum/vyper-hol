@@ -252,7 +252,7 @@ Theorem deploy_no_ctor_lowering_trace:
 Proof
   strip_tac >>
   qpat_x_assum `lower_vyper_deploy_unit _ _ _ = _` mp_tac >>
-  simp[lower_vyper_deploy_unit_def, GSYM imm_len_def] >>
+  simp[lower_vyper_deploy_unit_def, GSYM immSectionDeadTheory.imm_len_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
   qpat_x_assum `run_deploy_lowering _ _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[run_deploy_lowering_def] >>

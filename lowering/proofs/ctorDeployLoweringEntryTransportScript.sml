@@ -81,7 +81,7 @@ QED
 
 Theorem deploy_ctor_raw_blocks_no_phi:
  !tops rp runtime unit body ce nr key ut imm lbl sa sb sj se sp sf func bb label.
- supported_program tops /\
+ supported_program tops /\ supported_program_deploy tops /\
  deploy_ctor_code tops rp runtime unit
   (body,ce,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,func) /\
  lookup_block label func.fn_blocks = SOME bb ==>
