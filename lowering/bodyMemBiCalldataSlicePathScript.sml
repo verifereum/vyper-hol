@@ -12,7 +12,6 @@ Ancestors
   exprSimMemDefs instMemFrontier vyperInterpreter exprLowering valueCopy
   venomMemDefs bodyUnopFragMemory fragGasSeqMem fragGasMode
   allocaHistoryFragment rich_list
-  vyperStorageTrace vyperStorageFootprint
 
 (* Original: exprSimCalldataSlice.slice_calldata_vv_post [local]. *)
 Theorem slice_calldata_vv_capacity:
@@ -49,27 +48,8 @@ Proof
   simp[emitted_insts_def, DROP_APPEND1, mk_inst_def]
 QED
 
-(* The run result is one state, so the relation at any horizon follows from
-   the relation of the start state there. *)
-Theorem slice_state_rel_any_horizon[local]:
-  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa = (ptr_op,sb) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
-  context_well_typed cx /\ 0 < n /\ n < dimword (:256) /\ a < dimword (:256) /\
-  32 + 32 * word_size n < 2 ** 64 /\
-  eval_operand op s = SOME (n2w a) /\
-  (!x. op = Var x ==> not_fresh_at sa x) /\
-  ~(dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n) /\
-  run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  stmt_state_rel H ctx func cenv cx es t
-Proof
-  strip_tac >> drule_all slice_calldata_run >>
-  qpat_x_assum `~(_ \/ _)` (fn th => simp[th]) >>
-  strip_tac >> gvs[]
-QED
-
 Theorem slice_calldata_path_mem:
-  !ctx func cenv cx e es sa sb op p n a s0 bres st0 tr.
+  !ctx func cenv cx e es sa sb op p n a s0 bres.
   compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa =
     (p.ptr_operand,sb) /\ p.ptr_location = LocMemory /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\
@@ -80,18 +60,14 @@ Theorem slice_calldata_path_mem:
   (!x. op = Var x ==> not_fresh_at sa x) /\
   bres = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
            INL v => INL v | INR err => INR (Error err)) /\
-  (!H. valid_horizon cx st0 H tr ==> stmt_state_rel H ctx func cenv cx es s0) /\
-  (!H. valid_horizon cx st0 H tr ==> storage_well_formed_on cx es (FST H)) /\
-  (?H. valid_horizon cx st0 H tr) /\ eval_operand op s0 = SOME (n2w a) /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ eval_operand op s0 = SOME (n2w a) /\
   alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?m r. gas_marked_path T ctx func s0 m r /\
     ((?u. r = OK u /\
-          (?rv. bres = INL rv /\
-             (!H. valid_horizon cx st0 H tr ==>
-                vv_post H ctx func cenv cx e es sa sb s0 es
-                  (Value rv) (LocatedValue (expr_type e) p) u) /\
+          (?rv. bres = INL rv /\ vv_post H ctx func cenv cx e es sa sb s0 es
+             (Value rv) (LocatedValue (expr_type e) p) u /\
              vv_store_bound cx (expr_type e) (expr_type e) es (Value rv)
                (LocatedValue (expr_type e) p) u) /\
           alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
@@ -100,10 +76,6 @@ Theorem slice_calldata_path_mem:
      (exit_result r /\ expr_exit bres r))
 Proof
   rpt gen_tac >> strip_tac >>
-  rename1 `valid_horizon _ _ H0 tr` >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _`
-    (qspec_then `H0` mp_tac) >>
-  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   drule slice_calldata_shape >> strip_tac >>
   `?bb rest. lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
      DROP s0.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest` by
@@ -117,9 +89,7 @@ Proof
   `32 + 32 * word_size n < dimword (:256)` by
     (gvs[wordsTheory.dimword_def] >> decide_tac) >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s0` by
-    (irule (INST_TYPE [alpha |-> ``:256``] calldata_slice_seq_mem) >>
-     qexistsl_tac [`H0`, `p.ptr_operand`, `cenv`, `ctx`, `cx`, `es`, `func`, `n`, `op`, `n2w a`] >>
-     simp[]) >>
+    (irule calldata_slice_seq_mem >> metis_tac[]) >>
   `n < dimword (:256) /\ a < dimword (:256)` by
     fs[wordsTheory.dimword_def] >>
   drule_all slice_calldata_run >>
@@ -155,9 +125,6 @@ Resume slice_calldata_path_mem[success]:
   `alloca_history func
      (t with vs_inst_idx := s0.vs_inst_idx + LENGTH (emitted_insts sa sb))` by
     (irule alloca_history_run_inst_seq >> simp[] >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _`
-       (qspec_then `H0` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >>
      fs[EVERY_MEM, stmt_state_rel_def]) >>
   `s0.vs_alloca_next <= t.vs_alloca_next` by
     (irule calldata_slice_seq_frontier >>
@@ -170,67 +137,30 @@ Resume slice_calldata_path_mem[success]:
      `step_inst 0 ctx i ss1 = OK ss2` by simp[step_inst_non_invoke] >>
      drule venomInstProofsTheory.step_preserves_control_flow >> simp[]) >>
   `a+n <= LENGTH cx.txn.calldata` by decide_tac >>
-  `~(dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n)` by
-    (simp[wordsTheory.dimword_def] >> decide_tac) >>
-  `!H. valid_horizon cx st0 H tr ==> !j.
-     vv_post H ctx func cenv cx e es sa sb s0 es
+  `!j. vv_post H ctx func cenv cx e es sa sb s0 es
      (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
      (LocatedValue (expr_type e) p) (t with vs_inst_idx := j)` by
-    (rpt strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _`
-       (qspec_then `H` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
-     `stmt_state_rel H ctx func cenv cx es t` by
-       (rpt (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac) >>
-        mp_tac (Q.INST [`ptr_op` |-> `p.ptr_operand`, `s` |-> `s0`]
-                  (INST_TYPE [alpha |-> ``:256``] slice_state_rel_any_horizon)) >>
-        impl_tac >- (gns[wordsTheory.dimword_def] >> decide_tac) >>
-        disch_then ACCEPT_TAC) >>
-     `storage_well_formed_on cx es (FST H)` by
-       (qpat_assum `!H. _ ==> storage_well_formed_on _ _ _` (qspec_then `H` mp_tac) >>
-        impl_tac >- first_assum ACCEPT_TAC >> disch_then ACCEPT_TAC) >>
-     irule slice_calldata_vv_post >> simp[] >>
+    (irule slice_calldata_vv_post >> simp[] >>
      conj_tac >- first_assum ACCEPT_TAC >>
      qexists_tac `sa.cs_next_id + 7` >>
      conj_tac >- simp[] >> conj_tac >- simp[] >>
      conj_tac >- first_assum ACCEPT_TAC >> simp[]) >>
-  `(!H. valid_horizon cx st0 H tr ==>
-     vv_post H ctx func cenv cx e es sa sb s0 es
-     (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
-     (LocatedValue (expr_type e) p)
-     (t with vs_inst_idx := s0.vs_inst_idx + LENGTH (emitted_insts sa sb))) <=> T` by
-    (REWRITE_TAC[EQ_CLAUSES] >> rpt strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> !j. _`
-       (drule_then (qspec_then `s0.vs_inst_idx + LENGTH (emitted_insts sa sb)`
-                      ACCEPT_TAC))) >>
   qexistsl_tac [`k`, `OK (t with vs_inst_idx := s0.vs_inst_idx +
                                   LENGTH (emitted_insts sa sb))`] >>
   simp[] >> disj1_tac >>
   simp[same_blocks_def, evaluate_calldata_slice_uint] >>
   qpat_x_assum `expr_type e = _` (assume_tac o GSYM) >>
   asm_rewrite_tac[] >>
-  `vv_post H0 ctx func cenv cx e es sa sb s0 es
+  `vv_post H ctx func cenv cx e es sa sb s0 es
      (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
      (LocatedValue (expr_type e) p) t` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> !j. _` (qspec_then `H0` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     disch_then (qspec_then `t.vs_inst_idx` mp_tac) >>
-     `t with vs_inst_idx := t.vs_inst_idx = t` by
-       simp[venom_state_component_equality] >>
-     pop_assum SUBST1_TAC >> disch_then ACCEPT_TAC) >>
+    (first_x_assum (qspec_then `t.vs_inst_idx` mp_tac) >>
+     simp[venom_state_component_equality]) >>
   simp[] >> reverse conj_tac
   >- (reverse conj_tac >- fs[same_blocks_def] >>
       qpat_x_assum `alloca_history func (t with vs_inst_idx := _)` mp_tac >>
       simp[]) >>
-  conj_tac
-  >- (qx_gen_tac `H1` >> strip_tac >>
-      qpat_assum `!H. valid_horizon _ _ H _ ==> !j. _` (qspec_then `H1` mp_tac) >>
-      impl_tac >- first_assum ACCEPT_TAC >>
-      disch_then (qspec_then `t.vs_inst_idx` mp_tac) >>
-      `t with vs_inst_idx := t.vs_inst_idx = t` by
-        simp[venom_state_component_equality] >>
-      pop_assum SUBST1_TAC >> disch_then ACCEPT_TAC) >>
-  irule (INST_TYPE [alpha |-> ``:256``] slice_calldata_vv_capacity) >>
+  irule slice_calldata_vv_capacity >>
   simp[stmt_state_rel_inst_idx] >>
   conj_tac
   >- (qexistsl_tac [`sa.cs_next_id + 7`, `n`] >> simp[]) >>

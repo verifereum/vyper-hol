@@ -967,8 +967,7 @@ Theorem slice_calldata_frag[local]:
   local_ptrs_reserved cenv sa /\ context_well_typed cx /\
   0 < n /\ n < 2 ** 256 /\ a < 2 ** 256 /\
   32 + 32 * word_size n < 2 ** 64 /\
-  (!x. op = Var x ==> not_fresh_at sa x) /\
-  storage_well_formed_on cx es (FST H) /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\ storage_well_formed_on cx es (FST H) /\
   res = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
            INL v => INL (Value v) | INR err => INR (Error err)) ==>
   frag_exec ctx sa sb
@@ -1020,8 +1019,8 @@ Theorem slice_calldata_path[local]:
   (!x. op = Var x ==> not_fresh_at sa x) /\
   bres = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
            INL v => INL v | INR err => INR (Error err)) /\
-  (!H. valid_horizon cx st0 H tr ==> stmt_state_rel H ctx func cenv cx es s0) /\
-  (!H. valid_horizon cx st0 H tr ==> storage_well_formed_on cx es (FST H)) /\
+  (!H. valid_horizon cx st0 H tr ==> stmt_state_rel H ctx func cenv cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\
   (?H. valid_horizon cx st0 H tr) /\ eval_operand op s0 = SOME (n2w a) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -1044,7 +1043,7 @@ Proof
   BETA_TAC >> reverse impl_tac >- (disch_then ACCEPT_TAC) >>
   reverse (rpt conj_tac)
   >- (gvs[same_blocks_def] >>
-  qpat_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ _ s0` (drule_then assume_tac) >>
+  qpat_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ _ s0 /\ _` (drule_then strip_assume_tac) >>
   drule_all (SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
     [wordsTheory.dimword_def] slice_calldata_run) >>
   Cases_on `dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n` >>
@@ -1060,20 +1059,20 @@ Proof
   qpat_x_assum `expr_type e = _` (assume_tac o GSYM) >>
   asm_rewrite_tac[] >>
   qx_gen_tac `H1` >> strip_tac >>
+  `storage_well_formed_on cx es (FST H1)` by metis_tac[] >>
   `stmt_state_rel H1 ctx func cenv cx es t` by
     (`stmt_state_rel H1 ctx func cenv cx es s0` by metis_tac[] >>
-     qspecl_then [`H1`, `op`, `n`, `sa`, `p.ptr_operand`, `sb`, `func`, `cenv`,
-                  `cx`, `es`, `s0`, `a`, `ctx`] mp_tac
-       (Q.GEN `H` (SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
-          [wordsTheory.dimword_def] slice_calldata_run)) >>
-     (impl_tac >- (simp[] >> decide_tac)) >>
+     qpat_x_assum `stmt_state_rel H1 _ _ _ _ _ s0` mp_tac >>
+     rpt (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ s0` kall_tac) >>
+     strip_tac >>
+     `n < 115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
+      a < 115792089237316195423570985008687907853269984665640564039457584007913129639936` by decide_tac >>
+     drule_all (SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
+       [wordsTheory.dimword_def] slice_calldata_run) >>
      gns[wordsTheory.dimword_def] >> rpt strip_tac >> gvs[]) >>
   `t = t with vs_inst_idx := t.vs_inst_idx` by
     simp[venom_state_component_equality] >>
   pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
-  `storage_well_formed_on cx es (FST H1)` by
-    (qpat_assum `!H. _ ==> storage_well_formed_on _ _ _` (qspec_then `H1` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >> disch_then ACCEPT_TAC) >>
   irule slice_calldata_vv_post >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `sa.cs_next_id + 7` >> rpt conj_tac
@@ -1318,16 +1317,11 @@ Proof
   qpat_x_assum `LocatedValue _ _ = vv` (SUBST_ALL_TAC o SYM) >>
   qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (drule_then assume_tac) >>
   `!H. valid_horizon cx st0 H es'.storage_trace ==>
-     stmt_state_rel H ctx func cenv cx es' s` by
-    metis_tac[expr_post_state] >>
-  `!H. valid_horizon cx st0 H es'.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es' s /\
      storage_well_formed_on cx es' (FST H)` by
-    (qx_gen_tac `H1` >> strip_tac >>
-     qpat_x_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (qspec_then `H1` mp_tac) >>
-     impl_tac >- first_assum ACCEPT_TAC >>
-     disch_then (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o
-                 REWRITE_RULE [expr_post_def])) >>
+    (rpt strip_tac >>
+     qpat_x_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` drule >>
+     simp[expr_post_def]) >>
   `eval_operand x s = SOME (n2w a)` by
     (drule expr_post_word_operand >>
      simp[evaluate_type_def, is_word_type_def, word_value_def, val_to_w256_def,

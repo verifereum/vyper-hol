@@ -1603,7 +1603,7 @@ Proof
   `val_in_memory tv2 v' (w2n p) s.vs_memory` by metis_tac[] >>
   `val_footprint tv2 v' <= type_memory_bytes cenv (lowered_value_type cenv e1)` by simp[] >>
   `post_value_type cenv e = expr_type e` by simp[] >>
-  `storage_well_formed_on cx es1 (FST H)` by gvs[expr_post_def] >>
+  `storage_well_formed_on cx es1 (FST H)` by fs[expr_post_def] >>
   drule_all convert_widen_copy_owned >> strip_tac >>
   qexistsl_tac [`t`, `v'`] >> simp[] >>
   qpat_assum `expr_post H _ _ _ _ e1 _ _ _ _ _ _ _ _`
@@ -1879,21 +1879,17 @@ Proof
     (irule convert_operand_admissible >> metis_tac[]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`st0`, `sa`, `s1`, `x`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`sa`, `s1`, `x`, `s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
   rewrite_tac[gas_outcome_def] >> strip_tac
-  >- (qexists_tac `marks` >> disj1_tac >>
-      rewrite_tac[eval_expr_convert_action] >>
-      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
-      simp[vyperStorageTraceTheory.storage_trace_frame_def])
   >- suspend "counted" >>
-  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
+  qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   irule convert_exempt_cert >> simp[]
 QED
 
 Resume compile_convert_bytestring_frag_sim[counted]:
-  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+  qexists_tac `marks` >> disj1_tac >>
   rewrite_tac[eval_expr_convert_action] >>
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>

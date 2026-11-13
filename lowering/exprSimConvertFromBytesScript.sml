@@ -2376,7 +2376,7 @@ QED
 Resume dynamic_scalar_fragment[abort]:
   drule_all dynamic_scalar_frag_abort >>
   disch_then (qspecl_then [`s0`,`func`,`es`,`ctx`] mp_tac) >>
-  disch_then (qspec_then `cenv` (qspec_then `\s. F` (qspec_then `H` mp_tac))) >>
+  disch_then (qspecl_then [`cenv`, `\s. F`, `H`] mp_tac) >>
   disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
   disch_then irule >> simp[wordsTheory.dimword_def] >>
   fs[wordsTheory.dimword_def] >>
@@ -2667,21 +2667,17 @@ Proof
     (irule convert_operand_admissible >> metis_tac[]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`s1`,`x`,`s0`] mp_tac) >>
+  disch_then (qspecl_then [`sa`,`s1`,`x`,`s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> strip_tac
-  >- (qexists_tac `marks` >> disj1_tac >>
-      rewrite_tac[eval_expr_convert_action] >>
-      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
-      simp[vyperStorageTraceTheory.storage_trace_frame_def])
   >- suspend "counted" >>
-  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
+  qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
   irule convert_exempt_cert >> simp[]
 QED
 
 Resume dynamic_convert_lower_case[counted]:
-  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+  qexists_tac `marks` >> disj1_tac >>
   rewrite_tac[eval_expr_convert_action] >>
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
