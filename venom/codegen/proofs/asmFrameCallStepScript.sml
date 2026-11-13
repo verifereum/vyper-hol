@@ -11,6 +11,7 @@
 
 Theory asmFrameCallStep
 Ancestors
+  vfmWfState
   evmCreationGuard frameCreationGuard asmFrameRel frameObsStep frameStep evmStepSim asmCallOracleProps asmDataSuffixProps
   asmRunBounded asmCallGasArithmetic
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
@@ -726,7 +727,7 @@ Proof
      fs[vfmConstantsTheory.call_stipend_def, vfmConstantsTheory.call_value_cost_def]) >>
   PairCases_on `cg` >>
   qpat_x_assum `(_,_) = call_gas _ _ _ _ _` (assume_tac o SYM) >>
-  drule_all vfmRunCallTheory.call_gas_stipend_le_consumed >> simp[]
+  drule_all vfmWfStateTheory.call_gas_stipend_le_consumed >> simp[]
 QED
 
 Theorem asm_call_unused_gas_le_paid:
@@ -1122,8 +1123,8 @@ Theorem asm_proceed_call_memory_boundary:
 Proof
   strip_tac >>
   `s.contexts <> []` by simp[] >>
-  drule_all vfmRunCallTheory.proceed_call_push_structure >> strip_tac >>
-  drule vfmRunCallTheory.proceed_call_parent_gas_ok >>
+  drule_all vfmWfStateTheory.proceed_call_push_structure >> strip_tac >>
+  drule vfmWfStateTheory.proceed_call_parent_gas_ok >>
   disch_then (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
   Cases_on `t.contexts` >- fs[] >>
   PairCases_on `h` >> gvs[]
@@ -1641,6 +1642,8 @@ QED
 Theorem asm_step_oog_starved:
   s.contexts = (c,rb)::rest /\ wf_state s /\
   (rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)) /\
+  next_opcode c = SOME op /\ op <> Stop /\
+  step_inst op s = (INR (SOME OutOfGas), t) /\
   step s = handle_step (SOME OutOfGas) t /\
   t.contexts = (c with stack := DROP n c.stack,rb)::rest /\
   t.txParams = s.txParams ==>
@@ -1649,6 +1652,8 @@ Theorem asm_step_oog_starved:
          call_requests s = []
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `frame_inst_raises s OutOfGas op` by
+    (irule frame_inst_raises_next >> simp[] >> metis_tac[]) >>
   `c.gasUsed <= c.msgParams.gasLimit` by
     (qpat_x_assum `wf_state s` mp_tac >> simp[wf_state_def, wf_context_def]) >>
   qmatch_asmsub_abbrev_tac `t.contexts = (popped,rb)::rest` >>
@@ -1677,8 +1682,8 @@ Resume asm_step_oog_starved[single]:
   `call_trace s = []` by
     (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
   drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-  simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
-  qexistsl_tac [`OutOfGas`, `[]`, `[]`] >> simp[]
+  simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises, frame_outcome_def, call_requests_def] >>
+  metis_tac[]
 QED
 
 Resume asm_step_oog_starved[nested]:
@@ -1691,7 +1696,7 @@ Resume asm_step_oog_starved[nested]:
   `call_trace s = []` by
     (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
   drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-  simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
+  simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises, frame_outcome_def, call_requests_def] >>
   metis_tac[]
 QED
 Finalise asm_step_oog_starved
@@ -1710,6 +1715,10 @@ Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_failure_step >> disch_tac >>
   drule_all asm_call_prepare_failure_view >> strip_tac >>
+  `e = SOME OutOfGas` by (drule_all asm_call_prepare_failure_kind >> simp[]) >>
+  `op <> Stop /\ step_inst op s = (INR (SOME OutOfGas), t)` by
+    (qpat_x_assum `op = _ \/ _` strip_assume_tac >>
+     gvs[step_inst_def, asm_step_call_factor, bind_def]) >>
   drule_all asm_step_oog_starved >> simp[]
 QED
 Theorem asm_frame_call_prepare_failure_starved:
@@ -1995,6 +2004,10 @@ Proof
   `step s = (INL (),t)` by (irule asm_call_step_success >> metis_tac[]) >>
   `LENGTH t.contexts = LENGTH s.contexts` by simp[Abbr `t`] >>
   `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH es0.contexts /\
+              step x = (INL (), y)) es0 t` by
+    (drule asm_frame_rel_rtc_trans >> disch_then irule >>
+     irule relationTheory.RTC_SINGLE >> simp[] >> metis_tac[]) >>
   `wf_state t` by
     (drule step_preserves_wf_state >> simp[]) >>
   `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack` by
@@ -2186,6 +2199,7 @@ Theorem asm_frame_call_effects_restore:
   asm_pc_to_offset (prog ++ [AsmDataItem data]) (a.as_pc + 1) =
     asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc + 1 /\
   s.contexts = (c,rb)::rest /\ t.contexts = (ct,rb)::rest /\
+  RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t /\
   wf_state t /\ t.txParams = s.txParams /\ (?d. t.msdomain = Collect d) /\
   ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\
   (a.as_call_ctx.cc_created_in_tx =
@@ -2212,6 +2226,7 @@ Theorem asm_frame_call_effects_restore:
   asm_frame_rel prog data es0 a1 t
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_frame_rel_rtc_trans >> disch_tac >>
   qpat_x_assum `asm_consume_call_outcome _ _ _ _ _ = _` mp_tac >>
   simp[asm_consume_call_outcome_eq] >> strip_tac >>
   qpat_x_assum `asm_frame_rel prog data es0 a s` mp_tac >>
@@ -2226,6 +2241,7 @@ Theorem asm_frame_call_effects_step_ok:
     asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc + 1 /\
   s.contexts = (c,rb)::rest /\ t.contexts = (ct,rb)::rest /\
   run_call t = run_call s /\
+  RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t /\
   wf_state t /\ t.txParams = s.txParams /\ (?d. t.msdomain = Collect d) /\
   ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\
   (a.as_call_ctx.cc_created_in_tx =
@@ -2657,6 +2673,9 @@ Proof
   `wf_state s` by fs[asm_frame_rel_def] >>
   `LENGTH t.contexts = LENGTH s.contexts` by simp[] >>
   `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+              step x = (INL (), y)) s t` by
+    (irule relationTheory.RTC_SINGLE >> simp[] >> metis_tac[]) >>
   `wf_state t` by (drule step_preserves_wf_state >> simp[]) >>
   `a.as_call_ctx.cc_created_in_tx =
     account_empty (lookup_account c.msgParams.callee s.originalAccounts)` by
@@ -2829,6 +2848,9 @@ Proof
      disch_then asm_call_legacy_view >> simp[]) >>
   `LENGTH t.contexts = LENGTH s.contexts` by (asm_rewrite_tac[] >> simp[]) >>
   `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+              step x = (INL (), y)) s t` by
+    (irule relationTheory.RTC_SINGLE >> simp[] >> metis_tac[]) >>
   `wf_state t` by (drule step_preserves_wf_state >> simp[]) >>
   `observable_call c` by
     (simp[observable_call_def] >> Cases_on `op = Call` >> gvs[call_has_value_def]) >>
@@ -7434,6 +7456,9 @@ Proof
     assume_tac >- metis_tac[] >>
   drule_all asm_call_prepared_enter_view >> strip_tac >>
   `LENGTH v.contexts = SUC (LENGTH s.contexts)` by simp[] >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+              step x = (INL (), y)) s t` by
+    (irule run_call_enter_return_rtc >> metis_tac[]) >>
   drule_all asm_frame_call_enter_transport >> simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
   drule_all asm_call_prepared_request >> strip_tac >>
   drule_all asm_call_prepared_enter_take_outcome >> strip_tac >>

@@ -1,4 +1,4 @@
-(* TOP-LEVEL: frame_outcome, frame_resource_starved,
+(* TOP-LEVEL: frame_outcome, frame_resource_starved, creation_resource_starved,
  * frame_outcome_single_frame_run.
  *
  * Frame-level boundary for run_call.  The relations themselves use only
@@ -7,7 +7,7 @@
  *)
 Theory frameOutcome
 Ancestors
-  vfmExecution vfmRunCall
+  vfmExecution vfmRunCall frameGas
 
 (* ===== Frame outcomes ===== *)
 
@@ -40,8 +40,21 @@ Definition frame_outcome_def:
             (exc <> NONE ==> es'.rollback = rb)
 End
 
+(* Our frame ran out of gas or stack.  In a nested frame frame_outcome
+   only tells failure from success, so the frame must also show an
+   instruction that raised exc. *)
 Definition frame_resource_starved_def:
   frame_resource_starved es r es' <=>
+    ?exc out lgs. (exc = OutOfGas \/ exc = StackOverflow) /\
+                  frame_outcome es r es' (SOME exc) out lgs /\
+                  frame_raises es exc
+End
+
+(* A creation frame ran out of gas or stack.  Its code deposit raises
+   OutOfGas after RETURN, outside step_inst, so no instruction is named;
+   deployment runs it as a single frame, where r = INR exc. *)
+Definition creation_resource_starved_def:
+  creation_resource_starved es r es' <=>
     ?exc out lgs. (exc = OutOfGas \/ exc = StackOverflow) /\
                   frame_outcome es r es' (SOME exc) out lgs
 End

@@ -10,6 +10,7 @@
 
 Theory asmFrameLocalStep
 Ancestors
+  vfmWfState
   asmFrameRel frameObsStep frameStep evmStepTransplant asmEvmStepStarve asmEvmGasStep
   evmStepSim asmDataSuffixProps codegenRel asmSem asmWf symbolResolve
   callTrace frameOutcome vfmExecution vfmExecutionProp list rich_list
@@ -205,6 +206,10 @@ Proof
     (mp_tac (Q.INST [`d` |-> `LENGTH es.contexts`, `B` |-> `es.rollback`,
                     `s` |-> `es`, `t` |-> `es1`, `x` |-> `()`]
        step_continuing_collision_current) >> simp[]) >>
+  `RTC (\a b. LENGTH a.contexts >= LENGTH es0.contexts /\
+              step a = (INL (), b)) es0 es1` by
+    (irule (cj 2 relationTheory.RTC_RULES_RIGHT1) >>
+     qexists_tac `es` >> gvs[]) >>
   Cases_on `es1.contexts` >> gvs[same_frame_rel_def] >>
   PairCases_on `h` >> gvs[] >>
   `?d1. es1.msdomain = Collect d1` by
@@ -290,10 +295,15 @@ Proof
   `LENGTH t.contexts = 1` by
     (irule frame_terminal_singleton_length >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>
+  `?op. frame_inst_raises es exc op` by
+    (irule step_transplant_starved >> gvs[wf_state_def] >> metis_tac[]) >>
+  `frame_inst_raises es0 exc op` by
+    (irule frameGasTheory.frame_inst_raises_mid >> qexists_tac `es` >>
+     fs[asm_frame_rel_def] >> gvs[]) >>
   Cases_on `t.contexts` >> gvs[] >> PairCases_on `h` >>
   drule (SRULE [MEM] frame_terminal_transplant) >>
   disch_then drule >> simp[vfm_abort_def] >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[frame_resource_starved_def] >>
+  goal_assum (drule_at Any) >> simp[frame_resource_starved_def, frameGasTheory.frame_raises_inst_raises] >>
   metis_tac[]
 QED
 

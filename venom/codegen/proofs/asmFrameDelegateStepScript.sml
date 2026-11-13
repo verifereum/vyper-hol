@@ -1,6 +1,7 @@
 (* Delegate calls use the frame's observed message-call outcomes. *)
 Theory asmFrameDelegateStep
 Ancestors
+  vfmWfState
   asmFrameRel asmFrameCallStep frameObsStep frameStep asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   evmCreationGuard frameCreationGuard vfmExecution vfmExecutionProp vfmRunCall vfmDomainCollection asmEncodeParse vfmOperation rich_list list regularMemorySim
@@ -147,8 +148,10 @@ Proof
       `rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)` by
         (fs[asm_frame_rel_def, asm_evm_rel_def] >>
          Cases_on `c.msgParams.outputTo` >> gvs[]) >>
-      drule_at (Pat `step _ = _`) asm_step_oog_starved >>
-      disch_then (qspecl_then [`rest`,`rb`,`6`,`c`] mp_tac) >>
+      `step_inst DelegateCall s = (INR (SOME OutOfGas),t)` by
+        simp[step_inst_def] >>
+      mp_tac (Q.INST [`op` |-> `DelegateCall`, `n` |-> `6`]
+                asm_step_oog_starved) >>
       (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
       `frame_resource_starved es0 r s'` by
         (fs[asm_frame_rel_def] >> drule_all frame_resource_starved_mid >> simp[]) >>
@@ -191,6 +194,8 @@ Proof
     (irule asm_call_step_success >> simp[] >> metis_tac[]) >>
   `LENGTH t.contexts = LENGTH s.contexts` by simp[Abbr `t`] >>
   `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t` by
+    (irule relationTheory.RTC_SINGLE >> simp[] >> metis_tac[]) >>
   `wf_state t` by (drule step_preserves_wf_state >> simp[]) >>
   `6 <= LENGTH c.stack` by
     (drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_success_view >>
@@ -313,6 +318,8 @@ Proof
   `LENGTH t.contexts = LENGTH s.contexts` by
     (qpat_assum `s.contexts = _` (fn th => rewrite_tac[th]) >> simp[]) >>
   `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t` by
+    (irule relationTheory.RTC_SINGLE >> simp[] >> metis_tac[]) >>
   `wf_state t` by (drule step_preserves_wf_state >> simp[]) >>
   `observable_call c` by simp[observable_call_def] >>
   drule frame_obs_call_same_depth >>
@@ -409,6 +416,8 @@ Proof
   `LENGTH t.contexts = LENGTH s.contexts` by
     (qpat_assum `s.contexts = _` (fn th => rewrite_tac[th]) >> simp[]) >>
   `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t` by
+    (irule relationTheory.RTC_SINGLE >> simp[] >> metis_tac[]) >>
   `wf_state t` by (drule step_preserves_wf_state >> simp[]) >>
   `observable_call c` by simp[observable_call_def] >>
   drule frame_obs_call_same_depth >>
@@ -538,6 +547,8 @@ Proof
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
   drule_all asm_call_prepared_enter_view >> strip_tac >>
   `LENGTH v.contexts = SUC (LENGTH s.contexts)` by simp[] >>
+  `RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\ step x = (INL (), y)) s t` by
+    (irule run_call_enter_return_rtc >> metis_tac[]) >>
   drule_all asm_frame_call_enter_transport >>
   simp_tac (srw_ss()) [LET_THM] >> strip_tac >>
   suspend "consume"

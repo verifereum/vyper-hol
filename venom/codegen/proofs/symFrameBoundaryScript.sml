@@ -447,15 +447,12 @@ Theorem sym_restore_offset_steps:
       out.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
   rpt strip_tac >>
-  mp_tac (Q.SPECL [`p`, `env`, `ss`, `off`, `sv`,
-    `ss with <|sym_base := asm_next (ss.sym_base with as_stack := []);
-               sym_stack := Val (n2w off) :: ss.sym_stack|>`]
-    sym_pushed_mload) >>
-  simp[] >> strip_tac >> qexistsl_tac [`out`, `sv'`] >> simp[] >>
-  match_mp_tac (Q.SPECL [`p`, `env`, `ss`, `off`, `AsmOp "MLOAD"`,
-    `ss with <|sym_base := asm_next (ss.sym_base with as_stack := []);
-               sym_stack := Val (n2w off) :: ss.sym_stack|>`, `out`]
-    sym_push_offset_then) >> simp[]
+  qspecl_then [`p`, `env`, `ss`, `off`, `sv`] mp_tac sym_pushed_mload >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`out`, `sv'`] >> simp[] >>
+  qspecl_then [`p`, `env`, `ss`, `off`, `AsmOp "MLOAD"`] mp_tac
+    sym_push_offset_then >>
+  simp[]
 QED
 
 Theorem sym_spill_offsets_cons_result:

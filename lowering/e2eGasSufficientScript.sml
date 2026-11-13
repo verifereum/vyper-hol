@@ -162,9 +162,10 @@ Theorem vyper_call_gas_sufficient_identity:
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+        (frame_raises (add_frame_gas g' es) OutOfGas ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
+  PURE_REWRITE_TAC [frame_raises_inst_raises] >>
   rpt strip_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
@@ -385,6 +386,9 @@ Proof
    o1_lowered_inv dout.po_unit.cu_context vs` by metis_tac[] >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
+  `!obs. ~deploy_source_exempt tops
+     (load_contract NONE obs am tx [(NONE, tops)] [])`
+    by fs[deploy_gas_source_exempt_def] >>
   (* what the compiled constructor returns, as for e2e_deploy_correctness *)
   qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `rpolicy`, `dunit`,
                `dout`, `prog`, `cplan`, `am`, `tx`, `add_frame_gas g' es`, `vs_in`]

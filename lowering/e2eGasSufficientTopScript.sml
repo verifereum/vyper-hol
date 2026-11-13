@@ -35,7 +35,7 @@ Theorem vyper_call_gas_sufficient_asm_opt:
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+        (frame_raises (add_frame_gas g' es) OutOfGas ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   cheat
@@ -97,7 +97,7 @@ Theorem vyper_call_gas_sufficient:
          (!obs. ~gas_source_exempt tops
             (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
                obs am tx)) /\
-         (?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+         frame_raises (add_frame_gas g' es) OutOfGas ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -111,7 +111,7 @@ Proof
      ==>
      ?r es'.
        run_call (add_frame_gas g' es) = SOME (r, es') /\
-       ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+       (frame_raises (add_frame_gas g' es) OutOfGas ==>
         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)` by
     (`fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
      pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
