@@ -331,7 +331,7 @@ Finalise literal_chunks_run
 
 Theorem literal_state_memory_frame:
   !func cenv cx es s t ctx.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
     (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
        lookup_var x t = lookup_var x s) /\
@@ -348,7 +348,7 @@ Theorem literal_state_memory_frame:
         | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
       mem_bytes_at off (type_memory_size tv) t.vs_memory =
         mem_bytes_at off (type_memory_size tv) s.vs_memory) ==>
-    stmt_state_rel ctx func cenv cx es t
+    stmt_state_rel H ctx func cenv cx es t
 Proof
   rpt strip_tac >>
   `t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>` by
@@ -470,14 +470,14 @@ QED
 Theorem literal_bytelike_run:
   !func cenv cx es bs sa sb buf s ctx.
     compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     32 + 32 * word_size (LENGTH bs) < dimword (:256) /\
     MEM (mk_inst sa.cs_next_id ALLOCA
       [Lit (n2w (32 + 32 * word_size (LENGTH bs)))]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
     ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id =
         SOME (w2n w,32 + 32 * word_size (LENGTH bs)) /\
@@ -518,7 +518,7 @@ Proof
     (irule literal_emit_mstore_run >> simp[eval_operand_def] >>
      qexistsl_tac [`buf.buf_operand`, `Lit (n2w (LENGTH bs))`] >>
      simp[eval_operand_def]) >>
-  `stmt_state_rel ctx func cenv cx es (mstore (w2n w) (n2w (LENGTH bs)) t)` by
+  `stmt_state_rel H ctx func cenv cx es (mstore (w2n w) (n2w (LENGTH bs)) t)` by
     (irule literal_mstore_state_rel >> simp[] >> qexistsl_tac
       [`w2n w`, `mk_inst sa.cs_next_id ALLOCA
         [Lit (n2w (32 + 32 * word_size (LENGTH bs)))]
@@ -548,7 +548,7 @@ Resume literal_bytelike_run[chunks]:
   qpat_x_assum `compile_alloc_buffer _ _ = _` kall_tac >>
   qpat_x_assum `emit_void _ _ _ = _` kall_tac >>
   qpat_x_assum `compile_store_byte_chunks _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `stmt_state_rel ctx _ _ _ _ (mstore _ _ _)` kall_tac >>
+  qpat_x_assum `stmt_state_rel H ctx _ _ _ _ (mstore _ _ _)` kall_tac >>
   qpat_x_assum `final with <|vs_vars := (mstore _ _ _).vs_vars; vs_memory := _|> = _` kall_tac >>
   qpat_x_assum `!a len. _ ==> _ = mem_bytes_at _ _ (mstore _ _ _).vs_memory` kall_tac >>
   qpat_x_assum `eval_operand _ (mstore _ _ _) = _` kall_tac >>
@@ -561,7 +561,7 @@ QED
 Resume literal_bytelike_run[frame]:
   `!x. not_fresh_at sa x ==> lookup_var x final = lookup_var x t` by
     (rpt strip_tac >> first_x_assum irule >> gvs[not_fresh_at_def]) >>
-  `stmt_state_rel ctx func cenv cx es final` by
+  `stmt_state_rel H ctx func cenv cx es final` by
     (qspecl_then [`func`, `cenv`, `cx`, `es`, `t`, `final`, `ctx`]
        mp_tac literal_state_memory_frame >>
      impl_tac >- (rpt conj_tac
@@ -586,7 +586,7 @@ Resume literal_bytelike_run[frame]:
        rpt strip_tac >>
        `regions_disjoint off (type_memory_size tv) (w2n w)
           (32 + 32 * word_size (LENGTH bs))` by
-         (qpat_x_assum `stmt_state_rel ctx _ _ _ _ t` mp_tac >>
+         (qpat_x_assum `stmt_state_rel H ctx _ _ _ _ t` mp_tac >>
           simp[exprLoweringPropsTheory.stmt_state_rel_def,
                exprLoweringPropsTheory.immutable_alloca_sep_def] >>
           strip_tac >> first_x_assum drule_all >> strip_tac >>
@@ -899,7 +899,8 @@ Theorem literal_memory_vv_post:
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
+    storage_well_formed_on cx es (FST H) /\
     eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\
@@ -914,7 +915,7 @@ Theorem literal_memory_vv_post:
     (!name b len. local_region cenv es.scopes s0 name b len ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
     pure_frame cenv func es sa s0 t ==>
-    vv_post ctx func cenv cx e es sa sb s0 es (Value v)
+    vv_post H ctx func cenv cx e es sa sb s0 es (Value v)
       (LocatedValue (expr_type e) (base_ptr buf))
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof
@@ -963,21 +964,47 @@ Resume compile_literal_other_vv_sim[bytes]:
   drule_all literal_bytelike_alloca_mem >> strip_tac >>
   `32 + 32 * word_size (LENGTH bs) < dimword (:256)` by
     (simp[wordsTheory.dimword_def] >> decide_tac) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
-     simp[NoAsms]) >>
-  drule_all (Q.INST [`es` |-> `es with gas_obs := []`] (SPEC_ALL literal_bytelike_run)) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0 /\
+       storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+     `(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     conj_tac
+     >- (drule msg_gas_state_frame >>
+         disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
+         simp[NoAsms]) >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  reverse (Cases_on `vyperStorageFootprint$storage_trace_domain cx st0 es.storage_trace`)
+  >- (PURE_REWRITE_TAC[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      rw[gasStorageTheory.gas_bad_storage_at_def] >>
+      simp[Once evaluate_def, return_def, evaluate_literal_def]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    (qexists_tac `storage_trace_horizon es.storage_trace` >>
+     fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+  qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ (es with gas_obs := []) _ /\ _`
+    (qspec_then `H0` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
+  drule_all (Q.INST [`es` |-> `es with gas_obs := []`, `H` |-> `H0`] (SPEC_ALL literal_bytelike_run)) >>
   strip_tac >>
   drule_all literal_bytelike_gas_path >> strip_tac >>
-  simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-  simp[gasSummaryTheory.gas_summary_at_def] >>
+  rpt (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac) >>
+  qpat_x_assum `storage_well_formed_on _ _ (FST H0)` kall_tac >>
+  qpat_x_assum `valid_horizon _ _ H0 _` kall_tac >>
+  PURE_REWRITE_TAC[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  PURE_REWRITE_TAC[gasSummaryTheory.gas_summary_at_def] >>
   qexistsl_tac [`INL (Value (BytesV bs))`, `es`,
     `OK (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`] >>
   conj_tac
   >- simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
           Once evaluate_def, return_def, evaluate_literal_def] >>
-  simp[] >>
+  disj1_tac >> qexists_tac `t with vs_inst_idx := LENGTH cs'.cs_current_insts` >>
+  BETA_TAC >> rewrite_tac[] >> gen_tac >> strip_tac >>
+  qexists_tac `Value (BytesV bs)` >> simp[] >>
+  qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ (es with gas_obs := []) _ /\ _`
+    (qspec_then `H` mp_tac) >> (impl_tac >- fs[]) >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
+    (drule_all (Q.INST [`es` |-> `es with gas_obs := []`] (SPEC_ALL literal_bytelike_run)) >>
+     strip_tac >> gvs[]) >>
   once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] vv_post_initial_gas)] >>
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.INST [`e` |-> `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`]
@@ -1007,24 +1034,58 @@ Resume compile_literal_other_vv_sim[string]:
   `32 + 32 * word_size (LENGTH (MAP (n2w o ORD) str : word8 list)) < dimword (:256)` by
     (simp[wordsTheory.dimword_def] >> decide_tac) >>
   gvs[] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
-     simp[NoAsms]) >>
-  drule (SRULE []
-    (Q.INST [`bs` |-> `MAP (n2w o ORD) str : word8 list`,
-             `es` |-> `es with gas_obs := []`]
-      (SPEC_ALL literal_bytelike_run))) >>
-  disch_then drule >> (impl_tac >- simp[]) >> strip_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0 /\
+       storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+     `(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     conj_tac
+     >- (drule msg_gas_state_frame >>
+         disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
+         simp[NoAsms]) >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  reverse (Cases_on `vyperStorageFootprint$storage_trace_domain cx st0 es.storage_trace`)
+  >- (PURE_REWRITE_TAC[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      rw[gasStorageTheory.gas_bad_storage_at_def] >>
+      simp[Once evaluate_def, return_def, evaluate_literal_def]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    (qexists_tac `storage_trace_horizon es.storage_trace` >>
+     fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+  qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ (es with gas_obs := []) _ /\ _`
+    (qspec_then `H0` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
+  `32 + 32 * word_size (STRLEN str) < dimword (:256) /\
+   MEM (mk_inst sa.cs_next_id ALLOCA
+          [Lit (n2w (32 + 32 * word_size (STRLEN str)))]
+          [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
+    (once_rewrite_tac[arithmeticTheory.ADD_COMM] >> conj_tac >> first_assum ACCEPT_TAC) >>
+  mp_tac (SRULE [] (Q.INST [`H` |-> `H0`]
+    (Q.SPECL [`func`, `cenv`, `cx`, `es with gas_obs := []`,
+              `MAP (n2w o ORD) str : word8 list`, `sa`, `cs'`, `buf`, `s0`,
+              `ctx`] (INST_TYPE [alpha |-> ``:256``] literal_bytelike_run)))) >>
+  (impl_tac >- fs[]) >> strip_tac >>
   drule_all literal_bytelike_gas_path >> strip_tac >>
-  simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-  simp[gasSummaryTheory.gas_summary_at_def] >>
+  rpt (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac) >>
+  qpat_x_assum `storage_well_formed_on _ _ (FST H0)` kall_tac >>
+  qpat_x_assum `valid_horizon _ _ H0 _` kall_tac >>
+  PURE_REWRITE_TAC[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  PURE_REWRITE_TAC[gasSummaryTheory.gas_summary_at_def] >>
   qexistsl_tac [`INL (Value (StringV str))`, `es`,
     `OK (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`] >>
   conj_tac
   >- simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
           Once evaluate_def, return_def, evaluate_literal_def] >>
-  simp[] >>
+  disj1_tac >> qexists_tac `t with vs_inst_idx := LENGTH cs'.cs_current_insts` >>
+  BETA_TAC >> rewrite_tac[] >> gen_tac >> strip_tac >>
+  qexists_tac `Value (StringV str)` >> simp[] >>
+  qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ (es with gas_obs := []) _ /\ _`
+    (qspec_then `H` mp_tac) >> (impl_tac >- fs[]) >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
+    (mp_tac (SRULE []
+       (Q.SPECL [`func`, `cenv`, `cx`, `es with gas_obs := []`,
+                 `MAP (n2w o ORD) str : word8 list`, `sa`, `cs'`, `buf`, `s0`,
+                 `ctx`] (INST_TYPE [alpha |-> ``:256``] literal_bytelike_run))) >>
+     (impl_tac >- fs[]) >> strip_tac >> gvs[]) >>
   once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] vv_post_initial_gas)] >>
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.INST [`e` |-> `Literal (BaseT (StringT n)) (StringL str)`]
@@ -1049,12 +1110,12 @@ Finalise compile_literal_other_vv_sim
 Theorem alloc_buffer_frame_run:
   !func cenv cx es sa sm buf sz s.
     context$compile_alloc_buffer sz sa = (buf,sm) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
     ?t w. run_inst_seq (emitted_insts sa sm) s = OK t /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\

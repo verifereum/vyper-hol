@@ -253,12 +253,12 @@ Theorem concat_prefix_run:
     emit_void MSTORE [ob.buf_operand; Lit 0w] s3 = (u,s4) /\
     fn_has_code sa s4 func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ bsz < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t B ow binst oinst.
       gas_path ctx func s0 0 (OK t) /\
-      stmt_state_rel ctx func cenv cx es t /\ ~t.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es t /\ ~t.vs_halted /\
       t.vs_current_bb = s4.cs_current_bb /\
       t.vs_inst_idx = LENGTH s4.cs_current_insts /\
       lookup_var (STRING #"%" (toString sa.cs_next_var)) t = SOME (n2w B) /\
@@ -309,7 +309,7 @@ Proof
     simp[run_inst_seq_def] >>
   `!x. not_fresh_at sa x ==> lookup_var x t2 = lookup_var x t1` by
     (rw[Abbr `t2`, lookup_var_update_var] >> fs[not_fresh_at_def]) >>
-  `stmt_state_rel ctx func cenv cx es t2` by
+  `stmt_state_rel H ctx func cenv cx es t2` by
     (qunabbrev_tac `t2` >> irule stmt_state_rel_update_var >> simp[] >>
      irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
   `t2.vs_allocas = t1.vs_allocas /\ t2.vs_memory = t1.vs_memory` by
@@ -352,7 +352,7 @@ Proof
   `binst.inst_opcode = ALLOCA /\ binst.inst_id = sa.cs_next_id /\
    oinst.inst_opcode = ALLOCA /\ oinst.inst_id = sa.cs_next_id + 2` by
     simp[Abbr `binst`, Abbr `oinst`, mk_inst_def] >>
-  `stmt_state_rel ctx func cenv cx es t4` by
+  `stmt_state_rel H ctx func cenv cx es t4` by
     (qunabbrev_tac `t4` >>
      qspecl_then [`func`, `cenv`, `cx`, `es`, `t3`, `w2n w2`, `0w`, `oinst`,
                   `w2n w2`, `64`, `ctx`] mp_tac literal_mstore_state_rel >>
@@ -979,7 +979,7 @@ Proof
       qpat_assum `!p q. _ ==> mem_bytes_at p q t6.vs_memory = _` irule >>
       pop_assum mp_tac >> qpat_x_assum `32 <= bsz` mp_tac >>
       rpt (pop_assum kall_tac) >> decide_tac)
-  >~ [`stmt_state_rel _ _ _ _ ee t6`]
+  >~ [`stmt_state_rel H _ _ _ _ ee t6`]
   >- (qpat_assum `Abbrev (t6 = _)`
         (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
       match_mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `ee`,

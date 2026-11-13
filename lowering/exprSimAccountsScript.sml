@@ -88,7 +88,7 @@ Theorem unop_frag_read_then:
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           w = typed_val_to_w256 tv v) /\
     (!x ss n out.
-       eval_operand x ss = SOME w1 /\ stmt_state_rel ctx func cenv cx es0 ss ==>
+       eval_operand x ss = SOME w1 /\ stmt_state_rel H ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) /\
     (!c sa sb op ss.
@@ -106,7 +106,7 @@ Proof
   rename1 `emit_op opc [x] sa = (c, s1)` >>
   `opc <> GAS` by
     (strip_tac >> gvs[] >>
-     `stmt_state_rel ctx func cenv cx es0
+     `stmt_state_rel H ctx func cenv cx es0
         (s0 with <|vs_gas_readings := [1w]; vs_inst_idx := s0.vs_inst_idx|>)` by
        (first_assum (mp_then Any
           (qspecl_then [`[1w]`, `s0.vs_inst_idx`, `es0.gas_obs`] mp_tac)
@@ -153,7 +153,7 @@ Proof
      qexistsl_tac [`[x]`, `c`, `opc`, `s1`] >> simp[] >>
      rpt strip_tac >> first_x_assum irule >> simp[]) >>
   qabbrev_tac `u = (update_var out r s0) with vs_inst_idx := SUC s0.vs_inst_idx` >>
-  `stmt_state_rel ctx func cenv cx es0 u` by
+  `stmt_state_rel H ctx func cenv cx es0 u` by
     (simp[Abbr `u`, stmt_state_rel_inst_idx] >>
      irule stmt_state_rel_update_var >> simp[]) >>
   `eval_operand c u = SOME r` by
@@ -206,7 +206,7 @@ Theorem unop_frag_read:
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           r = typed_val_to_w256 tv v) /\
     (!x ss n out.
-       eval_operand x ss = SOME w1 /\ stmt_state_rel ctx func cenv cx es0 ss ==>
+       eval_operand x ss = SOME w1 /\ stmt_state_rel H ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) ==>
     unop_frag ctx func cenv cx (\x. emit_op opc [x]) w1 t (INL v) es0

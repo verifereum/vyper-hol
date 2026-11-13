@@ -1469,7 +1469,7 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       drule_all place_store_scalar_storage_dead >> simp[FUN_EQ_THM]) >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-  irule stmtSimAssignStorageTheory.encode_value_word_typed >>
+  irule stmtSimAssignStorageFactsTheory.encode_value_word_typed >>
   goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> simp[]
 QED
 

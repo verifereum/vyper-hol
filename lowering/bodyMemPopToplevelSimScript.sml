@@ -9,14 +9,14 @@ Ancestors
   list words finite_map fragExec
 
 Theorem pop_mem_updated_state_rel_cursor:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   declared_storage_region cx mid id [] = SOME (tr,w,ArrayTV tv (Dynamic n)) /\
   local_ptrs_reserved cenv sa /\
   u = (if tr then tstore w (n2w (w2n (lookup_storage w (get_storage cx es tr)) - 1)) s
        else sstore w (n2w (w2n (lookup_storage w (get_storage cx es tr)) - 1)) s)
         with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|> /\
   (!q. not_fresh_at sa q ==> lookup_var q u = lookup_var q s) ==>
-  stmt_state_rel ctx func cenv cx
+  stmt_state_rel H ctx func cenv cx
     (set_storage cx es tr
       (apply_writes w [(0,n2w (w2n (lookup_storage w (get_storage cx es tr)) - 1))]
         (get_storage cx es tr))) u
@@ -30,7 +30,7 @@ QED
 
 Theorem pop_mem_positive_holds_cursor:
   expr_sim_inv cenv cx env es /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   declared_storage_region cx mid id [] = SOME (tr,w,ArrayTV tv (Dynamic n)) /\
   evaluate_type (get_tenv cx) ann = SOME tv /\
   len = w2n (lookup_storage w (get_storage cx es tr)) /\ 0 < len /\
@@ -112,7 +112,7 @@ Resume compile_pop_storage_normalized_vv_sim_mem[positive]:
      once_rewrite_tac[arithmeticTheory.MULT_COMM] >> decide_tac) >>
   qmatch_asmsub_abbrev_tac `lookup_var x6 t = SOME elem` >>
   qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ post _` >>
-  `vv_post ctx func cenv cx (Pop ann (TopLevelNameTarget (src,id))) es sa r s0
+  `vv_post H ctx func cenv cx (Pop ann (TopLevelNameTarget (src,id))) es sa r s0
     (set_storage cx es tr
       (apply_writes (n2w slot)
         [(0,n2w (w2n (lookup_storage (n2w slot) (get_storage cx es tr)) - 1))]

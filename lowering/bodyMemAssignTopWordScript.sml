@@ -32,9 +32,9 @@ Theorem assign_storage_store_path_mem:
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     eval_operand op s = SOME w /\ alloca_history func s /\ alloca_inv s /\
-    stmt_state_rel ctx func cenv cx es'
+    stmt_state_rel H ctx func cenv cx es'
       (if tr then tstore slot w s else sstore slot w s) ==>
-    ?t. stmt_state_rel ctx func cenv cx es' t /\
+    ?t. stmt_state_rel H ctx func cenv cx es' t /\
         ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
         t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. lookup_var x t = lookup_var x s) /\
@@ -44,7 +44,7 @@ Theorem assign_storage_store_path_mem:
 Proof
   rpt strip_tac >>
   `~s.vs_call_ctx.cc_static` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
      Cases_on `tr` >>
      simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
           tstore_def, sstore_def, LET_THM]) >>
@@ -133,7 +133,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   qexists_tac `\v ee t.
-    expr_post ctx func cenv cx e es sa sB s0 ee v op t /\
+    expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
     t.vs_current_bb = sB.cs_current_bb /\
     t.vs_inst_idx = LENGTH sB.cs_current_insts /\
@@ -143,7 +143,7 @@ Proof
       `value_has_type tvt v` by metis_tac[] >>
       `encode_value tvt v = SOME [(0, typed_val_to_w256 tvt v)]` by
         (irule encode_value_word_typed >> metis_tac[]) >>
-      qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+      qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
         (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
       `eval_operand op t = SOME (typed_val_to_w256 tvt v)` by
         (gvs[expr_val_rel_def] >> metis_tac[]) >>

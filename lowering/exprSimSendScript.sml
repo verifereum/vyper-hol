@@ -324,9 +324,9 @@ QED
 Theorem expr_post_none_intro:
   expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
-  expr_type e = NoneT /\ stmt_state_rel ctx func cenv cx es' s /\
+  expr_type e = NoneT /\ stmt_state_rel H ctx func cenv cx es' s /\
   wb_frame cenv es es' sa s0 s ==>
-  expr_post ctx func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s
+  expr_post H ctx func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s
 Proof
   strip_tac >>
   fs[expr_post_def, expr_val_rel_def, expr_val_at_def, wb_frame_def,
@@ -359,7 +359,7 @@ Proof
 QED
 
 Theorem send_call_read_step:
-  stmt_state_rel ctx func cenv cx es1 t /\
+  stmt_state_rel H ctx func cenv cx es1 t /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
   IS_SOME (eval_operand gas_op t) /\
@@ -378,14 +378,14 @@ Theorem send_call_read_step:
     ((res = INL NoneV /\
       step_inst_base (mk_inst id CALL
         [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]) t =
-        OK (update_var out 1w t') /\ state_rel func cenv cx es' t') \/
+        OK (update_var out 1w t') /\ state_rel H func cenv cx es' t') \/
      (res = INR (Error (RuntimeError "send failed")) /\
       step_inst_base (mk_inst id CALL
         [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]) t =
         OK (update_var out 0w t')))
 Proof
   strip_tac >> drule eval_send_read >> strip_tac >>
-  `state_rel func cenv cx es1 t` by fs[stmt_state_rel_def] >>
+  `state_rel H func cenv cx es1 t` by fs[stmt_state_rel_def] >>
   `es1.outcomes = SOME t.vs_outcomes` by fs[state_rel_def] >>
   `r <> INR (Error (RuntimeError "call outcome accounts"))` by
     (drule_all eval_send_outcome_typed >> simp[]) >>
@@ -403,7 +403,7 @@ Theorem send_tail_frag:
     sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (u, sb) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
+  stmt_state_rel H ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
   IS_SOME (eval_operand gas_op t) /\
@@ -415,7 +415,7 @@ Theorem send_tail_frag:
   post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   frag_exec ctx sm sb (\s. s = t)
     (\s. ?v. res = INL v /\
-             expr_post ctx func cenv cx e es sa sb s0 es' v (Lit 0w) s)
+             expr_post H ctx func cenv cx e es sa sb s0 es' v (Lit 0w) s)
     (expr_exit res)
 Proof
   strip_tac >> drule_all send_tail_shape >> strip_tac >>
@@ -592,7 +592,7 @@ Theorem send_tail_path[local]:
   emit_void ASSERT [success] s3 = (u, sb) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   fn_has_code sm sb func /\
-  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
+  stmt_state_rel H ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   outcomes_accounts_typed es1.outcomes /\
@@ -607,7 +607,7 @@ Theorem send_tail_path[local]:
   ?n r. gas_marked_path F ctx func t n r /\
     ((?w. r = OK w /\
           (?v. res = INL v /\
-               expr_post ctx func cenv cx e es sa sb s0 es' v (Lit 0w) w) /\
+               expr_post H ctx func cenv cx e es sa sb s0 es' v (Lit 0w) w) /\
           w.vs_current_bb = sb.cs_current_bb /\
           w.vs_inst_idx = LENGTH sb.cs_current_insts) \/
      (exit_result r /\ expr_exit res r))
@@ -630,7 +630,7 @@ Proof
     (qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
   qspecl_then [`ctx`, `func`, `sm`, `sb`, `t`,
     `\w. ?v. res = INL v /\
-            expr_post ctx func cenv cx e es sa sb s0 es' v (Lit 0w) w`,
+            expr_post H ctx func cenv cx e es sa sb s0 es' v (Lit 0w) w`,
     `expr_exit res`] mp_tac run_inst_seq_gas_path >>
   BETA_TAC >> reverse impl_tac >- (disch_then ACCEPT_TAC) >>
   simp[rich_listTheory.IS_PREFIX_APPEND, mk_inst_def, is_terminator_def] >>
@@ -679,7 +679,7 @@ Theorem send_tail_summary[local]:
   emit_void ASSERT [success] s3 = (u, sb) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   fn_has_code sm sb func /\
-  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
+  stmt_state_rel H ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ es1.gas_obs = [] /\
   outcomes_accounts_typed es1.outcomes /\
@@ -695,7 +695,7 @@ Theorem send_tail_summary[local]:
     (bind (eval_send cx has_gas (to_v :: amount_v :: gas_vs)) (read_result cx))
     (es1, t)
     (\res ee t. ?v. res = INL v /\
-       expr_post ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
+       expr_post H ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee r. expr_exit res r)

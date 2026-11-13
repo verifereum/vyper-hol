@@ -17,7 +17,8 @@ Theorem gas_origin_ptr_path_trans:
   gas_origin_ptr_path cx st [] out
 Proof
   strip_tac >> PairCases_on `out` >>
-  drule gas_origin_ptr_path_append >> simp[] >>
+  qspecl_then [`cx`,`st`,`[]`,`(OK s1,G1,tn1)`] mp_tac gas_origin_ptr_path_append >>
+  impl_tac >- first_assum ACCEPT_TAC >> simp[] >>
   disch_then drule >> simp[]
 QED
 
@@ -102,8 +103,12 @@ Proof
   qpat_x_assum `!k bb u g q. _`
     (qspecl_then [`SUC k`, `bb`, `u o SUC`, `g o SUC`, `q o SUC`] mp_tac) >>
   impl_tac
-  >- (simp[] >> rpt strip_tac >>
-      qpat_x_assum `!j. j < LENGTH _ ==> _` (qspec_then `SUC j` mp_tac) >>
+  >- (simp[] >> rpt strip_tac
+      >~ [`run_inst_seq_mem_ok`]
+      >- (drule run_inst_seq_mem_ok_inst_idx >>
+          disch_then (qspecl_then [`u 1`, `SUC k`] (SUBST1_TAC o SYM)) >>
+          first_assum ACCEPT_TAC) >>
+      qpat_x_assum `!j. j < _ ==> _` (qspec_then `SUC j` mp_tac) >>
       simp[ADD_CLAUSES]) >>
   simp[ADD_CLAUSES] >> strip_tac >>
   `gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
@@ -114,7 +119,8 @@ Proof
                      `u` |-> `(u 1) with vs_inst_idx := k`,
                      `G'` |-> `g 1`, `tn'` |-> `q 1`] step_origin_ptr_path) >>
      simp[]) >>
-  drule gas_origin_ptr_path_append >>
+  qpat_x_assum `gas_origin_ptr_path _ ((u 0) with vs_inst_idx := k, g 0, q 0) [] _`
+    (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
   disch_then (qspecl_then [`(u 1) with vs_inst_idx := SUC k`, `g 1`, `q 1`,
     `[]`, `OK ((u (SUC (LENGTH xs))) with vs_inst_idx := SUC (k + LENGTH xs))`,
     `g (SUC (LENGTH xs))`, `q (SUC (LENGTH xs))`] mp_tac) >>
@@ -204,7 +210,7 @@ Proof
     (qspecl_then [`SUC k`, `u o SUC`, `g o SUC`, `q o SUC`] mp_tac) >>
   impl_tac
   >- (simp[ADD_CLAUSES] >> rpt strip_tac >>
-      qpat_x_assum `!j. j < LENGTH _ ==> _` (qspec_then `SUC j` mp_tac) >>
+      qpat_x_assum `!j. j < _ ==> _` (qspec_then `SUC j` mp_tac) >>
       simp[ADD_CLAUSES]) >>
   simp[inst_seq_ptr_def]
 QED

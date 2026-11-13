@@ -14,13 +14,13 @@ Ancestors
 Theorem body_prevhash_counted:
   compile_env_var PrevHash sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
   alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_path_mem ctx func s0 0 (OK t) /\
       eval_operand op t = SOME (HD cx.txn.block_hashes) /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z t = SOME w) /\
       t.vs_memory = s0.vs_memory /\ t.vs_allocas = s0.vs_allocas /\
       t.vs_alloca_next = s0.vs_alloca_next /\ alloca_history func t /\
@@ -65,7 +65,7 @@ Proof
        (simp[FILTER_EQ_NIL] >> fs[EVERY_MEM] >> rpt strip_tac >>
         qpat_x_assum `!i. MEM i _ ==> _ /\ ~is_ext_call_op _ /\ _`
           drule >> rw[] >> gvs[]) >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (qpat_x_assum `t = _ with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
      irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
      simp[lookup_var_def] >> first_x_assum irule >>
@@ -79,10 +79,10 @@ Theorem body_prevhash_mem_prefix[local]:
   lower_value compile_expr cenv ty
     (Builtin (env_item_type PrevHash) (Env PrevHash) []) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?v t. gas_value_prefix T (ctx,func,cenv,cx)
+  ?v t. gas_value_prefix H T (ctx,func,cenv,cx)
     (ty,Builtin (env_item_type PrevHash) (Env PrevHash) [])
     (sa,sb,op) (es,s0) [] (v,es,t)
 Proof

@@ -17,23 +17,28 @@ val literal_bytes_word_tac =
        vyperValueTheory.evaluate_type_def];
 
 Theorem literal_bytes_word_prefix[local]:
-  !ctx func cenv cx env ty ann bs es sa sb op s0.
+  !H ctx func cenv cx env ty ann bs es sa sb op s0.
     expr_sim_pre cenv cx env (Literal ann (BytesL bs)) es /\
     is_word_type ann /\
     lower_value compile_expr cenv ty (Literal ann (BytesL bs)) sa = (op,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_value_prefix F (ctx,func,cenv,cx) (ty,Literal ann (BytesL bs))
+    gas_value_prefix H F (ctx,func,cenv,cx) (ty,Literal ann (BytesL bs))
       (sa,sb,op) (es,s0) [] (evaluate_literal (BytesL bs),es,s0)
 Proof
   rpt gen_tac >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   gvs[gas_value_prefix_def, gas_marked_exec_def, gas_marked_path_def,
       literal_read_all_tails, expr_sim_pre_def, well_typed_expr_def] >>
   Cases_on `ann` >> gvs[well_typed_literal_def, is_word_type_def] >>
@@ -56,6 +61,11 @@ Proof
   rpt gen_tac >> strip_tac >> irule expr_sim_values >>
   rpt gen_tac >> strip_tac >>
   qexistsl_tac [`[]`, `evaluate_literal (BytesL bs)`, `es`, `s0`] >>
+  conj_tac
+  >- (simp[gas_marked_exec_def, gas_marked_path_def, literal_read_all_tails] >>
+      irule (cj 1 gas_path_rules) >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
   irule literal_bytes_word_prefix >> simp[] >> metis_tac[]
 QED
 
