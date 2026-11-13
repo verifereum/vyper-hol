@@ -8,6 +8,9 @@
  * ways and the event count.  Composing these gives the mask's sites as a
  * prefix of the raw unit's events for every terminating filling, and the
  * all-dead simulation from the filled raw state to the output state.
+ * When DFT's block lemma holds, the runs before it also keep the first n
+ * events of a run safe up to the cut n, terminating or not, so the sites
+ * start with those n raw events.
  *)
 Theory o1PipelineGasMask
 Ancestors
@@ -20,7 +23,9 @@ Ancestors
   ctxLookupAgree fcgPruning unitTransformDefs venomPipelineDriver
   venomPassSchedule venomExecSemantics venomInst venomState
   passSimulationDefs makeSsaCurrentEvents venomPipelineRunner
-  o1FnScheduleDecompHelpers option list
+  o1FnScheduleDecompHelpers o1PrewalkSafeUpto o1SafeUpto
+  o1ContractLowerDloadStage concretizeStageShape o1ContractMakeSsaSrc
+  option list
 
 (* ===== Runs at the entry ===== *)
 
@@ -407,6 +412,338 @@ QED
 fun spec_stage n th =
   REWRITE_RULE [] (numLib.REDUCE_RULE (REWRITE_RULE [o1_fn_passes_el] (Q.SPEC n th)));
 
+(* ===== Safe prefixes before DFT ===== *)
+
+(* The cut prefixes of the entry events: for a cut n and a state w, the
+   first n events of A's entry run at some fuel are the first n of B's at
+   some fuel. *)
+Theorem gas_prefix_trans[local]:
+  B.ctx_entry = A.ctx_entry /\
+  (!nm fa la f.
+     A.ctx_entry = SOME nm /\ lookup_function nm A.ctx_functions = SOME fa /\
+     fn_entry_label fa = SOME la /\
+     n <= LENGTH (gas_events_blocks f A fa
+            (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)) ==>
+     ?f' fb lb.
+       lookup_function nm B.ctx_functions = SOME fb /\ fn_entry_label fb = SOME lb /\
+       n <= LENGTH (gas_events_blocks f' B fb
+              (w with <| vs_prev_bb := NONE; vs_current_bb := lb; vs_inst_idx := 0 |>)) /\
+       TAKE n (gas_events_blocks f' B fb
+         (w with <| vs_prev_bb := NONE; vs_current_bb := lb; vs_inst_idx := 0 |>)) =
+       TAKE n (gas_events_blocks f A fa
+         (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>))) /\
+  (!nm fb lb f.
+     B.ctx_entry = SOME nm /\ lookup_function nm B.ctx_functions = SOME fb /\
+     fn_entry_label fb = SOME lb /\
+     n <= LENGTH (gas_events_blocks f B fb
+            (w with <| vs_prev_bb := NONE; vs_current_bb := lb; vs_inst_idx := 0 |>)) ==>
+     ?f' fc lc.
+       lookup_function nm C.ctx_functions = SOME fc /\ fn_entry_label fc = SOME lc /\
+       n <= LENGTH (gas_events_blocks f' C fc
+              (w with <| vs_prev_bb := NONE; vs_current_bb := lc; vs_inst_idx := 0 |>)) /\
+       TAKE n (gas_events_blocks f' C fc
+         (w with <| vs_prev_bb := NONE; vs_current_bb := lc; vs_inst_idx := 0 |>)) =
+       TAKE n (gas_events_blocks f B fb
+         (w with <| vs_prev_bb := NONE; vs_current_bb := lb; vs_inst_idx := 0 |>))) ==>
+  !nm fa la f.
+    A.ctx_entry = SOME nm /\ lookup_function nm A.ctx_functions = SOME fa /\
+    fn_entry_label fa = SOME la /\
+    n <= LENGTH (gas_events_blocks f A fa
+           (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)) ==>
+    ?f' fc lc.
+      lookup_function nm C.ctx_functions = SOME fc /\ fn_entry_label fc = SOME lc /\
+      n <= LENGTH (gas_events_blocks f' C fc
+             (w with <| vs_prev_bb := NONE; vs_current_bb := lc; vs_inst_idx := 0 |>)) /\
+      TAKE n (gas_events_blocks f' C fc
+        (w with <| vs_prev_bb := NONE; vs_current_bb := lc; vs_inst_idx := 0 |>)) =
+      TAKE n (gas_events_blocks f A fa
+        (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>))
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!nm fa la f. A.ctx_entry = _ /\ _ ==> _`
+    (drule_all_then strip_assume_tac) >>
+  `B.ctx_entry = SOME nm` by metis_tac[] >>
+  qpat_x_assum `!nm fb lb f. B.ctx_entry = _ /\ _ ==> _`
+    (drule_all_then strip_assume_tac) >>
+  metis_tac[]
+QED
+
+(* Same entry events at the same fuel give the same cut prefix. *)
+Theorem gas_prefix_same_events[local]:
+  o1_run_state_ok w /\
+  (!nm fa. lookup_function nm A.ctx_functions = SOME fa ==>
+     ?fb. lookup_function nm B.ctx_functions = SOME fb /\
+       fn_entry_label fb = fn_entry_label fa /\
+       !f st. fn_entry_state fa st ==>
+         gas_events_blocks f A fa st = gas_events_blocks f B fb st) ==>
+  !nm fa la f.
+    A.ctx_entry = SOME nm /\ lookup_function nm A.ctx_functions = SOME fa /\
+    fn_entry_label fa = SOME la /\
+    n <= LENGTH (gas_events_blocks f A fa
+           (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)) ==>
+    ?f' fb lb.
+      lookup_function nm B.ctx_functions = SOME fb /\ fn_entry_label fb = SOME lb /\
+      n <= LENGTH (gas_events_blocks f' B fb
+             (w with <| vs_prev_bb := NONE; vs_current_bb := lb; vs_inst_idx := 0 |>)) /\
+      TAKE n (gas_events_blocks f' B fb
+        (w with <| vs_prev_bb := NONE; vs_current_bb := lb; vs_inst_idx := 0 |>)) =
+      TAKE n (gas_events_blocks f A fa
+        (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>))
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!nm fa. _` drule >> strip_tac >>
+  qexistsl [`f`, `fb`, `la`] >>
+  `fn_entry_state fa
+     (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)` by
+    metis_tac[run_state_ok_entry_state] >>
+  qpat_x_assum `!f st. _`
+    (qspecl_then [`f`, `w with <| vs_prev_bb := NONE; vs_current_bb := la;
+                                  vs_inst_idx := 0 |>`] mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >> fs[]
+QED
+
+val make_ssa_prefix_tac =
+  `EVERY make_ssa_input_ok C.ctx_functions` by
+    fs[o1_pre_def, EVERY_MEM, o1_fn_row_def] >>
+  match_mp_tac gas_prefix_same_events >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >>
+  drule_all make_ssa_stage_gas_events >> strip_tac >>
+  qexists_tac `fn'` >> simp[] >>
+  drule make_ssa_stage_functions >> strip_tac >>
+  drule makeSsaCurrentEventsTheory.current_events_lookup_functions >>
+  disch_then (qspec_then `nm` mp_tac) >>
+  gvs[optionTheory.OPTREL_def] >>
+  metis_tac[make_ssa_current_fn_entry_label];
+
+(* One walk run before DFT keeps the cut prefix.  LowerDload and
+   ConcretizeMemLoc need the run to be safe up to the cut; the others keep
+   the entry events at every fuel. *)
+Theorem o1_walk_step_prefix[local]:
+  ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k) C C' /\
+  o1_pre k C C' /\ o1_ctx_shape C /\
+  dead_wf D /\ k < 7 /\ o1_run_state_ok w /\
+  (k = 1 ==> ?names. callee_first names C.ctx_functions /\ o1_safe_upto D lo n C w) /\
+  (k = 2 ==> (?names. callee_first names C.ctx_functions) /\
+             EVERY ssa_form C.ctx_functions /\
+             o1_ptr_safe_upto D lo n C w /\ alloca_frontier_upto n C w) /\
+  (k = 3 ==> (?names. callee_first names C.ctx_functions) /\ fmp_free_ctx C) ==>
+  !nm fa la f.
+    C.ctx_entry = SOME nm /\ lookup_function nm C.ctx_functions = SOME fa /\
+    fn_entry_label fa = SOME la /\
+    n <= LENGTH (gas_events_blocks f C fa
+           (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)) ==>
+    ?f' fb lb.
+      lookup_function nm C'.ctx_functions = SOME fb /\ fn_entry_label fb = SOME lb /\
+      n <= LENGTH (gas_events_blocks f' C' fb
+             (w with <| vs_prev_bb := NONE; vs_current_bb := lb; vs_inst_idx := 0 |>)) /\
+      TAKE n (gas_events_blocks f' C' fb
+        (w with <| vs_prev_bb := NONE; vs_current_bb := lb; vs_inst_idx := 0 |>)) =
+      TAKE n (gas_events_blocks f C fa
+        (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>))
+Proof
+  strip_tac >>
+  `k = 0 \/ k = 1 \/ k = 2 \/ k = 3 \/ k = 4 \/ k = 5 \/ k = 6` by decide_tac >>
+  pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC >>
+  RULE_ASSUM_TAC (REWRITE_RULE [] o numLib.REDUCE_RULE o
+                  REWRITE_RULE [o1_fn_passes_el]) >>
+  rpt (qpat_x_assum `_ /\ _` strip_assume_tac) >>
+  rpt (qpat_x_assum `?names. _` strip_assume_tac)
+  >~ [`VP_MakeSSA`] >- make_ssa_prefix_tac
+  >~ [`VP_LowerDload`]
+  >- (rpt strip_tac >>
+      drule_all lower_dload_stage_events_upto >> strip_tac >>
+      qexistsl [`fuel'`, `fn'`, `la`] >> simp[])
+  >~ [`VP_ConcretizeMemLoc`]
+  >- (rpt strip_tac >>
+      `ctx_inst_ids_distinct C` by fs[o1_ctx_shape_def] >>
+      `EVERY all_reachable C.ctx_functions /\
+       EVERY fn_defs_reach_uses C.ctx_functions` by
+        fs[o1_pre_def, o1_fn_row_def, EVERY_MEM, make_ssa_input_ok_def] >>
+      mp_tac (Q.INST [`vs` |-> `w`, `fuel` |-> `f`, `name` |-> `nm`,
+                      `fn` |-> `fa`, `lbl` |-> `la`,
+                      `s` |-> `w with <| vs_prev_bb := NONE; vs_current_bb := la;
+                                         vs_inst_idx := 0 |>`]
+                layout_stage_prefix_events) >>
+      impl_tac >- (simp[] >> metis_tac[]) >>
+      strip_tac >> qexistsl [`fuel'`, `fn'`, `la`] >> simp[])
+  >~ [`VP_FmpLowering`]
+  >- (`EVERY (\fn. fn.fn_fmp_signature = NONE /\ no_raw_fmp_ops fn)
+         C.ctx_functions` by fs[fmp_free_ctx_def] >>
+      match_mp_tac gas_prefix_same_events >> conj_tac >- first_assum ACCEPT_TAC >>
+      rpt strip_tac >>
+      drule_all fmp_lowering_stage_gas_events >> strip_tac >>
+      qexists_tac `fn'` >> simp[] >>
+      qpat_x_assum `fn_seal_eq _ _`
+        (mp_tac o Q.AP_TERM `\g. g.fn_blocks` o REWRITE_RULE [fn_seal_eq_def]) >>
+      simp[] >> strip_tac >> fs[fn_entry_label_def, entry_block_def])
+  >~ [`VP_MakeSSA`] >- make_ssa_prefix_tac
+  >~ [`VP_SimplifyCFG`]
+  >- (`EVERY simplify_cfg_fn_ok C.ctx_functions` by
+        (gvs[o1_pre_def, o1_fn_row_def, o1_ctx_shape_def, EVERY_MEM] >>
+         rpt strip_tac >> irule simplify_cfg_fn_ok_ssa >>
+         metis_tac[o1_fn_shape_def]) >>
+      rpt strip_tac >>
+      drule_all simplify_cfg_stage_gas_prefix >>
+      disch_then (qspec_then `f` strip_assume_tac) >>
+      qexistsl [`fuel'`, `fn'`, `la`] >> simp[TAKE_APPEND1])
+  >> match_mp_tac gas_prefix_same_events >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >>
+  `EVERY (o1_fn_row 6) C.ctx_functions` by fs[o1_pre_def] >>
+  drule_all sue_stage_gas_events >> strip_tac >>
+  qexists_tac `fn'` >> simp[]
+QED
+
+(* The runs before DFT keep the cut prefix of a run safe up to the cut:
+   the walk input's safety gives the safety LowerDload and
+   ConcretizeMemLoc read. *)
+Theorem o1_walk_before_dft_prefix[local]:
+  (!k. k < LENGTH o1_fn_passes ==>
+       ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+         (stage k) (stage (SUC k))) /\
+  (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
+  (!k. k <= LENGTH o1_fn_passes ==> EVERY (o1_fn_row k) (stage k).ctx_functions) /\
+  (!k. k <= LENGTH o1_fn_passes ==> (stage k).ctx_entry = (stage 0).ctx_entry) /\
+  callee_first names (stage 0).ctx_functions /\
+  dead_wf D /\ o1_run_state_ok w /\ o1_safe_upto D lo n (stage 0) w ==>
+  !m. m <= 7 ==>
+  !nm fa la f.
+    (stage 0).ctx_entry = SOME nm /\
+    lookup_function nm (stage 0).ctx_functions = SOME fa /\
+    fn_entry_label fa = SOME la /\
+    n <= LENGTH (gas_events_blocks f (stage 0) fa
+           (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)) ==>
+    ?f' fb lb.
+      lookup_function nm (stage m).ctx_functions = SOME fb /\
+      fn_entry_label fb = SOME lb /\
+      n <= LENGTH (gas_events_blocks f' (stage m) fb
+             (w with <| vs_prev_bb := NONE; vs_current_bb := lb; vs_inst_idx := 0 |>)) /\
+      TAKE n (gas_events_blocks f' (stage m) fb
+        (w with <| vs_prev_bb := NONE; vs_current_bb := lb; vs_inst_idx := 0 |>)) =
+      TAKE n (gas_events_blocks f (stage 0) fa
+        (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>))
+Proof
+  strip_tac >>
+  `!k. k < 7 ==>
+     ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
+       (stage k) (stage (SUC k)) /\
+     o1_pre k (stage k) (stage (SUC k)) /\ o1_ctx_shape (stage k) /\
+     (stage k).ctx_entry = (stage 0).ctx_entry` by
+    (gen_tac >> strip_tac >>
+     `k < LENGTH o1_fn_passes /\ k <= LENGTH o1_fn_passes /\
+      SUC k <= LENGTH o1_fn_passes` by simp[o1_fn_passes_el] >>
+     simp[o1_pre_def] >> metis_tac[]) >>
+  (* the facts LowerDload, ConcretizeMemLoc and FmpLowering read *)
+  `ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) (o1_walk_view rpolicy 0)
+     (stage 0) (stage 1) /\
+   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) (o1_walk_view rpolicy 1)
+     (stage 1) (stage 2) /\
+   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) (o1_walk_view rpolicy 2)
+     (stage 2) (stage 3)` by
+    (qpat_assum `!k. k < LENGTH _ ==> _`
+       (fn th => assume_tac (spec_stage `0` th) >> assume_tac (spec_stage `1` th) >>
+                 assume_tac (spec_stage `2` th)) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `o1_ctx_shape (stage 0) /\ o1_ctx_shape (stage 1) /\ o1_ctx_shape (stage 2) /\
+   EVERY (o1_fn_row 0) (stage 0).ctx_functions /\
+   EVERY (o1_fn_row 1) (stage 1).ctx_functions /\
+   EVERY (o1_fn_row 2) (stage 2).ctx_functions` by
+    (qpat_assum `!k. k <= LENGTH _ ==> o1_ctx_shape _`
+       (fn th => assume_tac (spec_stage `0` th) >> assume_tac (spec_stage `1` th) >>
+                 assume_tac (spec_stage `2` th)) >>
+     qpat_assum `!k. k <= LENGTH _ ==> EVERY _ _`
+       (fn th => assume_tac (spec_stage `0` th) >> assume_tac (spec_stage `1` th) >>
+                 assume_tac (spec_stage `2` th)) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `EVERY make_ssa_input_ok (stage 0).ctx_functions /\
+   EVERY make_ssa_input_ok (stage 2).ctx_functions` by
+    fs[EVERY_MEM, o1_fn_row_def] >>
+  `callee_first names (stage 1).ctx_functions` by
+    metis_tac[make_ssa_src_stage_callee_first] >>
+  `callee_first names (stage 2).ctx_functions` by
+    metis_tac[lower_dload_stage_callee_first] >>
+  `o1_safe_upto D lo n (stage 1) w` by
+    (drule_all make_ssa_stage_safe_upto >> simp[]) >>
+  `EVERY ssa_form (stage 1).ctx_functions` by
+    metis_tac[make_ssa_stage_wf_ssa, venomWfTheory.wf_ssa_def, EVERY_MEM] >>
+  `EVERY ssa_form (stage 2).ctx_functions` by
+    metis_tac[lower_dload_stage_ssa_form] >>
+  `o1_ptr_safe_upto D lo n (stage 2) w /\ alloca_frontier_upto n (stage 2) w` by
+    (drule_all lower_dload_stage_safe_upto >> simp[]) >>
+  `fmp_free_ctx (stage 3) /\ callee_first names (stage 3).ctx_functions` by
+    (`reserved_intervals_wf (stage 2).ctx_global_reserved /\
+      EVERY (\fn. fn.fn_eom = NONE) (stage 2).ctx_functions /\
+      fmp_free_ctx (stage 2)` by fs[o1_ptr_safe_upto_def] >>
+     drule_all concretize_stage_shape >> strip_tac >> simp[]) >>
+  (* the runs one by one *)
+  Induct
+  >- (rpt strip_tac >> qexistsl [`f`, `fa`, `la`] >> simp[]) >>
+  strip_tac >> `m < 7 /\ m <= 7` by decide_tac >>
+  qpat_x_assum `m <= 7 ==> _` (fn th => assume_tac (MP th (ASSUME ``m <= 7``))) >>
+  qpat_assum `!k. k < 7 ==> _` (qspec_then `m` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  mp_tac (Q.INST [`A` |-> `stage 0`, `B` |-> `stage (m:num)`, `C` |-> `stage (SUC m)`]
+            gas_prefix_trans) >>
+  impl_tac
+  >- (rpt conj_tac
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC >>
+      mp_tac (Q.INST [`C` |-> `stage (m:num)`, `C'` |-> `stage (SUC m)`, `k` |-> `m:num`]
+                o1_walk_step_prefix) >>
+      impl_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+      disch_then ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
+QED
+
+Theorem take_prefix_extend[local]:
+  sites = l ++ e /\ TAKE n l = TAKE n m ==> sites = TAKE n m ++ (DROP n l ++ e)
+Proof
+  strip_tac >> pop_assum (fn th => rewrite_tac[GSYM th]) >>
+  asm_rewrite_tac[APPEND_ASSOC, TAKE_DROP]
+QED
+
+(* DFT's mask, with the prefix half when the DFT block lemma holds. *)
+Theorem dft_stage_gas_mask_cond[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_DFT) view C C' /\ o1_pre 7 C C' /\
+  o1_ctx_shape C /\ o1_ctx_shape C' /\ EVERY wf_ssa C.ctx_functions /\
+  o1_run_state_ok vs' /\
+  C'.ctx_entry = SOME nm /\ lookup_function nm C'.ctx_functions = SOME fn' /\
+  fn_entry_label fn' = SOME lbl /\
+  terminates (run_context fuel C' vs') /\
+  gas_count_blocks fuel C' fn'
+    (vs' with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>) <=
+    LENGTH vs'.vs_gas_readings ==>
+  ?fn raw_slots sites unused.
+    C.ctx_entry = SOME nm /\
+    lookup_function nm C.ctx_functions = SOME fn /\ fn_entry_label fn = SOME lbl /\
+    LENGTH raw_slots = LENGTH sites /\
+    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) vs'.vs_gas_readings /\
+    (!gobs tail.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs ==>
+      (?extra. sites =
+         gas_events_blocks fuel C fn
+           (vs' with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                        vs_current_bb := lbl; vs_inst_idx := 0 |>) ++ extra) /\
+      ((?fr. terminates
+               (run_context fr C (vs' with vs_gas_readings := gobs ++ tail))) ==>
+       terminates (run_context fuel C (vs' with vs_gas_readings := gobs ++ tail)) /\
+       !D. ctx_sim D C C' (vs' with vs_gas_readings := gobs ++ tail) vs')) /\
+    (dft_blocks_gas_prefix ==>
+     !gobs tail.
+       LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs ==>
+       !f_src. ?extra. sites =
+         gas_events_blocks f_src C fn
+           (vs' with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                        vs_current_bb := lbl; vs_inst_idx := 0 |>) ++ extra)
+Proof
+  strip_tac >> Cases_on `dft_blocks_gas_prefix`
+  >- (drule_all dft_stage_gas_mask_prefix >> strip_tac >>
+      qexistsl [`fn`, `raw_slots`, `sites`, `unused`] >> simp[] >>
+      metis_tac[])
+  >> drule_all dft_stage_gas_mask >> strip_tac >>
+  qexistsl [`fn`, `raw_slots`, `sites`, `unused`] >> simp[]
+QED
+
 Theorem o1_walk_gas_mask[local]:
   (!k. k < LENGTH o1_fn_passes ==>
        ctx_pass_stage rpolicy (EL k o1_fn_passes) (o1_walk_view rpolicy k)
@@ -414,6 +751,7 @@ Theorem o1_walk_gas_mask[local]:
   (!k. k <= LENGTH o1_fn_passes ==> o1_ctx_shape (stage k)) /\
   (!k. k <= LENGTH o1_fn_passes ==> EVERY (o1_fn_row k) (stage k).ctx_functions) /\
   (!k. k <= LENGTH o1_fn_passes ==> (stage k).ctx_entry = (stage 0).ctx_entry) /\
+  callee_first names (stage 0).ctx_functions /\
   o1_run_state_ok vs_out /\
   (stage 9).ctx_entry = SOME nm /\
   lookup_function nm (stage 9).ctx_functions = SOME fn /\
@@ -425,7 +763,7 @@ Theorem o1_walk_gas_mask[local]:
   ?raw_slots sites unused.
     LENGTH raw_slots = LENGTH sites /\
     PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) vs_out.vs_gas_readings /\
-    !gobs tail D.
+    (!gobs tail D.
       LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs /\
       dead_wf D /\
       o1_inv D 0 (stage 0) (vs_out with vs_gas_readings := gobs ++ tail) /\
@@ -441,7 +779,21 @@ Theorem o1_walk_gas_mask[local]:
                (vs_out with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
                                vs_current_bb := la; vs_inst_idx := 0 |>) ++ extra) /\
       ctx_sim D (stage 0) (stage 9) (vs_out with vs_gas_readings := gobs ++ tail)
-        vs_out
+        vs_out) /\
+    (dft_blocks_gas_prefix ==>
+     !gobs tail D lo n f fa la.
+       LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs /\
+       dead_wf D /\
+       o1_safe_upto D lo n (stage 0) (vs_out with vs_gas_readings := gobs ++ tail) /\
+       lookup_function nm (stage 0).ctx_functions = SOME fa /\
+       fn_entry_label fa = SOME la /\
+       n <= LENGTH (gas_events_blocks f (stage 0) fa
+              (vs_out with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                              vs_current_bb := la; vs_inst_idx := 0 |>)) ==>
+       ?extra. sites =
+         TAKE n (gas_events_blocks f (stage 0) fa
+              (vs_out with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                              vs_current_bb := la; vs_inst_idx := 0 |>)) ++ extra)
 Proof
   strip_tac >>
   `(stage 0).ctx_entry = SOME nm /\ (stage 7).ctx_entry = SOME nm /\
@@ -497,12 +849,34 @@ Proof
   (* the DFT mask at the output state *)
   mp_tac (Q.INST [`C` |-> `stage 7`, `C'` |-> `stage 8`, `vs'` |-> `vs_out`,
                   `fuel` |-> `fuel8`, `fn'` |-> `fn8`,
-                  `view` |-> `o1_walk_view rpolicy 7`] dft_stage_gas_mask) >>
+                  `view` |-> `o1_walk_view rpolicy 7`] dft_stage_gas_mask_cond) >>
   impl_tac >- (simp[] >> metis_tac[]) >>
   disch_then (qx_choosel_then [`fn7`, `raw_slots`, `sites`, `unused`]
                 strip_assume_tac) >>
   qexistsl [`raw_slots`, `sites`, `unused`] >> simp[] >>
+  reverse conj_tac
+  >- ((* the safe prefix *)
+      rpt strip_tac >>
+      qpat_x_assum `dft_blocks_gas_prefix ==> _`
+        (fn th => mp_tac (Q.SPECL [`gobs`, `tail`] (UNDISCH th))) >>
+      impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+      RULE_ASSUM_TAC (REWRITE_RULE [GSYM filled_entry_state]) >>
+      rewrite_tac [GSYM filled_entry_state] >>
+      mp_tac (Q.INST [`w` |-> `vs_out with vs_gas_readings := gobs ++ tail`]
+                o1_walk_before_dft_prefix) >>
+      impl_tac
+      >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+          simp[run_state_ok_gas_readings]) >>
+      disch_then (qspec_then `7` mp_tac) >> impl_tac >- simp[] >>
+      disch_then (qspecl_then [`nm`, `fa`, `la`, `f`] mp_tac) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then (qx_choosel_then [`f7`, `fc`, `lc`] strip_assume_tac) >>
+      `fc = fn7` by metis_tac[SOME_11] >>
+      `lc = lbl` by metis_tac[SOME_11] >>
+      qpat_x_assum `!f_src. _` (qspec_then `f7` strip_assume_tac) >>
+      metis_tac[take_prefix_extend]) >>
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `dft_blocks_gas_prefix ==> _` kall_tac >>
   qabbrev_tac `w = vs_out with vs_gas_readings := gobs ++ tail` >>
   `o1_run_state_ok w` by simp[Abbr `w`, run_state_ok_gas_readings] >>
   qpat_x_assum `!gobs tail. _` (qspecl_then [`gobs`, `tail`] mp_tac) >>
@@ -644,7 +1018,7 @@ Theorem o1_pipeline_gas_mask:
   ?raw_slots sites unused.
     LENGTH raw_slots = LENGTH sites /\
     PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) vs_out.vs_gas_readings /\
-    !gobs tail D.
+    (!gobs tail D.
       LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs /\
       (?fr. terminates (run_context fr unit.cu_context
                           (vs_out with vs_gas_readings := gobs ++ tail))) /\
@@ -660,7 +1034,21 @@ Theorem o1_pipeline_gas_mask:
                (vs_out with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
                                vs_current_bb := lbl0; vs_inst_idx := 0 |>) ++ extra) /\
       ctx_sim D unit.cu_context out.po_unit.cu_context
-        (vs_out with vs_gas_readings := gobs ++ tail) vs_out
+        (vs_out with vs_gas_readings := gobs ++ tail) vs_out) /\
+    (dft_blocks_gas_prefix ==>
+     !gobs tail D lo n f fa la.
+       LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs /\
+       dead_wf D /\
+       o1_safe_upto D lo n unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) /\
+       lookup_function nm unit.cu_context.ctx_functions = SOME fa /\
+       fn_entry_label fa = SOME la /\
+       n <= LENGTH (gas_events_blocks f unit.cu_context fa
+              (vs_out with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                              vs_current_bb := la; vs_inst_idx := 0 |>)) ==>
+       ?extra. sites =
+         TAKE n (gas_events_blocks f unit.cu_context fa
+              (vs_out with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                              vs_current_bb := la; vs_inst_idx := 0 |>)) ++ extra)
 Proof
   strip_tac >> drule o1_driver_runs >> strip_tac >>
   `o1_ctx_shape unit.cu_context` by metis_tac[o1_source_unit_ok_ctx_shape] >>
@@ -697,16 +1085,77 @@ Proof
   impl_tac >- simp[] >>
   disch_then (qx_choosel_then [`raw_slots`, `sites`, `unused`] strip_assume_tac) >>
   qexistsl [`raw_slots`, `sites`, `unused`] >> simp[] >>
+  (* static facts of the pre-walk *)
+  `ctx_wf pre.cu_context` by metis_tac[o1_ctx_shape_wf] >>
+  `fcg_is_reachable (fcg_analyze pre.cu_context) entry` by
+    metis_tac[fcg_analyze_entry_reachable] >>
+  `unit.cu_context.ctx_entry = SOME entry` by metis_tac[] >>
+  `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
+     unit.cu_context.ctx_functions` by
+    (fs[unitShapeDefsTheory.o1_source_unit_ok_def, EVERY_MEM] >> rpt strip_tac >>
+     res_tac >> gvs[unitShapeDefsTheory.raw_opcode_ok_def]) >>
+  `EVERY simplify_cfg_fn_ok unit.cu_context.ctx_functions` by
+    (fs[o1_ctx_shape_def, unit_defs_reach_uses_def, EVERY_MEM] >>
+     rpt strip_tac >> irule simplify_cfg_fn_ok_no_phi >>
+     simp[EVERY_MEM] >> metis_tac[o1_fn_shape_def]) >>
+  reverse conj_tac
+  >- ((* the safe prefix: raw unit to SimplifyCFG's output, the pruned walk
+         input, then the walk *)
+      rpt strip_tac >>
+      RULE_ASSUM_TAC (REWRITE_RULE [GSYM filled_entry_state]) >>
+      rewrite_tac [GSYM filled_entry_state] >>
+      `o1_run_state_ok (vs_out with vs_gas_readings := gobs ++ tail)` by
+        simp[run_state_ok_gas_readings] >>
+      `o1_safe_upto D lo n (stage 0) (vs_out with vs_gas_readings := gobs ++ tail)` by
+        (qpat_x_assum `stage 0 = _` (fn th => rewrite_tac[th]) >>
+         qunabbrev_tac `P` >>
+         mp_tac (Q.INST [`s` |-> `init_ir_supply unit`,
+                         `vs` |-> `vs_out with vs_gas_readings := gobs ++ tail`]
+                   o1_walk_input_safe_upto) >>
+         impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
+      mp_tac (Q.SPECL [`rpolicy`, `any_view`, `unit.cu_context`, `mid.cu_context`,
+                       `vs_out with vs_gas_readings := gobs ++ tail`, `entry`, `fa`,
+                       `la`] simplify_cfg_stage_gas_prefix) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then (qspec_then `f` (qx_choosel_then [`f1`, `fm`, `ex1`]
+                                    strip_assume_tac)) >>
+      `lookup_function entry (stage 0).ctx_functions = SOME fm /\
+       !g st. gas_events_blocks g (stage 0) fm st =
+              gas_events_blocks g mid.cu_context fm st` by
+        (qpat_x_assum `stage 0 = _` (fn th => rewrite_tac[th]) >>
+         qunabbrev_tac `P` >>
+         `lookup_function entry pre.cu_context.ctx_functions = SOME fm` by
+           metis_tac[] >>
+         conj_tac >- metis_tac[lookup_function_prune_fcg_reachable] >>
+         mp_tac (Q.INST [`fcg` |-> `fcg_analyze pre.cu_context`, `unit` |-> `pre`,
+                         `fn` |-> `fm`] o1_prune_gas_events) >>
+         impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
+         rpt strip_tac >> metis_tac[]) >>
+      qpat_x_assum `dft_blocks_gas_prefix ==> _`
+        (fn th => mp_tac (Q.SPECL [`gobs`, `tail`, `D`, `lo`, `n`, `f1`, `fm`, `la`]
+                            (UNDISCH th))) >>
+      qabbrev_tac `st = (vs_out with vs_gas_readings := gobs ++ tail) with
+                          <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>` >>
+      `gas_events_blocks f1 (stage 0) fm st =
+       gas_events_blocks f unit.cu_context fa st ++ ex1` by metis_tac[] >>
+      `n <= LENGTH (gas_events_blocks f1 (stage 0) fm st)` by
+        (qpat_x_assum `gas_events_blocks f1 (stage 0) fm st = _`
+           (fn th => rewrite_tac[th, LENGTH_APPEND]) >> decide_tac) >>
+      `TAKE n (gas_events_blocks f1 (stage 0) fm st) =
+       TAKE n (gas_events_blocks f unit.cu_context fa st)` by
+        (qpat_x_assum `gas_events_blocks f1 (stage 0) fm st = _`
+           (fn th => rewrite_tac[th]) >>
+         irule TAKE_APPEND1 >> first_assum ACCEPT_TAC) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      strip_tac >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `dft_blocks_gas_prefix ==> _` kall_tac >>
   qpat_x_assum `!gobs tail D. _` (qspecl_then [`gobs`, `tail`, `D`] assume_tac) >>
   qabbrev_tac `w = vs_out with vs_gas_readings := gobs ++ tail` >>
   `o1_run_state_ok w` by simp[Abbr `w`, run_state_ok_gas_readings] >>
   `ctx_sim D unit.cu_context pre.cu_context w w /\
    o1_walk_src_inv D pre.cu_context w` by metis_tac[] >>
   (* pruning *)
-  `ctx_wf pre.cu_context` by metis_tac[o1_ctx_shape_wf] >>
-  `fcg_is_reachable (fcg_analyze pre.cu_context) entry` by
-    metis_tac[fcg_analyze_entry_reachable] >>
   `(!fuel vs. run_context fuel pre.cu_context vs =
               run_context fuel (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context vs) /\
    !vs. mem_inv raw_mem_ok pre.cu_context vs ==>
@@ -720,10 +1169,6 @@ Proof
   `ctx_sim D unit.cu_context (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context w w` by
     (irule ctx_sim_run_context_eq >> qexists_tac `pre.cu_context` >> simp[]) >>
   (* the raw unit's events reach the walk's input *)
-  `EVERY simplify_cfg_fn_ok unit.cu_context.ctx_functions` by
-    (gvs[o1_ctx_shape_def, o1_pre_walk_inv_def, EVERY_MEM] >>
-     rpt strip_tac >> irule simplify_cfg_fn_ok_no_phi >>
-     simp[EVERY_MEM] >> metis_tac[o1_fn_shape_def]) >>
   `!f. terminates (run_context f unit.cu_context w) ==>
        ?f' nm fa fb la lb.
          unit.cu_context.ctx_entry = SOME nm /\ mid.cu_context.ctx_entry = SOME nm /\

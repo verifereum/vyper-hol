@@ -95,7 +95,7 @@ Proof
   simp[]
 QED
 
-Theorem make_ssa_src_stage_callee_first[local]:
+Theorem make_ssa_src_stage_callee_first:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ callee_first names C.ctx_functions ==>
   callee_first names C'.ctx_functions
