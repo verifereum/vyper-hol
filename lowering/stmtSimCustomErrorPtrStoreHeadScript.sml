@@ -3,6 +3,7 @@ Theory stmtSimCustomErrorPtrStoreHead
 Ancestors
   stmtSimCustomErrorPtrUnwrap stmtSimCustomErrorPtrStoreProbe
   annAssignPtrDestinationFrame annAssignPtrExterior annAssignPtrStore
+  annAssignPtrMemorySource
   bodyPtrDefs freshWrites loweringStateRelDefs venomState finite_map pred_set
 
 Theorem custom_error_slice_store_frame_ptr[local]:
@@ -100,4 +101,68 @@ Proof
   simp[] >>
   simp[venomStateTheory.mstore_def, venomStateTheory.lookup_var_def,
        ptrDisciplineTheory.op_taint_def, venom_state_component_equality]
+QED
+
+(* Nonword stores use the run-time bytestring length, not the reserved capacity. *)
+Theorem custom_error_nonword_store_path_ptr[local]:
+  compile_store_memory ce (Var src) (Var dst) typ typ su = ((),st) /\
+  fn_has_code su st func /\ ~is_word_type typ /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = su.cs_current_bb /\ s.vs_inst_idx = LENGTH su.cs_current_insts /\
+  not_fresh_at su src /\ not_fresh_at su dst /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  nb = type_memory_bytes ce typ /\ nb = type_memory_size tv /\ nb < dimword (:256) /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
+  ptr_val_ok cx typ v (Var src) G tn s /\
+  ptr_covers G tn src s nb /\ ptr_covers G tn dst s nb ==>
+  !D PG. ?Gf tf t k.
+    k <= nb /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tf (OK t) /\
+    t.vs_current_bb = st.cs_current_bb /\ t.vs_inst_idx = LENGTH st.cs_current_insts /\
+    ~t.vs_halted /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+              vs_inst_idx := s.vs_inst_idx|>) = s /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!z. not_fresh_at su z ==> lookup_var z t = lookup_var z s /\
+      FLOOKUP Gf z = FLOOKUP G z /\ op_taint tf (Var z) = op_taint tn (Var z)) /\
+    (!i. ~(w2n b <= i /\ i < w2n b+k) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+    (!m. mem_agree_outside tf.t_mem t.vs_memory m ==> val_in_memory tv v (w2n b) m)
+Proof
+  strip_tac >> rpt gen_tac >>
+  `!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n a) m` by
+    (fs[ptr_val_ok_def, ptr_mem_ok_def, venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+  `val_wf tv v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  Cases_on `is_bytestring_type typ`
+  >- (drule_all annAssignPtrMemorySourceTheory.annassign_bytestring_window_ptr >>
+      strip_tac >>
+      `ptr_covers G tn src s (32 + 32 * ((len+31) DIV 32)) /\
+       ptr_covers G tn dst s (32 + 32 * ((len+31) DIV 32))` by
+        (fs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+          arithmeticTheory.LESS_EQ_MONO_ADD_EQ]) >>
+      `32 + 32 * ((len+31) DIV 32) < dimword (:256)` by decide_tac >>
+      `if is_bytestring_type typ then
+         32 + 32 * ((len+31) DIV 32) = 32 + 32 * ((len+31) DIV 32) /\
+         mload (w2n a) s = n2w len /\
+         (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem)
+       else 32 + 32 * ((len+31) DIV 32) = type_memory_bytes ce typ` by simp[] >>
+      qpat_x_assum `ptr_covers G tn src s nb` kall_tac >>
+      qpat_x_assum `ptr_covers G tn dst s nb` kall_tac >>
+      drule_all (SRULE [] (Q.INST [`sty` |-> `ty`]
+        (SPEC_ALL annAssignPtrDestinationTheory.annassign_store_memory_path_ptr))) >>
+      disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+      qexistsl [`Gf`, `tnf`, `sf`, `32 + 32 * ((len+31) DIV 32)`] >> simp[] >>
+      qpat_x_assum `!i. _ ==> mem_bytes_at i 1 sf.vs_memory = _ /\ _` mp_tac >>
+      simp[]) >>
+  `val_footprint tv v <= nb` by simp[exprSimPropsTheory.val_footprint_le] >>
+  `if is_bytestring_type typ then
+     nb = 32 + 32 * ((0+31) DIV 32) /\ mload (w2n a) s = n2w 0 /\
+     (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem)
+   else nb = type_memory_bytes ce typ` by simp[] >>
+  drule_all (SRULE [] (Q.INST [`sty` |-> `ty`]
+    (SPEC_ALL annAssignPtrDestinationTheory.annassign_store_memory_path_ptr))) >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl [`Gf`, `tnf`, `sf`, `nb`] >> simp[] >>
+  qpat_x_assum `!i. _ ==> mem_bytes_at i 1 sf.vs_memory = _ /\ _` mp_tac >> simp[]
 QED
