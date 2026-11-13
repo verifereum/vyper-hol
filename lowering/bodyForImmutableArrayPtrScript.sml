@@ -1,5 +1,5 @@
 Theory bodyForImmutableArrayPtr
-Ancestors forPtrArrayFrag bodyPtrPreds bodyPtrDefs bodySimDeclCases
+Ancestors bodyImmEntryPtr forPtrArrayFrag bodyPtrPreds bodyPtrDefs bodySimDeclCases
   stmtSimForArray exprSimHypsDefs exprSimHyps bodySim bodyExprPreFacts
   vyperAST vyperInterpreter vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeInvariants vyperTypeValues
