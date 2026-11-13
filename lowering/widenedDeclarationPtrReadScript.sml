@@ -7,7 +7,7 @@ Ancestors exprSimWordArgs bodyPtrDefs widenedDeclarationPtrStore stmtLowering
  bodyPtrIfExpZeroStore tupleMemoryFrame bodySim exprSimHyps exprSimHypsDefs
  exprSimDefs exprSimProps exprSimSource memoryLocalRhsProps
  exprLoweringProps exprLowering stmtSimDeclSource stmtSimDeclMem stmtSimProps
- assignValueMemoryOpen exprOpenTerminals
+ stmtSimDeclTypedCode exprOpenTerminals
  compileEnv context loweringPosts loweringStateRelDefs ptrDiscipline
  gasSummaryComposePtr gasSummary fragGasPathPtr freshWrites
  valueTypingMemoryProps vyperTypeInvariants vyperEvalPreservesScopes vyperAST vyperState venomState
@@ -229,7 +229,7 @@ Resume widened_declaration_retained_read_store_ptr[store]:
        qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
        simp[lower_value_def,comp_bind_def] >> rpt(pairarg_tac >> simp[]) >>
        strip_tac >> metis_tac[compile_expr_open, unwrap_value_open]) >>
-    drule_all compile_assign_value_memory_open >> simp[]) >>
+    drule_all compile_assign_value_typed_open >> simp[]) >>
 
  qmatch_asmsub_abbrev_tac `stmt_state_rel ctx func c cx
    (ee with <|scopes := scs; gas_obs := []|>) u` >>

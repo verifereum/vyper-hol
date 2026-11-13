@@ -16,7 +16,7 @@ Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps supportedStmts supportedDecls
   stmtLowering exprLowering compileEnv vyperAST vyperInterpreter vyperState
   vyperTypeSystem list finite_map
-  bodyPtrAugAssignNarrow bodyPtrAugAssignLocal bodyPtrAugAssignPureStorage
+  bodyPtrAugAssignNarrow bodyPtrAugAssignLocalPrefix bodyPtrAugAssignPureStorage
   supportedTargetLocalLive bodyAugAssignOther bodyAugPlaceTarget
   exprSimHypsDefs exprSimDefs vyperTypeInvariants
   widenedDeclarationPtrFragment widenedAssignPtrPreparation widenedAssignPtrRhsInput
@@ -226,7 +226,7 @@ Proof
          metis_tac[aug_place_supported_stmt_target_info] >>
        `!id. target_root bt = NameTarget id ==> local_target_live cx id bt` by
          metis_tac[supported_target_local_live] >>
-       gvs[Abbr `bt`] >> irule body_augassign_local_place_ptr >> simp[] >> metis_tac[]) >>
+       gvs[Abbr `bt`] >> irule body_augassign_local_place_from_suffix_ptr >> simp[] >> metis_tac[]) >>
    gvs[Abbr `bt`] >> irule body_augassign_pure_storage_place_ptr >> simp[] >> metis_tac[])
 QED
 

@@ -8,7 +8,7 @@ Ancestors widenedAssignPtrRead widenedAssignPtrPreparation
   compileEnv context fragExec stmtFragPtr loweringPosts
   gasSummaryComposePtr gasSummary gasOutcome gasExemptCert
   fragGasMode fragGasPathPtr fragGasPath
-  exprOpenTerminals assignValueMemoryOpen localPtrsProps
+  exprOpenTerminals stmtSimDeclTypedCode localPtrsProps
   vyperTypeSystem vyperAST vyperState finite_map words
 Libs monadsyntax
 
@@ -95,7 +95,7 @@ qpat_x_assum `r = OK t` SUBST_ALL_TAC >>
          qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
          simp[Once compile_expr_def] >> metis_tac[compile_intcall_open]) >>
       `~block_is_terminated sB` by metis_tac[unwrap_value_open] >>
-      drule_all compile_assign_value_memory_open >> simp[]) >>
+      drule_all compile_assign_value_typed_open >> simp[]) >>
   conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sB x` by metis_tac[not_fresh_at_mono] >>
