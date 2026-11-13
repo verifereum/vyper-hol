@@ -1,12 +1,28 @@
 (* Actual-state paths for array payload address arithmetic. *)
 Theory abiDecodeMemIndexedSetup
 Ancestors
+  abiDecoderVarSequence
+  abiDecodeMemStaticFrame abiDecoderSiteEffect
   calldataDynOwned calldataDynStep abiDecoderIndexedAddress
   abiDecodeMemElementReentry entrySinkExtraction entryDecoderHistoryFrame
   fragGasSeqMem fragExecMem fragExec compileEnv emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomState venomInst words list rich_list
   allocaFootprint abiDecoderReentry abiDecoderStaticLoopSetup
-  calldataFiniteTransport fragGasPathMem arithmetic
+  calldataFiniteTransport fragGasPathMem arithmetic abiEncoderWindowLookup loweringStateRelDefs
+
+Theorem abi_decode_indexed_output_bounds[local]:
+  abi_decode_indexed_address base_op idx stride st = (address,st') ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\
+    EVERY (not_fresh_at st') i.inst_outputs) (emitted_insts st st') /\
+  EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st st')
+Proof
+  simp[abi_decode_indexed_address_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def, not_fresh_at_def,
+    ASCIInumbersTheory.toString_11, abi_decoder_reentry_opcode_def]
+QED
 
 Theorem abi_decode_indexed_address_path_mem:
   abi_decode_indexed_address base_op idx stride st = (address,st') /\
@@ -27,9 +43,12 @@ Theorem abi_decode_indexed_address_path_mem:
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     t.vs_current_bb = st'.cs_current_bb /\
     t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
+    (!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+      fresh_vars_wrt limit_st t) /\ decode_static_frame s t /\
     alloca_history func t
 Proof
-  strip_tac >> drule calldata_indexed_address_code_shape >> strip_tac >>
+  strip_tac >> drule abi_decode_indexed_output_bounds >> strip_tac >>
+  drule calldata_indexed_address_code_shape >> strip_tac >>
   drule_all calldata_indexed_address_repeat >> strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts st st') s` by
     (irule run_inst_seq_mem_ok_of_prefix_safe >>
@@ -54,7 +73,18 @@ Proof
   drule_all entry_straight_line_alloca_history >> strip_tac >>
   drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
   `s.vs_inst_idx + LENGTH (emitted_insts st st') = LENGTH st'.cs_current_insts`
-    by gvs[IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND] >>
+    by (`LENGTH st.cs_current_insts <= LENGTH st'.cs_current_insts`
+          by metis_tac[IS_PREFIX_LENGTH] >>
+        pure_rewrite_tac [emitted_insts_def, LENGTH_DROP] >> decide_tac) >>
+  `!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+    fresh_vars_wrt limit_st (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (rpt strip_tac >>
+     mp_tac (Q.INST [`en` |-> `st'`, `insts` |-> `emitted_insts st st'`,
+       `s` |-> `s`, `t` |-> `t`, `idx` |-> `LENGTH st'.cs_current_insts`]
+       abi_window_seq_fresh_idx) >> (impl_tac >- asm_rewrite_tac []) >> simp[]) >>
+  `decode_static_frame s (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (drule_all abi_decode_reentry_sequence_static_frame >>
+     simp[decode_static_frame_def, venom_state_component_equality]) >>
   qexists_tac `t with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   simp[eval_operand_def, lookup_var_def] >> gvs[]
 QED
@@ -76,9 +106,18 @@ Theorem abi_decode_index_read_path_mem:
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     t.vs_current_bb = st'.cs_current_bb /\
     t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
+    (!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+      fresh_vars_wrt limit_st t) /\ decode_static_frame s t /\
     alloca_history func t
 Proof
-  strip_tac >> drule_all calldata_mload_repeat >> strip_tac >>
+  strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ EVERY (not_fresh_at st') i.inst_outputs)
+    (emitted_insts st st')` by
+    (drule abi_window_emit_register_bounds >> simp[]) >>
+  `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st st')` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     simp[abi_decoder_reentry_opcode_def, mk_inst_def]) >>
+  drule_all calldata_mload_repeat >> strip_tac >>
   drule_all emit_mload_mem_ok >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
   drule abi_decoder_operand_live_emit >> strip_tac >>
@@ -100,7 +139,18 @@ Proof
   drule_all entry_straight_line_alloca_history >> strip_tac >>
   drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
   `s.vs_inst_idx + LENGTH (emitted_insts st st') = LENGTH st'.cs_current_insts`
-    by gvs[IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND] >>
+    by (`LENGTH st.cs_current_insts <= LENGTH st'.cs_current_insts`
+          by metis_tac[IS_PREFIX_LENGTH] >>
+        pure_rewrite_tac [emitted_insts_def, LENGTH_DROP] >> decide_tac) >>
+  `!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+    fresh_vars_wrt limit_st (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (rpt strip_tac >>
+     mp_tac (Q.INST [`en` |-> `st'`, `insts` |-> `emitted_insts st st'`,
+       `s` |-> `s`, `t` |-> `t`, `idx` |-> `LENGTH st'.cs_current_insts`]
+       abi_window_seq_fresh_idx) >> (impl_tac >- asm_rewrite_tac []) >> simp[]) >>
+  `decode_static_frame s (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (drule_all abi_decode_reentry_sequence_static_frame >>
+     simp[decode_static_frame_def, venom_state_component_equality]) >>
   qexists_tac `t with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   simp[eval_operand_def, lookup_var_def] >> gvs[]
 QED
@@ -130,6 +180,8 @@ Theorem abi_decode_static_element_setup_path_mem:
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     t.vs_current_bb = st'.cs_current_bb /\
     t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
+    (!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+      fresh_vars_wrt limit_st t) /\ decode_static_frame s t /\
     alloca_history func t
 Proof
   strip_tac >> drule_all abi_decode_static_element_setup_operands >> strip_tac >>
@@ -195,6 +247,14 @@ Resume abi_decode_static_element_setup_path_mem[addresses]:
       abi_decoder_operand_live c2.cs_next_var op` by
        (conj_tac >> irule abi_decoder_operand_live_mono >>
         qexists_tac `st.cs_next_var` >> simp[]) >> metis_tac[]) >>
+  `decode_static_frame s t` by metis_tac[decode_static_frame_trans] >>
+  `!limit_st. end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+    fresh_vars_wrt limit_st t` by
+    (rpt strip_tac >>
+     `c1.cs_next_var <= limit_st.cs_next_var /\ c2.cs_next_var <= limit_st.cs_next_var`
+       by decide_tac >>
+     `fresh_vars_wrt limit_st s1` by metis_tac[] >>
+     `fresh_vars_wrt limit_st s2` by metis_tac[] >> metis_tac[]) >>
   qexists_tac `t` >> asm_simp_tac bool_ss [GSYM ADD_ASSOC] >>
   simp[MULT_COMM]
 QED
