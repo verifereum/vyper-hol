@@ -10,6 +10,7 @@ Ancestors
   exprLoweringProps exprOperandVar stmtLoweringMono stmtSimProps
   supportedStmts stmtSimDefs compileEnv context vyperInterpreter vyperState exprSimHypsDefs
   immutableStoreOptionPathMem immutableFixedCopyPathMem immutableAssignEmpty bodyMemoryPreds targetPlaceSim bodyImmutableAssignFacts immutableAssignStoreMem immutableFixedCopyMem immutableFixedCopyTransportMem immutableLoopStoreMem immutableNormalizeMem immutableAssignAdmissibility immutableAssignWordMem immutableAssignFixedMem immutableAssignBytesMem immutableAssignNormalizedMem
+  bodyAugPlaceTarget immutableAugAssignScalarAssembly
 Libs monadsyntax
 
 Theorem body_assign_immutable_deploy_mem:
@@ -159,8 +160,7 @@ QED
 
 Finalise body_assign_immutable_deploy_mem
 
-(* RESIDUAL (held): as its S1 twin immutable_deploy_augassign_case, which is
-   admitted on this base. *)
+(* Constructor augmented assignment through the counted scalar assembly. *)
 Theorem body_augassign_immutable_deploy_mem:
   !cx ty t bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
@@ -170,6 +170,7 @@ Theorem body_augassign_immutable_deploy_mem:
        body_expr_mem_ok cx e) /\
     body_base_target_mem_ok cx t /\
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings (AugAssign ty t bop e) /\
+    body_stmt_safe tops (AugAssign ty t bop e) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (AugAssign ty t bop e) ==>
        occurs_abi_decode_target target tops) /\
@@ -190,5 +191,9 @@ Theorem body_augassign_immutable_deploy_mem:
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e))
       (eval_stmt cx (AugAssign ty t bop e)) es
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `t`
+  >- gvs[]
+  >- (irule immutable_augassign_scalar_assembly >> metis_tac[])
+  >> metis_tac[aug_place_supported_stmt_target_info,
+               aug_place_supported_root_not_immutable]
 QED
