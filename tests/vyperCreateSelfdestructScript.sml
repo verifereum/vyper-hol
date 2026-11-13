@@ -238,9 +238,13 @@ End
 val () = cv_auto_trans blueprint_test_nested_create_def;
 
 Definition blueprint_test_nested_post_def:
-  blueprint_test_nested_post = blueprint_test_state [] with accounts :=
-    create_prelude_accounts 41w (vfmContext$address_for_create 41w 2) 0
-      (blueprint_test_state []).accounts
+  blueprint_test_nested_post =
+    let accounts = create_prelude_accounts 41w
+      (vfmContext$address_for_create 41w 2) 0
+      (blueprint_test_state []).accounts in
+    blueprint_test_state [] with
+      <|accounts := accounts;
+        storage_trace := [StorageBackend accounts empty_transient_storage]|>
 End
 val () = cv_auto_trans blueprint_test_nested_post_def;
 
@@ -305,28 +309,30 @@ Theorem blueprint_nested_deployment[local]:
   eval_expr blueprint_test_context blueprint_test_nested_create
     (blueprint_test_state []) =
   (INL (Value (AddressV (vfmContext$address_for_create 41w 2))),
-   blueprint_test_state [] with accounts :=
+   blueprint_test_state [] with <|accounts :=
      update_account (vfmContext$address_for_create 41w 2)
        (empty_account_state with nonce := 1)
        (update_account 41w
          (empty_account_state with <|balance := 100; nonce := 3; code := [0w]|>)
          (update_account 42w
            (empty_account_state with <|balance := 7; nonce := 4; code := []|>)
-           empty_accounts)))
+           empty_accounts));
+     storage_trace := blueprint_test_nested_post.storage_trace|>)
 Proof
   rewrite_tac[vyperSmallStepTheory.eval_expr_eq_cont_cps] >>
   CONV_TAC cv_eval
 QED
 
 Theorem blueprint_empty_source_check[local]:
-  let st = blueprint_test_state [] with accounts :=
+  let st = blueprint_test_state [] with <|accounts :=
      update_account (vfmContext$address_for_create 41w 2)
        (empty_account_state with nonce := 1)
        (update_account 41w
          (empty_account_state with <|balance := 100; nonce := 3; code := [0w]|>)
          (update_account 42w
            (empty_account_state with <|balance := 7; nonce := 4; code := []|>)
-           empty_accounts)) in
+           empty_accounts));
+    storage_trace := blueprint_test_nested_post.storage_trace|> in
   check_create_blueprint salted
     ([AddressV (vfmContext$address_for_create 41w 2); IntV 0] ++
      (if salted then [BytesV (REPLICATE 32 0w)] else []) ++ [IntV 0]) st =
@@ -340,14 +346,15 @@ Theorem blueprint_invalid_source_result[local]:
     (blueprint_test_expr blueprint_test_nested_create F salted rof 0
       [blueprint_test_nested_create]) (blueprint_test_state []) =
   (INR (Error (RuntimeError "create source has no deployable code")),
-   blueprint_test_state [] with accounts :=
+   blueprint_test_state [] with <|accounts :=
      update_account (vfmContext$address_for_create 41w 2)
        (empty_account_state with nonce := 1)
        (update_account 41w
          (empty_account_state with <|balance := 100; nonce := 3; code := [0w]|>)
          (update_account 42w
            (empty_account_state with <|balance := 7; nonce := 4; code := []|>)
-           empty_accounts)))
+           empty_accounts));
+     storage_trace := blueprint_test_nested_post.storage_trace|>)
 Proof
   Cases_on `salted` >>
   simp[blueprint_test_expr_def, evaluate_def, blueprint_nested_deployment,
@@ -429,8 +436,13 @@ Definition blueprint_test_captured_post_def:
     let populated = update_account (vfmContext$address_for_create 41w 2)
       (empty_account_state with <|nonce := 1; code := [0w]|>)
       blueprint_test_nested_post.accounts in
-    blueprint_test_nested_post with accounts :=
-      create_prelude_accounts 41w blueprint_test_captured_address 0 populated
+    let accounts = create_prelude_accounts 41w
+      blueprint_test_captured_address 0 populated in
+    blueprint_test_nested_post with
+      <|accounts := accounts;
+        storage_trace :=
+          [StorageBackend populated empty_transient_storage;
+           StorageBackend accounts empty_transient_storage]|>
 End
 val () = cv_auto_trans blueprint_test_captured_post_def;
 
