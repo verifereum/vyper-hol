@@ -1706,9 +1706,6 @@ Theorem extcall_return_default:
     vv = (if ret_type = NoneT then StackValue ann result_op
           else LocatedValue ann (mk_ptr result_op LocMemory)) /\
     fn_has_code sr sb func /\ fn_inst_ids_distinct func /\
-    (sb.cs_current_insts <> [] \/
-     !bb. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb ==>
-          phi_prefix_length bb.bb_instructions = 0) /\
     local_ptrs_reserved cenv sa /\
     extcall_returned ctx func cenv cx ret_type es sa s0 prot sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t ==>
@@ -1780,9 +1777,6 @@ Theorem extcall_return_values_owned:
     vv = (if ret_type = NoneT then StackValue ann result_op
           else LocatedValue ann (mk_ptr result_op LocMemory)) /\
     fn_has_code sr sb func /\ fn_inst_ids_distinct func /\
-    (sb.cs_current_insts <> [] \/
-     !bb. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb ==>
-          phi_prefix_length bb.bb_instructions = 0) /\
     local_ptrs_reserved cenv sa /\
     extcall_returned ctx func cenv cx ret_type es sa s0 prot sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t ==>
