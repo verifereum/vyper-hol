@@ -4,7 +4,8 @@ Ancestors
   exprSimSource exprSimExtCallCase exprSimHypsDefs exprLowering exprLoweringProps gasShadow
   gasShadowCompileExternal exprCallbackContracts fragExec vyperTypeSystem
   supportedExprTraverse allocLimits vyperTypeCallGraph list rich_list
-  compileEnv pair
+  compileEnv pair gasShadowState gasShadowCompile gasShadowCompileHelpers
+  gasShadowCompileStmtHelpers
 Libs
   pairLib
 
