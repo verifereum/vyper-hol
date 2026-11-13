@@ -260,12 +260,9 @@ Proof
   `!H. valid_horizon cx st0 H mid'.storage_trace ==>
      valid_horizon cx st0 H mid.storage_trace` by
     (rpt strip_tac >>
-     `valid_horizon cx st0 H (mid with gas_obs := gs2).storage_trace`
-       suffices_by simp[] >>
-     irule vyperStorageFootprintTheory.valid_horizon_frame >>
-     qexistsl_tac [`bind (eval_expr cx len) (read_result cx)`, `INL v`,
-                   `mid' with gas_obs := []`] >>
-     fs[]) >>
+     qpat_assum `bind (eval_expr cx len) _ _ = _`
+       (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[slice_read_frame]) >>
   `valid_horizon cx st0 (storage_trace_horizon mid'.storage_trace) mid'.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H mid'.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -346,15 +343,13 @@ Proof
       storage_trace_frame (bind (eval_expr cx len) (read_result cx))` by
        simp[slice_read_frame] >>
      rpt strip_tac >>
-     `valid_horizon cx st0 H (e1 with gas_obs := gs2).storage_trace` by
-       (irule vyperStorageFootprintTheory.valid_horizon_frame >>
-        qexistsl_tac [`bind (eval_expr cx len) (read_result cx)`,
-                      `INL (IntV (&k))`, `e2`] >> simp[]) >>
-     `valid_horizon cx st0 H (ec with gas_obs := gs1).storage_trace`
-       suffices_by simp[] >>
-     irule vyperStorageFootprintTheory.valid_horizon_frame >>
-     qexistsl_tac [`bind (eval_expr cx start) (read_result cx)`,
-                   `INL (IntV (&i))`, `e1`] >> fs[]) >>
+     `valid_horizon cx st0 H e1.storage_trace` by
+       (qpat_assum `bind (eval_expr cx len) _ _ = _`
+          (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+        simp[]) >>
+     qpat_assum `bind (eval_expr cx start) _ _ = _`
+       (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[]) >>
   `valid_horizon cx st0 (storage_trace_horizon e2.storage_trace) e2.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H e2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
@@ -469,15 +464,13 @@ Proof
       storage_trace_frame (bind (eval_expr cx len) (read_result cx))` by
        simp[slice_read_frame] >>
      rpt strip_tac >>
-     `valid_horizon cx st0 H (e1 with gas_obs := gs2).storage_trace` by
-       (irule vyperStorageFootprintTheory.valid_horizon_frame >>
-        qexistsl_tac [`bind (eval_expr cx len) (read_result cx)`,
-                      `INL (IntV (&k))`, `e2`] >> simp[]) >>
-     `valid_horizon cx st0 H (ec with gas_obs := gs1).storage_trace`
-       suffices_by simp[] >>
-     irule vyperStorageFootprintTheory.valid_horizon_frame >>
-     qexistsl_tac [`bind (eval_expr cx start) (read_result cx)`,
-                   `INL (IntV (&i))`, `e1`] >> fs[]) >>
+     `valid_horizon cx st0 H e1.storage_trace` by
+       (qpat_assum `bind (eval_expr cx len) _ _ = _`
+          (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+        simp[]) >>
+     qpat_assum `bind (eval_expr cx start) _ _ = _`
+       (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[]) >>
   `valid_horizon cx st0 (storage_trace_horizon e2.storage_trace) e2.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H e2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
@@ -620,12 +613,9 @@ Proof
   `!H. valid_horizon cx st0 H mid'.storage_trace ==>
      valid_horizon cx st0 H mid.storage_trace` by
     (rpt strip_tac >>
-     `valid_horizon cx st0 H (mid with gas_obs := gs2).storage_trace`
-       suffices_by simp[] >>
-     irule vyperStorageFootprintTheory.valid_horizon_frame >>
-     qexistsl_tac [`bind (eval_expr cx len) (read_result cx)`, `INL v`,
-                   `mid' with gas_obs := []`] >>
-     fs[]) >>
+     qpat_assum `bind (eval_expr cx len) _ _ = _`
+       (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[slice_read_frame]) >>
   `valid_horizon cx st0 (storage_trace_horizon mid'.storage_trace) mid'.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H mid'.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -709,15 +699,13 @@ Proof
       storage_trace_frame (bind (eval_expr cx len) (read_result cx))` by
        simp[slice_read_frame] >>
      rpt strip_tac >>
-     `valid_horizon cx st0 H (e1 with gas_obs := gs2).storage_trace` by
-       (irule vyperStorageFootprintTheory.valid_horizon_frame >>
-        qexistsl_tac [`bind (eval_expr cx len) (read_result cx)`,
-                      `INL (IntV (&k))`, `e2`] >> simp[]) >>
-     `valid_horizon cx st0 H (ec with gas_obs := gs1).storage_trace`
-       suffices_by simp[] >>
-     irule vyperStorageFootprintTheory.valid_horizon_frame >>
-     qexistsl_tac [`bind (eval_expr cx start) (read_result cx)`,
-                   `INL (IntV (&i))`, `e1`] >> fs[]) >>
+     `valid_horizon cx st0 H e1.storage_trace` by
+       (qpat_assum `bind (eval_expr cx len) _ _ = _`
+          (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+        simp[]) >>
+     qpat_assum `bind (eval_expr cx start) _ _ = _`
+       (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[]) >>
   `valid_horizon cx st0 (storage_trace_horizon e2.storage_trace) e2.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H e2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
@@ -835,15 +823,13 @@ Proof
       storage_trace_frame (bind (eval_expr cx len) (read_result cx))` by
        simp[slice_read_frame] >>
      rpt strip_tac >>
-     `valid_horizon cx st0 H (e1 with gas_obs := gs2).storage_trace` by
-       (irule vyperStorageFootprintTheory.valid_horizon_frame >>
-        qexistsl_tac [`bind (eval_expr cx len) (read_result cx)`,
-                      `INL (IntV (&k))`, `e2`] >> simp[]) >>
-     `valid_horizon cx st0 H (ec with gas_obs := gs1).storage_trace`
-       suffices_by simp[] >>
-     irule vyperStorageFootprintTheory.valid_horizon_frame >>
-     qexistsl_tac [`bind (eval_expr cx start) (read_result cx)`,
-                   `INL (IntV (&i))`, `e1`] >> fs[]) >>
+     `valid_horizon cx st0 H e1.storage_trace` by
+       (qpat_assum `bind (eval_expr cx len) _ _ = _`
+          (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+        simp[]) >>
+     qpat_assum `bind (eval_expr cx start) _ _ = _`
+       (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+     simp[]) >>
   `valid_horizon cx st0 (storage_trace_horizon e2.storage_trace) e2.storage_trace` by
     fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H e2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`

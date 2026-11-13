@@ -305,10 +305,10 @@ Resume compile_slice_ordinary_case[dynamic]:
  `!H. valid_horizon cx st0 H mid.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0` by
    (rpt strip_tac >>
-    `valid_horizon cx st0 H (es with gas_obs := gs).storage_trace` by
-      (irule vyperStorageFootprintTheory.valid_horizon_frame >>
-       qexistsl_tac [`bind (eval_expr cx src) (read_result cx)`, `INL v`,
-                     `mid with gas_obs := []`] >> simp[slice_read_frame]) >>
+    `valid_horizon cx st0 H es.storage_trace` by
+      (qpat_assum `bind (eval_expr cx src) _ _ = _`
+         (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+       simp[slice_read_frame]) >>
     fs[]) >>
  drule_all (INST_TYPE [alpha |-> ``:eval_result``] slice_dynamic_capture_horizons) >>
  simp[] >> strip_tac >>
@@ -589,10 +589,10 @@ Resume compile_slice_ordinary_case[fixed_source]:
  `!H. valid_horizon cx st0 H mid.storage_trace ==>
     stmt_state_rel H ctx func cenv cx es s0` by
    (rpt strip_tac >>
-    `valid_horizon cx st0 H (es with gas_obs := gs).storage_trace` by
-      (irule vyperStorageFootprintTheory.valid_horizon_frame >>
-       qexistsl_tac [`bind (eval_expr cx src) (read_result cx)`, `INL v`,
-                     `mid with gas_obs := []`] >> simp[slice_read_frame]) >>
+    `valid_horizon cx st0 H es.storage_trace` by
+      (qpat_assum `bind (eval_expr cx src) _ _ = _`
+         (mp_then (Pos (el 2)) mp_tac vyperStorageFootprintTheory.valid_horizon_frame) >>
+       simp[slice_read_frame]) >>
     fs[]) >>
  suspend "fixed_capture"
 QED
