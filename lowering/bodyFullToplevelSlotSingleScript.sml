@@ -5,6 +5,7 @@ Ancestors
   bodyFullUnwrapRun exprPtrUnwrapSingleSegment bodyStorageCopyMemory
   exprPtrUnwrapEnsureSingle bodyFullUnwrapSlotPost exprPtrUnwrapStoragePost
   exprLoweringProps bodyPtrDefs venomState venomInst words list rich_list
+  bodyMemEcArithPrefix exprPtrUnwrapAllocation bufferAllocationExecution fragGasSeqPtr
 
 Theorem toplevel_slot_single_suffix_origin_ptr:
   compile_expr cenv ty (TopLevelName ann nsid) si = (LocatedValue vt p,sm) /\
@@ -60,4 +61,46 @@ Proof
     (irule emitted_origin_ptr_path >> metis_tac[]) >>
   qexistsl [`Gf`, `tnf`, `t`] >> asm_rewrite_tac[] >>
   Cases_on `p.ptr_location=LocStorage` >> gvs[]
+QED
+
+Theorem toplevel_slot_alloc_origin_ptr:
+  compile_expr cenv ty (TopLevelName ann nsid) si = (LocatedValue vt p,sm) /\
+  compile_alloc_buffer nb sa = (buf,sb) /\ fn_has_code sa sb func /\
+  nb < dimword (:256) /\ allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?out u.
+    buf.buf_operand = Var out /\ buf.buf_size = nb /\
+    u = update_var out (n2w (buffer_allocation_base s sa.cs_next_id))
+      (buffer_allocation_fields s sa.cs_next_id nb) /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),
+       step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [out]) u,
+       step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [out]) s u tn)
+Proof
+  strip_tac >> drule_all unwrap_alloc_generated_step >>
+  disch_then (qspec_then `s` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `step_inst_base inst s = OK u` >>
+  `u.vs_requests = s.vs_requests` by
+    (simp[Abbr `u`, buffer_allocation_fields_def, update_var_def] >>
+     Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >> simp[]) >>
+  `ptr_inst_ok D lo 0 ctx func G tn inst s` by
+    (simp[Abbr `inst`] >> irule unwrap_alloc_ptr_check >>
+     simp[] >> qexists `u` >> simp[]) >>
+  `inst_seq_ptr D lo ctx func PG G tn [inst] s
+     (step_prov PG G inst u) (step_taint inst s u tn)` by
+    simp[inst_seq_ptr_def] >>
+  `run_inst_seq [inst] s = OK u` by simp[run_inst_seq_def] >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+    metis_tac[ec_alloc_buffer_mem_ok] >>
+  drule unwrap_alloc_current_block >> strip_tac >>
+  drule unwrap_alloc_generated_code >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+      ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+     (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts),
+      step_prov PG G inst u, step_taint inst s u tn)` by
+    (irule emitted_origin_ptr_path >> metis_tac[]) >>
+  qexistsl [`out`, `u`] >> gvs[Abbr `u`, Abbr `inst`]
 QED
