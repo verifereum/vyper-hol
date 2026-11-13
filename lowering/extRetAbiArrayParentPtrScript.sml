@@ -85,5 +85,5 @@ Proof
      pop_assum (mp_tac o Q.AP_TERM `EL 0`) >> simp[EL_mem_bytes_at]) >>
   qexistsl_tac [`Gf`,`tnf`,`sf`] >> simp[] >>
   qpat_x_assum `mem_bytes_at (w2n q) 32 sf.vs_memory = _` mp_tac >>
-  simp[valueEncodingTheory.mem_bytes_at_def, mload_def, read_memory_def]
+  simp[valueEncodingDefsTheory.mem_bytes_at_def, mload_def, read_memory_def]
 QED
