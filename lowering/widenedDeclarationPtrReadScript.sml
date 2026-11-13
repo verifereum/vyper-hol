@@ -271,14 +271,15 @@ Resume widened_declaration_retained_read_store_ptr[unstaged]:
     strip_tac >> gvs[]) >>
  `w2n sw + type_memory_size ltv <= w2n w \/ w2n w + sz <= w2n sw` by
    (mp_tac (Q.INST [`ce` |-> `c`,`es` |-> `ee with gas_obs := []`,
-       `ty` |-> `lowered_value_type c e`,`tv` |-> `ltv`,`src` |-> `Var src`,
-       `p` |-> `sw`,`x` |-> `p`,`b` |-> `w2n (w:256 word)`]
+       `ty` |-> `lowered_value_type c e`,`tv` |-> `ltv`,
+       `(src:operand)` |-> `Var src`,`(p:256 word)` |-> `sw`,
+       `(x:string)` |-> `p`,`b` |-> `w2n (w:256 word)`]
       (SPEC_ALL expr_val_at_alloca_outside_interval_separate)) >>
     (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[])) >>
     simp[]) >>
  `w2n w + type_memory_size tyv <= w2n sw \/
   w2n sw + type_memory_size ltv <= w2n w` by decide_tac >>
- mp_tac (Q.INST [`ce` |-> `c`,`sa` |-> `sb`,`sb` |-> `sf`,`src` |-> `Var src`,
+ mp_tac (Q.INST [`ce` |-> `c`,`sa` |-> `sb`,`sb` |-> `sf`,`(src:operand)` |-> `Var src`,
    `sty` |-> `lowered_value_type c e`,`dty` |-> `typ`,
    `stv` |-> `ltv`,`dtv` |-> `tyv`,
    `es` |-> `ee with gas_obs := []`,`s0` |-> `salloc`,
