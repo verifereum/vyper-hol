@@ -1027,7 +1027,49 @@ QED
 
 (* Calldata that dispatches to nothing (no fallback, a short head, or
    arguments the decoder rejects) makes the compiled contract revert with
-   empty returndata, or run out of resources. *)
+   empty returndata, or run out of resources: the identity finalizer. *)
+Theorem vyper_call_reverts_identity:
+  !policy tops deploy_bc runtime_bc am tx es.
+    compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\ immutable_free_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    calldata_dispatch tops
+      (buffer_to_list (FST (HD es.contexts)).msgParams.data) = NONE
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
+Proof
+  (* HELD ADMISSION SEQ-4945: e2e composition of SEQ-4940/SEQ-4942 through the identity finalizer *)
+  cheat
+QED
+
+(* The same under the final assembly optimizer, which excludes, for now,
+   programs that read their own code. *)
+Theorem vyper_call_reverts_asm_opt:
+  !policy tops deploy_bc runtime_bc am tx es.
+    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
+    ~program_reads_self_code tops /\
+    supported_program tops /\ immutable_free_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    calldata_dispatch tops
+      (buffer_to_list (FST (HD es.contexts)).msgParams.data) = NONE
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
+Proof
+  (* HELD ADMISSION SEQ-4951: asm_opt case of vyper_call_reverts; needs the asm_opt S7 *)
+  cheat
+QED
+
+(* Both accepted finalizers. *)
 Theorem vyper_call_reverts:
   !fin policy tops deploy_bc runtime_bc am tx es.
     fin IN accepted_finalizers /\
@@ -1045,8 +1087,12 @@ Theorem vyper_call_reverts:
       (frame_resource_starved es r es' \/
        ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs)
 Proof
-  (* HELD ADMISSION SEQ-4945: e2e composition of SEQ-4940/SEQ-4942 through both finalizers *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
+  >- (drule_all vyper_call_reverts_identity >> simp[])
+  >> `~program_reads_self_code tops` by fs[] >>
+  drule_all vyper_call_reverts_asm_opt >> simp[]
 QED
 
 (* The declared return type of the external entry f, which fixes how the
