@@ -276,7 +276,14 @@ Proof
                     d_imm := K {}; d_ret := K {} |>`] o1_contract_dft) >>
       simp[o1_run_contract_gas_def, o1_inv_def] >> metis_tac[]) >>
   qexists_tac `vo` >> simp[gas_variant_refl] >>
-  `!D. o1_run_contract rp D k` by metis_tac[o1_run_contracts_same] >>
+  `!D. o1_run_contract rp D k` by
+    (gen_tac >> fs[o1_fn_passes_def] >>
+     `k = 0 \/ k = 1 \/ k = 2 \/ k = 3 \/ k = 4 \/ k = 5 \/ k = 6 \/ k = 8`
+       by decide_tac >>
+     gvs[o1_contract_make_ssa_1, o1_contract_lower_dload,
+         o1_contract_concretize_mem_loc, o1_contract_fmp_lowering,
+         o1_contract_make_ssa_2, o1_contract_simplify_cfg, o1_contract_sue,
+         o1_contract_cfg_normalization]) >>
   gvs[o1_run_contract_def, o1_stage_contract_def] >>
   metis_tac[ctx_sim_fuel_imp_ctx_sim]
 QED

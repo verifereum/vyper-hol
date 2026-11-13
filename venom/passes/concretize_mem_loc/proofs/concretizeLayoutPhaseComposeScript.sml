@@ -1,5 +1,5 @@
 Theory concretizeLayoutPhaseCompose
-Ancestors concretizeLayoutPhaseExceptional concretizeLayoutPhaseOrigin
+Ancestors concretizeLayoutCutSafe concretizeLayoutPhaseExceptional concretizeLayoutPhaseOrigin
   ptrDiscipline frameRelocationEnvironment
   frameRelocationValues frameRelocationLocal concretizeLayoutSupplement
   concretizeLayoutReaderContext venomState
@@ -75,7 +75,7 @@ Proof
 QED
 
 Theorem layout_pending_returncopy_block_abort:
-  ptr_discipline lo C vs0 /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
   sn = layout_phase_normalize T s /\ tnxt = layout_phase_normalize T t /\
@@ -101,6 +101,7 @@ Proof
   drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
     layout_returncopy_phase_block_abort >>
   simp[layout_phase_ok_abort_def] >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then irule >> gvs[] >> metis_tac[]
 QED
 

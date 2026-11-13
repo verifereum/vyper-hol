@@ -1,5 +1,6 @@
 Theory lowerDloadBytesScalar
 Ancestors
+  o1SafeUpto
   lowerDloadProvenanceSupport lowerDloadReachableDiscipline
   lowerDloadPairedBoundary ptrDiscipline pointerConfinedDefs memLocDefs
   venomInst list pred_set o1PassContract contextCodegenRel
@@ -20,7 +21,7 @@ QED
 
 Theorem ld_reachable_bytes_scalars:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
   i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\
   ~in_revert_forward fn s /\

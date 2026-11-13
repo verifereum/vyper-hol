@@ -1,6 +1,7 @@
 (* RET transports returned values, not the opaque final return token. *)
 Theory o1LowerDloadJointReturn
 Ancestors
+  o1SafeUpto
   o1LowerDloadJointScalar o1LowerDloadOpaque o1LowerDloadGhost
   o1LowerDloadJointRelation o1LowerDloadEnvironment o1LowerDloadJointAssign
   o1LowerDloadOccurrence ptrDiscipline o1PassContract contextCodegenRel
@@ -9,7 +10,7 @@ Ancestors
 
 Theorem ld_joint_ret_front:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ inst.inst_opcode = RET /\
   inst.inst_operands <> [] ==>
   !op. MEM op (FRONT inst.inst_operands) ==>
@@ -17,11 +18,11 @@ Theorem ld_joint_ret_front:
 Proof
   strip_tac >>
   `!op. MEM op inst.inst_operands ==> op_prov H op = NONE` by
-    (drule ld_joint_scalar_no_provenance >>
+    (drule ld_joint_scalar_no_provenance >> disch_then (qspec_then `ncut` mp_tac) >>
      simp[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]) >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `MEM inst (fn_insts fn)` by
     (fs[active_inst_def, fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
      metis_tac[MEM_EL]) >>
@@ -35,7 +36,7 @@ QED
 
 Theorem ld_joint_ret_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\ inst.inst_opcode = RET /\
   step_inst fuel C inst s = IntRet ir s1 ==>
   ?jr. step_inst fuel C' inst t = IntRet jr t /\
@@ -56,7 +57,7 @@ Proof
      simp[eval_operands_def]) >>
   `!op. MEM op (FRONT inst.inst_operands) ==>
        eval_operand op s = eval_operand op t` by
-    (drule ld_joint_ret_front >> simp[]) >>
+    (drule ld_joint_ret_front >> disch_then (drule_at (Pat `gas_cut _ _ _`)) >> simp[]) >>
   drule_all ret_front_transfer >> strip_tac >>
   qexists_tac `jr` >> simp[step_inst_non_invoke]
 QED

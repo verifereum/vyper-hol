@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalContract
-Ancestors concretizeLayoutCanonicalBaseCertificate concretizeLayoutCanonicalBlock
+Ancestors concretizeLayoutCutSafe frameGasEvents concretizeLayoutCanonicalBaseCertificate concretizeLayoutCanonicalBlock
   concretizeLayoutCanonicalCallReturn concretizeLayoutCanonicalDeferredExit
   concretizeLayoutCanonicalRunNext concretizeLayoutCanonicalRunHalt
   concretizeLayoutCanonicalRunExit frameSelectedSimulation
@@ -11,12 +11,11 @@ Theorem layout_canonical_simulation_contract:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))
@@ -30,9 +29,9 @@ Theorem layout_canonical_simulation_contract:
     (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
     (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
-    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
-    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
-    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+    (events_OS C C' (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend))
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend))
 Proof
   strip_tac >> rewrite_tac[selected_simulation_contract_def] >>
   rpt conj_tac
@@ -52,12 +51,11 @@ Theorem layout_canonical_simulation_contract_fuel:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))

@@ -6,7 +6,7 @@ Ancestors
   lowerDloadPtrAggregate lowerDloadPtrPhi lowerDloadPtrCall venomState ptrDiscipline
   venomExecSemantics o1PassContract venomWf contextCodegenRel contextCodegenRelProps lowerDloadPtrOrdinary
   lowerDloadPtrBlockEntry finite_map pred_set memLocDefs codegenRel pointerConfinedDefs venomFnScheduleRunner
-  lowerDloadPtrSupport stepWriteFootprintBase
+  lowerDloadPtrSupport stepWriteFootprintBase o1SafeUpto lowerDloadPtrGasCut
 
 (* Reverse prefix origin is independent of resolver equalities and freshness.
    Even malformed DLOAD branches cannot begin with ASSIGN or REVERT. *)
@@ -268,7 +268,7 @@ QED
 (* All scalar/shape/success premises above now come from the actual source
    contract and phase-zero control, rather than a new terminal assumption. *)
 Theorem dload_actual_copy_terminal_fields:
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo cut C vs /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
   dload_control_match q f g s t i [i] 0 /\
@@ -279,7 +279,8 @@ Theorem dload_actual_copy_terminal_fields:
     PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  step_inst fuel Ct i t = OK t' ==>
+  step_inst fuel Ct i t = OK t' /\
+  gas_cut cut vs t ==>
   ?s'. step_inst fuel C i s = OK s' /\
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
     t'.vs_allocas = t.vs_allocas /\ t'.vs_alloca_next = t.vs_alloca_next /\
@@ -307,10 +308,11 @@ Proof
   `inst_wf i` by
     (gvs[fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
   `i.inst_outputs = []` by gvs[inst_wf_def] >>
+  `gas_cut cut vs s` by metis_tac[dload_boundary_core_gas_cut] >>
   `taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >>
-     first_x_assum drule >> simp[]) >>
+    (qpat_x_assum `ptr_discipline_upto _ _ _ _` mp_tac >>
+     simp[ptr_discipline_upto_def] >> strip_tac >>
+     first_x_assum drule_all >> simp[]) >>
   irule dload_copy_boundary_terminal_fields >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
@@ -573,7 +575,7 @@ QED
 (* The supply witnesses here are the block/prefix fields of actual control;
    unlike the discarded candidate, no source non-forwarding is assumed. *)
 Theorem dload_actual_terminal_revert_safety:
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo cut C vs /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\ active_inst f i s /\
   i.inst_opcode = REVERT /\ i.inst_operands = [dst;sz] /\
@@ -588,7 +590,8 @@ Theorem dload_actual_terminal_revert_safety:
   FDOM G SUBSET fn_pv P f /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
-    G H tn un s t ==>
+    G H tn un s t /\
+  gas_cut cut vs s ==>
   access_ok lo H g i t /\ taint_ok g un i t
 Proof
   strip_tac >>
@@ -603,9 +606,9 @@ Proof
      simp[o1_ctx_shape_def, EVERY_MEM] >> strip_tac >>
      first_x_assum drule >> simp[o1_fn_shape_def, fn_shape_ok_def]) >>
   `access_ok lo G f i s /\ taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >>
-     first_x_assum drule >> simp[]) >>
+    (qpat_x_assum `ptr_discipline_upto _ _ _ _` mp_tac >>
+     simp[ptr_discipline_upto_def] >> strip_tac >>
+     first_x_assum drule_all >> simp[]) >>
   `in_revert_forward f s ==> in_revert_forward g t` by
     (strip_tac >> irule lower_dload_terminal_forward_guard >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
@@ -686,7 +689,7 @@ Proof
 QED
 
 Theorem dload_actual_copy_terminal_next:
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo cut C vs /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
   dload_control_match q f g s t i [i] 0 /\
@@ -699,7 +702,8 @@ Theorem dload_actual_copy_terminal_next:
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   step_inst fuel Ct i t = OK t' /\
-  active_inst g j (t' with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  active_inst g j (t' with vs_inst_idx := SUC t.vs_inst_idx) /\
+  gas_cut cut vs t ==>
   ?s' i' emitted'.
     step_inst fuel C i s = OK s' /\
     frame_reachable vs C cs PG (step_prov PG G i s') (step_taint i s s' tn)
@@ -858,7 +862,7 @@ QED
 (* Entry witness: ss/tt are the actual bumped states. No memory agreement
    is asserted after the copy. The terminal alternatives are target-origin. *)
 Theorem dload_actual_copy_terminal_entry:
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo cut C vs /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
   dload_control_match q f g s t i [i] 0 /\ ir_supply_covers_fn q f /\
@@ -872,7 +876,8 @@ Theorem dload_actual_copy_terminal_entry:
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   (in_revert_forward g t \/ about_to_revert g i t) /\
-  step_inst fuel Ct i t = OK t' ==>
+  step_inst fuel Ct i t = OK t' /\
+  gas_cut cut vs t ==>
   ?s' ss tt bb tb bs bt mid.
     step_inst fuel C i s = OK s' /\
     ss = s' with vs_inst_idx := SUC s.vs_inst_idx /\
@@ -1112,7 +1117,7 @@ QED
 Finalise dload_terminal_assign_next
 
 Theorem dload_indexed_terminal_safety:
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo cut C vs /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f (EL k mid) s /\
   MEM bb f.fn_blocks /\
@@ -1133,7 +1138,8 @@ Theorem dload_indexed_terminal_safety:
   FDOM G SUBSET fn_pv P f /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
-    G H tn un s t ==>
+    G H tn un s t /\
+  gas_cut cut vs s ==>
   access_ok lo H g (EL k mid) t /\ taint_ok g un (EL k mid) t
 Proof
   strip_tac >> drule_all dload_terminal_slice_opcode >> strip_tac >>
@@ -1168,8 +1174,9 @@ Resume dload_indexed_terminal_safety[malformed]:
      simp[o1_ctx_shape_def, EVERY_MEM] >> strip_tac >>
      first_x_assum drule >> simp[o1_fn_shape_def, fn_shape_ok_def]) >>
   `taint_ok f tn (EL k mid) s` by
-    (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >> first_x_assum drule >> simp[]) >>
+    (qpat_x_assum `ptr_discipline_upto _ _ _ _` mp_tac >>
+     simp[ptr_discipline_upto_def] >> strip_tac >>
+     first_x_assum drule_all >> simp[]) >>
   irule dload_terminal_revert_taint >> simp[] >>
   qexistsl [`G`,`H`,`set (fn_ir_vars f) DIFF {v | retpc_var f v}`,
              `f`,`fs`,`s`,`tn`] >>

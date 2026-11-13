@@ -33,6 +33,7 @@
  *)
 Theory o1FrameLockstep
 Ancestors
+  o1SafeUpto
   o1PassLift ptrDiscipline unitMemInv stateFrame contextCodegenRel
   codegenRel venomExecSemantics venomExecProps venomInst venomState
   list finite_map option pred_set
@@ -1210,16 +1211,21 @@ Proof
   gvs[update_var_def]
 QED
 
-Theorem lockstep_final:
+(* A halting step of the output and the input's halting step it pairs
+   with, from states with the same execution frame. *)
+Theorem lockstep_halt_step:
   frame_reachable vs C' stk' PG G' T0' fn' inst' s' /\
   inst'.inst_opcode <> INVOKE /\ step_inst fuel C' inst' s' = Halt h' /\
   lockstep_ctx Q vs.vs_labels C C' /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted ==>
-  ?h tn R.
-    final_taint vs C h tn R /\ execution_frame h' = execution_frame h /\
-    (step_taint inst' s' h' T0').t_stor = tn.t_stor /\
-    (step_taint inst' s' h' T0').t_trans = tn.t_trans /\
-    (step_taint inst' s' h' T0').t_imm = tn.t_imm /\
-    ret_taint T0' inst' s' = R
+  ?stk G tn fn inst s h.
+    frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+    inst.inst_opcode <> INVOKE /\ step_inst fuel C inst s = Halt h /\
+    execution_frame s' = execution_frame s /\
+    execution_frame h' = execution_frame h /\
+    (step_taint inst' s' h' T0').t_stor = (step_taint inst s h tn).t_stor /\
+    (step_taint inst' s' h' T0').t_trans = (step_taint inst s h tn).t_trans /\
+    (step_taint inst' s' h' T0').t_imm = (step_taint inst s h tn).t_imm /\
+    ret_taint T0' inst' s' = ret_taint tn inst s
 Proof
   strip_tac >> drule_all frame_reachable_lockstep >> strip_tac >>
   drule_all lockstep_rel >> strip_tac >>
@@ -1234,9 +1240,42 @@ Proof
      reverse conj_tac >- (qexists `sg` >> simp[]) >> fs[]) >>
   `ret_taint T0' inst' s' = ret_taint tn inst s` by
     metis_tac[ret_taint_pair] >>
-  qexistsl [`h`, `step_taint inst s h tn`] >>
-  fs[ghost_rel_def] >> simp[final_taint_def] >>
-  qexistsl [`stk`, `PG`, `G`, `tn`, `fn`, `inst`, `s`, `fuel`] >> simp[]
+  qexistsl [`stk`, `G`, `tn`, `fn`, `inst`, `s`, `h`] >>
+  fs[ghost_rel_def, state_rel_def]
+QED
+
+Theorem lockstep_final:
+  frame_reachable vs C' stk' PG G' T0' fn' inst' s' /\
+  inst'.inst_opcode <> INVOKE /\ step_inst fuel C' inst' s' = Halt h' /\
+  lockstep_ctx Q vs.vs_labels C C' /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted ==>
+  ?h tn R.
+    final_taint vs C h tn R /\ execution_frame h' = execution_frame h /\
+    (step_taint inst' s' h' T0').t_stor = tn.t_stor /\
+    (step_taint inst' s' h' T0').t_trans = tn.t_trans /\
+    (step_taint inst' s' h' T0').t_imm = tn.t_imm /\
+    ret_taint T0' inst' s' = R
+Proof
+  strip_tac >> drule_all lockstep_halt_step >> strip_tac >>
+  qexistsl [`h`, `step_taint inst s h tn`, `ret_taint tn inst s`] >>
+  rewrite_tac[final_taint_def] >> asm_rewrite_tac[] >>
+  qexistsl [`stk`, `PG`, `G`, `tn`, `fn`, `inst`, `s`, `fuel`] >>
+  asm_rewrite_tac[]
+QED
+
+Theorem taint_within_upto_lockstep:
+  lockstep_ctx Q vs.vs_labels C C' /\ vs.vs_vars = FEMPTY /\
+  ~vs.vs_halted /\ taint_within_upto D n C vs ==>
+  taint_within_upto D n C' vs
+Proof
+  rewrite_tac[taint_within_upto_def] >> strip_tac >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> drule_all lockstep_req_step >>
+      strip_tac >> drule_all gas_cut_execution_frame >> strip_tac >>
+      first_x_assum drule_all >>
+      imp_res_tac execution_frame_fields >> simp[]) >>
+  rpt gen_tac >> strip_tac >> drule_all lockstep_halt_step >> strip_tac >>
+  drule_all gas_cut_execution_frame >> strip_tac >>
+  first_x_assum drule_all >>
+  imp_res_tac execution_frame_fields >> gvs[]
 QED
 
 Theorem taint_within_lockstep:
@@ -1244,13 +1283,9 @@ Theorem taint_within_lockstep:
   ~vs.vs_halted /\ taint_within D C vs ==>
   taint_within D C' vs
 Proof
-  rewrite_tac[taint_within_def] >> strip_tac >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> drule_all lockstep_req_step >>
-      strip_tac >> first_x_assum drule_all >>
-      imp_res_tac execution_frame_fields >> simp[]) >>
-  rpt gen_tac >> simp[Once final_taint_def] >> strip_tac >>
-  drule_all lockstep_final >> strip_tac >>
-  first_x_assum drule >> imp_res_tac execution_frame_fields >> gvs[]
+  strip_tac >> irule taint_within_upto_all >>
+  irule taint_within_upto_lockstep >>
+  metis_tac[taint_within_upto_whole]
 QED
 
 (* Paired states touch the same memory. *)

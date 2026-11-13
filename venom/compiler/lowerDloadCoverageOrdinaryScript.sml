@@ -4,6 +4,7 @@ Ancestors
   lowerDloadCoveragePhase lowerDloadSupplySegment
   lowerDloadCoverageInvariant lowerDloadProvenanceSupport lowerDloadReachability
   lowerDloadNormalDispatch lowerDloadDefs lowerDloadOwnership
+  o1SafeUpto
   ptrDiscipline memSafeRun unitMemInv o1PassContract
   venomInstProps venomExecSemantics venomExecProps venomState
   contextCodegenRel venomInst list rich_list
@@ -88,6 +89,9 @@ Proof
      active_inst fn (EL (SUC n) (ins ++ [j]))
        (u with vs_inst_idx := SUC sN.vs_inst_idx)` by
     suspend "successor_active" >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs0.vs_gas_readings)) CS vs0` by
+    metis_tac[ptr_discipline_upto_whole] >>
+  `gas_cut (SUC (LENGTH vs0.vs_gas_readings)) vs0 sN` by simp[] >>
   drule_all ld_normal_ordinary_next_backward >>
   disch_then (qspec_then `SUC (Ts n).vs_inst_idx` strip_assume_tac) >>
   `s'.vs_current_bb = sN.vs_current_bb` by
