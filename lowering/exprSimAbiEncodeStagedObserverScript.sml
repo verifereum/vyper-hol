@@ -9,11 +9,14 @@ Ancestors
   venomState venomMemDefs loweringPosts finite_map words list
 
 Definition abi_encode_staged_observation_def:
-  abi_encode_staged_observation ctx func ce cx vs st out mid outsz p at av initial actual <=>
-    stmt_state_rel ctx func ce cx vs actual /\
+  abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs st out mid outsz p at av initial actual <=>
+    stmt_state_rel H ctx func ce cx vs actual /\
     LENGTH initial.vs_memory <= LENGTH actual.vs_memory /\
     actual.vs_fmp = initial.vs_fmp /\
     actual.vs_call_ctx = initial.vs_call_ctx /\
+    actual.vs_accounts = initial.vs_accounts /\
+    actual.vs_transient = initial.vs_transient /\
+    actual.vs_requests = initial.vs_requests /\
     actual.vs_data_section = initial.vs_data_section /\
     abi_encode_semantic_obs actual = abi_encode_semantic_obs initial /\
     (!x v. not_fresh_at st x /\ lookup_var x initial = SOME v ==>
@@ -71,7 +74,7 @@ Theorem abi_encode_staged_observer_extend:
     sz = 32 /\ venomMemDefs$regions_disjoint (sb,cap) (b,sz) /\
     venomMemDefs$regions_disjoint (d,LENGTH (enc at av)) (b,sz) /\
     venomMemDefs$regions_disjoint (p+32,m) (b,sz)) /\
-  stmt_state_rel ctx func ce cx vs initial /\ local_ptrs_reserved ce st /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs initial /\ local_ptrs_reserved ce st /\
   fn_inst_ids_distinct func /\
   (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
     MEM j (fn_insts func)) /\
@@ -83,7 +86,7 @@ Theorem abi_encode_staged_observer_extend:
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_exec_frame obs initial actual /\
-    abi_encode_staged_observation ctx func ce cx vs st (FST ops) method_id
+    abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs st (FST ops) method_id
       outsz p at av initial actual /\
     abi_encoder_extend_sim (ctx with ctx_functions := [obs]) obs initial actual
 Proof
@@ -96,7 +99,7 @@ Proof
   drule_all abi_encode_phases_caller_state >> strip_tac >>
   drule_all abi_encode_phases_caller_pure_frame >> strip_tac >>
   `alloca_inv actual` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ actual` mp_tac >>
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ actual` mp_tac >>
      simp_tac bool_ss [stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `st.cs_next_id <= ready.cs_next_id` by
     (drule abi_builtin_encode_setup_shape >> strip_tac >>
@@ -119,6 +122,17 @@ Proof
      qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` (irule_at Any) >>
      qpat_assum `window_strong_result _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
+   actual.vs_requests = initial.vs_requests` by
+    (qpat_assum `window_strong_result _ _ _ _ _ _ _ _ prepared _`
+       (mp_tac o MATCH_MP abiEncoderWindowContractTheory.window_strong_result_effect) >>
+     qpat_assum `abi_encoder_registered_effect {} _ _ actual` mp_tac >>
+     qpat_assum `prepared.vs_accounts = _` mp_tac >>
+     qpat_assum `prepared.vs_transient = _` mp_tac >>
+     qpat_assum `prepared.vs_requests = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rewrite_tac[abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def] >>
+     rpt strip_tac >> asm_simp_tac (srw_ss()) []) >>
   qpat_assum `abi_encode_exec_frame obs initial actual` mp_tac >>
   simp_tac bool_ss [abi_encode_exec_frame_def] >> strip_tac >>
   qexists_tac `actual` >>
@@ -164,7 +178,7 @@ Theorem abi_encode_staged_observer:
     sz = 32 /\ venomMemDefs$regions_disjoint (sb,cap) (b,sz) /\
     venomMemDefs$regions_disjoint (d,LENGTH (enc at av)) (b,sz) /\
     venomMemDefs$regions_disjoint (p+32,m) (b,sz)) /\
-  stmt_state_rel ctx func ce cx vs initial /\ local_ptrs_reserved ce st /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs initial /\ local_ptrs_reserved ce st /\
   fn_inst_ids_distinct func /\
   (!j. MEM j (fn_insts obs) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
     MEM j (fn_insts func)) /\
@@ -176,7 +190,7 @@ Theorem abi_encode_staged_observer:
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     abi_encode_exec_frame obs initial actual /\
-    abi_encode_staged_observation ctx func ce cx vs st (FST ops) method_id
+    abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs st (FST ops) method_id
       outsz p at av initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -185,8 +199,8 @@ Proof
 QED
 
 Theorem abi_encode_staged_stmt_rel_prev_bb[local]:
-  stmt_state_rel ctx func ce cx es (s with vs_prev_bb := L) <=>
-  stmt_state_rel ctx func ce cx es s
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es (s with vs_prev_bb := L) <=>
+  stmt_state_rel H ctx func ce cx es s
 Proof
   `fmp_room ctx func (s with vs_prev_bb := L) <=> fmp_room ctx func s` by
     (irule fmp_room_fields_cong >> simp[]) >>
@@ -199,9 +213,9 @@ Proof
 QED
 
 Theorem abi_encode_staged_observation_prev_bb[simp]:
-  abi_encode_staged_observation ctx func ce cx vs st out mid outsz p at av initial
+  abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs st out mid outsz p at av initial
     (actual with vs_prev_bb := L) <=>
-  abi_encode_staged_observation ctx func ce cx vs st out mid outsz p at av initial actual
+  abi_encode_staged_observation H ctx func ce cx vs st out mid outsz p at av initial actual
 Proof
   Cases_on `out` >>
   simp[abi_encode_staged_observation_def, loweringPostsTheory.pure_frame_def, abi_encode_staged_stmt_rel_prev_bb,
@@ -209,9 +223,9 @@ Proof
 QED
 
 Theorem abi_encode_staged_observation_returndata[simp]:
-  abi_encode_staged_observation ctx func ce cx vs st out mid outsz p at av initial
+  abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs st out mid outsz p at av initial
     (actual with vs_returndata := rd) <=>
-  abi_encode_staged_observation ctx func ce cx vs st out mid outsz p at av initial actual
+  abi_encode_staged_observation H ctx func ce cx vs st out mid outsz p at av initial actual
 Proof
   Cases_on `out` >>
   simp[abi_encode_staged_observation_def, loweringPostsTheory.pure_frame_def, hash_returndata_state_rel,
