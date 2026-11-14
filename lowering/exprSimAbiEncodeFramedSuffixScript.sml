@@ -14,6 +14,7 @@ Ancestors
   exprSimAbiEncodeExecFrame exprSimAbiEncodeSemantic
   exprSimAbiEncodeOpenFinishExtension abiEncoderExtendSim
   exprLoweringProps compileEnv words finite_map arithmetic
+  exprSimAbiEncodeSourceRoom exprSimAbiEncodeChargeTransfer venomInstIdsProps
 
 Theorem abi_encode_framed_setup_window:
   abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
@@ -429,4 +430,55 @@ Theorem abi_encode_framed_semantic_fields:
 Proof
   strip_tac >> drule abi_encode_exec_frame_semantic >>
   simp[abi_encode_semantic_obs_fields]
+QED
+
+Theorem abi_encode_raw_framed_observer:
+  !dst src ei st out st' ctx func obs at av sb cap d s.
+    compile_abi_encode_to_buf dst src ei st = (out,st') /\
+    abi_encoder_window_pre ctx func st st' dst src ei at av sb cap d s /\
+    fn_has_code st st' obs /\ fn_inst_ids_distinct obs /\
+    obs.fn_name = func.fn_name /\
+    (!i. MEM i (fn_insts obs) /\ i.inst_opcode <> STOP /\
+         i.inst_opcode <> NOP ==> MEM i (fn_insts func)) /\
+    (!i. MEM i (fn_insts obs) ==> i.inst_opcode <> INVOKE) ==>
+    ?t. window_strong_result (ctx with ctx_functions := [obs]) obs
+          st st' out at av d s t /\
+        abi_encode_exec_frame func s t /\ abi_decode_sim ctx obs s t
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_pre_def]) >>
+  `alloca_room (ctx with ctx_functions := [obs]) obs s` by
+    (irule abi_encode_bridge_local_room >> metis_tac[]) >>
+  `abi_encoder_window_pre (ctx with ctx_functions := [obs]) obs
+     st st' dst src ei at av sb cap d s` by
+    (pure_rewrite_tac[abi_encoder_window_pre_def] >>
+     pure_asm_rewrite_tac[] >> simp_tac bool_ss [] >>
+     rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!inst b sz. MEM inst (fn_insts func) /\ _ ==> _`
+       irule >> qexists `inst` >> simp[] >>
+       qpat_x_assum `!i. MEM i (fn_insts obs) /\ _ ==> _` irule >> simp[]) >>
+  drule_all abi_encode_framed_body_singleton >> strip_tac >>
+  `abi_encoder_registered_effect (window_alloca_sites obs (frag_ids st st'))
+     [(d,LENGTH (enc at av))] s t` by
+    (drule window_strong_result_effect >> simp[]) >>
+  `!i. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+        ~MEM i (fn_insts obs) ==>
+        FLOOKUP t.vs_allocas i.inst_id = FLOOKUP s.vs_allocas i.inst_id` by
+    (rpt strip_tac >>
+     `i.inst_id NOTIN window_alloca_sites obs (frag_ids st st')` by
+       (simp[window_alloca_sites_def] >> disj2_tac >>
+        rpt strip_tac >>
+        `MEM inst (fn_insts func)` by
+          (qpat_x_assum `!i. MEM i (fn_insts obs) /\ _ ==> _` irule >> simp[]) >>
+        `inst = i` by metis_tac[venomInstIdsPropsTheory.fn_inst_ids_distinct_inj] >>
+        metis_tac[]) >>
+     fs[abi_encoder_registered_effect_def]) >>
+  `abi_encode_exec_frame func s t` by
+    (fs[abi_encode_exec_frame_def] >>
+     irule abi_encode_charge_difference_lift >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists `obs` >> simp[] >> rpt strip_tac >>
+     qpat_x_assum `!i. MEM i (fn_insts obs) /\ _ ==> _` irule >> simp[]) >>
+  qexists `t` >> simp[]
 QED
