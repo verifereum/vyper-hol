@@ -73,7 +73,7 @@ what the interpreter would run.
    bounds (`annotation_bound`), `range` counts (`get_iter_bound`), the
    endpoints of a `range` without `bound=` (`translate_iter`), keyword
    flags (`kwarg_bool`, `kwarg_num`, `kwarg_method_id`), the slice length,
-   tuple indices and `method_id` (`fold_constant`). Exponents use
+   tuple indices and `method_id` (`fold_pin_constant` / `pin_fold_value`). Exponents use
    `pin_fold_expr`, which preserves operations the compiler does not fold,
    including unsafe arithmetic. Boolean operators fold their literal children
    before translation to conditional expressions.
@@ -82,10 +82,9 @@ what the interpreter would run.
    annotation bound or `range` bound fails validation (`bound_resolved`,
    `iter_bound_resolved`), and a call with such a keyword or slice length
    translates to an expression the type checker rejects (`kwargs_checked`,
-   `rejected_expr`). Rejection is the cost of an evaluator smaller than the
-   compiler's folder: a `range` count defined by `uint256_addmod` is accepted
-   by the compiler and rejected here. A closed Boolean flag such as
-   `True or False` is folded and accepted.
+   `rejected_expr`). Closed `uint256_addmod` range counts and Boolean flags
+   such as `True or False` are folded and accepted, as the two
+   `constant_unevaluated_*` fixtures now check.
 
 Annotation nodes carry no compiler types, and neither do the functions of an
 imported module that nothing calls. So in a count (an annotation bound, a
@@ -110,8 +109,9 @@ expression under every node that also carries a `folded_value`.
 (constants of an imported module's import in bounds), `constant_widened`
 (a `Bytes[5]` constant referenced as a `Bytes[10]`), `constant_minmax_bound`
 (`int8[max_value(int8)]` and a `min_value` constant), `constant_interface_stub`
-(the builtin `IERC20Detailed` interface's `String[...]`), the two
-`constant_unevaluated_*` rejections, `constant_undecodable_bound` and
+(the builtin `IERC20Detailed` interface's `String[...]`),
+`constant_unevaluated_flag` (a folded Boolean constant),
+`constant_unevaluated_range` (a folded AddMod range bound), `constant_undecodable_bound` and
 `constant_undecodable_import` (an undecodable annotation in the main or an
 imported module) from
 `tests/fixtures/check_contract`. It decodes each one again with every
