@@ -8,7 +8,8 @@ Ancestors
   vyperInterpreter vyperState vyperTyping list stmtSimLogTrace emitHelper context venomInst
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasSeq rich_list vyperEvalExprPreservesScopesDom
-  eventLoweringStructure stmtSimLogTopics
+  fragGasSeqAbort
+  eventLoweringStructure stmtSimLogTopics logComposeFacts
 Libs
   monadsyntax
 
@@ -112,31 +113,6 @@ Proof
   strip_tac >> drule log_emit_open >> simp[]
 QED
 
-(* Outside a static frame the static-write check passes. *)
-Theorem eval_log_bind[local]:
-  ~cx.txn.is_static ==>
-  eval_stmt cx (Log id args) =
-    bind (eval_exprs cx args)
-      (\vs. bind (lift_option (encode_source_event (get_tenv cx) cx.sources
-                                 cx.txn.target id vs) "Log encode event")
-                 push_log)
-Proof
-  strip_tac >> simp[Once evaluate_def] >>
-  simp[FUN_EQ_THM, bind_def, ignore_bind_def] >> rpt gen_tac >>
-  rpt (CASE_TAC >> gvs[])
-QED
-
-Theorem log_args_admissible[local]:
-  ~cx.txn.is_static /\
-  gas_admissible (eval_stmt cx (Log id args)) (stmt_res_ok lctx) es ==>
-  gas_admissible (eval_exprs cx args) log_args_res_ok es
-Proof
-  rw[gas_admissible_def, log_args_res_ok_def] >>
-  `eval_stmt cx (Log id args) (es with gas_obs := gs) = (INR exc, ee)` by
-    simp[log_eval_outcome] >>
-  first_x_assum drule >> strip_tac >> metis_tac[log_argument_error_ok]
-QED
-
 Theorem log_args_scopes_dom:
   gas_marked_exec memory (ctx,func) (eval_exprs cx args)
     (es,s0) marks res ee r ==>
@@ -203,20 +179,19 @@ Proof
   strip_tac >>
   qpat_x_assum `!e tail s. _` (assume_tac o CONV_RULE (DEPTH_CONV ETA_CONV)) >>
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
-  (* A static frame has no related target state. *)
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   gvs[stmt_env_def, declare_stmt_local_def, comp_bind_def, comp_return_def,
       comp_ignore_bind_def] >>
   pairarg_tac >> gvs[] >>
   drule_all log_compile_structure >> strip_tac >>
   `gas_admissible (eval_exprs cx args) log_args_res_ok es` by
-    metis_tac[log_args_admissible] >>
+    (drule_all log_arguments_admissible >>
+     simp[GSYM log_args_res_ok_def, ETA_THM]) >>
   qspecl_then [`args`, `ctx`, `func`, `cenv`, `cx`, `R`, `es`, `sa`, `xs`, `sm`,
                `s0`, `env`, `env`, `es`, `ys`] mp_tac compile_log_eval_all_gas >>
   impl_tac
   >- (RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> simp[] >>
       first_assum ACCEPT_TAC) >>
-  qpat_assum `~cx.txn.is_static` (rewrite_tac o single o MATCH_MP eval_log_bind) >>
+  rewrite_tac[log_eval_bind] >>
   simp[gas_outcome_def] >> strip_tac
   >- suspend "args_summary" >>
   qexists_tac `marks` >> disj2_tac >>
@@ -283,10 +258,53 @@ Resume compile_log_ready_stmt_frag[args_value]:
     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
     (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
     (irule split_log_ops_data_rel >> simp[]) >>
+  Cases_on `cx.txn.is_static`
+  >- suspend "static_suffix" >>
+  `check_not_static cx = return ()` by simp[FUN_EQ_THM, return_def] >>
+  qpat_x_assum `check_not_static cx = return ()`
+    (fn th => rewrite_tac[th, ignore_bind_def, bind_return]) >>
   qpat_assum `MAP SND xs = MAP expr_type args`
     (fn th => drule_all (REWRITE_RULE [th] log_success_suffix_actual_run)) >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
   suspend "suffix"
+QED
+
+Resume compile_log_ready_stmt_frag[static_suffix]:
+  rename1 `compile_stmt _ _ _ (Log _ _) sa = ((),sb)` >>
+  qpat_assum `MAP SND xs = MAP expr_type args`
+    (fn th => drule_all (REWRITE_RULE [th] log_static_suffix_actual_run)) >>
+  disch_then (qx_choose_then `u` strip_assume_tac) >>
+  `?bb. lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sm sb) (DROP t.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fn_has_code_def, same_blocks_def, inst_extends_def,
+         IS_PREFIX_APPEND, Excl "enc_def"] >>
+     qexists_tac `l` >>
+     REWRITE_TAC[GSYM listTheory.APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND]) >>
+  qspecl_then [`F`,`emitted_insts sm sb`,`t`,`u`,`ExHalt_abort`,`ctx`,`func`,`bb`]
+    mp_tac run_inst_seq_abort_gas_path >>
+  impl_tac >- simp[Excl "enc_def"] >>
+  disch_then (qx_choose_then `n` (qx_choose_then `j` strip_assume_tac)) >>
+  `gas_marked_exec F (ctx,func)
+     (bind (lift_option (encode_source_event (get_tenv cx) cx.sources
+                          cx.txn.target id vs) "Log encode event")
+       (\ev. ignore_bind (check_not_static cx) (push_log ev)))
+     (es_end with gas_obs := [], t) (REPLICATE n F)
+     (INR (Error (RuntimeError "write in static context"))) es_end
+     (Abort ExHalt_abort (u with vs_inst_idx := j))` by
+    (irule gas_marked_exec_no_source_read >>
+     simp[bind_def, lift_option_def, return_def, ignore_bind_def, Excl "enc_def"]) >>
+  qexists_tac `marks ++ REPLICATE n F` >> disj1_tac >>
+  simp[gas_summary_at_def, Excl "enc_def"] >>
+  qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+               `es_end`,`Abort ExHalt_abort (u with vs_inst_idx := j)`] >>
+  conj_tac
+  >- (irule gas_marked_exec_bind_normal >>
+      qexistsl_tac [`es_end`,`t`,`vs`] >> simp[Excl "enc_def"] >>
+      qpat_x_assum `gas_marked_exec _ _ (bind (lift_option _ _) _) _ _ _ _ _`
+        mp_tac >>
+      qpat_assum `encode_source_event _ _ _ _ _ = _` (fn th => rewrite_tac[th]) >>
+      simp[Excl "enc_def"]) >>
+  simp[exit_result_def, stmt_exit_def, expr_exit_def]
 QED
 
 Resume compile_log_ready_stmt_frag[suffix]:
@@ -332,7 +350,7 @@ Resume compile_log_ready_stmt_frag[suffix]:
       qpat_x_assum `gas_marked_exec _ _ (bind (lift_option _ _) push_log) _ _ _ _ _`
         mp_tac >>
       qpat_assum `encode_source_event _ _ _ _ _ = _` (fn th => rewrite_tac[th]) >>
-      simp[Excl "enc_def"]) >>
+      simp[ETA_THM, Excl "enc_def"]) >>
   suspend "post"
 QED
 
