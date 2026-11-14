@@ -142,6 +142,9 @@ Theorem storage_word_endpoint_inv_ptr:
     ((if tr then tstore slot w s else sstore slot w s) with vs_inst_idx := idx)
 Proof
   strip_tac >>
+  `~cx.txn.is_static` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >>
   drule tuple_target_storage_scope_frame >> strip_tac >>
   conj_tac >- simp[stmt_state_rel_inst_idx] >>

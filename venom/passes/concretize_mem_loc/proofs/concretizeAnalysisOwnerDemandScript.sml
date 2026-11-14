@@ -1,5 +1,6 @@
 Theory concretizeAnalysisOwnerDemand
 Ancestors
+  concretizeLayoutCutSafe
   concretizeAnalysisTemporalDemand concretizeAnalysisIncomingDemand
   concretizeAnalysisReadOrigin frameActivationSeparation frameJointTrace
   frameJointTransition frameOriginHistory frameActivationCache o1PassContract
@@ -13,7 +14,7 @@ Theorem concretize_untainted_owner_read_liveat:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
   byte IN joint_reads (EL j (q0::qs)) /\ lo <= byte /\
@@ -57,6 +58,7 @@ Resume concretize_untainted_owner_read_liveat[local]:
   goal_assum (drule_at (Pat `EL j (_::_) = _`)) >>
   goal_assum (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `o1_walk_view _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   qexists_tac `byte` >> simp[] >> metis_tac[]
 QED
 
@@ -86,7 +88,7 @@ Theorem concretize_untainted_owner_read_liveset:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
   byte IN joint_reads (EL j (q0::qs)) /\ lo <= byte /\
@@ -136,6 +138,7 @@ Proof
      goal_assum (drule_at (Pat `EL j (_::_) = _`)) >>
      goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `o1_walk_view _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
      qexists_tac `byte` >> simp[] >> metis_tac[]) >>
   `!k stk' PG' G' tn' fn' inst' s' oms' om' hs' h'.
     k < n /\ EL k (q0::qs) = JointConfig stk' PG' G' tn' fn' inst' s' oms' om' hs' h' ==>
@@ -153,7 +156,7 @@ Proof
      goal_assum (drule_at (Pat `activation_location _ _ _ _`)) >>
      goal_assum (drule_at (Pat `activation_cache (EL n _) _ _ _ _`)) >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `ptr_discipline _ _ _`)) >>
+     goal_assum (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
      qexistsl_tac [`byte`,`j`] >> simp[] >> metis_tac[]) >>
   irule activation_context_liveset_intersection >> conj_tac
   >- (goal_assum (drule_at (Pat `ml_iterate_fuel _ _ _ _ _ _ _ _ _ = _`)) >> simp[]) >>

@@ -8,7 +8,7 @@ Ancestors
   o1LowerDloadRequestExec o1LowerDloadRequestEndpoints
   o1LowerDloadRequestForward o1ContractLowerDloadSim o1RequestContract
   o1PassContract o1LowerDloadJointRelation o1LowerDloadRootEntry
-  ptrDiscipline passSimulationDefs venomExecSemantics venomState
+  ptrDiscipline o1SafeUpto passSimulationDefs venomExecSemantics venomState
   venomExecProps venomInst o1LowerDloadSourceEntry list
 
 (* Retain the literal run conjunct, including every guard and quantifier.
@@ -30,19 +30,25 @@ Proof
   disch_then (assume_tac o SIMP_RULE bool_ss []) >>
   rpt strip_tac >> simp[ctx_abort_rq_def] >> rpt strip_tac >>
   `terminates (Abort a t)` by simp[terminates_def] >>
+  drule_all ld_run_context_entry >> strip_tac >>
+  qpat_x_assum `s0 = _` SUBST_ALL_TAC >>
+  drule o1_src_inv_safe_upto >> strip_tac >>
+  first_x_assum (qspec_then `SUC (LENGTH vs.vs_gas_readings)` assume_tac) >>
+  `0 < SUC (LENGTH vs.vs_gas_readings)` by simp[] >>
   drule_all lower_dload_stage_root_entry >> strip_tac >>
   `opaque_use_ok fn` by metis_tac[ld_ctx_shape_lookup_opaque] >>
   `fn.fn_name = name` by
     (qpat_assum `lookup_function name C.ctx_functions = SOME fn`
        (mp_tac o REWRITE_RULE [lookup_function_def]) >>
      disch_then (mp_tac o MATCH_MP FIND_P) >> simp[]) >>
-  `terminates (run_blocks fuel C fn s0)` by metis_tac[] >>
+  `terminates (run_blocks fuel C fn
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))` by metis_tac[] >>
   first_assum (drule_at (Pat `ld_joint_boundary`) o SIMP_RULE bool_ss []) >>
   simp[] >>
   disch_then (drule_at (Pat `terminates (run_blocks _ _ _ _)`)) >>
   simp[] >> disch_then (drule_all_then strip_assume_tac) >>
   gvs[ld_request_result_rel_abort] >>
-  qexists_tac `m` >> simp[] >>
+  qexists_tac `fuel` >> simp[] >>
   irule LIST_REL_imp_request_prefix_rel >> simp[]
 QED
 

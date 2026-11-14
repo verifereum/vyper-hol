@@ -27,7 +27,7 @@ Proof
   simp[layout_request_state_def]
 QED
 
-Theorem layout_request_run_next_certificate:
+Theorem layout_request_run_next_certificate_fuel:
   vs0.vs_allocas = FEMPTY /\ EVERY wf_function C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
@@ -35,16 +35,17 @@ Theorem layout_request_run_next_certificate:
       (EL (SUC k) (q0::MAP SND path))
       (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
       (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) ==>
-  selected_run_next_certificate C C' q0 path
+  selected_run_next_certificate_fuel C C' q0 path
     (layout_request_EB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
     (layout_request_OB D lo vs0 C C' q0 es qs ass qend)
     (layout_request_OutR D lo vs0 C C' q0 es qs ass qend)
 Proof
-  strip_tac >> simp[selected_run_next_certificate_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >> pure_rewrite_tac[selected_run_next_certificate_fuel_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `run_blocks (SUC k) C fn s = _` kall_tac >>
   drule_all layout_request_run_block_entry >> strip_tac >>
   qexistsl [`bb'`, `phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions`] >>
-  simp[] >> gen_tac >> strip_tac >>
+  (conj_tac >- first_assum ACCEPT_TAC) >> gen_tac >> strip_tac >>
   `?v. rb' = OK v` by
     (Cases_on `rb'` >> fs[layout_request_OB_def, layout_canonical_OB_def,
        layout_canonical_result_def]) >> gvs[] >>
@@ -52,50 +53,57 @@ Proof
   >- (fs[layout_request_EB_def, layout_request_OB_def] >>
       drule_at (Pat `layout_canonical_OB _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
         layout_canonical_run_continue >> simp[] >> metis_tac[]) >>
-  gen_tac >> strip_tac >> simp[selected_run_match_def] >> qexists `rr'` >> conj_tac
+  rpt strip_tac >> pure_rewrite_tac[selected_run_match_fuel_def] >> qexists `run_blocks k C' fn' v` >> conj_tac
+  >- (`~v.vs_halted` by metis_tac[finite_execution_block_endpoint] >>
+      simp[Once run_blocks_def, run_block_def]) >>
+  conj_tac
   >- (irule finite_step_run_next >> goal_assum (drule_at Any) >>
       metis_tac[finite_execution_block_endpoint]) >>
   qpat_x_assum `layout_request_OutR _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[layout_request_OutR_def, layout_canonical_OutR_def] >> simp[]
 QED
 
-Theorem layout_request_run_halt_certificate:
+Theorem layout_request_run_halt_certificate_fuel:
   EVERY wf_function C.ctx_functions ==>
-  selected_run_halt_certificate C C' q0 path
+  selected_run_halt_certificate_fuel C C' q0 path
     (layout_request_EB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
     (layout_request_OB D lo vs0 C C' q0 es qs ass qend)
     (layout_request_OutR D lo vs0 C C' q0 es qs ass qend)
 Proof
-  strip_tac >> simp[selected_run_halt_certificate_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >> pure_rewrite_tac[selected_run_halt_certificate_fuel_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `run_blocks (SUC k) C fn s = _` kall_tac >>
   drule_all layout_request_run_block_entry >> strip_tac >>
   qexistsl [`bb'`, `phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions`] >>
-  simp[] >> rpt strip_tac >> Cases_on `rb'` >>
+  (conj_tac >- first_assum ACCEPT_TAC) >> rpt gen_tac >> strip_tac >> Cases_on `rb'` >>
   gvs[layout_request_OB_def, layout_canonical_OB_def, layout_canonical_result_def,
     layout_request_EB_def, layout_canonical_EB_def] >>
   first_x_assum drule >> strip_tac >> fs[layout_completed_jump_def]
 QED
 
-Theorem layout_request_run_exit_certificate:
+Theorem layout_request_run_exit_certificate_fuel:
   EVERY wf_function C.ctx_functions ==>
-  selected_run_exit_certificate C C' q0 path
+  selected_run_exit_certificate_fuel C C' q0 path
     (layout_request_EB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
     (layout_request_OB D lo vs0 C C' q0 es qs ass qend)
     (layout_request_OutR D lo vs0 C C' q0 es qs ass qend)
 Proof
-  strip_tac >> rewrite_tac[selected_run_exit_certificate_def] >>
+  strip_tac >> rewrite_tac[selected_run_exit_certificate_fuel_def] >>
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `run_blocks (SUC k) C fn s = _` kall_tac >>
   drule_all layout_request_run_block_entry >> strip_tac >>
   qexistsl [`bb'`, `phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions`] >>
-  simp[] >> rpt strip_tac >>
+  (conj_tac >- first_assum ACCEPT_TAC) >> rpt gen_tac >> strip_tac >>
   `layout_canonical_result D lo vs0 C C' q0 es qs ass qend qe
     (n + LENGTH w) r rb'` by
     (Cases_on `r` >> Cases_on `rb'` >>
      gvs[layout_request_OB_def, layout_canonical_OB_def]) >>
   `!p. rb' <> OK p` by
     (Cases_on `r` >> Cases_on `rb'` >> gvs[layout_canonical_result_def]) >>
-  simp[selected_run_match_def] >> qexists `rb'` >> conj_tac
+  pure_rewrite_tac[selected_run_match_fuel_def] >> qexists `rb'` >> conj_tac
+  >- (simp[Once run_blocks_def, run_block_def] >> Cases_on `rb'` >> gvs[]) >>
+  conj_tac
   >- gvs[finite_step_run_exit] >>
   gvs[layout_request_OutR_def, layout_canonical_OutR_def, layout_request_OB_def]
 QED

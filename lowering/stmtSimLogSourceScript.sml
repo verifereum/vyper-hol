@@ -139,6 +139,25 @@ Proof
   metis_tac[]
 QED
 
+Theorem log_eval_bind:
+  eval_stmt cx (Log id args) =
+    bind (eval_exprs cx args)
+      (\vs. bind (lift_option (encode_source_event (get_tenv cx) cx.sources
+                                 cx.txn.target id vs) "Log encode event")
+        (\event. ignore_bind (check_not_static cx) (push_log event)))
+Proof
+  simp[Once evaluate_def]
+QED
+
+Theorem log_eval_static:
+  cx.txn.is_static /\ eval_exprs cx args es = (INL vals, mid) /\
+  encode_source_event (get_tenv cx) cx.sources cx.txn.target id vals = SOME ev ==>
+  eval_stmt cx (Log id args) es =
+    (INR (Error (RuntimeError "write in static context")), mid)
+Proof
+  simp[log_eval_bind, bind_def, ignore_bind_def, lift_option_def, return_def]
+QED
+
 (* Keep the encoding-error branch explicit: readiness only types successes.
    Outside a static frame; a static frame rejects the log write. *)
 Theorem log_eval_outcome:

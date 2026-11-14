@@ -64,6 +64,10 @@ Proof
   drule_all lockstep_rel >> strip_tac >>
   qexistsl_tac [`inst`, `st`] >> simp[] >>
   `execution_frame st' = execution_frame st` by fs[state_rel_def] >>
+  `st'.vs_gas_readings = st.vs_gas_readings` by
+    (qpat_x_assum `execution_frame st' = execution_frame st` mp_tac >>
+     simp[stateFrameTheory.execution_frame_def,
+          venomStateTheory.venom_state_component_equality]) >>
   Cases_on `p`
   >- (fs[] >> drule_all inst_mem_ranges_pair >> strip_tac >>
       simp[mem_corr_def, call_corr_def] >>

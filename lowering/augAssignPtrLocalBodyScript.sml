@@ -1,6 +1,7 @@
 (* Body-level live local augmented assignment. *)
 Theory augAssignPtrLocalBody
 Ancestors
+  targetPlaceSim
   augAssignPtrLocalCase exprSimProps stmtSimAugAssign bodyExprPreFacts bodyPtrPreds bodyPtrDefs bodySim
   supportedStmts exprSimHypsDefs vyperTypeEnv vyperTypeInvariants
   vyperTypeSystem vyperTyping vyperState vyperInterpreter vyperTypeCallGraph

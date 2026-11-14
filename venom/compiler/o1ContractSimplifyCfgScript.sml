@@ -236,10 +236,10 @@ QED
    merge and a jump bypass each drop a step.  So each function's output
    finishes on its input's fuel (simplify_cfg_fn_correct_fuel), and the
    stage follows via fn_bisim_fuel_run_context and lift_fuel_I. *)
-Theorem simplify_cfg_stage_sim_fuel:
+Theorem simplify_cfg_stage_sim_fuel_initial:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
-  o1_run_state_ok vs ==> ctx_sim_fuel I D C C' vs vs
+  o1_initial_state_ok vs ==> ctx_sim_fuel I D C C' vs vs
 Proof
   strip_tac >>
   `LIST_REL (fn_bisim_fuel I) C.ctx_functions C'.ctx_functions` by
@@ -252,24 +252,33 @@ Proof
   `!fuel v t. run_context fuel C vs <> IntRet v t` by
     metis_tac[o1_ctx_shape_no_intret] >>
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
-    gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+    gvs[unitTransformDefsTheory.o1_initial_state_ok_def] >>
   rw[ctx_sim_fuel_def] >>
   mp_tac (Q.INST [`fm` |-> `I`] fn_bisim_fuel_run_context) >>
   simp[lift_fuel_I]
 QED
 
-(* The raw memory fact exempts revert-forward pairs, so it transfers through
-   frame_sim and frame_sim_rf together. *)
-Theorem simplify_cfg_stage_mem_inv_rf:
+Theorem simplify_cfg_stage_sim_fuel:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
-  o1_run_state_ok vs /\ mem_corr_closed_rf M /\ mem_inv M C vs ==>
+  o1_run_state_ok vs ==> ctx_sim_fuel I D C C' vs vs
+Proof
+  simp[o1_run_state_ok_def] >>
+  metis_tac[simplify_cfg_stage_sim_fuel_initial]
+QED
+
+(* The raw memory fact exempts revert-forward pairs, so it transfers through
+   frame_sim and frame_sim_rf together. *)
+Theorem simplify_cfg_stage_mem_inv_rf_initial:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
+  o1_initial_state_ok vs /\ mem_corr_closed_rf M /\ mem_inv M C vs ==>
   mem_inv M C' vs
 Proof
   strip_tac >>
   `ctx_bisim C C'` by metis_tac[simplify_cfg_stage_bisim] >>
   irule frame_sim_rf_mem_inv >>
-  gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  gvs[unitTransformDefsTheory.o1_initial_state_ok_def] >>
   `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >> simp[] >>
   drule simplify_cfg_stage_functions >> strip_tac >>
   qexists_tac `C` >> simp[LIST_REL_MAP2, LIST_REL_EL_EQN] >>
@@ -284,6 +293,16 @@ Proof
   conj_tac >- gvs[fn_bisim_def] >>
   conj_tac >- (irule simplify_cfg_frame_sim >> gvs[o1_fn_shape_def]) >>
   irule simplify_cfg_frame_sim_rf >> gvs[o1_fn_shape_def]
+QED
+
+Theorem simplify_cfg_stage_mem_inv_rf:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
+  o1_run_state_ok vs /\ mem_corr_closed_rf M /\ mem_inv M C vs ==>
+  mem_inv M C' vs
+Proof
+  simp[o1_run_state_ok_def] >>
+  metis_tac[simplify_cfg_stage_mem_inv_rf_initial]
 QED
 
 (* The source rows that read only the functions' code: no layout end, no
@@ -325,12 +344,12 @@ QED
    DLOAD offsets that fit after the code.  Each state the output's frames
    reach has one the input's reach with the same ghosts, instruction and
    values; the input only adds jumps.  Admitted for now. *)
-Theorem simplify_cfg_stage_src_frame:
+Theorem simplify_cfg_stage_src_frame_initial:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
   EVERY (\fn. EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
     C.ctx_functions /\
-  o1_run_state_ok vs /\ o1_src_inv D C vs /\ ptr_discipline lo C vs ==>
+  o1_initial_state_ok vs /\ o1_src_inv D C vs /\ ptr_discipline lo C vs ==>
   (!stk PG G tn fn inst s.
      frame_reachable vs C' stk PG G tn fn inst s ==>
      access_ok lo G fn inst s /\ taint_ok fn tn inst s /\
@@ -345,7 +364,7 @@ Proof
     (fs[o1_ctx_shape_def, EVERY_MEM, simplifyCfgStaticInterfaceTheory.scfg_static_def] >>
      metis_tac[o1_fn_shape_def, simplifyCfgShapeCoreTheory.fn_shape_ok_scfg_shape]) >>
   `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
-    fs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+    fs[unitTransformDefsTheory.o1_initial_state_ok_def] >>
   `scfg_context_trace C C'` by metis_tac[scfg_context_trace_simplify_cfg] >>
   `~ctx_has_dalloca C /\ taint_within D C vs /\
    mem_inv dload_offset_ok C vs` by fs[o1_src_inv_def] >>
@@ -384,15 +403,31 @@ Proof
   irule simplify_cfg_frame_sim >> fs[o1_fn_shape_def] >> metis_tac[]
 QED
 
-(* LowerDload's alloca headroom: the pass drops jumps and dead blocks, so
-   the output has no more DLOADs than the input, and its frames reach no
-   alloca frontier the input's don't.  Admitted for now. *)
-Theorem simplify_cfg_stage_src_headroom:
+Theorem simplify_cfg_stage_src_frame:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
   EVERY (\fn. EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
     C.ctx_functions /\
-  o1_run_state_ok vs /\ o1_src_inv D C vs ==>
+  o1_run_state_ok vs /\ o1_src_inv D C vs /\ ptr_discipline lo C vs ==>
+  (!stk PG G tn fn inst s.
+     frame_reachable vs C' stk PG G tn fn inst s ==>
+     access_ok lo G fn inst s /\ taint_ok fn tn inst s /\
+     allocas_from lo s /\ (ctx_has_dalloca C' ==> allocas_below_fmp s)) /\
+  taint_within D C' vs /\ mem_inv dload_offset_ok C' vs
+Proof
+  simp[o1_run_state_ok_def] >>
+  metis_tac[simplify_cfg_stage_src_frame_initial]
+QED
+
+(* LowerDload's alloca headroom: the pass drops jumps and dead blocks, so
+   the output has no more DLOADs than the input, and its frames reach no
+   alloca frontier the input's don't.  Admitted for now. *)
+Theorem simplify_cfg_stage_src_headroom_initial:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
+  EVERY (\fn. EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
+    C.ctx_functions /\
+  o1_initial_state_ok vs /\ o1_src_inv D C vs ==>
   mem_inv dload_headroom_ok C' vs
 Proof
   strip_tac >>
@@ -402,13 +437,47 @@ Proof
     (irule simplify_cfg_ctx_dload_count_le >>
      simp[] >> irule simplify_cfg_stage_functions >> goal_assum drule) >>
   irule dload_headroom_mem_inv_decrease >> qexists_tac `C` >> simp[] >>
-  irule simplify_cfg_stage_mem_inv_rf >>
+  irule simplify_cfg_stage_mem_inv_rf_initial >>
   simp[dload_headroom_fixed_corr_closed_rf] >>
   qexistsl_tac [`C`, `rpolicy`, `view`] >> simp[] >>
   irule dload_headroom_mem_inv_freeze >> gvs[o1_src_inv_def]
 QED
 
+Theorem simplify_cfg_stage_src_headroom:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
+  EVERY (\fn. EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
+    C.ctx_functions /\
+  o1_run_state_ok vs /\ o1_src_inv D C vs ==>
+  mem_inv dload_headroom_ok C' vs
+Proof
+  simp[o1_run_state_ok_def] >>
+  metis_tac[simplify_cfg_stage_src_headroom_initial]
+QED
+
 (* The source rows besides the memory invariant, from the three above. *)
+Theorem simplify_cfg_stage_src_extras_initial:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
+  EVERY (\fn. EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
+    C.ctx_functions /\
+  o1_initial_state_ok vs /\ o1_src_inv D C vs ==>
+  EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C' /\
+  (?lo. fixed_region_reserved lo C' /\ ptr_discipline lo C' vs) /\
+  taint_within D C' vs /\ fmp_free_ctx C' /\ mem_inv dload_offset_ok C' vs /\
+  mem_inv dload_headroom_ok C' vs
+Proof
+  strip_tac >>
+  drule_all simplify_cfg_stage_src_static >> strip_tac >>
+  drule_all simplify_cfg_stage_src_headroom_initial >> strip_tac >>
+  `?lo. fixed_region_reserved lo C /\ ptr_discipline lo C vs` by
+    (qpat_x_assum `o1_src_inv _ _ _` mp_tac >> simp[o1_src_inv_def] >>
+     metis_tac[]) >>
+  drule_all simplify_cfg_stage_src_frame_initial >> strip_tac >>
+  simp[] >> qexists_tac `lo` >> simp[] >>
+  gvs[ptrDisciplineTheory.ptr_discipline_def] >> metis_tac[]
+QED
+
 Theorem simplify_cfg_stage_src_extras:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
@@ -420,37 +489,35 @@ Theorem simplify_cfg_stage_src_extras:
   taint_within D C' vs /\ fmp_free_ctx C' /\ mem_inv dload_offset_ok C' vs /\
   mem_inv dload_headroom_ok C' vs
 Proof
-  strip_tac >>
-  drule_all simplify_cfg_stage_src_static >> strip_tac >>
-  drule_all simplify_cfg_stage_src_headroom >> strip_tac >>
-  `?lo. fixed_region_reserved lo C /\ ptr_discipline lo C vs` by
-    (qpat_x_assum `o1_src_inv _ _ _` mp_tac >> simp[o1_src_inv_def] >>
-     metis_tac[]) >>
-  drule_all simplify_cfg_stage_src_frame >> strip_tac >>
-  simp[] >> qexists_tac `lo` >> simp[] >>
-  gvs[ptrDisciplineTheory.ptr_discipline_def] >> metis_tac[]
+  simp[o1_run_state_ok_def] >>
+  metis_tac[simplify_cfg_stage_src_extras_initial]
 QED
 
 (* Pre-walk output: every block reachable, definite assignment kept. *)
-Theorem simplify_cfg_stage_pre_walk:
-  !view. o1_stage_contract rpolicy D (CFP_Simple VP_SimplifyCFG) view no_pre
-           (o1_pre_walk_inv D) (o1_walk_src_inv D)
+Theorem o1_static_pre_walk_simplify_cfg:
+  !C C' vs.
+    ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+    no_pre C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ o1_pre_walk_inv D C vs ==>
+    ctx_sim_fuel (pass_fuel (CFP_Simple VP_SimplifyCFG) C') D C C' vs vs /\
+    o1_walk_src_inv D C' vs
 Proof
-  simp[o1_stage_contract_def, no_pre_def, pass_fuel_def] >>
+  simp[no_pre_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
   `EVERY simplify_cfg_fn_ok C.ctx_functions` by
     (gvs[o1_ctx_shape_def, o1_pre_walk_inv_def, EVERY_MEM] >>
      rpt strip_tac >> irule simplify_cfg_fn_ok_no_phi >>
      simp[EVERY_MEM] >> metis_tac[o1_fn_shape_def]) >>
-  conj_tac >- metis_tac[simplify_cfg_stage_sim_fuel] >>
+  conj_tac >- metis_tac[simplify_cfg_stage_sim_fuel_initial] >>
   simp[o1_walk_src_inv_def] >> conj_tac
   >- (`o1_src_inv D C vs` by gvs[o1_pre_walk_inv_def] >>
       `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
          C.ctx_functions` by
         (gvs[o1_pre_walk_inv_def, EVERY_MEM] >> metis_tac[]) >>
-      drule_all simplify_cfg_stage_src_extras >> strip_tac >>
+      drule_all simplify_cfg_stage_src_extras_initial >> strip_tac >>
       `mem_inv raw_mem_ok C' vs` by
-        (irule simplify_cfg_stage_mem_inv_rf >> gvs[o1_src_inv_def] >>
+        (irule simplify_cfg_stage_mem_inv_rf_initial >> gvs[o1_src_inv_def] >>
          metis_tac[mem_corr_closed_rf_raw_mem_ok]) >>
       `C'.ctx_global_reserved = C.ctx_global_reserved` by
         gvs[ctx_pass_stage_def] >>
@@ -465,23 +532,36 @@ Proof
   metis_tac[]
 QED
 
-(* The walk run, stage 5: wf_ssa in, wf_ssa out. *)
-Theorem simplify_cfg_stage_walk:
-  o1_run_contract rpolicy D 5
+Theorem simplify_cfg_stage_pre_walk:
+  !view. o1_stage_contract rpolicy D (CFP_Simple VP_SimplifyCFG) view no_pre
+           (o1_pre_walk_inv D) (o1_walk_src_inv D)
 Proof
-  simp[o1_run_contract_def, o1_fn_passes_def, o1_inv_def,
-       o1_stage_contract_def, o1_pre_def, pass_fuel_def] >>
+  simp[o1_stage_contract_def, o1_run_state_ok_def] >>
+  metis_tac[o1_static_pre_walk_simplify_cfg]
+QED
+
+(* The walk run, stage 5: wf_ssa in, wf_ssa out. *)
+Theorem o1_static_stage_simplify_cfg:
+  !C C' vs.
+    ctx_pass_stage rpolicy (EL 5 o1_fn_passes) (o1_walk_view rpolicy 5) C C' /\
+    o1_pre 5 C C' /\ dead_wf D /\ o1_ctx_shape C /\
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs /\ o1_inv D 5 C vs ==>
+    ctx_sim_fuel (pass_fuel (EL 5 o1_fn_passes) C') D C C' vs vs /\
+    o1_inv D (SUC 5) C' vs
+Proof
+  simp[o1_fn_passes_def, o1_inv_def, o1_pre_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
   `EVERY simplify_cfg_fn_ok C.ctx_functions` by
     (gvs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
      rpt strip_tac >> irule simplify_cfg_fn_ok_ssa >>
      metis_tac[o1_fn_shape_def]) >>
-  conj_tac >- metis_tac[simplify_cfg_stage_sim_fuel] >>
+  conj_tac >- metis_tac[simplify_cfg_stage_sim_fuel_initial] >>
   simp[o1_ssa_inv_def, GSYM CONJ_ASSOC] >> conj_tac
   >- (gvs[o1_ssa_inv_def, o1_lowered_inv_def] >>
       qexists_tac `eom` >> conj_tac
       >- metis_tac[simplify_cfg_stage_max_live_eom] >>
-      irule simplify_cfg_stage_mem_inv_rf >>
+      irule simplify_cfg_stage_mem_inv_rf_initial >>
       metis_tac[mem_corr_closed_rf_static_mem_ok]) >>
   drule simplify_cfg_stage_functions >> strip_tac >>
   simp[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> conj_tac >> rpt strip_tac
@@ -494,6 +574,14 @@ Proof
   gvs[o1_ctx_shape_def, EVERY_MEM] >>
   `o1_fn_shape C y` by metis_tac[] >>
   gvs[o1_fn_shape_def]
+QED
+
+Theorem simplify_cfg_stage_walk:
+  o1_run_contract rpolicy D 5
+Proof
+  pure_rewrite_tac [o1_run_contract_def, o1_stage_contract_def,
+                    o1_run_state_ok_def] >>
+  metis_tac[o1_static_stage_simplify_cfg]
 QED
 
 Theorem o1_contract_simplify_cfg_pre_walk:
