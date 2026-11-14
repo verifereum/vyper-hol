@@ -263,7 +263,32 @@ Theorem noninvoke_prefix_trace_keys:
     ZIP (MAP (\i. (p,d,i.inst_id))
       (FILTER (\i. i.inst_opcode = GAS) pre), gs)
 Proof
-  cheat
+  Induct >> rpt gen_tac >> strip_tac
+  >- (gvs[DROP_EQ_NIL] >>
+      simp[Once trace_defs, get_instruction_def, trace_gas_def]) >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `DROP _ _ = _`
+      (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[LENGTH_DROP]) >>
+  `EL s.vs_inst_idx bb.bb_instructions = h /\
+   DROP (SUC s.vs_inst_idx) bb.bb_instructions = pre` by
+    gvs[rich_listTheory.DROP_CONS_EL] >>
+  fs[EVERY_DEF, dftIndexedExecTheory.dft_exec_cons_def] >>
+  Cases_on `step_inst fuel C h (s with vs_gas_readings := gs ++ tail)` >> gvs[] >>
+  simp[Once trace_defs, get_instruction_def, trace_step_noninvoke] >>
+  Cases_on `(EL s.vs_inst_idx bb.bb_instructions).inst_opcode = GAS`
+  >- (drule_all dftBlockSimTheory.step_inst_ok_gas >> strip_tac >>
+      Cases_on `gs` >> fs[update_var_def] >>
+      first_x_assum (qspecl_then
+        [`v with vs_inst_idx := SUC s.vs_inst_idx`, `bb`, `u`, `t`, `tail`,
+         `fuel`, `C`, `func`, `p`, `d`] mp_tac) >>
+      simp[visit_gas_def]) >>
+  drule_all dft_nonconsuming_ok_readings >> strip_tac >>
+  first_x_assum (qspecl_then
+    [`v with vs_inst_idx := SUC s.vs_inst_idx`, `bb`, `u`, `gs`, `tail`,
+     `fuel`, `C`, `func`, `p`, `d`] mp_tac) >>
+  `v with vs_gas_readings := gs ++ tail = v` by
+    simp[venom_state_component_equality] >>
+  simp[visit_gas_def]
 QED
 
 Theorem initial_occurrence_prefix_keys:
@@ -284,7 +309,27 @@ Theorem initial_occurrence_prefix_keys:
           (be with vs_gas_readings := FLAT kgss ++ tail)) =
       ZIP (FLAT (TAKE k ks), FLAT kgss)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (TAKE k xs)` by
+    (simp[EVERY_EL] >> qx_gen_tac `qi` >> strip_tac >>
+     `qi < k` by (gvs[LENGTH_TAKE] >> decide_tac) >>
+     `EL qi (TAKE k xs) = EL qi xs` by
+       (irule listTheory.EL_TAKE >> simp[]) >>
+     conj_tac
+     >- (qpat_x_assum `!q. q < k ==> _` (qspec_then `qi` mp_tac) >> simp[]) >>
+     qpat_x_assum `EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs)`
+       (mp_tac o REWRITE_RULE [EVERY_EL]) >>
+     disch_then (qspec_then `qi` mp_tac) >> simp[LENGTH_TAKE]) >>
+  `LENGTH (FLAT kgss) = LENGTH (FILTER (\i. i.inst_opcode = GAS) (TAKE k xs))` by
+    (irule gas_padding_filling_length >> gvs[GSYM MAP_TAKE]) >>
+  `!ys. FLAT (MAP (\i. if i.inst_opcode = GAS then [(p,d,i.inst_id)] else []) ys) =
+    MAP (\i. (p,d,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) ys)` by
+    (Induct >> simp[] >> gen_tac >> IF_CASES_TAC >> simp[]) >>
+  `FLAT (TAKE k ks) =
+    MAP (\i. (p,d,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) (TAKE k xs))` by
+    simp[GSYM MAP_TAKE] >>
+  simp[] >> irule noninvoke_prefix_trace_keys >> simp[]
 QED
 
 Theorem initial_occurrence_prefix_replay:
