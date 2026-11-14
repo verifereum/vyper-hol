@@ -5,6 +5,7 @@ Ancestors
   exprSimAlloc exprSimProps valueEncodingProps
   compileEnv loweringStateRelDefs context finite_map pred_set loweringHalt bodyPtrDefs valueEncoding
   exprSimDefs fragGasPathPtr
+  allocationPtr bodyPtrEnvBuiltinsAllocation
 
 Theorem empty_buffer_framed_certificate:
   !sz header sa sb buf func cenv cx es s t ctx D PG G tn d.
@@ -35,8 +36,24 @@ Proof
     (irule buffer_alloc_code >> goal_assum drule >> simp[]) >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK u` >>
-  drule_all empty_alloc_buffer_certificate >>
-  disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
+  `?p midG midtn. buf.buf_operand = Var p /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sm) s midG midtn /\
+    ptr_covers midG midtn p u sz /\ ghost_inv H d cenv cx es midG midtn u /\
+    ghost_kept cenv es sa G tn s midG midtn` by
+    (drule compile_alloc_buffer_parts >> strip_tac >>
+     drule compile_alloc_buffer_insts >> strip_tac >>
+     `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+       [STRING #"%" (toString sa.cs_next_var)]) s = OK u` by
+       gvs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+         run_inst_seq_def, AllCaseEqs()] >>
+     mp_tac (Q.SPECL [`D`,`ctx`,`func`,`PG`,`G`,`tn`,`sa`,`sm`,`buf`,
+       `sz`,`s`,`u`] empty_alloc_checked_run) >>
+     simp[] >> strip_tac >>
+     goal_assum (drule_at Any) >> simp[] >> rpt conj_tac
+     >- (irule alloca_step_ptr_covers >> metis_tac[])
+     >- (irule alloca_step_ghost_inv >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     irule alloca_step_ghost_kept >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
   gvs[] >> rename1 `ptr_covers midG midtn p u sz` >>
   `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]) s = OK u` by
     gvs[run_inst_seq_def, AllCaseEqs()] >>

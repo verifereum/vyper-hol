@@ -8,6 +8,7 @@ Ancestors
   context emitHelper emitHelperProps exprLoweringProps exprSimProps rich_list
   compileEnv loweringStateRelDefs venomExecSemantics
   venomInst venomState ptrDiscipline robustCopyTransportPtr
+  bodyPtrEnvBuiltinsAllocation
 
 (* Placement, not source-register reservedness alone, excludes overlap with
    a reused allocation site.  Keep the source's semantic type explicit. *)
@@ -100,8 +101,23 @@ Theorem widen_copy_checked_certificate:
     (!m. mem_agree_outside th.t_mem t.vs_memory m ==> val_in_memory tv v (w2n b) m)
 Proof
   strip_tac >> drule_all widen_copy_split_certificate >> strip_tac >>
-  drule_all empty_alloc_buffer_certificate >>
-  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+  `?p G' tn'. buf.buf_operand = Var p /\
+    inst_seq_ptr D 0 ctx fn PG G0 tn0 (emitted_insts sa sm) s0 G' tn' /\
+    ptr_covers G' tn' p s capacity /\ ghost_inv H d cenv cx es G' tn' s /\
+    ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
+    (drule compile_alloc_buffer_parts >> strip_tac >>
+     drule compile_alloc_buffer_insts >> strip_tac >>
+     `step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w capacity)]
+       [STRING #"%" (toString sa.cs_next_var)]) s0 = OK s` by
+       gvs[emitted_insts_def, DROP_LENGTH_APPEND, run_inst_seq_def, AllCaseEqs()] >>
+     mp_tac (Q.SPECL [`D`,`ctx`,`fn`,`PG`,`G0`,`tn0`,`sa`,`sm`,`buf`,
+       `capacity`,`s0`,`s`] empty_alloc_checked_run) >>
+     simp[] >> strip_tac >>
+     goal_assum (drule_at Any) >> simp[] >> rpt conj_tac
+     >- (irule alloca_step_ptr_covers >> metis_tac[])
+     >- (irule alloca_step_ghost_inv >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     irule alloca_step_ghost_kept >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
   drule_all alloc_buffer_source_resources >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >> gvs[eval_operand_def] >>
   `capacity < dimword(:256) /\ lookup_var src s = SOME a` by
