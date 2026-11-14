@@ -313,6 +313,7 @@ Resume compile_subscript_array_framed_base_mem_case_from_suffix[suffix_preparati
      rpt strip_tac >> simp[]) >>
   `?w0. eval_operand p.ptr_operand t = SOME w0` by
     (qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
      simp[vv_post_def, vv_holds_def, vyperASTTheory.expr_type_def] >>
      rpt strip_tac >> metis_tac[]) >>
   `eval_operand p.ptr_operand t' = SOME w0` by
