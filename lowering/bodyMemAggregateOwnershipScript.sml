@@ -33,8 +33,8 @@ Proof
    (w2n sw + type_memory_size stv <= b+off \/
     b+off + type_memory_size dtv <= w2n sw)` by
     (irule aggregate_allocated_source_bounds >>
-     qexistsl_tac [`b'`, `aid`, `b`] >>
      goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
+     qexistsl_tac [`b'`, `aid`, `b`] >>
      goal_assum (drule_at (Pat `aid <> parent`)) >> simp[]) >>
   fs[alloca_inv_def, alloca_next_valid_def] >>
   `b'+sz <= s.vs_alloca_next /\ b+n <= s.vs_alloca_next` by
