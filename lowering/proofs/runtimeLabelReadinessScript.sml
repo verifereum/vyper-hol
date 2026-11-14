@@ -3,7 +3,7 @@
    labels occupy disjoint prefixed namespaces. *)
 Theory runtimeLabelReadiness
 Ancestors
-  compileVyper venomInst list runtimeLabelInvariant
+  compileVyper venomInst list runtimeLabelInvariant runtimeLabelValues
 
 Theorem lower_vyper_runtime_unit_no_runtime_begin:
   !tops rpolicy unit fn inst.
