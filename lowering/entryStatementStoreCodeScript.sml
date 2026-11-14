@@ -3,7 +3,7 @@ Ancestors
   entryCodePredicate entryContextCodePredicate entryTypedCopyCode
   entryAggregateCode entryValueCode entryLocationValueCode stmtLowering context compileEnv
 
-Theorem entry_code_imm_store_words[local]:
+Theorem entry_code_imm_store_words:
   !n off. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_imm_store_words imm src dst n off)
 Proof

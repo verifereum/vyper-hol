@@ -3942,14 +3942,15 @@ Proof
 QED
 
 Theorem compile_dynarray_append_labels:
-  !cenv b v ws es dt st cap p lo so s.
-    cs_extends s (SND (compile_dynarray_append cenv b v ws es dt st cap p lo so s)) /\
+  !cenv b v ws es dt st cap p loc s.
+    cs_extends s (SND (compile_dynarray_append cenv b v ws es dt st cap p loc s)) /\
     EVERY (isPREFIX "@") (added_labels s
-      (SND (compile_dynarray_append cenv b v ws es dt st cap p lo so s)))
+      (SND (compile_dynarray_append cenv b v ws es dt st cap p loc s)))
 Proof
   rpt gen_tac >> once_rewrite_tac[compile_dynarray_append_def] >>
   simp[LET_THM] >>
-  stmt_labels_chain (cj 1 compile_store_slots_labels :: stmt_labels_rws)
+  stmt_labels_chain (cj 1 compile_store_slots_labels :: compile_ptr_store_labels ::
+    stmt_labels_rws)
 QED
 
 Theorem comp_get_labels:
