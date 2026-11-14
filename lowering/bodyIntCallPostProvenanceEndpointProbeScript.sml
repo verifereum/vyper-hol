@@ -5,17 +5,21 @@ Ancestors
   bodyIntCallPathLayout loweringPosts valueEncoding valueEncodingDefs words
 
 Theorem inactive_dynamic_path_endpoint:
-  let inner = ArrayTV (BaseTV BoolT) (Dynamic 1);
-      outer = ArrayTV inner (Dynamic 1);
-      empty = ArrayV (DynArrayV [])
-  in
-    value_has_type outer empty /\
-    mem_path_offset outer [ValueSubscript (IntV 0)] = SOME (32,inner) /\
-    val_in_memory outer empty 0 [] /\
-    val_in_memory inner empty 32 [] /\
-    val_wf inner empty /\
-    value_has_type inner empty /\
-    ~sub_layout outer empty 32 inner empty
+  value_has_type (ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 1)) (Dynamic 1))
+    (ArrayV (DynArrayV [])) /\
+  mem_path_offset (ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 1)) (Dynamic 1))
+    [ValueSubscript (IntV 0)] =
+      SOME (32, ArrayTV (BaseTV BoolT) (Dynamic 1)) /\
+  val_in_memory (ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 1)) (Dynamic 1))
+    (ArrayV (DynArrayV [])) 0 [] /\
+  val_in_memory (ArrayTV (BaseTV BoolT) (Dynamic 1))
+    (ArrayV (DynArrayV [])) 32 [] /\
+  val_wf (ArrayTV (BaseTV BoolT) (Dynamic 1)) (ArrayV (DynArrayV [])) /\
+  value_has_type (ArrayTV (BaseTV BoolT) (Dynamic 1))
+    (ArrayV (DynArrayV [])) /\
+  ~sub_layout (ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 1)) (Dynamic 1))
+    (ArrayV (DynArrayV [])) 32 (ArrayTV (BaseTV BoolT) (Dynamic 1))
+    (ArrayV (DynArrayV []))
 Proof
   simp_tac (srw_ss()) [LET_THM] >>
   rpt conj_tac

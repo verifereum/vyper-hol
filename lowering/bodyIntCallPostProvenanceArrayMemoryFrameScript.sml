@@ -22,12 +22,12 @@ QED
 
 (* A live nested dynamic array, unlike an offset into inactive capacity,
    satisfies the semantic selection interface used by reconstruction. *)
-Theorem nested_dynamic_live_selection[local]:
-  let inner = ArrayTV (BaseTV BoolT) (Dynamic 1);
-      outer = ArrayTV inner (Dynamic 1);
-      child = ArrayV (DynArrayV [BoolV T]);
-      root = ArrayV (DynArrayV [child])
-  in value_has_type outer root /\ sub_layout outer root 32 inner child
+Theorem nested_dynamic_live_selection:
+  value_has_type (ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 1)) (Dynamic 1))
+    (ArrayV (DynArrayV [ArrayV (DynArrayV [BoolV T])])) /\
+  sub_layout (ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 1)) (Dynamic 1))
+    (ArrayV (DynArrayV [ArrayV (DynArrayV [BoolV T])])) 32
+    (ArrayTV (BaseTV BoolT) (Dynamic 1)) (ArrayV (DynArrayV [BoolV T]))
 Proof
   simp_tac (srw_ss()) [LET_THM] >> conj_tac
   >- EVAL_TAC >>

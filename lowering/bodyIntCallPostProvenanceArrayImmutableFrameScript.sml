@@ -35,7 +35,7 @@ Proof
 QED
 
 (* Concrete live nested dynamic selection in constructor memory. *)
-Theorem constructor_nested_dynamic_selection[local]:
+Theorem constructor_nested_dynamic_selection:
   immutables_rel ce addr src T es s /\
   FLOOKUP ce.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
   FLOOKUP (case ALOOKUP es.immutables addr of

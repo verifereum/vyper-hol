@@ -25,17 +25,22 @@ Proof
 QED
 
 (* A saved value at the selected dynamic child does not shadow live data. *)
-Theorem nested_dynamic_live_over_history[local]:
-  let inner = ArrayTV (BaseTV BoolT) (Dynamic 1);
-      outer = ArrayTV inner (Dynamic 1);
-      child = ArrayV (DynArrayV [BoolV T]);
-      stale = ArrayV (DynArrayV [BoolV F]);
-      path = [ValueSubscript (IntV 0)];
-      entry = <| assignable := T; type := outer;
-                 value := ArrayV (DynArrayV [child]);
-                 popped := [(path,stale)] |>
-  in read_popped outer path entry.popped = SOME stale /\
-     read_memory_path entry path = INL child
+Theorem nested_dynamic_live_over_history:
+  read_popped (ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 1)) (Dynamic 1))
+    [ValueSubscript (IntV 0)]
+    (<| assignable := T;
+        type := ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 1)) (Dynamic 1);
+        value := ArrayV (DynArrayV [ArrayV (DynArrayV [BoolV T])]);
+        popped := [([ValueSubscript (IntV 0)],
+                    ArrayV (DynArrayV [BoolV F]))] |>).popped =
+      SOME (ArrayV (DynArrayV [BoolV F])) /\
+  read_memory_path
+    <| assignable := T;
+       type := ArrayTV (ArrayTV (BaseTV BoolT) (Dynamic 1)) (Dynamic 1);
+       value := ArrayV (DynArrayV [ArrayV (DynArrayV [BoolV T])]);
+       popped := [([ValueSubscript (IntV 0)],
+                   ArrayV (DynArrayV [BoolV F]))] |>
+    [ValueSubscript (IntV 0)] = INL (ArrayV (DynArrayV [BoolV T]))
 Proof
   EVAL_TAC >> simp[]
 QED
