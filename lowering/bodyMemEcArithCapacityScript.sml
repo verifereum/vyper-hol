@@ -70,8 +70,8 @@ Proof
      simp[]) >>
   `wb_frame cenv es es sf s u` by
     (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     reverse conj_tac >- (qexistsl_tac [`es`,`sf`,`s1`] >> simp[]) >>
-     qexistsl_tac [`H`,`ctx`,`cx`,`func`] >> simp[]) >>
+     reverse conj_tac >- (qexistsl_tac [`H`,`ctx`,`cx`,`func`] >> simp[]) >>
+     qexistsl_tac [`es`,`sf`,`s1`] >> simp[]) >>
   `!x. ib.buf_operand = Var x ==> not_fresh_at sb x` by
     (rpt strip_tac >> gvs[not_fresh_at_def] >> decide_tac) >>
   qpat_x_assum `wb_frame cenv es es sf s s1` kall_tac >>

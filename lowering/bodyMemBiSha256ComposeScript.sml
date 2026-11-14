@@ -163,6 +163,8 @@ Proof
      simp[listTheory.DROP_APPEND, listTheory.DROP_LENGTH_TOO_LONG]) >>
   `es1.outcomes = SOME s.vs_outcomes` by
     (drule expr_post_state >> simp[stmt_state_rel_def, state_rel_def]) >>
+  `alloca_inv s` by
+    (drule expr_post_state >> simp[stmt_state_rel_def, state_rel_def]) >>
   Cases_on `s.vs_outcomes`
   >- (gvs[ignore_bind_def, bind_def, sha256_source_outcome_step] >> suspend "abort") >>
   rename1 `s.vs_outcomes = outcome::remaining` >>
@@ -173,6 +175,7 @@ QED
 
 Resume sha256_typed_effectful_path_mem[abort]:
   markerLib.RESUME_TAC >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then assume_tac) >>
   drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_run >>
   simp[] >> strip_tac >>
   `isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
@@ -185,6 +188,7 @@ Resume sha256_typed_effectful_path_mem[abort]:
 QED
 Resume sha256_typed_effectful_path_mem[success]:
   gvs[ignore_bind_def, bind_def, sha256_source_outcome_step, return_def] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then assume_tac) >>
   drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
   simp[] >> strip_tac >> gvs[] >>
   `!H'. valid_horizon cx st0 H' es1.storage_trace ==>
@@ -192,7 +196,6 @@ Resume sha256_typed_effectful_path_mem[success]:
        es sa sb s0 (es1 with outcomes := SOME remaining) (Value r)
        (StackValue (BaseT (BytesT (Fixed 32))) op) t` by
     (rpt strip_tac >>
-     qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
      drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
      simp[] >> strip_tac >> gvs[]) >>
@@ -201,8 +204,6 @@ Resume sha256_typed_effectful_path_mem[success]:
   drule_at (Pat `run_inst_seq _ _ = _`) run_inst_seq_gas_path_mem >> simp[] >>
   disch_then (qspecl_then [`ctx`,`func`,`bb`] mp_tac) >> simp[] >>
   strip_tac >>
-  `alloca_inv s` by
-    (drule expr_post_state >> simp[stmt_state_rel_def, state_rel_def]) >>
   `alloca_history func
      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb))` by
     (irule alloca_history_run_inst_seq >> goal_assum (drule_at Any) >>
@@ -424,18 +425,19 @@ Proof
      else case expr_type e of
        BaseT (BytesT (Fixed m)) => compile_sha256_bytesm x m sm
      | _ => compile_sha256_word x sm)`, `env`] >> simp[] >>
-  reverse conj_tac
-  >- (conj_tac
-      >- (rpt strip_tac >>
+  rpt conj_tac
+  >~ [`compile_expr cenv ty (Builtin _ _ _) _`]
+  >- (rpt strip_tac >>
           qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
-          simp[compile_hash_singleton] >> pairarg_tac >> simp[] >> metis_tac[]) >>
-      conj_tac >- (gen_tac >> ho_match_mp_tac cs_appends_stack_value >> simp[SF ETA_ss] >>
+          simp[compile_hash_singleton] >> pairarg_tac >> simp[] >> metis_tac[])
+  >~ [`cs_appends`]
+  >- (gen_tac >> ho_match_mp_tac cs_appends_stack_value >> simp[SF ETA_ss] >>
       Cases_on `bty` >> gvs[is_bytes_or_string_type_def,
         is_bytestring_type_def, hash_suffix_appends, SF ETA_ss] >>
       rename1 `expr_type e = BaseT (BytesT bd)` >>
-      Cases_on `bd` >> gvs[is_bytestring_type_def, hash_suffix_appends, SF ETA_ss]) >>
-      gvs[]) >>
-  rpt strip_tac >>
+      Cases_on `bd` >> gvs[is_bytestring_type_def, hash_suffix_appends, SF ETA_ss])
+  >~ [`gas_marked_path`]
+  >- (rpt strip_tac >>
   qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
   qmatch_goalsub_abbrev_tac `as_stack_val _ compiled` >>
   Cases_on `compiled` >> simp[as_stack_val_def] >> strip_tac >>
@@ -460,7 +462,8 @@ Proof
   disch_then (qspecl_then [`r`,`q`] mp_tac) >>
   (impl_tac >- metis_tac[]) >>
   strip_tac >> goal_assum drule >>
-  gvs[vyperASTTheory.expr_type_def, vv_store_bound_stack_word, is_word_type_def]
+  gvs[vyperASTTheory.expr_type_def, vv_store_bound_stack_word, is_word_type_def]) >>
+  gvs[]
 QED
 
 Theorem compile_sha256_typed_sim_mem:
