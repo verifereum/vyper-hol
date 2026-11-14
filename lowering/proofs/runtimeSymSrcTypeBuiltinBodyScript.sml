@@ -169,7 +169,10 @@ Resume runtime_sym_type_builtin_body[decode]:
   disch_then (assume_tac o SRULE [runtime_sym_expr_contract_def]) >>
   qpat_x_assum `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[NoAsms, compile_type_builtin_dispatch_body_def] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >>
+  qpat_assum `cfn _ _ _ _ = _` (fn th => simp[NoAsms, th]) >>
+  pairarg_tac >>
+  qpat_assum `unwrap_value _ _ _ = _` (fn th => simp[NoAsms, th]) >>
   qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory decoded_pair` >>
   Cases_on `decoded_pair` >> simp[as_ptr_val_def] >>
   disch_then (CONJUNCTS_THEN2 (SUBST_ALL_TAC o SYM) (SUBST_ALL_TAC o SYM)) >>
