@@ -10,7 +10,8 @@ Libs
 Theorem static_forbidden_no_normal[local]:
   MEM inst.inst_opcode [SSTORE; TSTORE; LOG] /\ s.vs_call_ctx.cc_static ==>
   step_inst fuel ctx inst s <> OK t /\
-  step_inst fuel ctx inst s <> IntRet ret t
+  step_inst fuel ctx inst s <> IntRet ret t /\
+  step_inst fuel ctx inst s <> Halt t
 Proof
   strip_tac >> fs[]
   >- (simp[step_inst_non_invoke] >> with_opcode_clause simp >>
@@ -33,6 +34,7 @@ Theorem static_abort_distance_no_normal[local]:
     static_abort_pair bb s.vs_inst_idx j ==>
     exec_block fuel ctx bb s <> OK t /\
     exec_block fuel ctx bb s <> IntRet ret t /\
+    exec_block fuel ctx bb s <> Halt t /\
     (exec_block fuel ctx bb s = Abort a t ==>
      t.vs_requests = s.vs_requests)
 Proof
@@ -83,7 +85,7 @@ Proof
       simp[])
   >> gvs[] >>
   gvs[step_inst_non_invoke] >>
-  metis_tac[step_inst_base_no_intret,
+  metis_tac[step_inst_base_no_intret, step_inst_base_no_halt,
             passSharedFrameTheory.step_inst_base_abort_requests]
 QED
 
@@ -108,5 +110,15 @@ Proof
   strip_tac >> gvs[static_abort_at_def] >>
   mp_tac (Q.SPECL [`j - s.vs_inst_idx`, `s`, `j`, `bb`, `fuel`, `ctx`,
                    `t`, `ARB`, `a`] static_abort_distance_no_normal) >>
+  impl_tac >- (gvs[static_abort_pair_def] >> gvs[]) >> simp[]
+QED
+
+Theorem static_abort_at_no_halt:
+  s.vs_call_ctx.cc_static /\ static_abort_at bb s.vs_inst_idx ==>
+  exec_block fuel ctx bb s <> Halt t
+Proof
+  strip_tac >> gvs[static_abort_at_def] >>
+  mp_tac (Q.SPECL [`j - s.vs_inst_idx`, `s`, `j`, `bb`, `fuel`, `ctx`,
+                   `t`, `ARB`, `ARB`] static_abort_distance_no_normal) >>
   impl_tac >- (gvs[static_abort_pair_def] >> gvs[]) >> simp[]
 QED
