@@ -1,6 +1,6 @@
 (* Clean scalar validation fragments used by calldata decoders. *)
 Theory calldataClampPtr
-Ancestors abiDecoderClamp abiEncoder compileEnv loweringStateRelDefs emitHelper exprLoweringProps
+Ancestors fragGasSeqPtr abiDecoderClamp abiEncoder compileEnv loweringStateRelDefs emitHelper exprLoweringProps
   fragExec venomInst list arithmetic words bodyPtrDefs decoderGhostFramePtr
   ptrDiscipline ptrSafeRun venomState venomExecSemantics entryDispatchPtr
   fragExecPtr ghostPcTransportPtr finite_map pred_set codegenRel instIdxIndep contextCodegenRel
@@ -246,7 +246,29 @@ Proof
   disch_then irule >> fs[allocas_from_def] >> metis_tac[]
 QED
 
-Theorem calldata_clamp_overwrite_trace_uniform:
+Theorem clamp_scalar_sequence_check[local]:
+  MEM opc [SIGNEXTEND; SHR; SHL; EQ; ISZERO; ASSERT] /\
+  EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
+  step_inst_base (mk_inst id opc ops outs) s = OK t /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  !D k. ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id opc ops outs)
+    (s with vs_inst_idx := k)
+Proof
+  strip_tac >> rpt gen_tac >>
+  `?vars. t = s with vs_vars := vars` by metis_tac[clamp_scalar_state_frame] >>
+  `opc <> INVOKE /\ ~is_terminator opc` by fs[MEM, is_terminator_def] >>
+  `step_inst 0 ctx (mk_inst id opc ops outs) (s with vs_inst_idx := k) =
+    OK (t with vs_inst_idx := k)` by
+    simp[step_inst_non_invoke, mk_inst_def, step_inst_inst_idx_indep,
+      exec_result_map_def] >>
+  `ptr_safe_step D lo 0 ctx fn PG G tn (mk_inst id opc ops outs)
+    (s with vs_inst_idx := k)` by
+    (irule clamp_scalar_step_safe >> simp[] >>
+     fs[allocas_from_def] >> metis_tac[]) >>
+  fs[ptr_safe_step_def]
+QED
+
+Theorem calldata_clamp_overwrite_prefix_uniform_joint:
   compile_abi_clamp_basetype op clamp sa = ((),sb) /\
   eval_operand op s = SOME w /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
@@ -270,10 +292,11 @@ Theorem calldata_clamp_overwrite_trace_uniform:
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==>
       FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
-    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
-      (s,G,tn) [] (OK s',G',tn')) /\
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G' tn') /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK s',G',tn'))
 Proof
   strip_tac >>
   drule calldata_clamp_instructions >> strip_tac
@@ -281,7 +304,7 @@ Proof
       qexistsl_tac [`G`, `tn`] >>
       `s with vs_inst_idx := LENGTH sa.cs_current_insts = s` by
         simp[venom_state_component_equality] >>
-      simp[fragGasOriginPtrTheory.gas_origin_ptr_path_rules]) >>
+      simp[inst_seq_ptr_def, fragGasOriginPtrTheory.gas_origin_ptr_path_rules]) >>
   qabbrev_tac `v0 = "%" ++ toString sa.cs_next_var` >>
   qabbrev_tac `v1 = "%" ++ toString (sa.cs_next_var + 1)` >>
   qabbrev_tac `i0 = mk_inst sa.cs_next_id opc [Lit shift; op] [v0]` >>
@@ -320,7 +343,7 @@ Proof
   suspend "ghost_frames"
 QED
 
-Resume calldata_clamp_overwrite_trace_uniform[ghost_frames]:
+Resume calldata_clamp_overwrite_prefix_uniform_joint[ghost_frames]:
   `op_taint tn1 op = {} /\ op_prov G1 op = NONE` by
     (Cases_on `op` >>
      gvs[Abbr `tn1`, Abbr `G1`, Abbr `i0`, op_prov_def,
@@ -353,10 +376,12 @@ Resume calldata_clamp_overwrite_trace_uniform[ghost_frames]:
     (rpt strip_tac >> simp[Abbr `G3`, Abbr `G2`, Abbr `G1`,
        Abbr `tn3`, Abbr `tn2`, Abbr `tn1`, Abbr `i0`, Abbr `i1`, Abbr `i2`,
        mk_inst_def, step_prov_other_output, step_taint_other_output]) >>
+  `!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G3 tn3` by
+    suspend "sequence" >>
   suspend "endpoint"
 QED
 
-Resume calldata_clamp_overwrite_trace_uniform[endpoint]:
+Resume calldata_clamp_overwrite_prefix_uniform_joint[endpoint]:
   `?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb (LENGTH sa.cs_current_insts) = SOME i0 /\
     get_instruction bb (LENGTH sa.cs_current_insts + 1) = SOME i1 /\
@@ -402,7 +427,7 @@ Resume calldata_clamp_overwrite_trace_uniform[endpoint]:
   fs[eval_operand_def]
 QED
 
-Resume calldata_clamp_overwrite_trace_uniform[continuation]:
+Resume calldata_clamp_overwrite_prefix_uniform_joint[continuation]:
   gen_tac >> strip_tac >>
   `!fuel. ptr_safe_run D lo fuel ctx fn PG G2 tn2
      (s2 with vs_inst_idx := LENGTH sa.cs_current_insts + 2)` by
@@ -448,13 +473,46 @@ Resume calldata_clamp_overwrite_trace_uniform[continuation]:
   simp[]
 QED
 
-Resume calldata_clamp_overwrite_trace_uniform[joint]:
+Resume calldata_clamp_overwrite_prefix_uniform_joint[sequence]:
+  `!D k. ptr_inst_ok D lo 0 ctx fn G tn i0 (s with vs_inst_idx := k)` by
+    (simp[Abbr `i0`] >> irule clamp_scalar_sequence_check >>
+     simp[op_taint_def, op_prov_def] >> fs[MEM] >> metis_tac[]) >>
+  `!D k. ptr_inst_ok D lo 0 ctx fn G1 tn1 i1 (s1 with vs_inst_idx := k)` by
+    (simp[NoAsms, Abbr `i1`] >> rpt gen_tac >> irule clamp_scalar_sequence_check >>
+     Cases_on `signed` >> fs[allocas_from_def] >> metis_tac[]) >>
+  `!D k. ptr_inst_ok D lo 0 ctx fn G2 tn2 i2 (s2 with vs_inst_idx := k)` by
+    (simp[NoAsms, Abbr `i2`] >> rpt gen_tac >> irule clamp_scalar_sequence_check >>
+     fs[allocas_from_def] >> metis_tac[]) >>
+  `ptr_inst_ok D lo 0 ctx fn G tn i0 s` by
+    (qpat_x_assum `!D k. ptr_inst_ok D lo 0 ctx fn G tn i0 _`
+      (qspecl_then [`D`, `s.vs_inst_idx`] mp_tac) >> simp[]) >>
+  `!k. step_inst_base i1 (s1 with vs_inst_idx := k) =
+      OK (s2 with vs_inst_idx := k)` by
+    (Cases_on `signed` >>
+     simp[NoAsms, Abbr `i1`, step_inst_inst_idx_indep, mk_inst_def,
+          is_terminator_def] >> fs[mk_inst_def, exec_result_map_def]) >>
+  `!k. step_inst_base i2 (s2 with vs_inst_idx := k) =
+      OK (t with vs_inst_idx := k)` by
+    (simp[NoAsms, Abbr `i2`, step_inst_inst_idx_indep, mk_inst_def,
+          is_terminator_def] >>
+     fs[mk_inst_def, exec_result_map_def]) >>
+  qpat_x_assum `s1 = _` kall_tac >>
+  qpat_x_assum `s2 = _` kall_tac >>
+  qpat_x_assum `t = _` kall_tac >>
+  qx_gen_tac `d` >>
+  `ptr_inst_ok d lo 0 ctx fn G tn i0 s` by
+    (qpat_x_assum `!D k. ptr_inst_ok D lo 0 ctx fn G tn i0 _`
+      (qspecl_then [`d`, `s.vs_inst_idx`] mp_tac) >> simp[]) >>
+  simp[inst_seq_ptr_def, Abbr `G3`, Abbr `tn3`, Abbr `G2`, Abbr `tn2`,
+       Abbr `G1`, Abbr `tn1`]
+QED
+
+Resume calldata_clamp_overwrite_prefix_uniform_joint[joint]:
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (s,G,tn) [] (OK (s1 with vs_inst_idx := SUC s.vs_inst_idx),G1,tn1)` by
     (simp_tac (srw_ss()) [Abbr `G1`, Abbr `tn1`, Abbr `i0`] >>
      irule clamp_scalar_joint_step >>
-     simp[op_taint_def, op_prov_def] >>
-     fs[MEM]) >>
+     simp[op_taint_def, op_prov_def] >> fs[MEM]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (s1 with vs_inst_idx := SUC s.vs_inst_idx,G1,tn1) []
     (OK (s2 with vs_inst_idx := s.vs_inst_idx + 2),G2,tn2)` by
@@ -467,25 +525,23 @@ Resume calldata_clamp_overwrite_trace_uniform[joint]:
   metis_tac[dispatched_decoder_joint_then]
 QED
 
-Resume calldata_clamp_overwrite_trace_uniform[joint_middle]:
+Resume calldata_clamp_overwrite_prefix_uniform_joint[joint_middle]:
   simp_tac (srw_ss()) [Abbr `G2`, Abbr `tn2`, Abbr `i1`] >>
   `s.vs_inst_idx + 2 = SUC (SUC s.vs_inst_idx)` by simp[] >>
   asm_rewrite_tac[] >>
-  irule clamp_scalar_indexed_joint_step >>
-  simp[allocas_from_def] >>
+  irule clamp_scalar_indexed_joint_step >> simp[allocas_from_def] >>
   Cases_on `signed` >> fs[allocas_from_def, arithmeticTheory.ADD1] >> metis_tac[]
 QED
 
-Resume calldata_clamp_overwrite_trace_uniform[joint_last]:
+Resume calldata_clamp_overwrite_prefix_uniform_joint[joint_last]:
   simp_tac (srw_ss()) [Abbr `G3`, Abbr `tn3`, Abbr `i2`] >>
   `s.vs_inst_idx + 3 = SUC (s.vs_inst_idx + 2)` by simp[] >>
   asm_rewrite_tac[] >>
   irule clamp_scalar_indexed_joint_step >>
   fs[allocas_from_def] >> metis_tac[]
-
 QED
 
-Finalise calldata_clamp_overwrite_trace_uniform
+Finalise calldata_clamp_overwrite_prefix_uniform_joint
 
 Theorem calldata_clamp_overwrite_prefix_uniform:
   compile_abi_clamp_basetype op clamp sa = ((),sb) /\
@@ -514,7 +570,7 @@ Theorem calldata_clamp_overwrite_prefix_uniform:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all calldata_clamp_overwrite_trace_uniform >>
+  strip_tac >> drule_all calldata_clamp_overwrite_prefix_uniform_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
 QED
@@ -557,7 +613,7 @@ Proof
     (rpt strip_tac >> irule evaluated_operand_not_fresh >>
      goal_assum $ drule_at (Pat `eval_operand`) >> simp[]) >>
   drule_all abi_decoder_clamp_sequence >> strip_tac >>
-  drule_all calldata_clamp_overwrite_trace_uniform >>
+  drule_all calldata_clamp_overwrite_prefix_uniform_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >>
   simp[fresh_vars_wrt_def, eval_op_inst_idx] >> fs[fresh_vars_wrt_def]
@@ -590,7 +646,7 @@ Theorem calldata_clamp_overwrite_prefix:
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all calldata_clamp_overwrite_trace_uniform >>
+  strip_tac >> drule_all calldata_clamp_overwrite_prefix_uniform_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
 QED
@@ -620,6 +676,73 @@ Theorem calldata_clamp_prefix_framed:
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
   strip_tac >> drule_all calldata_clamp_prefix_framed_uniform >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
+QED
+
+Theorem calldata_clamp_overwrite_prefix_uniform_seq:
+  compile_abi_clamp_basetype op clamp sa = ((),sb) /\
+  eval_operand op s = SOME w /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\
+  op_taint tn op = {} /\ op_prov G op = NONE /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?s' G' tn'.
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (s' with vs_inst_idx := s.vs_inst_idx) /\
+    ~s'.vs_halted /\ s'.vs_current_bb = sb.cs_current_bb /\
+    s'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    s'.vs_memory = s.vs_memory /\ s'.vs_allocas = s.vs_allocas /\
+    s'.vs_alloca_next = s.vs_alloca_next /\
+    s' = t with vs_inst_idx := LENGTH sb.cs_current_insts /\
+    (!a v. (!x. a = Var x ==> not_fresh_at sa x) /\
+      eval_operand a s = SOME v ==> eval_operand a s' = SOME v) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G' tn')
+Proof
+  strip_tac >> drule_all calldata_clamp_overwrite_prefix_uniform_joint >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
+QED
+
+Theorem calldata_clamp_overwrite_trace_uniform:
+  compile_abi_clamp_basetype op clamp sa = ((),sb) /\
+  eval_operand op s = SOME w /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\
+  op_taint tn op = {} /\ op_prov G op = NONE /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?s' G' tn'.
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (s' with vs_inst_idx := s.vs_inst_idx) /\
+    ~s'.vs_halted /\ s'.vs_current_bb = sb.cs_current_bb /\
+    s'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    s'.vs_memory = s.vs_memory /\ s'.vs_allocas = s.vs_allocas /\
+    s'.vs_alloca_next = s.vs_alloca_next /\
+    s' = t with vs_inst_idx := LENGTH sb.cs_current_insts /\
+    (!a v. (!x. a = Var x ==> not_fresh_at sa x) /\
+      eval_operand a s = SOME v ==> eval_operand a s' = SOME v) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) [] (OK s',G',tn')) /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all calldata_clamp_overwrite_prefix_uniform_joint >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[]
 QED

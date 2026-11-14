@@ -5,6 +5,7 @@ Ancestors calldataOverwritePtr calldataWordStepsPtr calldataClampPtr calldataDec
   venomInst list arithmetic words bodyPtrDefs decoderGhostFramePtr
   ptrDiscipline ptrSafeRun venomState venomExecSemantics entryDispatchPtr
   fragExecPtr ghostPcTransportPtr finite_map pred_set codegenRel instIdxIndep ptrSafetyTransport
+  instSeqComposePtr
 
 (* The calldata address step: base Lit 0w adds no instruction. *)
 val calldata_pos_addr = prove(
@@ -215,7 +216,7 @@ Proof
   simp[] >> qexists_tac `NoClamp` >> simp[abi_decoder_clamp_valid_def]
 QED
 
-Theorem calldata_word_overwrite_prefix_uniform:
+Theorem calldata_word_overwrite_prefix_uniform_seq:
   compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecPrimWord clamp) sa = ((),sb) /\
   eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
@@ -227,6 +228,7 @@ Theorem calldata_word_overwrite_prefix_uniform:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?s' G' tn'.
+    (!D. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G' tn') /\
     s' = actual with vs_inst_idx := LENGTH sb.cs_current_insts /\
     run_inst_seq (emitted_insts sa sb) s = OK (s' with vs_inst_idx := s.vs_inst_idx) /\
     ~s'.vs_halted /\ s'.vs_current_bb = sb.cs_current_bb /\
@@ -266,7 +268,7 @@ Proof
     metis_tac[fn_has_code_split] >>
   `fn_has_code c1 c2 fn /\ fn_has_code c2 sb fn` by
     metis_tac[fn_has_code_split] >>
-  drule_all calldata_load_overwrite_prefix_uniform >>
+  drule_all calldata_load_overwrite_prefix_uniform_seq >>
   disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
   rename1 `eval_operand value s1 = SOME _` >>
   `!x. not_fresh_at sa x ==> not_fresh_at c1 x` by
@@ -289,7 +291,7 @@ Proof
     (qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]) >>
   `?mid. run_inst_seq (emitted_insts c1 c2) s1 = OK mid` by
     suspend "clamp_success" >>
-  drule_all calldata_clamp_overwrite_prefix_uniform >>
+  drule_all calldata_clamp_overwrite_prefix_uniform_seq >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   rename1 `s2 = mid with vs_inst_idx := _` >>
   `eval_operand (Var p) s2 = SOME dw /\ eval_operand src s2 = SOME sw /\
@@ -303,7 +305,7 @@ Proof
     (Cases_on `value` >> fs[op_taint_def] >> metis_tac[]) >>
   `allocas_from lo s2` by
     (qpat_x_assum `allocas_from lo s1` mp_tac >> simp[allocas_from_def]) >>
-  drule_all clean_mstore_overwrite_prefix_uniform >>
+  drule_all clean_mstore_overwrite_prefix_uniform_seq >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   `!x. not_fresh_at sa x ==> FLOOKUP H' x = FLOOKUP G x /\
      op_taint u' (Var x) = op_taint tn (Var x)` by metis_tac[] >>
@@ -322,12 +324,12 @@ Proof
     (conj_tac >> first_x_assum irule >> simp[]) >>
   `t with vs_inst_idx := LENGTH sb.cs_current_insts = t` by
     simp[venom_state_component_equality] >>
-  simp[] >> conj_tac
+  simp[] >> conj_tac >- suspend "ghost_sequence" >> conj_tac
   >- (asm "ghost_run" mp_tac >> simp[]) >>
   qpat_x_assum `_ SUBSET tn'.t_mem` mp_tac >> simp[]
 QED
 
-Resume calldata_word_overwrite_prefix_uniform[word_sequence]:
+Resume calldata_word_overwrite_prefix_uniform_seq[word_sequence]:
   qpat_x_assum `s2 = mid with vs_inst_idx := _` kall_tac >>
   qpat_x_assum `run_inst_seq _ _ = OK mid` kall_tac >>
   `c1.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa c1 /\
@@ -351,7 +353,7 @@ Resume calldata_word_overwrite_prefix_uniform[word_sequence]:
     mp_tac run_inst_seq_chain >> simp[]
 QED
 
-Resume calldata_word_overwrite_prefix_uniform[clamp_success]:
+Resume calldata_word_overwrite_prefix_uniform_seq[clamp_success]:
   `c1.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa c1 /\
    c2.cs_current_insts = c1.cs_current_insts ++ emitted_insts c1 c2 /\
    sb.cs_current_insts = c2.cs_current_insts ++ emitted_insts c2 sb` by
@@ -383,7 +385,40 @@ Resume calldata_word_overwrite_prefix_uniform[clamp_success]:
   gvs[exec_result_map_def]
 QED
 
-Finalise calldata_word_overwrite_prefix_uniform
+Resume calldata_word_overwrite_prefix_uniform_seq[ghost_sequence]:
+  qpat_x_assum `s2 = mid with vs_inst_idx := _` kall_tac >>
+  `c1.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa c1 /\
+   c2.cs_current_insts = c1.cs_current_insts ++ emitted_insts c1 c2 /\
+   sb.cs_current_insts = c2.cs_current_insts ++ emitted_insts c2 sb` by
+    (drule calldata_clamp_instructions >> fs[inst_extends_def]) >>
+  `emitted_insts sa sb = emitted_insts sa c1 ++
+     (emitted_insts c1 c2 ++ emitted_insts c2 sb)` by
+    metis_tac[emitted_insts_append, APPEND_ASSOC] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa c1)` by
+    (drule emitted_insts_emit_op >> simp[mk_inst_def, is_terminator_def]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c1 c2)` by
+    (drule calldata_clamp_instructions >> strip_tac >>
+     simp[mk_inst_def, is_terminator_def] >> fs[MEM] >>
+     Cases_on `signed` >> simp[mk_inst_def, is_terminator_def]) >>
+  `s1 with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa c1) = s1` by
+    simp[venom_state_component_equality] >>
+  `s2 with vs_inst_idx := s1.vs_inst_idx + LENGTH (emitted_insts c1 c2) = s2` by
+    simp[venom_state_component_equality] >>
+  gen_tac >>
+  `inst_seq_ptr D lo ctx fn PG H u
+     (emitted_insts c1 c2 ++ emitted_insts c2 sb) s1 H' u'` by
+    (irule inst_seq_ptr_append_ok >> simp[] >>
+     qexistsl_tac [`G'`, `tn'`] >> simp[] >>
+     `LENGTH sa.cs_current_insts +
+       (LENGTH (emitted_insts c1 c2) + LENGTH (emitted_insts sa c1)) =
+       s2.vs_inst_idx` by simp[] >>
+     pop_assum (fn th => rewrite_tac[th]) >> simp[]) >>
+  qpat_x_assum `emitted_insts sa sb = _` (fn th => pure_once_rewrite_tac[th]) >>
+  irule inst_seq_ptr_append_ok >> simp[] >>
+  qexistsl_tac [`H`, `u`] >> gvs[]
+QED
+
+Finalise calldata_word_overwrite_prefix_uniform_seq
 
 (* Fixed-bound compatibility interface; witnesses are chosen by the uniform provider. *)
 Theorem calldata_word_overwrite_prefix:
@@ -414,7 +449,40 @@ Theorem calldata_word_overwrite_prefix:
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >> drule_all calldata_word_overwrite_prefix_uniform >>
+  strip_tac >> drule_all calldata_word_overwrite_prefix_uniform_seq >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`s'`,`G'`,`tn'`] >> simp[]
+QED
+
+Theorem calldata_word_overwrite_prefix_uniform:
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
+    (DecPrimWord clamp) sa = ((),sb) /\
+  eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
+  not_fresh_at sa p /\ (!x. src = Var x ==> not_fresh_at sa x) /\
+  run_inst_seq (emitted_insts sa sb) s = OK actual /\
+  ptr_covers G tn p s 32 /\ op_taint tn src = {} /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?s' G' tn'.
+    s' = actual with vs_inst_idx := LENGTH sb.cs_current_insts /\
+    run_inst_seq (emitted_insts sa sb) s = OK (s' with vs_inst_idx := s.vs_inst_idx) /\
+    ~s'.vs_halted /\ s'.vs_current_bb = sb.cs_current_bb /\
+    s'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand (Var p) s' = SOME dw /\ eval_operand src s' = SOME sw /\
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+    ptr_covers G' tn' p s' 32 /\
+    (!i. w2n dw <= i /\ i < w2n dw + 32 ==> i NOTIN tn'.t_mem) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem SUBSET tn.t_mem /\
+    mem_word_at (w2n dw) s'.vs_memory = abi_decode_load CALLDATALOAD sw s /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all calldata_word_overwrite_prefix_uniform_seq >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`s'`,`G'`,`tn'`] >> simp[]
 QED
