@@ -12,7 +12,7 @@ Ancestors
   bodyFullAppend bodyFullIfExp bodyFullAttribute
   bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
   bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullRawLog bodyFullCtrlCases
-  bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend
+  bodyFullBuiltinWord bodyFullExprGeneric bodyFullSend bodyFullHash
   gasShadowCompile gasShadowCompileHelpers bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps exprSimAggregateLayout bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
@@ -290,14 +290,14 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[]
 QED
 
-(* Admitted: the joint twin of bodyPtrHashBuiltins's hash_builtin_expr_ptr_ok. *)
+(* The joint hash producer supplies the same singleton-argument case. *)
 Theorem hash_builtin_expr_full_ok:
   !cx ty bt es.
     (bt = Keccak256 \/ bt = Sha256) /\
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_full_ok cx es) ==>
     body_expr_full_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullHashTheory.hash_expr_full_ok
 QED
 
 (* Admitted: the joint twin of bodyPtrBytestringBuiltins's bytestring_builtin_expr_ptr_ok. *)
