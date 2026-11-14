@@ -699,3 +699,127 @@ Proof
   gvs[vv_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
       loweringStateRelDefsTheory.state_rel_def]
 QED
+
+Theorem pure_array_holds_view[local]:
+  expr_body_pre ce cx env obj es /\
+  eval_expr cx obj es = (INL r,st) /\ expr_type obj = ArrayT et bd /\
+  (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
+  ee.scopes = st.scopes /\ ee.immutables = st.immutables /\
+  vv_holds ce cx (ArrayT et bd) r (LocatedValue ann p) ee q /\
+  (p.ptr_location = LocMemory \/ p.ptr_location = LocCode) ==>
+  ?etv av w.
+    evaluate_type (get_tenv cx) et = SOME etv /\
+    evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+    read_result cx r ee = (INL (ArrayV av),ee) /\
+    val_wf (ArrayTV etv bd) (ArrayV av) /\
+    value_has_type (ArrayTV etv bd) (ArrayV av) /\
+    eval_operand p.ptr_operand q = SOME w /\
+    array_length (ArrayTV etv bd) av < dimword (:256)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >> strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  `?v w. read_result cx r ee = (INL v,ee) /\
+           eval_operand p.ptr_operand q = SOME w` by
+    (fs[vv_holds_def, immutable_holds_def] >> metis_tac[]) >>
+  `FST (read_result cx r ee) = FST (read_result cx r st)` by
+    (irule read_result_nonstorage_frame >> simp[]) >>
+  `read_result cx r st = (INL v,st)` by
+    (Cases_on `read_result cx r st` >> imp_res_tac read_result_state >> gvs[]) >>
+  `value_has_type (ArrayTV tv bd) v` by metis_tac[] >>
+  `val_wf (ArrayTV tv bd) v` by
+    metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  rename1 `read_result cx r ee = (INL (ArrayV av),ee)` >>
+  Cases_on `bd` >> Cases_on `av` >>
+  gvs[vyperTypingTheory.value_has_type_def,
+      vyperValueTheory.type_slot_size_def, vyperValueOperationTheory.array_length_def] >>
+  `n * 1 <= n * type_slot_size tv` by simp[arithmeticTheory.LE_MULT_LCANCEL] >>
+  decide_tac
+QED
+
+Theorem enriched_array_index_suffix[local]:
+  expr_body_pre ce cx env (Subscript et obj idx) es /\
+  expr_type obj = ArrayT et bd /\ ~expr_has_effect obj /\
+  eval_expr cx obj es = (INL raw,st) /\
+  eval_expr cx idx st = (INL ir,ee) /\ read_result cx ir ee = (INL iv,ee) /\
+  ee.scopes = st.scopes /\ ee.immutables = st.immutables /\ ee.gas_obs = [] /\
+  (!tr slot vt. raw <> PlaceR (StoragePlace tr slot vt)) /\
+  vv_post ctx func ce cx obj es sa sb s0 st raw (LocatedValue (ArrayT et bd) p) u /\
+  intcall_vv_provenance ce cx (ArrayT et bd) sa sb st raw (LocatedValue (ArrayT et bd) p) u /\
+  expr_post ctx func ce cx idx st sb sc u ee iv iop s /\
+  (p.ptr_location = LocMemory \/ p.ptr_location = LocCode) /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\ (!l. p.ptr_operand <> Label l) /\
+  (!x. iop = Var x ==> not_fresh_at sc x) /\ (!l. iop <> Label l) /\
+  expr_sim_inv ce cx env st /\ stmt_state_rel ctx func ce cx es s0 /\
+  local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sb /\ local_ptrs_reserved ce sc /\
+  MAP FDOM es.scopes = MAP FDOM st.scopes /\
+  sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
+  sb.cs_next_var <= sc.cs_next_var /\ sb.cs_next_id <= sc.cs_next_id /\
+  compile_array_subscript p.ptr_operand iop
+    (case bd of Fixed _ => F | Dynamic _ => T) (case bd of Fixed n => n | Dynamic _ => 0)
+    (word_scale p.ptr_location) (elem_size_in_location ce p.ptr_location et)
+    (is_signed_type (expr_type idx))
+    (compile_ptr_load ce.ce_is_ctor ce.ce_imm_alloca p.ptr_location) sc = (dst,sd) /\
+  fn_has_code sc sd func /\ ~s.vs_halted /\
+  s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  gas_summary_at F (ctx,func) []
+    (select_result cx (ArrayT et bd) raw (ValueSubscript iv)) (ee,s)
+    (\res ee' q. ?child. res = INL child /\
+      vv_post ctx func ce cx (Subscript et obj idx) es sa sd s0 ee' child
+        (LocatedValue et (mk_ptr dst p.ptr_location)) q /\
+      intcall_vv_provenance ce cx et sa sd ee' child
+        (LocatedValue et (mk_ptr dst p.ptr_location)) q /\
+      q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts)
+    (\res ee' outcome. expr_exit res outcome)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base >> strip_tac >>
+  drule_all exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_index_after_base >> strip_tac >>
+  drule_all exprSimSourceTheory.expr_body_pre_runtime_typed >> strip_tac >>
+  `value_has_type tvt iv` by metis_tac[] >>
+  drule_all exprSimSubscriptArraySuffixTheory.framed_array_index_post_view >> strip_tac >>
+  `is_word_type (expr_type idx)` by
+    (qpat_x_assum `value_has_type tvt iv` mp_tac >>
+     qpat_x_assum `evaluate_type _ (expr_type idx) = _` mp_tac >>
+     qpat_x_assum `iv = IntV i` SUBST1_TAC >> rpt (pop_assum kall_tac) >>
+     Cases_on `expr_type idx` >>
+     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+          vyperTypingTheory.value_has_type_def, compileEnvTheory.is_word_type_def] >>
+     rpt strip_tac >> gvs[vyperTypingTheory.value_has_type_def, compileEnvTheory.is_word_type_def]) >>
+  `stmt_state_rel ctx func ce cx ee s` by fs[expr_post_def] >>
+  `cs_extends sc sd /\ sc.cs_next_var <= sd.cs_next_var /\ sc.cs_next_id <= sd.cs_next_id` by
+    (qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ sc = _`
+       (mp_tac o Q.AP_TERM `SND`) >> simp[] >> disch_then (SUBST1_TAC o SYM) >>
+     rewrite_tac[GSYM exprLoweringPropsTheory.ci_mono_def] >>
+     irule exprLoweringPropsTheory.ci_mono_compile_array_subscript >>
+     simp[exprLoweringPropsTheory.ci_mono_compile_ptr_load]) >>
+  suspend "finish"
+QED
+
+Resume enriched_array_index_suffix[finish]:
+  `vv_post ctx func ce cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee raw
+    (LocatedValue (ArrayT et bd) p) s /\
+   intcall_vv_provenance ce cx (ArrayT et bd) sa sc ee raw
+    (LocatedValue (ArrayT et bd) p) s` by
+    (irule enriched_array_base_endpoint >> simp[] >>
+     conj_tac >- metis_tac[] >>
+     qexistsl [`env`,`iop`,`iv`,`s`,`sb`,`sc`,`st`,`u`] >> simp[]) >>
+  `vv_holds ce cx (ArrayT et bd) raw (LocatedValue (ArrayT et bd) p) ee s` by
+    fs[vv_post_def, vyperASTTheory.expr_type_def] >>
+  drule_all pure_array_holds_view >> strip_tac >>
+  `type_memory_bytes ce et = type_memory_size etv` by
+    (irule exprSimHypsTheory.expr_sim_inv_memory_size >> simp[] >>
+     qexistsl [`cx`,`env`,`st`] >> simp[]) >>
+  qpat_x_assum `iv = IntV i` SUBST_ALL_TAC >>
+  irule pure_array_suffix_summary >> simp[] >>
+  conj_tac >- (qexists_tac `env` >> simp[]) >>
+  qexistsl [`iop`,`iw`,`sc`] >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LE_TRANS]) >>
+  gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule enriched_array_base_endpoint >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl [`env`,`iop`,`IntV i`,`s`,`sb`,`sc`,`st`,`u`] >> simp[]
+QED
+Finalise enriched_array_index_suffix
