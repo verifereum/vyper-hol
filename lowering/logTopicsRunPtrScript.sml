@@ -214,6 +214,21 @@ Theorem compile_split_log_topics_seq_ptr:
     EVERY (\op. (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) ops
 Proof
   strip_tac >>
+  `LIST_REL (log_arg_rel cenv cx sa sm es s) xs vs` by
+    (qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ _ _ /\ _) xs vs`
+       (mp_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+     simp[LIST_REL_EL_EQN] >> metis_tac[]) >>
+  `LIST_REL (log_arg_rel cenv cx sa sm es s)
+     (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs)` by
+    (irule stmtSimLogTopicsTheory.split_log_ops_data_rel >> simp[]) >>
+  `LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel cenv cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs` by
+    (fs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+     qexists_tac `SND (EL n xs)` >> simp[pairTheory.PAIR] >> metis_tac[]) >>
   drule_all compile_split_log_topics_run >> strip_tac >>
   `LENGTH vs = LENGTH xs` by metis_tac[LIST_REL_LENGTH] >>
   drule_all log_indexed_selection_rel >> strip_tac >>
@@ -231,6 +246,9 @@ Proof
      (REPLICATE (LENGTH (MAP FST (FILTER SND (ZIP (xs,flags))))) T)
      (MAP SND (MAP FST (FILTER SND (ZIP (xs,flags)))))
      (MAP FST (FILTER SND (ZIP (vs,flags)))) = SOME topics` by metis_tac[] >>
+  qpat_assum `LIST_REL (\arg v. ptr_val_ok _ _ _ _ _ _ _) xs vs`
+    (mp_then Any mp_tac log_indexed_selection_rel) >>
+  disch_then drule >> strip_tac >>
   drule_all compile_log_topic_ops_seq_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   suspend "post"
