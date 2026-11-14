@@ -304,12 +304,21 @@ Resume dft_gas_occurrence_prefix_step[local_trace]:
     (mp_tac (Q.INST [`fn` |-> `fn`, `inst` |-> `next`, `s` |-> `z`]
        (SPEC_ALL wf_active_lookup)) >>
      (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
-     disch_then (qx_choose_then `next_bb` strip_assume_tac) >> metis_tac[]) >>
+     disch_then (qx_choose_then `next_bb` strip_assume_tac) >>
+     `next_bb = local_bb` by metis_tac[optionTheory.SOME_11] >>
+     qpat_x_assum `next_bb = local_bb` (fn eq =>
+       qpat_x_assum `get_instruction next_bb _ = SOME next`
+         (ACCEPT_TAC o REWRITE_RULE [eq]))) >>
   `MEM ((p,d,next.inst_id),fn,next,z)
     (open_trace p d 0 C8 fn local_bb s)` by
     (drule_all open_trace_next >>
      disch_then (qspecl_then [`p`,`fn`,`d`] SUBST1_TAC) >>
-     simp[open_trace_def, trace_step_noninvoke, Once (cj 2 trace_defs)]) >>
+     qpat_assum `z = _` (fn eq => rewrite_tac[GSYM eq]) >>
+     pure_rewrite_tac[MEM, MEM_APPEND] >> disj2_tac >> disj2_tac >>
+     rewrite_tac[open_trace_def, MEM_APPEND] >> disj1_tac >>
+     pure_rewrite_tac[Once (cj 2 trace_defs)] >>
+     qpat_assum `get_instruction local_bb z.vs_inst_idx = SOME next`
+       (fn lookup => simp_tac (srw_ss()) [lookup])) >>
   qpat_x_assum `!k b. ?m. _` (qspecl_then [`0`,`0`] strip_assume_tac) >>
   metis_tac[]
 QED
@@ -318,11 +327,30 @@ Resume dft_gas_occurrence_prefix_step[row_observations]:
   rpt strip_tac >>
   `EL r ms = [ALOOKUP obs (p,d,(EL r xs).inst_id)] /\
     EL r ess = [(source_fn.fn_name,(EL r xs).inst_id)]` by metis_tac[] >>
-  Cases_on `r = q` >> simp[Abbr `ms'`, Abbr `obs'`, EL_LUPDATE, ALOOKUP_APPEND]
-  >- gvs[] >>
+  `q < LENGTH ms` by metis_tac[] >>
+  Cases_on `r = q`
+  >- (qpat_x_assum `r = q` SUBST_ALL_TAC >>
+      qpat_assum `EL q xs = inst` (fn eq =>
+        qpat_assum `ALOOKUP obs (p,d,inst.inst_id) = NONE` (fn fresh =>
+          simp_tac (srw_ss()) [Abbr `ms'`, Abbr `obs'`, EL_LUPDATE,
+            ALOOKUP_APPEND, eq, fresh])) >>
+      qpat_assum `q < LENGTH ms` (fn bound => rewrite_tac[bound])) >>
   `(EL r xs).inst_id <> inst.inst_id` by
     (qpat_x_assum `ALL_DISTINCT (MAP (\i. i.inst_id) xs)` mp_tac >>
-     simp[ALL_DISTINCT_EL_IMP, EL_MAP] >> metis_tac[]) >> simp[]
+     qpat_assum `EL q xs = inst` mp_tac >>
+     qpat_assum `q < LENGTH xs` mp_tac >>
+     qpat_assum `r < LENGTH xs` mp_tac >>
+     qpat_assum `r <> q` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     drule ALL_DISTINCT_EL_IMP >>
+     disch_then (qspecl_then [`r`, `q`] mp_tac) >> simp[EL_MAP]) >>
+  qpat_assum `(EL r xs).inst_id <> inst.inst_id` mp_tac >>
+  qpat_assum `r <> q` mp_tac >>
+  qpat_assum `EL r ms = _` mp_tac >>
+  qunabbrev_tac `ms'` >> qunabbrev_tac `obs'` >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  simp[EL_LUPDATE, ALOOKUP_APPEND] >>
+  Cases_on `ALOOKUP obs (p,d,(EL r xs).inst_id)` >> simp[]
 QED
 
 Resume dft_gas_occurrence_prefix_step[done]:
@@ -333,28 +361,61 @@ QED
 
 Resume dft_gas_occurrence_prefix_step[actual_prefix]:
   `EVERY (\i. ~is_terminator i.inst_opcode) (TAKE t ys)` by suspend "nonterm" >>
+  `z.vs_inst_idx - LENGTH pseudos = SUC t` by
+    simp[Abbr `t`, update_var_def] >>
   `TAKE (z.vs_inst_idx - LENGTH pseudos) ys = TAKE t ys ++ [inst]` by
-    simp[Abbr `t`, update_var_def, TAKE_SUC] >>
-  rpt strip_tac >>
-  `FOLDR (dft_exec_cons F C8) OK (TAKE t ys) be = OK s` by
-    (qpat_x_assum `!F. N <= F ==> _` (qspec_then `F` mp_tac) >>
-     simp[Abbr `t`] >> metis_tac[LESS_EQ_TRANS]) >>
-  simp[FOLDR_APPEND, Once dft_exec_prefix_continue,
-    dft_exec_cons_def, step_inst_gas_single]
+    (qpat_assum `z.vs_inst_idx - LENGTH pseudos = SUC t` (fn eq => rewrite_tac[eq]) >>
+     qpat_assum `t < LENGTH ys` (fn bound =>
+       qpat_assum `EL t ys = inst` (fn at => simp_tac (srw_ss()) [TAKE_SUC, bound, at]))) >>
+  qx_gen_tac `fuel_now` >> strip_tac >>
+  `FOLDR (dft_exec_cons fuel_now C8) OK (TAKE t ys) be = OK s` by
+    (qpat_x_assum `!F. N <= F ==> _` (qspec_then `fuel_now` mp_tac) >>
+     (impl_tac >- metis_tac[LESS_EQ_TRANS]) >> simp[]) >>
+  qpat_assum `TAKE (z.vs_inst_idx - LENGTH pseudos) ys = _`
+    (fn eq => pure_rewrite_tac[eq, FOLDR_APPEND, FOLDR]) >>
+  simp[Once dft_exec_prefix_continue] >>
+  `step_inst fuel_now C8 inst s = OK (update_var out w (s with vs_gas_readings := rest))` by
+    (mp_tac (Q.INST [`fuel` |-> `fuel_now`, `ctx` |-> `C8`, `s` |-> `s`,
+       `inst` |-> `inst`, `x` |-> `out`]
+      (SPEC_ALL dftBlockSimTheory.step_inst_gas_single)) >>
+     (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
+     qpat_assum `s.vs_gas_readings = w::rest`
+       (fn reads => simp_tac (srw_ss()) [reads])) >>
+  simp[dft_exec_cons_def]
 QED
 
 Resume dft_gas_occurrence_prefix_step[nonterm]:
   `bb_well_formed bb'` by
     metis_tac[wf_function_def, lookup_block_def, FIND_MEM] >>
+  qunabbrev_tac `t` >>
+  qpat_assum `bb_well_formed bb'` mp_tac >>
+  qpat_assum `bb'.bb_instructions = pseudos ++ ys` mp_tac >>
+  qpat_assum `LENGTH pseudos <= s.vs_inst_idx` mp_tac >>
+  qpat_assum `get_instruction bb' s.vs_inst_idx = SOME inst` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
   fs[EVERY_EL, LENGTH_TAKE, bb_well_formed_def] >>
   rpt strip_tac >>
+  `n < s.vs_inst_idx - LENGTH pseudos /\ n < LENGTH ys` by
+    (qpat_x_assum `n < LENGTH (TAKE _ _)` mp_tac >>
+     simp_tac (srw_ss()) [LENGTH_TAKE_EQ] >>
+     IF_CASES_TAC >> decide_tac) >>
   `LENGTH pseudos + n < LENGTH bb'.bb_instructions /\
     EL (LENGTH pseudos + n) bb'.bb_instructions = EL n ys` by
-    simp[EL_APPEND_EQN] >>
+    (qpat_assum `bb'.bb_instructions = _` (fn eq =>
+       simp_tac (srw_ss()) [eq, EL_APPEND_EQN]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     simp_tac arith_ss []) >>
+  `EL n (TAKE (s.vs_inst_idx - LENGTH pseudos) ys) = EL n ys` by
+    (irule EL_TAKE >> first_assum ACCEPT_TAC) >>
   `LENGTH pseudos + n = PRE (LENGTH bb'.bb_instructions)` by metis_tac[] >>
   `s.vs_inst_idx < LENGTH bb'.bb_instructions` by
-    gvs[get_instruction_def] >>
-  fs[Abbr `t`] >> decide_tac
+    (qpat_x_assum `get_instruction _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[get_instruction_def, AllCaseEqs()]) >>
+  qpat_x_assum `LENGTH pseudos + n = PRE _` mp_tac >>
+  qpat_x_assum `s.vs_inst_idx < LENGTH bb'.bb_instructions` mp_tac >>
+  qpat_x_assum `n < s.vs_inst_idx - LENGTH pseudos` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> decide_tac
 QED
 
 Resume dft_gas_occurrence_prefix_step[pending]:
@@ -365,13 +426,13 @@ Resume dft_gas_occurrence_prefix_step[pending]:
 QED
 
 Resume dft_gas_occurrence_prefix_step[source_prefix]:
-  rpt gen_tac >> strip_tac >>
+  qx_gen_tac `fuel_now` >> rpt gen_tac >> strip_tac >>
   `!r. r < k /\ (EL r xs).inst_opcode = INVOKE ==> MEM r done` by
     (rpt strip_tac >>
      `MEM r (done ++ [q])` by metis_tac[] >>
      fs[MEM_APPEND] >> metis_tac[]) >>
-  qpat_x_assum `!F k kgss tail. N <= F /\ _ ==> _`
-    (qspecl_then [`F`, `k`, `kgss`, `tail`] mp_tac) >>
+  qpat_x_assum `!fuel k kgss tail. N <= fuel /\ _ ==> _`
+    (qspecl_then [`fuel_now`, `k`, `kgss`, `tail`] mp_tac) >>
   (impl_tac >- metis_tac[LESS_EQ_TRANS]) >> simp[]
 QED
 
