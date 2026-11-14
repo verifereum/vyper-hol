@@ -68,7 +68,7 @@ Proof
     (simp[run_inst_seq_mem_ok_def] >> conj_tac
      >- (irule below_frontier_no_ranges >> Cases_on `tr` >> simp[mk_inst_def]) >>
      Cases_on `tr` >> simp[inst_dload_in_section_def, mk_inst_def,
-       venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.step_inst_base_opcode_eqs,
        venomExecSemanticsTheory.exec_write2_def, venomStateTheory.eval_operands_def]) >>
   drule run_inst_seq_gas_path_mem >>
   disch_then (qspecl_then
@@ -76,7 +76,7 @@ Proof
      `(if tr then tstore else sstore) dw w s`, `ctx`, `func`, `bb`] mp_tac) >>
   Cases_on `tr` >>
   simp[is_terminator_def, run_inst_seq_def,
-       mk_inst_def, IS_PREFIX_APPEND, venomExecSemanticsTheory.step_inst_base_def,
+       mk_inst_def, IS_PREFIX_APPEND, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
        venomExecSemanticsTheory.exec_write2_def, venomStateTheory.eval_operands_def,
        arithmeticTheory.ADD1]
 QED
