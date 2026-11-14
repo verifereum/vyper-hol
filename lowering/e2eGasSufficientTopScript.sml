@@ -10,7 +10,7 @@ Theory e2eGasSufficientTop
 Ancestors
   e2eGasSufficient e2eCorrectness e2eDefs e2eProducers e2eEntry
   unitTransformDefs ptrDiscipline lowerDloadDefs e2eComposition
-  o1PipelineCorrect o1PassContract contextCodegenRel
+  o1PipelineCorrect o1PassContract o1CodeEndOffset contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource passSimulationDefs
   codegenCorrectness frameGas frameStep venomRunBounded asmOptimizer callTrace
