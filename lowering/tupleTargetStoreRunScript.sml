@@ -731,6 +731,133 @@ QED
 
 Finalise tuple_target_nonlocal_head_path
 
+Theorem tuple_target_success_head_path[local]:
+  !ctx func cenv cx es es' s g ty tv v op st sf.
+    compile_tuple_store_all cenv [ty] [g] [op] st = ((),sf) /\
+    assign_tuple_targets cx g v es = (INL (),es') /\
+    tuple_target_aligned cenv cx g ty tv /\
+    tuple_target_layout es.scopes g ty tv v /\
+    value_has_type tv v /\ val_wf tv v /\
+    (if is_word_type ty then eval_operand op s = SOME (typed_val_to_w256 tv v)
+     else ?w. eval_operand op s = SOME w /\
+       val_in_memory tv v (w2n w) s.vs_memory /\
+       type_memory_size tv + 64 < dimword(:256)) /\
+    local_ptrs_reserved cenv st /\ (!x. op = Var x ==> not_fresh_at st x) /\
+    local_ptrs_rel func cenv es.scopes s /\ alloca_inv s /\
+    ((?id. g = BaseTarget (NameTarget id)) \/ ~s.vs_call_ctx.cc_static) /\
+    fn_has_code st sf func /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+    ?t. (!st0 H. valid_horizon cx st0 H es'.storage_trace /\
+                 stmt_state_rel H ctx func cenv cx es s /\
+                 storage_well_formed_on cx es (FST H) ==>
+                 stmt_state_rel H ctx func cenv cx es' t /\
+                 storage_well_formed_on cx es' (FST H)) /\
+      local_ptrs_rel func cenv es'.scopes t /\ alloca_inv t /\
+      t.vs_call_ctx.cc_static = s.vs_call_ctx.cc_static /\
+      ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+      (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
+      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
+      MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+      (!n. OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es'.scopes) =
+           OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es.scopes)) /\
+      (t.vs_memory = s.vs_memory \/ ?id p sz entry dw.
+        g = BaseTarget (NameTarget id) /\
+        lookup_scopes id es.scopes = SOME entry /\
+        FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+        lookup_var p s = SOME dw /\
+        (!a len. a + len <= w2n dw \/
+           w2n dw + (if is_word_type ty then 32 else type_memory_size tv) <= a ==>
+           mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)) /\
+      gas_marked_path F ctx func s 0 (OK t) /\
+      (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+         alloca_frame c0 e0 sa0 s0 cenv es' t)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all tuple_target_assignment_scope_frame >> strip_tac >>
+  Cases_on `?id. g = BaseTarget (NameTarget id)`
+  >- (pop_assum strip_assume_tac >> gvs[] >>
+      drule_all (at_horizon_named "H" tuple_target_local_head_path) >>
+      disch_then (qspec_then `ctx` (qx_choosel_then [`t`, `idp`, `sz`, `entry`, `dw`]
+        (map_every assume_tac o CONJUNCTS))) >>
+      qexists_tac `t` >> conj_tac >- suspend "local_rel" >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac
+      >- (irule alloca_inv_fields >> qexists_tac `s` >> asm_rewrite_tac[]) >>
+      reverse (rpt conj_tac) >- suspend "local_frame"
+      >~ [`t.vs_memory = s.vs_memory`]
+      >- (disj2_tac >> qexistsl_tac [`idp`, `sz`, `entry`, `dw`] >>
+          asm_rewrite_tac[]) >>
+      gvs[]) >>
+  `is_word_type ty` by metis_tac[tuple_target_aligned_nonlocal_word] >>
+  gvs[] >> drule_all tuple_target_nonlocal_head_path >>
+  disch_then (qspec_then `ctx` (CONJUNCTS_THEN2 assume_tac
+    (qx_choose_then `t` (map_every assume_tac o CONJUNCTS)))) >>
+  `local_ptrs_rel func cenv es'.scopes t` by
+    (qpat_assum `es'.scopes = es.scopes` SUBST1_TAC >>
+     irule local_ptrs_rel_frame >> qexists_tac `s` >> gvs[] >>
+     rpt strip_tac >~ [`s.vs_alloca_next <= b`] >- gvs[] >>
+     qpat_x_assum `!x. not_fresh_at st x ==> _` irule >>
+     fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `alloca_inv t` by
+    (irule alloca_inv_fields >> qexists_tac `s` >> asm_rewrite_tac[]) >>
+  qexists_tac `t` >> conj_tac >- first_assum ACCEPT_TAC >>
+  reverse (rpt conj_tac) >- suspend "nonlocal_frame" >>
+  gvs[]
+QED
+
+Resume tuple_target_success_head_path[local_rel]:
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (qpat_x_assum `!H. stmt_state_rel H _ _ _ _ _ s ==> _` irule >>
+      first_assum ACCEPT_TAC) >>
+  `storage_well_formed_on cx es' (FST H) <=> storage_well_formed_on cx es (FST H)` by
+    (irule storage_well_formed_on_backends >> asm_rewrite_tac[]) >>
+  asm_rewrite_tac[]
+QED
+
+Resume tuple_target_success_head_path[local_frame]:
+  rpt strip_tac >>
+  `type_memory_size entry.type <= sz` by
+    (qpat_assum `local_ptrs_rel _ _ es.scopes s`
+       (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
+     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  `local_region cenv es.scopes s id (w2n dw) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `entry.type = tv` by gvs[tuple_target_layout_local] >>
+  `(if is_word_type ty then 32 else type_memory_size tv) <= sz` by
+    (Cases_on `is_word_type ty` >> gvs[tuple_target_layout_local,
+       stmtSimDeclStoreTheory.store_lays_out_def] >> decide_tac) >>
+  irule tuple_local_region_write_frame >> goal_assum (drule_at Any) >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      Cases_on `is_word_type ty` >> gvs[] >> decide_tac) >>
+  simp[]
+QED
+
+
+Resume tuple_target_success_head_path[nonlocal_frame]:
+  rpt strip_tac >>
+  `!id b z. local_region cenv es'.scopes t id b z ==>
+             local_region cenv es.scopes s id b z` by
+    (rpt gen_tac >> simp[local_region_def] >> strip_tac >>
+     `lookup_var p t = lookup_var p s` by
+       (first_x_assum irule >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     `IS_SOME (lookup_scopes id es.scopes)` by
+       metis_tac[vyperTypeEnvPreservationTheory.lookup_scopes_same_fdoms_some] >>
+     fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
+  fs[alloca_frame_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!aid off sz. _` drule_all >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >> first_x_assum irule >>
+  metis_tac[]
+QED
+
+Finalise tuple_target_success_head_path
+
 Theorem tuple_target_store_head_path:
   !ctx func cenv cx es es' s g ty tv v op st sf.
     compile_tuple_store_all cenv [ty] [g] [op] st = ((),sf) /\
@@ -773,88 +900,13 @@ Theorem tuple_target_store_head_path:
       (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
          alloca_frame c0 e0 sa0 s0 cenv es' t)
 Proof
-  rpt strip_tac >> drule_all tuple_target_assignment_scope_frame >> strip_tac >>
-  Cases_on `?id. g = BaseTarget (NameTarget id)`
-  >- (pop_assum strip_assume_tac >> gvs[] >>
-      drule_all (at_horizon_named "H" tuple_target_local_head_path) >>
-      disch_then (qspec_then `ctx` (qx_choosel_then [`t`, `idp`, `sz`, `entry`, `dw`]
-        (map_every assume_tac o CONJUNCTS))) >>
-      qexists_tac `t` >> conj_tac >- suspend "local_rel" >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac
-      >- (irule alloca_inv_fields >> qexists_tac `s` >> asm_rewrite_tac[]) >>
-      reverse (rpt conj_tac) >- suspend "local_frame"
-      >~ [`t.vs_memory = s.vs_memory`]
-      >- (disj2_tac >> qexistsl_tac [`idp`, `sz`, `entry`, `dw`] >>
-          asm_rewrite_tac[]) >>
-      gvs[]) >>
-  `is_word_type ty` by metis_tac[tuple_target_aligned_nonlocal_word] >>
-  gvs[] >> drule_all tuple_target_nonlocal_head_path >>
-  disch_then (qspec_then `ctx` (CONJUNCTS_THEN2 assume_tac
-    (qx_choose_then `t` (map_every assume_tac o CONJUNCTS)))) >>
-  `local_ptrs_rel func cenv es'.scopes t` by
-    (qpat_assum `es'.scopes = es.scopes` SUBST1_TAC >>
-     irule local_ptrs_rel_frame >> qexists_tac `s` >> gvs[] >>
-     rpt strip_tac >~ [`s.vs_alloca_next <= b`] >- gvs[] >>
-     qpat_x_assum `!x. not_fresh_at st x ==> _` irule >>
-     fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  `alloca_inv t` by
-    (irule alloca_inv_fields >> qexists_tac `s` >> asm_rewrite_tac[]) >>
-  qexists_tac `t` >> conj_tac >- first_assum ACCEPT_TAC >>
-  reverse (rpt conj_tac) >- suspend "nonlocal_frame" >>
-  gvs[]
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  SUBGOAL_THEN ``(?id. g = BaseTarget (NameTarget id)) \/ ~s.vs_call_ctx.cc_static``
+    assume_tac >- simp[] >>
+  drule_all tuple_target_success_head_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists `t` >> gvs[] >> metis_tac[]
 QED
-
-Resume tuple_target_store_head_path[local_rel]:
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- (qpat_x_assum `!H. stmt_state_rel H _ _ _ _ _ s ==> _` irule >>
-      first_assum ACCEPT_TAC) >>
-  `storage_well_formed_on cx es' (FST H) <=> storage_well_formed_on cx es (FST H)` by
-    (irule storage_well_formed_on_backends >> asm_rewrite_tac[]) >>
-  asm_rewrite_tac[]
-QED
-
-Resume tuple_target_store_head_path[local_frame]:
-  rpt strip_tac >>
-  `type_memory_size entry.type <= sz` by
-    (qpat_assum `local_ptrs_rel _ _ es.scopes s`
-       (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
-     first_x_assum drule_all >> strip_tac >> gvs[]) >>
-  `local_region cenv es.scopes s id (w2n dw) sz` by
-    (simp[local_region_def] >> metis_tac[]) >>
-  `entry.type = tv` by gvs[tuple_target_layout_local] >>
-  `(if is_word_type ty then 32 else type_memory_size tv) <= sz` by
-    (Cases_on `is_word_type ty` >> gvs[tuple_target_layout_local,
-       stmtSimDeclStoreTheory.store_lays_out_def] >> decide_tac) >>
-  irule tuple_local_region_write_frame >> goal_assum (drule_at Any) >>
-  conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >>
-      fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >>
-      Cases_on `is_word_type ty` >> gvs[] >> decide_tac) >>
-  simp[]
-QED
-
-
-Resume tuple_target_store_head_path[nonlocal_frame]:
-  rpt strip_tac >>
-  `!id b z. local_region cenv es'.scopes t id b z ==>
-             local_region cenv es.scopes s id b z` by
-    (rpt gen_tac >> simp[local_region_def] >> strip_tac >>
-     `lookup_var p t = lookup_var p s` by
-       (first_x_assum irule >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-     `IS_SOME (lookup_scopes id es.scopes)` by
-       metis_tac[vyperTypeEnvPreservationTheory.lookup_scopes_same_fdoms_some] >>
-     fs[optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
-  fs[alloca_frame_def] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!aid off sz. _` drule_all >> strip_tac >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  rpt gen_tac >> strip_tac >> first_x_assum irule >>
-  metis_tac[]
-QED
-
-Finalise tuple_target_store_head_path
 
 Theorem tuple_target_store_memory_tail:
   !func cenv es s t st scopes' g ty tv tvs v vs b sz addr.
@@ -908,6 +960,229 @@ QED
 Finalise tuple_target_store_memory_tail
 
 
+Theorem tuple_success_targets_path[local]:
+  !gs m tys tvs vs ops addr b sz ctx func cenv cx es es' s st st'.
+    compile_tuple_store_all cenv tys gs ops st = ((),st') /\
+    assign_tuple_target_list cx gs vs es = (INL (),es') /\
+    LENGTH gs = LENGTH tys /\ LENGTH tys = LENGTH tvs /\
+    LENGTH tvs = LENGTH vs /\ LENGTH ops = LENGTH vs /\
+    (~m ==> EVERY is_word_type tys) /\
+    EVERY (\op. ?x. op = Var x) ops /\
+    EVERY (\op. !x. op = Var x ==> not_fresh_at st x) ops /\
+    local_ptrs_reserved cenv st /\ values_have_types tvs vs /\ tuple_val_wf vs tvs /\
+    (!i. i < LENGTH gs ==>
+       ?w. eval_operand (EL i ops) s = SOME w /\
+         (if is_word_type (EL i tys) then
+            w = typed_val_to_w256 (EL i tvs) (EL i vs)
+          else w2n w = addr + SUM (MAP type_memory_size (TAKE i tvs)))) /\
+    (!i. i < LENGTH gs ==>
+       tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs) /\
+       tuple_target_layout es.scopes (EL i gs) (EL i tys) (EL i tvs) (EL i vs)) /\
+    (!i. i < LENGTH tys /\ ~is_word_type (EL i tys) ==>
+       type_memory_size (EL i tvs) + 64 < dimword(:256)) /\
+    (m ==> (!i. i < LENGTH tys ==>
+          evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs) /\
+          (is_word_type (EL i tys) ==> type_memory_size (EL i tvs) = 32)) /\
+       b <= addr /\ addr + type_memory_size_list tvs <= b + sz /\
+       ((?aid. FLOOKUP s.vs_allocas aid = SOME (b,sz)) \/
+        (?name. local_region cenv es.scopes s name b sz)) /\
+       tuple_in_memory vs tvs addr s.vs_memory) /\
+    fn_has_code st st' func /\ ~s.vs_halted /\
+    s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    local_ptrs_rel func cenv es.scopes s /\ alloca_inv s /\
+    (EVERY (\g. ?id. g = BaseTarget (NameTarget id)) gs \/
+     (~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static)) ==>
+    (gs <> [] \/ ~block_is_terminated st ==> ~block_is_terminated st') /\
+    ?t. (!st0 H. valid_horizon cx st0 H es'.storage_trace /\
+                 stmt_state_rel H ctx func cenv cx es s /\
+                 storage_well_formed_on cx es (FST H) ==>
+                 stmt_state_rel H ctx func cenv cx es' t /\
+                 storage_well_formed_on cx es' (FST H)) /\ ~t.vs_halted /\
+        t.vs_call_ctx.cc_static = s.vs_call_ctx.cc_static /\
+        t.vs_current_bb = st'.cs_current_bb /\ t.vs_inst_idx = LENGTH st'.cs_current_insts /\
+        (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
+        (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP t.vs_allocas aid = SOME bs) /\
+        gas_marked_path F ctx func s 0 (OK t) /\
+        (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+           alloca_frame c0 e0 sa0 s0 cenv es' t)
+Proof
+  Induct
+  >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+      gvs[compile_tuple_store_all_def, comp_return_def, Once evaluate_def,
+          return_def] >> qexists `s` >> simp[gas_marked_path_def] >>
+      irule (cj 1 fragGasPathTheory.gas_path_rules) >> simp[]) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `tys` >- fs[] >> Cases_on `tvs` >- fs[] >>
+  Cases_on `vs` >- fs[] >> Cases_on `ops` >- fs[] >>
+  rename1 `compile_tuple_store_all cenv (ty::tys1) _ (op::ops1) st = _` >>
+  rename1 `assign_tuple_target_list cx _ (v::vs1) es = _` >>
+  rename1 `tuple_val_wf (v::vs1) (tv::tvs1)` >>
+  qpat_x_assum `!m tys tvs vs ops addr b sz ctx func cenv cx es es' s st st'. _`
+    (mk_asm "ih") >>
+  qpat_assum `!i. i < LENGTH (h::gs) ==> tuple_target_aligned _ _ _ _ _ /\ _`
+    (qspec_then `0` mp_tac) >> simp_tac (srw_ss()) [] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `value_has_type tv v /\ val_wf tv v` by
+    (qpat_x_assum `ih :- _` kall_tac >>
+     fs[value_has_type_def, val_wf_def]) >>
+  qpat_assum `assign_tuple_target_list cx (_::_) (_::_) es = _` mp_tac >>
+  simp[assign_tuple_target_list_cons, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  strip_tac >> Cases_on `r` >>
+  qpat_x_assum `case _ of INL _ => _ | INR _ => _` mp_tac >>
+  simp_tac (srw_ss()) [] >> strip_tac >>
+  rename1 `assign_tuple_targets cx h v es = (INL u,es1)` >>
+  Cases_on `u` >>
+  drule_all tuple_target_aligned_compiler >> strip_tac >>
+  drule tuple_compiler_target_base >>
+  disch_then (qx_choose_then `bt` SUBST_ALL_TAC) >>
+  drule tuple_store_base_cons >> strip_tac >>
+  suspend "head_setup"
+QED
+
+Resume tuple_success_targets_path[head_setup]:
+  qpat_assum `compile_tuple_store_all _ [_] [_] [_] _ = _`
+    (mp_then Any strip_assume_tac tuple_target_stores_growth) >>
+  qpat_assum `compile_tuple_store_all _ tys1 gs ops1 sm = _`
+    (mp_then Any strip_assume_tac tuple_target_stores_growth) >>
+  `fn_has_code st sm func /\ fn_has_code sm st' func` by
+    metis_tac[fn_has_code_split] >>
+  `if is_word_type ty then eval_operand op s = SOME (typed_val_to_w256 tv v)
+   else ?w. eval_operand op s = SOME w /\
+     val_in_memory tv v (w2n w) s.vs_memory /\
+     type_memory_size tv + 64 < dimword(:256)` by
+    suspend "head_operand" >>
+  `!x. op = Var x ==> not_fresh_at st x` by fs[] >>
+  SUBGOAL_THEN ``(?id. BaseTarget bt = BaseTarget (NameTarget id)) \/
+    ~s.vs_call_ctx.cc_static`` assume_tac
+    >- (fs[] >> metis_tac[]) >>
+  drule_all tuple_target_success_head_path >>
+  disch_then (qspec_then `ctx` (qx_choose_then `s1` (map_every assume_tac o CONJUNCTS))) >>
+  suspend "tail"
+QED
+
+Resume tuple_success_targets_path[head_operand]:
+  qpat_x_assum `ih :- _` kall_tac >>
+  qpat_assum `!i. i < LENGTH (_::gs) ==> ?w. _`
+    (qspec_then `0` mp_tac) >> simp_tac (srw_ss()) [] >>
+  disch_then (qx_choose_then `w` (map_every assume_tac o CONJUNCTS)) >>
+  Cases_on `is_word_type ty` >- fs[] >>
+  `m` by fs[] >>
+  `type_memory_size tv + 64 < dimword(:256)` by
+    (qpat_x_assum `!i. i < LENGTH (ty::tys1) /\ _ ==> _`
+      (qspec_then `0` mp_tac) >> simp[]) >>
+  qpat_x_assum `m ==> _` mp_tac >> simp[] >> strip_tac >>
+  gns[val_in_memory_def] >> qexists `w` >> simp[]
+QED
+
+Resume tuple_success_targets_path[tail]:
+  asm_x "ih" drule >> disch_then drule >>
+  disch_then (qspecl_then [`m`, `tvs1`, `addr + type_memory_size tv`, `b`,
+    `sz`, `ctx`, `func`, `s1`] mp_tac) >>
+  (impl_tac >- suspend "tail_premises") >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  suspend "compose"
+QED
+
+Resume tuple_success_targets_path[tail_premises]:
+  rpt conj_tac
+  >- fs[] >- fs[] >- fs[] >- fs[] >- fs[] >- fs[]
+  >- suspend "tail_fresh"
+  >- (irule local_ptrs_reserved_next_var >> qexists `st` >> simp[])
+  >- fs[value_has_type_def]
+  >- fs[val_wf_def]
+  >- suspend "tail_operands"
+  >- suspend "tail_layout"
+  >- suspend "tail_sizes"
+  >- suspend "tail_memory"
+  >> asm_rewrite_tac [] >> fs[] >> metis_tac[]
+QED
+
+Resume tuple_success_targets_path[tail_fresh]:
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  irule not_fresh_at_mono >> qexists `st` >> simp[] >> metis_tac[]
+QED
+
+Resume tuple_success_targets_path[tail_operands]:
+  gen_tac >> strip_tac >>
+  `LENGTH ops1 = LENGTH gs` by fs[] >>
+  drule (Q.SPEC `T` tuple_store_operands_tail) >>
+  disch_then (qspecl_then [`st`, `s`, `s1`] mp_tac) >>
+  disch_then irule >>
+  goal_assum (drule_at Any) >> asm_rewrite_tac [] >>
+  qexistsl [`BaseTarget bt`, `op`, `ty`, `v`] >> asm_rewrite_tac []
+QED
+
+Resume tuple_success_targets_path[tail_layout]:
+  drule tuple_target_layout_transport >> disch_tac >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!i. i < LENGTH (BaseTarget bt::gs) ==> tuple_target_aligned _ _ _ _ _ /\ _`
+    (qspec_then `SUC i` mp_tac) >> simp[] >>
+  `i < LENGTH vs1` by fs[] >> simp[]
+QED
+
+Resume tuple_success_targets_path[tail_sizes]:
+  rpt strip_tac >>
+  `i < LENGTH vs1` by fs[] >>
+  qpat_x_assum `!i. i < LENGTH (ty::tys1) /\ _ ==> _`
+    (qspec_then `SUC i` mp_tac) >> simp[]
+QED
+
+Resume tuple_success_targets_path[tail_memory]:
+  strip_tac >>
+  qpat_x_assum `m ==> _` mp_tac >>
+  (impl_tac >- asm_rewrite_tac []) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `is_word_type ty ==> type_memory_size tv = 32` by
+    (qpat_assum `!i. _ ==> evaluate_type _ _ = _ /\ _`
+      (qspec_then `0` mp_tac) >> simp_tac (srw_ss()) [] >>
+     strip_tac >> asm_rewrite_tac []) >>
+  drule_all tuple_target_store_memory_tail >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  asm_rewrite_tac [] >>
+  gen_tac >> strip_tac >>
+  `i < LENGTH vs1` by fs[] >>
+  qpat_x_assum `!i. i < LENGTH (ty::tys1) ==> _`
+    (qspec_then `SUC i` mp_tac) >> simp[]
+QED
+
+Resume tuple_success_targets_path[compose]:
+  `~block_is_terminated sm` by
+    (drule_all tuple_store_singleton_open >> simp[]) >>
+  conj_tac >- simp[] >>
+  qpat_x_assum `?t. (!st0 H. _) /\ _`
+    (qx_choose_then `sf` (map_every assume_tac o CONJUNCTS)) >>
+  qexists `sf` >> conj_tac >- suspend "compose_rel" >>
+  asm_rewrite_tac [] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sm x` by
+        (irule not_fresh_at_mono >> qexists `st` >> simp[]) >>
+      metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  reverse conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      first_x_assum irule >> first_assum ACCEPT_TAC) >>
+  irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+  first_assum (irule_at Any) >> simp[]
+QED
+
+Resume tuple_success_targets_path[compose_rel]:
+  rpt gen_tac >> strip_tac >>
+  `valid_horizon cx st0 H es1.storage_trace` by
+    (irule (INST_TYPE [alpha |-> ``:unit``] vyperStorageFootprintTheory.valid_horizon_frame) >>
+     qexistsl [`assign_tuple_target_list cx gs vs1`, `INL ()`, `es'`] >>
+     fs[evaluate_storage_trace_frame]) >>
+  `stmt_state_rel H ctx func cenv cx es1 s1 /\
+   storage_well_formed_on cx es1 (FST H)` by
+    (qpat_x_assum `!st0 H. valid_horizon _ _ H es1.storage_trace /\ _ ==> _` irule >>
+     asm_rewrite_tac[] >> qexists_tac `st0` >> asm_rewrite_tac[]) >>
+  qpat_x_assum `!st0 H. valid_horizon _ _ H es'.storage_trace /\ _ ==> _` irule >>
+  asm_rewrite_tac[] >> qexists_tac `st0` >> asm_rewrite_tac[]
+QED
+
+Finalise tuple_success_targets_path
+
 Theorem tuple_store_targets_path:
   !gs m tys tvs vs ops addr b sz ctx func cenv cx es es' s st st'.
     compile_tuple_store_all cenv tys gs ops st = ((),st') /\
@@ -953,169 +1228,475 @@ Theorem tuple_store_targets_path:
         (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
            alloca_frame c0 e0 sa0 s0 cenv es' t)
 Proof
-  Induct
-  >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-      gvs[compile_tuple_store_all_def, comp_return_def, Once evaluate_def,
-          return_def] >> qexists `s` >> simp[gas_marked_path_def] >>
-      irule (cj 1 fragGasPathTheory.gas_path_rules) >> simp[]) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `tys` >- fs[] >> Cases_on `tvs` >- fs[] >>
-  Cases_on `vs` >- fs[] >> Cases_on `ops` >- fs[] >>
-  rename1 `compile_tuple_store_all cenv (ty::tys1) _ (op::ops1) st = _` >>
-  rename1 `assign_tuple_target_list cx _ (v::vs1) es = _` >>
-  rename1 `tuple_val_wf (v::vs1) (tv::tvs1)` >>
-  qpat_x_assum `!m tys tvs vs ops addr b sz ctx func cenv cx es es' s st st'. _`
-    (mk_asm "ih") >>
-  qpat_assum `!i. i < LENGTH (h::gs) ==> tuple_target_aligned _ _ _ _ _ /\ _`
-    (qspec_then `0` mp_tac) >> simp_tac (srw_ss()) [] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `value_has_type tv v /\ val_wf tv v` by
-    (qpat_x_assum `ih :- _` kall_tac >>
-     fs[value_has_type_def, val_wf_def]) >>
-  drule_all tuple_target_list_cons_success >> strip_tac >>
-  drule_all tuple_target_aligned_compiler >> strip_tac >>
-  drule tuple_compiler_target_base >>
-  disch_then (qx_choose_then `bt` SUBST_ALL_TAC) >>
-  drule tuple_store_base_cons >> strip_tac >>
-  suspend "head_setup"
+  SUBGOAL_THEN ``EVERY (\g. ?id. g = BaseTarget (NameTarget id)) gs \/
+    (~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static)`` assume_tac
+    >- simp[] >>
+  drule_all tuple_success_targets_path >>
+  disch_then (qspec_then `ctx` (map_every assume_tac o CONJUNCTS)) >>
+  conj_tac >- asm_rewrite_tac [] >>
+  qpat_x_assum `?t. _` (qx_choose_then `t` strip_assume_tac) >>
+  qexists `t` >> asm_rewrite_tac []
 QED
 
-Resume tuple_store_targets_path[head_setup]:
-  qpat_assum `compile_tuple_store_all _ [_] [_] [_] _ = _`
-    (mp_then Any strip_assume_tac tuple_target_stores_growth) >>
-  qpat_assum `compile_tuple_store_all _ tys1 gs ops1 sm = _`
-    (mp_then Any strip_assume_tac tuple_target_stores_growth) >>
-  `fn_has_code st sm func /\ fn_has_code sm st' func` by
+(* A nonlocal static head executes its pointer code and reaches the actual
+   exceptional store instruction; the compiled tail is never executed. *)
+Theorem tuple_target_static_head_path[local]:
+  !ctx func cenv cx s g ty tv op st sf w.
+    compile_tuple_store_all cenv [ty] [g] [op] st = ((),sf) /\
+    tuple_target_aligned cenv cx g ty tv /\
+    (!id. g <> BaseTarget (NameTarget id)) /\
+    eval_operand op s = SOME w /\
+    (!x. op = Var x ==> not_fresh_at st x) /\
+    local_ptrs_reserved cenv st /\
+    s.vs_call_ctx.cc_static /\ fn_has_code st sf func /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+    ?t. gas_marked_path F ctx func s 0
+      (Abort ExHalt_abort (halt_state (set_returndata [] t)))
+Proof
+  rpt gen_tac >> simp[tuple_target_aligned_def] >> strip_tac >> gvs[]
+  >- suspend "toplevel" >>
+  suspend "field"
+QED
+
+Resume tuple_target_static_head_path[toplevel]:
+  drule_all compile_get_target_ptr_toplevel >>
+  disch_then (qspec_then `st` assume_tac) >> gvs[] >>
+  drule_all tuple_store_word_step >> strip_tac >>
+  qpat_x_assum `compile_tuple_store_all _ [_] [_] [_] _ = _` kall_tac >>
+  gvs[compile_tuple_store_all_def, comp_return_def] >>
+  qexists `s` >> irule storage_emit_static_path >>
+  simp[] >> qexistsl [`n2w k`, `Lit (n2w k)`, `op`, `st`, `sf`, `tr`, `w`] >>
+  Cases_on `tr` >> gvs[compile_store_at_loc_def, eval_operand_def]
+QED
+
+Resume tuple_target_static_head_path[field]:
+  Cases_on `emit_op ADD [Lit (n2w k); Lit (n2w (struct_field_offset_slots
+    (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))] st` >>
+  rename1 `emit_op ADD _ st = (dst,sp)` >>
+  drule_all tuple_target_field_pointer >> strip_tac >>
+  drule_all tuple_store_word_step >> strip_tac >>
+  qpat_x_assum `compile_tuple_store_all _ [_] [_] [_] _ = _` kall_tac >>
+  gvs[compile_tuple_store_all_def, comp_return_def] >>
+  `cs_extends st sp /\ cs_extends sp sf` by
+    (Cases_on `tr` >> gvs[compile_store_at_loc_def] >>
+     metis_tac[ci_mono_emit_op, ci_mono_emit_void, ci_mono_def, pairTheory.SND]) >>
+  `fn_has_code st sp func /\ fn_has_code sp sf func` by
     metis_tac[fn_has_code_split] >>
-  `if is_word_type ty then eval_operand op s = SOME (typed_val_to_w256 tv v)
-   else ?w. eval_operand op s = SOME w /\
-     val_in_memory tv v (w2n w) s.vs_memory /\
-     type_memory_size tv + 64 < dimword(:256)` by
-    suspend "head_operand" >>
-  `!x. op = Var x ==> not_fresh_at st x` by fs[] >>
-  drule_all tuple_target_store_head_path >>
-  disch_then (qspec_then `ctx` (qx_choose_then `s1` (map_every assume_tac o CONJUNCTS))) >>
-  suspend "tail"
-QED
-
-Resume tuple_store_targets_path[head_operand]:
-  qpat_x_assum `ih :- _` kall_tac >>
-  qpat_assum `!i. i < LENGTH (_::gs) ==> ?w. _`
-    (qspec_then `0` mp_tac) >> simp_tac (srw_ss()) [] >>
-  disch_then (qx_choose_then `w` (map_every assume_tac o CONJUNCTS)) >>
-  Cases_on `is_word_type ty` >- fs[] >>
-  `m` by fs[] >>
-  `type_memory_size tv + 64 < dimword(:256)` by
-    (qpat_x_assum `!i. i < LENGTH (ty::tys1) /\ _ ==> _`
-      (qspec_then `0` mp_tac) >> simp[]) >>
-  qpat_x_assum `m ==> _` mp_tac >> simp[] >> strip_tac >>
-  gns[val_in_memory_def] >> qexists `w` >> simp[]
-QED
-
-Resume tuple_store_targets_path[tail]:
-  asm_x "ih" drule >> disch_then drule >>
-  disch_then (qspecl_then [`m`, `tvs1`, `addr + type_memory_size tv`, `b`,
-    `sz`, `ctx`, `func`, `s1`] mp_tac) >>
-  (impl_tac >- suspend "tail_premises") >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  suspend "compose"
-QED
-
-Resume tuple_store_targets_path[tail_premises]:
-  rpt conj_tac
-  >- fs[] >- fs[] >- fs[] >- fs[] >- fs[] >- fs[]
-  >- suspend "tail_fresh"
-  >- (irule local_ptrs_reserved_next_var >> qexists `st` >> simp[])
-  >- fs[value_has_type_def]
-  >- fs[val_wf_def]
-  >- suspend "tail_operands"
-  >- suspend "tail_layout"
-  >- suspend "tail_sizes"
-  >- suspend "tail_memory"
-  >> asm_rewrite_tac []
-QED
-
-Resume tuple_store_targets_path[tail_fresh]:
-  fs[EVERY_MEM] >> rpt strip_tac >>
-  irule not_fresh_at_mono >> qexists `st` >> simp[] >> metis_tac[]
-QED
-
-Resume tuple_store_targets_path[tail_operands]:
-  gen_tac >> strip_tac >>
-  `LENGTH ops1 = LENGTH gs` by fs[] >>
-  drule (Q.SPEC `T` tuple_store_operands_tail) >>
-  disch_then (qspecl_then [`st`, `s`, `s1`] mp_tac) >>
-  disch_then irule >>
-  goal_assum (drule_at Any) >> asm_rewrite_tac [] >>
-  qexistsl [`BaseTarget bt`, `op`, `ty`, `v`] >> asm_rewrite_tac []
-QED
-
-Resume tuple_store_targets_path[tail_layout]:
-  drule tuple_target_layout_transport >> disch_tac >>
-  gen_tac >> strip_tac >>
-  qpat_x_assum `!i. i < LENGTH (BaseTarget bt::gs) ==> tuple_target_aligned _ _ _ _ _ /\ _`
-    (qspec_then `SUC i` mp_tac) >> simp[] >>
-  `i < LENGTH vs1` by fs[] >> simp[]
-QED
-
-Resume tuple_store_targets_path[tail_sizes]:
-  rpt strip_tac >>
-  `i < LENGTH vs1` by fs[] >>
-  qpat_x_assum `!i. i < LENGTH (ty::tys1) /\ _ ==> _`
-    (qspec_then `SUC i` mp_tac) >> simp[]
-QED
-
-Resume tuple_store_targets_path[tail_memory]:
-  strip_tac >>
-  qpat_x_assum `m ==> _` mp_tac >>
-  (impl_tac >- asm_rewrite_tac []) >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `is_word_type ty ==> type_memory_size tv = 32` by
-    (qpat_assum `!i. _ ==> evaluate_type _ _ = _ /\ _`
-      (qspec_then `0` mp_tac) >> simp_tac (srw_ss()) [] >>
-     strip_tac >> asm_rewrite_tac []) >>
-  drule_all tuple_target_store_memory_tail >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  asm_rewrite_tac [] >>
-  gen_tac >> strip_tac >>
-  `i < LENGTH vs1` by fs[] >>
-  qpat_x_assum `!i. i < LENGTH (ty::tys1) ==> _`
-    (qspec_then `SUC i` mp_tac) >> simp[]
-QED
-
-Resume tuple_store_targets_path[compose]:
-  `~block_is_terminated sm` by
-    (drule_all tuple_store_singleton_open >> simp[]) >>
-  conj_tac >- simp[] >>
-  qpat_x_assum `?t. (!st0 H. _) /\ _`
-    (qx_choose_then `sf` (map_every assume_tac o CONJUNCTS)) >>
-  qexists `sf` >> conj_tac >- suspend "compose_rel" >>
-  asm_rewrite_tac [] >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `not_fresh_at sm x` by
-        (irule not_fresh_at_mono >> qexists `st` >> simp[]) >>
-      metis_tac[]) >>
-  conj_tac >- metis_tac[] >>
-  reverse conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >>
-      first_x_assum irule >> first_assum ACCEPT_TAC) >>
+  drule_all tuple_field_add_frame_path >>
+  disch_then (qspec_then `ctx`
+    (qx_choose_then `mid` (map_every assume_tac o CONJUNCTS))) >>
+  `eval_operand op mid = SOME w` by
+    (Cases_on `op` >> gvs[eval_operand_def]) >>
+  `gas_marked_path F ctx func mid 0
+     (Abort ExHalt_abort (halt_state (set_returndata [] mid)))` by
+    (irule storage_emit_static_path >> simp[] >>
+     qexistsl [`n2w k + n2w (struct_field_offset_slots
+       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld)`,
+       `dst`, `op`, `sp`, `sf`, `tr`, `w`] >>
+     Cases_on `tr` >> gvs[compile_store_at_loc_def]) >>
+  qexists `mid` >>
   irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  first_assum (irule_at Any) >> simp[]
+  qexists `mid` >> simp[]
 QED
 
-Resume tuple_store_targets_path[compose_rel]:
-  rpt gen_tac >> strip_tac >>
-  `valid_horizon cx st0 H es1.storage_trace` by
-    (irule (INST_TYPE [alpha |-> ``:unit``] vyperStorageFootprintTheory.valid_horizon_frame) >>
-     qexistsl [`assign_tuple_target_list cx gs vs1`, `INL ()`, `es'`] >>
-     fs[evaluate_storage_trace_frame]) >>
-  `stmt_state_rel H ctx func cenv cx es1 s1 /\
-   storage_well_formed_on cx es1 (FST H)` by
-    (qpat_x_assum `!st0 H. valid_horizon _ _ H es1.storage_trace /\ _ ==> _` irule >>
-     asm_rewrite_tac[] >> qexists_tac `st0` >> asm_rewrite_tac[]) >>
-  qpat_x_assum `!st0 H. valid_horizon _ _ H es'.storage_trace /\ _ ==> _` irule >>
-  asm_rewrite_tac[] >> qexists_tac `st0` >> asm_rewrite_tac[]
+Finalise tuple_target_static_head_path
+
+(* Local source writes do not consult the transaction's static bit. *)
+Theorem tuple_local_source_success[local]:
+  !cx id v es entry.
+    lookup_scopes id es.scopes = SOME entry /\ entry.assignable ==>
+    ?es'. assign_tuple_targets cx (BaseTarget (NameTarget id)) v es = (INL (),es') /\
+      (!n. OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es'.scopes) =
+           OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es.scopes))
+Proof
+  rpt strip_tac >> drule lookup_scopes_find_containing_scope >> strip_tac >>
+  drule_all tuple_target_local_write_safe >> strip_tac >>
+  qexists `es with scopes := pre ++ (env |+ (id,entry with <|value := v; popped := []|>)) :: rest` >>
+  conj_tac
+  >- (simp[Once evaluate_def, bind_def] >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+           return_def, get_place_def, get_scopes_def] >>
+      simp[Once evaluate_def, bind_def, get_scopes_def, lift_option_type_def,
+           return_def, get_place_def, ignore_bind_def, type_check_def, assert_def]) >>
+  simp[] >> irule tuple_target_local_preserves_layout >> simp[]
 QED
 
-Finalise tuple_store_targets_path
+Theorem tuple_local_source_list_success[local]:
+  !gs cx es tvs vs.
+    EVERY (\g. ?id. g = BaseTarget (NameTarget id)) gs /\
+    LIST_REL (tuple_source_target cx es.scopes) gs tvs /\ LENGTH gs = LENGTH vs ==>
+    ?es'. assign_tuple_target_list cx gs vs es = (INL (),es') /\
+      (!n. OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es'.scopes) =
+           OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es.scopes))
+Proof
+  Induct >- simp[Once evaluate_def, return_def] >>
+  rpt gen_tac >> Cases_on `tvs` >- simp[] >> Cases_on `vs` >- simp[] >>
+  simp_tac (srw_ss()) [] >> strip_tac >> gvs[] >>
+  qpat_x_assum `tuple_source_target _ _ _ _` mp_tac >>
+  simp[tuple_source_target_def] >> strip_tac >>
+  drule_all tuple_local_source_success >>
+  disch_then (qspecl_then [`cx`, `h''`] strip_assume_tac) >>
+  `LIST_REL (tuple_source_target cx es'.scopes) gs t` by
+    (irule LIST_REL_mono >> first_assum (irule_at Any) >>
+     metis_tac[tuple_source_target_layout]) >>
+  first_x_assum (qspecl_then [`cx`, `es'`, `t`, `t'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexists `es''` >> simp[assign_tuple_target_list_cons, bind_def, ignore_bind_def] >>
+  metis_tac[]
+QED
+
+Theorem tuple_store_prefix_split[local]:
+  !pre tys gs ops cenv st sf.
+    EVERY (\g. ?bt. g = BaseTarget bt) pre /\
+    LENGTH tys = LENGTH (pre ++ gs) /\ LENGTH ops = LENGTH tys /\
+    compile_tuple_store_all cenv tys (pre ++ gs) ops st = ((),sf) ==>
+    ?sm. compile_tuple_store_all cenv (TAKE (LENGTH pre) tys) pre
+           (TAKE (LENGTH pre) ops) st = ((),sm) /\
+         compile_tuple_store_all cenv (DROP (LENGTH pre) tys) gs
+           (DROP (LENGTH pre) ops) sm = ((),sf)
+Proof
+  Induct
+  >- simp[compile_tuple_store_all_def, comp_return_def] >>
+  rpt gen_tac >> Cases_on `tys` >- simp[] >> Cases_on `ops` >- simp[] >>
+  simp_tac (srw_ss()) [] >> strip_tac >> gvs[] >>
+  drule tuple_store_base_cons >> strip_tac >>
+  first_x_assum (drule_at (Pat `compile_tuple_store_all _ _ _ _ _ = _`)) >>
+  simp[] >> strip_tac >>
+  qexists `sm'` >> conj_tac
+  >- (simp[compile_tuple_store_all_def, comp_ignore_bind_def,
+           comp_bind_def, comp_return_def, LET_THM] >>
+      pairarg_tac >> simp[] >> pairarg_tac >>
+      fs[compile_tuple_store_all_def, comp_ignore_bind_def,
+         comp_bind_def, comp_return_def, LET_THM]) >> simp[]
+QED
+
+Theorem tuple_source_prefix_then[local]:
+  !pre vals cx es em rest ws res ef.
+    assign_tuple_target_list cx pre vals es = (INL (),em) /\
+    assign_tuple_target_list cx rest ws em = (res,ef) ==>
+    assign_tuple_target_list cx (pre ++ rest) (vals ++ ws) es = (res,ef)
+Proof
+  Induct
+  >- (rpt gen_tac >> Cases_on `vals` >>
+      simp[Once evaluate_def, return_def, raise_def]) >>
+  rpt gen_tac >> Cases_on `vals`
+  >- simp[Once evaluate_def, raise_def] >>
+  simp[assign_tuple_target_list_cons] >> rpt strip_tac >>
+  Cases_on `r` >> gvs[] >> Cases_on `y` >>
+  qexistsl [`INL ()`, `es1`] >> simp[] >> first_x_assum irule >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem tuple_prefix_encoding[local]:
+  !n vs tvs addr mem.
+    values_have_types tvs vs /\ tuple_val_wf vs tvs /\
+    tuple_in_memory vs tvs addr mem ==>
+    values_have_types (TAKE n tvs) (TAKE n vs) /\
+    tuple_val_wf (TAKE n vs) (TAKE n tvs) /\
+    tuple_in_memory (TAKE n vs) (TAKE n tvs) addr mem
+Proof
+  Induct >> rpt gen_tac >> Cases_on `vs` >> Cases_on `tvs` >>
+  simp[value_has_type_def, val_wf_def, val_in_memory_def] >> metis_tac[]
+QED
+
+Theorem tuple_local_source_list_gas[local]:
+  !gs cx es tvs vs tail.
+    EVERY (\g. ?id. g = BaseTarget (NameTarget id)) gs /\
+    LIST_REL (tuple_source_target cx es.scopes) gs tvs /\
+    LIST_REL value_has_type tvs vs ==>
+    assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
+      (FST (assign_tuple_target_list cx gs vs es),
+       SND (assign_tuple_target_list cx gs vs es) with gas_obs := tail)
+Proof
+  Induct >- simp[evaluate_def, return_def] >>
+  rpt gen_tac >> Cases_on `tvs` >- simp[] >> Cases_on `vs` >- simp[] >>
+  simp_tac (srw_ss()) [] >> strip_tac >>
+  `?es'. assign_tuple_targets cx h h'' es = (INL (),es') /\
+      (!n. OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es'.scopes) =
+           OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es.scopes))` by
+    (gvs[] >> fs[tuple_source_target_def] >>
+     irule tuple_local_source_success >> metis_tac[]) >>
+  `LIST_REL (tuple_source_target cx es'.scopes) gs t` by
+    (irule LIST_REL_mono >> first_assum (irule_at Any) >>
+     metis_tac[tuple_source_target_layout]) >>
+  drule_all tuple_source_target_gas_obs >>
+  disch_then (qspec_then `tail` assume_tac) >>
+  first_x_assum drule_all >> disch_then (qspec_then `tail` assume_tac) >>
+  gvs[] >> ntac 3 (simp[Once evaluate_def, ignore_bind_def, bind_def])
+QED
+
+(* Split at the first static write: the shared success path executes only
+   the local prefix, and the nonlocal head supplies the exceptional step. *)
+Theorem tuple_static_targets_path[local]:
+  !gs tys tvs vs ops addr b sz ctx func cenv cx es s st sf.
+    compile_tuple_store_all cenv tys gs ops st = ((),sf) /\
+    LENGTH gs = LENGTH tys /\ LENGTH tys = LENGTH tvs /\
+    LENGTH tvs = LENGTH vs /\ LENGTH ops = LENGTH vs /\
+    EVERY (\op. ?x. op = Var x) ops /\
+    EVERY (\op. !x. op = Var x ==> not_fresh_at st x) ops /\
+    local_ptrs_reserved cenv st /\ values_have_types tvs vs /\ tuple_val_wf vs tvs /\
+    (!i. i < LENGTH gs ==>
+       ?w. eval_operand (EL i ops) s = SOME w /\
+         (if is_word_type (EL i tys) then
+            w = typed_val_to_w256 (EL i tvs) (EL i vs)
+          else w2n w = addr + SUM (MAP type_memory_size (TAKE i tvs)))) /\
+    (!i. i < LENGTH gs ==>
+       tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs) /\
+       tuple_target_layout es.scopes (EL i gs) (EL i tys) (EL i tvs) (EL i vs)) /\
+    (!i. i < LENGTH tys /\ ~is_word_type (EL i tys) ==>
+       type_memory_size (EL i tvs) + 64 < dimword(:256)) /\
+    (!i. i < LENGTH tys ==>
+       evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs) /\
+       (is_word_type (EL i tys) ==> type_memory_size (EL i tvs) = 32)) /\
+    b <= addr /\ addr + type_memory_size_list tvs <= b + sz /\
+    ((?aid. FLOOKUP s.vs_allocas aid = SOME (b,sz)) \/
+     (?name. local_region cenv es.scopes s name b sz)) /\
+    tuple_in_memory vs tvs addr s.vs_memory /\
+    fn_has_code st sf func /\ ~s.vs_halted /\
+    s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    local_ptrs_rel func cenv es.scopes s /\ alloca_inv s /\
+    s.vs_call_ctx.cc_static /\ cx.txn.is_static /\
+    ~EVERY (\g. ?id. g = BaseTarget (NameTarget id)) gs ==>
+    ?es' t. assign_tuple_target_list cx gs vs es =
+      (INR (Error (RuntimeError "write in static context")),es') /\
+      (!tail. assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
+        (INR (Error (RuntimeError "write in static context")),es' with gas_obs := tail)) /\
+      gas_marked_path F ctx func s 0
+        (Abort ExHalt_abort (halt_state (set_returndata [] t)))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `~EVERY _ gs` (strip_assume_tac o REWRITE_RULE [NOT_EVERY_EXISTS_FIRST]) >>
+  rename1 `i < LENGTH gs` >>
+  `EVERY (\g. ?id. g = BaseTarget (NameTarget id)) (TAKE i gs)` by
+    (simp[EVERY_EL, EL_TAKE] >> rpt strip_tac >> metis_tac[]) >>
+  `LIST_REL (tuple_source_target cx es.scopes) (TAKE i gs) (TAKE i tvs)` by
+    (simp[LIST_REL_EL_EQN, EL_TAKE] >> rpt strip_tac >>
+     irule tuple_target_aligned_source >>
+     qexistsl [`cenv`, `EL n tys`, `EL n vs`] >> fs[]) >>
+  drule tuple_local_source_list_success >>
+  disch_then (qspecl_then [`cx`, `es`, `TAKE i tvs`, `TAKE i vs`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `EVERY (\g. ?bt. g = BaseTarget bt) (TAKE i gs)` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  drule_at (Pat `compile_tuple_store_all _ _ _ _ _ = _`)
+    (tuple_store_prefix_split |> Q.SPEC `TAKE i gs` |>
+     Q.SPEC `tys` |> Q.SPEC `DROP i gs` |> SRULE []) >>
+  disch_then (qspec_then `i` mp_tac) >> simp[] >> strip_tac >>
+  qpat_assum `compile_tuple_store_all _ (TAKE i tys) _ _ _ = _`
+    (mp_then Any mp_tac tuple_success_targets_path) >> disch_then drule >>
+  disch_then (qspecl_then [`T`, `TAKE i tvs`, `addr`, `b`, `sz`, `ctx`, `func`, `s`] mp_tac) >>
+  (impl_tac >- suspend "prefix_premises") >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  suspend "fault"
+QED
+
+Resume tuple_static_targets_path[prefix_premises]:
+  drule_all tuple_prefix_encoding >> disch_then (qspec_then `i` strip_assume_tac) >>
+  `cs_extends st sm /\ cs_extends sm sf` by
+    metis_tac[tuple_target_stores_growth] >>
+  `fn_has_code st sm func` by metis_tac[fn_has_code_split] >>
+  simp[EL_TAKE, EVERY_TAKE, TAKE_TAKE] >>
+  conj_tac >- (rpt strip_tac >> gvs[EL_TAKE]) >>
+  `SUM (MAP type_memory_size tvs) =
+     SUM (MAP type_memory_size (TAKE i tvs)) +
+     SUM (MAP type_memory_size (DROP i tvs))` by
+    (pure_rewrite_tac[GSYM listTheory.SUM_APPEND, GSYM listTheory.MAP_APPEND, TAKE_DROP] >> simp[]) >>
+  gvs[valueEncodingProofsTheory.type_memory_size_list_sum]
+QED
+
+Resume tuple_static_targets_path[fault]:
+  qpat_x_assum `?t. (!st0 H. _) /\ _`
+    (qx_choose_then `mid` (map_every assume_tac o CONJUNCTS)) >>
+  `tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs)` by metis_tac[] >>
+  `!id. EL i gs <> BaseTarget (NameTarget id)` by gvs[] >>
+  drule_all tuple_target_static_assignment >>
+  disch_then (qspecl_then [`EL i vs`, `es'`] strip_assume_tac) >>
+  suspend "source_fault"
+QED
+
+Resume tuple_static_targets_path[source_fault]:
+  `assign_tuple_target_list cx (DROP i gs) (DROP i vs) es' =
+    (INR (Error (RuntimeError "write in static context")),es'')` by
+    (`DROP i gs = EL i gs :: DROP (SUC i) gs /\
+      DROP i vs = EL i vs :: DROP (SUC i) vs` by
+       (conj_tac >> irule (SRULE [GSYM arithmeticTheory.ADD1] DROP_EL_CONS) >> fs[]) >>
+     asm_rewrite_tac[assign_tuple_target_list_cons] >>
+     qexistsl [`INR (Error (RuntimeError "write in static context"))`, `es''`] >> simp[]) >>
+  drule_all tuple_source_prefix_then >>
+  simp[] >> strip_tac >>
+  `!tail. assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
+     (INR (Error (RuntimeError "write in static context")),es'' with gas_obs := tail)` by
+    suspend "gas_source" >>
+  simp[] >> suspend "target_fault"
+QED
+
+Resume tuple_static_targets_path[target_fault]:
+  `DROP i gs = EL i gs :: DROP (SUC i) gs /\
+   DROP i tys = EL i tys :: DROP (SUC i) tys /\
+   DROP i ops = EL i ops :: DROP (SUC i) ops` by
+    (rpt conj_tac >> irule (SRULE [GSYM arithmeticTheory.ADD1] DROP_EL_CONS) >> fs[]) >>
+  `?bt. EL i gs = BaseTarget bt` by
+    (gvs[tuple_target_aligned_def] >> metis_tac[]) >>
+  qpat_x_assum `compile_tuple_store_all _ (DROP i tys) _ _ _ = _` mp_tac >>
+  asm_rewrite_tac[] >> disch_then (strip_assume_tac o MATCH_MP tuple_store_base_cons) >>
+  suspend "head_premises"
+QED
+
+Resume tuple_static_targets_path[head_premises]:
+  `cs_extends st sm /\ cs_extends sm sm' /\ cs_extends sm' sf` by
+    metis_tac[tuple_target_stores_growth] >>
+  `cs_extends sm sf` by
+    (irule cs_extends_trans >> qexists `sm'` >> simp[]) >>
+  `fn_has_code sm sf func` by
+    (drule_all fn_has_code_split >> simp[]) >>
+  `fn_has_code sm sm' func` by
+    (qpat_x_assum `fn_has_code st sf func` kall_tac >>
+     drule_all fn_has_code_split >> simp[]) >>
+  qpat_assum `compile_tuple_store_all _ (TAKE i tys) _ _ _ = _`
+    (strip_assume_tac o MATCH_MP tuple_target_stores_growth) >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> qexists `st` >> simp[]) >>
+  `!x. EL i ops = Var x ==> not_fresh_at sm x` by
+    (fs[EVERY_EL] >> metis_tac[not_fresh_at_mono]) >>
+  `?w. eval_operand (EL i ops) mid = SOME w` by
+    (qpat_x_assum `!i. i < LENGTH gs ==> ?w. _` drule >> strip_tac >>
+     qexists `w` >>
+     `?x. EL i ops = Var x` by (fs[EVERY_EL] >> metis_tac[]) >>
+     `not_fresh_at st x` by
+       (qpat_x_assum `EVERY (\op. !x. _ ==> _) ops` mp_tac >>
+        simp[EVERY_EL] >> disch_then (qspec_then `i` mp_tac) >> simp[]) >>
+     gvs[eval_operand_def]) >>
+  `mid.vs_call_ctx.cc_static` by simp[] >>
+  qpat_x_assum `EL i gs = BaseTarget bt` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  drule_all tuple_target_static_head_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists `t` >>
+  irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+  qexists `mid` >> simp[]
+QED
+
+Resume tuple_static_targets_path[gas_source]:
+  gen_tac >>
+  `LIST_REL value_has_type (TAKE i tvs) (TAKE i vs)` by
+    (irule LIST_REL_TAKE >> simp[GSYM vyperTypeDefaultsTheory.values_have_types_LIST_REL]) >>
+  drule_all tuple_local_source_list_gas >>
+  disch_then (qspec_then `tail` assume_tac) >>
+  `tuple_source_target cx es'.scopes (EL i gs) (EL i tvs)` by
+    (`tuple_source_target cx es.scopes (EL i gs) (EL i tvs)` by
+       (irule tuple_target_aligned_source >>
+        qexistsl [`cenv`, `EL i tys`, `EL i vs`] >> simp[]) >>
+     metis_tac[tuple_source_target_layout]) >>
+  `value_has_type (EL i tvs) (EL i vs)` by
+    (fs[vyperTypeDefaultsTheory.values_have_types_LIST_REL, LIST_REL_EL_EQN]) >>
+  drule_all tuple_source_target_gas_obs >>
+  disch_then (qspec_then `tail` assume_tac) >>
+  `assign_tuple_target_list cx (DROP i gs) (DROP i vs) (es' with gas_obs := tail) =
+     (INR (Error (RuntimeError "write in static context")),es'' with gas_obs := tail)` by
+    (`DROP i gs = EL i gs :: DROP (SUC i) gs /\
+      DROP i vs = EL i vs :: DROP (SUC i) vs` by
+       (conj_tac >> irule (SRULE [GSYM arithmeticTheory.ADD1] DROP_EL_CONS) >> fs[]) >>
+     asm_rewrite_tac[assign_tuple_target_list_cons] >>
+     qexistsl [`INR (Error (RuntimeError "write in static context"))`, `es'' with gas_obs := tail`] >> simp[]) >>
+  `assign_tuple_target_list cx (TAKE i gs) (TAKE i vs) (es with gas_obs := tail) =
+     (INL (),es' with gas_obs := tail)` by simp[] >>
+  drule_all tuple_source_prefix_then >> simp[]
+QED
+
+Finalise tuple_static_targets_path
+
+(* Common success-or-static-fault interface; endpoints precede horizons. *)
+Theorem tuple_store_targets_outcome:
+  !gs tys tvs vs ops addr b sz ctx func cenv cx es s st sf.
+    compile_tuple_store_all cenv tys gs ops st = ((),sf) /\
+    LENGTH gs = LENGTH tys /\ LENGTH tys = LENGTH tvs /\
+    LENGTH tvs = LENGTH vs /\ LENGTH ops = LENGTH vs /\
+    EVERY (\op. ?x. op = Var x) ops /\
+    EVERY (\op. !x. op = Var x ==> not_fresh_at st x) ops /\
+    local_ptrs_reserved cenv st /\ values_have_types tvs vs /\ tuple_val_wf vs tvs /\
+    (!i. i < LENGTH gs ==>
+       ?w. eval_operand (EL i ops) s = SOME w /\
+         (if is_word_type (EL i tys) then
+            w = typed_val_to_w256 (EL i tvs) (EL i vs)
+          else w2n w = addr + SUM (MAP type_memory_size (TAKE i tvs)))) /\
+    (!i. i < LENGTH gs ==>
+       tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs) /\
+       tuple_target_layout es.scopes (EL i gs) (EL i tys) (EL i tvs) (EL i vs)) /\
+    (!i. i < LENGTH tys /\ ~is_word_type (EL i tys) ==>
+       type_memory_size (EL i tvs) + 64 < dimword(:256)) /\
+    (!i. i < LENGTH tys ==>
+       evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs) /\
+       (is_word_type (EL i tys) ==> type_memory_size (EL i tvs) = 32)) /\
+    b <= addr /\ addr + type_memory_size_list tvs <= b + sz /\
+    ((?aid. FLOOKUP s.vs_allocas aid = SOME (b,sz)) \/
+     (?name. local_region cenv es.scopes s name b sz)) /\
+    tuple_in_memory vs tvs addr s.vs_memory /\
+    fn_has_code st sf func /\ ~s.vs_halted /\
+    s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    local_ptrs_rel func cenv es.scopes s /\ alloca_inv s /\
+    s.vs_call_ctx.cc_static = cx.txn.is_static ==>
+    ?res es' r.
+      (!tail. assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
+         (res,es' with gas_obs := tail)) /\
+      assign_tuple_target_list cx gs vs es = (res,es') /\
+      gas_marked_path F ctx func s 0 r /\
+      ((?t. res = INL () /\ r = OK t /\
+         (!st0 H. valid_horizon cx st0 H es'.storage_trace /\
+                  stmt_state_rel H ctx func cenv cx es s /\
+                  storage_well_formed_on cx es (FST H) ==>
+                  stmt_state_rel H ctx func cenv cx es' t /\
+                  storage_well_formed_on cx es' (FST H)) /\
+         ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+         (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
+         (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+            alloca_frame c0 e0 sa0 s0 cenv es' t)) \/
+       (?t. res = INR (Error (RuntimeError "write in static context")) /\
+            r = Abort ExHalt_abort (halt_state (set_returndata [] t))))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `cx.txn.is_static /\ ~EVERY (\g. ?id. g = BaseTarget (NameTarget id)) gs`
+  >- (pop_assum strip_assume_tac >>
+      `s.vs_call_ctx.cc_static` by metis_tac[] >>
+      drule_all tuple_static_targets_path >>
+      disch_then (qspec_then `ctx` strip_assume_tac) >>
+      qexistsl [`INR (Error (RuntimeError "write in static context"))`, `es'`,
+        `Abort ExHalt_abort (halt_state (set_returndata [] t))`] >> simp[] >>
+      qexists `t` >> simp[]) >>
+  suspend "success"
+QED
+
+Resume tuple_store_targets_outcome[success]:
+  `LIST_REL (tuple_source_target cx es.scopes) gs tvs` by
+    (simp[LIST_REL_EL_EQN] >> rpt strip_tac >>
+     irule tuple_target_aligned_source >>
+     qexistsl [`cenv`, `EL n tys`, `EL n vs`] >> simp[]) >>
+  `LIST_REL value_has_type tvs vs` by
+    simp[GSYM vyperTypeDefaultsTheory.values_have_types_LIST_REL] >>
+  `?es'. assign_tuple_target_list cx gs vs es = (INL (),es')` by
+    (Cases_on `cx.txn.is_static`
+     >- (`EVERY (\g. ?id. g = BaseTarget (NameTarget id)) gs` by metis_tac[] >>
+         drule tuple_local_source_list_success >>
+         disch_then (qspecl_then [`cx`, `es`, `tvs`, `vs`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
+     drule_all assign_tuple_targets_safe >>
+     simp[Once evaluate_def]) >>
+  `!tail. assign_tuple_target_list cx gs vs (es with gas_obs := tail) =
+       (INL (),es' with gas_obs := tail)` by
+    (gen_tac >> Cases_on `cx.txn.is_static`
+     >- (`EVERY (\g. ?id. g = BaseTarget (NameTarget id)) gs` by metis_tac[] >>
+         drule_all tuple_local_source_list_gas >> simp[]) >>
+     drule_all assign_tuple_target_list_gas_obs >> simp[]) >>
+  SUBGOAL_THEN ``EVERY (\g. ?id. g = BaseTarget (NameTarget id)) gs \/
+     (~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static)`` assume_tac
+  >- metis_tac[] >>
+  drule_all (SIMP_RULE (srw_ss()) []
+    (Q.SPECL [`gs`, `T`] tuple_success_targets_path)) >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexistsl [`INL ()`, `es'`, `OK t`] >> simp[] >> first_assum ACCEPT_TAC
+QED
+
+Finalise tuple_store_targets_outcome
