@@ -1,6 +1,8 @@
 Theory vyperConstEvalWitness
 Ancestors
-  jsonToVyper jsonToVyperExpr vyperConstEval vyperConstEvalProps vyperAST vyperInterpreter
+  jsonToVyper jsonToVyperExpr vyperConstEval vyperConstEvalProps vyperPinFold
+  vyperPinFoldProps
+  vyperAST vyperInterpreter
   vyperState vyperValue
 Libs
   jsonASTLib vyperConstEvalLib vyperCheckContractFrontendLib
@@ -19,6 +21,7 @@ val () = holbuild_extra_deps [
   "../tests/fixtures/check_contract/constant_undecodable_bound.json",
   "../tests/fixtures/check_contract/constant_nested/main.json",
   "../tests/fixtures/check_contract/constant_widened.json",
+  "../tests/fixtures/check_contract/constant_widened_subscript.json",
   "../tests/fixtures/check_contract/constant_undecodable_import/main.json",
   "../tests/fixtures/check_contract/constant_minmax_bound.json",
   "../tests/fixtures/check_contract/constant_interface_stub.json"];
@@ -59,6 +62,170 @@ in
 end;
 
 val uint256 = ``BaseT (UintT 256)``;
+
+Theorem exponent_operand_original_residual:
+  exponent_operand JBop_Pow
+    (Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
+      [Builtin (BaseT (UintT 256)) (Bop Add)
+        [Literal (BaseT (UintT 256)) (IntL 1);
+         Literal (BaseT (UintT 256)) (IntL 2)];
+       Name (BaseT (UintT 256)) "x"]) =
+    Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
+      [Builtin (BaseT (UintT 256)) (Bop Add)
+        [Literal (BaseT (UintT 256)) (IntL 1);
+         Literal (BaseT (UintT 256)) (IntL 2)];
+       Name (BaseT (UintT 256)) "x"] /\
+  exponent_operand JBop_Pow
+    (Builtin (BaseT (UintT 256)) (Bop Add)
+      [Literal (BaseT (UintT 256)) (IntL 1);
+       Literal (BaseT (UintT 256)) (IntL 2)]) =
+    Literal (BaseT (UintT 256)) (IntL 3)
+Proof
+  EVAL_TAC
+QED
+
+val residual = ``Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
+  [Builtin (BaseT (UintT 256)) (Bop Add)
+     [Literal (BaseT (UintT 256)) (IntL 1);
+      Literal (BaseT (UintT 256)) (IntL 2)];
+   Name (BaseT (UintT 256)) "x"]``;
+val residual_json = ``JE_Call
+  (JE_Name "unsafe_add" NONE JMissingSource (JT_Integer 256 F))
+  [JE_BinOp (JE_Int 1 (JT_Integer 256 F)) JBop_Add
+     (JE_Int 2 (JT_Integer 256 F)) (JT_Integer 256 F);
+   JE_Name "x" NONE JMissingSource (JT_Integer 256 F)]
+  [] (JT_Integer 256 F) JMissingSource``;
+val residual_ctx_raw = ``module_expr_ctx [] (0:int) NONE [] [] [] []``;
+val residual_ctx = Term.inst
+  (match_type (type_of residual_ctx_raw) (fst (dom_rng (type_of ``translate_expr``))))
+  residual_ctx_raw;
+
+val projection_residual = EVAL ``
+  fold_pin_constant ^residual = ^residual /\
+  make_builtin_call (BaseT (BytesT (Dynamic 8))) "slice"
+    [Literal (BaseT (BytesT (Dynamic 8))) (BytesL []);
+     Literal (BaseT (UintT 256)) (IntL 0); ^residual] [] (JT_Bytes 8) =
+    Builtin (BaseT (BytesT (Dynamic 8))) (Slice 8)
+      [Literal (BaseT (BytesT (Dynamic 8))) (BytesL []);
+       Literal (BaseT (UintT 256)) (IntL 0); ^residual] /\
+  make_builtin_call (BaseT (BytesT (Fixed 4))) "method_id"
+    [^residual] [] (JT_BytesM 4) =
+    Builtin (BaseT (BytesT (Fixed 4))) MethodId [^residual] /\
+  translate_expr ^residual_ctx
+    (JE_Subscript
+      (JE_Tuple [JE_Int 1 (JT_Integer 256 F)]
+        (JT_Tuple [JT_Integer 256 F])) ^residual_json (JT_Integer 256 F)) =
+    Subscript (BaseT (UintT 256))
+      (Builtin (TupleT [BaseT (UintT 256)]) (MakeArray NONE (Fixed 1))
+        [Literal (BaseT (UintT 256)) (IntL 1)]) ^residual /\
+  translate_iter ^residual_ctx (BaseT (UintT 256))
+    (JIter_Range [^residual_json; ^residual_json] NONE) =
+    Range ^residual ^residual``;
+val () = if aconv (rhs (concl projection_residual)) ``T`` then ()
+         else raise Fail "runtime consumer changed a nonliteral residual";
+Theorem runtime_consumers_original_residual = EQT_ELIM projection_residual;
+
+(* The pin widens each literal's annotation to the list element type;
+   decoding must retain that bound rather than derive it from the payload. *)
+val widened_subscript = translate "constant_widened_subscript.json";
+val () = contains "widened list literals"
+  ``Builtin (ArrayT (BaseT (BytesT (Dynamic 2))) (Fixed 2))
+      (MakeArray (SOME (BaseT (BytesT (Dynamic 2)))) (Fixed 2))
+      [Literal (BaseT (BytesT (Dynamic 2))) (BytesL [97w]);
+       Literal (BaseT (BytesT (Dynamic 2))) (BytesL [97w; 98w])]``
+  widened_subscript;
+Theorem constant_widened_subscript_translation = widened_subscript;
+
+(* Runtime-safe evaluation has different values and coverage from the pin's
+   AST folder. These witnesses keep that distinction explicit. *)
+Theorem bounded_shift_constant:
+  eval_constant
+    (Builtin (BaseT (UintT 256)) (Bop Add)
+      [Builtin (BaseT (UintT 256)) (Bop ShR)
+        [Builtin (BaseT (UintT 256)) (Bop ShL)
+          [Literal (BaseT (UintT 256)) (IntL 1);
+           Literal (BaseT (UintT 256)) (IntL 256)];
+         Literal (BaseT (UintT 256)) (IntL 255)];
+       Literal (BaseT (UintT 256)) (IntL 1)]) = SOME (IntV 1)
+Proof
+  EVAL_TAC
+QED
+
+Theorem unsafe_add_constant:
+  eval_constant
+    (Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
+      [Literal (BaseT (UintT 256))
+        (IntL 115792089237316195423570985008687907853269984665640564039457584007913129639935);
+       Literal (BaseT (UintT 256)) (IntL 0)]) =
+    SOME (IntV 115792089237316195423570985008687907853269984665640564039457584007913129639935)
+Proof
+  EVAL_TAC
+QED
+
+Theorem as_wei_constant_omitted:
+  eval_constant
+    (Builtin (BaseT (UintT 256)) (AsWeiValue Gwei)
+      [Literal (BaseT (UintT 256))
+        (IntL 115792089237316195423570985008687907853269984665640564039457584007913)]) = NONE
+Proof
+  EVAL_TAC
+QED
+
+Theorem addmod_constant_omitted:
+  eval_constant
+    (Builtin (BaseT (UintT 256)) AddMod
+      [Literal (BaseT (UintT 256)) (IntL 1);
+       Literal (BaseT (UintT 256)) (IntL 2);
+       Literal (BaseT (UintT 256)) (IntL 5)]) = NONE
+Proof
+  EVAL_TAC
+QED
+
+Theorem pin_fold_wei_and_addmod:
+  pin_fold_expr
+    (Builtin (BaseT (UintT 256)) (AsWeiValue Gwei)
+      [Literal (BaseT DecimalT) (DecimalL 30)]) =
+      Literal (BaseT (UintT 256)) (IntL 3) /\
+  pin_fold_expr
+    (Builtin (BaseT (UintT 256)) AddMod
+      [Literal (BaseT (UintT 256)) (IntL 1);
+       Literal (BaseT (UintT 256)) (IntL 2);
+       Literal (BaseT (UintT 256)) (IntL 5)]) =
+      Literal (BaseT (UintT 256)) (IntL 3)
+Proof
+  EVAL_TAC
+QED
+
+Theorem pin_fold_runtime_provenance:
+  ~is_int_literal (pin_fold_expr
+    (Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
+      [Literal (BaseT (UintT 256)) (IntL 1);
+       Literal (BaseT (UintT 256)) (IntL 0)])) /\
+  ~is_int_literal (pin_fold_expr
+    (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
+      [Literal (BaseT (UintT 256)) (IntL 1)])) /\
+  ~is_int_literal (pin_fold_expr
+    (Builtin (BaseT (UintT 256)) (Bop Exp)
+      [Literal (BaseT (UintT 256)) (IntL 1);
+       Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
+         [Literal (BaseT (UintT 256)) (IntL 1);
+          Literal (BaseT (UintT 256)) (IntL 0)]]))
+Proof
+  EVAL_TAC
+QED
+
+Theorem pin_fold_list_selection:
+  pin_fold_expr
+    (Subscript (BaseT (UintT 256))
+      (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2))
+        (MakeArray (SOME (BaseT (UintT 256))) (Fixed 2))
+        [Literal (BaseT (UintT 256)) (IntL 0);
+         Literal (BaseT (UintT 256)) (IntL 2)])
+      (Literal (BaseT (UintT 256)) (IntL 0))) =
+    Literal (BaseT (UintT 256)) (IntL 0)
+Proof
+  EVAL_TAC
+QED
 
 (* N = 1 + 2 sizes the array and is the exponent of x ** N. *)
 val bound = translate "constant_bound.json";
@@ -133,20 +300,16 @@ val () = if can (find_term (fn t =>
 Theorem constant_widened_translation = widened;
 Theorem constant_widened_contract_checked = checked "constant_widened.json";
 
-(* Positions whose value must be known at compile time but that the evaluator
-   leaves alone are rejected, not given a default: range(N) with
-   N = uint256_addmod(1, 2, 7), and is_static_call=True or False. *)
+(* Literal-result initializers supply constants without trusting folded_value.
+   BoolOp syntax folds before translation to runtime IfExp. *)
 val unevaluated_range = translate "constant_unevaluated_range.json";
-val () = if optionSyntax.is_none (rhs (concl unevaluated_range)) then ()
-  else raise Fail "unevaluated range bound accepted";
-Theorem constant_unevaluated_range_rejected = unevaluated_range;
-val unevaluated_flag = translate "constant_unevaluated_flag.json";
-val () = contains "rejected raw_call" ``rejected_expr``
-  (CONV_RULE (RAND_CONV (REWRITE_CONV [GSYM rejected_expr_def])) unevaluated_flag);
-val () = if (checked "constant_unevaluated_flag.json"; false)
-              handle Fail msg => msg = "check_contract returned NONE"
-  then () else raise Fail "unevaluated raw_call flag accepted";
-Theorem constant_unevaluated_flag_translation = unevaluated_flag;
+val () = if has_for_bound 3 (rhs (concl unevaluated_range)) then ()
+  else raise Fail "folded addmod range bound is not 3";
+Theorem constant_addmod_range_translation = unevaluated_range;
+Theorem constant_addmod_range_contract_checked =
+  checked "constant_unevaluated_range.json";
+Theorem constant_unevaluated_flag_contract_checked =
+  checked "constant_unevaluated_flag.json";
 
 (* An annotation that is present but does not decode (here the bound
    len(b"abc"), whose untyped bytes literal the decoder does not accept) fails

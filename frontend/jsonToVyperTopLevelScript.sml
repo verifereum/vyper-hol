@@ -59,7 +59,11 @@ Definition translate_var_mutability_def:
     else if is_transient then Transient
     else if is_constant then
       (case const_val of
-         SOME e => Constant (translate_expr ctx e)
+         SOME e =>
+           let original = translate_expr ctx e in
+           Constant (case pin_fold_expr original of
+                     Literal ty l => Literal ty l
+                   | _ => original)
        | NONE => Storage)
     else Storage
 End

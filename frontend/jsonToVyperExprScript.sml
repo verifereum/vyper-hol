@@ -1,6 +1,7 @@
 Theory jsonToVyperExpr
 Ancestors
   ASCIInumbers integer alist jsonAST vyperAST jsonToVyperType vyperConstEval
+  vyperPinFold
 Libs
   intLib
 
@@ -205,9 +206,16 @@ End
 
 (* Compile-time keyword values (flags, max_outsize, method_id) are evaluated
    from their translated source expressions. *)
+Definition pin_fold_value_def:
+  pin_fold_value e =
+    case pin_fold_expr e of
+    | Literal ty l => SOME (evaluate_literal l)
+    | _ => NONE
+End
+
 Definition kwarg_bool_def:
   kwarg_bool key (kwargs : (identifier # expr) list) default =
-    case OPTION_BIND (ALOOKUP kwargs key) eval_constant of
+    case OPTION_BIND (ALOOKUP kwargs key) pin_fold_value of
       SOME (BoolV b) => b
     | _ => default
 End
@@ -215,7 +223,7 @@ End
 
 Definition kwarg_num_def:
   kwarg_num key (kwargs : (identifier # expr) list) (default : num) =
-    case OPTION_BIND (ALOOKUP kwargs key) eval_constant of
+    case OPTION_BIND (ALOOKUP kwargs key) pin_fold_value of
       SOME (IntV n) => if n >= 0 then Num n else default
     | _ => default
 End
@@ -233,7 +241,7 @@ End
 
 Definition kwarg_method_id_def:
   kwarg_method_id key (kwargs : (identifier # expr) list) =
-    case OPTION_BIND (ALOOKUP kwargs key) eval_constant of
+    case OPTION_BIND (ALOOKUP kwargs key) pin_fold_value of
       SOME (BytesV bs) => if LENGTH bs = 4 then SOME bs else NONE
     | _ => NONE
 End
@@ -252,7 +260,7 @@ Definition kwargs_checked_def:
                              "is_static_call"; "revert_on_failure";
                              "raw_args"; "unwrap_tuple"; "ensure_tuple";
                              "method_id"; "skip_contract_check"] ⇒
-                      IS_SOME (eval_constant v)) kwargs
+                      IS_SOME (pin_fold_value v)) kwargs
     then e else rejected_expr
 End
 
@@ -313,8 +321,15 @@ Definition fold_constant_def:
     | NONE => e
 End
 
+Definition fold_pin_constant_def:
+  fold_pin_constant e =
+    case pin_fold_expr e of
+    | Literal ty l => Literal ty l
+    | _ => e
+End
+
 Definition exponent_operand_def:
-  exponent_operand op e = if op = JBop_Pow then fold_constant e else e
+  exponent_operand op e = if op = JBop_Pow then fold_pin_constant e else e
 End
 
 Definition make_builtin_call_def:
@@ -327,7 +342,7 @@ Definition make_builtin_call_def:
     else if name = "slice" then
       (* The length is a compile-time value when it can be: the checker
          bounds the result by a literal length. *)
-      (let slice_args = (case args of [src; start; len] => [src; start; fold_constant len]
+      (let slice_args = (case args of [src; start; len] => [src; start; fold_pin_constant len]
                                     | _ => args) in
        case ret_ty of JT_String n => Builtin ty (Slice n) slice_args
                     | JT_Bytes n => Builtin ty (Slice n) slice_args
@@ -436,7 +451,7 @@ Definition make_builtin_call_def:
     else if name = "extract32" then
       TypeBuiltin ty Extract32 ty args
     else if name = "method_id" then
-      fold_constant (Builtin ty MethodId args)
+      fold_pin_constant (Builtin ty MethodId args)
     (* Struct constructor, cast, or regular call *)
     else (case ret_ty of
           | JT_Struct _ sname =>
@@ -848,9 +863,22 @@ Definition translate_list_def:
 End
 
 
+Definition pin_bool_values_def:
+  pin_bool_values [] = SOME [] /\
+  pin_bool_values (Literal ty (BoolL b) :: es) =
+    OPTION_MAP (CONS b) (pin_bool_values es) /\
+  pin_bool_values _ = NONE
+End
+
 Definition translate_boolop_def:
-  (translate_boolop JBoolop_And es = boolop_and es) /\
-  (translate_boolop JBoolop_Or es = boolop_or es)
+  translate_boolop JBoolop_And es =
+    (case pin_bool_values (MAP pin_fold_expr es) of
+     | SOME bs => Literal (BaseT BoolT) (BoolL (EVERY I bs))
+     | NONE => boolop_and es) /\
+  translate_boolop JBoolop_Or es =
+    (case pin_bool_values (MAP pin_fold_expr es) of
+     | SOME bs => Literal (BaseT BoolT) (BoolL (EXISTS I bs))
+     | NONE => boolop_or es)
 End
 
 
@@ -943,7 +971,7 @@ End
 (* The length is a compile-time value, not a runtime operand. *)
 Definition calldata_slice_length_def:
   calldata_slice_length e =
-    case eval_constant e of
+    case pin_fold_value e of
     | SOME (IntV i) =>
         if 0 < i /\ i < &(2 ** 256) then SOME (Num i) else NONE
     | _ => NONE
@@ -1060,7 +1088,7 @@ Definition translate_expr_def:
     let arr' = translate_expr ctx arr in
     let idx' = translate_expr ctx idx in
     Subscript (translate_type (expr_type_ctx ctx) ret_ty) arr'
-      (case expr_type arr' of TupleT _ => fold_constant idx' | _ => idx')) /\
+      (case expr_type arr' of TupleT _ => fold_pin_constant idx' | _ => idx')) /\
 
   (* NamedExpr - only appears in initializes:/uses: annotations, not in executable code *)
   (translate_expr ctx (JE_NamedExpr target value) =
@@ -1232,14 +1260,14 @@ End
    arguments; array iteration takes it from the array type. *)
 Definition constant_count_def:
   constant_count e =
-    case eval_constant e of
+    case pin_fold_value e of
     | SOME (IntV i) => if 0 <= i then SOME (Num i) else NONE
     | _ => NONE
 End
 
 Definition range_count_def:
   range_count (s : expr) e =
-    case (eval_constant s, eval_constant e) of
+    case (pin_fold_value s, pin_fold_value e) of
     | (SOME (IntV i), SOME (IntV j)) => if i <= j then Num (j - i) else 0
     | _ => 0
 End
@@ -1261,7 +1289,7 @@ End
 (* Declaration validation rejects a range whose bound does not evaluate. *)
 Definition iter_bound_resolved_def:
   (iter_bound_resolved ctx (JIter_Range args b) =
-     EVERY (λe. IS_SOME (eval_constant (translate_expr ctx e)))
+     EVERY (λe. IS_SOME (pin_fold_value (translate_expr ctx e)))
        (case b of SOME b => [b] | NONE => args)) /\
   (iter_bound_resolved ctx (JIter_Array _ _) = T)
 End
@@ -1276,12 +1304,12 @@ Definition translate_iter_def:
   (translate_iter ctx var_ty (JIter_Range [e] bound) =
     Range (Literal var_ty (IntL (integer$int_of_num 0)))
           (case bound of
-             NONE => fold_constant (translate_expr ctx e)
+             NONE => fold_pin_constant (translate_expr ctx e)
            | SOME _ => translate_expr ctx e)) /\
   (translate_iter ctx var_ty (JIter_Range (s::e::_) bound) =
     case bound of
-      NONE => Range (fold_constant (translate_expr ctx s))
-                    (fold_constant (translate_expr ctx e))
+      NONE => Range (fold_pin_constant (translate_expr ctx s))
+                    (fold_pin_constant (translate_expr ctx e))
     | SOME _ => Range (translate_expr ctx s) (translate_expr ctx e)) /\
   (translate_iter ctx var_ty (JIter_Array e _) =
     Array (translate_expr ctx e))
