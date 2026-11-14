@@ -103,7 +103,11 @@ Proof
   drule_all gen_inst_halt_frame_sim_deep >>
   disch_then(qx_choosel_then [`n`,`out`] strip_assume_tac) >>
   simp[body_result_abort_def] >>
-  qexistsl_tac [`n`,`out`] >> fs[]
+  qexistsl_tac [`n`,`out`] >> simp[] >>
+  qpat_x_assum `lo = SND (compute_label_offsets prog)` (fn hlo =>
+    qpat_x_assum `o2pc = build_offset_to_pc prog` (fn hpc =>
+      qpat_x_assum `asm_steps lo o2pc prog n ast = AsmHalt out`
+        (ACCEPT_TAC o REWRITE_RULE [hlo, hpc])))
 QED
 
 Theorem body_abort_abort_step:
