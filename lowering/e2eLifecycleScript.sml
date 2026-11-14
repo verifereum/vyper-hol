@@ -21,6 +21,7 @@ Ancestors
   vfmState vfmExecution vfmExecutionProp vfmRunCall vfmTotalBalance vfmWfState
   vfmAccountFrame vfmContext loweringStateRelDefs While
   e2eCodeFrame vyperRuntimeImmutables storageLiveAgree vyperCallFiniteStorage
+  vyperDeployConstantsFold
 
 (* ===== The premises a later call needs from the machine ===== *)
 
@@ -194,6 +195,8 @@ Proof
   gvs[deploy_typing_ok_constants_ready] >>
   `wf_state es /\ layouts_agree tops am tx` by fs[deploy_state_rel_def] >>
   drule_all load_contract_sources_layouts >> strip_tac >>
+  `am'.sources <> am.sources` by gvs[listTheory.CONS_ACYCLIC] >>
+  drule_all load_contract_establishes_constants_fold >> strip_tac >>
   `context_well_typed
      (initial_evaluation_context ((tx.target, [(NONE, tops)]) :: am.sources)
         am.layouts (tx with created_in_tx := T) NONE with in_deploy := T)` by
@@ -218,12 +221,17 @@ Proof
      qpat_assum `load_contract _ _ _ _ _ _ = _` (irule_at Any) >>
      gvs[listTheory.CONS_ACYCLIC] >>
      metis_tac[check_contract_exports_ok_empty]) >>
+  `source_deployment_rel tops am' tx2` by
+    (fs[source_deployment_rel_def] >> metis_tac[layouts_agree_cong]) >>
+  `global_cells_typed tops runtime_art.cta_bare_globals
+     (account_immutables am' tx2.target)` by
+    metis_tac[checked_contract_runtime_ready_global_cells_typed] >>
   `machine_well_typed (next_source_machine am' es')` by
     (irule next_source_machine_well_typed >> fs[machine_well_typed_def]) >>
   `layouts_agree tops (next_source_machine am' es') tx2` by
     metis_tac[layouts_agree_cong, next_source_machine_fields] >>
   fs[source_typing_ok_def, source_deployment_rel_def,
-     checked_contract_runtime_ready_def] >>
+     checked_contract_runtime_ready_def, account_immutables_def] >>
   gvs[]
 QED
 
@@ -274,6 +282,7 @@ Proof
   strip_tac >>
   `source_typing_ok tops am tx /\ source_deployment_rel tops am tx` by
     fs[call_ready_def] >>
+  drule_all source_typing_ok_runtime_ready >> strip_tac >>
   `am'.immutables = am.immutables` by
     (irule call_external_runtime_preserves_immutables >>
      fs[source_typing_ok_def, source_deployment_rel_def] >> metis_tac[]) >>
@@ -302,7 +311,7 @@ Proof
     (irule next_source_machine_well_typed >>
      fs[source_typing_ok_def, machine_well_typed_def]) >>
   fs[source_typing_ok_def, source_deployment_rel_def, layouts_agree_def,
-     checked_contract_runtime_ready_def] >>
+     checked_contract_runtime_ready_def, account_immutables_def] >>
   gvs[]
 QED
 
