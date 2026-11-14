@@ -163,7 +163,7 @@ Theorem store_slots_elements_body_transfer:
   (!m. mem_agree_outside t0.t_mem s0.vs_memory m ==>
     elems_in_memory vs (w2n sw) tv m) /\
   w2n sw+n*ms <= s0.vs_alloca_next /\
-  w2n sw+n*ms < dimword(:256) /\ w2n dw+n*slots < dimword(:256) /\
+  w2n sw+n*ms < dimword(:256) /\ w2n dw+n*slots <= dimword(:256) /\
   ~ctx_has_dalloca ctx /\ allocas_from lo s /\ ~s.vs_call_ctx.cc_static /\
   ~s.vs_halted /\ s.vs_current_bb=a.cs_current_bb /\
   s.vs_inst_idx=LENGTH a.cs_current_insts /\ j<n /\ Inv j G tn s ==>
@@ -179,7 +179,7 @@ Proof
    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv (EL j vs) (w2n sw+j*ms) m) /\
    w2n sw+j*ms+val_store_size tv (EL j vs) <= s.vs_alloca_next /\
-   w2n dw+j*slots+type_slot_size tv < dimword(:256)` by
+   w2n dw+j*slots+type_slot_size tv <= dimword(:256)` by
     (qpat_x_assum `store_copy_normalize s0 s = _` kall_tac >>
      qpat_x_assum `!i. i<n ==> _` kall_tac >>
      gvs[] >> drule_all store_slots_element_resources >>
@@ -198,7 +198,6 @@ Proof
     metis_tac[cj 1 vyperTypingTheory.value_has_type_equiv,optionTheory.IS_SOME_EXISTS] >>
   qpat_x_assum `!i. i<n ==> _` (qspec_then `j` mp_tac) >>
   (impl_tac >- asm_rewrite_tac[]) >> disch_tac >>
-  `w2n dw+j*slots+type_slot_size tv <= dimword(:256)` by decide_tac >>
   drule_all store_slots_element_step_origin_ptr >>
   disch_then (qx_choosel_then [`p`,`tp`,`u`,`tu`,`z`,`Gf`,`tf`,`child`]
     strip_assume_tac) >>
