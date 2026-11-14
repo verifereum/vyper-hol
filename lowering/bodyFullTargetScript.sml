@@ -86,9 +86,10 @@ Proof
   drule_all body_target_sim_full >>
   disch_then (qspecl_then [`DF`, `lo`, `d`, `PG`, `shadow_ctx`, `func`,
                            `shadow_func`] assume_tac) >>
-  simp[target_place_sim_full_def, eval_target_place_as_bind] >>
+  simp[target_place_sim_full_def,
+       targetPlaceSimCasesTheory.eval_target_place_bind] >>
   rpt gen_tac >> strip_tac >>
-  drule get_place_base_admissible >> strip_tac >>
+  drule targetPlaceSimCasesTheory.get_place_base_admissible >> strip_tac >>
   qpat_x_assum `target_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [target_sim_full_def]) >>
   disch_then (qspecl_then [`st0`, `Type ty`, `sa`, `sb`, `shadow_sa`,
