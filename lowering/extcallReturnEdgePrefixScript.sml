@@ -43,7 +43,7 @@ Theorem return_relabel_post_ids[local]:
      (start_relabel L ids st) (start_swap st L ids en) ceiling dstid d n s t)
 Proof
   strip_tac >> drule_all start_swap_fields >> strip_tac >>
-  simp[abi_valid_allocated_post_def, return_reject_sites, start_relabel_def]
+  simp[abi_valid_allocated_post_def, abi_malformed_scratch_sites_relabel, start_relabel_def]
 QED
 
 Theorem return_relabel_start_fields[local,simp]:
@@ -97,7 +97,7 @@ Proof
   drule_at (Pat `abi_valid_allocated_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     return_completed_cut_resources >>
   disch_then drule >> disch_then drule >>
-  simp[return_reject_sites, frag_observer_cut_def] >>
+  simp[abi_malformed_scratch_sites_relabel, frag_observer_cut_def] >>
   fs[start_relabel_def] >> metis_tac[]
 QED
 
@@ -184,7 +184,7 @@ Resume return_capped_relabel_edge_prefix[decode]:
     (irule return_capped_allocated_success >> simp[] >>
      qexistsl_tac [`B`, `H`, `base_op`, `bs`, `dst`, `env`, `hi`, `live`, `sf`, `ty`, `v`] >>
      drule return_observer_alloca_structure >> strip_tac >>
-     gvs[return_reject_sites]) >>
+     gvs[abi_malformed_scratch_sites_relabel]) >>
   `abi_valid_allocated_post tv rv (return_observer_context ctx full) full
     cenv cx es (start_relabel L ids st) (start_swap st L ids en)
     ceiling dstid d (type_memory_bytes ce rt) (s with vs_current_bb := L) t` by

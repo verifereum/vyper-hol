@@ -25,15 +25,6 @@ Proof
        DROP_APPEND, DROP_DROP]
 QED
 
-Theorem return_straight_sanitized_sites[local]:
-  abi_malformed_scratch_sites (start_relabel st.cs_current_bb ids st)
-    (start_swap st st.cs_current_bb ids en) func =
-  abi_malformed_scratch_sites st en func
-Proof
-  simp[abi_malformed_scratch_sites_def, start_relabel_def, start_swap_def] >>
-  IF_CASES_TAC >> simp[]
-QED
-
 Theorem return_straight_sanitized_entry[local]:
   abi_malformed_entry H ctx func ce cx es st sites dstid live
     base_op hi src dst B len xs p d n s ==>
@@ -175,7 +166,7 @@ Proof
     (`emitted_blocks a b = []` by metis_tac[cj 3 return_straight_shape] >>
      fs[frag_gas_free_def, Abbr `a`, start_relabel_def]) >>
   `abi_malformed_scratch_sites a b func = abi_malformed_scratch_sites st en func` by
-    simp[Abbr `a`, Abbr `b`, return_straight_sanitized_sites] >>
+    simp[Abbr `a`, Abbr `b`, abi_malformed_scratch_sites_relabel] >>
   `compile_abi_decode_to_buf dst (Lit 0w) MLOAD base_op hi
      (type_to_abi_dec_info sf ce rt) a = ((),b)` by suspend "compile" >>
   `abi_malformed_entry H ctx func cenv cx es a
