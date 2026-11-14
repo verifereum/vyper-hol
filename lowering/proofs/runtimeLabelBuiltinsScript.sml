@@ -2479,3 +2479,82 @@ Proof
    CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
    irule rb_emit_op >> simp[])
 QED
+
+Theorem rb_as_stack_val:
+  rb_step rb_operand_ok m ==>
+  rb_step rb_value_ok (\st. as_stack_val ty (m st))
+Proof
+  simp[rb_step_def] >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum drule >> Cases_on `m st` >>
+  simp[as_stack_val_def, rb_value_ok_def]
+QED
+
+Theorem rb_compile_powmod256_names:
+  rb_env_ok ce ==>
+  rb_step rb_value_ok (compile_powmod256_names ce ret_ty aty a bty b)
+Proof
+  strip_tac >> CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[GSYM ETA_AX])) >>
+  pure_rewrite_tac[compile_powmod256_names_def, LET_THM] >> BETA_TAC >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_value_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_compile_name_vv >> simp[]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_unwrap_value >> simp[]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_value_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_compile_name_vv >> simp[]) >>
+  gen_tac >> strip_tac >>
+  ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+    (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+  conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+    irule rb_unwrap_value >> simp[]) >>
+  gen_tac >> strip_tac >> irule rb_as_stack_val >>
+  simp[rb_compile_pow_mod256]
+QED
+
+Theorem rb_compile_mod_names:
+  rb_env_ok ce ==>
+  rb_step rb_value_ok (compile_addmod_names ce ret_ty aty a bty b mty m) /\
+  rb_step rb_value_ok (compile_mulmod_names ce ret_ty aty a bty b mty m)
+Proof
+  strip_tac >> conj_tac >>
+  (CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[GSYM ETA_AX])) >>
+   pure_rewrite_tac[compile_addmod_names_def, compile_mulmod_names_def, LET_THM] >> BETA_TAC >>
+   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+     (Q.ISPEC `rb_value_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+     irule rb_compile_name_vv >> simp[]) >>
+   gen_tac >> strip_tac >>
+   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+     (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+     irule rb_unwrap_value >> simp[]) >>
+   gen_tac >> strip_tac >>
+   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+     (Q.ISPEC `rb_value_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+     irule rb_compile_name_vv >> simp[]) >>
+   gen_tac >> strip_tac >>
+   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+     (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+     irule rb_unwrap_value >> simp[]) >>
+   gen_tac >> strip_tac >>
+   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+     (Q.ISPEC `rb_value_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+     irule rb_compile_name_vv >> simp[]) >>
+   gen_tac >> strip_tac >>
+   ho_match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
+     (Q.ISPEC `rb_operand_ok` (Q.GEN `P` rb_step_let))) >> BETA_TAC >>
+   conj_tac >- (CONV_TAC (RAND_CONV (DEPTH_CONV ETA_CONV)) >>
+     irule rb_unwrap_value >> simp[]) >>
+   gen_tac >> strip_tac >> irule rb_as_stack_val >>
+   simp[rb_compile_addmod, rb_compile_mulmod])
+QED
