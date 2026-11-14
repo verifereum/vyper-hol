@@ -78,7 +78,8 @@ Theorem assign_tuple_targets_suffix[local]:
       ((?t'. r = OK t' /\
          stmt_post ctx func cx lctx cenv cenv sa sf es s0 res
            (ee' with gas_obs := []) t') \/
-       (exit_result r /\ !tail. stmt_exit RetQ (ee' with gas_obs := tail) res r))
+       (exit_result r /\ (!tail. stmt_exit RetQ (ee' with gas_obs := tail) res r) /\
+        halt_exit cx ee' res r))
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all tuple_type_value >> strip_tac >> gvs[] >>

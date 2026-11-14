@@ -178,7 +178,8 @@ Theorem tuple_store_targets_abort_path:
     s.vs_inst_idx = LENGTH st.cs_current_insts /\ stmt_state_rel ctx func cenv cx es s /\
     assign_tuple_target_list cx gs vs es = (INR err,es') ==>
     ?r. gas_marked_path F ctx func s 0 r /\ exit_result r /\
-      !tail. stmt_exit RetQ (es' with gas_obs := tail) (INR err) r
+      (!tail. stmt_exit RetQ (es' with gas_obs := tail) (INR err) r) /\
+      halt_exit cx es' (INR err : unit + exception) r
 Proof
   Induct
   >- (rpt gen_tac >> strip_tac >> gvs[] >> fs[Once evaluate_def, return_def]) >>
@@ -228,7 +229,7 @@ Resume tuple_store_targets_abort_path[abort]:
     (qpat_x_assum `!tail. assign_tuple_targets _ _ _ _ = _`
       (qspec_then `es.gas_obs` mp_tac) >> simp[]) >>
   qexists `r` >>
-  gvs[assign_tuple_target_list_cons, stmt_exit_def, expr_exit_def]
+  gvs[assign_tuple_target_list_cons, stmt_exit_def, expr_exit_def, halt_exit_def]
 QED
 
 Resume tuple_store_targets_abort_path[prefix]:
@@ -365,7 +366,8 @@ Theorem tuple_store_targets_outcome:
         (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP t.vs_allocas aid = SOME bs) /\
         (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
            alloca_frame c0 e0 sa0 s0 cenv es' t)) \/
-       (exit_result r /\ !tail. stmt_exit RetQ (es' with gas_obs := tail) res r))
+       (exit_result r /\ (!tail. stmt_exit RetQ (es' with gas_obs := tail) res r) /\
+        halt_exit cx es' res r))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all tuple_source_list_outcome >>
