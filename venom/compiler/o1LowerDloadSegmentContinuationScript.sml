@@ -152,7 +152,6 @@ Proof
      (drule ld_joint_segment_control >>
       disch_then (drule_at (Pat `o1_ctx_shape _`)) >>
       disch_then (drule_at (Pat `active_inst _ _ _`)) >>
-      disch_then (qspecl_then [`sz`,`ptr`,`out`,`dst`] mp_tac) >>
       simp[] >> strip_tac >> gvs[] >> metis_tac[]) >>
    drule_all ld_successful_supply_packet >> strip_tac >> gvs[])
 QED

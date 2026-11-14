@@ -18,3 +18,19 @@ Proof
   qexists_tac `P` >> asm_rewrite_tac[] >>
   fs[EVERY_MEM]
 QED
+
+Theorem ptr_discipline_inst_opcode_exclusions:
+  ptr_discipline lo C vs /\ MEM fn C.ctx_functions /\
+  MEM inst (fn_insts fn) /\ ~ctx_has_dalloca C ==>
+  ~MEM inst.inst_opcode [MEMTOP; DRET; GETFMP; SETFMP; RETFMP; FMP_PARAM; DALLOCA]
+Proof
+  strip_tac >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
+    metis_tac[ptr_discipline_fn_ptr_ok] >>
+  `~MEM inst.inst_opcode [MEMTOP; DRET; GETFMP; SETFMP; RETFMP; FMP_PARAM]` by
+    (fs[EVERY_MEM] >> first_x_assum drule >>
+     simp[fn_ptr_ok_def] >> strip_tac >> first_x_assum drule >> simp[MEM]) >>
+  `inst.inst_opcode <> DALLOCA` by
+    (fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
+  fs[MEM]
+QED
