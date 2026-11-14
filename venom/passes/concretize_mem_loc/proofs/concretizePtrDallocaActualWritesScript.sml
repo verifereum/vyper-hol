@@ -273,3 +273,76 @@ Proof
      ntac 2 (first_x_assum (qspec_then `i` assume_tac)) >> gvs[] >> decide_tac) >>
   simp[]
 QED
+
+Theorem ptr_dalloca_actual_write_coverage:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  q < LENGTH done /\ a = EL (EL q done) h /\ t = EL q ht /\
+  posts = (EL (SUC (EL q done)) h).po_state /\
+  postt = (EL (SUC q) ht).po_state /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  (i < lo \/ dyn_floor C vs <= i) ==>
+  (i IN range_bytes (step_writes a.po_inst a.po_state posts) <=>
+   i IN range_bytes (step_writes t.po_inst t.po_state postt))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `i IN range_bytes (step_writes a.po_inst a.po_state posts) \/
+            i IN range_bytes (step_writes t.po_inst t.po_state postt)`
+  >- (drule_all ptr_dalloca_actual_write_descriptor >> strip_tac >> gns[] >>
+      drule_all (SRULE [MEM] ptr_paired_write_intervals) >> strip_tac >> metis_tac[]) >>
+  gvs[]
+QED
+
+(* A common byte offset works for every write family.  In particular the
+   descriptor size is 32 for word stores and the evaluated size for MCOPY. *)
+Theorem ptr_dalloca_actual_write_offsets:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  q < LENGTH done /\ a = EL (EL q done) h /\ t = EL q ht /\
+  posts = (EL (SUC (EL q done)) h).po_state /\
+  postt = (EL (SUC q) ht).po_state /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  (i < lo \/ dyn_floor C vs <= i) /\
+  i IN range_bytes (step_writes t.po_inst t.po_state postt) ==>
+  t.po_inst = a.po_inst /\
+  ?ops sizeop x z k.
+    mem_write_ops a.po_inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
+    eval_operand ops.iao_ofst a.po_state = SOME x /\
+    eval_operand ops.iao_ofst t.po_state = SOME x /\
+    eval_operand sizeop a.po_state = SOME z /\
+    eval_operand sizeop t.po_state = SOME z /\
+    i = w2n x + k /\ k < w2n z /\
+    (MEM a.po_inst.inst_opcode [MSTORE;ISTORE] ==> k < 32)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Q.SUBGOAL_THEN `i IN range_bytes (step_writes a.po_inst a.po_state posts) \/
+    i IN range_bytes (step_writes t.po_inst t.po_state postt)` assume_tac
+  >- simp[] >>
+  drule_all ptr_dalloca_actual_write_descriptor >> strip_tac >> gns[] >>
+  `w2n x <= i /\ i < w2n x + w2n z` by
+    (metis_tac[ptr_step_write_max_containment]) >>
+  `MEM a.po_inst.inst_opcode [MSTORE;ISTORE] ==> w2n z = 32` by
+    (strip_tac >> gvs[MEM] >>
+     gvs[mem_write_ops_def, eval_operand_def, AllCaseEqs(), dimword_def,
+         fcpLib.INDEX_CONV ``dimindex(:256)``]) >>
+  gns[] >> simp[] >> qexists `i - w2n x` >>
+  simp[] >> metis_tac[]
+QED
