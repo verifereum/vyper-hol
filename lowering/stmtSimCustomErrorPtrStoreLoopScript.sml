@@ -691,8 +691,10 @@ Resume custom_error_store_args_sim_ptr_conditional[tail_exempt]:
   pure_once_rewrite_tac[vyperStateTheory.bind_assoc] >>
   irule gasExemptCertTheory.gas_exempt_cert_bind_value >>
   goal_assum (drule_at Any) >>
-  gvs[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc,
-      vyperStateTheory.bind_return])
+  qhdtm_assum `gas_exempt_cert` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc,
+       vyperStateTheory.bind_return])
 QED
 
 Resume custom_error_store_args_sim_ptr_conditional[exit]:

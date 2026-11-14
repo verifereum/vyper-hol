@@ -116,7 +116,8 @@ Resume abi_encode_args_producer_phases[live]:
 QED
 
 Resume abi_encode_args_producer_phases[phases]:
-  drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`) abi_encode_bridge_bytes_phases_open >>
+  qpat_assum `abi_builtin_encode_setup _ _ _ = _`
+    (mp_then (Pat `abi_builtin_encode_setup _ _ _ = _`) mp_tac abi_encode_bridge_bytes_phases_open) >>
   disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `abi_encoder_window_input _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `alloca_room ctx func _`)) >>

@@ -420,7 +420,10 @@ Theorem edge_base_abort[local]:
     Abort a (t with <|vs_current_bb := b; vs_prev_bb := p|>)
 Proof
   Cases_on `inst.inst_opcode` >> simp[] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  qpat_assum `inst.inst_opcode = _`
+    (fn eq => pure_rewrite_tac [MATCH_MP
+      (valOf (List.find (fn th => can (MATCH_MP th) eq)
+        (CONJUNCTS step_inst_base_opcode_eqs))) eq]) >>
   simp[edge_pure1_control, edge_pure2_control, edge_pure3_control,
        edge_ext_call_control, edge_create_control, edge_delegatecall_control,
        edge_read0_control, edge_read1_control, edge_write2_control,
@@ -462,7 +465,10 @@ Theorem edge_base_intret[local]:
     IntRet vals (t with <|vs_current_bb := b; vs_prev_bb := p|>)
 Proof
   Cases_on `inst.inst_opcode` >> simp[] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  qpat_assum `inst.inst_opcode = _`
+    (fn eq => pure_rewrite_tac [MATCH_MP
+      (valOf (List.find (fn th => can (MATCH_MP th) eq)
+        (CONJUNCTS step_inst_base_opcode_eqs))) eq]) >>
   simp[edge_pure1_control, edge_pure2_control, edge_pure3_control,
        edge_ext_call_control, edge_create_control, edge_delegatecall_control,
        edge_read0_control, edge_read1_control, edge_write2_control,

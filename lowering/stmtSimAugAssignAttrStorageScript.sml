@@ -474,8 +474,8 @@ Proof
      qexistsl_tac [`[dst;op]`, `if tr then TSTORE else SSTORE`, `[]`,
                    `st`, `sf`] >>
      Cases_on `tr` >> gvs[emit_void_def,emit_inst_def,is_terminator_def] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     fs[mk_inst_def,exec_write2_def]) >>
+     simp[mk_inst_def] >>
+     simp[step_inst_base_opcode_eqs,exec_write2_def]) >>
   `sf.cs_current_bb = st.cs_current_bb /\
    LENGTH sf.cs_current_insts = SUC (LENGTH st.cs_current_insts)` by
     (Cases_on `tr` >>
