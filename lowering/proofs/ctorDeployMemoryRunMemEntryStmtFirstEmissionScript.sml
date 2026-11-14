@@ -524,7 +524,8 @@ Resume ctor_typed_memory_first_emission[dispatch]:
       TRY (rename1 `compile_store_memory_typed ce dst (ArrayT de db) src (ArrayT se sb)` >>
            Cases_on `db` >> Cases_on `sb`) >>
       fs[] >> simp[Once compile_store_memory_typed_def, LET_THM] >>
-      metis_tac[ctor_copy_memory_first_emission]) >>
+      rpt gen_tac >> strip_tac >>
+      drule ctor_copy_memory_first_emission >> simp[]) >>
   asm_simp_tac bool_ss [Once compile_store_memory_typed_def] >>
   mp_tac (cj 2 first_emission_emit_helpers |> Q.SPEC `INVALID`) >> simp[] >> metis_tac[]
 QED

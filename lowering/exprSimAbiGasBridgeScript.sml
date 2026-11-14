@@ -2251,7 +2251,10 @@ Theorem frag_relabel_base_abort:
     Abort a (t with <|vs_current_bb := b; vs_prev_bb := p|>)
 Proof
   Cases_on `inst.inst_opcode` >> simp[] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  qpat_assum `inst.inst_opcode = _`
+    (fn eq => pure_rewrite_tac [MATCH_MP
+      (valOf (List.find (fn th => can (MATCH_MP th) eq)
+        (CONJUNCTS step_inst_base_opcode_eqs))) eq]) >>
   simp[frag_pure1_control, frag_pure2_control, frag_pure3_control,
        frag_ext_call_control, frag_create_control, frag_delegatecall_control,
        frag_read0_control, frag_read1_control, frag_write2_control,
@@ -2295,7 +2298,10 @@ Theorem frag_relabel_base_intret:
     IntRet vals (t with <|vs_current_bb := b; vs_prev_bb := p|>)
 Proof
   Cases_on `inst.inst_opcode` >> simp[] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  qpat_assum `inst.inst_opcode = _`
+    (fn eq => pure_rewrite_tac [MATCH_MP
+      (valOf (List.find (fn th => can (MATCH_MP th) eq)
+        (CONJUNCTS step_inst_base_opcode_eqs))) eq]) >>
   simp[frag_pure1_control, frag_pure2_control, frag_pure3_control,
        frag_ext_call_control, frag_create_control, frag_delegatecall_control,
        frag_read0_control, frag_read1_control, frag_write2_control,

@@ -777,8 +777,10 @@ Proof
   strip_tac >>
   `eval_operands inst.inst_operands a = eval_operands inst.inst_operands b` by
     (irule supply_eval_operands_cong >> simp[]) >>
+  pure_rewrite_tac [codegenRelTheory.source_memory_write_ranges_def] >>
   Cases_on `inst.inst_opcode` >>
-  gvs[codegenRelTheory.source_memory_write_ranges_def] >>
+  qpat_assum `inst.inst_opcode = _` (fn eq => pure_rewrite_tac [eq]) >>
+  pure_rewrite_tac [TypeBase.case_def_of ``:opcode``] >>
   simp[codegenRelTheory.fixed_source_write_range_def,
        codegenRelTheory.sized_source_write_range_def] >>
   namedCases_on `inst.inst_operands` ["", "o1 os1"] >> gvs[] >>

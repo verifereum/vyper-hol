@@ -57,8 +57,9 @@ Theorem dse_create_not_effects_in_space:
   ~effects_in_space sp inst
 Proof
   simp[] >> strip_tac >> Cases_on `sp` >>
-  gvs[effects_in_space_def, write_effects_def, read_effects_def,
-      all_effects_def, empty_effects_def, pred_setTheory.SUBSET_DEF] >>
+  gvs[effects_in_space_def] >>
+  fs[write_effects_def, read_effects_def] >>
+  gvs[all_effects_def, empty_effects_def, pred_setTheory.SUBSET_DEF] >>
   metis_tac[effect_distinct]
 QED
 

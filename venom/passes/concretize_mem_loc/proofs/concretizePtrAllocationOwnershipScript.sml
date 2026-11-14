@@ -52,7 +52,7 @@ Proof
   rw[exec_alloca_def, AllCaseEqs()] >>
   gvs[update_var_def, ptr_alloc_table_ok_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >>
-  Cases_on `inst.inst_id = aid` >> Cases_on `inst.inst_id = aid'` >> gvs[] >>
+  Cases_on `inst.inst_id = aid` >> Cases_on `inst.inst_id = aid'` >> fs[] >>
   qpat_assum `!aid b sz. FLOOKUP _ _ = _ ==> _`
     (fn th => imp_res_tac th) >> gvs[] >> metis_tac[]
 QED
