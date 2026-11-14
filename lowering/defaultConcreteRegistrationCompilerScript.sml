@@ -65,17 +65,6 @@ Proof
   simp[rich_listTheory.TAKE_SUC, register_positional_args_append] >> gvs[]
 QED
 
-Theorem default_registration_slot_sizes:
-  !args tvs specs.
-  LENGTH args = LENGTH tvs /\
-  LIST_REL (default_registration_slot tops ce) (ZIP (args,tvs)) specs ==>
-  MAP (\(name,prim,dyn,sz,info). sz) specs = MAP tv_abi_size tvs
-Proof
-  Induct >> Cases_on `tvs` >> Cases_on `specs` >> simp[] >>
-  gen_tac >> rename1 `default_registration_slot _ _ (arg,tv) spec` >>
-  PairCases_on `arg` >> PairCases_on `spec` >>
-  simp[default_registration_slot_def] >> metis_tac[]
-QED
 
 
 Theorem default_registration_singleton_update:
