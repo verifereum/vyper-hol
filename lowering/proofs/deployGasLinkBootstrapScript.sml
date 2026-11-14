@@ -83,14 +83,18 @@ Theorem deploy_focus_mask_prefix[local]:
   LENGTH vs.vs_gas_readings = LENGTH sites + 1 /\
   lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME func /\
   fn_entry_label func = SOME "__deploy" /\
-  (!D n fuel.
-     dead_wf D /\ o1_safe_upto D (imm_len tops) n dunit.cu_context vs /\
-     n <= LENGTH (gas_events_blocks fuel dunit.cu_context func
+  (!fuel.
+     o1_safe_upto (deploy_dead H tops runtime_bc am tx) (imm_len tops)
+       (MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)) dunit.cu_context vs /\
+     MIN (LENGTH marks) (LENGTH vs.vs_gas_readings) <=
+       LENGTH (gas_events_blocks fuel dunit.cu_context func
        (vs with <|vs_prev_bb := NONE; vs_current_bb := "__deploy";
                   vs_inst_idx := 0|>)) ==>
-     ?extra. sites = TAKE n (gas_events_blocks fuel dunit.cu_context func
-       (vs with <|vs_prev_bb := NONE; vs_current_bb := "__deploy";
-                  vs_inst_idx := 0|>)) ++ extra) /\
+     ?extra. sites =
+       TAKE (MIN (LENGTH marks) (LENGTH vs.vs_gas_readings))
+         (gas_events_blocks fuel dunit.cu_context func
+           (vs with <|vs_prev_bb := NONE; vs_current_bb := "__deploy";
+                      vs_inst_idx := 0|>)) ++ extra) /\
   gas_origin_ptr_focus
     (deploy_dead H tops runtime_bc am tx, imm_len tops,
      gas_explicit_sites dunit.cu_context shadow_ctx, dunit.cu_context, func, [])
@@ -122,10 +126,8 @@ Proof
     (qpat_x_assum `MAP _ events = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
   qabbrev_tac `n = MIN (LENGTH marks) (LENGTH vs.vs_gas_readings)` >>
   `n <= LENGTH events` by simp[Abbr `n`] >>
-  `dead_wf (deploy_dead H tops runtime_bc am tx)` by simp[deploy_dead_wf] >>
-  qpat_x_assum `!D n fuel. _`
-    (qspecl_then [`deploy_dead H tops runtime_bc am tx`, `n`, `fuel`] mp_tac) >>
-  impl_tac >- simp[Abbr `events`] >>
+  qpat_x_assum `!fuel. _` (qspec_then `fuel` mp_tac) >>
+  impl_tac >- simp[Abbr `events`, GSYM (Abbr `n`)] >>
   disch_then (qx_choose_then `site_tail` assume_tac) >>
   `n <= LENGTH sites` by
     (qpat_x_assum `sites = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
@@ -301,8 +303,8 @@ Proof
   `?rest. project = marks ++ rest` by
     (qpat_assum `deploy_unit_execution_correct_with _ _ _ _ _ _ _ _` mp_tac >>
      rewrite_tac[deploy_unit_execution_correct_with_def] >> strip_tac
-     >- (metis_tac[deploy_focus_mask_prefix])
-     >- (metis_tac[deploy_focus_mask_prefix]) >>
+     >- (metis_tac[deploy_focus_mask_prefix, deploy_dead_wf])
+     >- (metis_tac[deploy_focus_mask_prefix, deploy_dead_wf]) >>
      qpat_x_assum `!D. (?fr. _) /\ _ ==> _` mp_tac >>
      simp[] >> strip_tac >>
      drule_all deploy_exit_mask_prefix >> simp[GSYM (Abbr `project`)]) >>
