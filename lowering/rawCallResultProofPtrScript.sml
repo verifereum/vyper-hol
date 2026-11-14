@@ -17,47 +17,7 @@ Proof
     comp_bind_def, comp_return_def] >> gen_tac >> pairarg_tac >> simp[]
 QED
 
-Theorem raw_call_tuple_suffix_steps:
-  (do z <- emit_op RETURNDATASIZE [];
-      cmp <- emit_op LT [z;Lit (n2w n)];
-      cap <- compile_select cmp z (Lit (n2w n));
-      emit_void MSTORE [ov;cap];
-      buf <- compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32);
-      emit_void MSTORE [buf.buf_operand;ok];
-      dst <- emit_op ADD [buf.buf_operand;Lit 32w];
-      emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
-      return buf.buf_operand od) sa = (result,sb) ==>
-  ?z s1 cmp s2 cap s3 s4 buf s5 s6 dst s7.
-    emit_op RETURNDATASIZE [] sa = (z,s1) /\
-    emit_op LT [z;Lit (n2w n)] s1 = (cmp,s2) /\
-    compile_select cmp z (Lit (n2w n)) s2 = (cap,s3) /\
-    emit_void MSTORE [ov;cap] s3 = ((),s4) /\
-    compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32) s4 = (buf,s5) /\
-    emit_void MSTORE [buf.buf_operand;ok] s5 = ((),s6) /\
-    emit_op ADD [buf.buf_operand;Lit 32w] s6 = (dst,s7) /\
-    emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))]
-      s7 = ((),sb) /\ result = buf.buf_operand
-Proof
-  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
-QED
 
-Theorem raw_call_bytes_suffix_steps:
-  (do z <- emit_op RETURNDATASIZE [];
-      cmp <- emit_op LT [z;Lit (n2w n)];
-      cap <- compile_select cmp z (Lit (n2w n));
-      emit_void MSTORE [ov;cap]; return ov od) sa = (result,sb) ==>
-  ?z s1 cmp s2 cap s3.
-    emit_op RETURNDATASIZE [] sa = (z,s1) /\
-    emit_op LT [z;Lit (n2w n)] s1 = (cmp,s2) /\
-    compile_select cmp z (Lit (n2w n)) s2 = (cap,s3) /\
-    emit_void MSTORE [ov;cap] s3 = ((),sb) /\ result = ov
-Proof
-  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
-QED
 
 
 Theorem raw_call_returndatasize_path_ptr:
@@ -880,7 +840,7 @@ Theorem raw_call_bytes_suffix_stage:
       lookup_var x t = lookup_var x s /\
       FLOOKUP HG x = FLOOKUP G x /\ op_taint un (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >> drule raw_call_bytes_suffix_steps >> strip_tac >>
+  strip_tac >> drule rawCallShapePtrTheory.raw_call_bytes_suffix_steps >> strip_tac >>
   `?rz cmpx. z = Var rz /\ cmp = Var cmpx` by
     (qpat_x_assum `emit_op RETURNDATASIZE _ _ = _` mp_tac >>
      qpat_x_assum `emit_op LT _ _ = _` mp_tac >>
@@ -1799,7 +1759,7 @@ Resume raw_call_tuple_suffix_stage[prefix]:
          exprLoweringPropsTheory.ci_mono_emit_op, pairTheory.SND] >>
      fs[exprLoweringPropsTheory.ci_mono_def] >>
      metis_tac[compileEnvTheory.cs_extends_trans]) >>
-  drule raw_call_bytes_suffix_steps >> strip_tac >>
+  drule rawCallShapePtrTheory.raw_call_bytes_suffix_steps >> strip_tac >>
   `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s3 s4` by
     metis_tac[exprLoweringPropsTheory.ci_mono_emit_op,
       exprLoweringPropsTheory.ci_mono_emit_void, pairTheory.SND] >>
