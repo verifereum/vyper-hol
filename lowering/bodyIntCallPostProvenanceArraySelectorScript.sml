@@ -9,7 +9,10 @@ Ancestors
   loweringPosts exprSimProps valueEncodingProofs valueEncodingDefs bodyIntCallArgType
   bodyIntCallPostProvenanceArrayOrigin bodySim placeTypingProps exprSimHypsDefs
   supportedExprTraverse gasOutcome gasSummary bodyIntCallFamAggSubscriptArraySetup
-  bodyPtrMakeArrayConsSource
+  bodyPtrMakeArrayConsSource bodyPtrBopInStackMemory bodyIntCallMemoryView
+  exprSimSubscriptArray exprLowering vyperInterpreter vyperAST vyperValue
+  vyperMisc vyperTypeContract vyperTypeSystem compileEnv finite_map context
+  exprSafeOperandBuiltins stmtSimForArrayFrame exprSimSubscriptArrayOrigin
 
 Theorem immutable_holds_source_frame[local]:
   immutable_holds ce cx ty r w es s /\
@@ -885,7 +888,89 @@ Proof
       loweringStateRelDefsTheory.state_rel_def] >> metis_tac[]
 QED
 
-(* Pending C1.9.11.8.3: preserved unfinished consumer; not a proved export.
+Theorem intcall_compile_array_operand_not_label[local]:
+  compile_expr ce ty e sa = (vv,sb) /\ expr_type e = ArrayT et bd /\
+  well_typed_expr env e /\
+  (!id t. FLOOKUP env.var_types id = SOME t ==>
+    ?q sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Var q) sz)) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  Cases_on `e` >> simp[expr_type_def] >> rpt strip_tac
+  >>~- ([`well_typed_expr env (Subscript _ _ _)`],
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def] >>
+    drule compile_subscript_not_label >> simp[])
+  >>~- ([`well_typed_expr env (Attribute _ _ _)`],
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def] >>
+    drule compile_attribute_safe_operand >> simp[exprSafeOperandTheory.safe_operand_def])
+  >>~- ([`well_typed_expr env (Builtin _ _ _)`],
+    qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+    simp[Once compile_expr_def, compile_expr_body_def] >> strip_tac >>
+    gvs[AllCaseEqs()]
+    >>~- ([`compile_builtin_dispatch _ _ _ _ _ _ = _`],
+      qpat_x_assum `compile_builtin_dispatch _ _ _ _ _ _ = _` mp_tac >>
+      pure_once_rewrite_tac[cj 2 compile_expr_raw_def] >> strip_tac >>
+      drule_all builtin_array_not_label >> simp[]) >>
+    gvs[Once well_typed_expr_def, well_typed_builtin_app_def])
+  >>~- ([`well_typed_expr env (Name _ _)`],
+    gvs[Once well_typed_expr_def] >> first_x_assum drule >> strip_tac >>
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def,
+        compile_name_vv_def, comp_return_def, mk_ptr_def, vv_operand_def])
+  >>~- ([`well_typed_expr env (TypeBuiltin _ _ _ _)`],
+    gvs[] >> qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+    pure_once_rewrite_tac[cj 1 compile_expr_raw_def] >>
+    simp[compile_expr_body_def, expr_type_def] >>
+    pure_once_rewrite_tac[cj 3 compile_expr_raw_def] >> simp[] >>
+    strip_tac >> drule_all type_builtin_array_not_label >> simp[])
+  >>~- ([`well_typed_expr env (TopLevelName _ _)`],
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def,
+        AllCaseEqs(), mk_ptr_def] >> rpt (pairarg_tac >> gvs[]) >>
+    gvs[vv_operand_def])
+  >>~- ([`well_typed_expr env (IfExp _ _ _ _)`],
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def] >>
+    rpt (pairarg_tac >> gvs[]) >> gvs[is_word_type_def, mk_ptr_def, vv_operand_def])
+  >>~- ([`well_typed_expr env (StructLit _ _ _)`], gvs[Once well_typed_expr_def])
+  >>~- ([`well_typed_expr env (FlagMember _ _ _)`],
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def, vv_operand_def])
+  >>~- ([`well_typed_expr env (Literal _ lit)`],
+    Cases_on `lit` >> gvs[Once well_typed_expr_def, well_typed_literal_def])
+  >>~- ([`well_typed_expr env (Pop _ _)`], suspend "pop")
+  >>~- ([`well_typed_expr env (Call _ _ _ _)`], suspend "call")
+QED
+Resume intcall_compile_array_operand_not_label[pop]:
+  gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[mk_ptr_def, vv_operand_def] >>
+  drule (cj 3 subscript_pop_not_label) >> simp[]
+QED
+Resume intcall_compile_array_operand_not_label[call]:
+  Cases_on `c` >> gvs[Once well_typed_expr_def, raw_call_return_type_def] >>
+  gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def]
+  >>~- ([`compile_call _ _ _ _ (IntCall _) _ _ _ = _`],
+    drule compile_internal_call_not_label >> simp[]) >>
+  all_tac
+  >>~- ([`ArrayT _ _ = if _ then _ else _`], gvs[AllCaseEqs()]) >>
+  rename1 `ExtCall _ _ sig_ _` >>
+  PairCases_on `sig_` >> gvs[compile_call_def, AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs(), mk_ptr_def, vv_operand_def] >>
+  drule compile_external_call_not_label >> simp[]
+QED
+Finalise intcall_compile_array_operand_not_label
+
+Theorem intcall_effect_free_stack_vv_post[local]:
+  ~expr_has_effect e /\ ~is_word_type (expr_type e) /\
+  vv_post ctx func ce cx e es sa sb s0 ee tv (StackValue ann op) s ==>
+  vv_post ctx func ce cx e es sa sb s0 ee tv
+    (LocatedValue (expr_type e) (mk_ptr op LocMemory)) s
+Proof
+  strip_tac >>
+  `post_value_type ce e = expr_type e` by metis_tac[effect_free_post_value_type] >>
+  fs[vv_post_def] >>
+  drule_all bodyPtrBopInStackMemoryTheory.membership_stack_memory_holds >> strip_tac >>
+  drule_all bodyPtrBopInStackMemoryTheory.membership_stack_memory_at >> strip_tac >>
+  simp[vv_storage_live_def, contextTheory.mk_ptr_def] >>
+  first_assum ACCEPT_TAC
+QED
+
 Theorem intcall_noncapturing_array_subscript_outcome:
   (!env ty es sa sb vv s0.
     expr_body_pre ce cx env obj es /\ ~expr_has_effect obj /\
@@ -946,6 +1031,14 @@ Proof
     gvs[expr_has_effect_def, supported_expr_exists_def, expr_effect_root_def] >>
   `gas_admissible (eval_expr cx obj) expr_vv_res_ok es` by
     metis_tac[exprSimHypsTheory.expr_body_pre_vv_gas_admissible] >>
+  `expr_vv_case F ctx func ce cx obj` by
+    (rw[exprSimHypsDefsTheory.expr_vv_case_def, exprSimDefsTheory.expr_vv_sim_def] >>
+     irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+     qpat_assum `!env ty es sa sb vv s0. _` (drule_all_then mp_tac) >>
+     disch_then (irule_at Any) >> simp[] >> metis_tac[]) >>
+  Cases_on `?bt p. bvv = LocatedValue bt p /\
+                    p.ptr_location <> LocMemory /\ p.ptr_location <> LocCode`
+  >- suspend "ordinary_location" >>
   qpat_x_assum `!env ty es sa sb vv s0. _` drule_all >>
   rewrite_tac[gas_outcome_def] >> strip_tac
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
@@ -1066,10 +1159,11 @@ Resume intcall_noncapturing_array_subscript_outcome[located]:
     (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[vv_post_def, vv_holds_def, effect_free_post_value_type,
           compileEnvTheory.is_bytestring_type_def]) >>
+  qpat_x_assum `!bt p'. LocatedValue _ _ = _ ==> _` (mk_asm "location_guard") >>
   gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def] >>
   Cases_on `p.ptr_location = LocMemory \/ p.ptr_location = LocCode`
-  >- suspend "memory_code" >>
-  suspend "other_location"
+  >- (asm_x "location_guard" kall_tac >> suspend "memory_code") >>
+  asm_x "location_guard" mp_tac >> simp[]
 QED
 Resume intcall_noncapturing_array_subscript_outcome[memory_code]:
   drule_all intcall_array_subscript_annotation >> strip_tac >> gnvs[] >>
@@ -1096,9 +1190,82 @@ Resume intcall_noncapturing_array_subscript_outcome[memory_code]:
      impl_tac >- (conj_tac >- fs[expr_body_pre_def] >>
          metis_tac[exprSimSourceTheory.expr_body_pre_var_types_well_formed]) >> simp[]) >>
   simp[AC CONJ_ASSOC CONJ_COMM] >>
-  irule (SRULE [AC CONJ_ASSOC CONJ_COMM] enriched_array_index_suffix) >> simp[] >>
-  FAIL_TAC "suffix interface"
+  irule (SRULE [AC CONJ_ASSOC CONJ_COMM] enriched_array_index_suffix_gas_entries) >> simp[] >>
+  goal_assum (drule_at (Pat `compile_array_subscript _ _ _ _ _ _ _ _ _ = _`)) >> simp[] >>
+  goal_assum (drule_at (Pat `eval_expr cx obj _ = _`)) >> simp[] >>
+  qexistsl_tac [`env`,`sm`,`t`] >>
+  simp[exprSimSubscriptArrayComposeTheory.expr_post_initial_gas,
+       expr_body_pre_def] >>
+  conj_tac >- metis_tac[fragExecTheory.fn_has_code_split] >>
+  conj_tac >- fs[expr_body_pre_def] >>
+  conj_tac >- metis_tac[exprSimSubscriptArrayComposeTheory.expr_post_initial_gas] >>
+  metis_tac[exprSimSubscriptArrayComposeTheory.vv_post_final_gas]
+QED
+Resume intcall_noncapturing_array_subscript_outcome[ordinary_location]:
+  `expr_vv_case F ctx func ce cx (Subscript ann obj idx)` by
+    (irule exprSimSubscriptArrayTheory.compile_subscript_array_case >>
+     simp[] >> metis_tac[effect_free_post_value_type]) >>
+  qpat_x_assum `expr_vv_case _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
+  rewrite_tac[exprSimHypsDefsTheory.expr_vv_case_def, exprSimDefsTheory.expr_vv_sim_def] >>
+  disch_then (qspecl_then [`env`,`ty`,`es`] mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`sa`,`sb`,`vv`,`s0`] mp_tac) >> simp[] >>
+  disch_tac >>
+  irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+  goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >>
+  gvs[bodyIntCallProducerInterfaceTheory.intcall_vv_provenance_def, contextTheory.vv_location_def,
+     contextTheory.mk_ptr_def]
+QED
+Resume intcall_noncapturing_array_subscript_outcome[stack]:
+  rename1 `StackValue bty bop` >>
+  drule_all intcall_array_subscript_annotation >> strip_tac >> gnvs[] >>
+  `~is_word_type (expr_type obj)` by simp[compileEnvTheory.is_word_type_def] >>
+  `vv_post ctx func ce cx obj es sa sm s0 (es_end with gas_obs := []) tv
+      (LocatedValue (ArrayT ann bd) (mk_ptr bop LocMemory)) t` by
+    (drule_all intcall_effect_free_stack_vv_post >> simp[]) >>
+  `intcall_vv_provenance ce cx (ArrayT ann bd) sa sm es_end tv
+      (LocatedValue (ArrayT ann bd) (mk_ptr bop LocMemory)) t` by
+    (irule bodyIntCallMemoryViewTheory.intcall_vv_provenance_memory_view >>
+     goal_assum (drule_at Any) >> simp[compileEnvTheory.is_word_type_def]) >>
+  `!tr slot vt. tv <> PlaceR (StoragePlace tr slot vt)` by
+    (irule body_array_base_nonstorage >> simp[contextTheory.vv_location_def] >>
+     goal_assum (drule_at (Pat `eval_expr cx obj _ = _`)) >> simp[] >>
+     goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+     simp[contextTheory.vv_location_def] >>
+     goal_assum (drule_at (Pat `body_inv _ _ _ _`)) >> simp[] >> metis_tac[]) >>
+  suspend "stack_suffix"
+QED
+Resume intcall_noncapturing_array_subscript_outcome[stack_suffix]:
+  `!x. bop = Var x ==> not_fresh_at sm x` by
+    (qpat_x_assum `compile_expr ce ty obj sa = _`
+       (mp_then Any mp_tac (CONJUNCT1 exprOperandVarTheory.compiler_compile_var)) >>
+     simp[contextTheory.vv_operand_def]) >>
+  `!x. iop = Var x ==> not_fresh_at st2 x` by
+    (qpat_x_assum `lower_value _ _ _ _ _ = _`
+       (mp_then Any mp_tac exprOperandVarTheory.compile_lower_value_var) >> simp[]) >>
+  `!l. bop <> Label l` by
+    (qpat_assum `compile_expr ce ty obj sa = _`
+       (mp_then Any mp_tac intcall_compile_array_operand_not_label) >>
+     simp[contextTheory.vv_operand_def] >> disch_then irule >>
+     qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+  `!l. iop <> Label l` by
+    (drule exprWordOperandTheory.lower_value_word_shape >>
+     disch_then (qspec_then `env` mp_tac) >> simp[] >>
+     impl_tac >- (conj_tac >- fs[expr_body_pre_def] >>
+         metis_tac[exprSimSourceTheory.expr_body_pre_var_types_well_formed]) >> simp[]) >>
+  gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def] >>
+  simp[AC CONJ_ASSOC CONJ_COMM] >>
+  gvs[contextTheory.mk_ptr_def] >>
+  irule (SRULE [AC CONJ_ASSOC CONJ_COMM, contextTheory.mk_ptr_def]
+    (Q.INST [`p` |-> `mk_ptr bop LocMemory`]
+      enriched_array_index_suffix_gas_entries)) >> simp[] >>
+  goal_assum (drule_at (Pat `compile_array_subscript _ _ _ _ _ _ _ _ _ = _`)) >> simp[] >>
+  goal_assum (drule_at (Pat `eval_expr cx obj _ = _`)) >> simp[] >>
+  qexistsl_tac [`env`,`sm`,`t`] >>
+  simp[exprSimSubscriptArrayComposeTheory.expr_post_initial_gas, expr_body_pre_def] >>
+  conj_tac >- metis_tac[fragExecTheory.fn_has_code_split] >>
+  conj_tac >- fs[expr_body_pre_def] >>
+  conj_tac >- metis_tac[exprSimSubscriptArrayComposeTheory.expr_post_initial_gas] >>
+  metis_tac[exprSimSubscriptArrayComposeTheory.vv_post_final_gas]
 QED
 Finalise intcall_noncapturing_array_subscript_outcome
-
-*)
