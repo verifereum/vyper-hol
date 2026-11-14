@@ -34,7 +34,11 @@ Theorem body_append_local_full:
        body_expr_full_ok cx e) ==>
     body_stmt_full_ok cx (Append (NameTarget id) e)
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `supported_full_word_type (expr_type e)`
+  >- (irule body_append_local_word_full >> simp[]) >>
+  rw[body_stmt_full_ok_def] >>
+  fs[supported_stmt_def]
 QED
 
 (* A dynamic array reached through subscripts/attributes, rooted at a local
