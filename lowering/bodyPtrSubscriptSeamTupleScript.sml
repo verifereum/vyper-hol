@@ -16,9 +16,7 @@ Ancestors
    offset to the base's pointer (tuple_subscript_compile), at the base's
    location.  The base's lowered value is laid out at its own type
    (post_value_type cenv obj = expr_type obj), so the offset and the
-   element's buffer are inside the base's buffer: an internal call whose
-   site widens the callee's return type is the residual
-   bodyPtrSubscriptWidenedResidual.  The S1 twin is exprSimTuple's
+   element's buffer are inside the base's buffer. The S1 twin is exprSimTuple's
    compile_subscript_tuple_sim.
    Hints: bodyPtrAttributeSim's attribute_vv_sim_ptr is the same shape (a
    base's expr_vv_sim_ptr, then one ADD of a constant offset) and its

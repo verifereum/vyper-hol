@@ -67,12 +67,18 @@ Proof
   `new_site_bytes s u = {}` by
     simp[new_site_bytes_def, update_var_def, FLOOKUP_DEF,
          EXTENSION, SF CONJ_ss] >>
-  gvs[MEM] >>
-  simp[step_taint_def, set_var_taint_def, mk_inst_def,
-       mem_taint_def, step_writes_def, source_memory_write_ranges_def,
-       written_taint_def, store_taint_def, adopt_reset_def,
-       imm_taint_def, range_bytes_def, out_taint_def, taint_component_equality] >>
-  Cases_on `eval_operand x s` >> simp[shift_taint_def, EXTENSION]
+  `opc <> CALL /\ opc <> STATICCALL /\ opc <> DELEGATECALL /\
+   opc <> SSTORE /\ opc <> TSTORE /\ opc <> ISTORE /\ opc <> MSTORE` by
+    gvs[MEM] >>
+  qabbrev_tac `inst = mk_inst id opc [x;y] [z]` >>
+  `inst.inst_opcode = opc /\ inst.inst_operands = [x;y] /\
+   inst.inst_outputs = [z]` by simp[Abbr `inst`, mk_inst_def] >>
+  `source_memory_write_ranges inst s = [] /\ out_taint tn inst s = {}` by
+    (gvs[MEM] >> simp[source_memory_write_ranges_def, out_taint_def] >>
+     Cases_on `eval_operand x s` >> simp[shift_taint_def, EXTENSION]) >>
+  simp[step_taint_def, set_var_taint_def,
+       mem_taint_def, step_writes_def, written_taint_def, store_taint_def,
+       adopt_reset_def, imm_taint_def, range_bytes_def, taint_component_equality]
 QED
 
 Theorem convert_scalar_ghost_frame:
