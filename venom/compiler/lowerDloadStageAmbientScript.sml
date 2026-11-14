@@ -8,14 +8,16 @@ Ancestors
 Libs
   lowerDloadReturnPackageLib lowerDloadOwnedTransitionPackageLib
 
-Theorem ld_stage_ambient:
+Theorem ld_stage_ambient_static:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  dead_wf D /\ o1_ctx_shape C /\
+  (o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+   code_layout_valid vs) /\
   o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
   ?lo P Sigma.
     EVERY (fn_ptr_ok P) C.ctx_functions /\
     (!fn. MEM fn C.ctx_functions ==>
-      ^ld_covered_ambient lo C C' vs Sigma names fn
+      ^ld_covered_ambient_static lo C C' vs Sigma names fn
         (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
     C'.ctx_entry = C.ctx_entry /\
     (?name fn lbl. C'.ctx_entry = SOME name /\
@@ -47,6 +49,26 @@ Proof
     (Cases_on `lower_dload_function_supply (Sigma fn.fn_name) fn` >>
      drule lower_dload_function_supply_labels >> simp[]) >>
   fs[ctx_pass_stage_def] >> metis_tac[]
+QED
+
+Theorem ld_stage_ambient:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
+  ?lo P Sigma.
+    EVERY (fn_ptr_ok P) C.ctx_functions /\
+    (!fn. MEM fn C.ctx_functions ==>
+      ^ld_covered_ambient lo C C' vs Sigma names fn
+        (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
+    C'.ctx_entry = C.ctx_entry /\
+    (?name fn lbl. C'.ctx_entry = SOME name /\
+      lookup_function name C'.ctx_functions = SOME fn /\
+      fn_entry_label fn = SOME lbl)
+Proof
+  strip_tac >>
+  fs[o1_run_state_ok_def] >>
+  drule_all ld_stage_ambient_static >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem ld_stage_root_coverage:
