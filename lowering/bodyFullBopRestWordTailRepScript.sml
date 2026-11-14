@@ -193,6 +193,21 @@ Theorem rest_word_membership_tail_clean_reads:
        (!cap. bd = Dynamic cap ==>
          key_taint (if tr then (Tu H).t_trans else (Tu H).t_stor) w = {} /\
          (if tr then tload w u else sload w u) = n2w (LENGTH ws))) /\
+   (~cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+     ?w. eval_operand (vv_operand vv) u = SOME w /\
+       op_taint (Tu H) (vv_operand vv) = {} /\
+       immutable_holds cenv cx (ArrayT ety pbd) (Value (ArrayV av)) w ee u /\
+       value_has_type (ArrayTV et pbd) (ArrayV av) /\
+       w2n w + type_memory_size (ArrayTV et pbd) <= LENGTH u.vs_data_section /\
+       (!i. i < LENGTH ws ==>
+         word_of_bytes T (0w:bytes32)
+           (TAKE 32 (DROP (w2n (w + n2w
+             ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)))
+             u.vs_data_section ++ REPLICATE 32 0w)) = EL i ws) /\
+       (!cap. bd = Dynamic cap ==>
+         word_of_bytes T (0w:bytes32)
+           (TAKE 32 (DROP (w2n w) u.vs_data_section ++ REPLICATE 32 0w)) =
+           n2w (LENGTH ws))) /\
    (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
      ?w. eval_operand (vv_operand vv) u = SOME w /\
        op_prov (Gu H) (vv_operand vv) = NONE /\ op_taint (Tu H) (vv_operand vv) = {} /\
@@ -225,7 +240,8 @@ Proof
   conj_tac >- (Cases_on `bd` >> gvs[] >> decide_tac) >>
   conj_tac >- (irule rest_word_membership_indexed_words >> metis_tac[]) >>
   conj_tac >- simp[] >> conj_tac >- suspend "runtime_memory" >>
-  conj_tac >- suspend "runtime_slot" >> suspend "ctor"
+  conj_tac >- suspend "runtime_slot" >>
+  conj_tac >- suspend "runtime_code" >> suspend "ctor"
 QED
 
 Resume rest_word_membership_tail_clean_reads[ctor]:
@@ -351,6 +367,44 @@ Resume rest_word_membership_tail_clean_reads[slot_reads]:
      n2w (array_length (ArrayTV et (Dynamic pcap)) av)` by
     (drule_all membership_located_slot_header >> simp[]) >>
   Cases_on `av` >> gvs[value_has_type_def, array_length_def]
+QED
+
+Resume rest_word_membership_tail_clean_reads[runtime_code]:
+  strip_tac >>
+  `vv_holds cenv cx (ArrayT ety pbd) tv vv ee u` by
+    (fs[loweringPostsTheory.vv_post_def] >> metis_tac[]) >>
+  Cases_on `vv` >>
+  gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def] >>
+  rename1 `LocatedValue ann p` >>
+  `?w. eval_operand p.ptr_operand u = SOME w /\
+    immutable_holds cenv cx (ArrayT ety pbd) tv w ee u` by
+    (gvs[loweringPostsTheory.vv_holds_def] >> metis_tac[]) >>
+  `immutable_holds cenv cx (ArrayT ety pbd) (Value (ArrayV av)) w ee u` by
+    (gvs[loweringPostsTheory.immutable_holds_def,
+      vyperStateTheory.read_result_def, vyperStateTheory.return_def] >> metis_tac[]) >>
+  `value_has_type (ArrayTV et pbd) (ArrayV av)` by
+    (gvs[loweringPostsTheory.immutable_holds_def,
+      vyperStateTheory.read_result_def, vyperStateTheory.return_def] >> metis_tac[]) >>
+  `stmt_state_rel H ctx fn cenv cx ee u` by
+    fs[loweringPostsTheory.vv_post_def] >>
+  `op_taint (Tu H) p.ptr_operand = {}` by
+    gvs[bodyPtrDefsTheory.ptr_vv_ok_def] >>
+  `w2n w + type_memory_size (ArrayTV et pbd) <= LENGTH u.vs_data_section` by
+    (drule_all exprSimBopRestWordLoadSafetyTheory.rest_word_immutable_region_bound >> simp[]) >>
+  qexists_tac `w` >> simp[] >>
+  conj_tac
+  >- (gen_tac >> disch_tac >>
+      `i < array_length (ArrayTV et pbd) av /\
+       array_index (ArrayTV et pbd) av (&i) =
+         SOME (THE (array_index (ArrayTV et bd) av (&i))) /\
+       (case pbd of Fixed _ => 0 | Dynamic _ => 32) =
+         (case bd of Fixed _ => 0 | Dynamic _ => 32)` by
+        (Cases_on `bd` >> Cases_on `av` >>
+         gvs[value_has_type_def, array_length_def, array_index_def]) >>
+      drule_all bodyPtrBopInCodeContentsTheory.membership_array_immutable_dload >> simp[]) >>
+  gen_tac >> disch_tac >> gvs[] >>
+  drule_all membership_dynamic_code_header >>
+  Cases_on `av` >> simp[array_length_def]
 QED
 
 Finalise rest_word_membership_tail_clean_reads
