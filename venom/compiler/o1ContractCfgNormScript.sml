@@ -1571,6 +1571,35 @@ Proof
   once_rewrite_tac[arithmeticTheory.MULT_COMM] >> first_assum ACCEPT_TAC
 QED
 
+
+Theorem cfg_norm_stage_revert_empty:
+  ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  run_context fuel C vs = Abort Revert_abort s /\
+  s.vs_returndata = [] ==>
+  ?t. run_context (cfg_norm_fuel C' fuel) C' vs = Abort Revert_abort t /\
+      t.vs_returndata = []
+Proof
+  strip_tac >>
+  drule_all cfg_norm_stage_fn_bisim_fuel >> strip_tac >>
+  `C'.ctx_entry = C.ctx_entry` by gvs[ctx_pass_stage_def] >>
+  `!fuel v t. run_context fuel C vs <> IntRet v t` by
+    (rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >>
+     `MEM fn C.ctx_functions /\ fn.fn_name = name` by
+       metis_tac[venomInstTheory.lookup_function_MEM,
+                 ctxLookupAgreeHelpersTheory.lookup_function_selected_name] >>
+     gvs[o1_ctx_shape_def, o1_fn_shape_def, listTheory.EVERY_MEM,
+         entry_fn_no_return_def] >> metis_tac[]) >>
+  `frame_result_rel (run_context fuel C vs)
+     (run_context (cfg_norm_fuel C' fuel) C' vs)` by
+    (pure_rewrite_tac[cfg_norm_fuel_def] >>
+     irule fn_bisim_fuel_run_context_frame >>
+     simp[le_exp2_mult, passSimulationDefsTheory.terminates_def] >>
+     once_rewrite_tac[arithmeticTheory.MULT_COMM] >> first_assum ACCEPT_TAC) >>
+  gvs[] >> drule_all frame_result_rel_revert_empty >> simp[]
+QED
+
 (* Row 8 to row 9 also holds for an incoming static frame. *)
 Theorem o1_static_stage_cfg_normalization:
   !C C' vs.

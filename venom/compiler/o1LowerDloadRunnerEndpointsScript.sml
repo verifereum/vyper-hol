@@ -1,13 +1,12 @@
 (* Terminal endpoints retain the runner's original boundary witnesses. *)
 Theory o1LowerDloadRunnerEndpoints
 Ancestors
-  o1SafeUpto
-  o1LowerDloadRunner o1LowerDloadUnchangedFetch o1LowerDloadBranchExec
-  o1LowerDloadForwardInversion contextCodegenRel
-  o1LowerDloadJointReturn o1LowerDloadHaltResult o1LowerDloadAbortResult
-  o1LowerDloadJointIdentity o1LowerDloadExceptional
-  o1LowerDloadRunnerBoundary o1LowerDloadJointRelation o1PassContract
-  ptrDiscipline venomExecSemantics venomInstProps venomInst opcodeClass list gasEvents
+  
+  o1SafeUpto o1LowerDloadRunner o1LowerDloadUnchangedFetch o1LowerDloadBranchExec o1LowerDloadForwardInversion
+  contextCodegenRel o1LowerDloadJointReturn o1LowerDloadHaltResult o1LowerDloadAbortResult o1LowerDloadJointIdentity
+  o1LowerDloadExceptional o1LowerDloadRunnerBoundary o1LowerDloadJointRelation o1PassContract ptrDiscipline
+  venomExecSemantics venomInstProps venomInst opcodeClass list
+  gasEvents passSharedFrame
 
 val ldPacket = fst (strip_comb (fst (dest_imp
   (concl ld_runner_packet_terminates))));
@@ -162,3 +161,93 @@ Proof
   drule_all revert_forward_at_terminates_abort >> strip_tac >> gvs[] >>
   drule_all ld_runner_forward_abort_endpoint >> simp[]
 QED
+
+Theorem ld_runner_abort_step_revert_empty[local]:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
+  step_inst fuel C inst s = Abort Revert_abort s1 /\
+  s1.vs_returndata = [] ==>
+  ?t1. step_inst fuel C' inst t = Abort Revert_abort t1 /\
+       t1.vs_returndata = []
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = REVERT`
+  >- (drule_all ld_joint_revert_empty >> simp[]) >>
+  `inst.inst_opcode <> INVALID` by
+    (strip_tac >> gvs[step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
+  `inst.inst_opcode <> SELFDESTRUCT` by
+    (strip_tac >>
+     gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()]) >>
+  `~is_terminator inst.inst_opcode` by
+    (drule step_inst_abort_opcodes >> rpt strip_tac >>
+     gvs[is_terminator_def]) >>
+  `?t1. step_inst fuel C' inst t = Abort Revert_abort t1` by
+    (Cases_on `MEM inst.inst_opcode [ASSERT; ASSERT_UNREACHABLE]`
+     >- (drule_all ld_joint_assert_abort >> metis_tac[]) >>
+     Cases_on `MEM inst.inst_opcode [RETURNDATACOPY; CREATE; CREATE2]`
+     >- (drule_all ld_joint_ordinary_abort >> metis_tac[]) >>
+     Cases_on `MEM inst.inst_opcode [SSTORE; TSTORE; LOG; SELFDESTRUCT; CALL]`
+     >- (drule_all ld_joint_static_abort >> metis_tac[]) >>
+     drule step_inst_abort_opcodes >> rpt strip_tac >> gvs[]) >>
+  qexists_tac `t1` >> simp[] >>
+  `step_inst_base inst t = Abort Revert_abort t1` by
+    gvs[step_inst_non_invoke] >>
+  drule_all step_inst_base_abort_returndata >> simp[]
+QED
+
+Theorem ld_runner_abort_endpoint_revert_empty:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  active_inst fn inst s /\ inst.inst_opcode <> INVOKE /\
+  step_inst fuel C inst s = Abort Revert_abort s1 /\
+  s1.vs_returndata = [] ==>
+  ?fn' bb' r'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    exec_block fuel C' bb' t = r' /\
+    ^ldPacket stk PG fn a U HP ts s.vs_call_ctx.cc_address
+      (Abort Revert_abort s1) r' /\
+    ?t1. r' = Abort Revert_abort t1 /\ t1.vs_returndata = []
+Proof
+  strip_tac >> drule_all ld_runner_abort_endpoint >>
+  disch_then (qx_choosel_then [`packet_fn`,`packet_bb`,`packet_res`]
+    strip_assume_tac) >>
+  qexistsl_tac [`packet_fn`,`packet_bb`,`packet_res`] >> simp[] >>
+  drule_all ld_runner_abort_step_revert_empty >>
+  disch_then (qx_choose_then `target_s` strip_assume_tac) >>
+  `~MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by
+    (drule step_inst_abort_opcodes >> rpt strip_tac >> gvs[]) >>
+  drule_all ld_joint_unchanged_fetch >> strip_tac >>
+  `get_instruction packet_bb t.vs_inst_idx = SOME inst` by
+    metis_tac[optionTheory.SOME_11] >>
+  qexists_tac `target_s` >> simp[] >>
+  qpat_x_assum `exec_block fuel C' packet_bb t = packet_res` mp_tac >>
+  simp[Once exec_block_def]
+QED
+
+Theorem ld_runner_forward_abort_endpoint_revert_empty:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\
+  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  inst.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  exec_block fuel C bb s = Abort Revert_abort s1 /\
+  s1.vs_returndata = [] ==>
+  ?fn' bb' r'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    exec_block fuel C' bb' t = r' /\
+    ^ldPacket stk PG fn a U HP ts s.vs_call_ctx.cc_address
+      (Abort Revert_abort s1) r' /\
+    ?t1. r' = Abort Revert_abort t1 /\ t1.vs_returndata = []
+Proof
+  strip_tac >> drule_all ld_runner_forward_abort_endpoint >>
+  disch_then (qx_choosel_then [`packet_fn`,`packet_bb`,`packet_res`]
+    strip_assume_tac) >>
+  qexistsl_tac [`packet_fn`,`packet_bb`,`packet_res`] >> simp[] >>
+  drule_all o1LowerDloadForwardAbortTheory.ld_joint_forward_revert_empty >>
+  disch_then (qx_choosel_then [`target_fn`,`target_bb`,`target_s`]
+    strip_assume_tac) >>
+  qexists_tac `target_s` >> simp[] >> metis_tac[optionTheory.SOME_11]
+QED
+

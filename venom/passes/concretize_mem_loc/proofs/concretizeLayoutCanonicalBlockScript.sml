@@ -6,6 +6,191 @@ Ancestors concretizeLayoutCutSafe concretizeLayoutCanonicalDeferred concretizeLa
   frameSelectedPrefix frameSelectedSimulation frameSelectedDecoration frameFiniteJointDecoration
   frameGasEvents fmpAnalysisProps frameFiniteExecution venomExecSemantics venomInst
   fragExec concretizeMemLocDefs passSharedDefs list arithmetic
+  mem2varRevertForward makeSsaRfShape analysisSimProofsBase
+  concretizeLayoutCanonicalBaseMemory concretizeLayoutCanonicalBaseCertificate
+
+Theorem layout_prefix_alias_success:
+  (!p q. same_after_assigns xs p q ==> eval_operand p s = eval_operand q s) /\
+  step_inst fuel C i s = OK post /\ ~is_terminator i.inst_opcode ==>
+  (!p q. same_after_assigns (i::xs) p q ==>
+    eval_operand p post = eval_operand q post)
+Proof
+  rpt strip_tac >>
+  Cases_on `p = q` >- gvs[] >>
+  Cases_on `step_back_assign i p` >>
+  Cases_on `step_back_assign i q` >>
+  gvs[contextCodegenRelTheory.same_after_assigns_def] >>
+  imp_res_tac m2v_step_back_assign_eval >>
+  metis_tac[]
+QED
+
+Theorem layout_prefix_alias_index:
+  (!p q. same_after_assigns xs p q ==> eval_operand p s = eval_operand q s) ==>
+  (!p q. same_after_assigns xs p q ==>
+    eval_operand p (s with vs_inst_idx := k) =
+    eval_operand q (s with vs_inst_idx := k))
+Proof
+  simp[instIdxIndepTheory.eval_op_inst_idx]
+QED
+
+Theorem layout_prefix_alias_initialize:
+  !is s p q.
+    same_after_assigns (REVERSE (TAKE (phi_prefix_length is) is)) p q ==>
+    eval_operand p s = eval_operand q s
+Proof
+  rpt gen_tac >>
+  `EVERY (\i. i.inst_opcode <> ASSIGN)
+     (REVERSE (TAKE (phi_prefix_length is) is))` by
+    (simp[rich_listTheory.EVERY_REVERSE, EVERY_MEM] >>
+     mp_tac (Q.SPEC `is` phi_prefix_all_phi) >>
+     simp[EVERY_MEM] >> strip_tac >> rpt strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  simp[simplifyCfgFrameRfTheory.scfg_same_after_nonassigns]
+QED
+
+Theorem layout_prefix_alias_phi_reset:
+  !is k p q.
+    phi_prefix_length is <= k /\ k <= LENGTH is /\
+    same_after_assigns (REVERSE (TAKE k is)) p q ==>
+    same_after_assigns
+      (REVERSE (TAKE (k - phi_prefix_length is)
+        (DROP (phi_prefix_length is) is))) p q
+Proof
+  rpt strip_tac >>
+  `TAKE k is = TAKE (phi_prefix_length is) is ++
+     TAKE (k - phi_prefix_length is) (DROP (phi_prefix_length is) is)` by
+    (qspecl_then [`phi_prefix_length is`, `k - phi_prefix_length is`, `is`]
+       mp_tac TAKE_SUM >> simp[]) >>
+  qpat_x_assum `same_after_assigns _ _ _` mp_tac >>
+  asm_rewrite_tac[REVERSE_APPEND] >>
+  strip_tac >>
+  irule rf_same_after_drop_phi_suffix >>
+  goal_assum (drule_at Any) >>
+  simp[rich_listTheory.EVERY_REVERSE, phi_prefix_all_phi]
+QED
+
+Theorem layout_prefix_alias_concretize:
+  !xs positions p q.
+    same_after_assigns xs p q ==>
+    same_after_assigns
+      (FILTER (\i. i.inst_opcode <> NOP)
+        (MAP (concretize_inst_with_positions positions) xs)) p q
+Proof
+  Induct_on `xs`
+  >- simp[contextCodegenRelTheory.same_after_assigns_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `p = q`
+  >- simp[makeSsaRfWitnessTheory.rf_same_after_assigns_refl] >>
+  Cases_on `h.inst_opcode = ALLOCA`
+  >- (Cases_on `p` >> Cases_on `q` >>
+      gvs[contextCodegenRelTheory.same_after_assigns_def,
+        contextCodegenRelTheory.step_back_assign_def,
+        SF boolSimps.COND_elim_ss] >>
+      Cases_on `h.inst_outputs` >>
+      simp[concretize_inst_with_positions_def] >>
+      Cases_on `t` >>
+      Cases_on `FLOOKUP positions (Allocation h.inst_id)` >>
+      gvs[mk_assign_inst_def, mk_nop_inst_def] >> metis_tac[]) >>
+  gvs[concretize_inst_with_positions_def] >>
+  Cases_on `h.inst_opcode = NOP`
+  >- (Cases_on `p` >> Cases_on `q` >>
+      gvs[contextCodegenRelTheory.same_after_assigns_def,
+        contextCodegenRelTheory.step_back_assign_def,
+        SF boolSimps.COND_elim_ss] >> metis_tac[]) >>
+  Cases_on `step_back_assign h p` >>
+  Cases_on `step_back_assign h q` >>
+  gvs[contextCodegenRelTheory.same_after_assigns_def]
+QED
+
+Definition layout_paired_prefix_alias_def:
+  layout_paired_prefix_alias bb s bb' t <=>
+    (!p q. same_after_assigns
+      (REVERSE (TAKE s.vs_inst_idx bb.bb_instructions)) p q ==>
+      eval_operand p s = eval_operand q s) /\
+    (!p q. same_after_assigns
+      (REVERSE (TAKE t.vs_inst_idx bb'.bb_instructions)) p q ==>
+      eval_operand p t = eval_operand q t)
+End
+
+Theorem layout_paired_prefix_alias_initialize:
+  s.vs_inst_idx = phi_prefix_length bb.bb_instructions /\
+  t.vs_inst_idx = phi_prefix_length bb'.bb_instructions ==>
+  layout_paired_prefix_alias bb s bb' t
+Proof
+  simp[layout_paired_prefix_alias_def] >>
+  metis_tac[layout_prefix_alias_initialize]
+QED
+
+Theorem layout_prefix_alias_advance[local]:
+  (!a b. same_after_assigns
+    (REVERSE (TAKE s.vs_inst_idx bb.bb_instructions)) a b ==>
+    eval_operand a s = eval_operand b s) /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  finite_step C i s (OK p) /\ ~is_terminator i.inst_opcode ==>
+  (!a b. same_after_assigns
+    (REVERSE (TAKE (SUC s.vs_inst_idx) bb.bb_instructions)) a b ==>
+    eval_operand a (p with vs_inst_idx := SUC s.vs_inst_idx) =
+    eval_operand b (p with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  simp[get_instruction_def, finite_step_iff] >> rpt strip_tac >>
+  gvs[rich_listTheory.TAKE_SUC_BY_TAKE, REVERSE_SNOC] >>
+  metis_tac[layout_prefix_alias_success, layout_prefix_alias_index]
+QED
+
+Theorem layout_paired_prefix_alias_retained:
+  layout_paired_prefix_alias bb s bb' t /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  get_instruction bb' t.vs_inst_idx = SOME j /\
+  finite_step C i s (OK p) /\ finite_step C' j t (OK tp) /\
+  ~is_terminator i.inst_opcode /\ ~is_terminator j.inst_opcode ==>
+  layout_paired_prefix_alias bb (p with vs_inst_idx := SUC s.vs_inst_idx)
+    bb' (tp with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  simp[layout_paired_prefix_alias_def] >> rpt strip_tac >>
+  irule layout_prefix_alias_advance >> metis_tac[]
+QED
+
+Theorem layout_paired_prefix_alias_nop:
+  layout_paired_prefix_alias bb s bb' t /\
+  get_instruction bb s.vs_inst_idx = SOME i /\ i.inst_opcode = NOP ==>
+  layout_paired_prefix_alias bb (s with vs_inst_idx := SUC s.vs_inst_idx) bb' t
+Proof
+  simp[layout_paired_prefix_alias_def, get_instruction_def] >>
+  rpt strip_tac >>
+  gvs[rich_listTheory.TAKE_SUC_BY_TAKE, REVERSE_SNOC,
+    instIdxIndepTheory.eval_op_inst_idx,
+    contextCodegenRelTheory.same_after_assigns_def,
+    contextCodegenRelTheory.step_back_assign_def] >>
+  Cases_on `p` >> Cases_on `q` >>
+  gvs[AllCaseEqs(), SF boolSimps.COND_elim_ss] >> metis_tac[]
+QED
+
+Theorem layout_filter_rank_take[local]:
+  !R P xs k.
+  TAKE (LENGTH (FILTER P (MAP R (TAKE k xs))))
+    (FILTER P (MAP R xs)) = FILTER P (MAP R (TAKE k xs))
+Proof
+  rpt gen_tac >> qid_spec_tac `k` >> Induct_on `xs` >> simp[] >>
+  Cases_on `k` >> simp[] >> Cases_on `P (R h)` >> simp[]
+QED
+
+Theorem layout_paired_prefix_alias_source_demand:
+  layout_block_pair positions bb bb' s.vs_inst_idx t.vs_inst_idx /\
+  layout_paired_prefix_alias bb s bb' t /\
+  same_after_assigns (REVERSE (TAKE s.vs_inst_idx bb.bb_instructions)) p q ==>
+  eval_operand p s = eval_operand q s /\
+  eval_operand p t = eval_operand q t
+Proof
+  simp[layout_paired_prefix_alias_def,
+    concretizeLayoutBlockPairingTheory.layout_block_pair_def] >>
+  rpt strip_tac >>
+  drule layout_prefix_alias_concretize >>
+  disch_then (qspec_then `positions` mp_tac) >>
+  gvs[clear_nops_block_def, passTransformTheory.block_map_transform_def,
+    concretizeLayoutBlockPairingTheory.layout_filter_rank_def,
+    layout_filter_rank_take, GSYM MAP_REVERSE, GSYM FILTER_REVERSE] >>
+  metis_tac[]
+QED
 
 Theorem layout_canonical_corridor_instruction:
   ~g.ltp_pending /\ layout_corridor_entry C g s t /\
@@ -289,6 +474,25 @@ Proof
   fs[layout_canonical_block_witness_def, layout_paired_ordinary_def]
 QED
 
+Theorem layout_canonical_ordinary_ready[local]:
+  layout_driver_indexed es ass k /\
+  layout_aligned_entry D lo vs0 C C' q0 es qs qend k p tp /\
+  k.lop_cursor = SUC m /\ k.lop_pending /\
+  qn = EL (SUC m) (q0::qs) ==>
+  layout_canonical_entry D lo vs0 C C' q0 es qs ass qend qn (SUC m)
+    (INL (k with lop_pending := F))
+    (p with vs_inst_idx := SUC p.vs_inst_idx)
+    (tp with vs_inst_idx := SUC tp.vs_inst_idx)
+Proof
+  strip_tac >> simp[layout_canonical_entry_def] >>
+  fs[layout_aligned_entry_def] >>
+  drule layout_ordinary_administrative >> strip_tac >>
+  gvs[layout_canonical_ready_def, layout_aligned_entry_def,
+      layout_ordinary_entry_def, layout_ordinary_trace_def,
+      layout_phase_normalize_def, layout_phase_origin_def, layout_driver_indexed_def,
+      concretizeLayoutCanonicalIndexTheory.layout_phase_canonical_def]
+QED
+
 Theorem layout_canonical_success_ready:
   layout_canonical_success D lo vs0 C C' q0 es qs ass qend m invoke a p tp /\
   qn = EL (SUC m) (q0::qs) ==>
@@ -380,6 +584,48 @@ Proof
       simp[ADD1] >> metis_tac[]) >>
   simp[layout_canonical_block_witness_def, layout_paired_ordinary_def,
        layout_canonical_entry_def, layout_phase_origin_def] >> metis_tac[]
+QED
+
+Theorem layout_canonical_ordinary_pending_reenter[local]:
+  layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+    q n bb s bb' t (INL g) /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\
+  i.inst_opcode <> NOP /\ i.inst_opcode <> INVOKE /\
+  j.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+  ~is_terminator j.inst_opcode /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  decoration_at fn i s q /\
+  decoration_entry fn (p with vs_inst_idx := SUC s.vs_inst_idx) qn /\
+  finite_step C i s (OK p) /\ finite_step C' j t (OK tp) /\
+  g.lop_cursor < LENGTH es /\ EL g.lop_cursor es = SOME (OriginOrdinary fuel p) /\
+  k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\ k.lop_ids = g.lop_ids /\
+  resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+    g.lop_ids g.lop_anns k.lop_anns /\
+  resolved_annotation_edge C g.lop_cursor g.lop_config (EL g.lop_cursor es) qn
+    g.lop_ids (EL g.lop_cursor ass) ids' (EL (SUC g.lop_cursor) ass) /\
+  layout_phase_ok_abort D lo vs0 C C' q0 es qs qend
+    (INL g) (INL k) (OK p) (OK tp) /\
+  qn = EL (SUC g.lop_cursor) (q0::qs) ==>
+  layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+    qn (SUC n) bb (p with vs_inst_idx := SUC s.vs_inst_idx) bb'
+    (tp with vs_inst_idx := SUC t.vs_inst_idx) (INL (k with lop_pending := F))
+Proof
+  strip_tac >>
+  drule layout_canonical_ordinary_step_witness >> strip_tac >>
+  `step_inst fuel C i s = OK p /\ step_inst_base j t = OK tp` by
+    gvs[finite_step_iff, step_inst_non_invoke] >>
+  drule_all layout_canonical_ordinary_success_witness >> strip_tac >>
+  `layout_canonical_entry D lo vs0 C C' q0 es qs ass qend qn (SUC n)
+    (INL (k with lop_pending := F))
+    (p with vs_inst_idx := SUC p.vs_inst_idx)
+    (tp with vs_inst_idx := SUC tp.vs_inst_idx)` by
+    (irule layout_canonical_ordinary_ready >> metis_tac[]) >>
+  `p.vs_current_bb = s.vs_current_bb /\ p.vs_inst_idx = s.vs_inst_idx /\
+   tp.vs_inst_idx = t.vs_inst_idx` by
+    metis_tac[frameFiniteControlTheory.finite_step_nonterminator_control] >>
+  irule layout_canonical_retained_reenter >>
+  gvs[layout_phase_origin_def] >> metis_tac[]
 QED
 
 Theorem layout_canonical_retained_successor:
@@ -1054,6 +1300,523 @@ Proof
      irule finite_step_block_next >> goal_assum (drule_at Any) >> metis_tac[]) >>
   `result = rb'` by metis_tac[finite_block_deterministic] >>
   gvs[selected_block_match_fuel_def]
+QED
+
+
+(* Companion entry certificate: semantic aliases are initialized at the real
+   post-PHI entry, independently of the ordinary relocation certificate. *)
+Theorem layout_canonical_prefix_initialize:
+  MEM bb fn.fn_blocks /\ bb_well_formed bb /\
+  bb' = clear_nops_block
+    (block_map_transform (concretize_inst_with_positions positions) bb) /\
+  s.vs_inst_idx = phi_prefix_length bb.bb_instructions /\
+  t.vs_inst_idx = phi_prefix_length bb'.bb_instructions /\
+  ~a.lop_pending /\ a.lop_config = q /\ a.lop_cursor = n /\
+  a.lop_origin.lbo_source = bb /\ a.lop_origin.lbo_target = bb' /\
+  layout_aligned_entry D lo vs0 C C' q0 es qs qend a s t /\
+  layout_driver_indexed es ass a /\ decoration_entry fn s q /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  MEM fn C.ctx_functions /\ layout_driver_row C' fn fn' positions ==>
+  layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+    q n bb s bb' t (INL a) /\ layout_paired_prefix_alias bb s bb' t
+Proof
+  strip_tac >> conj_tac
+  >- (simp[layout_canonical_block_witness_def] >>
+      goal_assum (drule_at Any) >> simp[] >>
+      irule layout_paired_ordinary_initialize >> metis_tac[]) >>
+  irule layout_paired_prefix_alias_initialize >> simp[]
+QED
+
+Theorem layout_canonical_prefix_retained_successor:
+  layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+    q n bb s bb' t a /\ layout_paired_prefix_alias bb s bb' t /\
+  get_instruction bb s.vs_inst_idx = SOME i /\ i.inst_opcode <> NOP /\
+  ~is_terminator i.inst_opcode /\ ~is_terminator j.inst_opcode /\
+  decoration_at fn i s q /\
+  decoration_entry fn (p with vs_inst_idx := SUC s.vs_inst_idx) qn /\
+  finite_step C i s (OK p) /\ finite_step C' j t (OK tp) /\
+  get_instruction bb' t.vs_inst_idx = SOME j /\
+  layout_canonical_success D lo vs0 C C' q0 es qs ass qend m
+    (i.inst_opcode = INVOKE) a p tp /\ qn = EL (SUC m) (q0::qs) ==>
+  ?b. layout_phase_origin b = layout_phase_origin a /\ (ISL b ==> ISL a) /\
+    layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+      qn (SUC m) bb (p with vs_inst_idx := SUC s.vs_inst_idx) bb'
+      (tp with vs_inst_idx := SUC t.vs_inst_idx) b /\
+    layout_paired_prefix_alias bb (p with vs_inst_idx := SUC s.vs_inst_idx)
+      bb' (tp with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >> drule_all layout_canonical_retained_successor >> strip_tac >>
+  qexists `b` >> simp[] >>
+  irule layout_paired_prefix_alias_retained >> metis_tac[]
+QED
+
+Theorem layout_canonical_prefix_nop_successor:
+  layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+    q n bb s bb' t (INL a) /\ layout_paired_prefix_alias bb s bb' t /\
+  get_instruction bb s.vs_inst_idx = SOME i /\ i.inst_opcode = NOP /\
+  decoration_at fn i s q /\ decoration_entry fn sn qn /\
+  sn.vs_current_bb = s.vs_current_bb /\
+  sn.vs_inst_idx = SUC s.vs_inst_idx /\
+  k.lop_origin = a.lop_origin /\ k.lop_cursor = SUC n /\ k.lop_config = qn /\
+  k.lop_pending /\ layout_driver_indexed es ass k /\
+  layout_aligned_entry D lo vs0 C C' q0 es qs qend k post t /\
+  post.vs_inst_idx = s.vs_inst_idx /\
+  sn = (post with vs_inst_idx := SUC s.vs_inst_idx) /\
+  finite_step C i s (OK post) ==>
+  layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+    qn (SUC n) bb sn bb' t (INL (k with lop_pending := F)) /\
+  layout_paired_prefix_alias bb sn bb' t
+Proof
+  strip_tac >> conj_tac
+  >- (irule layout_canonical_nop_reenter >> metis_tac[]) >>
+  `post = s` by
+    (gvs[finite_step_iff, step_inst_def, step_inst_base_def]) >>
+  gvs[] >> irule layout_paired_prefix_alias_nop >> metis_tac[]
+QED
+
+Theorem layout_canonical_prefix_invoke_successor[local]:
+  layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+    q n bb s bb' t (INL g) /\ layout_paired_prefix_alias bb s bb' t /\
+  get_instruction bb s.vs_inst_idx = SOME i /\ i.inst_opcode = INVOKE /\
+  ~is_terminator i.inst_opcode /\ ~is_terminator j.inst_opcode /\
+  decoration_at fn i s q /\
+  decoration_entry fn (p with vs_inst_idx := SUC s.vs_inst_idx) qn /\
+  finite_step C i s (OK p) /\ finite_step C' j t (OK tp) /\
+  get_instruction bb' t.vs_inst_idx = SOME j /\
+  layout_canonical_success D lo vs0 C C' q0 es qs ass qend m T (INL g) p tp /\
+  qn = EL (SUC m) (q0::qs) ==>
+  ?b. layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+      qn (SUC m) bb (p with vs_inst_idx := SUC s.vs_inst_idx) bb'
+      (tp with vs_inst_idx := SUC t.vs_inst_idx) (INL b) /\
+    layout_paired_prefix_alias bb (p with vs_inst_idx := SUC s.vs_inst_idx)
+      bb' (tp with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >>
+  `layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g)` by
+    (irule layout_canonical_block_witness_retained >> gvs[] >> metis_tac[]) >>
+  qpat_x_assum `layout_canonical_success _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[layout_canonical_success_def] >> strip_tac >> Cases_on `b` >> fs[] >>
+  rename1 `layout_driver_indexed es ass k` >>
+  `p.vs_current_bb = s.vs_current_bb /\ p.vs_inst_idx = s.vs_inst_idx /\
+   tp.vs_inst_idx = t.vs_inst_idx` by
+    metis_tac[frameFiniteControlTheory.finite_step_nonterminator_control] >>
+  `layout_canonical_entry D lo vs0 C C' q0 es qs ass qend qn (SUC m) (INL k)
+    (p with vs_inst_idx := SUC s.vs_inst_idx)
+    (tp with vs_inst_idx := SUC t.vs_inst_idx)` by
+    gvs[layout_canonical_entry_def, layout_canonical_ready_def,
+      layout_aligned_entry_def, layout_ordinary_entry_def, layout_ordinary_trace_def,
+      layout_driver_indexed_def, concretizeLayoutCanonicalIndexTheory.layout_phase_canonical_def] >>
+  qexists `k` >> conj_tac
+  >- (irule layout_canonical_retained_reenter >>
+      gvs[layout_phase_origin_def] >>
+      qexistsl [`g`, `fn`, `i`, `j`, `n`, `q`, `s`, `t`] >> simp[]) >>
+  irule layout_paired_prefix_alias_retained >> metis_tac[]
+QED
+
+Theorem layout_canonical_prefix_base_successor[local]:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ taint_within D C vs0 /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+    q n bb s bb' t (INL g) /\ layout_paired_prefix_alias bb s bb' t /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  get_instruction bb' t.vs_inst_idx = SOME j /\
+  layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
+  decoration_entry fn (post with vs_inst_idx := SUC s.vs_inst_idx) qn /\
+  i.inst_opcode <> NOP /\ i.inst_opcode <> INVOKE /\
+  ~(i.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s) /\
+  ~is_terminator i.inst_opcode /\ finite_step C i s (OK post) /\
+  finite_step C' j t (OK tp) /\ qn = EL (SUC n) (q0::qs) ==>
+  ?b. layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+      qn (SUC n) bb (post with vs_inst_idx := SUC s.vs_inst_idx) bb'
+      (tp with vs_inst_idx := SUC t.vs_inst_idx) (INL b) /\
+    layout_paired_prefix_alias bb (post with vs_inst_idx := SUC s.vs_inst_idx)
+      bb' (tp with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >>
+  `layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g)` by
+    (irule layout_canonical_block_witness_retained >> metis_tac[]) >>
+  `step_inst_base i s = OK post` by gvs[finite_step_iff, step_inst_non_invoke] >>
+  drule_all layout_canonical_base_nonterm_pending >> strip_tac >>
+  drule_all layout_canonical_ordinary_environment >> strip_tac >>
+  `j.inst_opcode <> INVOKE /\ ~is_terminator j.inst_opcode` by
+    (gvs[] >> metis_tac[concretize_positions_nonterminator,
+       concretize_positions_not_invoke]) >>
+  `tpost = tp` by gvs[finite_step_iff, step_inst_non_invoke] >> gvs[] >>
+  drule layout_canonical_ordinary_edge >>
+  disch_then (drule_at (Pat `layout_ordinary_trace _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`post`, `i`] mp_tac) >> simp[] >> strip_tac >>
+  qexists `k with lop_pending := F` >> conj_tac
+  >- (irule layout_canonical_ordinary_pending_reenter >> gvs[] >> metis_tac[]) >>
+  irule layout_paired_prefix_alias_retained >> metis_tac[]
+QED
+
+Theorem layout_canonical_prefix_next_ordinary:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ taint_within D C vs0 /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  decoration_at fn i s q /\ get_instruction bb s.vs_inst_idx = SOME i /\
+  decorated_step C i s (OK post) q n ws qm ds /\
+  ~is_terminator i.inst_opcode /\ decoration_consumes C i q post qm ev qn /\
+  decoration_entry fn (post with vs_inst_idx := SUC s.vs_inst_idx) qn /\
+  decorated_block C bb (post with vs_inst_idx := SUC s.vs_inst_idx)
+    r qn (n+LENGTH ws+1) wb qe db /\
+  selected_segment C q0 path n q (ws++[(ev,qn)]++wb) qe /\
+  layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+    q n bb s bb' t (INL g) /\ layout_paired_prefix_alias bb s bb' t /\
+  layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend q n i s j t /\
+  finite_step C' j t (OK tp) /\
+  (i.inst_opcode <> NOP ==> get_instruction bb' t.vs_inst_idx = SOME j) /\
+  layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend
+    q n qm (n+LENGTH ws) i s j t (OK post) (OK tp) /\
+  ~(i.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s) ==>
+  ?b tb. layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+      qn (n+LENGTH ws+1) bb (post with vs_inst_idx := SUC s.vs_inst_idx) bb' tb (INL b) /\
+    layout_paired_prefix_alias bb (post with vs_inst_idx := SUC s.vs_inst_idx) bb' tb /\
+    tb = (if i.inst_opcode = NOP then t else tp with vs_inst_idx := SUC t.vs_inst_idx) /\
+    (!fuel rb'. step_inst fuel C' j t = OK tp /\ exec_block fuel C' bb' tb = rb' ==>
+      exec_block fuel C' bb' t = rb')
+Proof
+  strip_tac >>
+  `layout_base_lookahead C q0 path q n i s` by
+    (irule concretizeLayoutSelectedBaseInterfaceTheory.layout_base_lookahead_next >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `finite_step C i s (OK post)` by
+    metis_tac[frameFiniteJointDecorationTheory.decorated_execution_erases] >>
+  Cases_on `i.inst_opcode = NOP`
+  >- suspend "nop" >>
+  suspend "retained"
+QED
+
+Resume layout_canonical_prefix_next_ordinary[nop]:
+  `ws = [] /\ qm = q /\ step_inst_base i s = OK post` by
+    (qpat_x_assum `decorated_step _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frameFiniteJointDecorationTheory.decorated_step_cases] >>
+     simp[] >> metis_tac[]) >>
+  `post = s` by gvs[step_inst_base_def] >> gvs[] >>
+  rename1 `decoration_at fn i s q` >>
+  `qn = EL (SUC n) (q0::MAP SND path)` by
+    (fs[frameSelectedDecorationTheory.selected_segment_def] >>
+     simp[EL_APPEND_EQN, EL_MAP]) >>
+  `layout_canonical_step_witness D lo vs0 C C' q0 (MAP FST path)
+    (MAP SND path) ass qend q n i s i t (INL g)` by
+    (drule_all layout_canonical_block_witness_step >> strip_tac >>
+     fs[layout_canonical_step_witness_def] >> metis_tac[]) >>
+  drule_at (Pat `layout_canonical_step_witness _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    layout_canonical_nop_success >>
+  simp[] >> disch_then (qspecl_then [`path`, `fn`, `P`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `k.lop_config = qn /\ k.lop_cursor = SUC n` by
+    gvs[layout_canonical_block_witness_def, layout_paired_ordinary_def,
+      layout_aligned_entry_def, layout_ordinary_entry_def, layout_ordinary_trace_def] >>
+  qexists `k with lop_pending := F` >> simp[] >>
+  conj_tac
+  >- (fs[GSYM ADD1] >> irule layout_canonical_nop_reenter >> gvs[] >> metis_tac[]) >>
+  irule layout_paired_prefix_alias_nop >> metis_tac[]
+QED
+
+Resume layout_canonical_prefix_next_ordinary[retained]:
+  `get_instruction bb' t.vs_inst_idx = SOME j` by simp[] >>
+  drule_all layout_canonical_retained_next_witness >> strip_tac >>
+  `joint_segment C q ws qm /\ joint_segment C qn wb qe /\
+   joint_transition C qm ev qn` by
+    metis_tac[frameFiniteJointDecorationTheory.decorated_execution_segment,
+      frameFiniteJointDecorationTheory.decoration_consumes_def] >>
+  `qn = EL (SUC (n+LENGTH ws)) (q0::qs)` by
+    (fs[APPEND_ASSOC] >>
+     drule_all (SRULE[APPEND_ASSOC] frameSelectedDecorationTheory.selected_segment_edge) >>
+     strip_tac >> gvs[GSYM ADD_ASSOC, GSYM ADD1, ADD_CLAUSES]) >>
+  `?b. layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+      qn (SUC (n+LENGTH ws)) bb (post with vs_inst_idx := SUC s.vs_inst_idx) bb'
+      (tp with vs_inst_idx := SUC t.vs_inst_idx) (INL b) /\
+    layout_paired_prefix_alias bb (post with vs_inst_idx := SUC s.vs_inst_idx)
+      bb' (tp with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (Cases_on `i.inst_opcode = INVOKE`
+     >- suspend "invoke" >>
+     `ws = [] /\ qm = q` by
+       (qpat_x_assum `decorated_step _ _ _ _ _ _ _ _ _` mp_tac >>
+        simp[Once frameFiniteJointDecorationTheory.decorated_step_cases] >> metis_tac[]) >>
+     gvs[] >> irule layout_canonical_prefix_base_successor >>
+     gvs[] >> metis_tac[]) >>
+  qexistsl [`b`, `tp with vs_inst_idx := SUC t.vs_inst_idx`] >>
+  gvs[GSYM ADD1, ADD_CLAUSES] >>
+  rpt strip_tac >> simp[Once exec_block_def]
+QED
+
+Resume layout_canonical_prefix_next_ordinary[invoke]:
+  `layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g)` by
+    (irule layout_canonical_block_witness_retained >> gvs[] >> metis_tac[]) >>
+  drule_all layout_deferred_next_consume >> strip_tac >>
+  irule layout_canonical_prefix_invoke_successor >>
+  gvs[] >> metis_tac[]
+QED
+
+Finalise layout_canonical_prefix_next_ordinary
+
+Theorem layout_returncopy_preserves_operand[local]:
+  i.inst_opcode = RETURNDATACOPY /\ step_inst_base i s = OK post ==>
+  eval_operand d post = eval_operand d s
+Proof
+  simp[step_inst_base_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  Cases_on `d` >> simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]
+QED
+
+Theorem layout_canonical_exempt_scalar_demand:
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\ decoration_at fn i s q /\
+  i.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
+  i.inst_operands = [opd;ops;opn] /\
+  layout_paired_prefix_alias g.lop_origin.lbo_source s g.lop_origin.lbo_target t /\
+  revert_forward_pair g.lop_origin.lbo_source s.vs_inst_idx jidx /\
+  get_instruction g.lop_origin.lbo_source jidx = SOME term /\
+  term.inst_operands = [ptr_op;len] /\
+  d = resolve_block_assigns
+    (REVERSE (TAKE (jidx - SUC s.vs_inst_idx)
+      (DROP (SUC s.vs_inst_idx) g.lop_origin.lbo_source.bb_instructions))) len /\
+  step_inst_base i s = OK post ==>
+  ?tpost. step_inst_base j t = OK tpost /\
+    layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost /\
+    eval_operand d post = eval_operand d tpost
+Proof
+  strip_tac >>
+  drule_all layout_canonical_exempt_returncopy_scalar_success >> strip_tac >>
+  drule_all layout_canonical_ordinary_environment >> strip_tac >>
+  `j = i` by gvs[concretize_positions_unchanged] >>
+  qpat_x_assum `j = i` SUBST_ALL_TAC >>
+  `same_after_assigns
+     (REVERSE (TAKE s.vs_inst_idx g.lop_origin.lbo_source.bb_instructions)) opn d` by
+    (fs[contextCodegenRelTheory.revert_forward_pair_def] >> gvs[]) >>
+  `eval_operand opn s = eval_operand d s /\
+   eval_operand opn t = eval_operand d t` by
+    (irule layout_paired_prefix_alias_source_demand >> metis_tac[]) >>
+  qexists `tpost` >> simp[] >>
+  metis_tac[layout_returncopy_preserves_operand]
+QED
+
+Theorem layout_assign_suffix_length[local]:
+  !mid bb s rev tail fuel C post ptr_op len.
+    DROP s.vs_inst_idx bb.bb_instructions = mid ++ rev::tail /\
+    EVERY inst_wf mid /\ EVERY (\i. i.inst_opcode = ASSIGN) mid /\
+    rev.inst_opcode = REVERT /\ rev.inst_operands = [ptr_op;len] /\
+    exec_block fuel C bb s = Abort Revert_abort post ==>
+    ?sz. eval_operand (resolve_block_assigns (REVERSE mid) len) s = SOME sz /\
+         LENGTH post.vs_returndata = w2n sz
+Proof
+  Induct_on `mid`
+  >- (rpt strip_tac >>
+      `get_instruction bb s.vs_inst_idx = SOME rev` by
+        (gvs[get_instruction_def, DROP_EQ_CONS]) >>
+      qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+      simp[Once exec_block_def, step_inst_non_invoke, step_inst_base_def,
+        AllCaseEqs()] >> rpt strip_tac >>
+      gvs[contextCodegenRelTheory.resolve_block_assigns_def,
+        venomStateTheory.revert_state_def, venomStateTheory.set_returndata_def,
+        venomStateTheory.read_memory_def]) >>
+  rpt strip_tac >>
+  `get_instruction bb s.vs_inst_idx = SOME h` by
+    (gvs[get_instruction_def, DROP_EQ_CONS]) >>
+  fs[EVERY_DEF] >>
+  reverse (drule stepWriteFootprintForwardTheory.step_assign_cases >>
+    disch_then (qspecl_then [`s`, `fuel`, `C`] strip_assume_tac))
+  >- (qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+      simp[Once exec_block_def]) >>
+  rename1 `step_inst fuel C h s = OK p` >>
+  `exec_block fuel C bb (p with vs_inst_idx := SUC s.vs_inst_idx) =
+     Abort Revert_abort post` by
+    (qpat_x_assum `exec_block _ _ _ s = _` mp_tac >>
+     simp[Once exec_block_def, is_terminator_def]) >>
+  `DROP (SUC s.vs_inst_idx) bb.bb_instructions = mid ++ rev::tail` by
+    (gvs[DROP_EQ_CONS] >> simp[GSYM rich_listTheory.DROP_DROP, ADD1]) >>
+  first_x_assum (qspecl_then [`bb`, `p with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+  simp[] >> disch_then drule_all >> strip_tac >>
+  `!op. eval_operand op p = eval_operand (resolve_block_assigns [h] op) s` by
+    (gen_tac >> irule m2v_assign_resolve_eval >>
+     simp[contextCodegenRelTheory.resolve_block_assigns_def] >> metis_tac[]) >>
+  `EVERY (\a. a.inst_opcode = ASSIGN /\ LENGTH a.inst_outputs = 1 /\
+     LENGTH a.inst_operands = 1) (REVERSE mid)` by
+    (fs[rich_listTheory.EVERY_REVERSE, EVERY_MEM, venomWfTheory.inst_wf_def] >> metis_tac[]) >>
+  qexists `sz` >>
+  simp[contextCodegenRelPropsTheory.resolve_block_assigns_copy_append] >>
+  fs[instIdxIndepTheory.eval_op_inst_idx]
+QED
+
+Theorem layout_filter_rank_drop[local]:
+  !R P xs k.
+  DROP (LENGTH (FILTER P (MAP R (TAKE k xs))))
+    (FILTER P (MAP R xs)) = FILTER P (MAP R (DROP k xs))
+Proof
+  rpt gen_tac >> qid_spec_tac `k` >> Induct_on `xs` >> simp[] >>
+  Cases_on `k` >> simp[] >> Cases_on `P (R h)` >> simp[]
+QED
+
+Theorem layout_block_pair_drop[local]:
+  layout_block_pair positions bb bb' k k' ==>
+  DROP k' bb'.bb_instructions =
+    FILTER (\i. i.inst_opcode <> NOP)
+      (MAP (concretize_inst_with_positions positions) (DROP k bb.bb_instructions))
+Proof
+  simp[concretizeLayoutBlockPairingTheory.layout_block_pair_def,
+    concretizeLayoutBlockPairingTheory.layout_filter_rank_def,
+    clear_nops_block_def, passTransformTheory.block_map_transform_def,
+    layout_filter_rank_drop]
+QED
+
+Theorem layout_forward_suffix[local]:
+  revert_forward_pair bb k jidx /\ get_instruction bb jidx = SOME term ==>
+  ?tail. DROP (SUC k) bb.bb_instructions =
+    TAKE (jidx - SUC k) (DROP (SUC k) bb.bb_instructions) ++ term::tail /\
+    EVERY (\i. i.inst_opcode = ASSIGN)
+      (TAKE (jidx - SUC k) (DROP (SUC k) bb.bb_instructions)) /\
+    term.inst_opcode = REVERT
+Proof
+  simp[contextCodegenRelTheory.revert_forward_pair_def] >> rpt strip_tac >>
+  `jidx < LENGTH bb.bb_instructions /\ EL jidx bb.bb_instructions = term` by
+    gvs[get_instruction_def] >>
+  qexists `DROP (SUC jidx) bb.bb_instructions` >>
+  conj_tac
+  >- (mp_tac (Q.ISPECL [`jidx - SUC k`, `DROP (SUC k) bb.bb_instructions`]
+        rich_listTheory.TAKE_DROP_SUC) >>
+      simp[EL_DROP, rich_listTheory.DROP_DROP_T] >>
+      `jidx - SUC k + SUC k = jidx /\
+       SUC k + SUC (jidx - SUC k) = SUC jidx` by decide_tac >> simp[]) >>
+  conj_tac
+  >- (simp[EVERY_EL, EL_TAKE, EL_DROP] >> rpt strip_tac >>
+      first_x_assum irule >> simp[get_instruction_def] >>
+      qexists `n + SUC k` >> simp[] >> decide_tac) >>
+  gvs[]
+QED
+
+Theorem layout_assign_suffix_image[local]:
+  !mid positions. EVERY (\i. i.inst_opcode = ASSIGN) mid ==>
+  FILTER (\i. i.inst_opcode <> NOP)
+    (MAP (concretize_inst_with_positions positions) mid) = mid
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  simp[concretize_positions_unchanged]
+QED
+
+Theorem layout_block_pair_assign_suffix[local]:
+  layout_block_pair positions bb bb' k k' /\
+  DROP k bb.bb_instructions = mid ++ rev::tail /\
+  EVERY (\i. i.inst_opcode = ASSIGN) mid /\ rev.inst_opcode = REVERT ==>
+  ?tail'. DROP k' bb'.bb_instructions = mid ++ rev::tail'
+Proof
+  strip_tac >> drule layout_block_pair_drop >>
+  simp[MAP_APPEND, FILTER_APPEND_DISTRIB, layout_assign_suffix_image,
+    concretize_positions_unchanged] >> metis_tac[]
+QED
+
+Theorem layout_canonical_source_block_wf[local]:
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions ==>
+  EVERY inst_wf g.lop_origin.lbo_source.bb_instructions
+Proof
+  simp[layout_canonical_step_witness_def, layout_canonical_block_witness_def,
+    layout_paired_ordinary_def] >> rpt strip_tac >> gvs[] >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  `MEM e (fn_insts fn)` by
+    (irule fragExecTheory.lookup_block_fn_insts >> metis_tac[]) >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem layout_forward_block_revert_empty:
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\ decoration_at fn i s q /\
+  i.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
+  i.inst_operands = [opd;ops;opn] /\
+  layout_paired_prefix_alias g.lop_origin.lbo_source s g.lop_origin.lbo_target t /\
+  revert_forward_pair g.lop_origin.lbo_source s.vs_inst_idx jidx /\
+  get_instruction g.lop_origin.lbo_source jidx = SOME term /\
+  term.inst_operands = [ptr_op;len] /\ step_inst_base i s = OK post /\
+  exec_block fuel C g.lop_origin.lbo_source s = Abort Revert_abort fin /\
+  fin.vs_returndata = [] /\
+  exec_block tfuel C' g.lop_origin.lbo_target t = Abort Revert_abort tfin ==>
+  ?tpost. step_inst_base j t = OK tpost /\
+    layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost /\
+    tfin.vs_returndata = []
+Proof
+  strip_tac >>
+  qabbrev_tac `mid = TAKE (jidx - SUC s.vs_inst_idx)
+    (DROP (SUC s.vs_inst_idx) g.lop_origin.lbo_source.bb_instructions)` >>
+  `?tpost. step_inst_base j t = OK tpost /\
+    layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost /\
+    eval_operand (resolve_block_assigns (REVERSE mid) len) post =
+    eval_operand (resolve_block_assigns (REVERSE mid) len) tpost` by
+    (irule layout_canonical_exempt_scalar_demand >> simp[Abbr `mid`] >> metis_tac[]) >>
+  drule_all layout_canonical_ordinary_environment >> strip_tac >>
+  `j = i` by gvs[concretize_positions_unchanged] >> gvs[] >>
+  drule_all layout_forward_suffix >> strip_tac >>
+  `EVERY inst_wf mid` by
+    (drule_all layout_canonical_source_block_wf >>
+     simp[Abbr `mid`] >> metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP]) >>
+  `get_instruction g.lop_origin.lbo_target t.vs_inst_idx = SOME i` by
+    (drule_all concretizeLayoutBlockPairingTheory.layout_block_pair_lookup >>
+     simp[concretize_positions_unchanged]) >>
+  `exec_block fuel C g.lop_origin.lbo_source
+     (post with vs_inst_idx := SUC s.vs_inst_idx) = Abort Revert_abort fin` by
+    (qpat_x_assum `exec_block fuel _ _ s = _` mp_tac >>
+     simp[Once exec_block_def, step_inst_non_invoke, is_terminator_def]) >>
+  `exec_block tfuel C' g.lop_origin.lbo_target
+     (tpost with vs_inst_idx := SUC t.vs_inst_idx) = Abort Revert_abort tfin` by
+    (qpat_x_assum `exec_block tfuel _ _ t = _` mp_tac >>
+     simp[Once exec_block_def, step_inst_non_invoke, is_terminator_def]) >>
+  drule_all concretizeLayoutBlockPairingTheory.layout_block_pair_advance >>
+  simp[concretize_positions_unchanged] >> strip_tac >>
+  `?tail'. DROP (SUC t.vs_inst_idx) g.lop_origin.lbo_target.bb_instructions = mid ++ term::tail'` by
+    (irule layout_block_pair_assign_suffix >> fs[Abbr `mid`, ADD1] >> metis_tac[]) >>
+  `?sz. eval_operand (resolve_block_assigns (REVERSE mid) len) post = SOME sz /\
+        LENGTH fin.vs_returndata = w2n sz` by
+    (qpat_assum `exec_block fuel _ _ (_ with vs_inst_idx := _) = _`
+       (mp_then Any mp_tac layout_assign_suffix_length) >>
+     simp[NoAsms, instIdxIndepTheory.eval_op_inst_idx] >>
+     fs[Abbr `mid`] >> metis_tac[]) >>
+  `?tsz. eval_operand (resolve_block_assigns (REVERSE mid) len) tpost = SOME tsz /\
+         LENGTH tfin.vs_returndata = w2n tsz` by
+    (qpat_assum `exec_block tfuel _ _ (_ with vs_inst_idx := _) = _`
+       (mp_then Any mp_tac layout_assign_suffix_length) >>
+     simp[NoAsms, instIdxIndepTheory.eval_op_inst_idx] >>
+     fs[Abbr `mid`] >> metis_tac[]) >>
+  gvs[]
 QED
 
 val _ = export_theory();

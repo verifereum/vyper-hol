@@ -85,6 +85,17 @@ Proof
   rw[] >> irule ctx_sim_refl >> metis_tac[o1_ctx_shape_entry_no_return]
 QED
 
+Theorem dret_desugar_stage_revert_empty:
+  ctx_pass_stage rpolicy (CFP_Simple VP_DretDesugar) view C C' /\
+  o1_ctx_shape C /\
+  run_context fuel C vs = Abort Revert_abort s /\
+  s.vs_returndata = [] ==>
+  ?t. run_context fuel C' vs = Abort Revert_abort t /\ t.vs_returndata = []
+Proof
+  strip_tac >> drule_all dret_desugar_stage_identity >> simp[] >>
+  metis_tac[]
+QED
+
 Theorem o1_contract_dret_desugar_pre_walk:
   o1_step_contract rpolicy (CFP_Simple VP_DretDesugar) /\
   (!view I. o1_stage_contract rpolicy D (CFP_Simple VP_DretDesugar) view

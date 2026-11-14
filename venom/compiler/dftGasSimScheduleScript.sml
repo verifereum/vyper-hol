@@ -258,3 +258,206 @@ Proof
      fs[Abbr `pre`] >> metis_tac[]) >>
   metis_tac[ev_head_bubbles]
 QED
+
+Theorem ev_suffix_cons_revert_empty:
+  (!u t. ev_step orc p d fuel C h s = OK u /\
+    ev_suffix orc p d fuel C xs (u with vs_inst_idx := SUC s.vs_inst_idx) =
+      Abort Revert_abort t /\ t.vs_returndata = [] ==>
+    ?v. ev_suffix orc p d fuel C ys (u with vs_inst_idx := SUC s.vs_inst_idx) =
+      Abort Revert_abort v /\ v.vs_returndata = []) /\
+  ev_suffix orc p d fuel C (h::xs) s = Abort Revert_abort t /\
+  t.vs_returndata = [] ==>
+  ?v. ev_suffix orc p d fuel C (h::ys) s = Abort Revert_abort v /\
+      v.vs_returndata = []
+Proof
+  strip_tac >> Cases_on `ev_step orc p d fuel C h s` >>
+  gvs[ev_suffix_def] >> Cases_on `is_terminator h.inst_opcode` >> gvs[] >>
+  Cases_on `v.vs_halted` >> gvs[] >> metis_tac[]
+QED
+
+Theorem ev_extract_head_revert_empty:
+  !pre s t.
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  dft_remaining_inv fn bb (pre ++ y::post) s /\ ~s.vs_call_ctx.cc_static /\
+  EVERY (\x. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+    ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode) pre /\
+  ev_suffix orc p d fuel C (pre ++ y::post) s = Abort Revert_abort t /\
+  t.vs_returndata = [] ==>
+  ?u. ev_suffix orc p d fuel C (y::(pre ++ post)) s = Abort Revert_abort u /\
+      u.vs_returndata = []
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  `dft_gas_swap_pair h y /\ inst_wf h /\ inst_wf y /\
+   ~(h.inst_outputs = [] /\ read_effects h.inst_opcode = empty_effects /\
+     write_effects h.inst_opcode = empty_effects)` by
+    (irule dft_crossing_swap_pair >> fs[] >> metis_tac[]) >>
+  `(!v. MEM (Var v) y.inst_operands ==> v IN FDOM s.vs_vars) /\
+   (y.inst_opcode <> INVOKE /\ y.inst_opcode <> CODECOPY ==>
+    !l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels)` by
+    (irule dft_remaining_inv_ready >> qexistsl_tac [`bb`, `fn`, `post`, `h::pre`] >>
+     simp[] >> fs[EVERY_MEM] >> metis_tac[]) >>
+  `?u. ev_suffix orc p d fuel C (h::y::(pre ++ post)) s = Abort Revert_abort u /\
+       u.vs_returndata = []` by
+    (irule ev_suffix_cons_revert_empty >>
+     qexistsl_tac [`t`, `pre ++ y::post`] >> fs[APPEND] >> rpt strip_tac >>
+     `~is_terminator h.inst_opcode` by gvs[dft_gas_swap_pair_def] >>
+     `~u.vs_call_ctx.cc_static` by metis_tac[ev_step_call_ctx] >>
+     `dft_remaining_inv fn bb (pre ++ y::post)
+       (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+       (drule_at (Pat `ev_step _ _ _ _ _ _ _ = OK _`) ev_remaining_inv_step >>
+        disch_then (qspecl_then [`[]`, `pre ++ y::post`] mp_tac) >> simp[] >>
+        disch_then (qspecl_then [`fn`, `bb`] mp_tac) >> fs[APPEND]) >>
+     first_x_assum irule >> fs[]) >>
+  simp[APPEND] >> irule ev_suffix_swap_revert_empty >>
+  fs[] >> strip_tac >>
+  metis_tac[dft_swap_operand_defined]
+QED
+
+Theorem ev_head_bubbles_revert_empty:
+  !todo scheduled.
+  dft_head_bubbles
+    (\x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+      ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+      id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+      ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
+    todo scheduled ==>
+  !s t. wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+    EVERY inst_wf bb.bb_instructions /\
+    EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+    dft_remaining_inv fn bb todo s /\ ~s.vs_call_ctx.cc_static /\
+    ev_suffix orc p d fuel C todo s = Abort Revert_abort t /\
+    t.vs_returndata = [] ==>
+    ?u. ev_suffix orc p d fuel C scheduled s = Abort Revert_abort u /\
+        u.vs_returndata = []
+Proof
+  ho_match_mp_tac dft_head_bubbles_ind >> conj_tac
+  >- simp[] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `ev_suffix orc p d fuel C (y::rest) s` >>
+  Cases_on `is_terminator y.inst_opcode`
+  >- (`pre = []` by (Cases_on `pre` >> fs[dft_must_order_def]) >> gvs[] >>
+      `post = []` by metis_tac[dft_remaining_inv_terminal] >> gvs[] >>
+      gvs[ev_suffix_def] >> metis_tac[]) >>
+  `?u. ev_suffix orc p d fuel C (y::(pre ++ post)) s = Abort Revert_abort u /\
+       u.vs_returndata = []` by
+    (irule ev_extract_head_revert_empty >> metis_tac[]) >>
+  irule ev_suffix_cons_revert_empty >>
+  qexistsl_tac [`u`, `pre ++ post`] >> simp[] >> rpt strip_tac >>
+  `~u'.vs_call_ctx.cc_static` by metis_tac[ev_step_call_ctx] >>
+  `dft_remaining_inv fn bb (pre ++ post)
+    (u' with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (drule_at (Pat `ev_step _ _ _ _ _ _ _ = OK _`) ev_remaining_inv_step >>
+     disch_then (qspecl_then [`pre`, `post`, `fn`, `bb`] mp_tac) >> simp[]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem dft_exec_prefix_revert_empty:
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  (!u t. FOLDR (dft_exec_cons fuel C) OK pre s = OK u /\
+    k u = Abort Revert_abort t /\ t.vs_returndata = [] ==>
+    ?v. k' u = Abort Revert_abort v /\ v.vs_returndata = []) /\
+  FOLDR (dft_exec_cons fuel C) k pre s = Abort Revert_abort t /\
+  t.vs_returndata = [] ==>
+  ?v. FOLDR (dft_exec_cons fuel C) k' pre s = Abort Revert_abort v /\
+      v.vs_returndata = []
+Proof
+  strip_tac >>
+  qpat_x_assum `FOLDR _ k _ _ = _` mp_tac >>
+  simp[Once dft_exec_prefix_continue] >>
+  Cases_on `FOLDR (dft_exec_cons fuel C) OK pre s` >> gvs[] >>
+  simp[Once dft_exec_prefix_continue] >> metis_tac[]
+QED
+
+Theorem ev_block_schedule_revert_empty:
+  wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+  EVERY inst_wf bb.bb_instructions /\
+  EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  dft_block_rel bb bb' /\ pseudos_prefix bb /\
+  bb.bb_label = s.vs_current_bb /\ strict_dom_vars_defined fn s /\
+  ~s.vs_call_ctx.cc_static /\
+  (!i l. MEM i bb.bb_instructions /\ ~is_pseudo i.inst_opcode /\
+    ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+    i.inst_opcode <> CODECOPY /\ MEM (Label l) i.inst_operands ==>
+    l IN FDOM s.vs_labels) /\
+  (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+    ~dft_abort_compatible x.inst_opcode y.inst_opcode /\
+    id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
+    id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id) /\
+  (case eval_phis s bb.bb_instructions of
+     OK u => ev_block orc p d fuel C bb
+       (u with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+   | Error e => Error e) = Abort Revert_abort t /\ t.vs_returndata = [] ==>
+  ?v. (case eval_phis s bb'.bb_instructions of
+     OK u => ev_block orc p d fuel C bb'
+       (u with vs_inst_idx := phi_prefix_length bb'.bb_instructions)
+   | Error e => Error e) = Abort Revert_abort v /\ v.vs_returndata = []
+Proof
+  strip_tac >> drule_all dft_block_head_bubbles >> strip_tac >>
+  rename1 `bb'.bb_instructions = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions ++ scheduled_body` >>
+  `bb.bb_instructions = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions ++
+     FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions` by
+    (qpat_x_assum `pseudos_prefix bb` mp_tac >>
+     simp[pseudos_prefix_def] >>
+     qspec_tac (`bb.bb_instructions`, `bi`) >> Induct >> simp[] >> rpt strip_tac >>
+     Cases_on `is_pseudo h.inst_opcode` >> simp[]
+     >- (first_x_assum irule >> rpt strip_tac >>
+         first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
+     `EVERY (\i. ~is_pseudo i.inst_opcode) bi` by
+       (simp[EVERY_EL] >> rpt strip_tac >>
+        first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
+     `FILTER (\i. is_pseudo i.inst_opcode) bi = []` by fs[FILTER_EQ_NIL] >>
+     `FILTER (\i. ~is_pseudo i.inst_opcode) bi = bi` by fs[FILTER_EQ_ID] >> simp[]) >>
+  qmatch_asmsub_abbrev_tac `bb'.bb_instructions = pre ++ scheduled_body` >>
+  qabbrev_tac `xs = FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions` >>
+  `EVERY (from_block bb.bb_instructions) scheduled_body` by fs[dft_block_rel_def] >>
+  `EVERY (\i. ~is_pseudo i.inst_opcode) scheduled_body` by
+    (fs[EVERY_MEM, from_block_def] >> metis_tac[flip_operands_is_pseudo]) >>
+  `EVERY (\i. ~is_pseudo i.inst_opcode) xs /\
+   EVERY (\i. is_pseudo i.inst_opcode) pre` by
+    simp[Abbr `xs`, Abbr `pre`, EVERY_MEM, MEM_FILTER] >>
+  `EVERY (\i. MEM i bb.bb_instructions) norm` by
+    (qpat_x_assum `PERM _ norm` (mp_tac o MATCH_MP PERM_MEM_EQ) >>
+     simp[EVERY_MEM, MEM_FILTER] >> metis_tac[]) >>
+  `!t. ev_suffix orc p d fuel C norm t = ev_suffix orc p d fuel C scheduled_body t` by
+    (gen_tac >> irule ev_normalized_suffix_eq >>
+     conj_tac >- (qexists_tac `bb.bb_instructions` >> simp[]) >>
+     irule LIST_REL_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (DROP (phi_prefix_length pre) pre)` by
+    (irule EVERY_DROP >> fs[Abbr `pre`, EVERY_MEM, MEM_FILTER] >>
+     rpt strip_tac >> Cases_on `i.inst_opcode` >> gvs[is_pseudo_def, is_terminator_def]) >>
+  `!b rest. b.bb_instructions = pre ++ rest /\
+    EVERY (\i. ~is_pseudo i.inst_opcode) rest ==>
+    (case eval_phis s b.bb_instructions of
+       OK u => ev_block orc p d fuel C b
+         (u with vs_inst_idx := phi_prefix_length b.bb_instructions)
+     | Error e => Error e) =
+    (case eval_phis s pre of
+       OK u => FOLDR (dft_exec_cons fuel C) (ev_suffix orc p d fuel C rest)
+         (DROP (phi_prefix_length pre) pre)
+         (u with vs_inst_idx := phi_prefix_length pre)
+     | Error e => Error e)` by
+    (rpt strip_tac >> irule ev_block_prefix >> simp[]) >>
+  qpat_assum `!b rest. _` (qspecl_then [`bb`, `xs`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (fn th => qpat_x_assum `_ = Abort Revert_abort t` mp_tac >>
+    rewrite_tac[th] >> disch_tac) >>
+  qpat_assum `!b rest. _` (qspecl_then [`bb'`, `scheduled_body`] mp_tac) >>
+  (impl_tac >- simp[]) >> disch_then SUBST1_TAC >>
+  qspecl_then [`s`, `pre`] strip_assume_tac eval_phis_ok_or_error_defs >>
+  qpat_x_assum `_ = Abort Revert_abort t` mp_tac >> simp[] >> disch_tac >>
+  irule dft_exec_prefix_revert_empty >> simp[] >>
+  qexistsl_tac [`ev_suffix orc p d fuel C xs`, `t`] >> simp[] >> rpt strip_tac >>
+  `~u.vs_call_ctx.cc_static` by
+    (drule_all dft_prefix_call_ctx >> drule dft_eval_phis_call_ctx >> simp[]) >>
+  `dft_remaining_inv fn bb xs u` by
+    (simp[Abbr `xs`] >> irule dft_remaining_inv_initialized >>
+     conj_tac >- simp[] >> conj_tac >- simp[] >>
+     qexistsl_tac [`C`, `fuel`, `s`, `s'`] >>
+     fs[Abbr `pre`] >> metis_tac[]) >>
+  metis_tac[ev_head_bubbles_revert_empty]
+QED
