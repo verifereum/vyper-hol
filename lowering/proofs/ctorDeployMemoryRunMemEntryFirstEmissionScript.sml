@@ -5172,7 +5172,7 @@ Theorem ctor_create_blueprint_check_first_emission_strong:
       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
 Proof
   ntac 2 gen_tac >> Cases_on `offset` >>
-  simp_tac (srw_ss()) [compile_create_blueprint_check_def] >>
+  (simp_tac (srw_ss()) [compile_create_blueprint_check_def] >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
       goal_assum $ drule_at Any >> simp[]) >>
@@ -5180,7 +5180,7 @@ Proof
   rpt (FIRST [gen_tac,
     CHANGED_TAC (simp[cs_appends_emit_helpers, cs_appends_return]),
     ho_match_mp_tac cs_appends_bind >> conj_tac,
-    ho_match_mp_tac cs_appends_ignore_bind >> conj_tac])
+    ho_match_mp_tac cs_appends_ignore_bind >> conj_tac]))
 QED
 
 Theorem ctor_create_copy_first_emission_strong:

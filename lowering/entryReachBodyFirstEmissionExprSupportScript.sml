@@ -1283,7 +1283,7 @@ Theorem first_emission_create_blueprint_check[local]:
     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
 Proof
   rpt gen_tac >> Cases_on `offset` >>
-  simp_tac (srw_ss()) [builtinCreateTheory.compile_create_blueprint_check_def] >>
+  (simp_tac (srw_ss()) [builtinCreateTheory.compile_create_blueprint_check_def] >>
   map_every qid_spec_tac [`b`, `x`, `a`] >>
   ho_match_mp_tac first_emission_strong_bind >> conj_tac
   >- (rpt strip_tac >> drule_at Any
@@ -1297,7 +1297,7 @@ Proof
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
        rpt gen_tac >> BETA_TAC >>
-       simp[comp_return_labels, emit_op_labels, emit_void_labels])
+       simp[comp_return_labels, emit_op_labels, emit_void_labels]))
 QED
 
 Theorem first_emission_create_salt[local]:
