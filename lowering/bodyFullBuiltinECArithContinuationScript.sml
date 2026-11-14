@@ -5,7 +5,8 @@ Theory bodyFullBuiltinECArithContinuation
 Ancestors
   bodyFullBuiltinECArithOperands bodyFullBuiltinPrecompileSuffixSuccess
   bodyFullBuiltinPrecompileSuffixAbort bodyFullAllocaFresh bodyFullAllocGeneric
-  bodyFullUnwrapRun bodyFullGhostFrame bodyMemEcArithTransfers
+  bodyFullUnwrapRun bodyFullGhostFrame bodyMemEcArithTransfers bodyMemEcArithSafe
+  bodyMemEcArithCode
   bodySimFull bodyFullPreds exprSimECArith gasOutcomeFullCompose
   gasShadowCompile exprSimHypsDefs exprLowering loweringPosts vyperAST list
   vyperStorageTrace vyperStorageFootprint exprSimHyps exprSimOperands exprSimSource
@@ -156,5 +157,25 @@ Proof
   qpat_assum `!H. valid_horizon _ _ H es2.storage_trace ==> _ /\ _`
     (qspec_then `storage_trace_horizon es2.storage_trace` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  FAIL_TAC "full EC staging interface"
+  `safe_operand s1 x` by
+    (irule ec_point_lower_value_safe_operand >> metis_tac[]) >>
+  `(!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l)` by
+    fs[exprSafeOperandTheory.safe_operand_def] >>
+  drule_all expr_post_operand_word >> strip_tac >>
+  `!w. eval_operand x t1 = SOME w ==> eval_operand x t2 = SOME w` by
+    metis_tac[optionTheory.SOME_11] >>
+  drule_all ec_first_point_staging_ready >> strip_tac >>
+  `cs_extends s2 sb` by
+    (Cases_on `bt = ECAdd` >> gvs[] >>
+     metis_tac[externalEntryShapeTheory.compile_ecadd_points_labels,
+               externalEntryShapeTheory.compile_ecmul_point_labels, pairTheory.SND]) >>
+  `cs_extends s1 sb` by metis_tac[compileEnvTheory.cs_extends_trans] >>
+  `fn_has_code s2 sb func` by metis_tac[fragExecTheory.fn_has_code_split] >>
+  `!i. MEM i (emitted_insts s2 sb) ==> MEM i (fn_insts func)` by
+    metis_tac[exprSimHashTheory.hash_emitted_inst_mem] >>
+  Cases_on `bt = ECAdd`
+  >- (gvs[] >> drule_all ecadd_points_prefix >> strip_tac >>
+      FAIL_TAC "ECAdd full allocation path") >>
+  gvs[] >> drule_all ecmul_points_prefix >> strip_tac >>
+  FAIL_TAC "ECMul full allocation path"
 QED
