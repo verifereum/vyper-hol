@@ -91,7 +91,9 @@ Theorem cfg_round_codecopy_back[local]:
 Proof
   strip_tac >> drule cfg_norm_round_supply_cases >> strip_tac
   >- (qexists_tac `v` >> gvs[]) >>
-  Cases_on `build_split_block_supply s pred target` >> PairCases_on `r` >>
+  Cases_on `build_split_block_supply s pred target` >>
+  rename1 `build_split_block_supply s pred target = (split,split_tail)` >>
+  PairCases_on `split_tail` >>
   rename1 `build_split_block_supply s pred target = (split,repls,rest)` >>
   `rest = t` by gvs[insert_split_supply_def] >> gvs[] >>
   fs[supply_norm_inv_def] >>
@@ -110,7 +112,9 @@ Theorem cfg_iter_codecopy_back[local]:
 Proof
   Induct_on `n` >> rpt gen_tac >> strip_tac
   >- (gvs[cfg_norm_iter_supply_def] >> metis_tac[]) >>
-  Cases_on `cfg_norm_round_supply s f` >> PairCases_on `r` >>
+  Cases_on `cfg_norm_round_supply s f` >>
+  rename1 `cfg_norm_round_supply s f = (mid,round_tail)` >>
+  PairCases_on `round_tail` >>
   rename1 `cfg_norm_round_supply s f = (mid,changed,s1)` >>
   `supply_norm_inv s1 mid /\ EVERY label_positions_ok (fn_insts mid) /\
    fn_entry_label mid = fn_entry_label f` by metis_tac[supply_round_semantics] >>

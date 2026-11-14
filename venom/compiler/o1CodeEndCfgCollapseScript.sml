@@ -87,18 +87,21 @@ Resume scfg_collapse_frame_observation_joint[merge]:
 QED
 
 Resume scfg_collapse_frame_observation_joint[bypass]:
-  Cases_on `try_bypass fn lm bb (s1::s2::rest2)` >> PairCases_on `r` >>
-  `scfg_collapse_contract fn q` by
+  Cases_on `try_bypass fn lm bb (s1::s2::rest2)` >>
+  rename1 `try_bypass fn lm bb (s1::s2::rest2) = (collapsed_fn,collapse_tail)` >>
+  PairCases_on `collapse_tail` >>
+  rename1 `try_bypass fn lm bb (s1::s2::rest2) = (collapsed_fn,label_map,new_visited)` >>
+  `scfg_collapse_contract fn collapsed_fn` by
     (irule scfg_collapse_bypass >> simp[] >>
-     qexistsl_tac [`bb`, `s1::s2::rest2`, `r1`, `lm`, `r0`] >> simp[]) >>
-  `scfg_normalized q /\ fn_entry_label q = fn_entry_label fn` by
+     qexistsl_tac [`bb`, `s1::s2::rest2`, `new_visited`, `lm`, `label_map`] >> simp[]) >>
+  `scfg_normalized collapsed_fn /\ fn_entry_label collapsed_fn = fn_entry_label fn` by
     fs[scfg_collapse_contract_def] >>
-  `!C s0 j t. fn_entry_state fn s0 /\ frame_reach C q s0 j t /\
+  `!C s0 j t. fn_entry_state fn s0 /\ frame_reach C collapsed_fn s0 j t /\
      j.inst_opcode <> PHI /\ ~is_terminator j.inst_opcode ==>
      ?s. frame_reach C fn s0 j s /\ scfg_payload s t` by
     (rpt strip_tac >> irule scfg_try_bypass_frame_observation >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  Cases_on `r1` >> gvs[]
+  Cases_on `new_visited` >> gvs[]
   >- suspend "bypass_changed" >>
   Cases_on `MEM bb.bb_label visited` >> gvs[] >>
   suspend "bypass_succs"
@@ -106,7 +109,7 @@ QED
 
 Resume scfg_collapse_frame_observation_joint[bypass_changed]:
   rpt strip_tac >>
-  `fn_entry_state q s0` by fs[fn_entry_state_def] >>
+  `fn_entry_state collapsed_fn s0` by fs[fn_entry_state_def] >>
   qpat_x_assum `!C s0 j t. _ /\ frame_reach C (FST _) _ _ _ /\ _ ==> _`
     (drule_all_then strip_assume_tac) >>
   first_x_assum drule_all >>
@@ -115,7 +118,7 @@ QED
 
 Resume scfg_collapse_frame_observation_joint[bypass_succs]:
   rpt strip_tac >>
-  `fn_entry_state q s0` by fs[fn_entry_state_def] >>
+  `fn_entry_state collapsed_fn s0` by fs[fn_entry_state_def] >>
   qpat_x_assum `!C s0 j t. _ /\ frame_reach C (FST _) _ _ _ /\ _ ==> _`
     (drule_all_then strip_assume_tac) >>
   first_x_assum drule_all >>
@@ -129,14 +132,17 @@ QED
 Resume scfg_collapse_frame_observation_joint[succs]:
   rpt gen_tac >> strip_tac >> strip_tac >>
   simp[Once collapse_dfs_def] >>
-  Cases_on `collapse_dfs fn lm visited lbl` >> PairCases_on `r` >>
+  Cases_on `collapse_dfs fn lm visited lbl` >>
+  rename1 `collapse_dfs fn lm visited lbl = (collapsed_fn,collapse_tail)` >>
+  PairCases_on `collapse_tail` >>
+  rename1 `collapse_dfs fn lm visited lbl = (collapsed_fn,label_map,new_visited)` >>
   gvs[] >>
-  `scfg_collapse_contract fn q` by metis_tac[scfg_collapse_joint, pairTheory.FST] >>
-  `scfg_normalized q /\ fn_entry_label q = fn_entry_label fn` by
+  `scfg_collapse_contract fn collapsed_fn` by metis_tac[scfg_collapse_joint, pairTheory.FST] >>
+  `scfg_normalized collapsed_fn /\ fn_entry_label collapsed_fn = fn_entry_label fn` by
     fs[scfg_collapse_contract_def] >>
   rpt strip_tac >>
-  `fn_entry_state q s0` by fs[fn_entry_state_def] >>
-  qpat_x_assum `scfg_normalized q ==> _`
+  `fn_entry_state collapsed_fn s0` by fs[fn_entry_state_def] >>
+  qpat_x_assum `scfg_normalized collapsed_fn ==> _`
     (drule_all_then strip_assume_tac) >>
   first_x_assum drule_all >>
   metis_tac[scfg_payload_trans]

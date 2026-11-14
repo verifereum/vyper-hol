@@ -155,8 +155,12 @@ Proof
       irule sue_state_rel_eval_operand >> qexists_tac `P` >>
       simp[] >> metis_tac[MEM_EL]) >>
   Cases_on `sue_expand_ops_supply dfg inst si inst.inst_operands 0` >>
-  PairCases_on `r` >> gvs[sue_expand_inst_supply_def] >>
-  `r0 = new_ops` by
+  rename1 `sue_expand_ops_supply dfg inst si inst.inst_operands 0 =
+    (operand_prefix,operand_tail)` >>
+  PairCases_on `operand_tail` >>
+  rename1 `sue_expand_ops_supply dfg inst si inst.inst_operands 0 =
+    (operand_prefix,expanded_ops,expanded_supply)` >> gvs[sue_expand_inst_supply_def] >>
+  `expanded_ops = new_ops` by
     (qpat_x_assum `inst with inst_operands := _ = _` mp_tac >>
      simp[instruction_component_equality]) >>
   gvs[] >> drule_all sue_expand_ops_supply_normalized_eval >> simp[]

@@ -14,7 +14,7 @@ Theorem code_end_outputs_trace_owner_alignment:
     EVERY (\(token,v,n). R n v) H'
 Proof
   Induct >- simp[current_outputs_trace_def] >>
-  gen_tac >> PairCases_on `h` >>
+  gen_tac >> rename1 `(annotation::_)` >> PairCases_on `annotation` >>
   simp[current_outputs_trace_def] >> rpt strip_tac >> gvs[] >>
   first_x_assum drule >> simp[EVERY_APPEND]
 QED

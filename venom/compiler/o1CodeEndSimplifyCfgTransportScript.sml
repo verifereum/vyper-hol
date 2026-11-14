@@ -183,19 +183,23 @@ Theorem code_end_round_static[local]:
 Proof
   strip_tac >> Cases_on `fn_entry_label f`
   >- (simp[simplify_cfg_round_with_labels_def] >> metis_tac[]) >>
+  rename1 `fn_entry_label f = SOME entry_lbl` >>
   drule_all simplify_cfg_round_entry_ssa_invariant >> strip_tac >>
   drule_all code_end_cleanup_static >> strip_tac >>
   qabbrev_tac `start = fix_all_phis (remove_unreachable_blocks f)` >>
-  Cases_on `collapse_dfs start [] [] x` >> PairCases_on `r` >>
-  qspecl_then [`start`, `[]`, `[]`, `x`] mp_tac
+  Cases_on `collapse_dfs start [] [] entry_lbl` >>
+  rename1 `collapse_dfs start [] [] entry_lbl = (collapsed_fn,collapse_tail)` >>
+  PairCases_on `collapse_tail` >>
+  rename1 `collapse_dfs start [] [] entry_lbl = (collapsed_fn,label_map,new_visited)` >>
+  qspecl_then [`start`, `[]`, `[]`, `entry_lbl`] mp_tac
     (Q.INST [`original` |-> `f`] code_end_collapse_static) >> simp[] >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
-  `subst_block_labels_fn r0 q = q` by
+  `subst_block_labels_fn label_map collapsed_fn = collapsed_fn` by
     (drule_at (Pat `collapse_dfs _ _ _ _ = _`) collapse_dfs_subst_identity >> simp[]) >>
-  `(!x i. code_end_var (fix_all_phis (remove_unreachable_blocks q)) x /\
-    MEM i (fn_insts (fix_all_phis (remove_unreachable_blocks q))) /\ MEM (Var x) i.inst_operands ==>
+  `(!x i. code_end_var (fix_all_phis (remove_unreachable_blocks collapsed_fn)) x /\
+    MEM i (fn_insts (fix_all_phis (remove_unreachable_blocks collapsed_fn))) /\ MEM (Var x) i.inst_operands ==>
     i.inst_opcode = ASSIGN \/ i.inst_opcode = CODECOPY) /\
-    (!x. code_end_var (fix_all_phis (remove_unreachable_blocks q)) x ==> code_end_var q x)` by
+    (!x. code_end_var (fix_all_phis (remove_unreachable_blocks collapsed_fn)) x ==> code_end_var collapsed_fn x)` by
     (irule code_end_cleanup_static >> conj_tac >> first_assum ACCEPT_TAC) >>
   fs[Abbr `start`] >> simp[simplify_cfg_round_with_labels_def] >> metis_tac[]
 QED
