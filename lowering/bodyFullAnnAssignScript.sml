@@ -10,6 +10,7 @@ Theory bodyFullAnnAssign
 Ancestors
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   bodyFullAnnAssignMemoryPost
+  bodyFullPathFrontier
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
 
