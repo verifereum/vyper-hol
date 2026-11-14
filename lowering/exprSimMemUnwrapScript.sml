@@ -530,7 +530,8 @@ Proof
   `u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
    u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `u = _` SUBST1_TAC >> simp[]) >>
-  qexistsl_tac [`u`, `w`] >> simp[] >> metis_tac[]
+  qpat_x_assum `u = _` kall_tac >>
+  qexistsl_tac [`u`, `w`] >> asm_rewrite_tac[]
 QED
 
 (* ----- storage and transient ----- *)
