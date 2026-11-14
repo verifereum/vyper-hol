@@ -11,6 +11,7 @@ Ancestors
   exprSimConvertBytes bodyPtrBytestringBuiltinsCalldataReserved
   valueEncodingProofs valueEncodingDefs compileEnv vyperValue
   supportedTypes vyperTypeSystem vyperTyping ptrDiscipline
+  bodyPtrBytestringBuiltinsWindowGhost loweringStateRelDefs
 
 Theorem slice_dynamic_capture_full_run:
   compile_bytestring_src (Var src) sa = ((len,data),sb) /\
@@ -142,7 +143,7 @@ Theorem slice_dynamic_capture_source_post:
   evaluate_type (get_tenv cx) (BaseT bt) = SOME vt /\ value_has_type vt v /\
   expr_sim_inv cenv cx env es /\
   ptr_val_ok cx (BaseT bt) v srcop G tn s /\
-  ghost_inv H d cenv cx es G tn s /\
+  ghost_inv_at ghost_D floor d cenv cx es G tn s /\
   compile_bytestring_src srcop sm = ((len,data),sc) /\ fn_has_code sm sc func /\
   (!z. srcop = Var z ==> not_fresh_at sm z) /\ (!l. srcop <> Label l) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -172,7 +173,7 @@ Theorem slice_dynamic_capture_source_post:
     (!n. 0 < LENGTH bs /\ n <= LENGTH bs ==>
        ?dp. data = Var dp /\ ptr_covers G' tn' dp u n) /\
     expr_post H ctx func cenv cx e es0 sa sc s0 es v srcop u /\
-    ghost_inv H d cenv cx es G' tn' u /\
+    ghost_inv_at ghost_D floor d cenv cx es G' tn' u /\
     allocas_from lo u /\ lo <= u.vs_alloca_next /\
     ptr_covers G' tn' src u (32+LENGTH bs) /\
     (0 < LENGTH bs ==> ?dp. data = Var dp /\ ptr_covers G' tn' dp u (LENGTH bs))
@@ -214,10 +215,27 @@ Proof
   `stmt_state_rel H ctx func cenv cx es u` by
     (irule stmt_state_rel_reserved_vars_update >>
      goal_assum (drule_at Any) >> metis_tac[]) >>
-  `ghost_inv H d cenv cx es G' tn' u` by
-    (irule ghost_inv_readonly_transport >>
-     goal_assum (drule_at Any) >> simp[] >>
-     gvs[venom_state_component_equality]) >>
+  `local_ptrs_rel func cenv es.scopes s` by
+    fs[stmt_state_rel_def,loweringStateRelDefsTheory.state_rel_def] >>
+  `stor_taint_ok_at ghost_D tn' u /\
+   allocas_from floor u /\ floor <= u.vs_alloca_next` by
+    (qpat_assum `ghost_inv_at ghost_D floor _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `u = s with vs_vars := _` mp_tac >>
+     qpat_assum `tn'.t_stor = tn.t_stor` mp_tac >>
+     qpat_assum `tn'.t_trans = tn.t_trans` mp_tac >>
+     qpat_assum `tn'.t_imm = tn.t_imm` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[ghost_inv_at_def,stor_taint_ok_at_def,allocas_from_def,
+       venom_state_component_equality] >>
+     metis_tac[]) >>
+  `ghost_inv_at ghost_D floor d cenv cx es G' tn' u` by
+    (mp_tac (Q.INST [`D` |-> `ghost_D`,`lo` |-> `floor`,
+       `sa` |-> `sm`,`G` |-> `G`,`tn` |-> `tn`,`s` |-> `s`,
+       `es` |-> `es`,`fn` |-> `func`,`HG` |-> `G'`,`tm` |-> `tn'`,
+       `es'` |-> `es`,`s'` |-> `u`]
+       ghost_inv_at_local_window_transport) >>
+     (impl_tac >- (simp[] >> gvs[venom_state_component_equality] >> metis_tac[])) >>
+     disch_then ACCEPT_TAC) >>
   `sm.cs_next_id <= sc.cs_next_id` by
     (qspec_then `sm` mp_tac (Q.SPEC `Var src` ci_mono_compile_bytestring_src) >>
      simp[ci_mono_def]) >>
