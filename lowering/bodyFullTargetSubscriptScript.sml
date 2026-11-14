@@ -14,7 +14,7 @@ Ancestors
   bodyMemoryDefs bodyPtrDefs loweringPosts exprSimHypsDefs exprSimDefs
   compileEnv exprLowering loweringStateRelDefs gasContext bodyFullShared
   vyperStorageTrace vyperStorageFootprint vyperTypeEnv vyperTypeSystem
-  vyperInterpreter vyperState list pair
+  vyperInterpreter vyperState vyperAST vyperValue list pair
 
 (* New definition (proof-internal): what the element suffix must give, from
    the endpoint after the base and the index ran, for target_sim_full of
@@ -341,6 +341,28 @@ Resume target_subscript_sim_full[index_run]:
 QED
 
 Resume target_subscript_sim_full[tail]:
+  `post_value_type cenv e = expr_type e` by
+    (Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+     >- (gvs[] >> rename1 `Call ity (IntCall fid) args drv` >>
+         PairCases_on `fid` >> fs[well_typed_expr_def, expr_type_def] >>
+         qpat_assum `well_formed_type env.type_defs ity` mp_tac >>
+         qpat_assum `subscript_vtype bvt ity = SOME vt` mp_tac >>
+         rpt (pop_assum kall_tac) >> rpt strip_tac >>
+         `is_int_type ity \/ hashmap_key_type ity` by
+           (Cases_on `bvt`
+            >- (rename1 `Type bty` >> Cases_on `bty` >>
+                gvs[subscript_vtype_def, AllCaseEqs()]) >>
+            gvs[subscript_vtype_def, AllCaseEqs()]) >>
+         Cases_on `ity` >>
+         gvs[is_int_type_def, hashmap_key_type_def, post_value_type_def,
+             is_word_type_def, is_bytestring_type_def] >>
+         rename1 `BaseT key` >> Cases_on `key` >>
+         gvs[is_int_type_def, hashmap_key_type_def, post_value_type_def,
+             is_word_type_def, is_bytestring_type_def] >>
+         rename1 `BytesT bd` >> Cases_on `bd` >>
+         gvs[is_word_type_def, is_bytestring_type_def, well_formed_type_def,
+             evaluate_type_def, AllCaseEqs()]) >>
+     irule post_value_type_not_int_call >> metis_tac[]) >>
   qx_genl_tac [`marks2`, `res2`, `mid2`, `G2`, `tn2`, `t2`] >>
   BETA_TAC >> strip_tac >> disj1_tac >>
   qunabbrev_tac `idxQ` >> RULE_ASSUM_TAC BETA_RULE >>
@@ -370,6 +392,8 @@ Resume target_subscript_sim_full[tail]:
      TRY (first_assum ACCEPT_TAC) >>
      simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
           storage_trace_frame_read_result]) >>
+  qpat_assum `post_value_type cenv e = expr_type e`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
   qpat_x_assum `subscript_tail_full _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [subscript_tail_full_def]) >>
   disch_then (qspecl_then [`st0`, `vt`, `bvt`, `sa`, `sm`, `sn`, `sb`, `rb`,
