@@ -6183,29 +6183,11 @@ Proof
   simp[get_instruction_def, supply_block_image_length]
 QED
 
-Theorem supply_gas_events_block_silent[local]:
-  EVERY (\inst. inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE)
-    bb.bb_instructions ==>
-  gas_events_block fuel ctx owner bb st = []
-Proof
-  measureInduct_on `LENGTH bb.bb_instructions - st.vs_inst_idx` >>
-  rpt strip_tac >> once_rewrite_tac[gas_events_block_def] >>
-  Cases_on `st.vs_inst_idx < LENGTH bb.bb_instructions`
-  >- (`(EL st.vs_inst_idx bb.bb_instructions).inst_opcode <> GAS /\
-       (EL st.vs_inst_idx bb.bb_instructions).inst_opcode <> INVOKE` by
-        gvs[listTheory.EVERY_EL] >>
-      simp[get_instruction_def, gas_events_step_def] >>
-      Cases_on `step_inst fuel ctx (EL st.vs_inst_idx bb.bb_instructions) st` >>
-      simp[] >> IF_CASES_TAC >> simp[] >>
-      first_x_assum irule >> simp[] >> decide_tac) >>
-  simp[get_instruction_def]
-QED
-
 Theorem supply_split_gas_events_block:
   build_split_block_supply s pred target = (split,repls,s') ==>
   gas_events_block fuel ctx owner split st = []
 Proof
-  strip_tac >> irule supply_gas_events_block_silent >>
+  strip_tac >> irule gas_events_block_silent >>
   drule supply_split_opcodes >>
   simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >> gvs[]
@@ -6249,26 +6231,6 @@ Proof
   simp[]
 QED
 
-Theorem supply_gas_events_blocks_unfold[local]:
-  gas_events_blocks (SUC n) ctx fn u =
-    case lookup_block u.vs_current_bb fn.fn_blocks of
-      NONE => []
-    | SOME bb =>
-        (case eval_phis u bb.bb_instructions of
-           OK p => gas_events_block n ctx fn.fn_name bb
-             (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)
-         | _ => []) ++
-        (case run_block_entry n ctx bb u of
-           OK v => if v.vs_halted then [] else gas_events_blocks n ctx fn v
-         | _ => [])
-Proof
-  simp[SimpLHS, Once gas_events_blocks_def] >>
-  Cases_on `lookup_block u.vs_current_bb fn.fn_blocks` >> simp[] >>
-  qspec_then `u` (qspec_then `x.bb_instructions` strip_assume_tac)
-    venomExecSemanticsTheory.eval_phis_ok_or_error_defs >>
-  simp[venomExecSemanticsTheory.run_block_entry_def]
-QED
-
 Theorem supply_gas_events_assemble[local]:
   lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
   run_block_entry k ctx bb u = OK v /\ ~v.vs_halted ==>
@@ -6302,7 +6264,7 @@ Proof
         (qspec_then `k + n` mp_tac) (cj 3 gas_events_fuel_extension) >>
       simp[] >> strip_tac >>
       qexistsl_tac [`SUC (k + n)`, `extra`] >> conj_tac
-      >- simp[supply_gas_events_blocks_unfold, venomExecSemanticsTheory.run_block_entry_def] >>
+      >- simp[gas_events_blocks_unfold, venomExecSemanticsTheory.run_block_entry_def] >>
       strip_tac >>
       `!err. run_blocks n ctx fn v <> Error err` by
         (Cases_on `run_blocks n ctx fn v` >>
@@ -6365,7 +6327,7 @@ Resume supply_run_blocks_gas_events_prefix[ready]:
   simp[stateEquivTheory.lift_result_def] >> rpt strip_tac
   >- suspend "continue" >>
   qexistsl_tac [`SUC k`, `[]`] >>
-  simp[supply_gas_events_blocks_unfold, venomExecSemanticsTheory.run_blocks_unfold,
+  simp[gas_events_blocks_unfold, venomExecSemanticsTheory.run_blocks_unfold,
        passSimulationDefsTheory.terminates_def, o1PassLiftTheory.frame_result_rel_def] >>
   gvs[supply_state_agree_def]
 QED
@@ -6397,7 +6359,7 @@ Resume supply_run_blocks_gas_events_prefix[continue]:
   drule_all supply_gas_events_assemble >>
   disch_then (qspec_then `m` strip_assume_tac) >>
   qexistsl_tac [`N`, `extra ++ extra'`] >> conj_tac
-  >- (simp[supply_gas_events_blocks_unfold, supply_ready_def, listTheory.APPEND_ASSOC] >>
+  >- (simp[gas_events_blocks_unfold, supply_ready_def, listTheory.APPEND_ASSOC] >>
       gvs[supply_ready_def]) >>
   strip_tac >>
   `terminates (run_blocks k ctx fn v')` by

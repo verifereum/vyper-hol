@@ -129,12 +129,6 @@ Proof
   simp[venom_state_component_equality]
 QED
 
-Theorem active_inst_gas_readings[local]:
-  active_inst fn inst (s with vs_gas_readings := gs) <=> active_inst fn inst s
-Proof
-  simp[active_inst_def]
-QED
-
 Theorem raw_reachable_zero_pad[local]:
   !v ctx fn inst t. raw_reachable v ctx fn inst t ==>
   !vs j. v = vs with vs_gas_readings := vs.vs_gas_readings ++ REPLICATE j 0w ==>
@@ -149,29 +143,29 @@ Proof
         `vs.vs_gas_readings ++ REPLICATE j 0w`, `s1`] mp_tac
         (Q.GENL [`fn`, `s`, `gs`, `s1`] enters_block_readings_cong) >>
       impl_tac >- simp[Abbr `ent`] >> strip_tac >>
-      qexistsl_tac [`s0`, `j`] >> gvs[active_inst_gas_readings] >>
+      qexistsl_tac [`s0`, `j`] >> gvs[dftGasToListReplayTheory.active_inst_gas_update] >>
       irule (cj 1 raw_reachable_rules) >> simp[] >> metis_tac[])
   >- (strip_tac >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
-      gvs[active_inst_gas_readings] >>
+      gvs[dftGasToListReplayTheory.active_inst_gas_update] >>
       drule step_inst_zero_pad >>
       disch_then (qx_choosel_then [`next`, `pad`] strip_assume_tac) >> gvs[] >>
       qexistsl_tac [`next with vs_inst_idx := SUC s.vs_inst_idx`, `pad`] >>
       simp[] >> irule (cj 2 raw_reachable_rules) >>
       fs[active_inst_def] >> metis_tac[])
   >- (strip_tac >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
-      gvs[active_inst_gas_readings] >>
+      gvs[dftGasToListReplayTheory.active_inst_gas_update] >>
       drule step_inst_zero_pad >>
       disch_then (qx_choosel_then [`next`, `pad`] strip_assume_tac) >> gvs[] >>
       drule enters_block_readings_cong >> strip_tac >> gvs[] >>
-      qexistsl_tac [`s0`, `pad`] >> gvs[active_inst_gas_readings] >>
+      qexistsl_tac [`s0`, `pad`] >> gvs[dftGasToListReplayTheory.active_inst_gas_update] >>
       irule (cj 3 raw_reachable_rules) >> fs[active_inst_def] >> metis_tac[]) >>
   strip_tac >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
-  gvs[active_inst_gas_readings, gas_setup_callee] >>
+  gvs[dftGasToListReplayTheory.active_inst_gas_update, gas_setup_callee] >>
   rename1 `setup_callee callee args s0 = SOME cs0` >>
   `cs0.vs_gas_readings = s0.vs_gas_readings` by
     metis_tac[gas_setup_callee_readings] >>
   drule enters_block_readings_cong >> strip_tac >> gvs[] >>
-  qexistsl_tac [`s0'`, `j'`] >> gvs[active_inst_gas_readings] >>
+  qexistsl_tac [`s0'`, `j'`] >> gvs[dftGasToListReplayTheory.active_inst_gas_update] >>
   irule (cj 4 raw_reachable_rules) >> simp[] >> metis_tac[]
 QED
 

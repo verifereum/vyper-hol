@@ -90,3 +90,41 @@ Resume gas_events_fuel_extension[blocks]:
 QED
 
 Finalise gas_events_fuel_extension
+
+Theorem gas_events_block_silent:
+  EVERY (\inst. inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE)
+    bb.bb_instructions ==>
+  gas_events_block fuel ctx owner bb st = []
+Proof
+  measureInduct_on `LENGTH bb.bb_instructions - st.vs_inst_idx` >>
+  rpt strip_tac >> once_rewrite_tac[gas_events_block_def] >>
+  Cases_on `st.vs_inst_idx < LENGTH bb.bb_instructions`
+  >- (`(EL st.vs_inst_idx bb.bb_instructions).inst_opcode <> GAS /\
+       (EL st.vs_inst_idx bb.bb_instructions).inst_opcode <> INVOKE` by
+        gvs[listTheory.EVERY_EL] >>
+      simp[venomInstTheory.get_instruction_def, gas_events_step_def] >>
+      Cases_on `step_inst fuel ctx (EL st.vs_inst_idx bb.bb_instructions) st` >>
+      simp[] >> IF_CASES_TAC >> simp[] >>
+      first_x_assum irule >> simp[] >> decide_tac) >>
+  simp[venomInstTheory.get_instruction_def]
+QED
+
+Theorem gas_events_blocks_unfold:
+  gas_events_blocks (SUC n) ctx fn u =
+    case lookup_block u.vs_current_bb fn.fn_blocks of
+      NONE => []
+    | SOME bb =>
+        (case eval_phis u bb.bb_instructions of
+           OK p => gas_events_block n ctx fn.fn_name bb
+             (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+         | _ => []) ++
+        (case run_block_entry n ctx bb u of
+           OK v => if v.vs_halted then [] else gas_events_blocks n ctx fn v
+         | _ => [])
+Proof
+  simp[SimpLHS, Once gas_events_blocks_def] >>
+  Cases_on `lookup_block u.vs_current_bb fn.fn_blocks` >> simp[] >>
+  qspec_then `u` (qspec_then `x.bb_instructions` strip_assume_tac)
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs >>
+  simp[venomExecSemanticsTheory.run_block_entry_def]
+QED

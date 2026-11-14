@@ -290,17 +290,6 @@ Proof
   irule dftSsaPreserveTheory.dft_block_rel_wf_ssa >> simp[]
 QED
 
-(* The actual entry run of a context, as its entry function's block run. *)
-Theorem run_context_entry_blocks:
-  ctx.ctx_entry = SOME nm /\ lookup_function nm ctx.ctx_functions = SOME fn /\
-  fn_entry_label fn = SOME lbl ==>
-  run_context fuel ctx s =
-  run_blocks fuel ctx fn
-    (s with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
-Proof
-  simp[run_context_def, run_function_def]
-QED
-
 Theorem run_blocks_terminates_fuel_eq[local]:
   terminates (run_blocks f1 ctx fn s) /\ terminates (run_blocks f2 ctx fn s) ==>
   run_blocks f1 ctx fn s = run_blocks f2 ctx fn s
@@ -413,8 +402,9 @@ Proof
   `run_context fuel C' vs' =
    run_blocks fuel C' (dft_fn fn)
      (vs' with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)` by
-    (irule run_context_entry_blocks >> simp[dft_fn_entry_label] >>
-     qexists_tac `nm` >> gvs[]) >>
+    (`C'.ctx_entry = SOME nm` by metis_tac[] >>
+     pop_assum (fn th => rewrite_tac[run_context_def, run_function_def, th]) >>
+     simp[dft_fn_entry_label]) >>
   rpt conj_tac >> asm_rewrite_tac [] >> gvs[fn_reachable_def] >>
   irule venomWfPropsTheory.strict_dom_vars_defined_entry >> simp[]
 QED
@@ -471,7 +461,9 @@ Proof
         with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>` by
        simp[venom_state_component_equality] >>
      pop_assum SUBST1_TAC >>
-     irule run_context_entry_blocks >> simp[] >> qexists_tac `nm` >> gvs[]) >>
+     `C.ctx_entry = SOME nm` by metis_tac[] >>
+     pop_assum (fn th => rewrite_tac[run_context_def, run_function_def, th]) >>
+     simp[]) >>
   `terminates (run_blocks fr C fn es)` by metis_tac[] >>
   qpat_x_assum `(?fuel_src. _) ==> _` mp_tac >>
   impl_tac >- (qexists_tac `fr` >> first_assum ACCEPT_TAC) >> strip_tac >>
