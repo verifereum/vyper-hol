@@ -43,7 +43,8 @@ Theorem prefix_member_setup_pair_floor:
     (!v. not_fresh_at st v ==>
        FLOOKUP H v = FLOOKUP G v /\ op_taint qt (Var v) = op_taint tn (Var v)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt prepared) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st middle) s H qt)
 Proof
   strip_tac >>
   drule_all prefix_member_setup_pair >>
@@ -61,6 +62,8 @@ Proof
    lo <= (t with vs_inst_idx := LENGTH middle.cs_current_insts).vs_alloca_next` by
     (irule prefix_allocation_floor_frame >> qexists `s` >> simp[]) >>
   qexistsl [`H`,`qt`,`child_dst`] >>
+  qpat_x_assum `!D'. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
+    (fn th => pure_rewrite_tac[th, AND_CLAUSES, FORALL_SIMP]) >>
   fs[eval_op_inst_idx, fresh_vars_wrt_def, abi_decoder_address_frame_def,
      allocas_from_def] >> metis_tac[]
 QED

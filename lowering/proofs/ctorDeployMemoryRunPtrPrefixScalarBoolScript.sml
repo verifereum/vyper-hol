@@ -1,9 +1,10 @@
 (* BoolClamp ghosts at a named successful scalar endpoint. *)
 Theory ctorDeployMemoryRunPtrPrefixScalarBool
 Ancestors
+  fragGasSeqPtr fragGasOriginPtrLoop instIdxIndep ctorDeployMemoryRunPtrPrefixSteps
   loweringStateRelDefs
   compileEnv
-  ctorDeployMemoryRunPtrPrefixScalarPackage
+  ctorDeployMemoryRunPtrPrefixScalarPackage ctorDeployMemoryRunPtrPrefixScalarClamps
   ctorDeployMemoryRunPtrPrefixCanonical ctorDeployMemoryRunPtrPrefixBoolWord
   abiEncoder abiDecoderContract abiDecoderClampedWord exprLoweringProps
   venomState venomInst venomExecSemantics ptrDiscipline ptrSafeRun
@@ -29,24 +30,25 @@ Theorem prefix_scalar_bool_success:
       FLOOKUP H v = FLOOKUP G v /\ op_taint qt (Var v) = op_taint tn (Var v)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
       (t with vs_inst_idx := s.vs_inst_idx+5)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt)
 Proof
-  strip_tac >> drule_all prefix_decoder_boolword_ptr >>
-  disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
-  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  qmatch_goalsub_abbrev_tac `word_of_bytes T (0w:bytes32) bytes` >>
-  qmatch_goalsub_abbrev_tac `mstore (w2n p) w pre` >>
-  qabbrev_tac `end = mstore (w2n p) w pre` >>
-  qmatch_goalsub_abbrev_tac `step_taint (mk_inst (st.cs_next_id+4) MSTORE [Var dst;Var x] []) u v qt0` >>
-  qabbrev_tac `qt = step_taint (mk_inst (st.cs_next_id+4) MSTORE [Var dst;Var x] []) u v qt0` >>
-  qabbrev_tac `H = DRESTRICT (DRESTRICT (DRESTRICT G (COMPL {x})) (COMPL {y})) (COMPL {z})` >>
   strip_tac >>
-  qpat_x_assum `run_inst_seq _ _ = if _ then _ else _` mp_tac >>
-  asm_rewrite_tac[] >> IF_CASES_TAC >> simp[] >> strip_tac >>
-  qexistsl [`H`,`qt`] >> asm_rewrite_tac[] >>
-  conj_tac
-  >- (qpat_x_assum `!v. v <> x /\ _ ==> _` mp_tac >> simp[] >> metis_tac[]) >>
-  metis_tac[]
+  `emitted_insts st st' =
+    [mk_inst st.cs_next_id DLOAD [src] [x];
+     mk_inst (st.cs_next_id+1) SHR [Lit 1w;Var x] [y];
+     mk_inst (st.cs_next_id+2) ISZERO [Var y] [z];
+     mk_inst (st.cs_next_id+3) ASSERT [Var z] [];
+     mk_inst (st.cs_next_id+4) MSTORE [Var dst;Var x] []]` by
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
+          comp_return_def, comp_bind_def, compile_abi_decode_range_check_def] >>
+     strip_tac >> drule prefix_boolword_code >> simp[]) >>
+  drule_all (SRULE [] (Q.INST
+    [`signed` |-> `F`, `left` |-> `F`, `n` |-> `1w`]
+    prefix_scalar_word_success)) >>
+  disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
+  asm_rewrite_tac[]
 QED
 
 Theorem prefix_scalar_bool_shape:
@@ -78,7 +80,8 @@ Theorem prefix_scalar_bool_ghost:
       op_taint qt (Var v) = op_taint tn (Var v)) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
       (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt)
 Proof
   strip_tac >> drule prefix_scalar_bool_shape >> strip_tac >>
   `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
