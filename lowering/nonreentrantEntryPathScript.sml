@@ -43,21 +43,6 @@ Proof
   gvs[] >> simp[DROP_APPEND]
 QED
 
-Theorem transient_lock_code_memory_checks[local]:
-  !code s.
-    EVERY (\i. MEM i.inst_opcode [TLOAD; EQ; ISZERO; ASSERT; TSTORE]) code ==>
-    run_inst_seq_mem_ok code s
-Proof
-  Induct >- simp[run_inst_seq_mem_ok_def] >>
-  rpt gen_tac >> strip_tac >>
-  `inst_mem_below_frontier h s /\ inst_dload_in_section h s` by
-    (gvs[MEM] >>
-     simp[inst_mem_below_frontier_def, inst_dload_in_section_def,
-          source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
-  simp[run_inst_seq_mem_ok_def] >>
-  Cases_on `step_inst_base h s` >> simp[] >> fs[]
-QED
-
 Theorem nonreentrant_ghost_inv_frame:
   storage_locks_separated (FST H) (SND H) /\
   MEM nkey (SND H) /\ nkey < dimword (:256) /\
@@ -159,8 +144,10 @@ Proof
     (Cases_on `iv` >> simp[transient_lock_code_def, mk_inst_def,
       is_terminator_def]) >>
   `run_inst_seq_mem_ok (transient_lock_code nkey iv sa) s` by
-    (irule transient_lock_code_memory_checks >> Cases_on `iv` >>
-     simp[transient_lock_code_def, mk_inst_def]) >>
+    (irule run_inst_seq_mem_ok_every >> Cases_on `iv` >>
+     simp[transient_lock_code_def, mk_inst_def,
+          inst_mem_below_frontier_def, inst_dload_in_section_def,
+          source_memory_read_ranges_def, source_memory_write_ranges_def]) >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >> conj_tac
   >- (rpt gen_tac >>
       mp_tac (Q.INST [`lo` |-> `0`, `PG` |-> `[]`]
