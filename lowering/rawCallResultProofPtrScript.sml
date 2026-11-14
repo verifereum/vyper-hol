@@ -59,23 +59,6 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[]
 QED
 
-Theorem raw_call_bytes_suffix_code:
-  (do z <- emit_op RETURNDATASIZE [];
-      cmp <- emit_op LT [z;Lit (n2w n)];
-      cap <- compile_select cmp z (Lit (n2w n));
-      emit_void MSTORE [ov;cap]; return ov od) sa = (result,sb) ==>
-  same_blocks sa sb /\
-  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts sa sb)
-Proof
-  simp[compile_select_def, comp_bind_def, emit_op_def, fresh_var_def,
-    fresh_id_def, comp_ignore_bind_def, comp_return_def, emit_def, emit_void_def] >>
-  strip_tac >> gvs[] >> simp[same_blocks_def, emitted_insts_def] >>
-  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
-    rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
-QED
 
 Theorem raw_call_returndatasize_path_ptr:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
@@ -378,20 +361,6 @@ QED
 
 
 
-Theorem raw_call_select_run_code:
-  compile_select condop tp ep sa = (op,sb) /\
-  eval_operand condop s = SOME (bool_to_word b) /\
-  eval_operand tp s = SOME tv /\ eval_operand ep s = SOME ev /\
-  (!x. condop = Var x ==> not_fresh_at sa x) /\
-  (!x. ep = Var x ==> not_fresh_at sa x) ==>
-  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    eval_operand op t = SOME (if b then tv else ev)
-Proof
-  strip_tac >> drule rawCallShapePtrTheory.raw_call_select_code >> strip_tac >> simp[] >>
-  irule rawCallBufferPtrTheory.raw_call_select_run >> simp[] >> rpt conj_tac >> strip_tac >>
-  fs[not_fresh_at_def] >>
-  first_x_assum (qspec_then `sa.cs_next_var` mp_tac) >> simp[]
-QED
 
 Theorem raw_call_select_path_ptr:
   compile_select condop tp ep sa = (op,sb) /\ fn_has_code sa sb func /\
@@ -415,7 +384,7 @@ Theorem raw_call_select_path_ptr:
     (!x. not_fresh_at sa x ==>
       FLOOKUP HG x = FLOOKUP G x /\ op_taint un (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >> drule_all raw_call_select_run_code >> strip_tac >>
+  strip_tac >> drule_all rawCallBufferPtrTheory.raw_call_select_run_code >> strip_tac >>
   drule_all rawCallBufferPtrTheory.raw_call_select_state_frame >> strip_tac >>
   drule_all rawCallBufferPtrTheory.raw_call_select_checked_code >>
   disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
@@ -709,25 +678,6 @@ Proof
   drule_all raw_call_mstore_path_ptr >> simp[]
 QED
 
-Theorem raw_call_mstore_clean_effect:
-  lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
-  op_taint tn value = {} ==>
-  step_taint (mk_inst iid MSTORE [Var dst;value] []) s (mstore (w2n a) w s) tn =
-    tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32}
-Proof
-  strip_tac >>
-  simp[ptrDisciplineTheory.step_taint_def, venomInstTheory.mk_inst_def,
-    ptrDisciplineTheory.set_var_taint_def, ptrDisciplineTheory.store_taint_def,
-    ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.imm_taint_def,
-    ptrDisciplineTheory.mem_taint_def, ptrDisciplineTheory.step_writes_def,
-    codegenRelTheory.source_memory_write_ranges_def,
-    codegenRelTheory.fixed_source_write_range_def,
-    venomStateTheory.eval_operand_def, ptrDisciplineTheory.written_taint_def,
-    ptrDisciplineTheory.range_bytes_def, ptrDisciplineTheory.new_site_bytes_def,
-    venomStateTheory.mstore_def, finite_mapTheory.FLOOKUP_DEF,
-    ptrDisciplineTheory.taint_component_equality, pred_setTheory.EXTENSION,
-    finite_mapTheory.DRESTRICT_UNIV, SF CONJ_ss]
-QED
 
 Theorem raw_call_bytes_length_write_stage:
   emit_void MSTORE [Var dst;value] sa = ((),sb) /\ fn_has_code sa sb func /\
@@ -774,7 +724,7 @@ Proof
   conj_tac
   >- (irule rawCallBufferPtrTheory.ptr_buf_ok_from_covers >>
       goal_assum (drule_at Any) >> simp[] >> qexists_tac `capacity` >> simp[]) >>
-  simp[Abbr `t`, Abbr `un`, raw_call_mstore_clean_effect,
+  simp[Abbr `t`, Abbr `un`, rawCallBufferPtrTheory.raw_call_mstore_clean_effect,
     venomStateTheory.mstore_def, venomStateTheory.lookup_var_def]
 QED
 
@@ -1433,7 +1383,7 @@ Resume raw_call_tuple_head_stage[store]:
   `step_taint (mk_inst sm.cs_next_id MSTORE [Var x;ok] []) u
       (mstore b (val_to_w256 (BoolV flag)) u) un =
     un with t_mem := un.t_mem DIFF {i | b <= i /\ i < b+32}` by
-    metis_tac[raw_call_mstore_clean_effect] >>
+    metis_tac[rawCallBufferPtrTheory.raw_call_mstore_clean_effect] >>
   qabbrev_tac `v = mstore b (val_to_w256 (BoolV flag)) u with
     vs_inst_idx := LENGTH sb.cs_current_insts` >>
   qabbrev_tac `vn = un with t_mem := un.t_mem DIFF {i | b <= i /\ i < b+32}` >>

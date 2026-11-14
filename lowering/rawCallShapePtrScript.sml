@@ -358,3 +358,20 @@ Proof
     rich_listTheory.DROP_LENGTH_APPEND] >> simp[arithmeticTheory.ADD_ASSOC]
 QED
 
+Theorem raw_call_bytes_suffix_code:
+  (do z <- emit_op RETURNDATASIZE [];
+      cmp <- emit_op LT [z;Lit (n2w n)];
+      cap <- compile_select cmp z (Lit (n2w n));
+      emit_void MSTORE [ov;cap]; return ov od) sa = (result,sb) ==>
+  same_blocks sa sb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)
+Proof
+  simp[compile_select_def, comp_bind_def, emit_op_def, fresh_var_def,
+    fresh_id_def, comp_ignore_bind_def, comp_return_def, emit_def, emit_void_def] >>
+  strip_tac >> gvs[] >> simp[same_blocks_def, emitted_insts_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
+    rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
+QED
