@@ -24,6 +24,7 @@ Ancestors
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlaceStorage bodyAugPlaceTarget
   bodyExprPreFacts bodySimExprCases bodyImmutableAugAssignCompose
   supportedStmtTraverse vyperTypeCallGraph vyperState exprSimTopLevelProps
+  vyperTypeStoragePreservation
 
 Theorem supported_word_type_is_word:
   !ty. supported_word_type ty ==> is_word_type ty
@@ -302,10 +303,17 @@ Theorem augassign_toplevel_success:
 Proof
   rpt strip_tac >>
   drule_all augassign_toplevel_metadata >> strip_tac >>
-  `contract_storage_well_formed cx es` by fs[expr_sim_inv_def] >>
+  qabbrev_tac `s0 = es with <|
+    accounts := (\a. es.accounts a with storage := vfmState$empty_storage);
+    tStorage := K vfmState$empty_storage |>` >>
+  `contract_storage_well_formed cx s0` by
+    (irule zero_read_storage_contract_storage_well_formed >> Cases >>
+     simp[Abbr `s0`, vyperStorageBackendTheory.get_storage_def,
+          vyperStorageTheory.read_slot_def, vfmStateTheory.lookup_storage_def,
+          vfmStateTheory.empty_storage_def]) >>
   drule_all toplevel_storage_read_decodes >> strip_tac >>
   drule_all eval_target_place_toplevel >>
-  disch_then (qspec_then `es` strip_assume_tac) >>
+  disch_then (qspec_then `s0` strip_assume_tac) >>
   metis_tac[read_place_def]
 QED
 

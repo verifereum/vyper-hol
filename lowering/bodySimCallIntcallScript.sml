@@ -7,7 +7,8 @@ Ancestors
   vyperContext vyperTypeCallGraph exprSimSend exprLowering context
   exprSimUnwrap exprSimMemoryRead exprSimMemoryForce
   exprSimMemorySource exprSimProps exprLoweringProps gasOutcome gasSummary
-  gasSummaryCompose gasExemptCert gasContext fragGasPath fragGasMode fragExec
+  gasSummaryCompose gasExemptCert gasContext gasStorage vyperStorageTrace
+  vyperStorageFootprint fragGasPath fragGasMode fragExec
   venomState compileEnv exprSimUnwrapProps
 
 (* The IHs at a supported callee (body_intcall_source_selection): no
@@ -143,9 +144,9 @@ Proof
       disch_then (DISJ_CASES_THEN (strip_assume_tac o BETA_RULE)) >>
       qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       rewrite_tac[gas_summary_at_def] >> BETA_TAC
-      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
-            (assume_tac o SIMP_RULE (srw_ss()) []) >>
-          first_assum (drule_then strip_assume_tac) >> gvs[] >>
+      >- (qpat_assum `!H. valid_horizon _ _ H _ ==> ?tv. _`
+            (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+          (impl_tac >- simp[]) >> strip_tac >> gvs[] >>
           rename1 `gas_marked_exec _ _ _ _ _ (INL tv) _ (OK s1)` >>
           `~s1.vs_halted` by
             metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
@@ -154,12 +155,13 @@ Proof
           >- (gvs[unwrap_value_def, comp_return_def] >>
               `?v. read_result cx tv (es_end with gas_obs := []) =
                    (INL v,es_end with gas_obs := [])` by
-                gvs[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def] >>
+                (fs[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def] >>
+                 metis_tac[]) >>
               qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK s1`] >>
               simp[] >> conj_tac
               >- (drule read_result_gas_obs >> strip_tac >>
                   gvs[gas_marked_exec_def, vyperStateTheory.bind_def]) >>
-              rpt strip_tac >> irule expr_post_of_vv_post_stack >>
+              disj1_tac >> rpt strip_tac >> irule expr_post_of_vv_post_stack >>
               irule_at Any vv_post_read_result >>
               goal_assum (drule_at Any) >> metis_tac[]) >>
           drule_all unwrap_memory_marked_read_horizons >> strip_tac >>
