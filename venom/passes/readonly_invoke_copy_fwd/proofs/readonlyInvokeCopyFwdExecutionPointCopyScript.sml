@@ -127,7 +127,7 @@ Proof
     `history`,`certificates`,`E`] >> fs[] >> first_x_assum irule >> simp[]
 QED
 
-Theorem ricf_execution_point_zero_copy:
+Theorem ricf_execution_point_zero_copy[local]:
   ricf_execution_point vs C log_of D a U B0 E0 outer_history outer_certificates
     sites maps targets stk PG G tn fn inst s t /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ wf_function fn /\
@@ -159,7 +159,7 @@ Proof
   simp[]
 QED
 
-Theorem ricf_execution_point_retained_copy:
+Theorem ricf_execution_point_retained_copy[local]:
   ricf_execution_point vs C log_of D a U B0 E0 outer_history outer_certificates
     sites maps targets stk PG G tn fn inst s t /\
   o1_ctx_shape C /\ o1_fn_shape C fn /\ wf_ssa fn /\
@@ -199,7 +199,7 @@ Proof
   disch_then (qspec_then `Ct` strip_assume_tac) >> metis_tac[]
 QED
 
-Theorem ricf_execution_point_positive_copy:
+Theorem ricf_execution_point_positive_copy[local]:
   ricf_execution_point vs C log_of D a U B0 E0 outer_history outer_certificates
     sites maps targets stk PG G tn fn inst s t /\
   o1_fn_shape C fn /\ wf_ssa fn /\
