@@ -27,7 +27,7 @@
 Theory bodyPtrDefs
 Ancestors
   sourceUnitExecution
-  fragGasPathPtr gasContext bodySim immSectionDead stmtSimDefs exprSimDefs exprSimProps exprSimHypsDefs fragExec ptrSafeRun ptrDiscipline
+  fragGasPathPtr gasContext bodySim immSectionDead stmtSimDefs stmtSimProps exprSimDefs exprSimProps exprSimHypsDefs fragExec ptrSafeRun ptrDiscipline
   compileEnv valueEncoding exprLowering exprLoweringProps context
   venomState venomExecSemantics vyperInterpreter vyperTypeSystem list
   finite_map words
@@ -145,6 +145,27 @@ Definition ghost_inv_at_def:
          FLOOKUP G x = NONE /\ op_taint tn (Var x) = {}) /\
     allocas_from lo s /\ lo <= s.vs_alloca_next
 End
+
+Theorem ghost_inv_at_declare_local_entry:
+  declare_local cenv id ty st = (c,st1) /\ cenv.ce_alloca_locals /\
+  lookup_scopes id es.scopes = NONE /\
+  ghost_inv_at D lo d cenv cx es G tn s ==>
+  ghost_inv_at D lo d c cx es G tn s
+Proof
+  strip_tac >> drule_all declare_local_ptr >> strip_tac >>
+  `c.ce_return_buf = cenv.ce_return_buf /\
+   c.ce_return_pc = cenv.ce_return_pc /\
+   c.ce_imm_alloca = cenv.ce_imm_alloca` by
+    (qpat_x_assum `c with <| ce_vars := _; ce_var_type := _;
+                           ce_dynarray_capacity := _ |> = cenv` mp_tac >>
+     simp[compile_env_component_equality]) >>
+  fs[ghost_inv_at_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> Cases_on `name = id` >> gvs[] >>
+      qpat_x_assum `!name entry p sz. _`
+        (qspecl_then [`name`, `entry`, `p`, `sz`] mp_tac) >> simp[]) >>
+  simp[] >> Cases_on `d` >> gvs[return_buf_ptr_def] >>
+  PairCases_on `x` >> gvs[return_buf_ptr_def]
+QED
 
 Definition ghost_inv_cx_dead:
   ghost_inv H d cenv cx es G tn s <=>
