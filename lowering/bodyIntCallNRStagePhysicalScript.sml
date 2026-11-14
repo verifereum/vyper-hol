@@ -87,3 +87,27 @@ Proof
   rename1 `Call ann target args drv` >> Cases_on `target` >>
   gvs[post_value_type_def, lowered_value_type_def, vyperASTTheory.expr_type_def]
 QED
+
+(* Head-premise provenance (no additional caller invariant).
+   - Semantic source/destination typing and widening: NRStageTypes exports
+     intcall_stage_declared_layout/word/bytes, using expr_body_pre and the
+     well-typed call's parameter widening.
+   - Source forcing capacity: aggregateEvaluatedLayout's public
+     body_post_type_allocation_bound, not expr_body_pre_copy_ok at the
+     annotation (an internal call may return a smaller physical aggregate).
+     Destination capacity: intcall_stage_declared_capacity at the callee's
+     FunctionDecl.  MAX 32 preserves the allocation limit.
+   - Unequal aggregate metadata: acyclic_struct_metadata is in body_inv;
+     sfields_tenv_consistent and field distinctness/sizes are in expr_sim_inv,
+     obtained from expr_body_pre.  expr_sim_inv_memory_size supplies the
+     universal evaluated-size equation.  These facts concern ce/cx and are
+     independent of the moving source evaluation state.
+   - Only the aggregate branch passes vv_type to compile_store_memory.
+     A word destination emits MSTORE directly; a bytes destination uses
+     compile_store_bytestring directly.  Their semantic representations use
+     intcall_stage_declared_word/bytes, not equality of physical and post tags.
+   - Source memory bounds/ownership are producer outputs.  Allocation and
+     forcing transport them; disjointness from the new destination and from
+     old snapshots remains a runtime head-execution obligation, not a type
+     fact.  NRStageFragments exports the guarded allocation/forcing frames.
+*)
