@@ -20,7 +20,9 @@ then compiles each JSON natively, and each contract gets a verdict:
   mismatch     they differ, or compile_vyper failed, on a program in
                supported_program; fails the check unless listed in
                bytecode/native/export-known-mismatches.txt
-  known        a listed mismatch
+  known        a listed mismatch with its listed outcome: `bytes` (the bytes
+               differ) or a failure (`none`: compile_vyper returned NONE;
+               `stuck`; `exception`)
   seed         a mismatch, but Vyper produces HOL's bytes under another
                PYTHONHASHSEED (the compile runs with seed 0)
   outside      the program is outside supported_program; the detail gives
@@ -28,8 +30,8 @@ then compiles each JSON natively, and each contract gets a verdict:
   rejected     the HOL frontend rejected the program
   vyper-error  the patched pin doesn't compile the source at this profile
   error        the runner gave no supported_program verdict, or the known
-               list is stale (a listed contract no longer mismatches or is
-               gone); fails the check
+               list is stale (a listed contract no longer mismatches, has
+               another outcome, or is gone); fails the check
 
 Run it with the patched pin's Python and PYTHONHASHSEED=0 (not with -I,
 which ignores PYTHONHASHSEED; -P -s isolate the imports instead):
@@ -48,6 +50,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import warnings
@@ -71,6 +74,12 @@ class Contract:
 
 
 @dataclass
+class Known:
+    outcome: str
+    reason: str
+
+
+@dataclass
 class Verdict:
     contract: Contract
     verdict: str
@@ -89,8 +98,6 @@ def collect(exports: Path) -> tuple[list[Contract], Counter]:
                     continue
                 if trace["deployment_type"] not in ("source", "blueprint"):
                     skipped[f"{trace['deployment_type']} deployments"] += 1
-                elif not trace["deployment_succeeded"]:
-                    skipped["failed deployments"] += 1
                 elif trace["compiler_settings"] != ORACLE_SETTINGS:
                     skipped["deployments at other compiler settings"] += 1
                 elif len(trace["solc_json"]["sources"]) != 1:
@@ -154,14 +161,23 @@ def seed_dependent(contract: Contract, native: Path) -> bool:
     return False
 
 
-def known_mismatches() -> dict[str, str]:
-    """{contract id: reason} from export-known-mismatches.txt."""
+def known_mismatches() -> dict[str, Known]:
+    """{contract id: its listed outcome and reason} from export-known-mismatches.txt."""
     known = {}
     for line in KNOWN.read_text().splitlines():
         if line.strip() and not line.startswith("#"):
-            key, reason = line.split()[:2]
-            known[key] = reason
+            key, outcome, reason = line.split()[:3]
+            known[key] = Known(outcome, reason)
     return known
+
+
+def outcome(detail: str) -> str:
+    """The kind of a mismatch's runner detail: bytes, none, stuck or exception."""
+    if re.match(r"(deploy|runtime) differs", detail):
+        return "bytes"
+    if detail == "compiler returned NONE":
+        return "none"
+    return "stuck" if detail.startswith("stuck: ") else "exception"
 
 
 def classify(line: str) -> tuple[str, str, str]:
@@ -203,12 +219,16 @@ def check(exports: Path, work: Path, jobs: int) -> tuple[list[Verdict], Counter]
         key, verdict, detail = classify(line)
         contract = compiled[key]
         dump = native / (key + ".hex")
-        if verdict == "mismatch" and key in known:
-            verdict, detail = "known", f"{known[key]}: {detail}"
+        listed = known.get(key)
+        if verdict == "mismatch" and listed and outcome(detail) == listed.outcome:
+            verdict, detail = "known", f"{listed.reason}: {detail}"
+        elif verdict == "mismatch" and listed:
+            verdict, detail = "error", (f"listed as {listed.outcome} ({listed.reason}) but "
+                                        f"{outcome(detail)}: {detail}")
         elif verdict == "mismatch" and dump.exists() and seed_dependent(contract, dump):
             verdict = "seed"
-        elif key in known:
-            verdict, detail = "error", f"listed ({known[key]}) but {verdict}; remove it from the list"
+        elif listed:
+            verdict, detail = "error", f"listed ({listed.reason}) but {verdict}; remove it from the list"
         verdicts.append(Verdict(contract, verdict, detail))
     for key in sorted(known.keys() - compiled.keys()):
         verdicts.append(Verdict(Contract(key, "-", ""), "error",
