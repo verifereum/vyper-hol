@@ -56,7 +56,7 @@ val ldRequestStrengthen = Term.subst
   [``dead_result_rel`` |-> ``ld_request_result_rel``];
 val ldRequestPredicates = map
   (ldRequestStrengthen o fst o strip_comb o snd o strip_forall)
-  (strip_conj (snd (dest_imp (concl ld_runner_conditional_induction_fuel))));
+  (strip_conj (snd (dest_imp (concl ld_runner_templates_fuel))));
 val (ldRequestIndVars,ldRequestIndBody) = strip_forall (concl run_defs_ind);
 val ldRequestInd = Term.subst (ListPair.map (fn (v,t) => v |-> t)
   (ldRequestIndVars,ldRequestPredicates)) ldRequestIndBody;
