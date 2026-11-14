@@ -290,7 +290,7 @@ Resume pop_nested_local_sim[nonempty]:
     |> SRULE [exprSimVVFrameTheory.vv_post_inst_idx, expr_type_def,
              loweringPostsTheory.expr_has_effect_thm]) >>
   goal_assum (drule_at Any) >>
-  simp[] >> conj_tac >- metis_tac[] >>
+  simp[Abbr `result`] >> conj_tac >- metis_tac[] >>
   qpat_assum `mem_path_offset entry.type path = _` (irule_at Any) >>
   qpat_assum `FLOOKUP cenv.ce_vars id = _` (irule_at Any) >>
   qpat_assum `wb_frame cenv es _ sa s0 t` (irule_at Any) >>
