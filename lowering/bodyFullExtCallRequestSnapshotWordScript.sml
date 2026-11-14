@@ -3,7 +3,7 @@ Theory bodyFullExtCallRequestSnapshotWord
 Ancestors
   bodyFullExtCallRequestSnapshot exprSimHypsDefs exprSimHyps
   aggregateEvaluatedLayout loweringPosts exprLowering context compileEnv
-  exprSimUnwrap valueEncodingProofs valueEncodingDefs
+  exprSimUnwrap valueEncodingProofs valueEncodingDefs valueCopyBytes
 
 Theorem extcall_request_word_snapshot_unwrap:
   expr_body_pre ce cx env e es /\ ~expr_has_effect e /\
@@ -133,4 +133,42 @@ Proof
       disj2_tac >> disj1_tac >>
       qexistsl_tac [`n`, `b`, `sz`] >> simp[]) >>
   gvs[vv_at_def]
+QED
+
+(* No-copy composites retain their ownership type even when a memory
+   bytestring's value interpretation changes capacity. *)
+Theorem extcall_request_nonword_snapshot_capture:
+  ~is_word_type dst /\
+  (src = dst \/
+   p.ptr_location = LocMemory /\
+   is_bytestring_type src /\ is_bytestring_type dst) /\
+  evaluate_type (get_tenv cx) src = SOME sv /\
+  evaluate_type (get_tenv cx) dst = SOME dv /\
+  value_has_type sv v /\ value_has_type dv v /\
+  read_result cx raw ee = (INL v,ee) /\
+  vv_holds ce cx src raw (LocatedValue tag p) ee s /\
+  vv_at ce cx src sa sm ee raw (LocatedValue tag p) s /\
+  compile_snapshot_vv ce F
+    (ext_call_arg_value dst (LocatedValue tag p)) sm = (snap,sb)
+  ==>
+  sb = sm /\ snap = LocatedValue dst p /\
+  vv_holds ce cx dst raw snap ee s /\
+  vv_at ce cx src sa sm ee raw snap s /\
+  val_footprint sv v = val_footprint dv v
+Proof
+  strip_tac
+  >- (gvs[ext_call_arg_value_def, compile_snapshot_vv_def, vv_type_def,
+          comp_return_def] >> conj_tac
+      >- (qpat_x_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>
+          simp[vv_holds_def]) >>
+      qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[vv_at_def]) >>
+  gvs[ext_call_arg_value_def, compile_snapshot_vv_def, vv_type_def,
+      comp_return_def] >>
+  conj_tac
+  >- (irule vv_holds_bytestring_memory_retag >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[vv_at_def]) >>
+  metis_tac[bytestring_val_footprint_eq]
 QED
