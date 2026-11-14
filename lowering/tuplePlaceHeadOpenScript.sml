@@ -4,6 +4,7 @@ Ancestors
   tuplePlaceHeadGas tuplePlaceOpen tuplePlacePointerReady
   tuplePlaceTargetGas targetPlaceSimCases gasSummary fragGasMode fragGasPath
   vyperStorageFootprint vyperStorageTrace
+Libs horizonTypeLib
 
 Theorem tuple_place_head_gas_continuation_open:
   tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
@@ -65,13 +66,16 @@ Proof
        (strip_assume_tac o REWRITE_RULE [tuplePlaceHeadTheory.tuple_place_head_def]) >>
      metis_tac[]) >>
   irule tuple_place_gas_outcome_bind_exec >>
-  goal_assum (drule_at Any) >> simp[] >> rpt conj_tac
-  >~ [`storage_trace_frame _`]
-  >- (rpt strip_tac >> irule vyperStorageTraceTheory.storage_trace_frame_ignore_bind >>
-      simp[vyperStorageTraceTheory.storage_trace_frame_write_place])
-  >~ [`expr_exit _ _`]
+  conj_tac
+  >- (simp[] >> rpt strip_tac >>
+      irule vyperStorageTraceTheory.storage_trace_frame_ignore_bind >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_write_place]) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac
   >- (rpt strip_tac >> Cases_on `res` >>
       gvs[stmtSimPropsTheory.expr_exit_INR_type]) >>
+  reverse conj_tac
+  >- (rpt strip_tac >> metis_tac[]) >>
   rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
@@ -81,35 +85,38 @@ Proof
   `target_post H0 ctx func cenv cx es sp sa s0 (mid with gas_obs := [])
      (PlaceR v) (Type (EL i tys)) r t /\
    t.vs_current_bb = sa.cs_current_bb /\ t.vs_inst_idx = LENGTH sa.cs_current_insts` by
-    res_tac >>
+    (simp[] >> metis_tac[]) >>
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
      target_post H ctx func cenv cx es sp sa s0 (mid with gas_obs := [])
        (PlaceR v) (Type (EL i tys)) r t` by
-    (rpt strip_tac >> res_tac) >>
+    (simp[] >> metis_tac[]) >>
   rename1 `PlaceR p` >>
   `arg_type_fits (EL i ltys) (EL i tys)` by
     (drule_all tuple_place_index_fit >> simp[]) >>
   `~block_is_terminated sb` by
-    (irule (SRULE [LET_THM] tuple_place_success_store_open) >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+    (irule (horizonTypeLib.at_horizon_named "H"
+       (SRULE [LET_THM] tuple_place_success_store_open)) >>
+     qpat_assum `target_post H0 ctx func cenv cx es sp sa s0 _ _ _ r t` (irule_at Any) >>
+     fs[LET_THM] >> metis_tac[]) >>
   `~t.vs_halted` by
     (fs[gas_marked_exec_def] >> drule gas_marked_path_exec >>
      strip_tac >> metis_tac[gas_path_normal]) >>
-  drule_all (SRULE [LET_THM] tuple_place_marked_head_step) >> strip_tac >>
+  drule_all tuple_place_marked_head_step >> strip_tac >>
   `?ast ast'. assign_tuple_targets cx (BaseTarget bt) (EL i vs) ast = (INL (),ast')` by
     (qpat_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
        (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
      disch_then (qspec_then `[]` strip_assume_tac o CONJUNCT1) >> fs[] >>
      qexists `es with gas_obs := gas_explicit marks s0.vs_gas_readings` >>
      simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def]) >>
+  qpat_assum `target_post H0 ctx func cenv cx es sp sa s0 _ _ _ r t`
+    (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.target_post_def]) >>
   irule tuple_place_write_gas_prefix >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   first_x_assum irule >> simp[] >>
   qpat_assum `assign_tuple_targets _ _ _ _ = _` (irule_at Any) >>
-  qpat_x_assum `target_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[loweringPostsTheory.target_post_def] >> strip_tac >>
   rpt strip_tac >>
-  `not_fresh_at sa x` by
-    (fs[loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+      `not_fresh_at sa x` by
+        (fs[loweringStateRelDefsTheory.not_fresh_at_def] >>
+         rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   metis_tac[]
 QED
