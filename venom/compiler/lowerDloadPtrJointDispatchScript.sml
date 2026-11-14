@@ -313,12 +313,10 @@ Proof
       qexists_tac `fuel` >> simp[] >>
       conj_tac >- metis_tac[] >>
       disj1_tac >> rpt (first_assum (irule_at Any)) >>
-      simp[Abbr `old`] >> conj_tac
-      >- (qpat_x_assum
-            `(_ : instruction -> num -> instruction list -> bool) i n emitted`
-            mp_tac >> simp[]) >>
-      qpat_x_assum `!k. k < LENGTH cs ==> _`
-        (mp_tac o SIMP_RULE (srw_ss()) [LET_THM]) >> simp[])
+      simp[Abbr `old`] >>
+      qpat_x_assum
+        `(_ : instruction -> num -> instruction list -> bool) i n emitted`
+        mp_tac >> simp[])
   >- normal_row (SRULE [] dload_joint_tracked_environment_read_next_static)
   >- normal_row (SRULE [] dload_joint_tracked_gas_next_static)
   >- normal_row (SRULE [] dload_joint_tracked_identity_next_static)
