@@ -22,7 +22,7 @@ Ancestors
   bodyIntCallPostProvenanceConditionalRoot
   bodyIntCallPostProvenanceConditionalJoin
   bodyIntCallPostProvenanceSelectors
-  bodyIntCallPostProvenanceOtherSelectors
+  bodyIntCallPostProvenanceOtherSelectors bodyIntCallPostProvenanceSelectorCases
   bodyIntCallPostProvenanceCaptured
 
 Theorem vv_post_intcall_provenance:
