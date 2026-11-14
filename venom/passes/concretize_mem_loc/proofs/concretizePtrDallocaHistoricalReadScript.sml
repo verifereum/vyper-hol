@@ -1,7 +1,7 @@
 Theory concretizePtrDallocaHistoricalRead
 Ancestors
   concretizePtrDallocaHistoricalMemory concretizePtrDallocaReadChannels
-  concretizePtrDallocaCopyRead concretizePtrPairedPrefix
+  concretizePtrDallocaCopyRead concretizePtrDallocaScalarReads concretizePtrPairedPrefix
   concretizePtrPairedFields list rich_list arithmetic finite_map words pred_set
 
 (* Each read uses the recorded departure snapshot. Recursive memory
@@ -64,13 +64,47 @@ Proof
     ptr_dalloca_demanded_reflection_memory) >>
   impl_tac
   >- (simp[LENGTH_TAKE, EL_TAKE] >> rpt conj_tac >>
-      rpt strip_tac >> gvs[EL_TAKE] >> first_x_assum irule >> simp[]
+      rpt strip_tac >>
+      `r < SUC q /\ EL r done < SUC (EL q done)` by
+        (fs[EL_TAKE] >> decide_tac) >>
+      `EL r (TAKE q done) = EL r done` by simp[EL_TAKE] >>
+      `EL (EL r done) (TAKE (SUC (EL q done)) h) = EL (EL r done) h` by simp[EL_TAKE] >>
+      `EL (EL r done) (TAKE (SUC (EL q done)) H) = EL (EL r done) H` by simp[EL_TAKE] >>
+      fs[] >> first_x_assum irule >> simp[]
       >> (fn g =>
         if is_exists (snd g) then
           (rename1 `FLOOKUP bw (tok,id) = SOME (read_base,read_size)` >>
            qexistsl [`id`,`pos`,`read_size`,`tok`,`u`] >> simp[]) g
         else decide_tac g)) >>
   simp[]
+QED
+
+Theorem ptr_dalloca_historical_scalar_read_masks:
+  ptr_paired_memory_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H ws /\
+  q < LENGTH done /\ n0 = EL q done /\
+  EL n0 H = (ts0,rw0,bw0,PT0,TG0,sv0,en0) /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  ~in_revert_forward (EL n0 h).po_fn (EL n0 h).po_state /\
+  (!i. i < lo ==> i IN (EL q ht).po_taint.t_mem ==> i IN (EL n0 h).po_taint.t_mem) /\
+  (EL q ht).po_taint.t_stor SUBSET (EL n0 h).po_taint.t_stor /\
+  (EL q ht).po_taint.t_trans SUBSET (EL n0 h).po_taint.t_trans /\
+  MEM (EL n0 h).po_inst.inst_opcode [ILOAD;SLOAD;TLOAD] /\ ptr_chrono_step C' (EL q ht) zt ==>
+  out_taint (EL q ht).po_taint (EL q ht).po_inst (EL q ht).po_state SUBSET
+    out_taint (EL n0 h).po_taint (EL n0 h).po_inst (EL n0 h).po_state
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `EL (EL q done) H = (ts0,rw0,bw0,PT0,TG0,sv0,en0)` by metis_tac[] >>
+  drule_all ptr_dalloca_memory_departure_cut >> strip_tac >>
+  mp_tac (Q.INST
+    [`h` |-> `TAKE (SUC n0) h`, `a` |-> `EL n0 h`,
+     `ht` |-> `TAKE (SUC q) ht`, `at` |-> `EL q ht`,
+     `done` |-> `TAKE q done`, `tokens` |-> `ts0`, `registry` |-> `rw0`,
+     `births` |-> `bw0`, `PT` |-> `PT0`, `TG` |-> `TG0`,
+     `saved` |-> `sv0`, `entries` |-> `en0`,
+     `H` |-> `TAKE (SUC n0) H`,
+     `ws` |-> `FILTER (\(n,j,rho). j < q) ws`]
+    ptr_dalloca_scalar_read_masks_memory) >> simp[]
 QED
 
 Theorem ptr_dalloca_historical_mload_read_mask:
@@ -130,7 +164,13 @@ Proof
     ptr_dalloca_mload_read_mask_memory) >>
   impl_tac
   >- (simp[LENGTH_TAKE, EL_TAKE] >> rpt conj_tac >>
-      rpt strip_tac >> gvs[EL_TAKE] >> first_x_assum irule >> simp[]
+      rpt strip_tac >>
+      `r < SUC q /\ EL r done < SUC (EL q done)` by
+        (fs[EL_TAKE] >> decide_tac) >>
+      `EL r (TAKE q done) = EL r done` by simp[EL_TAKE] >>
+      `EL (EL r done) (TAKE (SUC (EL q done)) h) = EL (EL r done) h` by simp[EL_TAKE] >>
+      `EL (EL r done) (TAKE (SUC (EL q done)) H) = EL (EL r done) H` by simp[EL_TAKE] >>
+      fs[] >> first_x_assum irule >> simp[]
       >> (fn g =>
         if is_exists (snd g) then
           (rename1 `FLOOKUP bw (tok,id) = SOME (read_base,read_size)` >>
@@ -201,7 +241,13 @@ Proof
     ptr_dalloca_mcopy_read_mask_memory) >>
   impl_tac
   >- (simp[LENGTH_TAKE, EL_TAKE] >> rpt conj_tac >>
-      rpt strip_tac >> gvs[EL_TAKE] >> first_x_assum irule >> simp[]
+      rpt strip_tac >>
+      `r < SUC q /\ EL r done < SUC (EL q done)` by
+        (fs[EL_TAKE] >> decide_tac) >>
+      `EL r (TAKE q done) = EL r done` by simp[EL_TAKE] >>
+      `EL (EL r done) (TAKE (SUC (EL q done)) h) = EL (EL r done) h` by simp[EL_TAKE] >>
+      `EL (EL r done) (TAKE (SUC (EL q done)) H) = EL (EL r done) H` by simp[EL_TAKE] >>
+      fs[] >> first_x_assum irule >> simp[]
       >> (fn g =>
         if is_exists (snd g) then
           (rename1 `FLOOKUP bw (tok,id) = SOME (read_base,read_size)` >>

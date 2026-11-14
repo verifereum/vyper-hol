@@ -300,6 +300,34 @@ Proof
   simp[EL_APPEND_EQN])
 QED
 
+(* Every source departure outside the target event list is a NOP,
+   including the gap before the first target departure. *)
+Theorem ptr_structural_trace_unmatched_nop:
+  !R vs0 C Ct h a ht at done tokens registry births PT TG saved entries.
+  ptr_structural_trace R vs0 C Ct h a ht at done tokens registry births PT TG saved entries ==>
+  !k. k < LENGTH h - 1 /\ ~MEM k done ==>
+    (EL k h).po_inst.inst_opcode = NOP
+Proof
+  ho_match_mp_tac ptr_structural_trace_strongind >>
+  rpt conj_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS)
+  >- simp[]
+  >- (qx_gen_tac `k` >> strip_tac >>
+      `0 < LENGTH h /\ LAST h = a` by
+        (drule ptr_structural_trace_source >>
+         disch_then (mp_tac o MATCH_MP ptr_chrono_history_end) >>
+         strip_tac >> simp[] >> Cases_on `h` >> fs[]) >>
+      Cases_on `k < LENGTH h - 1`
+      >- (simp[EL_APPEND_EQN] >> first_x_assum irule >> simp[]) >>
+      `k = LENGTH h - 1` by (fs[] >> decide_tac) >>
+      `h <> []` by (Cases_on `h` >> fs[]) >>
+      qpat_x_assum `LAST h = a` mp_tac >>
+      simp[LAST_EL, PRE_SUB1] >> strip_tac >> simp[EL_APPEND_EQN]) >>
+  qx_gen_tac `k` >> strip_tac >>
+  `k < LENGTH h - 1 /\ ~MEM k done` by (fs[MEM_APPEND] >> decide_tac) >>
+  simp[EL_APPEND_EQN] >> first_x_assum irule >> simp[]
+QED
+
 Theorem ptr_chrono_nop_memory_fields[local]:
   !C a b. ptr_chrono_step C a b ==> a.po_inst.inst_opcode = NOP ==>
     a.po_state.vs_memory = b.po_state.vs_memory /\

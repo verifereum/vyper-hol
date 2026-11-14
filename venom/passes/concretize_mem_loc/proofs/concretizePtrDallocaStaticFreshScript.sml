@@ -1,7 +1,7 @@
 Theory concretizePtrDallocaStaticFresh
 Ancestors
   concretizePtrChronologicalHistory concretizePtrLifetime lowerDloadPtrTaintBounds
-  ptrDiscipline codegenRel venomExecSemantics venomInst
+  lowerDloadPtrScalar ptrDiscipline codegenRel venomExecSemantics venomInst
   finite_map list rich_list pred_set words venomState
 
 Theorem ptr_dalloca_static_fresh_exclusion:
@@ -42,6 +42,31 @@ Proof
   Cases_on `eval_operand v s` >> simp[] >>
   Cases_on `eval_operand n s` >> simp[] >>
   rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+(* Only the three data-taint writers matter. Their write ranges do not
+   inspect the post-state, so the chronological cursor update is harmless. *)
+Theorem ptr_dalloca_chrono_written_footprint:
+  ptr_chrono_step C a z /\
+  (!op. op_taint a.po_taint op SUBSET {k | k < 32}) /\
+  i IN written_taint a.po_taint a.po_inst a.po_state ==>
+  i IN range_bytes (step_writes a.po_inst a.po_state z.po_state)
+Proof
+  strip_tac >>
+  `MEM a.po_inst.inst_opcode [MSTORE;ISTORE;MCOPY]` by
+    (spose_not_then assume_tac >>
+     `written_taint a.po_taint a.po_inst a.po_state = {}` by
+       (irule written_taint_opcode_exclusion >> simp[]) >> fs[]) >>
+  `~is_terminator a.po_inst.inst_opcode /\ a.po_inst.inst_opcode <> INVOKE` by
+    gvs[MEM, is_terminator_def] >>
+  drule_all ptr_chrono_ordinary_step_success >> strip_tac >>
+  rename1 `step_inst fuel C a.po_inst a.po_state = OK raw_post` >>
+  `written_taint a.po_taint a.po_inst a.po_state SUBSET
+   range_bytes (step_writes a.po_inst a.po_state raw_post)` by
+    (irule ptr_dalloca_written_taint_footprint >> simp[] >> metis_tac[]) >>
+  `step_writes a.po_inst a.po_state raw_post =
+   step_writes a.po_inst a.po_state z.po_state` by gvs[MEM, step_writes_def] >>
+  fs[SUBSET_DEF] >> metis_tac[]
 QED
 
 (* Freshness is queried at the actual successful post-state.  The call,

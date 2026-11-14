@@ -41,8 +41,8 @@ Proof
 QED
 
 Theorem ptr_dalloca_scalar_read_context[local]:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_paired_memory_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H ws /\
   o1_ctx_shape C /\ ptr_discipline lo C vs /\
   MEM a.po_inst.inst_opcode [ILOAD;SLOAD;TLOAD] ==>
   ?op out. at.po_inst = a.po_inst /\
@@ -53,7 +53,7 @@ Theorem ptr_dalloca_scalar_read_context[local]:
     op_prov a.po_prov op = NONE
 Proof
   strip_tac >>
-  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_paired_memory_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_ownership >> strip_tac >>
   `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
@@ -92,10 +92,10 @@ Resume ptr_dalloca_scalar_read_context[discipline]:
      op_taint a.po_taint op = {}) a.po_inst.inst_operands` by
     (irule ptr_dalloca_scalar_read_operands >> simp[] >> metis_tac[]) >>
   `a.po_state.vs_labels = at.po_state.vs_labels` by
-    (drule ptr_paired_prefix_endpoint >> strip_tac >>
+    (drule ptr_paired_memory_endpoint >> strip_tac >>
      fs[ptr_paired_sample_def] >> metis_tac[concretizePtrRequestHistoryTheory.ptr_history_content_labels]) >>
   `eval_operand op a.po_state = eval_operand op at.po_state` by
-    (drule ptr_paired_prefix_endpoint >> strip_tac >> fs[ptr_paired_sample_def] >>
+    (drule ptr_paired_memory_endpoint >> strip_tac >> fs[ptr_paired_sample_def] >>
      gvs[] >> drule_all ptr_mixed_vars_eval >>
      gvs[ptr_lookup_transport_def, ptr_value_transport_scalar_empty] >>
      Cases_on `eval_operand op a.po_state` >>
@@ -118,7 +118,7 @@ Resume ptr_dalloca_scalar_read_context[provenance]:
   gvs[]
 QED
 Resume ptr_dalloca_scalar_read_context[instruction]:
-  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  drule ptr_paired_memory_endpoint >> strip_tac >>
   qpat_x_assum `ptr_paired_cursor lp a at` mp_tac >>
   simp[ptr_paired_cursor_def] >> strip_tac >>
   `a.po_state.vs_inst_idx = EL at.po_state.vs_inst_idx indices` by
@@ -153,9 +153,9 @@ Proof
   gvs[mem_read_ops_def, op_prov_def]
 QED
 
-Theorem ptr_dalloca_scalar_read_masks:
-  ptr_paired_prefix R lp positions lo vs C C'
-    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+Theorem ptr_dalloca_scalar_read_masks_memory:
+  ptr_paired_memory_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H ws /\
   o1_ctx_shape C /\ ptr_discipline lo C vs /\
   ~in_revert_forward a.po_fn a.po_state /\
   (!i. i < lo ==> i IN at.po_taint.t_mem ==> i IN a.po_taint.t_mem) /\
@@ -174,4 +174,21 @@ Proof
       first_x_assum irule >> simp[] >> decide_tac)
   >- (fs[key_taint_def, SUBSET_DEF] >> metis_tac[]) >>
   fs[key_taint_def, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ptr_dalloca_scalar_read_masks:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  (!i. i < lo ==> i IN at.po_taint.t_mem ==> i IN a.po_taint.t_mem) /\
+  at.po_taint.t_stor SUBSET a.po_taint.t_stor /\
+  at.po_taint.t_trans SUBSET a.po_taint.t_trans /\
+  MEM a.po_inst.inst_opcode [ILOAD;SLOAD;TLOAD] /\ ptr_chrono_step C' at zt ==>
+  out_taint at.po_taint at.po_inst at.po_state SUBSET
+    out_taint a.po_taint a.po_inst a.po_state
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule ptr_paired_prefix_memory >> strip_tac >>
+  drule_all ptr_dalloca_scalar_read_masks_memory >> simp[]
 QED

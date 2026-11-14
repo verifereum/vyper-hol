@@ -8,8 +8,10 @@
  *)
 Theory concretizeStageFramePtr
 Ancestors
+  concretizePtrDallocaRuntimeHistory
   concretizeStageStatic concretizePtrDallocaHistoricalPersistent
   concretizePtrDallocaHistoricalMemory concretizePtrDallocaHistoricalRead
+  concretizePtrDallocaMemorySteps concretizePtrDallocaStageCoverage
   o1PassContract ptrDiscipline unitMemInv stackPlanGen concretizeMemLocDefs
   venomPassDispatcher cfgWf
   concretizePtrStagePairedBridge concretizePtrHistoryCoverage

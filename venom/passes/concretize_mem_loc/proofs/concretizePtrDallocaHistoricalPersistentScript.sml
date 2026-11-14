@@ -7,7 +7,7 @@ Ancestors
   concretizePtrSourceOwnership concretizePtrChronologicalHistory
   concretizePtrRequestHistory concretizePtrOpaqueRetpc
   concretizeMemLocDefs passSharedDefs o1PassContract unitShapeDefs
-  ptrDiscipline venomWf venomInst venomState list finite_map pred_set
+  ptrDiscipline venomExecSemantics opcodeClass venomWf venomInst venomState list finite_map pred_set
 
 Theorem ptr_dalloca_historical_sample:
   ptr_paired_prefix R lp positions lo vs C C'
@@ -132,4 +132,55 @@ Proof
     (strip_tac >> drule_all ptr_dalloca_call_adoption >> simp[]) >>
   irule ptr_dalloca_persistent_next >> simp[] >>
   gvs[concretizePtrRequestCompletionProbeTheory.ptr_call_adopted_def]
+QED
+
+(* Use the actual ordinary chronology witnesses; no equality between a
+   chronological cursor-updated post-state and a raw execution post-state. *)
+Theorem ptr_dalloca_historical_persistent_chrono:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  q < LENGTH done /\ a = EL (EL q done) h /\ target = EL q ht /\
+  ptr_chrono_step C a zs /\ ptr_chrono_step C' target zt /\
+  ~is_terminator a.po_inst.inst_opcode /\ a.po_inst.inst_opcode <> INVOKE /\
+  ~is_terminator target.po_inst.inst_opcode /\ target.po_inst.inst_opcode <> INVOKE /\
+  target.po_taint.t_stor SUBSET a.po_taint.t_stor /\
+  target.po_taint.t_trans SUBSET a.po_taint.t_trans /\
+  target.po_taint.t_imm SUBSET a.po_taint.t_imm /\
+  (!op. MEM op a.po_inst.inst_operands ==>
+    op_taint target.po_taint op SUBSET op_taint a.po_taint op) ==>
+  zt.po_taint.t_stor SUBSET zs.po_taint.t_stor /\
+  zt.po_taint.t_trans SUBSET zs.po_taint.t_trans /\
+  zt.po_taint.t_imm SUBSET zs.po_taint.t_imm
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!fuel src_post fuelT tgt_post.
+    step_inst fuel C a.po_inst a.po_state = OK src_post /\
+    step_inst fuelT C' target.po_inst target.po_state = OK tgt_post ==>
+    (step_taint target.po_inst target.po_state tgt_post target.po_taint).t_stor SUBSET
+      (step_taint a.po_inst a.po_state src_post a.po_taint).t_stor /\
+    (step_taint target.po_inst target.po_state tgt_post target.po_taint).t_trans SUBSET
+      (step_taint a.po_inst a.po_state src_post a.po_taint).t_trans /\
+    (step_taint target.po_inst target.po_state tgt_post target.po_taint).t_imm SUBSET
+      (step_taint a.po_inst a.po_state src_post a.po_taint).t_imm` by
+    (rpt gen_tac >> strip_tac >>
+     drule_all ptr_dalloca_historical_persistent_next >> simp[]) >>
+  qpat_x_assum `ptr_chrono_step C a zs` mp_tac >>
+  simp[Once ptr_chrono_step_cases, ptr_observe_def] >> strip_tac >>
+  gvs[ptr_observation_component_equality]
+  >>~- ([`step_inst _ _ _ _ = IntRet _ _`],
+    qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
+    simp[step_inst_non_invoke] >>
+    disch_then (mp_tac o MATCH_MP step_inst_base_intret_opcodes) >>
+    strip_tac >> gvs[is_terminator_def]) >>
+  qpat_x_assum `ptr_chrono_step C' target zt` mp_tac >>
+  simp[Once ptr_chrono_step_cases, ptr_observe_def] >> strip_tac >>
+  gvs[ptr_observation_component_equality]
+  >>~- ([`step_inst _ _ _ _ = IntRet _ _`],
+    qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
+    simp[step_inst_non_invoke] >>
+    disch_then (mp_tac o MATCH_MP step_inst_base_intret_opcodes) >>
+    strip_tac >> gvs[is_terminator_def]) >>
+  qpat_x_assum `!fuel src_post fuelT tgt_post. _`
+    (drule_all_then mp_tac) >> simp[]
 QED
