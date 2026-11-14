@@ -167,3 +167,5 @@ Resume body_target_place_sim_full[live]:
   drule_all local_base_place_live >> strip_tac >> gvs[] >>
   metis_tac[]
 QED
+
+Finalise body_target_place_sim_full
