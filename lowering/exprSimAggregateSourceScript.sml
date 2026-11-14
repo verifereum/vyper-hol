@@ -153,31 +153,37 @@ Proof
   strip_tac >> drule_all aggregate_named_child_body_syntax >> strip_tac >>
   `~expr_has_evm_run e` by
     (gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >> res_tac >> gvs[]) >>
-  simp[] >> rpt conj_tac >>
-  TRY (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
-       metis_tac[] >> NO_TAC) >>
-  TRY (fs[listTheory.EVERY_MEM] >> metis_tac[] >> NO_TAC) >>
-  TRY (strip_tac >>
+  simp[] >> rpt conj_tac
+  >~ [`call_evaluation_safe cx (int_calls_expr e)`]
+  >- (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
+      metis_tac[])
+  >~ [`EVERY _ (int_calls_expr e)`]
+  >- (fs[listTheory.EVERY_MEM] >> metis_tac[])
+  >~ [`~supported_expr_exists call_operands_effect_root e`]
+  >- (strip_tac >>
        qpat_x_assum `~supported_expr_exists call_operands_effect_root (StructLit _ _ _)`
          mp_tac >>
        simp[supportedExprTraverseTheory.supported_expr_exists_def,
             supportedExprTraverseTheory.supported_fields_exists_every,
             listTheory.EXISTS_MEM] >>
-       fs[listTheory.MEM_MAP] >> metis_tac[] >> NO_TAC) >>
-  TRY (strip_tac >>
+       fs[listTheory.MEM_MAP] >> metis_tac[])
+  >~ [`~supported_expr_exists (const_name_root cx) e`]
+  >- (strip_tac >>
        qpat_x_assum `~supported_expr_exists (const_name_root _) (StructLit _ _ _)`
          mp_tac >>
        simp[supportedExprTraverseTheory.supported_expr_exists_def,
             supportedExprTraverseTheory.supported_fields_exists_every,
             listTheory.EXISTS_MEM] >>
-       fs[listTheory.MEM_MAP] >> metis_tac[] >> NO_TAC) >>
-  TRY (rpt strip_tac >>
+       fs[listTheory.MEM_MAP] >> metis_tac[])
+  >~ [`!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+                occurs_abi_decode_target target (cx_tops cx)`]
+  >- (rpt strip_tac >>
        qpat_x_assum `!target. supported_expr_exists _ (StructLit _ _ _) ==> _`
          (qspec_then `target` irule) >>
        simp[supportedExprTraverseTheory.supported_expr_exists_def,
             supportedExprTraverseTheory.supported_fields_exists_every,
             listTheory.EXISTS_MEM] >>
-       disj2_tac >> fs[listTheory.MEM_MAP] >> metis_tac[] >> NO_TAC) >>
+       disj2_tac >> fs[listTheory.MEM_MAP] >> metis_tac[]) >>
   strip_tac >> gvs[] >> Cases_on `int_calls_expr e` >> gvs[] >>
   metis_tac[MEM]
 QED

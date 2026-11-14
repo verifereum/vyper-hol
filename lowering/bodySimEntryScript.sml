@@ -292,18 +292,18 @@ Theorem bare_global_not_const_immutable[local]:
     ?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) ts
 Proof
   Induct >> simp[is_bare_global_decl_def] >> rpt gen_tac >>
-  Cases_on `h` >> simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def] >>
-  TRY (metis_tac[] >> NO_TAC) >>
-  rename1 `VariableDecl dvis dmut dname dty dslot` >>
-  Cases_on `dmut` >>
-  simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def] >>
-  TRY (metis_tac[]) >>
-  rename1 `subst_consts_expr acc ce` >>
-  `MEM dname (MAP FST (module_consts_env ts
-     (acc ++ [(dname, fold_const_expr (subst_consts_expr acc ce))])))` by
-    (qspecl_then [`ts`, `acc ++ [(dname, fold_const_expr (subst_consts_expr acc ce))]`]
-       strip_assume_tac constSubstTheory.module_consts_env_acc_prefix >> simp[]) >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
+  Cases_on `h` >> simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def]
+  >~ [`VariableDecl dvis dmut dname dty dslot`]
+  >- (Cases_on `dmut` >>
+      simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def]
+      >~ [`subst_consts_expr acc ce`]
+      >- (`MEM dname (MAP FST (module_consts_env ts
+             (acc ++ [(dname, fold_const_expr (subst_consts_expr acc ce))])))` by
+            (qspecl_then [`ts`, `acc ++ [(dname, fold_const_expr (subst_consts_expr acc ce))]`]
+               strip_assume_tac constSubstTheory.module_consts_env_acc_prefix >> simp[]) >>
+          rpt strip_tac >> gvs[] >> metis_tac[]) >>
+      metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem is_immutable_decl_variable_decl[local]:

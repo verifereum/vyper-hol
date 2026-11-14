@@ -4228,22 +4228,21 @@ Proof
             (drule_all checked_const_initializer_prefix >> metis_tac[]) >>
           `constant_expr mods (fold_const_expr (subst_consts_expr E e))` by
             metis_tac[subst_consts_constant_expr, fold_const_expr_constant] >>
-          first_x_assum (qspec_then `pre'` irule) >> rpt conj_tac >>
-          TRY (simp[Abbr `pre'`] >> irule const_prefix_syntax_snoc >> simp[] >> NO_TAC) >>
-          TRY (rpt strip_tac >> gvs[ALOOKUP_APPEND, AllCaseEqs()] >>
-               metis_tac[fold_const_expr_typed] >> NO_TAC) >>
-          metis_tac[]) >>
-      first_x_assum irule >> rpt conj_tac >>
-      TRY (simp[Abbr `pre'`] >>
-           gvs[const_prefix_syntax_def, const_decl_names_append, const_decl_names_def] >>
-           metis_tac[MEM_APPEND] >> NO_TAC) >>
-      metis_tac[]) >>
+          `!n r. ALOOKUP (E ++ [(id,fold_const_expr (subst_consts_expr E e))]) n = SOME r ==>
+             well_typed_expr (artifact_env artifact mods NONE) r /\ constant_expr mods r` by
+            (rpt strip_tac >> gvs[ALOOKUP_APPEND, AllCaseEqs()] >>
+             metis_tac[fold_const_expr_typed]) >>
+          first_x_assum (qspec_then `pre'` irule) >>
+          simp[Abbr `pre'`, GSYM APPEND_ASSOC] >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          irule const_prefix_syntax_snoc >> simp[]) >>
+      first_x_assum irule >> simp[Abbr `pre'`] >>
+      gvs[const_prefix_syntax_def, const_decl_names_append, const_decl_names_def] >>
+      metis_tac[MEM_APPEND]) >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [module_consts_env_def]) >>
-  first_x_assum irule >> rpt conj_tac >>
-  TRY (simp[Abbr `pre'`] >>
-       gvs[const_prefix_syntax_def, const_decl_names_append, const_decl_names_def] >>
-       metis_tac[MEM_APPEND] >> NO_TAC) >>
-  metis_tac[]
+  first_x_assum irule >> simp[Abbr `pre'`] >>
+  gvs[const_prefix_syntax_def, const_decl_names_append, const_decl_names_def] >>
+  metis_tac[MEM_APPEND]
 QED
 
 Theorem checked_module_consts_env_replacement_typed:
