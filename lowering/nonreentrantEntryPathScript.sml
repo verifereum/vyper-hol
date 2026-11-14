@@ -176,3 +176,80 @@ Proof
     `G`, `tn`, `G'`, `tn'`, `ctx`, `func`, `bb`, `fuel`]
     run_inst_seq_ptr_continuation)) >> simp[]
 QED
+
+Theorem transient_lock_checked_ghost_frame:
+  ghost_inv H NONE cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  cenv.ce_return_buf = NONE /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at sa x) /\
+  tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+  tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+  (!x. not_fresh_at sa x ==>
+    FLOOKUP G' x = FLOOKUP G x /\
+    op_taint tn' (Var x) = op_taint tn (Var x)) ==>
+  ghost_inv H NONE cenv cx es G' tn'
+    (transient_lock_checked_state sa nkey s)
+Proof
+  strip_tac >> irule ghost_inv_fresh_frame >>
+  qexistsl_tac [`G`, `tn`, `s`, `sa`, `es`] >>
+  simp[transient_lock_checked_state_def, update_var_def] >>
+  rpt strip_tac >>
+  `x <> STRING #"%" (toString sa.cs_next_var) /\
+   x <> STRING #"%" (toString (sa.cs_next_var + 1)) /\
+   x <> STRING #"%" (toString (sa.cs_next_var + 2))` by
+    (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_ADD]) >>
+  simp[lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+(* Horizon-indexed relations share the physical and ghost endpoints above. *)
+Theorem nonreentrant_lock_relations:
+  storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
+  nkey < dimword (:256) /\ cx.nonreentrant_slot = SOME nkey /\
+  acquire_nonreentrant_lock cx.txn.target nkey iv es = (INL (),locked) /\
+  (~iv ==> ~cx.txn.is_static) /\
+  compile_nonreentrant_lock nkey T iv sa = ((),sb) /\
+  tload (n2w nkey) s <> 1w /\ fresh_vars_wrt sa s /\
+  local_ptrs_reserved cenv sa /\ cenv.ce_return_buf = NONE /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at sa x) /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv H NONE cenv cx es G tn s /\
+  run_inst_seq (transient_lock_code nkey iv sa) s = OK u /\
+  tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+  tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+  (!x. not_fresh_at sa x ==>
+    FLOOKUP G' x = FLOOKUP G x /\
+    op_taint tn' (Var x) = op_taint tn (Var x)) ==>
+  stmt_state_rel H ctx func cenv cx locked u /\
+  ghost_inv H NONE cenv cx locked G' tn' u
+Proof
+  strip_tac >>
+  `state_rel H func cenv cx es s` by fs[stmt_state_rel_def] >>
+  `state_rel H func cenv cx locked u` by
+    (drule_all compile_nonreentrant_lock_source_correct >>
+     drule compile_nonreentrant_lock_transient_code >> strip_tac >>
+     rpt strip_tac >> gvs[]) >>
+  `~iv ==> ~s.vs_call_ctx.cc_static` by
+    gvs[state_rel_def, call_ctx_rel_def] >>
+  `locked.scopes = es.scopes /\ locked.immutables = es.immutables` by
+    (Cases_on `iv` >>
+     gvs[acquire_nonreentrant_lock_execution, AllCaseEqs()]) >>
+  `stmt_state_rel H ctx func cenv cx es
+    (transient_lock_checked_state sa nkey s)` by
+    metis_tac[transient_lock_checked_stmt_state_rel] >>
+  `ghost_inv H NONE cenv cx es G' tn'
+    (transient_lock_checked_state sa nkey s)` by
+    (irule transient_lock_checked_ghost_frame >>
+     qexistsl_tac [`G`, `tn`] >> simp[]) >>
+  conj_tac
+  >- (irule stmt_state_rel_allocas_frame >>
+      qexistsl_tac [`es`, `transient_lock_checked_state sa nkey s`] >>
+      simp[] >> Cases_on `iv` >>
+      gvs[transient_lock_code_execution, stmt_state_rel_def,
+          immutable_alloca_sep_def, immutable_base_zero_def,
+          local_region_def, tstore_def, eval_operand_def, lookup_var_def]) >>
+  Cases_on `iv` >> gvs[transient_lock_code_execution]
+  >- fs[ghost_inv_def] >>
+  irule nonreentrant_ghost_inv_frame >>
+  qexists_tac `es` >> simp[]
+QED
