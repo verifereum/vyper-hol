@@ -5,6 +5,7 @@ Ancestors
   externalEntryProps context emitHelper emitHelperProps fragExec fragExecPtr venomMemDefs venomState venomInst
   venomExecSemantics ptrDiscipline compileEnv ptrSafeRun contextCodegenRel codegenRel
   exprLoweringProps list fragGasSeqPtr fragExecMem bodyPtrDefs
+  bodyFullGhostFrame extcallReturnDefaultResources loweringStateRelDefs
 
 Theorem return_default_join_joint:
   emit_inst JMP [Label lbl] [] a = ((),b) /\ fn_has_code a b func /\
@@ -170,3 +171,62 @@ Proof
   drule fragGasOriginPtrTheory.gas_origin_ptr_path_append >> simp[] >>
   disch_then irule >> gvs[]
 QED
+
+(* Read-only shell transport is independent of the chosen dead mask. *)
+Theorem return_default_shell_joint_frame:
+  sa.cs_next_var <= n1 /\ sa.cs_next_var <= n2 /\
+  u = jump_to lbl ((update_var (STRING #"%" (toString n2)) w2
+        (update_var (STRING #"%" (toString n1)) w1 s))
+          with vs_inst_idx := k) /\
+  H = DRESTRICT (DRESTRICT G (COMPL {STRING #"%" (toString n1)}))
+        (COMPL {STRING #"%" (toString n2)}) /\
+  tm = tn with t_var :=
+    (tn.t_var |+ (STRING #"%" (toString n1),{})) |+
+      (STRING #"%" (toString n2),{}) ==>
+  (!x. not_fresh_at sa x ==>
+    lookup_var x u = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+    op_taint tm (Var x) = op_taint tn (Var x)) /\
+  (!lo cenv es sa0 G0 tn0 s0.
+    sa0.cs_next_var <= sa.cs_next_var /\
+    ghost_kept_at lo cenv es sa0 G0 tn0 s0 G tn ==>
+    ghost_kept_at lo cenv es sa0 G0 tn0 s0 H tm) /\
+  (!D lo d cenv cx ee.
+    ghost_inv_at D lo d cenv cx ee G tn s /\ local_ptrs_reserved cenv sa /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
+    ghost_inv_at D lo d cenv cx ee H tm u) /\
+  (!H0 cenv cx ee.
+    local_ptrs_reserved cenv sa /\ stmt_state_rel H0 ctx func cenv cx ee s ==>
+    stmt_state_rel H0 ctx func cenv cx ee u) /\
+  (!cenv es ee sa0 s0.
+    sa0.cs_next_var <= sa.cs_next_var /\ wb_frame cenv es ee sa0 s0 s ==>
+    wb_frame cenv es ee sa0 s0 u)
+Proof
+  strip_tac >>
+  `!x. not_fresh_at sa x ==>
+    lookup_var x u = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+    op_taint tm (Var x) = op_taint tn (Var x)` by
+    (rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def, jump_to_def,
+       update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       finite_mapTheory.FLOOKUP_DRESTRICT, op_taint_def] >> metis_tac[]) >>
+  simp[] >> conj_tac >- suspend "kept" >>
+  conj_tac >- suspend "ghost" >>
+  conj_tac >- (rpt strip_tac >> irule return_default_shell_state >>
+    goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >> irule return_default_shell_wb_frame >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+Resume return_default_shell_joint_frame[kept]:
+  rpt strip_tac >>
+  `!x. not_fresh_at sa0 x ==> not_fresh_at sa x` by
+    (rw[not_fresh_at_def] >> first_x_assum irule >> decide_tac) >>
+  irule bodyFullUnwrapRunTheory.ghost_kept_at_clean_suffix >>
+  goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+Resume return_default_shell_joint_frame[ghost]:
+  rpt strip_tac >> irule ghost_inv_at_exterior_frame >>
+  goal_assum (drule_at Any) >> simp[jump_to_def, update_var_def] >>
+  qexistsl_tac [`G`, `ee`, `s`, `tn`] >> simp[] >>
+  gvs[jump_to_def, update_var_def, lookup_var_def]
+QED
+Finalise return_default_shell_joint_frame
