@@ -122,7 +122,7 @@ Theorem gas_transport_same_fuel[local]:
       (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)
 Proof
   rpt strip_tac >>
-  drule (SIMP_RULE [] (Q.INST [`r` |-> `run_context fuel C vs`]
+  drule (SIMP_RULE (srw_ss()) [] (Q.INST [`r` |-> `run_context fuel C vs`]
                         ld_run_context_entry)) >> strip_tac >>
   rename1 `lookup_function nm A.ctx_functions = SOME fa` >>
   rename1 `fn_entry_label fa = SOME lbl` >>
@@ -168,7 +168,7 @@ Theorem gas_transport_run_eq[local]:
       (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)
 Proof
   rpt strip_tac >>
-  drule (SIMP_RULE [] (Q.INST [`r` |-> `run_context fuel C vs`]
+  drule (SIMP_RULE (srw_ss()) [] (Q.INST [`r` |-> `run_context fuel C vs`]
                         ld_run_context_entry)) >> strip_tac >>
   rename1 `lookup_function nm A.ctx_functions = SOME fa` >>
   rename1 `fn_entry_label fa = SOME lbl` >>
@@ -302,7 +302,7 @@ Proof
         (gvs[o1_inv_def, o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
          rpt strip_tac >> irule simplify_cfg_fn_ok_ssa >>
          metis_tac[o1_fn_shape_def]) >>
-      drule (SIMP_RULE [] (Q.INST [`r` |-> `run_context fuel C vs`]
+      drule (SIMP_RULE (srw_ss()) [] (Q.INST [`r` |-> `run_context fuel C vs`]
                             ld_run_context_entry)) >> strip_tac >>
       drule_all simplify_cfg_stage_gas_prefix >>
       disch_then (qspec_then `f` strip_assume_tac) >>
@@ -1134,7 +1134,7 @@ Proof
          gas_events_blocks f unit.cu_context fa
            (w with <| vs_prev_bb := NONE; vs_current_bb := la; vs_inst_idx := 0 |>)` by
     (rpt strip_tac >>
-     drule (SIMP_RULE [] (Q.INST [`r` |-> `run_context fuel C vs`]
+     drule (SIMP_RULE (srw_ss()) [] (Q.INST [`r` |-> `run_context fuel C vs`]
                            ld_run_context_entry)) >> strip_tac >>
      drule_all simplify_cfg_stage_gas_prefix >>
      disch_then (qspec_then `f` strip_assume_tac) >> gvs[] >> metis_tac[]) >>
