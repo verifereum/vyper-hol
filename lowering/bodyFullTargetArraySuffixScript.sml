@@ -706,3 +706,60 @@ Proof
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   Cases_on `_0` >> gvs[] >> metis_tac[]
 QED
+
+Theorem array_tail_packet_scalar_inputs[local]:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
+  allocas_from lo t2 /\
+  op_taint tn2 (FST rb) = {} /\ op_taint tn2 iop = {} /\
+  op_prov G2 iop = NONE /\
+  ?b iw. eval_operand (FST rb) t2 = SOME b /\ eval_operand iop t2 = SOME iw
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid2.storage_trace) mid2.storage_trace` by
+    fs[array_tail_packet_def, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  drule_all array_tail_packet_base_at_index >> strip_tac >>
+  drule_all array_tail_packet_source_index >> strip_tac >>
+  fs[array_tail_packet_def] >> first_x_assum drule >> strip_tac >>
+  `is_int_type (expr_type e)` by
+    gvs[type_place_target_SubscriptTarget, subscript_vtype_def, AllCaseEqs()] >>
+  fs[expr_post_def, ghost_inv_at_def, ptr_val_ok_def] >>
+  `is_word_type (post_value_type cenv e)` by
+    (Cases_on `expr_type e` >> gvs[is_int_type_def] >>
+     rename1 `is_int_type (BaseT ity)` >> Cases_on `ity` >>
+     gvs[is_int_type_def, post_value_type_def, is_word_type_def]) >>
+  fs[] >> metis_tac[]
+QED
+
+Theorem array_tail_packet_operands_old[local]:
+  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+    st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
+    mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
+  (!x. FST rb = Var x ==> not_fresh_at sn x) /\
+  (!x. iop = Var x ==> not_fresh_at sn x)
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid2.storage_trace) mid2.storage_trace` by
+    fs[array_tail_packet_def, vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  drule_all array_tail_packet_index_post >> strip_tac >>
+  `local_ptrs_reserved cenv sm` by
+    (fs[array_tail_packet_def] >> metis_tac[local_ptrs_reserved_next_var]) >>
+  conj_tac
+  >- (fs[target_post_def, array_tail_packet_def] >>
+      metis_tac[not_fresh_at_mono]) >>
+  fs[array_tail_packet_def] >>
+  metis_tac[exprOperandVarTheory.compile_lower_value_var]
+QED
+
+Theorem array_tail_length_frame_operand[local]:
+  array_length_frame sa s G tn t G' tn' /\
+  (!x. op = Var x ==> not_fresh_at sa x) ==>
+  eval_operand op t = eval_operand op s /\
+  op_taint tn' op = op_taint tn op /\
+  op_prov G' op = op_prov G op
+Proof
+  Cases_on `op` >> simp[array_length_frame_def, eval_operand_def,
+    op_taint_def, op_prov_def] >> strip_tac >>
+  gvs[venom_state_component_equality]
+QED
