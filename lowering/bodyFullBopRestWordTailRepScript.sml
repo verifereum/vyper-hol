@@ -39,9 +39,11 @@ Theorem rest_word_membership_robust_index[local]:
   w2n w + type_memory_size (ArrayTV et bd) <= lo /\
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
     val_in_memory (ArrayTV et bd) (ArrayV av) (w2n w) mem) ==>
-  let a = w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32 in
-    a + 32 <= lo /\ mem_word_taint tn.t_mem a = {} /\
-    mload a s = typed_val_to_w256 et v
+  (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) + 32 <= lo /\
+  mem_word_taint tn.t_mem
+    (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) = {} /\
+  mload (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) s =
+    typed_val_to_w256 et v
 Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   `type_memory_size et = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
@@ -70,9 +72,11 @@ Theorem rest_word_membership_robust_indices[local]:
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
     val_in_memory (ArrayTV et bd) (ArrayV av) (w2n w) mem) ==>
   !i. i < array_length (ArrayTV et bd) av ==>
-    let a = w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32 in
-      a + 32 <= lo /\ mem_word_taint tn.t_mem a = {} /\
-      mload a s = typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&i)))
+    (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) + 32 <= lo /\
+    mem_word_taint tn.t_mem
+      (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) = {} /\
+    mload (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) s =
+      typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&i)))
 Proof
   strip_tac >> gen_tac >> disch_tac >>
   `array_index (ArrayTV et bd) av (&i) = SOME (THE (array_index (ArrayTV et bd) av (&i)))` by
@@ -161,17 +165,31 @@ Theorem rest_word_membership_tail_clean_reads:
    (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
       ptr_buf_ok cenv e p.ptr_operand (Gu H) u) /\
    ghost_kept_at lo cenv es sa G0 tn0 s0 (Gu H) (Tu H)) ==>
- let len = array_length (ArrayTV et bd) av;
-     elem = (\i. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&i))));
-     ws = GENLIST elem len in
- LENGTH ws = len /\ (!i. i < len ==> EL i ws = elem i) /\
+ LENGTH (GENLIST (\i. typed_val_to_w256 et
+   (THE (array_index (ArrayTV et bd) av (&i)))) (array_length (ArrayTV et bd) av)) =
+   array_length (ArrayTV et bd) av /\
+ (!i. i < array_length (ArrayTV et bd) av ==>
+   EL i (GENLIST (\j. typed_val_to_w256 et
+     (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av)) =
+   typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&i)))) /\
  (!H. guard H ==>
-   (case bd of Fixed n => LENGTH ws = n | Dynamic cap => LENGTH ws <= cap) /\
-   LENGTH ws < dimword (:256) /\
-   (evaluate_in_array (ArrayTV et bd) needle av <=> MEM (typed_val_to_w256 et needle) ws) /\
-   (!i. i < LENGTH ws ==>
+   (case bd of Fixed n => LENGTH (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av)) = n | Dynamic cap => LENGTH (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av)) <= cap) /\
+   LENGTH (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av)) < dimword (:256) /\
+   (evaluate_in_array (ArrayTV et bd) needle av <=> MEM (typed_val_to_w256 et needle) (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av))) /\
+   (!i. i < LENGTH (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av)) ==>
      array_index (ArrayTV et bd) av (&i) = SOME (THE (array_index (ArrayTV et bd) av (&i))) /\
      value_has_type et (THE (array_index (ArrayTV et bd) av (&i)))) /\
+   (!ib. cenv.ce_imm_alloca = SOME ib ==>
+     eval_operand ib u = SOME 0w /\
+     (!x. ib = Var x ==> not_fresh_at sm x) /\
+     (lo <> 0 ==> op_prov (Gu H) ib = NONE /\ op_taint (Tu H) ib = {})) /\
+   (!sl t Gt Tt. sm.cs_next_var <= sl.cs_next_var /\
+     membership_loop_frame sl (Gu H) (Tu H) u Gt Tt t ==>
+     eval_operand needleop t = SOME (typed_val_to_w256 et needle) /\
+     op_prov Gt needleop = NONE /\ op_taint Tt needleop = {} /\
+     eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) u /\
+     op_prov Gt (vv_operand vv) = op_prov (Gu H) (vv_operand vv) /\
+     op_taint Tt (vv_operand vv) = op_taint (Tu H) (vv_operand vv)) /\
    (vv_location vv = NONE \/ vv_location vv = SOME LocMemory ==>
      ?w. eval_operand (vv_operand vv) u = SOME w /\
        op_taint (Tu H) (vv_operand vv) = {} /\
@@ -184,48 +202,52 @@ Theorem rest_word_membership_tail_clean_reads:
          lookup_var dst t = SOME (w + n2w off) /\
          FLOOKUP G' dst = FLOOKUP (Gu H) src /\ op_taint T' (Var dst) = {} ==>
          ptr_covers G' T' dst t n) /\
-       (!i. i < LENGTH ws ==>
-         let a = w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32 in
-         mem_word_taint (Tu H).t_mem a = {} /\ mload a u = EL i ws) /\
+       (!i. i < LENGTH (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av)) ==>
+         mem_word_taint (Tu H).t_mem
+           (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) = {} /\
+         mload (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) u = EL i (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av))) /\
        (!cap. bd = Dynamic cap ==>
          mem_word_taint (Tu H).t_mem (w2n w) = {} /\
-         mload (w2n w) u = n2w (LENGTH ws))) /\
+         mload (w2n w) u = n2w (LENGTH (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av))))) /\
    (!tr. vv_location vv = SOME (if tr then LocTransient else LocStorage) ==>
      ?w. eval_operand (vv_operand vv) u = SOME w /\
        op_taint (Tu H) (vv_operand vv) = {} /\
        storage_holds cx tr (ArrayT ety pbd) tv w ee u /\
-       (!i. i < LENGTH ws ==>
-         let k = w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 1) + i) in
-         key_taint (if tr then (Tu H).t_trans else (Tu H).t_stor) k = {} /\
-         (if tr then tload k u else sload k u) = EL i ws) /\
+       (!i. i < LENGTH (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av)) ==>
+         key_taint (if tr then (Tu H).t_trans else (Tu H).t_stor)
+           (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 1) + i)) = {} /\
+         (if tr then tload (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 1) + i)) u
+          else sload (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 1) + i)) u) = EL i (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av))) /\
        (!cap. bd = Dynamic cap ==>
          key_taint (if tr then (Tu H).t_trans else (Tu H).t_stor) w = {} /\
-         (if tr then tload w u else sload w u) = n2w (LENGTH ws))) /\
+         (if tr then tload w u else sload w u) = n2w (LENGTH (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av))))) /\
    (~cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
      ?w. eval_operand (vv_operand vv) u = SOME w /\
        op_taint (Tu H) (vv_operand vv) = {} /\
        immutable_holds cenv cx (ArrayT ety pbd) (Value (ArrayV av)) w ee u /\
        value_has_type (ArrayTV et pbd) (ArrayV av) /\
        w2n w + type_memory_size (ArrayTV et pbd) <= LENGTH u.vs_data_section /\
-       (!i. i < LENGTH ws ==>
+       (!i. i < LENGTH (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av)) ==>
          word_of_bytes T (0w:bytes32)
            (TAKE 32 (DROP (w2n (w + n2w
              ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)))
-             u.vs_data_section ++ REPLICATE 32 0w)) = EL i ws) /\
+             u.vs_data_section ++ REPLICATE 32 0w)) = EL i (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av))) /\
        (!cap. bd = Dynamic cap ==>
          word_of_bytes T (0w:bytes32)
            (TAKE 32 (DROP (w2n w) u.vs_data_section ++ REPLICATE 32 0w)) =
-           n2w (LENGTH ws))) /\
+           n2w (LENGTH (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av))))) /\
    (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
      ?w. eval_operand (vv_operand vv) u = SOME w /\
        op_prov (Gu H) (vv_operand vv) = NONE /\ op_taint (Tu H) (vv_operand vv) = {} /\
        w2n w + type_memory_size (ArrayTV et pbd) <= lo /\
-       (!i. i < LENGTH ws ==>
-         let a = w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32 in
-         a + 32 <= lo /\ mem_word_taint (Tu H).t_mem a = {} /\ mload a u = EL i ws) /\
+       (!i. i < LENGTH (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av)) ==>
+         (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) + 32 <= lo /\
+         mem_word_taint (Tu H).t_mem
+           (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) = {} /\
+         mload (w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32) u = EL i (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av))) /\
        (!cap. bd = Dynamic cap ==>
          w2n w + 32 <= lo /\ mem_word_taint (Tu H).t_mem (w2n w) = {} /\
-         mload (w2n w) u = n2w (LENGTH ws))))
+         mload (w2n w) u = n2w (LENGTH (GENLIST (\j. typed_val_to_w256 et (THE (array_index (ArrayTV et bd) av (&j)))) (array_length (ArrayTV et bd) av))))))
 Proof
   rpt gen_tac >> strip_tac >>
   simp_tac bool_ss [LET_THM] >> BETA_TAC >>
@@ -247,7 +269,16 @@ Proof
   conj_tac >- simp[] >>
   conj_tac >- (Cases_on `bd` >> gvs[] >> decide_tac) >>
   conj_tac >- (irule rest_word_membership_indexed_words >> metis_tac[]) >>
-  conj_tac >- simp[] >> conj_tac >- suspend "runtime_memory" >>
+  conj_tac >- simp[] >>
+  conj_tac >- suspend "immutable_base" >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `!x. needleop = Var x ==> not_fresh_at sl x` by
+        metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+      `!x. vv_operand vv = Var x ==> not_fresh_at sl x` by
+        metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+      metis_tac[bodyPtrBopInLoopContractTheory.membership_loop_frame_operand]) >>
+  conj_tac >- suspend "runtime_memory" >>
   conj_tac >- suspend "runtime_slot" >>
   conj_tac >- suspend "runtime_code" >> suspend "ctor"
 QED
@@ -440,6 +471,20 @@ Resume rest_word_membership_tail_clean_reads[runtime_code]:
   gen_tac >> disch_tac >> gvs[] >>
   drule_all membership_dynamic_code_header >>
   Cases_on `av` >> simp[array_length_def]
+QED
+
+Resume rest_word_membership_tail_clean_reads[immutable_base]:
+  gen_tac >> disch_tac >>
+  `stmt_state_rel H ctx fn cenv cx ee u` by fs[loweringPostsTheory.vv_post_def] >>
+  conj_tac
+  >- (drule_all bodyPtrBopInRepresentationTheory.membership_immutable_base_value >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_imm_base,
+        freshWritesTheory.not_fresh_at_mono]) >>
+  Cases_on `ib` >>
+  gvs[bodyPtrDefsTheory.ghost_inv_at_def, ptrDisciplineTheory.op_prov_def,
+    ptrDisciplineTheory.op_taint_def]
 QED
 
 Finalise rest_word_membership_tail_clean_reads
