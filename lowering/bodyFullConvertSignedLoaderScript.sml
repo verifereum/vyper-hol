@@ -23,7 +23,7 @@ Proof
   gvs[]
 QED
 
-Theorem signed_loader_uniform_frame_raw[local]:
+Theorem signed_loader_uniform_frame_raw:
   ALL_DISTINCT [src;len;dp;data;empty;nonempty;selected;sub;bits;dst] /\
   ~ctx_has_dalloca ctx /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s capacity /\ 64 <= capacity /\
