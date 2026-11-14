@@ -375,3 +375,45 @@ Proof
     rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
 QED
+
+Theorem raw_call_tuple_suffix_steps:
+  (do z <- emit_op RETURNDATASIZE [];
+      cmp <- emit_op LT [z;Lit (n2w n)];
+      cap <- compile_select cmp z (Lit (n2w n));
+      emit_void MSTORE [ov;cap];
+      buf <- compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32);
+      emit_void MSTORE [buf.buf_operand;ok];
+      dst <- emit_op ADD [buf.buf_operand;Lit 32w];
+      emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
+      return buf.buf_operand od) sa = (result,sb) ==>
+  ?z s1 cmp s2 cap s3 s4 buf s5 s6 dst s7.
+    emit_op RETURNDATASIZE [] sa = (z,s1) /\
+    emit_op LT [z;Lit (n2w n)] s1 = (cmp,s2) /\
+    compile_select cmp z (Lit (n2w n)) s2 = (cap,s3) /\
+    emit_void MSTORE [ov;cap] s3 = ((),s4) /\
+    compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32) s4 = (buf,s5) /\
+    emit_void MSTORE [buf.buf_operand;ok] s5 = ((),s6) /\
+    emit_op ADD [buf.buf_operand;Lit 32w] s6 = (dst,s7) /\
+    emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))]
+      s7 = ((),sb) /\ result = buf.buf_operand
+Proof
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
+QED
+
+Theorem raw_call_bytes_suffix_steps:
+  (do z <- emit_op RETURNDATASIZE [];
+      cmp <- emit_op LT [z;Lit (n2w n)];
+      cap <- compile_select cmp z (Lit (n2w n));
+      emit_void MSTORE [ov;cap]; return ov od) sa = (result,sb) ==>
+  ?z s1 cmp s2 cap s3.
+    emit_op RETURNDATASIZE [] sa = (z,s1) /\
+    emit_op LT [z;Lit (n2w n)] s1 = (cmp,s2) /\
+    compile_select cmp z (Lit (n2w n)) s2 = (cap,s3) /\
+    emit_void MSTORE [ov;cap] s3 = ((),sb) /\ result = ov
+Proof
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
+QED
