@@ -489,3 +489,177 @@ Proof
   irule rb_ignore >> conj_tac >- gvs[rb_compile_internal_function] >>
   first_x_assum irule >> simp[]
 QED
+
+Theorem rb_fold_ignore:
+  (!x. rb_step (K T) (action x)) ==>
+  !xs. rb_step (K T)
+    (FOLDL (\m x. comp_ignore_bind m (action x)) (comp_return ()) xs)
+Proof
+  strip_tac >> Induct using SNOC_INDUCT >>
+  simp[FOLDL_SNOC, rb_step_return] >> gen_tac >>
+  irule rb_ignore >> simp[]
+QED
+
+Theorem rb_emit_dense_data_sections:
+  !buckets. rb_step (K T) (emit_dense_data_sections buckets width info)
+Proof
+  Induct >> simp[emit_dense_data_sections_def, rb_step_return] >>
+  gen_tac >> simp_tac std_ss [emit_dense_data_sections_def, LET_THM] >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_data_section] >>
+  irule rb_ignore >> reverse conj_tac >- simp[] >>
+  qmatch_goalsub_abbrev_tac `FOLDL action seed mids` >>
+  qid_spec_tac `mids` >> Induct using SNOC_INDUCT >>
+  simp[FOLDL_SNOC, Abbr `seed`] >- simp[rb_step_return] >>
+  gen_tac >> simp_tac std_ss [Abbr `action`] >>
+  irule rb_ignore >> conj_tac >- simp[] >>
+  pairarg_tac >> asm_simp_tac std_ss [LET_THM] >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_data_item] >>
+  irule rb_ignore >> simp[rb_emit_data_item]
+QED
+
+Theorem rb_compile_selector_dispatch_dense:
+  EVERY (\l. rb_operand_ok (Label l)) labels /\
+  rb_operand_ok (Label fallback) ==>
+  rb_step (K T)
+    (compile_selector_dispatch_dense sels bucket_count width buckets info labels fallback)
+Proof
+  strip_tac >> simp_tac std_ss [compile_selector_dispatch_dense_def, LET_THM] >>
+  ntac 3 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+  irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  ntac 6 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  ntac 10 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  ntac 11 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+  irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  ntac 5 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_void] >>
+  irule rb_ignore >> conj_tac >- gvs[rb_emit_inst, EVERY_MAP] >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_data_section] >>
+  irule rb_ignore >> reverse conj_tac >- simp[rb_emit_dense_data_sections] >>
+  qmatch_goalsub_abbrev_tac `FOLDL action seed bs` >>
+  qid_spec_tac `bs` >> Induct using SNOC_INDUCT >>
+  simp[FOLDL_SNOC, Abbr `seed`] >- simp[rb_step_return] >>
+  gen_tac >> simp_tac std_ss [Abbr `action`] >>
+  irule rb_ignore >> conj_tac >- simp[] >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_data_item] >>
+  irule rb_ignore >> simp[rb_emit_data_item]
+QED
+
+Theorem compile_generate_runtime_no_runtime_begin:
+  rb_expr_contract /\ rb_stmt_contract /\
+  rb_runtime_inputs_ok selectors externals internals fallback ==>
+  rb_step (K T) (compile_generate_runtime selectors externals internals fallback
+    strategy bucket_count width buckets info)
+Proof
+  strip_tac >> simp_tac std_ss [compile_generate_runtime_def, LET_THM] >>
+  irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac
+  >- (gvs[rb_runtime_inputs_ok_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
+      Cases_on `strategy` >>
+      simp[rb_compile_selector_dispatch_sparse, rb_compile_selector_dispatch_dense,
+        rb_compile_selector_dispatch_linear, EVERY_MAP, EVERY_MEM,
+        pairTheory.FORALL_PROD]) >>
+  irule rb_ignore >> conj_tac
+  >- (irule rb_compile_external_fn_bodies >>
+      gvs[rb_runtime_inputs_ok_def, EVERY_MEM, pairTheory.FORALL_PROD,
+          rb_external_package_ok_def] >> metis_tac[]) >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_ignore >> conj_tac
+  >- (Cases_on `fallback` >> simp[rb_emit_inst] >> PairCases_on `x` >> simp_tac std_ss [pairTheory.pair_case_thm] >>
+      irule rb_compile_fallback_body >>
+      gvs[rb_runtime_inputs_ok_def, rb_fallback_ok_def]) >>
+  irule rb_step_bind >> qexists_tac `K T` >> BETA_TAC >> simp[rb_step_return] >>
+  irule rb_compile_internal_fn_bodies >>
+  gvs[rb_runtime_inputs_ok_def, EVERY_MEM, pairTheory.FORALL_PROD,
+      rb_internal_package_ok_def] >> metis_tac[]
+QED
+
+Definition rb_job_ok_def:
+  rb_job_ok (ExternalLegacyJob package) = rb_external_package_ok package /\
+  rb_job_ok (ExternalCommonJob common kwvars) =
+    (rb_env_ok common.ec_env /\
+     EVERY (\(name,ptr,ty,e). rb_operand_ok ptr) kwvars)
+End
+
+Theorem rb_compile_external_groups:
+  !groups. rb_expr_contract /\ rb_operand_ok mid /\ EVERY rb_group_ok groups ==>
+    rb_step (EVERY rb_job_ok) (compile_external_groups mid groups)
+Proof
+  Induct >> simp[compile_external_groups_def, rb_step_return] >>
+  Cases >> simp_tac std_ss [rb_group_ok_def] >> strip_tac
+  >- (PairCases_on `p` >> gvs[rb_group_ok_def] >>
+      rewrite_tac[compile_external_groups_def] >>
+      irule rb_ignore >> conj_tac >- simp[rb_compile_selector_checks] >>
+      irule rb_step_bind >> qexists_tac `EVERY rb_job_ok` >> BETA_TAC >>
+      reverse conj_tac >- (first_x_assum irule >> simp[]) >>
+      gen_tac >> strip_tac >> simp[rb_step_return, rb_job_ok_def]) >>
+  rewrite_tac[compile_external_groups_def] >>
+  irule rb_step_bind >> qexists_tac `EVERY (\(name,ptr,ty,e). rb_operand_ok ptr)` >>
+  BETA_TAC >> reverse conj_tac >- simp[rb_compile_create_kwarg_allocas] >>
+  gen_tac >> strip_tac >> irule rb_ignore >> conj_tac
+  >- simp[rb_compile_group_entries] >>
+  irule rb_step_bind >> qexists_tac `EVERY rb_job_ok` >> BETA_TAC >>
+  reverse conj_tac >- (first_x_assum irule >> simp[]) >>
+  gen_tac >> strip_tac >> simp[rb_step_return, rb_job_ok_def]
+QED
+
+Theorem rb_compile_external_jobs:
+  !jobs. rb_stmt_contract /\ EVERY rb_job_ok jobs ==>
+    rb_step (K T) (compile_external_jobs jobs)
+Proof
+  Induct >> simp[compile_external_jobs_def, rb_step_return] >>
+  Cases >> simp_tac std_ss [rb_job_ok_def] >> strip_tac >>
+  rewrite_tac[compile_external_jobs_def]
+  >- (irule rb_ignore >> conj_tac
+      >- (irule rb_compile_external_fn_bodies >>
+          PairCases_on `p` >> gvs[rb_external_package_ok_def]) >>
+      first_x_assum irule >> simp[]) >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_ignore >> conj_tac >- simp[rb_compile_common_function_body] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem rb_compile_group_dispatch_linear:
+  rb_expr_contract /\ EVERY rb_group_ok groups /\
+  rb_operand_ok (Label fallback) ==>
+  rb_step (EVERY rb_job_ok) (compile_group_dispatch_linear groups fallback)
+Proof
+  strip_tac >> rewrite_tac[compile_group_dispatch_linear_def] >>
+  ntac 3 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+  irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
+  irule rb_ignore >> conj_tac >- simp[rb_emit_inst] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+  irule rb_step_bind >> qexists_tac `EVERY rb_job_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_external_groups] >>
+  gen_tac >> strip_tac >> irule rb_ignore >> simp[rb_emit_inst, rb_step_return]
+QED
+
+Theorem compile_generate_grouped_runtime_no_runtime_begin:
+  rb_expr_contract /\ rb_stmt_contract /\
+  rb_grouped_runtime_inputs_ok groups internals fallback ==>
+  rb_step (K T) (compile_generate_grouped_runtime groups internals fallback)
+Proof
+  strip_tac >> rewrite_tac[compile_generate_grouped_runtime_def] >>
+  irule rb_bind_fresh_label >> BETA_TAC >> gen_tac >> strip_tac >>
+  irule rb_step_bind >> qexists_tac `EVERY rb_job_ok` >> BETA_TAC >>
+  reverse conj_tac
+  >- (irule rb_compile_group_dispatch_linear >> gvs[rb_grouped_runtime_inputs_ok_def]) >>
+  qx_gen_tac `jobs` >> strip_tac >> irule rb_ignore >> conj_tac
+  >- simp[rb_compile_external_jobs] >>
+  irule rb_ignore >> conj_tac >- simp[rb_new_block] >>
+  irule rb_ignore >> conj_tac
+  >- (Cases_on `fallback` >> simp[rb_emit_inst] >> PairCases_on `x` >>
+      simp_tac std_ss [pairTheory.pair_case_thm] >>
+      irule rb_compile_fallback_body >>
+      gvs[rb_grouped_runtime_inputs_ok_def, rb_fallback_ok_def]) >>
+  irule rb_step_bind >> qexists_tac `K T` >> BETA_TAC >> simp[rb_step_return] >>
+  irule rb_compile_internal_fn_bodies >>
+  gvs[rb_grouped_runtime_inputs_ok_def, EVERY_MEM, pairTheory.FORALL_PROD,
+      rb_internal_package_ok_def] >> metis_tac[]
+QED
