@@ -1,6 +1,6 @@
 Theory lowerDloadReachableFloor
 Ancestors
-  lowerDloadFrameFloor o1PassLift ptrDiscipline venomExecSemantics
+  lowerDloadFrameFloor o1PassLift o1SafeUpto ptrDiscipline venomExecSemantics
   venomState finite_map lowerDloadOwnership calleeTransport venomInstProps venomInst
 
 Theorem ld_step_floor_total:
@@ -113,13 +113,13 @@ QED
 Finalise ld_frame_reachable_frontier_floor
 
 Theorem ld_ptr_reachable_frontier_floor:
-  ptr_discipline lo C vs0 /\
+  ptr_discipline_upto lo ncut C vs0 /\
   frame_reachable vs0 C stk PG G tn fn i s ==>
   lo <= s.vs_alloca_next
 Proof
   strip_tac >> drule ld_frame_reachable_frontier_floor >>
   disch_then (qspec_then `lo` mp_tac) >>
-  fs[ptr_discipline_def]
+  fs[ptr_discipline_upto_def]
 QED
 
 Theorem ld_frame_reachable_allocas_floor:
@@ -191,27 +191,27 @@ Proof
 QED
 
 Theorem ld_ptr_discipline_raise_floor:
-  ptr_discipline l C vs0 /\ l <= L /\ L <= vs0.vs_alloca_next /\
-  allocas_from L vs0 ==> ptr_discipline L C vs0
+  ptr_discipline_upto l ncut C vs0 /\ l <= L /\ L <= vs0.vs_alloca_next /\
+  allocas_from L vs0 ==> ptr_discipline_upto L ncut C vs0
 Proof
-  simp[ptr_discipline_def] >> strip_tac >>
-  qexists_tac `P` >> simp[] >> rpt gen_tac >> strip_tac >>
+  simp[ptr_discipline_upto_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
   drule_all ld_frame_reachable_allocas_floor >> strip_tac >>
   first_x_assum drule >> strip_tac >>
   metis_tac[ld_access_ok_raise_floor]
 QED
 
 Theorem ld_o1_src_inv_frontier_discipline:
-  o1PassContract$o1_run_state_ok vs0 /\ o1PassContract$o1_src_inv D C vs0 ==>
-  ptr_discipline vs0.vs_alloca_next C vs0
+  o1PassContract$o1_run_state_ok vs0 /\
+  o1SafeUpto$o1_ptr_safe_upto D lo ncut C vs0 ==>
+  ptr_discipline_upto vs0.vs_alloca_next ncut C vs0
 Proof
   strip_tac >>
   `allocas_from vs0.vs_alloca_next vs0` by
     (gvs[o1PassContractTheory.o1_run_state_ok_def,
          unitTransformDefsTheory.o1_initial_state_ok_def, allocas_from_def]) >>
-  qpat_x_assum `o1PassContract$o1_src_inv D C vs0` mp_tac >>
-  simp[o1PassContractTheory.o1_src_inv_def] >> strip_tac >>
+  gvs[o1_ptr_safe_upto_def] >>
   drule ld_ptr_discipline_raise_floor >>
   disch_then (qspec_then `vs0.vs_alloca_next` irule) >>
-  gvs[ptr_discipline_def]
+  gvs[ptr_discipline_upto_def]
 QED

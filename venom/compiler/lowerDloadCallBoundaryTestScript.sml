@@ -1,5 +1,6 @@
 Theory lowerDloadCallBoundaryTest
 Ancestors
+  o1SafeUpto
   lowerDloadReturnBoundary lowerDloadTargetGeometry lowerDloadOrdinaryExecution lowerDloadFrameCertificate
   lowerDloadPairedBoundary lowerDloadOwnership lowerDloadAllocation
   lowerDloadControlPosition lowerDloadDefs venomExecSemantics venomState
@@ -224,7 +225,7 @@ QED
 *)
 
 Theorem ld_ret_resumed_owned_backward:
-  ptr_discipline lo ctx vs0 /\
+  ptr_discipline_upto lo ncut ctx vs0 /\ gas_cut ncut vs0 s /\
   ld_annotated_reachable vs0 ctx astk k L AP AG tn fn i s /\
   i.inst_opcode = RET /\ ld_owned_vars V E AG BH tn un s t /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\

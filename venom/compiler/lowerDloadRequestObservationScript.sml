@@ -5,6 +5,7 @@ Ancestors
   venomCallOracleDefs venomExecSemantics venomState venomWf ptrDiscipline list extCallOracle
   oracleExecProps lowerDloadRevertSuffix lowerDloadCoverageInvariant
   lowerDloadSharedState lowerDloadReachability lowerDloadOwnership stateEquiv
+  o1SafeUpto
 
 Theorem ld_consume_call_request_growth:
   rq.cr_kind = rq'.cr_kind /\ rq.cr_value = rq'.cr_value /\
@@ -37,7 +38,7 @@ QED
 
 Theorem ld_normal_call_request_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\ ld_stack_origin vs0 CS stk fn s0 /\
   LIST_REL (\A g. FINITE A /\
@@ -65,7 +66,7 @@ Proof
          simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
        drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
          ld_normal_external_input_correspondence >>
-       disch_then drule >> disch_then drule >> disch_then drule >>
+       disch_then drule >> disch_then drule >> disch_then drule >> disch_then drule >>
        qpat_assum `i.inst_opcode = CALL` (fn opc =>
          qpat_assum `i.inst_operands = _` (fn operands =>
            simp_tac (srw_ss()) [opc,operands])) >> disch_then drule >>
@@ -87,7 +88,7 @@ Proof
      simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
   drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     ld_normal_external_input_correspondence >>
-  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then drule >> disch_then drule >> disch_then drule >> disch_then drule >>
   simp[] >> disch_then drule >>
   simp[DISJ_IMP_THM, FORALL_AND_THM] >> strip_tac >>
   drule_at (Pat `step_inst _ _ _ _ = OK _`) ld_call_step_backward >>
@@ -147,7 +148,7 @@ Theorem ld_normal_request_observation:
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
     astk live keys d A suspended gstk f ==>
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s ==>
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\ ld_stack_origin vs0 CS stk fn s0 /\
   LIST_REL (\A g. FINITE A /\
@@ -158,7 +159,7 @@ Theorem ld_normal_request_observation:
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   ~in_revert_forward fn s /\
   MEM i.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2] /\
-  dead_wf D /\ taint_within D CS vs0 /\ active_inst fn i s /\
+  dead_wf D /\ taint_within_upto D ncut CS vs0 /\ active_inst fn i s /\
   step_inst fuel CT i t = OK t' /\
   LENGTH t.vs_requests < LENGTH t'.vs_requests ==>
   un.t_stor SUBSET D.d_stor t.vs_call_ctx.cc_address
@@ -175,7 +176,7 @@ Proof
         ld_normal_call_request_backward >>
       disch_then (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `step_inst _ _ _ _ = OK _`)) >>
-      disch_then (qspecl_then [`stk`,`s0`,`names`,`P`] mp_tac) >>
+      disch_then (qspecl_then [`stk`,`s0`,`ncut`,`names`,`P`] mp_tac) >>
       asm_rewrite_tac[] >> strip_tac >>
       drule_then assume_tac ld_annotated_erasure >>
       `i.inst_opcode <> INVOKE` by fs[MEM] >>
@@ -183,8 +184,8 @@ Proof
           (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
        tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
           (s.vs_transient s.vs_call_ctx.cc_address)` by
-        (qpat_x_assum `taint_within D CS vs0` mp_tac >>
-         rewrite_tac[taint_within_def] >> strip_tac >>
+        (qpat_x_assum `taint_within_upto D ncut CS vs0` mp_tac >>
+         rewrite_tac[taint_within_upto_def] >> strip_tac >>
          first_x_assum (drule_all_then assume_tac) >> simp[]) >>
       suspend "transport") >>
   `tn.t_stor = {} /\ tn.t_trans = {}` by (fs[MEM] >> metis_tac[]) >>

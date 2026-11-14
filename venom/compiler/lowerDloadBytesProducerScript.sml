@@ -133,7 +133,7 @@ QED
    opaque return-PC values; definedness still uses the full V. *)
 Theorem ld_bytes_certificate_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn inst s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!fn. MEM fn CS.ctx_functions ==> fn_ptr_ok P fn) /\
   inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dst;off;sz] /\
   inst.inst_outputs = [] /\ ~in_revert_forward fn s /\

@@ -1,6 +1,7 @@
 Theory lowerDloadPtrAllocTransport
 Ancestors
-  lowerDloadPtrAlloc lowerDloadPtrCall lowerDloadPtrTaint lowerDloadPtrAggregate
+o1SafeUpto
+    lowerDloadPtrAlloc lowerDloadPtrCall lowerDloadPtrTaint lowerDloadPtrAggregate
   lowerDloadPtrRel ptrDiscipline venomExecSemantics venomState codegenRel
   memLocDefs lowerDloadPtrSourceInv o1PassContract lowerDloadDefs
   finite_map list pred_set words
@@ -204,7 +205,7 @@ Proof
 QED
 
 Theorem dload_alloca_successor_headroom:
-  o1_ctx_shape C /\ o1_src_inv D C vs /\
+  o1_ctx_shape C /\ o1_safe_upto D lo cut C vs /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   inst.inst_opcode = ALLOCA /\ step_inst fuel C inst s = OK s' /\
   active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
@@ -227,7 +228,7 @@ Theorem dload_alloca_fresh_post_bound:
   exec_alloca inst s amount = OK s' /\ exec_alloca inst t amount = OK t' /\
   dload_table_stack (f::fs) (s::ss) (t::ts) /\
   SUM (MAP (\f. CARD f.dr_scratch) (f::fs)) <= ctx_dload_count C /\
-  o1_ctx_shape C /\ o1_src_inv D C vs /\
+  o1_ctx_shape C /\ o1_safe_upto D lo cut C vs /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   inst.inst_opcode = ALLOCA /\ step_inst fuel C inst s = OK s' /\
   active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>

@@ -93,7 +93,7 @@ QED
 
 Theorem ld_annotated_payload_operands:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
   MEM i.inst_opcode [CALLDATACOPY; CODECOPY; RETURNDATACOPY; EXTCODECOPY] /\
   i.inst_operands = (if i.inst_opcode = EXTCODECOPY then [addr;dst;off;sz]
@@ -130,7 +130,7 @@ QED
 
 Theorem ld_normal_payload_copy_backward:
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-  ptr_discipline lo CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\ opaque_use_ok fn /\
   U = {v | v IN V /\ ~retpc_var fn v} /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
