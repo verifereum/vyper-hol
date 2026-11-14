@@ -1086,7 +1086,7 @@ Proof
 QED
 
 
-Theorem append_sparse_staging_frame[local]:
+Theorem append_sparse_staging_frame:
   compile_alloc_buffer n sb = (buf,sc) /\
   compile_store_memory cenv raw buf.buf_operand elem elem sc = ((),sd) /\
   n = type_memory_bytes cenv elem /\ 0 < n /\ n < dimword (:256) /\
@@ -1162,14 +1162,14 @@ Proof
   qexistsl_tac [`s2`, `w`] >> simp[eval_operand_def] >> metis_tac[]
 QED
 
-Theorem append_sparse_single_projections[local]:
+Theorem append_sparse_single_projections:
   !tr k v s. ((if tr then tstore else sstore) k v s).vs_allocas = s.vs_allocas /\
     ((if tr then tstore else sstore) k v s).vs_memory = s.vs_memory
 Proof
   rpt gen_tac >> Cases_on `tr` >> simp[sstore_def, tstore_def, LET_THM]
 QED
 
-Theorem append_sparse_store_projections[local]:
+Theorem append_sparse_store_projections:
   !ks base tr (addr:num->bytes32) (rd:num->bytes32) k v.
     let u = (if tr then tstore else sstore) k v
       (FOLDL (\q i. (if tr then tstore else sstore) (addr i) (rd i) q) base ks)
@@ -1182,7 +1182,7 @@ Proof
   Induct >> simp[append_sparse_single_projections]
 QED
 
-Theorem append_sparse_destination_bound[local]:
+Theorem append_sparse_destination_bound:
   !(slot:bytes32) len stride cap.
     w2n slot + (1 + cap * stride) <= dimword (:256) /\
     0 < stride /\ len < cap ==>
