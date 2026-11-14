@@ -2,11 +2,13 @@
 Theory abiValidAllocatedJoint
 Ancestors
  abiValidAllocatedMembersJoint abiValidAllocatedMemberEntry abiValidMembers
+ abiValidAllocatedComplexJoint abiValidAllocatedComplex abiValidAllocatedObservations
+ abiDecoderComplexExecute abiDecoderComplexGuard ctorAbiActualWorld fragGasOriginPtr
  abiValidAllocatedMembers abiValidAllocatedContract abiValidAllocatedSource
  abiDecoderMemberCons abiDecoderMemberInfos abiDecoderMemberSetup
  abiDecoderCoherence abiDecoderContract abiDecoderReentry abiMalformedRecursiveInterface
  abiMalformedSiteFrame decoderGhostFramePtr bodyPtrDefs ptrDiscipline
- exprSimProps exprLoweringProps valueEncodingTyping valueEncodingDefs valueEncoding
+ exprSimProps exprLoweringProps valueEncodingProps valueEncodingTyping valueEncodingDefs valueEncoding
  abiEncoder compileEnv loweringStateRelDefs venomState vyperABI contractABI finite_map pred_set list arithmetic
 
 val C = ``\ty tv.
@@ -228,4 +230,105 @@ Proof
     first_x_assum irule >> simp[])) >>
  simp[]
 QED
+
+Theorem abi_valid_allocated_joint_complex:
+ LIST_REL (^C) tys tvs /\
+ compile_abi_decode_to_buf (Var output) pos MLOAD (Var source) hi
+   (DecComplex dyn (abi_decoder_member_infos sf ce tys)) st = ((),en) /\
+ fn_has_code st en func /\ fn_inst_ids_distinct func /\
+ abi_malformed_entry H0 ctx func cenv cx es st
+   (abi_malformed_scratch_sites st en func) dstid live
+   (Var source) hi pos (Var output) B L xs p d (type_memory_size_list tvs) s /\
+ LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\ p <= L /\
+ vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) (DROP p xs) (DROP p xs) /\
+ abi_to_vyper_list env tys
+   (abi_decode_members (MAP (vyper_to_abi_type env) tys) (DROP p xs) (DROP p xs)) = SOME vs /\
+ en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
+ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+ s.vs_inst_idx = LENGTH st.cs_current_insts /\
+ ~ctx_has_dalloca ctx /\ abi_decode_ptr_window G tn s source (n2w B) L /\
+ ptr_covers G tn output s (type_memory_size_list tvs) /\
+ op_prov G pos = NONE /\ op_prov G hi = NONE /\
+ op_taint tn pos = {} /\ op_taint tn hi = {} /\
+ allocas_from lo s /\ lo <= s.vs_alloca_next /\ alloca_history func s ==>
+?u G' tn'.
+ abi_valid_allocated_members_post tvs vs ctx func cenv cx es st en ceiling dstid
+   d (type_memory_size_list tvs) s u /\
+ u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+ u.vs_call_ctx = s.vs_call_ctx /\ u.vs_immutables = s.vs_immutables /\
+ (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+   (s,G,tn) [] (OK u,G',tn')) /\
+ ptr_covers G' tn' output u (type_memory_size_list tvs) /\
+ abi_decode_ptr_window G' tn' u source (n2w B) L /\
+ (!mem. mem_agree_outside tn'.t_mem u.vs_memory mem ==>
+   tuple_in_memory vs tvs d mem) /\
+ (!x. abi_decoder_operand_live st.cs_next_var (Var x) ==>
+   FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+ (!a. ~(d <= a /\ a < d+type_memory_size_list tvs) /\
+   ~abi_malformed_site_range (abi_malformed_scratch_sites st en func) s u a 1 ==>
+   (a IN tn'.t_mem <=> a IN tn.t_mem)) /\
+ alloca_history func u /\ allocas_from lo u /\ lo <= u.vs_alloca_next
+Proof
+ disch_then (CONJUNCTS_THEN2 (mk_asm "children")
+   (map_every assume_tac o CONJUNCTS)) >>
+ drule abi_decoder_complex_trace >> strip_tac >>
+ `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+ drule_all abi_decoder_complex_code >> strip_tac >>
+ drule abi_decoder_member_infos_layout >> strip_tac >>
+ `LENGTH xs = L` by
+   (fs[abi_malformed_entry_def, abi_malformed_allocated_window_def] >>
+    metis_tac[LENGTH_mem_bytes_at]) >>
+ `p + SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) <= L` by
+   (drule abi_valid_members_view >> simp[LENGTH_DROP] >> decide_tac) >>
+ mp_tac (abi_valid_allocated_complex_members_entry_joint |> Q.INST
+   [`HZ` |-> `H0`, `src` |-> `pos`, `n` |-> `type_memory_size_list tvs`,
+    `H` |-> `FOLDR (\(_,asz,_) acc. asz + acc) 0 (abi_decoder_member_infos sf ce tys)`]) >>
+ (impl_tac >- asm_simp_tac (srw_ss()) []) >>
+ disch_then (qx_choose_then `prepared`
+   (qx_choose_then `G1` (qx_choose_then `tn1` strip_assume_tac))) >>
+ `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st middle)` by
+   (drule abi_decoder_complex_guard_code >> simp[EVERY_CONJ]) >>
+ drule_all ctor_actual_sequence_world >> strip_tac >>
+ drule_all abi_valid_allocated_sequence_static >> strip_tac >>
+ `op_prov G1 pos = NONE /\ op_prov G1 hi = NONE /\
+  op_taint tn1 pos = {} /\ op_taint tn1 hi = {}` by
+   (asm_x "children" kall_tac >> Cases_on `pos` >> Cases_on `hi` >>
+    fs[abi_malformed_entry_def, EVERY_DEF, op_prov_def, op_taint_def,
+       abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def] >>
+    metis_tac[]) >>
+ asm "children" (fn th =>
+   mp_tac (MATCH_MP (Q.SPECL [`tys`, `tvs`] abi_valid_allocated_joint_members) th)) >>
+ disch_then (mp_tac o BETA_RULE) >> disch_then drule >>
+ disch_then (qspecl_then [`G1`, `tn1`, `PG`, `lo`] mp_tac) >>
+ (impl_tac >- simp[]) >>
+ disch_then (qx_choose_then `actual`
+   (qx_choose_then `G2` (qx_choose_then `tn2` strip_assume_tac))) >>
+ asm_x "children" kall_tac >>
+ drule_all abi_valid_allocated_complex_members_post >> strip_tac >>
+ `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) [] (OK actual,G2,tn2)` by
+   metis_tac[gas_origin_ptr_path_append, APPEND] >>
+ `abi_malformed_scratch_sites middle en func SUBSET
+    abi_malformed_scratch_sites st en func` by
+   (irule abi_malformed_scratch_sites_nested >> decide_tac) >>
+ `!a. ~(d <= a /\ a < d+type_memory_size_list tvs) /\
+    ~abi_malformed_site_range (abi_malformed_scratch_sites st en func) s actual a 1 ==>
+    (a IN tn2.t_mem <=> a IN tn.t_mem)` by
+   (rpt strip_tac >>
+    `~abi_malformed_site_range (abi_malformed_scratch_sites middle en func)
+       prepared actual a 1` by
+      (fs[abi_malformed_site_range_def, SUBSET_DEF] >> metis_tac[]) >>
+    metis_tac[ADD_0]) >>
+ `!x. abi_decoder_operand_live st.cs_next_var (Var x) ==>
+    FLOOKUP G2 x = FLOOKUP G x /\ op_taint tn2 (Var x) = op_taint tn (Var x)` by
+   (rpt strip_tac >>
+    `abi_decoder_operand_live middle.cs_next_var (Var x)` by
+      (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
+    `not_fresh_at st x` by
+      fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def] >>
+    metis_tac[]) >>
+ qexistsl_tac [`actual`, `G2`, `tn2`] >> fs[] >> metis_tac[]
+QED
+
 
