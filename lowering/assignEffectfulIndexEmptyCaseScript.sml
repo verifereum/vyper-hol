@@ -6,9 +6,14 @@ Ancestors
   stmtLoweringMono exprLoweringProps loweringPosts compileEnv exprLowering
   immutableAssignEmpty bodySimAugPlaceLoad vyperStoragePlaceProvenance memoryLocalRhsProps
   stmtSimAugAssign stmtSimAugAssignPlaceMemory vyperTypeDefaults
-  tuplePlaceWriteOutcome vyperTypeCallStackSoundness vyperTypeInvariants
-  vyperTypeSystem vyperState loweringStateRelDefs fragExec
+  tuplePlaceWriteOutcome tuplePlaceHeadGas vyperTypeCallStackSoundness vyperTypeInvariants
+  vyperTypeSystem vyperState loweringStateRelDefs fragExec storageStoreFrame
+  vyperStorageBackend
 Libs monadsyntax
+
+(* Keep source and target framing states paired; use this rewrite only at
+   the explicit transport below. *)
+val _ = temp_delsimps ["tuple_place_target_post_gas_obs"];
 
 Theorem assign_place_effectful_empty_case:
   !ctx func cx lctx RetQ cenv ty env tops bt e es dty.
@@ -106,8 +111,13 @@ Proof
       `?wr ff. write_place cx p (default_value dtv)
           (mid with gas_obs := []) = (wr,ff)` by
         metis_tac[pairTheory.PAIR] >>
-      `wr = INL ()` by
-        (irule tuple_place_source_write_success >>
+      Q.SUBGOAL_THEN
+       `wr = INL () \/
+        (?is_t slot value_ty. p = StoragePlace is_t slot value_ty /\
+          cx.txn.is_static /\
+          wr = INR (Error (RuntimeError "write in static context")) /\
+          ff = mid with gas_obs := [])` assume_tac
+      >- (irule tuple_place_source_write_outcome >>
          qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
          qpat_assum `eval_target_place _ _ _ = _` (irule_at Any) >>
          qpat_assum `stmt_state_rel _ _ _ _ (_ with gas_obs := []) t`
@@ -115,6 +125,32 @@ Proof
          qexistsl_tac [`dty`, `dtv`, `env`] >>
          simp[target_pre_def, well_typed_target_def] >>
          metis_tac[expr_sim_inv_gas_obs, default_value_has_type_thm]) >>
+      reverse (Cases_on `wr = INL ()`)
+      >- (gvs[] >>
+          rename1 `write_place cx (StoragePlace is_t slot value_ty) _ _ = _` >>
+          `eval_operand dst t = SOME slot /\ loc = slot_loc is_t` by
+            gvs[target_post_def, place_ptr_rel_def] >>
+          `t.vs_call_ctx.cc_static` by
+            fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+          `~t.vs_halted` by
+            (irule aug_place_marked_path_not_halted >>
+             fs[gasSummaryTheory.gas_marked_exec_def] >> metis_tac[]) >>
+          `emit_void (if is_t then TSTORE else SSTORE) [dst;Lit 0w] st = ((),sb)` by
+            (Cases_on `is_t` >>
+             gvs[stmtLoweringTheory.compile_store_at_loc_def, slot_loc_def]) >>
+          `eval_operand (Lit 0w) t = SOME 0w` by
+            simp[venomStateTheory.eval_operand_def] >>
+          drule_all storage_emit_static_path >> strip_tac >>
+          simp[gasOutcomeTheory.gas_outcome_def] >>
+          qexists_tac `[]` >> disj1_tac >>
+          simp[gasSummaryTheory.gas_summary_at_def,
+               gasSummaryTheory.gas_marked_exec_def] >>
+          qexistsl_tac [`INR (Error (RuntimeError "write in static context"))`,
+            `mid with gas_obs := []`,
+            `Abort ExHalt_abort (halt_state (set_returndata [] t))`] >>
+          simp[write_place_def, write_storage_slot_eq,
+               stmt_exit_def, exprSimDefsTheory.expr_exit_def,
+               fragExecTheory.exit_result_def]) >>
       rpt BasicProvers.VAR_EQ_TAC >>
       `~t.vs_halted` by
         (irule aug_place_marked_path_not_halted >>
@@ -136,9 +172,7 @@ Proof
          (PlaceR p) (Type dty) (dst,SOME loc,SOME (ValPT dty)) t` by
         (qpat_assum `target_post _ _ _ _ (_ with gas_obs := []) _ _ _ _ _ _ _ _`
            mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         simp[target_post_def, locals_kept_def, popped_kept_def] >>
-         strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         rewrite_tac[CONJUNCT1 tuple_place_target_post_gas_obs]) >>
       pop_assum (mp_then (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
         (SIMP_RULE (srw_ss())
           [stmtSimDeclComposeTheory.stmt_post_end_gas_obs, SF ETA_ss]

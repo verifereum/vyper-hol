@@ -25,19 +25,22 @@ Proof
   drule_all aug_place_replace_read_error >> gvs[]
 QED
 
-Theorem tuple_place_source_write_success:
+Theorem tuple_place_source_write_outcome:
   target_pre cenv cx env bt es /\ well_typed_target env bt ty /\
   call_evaluation_safe cx (int_calls_target bt) /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
   ~immutable_root cx bt /\ eval_target_place cx bt es = (INL p,ee) /\
   stmt_state_rel ctx func cenv cx ee s /\
-  write_place cx p v ee = (res,ff) ==> res = INL ()
+  write_place cx p v ee = (res,ff) ==>
+  res = INL () \/
+  (?tr slot tv. p = StoragePlace tr slot tv /\ cx.txn.is_static /\
+    res = INR (Error (RuntimeError "write in static context")) /\ ff = ee)
 Proof
   strip_tac >> drule_all tuple_place_source_target_endpoint >> strip_tac >>
   `state_well_typed ee` by fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
   drule_all write_place_no_type_error >> strip_tac >>
   Cases_on `p`
-  >- (`~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  >- (Cases_on `cx.txn.is_static` >>
       gvs[write_place_def, write_storage_slot_eq, AllCaseEqs(),
           no_type_error_result_def])
   >- metis_tac[tuple_place_memory_write_result]
