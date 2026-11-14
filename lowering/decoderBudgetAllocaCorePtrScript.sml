@@ -194,3 +194,37 @@ Proof
   disch_then (strip_assume_tac o SPEC_ALL) >>
   qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[]
 QED
+
+Theorem budget_alloca_endpoint_exact_joint_core:
+  emit_op ALLOCA [Lit 32w] sa = (ip,sb) /\
+  abi_decoder_budget first last b cap s /\ sa.cs_next_id IN abi_decoder_ids first last /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?HG u q p. ip = Var q /\ lookup_var q t = SOME (n2w p) /\
+    b <= p /\ p + 32 <= b + cap /\ p + 32 < dimword (:256) /\
+    ptr_covers HG u q (t with vs_inst_idx := SUC s.vs_inst_idx) 32 /\
+    frag_exec_ptr H cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = HG /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    u.t_mem DIFF {a | p <= a /\ a < p + 32} =
+      tn.t_mem DIFF {a | p <= a /\ a < p + 32} /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    (!D lower ctx' func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
+      s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s) /\
+    (!D lower explicit ctx' func.
+      ~s.vs_halted /\ fn_has_code sa sb func /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\
+      ~ctx_has_dalloca ctx' /\ s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx',func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),HG,u))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all budget_alloca_endpoint_exact_ptr_origin_core >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
+  qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[] >> metis_tac[]
+QED
