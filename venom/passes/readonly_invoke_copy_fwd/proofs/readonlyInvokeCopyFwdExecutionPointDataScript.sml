@@ -94,4 +94,3 @@ Proof
   drule_all ricf_execution_external_data_next >>
   disch_then (qspec_then `Ct` strip_assume_tac) >> metis_tac[]
 QED
-

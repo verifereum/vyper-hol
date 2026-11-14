@@ -150,4 +150,3 @@ Proof
       ricf_support_agree_def, update_var_def, Excl "consume_create_outcome_eq"] >>
     metis_tac[])) >> simp[Excl "consume_create_outcome_eq"]
 QED
-

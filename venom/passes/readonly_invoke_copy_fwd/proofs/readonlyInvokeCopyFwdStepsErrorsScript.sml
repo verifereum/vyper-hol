@@ -51,12 +51,9 @@ Ancestors
    includes its index-out-of-range Error, not just failed evaluation.
    PARAM/FMP_PARAM require equal parameter-list lengths.  Static-sensitive
    direct adapters require equal cc_static.  CALL also requires matching
-   zero-value tests.  The DELEGATECALL interface retains its historical
-   concrete-extraction premise, although oracle-call helper errors depend
-   only on the output envelope, as ricf_delegatecall_error_iff states.
-   Other external/create helper
+   zero-value tests.  DELEGATECALL and the other external/create helper
    Error cases are exactly the single-output envelope failures, exposed by
-   ricf_ext_call_error_iff and ricf_create_error_iff.
+   ricf_delegatecall_error_iff, ricf_ext_call_error_iff and ricf_create_error_iff.
 
    There are no constructors beyond this table.  The only default arm of
    base dispatch is INVOKE; its real semantics is deliberately NOT this

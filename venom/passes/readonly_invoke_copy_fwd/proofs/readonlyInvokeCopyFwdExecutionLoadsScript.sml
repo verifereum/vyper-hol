@@ -172,4 +172,3 @@ Proof
    sb+(w2n x-db)+k = k+(sb+w2n x)-db` by decide_tac >>
   metis_tac[]
 QED
-

@@ -1,5 +1,6 @@
 Theory readonlyInvokeCopyFwdExecutionOrdinary
 Ancestors
+  readonlyInvokeCopyFwdExecutionMemoryScalars
   readonlyInvokeCopyFwdExecutionLocal readonlyInvokeCopyFwdExecution
   readonlyInvokeCopyFwdExecutionMultiply
   readonlyInvokeCopyFwdOpaque frameViewFacts frameRel unitShapeDefs
@@ -9,45 +10,6 @@ Ancestors
   o1LowerDloadRelocationKernel o1LowerDloadOccurrence
   internalReturnCopyFwdSim allocaFrontierBound taintAgree ptrDiscipline pointerConfinedDefs memLocDefs
   venomExecSemantics venomState venomInst codegenRel finite_map list pred_set words
-
-Theorem ricf_execution_scalar_operand:
-  ricf_execution_invariant vs C D stk PG G tn fn inst s t
-    n a U B HP H ledger E sites maps targets rt /\
-  ssa_form fn /\ opaque_use_ok fn /\
-  ptr_discipline lo C vs /\ active_inst fn inst s /\
-  ~is_pointer_preserving_op inst.inst_opcode /\
-  ~MEM inst.inst_opcode [LT;GT;EQ;INVOKE;RET;RETFMP;DRET] /\
-  mem_read_ops inst = NONE /\ mem_write_ops inst = NONE /\
-  MEM op inst.inst_operands /\ op_taint rt op = {} /\
-  eval_operand op s = SOME x ==>
-  eval_operand op t = SOME x
-Proof
-  strip_tac >>
-  `frame_reachable vs C stk PG G tn fn inst s` by
-    (fs[ricf_execution_invariant_def, ricf_heterogeneous_source_ledger_def] >>
-     metis_tac[occ_frame_reachable_projection]) >>
-  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
-    metis_tac[ptr_discipline_fn_ptr_ok] >>
-  `MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn` by
-    metis_tac[frame_reachable_prov_support] >>
-  `MEM inst (fn_insts fn)` by metis_tac[active_inst_mem_fn_insts] >>
-  `ptr_use_ok P (fn_pv P fn) inst` by
-    (fs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
-  `op_prov G op = NONE` by
-    (irule ld_scalar_no_provenance >>
-     qexistsl_tac [`P`,`inst`,`fn_pv P fn`] >> fs[MEM]) >>
-  `!name. op = Var name ==> ~retpc_var fn name` by
-    (rpt gen_tac >> strip_tac >> irule ordinary_operand_not_retpc >> simp[] >>
-     qexists_tac `inst` >>
-     fs[MEM] >> metis_tac[is_pointer_preserving_op_def]) >>
-  `ricf_opaque_frame_agree fn D (ircf_dead (ricf_original_copy_ids C) s stk) sites
-    (ricf_complete_params PG s.vs_params) G rt s t` by
-    fs[ricf_execution_invariant_def] >>
-  drule_all ricf_opaque_frame_operand >> strip_tac >>
-  `x = y` by
-    (irule ld_value_agree_clean >>
-     qexists_tac `sites` >> gvs[ricf_opaque_value_agree_def, ricf_is_zero_prov_def, ricf_value_agree_def]) >> gvs[]
-QED
 
 Theorem ricf_execution_scalar_result_next[local]:
   ricf_execution_invariant vs C D stk PG G tn fn inst s t
@@ -114,7 +76,8 @@ Proof
    ~MEM inst.inst_opcode [LT;GT;EQ;INVOKE;RET;RETFMP;DRET] /\
    mem_read_ops inst = NONE /\ mem_write_ops inst = NONE` by
     (fs[MEM] >> gvs[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]) >>
-  metis_tac[ricf_execution_scalar_operand]
+  (drule ricf_execution_nonaddress_operand >> disch_then irule >>
+      simp[] >> metis_tac[])
 QED
 
 Theorem ricf_execution_unary_next:

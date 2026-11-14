@@ -59,7 +59,7 @@ Proof
       >- (qexistsl [`s`, `t`, `un`] >> simp[]) >>
       simp[] >> rpt strip_tac >>
       gvs[ricf_live_stack_agree_def, ricf_live_frame_decompose,
-          ircf_cross_def] >> metis_tac[]) 
+          ircf_cross_def] >> metis_tac[])
   >- metis_tac[]
   >- (gvs[ricf_cert_crosses_def, EVERY_MEM, ircf_cross_def] >> metis_tac[])
   >> gvs[ircf_cross_def] >> metis_tac[]

@@ -253,7 +253,6 @@ Proof
   Cases_on `eval_operand op1 t` >> Cases_on `eval_operand op2 t` >>
   gvs[] >> metis_tac[optionTheory.NOT_SOME_NONE]
 QED
-
 Theorem ricf_pure3_error:
   (!op. MEM op inst.inst_operands ==>
     (eval_operand op s = NONE <=> eval_operand op t = NONE)) /\
@@ -265,7 +264,6 @@ Proof
   Cases_on `eval_operand op3 t` >>
   gvs[] >> metis_tac[optionTheory.NOT_SOME_NONE]
 QED
-
 Theorem ricf_read0_error:
   exec_read0 f inst s = Error e ==> exec_read0 g inst t = Error e
 Proof
@@ -292,4 +290,3 @@ Proof
   Cases_on `eval_operand op1 t` >> Cases_on `eval_operand op2 t` >>
   gvs[] >> metis_tac[optionTheory.NOT_SOME_NONE]
 QED
-

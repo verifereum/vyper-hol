@@ -5,16 +5,6 @@ Ancestors
 Libs
   stepInstBaseLib
 
-(* This is the actual extraction boundary, not an external-call simulation. *)
-Definition ricf_delegate_extract_def:
-  ricf_delegate_extract s gas addr ao az ro rz =
-    extract_venom_result s 1w (w2n ro) (w2n rz)
-      (run (make_venom_delegatecall_state s (w2w addr) (w2n gas)
-        (read_memory (w2n ao) (w2n az) s)
-        (lookup_account (w2w addr) s.vs_accounts).code
-        s.vs_call_ctx.cc_static))
-End
-
 Theorem ricf_ext_call_error_iff:
   exec_ext_call inst s gas addr value ao az ro rz static = Error e <=>
   ~(?out. inst.inst_outputs = [out]) /\
@@ -46,13 +36,10 @@ Proof
 QED
 
 Theorem ricf_delegatecall_error:
-  (ricf_delegate_extract s gas addr ao az ro rz = NONE <=>
-   ricf_delegate_extract t gas' addr' ao' az' ro' rz' = NONE) /\
   exec_delegatecall inst s gas addr ao az ro rz = Error e ==>
   exec_delegatecall inst t gas' addr' ao' az' ro' rz' = Error e
 Proof
-  simp[ricf_delegatecall_error_iff, optionTheory.IS_SOME_EQ_NOT_NONE] >>
-  metis_tac[optionTheory.option_CASES, optionTheory.NOT_SOME_NONE]
+  simp[ricf_delegatecall_error_iff]
 QED
 
 Theorem ricf_staticcall_error:
@@ -130,23 +117,10 @@ Proof
   metis_tac[optionTheory.NOT_SOME_NONE]
 QED
 
-(* The historical extraction premise remains in this interface; oracle-call
-   helper errors now depend only on the output envelope. *)
 Theorem ricf_delegatecall_dispatch_error:
   inst.inst_opcode = DELEGATECALL /\
   (!op. MEM op inst.inst_operands ==>
     (eval_operand op s = NONE <=> eval_operand op t = NONE)) /\
-  (!g a ao az ro rz gas addr argsOff argsSize retOff retSize
-                    gas' addr' argsOff' argsSize' retOff' retSize'.
-    inst.inst_operands = [g;a;ao;az;ro;rz] /\
-    eval_operand g s = SOME gas /\ eval_operand a s = SOME addr /\
-    eval_operand ao s = SOME argsOff /\ eval_operand az s = SOME argsSize /\
-    eval_operand ro s = SOME retOff /\ eval_operand rz s = SOME retSize /\
-    eval_operand g t = SOME gas' /\ eval_operand a t = SOME addr' /\
-    eval_operand ao t = SOME argsOff' /\ eval_operand az t = SOME argsSize' /\
-    eval_operand ro t = SOME retOff' /\ eval_operand rz t = SOME retSize' ==>
-    (ricf_delegate_extract s gas addr argsOff argsSize retOff retSize = NONE <=>
-     ricf_delegate_extract t gas' addr' argsOff' argsSize' retOff' retSize' = NONE)) /\
   step_inst_base inst s = Error e ==> step_inst_base inst t = Error e
 Proof
   strip_tac >> with_opcode_clause (fn ths => gvs(ths @ [AllCaseEqs()])) >>

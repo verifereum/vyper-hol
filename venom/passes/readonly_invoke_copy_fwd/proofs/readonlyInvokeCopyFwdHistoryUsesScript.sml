@@ -21,7 +21,7 @@ Theorem ricf_block_trace_erasure:
   !i old.
     i < LENGTH bb.bb_instructions /\
     (EL i bb.bb_instructions).inst_id = old.inst_id /\
-    (EL i bb.bb_instructions).inst_opcode = MCOPY /\ 
+    (EL i bb.bb_instructions).inst_opcode = MCOPY /\
     (EL i last.bb_instructions).inst_opcode <> MCOPY ==>
     ricf_block_erasure bb trace i old
 Proof

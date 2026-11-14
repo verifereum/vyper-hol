@@ -1,5 +1,6 @@
 Theory readonlyInvokeCopyFwdExecutionReads
 Ancestors
+  readonlyInvokeCopyFwdExecutionMemoryScalars
   readonlyInvokeCopyFwdExecutionLocal readonlyInvokeCopyFwdExecution
   readonlyInvokeCopyFwdOpaque frameViewFacts frameRel unitShapeDefs
   readonlyInvokeCopyFwdExecutionOrdinary readonlyInvokeCopyFwdHeterogeneousLedger
@@ -105,7 +106,8 @@ Proof
       ~MEM inst.inst_opcode [LT;GT;EQ;INVOKE;RET;RETFMP;DRET] /\
       mem_read_ops inst = NONE /\ mem_write_ops inst = NONE` by
        (fs[MEM] >> gvs[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]) >>
-     metis_tac[ricf_execution_scalar_operand]) >>
+     (drule ricf_execution_nonaddress_operand >> disch_then irule >>
+      simp[] >> metis_tac[])) >>
   `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
     fs[ricf_execution_invariant_def, ricf_opaque_frame_agree_def,
       ricf_frame_agree_def, taint_agree_def, ld_shared_agree_def,

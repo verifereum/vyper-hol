@@ -575,7 +575,7 @@ Proof
 QED
 
 Theorem ricf_block_edit_EL:
-  ricf_block_edit old cur ==> 
+  ricf_block_edit old cur ==>
   LENGTH old.bb_instructions = LENGTH cur.bb_instructions /\
   !i. i < LENGTH old.bb_instructions ==>
     ricf_inst_edit (EL i old.bb_instructions) (EL i cur.bb_instructions)

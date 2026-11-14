@@ -187,4 +187,3 @@ Proof
     `ledger` |-> `certificates`] ricf_execution_revert) >>
   (impl_tac >- simp[]) >> strip_tac >> metis_tac[]
 QED
-

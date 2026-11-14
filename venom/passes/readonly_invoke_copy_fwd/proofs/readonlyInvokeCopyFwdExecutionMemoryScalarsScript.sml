@@ -83,4 +83,3 @@ Proof
   strip_tac >> drule_all ricf_execution_nonaddress_value >> strip_tac >>
   gvs[] >> metis_tac[word_agree_except_empty]
 QED
-

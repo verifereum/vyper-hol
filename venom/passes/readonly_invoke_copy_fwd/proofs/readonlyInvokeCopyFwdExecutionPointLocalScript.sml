@@ -361,7 +361,6 @@ Proof
   disch_then (qspec_then `Ct` strip_assume_tac) >>
   simp[block_step_rel_def, fn_run_rel_def]
 QED
-
 Theorem ricf_execution_point_revert:
   ricf_execution_point vs C log_of D a U B0 E0 outer_history outer_certificates sites maps targets
     stk PG G tn fn inst s t /\
@@ -374,4 +373,3 @@ Proof
   disch_then (qspec_then `Ct` strip_assume_tac) >>
   simp[block_step_rel_def, fn_run_rel_def]
 QED
-

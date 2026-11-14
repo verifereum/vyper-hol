@@ -297,4 +297,3 @@ Proof
   qexists_tac `y` >> simp[] >> irule read_memory_eq_from_bytes >>
   metis_tac[]
 QED
-

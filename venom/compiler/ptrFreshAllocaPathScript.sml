@@ -92,7 +92,7 @@ Proof
   >- (irule is_fn_path_snoc >> simp[]) >>
   conj_tac >- (Cases_on `done` >> simp[]) >>
   conj_tac
-  >- (rpt strip_tac >> fs[MEM_APPEND] 
+  >- (rpt strip_tac >> fs[MEM_APPEND]
       >- metis_tac[SUBMAP_FDOM_SUBSET, SUBSET_DEF] >>
       gvs[] >>
       fs[contextCodegenRelTheory.active_inst_def] >>

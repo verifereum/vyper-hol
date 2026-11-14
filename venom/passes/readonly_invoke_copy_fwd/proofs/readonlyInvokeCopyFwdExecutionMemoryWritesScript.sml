@@ -189,4 +189,3 @@ Proof
   `~(dst <= db+k /\ db+k < dst+LENGTH xs) /\
    ~(dst <= sb+k /\ sb+k < dst+LENGTH xs)` by metis_tac[] >> fs[]) >> simp[]
 QED
-

@@ -8,30 +8,6 @@ Ancestors
   taintAgree venomState venomExecSemantics ptrDiscipline
   internalReturnCopyFwdSim finite_map words list pred_set
 
-Theorem ricf_delegate_extract_none_iff:
-  ld_joint_local_fields s t /\
-  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
-  read_memory (w2n ao) (w2n az) s = read_memory (w2n ao') (w2n az) t ==>
-  (ricf_delegate_extract s gas addr ao az ro rz = NONE <=>
-   ricf_delegate_extract t gas addr ao' az ro' rz' = NONE)
-Proof
-  strip_tac >>
-  `s.vs_call_ctx = t.vs_call_ctx` by fs[ld_joint_local_fields_def] >>
-  `make_venom_delegatecall_state s (w2w addr) (w2n gas)
-      (read_memory (w2n ao) (w2n az) s)
-      (lookup_account (w2w addr) s.vs_accounts).code s.vs_call_ctx.cc_static =
-   make_venom_delegatecall_state t (w2w addr) (w2n gas)
-      (read_memory (w2n ao') (w2n az) t)
-      (lookup_account (w2w addr) t.vs_accounts).code t.vs_call_ctx.cc_static` by
-    (drule_all ld_concrete_constructors >> simp[]) >>
-  simp[ricf_delegate_extract_def] >>
-  qmatch_goalsub_abbrev_tac `run evm` >>
-  Cases_on `run evm` >> simp[extract_venom_result_def] >>
-  PairCases_on `x` >> Cases_on `x1.contexts` >> simp[] >>
-  PairCases_on `h` >> Cases_on `t'` >> simp[] >>
-  Cases_on `x0` >> simp[] >> Cases_on `y` >> simp[]
-QED
-
 (* A concrete result installs common shared observations without touching
    locals or memory.  Memory framing is handled separately by StepsMemory. *)
 Theorem ricf_frame_concrete_shared:
@@ -225,30 +201,4 @@ Proof
   qexistsl [`{}`, `out`, `NONE`, `w`, `w`] >>
   simp_tac (srw_ss()) [ricf_value_agree_def, o1LowerDloadRelocationKernelTheory.ld_value_agree_def,
     word_agree_except_def, arithmeticTheory.ADD_COMM]
-QED
-
-(* Return buffers may differ: extraction failure depends only on the run. *)
-Theorem ricf_delegatecall_concrete_dispatch_error:
-  inst.inst_opcode = DELEGATECALL /\
-  ld_joint_local_fields s t /\
-  s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
-  (!op. MEM op inst.inst_operands ==>
-    (eval_operand op s = NONE <=> eval_operand op t = NONE)) /\
-  (!g a ao az ro rz.
-    inst.inst_operands = [g;a;ao;az;ro;rz] ==>
-    eval_operand g s = eval_operand g t /\
-    eval_operand a s = eval_operand a t /\
-    eval_operand az s = eval_operand az t /\
-    (!off off' size.
-      eval_operand ao s = SOME off /\ eval_operand ao t = SOME off' /\
-      eval_operand az s = SOME size ==>
-      read_memory (w2n off) (w2n size) s =
-      read_memory (w2n off') (w2n size) t)) /\
-  step_inst_base inst s = Error e ==> step_inst_base inst t = Error e
-Proof
-  strip_tac >>
-  irule ricf_delegatecall_dispatch_error >> simp[] >> qexists_tac `s` >> simp[] >>
-  rpt strip_tac >>
-  first_x_assum drule >> strip_tac >> gvs[] >>
-  irule ricf_delegate_extract_none_iff >> simp[] >> metis_tac[]
 QED

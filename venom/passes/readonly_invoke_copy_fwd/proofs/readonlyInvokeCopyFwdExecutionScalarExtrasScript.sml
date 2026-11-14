@@ -1,5 +1,6 @@
 Theory readonlyInvokeCopyFwdExecutionScalarExtras
 Ancestors
+  readonlyInvokeCopyFwdExecutionMemoryScalars
   readonlyInvokeCopyFwdOpaque
   readonlyInvokeCopyFwdExecutionOrdinary
   readonlyInvokeCopyFwdExecutionLocal readonlyInvokeCopyFwdExecution
@@ -42,7 +43,8 @@ Proof
       ~MEM inst.inst_opcode [LT;GT;EQ;INVOKE;RET;RETFMP;DRET] /\
       mem_read_ops inst = NONE /\ mem_write_ops inst = NONE` by
        (fs[MEM] >> gvs[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]) >>
-     metis_tac[ricf_execution_scalar_operand]) >>
+     (drule ricf_execution_nonaddress_operand >> disch_then irule >>
+      simp[] >> metis_tac[])) >>
   `?out value. u = update_var out value s /\ inst.inst_outputs = [out] /\
     step_inst fuel Ct inst t = OK (update_var out value t)` by
     (qpat_x_assum `step_inst fuel C inst s = OK u` mp_tac >> fs[MEM] >>
@@ -66,4 +68,3 @@ Proof
     FLOOKUP_DEF, is_terminator_def, SF CONJ_ss] >>
   metis_tac[update_var_def]
 QED
-

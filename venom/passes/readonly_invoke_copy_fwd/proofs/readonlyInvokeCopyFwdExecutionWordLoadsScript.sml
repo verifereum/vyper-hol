@@ -1,5 +1,6 @@
 Theory readonlyInvokeCopyFwdExecutionWordLoads
 Ancestors
+  readonlyInvokeCopyFwdExecutionMemoryScalars
   readonlyInvokeCopyFwdExecutionReadClassification
   readonlyInvokeCopyFwdExecutionLoads
   pointerConfinedDefs
@@ -212,7 +213,7 @@ Proof
   `op_taint tn kop = {}` by
     (fs[MEM] >> gvs[taint_ok_def] >> metis_tac[]) >>
   `eval_operand kop t = SOME key` by
-    (drule ricf_execution_scalar_operand >> disch_then irule >>
+    (drule ricf_execution_nonaddress_operand >> disch_then irule >>
      fs[MEM] >> simp[is_pointer_preserving_op_def, mem_read_ops_def,
        mem_write_ops_def] >> metis_tac[MEM]) >>
   `~retpc_var fn out` by

@@ -1501,7 +1501,7 @@ QED
 
 Theorem taint_agree_word_store_step:
   taint_agree D X tn s t /\ taint_ok fn tn inst s /\
-  MEM inst.inst_opcode [MSTORE; ISTORE] /\ inst.inst_outputs = [] /\ 
+  MEM inst.inst_opcode [MSTORE; ISTORE] /\ inst.inst_outputs = [] /\
   step_inst_base inst s = OK s' ==>
   ?t'. step_inst_base inst t = OK t' /\
        taint_agree D X (step_taint inst s s' tn) s' t'

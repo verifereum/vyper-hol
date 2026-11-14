@@ -147,4 +147,3 @@ Proof
   drule_all ricf_execution_certificates_subset >> strip_tac >>
   qexistsl_tac [`t'`,`n`,`history`,`certificates`] >> simp[] >> gvs[]
 QED
-

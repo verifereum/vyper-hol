@@ -26,7 +26,7 @@ Proof
   >- (drule_all ricf_frame_agree_update_var >>
       simp[update_var_def, ircf_dead_def, ricf_complete_params_def])
   >- gvs[ricf_live_stack_agree_def, merge_callee_state_def, update_var_def]
-  >- (gvs[ircf_cross_def, update_var_def] >> metis_tac[]) 
+  >- (gvs[ircf_cross_def, update_var_def] >> metis_tac[])
   >> gvs[ricf_cert_crosses_def, EVERY_MEM, ircf_cross_def, update_var_def]
   >> metis_tac[]
 QED
