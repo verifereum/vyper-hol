@@ -1,6 +1,6 @@
 Theory bodyFullExtCallSuccess
 Ancestors
-  bodyFullExtCallFrames exprSimExtCallCase valueEncodingProps
+  bodyFullExtCallFrames bodyFullExtCallSuccessSource exprSimExtCallCase valueEncodingProps
   loweringStateRelDefs venomState allocaHistory ghostPcTransportPtr
   abiStaticLoopBody exprLoweringProps exprSafeOperand compileEnv loweringPosts
 
@@ -83,4 +83,58 @@ Proof
   simp[] >>
   gvs[write_memory_mem_bytes_at_same] >>
   qexistsl_tac [`live`, `buf_size`] >> simp[] >> decide_tac
+QED
+
+(* Caller handoff: the oracle endpoint supplies v = update_var out 1w u.
+   The checked CALL ends at next_inst v; emit_jnz_origin_ptr with b = T
+   supplies the path to jump_to cont_lbl (next_inst v).  The compilation
+   layout supplies new_block and the two counter bounds (not cs_extends
+   alone).  This theorem publishes only the endpoint postconditions. *)
+Theorem extcall_success_return_boundary:
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
+    calldata has_default default_op default_ty default_opt ee t /\
+  sp.cs_next_var <= sr.cs_next_var /\ sp.cs_next_id <= sr.cs_next_id /\
+  new_block cont_lbl s10 = (old_lbl,sr) /\
+  (!H. valid_horizon cx st0 H ee'.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx ee' v) /\
+  wb_frame cenv es ee' sa s0 v /\
+  extcall_default_ready cx ret_type has_default default_op default_ty default_opt v /\
+  ~v.vs_halted /\ v.vs_allocas = t.vs_allocas /\
+  v.vs_alloca_next = t.vs_alloca_next /\ eval_operand buf_op t = SOME ro /\
+  v.vs_memory = (write_memory_with_expansion (w2n ro) (TAKE cap rd) t).vs_memory /\
+  v.vs_returndata = rd /\
+  (!op. safe_operand sp op ==> eval_operand op v = eval_operand op t) /\
+  alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next /\
+  take_call_outcome target calldata value_opt ee = (INL (rq,oc),consumed) /\
+  oc.co_success /\ ee' = SND (adopt_call_outcome rq oc consumed) /\
+  rd = oc.co_returnData /\
+  eval_ext_call_effects cx target calldata value_opt gas ee.accounts ee =
+    (INL rd,ee') ==>
+  extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap
+    target has_default default_op default_ty default_opt rd ee'
+    (jump_to cont_lbl (next_inst v)) /\
+  alloca_history func (jump_to cont_lbl (next_inst v)) /\
+  s0.vs_alloca_next <= (jump_to cont_lbl (next_inst v)).vs_alloca_next /\
+  (!op. safe_operand sp op ==>
+    eval_operand op (jump_to cont_lbl (next_inst v)) = eval_operand op t) /\
+  (jump_to cont_lbl (next_inst v)).vs_allocas = t.vs_allocas /\
+  (jump_to cont_lbl (next_inst v)).vs_alloca_next = t.vs_alloca_next /\
+  (jump_to cont_lbl (next_inst v)).vs_memory =
+    (write_memory_with_expansion (w2n ro) (TAKE cap rd) t).vs_memory /\
+  (!dv w tv. default_opt = SOME dv /\ ~is_word_type default_ty /\
+    eval_operand default_op t = SOME w /\
+    evaluate_type (get_tenv cx) default_ty = SOME tv ==>
+    mem_bytes_at (w2n w) (val_footprint tv dv)
+      (jump_to cont_lbl (next_inst v)).vs_memory =
+    mem_bytes_at (w2n w) (val_footprint tv dv) t.vs_memory)
+Proof
+  strip_tac >> gvs[] >>
+  drule (REWRITE_RULE [GSYM AND_IMP_INTRO] extcall_success_source_boundary) >>
+  disch_then drule >> simp[] >>
+  disch_then (qspec_then `gas` mp_tac) >> simp[] >> strip_tac >>
+  drule (REWRITE_RULE [GSYM AND_IMP_INTRO] extcall_success_target_boundary) >>
+  simp[] >> disch_then drule >> disch_then drule >> disch_then drule >>
+  simp[] >> disch_then (qspecl_then [`v`, `SND (adopt_call_outcome rq oc consumed)`] mp_tac) >>
+  simp[]
 QED
