@@ -110,19 +110,20 @@ Theorem external_entry_joint:
       (initial_state am [env] with
          <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
       (INL (), es0) ==>
-    ?lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' func
+    ?pbody lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' func
      s0 G0 tn0.
+      pbody = subst_consts_stmts (module_consts_env tops []) fbody /\
       set_external_package_target rpolicy.rpol_target
         (package_external_fn tops T (K global_nonreentrant_slot)
-           (mut, F, lookup_raw_return_or_F (NONE : num option)
+           (subst_consts_fn (module_consts_env tops []) (mut, F, lookup_raw_return_or_F (NONE : num option)
                        tx.function_name External tops,
-            tx.function_name, args, [], ret, fbody)) =
-        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
+            tx.function_name, args, [], ret, fbody))) =
+        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, pbody,
          rt) /\
       runtime_selected_body_start tops rpolicy
-        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody, rt) st /\
+        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, pbody, rt) st /\
       compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
-      compile_guarded_body cenv F nkey ut' iv fbody rt sa = ((), st') /\
+      compile_guarded_body cenv F nkey ut' iv pbody rt sa = ((), st') /\
       fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
       unit.cu_context.ctx_entry = SOME "__entry" /\
@@ -175,13 +176,20 @@ Proof
   drule source_typing_ok_external_names_distinct >> strip_tac >>
   drule_all runtime_entry_function_no_phi >> strip_tac >>
   drule_all external_entry_reaches_registration_ptr >> strip_tac >>
+  `set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops T (K global_nonreentrant_slot)
+      (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+       tx.function_name,args,([] : expr list),ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt)` by
+    (rewrite_tac[Q.INST [`E` |-> `module_consts_env tops []`]
+       entryDispatchPropsTheory.external_package_subst_consts] >> fs[]) >>
   drule_all (INST_TYPE [beta |-> ``:256``] register_positional_args_ptr) >>
   disch_then (qspec_then `G1` strip_assume_tac) >>
   `gas_path_mem unit.cu_context func
      (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
                  vs_inst_idx := 0 |>) (0 + 0) (OK s0)` by
     (irule gas_path_mem_then >> qexists_tac `s1` >> simp[]) >>
-  fs[] >>
+  gvs[] >>
   drule_all entry_path_endpoint_facts >> strip_tac >>
   qexistsl_tac [`st`, `cenv`, `sa`, `st'`, `s0`, `G0`, `tn0`] >>
   simp[return_buf_frame_def] >>
