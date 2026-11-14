@@ -2,7 +2,7 @@
 Theory guardRequestAlignment
 Ancestors
   o1RequestContract o1PassContract codegenRequestPrefix callTrace
-  contextCodegenRel unitTransformDefs venomExecSemantics ptrDiscipline
+  contextCodegenRel unitTransformDefs venomExecSemantics ptrDiscipline passSimulationDefs
   extCallOracle list rich_list pair
   e2eDefs e2eProducers e2eEntry e2eComposition sourceUnitExecution
   vyperLoweringCorrect supportedProgram o1PipelineCorrect loweringShapeProps

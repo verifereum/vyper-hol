@@ -1,9 +1,8 @@
 (*
  * Closed-world storage guard on callee outcomes, short of the call theorem.
  *
- * Definitions of the closed world (vyper_closed_world), the S1
- * request-prefix companion carried as a premise (s1_request_prefix), and
- * closed_world_outcomes_guard: at the companion's gas marking, the guard
+ * Shared premises are defined in e2eOutcomesDefs. At the S1 request-prefix
+ * companion's gas marking, closed_world_outcomes_guard proves the guard
  * call_outcomes_storage_ok follows from source_storage_ok, given the
  * producer's conclusion for every re-entry.  e2eOutcomesProducer adds the
  * induction on call depth and the call theorem.
