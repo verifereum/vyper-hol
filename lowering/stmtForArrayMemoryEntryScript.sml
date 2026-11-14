@@ -63,7 +63,7 @@ Resume array_loop_initialize_mem[allocation_safe]:
     metis_tac[] >>
   conj_tac
   >- (conj_tac
-      >- (rpt strip_tac >> Cases_on `name' = id` >> gvs[] >> metis_tac[]) >>
+      >- (rpt strip_tac >> Cases_on `name' = id` >> fs[] >> metis_tac[]) >>
       metis_tac[]) >>
   strip_tac >> gvs[] >> metis_tac[]
 QED

@@ -146,7 +146,7 @@ Resume frag_relabel_step_edge_raw[ordinary]:
   `!b p. step_inst_base inst (u with <|vs_current_bb := b; vs_prev_bb := p|>) =
       OK (middle with <|vs_current_bb := b; vs_prev_bb := p|>)` by
     (Cases_on `is_pseudo inst.inst_opcode`
-     >- (Cases_on `inst.inst_opcode` >> fs[is_pseudo_def] >>
+     >- (Cases_on `inst.inst_opcode` >> full_simp_tac bool_ss [is_pseudo_def] >>
          asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
          rpt strip_tac >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
          simp[update_var_def]) >>

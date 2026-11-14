@@ -117,7 +117,15 @@ Resume body_assign_local_memory_ptr[typed]:
   `value_runtime_typed env (lowered_value_type cenv e) v` by
     metis_tac[CONV_RULE (DEPTH_CONV ETA_CONV) memory_rhs_read_lowered_typed] >>
   `expr_sim_inv cenv cx env (es with gas_obs := gs)` by simp[] >>
-  metis_tac[memory_rhs_runtime_layout, optionTheory.SOME_11]
+  qspecl_then [`cenv`, `cx`, `env`, `es with gas_obs := gs`, `ty`, `v`]
+    mp_tac memory_rhs_runtime_layout >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+  qspecl_then [`cenv`, `cx`, `env`, `es with gas_obs := gs`, `expr_type e`, `v`]
+    mp_tac memory_rhs_runtime_layout >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+  qspecl_then [`cenv`, `cx`, `env`, `es with gas_obs := gs`, `lowered_value_type cenv e`, `v`]
+    mp_tac memory_rhs_runtime_layout >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >> gvs[]
 QED
 
 Finalise body_assign_local_memory_ptr

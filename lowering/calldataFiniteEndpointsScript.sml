@@ -193,7 +193,10 @@ Proof
   `d < dimword (:256) /\ d + 32 <= initial.vs_alloca_next` by decide_tac >>
   `run_inst_seq_mem_ok (emitted_insts st last) initial` by
     (irule run_inst_seq_mem_ok_of_prefix_safe >> reverse conj_tac
-     >- (fs[EVERY_MEM] >> metis_tac[]) >>
+     >- (qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) _`
+           mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+         simp[EVERY_MEM] >> metis_tac[]) >>
      ho_match_mp_tac (GEN_ALL calldata_word_prefix_live) >>
      goal_assum (drule_at Any) >> asm_rewrite_tac[] >> metis_tac[]) >>
   suspend "endpoint"

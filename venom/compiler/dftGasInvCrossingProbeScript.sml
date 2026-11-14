@@ -138,7 +138,7 @@ Theorem inv_static_class_no_abort:
 Proof
   simp[] >> rpt strip_tac >>
   gvs[step_inst_non_invoke] >>
-  gvs[Once step_inst_base_def, AllCaseEqs(), exec_write2_def]
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs(), exec_write2_def]
 QED
 
 Theorem inv_oracle_static_class_total:
