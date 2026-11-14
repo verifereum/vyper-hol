@@ -221,6 +221,16 @@ Proof
   disj2_tac >> rpt strip_tac >> res_tac >> decide_tac
 QED
 
+(* Public projection of the range facts used by ordinary and abort codegen. *)
+Theorem lowered_mem_ok_disjoint:
+  lowered_mem_ok eom fmp ctx fn inst s /\ ~in_revert_forward fn s /\
+  (!r. MEM r cp.cp_regions ==> eom <= r.sr_spill_base /\ r.sr_spill_end <= fmp) ==>
+  source_memory_reads_disjoint cp inst s /\
+  context_source_memory_writes_disjoint cp inst s
+Proof
+  metis_tac[lowered_reads_disjoint, lowered_writes_disjoint]
+QED
+
 Theorem lowered_spill_step_safe[local]:
   step_write_footprint ctx vs /\
   (!fn inst s. raw_reachable vs ctx fn inst s ==>
