@@ -107,7 +107,7 @@ Proof
   irule gas_outcome_full_bind_all >>
   qpat_assum `gas_outcome_full _ _ _ _ source _ (\H res ee G1 tn1 t. _ /\ _) _`
     (irule_at Any) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt conj_tac >> asm_rewrite_tac[] >>
   rpt gen_tac >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
     mid.storage_trace` by fs[storage_trace_domain_def] >>

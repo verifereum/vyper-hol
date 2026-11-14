@@ -56,7 +56,7 @@ Proof
             (first_x_assum irule >> simp[] >> decide_tac) >>
           drule_all declared_region_dead_storage_dead >> simp[]) >>
       irule storage_dead_endpoint_outside >>
-      qexistsl_tac [`k`, `mid`, `n`, `st`, `subs`, `tv`] >>
+      qexistsl_tac [`cx`, `k`, `mid`, `n`, `st`, `subs`, `tv`] >>
       simp[]) >>
   `j < type_slot_size tv` by decide_tac >>
   `MEM j (MAP FST writes)` by

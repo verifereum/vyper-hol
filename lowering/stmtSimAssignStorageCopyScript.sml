@@ -637,24 +637,6 @@ Proof
   qexists_tac `v` >> simp[]
 QED
 
-Theorem storage_copy_backend_fold:
-  !is k ws s tr.
-    FOLDL (\t i. (if tr then tstore else sstore) (k+n2w i) (ws i) t) s is =
-    if tr then
-      s with vs_transient :=
-        (s.vs_call_ctx.cc_address =+
-          FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
-            (contract_transient s) is) s.vs_transient
-    else
-      s with vs_accounts :=
-        (s.vs_call_ctx.cc_address =+
-          (lookup_account s.vs_call_ctx.cc_address s.vs_accounts with storage :=
-            FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
-              (contract_storage s) is)) s.vs_accounts
-Proof
-  ACCEPT_TAC storageCopyBackendFoldTheory.storage_copy_backend_fold
-QED
-
 (* The copy prefix writes storage only: the call context stays sbase's. *)
 Theorem store_copy_prefix_call_ctx[local]:
   !i. (store_copy_prefix loc b k sbase i).vs_call_ctx = sbase.vs_call_ctx

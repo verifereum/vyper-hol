@@ -1,6 +1,6 @@
 (* Semantic projections of the existing counted storage prefix model. *)
 Theory assignBasePtrStorageSemantic
-Ancestors storageCopyBackendFold assignBasePtrStorageLoop storageCopyLive assignBasePtrStorageFrame
+Ancestors assignBasePtrStorageLoop storageCopyLive assignBasePtrStorageFrame
   exprLoweringProps
   exprSimDefs exprSimProps loweringPosts compileEnv loweringStateRelDefs stmtSimStoreCopy valueEncodingProps stateFrame
   accountsRelProps vyperStorageFrame vyperStorageBackend vyperStorage venomState vfmState
@@ -21,7 +21,10 @@ Theorem assign_base_store_backend_fold:
             FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
               (contract_storage s) is)) s.vs_accounts
 Proof
-  ACCEPT_TAC storageCopyBackendFoldTheory.storage_copy_backend_fold
+  Induct >> rpt gen_tac >> Cases_on `tr` >>
+  simp[FOLDL, sstore_def, tstore_def, contract_storage_def,
+       contract_transient_def, vfmStateTheory.lookup_account_def,
+       combinTheory.APPLY_UPDATE_THM, combinTheory.APPLY_UPDATE_ID]
 QED
 
 Theorem assign_base_store_fold_lookup:

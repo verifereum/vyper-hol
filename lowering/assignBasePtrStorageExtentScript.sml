@@ -1,7 +1,7 @@
 (* Storage aggregates have full-capacity footprints even with nested dynamic
    members: val_footprint only shortens top-level bytes and string values. *)
 Theory assignBasePtrStorageExtent
-Ancestors assignBasePtrStorageTypes exprSimHyps exprSimHypsDefs
+Ancestors fullAssignCopyFacts assignBasePtrStorageTypes exprSimHyps exprSimHypsDefs
   supportedTypes loweringPosts vyperValue vyperTyping exprLowering compileEnv bodySim supportedExprs
   stmtSimReturn exprSimTypedAlloc assignBasePtrEndpointAudit words arithmetic
 
