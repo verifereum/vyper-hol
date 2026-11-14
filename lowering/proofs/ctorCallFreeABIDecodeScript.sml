@@ -25,15 +25,6 @@ Proof
       every_state_insts_return])])
 QED
 
-Theorem call_free_abi_clamp:
-  !cl val_op st.
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_abi_clamp_basetype val_op cl st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_abi_clamp) >> simp[]
-QED
-
 Theorem opcode_every_abi_dec_addr[local]:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -91,21 +82,6 @@ Proof
       every_state_insts_return])])
 QED
 
-Theorem call_free_abi_element_ptr_opcode:
-  (!src dyn off opc base_op hi_op st.
-    opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2 /\
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_getelemptr_abi src dyn off opc base_op hi_op st)))) /\
-  (!opc base_op elem_src src_data hi_op asz st.
-    opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2 /\
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_abi_decode_dyn_elem_ptr opc base_op elem_src src_data hi_op asz st))))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_abi_element_ptr_opcode) >> simp[]
-QED
-
 Theorem opcode_every_abi_copy[local]:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -156,26 +132,6 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem call_free_abi_decode_opcode:
-  (!dst src opc base_op hi_op info.
-    opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2 ==> !st.
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_abi_decode_to_buf dst src opc base_op hi_op info st)))) /\
-  (!dst src opc base_op hi_op elems ao vo.
-    opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2 ==> !st.
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_abi_decode_complex_elems dst src opc base_op hi_op elems ao vo st)))) /\
-  (!dst src opc base_op hi_op info asz msz ip cnt.
-    opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2 ==> !st.
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_abi_decode_dyn_loop dst src opc base_op hi_op info asz msz ip cnt st))))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_abi_decode_opcode) >> simp[]
-QED
-
 Theorem opcode_every_abi_decode_memory:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -200,24 +156,4 @@ Proof
   strip_tac >>
   rpt conj_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
   simp[(UNDISCH opcode_every_abi_decode_opcode)]
-QED
-
-Theorem call_free_abi_decode_memory:
-  (!dst src opc base_op hi_op info.
-    opc = MLOAD ==> !st.
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_abi_decode_to_buf dst src opc base_op hi_op info st)))) /\
-  (!dst src opc base_op hi_op elems ao vo.
-    opc = MLOAD ==> !st.
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_abi_decode_complex_elems dst src opc base_op hi_op elems ao vo st)))) /\
-  (!dst src opc base_op hi_op info asz msz ip cnt.
-    opc = MLOAD ==> !st.
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_abi_decode_dyn_loop dst src opc base_op hi_op info asz msz ip cnt st))))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_abi_decode_memory) >> simp[]
 QED

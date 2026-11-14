@@ -55,22 +55,6 @@ Proof
   simp[every_state_insts_return]
 QED
 
-Theorem call_free_multi_exprs:
-  (!ce vv st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (unwrap_value ce vv st)))) ==>
-  !es cfn cenv.
-  (!e ty st. MEM e es ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (cfn cenv ty e st)))) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_multi_exprs cfn cenv es st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_multi_exprs) >> simp[]
-QED
-
 Theorem opcode_every_make_tuple:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -100,25 +84,6 @@ Proof
   rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, every_state_insts_return])])
-QED
-
-Theorem call_free_make_tuple:
-  (!ce src dst dty sty st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_store_memory ce src dst dty sty st)))) ==>
-  (!ce vv st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (unwrap_value ce vv st)))) ==>
-  !es cfn cenv.
-  (!e ty st. MEM e es ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (cfn cenv ty e st)))) ==>
-  !tys buf off st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_make_tuple cfn cenv es tys buf off st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_make_tuple) >> simp[]
 QED
 
 Theorem opcode_every_make_array_elems:
@@ -151,26 +116,6 @@ Proof
     gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, every_state_insts_return])])
 QED
 
-Theorem call_free_make_array_elems:
-  (!ce src dst dty sty st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_store_memory ce src dst dty sty st)))) ==>
-  (!ce vv st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (unwrap_value ce vv st)))) ==>
-  !es cfn cenv.
-  (!e ty st. MEM e es ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (cfn cenv ty e st)))) ==>
-  !ety sz len_word buf idx st.
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_make_array_elems cfn cenv es ety sz len_word buf idx st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_make_array_elems) >> simp[]
-QED
-
 Theorem opcode_every_make_array:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -195,24 +140,6 @@ Proof
   rpt (FIRST [ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     CHANGED_TAC (simp[(UNDISCH opcode_every_make_array_elems), opcode_every_emit_void,
       every_state_insts_return])])
-QED
-
-Theorem call_free_make_array:
-  (!ce src dst dty sty st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_store_memory ce src dst dty sty st)))) /\
-  (!ce vv st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (unwrap_value ce vv st)))) ==>
-  (!e ty st. MEM e es ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (cfn cenv ty e st)))) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_make_array cfn cenv es ety sz len_word buf st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_make_array) >> simp[]
 QED
 
 Theorem opcode_every_struct_lit:
@@ -245,26 +172,6 @@ Proof
     gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, every_state_insts_return])]) >> metis_tac[]
 QED
 
-Theorem call_free_struct_lit:
-  (!ce src dst dty sty st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_store_memory ce src dst dty sty st)))) ==>
-  (!ce vv st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (unwrap_value ce vv st)))) ==>
-  !fields cfn cenv.
-  (!name e ty st. MEM (name,e) fields ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (cfn cenv ty e st)))) ==>
-  !sty buf off st.
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_struct_lit cfn cenv sty fields buf off st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_struct_lit) >> simp[]
-QED
-
 Theorem opcode_every_concat:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -293,23 +200,6 @@ Proof
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_lower_value >> conj_tac,
     gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void, every_state_insts_return])])
-QED
-
-Theorem call_free_concat:
-  (!ce vv st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (unwrap_value ce vv st)))) ==>
-  !es cfn cenv.
-  (!e ty st. MEM e es ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (cfn cenv ty e st)))) ==>
-  !data_op infos off_op st.
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_concat cfn cenv es data_op infos off_op st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_concat) >> simp[]
 QED
 
 Theorem opcode_every_abi_encode_args:
@@ -341,25 +231,6 @@ Proof
     gen_tac, CHANGED_TAC (simp[every_state_insts_return])])
 QED
 
-Theorem call_free_abi_encode_args:
-  (!ce ty vv st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_materialize_vv ce ty vv st)))) ==>
-  (!ce vv st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (unwrap_value ce vv st)))) ==>
-  !es cfn cenv.
-  (!e ty st. MEM e es ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (cfn cenv ty e st)))) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_abi_encode_args cfn cenv es st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_abi_encode_args) >> simp[]
-QED
-
 Theorem opcode_every_attribute:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -376,17 +247,6 @@ Proof
   strip_tac >> simp[compile_attribute_def] >>
   rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
     gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, every_state_insts_return])])
-QED
-
-Theorem call_free_attribute:
-  (!st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (cfn cenv ty base_e st)))) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_attribute cfn cenv ret_ty ty base_e field_name st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_attribute) >> simp[]
 QED
 
 Theorem opcode_every_acc:
@@ -410,17 +270,6 @@ Proof
    P GT /\
    P INVALID` by simp[] >>
   metis_tac[opcode_every_emit_op, opcode_every_emit_inst, SND]
-QED
-
-Theorem call_free_acc:
-  (!st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (lower_value cfn cenv (BaseT AddressT) addr_e st)))) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_acc cfn cenv addr_e accessor st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_acc) >> simp[]
 QED
 
 Theorem every_state_insts_subscript:
@@ -512,17 +361,6 @@ Proof
     gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void])])
 QED
 
-Theorem call_free_mapping_subscript:
-  (!sz st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_alloc_buffer sz st)))) ==>
-  !base key st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_mapping_subscript base key st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_mapping_subscript) >> simp[]
-QED
-
 Theorem opcode_every_keccak256_key:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -538,14 +376,6 @@ Proof
     gen_tac, CHANGED_TAC (simp[opcode_every_emit_op])])
 QED
 
-Theorem call_free_keccak256_key:
-  !v st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_keccak256_key v F st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_keccak256_key) >> simp[]
-QED
-
 Theorem opcode_every_tuple_subscript:
   (!opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\
          opc <> CREATE /\ opc <> CREATE2 ==> P opc) ==>
@@ -557,14 +387,6 @@ Theorem opcode_every_tuple_subscript:
 Proof
   strip_tac >>
   simp[compile_tuple_subscript_def, opcode_every_emit_op]
-QED
-
-Theorem call_free_tuple_subscript:
-  !base off st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-    (state_insts (SND (compile_tuple_subscript base off st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_tuple_subscript) >> simp[]
 QED
 
 Theorem opcode_every_array_subscript:
@@ -586,16 +408,4 @@ Proof
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     gen_tac, CHANGED_TAC (simp[opcode_every_emit_op, opcode_every_emit_void,
       every_state_insts_return])])
-QED
-
-Theorem call_free_array_subscript:
-  !base idx dyn count ws sz signed loader.
-  (!v st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (loader v st)))) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
-      (state_insts (SND (compile_array_subscript base idx dyn count ws sz signed loader st)))
-Proof
-  mp_tac (Q.INST [`P` |-> `\opc. opc <> RETURNDATACOPY /\ opc <> INVOKE /\ opc <> CREATE /\ opc <> CREATE2`] opcode_every_array_subscript) >> simp[]
 QED
