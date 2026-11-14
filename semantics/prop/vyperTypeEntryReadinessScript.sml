@@ -80,10 +80,15 @@ Proof
   simp[evaluate_all_constants_def] >>
   qid_spec_tac `am_c` >> qid_spec_tac `am` >>
   qspec_tac (`constants_order mods`, `mods`) >> Induct
-  >- rw[evaluate_module_constants_def] >>
+  >- rw[evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
   rpt gen_tac >> PairCases_on `h` >> rw[evaluate_module_constants_def] >>
-  gvs[AllCaseEqs()] >>
-  first_x_assum drule >> simp[merge_constants_def]
+  gvs[evaluate_module_constants_trace_def] >>
+  pairarg_tac >> gvs[] >> Cases_on `result` >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  qpat_x_assum `!am am_c. _` mp_tac >>
+  simp[evaluate_module_constants_def] >>
+  disch_then (qspec_then `merge_constants addr h0 x am` mp_tac) >>
+  simp[merge_constants_def]
 QED
 
 Theorem checked_deployment_constants_ready_setup:

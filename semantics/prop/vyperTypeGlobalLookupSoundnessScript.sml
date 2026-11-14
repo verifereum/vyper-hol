@@ -135,7 +135,7 @@ Theorem lookup_global_TopLevelName_find_NONE_no_type_error:
 Proof
   rpt strip_tac >>
   qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
-  simp[lookup_global_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def] >>
   Cases_on `get_immutables cx src st` >> Cases_on `q`
   >- (simp[bind_def, return_def, raise_def] >>
@@ -177,7 +177,7 @@ Proof
   `env.type_defs = get_tenv cx` by
     gvs[env_consistent_def, env_context_consistent_def] >>
   qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
-  simp[lookup_global_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def] >>
   Cases_on `get_immutables cx src st` >> Cases_on `q`
   >- (simp[bind_def, return_def, raise_def] >>
@@ -260,7 +260,7 @@ Theorem lookup_global_StorageVarDecl_no_type_error:
 Proof
   rpt strip_tac >>
   qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
-  simp[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def, return_def, raise_def,
        LET_THM, option_CASE_rator, var_decl_info_CASE_rator, prod_CASE_rator,
        type_value_CASE_rator, AllCaseEqs()] >>
   Cases_on `tv` >> simp[return_def, no_type_error_result_def] >>
@@ -287,7 +287,7 @@ Proof
   `env.type_defs = get_tenv cx` by
     gvs[env_consistent_def, env_context_consistent_def] >>
   qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
-  simp[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def, return_def, raise_def,
        LET_THM, option_CASE_rator, var_decl_info_CASE_rator, prod_CASE_rator,
        type_value_CASE_rator, AllCaseEqs()] >>
   Cases_on `lookup_var_slot_from_layout cx is_transient src id_str` >> gvs[] >>
@@ -448,7 +448,7 @@ Proof
       Cases_on `res` >> simp[] >>
       rename1 `lookup_global cx src id st = (INL tvl,st')` >>
       qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
-      simp[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def,
+      simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def, return_def, raise_def,
            LET_THM, option_CASE_rator, var_decl_info_CASE_rator, prod_CASE_rator,
            type_value_CASE_rator, AllCaseEqs()] >>
       rpt strip_tac >> gvs[return_def, eval_result_typed_def] >>

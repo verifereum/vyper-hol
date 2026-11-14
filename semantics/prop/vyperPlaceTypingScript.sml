@@ -142,14 +142,17 @@ Theorem extend_place_typed:
     runtime_place_typed cx st' q etv
 Proof
   Cases_on `p`
-  >- (simp[extend_place_def, runtime_place_typed_storage] >>
+  >- (simp[extend_place_def, ignore_bind_def, record_storage_event_def, runtime_place_typed_storage] >>
       rpt strip_tac >>
       gvs[bind_def, return_def, AllCaseEqs()] >>
       metis_tac[extend_storage_place_type]) >>
   rpt strip_tac >>
-  `st' = st` by metis_tac[vyperPlaceFramesTheory.extend_place_state, SND] >>
   gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
       lift_sum_def, raise_def, AllCaseEqs()] >>
+  imp_res_tac place_type_value_state >>
+  imp_res_tac read_place_state >>
+  Cases_on `evaluate_subscripts tv' v'' [sb]` >>
+  gvs[return_def, raise_def] >>
   irule extend_memory_place_type >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
 QED

@@ -1143,6 +1143,13 @@ Proof
   simp[preserves_tv_def]
 QED
 
+Theorem preserves_tv_storage_trace[simp]:
+  preserves_tv cx s (t with storage_trace := observations) <=>
+  preserves_tv cx s t
+Proof
+  simp[preserves_tv_def]
+QED
+
 Theorem preserves_tv_gas_obs[simp]:
   ∀cx st g. preserves_tv cx st (st with gas_obs := g)
 Proof
@@ -1449,6 +1456,8 @@ val PLACE_TV_TAC =
   imp_res_tac read_place_state >> imp_res_tac place_type_value_state >>
   imp_res_tac read_result_state >> imp_res_tac get_place_state >>
   imp_res_tac extend_place_state >> imp_res_tac lookup_global_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (fn th => once_rewrite_tac [th])) >>
   imp_res_tac read_result_state >>
   imp_res_tac lift_sum_state >> imp_res_tac read_result_state >>
   imp_res_tac write_place_preserves_tv >> imp_res_tac type_check_state >>
@@ -1845,6 +1854,8 @@ Proof
       (s with <|accounts := accounts; tStorage := transient;
                 logs := s.logs ++ logs; pending_deletions := pending|>)` by simp[preserves_tv_def] >>
   `!s. preserves_tv cx s s` by simp[] >>
+  `!s t observations. preserves_tv cx s t ==>
+     preserves_tv cx s (t with storage_trace := observations)` by simp[] >>
   drule_all (ExtCall_outcome_transport |> Q.INST
     [`R` |-> `preserves_tv cx`]) >> simp[]
 QED

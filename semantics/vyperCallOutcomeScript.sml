@@ -33,7 +33,8 @@ Definition take_request_outcome_def:
     | SOME os =>
       let (outcome, rest) = take_outcome rq os in
       let st' = st with <| outcomes := SOME rest;
-                          requests := record_request rq st.requests |> in
+                          requests := record_request rq st.requests;
+                          storage_trace := st.storage_trace ++ [StorageOutcome rq outcome] |> in
       if outcome.co_success /\ ~rq.cr_static /\
          ~accounts_runtime_well_typed outcome.co_accounts
       then (INR (Error (RuntimeError "call outcome accounts")), st')
@@ -67,10 +68,14 @@ Definition adopt_call_outcome_def:
   adopt_call_outcome rq outcome st =
     let (accounts, tStorage, logs) =
       adopt_outcome rq outcome (st.accounts, st.tStorage, st.logs) in
-    return () (st with <| accounts := accounts; tStorage := tStorage;
+    let st' = st with <| accounts := accounts; tStorage := tStorage;
                          logs := logs;
                          pending_deletions :=
-                           adopt_outcome_deletions rq outcome st.pending_deletions |>)
+                           adopt_outcome_deletions rq outcome st.pending_deletions |> in
+    if ~rq.cr_static /\
+       (outcome.co_success \/
+        (rq.cr_kind <> MessageCall /\ rq.cr_kind <> DelegateMessageCall))
+    then record_storage_backend st' else return () st'
 End
 val () = adopt_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
 
@@ -90,7 +95,8 @@ Theorem take_call_outcome_plan:
                  cr_accounts := st.accounts; cr_tStorage := st.tStorage|> in
       let (outcome,rest) = take_outcome rq os in
       let st' = st with <|outcomes := SOME rest;
-                          requests := record_request rq st.requests|> in
+                          requests := record_request rq st.requests;
+                          storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|> in
       if outcome.co_success /\ ~rq.cr_static /\
          ~accounts_runtime_well_typed outcome.co_accounts then
         (INR (Error (RuntimeError "call outcome accounts")),st')
@@ -101,7 +107,8 @@ QED
 
 Theorem take_request_outcome_frame:
   take_request_outcome rq st = (res, st') ==>
-  st' = st with <|outcomes := st'.outcomes; requests := st'.requests|>
+  st' = st with <|outcomes := st'.outcomes; requests := st'.requests;
+                 storage_trace := st'.storage_trace|>
 Proof
   Cases_on `st.outcomes` >>
   simp[take_request_outcome_def] >>
@@ -110,7 +117,8 @@ QED
 
 Theorem take_call_outcome_frame:
   take_call_outcome target calldata value_opt st = (res, st') ==>
-  st' = st with <|outcomes := st'.outcomes; requests := st'.requests|>
+  st' = st with <|outcomes := st'.outcomes; requests := st'.requests;
+                 storage_trace := st'.storage_trace|>
 Proof
   PURE_REWRITE_TAC [take_call_outcome_def] >>
   MATCH_ACCEPT_TAC take_request_outcome_frame
@@ -118,7 +126,8 @@ QED
 
 Theorem take_delegate_outcome_frame:
   take_delegate_outcome target calldata value_opt st = (res, st') ==>
-  st' = st with <|outcomes := st'.outcomes; requests := st'.requests|>
+  st' = st with <|outcomes := st'.outcomes; requests := st'.requests;
+                 storage_trace := st'.storage_trace|>
 Proof
   PURE_REWRITE_TAC [take_delegate_outcome_def] >>
   MATCH_ACCEPT_TAC take_request_outcome_frame
@@ -131,12 +140,17 @@ Theorem adopt_call_outcome_equation:
          st with <|accounts := outcome.co_accounts;
                    tStorage := outcome.co_tStorage;
                    logs := st.logs ++ outcome.co_logs;
-                   pending_deletions := outcome.co_toDelete ++ st.pending_deletions|>
+                   pending_deletions := outcome.co_toDelete ++ st.pending_deletions;
+                   storage_trace := st.storage_trace ++
+                     [StorageBackend outcome.co_accounts outcome.co_tStorage]|>
        else if rq.cr_kind = MessageCall \/ rq.cr_kind = DelegateMessageCall then st
        else st with <|accounts := outcome.co_accounts;
-                     tStorage := outcome.co_tStorage|>)
+                     tStorage := outcome.co_tStorage;
+                     storage_trace := st.storage_trace ++
+                       [StorageBackend outcome.co_accounts outcome.co_tStorage]|>)
 Proof
-  rw[adopt_call_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def, return_def] >>
+  rw[adopt_call_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def,
+     record_storage_backend_def, record_storage_event_def, return_def] >>
   gvs[evaluation_state_component_equality]
 QED
 
@@ -144,7 +158,8 @@ Theorem adopt_call_outcome_frame:
   adopt_call_outcome rq outcome st = (res,st') ==>
   res = INL () /\
   st' = st with <|accounts := st'.accounts; tStorage := st'.tStorage;
-                 logs := st'.logs; pending_deletions := st'.pending_deletions|>
+                 logs := st'.logs; pending_deletions := st'.pending_deletions;
+                 storage_trace := st'.storage_trace|>
 Proof
   rw[adopt_call_outcome_equation, adopt_outcome_deletions_def] >>
   gvs[evaluation_state_component_equality]
@@ -155,8 +170,9 @@ Theorem adopt_call_outcome_computed_deletions:
   (SND (adopt_call_outcome rq (FST (take_outcome rq os)) st)).pending_deletions =
     st.pending_deletions
 Proof
-  rw[adopt_call_outcome_def, return_def, adopt_outcome_deletions_computed] >>
-  pairarg_tac >> simp[]
+  rw[adopt_call_outcome_def, record_storage_backend_def, record_storage_event_def,
+     return_def, adopt_outcome_deletions_computed] >>
+  pairarg_tac >> rw[]
 QED
 
 Theorem adopt_call_outcome_observed_deletions:
@@ -215,7 +231,8 @@ Definition take_create_outcome_def:
       let rq = create_outcome_request kind value initcode st in
       let (outcome, rest) = take_outcome rq os in
       let st' = st with <|outcomes := SOME rest;
-                         requests := record_request rq st.requests|> in
+                         requests := record_request rq st.requests;
+                          storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|> in
       if ~accounts_runtime_well_typed outcome.co_accounts
       then (INR (Error (RuntimeError "create outcome accounts")), st')
       else (INL (rq, outcome), st')
@@ -245,7 +262,8 @@ Theorem take_create_outcome_SOME:
     (if ~accounts_runtime_well_typed outcome.co_accounts
      then INR (Error (RuntimeError "create outcome accounts"))
      else INL (rq,outcome),
-     st with <|outcomes := SOME rest; requests := st.requests ++ [rq]|>)
+     st with <|outcomes := SOME rest; requests := st.requests ++ [rq];
+               storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|>)
 Proof
   rpt strip_tac >> gvs[take_create_outcome_def, record_request_def] >>
   rw[] >> gvs[]
@@ -258,7 +276,8 @@ Theorem take_create_outcome_ordinary:
     (if ~accounts_runtime_well_typed outcome.co_accounts
      then INR (Error (RuntimeError "create outcome accounts"))
      else INL (rq,outcome),
-     st with <|outcomes := SOME rest; requests := st.requests ++ [rq]|>)
+     st with <|outcomes := SOME rest; requests := st.requests ++ [rq];
+               storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|>)
 Proof
   rpt strip_tac >> gvs[take_create_outcome_def, take_outcome_def, record_request_def] >>
   rw[] >> gvs[]
@@ -271,7 +290,8 @@ Theorem take_create_outcome_exhausted:
     (if ~accounts_runtime_well_typed st.accounts
      then INR (Error (RuntimeError "create outcome accounts"))
      else INL (rq,failed_outcome rq),
-     st with <|outcomes := SOME []; requests := st.requests ++ [rq]|>)
+     st with <|outcomes := SOME []; requests := st.requests ++ [rq];
+               storage_trace := st.storage_trace ++ [StorageOutcome rq (failed_outcome rq)]|>)
 Proof
   rpt strip_tac >>
   `take_outcome rq [] = (failed_outcome rq,[])` by
@@ -287,14 +307,16 @@ Theorem take_create_outcome_guard_rejected:
   ~accounts_runtime_well_typed outcome.co_accounts ==>
   take_create_outcome kind value initcode st =
     (INR (Error (RuntimeError "create outcome accounts")),
-     st with <|outcomes := SOME rest; requests := st.requests ++ [rq]|>)
+     st with <|outcomes := SOME rest; requests := st.requests ++ [rq];
+               storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|>)
 Proof
   rpt strip_tac >> drule_all take_create_outcome_SOME >> simp[]
 QED
 
 Theorem take_create_outcome_frame:
   take_create_outcome kind value initcode st = (res,st') ==>
-  st' = st with <|outcomes := st'.outcomes; requests := st'.requests|>
+  st' = st with <|outcomes := st'.outcomes; requests := st'.requests;
+                 storage_trace := st'.storage_trace|>
 Proof
   Cases_on `st.outcomes` >> simp[take_create_outcome_def] >>
   pairarg_tac >> rw[] >> gvs[]
@@ -327,7 +349,8 @@ Theorem take_create_outcome_success:
     st.outcomes = SOME os /\
     rq = create_outcome_request kind value initcode st /\
     take_outcome rq os = (outcome,rest) /\
-    st' = st with <|outcomes := SOME rest; requests := st.requests ++ [rq]|> /\
+    st' = st with <|outcomes := SOME rest; requests := st.requests ++ [rq];
+               storage_trace := st.storage_trace ++ [StorageOutcome rq outcome]|> /\
     accounts_runtime_well_typed outcome.co_accounts
 Proof
   Cases_on `st.outcomes` >> simp[take_create_outcome_def, record_request_def] >>
@@ -354,7 +377,9 @@ Theorem adopt_create_outcome_equation:
                       tStorage := outcome.co_tStorage;
                       logs := if outcome.co_success then st.logs ++ outcome.co_logs else st.logs;
                       pending_deletions := if outcome.co_success then outcome.co_toDelete ++ st.pending_deletions
-                                           else st.pending_deletions|>)
+                                           else st.pending_deletions;
+                      storage_trace := st.storage_trace ++
+                        [StorageBackend outcome.co_accounts outcome.co_tStorage]|>)
 Proof
   rw[adopt_call_outcome_equation, create_outcome_request_def] >>
   gvs[evaluation_state_component_equality]

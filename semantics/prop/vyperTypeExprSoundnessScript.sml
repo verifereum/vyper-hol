@@ -82,6 +82,13 @@ Definition runtime_consistent_def:
     context_well_typed cx /\ accounts_well_typed st.accounts
 End
 
+Theorem runtime_consistent_storage_trace[simp]:
+  runtime_consistent env cx (st with storage_trace := observations) <=>
+  runtime_consistent env cx st
+Proof
+  simp[runtime_consistent_def]
+QED
+
 Definition target_path_step_type_def:
   (target_path_step_type env (HashMapT kt vt) sb next_vt <=>
     case sb of

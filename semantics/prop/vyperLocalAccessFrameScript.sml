@@ -32,6 +32,13 @@ Libs
    aug_place_name_root_memory is the MemoryPlace-root fact.  Both live in
    lowering/, which this theory can't import. *)
 
+(* select_result and extend_place record a storage observation, so their
+   end state is the start state with a longer storage_trace; turn each such
+   equation into one on scopes. *)
+val trace_scopes_tac =
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+         (assume_tac o AP_TERM ``evaluation_state_scopes``)) >> gvs[];
+
 Theorem extend_place_memory_origin:
   extend_place cx r sb s = (INL (PlaceR (MemoryPlace id path)),t) ==>
   ?path0. r = PlaceR (MemoryPlace id path0)
@@ -46,7 +53,8 @@ Proof
   simp[extend_place_def, bind_def, lift_option_type_def, return_def,
        raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
-  gvs[value_type_CASE_rator, return_def, raise_def, bind_def, AllCaseEqs()]
+  gvs[value_type_CASE_rator, return_def, raise_def, bind_def, ignore_bind_def,
+      record_storage_event_def, AllCaseEqs()]
 QED
 
 Theorem lookup_global_not_memory:
@@ -56,7 +64,8 @@ Proof
   rpt strip_tac >>
   gvs[lookup_global_def, vyperMiscTheory.option_CASE_rator,
       vyperMiscTheory.prod_CASE_rator, var_decl_info_CASE_rator,
-      bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()]
+      bind_def, ignore_bind_def, record_storage_event_def, lift_option_type_def,
+      return_def, raise_def, AllCaseEqs()]
 QED
 
 Theorem eval_base_place_memory_access:
@@ -225,11 +234,11 @@ Resume evaluate_unwritten_local[subscript]:
   Cases_on `subscript_reads_base cx e e'` >>
   gvs[bind_def, return_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> metis_tac[]
+  trace_scopes_tac >> metis_tac[]
 QED
 Resume evaluate_unwritten_local[attribute]:
   rpt strip_tac >> gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >> trace_scopes_tac >> metis_tac[]
 QED
 Resume evaluate_unwritten_local[builtin]:
   rpt gen_tac >> strip_tac >>
@@ -420,12 +429,12 @@ Resume evaluate_unwritten_local[baseglobal]:
 QED
 Resume evaluate_unwritten_local[baseattribute]:
   rpt strip_tac >> gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
-  imp_res_tac extend_place_state >> gvs[] >> metis_tac[]
+  imp_res_tac extend_place_state >> trace_scopes_tac >> metis_tac[]
 QED
 Resume evaluate_unwritten_local[basesubscript]:
   rpt strip_tac >> gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
-  gvs[] >> metis_tac[]
+  trace_scopes_tac >> metis_tac[]
 QED
 Resume evaluate_unwritten_local[target]:
   rpt strip_tac >> gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
