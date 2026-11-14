@@ -1178,6 +1178,8 @@ Proof
  drule_all deploy_ctor_decode_constructor_arg_old_prefix_complete_gas_path >>
  disch_then (qx_choose_then `actual` (map_every assume_tac o CONJUNCTS)) >>
  `type_memory_bytes ce' ty = type_memory_bytes ce ty` by simp[] >>
+ `value_has_type entry.type entry.value` by
+   first_assum (fn th => ACCEPT_TAC (el 2 (CONJUNCTS (REWRITE_RULE [abiDecoderTypedContractTheory.abi_decoder_metadata_def] th)))) >>
  ntac 10 (pop_last_assum kall_tac) >>
  qpat_x_assum `abi_decoder_coherent ce _ _ _ _` kall_tac >>
  qpat_x_assum `abi_decoder_metadata ce _ _ _ _ _ _` kall_tac >>

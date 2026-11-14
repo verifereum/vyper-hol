@@ -146,9 +146,9 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
   `eval_operand (Var slot_var) s = SOME (n2w slot) /\
    eval_operand src s = SOME (n2w sb)` by
-    (fs[abi_decoder_ranges_def, eval_operand_def,Excl "enc_def"] >>
+    (fs[abi_decoder_ranges_def,Excl "enc_def"] >>
      conj_tac >> irule ctor_actual_array_observation_operand >>
-     metis_tac[]) >>
+     metis_tac[eval_operand_def]) >>
   `mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     (abi_decode_source DLOAD s) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
     fs[ctor_actual_array_observation_def,abi_decode_source_def,Excl "enc_def"] >>
