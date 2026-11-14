@@ -254,3 +254,98 @@ Proof
   simp[Abbr `tw`, Abbr `i2`, step_taint_def, imm_taint_def, mk_inst_def,
        Abbr `w`, Abbr `v`, update_var_def]
 QED
+
+Theorem ec_point_word_transfer_origin_ptr_path:
+  (do src <- emit_op ADD [Var pp; Lit (n2w ps)];
+      value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [Var bp; Lit (n2w pd)];
+      emit_void MSTORE [dst; value] od) sa = ((),sb) /\
+  lookup_var pp s = SOME pw /\ lookup_var bp s = SOME bw /\
+  ptr_covers G tn pp s ns /\ ptr_covers G tn bp s nd /\
+  not_fresh_at sa pp /\ not_fresh_at sa bp /\
+  ps+32 <= ns /\ pd+32 <= nd /\
+  w2n pw+ns < dimword (:256) /\ w2n bw+nd < dimword (:256) /\
+  w2n pw+ns <= s.vs_alloca_next /\ w2n bw+nd <= s.vs_alloca_next /\
+  (!i. w2n pw+ps <= i /\ i < w2n pw+ps+32 ==> i NOTIN tn.t_mem) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?t G' tn'.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')) /\
+    t.vs_memory = (mstore (w2n bw+pd)
+      (mem_word_at (w2n pw+ps) s.vs_memory) s).vs_memory /\
+    tn'.t_mem = tn.t_mem DIFF {i | w2n bw+pd <= i /\ i < w2n bw+pd+32} /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sa sb) /\
+    t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+             vs_inst_idx := s.vs_inst_idx|> = s
+Proof
+  strip_tac >>
+  Cases_on `emit_op ADD [Var pp; Lit (n2w ps)] sa` >>
+  rename1 `emit_op ADD [Var pp; Lit (n2w ps)] sa = (src,sc)` >>
+  Cases_on `emit_op MLOAD [src] sc` >>
+  rename1 `emit_op MLOAD [src] sc = (value,sm)` >>
+  ` (do src <- emit_op ADD [Var pp; Lit (n2w ps)]; emit_op MLOAD [src] od) sa = (value,sm)` by
+    simp[comp_bind_def] >>
+  ` (do dst <- emit_op ADD [Var bp; Lit (n2w pd)]; emit_void MSTORE [dst;value] od) sm = ((),sb)` by
+    (qpat_x_assum `_ sa = ((),sb)` mp_tac >> simp[comp_bind_def]) >>
+  drule ec_scalar_store_shape >> strip_tac >>
+  drule_all emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  `sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm /\
+   sa.cs_next_var <= sm.cs_next_var` by
+    (qpat_x_assum `emit_op ADD _ sa = _` mp_tac >>
+     qpat_x_assum `emit_op MLOAD _ sc = _` mp_tac >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+          fresh_id_def, fresh_var_def, emit_def] >> rpt strip_tac >>
+     gvs[emitted_insts_def, rich_listTheory.DROP_APPEND1]) >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule arithmeticPropsTheory.emitted_insts_prefix_split >> simp[]) >>
+  `isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[listTheory.APPEND_ASSOC]) >>
+  drule_all ec_point_word_load_origin_ptr_path >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  `u.vs_memory = s.vs_memory /\ u.vs_alloca_next = s.vs_alloca_next /\
+   u.vs_allocas = s.vs_allocas /\ u.vs_halted = s.vs_halted /\
+   u.vs_current_bb = s.vs_current_bb` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `lookup_var bp u = SOME bw /\ ptr_covers Gu tu bp u nd` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  `not_fresh_at sm bp` by
+    (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `allocas_from lo u` by (fs[allocas_from_def] >> metis_tac[]) >>
+  `isPREFIX (emitted_insts sm sb) (DROP u.vs_inst_idx bb.bb_instructions)` by
+    (simp[GSYM rich_listTheory.DROP_DROP_T] >>
+     qpat_x_assum `isPREFIX (emitted_insts sa sb) _` mp_tac >>
+     simp[rich_listTheory.IS_PREFIX_APPEND, listTheory.APPEND_ASSOC] >>
+     strip_tac >>
+     qpat_x_assum `DROP s.vs_inst_idx _ = _` SUBST1_TAC >>
+     pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+     simp[rich_listTheory.DROP_APPEND2]) >>
+  `w2n bw + nd <= u.vs_alloca_next /\ lo <= u.vs_alloca_next /\
+   ~u.vs_halted /\ lookup_block u.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  drule_all ec_scalar_store_origin_ptr_path >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl [`t`,`G'`,`tn'`] >>
+  conj_tac >-
+    (gen_tac >>
+     `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) ([] ++ []) (OK t,G',tn')` by
+       metis_tac[fragGasOriginPtrTheory.gas_origin_ptr_path_append] >> fs[]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+    (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  rpt conj_tac
+  >- gvs[mstore_def, write_memory_with_expansion_def]
+  >- simp[]
+  >- simp[]
+  >- simp[]
+  >- simp[]
+  >- metis_tac[]
+  >- simp[listTheory.LENGTH_APPEND] >>
+  qpat_x_assum `t with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|> = u` mp_tac >>
+  qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s` mp_tac >>
+  simp[venom_state_component_equality]
+QED
