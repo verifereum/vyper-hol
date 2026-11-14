@@ -284,3 +284,102 @@ Proof
     finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt strip_tac >> gvs[AllCaseEqs(), rb_location_ok_def] >> metis_tac[]
 QED
+
+Theorem rb_compile_decode_args:
+  !args ce offset opc hi base_adj. rb_env_ok ce /\ rb_operand_ok hi ==>
+    rb_step (K T) (compile_decode_args ce args offset opc hi base_adj)
+Proof
+  Induct >> simp[compile_decode_args_def, rb_step_return] >>
+  PairCases >> rpt gen_tac >> strip_tac >>
+  rewrite_tac[compile_decode_args_def] >> BETA_TAC >>
+  Cases_on `h1`
+  >- (simp[] >>
+      ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      irule rb_ignore >> conj_tac >- simp[rb_compile_abi_clamp_basetype] >>
+      irule rb_ignore >> reverse conj_tac >- (first_x_assum irule >> simp[]) >>
+      Cases_on `FLOOKUP ce.ce_vars h0` >> simp[rb_step_return] >>
+      rename1 `_ = SOME loc` >> Cases_on `var_location_decode_operand loc` >>
+      simp[rb_step_return] >> irule rb_emit_void >> simp[] >>
+      irule rb_var_location_decode_operand >> qexists_tac `loc` >>
+      gvs[rb_env_ok_def] >> metis_tac[]) >>
+  simp[] >> Cases_on `h2` >> simp[] >>
+  Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
+  rename1 `_ = SOME loc` >> Cases_on `var_location_decode_operand loc` >> simp[] >>
+  rename1 `_ = SOME dst` >>
+  `rb_operand_ok dst` by
+    (irule rb_var_location_decode_operand >> qexists_tac `loc` >>
+     gvs[rb_env_ok_def] >> metis_tac[]) >>
+  irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac
+  >- (ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+      irule rb_ignore >> conj_tac >- simp[rb_compile_abi_arg_ptr_guard] >>
+      irule rb_ignore >> conj_tac
+      >- (irule (cj 1 rb_abi_decode) >> Cases_on `opc = CALLDATALOAD` >> simp[]) >>
+      first_x_assum irule >> simp[]) >>
+  irule rb_ignore >> conj_tac
+  >- (irule (cj 1 rb_abi_decode) >> Cases_on `opc = CALLDATALOAD` >> simp[]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem rb_compile_register_positional_args:
+  !args ce offset. rb_env_ok ce ==>
+    rb_step rb_env_ok (compile_register_positional_args ce args offset)
+Proof
+  Induct >> simp[compile_register_positional_args_def, rb_step_return] >>
+  PairCases >> rpt gen_tac >> strip_tac >>
+  rewrite_tac[compile_register_positional_args_def] >>
+  Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
+  rename1 `_ = SOME loc` >> Cases_on `var_location_memory_size loc` >> simp[] >>
+  irule rb_step_bind >> qexists_tac `rb_buffer_ok` >> BETA_TAC >>
+  reverse conj_tac >- simp[rb_compile_alloc_buffer] >> qx_gen_tac `buf` >> strip_tac >>
+  irule rb_bind_return >> BETA_TAC >>
+  `rb_env_ok (ce with ce_vars updated_by
+    (\m. m |+ (h0,PtrVar buf.buf_operand x)))` by
+      gvs[rb_env_bind_local, rb_buffer_ok_def, rb_location_ok_def] >>
+  irule rb_ignore >> conj_tac >- simp[rb_compile_decode_args] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem rb_compile_init_kwargs:
+  !kwvars ce offset num hi. rb_expr_contract /\ rb_env_ok ce /\
+    EVERY (\(name,ptr,ty,e). rb_operand_ok ptr) kwvars ==>
+    rb_step (K T) (compile_init_kwargs ce kwvars offset num hi)
+Proof
+  Induct >> simp[compile_init_kwargs_def, rb_step_return] >>
+  PairCases >> rpt gen_tac >> strip_tac >>
+  rewrite_tac[compile_init_kwargs_def] >> BETA_TAC >> IF_CASES_TAC
+  >- (simp_tac std_ss [LET_THM] >>
+      irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac >>
+      irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+      reverse conj_tac
+      >- (IF_CASES_TAC >> simp[rb_step_return] >>
+          ntac 2 (irule rb_bind_emit_op >> BETA_TAC >> simp[] >> gen_tac >> strip_tac) >>
+          irule rb_ignore >> simp[rb_compile_abi_arg_ptr_guard, rb_step_return]) >>
+      gen_tac >> strip_tac >> irule rb_ignore >> conj_tac
+      >- (irule (cj 1 rb_abi_decode) >> gvs[]) >>
+      first_x_assum irule >> gvs[]) >>
+  irule rb_step_bind >> qexists_tac `rb_operand_ok` >> BETA_TAC >>
+  reverse conj_tac >- (irule rb_lower_value >> gvs[rb_expr_contract_def]) >>
+  gen_tac >> strip_tac >> irule rb_ignore >> conj_tac
+  >- (IF_CASES_TAC >> gvs[rb_emit_void] >> IF_CASES_TAC >>
+      gvs[rb_compile_store_bytestring, rb_emit_void]) >>
+  first_x_assum irule >> gvs[]
+QED
+
+Theorem rb_compile_entry_point_kwargs:
+  rb_expr_contract /\ rb_env_ok ce /\
+  EVERY (\(name,ptr,ty,e). rb_operand_ok ptr) kwvars /\
+  rb_operand_ok (Label common) ==>
+  rb_step (K T) (compile_entry_point_kwargs ce kwvars offset num common)
+Proof
+  strip_tac >> rewrite_tac[compile_entry_point_kwargs_def] >>
+  irule rb_ignore >> simp[rb_compile_init_kwargs, rb_emit_inst]
+QED
+
+Theorem rb_compile_external_function_body:
+  rb_stmt_contract /\ rb_env_ok ce ==>
+  rb_step (K T) (compile_external_function_body ce args nr key trans view stmts ret)
+Proof
+  strip_tac >> rewrite_tac[compile_external_function_body_def] >>
+  irule rb_step_bind >> qexists_tac `rb_env_ok` >> BETA_TAC >>
+  simp[rb_compile_register_positional_args, rb_compile_guarded_body]
+QED
