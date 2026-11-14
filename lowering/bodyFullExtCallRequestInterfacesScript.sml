@@ -131,3 +131,27 @@ Proof
   ntac 4 (pairarg_tac >> simp[]) >>
   ntac 3 (pairarg_tac >> simp[]) >> strip_tac >> gvs[]
 QED
+
+(* Retain the root exclusion which the older typing boundary forgets. *)
+Theorem extcall_request_tail_effect_free:
+  !cenv cx env ann stat skip name ats rt opts args dr es.
+    expr_body_pre cenv cx env
+      (Call ann (ExtCall stat skip (name,ats,rt) opts) args dr) es ==>
+    EVERY (\e. ~expr_has_effect e) (DROP 1 args)
+Proof
+  rpt strip_tac >>
+  irule call_operands_effect_extcall_tail >>
+  gvs[expr_body_pre_def] >> metis_tac[]
+QED
+
+Theorem extcall_request_nonmutating:
+  (!ce e. ~expr_has_effect e ==> ~expr_can_mutate ce e) /\
+  (!ce es. ~EXISTS expr_has_effect es ==> ~exprs_can_mutate ce es) /\
+  (!ce d. (case d of NONE => T | SOME e => ~expr_has_effect e) ==>
+     ~opt_expr_can_mutate ce d) /\
+  (!ce kes. ~EXISTS (expr_has_effect o SND) kes ==>
+     ~named_exprs_can_mutate ce kes)
+Proof
+  ho_match_mp_tac expr_can_mutate_ind >>
+  simp[expr_can_mutate_def] >> metis_tac[]
+QED
