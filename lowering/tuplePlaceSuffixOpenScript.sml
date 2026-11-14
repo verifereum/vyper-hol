@@ -57,7 +57,7 @@ Proof
          compileEnvTheory.comp_return_def] >>
       simp[DROP_LENGTH_TOO_LONG, Once evaluate_def] >>
       irule gas_outcome_return_path >> qexists `s0` >>
-      conj_tac
+      reverse conj_tac
       >- (qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
             (strip_assume_tac o REWRITE_RULE [tuple_place_head_def]) >>
           simp[gas_marked_path_def] >> metis_tac[gas_path_rules]) >>
@@ -65,7 +65,7 @@ Proof
       `stmt_state_rel H ctx func cenv cx es s0 /\
        storage_well_formed_on cx es (FST H)` by
         (qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-           (strip_assume_tac o REWRITE_RULE [tuple_place_head_def]) >> res_tac) >>
+           (strip_assume_tac o REWRITE_RULE [tuple_place_head_def]) >> metis_tac[]) >>
       `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
         (`storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
           storage_well_formed_on cx es (FST H)` by
