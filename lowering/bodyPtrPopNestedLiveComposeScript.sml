@@ -19,7 +19,7 @@ val _ = temp_delsimps ["tuple_place_target_post_gas_obs"];
 Theorem pop_nested_live_compose:
   pop_target_frag_ptr d ctx PG func cenv cx env bt es /\
   (!x. bt <> NameTarget x) /\ target_root bt = NameTarget id /\
-  local_target_live cx id bt /\ expr_body_pre cenv cx env (Pop ann bt) es ==>
+  expr_body_pre cenv cx env (Pop ann bt) es ==>
   expr_vv_sim_ptr d ctx PG func cenv cx ty (Pop ann bt) es
 Proof
   strip_tac >>
