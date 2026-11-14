@@ -47,8 +47,9 @@ class NativeInputTests(unittest.TestCase):
 
     @staticmethod
     def empty_call() -> dict:
-        # An unknown target with an expected error passes without deployment.
-        # The dumped input still exposes all imported byte strings and hashes.
+        # An unknown target runs as a raw EVM call: empty code returns empty
+        # output, so the call passes without deployment. The dumped input
+        # still exposes all imported byte strings and hashes.
         return {
             "trace_type": "call",
             "call_args": {
@@ -60,7 +61,7 @@ class NativeInputTests(unittest.TestCase):
                 "block": {"block_hashes": {}, "timestamp": 1, "number": 1,
                           "blob_basefee": 1},
             },
-            "output": None,
+            "output": "",
         }
 
     def test_unicode_case_name_round_trip(self) -> None:
