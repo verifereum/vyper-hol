@@ -8,11 +8,12 @@
  * TOP-LEVEL:
  *   step_transplant_continue - a continuing step
  *   step_transplant_end      - a step that ends the frame
+ *   step_transplant_starved  - a starving step names its raising instruction
  *)
 
 Theory evmStepTransplant
 Ancestors
-  callTrace frameOutcome vfmExecution vfmExecutionProp vfmSameFrame
+  callTrace frameOutcome frameGas vfmExecution vfmExecutionProp vfmSameFrame
   vfmStepLength vfmHandleStep vfmContextLength vfmRunCall
 
 Definition transplant_local_def:
@@ -890,4 +891,96 @@ Proof
   qpat_x_assum `!rest'. step_inner _ = _`
     (qspec_then `rest` mp_tac) >> simp[] >>
   strip_tac >> simp[] >> metis_tac[]
+QED
+
+(* A single call frame's handler passes the step's exception on. *)
+Theorem handle_step_single_reraise[local]:
+  u.contexts = [(d,rb)] /\ wf_context d /\
+  (!a. d.msgParams.outputTo <> Code a) /\
+  handle_step err u = (INR e, t) ==> e = err
+Proof
+  strip_tac >>
+  `d.gasUsed <= d.msgParams.gasLimit` by gvs[wf_context_def] >>
+  drule transplant_handle_exception_singleton >>
+  impl_tac >- simp[] >> strip_tac >>
+  Cases_on `vfm_abort err` >> gvs[handle_step_def, reraise_def] >>
+  qpat_x_assum `handle _ _ _ = _` mp_tac >>
+  simp[handle_def, handle_create_def, bind_def, ignore_bind_def,
+       get_return_data_def, get_output_to_def, get_current_context_def,
+       return_def] >>
+  Cases_on `d.msgParams.outputTo` >> gvs[reraise_def] >>
+  rw[] >> gvs[]
+QED
+
+(* inc_pc_or_jump fails only on a bad jump target. *)
+Theorem inc_pc_or_jump_not_resource[local]:
+  inc_pc_or_jump op s = (INR e, t) ==>
+  e <> SOME OutOfGas /\ e <> SOME StackOverflow
+Proof
+  rw[inc_pc_or_jump_def, bind_def, ignore_bind_def, get_current_context_def,
+     set_current_context_def, return_def, assert_def, fail_def] >>
+  gvs[AllCaseEqs()] >>
+  Cases_on `(FST (HD s.contexts)).jumpDest` >>
+  gvs[bind_def, ignore_bind_def, set_current_context_def, return_def,
+      assert_def, fail_def, AllCaseEqs()]
+QED
+
+(* A step of a call frame that pushes no context and runs out of gas or
+   stack: the instruction it runs raises that at the frame's depth. *)
+Theorem step_transplant_starved:
+  es.contexts = (c, rb) :: rest /\ wf_context c /\
+  (!a. c.msgParams.outputTo <> Code a) /\
+  (!op. next_opcode c = SOME op ==>
+        ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
+  step (es with contexts := [(c, rb)]) = (INR (SOME exc), t) /\
+  (exc = OutOfGas \/ exc = StackOverflow) ==>
+  ?op. frame_inst_raises es exc op
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  qpat_x_assum `exc = OutOfGas \/ _` mp_tac >>
+  qabbrev_tac `s1 = es with contexts := [(c,rb)]` >>
+  `s1.contexts = [(c,rb)]` by simp[Abbr `s1`] >>
+  Cases_on `step_inner s1` >> rename1 `step_inner s1 = (res,u)` >>
+  drule_at (Pat `step_inner _ = _`) transplant_raw_boundary >> simp[] >>
+  strip_tac >>
+  Cases_on `res` >> gvs[transplant_step_eq, handle_def] >>
+  rename1 `handle_step err u = _` >>
+  `SOME exc = err` by
+    (irule handle_step_single_reraise >> gvs[] >> metis_tac[]) >>
+  gvs[] >>
+  `transplant_raw c s1 = (INR (SOME exc), u)` by
+    metis_tac[transplant_step_inner_eq] >>
+  `!op. ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2] /\
+        step_inst op s1 = (INR (SOME exc), u) ==>
+        ?s'. step_inst op es = (INR (SOME exc), s') /\
+             LENGTH s'.contexts = LENGTH es.contexts` by
+    (rpt strip_tac >>
+     drule transplant_local_step_inst >> rw[transplant_local_def] >>
+     first_x_assum drule_all >> strip_tac >>
+     first_x_assum (qspec_then `rest` mp_tac) >>
+     `s1 with contexts := (c,rb)::rest = es` by
+       simp[Abbr `s1`, vfmContextTheory.execution_state_component_equality] >>
+     simp[]) >>
+  qpat_x_assum `transplant_raw _ _ = _` mp_tac >>
+  simp[transplant_raw_def] >>
+  Cases_on `FLOOKUP c.msgParams.parsed c.pc` >> simp[]
+  >- (strip_tac >> disch_tac >>
+      qexists_tac `if LENGTH c.msgParams.code <= c.pc then Stop else Invalid` >>
+      irule frame_inst_raises_here >> simp[] >>
+      first_x_assum (qspec_then
+        `if LENGTH c.msgParams.code <= c.pc then Stop else Invalid` mp_tac) >>
+      (impl_tac >- (IF_CASES_TAC >> gvs[])) >>
+      strip_tac >> qexists_tac `s'` >> gvs[]) >>
+  rename1 `FLOOKUP _ _ = SOME op` >>
+  simp[ignore_bind_def, bind_def] >>
+  Cases_on `step_inst op s1` >> rename1 `step_inst op s1 = (r1,s2)` >>
+  Cases_on `r1` >> simp[]
+  >- (strip_tac >> drule inc_pc_or_jump_not_resource >> gvs[]) >>
+  strip_tac >> disch_tac >> gvs[] >>
+  `~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]` by
+    (irule transplant_lookup_allowed >> qexists_tac `c` >> gvs[]) >>
+  qpat_x_assum `!op'. _ /\ step_inst op' s1 = _ ==> _` (qspec_then `op` mp_tac) >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  qexists_tac `op` >> irule frame_inst_raises_here >> simp[] >>
+  goal_assum drule >> simp[]
 QED
