@@ -49,6 +49,7 @@ Theorem pop_memory_live_suffix_post:
   expr_sim_inv cenv cx env es /\
   stmt_state_rel H ctx func cenv cx es s0 /\
   stmt_state_rel H ctx func cenv cx mid s /\
+  storage_well_formed_on cx mid (FST H) /\
   wb_frame cenv es mid sa s0 s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM mid.scopes /\
@@ -123,6 +124,9 @@ Proof
     (drule_all wb_frame_trans >> simp[]) >>
   `local_region cenv scopes' u id (w2n b) sz` by
     (simp[local_region_def] >> metis_tac[]) >>
+  `storage_well_formed_on cx (mid with scopes := scopes') (FST H)` by
+    fs[vyperStorageFootprintTheory.storage_well_formed_on_def,
+       vyperStorageBackendTheory.get_storage_scopes] >>
   irule pop_path_vv_post >>
   qpat_assum `mem_path_offset _ _ = _` (irule_at Any) >>
   qpat_assum `evaluate_subscripts _ _ _ = _` (irule_at Any) >>

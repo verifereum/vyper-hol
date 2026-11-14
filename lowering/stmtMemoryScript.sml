@@ -22,8 +22,6 @@ Theorem compile_expr_stmt_frag_ok_mem:
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_mem_def] >> rpt gen_tac >>
   strip_tac >>
-  `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
-    fs[stmt_state_rel_def, state_rel_def] >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
@@ -33,42 +31,83 @@ Proof
     metis_tac[expr_stmt_admissible] >>
   qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_mem_def]) >>
-  disch_then drule >> simp[] >>
-  disch_then (qspec_then `s0` mp_tac) >> simp[] >>
-  simp[gas_outcome_def, gas_summary_at_def] >>
-  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN assume_tac))
+  disch_then (qspecl_then [`st0`, `sa`, `sb`, `vv`, `s0`] mp_tac) >>
+  impl_tac >- gs[] >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> BETA_TAC >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
-      qpat_x_assum `?res es_end r. _` strip_assume_tac >> gvs[]
-      >- (qexistsl_tac [`INL ()`, `es_end`, `OK t`] >>
-          qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-          simp[gas_marked_exec_def] >> strip_tac >>
-          `~is_HashMapRef tv` by
-            (qpat_x_assum `!tail. eval_expr _ _ _ = _`
-               (qspec_then `[]` assume_tac) >>
-             fs[] >> metis_tac[expr_stmt_not_hashmap]) >>
-          conj_tac >- metis_tac[eval_expr_stmt_success] >>
-          disj1_tac >>
-          `~t.vs_halted` by
-            (fs[fragGasModeTheory.gas_marked_path_def] >>
-             drule fragGasPathMemTheory.gas_path_mem_exec >>
-             strip_tac >> metis_tac[fragGasPathTheory.gas_path_normal]) >>
-          `~block_is_terminated sb` by
-            (qpat_x_assum `!tail. eval_expr _ _ _ = _`
-               (qspec_then `[]` assume_tac) >> fs[] >> metis_tac[]) >>
-          fs[vv_post_def, stmt_lands_def, cenv_top_ext_refl] >>
-          `ci_mono sa sb` by
-            metis_tac[cj 1 compile_expr_ci_mono, pairTheory.SND] >>
-          fs[ci_mono_def] >> irule return_buf_frame_frame >>
-          qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
-      Cases_on `res` >- fs[expr_exit_def] >>
+      `eval_stmt cx (Expr e) =
+       bind (eval_expr cx e)
+         (\tv. type_check (~is_HashMapRef tv) "Expr HashMapRef")` by
+        simp[Once evaluate_def] >>
+      pop_assum SUBST1_TAC >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_checks])
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      qpat_x_assum `r = _` SUBST_ALL_TAC >>
+      Cases_on `res`
+      >- (rename1 `gas_marked_exec _ _ _ _ _ (INL tv) _ _` >> qexistsl_tac [`INL ()`, `es_end`, `OK t`] >>
+          conj_tac
+          >- (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+                (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+              simp[gas_marked_exec_def] >> gen_tac >>
+              qpat_x_assum `!tail. eval_expr _ _ _ = _`
+                (qspec_then `tail` assume_tac) >>
+              metis_tac[expr_stmt_not_hashmap, eval_expr_stmt_success]) >>
+          disj1_tac >> qexists_tac `t` >> conj_tac >- simp[] >>
+          suspend "ok") >>
+      qexistsl_tac [`INR y`, `es_end`, `OK t`] >>
+      conj_tac
+      >- (fs[gas_marked_exec_def] >> metis_tac[eval_expr_stmt_exception]) >>
+      disj1_tac >> qexists_tac `t` >> conj_tac >- simp[] >>
+      rpt strip_tac >> first_x_assum drule >> simp[])
+  >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      Cases_on `res`
+      >- (rename1 `gas_marked_exec _ _ _ _ _ (INL tv) _ _` >> qexistsl_tac [`INL ()`, `es_end`, `r`] >>
+          conj_tac
+          >- (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+                (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+              simp[gas_marked_exec_def] >> gen_tac >>
+              qpat_x_assum `!tail. eval_expr _ _ _ = _`
+                (qspec_then `tail` assume_tac) >>
+              metis_tac[expr_stmt_not_hashmap, eval_expr_stmt_success]) >>
+          disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+          rpt strip_tac >> first_x_assum drule >> simp[expr_exit_def]) >>
       qexistsl_tac [`INR y`, `es_end`, `r`] >>
       conj_tac
       >- (fs[gas_marked_exec_def] >> metis_tac[eval_expr_stmt_exception]) >>
-      disj2_tac >> simp[stmt_exit_def] >>
+      disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+      rpt strip_tac >> first_x_assum drule >> simp[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
-  qexists_tac `marks` >> disj2_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   metis_tac[expr_stmt_exempt]
 QED
+
+Resume compile_expr_stmt_frag_ok_mem[ok]:
+  rpt strip_tac >>
+  `~t.vs_halted` by
+    (qpat_x_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
+     strip_tac >> drule fragGasPathMemTheory.gas_path_mem_exec >>
+     strip_tac >> metis_tac[fragGasPathTheory.gas_path_normal]) >>
+  `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL tv, es_end with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?tv. _`
+    (qspec_then `H` mp_tac) >>
+  impl_tac >- gs[] >> strip_tac >> gvs[] >>
+  `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
+    fs[vv_post_def, stmt_state_rel_def, state_rel_def] >>
+  `~block_is_terminated sb` by metis_tac[] >>
+  `ci_mono sa sb` by
+    metis_tac[cj 1 compile_expr_ci_mono, pairTheory.SND] >>
+  fs[vv_post_def, stmt_lands_def, cenv_top_ext_refl, ci_mono_def] >>
+  irule return_buf_frame_frame >>
+  qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]
+QED
+
+Finalise compile_expr_stmt_frag_ok_mem
 
 (* Original fixed-result proof retained for migration reference:
 Proof

@@ -10,6 +10,7 @@ Theorem pop_positive_framed_posts:
   expr_sim_inv cenv cx env es /\
   stmt_state_rel H ctx func cenv cx es s0 /\
   stmt_state_rel H ctx func cenv cx mid s /\
+  storage_well_formed_on cx mid (FST H) /\
   wb_frame cenv es mid sa s0 s /\
   ghost_inv H d cenv cx mid G tn s /\
   local_ptrs_rel func cenv mid.scopes s /\

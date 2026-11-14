@@ -15,13 +15,13 @@ Proof
 QED
 
 Theorem abi_encode_staged_observation_extend:
-  abi_encode_staged_observation ctx func ce cx vs st out mid outsz p at av initial u /\
+  abi_encode_staged_observation (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx vs st out mid outsz p at av initial u /\
   abi_decoder_vars_extend upper u v ==>
-  abi_encode_staged_observation ctx func ce cx vs st out mid outsz p at av initial v
+  abi_encode_staged_observation H ctx func ce cx vs st out mid outsz p at av initial v
 Proof
   strip_tac >>
   `vars_ext u v` by (irule abi_encode_bounded_vars_ext >> goal_assum (drule_at Any)) >>
-  `stmt_state_rel ctx func ce cx vs v` by
+  `stmt_state_rel H ctx func ce cx vs v` by
     (irule stmt_state_rel_vars_ext >> qexists_tac `u` >>
      gvs[abi_encode_staged_observation_def]) >>
   `eval_operand out v = SOME (n2w p)` by

@@ -26,6 +26,8 @@ Ancestors
   mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
   (* O1: lifting per-function pass facts to the stage contract *)
   o1PassLift
+  (* O1: the pipeline's request companion at an abort *)
+  o1PipelineRequests
   (* codegen and compiler units: frame simulation, stack planning, unit checks,
      codegen request prefix *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv

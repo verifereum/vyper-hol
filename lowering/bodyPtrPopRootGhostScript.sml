@@ -1,6 +1,6 @@
 Theory bodyPtrPopRootGhost
 Ancestors
-  bodyPtrDefs exprSimPopStorage appendStorageGhostPtr ptrDiscipline
+  bodyPtrDefs exprSimPopStorage sourceUnitExecution appendStorageGhostPtr ptrDiscipline
   venomState vyperStorage words pred_set compileEnv loweringStateRelDefs
 
 Theorem pop_header_taint_dead_subset:
