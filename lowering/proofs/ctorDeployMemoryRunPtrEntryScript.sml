@@ -39,7 +39,7 @@ Ancestors
   ctorDeployMemoryRunPtrPrefixEntrySemantic ctorDeployLoweringEntryImmutableMemory ctorDeployLoweringNoCtor
   valueEncoding codegenRel ctorDeployMemoryRunMemEntryTaskBound
   bodyPtrDefs ctorDeployMemoryRunMemEntryBoundary calldataRegistrationLocals
-  fragGasOriginPtr
+  fragGasOriginPtr loweringStateRelDefs
 
 val _ = Parse.hide "body";
 
@@ -48,20 +48,25 @@ val _ = Parse.hide "body";
 Theorem deploy_ptr_entry_normalized:
   deploy_phases policy tops (deploy_bc,runtime_bc)
     (rp,unit,dout,prog,cplan) /\
+  deploy_source_ok tops am tx /\
   deploy_state_rel tops deploy_bc am tx es /\
   gas_variant vs (deploy_entry_state prog cplan tops es) /\
   deploy_ctor_code tops rp runtime_bc unit
     (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
   lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl ==>
-  let initial = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>
-  in fn = func /\ lbl = "__deploy" /\
-     fresh_vars_wrt (initial_compile_state "__deploy") initial /\
-     ~initial.vs_halted /\
-     initial.vs_current_bb = (initial_compile_state "__deploy").cs_current_bb /\
-     initial.vs_inst_idx = LENGTH (initial_compile_state "__deploy").cs_current_insts /\
-     initial.vs_allocas = FEMPTY /\ initial.vs_alloca_next = imm_len tops /\
-     allocas_from (imm_len tops) initial /\
+  fn = func /\ lbl = "__deploy" /\
+     fresh_vars_wrt (initial_compile_state "__deploy")
+       (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) /\
+     ~(vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>).vs_halted /\
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>).vs_current_bb =
+       (initial_compile_state "__deploy").cs_current_bb /\
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>).vs_inst_idx =
+       LENGTH (initial_compile_state "__deploy").cs_current_insts /\
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>).vs_allocas = FEMPTY /\
+     (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>).vs_alloca_next = imm_len tops /\
+     allocas_from (imm_len tops)
+       (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) /\
      ~ctx_has_dalloca unit.cu_context /\
      imm_len tops + unit_alloca_budget unit.cu_context < dimword (:256) /\
      (!bb label. lookup_block label func.fn_blocks = SOME bb ==>
@@ -249,7 +254,7 @@ Theorem deploy_ptr_entry_prefix_source_mode:
   !checked. (^SourceEntryMode) checked
 Proof
   gen_tac >> BETA_TAC >> strip_tac >>
-  drule_all deploy_ptr_entry_normalized >> simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule_all deploy_ptr_entry_normalized >> strip_tac >>
   qmatch_asmsub_abbrev_tac `fresh_vars_wrt _ initial` >> gvs[] >>
   drule_all deploy_ptr_entry_initial_resources >> strip_tac >>
   VALID (qpat_assum `deploy_ctor_code _ _ _ _ _` (strip_assume_tac o REWRITE_RULE [deploy_ctor_code_def])) >>
@@ -312,7 +317,9 @@ Proof
      simp[Abbr `initial`, initial_compile_state_def]) >>
   `alloca_history fn t` by metis_tac[] >>
   drule (deploy_ptr_entry_register_prepared_origins_coverage_mode |> Q.SPEC `T` |>
-    SIMP_RULE bool_ss [] |> INST_TYPE [``:'a`` |-> ``:word8``] |> SPEC_ALL |>
+    SIMP_RULE bool_ss [] |> SPEC_ALL |>
+    Q.GENL [`runtime_bc`,`am`] |>
+    Q.ISPECL [`runtime_bc:word8 list`,`am:abstract_machine`] |>
     Q.INST [`ce0` |-> `cenv0 with ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)`] |>
     GEN_ALL |> SRULE []) >>
   disch_then drule_all >>
@@ -320,6 +327,7 @@ Proof
   disch_then (qspec_then `qt` mp_tac) >>
   disch_then (qspec_then `runtime_bc` mp_tac) >>
   disch_then (qspec_then `am` mp_tac) >>
+  disch_then (qspec_then `HS0` mp_tac) >>
   disch_then (qspec_then `H`
     (qx_choose_then `end_state` (qx_choose_then `end_G`
       (qx_choose_then `end_taint` strip_assume_tac)))) >>
@@ -452,7 +460,7 @@ Proof
   strip_tac >>
   `!bb label. lookup_block label func.fn_blocks = SOME bb ==>
      phi_prefix_length bb.bb_instructions = 0` by
-    (drule_all deploy_ptr_entry_normalized >> simp_tac bool_ss [LET_THM] >>
+    (drule_all deploy_ptr_entry_normalized >>
      strip_tac >> first_assum ACCEPT_TAC) >>
   drule_all (SIMP_RULE bool_ss [] (Q.SPEC `T` deploy_ptr_entry_prefix_source_mode)) >> strip_tac >>
   (* The prefix is pointer-safe at every horizon: its path is. *)
@@ -462,7 +470,7 @@ Proof
           fuel unit.cu_context func [] FEMPTY entry_taint
           (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)` by
     (qx_gen_tac `HS` >> strip_tac >>
-     mp_tac (Q.SPECL [`deploy_dead HS tops runtime_bc am tx`, `imm_len tops`,
+     mp_tac (Q.SPECL [`deploy_dead HS tops (runtime_bc:word8 list) (am:abstract_machine) tx`, `imm_len tops`,
        `unit.cu_context`, `func`, `[]`, `FEMPTY`, `entry_taint`,
        `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`,
        `0`, `H`, `qt`, `actual`] gas_path_ptr_safe_run) >>
@@ -616,8 +624,9 @@ Theorem deploy_ctor_entry_run_ptr:
                             vs_inst_idx := 0 |>))
 Proof
   rpt strip_tac >>
-  drule_all deploy_ptr_entry_prefix_related >> strip_tac >>
-  drule_all deploy_ptr_entry_normalized >> simp_tac bool_ss [LET_THM] >> strip_tac >> gvs[] >>
+  drule_all deploy_ptr_entry_prefix_related >>
+  disch_then (qspec_then `HS` strip_assume_tac) >>
+  drule_all deploy_ptr_entry_normalized >> strip_tac >> gvs[] >>
   qexistsl [`actual`,`H`,`qt`] >> simp[] >> strip_tac >>
   qpat_x_assum `(!fuel. ptr_safe_run _ _ _ _ _ _ H qt actual) ==> _` drule >>
   disch_tac >> Cases_on `fuel` >> simp[Once ptr_safe_blocks_def] >>
