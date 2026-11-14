@@ -186,6 +186,7 @@ Proof
     (qpat_x_assum `_ ==> ctx_sim _ _ _ _ _ /\ _` irule >> metis_tac[]) >>
   drule_all o1_pipeline_memory_obligations_raw >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
+  rewrite_tac [frame_raises_inst_raises] >>
   qpat_x_assum `!g' Inv vs es. _` irule >> simp[] >>
   qexistsl_tac [`raw_reachable vs`, `vs`] >> simp[]
 QED
