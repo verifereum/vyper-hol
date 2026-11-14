@@ -109,15 +109,17 @@ Theorem tuple_place_marked_head_step:
     type_memory_size (EL j ltvs)+64 < dimword (:256)) /\
   (EXISTS (\t. ~is_word_type t) ltys ==> cenv.ce_target CapMcopy) /\
   type_alloc_ok cenv (TupleT tys) /\ i < LENGTH tys /\
-  (let dst = FST r; loc_opt = FST (SND r); dst_ty_opt = SND (SND r);
-       loc = case loc_opt of SOME l => l | NONE => LocMemory;
-       dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys
-   in (if is_word_type (EL i ltys) then
-         if is_word_type dty then
-           compile_store_at_loc cenv.ce_imm_alloca dst (EL i elems) loc_opt
-         else emit_void INVALID []
-       else compile_assign_value cenv dst loc (EL i elems) (is_word_type dty)
-         NONE dty (EL i ltys) (type_memory_bytes cenv dty)) sa) = ((),sb) /\
+  (if is_word_type (EL i ltys) then
+     if is_word_type (case SND (SND r) of SOME (ValPT t) => t | _ => EL i ltys) then
+       compile_store_at_loc cenv.ce_imm_alloca (FST r) (EL i elems) (FST (SND r))
+     else emit_void INVALID []
+   else compile_assign_value cenv (FST r)
+     (case FST (SND r) of SOME l => l | NONE => LocMemory)
+     (EL i elems)
+     (is_word_type (case SND (SND r) of SOME (ValPT t) => t | _ => EL i ltys))
+     NONE (case SND (SND r) of SOME (ValPT t) => t | _ => EL i ltys) (EL i ltys)
+     (type_memory_bytes cenv
+       (case SND (SND r) of SOME (ValPT t) => t | _ => EL i ltys))) sa = ((),sb) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\ local_ptrs_reserved cenv sa /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
