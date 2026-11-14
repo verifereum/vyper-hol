@@ -542,7 +542,7 @@ Proof
   simp[] >> simp[update_var_def, venom_state_component_equality]
 QED
 
-Theorem attr_source[local]:
+Theorem attr_source:
   !cx ann obj fld.
     eval_expr cx (Attribute ann obj fld) =
     bind (eval_expr cx obj)
@@ -552,7 +552,7 @@ Proof
 QED
 
 (* The field's selection reads no gas observation. *)
-Theorem attr_select_gas_obs[local]:
+Theorem attr_select_gas_obs:
   !cx ty tv fld ee r.
     select_result cx ty tv (AttrSubscript fld) ee = (r, ee) ==>
     !tail. select_result cx ty tv (AttrSubscript fld)
@@ -602,7 +602,7 @@ Proof
   simp[return_def, raise_def]
 QED
 
-Theorem attr_operand_admissible[local]:
+Theorem attr_operand_admissible:
   !cenv cx env e es.
     expr_body_pre cenv cx env e es ==>
     gas_admissible (eval_expr cx e) expr_vv_res_ok es
@@ -632,7 +632,7 @@ Proof
 QED
 
 (* The source facts at the base's actual end state. *)
-Theorem attr_base_facts[local]:
+Theorem attr_base_facts:
   !cenv cx env ann obj fld es sid es0 btv es1.
     expr_body_pre cenv cx env (Attribute ann obj fld) es0 /\
     expr_body_pre cenv cx env obj es0 /\ expr_type obj = StructT sid /\
