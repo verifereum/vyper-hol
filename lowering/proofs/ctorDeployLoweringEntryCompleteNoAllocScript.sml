@@ -250,7 +250,8 @@ Proof
  simp[fresh_vars_wrt_def, abi_decode_frame_def, eval_op_inst_idx,
    abi_encoder_registered_effect_def, alloca_inv_def, alloca_frontier_inv_def,
    remaining_alloca_budget_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
- metis_tac[]
+ fs[fresh_vars_wrt_def, abi_decode_frame_def, abi_encoder_registered_effect_def] >>
+ rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem deploy_ctor_bulk_complete_gas_path:
@@ -305,7 +306,8 @@ Proof
  simp[fresh_vars_wrt_def, abi_decode_frame_def, eval_op_inst_idx,
    abi_encoder_registered_effect_def, alloca_inv_def, alloca_frontier_inv_def,
    remaining_alloca_budget_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
- metis_tac[]
+ fs[fresh_vars_wrt_def, abi_decode_frame_def, abi_encoder_registered_effect_def] >>
+ rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 val CcompleteGas = ``\ty tv.
