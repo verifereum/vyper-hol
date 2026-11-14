@@ -8,10 +8,11 @@ Ancestors
   placeMemoryLiveRegion exprSimOperands venomInst targetPlaceSimCasesBase
   venomExecSemantics venomState fragGasMode stmtSimAugAssignPlaceMemory
   stmtSimDefs localMemoryStorePath vyperScopePreservation venomMemDefs
-Libs monadsyntax
+  vyperStorageFootprint
+Libs monadsyntax horizonTypeLib
 
 Theorem place_relayout_memory_run:
-  !ctx func cenv cx env ee ff s p dw dst src src_loc dty sty stv dtv v sa sb bytes sw.
+  !cx st0 ctx func cenv env ee ff s p dw dst src src_loc dty sty stv dtv v sa sb bytes sw.
   compile_assign_value cenv dst LocMemory src F src_loc dty sty bytes sa = ((),sb) /\
   (src_loc = NONE \/ src_loc = SOME LocMemory) /\
   ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty /\
@@ -32,12 +33,16 @@ Theorem place_relayout_memory_run:
   0 < type_memory_size stv /\ type_memory_bytes cenv sty < dimword (:256) /\
   val_footprint stv v <= type_memory_size stv /\
   place_ptr_rel cenv cx s (PlaceR p) dw (SOME LocMemory) (Type dty) /\
-  stmt_state_rel H ctx func cenv cx ee s /\ write_place cx p v ee = (INL (),ff) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx ee s) /\
+  write_place cx p v ee = (INL (),ff) /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx ff t /\
+      (!H. valid_horizon cx st0 H ee.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx ff t) /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -45,6 +50,9 @@ Theorem place_relayout_memory_run:
       alloca_frame cenv ee sa s cenv ff t
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _`
+    (qx_choose_then `H` assume_tac) >>
+  `stmt_state_rel H ctx func cenv cx ee s` by metis_tac[] >>
   `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
       ALL_DISTINCT (MAP FST fields) /\
@@ -71,8 +79,9 @@ Proof
      goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `evaluate_type _ _ = SOME dtv`)) >>
      goal_assum (drule_at (Pat `eval_operand src s = _`)) >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx ff t` by
-    (irule memory_place_write_copy_effect >>
+  `!HH. valid_horizon cx st0 HH ee.storage_trace ==>
+    stmt_state_rel HH ctx func cenv cx ff t` by
+    (rpt strip_tac >> irule memory_place_write_copy_effect >>
      goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >>
      metis_tac[]) >>
   `alloca_frame cenv ee sa s cenv ff t` by suspend "direct_frame" >>
@@ -102,8 +111,9 @@ Resume place_relayout_memory_run[staged]:
    s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
   `type_memory_bytes cenv sty <= type_memory_bytes cenv sty /\
    val_footprint stv v <= type_memory_bytes cenv sty` by simp[] >>
-  drule_all alloc_copy_memory_framed_capacity_path >>
+  drule_all (SRULE [PULL_EXISTS] alloc_copy_memory_framed_capacity_path) >>
   disch_then (qx_choosel_then [`u`,`uw`] strip_assume_tac) >>
+  `stmt_state_rel H ctx func cenv cx ee u` by metis_tac[] >>
   `venomMemDefs$allocas_non_overlapping u` by
     fs[stmt_state_rel_def, state_rel_def, alloca_inv_def] >>
   `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
@@ -134,7 +144,7 @@ Resume place_relayout_memory_run[staged]:
   `local_region cenv ee.scopes u name b len` by
     (fs[local_region_def, not_local_ptr_def] >> metis_tac[]) >>
   `w2n uw + type_memory_bytes cenv sty <= b \/ b + len <= w2n uw` by
-    (irule alloca_clear_of_locals >>
+    (irule (horizonTypeLib.at_horizon_named "H" alloca_clear_of_locals) >>
      goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ u`)) >>
      goal_assum (drule_at (Pat `local_region _ _ u _ _ _`)) >>
      qexistsl_tac [`mk_inst sx.cs_next_id ALLOCA
@@ -176,8 +186,9 @@ Resume place_relayout_memory_run[staged]:
         simp[listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]) >>
      qpat_x_assum `compile_store_memory cenv buf.buf_operand dst dty sty ss = _` mp_tac >>
      simp[]) >>
-  `stmt_state_rel H ctx func cenv cx ff t` by
-    (irule memory_place_write_copy_effect >>
+  `!HH. valid_horizon cx st0 HH ee.storage_trace ==>
+    stmt_state_rel HH ctx func cenv cx ff t` by
+    (rpt strip_tac >> irule memory_place_write_copy_effect >>
      goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >> metis_tac[]) >>
   `gas_marked_path F ctx func u 0 (OK t)` by metis_tac[typed_copy_effect_path] >>
   `gas_marked_path F ctx func s (0 + 0) (OK t)` by
@@ -191,7 +202,7 @@ Resume place_relayout_memory_run[staged]:
      qpat_x_assum `!x. not_fresh_at sa x ==> not_fresh_at ss x /\ x <> q` drule >>
      strip_tac >> simp[]) >>
   `alloca_frame cenv ee sa s cenv ff t` by
-    (irule alloca_frame_of_mem_frame >>
+    (irule (horizonTypeLib.at_horizon_named "H" alloca_frame_of_mem_frame) >>
      conj_tac >- (rpt strip_tac >> simp[]) >>
      conj_tac >- (
      map_every qx_gen_tac [`aid`, `off`, `sz`] >> strip_tac >>
@@ -206,7 +217,9 @@ Resume place_relayout_memory_run[staged]:
      simp[] >> decide_tac) >>
      conj_tac
      >- metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
-     metis_tac[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`H`, `ctx`, `cx`, `func`] >>
+     first_assum ACCEPT_TAC) >>
   qexists_tac `t` >> fs[] >>
   rpt strip_tac >> first_x_assum drule >> simp[])
 QED
@@ -214,7 +227,7 @@ QED
 Resume place_relayout_memory_run[direct_frame]:
   markerLib.RESUME_TAC >> (rpt strip_tac >>
   drule_all memory_place_live_region >> strip_tac >>
-  irule alloca_frame_of_mem_frame >>
+  irule (horizonTypeLib.at_horizon_named "H" alloca_frame_of_mem_frame) >>
   simp[] >> conj_tac >- metis_tac[typed_copy_effect_lookup] >>
   reverse conj_tac
   >- (conj_tac
