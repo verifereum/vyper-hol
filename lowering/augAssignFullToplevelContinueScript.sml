@@ -557,3 +557,107 @@ Proof
      qexistsl_tac [`emitted_insts s2 s3`, `u`, `s2`] >> simp[]) >>
   simp[]
 QED
+
+Theorem augassign_toplevel_success_continue_full:
+  evaluate_binop bound tvt bop cur rhs = INL result /\
+  value_has_type tvt result /\ encode_value tvt result = SOME [(0,w)] /\
+  type_slot_size tvt = 1 /\ well_formed_type_value tvt /\
+  ~u.vs_halted /\ ~cx.txn.is_static /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (u,Gr,tnr) []
+      (OK operated,Gop,tnop)) /\
+  emit_void (if tr then TSTORE else SSTORE) [Lit (n2w slot);res_op] s3 = ((),sb) /\
+  fn_has_code s3 sb func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
+  ~operated.vs_halted /\ operated.vs_current_bb = s3.cs_current_bb /\
+  operated.vs_inst_idx = LENGTH s3.cs_current_insts /\
+  ~operated.vs_call_ctx.cc_static /\ operated.vs_call_ctx.cc_address = cx.txn.target /\
+  eval_operand res_op operated = SOME w /\ op_taint tnop res_op = {} /\
+  alloca_frame cenv es sa s0 cenv mid operated /\
+  (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==>
+    lookup_var x operated = SOME v) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+    FLOOKUP operated.vs_allocas aid = SOME b) /\
+  (!x. not_fresh_at sa x ==> FLOOKUP Gop x = FLOOKUP G0 x /\
+    op_taint tnop (Var x) = op_taint tn0 (Var x)) /\
+  return_buf_frame d cenv s3 operated /\ alloca_history func operated /\
+  alloca_inv operated /\ s0.vs_alloca_next <= operated.vs_alloca_next /\
+  root_es.storage_trace = es.storage_trace ++ [StorageRoot tr slot tvt] /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    valid_horizon cx st0 H root_es.storage_trace) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx mid operated /\
+    storage_well_formed_on cx mid (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx mid Gop tnop operated) /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) ==>
+  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+    (bind (lift_sum (evaluate_binop bound tvt bop cur rhs))
+      (write_place cx (StoragePlace tr (n2w slot) tvt)))
+    (mid,u,Gr,tnr)
+    (\H res ee G tn t. ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
+      return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+      s0.vs_alloca_next <= t.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv'' cx ee G tn t /\
+      (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==>
+        lookup_var x t = SOME v) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+        FLOOKUP t.vs_allocas aid = SOME b) /\
+      (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\
+        op_taint tn (Var x) = op_taint tn0 (Var x)))
+    (\H res ee gt r. !tail.
+      stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
+Proof
+  strip_tac >>
+  Cases_on `write_storage_slot cx tr (n2w slot) tvt result (mid with gas_obs := [])` >>
+  rename1 `write_storage_slot _ _ _ _ _ _ = (store_res,fin)` >>
+  `store_res = INL ()` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     simp[write_storage_slot_eq]) >> pop_assum SUBST_ALL_TAC >>
+  `fin.gas_obs = [] /\ fin.scopes = mid.scopes /\
+   fin.storage_trace = mid.storage_trace` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`write_storage_slot _ _ _ _ _ _ = (INL (),fin)`,
+        `encode_value tvt result = SOME _`, `~cx.txn.is_static`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     fs[write_storage_slot_eq] >> Cases_on `tr` >> gvs[set_storage_def]) >>
+  qabbrev_tac `last = (if tr then tstore (n2w slot) w operated
+    else sstore (n2w slot) w operated) with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  qabbrev_tac `tnlast = if tr then tnop with t_trans := key_update tnop.t_trans (n2w slot) {}
+    else tnop with t_stor := key_update tnop.t_stor (n2w slot) {}` >>
+  `!H. valid_horizon cx st0 H fin.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx fin last /\
+    storage_well_formed_on cx fin (FST H) /\
+    ghost_inv_at (DF H) lo d cenv cx fin Gop tnlast last` by
+    (qunabbrev_tac `last` >> qunabbrev_tac `tnlast` >>
+     gen_tac >> strip_tac >>
+     irule augassign_toplevel_store_relations_full >>
+     conj_tac >- simp[] >> conj_tac >- simp[] >>
+     qexistsl_tac [`es`, `mid`, `result`, `root_es`, `st0`, `tvt`] >> simp[]) >>
+  `(!D lo. allocas_from lo operated /\ lo <= operated.vs_alloca_next ==>
+      gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (operated,Gop,tnop) []
+        (OK last,Gop,tnlast)) /\
+   (!H. valid_horizon cx st0 H fin.storage_trace ==>
+      stmt_post H ctx func cx lctx cenv cenv sa sb es s0 (INL ()) fin last /\
+      return_buf_frame d cenv sb last /\ alloca_history func last /\
+      s0.vs_alloca_next <= last.vs_alloca_next /\
+      ghost_inv_at (DF H) lo d cenv cx fin Gop tnlast last /\
+      (!x. not_fresh_at sa x ==> FLOOKUP Gop x = FLOOKUP G0 x /\
+        op_taint tnlast (Var x) = op_taint tn0 (Var x)))` by
+    (irule augassign_toplevel_store_landing_full >>
+     simp[] >> conj_tac
+     >- (qexistsl_tac [`res_op`, `s3`, `slot`, `tr`, `w`] >>
+         simp[Abbr `last`, Abbr `tnlast`]) >>
+     qexists_tac `mid` >> simp[]) >>
+  irule augassign_toplevel_store_outcome_full >> simp[] >>
+  qexistsl_tac [`Gop`, `es`, `last`, `operated`, `tnlast`, `tnop`] >>
+  simp[] >> qx_gen_tac `H` >> strip_tac >>
+  `allocas_from lo operated /\ lo <= operated.vs_alloca_next` by
+    (qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _ /\ _ /\ _`
+       (qspec_then `H` mp_tac) >> simp[ghost_inv_at_def]) >>
+  qpat_x_assum `!H. valid_horizon _ _ H fin.storage_trace ==> stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H` mp_tac) >> simp[]
+QED
