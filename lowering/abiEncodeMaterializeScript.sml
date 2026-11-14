@@ -124,6 +124,9 @@ Proof
     (irule exprSimVVFrameTheory.vv_holds_vars_frame >> qexists_tac `s` >> simp[]) >>
   `vv_at cenv cx (post_value_type cenv e) sa sn es' tv vv t` by
     (irule materialize_vv_at_alloc_frame >> qexistsl [`s`, `sm`] >> simp[]) >>
+  `vv_place_ptr cenv cx es' t tv vv` by
+    (irule vv_place_ptr_vars_frame >> qexists_tac `s` >> simp[] >>
+     rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   `locals_kept cenv es es' s0 t` by
     (irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]) >>
   `post_value_type cenv e <> expr_type e ==>

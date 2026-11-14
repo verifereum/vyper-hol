@@ -860,7 +860,7 @@ Proof
   drule_all (Q.SPEC `H` attr_add_step) >> strip_tac >>
   qpat_x_assum `Abbrev (t1 = _)`
     (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  gvs[] >>
+  fs[] >>
   qpat_x_assum `!tail. select_result _ _ _ _ _ = _`
     (qspec_then `[]` assume_tac) >>
   `eval_result_typed (env,cx,fe with gas_obs := []) btv (Type (StructT sid)) /\
@@ -883,7 +883,7 @@ Proof
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   `vv_place_ptr cenv cx fe t1 tv2 (LocatedValue ann (mk_ptr p (vv_loc bvv)))` by
     fs[] >>
-  drule select_result_memory_place >> strip_tac >>
+  drule select_result_memory_place >> strip_tac >> gvs[] >>
   irule attr_vv_post >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   rpt strip_tac >> gvs[]
