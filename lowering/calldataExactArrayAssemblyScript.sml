@@ -276,14 +276,8 @@ Resume calldata_exact_array_case[fixed_extends]:
   metis_tac[abiDecoderMemberConsTheory.abi_decoder_members_extends]
 QED
 Resume calldata_exact_array_case[fixed_element_extends]:
-  POP_ASSUM_LIST (K all_tac) >> rpt gen_tac >>
-  qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,
-    `[(ei,0,0)]`,`ao`,`vo`,`a`,`b`] mp_tac
-    (Q.GENL [`dst`,`src`,`opc`,`base_op`,`hi`,`elems`,`ao`,`vo`,`st`,`final`]
-      abiDecoderMemberConsTheory.abi_decoder_members_extends) >>
-  simp[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+  POP_ASSUM_LIST (K all_tac) >>
+  metis_tac[abiDecoderMemberConsTheory.abi_decoder_member_step_extends]
 QED
 Resume calldata_exact_array_case[fixed_child]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >>

@@ -59,6 +59,23 @@ Proof
   metis_tac[cj 2 abi_decoder_vars_mono_mutual, abi_decoder_vars_mono_def, SND]
 QED
 
+Theorem abi_decoder_member_step_extends:
+  !dst src opc base_op hi ei ao vo st final.
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao opc base_op hi;
+        dp <- emit_op ADD [dst; Lit (n2w vo)];
+        compile_abi_decode_to_buf dp ep opc base_op hi ei od) st = ((),final) ==>
+    cs_extends st final
+Proof
+  rpt gen_tac >>
+  qspecl_then [`dst`,`src`,`opc`,`base_op`,`hi`,
+    `[(ei,0,0)]`,`ao`,`vo`,`st`,`final`] mp_tac
+    (Q.GENL [`dst`,`src`,`opc`,`base_op`,`hi`,`elems`,`ao`,`vo`,`st`,`final`]
+      abi_decoder_members_extends) >>
+  simp[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
 Theorem abi_decoder_member_cons_trace:
   compile_abi_decode_complex_elems dst src opc base_op hi (abi_decoder_member_infos sf ce (ty::tys))
     ao vo st = ((),final) ==>
