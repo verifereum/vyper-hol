@@ -145,7 +145,7 @@ Proof
 QED
 
 (* Bridge from a positioned context-region entry to an assembly state. *)
-Theorem initial_state_bridge[local]:
+Theorem initial_state_bridge:
   ∀cp prog off fn vs es ctx i r unit lo.
     initial_state_rel cp prog off fn vs es /\
     generate_context_plan ctx = SOME cp /\
