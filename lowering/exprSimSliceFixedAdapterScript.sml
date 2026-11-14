@@ -19,10 +19,11 @@ Proof
   `expr_sim_inv cenv cx env ee /\ expr_result_typed env src (Value v)` by
     metis_tac[exprSimSourceTheory.expr_body_pre_eval] >>
   `env.type_defs = get_tenv cx` by
-    fs[exprSimHypsDefsTheory.expr_body_pre_def,
-       exprSimHypsDefsTheory.expr_sim_inv_def,
-       vyperTypeInvariantsTheory.env_consistent_def,
-       vyperTypeInvariantsTheory.env_context_consistent_def] >>
+    (qpat_assum `expr_sim_inv cenv cx env ee`
+       (ACCEPT_TAC o CONJUNCT1 o
+        PURE_REWRITE_RULE [vyperTypeInvariantsTheory.env_context_consistent_def] o
+        CONJUNCT1 o PURE_REWRITE_RULE [vyperTypeInvariantsTheory.env_consistent_def] o
+        CONJUNCT1 o PURE_REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_def])) >>
   fs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def,
      vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
   Cases_on `v` >> gvs[vyperValueTheory.evaluate_type_def,

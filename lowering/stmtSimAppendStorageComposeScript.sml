@@ -834,7 +834,7 @@ Resume append_storage_word_suffix_path[store]:
       qpat_x_assum `state_frame u = _` (fn th => pure_once_rewrite_tac [th]) >>
       qpat_x_assum `state_frame t = _` (fn th => pure_once_rewrite_tac [th]) >>
       Cases_on `tr` >>
-      simp[drop_fresh_def, sstore_def, tstore_def, LET_THM]) >>
+      simp_tac (srw_ss()) [drop_fresh_def, sstore_def, tstore_def, LET_THM]) >>
   rpt strip_tac >>
   `eval_operand (Var x) (drop_fresh sb s) = SOME a` by
     simp[eval_operand_def, lookup_var_drop_fresh] >>

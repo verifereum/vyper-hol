@@ -246,7 +246,8 @@ Theorem window_complex_pre_prefix[local]:
   ci_mono st mid /\ ci_mono mid en ==>
   abi_encoder_window_pre ctx func st mid dst src ei at av sb cap d s
 Proof
-  simp_tac bool_ss [abi_encoder_window_pre_def, ci_mono_def] >> strip_tac >>
+  pure_rewrite_tac [abi_encoder_window_pre_def] >>
+  pure_rewrite_tac [ci_mono_def] >> strip_tac >>
   asm_rewrite_tac[] >>
   (conj_tac >- metis_tac[fragExecTheory.fn_has_code_split]) >>
   rpt gen_tac >> strip_tac >>

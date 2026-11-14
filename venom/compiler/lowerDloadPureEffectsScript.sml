@@ -30,10 +30,9 @@ Theorem ld_pure_taint_nonvar:
   (step_taint i s s' tn).t_imm = tn.t_imm
 Proof
   strip_tac >> drule_all ld_pure_update >> strip_tac >> gvs[] >>
-  simp[step_taint_def, mem_taint_def, new_site_bytes_def,
-    written_taint_def, step_writes_def, source_memory_write_ranges_def,
-    store_taint_def, imm_taint_def, adopt_reset_def, update_var_def,
-    range_bytes_def, EXTENSION, FLOOKUP_DEF] >>
+  (simp[step_taint_def, mem_taint_def, store_taint_def, imm_taint_def, adopt_reset_def] >>
+  simp[new_site_bytes_def, written_taint_def, step_writes_def, source_memory_write_ranges_def,
+    update_var_def, range_bytes_def, EXTENSION, FLOOKUP_DEF]) >>
   simp[SF CONJ_ss] >>
   namedCases_on `i.inst_operands` ["", "a ops1"] >> simp[] >>
   namedCases_on `ops1` ["", "b ops2"] >> simp[] >>

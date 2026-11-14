@@ -157,7 +157,7 @@ Proof
       (mk_inst sm.cs_next_id (if tr then TLOAD else SLOAD)
         [p.ptr_operand] [out]) s =
       OK (update_var out (if tr then tload w s else sload w s) s)` by
-    (Cases_on `tr` >> simp[step_inst_base_def, mk_inst_def, exec_read1_def]) >>
+    (Cases_on `tr` >> (simp[mk_inst_def] >> simp[step_inst_base_opcode_eqs, exec_read1_def])) >>
   `gas_path ctx func s 0
     (OK (update_var (STRING #"%" (toString sm.cs_next_var))
        (if tr then tload w s else sload w s) s
