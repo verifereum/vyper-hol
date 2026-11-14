@@ -2,12 +2,13 @@
 Theory bodyFullAssignToplevelSource
 Ancestors
   gasOutcomeFull gasOutcomeFullCompose gasExemptCert gasStorage
+  gasContext stmtSimDefs
   vyperStorageTrace vyperStorageFootprint vyperState vyperInterpreter
   venomState fragExec fragGasOriginPtr list
 
 Theorem body_assign_toplevel_word_full_source:
-  gas_admissible (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
-    (stmt_res_ok lctx) es /\
+  gasContext$gas_admissible (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
+    (stmtSimDefs$stmt_res_ok lctx) es /\
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn) Q1
     (\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r) /\
