@@ -499,30 +499,6 @@ Proof
   rpt gen_tac >> Cases_on `x = v` >> simp[]
 QED
 
-(* Pure transport for clean output prefixes and synchronized snapshot reset. *)
-Theorem concretize_reset_write_taint_order[local]:
-  relocation_taint_le R tn un /\
-  (!a b. next a b /\ a IN written ==> b IN writtenT) /\
-  (!a b. next a b /\ a NOTIN written ==> R a b) ==>
-  relocation_taint_le next
-    (tn with <|t_mem := tn.t_mem DIFF written;
-       t_var := tn.t_var |+ (v,{});
-       t_stor := if reset then {} else tn.t_stor;
-       t_trans := if reset then {} else tn.t_trans|>)
-    (un with <|t_mem := un.t_mem DIFF writtenT;
-       t_var := un.t_var |+ (v,{});
-       t_stor := if reset then {} else un.t_stor;
-       t_trans := if reset then {} else un.t_trans|>)
-Proof
-  strip_tac >> fs[relocation_taint_le_def] >>
-  simp[relocation_taint_le_def] >> conj_tac
-  >- (fs[demand_taint_def] >> metis_tac[]) >>
-  conj_tac
-  >- (simp[op_taint_def, FLOOKUP_UPDATE] >> rpt gen_tac >>
-      IF_CASES_TAC >> simp[] >> fs[op_taint_def]) >>
-  Cases_on `reset` >> simp[]
-QED
-
 Theorem ext_call_taint[local]:
   MEM inst.inst_opcode [CALL; STATICCALL] /\ inst.inst_outputs = [v] /\
   inst.inst_operands = [opg;opa] ++ vals ++ [opd;opn;opr;opm] /\

@@ -164,15 +164,6 @@ QED
 val _ = if null (hyp concretize_word_load_local_complete) then ()
         else raise Fail "complete load export has hypotheses";
 
-Theorem mload_taint_update[local]:
-  inst.inst_opcode = MLOAD /\ inst.inst_operands = [opd] /\
-  inst.inst_outputs = [v] /\ eval_operand opd s = SOME dst ==>
-  step_taint inst s (update_var v value s) tn =
-    tn with t_var := tn.t_var |+ (v,mem_word_taint tn.t_mem (w2n dst))
-Proof
-  strip_tac >> irule word_load_taint_update >> simp[]
-QED
-
 Theorem concretize_mload_local_complete:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
