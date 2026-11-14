@@ -91,6 +91,7 @@ Proof
     (Q.INST [`cur` |-> `old`] (SPEC_ALL aug_place_rhs_operator_write_mem))) >>
   impl_tac >- (
   simp[typed_val_to_w256_word_value, loweringPostsTheory.slot_loc_def] >>
+  conj_tac >- (Cases_on `tr` >> simp[]) >>
   rpt gen_tac >> strip_tac >>
   `?xs. ee.storage_trace = mid.storage_trace ++ xs` by
     (`storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
