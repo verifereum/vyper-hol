@@ -3,7 +3,8 @@ Theory fullStoreCopyPost
 Ancestors
   fullStoreCopyTaint exprSimProps stmtSimStoreCopy bodyMemoryDefs
   bodyPtrDefs localPtrsProps loweringStateRelDefs loweringPosts exprLoweringProps
-  venomState venomMemDefs ptrDiscipline
+  venomState venomMemDefs ptrDiscipline fragGasOriginPtr fragGasOrigin fragGasMode
+  fragGasPathFrameMem bodyMemAggregatePath allocaHistory
 Libs
   pairLib
 
@@ -62,4 +63,48 @@ Proof
       gvs[return_buf_ptr_def] >> metis_tac[])
   >- (rpt strip_tac >> gvs[local_ptrs_reserved_def] >> metis_tac[])
   >- metis_tac[]
+QED
+
+Theorem store_copy_path_history:
+  fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
+  gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (s,G,tn) [] (OK u,Gf,tf) ==>
+  alloca_history func u
+Proof
+  strip_tac >> drule gas_origin_ptr_path_projections >> strip_tac >>
+  drule gas_origin_path_erase >> simp[gas_marked_path_def] >> strip_tac >>
+  irule gas_path_mem_zero_history >> simp[] >>
+  metis_tac[aggregate_mem_path_alloca_inv]
+QED
+
+(* Compose the RHS's old-resource frame with a nonallocating store frame. *)
+Theorem store_copy_kept_resources_post:
+  sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sb.cs_next_var /\
+  return_buf_frame d cenv sm s /\ u.vs_alloca_next = s.vs_alloca_next /\
+  u.vs_allocas = s.vs_allocas /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+         lookup_var x s = SOME w) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP s.vs_allocas aid = SOME b) /\
+  (!x. not_fresh_at sa x ==>
+       FLOOKUP G x = FLOOKUP G0 x /\
+       op_taint tn (Var x) = op_taint tn0 (Var x)) /\
+  (!x. not_fresh_at sm x ==>
+       lookup_var x u = lookup_var x s /\ FLOOKUP Gf x = FLOOKUP G x /\
+       op_taint tf (Var x) = op_taint tn (Var x)) ==>
+  return_buf_frame d cenv sb u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+         lookup_var x u = SOME w) /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP u.vs_allocas aid = SOME b) /\
+  (!x. not_fresh_at sa x ==>
+       FLOOKUP Gf x = FLOOKUP G0 x /\
+       op_taint tf (Var x) = op_taint tn0 (Var x))
+Proof
+  strip_tac >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+    (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  conj_tac
+  >- (irule return_buf_frame_frame >> goal_assum (drule_at Any) >> simp[]) >>
+  simp[] >> metis_tac[]
 QED
