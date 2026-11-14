@@ -75,12 +75,11 @@ Proof
  drule_all deploy_ctor_decoder_sequence_ambient >> strip_tac >>
  drule_all ctor_actual_sequence_world >> strip_tac >>
  drule_all ctor_actual_scratch_free_effect >>
- disch_then (qspecl_then [`site`, `{}`, `func`, `ctx`] assume_tac) >>
+ disch_then (qspecl_then [`site`, `{}`, `func`, `ctx`] strip_assume_tac) >>
  qexists `actual` >>
- simp[fresh_vars_wrt_def, abi_decode_frame_def, eval_op_inst_idx,
-   abi_encoder_registered_effect_def, alloca_inv_def, alloca_frontier_inv_def,
-   remaining_alloca_budget_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
- metis_tac[]
+ asm_rewrite_tac[] >>
+ fs[fresh_vars_wrt_def, abi_decode_frame_def, abi_encoder_registered_effect_def] >>
+ rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem deploy_ctor_noalloc_complete_run:
@@ -245,12 +244,13 @@ Proof
  drule_all deploy_ctor_decoder_sequence_ambient >> strip_tac >>
  drule_all ctor_actual_sequence_world >> strip_tac >>
  drule_all ctor_actual_scratch_free_effect >>
- disch_then (qspecl_then [`site`, `{}`, `func`, `ctx`] assume_tac) >>
+ disch_then (qspecl_then [`site`, `{}`, `func`, `ctx`] strip_assume_tac) >>
  qexists `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
  simp[fresh_vars_wrt_def, abi_decode_frame_def, eval_op_inst_idx,
    abi_encoder_registered_effect_def, alloca_inv_def, alloca_frontier_inv_def,
    remaining_alloca_budget_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
- metis_tac[]
+ fs[fresh_vars_wrt_def, abi_decode_frame_def, abi_encoder_registered_effect_def] >>
+ rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem deploy_ctor_noalloc_complete_gas_resources:
