@@ -85,14 +85,18 @@ Proof
        (LocatedValue (expr_type e) (mk_ptr result LocMemory)) t` by
     (qx_gen_tac `H2` >> strip_tac >>
      `stmt_state_rel H2 ctx func cenv cx es t` by
-       (drule_all (Q.SPEC `H2` raw_call_nonrevert_positive_run) >>
+       (Q.ISPEC_THEN `H2` drule_all (Q.GEN `H` raw_call_nonrevert_positive_run) >>
         strip_tac >> gvs[]) >>
-     conj_tac
-     >- (qpat_assum `lowered_value_type _ _ = _`
+     `vv_post H2 ctx func cenv cx e es0 sf sb s0 es
+       (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
+       (LocatedValue (expr_type e) (mk_ptr result LocMemory)) t` by
+       (qpat_assum `lowered_value_type _ _ = _`
            (assume_tac o MATCH_MP loweringPostsTheory.post_value_type_lowered) >>
-         irule raw_call_tuple_post >> simp[] >> qexists_tac `ti` >>
-         fs[arithmeticTheory.MULT_COMM] >> metis_tac[]) >>
-     irule aggregate_allocated_result_store_bound_mem >>
+        irule raw_call_tuple_post >> simp[] >> qexists_tac `ti` >>
+        fs[arithmeticTheory.MULT_COMM] >> metis_tac[]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     Q.ISPEC_THEN `H2` irule
+       (Q.GEN `H` aggregate_allocated_result_store_bound_mem) >>
      conj_tac >- fs[stmt_state_rel_def] >>
      conj_tac
      >- (qexistsl_tac [`ti`,`w2n tw`,
