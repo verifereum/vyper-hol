@@ -33,6 +33,7 @@ Ancestors
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
   codegenRequestPrefix
   codegenStaticAbort
+  staticAbortMemDefs
   (* lowering: ABI correctness, target/place steps, typed copies and hashing,
      place typing *)
   abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
