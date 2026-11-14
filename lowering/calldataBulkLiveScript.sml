@@ -597,7 +597,7 @@ Proof
   drule_all calldata_count_guard_rejected_live_mod >> gvs[]
 QED
 
-Theorem calldata_bulk_live_frag_mem_mod:
+Theorem calldata_bulk_live_frag_mem_mod_guard:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\ eval_operand src initial = SOME p /\
@@ -616,7 +616,8 @@ Theorem calldata_bulk_live_frag_mem_mod:
       (!op. abi_decoder_operand_live st.cs_next_var op ==>
         eval_operand op t = eval_operand op initial) /\
       t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next)
-    (\r. ?t. r = Abort Revert_abort t /\
+    (\r. maxn MOD dimword (:256) < w2n (abi_decode_load CALLDATALOAD p initial) /\
+      ?t. r = Abort Revert_abort t /\
       (!op. abi_decoder_operand_live st.cs_next_var op ==>
         eval_operand op t = eval_operand op initial) /\
       t.vs_memory = initial.vs_memory /\ t.vs_call_ctx = initial.vs_call_ctx /\
@@ -646,4 +647,36 @@ Proof
   drule_all calldata_bulk_rejected_live_mod >> strip_tac >>
   disj2_tac >> qexists_tac `t` >>
   simp[instIdxIndepTheory.eval_op_inst_idx]
+QED
+
+Theorem calldata_bulk_live_frag_mem_mod:
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
+    (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
+  ~dec_info_needs_clamp ei /\ eval_operand src initial = SOME p /\
+  eval_operand dst initial = SOME (n2w d) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  d+(32+maxn*mem_sz) < dimword (:256) /\
+  d+(32+maxn*mem_sz) <= initial.vs_alloca_next ==>
+  frag_exec_mem ctx st st' (\s. s = initial)
+    (\t. w2n (abi_decode_load CALLDATALOAD p initial) <= maxn MOD dimword (:256) /\
+      mem_word_at d t.vs_memory = abi_decode_load CALLDATALOAD p initial /\
+      mem_bytes_at (d+32) (w2n (abi_decode_load CALLDATALOAD p initial)*mem_sz) t.vs_memory =
+        mem_bytes_at (w2n (p+32w)) (w2n (abi_decode_load CALLDATALOAD p initial)*mem_sz)
+          initial.vs_call_ctx.cc_calldata /\
+      abi_decode_frame d (32+maxn*mem_sz) initial t /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op initial) /\
+      t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next)
+    (\r. ?t. r = Abort Revert_abort t /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op initial) /\
+      t.vs_memory = initial.vs_memory /\ t.vs_call_ctx = initial.vs_call_ctx /\
+      t.vs_data_section = initial.vs_data_section /\
+      t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next)
+Proof
+  strip_tac >> drule_all calldata_bulk_live_frag_mem_mod_guard >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  disch_then (mp_tac o MATCH_MP fragExecMemTheory.frag_exec_mem_weaken) >>
+  disch_then irule >> simp[]
 QED

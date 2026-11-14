@@ -1595,31 +1595,29 @@ Theorem lower_vyper_runtime_unit_no_external_defaults:
   classify_functions tops = (ext_fns,int_fns,fb_fn,ctor_fn) /\
   ~EXISTS external_has_defaults ext_fns ==>
   lower_vyper_runtime_unit tops rpolicy =
-    let tenv = type_env tops in
-    let nkey_map = (K global_nonreentrant_slot : string -> num) in
-    let use_trans = T in
-    let selectors = build_selectors tenv ext_fns in
-    let external_fns = MAP
-      (set_external_package_target rpolicy.rpol_target o
-       package_external_fn tops use_trans nkey_map) ext_fns in
-    let runtime_int_fns = MAP
-      (set_internal_package_target rpolicy.rpol_target o
-       package_internal_fn tops use_trans nkey_map F 0) int_fns in
-    let fallback_fn = set_fallback_package_target rpolicy.rpol_target
-      (package_fallback_fn tops use_trans nkey_map fb_fn) in
     if compute_immutables_len (get_struct_fields (make_struct_fields_map tops))
          tops < 0x6000 ∧
-       EVERY external_return_buffer_ok external_fns ∧
+       EVERY external_return_buffer_ok (MAP
+      (set_external_package_target rpolicy.rpol_target o
+       package_external_fn tops (T) ((K global_nonreentrant_slot : string -> num))) ext_fns) ∧
        OPTION_ALL (λ(cenv,pay,nr,nkey,ut,iv,body,ret_opt).
                      external_return_buffer_ok
                        ("", cenv, ([] : num list), 0, pay, nr, nkey, ut, iv, body,
                         ret_opt))
-         fallback_fn ∧
+         (set_fallback_package_target rpolicy.rpol_target
+      (package_fallback_fn tops (T) ((K global_nonreentrant_slot : string -> num)) fb_fn)) ∧
        EVERY (fn_allocs_ok tops)
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
     then
-      run_lowering selectors external_fns runtime_int_fns fallback_fn rpolicy
-        0 0 ([]:dense_bucket list) (build_dense_entry_info selectors external_fns)
+      run_lowering (build_selectors (type_env tops) ext_fns) (MAP
+      (set_external_package_target rpolicy.rpol_target o
+       package_external_fn tops (T) ((K global_nonreentrant_slot : string -> num))) ext_fns) (MAP
+      (set_internal_package_target rpolicy.rpol_target o
+       package_internal_fn tops (T) ((K global_nonreentrant_slot : string -> num)) F 0) int_fns) (set_fallback_package_target rpolicy.rpol_target
+      (package_fallback_fn tops (T) ((K global_nonreentrant_slot : string -> num)) fb_fn)) rpolicy
+        0 0 ([]:dense_bucket list) (build_dense_entry_info (build_selectors (type_env tops) ext_fns) (MAP
+      (set_external_package_target rpolicy.rpol_target o
+       package_external_fn tops (T) ((K global_nonreentrant_slot : string -> num))) ext_fns))
         "__entry"
     else NONE
 Proof

@@ -7,7 +7,7 @@ Ancestors
   arithmetic list rich_list words compileEnv abiEncoder
 
 Theorem calldata_exact_struct_case:
-  let R = \ce env sf ty tv.
+  !R. R = (\ce env sf ty tv.
     !dst src st final fn initial p d ctx site oid base_addr cap.
     compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) st = ((),final) /\
@@ -58,8 +58,7 @@ Theorem calldata_exact_struct_case:
         eval_operand op v = eval_operand op initial) /\
       abi_decode_footprint_frame ((d,type_memory_size tv)::sc) initial v /\
       (!q k. MEM (q,k) sc ==> ?id. st.cs_next_id <= id /\ id < final.cs_next_id /\
-        FLOOKUP v.vs_allocas id = SOME (q,k))
-  in
+        FLOOKUP v.vs_allocas id = SOME (q,k))) ==>
   FLOOKUP env nsid = SOME (StructArgs args) /\
   FLOOKUP sf (nsid_to_string nsid) = SOME fields /\
   MAP (\(name,ty,sz). (name,ty)) fields = args /\
@@ -70,6 +69,7 @@ Theorem calldata_exact_struct_case:
   abi_decoder_header ce env (StructT nsid) (StructTV (ZIP (MAP FST args,tvs))) ==>
   R ce env sf (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
 Proof
+  gen_tac >> disch_then SUBST1_TAC >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
   `LIST_REL (abi_decoder_coherent ce (env \\ nsid) (sf \\ nsid_to_string nsid))
     (MAP SND args) tvs` by

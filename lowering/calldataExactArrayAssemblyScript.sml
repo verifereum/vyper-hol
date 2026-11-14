@@ -7,7 +7,7 @@ Ancestors
   arithmetic list rich_list words compileEnv abiEncoder
 
 Theorem calldata_exact_array_case:
-  let R = \ty tv.
+  !R. R = (\ty tv.
     !dst src st final fn initial p d ctx site oid base_addr cap.
     compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) st = ((),final) /\
@@ -58,8 +58,7 @@ Theorem calldata_exact_array_case:
         eval_operand op v = eval_operand op initial) /\
       abi_decode_footprint_frame ((d,type_memory_size tv)::sc) initial v /\
       (!q k. MEM (q,k) sc ==> ?id. st.cs_next_id <= id /\ id < final.cs_next_id /\
-        FLOOKUP v.vs_allocas id = SOME (q,k))
-  in
+        FLOOKUP v.vs_allocas id = SOME (q,k))) ==>
   (!dst src xs st final fn initial srcword d ctx site oid base_addr cap TV ts member_ptrs build.
     compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) xs 0 0 st = ((),final) /\
     fn_has_code st final fn /\ ~initial.vs_halted /\
@@ -181,6 +180,7 @@ Theorem calldata_exact_array_case:
   abi_decoder_header ce env (ArrayT ty bound) (ArrayTV tv bound) ==>
   R (ArrayT ty bound) (ArrayTV tv bound)
 Proof
+  gen_tac >> disch_then SUBST1_TAC >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> disch_then (mk_asm "linked") >> strip_tac >> strip_tac >>
   `abi_decoder_coherent ce env sf (ArrayT ty bound) (ArrayTV tv bound)` by
     (irule (cj 3 abi_decoder_coherent_rules) >> asm_rewrite_tac[]) >>
@@ -189,7 +189,12 @@ Proof
   Cases_on `is_abi_dynamic ce.ce_struct_fields ty \/
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)`
   >- suspend "nonbulk" >>
-  asm_x "linked" kall_tac >> first_x_assum irule >> simp[] >> metis_tac[]
+  asm_x "linked" kall_tac >>
+  qpat_x_assum `~(_ \/ _)`
+    (strip_assume_tac o REWRITE_RULE [DE_MORGAN_THM]) >>
+  qpat_x_assum `!n. ~is_abi_dynamic ce.ce_struct_fields ty /\ _ ==> _`
+    (qspec_then `n` mp_tac) >>
+  impl_tac >- asm_rewrite_tac[] >> simp[]
 QED
 Resume calldata_exact_array_case[fixed]:
   BETA_TAC >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>

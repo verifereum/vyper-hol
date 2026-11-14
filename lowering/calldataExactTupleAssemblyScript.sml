@@ -7,7 +7,7 @@ Ancestors
   arithmetic list rich_list words compileEnv abiEncoder
 
 Theorem calldata_exact_tuple_case:
-  let R = \ty tv.
+  !R. R = (\ty tv.
     !dst src st final fn initial p d ctx site oid base_addr cap.
     compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) st = ((),final) /\
@@ -58,12 +58,12 @@ Theorem calldata_exact_tuple_case:
         eval_operand op v = eval_operand op initial) /\
       abi_decode_footprint_frame ((d,type_memory_size tv)::sc) initial v /\
       (!q k. MEM (q,k) sc ==> ?id. st.cs_next_id <= id /\ id < final.cs_next_id /\
-        FLOOKUP v.vs_allocas id = SOME (q,k))
-  in
+        FLOOKUP v.vs_allocas id = SOME (q,k))) ==>
   LIST_REL (\ty tv. abi_decoder_coherent ce env sf ty tv /\ R ty tv) tys tvs /\
   abi_decoder_header ce env (TupleT tys) (TupleTV tvs) ==>
   R (TupleT tys) (TupleTV tvs)
 Proof
+  gen_tac >> disch_then SUBST1_TAC >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
   `LIST_REL (abi_decoder_coherent ce env sf) tys tvs` by
     (qpat_assum `LIST_REL _ tys tvs` mp_tac >>

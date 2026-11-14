@@ -1,16 +1,8 @@
 Theory calldataSourceDecisions
 Ancestors
-  calldataSourceCorrespondence vyperCalldata vyperCalldataProps
+  calldataReconstruction calldataSourceCorrespondence vyperCalldata vyperCalldataProps
   calldataRecursiveProducers abiDecoderCoherence exprLowering abiEncoder
   compileEnv vyperValue vyperABI list arithmetic
-
-Theorem dec_infos_need_clamp_exists:
-  !infos. dec_infos_need_clamp infos =
-    EXISTS (\(ei,a,m). dec_info_needs_clamp ei) infos
-Proof
-  Induct >> simp[dec_info_needs_clamp_def] >>
-  gen_tac >> PairCases_on `h` >> simp[dec_info_needs_clamp_def]
-QED
 
 Theorem calldata_coherent_clamp:
   !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==>
@@ -30,17 +22,17 @@ Proof
            needs_clamp_def, tv_needs_clamp_def, SF boolSimps.COND_elim_ss])
   >- (Cases_on `bound` >>
       gvs[type_to_abi_dec_info_def, dec_info_needs_clamp_def,
-          tv_needs_clamp_def, dec_infos_need_clamp_exists, EXISTS_GENLIST] >>
+          tv_needs_clamp_def, calldata_clamp_list, EXISTS_GENLIST] >>
       gvs[abi_decoder_header_def, evaluate_type_def, AllCaseEqs()] >>
       metis_tac[arithmeticTheory.NOT_ZERO_LT_ZERO])
   >- (qpat_x_assum `abi_decoder_header _ _ _ _` kall_tac >>
       simp[type_to_abi_dec_info_def, dec_info_needs_clamp_def,
-           dec_infos_need_clamp_exists, EXISTS_MAP, tv_needs_clamp_def,
+           calldata_clamp_list, EXISTS_MAP, tv_needs_clamp_def,
            tv_needs_clamp_list_exists] >>
       pop_assum mp_tac >> qid_spec_tac `tvs` >> Induct_on `tys` >>
       Cases_on `tvs` >> simp[] >> metis_tac[])
   >> simp[type_to_abi_dec_info_def, dec_info_needs_clamp_def,
-          dec_infos_need_clamp_exists, EXISTS_MAP, tv_needs_clamp_def,
+          calldata_clamp_list, EXISTS_MAP, tv_needs_clamp_def,
           tv_needs_clamp_fields_map, tv_needs_clamp_list_exists]
   >> qpat_x_assum `MAP _ fields = args` (SUBST_ALL_TAC o SYM)
   >> qpat_x_assum `LIST_REL _ _ _` mp_tac

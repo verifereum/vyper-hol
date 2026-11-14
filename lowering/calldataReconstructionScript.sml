@@ -260,7 +260,7 @@ Proof
   simp[] >> strip_tac >> qexists_tac `(h0,v)::fields` >> simp[val_in_memory_def]
 QED
 
-Theorem calldata_clamp_list[local]:
+Theorem calldata_clamp_list:
   !xs. dec_infos_need_clamp xs <=> EXISTS (\x. dec_info_needs_clamp (FST x)) xs
 Proof
   Induct >> simp[dec_info_needs_clamp_def] >>

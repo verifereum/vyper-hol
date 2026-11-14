@@ -18,57 +18,14 @@ Ancestors
   calldataExactArrayAssembly calldataExactTupleAssembly calldataExactStructAssembly
   calldataExactLinkedMembers
 
-Theorem calldata_bulk_live_frag_mem_mod_guard:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
-    (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
-  ~dec_info_needs_clamp ei /\ eval_operand src initial = SOME p /\
-  eval_operand dst initial = SOME (n2w d) /\
-  abi_decoder_operand_live st.cs_next_var src /\
-  abi_decoder_operand_live st.cs_next_var dst /\
-  d+(32+maxn*mem_sz) < dimword (:256) /\
-  d+(32+maxn*mem_sz) <= initial.vs_alloca_next ==>
-  frag_exec_mem ctx st st' (\s. s = initial)
-    (\t. w2n (abi_decode_load CALLDATALOAD p initial) <= maxn MOD dimword (:256) /\
-      mem_word_at d t.vs_memory = abi_decode_load CALLDATALOAD p initial /\
-      mem_bytes_at (d+32) (w2n (abi_decode_load CALLDATALOAD p initial)*mem_sz) t.vs_memory =
-        mem_bytes_at (w2n (p+32w)) (w2n (abi_decode_load CALLDATALOAD p initial)*mem_sz)
-          initial.vs_call_ctx.cc_calldata /\
-      abi_decode_frame d (32+maxn*mem_sz) initial t /\
-      (!op. abi_decoder_operand_live st.cs_next_var op ==>
-        eval_operand op t = eval_operand op initial) /\
-      t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next)
-    (\r. maxn MOD dimword (:256) < w2n (abi_decode_load CALLDATALOAD p initial) /\
-      ?t. r = Abort Revert_abort t /\
-      (!op. abi_decoder_operand_live st.cs_next_var op ==>
-        eval_operand op t = eval_operand op initial) /\
-      t.vs_memory = initial.vs_memory /\ t.vs_call_ctx = initial.vs_call_ctx /\
-      t.vs_data_section = initial.vs_data_section /\
-      t.vs_allocas = initial.vs_allocas /\ t.vs_alloca_next = initial.vs_alloca_next)
-Proof
-  strip_tac >>
-  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decoder_bulk_shape >> strip_tac >>
-  drule_all calldata_bulk_opcodes >> strip_tac >>
-  irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
-  >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
-      ho_match_mp_tac (GEN_ALL calldata_bulk_live_prefix_safe_mod) >>
-      qexistsl_tac [`src`,`p`,`mem_sz`,`maxn`,`ei`,`dst`,`d`,`abi_sz`] >> simp[]) >>
-  Cases_on `w2n (abi_decode_load CALLDATALOAD p initial) <= maxn MOD dimword (:256)`
-  >- (drule_all calldata_count_guard_accepted_bounds >> strip_tac >>
-      `w2n (abi_decode_load CALLDATALOAD p initial)*mem_sz <= maxn*mem_sz` by
-        simp[LE_MULT_RCANCEL] >>
-      `d+32 < dimword (:256) /\
-       w2n (abi_decode_load CALLDATALOAD p initial)*mem_sz < dimword (:256)` by decide_tac >>
-      drule_all calldata_bulk_accepted_live_mod >> strip_tac >>
-      `abi_decode_frame d (32+maxn*mem_sz) initial t` by
-        (irule abi_decode_frame_widen >> goal_assum (drule_at Any) >> simp[]) >>
-      disj1_tac >> qexists_tac `t` >>
-      gvs[instIdxIndepTheory.eval_op_inst_idx, abi_decode_frame_def] >> metis_tac[]) >>
-  `maxn MOD dimword (:256) < w2n (abi_decode_load CALLDATALOAD p initial)` by decide_tac >>
-  drule_all calldata_bulk_rejected_live_mod >> strip_tac >>
-  disj2_tac >> qexists_tac `t` >>
-  simp[instIdxIndepTheory.eval_op_inst_idx]
-QED
+fun instantiate_case_context th =
+  let
+    val th = SPEC_ALL th;
+    val (equation, _) = dest_imp (concl th);
+    val (context, value) = dest_eq equation;
+  in
+    MP (INST [context |-> value] th) (REFL value)
+  end;
 
 Theorem calldata_exact_word_owned_run:
   abi_decoder_coherent ce env sf ty tv /\ is_word_type ty /\
@@ -528,7 +485,7 @@ QED
 
 Resume calldata_exact_owned_run[array]:
   rpt gen_tac >>
-  mp_tac calldata_exact_array_case >>
+  mp_tac (instantiate_case_context calldata_exact_array_case) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC calldata_exact_aggregate_owned_run_linked_tail)) >>
   (impl_tac >- (BETA_TAC >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
@@ -544,11 +501,11 @@ Resume calldata_exact_owned_run[array]:
   disch_then (ACCEPT_TAC o BETA_RULE)
 QED
 Resume calldata_exact_owned_run[tuple]:
-  rpt gen_tac >> mp_tac calldata_exact_tuple_case >>
+  rpt gen_tac >> mp_tac (instantiate_case_context calldata_exact_tuple_case) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> disch_then (ACCEPT_TAC o BETA_RULE)
 QED
 Resume calldata_exact_owned_run[struct]:
-  rpt gen_tac >> mp_tac calldata_exact_struct_case >>
+  rpt gen_tac >> mp_tac (instantiate_case_context calldata_exact_struct_case) >>
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> disch_then (MATCH_ACCEPT_TAC o BETA_RULE)
 QED
 Finalise calldata_exact_owned_run
