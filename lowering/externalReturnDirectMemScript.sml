@@ -18,6 +18,7 @@ Ancestors
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
 
 val _ = Parse.hide "body";
+val _ = Parse.hide "tops";
 
 Theorem external_frame_ret_value_direct_run_mem:
   !tops rpolicy unit am tx ret vs mut args fbody env0 lbl cenv0 pos_args

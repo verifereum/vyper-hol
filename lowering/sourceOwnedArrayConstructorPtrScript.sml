@@ -553,7 +553,8 @@ Resume source_owned_nonbulk_array_ptr[initialize]:
       abiDecoderExecutionTheory.abi_decode_position_header_delta_def]
     (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_loop_prefix_facts)) >> strip_tac >>
   `middle.cs_next_var <= st1.cs_next_var` by
-    metis_tac[abiDecoderCountersTheory.abi_decoder_variable_counter] >>
+    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ middle = ((),st1)`
+       (ACCEPT_TAC o MATCH_MP abiDecoderCountersTheory.abi_decoder_variable_counter)) >>
   `last.cs_next_var = st1.cs_next_var+1` by
     (qpat_assum `abi_decode_loop_suffix _ _ _ _ _ = _` mp_tac >>
      qpat_assum `FST ops = _` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
@@ -581,7 +582,13 @@ Resume source_owned_nonbulk_array_ptr[initialize]:
     ?b. entry = (b,32) /\ b+32 <= s.vs_alloca_next` by
     (rpt strip_tac >> PairCases_on `entry` >>
      qpat_assum `!id p k. st.cs_next_id <= id /\ _ ==> _` (qspecl_then [`inst.inst_id`,`entry0`,`entry1`] mp_tac) >>
-     impl_tac >- metis_tac[] >> simp_tac (srw_ss()) [] >> metis_tac[]) >>
+     impl_tac
+     >- (qpat_assum `inst.inst_id = header_st.cs_next_id` mp_tac >>
+         qpat_assum `st.cs_next_id <= header_st.cs_next_id` mp_tac >>
+         qpat_assum `header_st.cs_next_id < last.cs_next_id` mp_tac >>
+         qpat_assum `FLOOKUP s.vs_allocas inst.inst_id = SOME (entry0,entry1)` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[]) >>
+     simp_tac (srw_ss()) [] >> metis_tac[]) >>
   drule_all actual_word_alloca_physical_credit >> disch_tac >>
   `header_st.cs_next_id = loop_st.cs_next_id-2` by
     (drule abi_decode_index_init_shape >> strip_tac >> decide_tac) >>
