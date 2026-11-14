@@ -8,6 +8,7 @@ Ancestors
   vyperStoragePlaceProvenance fragGasPath gasSummary fragGasMode
   vyperStorageLayoutSafety vyperLookupStorage vyperStorageBackend stmtSimAppendStorageCompose
   exprSimSource bodyPtrPopStoragePureFrame exprOperandVar context
+  vyperEvalExprPreservesScopesDom
 
 Theorem pop_storage_pure_compose:
   !tops ctx cenv cx env ann bt ty es d PG func src id ts vd.
@@ -16,8 +17,7 @@ Theorem pop_storage_pure_compose:
     expr_body_pre cenv cx env (Pop ann bt) es /\
     target_root bt = TopLevelNameTarget (src,id) /\
     get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME vd /\
-    EVERY pure_expr (target_indices bt) ==>
+    find_var_decl_by_name id ts = SOME vd ==>
     expr_vv_sim_ptr d ctx PG func cenv cx ty (Pop ann bt) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -77,12 +77,8 @@ Resume pop_storage_pure_compose[normal]:
     (qpat_x_assum `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_ptr_def] >> strip_tac >>
      first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-  drule_all nested_pop_eval_target_pure_state >> strip_tac >>
-  `gas_explicit marks s0.vs_gas_readings = [] /\
-   tend with gas_obs := [] = es with gas_obs := []` by
-    fs[vyperStateTheory.evaluation_state_component_equality] >>
-  qpat_x_assum `_ with gas_obs := [] = _ with gas_obs := gas_explicit _ _` kall_tac >>
-  gvs[] >>
+  `storage_layout_safe cx` by fs[expr_sim_inv_def] >>
+  drule_all nested_pop_target_storage_preserved >> strip_tac >>
   drule_all nested_pop_eval_target_storage_class >> strip_tac >> gvs[] >>
   drule nested_pop_storage_target_metadata >> strip_tac >> gvs[] >>
   drule_all pop_storage_element_size >>
@@ -95,19 +91,13 @@ Resume pop_storage_pure_compose[normal]:
 QED
 
 Resume pop_storage_pure_compose[suffix]:
-  `expr_body_pre cenv cx env (Pop ann bt) (es with gas_obs := [])` by
-    metis_tac[expr_body_pre_gas_obs] >>
-  `storage_layout_safe cx /\ contract_storage_well_formed cx (es with gas_obs := [])` by
-    (qpat_x_assum `expr_body_pre _ _ _ _ (_ with gas_obs := [])` mp_tac >>
-     pure_rewrite_tac[expr_body_pre_def, expr_sim_inv_def] >>
-     strip_tac >> asm_rewrite_tac[]) >>
   `storage_place_region cx (StoragePlace tr slot (ArrayTV tv' (Dynamic n)))` by
     metis_tac[eval_target_place_region] >>
-  `get_storage_backend cx tr (es with gas_obs := []) =
-    (INL (get_storage cx (es with gas_obs := []) tr),es with gas_obs := [])` by
-    simp[get_storage_backend_eq] >>
-  drule_all nested_pop_eval_target_slots >> strip_tac >>
-  drule_all nested_pop_eval_target_live_post >> strip_tac >>
+  `0 < type_slot_size (ArrayTV tv' (Dynamic n))` by
+    simp[vyperValueTheory.type_slot_size_def] >>
+  drule_all vyperPlaceStoragePreservationTheory.storage_place_region_slots_in_range >>
+  strip_tac >>
+  drule_all accountsRelPropsTheory.storage_place_region_read_live >> strip_tac >>
   `local_ptrs_reserved cenv sm` by
     metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
@@ -131,8 +121,7 @@ Resume pop_storage_pure_compose[apply]:
     (CONJUNCTS_THEN assume_tac)) >>
   qexistsl [`pres`, `pend`, `G2`, `tn2`, `pr`] >>
   conj_tac
-  >- (qpat_x_assum `tend with gas_obs := [] = _` mp_tac >>
-      qpat_x_assum `gas_marked_exec_ptr _ _ _ (eval_target_place _ _) _ _ _ _ _ _ _` mp_tac >>
+  >- (qpat_x_assum `gas_marked_exec_ptr _ _ _ (eval_target_place _ _) _ _ _ _ _ _ _` mp_tac >>
       qpat_x_assum `gas_marked_exec_ptr _ _ _ (pop_place _ _) _ _ _ _ _ _ _` mp_tac >>
       rpt (first_x_assum kall_tac) >> rpt strip_tac >>
       metis_tac[gas_marked_exec_ptr_bind_normal, listTheory.APPEND_NIL]) >>
@@ -140,6 +129,8 @@ Resume pop_storage_pure_compose[apply]:
 QED
 
 Resume pop_storage_pure_compose[post]:
+  `MAP FDOM es.scopes = MAP FDOM tend.scopes` by
+    (drule eval_target_place_preserves_scopes_dom >> simp[]) >>
   `ghost_kept cenv es sa G0 tn0 s0 G2 tn2` by
     (irule target_post_ghost_kept_compose >>
      qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
