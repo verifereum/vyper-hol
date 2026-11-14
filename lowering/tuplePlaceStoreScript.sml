@@ -80,7 +80,7 @@ QED
 
 (* Allocation and typed normalization retain bytes of every old allocation.
    Both frames refer to the endpoint used for the source-state relation. *)
-Theorem tuple_place_normalize_frame:
+Theorem tuple_place_normalize_effect:
   !cenv cx ctx func es sa sm sc buf dty sty dtv stv v src sw s.
     compile_alloc_buffer (type_memory_size dtv) sa = (buf,sm) /\
     compile_store_memory_typed cenv buf.buf_operand dty src sty sm = ((),sc) /\
@@ -118,6 +118,10 @@ Theorem tuple_place_normalize_frame:
       t.vs_inst_idx = LENGTH sc.cs_current_insts /\
       (!aid b len a n. FLOOKUP s.vs_allocas aid = SOME (b,len) /\
         aid < sa.cs_next_id /\ b <= a /\ a + n <= b + len ==>
+        mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) /\
+      (!a n. a+n <= s.vs_alloca_next /\
+        (!aid b len. FLOOKUP s.vs_allocas aid = SOME (b,len) /\
+          sa.cs_next_id <= aid ==> a+n <= b \/ b+len <= a) ==>
         mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -164,10 +168,22 @@ Proof
      aid < sa.cs_next_id /\ b <= a /\ a + n <= b + len ==>
      mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory` by
     suspend "bytes" >>
+  `!a n. a+n <= s.vs_alloca_next /\
+     (!aid b len. FLOOKUP s.vs_allocas aid = SOME (b,len) /\
+       sa.cs_next_id <= aid ==> a+n <= b \/ b+len <= a) ==>
+     mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory` by
+    (rpt strip_tac >>
+     `regions_disjoint a n (w2n w) (type_memory_size dtv)` by
+       (irule place_store_alloc_source_disjoint >>
+        qexistsl_tac [`s`, `sa`] >> simp[] >> metis_tac[]) >>
+     `a+n <= w2n w \/ w2n w + type_memory_size dtv <= a` by
+       gvs[regions_disjoint_def] >>
+     qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ t.vs_memory = _`
+       (qspecl_then [`a`, `n`] mp_tac) >> simp[]) >>
   qexistsl_tac [`t`, `w`] >> suspend "post"
 QED
 
-Resume tuple_place_normalize_frame[state]:
+Resume tuple_place_normalize_effect[state]:
   markerLib.RESUME_TAC >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   `!name lb len. local_region cenv es.scopes u name lb len ==>
@@ -180,7 +196,7 @@ Resume tuple_place_normalize_frame[state]:
   asm_rewrite_tac[venomInstTheory.mk_inst_def] >> simp[]
 QED
 
-Resume tuple_place_normalize_frame[bytes]:
+Resume tuple_place_normalize_effect[bytes]:
   markerLib.RESUME_TAC >> rpt strip_tac >>
   `regions_disjoint (w2n w) (type_memory_size dtv) b len` by
     (qpat_x_assum `!aid b len. _` drule_all >> simp[]) >>
@@ -189,7 +205,7 @@ Resume tuple_place_normalize_frame[bytes]:
   qpat_x_assum `!a len. _` drule >> simp[]
 QED
 
-Resume tuple_place_normalize_frame[post]:
+Resume tuple_place_normalize_effect[post]:
   markerLib.RESUME_TAC >>
   drule_all exprSimStorageCopyTheory.copy_static_fields >> strip_tac >>
   `gas_marked_path F ctx func s 0 (OK t)` by
@@ -200,4 +216,49 @@ Resume tuple_place_normalize_frame[post]:
      metis_tac[]) >>
   asm_rewrite_tac[] >> simp[eval_operand_def] >> metis_tac[eval_operand_def]
 QED
-Finalise tuple_place_normalize_frame
+Finalise tuple_place_normalize_effect
+
+Theorem tuple_place_normalize_frame:
+  !cenv cx ctx func es sa sm sc buf dty sty dtv stv v src sw s.
+    compile_alloc_buffer (type_memory_size dtv) sa = (buf,sm) /\
+    compile_store_memory_typed cenv buf.buf_operand dty src sty sm = ((),sc) /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    type_widens_to (get_tenv cx) sty dty /\
+    evaluate_type (get_tenv cx) sty = SOME stv /\
+    evaluate_type (get_tenv cx) dty = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ val_in_memory stv v (w2n sw) s.vs_memory /\
+    w2n sw + type_memory_size stv < dimword (:256) /\
+    type_memory_size dtv < dimword (:256) /\
+    w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+    (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ sa.cs_next_id <= aid ==>
+      w2n sw + type_memory_size stv <= b \/ b + sz <= w2n sw) /\
+    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    fn_has_code sa sm func /\ fn_has_code sm sc func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t dw. gas_marked_path F ctx func s 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx es t /\
+      eval_operand buf.buf_operand t = SOME dw /\
+      val_in_memory dtv v (w2n dw) t.vs_memory /\
+      w2n dw + type_memory_size dtv < dimword (:256) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+        FLOOKUP t.vs_allocas aid = SOME entry) /\
+      t.vs_labels = s.vs_labels /\
+      ~t.vs_halted /\ t.vs_current_bb = sc.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sc.cs_current_insts /\
+      (!aid b len a n. FLOOKUP s.vs_allocas aid = SOME (b,len) /\
+        aid < sa.cs_next_id /\ b <= a /\ a + n <= b + len ==>
+        mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all tuple_place_normalize_effect >> strip_tac >>
+  qexistsl_tac [`t`, `dw`] >> simp[] >> first_assum ACCEPT_TAC
+QED
