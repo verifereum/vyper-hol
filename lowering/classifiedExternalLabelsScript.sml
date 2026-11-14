@@ -1,6 +1,6 @@
-(* Structural label distinctness boundary. The proofs are retained from
-   externalEntryChecks (823-899), avoiding that theory's body-simulation
-   dependencies. The original consumer is intentionally unchanged. *)
+(* Structural label distinctness boundary. These statements and proofs
+   are relocated verbatim from externalEntryChecks, which imports this
+   slim theory instead of defining duplicate copies. *)
 Theory classifiedExternalLabels
 Ancestors entryDispatchProps loweringShapeProps compileVyper vyperTypeContract
   loweringShapeSource list pair
