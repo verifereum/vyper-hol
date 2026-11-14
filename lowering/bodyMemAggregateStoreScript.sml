@@ -2,7 +2,7 @@
 Theory bodyMemAggregateStore
 Ancestors
   exprSimAggregateLoops
-  bodyMemAggregateUnwrap bodyCopyMemory exprSimAggregateChildren
+  bodyMemAggregateUnwrap bodyCopyMemory bodyCopyMemoryBase exprSimAggregateChildren
   exprLowering context compileEnv vyperTypeSystem vyperTypeCallGraph
   loweringPosts exprSimMemDefs exprSimProps exprSimBufferStore valueEncodingProps
   bodyDeclMemoryCore exprSimMemoryValues emitHelperProps emitHelper
