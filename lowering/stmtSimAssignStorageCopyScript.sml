@@ -1241,15 +1241,6 @@ Proof
   fs[local_ptrs_reserved_def, lookup_var_def] >> metis_tac[]
 QED
 
-(* Storage writes keep the call context. *)
-Theorem storage_fold_call_ctx[local]:
-  !l s f g tr.
-    (FOLDL (\t i. (if tr then tstore else sstore) (f i) (g i) t) s l).vs_call_ctx =
-    s.vs_call_ctx
-Proof
-  Induct >> simp[FOLDL] >> Cases_on `tr` >> simp[sstore_def, tstore_def]
-QED
-
 Theorem storage_fold_memory[local]:
   !l s f g tr.
     (FOLDL (\t i. (if tr then tstore else sstore) (f i) (g i) t) s l).vs_memory =
