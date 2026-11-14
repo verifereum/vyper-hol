@@ -793,7 +793,7 @@ Proof
   qexistsl_tac [`expr_type e`, `get_tenv cx`, `ftv`, `tyv`] >> simp[]
 QED
 
-Theorem augassign_attr_rhs_word_operand[local]:
+Theorem augassign_attr_rhs_word_operand:
   expr_body_pre cenv cx env e es /\ word_value_type (expr_type e) /\
   bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) = (INL v,ee) /\
   expr_post H ctx func cenv cx e ep sa sb sm ee v rhs t ==>
