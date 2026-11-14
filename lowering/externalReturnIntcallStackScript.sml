@@ -20,18 +20,20 @@ Theorem return_intcall_stack_force:
   gas_admissible
     (eval_stmt cx (Return (SOME (Call ann (IntCall fid) args drv))))
     (stmt_res_ok lctx) es /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx (Call ann (IntCall fid) args drv)) (read_result cx))
     (es,s0)
-    (\res ee s. ?v. res = INL v /\
-      expr_post ctx func ce cx (Call ann (IntCall fid) args drv)
+    (\H res ee s. ?v. res = INL v /\
+      expr_post H ctx func ce cx (Call ann (IntCall fid) args drv)
         es sa sm s0 ee v (Lit 0w) s /\
       s.vs_current_bb = sm.cs_current_bb /\
       s.vs_inst_idx = LENGTH sm.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >> drule return_stack_lower_value >> strip_tac >>
   drule return_forced_admissible >> strip_tac >>

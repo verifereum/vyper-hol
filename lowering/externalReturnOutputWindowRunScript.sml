@@ -13,7 +13,7 @@ Theorem return_output_window_run:
   eval_operand dst u = SOME (n2w d) /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at mid x) /\
   fn_has_code mid en func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv mid /\
+  stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv mid /\
   FLOOKUP u.vs_allocas output_id = SOME (d,msz) /\
   output_id < mid.cs_next_id /\ LENGTH (enc at av) <= msz /\
   (0 < cap ==> venomMemDefs$regions_disjoint (sb,cap) (d,msz)) /\
