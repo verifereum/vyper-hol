@@ -1,6 +1,7 @@
 (* Source and counted target outcomes for the raw-call suffix. *)
 Theory rawCallTailOutcomeMemory
 Ancestors
+  rawCallShapePtr
   vyperStorageFootprint vyperStorageTrace gasStorage vyperFiniteStoragePreservation
   rawCallTailMemory exprSimRawCall exprSimRawCallCalldata rawCallPrefixMemory valueEncodingDefs
   exprSimMemDefs gasOutcome gasSummary fragGasMode

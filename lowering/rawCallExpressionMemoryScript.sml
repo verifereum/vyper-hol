@@ -1,6 +1,7 @@
 (* Composition of raw-call argument and memory-counted suffix boundaries. *)
 Theory rawCallExpressionMemory
 Ancestors
+  rawCallShapePtr
   rawCallTailOutcomeMemory rawCallPrefixMemory exprSimRawCall exprSimMemDefs
   bodyMemoryPreds exprSimDefs exprSimProps exprLoweringProps exprLowering
   compileEnv loweringPosts vyperInterpreter vyperState venomState
