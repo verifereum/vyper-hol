@@ -315,7 +315,10 @@ Definition fold_constant_def:
 End
 
 Definition exponent_operand_def:
-  exponent_operand op e = if op = JBop_Pow then pin_fold_expr e else e
+  exponent_operand op e =
+    if op = JBop_Pow then
+      (case pin_fold_expr e of Literal ty l => Literal ty l | _ => e)
+    else e
 End
 
 Definition make_builtin_call_def:

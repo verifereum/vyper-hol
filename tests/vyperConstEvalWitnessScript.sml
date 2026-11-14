@@ -63,6 +63,27 @@ end;
 
 val uint256 = ``BaseT (UintT 256)``;
 
+Theorem exponent_operand_original_residual:
+  exponent_operand JBop_Pow
+    (Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
+      [Builtin (BaseT (UintT 256)) (Bop Add)
+        [Literal (BaseT (UintT 256)) (IntL 1);
+         Literal (BaseT (UintT 256)) (IntL 2)];
+       Name (BaseT (UintT 256)) "x"]) =
+    Builtin (BaseT (UintT 256)) (Bop UnsafeAdd)
+      [Builtin (BaseT (UintT 256)) (Bop Add)
+        [Literal (BaseT (UintT 256)) (IntL 1);
+         Literal (BaseT (UintT 256)) (IntL 2)];
+       Name (BaseT (UintT 256)) "x"] /\
+  exponent_operand JBop_Pow
+    (Builtin (BaseT (UintT 256)) (Bop Add)
+      [Literal (BaseT (UintT 256)) (IntL 1);
+       Literal (BaseT (UintT 256)) (IntL 2)]) =
+    Literal (BaseT (UintT 256)) (IntL 3)
+Proof
+  EVAL_TAC
+QED
+
 (* The pin widens each literal's annotation to the list element type;
    decoding must retain that bound rather than derive it from the payload. *)
 val widened_subscript = translate "constant_widened_subscript.json";
