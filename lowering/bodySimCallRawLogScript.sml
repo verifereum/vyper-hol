@@ -213,9 +213,8 @@ Proof
     metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
   `!z. data_op = Var z ==> not_fresh_at sn z` by
     (drule exprOperandVarTheory.compile_lower_value_var >> simp[]) >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   simp[Abbr `call`] >>
-  drule_all raw_log_forced_source_eval >>
+  drule_all raw_log_forced_source_eval_checked >>
   simp[SF ETA_ss] >> disch_then (fn th => rewrite_tac[th]) >>
   drule_all raw_log_body_topics_sim >>
   disch_then (mp_then Any irule raw_log_outcome_bind_values) >>
@@ -291,13 +290,37 @@ Proof
   `fn_has_code sn sb func` by metis_tac[fn_has_code_mid, cs_extends_refl, cs_extends_trans] >>
   qpat_assum `LENGTH ops = LENGTH topics`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th])) >>
+  Cases_on `cx.txn.is_static`
+  >- suspend "static" >>
+  `check_not_static cx = return ()` by simp[FUN_EQ_THM, return_def] >>
+  qpat_x_assum `check_not_static cx = return ()`
+    (fn th => rewrite_tac[th, ignore_bind_def, bind_return]) >>
   drule_all raw_log_dynamic_tail_counted >> strip_tac >>
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
   qexists_tac `[]` >> disj1_tac >>
-  irule raw_log_tail_summary >>
+  irule (PURE_REWRITE_RULE [ignore_bind_def] raw_log_tail_summary) >>
   simp[dest_BytesV_def, raw_log_post_gas_obs] >>
   qexists_tac `t''` >> gvs[]
 QED
+
+Resume raw_log_dynamic_frag[static]:
+  `?u. run_inst_seq (emitted_insts sn sb) t' = Abort ExHalt_abort u` by
+    (drule_all raw_log_dynamic_static_run >> simp[]) >>
+  pop_assum strip_assume_tac >>
+  `sb.cs_current_bb = sn.cs_current_bb /\
+   sb.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sb /\
+   EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+              ~is_terminator i.inst_opcode) (emitted_insts sn sb)` by
+    (gvs[emit_op_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+         fresh_var_def, fresh_id_def, emit_def, comp_return_def, emitted_insts_def] >>
+     CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]) >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  irule (CONV_RULE (DEPTH_CONV ETA_CONV) raw_log_static_suffix_summary) >> simp[dest_BytesV_def] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+Finalise raw_log_dynamic_frag
 
 Theorem raw_log_alloc_args_post:
   wb_args_post ctx func cenv cx es0 sa s0 es ops vals t /\
@@ -401,9 +424,8 @@ Proof
   `local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sk /\
    local_ptrs_reserved cenv sn` by
     metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   simp[Abbr `call`] >>
-  drule_all raw_log_forced_source_eval >>
+  drule_all raw_log_forced_source_eval_checked >>
   simp[SF ETA_ss] >> disch_then (fn th => rewrite_tac[th]) >>
   drule_all raw_log_body_topics_sim >>
   disch_then (mp_then Any irule raw_log_outcome_bind_values) >>
@@ -524,13 +546,39 @@ Proof
   `FLOOKUP t''.vs_allocas
     (mk_inst sm.cs_next_id ALLOCA [Lit 32w]
        [STRING #"%" (toString sm.cs_next_var)]).inst_id = SOME (w2n w,32)` by simp[mk_inst_def] >>
+  Cases_on `cx.txn.is_static`
+  >- suspend "static" >>
+  `check_not_static cx = return ()` by simp[FUN_EQ_THM, return_def] >>
+  qpat_x_assum `check_not_static cx = return ()`
+    (fn th => rewrite_tac[th, ignore_bind_def, bind_return]) >>
   drule_all raw_log_fixed_tail_counted >> strip_tac >>
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
   qexists_tac `[]` >> disj1_tac >>
-  irule raw_log_tail_summary >>
+  irule (PURE_REWRITE_RULE [ignore_bind_def] raw_log_tail_summary) >>
   simp[dest_BytesV_def, raw_log_post_gas_obs] >>
   qexists_tac `t'''` >> gvs[]
 QED
+
+Resume raw_log_fixed32_body_frag[static]:
+  `t''.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `?u. run_inst_seq (emitted_insts sn sb) t'' = Abort ExHalt_abort u` by
+    (drule_all raw_log_fixed_static_run >> simp[]) >>
+  pop_assum strip_assume_tac >>
+  `sb.cs_current_bb = sn.cs_current_bb /\
+   sb.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sb /\
+   EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+              ~is_terminator i.inst_opcode) (emitted_insts sn sb)` by
+    (gvs[emit_void_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+         fresh_id_def, emit_def, comp_return_def, emitted_insts_def] >>
+     CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]) >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  qexists_tac `[]` >> disj1_tac >>
+  irule (CONV_RULE (DEPTH_CONV ETA_CONV) raw_log_static_suffix_summary) >> simp[dest_BytesV_def] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+Finalise raw_log_fixed32_body_frag
 
 Theorem raw_log_body_expr_ok:
   !cx v20 es v21.
