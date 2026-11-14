@@ -31,7 +31,8 @@ Proof
    ~MEM inst.inst_opcode [LT;GT;EQ;INVOKE;RET;RETFMP;DRET] /\
    mem_read_ops inst = NONE /\ mem_write_ops inst = NONE` by
     fs[MEM, is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def] >>
-  drule ricf_execution_nonaddress_operand >> disch_then irule >> simp[]
+  drule ricf_execution_nonaddress_operand >> disch_then irule >> simp[] >>
+  qexists_tac `lo` >> simp[]
 QED
 
 Theorem ricf_execution_assert_next:
