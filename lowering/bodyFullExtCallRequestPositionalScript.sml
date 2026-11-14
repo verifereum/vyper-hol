@@ -2,6 +2,7 @@
 Theory bodyFullExtCallRequestPositional
 Ancestors
   bodyFullExtCallRequestSnapshotMemory bodyFullExtCallRequestRetag
+  bodyFullExtCallRequestSnapshotWord compileEnv
   exprSimSource exprSimHyps exprSimHypsDefs vyperTypeInvariants vyperTypeExprSoundness
   bodyPtrDefs loweringPosts exprLowering supportedExprTraverse vyperState
 
@@ -35,4 +36,20 @@ Proof
       simp[ext_call_arg_value_def] >>
       irule extcall_request_memory_retag >> metis_tac[]) >>
   irule extcall_nonmemory_retag >> metis_tac[]
+QED
+
+(* The word branch can consume expr_sim_full, without repeating unwrap. *)
+Theorem extcall_snapshot_word_lower_value:
+  expr_body_pre ce cx env e es /\ ~expr_has_effect e /\
+  compile_expr ce (expr_type e) e sa = (vv,sm) /\
+  vv_holds ce cx (post_value_type ce e) tv vv ee s /\
+  is_word_type (vv_type (ext_call_arg_value (lowered_value_type ce e) vv)) /\
+  compile_snapshot_vv ce F (ext_call_arg_value (lowered_value_type ce e) vv)
+    sm = (sv,sb) ==>
+  ?op. lower_value compile_expr ce (expr_type e) e sa = (op,sb) /\
+       sv = StackValue (vv_type (ext_call_arg_value (lowered_value_type ce e) vv)) op
+Proof
+  strip_tac >> drule_all extcall_request_word_snapshot_unwrap >> strip_tac >>
+  gvs[lower_value_def, comp_bind_def, comp_return_def] >>
+  Cases_on `unwrap_value ce vv sm` >> gvs[]
 QED
