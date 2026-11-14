@@ -1,5 +1,6 @@
 Theory dftGasSourcePrefix
 Ancestors
+  dftGasFromListTraceDefs dftGasFromListReadings
   gasEvents gasCount gasOracleReplay dftIndexedExec dftRunRel dftBlockSim
   removeUnusedGasProofs venomExecProofs venomExecSemantics venomState venomInst
   list rich_list option arithmetic
@@ -245,6 +246,45 @@ Proof
   simp_tac (srw_ss()) [gasOracleReplayTheory.gas_prefix_def] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, TAKE_LENGTH_APPEND] >>
   simp[DROP_LENGTH_APPEND]
+QED
+
+(* Successful native prefixes identify dynamic occurrence keys, including
+   a nonzero starting cursor. This is separate from original-site events. *)
+Theorem noninvoke_prefix_trace_keys:
+  !pre s bb u gs tail fuel C func p d.
+    DROP s.vs_inst_idx bb.bb_instructions = pre /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre /\
+    LENGTH gs = LENGTH (FILTER (\i. i.inst_opcode = GAS) pre) /\
+    FOLDR (dft_exec_cons fuel C) OK pre
+      (s with vs_gas_readings := gs ++ tail) = OK u ==>
+    dftGasFromListTraceDefs$trace_gas
+      (dftGasFromListTraceDefs$trace_block p d fuel C func bb
+        (s with vs_gas_readings := gs ++ tail)) =
+    ZIP (MAP (\i. (p,d,i.inst_id))
+      (FILTER (\i. i.inst_opcode = GAS) pre), gs)
+Proof
+  cheat
+QED
+
+Theorem initial_occurrence_prefix_keys:
+  !xs be C func p d ms ks.
+    ms = MAP (\i. if i.inst_opcode = GAS then [NONE] else []) xs /\
+    ks = MAP (\i. if i.inst_opcode = GAS then [(p,d,i.inst_id)] else []) xs ==>
+    !fuel k kgss tail bb u.
+      k <= LENGTH xs /\
+      DROP be.vs_inst_idx bb.bb_instructions = TAKE k xs /\
+      EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs) /\
+      (!q. q < k ==> (EL q xs).inst_opcode <> INVOKE) /\
+      LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w))
+        (TAKE k ms) kgss /\
+      FOLDR (dft_exec_cons fuel C) OK (TAKE k xs)
+        (be with vs_gas_readings := FLAT kgss ++ tail) = OK u ==>
+      dftGasFromListTraceDefs$trace_gas
+        (dftGasFromListTraceDefs$trace_block p d fuel C func bb
+          (be with vs_gas_readings := FLAT kgss ++ tail)) =
+      ZIP (FLAT (TAKE k ks), FLAT kgss)
+Proof
+  cheat
 QED
 
 Theorem initial_occurrence_prefix_replay:
