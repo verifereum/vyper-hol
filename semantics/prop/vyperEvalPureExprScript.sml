@@ -225,13 +225,6 @@ Proof
        storage_trace_frame_conditional_result, storage_trace_frame_array_length]
 QED
 
-Theorem evaluator_trace_results[local]:
-  FST (eval_expr cx e (st with storage_trace := p)) = FST (eval_expr cx e st) /\
-  FST (eval_exprs cx es (st with storage_trace := p)) = FST (eval_exprs cx es st)
-Proof
-  conj_tac >> irule trace_result_transport >>
-  metis_tac[evaluate_storage_trace_frame]
-QED
 
 Theorem read_result_trace:
   read_result cx r (st with storage_trace := p) =

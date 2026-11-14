@@ -2646,58 +2646,6 @@ QED
    its own prelude.  NONE restores the rollback accounts; SOME installs the
    adapter's final accounts, transient storage, and pending deletions.  Both
    outcomes are covered by the protected-storage adapter-boundary postulate. *)
-Theorem create_evm_tail_contract_storage[local]:
-  protected_storage_creates_preserve cx /\
-  contract_storage_well_formed cx s /\
-  (case run_create_evm sender address initcode value s.accounts
-          s.tStorage s.pending_deletions txp of
-     NONE => do
-       x <- update_accounts (K (create_rollback_accounts sender s.accounts));
-       create_soft_failure rof "create failed"
-     od
-   | SOME (code_opt,accounts',tStorage',logs',revertData,pending') =>
-       do x <- update_accounts (K accounts');
-          x <- update_transient (K tStorage');
-          x <- update_pending_deletions (K pending');
-          case code_opt of
-            SOME v => do
-              x <- append_logs logs';
-              return (Value (AddressV new_addr))
-            od
-          | NONE => if rof then raise (Error (RevertData revertData))
-                    else return (Value (AddressV 0w))
-          od)
-     (s with accounts updated_by
-             (create_prelude_accounts sender address value)) = (res,st') ==>
-  contract_storage_well_formed cx st'
-Proof
-  strip_tac >>
-  (* The case expression is under-applied, so split the adapter result first. *)
-  Cases_on `run_create_evm sender address initcode value s.accounts
-              s.tStorage s.pending_deletions txp`
-  >| [(* adapter NONE: rollback the interpreter's prelude *)
-      (gs[] >>
-       Cases_on `rof` >>
-       gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-           create_soft_failure_def, return_def, raise_def,
-           evaluation_state_accfupds] >>
-       drule_all protected_storage_creates_preserve_run_create_evm_NONE >>
-       metis_tac[]),
-      (* adapter SOME: install its accounts, transient storage and deletions *)
-      (PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
-       gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-           update_transient_def, update_pending_deletions_def, append_logs_def, update_pending_deletions_def,
-           return_def, raise_def, AllCaseEqs(),
-           evaluation_state_accfupds] >>
-       drule_all protected_storage_creates_preserve_run_create_evm >>
-       strip_tac >>
-       rename1 `contract_storage_well_formed cx
-         (s with <|accounts := new_accounts; tStorage := new_tStorage|>)` >>
-       irule contract_storage_well_formed_backends_frame >>
-       qexists_tac `s with <|accounts := new_accounts;
-                             tStorage := new_tStorage|>` >>
-       simp[evaluation_state_accfupds])]
-QED
 
 Theorem create_evm_logged_tail_contract_storage[local]:
   protected_storage_creates_preserve cx /\

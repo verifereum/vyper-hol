@@ -114,47 +114,6 @@ Proof
   simp[evaluate_module_constants_def, merge_constants_def]
 QED
 
-Theorem call_external_function_result_preserves_sources[local]:
-  srcs = am.sources /\
-  (\(res,am_out,rqs). (res,am_out,rqs))
-    (case body_res of
-       (INL (), st) =>
-         (case unlock st of
-            (INL u, st') => (INL NoneV, abstract_machine_from_state srcs exps layouts st', st'.requests)
-          | (INR e, st') => (INR e, am, st'.requests))
-     | (INR (ReturnException v_ret), st) =>
-         (case unlock st of
-            (INL u, st') =>
-              (case evaluate_type tenv ret of
-                 NONE => (INR (Error (TypeError "eval ret")), am, st'.requests)
-               | SOME tv =>
-                   case safe_cast tv v_ret of
-                     NONE => (INR (Error (TypeError "ext cast ret")), am, st'.requests)
-                   | SOME v_cast =>
-                       (INL v_cast, abstract_machine_from_state srcs exps layouts st', st'.requests))
-          | (INR e, st') => (INR e, am, st'.requests))
-     | (INR HaltException, st) =>
-         (INR HaltException, abstract_machine_from_state srcs exps layouts st, st.requests)
-     | (INR e, st) => (INR e, am, st.requests)) = (result, am_out, rqs) ==>
-  am_out.sources = am.sources
-Proof
-  rewrite_tac[triple_identity] >>
-  namedCases_on `body_res` ["tag st_body"] >>
-  Cases_on `tag`
-  >- (namedCases_on `unlock st_body` ["res st_unlocked"] >>
-      Cases_on `res` >> rpt strip_tac >>
-      gvs[abstract_machine_from_state_def]) >>
-  rename1 `INR exc` >> Cases_on `exc` >>
-  simp[abstract_machine_from_state_def] >> rpt strip_tac >>
-  gvs[] >>
-  rename1 `safe_cast _ v_ret` >>
-  namedCases_on `unlock st_body` ["res st_unlocked"] >>
-  Cases_on `res` >> gvs[abstract_machine_from_state_def] >>
-  Cases_on `evaluate_type tenv ret` >> gvs[] >>
-  rename1 `safe_cast tv v_ret` >>
-  Cases_on `safe_cast tv v_ret` >> rpt strip_tac >>
-  gvs[abstract_machine_from_state_def]
-QED
 
 Theorem call_external_function_preserves_sources:
   call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
@@ -1257,47 +1216,6 @@ Proof
   Cases_on `safe_cast tv v_ret` >> gvs[]
 QED
 
-Theorem call_external_function_result_preserves_exports[local]:
-  exps = am.exports /\
-  (\(res,am_out,rqs). (res,am_out,rqs))
-    (case body_res of
-       (INL (), st) =>
-         (case unlock st of
-            (INL u, st') => (INL NoneV, abstract_machine_from_state srcs exps layouts st', st'.requests)
-          | (INR e, st') => (INR e, am, st'.requests))
-     | (INR (ReturnException v_ret), st) =>
-         (case unlock st of
-            (INL u, st') =>
-              (case evaluate_type tenv ret of
-                 NONE => (INR (Error (TypeError "eval ret")), am, st'.requests)
-               | SOME tv =>
-                   case safe_cast tv v_ret of
-                     NONE => (INR (Error (TypeError "ext cast ret")), am, st'.requests)
-                   | SOME v_cast =>
-                       (INL v_cast, abstract_machine_from_state srcs exps layouts st', st'.requests))
-          | (INR e, st') => (INR e, am, st'.requests))
-     | (INR HaltException, st) =>
-         (INR HaltException, abstract_machine_from_state srcs exps layouts st, st.requests)
-     | (INR e, st) => (INR e, am, st.requests)) = (result, am_out, rqs) ==>
-  am_out.exports = am.exports
-Proof
-  rewrite_tac[triple_identity] >>
-  namedCases_on `body_res` ["tag st_body"] >>
-  Cases_on `tag`
-  >- (namedCases_on `unlock st_body` ["res st_unlocked"] >>
-      Cases_on `res` >> rpt strip_tac >>
-      gvs[abstract_machine_from_state_def]) >>
-  rename1 `INR exc` >> Cases_on `exc` >>
-  simp[abstract_machine_from_state_def] >> rpt strip_tac >>
-  gvs[] >>
-  rename1 `safe_cast _ v_ret` >>
-  namedCases_on `unlock st_body` ["res st_unlocked"] >>
-  Cases_on `res` >> gvs[abstract_machine_from_state_def] >>
-  Cases_on `evaluate_type tenv ret` >> gvs[] >>
-  rename1 `safe_cast tv v_ret` >>
-  Cases_on `safe_cast tv v_ret` >> rpt strip_tac >>
-  gvs[abstract_machine_from_state_def]
-QED
 
 Theorem call_external_function_deploy_success_cases:
   cx.in_deploy /\
