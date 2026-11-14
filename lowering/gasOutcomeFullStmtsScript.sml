@@ -222,3 +222,76 @@ Proof
   pop_assum (fn th => RULE_ASSUM_TAC (ONCE_REWRITE_RULE [th])) >>
   fs[] >> metis_tac[]
 QED
+
+(* C1.2.1.1 proposed additive interface (review checkpoint, NOT a theorem).
+   The input/output source result types may differ. No new Definition.
+
+Theorem gas_outcome_full_handler_transport:
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0
+    source (es, s, G, tn) Q R /\
+  es_out.storage_trace = es.storage_trace /\
+  (!marks.
+     gas_bad_storage_at cx st0 source es s marks ==>
+     gas_bad_storage_at cx st0 wrapped es_out s marks) /\
+  (!marks err ee leaf finish.
+     gas_exempt_cert T tops (ctx, func)
+       (ignore_bind source (return ())) (es, s) marks
+       (err, ee) (leaf, finish) ==>
+     ?err' ee'. gas_exempt_cert T tops (ctx, func)
+       (ignore_bind wrapped (return ())) (es_out, s) marks
+       (err', ee') (leaf, finish)) /\
+  (!marks res ee r G' tn'.
+     (!tail. source (es with gas_obs :=
+              gas_explicit marks s.vs_gas_readings ++ tail) =
+              (res, ee with gas_obs := tail)) /\
+     storage_trace_domain cx st0 ee.storage_trace /\
+     (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+         (s, G, tn) marks (r, G', tn') /\
+       ((?t. r = OK t /\ Q H res (ee with gas_obs := []) G' tn' t) \/
+        (exit_result r /\
+         R H res (ee with gas_obs := []) (G', tn') r))) ==>
+     ?marks' res' ee' r' G'' tn''.
+       (!tail. wrapped (es_out with gas_obs :=
+                gas_explicit marks' s.vs_gas_readings ++ tail) =
+                (res', ee' with gas_obs := tail)) /\
+       storage_trace_domain cx st0 ee'.storage_trace /\
+       (!H. valid_horizon cx st0 H ee'.storage_trace ==>
+            valid_horizon cx st0 H ee.storage_trace) /\
+       (!H.
+          valid_horizon cx st0 H ee'.storage_trace /\
+          gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+            (s, G, tn) marks (r, G', tn') /\
+          ((?t. r = OK t /\ Q H res (ee with gas_obs := []) G' tn' t) \/
+           (exit_result r /\
+            R H res (ee with gas_obs := []) (G', tn') r)) ==>
+          gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+            (s, G, tn) marks' (r', G'', tn'') /\
+          ((?t. r' = OK t /\
+                Q' H res' (ee' with gas_obs := []) G'' tn'' t) \/
+           (exit_result r' /\
+            R' H res' (ee' with gas_obs := []) (G'', tn'') r')))) ==>
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0
+    wrapped (es_out, s, G, tn) Q' R'
+
+   Premise-to-For map:
+   es is after push_scope_with_var; es_out before that source push.
+   Push/pop preserve the initial storage trace. The bad-storage premise
+   needs trace-frame facts for try/handler/finally, not a body IH on an
+   unread element. The certificate premise must prove actual wrapper
+   certificate transport preserving the executed focus leaf and finish;
+   this is not a license to assume an already handled full outcome.
+   The final premise chooses ONE transformed tuple before H. Source
+   evaluation handles normal => INL F, Break => INL T, Continue => INL F,
+   and propagates return/error, then pops scope in every case. Source
+   equations and trace compatibility are uniform in the arbitrary tail.
+   Its path implication must append the actual compiler handler jmp/jnz
+   suffix, with matching allocation and pointer ghosts, or retain the
+   halted/exit path; no exception-to-normal source_map is used. An OK
+   halted state remains in the Q alternative unless actual path facts
+   rule it out; exit_result is not silently identified with source INR.
+   Bad-storage/exempt arms reuse the SAME selected focus, marks and H;
+   initial trace equality transfers the initial-horizon guard. No byte
+   preservation follows from this transport: For must separately supply
+   the body-selected memory preservation used by its path/post proof.
+*)
