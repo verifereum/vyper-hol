@@ -110,7 +110,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem body_assign_local_memory_read[local]:
+Theorem body_assign_local_memory_read:
   !cenv cx env e es tops id ty tyv v es1 entry.
     expr_body_pre cenv cx env e es /\ supported_expr tops e /\
     supported_program tops /\

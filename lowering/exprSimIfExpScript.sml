@@ -376,7 +376,7 @@ Proof
   metis_tac[ifexp_zero_source_fits]
 QED
 
-Theorem ifexp_physical_source_positive[local]:
+Theorem ifexp_physical_source_positive:
   expr_body_pre cenv cx env e es /\
   post_value_type cenv e <> expr_type e /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME stv ==>
@@ -423,7 +423,7 @@ Proof
   simp[expr_val_at_def] >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem ifexp_typed_alloc_source[local]:
+Theorem ifexp_typed_alloc_source:
   compile_alloc_buffer (type_memory_bytes cenv dty) sa = (buf,sm) /\
   compile_store_memory_typed cenv buf.buf_operand dty src sty sm = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -1050,7 +1050,7 @@ Resume ifexp_different_type_unwrap_pure[call]:
 QED
 Finalise ifexp_different_type_unwrap_pure[local]
 
-Theorem ifexp_post_annotated[local]:
+Theorem ifexp_post_annotated:
   (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
      type_memory_bytes ce ty = type_memory_size tv) /\
   (~is_word_type (expr_type e) ==>
@@ -1088,7 +1088,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ifexp_aggregate_source_kind[local]:
+Theorem ifexp_aggregate_source_kind:
   !sty dty. arg_type_fits sty dty /\
     ~is_word_type dty /\ ~is_bytestring_type dty ==>
     ~is_word_type sty /\ ~is_bytestring_type sty
