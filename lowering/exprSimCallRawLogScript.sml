@@ -240,15 +240,6 @@ Proof
   simp[expr_ok_def, expr_sim_ok_def] >> metis_tac[]
 QED
 
-Theorem raw_log_post_vv[local]:
-  expr_post ctx func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' (Value NoneV)
-    (StackValue NoneT (Lit 0w)) s
-Proof
-  simp[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-       vv_own_def, read_result_def, return_def] >> metis_tac[]
-QED
-
 Theorem compile_multi_exprs_lower_word_args[local]:
   !topics. compile_multi_exprs compile_expr cenv topics =
            lower_word_args cenv expr_type topics
