@@ -1066,17 +1066,6 @@ Proof
   decide_tac
 QED
 
-Theorem generated_plan_state_wf_init[local]:
-  !base ctr.
-    base < dimword(:256) ==>
-    generated_plan_state_wf base
-      ((init_plan_state base) with ps_label_counter := ctr)
-Proof
-  simp[generated_plan_state_wf_def, init_plan_state_slots_bounded,
-       doSwapSimTheory.spill_alloc_layout_wf_def,
-       init_plan_state_def, init_spill_alloc_def]
-QED
-
 Theorem do_swap_generated_plan_state_wf:
   !base dist ps lo.
   generated_plan_state_wf base ps /\ dist < LENGTH ps.ps_stack /\
@@ -1097,17 +1086,6 @@ Proof
             (FDOM (SND (do_swap dist ps)).ps_spilled)` by (
     irule doSwapSimTheory.do_swap_structural_layout_wf >> simp[]) >>
   simp[generated_plan_state_wf_def]
-QED
-
-Theorem generated_plan_state_wf_free_active_separate[local]:
-  !base ps op active free.
-    generated_plan_state_wf base ps /\
-    FLOOKUP ps.ps_spilled op = SOME active /\
-    MEM free ps.ps_alloc.sa_free_slots ==>
-    active + 32 <= free \/ free + 32 <= active
-Proof
-  simp[generated_plan_state_wf_def, doSwapSimTheory.spill_alloc_layout_wf_def] >>
-  metis_tac[]
 QED
 
 Theorem generated_plan_state_wf_push[local]:
@@ -1137,26 +1115,6 @@ Proof
   `MEM x (TAKE (LENGTH ps.ps_stack - n) ps.ps_stack) ==>
    MEM x ps.ps_stack` by metis_tac[rich_listTheory.MEM_TAKE] >>
   metis_tac[]
-QED
-
-Theorem popmany_plan_top_two_align[local]:
-  !drop_a drop_b a b stk ps ops ps' lo.
-    ps.ps_stack = stk ++ [a; b] /\
-    a <> b /\
-    popmany_plan
-      (if drop_a then a :: if drop_b then [b] else []
-       else if drop_b then [b] else []) ps = (ops,ps') ==>
-    apply_prefix_ops initial_fmp lo ops ps = ps'
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `drop_a` >> Cases_on `drop_b` >>
-  gvs[popmany_plan_def, popmany_individual_def, is_contiguous_top_def,
-      stack_get_depth_def, stack_find_def, do_swap_def, LET_THM,
-      apply_prefix_ops_append, apply_prefix_ops_def, apply_prefix_op_def,
-      apply_simple_op_def, stack_pop_def, stack_swap_def, stack_push_def,
-      stack_peek_def, stack_poke_def, REVERSE_APPEND, TAKE_APPEND1,
-      TAKE_APPEND2, sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
-      sortingTheory.PART_DEF]
 QED
 
 Theorem popmany_plan_top_two_generated_wf[local]:
@@ -1906,195 +1864,6 @@ Proof
   gvs[is_var_operand_def, dead_stack_marker_def]
 QED
 
-(* --- Helpers for do_dup deep-case contradiction --- *)
-
-(* After shallow do_dup, the operand is at depth 0 *)
-Theorem do_dup_shallow_depth[local]:
-  !op dist ps.
-    stack_get_depth op ps.ps_stack = SOME dist /\ dist <= 15 ==>
-    stack_get_depth op (SND (do_dup dist ps)).ps_stack = SOME 0
-Proof
-  rw[do_dup_def] >>
-  imp_res_tac stack_get_depth_props >>
-  simp[stack_dup_def, GSYM stack_push_def, stack_get_depth_push]
-QED
-
-(* prefix_spill_wf initial_fmp decomposition at last element *)
-Theorem prefix_spill_wf_snoc[local]:
-  !ops op lo ps.
-    prefix_spill_wf initial_fmp lo (ops ++ [op]) ps <=>
-    prefix_spill_wf initial_fmp lo ops ps /\
-    spill_op_wf (apply_prefix_ops initial_fmp lo ops ps) op
-Proof
-  Induct >> simp[prefix_spill_wf_def, apply_prefix_ops_def] >>
-  rpt gen_tac >> metis_tac[]
-QED
-
-(* FRANGE can only shrink through SORestore-only sequences *)
-Theorem frange_restore_only_mono[local]:
-  !ops lo ps off.
-    EVERY (\op. ?off'. op = SORestore off') ops /\
-    off IN FRANGE (apply_prefix_ops initial_fmp lo ops ps).ps_spilled ==>
-    off IN FRANGE ps.ps_spilled
-Proof
-  Induct >> simp[apply_prefix_ops_def] >>
-  rpt gen_tac >> Cases_on `h` >> simp[] >>
-  strip_tac >> rename1 `SORestore n` >>
-  `off IN FRANGE (apply_prefix_op initial_fmp lo (SORestore n) ps).ps_spilled` by
-    metis_tac[] >>
-  pop_assum mp_tac >>
-  simp[apply_prefix_op_def, LET_THM] >>
-  metis_tac[finite_mapTheory.FRANGE_DOMSUB_SUBSET,
-            pred_setTheory.SUBSET_DEF]
-QED
-
-(* If off has unique pre-image k in f, DOMSUB k removes off from FRANGE *)
-Theorem domsub_unique_removes_from_frange[local]:
-  !f k (off:num).
-    FLOOKUP f k = SOME off /\
-    (!k'. k' <> k ==> FLOOKUP f k' <> SOME off) ==>
-    off NOTIN FRANGE (f \\ k)
-Proof
-  rpt strip_tac >>
-  fs[finite_mapTheory.FRANGE_FLOOKUP, finite_mapTheory.FLOOKUP_DEF,
-     finite_mapTheory.DOMSUB_FAPPLY_THM, finite_mapTheory.FDOM_DOMSUB] >>
-  Cases_on `x = k` >> gvs[]
-QED
-
-(* After SORestore off, if off had unique pre-image, off leaves FRANGE *)
-Theorem restore_unique_clears_frange[local]:
-  !off ps lo.
-    (?op. FLOOKUP ps.ps_spilled op = SOME off) /\
-    (!op1 op2. FLOOKUP ps.ps_spilled op1 = SOME off /\
-               FLOOKUP ps.ps_spilled op2 = SOME off ==> op1 = op2) ==>
-    off NOTIN FRANGE (apply_prefix_op initial_fmp lo (SORestore off) ps).ps_spilled
-Proof
-  rpt strip_tac >>
-  `FLOOKUP ps.ps_spilled (spill_lookup off ps.ps_spilled) = SOME off` by (
-    simp[spill_lookup_def] >> SELECT_ELIM_TAC >> metis_tac[]) >>
-  qpat_x_assum `off IN FRANGE _` mp_tac >>
-  simp[apply_prefix_op_def, LET_THM, finite_mapTheory.FRANGE_FLOOKUP] >>
-  rpt strip_tac >>
-  rename1 `FLOOKUP (_ \\ _) k = SOME off` >>
-  qpat_x_assum `FLOOKUP (_ \\ _) _ = _` mp_tac >>
-  simp[finite_mapTheory.DOMSUB_FLOOKUP_THM]
-QED
-
-(* FUPDATE preserves "not in FRANGE" for different values *)
-Theorem fupdate_not_in_frange[local]:
-  !(f:'a |-> num) k v off.
-    off NOTIN FRANGE f /\ off <> v ==>
-    off NOTIN FRANGE (f |+ (k, v))
-Proof
-  rw[finite_mapTheory.FRANGE_FUPDATE_DOMSUB] >>
-  metis_tac[finite_mapTheory.FRANGE_DOMSUB_SUBSET,
-            pred_setTheory.SUBSET_DEF]
-QED
-
-(* After prefix_spill_wf initial_fmp SOSpill sequence, an offset not originally in
-   FRANGE and not equal to any spilled offset stays out of FRANGE *)
-Theorem spill_seq_not_in_frange[local]:
-  !ops lo ps off.
-    EVERY (\op. ?off'. op = SOSpill off' /\ off' <> off) ops /\
-    prefix_spill_wf initial_fmp lo ops ps /\
-    off NOTIN FRANGE ps.ps_spilled ==>
-    off NOTIN FRANGE (apply_prefix_ops initial_fmp lo ops ps).ps_spilled
-Proof
-  Induct >> simp[apply_prefix_ops_def, prefix_spill_wf_def] >>
-  rpt gen_tac >> Cases_on `h` >> simp[] >> strip_tac >>
-  first_x_assum irule >> simp[] >>
-  `(apply_prefix_op initial_fmp lo (SOSpill n) ps).ps_spilled =
-   ps.ps_spilled |+ (stack_peek 0 ps.ps_stack, n)` by
-    simp[apply_prefix_op_def] >>
-  pop_assum SUBST1_TAC >>
-  irule fupdate_not_in_frange >> simp[]
-QED
-
-(* If off has unique pre-image k, and we FUPDATE (k', v) with v <> off,
-   then off still has unique pre-image k *)
-Theorem fupdate_preserves_unique_preimage[local]:
-  !(f:'a |-> num) k off k' v.
-    (!x. FLOOKUP f x = SOME off ==> x = k) /\
-    v <> off ==>
-    (!x. FLOOKUP (f |+ (k', v)) x = SOME off ==> x = k)
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `FLOOKUP (f |+ _) _ = _` mp_tac >>
-  simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-  Cases_on `k' = x` >> simp[]
-QED
-
-(* After a SOSpill sequence with all offsets <> off,
-   off's unique-preimage property is preserved *)
-Theorem spill_seq_preserves_unique_preimage[local]:
-  !ops lo ps off k.
-    EVERY (\op. ?off'. op = SOSpill off' /\ off' <> off) ops /\
-    (!x. FLOOKUP ps.ps_spilled x = SOME off ==> x = k) ==>
-    (!x. FLOOKUP (apply_prefix_ops initial_fmp lo ops ps).ps_spilled x = SOME off ==>
-         x = k)
-Proof
-  Induct >> simp[apply_prefix_ops_def] >>
-  rpt gen_tac >> Cases_on `h` >> simp[] >> strip_tac >>
-  first_x_assum (qspecl_then
-    [`lo`, `apply_prefix_op initial_fmp lo (SOSpill n) ps`, `off`, `k`] mp_tac) >>
-  simp[] >> disch_then match_mp_tac >>
-  rpt strip_tac >>
-  qpat_x_assum `FLOOKUP _ _ = SOME off` mp_tac >>
-  simp[apply_prefix_op_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  Cases_on `stack_peek 0 ps.ps_stack = x` >> simp[]
-QED
-
-Theorem spill_prefix_preserves_value_unique[local]:
-  !sops lo ps.
-    (!x y off. FLOOKUP ps.ps_spilled x = SOME off /\
-               FLOOKUP ps.ps_spilled y = SOME off ==> x = y) /\
-    EVERY (\p. ?off. p = SOSpill off) sops /\
-    prefix_spill_wf initial_fmp lo sops ps ==>
-    !x y off.
-      FLOOKUP (apply_prefix_ops initial_fmp lo sops ps).ps_spilled x = SOME off /\
-      FLOOKUP (apply_prefix_ops initial_fmp lo sops ps).ps_spilled y = SOME off ==>
-      x = y
-Proof
-  Induct >> simp[apply_prefix_ops_def, prefix_spill_wf_def] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `h` >> gvs[spill_op_wf_def, apply_prefix_op_def] >>
-  first_x_assum (qspecl_then [`lo`,
-    `apply_prefix_op initial_fmp lo (SOSpill n) ps`] mp_tac) >>
-  simp[apply_prefix_op_def] >>
-  (impl_tac >-
-    (rpt strip_tac >>
-     qpat_x_assum `FLOOKUP (_ |+ _) _ = _` mp_tac >>
-     qpat_x_assum `FLOOKUP (_ |+ _) _ = _` mp_tac >>
-     simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-     rpt IF_CASES_TAC >> gvs[] >>
-     rpt strip_tac >>
-     qpat_assum `!op2 off2. FLOOKUP ps.ps_spilled op2 = SOME off2 ==> _`
-       drule >> decide_tac)) >>
-  simp[]
-QED
-
-Theorem unique_offset_cannot_be_restored_twice[local]:
-  !off middle lo ps.
-    (!x y v. FLOOKUP ps.ps_spilled x = SOME v /\
-             FLOOKUP ps.ps_spilled y = SOME v ==> x = y) /\
-    EVERY (\p. ?v. p = SORestore v) middle /\
-    prefix_spill_wf initial_fmp lo
-      ([SORestore off] ++ middle ++ [SORestore off]) ps ==>
-    F
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[prefix_spill_wf_def] >>
-  fs[prefix_spill_wf_snoc] >>
-  `off NOTIN FRANGE
-     (apply_prefix_op initial_fmp lo (SORestore off) ps).ps_spilled` by
-    (irule restore_unique_clears_frange >>
-     fs[spill_op_wf_def] >> metis_tac[]) >>
-  `off IN FRANGE
-     (apply_prefix_ops initial_fmp lo middle
-       (apply_prefix_op initial_fmp lo (SORestore off) ps)).ps_spilled` by
-    (fs[spill_op_wf_def, finite_mapTheory.FRANGE_FLOOKUP] >> metis_tac[]) >>
-  drule_all frange_restore_only_mono >> strip_tac >> gvs[]
-QED
 (* spill_seq_first_off_unique and do_dup_deep_not_spill_wf deleted:
    replaced by depth <= 15 precondition approach. *)
 
@@ -3737,61 +3506,6 @@ Proof
       fs[EVERY_MEM] >> metis_tac[])
 QED
 
-(* ===== SSA freshness propagation through prefix ops ===== *)
-
-(* A single prefix op cannot introduce a Var y into the plan stack
-   if Var y was not already there or in spilled.
-   Needs:
-   - spill_op_wf for SORestore (Hilbert choice picks from FDOM)
-   - stack_op_wf for SODup/SOSwap (index validity) *)
-Theorem apply_prefix_op_preserves_not_mem[local]:
-  !lo op ps y.
-    is_prefix_op op /\
-    spill_op_wf ps op /\
-    FST (stack_op_wf lo op (LENGTH ps.ps_stack)) /\
-    ~MEM (Var y) ps.ps_stack /\
-    Var y NOTIN FDOM ps.ps_spilled ==>
-    ~MEM (Var y) (apply_prefix_op initial_fmp lo op ps).ps_stack /\
-    Var y NOTIN FDOM (apply_prefix_op initial_fmp lo op ps).ps_spilled
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `op` >>
-  gvs[is_prefix_op_def, apply_prefix_op_def, stack_op_wf_def,
-      apply_simple_op_def, stack_push_def, stack_pop_def,
-      stack_swap_def, spill_op_wf_def, spill_lookup_def, LET_THM,
-      listTheory.MEM_SNOC, stack_peek_def] >>
-  rpt conj_tac >> rpt strip_tac >>
-  TRY (Cases_on `o'` >>
-       gvs[apply_simple_op_def, stack_push_def, listTheory.MEM_SNOC] >>
-       NO_TAC) >>
-  TRY (imp_res_tac rich_listTheory.MEM_TAKE >> gvs[] >> NO_TAC) >>
-  (* SOSwap: extract from LUPDATE *)
-  TRY (imp_res_tac listTheory.MEM_LUPDATE_E >> gvs[] >>
-       imp_res_tac listTheory.MEM_LUPDATE_E >> gvs[]) >>
-  (* SORestore: SELECT gives FDOM membership *)
-  TRY (`FLOOKUP ps.ps_spilled (@op. FLOOKUP ps.ps_spilled op = SOME n)
-        = SOME n` by (SELECT_ELIM_TAC >> metis_tac[]) >>
-       fs[finite_mapTheory.FLOOKUP_DEF]) >>
-  (* All remaining: ~MEM (EL k l) l with k < LENGTH l.
-     Derive MEM from EL_MEM, then contradiction with ~MEM. *)
-  qpat_x_assum `~MEM _ _` mp_tac >> simp[] >>
-  irule listTheory.EL_MEM >> simp[]
-QED
-
-(* LENGTH invariant for apply_prefix_op initial_fmp *)
-Theorem apply_prefix_op_stack_length[local]:
-  !lo op ps.
-    is_prefix_op op ==>
-    LENGTH (apply_prefix_op initial_fmp lo op ps).ps_stack =
-      SND (stack_op_wf lo op (LENGTH ps.ps_stack))
-Proof
-  rpt strip_tac >> Cases_on `op` >>
-  gvs[is_prefix_op_def, apply_prefix_op_def, stack_op_wf_def,
-      apply_simple_op_def, stack_push_def, stack_pop_def,
-      stack_swap_def, spill_lookup_def, LET_THM] >>
-  Cases_on `o'` >> gvs[apply_simple_op_def, stack_push_def, stack_op_wf_def]
-QED
-
 Theorem step_inst_non_invoke_preserves_initial_fmp:
   !fuel ctx inst s s'.
     inst.inst_opcode <> INVOKE /\
@@ -3802,17 +3516,6 @@ Proof
   rpt strip_tac >>
   gvs[step_inst_non_invoke] >>
   drule step_inst_base_preserves_all >> simp[]
-QED
-
-Theorem eval_operand_eq_operand_val_on[local]:
-  !ops vs lo.
-    (!l. MEM (Label l) ops ==>
-         FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) ==>
-    !op. MEM op ops ==>
-      eval_operand op vs = operand_val vs lo op
-Proof
-  rpt strip_tac >> Cases_on `op` >>
-  gvs[eval_operand_def, operand_val_def, lookup_var_def]
 QED
 
 (* The shared ownership contract is strong enough to materialise both ISTORE
@@ -3842,23 +3545,6 @@ Proof
       rewrite_tac[stack_peek_def] >> irule EL_MEM >> decide_tac)
   >> disj2_tac >> Cases_on `FLOOKUP ps.ps_spilled op` >>
      gvs[finite_mapTheory.flookup_thm]
-QED
-
-Theorem reorder_plan_exact_two_ready_local[local]:
-  exact_two_planner_ready spill_base h h' ps /\
-  reorder_plan dfg [h;h'] ps = (ops,ps') ==>
-  exact_two_planner_ready spill_base h h' ps'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
-  simp[reorder_plan_def, indexedListsTheory.MAPi_def,
-       indexedListsTheory.MAPi_ACC_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  `exact_two_planner_ready spill_base h h' ps''` by
-    (irule reorder_one_exact_two_planner_ready >>
-     qexistsl [`dfg`, `0`, `h`, `ops'`, `ps`] >> simp[]) >>
-  irule reorder_one_exact_two_planner_ready >>
-  qexistsl [`dfg`, `1`, `h'`, `step_ops`, `ps''`] >> simp[]
 QED
 
 Theorem assign_singleton_reorder_shallow[local]:
@@ -6501,29 +6187,6 @@ Proof
   drule emit_one_input_residual_budget_wf >>
   disch_then drule >> simp[]
 QED
-Theorem bump_emit_input_plan_residual_wf[local]:
-  generated_plan_state_wf spill_base ps /\
-  emit_input_plan BUMP [h;h'] nl ps = (iops,ps1) /\
-  2 <= LENGTH ps1.ps_stack ==>
-  plan_state_residual_wf spill_base [h;h'] 0 ps1
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `emit_input_plan _ _ _ _ = _` mp_tac >>
-  simp[emit_input_plan_two] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  strip_tac >> gvs[] >>
-  `residual_budget_wf spill_base [] ps` by
-    (irule residual_budget_wf_canonical >>
-     fs[generated_plan_state_wf_def]) >>
-  `residual_budget_wf spill_base [h] ps1'` by
-    (drule emit_one_input_residual_budget_wf >>
-     disch_then drule >> simp[]) >>
-  `residual_budget_wf spill_base [h; h'] ps1` by
-    (drule emit_one_input_residual_budget_wf >>
-     disch_then drule >> simp[]) >>
-  irule residual_budget_wf_to_residual >> simp[]
-QED
-
 Theorem bump_reorder_postpop_generated_wf[local]:
   generated_plan_state_wf spill_base ps /\
   emit_input_plan BUMP [h;h'] nl ps = (iops,ps1) /\
@@ -6608,22 +6271,6 @@ Proof
        mp_tac plan_state_residual_wf_pop >> simp[]) >>
   gvs[generated_plan_state_wf_def]
 QED
-Theorem bump_apply_prefix_op_ext_relevant[local]:
-  !op lo ps1 ps2.
-    ps1.ps_stack = ps2.ps_stack /\
-    ps1.ps_spilled = ps2.ps_spilled /\
-    ps1.ps_alloc.sa_spill_base = ps2.ps_alloc.sa_spill_base /\
-    ps1.ps_alloc.sa_next_offset = ps2.ps_alloc.sa_next_offset ==>
-    let via1 = apply_prefix_op initial_fmp lo op ps1;
-        via2 = apply_prefix_op initial_fmp lo op ps2
-    in via1.ps_stack = via2.ps_stack /\
-       via1.ps_spilled = via2.ps_spilled /\
-       via1.ps_alloc.sa_spill_base = via2.ps_alloc.sa_spill_base /\
-       via1.ps_alloc.sa_next_offset = via2.ps_alloc.sa_next_offset
-Proof
-  ACCEPT_TAC reorderSimTheory.apply_prefix_op_ext_relevant
-QED
-
 Theorem bump_apply_prefix_ops_ext_relevant[local]:
   !ops lo ps1 ps2.
     ps1.ps_stack = ps2.ps_stack /\
@@ -6683,22 +6330,6 @@ Proof
           apply_prefix_op_def, apply_simple_op_def])
 QED
 
-Theorem bump_spilled_separated_domsub[local]:
-  !fm x.
-    (!op1 off1 op2 off2.
-       FLOOKUP fm op1 = SOME off1 /\ FLOOKUP fm op2 = SOME off2 /\
-       op1 <> op2 ==> off1 + 32 <= off2 \/ off2 + 32 <= off1) ==>
-    (!op1 off1 op2 off2.
-       FLOOKUP (fm \\ x) op1 = SOME off1 /\
-       FLOOKUP (fm \\ x) op2 = SOME off2 /\ op1 <> op2 ==>
-       off1 + 32 <= off2 \/ off2 + 32 <= off1)
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `!op1 off1 op2 off2. _`
-    (qspecl_then [`op1`, `off1`, `op2`, `off2`] mp_tac) >>
-  gvs[finite_mapTheory.DOMSUB_FLOOKUP_THM]
-QED
-
 Theorem bump_emit_one_input_spilled_shape:
   !opc nl op ps ops ps'.
     emit_one_input opc nl op ps = (ops,ps') ==>
@@ -6730,56 +6361,6 @@ Proof
               gvs[stack_push_def])
           >- (strip_tac >> gvs[])))
   >- (Cases_on `opc = INVOKE` >> simp[] >> strip_tac >> gvs[])
-QED
-
-Theorem bump_emit_input_plan_first_stage[local]:
-  !base h h' nl ps ops1 mid ops2 lo.
-    generated_plan_state_wf base ps /\
-    (!op. MEM op [h;h'] /\ is_var_operand op ==>
-      (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
-      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
-    emit_one_input BUMP (operand_vars [h'] ++ nl) h ps = (ops1,mid) /\
-    prefix_spill_wf initial_fmp lo (ops1 ++ ops2) ps ==>
-    prefix_spill_wf initial_fmp lo ops1 ps /\
-    prefix_spill_wf initial_fmp lo ops2 mid /\
-    spill_alloc_layout_wf mid.ps_alloc mid.ps_spilled
-Proof
-  rpt strip_tac >> fs[] >>
-  `prefix_spill_wf initial_fmp lo ops1 ps` by
-    (irule prefix_spill_wf_prefix >> qexists `ops2` >> simp[]) >>
-  `(apply_prefix_ops initial_fmp lo ops1 ps).ps_stack = mid.ps_stack /\
-   (apply_prefix_ops initial_fmp lo ops1 ps).ps_spilled = mid.ps_spilled` by
-    (irule emit_one_input_ss_align_from_spill_wf >> conj_tac
-     >- fs[generated_plan_state_wf_def, spill_alloc_layout_wf_def] >> conj_tac
-     >- (qexistsl [`operand_vars [h'] ++ nl`, `h`, `BUMP`] >>
-         ASM_REWRITE_TAC[] >> conj_tac
-         >- (rpt strip_tac >>
-             qpat_assum `!op. (op = h \/ op = h') /\ is_var_operand op ==> _`
-               (qspec_then `Var s` mp_tac) >>
-             (impl_tac >- simp[is_var_operand_def]) >>
-             strip_tac >- gvs[] >> gvs[]) >> simp[]) >> ASM_REWRITE_TAC[]) >>
-  `(is_var_operand h ==>
-    (?d. stack_get_depth h ps.ps_stack = SOME d /\ d <= 15) \/
-    IS_SOME (FLOOKUP ps.ps_spilled h))` by
-    (strip_tac >>
-     qpat_assum `!op. (op = h \/ op = h') /\ is_var_operand op ==> _`
-       (qspec_then `h` mp_tac) >> simp[]) >>
-  `(apply_prefix_ops initial_fmp lo ops1 ps).ps_alloc.sa_spill_base =
-    mid.ps_alloc.sa_spill_base` by
-    (qspecl_then [`BUMP`, `operand_vars [h'] ++ nl`, `h`, `ps`, `ops1`, `mid`]
-       mp_tac emit_one_input_spill_base >> ASM_REWRITE_TAC[] >> strip_tac >>
-     simp[apply_prefix_ops_spill_base] >> metis_tac[]) >>
-  `(apply_prefix_ops initial_fmp lo ops1 ps).ps_alloc.sa_next_offset =
-    mid.ps_alloc.sa_next_offset` by
-    (drule_all bump_emit_one_input_next_offset >> simp[]) >>
-  `prefix_spill_wf initial_fmp lo ops2 mid` by
-    (qspecl_then [`ops2`, `lo`, `apply_prefix_ops initial_fmp lo ops1 ps`, `mid`]
-       mp_tac bump_prefix_spill_wf_ext_relevant >>
-     (impl_tac >- fs[bump_prefix_spill_wf_append]) >> simp[]) >>
-  ASM_REWRITE_TAC[] >>
-  qspecl_then [`BUMP`, `operand_vars [h'] ++ nl`, `h`, `ps`, `ops1`, `mid`]
-    mp_tac emit_one_input_layout_wf >> ASM_REWRITE_TAC[] >>
-  fs[generated_plan_state_wf_def]
 QED
 
 Theorem bump_emit_one_input_bounded_sim[local]:
@@ -7062,125 +6643,6 @@ Proof
   qexists `after` >>
   gvs[execute_plan_append, LENGTH_APPEND, asm_steps_add]
 QED
-Theorem bump_emit_input_plan_shallow_state_align[local]:
-  !base h h' nl ps input_ops ps1 lo.
-    generated_plan_state_wf base ps /\
-    (!op. MEM op [h;h'] /\ is_var_operand op ==>
-      (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
-      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
-    (!l. MEM (Label l) [h;h'] ==> IS_SOME (FLOOKUP lo l)) /\
-    emit_input_plan BUMP [h;h'] nl ps = (input_ops,ps1) /\
-    prefix_spill_wf initial_fmp lo input_ops ps /\
-    (!v d.
-      let mid = SND (emit_one_input BUMP (operand_vars [h'] ++ nl) h ps)
-      in h' = Var v /\ MEM v nl /\
-         ~IS_SOME (FLOOKUP mid.ps_spilled h') /\
-         stack_get_depth h' mid.ps_stack = SOME d ==> d <= 15) ==>
-    let via = apply_prefix_ops initial_fmp lo input_ops ps in
-      via.ps_stack = ps1.ps_stack /\
-      via.ps_spilled = ps1.ps_spilled /\
-      via.ps_alloc.sa_spill_base = ps1.ps_alloc.sa_spill_base /\
-      via.ps_alloc.sa_next_offset = ps1.ps_alloc.sa_next_offset
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `emit_input_plan _ _ _ _ = _` mp_tac >>
-  simp[emit_input_plan_two] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  `prefix_spill_wf initial_fmp lo ops1 ps` by
-    (irule prefix_spill_wf_prefix >> qexists `ops2` >> simp[]) >>
-  `(apply_prefix_ops initial_fmp lo ops1 ps).ps_stack = ps1'.ps_stack /\
-   (apply_prefix_ops initial_fmp lo ops1 ps).ps_spilled = ps1'.ps_spilled` by
-    (irule emit_one_input_ss_align_from_spill_wf >>
-     conj_tac
-     >- fs[generated_plan_state_wf_def, spill_alloc_layout_wf_def] >>
-     conj_tac
-     >- (qexistsl [`operand_vars [h'] ++ nl`, `h`, `BUMP`] >>
-         ASM_REWRITE_TAC[] >>
-         conj_tac
-         >- (rpt strip_tac >>
-             qpat_assum `!op. (op = h \/ op = h') /\ is_var_operand op ==> _`
-               (qspec_then `Var s` mp_tac) >>
-             (impl_tac >- simp[is_var_operand_def]) >>
-             strip_tac >- gvs[] >> gvs[]) >>
-         simp[]) >>
-     ASM_REWRITE_TAC[]) >>
-  `(is_var_operand h ==>
-    (?d. stack_get_depth h ps.ps_stack = SOME d /\ d <= 15) \/
-    IS_SOME (FLOOKUP ps.ps_spilled h))` by
-    (strip_tac >>
-     qpat_assum `!op. (op = h \/ op = h') /\ is_var_operand op ==> _`
-       (qspec_then `h` mp_tac) >> simp[]) >>
-  `(apply_prefix_ops initial_fmp lo ops1 ps).ps_alloc.sa_spill_base =
-     ps1'.ps_alloc.sa_spill_base` by
-    (qspecl_then [`BUMP`, `operand_vars [h'] ++ nl`, `h`, `ps`,
-       `ops1`, `ps1'`] mp_tac emit_one_input_spill_base >>
-     ASM_REWRITE_TAC[] >> strip_tac >>
-     simp[apply_prefix_ops_spill_base] >> metis_tac[]) >>
-  `(apply_prefix_ops initial_fmp lo ops1 ps).ps_alloc.sa_next_offset =
-     ps1'.ps_alloc.sa_next_offset` by
-    (drule_all bump_emit_one_input_next_offset >> simp[]) >>
-  `prefix_spill_wf initial_fmp lo ops2
-     (apply_prefix_ops initial_fmp lo ops1 ps)` by
-    fs[bump_prefix_spill_wf_append] >>
-  `prefix_spill_wf initial_fmp lo ops2 ps1'` by
-    (qspecl_then [`ops2`, `lo`,
-       `apply_prefix_ops initial_fmp lo ops1 ps`, `ps1'`]
-       mp_tac bump_prefix_spill_wf_ext_relevant >>
-     (impl_tac >- (rpt conj_tac >> simp[])) >> simp[]) >>
-  `spill_alloc_layout_wf ps1'.ps_alloc ps1'.ps_spilled` by
-    (qspecl_then [`BUMP`, `operand_vars [h'] ++ nl`, `h`, `ps`,
-       `ops1`, `ps1'`] mp_tac emit_one_input_layout_wf >>
-     ASM_REWRITE_TAC[] >> fs[generated_plan_state_wf_def]) >>
-  `(apply_prefix_ops initial_fmp lo ops2 ps1').ps_stack = ps1.ps_stack /\
-   (apply_prefix_ops initial_fmp lo ops2 ps1').ps_spilled = ps1.ps_spilled /\
-   (apply_prefix_ops initial_fmp lo ops2 ps1').ps_alloc.sa_next_offset =
-     ps1.ps_alloc.sa_next_offset` by
-    (qspecl_then [`BUMP`, `nl`, `h'`, `ps1'`, `ops2`, `ps1`, `lo`]
-        mp_tac bump_emit_one_input_ss_align_shallow >>
-      ASM_REWRITE_TAC[] >> fs[LET_THM]) >>
-  `ps1.ps_alloc.sa_spill_base = ps1'.ps_alloc.sa_spill_base` by
-    (drule emit_one_input_spill_base >> simp[]) >>
-  simp[LET_THM] >> once_rewrite_tac[apply_prefix_ops_append] >>
-  qspecl_then [`ops2`, `lo`,
-    `apply_prefix_ops initial_fmp lo ops1 ps`, `ps1'`] mp_tac
-    bump_apply_prefix_ops_ext_relevant >>
-  simp[LET_THM, apply_prefix_ops_spill_base] >> metis_tac[]
-QED
-
-Theorem bump_emit_input_plan_sim[local]:
-  !alloc_base h h' nl ps input_ops ps1 initial_fmp lo o2pc prog vs st.
-    generated_plan_state_wf alloc_base ps /\
-    (!op. MEM op [h;h'] /\ is_var_operand op ==>
-      (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
-      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
-    (!l. MEM (Label l) [h;h'] ==> IS_SOME (FLOOKUP lo l)) /\
-    emit_input_plan BUMP [h;h'] nl ps = (input_ops,ps1) /\
-    prefix_spill_wf initial_fmp lo input_ops ps /\ venom_asm_rel lo ps vs st /\
-    asm_block_at prog st.as_pc (execute_plan initial_fmp input_ops) ==>
-    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp input_ops)) st =
-      AsmOK st' /\ venom_asm_rel lo ps1 vs st' /\
-      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp input_ops)
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `emit_one_input BUMP (operand_vars [h'] ++ nl) h ps` >>
-  rename1 `emit_one_input _ _ h ps = (ops1,mid)` >>
-  Cases_on `emit_one_input BUMP nl h' mid` >>
-  rename1 `emit_one_input _ nl h' mid = (ops2,post)` >>
-  `input_ops = ops1 ++ ops2 /\ ps1 = post` by
-    (qpat_x_assum `emit_input_plan _ _ _ _ = _` mp_tac >>
-     asm_simp_tac (srw_ss()) [emit_input_plan_two, LET_THM]) >> gvs[] >>
-  mp_tac (Q.SPECL [`alloc_base`,`h`,`h'`,`nl`,`ps`,`ops1`,`mid`,`ops2`,`lo`]
-    bump_emit_input_plan_first_stage) >>
-  (impl_tac >- (asm_simp_tac (srw_ss()) [] >>
-    rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  mp_tac (Q.SPECL [`BUMP`,`h`,`h'`,`nl`,`ps`,`ops1`,`mid`,`ops2`,`post`,
-    `initial_fmp`,`lo`,`o2pc`,`prog`,`vs`,`st`]
-    emit_input_plan_two_venom_asm_rel) >>
-  (impl_tac >- (asm_simp_tac (srw_ss()) [] >>
-    fs[generated_plan_state_wf_def] >>
-    rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp_tac std_ss [ADD_COMM]
-QED
-
 Theorem bump_asm_block_at_after_two_prefixes:
   !prog pc initial_fmp ops1 ops2 suffix.
     asm_block_at prog pc
@@ -7193,43 +6655,6 @@ Proof
   qpat_x_assum `asm_block_at _ _ _` mp_tac >>
   PURE_REWRITE_TAC[execute_plan_append, asm_block_at_append] >>
   strip_tac >> fs[LENGTH_APPEND, arithmeticTheory.ADD_ASSOC]
-QED
-
-Theorem bump_deep_inputs_reorder[local]:
-  !dfg h h' nl ps input_ops ps1.
-    (!op. MEM op [h;h'] /\ is_var_operand op ==>
-      (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
-      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
-    emit_input_plan BUMP [h;h'] nl ps = (input_ops,ps1) /\
-    ~(!v d.
-      let mid = SND (emit_one_input BUMP (operand_vars [h'] ++ nl) h ps)
-      in h' = Var v /\ MEM v nl /\
-         ~IS_SOME (FLOOKUP mid.ps_spilled h') /\
-         stack_get_depth h' mid.ps_stack = SOME d ==> d <= 15) ==>
-    reorder_plan dfg [h;h'] ps1 = ([],ps1)
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `emit_one_input BUMP (operand_vars [h'] ++ nl) h ps` >>
-  rename1 `emit_one_input _ _ h ps = (ops1,mid)` >>
-  qpat_x_assum `~!v d. _` mp_tac >>
-  asm_simp_tac (srw_ss()) [LET_THM] >> strip_tac >> gvs[] >>
-  rename1 `stack_get_depth (Var v) mid.ps_stack = SOME dist` >>
-  `FLOOKUP mid.ps_spilled (Var v) = NONE` by
-    (Cases_on `FLOOKUP mid.ps_spilled (Var v)` >> gvs[]) >>
-  `15 < dist` by decide_tac >>
-  `(?d. stack_get_depth (Var v) ps.ps_stack = SOME d /\ d <= 15) \/
-    IS_SOME (FLOOKUP ps.ps_spilled (Var v))` by
-    (qpat_x_assum `!op. _ /\ is_var_operand op ==> _`
-       (qspec_then `Var v` mp_tac) >> simp[is_var_operand_def]) >>
-  Cases_on `emit_one_input BUMP nl (Var v) mid` >>
-  rename1 `emit_one_input _ nl _ mid = (ops2,post)` >>
-  `input_ops = ops1 ++ ops2 /\ ps1 = post` by
-    (qpat_x_assum `emit_input_plan _ _ _ _ = _` mp_tac >>
-     asm_simp_tac (srw_ss()) [emit_input_plan_two, LET_THM]) >>
-  qpat_x_assum `ps1 = post` SUBST1_TAC >>
-  mp_tac (Q.SPECL [`dfg`,`BUMP`,`operand_vars [Var v] ++ nl`,`nl`,`h`,`v`,
-    `ps`,`ops1`,`mid`,`ops2`,`post`,`dist`] emit_deep_second_input_reorder) >>
-  (impl_tac >- asm_simp_tac (srw_ss()) []) >> simp_tac bool_ss []
 QED
 
 Theorem bump_input_reorder_venom_asm_rel[local]:
