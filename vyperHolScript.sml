@@ -27,7 +27,7 @@ Ancestors
   fmpLowerSequenceExec mmTransform memzeroFrame
   mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
   (* O1: lifting per-function pass facts to the stage contract *)
-  o1PassLift
+  o1PassLift o1StaticLowerDload
   (* O1: the pipeline's request companion at an abort *)
   o1PipelineRequests
   (* codegen and compiler units: frame simulation, stack planning, unit checks,
