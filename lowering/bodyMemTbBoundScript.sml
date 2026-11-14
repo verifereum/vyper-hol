@@ -56,13 +56,18 @@ Theorem bound_builtin_mem_prefix[local]:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  storage_well_formed_on cx es (FST H) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?v ee t'. gas_value_prefix H T (ctx,func,cenv,cx) (ty,TypeBuiltin ann tb t args)
-        (sa,sb,op) (es,s0) [] (v,ee,t')
+  ?v. gas_value_prefix H T (ctx,func,cenv,cx) (ty,TypeBuiltin ann tb t args)
+        (sa,sb,op) (es,s0) [] (v,es,s0)
 Proof
   strip_tac >> drule_all bound_builtin_eval >> strip_tac >> gvs[] >>
-  qexistsl_tac [`v`, `es`, `s0`] >>
+  qexists_tac `v` >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+   storage_well_formed_on cx es (FST H)` by
+    (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+     simp[]) >>
   `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
@@ -101,7 +106,17 @@ Proof
           type_builtin_result_ok_def, well_typed_type_builtin_args_def,
           vyperASTTheory.expr_type_def, is_word_type_def]) >>
      rpt gen_tac >> strip_tac >>
-     qexists_tac `[]` >> irule bound_builtin_mem_prefix >> metis_tac[]) >>
+     drule_all bound_builtin_eval >>
+     disch_then (strip_assume_tac o CONJUNCT2 o CONJUNCT2 o CONJUNCT2) >>
+     qexistsl_tac [`[]`, `v`, `es'`, `s0`] >> conj_tac
+     >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_mem_rules] >>
+     rpt strip_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H es'.storage_trace ==> _`
+       (qspec_then `H` (fn th =>
+         qpat_assum `valid_horizon cx st0 H es'.storage_trace`
+           (strip_assume_tac o MATCH_MP th))) >>
+     drule_all bound_builtin_mem_prefix >> strip_tac >>
+     gvs[gas_value_prefix_def, gas_marked_exec_def]) >>
   simp[] >> `is_word_type (expr_type (TypeBuiltin v11 tb typ es))` by
     (`!t. is_int_type t ==> is_word_type t` by
         (Cases >> simp[is_word_type_def] >>
