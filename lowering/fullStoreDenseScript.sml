@@ -95,7 +95,7 @@ Proof
   simp[]
 QED
 
-Theorem dense_single_compiled_origin_ptr:
+Theorem dense_single_compiled_origin_ptr_uniform:
   (do loaded <- emit_op MLOAD [Var root];
       emit_void (if tr then TSTORE else SSTORE) [dst;loaded]
    od) sa = (z,sb) /\ fn_has_code sa sb func /\
@@ -107,7 +107,7 @@ Theorem dense_single_compiled_origin_ptr:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t Gf tnf.
-    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+    (!D explicit PG. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,Gf,tnf)) /\
     store_copy_frame sa (if tr then LocTransient else LocStorage) a k s 1 t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -140,7 +140,6 @@ Proof
     (gvs[fn_has_code_def, IS_PREFIX_APPEND] >> simp[DROP_APPEND]) >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
    (!x. dst = Var x ==> x <> tmp)` by metis_tac[] >>
-  drule_all dense_single_origin_ptr >> strip_tac >>
   qexistsl_tac [
     `(if tr then tstore else sstore) k (mload (w2n a) s)
       (update_var tmp (mload (w2n a) s) s) with vs_inst_idx := s.vs_inst_idx+2`,
@@ -149,13 +148,44 @@ Proof
        with t_trans := key_update tn.t_trans k (mem_word_taint tn.t_mem (w2n a))
      else (tn with t_var := tn.t_var |+ (tmp,mem_word_taint tn.t_mem (w2n a)))
        with t_stor := key_update tn.t_stor k (mem_word_taint tn.t_mem (w2n a))`] >>
-  conj_tac >- metis_tac[] >>
+  conj_tac >- (rpt gen_tac >> drule_all dense_single_origin_ptr >> simp[]) >>
   Cases_on `tr` >>
   simp[store_copy_frame_def, store_copy_normalize_def, store_copy_prefix_def,
     COUNT_LIST_def, sstore_def, tstore_def, update_var_def, lookup_var_def,
     FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, toplevel_copy_source_taint_def,
     op_taint_def, EVAL ``COUNT_LIST 1``] >>
   fs[WORD_ADD_0, WORD_MULT_CLAUSES, venom_state_component_equality]
+QED
+
+Theorem dense_single_compiled_origin_ptr:
+  (do loaded <- emit_op MLOAD [Var root];
+      emit_void (if tr then TSTORE else SSTORE) [dst;loaded]
+   od) sa = (z,sb) /\ fn_has_code sa sb func /\
+  not_fresh_at sa root /\ (!x. dst = Var x ==> not_fresh_at sa x) /\
+  ptr_covers G tn root s 32 /\ lookup_var root s = SOME a /\
+  eval_operand dst s = SOME k /\ op_taint tn dst = {} /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  w2n a + 32 <= s.vs_alloca_next /\ ~s.vs_call_ctx.cc_static /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf.
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tnf)) /\
+    store_copy_frame sa (if tr then LocTransient else LocStorage) a k s 1 t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
+    (if tr then tnf.t_stor = tn.t_stor else tnf.t_trans = tn.t_trans) /\
+    toplevel_copy_source_taint (if tr then LocTransient else LocStorage) tnf =
+      key_update (toplevel_copy_source_taint (if tr then LocTransient else LocStorage) tn)
+        k (mem_word_taint tn.t_mem (w2n a)) /\
+    (!x. not_fresh_at sa x ==> FLOOKUP Gf x = FLOOKUP G x /\
+      op_taint tnf (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule_all dense_single_compiled_origin_ptr_uniform >>
+  metis_tac[]
 QED
 
 Theorem dense_loop_compiled_origin_ptr:
