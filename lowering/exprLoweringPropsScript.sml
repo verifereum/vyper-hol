@@ -60,7 +60,7 @@ Ancestors
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
   valueEncoding valueEncodingDefs valueEncodingProofs localPtrsProps venomMemDefs valueLoadProps
-  vyperAST vyperTyping fcgDefs
+  vyperAST vyperTyping fcgDefs ptrDiscipline
 Libs
   pairLib BasicProvers monadsyntax
 
@@ -261,17 +261,18 @@ Definition alloca_room_def:
 End
 
 (* Dynamic scratch starts above the complete reserved static allocation charge.
-   The upper margin covers bounded create scratch on non-aborting paths. *)
+   The initial frontier brackets the static reservation; allocated scratch is
+   covered by materialized memory, apart from its final word's padding. *)
 Definition fmp_room_def:
   fmp_room ctx func (ss:venom_state) <=>
-    (EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) \/
-     (?g f. TC (fn_directly_calls ctx) func.fn_name g /\
-       MEM f ctx.ctx_functions /\ f.fn_name = g /\
-       EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts f))) ==>
+    (ctx_has_dalloca ctx \/
+     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
     ss.vs_alloca_next + pending_alloca_size func ss +
     CARD {g | TC (fn_directly_calls ctx) func.fn_name g} *
-      unit_alloca_frame ctx <= w2n ss.vs_fmp /\
-    w2n ss.vs_fmp + 2 ** 65 < dimword (:256)
+      unit_alloca_frame ctx <= w2n ss.vs_initial_fmp /\
+    w2n ss.vs_initial_fmp <= w2n ss.vs_fmp /\
+    w2n ss.vs_initial_fmp + 2 ** 65 < dimword (:256) /\
+    w2n ss.vs_fmp <= MAX (w2n ss.vs_initial_fmp) (LENGTH ss.vs_memory + 31)
 End
 
 (* Constructor immutable capacity regions lie below the bump frontier and
@@ -554,19 +555,28 @@ Theorem fmp_room_fields:
   !func ss ss' ctx.
     fmp_room ctx func ss /\
     ss'.vs_allocas = ss.vs_allocas /\ ss'.vs_alloca_next = ss.vs_alloca_next /\
-    ss'.vs_fmp = ss.vs_fmp ==>
+    ss'.vs_fmp = ss.vs_fmp /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      ss'.vs_initial_fmp = ss.vs_initial_fmp /\
+      LENGTH ss.vs_memory <= LENGTH ss'.vs_memory) ==>
     fmp_room ctx func ss'
 Proof
-  rw[fmp_room_def, pending_alloca_size_def] >> gvs[]
+  rw[fmp_room_def, pending_alloca_size_def] >> gvs[] >>
+  res_tac >> gvs[arithmeticTheory.MAX_DEF] >> decide_tac
 QED
 
 Theorem fmp_room_fields_cong:
   !ctx func s s'.
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
-    s'.vs_fmp = s.vs_fmp ==>
+    s'.vs_fmp = s.vs_fmp /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      s'.vs_initial_fmp = s.vs_initial_fmp /\
+      LENGTH s'.vs_memory = LENGTH s.vs_memory) ==>
     (fmp_room ctx func s' <=> fmp_room ctx func s)
 Proof
-  metis_tac[fmp_room_fields]
+  rw[fmp_room_def, pending_alloca_size_def] >> gvs[] >> metis_tac[]
 QED
 
 (* state_rel re-established by a step that keeps the allocations gives
@@ -577,14 +587,18 @@ Theorem stmt_state_rel_allocas_frame:
     stmt_state_rel H ctx func cenv cx es s /\ state_rel H func cenv cx es' s' /\
     immutable_alloca_sep func cenv cx es' s' /\
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
-    s'.vs_fmp = s.vs_fmp /\ immutable_base_zero cenv s' ==>
+    s'.vs_fmp = s.vs_fmp /\ immutable_base_zero cenv s' /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      s'.vs_initial_fmp = s.vs_initial_fmp /\
+      LENGTH s.vs_memory <= LENGTH s'.vs_memory) ==>
     stmt_state_rel H ctx func cenv cx es' s'
 Proof
   gen_tac >>
   rw[stmt_state_rel_def]
   >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[])
   >- (irule alloca_room_fields >> qexists_tac `s` >> simp[])
-  >- (irule fmp_room_fields >> qexists_tac `s` >> simp[]) >>
+  >- (irule fmp_room_fields >> qexists_tac `s` >> simp[] >> metis_tac[]) >>
   gvs[] >> res_tac
 QED
 
@@ -662,9 +676,13 @@ Theorem fmp_room_static_charge:
     fmp_room ctx func s /\
     t.vs_alloca_next + pending_alloca_size func t <=
       s.vs_alloca_next + pending_alloca_size func s /\
-    t.vs_fmp = s.vs_fmp ==> fmp_room ctx func t
+    t.vs_fmp = s.vs_fmp /\
+    ((ctx_has_dalloca ctx \/
+      EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)) ==>
+      t.vs_initial_fmp = s.vs_initial_fmp /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) ==> fmp_room ctx func t
 Proof
-  rw[fmp_room_def] >> res_tac >> gvs[]
+  rw[fmp_room_def] >> res_tac >> gvs[arithmeticTheory.MAX_DEF] >> decide_tac
 QED
 
 Theorem fmp_room_exec_alloca:
