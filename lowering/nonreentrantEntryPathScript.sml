@@ -2,7 +2,8 @@
 Theory nonreentrantEntryPath
 Ancestors
   nonreentrantEquiv transientLockPtr transientLockFrameProps transientLockProps
-  nonreentrantSource accountsRelProps fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasMode
+  nonreentrantSource accountsRelProps ghostPcTransportPtr
+  fragGasSeqPtr fragGasOriginPtr fragGasOrigin fragGasMode
   fragGasPathPtr fragGasSeqMem fragExecMem fragExec memSafeRun unitTransformDefs ptrSafeRun
   ptrDiscipline gasEvents gasCount allocaHistoryFragment allocaHistory
   exprSimPtrProps exprLoweringProps codegenRel contextCodegenRel
@@ -269,4 +270,141 @@ Proof
      `ss` |-> `transient_lock_checked_state sa nkey s`,
      `G` |-> `G'`, `tn` |-> `tn'`, `value` |-> `1w`]
     nonreentrant_ghost_inv_frame) >> simp[]
+QED
+
+Theorem nonreentrant_entry_success_joint:
+  function_header_ok vis mut T rr name args dflts ret /\
+  cx.nonreentrant_slot = SOME nkey /\ nkey < dimword (:256) /\
+  lock_if_nr cx T (is_view_mut mut) es_reg = (INL (), es_lock) /\
+  compile_nonreentrant_lock nkey T (mut = View) sa = ((), body_sa) /\
+  fn_has_code sa body_sa func /\ fn_inst_ids_distinct func /\
+  ~ctx_has_dalloca ctx /\ ~s_reg.vs_halted /\
+  ~block_is_terminated sa /\
+  s_reg.vs_current_bb = sa.cs_current_bb /\
+  s_reg.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  fresh_vars_wrt sa s_reg /\ local_ptrs_reserved cenv sa /\
+  return_buf_frame NONE cenv sa s_reg /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sa x) /\
+  alloca_history func s_reg /\
+  (!H. stmt_state_rel H ctx func cenv cx es_reg s_reg /\
+       ghost_inv H NONE cenv cx es_reg G_reg tn_reg s_reg) ==>
+  ?s_lock G_lock tn_lock.
+    gas_path ctx func s_reg 0 (OK s_lock) /\
+    gas_path_mem ctx func s_reg 0 (OK s_lock) /\
+    (!D explicit.
+       gas_origin_ptr_path (D, 0, explicit, ctx, func, [])
+         (s_reg, G_reg, tn_reg) [] (OK s_lock, G_lock, tn_lock)) /\
+    (!D. (!fuel. ptr_safe_run D 0 fuel ctx func []
+                    G_lock tn_lock s_lock) ==>
+         !fuel. ptr_safe_run D 0 fuel ctx func []
+                    G_reg tn_reg s_reg) /\
+    alloca_history func s_lock /\
+    return_buf_frame NONE cenv body_sa s_lock /\
+    fresh_vars_wrt body_sa s_lock /\ local_ptrs_reserved cenv body_sa /\
+    ~block_is_terminated body_sa /\ ~s_lock.vs_halted /\
+    s_lock.vs_current_bb = body_sa.cs_current_bb /\
+    s_lock.vs_inst_idx = LENGTH body_sa.cs_current_insts /\
+    s_lock.vs_gas_readings = s_reg.vs_gas_readings /\
+    s_lock.vs_code = s_reg.vs_code /\ s_lock.vs_labels = s_reg.vs_labels /\
+    (mut <> View ==> ~cx.txn.is_static) /\
+    (!H. storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) ==>
+       stmt_state_rel H ctx func cenv cx es_lock s_lock /\
+       ghost_inv H NONE cenv cx es_lock G_lock tn_lock s_lock)
+Proof
+  strip_tac >>
+  drule_all nonreentrant_lock_success_source >> strip_tac >>
+  qpat_assum `!H. _`
+    (qspec_then `([], [nkey])` strip_assume_tac) >>
+  `state_rel ([], [nkey]) func cenv cx es_reg s_reg` by
+    fs[stmt_state_rel_def] >>
+  `lookup_storage (n2w nkey) (es_reg.tStorage cx.txn.target) =
+    tload (n2w nkey) s_reg` by
+    (match_mp_tac (Q.INST [`H` |-> `([], [nkey])`]
+      (SPEC_ALL nonreentrant_lock_agreement)) >>
+     simp[vyperStorageFootprintTheory.storage_locks_separated_def]) >>
+  `tload (n2w nkey) s_reg <> 1w` by
+    (spose_not_then assume_tac >>
+     fs[acquire_nonreentrant_lock_execution]) >>
+  `~(mut = View) ==> ~s_reg.vs_call_ctx.cc_static` by
+    fs[state_rel_def, call_ctx_rel_def] >>
+  `!b. ~((n2w nkey,b) IN tn_reg.t_trans)` by
+    (match_mp_tac (Q.INST
+       [`H` |-> `([], [nkey])`, `tn` |-> `tn_reg`, `ss` |-> `s_reg`]
+       (SPEC_ALL nonreentrant_slot_untainted)) >>
+     fs[ghost_inv_def]) >>
+  mp_tac (Q.INST [`s` |-> `s_reg`, `sb` |-> `body_sa`,
+    `iv` |-> `mut = View`, `G` |-> `G_reg`, `tn` |-> `tn_reg`]
+    (SPEC_ALL nonreentrant_lock_paths)) >> simp[] >> strip_tac >>
+  `cenv.ce_return_buf = NONE` by fs[return_buf_frame_def] >>
+  `local_ptrs_rel func cenv es_reg.scopes s_reg /\ alloca_inv s_reg` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `fresh_vars_wrt body_sa u` by
+    (drule_all compile_nonreentrant_lock_transient_frame >> strip_tac >>
+     drule compile_nonreentrant_lock_transient_code >> strip_tac >> gvs[]) >>
+  drule compile_nonreentrant_lock_transient_same_block >> strip_tac >>
+  drule compile_nonreentrant_lock_transient_counter >> strip_tac >>
+  `local_ptrs_reserved cenv body_sa` by
+    (match_mp_tac (Q.SPECL [`cenv`, `sa`, `body_sa`]
+      local_ptrs_reserved_next_var) >> simp[]) >>
+  `?bb rest. lookup_block s_reg.vs_current_bb func.fn_blocks = SOME bb /\
+    DROP s_reg.vs_inst_idx bb.bb_instructions =
+      transient_lock_code nkey (mut = View) sa ++ rest` by
+    (drule_all compile_nonreentrant_lock_transient_prefix >>
+     simp[IS_PREFIX_APPEND] >> metis_tac[]) >>
+  `EVERY (\inst. ~is_terminator inst.inst_opcode)
+    (transient_lock_code nkey (mut = View) sa)` by
+    (Cases_on `mut = View` >>
+     simp[transient_lock_code_def, mk_inst_def, is_terminator_def]) >>
+  `alloca_history func (u with vs_inst_idx := s_reg.vs_inst_idx +
+    LENGTH (transient_lock_code nkey (mut = View) sa))` by
+    (mp_tac (Q.SPECL [`func`, `bb`, `s_reg`,
+       `transient_lock_code nkey (mut = View) sa`, `rest`, `u`]
+       alloca_history_run_inst_seq) >> simp[]) >>
+  `gas_origin_path T {} ctx func s_reg []
+     (OK (u with vs_inst_idx := s_reg.vs_inst_idx +
+       LENGTH (transient_lock_code nkey (mut = View) sa))) /\
+   gas_path_ptr (ARB:dead) 0 ctx func [] G_reg tn_reg s_reg 0 G' tn'
+     (OK (u with vs_inst_idx := s_reg.vs_inst_idx +
+       LENGTH (transient_lock_code nkey (mut = View) sa)))` by
+    (qpat_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
+       (qspecl_then [`ARB:dead`, `{}`] mp_tac) >>
+     strip_tac >> drule gas_origin_ptr_path_projections >> simp[]) >>
+  `gas_path ctx func s_reg 0
+     (OK (u with vs_inst_idx := s_reg.vs_inst_idx +
+       LENGTH (transient_lock_code nkey (mut = View) sa)))` by
+    (drule gas_path_ptr_erase >> simp[]) >>
+  `gas_path_mem ctx func s_reg 0
+     (OK (u with vs_inst_idx := s_reg.vs_inst_idx +
+       LENGTH (transient_lock_code nkey (mut = View) sa)))` by
+    (drule gas_origin_path_erase >> simp[gas_marked_path_def]) >>
+  `!H. storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) ==>
+    stmt_state_rel H ctx func cenv cx es_lock u /\
+    ghost_inv H NONE cenv cx es_lock G' tn' u` by
+    (rpt strip_tac >>
+     mp_tac (Q.INST [`es` |-> `es_reg`, `locked` |-> `es_lock`,
+       `s` |-> `s_reg`, `G` |-> `G_reg`, `tn` |-> `tn_reg`,
+       `sb` |-> `body_sa`, `iv` |-> `mut = View`]
+       (SPEC_ALL nonreentrant_lock_relations)) >> simp[]) >>
+  `!H. storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) ==>
+    stmt_state_rel H ctx func cenv cx es_lock
+      (u with vs_inst_idx := s_reg.vs_inst_idx +
+        LENGTH (transient_lock_code nkey (mut = View) sa)) /\
+    ghost_inv H NONE cenv cx es_lock G' tn'
+      (u with vs_inst_idx := s_reg.vs_inst_idx +
+        LENGTH (transient_lock_code nkey (mut = View) sa))` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es_lock u /\
+      ghost_inv H NONE cenv cx es_lock G' tn' u` by simp[] >>
+     fs[stmt_state_rel_inst_idx, ghost_inv_cx_dead,
+        ghost_inv_at_inst_idx]) >>
+  qexistsl_tac
+    [`u with vs_inst_idx := s_reg.vs_inst_idx +
+        LENGTH (transient_lock_code nkey (mut = View) sa)`, `G'`, `tn'`] >>
+  simp[return_buf_frame_def, stmt_state_rel_inst_idx] >>
+  Cases_on `mut = View` >> Cases_on `sa.cs_current_insts` >>
+  gvs[transient_lock_code_execution, transient_lock_checked_state_def,
+      update_var_def, tstore_def, fresh_vars_wrt_def,
+      block_is_terminated_def, transient_lock_code_def, LAST_APPEND,
+      mk_inst_def, is_terminator_def]
 QED
