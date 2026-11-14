@@ -190,7 +190,8 @@ Proof
      rewrite_tac[loweringPostsTheory.target_post_def] >> strip_tac >>
      conj_tac
      >- (mp_tac (Q.INST [`es` |-> `mid`, `s` |-> `t`]
-           exprLoweringPropsTheory.stmt_state_rel_fields_transport) >>
+           (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+             exprLoweringPropsTheory.stmt_state_rel_fields_transport)) >>
          impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
          strip_tac >> first_assum ACCEPT_TAC) >>
      first_assum ACCEPT_TAC) >>
