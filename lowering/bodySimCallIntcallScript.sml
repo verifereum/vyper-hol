@@ -24,7 +24,7 @@ Proof
        vfmContextTheory.empty_transient_storage_def,
        vfmExecutionTheory.lookup_transient_storage_def,
        vfmStateTheory.lookup_storage_def, vfmStateTheory.empty_storage_def] >>
-  rw[return_def]
+  rw[return_def, vyperStateTheory.update_transient_def]
 QED
 
 (* The IHs at a supported callee (body_intcall_source_selection): the
