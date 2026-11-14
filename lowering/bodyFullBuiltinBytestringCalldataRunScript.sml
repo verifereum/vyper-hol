@@ -23,7 +23,7 @@ fun calldata_horizons initial target provider =
       (type_of (pairSyntax.mk_pair (initial,target)))
   in INST [inst tys formal |-> initial] (INST_TYPE tys provider) end;
 
-Theorem bytestring_calldata_full_run:
+Theorem bytestring_calldata_full_run_frame:
   compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
@@ -67,7 +67,9 @@ Theorem bytestring_calldata_full_run:
     mem_bytes_at 0 lo t.vs_memory = mem_bytes_at 0 lo s.vs_memory /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     ghost_kept_at lo cenv es sa G tn s HG tm /\
-    locals_kept cenv es es s t /\ pure_frame cenv func es sa s t
+    locals_kept cenv es es s t /\ pure_frame cenv func es sa s t /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_immutables = s.vs_immutables
 Proof
   strip_tac >> drule compile_slice_calldata_stages >> strip_tac >>
   `fn_has_code sa s2 func /\ fn_has_code s2 s3 func /\
@@ -194,6 +196,26 @@ Proof
         vs_alloca_next := _; vs_inst_idx := _|> = u`
       (assume_tac o SIMP_RULE (srw_ss()) [] o Q.AP_TERM `\st. st.vs_memory`) >>
      metis_tac[]) >>
+  `u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+   u.vs_call_ctx = s.vs_call_ctx /\ u.vs_immutables = s.vs_immutables` by
+    (qpat_assum `u = s with <|vs_vars := _; vs_inst_idx := _|>`
+      (ACCEPT_TAC o SIMP_RULE (srw_ss()) [] o
+        Q.AP_TERM `\st. (st.vs_accounts,st.vs_transient,st.vs_call_ctx,st.vs_immutables)`)) >>
+  `v.vs_accounts = u.vs_accounts /\ v.vs_transient = u.vs_transient /\
+   v.vs_call_ctx = u.vs_call_ctx /\ v.vs_immutables = u.vs_immutables` by
+    (qpat_assum `v with <|vs_vars := _; vs_allocas := _;
+        vs_alloca_next := _; vs_inst_idx := _|> = u`
+      (ACCEPT_TAC o SIMP_RULE (srw_ss()) [] o
+        Q.AP_TERM `\st. (st.vs_accounts,st.vs_transient,st.vs_call_ctx,st.vs_immutables)`)) >>
+  `t.vs_accounts = v.vs_accounts /\ t.vs_transient = v.vs_transient /\
+   t.vs_call_ctx = v.vs_call_ctx /\ t.vs_immutables = v.vs_immutables` by
+    (qpat_assum `t = _`
+      (ACCEPT_TAC o SIMP_RULE (srw_ss())
+        [mstore_def, write_memory_with_expansion_def, LET_THM] o
+        Q.AP_TERM `\st. (st.vs_accounts,st.vs_transient,st.vs_call_ctx,st.vs_immutables)`)) >>
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_immutables = s.vs_immutables` by
+    metis_tac[] >>
   `lookup_var root t = SOME w` by fs[lookup_var_def] >>
   `FLOOKUP v.vs_allocas (sa.cs_next_id+7) = SOME (w2n w,N)` by
     (qpat_assum `s2.cs_next_id = sa.cs_next_id+7` (fn id =>
@@ -437,4 +459,55 @@ Proof
           TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
       first_assum ACCEPT_TAC) >>
   metis_tac[]
+QED
+
+Theorem bytestring_calldata_full_run:
+  compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  stmt_state_rel H0 ctx func cenv cx es s /\ context_well_typed cx /\
+  0 < n /\ n < dimword (:256) /\ a < dimword (:256) /\
+  32+n <= N /\ N < dimword (:256) /\
+  eval_operand start s = SOME (n2w a) /\
+  op_prov G start = NONE /\ op_taint tn start = {} /\
+  (!x. start = Var x ==> not_fresh_at sa x) /\
+  a+n < dimword (:256) /\ a+n <= LENGTH cx.txn.calldata /\
+  alloca_history func s /\ allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?p w t HG tm.
+    out = Var p /\ not_fresh_at sb p /\
+    (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,HG,tm)) /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+    lookup_var p t = SOME w /\ ptr_covers HG tm p t N /\
+    FLOOKUP t.vs_allocas (sa.cs_next_id+7) = SOME (w2n w,N) /\
+    w2n w+N < dimword (:256) /\ w2n w+N <= t.vs_alloca_next /\
+    val_in_memory (BaseTV (BytesT (Dynamic n)))
+      (BytesV (TAKE n (DROP a cx.txn.calldata))) (w2n w) t.vs_memory /\
+    (!i. w2n w <= i /\ i < w2n w+32+n ==> i NOTIN tm.t_mem) /\
+    (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+       stmt_state_rel H' ctx func cenv cx es t) /\
+    alloca_history func t /\ allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    (!x. not_fresh_at sa x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP HG x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x)) /\
+    (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==>
+      FLOOKUP t.vs_allocas aid = SOME e) /\
+    (!aid b len. FLOOKUP s.vs_allocas aid = SOME (b,len) /\
+      aid < sa.cs_next_id ==>
+      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    (!name b len. local_region cenv es.scopes s name b len ==>
+      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory /\
+      (!i. b <= i /\ i < b+len /\ i IN tm.t_mem ==> i IN tn.t_mem)) /\
+    mem_bytes_at 0 lo t.vs_memory = mem_bytes_at 0 lo s.vs_memory /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    ghost_kept_at lo cenv es sa G tn s HG tm /\
+    locals_kept cenv es es s t /\ pure_frame cenv func es sa s t
+Proof
+  strip_tac >> drule_all bytestring_calldata_full_run_frame >>
+  disch_then (qspecl_then [`explicit`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`p`,`w`,`t`,`HG`,`tm`] >> asm_rewrite_tac[]
 QED
