@@ -230,32 +230,12 @@ Proof
   metis_tac[o1_fn_shape_def, MEM_EL]
 QED
 
-Theorem simplify_cfg_stage_sim:
-  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
-  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
-  o1_run_state_ok vs ==> ctx_sim D C C' vs vs
-Proof
-  strip_tac >>
-  `ctx_bisim C C'` by metis_tac[simplify_cfg_stage_bisim] >>
-  irule ctx_bisim_ctx_sim >>
-  gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
-  metis_tac[o1_ctx_shape_no_intret, ctx_pass_stage_def]
-QED
-
-(* Gas sufficiency S6b fuel leaf: SimplifyCFG keeps the fuel.
-   No transform of the pass adds a block step or an INVOKE: unreachable
-   block removal and label substitution keep the steps, fix_all_phis and
-   canon_jnz act inside a block, a chain merge and a jump bypass each drop
-   a step.  So the output finishes within the input's fuel, and
-   run_blocks_terminates_mono / exec_block_terminates_mono lift a run that
-   finishes earlier (an INVOKE in a merged tail sees more callee fuel) to
-   the same fuel.  The existing forward chain (scfg_chain_runs_forward,
-   the restriction / fix-phis / bypass / round lemmas, scfg_bstep_continue
-   with SUC (MAX k n)) only gives an existential output fuel, so it needs
-   a bound k <= n carried through; scfg_bprefix_cancel_bounded already has
-   that shape.  The per-function target is fn_bisim_fuel I fn
-   (simplify_cfg_fn fn); the stage then follows as sue_stage_sim_fuel
-   does, via fn_bisim_fuel_run_context and lift_fuel_I. *)
+(* SimplifyCFG keeps the fuel.  No transform of the pass adds a block
+   step or an INVOKE: unreachable block removal and label substitution
+   keep the steps, fix_all_phis and canon_jnz act inside a block, a chain
+   merge and a jump bypass each drop a step.  So each function's output
+   finishes on its input's fuel (simplify_cfg_fn_correct_fuel), and the
+   stage follows via fn_bisim_fuel_run_context and lift_fuel_I. *)
 Theorem simplify_cfg_stage_sim_fuel:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\

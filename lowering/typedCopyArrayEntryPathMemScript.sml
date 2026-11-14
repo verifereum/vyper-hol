@@ -4,6 +4,7 @@ Ancestors
   fragGasMode fragGasPathMem venomState venomExecSemantics venomInst
   exprLoweringProps words arithmetic list rich_list typedNormalizeDynarray
   bodyDeclMemoryCounted exprSimDefs emitHelper context compileEnv valueEncoding
+  loweringStateRelDefs
 
 Theorem typed_sa_pointer_path_mem:
   code =

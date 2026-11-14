@@ -2304,11 +2304,12 @@ Proof
   disch_then (qspec_then `gas_prefix n (DROP m t.vs_gas_readings)` mp_tac) >>
   asm_rewrite_tac[] >>
   Cases_on `g t` >> gvs[lift_result_def] >>
-  Cases_on `f s` >>
+  Cases_on `f s` >> gvs[lift_result_def] >>
   Cases_on `g (t with vs_gas_readings := gas_prefix (n+m) t.vs_gas_readings)` >>
+  gvs[lift_result_def] >>
   Cases_on `f (s with vs_gas_readings := gas_prefix (n+m) t.vs_gas_readings)` >>
-  gvs[lift_result_def, result_equiv_def, state_equiv_def,
-      execution_equiv_def] >>
+  gvs[lift_result_def] >> gvs[result_equiv_def] >>
+  gvs[state_equiv_def, execution_equiv_def] >>
   rpt strip_tac >>
   qpat_x_assum `gas_prefix m _ = gas_prefix n _`
     (mp_tac o AP_TERM ``LENGTH : bytes32 list -> num``) >>

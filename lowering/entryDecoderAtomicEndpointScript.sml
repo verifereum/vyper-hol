@@ -204,7 +204,10 @@ Resume entry_valid_bytes_owned_endpoint[sequence]:
      asm_rewrite_tac[]) >>
   `run_inst_seq_mem_ok (emitted_insts st last) initial` by
     (irule run_inst_seq_mem_ok_of_prefix_safe >> reverse conj_tac
-     >- (fs[EVERY_MEM] >> metis_tac[]) >>
+     >- (qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\
+            ~is_terminator i.inst_opcode /\ i.inst_opcode <> DLOAD /\
+            i.inst_opcode <> DLOADBYTES) _` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >> simp[EVERY_MEM] >> metis_tac[]) >>
      drule calldata_bytes_prefix_live >>
      disch_then (qspecl_then [`initial`, `n2w sb`, `d`] mp_tac) >>
      asm_rewrite_tac[]) >>

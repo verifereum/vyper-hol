@@ -419,7 +419,10 @@ Resume window_array_strong_contract_mem[code]:
   drule window_array_loop_code_bounds >> strip_tac >>
   `owner.cs_next_id <= st'.cs_next_id` by decide_tac >>
   `~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
-   s.vs_inst_idx = LENGTH st.cs_current_insts` by fs[abi_encoder_window_pre_def] >>
+   s.vs_inst_idx = LENGTH st.cs_current_insts` by
+    (qhdtm_assum `abi_encoder_window_pre` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rewrite_tac[abi_encoder_window_pre_def] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all window_array_constructor_entry_mem >> strip_tac >>
   rename1 `window_array_transition ctx func st _ [(d,32)] s entry` >>
   qabbrev_tac `ids = window_alloca_sites func (frag_ids st st')` >>

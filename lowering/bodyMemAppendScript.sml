@@ -2,7 +2,7 @@
 Theory bodyMemAppend
 Ancestors
   bodyMemoryPreds bodyMemAppendAdapter supportedStmts supportedExprs
-  bodyMemAppendAggregateFacts bodyExprPreFacts
+  bodyMemAppendAggregateCompose bodyMemAppendAggregateFacts bodyExprPreFacts
   bodyMemAssignTopCopyFacts vyperLookupStorage vyperStorageLayoutSafety
   bodyAppendStorageFacts bodyAppendStorageAdapter bodySim exprSimHypsDefs
   exprLoweringProps loweringStateRelDefs compileEnv vyperValue
@@ -11,17 +11,16 @@ Ancestors
 Libs
   monadsyntax
 
-(* PORT_ADMISSION SEQ-4381: body_append_storage_narrow_mem.
-   Original source: 488580bb2. TRUE as stated on 67c6f13fd; body_inv and
-   expr_sim_inv supply acyclic_struct_metadata and field consistency.
-   The lower metadata-free memory helper is false, so the cut is here.
-   This masks the whole aggregate case, including previously proved static
-   aggregate/direct-single-word aggregate paths, until the actual sparse
-   compile_store_slots consumer port is restored. Primitive full-word Append
-   (uint256, int256, bytes32) remains proved by bodyMemAppendAdapter;
-   append_storage_element_domain excludes other scalar word types here.
-   Original proof retained:
-
+Theorem body_append_storage_narrow_mem:
+  !cx nid e tops ctx cenv vis mut elem dn slot.
+    (!s'' p t'. eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
+                body_expr_mem_ok cx e) /\
+    body_inv tops ctx cenv cx /\
+    supported_variable_decl tops nid =
+      SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
+    (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem /\
+    type_memory_bytes cenv elem < 2 ** 64 ==>
+    body_stmt_mem_ok cx (Append (TopLevelNameTarget nid) e)
 Proof
   rpt gen_tac >> strip_tac >>
   rw[body_stmt_mem_ok_def] >>
@@ -75,29 +74,38 @@ Proof
        qpat_x_assum `_ ==> stmt_frag_mem _ _ _ _ _ _ _ _ _ _`
          (mp_tac o REWRITE_RULE [stmt_frag_mem_def]) >> simp[] >> metis_tac[]) >>
   strip_tac >> drule_all append_storage_compiler_location >> strip_tac >>
-  irule compile_append_storage_aggregate_stmt_frag_mem >>
-  (conj_tac >- metis_tac[]) >>
-  qexistsl_tac [`dn`, `elem`, `q`, `r`, `n2w rslot`, `tr`, `tv`] >>
-  simp[] >>
-  (conj_tac >-
+  `acyclic_struct_metadata cenv'.ce_struct_fields` by fs[body_inv_def] >>
+  `sfields_tenv_consistent cenv'.ce_struct_fields (get_tenv cx) /\
+   (!name fields. FLOOKUP cenv'.ce_struct_fields name = SOME fields ==>
+     ALL_DISTINCT (MAP FST fields) /\
+     EVERY (\(fname,fty,sz). !tv.
+       evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields)` by
+    (fs[expr_sim_inv_def] >> first_assum ACCEPT_TAC) >>
+  `cenv'.ce_module_var_type (q,r) = SOME (ArrayT elem (Dynamic dn)) /\
+   cenv'.ce_hashmap_info (q,r) = NONE /\
+   cenv'.ce_module_dynarray_capacity (q,r) = dn` by
+    metis_tac[body_append_root_metadata] >>
+  `w2n (n2w rslot:bytes32) + type_slot_size (ArrayTV tv (Dynamic dn)) <=
+   dimword (:256)` by simp[] >>
+  `!mid' n' subs' slot' tv'.
+    declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
+    (slot',tv') <> (n2w rslot,ArrayTV tv (Dynamic dn)) ==>
+    ranges_disjoint (w2n (n2w rslot:bytes32))
+      (type_slot_size (ArrayTV tv (Dynamic dn)))
+      (w2n slot') (type_slot_size tv')` by
+    (rpt strip_tac >> fs[Abbr `tr`] >>
+     qpat_x_assum `!mid' n' subs' k' tv'. _` irule >>
+     simp[] >> metis_tac[]) >>
+  `!gs v es1.
+    (do result <- eval_expr cx e; read_result cx result od)
+      (es with gas_obs := gs) = (INL v,es1) ==>
+    value_has_type tv v /\ ?writes. encode_value tv v = SOME writes` by
     (rpt strip_tac >>
      `value_has_type tv v` by metis_tac[topcopy_rhs_value_typed] >>
-     metis_tac[vyperTypingTheory.value_has_type_equiv, optionTheory.IS_SOME_EXISTS])) >>
-  rpt strip_tac >> fs[Abbr `tr`] >> metis_tac[]
-QED
-*)
-Theorem body_append_storage_narrow_mem:
-  !cx nid e tops ctx cenv vis mut elem dn slot.
-    (!s'' p t'. eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
-                body_expr_mem_ok cx e) /\
-    body_inv tops ctx cenv cx /\
-    supported_variable_decl tops nid =
-      SOME (vis, mut, ArrayT elem (Dynamic dn), SOME slot) /\
-    (mut = Storage \/ mut = Transient) /\ ~supported_full_word_type elem /\
-    type_memory_bytes cenv elem < 2 ** 64 ==>
-    body_stmt_mem_ok cx (Append (TopLevelNameTarget nid) e)
-Proof
-  cheat
+     metis_tac[vyperTypingTheory.value_has_type_equiv,
+       optionTheory.IS_SOME_EXISTS]) >>
+  drule_all compile_append_storage_aggregate_stmt_frag_mem >>
+  disch_then MATCH_ACCEPT_TAC
 QED
 
 Theorem body_append_mem_case:

@@ -10,6 +10,8 @@ Theory e2eGasSufficientTop
 Ancestors
   e2eGasSufficient e2eComposition asmOptimizer
 
+val _ = Parse.hide "tops";
+
 (* ===== The assembly optimizer's cases ===== *)
 
 (* The final assembly optimizer's case, under the same hypotheses plus the
