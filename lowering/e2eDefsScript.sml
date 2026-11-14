@@ -16,7 +16,7 @@
 Theory e2eDefs
 Ancestors
   vfmExecution vfmExecutionProp vfmState vfmRunCall
-  vfmTotalBalance vfmReturndataBound vfmWfState
+  vfmTotalBalance vfmReturndataBound vfmCalldataBound vfmWfState
   frameOutcome callTrace
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
@@ -190,6 +190,7 @@ Definition call_state_rel_def:
       ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
       ctxt.returnData = [] /\ buffer_to_list ctxt.memory = [] /\
       balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es /\
+      calldata_bounded es /\
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.toDelete = am.pending_deletions /\
