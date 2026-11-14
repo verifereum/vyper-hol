@@ -324,13 +324,20 @@ Proof
       value_result_typed_def, is_HashMapRef_def]
 QED
 
+Theorem tuple_eval_bind_notation_ptr:
+  vyperState$bind (eval_expr cx e) (read_result cx) =
+  (do result <- eval_expr cx e; read_result cx result od)
+Proof
+  simp[vyperStateTheory.bind_def, FUN_EQ_THM]
+QED
+
 Theorem expr_body_pre_eval_gas_ptr:
   expr_body_pre cenv cx env e es /\
   vyperState$bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := obs) = (INL v, es') ==>
   expr_sim_inv cenv cx env es' /\ value_runtime_typed env (expr_type e) v
 Proof
-  rpt strip_tac >>
+  rewrite_tac[tuple_eval_bind_notation_ptr] >> rpt strip_tac >>
   `expr_body_pre cenv cx env e (es with gas_obs := obs)` by simp[] >>
   drule_all (SRULE [ETA_THM] expr_body_pre_eval) >>
   simp[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def,
