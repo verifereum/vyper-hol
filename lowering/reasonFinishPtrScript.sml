@@ -228,7 +228,8 @@ Resume reason_encode_finish_path_ptr[payload]:
   >- (gvs[])
   >- (gvs[])
   >- (gvs[])
-  >- (gvs[])
+  >- (qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> simp[])
   >- (qpat_x_assum `ALL_DISTINCT _` mp_tac >>
       POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[])
   >>
